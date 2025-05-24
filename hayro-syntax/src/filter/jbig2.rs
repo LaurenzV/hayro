@@ -39,6 +39,11 @@
 //! 20. SimpleSegmentVisitor: JS has more sophisticated symbol/pattern/table management with lazy initialization
 //! 21. PageInformation: JS reads resolutionX/Y, pageStripingInformation, lossless/refinement/requiresBuffer flags
 //! 22. Symbol dictionary Huffman: JS implements proper DH/DW selector logic and custom table indexing
+//! 23. Refinement templates: JS uses separate Int32Array for coordinates, Rust uses Vec<[i32; 2]>
+//! 24. Symbol dictionary collective bitmaps: JS implements height class collective bitmap + exported symbols
+//! 25. Text region refinement: JS has full rdw/rdh/rdx/rdy offset calculations, Rust has placeholder
+//! 26. Halftone gray-scale decoding: JS uses XOR bit plane operations, Rust simplified
+//! 27. Unknown segment pattern search: JS implements 6-byte pattern detection, Rust returns error
 
 use crate::object::dict::Dict;
 use crate::object::dict::keys::JBIG2_GLOBALS;
@@ -744,6 +749,11 @@ fn decode_refinement(
     at: &[TemplatePixel],
     decoding_context: &mut DecodingContext,
 ) -> Result<Bitmap, Jbig2Error> {
+    // TODO: REFINEMENT TEMPLATE DIFFERENCES: JS version creates separate Int32Array
+    // for codingTemplateX/Y and referenceTemplateX/Y coordinates, uses concat() to combine
+    // RefinementTemplates with at[] parameters, and has different template handling.
+    // Rust version uses Vec<[i32; 2]> and different data structures. This could affect
+    // refinement template processing and context label calculation accuracy.
     let mut coding_template: Vec<[i32; 2]> = REFINEMENT_TEMPLATES[template_index].coding.to_vec();
     if template_index == 0 {
         coding_template.push([at[0].x, at[0].y]);
@@ -848,6 +858,13 @@ fn decode_symbol_dictionary(
     // 3. symbolWidths array tracking and totalWidth calculation
     // 4. Standard table B.1 usage and symbolCodeLength adjustments
     // Rust version is significantly simplified and may not handle complex symbol dictionary cases.
+    // TODO: CRITICAL MISSING FEATURES: JS version implements:
+    // 1. Height class collective bitmap decoding (6.5.9) with bitmapSize and byteAlign()
+    // 2. Exported symbols processing (6.5.10) with run-length flags and IAEX decoder
+    // 3. Multiple symbol instances with IAAI decoder and text region calls for aggregation
+    // 4. Proper symbol width tracking and bitmap division using subarray()
+    // 5. MMR collective bitmap handling with position/end management
+    // Rust version completely lacks these features and will fail on complex symbol dictionaries.
     if huffman && refinement {
         return Err(Jbig2Error::new("symbol refinement with Huffman is not supported"));
     }
@@ -1114,6 +1131,13 @@ fn decode_text_region(
     // TODO: SYMBOL PLACEMENT DIFFERENCES: JS uses transposed flag for different placement algorithms
     // with complex offsetT/offsetS calculations and supports combination operators (OR, XOR)
     // with proper symbol bitmap iteration. Rust version may not handle all these placement modes.
+    // TODO: TEXT REGION REFINEMENT DIFFERENCES: JS version implements full symbol refinement with:
+    // 1. rdw/rdh/rdx/rdy parameter decoding for width/height/offset adjustments
+    // 2. Complex offset calculations: (rdw >> 1) + rdx, (rdh >> 1) + rdy  
+    // 3. Symbol dimension updates: symbolWidth += rdw, symbolHeight += rdh
+    // 4. Bounds checking with maxWidth = Math.min(width - offsetT, symbolWidth)
+    // 5. Proper transposed vs non-transposed symbol placement with different loop orders
+    // Rust version has simplified placeholder that returns error for refinement storage.
     
     let mut bitmap = Vec::with_capacity(height);
     for _ in 0..height {
@@ -1445,6 +1469,11 @@ fn decode_pattern_dictionary(
     // of width (maxPatternIndex + 1) * patternWidth and height patternHeight, then
     // divides it into individual patterns. Rust version decodes each pattern individually.
     // This could lead to different results if patterns share context across boundaries.
+    // TODO: PATTERN DICTIONARY ALGORITHM DIFFERENCE: JS decodePatternDictionary() creates
+    // collectiveWidth = (maxPatternIndex + 1) * patternWidth, decodes one large collective
+    // bitmap, then uses collectiveBitmap[y].subarray(xMin, xMax) to divide into individual
+    // patterns. Rust version decodes each pattern individually which breaks context sharing
+    // and will produce different results for patterns that depend on neighboring pattern context.
     let mut at = Vec::new();
     if !mmr {
         at.push(TemplatePixel { x: -(pattern_width as i32), y: 0 });
@@ -1820,6 +1849,12 @@ fn read_segment_header(data: &[u8], start: usize) -> Result<SegmentHeader, Jbig2
         // end-of-segment detection for ImmediateGenericRegion (type 38) by searching for
         // specific patterns (0xff, 0xac followed by height bytes). Rust version currently
         // returns error. This could cause failures with some JBIG2 files using unknown lengths.
+        // TODO: UNKNOWN SEGMENT LENGTH PATTERN SEARCH: JS readSegmentHeader() implements full
+        // end-of-segment detection by creating searchPattern[] with:
+        // - For non-MMR: [0xff, 0xac, height>>24, height>>16, height>>8, height&0xff]  
+        // - For MMR: [height>>24, height>>16, height>>8, height&0xff]
+        // Then searches byte-by-byte through data to find this 6-byte pattern.
+        // Rust version just returns error which will fail on valid JBIG2 files with unknown lengths.
         return Err(Jbig2Error::new("unknown segment length requires end-of-segment detection"));
     }
     
@@ -2388,6 +2423,13 @@ fn decode_halftone_region(
     // Rust version uses simplified: pattern_x = grid_offset_x + (ng as i32) * grid_vector_x;
     // pattern_y = grid_offset_y + (mg as i32) * grid_vector_y;
     // This will produce completely different pattern placement results.
+    // TODO: HALFTONE REGION ALGORITHM DIFFERENCES: JS version implements:
+    // 1. Proper gray-scale bit plane decoding with XOR operation: bit ^= grayScaleBitPlanes[j][mg][ng]
+    // 2. MMR bit planes in continuous stream with EOFB detection using Reader class
+    // 3. Complex grid vector position calculation with bit shifts 
+    // 4. Optimized vs bounds-checked pattern placement (fast path for fully contained patterns)
+    // 5. Pattern rendering with proper regionRow/patternRow iteration
+    // Rust version has simplified grid calculation and may not handle MMR bit planes correctly.
     if enable_skip {
         return Err(Jbig2Error::new("skip is not supported"));
     }
