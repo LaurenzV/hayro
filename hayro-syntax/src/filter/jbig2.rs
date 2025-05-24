@@ -279,9 +279,10 @@ struct ArithmeticDecoder {
 
 impl ArithmeticDecoder {
     // C.3.5 Initialisation of the decoder (INITDEC)
-    // TODO: ARITHMETIC DECODER DIFFERENCES: JS version uses direct array access data[bp],
-    // Rust version adds bounds checking. JS uses let/const for variables, Rust uses mut.
-    // Both follow the same QM Coder algorithm but with different memory safety approaches.
+    // ✅ ARITHMETIC DECODER IMPLEMENTATION: Faithful port of the JavaScript QM Coder algorithm
+    // with intentional improvements: Rust version adds bounds checking for memory safety where
+    // JavaScript uses direct array access. Both follow the same QM Coder algorithm from
+    // JPEG 2000 Part I Final Committee Draft Version 1.0 Annex C.3.
     fn new(data: &[u8], start: usize, end: usize) -> Self {
         let mut decoder = Self {
             data: data.to_vec(),
