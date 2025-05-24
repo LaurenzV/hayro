@@ -31,12 +31,14 @@
 //! 12. decode_text_region: JS supports transposed placement and combination operators, Rust simplified
 //! 13. HuffmanLine: JS single constructor with string flags, Rust separate constructors
 //! 14. Text region Huffman tables: JS implements complex symbol ID table with RUNCODE handling, Rust simplified
-//! 15. MMR bitmap decoding: JS uses CCITTFaxDecoder, Rust has placeholder implementation
+//! 15. MMR bitmap decoding: JS uses CCITTFaxDecoder with row-by-row processing, Rust has placeholder
 //! 16. Unknown segment length: JS implements pattern search for end detection, Rust returns error
 //! 17. Header validation: JS parseJbig2() validates 8-byte JBIG2 signature and handles randomAccess/numberOfPages
 //! 18. Final output: JS converts bit-packed to Uint8ClampedArray with 0/255 values, Rust returns raw Vec<u8>
 //! 19. Segment flag parsing: JS extracts detailed Huffman selectors (DH/DW/FS/DS/DT), Rust uses simplified flags
 //! 20. SimpleSegmentVisitor: JS has more sophisticated symbol/pattern/table management with lazy initialization
+//! 21. PageInformation: JS reads resolutionX/Y, pageStripingInformation, lossless/refinement/requiresBuffer flags
+//! 22. Symbol dictionary Huffman: JS implements proper DH/DW selector logic and custom table indexing
 
 use crate::object::dict::Dict;
 use crate::object::dict::keys::JBIG2_GLOBALS;
@@ -2242,6 +2244,11 @@ impl SimpleSegmentVisitor {
     }
     
     fn get_symbol_dictionary_huffman_tables(&self, dictionary: &SymbolDictionary, referred_segments: &[u32]) -> Result<SymbolDictionaryHuffmanTables, Jbig2Error> {
+        // TODO: SYMBOL DICTIONARY HUFFMAN TABLE DIFFERENCES: JS getSymbolDictionaryHuffmanTables()
+        // implements proper huffmanDHSelector/huffmanDWSelector logic (0/1 = standard tables 4-5/2-3,
+        // 3 = custom table), bitmapSizeSelector and aggregationInstancesSelector handling.
+        // JS also properly increments customIndex for each custom table access.
+        // Rust version has simplified fallback logic that may not handle complex cases correctly.
         // Based on getSymbolDictionaryHuffmanTables from JS
         let mut custom_index = 0;
         
@@ -2508,8 +2515,10 @@ fn decode_mmr_bitmap(
 ) -> Result<Bitmap, Jbig2Error> {
     // TODO: MMR BITMAP DECODING DIFFERENCE: JS version uses CCITTFaxDecoder with parameters
     // K=-1, BlackIs1=true, EndOfBlock=endOfBlock and proper EOFB consumption handling.
-    // Rust version has a simplified placeholder implementation that just creates a blank bitmap.
-    // This is a major functional difference that will cause MMR-encoded regions to decode incorrectly.
+    // JS also implements row-by-row decoding with shift operations and lookForEOFLimit=5 
+    // for EOFB consumption. Rust version has a simplified placeholder implementation that 
+    // just creates a blank bitmap. This is a major functional difference that will cause 
+    // MMR-encoded regions to decode incorrectly.
     let _ = (data, end_of_block); // Suppress unused warnings
     
     // For now, return a blank bitmap as a placeholder
@@ -2817,7 +2826,13 @@ fn process_segment(segment: &Segment, visitor: &mut SimpleSegmentVisitor) -> Res
             
             let width = read_uint32(data, position);
             let height = read_uint32(data, position + 4);
+            // TODO: PAGE INFORMATION DIFFERENCES: JS processSegment() reads additional fields:
+            // resolutionX, resolutionY (positions 8-15), pageStripingInformation (position 17),
+            // plus more detailed flag parsing: lossless, refinement, requiresBuffer flags.
+            // Rust version only reads width, height, and basic flags. Missing fields could
+            // affect page rendering parameters and buffer management.
             let page_segment_flags = data[position + 16];
+            
             
             let default_pixel_value = ((page_segment_flags >> 2) & 1) as u8;
             let combination_operator = ((page_segment_flags >> 3) & 3) as u8;
