@@ -424,7 +424,6 @@ fn decode_integer(context_cache: &mut ContextCache, procedure: &str, decoder: &m
 
     let sign = read_bits(1);
     
-    // Nested ternary from original JS - keeping structure faithful
     let value = if read_bits(1) != 0 {
         if read_bits(1) != 0 {
             if read_bits(1) != 0 {
