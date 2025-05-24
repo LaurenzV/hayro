@@ -13,37 +13,20 @@
  * limitations under the License.
  */
 
-//! A decoder for JBIG2 streams, translated from https://github.com/mozilla/pdf.js/blob/master/src/core/jbig2.js
-//!
-//! TODO: REMAINING DIFFERENCES BETWEEN JS AND RUST IMPLEMENTATIONS:
-//! 1. Error handling: JS throws exceptions, Rust returns Result types
-//! 2. ✅ FIXED: Array indexing: Now uses direct array indexing like JS (may panic on out-of-bounds)
-//! 3. ArithmeticDecoder: JS uses direct array access, Rust adds bounds checking
-//! 4. decode_bitmap: JS uses Int8Array/Uint16Array for template coordinates, Rust uses Vec<TemplatePixel>
-
 use crate::object::dict::Dict;
 use crate::object::dict::keys::JBIG2_GLOBALS;
 use crate::filter::ccitt::{CCITTFaxDecoder, CCITTFaxDecoderOptions};
 use crate::reader::Reader as CrateReader;
 use log::warn;
 use std::collections::HashMap;
+use crate::object::stream::Stream;
 
-// Decode a JBIG2 data stream
-// TODO: JS version has parseJbig2(data) and parseJbig2Chunks(chunks) as separate functions,
-// but Rust version only has decode() function that combines both. The JS version also has
-// a Jbig2Image class with parseChunks() and parse() methods, while Rust directly returns
-// Option<Vec<u8>>. This architectural difference may affect error handling and data flow.
-// TODO: PARSE ENTRY POINT DIFFERENCES: JS parseJbig2() has explicit JBIG2 header validation
-// (checks for 0x97 0x4A 0x42 0x32 0x0D 0x0A 0x1A 0x0A signature), random access flag handling,
-// and numberOfPages parsing. JS also converts bit-packed buffer to Uint8ClampedArray with 
-// 0/255 pixel values. Rust version has simplified header handling and returns raw Vec<u8>.
 pub fn decode(data: &[u8], params: Dict) -> Option<Vec<u8>> {
-    let globals = params.get::<Vec<u8>>(JBIG2_GLOBALS);
+    let globals = params.get::<Stream>(JBIG2_GLOBALS);
     
     let mut chunks = Vec::new();
     
-    // Add globals if present
-    if let Some(globals_data) = globals {
+    if let Some(globals_data) = globals.and_then(|g| g.decoded()) {
         chunks.push(Chunk {
             data: globals_data.clone(),
             start: 0,
@@ -51,7 +34,6 @@ pub fn decode(data: &[u8], params: Dict) -> Option<Vec<u8>> {
         });
     }
     
-    // Add main data
     chunks.push(Chunk {
         data: data.to_vec(),
         start: 0,
@@ -59,7 +41,14 @@ pub fn decode(data: &[u8], params: Dict) -> Option<Vec<u8>> {
     });
     
     let mut jbig2_image = Jbig2Image::new();
-    jbig2_image.parse_chunks(&chunks)
+    let mut buf = jbig2_image.parse_chunks(&chunks)?;
+
+    // JBIG2 had black as 1 and white as 0, inverting the colors
+    for b in &mut buf {
+        *b =*b ^ 0xFF;
+    }
+    
+    Some(buf)
 }
 
 #[derive(Debug)]
