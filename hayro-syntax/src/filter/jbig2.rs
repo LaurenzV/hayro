@@ -89,11 +89,6 @@ impl ContextCache {
     }
 }
 
-// New architecture to fix borrowing issues
-// TODO: JS version uses lazy getters for decoder and contextCache (using shadow() utility),
-// while Rust version stores them directly. JS DecodingContext.decoder creates a new 
-// ArithmeticDecoder on first access and caches it, but Rust creates it immediately in new().
-// This might affect performance and memory usage patterns.
 struct DecodingContext {
     decoder: ArithmeticDecoder,
     context_cache: ContextCache,
