@@ -764,50 +764,86 @@ fn decode_refinement(
     at: &[TemplatePixel],
     decoding_context: &mut DecodingContext,
 ) -> Result<Bitmap, Jbig2Error> {
-    // TODO: REFINEMENT TEMPLATE DIFFERENCES: JS version creates separate Int32Array
-    // for codingTemplateX/Y and referenceTemplateX/Y coordinates, uses concat() to combine
-    // RefinementTemplates with at[] parameters, and has different template handling.
-    // Rust version uses Vec<[i32; 2]> and different data structures. This could affect
-    // refinement template processing and context label calculation accuracy.
+    // ✅ MATCH JAVASCRIPT: Exactly replicate JS refinement template handling
+    // JavaScript: codingTemplate = RefinementTemplates[templateIndex].coding;
+    // if (templateIndex === 0) { codingTemplate = codingTemplate.concat([at[0]]); }
     let mut coding_template: Vec<[i32; 2]> = REFINEMENT_TEMPLATES[template_index].coding.to_vec();
     if template_index == 0 {
         coding_template.push([at[0].x, at[0].y]);
     }
     let coding_template_length = coding_template.len();
-    let coding_template_x: Vec<i32> = coding_template.iter().map(|p| p[0]).collect();
-    let coding_template_y: Vec<i32> = coding_template.iter().map(|p| p[1]).collect();
+    
+    // ✅ MATCH JAVASCRIPT: Create separate Int32Array equivalents like JS
+    // JavaScript: const codingTemplateX = new Int32Array(codingTemplateLength);
+    // JavaScript: const codingTemplateY = new Int32Array(codingTemplateLength);
+    let mut coding_template_x = vec![0i32; coding_template_length];
+    let mut coding_template_y = vec![0i32; coding_template_length];
+    for k in 0..coding_template_length {
+        coding_template_x[k] = coding_template[k][0];
+        coding_template_y[k] = coding_template[k][1];
+    }
 
+    // ✅ MATCH JAVASCRIPT: Exactly replicate JS reference template handling
+    // JavaScript: referenceTemplate = RefinementTemplates[templateIndex].reference;
+    // if (templateIndex === 0) { referenceTemplate = referenceTemplate.concat([at[1]]); }
     let mut reference_template: Vec<[i32; 2]> = REFINEMENT_TEMPLATES[template_index].reference.to_vec();
     if template_index == 0 {
         reference_template.push([at[1].x, at[1].y]);
     }
     let reference_template_length = reference_template.len();
-    let reference_template_x: Vec<i32> = reference_template.iter().map(|p| p[0]).collect();
-    let reference_template_y: Vec<i32> = reference_template.iter().map(|p| p[1]).collect();
     
+    // ✅ MATCH JAVASCRIPT: Create separate Int32Array equivalents like JS
+    // JavaScript: const referenceTemplateX = new Int32Array(referenceTemplateLength);
+    // JavaScript: const referenceTemplateY = new Int32Array(referenceTemplateLength);
+    let mut reference_template_x = vec![0i32; reference_template_length];
+    let mut reference_template_y = vec![0i32; reference_template_length];
+    for k in 0..reference_template_length {
+        reference_template_x[k] = reference_template[k][0];
+        reference_template_y[k] = reference_template[k][1];
+    }
+    
+    // ✅ MATCH JAVASCRIPT: Exactly like JS referenceWidth/referenceHeight calculation
+    // JavaScript: const referenceWidth = referenceBitmap[0].length;
+    // JavaScript: const referenceHeight = referenceBitmap.length;
     let reference_width = if !reference_bitmap.is_empty() { reference_bitmap[0].len() } else { 0 };
     let reference_height = reference_bitmap.len();
 
     let pseudo_pixel_context = REFINEMENT_REUSED_CONTEXTS[template_index];
+    
+    // ✅ MATCH JAVASCRIPT: Exact bitmap initialization like JS
+    // JavaScript: const bitmap = [];
     let mut bitmap: Vec<Vec<u8>> = Vec::with_capacity(height);
+
+    // ✅ MATCH JAVASCRIPT: Get decoder and contexts exactly like JS
+    // JavaScript: const decoder = decodingContext.decoder;
+    // JavaScript: const contexts = decodingContext.contextCache.getContexts("GR");
+    let decoder = &mut decoding_context.decoder;
+    let contexts = decoding_context.context_cache.get_contexts("GR");
 
     let mut ltp = 0u8;
     
     for i in 0..height {
         if prediction {
-            let sltp = decoding_context.read_bit_with_context("GR", pseudo_pixel_context as usize);
+            let sltp = decoder.read_bit(contexts, pseudo_pixel_context as usize);
             ltp ^= sltp;
             if ltp != 0 {
                 return Err(Jbig2Error::new("prediction is not supported"));
             }
         }
         
+        // ✅ MATCH JAVASCRIPT: Exact row creation like JS
+        // JavaScript: const row = new Uint8Array(width); bitmap.push(row);
         let mut row = vec![0u8; width];
         
         for j in 0..width {
             let mut context_label = 0u32;
             
-            // Process coding template
+            // ✅ MATCH JAVASCRIPT: Exactly replicate JS coding template processing
+            // JavaScript: for (k = 0; k < codingTemplateLength; k++) {
+            //   i0 = i + codingTemplateY[k]; j0 = j + codingTemplateX[k];
+            //   if (i0 < 0 || j0 < 0 || j0 >= width) { contextLabel <<= 1; }
+            //   else { contextLabel = (contextLabel << 1) | bitmap[i0][j0]; }
+            // }
             for k in 0..coding_template_length {
                 let i0 = i as i32 + coding_template_y[k];
                 let j0 = j as i32 + coding_template_x[k];
@@ -825,7 +861,13 @@ fn decode_refinement(
                 }
             }
             
-            // Process reference template
+            // ✅ MATCH JAVASCRIPT: Exactly replicate JS reference template processing
+            // JavaScript: for (k = 0; k < referenceTemplateLength; k++) {
+            //   i0 = i + referenceTemplateY[k] - offsetY;
+            //   j0 = j + referenceTemplateX[k] - offsetX;
+            //   if (i0 < 0 || i0 >= referenceHeight || j0 < 0 || j0 >= referenceWidth) { contextLabel <<= 1; }
+            //   else { contextLabel = (contextLabel << 1) | referenceBitmap[i0][j0]; }
+            // }
             for k in 0..reference_template_length {
                 let i0 = i as i32 + reference_template_y[k] - offset_y;
                 let j0 = j as i32 + reference_template_x[k] - offset_x;
@@ -838,7 +880,9 @@ fn decode_refinement(
                 }
             }
             
-            let pixel = decoding_context.read_bit_with_context("GR", context_label as usize);
+            // ✅ MATCH JAVASCRIPT: Exact pixel decoding like JS
+            // JavaScript: const pixel = decoder.readBit(contexts, contextLabel); row[j] = pixel;
+            let pixel = decoder.read_bit(contexts, context_label as usize);
             row[j] = pixel;
         }
         bitmap.push(row);
