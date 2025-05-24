@@ -2146,7 +2146,15 @@ fn process_segment(segment: &Segment, visitor: &mut SimpleSegmentVisitor) -> Res
             let transposed = (text_region_segment_flags & 64) != 0;
             let combination_operator = ((text_region_segment_flags >> 7) & 3) as u8;
             let default_pixel_value = ((text_region_segment_flags >> 9) & 1) as u8;
-            let ds_offset = ((text_region_segment_flags << 17) as i32) >> 27; // sign extension
+            // Extract bits 10-14 (5 bits) and sign-extend from 5-bit to i32
+            let ds_offset_bits = (text_region_segment_flags >> 10) & 0x1f; // Extract 5 bits
+            let ds_offset = if ds_offset_bits & 0x10 != 0 {
+                // Negative value - sign extend from 5-bit
+                (ds_offset_bits as i32) | !0x1f
+            } else {
+                // Positive value
+                ds_offset_bits as i32
+            };
             let refinement_template = ((text_region_segment_flags >> 15) & 1) as usize;
             
             if huffman {
