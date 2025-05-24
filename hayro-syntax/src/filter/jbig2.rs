@@ -17,6 +17,8 @@
 
 use crate::object::dict::Dict;
 use crate::object::dict::keys::JBIG2_GLOBALS;
+use crate::filter::ccitt::{CCITTFaxDecoder, CCITTFaxDecoderOptions};
+use crate::reader::Reader as CrateReader;
 use log::warn;
 use std::collections::HashMap;
 
@@ -560,8 +562,7 @@ fn decode_bitmap(
     if mmr {
         // Use MMR decoding
         let data_slice = &decoding_context.decoder.data[decoding_context.decoder.bp..decoding_context.decoder.data_end];
-        let mut reader = Reader::new(data_slice, 0, data_slice.len());
-        return decode_mmr_bitmap(&mut reader, width, height, false);
+        return decode_mmr_bitmap(data_slice, width, height, false);
     }
 
     // Use optimized version for the most common case
@@ -1194,8 +1195,7 @@ fn decode_pattern_dictionary(
         let bitmap = if mmr {
             // MMR-coded pattern bitmap
             let data_slice = &decoding_context.decoder.data[decoding_context.decoder.bp..decoding_context.decoder.data_end];
-            let mut reader = Reader::new(data_slice, 0, data_slice.len());
-            decode_mmr_bitmap(&mut reader, pattern_width, pattern_height, false)?
+            decode_mmr_bitmap(data_slice, pattern_width, pattern_height, false)?
         } else {
             decode_bitmap(
                 false, // mmr
@@ -1782,8 +1782,7 @@ impl SimpleSegmentVisitor {
         let bitmap = if region.mmr {
             // MMR-coded generic region
             let data_slice = &data[start..end];
-            let mut reader = Reader::new(data_slice, 0, data_slice.len());
-            decode_mmr_bitmap(&mut reader, region.info.width as usize, region.info.height as usize, false)?
+            decode_mmr_bitmap(data_slice, region.info.width as usize, region.info.height as usize, false)?
         } else {
             decode_bitmap(
                 false, // mmr
@@ -2076,8 +2075,7 @@ fn decode_halftone_region(
         let bitmap = if mmr {
             // MMR-coded halftone bitmap
             let data_slice = &decoding_context.decoder.data[decoding_context.decoder.bp..decoding_context.decoder.data_end];
-            let mut reader = Reader::new(data_slice, 0, data_slice.len());
-            decode_mmr_bitmap(&mut reader, grid_width, grid_height, false)?
+            decode_mmr_bitmap(data_slice, grid_width, grid_height, false)?
         } else {
             decode_bitmap(
                 false, // mmr
@@ -2097,49 +2095,58 @@ fn decode_halftone_region(
     Ok(region_bitmap)
 }
 
-// MMR bitmap decoding placeholder - ported from decodeMMRBitmap function
+// MMR bitmap decoding using CCITT fax decoder - ported from decodeMMRBitmap function
 fn decode_mmr_bitmap(
-    input: &mut Reader,
+    data: &[u8],
     width: usize,
     height: usize,
     end_of_block: bool,
 ) -> Result<Bitmap, Jbig2Error> {
-    // Basic MMR (Modified Modified READ) implementation
-    // This is a simplified implementation - a full Group 4 decoder would be more complex
-    let mut bitmap: Vec<Vec<u8>> = Vec::with_capacity(height);
+    // MMR uses CCITT Group 4 (2D) encoding with k = -1
+    let options = CCITTFaxDecoderOptions {
+        k: -1, // Group 4 (MMR) encoding
+        end_of_line: false, // MMR doesn't use EOL markers
+        encoded_byte_align: false,
+        columns: width,
+        rows: height,
+        eoblock: end_of_block,
+        black_is_1: false, // JBIG2 uses 0=white, 1=black
+    };
     
-    for _ in 0..height {
-        let mut row = vec![0u8; width];
-        
-        // Simple bit-by-bit decoding (not optimal, but functional)
-        for j in 0..width {
-            match input.read_bit() {
-                Ok(bit) => row[j] = bit,
-                Err(_) => break, // End of data
-            }
+    let mut reader = CrateReader::new(data);
+    let mut decoder = CCITTFaxDecoder::new(&mut reader, options);
+    
+    // Read decoded bytes
+    let mut decoded_bytes = Vec::new();
+    loop {
+        let byte = decoder.read_next_char();
+        if byte == -1 {
+            break;
         }
+        decoded_bytes.push(byte as u8);
+    }
+    
+    // Convert packed bits to bitmap format
+    let mut bitmap: Vec<Vec<u8>> = Vec::with_capacity(height);
+    let bytes_per_row = (width + 7) / 8;
+    
+    for row in 0..height {
+        let mut bitmap_row = Vec::with_capacity(width);
+        let row_start = row * bytes_per_row;
         
-        bitmap.push(row);
-        
-        // Check for end-of-block marker if requested
-        if end_of_block {
-            // Look ahead for EOB pattern (simplified)
-            let mut consecutive_zeros = 0;
-            while consecutive_zeros < 24 {
-                match input.read_bit() {
-                    Ok(0) => consecutive_zeros += 1,
-                    Ok(1) => {
-                        if consecutive_zeros >= 11 {
-                            // Found potential EOB
-                            return Ok(bitmap);
-                        }
-                        break;
-                    },
-                    Ok(_) => break, // Any other bit value
-                    Err(_) => return Ok(bitmap),
-                }
-            }
+        for col in 0..width {
+            let byte_idx = row_start + (col / 8);
+            let bit_idx = 7 - (col % 8);
+            
+            let pixel = if byte_idx < decoded_bytes.len() {
+                (decoded_bytes[byte_idx] >> bit_idx) & 1
+            } else {
+                0 // Default to white if we run out of data
+            };
+            
+            bitmap_row.push(pixel);
         }
+        bitmap.push(bitmap_row);
     }
     
     Ok(bitmap)
