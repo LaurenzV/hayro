@@ -810,7 +810,7 @@ fn decode_symbol_dictionary(
         }
         
         let tables = huffman_tables.unwrap();
-        let mut huffman_reader = _huffman_input.ok_or_else(|| {
+        let huffman_reader = _huffman_input.ok_or_else(|| {
             Jbig2Error::new("Huffman input reader required for Huffman symbol dictionary")
         })?;
         
@@ -864,7 +864,7 @@ fn decode_symbol_dictionary(
                     // For Huffman mode, the bitmap data follows Huffman-decoded dimensions
                     if let Some(ref bitmap_size_table) = tables.bitmap_size_table {
                         // Decode bitmap size
-                        let bitmap_size = bitmap_size_table.decode(huffman_reader)?.unwrap_or(0);
+                        let _bitmap_size = bitmap_size_table.decode(huffman_reader)?.unwrap_or(0);
                         
                         // Read uncompressed bitmap
                         read_uncompressed_bitmap(
@@ -970,7 +970,7 @@ struct SymbolDictionaryHuffmanTables {
     pub height_table: HuffmanTable,
     pub width_table: HuffmanTable,
     pub bitmap_size_table: Option<HuffmanTable>,
-    pub aggregate_table: Option<HuffmanTable>,
+    pub _aggregate_table: Option<HuffmanTable>,
 }
 
 // Reader class - ported from JS Reader class
@@ -1021,7 +1021,7 @@ impl<'a> Reader<'a> {
         self.shift = -1;
     }
 
-    fn next(&mut self) -> i32 {
+    fn _next(&mut self) -> i32 {
         if self.position >= self.end {
             return -1;
         }
@@ -1075,7 +1075,7 @@ fn decode_text_region(
         }
         
         let huffman_tables = _huffman_tables.unwrap();
-        let mut huffman_reader = _huffman_input.ok_or_else(|| {
+        let huffman_reader = _huffman_input.ok_or_else(|| {
             Jbig2Error::new("Huffman input reader required for Huffman text region")
         })?;
         
@@ -1255,8 +1255,8 @@ fn decode_text_region(
             };
             
             let symbol_bitmap = &input_symbols[symbol_id];
-            let mut symbol_width = if !symbol_bitmap.is_empty() { symbol_bitmap[0].len() } else { 0 };
-            let mut symbol_height = symbol_bitmap.len();
+            let symbol_width = if !symbol_bitmap.is_empty() { symbol_bitmap[0].len() } else { 0 };
+            let symbol_height = symbol_bitmap.len();
             
             if apply_refinement {
                 // Symbol refinement in text region
