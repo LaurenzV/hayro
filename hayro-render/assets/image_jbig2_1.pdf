@@ -1,0 +1,108 @@
+%PDF-1.4
+%µ¶
+
+1 0 obj
+<<
+  /Type /Catalog
+  /OpenAction [ 4 0 R /Fit ]
+  /Pages 3 0 R
+>>
+endobj
+
+2 0 obj
+<<
+  /Type /Font
+  /Subtype /Type1
+  /BaseFont /Helvetica
+  /Encoding /WinAnsiEncoding
+>>
+endobj
+
+3 0 obj
+<<
+  /Type /Pages
+  /Count 1
+  /Kids [ 4 0 R ]
+>>
+endobj
+
+4 0 obj
+<<
+  /Type /Page
+  /Parent 3 0 R
+  /Contents 17 0 R
+  /MediaBox [ 0 0 595.2756 841.8898 ]
+  /Resources <<
+    /Font <<
+      /F1 2 0 R
+    >>
+    /XObject <<
+      /Im1 6 0 R
+    >>
+  >>
+>>
+endobj
+
+6 0 obj
+<<
+  /Type /XObject
+  /Subtype /Image
+  /Width 132
+  /Height 14
+  /BitsPerComponent 1
+  /ColorSpace /DeviceGray
+  /Filter [ /ASCIIHexDecode /JBIG2Decode ]
+  /Length 388
+>>
+stream
+0000000030000100000013000000840000000e00000000000000000100000000
+000100010100000064080002ff00000008000000083a48378aacb40630e091ea
+7be5641dfe6dbff0458dbddb2091ce6d7074e6f3914f6e2f68bbe02f6ceb6b85
+e228d25453121e91d1ce4a4421813cd28b9d43ff2ad018b331c9c1f34f5fbb37
+5f6037a2ef8ab953dc341bffac00000002072001010000002600000084000000
+0e000000000000000000000400000009e8d09ef9daf0877061c539fabfffac>
+endstream
+endobj
+
+17 0 obj
+<<
+  /Length 36
+>>
+stream
+q
+500 0 0 53.03 48 550 cm
+/Im1 Do
+Q
+
+endstream
+endobj
+
+xref
+0 18
+0000000005 65535 f 
+0000000016 00000 n 
+0000000099 00000 n 
+0000000205 00000 n 
+0000000271 00000 n 
+0000000007 00011 f 
+0000000477 00000 n 
+0000000008 00010 f 
+0000000009 00009 f 
+0000000010 00008 f 
+0000000011 00007 f 
+0000000012 00006 f 
+0000000013 00005 f 
+0000000014 00004 f 
+0000000015 00003 f 
+0000000016 00002 f 
+0000000000 00001 f 
+0000001071 00000 n 
+
+trailer
+<<
+  /Size 18
+  /Root 1 0 R
+>>
+startxref
+1161
+%%EOF
