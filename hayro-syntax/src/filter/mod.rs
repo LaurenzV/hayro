@@ -4,6 +4,7 @@ mod ascii_85;
 mod ascii_hex;
 mod ccitt;
 mod dct;
+mod jbig2;
 mod jpx;
 mod lzw_flate;
 mod run_length;
@@ -101,6 +102,7 @@ impl Filter {
                 lzw_flate::flate::decode(data, params).map(FilterResult::from_data)
             }
             Filter::CcittFaxDecode => ccitt::decode(data, params).map(FilterResult::from_data),
+            Filter::Jbig2Decode => jbig2::decode(data, params).map(FilterResult::from_data),
             Filter::JpxDecode => jpx::decode(data),
             _ => None,
         }
