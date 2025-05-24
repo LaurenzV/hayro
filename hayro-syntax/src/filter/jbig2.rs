@@ -2299,7 +2299,9 @@ impl SimpleSegmentVisitor {
         
         // Create Huffman tables and reader if needed (like JS implementation)
         let huffman_tables = if region.huffman {
-            Some(self.get_text_region_huffman_tables(region, referred_segments, input_symbols.len())?)
+            // Use the enhanced function that can decode symbol ID table
+            let mut huffman_reader = Some(Reader::new(data, start, end));
+            Some(self.get_text_region_huffman_tables_with_reader(region, referred_segments, input_symbols.len(), huffman_reader.as_mut())?)
         } else {
             None
         };
@@ -2394,17 +2396,12 @@ impl SimpleSegmentVisitor {
     }
     
     fn get_symbol_dictionary_huffman_tables(&self, dictionary: &SymbolDictionary, referred_segments: &[u32]) -> Result<SymbolDictionaryHuffmanTables, Jbig2Error> {
-        // TODO: SYMBOL DICTIONARY HUFFMAN TABLE DIFFERENCES: JS getSymbolDictionaryHuffmanTables()
-        // implements proper huffmanDHSelector/huffmanDWSelector logic (0/1 = standard tables 4-5/2-3,
-        // 3 = custom table), bitmapSizeSelector and aggregationInstancesSelector handling.
-        // JS also properly increments customIndex for each custom table access.
-        // Rust version has simplified fallback logic that may not handle complex cases correctly.
-        // Based on getSymbolDictionaryHuffmanTables from JS
+        // 7.4.2.1.6 Symbol dictionary segment Huffman table selection
         let mut custom_index = 0;
         
-        // Height table selection based on huffmanDHSelector (extracted from dictionary flags)
-        let height_table = match dictionary.huffman as u8 { // Use huffman flag as selector for now
-            0 | 1 => get_standard_table(4 + (dictionary.huffman as u32))?,
+        // Height table selection based on huffmanDHSelector
+        let height_table = match dictionary.huffman_dh_selector {
+            0 | 1 => get_standard_table(dictionary.huffman_dh_selector as u32 + 4)?,
             3 => {
                 let table = get_custom_huffman_table(custom_index, referred_segments, &self.custom_tables)?.clone();
                 custom_index += 1;
@@ -2414,20 +2411,29 @@ impl SimpleSegmentVisitor {
         };
         
         // Width table selection based on huffmanDWSelector
-        let width_table = match dictionary.huffman as u8 { // Use huffman flag as selector for now  
-            0 | 1 => get_standard_table(2 + (dictionary.huffman as u32))?,
+        let width_table = match dictionary.huffman_dw_selector {
+            0 | 1 => get_standard_table(dictionary.huffman_dw_selector as u32 + 2)?,
             3 => {
-                get_custom_huffman_table(custom_index, referred_segments, &self.custom_tables)?.clone()
+                let table = get_custom_huffman_table(custom_index, referred_segments, &self.custom_tables)?.clone();
+                custom_index += 1;
+                table
             },
             _ => return Err(Jbig2Error::new("invalid Huffman DW selector")),
         };
         
+        // Bitmap size table selection based on bitmapSizeSelector
+        let bitmap_size_table = if dictionary.bitmap_size_selector {
+            Some(get_custom_huffman_table(custom_index, referred_segments, &self.custom_tables)?.clone())
+        } else {
+            Some(get_standard_table(1)?)
+        };
         
-        // Bitmap size table - use standard table 1 for simplicity
-        let bitmap_size_table = Some(get_standard_table(1)?);
-        
-        // Aggregate table - use standard table 1 for simplicity  
-        let _aggregate_table = Some(get_standard_table(1)?);
+        // Aggregation instances table selection based on aggregationInstancesSelector  
+        let _aggregate_table = if dictionary.aggregation_instances_selector {
+            Some(get_custom_huffman_table(custom_index, referred_segments, &self.custom_tables)?.clone())
+        } else {
+            Some(get_standard_table(1)?)
+        };
         
         Ok(SymbolDictionaryHuffmanTables {
             height_table,
@@ -2437,27 +2443,70 @@ impl SimpleSegmentVisitor {
         })
     }
     
-    fn get_text_region_huffman_tables(&self, region: &TextRegion, referred_segments: &[u32], number_of_symbols: usize) -> Result<TextRegionHuffmanTables, Jbig2Error> {
-        // ✅ FAITHFUL PORT: Complete JavaScript implementation with RUNCODE handling
-        // 7.4.3.1.7 Symbol ID Huffman table decoding
+    fn get_text_region_huffman_tables(&self, region: &TextRegion, referred_segments: &[u32], _number_of_symbols: usize) -> Result<TextRegionHuffmanTables, Jbig2Error> {
+        self.get_text_region_huffman_tables_with_reader(region, referred_segments, _number_of_symbols, None)
+    }
+    
+    fn get_text_region_huffman_tables_with_reader(&self, region: &TextRegion, referred_segments: &[u32], number_of_symbols: usize, huffman_reader: Option<&mut Reader>) -> Result<TextRegionHuffmanTables, Jbig2Error> {
+        // 7.4.3.1.6 Text region segment Huffman table selection
+        let mut custom_index = 0;
         
-        // This would require access to the original segment data and a Reader positioned at the right location.
-        // In a full implementation, we would need the huffman_input Reader from the text region decoding.
-        // For now, we create simplified fallback tables using standard tables.
+        // Symbol ID table decoding
+        let symbol_id_table = if let Some(reader) = huffman_reader {
+            // ✅ FAITHFUL PORT: Complete JavaScript implementation with RUNCODE handling
+            // 7.4.3.1.7 Symbol ID Huffman table decoding
+            decode_symbol_id_huffman_table(reader, number_of_symbols)?
+        } else {
+            // Fallback to standard table when no reader available
+            get_standard_table(15)?
+        };
         
-        // Table selection based on huffmanFS/DS/DT selectors (7.4.3.1.6)
-        let symbol_id_table = get_standard_table(15)?; // Use a reasonable default
-        let t_table = get_standard_table(11)?;  // Standard table for delta T
-        let s_table = get_standard_table(8)?;   // Standard table for delta S
-        let fs_table = Some(get_standard_table(6)?); // Standard table for first S
+        // First S table selection based on huffmanFS selector
+        let fs_table = match region.huffman_fs {
+            0 | 1 => Some(get_standard_table(region.huffman_fs as u32 + 6)?),
+            3 => {
+                let table = get_custom_huffman_table(custom_index, referred_segments, &self.custom_tables)?.clone();
+                custom_index += 1;
+                Some(table)
+            },
+            _ => return Err(Jbig2Error::new("invalid Huffman FS selector")),
+        };
+        
+        // Delta S table selection based on huffmanDS selector
+        let s_table = match region.huffman_ds {
+            0 | 1 | 2 => get_standard_table(region.huffman_ds as u32 + 8)?,
+            3 => {
+                let table = get_custom_huffman_table(custom_index, referred_segments, &self.custom_tables)?.clone();
+                custom_index += 1;
+                table
+            },
+            _ => return Err(Jbig2Error::new("invalid Huffman DS selector")),
+        };
+        
+        // Delta T table selection based on huffmanDT selector  
+        let t_table = match region.huffman_dt {
+            0 | 1 | 2 => get_standard_table(region.huffman_dt as u32 + 11)?,
+            3 => {
+                let table = get_custom_huffman_table(custom_index, referred_segments, &self.custom_tables)?.clone();
+                custom_index += 1;
+                table
+            },
+            _ => return Err(Jbig2Error::new("invalid Huffman DT selector")),
+        };
+        
+        if region.refinement {
+            // Load tables RDW, RDH, RDX and RDY based on selectors
+            // For now, return error as refinement with Huffman is complex
+            return Err(Jbig2Error::new("refinement with Huffman is not supported"));
+        }
         
         Ok(TextRegionHuffmanTables {
             symbol_id_table,
-            t_table,
-            s_table, 
+            t_table: t_table.clone(),
+            s_table: s_table.clone(),
             fs_table,
-            _ds_table: Some(get_standard_table(8)?),
-            _dt_table: Some(get_standard_table(11)?),
+            _ds_table: Some(s_table),
+            _dt_table: Some(t_table),
             _rdw_table: None,
             _rdh_table: None,
             _rdx_table: None,
@@ -2481,6 +2530,12 @@ struct GenericRegion {
 struct SymbolDictionary {
     huffman: bool,
     refinement: bool,
+    huffman_dh_selector: u8,
+    huffman_dw_selector: u8,
+    bitmap_size_selector: bool,
+    aggregation_instances_selector: bool,
+    bitmap_coding_context_used: bool,
+    bitmap_coding_context_retained: bool,
     template: usize,
     refinement_template: usize,
     at: Vec<TemplatePixel>,
@@ -2494,6 +2549,14 @@ struct TextRegion {
     info: RegionSegmentInformation,
     huffman: bool,
     refinement: bool,
+    huffman_fs: u8,
+    huffman_ds: u8,
+    huffman_dt: u8,
+    huffman_refinement_dw: u8,
+    huffman_refinement_dh: u8,
+    huffman_refinement_dx: u8,
+    huffman_refinement_dy: u8,
+    huffman_refinement_size_selector: bool,
     default_pixel_value: u8,
     number_of_symbol_instances: u32,
     strip_size: u32,
@@ -2791,6 +2854,12 @@ fn process_segment(segment: &Segment, visitor: &mut SimpleSegmentVisitor) -> Res
             
             let huffman = (dictionary_flags & 1) != 0;
             let refinement = (dictionary_flags & 2) != 0;
+            let huffman_dh_selector = ((dictionary_flags >> 2) & 3) as u8;
+            let huffman_dw_selector = ((dictionary_flags >> 4) & 3) as u8;
+            let bitmap_size_selector = ((dictionary_flags >> 6) & 1) != 0;
+            let aggregation_instances_selector = ((dictionary_flags >> 7) & 1) != 0;
+            let bitmap_coding_context_used = (dictionary_flags & 256) != 0;
+            let bitmap_coding_context_retained = (dictionary_flags & 512) != 0;
             let template = ((dictionary_flags >> 10) & 3) as usize;
             let refinement_template = ((dictionary_flags >> 12) & 1) as usize;
             
@@ -2834,6 +2903,12 @@ fn process_segment(segment: &Segment, visitor: &mut SimpleSegmentVisitor) -> Res
             let dictionary = SymbolDictionary {
                 huffman,
                 refinement,
+                huffman_dh_selector,
+                huffman_dw_selector,
+                bitmap_size_selector,
+                aggregation_instances_selector,
+                bitmap_coding_context_used,
+                bitmap_coding_context_retained,
                 template,
                 refinement_template,
                 at,
@@ -2877,9 +2952,30 @@ fn process_segment(segment: &Segment, visitor: &mut SimpleSegmentVisitor) -> Res
             };
             let refinement_template = ((text_region_segment_flags >> 15) & 1) as usize;
             
+            // Extract Huffman selectors from textRegionHuffmanFlags if Huffman is used
+            let mut huffman_fs = 0u8;
+            let mut huffman_ds = 0u8;
+            let mut huffman_dt = 0u8;
+            let mut huffman_refinement_dw = 0u8;
+            let mut huffman_refinement_dh = 0u8;
+            let mut huffman_refinement_dx = 0u8;
+            let mut huffman_refinement_dy = 0u8;
+            let mut huffman_refinement_size_selector = false;
+            
             if huffman {
-                // Skip Huffman flags for now
+                if position + 2 > data.len() {
+                    return Err(Jbig2Error::new("insufficient data for text region Huffman flags"));
+                }
+                let text_region_huffman_flags = read_uint16(data, position);
                 position += 2;
+                huffman_fs = (text_region_huffman_flags & 3) as u8;
+                huffman_ds = ((text_region_huffman_flags >> 2) & 3) as u8;
+                huffman_dt = ((text_region_huffman_flags >> 4) & 3) as u8;
+                huffman_refinement_dw = ((text_region_huffman_flags >> 6) & 3) as u8;
+                huffman_refinement_dh = ((text_region_huffman_flags >> 8) & 3) as u8;
+                huffman_refinement_dx = ((text_region_huffman_flags >> 10) & 3) as u8;
+                huffman_refinement_dy = ((text_region_huffman_flags >> 12) & 3) as u8;
+                huffman_refinement_size_selector = (text_region_huffman_flags & 0x4000) != 0;
             }
             
             let mut refinement_at = Vec::new();
@@ -2906,6 +3002,14 @@ fn process_segment(segment: &Segment, visitor: &mut SimpleSegmentVisitor) -> Res
                 info,
                 huffman,
                 refinement,
+                huffman_fs,
+                huffman_ds,
+                huffman_dt,
+                huffman_refinement_dw,
+                huffman_refinement_dh,
+                huffman_refinement_dx,
+                huffman_refinement_dy,
+                huffman_refinement_size_selector,
                 default_pixel_value,
                 number_of_symbol_instances,
                 strip_size,
@@ -3410,7 +3514,6 @@ fn get_custom_huffman_table<'a>(
 
 // Helper function for complete RUNCODE symbol ID table decoding  
 // ✅ FAITHFUL PORT: Complete JavaScript getTextRegionHuffmanTables implementation
-#[allow(dead_code)]
 fn decode_symbol_id_huffman_table(reader: &mut Reader, number_of_symbols: usize) -> Result<HuffmanTable, Jbig2Error> {
     // 7.4.3.1.7 Symbol ID Huffman table decoding
     
