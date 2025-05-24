@@ -14,6 +14,32 @@
  */
 
 //! A decoder for JBIG2 streams, translated from https://github.com/mozilla/pdf.js/blob/master/src/core/jbig2.js
+//!
+//! TODO: MAJOR DIFFERENCES BETWEEN JS AND RUST IMPLEMENTATIONS:
+//! 1. Main entry point: JS has parseJbig2() and parseJbig2Chunks() as separate functions + Jbig2Image class
+//!    Rust combines these into a single decode() function returning Option<Vec<u8>>
+//! 2. DecodingContext: JS uses lazy getters with shadow() utility, Rust stores decoder/cache directly
+//! 3. decode_integer: JS doesn't handle -0 explicitly, Rust converts -0 to 0 which could affect signed zero representation
+//! 4. decodeBitmapTemplate0 row initialization: JS uses current row as row1 when i==0, Rust uses empty_row
+//! 5. decode_symbol_dictionary: Rust implementation is incomplete for Huffman mode compared to JS
+//! 6. Error handling: JS throws exceptions, Rust returns Result types
+//! 7. Array indexing: JS has bounds checking via [index], Rust uses .get().copied().unwrap_or(0)
+//! 8. Memory management: JS uses garbage collection, Rust explicit memory management with Vec/clone
+//! 9. Type differences: JS uses Uint8Array/Int8Array/Int32Array, Rust uses Vec<u8>/Vec<i32>
+//! 10. Many Huffman-related functions are simplified or use fallbacks in Rust version
+//! 11. decode_pattern_dictionary: JS decodes collective bitmap then divides, Rust decodes individually
+//! 12. decode_text_region: JS has complete Huffman refinement support, Rust returns error for Huffman+refinement
+//! 13. decode_halftone_region: JS uses complex grid vector formula with bit shifts, Rust uses simplified calculation
+//! 14. HuffmanTable: JS uses Uint32Array for histogram in assignPrefixCodes, Rust uses Vec<u32>
+//! 15. MMR decoding: JS uses custom Reader with EOFB detection, Rust uses CCITTFaxDecoder wrapper
+//! 16. ArithmeticDecoder: JS uses direct array access, Rust adds bounds checking for memory safety
+//!
+//! SYSTEMATIC COMPARISON SUMMARY:
+//! - Compared ~40 major functions between JS (2595 lines) and Rust (3200+ lines) implementations
+//! - Found 16 major architectural and algorithmic differences that could affect decoding results
+//! - Constants (SEGMENT_TYPES, CODING_TEMPLATES, QE_TABLE) verified to match exactly
+//! - Rust version appears to be a simplified/fallback implementation for many advanced features
+//! - Key areas needing attention: Huffman decoding, pattern dictionaries, halftone regions, refinement
 
 use crate::object::dict::Dict;
 use crate::object::dict::keys::JBIG2_GLOBALS;
@@ -23,6 +49,10 @@ use log::warn;
 use std::collections::HashMap;
 
 // Decode a JBIG2 data stream
+// TODO: JS version has parseJbig2(data) and parseJbig2Chunks(chunks) as separate functions,
+// but Rust version only has decode() function that combines both. The JS version also has
+// a Jbig2Image class with parseChunks() and parse() methods, while Rust directly returns
+// Option<Vec<u8>>. This architectural difference may affect error handling and data flow.
 pub fn decode(data: &[u8], params: Dict) -> Option<Vec<u8>> {
     let globals = params.get::<Vec<u8>>(JBIG2_GLOBALS);
     
@@ -87,6 +117,10 @@ impl ContextCache {
 }
 
 // New architecture to fix borrowing issues
+// TODO: JS version uses lazy getters for decoder and contextCache (using shadow() utility),
+// while Rust version stores them directly. JS DecodingContext.decoder creates a new 
+// ArithmeticDecoder on first access and caches it, but Rust creates it immediately in new().
+// This might affect performance and memory usage patterns.
 struct DecodingContext {
     decoder: ArithmeticDecoder,
     context_cache: ContextCache,
@@ -275,6 +309,9 @@ struct ArithmeticDecoder {
 
 impl ArithmeticDecoder {
     // C.3.5 Initialisation of the decoder (INITDEC)
+    // TODO: ARITHMETIC DECODER DIFFERENCES: JS version uses direct array access data[bp],
+    // Rust version adds bounds checking. JS uses let/const for variables, Rust uses mut.
+    // Both follow the same QM Coder algorithm but with different memory safety approaches.
     fn new(data: &[u8], start: usize, end: usize) -> Self {
         let mut decoder = Self {
             data: data.to_vec(),
@@ -448,6 +485,9 @@ fn decode_integer(context_cache: &mut ContextCache, procedure: &str, decoder: &m
         -(value as i32)
     } else {
         // When value is 0 and sign is 1, result should be 0 (not -0)
+        // TODO: JS version doesn't have this explicit check - it would create a -0 value.
+        // JS: signedValue = -value; (where value is 0) creates -0, but in Rust this becomes 0.
+        // This could potentially affect behavior if the decoder expects signed zero representation.
         0
     };
 
@@ -1054,6 +1094,10 @@ fn decode_text_region(
     log_strip_size: usize,
     _huffman_input: Option<&mut Reader>,
 ) -> Result<Bitmap, Jbig2Error> {
+    // TODO: HUFFMAN HANDLING DIFFERENCES: JS version uses huffmanTables.tableDeltaT.decode()
+    // for initial stripT calculation, while Rust uses t_table. JS also has more complete
+    // refinement support in Huffman mode (decodes rdw, rdh, rdx, rdy and calls decodeRefinement),
+    // while Rust returns error for "refinement with Huffman is not supported".
     if huffman && refinement {
         return Err(Jbig2Error::new("refinement with Huffman is not supported"));
     }
@@ -1385,6 +1429,10 @@ fn decode_pattern_dictionary(
     template: usize,
     decoding_context: &mut DecodingContext,
 ) -> Result<Vec<Bitmap>, Jbig2Error> {
+    // TODO: MAJOR ALGORITHMIC DIFFERENCE: JS version decodes a single collective bitmap
+    // of width (maxPatternIndex + 1) * patternWidth and height patternHeight, then
+    // divides it into individual patterns. Rust version decodes each pattern individually.
+    // This could lead to different results if patterns share context across boundaries.
     let mut at = Vec::new();
     if !mmr {
         at.push(TemplatePixel { x: -(pattern_width as i32), y: 0 });
@@ -2322,6 +2370,12 @@ fn decode_halftone_region(
     grid_vector_y: i32,
     decoding_context: &mut DecodingContext,
 ) -> Result<Bitmap, Jbig2Error> {
+    // TODO: GRID VECTOR CALCULATION DIFFERENCE: JS version uses complex formula:
+    // x = (gridOffsetX + mg * gridVectorY + ng * gridVectorX) >> 8;
+    // y = (gridOffsetY + mg * gridVectorX - ng * gridVectorY) >> 8;
+    // Rust version uses simplified: pattern_x = grid_offset_x + (ng as i32) * grid_vector_x;
+    // pattern_y = grid_offset_y + (mg as i32) * grid_vector_y;
+    // This will produce completely different pattern placement results.
     if enable_skip {
         return Err(Jbig2Error::new("skip is not supported"));
     }
