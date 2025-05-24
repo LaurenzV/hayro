@@ -12,13 +12,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
+use std::cell::RefCell;
 use crate::object::dict::Dict;
 use crate::object::dict::keys::JBIG2_GLOBALS;
 use crate::filter::ccitt::{CCITTFaxDecoder, CCITTFaxDecoderOptions};
 use crate::reader::Reader as CrateReader;
 use log::warn;
 use std::collections::HashMap;
+use std::rc::Rc;
 use crate::object::stream::Stream;
 
 pub fn decode(data: &[u8], params: Dict) -> Option<Vec<u8>> {
@@ -273,6 +274,7 @@ struct ArithmeticDecoder {
     clow: u32,
     ct: i32,
     a: u32,
+    counter: usize,
 }
 
 impl ArithmeticDecoder {
@@ -289,6 +291,7 @@ impl ArithmeticDecoder {
             clow: 0,
             ct: 0,
             a: 0,
+            counter: 0,
         };
         
         decoder.byte_in();
@@ -333,6 +336,9 @@ impl ArithmeticDecoder {
     
     // C.3.2 Decoding a decision (DECODE)
     fn read_bit(&mut self, contexts: &mut [i8], pos: usize) -> u8 {
+        println!("{}, a: {}", self.counter, self.a);
+        self.counter += 1;
+        
         // Contexts are packed into 1 byte:
         // highest 7 bits carry cx.index, lowest bit carries cx.mps
         let mut cx_index = (contexts[pos] >> 1) as usize;
@@ -592,10 +598,6 @@ fn decode_bitmap(
     at: &[TemplatePixel],
     decoding_context: &mut DecodingContext,
 ) -> Result<Bitmap, Jbig2Error> {
-    // TODO: TEMPLATE HANDLING DIFFERENCES: JS uses CodingTemplates[templateIndex].concat(at)
-    // and creates separate Int8Array for templateX/templateY coordinates, plus Int32Array for
-    // changingTemplateX/Y and Uint16Array for changingTemplateBit. Rust uses Vec<TemplatePixel>
-    // and different data structures. This could affect template processing performance and accuracy.
     if mmr {
         // Use MMR decoding
         let data_slice = &decoding_context.decoder.data[decoding_context.decoder.bp..decoding_context.decoder.data_end];
@@ -654,7 +656,7 @@ fn decode_bitmap(
 
     let pseudo_pixel_context = REUSED_CONTEXTS[template_index];
     let mut bitmap = Vec::with_capacity(height);
-    let mut row = vec![0u8; width];
+    let mut row = Rc::new(RefCell::new(vec![0u8; width]));
 
     // We'll use the with_decoder_and_context method in the loop below
 
@@ -670,11 +672,12 @@ fn decode_bitmap(
             }
         }
         
-        row = vec![0u8; width];
+        row = Rc::new(RefCell::new(vec![0u8; width]));
+        bitmap.push(row.clone());
         
         for j in 0..width {
             if use_skip && skip.unwrap()[i][j] != 0 {
-                row[j] = 0;
+                row.borrow_mut()[j] = 0;
                 continue;
             }
             
@@ -689,7 +692,7 @@ fn decode_bitmap(
                     let i0 = (i as i32 + template[k].y) as usize;
                     let j0 = (j as i32 + template[k].x) as usize;
                     if i0 < bitmap.len() && j0 < width {
-                        let bit = bitmap[i0][j0];
+                        let bit = bitmap[i0].borrow()[j0];
                         if bit != 0 {
                             let changing_bit = 1 << (template_length - 1 - k);
                             context_label |= changing_bit;
@@ -704,7 +707,7 @@ fn decode_bitmap(
                     if j0 >= 0 && j0 < width as i32 {
                         let i0 = i as i32 + template[k].y;
                         if i0 >= 0 && (i0 as usize) < bitmap.len() {
-                            let bit = bitmap[i0 as usize][j0 as usize];
+                            let bit = bitmap[i0 as usize].borrow()[j0 as usize];
                             if bit != 0 {
                                 context_label |= 1 << (template_length - 1 - k);
                             }
@@ -714,12 +717,12 @@ fn decode_bitmap(
             }
             
             let pixel = decoding_context.read_bit_with_context("GB", context_label as usize);
-            row[j] = pixel;
+            row.borrow_mut()[j] = pixel;
         }
         bitmap.push(row.clone());
     }
 
-    Ok(bitmap)
+    Ok(bitmap.into_iter().map(|i| i.borrow().clone()).collect())
 }
 
 // Refinement decoding - ported from decodeRefinement function
@@ -875,7 +878,7 @@ fn decode_symbol_dictionary(
         let mut current_width = 0i32;
         let mut total_width = 0i32;
         let first_symbol = if huffman { symbol_widths.len() } else { 0 };
-        
+
         // Inner width loop
         loop {
             // Delta width decoding
