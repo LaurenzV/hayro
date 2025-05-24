@@ -598,6 +598,10 @@ fn decode_bitmap(
     at: &[TemplatePixel],
     decoding_context: &mut DecodingContext,
 ) -> Result<Bitmap, Jbig2Error> {
+    // TODO: TEMPLATE HANDLING DIFFERENCES: JS uses CodingTemplates[templateIndex].concat(at)
+    // and creates separate Int8Array for templateX/templateY coordinates, plus Int32Array for
+    // changingTemplateX/Y and Uint16Array for changingTemplateBit. Rust uses Vec<TemplatePixel>
+    // and different data structures. This could affect template processing performance and accuracy.
     if mmr {
         // Use MMR decoding
         let data_slice = &decoding_context.decoder.data[decoding_context.decoder.bp..decoding_context.decoder.data_end];
@@ -614,7 +618,7 @@ fn decode_bitmap(
         return Ok(decode_bitmap_template0(width, height, decoding_context));
     }
 
-    let use_skip = skip.is_some();
+    let useskip = skip.is_some();
     let mut template = CODING_TEMPLATES[template_index].iter()
         .map(|[x, y]| TemplatePixel { x: *x, y: *y })
         .collect::<Vec<_>>();
@@ -626,6 +630,11 @@ fn decode_bitmap(
     template.sort_by(|a, b| a.y.cmp(&b.y).then(a.x.cmp(&b.x)));
 
     let template_length = template.len();
+    
+    // ✅ MATCH JAVASCRIPT: Create separate coordinate arrays like JS templateX/templateY
+    let mut template_x: Vec<i8> = vec![0; template_length];
+    let mut template_y: Vec<i8> = vec![0; template_length];
+    
     let mut changing_template_entries = Vec::new();
     let mut reuse_mask = 0u32;
     let mut min_x = 0i32;
@@ -633,6 +642,9 @@ fn decode_bitmap(
     let mut min_y = 0i32;
 
     for k in 0..template_length {
+        template_x[k] = template[k].x as i8;
+        template_y[k] = template[k].y as i8;
+        
         min_x = min_x.min(template[k].x);
         max_x = max_x.max(template[k].x);
         min_y = min_y.min(template[k].y);
@@ -648,23 +660,36 @@ fn decode_bitmap(
             changing_template_entries.push(k);
         }
     }
+    
+    let changing_entries_length = changing_template_entries.len();
+    
+    // ✅ MATCH JAVASCRIPT: Create separate arrays for changing template entries like JS
+    let changing_template_x: Vec<i8> = changing_template_entries.iter()
+        .map(|&k| template[k].x as i8).collect();
+    let changing_template_y: Vec<i8> = changing_template_entries.iter()
+        .map(|&k| template[k].y as i8).collect();
+    let changing_template_bit: Vec<u16> = changing_template_entries.iter()
+        .map(|&k| 1u16 << (template_length - 1 - k)).collect();
 
     // Get the safe bounding box edges from the width, height, minX, maxX, minY
-    let sbb_left = (-min_x) as usize;
-    let sbb_top = (-min_y) as usize;
-    let sbb_right = (width as i32 - max_x) as usize;
+    let sbb_left = -min_x;
+    let sbb_top = -min_y;
+    let sbb_right = width as i32 - max_x;
 
     let pseudo_pixel_context = REUSED_CONTEXTS[template_index];
     let mut bitmap = Vec::with_capacity(height);
     let mut row = Rc::new(RefCell::new(vec![0u8; width]));
-    println!("printing: {:?}", decoding_context.decoder.counter);
-    // We'll use the with_decoder_and_context method in the loop below
+
+    // ✅ MATCH JAVASCRIPT: Get decoder and contexts like JS
+    let decoder = &mut decoding_context.decoder;
+    let contexts = decoding_context.context_cache.get_contexts("GB");
 
     let mut ltp = 0u8;
+    let mut context_label = 0u32;
     
     for i in 0..height {
         if prediction {
-            let sltp = decoding_context.read_bit_with_context("GB", pseudo_pixel_context as usize);
+            let sltp = decoder.read_bit(contexts, pseudo_pixel_context as usize);
             ltp ^= sltp;
             if ltp != 0 {
                 bitmap.push(row.clone()); // duplicate previous row
@@ -677,50 +702,48 @@ fn decode_bitmap(
         bitmap.push(row.clone());
         
         for j in 0..width {
-            if use_skip && skip.unwrap()[i][j] != 0 {
+            if useskip && skip.unwrap()[i][j] != 0 {
                 row.borrow_mut()[j] = 0;
                 continue;
             }
             
-            let mut context_label = 0u32;
-            
+            // ✅ MATCH JAVASCRIPT: Identical logic to JS for context calculation
             // Are we in the middle of a scanline, so we can reuse contextLabel bits?
-            if j >= sbb_left && j < sbb_right && i >= sbb_top {
+            if (j as i32) >= sbb_left && (j as i32) < sbb_right && (i as i32) >= sbb_top {
                 // If yes, we can just shift the bits that are reusable and only
                 // fetch the remaining ones.
                 context_label = (context_label << 1) & reuse_mask;
-                for &k in &changing_template_entries {
-                    let i0 = (i as i32 + template[k].y) as usize;
-                    let j0 = (j as i32 + template[k].x) as usize;
-                    if i0 < bitmap.len() && j0 < width {
-                        let bit = bitmap[i0].borrow()[j0];
-                        if bit != 0 {
-                            let changing_bit = 1 << (template_length - 1 - k);
-                            context_label |= changing_bit;
-                        }
+                for k in 0..changing_entries_length {
+                    let i0 = (i as i32 + changing_template_y[k] as i32) as usize;
+                    let j0 = (j as i32 + changing_template_x[k] as i32) as usize;
+                    let bit = bitmap[i0].borrow()[j0];
+                    if bit != 0 {
+                        context_label |= changing_template_bit[k] as u32;
                     }
                 }
             } else {
                 // compute the contextLabel from scratch
                 context_label = 0;
+                let mut shift = template_length - 1;
                 for k in 0..template_length {
-                    let j0 = j as i32 + template[k].x;
+                    let j0 = j as i32 + template_x[k] as i32;
                     if j0 >= 0 && j0 < width as i32 {
-                        let i0 = i as i32 + template[k].y;
-                        if i0 >= 0 && (i0 as usize) < bitmap.len() {
+                        let i0 = i as i32 + template_y[k] as i32;
+                        if i0 >= 0 {
                             let bit = bitmap[i0 as usize].borrow()[j0 as usize];
                             if bit != 0 {
-                                context_label |= 1 << (template_length - 1 - k);
+                                context_label |= (bit as u32) << shift;
                             }
                         }
                     }
-                    println!("{:?}", bitmap);
-                    println!("k: {}, ctx: {}", k, context_label);
+
+                    if shift > 0 {
+                        shift -= 1;
+                    }
                 }
             }
-            println!("{}, {}", decoding_context.decoder.counter, context_label);
             
-            let pixel = decoding_context.read_bit_with_context("GB", context_label as usize);
+            let pixel = decoder.read_bit(contexts, context_label as usize);
             row.borrow_mut()[j] = pixel;
         }
     }
