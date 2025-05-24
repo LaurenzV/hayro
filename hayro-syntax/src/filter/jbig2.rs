@@ -452,24 +452,25 @@ fn decode_integer(context_cache: &mut ContextCache, procedure: &str, decoder: &m
         read_bits(2)
     };
 
-    let signed_value = if sign == 0 {
-        value as i32
+    let mut signed_value = None;
+    
+    if sign == 0 {
+        signed_value = Some(value as i32);
     } else if value > 0 {
-        -(value as i32)
-    } else {
-        // When value is 0 and sign is 1, result should be 0 (not -0)
-        0
+        signed_value = Some(-(value as i32));
     };
 
     // Ensure that the integer value doesn't underflow or overflow
     const MIN_INT_32: i32 = i32::MIN;
     const MAX_INT_32: i32 = i32::MAX;
     
-    if signed_value >= MIN_INT_32 && signed_value <= MAX_INT_32 {
-        Some(signed_value)
-    } else {
-        None
+    if let Some(signed_value) = signed_value {
+        if signed_value >= MIN_INT_32 && signed_value <= MAX_INT_32 {
+            return Some(signed_value);
+        }
     }
+    
+    None
 }
 
 // A.3 The IAID decoding procedure
@@ -598,10 +599,7 @@ fn decode_bitmap(
     at: &[TemplatePixel],
     decoding_context: &mut DecodingContext,
 ) -> Result<Bitmap, Jbig2Error> {
-    // TODO: TEMPLATE HANDLING DIFFERENCES: JS uses CodingTemplates[templateIndex].concat(at)
-    // and creates separate Int8Array for templateX/templateY coordinates, plus Int32Array for
-    // changingTemplateX/Y and Uint16Array for changingTemplateBit. Rust uses Vec<TemplatePixel>
-    // and different data structures. This could affect template processing performance and accuracy.
+    println!("Decode bitmap: {}", decoding_context.decoder.counter);
     if mmr {
         // Use MMR decoding
         let data_slice = &decoding_context.decoder.data[decoding_context.decoder.bp..decoding_context.decoder.data_end];
@@ -714,6 +712,7 @@ fn decode_bitmap(
                 // fetch the remaining ones.
                 context_label = (context_label << 1) & reuse_mask;
                 for k in 0..changing_entries_length {
+                    println!("k_if: {k}, {context_label}");
                     let i0 = (i as i32 + changing_template_y[k] as i32) as usize;
                     let j0 = (j as i32 + changing_template_x[k] as i32) as usize;
                     let bit = bitmap[i0].borrow()[j0];
@@ -726,6 +725,7 @@ fn decode_bitmap(
                 context_label = 0;
                 let mut shift = template_length - 1;
                 for k in 0..template_length {
+                    println!("k_else: {k}, {context_label}");
                     let j0 = j as i32 + template_x[k] as i32;
                     if j0 >= 0 && j0 < width as i32 {
                         let i0 = i as i32 + template_y[k] as i32;
