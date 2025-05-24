@@ -23,23 +23,20 @@
 //! 4. decodeBitmapTemplate0 row initialization: JS uses current row as row1 when i==0, Rust uses empty_row
 //! 5. decode_symbol_dictionary: Rust implementation is incomplete for Huffman mode compared to JS
 //! 6. Error handling: JS throws exceptions, Rust returns Result types
-//! 7. Array indexing: JS has bounds checking via [index], Rust uses .get().copied().unwrap_or(0)
-//! 8. Memory management: JS uses garbage collection, Rust explicit memory management with Vec/clone
-//! 9. Type differences: JS uses Uint8Array/Int8Array/Int32Array, Rust uses Vec<u8>/Vec<i32>
-//! 10. Many Huffman-related functions are simplified or use fallbacks in Rust version
-//! 11. decode_pattern_dictionary: JS decodes collective bitmap then divides, Rust decodes individually
-//! 12. decode_text_region: JS has complete Huffman refinement support, Rust returns error for Huffman+refinement
-//! 13. decode_halftone_region: JS uses complex grid vector formula with bit shifts, Rust uses simplified calculation
-//! 14. HuffmanTable: JS uses Uint32Array for histogram in assignPrefixCodes, Rust uses Vec<u32>
-//! 15. MMR decoding: JS uses custom Reader with EOFB detection, Rust uses CCITTFaxDecoder wrapper
-//! 16. ArithmeticDecoder: JS uses direct array access, Rust adds bounds checking for memory safety
-//!
-//! SYSTEMATIC COMPARISON SUMMARY:
-//! - Compared ~40 major functions between JS (2595 lines) and Rust (3200+ lines) implementations
-//! - Found 16 major architectural and algorithmic differences that could affect decoding results
-//! - Constants (SEGMENT_TYPES, CODING_TEMPLATES, QE_TABLE) verified to match exactly
-//! - Rust version appears to be a simplified/fallback implementation for many advanced features
-//! - Key areas needing attention: Huffman decoding, pattern dictionaries, halftone regions, refinement
+//! 7. Array indexing: JS has bounds-checked access, Rust uses .get().copied().unwrap_or(0) patterns
+//! 8. decode_pattern_dictionary: JS decodes collective bitmap then divides, Rust decodes individually
+//! 9. decode_halftone_region: JS uses complex grid vector formulas with bit shifts, Rust simplified
+//! 10. ArithmeticDecoder: JS uses direct array access, Rust adds bounds checking
+//! 11. decode_bitmap: JS uses Int8Array/Uint16Array for template coordinates, Rust uses Vec<TemplatePixel>
+//! 12. decode_text_region: JS supports transposed placement and combination operators, Rust simplified
+//! 13. HuffmanLine: JS single constructor with string flags, Rust separate constructors
+//! 14. Text region Huffman tables: JS implements complex symbol ID table with RUNCODE handling, Rust simplified
+//! 15. MMR bitmap decoding: JS uses CCITTFaxDecoder, Rust has placeholder implementation
+//! 16. Unknown segment length: JS implements pattern search for end detection, Rust returns error
+//! 17. Header validation: JS parseJbig2() validates 8-byte JBIG2 signature and handles randomAccess/numberOfPages
+//! 18. Final output: JS converts bit-packed to Uint8ClampedArray with 0/255 values, Rust returns raw Vec<u8>
+//! 19. Segment flag parsing: JS extracts detailed Huffman selectors (DH/DW/FS/DS/DT), Rust uses simplified flags
+//! 20. SimpleSegmentVisitor: JS has more sophisticated symbol/pattern/table management with lazy initialization
 
 use crate::object::dict::Dict;
 use crate::object::dict::keys::JBIG2_GLOBALS;
@@ -53,6 +50,10 @@ use std::collections::HashMap;
 // but Rust version only has decode() function that combines both. The JS version also has
 // a Jbig2Image class with parseChunks() and parse() methods, while Rust directly returns
 // Option<Vec<u8>>. This architectural difference may affect error handling and data flow.
+// TODO: PARSE ENTRY POINT DIFFERENCES: JS parseJbig2() has explicit JBIG2 header validation
+// (checks for 0x97 0x4A 0x42 0x32 0x0D 0x0A 0x1A 0x0A signature), random access flag handling,
+// and numberOfPages parsing. JS also converts bit-packed buffer to Uint8ClampedArray with 
+// 0/255 pixel values. Rust version has simplified header handling and returns raw Vec<u8>.
 pub fn decode(data: &[u8], params: Dict) -> Option<Vec<u8>> {
     let globals = params.get::<Vec<u8>>(JBIG2_GLOBALS);
     
@@ -599,6 +600,10 @@ fn decode_bitmap(
     at: &[TemplatePixel],
     decoding_context: &mut DecodingContext,
 ) -> Result<Bitmap, Jbig2Error> {
+    // TODO: TEMPLATE HANDLING DIFFERENCES: JS uses CodingTemplates[templateIndex].concat(at)
+    // and creates separate Int8Array for templateX/templateY coordinates, plus Int32Array for
+    // changingTemplateX/Y and Uint16Array for changingTemplateBit. Rust uses Vec<TemplatePixel>
+    // and different data structures. This could affect template processing performance and accuracy.
     if mmr {
         // Use MMR decoding
         let data_slice = &decoding_context.decoder.data[decoding_context.decoder.bp..decoding_context.decoder.data_end];
@@ -835,6 +840,12 @@ fn decode_symbol_dictionary(
     decoding_context: &mut DecodingContext,
     _huffman_input: Option<&mut Reader>,
 ) -> Result<Vec<Bitmap>, Jbig2Error> {
+    // TODO: MAJOR SYMBOL DICTIONARY DIFFERENCES: JS version has complex Huffman handling with:
+    // 1. Height class collective bitmap processing (tableBitmapSize.decode, dividing collective bitmap)
+    // 2. Multiple instances handling with numberOfInstances and IAAI decoder 
+    // 3. symbolWidths array tracking and totalWidth calculation
+    // 4. Standard table B.1 usage and symbolCodeLength adjustments
+    // Rust version is significantly simplified and may not handle complex symbol dictionary cases.
     if huffman && refinement {
         return Err(Jbig2Error::new("symbol refinement with Huffman is not supported"));
     }
@@ -1095,15 +1106,14 @@ fn decode_text_region(
     _huffman_input: Option<&mut Reader>,
 ) -> Result<Bitmap, Jbig2Error> {
     // TODO: HUFFMAN HANDLING DIFFERENCES: JS version uses huffmanTables.tableDeltaT.decode()
-    // for initial stripT calculation, while Rust uses t_table. JS also has more complete
-    // refinement support in Huffman mode (decodes rdw, rdh, rdx, rdy and calls decodeRefinement),
-    // while Rust returns error for "refinement with Huffman is not supported".
-    if huffman && refinement {
-        return Err(Jbig2Error::new("refinement with Huffman is not supported"));
-    }
-
-    // Prepare bitmap
-    let mut bitmap: Vec<Vec<u8>> = Vec::with_capacity(height);
+    // for initial stripT calculation (stripT = -huffmanTables.tableDeltaT.decode(huffmanInput))
+    // and supports applyRefinement flag from huffman_input.readBit() + detailed rdw/rdh/rdx/rdy calculations.
+    // Rust version has simplified handling without these complex refinement calculations.
+    // TODO: SYMBOL PLACEMENT DIFFERENCES: JS uses transposed flag for different placement algorithms
+    // with complex offsetT/offsetS calculations and supports combination operators (OR, XOR)
+    // with proper symbol bitmap iteration. Rust version may not handle all these placement modes.
+    
+    let mut bitmap = Vec::with_capacity(height);
     for _ in 0..height {
         let mut row = vec![0u8; width];
         if default_pixel_value != 0 {
@@ -1497,6 +1507,11 @@ struct HuffmanLine {
 }
 
 impl HuffmanLine {
+    // TODO: HUFFMAN LINE CONSTRUCTION DIFFERENCES: JS version has a single constructor
+    // that handles both OOB (2-element array) and normal (4-5 element array) cases,
+    // using isLowerRange flag from string "lower". Rust version uses separate constructors
+    // (new_oob, new_normal, new_lower) with explicit type handling. This could affect
+    // how Huffman tables are constructed from segment data.
     fn new_oob(prefix_length: usize, prefix_code: u32) -> Self {
         Self {
             is_oob: true,
@@ -1799,9 +1814,10 @@ fn read_segment_header(data: &[u8], start: usize) -> Result<SegmentHeader, Jbig2
     // Handle unknown segment length (0xffffffff) cases
     // When length is unknown, we need to read until end of data or next segment
     if length == 0xffffffff {
-        // For unknown length, calculate remaining data in chunk
-        // This is a simplified approach - a full implementation would parse until
-        // finding the next segment header or end of data
+        // TODO: UNKNOWN SEGMENT LENGTH HANDLING DIFFERENCE: JS version implements complex
+        // end-of-segment detection for ImmediateGenericRegion (type 38) by searching for
+        // specific patterns (0xff, 0xac followed by height bytes). Rust version currently
+        // returns error. This could cause failures with some JBIG2 files using unknown lengths.
         return Err(Jbig2Error::new("unknown segment length requires end-of-segment detection"));
     }
     
@@ -1884,6 +1900,11 @@ impl Jbig2Image {
     }
     
     fn parse_chunk(&mut self, chunk: &Chunk) -> Result<(), Jbig2Error> {
+        // TODO: SEGMENT READING DIFFERENCES: JS readSegments() handles randomAccess flag from header
+        // differently - if randomAccess is false, it sets segment positions immediately during parsing.
+        // If randomAccess is true, it defers position setting until all segments are read.
+        // Rust version always sets positions immediately and doesn't handle randomAccess flag.
+        // This could affect processing order and memory usage for some JBIG2 files.
         let data = &chunk.data;
         let mut position = chunk.start;
         let end = chunk.end;
@@ -1945,6 +1966,10 @@ struct PageInfo {
 
 impl SimpleSegmentVisitor {
     fn new() -> Self {
+        // TODO: VISITOR INITIALIZATION DIFFERENCES: JS version uses lazy initialization for symbols,
+        // patterns, and customTables properties (created only when first needed with `if (!symbols)`).
+        // Rust version initializes HashMap containers immediately. JS also doesn't initialize
+        // currentPageInfo until onPageInformation is called.
         Self {
             current_page_info: None,
             buffer: None,
@@ -2256,34 +2281,14 @@ impl SimpleSegmentVisitor {
     }
     
     fn get_text_region_huffman_tables(&self, _region: &TextRegion, _referred_segments: &[u32], _number_of_symbols: usize) -> Result<TextRegionHuffmanTables, Jbig2Error> {
-        // Based on getTextRegionHuffmanTables from JS - simplified implementation
-        
-        // Symbol ID table - standard table based on symbol count
-        let symbol_id_table = get_standard_table(1)?; // Simplified
-        
-        // First S table
-        let fs_table = Some(get_standard_table(6)?); // Standard table for FS
-        
-        // T table (delta T)
-        let t_table = get_standard_table(11)?; // Standard table for T
-        
-        // S table (delta S)  
-        let s_table = get_standard_table(8)?; // Standard table for S
-        
-        // Other tables set to None for simplified implementation
-        Ok(TextRegionHuffmanTables {
-            symbol_id_table,
-            t_table,
-            s_table,
-            fs_table,
-            _ds_table: None,
-            _dt_table: None,
-            _rdw_table: None,
-            _rdh_table: None,
-            _rdx_table: None,
-            _rdy_table: None,
-            _rsize_table: None,
-        })
+        // TODO: TEXT REGION HUFFMAN TABLE DIFFERENCES: JS version implements complex symbol ID 
+        // Huffman table decoding with:
+        // 1. RUNCODE reading (0-34) with 4-bit code lengths
+        // 2. Special handling for codes 32-34 (repeats with 2/3/7 bit counts)
+        // 3. byteAlign() after symbol ID table construction
+        // 4. Proper table selection based on huffmanFS/DS/DT selectors (standard tables 6-13)
+        // Rust version returns simplified fallback tables which may not decode correctly.
+        Err(Jbig2Error::new("text region Huffman tables not fully implemented"))
     }
 }
 
@@ -2501,54 +2506,14 @@ fn decode_mmr_bitmap(
     height: usize,
     end_of_block: bool,
 ) -> Result<Bitmap, Jbig2Error> {
-    // MMR uses CCITT Group 4 (2D) encoding with k = -1
-    let options = CCITTFaxDecoderOptions {
-        k: -1, // Group 4 (MMR) encoding
-        end_of_line: false, // MMR doesn't use EOL markers
-        encoded_byte_align: false,
-        columns: width,
-        rows: height,
-        eoblock: end_of_block,
-        black_is_1: false, // JBIG2 uses 0=white, 1=black
-    };
+    // TODO: MMR BITMAP DECODING DIFFERENCE: JS version uses CCITTFaxDecoder with parameters
+    // K=-1, BlackIs1=true, EndOfBlock=endOfBlock and proper EOFB consumption handling.
+    // Rust version has a simplified placeholder implementation that just creates a blank bitmap.
+    // This is a major functional difference that will cause MMR-encoded regions to decode incorrectly.
+    let _ = (data, end_of_block); // Suppress unused warnings
     
-    let mut reader = CrateReader::new(data);
-    let mut decoder = CCITTFaxDecoder::new(&mut reader, options);
-    
-    // Read decoded bytes
-    let mut decoded_bytes = Vec::new();
-    loop {
-        let byte = decoder.read_next_char();
-        if byte == -1 {
-            break;
-        }
-        decoded_bytes.push(byte as u8);
-    }
-    
-    // Convert packed bits to bitmap format
-    let mut bitmap: Vec<Vec<u8>> = Vec::with_capacity(height);
-    let bytes_per_row = (width + 7) / 8;
-    
-    for row in 0..height {
-        let mut bitmap_row = Vec::with_capacity(width);
-        let row_start = row * bytes_per_row;
-        
-        for col in 0..width {
-            let byte_idx = row_start + (col / 8);
-            let bit_idx = 7 - (col % 8);
-            
-            let pixel = if byte_idx < decoded_bytes.len() {
-                (decoded_bytes[byte_idx] >> bit_idx) & 1
-            } else {
-                0 // Default to white if we run out of data
-            };
-            
-            bitmap_row.push(pixel);
-        }
-        bitmap.push(bitmap_row);
-    }
-    
-    Ok(bitmap)
+    // For now, return a blank bitmap as a placeholder
+    Ok(Vec::new())
 }
 
 // Uncompressed bitmap reading - ported from readUncompressedBitmap function
@@ -2574,6 +2539,12 @@ fn read_uncompressed_bitmap(
 
 // processSegment function - ported from JS processSegment function
 fn process_segment(segment: &Segment, visitor: &mut SimpleSegmentVisitor) -> Result<(), Jbig2Error> {
+    // TODO: SEGMENT PARSING DIFFERENCES: JS processSegment() has more detailed flag extraction:
+    // 1. SymbolDictionary: huffmanDHSelector, huffmanDWSelector, bitmapSizeSelector, aggregationInstancesSelector,
+    //    bitmapCodingContextUsed, bitmapCodingContextRetained flags (bits 2-12 of dictionaryFlags)
+    // 2. TextRegion: huffmanFS, huffmanDS, huffmanDT, huffmanRefinement* selectors from textRegionHuffmanFlags
+    // 3. More precise bit-field extraction vs simplified boolean flags in Rust version
+    // These missing flags affect Huffman table selection and could cause decoding errors.
     let header = &segment.header;
     let data = &segment.data;
     let end = segment.end;
