@@ -1264,7 +1264,7 @@ fn decode_text_region(
     }
 
     if huffman {
-        // Huffman-coded text region
+        // ✅ MATCH JAVASCRIPT: Complete Huffman-coded text region implementation
         if _huffman_tables.is_none() {
             return Err(Jbig2Error::new("Huffman tables required for Huffman text region"));
         }
@@ -1274,8 +1274,9 @@ fn decode_text_region(
             Jbig2Error::new("Huffman input reader required for Huffman text region")
         })?;
         
-        // Huffman-coded text region implementation
-        let strip_t = huffman_tables.t_table.decode(huffman_reader)?
+        // ✅ MATCH JAVASCRIPT: Exact initial stripT calculation like JS
+        // JavaScript: stripT = -huffmanTables.tableDeltaT.decode(huffmanInput)
+        let mut strip_t = huffman_tables.t_table.decode(huffman_reader)?
             .ok_or_else(|| Jbig2Error::new("Failed to decode initial strip T"))
             .map(|v| -v)?;
 
@@ -1283,12 +1284,14 @@ fn decode_text_region(
         let mut i = 0;
         
         while i < number_of_symbol_instances {
-            // Decode delta T using Huffman
+            // ✅ MATCH JAVASCRIPT: Exact delta T decoding like JS
+            // JavaScript: deltaT = huffmanTables.tableDeltaT.decode(huffmanInput)
             let delta_t = huffman_tables.t_table.decode(huffman_reader)?
                 .unwrap_or(0);
-            let strip_t = strip_t + delta_t;
+            strip_t += delta_t;
 
-            // Decode first S using Huffman
+            // ✅ MATCH JAVASCRIPT: Exact first S decoding like JS
+            // JavaScript: deltaFirstS = huffmanTables.tableFirstS.decode(huffmanInput)
             let delta_first_s = if let Some(ref fs_table) = huffman_tables.fs_table {
                 fs_table.decode(huffman_reader)?.unwrap_or(0)
             } else {
@@ -1298,8 +1301,9 @@ fn decode_text_region(
             let mut current_s = first_s;
             
             loop {
-                // Decode current T using Huffman
-                let current_t = if strip_size > 1 && log_strip_size > 0 {
+                // ✅ MATCH JAVASCRIPT: Exact current T calculation like JS
+                // JavaScript: currentT = huffman ? huffmanInput.readBits(logStripSize) : decodeInteger(contextCache, "IAIT", decoder);
+                let current_t = if strip_size > 1 {
                     huffman_reader.read_bits(log_strip_size)? as i32
                 } else {
                     0
@@ -1307,7 +1311,8 @@ fn decode_text_region(
                 
                 let t = (strip_size as i32) * strip_t + current_t;
                 
-                // Decode symbol ID using Huffman
+                // ✅ MATCH JAVASCRIPT: Exact symbol ID decoding like JS
+                // JavaScript: symbolId = huffmanTables.symbolIDTable.decode(huffmanInput)
                 let symbol_id = huffman_tables.symbol_id_table.decode(huffman_reader)?;
                 let Some(symbol_id) = symbol_id else { break }; // OOB
                 
@@ -1315,10 +1320,57 @@ fn decode_text_region(
                     break;
                 }
                 
-                let symbol_bitmap = &input_symbols[symbol_id as usize];
-                let symbol_width = if !symbol_bitmap.is_empty() { symbol_bitmap[0].len() } else { 0 };
-                let symbol_height = symbol_bitmap.len();
+                // ✅ MATCH JAVASCRIPT: Exact apply refinement flag handling like JS
+                // JavaScript: applyRefinement = refinement && (huffman ? huffmanInput.readBit() : decodeInteger(contextCache, "IARI", decoder));
+                let apply_refinement = if refinement {
+                    huffman_reader.read_bit()? != 0
+                } else {
+                    false
+                };
                 
+                let mut symbol_bitmap = &input_symbols[symbol_id as usize];
+                let mut symbol_width = if !symbol_bitmap.is_empty() { symbol_bitmap[0].len() } else { 0 };
+                let mut symbol_height = symbol_bitmap.len();
+                let mut refined_bitmap_storage: Option<Bitmap> = None; // Storage for refined bitmap
+                
+                if apply_refinement {
+                    // ✅ MATCH JAVASCRIPT: Exact refinement handling like JS (note: uses arithmetic decoder even in Huffman mode)
+                    // JavaScript: rdw = decodeInteger(contextCache, "IARDW", decoder); // 6.4.11.1
+                    // JavaScript: rdh = decodeInteger(contextCache, "IARDH", decoder); // 6.4.11.2
+                    // JavaScript: rdx = decodeInteger(contextCache, "IARDX", decoder); // 6.4.11.3
+                    // JavaScript: rdy = decodeInteger(contextCache, "IARDY", decoder); // 6.4.11.4
+                    let rdw = decoding_context.decode_integer("IARDW").unwrap_or(0); // 6.4.11.1
+                    let rdh = decoding_context.decode_integer("IARDH").unwrap_or(0); // 6.4.11.2
+                    let rdx = decoding_context.decode_integer("IARDX").unwrap_or(0); // 6.4.11.3
+                    let rdy = decoding_context.decode_integer("IARDY").unwrap_or(0); // 6.4.11.4
+                    
+                    // ✅ MATCH JAVASCRIPT: Exact symbol dimension updates like JS
+                    // JavaScript: symbolWidth += rdw; symbolHeight += rdh;
+                    symbol_width = (symbol_width as i32 + rdw) as usize;
+                    symbol_height = (symbol_height as i32 + rdh) as usize;
+                    
+                    // ✅ MATCH JAVASCRIPT: Exact refinement call like JS
+                    // JavaScript: symbolBitmap = decodeRefinement(symbolWidth, symbolHeight, refinementTemplateIndex, symbolBitmap, (rdw >> 1) + rdx, (rdh >> 1) + rdy, false, refinementAt, decodingContext);
+                    let refined_bitmap = decode_refinement(
+                        symbol_width,
+                        symbol_height,
+                        refinement_template_index,
+                        symbol_bitmap,
+                        (rdw >> 1) + rdx,  // JavaScript: (rdw >> 1) + rdx
+                        (rdh >> 1) + rdy,  // JavaScript: (rdh >> 1) + rdy
+                        false, // prediction
+                        refinement_at,
+                        decoding_context,
+                    )?;
+                    
+                    // Store refined bitmap and update references
+                    refined_bitmap_storage = Some(refined_bitmap);
+                    symbol_bitmap = refined_bitmap_storage.as_ref().unwrap();
+                }
+                
+                // ✅ MATCH JAVASCRIPT: Exact increment calculation like JS
+                // JavaScript: if (!transposed) { if (referenceCorner > 1) { currentS += symbolWidth - 1; } else { increment = symbolWidth - 1; } }
+                // JavaScript: else if (!(referenceCorner & 1)) { currentS += symbolHeight - 1; } else { increment = symbolHeight - 1; }
                 let increment = if !transposed {
                     if reference_corner > 1 {
                         current_s += symbol_width as i32 - 1;
@@ -1333,17 +1385,23 @@ fn decode_text_region(
                     symbol_height as i32 - 1
                 };
                 
+                // ✅ MATCH JAVASCRIPT: Exact offset calculation like JS
+                // JavaScript: offsetT = t - (referenceCorner & 1 ? 0 : symbolHeight - 1);
+                // JavaScript: offsetS = currentS - (referenceCorner & 2 ? symbolWidth - 1 : 0);
                 let offset_t = t - if (reference_corner & 1) != 0 { 0 } else { symbol_height as i32 - 1 };
                 let offset_s = current_s - if (reference_corner & 2) != 0 { symbol_width as i32 - 1 } else { 0 };
                 
-                // Place symbol bitmap (same logic as arithmetic path)
+                // ✅ MATCH JAVASCRIPT: Exact symbol placement like JS
                 if transposed {
+                    // JavaScript: for (s2 = 0; s2 < symbolHeight; s2++) { row = bitmap[offsetS + s2]; if (!row) { continue; } ... }
                     for s2 in 0..symbol_height {
                         let row_idx = (offset_s + s2 as i32) as usize;
                         if row_idx >= bitmap.len() {
                             continue;
                         }
                         let symbol_row = &symbol_bitmap[s2];
+                        // ✅ MATCH JAVASCRIPT: Exact maxWidth calculation like JS
+                        // JavaScript: const maxWidth = Math.min(width - offsetT, symbolWidth);
                         let max_width = ((width as i32) - offset_t).min(symbol_width as i32).max(0) as usize;
                         
                         match combination_operator {
@@ -1367,6 +1425,7 @@ fn decode_text_region(
                         }
                     }
                 } else {
+                    // JavaScript: for (t2 = 0; t2 < symbolHeight; t2++) { row = bitmap[offsetT + t2]; if (!row) { continue; } ... }
                     for t2 in 0..symbol_height {
                         let row_idx = (offset_t + t2 as i32) as usize;
                         if row_idx >= bitmap.len() {
@@ -1398,7 +1457,8 @@ fn decode_text_region(
                 
                 i += 1;
                 
-                // Decode delta S using Huffman
+                // ✅ MATCH JAVASCRIPT: Exact delta S decoding like JS
+                // JavaScript: deltaS = huffmanTables.tableDeltaS.decode(huffmanInput)
                 let delta_s = huffman_tables.s_table.decode(huffman_reader)?;
                 let Some(delta_s) = delta_s else { break }; // OOB
                 
