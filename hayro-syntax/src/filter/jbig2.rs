@@ -20,7 +20,7 @@
 //! 2. ✅ FIXED: DecodingContext - Direct storage instead of lazy getters is acceptable
 //! 3. ✅ FIXED: decode_integer - Converting -0 to 0 is acceptable behavior
 //! 4. ✅ FIXED: decodeBitmapTemplate0 row initialization now matches JS (uses current row when i < 1/2)
-//! 5. decode_symbol_dictionary: Rust implementation is incomplete for Huffman mode compared to JS
+//! 5. ✅ FIXED: decode_symbol_dictionary: Now faithfully ported from JS with complete features
 //! 6. Error handling: JS throws exceptions, Rust returns Result types
 //! 7. Array indexing: JS has bounds-checked access, Rust uses .get().copied().unwrap_or(0) patterns
 //! 8. decode_pattern_dictionary: JS decodes collective bitmap then divides, Rust decodes individually
@@ -871,194 +871,250 @@ fn decode_symbol_dictionary(
     refinement: bool,
     symbols: &[Bitmap],
     number_of_new_symbols: usize,
-    _number_of_exported_symbols: usize,
+    number_of_exported_symbols: usize,
     huffman_tables: Option<&SymbolDictionaryHuffmanTables>,
     template_index: usize,
     at: &[TemplatePixel],
     refinement_template_index: usize,
     refinement_at: &[TemplatePixel],
     decoding_context: &mut DecodingContext,
-    _huffman_input: Option<&mut Reader>,
+    mut huffman_input: Option<&mut Reader>,
 ) -> Result<Vec<Bitmap>, Jbig2Error> {
-    // TODO: MAJOR SYMBOL DICTIONARY DIFFERENCES: JS version has complex Huffman handling with:
-    // 1. Height class collective bitmap processing (tableBitmapSize.decode, dividing collective bitmap)
-    // 2. Multiple instances handling with numberOfInstances and IAAI decoder 
-    // 3. symbolWidths array tracking and totalWidth calculation
-    // 4. Standard table B.1 usage and symbolCodeLength adjustments
-    // Rust version is significantly simplified and may not handle complex symbol dictionary cases.
-    // TODO: CRITICAL MISSING FEATURES: JS version implements:
-    // 1. Height class collective bitmap decoding (6.5.9) with bitmapSize and byteAlign()
-    // 2. Exported symbols processing (6.5.10) with run-length flags and IAEX decoder
-    // 3. Multiple symbol instances with IAAI decoder and text region calls for aggregation
-    // 4. Proper symbol width tracking and bitmap division using subarray()
-    // 5. MMR collective bitmap handling with position/end management
-    // Rust version completely lacks these features and will fail on complex symbol dictionaries.
+    // ✅ FAITHFUL PORT: Complete JavaScript implementation
     if huffman && refinement {
         return Err(Jbig2Error::new("symbol refinement with Huffman is not supported"));
     }
 
     let mut new_symbols = Vec::new();
     let mut current_height = 0i32;
-    let symbol_code_length = log2(symbols.len() + number_of_new_symbols).max(if huffman { 1 } else { 0 });
-
+    let mut symbol_code_length = log2(symbols.len() + number_of_new_symbols);
+    
+    // Huffman setup (faithful to JS)
+    let table_b1 = if huffman {
+        Some(get_standard_table(1)?) // standard table B.1
+    } else {
+        None
+    };
+    let mut symbol_widths = Vec::new();
     if huffman {
-        // Huffman-coded symbol dictionary
-        if huffman_tables.is_none() {
-            return Err(Jbig2Error::new("Huffman tables required for Huffman symbol dictionary"));
-        }
+        symbol_code_length = symbol_code_length.max(1); // 6.5.8.2.3
+    }
+
+    while new_symbols.len() < number_of_new_symbols {
+        // Delta height decoding
+        let delta_height = if huffman {
+            huffman_tables.as_ref()
+                .ok_or_else(|| Jbig2Error::new("Huffman tables required"))?
+                .height_table.decode(huffman_input.as_mut()
+                    .ok_or_else(|| Jbig2Error::new("Huffman input required"))?)
+                .map_err(|_| Jbig2Error::new("Failed to decode delta height"))?
+                .ok_or_else(|| Jbig2Error::new("Got OOB for delta height"))?
+        } else {
+            decoding_context.decode_integer("IADH") // 6.5.6
+                .ok_or_else(|| Jbig2Error::new("Failed to decode IADH"))?
+        };
+        current_height += delta_height;
         
-        let tables = huffman_tables.unwrap();
-        let huffman_reader = _huffman_input.ok_or_else(|| {
-            Jbig2Error::new("Huffman input reader required for Huffman symbol dictionary")
-        })?;
+        let mut current_width = 0i32;
+        let mut total_width = 0i32;
+        let first_symbol = if huffman { symbol_widths.len() } else { 0 };
         
-        // Huffman-coded symbol dictionary dimensions
-        let mut current_height = 0i32;
-        
-        while new_symbols.len() < number_of_new_symbols {
-            // Decode delta height using Huffman table
-            let delta_height = tables.height_table.decode(huffman_reader)?;
+        // Inner width loop
+        loop {
+            // Delta width decoding
+            let delta_width = if huffman {
+                huffman_tables.as_ref().unwrap()
+                    .width_table.decode(huffman_input.as_mut().unwrap())?
+            } else {
+                decoding_context.decode_integer("IADW") // 6.5.7
+            };
             
-            let Some(dh) = delta_height else { break }; // OOB
-            current_height += dh;
+            let Some(dw) = delta_width else { break }; // OOB
+            current_width += dw;
+            total_width += current_width;
             
-            let mut current_width = 0i32;
-            
-            loop {
-                // Decode delta width using Huffman table
-                let delta_width = tables.width_table.decode(huffman_reader)?;
-                
-                let Some(dw) = delta_width else { break }; // OOB
-                current_width += dw;
-                
-                let bitmap = if refinement {
-                    // Refinement-coded symbol bitmap with Huffman
-                    if symbols.is_empty() {
-                        return Err(Jbig2Error::new("No reference symbols available for refinement"));
-                    }
+            if refinement {
+                // 6.5.8.2 Refinement/aggregate-coded symbol bitmap
+                let number_of_instances = decoding_context.decode_integer("IAAI")
+                    .ok_or_else(|| Jbig2Error::new("Failed to decode IAAI"))?;
                     
-                    // For Huffman refinement, symbol ID would be decoded differently
-                    // For now, use a simplified approach
-                    let reference_id = (huffman_reader.read_bits(symbol_code_length)? as usize).min(symbols.len() - 1);
-                    let reference_bitmap = &symbols[reference_id];
+                let bitmap = if number_of_instances > 1 {
+                    // Multiple instances - call text region
+                    let mut all_symbols = symbols.to_vec();
+                    all_symbols.extend_from_slice(&new_symbols);
                     
-                    // Refinement offset would be decoded from Huffman tables if available
-                    let refinement_offset_x = 0; // Simplified
-                    let refinement_offset_y = 0; // Simplified
+                    decode_text_region(
+                        huffman,
+                        refinement,
+                        current_width as usize,
+                        current_height as usize,
+                        0, // default pixel value
+                        number_of_instances as usize,
+                        1, // strip size
+                        &all_symbols,
+                        symbol_code_length,
+                        false, // transposed = 0
+                        0, // ds offset = 0
+                        1, // reference corner = 1 (top left 7.4.3.1.1)
+                        0, // combination operator = 0 (OR)
+                        huffman_tables.map(|_| unreachable!("no text region huffman tables")),
+                        refinement_template_index,
+                        refinement_at,
+                        decoding_context,
+                        0, // log strip size = 0
+                        None, // huffman_input - text region doesn't use it in refinement mode
+                    )?
+                } else {
+                    // Single instance refinement
+                    let symbol_id = decoding_context.decode_iaid(symbol_code_length) as usize;
+                    let rdx = decoding_context.decode_integer("IARDX") // 6.4.11.3
+                        .ok_or_else(|| Jbig2Error::new("Failed to decode IARDX"))?;
+                    let rdy = decoding_context.decode_integer("IARDY") // 6.4.11.4
+                        .ok_or_else(|| Jbig2Error::new("Failed to decode IARDY"))?;
+                        
+                    let symbol = if symbol_id < symbols.len() {
+                        &symbols[symbol_id]
+                    } else {
+                        &new_symbols[symbol_id - symbols.len()]
+                    };
                     
                     decode_refinement(
                         current_width as usize,
                         current_height as usize,
                         refinement_template_index,
-                        reference_bitmap,
-                        refinement_offset_x,
-                        refinement_offset_y,
-                        false,
+                        symbol,
+                        rdx,
+                        rdy,
+                        false, // prediction
                         refinement_at,
                         decoding_context,
                     )?
-                } else {
-                    // Direct-coded symbol bitmap
-                    // For Huffman mode, the bitmap data follows Huffman-decoded dimensions
-                    if let Some(ref bitmap_size_table) = tables.bitmap_size_table {
-                        // Decode bitmap size
-                        let _bitmap_size = bitmap_size_table.decode(huffman_reader)?.unwrap_or(0);
-                        
-                        // Read uncompressed bitmap
-                        read_uncompressed_bitmap(
-                            huffman_reader,
-                            current_width as usize,
-                            current_height as usize,
-                        )?
-                    } else {
-                        // Fallback to arithmetic decoding for bitmap content
-                        decode_bitmap(
-                            false, // mmr
-                            current_width as usize,
-                            current_height as usize,
-                            template_index,
-                            false, // prediction
-                            None,  // skip
-                            at,
-                            decoding_context,
-                        )?
-                    }
                 };
-                
                 new_symbols.push(bitmap);
-            }
-        }
-        
-        return Ok(new_symbols);
-    }
-
-    while new_symbols.len() < number_of_new_symbols {
-        let delta_height = decoding_context.decode_integer("IADH");
-        
-        if let Some(dh) = delta_height {
-            current_height += dh;
-        } else {
-            break;
-        }
-        
-        let mut current_width = 0i32;
-        
-        loop {
-            let delta_width = decoding_context.decode_integer("IADW");
-            
-            let Some(dw) = delta_width else { break }; // OOB
-            current_width += dw;
-            
-            let bitmap = if refinement {
-                // Refinement-coded symbol bitmap
-                // This requires a reference symbol and refinement parameters
-                if symbols.is_empty() {
-                    return Err(Jbig2Error::new("No reference symbols available for refinement"));
-                }
-                
-                // Read the refinement symbol ID (this would normally use IAID decoder)
-                let reference_id = decoding_context.decode_iaid(symbol_code_length) as usize;
-                if reference_id >= symbols.len() {
-                    return Err(Jbig2Error::new("Invalid reference symbol ID for refinement"));
-                }
-                
-                let reference_bitmap = &symbols[reference_id];
-                
-                // Read refinement offset (normally from integer decoder)
-                let refinement_offset_x = decoding_context.decode_integer("IARDX").unwrap_or(0);
-                let refinement_offset_y = decoding_context.decode_integer("IARDY").unwrap_or(0);
-                
-                // Decode refined bitmap using reference
-                decode_refinement(
-                    current_width as usize,
-                    current_height as usize,
-                    refinement_template_index,
-                    reference_bitmap,
-                    refinement_offset_x,
-                    refinement_offset_y,
-                    false, // prediction not typically used in symbol refinement
-                    refinement_at,
-                    decoding_context,
-                )?
+            } else if huffman {
+                // Store only symbol width and decode a collective bitmap when the height class is done.
+                symbol_widths.push(current_width);
             } else {
-                // Direct-coded symbol bitmap
-                decode_bitmap(
+                // 6.5.8.1 Direct-coded symbol bitmap
+                let bitmap = decode_bitmap(
                     false, // mmr
                     current_width as usize,
                     current_height as usize,
                     template_index,
-                    false, // prediction - not typically used for symbol dictionaries
+                    false, // prediction
                     None,  // skip
                     at,
                     decoding_context,
+                )?;
+                new_symbols.push(bitmap);
+            }
+        }
+        
+        if huffman && !refinement {
+            // 6.5.9 Height class collective bitmap
+            let bitmap_size = huffman_tables.as_ref().unwrap()
+                .bitmap_size_table.as_ref()
+                .ok_or_else(|| Jbig2Error::new("Bitmap size table required"))?
+                .decode(huffman_input.as_mut().unwrap())?
+                .ok_or_else(|| Jbig2Error::new("Got OOB for bitmap size"))?;
+                
+            huffman_input.as_mut().unwrap().byte_align();
+            
+            let collective_bitmap = if bitmap_size == 0 {
+                // Uncompressed collective bitmap
+                read_uncompressed_bitmap(
+                    huffman_input.as_mut().unwrap(),
+                    total_width as usize,
+                    current_height as usize,
                 )?
+            } else {
+                // MMR collective bitmap
+                let huffman_reader = huffman_input.as_mut().unwrap();
+                let original_end = huffman_reader.end;
+                let bitmap_end = huffman_reader.position + bitmap_size as usize;
+                huffman_reader.end = bitmap_end;
+                
+                let result = decode_mmr_bitmap(
+                    &huffman_reader.data[huffman_reader.position..bitmap_end],
+                    total_width as usize,
+                    current_height as usize,
+                    false, // end of block
+                );
+                
+                huffman_reader.end = original_end;
+                huffman_reader.position = bitmap_end;
+                result?
             };
             
-            new_symbols.push(bitmap);
+            let number_of_symbols_decoded = symbol_widths.len();
+            if first_symbol == number_of_symbols_decoded - 1 {
+                // collectiveBitmap is a single symbol.
+                new_symbols.push(collective_bitmap);
+            } else {
+                // Divide collectiveBitmap into symbols.
+                let mut x_min = 0;
+                for i in first_symbol..number_of_symbols_decoded {
+                    let bitmap_width = symbol_widths[i] as usize;
+                    let x_max = x_min + bitmap_width;
+                    let mut symbol_bitmap = Vec::new();
+                    
+                    for y in 0..(current_height as usize) {
+                        if y < collective_bitmap.len() {
+                            let row = &collective_bitmap[y];
+                            let symbol_row = if x_min < row.len() {
+                                row[x_min..x_max.min(row.len())].to_vec()
+                            } else {
+                                vec![0u8; bitmap_width]
+                            };
+                            symbol_bitmap.push(symbol_row);
+                        } else {
+                            symbol_bitmap.push(vec![0u8; bitmap_width]);
+                        }
+                    }
+                    new_symbols.push(symbol_bitmap);
+                    x_min = x_max;
+                }
+            }
         }
     }
 
-    Ok(new_symbols)
+    // 6.5.10 Exported symbols
+    let mut exported_symbols = Vec::new();
+    let mut flags = Vec::new();
+    let mut current_flag = false;
+    let total_symbols_length = symbols.len() + number_of_new_symbols;
+    
+    while flags.len() < total_symbols_length {
+        let run_length = if huffman {
+            table_b1.as_ref().unwrap()
+                .decode(huffman_input.as_mut().unwrap())?
+                .ok_or_else(|| Jbig2Error::new("Got OOB for run length"))?
+        } else {
+            decoding_context.decode_integer("IAEX")
+                .ok_or_else(|| Jbig2Error::new("Failed to decode IAEX"))?
+        };
+        
+        for _ in 0..run_length {
+            flags.push(current_flag);
+        }
+        current_flag = !current_flag;
+    }
+    
+    // Export symbols based on flags
+    for (i, &flag) in flags.iter().enumerate().take(symbols.len()) {
+        if flag {
+            exported_symbols.push(symbols[i].clone());
+        }
+    }
+    
+    for (j, symbol) in new_symbols.iter().enumerate() {
+        let i = symbols.len() + j;
+        if i < flags.len() && flags[i] {
+            exported_symbols.push(symbol.clone());
+        }
+    }
+
+    Ok(exported_symbols)
 }
 
 // Placeholder structs for complex Huffman functionality
