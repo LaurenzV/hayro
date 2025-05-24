@@ -2065,17 +2065,84 @@ fn read_segment_header(data: &[u8], start: usize) -> Result<SegmentHeader, Jbig2
     // Handle unknown segment length (0xffffffff) cases
     // When length is unknown, we need to read until end of data or next segment
     if length == 0xffffffff {
-        // TODO: UNKNOWN SEGMENT LENGTH HANDLING DIFFERENCE: JS version implements complex
-        // end-of-segment detection for ImmediateGenericRegion (type 38) by searching for
-        // specific patterns (0xff, 0xac followed by height bytes). Rust version currently
-        // returns error. This could cause failures with some JBIG2 files using unknown lengths.
-        // TODO: UNKNOWN SEGMENT LENGTH PATTERN SEARCH: JS readSegmentHeader() implements full
-        // end-of-segment detection by creating searchPattern[] with:
-        // - For non-MMR: [0xff, 0xac, height>>24, height>>16, height>>8, height&0xff]  
-        // - For MMR: [height>>24, height>>16, height>>8, height&0xff]
-        // Then searches byte-by-byte through data to find this 6-byte pattern.
-        // Rust version just returns error which will fail on valid JBIG2 files with unknown lengths.
-        return Err(Jbig2Error::new("unknown segment length requires end-of-segment detection"));
+        // Implement end-of-segment detection for ImmediateGenericRegion (type 38)
+        if segment_type == 38 {
+            // For ImmediateGenericRegion with unknown length, we need to find the end pattern
+            // by reading ahead to find the region information and create a search pattern
+            if position + 17 > data.len() {
+                return Err(Jbig2Error::new("insufficient data for region info in unknown length segment"));
+            }
+            
+            let region_height = read_uint32(data, position + 4);
+            let region_flags = if position + 17 < data.len() { data[position + 17] } else { 0 };
+            let mmr = (region_flags & 1) != 0;
+            
+            // Create search pattern based on MMR flag and height
+            let search_pattern = if mmr {
+                // For MMR: just height bytes
+                vec![
+                    (region_height >> 24) as u8,
+                    (region_height >> 16) as u8,
+                    (region_height >> 8) as u8,
+                    region_height as u8,
+                ]
+            } else {
+                // For non-MMR: 0xff, 0xac followed by height bytes
+                vec![
+                    0xff,
+                    0xac,
+                    (region_height >> 24) as u8,
+                    (region_height >> 16) as u8,
+                    (region_height >> 8) as u8,
+                    region_height as u8,
+                ]
+            };
+            
+            // Search for the pattern starting from after the segment header
+            let search_start = position + 18; // After region info and flags
+            let search_end = data.len().saturating_sub(search_pattern.len());
+            let mut found_end = None;
+            
+            for i in search_start..=search_end {
+                if data[i..i + search_pattern.len()] == search_pattern {
+                    found_end = Some(i + search_pattern.len());
+                    break;
+                }
+            }
+            
+            let actual_length = if let Some(end_pos) = found_end {
+                end_pos - position
+            } else {
+                // If pattern not found, use remaining data
+                data.len() - position
+            };
+            
+            return Ok(SegmentHeader {
+                number,
+                segment_type,
+                type_name,
+                _deferred_non_retain: deferred_non_retain,
+                _retain_bits: retain_bits,
+                referred_to,
+                _page_association: page_association,
+                length: actual_length as u32,
+                header_end: position,
+            });
+        }
+        
+        // For other segment types with unknown length, use remaining data
+        let remaining_length = data.len() - position;
+        return Ok(SegmentHeader {
+            number,
+            segment_type,
+            type_name,
+            _deferred_non_retain: deferred_non_retain,
+            _retain_bits: retain_bits,
+            referred_to,
+            _page_association: page_association,
+            length: remaining_length as u32,
+            header_end: position,
+        });
     }
     
     Ok(SegmentHeader {
