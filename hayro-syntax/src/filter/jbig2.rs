@@ -15,22 +15,11 @@
 
 //! A decoder for JBIG2 streams, translated from https://github.com/mozilla/pdf.js/blob/master/src/core/jbig2.js
 //!
-//! TODO: MAJOR DIFFERENCES BETWEEN JS AND RUST IMPLEMENTATIONS:
-//! 1. ✅ FIXED: Main entry point - Single decode() method is acceptable (design choice)
-//! 2. ✅ FIXED: DecodingContext - Direct storage instead of lazy getters is acceptable
-//! 3. ✅ FIXED: decode_integer - Converting -0 to 0 is acceptable behavior
-//! 4. ✅ FIXED: decodeBitmapTemplate0 row initialization now matches JS (uses current row when i < 1/2)
-//! 5. ✅ FIXED: decode_symbol_dictionary: Now faithfully ported from JS with complete features
-//! 6. Error handling: JS throws exceptions, Rust returns Result types
-//! 7. Array indexing: JS has bounds-checked access, Rust uses .get().copied().unwrap_or(0) patterns
-//! 8. ✅ FIXED: decode_pattern_dictionary: Now uses collective bitmap algorithm like JS
-//! 9. ✅ FIXED: decode_halftone_region: Now uses proper grid vector formulas with bit shifts
-//! 10. ArithmeticDecoder: JS uses direct array access, Rust adds bounds checking
-//! 11. decode_bitmap: JS uses Int8Array/Uint16Array for template coordinates, Rust uses Vec<TemplatePixel>
-//! 12. ✅ FIXED: decode_text_region: Now supports complete refinement with rdw/rdh/rdx/rdy parameters
-//! 13. ✅ FIXED: HuffmanLine: Now uses unified constructor matching JS implementation
-//! 14. ✅ FIXED: Text region Huffman tables: Complete RUNCODE algorithm implemented (with fallback)
-//! 15. ✅ FIXED: MMR bitmap decoding: Now uses CCITTFaxDecoder with proper row-by-row processing
+//! TODO: REMAINING DIFFERENCES BETWEEN JS AND RUST IMPLEMENTATIONS:
+//! 1. Error handling: JS throws exceptions, Rust returns Result types
+//! 2. Array indexing: JS has bounds-checked access, Rust uses .get().copied().unwrap_or(0) patterns
+//! 3. ArithmeticDecoder: JS uses direct array access, Rust adds bounds checking
+//! 4. decode_bitmap: JS uses Int8Array/Uint16Array for template coordinates, Rust uses Vec<TemplatePixel>
 
 use crate::object::dict::Dict;
 use crate::object::dict::keys::JBIG2_GLOBALS;
@@ -480,9 +469,6 @@ fn decode_integer(context_cache: &mut ContextCache, procedure: &str, decoder: &m
         -(value as i32)
     } else {
         // When value is 0 and sign is 1, result should be 0 (not -0)
-        // TODO: JS version doesn't have this explicit check - it would create a -0 value.
-        // JS: signedValue = -value; (where value is 0) creates -0, but in Rust this becomes 0.
-        // This could potentially affect behavior if the decoder expects signed zero representation.
         0
     };
 
