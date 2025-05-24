@@ -1623,10 +1623,10 @@ struct SegmentHeader {
     number: u32,
     segment_type: u8,
     type_name: String,
-    deferred_non_retain: bool,
-    retain_bits: Vec<u8>,
+    _deferred_non_retain: bool,
+    _retain_bits: Vec<u8>,
     referred_to: Vec<u32>,
-    page_association: u32,
+    _page_association: u32,
     length: u32,
     header_end: usize,
 }
@@ -1761,10 +1761,10 @@ fn read_segment_header(data: &[u8], start: usize) -> Result<SegmentHeader, Jbig2
         number,
         segment_type,
         type_name,
-        deferred_non_retain,
-        retain_bits,
+        _deferred_non_retain: deferred_non_retain,
+        _retain_bits: retain_bits,
         referred_to,
-        page_association,
+        _page_association: page_association,
         length,
         header_end: position,
     })
@@ -2168,24 +2168,12 @@ impl SimpleSegmentVisitor {
         Ok(())
     }
     
-    fn get_huffman_table(&self, table_id: u32, referred_segments: &[u32]) -> Result<HuffmanTable, Jbig2Error> {
-        if table_id <= 15 {
-            // Standard table
-            get_standard_table(table_id)
-        } else {
-            // Custom table from referred segments
-            let custom_index = (table_id - 16) as usize;
-            let table_ref = get_custom_huffman_table(custom_index, referred_segments, &self.custom_tables)?;
-            Ok(table_ref.clone())
-        }
-    }
-    
     fn get_symbol_dictionary_huffman_tables(&self, dictionary: &SymbolDictionary, referred_segments: &[u32]) -> Result<SymbolDictionaryHuffmanTables, Jbig2Error> {
         // Based on getSymbolDictionaryHuffmanTables from JS
         let mut custom_index = 0;
         
         // Height table selection based on huffmanDHSelector (extracted from dictionary flags)
-        let height_table = match (dictionary.huffman as u8) { // Use huffman flag as selector for now
+        let height_table = match dictionary.huffman as u8 { // Use huffman flag as selector for now
             0 | 1 => get_standard_table(4 + (dictionary.huffman as u32))?,
             3 => {
                 let table = get_custom_huffman_table(custom_index, referred_segments, &self.custom_tables)?.clone();
@@ -2196,15 +2184,14 @@ impl SimpleSegmentVisitor {
         };
         
         // Width table selection based on huffmanDWSelector
-        let width_table = match (dictionary.huffman as u8) { // Use huffman flag as selector for now  
+        let width_table = match dictionary.huffman as u8 { // Use huffman flag as selector for now  
             0 | 1 => get_standard_table(2 + (dictionary.huffman as u32))?,
             3 => {
-                let table = get_custom_huffman_table(custom_index, referred_segments, &self.custom_tables)?.clone();
-                custom_index += 1;
-                table
+                get_custom_huffman_table(custom_index, referred_segments, &self.custom_tables)?.clone()
             },
             _ => return Err(Jbig2Error::new("invalid Huffman DW selector")),
         };
+        
         
         // Bitmap size table - use standard table 1 for simplicity
         let bitmap_size_table = Some(get_standard_table(1)?);
@@ -2220,7 +2207,7 @@ impl SimpleSegmentVisitor {
         })
     }
     
-    fn get_text_region_huffman_tables(&self, region: &TextRegion, referred_segments: &[u32], _number_of_symbols: usize) -> Result<TextRegionHuffmanTables, Jbig2Error> {
+    fn get_text_region_huffman_tables(&self, _region: &TextRegion, _referred_segments: &[u32], _number_of_symbols: usize) -> Result<TextRegionHuffmanTables, Jbig2Error> {
         // Based on getTextRegionHuffmanTables from JS - simplified implementation
         
         // Symbol ID table - standard table based on symbol count
