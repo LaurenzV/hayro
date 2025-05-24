@@ -17,7 +17,7 @@
 //!
 //! TODO: REMAINING DIFFERENCES BETWEEN JS AND RUST IMPLEMENTATIONS:
 //! 1. Error handling: JS throws exceptions, Rust returns Result types
-//! 2. Array indexing: JS has bounds-checked access, Rust uses .get().copied().unwrap_or(0) patterns
+//! 2. ✅ FIXED: Array indexing: Now uses direct array indexing like JS (may panic on out-of-bounds)
 //! 3. ArithmeticDecoder: JS uses direct array access, Rust adds bounds checking
 //! 4. decode_bitmap: JS uses Int8Array/Uint16Array for template coordinates, Rust uses Vec<TemplatePixel>
 
@@ -548,25 +548,25 @@ fn decode_bitmap_template0(width: usize, height: usize, decoding_context: &mut D
             let row2_vals = if i < 2 { &row } else { &bitmap[i - 2] };
             let row1_vals = if i < 1 { &row } else { &bitmap[i - 1] };
             
-            ((row2_vals.get(0).copied().unwrap_or(0) as u32) << 13) |
-            ((row2_vals.get(1).copied().unwrap_or(0) as u32) << 12) |
-            ((row2_vals.get(2).copied().unwrap_or(0) as u32) << 11) |
-            ((row1_vals.get(0).copied().unwrap_or(0) as u32) << 7) |
-            ((row1_vals.get(1).copied().unwrap_or(0) as u32) << 6) |
-            ((row1_vals.get(2).copied().unwrap_or(0) as u32) << 5) |
-            ((row1_vals.get(3).copied().unwrap_or(0) as u32) << 4)
+            ((row2_vals[0] as u32) << 13) |
+            ((row2_vals[1] as u32) << 12) |
+            ((row2_vals[2] as u32) << 11) |
+            ((row1_vals[0] as u32) << 7) |
+            ((row1_vals[1] as u32) << 6) |
+            ((row1_vals[2] as u32) << 5) |
+            ((row1_vals[3] as u32) << 4)
         } else {
             // When i >= 2, we can use previous rows from bitmap
             let row2 = &bitmap[i - 2];
             let row1 = if i < 1 { &row } else { &bitmap[i - 1] };
             
-            ((row2.get(0).copied().unwrap_or(0) as u32) << 13) |
-            ((row2.get(1).copied().unwrap_or(0) as u32) << 12) |
-            ((row2.get(2).copied().unwrap_or(0) as u32) << 11) |
-            ((row1.get(0).copied().unwrap_or(0) as u32) << 7) |
-            ((row1.get(1).copied().unwrap_or(0) as u32) << 6) |
-            ((row1.get(2).copied().unwrap_or(0) as u32) << 5) |
-            ((row1.get(3).copied().unwrap_or(0) as u32) << 4)
+            ((row2[0] as u32) << 13) |
+            ((row2[1] as u32) << 12) |
+            ((row2[2] as u32) << 11) |
+            ((row1[0] as u32) << 7) |
+            ((row1[1] as u32) << 6) |
+            ((row1[2] as u32) << 5) |
+            ((row1[3] as u32) << 4)
         };
 
         for j in 0..width {
@@ -577,14 +577,14 @@ fn decode_bitmap_template0(width: usize, height: usize, decoding_context: &mut D
             // At each pixel: Clear contextLabel pixels that are shifted
             // out of the context, then add new ones.
             let row2_val = if i < 2 { 
-                row.get(j + 3).copied().unwrap_or(0) 
+                row[j + 3] 
             } else { 
-                bitmap[i - 2].get(j + 3).copied().unwrap_or(0) 
+                bitmap[i - 2][j + 3] 
             };
             let row1_val = if i < 1 { 
-                row.get(j + 4).copied().unwrap_or(0) 
+                row[j + 4] 
             } else { 
-                bitmap[i - 1].get(j + 4).copied().unwrap_or(0) 
+                bitmap[i - 1][j + 4] 
             };
             
             context_label = ((context_label & OLD_PIXEL_MASK) << 1) |
