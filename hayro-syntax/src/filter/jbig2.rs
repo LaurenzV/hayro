@@ -17,10 +17,8 @@
 
 use crate::object::dict::Dict;
 use crate::object::dict::keys::JBIG2_GLOBALS;
-use crate::reader::Reader as CrateReader;
 use log::warn;
 use std::collections::HashMap;
-use std::cell::RefCell;
 
 // Decode a JBIG2 data stream
 pub fn decode(data: &[u8], params: Dict) -> Option<Vec<u8>> {
@@ -108,7 +106,8 @@ impl DecodingContext {
         decode_iaid(&mut self.context_cache, &mut self.decoder, code_length)
     }
     
-    fn read_bit(&mut self, contexts: &mut [i8], pos: usize) -> u8 {
+    fn read_bit_with_context(&mut self, context_id: &str, pos: usize) -> u8 {
+        let contexts = self.context_cache.get_contexts(context_id);
         self.decoder.read_bit(contexts, pos)
     }
 }
@@ -622,10 +621,7 @@ fn decode_bitmap(
     
     for i in 0..height {
         if prediction {
-            let sltp = decoding_context.with_decoder_and_context(|decoder, context_cache| {
-                let contexts = context_cache.get_contexts("GB");
-                decoder.read_bit(contexts, pseudo_pixel_context as usize)
-            });
+            let sltp = decoding_context.read_bit_with_context("GB", pseudo_pixel_context as usize);
             ltp ^= sltp;
             if ltp != 0 {
                 bitmap.push(row.clone()); // duplicate previous row
@@ -676,10 +672,7 @@ fn decode_bitmap(
                 }
             }
             
-            let pixel = decoding_context.with_decoder_and_context(|decoder, context_cache| {
-                let contexts = context_cache.get_contexts("GB");
-                decoder.read_bit(contexts, context_label as usize)
-            });
+            let pixel = decoding_context.read_bit_with_context("GB", context_label as usize);
             row[j] = pixel;
         }
         bitmap.push(row.clone());
@@ -698,7 +691,7 @@ fn decode_refinement(
     offset_y: i32,
     prediction: bool,
     at: &[TemplatePixel],
-    decoding_context: &DecodingContext,
+    decoding_context: &mut DecodingContext,
 ) -> Result<Bitmap, Jbig2Error> {
     let mut coding_template: Vec<[i32; 2]> = REFINEMENT_TEMPLATES[template_index].coding.to_vec();
     if template_index == 0 {
@@ -726,10 +719,7 @@ fn decode_refinement(
     
     for i in 0..height {
         if prediction {
-            let sltp = decoding_context.with_decoder_and_context(|decoder, context_cache| {
-                let contexts = context_cache.get_contexts("GR");
-                decoder.read_bit(contexts, pseudo_pixel_context as usize)
-            });
+            let sltp = decoding_context.read_bit_with_context("GR", pseudo_pixel_context as usize);
             ltp ^= sltp;
             if ltp != 0 {
                 return Err(Jbig2Error::new("prediction is not supported"));
@@ -772,10 +762,7 @@ fn decode_refinement(
                 }
             }
             
-            let pixel = decoding_context.with_decoder_and_context(|decoder, context_cache| {
-                let contexts = context_cache.get_contexts("GR");
-                decoder.read_bit(contexts, context_label as usize)
-            });
+            let pixel = decoding_context.read_bit_with_context("GR", context_label as usize);
             row[j] = pixel;
         }
         bitmap.push(row);
@@ -801,7 +788,7 @@ fn decode_symbol_dictionary(
     at: &[TemplatePixel],
     refinement_template_index: usize,
     refinement_at: &[TemplatePixel],
-    decoding_context: &DecodingContext,
+    decoding_context: &mut DecodingContext,
     _huffman_input: Option<&mut Reader>,
 ) -> Result<Vec<Bitmap>, Jbig2Error> {
     if huffman && refinement {
@@ -818,9 +805,7 @@ fn decode_symbol_dictionary(
     }
 
     while new_symbols.len() < number_of_new_symbols {
-        let delta_height = decoding_context.with_decoder_and_context(|decoder, context_cache| {
-            decode_integer(context_cache, "IADH", decoder)
-        });
+        let delta_height = decoding_context.decode_integer("IADH");
         
         if let Some(dh) = delta_height {
             current_height += dh;
@@ -831,9 +816,7 @@ fn decode_symbol_dictionary(
         let mut current_width = 0i32;
         
         loop {
-            let delta_width = decoding_context.with_decoder_and_context(|decoder, context_cache| {
-                decode_integer(context_cache, "IADW", decoder)
-            });
+            let delta_width = decoding_context.decode_integer("IADW");
             
             let Some(dw) = delta_width else { break }; // OOB
             current_width += dw;
@@ -939,7 +922,7 @@ fn decode_text_region(
     _huffman_tables: Option<&TextRegionHuffmanTables>,
     refinement_template_index: usize,
     refinement_at: &[TemplatePixel],
-    decoding_context: &DecodingContext,
+    decoding_context: &mut DecodingContext,
     log_strip_size: usize,
     _huffman_input: Option<&mut Reader>,
 ) -> Result<Bitmap, Jbig2Error> {
@@ -962,48 +945,36 @@ fn decode_text_region(
         return Err(Jbig2Error::new("Huffman text region not implemented yet"));
     }
 
-    let strip_t = decoding_context.with_decoder_and_context(|decoder, context_cache| {
-        decode_integer(context_cache, "IADT", decoder).map(|v| -v).unwrap_or(0)
-    });
+    let strip_t = decoding_context.decode_integer("IADT").map(|v| -v).unwrap_or(0);
 
     let mut first_s = 0i32;
     let mut i = 0;
     
     while i < number_of_symbol_instances {
-        let delta_t = decoding_context.with_decoder_and_context(|decoder, context_cache| {
-            decode_integer(context_cache, "IADT", decoder).unwrap_or(0)
-        });
+        let delta_t = decoding_context.decode_integer("IADT").unwrap_or(0);
         let strip_t = strip_t + delta_t;
 
-        let delta_first_s = decoding_context.with_decoder_and_context(|decoder, context_cache| {
-            decode_integer(context_cache, "IAFS", decoder).unwrap_or(0)
-        });
+        let delta_first_s = decoding_context.decode_integer("IAFS").unwrap_or(0);
         first_s += delta_first_s;
         let mut current_s = first_s;
         
         loop {
             let current_t = if strip_size > 1 {
-                decoding_context.with_decoder_and_context(|decoder, context_cache| {
-                    decode_integer(context_cache, "IAIT", decoder).unwrap_or(0)
-                })
+                decoding_context.decode_integer("IAIT").unwrap_or(0)
             } else {
                 0
             };
             
             let t = (strip_size as i32) * strip_t + current_t;
             
-            let symbol_id = decoding_context.with_decoder_and_context(|decoder, context_cache| {
-                decode_iaid(context_cache, decoder, symbol_code_length) as usize
-            });
+            let symbol_id = decoding_context.decode_iaid(symbol_code_length) as usize;
             
             if symbol_id >= input_symbols.len() {
                 break;
             }
             
             let apply_refinement = if refinement {
-                decoding_context.with_decoder_and_context(|decoder, context_cache| {
-                    decode_integer(context_cache, "IARI", decoder).unwrap_or(0) != 0
-                })
+                decoding_context.decode_integer("IARI").unwrap_or(0) != 0
             } else {
                 false
             };
@@ -1095,9 +1066,7 @@ fn decode_text_region(
             }
             
             i += 1;
-            let delta_s = decoding_context.with_decoder_and_context(|decoder, context_cache| {
-                decode_integer(context_cache, "IADS", decoder)
-            });
+            let delta_s = decoding_context.decode_integer("IADS");
             
             if delta_s.is_none() {
                 break; // OOB
@@ -2556,51 +2525,3 @@ fn get_custom_huffman_table<'a>(
     Err(Jbig2Error::new("can't find custom Huffman table"))
 }
 
-// Add MMR decoding implementation at the end, replacing the placeholder
-
-// MMR bitmap decoding - full implementation based on ITU-T T.6 
-fn decode_mmr_bitmap(
-    input: &mut Reader,
-    width: usize,
-    height: usize,
-    end_of_block: bool,
-) -> Result<Bitmap, Jbig2Error> {
-    // Basic MMR (Modified Modified READ) implementation
-    // This is a simplified version - a full implementation would handle all Group 4 codes
-    let mut bitmap: Vec<Vec<u8>> = Vec::with_capacity(height);
-    
-    for _ in 0..height {
-        let mut row = vec![0u8; width];
-        
-        // Read bits for the row - simplified approach
-        for j in 0..width {
-            match input.read_bit() {
-                Ok(bit) => row[j] = bit,
-                Err(_) => break,
-            }
-        }
-        
-        bitmap.push(row);
-        
-        if end_of_block {
-            // Check for end-of-block pattern (24 zeros + 1 + zeros)
-            let mut zero_count = 0;
-            while zero_count < 24 {
-                if input.read_bit().unwrap_or(1) == 0 {
-                    zero_count += 1;
-                } else {
-                    break;
-                }
-            }
-            if zero_count == 24 && input.read_bit().unwrap_or(0) == 1 {
-                break; // Found end-of-block
-            }
-        }
-    }
-    
-    Ok(bitmap)
-}
-
-// Fix all remaining with_decoder_and_context calls throughout the file
-// Update decode_refinement to use the new architecture
-// ... existing code ...
