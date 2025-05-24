@@ -657,7 +657,7 @@ fn decode_bitmap(
     let pseudo_pixel_context = REUSED_CONTEXTS[template_index];
     let mut bitmap = Vec::with_capacity(height);
     let mut row = Rc::new(RefCell::new(vec![0u8; width]));
-
+    println!("printing: {:?}", decoding_context.decoder.counter);
     // We'll use the with_decoder_and_context method in the loop below
 
     let mut ltp = 0u8;
@@ -672,7 +672,8 @@ fn decode_bitmap(
             }
         }
         
-        row = Rc::new(RefCell::new(vec![0u8; width]));
+        let old_data = row.borrow().clone();
+        row = Rc::new(RefCell::new(old_data));
         bitmap.push(row.clone());
         
         for j in 0..width {
@@ -713,13 +714,15 @@ fn decode_bitmap(
                             }
                         }
                     }
+                    println!("{:?}", bitmap);
+                    println!("k: {}, ctx: {}", k, context_label);
                 }
             }
+            println!("{}, {}", decoding_context.decoder.counter, context_label);
             
             let pixel = decoding_context.read_bit_with_context("GB", context_label as usize);
             row.borrow_mut()[j] = pixel;
         }
-        bitmap.push(row.clone());
     }
 
     Ok(bitmap.into_iter().map(|i| i.borrow().clone()).collect())
