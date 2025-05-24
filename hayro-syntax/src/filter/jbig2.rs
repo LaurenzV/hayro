@@ -17,9 +17,10 @@
 
 use crate::object::dict::Dict;
 use crate::object::dict::keys::JBIG2_GLOBALS;
-use crate::reader::Reader;
+use crate::reader::Reader as CrateReader;
 use log::warn;
 use std::collections::HashMap;
+use std::cell::RefCell;
 
 // Decode a JBIG2 data stream
 pub fn decode(data: &[u8], params: Dict) -> Option<Vec<u8>> {
@@ -89,8 +90,8 @@ struct DecodingContext {
     data: Vec<u8>,
     start: usize,
     end: usize,
-    decoder: Option<ArithmeticDecoder>,
-    context_cache: Option<ContextCache>,
+    decoder: RefCell<Option<ArithmeticDecoder>>,
+    context_cache: RefCell<Option<ContextCache>>,
 }
 
 impl DecodingContext {
@@ -99,23 +100,32 @@ impl DecodingContext {
             data,
             start,
             end,
-            decoder: None,
-            context_cache: None,
+            decoder: RefCell::new(None),
+            context_cache: RefCell::new(None),
         }
     }
     
-    fn get_decoder(&mut self) -> &mut ArithmeticDecoder {
-        if self.decoder.is_none() {
-            self.decoder = Some(ArithmeticDecoder::new(&self.data, self.start, self.end));
+    fn with_decoder_and_context<T, F>(&self, f: F) -> T
+    where
+        F: FnOnce(&mut ArithmeticDecoder, &mut ContextCache) -> T,
+    {
+        // Initialize decoder if needed
+        if self.decoder.borrow().is_none() {
+            *self.decoder.borrow_mut() = Some(ArithmeticDecoder::new(&self.data, self.start, self.end));
         }
-        self.decoder.as_mut().unwrap()
-    }
-    
-    fn get_context_cache(&mut self) -> &mut ContextCache {
-        if self.context_cache.is_none() {
-            self.context_cache = Some(ContextCache::new());
+        
+        // Initialize context cache if needed
+        if self.context_cache.borrow().is_none() {
+            *self.context_cache.borrow_mut() = Some(ContextCache::new());
         }
-        self.context_cache.as_mut().unwrap()
+        
+        let mut decoder_ref = self.decoder.borrow_mut();
+        let mut context_cache_ref = self.context_cache.borrow_mut();
+        
+        f(
+            decoder_ref.as_mut().unwrap(),
+            context_cache_ref.as_mut().unwrap(),
+        )
     }
 }
 
@@ -483,16 +493,1037 @@ fn decode_iaid(context_cache: &mut ContextCache, decoder: &mut ArithmeticDecoder
     }
 }
 
-// TODO: Implement bitmap decoding functions
-// TODO: Implement symbol dictionary decoding
-// TODO: Implement text region decoding
-// TODO: Implement pattern dictionary decoding
-// TODO: Implement halftone region decoding
+// Reused contexts for different template indices (6.2.5.7)
+const REUSED_CONTEXTS: [u32; 4] = [
+    0x9b25, // 10011 0110010 0101
+    0x0795, // 0011 110010 101  
+    0x00e5, // 001 11001 01
+    0x0195, // 011001 0101
+];
+
+// Refinement reused contexts 
+const REFINEMENT_REUSED_CONTEXTS: [u32; 2] = [
+    0x0020, // '000' + '0' (coding) + '00010000' + '0' (reference)
+    0x0008, // '0000' + '001000'
+];
+
+// Bitmap type for 2D bitmap data
+type Bitmap = Vec<Vec<u8>>;
+
+// Template structure for coordinates
+#[derive(Clone, Copy, Debug)]
+struct TemplatePixel {
+    x: i32,
+    y: i32,
+}
+
+// 6.2 Generic Region Decoding Procedure - Template 0 optimized version
+fn decode_bitmap_template0(width: usize, height: usize, decoding_context: &mut DecodingContext) -> Bitmap {
+    let mut bitmap = Vec::with_capacity(height);
+    
+    // Context template for current pixel (X)
+    // ...ooooo....
+    // ..ooooooo... Context template for current pixel (X)
+    // .ooooX...... (concatenate values of 'o'-pixels to get contextLabel)
+    const OLD_PIXEL_MASK: u32 = 0x7bf7; // 01111 0111111 0111
+
+    for i in 0..height {
+        let mut row = vec![0u8; width];
+        let empty_row = vec![0u8; width];
+        let row1 = if i >= 1 { &bitmap[i - 1] } else { &empty_row };
+        let row2 = if i >= 2 { &bitmap[i - 2] } else { &empty_row };
+
+        // At the beginning of each row:
+        // Fill contextLabel with pixels that are above/right of (X)
+        let mut context_label = 
+            ((row2.get(0).copied().unwrap_or(0) as u32) << 13) |
+            ((row2.get(1).copied().unwrap_or(0) as u32) << 12) |
+            ((row2.get(2).copied().unwrap_or(0) as u32) << 11) |
+            ((row1.get(0).copied().unwrap_or(0) as u32) << 7) |
+            ((row1.get(1).copied().unwrap_or(0) as u32) << 6) |
+            ((row1.get(2).copied().unwrap_or(0) as u32) << 5) |
+            ((row1.get(3).copied().unwrap_or(0) as u32) << 4);
+
+        for j in 0..width {
+            let pixel = decoding_context.with_decoder_and_context(|decoder, context_cache| {
+                let contexts = context_cache.get_contexts("GB");
+                decoder.read_bit(contexts, context_label as usize)
+            });
+            row[j] = pixel;
+
+            // At each pixel: Clear contextLabel pixels that are shifted
+            // out of the context, then add new ones.
+            context_label = ((context_label & OLD_PIXEL_MASK) << 1) |
+                ((row2.get(j + 3).copied().unwrap_or(0) as u32) << 11) |
+                ((row1.get(j + 4).copied().unwrap_or(0) as u32) << 4) |
+                (pixel as u32);
+        }
+        bitmap.push(row);
+    }
+
+    bitmap
+}
+
+// 6.2 Generic Region Decoding Procedure - General case
+fn decode_bitmap(
+    mmr: bool,
+    width: usize,
+    height: usize,
+    template_index: usize,
+    prediction: bool,
+    skip: Option<&Bitmap>,
+    at: &[TemplatePixel],
+    decoding_context: &mut DecodingContext,
+) -> Result<Bitmap, Jbig2Error> {
+    if mmr {
+        // TODO: Implement MMR decoding
+        return Err(Jbig2Error::new("MMR decoding not implemented yet"));
+    }
+
+    // Use optimized version for the most common case
+    if template_index == 0 && skip.is_none() && !prediction &&
+       at.len() == 4 &&
+       at[0].x == 3 && at[0].y == -1 &&
+       at[1].x == -3 && at[1].y == -1 &&
+       at[2].x == 2 && at[2].y == -2 &&
+       at[3].x == -2 && at[3].y == -2 {
+        return Ok(decode_bitmap_template0(width, height, decoding_context));
+    }
+
+    let use_skip = skip.is_some();
+    let mut template = CODING_TEMPLATES[template_index].iter()
+        .map(|[x, y]| TemplatePixel { x: *x, y: *y })
+        .collect::<Vec<_>>();
+    template.extend_from_slice(at);
+
+    // Sorting is non-standard, and it is not required. But sorting increases
+    // the number of template bits that can be reused from the previous
+    // contextLabel in the main loop.
+    template.sort_by(|a, b| a.y.cmp(&b.y).then(a.x.cmp(&b.x)));
+
+    let template_length = template.len();
+    let mut changing_template_entries = Vec::new();
+    let mut reuse_mask = 0u32;
+    let mut min_x = 0i32;
+    let mut max_x = 0i32;
+    let mut min_y = 0i32;
+
+    for k in 0..template_length {
+        min_x = min_x.min(template[k].x);
+        max_x = max_x.max(template[k].x);
+        min_y = min_y.min(template[k].y);
+        
+        // Check if the template pixel appears in two consecutive context labels,
+        // so it can be reused. Otherwise, we add it to the list of changing
+        // template entries.
+        if k < template_length - 1 &&
+           template[k].y == template[k + 1].y &&
+           template[k].x == template[k + 1].x - 1 {
+            reuse_mask |= 1 << (template_length - 1 - k);
+        } else {
+            changing_template_entries.push(k);
+        }
+    }
+
+    // Get the safe bounding box edges from the width, height, minX, maxX, minY
+    let sbb_left = (-min_x) as usize;
+    let sbb_top = (-min_y) as usize;
+    let sbb_right = (width as i32 - max_x) as usize;
+
+    let pseudo_pixel_context = REUSED_CONTEXTS[template_index];
+    let mut bitmap = Vec::with_capacity(height);
+    let mut row = vec![0u8; width];
+
+    // We'll use the with_decoder_and_context method in the loop below
+
+    let mut ltp = 0u8;
+    
+    for i in 0..height {
+        if prediction {
+            let sltp = decoding_context.with_decoder_and_context(|decoder, context_cache| {
+                let contexts = context_cache.get_contexts("GB");
+                decoder.read_bit(contexts, pseudo_pixel_context as usize)
+            });
+            ltp ^= sltp;
+            if ltp != 0 {
+                bitmap.push(row.clone()); // duplicate previous row
+                continue;
+            }
+        }
+        
+        row = vec![0u8; width];
+        
+        for j in 0..width {
+            if use_skip && skip.unwrap()[i][j] != 0 {
+                row[j] = 0;
+                continue;
+            }
+            
+            let mut context_label = 0u32;
+            
+            // Are we in the middle of a scanline, so we can reuse contextLabel bits?
+            if j >= sbb_left && j < sbb_right && i >= sbb_top {
+                // If yes, we can just shift the bits that are reusable and only
+                // fetch the remaining ones.
+                context_label = (context_label << 1) & reuse_mask;
+                for &k in &changing_template_entries {
+                    let i0 = (i as i32 + template[k].y) as usize;
+                    let j0 = (j as i32 + template[k].x) as usize;
+                    if i0 < bitmap.len() && j0 < width {
+                        let bit = bitmap[i0][j0];
+                        if bit != 0 {
+                            let changing_bit = 1 << (template_length - 1 - k);
+                            context_label |= changing_bit;
+                        }
+                    }
+                }
+            } else {
+                // compute the contextLabel from scratch
+                context_label = 0;
+                for k in 0..template_length {
+                    let j0 = j as i32 + template[k].x;
+                    if j0 >= 0 && j0 < width as i32 {
+                        let i0 = i as i32 + template[k].y;
+                        if i0 >= 0 && (i0 as usize) < bitmap.len() {
+                            let bit = bitmap[i0 as usize][j0 as usize];
+                            if bit != 0 {
+                                context_label |= 1 << (template_length - 1 - k);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            let pixel = decoding_context.with_decoder_and_context(|decoder, context_cache| {
+                let contexts = context_cache.get_contexts("GB");
+                decoder.read_bit(contexts, context_label as usize)
+            });
+            row[j] = pixel;
+        }
+        bitmap.push(row.clone());
+    }
+
+    Ok(bitmap)
+}
+
+// Refinement decoding - ported from decodeRefinement function
+fn decode_refinement(
+    width: usize,
+    height: usize,
+    template_index: usize,
+    reference_bitmap: &Bitmap,
+    offset_x: i32,
+    offset_y: i32,
+    prediction: bool,
+    at: &[TemplatePixel],
+    decoding_context: &DecodingContext,
+) -> Result<Bitmap, Jbig2Error> {
+    let mut coding_template: Vec<[i32; 2]> = REFINEMENT_TEMPLATES[template_index].coding.to_vec();
+    if template_index == 0 {
+        coding_template.push([at[0].x, at[0].y]);
+    }
+    let coding_template_length = coding_template.len();
+    let coding_template_x: Vec<i32> = coding_template.iter().map(|p| p[0]).collect();
+    let coding_template_y: Vec<i32> = coding_template.iter().map(|p| p[1]).collect();
+
+    let mut reference_template: Vec<[i32; 2]> = REFINEMENT_TEMPLATES[template_index].reference.to_vec();
+    if template_index == 0 {
+        reference_template.push([at[1].x, at[1].y]);
+    }
+    let reference_template_length = reference_template.len();
+    let reference_template_x: Vec<i32> = reference_template.iter().map(|p| p[0]).collect();
+    let reference_template_y: Vec<i32> = reference_template.iter().map(|p| p[1]).collect();
+    
+    let reference_width = if !reference_bitmap.is_empty() { reference_bitmap[0].len() } else { 0 };
+    let reference_height = reference_bitmap.len();
+
+    let pseudo_pixel_context = REFINEMENT_REUSED_CONTEXTS[template_index];
+    let mut bitmap: Vec<Vec<u8>> = Vec::with_capacity(height);
+
+    let mut ltp = 0u8;
+    
+    for i in 0..height {
+        if prediction {
+            let sltp = decoding_context.with_decoder_and_context(|decoder, context_cache| {
+                let contexts = context_cache.get_contexts("GR");
+                decoder.read_bit(contexts, pseudo_pixel_context as usize)
+            });
+            ltp ^= sltp;
+            if ltp != 0 {
+                return Err(Jbig2Error::new("prediction is not supported"));
+            }
+        }
+        
+        let mut row = vec![0u8; width];
+        
+        for j in 0..width {
+            let mut context_label = 0u32;
+            
+            // Process coding template
+            for k in 0..coding_template_length {
+                let i0 = i as i32 + coding_template_y[k];
+                let j0 = j as i32 + coding_template_x[k];
+                
+                if i0 < 0 || j0 < 0 || j0 >= width as i32 {
+                    context_label <<= 1; // out of bound pixel
+                } else {
+                    let bit = if i0 >= 0 && (i0 as usize) < bitmap.len() && 
+                                 j0 >= 0 && (j0 as usize) < width {
+                        bitmap[i0 as usize][j0 as usize]
+                    } else {
+                        0
+                    };
+                    context_label = (context_label << 1) | (bit as u32);
+                }
+            }
+            
+            // Process reference template
+            for k in 0..reference_template_length {
+                let i0 = i as i32 + reference_template_y[k] - offset_y;
+                let j0 = j as i32 + reference_template_x[k] - offset_x;
+                
+                if i0 < 0 || i0 >= reference_height as i32 || j0 < 0 || j0 >= reference_width as i32 {
+                    context_label <<= 1; // out of bound pixel
+                } else {
+                    let bit = reference_bitmap[i0 as usize][j0 as usize];
+                    context_label = (context_label << 1) | (bit as u32);
+                }
+            }
+            
+            let pixel = decoding_context.with_decoder_and_context(|decoder, context_cache| {
+                let contexts = context_cache.get_contexts("GR");
+                decoder.read_bit(contexts, context_label as usize)
+            });
+            row[j] = pixel;
+        }
+        bitmap.push(row);
+    }
+
+    Ok(bitmap)
+}
+
+// Utility function equivalent to log2 from JS
+fn log2(n: usize) -> usize {
+    if n == 0 { 0 } else { (n as f64).log2().ceil() as usize }
+}
+
+// Symbol dictionary decoding - ported from decodeSymbolDictionary function  
+fn decode_symbol_dictionary(
+    huffman: bool,
+    refinement: bool,
+    symbols: &[Bitmap],
+    number_of_new_symbols: usize,
+    _number_of_exported_symbols: usize,
+    huffman_tables: Option<&SymbolDictionaryHuffmanTables>,
+    template_index: usize,
+    at: &[TemplatePixel],
+    refinement_template_index: usize,
+    refinement_at: &[TemplatePixel],
+    decoding_context: &DecodingContext,
+    _huffman_input: Option<&mut Reader>,
+) -> Result<Vec<Bitmap>, Jbig2Error> {
+    if huffman && refinement {
+        return Err(Jbig2Error::new("symbol refinement with Huffman is not supported"));
+    }
+
+    let mut new_symbols = Vec::new();
+    let mut current_height = 0i32;
+    let symbol_code_length = log2(symbols.len() + number_of_new_symbols).max(if huffman { 1 } else { 0 });
+
+    // TODO: Implement huffman path
+    if huffman {
+        return Err(Jbig2Error::new("Huffman symbol dictionary not implemented yet"));
+    }
+
+    while new_symbols.len() < number_of_new_symbols {
+        let delta_height = decoding_context.with_decoder_and_context(|decoder, context_cache| {
+            decode_integer(context_cache, "IADH", decoder)
+        });
+        
+        if let Some(dh) = delta_height {
+            current_height += dh;
+        } else {
+            break;
+        }
+        
+        let mut current_width = 0i32;
+        
+        loop {
+            let delta_width = decoding_context.with_decoder_and_context(|decoder, context_cache| {
+                decode_integer(context_cache, "IADW", decoder)
+            });
+            
+            let Some(dw) = delta_width else { break }; // OOB
+            current_width += dw;
+            
+            let bitmap = if refinement {
+                // TODO: Implement refinement path for symbol dictionary
+                return Err(Jbig2Error::new("Refinement symbol dictionary not implemented yet"));
+            } else {
+                // Direct-coded symbol bitmap
+                // TODO: Fix borrowing architecture - this needs to be redesigned
+                return Err(Jbig2Error::new("Symbol dictionary needs architecture fix"))
+            };
+            
+            new_symbols.push(bitmap);
+        }
+    }
+
+    Ok(new_symbols)
+}
+
+// Placeholder structs for complex Huffman functionality
+#[derive(Debug)]
+struct SymbolDictionaryHuffmanTables {
+    // TODO: Implement fields based on JS getSymbolDictionaryHuffmanTables
+}
+
+// Reader class - ported from JS Reader class
+#[derive(Debug)]
+struct Reader<'a> {
+    data: &'a [u8],
+    start: usize,
+    end: usize,
+    position: usize,
+    shift: i32,
+    current_byte: u8,
+}
+
+impl<'a> Reader<'a> {
+    fn new(data: &'a [u8], start: usize, end: usize) -> Self {
+        Self {
+            data,
+            start,
+            end,
+            position: start,
+            shift: -1,
+            current_byte: 0,
+        }
+    }
+
+    fn read_bit(&mut self) -> Result<u8, Jbig2Error> {
+        if self.shift < 0 {
+            if self.position >= self.end {
+                return Err(Jbig2Error::new("end of data while reading bit"));
+            }
+            self.current_byte = self.data[self.position];
+            self.position += 1;
+            self.shift = 7;
+        }
+        let bit = (self.current_byte >> self.shift) & 1;
+        self.shift -= 1;
+        Ok(bit)
+    }
+
+    fn read_bits(&mut self, num_bits: usize) -> Result<u32, Jbig2Error> {
+        let mut result = 0u32;
+        for i in 0..num_bits {
+            let bit = self.read_bit()? as u32;
+            result |= bit << (num_bits - 1 - i);
+        }
+        Ok(result)
+    }
+
+    fn byte_align(&mut self) {
+        self.shift = -1;
+    }
+
+    fn next(&mut self) -> i32 {
+        if self.position >= self.end {
+            return -1;
+        }
+        let byte = self.data[self.position] as i32;
+        self.position += 1;
+        byte
+    }
+}
+
+// Text region decoding - ported from decodeTextRegion function
+#[allow(clippy::too_many_arguments)]
+fn decode_text_region(
+    huffman: bool,
+    refinement: bool,
+    width: usize,
+    height: usize,
+    default_pixel_value: u8,
+    number_of_symbol_instances: usize,
+    strip_size: usize,
+    input_symbols: &[Bitmap],
+    symbol_code_length: usize,
+    transposed: bool,
+    ds_offset: i32,
+    reference_corner: u8,
+    combination_operator: u8,
+    _huffman_tables: Option<&TextRegionHuffmanTables>,
+    refinement_template_index: usize,
+    refinement_at: &[TemplatePixel],
+    decoding_context: &DecodingContext,
+    log_strip_size: usize,
+    _huffman_input: Option<&mut Reader>,
+) -> Result<Bitmap, Jbig2Error> {
+    if huffman && refinement {
+        return Err(Jbig2Error::new("refinement with Huffman is not supported"));
+    }
+
+    // Prepare bitmap
+    let mut bitmap: Vec<Vec<u8>> = Vec::with_capacity(height);
+    for _ in 0..height {
+        let mut row = vec![0u8; width];
+        if default_pixel_value != 0 {
+            row.fill(default_pixel_value);
+        }
+        bitmap.push(row);
+    }
+
+    // TODO: Implement huffman path
+    if huffman {
+        return Err(Jbig2Error::new("Huffman text region not implemented yet"));
+    }
+
+    let strip_t = decoding_context.with_decoder_and_context(|decoder, context_cache| {
+        decode_integer(context_cache, "IADT", decoder).map(|v| -v).unwrap_or(0)
+    });
+
+    let mut first_s = 0i32;
+    let mut i = 0;
+    
+    while i < number_of_symbol_instances {
+        let delta_t = decoding_context.with_decoder_and_context(|decoder, context_cache| {
+            decode_integer(context_cache, "IADT", decoder).unwrap_or(0)
+        });
+        let strip_t = strip_t + delta_t;
+
+        let delta_first_s = decoding_context.with_decoder_and_context(|decoder, context_cache| {
+            decode_integer(context_cache, "IAFS", decoder).unwrap_or(0)
+        });
+        first_s += delta_first_s;
+        let mut current_s = first_s;
+        
+        loop {
+            let current_t = if strip_size > 1 {
+                decoding_context.with_decoder_and_context(|decoder, context_cache| {
+                    decode_integer(context_cache, "IAIT", decoder).unwrap_or(0)
+                })
+            } else {
+                0
+            };
+            
+            let t = (strip_size as i32) * strip_t + current_t;
+            
+            let symbol_id = decoding_context.with_decoder_and_context(|decoder, context_cache| {
+                decode_iaid(context_cache, decoder, symbol_code_length) as usize
+            });
+            
+            if symbol_id >= input_symbols.len() {
+                break;
+            }
+            
+            let apply_refinement = if refinement {
+                decoding_context.with_decoder_and_context(|decoder, context_cache| {
+                    decode_integer(context_cache, "IARI", decoder).unwrap_or(0) != 0
+                })
+            } else {
+                false
+            };
+            
+            let symbol_bitmap = &input_symbols[symbol_id];
+            let mut symbol_width = if !symbol_bitmap.is_empty() { symbol_bitmap[0].len() } else { 0 };
+            let mut symbol_height = symbol_bitmap.len();
+            
+            // For now, skip refinement - TODO: implement properly
+            if apply_refinement {
+                return Err(Jbig2Error::new("Text region refinement not implemented yet"));
+            }
+            
+            let increment = if !transposed {
+                if reference_corner > 1 {
+                    current_s += symbol_width as i32 - 1;
+                    0
+                } else {
+                    symbol_width as i32 - 1
+                }
+            } else if (reference_corner & 1) == 0 {
+                current_s += symbol_height as i32 - 1;
+                0
+            } else {
+                symbol_height as i32 - 1
+            };
+            
+            let offset_t = t - if (reference_corner & 1) != 0 { 0 } else { symbol_height as i32 - 1 };
+            let offset_s = current_s - if (reference_corner & 2) != 0 { symbol_width as i32 - 1 } else { 0 };
+            
+            // Place symbol bitmap
+            if transposed {
+                for s2 in 0..symbol_height {
+                    let row_idx = (offset_s + s2 as i32) as usize;
+                    if row_idx >= bitmap.len() {
+                        continue;
+                    }
+                    let symbol_row = &symbol_bitmap[s2];
+                    let max_width = ((width as i32) - offset_t).min(symbol_width as i32).max(0) as usize;
+                    
+                    match combination_operator {
+                        0 => { // OR
+                            for t2 in 0..max_width {
+                                let col_idx = (offset_t + t2 as i32) as usize;
+                                if col_idx < bitmap[row_idx].len() && t2 < symbol_row.len() {
+                                    bitmap[row_idx][col_idx] |= symbol_row[t2];
+                                }
+                            }
+                        },
+                        2 => { // XOR
+                            for t2 in 0..max_width {
+                                let col_idx = (offset_t + t2 as i32) as usize;
+                                if col_idx < bitmap[row_idx].len() && t2 < symbol_row.len() {
+                                    bitmap[row_idx][col_idx] ^= symbol_row[t2];
+                                }
+                            }
+                        },
+                        _ => return Err(Jbig2Error::new(&format!("operator {} is not supported", combination_operator))),
+                    }
+                }
+            } else {
+                for t2 in 0..symbol_height {
+                    let row_idx = (offset_t + t2 as i32) as usize;
+                    if row_idx >= bitmap.len() {
+                        continue;
+                    }
+                    let symbol_row = &symbol_bitmap[t2];
+                    
+                    match combination_operator {
+                        0 => { // OR
+                            for s2 in 0..symbol_width {
+                                let col_idx = (offset_s + s2 as i32) as usize;
+                                if col_idx < bitmap[row_idx].len() && s2 < symbol_row.len() {
+                                    bitmap[row_idx][col_idx] |= symbol_row[s2];
+                                }
+                            }
+                        },
+                        2 => { // XOR
+                            for s2 in 0..symbol_width {
+                                let col_idx = (offset_s + s2 as i32) as usize;
+                                if col_idx < bitmap[row_idx].len() && s2 < symbol_row.len() {
+                                    bitmap[row_idx][col_idx] ^= symbol_row[s2];
+                                }
+                            }
+                        },
+                        _ => return Err(Jbig2Error::new(&format!("operator {} is not supported", combination_operator))),
+                    }
+                }
+            }
+            
+            i += 1;
+            let delta_s = decoding_context.with_decoder_and_context(|decoder, context_cache| {
+                decode_integer(context_cache, "IADS", decoder)
+            });
+            
+            if delta_s.is_none() {
+                break; // OOB
+            }
+            current_s += increment + delta_s.unwrap() + ds_offset;
+        }
+    }
+    
+    Ok(bitmap)
+}
+
+// Pattern dictionary decoding - ported from decodePatternDictionary function
+fn decode_pattern_dictionary(
+    mmr: bool,
+    pattern_width: usize,
+    pattern_height: usize,
+    max_pattern_index: usize,
+    template: usize,
+    decoding_context: &DecodingContext,
+) -> Result<Vec<Bitmap>, Jbig2Error> {
+    let mut at = Vec::new();
+    if !mmr {
+        at.push(TemplatePixel { x: -(pattern_width as i32), y: 0 });
+        if template == 0 {
+            at.push(TemplatePixel { x: -3, y: -1 });
+            at.push(TemplatePixel { x: 2, y: -2 });
+            at.push(TemplatePixel { x: -2, y: -2 });
+        }
+    }
+
+    let mut patterns = Vec::new();
+    for i in 0..=max_pattern_index {
+        let bitmap = if mmr {
+            // TODO: Implement MMR decoding
+            return Err(Jbig2Error::new("MMR pattern dictionary not implemented yet"));
+        } else {
+            // TODO: Fix borrowing for decode_bitmap call
+            return Err(Jbig2Error::new("Pattern dictionary needs architecture fix"));
+        };
+        patterns.push(bitmap);
+    }
+
+    Ok(patterns)
+}
+
+// Placeholder for Huffman tables
+#[derive(Debug)]
+struct TextRegionHuffmanTables {
+    // TODO: Implement fields based on JS getTextRegionHuffmanTables
+}
+
+// Huffman decoding classes - ported from JS HuffmanLine, HuffmanTreeNode, HuffmanTable
+
+#[derive(Debug, Clone)]
+struct HuffmanLine {
+    is_oob: bool,
+    range_low: i32,
+    prefix_length: usize,
+    range_length: usize,
+    prefix_code: u32,
+    is_lower_range: bool,
+}
+
+impl HuffmanLine {
+    fn new_oob(prefix_length: usize, prefix_code: u32) -> Self {
+        Self {
+            is_oob: true,
+            range_low: 0,
+            prefix_length,
+            range_length: 0,
+            prefix_code,
+            is_lower_range: false,
+        }
+    }
+    
+    fn new_normal(range_low: i32, prefix_length: usize, range_length: usize, prefix_code: u32) -> Self {
+        Self {
+            is_oob: false,
+            range_low,
+            prefix_length,
+            range_length,
+            prefix_code,
+            is_lower_range: false,
+        }
+    }
+    
+    fn new_lower(range_low: i32, prefix_length: usize, range_length: usize, prefix_code: u32) -> Self {
+        Self {
+            is_oob: false,
+            range_low,
+            prefix_length,
+            range_length,
+            prefix_code,
+            is_lower_range: true,
+        }
+    }
+}
+
+#[derive(Debug)]
+struct HuffmanTreeNode {
+    children: [Option<Box<HuffmanTreeNode>>; 2],
+    is_leaf: bool,
+    range_length: usize,
+    range_low: i32,
+    is_lower_range: bool,
+    is_oob: bool,
+}
+
+impl HuffmanTreeNode {
+    fn new_leaf(line: &HuffmanLine) -> Self {
+        Self {
+            children: [None, None],
+            is_leaf: true,
+            range_length: line.range_length,
+            range_low: line.range_low,
+            is_lower_range: line.is_lower_range,
+            is_oob: line.is_oob,
+        }
+    }
+    
+    fn new_node() -> Self {
+        Self {
+            children: [None, None],
+            is_leaf: false,
+            range_length: 0,
+            range_low: 0,
+            is_lower_range: false,
+            is_oob: false,
+        }
+    }
+    
+    fn build_tree(&mut self, line: &HuffmanLine, shift: i32) {
+        let bit = ((line.prefix_code >> shift) & 1) as usize;
+        if shift <= 0 {
+            // Create a leaf node
+            self.children[bit] = Some(Box::new(HuffmanTreeNode::new_leaf(line)));
+        } else {
+            // Create an intermediate node and continue recursively
+            if self.children[bit].is_none() {
+                self.children[bit] = Some(Box::new(HuffmanTreeNode::new_node()));
+            }
+            self.children[bit].as_mut().unwrap().build_tree(line, shift - 1);
+        }
+    }
+    
+    fn decode_node(&self, reader: &mut Reader) -> Result<Option<i32>, Jbig2Error> {
+        if self.is_leaf {
+            if self.is_oob {
+                return Ok(None);
+            }
+            let ht_offset = reader.read_bits(self.range_length)? as i32;
+            let result = self.range_low + if self.is_lower_range { -ht_offset } else { ht_offset };
+            return Ok(Some(result));
+        }
+        
+        let bit = reader.read_bit()? as usize;
+        match &self.children[bit] {
+            Some(node) => node.decode_node(reader),
+            None => Err(Jbig2Error::new("invalid Huffman data")),
+        }
+    }
+}
+
+#[derive(Debug)]
+struct HuffmanTable {
+    root_node: HuffmanTreeNode,
+}
+
+impl HuffmanTable {
+    fn new(mut lines: Vec<HuffmanLine>, prefix_codes_done: bool) -> Self {
+        if !prefix_codes_done {
+            Self::assign_prefix_codes(&mut lines);
+        }
+        
+        // Create Huffman tree
+        let mut root_node = HuffmanTreeNode::new_node();
+        for line in &lines {
+            if line.prefix_length > 0 {
+                root_node.build_tree(line, line.prefix_length as i32 - 1);
+            }
+        }
+        
+        Self { root_node }
+    }
+    
+    fn decode(&self, reader: &mut Reader) -> Result<Option<i32>, Jbig2Error> {
+        self.root_node.decode_node(reader)
+    }
+    
+    fn assign_prefix_codes(lines: &mut [HuffmanLine]) {
+        // Annex B.3 Assigning the prefix codes
+        let lines_length = lines.len();
+        let mut prefix_length_max = 0usize;
+        for line in lines.iter() {
+            prefix_length_max = prefix_length_max.max(line.prefix_length);
+        }
+        
+        let mut histogram = vec![0u32; prefix_length_max + 1];
+        for line in lines.iter() {
+            histogram[line.prefix_length] += 1;
+        }
+        
+        let mut current_length = 1usize;
+        let mut first_code = 0u32;
+        histogram[0] = 0;
+        
+        while current_length <= prefix_length_max {
+            first_code = (first_code + histogram[current_length - 1]) << 1;
+            let mut current_code = first_code;
+            
+            for line in lines.iter_mut() {
+                if line.prefix_length == current_length {
+                    line.prefix_code = current_code;
+                    current_code += 1;
+                }
+            }
+            current_length += 1;
+        }
+    }
+}
+
+// Utility function for reading uint32 values
+fn read_uint32(data: &[u8], offset: usize) -> u32 {
+    if offset + 4 > data.len() {
+        return 0;
+    }
+    ((data[offset] as u32) << 24) |
+    ((data[offset + 1] as u32) << 16) |
+    ((data[offset + 2] as u32) << 8) |
+    (data[offset + 3] as u32)
+}
+
+// Segment structures and reading functions
+
+#[derive(Debug, Clone)]
+struct SegmentHeader {
+    number: u32,
+    segment_type: u8,
+    type_name: String,
+    deferred_non_retain: bool,
+    retain_bits: Vec<u8>,
+    referred_to: Vec<u32>,
+    page_association: u32,
+    length: u32,
+    header_end: usize,
+}
+
+#[derive(Debug)]
+struct Segment {
+    header: SegmentHeader,
+    data: Vec<u8>,
+    start: usize,
+    end: usize,
+}
+
+#[derive(Debug, Clone)]
+struct RegionSegmentInformation {
+    width: u32,
+    height: u32,
+    x: u32,
+    y: u32,
+    combination_operator: u8,
+}
+
+// Utility functions for reading integers
+fn read_uint16(data: &[u8], offset: usize) -> u16 {
+    if offset + 2 > data.len() {
+        return 0;
+    }
+    ((data[offset] as u16) << 8) | (data[offset + 1] as u16)
+}
+
+fn read_int8(data: &[u8], offset: usize) -> i8 {
+    if offset >= data.len() {
+        return 0;
+    }
+    data[offset] as i8
+}
+
+// Segment header reading - ported from readSegmentHeader function
+fn read_segment_header(data: &[u8], start: usize) -> Result<SegmentHeader, Jbig2Error> {
+    if start + 6 > data.len() {
+        return Err(Jbig2Error::new("insufficient data for segment header"));
+    }
+    
+    let number = read_uint32(data, start);
+    let flags = data[start + 4];
+    let segment_type = flags & 0x3f;
+    
+    if segment_type as usize >= SEGMENT_TYPES.len() || SEGMENT_TYPES[segment_type as usize].is_none() {
+        return Err(Jbig2Error::new(&format!("invalid segment type: {}", segment_type)));
+    }
+    
+    let type_name = SEGMENT_TYPES[segment_type as usize].unwrap().to_string();
+    let deferred_non_retain = (flags & 0x80) != 0;
+    let page_association_field_size = (flags & 0x40) != 0;
+    
+    let referred_flags = data[start + 5];
+    let mut referred_to_count = ((referred_flags >> 5) & 7) as usize;
+    let mut retain_bits = vec![referred_flags & 31];
+    let mut position = start + 6;
+    
+    if referred_flags == 7 {
+        referred_to_count = (read_uint32(data, position - 1) & 0x1fffffff) as usize;
+        position += 3;
+        let mut bytes = (referred_to_count + 7) >> 3;
+        if position >= data.len() {
+            return Err(Jbig2Error::new("insufficient data for retain bits"));
+        }
+        retain_bits[0] = data[position];
+        position += 1;
+        bytes -= 1;
+        while bytes > 0 && position < data.len() {
+            retain_bits.push(data[position]);
+            position += 1;
+            bytes -= 1;
+        }
+    } else if referred_flags == 5 || referred_flags == 6 {
+        return Err(Jbig2Error::new("invalid referred-to flags"));
+    }
+    
+    let referred_to_segment_number_size = if number <= 256 {
+        1
+    } else if number <= 65536 {
+        2
+    } else {
+        4
+    };
+    
+    let mut referred_to = Vec::new();
+    for _ in 0..referred_to_count {
+        if position + referred_to_segment_number_size > data.len() {
+            return Err(Jbig2Error::new("insufficient data for referred-to segments"));
+        }
+        
+        let number = match referred_to_segment_number_size {
+            1 => data[position] as u32,
+            2 => read_uint16(data, position) as u32,
+            4 => read_uint32(data, position),
+            _ => return Err(Jbig2Error::new("invalid segment number size")),
+        };
+        referred_to.push(number);
+        position += referred_to_segment_number_size;
+    }
+    
+    let page_association = if !page_association_field_size {
+        if position >= data.len() {
+            return Err(Jbig2Error::new("insufficient data for page association"));
+        }
+        data[position] as u32
+    } else {
+        if position + 4 > data.len() {
+            return Err(Jbig2Error::new("insufficient data for page association"));
+        }
+        read_uint32(data, position)
+    };
+    position += if page_association_field_size { 4 } else { 1 };
+    
+    if position + 4 > data.len() {
+        return Err(Jbig2Error::new("insufficient data for segment length"));
+    }
+    let length = read_uint32(data, position);
+    position += 4;
+    
+    // TODO: Handle unknown segment length (0xffffffff) cases
+    if length == 0xffffffff {
+        return Err(Jbig2Error::new("unknown segment length not implemented"));
+    }
+    
+    Ok(SegmentHeader {
+        number,
+        segment_type,
+        type_name,
+        deferred_non_retain,
+        retain_bits,
+        referred_to,
+        page_association,
+        length,
+        header_end: position,
+    })
+}
+
+// Region segment information reading - ported from readRegionSegmentInformation
+fn read_region_segment_information(data: &[u8], start: usize) -> Result<RegionSegmentInformation, Jbig2Error> {
+    if start + 17 > data.len() {
+        return Err(Jbig2Error::new("insufficient data for region segment information"));
+    }
+    
+    Ok(RegionSegmentInformation {
+        width: read_uint32(data, start),
+        height: read_uint32(data, start + 4),
+        x: read_uint32(data, start + 8),
+        y: read_uint32(data, start + 12),
+        combination_operator: data[start + 16] & 7,
+    })
+}
+
+// TODO: Implement decode_halftone_region function
+// TODO: Implement segment processing and visitor pattern functions
+// TODO: Implement SimpleSegmentVisitor and main parsing logic 
+// TODO: Implement MMR decoding functions
+// TODO: Implement tables segment decoding and standard tables
 
 // Main JBIG2 decoder class
 struct Jbig2Image {
     width: usize,
     height: usize,
+    segments: Vec<Segment>,
 }
 
 impl Jbig2Image {
@@ -500,13 +1531,720 @@ impl Jbig2Image {
         Self {
             width: 0,
             height: 0,
+            segments: Vec::new(),
         }
     }
     
     fn parse_chunks(&mut self, chunks: &[Chunk]) -> Option<Vec<u8>> {
-        // TODO: Implement chunk parsing logic
-        // This should mirror parseJbig2Chunks from the JS implementation
-        warn!("JBIG2 decode not fully implemented yet");
-        None
+        // Parse all segments from chunks first
+        for chunk in chunks {
+            if let Err(e) = self.parse_chunk(chunk) {
+                warn!("Error parsing JBIG2 chunk: {}", e);
+                return None;
+            }
+        }
+        
+        // Process segments with visitor pattern to generate final bitmap
+        let mut visitor = SimpleSegmentVisitor::new();
+        
+        if let Err(e) = process_segments(&self.segments, &mut visitor) {
+            warn!("Error processing JBIG2 segments: {}", e);
+            return None;
+        }
+        
+        // Return the final bitmap buffer if available
+        visitor.buffer
     }
-} 
+    
+    fn parse_chunk(&mut self, chunk: &Chunk) -> Result<(), Jbig2Error> {
+        let data = &chunk.data;
+        let mut position = chunk.start;
+        let end = chunk.end;
+        
+        // Skip file header if present (first 9 bytes for file organization)
+        if position + 9 <= data.len() && 
+           data[position..position + 4] == [0x97, 0x4A, 0x42, 0x32] {
+            // Skip the file header
+            position += 9;
+        }
+        
+        // Read segments
+        while position < end && position + 6 <= data.len() {
+            let segment_header = read_segment_header(data, position)?;
+            position = segment_header.header_end;
+            
+            if position + segment_header.length as usize > data.len() {
+                return Err(Jbig2Error::new("segment data extends beyond chunk"));
+            }
+            
+            let segment = Segment {
+                header: segment_header.clone(),
+                data: data[position..position + segment_header.length as usize].to_vec(),
+                start: 0,  // Relative to segment data
+                end: segment_header.length as usize,
+            };
+            
+            position += segment_header.length as usize;
+            self.segments.push(segment);
+            
+            // Break on end of file segment
+            if segment_header.segment_type == 51 {
+                break;
+            }
+        }
+        
+        Ok(())
+    }
+}
+
+// SimpleSegmentVisitor - ported from JS SimpleSegmentVisitor class
+#[derive(Debug)]
+struct SimpleSegmentVisitor {
+    current_page_info: Option<PageInfo>,
+    buffer: Option<Vec<u8>>,
+    symbols: HashMap<u32, Vec<Bitmap>>,
+    patterns: HashMap<u32, Vec<Bitmap>>,
+    custom_tables: HashMap<u32, HuffmanTable>,
+}
+
+#[derive(Debug, Clone)]
+struct PageInfo {
+    width: u32,
+    height: u32,
+    default_pixel_value: u8,
+    combination_operator: u8,
+    combination_operator_override: bool,
+}
+
+impl SimpleSegmentVisitor {
+    fn new() -> Self {
+        Self {
+            current_page_info: None,
+            buffer: None,
+            symbols: HashMap::new(),
+            patterns: HashMap::new(),
+            custom_tables: HashMap::new(),
+        }
+    }
+    
+    fn on_page_information(&mut self, info: PageInfo) {
+        self.current_page_info = Some(info.clone());
+        let row_size = (info.width + 7) >> 3;
+        let mut buffer = vec![0u8; (row_size * info.height) as usize];
+        
+        // Fill with 0xFF if default pixel value is set
+        if info.default_pixel_value != 0 {
+            buffer.fill(0xff);
+        }
+        self.buffer = Some(buffer);
+    }
+    
+    fn draw_bitmap(&mut self, region_info: &RegionSegmentInformation, bitmap: &Bitmap) -> Result<(), Jbig2Error> {
+        let page_info = self.current_page_info.as_ref()
+            .ok_or_else(|| Jbig2Error::new("no page information available"))?;
+        let buffer = self.buffer.as_mut()
+            .ok_or_else(|| Jbig2Error::new("no buffer available"))?;
+            
+        let width = region_info.width as usize;
+        let height = region_info.height as usize;
+        let row_size = ((page_info.width + 7) >> 3) as usize;
+        
+        let combination_operator = if page_info.combination_operator_override {
+            region_info.combination_operator
+        } else {
+            page_info.combination_operator
+        };
+        
+        let mask0 = 128u8 >> (region_info.x & 7);
+        let mut offset0 = (region_info.y * (page_info.width + 7) / 8 + region_info.x / 8) as usize;
+        
+        match combination_operator {
+            0 => { // OR
+                for i in 0..height {
+                    if i >= bitmap.len() { break; }
+                    let mut mask = mask0;
+                    let mut offset = offset0;
+                    
+                    for j in 0..width {
+                        if j < bitmap[i].len() && bitmap[i][j] != 0 {
+                            if offset < buffer.len() {
+                                buffer[offset] |= mask;
+                            }
+                        }
+                        mask >>= 1;
+                        if mask == 0 {
+                            mask = 128;
+                            offset += 1;
+                        }
+                    }
+                    offset0 += row_size;
+                }
+            },
+            2 => { // XOR
+                for i in 0..height {
+                    if i >= bitmap.len() { break; }
+                    let mut mask = mask0;
+                    let mut offset = offset0;
+                    
+                    for j in 0..width {
+                        if j < bitmap[i].len() && bitmap[i][j] != 0 {
+                            if offset < buffer.len() {
+                                buffer[offset] ^= mask;
+                            }
+                        }
+                        mask >>= 1;
+                        if mask == 0 {
+                            mask = 128;
+                            offset += 1;
+                        }
+                    }
+                    offset0 += row_size;
+                }
+            },
+            _ => return Err(Jbig2Error::new(&format!("operator {} is not supported", combination_operator))),
+        }
+        
+        Ok(())
+    }
+    
+    fn on_immediate_generic_region(&mut self, region: &GenericRegion, data: &[u8], start: usize, end: usize) -> Result<(), Jbig2Error> {
+        let decoding_context = DecodingContext::new(data.to_vec(), start, end);
+        
+        // TODO: Fix borrowing issue for decode_bitmap call
+        // This is a placeholder - the actual implementation needs architecture fixes
+        Err(Jbig2Error::new("Generic region processing needs architecture fix"))
+    }
+    
+    fn on_symbol_dictionary(&mut self, dictionary: &SymbolDictionary, current_segment: u32, referred_segments: &[u32], data: &[u8], start: usize, end: usize) -> Result<(), Jbig2Error> {
+        // Collect input symbols from referred segments
+        let mut input_symbols = Vec::new();
+        for &referred_segment in referred_segments {
+            if let Some(referred_symbols) = self.symbols.get(&referred_segment) {
+                input_symbols.extend(referred_symbols.iter().cloned());
+            }
+        }
+        
+        let decoding_context = DecodingContext::new(data.to_vec(), start, end);
+        
+        // TODO: Fix borrowing issue and implement full symbol dictionary decoding
+        // This is a placeholder - the actual implementation needs architecture fixes
+        self.symbols.insert(current_segment, Vec::new());
+        
+        Err(Jbig2Error::new("Symbol dictionary processing needs architecture fix"))
+    }
+    
+    fn on_immediate_text_region(&mut self, region: &TextRegion, referred_segments: &[u32], data: &[u8], start: usize, end: usize) -> Result<(), Jbig2Error> {
+        // TODO: Implement text region processing similar to JS version
+        Err(Jbig2Error::new("Text region processing needs architecture fix"))
+    }
+    
+    fn on_pattern_dictionary(&mut self, dictionary: &PatternDictionary, current_segment: u32, data: &[u8], start: usize, end: usize) -> Result<(), Jbig2Error> {
+        // TODO: Implement pattern dictionary processing
+        self.patterns.insert(current_segment, Vec::new());
+        Err(Jbig2Error::new("Pattern dictionary processing needs architecture fix"))
+    }
+    
+    fn on_immediate_halftone_region(&mut self, region: &HalftoneRegion, referred_segments: &[u32], data: &[u8], start: usize, end: usize) -> Result<(), Jbig2Error> {
+        // TODO: Implement halftone region processing
+        Err(Jbig2Error::new("Halftone region processing needs architecture fix"))
+    }
+    
+    fn on_tables(&mut self, current_segment: u32, data: &[u8], start: usize, end: usize) -> Result<(), Jbig2Error> {
+        // TODO: Implement tables segment processing
+        Err(Jbig2Error::new("Tables processing not implemented yet"))
+    }
+}
+
+// Placeholder structures for different segment types
+#[derive(Debug)]
+struct GenericRegion {
+    info: RegionSegmentInformation,
+    mmr: bool,
+    template: usize,
+    prediction: bool,
+    at: Vec<TemplatePixel>,
+}
+
+#[derive(Debug)]
+struct SymbolDictionary {
+    huffman: bool,
+    refinement: bool,
+    template: usize,
+    refinement_template: usize,
+    at: Vec<TemplatePixel>,
+    refinement_at: Vec<TemplatePixel>,
+    number_of_exported_symbols: u32,
+    number_of_new_symbols: u32,
+}
+
+#[derive(Debug)]
+struct TextRegion {
+    info: RegionSegmentInformation,
+    huffman: bool,
+    refinement: bool,
+    default_pixel_value: u8,
+    number_of_symbol_instances: u32,
+    strip_size: u32,
+    transposed: bool,
+    ds_offset: i32,
+    reference_corner: u8,
+    combination_operator: u8,
+    refinement_template: usize,
+    refinement_at: Vec<TemplatePixel>,
+    log_strip_size: usize,
+}
+
+#[derive(Debug)]
+struct PatternDictionary {
+    mmr: bool,
+    pattern_width: u32,
+    pattern_height: u32,
+    max_pattern_index: u32,
+    template: usize,
+}
+
+#[derive(Debug)]
+struct HalftoneRegion {
+    info: RegionSegmentInformation,
+    mmr: bool,
+    template: usize,
+    default_pixel_value: u8,
+    enable_skip: bool,
+    combination_operator: u8,
+    grid_width: u32,
+    grid_height: u32,
+    grid_offset_x: i32,
+    grid_offset_y: i32,
+    grid_vector_x: i32,
+    grid_vector_y: i32,
+}
+
+// Halftone region decoding - ported from decodeHalftoneRegion function
+#[allow(clippy::too_many_arguments)]
+fn decode_halftone_region(
+    mmr: bool,
+    patterns: &[Bitmap],
+    template: usize,
+    region_width: usize,
+    region_height: usize,
+    default_pixel_value: u8,
+    enable_skip: bool,
+    combination_operator: u8,
+    grid_width: usize,
+    grid_height: usize,
+    grid_offset_x: i32,
+    grid_offset_y: i32,
+    grid_vector_x: i32,
+    grid_vector_y: i32,
+    decoding_context: &DecodingContext,
+) -> Result<Bitmap, Jbig2Error> {
+    if enable_skip {
+        return Err(Jbig2Error::new("skip is not supported"));
+    }
+    if combination_operator != 0 {
+        return Err(Jbig2Error::new(&format!("operator \"{}\" is not supported in halftone region", combination_operator)));
+    }
+
+    // Prepare bitmap
+    let mut region_bitmap: Vec<Vec<u8>> = Vec::with_capacity(region_height);
+    for _ in 0..region_height {
+        let mut row = vec![0u8; region_width];
+        if default_pixel_value != 0 {
+            row.fill(default_pixel_value);
+        }
+        region_bitmap.push(row);
+    }
+
+    let number_of_patterns = patterns.len();
+    if number_of_patterns == 0 {
+        return Ok(region_bitmap);
+    }
+    
+    let pattern0 = &patterns[0];
+    let pattern_width = if !pattern0.is_empty() { pattern0[0].len() } else { 0 };
+    let pattern_height = pattern0.len();
+    let bits_per_value = log2(number_of_patterns);
+    
+    let mut at = Vec::new();
+    if !mmr {
+        at.push(TemplatePixel { 
+            x: if template <= 1 { 3 } else { 2 }, 
+            y: -1 
+        });
+        if template == 0 {
+            at.push(TemplatePixel { x: -3, y: -1 });
+            at.push(TemplatePixel { x: 2, y: -2 });
+            at.push(TemplatePixel { x: -2, y: -2 });
+        }
+    }
+
+    // Annex C. Gray-scale Image Decoding Procedure
+    let mut gray_scale_bit_planes = Vec::with_capacity(bits_per_value);
+    
+    for i in (0..bits_per_value).rev() {
+        let bitmap = if mmr {
+            // TODO: Implement MMR decoding properly
+            return Err(Jbig2Error::new("MMR halftone region not implemented yet"));
+        } else {
+            // TODO: Fix borrowing issue for decode_bitmap call
+            return Err(Jbig2Error::new("Halftone region needs architecture fix"));
+        };
+        gray_scale_bit_planes.push(bitmap);
+    }
+    
+    // This would continue with pattern rendering but needs the bitmaps first
+    Ok(region_bitmap)
+}
+
+// MMR bitmap decoding placeholder - ported from decodeMMRBitmap function
+fn decode_mmr_bitmap(
+    _input: &mut Reader,
+    _width: usize,
+    _height: usize,
+    _end_of_block: bool,
+) -> Result<Bitmap, Jbig2Error> {
+    // TODO: Implement full MMR (Modified Modified READ) decoding
+    // This is a complex compression algorithm used in fax machines
+    // See ITU-T T.6 specification for details
+    Err(Jbig2Error::new("MMR decoding not implemented yet"))
+}
+
+// Uncompressed bitmap reading - ported from readUncompressedBitmap function
+fn read_uncompressed_bitmap(
+    reader: &mut Reader,
+    width: usize,
+    height: usize,
+) -> Result<Bitmap, Jbig2Error> {
+    let mut bitmap: Vec<Vec<u8>> = Vec::with_capacity(height);
+    
+    for _ in 0..height {
+        let mut row = Vec::with_capacity(width);
+        for _ in 0..width {
+            let bit = reader.read_bit()?;
+            row.push(bit);
+        }
+        bitmap.push(row);
+    }
+    
+    reader.byte_align();
+    Ok(bitmap)
+}
+
+// processSegment function - ported from JS processSegment function
+fn process_segment(segment: &Segment, visitor: &mut SimpleSegmentVisitor) -> Result<(), Jbig2Error> {
+    let header = &segment.header;
+    let data = &segment.data;
+    let end = segment.end;
+    let mut position = segment.start;
+    
+    const REGION_SEGMENT_INFORMATION_FIELD_LENGTH: usize = 17;
+    
+    match header.segment_type {
+        0 => { // SymbolDictionary
+            // 7.4.2 Symbol dictionary segment syntax
+            if position + 2 > data.len() {
+                return Err(Jbig2Error::new("insufficient data for symbol dictionary"));
+            }
+            
+            let dictionary_flags = read_uint16(data, position);
+            position += 2;
+            
+            let huffman = (dictionary_flags & 1) != 0;
+            let refinement = (dictionary_flags & 2) != 0;
+            let template = ((dictionary_flags >> 10) & 3) as usize;
+            let refinement_template = ((dictionary_flags >> 12) & 1) as usize;
+            
+            let mut at = Vec::new();
+            if !huffman {
+                let at_length = if template == 0 { 4 } else { 1 };
+                for _ in 0..at_length {
+                    if position + 2 > data.len() {
+                        return Err(Jbig2Error::new("insufficient data for AT pixels"));
+                    }
+                    at.push(TemplatePixel {
+                        x: read_int8(data, position) as i32,
+                        y: read_int8(data, position + 1) as i32,
+                    });
+                    position += 2;
+                }
+            }
+            
+            let mut refinement_at = Vec::new();
+            if refinement && refinement_template == 0 {
+                for _ in 0..2 {
+                    if position + 2 > data.len() {
+                        return Err(Jbig2Error::new("insufficient data for refinement AT pixels"));
+                    }
+                    refinement_at.push(TemplatePixel {
+                        x: read_int8(data, position) as i32,
+                        y: read_int8(data, position + 1) as i32,
+                    });
+                    position += 2;
+                }
+            }
+            
+            if position + 8 > data.len() {
+                return Err(Jbig2Error::new("insufficient data for symbol counts"));
+            }
+            let number_of_exported_symbols = read_uint32(data, position);
+            position += 4;
+            let number_of_new_symbols = read_uint32(data, position);
+            position += 4;
+            
+            let dictionary = SymbolDictionary {
+                huffman,
+                refinement,
+                template,
+                refinement_template,
+                at,
+                refinement_at,
+                number_of_exported_symbols,
+                number_of_new_symbols,
+            };
+            
+            visitor.on_symbol_dictionary(&dictionary, header.number, &header.referred_to, data, position, end)?;
+        },
+        6 | 7 => { // ImmediateTextRegion | ImmediateLosslessTextRegion
+            if position + REGION_SEGMENT_INFORMATION_FIELD_LENGTH > data.len() {
+                return Err(Jbig2Error::new("insufficient data for text region"));
+            }
+            
+            let info = read_region_segment_information(data, position)?;
+            position += REGION_SEGMENT_INFORMATION_FIELD_LENGTH;
+            
+            if position + 2 > data.len() {
+                return Err(Jbig2Error::new("insufficient data for text region flags"));
+            }
+            let text_region_segment_flags = read_uint16(data, position);
+            position += 2;
+            
+            let huffman = (text_region_segment_flags & 1) != 0;
+            let refinement = (text_region_segment_flags & 2) != 0;
+            let log_strip_size = ((text_region_segment_flags >> 2) & 3) as usize;
+            let strip_size = 1u32 << log_strip_size;
+            let reference_corner = ((text_region_segment_flags >> 4) & 3) as u8;
+            let transposed = (text_region_segment_flags & 64) != 0;
+            let combination_operator = ((text_region_segment_flags >> 7) & 3) as u8;
+            let default_pixel_value = ((text_region_segment_flags >> 9) & 1) as u8;
+            let ds_offset = ((text_region_segment_flags << 17) as i32) >> 27; // sign extension
+            let refinement_template = ((text_region_segment_flags >> 15) & 1) as usize;
+            
+            if huffman {
+                // Skip Huffman flags for now
+                position += 2;
+            }
+            
+            let mut refinement_at = Vec::new();
+            if refinement && refinement_template == 0 {
+                for _ in 0..2 {
+                    if position + 2 > data.len() {
+                        return Err(Jbig2Error::new("insufficient data for refinement AT pixels"));
+                    }
+                    refinement_at.push(TemplatePixel {
+                        x: read_int8(data, position) as i32,
+                        y: read_int8(data, position + 1) as i32,
+                    });
+                    position += 2;
+                }
+            }
+            
+            if position + 4 > data.len() {
+                return Err(Jbig2Error::new("insufficient data for number of symbol instances"));
+            }
+            let number_of_symbol_instances = read_uint32(data, position);
+            position += 4;
+            
+            let region = TextRegion {
+                info,
+                huffman,
+                refinement,
+                default_pixel_value,
+                number_of_symbol_instances,
+                strip_size,
+                transposed,
+                ds_offset,
+                reference_corner,
+                combination_operator,
+                refinement_template,
+                refinement_at,
+                log_strip_size,
+            };
+            
+            visitor.on_immediate_text_region(&region, &header.referred_to, data, position, end)?;
+        },
+        16 => { // PatternDictionary
+            if position + 7 > data.len() {
+                return Err(Jbig2Error::new("insufficient data for pattern dictionary"));
+            }
+            
+            let pattern_dictionary_flags = data[position];
+            position += 1;
+            let mmr = (pattern_dictionary_flags & 1) != 0;
+            let template = ((pattern_dictionary_flags >> 1) & 3) as usize;
+            
+            let pattern_width = data[position] as u32;
+            position += 1;
+            let pattern_height = data[position] as u32;
+            position += 1;
+            let max_pattern_index = read_uint32(data, position);
+            position += 4;
+            
+            let dictionary = PatternDictionary {
+                mmr,
+                pattern_width,
+                pattern_height,
+                max_pattern_index,
+                template,
+            };
+            
+            visitor.on_pattern_dictionary(&dictionary, header.number, data, position, end)?;
+        },
+        22 | 23 => { // ImmediateHalftoneRegion | ImmediateLosslessHalftoneRegion
+            if position + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 1 > data.len() {
+                return Err(Jbig2Error::new("insufficient data for halftone region"));
+            }
+            
+            let info = read_region_segment_information(data, position)?;
+            position += REGION_SEGMENT_INFORMATION_FIELD_LENGTH;
+            
+            let halftone_region_flags = data[position];
+            position += 1;
+            
+            let mmr = (halftone_region_flags & 1) != 0;
+            let template = ((halftone_region_flags >> 1) & 3) as usize;
+            let enable_skip = (halftone_region_flags & 8) != 0;
+            let combination_operator = ((halftone_region_flags >> 4) & 7) as u8;
+            let default_pixel_value = ((halftone_region_flags >> 7) & 1) as u8;
+            
+            if position + 16 > data.len() {
+                return Err(Jbig2Error::new("insufficient data for halftone grid"));
+            }
+            let grid_width = read_uint32(data, position);
+            position += 4;
+            let grid_height = read_uint32(data, position);
+            position += 4;
+            let grid_offset_x = read_uint32(data, position) as i32;
+            position += 4;
+            let grid_offset_y = read_uint32(data, position) as i32;
+            position += 4;
+            let grid_vector_x = read_uint16(data, position) as i32;
+            position += 2;
+            let grid_vector_y = read_uint16(data, position) as i32;
+            position += 2;
+            
+            let region = HalftoneRegion {
+                info,
+                mmr,
+                template,
+                default_pixel_value,
+                enable_skip,
+                combination_operator,
+                grid_width,
+                grid_height,
+                grid_offset_x,
+                grid_offset_y,
+                grid_vector_x,
+                grid_vector_y,
+            };
+            
+            visitor.on_immediate_halftone_region(&region, &header.referred_to, data, position, end)?;
+        },
+        38 | 39 => { // ImmediateGenericRegion | ImmediateLosslessGenericRegion
+            if position + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 1 > data.len() {
+                return Err(Jbig2Error::new("insufficient data for generic region"));
+            }
+            
+            let info = read_region_segment_information(data, position)?;
+            position += REGION_SEGMENT_INFORMATION_FIELD_LENGTH;
+            
+            let generic_region_segment_flags = data[position];
+            position += 1;
+            
+            let mmr = (generic_region_segment_flags & 1) != 0;
+            let template = ((generic_region_segment_flags >> 1) & 3) as usize;
+            let prediction = (generic_region_segment_flags & 8) != 0;
+            
+            let mut at = Vec::new();
+            if !mmr {
+                let at_length = if template == 0 { 4 } else { 1 };
+                for _ in 0..at_length {
+                    if position + 2 > data.len() {
+                        return Err(Jbig2Error::new("insufficient data for AT pixels"));
+                    }
+                    at.push(TemplatePixel {
+                        x: read_int8(data, position) as i32,
+                        y: read_int8(data, position + 1) as i32,
+                    });
+                    position += 2;
+                }
+            }
+            
+            let region = GenericRegion {
+                info,
+                mmr,
+                template,
+                prediction,
+                at,
+            };
+            
+            visitor.on_immediate_generic_region(&region, data, position, end)?;
+        },
+        48 => { // PageInformation
+            if position + 19 > data.len() {
+                return Err(Jbig2Error::new("insufficient data for page information"));
+            }
+            
+            let width = read_uint32(data, position);
+            let height = read_uint32(data, position + 4);
+            let page_segment_flags = data[position + 16];
+            
+            let default_pixel_value = ((page_segment_flags >> 2) & 1) as u8;
+            let combination_operator = ((page_segment_flags >> 3) & 3) as u8;
+            let combination_operator_override = (page_segment_flags & 64) != 0;
+            
+            let page_info = PageInfo {
+                width,
+                height: if height == 0xffffffff { 0 } else { height }, // Handle unknown height
+                default_pixel_value,
+                combination_operator,
+                combination_operator_override,
+            };
+            
+            visitor.on_page_information(page_info);
+        },
+        49 => { // EndOfPage
+            // No processing needed
+        },
+        50 => { // EndOfStripe  
+            // No processing needed
+        },
+        51 => { // EndOfFile
+            // No processing needed
+        },
+        53 => { // Tables
+            visitor.on_tables(header.number, data, position, end)?;
+        },
+        62 => { // Extension - can be ignored
+            // No processing needed
+        },
+        _ => {
+            return Err(Jbig2Error::new(&format!("segment type {}({}) is not implemented", header.type_name, header.segment_type)));
+        }
+    }
+    
+    Ok(())
+}
+
+// processSegments function - ported from JS processSegments function
+fn process_segments(segments: &[Segment], visitor: &mut SimpleSegmentVisitor) -> Result<(), Jbig2Error> {
+    for segment in segments {
+        process_segment(segment, visitor)?;
+    }
+    Ok(())
+}
+
+// TODO: Complete implementation of:
+// - Full MMR decoding functions following ITU-T T.6 specification
+// - Tables segment decoding and standard Huffman tables  
+// - Custom Huffman table functions and getStandardTable function
+// - Fix borrowing architecture issues throughout the codebase to enable full functionality 
