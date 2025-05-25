@@ -148,6 +148,68 @@ struct Chunk {
     end: usize,
 }
 
+// Header structure for file organization information  
+#[derive(Debug)]
+struct Jbig2Header {
+    random_access: bool,
+}
+
+impl Default for Jbig2Header {
+    fn default() -> Self {
+        Self {
+            random_access: false,
+        }
+    }
+}
+
+// readSegments function - ported from JS readSegments function
+fn read_segments(
+    header: &Jbig2Header,
+    data: &[u8],
+    start: usize,
+    end: usize,
+) -> Result<Vec<Segment>, Jbig2Error> {
+    let mut segments = Vec::new();
+    let mut position = start;
+
+    while position < end {
+        let segment_header = read_segment_header(data, position)?;
+        position = segment_header.header_end;
+
+        let mut segment = Segment {
+            header: segment_header.clone(),
+            data: data.to_vec(), // Share reference to original data like JS
+            start: 0,           // Will be set below
+            end: 0,             // Will be set below
+        };
+
+        if !header.random_access {
+            // Set segment positions immediately during parsing (non-random access)
+            segment.start = position;
+            position += segment_header.length as usize;
+            segment.end = position;
+        }
+
+        segments.push(segment);
+
+        // Break on end of file segment
+        if segment_header.segment_type == 51 {
+            break;
+        }
+    }
+
+    if header.random_access {
+        // Defer position setting until all segments are read (random access)
+        for segment in &mut segments {
+            segment.start = position;
+            position += segment.header.length as usize;
+            segment.end = position;
+        }
+    }
+
+    Ok(segments)
+}
+
 /// ArithmeticDecoder - ported from PDF.js arithmetic_decoder.js
 ///
 /// This class implements the QM Coder decoding as defined in
@@ -857,43 +919,37 @@ impl Jbig2Image {
     }
 
     fn parse_chunk(&mut self, chunk: &Chunk) -> Result<(), Jbig2Error> {
-        // TODO: SEGMENT READING DIFFERENCES: JS readSegments() handles randomAccess flag from header
-        // differently - if randomAccess is false, it sets segment positions immediately during parsing.
-        // If randomAccess is true, it defers position setting until all segments are read.
-        // Rust version always sets positions immediately and doesn't handle randomAccess flag.
-        // This could affect processing order and memory usage for some JBIG2 files.
         let data = &chunk.data;
         let mut position = chunk.start;
         let end = chunk.end;
 
-        // Skip file header if present (first 9 bytes for file organization)
-        if position + 9 <= data.len() && data[position..position + 4] == [0x97, 0x4A, 0x42, 0x32] {
-            // Skip the file header
-            position += 9;
-        }
+        // Parse file header if present (first 9 bytes for file organization)
+        let header = if position + 9 <= data.len() && data[position..position + 4] == [0x97, 0x4A, 0x42, 0x32] {
+            // Read file header flags
+            let file_organization_flags = data[position + 8];
+            let random_access = (file_organization_flags & 1) != 0;
+            position += 9; // Skip the file header
+            Jbig2Header { random_access }
+        } else {
+            Jbig2Header::default()
+        };
 
-        // Read segments
-        while position < end && position + 6 <= data.len() {
-            let segment_header = read_segment_header(data, position)?;
-            position = segment_header.header_end;
-
-            if position + segment_header.length as usize > data.len() {
+        // Read segments using extracted function like JavaScript implementation
+        let segments = read_segments(&header, data, position, end)?;
+        
+        // Extract segment data and convert to owned format for processing
+        for segment in segments {
+            if segment.start < data.len() && segment.end <= data.len() {
+                let segment_data = data[segment.start..segment.end].to_vec();
+                let owned_segment = Segment {
+                    header: segment.header,
+                    data: segment_data.clone(),
+                    start: 0, // Relative to segment data
+                    end: segment_data.len(),
+                };
+                self.segments.push(owned_segment);
+            } else {
                 return Err(Jbig2Error::new("segment data extends beyond chunk"));
-            }
-
-            let segment = Segment {
-                header: segment_header.clone(),
-                data: data[position..position + segment_header.length as usize].to_vec(),
-                start: 0, // Relative to segment data
-                end: segment_header.length as usize,
-            };
-
-            position += segment_header.length as usize;
-            self.segments.push(segment);
-
-            // Break on end of file segment
-            if segment_header.segment_type == 51 {
-                break;
             }
         }
 
