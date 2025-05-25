@@ -1,10 +1,33 @@
+use once_cell::sync::Lazy;
 use crate::filter::jbig2::{HuffmanLine, HuffmanTable, Jbig2Error};
 
-// Standard tables getter - ported from getStandardTable function
-pub(crate) fn get_standard_table(number: u32) -> Result<HuffmanTable, Jbig2Error> {
-    // For simplicity, we'll recreate tables each time
-    // In a production implementation, these would be cached
+pub fn get_standard_table(number: u32) -> Result<HuffmanTable, Jbig2Error> {
+    if number == 0 || number > 15 {
+        return Err(Jbig2Error::new("invalid standard table"));
+    }   else {
+        Ok(Lazy::force(&STANDARD_TABLES[number as usize - 1]).clone())
+    }
+}
 
+static STANDARD_TABLES: [Lazy<HuffmanTable>; 15] = [
+    Lazy::new(|| build_standard_table(1)),
+    Lazy::new(|| build_standard_table(2)),
+    Lazy::new(|| build_standard_table(3)),
+    Lazy::new(|| build_standard_table(4)),
+    Lazy::new(|| build_standard_table(5)),
+    Lazy::new(|| build_standard_table(6)),
+    Lazy::new(|| build_standard_table(7)),
+    Lazy::new(|| build_standard_table(8)),
+    Lazy::new(|| build_standard_table(9)),
+    Lazy::new(|| build_standard_table(10)),
+    Lazy::new(|| build_standard_table(11)),
+    Lazy::new(|| build_standard_table(12)),
+    Lazy::new(|| build_standard_table(13)),
+    Lazy::new(|| build_standard_table(14)),
+    Lazy::new(|| build_standard_table(15)),
+];
+
+fn build_standard_table(number: u32) -> HuffmanTable {
     // Annex B.5 Standard Huffman tables
     let lines_data: Vec<Vec<i32>> = match number {
         1 => vec![
@@ -221,12 +244,7 @@ pub(crate) fn get_standard_table(number: u32) -> Result<HuffmanTable, Jbig2Error
             vec![-25, 7, 32, 0x7e, -1], // lower
             vec![25, 7, 32, 0x7f],      // upper
         ],
-        _ => {
-            return Err(Jbig2Error::new(&format!(
-                "standard table B.{} does not exist",
-                number
-            )));
-        }
+        _ => unreachable!()
     };
 
     // Convert to HuffmanLine objects using unified constructor
@@ -236,5 +254,6 @@ pub(crate) fn get_standard_table(number: u32) -> Result<HuffmanTable, Jbig2Error
     }
 
     let table = HuffmanTable::new(lines, true);
-    Ok(table)
+    
+    table
 }

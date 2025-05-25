@@ -569,6 +569,7 @@ dependencies = [
  "kurbo",
  "log",
  "miniz_oxide",
+ "once_cell",
  "rustc-hash",
  "smallvec",
  "zune-jpeg",

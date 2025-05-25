@@ -142,10 +142,10 @@ impl DecodingContext {
 
 // Chunk structure for parsing
 #[derive(Clone)]
-struct Chunk {
-    data: Vec<u8>,
-    start: usize,
-    end: usize,
+pub struct Chunk {
+    pub data: Vec<u8>,
+    pub start: usize,
+    pub end: usize,
 }
 
 // Header structure for file organization information  
@@ -738,6 +738,7 @@ struct HuffmanTable {
 
 impl HuffmanTable {
     fn new(mut lines: Vec<HuffmanLine>, prefix_codes_done: bool) -> Self {
+        println!("Creating tree with {} lines", lines.len());
         if !prefix_codes_done {
             Self::assign_prefix_codes(&mut lines);
         }
@@ -749,6 +750,7 @@ impl HuffmanTable {
                 root_node.build_tree(line, line.prefix_length as i32 - 1);
             }
         }
+        // println!("{:#?}", root_node);
 
         Self { root_node }
     }
@@ -874,14 +876,14 @@ pub(crate) fn read_region_segment_information(
 // - tables segment decoding and standard tables ✓
 
 // Main JBIG2 decoder class
-struct Jbig2Image {
+pub struct Jbig2Image {
     width: usize,
     height: usize,
     segments: Vec<Segment>,
 }
 
 impl Jbig2Image {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             width: 0,
             height: 0,
@@ -889,7 +891,7 @@ impl Jbig2Image {
         }
     }
 
-    fn parse_chunks(&mut self, chunks: &[Chunk]) -> Option<Vec<u8>> {
+    pub fn parse_chunks(&mut self, chunks: &[Chunk]) -> Option<Vec<u8>> {
         // Parse all segments from chunks first
         for chunk in chunks {
             if let Err(e) = self.parse_chunk(chunk) {
@@ -1654,7 +1656,8 @@ fn process_segment(
     let mut position = segment.start;
 
     const REGION_SEGMENT_INFORMATION_FIELD_LENGTH: usize = 17;
-
+    println!("visiting segment {}", header.segment_type);
+    
     match header.segment_type {
         0 => {
             // SymbolDictionary

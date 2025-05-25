@@ -12,6 +12,7 @@ smallvec = { workspace = true }
 zune-jpeg = { workspace = true }
 miniz_oxide = { workspace = true }
 itertools = { workspace = true }
+once_cell = { workspace = true }
 jpeg2k = { workspace = true, optional = true }
 
 [features]
