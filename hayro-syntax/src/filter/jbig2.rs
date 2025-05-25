@@ -643,7 +643,7 @@ fn decode_symbol_dictionary(
     refinement_template_index: usize,
     refinement_at: &[TemplatePixel],
     decoding_context: &mut DecodingContext,
-    mut huffman_input: Option<&mut Reader>,
+    mut huffman_input: Option<&Reader>,
 ) -> Result<Vec<Bitmap>, Jbig2Error> {
     if huffman && refinement {
         return Err(Jbig2Error::new(
@@ -674,7 +674,7 @@ fn decode_symbol_dictionary(
                 .height_table
                 .decode(
                     huffman_input
-                        .as_mut()
+                        .as_ref()
                         .ok_or_else(|| Jbig2Error::new("Huffman input required"))?,
                 )
                 .map_err(|_| Jbig2Error::new("Failed to decode delta height"))?
@@ -692,11 +692,13 @@ fn decode_symbol_dictionary(
 
         loop {
             let delta_width = if huffman {
-                huffman_tables
+                let result = huffman_tables
                     .as_ref()
                     .unwrap()
                     .width_table
-                    .decode(huffman_input.as_mut().unwrap())?
+                    .decode(huffman_input.clone().unwrap())?;
+
+                result
             } else {
                 decoding_context.decode_integer("IADW") // 6.5.7
             };
@@ -737,7 +739,7 @@ fn decode_symbol_dictionary(
                         decoding_context,
                         0,
                         // TODO: Figure out how to align this
-                        None,
+                        huffman_input,
                     )?
                 } else {
                     let symbol_id = decoding_context.decode_iaid(symbol_code_length) as usize;
@@ -787,6 +789,8 @@ fn decode_symbol_dictionary(
         }
 
         if huffman && !refinement {
+            let huffman_input = huffman_input.clone().unwrap();
+
             // 6.5.9 Height class collective bitmap
             let bitmap_size = huffman_tables
                 .as_ref()
@@ -794,35 +798,35 @@ fn decode_symbol_dictionary(
                 .bitmap_size_table
                 .as_ref()
                 .ok_or_else(|| Jbig2Error::new("Bitmap size table required"))?
-                .decode(huffman_input.as_mut().unwrap())?
+                .decode(huffman_input)?
                 .ok_or_else(|| Jbig2Error::new("Got OOB for bitmap size"))?;
 
-            huffman_input.as_mut().unwrap().byte_align();
+            huffman_input.byte_align();
 
             let collective_bitmap = if bitmap_size == 0 {
                 // Uncompressed collective bitmap
                 read_uncompressed_bitmap(
-                    huffman_input.as_mut().unwrap(),
+                    huffman_input,
                     total_width as usize,
                     current_height as usize,
                 )?
             } else {
                 // MMR collective bitmap
-                // TODO: Original JS has huffman input
-                let huffman_reader = huffman_input.as_mut().unwrap();
-                let original_end = huffman_reader.end;
-                let bitmap_end = huffman_reader.position + bitmap_size as usize;
-                huffman_reader.end = bitmap_end;
+                let mut input = huffman_input.0.borrow_mut();
+                let original_end = input.end;
+                let bitmap_end = input.position + bitmap_size as usize;
+                input.end = bitmap_end;
 
                 let result = decode_mmr_bitmap(
-                    &huffman_reader.data[huffman_reader.position..bitmap_end],
+                    &input.data[input.position..bitmap_end],
                     total_width as usize,
                     current_height as usize,
                     false,
                 );
 
-                huffman_reader.end = original_end;
-                huffman_reader.position = bitmap_end;
+                input.end = original_end;
+                input.position = bitmap_end;
+
                 result?
             };
 
@@ -855,11 +859,14 @@ fn decode_symbol_dictionary(
 
     while flags.len() < total_symbols_length {
         let run_length = if huffman {
-            table_b1
+            let huffman_input = huffman_input.clone().unwrap();
+            let res = table_b1
                 .as_ref()
                 .unwrap()
-                .decode(huffman_input.as_mut().unwrap())?
-                .ok_or_else(|| Jbig2Error::new("Got OOB for run length"))?
+                .decode(huffman_input)?
+                .ok_or_else(|| Jbig2Error::new("Got OOB for run length"))?;
+
+            res
         } else {
             decoding_context
                 .decode_integer("IAEX")
@@ -1462,60 +1469,69 @@ struct SymbolDictionaryHuffmanTables {
     pub _aggregate_table: Option<HuffmanTable>,
 }
 
-// Reader class - ported from JS Reader class
 #[derive(Debug)]
-struct Reader<'a> {
+struct ReaderInner<'a> {
     data: &'a [u8],
+    start: usize,
     end: usize,
     position: usize,
     shift: i32,
     current_byte: u8,
 }
 
+// Reader class - ported from JS Reader class
+#[derive(Debug)]
+struct Reader<'a>(RefCell<ReaderInner<'a>>);
+
 impl<'a> Reader<'a> {
     fn new(data: &'a [u8], start: usize, end: usize) -> Self {
-        Self {
+        Self(RefCell::new(ReaderInner {
             data,
             end,
+            start,
             position: start,
             shift: -1,
             current_byte: 0,
-        }
+        }))
     }
 
-    fn read_bit(&mut self) -> Result<u8, Jbig2Error> {
-        if self.shift < 0 {
-            if self.position >= self.end {
+    fn read_bit(&self) -> Result<u8, Jbig2Error> {
+        let mut s = self.0.borrow_mut();
+
+        if s.shift < 0 {
+            if s.position >= s.end {
                 return Err(Jbig2Error::new("end of data while reading bit"));
             }
-            self.current_byte = self.data[self.position];
-            self.position += 1;
-            self.shift = 7;
+            s.current_byte = s.data[s.position];
+            s.position += 1;
+            s.shift = 7;
         }
-        let bit = (self.current_byte >> self.shift) & 1;
-        self.shift -= 1;
+        let bit = (s.current_byte >> s.shift) & 1;
+        s.shift -= 1;
         Ok(bit)
     }
 
-    fn read_bits(&mut self, num_bits: usize) -> Result<u32, Jbig2Error> {
+    fn read_bits(&self, num_bits: usize) -> Result<u32, Jbig2Error> {
         let mut result = 0u32;
-        for i in 0..num_bits {
-            let bit = self.read_bit()? as u32;
-            result |= bit << (num_bits - 1 - i);
+        for i in (0..num_bits).rev() {
+            result |= (self.read_bit()? as u32) << i;
         }
+
         Ok(result)
     }
 
-    fn byte_align(&mut self) {
-        self.shift = -1;
+    fn byte_align(&self) {
+        self.0.borrow_mut().shift = -1;
     }
 
-    fn _next(&mut self) -> i32 {
-        if self.position >= self.end {
+    fn _next(&self) -> i32 {
+        let mut s = self.0.borrow_mut();
+
+        if s.position >= s.end {
             return -1;
         }
-        let byte = self.data[self.position] as i32;
-        self.position += 1;
+        let byte = s.data[s.position] as i32;
+        s.position += 1;
         byte
     }
 }
@@ -1541,7 +1557,7 @@ fn decode_text_region(
     refinement_at: &[TemplatePixel],
     decoding_context: &mut DecodingContext,
     log_strip_size: usize,
-    _huffman_input: Option<&mut Reader>,
+    _huffman_input: Option<&Reader>,
 ) -> Result<Bitmap, Jbig2Error> {
     // TODO: HUFFMAN HANDLING DIFFERENCES: JS version uses huffmanTables.tableDeltaT.decode()
     // for initial stripT calculation (stripT = -huffmanTables.tableDeltaT.decode(huffmanInput))
@@ -2224,7 +2240,7 @@ impl HuffmanTreeNode {
         }
     }
 
-    fn decode_node(&self, reader: &mut Reader) -> Result<Option<i32>, Jbig2Error> {
+    fn decode_node(&self, reader: &Reader) -> Result<Option<i32>, Jbig2Error> {
         if self.is_leaf {
             if self.is_oob {
                 return Ok(None);
@@ -2269,7 +2285,7 @@ impl HuffmanTable {
         Self { root_node }
     }
 
-    fn decode(&self, reader: &mut Reader) -> Result<Option<i32>, Jbig2Error> {
+    fn decode(&self, reader: &Reader) -> Result<Option<i32>, Jbig2Error> {
         self.root_node.decode_node(reader)
     }
 
@@ -2882,7 +2898,7 @@ impl SimpleSegmentVisitor {
             dictionary.refinement_template,
             &dictionary.refinement_at,
             &mut decoding_context,
-            huffman_reader.as_mut(),
+            huffman_reader.as_ref(),
         )?;
 
         // Store all symbols (input + new)
@@ -2924,7 +2940,7 @@ impl SimpleSegmentVisitor {
                 region,
                 referred_segments,
                 input_symbols.len(),
-                huffman_reader.as_mut(),
+                huffman_reader.as_ref(),
             )?)
         } else {
             None
@@ -2955,7 +2971,7 @@ impl SimpleSegmentVisitor {
             &region.refinement_at,
             &mut decoding_context,
             region.log_strip_size,
-            huffman_reader.as_mut(),
+            huffman_reader.as_ref(),
         )?;
 
         self.draw_bitmap(&region.info, &bitmap)
@@ -3120,7 +3136,7 @@ impl SimpleSegmentVisitor {
         region: &TextRegion,
         referred_segments: &[u32],
         number_of_symbols: usize,
-        huffman_reader: Option<&mut Reader>,
+        huffman_reader: Option<&Reader>,
     ) -> Result<TextRegionHuffmanTables, Jbig2Error> {
         // 7.4.3.1.6 Text region segment Huffman table selection
         let mut custom_index = 0;
@@ -3504,7 +3520,7 @@ fn decode_mmr_bitmap(
 
 // Uncompressed bitmap reading - ported from readUncompressedBitmap function
 fn read_uncompressed_bitmap(
-    reader: &mut Reader,
+    reader: &Reader,
     width: usize,
     height: usize,
 ) -> Result<Bitmap, Jbig2Error> {
@@ -4256,7 +4272,7 @@ fn get_custom_huffman_table<'a>(
 // Helper function for complete RUNCODE symbol ID table decoding
 // ✅ FAITHFUL PORT: Complete JavaScript getTextRegionHuffmanTables implementation
 fn decode_symbol_id_huffman_table(
-    reader: &mut Reader,
+    reader: &Reader,
     number_of_symbols: usize,
 ) -> Result<HuffmanTable, Jbig2Error> {
     // 7.4.3.1.7 Symbol ID Huffman table decoding
