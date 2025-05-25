@@ -17,17 +17,19 @@ mod bitmap_template0;
 mod halftone_region;
 mod pattern_dictionary;
 mod refinement;
+mod segment_header;
 mod standard_table;
 mod symbol_dictionary;
 mod tables;
 mod text_region;
-mod segment_header;
 
 use crate::filter::ccitt::{CCITTFaxDecoder, CCITTFaxDecoderOptions};
 use crate::filter::jbig2::bitmap::decode_bitmap;
 use crate::filter::jbig2::bitmap_template0::decode_bitmap_template0;
+use crate::filter::jbig2::halftone_region::decode_halftone_region;
 use crate::filter::jbig2::pattern_dictionary::decode_pattern_dictionary;
 use crate::filter::jbig2::refinement::decode_refinement;
+use crate::filter::jbig2::segment_header::read_segment_header;
 use crate::filter::jbig2::standard_table::get_standard_table;
 use crate::filter::jbig2::symbol_dictionary::decode_symbol_dictionary;
 use crate::filter::jbig2::tables::{QE_TABLE, SEGMENT_TYPES};
@@ -40,8 +42,6 @@ use log::warn;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
-use crate::filter::jbig2::halftone_region::decode_halftone_region;
-use crate::filter::jbig2::segment_header::read_segment_header;
 
 pub fn decode(data: &[u8], params: Dict) -> Option<Vec<u8>> {
     let globals = params.get::<Stream>(JBIG2_GLOBALS);
@@ -787,7 +787,7 @@ fn read_int8(data: &[u8], offset: usize) -> i8 {
 }
 
 // Region segment information reading - ported from readRegionSegmentInformation
-fn read_region_segment_information(
+pub(crate) fn read_region_segment_information(
     data: &[u8],
     start: usize,
 ) -> Result<RegionSegmentInformation, Jbig2Error> {

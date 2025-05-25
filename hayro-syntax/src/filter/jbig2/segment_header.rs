@@ -1,5 +1,5 @@
-use crate::filter::jbig2::{read_uint16, read_uint32, Jbig2Error, SegmentHeader};
 use crate::filter::jbig2::tables::SEGMENT_TYPES;
+use crate::filter::jbig2::{Jbig2Error, SegmentHeader, read_uint16, read_uint32};
 
 // Segment header reading - ported from readSegmentHeader function
 pub(crate) fn read_segment_header(data: &[u8], start: usize) -> Result<SegmentHeader, Jbig2Error> {
@@ -87,65 +87,42 @@ pub(crate) fn read_segment_header(data: &[u8], start: usize) -> Result<SegmentHe
     position += 4;
 
     // Handle unknown segment length (0xffffffff) cases
-    // When length is unknown, we need to read until end of data or next segment
     if length == 0xffffffff {
-        // Implement end-of-segment detection for ImmediateGenericRegion (type 38)
+        // 7.2.7 Segment data length, unknown segment length
         if segment_type == 38 {
-            // For ImmediateGenericRegion with unknown length, we need to find the end pattern
-            // by reading ahead to find the region information and create a search pattern
-            if position + 17 > data.len() {
-                return Err(Jbig2Error::new(
-                    "insufficient data for region info in unknown length segment",
-                ));
+            // ImmediateGenericRegion
+            let generic_region_info = super::read_region_segment_information(data, position)?;
+            let region_segment_information_field_length = 17;
+            let generic_region_segment_flags =
+                data[position + region_segment_information_field_length];
+            let generic_region_mmr = (generic_region_segment_flags & 1) != 0;
+
+            // Searching for the segment end
+            let search_pattern_length = 6;
+            let mut search_pattern = vec![0u8; search_pattern_length];
+            if !generic_region_mmr {
+                search_pattern[0] = 0xff;
+                search_pattern[1] = 0xac;
             }
+            search_pattern[2] = (generic_region_info.height >> 24) as u8;
+            search_pattern[3] = (generic_region_info.height >> 16) as u8;
+            search_pattern[4] = (generic_region_info.height >> 8) as u8;
+            search_pattern[5] = generic_region_info.height as u8;
 
-            let region_height = read_uint32(data, position + 4);
-            let region_flags = if position + 17 < data.len() {
-                data[position + 17]
-            } else {
-                0
-            };
-            let mmr = (region_flags & 1) != 0;
-
-            // Create search pattern based on MMR flag and height
-            let search_pattern = if mmr {
-                // For MMR: just height bytes
-                vec![
-                    (region_height >> 24) as u8,
-                    (region_height >> 16) as u8,
-                    (region_height >> 8) as u8,
-                    region_height as u8,
-                ]
-            } else {
-                // For non-MMR: 0xff, 0xac followed by height bytes
-                vec![
-                    0xff,
-                    0xac,
-                    (region_height >> 24) as u8,
-                    (region_height >> 16) as u8,
-                    (region_height >> 8) as u8,
-                    region_height as u8,
-                ]
-            };
-
-            // Search for the pattern starting from after the segment header
-            let search_start = position + 18; // After region info and flags
-            let search_end = data.len().saturating_sub(search_pattern.len());
-            let mut found_end = None;
-
-            for i in search_start..=search_end {
-                if data[i..i + search_pattern.len()] == search_pattern {
-                    found_end = Some(i + search_pattern.len());
+            let mut found_length = None;
+            for i in position..data.len() {
+                let mut j = 0;
+                while j < search_pattern_length && search_pattern[j] == data[i + j] {
+                    j += 1;
+                }
+                if j == search_pattern_length {
+                    found_length = Some(i + search_pattern_length);
                     break;
                 }
             }
 
-            let actual_length = if let Some(end_pos) = found_end {
-                end_pos - position
-            } else {
-                // If pattern not found, use remaining data
-                data.len() - position
-            };
+            let actual_length =
+                found_length.ok_or_else(|| Jbig2Error::new("segment end was not found"))?;
 
             return Ok(SegmentHeader {
                 number,
@@ -158,21 +135,9 @@ pub(crate) fn read_segment_header(data: &[u8], start: usize) -> Result<SegmentHe
                 length: actual_length as u32,
                 header_end: position,
             });
+        } else {
+            return Err(Jbig2Error::new("invalid unknown segment length"));
         }
-
-        // For other segment types with unknown length, use remaining data
-        let remaining_length = data.len() - position;
-        return Ok(SegmentHeader {
-            number,
-            segment_type,
-            type_name,
-            _deferred_non_retain: deferred_non_retain,
-            _retain_bits: retain_bits,
-            referred_to,
-            _page_association: page_association,
-            length: remaining_length as u32,
-            header_end: position,
-        });
     }
 
     Ok(SegmentHeader {
