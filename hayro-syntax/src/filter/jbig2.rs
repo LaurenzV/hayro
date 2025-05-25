@@ -274,6 +274,87 @@ struct RefinementTemplate {
     reference: &'static [[i32; 2]],
 }
 
+// Reused contexts for different template indices (6.2.5.7)
+const REUSED_CONTEXTS: [u32; 4] = [
+    0x9b25, // 10011 0110010 0101
+    0x0795, // 0011 110010 101
+    0x00e5, // 001 11001 01
+    0x0195, // 011001 0101
+];
+
+// Refinement reused contexts
+const REFINEMENT_REUSED_CONTEXTS: [u32; 2] = [
+    0x0020, // '000' + '0' (coding) + '00010000' + '0' (reference)
+    0x0008, // '0000' + '001000'
+];
+
+fn decode_bitmap_template0(
+    width: usize,
+    height: usize,
+    decoding_context: &mut DecodingContext,
+) -> Bitmap {
+    let contexts = decoding_context.context_cache.get_contexts("GB");
+    let decoder = &mut decoding_context.decoder;
+    let mut bitmap = Vec::with_capacity(height);
+
+    // ...ooooo....
+    // ..ooooooo... Context template for current pixel (X)
+    // .ooooX...... (concatenate values of 'o'-pixels to get contextLabel)
+    const OLD_PIXEL_MASK: u32 = 0x7bf7; // 01111 0111111 0111
+
+    for i in 0..height {
+        let mut row = Rc::new(RefCell::new(vec![0u8; width]));
+        bitmap.push(row.clone());
+        let row1 = if i < 1 {
+            row.clone()
+        } else {
+            bitmap[i - 1].clone()
+        };
+        let row2 = if i < 2 {
+            row.clone()
+        } else {
+            bitmap[i - 2].clone()
+        };
+
+        // At the beginning of each row:
+        // Fill contextLabel with pixels that are above/right of (X)
+        let mut context_label = (row2.borrow()[0] as u32) << 13
+            | (row2.borrow()[1] as u32) << 12
+            | (row2.borrow()[1] as u32) << 11
+            | (row1.borrow()[0] as u32) << 7
+            | (row1.borrow()[1] as u32) << 6
+            | (row1.borrow()[2] as u32) << 5
+            | (row1.borrow()[3] as u32) << 4;
+
+        for j in 0..width {
+            let pixel = decoder.read_bit(contexts, context_label as usize);
+            row.borrow_mut()[j] = pixel;
+
+            // At each pixel: Clear contextLabel pixels that are shifted
+            // out of the context, then add new ones.
+
+            context_label = ((context_label & OLD_PIXEL_MASK) << 1)
+                | {
+                    if j + 3 < width {
+                        (row2.borrow()[j + 3] as u32) << 11
+                    } else {
+                        0
+                    }
+                }
+                | {
+                    if j + 4 < width {
+                        (row1.borrow()[j + 4] as u32) << 4
+                    } else {
+                        0
+                    }
+                }
+                | pixel as u32;
+        }
+    }
+
+    bitmap.iter().map(|i| i.borrow().clone()).collect()
+}
+
 // QM Coder Table C-2 from JPEG 2000 Part I Final Committee Draft Version 1.0
 #[derive(Clone, Copy)]
 struct QeEntry {
@@ -818,20 +899,6 @@ fn decode_iaid(
     }
 }
 
-// Reused contexts for different template indices (6.2.5.7)
-const REUSED_CONTEXTS: [u32; 4] = [
-    0x9b25, // 10011 0110010 0101
-    0x0795, // 0011 110010 101
-    0x00e5, // 001 11001 01
-    0x0195, // 011001 0101
-];
-
-// Refinement reused contexts
-const REFINEMENT_REUSED_CONTEXTS: [u32; 2] = [
-    0x0020, // '000' + '0' (coding) + '00010000' + '0' (reference)
-    0x0008, // '0000' + '001000'
-];
-
 // Bitmap type for 2D bitmap data
 type Bitmap = Vec<Vec<u8>>;
 
@@ -840,86 +907,6 @@ type Bitmap = Vec<Vec<u8>>;
 struct TemplatePixel {
     x: i32,
     y: i32,
-}
-
-// 6.2 Generic Region Decoding Procedure - Template 0 optimized version
-fn decode_bitmap_template0(
-    width: usize,
-    height: usize,
-    decoding_context: &mut DecodingContext,
-) -> Bitmap {
-    let mut bitmap = Vec::with_capacity(height);
-
-    // Context template for current pixel (X)
-    // ...ooooo....
-    // ..ooooooo... Context template for current pixel (X)
-    // .ooooX...... (concatenate values of 'o'-pixels to get contextLabel)
-    const OLD_PIXEL_MASK: u32 = 0x7bf7; // 01111 0111111 0111
-
-    for i in 0..height {
-        let mut row = vec![0u8; width];
-
-        // FIXED: Match JavaScript behavior - use current row when i < 1 or i < 2
-        // JS: row1 = i < 1 ? row : bitmap[i - 1];
-        // JS: row2 = i < 2 ? row : bitmap[i - 2];
-
-        // At the beginning of each row:
-        // Fill contextLabel with pixels that are above/right of (X)
-        let mut context_label = if i < 2 {
-            // When i < 2, row2 uses current row (which is initially all zeros)
-            let row2_vals = if i < 2 { &row } else { &bitmap[i - 2] };
-            let row1_vals = if i < 1 { &row } else { &bitmap[i - 1] };
-
-            ((row2_vals[0] as u32) << 13)
-                | ((row2_vals[1] as u32) << 12)
-                | ((row2_vals[2] as u32) << 11)
-                | ((row1_vals[0] as u32) << 7)
-                | ((row1_vals[1] as u32) << 6)
-                | ((row1_vals[2] as u32) << 5)
-                | ((row1_vals[3] as u32) << 4)
-        } else {
-            // When i >= 2, we can use previous rows from bitmap
-            let row2 = &bitmap[i - 2];
-            let row1 = if i < 1 { &row } else { &bitmap[i - 1] };
-
-            ((row2[0] as u32) << 13)
-                | ((row2[1] as u32) << 12)
-                | ((row2[2] as u32) << 11)
-                | ((row1[0] as u32) << 7)
-                | ((row1[1] as u32) << 6)
-                | ((row1[2] as u32) << 5)
-                | ((row1[3] as u32) << 4)
-        };
-
-        for j in 0..width {
-            let contexts = decoding_context.context_cache.get_contexts("GB");
-            let pixel = decoding_context
-                .decoder
-                .read_bit(contexts, context_label as usize);
-            row[j] = pixel;
-
-            // At each pixel: Clear contextLabel pixels that are shifted
-            // out of the context, then add new ones.
-            let row2_val = if i < 2 {
-                row[j + 3]
-            } else {
-                bitmap[i - 2][j + 3]
-            };
-            let row1_val = if i < 1 {
-                row[j + 4]
-            } else {
-                bitmap[i - 1][j + 4]
-            };
-
-            context_label = ((context_label & OLD_PIXEL_MASK) << 1)
-                | ((row2_val as u32) << 11)
-                | ((row1_val as u32) << 4)
-                | (pixel as u32);
-        }
-        bitmap.push(row);
-    }
-
-    bitmap
 }
 
 // 6.2 Generic Region Decoding Procedure - General case
