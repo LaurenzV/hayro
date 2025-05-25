@@ -1137,7 +1137,7 @@ impl SimpleSegmentVisitor {
         }
 
         let mut decoding_context = DecodingContext::new(data.to_vec(), start, end);
-        println!("current segment: {current_segment}");
+        // println!("current segment: {current_segment}");
         let new_symbols = decode_symbol_dictionary(
             dictionary.huffman,
             dictionary.refinement,
@@ -1173,39 +1173,28 @@ impl SimpleSegmentVisitor {
     ) -> Result<(), Jbig2Error> {
         // Collect input symbols from referred segments
         let mut input_symbols = Vec::new();
-        // println!(":{:?}", self.symbols[&2]);
         for &referred_segment in referred_segments {
             if let Some(referred_symbols) = self.symbols.get(&referred_segment) {
                 input_symbols.extend(referred_symbols.iter().cloned());
             }
         }
-
-        if input_symbols.is_empty() {
-            return Err(Jbig2Error::new("no symbols available for text region"));
-        }
-
-        let mut decoding_context = DecodingContext::new(data.to_vec(), start, end);
-        let symbol_code_length = log2(input_symbols.len()).max(1);
-
-        // Create Huffman tables and reader if needed (like JS implementation)
-        let huffman_tables = if region.huffman {
-            // Use the enhanced function that can decode symbol ID table
-            let mut huffman_reader = Some(Reader::new(data, start, end));
-            Some(self.get_text_region_huffman_tables_with_reader(
+        
+        let (huffman_input, huffman_table) = if region.huffman {
+            let huffman_input = Reader::new(data, start, end);
+            let huffman_table = self.get_text_region_huffman_tables_with_reader(
                 region,
                 referred_segments,
                 input_symbols.len(),
-                huffman_reader.as_ref(),
-            )?)
-        } else {
-            None
+                Some(&huffman_input),
+            )?;
+
+            (Some(huffman_input), Some(huffman_table))
+        }   else {
+            (None, None)
         };
 
-        let mut huffman_reader = if region.huffman {
-            Some(Reader::new(data, start, end))
-        } else {
-            None
-        };
+        let mut decoding_context = DecodingContext::new(data.to_vec(), start, end);
+        let symbol_code_length = log2(input_symbols.len()).max(1);
 
         let bitmap = decode_text_region(
             region.huffman,
@@ -1221,12 +1210,12 @@ impl SimpleSegmentVisitor {
             region.ds_offset,
             region.reference_corner,
             region.combination_operator,
-            huffman_tables.as_ref(),
+            huffman_table.as_ref(),
             region.refinement_template,
             &region.refinement_at,
             &mut decoding_context,
             region.log_strip_size,
-            huffman_reader.as_ref(),
+            huffman_input.as_ref(),
         )?;
 
         self.draw_bitmap(&region.info, &bitmap)
