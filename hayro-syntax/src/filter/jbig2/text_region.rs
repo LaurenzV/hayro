@@ -201,14 +201,18 @@ pub(crate) fn decode_text_region(
                             // OR
                             for t2 in 0..max_width {
                                 let col_idx = (offset_t + t2 as i32) as usize;
-                                bitmap[row_idx][col_idx] |= symbol_row[t2];
+                                if col_idx < bitmap[row_idx].len() {
+                                    bitmap[row_idx][col_idx] |= symbol_row[t2];
+                                }
                             }
                         }
                         2 => {
                             // XOR
                             for t2 in 0..max_width {
                                 let col_idx = (offset_t + t2 as i32) as usize;
-                                bitmap[row_idx][col_idx] ^= symbol_row[t2];
+                                if col_idx < bitmap[row_idx].len() {
+                                    bitmap[row_idx][col_idx] ^= symbol_row[t2];
+                                }
                             }
                         }
                         _ => {
@@ -233,14 +237,18 @@ pub(crate) fn decode_text_region(
                             // OR
                             for s2 in 0..symbol_width {
                                 let col_idx = (offset_s + s2 as i32) as usize;
-                                bitmap[row_idx][col_idx] |= symbol_row[s2];
+                                if col_idx < bitmap[row_idx].len() {
+                                    bitmap[row_idx][col_idx] |= symbol_row[s2];
+                                }
                             }
                         }
                         2 => {
                             // XOR
                             for s2 in 0..symbol_width {
                                 let col_idx = (offset_s + s2 as i32) as usize;
-                                bitmap[row_idx][col_idx] ^= symbol_row[s2];
+                                if col_idx < bitmap[row_idx].len() {
+                                    bitmap[row_idx][col_idx] ^= symbol_row[s2];
+                                }
                             }
                         }
                         _ => {

@@ -102,7 +102,7 @@ impl Filter {
                 lzw_flate::flate::decode(data, params).map(FilterResult::from_data)
             }
             Filter::CcittFaxDecode => ccitt::decode(data, params).map(FilterResult::from_data),
-            Filter::Jbig2Decode => jbig2::decode(data, params).map(FilterResult::from_data),
+            Filter::Jbig2Decode => Some(FilterResult::from_data(jbig2::decode(data, params).unwrap())),
             Filter::JpxDecode => jpx::decode(data),
             _ => None,
         }

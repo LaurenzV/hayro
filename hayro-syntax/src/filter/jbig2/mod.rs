@@ -298,8 +298,6 @@ impl ArithmeticDecoder {
 
     // C.3.2 Decoding a decision (DECODE)
     fn read_bit(&mut self, contexts: &mut [i8], pos: usize) -> u8 {
-        println!("{}, a: {}", self.counter, self.a);
-        self.counter += 1;
 
         // Contexts are packed into 1 byte:
         // highest 7 bits carry cx.index, lowest bit carries cx.mps
@@ -728,7 +726,7 @@ impl HuffmanTreeNode {
         let bit = reader.read_bit()? as usize;
         match &self.children[bit] {
             Some(node) => node.decode_node(reader),
-            None => Err(Jbig2Error::new("invalid Huffman data")),
+            None => Err(Jbig2Error::new("invalid Huffman data"))
         }
     }
 }
@@ -1104,27 +1102,16 @@ impl SimpleSegmentVisitor {
     ) -> Result<(), Jbig2Error> {
         let mut decoding_context = DecodingContext::new(data.to_vec(), start, end);
 
-        let bitmap = if region.mmr {
-            // MMR-coded generic region
-            let data_slice = &data[start..end];
-            decode_mmr_bitmap(
-                data_slice,
-                region.info.width as usize,
-                region.info.height as usize,
-                false,
-            )?
-        } else {
-            decode_bitmap(
-                false, // mmr
-                region.info.width as usize,
-                region.info.height as usize,
-                region.template,
-                region.prediction,
-                None, // skip
-                &region.at,
-                &mut decoding_context,
-            )?
-        };
+        let bitmap = decode_bitmap(
+            region.mmr, // mmr
+            region.info.width as usize,
+            region.info.height as usize,
+            region.template,
+            region.prediction,
+            None, // skip
+            &region.at,
+            &mut decoding_context,
+        )?;
 
         self.draw_bitmap(&region.info, &bitmap)
     }
