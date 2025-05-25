@@ -1647,12 +1647,6 @@ fn process_segment(
     segment: &Segment,
     visitor: &mut SimpleSegmentVisitor,
 ) -> Result<(), Jbig2Error> {
-    // TODO: SEGMENT PARSING DIFFERENCES: JS processSegment() has more detailed flag extraction:
-    // 1. SymbolDictionary: huffmanDHSelector, huffmanDWSelector, bitmapSizeSelector, aggregationInstancesSelector,
-    //    bitmapCodingContextUsed, bitmapCodingContextRetained flags (bits 2-12 of dictionaryFlags)
-    // 2. TextRegion: huffmanFS, huffmanDS, huffmanDT, huffmanRefinement* selectors from textRegionHuffmanFlags
-    // 3. More precise bit-field extraction vs simplified boolean flags in Rust version
-    // These missing flags affect Huffman table selection and could cause decoding errors.
     let header = &segment.header;
     let data = &segment.data;
     let end = segment.end;
