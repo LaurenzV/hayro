@@ -1317,6 +1317,13 @@ impl SimpleSegmentVisitor {
         Ok(())
     }
 
+    // ============================================================================
+    // HUFFMAN TABLE SELECTION METHODS
+    // ============================================================================
+    // These methods select appropriate Huffman tables based on segment flags
+    // Ported from JavaScript implementation in jbig2.js
+
+    /// Symbol dictionary Huffman table selection - ported from getSymbolDictionaryHuffmanTables
     fn get_symbol_dictionary_huffman_tables(
         &self,
         dictionary: &SymbolDictionary,
@@ -1379,20 +1386,22 @@ impl SimpleSegmentVisitor {
         })
     }
 
+    /// Text region Huffman table selection - ported from getTextRegionHuffmanTables  
     fn get_text_region_huffman_tables(
         &self,
         region: &TextRegion,
         referred_segments: &[u32],
-        _number_of_symbols: usize,
+        number_of_symbols: usize,
     ) -> Result<TextRegionHuffmanTables, Jbig2Error> {
         self.get_text_region_huffman_tables_with_reader(
             region,
             referred_segments,
-            _number_of_symbols,
+            number_of_symbols,
             None,
         )
     }
 
+    /// Text region Huffman table selection with reader - ported from getTextRegionHuffmanTables
     fn get_text_region_huffman_tables_with_reader(
         &self,
         region: &TextRegion,
@@ -2045,7 +2054,83 @@ fn process_segments(
     Ok(())
 }
 
-// Tables segment decoding - ported from decodeTablesSegment function
+
+
+// ============================================================================
+// HUFFMAN TABLE DECODING FUNCTIONS  
+// ============================================================================
+// These functions handle Huffman table construction and decoding for JBIG2
+// Ported from JavaScript implementation in jbig2.js
+
+/// Symbol ID Huffman table decoding - ported from getTextRegionHuffmanTables
+/// ✅ FAITHFUL PORT: Complete JavaScript getTextRegionHuffmanTables implementation
+fn decode_symbol_id_huffman_table(
+    reader: &Reader,
+    number_of_symbols: usize,
+) -> Result<HuffmanTable, Jbig2Error> {
+    // 7.4.3.1.7 Symbol ID Huffman table decoding
+
+    // Read code lengths for RUNCODEs 0...34 (4 bits each)
+    let mut codes = Vec::new();
+    for i in 0..=34 {
+        let code_length = reader.read_bits(4)? as i32;
+        codes.push(HuffmanLine::new(&[i, code_length, 0, 0]));
+    }
+
+    // Assign Huffman codes for RUNCODEs
+    let run_codes_table = HuffmanTable::new(codes, false);
+
+    // Read a Huffman code using the assignment above
+    // Interpret the RUNCODE codes and the additional bits (if any)
+    let mut symbol_codes: Vec<HuffmanLine> = Vec::new();
+    let mut i = 0;
+    while i < number_of_symbols {
+        let code_length = run_codes_table
+            .decode(reader)?
+            .ok_or_else(|| Jbig2Error::new("unexpected OOB in RUNCODE table"))?;
+
+        if code_length >= 32 {
+            let (repeated_length, number_of_repeats) = match code_length {
+                32 => {
+                    if i == 0 {
+                        return Err(Jbig2Error::new("no previous value in symbol ID table"));
+                    }
+                    let repeats = reader.read_bits(2)? + 3;
+                    let prev_length = symbol_codes[i - 1].prefix_length as i32;
+                    (prev_length, repeats)
+                }
+                33 => {
+                    let repeats = reader.read_bits(3)? + 3;
+                    (0, repeats)
+                }
+                34 => {
+                    let repeats = reader.read_bits(7)? + 11;
+                    (0, repeats)
+                }
+                _ => return Err(Jbig2Error::new("invalid code length in symbol ID table")),
+            };
+
+            for _ in 0..number_of_repeats {
+                // Only add lines with non-zero prefix length (skip entries with length 0)
+                if repeated_length > 0 {
+                    symbol_codes.push(HuffmanLine::new(&[i as i32, repeated_length, 0, 0]));
+                }
+                i += 1;
+            }
+        } else {
+            // Only add lines with non-zero prefix length (skip entries with length 0)
+            if code_length > 0 {
+                symbol_codes.push(HuffmanLine::new(&[i as i32, code_length, 0, 0]));
+            }
+            i += 1;
+        }
+    }
+
+    reader.byte_align();
+    Ok(HuffmanTable::new(symbol_codes, false))
+}
+
+/// Tables segment decoding - ported from decodeTablesSegment function
 fn decode_tables_segment(
     data: &[u8],
     start: usize,
@@ -2058,7 +2143,7 @@ fn decode_tables_segment(
     let flags = data[start];
     let lowest_value = read_uint32(data, start + 1);
     let highest_value = read_uint32(data, start + 5);
-    let mut reader = Reader::new(data, start + 9, end);
+    let reader = Reader::new(data, start + 9, end);
 
     let prefix_size_bits = ((flags >> 1) & 7) + 1;
     let range_size_bits = ((flags >> 4) & 7) + 1;
@@ -2108,7 +2193,7 @@ fn decode_tables_segment(
     Ok(HuffmanTable::new(lines, false))
 }
 
-// Custom Huffman table getter - ported from getCustomHuffmanTable function
+/// Custom Huffman table getter - ported from getCustomHuffmanTable function  
 fn get_custom_huffman_table<'a>(
     index: usize,
     referred_to: &[u32],
@@ -2124,66 +2209,4 @@ fn get_custom_huffman_table<'a>(
         }
     }
     Err(Jbig2Error::new("can't find custom Huffman table"))
-}
-
-// Helper function for complete RUNCODE symbol ID table decoding
-// ✅ FAITHFUL PORT: Complete JavaScript getTextRegionHuffmanTables implementation
-fn decode_symbol_id_huffman_table(
-    reader: &Reader,
-    number_of_symbols: usize,
-) -> Result<HuffmanTable, Jbig2Error> {
-    // 7.4.3.1.7 Symbol ID Huffman table decoding
-
-    // Read code lengths for RUNCODEs 0...34 (4 bits each)
-    let mut codes = Vec::new();
-    for i in 0..=34 {
-        let code_length = reader.read_bits(4)? as i32;
-        codes.push(HuffmanLine::new(&[i, code_length, 0, 0]));
-    }
-
-    // Assign Huffman codes for RUNCODEs
-    let run_codes_table = HuffmanTable::new(codes, false);
-
-    // Read a Huffman code using the assignment above
-    // Interpret the RUNCODE codes and the additional bits (if any)
-    let mut symbol_codes: Vec<HuffmanLine> = Vec::new();
-    let mut i = 0;
-    while i < number_of_symbols {
-        let code_length = run_codes_table
-            .decode(reader)?
-            .ok_or_else(|| Jbig2Error::new("unexpected OOB in RUNCODE table"))?;
-
-        if code_length >= 32 {
-            let (repeated_length, number_of_repeats) = match code_length {
-                32 => {
-                    if i == 0 {
-                        return Err(Jbig2Error::new("no previous value in symbol ID table"));
-                    }
-                    let repeats = reader.read_bits(2)? + 3;
-                    let prev_length = symbol_codes[i - 1].prefix_length as i32;
-                    (prev_length, repeats)
-                }
-                33 => {
-                    let repeats = reader.read_bits(3)? + 3;
-                    (0, repeats)
-                }
-                34 => {
-                    let repeats = reader.read_bits(7)? + 11;
-                    (0, repeats)
-                }
-                _ => return Err(Jbig2Error::new("invalid code length in symbol ID table")),
-            };
-
-            for _ in 0..number_of_repeats {
-                symbol_codes.push(HuffmanLine::new(&[i as i32, repeated_length, 0, 0]));
-                i += 1;
-            }
-        } else {
-            symbol_codes.push(HuffmanLine::new(&[i as i32, code_length, 0, 0]));
-            i += 1;
-        }
-    }
-
-    reader.byte_align();
-    Ok(HuffmanTable::new(symbol_codes, false))
 }
