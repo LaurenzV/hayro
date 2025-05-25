@@ -72,6 +72,7 @@ use crate::run_test;
 #[test] fn image_inline_7() { run_test("image_inline_7", false, None); }
 #[test] fn image_inline_8() { run_test("image_inline_8", false, Some(2..=2)); }
 #[test] fn image_jbig2_1() { run_test("image_jbig2_1", false, None); }
+#[test] fn image_jbig2_2() { run_test("image_jbig2_2", true, Some(0..=4)); }
 #[test] fn image_lab() { run_test("image_lab", false, None); }
 #[test] fn image_luma16() { run_test("image_luma16", false, None); }
 #[test] fn image_luma8() { run_test("image_luma8", false, None); }

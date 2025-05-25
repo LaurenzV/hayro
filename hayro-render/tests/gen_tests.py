@@ -6,7 +6,7 @@ downloads_directory = os.path.join(os.path.dirname(__file__), '../downloads')  #
 # Output Rust file
 output_file = os.path.join(os.path.dirname(__file__), 'tests.rs')
 
-ignore_list = ["pdftc_010k_0083", "integration_matplotlib", "pattern_shading_type6", "pattern_shading_type6_2"]
+ignore_list = ["pdftc_010k_0083", "integration_matplotlib", "pattern_shading_type6", "pattern_shading_type6_2", "image_jbig2_3", "pdfjs_issue2642"]
 
 lengths = {
     "color_space_calrgb": "0..=8",
@@ -23,6 +23,8 @@ lengths = {
     "stream_jpx_3": "2..=2",
     "font_truetype_slow_post_lookup": "0..=0",
     "rendering_conflation_artifacts": "2..=2",
+    "image_jbig2_2": "0..=4",
+    "pdfjs_issue2642": "0..=0",
 }
 
 def generate_rust_function(file_stem, is_download):

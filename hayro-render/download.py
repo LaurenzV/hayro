@@ -22,10 +22,6 @@ def download_pdf(link_path: Path):
     try:
         head_response = requests.get(url, stream=True, timeout=10)
         head_response.raise_for_status()
-        head = head_response.raw.read(5)
-        if head != b'%PDF-':
-            print(f"✘ {stem}: Invalid PDF header: {head}")
-            return
 
         response = requests.get(url, stream=True, timeout=10)
         with open(dest_path, 'wb') as f:
