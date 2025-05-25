@@ -896,6 +896,489 @@ fn decode_symbol_dictionary(
     Ok(exported_symbols)
 }
 
+
+// Text region decoding - ported from decodeTextRegion function
+#[allow(clippy::too_many_arguments)]
+fn decode_text_region(
+    huffman: bool,
+    refinement: bool,
+    width: usize,
+    height: usize,
+    default_pixel_value: u8,
+    number_of_symbol_instances: usize,
+    strip_size: usize,
+    input_symbols: &[Bitmap],
+    symbol_code_length: usize,
+    transposed: bool,
+    ds_offset: i32,
+    reference_corner: u8,
+    combination_operator: u8,
+    _huffman_tables: Option<&TextRegionHuffmanTables>,
+    refinement_template_index: usize,
+    refinement_at: &[TemplatePixel],
+    decoding_context: &mut DecodingContext,
+    log_strip_size: usize,
+    _huffman_input: Option<&Reader>,
+) -> Result<Bitmap, Jbig2Error> {
+    // TODO: HUFFMAN HANDLING DIFFERENCES: JS version uses huffmanTables.tableDeltaT.decode()
+    // for initial stripT calculation (stripT = -huffmanTables.tableDeltaT.decode(huffmanInput))
+    // and supports applyRefinement flag from huffman_input.readBit() + detailed rdw/rdh/rdx/rdy calculations.
+    // Rust version has simplified handling without these complex refinement calculations.
+    // TODO: SYMBOL PLACEMENT DIFFERENCES: JS uses transposed flag for different placement algorithms
+    // with complex offsetT/offsetS calculations and supports combination operators (OR, XOR)
+    // with proper symbol bitmap iteration. Rust version may not handle all these placement modes.
+    // TODO: TEXT REGION REFINEMENT DIFFERENCES: JS version implements full symbol refinement with:
+    // 1. rdw/rdh/rdx/rdy parameter decoding for width/height/offset adjustments
+    // 2. Complex offset calculations: (rdw >> 1) + rdx, (rdh >> 1) + rdy
+    // 3. Symbol dimension updates: symbolWidth += rdw, symbolHeight += rdh
+    // 4. Bounds checking with maxWidth = Math.min(width - offsetT, symbolWidth)
+    // 5. Proper transposed vs non-transposed symbol placement with different loop orders
+    // Rust version has simplified placeholder that returns error for refinement storage.
+
+    let mut bitmap = Vec::with_capacity(height);
+    for _ in 0..height {
+        let mut row = vec![0u8; width];
+        if default_pixel_value != 0 {
+            row.fill(default_pixel_value);
+        }
+        bitmap.push(row);
+    }
+
+    if huffman {
+        // ✅ MATCH JAVASCRIPT: Complete Huffman-coded text region implementation
+        if _huffman_tables.is_none() {
+            return Err(Jbig2Error::new(
+                "Huffman tables required for Huffman text region",
+            ));
+        }
+
+        let huffman_tables = _huffman_tables.unwrap();
+        let huffman_reader = _huffman_input.ok_or_else(|| {
+            Jbig2Error::new("Huffman input reader required for Huffman text region")
+        })?;
+
+        // ✅ MATCH JAVASCRIPT: Exact initial stripT calculation like JS
+        // JavaScript: stripT = -huffmanTables.tableDeltaT.decode(huffmanInput)
+        let mut strip_t = huffman_tables
+            .table_delta_t
+            .decode(huffman_reader)?
+            .ok_or_else(|| Jbig2Error::new("Failed to decode initial strip T"))
+            .map(|v| -v)?;
+
+        let mut first_s = 0i32;
+        let mut i = 0;
+
+        while i < number_of_symbol_instances {
+            // ✅ MATCH JAVASCRIPT: Exact delta T decoding like JS
+            // JavaScript: deltaT = huffmanTables.tableDeltaT.decode(huffmanInput)
+            let delta_t = huffman_tables.table_delta_t.decode(huffman_reader)?.unwrap_or(0);
+            strip_t += delta_t;
+
+            // ✅ MATCH JAVASCRIPT: Exact first S decoding like JS
+            // JavaScript: deltaFirstS = huffmanTables.tableFirstS.decode(huffmanInput)
+            let delta_first_s = if let Some(ref fs_table) = huffman_tables.table_first_s {
+                fs_table.decode(huffman_reader)?.unwrap_or(0)
+            } else {
+                0
+            };
+            first_s += delta_first_s;
+            let mut current_s = first_s;
+
+            loop {
+                // ✅ MATCH JAVASCRIPT: Exact current T calculation like JS
+                // JavaScript: currentT = huffman ? huffmanInput.readBits(logStripSize) : decodeInteger(contextCache, "IAIT", decoder);
+                let current_t = if strip_size > 1 {
+                    huffman_reader.read_bits(log_strip_size)? as i32
+                } else {
+                    0
+                };
+
+                let t = (strip_size as i32) * strip_t + current_t;
+
+                // ✅ MATCH JAVASCRIPT: Exact symbol ID decoding like JS
+                // JavaScript: symbolId = huffmanTables.symbolIDTable.decode(huffmanInput)
+                let symbol_id = huffman_tables.symbol_id_table.decode(huffman_reader)?;
+                let Some(symbol_id) = symbol_id else { break }; // OOB
+
+                if symbol_id < 0 || symbol_id as usize >= input_symbols.len() {
+                    break;
+                }
+
+                // ✅ MATCH JAVASCRIPT: Exact apply refinement flag handling like JS
+                // JavaScript: applyRefinement = refinement && (huffman ? huffmanInput.readBit() : decodeInteger(contextCache, "IARI", decoder));
+                let apply_refinement = if refinement {
+                    huffman_reader.read_bit()? != 0
+                } else {
+                    false
+                };
+
+                let mut symbol_bitmap = &input_symbols[symbol_id as usize];
+                let mut symbol_width = if !symbol_bitmap.is_empty() {
+                    symbol_bitmap[0].len()
+                } else {
+                    0
+                };
+                let mut symbol_height = symbol_bitmap.len();
+                let mut refined_bitmap_storage: Option<Bitmap> = None; // Storage for refined bitmap
+
+                if apply_refinement {
+                    // ✅ MATCH JAVASCRIPT: Exact refinement handling like JS (note: uses arithmetic decoder even in Huffman mode)
+                    // JavaScript: rdw = decodeInteger(contextCache, "IARDW", decoder); // 6.4.11.1
+                    // JavaScript: rdh = decodeInteger(contextCache, "IARDH", decoder); // 6.4.11.2
+                    // JavaScript: rdx = decodeInteger(contextCache, "IARDX", decoder); // 6.4.11.3
+                    // JavaScript: rdy = decodeInteger(contextCache, "IARDY", decoder); // 6.4.11.4
+                    let rdw = decoding_context.decode_integer("IARDW").unwrap_or(0); // 6.4.11.1
+                    let rdh = decoding_context.decode_integer("IARDH").unwrap_or(0); // 6.4.11.2
+                    let rdx = decoding_context.decode_integer("IARDX").unwrap_or(0); // 6.4.11.3
+                    let rdy = decoding_context.decode_integer("IARDY").unwrap_or(0); // 6.4.11.4
+
+                    // ✅ MATCH JAVASCRIPT: Exact symbol dimension updates like JS
+                    // JavaScript: symbolWidth += rdw; symbolHeight += rdh;
+                    symbol_width = (symbol_width as i32 + rdw) as usize;
+                    symbol_height = (symbol_height as i32 + rdh) as usize;
+
+                    // ✅ MATCH JAVASCRIPT: Exact refinement call like JS
+                    // JavaScript: symbolBitmap = decodeRefinement(symbolWidth, symbolHeight, refinementTemplateIndex, symbolBitmap, (rdw >> 1) + rdx, (rdh >> 1) + rdy, false, refinementAt, decodingContext);
+                    let refined_bitmap = decode_refinement(
+                        symbol_width,
+                        symbol_height,
+                        refinement_template_index,
+                        symbol_bitmap,
+                        (rdw >> 1) + rdx, // JavaScript: (rdw >> 1) + rdx
+                        (rdh >> 1) + rdy, // JavaScript: (rdh >> 1) + rdy
+                        false,            // prediction
+                        refinement_at,
+                        decoding_context,
+                    )?;
+
+                    // Store refined bitmap and update references
+                    refined_bitmap_storage = Some(refined_bitmap);
+                    symbol_bitmap = refined_bitmap_storage.as_ref().unwrap();
+                }
+
+                // ✅ MATCH JAVASCRIPT: Exact increment calculation like JS
+                // JavaScript: if (!transposed) { if (referenceCorner > 1) { currentS += symbolWidth - 1; } else { increment = symbolWidth - 1; } }
+                // JavaScript: else if (!(referenceCorner & 1)) { currentS += symbolHeight - 1; } else { increment = symbolHeight - 1; }
+                let increment = if !transposed {
+                    if reference_corner > 1 {
+                        current_s += symbol_width as i32 - 1;
+                        0
+                    } else {
+                        symbol_width as i32 - 1
+                    }
+                } else if (reference_corner & 1) == 0 {
+                    current_s += symbol_height as i32 - 1;
+                    0
+                } else {
+                    symbol_height as i32 - 1
+                };
+
+                // ✅ MATCH JAVASCRIPT: Exact offset calculation like JS
+                // JavaScript: offsetT = t - (referenceCorner & 1 ? 0 : symbolHeight - 1);
+                // JavaScript: offsetS = currentS - (referenceCorner & 2 ? symbolWidth - 1 : 0);
+                let offset_t = t - if (reference_corner & 1) != 0 {
+                    0
+                } else {
+                    symbol_height as i32 - 1
+                };
+                let offset_s = current_s
+                    - if (reference_corner & 2) != 0 {
+                    symbol_width as i32 - 1
+                } else {
+                    0
+                };
+
+                // ✅ MATCH JAVASCRIPT: Exact symbol placement like JS
+                if transposed {
+                    // JavaScript: for (s2 = 0; s2 < symbolHeight; s2++) { row = bitmap[offsetS + s2]; if (!row) { continue; } ... }
+                    for s2 in 0..symbol_height {
+                        let row_idx = (offset_s + s2 as i32) as usize;
+                        if row_idx >= bitmap.len() {
+                            continue;
+                        }
+                        let symbol_row = &symbol_bitmap[s2];
+                        // ✅ MATCH JAVASCRIPT: Exact maxWidth calculation like JS
+                        // JavaScript: const maxWidth = Math.min(width - offsetT, symbolWidth);
+                        let max_width =
+                            ((width as i32) - offset_t).min(symbol_width as i32).max(0) as usize;
+
+                        match combination_operator {
+                            0 => {
+                                // OR
+                                for t2 in 0..max_width {
+                                    let col_idx = (offset_t + t2 as i32) as usize;
+                                    if col_idx < bitmap[row_idx].len() && t2 < symbol_row.len() {
+                                        bitmap[row_idx][col_idx] |= symbol_row[t2];
+                                    }
+                                }
+                            }
+                            2 => {
+                                // XOR
+                                for t2 in 0..max_width {
+                                    let col_idx = (offset_t + t2 as i32) as usize;
+                                    if col_idx < bitmap[row_idx].len() && t2 < symbol_row.len() {
+                                        bitmap[row_idx][col_idx] ^= symbol_row[t2];
+                                    }
+                                }
+                            }
+                            _ => {
+                                return Err(Jbig2Error::new(&format!(
+                                    "operator {} is not supported",
+                                    combination_operator
+                                )));
+                            }
+                        }
+                    }
+                } else {
+                    // JavaScript: for (t2 = 0; t2 < symbolHeight; t2++) { row = bitmap[offsetT + t2]; if (!row) { continue; } ... }
+                    for t2 in 0..symbol_height {
+                        let row_idx = (offset_t + t2 as i32) as usize;
+                        if row_idx >= bitmap.len() {
+                            continue;
+                        }
+                        let symbol_row = &symbol_bitmap[t2];
+
+                        match combination_operator {
+                            0 => {
+                                // OR
+                                for s2 in 0..symbol_width {
+                                    let col_idx = (offset_s + s2 as i32) as usize;
+                                    if col_idx < bitmap[row_idx].len() && s2 < symbol_row.len() {
+                                        bitmap[row_idx][col_idx] |= symbol_row[s2];
+                                    }
+                                }
+                            }
+                            2 => {
+                                // XOR
+                                for s2 in 0..symbol_width {
+                                    let col_idx = (offset_s + s2 as i32) as usize;
+                                    if col_idx < bitmap[row_idx].len() && s2 < symbol_row.len() {
+                                        bitmap[row_idx][col_idx] ^= symbol_row[s2];
+                                    }
+                                }
+                            }
+                            _ => {
+                                return Err(Jbig2Error::new(&format!(
+                                    "operator {} is not supported",
+                                    combination_operator
+                                )));
+                            }
+                        }
+                    }
+                }
+
+                i += 1;
+
+                // ✅ MATCH JAVASCRIPT: Exact delta S decoding like JS
+                // JavaScript: deltaS = huffmanTables.tableDeltaS.decode(huffmanInput)
+                let delta_s = huffman_tables.table_delta_s.decode(huffman_reader)?;
+                let Some(delta_s) = delta_s else { break }; // OOB
+
+                current_s += increment + delta_s + ds_offset;
+            }
+        }
+
+        return Ok(bitmap);
+    }
+
+    let strip_t = decoding_context
+        .decode_integer("IADT")
+        .map(|v| -v)
+        .unwrap_or(0);
+
+    let mut first_s = 0i32;
+    let mut i = 0;
+
+    while i < number_of_symbol_instances {
+        let delta_t = decoding_context.decode_integer("IADT").unwrap_or(0);
+        let strip_t = strip_t + delta_t;
+
+        let delta_first_s = decoding_context.decode_integer("IAFS").unwrap_or(0);
+        first_s += delta_first_s;
+        let mut current_s = first_s;
+
+        loop {
+            let current_t = if strip_size > 1 {
+                // For arithmetic mode, we should still read log_strip_size bits
+                // but using the integer decoder instead of direct bit reading
+                if log_strip_size > 0 {
+                    decoding_context.decode_integer("IAIT").unwrap_or(0)
+                } else {
+                    0
+                }
+            } else {
+                0
+            };
+
+            let t = (strip_size as i32) * strip_t + current_t;
+
+            let symbol_id = decoding_context.decode_iaid(symbol_code_length) as usize;
+
+            if symbol_id >= input_symbols.len() {
+                break;
+            }
+
+            let apply_refinement = if refinement {
+                decoding_context.decode_integer("IARI").unwrap_or(0) != 0
+            } else {
+                false
+            };
+
+            let mut symbol_bitmap = &input_symbols[symbol_id];
+            let mut symbol_width = if !symbol_bitmap.is_empty() {
+                symbol_bitmap[0].len()
+            } else {
+                0
+            };
+            let mut symbol_height = symbol_bitmap.len();
+            let mut refined_bitmap_storage: Option<Bitmap> = None; // Storage for refined bitmap
+
+            if apply_refinement {
+                // ✅ FAITHFUL PORT: Complete JavaScript refinement implementation
+                // Symbol refinement in text region with rdw/rdh/rdx/rdy parameters
+                let rdw = decoding_context.decode_integer("IARDW").unwrap_or(0); // 6.4.11.1
+                let rdh = decoding_context.decode_integer("IARDH").unwrap_or(0); // 6.4.11.2
+                let rdx = decoding_context.decode_integer("IARDX").unwrap_or(0); // 6.4.11.3
+                let rdy = decoding_context.decode_integer("IARDY").unwrap_or(0); // 6.4.11.4
+
+                // Update symbol dimensions like JavaScript
+                let refined_width = (symbol_width as i32 + rdw) as usize;
+                let refined_height = (symbol_height as i32 + rdh) as usize;
+
+                // Apply refinement to the symbol bitmap with proper offset calculations
+                let refined_bitmap = decode_refinement(
+                    refined_width,
+                    refined_height,
+                    refinement_template_index,
+                    symbol_bitmap,
+                    (rdw >> 1) + rdx, // JavaScript: (rdw >> 1) + rdx
+                    (rdh >> 1) + rdy, // JavaScript: (rdh >> 1) + rdy
+                    false,            // prediction
+                    refinement_at,
+                    decoding_context,
+                )?;
+
+                // Store refined bitmap and update references
+                refined_bitmap_storage = Some(refined_bitmap);
+                symbol_bitmap = refined_bitmap_storage.as_ref().unwrap();
+                symbol_width = refined_width;
+                symbol_height = refined_height;
+            }
+
+            let increment = if !transposed {
+                if reference_corner > 1 {
+                    current_s += symbol_width as i32 - 1;
+                    0
+                } else {
+                    symbol_width as i32 - 1
+                }
+            } else if (reference_corner & 1) == 0 {
+                current_s += symbol_height as i32 - 1;
+                0
+            } else {
+                symbol_height as i32 - 1
+            };
+
+            let offset_t = t - if (reference_corner & 1) != 0 {
+                0
+            } else {
+                symbol_height as i32 - 1
+            };
+            let offset_s = current_s
+                - if (reference_corner & 2) != 0 {
+                symbol_width as i32 - 1
+            } else {
+                0
+            };
+
+            // Place symbol bitmap
+            if transposed {
+                for s2 in 0..symbol_height {
+                    let row_idx = (offset_s + s2 as i32) as usize;
+                    if row_idx >= bitmap.len() {
+                        continue;
+                    }
+                    let symbol_row = &symbol_bitmap[s2];
+                    let max_width =
+                        ((width as i32) - offset_t).min(symbol_width as i32).max(0) as usize;
+
+                    match combination_operator {
+                        0 => {
+                            // OR
+                            for t2 in 0..max_width {
+                                let col_idx = (offset_t + t2 as i32) as usize;
+                                if col_idx < bitmap[row_idx].len() && t2 < symbol_row.len() {
+                                    bitmap[row_idx][col_idx] |= symbol_row[t2];
+                                }
+                            }
+                        }
+                        2 => {
+                            // XOR
+                            for t2 in 0..max_width {
+                                let col_idx = (offset_t + t2 as i32) as usize;
+                                if col_idx < bitmap[row_idx].len() && t2 < symbol_row.len() {
+                                    bitmap[row_idx][col_idx] ^= symbol_row[t2];
+                                }
+                            }
+                        }
+                        _ => {
+                            return Err(Jbig2Error::new(&format!(
+                                "operator {} is not supported",
+                                combination_operator
+                            )));
+                        }
+                    }
+                }
+            } else {
+                for t2 in 0..symbol_height {
+                    let row_idx = (offset_t + t2 as i32) as usize;
+                    if row_idx >= bitmap.len() {
+                        continue;
+                    }
+                    let symbol_row = &symbol_bitmap[t2];
+
+                    match combination_operator {
+                        0 => {
+                            // OR
+                            for s2 in 0..symbol_width {
+                                let col_idx = (offset_s + s2 as i32) as usize;
+                                if col_idx < bitmap[row_idx].len() && s2 < symbol_row.len() {
+                                    bitmap[row_idx][col_idx] |= symbol_row[s2];
+                                }
+                            }
+                        }
+                        2 => {
+                            // XOR
+                            for s2 in 0..symbol_width {
+                                let col_idx = (offset_s + s2 as i32) as usize;
+                                if col_idx < bitmap[row_idx].len() && s2 < symbol_row.len() {
+                                    bitmap[row_idx][col_idx] ^= symbol_row[s2];
+                                }
+                            }
+                        }
+                        _ => {
+                            return Err(Jbig2Error::new(&format!(
+                                "operator {} is not supported",
+                                combination_operator
+                            )));
+                        }
+                    }
+                }
+            }
+
+            i += 1;
+            let delta_s = decoding_context.decode_integer("IADS");
+
+            if delta_s.is_none() {
+                break; // OOB
+            }
+            current_s += increment + delta_s.unwrap() + ds_offset;
+        }
+    }
+
+    Ok(bitmap)
+}
+
 // QM Coder Table C-2 from JPEG 2000 Part I Final Committee Draft Version 1.0
 #[derive(Clone, Copy)]
 struct QeEntry {
@@ -1534,488 +2017,6 @@ impl<'a> Reader<'a> {
         s.position += 1;
         byte
     }
-}
-
-// Text region decoding - ported from decodeTextRegion function
-#[allow(clippy::too_many_arguments)]
-fn decode_text_region(
-    huffman: bool,
-    refinement: bool,
-    width: usize,
-    height: usize,
-    default_pixel_value: u8,
-    number_of_symbol_instances: usize,
-    strip_size: usize,
-    input_symbols: &[Bitmap],
-    symbol_code_length: usize,
-    transposed: bool,
-    ds_offset: i32,
-    reference_corner: u8,
-    combination_operator: u8,
-    _huffman_tables: Option<&TextRegionHuffmanTables>,
-    refinement_template_index: usize,
-    refinement_at: &[TemplatePixel],
-    decoding_context: &mut DecodingContext,
-    log_strip_size: usize,
-    _huffman_input: Option<&Reader>,
-) -> Result<Bitmap, Jbig2Error> {
-    // TODO: HUFFMAN HANDLING DIFFERENCES: JS version uses huffmanTables.tableDeltaT.decode()
-    // for initial stripT calculation (stripT = -huffmanTables.tableDeltaT.decode(huffmanInput))
-    // and supports applyRefinement flag from huffman_input.readBit() + detailed rdw/rdh/rdx/rdy calculations.
-    // Rust version has simplified handling without these complex refinement calculations.
-    // TODO: SYMBOL PLACEMENT DIFFERENCES: JS uses transposed flag for different placement algorithms
-    // with complex offsetT/offsetS calculations and supports combination operators (OR, XOR)
-    // with proper symbol bitmap iteration. Rust version may not handle all these placement modes.
-    // TODO: TEXT REGION REFINEMENT DIFFERENCES: JS version implements full symbol refinement with:
-    // 1. rdw/rdh/rdx/rdy parameter decoding for width/height/offset adjustments
-    // 2. Complex offset calculations: (rdw >> 1) + rdx, (rdh >> 1) + rdy
-    // 3. Symbol dimension updates: symbolWidth += rdw, symbolHeight += rdh
-    // 4. Bounds checking with maxWidth = Math.min(width - offsetT, symbolWidth)
-    // 5. Proper transposed vs non-transposed symbol placement with different loop orders
-    // Rust version has simplified placeholder that returns error for refinement storage.
-
-    let mut bitmap = Vec::with_capacity(height);
-    for _ in 0..height {
-        let mut row = vec![0u8; width];
-        if default_pixel_value != 0 {
-            row.fill(default_pixel_value);
-        }
-        bitmap.push(row);
-    }
-
-    if huffman {
-        // ✅ MATCH JAVASCRIPT: Complete Huffman-coded text region implementation
-        if _huffman_tables.is_none() {
-            return Err(Jbig2Error::new(
-                "Huffman tables required for Huffman text region",
-            ));
-        }
-
-        let huffman_tables = _huffman_tables.unwrap();
-        let huffman_reader = _huffman_input.ok_or_else(|| {
-            Jbig2Error::new("Huffman input reader required for Huffman text region")
-        })?;
-
-        // ✅ MATCH JAVASCRIPT: Exact initial stripT calculation like JS
-        // JavaScript: stripT = -huffmanTables.tableDeltaT.decode(huffmanInput)
-        let mut strip_t = huffman_tables
-            .table_delta_t
-            .decode(huffman_reader)?
-            .ok_or_else(|| Jbig2Error::new("Failed to decode initial strip T"))
-            .map(|v| -v)?;
-
-        let mut first_s = 0i32;
-        let mut i = 0;
-
-        while i < number_of_symbol_instances {
-            // ✅ MATCH JAVASCRIPT: Exact delta T decoding like JS
-            // JavaScript: deltaT = huffmanTables.tableDeltaT.decode(huffmanInput)
-            let delta_t = huffman_tables.table_delta_t.decode(huffman_reader)?.unwrap_or(0);
-            strip_t += delta_t;
-
-            // ✅ MATCH JAVASCRIPT: Exact first S decoding like JS
-            // JavaScript: deltaFirstS = huffmanTables.tableFirstS.decode(huffmanInput)
-            let delta_first_s = if let Some(ref fs_table) = huffman_tables.table_first_s {
-                fs_table.decode(huffman_reader)?.unwrap_or(0)
-            } else {
-                0
-            };
-            first_s += delta_first_s;
-            let mut current_s = first_s;
-
-            loop {
-                // ✅ MATCH JAVASCRIPT: Exact current T calculation like JS
-                // JavaScript: currentT = huffman ? huffmanInput.readBits(logStripSize) : decodeInteger(contextCache, "IAIT", decoder);
-                let current_t = if strip_size > 1 {
-                    huffman_reader.read_bits(log_strip_size)? as i32
-                } else {
-                    0
-                };
-
-                let t = (strip_size as i32) * strip_t + current_t;
-
-                // ✅ MATCH JAVASCRIPT: Exact symbol ID decoding like JS
-                // JavaScript: symbolId = huffmanTables.symbolIDTable.decode(huffmanInput)
-                let symbol_id = huffman_tables.symbol_id_table.decode(huffman_reader)?;
-                let Some(symbol_id) = symbol_id else { break }; // OOB
-
-                if symbol_id < 0 || symbol_id as usize >= input_symbols.len() {
-                    break;
-                }
-
-                // ✅ MATCH JAVASCRIPT: Exact apply refinement flag handling like JS
-                // JavaScript: applyRefinement = refinement && (huffman ? huffmanInput.readBit() : decodeInteger(contextCache, "IARI", decoder));
-                let apply_refinement = if refinement {
-                    huffman_reader.read_bit()? != 0
-                } else {
-                    false
-                };
-
-                let mut symbol_bitmap = &input_symbols[symbol_id as usize];
-                let mut symbol_width = if !symbol_bitmap.is_empty() {
-                    symbol_bitmap[0].len()
-                } else {
-                    0
-                };
-                let mut symbol_height = symbol_bitmap.len();
-                let mut refined_bitmap_storage: Option<Bitmap> = None; // Storage for refined bitmap
-
-                if apply_refinement {
-                    // ✅ MATCH JAVASCRIPT: Exact refinement handling like JS (note: uses arithmetic decoder even in Huffman mode)
-                    // JavaScript: rdw = decodeInteger(contextCache, "IARDW", decoder); // 6.4.11.1
-                    // JavaScript: rdh = decodeInteger(contextCache, "IARDH", decoder); // 6.4.11.2
-                    // JavaScript: rdx = decodeInteger(contextCache, "IARDX", decoder); // 6.4.11.3
-                    // JavaScript: rdy = decodeInteger(contextCache, "IARDY", decoder); // 6.4.11.4
-                    let rdw = decoding_context.decode_integer("IARDW").unwrap_or(0); // 6.4.11.1
-                    let rdh = decoding_context.decode_integer("IARDH").unwrap_or(0); // 6.4.11.2
-                    let rdx = decoding_context.decode_integer("IARDX").unwrap_or(0); // 6.4.11.3
-                    let rdy = decoding_context.decode_integer("IARDY").unwrap_or(0); // 6.4.11.4
-
-                    // ✅ MATCH JAVASCRIPT: Exact symbol dimension updates like JS
-                    // JavaScript: symbolWidth += rdw; symbolHeight += rdh;
-                    symbol_width = (symbol_width as i32 + rdw) as usize;
-                    symbol_height = (symbol_height as i32 + rdh) as usize;
-
-                    // ✅ MATCH JAVASCRIPT: Exact refinement call like JS
-                    // JavaScript: symbolBitmap = decodeRefinement(symbolWidth, symbolHeight, refinementTemplateIndex, symbolBitmap, (rdw >> 1) + rdx, (rdh >> 1) + rdy, false, refinementAt, decodingContext);
-                    let refined_bitmap = decode_refinement(
-                        symbol_width,
-                        symbol_height,
-                        refinement_template_index,
-                        symbol_bitmap,
-                        (rdw >> 1) + rdx, // JavaScript: (rdw >> 1) + rdx
-                        (rdh >> 1) + rdy, // JavaScript: (rdh >> 1) + rdy
-                        false,            // prediction
-                        refinement_at,
-                        decoding_context,
-                    )?;
-
-                    // Store refined bitmap and update references
-                    refined_bitmap_storage = Some(refined_bitmap);
-                    symbol_bitmap = refined_bitmap_storage.as_ref().unwrap();
-                }
-
-                // ✅ MATCH JAVASCRIPT: Exact increment calculation like JS
-                // JavaScript: if (!transposed) { if (referenceCorner > 1) { currentS += symbolWidth - 1; } else { increment = symbolWidth - 1; } }
-                // JavaScript: else if (!(referenceCorner & 1)) { currentS += symbolHeight - 1; } else { increment = symbolHeight - 1; }
-                let increment = if !transposed {
-                    if reference_corner > 1 {
-                        current_s += symbol_width as i32 - 1;
-                        0
-                    } else {
-                        symbol_width as i32 - 1
-                    }
-                } else if (reference_corner & 1) == 0 {
-                    current_s += symbol_height as i32 - 1;
-                    0
-                } else {
-                    symbol_height as i32 - 1
-                };
-
-                // ✅ MATCH JAVASCRIPT: Exact offset calculation like JS
-                // JavaScript: offsetT = t - (referenceCorner & 1 ? 0 : symbolHeight - 1);
-                // JavaScript: offsetS = currentS - (referenceCorner & 2 ? symbolWidth - 1 : 0);
-                let offset_t = t - if (reference_corner & 1) != 0 {
-                    0
-                } else {
-                    symbol_height as i32 - 1
-                };
-                let offset_s = current_s
-                    - if (reference_corner & 2) != 0 {
-                        symbol_width as i32 - 1
-                    } else {
-                        0
-                    };
-
-                // ✅ MATCH JAVASCRIPT: Exact symbol placement like JS
-                if transposed {
-                    // JavaScript: for (s2 = 0; s2 < symbolHeight; s2++) { row = bitmap[offsetS + s2]; if (!row) { continue; } ... }
-                    for s2 in 0..symbol_height {
-                        let row_idx = (offset_s + s2 as i32) as usize;
-                        if row_idx >= bitmap.len() {
-                            continue;
-                        }
-                        let symbol_row = &symbol_bitmap[s2];
-                        // ✅ MATCH JAVASCRIPT: Exact maxWidth calculation like JS
-                        // JavaScript: const maxWidth = Math.min(width - offsetT, symbolWidth);
-                        let max_width =
-                            ((width as i32) - offset_t).min(symbol_width as i32).max(0) as usize;
-
-                        match combination_operator {
-                            0 => {
-                                // OR
-                                for t2 in 0..max_width {
-                                    let col_idx = (offset_t + t2 as i32) as usize;
-                                    if col_idx < bitmap[row_idx].len() && t2 < symbol_row.len() {
-                                        bitmap[row_idx][col_idx] |= symbol_row[t2];
-                                    }
-                                }
-                            }
-                            2 => {
-                                // XOR
-                                for t2 in 0..max_width {
-                                    let col_idx = (offset_t + t2 as i32) as usize;
-                                    if col_idx < bitmap[row_idx].len() && t2 < symbol_row.len() {
-                                        bitmap[row_idx][col_idx] ^= symbol_row[t2];
-                                    }
-                                }
-                            }
-                            _ => {
-                                return Err(Jbig2Error::new(&format!(
-                                    "operator {} is not supported",
-                                    combination_operator
-                                )));
-                            }
-                        }
-                    }
-                } else {
-                    // JavaScript: for (t2 = 0; t2 < symbolHeight; t2++) { row = bitmap[offsetT + t2]; if (!row) { continue; } ... }
-                    for t2 in 0..symbol_height {
-                        let row_idx = (offset_t + t2 as i32) as usize;
-                        if row_idx >= bitmap.len() {
-                            continue;
-                        }
-                        let symbol_row = &symbol_bitmap[t2];
-
-                        match combination_operator {
-                            0 => {
-                                // OR
-                                for s2 in 0..symbol_width {
-                                    let col_idx = (offset_s + s2 as i32) as usize;
-                                    if col_idx < bitmap[row_idx].len() && s2 < symbol_row.len() {
-                                        bitmap[row_idx][col_idx] |= symbol_row[s2];
-                                    }
-                                }
-                            }
-                            2 => {
-                                // XOR
-                                for s2 in 0..symbol_width {
-                                    let col_idx = (offset_s + s2 as i32) as usize;
-                                    if col_idx < bitmap[row_idx].len() && s2 < symbol_row.len() {
-                                        bitmap[row_idx][col_idx] ^= symbol_row[s2];
-                                    }
-                                }
-                            }
-                            _ => {
-                                return Err(Jbig2Error::new(&format!(
-                                    "operator {} is not supported",
-                                    combination_operator
-                                )));
-                            }
-                        }
-                    }
-                }
-
-                i += 1;
-
-                // ✅ MATCH JAVASCRIPT: Exact delta S decoding like JS
-                // JavaScript: deltaS = huffmanTables.tableDeltaS.decode(huffmanInput)
-                let delta_s = huffman_tables.table_delta_s.decode(huffman_reader)?;
-                let Some(delta_s) = delta_s else { break }; // OOB
-
-                current_s += increment + delta_s + ds_offset;
-            }
-        }
-
-        return Ok(bitmap);
-    }
-
-    let strip_t = decoding_context
-        .decode_integer("IADT")
-        .map(|v| -v)
-        .unwrap_or(0);
-
-    let mut first_s = 0i32;
-    let mut i = 0;
-
-    while i < number_of_symbol_instances {
-        let delta_t = decoding_context.decode_integer("IADT").unwrap_or(0);
-        let strip_t = strip_t + delta_t;
-
-        let delta_first_s = decoding_context.decode_integer("IAFS").unwrap_or(0);
-        first_s += delta_first_s;
-        let mut current_s = first_s;
-
-        loop {
-            let current_t = if strip_size > 1 {
-                // For arithmetic mode, we should still read log_strip_size bits
-                // but using the integer decoder instead of direct bit reading
-                if log_strip_size > 0 {
-                    decoding_context.decode_integer("IAIT").unwrap_or(0)
-                } else {
-                    0
-                }
-            } else {
-                0
-            };
-
-            let t = (strip_size as i32) * strip_t + current_t;
-
-            let symbol_id = decoding_context.decode_iaid(symbol_code_length) as usize;
-
-            if symbol_id >= input_symbols.len() {
-                break;
-            }
-
-            let apply_refinement = if refinement {
-                decoding_context.decode_integer("IARI").unwrap_or(0) != 0
-            } else {
-                false
-            };
-
-            let mut symbol_bitmap = &input_symbols[symbol_id];
-            let mut symbol_width = if !symbol_bitmap.is_empty() {
-                symbol_bitmap[0].len()
-            } else {
-                0
-            };
-            let mut symbol_height = symbol_bitmap.len();
-            let mut refined_bitmap_storage: Option<Bitmap> = None; // Storage for refined bitmap
-
-            if apply_refinement {
-                // ✅ FAITHFUL PORT: Complete JavaScript refinement implementation
-                // Symbol refinement in text region with rdw/rdh/rdx/rdy parameters
-                let rdw = decoding_context.decode_integer("IARDW").unwrap_or(0); // 6.4.11.1
-                let rdh = decoding_context.decode_integer("IARDH").unwrap_or(0); // 6.4.11.2
-                let rdx = decoding_context.decode_integer("IARDX").unwrap_or(0); // 6.4.11.3
-                let rdy = decoding_context.decode_integer("IARDY").unwrap_or(0); // 6.4.11.4
-
-                // Update symbol dimensions like JavaScript
-                let refined_width = (symbol_width as i32 + rdw) as usize;
-                let refined_height = (symbol_height as i32 + rdh) as usize;
-
-                // Apply refinement to the symbol bitmap with proper offset calculations
-                let refined_bitmap = decode_refinement(
-                    refined_width,
-                    refined_height,
-                    refinement_template_index,
-                    symbol_bitmap,
-                    (rdw >> 1) + rdx, // JavaScript: (rdw >> 1) + rdx
-                    (rdh >> 1) + rdy, // JavaScript: (rdh >> 1) + rdy
-                    false,            // prediction
-                    refinement_at,
-                    decoding_context,
-                )?;
-
-                // Store refined bitmap and update references
-                refined_bitmap_storage = Some(refined_bitmap);
-                symbol_bitmap = refined_bitmap_storage.as_ref().unwrap();
-                symbol_width = refined_width;
-                symbol_height = refined_height;
-            }
-
-            let increment = if !transposed {
-                if reference_corner > 1 {
-                    current_s += symbol_width as i32 - 1;
-                    0
-                } else {
-                    symbol_width as i32 - 1
-                }
-            } else if (reference_corner & 1) == 0 {
-                current_s += symbol_height as i32 - 1;
-                0
-            } else {
-                symbol_height as i32 - 1
-            };
-
-            let offset_t = t - if (reference_corner & 1) != 0 {
-                0
-            } else {
-                symbol_height as i32 - 1
-            };
-            let offset_s = current_s
-                - if (reference_corner & 2) != 0 {
-                    symbol_width as i32 - 1
-                } else {
-                    0
-                };
-
-            // Place symbol bitmap
-            if transposed {
-                for s2 in 0..symbol_height {
-                    let row_idx = (offset_s + s2 as i32) as usize;
-                    if row_idx >= bitmap.len() {
-                        continue;
-                    }
-                    let symbol_row = &symbol_bitmap[s2];
-                    let max_width =
-                        ((width as i32) - offset_t).min(symbol_width as i32).max(0) as usize;
-
-                    match combination_operator {
-                        0 => {
-                            // OR
-                            for t2 in 0..max_width {
-                                let col_idx = (offset_t + t2 as i32) as usize;
-                                if col_idx < bitmap[row_idx].len() && t2 < symbol_row.len() {
-                                    bitmap[row_idx][col_idx] |= symbol_row[t2];
-                                }
-                            }
-                        }
-                        2 => {
-                            // XOR
-                            for t2 in 0..max_width {
-                                let col_idx = (offset_t + t2 as i32) as usize;
-                                if col_idx < bitmap[row_idx].len() && t2 < symbol_row.len() {
-                                    bitmap[row_idx][col_idx] ^= symbol_row[t2];
-                                }
-                            }
-                        }
-                        _ => {
-                            return Err(Jbig2Error::new(&format!(
-                                "operator {} is not supported",
-                                combination_operator
-                            )));
-                        }
-                    }
-                }
-            } else {
-                for t2 in 0..symbol_height {
-                    let row_idx = (offset_t + t2 as i32) as usize;
-                    if row_idx >= bitmap.len() {
-                        continue;
-                    }
-                    let symbol_row = &symbol_bitmap[t2];
-
-                    match combination_operator {
-                        0 => {
-                            // OR
-                            for s2 in 0..symbol_width {
-                                let col_idx = (offset_s + s2 as i32) as usize;
-                                if col_idx < bitmap[row_idx].len() && s2 < symbol_row.len() {
-                                    bitmap[row_idx][col_idx] |= symbol_row[s2];
-                                }
-                            }
-                        }
-                        2 => {
-                            // XOR
-                            for s2 in 0..symbol_width {
-                                let col_idx = (offset_s + s2 as i32) as usize;
-                                if col_idx < bitmap[row_idx].len() && s2 < symbol_row.len() {
-                                    bitmap[row_idx][col_idx] ^= symbol_row[s2];
-                                }
-                            }
-                        }
-                        _ => {
-                            return Err(Jbig2Error::new(&format!(
-                                "operator {} is not supported",
-                                combination_operator
-                            )));
-                        }
-                    }
-                }
-            }
-
-            i += 1;
-            let delta_s = decoding_context.decode_integer("IADS");
-
-            if delta_s.is_none() {
-                break; // OOB
-            }
-            current_s += increment + delta_s.unwrap() + ds_offset;
-        }
-    }
-
-    Ok(bitmap)
 }
 
 // Pattern dictionary decoding - ported from decodePatternDictionary function
