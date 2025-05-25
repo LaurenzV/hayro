@@ -2058,7 +2058,7 @@ fn process_segments(
 ) -> Result<(), Jbig2Error> {
     for segment in segments {
         process_segment(segment, visitor)?;
-        println!("{:?}", visitor.buffer.as_ref().map(|b| &b[88..=97]));
+        // println!("{:?}", visitor.buffer.as_ref().map(|b| &b[88..=97]));
     }
     Ok(())
 }
