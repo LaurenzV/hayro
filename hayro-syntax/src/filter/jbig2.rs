@@ -1599,7 +1599,7 @@ fn decode_text_region(
         // ✅ MATCH JAVASCRIPT: Exact initial stripT calculation like JS
         // JavaScript: stripT = -huffmanTables.tableDeltaT.decode(huffmanInput)
         let mut strip_t = huffman_tables
-            .t_table
+            .table_delta_t
             .decode(huffman_reader)?
             .ok_or_else(|| Jbig2Error::new("Failed to decode initial strip T"))
             .map(|v| -v)?;
@@ -1610,12 +1610,12 @@ fn decode_text_region(
         while i < number_of_symbol_instances {
             // ✅ MATCH JAVASCRIPT: Exact delta T decoding like JS
             // JavaScript: deltaT = huffmanTables.tableDeltaT.decode(huffmanInput)
-            let delta_t = huffman_tables.t_table.decode(huffman_reader)?.unwrap_or(0);
+            let delta_t = huffman_tables.table_delta_t.decode(huffman_reader)?.unwrap_or(0);
             strip_t += delta_t;
 
             // ✅ MATCH JAVASCRIPT: Exact first S decoding like JS
             // JavaScript: deltaFirstS = huffmanTables.tableFirstS.decode(huffmanInput)
-            let delta_first_s = if let Some(ref fs_table) = huffman_tables.fs_table {
+            let delta_first_s = if let Some(ref fs_table) = huffman_tables.table_first_s {
                 fs_table.decode(huffman_reader)?.unwrap_or(0)
             } else {
                 0
@@ -1810,7 +1810,7 @@ fn decode_text_region(
 
                 // ✅ MATCH JAVASCRIPT: Exact delta S decoding like JS
                 // JavaScript: deltaS = huffmanTables.tableDeltaS.decode(huffmanInput)
-                let delta_s = huffman_tables.s_table.decode(huffman_reader)?;
+                let delta_s = huffman_tables.table_delta_s.decode(huffman_reader)?;
                 let Some(delta_s) = delta_s else { break }; // OOB
 
                 current_s += increment + delta_s + ds_offset;
@@ -2091,9 +2091,9 @@ fn decode_pattern_dictionary(
 struct TextRegionHuffmanTables {
     // Huffman tables for text region as per JBIG2 spec Table E.2
     pub symbol_id_table: HuffmanTable,
-    pub t_table: HuffmanTable,
-    pub s_table: HuffmanTable,
-    pub fs_table: Option<HuffmanTable>,
+    pub table_delta_t: HuffmanTable,        // JavaScript: tableDeltaT
+    pub table_delta_s: HuffmanTable,        // JavaScript: tableDeltaS
+    pub table_first_s: Option<HuffmanTable>, // JavaScript: tableFirstS
     pub _ds_table: Option<HuffmanTable>,
     pub _dt_table: Option<HuffmanTable>,
     pub _rdw_table: Option<HuffmanTable>,
@@ -3198,9 +3198,9 @@ impl SimpleSegmentVisitor {
 
         Ok(TextRegionHuffmanTables {
             symbol_id_table,
-            t_table: t_table.clone(),
-            s_table: s_table.clone(),
-            fs_table,
+            table_delta_t: t_table.clone(),        // JavaScript: tableDeltaT
+            table_delta_s: s_table.clone(),        // JavaScript: tableDeltaS  
+            table_first_s: fs_table,               // JavaScript: tableFirstS
             _ds_table: Some(s_table),
             _dt_table: Some(t_table),
             _rdw_table: None,
