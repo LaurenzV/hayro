@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
-use crate::filter::jbig2::{Bitmap, DecodingContext, Jbig2Error, TemplatePixel, REFINEMENT_REUSED_CONTEXTS, REFINEMENT_TEMPLATES};
+use crate::filter::jbig2::{Bitmap, DecodingContext, Jbig2Error, TemplatePixel};
+use crate::filter::jbig2::tables::{REFINEMENT_REUSED_CONTEXTS, REFINEMENT_TEMPLATES};
 
 // 6.3.2 Generic Refinement Region Decoding Procedure
 pub(crate) fn decode_refinement(
