@@ -14,6 +14,7 @@
  */
 mod bitmap;
 mod bitmap_template0;
+mod halftone_region;
 mod pattern_dictionary;
 mod refinement;
 mod standard_table;
@@ -38,6 +39,7 @@ use log::warn;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
+use crate::filter::jbig2::halftone_region::decode_halftone_region;
 
 pub fn decode(data: &[u8], params: Dict) -> Option<Vec<u8>> {
     let globals = params.get::<Stream>(JBIG2_GLOBALS);
@@ -1692,173 +1694,6 @@ struct HalftoneRegion {
     grid_offset_y: i32,
     grid_vector_x: i32,
     grid_vector_y: i32,
-}
-
-// Halftone region decoding - ported from decodeHalftoneRegion function
-#[allow(clippy::too_many_arguments)]
-fn decode_halftone_region(
-    mmr: bool,
-    patterns: &[Bitmap],
-    template: usize,
-    region_width: usize,
-    region_height: usize,
-    default_pixel_value: u8,
-    enable_skip: bool,
-    combination_operator: u8,
-    grid_width: usize,
-    grid_height: usize,
-    grid_offset_x: i32,
-    grid_offset_y: i32,
-    grid_vector_x: i32,
-    grid_vector_y: i32,
-    decoding_context: &mut DecodingContext,
-) -> Result<Bitmap, Jbig2Error> {
-    // ✅ FAITHFUL PORT: Complete JavaScript implementation with proper grid vectors
-    if enable_skip {
-        return Err(Jbig2Error::new("skip is not supported"));
-    }
-    if combination_operator != 0 {
-        return Err(Jbig2Error::new(&format!(
-            "operator \"{}\" is not supported in halftone region",
-            combination_operator
-        )));
-    }
-
-    // Prepare bitmap
-    let mut region_bitmap: Vec<Vec<u8>> = Vec::with_capacity(region_height);
-    for _ in 0..region_height {
-        let mut row = vec![0u8; region_width];
-        if default_pixel_value != 0 {
-            row.fill(default_pixel_value);
-        }
-        region_bitmap.push(row);
-    }
-
-    let number_of_patterns = patterns.len();
-    if number_of_patterns == 0 {
-        return Ok(region_bitmap);
-    }
-
-    let pattern0 = &patterns[0];
-    let pattern_width = if !pattern0.is_empty() {
-        pattern0[0].len()
-    } else {
-        0
-    };
-    let pattern_height = pattern0.len();
-    let bits_per_value = log2(number_of_patterns);
-
-    let mut at = Vec::new();
-    if !mmr {
-        at.push(TemplatePixel {
-            x: if template <= 1 { 3 } else { 2 },
-            y: -1,
-        });
-        if template == 0 {
-            at.push(TemplatePixel { x: -3, y: -1 });
-            at.push(TemplatePixel { x: 2, y: -2 });
-            at.push(TemplatePixel { x: -2, y: -2 });
-        }
-    }
-
-    // Annex C. Gray-scale Image Decoding Procedure
-    let mut gray_scale_bit_planes = Vec::with_capacity(bits_per_value);
-
-    for _i in (0..bits_per_value).rev() {
-        let bitmap = if mmr {
-            // MMR bit planes are in one continuous stream. Only EOFB codes indicate
-            // the end of each bitmap, so EOFBs must be decoded.
-            let data_slice = &decoding_context.decoder.data
-                [decoding_context.decoder.bp..decoding_context.decoder.data_end];
-            decode_mmr_bitmap(
-                data_slice,
-                grid_width,
-                grid_height,
-                true, // end_of_block = true for bit planes
-            )?
-        } else {
-            decode_bitmap(
-                false, // mmr
-                grid_width,
-                grid_height,
-                template,
-                false, // prediction
-                None,  // skip
-                &at,
-                decoding_context,
-            )?
-        };
-        gray_scale_bit_planes.push(bitmap);
-    }
-
-    // 6.6.5.2 Rendering the patterns
-    for mg in 0..grid_height {
-        for ng in 0..grid_width {
-            let mut bit = 0u8;
-            let mut pattern_index = 0usize;
-
-            // Gray decoding - extract pattern index from bit planes
-            for j in (0..bits_per_value).rev() {
-                if mg < gray_scale_bit_planes[j].len() && ng < gray_scale_bit_planes[j][mg].len() {
-                    bit ^= gray_scale_bit_planes[j][mg][ng]; // Gray decoding
-                }
-                pattern_index |= (bit as usize) << j;
-            }
-
-            if pattern_index < patterns.len() {
-                let pattern_bitmap = &patterns[pattern_index];
-
-                // ✅ PROPER GRID VECTOR CALCULATION: JavaScript formula
-                // x = (gridOffsetX + mg * gridVectorY + ng * gridVectorX) >> 8;
-                // y = (gridOffsetY + mg * gridVectorX - ng * gridVectorY) >> 8;
-                let x = (grid_offset_x + (mg as i32) * grid_vector_y + (ng as i32) * grid_vector_x)
-                    >> 8;
-                let y = (grid_offset_y + (mg as i32) * grid_vector_x - (ng as i32) * grid_vector_y)
-                    >> 8;
-
-                // Draw pattern bitmap at (x, y)
-                if x >= 0
-                    && x + (pattern_width as i32) <= region_width as i32
-                    && y >= 0
-                    && y + (pattern_height as i32) <= region_height as i32
-                {
-                    // Fast path: pattern is fully contained
-                    for i in 0..pattern_height {
-                        let region_y = (y + i as i32) as usize;
-                        let pattern_row = &pattern_bitmap[i];
-                        let region_row = &mut region_bitmap[region_y];
-                        for j in 0..pattern_width {
-                            let region_x = (x + j as i32) as usize;
-                            if j < pattern_row.len() {
-                                region_row[region_x] |= pattern_row[j];
-                            }
-                        }
-                    }
-                } else {
-                    // Bounds-checked path: pattern may be partially outside
-                    for i in 0..pattern_height {
-                        let region_y = y + i as i32;
-                        if region_y < 0 || region_y >= region_height as i32 {
-                            continue;
-                        }
-                        let region_row = &mut region_bitmap[region_y as usize];
-                        let pattern_row = &pattern_bitmap[i];
-                        for j in 0..pattern_width {
-                            let region_x = x + j as i32;
-                            if region_x >= 0
-                                && (region_x as usize) < region_width
-                                && j < pattern_row.len()
-                            {
-                                region_row[region_x as usize] |= pattern_row[j];
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    Ok(region_bitmap)
 }
 
 // MMR bitmap decoding using CCITT fax decoder - ported from decodeMMRBitmap function
