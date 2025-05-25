@@ -24,7 +24,10 @@ fn main() {
         }
     ];
     
-    image.parse_chunks(&chunks).unwrap();
+    let res = image.parse_chunks(&chunks).unwrap();
+    for (idx, b) in res.iter().enumerate() {
+        // println!("{idx}, {}", b);
+    }
 }
 
 /// A simple stderr logger.

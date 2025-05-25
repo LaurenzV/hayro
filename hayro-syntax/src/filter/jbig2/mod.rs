@@ -1034,7 +1034,7 @@ impl SimpleSegmentVisitor {
         };
 
         let mask0 = 128u8 >> (region_info.x & 7);
-        let mut offset0 = (region_info.y * (page_info.width + 7) / 8 + region_info.x / 8) as usize;
+        let mut offset0 = (region_info.y * row_size as u32 + (region_info.x >> 3)) as usize;
 
         match combination_operator {
             0 => {
@@ -1116,7 +1116,16 @@ impl SimpleSegmentVisitor {
             &mut decoding_context,
         )?;
 
-        self.draw_bitmap(&region.info, &bitmap)
+        // for e in &bitmap {
+        //     for b in e {
+        //         print!("{b}");
+        //     }
+        //     println!();
+        // }
+        // println!("{:?}", self.buffer.as_ref().map(|b| &b[88..=97]));
+        let res = self.draw_bitmap(&region.info, &bitmap);
+        // println!("{:?}", self.buffer.as_ref().map(|b| &b[88..=97]));
+        res
     }
 
     fn on_symbol_dictionary(
@@ -2049,6 +2058,7 @@ fn process_segments(
 ) -> Result<(), Jbig2Error> {
     for segment in segments {
         process_segment(segment, visitor)?;
+        println!("{:?}", visitor.buffer.as_ref().map(|b| &b[88..=97]));
     }
     Ok(())
 }
