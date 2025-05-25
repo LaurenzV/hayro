@@ -971,8 +971,13 @@ struct SimpleSegmentVisitor {
 struct PageInfo {
     width: u32,
     height: u32,
+    resolution_x: u32,
+    resolution_y: u32,
+    lossless: bool,
+    refinement: bool,
     default_pixel_value: u8,
     combination_operator: u8,
+    requires_buffer: bool,
     combination_operator_override: bool,
 }
 
@@ -1980,29 +1985,36 @@ fn process_segment(
             visitor.on_immediate_generic_region(&region, data, position, end)?;
         }
         48 => {
-            // PageInformation
+            // PageInformation - fully implemented to match JavaScript version
             if position + 19 > data.len() {
                 return Err(Jbig2Error::new("insufficient data for page information"));
             }
 
             let width = read_uint32(data, position);
             let height = read_uint32(data, position + 4);
-            // TODO: PAGE INFORMATION DIFFERENCES: JS processSegment() reads additional fields:
-            // resolutionX, resolutionY (positions 8-15), pageStripingInformation (position 17),
-            // plus more detailed flag parsing: lossless, refinement, requiresBuffer flags.
-            // Rust version only reads width, height, and basic flags. Missing fields could
-            // affect page rendering parameters and buffer management.
+            let resolution_x = read_uint32(data, position + 8);
+            let resolution_y = read_uint32(data, position + 12);
             let page_segment_flags = data[position + 16];
+            let _page_striping_information = read_uint16(data, position + 17); // Read but not stored, like JS
 
+            // Extract all flags from pageSegmentFlags exactly like JavaScript
+            let lossless = (page_segment_flags & 1) != 0;
+            let refinement = (page_segment_flags & 2) != 0;
             let default_pixel_value = ((page_segment_flags >> 2) & 1) as u8;
             let combination_operator = ((page_segment_flags >> 3) & 3) as u8;
+            let requires_buffer = (page_segment_flags & 32) != 0;
             let combination_operator_override = (page_segment_flags & 64) != 0;
 
             let page_info = PageInfo {
                 width,
-                height: if height == 0xffffffff { 0 } else { height }, // Handle unknown height
+                height: if height == 0xffffffff { 0 } else { height }, // Handle unknown height like JS
+                resolution_x,
+                resolution_y,
+                lossless,
+                refinement,
                 default_pixel_value,
                 combination_operator,
+                requires_buffer,
                 combination_operator_override,
             };
 
