@@ -1,5 +1,7 @@
-use crate::filter::jbig2::{Bitmap, DecodingContext, Jbig2Error, Reader, TemplatePixel, TextRegionHuffmanTables};
 use crate::filter::jbig2::refinement::decode_refinement;
+use crate::filter::jbig2::{
+    Bitmap, DecodingContext, Jbig2Error, Reader, TemplatePixel, TextRegionHuffmanTables,
+};
 
 // Text region decoding - ported from decodeTextRegion function
 #[allow(clippy::too_many_arguments)]
@@ -38,9 +40,15 @@ pub(crate) fn decode_text_region(
     }
 
     let mut strip_t = if huffman {
-        let tables = huffman_tables.ok_or_else(|| Jbig2Error::new("Huffman tables required for Huffman text region"))?;
-        let reader = huffman_input.ok_or_else(|| Jbig2Error::new("Huffman input reader required for Huffman text region"))?;
-        -tables.table_delta_t.decode(reader)?.ok_or_else(|| Jbig2Error::new("Failed to decode initial strip T"))?
+        let tables = huffman_tables
+            .ok_or_else(|| Jbig2Error::new("Huffman tables required for Huffman text region"))?;
+        let reader = huffman_input.ok_or_else(|| {
+            Jbig2Error::new("Huffman input reader required for Huffman text region")
+        })?;
+        -tables
+            .table_delta_t
+            .decode(reader)?
+            .ok_or_else(|| Jbig2Error::new("Failed to decode initial strip T"))?
     } else {
         -decoding_context.decode_integer("IADT").unwrap_or(0)
     };
@@ -102,15 +110,20 @@ pub(crate) fn decode_text_region(
                 break;
             }
 
-            let apply_refinement = refinement && if huffman {
-                let reader = huffman_input.unwrap();
-                reader.read_bit()? != 0
-            } else {
-                decoding_context.decode_integer("IARI").unwrap_or(0) != 0
-            };
+            let apply_refinement = refinement
+                && if huffman {
+                    let reader = huffman_input.unwrap();
+                    reader.read_bit()? != 0
+                } else {
+                    decoding_context.decode_integer("IARI").unwrap_or(0) != 0
+                };
 
             let mut symbol_bitmap = &input_symbols[symbol_id as usize];
-            let mut symbol_width = if !symbol_bitmap.is_empty() { symbol_bitmap[0].len() } else { 0 };
+            let mut symbol_width = if !symbol_bitmap.is_empty() {
+                symbol_bitmap[0].len()
+            } else {
+                0
+            };
             let mut symbol_height = symbol_bitmap.len();
             let mut refined_bitmap_storage: Option<Bitmap> = None;
 
@@ -152,19 +165,32 @@ pub(crate) fn decode_text_region(
                 symbol_height as i32 - 1
             };
 
-            let offset_t = t - if (reference_corner & 1) != 0 { 0 } else { symbol_height as i32 - 1 };
-            let offset_s = current_s - if (reference_corner & 2) != 0 { symbol_width as i32 - 1 } else { 0 };
+            let offset_t = t - if (reference_corner & 1) != 0 {
+                0
+            } else {
+                symbol_height as i32 - 1
+            };
+            let offset_s = current_s
+                - if (reference_corner & 2) != 0 {
+                    symbol_width as i32 - 1
+                } else {
+                    0
+                };
 
             if transposed {
                 for s2 in 0..symbol_height {
                     let row_idx = (offset_s + s2 as i32) as usize;
-                    if row_idx >= bitmap.len() { continue; }
+                    if row_idx >= bitmap.len() {
+                        continue;
+                    }
 
                     let symbol_row = &symbol_bitmap[s2];
-                    let max_width = ((width as i32) - offset_t).min(symbol_width as i32).max(0) as usize;
+                    let max_width =
+                        ((width as i32) - offset_t).min(symbol_width as i32).max(0) as usize;
 
                     match combination_operator {
-                        0 => { // OR
+                        0 => {
+                            // OR
                             for t2 in 0..max_width {
                                 let col_idx = (offset_t + t2 as i32) as usize;
                                 if col_idx < bitmap[row_idx].len() && t2 < symbol_row.len() {
@@ -172,7 +198,8 @@ pub(crate) fn decode_text_region(
                                 }
                             }
                         }
-                        2 => { // XOR
+                        2 => {
+                            // XOR
                             for t2 in 0..max_width {
                                 let col_idx = (offset_t + t2 as i32) as usize;
                                 if col_idx < bitmap[row_idx].len() && t2 < symbol_row.len() {
@@ -181,19 +208,25 @@ pub(crate) fn decode_text_region(
                             }
                         }
                         _ => {
-                            return Err(Jbig2Error::new(&format!("operator {} is not supported", combination_operator)));
+                            return Err(Jbig2Error::new(&format!(
+                                "operator {} is not supported",
+                                combination_operator
+                            )));
                         }
                     }
                 }
             } else {
                 for t2 in 0..symbol_height {
                     let row_idx = (offset_t + t2 as i32) as usize;
-                    if row_idx >= bitmap.len() { continue; }
+                    if row_idx >= bitmap.len() {
+                        continue;
+                    }
 
                     let symbol_row = &symbol_bitmap[t2];
 
                     match combination_operator {
-                        0 => { // OR
+                        0 => {
+                            // OR
                             for s2 in 0..symbol_width {
                                 let col_idx = (offset_s + s2 as i32) as usize;
                                 if col_idx < bitmap[row_idx].len() && s2 < symbol_row.len() {
@@ -201,7 +234,8 @@ pub(crate) fn decode_text_region(
                                 }
                             }
                         }
-                        2 => { // XOR
+                        2 => {
+                            // XOR
                             for s2 in 0..symbol_width {
                                 let col_idx = (offset_s + s2 as i32) as usize;
                                 if col_idx < bitmap[row_idx].len() && s2 < symbol_row.len() {
@@ -210,7 +244,10 @@ pub(crate) fn decode_text_region(
                             }
                         }
                         _ => {
-                            return Err(Jbig2Error::new(&format!("operator {} is not supported", combination_operator)));
+                            return Err(Jbig2Error::new(&format!(
+                                "operator {} is not supported",
+                                combination_operator
+                            )));
                         }
                     }
                 }

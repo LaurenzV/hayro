@@ -1,8 +1,8 @@
-use std::cell::RefCell;
-use std::rc::Rc;
-use crate::filter::jbig2::{decode_mmr_bitmap, Bitmap, DecodingContext, Jbig2Error, TemplatePixel};
 use crate::filter::jbig2::bitmap_template0::decode_bitmap_template0;
 use crate::filter::jbig2::tables::{CODING_TEMPLATES, REUSED_CONTEXTS};
+use crate::filter::jbig2::{Bitmap, DecodingContext, Jbig2Error, TemplatePixel, decode_mmr_bitmap};
+use std::cell::RefCell;
+use std::rc::Rc;
 
 // 6.2 Generic Region Decoding Procedure - General case
 pub(crate) fn decode_bitmap(

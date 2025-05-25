@@ -1,7 +1,11 @@
-use crate::filter::jbig2::{decode_mmr_bitmap, get_standard_table, log2, read_uncompressed_bitmap, Bitmap, DecodingContext, Jbig2Error, Reader, SymbolDictionaryHuffmanTables, TemplatePixel};
 use crate::filter::jbig2::bitmap::decode_bitmap;
 use crate::filter::jbig2::refinement::decode_refinement;
+use crate::filter::jbig2::standard_table::get_standard_table;
 use crate::filter::jbig2::text_region::decode_text_region;
+use crate::filter::jbig2::{
+    Bitmap, DecodingContext, Jbig2Error, Reader, SymbolDictionaryHuffmanTables, TemplatePixel,
+    decode_mmr_bitmap, log2, read_uncompressed_bitmap,
+};
 
 // 6.5.5 Decoding the symbol dictionary
 pub(crate) fn decode_symbol_dictionary(

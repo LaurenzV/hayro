@@ -1,6 +1,6 @@
+use crate::filter::jbig2::{Bitmap, DecodingContext};
 use std::cell::RefCell;
 use std::rc::Rc;
-use crate::filter::jbig2::{Bitmap, DecodingContext};
 
 pub(crate) fn decode_bitmap_template0(
     width: usize,
@@ -49,19 +49,19 @@ pub(crate) fn decode_bitmap_template0(
 
             context_label = ((context_label & OLD_PIXEL_MASK) << 1)
                 | {
-                if j + 3 < width {
-                    (row2.borrow()[j + 3] as u32) << 11
-                } else {
-                    0
+                    if j + 3 < width {
+                        (row2.borrow()[j + 3] as u32) << 11
+                    } else {
+                        0
+                    }
                 }
-            }
                 | {
-                if j + 4 < width {
-                    (row1.borrow()[j + 4] as u32) << 4
-                } else {
-                    0
+                    if j + 4 < width {
+                        (row1.borrow()[j + 4] as u32) << 4
+                    } else {
+                        0
+                    }
                 }
-            }
                 | pixel as u32;
         }
     }
