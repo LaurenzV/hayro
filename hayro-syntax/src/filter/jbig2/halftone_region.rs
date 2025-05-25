@@ -1,5 +1,5 @@
 use crate::filter::jbig2::bitmap::decode_bitmap;
-use crate::filter::jbig2::{Bitmap, DecodingContext, Jbig2Error, TemplatePixel, decode_mmr_bitmap, log2, Reader};
+use crate::filter::jbig2::{Bitmap, DecodingContext, Jbig2Error, TemplatePixel, decode_mmr_bitmap, log2, Reader, print_bitmap};
 
 // Halftone region decoding - ported from decodeHalftoneRegion function
 #[allow(clippy::too_many_arguments)]
@@ -70,7 +70,7 @@ pub(crate) fn decode_halftone_region(
         None
     };
     
-    for _i in (0..bits_per_value).rev() {
+    for _i in (0..bits_per_value) {
         let bitmap = if mmr {
             // MMR bit planes are in one continuous stream. Only EOFB codes indicate
             // the end of each bitmap, so EOFBs must be decoded.
@@ -92,8 +92,11 @@ pub(crate) fn decode_halftone_region(
                 decoding_context,
             )?
         };
+        // print_bitmap(&bitmap);
         gray_scale_bit_planes.push(bitmap);
     }
+    
+    gray_scale_bit_planes.reverse();
 
     // 6.6.5.2 Rendering the patterns
     for mg in 0..grid_height {
@@ -103,11 +106,13 @@ pub(crate) fn decode_halftone_region(
 
             // Gray decoding - extract pattern index from bit planes
             for j in (0..bits_per_value).rev() {
+                // println!("{:?}", gray_scale_bit_planes[j][mg][ng]);
                 bit ^= gray_scale_bit_planes[j][mg][ng]; // Gray decoding
                 pattern_index |= (bit as usize) << j;
             }
 
             let pattern_bitmap = &patterns[pattern_index];
+            // print_bitmap(pattern_bitmap);
 
             let x =
                 (grid_offset_x + (mg as i32) * grid_vector_y + (ng as i32) * grid_vector_x) >> 8;
@@ -128,6 +133,8 @@ pub(crate) fn decode_halftone_region(
                         let region_x = (x + j as i32) as usize;
                         region_row[region_x] |= pattern_row[j];
                     }
+                    // println!("{:?}", region_row);
+                    // continue;
                 }
             } else {
                 // Bounds-checked path: pattern may be partially outside

@@ -1256,6 +1256,10 @@ impl SimpleSegmentVisitor {
             dictionary.template,
             &mut decoding_context,
         )?;
+        
+        for p in &patterns {
+            // print_bitmap(p);
+        }
 
         self.patterns.insert(current_segment, patterns);
         Ok(())
@@ -1270,13 +1274,8 @@ impl SimpleSegmentVisitor {
         end: usize,
     ) -> Result<(), Jbig2Error> {
         // Collect patterns from referred segments
-        let mut patterns = Vec::new();
-        for &referred_segment in referred_segments {
-            if let Some(referred_patterns) = self.patterns.get(&referred_segment) {
-                patterns.extend(referred_patterns.iter().cloned());
-            }
-        }
-
+        let mut patterns = self.patterns[&referred_segments[0]].clone();
+        
         if patterns.is_empty() {
             return Err(Jbig2Error::new("no patterns available for halftone region"));
         }
@@ -1300,6 +1299,8 @@ impl SimpleSegmentVisitor {
             region.grid_vector_y,
             &mut decoding_context,
         )?;
+
+        // print_bitmap(&bitmap);
 
         self.draw_bitmap(&region.info, &bitmap)
     }
@@ -2058,7 +2059,7 @@ fn process_segments(
 ) -> Result<(), Jbig2Error> {
     for segment in segments {
         process_segment(segment, visitor)?;
-        // println!("{:?}", visitor.buffer.as_ref().map(|b| &b[88..=97]));
+        // println!("{:?}", visitor.buffer.as_ref().map(|b| &b[122..=125]));
     }
     Ok(())
 }
@@ -2218,4 +2219,13 @@ fn get_custom_huffman_table<'a>(
         }
     }
     Err(Jbig2Error::new("can't find custom Huffman table"))
+}
+
+pub(crate) fn print_bitmap(entries: &Vec<Vec<u8>>) {
+    for e in entries {
+        for b in e {
+            print!("{b}");
+        }
+        println!();
+    }
 }

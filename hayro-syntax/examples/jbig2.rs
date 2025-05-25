@@ -26,7 +26,7 @@ fn main() {
     
     let res = image.parse_chunks(&chunks).unwrap();
     for (idx, b) in res.iter().enumerate() {
-        println!("{idx}, {}", b);
+        // println!("{idx}, {}", b);
     }
 }
 
