@@ -30,7 +30,8 @@ pub(crate) fn decode_text_region(
         return Err(Jbig2Error::new("refinement with Huffman is not supported"));
     }
 
-    let mut bitmap = Vec::with_capacity(height);
+    // Prepare bitmap
+    let mut bitmap = Vec::new();
     for _ in 0..height {
         let mut row = vec![0u8; width];
         if default_pixel_value != 0 {
@@ -40,17 +41,15 @@ pub(crate) fn decode_text_region(
     }
 
     let mut strip_t = if huffman {
-        let tables = huffman_tables
-            .ok_or_else(|| Jbig2Error::new("Huffman tables required for Huffman text region"))?;
-        let reader = huffman_input.ok_or_else(|| {
-            Jbig2Error::new("Huffman input reader required for Huffman text region")
-        })?;
-        -tables
+        -huffman_tables
+            .unwrap()
             .table_delta_t
-            .decode(reader)?
-            .ok_or_else(|| Jbig2Error::new("Failed to decode initial strip T"))?
+            .decode(huffman_input.unwrap())?
+            .ok_or_else(|| Jbig2Error::new("Failed to decode initial stripT"))?
     } else {
-        -decoding_context.decode_integer("IADT").unwrap_or(0)
+        -decoding_context
+            .decode_integer("IADT")
+            .ok_or_else(|| Jbig2Error::new("Failed to decode initial stripT"))?
     };
 
     let mut first_s = 0i32;
@@ -58,80 +57,89 @@ pub(crate) fn decode_text_region(
 
     while i < number_of_symbol_instances {
         let delta_t = if huffman {
-            let tables = huffman_tables.unwrap();
-            let reader = huffman_input.unwrap();
-            tables.table_delta_t.decode(reader)?.unwrap_or(0)
+            huffman_tables
+                .unwrap()
+                .table_delta_t
+                .decode(huffman_input.unwrap())?
+                .ok_or_else(|| Jbig2Error::new("Failed to decode deltaT"))?
         } else {
-            decoding_context.decode_integer("IADT").unwrap_or(0)
+            decoding_context
+                .decode_integer("IADT")
+                .ok_or_else(|| Jbig2Error::new("Failed to decode deltaT"))?
         };
         strip_t += delta_t;
 
         let delta_first_s = if huffman {
-            let tables = huffman_tables.unwrap();
-            let reader = huffman_input.unwrap();
-            if let Some(ref fs_table) = tables.table_first_s {
-                // TODO: Doesnt quite match
-                fs_table.decode(reader)?.unwrap_or(0)
-            } else {
-                panic!();
-            }
+            huffman_tables
+                .unwrap()
+                .table_first_s
+                .as_ref()
+                .unwrap()
+                .decode(huffman_input.unwrap())?
+                .ok_or_else(|| Jbig2Error::new("Failed to decode deltaFirstS"))?
         } else {
-            decoding_context.decode_integer("IAFS").unwrap_or(0)
+            decoding_context
+                .decode_integer("IAFS")
+                .ok_or_else(|| Jbig2Error::new("Failed to decode deltaFirstS"))?
         };
         first_s += delta_first_s;
         let mut current_s = first_s;
 
         loop {
-            let current_t = if strip_size > 1 {
-                if huffman {
-                    let reader = huffman_input.unwrap();
-                    reader.read_bits(log_strip_size)? as i32
+            let mut current_t = 0;
+            if strip_size > 1 {
+                current_t = if huffman {
+                    huffman_input.unwrap().read_bits(log_strip_size)? as i32
                 } else {
-                    decoding_context.decode_integer("IAIT").unwrap_or(0)
-                }
-            } else {
-                0
-            };
+                    decoding_context
+                        .decode_integer("IAIT")
+                        .ok_or_else(|| Jbig2Error::new("Failed to decode currentT"))?
+                };
+            }
 
             let t = (strip_size as i32) * strip_t + current_t;
 
             let symbol_id = if huffman {
-                let tables = huffman_tables.unwrap();
-                let reader = huffman_input.unwrap();
-                match tables.symbol_id_table.decode(reader)? {
+                match huffman_tables
+                    .unwrap()
+                    .symbol_id_table
+                    .decode(huffman_input.unwrap())?
+                {
                     Some(id) => id,
-                    None => break, // OOB
+                    None => return Err(Jbig2Error::new("Unexpected OOB in symbolID decode")),
                 }
             } else {
                 decoding_context.decode_iaid(symbol_code_length) as i32
             };
 
-            if symbol_id < 0 || symbol_id as usize >= input_symbols.len() {
-                break;
-            }
-
             let apply_refinement = refinement
                 && if huffman {
-                    let reader = huffman_input.unwrap();
-                    reader.read_bit()? != 0
+                    huffman_input.unwrap().read_bit()? != 0
                 } else {
-                    decoding_context.decode_integer("IARI").unwrap_or(0) != 0
+                    decoding_context
+                        .decode_integer("IARI")
+                        .ok_or_else(|| Jbig2Error::new("Failed to decode refinement flag"))?
+                        != 0
                 };
 
             let mut symbol_bitmap = &input_symbols[symbol_id as usize];
-            let mut symbol_width = if !symbol_bitmap.is_empty() {
-                symbol_bitmap[0].len()
-            } else {
-                0
-            };
+            let mut symbol_width = symbol_bitmap[0].len();
             let mut symbol_height = symbol_bitmap.len();
             let mut refined_bitmap_storage: Option<Bitmap> = None;
 
             if apply_refinement {
-                let rdw = decoding_context.decode_integer("IARDW").unwrap_or(0);
-                let rdh = decoding_context.decode_integer("IARDH").unwrap_or(0);
-                let rdx = decoding_context.decode_integer("IARDX").unwrap_or(0);
-                let rdy = decoding_context.decode_integer("IARDY").unwrap_or(0);
+                let rdw = decoding_context
+                    .decode_integer("IARDW")
+                    .ok_or_else(|| Jbig2Error::new("Failed to decode rdw"))?;
+                let rdh = decoding_context
+                    .decode_integer("IARDH")
+                    .ok_or_else(|| Jbig2Error::new("Failed to decode rdh"))?;
+                let rdx = decoding_context
+                    .decode_integer("IARDX")
+                    .ok_or_else(|| Jbig2Error::new("Failed to decode rdx"))?;
+                let rdy = decoding_context
+                    .decode_integer("IARDY")
+                    .ok_or_else(|| Jbig2Error::new("Failed to decode rdy"))?;
 
                 symbol_width = (symbol_width as i32 + rdw) as usize;
                 symbol_height = (symbol_height as i32 + rdh) as usize;
@@ -151,19 +159,18 @@ pub(crate) fn decode_text_region(
                 symbol_bitmap = refined_bitmap_storage.as_ref().unwrap();
             }
 
-            let increment = if !transposed {
+            let mut increment = 0;
+            if !transposed {
                 if reference_corner > 1 {
                     current_s += symbol_width as i32 - 1;
-                    0
                 } else {
-                    symbol_width as i32 - 1
+                    increment = symbol_width as i32 - 1;
                 }
             } else if (reference_corner & 1) == 0 {
                 current_s += symbol_height as i32 - 1;
-                0
             } else {
-                symbol_height as i32 - 1
-            };
+                increment = symbol_height as i32 - 1;
+            }
 
             let offset_t = t - if (reference_corner & 1) != 0 {
                 0
@@ -178,6 +185,7 @@ pub(crate) fn decode_text_region(
                 };
 
             if transposed {
+                // Place Symbol Bitmap from T1,S1
                 for s2 in 0..symbol_height {
                     let row_idx = (offset_s + s2 as i32) as usize;
                     if row_idx >= bitmap.len() {
@@ -185,26 +193,22 @@ pub(crate) fn decode_text_region(
                     }
 
                     let symbol_row = &symbol_bitmap[s2];
-                    let max_width =
-                        ((width as i32) - offset_t).min(symbol_width as i32).max(0) as usize;
+                    // To ignore Parts of Symbol bitmap which goes outside bitmap region
+                    let max_width = ((width as i32) - offset_t).min(symbol_width as i32) as usize;
 
                     match combination_operator {
                         0 => {
                             // OR
                             for t2 in 0..max_width {
                                 let col_idx = (offset_t + t2 as i32) as usize;
-                                if col_idx < bitmap[row_idx].len() && t2 < symbol_row.len() {
-                                    bitmap[row_idx][col_idx] |= symbol_row[t2];
-                                }
+                                bitmap[row_idx][col_idx] |= symbol_row[t2];
                             }
                         }
                         2 => {
                             // XOR
                             for t2 in 0..max_width {
                                 let col_idx = (offset_t + t2 as i32) as usize;
-                                if col_idx < bitmap[row_idx].len() && t2 < symbol_row.len() {
-                                    bitmap[row_idx][col_idx] ^= symbol_row[t2];
-                                }
+                                bitmap[row_idx][col_idx] ^= symbol_row[t2];
                             }
                         }
                         _ => {
@@ -229,18 +233,14 @@ pub(crate) fn decode_text_region(
                             // OR
                             for s2 in 0..symbol_width {
                                 let col_idx = (offset_s + s2 as i32) as usize;
-                                if col_idx < bitmap[row_idx].len() && s2 < symbol_row.len() {
-                                    bitmap[row_idx][col_idx] |= symbol_row[s2];
-                                }
+                                bitmap[row_idx][col_idx] |= symbol_row[s2];
                             }
                         }
                         2 => {
                             // XOR
                             for s2 in 0..symbol_width {
                                 let col_idx = (offset_s + s2 as i32) as usize;
-                                if col_idx < bitmap[row_idx].len() && s2 < symbol_row.len() {
-                                    bitmap[row_idx][col_idx] ^= symbol_row[s2];
-                                }
+                                bitmap[row_idx][col_idx] ^= symbol_row[s2];
                             }
                         }
                         _ => {
@@ -255,15 +255,18 @@ pub(crate) fn decode_text_region(
 
             i += 1;
             let delta_s = if huffman {
-                let tables = huffman_tables.unwrap();
-                let reader = huffman_input.unwrap();
-                tables.table_delta_s.decode(reader)?
+                huffman_tables
+                    .unwrap()
+                    .table_delta_s
+                    .decode(huffman_input.unwrap())?
             } else {
                 decoding_context.decode_integer("IADS")
             };
 
-            let Some(delta_s) = delta_s else { break };
-            current_s += increment + delta_s + ds_offset;
+            if delta_s.is_none() {
+                break; // OOB
+            }
+            current_s += increment + delta_s.unwrap() + ds_offset;
         }
     }
 
