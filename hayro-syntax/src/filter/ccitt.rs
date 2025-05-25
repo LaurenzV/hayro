@@ -1346,7 +1346,7 @@ impl<'a> CCITTFaxDecoder<'a> {
             }
         }
 
-        warn!("bad two dim code");
+        // warn!("bad two dim code");
 
         CCITT_EOF
     }

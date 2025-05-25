@@ -1585,7 +1585,7 @@ fn decode_mmr_bitmap(
         for _ in 0..width {
             if shift < 0 {
                 let byte = decoder.read_next_char();
-                println!("read byte {}", byte);
+                // println!("read byte {}", byte);
                 if byte == -1 {
                     // Set the rest of the bits to zero.
                     current_byte = 0;
@@ -1614,7 +1614,7 @@ fn decode_mmr_bitmap(
     
     borrowed.position += decoder.source.offset();
 
-    println!("\n\n");
+    // println!("\n\n");
     
     Ok(bitmap.into_iter().map(|i| i.borrow().clone()).collect())
 }
