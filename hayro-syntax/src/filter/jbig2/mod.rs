@@ -1663,7 +1663,6 @@ fn process_segment(
             }
 
             let dictionary_flags = read_uint16(data, position);
-            position += 2;
 
             let huffman = (dictionary_flags & 1) != 0;
             let refinement = (dictionary_flags & 2) != 0;
@@ -1676,6 +1675,8 @@ fn process_segment(
             let template = ((dictionary_flags >> 10) & 3) as usize;
             let refinement_template = ((dictionary_flags >> 12) & 1) as usize;
 
+            position += 2;
+            
             let mut at = Vec::new();
             if !huffman {
                 let at_length = if template == 0 { 4 } else { 1 };
@@ -1764,7 +1765,6 @@ fn process_segment(
             let transposed = (text_region_segment_flags & 64) != 0;
             let combination_operator = ((text_region_segment_flags >> 7) & 3) as u8;
             let default_pixel_value = ((text_region_segment_flags >> 9) & 1) as u8;
-            // Extract bits 10-14 (5 bits) and sign-extend from 5-bit to i32
             let ds_offset_bits = (text_region_segment_flags >> 10) & 0x1f; // Extract 5 bits
             let ds_offset = if ds_offset_bits & 0x10 != 0 {
                 // Negative value - sign extend from 5-bit
