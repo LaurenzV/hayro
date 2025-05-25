@@ -1,7 +1,5 @@
 use crate::filter::jbig2::bitmap::decode_bitmap;
-use crate::filter::jbig2::{
-    Bitmap, DecodingContext, Jbig2Error, TemplatePixel, decode_mmr_bitmap, log2,
-};
+use crate::filter::jbig2::{Bitmap, DecodingContext, Jbig2Error, TemplatePixel, decode_mmr_bitmap, log2, Reader};
 
 // Halftone region decoding - ported from decodeHalftoneRegion function
 #[allow(clippy::too_many_arguments)]
@@ -64,15 +62,20 @@ pub(crate) fn decode_halftone_region(
 
     // Annex C. Gray-scale Image Decoding Procedure
     let mut gray_scale_bit_planes = Vec::with_capacity(bits_per_value);
-
+    let decoding_data = decoding_context.data.clone();
+    
+    let mmr_input = if mmr {
+        Some(Reader::new(&decoding_data, decoding_context.start, decoding_context.end))
+    }   else {
+        None
+    };
+    
     for _i in (0..bits_per_value).rev() {
         let bitmap = if mmr {
             // MMR bit planes are in one continuous stream. Only EOFB codes indicate
             // the end of each bitmap, so EOFBs must be decoded.
-            let data_slice = &decoding_context.decoder.data
-                [decoding_context.decoder.bp..decoding_context.decoder.data_end];
             decode_mmr_bitmap(
-                data_slice,
+                mmr_input.as_ref().unwrap(),
                 grid_width,
                 grid_height,
                 true, // end_of_block = true for bit planes

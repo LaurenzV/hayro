@@ -16,6 +16,10 @@ impl<'a> Reader<'a> {
     pub(crate) fn new(data: &'a [u8]) -> Self {
         Self { data, offset: 0 }
     }
+    #[inline]
+    pub(crate) fn new_with(data: &'a [u8], offset: usize) -> Self {
+        Self { data, offset }
+    }
 
     #[inline]
     pub(crate) fn at_end(&self) -> bool {

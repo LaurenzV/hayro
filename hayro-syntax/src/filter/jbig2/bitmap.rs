@@ -1,6 +1,6 @@
 use crate::filter::jbig2::bitmap_template0::decode_bitmap_template0;
 use crate::filter::jbig2::tables::{CODING_TEMPLATES, REUSED_CONTEXTS};
-use crate::filter::jbig2::{Bitmap, DecodingContext, Jbig2Error, TemplatePixel, decode_mmr_bitmap};
+use crate::filter::jbig2::{Bitmap, DecodingContext, Jbig2Error, TemplatePixel, decode_mmr_bitmap, Reader};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -17,11 +17,8 @@ pub(crate) fn decode_bitmap(
 ) -> Result<Bitmap, Jbig2Error> {
     // println!("Decode bitmap: {}", decoding_context.decoder.counter);
     if mmr {
-        // Use MMR decoding
-        // TODO: DIfferent from JS.
-        let data_slice = &decoding_context.decoder.data
-            [decoding_context.decoder.bp..decoding_context.decoder.data_end];
-        return decode_mmr_bitmap(data_slice, width, height, false);
+        let reader = Reader::new(&decoding_context.data, decoding_context.start, decoding_context.end);
+        return decode_mmr_bitmap(&reader, width, height, false);
     }
 
     // Use optimized version for the most common case

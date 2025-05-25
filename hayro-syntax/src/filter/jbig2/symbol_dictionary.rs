@@ -22,7 +22,6 @@ pub(crate) fn decode_symbol_dictionary(
     decoding_context: &mut DecodingContext,
     mut huffman_input: Option<&Reader>,
 ) -> Result<Vec<Bitmap>, Jbig2Error> {
-    println!("{:?}", huffman_input);
     if huffman && refinement {
         return Err(Jbig2Error::new(
             "symbol refinement with Huffman is not supported",
@@ -194,14 +193,16 @@ pub(crate) fn decode_symbol_dictionary(
                 let original_end = input.end;
                 let bitmap_end = input.position + bitmap_size as usize;
                 input.end = bitmap_end;
+                std::mem::drop(input);
 
                 let result = decode_mmr_bitmap(
-                    &input.data[input.position..bitmap_end],
+                    &huffman_input,
                     total_width as usize,
                     current_height as usize,
                     false,
                 );
 
+                let mut input = huffman_input.0.borrow_mut();
                 input.end = original_end;
                 input.position = bitmap_end;
 

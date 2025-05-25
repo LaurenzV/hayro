@@ -39,10 +39,11 @@ use crate::object::dict::keys::JBIG2_GLOBALS;
 use crate::object::stream::Stream;
 use crate::reader::Reader as CrateReader;
 use log::warn;
-use std::cell::RefCell;
+use std::cell::{OnceCell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
+use once_cell::sync::Lazy;
 
 pub fn decode(data: &[u8], params: Dict) -> Option<Vec<u8>> {
     let globals = params.get::<Stream>(JBIG2_GLOBALS);
@@ -115,6 +116,9 @@ impl ContextCache {
 }
 
 struct DecodingContext {
+    pub data: Vec<u8>,
+    pub start: usize,
+    pub end: usize,
     decoder: ArithmeticDecoder,
     context_cache: ContextCache,
 }
@@ -122,6 +126,9 @@ struct DecodingContext {
 impl DecodingContext {
     fn new(data: Vec<u8>, start: usize, end: usize) -> Self {
         Self {
+            data: data.clone(),
+            start,
+            end,
             decoder: ArithmeticDecoder::new(&data, start, end),
             context_cache: ContextCache::new(),
         }
@@ -222,6 +229,7 @@ fn read_segments(
 ///
 /// The arithmetic decoder is used in conjunction with context models to decode
 /// JPEG2000 and JBIG2 streams.
+#[derive(Clone, Debug)]
 struct ArithmeticDecoder {
     data: Vec<u8>,
     bp: usize,
@@ -1545,7 +1553,7 @@ struct HalftoneRegion {
 
 // MMR bitmap decoding using CCITT fax decoder - ported from decodeMMRBitmap function
 fn decode_mmr_bitmap(
-    data: &[u8],
+    reader: &Reader,
     width: usize,
     height: usize,
     end_of_block: bool,
@@ -1560,20 +1568,24 @@ fn decode_mmr_bitmap(
         eoblock: end_of_block,
         ..Default::default()
     };
+    
+    let mut borrowed = reader.0.borrow_mut();
 
-    let mut reader = CrateReader::new(data);
+    let mut reader = CrateReader::new_with(&borrowed.data[borrowed.position..borrowed.end], 0);
     let mut decoder = CCITTFaxDecoder::new(&mut reader, params);
-    let mut bitmap: Vec<Vec<u8>> = Vec::with_capacity(height);
+    let mut bitmap = Vec::with_capacity(height);
     let mut eof = false;
 
     for _ in 0..height {
-        let mut row = Vec::with_capacity(width);
+        let mut row = Rc::new(RefCell::new(vec![]));
+        bitmap.push(row.clone());
         let mut shift = -1i32;
         let mut current_byte = 0u8;
 
         for _ in 0..width {
             if shift < 0 {
                 let byte = decoder.read_next_char();
+                println!("read byte {}", byte);
                 if byte == -1 {
                     // Set the rest of the bits to zero.
                     current_byte = 0;
@@ -1585,10 +1597,9 @@ fn decode_mmr_bitmap(
                 }
             }
             let bit = (current_byte >> shift) & 1;
-            row.push(bit);
+            row.borrow_mut().push(bit);
             shift -= 1;
         }
-        bitmap.push(row);
     }
 
     if end_of_block && !eof {
@@ -1600,8 +1611,12 @@ fn decode_mmr_bitmap(
             }
         }
     }
+    
+    borrowed.position += decoder.source.offset();
 
-    Ok(bitmap)
+    println!("\n\n");
+    
+    Ok(bitmap.into_iter().map(|i| i.borrow().clone()).collect())
 }
 
 // Uncompressed bitmap reading - ported from readUncompressedBitmap function
