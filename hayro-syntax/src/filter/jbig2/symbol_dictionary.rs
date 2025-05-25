@@ -22,6 +22,7 @@ pub(crate) fn decode_symbol_dictionary(
     decoding_context: &mut DecodingContext,
     mut huffman_input: Option<&Reader>,
 ) -> Result<Vec<Bitmap>, Jbig2Error> {
+    println!("{:?}", huffman_input);
     if huffman && refinement {
         return Err(Jbig2Error::new(
             "symbol refinement with Huffman is not supported",
@@ -256,6 +257,7 @@ pub(crate) fn decode_symbol_dictionary(
         current_flag = !current_flag;
     }
 
+    // println!("flags: {:?}", flags);
     // Export symbols based on flags
     for (i, &flag) in flags.iter().enumerate().take(symbols.len()) {
         if flag {

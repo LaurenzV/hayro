@@ -42,6 +42,7 @@ use log::warn;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::sync::Arc;
 
 pub fn decode(data: &[u8], params: Dict) -> Option<Vec<u8>> {
     let globals = params.get::<Stream>(JBIG2_GLOBALS);
@@ -169,16 +170,18 @@ fn read_segments(
     start: usize,
     end: usize,
 ) -> Result<Vec<Segment>, Jbig2Error> {
+    let owned_data = Rc::new(data[start..end].to_vec());
     let mut segments = Vec::new();
     let mut position = start;
 
     while position < end {
         let segment_header = read_segment_header(data, position)?;
+        
         position = segment_header.header_end;
 
         let mut segment = Segment {
             header: segment_header.clone(),
-            data: data.to_vec(), // Share reference to original data like JS
+            data: owned_data.clone(), // Share reference to original data like JS
             start: 0,           // Will be set below
             end: 0,             // Will be set below
         };
@@ -738,7 +741,7 @@ struct HuffmanTable {
 
 impl HuffmanTable {
     fn new(mut lines: Vec<HuffmanLine>, prefix_codes_done: bool) -> Self {
-        println!("Creating tree with {} lines", lines.len());
+        // println!("Creating tree with {} lines", lines.len());
         if !prefix_codes_done {
             Self::assign_prefix_codes(&mut lines);
         }
@@ -819,7 +822,7 @@ struct SegmentHeader {
 #[derive(Debug)]
 struct Segment {
     header: SegmentHeader,
-    data: Vec<u8>,
+    data: Rc<Vec<u8>>,
     start: usize,
     end: usize,
 }
@@ -937,21 +940,11 @@ impl Jbig2Image {
         // Read segments using extracted function like JavaScript implementation
         let segments = read_segments(&header, data, position, end)?;
         
-        // Extract segment data and convert to owned format for processing
         for segment in segments {
-            if segment.start < data.len() && segment.end <= data.len() {
-                let segment_data = data[segment.start..segment.end].to_vec();
-                let owned_segment = Segment {
-                    header: segment.header,
-                    data: segment_data.clone(),
-                    start: 0, // Relative to segment data
-                    end: segment_data.len(),
-                };
-                self.segments.push(owned_segment);
-            } else {
-                return Err(Jbig2Error::new("segment data extends beyond chunk"));
-            }
+            self.segments.push(segment);
         }
+        
+        // println!("{:?}", self.segments);
 
         Ok(())
     }
@@ -1127,29 +1120,24 @@ impl SimpleSegmentVisitor {
         start: usize,
         end: usize,
     ) -> Result<(), Jbig2Error> {
+        let (huffman_tables, huffman_input) = if dictionary.huffman {
+            (Some(self.get_symbol_dictionary_huffman_tables(dictionary, referred_segments)?), Some(Reader::new(data, start, end)))  
+        }   else {
+            (None, None)
+        };
+        
+        let symbols = &mut self.symbols;
+        
         // Collect input symbols from referred segments
         let mut input_symbols = Vec::new();
         for &referred_segment in referred_segments {
-            if let Some(referred_symbols) = self.symbols.get(&referred_segment) {
+            if let Some(referred_symbols) = symbols.get(&referred_segment) {
                 input_symbols.extend(referred_symbols.iter().cloned());
             }
         }
 
         let mut decoding_context = DecodingContext::new(data.to_vec(), start, end);
-
-        // Create Huffman tables and reader if needed (like JS implementation)
-        let huffman_tables = if dictionary.huffman {
-            Some(self.get_symbol_dictionary_huffman_tables(dictionary, referred_segments)?)
-        } else {
-            None
-        };
-
-        let mut huffman_reader = if dictionary.huffman {
-            Some(Reader::new(data, start, end))
-        } else {
-            None
-        };
-
+        println!("current segment: {current_segment}");
         let new_symbols = decode_symbol_dictionary(
             dictionary.huffman,
             dictionary.refinement,
@@ -1162,13 +1150,15 @@ impl SimpleSegmentVisitor {
             dictionary.refinement_template,
             &dictionary.refinement_at,
             &mut decoding_context,
-            huffman_reader.as_ref(),
+            huffman_input.as_ref(),
         )?;
-
-        // Store all symbols (input + new)
-        let mut all_symbols = input_symbols;
-        all_symbols.extend(new_symbols);
-        self.symbols.insert(current_segment, all_symbols);
+        
+        // println!("current segment {current_segment}, {:?}", new_symbols);
+        if let Some(entry) = symbols.get_mut(&current_segment) {
+            entry.extend(new_symbols)
+        }   else {
+            symbols.insert(current_segment, new_symbols);
+        }
 
         Ok(())
     }
@@ -1183,6 +1173,7 @@ impl SimpleSegmentVisitor {
     ) -> Result<(), Jbig2Error> {
         // Collect input symbols from referred segments
         let mut input_symbols = Vec::new();
+        // println!(":{:?}", self.symbols[&2]);
         for &referred_segment in referred_segments {
             if let Some(referred_symbols) = self.symbols.get(&referred_segment) {
                 input_symbols.extend(referred_symbols.iter().cloned());
@@ -1630,19 +1621,20 @@ fn read_uncompressed_bitmap(
     width: usize,
     height: usize,
 ) -> Result<Bitmap, Jbig2Error> {
-    let mut bitmap: Vec<Vec<u8>> = Vec::with_capacity(height);
+    let mut bitmap = Vec::new();
 
     for _ in 0..height {
-        let mut row = Vec::with_capacity(width);
+        let mut row = Rc::new(RefCell::new(Vec::with_capacity(width)));
+        bitmap.push(row.clone());
+        
         for _ in 0..width {
             let bit = reader.read_bit()?;
-            row.push(bit);
+            row.borrow_mut().push(bit);
         }
-        bitmap.push(row);
+        reader.byte_align();
     }
-
-    reader.byte_align();
-    Ok(bitmap)
+    
+    Ok(bitmap.into_iter().map(|i| i.borrow().clone()).collect())
 }
 
 // processSegment function - ported from JS processSegment function
@@ -1656,7 +1648,7 @@ fn process_segment(
     let mut position = segment.start;
 
     const REGION_SEGMENT_INFORMATION_FIELD_LENGTH: usize = 17;
-    println!("visiting segment {}", header.segment_type);
+    // println!("visiting segment {:?}", header);
     
     match header.segment_type {
         0 => {
