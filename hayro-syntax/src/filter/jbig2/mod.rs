@@ -14,6 +14,7 @@
  */
 mod bitmap;
 mod bitmap_template0;
+mod pattern_dictionary;
 mod refinement;
 mod standard_table;
 mod symbol_dictionary;
@@ -23,6 +24,7 @@ mod text_region;
 use crate::filter::ccitt::{CCITTFaxDecoder, CCITTFaxDecoderOptions};
 use crate::filter::jbig2::bitmap::decode_bitmap;
 use crate::filter::jbig2::bitmap_template0::decode_bitmap_template0;
+use crate::filter::jbig2::pattern_dictionary::decode_pattern_dictionary;
 use crate::filter::jbig2::refinement::decode_refinement;
 use crate::filter::jbig2::standard_table::get_standard_table;
 use crate::filter::jbig2::symbol_dictionary::decode_symbol_dictionary;
@@ -486,74 +488,6 @@ impl<'a> Reader<'a> {
         s.position += 1;
         byte
     }
-}
-
-// Pattern dictionary decoding - ported from decodePatternDictionary function
-fn decode_pattern_dictionary(
-    mmr: bool,
-    pattern_width: usize,
-    pattern_height: usize,
-    max_pattern_index: usize,
-    template: usize,
-    decoding_context: &mut DecodingContext,
-) -> Result<Vec<Bitmap>, Jbig2Error> {
-    // ✅ FAITHFUL PORT: Complete JavaScript implementation with collective bitmap algorithm
-    let mut at = Vec::new();
-    if !mmr {
-        at.push(TemplatePixel {
-            x: -(pattern_width as i32),
-            y: 0,
-        });
-        if template == 0 {
-            at.push(TemplatePixel { x: -3, y: -1 });
-            at.push(TemplatePixel { x: 2, y: -2 });
-            at.push(TemplatePixel { x: -2, y: -2 });
-        }
-    }
-
-    // Collective bitmap approach - decode one large bitmap then divide
-    let collective_width = (max_pattern_index + 1) * pattern_width;
-    let collective_bitmap = if mmr {
-        let data_slice = &decoding_context.decoder.data
-            [decoding_context.decoder.bp..decoding_context.decoder.data_end];
-        decode_mmr_bitmap(data_slice, collective_width, pattern_height, false)?
-    } else {
-        decode_bitmap(
-            false, // mmr
-            collective_width,
-            pattern_height,
-            template,
-            false, // prediction
-            None,  // skip
-            &at,
-            decoding_context,
-        )?
-    };
-
-    // Divide collective bitmap into patterns.
-    let mut patterns = Vec::new();
-    for i in 0..=max_pattern_index {
-        let mut pattern_bitmap = Vec::new();
-        let x_min = pattern_width * i;
-        let x_max = x_min + pattern_width;
-
-        for y in 0..pattern_height {
-            if y < collective_bitmap.len() {
-                let row = &collective_bitmap[y];
-                let pattern_row = if x_min < row.len() {
-                    row[x_min..x_max.min(row.len())].to_vec()
-                } else {
-                    vec![0u8; pattern_width]
-                };
-                pattern_bitmap.push(pattern_row);
-            } else {
-                pattern_bitmap.push(vec![0u8; pattern_width]);
-            }
-        }
-        patterns.push(pattern_bitmap);
-    }
-
-    Ok(patterns)
 }
 
 // Placeholder for Huffman tables
