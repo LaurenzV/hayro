@@ -26,5 +26,17 @@
   ],
   "5134": [
     "https://issues.apache.org/jira/secure/attachment/13022705/gs-bugzilla687307-2.pdf"
+  ],
+  "4326": [
+    // JPEG2000 image that doesn't render
+    "https://issues.apache.org/jira/secure/attachment/12941825/PDFJS-10026.pdf" 
+  ],
+  "4328": [
+    // JPEG2000 image that doesn't render
+    "https://issues.apache.org/jira/secure/attachment/12941881/001659-p14.pdf" 
+  ],
+  "2103": [
+    // Artifacts in the rendered JPEG image.
+    "https://issues.apache.org/jira/secure/attachment/12647559/000001_MTEXT_CS6.pdf"
   ]
 }
