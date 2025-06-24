@@ -4,7 +4,6 @@ use js_sys;
 use std::sync::Arc;
 use wasm_bindgen::prelude::*;
 
-// Custom logger to forward Rust logs to browser console
 struct ConsoleLogger;
 
 impl log::Log for ConsoleLogger {
@@ -21,7 +20,6 @@ impl log::Log for ConsoleLogger {
                 record.args()
             );
 
-            // Get level string for the log window
             let level_str = match record.level() {
                 log::Level::Error => "error",
                 log::Level::Warn => "warn",
@@ -30,14 +28,12 @@ impl log::Log for ConsoleLogger {
                 log::Level::Trace => "trace",
             };
 
-            // Log to browser console
             match record.level() {
                 log::Level::Error => web_sys::console::error_1(&message.clone().into()),
                 log::Level::Warn => web_sys::console::warn_1(&message.clone().into()),
                 _ => web_sys::console::log_1(&message.clone().into()),
             }
 
-            // Also log to our custom log window if the function exists
             if let Some(window) = web_sys::window() {
                 if let Ok(add_log_entry) = js_sys::Reflect::get(&window, &"addLogEntry".into()) {
                     if add_log_entry.is_function() {
@@ -67,7 +63,6 @@ impl PdfViewer {
     pub fn new() -> Self {
         console_error_panic_hook::set_once();
 
-        // Initialize logger to forward Rust logs to browser console
         if log::set_logger(&LOGGER).is_ok() {
             log::set_max_level(log::LevelFilter::Warn);
         }
@@ -97,20 +92,23 @@ impl PdfViewer {
 
     #[wasm_bindgen]
     pub fn render_current_page(&self) -> Result<Vec<u8>, JsValue> {
-        if let Some(pdf) = &self.pdf {
-            if self.current_page < self.total_pages {
-                let pixmaps = hayro_render::render_png(
-                    &pdf,
-                    2.0, // Fixed scale, no zoom
-                    Some(self.current_page..=self.current_page),
-                );
-
-                if let Some(png_data) = pixmaps.as_ref().and_then(|p| p.first()) {
-                    return Ok(png_data.clone());
-                }
-            }
+        let pdf = self.pdf.as_ref().ok_or("No PDF loaded")?;
+        
+        if self.current_page >= self.total_pages {
+            return Err(JsValue::from_str("Page out of bounds"));
         }
-        Err(JsValue::from_str("Failed to render page"))
+
+        let pixmaps = hayro_render::render_png(
+            pdf,
+            2.0,
+            Some(self.current_page..=self.current_page),
+        );
+
+        pixmaps
+            .as_ref()
+            .and_then(|p| p.first())
+            .cloned()
+            .ok_or_else(|| JsValue::from_str("Failed to render page"))
     }
 
     #[wasm_bindgen]
@@ -136,7 +134,7 @@ impl PdfViewer {
     #[wasm_bindgen]
     pub fn set_page(&mut self, page: usize) -> bool {
         if page > 0 && page <= self.total_pages {
-            self.current_page = page - 1; // Convert from 1-indexed to 0-indexed
+            self.current_page = page - 1;
             true
         } else {
             false
@@ -145,7 +143,7 @@ impl PdfViewer {
 
     #[wasm_bindgen]
     pub fn get_current_page(&self) -> usize {
-        self.current_page + 1 // Convert to 1-indexed
+        self.current_page + 1
     }
 
     #[wasm_bindgen]

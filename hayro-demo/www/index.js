@@ -17,12 +17,8 @@ async function run() {
     const pageInput = document.getElementById('page-input');
     const dropOverlay = document.getElementById('drop-overlay');
 
-    // Make drop zone clickable to open file dialog
-    dropZone.addEventListener('click', () => {
-        fileInput.click();
-    });
+    dropZone.addEventListener('click', () => fileInput.click());
 
-    // Prevent default drag behaviors
     const preventDefaults = (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -32,11 +28,9 @@ async function run() {
         document.addEventListener(eventName, preventDefaults, false);
     });
 
-    // Function to handle PDF files from drag and drop or file input
     function handlePDFDrop(e, files) {
         preventDefaults(e);
         
-        // Hide drop overlays
         dropZone.classList.remove('dragover');
         dropOverlay.style.display = 'none';
         
@@ -45,14 +39,12 @@ async function run() {
         }
     }
 
-    // Highlight drop zones when item is dragged over them
     ['dragenter', 'dragover'].forEach(eventName => {
         dropZone.addEventListener(eventName, (e) => {
             preventDefaults(e);
             dropZone.classList.add('dragover');
         }, false);
         
-        // Show drop overlay when dragging over viewer
         viewer.addEventListener(eventName, (e) => {
             preventDefaults(e);
             if (pdfViewer) {
@@ -61,7 +53,6 @@ async function run() {
         }, false);
     });
 
-    // Remove drag styling when leaving
     ['dragleave'].forEach(eventName => {
         dropZone.addEventListener(eventName, (e) => {
             preventDefaults(e);
@@ -70,30 +61,21 @@ async function run() {
         
         viewer.addEventListener(eventName, (e) => {
             preventDefaults(e);
-            // Only hide if we're leaving the viewer completely
             if (!viewer.contains(e.relatedTarget)) {
                 dropOverlay.style.display = 'none';
             }
         }, false);
     });
 
-    // Handle dropped files
-    dropZone.addEventListener('drop', (e) => {
-        handlePDFDrop(e, e.dataTransfer.files);
-    }, false);
+    dropZone.addEventListener('drop', (e) => handlePDFDrop(e, e.dataTransfer.files), false);
+    viewer.addEventListener('drop', (e) => handlePDFDrop(e, e.dataTransfer.files), false);
 
-    viewer.addEventListener('drop', (e) => {
-        handlePDFDrop(e, e.dataTransfer.files);
-    }, false);
-
-    // Handle file selection
     fileInput.addEventListener('change', (e) => {
         if (e.target.files.length > 0) {
             handleFile(e.target.files[0]);
         }
     });
 
-    // Navigation handlers
     prevButton.addEventListener('click', () => {
         if (pdfViewer && pdfViewer.previous_page()) {
             renderCurrentPage();
@@ -106,7 +88,6 @@ async function run() {
         }
     });
 
-    // Page input handler
     pageInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
             const pageNum = parseInt(pageInput.value);
@@ -118,7 +99,6 @@ async function run() {
         }
     });
 
-    // Handle file loading
     async function handleFile(file) {
         if (file.type !== 'application/pdf') {
             console.error('Please select a PDF file.');
@@ -134,36 +114,30 @@ async function run() {
         }
     }
 
-    // Load PDF data
     async function loadPDFData(uint8Array) {
         try {
             pdfViewer = new PdfViewer();
             await pdfViewer.load_pdf(uint8Array);
             
-            // Switch to viewer
             fileSelector.style.display = 'none';
             viewer.style.display = 'block';
             
             renderCurrentPage();
         } catch (error) {
             console.error('Error loading PDF:', error);
-            // Check if it's an encrypted PDF error
             if (error && error.toString().includes('encrypted')) {
                 console.warn('PDF appears to be encrypted and cannot be opened');
             }
-            // Reset state
             pdfViewer = null;
         }
     }
 
-    // Render current page
     async function renderCurrentPage() {
         if (!pdfViewer) return;
         
         try {
             const pngData = pdfViewer.render_current_page();
             
-            // Create blob and load image
             const blob = new Blob([pngData], { type: 'image/png' });
             const imageUrl = URL.createObjectURL(blob);
             
@@ -172,8 +146,6 @@ async function run() {
                 currentImage = img;
                 drawImage();
                 updatePageInfo();
-                
-                // Clean up the URL
                 URL.revokeObjectURL(imageUrl);
             };
             img.onerror = () => {
@@ -186,43 +158,34 @@ async function run() {
         }
     }
 
-    // Draw image on canvas
     function drawImage() {
         if (!currentImage) return;
 
         const ctx = canvas.getContext('2d');
         const dpr = window.devicePixelRatio || 1;
         
-        // Get viewport dimensions (minus some padding for controls)
         const viewportWidth = window.innerWidth;
-        const viewportHeight = window.innerHeight - 120; // Reserve space for controls
+        const viewportHeight = window.innerHeight - 120;
         
-        // Calculate scale to fit image within viewport while maintaining aspect ratio
         const scaleX = viewportWidth / currentImage.width;
         const scaleY = viewportHeight / currentImage.height;
-        const scale = Math.min(scaleX, scaleY, 1); // Don't scale up beyond original size
+        const scale = Math.min(scaleX, scaleY, 1);
         
-        // Calculate scaled dimensions
         const scaledWidth = currentImage.width * scale;
         const scaledHeight = currentImage.height * scale;
         
-        // Set canvas actual size accounting for device pixel ratio
         canvas.width = scaledWidth * dpr;
         canvas.height = scaledHeight * dpr;
         
-        // Set canvas display size (CSS pixels)
         canvas.style.width = scaledWidth + 'px';
         canvas.style.height = scaledHeight + 'px';
         
-        // Scale the drawing context to match device pixel ratio
         ctx.scale(dpr, dpr);
         
-        // Clear and draw scaled image
         ctx.clearRect(0, 0, scaledWidth, scaledHeight);
         ctx.drawImage(currentImage, 0, 0, scaledWidth, scaledHeight);
     }
 
-    // Update page information
     function updatePageInfo() {
         if (!pdfViewer) return;
         
@@ -233,12 +196,10 @@ async function run() {
         pageInput.value = currentPage;
         pageInput.max = totalPages;
         
-        // Update button states
         prevButton.disabled = currentPage === 1;
         nextButton.disabled = currentPage === totalPages;
     }
 
-    // Keyboard navigation
     document.addEventListener('keydown', (e) => {
         if (!pdfViewer) return;
         
@@ -260,26 +221,21 @@ async function run() {
         }
     });
 
-    // Handle window resize to refit PDF
     window.addEventListener('resize', () => {
         if (currentImage) {
             drawImage();
         }
     });
 
-    // Setup log window
     setupLogWindow();
 }
 
-// Setup log window functionality
 function setupLogWindow() {
     const logContent = document.getElementById('log-content');
     const clearLogsButton = document.getElementById('clear-logs');
 
-    // Clear logs on page load
     logContent.innerHTML = '';
 
-    // Function to add log entry
     window.addLogEntry = function(level, message) {
         const logEntry = document.createElement('div');
         logEntry.className = `log-entry ${level}`;
@@ -288,43 +244,41 @@ function setupLogWindow() {
         logEntry.innerHTML = `<span class="log-timestamp">[${timestamp}]</span>${message}`;
         
         logContent.appendChild(logEntry);
-        logContent.scrollTop = logContent.scrollHeight; // Auto-scroll to bottom
+        logContent.scrollTop = logContent.scrollHeight;
     };
 
-    // Clear logs button
     clearLogsButton.addEventListener('click', () => {
         logContent.innerHTML = '';
     });
     
-    // Add welcome message
     window.addLogEntry('info', 'Hayro PDF Demo initialized');
 
-    // Override console methods to also log to our window
-    const originalConsoleWarn = console.warn;
-    const originalConsoleError = console.error;
-    const originalConsoleLog = console.log;
-    const originalConsoleInfo = console.info;
+    const originalConsole = {
+        warn: console.warn,
+        error: console.error,
+        log: console.log,
+        info: console.info
+    };
 
     console.warn = function(...args) {
-        originalConsoleWarn.apply(console, args);
+        originalConsole.warn.apply(console, args);
         window.addLogEntry('warn', args.join(' '));
     };
 
     console.error = function(...args) {
-        originalConsoleError.apply(console, args);
+        originalConsole.error.apply(console, args);
         window.addLogEntry('error', args.join(' '));
     };
 
     console.log = function(...args) {
-        originalConsoleLog.apply(console, args);
+        originalConsole.log.apply(console, args);
         window.addLogEntry('info', args.join(' '));
     };
 
     console.info = function(...args) {
-        originalConsoleInfo.apply(console, args);
+        originalConsole.info.apply(console, args);
         window.addLogEntry('info', args.join(' '));
     };
 }
 
-// Start the application
-run().catch(console.error); 
+run().catch(console.error);
