@@ -1,2 +1,14 @@
 node_modules
 *.wasm
+
+www/hayro_demo_bg.wasm
+www/hayro_demo_bg.wasm.d.ts
+www/hayro_demo.js
+www/hayro_demo.d.ts
+www/package.json
+
+dist/
+target/
+
+.DS_Store
+Thumbs.db
