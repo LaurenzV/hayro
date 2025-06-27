@@ -45,6 +45,7 @@ pub(crate) fn parse_char_string(
         builder: &mut inner_builder,
         x: 0.0,
         y: 0.0,
+        sbx: 0.0,
         is_flexing: false,
     };
     _parse_char_string(&mut ctx, data, 0, &mut parser)?;
@@ -164,7 +165,7 @@ fn _parse_char_string(
                         let base_char = ctx.params.encoding_type.encode(p.stack.pop() as u8);
                         let dy = p.stack.pop();
                         let dx = p.stack.pop();
-                        let sbx = p.stack.pop();
+                        let asb = p.stack.pop();
 
                         ctx.has_seac = true;
 
@@ -178,7 +179,7 @@ fn _parse_char_string(
                             .get(&base_char.ok_or(OutlineError::InvalidSeacCode)?.to_string())
                             .ok_or(OutlineError::InvalidSeacCode)?;
                         _parse_char_string(ctx, base_char_string, depth + 1, p)?;
-                        p.x = dx + sbx;
+                        p.x = dx + p.sbx - asb;
                         p.y = dy;
 
                         let accent_char_string = ctx
@@ -197,6 +198,7 @@ fn _parse_char_string(
                         trace_op!("SBW");
                         p.x = p.stack.at(0);
                         p.y = p.stack.at(1);
+                        p.sbx = p.x;
 
                         p.stack.clear();
                     }
@@ -238,8 +240,8 @@ fn _parse_char_string(
             sb_operator::HSBW => {
                 trace_op!("HSBW");
 
-                p.x = p.stack.at(0);
-                p.y = 0.0;
+                p.x += p.stack.at(0);
+                p.sbx = p.x;
 
                 p.stack.clear();
             }

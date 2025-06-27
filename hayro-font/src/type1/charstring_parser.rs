@@ -6,6 +6,7 @@ use crate::type1::stream::Stream;
 pub(crate) struct CharStringParser<'a> {
     pub stack: ArgumentsStack<'a>,
     pub builder: &'a mut Builder<'a>,
+    pub sbx: f32,
     pub x: f32,
     pub y: f32,
     pub is_flexing: bool,
