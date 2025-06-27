@@ -75,6 +75,9 @@ impl ColorSpaceType {
                     let cal_dict = iter.next::<Dict>()?;
                     return Some(ColorSpaceType::CalRgb(CalRgb::new(&cal_dict)?));
                 }
+                DEVICE_RGB => return Some(ColorSpaceType::DeviceRgb),
+                DEVICE_GRAY => return Some(ColorSpaceType::DeviceGray),
+                DEVICE_CMYK => return Some(ColorSpaceType::DeviceCmyk),
                 LAB => {
                     let lab_dict = iter.next::<Dict>()?;
                     return Some(ColorSpaceType::Lab(Lab::new(&lab_dict)?));
