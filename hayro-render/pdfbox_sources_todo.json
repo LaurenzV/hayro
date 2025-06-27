@@ -1,4 +1,8 @@
 {
+  "1084": [
+    // Type 1 font fails to process
+    "https://issues.apache.org/jira/secure/attachment/12489950/w_4_2007.pdf"
+  ],
   "1442": [
     "https://issues.apache.org/jira/secure/attachment/12552794/clientfocus.pdf"
   ],
@@ -24,6 +28,26 @@
   "2241": [
     // Type1 font that fails to parse
     "https://issues.apache.org/jira/secure/attachment/12657611/2.pdf"
+  ],
+  "3654": [
+    // Non-binary Type1 encryption
+    "https://issues.apache.org/jira/secure/attachment/12848079/testcase2.pdf"
+  ],
+  "3754": [
+    // Type 1 font that fails to process
+    "https://issues.apache.org/jira/secure/attachment/12863088/PDFJS-7769.pdf"
+  ],
+  "3874": [
+    // Type 1 font that fails to process
+    "https://issues.apache.org/jira/secure/attachment/12878016/PDFJS-8644-p2.pdf"
+  ],
+  "3979": [
+    // Type 1 font that fails to process
+    "https://issues.apache.org/jira/secure/attachment/12894023/NullReadCharStrings.pdf"
+  ],
+  "4395": [
+    // Accents are positioned wrong
+    "https://issues.apache.org/jira/browse/PDFBOX-4395"
   ],
   "4914": [
     "https://issues.apache.org/jira/secure/attachment/13007430/POPPLER-938.pdf"
