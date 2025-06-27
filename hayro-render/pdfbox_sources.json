@@ -63,11 +63,29 @@
     "https://issues.apache.org/jira/secure/attachment/12651861/pattern-shading-2-4-noMatrix.pdf",
     "https://issues.apache.org/jira/secure/attachment/12651826/swftools-gradients.pdf"
   ],
+  "2170": {
+    "link": "https://issues.apache.org/jira/secure/attachment/12653047/002-002166.pdf",
+    "last_page": 0
+  },
+  "2192": {
+    "link": "https://issues.apache.org/jira/secure/attachment/12654203/PDFBOX-2192-006972.pdf",
+    "first_page": 23
+  },
+  "2202": {
+    "link": "https://issues.apache.org/jira/secure/attachment/12655282/PDFBOX-2202-003417.pdf",
+    "last_page": 0
+  },
   "2217": [
     "https://issues.apache.org/jira/secure/attachment/12656351/pdfbox-bug.pdf"
   ],
+  "2244": [
+    "https://issues.apache.org/jira/secure/attachment/12657999/PDFBOX-2244-040483.pdf"
+  ],
   "2344": [
     "https://issues.apache.org/jira/secure/attachment/12668313/PDFBOX-2344-233644-p10.pdf"
+  ],
+  "2448": [
+    "https://issues.apache.org/jira/secure/attachment/12676712/115258.pdf"
   ],
   "2726": [
     "https://issues.apache.org/jira/secure/attachment/12706706/PDFBOX-2726.pdf"

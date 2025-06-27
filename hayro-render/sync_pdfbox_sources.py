@@ -84,17 +84,56 @@ class PdfboxSourceSync:
         with open(self.sources_path, 'r') as f:
             sources = json.load(f)
         
-        print(f"📋 Found {len(sources)} PDFBOX issues with {sum(len(urls) for urls in sources.values())} total PDFs")
+        # Count total PDFs
+        total_pdfs = 0
+        for value in sources.values():
+            if isinstance(value, list):
+                total_pdfs += len(value)
+            elif isinstance(value, (dict, str)):
+                total_pdfs += 1
+        
+        print(f"📋 Found {len(sources)} PDFBOX issues with {total_pdfs} total PDFs")
         
         manifest_entries = []
         processed_count = 0
         failed_count = 0
         
-        for issue, urls in sources.items():
-            print(f"\n📦 Processing PDFBOX-{issue} ({len(urls)} PDFs)...")
+        for issue, value in sources.items():
+            # Handle single string, single object, or list format
+            if isinstance(value, list):
+                items = value
+            elif isinstance(value, (dict, str)):
+                # Single string or object - wrap in a list
+                items = [value]
+            else:
+                print(f"✘ Invalid format for issue {issue}: expected string, dict, or list, got {type(value)}")
+                failed_count += 1
+                continue
+                
+            print(f"\n📦 Processing PDFBOX-{issue} ({len(items)} PDFs)...")
             
-            for i, url in enumerate(urls):
-                test_name = self.generate_test_name(issue, i, len(urls))
+            for i, item in enumerate(items):
+                test_name = self.generate_test_name(issue, i, len(items))
+                
+                # Handle both string URLs and objects with link/first_page/last_page
+                if isinstance(item, str):
+                    # Simple string URL
+                    url = item
+                    first_page = None
+                    last_page = None
+                elif isinstance(item, dict):
+                    # Object with link and optional page range
+                    url = item.get('link')
+                    if not url:
+                        print(f"✘ Missing 'link' field for {test_name}")
+                        failed_count += 1
+                        continue
+                    first_page = item.get('first_page')
+                    last_page = item.get('last_page')
+                else:
+                    print(f"✘ Invalid item type for {test_name}: {type(item)}")
+                    failed_count += 1
+                    continue
                 
                 # Create .link file
                 link_path = self.pdfs_dir / f"{test_name}.link"
@@ -114,6 +153,13 @@ class PdfboxSourceSync:
                         "md5": md5_hash,
                         "link": True
                     }
+                    
+                    # Add page range if specified
+                    if first_page is not None:
+                        manifest_entry["first_page"] = first_page
+                    if last_page is not None:
+                        manifest_entry["last_page"] = last_page
+                    
                     manifest_entries.append(manifest_entry)
                     processed_count += 1
                 else:
@@ -147,9 +193,17 @@ class PdfboxSourceSync:
             
         # Generate expected test names
         expected_names = set()
-        for issue, urls in sources.items():
-            for i in range(len(urls)):
-                test_name = self.generate_test_name(issue, i, len(urls))
+        for issue, value in sources.items():
+            # Handle single string, single object, or list format
+            if isinstance(value, list):
+                items = value
+            elif isinstance(value, (dict, str)):
+                items = [value]
+            else:
+                continue
+                
+            for i in range(len(items)):
+                test_name = self.generate_test_name(issue, i, len(items))
                 expected_names.add(test_name)
         
         removed_count = 0
