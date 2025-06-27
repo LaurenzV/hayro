@@ -57,10 +57,6 @@
     // Type3 text fails to render
     "https://issues.apache.org/jira/secure/attachment/12924707/example.pdf"
   ],
-  "4395": [
-    // Accents are positioned wrong
-    "https://issues.apache.org/jira/secure/attachment/12950590/PDFJS-4130.pdf"
-  ],
   "4914": [
     "https://issues.apache.org/jira/secure/attachment/13007430/POPPLER-938.pdf"
   ],

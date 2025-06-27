@@ -1,9 +1,9 @@
 use crate::OutlineError;
 use crate::argstack::ArgumentsStack;
-use crate::type1::Parameters;
 use crate::type1::charstring_parser::CharStringParser;
 use crate::type1::operator::{sb_operator, tb_operator};
 use crate::type1::stream::Stream;
+use crate::type1::{EncodingType, Parameters};
 use crate::{Builder, OutlineBuilder, RectF};
 use log::{debug, error, trace, warn};
 
@@ -161,8 +161,8 @@ fn _parse_char_string(
                             return Err(OutlineError::InvalidArgumentsStackLength);
                         }
 
-                        let accent_char = ctx.params.encoding_type.encode(p.stack.pop() as u8);
-                        let base_char = ctx.params.encoding_type.encode(p.stack.pop() as u8);
+                        let accent_char = EncodingType::Standard.encode(p.stack.pop() as u8);
+                        let base_char = EncodingType::Standard.encode(p.stack.pop() as u8);
                         let dy = p.stack.pop();
                         let dx = p.stack.pop();
                         let asb = p.stack.pop();
