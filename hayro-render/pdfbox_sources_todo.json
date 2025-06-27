@@ -33,10 +33,6 @@
     // Type1 font that fails to parse
     "https://issues.apache.org/jira/secure/attachment/12657611/2.pdf"
   ],
-  "2959": [
-    // Another test of Type3 font very bold, maybe a good debugging example
-    "https://issues.apache.org/jira/secure/attachment/12754347/PDFBOX-2959-reduced.pdf"
-  ],
   "3045": [
     // Flate filter fails to apply
     "https://issues.apache.org/jira/secure/attachment/12767969/PDFbox2.pdf"
