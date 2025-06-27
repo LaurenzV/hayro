@@ -4,7 +4,7 @@ use crate::PdfData;
 use crate::document::page::{Page, Pages};
 use crate::object::Object;
 use crate::reader::ReaderContext;
-use crate::xref::{XRef, fallback, root_xref, XRefError};
+use crate::xref::{XRef, XRefError, fallback, root_xref};
 
 /// A PDF file.
 pub struct Pdf {
@@ -21,7 +21,7 @@ impl Pdf {
             Err(e) => match e {
                 XRefError::Unknown => fallback(data)?,
                 XRefError::Encrypted => return None,
-            }
+            },
         };
 
         Some(Self { xref })

@@ -21,14 +21,15 @@ pub(crate) const XREF_ENTRY_LEN: usize = 20;
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum XRefError {
     Unknown,
-    Encrypted
+    Encrypted,
 }
 
 /// Parse the "root" xref from the PDF.
 pub(crate) fn root_xref(data: PdfData) -> Result<XRef, XRefError> {
     let mut xref_map = FxHashMap::default();
     let xref_pos = find_last_xref_pos(data.as_ref().as_ref()).ok_or(XRefError::Unknown)?;
-    let trailer = populate_xref_impl(data.as_ref().as_ref(), xref_pos, &mut xref_map).ok_or(XRefError::Unknown)?;
+    let trailer = populate_xref_impl(data.as_ref().as_ref(), xref_pos, &mut xref_map)
+        .ok_or(XRefError::Unknown)?;
 
     XRef::new(data.clone(), xref_map, &trailer, false)
 }
@@ -101,15 +102,16 @@ impl XRef {
         });
 
         let mut r = Reader::new(&trailer_dict_data);
-        let trailer_dict = r.read_with_context::<Dict>(ReaderContext::new(&xref, false))
+        let trailer_dict = r
+            .read_with_context::<Dict>(ReaderContext::new(&xref, false))
             .ok_or(XRefError::Unknown)?;
-        
+
         if trailer_dict.get::<Dict>(ENCRYPT).is_some() {
             warn!("encrypted PDF files are not yet supported");
-            
+
             return Err(XRefError::Encrypted);
         }
-        
+
         let root = trailer_dict.get::<Dict>(ROOT).ok_or(XRefError::Unknown)?;
         let pages_ref = root.get_ref(PAGES).ok_or(XRefError::Unknown)?;
 

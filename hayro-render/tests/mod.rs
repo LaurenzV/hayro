@@ -158,7 +158,7 @@ pub fn run_test(name: &str, file_path: &str, range_str: Option<&str>) {
     let pdf = Pdf::new(data).unwrap();
 
     let range = range_str.and_then(parse_range);
-    check_render(name, hayro_render::render_png(&pdf, 1.0, range));
+    check_render(name, hayro_render::render_png(&pdf, 1.0, range).unwrap());
 }
 
 pub fn get_diff(expected_image: &RgbaImage, actual_image: &RgbaImage) -> (RgbaImage, u32) {

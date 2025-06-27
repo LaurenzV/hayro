@@ -44,6 +44,7 @@
     "https://issues.apache.org/jira/secure/attachment/12647115/PDFBOX-2100-gouraud-RGB-function.pdf"
   ],
   "1958": "https://issues.apache.org/jira/secure/attachment/12632189/cinnebar.pdf",
+  "2046": "https://issues.apache.org/jira/secure/attachment/12642198/issue.pdf",
   "2112": "https://issues.apache.org/jira/secure/attachment/12648299/main%20doc.pdf",
   "2156": [
     "https://issues.apache.org/jira/secure/attachment/12651861/pattern-shading-2-4-noMatrix.pdf",
@@ -61,6 +62,11 @@
     "link": "https://issues.apache.org/jira/secure/attachment/12655282/PDFBOX-2202-003417.pdf",
     "last_page": 0
   },
+  "2216": {
+    "link": "https://issues.apache.org/jira/secure/attachment/12656342/PDFBOX-2216-025977.pdf",
+    "first_page": 2,
+    "last_page": 2
+  },
   "2217": "https://issues.apache.org/jira/secure/attachment/12656351/pdfbox-bug.pdf",
   "2244": "https://issues.apache.org/jira/secure/attachment/12657999/PDFBOX-2244-040483.pdf",
   "2344": "https://issues.apache.org/jira/secure/attachment/12668313/PDFBOX-2344-233644-p10.pdf",
@@ -69,10 +75,12 @@
   "2737": "https://issues.apache.org/jira/secure/attachment/12708373/test.pdf",
   "3185": "https://issues.apache.org/jira/secure/attachment/12780980/a.pdf",
   "3246": "https://issues.apache.org/jira/secure/attachment/12789065/LI_Eingangsrechnung_ERX2388_2016_02_11_133551%20v1_0.pdf",
+  "3273": "https://issues.apache.org/jira/secure/attachment/12793803/PDFBOX-3273.pdf",
   "3423": "https://issues.apache.org/jira/secure/attachment/12818567/testPDF.pdf",
   "3562": "https://issues.apache.org/jira/secure/attachment/12838397/PDFBOX-3562-BitsPerFlag2.pdf",
   "3640": "https://issues.apache.org/jira/secure/attachment/12844801/PDFBOX-3640.pdf",
   "3647": "https://issues.apache.org/jira/secure/attachment/12846620/PDFBOX-3647.pdf",
+  "3676": "https://issues.apache.org/jira/secure/attachment/12851010/PDFBOX-3676.pdf",
   "3678": "https://issues.apache.org/jira/secure/attachment/12851414/BTB0010010004.1-Bit_Jbig2.pdf",
   "3769": "https://issues.apache.org/jira/secure/attachment/12865265/jbig2.pdf",
   "4110": "https://issues.apache.org/jira/secure/attachment/12910605/flight_receipt.pdf",

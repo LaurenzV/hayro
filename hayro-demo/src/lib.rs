@@ -93,16 +93,13 @@ impl PdfViewer {
     #[wasm_bindgen]
     pub fn render_current_page(&self) -> Result<Vec<u8>, JsValue> {
         let pdf = self.pdf.as_ref().ok_or("No PDF loaded")?;
-        
+
         if self.current_page >= self.total_pages {
             return Err(JsValue::from_str("Page out of bounds"));
         }
 
-        let pixmaps = hayro_render::render_png(
-            pdf,
-            2.0,
-            Some(self.current_page..=self.current_page),
-        );
+        let pixmaps =
+            hayro_render::render_png(pdf, 2.0, Some(self.current_page..=self.current_page));
 
         pixmaps
             .as_ref()

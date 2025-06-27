@@ -379,33 +379,41 @@ pub fn render(page: &Page, scale: f32) -> Pixmap {
     pixmap
 }
 
-pub fn render_png(pdf: &Pdf, scale: f32, range: Option<RangeInclusive<usize>>) -> Option<Vec<Vec<u8>>> {
+pub fn render_png(
+    pdf: &Pdf,
+    scale: f32,
+    range: Option<RangeInclusive<usize>>,
+) -> Option<Vec<Vec<u8>>> {
     if let Some(pages) = pdf.pages() {
-        let rendered = pages.iter().enumerate().flat_map(|(idx, page)| {
-            if range.clone().is_some_and(|range| !range.contains(&idx)) {
-                return None;
-            }
+        let rendered = pages
+            .iter()
+            .enumerate()
+            .flat_map(|(idx, page)| {
+                if range.clone().is_some_and(|range| !range.contains(&idx)) {
+                    return None;
+                }
 
-            let pixmap = render(page, scale);
+                let pixmap = render(page, scale);
 
-            let mut png_data = Vec::new();
-            let cursor = Cursor::new(&mut png_data);
-            let encoder = PngEncoder::new(cursor);
-            encoder
-                .write_image(
-                    pixmap.data_as_u8_slice(),
-                    pixmap.width() as u32,
-                    pixmap.height() as u32,
-                    ExtendedColorType::Rgba8,
-                )
-                .expect("Failed to encode image");
+                let mut png_data = Vec::new();
+                let cursor = Cursor::new(&mut png_data);
+                let encoder = PngEncoder::new(cursor);
+                encoder
+                    .write_image(
+                        pixmap.data_as_u8_slice(),
+                        pixmap.width() as u32,
+                        pixmap.height() as u32,
+                        ExtendedColorType::Rgba8,
+                    )
+                    .expect("Failed to encode image");
 
-            Some(png_data)
-        }).collect();
-        
+                Some(png_data)
+            })
+            .collect();
+
         return Some(rendered);
     }
-    
+
     None
 }
 

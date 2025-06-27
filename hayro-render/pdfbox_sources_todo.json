@@ -21,6 +21,10 @@
   "1968": [
     "https://issues.apache.org/jira/secure/attachment/12633464/texample-rgb-triangle.pdf"
   ],
+  "2241": [
+    // Type1 font that fails to parse
+    "https://issues.apache.org/jira/secure/attachment/12657611/2.pdf"
+  ],
   "4914": [
     "https://issues.apache.org/jira/secure/attachment/13007430/POPPLER-938.pdf"
   ],
