@@ -58,4 +58,13 @@
   "918": "pdf not loaded",
   "921": "probably jbig bug, also in firefox",
   "994": "transparency group",
+  "1174": "font cannot be read",
+  "1416": "missing image",
+  "1442": "black bar in plots",
+  "1446": "page completely red",
+  "1570": "transparency groups",
+  "1593": "encryption",
+  "1606": "fails to parse",
+  "1607": "maybe a good test case for ofnt fallback",
+  "1689": "font fallback"
 }
