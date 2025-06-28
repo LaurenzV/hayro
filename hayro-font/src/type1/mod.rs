@@ -82,7 +82,7 @@ impl<'a> Table<'a> {
                 }
                 b"/Encoding" => params.encoding_type = s.read_encoding()?,
                 b"eexec" => {
-                    let decrypted = decrypt(s.tail()?)?;
+                    let decrypted = decrypt(s.tail()?, true)?;
                     Self::parse_eexec(&decrypted, &mut params)?;
                 }
                 _ => {}
@@ -99,19 +99,25 @@ impl<'a> Table<'a> {
         let mut s = Stream::new(data);
 
         let mut len_iv = 4;
+        let mut use_decryption = true;
 
         while let Some(token) = s.next_token() {
             match token {
                 b"/Subrs" => {
-                    params.subroutines = s.parse_subroutines(len_iv)?;
+                    params.subroutines = s.parse_subroutines(len_iv, use_decryption)?;
                 }
                 b"/CharStrings" => {
-                    if let Some(chars) = s.parse_charstrings(len_iv) {
+                    if let Some(chars) = s.parse_charstrings(len_iv, use_decryption) {
                         params.charstrings = chars;
                     }
                 }
                 b"/lenIV" => {
-                    len_iv = s.next_int()? as usize;
+                    len_iv = s.next_int()?;
+
+                    if len_iv < 0 {
+                        use_decryption = false;
+                        len_iv = 0;
+                    }
                 }
                 _ => {}
             }
@@ -153,7 +159,11 @@ impl<'a> Stream<'a> {
         parse_int(std::str::from_utf8(self.next_token()?).ok()?)
     }
 
-    fn parse_charstrings(&mut self, len_iv: usize) -> Option<HashMap<String, Vec<u8>>> {
+    fn parse_charstrings(
+        &mut self,
+        len_iv: i64,
+        use_decryption: bool,
+    ) -> Option<HashMap<String, Vec<u8>>> {
         let mut charstrings = HashMap::new();
 
         let mut first_glyph_name = None;
@@ -195,7 +205,7 @@ impl<'a> Stream<'a> {
 
                 self.read_byte();
             } else {
-                let tok = self.next_token()?;
+                let tok = self.next_token().unwrap();
                 if tok == b"end" {
                     break;
                 }
@@ -206,8 +216,8 @@ impl<'a> Stream<'a> {
                     glyph_name = tok;
                 }
 
-                bin_len = self.next_int()?;
-                let tok = self.next_token()?;
+                bin_len = self.next_int().unwrap();
+                let tok = self.next_token().unwrap();
 
                 if tok == RD || tok == RD_ALT {
                     self.read_byte();
@@ -218,14 +228,15 @@ impl<'a> Stream<'a> {
                 }
             }
 
-            let encrypted_bytes = self.read_bytes(bin_len as usize)?;
-            let decrypted_bytes = decrypt_charstring(encrypted_bytes, len_iv)?;
+            let encrypted_bytes = self.read_bytes(bin_len as usize).unwrap();
+            let decrypted_bytes =
+                decrypt_charstring(encrypted_bytes, len_iv, use_decryption).unwrap();
             charstrings.insert(
                 std::str::from_utf8(glyph_name).ok()?.to_string(),
                 decrypted_bytes,
             );
 
-            let tok = self.next_token()?;
+            let tok = self.next_token().unwrap();
             if tok == ND || tok == ND_ALT {
             } else {
                 error!("invalid charstring in end, expected ND, found {:?}", tok);
@@ -237,7 +248,11 @@ impl<'a> Stream<'a> {
         Some(charstrings)
     }
 
-    fn parse_subroutines(&mut self, len_iv: usize) -> Option<HashMap<u32, Vec<u8>>> {
+    fn parse_subroutines(
+        &mut self,
+        len_iv: i64,
+        use_decryption: bool,
+    ) -> Option<HashMap<u32, Vec<u8>>> {
         let mut subroutines = HashMap::new();
 
         let num_subrs = parse_int(std::str::from_utf8(self.next_token()?).ok()?)?;
@@ -288,7 +303,7 @@ impl<'a> Stream<'a> {
             let encrypted_bytes = self.read_bytes(bin_len as usize)?;
             subroutines.insert(
                 subr_idx as u32,
-                decrypt_charstring(encrypted_bytes, len_iv)?,
+                decrypt_charstring(encrypted_bytes, len_iv, use_decryption)?,
             );
 
             let mut tok = self.next_token()?;
@@ -530,17 +545,17 @@ impl<'a> Stream<'a> {
     }
 }
 
-fn decrypt_charstring(data: &[u8], len_iv: usize) -> Option<Vec<u8>> {
+fn decrypt_charstring(data: &[u8], len_iv: i64, use_decryption: bool) -> Option<Vec<u8>> {
     let mut r = 4330;
     let mut cb: Copied<Iter<u8>> = data.iter().copied();
     let mut decrypted = vec![];
 
     for _ in 0..len_iv {
-        let _ = decrypt_byte(cb.next()?, &mut r);
+        let _ = decrypt_byte(cb.next()?, &mut r, use_decryption);
     }
 
     for byte in cb {
-        decrypted.push(decrypt_byte(byte, &mut r))
+        decrypted.push(decrypt_byte(byte, &mut r, use_decryption))
     }
 
     Some(decrypted)

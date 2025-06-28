@@ -1,14 +1,14 @@
 use super::stream::Stream;
 use log::error;
 
-pub(crate) fn decrypt(data: &[u8]) -> Option<Vec<u8>> {
+pub(crate) fn decrypt(data: &[u8], use_decryption: bool) -> Option<Vec<u8>> {
     let mut stream = Stream::new(data);
     stream.skip_whitespaces();
 
     let mut b00 = None;
     let mut r: u32 = 55665;
 
-    let mut decrypt = |b: u8| decrypt_byte(b, &mut r);
+    let mut decrypt = |b: u8| decrypt_byte(b, &mut r, use_decryption);
 
     for _ in 0..1000 {
         let c = stream.read_byte()?;
@@ -100,11 +100,15 @@ pub(crate) fn decrypt(data: &[u8]) -> Option<Vec<u8>> {
     }
 }
 
-pub(crate) fn decrypt_byte(cipher: u8, r: &mut u32) -> u8 {
+pub(crate) fn decrypt_byte(cipher: u8, r: &mut u32, use_decryption: bool) -> u8 {
     let cipher = cipher as u32;
-    let plain = cipher ^ (*r >> 8);
-    *r = ((cipher + *r).wrapping_mul(52845) + 22719) & 0xFFFF;
-    (plain & 0xFF) as u8
+    if use_decryption {
+        let plain = cipher ^ (*r >> 8);
+        *r = ((cipher + *r).wrapping_mul(52845) + 22719) & 0xFFFF;
+        (plain & 0xFF) as u8
+    } else {
+        (cipher & 0xFF) as u8
+    }
 }
 
 fn is_white_space_after_token_eexec(c: u8) -> bool {
