@@ -21,6 +21,10 @@
   "1968": [
     "https://issues.apache.org/jira/secure/attachment/12633464/texample-rgb-triangle.pdf"
   ],
+  "2452": [
+    // Color mask
+    "https://issues.apache.org/jira/secure/attachment/12676864/test.pdf"
+  ],
   "3045": [
     // Flate filter fails to apply
     "https://issues.apache.org/jira/secure/attachment/12767969/PDFbox2.pdf"

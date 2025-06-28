@@ -232,6 +232,10 @@
     "file": "pdfs/bug1627427_reduced.pdf"
   },
   {
+    "id": "bug1650302_reduced",
+    "file": "pdfs/bug1650302_reduced.pdf"
+  },
+  {
     "id": "bug1703683_page2_reduced",
     "file": "pdfs/bug1703683_page2_reduced.pdf"
   },
@@ -464,6 +468,13 @@
   {
     "id": "issue840",
     "file": "pdfs/issue840.pdf"
+  },
+  {
+    "id": "issue8895",
+    "file": "pdfs/issue8895.link",
+    "md5": "098658008fc2bf7d433fd0d6d468a9e1",
+    "link": true,
+    "last_page": 0
   },
   {
     "id": "jbig2_symbol_offset",
