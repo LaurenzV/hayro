@@ -106,7 +106,9 @@ impl<'a> Table<'a> {
                     params.subroutines = s.parse_subroutines(len_iv)?;
                 }
                 b"/CharStrings" => {
-                    params.charstrings = s.parse_charstrings(len_iv)?;
+                    if let Some(chars) = s.parse_charstrings(len_iv) {
+                        params.charstrings = chars;
+                    }
                 }
                 b"/lenIV" => {
                     len_iv = s.next_int()? as usize;

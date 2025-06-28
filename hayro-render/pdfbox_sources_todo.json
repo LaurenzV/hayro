@@ -25,10 +25,6 @@
   "1968": [
     "https://issues.apache.org/jira/secure/attachment/12633464/texample-rgb-triangle.pdf"
   ],
-  "2241": [
-    // Type1 font that fails to parse
-    "https://issues.apache.org/jira/secure/attachment/12657611/2.pdf"
-  ],
   "3045": [
     // Flate filter fails to apply
     "https://issues.apache.org/jira/secure/attachment/12767969/PDFbox2.pdf"
