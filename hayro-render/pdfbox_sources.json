@@ -91,6 +91,10 @@
     "last_page": 0
   },
   "1867": "https://issues.apache.org/jira/secure/attachment/12625362/Document2.pdf",
+  "1868": "https://issues.apache.org/jira/secure/attachment/12625395/script-font.pdf",
+  "1875": "https://issues.apache.org/jira/secure/attachment/12652654/PDFBOX-1861-bbox.pdf",
+  "1876": "https://issues.apache.org/jira/secure/attachment/12630333/PDFBOX-1876-duotone.pdf",
+  "1879": "https://issues.apache.org/jira/secure/attachment/12626656/stinky_vat.pdf",
   "1915": [
     "https://issues.apache.org/jira/secure/attachment/12628793/asy-tensor.pdf",
     "https://issues.apache.org/jira/secure/attachment/12646784/asy-tensor-rainbow.pdf",
@@ -112,22 +116,36 @@
     "https://issues.apache.org/jira/secure/attachment/12628796/XYZsweep.pdf",
     "https://issues.apache.org/jira/secure/attachment/12630272/uniekekans_test.pdf"
   ],
+  "1918": {
+    "link": "https://issues.apache.org/jira/secure/attachment/12637093/rpt1390780234888753.pdf",
+    "last_page": 0
+  },
+  "1927": "https://issues.apache.org/jira/secure/attachment/12629864/FlexRiskTrackerPrompt_166.pdf",
+  "1931": "https://issues.apache.org/jira/secure/attachment/12630272/uniekekans_test.pdf",
   "1936": [
     "https://issues.apache.org/jira/secure/attachment/12630566/pslib-shading.pdf",
     "https://issues.apache.org/jira/secure/attachment/12630564/color_gradient.pdf"
   ],
+  "1938": "https://issues.apache.org/jira/secure/attachment/12630679/BadText.pdf",
+  "1940": "https://issues.apache.org/jira/secure/attachment/12630966/input.pdf",
+  "1949": "https://issues.apache.org/jira/secure/attachment/12631170/PDFBOX-1435_12102.pdf",
+  "1950": "https://issues.apache.org/jira/secure/attachment/12631271/PDFBOX-1950.pdf",
   "1966": [
     "https://issues.apache.org/jira/secure/attachment/12633430/asy-functionshading.pdf",
     "https://issues.apache.org/jira/secure/attachment/12633431/hsv-shading.pdf"
   ],
   "1970": "https://issues.apache.org/jira/secure/attachment/12633540/asy-gouraud.pdf",
+  "1997": "https://issues.apache.org/jira/secure/attachment/12636381/text_graphic_image.pdf",
   "1200": [
     "https://issues.apache.org/jira/secure/attachment/12647112/PDFBOX-2100-gouraud-CMYK-function.pdf",
     "https://issues.apache.org/jira/secure/attachment/12647115/PDFBOX-2100-gouraud-RGB-function.pdf"
   ],
   "1958": "https://issues.apache.org/jira/secure/attachment/12632189/cinnebar.pdf",
   "2046": "https://issues.apache.org/jira/secure/attachment/12642198/issue.pdf",
+  "2090": "https://issues.apache.org/jira/secure/attachment/12646348/Kommunikationsbedingungen-Einlagen_FIDOR-Bank.pdf",
+  "2091": "https://issues.apache.org/jira/secure/attachment/12646305/missing_yaccute.pdf",
   "2112": "https://issues.apache.org/jira/secure/attachment/12648299/main%20doc.pdf",
+  "2142": "https://issues.apache.org/jira/secure/attachment/12650448/PDFBOX-2142.pdf",
   "2156": [
     "https://issues.apache.org/jira/secure/attachment/12651861/pattern-shading-2-4-noMatrix.pdf",
     "https://issues.apache.org/jira/secure/attachment/12651826/swftools-gradients.pdf"
@@ -135,6 +153,17 @@
   "2170": {
     "link": "https://issues.apache.org/jira/secure/attachment/12653047/002-002166.pdf",
     "last_page": 0
+  },
+  "2171": "https://issues.apache.org/jira/secure/attachment/12653054/002-002710-p14.pdf",
+  "2176": {
+    "link": "https://issues.apache.org/jira/secure/attachment/12653583/000049.pdf",
+    "last_page": 0
+  },
+  "2185": "https://issues.apache.org/jira/secure/attachment/12654107/example_013.pdf",
+  "2187": "https://issues.apache.org/jira/secure/attachment/12654123/tiffT6-line1002-002145.pdf",
+  "2191": {
+    "link": "https://issues.apache.org/jira/secure/attachment/12654200/PDFBOX-2191-006816.pdf",
+    "last_page": 1
   },
   "2192": {
     "link": "https://issues.apache.org/jira/secure/attachment/12654203/PDFBOX-2192-006972.pdf",

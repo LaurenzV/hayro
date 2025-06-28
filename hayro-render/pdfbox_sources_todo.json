@@ -66,5 +66,15 @@
   "1593": "encryption",
   "1606": "fails to parse",
   "1607": "maybe a good test case for ofnt fallback",
-  "1689": "font fallback"
+  "1689": "font fallback",
+  "1908": "transparency groups",
+  "1910": "encryption",
+  "1911": "jpx + mask on first page?",
+  "1934": "color mask",
+  "2006": "failed to load pdf",
+  "2027": "failed to load pdf",
+  "2059": "missing characters",
+  "2137": "missing text",
+  "2163": "infinite loop, inline image",
+  "2180": "index out of bounds error"
 }
