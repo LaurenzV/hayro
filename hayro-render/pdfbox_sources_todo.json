@@ -25,10 +25,6 @@
     // Flate filter fails to apply
     "https://issues.apache.org/jira/secure/attachment/12767969/PDFbox2.pdf"
   ],
-  "4228": [
-    // Type3 text fails to render
-    "https://issues.apache.org/jira/secure/attachment/12924707/example.pdf"
-  ],
   "4914": [
     "https://issues.apache.org/jira/secure/attachment/13007430/POPPLER-938.pdf"
   ],
