@@ -216,7 +216,11 @@ impl<'a> Stream<'a> {
                     glyph_name = tok;
                 }
 
-                bin_len = self.next_int().unwrap();
+                // See PDFBOX-3979.
+                let Some(len) = self.next_int() else {
+                    break;
+                };
+                bin_len = len;
                 let tok = self.next_token().unwrap();
 
                 if tok == RD || tok == RD_ALT {

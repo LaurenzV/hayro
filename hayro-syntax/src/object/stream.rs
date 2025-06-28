@@ -168,7 +168,7 @@ fn parse_fallback<'a>(r: &mut Reader<'a>, dict: &Dict<'a>) -> Option<Stream<'a>>
     let start = r.offset();
 
     loop {
-        if r.peek_byte()?.is_ascii_whitespace() {
+        if r.peek_byte()?.is_ascii_whitespace() || r.peek_tag(b"endstream").is_some() {
             let length = r.offset() - start;
             let data = data_start.get(..length)?;
 

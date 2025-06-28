@@ -22,7 +22,7 @@ impl Type1Font {
         } else if is_cff(dict) {
             Self(Kind::Cff(CffKind::new(dict)?))
         } else if is_type1(dict) {
-            Self(Kind::Type1(Type1Kind::new(dict)))
+            Self(Kind::Type1(Type1Kind::new(dict)?))
         } else {
             warn!("unable to load type1 font, falling back to Times New Roman");
             Self(Kind::Standard(StandardKind::new_with_standard(
@@ -151,23 +151,23 @@ struct Type1Kind {
 }
 
 impl Type1Kind {
-    fn new(dict: &Dict) -> Self {
-        let descriptor = dict.get::<Dict>(FONT_DESC).unwrap();
+    fn new(dict: &Dict) -> Option<Self> {
+        let descriptor = dict.get::<Dict>(FONT_DESC)?;
         let data = descriptor.get::<Stream>(FONT_FILE).unwrap();
-        let font = Type1FontBlob::new(Arc::new(data.decoded().unwrap().to_vec()));
+        let font = Type1FontBlob::new(Arc::new(data.decoded()?.to_vec()));
 
         let (encoding, encodings) = read_encoding(dict);
         let widths = read_widths(dict, &descriptor);
 
         let glyph_simulator = GlyphSimulator::new();
 
-        Self {
+        Some(Self {
             font,
             encoding,
             glyph_simulator,
             widths,
             encodings,
-        }
+        })
     }
 
     fn string_to_glyph(&self, string: &str) -> GlyphId {

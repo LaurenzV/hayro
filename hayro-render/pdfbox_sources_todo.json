@@ -29,10 +29,6 @@
     // Flate filter fails to apply
     "https://issues.apache.org/jira/secure/attachment/12767969/PDFbox2.pdf"
   ],
-  "3979": [
-    // Type 1 font that fails to process
-    "https://issues.apache.org/jira/secure/attachment/12894023/NullReadCharStrings.pdf"
-  ],
   "4228": [
     // Type3 text fails to render
     "https://issues.apache.org/jira/secure/attachment/12924707/example.pdf"
