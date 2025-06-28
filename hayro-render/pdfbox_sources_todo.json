@@ -39,10 +39,6 @@
   "5134": [
     "https://issues.apache.org/jira/secure/attachment/13022705/gs-bugzilla687307-2.pdf"
   ],
-  "5963": [
-    // Type3 text with weird spacing
-    "https://issues.apache.org/jira/secure/attachment/13074981/PDFJS-19532-Type3.pdf"
-  ],
   "4326": [
     // JPEG2000 image that doesn't render
     "https://issues.apache.org/jira/secure/attachment/12941825/PDFJS-10026.pdf" 

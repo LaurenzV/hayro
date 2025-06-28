@@ -417,3 +417,4 @@ use crate::run_test;
 #[test] fn pdfbox_5657() { run_test("pdfbox_5657", "downloads/pdfbox/5657.pdf", None); }
 #[test] fn pdfbox_5706() { run_test("pdfbox_5706", "downloads/pdfbox/5706.pdf", None); }
 #[test] fn pdfbox_5738() { run_test("pdfbox_5738", "downloads/pdfbox/5738.pdf", None); }
+#[test] fn pdfbox_5963() { run_test("pdfbox_5963", "downloads/pdfbox/5963.pdf", None); }

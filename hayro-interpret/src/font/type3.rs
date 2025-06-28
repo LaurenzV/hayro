@@ -3,7 +3,7 @@ use crate::context::Context;
 use crate::device::Device;
 use crate::font::glyph_simulator::GlyphSimulator;
 use crate::font::true_type::{read_encoding, read_widths};
-use crate::font::{Glyph, Type3Glyph, UNITS_PER_EM};
+use crate::font::{Encoding, Glyph, Type3Glyph, UNITS_PER_EM};
 use crate::image::{RgbaImage, StencilImage};
 use crate::paint::Paint;
 use crate::{FillProps, StrokeProps, interpret};
@@ -20,6 +20,7 @@ use std::collections::HashMap;
 #[derive(Debug)]
 pub(crate) struct Type3<'a> {
     widths: Vec<f32>,
+    encoding: Encoding,
     encodings: HashMap<u8, String>,
     dict: Dict<'a>,
     char_procs: HashMap<String, Stream<'a>>,
@@ -29,7 +30,7 @@ pub(crate) struct Type3<'a> {
 
 impl<'a> Type3<'a> {
     pub(crate) fn new(dict: &Dict<'a>) -> Self {
-        let (_, encodings) = read_encoding(dict);
+        let (encoding, encodings) = read_encoding(dict);
         let widths = read_widths(dict, dict);
 
         let matrix = Affine::new(
@@ -52,6 +53,7 @@ impl<'a> Type3<'a> {
 
         Self {
             glyph_simulator: GlyphSimulator::new(),
+            encoding,
             char_procs,
             widths,
             encodings,
@@ -63,6 +65,8 @@ impl<'a> Type3<'a> {
     pub(crate) fn map_code(&self, code: u8) -> GlyphId {
         self.encodings
             .get(&code)
+            .map(|s| s.as_str())
+            .or_else(|| self.encoding.map_code(code))
             .map(|g| self.glyph_simulator.string_to_glyph(g))
             .unwrap_or(GlyphId::NOTDEF)
     }
