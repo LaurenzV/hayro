@@ -48,5 +48,8 @@
     "https://issues.apache.org/jira/secure/attachment/12647559/000001_MTEXT_CS6.pdf"
   ],
   "423": "password-protected",
-  "457": "CCIT-encoded, failed to parse stream"
+  "457": "CCIT-encoded, failed to parse stream",
+  "490": "black bars",
+  "491": "wrong text spacing",
+  "509": "characters dont render"
 }

@@ -7,6 +7,24 @@
     "last_page": 0
   },
   {
+    "id": "142",
+    "file": "pdfs/142.link",
+    "md5": "f6fa0a8bc5f9399125d9e4f347bb06c2",
+    "link": true
+  },
+  {
+    "id": "163",
+    "file": "pdfs/163.link",
+    "md5": "164d0c399cfcfb8462139f30b683de54",
+    "link": true
+  },
+  {
+    "id": "239",
+    "file": "pdfs/239.link",
+    "md5": "64f98a5283ac83af3e8231e0fae1d0b6",
+    "link": true
+  },
+  {
     "id": "301",
     "file": "pdfs/301.link",
     "md5": "a02eb63877f52c2e908ca5b4437f1b95",
@@ -31,6 +49,50 @@
     "link": true
   },
   {
+    "id": "479",
+    "file": "pdfs/479.link",
+    "md5": "d404ce3c3ddb6f3a9db713241cf4695d",
+    "link": true
+  },
+  {
+    "id": "488",
+    "file": "pdfs/488.link",
+    "md5": "8d4c05f2782b7af9610f7406b986040a",
+    "link": true
+  },
+  {
+    "id": "498",
+    "file": "pdfs/498.link",
+    "md5": "0d31a45de9bd4f4a2e8ed7d5f0db12f5",
+    "link": true,
+    "last_page": 0
+  },
+  {
+    "id": "539",
+    "file": "pdfs/539.link",
+    "md5": "bf0e6576a7b6c2fe7485bce1b78e006f",
+    "link": true,
+    "last_page": 0
+  },
+  {
+    "id": "541",
+    "file": "pdfs/541.link",
+    "md5": "de6fc442cbf8e2bd30fdf299a9ebf2bf",
+    "link": true
+  },
+  {
+    "id": "552",
+    "file": "pdfs/552.link",
+    "md5": "817e510cc6fd68a4ca1409014b61f920",
+    "link": true
+  },
+  {
+    "id": "584",
+    "file": "pdfs/584.link",
+    "md5": "9d991c7ca3b8ca034ef87c7edd03f948",
+    "link": true
+  },
+  {
     "id": "615_1",
     "file": "pdfs/615_1.link",
     "md5": "48df4ed159658d5a3a65df8a0b6bf92c",
@@ -40,6 +102,26 @@
     "id": "615_2",
     "file": "pdfs/615_2.link",
     "md5": "ed949583088576ed5675bde4ae1e29bc",
+    "link": true
+  },
+  {
+    "id": "617",
+    "file": "pdfs/617.link",
+    "md5": "3513b89aaba4acece84d35e1b5a29258",
+    "link": true,
+    "last_page": 1
+  },
+  {
+    "id": "624",
+    "file": "pdfs/624.link",
+    "md5": "57c0aa24ac24d67ba4ef68ed5348263d",
+    "link": true,
+    "last_page": 0
+  },
+  {
+    "id": "647",
+    "file": "pdfs/647.link",
+    "md5": "b4d5562a88ca42ec32ce95e5df48feac",
     "link": true
   },
   {
