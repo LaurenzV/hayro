@@ -147,8 +147,8 @@ const NP: &[u8] = b"NP";
 const NP_ALT: &[u8] = b"|";
 
 impl<'a> Stream<'a> {
-    fn next_int(&mut self) -> Option<i32> {
-        i32::from_str(std::str::from_utf8(self.next_token()?).ok()?).ok()
+    fn next_int(&mut self) -> Option<i64> {
+        parse_int(std::str::from_utf8(self.next_token()?).ok()?)
     }
 
     fn parse_charstrings(&mut self, len_iv: usize) -> Option<HashMap<String, Vec<u8>>> {
@@ -168,7 +168,7 @@ impl<'a> Stream<'a> {
                 .iter()
                 .all(|b| matches!(*b, b'#') || b.is_ascii_digit())
             {
-                int_token = Some(i32::from_str(std::str::from_utf8(token).ok()?).ok()?);
+                int_token = parse_int(std::str::from_utf8(token).ok()?);
             } else if token == RD || token == RD_ALT {
                 break;
             }
@@ -238,7 +238,7 @@ impl<'a> Stream<'a> {
     fn parse_subroutines(&mut self, len_iv: usize) -> Option<HashMap<u32, Vec<u8>>> {
         let mut subroutines = HashMap::new();
 
-        let num_subrs = u32::from_str(std::str::from_utf8(self.next_token()?).ok()?).ok()?;
+        let num_subrs = parse_int(std::str::from_utf8(self.next_token()?).ok()?)?;
 
         if num_subrs < 1 {
             return Some(subroutines);
@@ -450,7 +450,9 @@ impl<'a> Stream<'a> {
                 return None;
             }
 
-            let code = u8::from_str(std::str::from_utf8(self.next_token()?).ok()?).ok()?;
+            let next = self.next_token();
+            // TODO: Should other places in the parser also use `parse_int`?
+            let code = parse_int(std::str::from_utf8(next?).ok()?)?;
             let glyph_name = std::str::from_utf8(&self.next_token()?[1..])
                 .ok()?
                 .to_string();
@@ -461,7 +463,7 @@ impl<'a> Stream<'a> {
                 return None;
             }
 
-            map.insert(code, glyph_name);
+            map.insert(u8::try_from(code).ok()?, glyph_name);
         }
 
         Some(EncodingType::Custom(Arc::new(map)))
@@ -577,6 +579,24 @@ impl EncodingType {
             EncodingType::Standard => STANDARD.get(&code).copied(),
             EncodingType::Custom(c) => c.get(&code).map(|s| s.as_str()),
         }
+    }
+}
+
+fn parse_int(str: &str) -> Option<i64> {
+    if let Some(hash_idx) = str.find('#') {
+        if hash_idx == 1 || hash_idx == 2 {
+            // It's a radix number, like 8#40.
+            let radix_str = &str[0..hash_idx];
+            let number_str = &str[hash_idx + 1..];
+
+            let radix = radix_str.parse::<u32>().ok()?;
+
+            i64::from_str_radix(number_str, radix).ok()
+        } else {
+            str.parse::<i64>().ok()
+        }
+    } else {
+        str.parse::<i64>().ok()
     }
 }
 
