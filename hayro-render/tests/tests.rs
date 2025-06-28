@@ -329,6 +329,10 @@ use crate::run_test;
 #[test] fn pdfjs_type4psfunc() { run_test("pdfjs_type4psfunc", "pdfs/pdfjs/type4psfunc.pdf", None); }
 #[test] fn pdfjs_zerowidthline() { run_test("pdfjs_zerowidthline", "pdfs/pdfjs/zerowidthline.pdf", None); }
 #[test] fn pdfbox_31() { run_test("pdfbox_31", "downloads/pdfbox/31.pdf", Some("..=0")); }
+#[test] fn pdfbox_301() { run_test("pdfbox_301", "downloads/pdfbox/301.pdf", None); }
+#[test] fn pdfbox_390() { run_test("pdfbox_390", "downloads/pdfbox/390.pdf", None); }
+#[test] fn pdfbox_454() { run_test("pdfbox_454", "downloads/pdfbox/454.pdf", None); }
+#[test] fn pdfbox_462() { run_test("pdfbox_462", "downloads/pdfbox/462.pdf", None); }
 #[test] fn pdfbox_615_1() { run_test("pdfbox_615_1", "downloads/pdfbox/615_1.pdf", None); }
 #[test] fn pdfbox_615_2() { run_test("pdfbox_615_2", "downloads/pdfbox/615_2.pdf", None); }
 #[test] fn pdfbox_795() { run_test("pdfbox_795", "downloads/pdfbox/795.pdf", None); }

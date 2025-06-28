@@ -46,5 +46,7 @@
   "2103": [
     // Artifacts in the rendered JPEG image.
     "https://issues.apache.org/jira/secure/attachment/12647559/000001_MTEXT_CS6.pdf"
-  ]
+  ],
+  "423": "password-protected",
+  "457": "CCIT-encoded, failed to parse stream"
 }
