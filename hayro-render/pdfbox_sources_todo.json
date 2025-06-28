@@ -33,10 +33,6 @@
     // Flate filter fails to apply
     "https://issues.apache.org/jira/secure/attachment/12767969/PDFbox2.pdf"
   ],
-  "3654": [
-    // Non-binary Type1 encryption
-    "https://issues.apache.org/jira/secure/attachment/12848079/testcase2.pdf"
-  ],
   "3754": [
     // Type 1 font that fails to process
     "https://issues.apache.org/jira/secure/attachment/12863088/PDFJS-7769.pdf"

@@ -1,5 +1,5 @@
 use super::stream::Stream;
-use log::{error, warn};
+use log::error;
 
 pub(crate) fn decrypt(data: &[u8]) -> Option<Vec<u8>> {
     let mut stream = Stream::new(data);
@@ -53,9 +53,50 @@ pub(crate) fn decrypt(data: &[u8]) -> Option<Vec<u8>> {
 
         Some(out)
     } else {
-        warn!("non-binary decryption is unimplemented");
+        let mut out = vec![];
 
-        None
+        // Decrypt the first 4 hex chars (2 bytes) as garbage bytes
+        let b0 = hex_to_byte(b[0] as char, b[1] as char)?;
+        let b1 = hex_to_byte(b[2] as char, b[3] as char)?;
+        decrypt(b0);
+        decrypt(b1);
+
+        let mut hex_chars = vec![];
+        for b in stream.tail()? {
+            if b.is_ascii_hexdigit() {
+                hex_chars.push(*b as char);
+            } else if !is_whitespace(*b) {
+                break;
+            }
+        }
+
+        let mut i = 0;
+        while i + 1 < hex_chars.len() {
+            if let Some(byte) = hex_to_byte(hex_chars[i], hex_chars[i + 1]) {
+                if i < 4 {
+                    decrypt(byte);
+                } else {
+                    out.push(decrypt(byte));
+                }
+                i += 2;
+            } else {
+                error!("failed to convert hex chars to byte");
+                return None;
+            }
+        }
+
+        // Handle odd number of hex digits (pad with '0')
+        if i < hex_chars.len() {
+            if let Some(byte) = hex_to_byte(hex_chars[i], '0') {
+                if i >= 4 {
+                    out.push(decrypt(byte));
+                } else {
+                    decrypt(byte);
+                }
+            }
+        }
+
+        Some(out)
     }
 }
 
@@ -68,4 +109,23 @@ pub(crate) fn decrypt_byte(cipher: u8, r: &mut u32) -> u8 {
 
 fn is_white_space_after_token_eexec(c: u8) -> bool {
     matches!(c, b' ' | b'\t' | b'\n' | b'\r')
+}
+
+fn is_whitespace(c: u8) -> bool {
+    matches!(c, b' ' | b'\t' | b'\n' | b'\r' | b'\0' | b'\x0C')
+}
+
+fn hex_to_byte(c1: char, c2: char) -> Option<u8> {
+    let h1 = hex_to_dec(c1)?;
+    let h2 = hex_to_dec(c2)?;
+    Some((h1 << 4) | h2)
+}
+
+fn hex_to_dec(hex: char) -> Option<u8> {
+    match hex {
+        '0'..='9' => Some((hex as u8) - b'0'),
+        'A'..='F' => Some((hex as u8) - b'A' + 10),
+        'a'..='f' => Some((hex as u8) - b'a' + 10),
+        _ => None,
+    }
 }
