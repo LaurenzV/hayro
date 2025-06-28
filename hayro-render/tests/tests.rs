@@ -348,7 +348,14 @@ use crate::run_test;
 #[test] fn pdfbox_617() { run_test("pdfbox_617", "downloads/pdfbox/617.pdf", Some("..=1")); }
 #[test] fn pdfbox_624() { run_test("pdfbox_624", "downloads/pdfbox/624.pdf", Some("..=0")); }
 #[test] fn pdfbox_647() { run_test("pdfbox_647", "downloads/pdfbox/647.pdf", None); }
+#[test] fn pdfbox_682() { run_test("pdfbox_682", "downloads/pdfbox/682.pdf", Some("..=1")); }
+#[test] fn pdfbox_692() { run_test("pdfbox_692", "downloads/pdfbox/692.pdf", Some("..=1")); }
+#[test] fn pdfbox_697() { run_test("pdfbox_697", "downloads/pdfbox/697.pdf", None); }
+#[test] fn pdfbox_767() { run_test("pdfbox_767", "downloads/pdfbox/767.pdf", None); }
 #[test] fn pdfbox_795() { run_test("pdfbox_795", "downloads/pdfbox/795.pdf", None); }
+#[test] fn pdfbox_813() { run_test("pdfbox_813", "downloads/pdfbox/813.pdf", None); }
+#[test] fn pdfbox_905() { run_test("pdfbox_905", "downloads/pdfbox/905.pdf", None); }
+#[test] fn pdfbox_1058() { run_test("pdfbox_1058", "downloads/pdfbox/1058.pdf", Some("..=1")); }
 #[test] fn pdfbox_1067() { run_test("pdfbox_1067", "downloads/pdfbox/1067.pdf", None); }
 #[test] fn pdfbox_1084() { run_test("pdfbox_1084", "downloads/pdfbox/1084.pdf", None); }
 #[test] fn pdfbox_1147() { run_test("pdfbox_1147", "downloads/pdfbox/1147.pdf", None); }
