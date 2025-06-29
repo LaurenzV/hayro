@@ -13,6 +13,7 @@ use crate::type1::standard::STANDARD;
 use crate::type1::stream::Stream;
 use crate::{Matrix, OutlineBuilder};
 use log::error;
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::iter::Copied;
 use std::slice::Iter;
@@ -48,13 +49,17 @@ pub struct Table {
 impl Table {
     /// Parses a table from raw data.
     pub fn parse(data: &[u8]) -> Option<Self> {
-        if !data.starts_with(b"%!") {
-            error!("type1 font didn't start with %!");
+        let data = if data.starts_with(&[0x80, 0x01]) {
+            extract_pfb_segments(data)?
+        } else if data.starts_with(b"%!") {
+            Cow::Borrowed(data)
+        } else {
+            error!("type1 font wasn't recognized!");
 
             return None;
-        }
+        };
 
-        let mut s = Stream::new(data);
+        let mut s = Stream::new(data.as_ref());
         let mut params = Parameters::default();
 
         while let Some(token) = s.next_token() {
@@ -140,6 +145,96 @@ impl Table {
     pub fn code_to_string(&self, code_point: u8) -> Option<&str> {
         self.params.encoding_type.encode(code_point)
     }
+}
+
+// <https://github.com/apache/pdfbox/blob/129aafe26548c1ff935af9c55cb40a996186c35f/fontbox/src/main/java/org/apache/fontbox/pfb/PfbParser.java#L119>
+fn extract_pfb_segments(pfb: &[u8]) -> Option<Cow<'static, [u8]>> {
+    const START_MARKER: u8 = 0x80;
+    const ASCII_MARKER: u8 = 0x01;
+    const BINARY_MARKER: u8 = 0x02;
+    const EOF_MARKER: u8 = 0x03;
+    const PFB_HEADER_LENGTH: usize = 18;
+
+    if pfb.len() < PFB_HEADER_LENGTH {
+        return None;
+    }
+
+    let mut stream = Stream::new(pfb);
+    let mut type_list = Vec::new();
+    let mut barr_list = Vec::new();
+    let mut total = 0;
+
+    loop {
+        let r = stream.read_byte();
+        if r.is_none() && total > 0 {
+            break; // EOF
+        }
+        let r = r?;
+
+        if r != START_MARKER {
+            return None;
+        }
+
+        let record_type = stream.read_byte()?;
+        if record_type == EOF_MARKER {
+            break;
+        }
+
+        if record_type != ASCII_MARKER && record_type != BINARY_MARKER {
+            return None;
+        }
+
+        let size_bytes = stream.read_bytes(4)?;
+        let mut size = size_bytes[0] as usize;
+        size += (size_bytes[1] as usize) << 8;
+        size += (size_bytes[2] as usize) << 16;
+        size += (size_bytes[3] as usize) << 24;
+
+        let ar = stream.read_bytes(size)?;
+        total += size;
+        type_list.push(record_type);
+        barr_list.push(ar);
+    }
+
+    // We now have ASCII and binary segments. Lets arrange these so that the ASCII segments
+    // come first, then the binary segments, then the last ASCII segment if it is
+    // 0000... cleartomark
+
+    let mut pfbdata = Vec::with_capacity(total);
+    let mut cleartomark_segment = None;
+
+    // copy the ASCII segments
+    for i in 0..type_list.len() {
+        if type_list[i] != ASCII_MARKER {
+            continue;
+        }
+
+        let ar = barr_list[i];
+        if i == type_list.len() - 1 && ar.len() < 600 {
+            if let Ok(s) = std::str::from_utf8(ar) {
+                if s.contains("cleartomark") {
+                    cleartomark_segment = Some(ar);
+                    continue;
+                }
+            }
+        }
+        pfbdata.extend_from_slice(ar);
+    }
+
+    // copy the binary segments
+    for i in 0..type_list.len() {
+        if type_list[i] != BINARY_MARKER {
+            continue;
+        }
+        let ar = barr_list[i];
+        pfbdata.extend_from_slice(ar);
+    }
+
+    if let Some(segment) = cleartomark_segment {
+        pfbdata.extend_from_slice(segment);
+    }
+
+    Some(Cow::Owned(pfbdata))
 }
 
 const ND: &[u8] = b"ND";
