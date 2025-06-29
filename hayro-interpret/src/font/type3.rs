@@ -179,9 +179,17 @@ impl<T: Device> Device for Type3ShapeGlyphDevice<'_, T> {
 
     fn push_transparency_group(&mut self, _: f32) {}
 
-    fn fill_glyph(&mut self, _: &Glyph<'_>, _: &Paint) {}
+    // Technically not valid, I think, but there is a PDFBox test case that contains such a font
+    // and everyone seems to render it.
+    fn fill_glyph(&mut self, g: &Glyph<'_>, p: &Paint) {
+        self.inner.fill_glyph(g, p);
+    }
 
-    fn stroke_glyph(&mut self, _: &Glyph<'_>, _: &Paint) {}
+    // Technically not valid, I think, but there is a PDFBox test case that contains such a font
+    // and everyone seems to render it.
+    fn stroke_glyph(&mut self, g: &Glyph<'_>, p: &Paint) {
+        self.inner.stroke_glyph(g, p);
+    }
 
     fn draw_rgba_image(&mut self, _: RgbaImage) {}
 
