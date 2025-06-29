@@ -80,7 +80,6 @@
   "2347": "encrypted pdf",
   "2359": "image rendered wrong, perhaps softmask",
   "2363": "xstep crashes",
-  "2385": "unknown color space I, failed to apply ascii85",
   "2484": "encryption",
   "2487": "weird black part, probably bug in type1 parser",
   "2495": "images render wrongly",

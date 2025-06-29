@@ -75,14 +75,14 @@ impl ColorSpaceType {
                     let cal_dict = iter.next::<Dict>()?;
                     return Some(ColorSpaceType::CalRgb(CalRgb::new(&cal_dict)?));
                 }
-                DEVICE_RGB => return Some(ColorSpaceType::DeviceRgb),
-                DEVICE_GRAY => return Some(ColorSpaceType::DeviceGray),
-                DEVICE_CMYK => return Some(ColorSpaceType::DeviceCmyk),
+                DEVICE_RGB | RGB => return Some(ColorSpaceType::DeviceRgb),
+                DEVICE_GRAY | G => return Some(ColorSpaceType::DeviceGray),
+                DEVICE_CMYK | CMYK => return Some(ColorSpaceType::DeviceCmyk),
                 LAB => {
                     let lab_dict = iter.next::<Dict>()?;
                     return Some(ColorSpaceType::Lab(Lab::new(&lab_dict)?));
                 }
-                INDEXED => return Some(ColorSpaceType::Indexed(Indexed::new(&color_array)?)),
+                INDEXED | I => return Some(ColorSpaceType::Indexed(Indexed::new(&color_array)?)),
                 SEPARATION => {
                     return Some(ColorSpaceType::Separation(Separation::new(&color_array)?));
                 }
