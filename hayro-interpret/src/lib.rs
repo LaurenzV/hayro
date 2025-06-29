@@ -468,6 +468,12 @@ pub fn interpret<'a, 'b>(
             TypedOperation::BeginCompatibility(_) => {}
             TypedOperation::EndCompatibility(_) => {}
             TypedOperation::ColorGlyph(_) => {}
+            TypedOperation::ShowTextWithParameters(t) => {
+                context.get_mut().text_state.word_space = t.0.as_f32();
+                context.get_mut().text_state.char_space = t.1.as_f32();
+                text::next_line(context, 0.0, -context.get().text_state.leading as f64);
+                text::show_text_string(context, device, resources, t.2)
+            }
             _ => {
                 warn!("Failed to read an operator");
             }
