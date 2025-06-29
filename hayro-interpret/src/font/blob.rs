@@ -110,11 +110,10 @@ pub(crate) static SYMBOL: Lazy<CffFontBlob> = Lazy::new(|| {
 type FontData = Arc<dyn AsRef<[u8]> + Send + Sync>;
 type OpenTypeFontYoke = Yoke<OTFYoke<'static>, FontData>;
 type CffFontYoke = Yoke<CFFYoke<'static>, FontData>;
-type Type1FontYoke = Yoke<Type1Yoke<'static>, FontData>;
 
 /// A font blob for type 1 fonts.
 #[derive(Clone)]
-pub(crate) struct Type1FontBlob(Arc<Type1FontYoke>);
+pub(crate) struct Type1FontBlob(Arc<type1::Table>);
 
 impl Debug for Type1FontBlob {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -123,17 +122,14 @@ impl Debug for Type1FontBlob {
 }
 
 impl Type1FontBlob {
-    pub(crate) fn new(data: FontData) -> Self {
-        let yoke = Yoke::<Type1Yoke<'static>, FontData>::attach_to_cart(data.clone(), |data| {
-            let table = type1::Table::parse(data.as_ref()).unwrap();
-            Type1Yoke { table }
-        });
+    pub(crate) fn new(data: FontData) -> Option<Self> {
+        let table = type1::Table::parse(data.as_ref().as_ref())?;
 
-        Self(Arc::new(yoke))
+        Some(Self(Arc::new(table)))
     }
 
     pub(crate) fn table(&self) -> &type1::Table {
-        &self.0.as_ref().get().table
+        &self.0.as_ref()
     }
 
     pub(crate) fn outline_glyph(&self, name: &str) -> BezPath {
@@ -290,9 +286,4 @@ struct OTFYoke<'a> {
 #[derive(Yokeable, Clone)]
 struct CFFYoke<'a> {
     table: cff::Table<'a>,
-}
-
-#[derive(Yokeable, Clone)]
-struct Type1Yoke<'a> {
-    table: type1::Table<'a>,
 }

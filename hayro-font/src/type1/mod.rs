@@ -41,15 +41,13 @@ impl Default for Parameters {
 }
 
 #[derive(Debug, Clone)]
-pub struct Table<'a> {
-    #[allow(dead_code)]
-    data: &'a [u8],
+pub struct Table {
     params: Arc<Parameters>,
 }
 
-impl<'a> Table<'a> {
+impl Table {
     /// Parses a table from raw data.
-    pub fn parse(data: &'a [u8]) -> Option<Self> {
+    pub fn parse(data: &[u8]) -> Option<Self> {
         if !data.starts_with(b"%!") {
             error!("type1 font didn't start with %!");
 
@@ -90,7 +88,6 @@ impl<'a> Table<'a> {
         }
 
         Some(Self {
-            data,
             params: Arc::new(params),
         })
     }
