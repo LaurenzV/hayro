@@ -146,7 +146,9 @@ fn parse_proper<'a>(r: &mut Reader<'a>, dict: &Dict<'a>) -> Option<Stream<'a>> {
 
     r.skip_white_spaces_and_comments();
     r.forward_tag(b"stream")?;
-    r.forward_tag(b"\n").or_else(|| r.forward_tag(b"\r\n"))?;
+    r.forward_tag(b"\n")
+        .or_else(|| r.forward_tag(b"\r\n"))
+        .or_else(|| r.forward_tag(b"\r"))?;
     let data = r.read_bytes(length as usize)?;
     r.skip_white_spaces();
     r.forward_tag(b"endstream")?;
