@@ -512,6 +512,9 @@ fn handle_gs_single(dict: &Dict, key: Name, context: &mut Context) -> Option<()>
         "ML" => context.get_mut().miter_limit = dict.get::<f32>(key)?,
         "CA" => context.get_mut().stroke_alpha = dict.get::<f32>(key)?,
         "ca" => context.get_mut().non_stroke_alpha = dict.get::<f32>(key)?,
+        "SMask" => {
+            warn!("soft masks are not yet supported");
+        }
         "Type" => {}
         _ => {}
     }

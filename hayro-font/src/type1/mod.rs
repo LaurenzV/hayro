@@ -76,8 +76,8 @@ impl Table {
                     let matrix = s.read_font_matrix()?;
                     params.font_matrix = Matrix {
                         sx: matrix[0],
-                        kx: matrix[1],
-                        ky: matrix[2],
+                        kx: matrix[2],
+                        ky: matrix[1],
                         sy: matrix[3],
                         tx: matrix[4],
                         ty: matrix[5],

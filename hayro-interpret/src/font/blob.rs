@@ -267,8 +267,8 @@ impl OpenTypeFontBlob {
 fn convert_matrix(matrix: Matrix) -> Affine {
     Affine::new([
         matrix.sx as f64,
-        matrix.kx as f64,
         matrix.ky as f64,
+        matrix.kx as f64,
         matrix.sy as f64,
         matrix.tx as f64,
         matrix.ty as f64,
