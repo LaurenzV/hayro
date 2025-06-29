@@ -916,5 +916,10 @@
   {
     "id": "issue_missing_jpeg_image",
     "file": "pdfs/issue_missing_jpeg_image.pdf"
+  },
+  {
+    "id": "xref_f2_len_8",
+    "file": "pdfs/xref_f2_len_8.pdf",
+    "last_page": 0
   }
 ]

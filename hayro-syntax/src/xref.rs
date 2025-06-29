@@ -451,7 +451,7 @@ fn populate_from_xref_stream<'a>(
 
     let [f1_len, f2_len, f3_len] = stream.dict().get::<[u8; 3]>(W)?;
 
-    if f2_len > size_of::<u32>() as u8 {
+    if f2_len > size_of::<u64>() as u8 {
         error!("xref offset length is larger than the allowed limit");
 
         return None;
@@ -501,6 +501,15 @@ fn xref_stream_num<'a>(data: &[u8]) -> Option<u32> {
         2 => u16::from_be_bytes(data[0..2].try_into().ok()?) as u32,
         3 => u32::from_be_bytes([0, data[0], data[1], data[2]]),
         4 => u32::from_be_bytes(data[0..4].try_into().ok()?),
+        8 => {
+            if let Ok(num) = u32::try_from(u64::from_be_bytes(data[0..8].try_into().ok()?)) {
+                return Some(num);
+            } else {
+                warn!("xref stream number is too large");
+
+                return None;
+            }
+        }
         n => {
             warn!("invalid xref stream number {}", n);
 
