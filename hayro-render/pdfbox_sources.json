@@ -195,6 +195,11 @@
   "2244": "https://issues.apache.org/jira/secure/attachment/12657999/PDFBOX-2244-040483.pdf",
   "2296": "https://issues.apache.org/jira/secure/attachment/12675303/063344.pdf",
   "2315": "https://issues.apache.org/jira/secure/attachment/12666506/PDFBOX-2315.pdf",
+  "2339": {
+    "link": "https://issues.apache.org/jira/secure/attachment/12667659/PDFBOX-2339-168002.pdf",
+    "first_page": 2,
+    "last_page": 2
+  },
   "2344": "https://issues.apache.org/jira/secure/attachment/12668313/PDFBOX-2344-233644-p10.pdf",
   "2350": {
     "link": "https://issues.apache.org/jira/secure/attachment/12670292/PDFBOX-2350-289451-endless.pdf",

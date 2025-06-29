@@ -17,18 +17,27 @@ pub(crate) struct Type1Font(Kind);
 
 impl Type1Font {
     pub(crate) fn new(dict: &Dict) -> Option<Self> {
+        let fallback = || {
+            warn!("unable to load type1 font, falling back to Times New Roman");
+
+            Self(Kind::Standard(StandardKind::new_with_standard(
+                dict,
+                StandardFont::TimesRoman,
+            )))
+        };
+
         let inner = if let Some(standard) = StandardKind::new(dict) {
             Self(Kind::Standard(standard))
         } else if is_cff(dict) {
             Self(Kind::Cff(CffKind::new(dict)?))
         } else if is_type1(dict) {
-            Self(Kind::Type1(Type1Kind::new(dict)?))
+            if let Some(f) = Type1Kind::new(dict) {
+                Self(Kind::Type1(f))
+            } else {
+                fallback()
+            }
         } else {
-            warn!("unable to load type1 font, falling back to Times New Roman");
-            Self(Kind::Standard(StandardKind::new_with_standard(
-                dict,
-                StandardFont::TimesRoman,
-            )))
+            fallback()
         };
 
         Some(inner)

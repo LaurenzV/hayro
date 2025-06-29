@@ -469,7 +469,7 @@ pub fn interpret<'a, 'b>(
             TypedOperation::EndCompatibility(_) => {}
             TypedOperation::ColorGlyph(_) => {}
             _ => {
-                println!("{:?}", op);
+                warn!("Failed to read an operator");
             }
         }
     }

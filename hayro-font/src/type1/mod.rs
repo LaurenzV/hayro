@@ -324,9 +324,8 @@ impl<'a> Stream<'a> {
                 }
             }
 
-            let encrypted_bytes = self.read_bytes(bin_len as usize).unwrap();
-            let decrypted_bytes =
-                decrypt_charstring(encrypted_bytes, len_iv, use_decryption).unwrap();
+            let encrypted_bytes = self.read_bytes(bin_len as usize)?;
+            let decrypted_bytes = decrypt_charstring(encrypted_bytes, len_iv, use_decryption)?;
             charstrings.insert(
                 std::str::from_utf8(glyph_name).ok()?.to_string(),
                 decrypted_bytes,
