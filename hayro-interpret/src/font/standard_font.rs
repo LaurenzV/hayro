@@ -58,7 +58,20 @@ impl StandardFont {
         }
     }
 
-    pub(crate) fn get_width(&self, name: &str) -> Option<f32> {
+    pub(crate) fn get_width(&self, mut name: &str) -> Option<f32> {
+        // <https://github.com/apache/pdfbox/blob/129aafe26548c1ff935af9c55cb40a996186c35f/pdfbox/src/main/java/org/apache/pdfbox/pdmodel/font/PDSimpleFont.java#L340>
+        if name == ".notdef" {
+            return Some(250.0);
+        }
+
+        if name == "nbspace" {
+            name = "space";
+        }
+
+        if name == "sfthyphen" {
+            name = "hyphen"
+        }
+
         match self {
             StandardFont::Helvetica => metrics::HELVETICA.get(name).copied(),
             StandardFont::HelveticaBold => metrics::HELVETICA_BOLD.get(name).copied(),

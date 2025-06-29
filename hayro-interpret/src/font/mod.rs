@@ -251,6 +251,9 @@ enum Encoding {
 
 impl Encoding {
     fn map_code(&self, code: u8) -> Option<&'static str> {
+        if code == 0 {
+            return Some(".notdef");
+        }
         match self {
             Encoding::Standard => standard::get(code),
             Encoding::MacRoman => mac_roman::get(code).or_else(|| mac_os_roman::get(code)),
