@@ -110,6 +110,8 @@ pub(crate) fn skip_name_like(r: &mut Reader, solidus: bool) -> Option<()> {
         r.forward_tag(b"/")?;
     }
 
+    let mut old = r.offset();
+
     while let Some(b) = r.eat(|n| is_regular_character(n)) {
         match b {
             b'#' => {
@@ -118,6 +120,10 @@ pub(crate) fn skip_name_like(r: &mut Reader, solidus: bool) -> Option<()> {
             }
             _ => {}
         }
+    }
+
+    if !solidus && old == r.offset() {
+        return None;
     }
 
     Some(())

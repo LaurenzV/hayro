@@ -73,7 +73,6 @@
   "2006": "encrypted PDF",
   "2027": "encrypted PDF",
   "2059": "missing characters, probably because standard fonts dont have full coverage",
-  "2163": "infinite loop, inline image",
   "2180": "index out of bounds error",
   "2205": "jpx with indexed cs",
   "2265": "takes long, renders wrong, perhaps mask",

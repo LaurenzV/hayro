@@ -129,7 +129,7 @@ impl<'a> Iterator for UntypedIter<'a> {
                     let stream_data = self.reader.tail()?;
                     let start_offset = self.reader.offset();
 
-                    while let Some(bytes) = self.reader.peek_bytes(2) {
+                    'outer: while let Some(bytes) = self.reader.peek_bytes(2) {
                         if bytes == b"EI" {
                             let end_offset = self.reader.offset() - start_offset;
                             let image_data = &stream_data[..end_offset];
@@ -148,6 +148,39 @@ impl<'a> Iterator for UntypedIter<'a> {
                             if stream.decoded().is_none() {
                                 self.reader.read_bytes(2);
                                 continue;
+                            }
+
+                            // If the inline image doesn't have any filter, then the above doesn't
+                            // help. In this case, we check whether the tail of the stream is a valid
+                            // content stream.
+                            let mut find_reader = Reader::new(&self.reader.tail()?[2..]);
+
+                            while let Some(bytes) = find_reader.peek_bytes(2) {
+                                if bytes == b"EI" {
+                                    let between = find_reader.head()?;
+                                    let mut iter =
+                                        TypedIter::new(UntypedIter::new(between)).peekable();
+
+                                    if iter.peek().is_none() {
+                                        self.reader.read_bytes(2);
+                                        continue 'outer;
+                                    }
+
+                                    for op in iter {
+                                        match op {
+                                            // Not a valid content stream, continue.
+                                            TypedOperation::Fallback => {
+                                                self.reader.read_bytes(2);
+                                                continue 'outer;
+                                            }
+                                            _ => {}
+                                        }
+                                    }
+
+                                    break;
+                                }
+
+                                find_reader.read_byte()?;
                             }
 
                             self.stack.push(Object::Stream(stream));

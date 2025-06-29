@@ -37,6 +37,10 @@ impl<'a> Reader<'a> {
         self.offset = offset;
     }
 
+    pub(crate) fn head(&self) -> Option<&'a [u8]> {
+        self.data.get(..self.offset)
+    }
+
     #[inline]
     pub(crate) fn tail(&mut self) -> Option<&'a [u8]> {
         self.data.get(self.offset..)
