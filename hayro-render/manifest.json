@@ -921,5 +921,10 @@
     "id": "xref_f2_len_8",
     "file": "pdfs/xref_f2_len_8.pdf",
     "last_page": 0
+  },
+  {
+    "id": "issue42",
+    "file": "pdfs/issue42.link",
+    "link": true
   }
 ]

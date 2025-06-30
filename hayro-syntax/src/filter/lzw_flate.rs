@@ -244,7 +244,7 @@ impl PredictorParams {
 
 fn apply_predictor(data: Vec<u8>, params: &PredictorParams) -> Option<Vec<u8>> {
     match params.predictor {
-        1 | 10 => Some(data),
+        1 => Some(data),
         i => {
             let is_png_predictor = i >= 10;
 
