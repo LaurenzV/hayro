@@ -926,5 +926,9 @@
     "id": "issue42",
     "file": "pdfs/issue42.link",
     "link": true
+  },
+  {
+    "id": "issue41",
+    "file": "pdfs/issue41.pdf"
   }
 ]

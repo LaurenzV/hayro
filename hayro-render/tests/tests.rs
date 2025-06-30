@@ -221,6 +221,7 @@ use crate::run_test;
 #[test] fn issue_missing_jpeg_image() { run_test("issue_missing_jpeg_image", "pdfs/issue_missing_jpeg_image.pdf", None); }
 #[test] fn xref_f2_len_8() { run_test("xref_f2_len_8", "pdfs/xref_f2_len_8.pdf", Some("..=0")); }
 #[test] fn issue42() { run_test("issue42", "downloads/issue42.pdf", None); }
+#[test] fn issue41() { run_test("issue41", "pdfs/issue41.pdf", None); }
 #[test] fn pdfjs_20130226130259() { run_test("pdfjs_20130226130259", "downloads/pdfjs/20130226130259.pdf", Some("0..=0")); }
 #[test] fn pdfjs_IdentityToUnicodeMap_charCodeOf() { run_test("pdfjs_IdentityToUnicodeMap_charCodeOf", "pdfs/pdfjs/IdentityToUnicodeMap_charCodeOf.pdf", None); }
 #[test] fn pdfjs_IndexedCS_negative_and_high() { run_test("pdfjs_IndexedCS_negative_and_high", "pdfs/pdfjs/IndexedCS_negative_and_high.pdf", None); }

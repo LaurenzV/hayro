@@ -3,7 +3,7 @@ use crate::object::dict::Dict;
 use crate::object::dict::keys::{C0, C1, N};
 use crate::object::number::Number;
 use itertools::izip;
-use smallvec::SmallVec;
+use smallvec::{SmallVec, smallvec};
 
 /// A type 2 function (exponential function).
 #[derive(Debug)]
@@ -17,8 +17,8 @@ pub struct Type2 {
 impl Type2 {
     /// Create a new type 2 function.
     pub fn new(dict: &Dict) -> Option<Self> {
-        let c0 = dict.get::<Values>(C0)?;
-        let c1 = dict.get::<Values>(C1)?;
+        let c0 = dict.get::<Values>(C0).unwrap_or(smallvec![0.0]);
+        let c1 = dict.get::<Values>(C1).unwrap_or(smallvec![1.0]);
         let clamper = Clamper::new(dict)?;
         let n = dict.get::<Number>(N)?.as_f32();
 
