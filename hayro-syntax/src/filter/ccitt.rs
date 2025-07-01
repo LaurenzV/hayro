@@ -1165,6 +1165,8 @@ pub(crate) struct CCITTFaxDecoder<'a> {
     input_buf: u32,
     output_bits: usize,
     rows_done: bool,
+    // For debugging purposes.
+    #[allow(dead_code)]
     counter: u32,
     err: bool,
 }
@@ -1252,12 +1254,13 @@ impl<'a> CCITTFaxDecoder<'a> {
         }
     }
 
-    fn add_pixels(&mut self, a1: i64, black_pixels: bool) {
+    fn add_pixels(&mut self, mut a1: i64, black_pixels: bool) {
         if a1 > self.coding_line[self.coding_pos] as i64 {
             if a1 > self.columns as i64 {
                 warn!("row is wrong length");
 
                 self.err = true;
+                a1 = self.columns as i64;
             }
 
             if ((self.coding_pos & 1) != 0) ^ black_pixels {
@@ -1440,13 +1443,13 @@ impl<'a> CCITTFaxDecoder<'a> {
     }
 
     pub(crate) fn read_next_char(&mut self) -> i32 {
-        if self.counter == 124200 {
-            println!("reached!");
-        }
-
-        if self.counter >= 124309 {
-            // panic!("too many iterations");
-        }
+        // if self.counter == 124200 {
+        //     println!("reached!");
+        // }
+        //
+        // if self.counter >= 124309 {
+        //     // panic!("too many iterations");
+        // }
 
         if self.eof {
             return -1;
@@ -1703,6 +1706,10 @@ impl<'a> CCITTFaxDecoder<'a> {
                         }
                     }
 
+                    // if self.counter == 124200 && self.coding_pos == 3 {
+                    //     println!("reached!");
+                    // }
+
                     self.add_pixels(
                         self.coding_line[self.coding_pos] as i64 + code1 as i64,
                         black_pixels,
@@ -1710,7 +1717,6 @@ impl<'a> CCITTFaxDecoder<'a> {
                     black_pixels ^= true;
                 }
             }
-            println!("reachedddd");
 
             let mut got_eol = false;
 
@@ -1862,9 +1868,9 @@ impl<'a> CCITTFaxDecoder<'a> {
             c ^= 0xff;
         }
 
-        println!("{}: {}", self.counter, self.output_bits);
-
-        self.counter += 1;
+        // println!("{}: {}", self.counter, self.output_bits);
+        //
+        // self.counter += 1;
 
         c
     }
