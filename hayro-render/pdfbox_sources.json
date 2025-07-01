@@ -289,17 +289,60 @@
   "3661": "https://issues.apache.org/jira/secure/attachment/12848855/simple_malformed_doc.pdf",
   "3676": "https://issues.apache.org/jira/secure/attachment/12851010/PDFBOX-3676.pdf",
   "3678": "https://issues.apache.org/jira/secure/attachment/12851414/BTB0010010004.1-Bit_Jbig2.pdf",
+  "3686": "https://issues.apache.org/jira/secure/attachment/12852867/040669-p25.pdf",
+  "3693": {
+    "link": "https://issues.apache.org/jira/secure/attachment/12853426/PDFBOX-3693-656282-p1-p8.pdf",
+    "last_page": 3
+  },
+  "3702": "https://issues.apache.org/jira/secure/attachment/12854908/223423-p53.pdf",
+  "3717": {
+    "link": "https://issues.apache.org/jira/secure/attachment/12858908/069020.pdf",
+    "last_page": 0
+  },
+  "3724": "https://issues.apache.org/jira/secure/attachment/12859498/example1.pdf",
   "3725": [
     "https://issues.apache.org/jira/secure/attachment/12859627/kcap.pdf",
     "https://issues.apache.org/jira/secure/attachment/12861329/mini2.pdf"
   ],
   "3731": "https://issues.apache.org/jira/secure/attachment/12859979/pop-bugzilla48051.pdf",
   "3754": "https://issues.apache.org/jira/secure/attachment/12863088/PDFJS-7769.pdf",
+  "3755": "https://issues.apache.org/jira/secure/attachment/12863200/002400-p26.pdf",
   "3769": "https://issues.apache.org/jira/secure/attachment/12865265/jbig2.pdf",
+  "3783": "https://issues.apache.org/jira/secure/attachment/12867102/PDFBOX-3783-72GLBIGUC6LB46ELZFBARRJTLN4RBSQM.pdf",
+  "3784": "https://issues.apache.org/jira/secure/attachment/12867107/PDFBOX-3784-358043-p2.pdf",
   "3874": "https://issues.apache.org/jira/secure/attachment/12878016/PDFJS-8644-p2.pdf",
+  "3909": [
+    "https://issues.apache.org/jira/secure/attachment/12883566/PDFJS-8798-test1.pdf",
+    "https://issues.apache.org/jira/secure/attachment/12883565/PDFJS-8798-test2.pdf"
+  ],
+  "3922": "https://issues.apache.org/jira/secure/attachment/12885283/loop_edited.pdf",
+  "3928": {
+    "link": "https://issues.apache.org/jira/secure/attachment/12886213/023505.pdf",
+    "last_page": 0
+  },
+  "3932": "https://issues.apache.org/jira/secure/attachment/12887373/PDFJS-8895-p1.pdf",
+  "3948": "https://issues.apache.org/jira/secure/attachment/12890034/EUWO6SQS5TM4VGOMRD3FLXZHU35V2CP2.pdf",
+  "3956": {
+    "link": "https://issues.apache.org/jira/secure/attachment/12891123/N4CWPKUJDQIPQ6YLYKPLOZJBTSYGQEYR.pdf",
+    "last_page": 1
+  },
+  "3977": "https://issues.apache.org/jira/secure/attachment/12893582/63NGFQRI44HQNPIPEJH5W2TBM6DJZWMI.pdf",
   "3979": "https://issues.apache.org/jira/secure/attachment/12894023/NullReadCharStrings.pdf",
+  "4010": "https://issues.apache.org/jira/secure/attachment/12897592/PDFBOX-4010-noprint-reduced.pdf",
+  "4015": "https://issues.apache.org/jira/secure/attachment/12898013/PDFBOX-4015.pdf",
+  "4059": "https://issues.apache.org/jira/secure/attachment/12905318/1773433_WILL.pdf",
+  "4085": "https://issues.apache.org/jira/secure/attachment/12908130/AAAA3d.pdf",
+  "4114": "https://issues.apache.org/jira/secure/attachment/12911037/highResPdf.pdf",
   "4110": "https://issues.apache.org/jira/secure/attachment/12910605/flight_receipt.pdf",
+  "4200": "https://issues.apache.org/jira/secure/attachment/12919854/invalid.pdf",
+  "4201": "https://issues.apache.org/jira/secure/attachment/12919887/testDoc2.pdf",
   "4228": "https://issues.apache.org/jira/secure/attachment/12924707/example.pdf",
+  "4246": "https://issues.apache.org/jira/secure/attachment/12928186/xerox.pdf",
+  "4277": {
+    "link": "https://issues.apache.org/jira/secure/attachment/12933036/ABBY.pdf",
+    "last_page": 2
+  },
+  "4279": "https://issues.apache.org/jira/secure/attachment/12933227/pop-bugzilla62905.pdf",
   "4320": "https://issues.apache.org/jira/secure/attachment/12940751/scanned.pdf",
   "4395": [
     "https://issues.apache.org/jira/secure/attachment/12950591/accents_Type1.pdf",
