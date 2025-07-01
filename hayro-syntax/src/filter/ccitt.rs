@@ -1165,6 +1165,7 @@ pub(crate) struct CCITTFaxDecoder<'a> {
     input_buf: u32,
     output_bits: usize,
     rows_done: bool,
+    counter: u32,
     err: bool,
 }
 
@@ -1196,6 +1197,7 @@ impl<'a> CCITTFaxDecoder<'a> {
             ref_line,
             coding_pos: 0,
             row: 0,
+            counter: 0,
             next_line_2d: k < 0,
             input_bits: 0,
             input_buf: 0,
@@ -1250,9 +1252,9 @@ impl<'a> CCITTFaxDecoder<'a> {
         }
     }
 
-    fn add_pixels(&mut self, a1: u32, black_pixels: bool) {
-        if a1 > self.coding_line[self.coding_pos] {
-            if a1 > self.columns as u32 {
+    fn add_pixels(&mut self, a1: i64, black_pixels: bool) {
+        if a1 > self.coding_line[self.coding_pos] as i64 {
+            if a1 > self.columns as i64 {
                 warn!("row is wrong length");
 
                 self.err = true;
@@ -1262,7 +1264,7 @@ impl<'a> CCITTFaxDecoder<'a> {
                 self.coding_pos += 1;
             }
 
-            self.coding_line[self.coding_pos] = a1;
+            self.coding_line[self.coding_pos] = a1 as u32;
         }
     }
 
@@ -1438,6 +1440,14 @@ impl<'a> CCITTFaxDecoder<'a> {
     }
 
     pub(crate) fn read_next_char(&mut self) -> i32 {
+        if self.counter == 124200 {
+            println!("reached!");
+        }
+
+        if self.counter >= 124309 {
+            // panic!("too many iterations");
+        }
+
         if self.eof {
             return -1;
         }
@@ -1485,7 +1495,7 @@ impl<'a> CCITTFaxDecoder<'a> {
                         x if x == TWO_DIM_PASS => {
                             let next_pos = ref_pos + 1;
 
-                            self.add_pixels(self.ref_line[next_pos], black_pixels);
+                            self.add_pixels(self.ref_line[next_pos] as i64, black_pixels);
 
                             if self.ref_line[next_pos] < columns as u32 {
                                 ref_pos += 2;
@@ -1528,13 +1538,13 @@ impl<'a> CCITTFaxDecoder<'a> {
                             }
 
                             self.add_pixels(
-                                self.coding_line[self.coding_pos] + code1 as u32,
+                                self.coding_line[self.coding_pos] as i64 + code1 as i64,
                                 black_pixels,
                             );
 
                             if self.coding_line[self.coding_pos] < columns as u32 {
                                 self.add_pixels(
-                                    self.coding_line[self.coding_pos] + code2 as u32,
+                                    self.coding_line[self.coding_pos] as i64 + code2 as i64,
                                     black_pixels ^ true,
                                 );
                             }
@@ -1546,7 +1556,7 @@ impl<'a> CCITTFaxDecoder<'a> {
                             }
                         }
                         x if x == TWO_DIM_VERT_R3 => {
-                            self.add_pixels(self.ref_line[ref_pos] + 3, black_pixels);
+                            self.add_pixels(self.ref_line[ref_pos] as i64 + 3, black_pixels);
 
                             black_pixels ^= true;
 
@@ -1560,7 +1570,7 @@ impl<'a> CCITTFaxDecoder<'a> {
                             }
                         }
                         x if x == TWO_DIM_VERT_R2 => {
-                            self.add_pixels(self.ref_line[ref_pos] + 2, black_pixels);
+                            self.add_pixels(self.ref_line[ref_pos] as i64 + 2, black_pixels);
 
                             black_pixels ^= true;
 
@@ -1575,7 +1585,7 @@ impl<'a> CCITTFaxDecoder<'a> {
                             }
                         }
                         x if x == TWO_DIM_VERT_R1 => {
-                            self.add_pixels(self.ref_line[ref_pos] + 1, black_pixels);
+                            self.add_pixels(self.ref_line[ref_pos] as i64 + 1, black_pixels);
 
                             black_pixels ^= true;
 
@@ -1590,7 +1600,7 @@ impl<'a> CCITTFaxDecoder<'a> {
                             }
                         }
                         x if x == TWO_DIM_VERT_0 => {
-                            self.add_pixels(self.ref_line[ref_pos], black_pixels);
+                            self.add_pixels(self.ref_line[ref_pos] as i64, black_pixels);
 
                             black_pixels ^= true;
 
@@ -1656,13 +1666,13 @@ impl<'a> CCITTFaxDecoder<'a> {
                             }
                         }
                         x if x == CCITT_EOF => {
-                            self.add_pixels(columns as u32, false);
+                            self.add_pixels(columns as i64, false);
                             self.eof = true;
                         }
                         _ => {
                             warn!("bad 2d code");
 
-                            self.add_pixels(columns as u32, false);
+                            self.add_pixels(columns as i64, false);
                             self.err = true;
                         }
                     }
@@ -1694,12 +1704,13 @@ impl<'a> CCITTFaxDecoder<'a> {
                     }
 
                     self.add_pixels(
-                        self.coding_line[self.coding_pos] + code1 as u32,
+                        self.coding_line[self.coding_pos] as i64 + code1 as i64,
                         black_pixels,
                     );
                     black_pixels ^= true;
                 }
             }
+            println!("reachedddd");
 
             let mut got_eol = false;
 
@@ -1850,6 +1861,10 @@ impl<'a> CCITTFaxDecoder<'a> {
         if self.black {
             c ^= 0xff;
         }
+
+        println!("{}: {}", self.counter, self.output_bits);
+
+        self.counter += 1;
 
         c
     }
