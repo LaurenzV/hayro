@@ -94,5 +94,13 @@
   "3000": "collection of transparency ghroup stuff",
   "3107": "single character not displaying",
   "3118": "drop shadow missing",
-  "3149": "encryption"
+  "3149": "encryption",
+  "3182": "panic when rendering image",
+  "3221": "transfer functions",
+  "3297": "failed to process shading",
+  "3457": "bullet points dont show, CID without embedded",
+  "3465": "soft mask",
+  "3526": "failed to parse pdf",
+  "3558": "jbig2 soft mask" ,
+  "3579": "cff font with 2 font matrices"
 }

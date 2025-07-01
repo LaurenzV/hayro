@@ -248,13 +248,45 @@
   "3031": "https://issues.apache.org/jira/secure/attachment/12766950/10_15_15_Proposed_Order.pdf",
   "3041": "https://issues.apache.org/jira/secure/attachment/12767830/PDFA-XRefUncompressed-W0_2_0.pdf",
   "3185": "https://issues.apache.org/jira/secure/attachment/12780980/a.pdf",
+  "3223": "https://issues.apache.org/jira/secure/attachment/12785806/PDFJS-6950-reduced.pdf",
   "3246": "https://issues.apache.org/jira/secure/attachment/12789065/LI_Eingangsrechnung_ERX2388_2016_02_11_133551%20v1_0.pdf",
   "3273": "https://issues.apache.org/jira/secure/attachment/12793803/PDFBOX-3273.pdf",
+  "3293": "https://issues.apache.org/jira/secure/attachment/12795863/PDFBOX-3293_reduced.pdf",
+  "3304": "https://issues.apache.org/jira/secure/attachment/12796673/cmp_textWithSymbolEncoding.pdf",
   "3423": "https://issues.apache.org/jira/secure/attachment/12818567/testPDF.pdf",
+  "3445": "https://issues.apache.org/jira/secure/attachment/12821361/PDFBOX-3445-rupen.pdf",
+  "3446": {
+    "link": "https://issues.apache.org/jira/secure/attachment/12821393/PDFBOX-3446.pdf",
+    "last_page": 0
+  },
+  "3456": "https://issues.apache.org/jira/secure/attachment/12822103/8_8healthcare.pdf",
+  "3475": "https://issues.apache.org/jira/secure/attachment/12825681/PDFJS-3928-p4.pdf",
+  "3491": "https://issues.apache.org/jira/secure/attachment/12827889/bugzilla1068432.pdf",
+  "3499": {
+    "link": "https://issues.apache.org/jira/secure/attachment/12828716/UnicodeTest.pdf",
+    "last_page": 0
+  },
+  "3500": "https://issues.apache.org/jira/secure/attachment/12828717/PDFBOX-3500.pdf",
+  "3501": "https://issues.apache.org/jira/secure/attachment/12828850/PDFBOX-3501.pdf",
+  "3505": "https://issues.apache.org/jira/secure/attachment/12829416/PDFBOX_NO-BREAK%20SPACE.pdf",
+  "3516": "https://issues.apache.org/jira/secure/attachment/12830848/PDFJS-7138.pdf",
   "3562": "https://issues.apache.org/jira/secure/attachment/12838397/PDFBOX-3562-BitsPerFlag2.pdf",
+  "3591": {
+    "link": "https://issues.apache.org/jira/secure/attachment/12840266/Vagueness%20and%20the%20Rule%20of%20Law-%20Reconsidering%20Installment%20Land%20Con.pdf",
+    "last_page": 2
+  },
+  "3592": "https://issues.apache.org/jira/secure/attachment/12840316/PDFBOX-3592-orig.pdf",
+  "3615": "https://issues.apache.org/jira/secure/attachment/12841579/c-multiply.pdf",
+  "3622": "https://issues.apache.org/jira/secure/attachment/12842386/PDFBOX-3622.pdf",
+  "3627": {
+    "link": "https://issues.apache.org/jira/secure/attachment/12843031/CIT_2.pdf",
+    "last_page": 2
+  },
   "3640": "https://issues.apache.org/jira/secure/attachment/12844801/PDFBOX-3640.pdf",
   "3647": "https://issues.apache.org/jira/secure/attachment/12846620/PDFBOX-3647.pdf",
   "3654": "https://issues.apache.org/jira/secure/attachment/12848079/testcase2.pdf",
+  "3657": "https://issues.apache.org/jira/secure/attachment/12848289/p39.pdf",
+  "3661": "https://issues.apache.org/jira/secure/attachment/12848855/simple_malformed_doc.pdf",
   "3676": "https://issues.apache.org/jira/secure/attachment/12851010/PDFBOX-3676.pdf",
   "3678": "https://issues.apache.org/jira/secure/attachment/12851414/BTB0010010004.1-Bit_Jbig2.pdf",
   "3725": [
