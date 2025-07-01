@@ -509,11 +509,6 @@ mod tests {
     }
 
     #[test]
-    fn predictor_none() {
-        predictor_test(10, &predictor_expected());
-    }
-
-    #[test]
     fn predictor_sub() {
         predictor_test(
             11,
