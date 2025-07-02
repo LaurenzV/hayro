@@ -45,3 +45,15 @@ impl Pdf {
             .and_then(|p| Pages::new(p, ctx).map(|p| p.pages))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+    use crate::pdf::Pdf;
+
+    #[test]
+    fn issue_49() {
+        let data = Arc::new([]);
+        let pdf = Pdf::new(data);
+    }
+}

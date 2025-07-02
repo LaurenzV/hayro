@@ -245,7 +245,7 @@ impl XRef {
 
 pub(crate) fn find_last_xref_pos(data: &[u8]) -> Option<usize> {
     let mut finder = Reader::new(data);
-    let mut pos = finder.len() - 1;
+    let mut pos = finder.len().checked_sub(1)?;
     finder.jump(pos);
 
     let needle = b"startxref";
