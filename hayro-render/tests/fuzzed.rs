@@ -13,12 +13,14 @@ fn render_fuzzed(file: &[u8]) {
 
 #[test]
 fn issue_55() {
-    let file = b"3 0 obj<< /eg 4>>stream
-/Dc cs/endstream6 0obj<</Type/Page
-/Contents 3 0 R>>
-
-2 0obj<</Kids[ 6 0 R ]
->>b1 0obj<</Pages 2 0R/Size 7/Root 1 0R>>";
+    let file = include_bytes!("fuzzed_pdfs/issue55.pdf");
     
+    render_fuzzed(file);
+}
+
+#[test]
+fn issue_56() {
+    let file = include_bytes!("fuzzed_pdfs/issue56.pdf");
+
     render_fuzzed(file);
 }
