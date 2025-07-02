@@ -48,8 +48,8 @@ impl Pdf {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
     use crate::pdf::Pdf;
+    use std::sync::Arc;
 
     #[test]
     fn issue_49() {

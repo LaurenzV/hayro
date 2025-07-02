@@ -206,9 +206,10 @@ pub fn interpret<'a, 'b>(
                 *(context.last_point_mut()) = *context.sub_path_start();
             }
             TypedOperation::SetGraphicsState(gs) => {
-                if let Some(gs) =  resources
+                if let Some(gs) = resources
                     .get_ext_g_state::<Dict>(gs.0.clone(), Box::new(|_| None), Box::new(Some))
-                    .warn_none(&format!("failed to get extgstate {}", gs.0.as_str())) {
+                    .warn_none(&format!("failed to get extgstate {}", gs.0.as_str()))
+                {
                     handle_gs(&gs, context);
                 }
             }

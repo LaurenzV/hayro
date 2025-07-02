@@ -162,7 +162,7 @@ struct Type1Kind {
 impl Type1Kind {
     fn new(dict: &Dict) -> Option<Self> {
         let descriptor = dict.get::<Dict>(FONT_DESC)?;
-        let data = descriptor.get::<Stream>(FONT_FILE).unwrap();
+        let data = descriptor.get::<Stream>(FONT_FILE)?;
         let font = Type1FontBlob::new(Arc::new(data.decoded()?.to_vec()))?;
 
         let (encoding, encodings) = read_encoding(dict);

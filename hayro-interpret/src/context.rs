@@ -181,18 +181,17 @@ impl<'a> Context<'a> {
         resources: &Resources,
         name: Name,
     ) -> Option<ColorSpace> {
-        resources
-            .get_color_space(
-                name,
-                Box::new(|ref_| {
-                    self.object_cache.get_or_insert_with(ref_.into(), || {
-                        resources
-                            .resolve_ref::<Object>(ref_)
-                            .map(|o| ColorSpace::new(o))
-                    })
-                }),
-                Box::new(|c| Some(ColorSpace::new(c))),
-            )?
+        resources.get_color_space(
+            name,
+            Box::new(|ref_| {
+                self.object_cache.get_or_insert_with(ref_.into(), || {
+                    resources
+                        .resolve_ref::<Object>(ref_)
+                        .map(|o| ColorSpace::new(o))
+                })
+            }),
+            Box::new(|c| Some(ColorSpace::new(c))),
+        )?
     }
 
     pub(crate) fn stroke_props(&self) -> StrokeProps {

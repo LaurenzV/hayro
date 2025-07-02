@@ -1,6 +1,6 @@
-use std::sync::Arc;
 use hayro_render::render_png;
 use hayro_syntax::pdf::Pdf;
+use std::sync::Arc;
 
 fn render_fuzzed(file: &[u8]) {
     let data = Arc::new(file.to_vec());
@@ -14,13 +14,17 @@ fn render_fuzzed(file: &[u8]) {
 #[test]
 fn issue_55() {
     let file = include_bytes!("fuzzed_pdfs/issue55.pdf");
-    
     render_fuzzed(file);
 }
 
 #[test]
 fn issue_56() {
     let file = include_bytes!("fuzzed_pdfs/issue56.pdf");
+    render_fuzzed(file);
+}
 
+#[test]
+fn issue_61() {
+    let file = include_bytes!("fuzzed_pdfs/issue61.pdf");
     render_fuzzed(file);
 }
