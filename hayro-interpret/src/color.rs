@@ -566,8 +566,7 @@ impl Indexed {
             let data = iter
                 .next::<Stream>()
                 .and_then(|s| s.decoded())
-                .or_else(|| iter.next::<string::String>().map(|s| s.get().to_vec()))
-                .unwrap();
+                .or_else(|| iter.next::<string::String>().map(|s| s.get().to_vec()))?;
 
             let num_components = base_color_space.num_components();
 

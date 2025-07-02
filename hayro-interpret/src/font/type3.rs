@@ -43,9 +43,9 @@ impl<'a> Type3<'a> {
             let dict = dict.get::<Dict>(CHAR_PROCS).unwrap_or_default();
 
             for name in dict.keys() {
-                let prog = dict.get::<Stream>(name.clone()).unwrap();
-
-                procs.insert(name.as_str().to_string(), prog.clone());
+                if let Some(prog) = dict.get::<Stream>(name.clone()) {
+                    procs.insert(name.as_str().to_string(), prog.clone());
+                }
             }
 
             procs
@@ -72,7 +72,7 @@ impl<'a> Type3<'a> {
     }
 
     pub(crate) fn glyph_width(&self, code: u8) -> f32 {
-        (*self.widths.get(code as usize).unwrap() * self.matrix.as_coeffs()[0] as f32)
+        (*self.widths.get(code as usize).unwrap_or(&0.0) * self.matrix.as_coeffs()[0] as f32)
             * UNITS_PER_EM
     }
 
