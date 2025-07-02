@@ -192,8 +192,7 @@ impl<'a> Context<'a> {
                     })
                 }),
                 Box::new(|c| Some(ColorSpace::new(c))),
-            )
-            .unwrap()
+            )?
     }
 
     pub(crate) fn stroke_props(&self) -> StrokeProps {
