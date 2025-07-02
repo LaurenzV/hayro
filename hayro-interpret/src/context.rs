@@ -83,12 +83,20 @@ impl<'a> Context<'a> {
     }
 
     pub(crate) fn save_state(&mut self) {
-        let cur = self.states.last().unwrap().clone();
+        let Some(cur) = self.states.last().cloned() else {
+            warn!("attempted to save state without existing state");
+            return;
+        };
+
         self.states.push(cur);
     }
 
     pub(crate) fn bbox(&self) -> kurbo::Rect {
-        *self.bbox.last().unwrap()
+        self.bbox.last().copied().unwrap_or_else(|| {
+            warn!("failed to get a bbox");
+
+            kurbo::Rect::new(0.0, 0.0, 1.0, 1.0)
+        })
     }
 
     pub(crate) fn push_root_transform(&mut self) {
@@ -100,7 +108,10 @@ impl<'a> Context<'a> {
     }
 
     pub(crate) fn root_transform(&self) -> Affine {
-        *self.root_transforms.last().unwrap()
+        self.root_transforms
+            .last()
+            .copied()
+            .unwrap_or(Affine::IDENTITY)
     }
 
     pub(crate) fn restore_state(&mut self) {

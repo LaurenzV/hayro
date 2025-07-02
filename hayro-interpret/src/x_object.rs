@@ -55,7 +55,7 @@ impl<'a> FormXObject<'a> {
             dict.get::<[f64; 6]>(MATRIX)
                 .unwrap_or([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]),
         );
-        let bbox = dict.get::<[f32; 4]>(BBOX).unwrap();
+        let bbox = dict.get::<[f32; 4]>(BBOX)?;
         let is_transparency_group = dict.get::<Dict>(GROUP).is_some();
 
         Some(Self {
@@ -136,7 +136,9 @@ pub(crate) fn draw_image_xobject(
     let width = x_object.width as f64;
     let height = x_object.height as f64;
 
-    let data = x_object.as_rgba8();
+    let Some(data) = x_object.as_rgba8() else {
+        return;
+    };
 
     context.save_state();
     context.pre_concat_affine(Affine::new([
@@ -244,14 +246,8 @@ impl<'a> ImageXObject<'a> {
             .or_else(|| dict.get::<Array>(DECODE))
             .map(|a| a.iter::<(f32, f32)>().collect::<SmallVec<_>>())
             .unwrap_or(color_space.default_decode_arr(bits_per_component as f32));
-        let width = dict
-            .get::<u32>(W)
-            .or_else(|| dict.get::<u32>(WIDTH))
-            .unwrap();
-        let height = dict
-            .get::<u32>(H)
-            .or_else(|| dict.get::<u32>(HEIGHT))
-            .unwrap();
+        let width = dict.get::<u32>(W).or_else(|| dict.get::<u32>(WIDTH))?;
+        let height = dict.get::<u32>(H).or_else(|| dict.get::<u32>(HEIGHT))?;
 
         Some(Self {
             decoded: decoded.data,
@@ -267,7 +263,7 @@ impl<'a> ImageXObject<'a> {
         })
     }
 
-    pub fn as_rgba8(&self) -> Vec<u8> {
+    pub fn as_rgba8(&self) -> Option<Vec<u8>> {
         fn fix(mut image: Vec<u8>, length: usize, filler: u8) -> Vec<u8> {
             image.truncate(length);
 
@@ -279,9 +275,9 @@ impl<'a> ImageXObject<'a> {
         }
 
         if self.is_image_mask {
-            let decoded = self.decode_raw();
+            let decoded = self.decode_raw()?;
 
-            fix(
+            Some(fix(
                 decoded
                     .iter()
                     .flat_map(|alpha| {
@@ -291,22 +287,26 @@ impl<'a> ImageXObject<'a> {
                     .collect(),
                 self.width as usize * self.height as usize * 4,
                 255,
-            )
+            ))
         } else {
             let s_mask = if let Some(1) = self.dict.get::<u8>(SMASK_IN_DATA) {
-                Some(decode(
-                    self.data_smask.as_ref().unwrap(),
-                    self.width,
-                    self.height,
-                    &ColorSpace::device_gray(),
-                    8,
-                    &[(0.0, 1.0)],
-                ))
+                if let Some(data) = self.data_smask.as_ref() {
+                    decode(
+                        data,
+                        self.width,
+                        self.height,
+                        &ColorSpace::device_gray(),
+                        8,
+                        &[(0.0, 1.0)],
+                    )
+                } else {
+                    None
+                }
             } else if let Some(s_mask) = self.dict.get::<Stream>(SMASK) {
-                ImageXObject::new(&s_mask, |_| None).map(|s| s.decode_raw())
+                ImageXObject::new(&s_mask, |_| None).and_then(|s| s.decode_raw())
             } else if let Some(mask) = self.dict.get::<Stream>(MASK) {
                 if let Some(obj) = ImageXObject::new(&mask, |_| None) {
-                    let mut mask_data = obj.decode_raw();
+                    let mut mask_data = obj.decode_raw()?;
 
                     // Mask doesn't necessarily have the same dimensions.
                     if obj.width != self.width || obj.height != self.height {
@@ -340,17 +340,21 @@ impl<'a> ImageXObject<'a> {
                 s_mask.unwrap_or_else(|| vec![1.0; self.width as usize * self.height as usize]);
 
             let decoded = self
-                .decode_raw()
+                .decode_raw()?
                 .chunks(self.color_space.num_components() as usize)
                 .zip(s_mask)
                 .flat_map(|(v, alpha)| self.color_space.to_rgba(v, alpha).to_rgba8().to_u8_array())
                 .collect::<Vec<_>>();
 
-            fix(decoded, self.width as usize * self.height as usize * 4, 0)
+            Some(fix(
+                decoded,
+                self.width as usize * self.height as usize * 4,
+                0,
+            ))
         }
     }
 
-    pub fn decode_raw(&self) -> Vec<f32> {
+    pub fn decode_raw(&self) -> Option<Vec<f32>> {
         decode(
             &self.decoded,
             self.width,
@@ -369,7 +373,7 @@ fn decode(
     color_space: &ColorSpace,
     bits_per_component: u8,
     decode: &[(f32, f32)],
-) -> Vec<f32> {
+) -> Option<Vec<f32>> {
     let interpolate = |n: f32, d_min: f32, d_max: f32| {
         interpolate(
             n,
@@ -383,7 +387,7 @@ fn decode(
     let adjusted_components = match bits_per_component {
         1 | 2 | 4 => {
             let mut buf = vec![];
-            let bpc = BitSize::from_u8(bits_per_component).unwrap();
+            let bpc = BitSize::from_u8(bits_per_component)?;
             let mut reader = BitReader::new(data.as_ref());
 
             for _ in 0..height {
@@ -418,5 +422,5 @@ fn decode(
         }
     }
 
-    decoded_arr
+    Some(decoded_arr)
 }

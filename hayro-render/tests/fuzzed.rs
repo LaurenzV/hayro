@@ -28,3 +28,9 @@ fn issue_61() {
     let file = include_bytes!("fuzzed_pdfs/issue61.pdf");
     render_fuzzed(file);
 }
+
+#[test]
+fn issue_62() {
+    let file = include_bytes!("fuzzed_pdfs/issue62.pdf");
+    render_fuzzed(file);
+}

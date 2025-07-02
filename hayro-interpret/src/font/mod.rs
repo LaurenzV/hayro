@@ -100,7 +100,7 @@ impl<'a> Font<'a> {
             f => {
                 println!(
                     "unimplemented font type {:?}",
-                    std::str::from_utf8(f).unwrap()
+                    std::str::from_utf8(f).unwrap_or("unknown type")
                 );
 
                 return None;
