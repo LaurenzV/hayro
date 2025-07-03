@@ -93,12 +93,14 @@ impl Readable<'_> for Number {
         // of first parsing it to a number).
 
         let data = r.skip::<Number>(ctx.in_content_stream)?;
-        let num = f32::from_str(std::str::from_utf8(data).ok()?).ok()?;
+        // We need to use f64 here, so that we can still parse a full `i32` without losing
+        // precision.
+        let num = f64::from_str(std::str::from_utf8(data).ok()?).ok()?;
 
         if num.fract() == 0.0 {
             Some(Number(InternalNumber::Integer(num as i32)))
         } else {
-            Some(Number(InternalNumber::Real(num)))
+            Some(Number(InternalNumber::Real(num as f32)))
         }
     }
 }
