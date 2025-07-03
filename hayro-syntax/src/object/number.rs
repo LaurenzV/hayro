@@ -419,4 +419,15 @@ mod tests {
             -0.345
         );
     }
+
+    #[test]
+    fn large_number() {
+        assert_eq!(
+            Reader::new("38359922".as_bytes())
+                .read_without_context::<Number>()
+                .unwrap()
+                .as_i32(),
+            38359922
+        );
+    }
 }
