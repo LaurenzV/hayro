@@ -407,15 +407,47 @@
   "5294": "https://issues.apache.org/jira/secure/attachment/13034818/issue-1.pdf",
   "5337": "https://issues.apache.org/jira/secure/attachment/13036969/Stein%2021622%20Edelstahl-Abdeckung.pdf",
   "5386": "https://issues.apache.org/jira/secure/attachment/13040988/cover.pdf",
+  "5414": {
+    "last_page": 3,
+    "link": "https://issues.apache.org/jira/secure/attachment/13042172/EVH6PLTXSXHKSRTBDZSINZ22R3U5EBYY.pdf"
+  },
   "5416": "https://issues.apache.org/jira/secure/attachment/13042386/label.pdf",
+  "5419": {
+    "last_page": 0,
+    "link": "https://issues.apache.org/jira/secure/attachment/13042502/PDFBOX-5419-4IMVKOWAZVGDFIUWAXFYBVHXKI5SHSK7.pdf"
+  },
+  "5442": "https://issues.apache.org/jira/secure/attachment/13044117/23115_133_1_25693_17.pdf",
+  "5461": "https://issues.apache.org/jira/secure/attachment/13045214/TK_invoice_160265.pdf",
+  "5464": {
+    "link": "https://issues.apache.org/jira/secure/attachment/13045360/err1.pdf",
+    "last_page": 2
+  },
+  "5484": "https://issues.apache.org/jira/secure/attachment/13047559/PDF-with-the-issue.pdf",
+  "5488": "https://issues.apache.org/jira/secure/attachment/13047800/gre_research_validity_data.pdf",
+  "5553": "https://issues.apache.org/jira/secure/attachment/13054031/black-background.pdf",
+  "5567": "https://issues.apache.org/jira/secure/attachment/13055594/Rechnung_001%20%281%29.pdf",
   "5597": [
     "https://issues.apache.org/jira/secure/attachment/13062795/test6.pdf",
     "https://issues.apache.org/jira/secure/attachment/13063199/image17.pdf",
     "https://issues.apache.org/jira/secure/attachment/13057930/test.pdf"
   ],
   "5635": "https://issues.apache.org/jira/secure/attachment/13061240/anonymous.pdf",
+  "5651": "https://issues.apache.org/jira/secure/attachment/13062077/IT54KKRKJBTDPS2MOXLUNUDP3G2BEDGD.pdf",
   "5657": "https://issues.apache.org/jira/secure/attachment/13062286/PDFJS-16782-SMaskInData.pdf",
+  "5665": "https://issues.apache.org/jira/secure/attachment/13062562/PDFBOX-5665-2_unc.pdf",
+  "5702": "https://issues.apache.org/jira/secure/attachment/13063672/image2%EF%BC%88pdfbox%E4%B8%A2%E5%A4%B1%E5%AD%97%E4%BD%93%EF%BC%89.pdf",
   "5706": "https://issues.apache.org/jira/secure/attachment/13063781/PDFBOX-5706-uae-visa-application-form-english.pdf",
   "5738": "https://issues.apache.org/jira/secure/attachment/13065299/Rechnung%20983312924%20%28Carbagas%29.pdf",
-  "5963": "https://issues.apache.org/jira/secure/attachment/13074981/PDFJS-19532-Type3.pdf"
+  "5778": "https://issues.apache.org/jira/secure/attachment/13067268/hk.pdf",
+  "5876": "https://issues.apache.org/jira/secure/attachment/13071244/jpeg2000.pdf",
+  "5926": {
+    "link": "https://issues.apache.org/jira/secure/attachment/13073557/jbig2_blank_thumbnail.pdf",
+    "last_page": 1
+  },
+  "5957": "https://issues.apache.org/jira/secure/attachment/13074749/VERAPDF-1335-InlineImage.pdf",
+  "5963": "https://issues.apache.org/jira/secure/attachment/13074981/PDFJS-19532-Type3.pdf",
+  "5992": [
+    "https://issues.apache.org/jira/secure/attachment/13076193/broken.pdf",
+    "https://issues.apache.org/jira/secure/attachment/13076198/EDGE11896203.pdf"
+  ]
 }
