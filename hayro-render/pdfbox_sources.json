@@ -344,20 +344,69 @@
   },
   "4279": "https://issues.apache.org/jira/secure/attachment/12933227/pop-bugzilla62905.pdf",
   "4320": "https://issues.apache.org/jira/secure/attachment/12940751/scanned.pdf",
+  "4326": "https://issues.apache.org/jira/secure/attachment/12941825/PDFJS-10026.pdf",
+  "4330": "https://issues.apache.org/jira/secure/attachment/12942260/pop-bugzilla37292.pdf",
   "4395": [
     "https://issues.apache.org/jira/secure/attachment/12950591/accents_Type1.pdf",
     "https://issues.apache.org/jira/secure/attachment/12950590/PDFJS-4130.pdf"
   ],
+  "4464": "https://issues.apache.org/jira/secure/attachment/12958674/BrokenPage.pdf",
+  "4470": "https://issues.apache.org/jira/secure/attachment/12959449/1206264-michael-sims-onboarding-documents-248%20%281%29.pdf",
+  "4474": "https://issues.apache.org/jira/secure/attachment/12960068/amazon_refund_signed.pdf",
+  "4484": "https://issues.apache.org/jira/secure/attachment/12962147/test-jbig2.pdf",
+  "4516": [
+    "https://issues.apache.org/jira/secure/attachment/12985587/PDFBOX-4516_TvT.pdf",
+    "https://issues.apache.org/jira/secure/attachment/13000419/PDFBOX-4815-dithered-stencil.pdf"
+  ],
   "4520": "https://issues.apache.org/jira/secure/attachment/12966447/orginalPdf.pdf",
+  "4530": "https://issues.apache.org/jira/secure/attachment/12967362/page-3.pdf",
   "4559": {
     "link": "https://issues.apache.org/jira/secure/attachment/12970915/test.pdf",
     "last_page": 2
   },
   "4561": "https://issues.apache.org/jira/secure/attachment/12971051/PdfBox_Test.pdf",
+  "4607": "https://issues.apache.org/jira/secure/attachment/12975736/16bit-transparent.pdf",
+  "4627": "https://issues.apache.org/jira/secure/attachment/12977148/uncolored_tiling_pattern.pdf",
+  "4661": "https://issues.apache.org/jira/secure/attachment/12981543/KR1020067006547.pdf",
+  "4676": "https://issues.apache.org/jira/secure/attachment/12984327/11.pdf",
+  "4719": {
+    "last_page": 1,
+    "link": "https://issues.apache.org/jira/secure/attachment/12989242/incomplete%20input.pdf"
+  },
+  "4801": "https://issues.apache.org/jira/secure/attachment/12997160/PDFBOX-4801-Bad-ICC-N.pdf",
+  "4820": {
+    "last_page": 1,
+    "link": "https://issues.apache.org/jira/secure/attachment/13001365/bit_coin.pdf"
+  },
+  "4831": {
+    "link": "https://issues.apache.org/jira/secure/attachment/13002695/13._Korona_szallo_vegzes_13.09.26.eredeti.pdf",
+    "last_page": 0
+  },
+  "4832": "https://issues.apache.org/jira/secure/attachment/13002706/pdf_scanned-eng-bw.pdf",
+  "4850": "https://issues.apache.org/jira/secure/attachment/13004316/issue.pdf",
+  "4851": "https://issues.apache.org/jira/secure/attachment/13004321/issue2.pdf",
+  "4858": "https://issues.apache.org/jira/secure/attachment/13004689/20200603155752-null.pdf",
+  "4900": "https://issues.apache.org/jira/secure/attachment/13006540/TwoCircles_NS-None.pdf",
+  "4915": {
+    "link": "https://issues.apache.org/jira/secure/attachment/13007675/Black%20Bullet%20-%20Volume%2001%20-%20Those%20Who%20Would%20Be%20Gods%20%5BYen%20Press%5D%5BKobo_Kitzoku%5D.pdf",
+    "last_page": 0
+  },
+  "4917": "https://issues.apache.org/jira/secure/attachment/13007802/issue.pdf",
+  "4927": "https://issues.apache.org/jira/secure/attachment/13008805/M2BEIK4UWALXYEIHCRCJFASR222EEOLV.pdf",
+  "4929": "https://issues.apache.org/jira/secure/attachment/13008932/pdfbox-image-bug.pdf",
+  "4934": [
+    "https://issues.apache.org/jira/secure/attachment/13009519/Korea.pdf",
+    "https://issues.apache.org/jira/secure/attachment/13009520/JP.pdf"
+  ],
+  "4938": "https://issues.apache.org/jira/secure/attachment/13010119/Pro-Team-ENT_SN_Datasheet.pdf",
+  "4996": "https://issues.apache.org/jira/secure/attachment/13013824/pdf-test-customer.pdf",
   "5054": "https://issues.apache.org/jira/secure/attachment/13017472/PDFJS-12705-type3.pdf",
+  "5079": "https://issues.apache.org/jira/secure/attachment/13018679/PDF2.0imagewithBPC.pdf",
   "5097": "https://issues.apache.org/jira/secure/attachment/13019989/document%283%29.pdf",
+  "5275": "https://issues.apache.org/jira/secure/attachment/13033020/PDFBOX-5275-p5.pdf",
   "5294": "https://issues.apache.org/jira/secure/attachment/13034818/issue-1.pdf",
   "5337": "https://issues.apache.org/jira/secure/attachment/13036969/Stein%2021622%20Edelstahl-Abdeckung.pdf",
+  "5386": "https://issues.apache.org/jira/secure/attachment/13040988/cover.pdf",
   "5416": "https://issues.apache.org/jira/secure/attachment/13042386/label.pdf",
   "5597": [
     "https://issues.apache.org/jira/secure/attachment/13062795/test6.pdf",
