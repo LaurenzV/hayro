@@ -12,37 +12,37 @@ fn render_fuzzed(file: &[u8]) {
 }
 
 #[test]
-fn issue_55() {
+fn issue55() {
     let file = include_bytes!("fuzzed_pdfs/issue55.pdf");
     render_fuzzed(file);
 }
 
 #[test]
-fn issue_56() {
+fn issue56() {
     let file = include_bytes!("fuzzed_pdfs/issue56.pdf");
     render_fuzzed(file);
 }
 
 #[test]
-fn issue_61() {
+fn issue61() {
     let file = include_bytes!("fuzzed_pdfs/issue61.pdf");
     render_fuzzed(file);
 }
 
 #[test]
-fn issue_62() {
+fn issue62() {
     let file = include_bytes!("fuzzed_pdfs/issue62.pdf");
     render_fuzzed(file);
 }
 
 #[test]
-fn issue_67() {
+fn issue67() {
     let file = include_bytes!("fuzzed_pdfs/issue67.pdf");
     render_fuzzed(file);
 }
 
 #[test]
-fn issue_68() {
+fn issue68() {
     let file = include_bytes!("fuzzed_pdfs/issue68.pdf");
     render_fuzzed(file);
 }
