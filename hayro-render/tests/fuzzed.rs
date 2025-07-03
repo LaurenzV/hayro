@@ -12,6 +12,12 @@ fn render_fuzzed(file: &[u8]) {
 }
 
 #[test]
+fn issue54() {
+    let file = include_bytes!("fuzzed_pdfs/issue54.pdf");
+    render_fuzzed(file);
+}
+
+#[test]
 fn issue55() {
     let file = include_bytes!("fuzzed_pdfs/issue55.pdf");
     render_fuzzed(file);

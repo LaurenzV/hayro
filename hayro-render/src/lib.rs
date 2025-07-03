@@ -309,7 +309,7 @@ pub fn render(page: &Page, scale: f32) -> Pixmap {
     {
         (A4.width(), A4.height())
     } else {
-        (crop_box.width(), crop_box.height())
+        (crop_box.width().max(1.0), crop_box.height().max(1.0))
     };
 
     let (mut pix_width, mut pix_height) = (unscaled_width, unscaled_height);
