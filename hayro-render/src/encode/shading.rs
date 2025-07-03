@@ -25,7 +25,8 @@ impl Sampler for EncodedShading {
     fn sample_impl(&self, pos: Point) -> [f32; 4] {
         self.shading_type
             .eval(pos, self.background_color, &self.color_space)
-            .components
+            .map(|v| v.components)
+            .unwrap_or([0.0, 0.0, 0.0, 0.0])
     }
 }
 
@@ -251,17 +252,15 @@ impl EncodedShadingType {
         pos: Point,
         bg_color: AlphaColor<Srgb>,
         color_space: &ColorSpace,
-    ) -> AlphaColor<Srgb> {
+    ) -> Option<AlphaColor<Srgb>> {
         match self {
             EncodedShadingType::FunctionBased { domain, function } => {
                 if !domain.contains(pos) {
-                    bg_color
+                    Some(bg_color)
                 } else {
-                    let out = function
-                        .eval(&smallvec![pos.x as f32, pos.y as f32])
-                        .unwrap();
+                    let out = function.eval(&smallvec![pos.x as f32, pos.y as f32])?;
                     // TODO: Clamp out-of-range values.
-                    color_space.to_rgba(&out, 1.0)
+                    Some(color_space.to_rgba(&out, 1.0))
                 }
             }
             EncodedShadingType::RadialAxial {
@@ -280,41 +279,41 @@ impl EncodedShadingType {
                 };
 
                 if t == f32::MIN {
-                    return bg_color;
+                    return Some(bg_color);
                 }
 
                 if t < 0.0 {
                     if extend[0] {
                         t = 0.0;
                     } else {
-                        return bg_color;
+                        return Some(bg_color);
                     }
                 } else if t > 1.0 {
                     if extend[1] {
                         t = 1.0;
                     } else {
-                        return bg_color;
+                        return Some(bg_color);
                     }
                 }
 
                 let t = t0 + (t1 - t0) * t;
 
-                let val = function.eval(&smallvec![t]).unwrap();
+                let val = function.eval(&smallvec![t])?;
 
-                color_space.to_rgba(&val, 1.0)
+                Some(color_space.to_rgba(&val, 1.0))
             }
             EncodedShadingType::Sampled { samples, function } => {
                 let sample_point = (pos.x as u16, pos.y as u16);
 
                 if let Some(color) = samples.get(&sample_point) {
                     if let Some(function) = function {
-                        let val = function.eval(&color.to_smallvec()).unwrap();
-                        color_space.to_rgba(&val, 1.0)
+                        let val = function.eval(&color.to_smallvec())?;
+                        Some(color_space.to_rgba(&val, 1.0))
                     } else {
-                        color_space.to_rgba(color, 1.0)
+                        Some(color_space.to_rgba(color, 1.0))
                     }
                 } else {
-                    bg_color
+                    Some(bg_color)
                 }
             }
         }

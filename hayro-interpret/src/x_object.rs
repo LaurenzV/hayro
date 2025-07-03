@@ -31,7 +31,7 @@ impl<'a> XObject<'a> {
         match dict.get::<Name>(SUBTYPE)?.deref() {
             IMAGE => Some(Self::ImageXObject(ImageXObject::new(stream, |_| None)?)),
             FORM => Some(Self::FormXObject(FormXObject::new(stream)?)),
-            _ => unimplemented!(),
+            _ => None,
         }
     }
 }
