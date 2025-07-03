@@ -105,12 +105,29 @@ impl<'a> LiteralString<'a> {
                         let next = r.read_byte().unwrap();
 
                         if is_octal_digit(next) {
-                            let second = r.read_byte().unwrap();
-                            let third = r.read_byte().unwrap();
-                            let bytes = [next, second, third];
-                            let str = std::str::from_utf8(&bytes).unwrap();
-                            let num = u8::from_str_radix(str, 8).unwrap();
-                            cleaned.push(num);
+                            let second = r.read_byte();
+                            let third = r.read_byte();
+
+                            match (second, third) {
+                                (Some(n1), Some(n2)) => {
+                                    if is_octal_digit(n1) && is_octal_digit(n2) {
+                                        let bytes = [next, n1, n2];
+                                        let str = std::str::from_utf8(&bytes).unwrap();
+                                        let num = u8::from_str_radix(str, 8).unwrap();
+                                        cleaned.push(num);
+                                    } else {
+                                        // Ignore the solidus and treat as normal characters.
+                                        cleaned.push(next);
+                                        cleaned.push(n1);
+                                        cleaned.push(n2);
+                                    }
+                                }
+                                (Some(n1), None) => {
+                                    cleaned.push(next);
+                                    cleaned.push(n1);
+                                }
+                                _ => cleaned.push(next),
+                            }
                         } else {
                             match next {
                                 b'n' => cleaned.push(0xA),
@@ -129,7 +146,7 @@ impl<'a> LiteralString<'a> {
                                     // were not split.
                                     r.skip_eol_characters();
                                 }
-                                _ => unreachable!(),
+                                _ => cleaned.push(next),
                             }
                         }
                     }
@@ -196,16 +213,7 @@ fn parse_literal(r: &mut Reader<'_>) -> Option<bool> {
             b'\\' => {
                 dirty = true;
 
-                let next = r.read_byte()?;
-                if is_octal_digit(next) {
-                    r.eat(|b| is_octal_digit(b))?;
-                    r.eat(|b| is_octal_digit(b))?;
-                } else if !matches!(
-                    next,
-                    b'n' | b'r' | b't' | b'b' | b'f' | b'(' | b')' | b'\\' | b'\n' | b'\r'
-                ) {
-                    return None;
-                }
+                let _ = r.read_byte()?;
             }
             b'(' => bracket_counter += 1,
             b')' => bracket_counter -= 1,
@@ -462,6 +470,39 @@ mod tests {
     }
 
     #[test]
+    fn literal_string_8() {
+        assert_eq!(
+            Reader::new("(\\3)".as_bytes())
+                .read_without_context::<String>()
+                .unwrap()
+                .get(),
+            b"3".to_vec()
+        )
+    }
+
+    #[test]
+    fn literal_string_9() {
+        assert_eq!(
+            Reader::new("(\\36)".as_bytes())
+                .read_without_context::<String>()
+                .unwrap()
+                .get(),
+            b"36".to_vec()
+        )
+    }
+
+    #[test]
+    fn literal_string_10() {
+        assert_eq!(
+            Reader::new("(\\36ab)".as_bytes())
+                .read_without_context::<String>()
+                .unwrap()
+                .get(),
+            b"36ab".to_vec()
+        )
+    }
+
+    #[test]
     fn literal_string_trailing() {
         assert_eq!(
             Reader::new("(Hi there.)abcde".as_bytes())
@@ -475,10 +516,14 @@ mod tests {
 
     #[test]
     fn literal_string_invalid() {
-        assert!(
+        // In this case, we just ignore the solidus and treat it as literal numbers.
+        assert_eq!(
             Reader::new("(Hi \\778)".as_bytes())
                 .read_without_context::<LiteralString>()
-                .is_none()
+                .unwrap()
+                .get()
+                .to_vec(),
+            b"Hi 778".to_vec()
         );
     }
 
