@@ -136,13 +136,7 @@ impl StandardKind {
     fn map_code(&self, code: u8) -> GlyphId {
         let result = self
             .code_to_ps_name(code)
-            .and_then(|c| {
-                self.base_font
-                    .get_blob()
-                    .table()
-                    .glyph_index_by_name(c)
-                    .map(|g| GlyphId::new(g.0 as u32))
-            })
+            .and_then(|c| self.base_font.get_blob().name_to_glyph(c))
             .unwrap_or(GlyphId::NOTDEF);
         self.glyph_to_code.borrow_mut().insert(result, code);
 

@@ -1,13 +1,17 @@
 use crate::font::blob::{
     COURIER_BOLD, COURIER_BOLD_ITALIC, COURIER_ITALIC, COURIER_REGULAR, CffFontBlob,
-    HELVETICA_BOLD, HELVETICA_BOLD_ITALIC, HELVETICA_ITALIC, HELVETICA_REGULAR, TIMES_BOLD,
-    TIMES_ITALIC, TIMES_REGULAR, TIMES_ROMAN_BOLD_ITALIC, ZAPF_DINGS_BAT,
+    HELVETICA_BOLD, HELVETICA_BOLD_ITALIC, HELVETICA_ITALIC, HELVETICA_REGULAR, OpenTypeFontBlob,
+    TIMES_BOLD, TIMES_ITALIC, TIMES_REGULAR, TIMES_ROMAN_BOLD_ITALIC, ZAPF_DINGS_BAT,
 };
 use crate::font::generated::{metrics, standard, symbol, zapf_dings};
 use crate::font::{FontData, blob};
 use hayro_syntax::object::dict::Dict;
-use hayro_syntax::object::dict::keys::BASE_FONT;
+use hayro_syntax::object::dict::keys::{BASE_FONT, P};
 use hayro_syntax::object::name::Name;
+use kurbo::BezPath;
+use skrifa::GlyphId16;
+use skrifa::raw::TableProvider;
+use std::collections::HashMap;
 use std::ops::Deref;
 
 #[derive(Copy, Clone, Debug)]
@@ -64,22 +68,28 @@ impl StandardFont {
         }
     }
 
-    pub(crate) fn get_blob(&self) -> CffFontBlob {
+    pub(crate) fn get_blob(&self) -> StandardFontBlob {
         match self {
-            StandardFont::Helvetica => HELVETICA_REGULAR.clone(),
-            StandardFont::HelveticaBold => HELVETICA_BOLD.clone(),
-            StandardFont::HelveticaOblique => HELVETICA_ITALIC.clone(),
-            StandardFont::HelveticaBoldOblique => HELVETICA_BOLD_ITALIC.clone(),
-            StandardFont::Courier => COURIER_REGULAR.clone(),
-            StandardFont::CourierBold => COURIER_BOLD.clone(),
-            StandardFont::CourierOblique => COURIER_ITALIC.clone(),
-            StandardFont::CourierBoldOblique => COURIER_BOLD_ITALIC.clone(),
-            StandardFont::TimesRoman => TIMES_REGULAR.clone(),
-            StandardFont::TimesBold => TIMES_BOLD.clone(),
-            StandardFont::TimesItalic => TIMES_ITALIC.clone(),
-            StandardFont::TimesBoldItalic => TIMES_ROMAN_BOLD_ITALIC.clone(),
-            StandardFont::ZapfDingBats => ZAPF_DINGS_BAT.clone(),
-            StandardFont::Symbol => blob::SYMBOL.clone(),
+            StandardFont::Helvetica => StandardFontBlob::new_cff(HELVETICA_REGULAR.clone()),
+            StandardFont::HelveticaBold => StandardFontBlob::new_cff(HELVETICA_BOLD.clone()),
+            StandardFont::HelveticaOblique => StandardFontBlob::new_cff(HELVETICA_ITALIC.clone()),
+            StandardFont::HelveticaBoldOblique => {
+                StandardFontBlob::new_cff(HELVETICA_BOLD_ITALIC.clone())
+            }
+            StandardFont::Courier => StandardFontBlob::new_cff(COURIER_REGULAR.clone()),
+            StandardFont::CourierBold => StandardFontBlob::new_cff(COURIER_BOLD.clone()),
+            StandardFont::CourierOblique => StandardFontBlob::new_cff(COURIER_ITALIC.clone()),
+            StandardFont::CourierBoldOblique => {
+                StandardFontBlob::new_cff(COURIER_BOLD_ITALIC.clone())
+            }
+            StandardFont::TimesRoman => StandardFontBlob::new_cff(TIMES_REGULAR.clone()),
+            StandardFont::TimesBold => StandardFontBlob::new_cff(TIMES_BOLD.clone()),
+            StandardFont::TimesItalic => StandardFontBlob::new_cff(TIMES_ITALIC.clone()),
+            StandardFont::TimesBoldItalic => {
+                StandardFontBlob::new_cff(TIMES_ROMAN_BOLD_ITALIC.clone())
+            }
+            StandardFont::ZapfDingBats => StandardFontBlob::new_cff(ZAPF_DINGS_BAT.clone()),
+            StandardFont::Symbol => StandardFontBlob::new_cff(blob::SYMBOL.clone()),
         }
     }
 
@@ -210,5 +220,49 @@ pub(crate) fn select_standard_font(dict: &Dict) -> Option<StandardFont> {
         | b"Dingbats"
         | b"MS-Gothic" => Some(StandardFont::ZapfDingBats),
         _ => None,
+    }
+}
+
+pub(crate) enum StandardFontBlob {
+    Cff(CffFontBlob),
+    Otf(OpenTypeFontBlob, HashMap<String, skrifa::GlyphId>),
+}
+
+impl StandardFontBlob {
+    pub(crate) fn new_cff(blob: CffFontBlob) -> Self {
+        Self::Cff(blob)
+    }
+
+    pub(crate) fn new_otf(blob: OpenTypeFontBlob) -> Self {
+        let mut glyph_names = HashMap::new();
+
+        if let Ok(post) = blob.font_ref().post() {
+            for i in 0..blob.num_glyphs() {
+                if let Some(str) = post.glyph_name(GlyphId16::new(i)) {
+                    glyph_names.insert(str.to_string(), skrifa::GlyphId::new(i as u32));
+                }
+            }
+        }
+
+        Self::Otf(blob, glyph_names)
+    }
+}
+
+impl StandardFontBlob {
+    pub(crate) fn name_to_glyph(&self, name: &str) -> Option<skrifa::GlyphId> {
+        match self {
+            Self::Cff(blob) => blob
+                .table()
+                .glyph_index_by_name(name)
+                .map(|g| skrifa::GlyphId::new(g.0 as u32)),
+            Self::Otf(_, glyph_names) => glyph_names.get(name).copied(),
+        }
+    }
+
+    pub(crate) fn outline_glyph(&self, glyph: skrifa::GlyphId) -> BezPath {
+        match self {
+            StandardFontBlob::Cff(blob) => blob.outline_glyph(glyph),
+            StandardFontBlob::Otf(blob, _) => blob.outline_glyph(glyph),
+        }
     }
 }
