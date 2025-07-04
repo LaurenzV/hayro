@@ -329,6 +329,7 @@ use crate::run_test;
 #[test] fn pdfjs_pattern_text_embedded_font() { run_test("pdfjs_pattern_text_embedded_font", "pdfs/pdfjs/pattern_text_embedded_font.pdf", None); }
 #[test] fn pdfjs_personwithdog() { run_test("pdfjs_personwithdog", "pdfs/pdfjs/personwithdog.pdf", None); }
 #[test] fn pdfjs_simpletype3font() { run_test("pdfjs_simpletype3font", "pdfs/pdfjs/simpletype3font.pdf", None); }
+#[test] fn pdfjs_standard_fonts_no_system_fonts() { run_test("pdfjs_standard_fonts_no_system_fonts", "pdfs/pdfjs/standard_fonts.pdf", None); }
 #[test] fn pdfjs_type4psfunc() { run_test("pdfjs_type4psfunc", "pdfs/pdfjs/type4psfunc.pdf", None); }
 #[test] fn pdfjs_zerowidthline() { run_test("pdfjs_zerowidthline", "pdfs/pdfjs/zerowidthline.pdf", None); }
 #[test] fn pdfbox_31() { run_test("pdfbox_31", "downloads/pdfbox/31.pdf", Some("..=0")); }

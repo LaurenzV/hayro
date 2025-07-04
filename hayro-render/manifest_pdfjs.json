@@ -501,6 +501,10 @@
     "file": "pdfs/simpletype3font.pdf"
   },
   {
+    "id": "standard_fonts_no_system_fonts",
+    "file": "pdfs/standard_fonts.pdf"
+  },
+  {
     "id": "type4psfunc",
     "file": "pdfs/type4psfunc.pdf"
   },
