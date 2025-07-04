@@ -70,7 +70,6 @@
   "1934": "color mask",
   "2006": "encrypted PDF",
   "2027": "encrypted PDF",
-  "2059": "missing characters, probably because standard fonts dont have full coverage",
   "2180": "extremely slow because we don't cache patterns",
   "2205": "jpx with indexed cs",
   "2265": "takes long, renders wrong, perhaps mask",
