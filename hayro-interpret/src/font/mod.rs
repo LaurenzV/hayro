@@ -8,6 +8,7 @@ use crate::font::true_type::TrueTypeFont;
 use crate::font::type1::Type1Font;
 use crate::font::type3::Type3;
 use crate::interpret::state::State;
+use bitflags::bitflags;
 use hayro_syntax::document::page::Resources;
 use hayro_syntax::object::dict::Dict;
 use hayro_syntax::object::dict::keys::SUBTYPE;
@@ -293,6 +294,22 @@ impl FontStretch {
     }
 }
 
+bitflags! {
+    /// Bitflags describing various characteristics of fonts.
+    #[derive(Debug)]
+    pub struct FontFlags: u32 {
+        const FIXED_PITCH = 1 << 0;
+        const SERIF = 1 << 1;
+        const SYMBOLIC = 1 << 2;
+        const SCRIPT = 1 << 3;
+        const NON_SYMBOLIC = 1 << 5;
+        const ITALIC = 1 << 6;
+        const ALL_CAP = 1 << 16;
+        const SMALL_CAP = 1 << 17;
+        const FORCE_BOLD = 1 << 18;
+    }
+}
+
 #[derive(Debug, Clone)]
 struct FontData {
     post_script_name: Option<String>,
@@ -336,14 +353,17 @@ impl FontData {
                 .unwrap_or(FontStretch::Normal);
             data.font_weight = descriptor.get::<u32>(FONT_WEIGHT).unwrap_or(400);
 
-            if let Some(flags) = descriptor.get::<u32>(FLAGS) {
-                data.is_serif = flags & (1 << 1) != 0;
-                data.is_italic = flags & (1 << 6) != 0
+            if let Some(flags) = descriptor
+                .get::<u32>(FLAGS)
+                .map(|n| FontFlags::from_bits_truncate(n))
+            {
+                data.is_serif = flags.contains(FontFlags::SERIF);
+                data.is_italic = flags.contains(FontFlags::ITALIC)
                     || data
                         .post_script_name
                         .as_ref()
                         .is_some_and(|s| s.contains("Italic"));
-                data.is_small_cap = flags & (1 << 17) != 0;
+                data.is_small_cap = flags.contains(FontFlags::SMALL_CAP);
                 data.is_bold = data
                     .post_script_name
                     .as_ref()

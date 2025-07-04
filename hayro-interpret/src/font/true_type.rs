@@ -1,6 +1,6 @@
-use crate::font::Encoding;
 use crate::font::blob::OpenTypeFontBlob;
 use crate::font::generated::{glyph_names, mac_os_roman, mac_roman};
+use crate::font::{Encoding, FontFlags};
 use crate::util::{CodeMapExt, OptionLog};
 use bitflags::bitflags;
 use hayro_syntax::object::Object;
@@ -183,23 +183,6 @@ impl TrueTypeFont {
             })
             .warn_none(&format!("failed to find advance width for code {code}"))
             .unwrap_or(0.0)
-    }
-}
-
-// TODO: Deduplicate
-bitflags! {
-    /// Bitflags describing various characteristics of fonts.
-    #[derive(Debug)]
-    pub struct FontFlags: u32 {
-        const FIXED_PITCH = 1 << 0;
-        const SERIF = 1 << 1;
-        const SYMBOLIC = 1 << 2;
-        const SCRIPT = 1 << 3;
-        const NON_SYMBOLIC = 1 << 5;
-        const ITALIC = 1 << 6;
-        const ALL_CAP = 1 << 16;
-        const SMALL_CAP = 1 << 17;
-        const FORCE_BOLD = 1 << 18;
     }
 }
 
