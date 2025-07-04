@@ -1,6 +1,6 @@
 use crate::font::blob::{CffFontBlob, Type1FontBlob};
 use crate::font::glyph_simulator::GlyphSimulator;
-use crate::font::standard_font::{StandardFont, select_standard_font};
+use crate::font::standard_font::{StandardFont, StandardFontBlob, select_standard_font};
 use crate::font::true_type::{read_encoding, read_widths};
 use crate::font::{Encoding, FontData};
 use hayro_syntax::object::dict::Dict;
@@ -89,6 +89,7 @@ enum Kind {
 #[derive(Debug)]
 struct StandardKind {
     base_font: StandardFont,
+    base_font_blob: StandardFontBlob,
     encoding: Encoding,
     widths: Vec<f32>,
     fallback: bool,
@@ -110,9 +111,11 @@ impl StandardKind {
         let widths = read_widths(dict, &descriptor);
 
         let (encoding, encoding_map) = read_encoding(dict);
+        let base_font_blob = base_font.get_blob();
 
         Self {
             base_font,
+            base_font_blob,
             widths,
             encodings: encoding_map,
             glyph_to_code: RefCell::new(HashMap::new()),
@@ -136,7 +139,7 @@ impl StandardKind {
     fn map_code(&self, code: u8) -> GlyphId {
         let result = self
             .code_to_ps_name(code)
-            .and_then(|c| self.base_font.get_blob().name_to_glyph(c))
+            .and_then(|c| self.base_font_blob.name_to_glyph(c))
             .unwrap_or(GlyphId::NOTDEF);
         self.glyph_to_code.borrow_mut().insert(result, code);
 
@@ -144,7 +147,7 @@ impl StandardKind {
     }
 
     fn outline_glyph(&self, glyph: GlyphId) -> BezPath {
-        let path = self.base_font.get_blob().outline_glyph(glyph);
+        let path = self.base_font_blob.outline_glyph(glyph);
 
         // If the font was not embedded in the file and we are using a standard font as a substitute,
         // we stretch the glyph so it matches the width of the standard font.

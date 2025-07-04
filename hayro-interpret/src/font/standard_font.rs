@@ -70,23 +70,23 @@ impl StandardFont {
 
     pub(crate) fn get_blob(&self) -> StandardFontBlob {
         match self {
-            StandardFont::Helvetica => StandardFontBlob::new_cff(HELVETICA_REGULAR.clone()),
-            StandardFont::HelveticaBold => StandardFontBlob::new_cff(HELVETICA_BOLD.clone()),
-            StandardFont::HelveticaOblique => StandardFontBlob::new_cff(HELVETICA_ITALIC.clone()),
+            StandardFont::Helvetica => StandardFontBlob::new_otf(HELVETICA_REGULAR.clone()),
+            StandardFont::HelveticaBold => StandardFontBlob::new_otf(HELVETICA_BOLD.clone()),
+            StandardFont::HelveticaOblique => StandardFontBlob::new_otf(HELVETICA_ITALIC.clone()),
             StandardFont::HelveticaBoldOblique => {
-                StandardFontBlob::new_cff(HELVETICA_BOLD_ITALIC.clone())
+                StandardFontBlob::new_otf(HELVETICA_BOLD_ITALIC.clone())
             }
-            StandardFont::Courier => StandardFontBlob::new_cff(COURIER_REGULAR.clone()),
-            StandardFont::CourierBold => StandardFontBlob::new_cff(COURIER_BOLD.clone()),
-            StandardFont::CourierOblique => StandardFontBlob::new_cff(COURIER_ITALIC.clone()),
+            StandardFont::Courier => StandardFontBlob::new_otf(COURIER_REGULAR.clone()),
+            StandardFont::CourierBold => StandardFontBlob::new_otf(COURIER_BOLD.clone()),
+            StandardFont::CourierOblique => StandardFontBlob::new_otf(COURIER_ITALIC.clone()),
             StandardFont::CourierBoldOblique => {
-                StandardFontBlob::new_cff(COURIER_BOLD_ITALIC.clone())
+                StandardFontBlob::new_otf(COURIER_BOLD_ITALIC.clone())
             }
-            StandardFont::TimesRoman => StandardFontBlob::new_cff(TIMES_REGULAR.clone()),
-            StandardFont::TimesBold => StandardFontBlob::new_cff(TIMES_BOLD.clone()),
-            StandardFont::TimesItalic => StandardFontBlob::new_cff(TIMES_ITALIC.clone()),
+            StandardFont::TimesRoman => StandardFontBlob::new_otf(TIMES_REGULAR.clone()),
+            StandardFont::TimesBold => StandardFontBlob::new_otf(TIMES_BOLD.clone()),
+            StandardFont::TimesItalic => StandardFontBlob::new_otf(TIMES_ITALIC.clone()),
             StandardFont::TimesBoldItalic => {
-                StandardFontBlob::new_cff(TIMES_ROMAN_BOLD_ITALIC.clone())
+                StandardFontBlob::new_otf(TIMES_ROMAN_BOLD_ITALIC.clone())
             }
             StandardFont::ZapfDingBats => StandardFontBlob::new_cff(ZAPF_DINGS_BAT.clone()),
             StandardFont::Symbol => StandardFontBlob::new_cff(blob::SYMBOL.clone()),
@@ -223,6 +223,7 @@ pub(crate) fn select_standard_font(dict: &Dict) -> Option<StandardFont> {
     }
 }
 
+#[derive(Debug)]
 pub(crate) enum StandardFontBlob {
     Cff(CffFontBlob),
     Otf(OpenTypeFontBlob, HashMap<String, skrifa::GlyphId>),
@@ -260,6 +261,12 @@ impl StandardFontBlob {
     }
 
     pub(crate) fn outline_glyph(&self, glyph: skrifa::GlyphId) -> BezPath {
+        // Standard fonts have empty outlines for these, but in Liberation Sans
+        // they are a .notdef rectangle.
+        if glyph == skrifa::GlyphId::NOTDEF {
+            return BezPath::new();
+        }
+
         match self {
             StandardFontBlob::Cff(blob) => blob.outline_glyph(glyph),
             StandardFontBlob::Otf(blob, _) => blob.outline_glyph(glyph),

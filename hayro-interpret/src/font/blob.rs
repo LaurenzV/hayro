@@ -12,84 +12,124 @@ use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
 use yoke::{Yoke, Yokeable};
 
-pub(crate) static HELVETICA_REGULAR: Lazy<CffFontBlob> = Lazy::new(|| {
-    CffFontBlob::new(Arc::new(include_bytes!(
-        "../../../assets/standard_fonts/FoxitSans.pfb"
-    )))
+// The Foxit fonts are to some degree uncomplete, so we use Liberation wherever possible instead.
+
+pub(crate) static HELVETICA_REGULAR: Lazy<OpenTypeFontBlob> = Lazy::new(|| {
+    OpenTypeFontBlob::new(
+        Arc::new(include_bytes!(
+            "../../../assets/standard_fonts/LiberationSans-Regular.ttf"
+        )),
+        0,
+    )
     .unwrap()
 });
 
-pub(crate) static HELVETICA_BOLD: Lazy<CffFontBlob> = Lazy::new(|| {
-    CffFontBlob::new(Arc::new(include_bytes!(
-        "../../../assets/standard_fonts/FoxitSansBold.pfb"
-    )))
+pub(crate) static HELVETICA_BOLD: Lazy<OpenTypeFontBlob> = Lazy::new(|| {
+    OpenTypeFontBlob::new(
+        Arc::new(include_bytes!(
+            "../../../assets/standard_fonts/LiberationSans-Bold.ttf"
+        )),
+        0,
+    )
     .unwrap()
 });
-pub(crate) static HELVETICA_ITALIC: Lazy<CffFontBlob> = Lazy::new(|| {
-    CffFontBlob::new(Arc::new(include_bytes!(
-        "../../../assets/standard_fonts/FoxitSansItalic.pfb"
-    )))
-    .unwrap()
-});
-pub(crate) static HELVETICA_BOLD_ITALIC: Lazy<CffFontBlob> = Lazy::new(|| {
-    CffFontBlob::new(Arc::new(include_bytes!(
-        "../../../assets/standard_fonts/FoxitSansBoldItalic.pfb"
-    )))
-    .unwrap()
-});
-pub(crate) static COURIER_REGULAR: Lazy<CffFontBlob> = Lazy::new(|| {
-    CffFontBlob::new(Arc::new(include_bytes!(
-        "../../../assets/standard_fonts/FoxitFixed.pfb"
-    )))
+pub(crate) static HELVETICA_ITALIC: Lazy<OpenTypeFontBlob> = Lazy::new(|| {
+    OpenTypeFontBlob::new(
+        Arc::new(include_bytes!(
+            "../../../assets/standard_fonts/LiberationSans-Italic.ttf"
+        )),
+        0,
+    )
     .unwrap()
 });
 
-pub(crate) static COURIER_BOLD: Lazy<CffFontBlob> = Lazy::new(|| {
-    CffFontBlob::new(Arc::new(include_bytes!(
-        "../../../assets/standard_fonts/FoxitFixedBold.pfb"
-    )))
+pub(crate) static HELVETICA_BOLD_ITALIC: Lazy<OpenTypeFontBlob> = Lazy::new(|| {
+    OpenTypeFontBlob::new(
+        Arc::new(include_bytes!(
+            "../../../assets/standard_fonts/LiberationSans-BoldItalic.ttf"
+        )),
+        0,
+    )
     .unwrap()
 });
 
-pub(crate) static COURIER_ITALIC: Lazy<CffFontBlob> = Lazy::new(|| {
-    CffFontBlob::new(Arc::new(include_bytes!(
-        "../../../assets/standard_fonts/FoxitFixedItalic.pfb"
-    )))
+pub(crate) static COURIER_REGULAR: Lazy<OpenTypeFontBlob> = Lazy::new(|| {
+    OpenTypeFontBlob::new(
+        Arc::new(include_bytes!(
+            "../../../assets/standard_fonts/LiberationMono-Regular.ttf"
+        )),
+        0,
+    )
     .unwrap()
 });
 
-pub(crate) static COURIER_BOLD_ITALIC: Lazy<CffFontBlob> = Lazy::new(|| {
-    CffFontBlob::new(Arc::new(include_bytes!(
-        "../../../assets/standard_fonts/FoxitFixedBoldItalic.pfb"
-    )))
+pub(crate) static COURIER_BOLD: Lazy<OpenTypeFontBlob> = Lazy::new(|| {
+    OpenTypeFontBlob::new(
+        Arc::new(include_bytes!(
+            "../../../assets/standard_fonts/LiberationMono-Bold.ttf"
+        )),
+        0,
+    )
     .unwrap()
 });
 
-pub(crate) static TIMES_REGULAR: Lazy<CffFontBlob> = Lazy::new(|| {
-    CffFontBlob::new(Arc::new(include_bytes!(
-        "../../../assets/standard_fonts/FoxitSerif.pfb"
-    )))
+pub(crate) static COURIER_ITALIC: Lazy<OpenTypeFontBlob> = Lazy::new(|| {
+    OpenTypeFontBlob::new(
+        Arc::new(include_bytes!(
+            "../../../assets/standard_fonts/LiberationMono-Italic.ttf"
+        )),
+        0,
+    )
     .unwrap()
 });
 
-pub(crate) static TIMES_BOLD: Lazy<CffFontBlob> = Lazy::new(|| {
-    CffFontBlob::new(Arc::new(include_bytes!(
-        "../../../assets/standard_fonts/FoxitSerifBold.pfb"
-    )))
+pub(crate) static COURIER_BOLD_ITALIC: Lazy<OpenTypeFontBlob> = Lazy::new(|| {
+    OpenTypeFontBlob::new(
+        Arc::new(include_bytes!(
+            "../../../assets/standard_fonts/LiberationMono-BoldItalic.ttf"
+        )),
+        0,
+    )
     .unwrap()
 });
 
-pub(crate) static TIMES_ITALIC: Lazy<CffFontBlob> = Lazy::new(|| {
-    CffFontBlob::new(Arc::new(include_bytes!(
-        "../../../assets/standard_fonts/FoxitSerifItalic.pfb"
-    )))
+pub(crate) static TIMES_REGULAR: Lazy<OpenTypeFontBlob> = Lazy::new(|| {
+    OpenTypeFontBlob::new(
+        Arc::new(include_bytes!(
+            "../../../assets/standard_fonts/LiberationSerif-Regular.ttf"
+        )),
+        0,
+    )
     .unwrap()
 });
 
-pub(crate) static TIMES_ROMAN_BOLD_ITALIC: Lazy<CffFontBlob> = Lazy::new(|| {
-    CffFontBlob::new(Arc::new(include_bytes!(
-        "../../../assets/standard_fonts/FoxitSerifBoldItalic.pfb"
-    )))
+pub(crate) static TIMES_BOLD: Lazy<OpenTypeFontBlob> = Lazy::new(|| {
+    OpenTypeFontBlob::new(
+        Arc::new(include_bytes!(
+            "../../../assets/standard_fonts/LiberationSerif-Bold.ttf"
+        )),
+        0,
+    )
+    .unwrap()
+});
+
+pub(crate) static TIMES_ITALIC: Lazy<OpenTypeFontBlob> = Lazy::new(|| {
+    OpenTypeFontBlob::new(
+        Arc::new(include_bytes!(
+            "../../../assets/standard_fonts/LiberationSerif-Italic.ttf"
+        )),
+        0,
+    )
+    .unwrap()
+});
+
+pub(crate) static TIMES_ROMAN_BOLD_ITALIC: Lazy<OpenTypeFontBlob> = Lazy::new(|| {
+    OpenTypeFontBlob::new(
+        Arc::new(include_bytes!(
+            "../../../assets/standard_fonts/LiberationSerif-BoldItalic.ttf"
+        )),
+        0,
+    )
     .unwrap()
 });
 
