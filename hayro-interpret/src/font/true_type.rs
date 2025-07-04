@@ -186,6 +186,7 @@ impl TrueTypeFont {
     }
 }
 
+// TODO: Deduplicate
 bitflags! {
     /// Bitflags describing various characteristics of fonts.
     #[derive(Debug)]

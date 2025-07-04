@@ -1,14 +1,15 @@
-use crate::font::Encoding;
 use crate::font::blob::{CffFontBlob, Type1FontBlob};
 use crate::font::glyph_simulator::GlyphSimulator;
 use crate::font::standard_font::{StandardFont, select_standard_font};
 use crate::font::true_type::{read_encoding, read_widths};
+use crate::font::{Encoding, FontData};
 use hayro_syntax::object::dict::Dict;
 use hayro_syntax::object::dict::keys::{FONT_DESC, FONT_FILE, FONT_FILE3};
 use hayro_syntax::object::stream::Stream;
-use kurbo::BezPath;
+use kurbo::{Affine, BezPath};
 use log::warn;
 use skrifa::GlyphId;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -18,11 +19,21 @@ pub(crate) struct Type1Font(Kind);
 impl Type1Font {
     pub(crate) fn new(dict: &Dict) -> Option<Self> {
         let fallback = || {
-            warn!("unable to load type1 font, falling back to Times New Roman");
+            let font_data = FontData::new(dict);
+            let standard_font = StandardFont::from_font_data(&font_data);
+
+            warn!(
+                "unable to load font {}, falling back to {}",
+                font_data
+                    .post_script_name
+                    .unwrap_or("(no name)".to_string()),
+                standard_font.as_str()
+            );
 
             Self(Kind::Standard(StandardKind::new_with_standard(
                 dict,
-                StandardFont::TimesRoman,
+                standard_font,
+                true,
             )))
         };
 
@@ -80,15 +91,21 @@ struct StandardKind {
     base_font: StandardFont,
     encoding: Encoding,
     widths: Vec<f32>,
+    fallback: bool,
+    glyph_to_code: RefCell<HashMap<GlyphId, u8>>,
     encodings: HashMap<u8, String>,
 }
 
 impl StandardKind {
     fn new(dict: &Dict) -> Option<StandardKind> {
-        Some(Self::new_with_standard(dict, select_standard_font(dict)?))
+        Some(Self::new_with_standard(
+            dict,
+            select_standard_font(dict)?,
+            false,
+        ))
     }
 
-    fn new_with_standard(dict: &Dict, base_font: StandardFont) -> Self {
+    fn new_with_standard(dict: &Dict, base_font: StandardFont, fallback: bool) -> Self {
         let descriptor = dict.get::<Dict>(FONT_DESC).unwrap_or_default();
         let widths = read_widths(dict, &descriptor);
 
@@ -98,6 +115,8 @@ impl StandardKind {
             base_font,
             widths,
             encodings: encoding_map,
+            glyph_to_code: RefCell::new(HashMap::new()),
+            fallback,
             encoding,
         }
     }
@@ -115,7 +134,8 @@ impl StandardKind {
     }
 
     fn map_code(&self, code: u8) -> GlyphId {
-        self.code_to_ps_name(code)
+        let result = self
+            .code_to_ps_name(code)
             .and_then(|c| {
                 self.base_font
                     .get_blob()
@@ -123,11 +143,31 @@ impl StandardKind {
                     .glyph_index_by_name(c)
                     .map(|g| GlyphId::new(g.0 as u32))
             })
-            .unwrap_or(GlyphId::NOTDEF)
+            .unwrap_or(GlyphId::NOTDEF);
+        self.glyph_to_code.borrow_mut().insert(result, code);
+
+        result
     }
 
     fn outline_glyph(&self, glyph: GlyphId) -> BezPath {
-        self.base_font.get_blob().outline_glyph(glyph)
+        let path = self.base_font.get_blob().outline_glyph(glyph);
+
+        // If the font was not embedded in the file and we are using a standard font as a substitute,
+        // we stretch the glyph so it matches the width of the standard font.
+        if self.fallback
+            && let Some(code) = self.glyph_to_code.borrow().get(&glyph).copied()
+            && let Some(should_width) = self.glyph_width(code)
+            && let Some(actual_width) = self
+                .code_to_ps_name(code)
+                .and_then(|name| self.base_font.get_width(name))
+            && actual_width != 0.0
+        {
+            let stretch_factor = should_width / actual_width;
+
+            return Affine::scale_non_uniform(stretch_factor as f64, 1.0) * path;
+        }
+
+        path
     }
 
     fn glyph_width(&self, code: u8) -> Option<f32> {

@@ -63,9 +63,17 @@
   "1321": "https://issues.apache.org/jira/secure/attachment/12529064/00000C24.PDF",
   "1325": "https://issues.apache.org/jira/secure/attachment/12530336/pdf-nok.pdf",
   "1348": "https://issues.apache.org/jira/secure/attachment/12533436/98281340210146699.pdf",
+  "1607": {
+    "link": "https://issues.apache.org/jira/secure/attachment/12584297/pdf-govdocs-036902.pdf",
+    "last_page": 1
+  },
   "1620": "https://issues.apache.org/jira/secure/attachment/12585751/issue.pdf",
   "1628": "https://issues.apache.org/jira/secure/attachment/12586352/page4.pdf",
   "1686": "https://issues.apache.org/jira/secure/attachment/12596848/test1.pdf",
+  "1689": {
+    "link": "https://issues.apache.org/jira/secure/attachment/12597272/ELVIA-Reiserucktritt-Vollschutz.pdf",
+    "last_page": 0
+  },
   "1693": "https://issues.apache.org/jira/secure/attachment/12597513/DOC008.pdf",
   "1697": "https://issues.apache.org/jira/secure/attachment/12598578/%E4%BD%B3%E8%83%BDEOS_600D_%E4%B8%AD%E6%96%87%E4%BD%BF%E7%94%A8%E8%AF%B4%E6%98%8E%E4%B9%A6-0.pdf",
   "1708": "https://issues.apache.org/jira/secure/attachment/12600176/IN06119.PDF",

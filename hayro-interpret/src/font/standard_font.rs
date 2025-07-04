@@ -1,10 +1,10 @@
-use crate::font::blob;
 use crate::font::blob::{
     COURIER_BOLD, COURIER_BOLD_ITALIC, COURIER_ITALIC, COURIER_REGULAR, CffFontBlob,
     HELVETICA_BOLD, HELVETICA_BOLD_ITALIC, HELVETICA_ITALIC, HELVETICA_REGULAR, TIMES_BOLD,
     TIMES_ITALIC, TIMES_REGULAR, TIMES_ROMAN_BOLD_ITALIC, ZAPF_DINGS_BAT,
 };
 use crate::font::generated::{metrics, standard, symbol, zapf_dings};
+use crate::font::{FontData, blob};
 use hayro_syntax::object::dict::Dict;
 use hayro_syntax::object::dict::keys::BASE_FONT;
 use hayro_syntax::object::name::Name;
@@ -36,6 +36,31 @@ impl StandardFont {
             // but instead has a custom encoding.
             Self::ZapfDingBats => zapf_dings::get(code),
             _ => standard::get(code),
+        }
+    }
+
+    pub(crate) fn from_font_data(data: &FontData) -> Self {
+        if data.is_fixed_pitch {
+            match (data.is_bold, data.is_italic) {
+                (true, true) => StandardFont::CourierBoldOblique,
+                (true, false) => StandardFont::CourierBold,
+                (false, true) => StandardFont::CourierOblique,
+                (false, false) => StandardFont::Courier,
+            }
+        } else if !data.is_serif {
+            match (data.is_bold, data.is_italic) {
+                (true, true) => StandardFont::HelveticaBoldOblique,
+                (true, false) => StandardFont::HelveticaBold,
+                (false, true) => StandardFont::HelveticaOblique,
+                (false, false) => StandardFont::Helvetica,
+            }
+        } else {
+            match (data.is_bold, data.is_italic) {
+                (true, true) => StandardFont::TimesBoldItalic,
+                (true, false) => StandardFont::TimesBold,
+                (false, true) => StandardFont::TimesItalic,
+                (false, false) => StandardFont::TimesRoman,
+            }
         }
     }
 
@@ -89,6 +114,25 @@ impl StandardFont {
             StandardFont::TimesBoldItalic => metrics::TIMES_BOLD_ITALIC.get(name).copied(),
             StandardFont::ZapfDingBats => metrics::ZAPF_DING_BATS.get(name).copied(),
             StandardFont::Symbol => metrics::SYMBOL.get(name).copied(),
+        }
+    }
+
+    pub(crate) fn as_str(&self) -> &'static str {
+        match self {
+            StandardFont::Helvetica => "Helvetica",
+            StandardFont::HelveticaBold => "Helvetica Bold",
+            StandardFont::HelveticaOblique => "Helvetica Oblique",
+            StandardFont::HelveticaBoldOblique => "Helvetica Bold Oblique",
+            StandardFont::Courier => "Courier",
+            StandardFont::CourierBold => "Courier Bold",
+            StandardFont::CourierOblique => "Courier Oblique",
+            StandardFont::CourierBoldOblique => "Courier Bold Oblique",
+            StandardFont::TimesRoman => "Times Roman",
+            StandardFont::TimesBold => "Times Bold",
+            StandardFont::TimesItalic => "Times Italic",
+            StandardFont::TimesBoldItalic => "Times Bold Italic",
+            StandardFont::ZapfDingBats => "Zapf Dingbats",
+            StandardFont::Symbol => "Symbol",
         }
     }
 }
