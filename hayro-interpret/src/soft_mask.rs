@@ -61,8 +61,10 @@ impl<'a> SoftMask<'a> {
         dict: &Dict<'a>,
         context: &Context<'a>,
         parent_resources: Resources<'a>,
-        obj_id: ObjectIdentifier,
     ) -> Option<SoftMask<'a>> {
+        // TODO: With this setup, if there is a luminosity mask and alpha mask pointing to the
+        // same xobject, the ID will be the same.
+        let obj_id = dict.get_ref(G)?.into();
         let group_stream = dict.get::<Stream>(G)?;
         let group = XObject::new(&group_stream)?;
         let mask_type = match dict.get::<Name>(S)?.deref() {

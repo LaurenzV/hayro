@@ -535,10 +535,9 @@ fn handle_gs_single<'a>(
                     context.get_mut().soft_mask = None;
                 }
             } else {
-                let obj_id = dict.get_ref(SMASK)?.into();
                 context.get_mut().soft_mask = dict
                     .get::<Dict>(SMASK)
-                    .and_then(|d| SoftMask::new(&d, context, parent_resources.clone(), obj_id));
+                    .and_then(|d| SoftMask::new(&d, context, parent_resources.clone()));
             }
         }
         "Type" => {}
