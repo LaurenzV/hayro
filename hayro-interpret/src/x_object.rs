@@ -112,6 +112,8 @@ pub(crate) fn draw_form_xobject<'a>(
         fill: Fill::NonZero,
     });
 
+    context.get_mut().soft_mask = None;
+
     interpret(
         iter,
         &Resources::from_parent(x_object.resources.clone(), resources.clone()),

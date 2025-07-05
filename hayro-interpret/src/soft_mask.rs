@@ -71,11 +71,15 @@ impl<'a> SoftMask<'a> {
             _ => return None,
         };
 
-        let context = Context::new(
+        let mut state = context.get().clone();
+        state.ctm = Affine::IDENTITY;
+
+        let context = Context::new_with(
             context.root_transform(),
             context.bbox(),
             context.object_cache.clone(),
             context.xref,
+            state,
         );
 
         Some(Self(Arc::new(SoftMaskRepr {

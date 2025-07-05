@@ -930,5 +930,13 @@
   {
     "id": "issue41",
     "file": "pdfs/issue41.pdf"
+  },
+  {
+    "id": "mask_alpha",
+    "file": "pdfs/mask_alpha.pdf"
+  },
+  {
+    "id": "mask_luminosity",
+    "file": "pdfs/mask_luminosity.pdf"
   }
 ]
