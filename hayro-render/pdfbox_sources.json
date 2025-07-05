@@ -104,6 +104,10 @@
   "1875": "https://issues.apache.org/jira/secure/attachment/12652654/PDFBOX-1861-bbox.pdf",
   "1876": "https://issues.apache.org/jira/secure/attachment/12630333/PDFBOX-1876-duotone.pdf",
   "1879": "https://issues.apache.org/jira/secure/attachment/12626656/stinky_vat.pdf",
+  "1911": {
+    "link": "https://issues.apache.org/jira/secure/attachment/12628323/How-Knowledge-Is-Changing-Customer-Service.pdf",
+    "last_page": 1
+  },
   "1915": [
     "https://issues.apache.org/jira/secure/attachment/12628793/asy-tensor.pdf",
     "https://issues.apache.org/jira/secure/attachment/12646784/asy-tensor-rainbow.pdf",
@@ -330,6 +334,7 @@
     "last_page": 0
   },
   "3932": "https://issues.apache.org/jira/secure/attachment/12887373/PDFJS-8895-p1.pdf",
+  "3934": "https://issues.apache.org/jira/secure/attachment/12887766/BCZSFNQAB62TUBURWG6B3ZOZCG5IH46P.pdf",
   "3948": "https://issues.apache.org/jira/secure/attachment/12890034/EUWO6SQS5TM4VGOMRD3FLXZHU35V2CP2.pdf",
   "3956": {
     "link": "https://issues.apache.org/jira/secure/attachment/12891123/N4CWPKUJDQIPQ6YLYKPLOZJBTSYGQEYR.pdf",
