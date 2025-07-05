@@ -100,16 +100,14 @@ pub(crate) fn draw_form_xobject<'a>(
         device.push_transparency_group(context.get().non_stroke_alpha);
     }
 
-    let bbox = Rect::new(
-        x_object.bbox[0].min(x_object.bbox[2]) as f64,
-        x_object.bbox[1].min(x_object.bbox[3]) as f64,
-        x_object.bbox[0].max(x_object.bbox[2]) as f64,
-        x_object.bbox[1].max(x_object.bbox[3]) as f64,
-    )
-    .intersect(context.bbox());
-
     device.push_clip_path(&ClipPath {
-        path: bbox.to_path(0.1),
+        path: Rect::new(
+            x_object.bbox[0] as f64,
+            x_object.bbox[1] as f64,
+            x_object.bbox[2] as f64,
+            x_object.bbox[3] as f64,
+        )
+        .to_path(0.1),
         fill: Fill::NonZero,
     });
 
@@ -153,11 +151,8 @@ pub(crate) fn draw_image_xobject(
     ]));
     let transform = context.get().ctm;
     device.set_transform(transform);
-    if data.len() % 4 == 0 {
-        device.set_soft_mask(None);
-    } else {
-        device.set_soft_mask(context.get().soft_mask.clone());
-    }
+    // TODO: If image had soft mask, the one from the context should be replaced by it.
+    device.set_soft_mask(context.get().soft_mask.clone());
     device.push_transparency_group(context.get().non_stroke_alpha);
 
     if x_object.is_image_mask {

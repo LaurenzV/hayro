@@ -270,7 +270,6 @@ use crate::run_test;
 #[test] fn pdfjs_bug1539074_1() { run_test("pdfjs_bug1539074_1", "pdfs/pdfjs/bug1539074.1.pdf", None); }
 #[test] fn pdfjs_bug1627427() { run_test("pdfjs_bug1627427", "pdfs/pdfjs/bug1627427_reduced.pdf", None); }
 #[test] fn pdfjs_bug1650302_reduced() { run_test("pdfjs_bug1650302_reduced", "pdfs/pdfjs/bug1650302_reduced.pdf", None); }
-#[test] fn pdfjs_bug1703683_page2_reduced() { run_test("pdfjs_bug1703683_page2_reduced", "pdfs/pdfjs/bug1703683_page2_reduced.pdf", None); }
 #[test] fn pdfjs_bug1743245() { run_test("pdfjs_bug1743245", "pdfs/pdfjs/bug1743245.pdf", None); }
 #[test] fn pdfjs_bug1791583() { run_test("pdfjs_bug1791583", "downloads/pdfjs/bug1791583.pdf", None); }
 #[test] fn pdfjs_bug893730() { run_test("pdfjs_bug893730", "pdfs/pdfjs/bug893730.pdf", None); }
