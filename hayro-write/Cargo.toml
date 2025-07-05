@@ -1,0 +1,12 @@
+[package]
+name = "hayro-write"
+version = "0.1.0"
+authors.workspace = true
+edition.workspace = true
+repository.workspace = true
+readme.workspace = true
+license.workspace = true
+
+[dependencies]
+hayro-syntax = { path = "../hayro-syntax" }
+pdf-writer = { workspace = true }

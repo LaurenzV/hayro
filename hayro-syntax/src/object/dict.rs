@@ -83,6 +83,14 @@ impl<'a> Dict<'a> {
         self.0.offsets.keys().cloned()
     }
 
+    /// An iterator over all entries in the dictionary.
+    pub fn entries(&self) -> impl Iterator<Item = (Name, MaybeRef<Object>)> {
+        self.keys().map(|k| {
+            let obj = self.get_raw(k.deref()).unwrap();
+            (k, obj)
+        })
+    }
+
     /// Return the raw entry for a specific key.
     #[allow(private_bounds)]
     pub fn get_raw<T>(&self, key: impl Deref<Target = [u8]>) -> Option<MaybeRef<T>>
