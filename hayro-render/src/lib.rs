@@ -328,7 +328,8 @@ impl Device for Renderer {
     }
 
     fn push_transparency_group(&mut self, opacity: f32) {
-        self.ctx.push_layer(None, None, Some(opacity), None)
+        self.ctx
+            .push_layer(None, None, Some(opacity), self.cur_mask.clone());
     }
 
     fn pop_clip_path(&mut self) {

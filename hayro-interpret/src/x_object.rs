@@ -94,6 +94,7 @@ pub(crate) fn draw_form_xobject<'a>(
     context.pre_concat_affine(x_object.matrix);
     context.push_root_transform();
 
+    device.set_soft_mask(context.get().soft_mask.clone());
     device.set_transform(context.get().ctm);
 
     if x_object.is_transparency_group {
