@@ -224,6 +224,10 @@ use crate::run_test;
 #[test] fn issue41() { run_test("issue41", "pdfs/issue41.pdf", None); }
 #[test] fn mask_alpha() { run_test("mask_alpha", "pdfs/mask_alpha.pdf", None); }
 #[test] fn mask_luminosity() { run_test("mask_luminosity", "pdfs/mask_luminosity.pdf", None); }
+#[test] fn resvg_masking_clipPath_mixed_clip_rule() { run_test("resvg_masking_clipPath_mixed_clip_rule", "pdfs/resvg_masking_clipPath_mixed_clip_rule.pdf", None); }
+#[test] fn resvg_masking_clipPath_nested_clip_path() { run_test("resvg_masking_clipPath_nested_clip_path", "pdfs/resvg_masking_clipPath_nested_clip_path.pdf", None); }
+#[test] fn resvg_masking_clipPath_overlapped_shapes_with_evenodd() { run_test("resvg_masking_clipPath_overlapped_shapes_with_evenodd", "pdfs/resvg_masking_clipPath_overlapped_shapes_with_evenodd.pdf", None); }
+#[test] fn resvg_masking_mask_with_clip_path() { run_test("resvg_masking_mask_with_clip_path", "pdfs/resvg_masking_mask_with_clip_path.pdf", None); }
 #[test] fn pdfjs_20130226130259() { run_test("pdfjs_20130226130259", "downloads/pdfjs/20130226130259.pdf", Some("0..=0")); }
 #[test] fn pdfjs_IdentityToUnicodeMap_charCodeOf() { run_test("pdfjs_IdentityToUnicodeMap_charCodeOf", "pdfs/pdfjs/IdentityToUnicodeMap_charCodeOf.pdf", None); }
 #[test] fn pdfjs_IndexedCS_negative_and_high() { run_test("pdfjs_IndexedCS_negative_and_high", "pdfs/pdfjs/IndexedCS_negative_and_high.pdf", None); }

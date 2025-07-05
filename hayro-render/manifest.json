@@ -938,5 +938,21 @@
   {
     "id": "mask_luminosity",
     "file": "pdfs/mask_luminosity.pdf"
+  },
+  {
+    "id": "resvg_masking_clipPath_mixed_clip_rule",
+    "file": "pdfs/resvg_masking_clipPath_mixed_clip_rule.pdf"
+  },
+  {
+    "id": "resvg_masking_clipPath_nested_clip_path",
+    "file": "pdfs/resvg_masking_clipPath_nested_clip_path.pdf"
+  },
+  {
+    "id": "resvg_masking_clipPath_overlapped_shapes_with_evenodd",
+    "file": "pdfs/resvg_masking_clipPath_overlapped_shapes_with_evenodd.pdf"
+  },
+  {
+    "id": "resvg_masking_mask_with_clip_path",
+    "file": "pdfs/resvg_masking_mask_with_clip_path.pdf"
   }
 ]
