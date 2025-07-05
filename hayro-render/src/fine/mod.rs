@@ -103,7 +103,7 @@ impl Fine {
                     let a_slice = &alphas[alpha_idx..];
 
                     if let Some(mask) = mask {
-                        let start_x = self.wide_coords.0 * WideTile::WIDTH;
+                        let start_x = (self.wide_coords.0 * WideTile::WIDTH) + s.x;
                         let start_y = self.wide_coords.1 * Tile::HEIGHT;
 
                         let mut mask_iter = mask_fn(mask, start_x, start_y);
@@ -139,7 +139,7 @@ impl Fine {
                     }
                 }
                 (None, Some(mask)) => {
-                    let start_x = self.wide_coords.0 * WideTile::WIDTH;
+                    let start_x = (self.wide_coords.0 * WideTile::WIDTH) + s.x;
                     let start_y = self.wide_coords.1 * Tile::HEIGHT;
 
                     let mask_iter = mask_fn(mask, start_x, start_y);
