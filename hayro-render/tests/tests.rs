@@ -228,6 +228,7 @@ use crate::run_test;
 #[test] fn resvg_masking_clipPath_nested_clip_path() { run_test("resvg_masking_clipPath_nested_clip_path", "pdfs/resvg_masking_clipPath_nested_clip_path.pdf", None); }
 #[test] fn resvg_masking_clipPath_overlapped_shapes_with_evenodd() { run_test("resvg_masking_clipPath_overlapped_shapes_with_evenodd", "pdfs/resvg_masking_clipPath_overlapped_shapes_with_evenodd.pdf", None); }
 #[test] fn resvg_masking_mask_with_clip_path() { run_test("resvg_masking_mask_with_clip_path", "pdfs/resvg_masking_mask_with_clip_path.pdf", None); }
+#[test] fn issue44() { run_test("issue44", "pdfs/issue44.pdf", None); }
 #[test] fn pdfjs_20130226130259() { run_test("pdfjs_20130226130259", "downloads/pdfjs/20130226130259.pdf", Some("0..=0")); }
 #[test] fn pdfjs_IdentityToUnicodeMap_charCodeOf() { run_test("pdfjs_IdentityToUnicodeMap_charCodeOf", "pdfs/pdfjs/IdentityToUnicodeMap_charCodeOf.pdf", None); }
 #[test] fn pdfjs_IndexedCS_negative_and_high() { run_test("pdfjs_IndexedCS_negative_and_high", "pdfs/pdfjs/IndexedCS_negative_and_high.pdf", None); }

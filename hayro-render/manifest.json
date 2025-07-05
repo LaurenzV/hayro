@@ -954,5 +954,9 @@
   {
     "id": "resvg_masking_mask_with_clip_path",
     "file": "pdfs/resvg_masking_mask_with_clip_path.pdf"
+  },
+  {
+    "id": "issue44",
+    "file": "pdfs/issue44.pdf"
   }
 ]
