@@ -4,6 +4,7 @@ use clip_path::ClipPath;
 use hayro_syntax::content::ops::{LineCap, LineJoin, TypedOperation};
 use hayro_syntax::document::page::Resources;
 use hayro_syntax::object::dict::Dict;
+use hayro_syntax::object::dict::keys::SMASK;
 use hayro_syntax::object::name::Name;
 use hayro_syntax::object::number::Number;
 use hayro_syntax::object::{Object, dict_or_stream};
@@ -26,6 +27,7 @@ pub mod mask;
 mod paint;
 pub mod pattern;
 pub mod shading;
+mod soft_mask;
 pub mod util;
 pub mod x_object;
 
@@ -38,6 +40,7 @@ use crate::x_object::{ImageXObject, XObject, draw_image_xobject, draw_xobject};
 use interpret::text::TextRenderingMode;
 
 use crate::interpret::path::{fill_path, fill_path_impl, fill_stroke_path, stroke_path};
+use crate::soft_mask::SoftMask;
 pub use image::{RgbaImage, StencilImage};
 use interpret::text;
 pub use paint::{Paint, PaintType};
@@ -210,7 +213,7 @@ pub fn interpret<'a, 'b>(
                     .get_ext_g_state::<Dict>(gs.0.clone(), Box::new(|_| None), Box::new(Some))
                     .warn_none(&format!("failed to get extgstate {}", gs.0.as_str()))
                 {
-                    handle_gs(&gs, context);
+                    handle_gs(&gs, context, resources);
                 }
             }
             TypedOperation::StrokePath(_) => {
@@ -500,16 +503,21 @@ fn restore_state(ctx: &mut Context, device: &mut impl Device) {
     }
 }
 
-fn handle_gs(dict: &Dict, context: &mut Context) {
+fn handle_gs<'a>(dict: &Dict<'a>, context: &mut Context<'a>, parent_resources: &Resources<'a>) {
     for key in dict.keys() {
-        handle_gs_single(dict, key.clone(), context).warn_none(&format!(
+        handle_gs_single(dict, key.clone(), context, parent_resources).warn_none(&format!(
             "invalid value in graphics state for {}",
             key.as_str()
         ));
     }
 }
 
-fn handle_gs_single(dict: &Dict, key: Name, context: &mut Context) -> Option<()> {
+fn handle_gs_single<'a>(
+    dict: &Dict<'a>,
+    key: Name,
+    context: &mut Context<'a>,
+    parent_resources: &Resources<'a>,
+) -> Option<()> {
     // TODO Can we use constants here somehow?
     match key.as_str() {
         "LW" => context.get_mut().line_width = dict.get::<f32>(key)?,
@@ -519,7 +527,11 @@ fn handle_gs_single(dict: &Dict, key: Name, context: &mut Context) -> Option<()>
         "CA" => context.get_mut().stroke_alpha = dict.get::<f32>(key)?,
         "ca" => context.get_mut().non_stroke_alpha = dict.get::<f32>(key)?,
         "SMask" => {
-            warn!("soft masks are not yet supported");
+            let obj_id = dict.get_ref(SMASK)?.into();
+            context.get_mut().soft_mask = dict
+                .get::<Dict>(SMASK)
+                .and_then(|d| SoftMask::new(dict, context, parent_resources.clone(), obj_id));
+            warn!("set soft mask.")
         }
         "Type" => {}
         _ => {}

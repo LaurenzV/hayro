@@ -53,6 +53,7 @@ impl<'a> Context<'a> {
             stroke_alpha: 1.0,
             fill_rule: Fill::NonZero,
             n_clips: 0,
+            soft_mask: None,
             text_state: TextState::default(),
             stroke_pattern: None,
             non_stroke_pattern: None,
