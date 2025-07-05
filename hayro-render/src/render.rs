@@ -94,11 +94,17 @@ impl RenderContext {
     }
 
     /// Fill a path.
-    pub fn fill_path(&mut self, path: &BezPath, paint_type: PaintType, paint_transform: Affine) {
+    pub fn fill_path(
+        &mut self,
+        path: &BezPath,
+        paint_type: PaintType,
+        paint_transform: Affine,
+        mask: Option<Mask>,
+    ) {
         let paint = self.encode_paint(paint_type, paint_transform);
         self.apply_paint_bbox(paint_transform);
         flatten::fill(path, self.transform, &mut self.line_buf);
-        self.render_path(self.fill_rule, paint);
+        self.render_path(self.fill_rule, paint, mask);
         self.unapply_paint_bbox();
     }
 
@@ -118,20 +124,33 @@ impl RenderContext {
     }
 
     /// Stroke a path.
-    pub fn stroke_path(&mut self, path: &BezPath, paint_type: PaintType, paint_transform: Affine) {
+    pub fn stroke_path(
+        &mut self,
+        path: &BezPath,
+        paint_type: PaintType,
+        paint_transform: Affine,
+        mask: Option<Mask>,
+    ) {
         let paint = self.encode_paint(paint_type, paint_transform);
         self.apply_paint_bbox(paint_transform);
         flatten::stroke(path, &self.stroke, self.transform, &mut self.line_buf);
-        self.render_path(Fill::NonZero, paint);
+        self.render_path(Fill::NonZero, paint, mask);
         self.unapply_paint_bbox();
     }
 
     /// Fill a rectangle.
-    pub fn fill_rect(&mut self, rect: &Rect, paint_type: PaintType, paint_transform: Affine) {
+    pub fn fill_rect(
+        &mut self,
+        rect: &Rect,
+        paint_type: PaintType,
+        paint_transform: Affine,
+        mask: Option<Mask>,
+    ) {
         self.fill_path(
             &rect.to_path(DEFAULT_TOLERANCE),
             paint_type,
             paint_transform,
+            mask,
         );
     }
 
@@ -255,9 +274,9 @@ impl RenderContext {
     }
 
     // Assumes that `line_buf` contains the flattened path.
-    fn render_path(&mut self, fill_rule: Fill, paint: Paint) {
+    fn render_path(&mut self, fill_rule: Fill, paint: Paint, mask: Option<Mask>) {
         self.make_strips(fill_rule);
-        self.wide.generate(&self.strip_buf, fill_rule, paint);
+        self.wide.generate(&self.strip_buf, fill_rule, paint, mask);
     }
 
     fn make_strips(&mut self, fill_rule: Fill) {

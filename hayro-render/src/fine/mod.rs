@@ -9,6 +9,7 @@ mod shader;
 use crate::coarse::{Cmd, WideTile};
 use crate::encode::EncodedPaint;
 use crate::fine::shader::ShaderFiller;
+use crate::mask::Mask;
 use crate::paint::Paint;
 use crate::tile::Tile;
 use core::fmt::Debug;
@@ -97,18 +98,64 @@ impl Fine {
                     paints,
                 );
             }
-            Cmd::AlphaFill(s) => {
-                let a_slice = &alphas[s.alpha_idx..];
-                self.strip(
-                    usize::from(s.x),
-                    usize::from(s.width),
-                    a_slice,
-                    &s.paint,
-                    s.blend_mode
-                        .unwrap_or(BlendMode::new(Mix::Normal, Compose::SrcOver)),
-                    paints,
-                );
-            }
+            Cmd::AlphaFill(s) => match (s.alpha_idx, s.mask.as_ref()) {
+                (Some(alpha_idx), mask) => {
+                    let a_slice = &alphas[alpha_idx..];
+
+                    if let Some(mask) = mask {
+                        let start_x = self.wide_coords.0 * WideTile::WIDTH;
+                        let start_y = self.wide_coords.1 * Tile::HEIGHT;
+
+                        let mut mask_iter = mask_fn(mask, start_x, start_y);
+
+                        self.strip(
+                            usize::from(s.x),
+                            usize::from(s.width),
+                            a_slice.chunks_exact(4).map(move |e| {
+                                let m = mask_iter.next().unwrap();
+
+                                [
+                                    ((e[0] as u16 * m[0] as u16) / 255) as u8,
+                                    ((e[1] as u16 * m[1] as u16) / 255) as u8,
+                                    ((e[2] as u16 * m[2] as u16) / 255) as u8,
+                                    ((e[3] as u16 * m[3] as u16) / 255) as u8,
+                                ]
+                            }),
+                            &s.paint,
+                            s.blend_mode
+                                .unwrap_or(BlendMode::new(Mix::Normal, Compose::SrcOver)),
+                            paints,
+                        );
+                    } else {
+                        self.strip(
+                            usize::from(s.x),
+                            usize::from(s.width),
+                            a_slice.chunks_exact(4).map(|e| [e[0], e[1], e[2], e[3]]),
+                            &s.paint,
+                            s.blend_mode
+                                .unwrap_or(BlendMode::new(Mix::Normal, Compose::SrcOver)),
+                            paints,
+                        );
+                    }
+                }
+                (None, Some(mask)) => {
+                    let start_x = self.wide_coords.0 * WideTile::WIDTH;
+                    let start_y = self.wide_coords.1 * Tile::HEIGHT;
+
+                    let mask_iter = mask_fn(mask, start_x, start_y);
+
+                    self.strip(
+                        usize::from(s.x),
+                        usize::from(s.width),
+                        mask_iter,
+                        &s.paint,
+                        s.blend_mode
+                            .unwrap_or(BlendMode::new(Mix::Normal, Compose::SrcOver)),
+                        paints,
+                    );
+                }
+                (None, None) => unreachable!(),
+            },
             Cmd::PushBuf => {
                 self.blend_buf.push([0.0; SCRATCH_BUF_SIZE]);
             }
@@ -257,16 +304,11 @@ impl Fine {
         &mut self,
         x: usize,
         width: usize,
-        alphas: &[u8],
+        alphas: impl Iterator<Item = [u8; Tile::HEIGHT as usize]>,
         fill: &Paint,
         blend_mode: BlendMode,
         paints: &[EncodedPaint],
     ) {
-        debug_assert!(
-            alphas.len() >= width,
-            "alpha buffer doesn't contain sufficient elements"
-        );
-
         let blend_buf = &mut self.blend_buf.last_mut().unwrap()[x * TILE_HEIGHT_COMPONENTS..]
             [..TILE_HEIGHT_COMPONENTS * width];
         let color_buf =
@@ -277,12 +319,7 @@ impl Fine {
 
         match fill {
             Paint::Solid(color) => {
-                strip::blend(
-                    blend_buf,
-                    iter::repeat(color.0),
-                    blend_mode,
-                    alphas.chunks_exact(4).map(|e| [e[0], e[1], e[2], e[3]]),
-                );
+                strip::blend(blend_buf, iter::repeat(color.0), blend_mode, alphas);
             }
             Paint::Indexed(paint) => {
                 let encoded_paint = &paints[paint.index()];
@@ -296,7 +333,7 @@ impl Fine {
                             blend_buf,
                             color_buf.chunks_exact(4).map(|e| [e[0], e[1], e[2], e[3]]),
                             blend_mode,
-                            alphas.chunks_exact(4).map(|e| [e[0], e[1], e[2], e[3]]),
+                            alphas,
                         );
                     }
                     EncodedPaint::Shading(s) => {
@@ -307,23 +344,29 @@ impl Fine {
                             blend_buf,
                             color_buf.chunks_exact(4).map(|e| [e[0], e[1], e[2], e[3]]),
                             blend_mode,
-                            alphas.chunks_exact(4).map(|e| [e[0], e[1], e[2], e[3]]),
+                            alphas,
                         );
                     }
                     EncodedPaint::Mask(i) => {
                         let filler = ShaderFiller::new(i, start_x, start_y);
                         filler.paint(color_buf);
 
-                        for ((dest, src), alpha) in blend_buf
-                            .chunks_exact_mut(4)
-                            .zip(color_buf.chunks_exact(4))
-                            .zip(alphas.iter())
+                        for ((dest, src), alphas) in blend_buf
+                            .chunks_exact_mut(16)
+                            .zip(color_buf.chunks_exact(16))
+                            .zip(alphas)
                         {
-                            let alpha = *alpha as f32 / 255.0;
-                            let src = src[3];
+                            for ((dest, src), alpha) in dest
+                                .chunks_exact_mut(4)
+                                .zip(src.chunks_exact(4))
+                                .zip(alphas)
+                            {
+                                let alpha = alpha as f32 / 255.0;
+                                let src = src[3];
 
-                            for dest in dest {
-                                *dest = *dest * src * alpha;
+                                for dest in dest {
+                                    *dest = *dest * src * alpha;
+                                }
                             }
                         }
                     }
@@ -379,6 +422,23 @@ impl Fine {
             alphas.chunks_exact(4).map(|e| [e[0], e[1], e[2], e[3]]),
         );
     }
+}
+
+fn mask_fn<'a>(
+    mask: &'a Mask,
+    mut start_x: u16,
+    start_y: u16,
+) -> impl Iterator<Item = [u8; 4]> + 'a {
+    iter::from_fn(move || {
+        let s1 = mask.sample(start_x, start_y);
+        let s2 = mask.sample(start_x, start_y + 1);
+        let s3 = mask.sample(start_x, start_y + 2);
+        let s4 = mask.sample(start_x, start_y + 3);
+
+        start_x += 1;
+
+        Some([s1, s2, s3, s4])
+    })
 }
 
 fn pack(

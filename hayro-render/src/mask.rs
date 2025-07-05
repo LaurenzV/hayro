@@ -70,11 +70,10 @@ impl Mask {
     /// This function might panic or yield a wrong result if the location
     /// is out-of-bounds.
     pub fn sample(&self, x: u16, y: u16) -> u8 {
-        debug_assert!(
-            x < self.width && y < self.height,
-            "cannot sample mask outside of its range"
-        );
-
-        self.data[y as usize * self.width as usize + x as usize]
+        if x >= self.width || y >= self.height {
+            255
+        } else {
+            self.data[y as usize * self.width as usize + x as usize]
+        }
     }
 }

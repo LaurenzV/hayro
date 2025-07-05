@@ -99,6 +99,7 @@ impl Renderer {
             &Rect::new(0.0, 0.0, width as f64, height as f64),
             image.into(),
             self.ctx.transform,
+            None,
         );
     }
 
@@ -219,12 +220,8 @@ impl Device for Renderer {
 
     fn stroke_path(&mut self, path: &BezPath, paint: &Paint) {
         let (paint_type, paint_transform) = self.convert_paint(paint, true);
-
-        if let Some(ref mask) = self.cur_mask {
-            self.ctx.push_layer(None, None, None, Some(mask.clone()));
-        }
-
-        self.ctx.stroke_path(path, paint_type, paint_transform);
+        self.ctx
+            .stroke_path(path, paint_type, paint_transform, self.cur_mask.clone());
 
         if self.cur_mask.is_some() {
             self.ctx.pop_layer();
@@ -237,16 +234,8 @@ impl Device for Renderer {
 
     fn fill_path(&mut self, path: &BezPath, paint: &Paint) {
         let (paint_type, paint_transform) = self.convert_paint(paint, false);
-
-        if let Some(ref mask) = self.cur_mask {
-            self.ctx.push_layer(None, None, None, Some(mask.clone()));
-        }
-
-        self.ctx.fill_path(path, paint_type, paint_transform);
-
-        if self.cur_mask.is_some() {
-            self.ctx.pop_layer();
-        }
+        self.ctx
+            .fill_path(path, paint_type, paint_transform, self.cur_mask.clone());
     }
 
     fn draw_rgba_image(&mut self, image: hayro_interpret::RgbaImage) {
@@ -282,6 +271,7 @@ impl Device for Renderer {
             &Rect::new(0.0, 0.0, stencil.width as f64, stencil.height as f64),
             converted_paint,
             paint_transform,
+            None,
         );
         self.draw_image(
             stencil.stencil_data,
@@ -414,6 +404,7 @@ pub fn render(page: &Page, scale: f32) -> Pixmap {
         &Rect::new(0.0, 0.0, pix_width as f64, pix_height as f64),
         WHITE.into(),
         Affine::IDENTITY,
+        None,
     );
     device.push_clip_path(&ClipPath {
         path: initial_transform * crop_box.to_path(0.1),

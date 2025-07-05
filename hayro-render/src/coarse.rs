@@ -194,7 +194,13 @@ impl Wide {
     ///    - Generate alpha fill commands for the intersected wide tiles
     /// 2. For active fill regions (determined by fill rule):
     ///    - Generate solid fill commands for the regions between strips
-    pub fn generate(&mut self, strip_buf: &[Strip], fill_rule: Fill, paint: Paint) {
+    pub fn generate(
+        &mut self,
+        strip_buf: &[Strip],
+        fill_rule: Fill,
+        paint: Paint,
+        mask: Option<Mask>,
+    ) {
         if strip_buf.is_empty() {
             return;
         }
@@ -258,7 +264,8 @@ impl Wide {
                 let cmd = CmdAlphaFill {
                     x: x_wtile_rel,
                     width,
-                    alpha_idx: (col * u32::from(Tile::HEIGHT)) as usize,
+                    alpha_idx: Some((col * u32::from(Tile::HEIGHT)) as usize),
+                    mask: mask.clone(),
                     paint: paint.clone(),
                     blend_mode: None,
                 };
@@ -290,8 +297,12 @@ impl Wide {
                     let x_wtile_rel = x % WideTile::WIDTH;
                     let width = x2.min((wtile_x + 1) * WideTile::WIDTH) - x;
                     x += width;
-                    self.get_mut(wtile_x, strip_y)
-                        .fill(x_wtile_rel, width, paint.clone());
+                    self.get_mut(wtile_x, strip_y).fill(
+                        x_wtile_rel,
+                        width,
+                        paint.clone(),
+                        mask.clone(),
+                    );
                 }
             }
         }
@@ -714,7 +725,7 @@ impl WideTile {
         }
     }
 
-    pub(crate) fn fill(&mut self, x: u16, width: u16, paint: Paint) {
+    pub(crate) fn fill(&mut self, x: u16, width: u16, paint: Paint, mask: Option<Mask>) {
         if !self.is_zero_clip() {
             let bg = if let Paint::Solid(s) = &paint {
                 // Note that we could be more aggressive in optimizing a whole-tile opaque fill
@@ -731,7 +742,8 @@ impl WideTile {
                     && width == Self::WIDTH
                     && s.is_opaque()
                     && self.n_clip == 0
-                    && self.n_bufs == 0;
+                    && self.n_bufs == 0
+                    && mask.is_none();
                 can_override.then_some(*s)
             } else {
                 // TODO: Implement for indexed paints.
@@ -742,12 +754,23 @@ impl WideTile {
                 self.cmds.clear();
                 self.bg = bg;
             } else {
-                self.cmds.push(Cmd::Fill(CmdFill {
-                    x,
-                    width,
-                    paint,
-                    blend_mode: None,
-                }));
+                if let Some(mask) = mask {
+                    self.cmds.push(Cmd::AlphaFill(CmdAlphaFill {
+                        x,
+                        width,
+                        paint,
+                        alpha_idx: None,
+                        mask: Some(mask),
+                        blend_mode: None,
+                    }));
+                } else {
+                    self.cmds.push(Cmd::Fill(CmdFill {
+                        x,
+                        width,
+                        paint,
+                        blend_mode: None,
+                    }));
+                }
             }
         }
     }
@@ -934,7 +957,8 @@ pub struct CmdAlphaFill {
     /// The width of the command in pixels.
     pub width: u16,
     /// The start index into the alpha buffer of the command.
-    pub alpha_idx: usize,
+    pub alpha_idx: Option<usize>,
+    pub mask: Option<Mask>,
     /// The paint that should be used to fill the area.
     pub paint: Paint,
     /// A blend mode to apply before drawing the contents.
