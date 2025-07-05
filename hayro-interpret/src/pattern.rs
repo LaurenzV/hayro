@@ -6,6 +6,7 @@ use crate::device::Device;
 use crate::font::Glyph;
 use crate::interpret::state::State;
 use crate::shading::Shading;
+use crate::soft_mask::SoftMask;
 use crate::{FillProps, Paint, PaintType, RgbaImage, StencilImage, StrokeProps, interpret};
 use hayro_syntax::content::{TypedIter, UntypedIter};
 use hayro_syntax::document::page::Resources;
@@ -224,6 +225,8 @@ impl<T: Device> Device for StencilPatternDevice<'_, T> {
     fn set_stroke_properties(&mut self, stroke_props: &StrokeProps) {
         self.inner.set_stroke_properties(stroke_props)
     }
+
+    fn set_soft_mask(&mut self, _: Option<SoftMask>) {}
 
     fn fill_path(&mut self, path: &BezPath, _: &Paint) {
         self.inner.fill_path(path, self.paint)

@@ -15,6 +15,7 @@ use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 use std::sync::Arc;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MaskType {
     Luminosity,
     Alpha,
@@ -97,5 +98,13 @@ impl<'a> SoftMask<'a> {
             self.0.xref,
         );
         draw_xobject(&self.0.group, &self.0.parent_resources, &mut ctx, device);
+    }
+
+    pub fn id(&self) -> ObjectIdentifier {
+        self.0.obj_id
+    }
+
+    pub fn mask_type(&self) -> MaskType {
+        self.0.mask_type
     }
 }

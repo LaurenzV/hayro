@@ -6,6 +6,7 @@ use crate::font::true_type::{read_encoding, read_widths};
 use crate::font::{Encoding, Glyph, Type3Glyph, UNITS_PER_EM};
 use crate::image::{RgbaImage, StencilImage};
 use crate::paint::Paint;
+use crate::soft_mask::SoftMask;
 use crate::{FillProps, StrokeProps, interpret};
 use hayro_syntax::content::ops::TypedOperation;
 use hayro_syntax::content::{TypedIter, UntypedIter};
@@ -164,6 +165,8 @@ impl<T: Device> Device for Type3ShapeGlyphDevice<'_, T> {
     fn set_stroke_properties(&mut self, stroke_props: &StrokeProps) {
         self.inner.set_stroke_properties(stroke_props)
     }
+
+    fn set_soft_mask(&mut self, _: Option<SoftMask>) {}
 
     fn fill_path(&mut self, path: &BezPath, _: &Paint) {
         self.inner.fill_path(path, self.paint)

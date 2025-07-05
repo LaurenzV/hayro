@@ -1,4 +1,5 @@
 use crate::encode::{Buffer, x_y_advances};
+use crate::mask::Mask;
 use crate::paint::{Image, PaintType};
 use crate::pixmap::Pixmap;
 use crate::render::RenderContext;
@@ -9,8 +10,9 @@ use hayro_interpret::device::Device;
 use hayro_interpret::font::Glyph;
 use hayro_interpret::pattern::Pattern;
 use hayro_interpret::util::FloatExt;
-use hayro_interpret::{FillProps, Paint, StencilImage, StrokeProps, interpret};
+use hayro_interpret::{FillProps, MaskType, Paint, SoftMask, StencilImage, StrokeProps, interpret};
 use hayro_syntax::document::page::{A4, Page, Rotation};
+use hayro_syntax::object::ObjectIdentifier;
 use hayro_syntax::pdf::Pdf;
 use image::codecs::png::PngEncoder;
 use image::imageops::FilterType;
@@ -18,6 +20,7 @@ use image::{DynamicImage, ExtendedColorType, ImageBuffer, ImageEncoder};
 use kurbo::{Affine, BezPath, Point, Rect, Shape};
 use peniko::Fill;
 use peniko::color::palette::css::WHITE;
+use std::collections::HashMap;
 use std::io::Cursor;
 use std::ops::RangeInclusive;
 use std::sync::Arc;
@@ -33,7 +36,12 @@ pub mod render;
 mod strip;
 mod tile;
 
-struct Renderer(RenderContext, bool);
+struct Renderer {
+    ctx: RenderContext,
+    inside_pattern: bool,
+    soft_mask_cache: HashMap<ObjectIdentifier, Mask>,
+    cur_mask: Option<Mask>,
+}
 
 impl Renderer {
     fn draw_image(
@@ -44,7 +52,7 @@ impl Renderer {
         is_stencil: bool,
         interpolate: bool,
     ) {
-        let mut cur_transform = self.0.transform;
+        let mut cur_transform = self.ctx.transform;
 
         let (x_scale, y_scale) = {
             let (x, y) = x_y_advances(&cur_transform);
@@ -69,7 +77,7 @@ impl Renderer {
             let t_scale_y = height as f32 / new_height as f32;
 
             cur_transform *= Affine::scale_non_uniform(t_scale_x as f64, t_scale_y as f64);
-            self.0.set_transform(cur_transform);
+            self.ctx.set_transform(cur_transform);
 
             width = new_width;
             height = new_height;
@@ -87,10 +95,10 @@ impl Renderer {
             is_pattern: false,
         };
 
-        self.0.fill_rect(
+        self.ctx.fill_rect(
             &Rect::new(0.0, 0.0, width as f64, height as f64),
             image.into(),
-            self.0.transform,
+            self.ctx.transform,
         );
     }
 
@@ -131,13 +139,17 @@ impl Renderer {
                         let pix_width = x_step.abs().round() as u16;
                         let pix_height = y_step.abs().round() as u16;
 
-                        let mut renderer =
-                            Renderer(RenderContext::new(pix_width, pix_height), true);
+                        let mut renderer = Renderer {
+                            ctx: RenderContext::new(pix_width, pix_height),
+                            cur_mask: None,
+                            inside_pattern: true,
+                            soft_mask_cache: Default::default(),
+                        };
                         let mut initial_transform =
                             Affine::new([xs as f64, 0.0, 0.0, ys as f64, -bbox.x0, -bbox.y0]);
                         t.interpret(&mut renderer, initial_transform, is_stroke);
                         let mut pix = Pixmap::new(pix_width, pix_height);
-                        renderer.0.render_to_pixmap(&mut pix);
+                        renderer.ctx.render_to_pixmap(&mut pix);
 
                         // TODO: Add tests
                         if x_step < 0.0 {
@@ -178,17 +190,17 @@ impl Renderer {
 
 impl Device for Renderer {
     fn set_transform(&mut self, affine: Affine) {
-        self.0.set_transform(affine);
+        self.ctx.set_transform(affine);
     }
 
     fn set_stroke_properties(&mut self, stroke_props: &StrokeProps) {
         // Best-effort attempt to ensure a line width of at least 1.
-        let min_factor = min_factor(&self.0.transform);
+        let min_factor = min_factor(&self.ctx.transform);
         let mut line_width = stroke_props.line_width.max(0.01);
         let transformed_width = line_width * min_factor;
 
         // Only enforce line width if not inside of pattern.
-        if transformed_width < 1.0 && !self.1 {
+        if transformed_width < 1.0 && !self.inside_pattern {
             line_width /= transformed_width;
         }
 
@@ -202,25 +214,47 @@ impl Device for Renderer {
             dash_offset: stroke_props.dash_offset as f64,
         };
 
-        self.0.set_stroke(stroke);
+        self.ctx.set_stroke(stroke);
     }
 
     fn stroke_path(&mut self, path: &BezPath, paint: &Paint) {
         let (paint_type, paint_transform) = self.convert_paint(paint, true);
-        self.0.stroke_path(path, paint_type, paint_transform);
+
+        if let Some(ref mask) = self.cur_mask {
+            self.ctx.push_layer(None, None, None, Some(mask.clone()));
+        }
+
+        self.ctx.stroke_path(path, paint_type, paint_transform);
+
+        if self.cur_mask.is_some() {
+            self.ctx.pop_layer();
+        }
     }
 
     fn set_fill_properties(&mut self, fill_props: &FillProps) {
-        self.0.set_fill_rule(fill_props.fill_rule);
+        self.ctx.set_fill_rule(fill_props.fill_rule);
     }
 
     fn fill_path(&mut self, path: &BezPath, paint: &Paint) {
         let (paint_type, paint_transform) = self.convert_paint(paint, false);
-        self.0.fill_path(path, paint_type, paint_transform);
+
+        if let Some(ref mask) = self.cur_mask {
+            self.ctx.push_layer(None, None, None, Some(mask.clone()));
+        }
+
+        self.ctx.fill_path(path, paint_type, paint_transform);
+
+        if self.cur_mask.is_some() {
+            self.ctx.pop_layer();
+        }
     }
 
     fn draw_rgba_image(&mut self, image: hayro_interpret::RgbaImage) {
-        self.0.set_anti_aliasing(false);
+        if let Some(ref mask) = self.cur_mask {
+            self.ctx.push_layer(None, None, None, Some(mask.clone()));
+        }
+
+        self.ctx.set_anti_aliasing(false);
         self.draw_image(
             image.image_data,
             image.width,
@@ -228,18 +262,23 @@ impl Device for Renderer {
             false,
             image.interpolate,
         );
-        self.0.set_anti_aliasing(true);
+        self.ctx.set_anti_aliasing(true);
+
+        if self.cur_mask.is_some() {
+            self.ctx.pop_layer();
+        }
     }
 
     fn draw_stencil_image(&mut self, stencil: StencilImage, paint: &Paint) {
-        self.0.set_anti_aliasing(false);
-        self.push_transparency_group(1.0);
-        let old_rule = self.0.fill_rule;
+        self.ctx.set_anti_aliasing(false);
+        self.ctx
+            .push_layer(None, None, Some(1.0), self.cur_mask.clone());
+        let old_rule = self.ctx.fill_rule;
         self.set_fill_properties(&FillProps {
             fill_rule: Fill::NonZero,
         });
         let (converted_paint, paint_transform) = self.convert_paint(paint, false);
-        self.0.fill_rect(
+        self.ctx.fill_rect(
             &Rect::new(0.0, 0.0, stencil.width as f64, stencil.height as f64),
             converted_paint,
             paint_transform,
@@ -251,12 +290,12 @@ impl Device for Renderer {
             true,
             stencil.interpolate,
         );
-        self.pop_transparency_group();
+        self.ctx.pop_layer();
 
         self.set_fill_properties(&FillProps {
             fill_rule: old_rule,
         });
-        self.0.set_anti_aliasing(true);
+        self.ctx.set_anti_aliasing(true);
     }
 
     fn fill_glyph(&mut self, glyph: &Glyph<'_>, paint: &Paint) {
@@ -284,20 +323,32 @@ impl Device for Renderer {
     }
 
     fn push_clip_path(&mut self, clip_path: &ClipPath) {
-        self.0.set_fill_rule(clip_path.fill);
-        self.0.push_layer(Some(&clip_path.path), None, None, None)
+        self.ctx.set_fill_rule(clip_path.fill);
+        self.ctx.push_layer(Some(&clip_path.path), None, None, None)
     }
 
     fn push_transparency_group(&mut self, opacity: f32) {
-        self.0.push_layer(None, None, Some(opacity), None)
+        self.ctx.push_layer(None, None, Some(opacity), None)
     }
 
     fn pop_clip_path(&mut self) {
-        self.0.pop_layer();
+        self.ctx.pop_layer();
     }
 
     fn pop_transparency_group(&mut self) {
-        self.0.pop_layer();
+        self.ctx.pop_layer();
+    }
+
+    fn set_soft_mask(&mut self, mask: Option<SoftMask>) {
+        self.cur_mask = mask.map(|m| {
+            let width = self.ctx.width as u16;
+            let height = self.ctx.height as u16;
+
+            self.soft_mask_cache
+                .entry(m.id())
+                .or_insert_with(|| draw_soft_mask(&m, width, height))
+                .clone()
+        });
     }
 }
 
@@ -351,9 +402,14 @@ pub fn render(page: &Page, scale: f32) -> Pixmap {
         Cache::new(),
         page.xref(),
     );
-    let mut device = Renderer(RenderContext::new(pix_width, pix_height), false);
+    let mut device = Renderer {
+        ctx: RenderContext::new(pix_width, pix_height),
+        inside_pattern: false,
+        soft_mask_cache: Default::default(),
+        cur_mask: None,
+    };
 
-    device.0.fill_rect(
+    device.ctx.fill_rect(
         &Rect::new(0.0, 0.0, pix_width as f64, pix_height as f64),
         WHITE.into(),
         Affine::IDENTITY,
@@ -375,8 +431,25 @@ pub fn render(page: &Page, scale: f32) -> Pixmap {
     device.pop_clip_path();
 
     let mut pixmap = Pixmap::new(pix_width, pix_height);
-    device.0.render_to_pixmap(&mut pixmap);
+    device.ctx.render_to_pixmap(&mut pixmap);
     pixmap
+}
+
+fn draw_soft_mask(mask: &SoftMask, width: u16, height: u16) -> Mask {
+    let mut renderer = Renderer {
+        ctx: RenderContext::new(width, height),
+        inside_pattern: false,
+        cur_mask: None,
+        soft_mask_cache: Default::default(),
+    };
+    mask.interpret(&mut renderer);
+    let mut pix = Pixmap::new(width, height);
+    renderer.ctx.render_to_pixmap(&mut pix);
+
+    match mask.mask_type() {
+        MaskType::Luminosity => Mask::new_luminance(&pix),
+        MaskType::Alpha => Mask::new_alpha(&pix),
+    }
 }
 
 pub fn render_png(

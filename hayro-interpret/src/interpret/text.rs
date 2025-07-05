@@ -48,6 +48,7 @@ pub(crate) fn next_line(ctx: &mut Context, tx: f64, ty: f64) {
 pub(crate) fn show_glyph<'a>(ctx: &mut Context<'a>, device: &mut impl Device, glyph: &Glyph<'a>) {
     device.set_transform(ctx.get().ctm);
 
+    device.set_soft_mask(ctx.get().soft_mask.clone());
     device.set_stroke_properties(&ctx.stroke_props());
     device.set_fill_properties(&ctx.fill_props());
 

@@ -40,10 +40,11 @@ use crate::x_object::{ImageXObject, XObject, draw_image_xobject, draw_xobject};
 use interpret::text::TextRenderingMode;
 
 use crate::interpret::path::{fill_path, fill_path_impl, fill_stroke_path, stroke_path};
-use crate::soft_mask::SoftMask;
+pub use hayro_syntax::object::ObjectIdentifier;
 pub use image::{RgbaImage, StencilImage};
 use interpret::text;
 pub use paint::{Paint, PaintType};
+pub use soft_mask::{MaskType, SoftMask};
 
 #[derive(Clone, Debug)]
 pub struct StrokeProps {
@@ -530,7 +531,7 @@ fn handle_gs_single<'a>(
             let obj_id = dict.get_ref(SMASK)?.into();
             context.get_mut().soft_mask = dict
                 .get::<Dict>(SMASK)
-                .and_then(|d| SoftMask::new(dict, context, parent_resources.clone(), obj_id));
+                .and_then(|d| SoftMask::new(&d, context, parent_resources.clone(), obj_id));
             warn!("set soft mask.")
         }
         "Type" => {}
