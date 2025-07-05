@@ -1,0 +1,312 @@
+%PDF-1.7
+%µ¶
+
+1 0 obj
+<<
+  /Type /Pages
+  /Count 1
+  /Kids [ 14 0 R ]
+>>
+endobj
+
+2 0 obj
+<<
+  /Type /ExtGState
+  /SMask 4 0 R
+>>
+endobj
+
+3 0 obj
+<<
+  /Type /ExtGState
+  /SMask 5 0 R
+>>
+endobj
+
+4 0 obj
+<<
+  /Type /Mask
+  /S /Luminosity
+  /G 6 0 R
+>>
+endobj
+
+5 0 obj
+<<
+  /Type /Mask
+  /S /Luminosity
+  /G 7 0 R
+>>
+endobj
+
+6 0 obj
+<<
+  /Length 31
+  /Type /XObject
+  /Subtype /Form
+  /Group <<
+    /Type /Group
+    /S /Transparency
+    /CS /DeviceRGB
+  >>
+  /Resources <<
+    /Shading <<
+      /s0 10 0 R
+    >>
+  >>
+  /BBox [ 20 20 180 180 ]
+>>
+stream
+q
+160 0 0 160 20 20 cm
+/s0 sh
+Q
+endstream
+endobj
+
+7 0 obj
+<<
+  /Length 111
+  /Type /XObject
+  /Subtype /Form
+  /Group <<
+    /Type /Group
+    /S /Transparency
+    /CS /DeviceRGB
+  >>
+  /Resources <<
+    /ExtGState <<
+      /g0 2 0 R
+    >>
+    /Pattern <<
+      /p0 13 0 R
+    >>
+  >>
+  /BBox [ 20 20 180 180 ]
+>>
+stream
+q
+4 4 m
+196 4 l
+196 196 l
+4 196 l
+h
+W
+n
+q/g0 gs
+/Pattern cs
+/p0 scn
+20 20 m
+180 20 l
+180 180 l
+20 180 l
+h
+f
+Q
+Q
+endstream
+endobj
+
+8 0 obj
+<<
+  /Length 59
+  /Type /XObject
+  /Subtype /Form
+  /Group <<
+    /Type /Group
+    /S /Transparency
+    /CS /DeviceRGB
+  >>
+  /Resources <<
+  >>
+  /BBox [ 20 20 180 180 ]
+>>
+stream
+q
+0 .5019608 0 rg
+20 20 m
+180 20 l
+180 180 l
+20 180 l
+h
+f
+Q
+endstream
+endobj
+
+9 0 obj
+<<
+  /FunctionType 2
+  /Range [ 0 1 ]
+  /C0 [ 0 ]
+  /C1 [ 1 ]
+  /Domain [ 0 1 ]
+  /N 1
+>>
+endobj
+
+10 0 obj
+<<
+  /ShadingType 2
+  /ColorSpace /DeviceGray
+  /AntiAlias false
+  /Function 9 0 R
+  /Coords [ 0 0 1 0 ]
+  /Extend [ true true ]
+>>
+endobj
+
+11 0 obj
+<<
+  /FunctionType 2
+  /Range [ 0 1 0 1 0 1 ]
+  /C0 [ 1 1 1 ]
+  /C1 [ 0 0 0 ]
+  /Domain [ 0 1 ]
+  /N 1
+>>
+endobj
+
+12 0 obj
+<<
+  /ShadingType 2
+  /ColorSpace /DeviceRGB
+  /AntiAlias false
+  /Function 11 0 R
+  /Coords [ 0 0 1 0 ]
+  /Extend [ true true ]
+>>
+endobj
+
+13 0 obj
+<<
+  /Type /Pattern
+  /PatternType 2
+  /Shading 12 0 R
+  /Matrix [ 160 0 0 160 20 20 ]
+>>
+endobj
+
+14 0 obj
+<<
+  /Type /Page
+  /Resources <<
+    /ExtGState <<
+      /g0 3 0 R
+    >>
+    /XObject <<
+      /x0 8 0 R
+    >>
+  >>
+  /MediaBox [ 0 0 200 200 ]
+  /Parent 1 0 R
+  /Contents 19 0 R
+>>
+endobj
+
+16 0 obj
+<<
+  /Length 1475
+  /Type /Metadata
+  /Subtype /XML
+  /Filter /ASCIIHexDecode
+>>
+stream
+3c3f787061636b657420626567696e3d22efbbbf222069643d2257354d304d70
+43656869487a7265537a4e54637a6b633964223f3e3c783a786d706d65746120
+786d6c6e733a783d2261646f62653a6e733a6d6574612f2220783a786d70746b
+3d22786d702d777269746572223e3c7264663a52444620786d6c6e733a726466
+3d22687474703a2f2f7777772e77332e6f72672f313939392f30322f32322d72
+64662d73796e7461782d6e7323223e3c7264663a4465736372697074696f6e20
+7264663a61626f75743d222220786d6c6e733a64633d22687474703a2f2f7075
+726c2e6f72672f64632f656c656d656e74732f312e312f222020786d6c6e733a
+786d704d4d3d22687474703a2f2f6e732e61646f62652e636f6d2f7861702f31
+2e302f6d6d2f222020786d6c6e733a786d705450673d22687474703a2f2f6e73
+2e61646f62652e636f6d2f7861702f312e302f742f70672f222020786d6c6e73
+3a7064663d22687474703a2f2f6e732e61646f62652e636f6d2f7064662f312e
+332f22203e3c786d705450673a4e50616765733e313c2f786d705450673a4e50
+616765733e3c64633a666f726d61743e6170706c69636174696f6e2f7064663c
+2f64633a666f726d61743e3c786d704d4d3a496e7374616e636549443e587871
+31494a4e4f42554d752b57737867726e6273773d3d3c2f786d704d4d3a496e73
+74616e636549443e3c786d704d4d3a446f63756d656e7449443e58787131494a
+4e4f42554d752b57737867726e6273773d3d3c2f786d704d4d3a446f63756d65
+6e7449443e3c786d704d4d3a52656e646974696f6e436c6173733e70726f6f66
+3c2f786d704d4d3a52656e646974696f6e436c6173733e3c7064663a50444656
+657273696f6e3e312e373c2f7064663a50444656657273696f6e3e3c2f726466
+3a4465736372697074696f6e3e3c2f7264663a5244463e3c2f783a786d706d65
+74613e3c3f787061636b657420656e643d2272223f3e>
+endstream
+endobj
+
+17 0 obj
+<<
+  /Type /Catalog
+  /Pages 1 0 R
+  /Metadata 16 0 R
+>>
+endobj
+
+19 0 obj
+<<
+  /Length 142
+>>
+stream
+q
+0 200 m
+200 200 l
+200 0 l
+0 0 l
+h
+W
+n
+q
+1 0 0 -1 0 200 cm/g0 gs
+/x0 Do
+Q
+q
+1 0 0 -1 0 200 cm
+0 G
+4 M
+1 1 m
+199 1 l
+199 199 l
+1 199 l
+h
+S
+Q
+Q
+endstream
+endobj
+
+xref
+0 20
+0000000015 65535 f 
+0000000016 00000 n 
+0000000083 00000 n 
+0000000139 00000 n 
+0000000195 00000 n 
+0000000259 00000 n 
+0000000323 00000 n 
+0000000602 00000 n 
+0000001003 00000 n 
+0000001270 00000 n 
+0000001376 00000 n 
+0000001525 00000 n 
+0000001648 00000 n 
+0000001797 00000 n 
+0000001904 00000 n 
+0000000018 00002 f 
+0000002105 00000 n 
+0000003696 00000 n 
+0000000000 00001 f 
+0000003770 00000 n 
+
+trailer
+<<
+  /Size 20
+  /Root 17 0 R
+  /ID [ (Xxq1IJNOBUMu+Wsxgrnbsw==) (Xxq1IJNOBUMu+Wsxgrnbsw==) ]
+>>
+startxref
+3967
+%%EOF

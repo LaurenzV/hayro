@@ -958,5 +958,33 @@
   {
     "id": "issue44",
     "file": "pdfs/issue44.pdf"
+  },
+  {
+    "id": "resvg_masking_mask_mask_type_alpha",
+    "file": "pdfs/resvg_masking_mask_mask_type_alpha.pdf"
+  },
+  {
+    "id": "resvg_masking_mask_mask_type_luminance",
+    "file": "pdfs/resvg_masking_mask_mask_type_luminance.pdf"
+  },
+  {
+    "id": "resvg_masking_mask_recursive",
+    "file": "pdfs/resvg_masking_mask_recursive.pdf"
+  },
+  {
+    "id": "resvg_masking_mask_recursive_on_child",
+    "file": "pdfs/resvg_masking_mask_recursive_on_child.pdf"
+  },
+  {
+    "id": "resvg_masking_mask_recursive_on_self",
+    "file": "pdfs/resvg_masking_mask_recursive_on_self.pdf"
+  },
+  {
+    "id": "resvg_masking_mask_transform_on_shape",
+    "file": "pdfs/resvg_masking_mask_transform_on_shape.pdf"
+  },
+  {
+    "id": "resvg_masking_mask_with_image",
+    "file": "pdfs/resvg_masking_mask_with_image.pdf"
   }
 ]

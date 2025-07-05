@@ -229,6 +229,13 @@ use crate::run_test;
 #[test] fn resvg_masking_clipPath_overlapped_shapes_with_evenodd() { run_test("resvg_masking_clipPath_overlapped_shapes_with_evenodd", "pdfs/resvg_masking_clipPath_overlapped_shapes_with_evenodd.pdf", None); }
 #[test] fn resvg_masking_mask_with_clip_path() { run_test("resvg_masking_mask_with_clip_path", "pdfs/resvg_masking_mask_with_clip_path.pdf", None); }
 #[test] fn issue44() { run_test("issue44", "pdfs/issue44.pdf", None); }
+#[test] fn resvg_masking_mask_mask_type_alpha() { run_test("resvg_masking_mask_mask_type_alpha", "pdfs/resvg_masking_mask_mask_type_alpha.pdf", None); }
+#[test] fn resvg_masking_mask_mask_type_luminance() { run_test("resvg_masking_mask_mask_type_luminance", "pdfs/resvg_masking_mask_mask_type_luminance.pdf", None); }
+#[test] fn resvg_masking_mask_recursive() { run_test("resvg_masking_mask_recursive", "pdfs/resvg_masking_mask_recursive.pdf", None); }
+#[test] fn resvg_masking_mask_recursive_on_child() { run_test("resvg_masking_mask_recursive_on_child", "pdfs/resvg_masking_mask_recursive_on_child.pdf", None); }
+#[test] fn resvg_masking_mask_recursive_on_self() { run_test("resvg_masking_mask_recursive_on_self", "pdfs/resvg_masking_mask_recursive_on_self.pdf", None); }
+#[test] fn resvg_masking_mask_transform_on_shape() { run_test("resvg_masking_mask_transform_on_shape", "pdfs/resvg_masking_mask_transform_on_shape.pdf", None); }
+#[test] fn resvg_masking_mask_with_image() { run_test("resvg_masking_mask_with_image", "pdfs/resvg_masking_mask_with_image.pdf", None); }
 #[test] fn pdfjs_20130226130259() { run_test("pdfjs_20130226130259", "downloads/pdfjs/20130226130259.pdf", Some("0..=0")); }
 #[test] fn pdfjs_IdentityToUnicodeMap_charCodeOf() { run_test("pdfjs_IdentityToUnicodeMap_charCodeOf", "pdfs/pdfjs/IdentityToUnicodeMap_charCodeOf.pdf", None); }
 #[test] fn pdfjs_IndexedCS_negative_and_high() { run_test("pdfjs_IndexedCS_negative_and_high", "pdfs/pdfjs/IndexedCS_negative_and_high.pdf", None); }
