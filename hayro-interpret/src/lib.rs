@@ -12,6 +12,7 @@ use kurbo::{Affine, Cap, Join, Point, Shape};
 use log::warn;
 use peniko::Fill;
 use smallvec::{SmallVec, smallvec};
+use std::ops::Deref;
 use std::sync::Arc;
 
 pub mod cache;
@@ -528,11 +529,16 @@ fn handle_gs_single<'a>(
         "CA" => context.get_mut().stroke_alpha = dict.get::<f32>(key)?,
         "ca" => context.get_mut().non_stroke_alpha = dict.get::<f32>(key)?,
         "SMask" => {
-            let obj_id = dict.get_ref(SMASK)?.into();
-            context.get_mut().soft_mask = dict
-                .get::<Dict>(SMASK)
-                .and_then(|d| SoftMask::new(&d, context, parent_resources.clone(), obj_id));
-            warn!("set soft mask.")
+            if let Some(name) = dict.get::<Name>(SMASK) {
+                if name.deref() == b"None" {
+                    context.get_mut().soft_mask = None;
+                }
+            } else {
+                let obj_id = dict.get_ref(SMASK)?.into();
+                context.get_mut().soft_mask = dict
+                    .get::<Dict>(SMASK)
+                    .and_then(|d| SoftMask::new(&d, context, parent_resources.clone(), obj_id));
+            }
         }
         "Type" => {}
         _ => {}
