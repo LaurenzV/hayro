@@ -457,6 +457,7 @@ pub fn interpret<'a, 'b>(
                     st.non_stroke_pattern = Some(sp);
                     st.none_stroke_cs = ColorSpace::pattern();
 
+                    device.set_soft_mask(st.soft_mask.clone());
                     device.push_transparency_group(st.non_stroke_alpha);
 
                     let bbox = context.bbox().to_path(0.1);
