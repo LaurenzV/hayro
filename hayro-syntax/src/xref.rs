@@ -5,7 +5,9 @@ use crate::data::Data;
 use crate::object::ObjectIdentifier;
 use crate::object::array::Array;
 use crate::object::dict::Dict;
-use crate::object::dict::keys::{ENCRYPT, FIRST, INDEX, N, PAGES, PREV, ROOT, SIZE, W, XREF_STM};
+use crate::object::dict::keys::{
+    ENCRYPT, FIRST, INDEX, N, PAGES, PREV, ROOT, SIZE, VERSION, W, XREF_STM,
+};
 use crate::object::indirect::IndirectObject;
 use crate::object::stream::Stream;
 use crate::object::{Object, ObjectLike};
@@ -114,9 +116,11 @@ impl XRef {
 
         let root = trailer_dict.get::<Dict>(ROOT).ok_or(XRefError::Unknown)?;
         let pages_ref = root.get_ref(PAGES).ok_or(XRefError::Unknown)?;
+        let version = root.get::<f32>(VERSION);
 
         let td = TrailerData {
             pages_ref: pages_ref.into(),
+            version,
         };
 
         match &mut xref.0 {
@@ -287,12 +291,14 @@ struct SomeRepr {
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct TrailerData {
     pub pages_ref: ObjectIdentifier,
+    pub version: Option<f32>,
 }
 
 impl TrailerData {
     pub fn dummy() -> Self {
         Self {
             pages_ref: ObjectIdentifier::new(0, 0),
+            version: None,
         }
     }
 }
