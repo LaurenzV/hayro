@@ -1,28 +1,48 @@
 mod primitive;
 
-use hayro_syntax as hs;
-use hayro_syntax::object::null::Null;
+use crate::primitive::WriteDirect;
+use hayro_syntax::document::page::{Resources, Rotation};
+use hayro_syntax::object::Object;
+use hayro_syntax::object::dict::Dict;
+use hayro_syntax::object::dict::keys::{CONTENTS, RESOURCES};
 use hayro_syntax::object::r#ref::ObjRef;
 use hayro_syntax::pdf::Pdf;
-use pdf_writer as pf;
 use pdf_writer::{Chunk, Obj, Ref};
 use std::collections::{HashMap, HashSet};
-use std::ops::Range;
+
+pub enum ExtractionError {
+    LoadPdfError,
+    InvalidPage(usize, usize),
+}
 
 pub struct ExtractedPages {
     chunk: Chunk,
-    page_regs: Vec<ObjRef>,
+    page_refs: Vec<Ref>,
 }
 
 struct ExtractionContext {
     chunks: Vec<Chunk>,
     visited_objects: HashSet<ObjRef>,
     to_visit_refs: Vec<ObjRef>,
+    page_refs: Vec<Ref>,
     next_ref: Ref,
     ref_map: HashMap<ObjRef, Ref>,
+    page_cache: HashMap<usize, Ref>,
 }
 
 impl ExtractionContext {
+    pub fn new() -> Self {
+        Self {
+            chunks: vec![],
+            visited_objects: HashSet::new(),
+            to_visit_refs: Vec::new(),
+            next_ref: Ref::new(1),
+            ref_map: HashMap::new(),
+            page_cache: HashMap::new(),
+            page_refs: Vec::new(),
+        }
+    }
+
     pub fn map_ref(&mut self, ref_: ObjRef) -> pdf_writer::Ref {
         if let Some(ref_) = self.ref_map.get(&ref_) {
             *ref_
@@ -33,12 +53,73 @@ impl ExtractionContext {
             new_ref
         }
     }
+
+    pub fn new_ref(&mut self) -> pdf_writer::Ref {
+        self.next_ref.bump()
+    }
 }
 
-//
-// pub fn extract_pages(pdf: &Pdf, page_range: &[usize]) -> ExtractedPages {
-//     todo!()
-// }
+pub fn extract_pages(pdf: &Pdf, page_indices: &[usize]) -> Result<ExtractedPages, ExtractionError> {
+    let pages = pdf.pages().ok_or(ExtractionError::LoadPdfError)?;
+    let mut ctx = ExtractionContext::new();
+
+    for page_index in page_indices.iter().copied() {
+        let page = pages
+            .get(page_index)
+            .ok_or(ExtractionError::InvalidPage(page_index, pages.len()))?;
+
+        if let Some(ref_) = ctx.page_cache.get(&page_index) {
+            ctx.page_refs.push(*ref_);
+        } else {
+            let page_ref = ctx.new_ref();
+            ctx.page_cache.insert(page_index, page_ref);
+            write_page(page, page_ref, &mut ctx)?;
+            ctx.page_refs.push(page_ref);
+        }
+    }
+
+    todo!()
+}
+
+fn write_page(
+    page: &hayro_syntax::document::page::Page,
+    page_ref: Ref,
+    ctx: &mut ExtractionContext,
+) -> Result<(), ExtractionError> {
+    let mut chunk = Chunk::new();
+    let mut pdf_page = chunk.page(page_ref);
+    pdf_page
+        .media_box(convert_rect(&page.media_box()))
+        .crop_box(convert_rect(&page.crop_box()))
+        .rotate(match page.rotation() {
+            Rotation::None => 0,
+            Rotation::Horizontal => 90,
+            Rotation::Flipped => 180,
+            Rotation::FlippedHorizontal => 270,
+        });
+
+    let raw_dict = page.raw();
+
+    if let Some(contents) = raw_dict.get_raw::<Object>(CONTENTS) {
+        contents.write_direct(pdf_page.insert(pdf_writer::Name(CONTENTS)), ctx);
+    }
+
+    if let Some(resources) = raw_dict.get_raw::<Dict>(RESOURCES) {
+        resources.write_direct(pdf_page.into(pdf_writer::Name(RESOURCES)), ctx)
+    }
+
+    Ok(())
+}
+
+fn convert_rect(hy_rect: &hayro_syntax::object::rect::Rect) -> pdf_writer::Rect {
+    pdf_writer::Rect::new(
+        hy_rect.x0 as f32,
+        hy_rect.y0 as f32,
+        hy_rect.x1 as f32,
+        hy_rect.y1 as f32,
+    )
+}
+
 //
 // fn write_dict(dict: &hs::object::dict::Dict, ctx: &mut ExtractionContext) {
 //     for (key, name) in dict.entries() {

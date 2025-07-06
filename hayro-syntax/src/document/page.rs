@@ -305,6 +305,12 @@ impl<'a> Page<'a> {
         self.operations_impl().unwrap_or(UntypedIter::empty())
     }
 
+    /// Get the raw dictionary of the page.
+    pub fn raw(&self) -> &Dict<'a> {
+        &self.inner
+    }
+
+    // TODO: Remove?
     /// Get the xref table (of the document the page belongs to).
     pub fn xref(&self) -> &'a XRef {
         self.ctx.xref
