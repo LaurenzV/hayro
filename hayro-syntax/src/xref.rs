@@ -6,9 +6,10 @@ use crate::object::ObjectIdentifier;
 use crate::object::array::Array;
 use crate::object::dict::Dict;
 use crate::object::dict::keys::{
-    ENCRYPT, FIRST, INDEX, N, PAGES, PREV, ROOT, SIZE, VERSION, W, XREF_STM,
+    ENCRYPT, FIRST, INDEX, N, PAGES, PREV, ROOT, SIZE, TYPE, VERSION, W, XREF_STM,
 };
 use crate::object::indirect::IndirectObject;
+use crate::object::name::Name;
 use crate::object::stream::Stream;
 use crate::object::{Object, ObjectLike};
 use crate::reader::{Readable, Reader, ReaderContext};
@@ -58,14 +59,37 @@ fn fallback_xref_map(data: &[u8]) -> (XrefMap, Option<&[u8]>) {
 
     let mut r = Reader::new(data);
 
+    let dummy_ctx = ReaderContext::dummy();
+    let mut last_obj_num = None;
+
     loop {
         let cur_pos = r.offset();
 
-        if let Some(obj) = r.read_without_context::<ObjectIdentifier>() {
-            xref_map.insert(obj, EntryType::Normal(cur_pos));
-        } else if let Some(dict) = r.read::<Dict>(ReaderContext::dummy()) {
+        let mut old_r = r.clone();
+
+        if let Some(obj_id) = r.read::<ObjectIdentifier>(dummy_ctx) {
+            xref_map.insert(obj_id, EntryType::Normal(cur_pos));
+            last_obj_num = Some(obj_id);
+        } else if let Some(dict) = r.read::<Dict>(dummy_ctx) {
             if dict.contains_key(SIZE) && dict.contains_key(ROOT) {
-                trailer_dict = Some(dict);
+                trailer_dict = Some(dict.clone());
+            }
+
+            if let Some(stream) = old_r.read::<Stream>(dummy_ctx) {
+                if stream.dict().get::<Name>(TYPE).as_deref() == Some(b"ObjStm")
+                    && let Some(data) = stream.decoded()
+                    && let Some(last_obj_num) = last_obj_num
+                {
+                    if let Some(obj_stream) = ObjectStream::new(stream, &data, dummy_ctx) {
+                        for (idx, (obj_num, _)) in obj_stream.offsets.iter().enumerate() {
+                            let id = ObjectIdentifier::new(*obj_num as i32, 0);
+                            xref_map.insert(
+                                id,
+                                EntryType::ObjStream(last_obj_num.obj_num as u32, idx as u32),
+                            );
+                        }
+                    }
+                }
             }
         } else {
             r.read_byte();
@@ -133,6 +157,16 @@ impl XRef {
         Ok(xref)
     }
 
+    fn is_repaired(&self) -> bool {
+        match &self.0 {
+            Inner::Dummy => false,
+            Inner::Some { map, .. } => {
+                let locked = map.read().unwrap();
+                locked.repaired
+            }
+        }
+    }
+
     pub(crate) fn dummy() -> &'static XRef {
         DUMMY_XREF
     }
@@ -185,7 +219,6 @@ impl XRef {
         };
 
         let locked = map.try_read().unwrap();
-        let repaired = locked.repaired;
 
         let mut r = Reader::new(data.get());
 
@@ -217,7 +250,7 @@ impl XRef {
                 };
 
                 // The xref table is broken, try to repair if not already repaired.
-                if repaired {
+                if self.is_repaired() {
                     error!(
                         "attempt was made at repairing xref, but object {:?} still couldn't be read",
                         id
@@ -619,7 +652,7 @@ fn read_xref_table_trailer<'a>(
 struct ObjectStream<'a> {
     data: &'a [u8],
     ctx: ReaderContext<'a>,
-    offsets: Vec<usize>,
+    offsets: Vec<(u32, usize)>,
 }
 
 impl<'a> ObjectStream<'a> {
@@ -634,10 +667,10 @@ impl<'a> ObjectStream<'a> {
         for _ in 0..num_objects {
             r.skip_white_spaces_and_comments();
             // Skip object number
-            let _ = r.read_without_context::<u32>()?;
+            let obj_num = r.read_without_context::<u32>()?;
             r.skip_white_spaces_and_comments();
             let relative_offset = r.read_without_context::<usize>()?;
-            offsets.push(first_offset + relative_offset);
+            offsets.push((obj_num, first_offset + relative_offset));
         }
 
         Some(Self { data, ctx, offsets })
@@ -647,7 +680,7 @@ impl<'a> ObjectStream<'a> {
     where
         T: ObjectLike<'a>,
     {
-        let offset = *self.offsets.get(index as usize)?;
+        let offset = self.offsets.get(index as usize)?.1;
         let mut r = Reader::new(&self.data);
         r.jump(offset);
 
