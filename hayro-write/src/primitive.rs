@@ -1,7 +1,8 @@
-use std::ops::Deref;
-use pdf_writer::Obj;
-use hayro_syntax::object::Object;
 use crate::ExtractionContext;
+use hayro_syntax::object::Object;
+use hayro_syntax::object::r#ref::MaybeRef;
+use pdf_writer::Obj;
+use std::ops::Deref;
 
 pub(crate) trait WritePrimitive {
     fn write(&self, obj: Obj, _: &mut ExtractionContext);
@@ -9,7 +10,8 @@ pub(crate) trait WritePrimitive {
 
 impl WritePrimitive for hayro_syntax::object::r#ref::ObjRef {
     fn write(&self, obj: Obj, ctx: &mut ExtractionContext) {
-        let mapped_ref = ctx.map_ref(self.clone());
+        ctx.to_visit_refs.push(*self);
+        let mapped_ref = ctx.map_ref(*self);
         obj.primitive(mapped_ref);
     }
 }
@@ -20,7 +22,7 @@ impl WritePrimitive for hayro_syntax::object::number::Number {
 
         if float_num.fract() == 0.0 {
             obj.primitive(float_num as i32);
-        }   else {
+        } else {
             obj.primitive(float_num as f32);
         }
     }
@@ -51,13 +53,35 @@ impl WritePrimitive for hayro_syntax::object::name::Name<'_> {
 }
 
 impl WritePrimitive for hayro_syntax::object::array::Array<'_> {
-    fn write(&self, obj: Obj, _: &mut ExtractionContext) {
-        let mut iter = self.flex_iter();
-        for item in iter.next()
+    fn write(&self, obj: Obj, ctx: &mut ExtractionContext) {
+        let mut arr = obj.array();
+        for item in self.raw_iter() {
+            let obj = arr.push();
+            item.write(obj, ctx);
+        }
     }
 }
 
-impl WritePrimitive for hayro_syntax::object::Object<'_> {
+impl<T: WritePrimitive> WritePrimitive for MaybeRef<T> {
+    fn write(&self, obj: Obj, ctx: &mut ExtractionContext) {
+        match self {
+            MaybeRef::Ref(r) => r.write(obj, ctx),
+            MaybeRef::NotRef(o) => o.write(obj, ctx),
+        }
+    }
+}
+
+impl WritePrimitive for hayro_syntax::object::dict::Dict<'_> {
+    fn write(&self, obj: Obj, ctx: &mut ExtractionContext) {
+        let mut dict = obj.dict();
+
+        for (name, val) in self.entries() {
+            val.write(dict.insert(pdf_writer::Name(name.deref())), ctx);
+        }
+    }
+}
+
+impl WritePrimitive for Object<'_> {
     fn write(&self, obj: Obj, ctx: &mut ExtractionContext) {
         match self {
             Object::Null(n) => n.write(obj, ctx),
@@ -65,8 +89,8 @@ impl WritePrimitive for hayro_syntax::object::Object<'_> {
             Object::Number(n) => n.write(obj, ctx),
             Object::String(s) => s.write(obj, ctx),
             Object::Name(n) => n.write(obj, ctx),
-            Object::Dict(_) => {}
-            Object::Array(_) => {}
+            Object::Dict(d) => d.write(obj, ctx),
+            Object::Array(a) => a.write(obj, ctx),
             Object::Stream(_) => {}
         }
     }

@@ -26,7 +26,7 @@ impl PartialEq for Array<'_> {
 
 impl<'a> Array<'a> {
     /// Returns an iterator over the objects of the array.
-    fn raw_iter(&self) -> ArrayIter<'a> {
+    pub fn raw_iter(&self) -> ArrayIter<'a> {
         ArrayIter::new(self.data, self.ctx)
     }
 
@@ -100,7 +100,7 @@ impl<'a> Readable<'a> for Array<'a> {
 }
 
 /// An iterator over the items of an array.
-pub(crate) struct ArrayIter<'a> {
+pub struct ArrayIter<'a> {
     reader: Reader<'a>,
     ctx: ReaderContext<'a>,
 }
