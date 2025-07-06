@@ -80,4 +80,12 @@ mod tests {
         let data = Arc::new([]);
         let pdf = Pdf::new(data);
     }
+
+    #[test]
+    fn pdf_version() {
+        let data = std::fs::read("../hayro-render/pdfs/pdfjs/alphatrans.pdf").unwrap();
+        let pdf = Pdf::new(Arc::new(data)).unwrap();
+
+        assert_eq!(pdf.version(), 1.7);
+    }
 }
