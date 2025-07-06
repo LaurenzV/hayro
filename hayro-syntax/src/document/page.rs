@@ -12,6 +12,7 @@ use crate::object::{Object, ObjectLike};
 use crate::reader::ReaderContext;
 use crate::util::FloatExt;
 use crate::xref::XRef;
+use kurbo::Affine;
 use log::warn;
 use std::cell::OnceCell;
 use std::ops::Deref;
@@ -227,9 +228,12 @@ impl<'a> Page<'a> {
         self.crop_box
     }
 
-    /// TODO: Remove
-    pub fn base_dimensions(&self) -> (f32, f32) {
-        let crop_box = self.crop_box().intersect(self.media_box());
+    fn intersected_crop_box(&self) -> Rect {
+        self.crop_box().intersect(self.media_box())
+    }
+
+    fn base_dimensions(&self) -> (f32, f32) {
+        let crop_box = self.intersected_crop_box();
 
         if (crop_box.width() as f32).is_nearly_zero() || (crop_box.height() as f32).is_nearly_zero()
         {
@@ -240,6 +244,43 @@ impl<'a> Page<'a> {
                 crop_box.height().max(1.0) as f32,
             )
         }
+    }
+
+    /// A clip path that should be applied initially, representing the visible area.
+    pub fn view_box(&self) -> Rect {
+        self.intersected_crop_box()
+    }
+
+    /// Return the initial transform that should be applied when rendering. This accounts for a
+    /// number of factors, such as the mismatch between PDF's y-up and most renderers' y-down
+    /// coordinate system, the rotation of the page and the offset of the crop box.
+    pub fn initial_transform(&self) -> kurbo::Affine {
+        let crop_box = self.intersected_crop_box();
+        let (_, base_height) = self.base_dimensions();
+        let (width, height) = self.render_dimensions();
+
+        let rotation_transform = match self.rotation() {
+            Rotation::None => Affine::IDENTITY,
+            Rotation::Horizontal => {
+                let t =
+                    Affine::rotate(90.0f64.to_radians()) * Affine::translate((0.0, -width as f64));
+
+                t
+            }
+            Rotation::Flipped => {
+                Affine::scale(-1.0) * Affine::translate((-width as f64, -height as f64))
+            }
+            Rotation::FlippedHorizontal => {
+                let t =
+                    Affine::translate((0.0, height as f64)) * Affine::rotate(-90.0f64.to_radians());
+
+                t
+            }
+        };
+
+        rotation_transform
+            * Affine::new([1.0, 0.0, 0.0, -1.0, 0.0, base_height as f64])
+            * Affine::translate((-crop_box.x0, -crop_box.y0))
     }
 
     /// Return the with and height of the page that should be assumed when rendering the page.

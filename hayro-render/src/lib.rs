@@ -344,40 +344,14 @@ impl Device for Renderer {
 }
 
 pub fn render(page: &Page, scale: f32) -> Pixmap {
-    let crop_box = page.crop_box().intersect(page.media_box());
+    let (width, height) = page.render_dimensions();
+    let (scaled_width, scaled_height) = ((width * scale) as f64, (height * scale) as f64);
+    let initial_transform = Affine::scale(scale as f64) * page.initial_transform();
 
-    let (_, base_height) = page.base_dimensions();
-    let (pix_width, pix_height) = page.render_dimensions();
-
-    let rotation_transform = Affine::scale(scale as f64)
-        * match page.rotation() {
-            Rotation::None => Affine::IDENTITY,
-            Rotation::Horizontal => {
-                let t = Affine::rotate(90.0f64.to_radians())
-                    * Affine::translate((0.0, -pix_width as f64));
-
-                t
-            }
-            Rotation::Flipped => {
-                Affine::scale(-1.0) * Affine::translate((-pix_width as f64, -pix_height as f64))
-            }
-            Rotation::FlippedHorizontal => {
-                let t = Affine::translate((0.0, pix_height as f64))
-                    * Affine::rotate(-90.0f64.to_radians());
-
-                t
-            }
-        };
-
-    let initial_transform = rotation_transform
-        * Affine::new([1.0, 0.0, 0.0, -1.0, 0.0, base_height as f64])
-        * Affine::translate((-crop_box.x0, -crop_box.y0));
-
-    let (scaled_width, scaled_height) = ((pix_width * scale) as f64, (pix_height * scale) as f64);
     let (pix_width, pix_height) = (scaled_width.floor() as u16, scaled_height.floor() as u16);
     let mut state = Context::new(
         initial_transform,
-        kurbo::Rect::new(0.0, 0.0, pix_width as f64, pix_height as f64),
+        Rect::new(0.0, 0.0, pix_width as f64, pix_height as f64),
         Cache::new(),
         page.xref(),
     );
@@ -395,7 +369,7 @@ pub fn render(page: &Page, scale: f32) -> Pixmap {
         None,
     );
     device.push_clip_path(&ClipPath {
-        path: initial_transform * crop_box.to_path(0.1),
+        path: initial_transform * page.view_box().to_path(0.1),
         fill: Fill::NonZero,
     });
 
