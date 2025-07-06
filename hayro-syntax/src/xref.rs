@@ -210,7 +210,8 @@ impl XRef {
         locked.repaired = true;
     }
 
-    pub(crate) fn get<'a, T>(&'a self, id: ObjectIdentifier) -> Option<T>
+    /// Return the object with the given identifier.
+    pub fn get<'a, T>(&'a self, id: ObjectIdentifier) -> Option<T>
     where
         T: ObjectLike<'a>,
     {

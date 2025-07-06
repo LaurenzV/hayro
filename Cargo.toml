@@ -17,13 +17,11 @@ hayro-syntax = { path = "hayro-syntax", default-features = true }
 
 bitflags = { version = "2.9.1" }
 bytemuck = { version = "1.23.1" }
-hex = { version = "0.4.3" }
 image = { version = "0.25.6" }
 jpeg2k = { version = "0.9.1", default-features = false, features = ["openjp2"] }
 kurbo = { version = "0.11.1" }
 log = { version = "0.4.22" }
 flate2 = { version = "1.0", default-features = false, features = ["rust_backend"] }
-itertools = { version = "0.14.0" }
 oxipng = { version = "9.1.5" }
 peniko = { version = "0.4.0", features = ["bytemuck"] }
 once_cell = { version = "1.20.3" }
@@ -35,4 +33,5 @@ smallvec = { version = "1.13.2" }
 yoke = { version = "0.8.0" }
 walkdir = "2.5.0"
 pdf-writer = "0.13.0"
+lazy_static = "1.5.0"
 zune-jpeg = { git = "https://github.com/etemesi254/zune-image", rev = "ac43af3", version = "0.5.0-rc5" }

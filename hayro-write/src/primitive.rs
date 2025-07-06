@@ -1,12 +1,37 @@
 use crate::ExtractionContext;
+use hayro_syntax::object::dict::keys::{
+    AF, LAST_MODIFIED, LENGTH, METADATA, OC, OPI, PIECE_INFO, PT_DATA, REF, REFERENCE,
+    STRUCT_PARENT, STRUCT_PARENTS,
+};
 use hayro_syntax::object::null::Null;
 use hayro_syntax::object::number::Number;
 use hayro_syntax::object::r#ref::MaybeRef;
 use hayro_syntax::object::stream::Stream;
 use hayro_syntax::object::{Object, array, dict, name, string};
+use lazy_static::lazy_static;
 use pdf_writer::{Chunk, Dict, Obj, Ref};
+use std::collections::HashSet;
 use std::ops::Deref;
 use std::ops::DerefMut;
+
+lazy_static! {
+    static ref IGNORE_KEYS: HashSet<&'static [u8]> = {
+        let mut m = HashSet::new();
+
+        m.insert(METADATA);
+        m.insert(STRUCT_PARENT);
+        m.insert(OC);
+        m.insert(AF);
+        m.insert(PT_DATA);
+        m.insert(REF);
+        m.insert(LAST_MODIFIED);
+        m.insert(PIECE_INFO);
+        m.insert(STRUCT_PARENTS);
+        m.insert(OPI);
+
+        m
+    };
+}
 
 pub(crate) trait WriteDirect {
     fn write_direct(&self, obj: Obj, _: &mut ExtractionContext);
@@ -75,9 +100,20 @@ impl<T: WriteDirect> WriteDirect for MaybeRef<T> {
     }
 }
 
-fn write_dict(hayro_dict: &dict::Dict, pdf_dict: &mut Dict, ctx: &mut ExtractionContext) {
+fn write_dict(
+    hayro_dict: &dict::Dict,
+    pdf_dict: &mut Dict,
+    ctx: &mut ExtractionContext,
+    is_stream: bool,
+) {
     for (name, val) in hayro_dict.entries() {
-        val.write_direct(pdf_dict.insert(pdf_writer::Name(name.deref())), ctx);
+        if is_stream && name.deref() == LENGTH {
+            continue;
+        }
+
+        if !IGNORE_KEYS.contains(name.deref()) {
+            val.write_direct(pdf_dict.insert(pdf_writer::Name(name.deref())), ctx);
+        }
     }
 }
 
@@ -85,7 +121,7 @@ impl WriteDirect for hayro_syntax::object::dict::Dict<'_> {
     fn write_direct(&self, obj: Obj, ctx: &mut ExtractionContext) {
         let mut dict = obj.dict();
 
-        write_dict(self, &mut dict, ctx);
+        write_dict(self, &mut dict, ctx, false);
     }
 }
 
@@ -104,7 +140,7 @@ impl WriteDirect for Object<'_> {
     }
 }
 
-trait WriteIndirect {
+pub(crate) trait WriteIndirect {
     fn write_indirect(&self, chunk: &mut Chunk, id: Ref, ctx: &mut ExtractionContext);
 }
 
@@ -130,6 +166,21 @@ impl WriteIndirect for Stream<'_> {
     fn write_indirect(&self, chunk: &mut Chunk, id: Ref, ctx: &mut ExtractionContext) {
         // TODO: Handle `Crypt` filter
         let mut obj = chunk.stream(id, self.raw_data());
-        write_dict(self.dict(), obj.deref_mut(), ctx);
+        write_dict(self.dict(), obj.deref_mut(), ctx, true);
+    }
+}
+
+impl WriteIndirect for Object<'_> {
+    fn write_indirect(&self, chunk: &mut Chunk, id: Ref, ctx: &mut ExtractionContext) {
+        match self {
+            Object::Null(n) => n.write_indirect(chunk, id, ctx),
+            Object::Boolean(b) => b.write_indirect(chunk, id, ctx),
+            Object::Number(n) => n.write_indirect(chunk, id, ctx),
+            Object::String(s) => s.write_indirect(chunk, id, ctx),
+            Object::Name(n) => n.write_indirect(chunk, id, ctx),
+            Object::Dict(d) => d.write_indirect(chunk, id, ctx),
+            Object::Array(a) => a.write_indirect(chunk, id, ctx),
+            Object::Stream(s) => s.write_indirect(chunk, id, ctx),
+        }
     }
 }

@@ -57,6 +57,11 @@ impl Pdf {
             .get(self.xref.trailer_data().pages_ref)
             .and_then(|p| Pages::new(p, ctx, &self.xref))
     }
+
+    /// Return the xref of the PDF file.
+    pub fn xref(&self) -> &XRef {
+        &self.xref
+    }
 }
 
 fn find_version(data: &[u8]) -> Option<f32> {

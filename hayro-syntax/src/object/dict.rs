@@ -647,6 +647,7 @@ pub mod keys {
     key!(OP_NS, b"op");
     key!(OPEN_ACTION, b"OpenAction");
     key!(OPEN_TYPE, b"OpenType");
+    key!(OPI, b"OPI");
     key!(OPM, b"OPM");
     key!(OPT, b"Opt");
     key!(ORDER, b"Order");
@@ -701,6 +702,7 @@ pub mod keys {
     key!(PROP_BUILD, b"Prop_Build");
     key!(PROPERTIES, b"Properties");
     key!(PS, b"PS");
+    key!(PT_DATA, b"PtData");
     key!(PUB_SEC, b"PubSec");
     key!(PV, b"PV");
 
@@ -717,6 +719,7 @@ pub mod keys {
     key!(REASONS, b"Reasons");
     key!(RECIPIENTS, b"Recipients");
     key!(RECT, b"Rect");
+    key!(REF, b"Ref");
     key!(REFERENCE, b"Reference");
     key!(REGISTRY, b"Registry");
     key!(REGISTRY_NAME, b"RegistryName");

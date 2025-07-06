@@ -1,23 +1,26 @@
 mod primitive;
 
-use crate::primitive::WriteDirect;
+use crate::primitive::{WriteDirect, WriteIndirect};
 use hayro_syntax::document::page::{Resources, Rotation};
 use hayro_syntax::object::Object;
 use hayro_syntax::object::dict::Dict;
 use hayro_syntax::object::dict::keys::{CONTENTS, RESOURCES};
 use hayro_syntax::object::r#ref::ObjRef;
 use hayro_syntax::pdf::Pdf;
-use pdf_writer::{Chunk, Obj, Ref};
+use pdf_writer::{Chunk, Finish, Obj, Ref};
 use std::collections::{HashMap, HashSet};
 
+#[derive(Debug)]
 pub enum ExtractionError {
     LoadPdfError,
-    InvalidPage(usize, usize),
+    InvalidPageIndex(usize, usize),
+    InvalidPdf,
 }
 
 pub struct ExtractedPages {
-    chunk: Chunk,
-    page_refs: Vec<Ref>,
+    pub chunk: Chunk,
+    pub page_refs: Vec<Ref>,
+    pub next_ref: Ref,
 }
 
 struct ExtractionContext {
@@ -28,18 +31,20 @@ struct ExtractionContext {
     next_ref: Ref,
     ref_map: HashMap<ObjRef, Ref>,
     page_cache: HashMap<usize, Ref>,
+    page_tree_parent_ref: Ref,
 }
 
 impl ExtractionContext {
-    pub fn new() -> Self {
+    pub fn new(next_ref: Ref, page_tree_parent_ref: Ref) -> Self {
         Self {
             chunks: vec![],
             visited_objects: HashSet::new(),
             to_visit_refs: Vec::new(),
-            next_ref: Ref::new(1),
+            next_ref,
             ref_map: HashMap::new(),
             page_cache: HashMap::new(),
             page_refs: Vec::new(),
+            page_tree_parent_ref,
         }
     }
 
@@ -59,14 +64,19 @@ impl ExtractionContext {
     }
 }
 
-pub fn extract_pages(pdf: &Pdf, page_indices: &[usize]) -> Result<ExtractedPages, ExtractionError> {
+pub fn extract_pages(
+    pdf: &Pdf,
+    next_ref: Ref,
+    page_tree_parent_ref: Ref,
+    page_indices: &[usize],
+) -> Result<ExtractedPages, ExtractionError> {
     let pages = pdf.pages().ok_or(ExtractionError::LoadPdfError)?;
-    let mut ctx = ExtractionContext::new();
+    let mut ctx = ExtractionContext::new(next_ref, page_tree_parent_ref);
 
     for page_index in page_indices.iter().copied() {
         let page = pages
             .get(page_index)
-            .ok_or(ExtractionError::InvalidPage(page_index, pages.len()))?;
+            .ok_or(ExtractionError::InvalidPageIndex(page_index, pages.len()))?;
 
         if let Some(ref_) = ctx.page_cache.get(&page_index) {
             ctx.page_refs.push(*ref_);
@@ -78,7 +88,34 @@ pub fn extract_pages(pdf: &Pdf, page_indices: &[usize]) -> Result<ExtractedPages
         }
     }
 
-    todo!()
+    while let Some(ref_) = ctx.to_visit_refs.pop() {
+        if ctx.visited_objects.contains(&ref_) {
+            continue;
+        }
+
+        let mut chunk = Chunk::new();
+        let object = pdf
+            .xref()
+            .get::<Object>(ref_.into())
+            .ok_or(ExtractionError::InvalidPdf)?;
+        let new_ref = ctx.map_ref(ref_);
+        object.write_indirect(&mut chunk, new_ref, &mut ctx);
+        ctx.chunks.push(chunk);
+
+        ctx.visited_objects.insert(ref_);
+    }
+
+    let mut global_chunk = Chunk::new();
+
+    for chunk in &ctx.chunks {
+        global_chunk.extend(&chunk)
+    }
+
+    Ok(ExtractedPages {
+        chunk: global_chunk,
+        page_refs: ctx.page_refs,
+        next_ref: ctx.next_ref,
+    })
 }
 
 fn write_page(
@@ -86,6 +123,8 @@ fn write_page(
     page_ref: Ref,
     ctx: &mut ExtractionContext,
 ) -> Result<(), ExtractionError> {
+    // TODO: In theory, we should also decode content streams and clean them, to remove things
+    // like marked content information.
     let mut chunk = Chunk::new();
     let mut pdf_page = chunk.page(page_ref);
     pdf_page
@@ -96,7 +135,8 @@ fn write_page(
             Rotation::Horizontal => 90,
             Rotation::Flipped => 180,
             Rotation::FlippedHorizontal => 270,
-        });
+        })
+        .parent(ctx.page_tree_parent_ref);
 
     let raw_dict = page.raw();
 
@@ -105,8 +145,11 @@ fn write_page(
     }
 
     if let Some(resources) = raw_dict.get_raw::<Dict>(RESOURCES) {
-        resources.write_direct(pdf_page.into(pdf_writer::Name(RESOURCES)), ctx)
+        resources.write_direct(pdf_page.insert(pdf_writer::Name(RESOURCES)), ctx)
     }
+
+    pdf_page.finish();
+    ctx.chunks.push(chunk);
 
     Ok(())
 }
@@ -118,18 +161,4 @@ fn convert_rect(hy_rect: &hayro_syntax::object::rect::Rect) -> pdf_writer::Rect 
         hy_rect.x1 as f32,
         hy_rect.y1 as f32,
     )
-}
-
-//
-// fn write_dict(dict: &hs::object::dict::Dict, ctx: &mut ExtractionContext) {
-//     for (key, name) in dict.entries() {
-//
-//     }
-// }
-
-fn test() {
-    // let mut chunk = Chunk::new();
-    // let mut indirect = chunk.indirect(pf::Ref::new(1));
-    // let mut d: pf::Dict = indirect.start();
-    // let mut r: Ref = d.insert(Name(b"Hi")).start();
 }
