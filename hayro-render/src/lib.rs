@@ -346,46 +346,34 @@ impl Device for Renderer {
 pub fn render(page: &Page, scale: f32) -> Pixmap {
     let crop_box = page.crop_box().intersect(page.media_box());
 
-    let (unscaled_width, unscaled_height) = if (crop_box.width() as f32).is_nearly_zero()
-        || (crop_box.height() as f32).is_nearly_zero()
-    {
-        (A4.width(), A4.height())
-    } else {
-        (crop_box.width().max(1.0), crop_box.height().max(1.0))
-    };
-
-    let (mut pix_width, mut pix_height) = (unscaled_width, unscaled_height);
+    let (_, base_height) = page.base_dimensions();
+    let (pix_width, pix_height) = page.render_dimensions();
 
     let rotation_transform = Affine::scale(scale as f64)
         * match page.rotation() {
             Rotation::None => Affine::IDENTITY,
             Rotation::Horizontal => {
                 let t = Affine::rotate(90.0f64.to_radians())
-                    * Affine::translate((0.0, -unscaled_height));
-                std::mem::swap(&mut pix_width, &mut pix_height);
+                    * Affine::translate((0.0, -pix_width as f64));
 
                 t
             }
             Rotation::Flipped => {
-                Affine::scale(-1.0) * Affine::translate((-unscaled_width, -unscaled_height))
+                Affine::scale(-1.0) * Affine::translate((-pix_width as f64, -pix_height as f64))
             }
             Rotation::FlippedHorizontal => {
-                let t = Affine::translate((0.0, unscaled_width))
+                let t = Affine::translate((0.0, pix_height as f64))
                     * Affine::rotate(-90.0f64.to_radians());
-                std::mem::swap(&mut pix_width, &mut pix_height);
 
                 t
             }
         };
 
     let initial_transform = rotation_transform
-        * Affine::new([1.0, 0.0, 0.0, -1.0, 0.0, unscaled_height])
+        * Affine::new([1.0, 0.0, 0.0, -1.0, 0.0, base_height as f64])
         * Affine::translate((-crop_box.x0, -crop_box.y0));
 
-    let (scaled_width, scaled_height) = (
-        (pix_width as f32 * scale) as f64,
-        (pix_height as f32 * scale) as f64,
-    );
+    let (scaled_width, scaled_height) = ((pix_width * scale) as f64, (pix_height * scale) as f64);
     let (pix_width, pix_height) = (scaled_width.floor() as u16, scaled_height.floor() as u16);
     let mut state = Context::new(
         initial_transform,

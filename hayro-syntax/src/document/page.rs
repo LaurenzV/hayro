@@ -227,20 +227,27 @@ impl<'a> Page<'a> {
         self.crop_box
     }
 
+    /// TODO: Remove
+    pub fn base_dimensions(&self) -> (f32, f32) {
+        let crop_box = self.crop_box().intersect(self.media_box());
+
+        if (crop_box.width() as f32).is_nearly_zero() || (crop_box.height() as f32).is_nearly_zero()
+        {
+            (A4.width() as f32, A4.height() as f32)
+        } else {
+            (
+                crop_box.width().max(1.0) as f32,
+                crop_box.height().max(1.0) as f32,
+            )
+        }
+    }
+
     /// Return the with and height of the page that should be assumed when rendering the page.
     ///
     /// Depending on the document, it is either based on the media box or the crop box
     /// of the page. In addition to that, it also takes the rotation of the page into account.
     pub fn render_dimensions(&self) -> (f32, f32) {
-        let crop_box = self.crop_box().intersect(self.media_box());
-
-        let (mut base_width, mut base_height) = if (crop_box.width() as f32).is_nearly_zero()
-            || (crop_box.height() as f32).is_nearly_zero()
-        {
-            (A4.width(), A4.height())
-        } else {
-            (crop_box.width().max(1.0), crop_box.height().max(1.0))
-        };
+        let (mut base_width, mut base_height) = self.base_dimensions();
 
         if matches!(
             self.rotation(),
@@ -249,7 +256,7 @@ impl<'a> Page<'a> {
             std::mem::swap(&mut base_width, &mut base_height);
         }
 
-        (base_width as f32, base_width as f32)
+        (base_width, base_height)
     }
 
     /// Get the operations of the content stream of the page.
