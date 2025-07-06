@@ -451,6 +451,7 @@ pub fn render_png(
 ) -> Option<Vec<Vec<u8>>> {
     if let Some(pages) = pdf.pages() {
         let rendered = pages
+            .get()
             .iter()
             .enumerate()
             .flat_map(|(idx, page)| {

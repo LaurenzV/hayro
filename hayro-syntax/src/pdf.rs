@@ -38,11 +38,11 @@ impl Pdf {
     }
 
     /// Return the pages of the PDF file.
-    pub fn pages(&self) -> Option<Vec<Page>> {
+    pub fn pages(&self) -> Option<Pages> {
         let ctx = ReaderContext::new(&self.xref, false);
         self.xref
             .get(self.xref.trailer_data().pages_ref)
-            .and_then(|p| Pages::new(p, ctx).map(|p| p.pages))
+            .and_then(|p| Pages::new(p, ctx, &self.xref))
     }
 }
 
