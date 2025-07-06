@@ -7,7 +7,10 @@ use crate::font::Glyph;
 use crate::interpret::state::State;
 use crate::shading::Shading;
 use crate::soft_mask::SoftMask;
-use crate::{FillProps, Paint, PaintType, RgbaImage, StencilImage, StrokeProps, interpret};
+use crate::{
+    FillProps, InterpreterSettings, Paint, PaintType, RgbaImage, StencilImage, StrokeProps,
+    interpret,
+};
 use hayro_syntax::content::{TypedIter, UntypedIter};
 use hayro_syntax::document::page::Resources;
 use hayro_syntax::object::dict::Dict;
@@ -84,6 +87,7 @@ pub struct TilingPattern<'a> {
     pub(crate) state: Box<State<'a>>,
     pub(crate) parent_resources: Resources<'a>,
     pub(crate) cache: Cache,
+    pub(crate) settings: InterpreterSettings,
     pub(crate) xref: &'a XRef,
 }
 
@@ -136,6 +140,7 @@ impl<'a> TilingPattern<'a> {
             stroke_paint,
             non_stroking_paint,
             state: Box::new(ctx.get().clone()),
+            settings: ctx.settings.clone(),
             parent_resources: resources.clone(),
             cache: ctx.object_cache.clone(),
             xref: ctx.xref,
@@ -157,6 +162,7 @@ impl<'a> TilingPattern<'a> {
             kurbo::Rect::new(0.0, 0.0, 1.0, 1.0),
             self.cache.clone(),
             self.xref,
+            self.settings.clone(),
             state,
         );
 

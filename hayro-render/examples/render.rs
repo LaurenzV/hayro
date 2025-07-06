@@ -1,3 +1,6 @@
+use hayro_interpret::font::FontQuery;
+use hayro_interpret::font::standard_font::StandardFont;
+use hayro_interpret::{FontData, InterpreterSettings};
 use hayro_render::render_png;
 use hayro_syntax::pdf::Pdf;
 use std::sync::Arc;
@@ -11,9 +14,63 @@ fn main() {
     let data = Arc::new(file);
     let pdf = Pdf::new(data).unwrap();
 
-    let pixmaps = render_png(&pdf, 1.0, None).unwrap();
+    let settings = InterpreterSettings {
+        font_resolver: Arc::new(|query| match query {
+            FontQuery::Standard(s) => Some(get_standard(&s)),
+            FontQuery::Fallback(f) => Some(get_standard(&f.pick_standard_font())),
+        }),
+    };
+
+    let pixmaps = render_png(&pdf, 1.0, settings, None).unwrap();
 
     std::fs::write("out.png", &pixmaps[0]).unwrap();
+}
+
+fn get_standard(font: &StandardFont) -> FontData {
+    let data = match font {
+        StandardFont::Helvetica => {
+            &include_bytes!("../../assets/standard_fonts/LiberationSans-Regular.ttf")[..]
+        }
+        StandardFont::HelveticaBold => {
+            &include_bytes!("../../assets/standard_fonts/LiberationSans-Bold.ttf")[..]
+        }
+        StandardFont::HelveticaOblique => {
+            &include_bytes!("../../assets/standard_fonts/LiberationSans-Italic.ttf")[..]
+        }
+        StandardFont::HelveticaBoldOblique => {
+            &include_bytes!("../../assets/standard_fonts/LiberationSans-BoldItalic.ttf")[..]
+        }
+        StandardFont::Courier => {
+            &include_bytes!("../../assets/standard_fonts/LiberationMono-Regular.ttf")[..]
+        }
+        StandardFont::CourierBold => {
+            &include_bytes!("../../assets/standard_fonts/LiberationMono-Bold.ttf")[..]
+        }
+        StandardFont::CourierOblique => {
+            &include_bytes!("../../assets/standard_fonts/LiberationMono-Italic.ttf")[..]
+        }
+        StandardFont::CourierBoldOblique => {
+            &include_bytes!("../../assets/standard_fonts/LiberationMono-BoldItalic.ttf")[..]
+        }
+        StandardFont::TimesRoman => {
+            &include_bytes!("../../assets/standard_fonts/LiberationSerif-Regular.ttf")[..]
+        }
+        StandardFont::TimesBold => {
+            &include_bytes!("../../assets/standard_fonts/LiberationSerif-Bold.ttf")[..]
+        }
+        StandardFont::TimesItalic => {
+            &include_bytes!("../../assets/standard_fonts/LiberationSerif-Italic.ttf")[..]
+        }
+        StandardFont::TimesBoldItalic => {
+            &include_bytes!("../../assets/standard_fonts/LiberationSerif-BoldItalic.ttf")[..]
+        }
+        StandardFont::ZapfDingBats => {
+            &include_bytes!("../../assets/standard_fonts/FoxitDingbats.pfb")[..]
+        }
+        StandardFont::Symbol => &include_bytes!("../../assets/standard_fonts/FoxitSymbol.pfb")[..],
+    };
+
+    Arc::new(data)
 }
 
 /// A simple stderr logger.

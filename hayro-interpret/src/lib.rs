@@ -40,12 +40,17 @@ use crate::util::OptionLog;
 use crate::x_object::{ImageXObject, XObject, draw_image_xobject, draw_xobject};
 use interpret::text::TextRenderingMode;
 
+use crate::font::FontQuery;
 use crate::interpret::path::{fill_path, fill_path_impl, fill_stroke_path, stroke_path};
 pub use hayro_syntax::object::ObjectIdentifier;
 pub use image::{RgbaImage, StencilImage};
 use interpret::text;
 pub use paint::{Paint, PaintType};
 pub use soft_mask::{MaskType, SoftMask};
+
+/// A container for the bytes of a PDF file.
+pub type FontData = Arc<dyn AsRef<[u8]> + Send + Sync>;
+pub type FontResolverFn = Arc<dyn Fn(&FontQuery) -> Option<FontData> + Send + Sync>;
 
 #[derive(Clone, Debug)]
 pub struct StrokeProps {
@@ -60,6 +65,52 @@ pub struct StrokeProps {
 #[derive(Clone, Debug)]
 pub struct FillProps {
     pub fill_rule: Fill,
+}
+
+#[derive(Clone)]
+/// Settings that should be applied during the interpretation process.
+pub struct InterpreterSettings {
+    /// Nearly every PDF contains text. In most cases, PDF files embed the fonts they use, and
+    /// hayro can therefore read the font files and do all the processing needed. However, there
+    /// are two problems:
+    /// - Fonts don't _have_ to be embedded, it's possible that the PDF file only defines the basic
+    ///   metadata of the font, like its name, but relies on the PDF processor to find that font
+    ///   in its environment.
+    /// - The PDF specification requires a list of 14 fonts that should always be available to a
+    ///   PDF processor. These include:
+    ///   - Times New Roman (Normal, Bold, Italic, BoldItalic)
+    ///   - Courier (Normal, Bold, Italic, BoldItalic)
+    ///   - Helvetica (Normal, Bold, Italic, BoldItalic)
+    ///   - ZapfDingBats
+    ///   - Symbol
+    ///
+    /// Because of this, if any of the above situations occurs, this callback will be called, which
+    /// expects the data of an appropriate font to be returned, if available. If no such font is
+    /// provided, the text will most likely fail to render.
+    ///
+    /// For the font data, there are two different formats that are accepted:
+    /// - Any valid TTF/OTF font.
+    /// - A valid CFF font program.
+    ///
+    /// The following recommendations are given for the implementation of this callback function.
+    ///
+    /// For the standard fonts, in case the original fonts are available on the system, you should
+    /// just return those. Otherwise, for Helvetica, Courier and Times New Roman, the best alternative
+    /// are the corresponding fonts of the [Liberation font family](https://github.com/liberationfonts/liberation-fonts).
+    /// If you prefer smaller fonts, you can use the [Foxit CFF fonts](https://github.com/LaurenzV/hayro/tree/master/assets/standard_fonts),
+    /// which are much smaller but are missing glyphs for certain scripts.
+    ///
+    /// For the `Symbol` and `ZapfDingBats` fonts, you should also prefer the system fonts, and if
+    /// not available to you, you can, similarly to above, use the corresponding fonts from Foxit.
+    pub font_resolver: FontResolverFn,
+}
+
+impl Default for InterpreterSettings {
+    fn default() -> Self {
+        Self {
+            font_resolver: Arc::new(|_| None),
+        }
+    }
 }
 
 pub fn interpret<'a, 'b>(

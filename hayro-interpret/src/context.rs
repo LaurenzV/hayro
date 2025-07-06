@@ -3,7 +3,7 @@ use crate::color::ColorSpace;
 use crate::convert::convert_transform;
 use crate::font::Font;
 use crate::interpret::state::{State, TextState};
-use crate::{FillProps, StrokeProps};
+use crate::{FillProps, InterpreterSettings, StrokeProps};
 use hayro_syntax::content::ops::Transform;
 use hayro_syntax::document::page::Resources;
 use hayro_syntax::object::Object;
@@ -26,12 +26,19 @@ pub struct Context<'a> {
     font_cache: HashMap<ObjRef, Option<Font<'a>>>,
     root_transforms: Vec<Affine>,
     bbox: Vec<kurbo::Rect>,
+    pub(crate) settings: InterpreterSettings,
     pub(crate) object_cache: Cache,
     pub(crate) xref: &'a XRef,
 }
 
 impl<'a> Context<'a> {
-    pub fn new(initial_transform: Affine, bbox: kurbo::Rect, cache: Cache, xref: &'a XRef) -> Self {
+    pub fn new(
+        initial_transform: Affine,
+        bbox: kurbo::Rect,
+        cache: Cache,
+        xref: &'a XRef,
+        settings: InterpreterSettings,
+    ) -> Self {
         let line_width = 1.0;
         let line_cap = Cap::Butt;
         let line_join = Join::Miter;
@@ -59,7 +66,7 @@ impl<'a> Context<'a> {
             non_stroke_pattern: None,
         };
 
-        Self::new_with(initial_transform, bbox, cache, xref, state)
+        Self::new_with(initial_transform, bbox, cache, xref, settings, state)
     }
 
     pub(crate) fn new_with(
@@ -67,10 +74,12 @@ impl<'a> Context<'a> {
         bbox: kurbo::Rect,
         cache: Cache,
         xref: &'a XRef,
+        settings: InterpreterSettings,
         state: State<'a>,
     ) -> Self {
         Self {
             states: vec![state],
+            settings,
             xref,
             root_transforms: vec![initial_transform],
             last_point: Point::default(),
@@ -180,11 +189,11 @@ impl<'a> Context<'a> {
                     .or_insert_with(|| {
                         resources
                             .resolve_ref::<Dict>(ref_)
-                            .and_then(|o| Font::new(&o))
+                            .and_then(|o| Font::new(&o, &self.settings.font_resolver))
                     })
                     .clone()
             }),
-            Box::new(|c| Font::new(&c)),
+            Box::new(|c| Font::new(&c, &self.settings.font_resolver)),
         )
     }
 

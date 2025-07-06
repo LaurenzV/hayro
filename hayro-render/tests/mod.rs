@@ -1,3 +1,6 @@
+use hayro_interpret::font::FontQuery;
+use hayro_interpret::font::standard_font::StandardFont;
+use hayro_interpret::{FontData, InterpreterSettings};
 use hayro_syntax::pdf::Pdf;
 use image::{Rgba, RgbaImage, load_from_memory};
 use once_cell::sync::Lazy;
@@ -158,8 +161,18 @@ pub fn run_test(name: &str, file_path: &str, range_str: Option<&str>) {
     let data = Arc::new(content);
     let pdf = Pdf::new(data).unwrap();
 
+    let settings = InterpreterSettings {
+        font_resolver: Arc::new(|query| match query {
+            FontQuery::Standard(s) => Some(get_standard(&s)),
+            FontQuery::Fallback(f) => Some(get_standard(&f.pick_standard_font())),
+        }),
+    };
+
     let range = range_str.and_then(parse_range);
-    check_render(name, hayro_render::render_png(&pdf, 1.0, range).unwrap());
+    check_render(
+        name,
+        hayro_render::render_png(&pdf, 1.0, settings, range).unwrap(),
+    );
 }
 
 pub fn get_diff(expected_image: &RgbaImage, actual_image: &RgbaImage) -> (RgbaImage, u32) {
@@ -217,4 +230,51 @@ fn is_pix_diff(pixel1: &Rgba<u8>, pixel2: &Rgba<u8>) -> bool {
         || pixel1.0[1] != pixel2.0[1]
         || pixel1.0[2] != pixel2.0[2]
         || pixel1.0[3] != pixel2.0[3]
+}
+
+fn get_standard(font: &StandardFont) -> FontData {
+    let data = match font {
+        StandardFont::Helvetica => {
+            &include_bytes!("../../assets/standard_fonts/LiberationSans-Regular.ttf")[..]
+        }
+        StandardFont::HelveticaBold => {
+            &include_bytes!("../../assets/standard_fonts/LiberationSans-Bold.ttf")[..]
+        }
+        StandardFont::HelveticaOblique => {
+            &include_bytes!("../../assets/standard_fonts/LiberationSans-Italic.ttf")[..]
+        }
+        StandardFont::HelveticaBoldOblique => {
+            &include_bytes!("../../assets/standard_fonts/LiberationSans-BoldItalic.ttf")[..]
+        }
+        StandardFont::Courier => {
+            &include_bytes!("../../assets/standard_fonts/LiberationMono-Regular.ttf")[..]
+        }
+        StandardFont::CourierBold => {
+            &include_bytes!("../../assets/standard_fonts/LiberationMono-Bold.ttf")[..]
+        }
+        StandardFont::CourierOblique => {
+            &include_bytes!("../../assets/standard_fonts/LiberationMono-Italic.ttf")[..]
+        }
+        StandardFont::CourierBoldOblique => {
+            &include_bytes!("../../assets/standard_fonts/LiberationMono-BoldItalic.ttf")[..]
+        }
+        StandardFont::TimesRoman => {
+            &include_bytes!("../../assets/standard_fonts/LiberationSerif-Regular.ttf")[..]
+        }
+        StandardFont::TimesBold => {
+            &include_bytes!("../../assets/standard_fonts/LiberationSerif-Bold.ttf")[..]
+        }
+        StandardFont::TimesItalic => {
+            &include_bytes!("../../assets/standard_fonts/LiberationSerif-Italic.ttf")[..]
+        }
+        StandardFont::TimesBoldItalic => {
+            &include_bytes!("../../assets/standard_fonts/LiberationSerif-BoldItalic.ttf")[..]
+        }
+        StandardFont::ZapfDingBats => {
+            &include_bytes!("../../assets/standard_fonts/FoxitDingbats.pfb")[..]
+        }
+        StandardFont::Symbol => &include_bytes!("../../assets/standard_fonts/FoxitSymbol.pfb")[..],
+    };
+
+    Arc::new(data)
 }

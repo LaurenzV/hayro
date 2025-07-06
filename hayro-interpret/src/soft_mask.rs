@@ -1,3 +1,4 @@
+use crate::InterpreterSettings;
 use crate::cache::Cache;
 use crate::context::Context;
 use crate::device::Device;
@@ -29,6 +30,7 @@ struct SoftMaskRepr<'a> {
     root_transform: Affine,
     bbox: kurbo::Rect,
     object_cache: Cache,
+    settings: InterpreterSettings,
     xref: &'a XRef,
 }
 
@@ -80,6 +82,7 @@ impl<'a> SoftMask<'a> {
             root_transform: context.get().ctm,
             bbox: context.bbox(),
             object_cache: context.object_cache.clone(),
+            settings: context.settings.clone(),
             xref: context.xref,
             parent_resources,
         })))
@@ -91,6 +94,7 @@ impl<'a> SoftMask<'a> {
             self.0.bbox,
             self.0.object_cache.clone(),
             self.0.xref,
+            self.0.settings.clone(),
         );
         draw_xobject(&self.0.group, &self.0.parent_resources, &mut ctx, device);
     }

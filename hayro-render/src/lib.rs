@@ -25,6 +25,11 @@ use std::io::Cursor;
 use std::ops::RangeInclusive;
 use std::sync::Arc;
 
+pub use hayro_interpret::FontData;
+pub use hayro_interpret::InterpreterSettings;
+pub use hayro_interpret::font::FontQuery;
+pub use hayro_interpret::font::standard_font::StandardFont;
+
 mod coarse;
 mod encode;
 mod fine;
@@ -343,7 +348,7 @@ impl Device for Renderer {
     }
 }
 
-pub fn render(page: &Page, scale: f32) -> Pixmap {
+pub fn render(page: &Page, settings: InterpreterSettings, scale: f32) -> Pixmap {
     let (width, height) = page.render_dimensions();
     let (scaled_width, scaled_height) = ((width * scale) as f64, (height * scale) as f64);
     let initial_transform = Affine::scale(scale as f64) * page.initial_transform();
@@ -354,6 +359,7 @@ pub fn render(page: &Page, scale: f32) -> Pixmap {
         Rect::new(0.0, 0.0, pix_width as f64, pix_height as f64),
         Cache::new(),
         page.xref(),
+        settings,
     );
     let mut device = Renderer {
         ctx: RenderContext::new(pix_width, pix_height),
@@ -409,6 +415,7 @@ fn draw_soft_mask(mask: &SoftMask, width: u16, height: u16) -> Mask {
 pub fn render_png(
     pdf: &Pdf,
     scale: f32,
+    settings: InterpreterSettings,
     range: Option<RangeInclusive<usize>>,
 ) -> Option<Vec<Vec<u8>>> {
     if let Some(pages) = pdf.pages() {
@@ -421,7 +428,7 @@ pub fn render_png(
                     return None;
                 }
 
-                let pixmap = render(page, scale);
+                let pixmap = render(page, settings.clone(), scale);
 
                 let mut png_data = Vec::new();
                 let cursor = Cursor::new(&mut png_data);

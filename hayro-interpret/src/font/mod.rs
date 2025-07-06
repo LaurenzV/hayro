@@ -1,13 +1,14 @@
-use crate::Paint;
 use crate::cache::Cache;
 use crate::context::Context;
 use crate::device::Device;
 use crate::font::cid::Type0Font;
 use crate::font::generated::{mac_expert, mac_os_roman, mac_roman, standard, win_ansi};
+use crate::font::standard_font::StandardFont;
 use crate::font::true_type::TrueTypeFont;
 use crate::font::type1::Type1Font;
 use crate::font::type3::Type3;
 use crate::interpret::state::State;
+use crate::{FontResolverFn, InterpreterSettings, Paint};
 use bitflags::bitflags;
 use hayro_syntax::document::page::Resources;
 use hayro_syntax::object::dict::Dict;
@@ -27,7 +28,7 @@ mod cid;
 mod generated;
 mod glyph_simulator;
 pub(crate) mod outline;
-mod standard_font;
+pub mod standard_font;
 mod true_type;
 mod type1;
 pub(crate) mod type3;
@@ -75,6 +76,7 @@ pub struct Type3Glyph<'a> {
     pub(crate) cache: Cache,
     pub(crate) glyph_transform: Affine,
     pub(crate) xref: &'a XRef,
+    pub(crate) settings: InterpreterSettings,
 }
 
 /// A glyph defined by PDF drawing instructions.
@@ -89,13 +91,17 @@ impl<'a> Type3Glyph<'a> {
 pub(crate) struct Font<'a>(FontType<'a>);
 
 impl<'a> Font<'a> {
-    pub(crate) fn new(dict: &Dict<'a>) -> Option<Self> {
+    pub(crate) fn new(dict: &Dict<'a>, resolver: &FontResolverFn) -> Option<Self> {
         let f_type = match dict.get::<Name>(SUBTYPE)?.deref() {
-            TYPE1 | MM_TYPE1 => FontType::Type1(Arc::new(Type1Font::new(dict)?)),
+            TYPE1 | MM_TYPE1 => FontType::Type1(Arc::new(Type1Font::new(dict, resolver)?)),
             TRUE_TYPE => TrueTypeFont::new(dict)
                 .map(Arc::new)
                 .map(FontType::TrueType)
-                .or_else(|| Type1Font::new(dict).map(Arc::new).map(FontType::Type1))?,
+                .or_else(|| {
+                    Type1Font::new(dict, resolver)
+                        .map(Arc::new)
+                        .map(FontType::Type1)
+                })?,
             TYPE0 => FontType::Type0(Arc::new(Type0Font::new(dict)?)),
             TYPE3 => FontType::Type3(Arc::new(Type3::new(dict))),
             f => {
@@ -176,6 +182,7 @@ impl<'a> Font<'a> {
                     parent_resources: resources.clone(),
                     cache: ctx.object_cache.clone(),
                     xref: ctx.xref,
+                    settings: ctx.settings.clone(),
                     glyph_transform,
                 };
 
@@ -310,22 +317,41 @@ bitflags! {
     }
 }
 
+/// A query for a font.
+pub enum FontQuery {
+    /// A query for one of the 14 PDF standard fonts.
+    Standard(StandardFont),
+    /// A query for a font that is not embedded in the PDF file.
+    Fallback(FallbackFontQuery),
+}
+
+/// A query for a font with specific properties.
 #[derive(Debug, Clone)]
-struct FontData {
+pub struct FallbackFontQuery {
+    /// The postscript name of the font.
     post_script_name: Option<String>,
+    /// The name of the font.
     font_name: Option<String>,
+    /// The family of the font.
     font_family: Option<String>,
+    /// The stretch of the font.
     font_stretch: FontStretch,
+    /// The weight of the font.
     font_weight: u32,
+    /// Whether the font is monospaced.
     is_fixed_pitch: bool,
+    /// Whether the font is serif.
     is_serif: bool,
+    /// Whether the font is italic.
     is_italic: bool,
+    /// Whether the font is bold.
     is_bold: bool,
+    /// Whether the font is small cap.
     is_small_cap: bool,
 }
 
-impl FontData {
-    pub fn new(dict: &Dict) -> Self {
+impl FallbackFontQuery {
+    pub(crate) fn new(dict: &Dict) -> Self {
         let mut data = Self::default();
 
         let remove_subset_prefix = |s: String| {
@@ -373,9 +399,35 @@ impl FontData {
 
         data
     }
+
+    /// Do a best-effort fallback to the 14 standard fonts based on the query.
+    pub fn pick_standard_font(&self) -> StandardFont {
+        if self.is_fixed_pitch {
+            match (self.is_bold, self.is_italic) {
+                (true, true) => StandardFont::CourierBoldOblique,
+                (true, false) => StandardFont::CourierBold,
+                (false, true) => StandardFont::CourierOblique,
+                (false, false) => StandardFont::Courier,
+            }
+        } else if !self.is_serif {
+            match (self.is_bold, self.is_italic) {
+                (true, true) => StandardFont::HelveticaBoldOblique,
+                (true, false) => StandardFont::HelveticaBold,
+                (false, true) => StandardFont::HelveticaOblique,
+                (false, false) => StandardFont::Helvetica,
+            }
+        } else {
+            match (self.is_bold, self.is_italic) {
+                (true, true) => StandardFont::TimesBoldItalic,
+                (true, false) => StandardFont::TimesBold,
+                (false, true) => StandardFont::TimesItalic,
+                (false, false) => StandardFont::TimesRoman,
+            }
+        }
+    }
 }
 
-impl Default for FontData {
+impl Default for FallbackFontQuery {
     fn default() -> Self {
         Self {
             post_script_name: None,

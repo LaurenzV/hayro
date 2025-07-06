@@ -1,10 +1,6 @@
-use crate::font::blob::{
-    COURIER_BOLD, COURIER_BOLD_ITALIC, COURIER_ITALIC, COURIER_REGULAR, CffFontBlob,
-    HELVETICA_BOLD, HELVETICA_BOLD_ITALIC, HELVETICA_ITALIC, HELVETICA_REGULAR, OpenTypeFontBlob,
-    TIMES_BOLD, TIMES_ITALIC, TIMES_REGULAR, TIMES_ROMAN_BOLD_ITALIC, ZAPF_DINGS_BAT,
-};
+use crate::FontData;
+use crate::font::blob::{CffFontBlob, OpenTypeFontBlob};
 use crate::font::generated::{metrics, standard, symbol, zapf_dings};
-use crate::font::{FontData, blob};
 use hayro_syntax::object::dict::Dict;
 use hayro_syntax::object::dict::keys::{BASE_FONT, P};
 use hayro_syntax::object::name::Name;
@@ -14,8 +10,9 @@ use skrifa::raw::TableProvider;
 use std::collections::HashMap;
 use std::ops::Deref;
 
+/// The 14 standard fonts of PDF.
 #[derive(Copy, Clone, Debug)]
-pub(crate) enum StandardFont {
+pub enum StandardFont {
     Helvetica,
     HelveticaBold,
     HelveticaOblique,
@@ -40,56 +37,6 @@ impl StandardFont {
             // but instead has a custom encoding.
             Self::ZapfDingBats => zapf_dings::get(code),
             _ => standard::get(code),
-        }
-    }
-
-    pub(crate) fn from_font_data(data: &FontData) -> Self {
-        if data.is_fixed_pitch {
-            match (data.is_bold, data.is_italic) {
-                (true, true) => StandardFont::CourierBoldOblique,
-                (true, false) => StandardFont::CourierBold,
-                (false, true) => StandardFont::CourierOblique,
-                (false, false) => StandardFont::Courier,
-            }
-        } else if !data.is_serif {
-            match (data.is_bold, data.is_italic) {
-                (true, true) => StandardFont::HelveticaBoldOblique,
-                (true, false) => StandardFont::HelveticaBold,
-                (false, true) => StandardFont::HelveticaOblique,
-                (false, false) => StandardFont::Helvetica,
-            }
-        } else {
-            match (data.is_bold, data.is_italic) {
-                (true, true) => StandardFont::TimesBoldItalic,
-                (true, false) => StandardFont::TimesBold,
-                (false, true) => StandardFont::TimesItalic,
-                (false, false) => StandardFont::TimesRoman,
-            }
-        }
-    }
-
-    pub(crate) fn get_blob(&self) -> StandardFontBlob {
-        match self {
-            StandardFont::Helvetica => StandardFontBlob::new_otf(HELVETICA_REGULAR.clone()),
-            StandardFont::HelveticaBold => StandardFontBlob::new_otf(HELVETICA_BOLD.clone()),
-            StandardFont::HelveticaOblique => StandardFontBlob::new_otf(HELVETICA_ITALIC.clone()),
-            StandardFont::HelveticaBoldOblique => {
-                StandardFontBlob::new_otf(HELVETICA_BOLD_ITALIC.clone())
-            }
-            StandardFont::Courier => StandardFontBlob::new_otf(COURIER_REGULAR.clone()),
-            StandardFont::CourierBold => StandardFontBlob::new_otf(COURIER_BOLD.clone()),
-            StandardFont::CourierOblique => StandardFontBlob::new_otf(COURIER_ITALIC.clone()),
-            StandardFont::CourierBoldOblique => {
-                StandardFontBlob::new_otf(COURIER_BOLD_ITALIC.clone())
-            }
-            StandardFont::TimesRoman => StandardFontBlob::new_otf(TIMES_REGULAR.clone()),
-            StandardFont::TimesBold => StandardFontBlob::new_otf(TIMES_BOLD.clone()),
-            StandardFont::TimesItalic => StandardFontBlob::new_otf(TIMES_ITALIC.clone()),
-            StandardFont::TimesBoldItalic => {
-                StandardFontBlob::new_otf(TIMES_ROMAN_BOLD_ITALIC.clone())
-            }
-            StandardFont::ZapfDingBats => StandardFontBlob::new_cff(ZAPF_DINGS_BAT.clone()),
-            StandardFont::Symbol => StandardFontBlob::new_cff(blob::SYMBOL.clone()),
         }
     }
 
@@ -142,6 +89,25 @@ impl StandardFont {
             StandardFont::TimesItalic => "Times Italic",
             StandardFont::TimesBoldItalic => "Times Bold Italic",
             StandardFont::ZapfDingBats => "Zapf Dingbats",
+            StandardFont::Symbol => "Symbol",
+        }
+    }
+
+    pub fn postscript_name(&self) -> &'static str {
+        match self {
+            StandardFont::Helvetica => "Helvetica",
+            StandardFont::HelveticaBold => "Helvetica-Bold",
+            StandardFont::HelveticaOblique => "Helvetica-Oblique",
+            StandardFont::HelveticaBoldOblique => "Helvetica-BoldOblique",
+            StandardFont::Courier => "Courier",
+            StandardFont::CourierBold => "Courier-Bold",
+            StandardFont::CourierOblique => "Courier-Oblique",
+            StandardFont::CourierBoldOblique => "Courier-BoldOblique",
+            StandardFont::TimesRoman => "Times-Roman",
+            StandardFont::TimesBold => "Times-Bold",
+            StandardFont::TimesItalic => "Times-Italic",
+            StandardFont::TimesBoldItalic => "Times-BoldItalic",
+            StandardFont::ZapfDingBats => "ZapfDingbats",
             StandardFont::Symbol => "Symbol",
         }
     }
@@ -230,6 +196,16 @@ pub(crate) enum StandardFontBlob {
 }
 
 impl StandardFontBlob {
+    pub(crate) fn from_data(data: FontData) -> Option<Self> {
+        if let Some(blob) = CffFontBlob::new(data.clone()) {
+            Some(Self::new_cff(blob))
+        } else if let Some(blob) = OpenTypeFontBlob::new(data, 0) {
+            Some(Self::new_otf(blob))
+        } else {
+            None
+        }
+    }
+
     pub(crate) fn new_cff(blob: CffFontBlob) -> Self {
         Self::Cff(blob)
     }

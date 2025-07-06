@@ -2,7 +2,8 @@ use crate::font::blob::{CffFontBlob, Type1FontBlob};
 use crate::font::glyph_simulator::GlyphSimulator;
 use crate::font::standard_font::{StandardFont, StandardFontBlob, select_standard_font};
 use crate::font::true_type::{read_encoding, read_widths};
-use crate::font::{Encoding, FontData};
+use crate::font::{Encoding, FallbackFontQuery, FontQuery};
+use crate::{FontResolverFn, InterpreterSettings};
 use hayro_syntax::object::dict::Dict;
 use hayro_syntax::object::dict::keys::{FONT_DESC, FONT_FILE, FONT_FILE3};
 use hayro_syntax::object::stream::Stream;
@@ -17,27 +18,29 @@ use std::sync::Arc;
 pub(crate) struct Type1Font(Kind);
 
 impl Type1Font {
-    pub(crate) fn new(dict: &Dict) -> Option<Self> {
+    pub(crate) fn new(dict: &Dict, resolver: &FontResolverFn) -> Option<Self> {
         let fallback = || {
-            let font_data = FontData::new(dict);
-            let standard_font = StandardFont::from_font_data(&font_data);
+            // TODO: Actually use fallback fonts
+            let fallback_query = FallbackFontQuery::new(dict);
+            let standard_font = fallback_query.pick_standard_font();
 
             warn!(
                 "unable to load font {}, falling back to {}",
-                font_data
+                fallback_query
                     .post_script_name
                     .unwrap_or("(no name)".to_string()),
                 standard_font.as_str()
             );
 
-            Self(Kind::Standard(StandardKind::new_with_standard(
+            Some(Self(Kind::Standard(StandardKind::new_with_standard(
                 dict,
                 standard_font,
                 true,
-            )))
+                resolver,
+            )?)))
         };
 
-        let inner = if let Some(standard) = StandardKind::new(dict) {
+        let inner = if let Some(standard) = StandardKind::new(dict, resolver) {
             Self(Kind::Standard(standard))
         } else if is_cff(dict) {
             Self(Kind::Cff(CffKind::new(dict)?))
@@ -45,10 +48,10 @@ impl Type1Font {
             if let Some(f) = Type1Kind::new(dict) {
                 Self(Kind::Type1(f))
             } else {
-                fallback()
+                return fallback();
             }
         } else {
-            fallback()
+            return fallback();
         };
 
         Some(inner)
@@ -98,22 +101,29 @@ struct StandardKind {
 }
 
 impl StandardKind {
-    fn new(dict: &Dict) -> Option<StandardKind> {
+    fn new(dict: &Dict, resolver: &FontResolverFn) -> Option<StandardKind> {
         Some(Self::new_with_standard(
             dict,
             select_standard_font(dict)?,
             false,
-        ))
+            resolver,
+        )?)
     }
 
-    fn new_with_standard(dict: &Dict, base_font: StandardFont, fallback: bool) -> Self {
+    fn new_with_standard(
+        dict: &Dict,
+        base_font: StandardFont,
+        fallback: bool,
+        resolver: &FontResolverFn,
+    ) -> Option<Self> {
         let descriptor = dict.get::<Dict>(FONT_DESC).unwrap_or_default();
         let widths = read_widths(dict, &descriptor);
 
         let (encoding, encoding_map) = read_encoding(dict);
-        let base_font_blob = base_font.get_blob();
+        let base_font_blob =
+            StandardFontBlob::from_data(resolver(&FontQuery::Standard(base_font))?)?;
 
-        Self {
+        Some(Self {
             base_font,
             base_font_blob,
             widths,
@@ -121,7 +131,7 @@ impl StandardKind {
             glyph_to_code: RefCell::new(HashMap::new()),
             fallback,
             encoding,
-        }
+        })
     }
 
     fn code_to_ps_name(&self, code: u8) -> Option<&str> {

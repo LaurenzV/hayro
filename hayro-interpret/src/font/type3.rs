@@ -94,6 +94,7 @@ impl<'a> Type3<'a> {
             Rect::new(0.0, 0.0, 1.0, 1.0),
             glyph.cache.clone(),
             glyph.xref,
+            glyph.settings.clone(),
             state,
         );
 

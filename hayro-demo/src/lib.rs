@@ -1,4 +1,5 @@
 use console_error_panic_hook;
+use hayro_render::{FontData, FontQuery, InterpreterSettings, StandardFont};
 use hayro_syntax::pdf::Pdf;
 use js_sys;
 use std::sync::Arc;
@@ -46,6 +47,53 @@ impl log::Log for ConsoleLogger {
     }
 
     fn flush(&self) {}
+}
+
+fn get_standard(font: &StandardFont) -> FontData {
+    let data = match font {
+        StandardFont::Helvetica => {
+            &include_bytes!("../../assets/standard_fonts/LiberationSans-Regular.ttf")[..]
+        }
+        StandardFont::HelveticaBold => {
+            &include_bytes!("../../assets/standard_fonts/LiberationSans-Bold.ttf")[..]
+        }
+        StandardFont::HelveticaOblique => {
+            &include_bytes!("../../assets/standard_fonts/LiberationSans-Italic.ttf")[..]
+        }
+        StandardFont::HelveticaBoldOblique => {
+            &include_bytes!("../../assets/standard_fonts/LiberationSans-BoldItalic.ttf")[..]
+        }
+        StandardFont::Courier => {
+            &include_bytes!("../../assets/standard_fonts/LiberationMono-Regular.ttf")[..]
+        }
+        StandardFont::CourierBold => {
+            &include_bytes!("../../assets/standard_fonts/LiberationMono-Bold.ttf")[..]
+        }
+        StandardFont::CourierOblique => {
+            &include_bytes!("../../assets/standard_fonts/LiberationMono-Italic.ttf")[..]
+        }
+        StandardFont::CourierBoldOblique => {
+            &include_bytes!("../../assets/standard_fonts/LiberationMono-BoldItalic.ttf")[..]
+        }
+        StandardFont::TimesRoman => {
+            &include_bytes!("../../assets/standard_fonts/LiberationSerif-Regular.ttf")[..]
+        }
+        StandardFont::TimesBold => {
+            &include_bytes!("../../assets/standard_fonts/LiberationSerif-Bold.ttf")[..]
+        }
+        StandardFont::TimesItalic => {
+            &include_bytes!("../../assets/standard_fonts/LiberationSerif-Italic.ttf")[..]
+        }
+        StandardFont::TimesBoldItalic => {
+            &include_bytes!("../../assets/standard_fonts/LiberationSerif-BoldItalic.ttf")[..]
+        }
+        StandardFont::ZapfDingBats => {
+            &include_bytes!("../../assets/standard_fonts/FoxitDingbats.pfb")[..]
+        }
+        StandardFont::Symbol => &include_bytes!("../../assets/standard_fonts/FoxitSymbol.pfb")[..],
+    };
+
+    Arc::new(data)
 }
 
 static LOGGER: ConsoleLogger = ConsoleLogger;
@@ -98,8 +146,20 @@ impl PdfViewer {
             return Err(JsValue::from_str("Page out of bounds"));
         }
 
-        let pixmaps =
-            hayro_render::render_png(pdf, 2.0, Some(self.current_page..=self.current_page));
+        // TODO: Fetch fonts lazily
+        let settings = InterpreterSettings {
+            font_resolver: Arc::new(|query| match query {
+                FontQuery::Standard(s) => Some(get_standard(&s)),
+                FontQuery::Fallback(f) => Some(get_standard(&f.pick_standard_font())),
+            }),
+        };
+
+        let pixmaps = hayro_render::render_png(
+            pdf,
+            2.0,
+            settings,
+            Some(self.current_page..=self.current_page),
+        );
 
         pixmaps
             .as_ref()
