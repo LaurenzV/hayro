@@ -553,7 +553,6 @@ dependencies = [
  "jpeg2k",
  "kurbo",
  "log",
- "once_cell",
  "rustc-hash",
  "smallvec",
  "zune-jpeg 0.5.0-rc5",

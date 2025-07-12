@@ -2,7 +2,7 @@ use crate::object::ObjectIdentifier;
 use crate::object::stream::Stream;
 use crate::xref::XRef;
 use crate::{NUM_SLOTS, PdfData};
-use once_cell::sync::OnceCell;
+use std::sync::OnceLock;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::sync::Mutex;
@@ -20,7 +20,7 @@ use std::sync::atomic::AtomicUsize;
 // PDF objects that actually stem from different data sources.
 pub(crate) struct Data {
     data: PdfData,
-    slots: Vec<OnceCell<Option<Vec<u8>>>>,
+    slots: Vec<OnceLock<Option<Vec<u8>>>>,
     map: Mutex<HashMap<ObjectIdentifier, usize>>,
     counter: AtomicUsize,
 }
@@ -35,7 +35,7 @@ impl Data {
     /// Create a new `Data` structure.
     pub fn new(data: PdfData) -> Self {
         let map = Mutex::new(HashMap::new());
-        let slots = vec![OnceCell::new(); NUM_SLOTS];
+        let slots = vec![OnceLock::new(); NUM_SLOTS];
         let counter = AtomicUsize::new(0);
 
         Self {

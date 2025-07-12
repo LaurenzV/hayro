@@ -21,10 +21,10 @@ use crate::object::dict::keys::JBIG2_GLOBALS;
 use crate::object::stream::Stream;
 use crate::reader::Reader as CrateReader;
 use log::warn;
-use once_cell::sync::Lazy;
-use std::cell::RefCell;
+use std::cell::{OnceCell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::sync::LazyLock;
 
 /// Decode a JBIG2 data stream.
 pub fn decode(data: &[u8], params: Dict) -> Option<Vec<u8>> {
@@ -2134,26 +2134,26 @@ fn get_standard_table(number: u32) -> Result<HuffmanTable, Jbig2Error> {
     if number == 0 || number > 15 {
         Err(Jbig2Error::new("invalid standard table"))
     } else {
-        Ok(Lazy::force(&STANDARD_TABLES[number as usize - 1]).clone())
+        Ok(LazyLock::force(&STANDARD_TABLES[number as usize - 1]).clone())
     }
 }
 
-static STANDARD_TABLES: [Lazy<HuffmanTable>; 15] = [
-    Lazy::new(|| build_standard_table(1)),
-    Lazy::new(|| build_standard_table(2)),
-    Lazy::new(|| build_standard_table(3)),
-    Lazy::new(|| build_standard_table(4)),
-    Lazy::new(|| build_standard_table(5)),
-    Lazy::new(|| build_standard_table(6)),
-    Lazy::new(|| build_standard_table(7)),
-    Lazy::new(|| build_standard_table(8)),
-    Lazy::new(|| build_standard_table(9)),
-    Lazy::new(|| build_standard_table(10)),
-    Lazy::new(|| build_standard_table(11)),
-    Lazy::new(|| build_standard_table(12)),
-    Lazy::new(|| build_standard_table(13)),
-    Lazy::new(|| build_standard_table(14)),
-    Lazy::new(|| build_standard_table(15)),
+static STANDARD_TABLES: [LazyLock<HuffmanTable>; 15] = [
+    LazyLock::new(|| build_standard_table(1)),
+    LazyLock::new(|| build_standard_table(2)),
+    LazyLock::new(|| build_standard_table(3)),
+    LazyLock::new(|| build_standard_table(4)),
+    LazyLock::new(|| build_standard_table(5)),
+    LazyLock::new(|| build_standard_table(6)),
+    LazyLock::new(|| build_standard_table(7)),
+    LazyLock::new(|| build_standard_table(8)),
+    LazyLock::new(|| build_standard_table(9)),
+    LazyLock::new(|| build_standard_table(10)),
+    LazyLock::new(|| build_standard_table(11)),
+    LazyLock::new(|| build_standard_table(12)),
+    LazyLock::new(|| build_standard_table(13)),
+    LazyLock::new(|| build_standard_table(14)),
+    LazyLock::new(|| build_standard_table(15)),
 ];
 
 fn build_standard_table(number: u32) -> HuffmanTable {
