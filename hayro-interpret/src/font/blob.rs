@@ -2,7 +2,6 @@ use crate::font::UNITS_PER_EM;
 use crate::font::outline::OutlinePath;
 use hayro_font::{Matrix, cff, type1};
 use kurbo::{Affine, BezPath};
-use once_cell::sync::Lazy;
 use skrifa::instance::{LocationRef, Size};
 use skrifa::metrics::GlyphMetrics;
 use skrifa::outline::{DrawSettings, Engine, HintingInstance, HintingOptions, Target};

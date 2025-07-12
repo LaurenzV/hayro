@@ -520,7 +520,6 @@ dependencies = [
  "hayro-syntax",
  "kurbo",
  "log",
- "once_cell",
  "peniko",
  "phf",
  "qcms",

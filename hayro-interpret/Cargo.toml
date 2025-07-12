@@ -10,7 +10,6 @@ peniko = { workspace = true }
 smallvec = { workspace = true }
 log = { workspace = true }
 qcms=  { workspace = true }
-once_cell = { workspace = true }
 phf = { workspace = true, features = ["macros"] }
 skrifa = { workspace = true }
 yoke = { workspace = true, features = ["derive"]}

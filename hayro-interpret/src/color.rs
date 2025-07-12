@@ -8,14 +8,13 @@ use hayro_syntax::object::name::Name;
 use hayro_syntax::object::stream::Stream;
 use hayro_syntax::object::{Object, string};
 use log::warn;
-use once_cell::sync::Lazy;
 use peniko::color::palette::css::BLACK;
 use peniko::color::{AlphaColor, Srgb};
 use qcms::Transform;
 use smallvec::{SmallVec, ToSmallVec, smallvec};
 use std::fmt::{Debug, Formatter};
 use std::ops::Deref;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 /// A storage for the components of colors.
 pub type ColorComponents = SmallVec<[f32; 4]>;
@@ -774,7 +773,7 @@ impl Color {
     }
 }
 
-static CMYK_TRANSFORM: Lazy<ICCProfile> = Lazy::new(|| {
+static CMYK_TRANSFORM: LazyLock<ICCProfile> = LazyLock::new(|| {
     ICCProfile::new(
         include_bytes!("../../assets/CGATS001Compat-v2-micro.icc"),
         4,
