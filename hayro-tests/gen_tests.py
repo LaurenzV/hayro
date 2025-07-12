@@ -12,7 +12,7 @@ class TestGenerator:
         self.pdfbox_manifest_path = self.script_dir / 'manifest_pdfbox.json'
         self.pdfs_dir = self.script_dir / 'pdfs'
         self.downloads_dir = self.script_dir / 'downloads'
-        self.output_file = self.script_dir / 'tests' / 'tests.rs'
+        self.output_file = self.script_dir / 'tests' / 'render.rs'
         
     def ensure_downloads_dir(self):
         """Create downloads directory if it doesn't exist."""
