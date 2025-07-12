@@ -10,23 +10,11 @@ hayro-interpret = { path = "../hayro-interpret", default-features = false }
 kurbo = { workspace = true }
 peniko = { workspace = true }
 image = "0.25.6"
-once_cell = "1.21.3"
 bytemuck = "1.23.0"
 smallvec = { workspace = true }
 rustc-hash = { workspace = true }
 
 [features]
-default = ["jpeg2000"]
+default = []
 jpeg2000 = ["hayro-interpret/jpeg2000"]
-
-[[test]]
-name = "tests"
-path = "tests/mod.rs"
-
-
-[dev-dependencies]
-walkdir = "2.5.0"
-log = "0.4.27"
-image = "0.25.6"
-oxipng = "9.1.5"
 

@@ -18,5 +18,5 @@ jpeg2k = { workspace = true, optional = true }
 flate2 = { workspace = true }
 
 [features]
-default = ["jpeg2000"]
+default = []
 jpeg2000 = ["dep:jpeg2k"]

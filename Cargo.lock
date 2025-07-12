@@ -538,13 +538,9 @@ dependencies = [
  "hayro-syntax",
  "image",
  "kurbo",
- "log",
- "once_cell",
- "oxipng",
  "peniko",
  "rustc-hash",
  "smallvec",
- "walkdir",
 ]
 
 [[package]]

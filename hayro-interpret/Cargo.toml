@@ -18,5 +18,5 @@ hayro-font = { workspace = true }
 bitflags = "2.9.0"
 
 [features]
-default = ["jpeg2000"]
+default = []
 jpeg2000 = ["hayro-syntax/jpeg2000"]
