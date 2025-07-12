@@ -24,9 +24,7 @@ features = [
 ]
 
 [dependencies.hayro-syntax]
-path = "../hayro-syntax"
-default-features = false
+workspace = true
 
 [dependencies.hayro-render]
-path = "../hayro-render"
-default-features = false 
+workspace = true

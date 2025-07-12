@@ -4,18 +4,18 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-hayro-syntax = { path = "../hayro-syntax", default-features = false }
+hayro-syntax = { workspace = true }
 kurbo = { workspace = true }
 peniko = { workspace = true }
 smallvec = { workspace = true }
 log = { workspace = true }
 qcms=  { workspace = true }
-once_cell = "1.21.3"
+once_cell = { workspace = true }
 phf = { workspace = true, features = ["macros"] }
 skrifa = { workspace = true }
 yoke = { workspace = true, features = ["derive"]}
 hayro-font = { workspace = true }
-bitflags = "2.9.0"
+bitflags = { workspace = true }
 
 [features]
 default = []

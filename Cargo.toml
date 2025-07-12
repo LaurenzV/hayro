@@ -10,23 +10,27 @@ readme = "README.md"
 license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
-hayro-syntax = { path = "hayro-syntax", default-features = true }
+hayro-font = { path = "hayro-font" }
 hayro-interpret = { path = "hayro-interpret", default-features = true }
 hayro-render = { path = "hayro-render", default-features = true }
+hayro-syntax = { path = "hayro-syntax", default-features = true }
+
+bitflags = { version = "2.9.1" }
+bytemuck = { version = "1.23.1" }
 hex = { version = "0.4.3" }
-kurbo = { version = "0.11.1" }
+image = { version = "0.25.6" }
 jpeg2k = { version = "0.9.1", default-features = false, features = ["openjp2"] }
+kurbo = { version = "0.11.1" }
 log = { version = "0.4.22" }
-once_cell = { version = "1.20.3" }
-rustc-hash = { version = "2.1.0" }
-smallvec = { version = "1.13.2" }
-zune-jpeg = { git = "https://github.com/etemesi254/zune-image", rev = "ac43af3", version = "0.5.0-rc5" }
 flate2 = { version = "1.0", default-features = false, features = ["rust_backend"] }
-itertools = "0.14.0"
+itertools = { version = "0.14.0" }
+oxipng = { version = "9.1.5" }
 peniko = { version = "0.4.0", features = ["bytemuck"] }
-qcms = "0.3.0"
+once_cell = { version = "1.20.3" }
 phf = { version = "0.11.3" }
+qcms = { version = "0.3.0" }
+rustc-hash = { version = "2.1.0" }
 skrifa = { git = "https://github.com/googlefonts/fontations", rev = "b5c3030" }
+smallvec = { version = "1.13.2" }
 yoke = { version = "0.8.0" }
-hayro-font = { path = "./hayro-font" }
-walkdir = "2.5.0"
+zune-jpeg = { git = "https://github.com/etemesi254/zune-image", rev = "ac43af3", version = "0.5.0-rc5" }

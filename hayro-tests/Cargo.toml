@@ -18,7 +18,5 @@ hayro-render = { path = "../hayro-render", features = ["jpeg2000"] }
 
 [dev-dependencies]
 once_cell = { workspace = true }
-walkdir = "2.5.0"
-log = "0.4.27"
-image = "0.25.6"
-oxipng = "9.1.5"
+image = {  workspace = true }
+oxipng = { workspace = true }

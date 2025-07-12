@@ -9,8 +9,8 @@ hayro-syntax = { path = "../hayro-syntax", default-features = false }
 hayro-interpret = { path = "../hayro-interpret", default-features = false }
 kurbo = { workspace = true }
 peniko = { workspace = true }
-image = "0.25.6"
-bytemuck = "1.23.0"
+image = { workspace = true }
+bytemuck = { workspace = true }
 smallvec = { workspace = true }
 rustc-hash = { workspace = true }
 
