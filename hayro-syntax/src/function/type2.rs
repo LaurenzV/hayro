@@ -29,7 +29,10 @@ impl Type2 {
         let mut input = [input];
         self.clamper.clamp_input(&mut input);
 
-        let mut out = self.c0.iter().zip(self.c1.iter())
+        let mut out = self
+            .c0
+            .iter()
+            .zip(self.c1.iter())
             .map(|(c0, c1)| *c0 + input[0].powf(self.n) * (*c1 - *c0))
             .collect::<SmallVec<_>>();
 

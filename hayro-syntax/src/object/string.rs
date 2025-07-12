@@ -1,11 +1,11 @@
 //! String objects.
 
+use crate::filter::ascii_hex::decode_hex_string;
 use crate::object::macros::object;
 use crate::object::{Object, ObjectLike};
 use crate::reader::{Readable, Reader, ReaderContext, Skippable};
 use crate::trivia::is_white_space_character;
 use std::borrow::Cow;
-use crate::filter::ascii_hex::decode_hex_string;
 
 /// A hex-encoded string.
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]

@@ -58,7 +58,7 @@ pub fn decode(data: &[u8]) -> Option<Vec<u8>> {
 
 // Taken from the `hex` crate
 
-pub(crate) fn decode_hex_string(str: &[u8]) -> Result<Vec<u8>, ()>{
+pub(crate) fn decode_hex_string(str: &[u8]) -> Result<Vec<u8>, ()> {
     str.chunks(2)
         .enumerate()
         .map(|(i, pair)| Ok(val(pair[0])? << 4 | val(pair[1])?))

@@ -2,10 +2,10 @@ use crate::object::ObjectIdentifier;
 use crate::object::stream::Stream;
 use crate::xref::XRef;
 use crate::{NUM_SLOTS, PdfData};
-use std::sync::OnceLock;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::sync::Mutex;
+use std::sync::OnceLock;
 use std::sync::atomic::AtomicUsize;
 
 /// A structure for storing the data of the PDF.

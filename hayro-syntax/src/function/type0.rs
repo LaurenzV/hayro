@@ -78,11 +78,13 @@ impl Type0 {
 
         self.clamper.clamp_input(&mut input);
 
-        
         let mut key = input;
-        
-        for (((x, domain), encode), size) in
-            key.iter_mut().zip(self.clamper.domain.iter()).zip(self.encode.iter()).zip(self.sizes.iter())
+
+        for (((x, domain), encode), size) in key
+            .iter_mut()
+            .zip(self.clamper.domain.iter())
+            .zip(self.encode.iter())
+            .zip(self.sizes.iter())
         {
             *x = interpolate(*x, domain.0, domain.1, encode.0, encode.1);
             *x = x.max(0.0).min(*size as f32 - 1.0);
@@ -101,7 +103,9 @@ impl Type0 {
 
         let interpolated = interpolator.interpolate(&self.table);
 
-        let mut out = interpolated.iter().zip(self.decode.iter())
+        let mut out = interpolated
+            .iter()
+            .zip(self.decode.iter())
             .map(|(x, decode)| {
                 interpolate(
                     *x,
