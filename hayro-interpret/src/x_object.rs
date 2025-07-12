@@ -16,10 +16,10 @@ use hayro_syntax::object::dict::keys::*;
 use hayro_syntax::object::name::Name;
 use hayro_syntax::object::stream::Stream;
 use kurbo::{Affine, Rect, Shape};
+use log::warn;
 use peniko::Fill;
 use smallvec::SmallVec;
 use std::ops::Deref;
-use log::warn;
 
 pub enum XObject<'a> {
     FormXObject(FormXObject<'a>),
@@ -381,9 +381,11 @@ fn decode(
     decode: &[(f32, f32)],
 ) -> Option<Vec<f32>> {
     if !matches!(bits_per_component, 1 | 2 | 4 | 8 | 16) {
-        bits_per_component = ((data.len() as u64 * 8) / (width as u64 * height as u64 * color_space.num_components() as u64)) as u8;
+        bits_per_component = ((data.len() as u64 * 8)
+            / (width as u64 * height as u64 * color_space.num_components() as u64))
+            as u8;
     }
-    
+
     let interpolate = |n: f32, d_min: f32, d_max: f32| {
         interpolate(
             n,
@@ -393,7 +395,7 @@ fn decode(
             d_max,
         )
     };
-    
+
     let adjusted_components = match bits_per_component {
         1..8 | 9..16 => {
             let mut buf = vec![];
@@ -424,7 +426,7 @@ fn decode(
         _ => {
             warn!("unsupported bits per component: {}", bits_per_component);
             return None;
-        },
+        }
     };
 
     let mut decoded_arr = vec![];

@@ -149,7 +149,7 @@ impl<'a> Iterator for UntypedIter<'a> {
                                 if bytes == b"EI" {
                                     self.reader.read_bytes(2)?;
                                     continue 'outer;
-                                }  else if bytes == b"BI" {
+                                } else if bytes == b"BI" {
                                     let mut cloned = find_reader.clone();
                                     cloned.read_bytes(2)?;
                                     if cloned.read_without_context::<InlineImageDict>().is_some() {
@@ -159,7 +159,7 @@ impl<'a> Iterator for UntypedIter<'a> {
 
                                 find_reader.read_byte()?;
                             }
-                            
+
                             self.stack.push(Object::Stream(stream));
 
                             self.reader.read_bytes(2)?;
