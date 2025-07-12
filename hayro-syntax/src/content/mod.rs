@@ -159,8 +159,7 @@ impl<'a> Iterator for UntypedIter<'a> {
 
                                 find_reader.read_byte()?;
                             }
-
-                            println!("reached");
+                            
                             self.stack.push(Object::Stream(stream));
 
                             self.reader.read_bytes(2)?;

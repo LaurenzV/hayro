@@ -607,6 +607,7 @@ use crate::run_test;
 #[test] fn pdfbox_4934_2() { run_test("pdfbox_4934_2", "downloads/pdfbox/4934_2.pdf", None); }
 #[test] fn pdfbox_4938() { run_test("pdfbox_4938", "downloads/pdfbox/4938.pdf", None); }
 #[test] fn pdfbox_4996() { run_test("pdfbox_4996", "downloads/pdfbox/4996.pdf", None); }
+#[test] fn pdfbox_5038() { run_test("pdfbox_5038", "downloads/pdfbox/5038.pdf", Some("..=0")); }
 #[test] fn pdfbox_5054() { run_test("pdfbox_5054", "downloads/pdfbox/5054.pdf", None); }
 #[test] fn pdfbox_5079() { run_test("pdfbox_5079", "downloads/pdfbox/5079.pdf", None); }
 #[test] fn pdfbox_5097() { run_test("pdfbox_5097", "downloads/pdfbox/5097.pdf", None); }

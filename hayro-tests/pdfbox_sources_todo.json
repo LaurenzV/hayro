@@ -142,7 +142,6 @@
   "4913": "gradient that somehow gets stuck",
   "4949": "prints empty, probably ebcause empty clip path is applied",
   "5026": "cannot load PDF",
-  "5038": "failed to apply ascii 85",
   "5065": "more transparency group stuff",
   "5074": "second rect has wrong color",
   "5115": "hyphen missing",

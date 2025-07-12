@@ -273,15 +273,16 @@ pub fn interpret<'a, 'b>(
                 stroke_path(context, device);
             }
             TypedOperation::EndPath(_) => {
-                if let Some(clip) = *context.clip() {
+                if let Some(clip) = *context.clip() && !context.path().elements().is_empty() {
                     device.set_transform(context.get().ctm);
                     device.push_clip_path(&ClipPath {
                         path: context.path().clone(),
                         fill: clip,
                     });
 
-                    *(context.clip_mut()) = None;
                     context.get_mut().n_clips += 1;
+                    
+                    *(context.clip_mut()) = None;
                 }
 
                 context.path_mut().truncate(0);
