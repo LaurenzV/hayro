@@ -1,5 +1,7 @@
 // THIS FILE IS AUTO-GENERATED, DO NOT EDIT MANUALLY
 
+use crate::content::Operator;
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct BeginCompatibility;
 op0!(BeginCompatibility, "BX");
@@ -441,7 +443,7 @@ pub enum TypedOperation<'a> {
     BeginMarkedContent(BeginMarkedContent<'a>),
     BeginMarkedContentWithProperties(BeginMarkedContentWithProperties<'a>),
     EndMarkedContent(EndMarkedContent),
-    Fallback,
+    Fallback(Operator<'a>),
 }
 
 impl<'a> TypedOperation<'a> {
@@ -519,7 +521,7 @@ impl<'a> TypedOperation<'a> {
             b"BMC" => BeginMarkedContent::from_stack(&operation.operands)?.into(),
             b"BDC" => BeginMarkedContentWithProperties::from_stack(&operation.operands)?.into(),
             b"EMC" => EndMarkedContent::from_stack(&operation.operands)?.into(),
-            _ => return Self::Fallback.into(),
+            _ => return Self::Fallback(operation.operator.clone()).into(),
         })
     }
 }

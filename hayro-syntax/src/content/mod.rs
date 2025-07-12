@@ -29,6 +29,7 @@ impl Debug for Operator<'_> {
 }
 
 /// A content stream operator.
+#[derive(Clone, PartialEq)]
 pub struct Operator<'a>(Name<'a>);
 
 impl Deref for Operator<'_> {
@@ -169,7 +170,7 @@ impl<'a> Iterator for UntypedIter<'a> {
                                     for op in iter {
                                         match op {
                                             // Not a valid content stream, continue.
-                                            TypedOperation::Fallback => {
+                                            TypedOperation::Fallback(_) => {
                                                 self.reader.read_bytes(2);
                                                 continue 'outer;
                                             }

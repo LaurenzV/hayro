@@ -182,7 +182,7 @@ enum_block = (
         "#[derive(Debug, PartialEq, Clone)]\n"
         "pub enum TypedOperation<'a> {\n"
         + "    " + ",\n    ".join(enum_variants) + ",\n"
-                                                   "    Fallback,\n}"
+                                                   "    Fallback(Operator<'a>),\n}"
 )
 
 dispatch_block = (
@@ -191,15 +191,16 @@ dispatch_block = (
         "        let op_name = operation.operator.as_ref();\n"
         "        Some(match op_name {\n"
         + "            " + "\n            ".join(dispatch_arms) + "\n"
-                                                                  "            _ => return Self::Fallback.into(),\n"
+                                                                  "            _ => return Self::Fallback(operation.operator.clone()).into(),\n"
                                                                   "        })\n"
                                                                   "    }\n"
                                                                   "}"
 )
 
 gen_notice = "// THIS FILE IS AUTO-GENERATED, DO NOT EDIT MANUALLY"
+imports = "use crate::content::Operator;"
 
-joined = "\n\n".join([gen_notice, struct_block, enum_block, dispatch_block])
+joined = "\n\n".join([gen_notice, imports, struct_block, enum_block, dispatch_block])
 
 with open("ops_generated.rs", 'w') as f:
     f.write(joined)
