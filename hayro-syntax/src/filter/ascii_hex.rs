@@ -50,9 +50,27 @@ pub fn decode(data: &[u8]) -> Option<Vec<u8>> {
             cleaned.push(b'0');
         }
 
-        hex::decode(&cleaned).ok()
+        decode_hex_string(&cleaned).ok()
     } else {
-        hex::decode(trimmed).ok()
+        decode_hex_string(trimmed).ok()
+    }
+}
+
+// Taken from the `hex` crate
+
+pub(crate) fn decode_hex_string(str: &[u8]) -> Result<Vec<u8>, ()>{
+    str.chunks(2)
+        .enumerate()
+        .map(|(i, pair)| Ok(val(pair[0])? << 4 | val(pair[1])?))
+        .collect()
+}
+
+fn val(c: u8) -> Result<u8, ()> {
+    match c {
+        b'A'..=b'F' => Ok(c - b'A' + 10),
+        b'a'..=b'f' => Ok(c - b'a' + 10),
+        b'0'..=b'9' => Ok(c - b'0'),
+        _ => Err(()),
     }
 }
 

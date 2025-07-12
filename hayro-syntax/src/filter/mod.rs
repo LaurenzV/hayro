@@ -1,7 +1,7 @@
 //! Decoding data streams.
 
 mod ascii_85;
-mod ascii_hex;
+pub(crate) mod ascii_hex;
 mod ccitt;
 mod dct;
 mod jbig2;

@@ -6,7 +6,6 @@ edition = { workspace = true }
 license = { workspace = true }
 
 [dependencies]
-hex = { workspace = true }
 log = { workspace = true }
 kurbo = { workspace = true }
 rustc-hash = { workspace = true }
