@@ -13,7 +13,6 @@ use hayro_interpret::util::FloatExt;
 use hayro_interpret::{FillProps, MaskType, Paint, SoftMask, StencilImage, StrokeProps, interpret};
 use hayro_syntax::document::page::{A4, Page, Rotation};
 use hayro_syntax::object::ObjectIdentifier;
-use hayro_syntax::pdf::Pdf;
 use image::codecs::png::PngEncoder;
 use image::imageops::FilterType;
 use image::{DynamicImage, ExtendedColorType, ImageBuffer, ImageEncoder};
@@ -29,6 +28,7 @@ pub use hayro_interpret::FontData;
 pub use hayro_interpret::InterpreterSettings;
 pub use hayro_interpret::font::FontQuery;
 pub use hayro_interpret::font::standard_font::StandardFont;
+pub use hayro_syntax::pdf::Pdf;
 
 mod coarse;
 mod encode;

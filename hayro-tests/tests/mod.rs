@@ -1,7 +1,7 @@
-use hayro_interpret::font::FontQuery;
-use hayro_interpret::font::standard_font::StandardFont;
-use hayro_interpret::{FontData, InterpreterSettings};
-use hayro_syntax::pdf::Pdf;
+use hayro_render::FontQuery;
+use hayro_render::StandardFont;
+use hayro_render::{FontData, InterpreterSettings};
+use hayro_render::Pdf;
 use image::{Rgba, RgbaImage, load_from_memory};
 use once_cell::sync::Lazy;
 use std::cmp::max;
