@@ -8,6 +8,7 @@ on:
 
 jobs:
   format-check:
+    name: Check formatting
     runs-on: ubuntu-latest
     
     steps:
