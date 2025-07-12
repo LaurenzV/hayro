@@ -14,42 +14,42 @@ fn render_fuzzed(file: &[u8]) {
 
 #[test]
 fn issue54() {
-    let file = include_bytes!("fuzzed_pdfs/issue54.pdf");
+    let file = include_bytes!("../pdfs/issue54.pdf");
     render_fuzzed(file);
 }
 
 #[test]
 fn issue55() {
-    let file = include_bytes!("fuzzed_pdfs/issue55.pdf");
+    let file = include_bytes!("../pdfs/issue55.pdf");
     render_fuzzed(file);
 }
 
 #[test]
 fn issue56() {
-    let file = include_bytes!("fuzzed_pdfs/issue56.pdf");
+    let file = include_bytes!("../pdfs/issue56.pdf");
     render_fuzzed(file);
 }
 
 #[test]
 fn issue61() {
-    let file = include_bytes!("fuzzed_pdfs/issue61.pdf");
+    let file = include_bytes!("../pdfs/issue61.pdf");
     render_fuzzed(file);
 }
 
 #[test]
 fn issue62() {
-    let file = include_bytes!("fuzzed_pdfs/issue62.pdf");
+    let file = include_bytes!("../pdfs/issue62.pdf");
     render_fuzzed(file);
 }
 
 #[test]
 fn issue67() {
-    let file = include_bytes!("fuzzed_pdfs/issue67.pdf");
+    let file = include_bytes!("../pdfs/issue67.pdf");
     render_fuzzed(file);
 }
 
 #[test]
 fn issue68() {
-    let file = include_bytes!("fuzzed_pdfs/issue68.pdf");
+    let file = include_bytes!("../pdfs/issue68.pdf");
     render_fuzzed(file);
 }
