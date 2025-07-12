@@ -2,7 +2,6 @@ use crate::function::{Clamper, Values};
 use crate::object::dict::Dict;
 use crate::object::dict::keys::{C0, C1, N};
 use crate::object::number::Number;
-use itertools::izip;
 use smallvec::{SmallVec, smallvec};
 
 /// A type 2 function (exponential function).
@@ -30,7 +29,7 @@ impl Type2 {
         let mut input = [input];
         self.clamper.clamp_input(&mut input);
 
-        let mut out = izip!(&self.c0, &self.c1)
+        let mut out = self.c0.iter().zip(self.c1.iter())
             .map(|(c0, c1)| *c0 + input[0].powf(self.n) * (*c1 - *c0))
             .collect::<SmallVec<_>>();
 

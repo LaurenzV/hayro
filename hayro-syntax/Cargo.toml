@@ -11,7 +11,6 @@ kurbo = { workspace = true }
 rustc-hash = { workspace = true }
 smallvec = { workspace = true }
 zune-jpeg = { workspace = true }
-itertools = { workspace = true }
 jpeg2k = { workspace = true, optional = true }
 flate2 = { workspace = true }
 

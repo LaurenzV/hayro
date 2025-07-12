@@ -3,7 +3,6 @@
 use crate::bit_reader::{BitChunk, BitChunks, BitReader, BitSize, BitWriter};
 use crate::object::dict::Dict;
 use crate::object::dict::keys::{BITS_PER_COMPONENT, COLORS, COLUMNS, EARLY_CHANGE, PREDICTOR};
-use itertools::izip;
 use log::warn;
 
 pub mod flate {
@@ -371,15 +370,12 @@ fn apply<'a, T: Predictor>(
     chunk_len: usize,
     bit_size: BitSize,
 ) -> Option<()> {
-    for (cur_row, prev_row) in izip!(cur_row, prev_row) {
+    for (cur_row, prev_row) in cur_row.zip(prev_row) {
         let old_pos = writer.cur_pos();
+        
+        
 
-        for (cur_row, prev_row, prev_col, top_left) in izip!(
-            cur_row.iter(),
-            prev_row.iter(),
-            prev_col.iter(),
-            top_left.iter()
-        ) {
+        for (((cur_row, prev_row), prev_col), top_left) in cur_row.iter().zip(prev_row.iter()).zip(prev_col.iter()).zip(top_left.iter()) {
             // Note that the wrapping behavior when adding inside the predictors is dependent on the
             // bit size, so it wouldn't be triggered for bits per component < 16. So we mask out
             // the bytes manually, which is equivalent to a wrapping add.

@@ -4,7 +4,6 @@ use crate::object::array::Array;
 use crate::object::dict::keys::{BITS_PER_SAMPLE, DECODE, ENCODE, SIZE};
 use crate::object::stream::Stream;
 use crate::util::OptionLog;
-use itertools::izip;
 use log::{error, warn};
 use smallvec::{SmallVec, ToSmallVec, smallvec};
 use std::collections::HashMap;
@@ -79,9 +78,11 @@ impl Type0 {
 
         self.clamper.clamp_input(&mut input);
 
+        
         let mut key = input;
-        for (x, domain, encode, size) in
-            izip!(&mut key, &self.clamper.domain, &self.encode, &self.sizes)
+        
+        for (((x, domain), encode), size) in
+            key.iter_mut().zip(self.clamper.domain.iter()).zip(self.encode.iter()).zip(self.sizes.iter())
         {
             *x = interpolate(*x, domain.0, domain.1, encode.0, encode.1);
             *x = x.max(0.0).min(*size as f32 - 1.0);
@@ -100,7 +101,7 @@ impl Type0 {
 
         let interpolated = interpolator.interpolate(&self.table);
 
-        let mut out = izip!(&interpolated, &self.decode)
+        let mut out = interpolated.iter().zip(self.decode.iter())
             .map(|(x, decode)| {
                 interpolate(
                     *x,
