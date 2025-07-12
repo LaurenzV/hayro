@@ -19,6 +19,7 @@ use kurbo::{Affine, Rect, Shape};
 use peniko::Fill;
 use smallvec::SmallVec;
 use std::ops::Deref;
+use log::warn;
 
 pub enum XObject<'a> {
     FormXObject(FormXObject<'a>),
@@ -376,9 +377,13 @@ fn decode(
     width: u32,
     height: u32,
     color_space: &ColorSpace,
-    bits_per_component: u8,
+    mut bits_per_component: u8,
     decode: &[(f32, f32)],
 ) -> Option<Vec<f32>> {
+    if !matches!(bits_per_component, 1 | 2 | 4 | 8 | 16) {
+        bits_per_component = ((data.len() as u64 * 8) / (width as u64 * height as u64 * color_space.num_components() as u64)) as u8;
+    }
+    
     let interpolate = |n: f32, d_min: f32, d_max: f32| {
         interpolate(
             n,
@@ -388,9 +393,9 @@ fn decode(
             d_max,
         )
     };
-
+    
     let adjusted_components = match bits_per_component {
-        1 | 2 | 4 => {
+        1..8 | 9..16 => {
             let mut buf = vec![];
             let bpc = BitSize::from_u8(bits_per_component)?;
             let mut reader = BitReader::new(data.as_ref());
@@ -416,7 +421,10 @@ fn decode(
             .chunks(2)
             .map(|v| (u16::from_be_bytes([v[0], v[1]])))
             .collect(),
-        _ => unimplemented!(),
+        _ => {
+            warn!("unsupported bits per component: {}", bits_per_component);
+            return None;
+        },
     };
 
     let mut decoded_arr = vec![];
