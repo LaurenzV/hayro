@@ -38,10 +38,7 @@ pub fn decode(data: &[u8]) -> Option<Vec<u8>> {
         decoded.extend_from_slice(&last[..tail_len - 1]);
     }
 
-    match (stream.next(), stream.next()) {
-        (Some(b'>'), None) => Some(decoded),
-        _ => None,
-    }
+    Some(decoded)
 }
 
 fn sym_85(byte: u8) -> Option<u8> {
