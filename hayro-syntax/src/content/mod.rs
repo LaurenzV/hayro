@@ -143,47 +143,24 @@ impl<'a> Iterator for UntypedIter<'a> {
                             // stream. See also <https://github.com/pdf-association/pdf-issues/issues/543>
                             // PDF 2.0 does have a `/Length` attribute we can read, but since it's relatively
                             // new we don't bother trying to read it.
-                            // Because of this, we instead try to decode the data we currently have,
-                            // and if it doesn't work we assume that the `EI` is not the one we are
-                            // looking for and we keep searching.
-                            if stream.decoded().is_none() {
-                                self.reader.read_bytes(2);
-                                continue;
-                            }
-
-                            // If the inline image doesn't have any filter, then the above doesn't
-                            // help. In this case, we check whether the tail of the stream is a valid
-                            // content stream.
                             let mut find_reader = Reader::new(&self.reader.tail()?[2..]);
 
                             while let Some(bytes) = find_reader.peek_bytes(2) {
                                 if bytes == b"EI" {
-                                    let between = find_reader.head()?;
-                                    let mut iter =
-                                        TypedIter::new(UntypedIter::new(between)).peekable();
-
-                                    if iter.peek().is_none() {
-                                        self.reader.read_bytes(2);
-                                        continue 'outer;
+                                    self.reader.read_bytes(2)?;
+                                    continue 'outer;
+                                }  else if bytes == b"BI" {
+                                    let mut cloned = find_reader.clone();
+                                    cloned.read_bytes(2)?;
+                                    if cloned.read_without_context::<InlineImageDict>().is_some() {
+                                        break;
                                     }
-
-                                    for op in iter {
-                                        match op {
-                                            // Not a valid content stream, continue.
-                                            TypedOperation::Fallback(_) => {
-                                                self.reader.read_bytes(2);
-                                                continue 'outer;
-                                            }
-                                            _ => {}
-                                        }
-                                    }
-
-                                    break;
                                 }
 
                                 find_reader.read_byte()?;
                             }
 
+                            println!("reached");
                             self.stack.push(Object::Stream(stream));
 
                             self.reader.read_bytes(2)?;
