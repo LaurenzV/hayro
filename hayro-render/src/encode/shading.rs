@@ -104,6 +104,11 @@ impl EncodeExt for ShadingPattern {
                     function: function.clone(),
                 }
             }
+            ShadingType::Dummy => {
+                base_transform = Affine::IDENTITY;
+
+                EncodedShadingType::Dummy
+            }
         };
 
         let color_space = self.shading.color_space.clone();
@@ -244,6 +249,7 @@ pub(crate) enum EncodedShadingType {
         samples: FxHashMap<(u16, u16), ColorComponents>,
         function: Option<ShadingFunction>,
     },
+    Dummy,
 }
 
 impl EncodedShadingType {
@@ -316,6 +322,7 @@ impl EncodedShadingType {
                     Some(bg_color)
                 }
             }
+            EncodedShadingType::Dummy => Some(TRANSPARENT),
         }
     }
 }

@@ -1,6 +1,6 @@
 /// PDF shadings.
 use crate::color::{ColorComponents, ColorSpace};
-use crate::util::PointExt;
+use crate::util::{FloatExt, PointExt};
 use hayro_syntax::bit_reader::{BitReader, BitSize};
 use hayro_syntax::function::{Function, Values, interpolate};
 use hayro_syntax::object::Object;
@@ -98,6 +98,7 @@ pub enum ShadingType {
         /// An optional function used for calculating the sampled color values.
         function: Option<ShadingFunction>,
     },
+    Dummy,
 }
 
 /// A PDF shading.
@@ -138,21 +139,31 @@ impl Shading {
                 let domain = dict.get::<[f32; 2]>(DOMAIN).unwrap_or([0.0, 1.0]);
                 let function = read_function(dict, &color_space)?;
                 let extend = dict.get::<[bool; 2]>(EXTEND).unwrap_or([false, false]);
-                let coords = if shading_num == 2 {
+                let (coords, invalid) = if shading_num == 2 {
                     let read = dict.get::<[f32; 4]>(COORDS)?;
-                    [read[0], read[1], read[2], read[3], 0.0, 0.0]
+                    let invalid = (read[0] - read[2]).is_nearly_zero()
+                        && (read[1] - read[3]).is_nearly_zero();
+                    ([read[0], read[1], read[2], read[3], 0.0, 0.0], invalid)
                 } else {
-                    dict.get::<[f32; 6]>(COORDS)?
+                    let read = dict.get::<[f32; 6]>(COORDS)?;
+                    let invalid = (read[0] - read[3]).is_nearly_zero()
+                        && (read[1] - read[4]).is_nearly_zero()
+                        && (read[2] - read[5]).is_nearly_zero();
+                    (read, invalid)
                 };
 
                 let axial = shading_num == 2;
 
-                ShadingType::RadialAxial {
-                    domain,
-                    function,
-                    extend,
-                    coords,
-                    axial,
+                if invalid {
+                    ShadingType::Dummy
+                } else {
+                    ShadingType::RadialAxial {
+                        domain,
+                        function,
+                        extend,
+                        coords,
+                        axial,
+                    }
                 }
             }
             4 => {
