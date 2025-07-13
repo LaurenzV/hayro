@@ -67,15 +67,21 @@ impl Renderer {
         let interpolate = rgb_data.interpolate;
         
         let rgba_data = if let Some(alpha) = alpha_data {
-            if alpha.width != rgb_data.width || alpha.height != rgb_data.height {
-                unimplemented!()
+            let alpha_data = if alpha.width != rgb_data.width || alpha.height != rgb_data.height {
+                let image = DynamicImage::ImageLuma8(
+                    ImageBuffer::from_raw(alpha.width, alpha.height, alpha.stencil_data.clone()).unwrap(),
+                );
+                let resized = image.resize_exact(rgb_data.width, rgb_data.height, FilterType::CatmullRom);
+                resized.to_luma8().into_raw()
             }   else {
-                rgb_data.image_data
-                    .chunks_exact(3)
-                    .zip(alpha.stencil_data)
-                    .flat_map(|(rgb, a)| [rgb[0], rgb[1], rgb[2], a])
-                    .collect::<Vec<_>>()
-            }
+                alpha.stencil_data
+            };
+
+            rgb_data.image_data
+                .chunks_exact(3)
+                .zip(alpha_data)
+                .flat_map(|(rgb, a)| [rgb[0], rgb[1], rgb[2], a])
+                .collect::<Vec<_>>()
         }   else {
             rgb_data.image_data.chunks_exact(3)
                 .flat_map(|d| [d[0], d[1], d[2], 255])
