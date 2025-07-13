@@ -2674,7 +2674,7 @@ impl HuffmanTable {
         self.root_node.decode_node(reader)
     }
     
-    // For debugging purposes
+    // For debugging purposes.
     #[allow(dead_code)]
     fn print_tree(&self) {
         println!("=== Huffman Tree Structure ===");
