@@ -62,59 +62,58 @@ impl Renderer {
             let (x, y) = x_y_advances(&cur_transform);
             (x.length() as f32, y.length() as f32)
         };
-        let mut width = rgb_data.width;
-        let mut height = rgb_data.height;
-        let interpolate = rgb_data.interpolate;
+        let mut rgb_width = rgb_data.width;
+        let mut rgb_height = rgb_data.height;
         
-        let rgba_data = if let Some(alpha) = alpha_data {
-            let alpha_data = if alpha.width != rgb_data.width || alpha.height != rgb_data.height {
-                let image = DynamicImage::ImageLuma8(
-                    ImageBuffer::from_raw(alpha.width, alpha.height, alpha.stencil_data.clone()).unwrap(),
-                );
-                let resized = image.resize_exact(rgb_data.width, rgb_data.height, FilterType::CatmullRom);
-                resized.to_luma8().into_raw()
-            }   else {
-                alpha.stencil_data
-            };
+        let interpolate = rgb_data.interpolate;
 
+        let rgb_data = if x_scale >= 1.0 && y_scale >= 1.0 {
             rgb_data.image_data
-                .chunks_exact(3)
-                .zip(alpha_data)
-                .flat_map(|(rgb, a)| [rgb[0], rgb[1], rgb[2], a])
-                .collect::<Vec<_>>()
-        }   else {
-            rgb_data.image_data.chunks_exact(3)
-                .flat_map(|d| [d[0], d[1], d[2], 255])
-                .collect()
-        };
-
-        let image_data = if x_scale >= 1.0 && y_scale >= 1.0 {
-            rgba_data
         } else {
-            // Do subsampling to prevent aliasing artifacts.
-            let new_width = (width as f32 * x_scale).ceil().max(1.0) as u32;
-            let new_height = (height as f32 * y_scale).ceil().max(1.0) as u32;
+            // Resize the image, either doing down- or upsampling.
+            let new_width = (rgb_width as f32 * x_scale).ceil().max(1.0) as u32;
+            let new_height = (rgb_height as f32 * y_scale).ceil().max(1.0) as u32;
 
-            let image = DynamicImage::ImageRgba8(
-                ImageBuffer::from_raw(width, height, rgba_data.clone()).unwrap(),
+            let image = DynamicImage::ImageRgb8(
+                ImageBuffer::from_raw(rgb_width, rgb_height, rgb_data.image_data.clone()).unwrap(),
             );
             let resized = image.resize_exact(new_width, new_height, FilterType::CatmullRom);
 
             let new_width = resized.width();
             let new_height = resized.height();
-            let t_scale_x = width as f32 / new_width as f32;
-            let t_scale_y = height as f32 / new_height as f32;
+            let t_scale_x = rgb_width as f32 / new_width as f32;
+            let t_scale_y = rgb_height as f32 / new_height as f32;
 
             cur_transform *= Affine::scale_non_uniform(t_scale_x as f64, t_scale_y as f64);
             self.ctx.set_transform(cur_transform);
 
-            width = new_width;
-            height = new_height;
+            rgb_width = new_width;
+            rgb_height = new_height;
 
-            resized.to_rgba8().into_raw()
+            resized.to_rgb8().into_raw()
         };
+        
+        let alpha_data = if let Some(alpha_data) = alpha_data {
+            if alpha_data.width != rgb_width || alpha_data.height != rgb_height {
+                let image = DynamicImage::ImageLuma8(
+                    ImageBuffer::from_raw(alpha_data.width, alpha_data.height, alpha_data.stencil_data.clone()).unwrap(),
+                );
+                let resized = image.resize_exact(rgb_width, rgb_height, FilterType::CatmullRom);
+                resized.to_luma8().into_raw()
+            }   else {
+                alpha_data.stencil_data
+            }
+        }   else {
+            vec![255; rgb_width as usize * rgb_height as usize]
+        };
+        
+        let rgba_data = rgb_data
+            .chunks_exact(3)
+            .zip(alpha_data)
+            .flat_map(|(rgb, a)| [rgb[0], rgb[1], rgb[2], a])
+            .collect::<Vec<_>>();
 
-        let mut buffer = Buffer::<4>::new_u8(image_data, width, height);
+        let mut buffer = Buffer::<4>::new_u8(rgba_data, rgb_width, rgb_height);
         buffer.premultiply();
 
         let image = Image {
@@ -125,7 +124,7 @@ impl Renderer {
         };
 
         self.ctx.fill_rect(
-            &Rect::new(0.0, 0.0, width as f64, height as f64),
+            &Rect::new(0.0, 0.0, rgb_width as f64, rgb_height as f64),
             image.into(),
             self.ctx.transform,
             None,
