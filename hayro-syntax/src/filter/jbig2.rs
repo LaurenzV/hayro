@@ -2619,10 +2619,10 @@ impl HuffmanTreeNode {
             None => Err(Jbig2Error::new("invalid Huffman data")),
         }
     }
-    
+
     fn print_node(&self, indent: usize, path: &str) {
         let indent_str = "  ".repeat(indent);
-        
+
         if self.is_leaf {
             if self.is_oob {
                 println!("{}[{}] LEAF: OOB", indent_str, path);
@@ -2634,11 +2634,11 @@ impl HuffmanTreeNode {
             }
         } else {
             println!("{}[{}] NODE", indent_str, path);
-            
+
             if let Some(ref child) = self.children[0] {
                 child.print_node(indent + 1, &format!("{}0", path));
             }
-            
+
             if let Some(ref child) = self.children[1] {
                 child.print_node(indent + 1, &format!("{}1", path));
             }
@@ -2673,7 +2673,7 @@ impl HuffmanTable {
     fn decode(&self, reader: &Reader) -> Result<Option<i32>, Jbig2Error> {
         self.root_node.decode_node(reader)
     }
-    
+
     // For debugging purposes.
     #[allow(dead_code)]
     fn print_tree(&self) {
@@ -3988,7 +3988,7 @@ fn decode_tables_segment(
 
     let prefix_size_bits = ((flags >> 1) & 7) + 1;
     let range_size_bits = ((flags >> 4) & 7) + 1;
-    
+
     let mut lines = Vec::new();
     let mut current_range_low = lowest_value;
 
@@ -4005,7 +4005,7 @@ fn decode_tables_segment(
         ]));
 
         current_range_low += 1 << range_length;
-        
+
         if current_range_low >= highest_value {
             break;
         }
@@ -4023,12 +4023,7 @@ fn decode_tables_segment(
 
     // Upper range table line
     let prefix_length = reader.read_bits(prefix_size_bits as usize)? as i32;
-    lines.push(HuffmanLine::new(&[
-        highest_value,
-        prefix_length,
-        32,
-        0,
-    ]));
+    lines.push(HuffmanLine::new(&[highest_value, prefix_length, 32, 0]));
 
     // Out-of-band table line
     if (flags & 1) != 0 {
