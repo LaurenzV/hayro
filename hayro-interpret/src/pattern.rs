@@ -8,7 +8,7 @@ use crate::interpret::state::State;
 use crate::shading::Shading;
 use crate::soft_mask::SoftMask;
 use crate::{
-    FillProps, InterpreterSettings, Paint, PaintType, RgbaImage, StencilImage, StrokeProps,
+    FillProps, InterpreterSettings, Paint, PaintType, RgbData, AlphaData, StrokeProps,
     interpret,
 };
 use hayro_syntax::content::{TypedIter, UntypedIter};
@@ -256,9 +256,9 @@ impl<T: Device> Device for StencilPatternDevice<'_, T> {
         self.inner.stroke_glyph(glyph, self.paint)
     }
 
-    fn draw_rgba_image(&mut self, _: RgbaImage) {}
+    fn draw_rgba_image(&mut self, _: RgbData, _: Option<AlphaData>) {}
 
-    fn draw_stencil_image(&mut self, stencil: StencilImage, _: &Paint) {
+    fn draw_stencil_image(&mut self, stencil: AlphaData, _: &Paint) {
         self.inner.draw_stencil_image(stencil, self.paint);
     }
 
