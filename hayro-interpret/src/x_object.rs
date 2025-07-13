@@ -2,7 +2,7 @@ use crate::clip_path::ClipPath;
 use crate::color::ColorSpace;
 use crate::context::Context;
 use crate::device::Device;
-use crate::image::{RgbData, AlphaData};
+use crate::image::{AlphaData, RgbData};
 use crate::interpret;
 use crate::interpret::path::get_paint;
 use hayro_syntax::bit_reader::{BitReader, BitSize};
@@ -255,20 +255,18 @@ impl<'a> ImageXObject<'a> {
             bits_per_component,
         })
     }
-    
+
     pub fn alpha8(&self) -> Option<AlphaData> {
         let data_len = self.width as usize * self.height as usize;
 
         if self.is_image_mask {
             let decoded = self.decode_raw()?;
-            
+
             return Some(AlphaData {
                 stencil_data: fix_image_length(
                     decoded
                         .iter()
-                        .map(|alpha| {
-                            ((1.0 - *alpha) * 255.0 + 0.5) as u8
-                        })
+                        .map(|alpha| ((1.0 - *alpha) * 255.0 + 0.5) as u8)
                         .collect(),
                     data_len,
                     255,
@@ -277,45 +275,53 @@ impl<'a> ImageXObject<'a> {
                 height: self.height,
                 interpolate: self.interpolate,
             });
-        }   else {
-            let (f32_data, width, height, interpolate) = if let Some(1) = self.dict.get::<u8>(SMASK_IN_DATA) {
-                if let Some(data) = self.data_smask.as_ref() {
-                    (decode(
-                        data,
-                        self.width,
-                        self.height,
-                        &ColorSpace::device_gray(),
-                        8,
-                        &[(0.0, 1.0)],
-                    )?, self.width, self.height, self.interpolate)
-                } else {
-                    return None;
-                }
-            } else if let Some(s_mask) = self.dict.get::<Stream>(SMASK) {
-                ImageXObject::new(&s_mask, |_| None).and_then(|s| if let Some(decoded) = s.decode_raw() {
-                    Some((decoded, s.width, s.height, s.interpolate))
-                } else {
-                    None
-                })?
-            } else if let Some(mask) = self.dict.get::<Stream>(MASK) {
-                if let Some(obj) = ImageXObject::new(&mask, |_| None) {
-                    let mut mask_data = obj.decode_raw()?;
-                    mask_data = mask_data.iter().map(|v| 1.0 - *v).collect();
+        } else {
+            let (f32_data, width, height, interpolate) =
+                if let Some(1) = self.dict.get::<u8>(SMASK_IN_DATA) {
+                    if let Some(data) = self.data_smask.as_ref() {
+                        (
+                            decode(
+                                data,
+                                self.width,
+                                self.height,
+                                &ColorSpace::device_gray(),
+                                8,
+                                &[(0.0, 1.0)],
+                            )?,
+                            self.width,
+                            self.height,
+                            self.interpolate,
+                        )
+                    } else {
+                        return None;
+                    }
+                } else if let Some(s_mask) = self.dict.get::<Stream>(SMASK) {
+                    ImageXObject::new(&s_mask, |_| None).and_then(|s| {
+                        if let Some(decoded) = s.decode_raw() {
+                            Some((decoded, s.width, s.height, s.interpolate))
+                        } else {
+                            None
+                        }
+                    })?
+                } else if let Some(mask) = self.dict.get::<Stream>(MASK) {
+                    if let Some(obj) = ImageXObject::new(&mask, |_| None) {
+                        let mut mask_data = obj.decode_raw()?;
+                        mask_data = mask_data.iter().map(|v| 1.0 - *v).collect();
 
-                    (mask_data, obj.width, obj.height, obj.interpolate)
+                        (mask_data, obj.width, obj.height, obj.interpolate)
+                    } else {
+                        return None;
+                    }
                 } else {
                     return None;
-                }
-            } else {
-                return None;
-            };
-            
+                };
+
             let u8_data = fix_image_length(
                 f32_data.iter().map(|v| (*v * 255.0 + 0.5) as u8).collect(),
                 (width * height) as usize,
-                255
+                255,
             );
-            
+
             Some(AlphaData {
                 stencil_data: u8_data,
                 width,
@@ -324,13 +330,13 @@ impl<'a> ImageXObject<'a> {
             })
         }
     }
-    
+
     pub fn rgb8(&self) -> Option<RgbData> {
-        let data  = if self.is_image_mask {
+        let data = if self.is_image_mask {
             return None;
         } else {
             let data_len = self.width as usize * self.height as usize * 3;
-            
+
             let decoded = self
                 .decode_raw()?
                 .chunks(self.color_space.num_components() as usize)
@@ -340,13 +346,9 @@ impl<'a> ImageXObject<'a> {
                 })
                 .collect::<Vec<_>>();
 
-            fix_image_length(
-                decoded,
-                data_len,
-                0,
-            )
+            fix_image_length(decoded, data_len, 0)
         };
-        
+
         Some(RgbData {
             image_data: data,
             width: self.width,
@@ -354,7 +356,7 @@ impl<'a> ImageXObject<'a> {
             interpolate: self.interpolate,
         })
     }
-    
+
     fn decode_raw(&self) -> Option<Vec<f32>> {
         decode(
             &self.decoded,

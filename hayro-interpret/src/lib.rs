@@ -43,7 +43,7 @@ use interpret::text::TextRenderingMode;
 use crate::font::FontQuery;
 use crate::interpret::path::{fill_path, fill_path_impl, fill_stroke_path, stroke_path};
 pub use hayro_syntax::object::ObjectIdentifier;
-pub use image::{RgbData, AlphaData};
+pub use image::{AlphaData, RgbData};
 use interpret::text;
 pub use paint::{Paint, PaintType};
 pub use soft_mask::{MaskType, SoftMask};

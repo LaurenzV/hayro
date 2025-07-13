@@ -8,8 +8,7 @@ use crate::interpret::state::State;
 use crate::shading::Shading;
 use crate::soft_mask::SoftMask;
 use crate::{
-    FillProps, InterpreterSettings, Paint, PaintType, RgbData, AlphaData, StrokeProps,
-    interpret,
+    AlphaData, FillProps, InterpreterSettings, Paint, PaintType, RgbData, StrokeProps, interpret,
 };
 use hayro_syntax::content::{TypedIter, UntypedIter};
 use hayro_syntax::document::page::Resources;
