@@ -91,6 +91,7 @@ pub(crate) fn draw_form_xobject<'a>(
 ) {
     let iter = TypedIter::new(UntypedIter::new(x_object.decoded.as_ref()));
 
+    context.path_mut().truncate(0);
     context.save_state();
     context.pre_concat_affine(x_object.matrix);
     context.push_root_transform();
