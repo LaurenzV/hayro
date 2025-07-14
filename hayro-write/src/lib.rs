@@ -5,7 +5,7 @@ use hayro_syntax::document::page::{Resources, Rotation};
 use hayro_syntax::object::Object;
 use hayro_syntax::object::dict::Dict;
 use hayro_syntax::object::dict::keys::{
-    COLORSPACE, CONTENTS, EXT_G_STATE, FONT, PATTERN, RESOURCES, SHADING, XOBJECT,
+    COLORSPACE, CONTENTS, EXT_G_STATE, FONT, PATTERN, PROPERTIES, RESOURCES, SHADING, XOBJECT,
 };
 use hayro_syntax::object::r#ref::{MaybeRef, ObjRef};
 use hayro_syntax::pdf::Pdf;
@@ -197,20 +197,26 @@ fn write_page(
         |r| r.fonts.clone(),
         hayro_syntax::object::name::Name::new(FONT),
     );
+    let properties = collect_resources(
+        &resources,
+        |r| r.properties.clone(),
+        hayro_syntax::object::name::Name::new(PROPERTIES),
+    );
 
     if !(ext_g_states.is_empty()
         && shadings.is_empty()
         && patterns.is_empty()
         && x_objects.is_empty()
         && color_spaces.is_empty()
+        && properties.is_empty()
         && fonts.is_empty())
     {
         let mut resources = pdf_page.resources();
 
         macro_rules! write {
-            ($name:ident) => {
+            ($name:ident, $key:expr) => {
                 if !$name.is_empty() {
-                    let mut dict = resources.$name();
+                    let mut dict = resources.insert(Name($key)).dict();
 
                     for (name, obj) in $name {
                         obj.write_direct(dict.insert(Name(name.deref())), ctx);
@@ -219,12 +225,13 @@ fn write_page(
             };
         }
 
-        write!(ext_g_states);
-        write!(shadings);
-        write!(patterns);
-        write!(x_objects);
-        write!(color_spaces);
-        write!(fonts);
+        write!(ext_g_states, EXT_G_STATE);
+        write!(shadings, SHADING);
+        write!(patterns, PATTERN);
+        write!(x_objects, XOBJECT);
+        write!(color_spaces, COLORSPACE);
+        write!(fonts, FONT);
+        write!(properties, PROPERTIES);
     }
 
     pdf_page.finish();

@@ -332,6 +332,8 @@ pub struct Resources<'a> {
     pub ext_g_states: Dict<'a>,
     /// The raw dictionary of fonts.
     pub fonts: Dict<'a>,
+    /// The raw dictionary of properties.
+    pub properties: Dict<'a>,
     /// The raw dictionary of color spaces.
     pub color_spaces: Dict<'a>,
     /// The raw dictionary of x objects.
@@ -362,6 +364,7 @@ impl<'a> Resources<'a> {
         let x_objects = resources.get::<Dict>(XOBJECT).unwrap_or_default();
         let patterns = resources.get::<Dict>(PATTERN).unwrap_or_default();
         let shadings = resources.get::<Dict>(SHADING).unwrap_or_default();
+        let properties = resources.get::<Dict>(PROPERTIES).unwrap_or_default();
 
         let parent = parent.map(|r| Box::new(r));
 
@@ -370,6 +373,7 @@ impl<'a> Resources<'a> {
             ext_g_states,
             fonts,
             color_spaces,
+            properties,
             x_objects,
             patterns,
             shadings,

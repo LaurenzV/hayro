@@ -153,3 +153,17 @@ fn write_page_with_inherited_resources_2() {
         Renderer::Pdfium,
     );
 }
+
+// Not writing the `Properties` entry of `Resources` causes rendering issues in
+// Quartz, and ghostscript prints a warning.
+#[cfg(target_os = "macos")]
+#[ignore]
+#[test]
+fn write_page_with_properties() {
+    run_write_test(
+        "write_page_with_properties",
+        "downloads/pdfbox/3754.pdf",
+        &[0],
+        Renderer::Quartz,
+    );
+}
