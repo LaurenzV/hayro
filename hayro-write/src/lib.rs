@@ -75,6 +75,7 @@ pub fn extract_pages(
 
     for page_index in page_indices.iter().copied() {
         let page = pages
+            .get()
             .get(page_index)
             .ok_or(ExtractionError::InvalidPageIndex(page_index, pages.len()))?;
 
