@@ -26,18 +26,19 @@ pub(crate) static DIFFS_PATH: Lazy<PathBuf> = Lazy::new(|| {
 
     path
 });
-pub(crate) static SNAPSHOTS_PATH: Lazy<PathBuf> = Lazy::new(|| WORKSPACE_PATH.join("snapshots"));
+pub(crate) static RENDER_SNAPSHOTS_PATH: Lazy<PathBuf> =
+    Lazy::new(|| WORKSPACE_PATH.join("snapshots/render"));
 
 type RenderedDocument = Vec<Vec<u8>>;
 type RenderedPage = Vec<u8>;
 
 pub fn check_render(name: &str, document: RenderedDocument) {
     let refs_path = if name.starts_with("pdfjs_") {
-        SNAPSHOTS_PATH.join("pdfjs")
+        RENDER_SNAPSHOTS_PATH.join("pdfjs")
     } else if name.starts_with("pdfbox_") {
-        SNAPSHOTS_PATH.join("pdfbox")
+        RENDER_SNAPSHOTS_PATH.join("pdfbox")
     } else {
-        SNAPSHOTS_PATH.clone()
+        RENDER_SNAPSHOTS_PATH.clone()
     };
 
     // Ensure the snapshots subdirectory exists
