@@ -1,8 +1,8 @@
+use hayro_render::Pdf;
+use pdf_writer::{Dict, Name, Obj};
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
-
-use hayro_render::Pdf;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let input_dir = Path::new("pdfs_without_page_attrs");
@@ -24,11 +24,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let entry = entry.ok()?;
             let path = entry.path();
             if path.extension().and_then(|s| s.to_str()) == Some("pdf")
-                && path
-                    .file_name()
-                    .unwrap()
-                    .to_string_lossy()
-                    .contains("5992_1")
+                && path.file_name().unwrap().to_string_lossy().contains("5910")
             {
                 Some(path)
             } else {

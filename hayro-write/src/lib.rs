@@ -4,12 +4,15 @@ use crate::primitive::{WriteDirect, WriteIndirect};
 use hayro_syntax::document::page::{Resources, Rotation};
 use hayro_syntax::object::Object;
 use hayro_syntax::object::dict::Dict;
-use hayro_syntax::object::dict::keys::{CONTENTS, RESOURCES};
-use hayro_syntax::object::r#ref::ObjRef;
+use hayro_syntax::object::dict::keys::{
+    COLORSPACE, CONTENTS, EXT_G_STATE, FONT, PATTERN, RESOURCES, SHADING, XOBJECT,
+};
+use hayro_syntax::object::r#ref::{MaybeRef, ObjRef};
 use hayro_syntax::pdf::Pdf;
 use log::warn;
-use pdf_writer::{Chunk, Finish, Obj, Ref};
-use std::collections::{HashMap, HashSet};
+use pdf_writer::{Chunk, Finish, Name, Obj, Ref};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::ops::Deref;
 
 #[derive(Debug)]
 pub enum ExtractionError {
@@ -166,15 +169,100 @@ fn write_page(
         contents.write_direct(pdf_page.insert(pdf_writer::Name(CONTENTS)), ctx);
     }
 
-    // TODO: Consider inherited resources as well!
-    if let Some(resources) = raw_dict.get_raw::<Dict>(RESOURCES) {
-        resources.write_direct(pdf_page.insert(pdf_writer::Name(RESOURCES)), ctx)
+    let resources = page.resources();
+
+    let ext_g_states = collect_resources(
+        &resources,
+        |r| r.ext_g_states.clone(),
+        hayro_syntax::object::name::Name::new(EXT_G_STATE),
+    );
+    let shadings = collect_resources(
+        &resources,
+        |r| r.shadings.clone(),
+        hayro_syntax::object::name::Name::new(SHADING),
+    );
+    let patterns = collect_resources(
+        &resources,
+        |r| r.patterns.clone(),
+        hayro_syntax::object::name::Name::new(PATTERN),
+    );
+    let x_objects = collect_resources(
+        &resources,
+        |r| r.x_objects.clone(),
+        hayro_syntax::object::name::Name::new(XOBJECT),
+    );
+    let color_spaces = collect_resources(
+        &resources,
+        |r| r.color_spaces.clone(),
+        hayro_syntax::object::name::Name::new(COLORSPACE),
+    );
+    let fonts = collect_resources(
+        &resources,
+        |r| r.fonts.clone(),
+        hayro_syntax::object::name::Name::new(FONT),
+    );
+
+    if !(ext_g_states.is_empty()
+        && shadings.is_empty()
+        && patterns.is_empty()
+        && x_objects.is_empty()
+        && color_spaces.is_empty()
+        && fonts.is_empty())
+    {
+        let mut resources = pdf_page.resources();
+
+        macro_rules! write {
+            ($name:ident) => {
+                if !$name.is_empty() {
+                    let mut dict = resources.$name();
+
+                    for (name, obj) in $name {
+                        obj.write_direct(dict.insert(Name(name.deref())), ctx);
+                    }
+                }
+            };
+        }
+
+        write!(ext_g_states);
+        write!(shadings);
+        write!(patterns);
+        write!(x_objects);
+        write!(color_spaces);
+        write!(fonts);
     }
 
     pdf_page.finish();
     ctx.chunks.push(chunk);
 
     Ok(())
+}
+
+pub fn collect_resources<'a>(
+    resources: &Resources<'a>,
+    mut get_dict: impl FnMut(&Resources<'a>) -> Dict<'a> + Clone,
+    name: hayro_syntax::object::name::Name<'a>,
+) -> BTreeMap<hayro_syntax::object::name::Name<'a>, MaybeRef<Object<'a>>> {
+    let mut map = BTreeMap::new();
+    collect_resources_inner(resources, get_dict, name, &mut map);
+    map
+}
+
+pub fn collect_resources_inner<'a>(
+    resources: &Resources<'a>,
+    mut get_dict: impl FnMut(&Resources<'a>) -> Dict<'a> + Clone,
+    name: hayro_syntax::object::name::Name<'a>,
+    map: &mut BTreeMap<hayro_syntax::object::name::Name<'a>, MaybeRef<Object<'a>>>,
+) {
+    // Process parents first, so that duplicates get overridden by the current dictionary.
+    if let Some(parent) = resources.parent() {
+        collect_resources_inner(parent, get_dict.clone(), name, map);
+    }
+
+    let dict = get_dict(resources);
+
+    for (name, object) in dict.entries() {
+        map.insert(name, object);
+    }
 }
 
 fn convert_rect(hy_rect: &hayro_syntax::object::rect::Rect) -> pdf_writer::Rect {

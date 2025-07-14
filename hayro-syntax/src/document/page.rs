@@ -15,6 +15,7 @@ use crate::xref::XRef;
 use kurbo::Affine;
 use log::warn;
 use std::cell::OnceCell;
+use std::collections::HashSet;
 use std::ops::Deref;
 
 /// A structure holding the pages of a PDF document.
@@ -327,12 +328,18 @@ impl<'a> Page<'a> {
 pub struct Resources<'a> {
     parent: Option<Box<Resources<'a>>>,
     ctx: ReaderContext<'a>,
-    ext_g_states: Dict<'a>,
-    fonts: Dict<'a>,
-    color_spaces: Dict<'a>,
-    x_objects: Dict<'a>,
-    patterns: Dict<'a>,
-    shadings: Dict<'a>,
+    /// The raw dictionary of external graphics states.
+    pub ext_g_states: Dict<'a>,
+    /// The raw dictionary of fonts.
+    pub fonts: Dict<'a>,
+    /// The raw dictionary of color spaces.
+    pub color_spaces: Dict<'a>,
+    /// The raw dictionary of x objects.
+    pub x_objects: Dict<'a>,
+    /// The raw dictionary of patterns.
+    pub patterns: Dict<'a>,
+    /// The raw dictionary of shadings.
+    pub shadings: Dict<'a>,
 }
 
 impl<'a> Resources<'a> {
@@ -391,6 +398,11 @@ impl<'a> Resources<'a> {
             }
             MaybeRef::NotRef(i) => resolve(i),
         }
+    }
+
+    /// Get the parent in the resource, chain, if available.
+    pub fn parent(&self) -> Option<&Resources<'a>> {
+        self.parent.as_deref()
     }
 
     // TODO: Refactor caching mechanism

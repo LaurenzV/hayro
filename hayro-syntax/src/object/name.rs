@@ -35,6 +35,18 @@ impl PartialEq for Name<'_> {
 
 impl Eq for Name<'_> {}
 
+impl PartialOrd for Name<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.deref().partial_cmp(other.deref())
+    }
+}
+
+impl Ord for Name<'_> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.deref().cmp(other.deref())
+    }
+}
+
 impl<'a> AsRef<Name<'a>> for Name<'a> {
     fn as_ref(&self) -> &Name<'a> {
         self

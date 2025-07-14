@@ -121,3 +121,13 @@ fn write_page_missing_ref() {
         Renderer::Pdfium,
     );
 }
+
+#[test]
+fn write_page_with_inherited_resource() {
+    run_write_test(
+        "write_page_with_inherited_resource",
+        "downloads/pdfbox/5910.pdf",
+        &[0],
+        Renderer::Pdfium,
+    );
+}
