@@ -588,9 +588,11 @@ name = "hayro-tests"
 version = "0.1.0"
 dependencies = [
  "hayro-render",
+ "hayro-write",
  "image 0.25.6",
  "once_cell",
  "oxipng",
+ "pdf-writer",
  "sitro",
 ]
 

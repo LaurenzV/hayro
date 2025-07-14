@@ -124,8 +124,6 @@ fn write_page(
     page_ref: Ref,
     ctx: &mut ExtractionContext,
 ) -> Result<(), ExtractionError> {
-    // TODO: In theory, we should also decode content streams and clean them, to remove things
-    // like marked content information.
     let mut chunk = Chunk::new();
     let mut pdf_page = chunk.page(page_ref);
     pdf_page
@@ -145,6 +143,7 @@ fn write_page(
         contents.write_direct(pdf_page.insert(pdf_writer::Name(CONTENTS)), ctx);
     }
 
+    // TODO: Consider inherited resources as well!
     if let Some(resources) = raw_dict.get_raw::<Dict>(RESOURCES) {
         resources.write_direct(pdf_page.insert(pdf_writer::Name(RESOURCES)), ctx)
     }

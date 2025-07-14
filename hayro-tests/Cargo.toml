@@ -15,6 +15,8 @@ path = "tests/mod.rs"
 
 [dependencies]
 hayro-render = { path = "../hayro-render", features = ["jpeg2000"] }
+hayro-write = { workspace = true }
+pdf-writer = { workspace = true }
 
 [dev-dependencies]
 once_cell = { workspace = true }

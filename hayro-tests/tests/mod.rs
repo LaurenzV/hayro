@@ -2,8 +2,11 @@ use hayro_render::FontQuery;
 use hayro_render::Pdf;
 use hayro_render::StandardFont;
 use hayro_render::{FontData, InterpreterSettings};
+use hayro_write::extract_pages;
 use image::{Rgba, RgbaImage, load_from_memory};
 use once_cell::sync::Lazy;
+use pdf_writer::Ref;
+use sitro::{RenderOptions, Renderer};
 use std::cmp::max;
 use std::ops::RangeInclusive;
 use std::path::PathBuf;
@@ -13,6 +16,7 @@ use std::sync::Arc;
 #[allow(non_snake_case)]
 mod render;
 mod custom;
+mod write;
 
 const REPLACE: Option<&str> = option_env!("REPLACE");
 
@@ -28,17 +32,19 @@ pub(crate) static DIFFS_PATH: Lazy<PathBuf> = Lazy::new(|| {
 });
 pub(crate) static RENDER_SNAPSHOTS_PATH: Lazy<PathBuf> =
     Lazy::new(|| WORKSPACE_PATH.join("snapshots/render"));
+pub(crate) static WRITE_SNAPSHOTS_PATH: Lazy<PathBuf> =
+    Lazy::new(|| WORKSPACE_PATH.join("snapshots/write"));
 
 type RenderedDocument = Vec<Vec<u8>>;
 type RenderedPage = Vec<u8>;
 
-pub fn check_render(name: &str, document: RenderedDocument) {
+pub fn check_render(name: &str, snapshot_path: PathBuf, document: RenderedDocument) {
     let refs_path = if name.starts_with("pdfjs_") {
-        RENDER_SNAPSHOTS_PATH.join("pdfjs")
+        snapshot_path.join("pdfjs")
     } else if name.starts_with("pdfbox_") {
-        RENDER_SNAPSHOTS_PATH.join("pdfbox")
+        snapshot_path.join("pdfbox")
     } else {
-        RENDER_SNAPSHOTS_PATH.clone()
+        snapshot_path.clone()
     };
 
     // Ensure the snapshots subdirectory exists
@@ -156,11 +162,15 @@ fn parse_range(range_str: &str) -> Option<RangeInclusive<usize>> {
     None
 }
 
-pub fn run_render_test(name: &str, file_path: &str, range_str: Option<&str>) {
-    let path = WORKSPACE_PATH.join(file_path);
+fn load_pdf(path: &str) -> Pdf {
+    let path = WORKSPACE_PATH.join(path);
     let content = std::fs::read(&path).unwrap();
     let data = Arc::new(content);
-    let pdf = Pdf::new(data).unwrap();
+    Pdf::new(data).unwrap()
+}
+
+pub fn run_render_test(name: &str, file_path: &str, range_str: Option<&str>) {
+    let pdf = load_pdf(file_path);
 
     let settings = InterpreterSettings {
         font_resolver: Arc::new(|query| match query {
@@ -172,8 +182,34 @@ pub fn run_render_test(name: &str, file_path: &str, range_str: Option<&str>) {
     let range = range_str.and_then(parse_range);
     check_render(
         name,
+        RENDER_SNAPSHOTS_PATH.clone(),
         hayro_render::render_png(&pdf, 1.0, settings, range).unwrap(),
     );
+}
+
+pub fn run_write_test(name: &str, file_path: &str, page_indices: &[usize], renderer: Renderer) {
+    let hayro_pdf = load_pdf(file_path);
+
+    let mut pdf = pdf_writer::Pdf::new();
+    let mut next_ref = Ref::new(1);
+
+    let catalog_id = next_ref.bump();
+    let page_tree_id = next_ref.bump();
+    pdf.catalog(catalog_id).pages(page_tree_id);
+
+    let extracted = extract_pages(&hayro_pdf, next_ref, page_tree_id, &page_indices).unwrap();
+    let count = extracted.page_refs.len();
+    pdf.pages(page_tree_id)
+        .kids(extracted.page_refs)
+        .count(count as i32);
+    pdf.extend(&extracted.chunk);
+
+    let buf: Vec<u8> = pdf.finish();
+
+    let rendered = renderer
+        .render_as_png(&buf, &RenderOptions::default())
+        .unwrap();
+    check_render(name, WRITE_SNAPSHOTS_PATH.clone(), rendered);
 }
 
 pub fn get_diff(expected_image: &RgbaImage, actual_image: &RgbaImage) -> (RgbaImage, u32) {
