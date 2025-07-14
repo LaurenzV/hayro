@@ -119,6 +119,26 @@ pub fn extract_pages(
     })
 }
 
+// Only used for testing.
+#[doc(hidden)]
+pub fn extract_pages_to_pdf(hayro_pdf: &Pdf, page_indices: &[usize]) -> Vec<u8> {
+    let mut pdf = pdf_writer::Pdf::new();
+    let mut next_ref = Ref::new(1);
+
+    let catalog_id = next_ref.bump();
+    let page_tree_id = next_ref.bump();
+    pdf.catalog(catalog_id).pages(page_tree_id);
+
+    let extracted = extract_pages(&hayro_pdf, next_ref, page_tree_id, &page_indices).unwrap();
+    let count = extracted.page_refs.len();
+    pdf.pages(page_tree_id)
+        .kids(extracted.page_refs)
+        .count(count as i32);
+    pdf.extend(&extracted.chunk);
+
+    pdf.finish()
+}
+
 fn write_page(
     page: &hayro_syntax::document::page::Page,
     page_ref: Ref,

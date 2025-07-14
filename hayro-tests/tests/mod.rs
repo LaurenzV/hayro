@@ -190,21 +190,7 @@ pub fn run_render_test(name: &str, file_path: &str, range_str: Option<&str>) {
 pub fn run_write_test(name: &str, file_path: &str, page_indices: &[usize], renderer: Renderer) {
     let hayro_pdf = load_pdf(file_path);
 
-    let mut pdf = pdf_writer::Pdf::new();
-    let mut next_ref = Ref::new(1);
-
-    let catalog_id = next_ref.bump();
-    let page_tree_id = next_ref.bump();
-    pdf.catalog(catalog_id).pages(page_tree_id);
-
-    let extracted = extract_pages(&hayro_pdf, next_ref, page_tree_id, &page_indices).unwrap();
-    let count = extracted.page_refs.len();
-    pdf.pages(page_tree_id)
-        .kids(extracted.page_refs)
-        .count(count as i32);
-    pdf.extend(&extracted.chunk);
-
-    let buf: Vec<u8> = pdf.finish();
+    let buf = hayro_write::extract_pages_to_pdf(&hayro_pdf, page_indices);
 
     let rendered = renderer
         .render_as_png(&buf, &RenderOptions::default())
