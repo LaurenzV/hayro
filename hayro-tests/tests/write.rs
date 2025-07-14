@@ -123,10 +123,20 @@ fn write_page_missing_ref() {
 }
 
 #[test]
-fn write_page_with_inherited_resource() {
+fn write_page_with_inherited_resources_1() {
     run_write_test(
         "write_page_with_inherited_resource",
         "downloads/pdfbox/5910.pdf",
+        &[0],
+        Renderer::Pdfium,
+    );
+}
+
+#[test]
+fn write_page_with_inherited_resources_2() {
+    run_write_test(
+        "write_page_with_inherited_resources_2",
+        "pdfs/pdfjs/issue17065.pdf",
         &[0],
         Renderer::Pdfium,
     );

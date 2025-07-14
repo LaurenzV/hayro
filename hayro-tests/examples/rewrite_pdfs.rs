@@ -24,7 +24,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let entry = entry.ok()?;
             let path = entry.path();
             if path.extension().and_then(|s| s.to_str()) == Some("pdf")
-                && path.file_name().unwrap().to_string_lossy().contains("5910")
+                && path
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .contains("issue17065")
             {
                 Some(path)
             } else {
