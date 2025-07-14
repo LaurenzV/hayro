@@ -83,14 +83,10 @@ pub fn extract_pages(
             .get(page_index)
             .ok_or(ExtractionError::InvalidPageIndex(page_index, pages.len()))?;
 
-        if let Some(ref_) = ctx.page_cache.get(&page_index) {
-            ctx.page_refs.push(*ref_);
-        } else {
-            let page_ref = ctx.new_ref();
-            ctx.page_cache.insert(page_index, page_ref);
-            write_page(page, page_ref, &mut ctx)?;
-            ctx.page_refs.push(page_ref);
-        }
+        let page_ref = ctx.new_ref();
+        ctx.page_cache.insert(page_index, page_ref);
+        write_page(page, page_ref, &mut ctx)?;
+        ctx.page_refs.push(page_ref);
     }
 
     while let Some(ref_) = ctx.to_visit_refs.pop() {

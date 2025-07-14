@@ -1,4 +1,5 @@
-use crate::run_write_test;
+use crate::{load_pdf, run_write_test};
+use pdf_writer::Ref;
 use sitro::Renderer;
 
 #[test]
@@ -9,6 +10,17 @@ fn write_page_basic_1() {
         &[0],
         Renderer::Pdfium,
     );
+}
+
+#[test]
+fn dont_cache_page_references() {
+    let hayro_pdf = load_pdf("pdfs/clip_path_evenodd.pdf");
+    let extracted =
+        hayro_write::extract_pages(&hayro_pdf, Ref::new(2), Ref::new(1), &[0, 0]).unwrap();
+
+    // Adobe Acrobat does not seem to like reusing the same page reference, so we must always
+    // create a new one and not cache them.
+    assert!(extracted.page_refs[0] != extracted.page_refs[1]);
 }
 
 #[test]
