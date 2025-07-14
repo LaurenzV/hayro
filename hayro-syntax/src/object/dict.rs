@@ -83,12 +83,11 @@ impl<'a> Dict<'a> {
         self.0.offsets.keys().cloned()
     }
 
-    /// An iterator over all entries in the dictionary.
+    /// An iterator over all entries in the dictionary, sorted by key.
     pub fn entries(&self) -> impl Iterator<Item = (Name, MaybeRef<Object>)> {
         let mut sorted_keys = self.keys().collect::<Vec<_>>();
         sorted_keys.sort_by(|n1, n2| n1.as_ref().cmp(n2.as_ref()));
         sorted_keys.into_iter().map(|k| {
-            println!("checking key {:?}", std::str::from_utf8(k.as_ref()));
             let obj = self.get_raw(k.deref()).unwrap();
             (k, obj)
         })

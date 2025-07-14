@@ -110,3 +110,14 @@ fn write_page_multiple_pages_2() {
         Renderer::Pdfium,
     );
 }
+
+// Original PDF contains reference for `ToUnicode`, but doesn't actually have it in the PDF.
+#[test]
+fn write_page_missing_ref() {
+    run_write_test(
+        "write_page_missing_ref",
+        "downloads/pdfbox/5992_1.pdf",
+        &[0],
+        Renderer::Pdfium,
+    );
+}

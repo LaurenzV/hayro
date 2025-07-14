@@ -7,6 +7,7 @@ use hayro_syntax::object::dict::Dict;
 use hayro_syntax::object::dict::keys::{CONTENTS, RESOURCES};
 use hayro_syntax::object::r#ref::ObjRef;
 use hayro_syntax::pdf::Pdf;
+use log::warn;
 use pdf_writer::{Chunk, Finish, Obj, Ref};
 use std::collections::{HashMap, HashSet};
 
@@ -90,21 +91,20 @@ pub fn extract_pages(
     }
 
     while let Some(ref_) = ctx.to_visit_refs.pop() {
-        println!("visiting {:?}", ref_);
         if ctx.visited_objects.contains(&ref_) {
             continue;
         }
 
         let mut chunk = Chunk::new();
-        let object = pdf
-            .xref()
-            .get::<Object>(ref_.into())
-            .ok_or(ExtractionError::InvalidPdf)?;
-        let new_ref = ctx.map_ref(ref_);
-        object.write_indirect(&mut chunk, new_ref, &mut ctx);
-        ctx.chunks.push(chunk);
+        if let Some(object) = pdf.xref().get::<Object>(ref_.into()) {
+            let new_ref = ctx.map_ref(ref_);
+            object.write_indirect(&mut chunk, new_ref, &mut ctx);
+            ctx.chunks.push(chunk);
 
-        ctx.visited_objects.insert(ref_);
+            ctx.visited_objects.insert(ref_);
+        } else {
+            warn!("failed to extract object with ref: {:?}", ref_);
+        }
     }
 
     let mut global_chunk = Chunk::new();

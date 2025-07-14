@@ -24,7 +24,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let entry = entry.ok()?;
             let path = entry.path();
             if path.extension().and_then(|s| s.to_str()) == Some("pdf")
-                && path.file_name().unwrap().to_string_lossy().contains("2363")
+                && path
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .contains("5992_1")
             {
                 Some(path)
             } else {
@@ -58,12 +62,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
 
                 let page_indices: Vec<usize> = (0..page_count).collect();
-
-                // Skip problematic files known to cause issues
-                if filename.to_string_lossy().contains("5992_1") {
-                    eprintln!("  Skipping known problematic file: {:?}", filename);
-                    continue;
-                }
 
                 let output_bytes = hayro_write::extract_pages_to_pdf(&hayro_pdf, &page_indices);
 

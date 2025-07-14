@@ -602,6 +602,7 @@ version = "0.1.0"
 dependencies = [
  "hayro-syntax",
  "lazy_static",
+ "log",
  "pdf-writer",
 ]
 
