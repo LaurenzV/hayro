@@ -19,6 +19,7 @@ mod custom;
 mod write;
 
 const REPLACE: Option<&str> = option_env!("REPLACE");
+const STORE: Option<&str> = option_env!("STORE");
 
 pub(crate) static WORKSPACE_PATH: Lazy<PathBuf> =
     Lazy::new(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(""));
@@ -34,6 +35,7 @@ pub(crate) static RENDER_SNAPSHOTS_PATH: Lazy<PathBuf> =
     Lazy::new(|| WORKSPACE_PATH.join("snapshots/render"));
 pub(crate) static WRITE_SNAPSHOTS_PATH: Lazy<PathBuf> =
     Lazy::new(|| WORKSPACE_PATH.join("snapshots/write"));
+pub(crate) static STORE_PATH: Lazy<PathBuf> = Lazy::new(|| WORKSPACE_PATH.join("store"));
 
 type RenderedDocument = Vec<Vec<u8>>;
 type RenderedPage = Vec<u8>;
@@ -191,6 +193,12 @@ pub fn run_write_test(name: &str, file_path: &str, page_indices: &[usize], rende
     let hayro_pdf = load_pdf(file_path);
 
     let buf = hayro_write::extract_pages_to_pdf(&hayro_pdf, page_indices);
+
+    if STORE.is_some() {
+        let _ = std::fs::create_dir_all(&STORE_PATH.clone());
+
+        std::fs::write(STORE_PATH.join(format!("{name}.pdf")), &buf).unwrap();
+    }
 
     let rendered = renderer
         .render_as_png(&buf, &RenderOptions::default())
