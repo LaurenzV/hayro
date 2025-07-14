@@ -90,6 +90,7 @@ pub fn extract_pages(
     }
 
     while let Some(ref_) = ctx.to_visit_refs.pop() {
+        println!("visiting {:?}", ref_);
         if ctx.visited_objects.contains(&ref_) {
             continue;
         }
@@ -120,6 +121,8 @@ pub fn extract_pages(
 }
 
 // Only used for testing.
+/// Extract the given pages from the PDF and resave them as a new PDF. This function shouldn't be
+/// used directly and only exists for test purposes.
 #[doc(hidden)]
 pub fn extract_pages_to_pdf(hayro_pdf: &Pdf, page_indices: &[usize]) -> Vec<u8> {
     let mut pdf = pdf_writer::Pdf::new();

@@ -1,0 +1,84 @@
+use std::fs;
+use std::path::Path;
+use std::sync::Arc;
+
+use hayro_render::Pdf;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let input_dir = Path::new("pdfs_without_page_attrs");
+    let output_dir = Path::new("rewritten_pdfs");
+
+    if !input_dir.exists() {
+        eprintln!(
+            "Input directory '{}' does not exist. Run copy_pdfs_without_pages.py first.",
+            input_dir.display()
+        );
+        return Ok(());
+    }
+
+    fs::create_dir_all(output_dir)?;
+
+    // Collect all PDF files and sort them
+    let mut pdf_files: Vec<_> = fs::read_dir(input_dir)?
+        .filter_map(|entry| {
+            let entry = entry.ok()?;
+            let path = entry.path();
+            if path.extension().and_then(|s| s.to_str()) == Some("pdf")
+                && path.file_name().unwrap().to_string_lossy().contains("2363")
+            {
+                Some(path)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    // Sort by filename
+    pdf_files.sort_by(|a, b| {
+        a.file_name()
+            .unwrap()
+            .to_string_lossy()
+            .cmp(&b.file_name().unwrap().to_string_lossy())
+    });
+
+    for path in pdf_files {
+        let filename = path.file_name().unwrap();
+        println!("Processing: {:?}", filename);
+
+        let pdf_bytes = fs::read(&path)?;
+        let data = Arc::new(pdf_bytes);
+
+        match Pdf::new(data) {
+            Some(hayro_pdf) => {
+                let page_count = hayro_pdf.pages().map(|pages| pages.len()).unwrap_or(0);
+
+                if page_count == 0 {
+                    eprintln!("  Warning: No pages found in {:?}", filename);
+                    continue;
+                }
+
+                let page_indices: Vec<usize> = (0..page_count).collect();
+
+                // Skip problematic files known to cause issues
+                if filename.to_string_lossy().contains("5992_1") {
+                    eprintln!("  Skipping known problematic file: {:?}", filename);
+                    continue;
+                }
+
+                let output_bytes = hayro_write::extract_pages_to_pdf(&hayro_pdf, &page_indices);
+
+                let output_path = output_dir.join(filename);
+                fs::write(&output_path, output_bytes)?;
+
+                println!("  Rewrote {} pages to {:?}", page_count, output_path);
+            }
+            None => {
+                eprintln!("  Error parsing {:?}", filename);
+            }
+        }
+    }
+
+    println!("\nDone! Rewritten PDFs are in '{}'", output_dir.display());
+
+    Ok(())
+}
