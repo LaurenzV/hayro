@@ -15,8 +15,25 @@ enum Cow<'a> {
 }
 
 /// A PDF name.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone)]
 pub struct Name<'a>(Cow<'a>);
+
+// Two names should be equal even if one is borrowed and the other is owned,
+// so we need these manual implementations.
+
+impl<'a> Hash for Name<'a> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.deref().hash(state)
+    }
+}
+
+impl PartialEq for Name<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.deref() == other.deref()
+    }
+}
+
+impl Eq for Name<'_> {}
 
 impl<'a> AsRef<Name<'a>> for Name<'a> {
     fn as_ref(&self) -> &Name<'a> {

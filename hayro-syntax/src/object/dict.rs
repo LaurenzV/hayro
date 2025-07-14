@@ -981,4 +981,12 @@ mod tests {
 
         assert_eq!(dict.get_dict().len(), 5);
     }
+
+    #[test]
+    fn dict_with_escaped_name() {
+        let dict_data = b"<< /PANTONE#20104#20C 234 >>";
+        let dict = dict_impl(dict_data).unwrap();
+
+        assert!(dict.contains_key(b"PANTONE 104 C".as_ref()));
+    }
 }
