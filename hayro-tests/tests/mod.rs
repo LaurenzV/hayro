@@ -156,7 +156,7 @@ fn parse_range(range_str: &str) -> Option<RangeInclusive<usize>> {
     None
 }
 
-pub fn run_test(name: &str, file_path: &str, range_str: Option<&str>) {
+pub fn run_render_test(name: &str, file_path: &str, range_str: Option<&str>) {
     let path = WORKSPACE_PATH.join(file_path);
     let content = std::fs::read(&path).unwrap();
     let data = Arc::new(content);

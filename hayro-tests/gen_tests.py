@@ -207,7 +207,7 @@ class TestGenerator:
                 file_path = entry['file']
             func_name = entry_id.replace('-', '_')
             
-        return f'#[test] fn {func_name}() {{ run_test("{func_name}", "{file_path}", {length}); }}'
+        return f'#[test] fn {func_name}() {{ run_render_test("{func_name}", "{file_path}", {length}); }}'
         
     def generate_tests(self):
         """Main function to generate tests from manifest."""
@@ -273,7 +273,7 @@ class TestGenerator:
         # Write Rust test file
         try:
             with open(self.output_file, 'w') as f:
-                f.write('use crate::run_test;\n\n')
+                f.write('use crate::run_render_test;\n\n')
                 f.write('\n'.join(rust_functions))
                 
             print(f"\n🎉 Generated {len(rust_functions)} Rust test functions")
