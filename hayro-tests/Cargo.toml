@@ -20,3 +20,4 @@ hayro-render = { path = "../hayro-render", features = ["jpeg2000"] }
 once_cell = { workspace = true }
 image = {  workspace = true }
 oxipng = { workspace = true }
+sitro = { workspace = true }

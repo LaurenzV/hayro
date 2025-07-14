@@ -12,7 +12,7 @@ use std::sync::Arc;
 #[rustfmt::skip]
 #[allow(non_snake_case)]
 mod render;
-mod fuzzed;
+mod custom;
 
 const REPLACE: Option<&str> = option_env!("REPLACE");
 
