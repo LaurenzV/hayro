@@ -260,22 +260,29 @@ impl<'a> Page<'a> {
         let (_, base_height) = self.base_dimensions();
         let (width, height) = self.render_dimensions();
 
+        let horizontal_t =
+            Affine::rotate(90.0f64.to_radians()) * Affine::translate((0.0, -width as f64));
+        let flipped_horizontal_t =
+            Affine::translate((0.0, height as f64)) * Affine::rotate(-90.0f64.to_radians());
+
         let rotation_transform = match self.rotation() {
             Rotation::None => Affine::IDENTITY,
             Rotation::Horizontal => {
-                let t =
-                    Affine::rotate(90.0f64.to_radians()) * Affine::translate((0.0, -width as f64));
-
-                t
+                if invert_y {
+                    horizontal_t
+                } else {
+                    flipped_horizontal_t
+                }
             }
             Rotation::Flipped => {
                 Affine::scale(-1.0) * Affine::translate((-width as f64, -height as f64))
             }
             Rotation::FlippedHorizontal => {
-                let t =
-                    Affine::translate((0.0, height as f64)) * Affine::rotate(-90.0f64.to_radians());
-
-                t
+                if invert_y {
+                    flipped_horizontal_t
+                } else {
+                    horizontal_t
+                }
             }
         };
 

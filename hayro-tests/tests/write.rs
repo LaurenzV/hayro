@@ -91,21 +91,10 @@ fn write_page_mediabox_1() {
 }
 
 #[test]
-fn write_page_mediabox_2() {
+fn write_page_rotation() {
     run_write_test(
-        "write_page_mediabox_2",
-        "pdfs/page_media_box_top_left.pdf",
-        &[0],
-        Renderer::Pdfium,
-        true,
-    );
-}
-
-#[test]
-fn write_page_mediabox_3() {
-    run_write_test(
-        "write_page_mediabox_3",
-        "pdfs/page_media_box_zoomed_out.pdf",
+        "write_page_rotation",
+        "pdfs/page_rotation_270.pdf",
         &[0],
         Renderer::Pdfium,
         true,
@@ -232,6 +221,50 @@ fn write_xobject_mediabox_3() {
     run_write_test(
         "write_xobject_mediabox_3",
         "pdfs/page_media_box_zoomed_out.pdf",
+        &[0],
+        Renderer::Pdfium,
+        false,
+    );
+}
+
+#[test]
+fn write_xobject_rotation_none() {
+    run_write_test(
+        "write_xobject_rotation_none",
+        "pdfs/page_rotation_none.pdf",
+        &[0],
+        Renderer::Pdfium,
+        false,
+    );
+}
+
+#[test]
+fn write_xobject_rotation_90() {
+    run_write_test(
+        "write_xobject_rotation_90",
+        "pdfs/page_rotation_90.pdf",
+        &[0],
+        Renderer::Pdfium,
+        false,
+    );
+}
+
+#[test]
+fn write_xobject_rotation_180() {
+    run_write_test(
+        "write_xobject_rotation_180",
+        "pdfs/page_rotation_180.pdf",
+        &[0],
+        Renderer::Pdfium,
+        false,
+    );
+}
+
+#[test]
+fn write_xobject_rotation_270() {
+    run_write_test(
+        "write_xobject_rotation_270",
+        "pdfs/page_rotation_270.pdf",
         &[0],
         Renderer::Pdfium,
         false,
