@@ -236,6 +236,7 @@ use crate::run_test;
 #[test] fn resvg_masking_mask_recursive_on_self() { run_test("resvg_masking_mask_recursive_on_self", "pdfs/resvg_masking_mask_recursive_on_self.pdf", None); }
 #[test] fn resvg_masking_mask_transform_on_shape() { run_test("resvg_masking_mask_transform_on_shape", "pdfs/resvg_masking_mask_transform_on_shape.pdf", None); }
 #[test] fn resvg_masking_mask_with_image() { run_test("resvg_masking_mask_with_image", "pdfs/resvg_masking_mask_with_image.pdf", None); }
+#[test] fn issue40() { run_test("issue40", "downloads/issue40.pdf", None); }
 #[test] fn pdfjs_20130226130259() { run_test("pdfjs_20130226130259", "downloads/pdfjs/20130226130259.pdf", Some("0..=0")); }
 #[test] fn pdfjs_IdentityToUnicodeMap_charCodeOf() { run_test("pdfjs_IdentityToUnicodeMap_charCodeOf", "pdfs/pdfjs/IdentityToUnicodeMap_charCodeOf.pdf", None); }
 #[test] fn pdfjs_IndexedCS_negative_and_high() { run_test("pdfjs_IndexedCS_negative_and_high", "pdfs/pdfjs/IndexedCS_negative_and_high.pdf", None); }
