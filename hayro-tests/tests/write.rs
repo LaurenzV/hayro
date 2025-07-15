@@ -272,6 +272,17 @@ fn write_xobject_rotation_270() {
 }
 
 #[test]
+fn write_xobject_rotation_and_cropbox() {
+    run_write_test(
+        "write_xobject_rotation_and_cropbox",
+        "downloads/pdfbox/1697.pdf",
+        &[0],
+        Renderer::Pdfium,
+        false,
+    );
+}
+
+#[test]
 fn write_xobject_contents_array() {
     run_write_test(
         "write_xobject_contents_array",

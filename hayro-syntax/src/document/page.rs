@@ -233,7 +233,8 @@ impl<'a> Page<'a> {
         self.crop_box
     }
 
-    fn intersected_crop_box(&self) -> Rect {
+    /// Get the crop box of the page.
+    pub fn intersected_crop_box(&self) -> Rect {
         self.crop_box().intersect(self.media_box())
     }
 

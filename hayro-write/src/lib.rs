@@ -257,13 +257,14 @@ fn write_xobject(
     x_object.deref_mut().filter(Filter::FlateDecode);
 
     let render_dimensions = page.render_dimensions();
+    let bbox = page.crop_box();
     let initial_transform = page.initial_transform(false);
 
     x_object.bbox(pdf_writer::Rect::new(
-        0.0,
-        0.0,
-        render_dimensions.0,
-        render_dimensions.1,
+        bbox.x0 as f32,
+        bbox.y0 as f32,
+        bbox.x1 as f32,
+        bbox.y1 as f32,
     ));
 
     let i = initial_transform.as_coeffs();
