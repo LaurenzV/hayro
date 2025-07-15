@@ -5,9 +5,11 @@ use hayro_syntax::document::page::{Resources, Rotation};
 use hayro_syntax::object::Object;
 use hayro_syntax::object::dict::Dict;
 use hayro_syntax::object::dict::keys::{
-    COLORSPACE, CONTENTS, EXT_G_STATE, FONT, PATTERN, PROPERTIES, RESOURCES, SHADING, XOBJECT,
+    COLORSPACE, CONTENTS, EXT_G_STATE, FILTER, FONT, GROUP, PATTERN, PROPERTIES, RESOURCES,
+    SHADING, XOBJECT,
 };
 use hayro_syntax::object::r#ref::{MaybeRef, ObjRef};
+use hayro_syntax::object::stream::Stream;
 use hayro_syntax::pdf::Pdf;
 use log::warn;
 use pdf_writer::{Chunk, Finish, Name, Obj, Ref};
@@ -165,8 +167,69 @@ fn write_page(
         contents.write_direct(pdf_page.insert(pdf_writer::Name(CONTENTS)), ctx);
     }
 
-    let resources = page.resources();
+    if let Some(group) = raw_dict.get_raw::<Object>(GROUP) {
+        group.write_direct(pdf_page.insert(pdf_writer::Name(GROUP)), ctx);
+    }
 
+    serialize_resources(page.resources(), ctx, &mut pdf_page);
+
+    pdf_page.finish();
+    ctx.chunks.push(chunk);
+
+    Ok(())
+}
+
+fn write_xobject(
+    page: &hayro_syntax::document::page::Page,
+    xobj_ref: Ref,
+    ctx: &mut ExtractionContext,
+) -> Result<(), ExtractionError> {
+    let raw_dict = page.raw();
+    let content_stream = raw_dict
+        .get::<Stream>(CONTENTS)
+        .ok_or(ExtractionError::InvalidPdf)?;
+    let stream_dict = content_stream.dict();
+
+    let mut chunk = Chunk::new();
+    let mut x_object = chunk.form_xobject(xobj_ref, content_stream.raw_data());
+
+    if let Some(filters) = stream_dict.get::<Object>(FILTER) {
+        filters.write_direct(x_object.insert(pdf_writer::Name(FILTER)), ctx);
+    }
+
+    let render_dimensions = page.render_dimensions();
+    let initial_transform = page.initial_transform(false);
+
+    x_object.bbox(pdf_writer::Rect::new(
+        0.0,
+        0.0,
+        render_dimensions.0,
+        render_dimensions.1,
+    ));
+
+    let i = initial_transform.as_coeffs();
+    x_object.matrix([
+        i[0] as f32,
+        i[1] as f32,
+        i[2] as f32,
+        i[3] as f32,
+        i[4] as f32,
+        i[5] as f32,
+    ]);
+
+    serialize_resources(page.resources(), ctx, &mut x_object);
+
+    x_object.finish();
+    ctx.chunks.push(chunk);
+
+    Ok(())
+}
+
+fn serialize_resources(
+    resources: &Resources,
+    ctx: &mut ExtractionContext,
+    writer: &mut impl ResourcesExt,
+) {
     let ext_g_states = collect_resources(
         &resources,
         |r| r.ext_g_states.clone(),
@@ -211,7 +274,7 @@ fn write_page(
         && properties.is_empty()
         && fonts.is_empty())
     {
-        let mut resources = pdf_page.resources();
+        let mut resources = writer.resources();
 
         macro_rules! write {
             ($name:ident, $key:expr) => {
@@ -233,14 +296,9 @@ fn write_page(
         write!(fonts, FONT);
         write!(properties, PROPERTIES);
     }
-
-    pdf_page.finish();
-    ctx.chunks.push(chunk);
-
-    Ok(())
 }
 
-pub fn collect_resources<'a>(
+fn collect_resources<'a>(
     resources: &Resources<'a>,
     mut get_dict: impl FnMut(&Resources<'a>) -> Dict<'a> + Clone,
     name: hayro_syntax::object::name::Name<'a>,
@@ -250,7 +308,7 @@ pub fn collect_resources<'a>(
     map
 }
 
-pub fn collect_resources_inner<'a>(
+fn collect_resources_inner<'a>(
     resources: &Resources<'a>,
     mut get_dict: impl FnMut(&Resources<'a>) -> Dict<'a> + Clone,
     name: hayro_syntax::object::name::Name<'a>,
@@ -275,4 +333,20 @@ fn convert_rect(hy_rect: &hayro_syntax::object::rect::Rect) -> pdf_writer::Rect 
         hy_rect.x1 as f32,
         hy_rect.y1 as f32,
     )
+}
+
+trait ResourcesExt {
+    fn resources(&mut self) -> pdf_writer::writers::Resources;
+}
+
+impl ResourcesExt for pdf_writer::writers::Page<'_> {
+    fn resources(&mut self) -> pdf_writer::writers::Resources {
+        Self::resources(self)
+    }
+}
+
+impl ResourcesExt for pdf_writer::writers::FormXObject<'_> {
+    fn resources(&mut self) -> pdf_writer::writers::Resources {
+        Self::resources(self)
+    }
 }

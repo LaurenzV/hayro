@@ -255,7 +255,7 @@ impl<'a> Page<'a> {
     /// Return the initial transform that should be applied when rendering. This accounts for a
     /// number of factors, such as the mismatch between PDF's y-up and most renderers' y-down
     /// coordinate system, the rotation of the page and the offset of the crop box.
-    pub fn initial_transform(&self) -> kurbo::Affine {
+    pub fn initial_transform(&self, invert_y: bool) -> kurbo::Affine {
         let crop_box = self.intersected_crop_box();
         let (_, base_height) = self.base_dimensions();
         let (width, height) = self.render_dimensions();
@@ -279,9 +279,13 @@ impl<'a> Page<'a> {
             }
         };
 
-        rotation_transform
-            * Affine::new([1.0, 0.0, 0.0, -1.0, 0.0, base_height as f64])
-            * Affine::translate((-crop_box.x0, -crop_box.y0))
+        let inversion_transform = if invert_y {
+            Affine::new([1.0, 0.0, 0.0, -1.0, 0.0, base_height as f64])
+        } else {
+            Affine::IDENTITY
+        };
+
+        rotation_transform * inversion_transform * Affine::translate((-crop_box.x0, -crop_box.y0))
     }
 
     /// Return the with and height of the page that should be assumed when rendering the page.

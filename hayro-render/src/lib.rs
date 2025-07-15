@@ -374,7 +374,7 @@ impl Device for Renderer {
 pub fn render(page: &Page, settings: InterpreterSettings, scale: f32) -> Pixmap {
     let (width, height) = page.render_dimensions();
     let (scaled_width, scaled_height) = ((width * scale) as f64, (height * scale) as f64);
-    let initial_transform = Affine::scale(scale as f64) * page.initial_transform();
+    let initial_transform = Affine::scale(scale as f64) * page.initial_transform(true);
 
     let (pix_width, pix_height) = (scaled_width.floor() as u16, scaled_height.floor() as u16);
     let mut state = Context::new(
