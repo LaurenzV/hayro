@@ -25,7 +25,7 @@ pub enum ExtractionError {
 
 pub struct ExtractedPages {
     pub chunk: Chunk,
-    pub page_refs: Vec<Ref>,
+    pub root_refs: Vec<Ref>,
     pub next_ref: Ref,
 }
 
@@ -33,10 +33,9 @@ struct ExtractionContext {
     chunks: Vec<Chunk>,
     visited_objects: HashSet<ObjRef>,
     to_visit_refs: Vec<ObjRef>,
-    page_refs: Vec<Ref>,
+    root_refs: Vec<Ref>,
     next_ref: Ref,
     ref_map: HashMap<ObjRef, Ref>,
-    page_cache: HashMap<usize, Ref>,
     page_tree_parent_ref: Ref,
 }
 
@@ -48,8 +47,7 @@ impl ExtractionContext {
             to_visit_refs: Vec::new(),
             next_ref,
             ref_map: HashMap::new(),
-            page_cache: HashMap::new(),
-            page_refs: Vec::new(),
+            root_refs: Vec::new(),
             page_tree_parent_ref,
         }
     }
@@ -75,6 +73,7 @@ pub fn extract_pages(
     next_ref: Ref,
     page_tree_parent_ref: Ref,
     page_indices: &[usize],
+    as_page: bool,
 ) -> Result<ExtractedPages, ExtractionError> {
     let pages = pdf.pages().ok_or(ExtractionError::LoadPdfError)?;
     let mut ctx = ExtractionContext::new(next_ref, page_tree_parent_ref);
@@ -85,28 +84,16 @@ pub fn extract_pages(
             .get(page_index)
             .ok_or(ExtractionError::InvalidPageIndex(page_index, pages.len()))?;
 
-        let page_ref = ctx.new_ref();
-        ctx.page_cache.insert(page_index, page_ref);
-        write_page(page, page_ref, &mut ctx)?;
-        ctx.page_refs.push(page_ref);
-    }
-
-    while let Some(ref_) = ctx.to_visit_refs.pop() {
-        if ctx.visited_objects.contains(&ref_) {
-            continue;
-        }
-
-        let mut chunk = Chunk::new();
-        if let Some(object) = pdf.xref().get::<Object>(ref_.into()) {
-            let new_ref = ctx.map_ref(ref_);
-            object.write_indirect(&mut chunk, new_ref, &mut ctx);
-            ctx.chunks.push(chunk);
-
-            ctx.visited_objects.insert(ref_);
+        let root_ref = ctx.new_ref();
+        if as_page {
+            write_page(page, root_ref, &mut ctx)?;
         } else {
-            warn!("failed to extract object with ref: {:?}", ref_);
+            write_xobject(page, root_ref, &mut ctx)?;
         }
+        ctx.root_refs.push(root_ref);
     }
+
+    write_dependencies(pdf, &mut ctx);
 
     let mut global_chunk = Chunk::new();
 
@@ -116,9 +103,28 @@ pub fn extract_pages(
 
     Ok(ExtractedPages {
         chunk: global_chunk,
-        page_refs: ctx.page_refs,
+        root_refs: ctx.root_refs,
         next_ref: ctx.next_ref,
     })
+}
+
+fn write_dependencies(pdf: &Pdf, ctx: &mut ExtractionContext) {
+    while let Some(ref_) = ctx.to_visit_refs.pop() {
+        if ctx.visited_objects.contains(&ref_) {
+            continue;
+        }
+
+        let mut chunk = Chunk::new();
+        if let Some(object) = pdf.xref().get::<Object>(ref_.into()) {
+            let new_ref = ctx.map_ref(ref_);
+            object.write_indirect(&mut chunk, new_ref, ctx);
+            ctx.chunks.push(chunk);
+
+            ctx.visited_objects.insert(ref_);
+        } else {
+            warn!("failed to extract object with ref: {:?}", ref_);
+        }
+    }
 }
 
 // Only used for testing.
@@ -133,10 +139,10 @@ pub fn extract_pages_to_pdf(hayro_pdf: &Pdf, page_indices: &[usize]) -> Vec<u8> 
     let page_tree_id = next_ref.bump();
     pdf.catalog(catalog_id).pages(page_tree_id);
 
-    let extracted = extract_pages(&hayro_pdf, next_ref, page_tree_id, &page_indices).unwrap();
-    let count = extracted.page_refs.len();
+    let extracted = extract_pages(&hayro_pdf, next_ref, page_tree_id, &page_indices, true).unwrap();
+    let count = extracted.root_refs.len();
     pdf.pages(page_tree_id)
-        .kids(extracted.page_refs)
+        .kids(extracted.root_refs)
         .count(count as i32);
     pdf.extend(&extracted.chunk);
 

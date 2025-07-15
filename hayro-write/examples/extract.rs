@@ -19,9 +19,9 @@ fn main() {
     pdf.catalog(catalog_id).pages(page_tree_id);
 
     let extracted = extract_pages(&hayro_pdf, next_ref, page_tree_id, &page_indices).unwrap();
-    let count = extracted.page_refs.len();
+    let count = extracted.root_refs.len();
     pdf.pages(page_tree_id)
-        .kids(extracted.page_refs)
+        .kids(extracted.root_refs)
         .count(count as i32);
     pdf.extend(&extracted.chunk);
 
