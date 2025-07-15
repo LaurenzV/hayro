@@ -174,13 +174,20 @@ impl<'a> Page<'a> {
     }
 
     fn operations_impl(&self) -> Option<UntypedIter> {
+        let stream = self.page_stream()?;
+        let iter = UntypedIter::new(stream);
+
+        Some(iter)
+    }
+
+    /// Return the decoded content stream of the page.
+    pub fn page_stream(&self) -> Option<&[u8]> {
         let convert_single = |s: Stream| {
             let data = s.decoded()?;
             Some(data.to_vec())
         };
 
-        let stream = self
-            .page_streams
+        self.page_streams
             .get_or_init(|| {
                 if let Some(stream) = self.inner.get::<Stream>(CONTENTS) {
                     convert_single(stream)
@@ -202,11 +209,8 @@ impl<'a> Page<'a> {
                     return None;
                 }
             })
-            .as_ref()?;
-
-        let iter = UntypedIter::new(&stream);
-
-        Some(iter)
+            .as_ref()
+            .map(|d| d.as_slice())
     }
 
     /// Get the resources of the page.

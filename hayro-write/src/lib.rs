@@ -1,6 +1,8 @@
 mod primitive;
 
 use crate::primitive::{WriteDirect, WriteIndirect};
+use flate2::Compression;
+use flate2::write::ZlibEncoder;
 use hayro_syntax::document::page::{Resources, Rotation};
 use hayro_syntax::object::Object;
 use hayro_syntax::object::dict::Dict;
@@ -12,9 +14,10 @@ use hayro_syntax::object::r#ref::{MaybeRef, ObjRef};
 use hayro_syntax::object::stream::Stream;
 use hayro_syntax::pdf::Pdf;
 use log::warn;
-use pdf_writer::{Chunk, Content, Finish, Name, Obj, Rect, Ref};
+use pdf_writer::{Chunk, Content, Filter, Finish, Name, Obj, Rect, Ref};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::ops::Deref;
+use std::ops::DerefMut;
 
 #[derive(Debug)]
 pub enum ExtractionError {
@@ -208,6 +211,7 @@ fn write_page(
 ) -> Result<(), ExtractionError> {
     let mut chunk = Chunk::new();
     let mut pdf_page = chunk.page(page_ref);
+    let stream_ref = ctx.new_ref();
     pdf_page
         .media_box(convert_rect(&page.media_box()))
         .crop_box(convert_rect(&page.crop_box()))
@@ -217,13 +221,10 @@ fn write_page(
             Rotation::Flipped => 180,
             Rotation::FlippedHorizontal => 270,
         })
-        .parent(ctx.page_tree_parent_ref);
+        .parent(ctx.page_tree_parent_ref)
+        .contents(stream_ref);
 
     let raw_dict = page.raw();
-
-    if let Some(contents) = raw_dict.get_raw::<Object>(CONTENTS) {
-        contents.write_direct(pdf_page.insert(pdf_writer::Name(CONTENTS)), ctx);
-    }
 
     if let Some(group) = raw_dict.get_raw::<Object>(GROUP) {
         group.write_direct(pdf_page.insert(pdf_writer::Name(GROUP)), ctx);
@@ -232,6 +233,14 @@ fn write_page(
     serialize_resources(page.resources(), ctx, &mut pdf_page);
 
     pdf_page.finish();
+
+    chunk
+        .stream(
+            stream_ref,
+            &deflate_encode(page.page_stream().unwrap_or(b"")),
+        )
+        .filter(Filter::FlateDecode);
+
     ctx.chunks.push(chunk);
 
     Ok(())
@@ -242,18 +251,10 @@ fn write_xobject(
     xobj_ref: Ref,
     ctx: &mut ExtractionContext,
 ) -> Result<(), ExtractionError> {
-    let raw_dict = page.raw();
-    let content_stream = raw_dict
-        .get::<Stream>(CONTENTS)
-        .ok_or(ExtractionError::InvalidPdf)?;
-    let stream_dict = content_stream.dict();
-
     let mut chunk = Chunk::new();
-    let mut x_object = chunk.form_xobject(xobj_ref, content_stream.raw_data());
-
-    if let Some(filters) = stream_dict.get::<Object>(FILTER) {
-        filters.write_direct(x_object.insert(pdf_writer::Name(FILTER)), ctx);
-    }
+    let encoded_stream = deflate_encode(page.page_stream().unwrap_or(b""));
+    let mut x_object = chunk.form_xobject(xobj_ref, &encoded_stream);
+    x_object.deref_mut().filter(Filter::FlateDecode);
 
     let render_dimensions = page.render_dimensions();
     let initial_transform = page.initial_transform(false);
@@ -382,6 +383,15 @@ fn collect_resources_inner<'a>(
     for (name, object) in dict.entries() {
         map.insert(name, object);
     }
+}
+
+pub(crate) fn deflate_encode(data: &[u8]) -> Vec<u8> {
+    use std::io::Write;
+
+    const COMPRESSION_LEVEL: u8 = 6;
+    let mut e = ZlibEncoder::new(Vec::new(), Compression::new(COMPRESSION_LEVEL as u32));
+    e.write_all(data).unwrap();
+    e.finish().unwrap()
 }
 
 fn convert_rect(hy_rect: &hayro_syntax::object::rect::Rect) -> pdf_writer::Rect {

@@ -23,13 +23,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .filter_map(|entry| {
             let entry = entry.ok()?;
             let path = entry.path();
-            if path.extension().and_then(|s| s.to_str()) == Some("pdf")
-                && path
-                    .file_name()
-                    .unwrap()
-                    .to_string_lossy()
-                    .contains("clip_path_evenodd")
-            {
+            if path.extension().and_then(|s| s.to_str()) == Some("pdf") {
                 Some(path)
             } else {
                 None
@@ -45,7 +39,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .cmp(&b.file_name().unwrap().to_string_lossy())
     });
 
-    for path in &pdf_files[..1] {
+    for path in &pdf_files {
         let filename = path.file_name().unwrap();
         println!("Processing: {:?}", filename);
 

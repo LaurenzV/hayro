@@ -600,6 +600,7 @@ dependencies = [
 name = "hayro-write"
 version = "0.1.0"
 dependencies = [
+ "flate2",
  "hayro-syntax",
  "lazy_static",
  "log",

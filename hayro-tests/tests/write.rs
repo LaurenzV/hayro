@@ -270,3 +270,14 @@ fn write_xobject_rotation_270() {
         false,
     );
 }
+
+#[test]
+fn write_xobject_contents_array() {
+    run_write_test(
+        "write_xobject_contents_array",
+        "downloads/pdfbox/1084.pdf",
+        &[0],
+        Renderer::Pdfium,
+        false,
+    );
+}
