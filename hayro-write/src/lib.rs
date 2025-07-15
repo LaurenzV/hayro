@@ -12,7 +12,7 @@ use hayro_syntax::object::r#ref::{MaybeRef, ObjRef};
 use hayro_syntax::object::stream::Stream;
 use hayro_syntax::pdf::Pdf;
 use log::warn;
-use pdf_writer::{Chunk, Finish, Name, Obj, Ref};
+use pdf_writer::{Chunk, Content, Finish, Name, Obj, Rect, Ref};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::ops::Deref;
 
@@ -144,6 +144,58 @@ pub fn extract_pages_to_pdf(hayro_pdf: &Pdf, page_indices: &[usize]) -> Vec<u8> 
     pdf.pages(page_tree_id)
         .kids(extracted.root_refs)
         .count(count as i32);
+    pdf.extend(&extracted.chunk);
+
+    pdf.finish()
+}
+
+#[doc(hidden)]
+pub fn extract_pages_as_xobject_to_pdf(hayro_pdf: &Pdf, page_indices: &[usize]) -> Vec<u8> {
+    let hayro_pages = hayro_pdf.pages().unwrap();
+    let page_list = hayro_pages.get();
+
+    let mut pdf = pdf_writer::Pdf::new();
+    let mut next_ref = Ref::new(1);
+
+    let catalog_id = next_ref.bump();
+    let page_tree_id = next_ref.bump();
+    pdf.catalog(catalog_id).pages(page_tree_id);
+
+    let extracted =
+        extract_pages(&hayro_pdf, next_ref, page_tree_id, &page_indices, false).unwrap();
+    next_ref = extracted.next_ref;
+    let mut page_refs = vec![];
+
+    for (x_object_ref, page_idx) in extracted.root_refs.iter().zip(page_indices) {
+        let page = &page_list[*page_idx];
+        let render_dimensions = page.render_dimensions();
+
+        let mut content = Content::new();
+        content.x_object(Name(b"O1"));
+
+        let finished = content.finish();
+
+        let page_id = next_ref.bump();
+        let stream_id = next_ref.bump();
+        page_refs.push(page_id);
+
+        let mut page = pdf.page(page_id);
+        page.resources().x_objects().pair(Name(b"O1"), x_object_ref);
+        page.media_box(Rect::new(
+            0.0,
+            0.0,
+            render_dimensions.0,
+            render_dimensions.1,
+        ));
+        page.parent(page_tree_id);
+        page.contents(stream_id);
+        page.finish();
+
+        pdf.stream(stream_id, finished.as_slice());
+    }
+
+    let count = extracted.root_refs.len();
+    pdf.pages(page_tree_id).kids(page_refs).count(count as i32);
     pdf.extend(&extracted.chunk);
 
     pdf.finish()

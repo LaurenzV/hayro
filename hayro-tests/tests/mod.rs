@@ -189,10 +189,20 @@ pub fn run_render_test(name: &str, file_path: &str, range_str: Option<&str>) {
     );
 }
 
-pub fn run_write_test(name: &str, file_path: &str, page_indices: &[usize], renderer: Renderer) {
+pub fn run_write_test(
+    name: &str,
+    file_path: &str,
+    page_indices: &[usize],
+    renderer: Renderer,
+    page: bool,
+) {
     let hayro_pdf = load_pdf(file_path);
 
-    let buf = hayro_write::extract_pages_to_pdf(&hayro_pdf, page_indices);
+    let buf = if page {
+        hayro_write::extract_pages_to_pdf(&hayro_pdf, page_indices)
+    } else {
+        hayro_write::extract_pages_as_xobject_to_pdf(&hayro_pdf, page_indices)
+    };
 
     if STORE.is_some() {
         let _ = std::fs::create_dir_all(&STORE_PATH.clone());

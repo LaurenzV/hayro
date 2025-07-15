@@ -23,7 +23,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .filter_map(|entry| {
             let entry = entry.ok()?;
             let path = entry.path();
-            if path.extension().and_then(|s| s.to_str()) == Some("pdf") {
+            if path.extension().and_then(|s| s.to_str()) == Some("pdf")
+                && path
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .contains("clip_path_evenodd")
+            {
                 Some(path)
             } else {
                 None
@@ -39,7 +45,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .cmp(&b.file_name().unwrap().to_string_lossy())
     });
 
-    for path in pdf_files {
+    for path in &pdf_files[..1] {
         let filename = path.file_name().unwrap();
         println!("Processing: {:?}", filename);
 
@@ -57,7 +63,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 let page_indices: Vec<usize> = (0..page_count).collect();
 
-                let output_bytes = hayro_write::extract_pages_to_pdf(&hayro_pdf, &page_indices);
+                let output_bytes =
+                    hayro_write::extract_pages_as_xobject_to_pdf(&hayro_pdf, &page_indices);
 
                 let output_path = output_dir.join(filename);
                 fs::write(&output_path, output_bytes)?;
