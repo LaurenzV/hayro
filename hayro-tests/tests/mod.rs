@@ -2,7 +2,6 @@ use hayro_render::FontQuery;
 use hayro_render::Pdf;
 use hayro_render::StandardFont;
 use hayro_render::{FontData, InterpreterSettings};
-use hayro_write::extract_pages;
 use image::{Rgba, RgbaImage, load_from_memory};
 use once_cell::sync::Lazy;
 use pdf_writer::Ref;

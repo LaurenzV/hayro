@@ -19,16 +19,44 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::ops::Deref;
 use std::ops::DerefMut;
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
+pub enum ExtractionQueryType {
+    XObject,
+    Page,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct ExtractionQuery {
+    query_type: ExtractionQueryType,
+    page_index: usize,
+}
+
+impl ExtractionQuery {
+    pub fn new_page(page_index: usize) -> Self {
+        Self {
+            query_type: ExtractionQueryType::Page,
+            page_index,
+        }
+    }
+
+    pub fn new_xobject(page_index: usize) -> Self {
+        Self {
+            query_type: ExtractionQueryType::XObject,
+            page_index,
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
 pub enum ExtractionError {
     LoadPdfError,
-    InvalidPageIndex(usize, usize),
+    InvalidPageIndex(usize),
     InvalidPdf,
 }
 
-pub struct ExtractedPages {
+pub struct ExtractionResult {
     pub chunk: Chunk,
-    pub root_refs: Vec<Ref>,
+    pub root_refs: Vec<Result<Ref, ExtractionError>>,
     pub next_ref: Ref,
 }
 
@@ -36,7 +64,7 @@ struct ExtractionContext {
     chunks: Vec<Chunk>,
     visited_objects: HashSet<ObjRef>,
     to_visit_refs: Vec<ObjRef>,
-    root_refs: Vec<Ref>,
+    root_refs: Vec<Result<Ref, ExtractionError>>,
     next_ref: Ref,
     ref_map: HashMap<ObjRef, Ref>,
     page_tree_parent_ref: Ref,
@@ -71,29 +99,29 @@ impl ExtractionContext {
     }
 }
 
-pub fn extract_pages(
+pub fn extract(
     pdf: &Pdf,
     next_ref: Ref,
     page_tree_parent_ref: Ref,
-    page_indices: &[usize],
-    as_page: bool,
-) -> Result<ExtractedPages, ExtractionError> {
+    queries: &[ExtractionQuery],
+) -> Result<ExtractionResult, ExtractionError> {
     let pages = pdf.pages().ok_or(ExtractionError::LoadPdfError)?;
     let mut ctx = ExtractionContext::new(next_ref, page_tree_parent_ref);
 
-    for page_index in page_indices.iter().copied() {
+    for query in queries {
         let page = pages
             .get()
-            .get(page_index)
-            .ok_or(ExtractionError::InvalidPageIndex(page_index, pages.len()))?;
+            .get(query.page_index)
+            .ok_or(ExtractionError::InvalidPageIndex(query.page_index))?;
 
         let root_ref = ctx.new_ref();
-        if as_page {
-            write_page(page, root_ref, &mut ctx)?;
-        } else {
-            write_xobject(page, root_ref, &mut ctx)?;
-        }
-        ctx.root_refs.push(root_ref);
+
+        let res = match query.query_type {
+            ExtractionQueryType::XObject => write_xobject(page, root_ref, &mut ctx),
+            ExtractionQueryType::Page => write_page(page, root_ref, &mut ctx),
+        };
+
+        ctx.root_refs.push(res.map(|_| root_ref));
     }
 
     write_dependencies(pdf, &mut ctx);
@@ -104,7 +132,7 @@ pub fn extract_pages(
         global_chunk.extend(&chunk)
     }
 
-    Ok(ExtractedPages {
+    Ok(ExtractionResult {
         chunk: global_chunk,
         root_refs: ctx.root_refs,
         next_ref: ctx.next_ref,
@@ -137,15 +165,22 @@ fn write_dependencies(pdf: &Pdf, ctx: &mut ExtractionContext) {
 pub fn extract_pages_to_pdf(hayro_pdf: &Pdf, page_indices: &[usize]) -> Vec<u8> {
     let mut pdf = pdf_writer::Pdf::new();
     let mut next_ref = Ref::new(1);
+    let requests = page_indices
+        .iter()
+        .map(|i| ExtractionQuery {
+            query_type: ExtractionQueryType::Page,
+            page_index: *i,
+        })
+        .collect::<Vec<_>>();
 
     let catalog_id = next_ref.bump();
     let page_tree_id = next_ref.bump();
     pdf.catalog(catalog_id).pages(page_tree_id);
 
-    let extracted = extract_pages(&hayro_pdf, next_ref, page_tree_id, &page_indices, true).unwrap();
+    let extracted = extract(&hayro_pdf, next_ref, page_tree_id, &requests).unwrap();
     let count = extracted.root_refs.len();
     pdf.pages(page_tree_id)
-        .kids(extracted.root_refs)
+        .kids(extracted.root_refs.iter().map(|r| r.unwrap()))
         .count(count as i32);
     pdf.extend(&extracted.chunk);
 
@@ -163,9 +198,15 @@ pub fn extract_pages_as_xobject_to_pdf(hayro_pdf: &Pdf, page_indices: &[usize]) 
     let catalog_id = next_ref.bump();
     let page_tree_id = next_ref.bump();
     pdf.catalog(catalog_id).pages(page_tree_id);
+    let requests = page_indices
+        .iter()
+        .map(|i| ExtractionQuery {
+            query_type: ExtractionQueryType::XObject,
+            page_index: *i,
+        })
+        .collect::<Vec<_>>();
 
-    let extracted =
-        extract_pages(&hayro_pdf, next_ref, page_tree_id, &page_indices, false).unwrap();
+    let extracted = extract(&hayro_pdf, next_ref, page_tree_id, &requests).unwrap();
     next_ref = extracted.next_ref;
     let mut page_refs = vec![];
 
@@ -183,7 +224,9 @@ pub fn extract_pages_as_xobject_to_pdf(hayro_pdf: &Pdf, page_indices: &[usize]) 
         page_refs.push(page_id);
 
         let mut page = pdf.page(page_id);
-        page.resources().x_objects().pair(Name(b"O1"), x_object_ref);
+        page.resources()
+            .x_objects()
+            .pair(Name(b"O1"), x_object_ref.unwrap());
         page.media_box(Rect::new(
             0.0,
             0.0,
@@ -256,7 +299,6 @@ fn write_xobject(
     let mut x_object = chunk.form_xobject(xobj_ref, &encoded_stream);
     x_object.deref_mut().filter(Filter::FlateDecode);
 
-    let render_dimensions = page.render_dimensions();
     let bbox = page.crop_box();
     let initial_transform = page.initial_transform(false);
 
