@@ -17,9 +17,10 @@ fn write_page_basic_1() {
 #[test]
 fn dont_cache_page_references() {
     let hayro_pdf = load_pdf("pdfs/clip_path_evenodd.pdf");
+    let mut next_ref = Ref::new(2);
     let extracted = hayro_write::extract(
         &hayro_pdf,
-        Ref::new(2),
+        Box::new(|| next_ref.bump()),
         Ref::new(1),
         &[ExtractionQuery::new_page(0), ExtractionQuery::new_page(0)],
     )

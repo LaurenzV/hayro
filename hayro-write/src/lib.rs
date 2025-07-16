@@ -18,6 +18,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::ops::Deref;
 use std::ops::DerefMut;
 
+pub use hayro_syntax::PdfData;
 pub use hayro_syntax::pdf::Pdf;
 
 #[derive(Copy, Clone, Debug)]
@@ -58,26 +59,25 @@ pub enum ExtractionError {
 pub struct ExtractionResult {
     pub chunk: Chunk,
     pub root_refs: Vec<Result<Ref, ExtractionError>>,
-    pub next_ref: Ref,
 }
 
-struct ExtractionContext {
+struct ExtractionContext<'a> {
     chunks: Vec<Chunk>,
     visited_objects: HashSet<ObjRef>,
     to_visit_refs: Vec<ObjRef>,
     root_refs: Vec<Result<Ref, ExtractionError>>,
-    next_ref: Ref,
+    new_ref: Box<dyn FnMut() -> Ref + 'a>,
     ref_map: HashMap<ObjRef, Ref>,
     page_tree_parent_ref: Ref,
 }
 
-impl ExtractionContext {
-    pub fn new(next_ref: Ref, page_tree_parent_ref: Ref) -> Self {
+impl<'a> ExtractionContext<'a> {
+    pub fn new(new_ref: Box<dyn FnMut() -> Ref + 'a>, page_tree_parent_ref: Ref) -> Self {
         Self {
             chunks: vec![],
             visited_objects: HashSet::new(),
             to_visit_refs: Vec::new(),
-            next_ref,
+            new_ref,
             ref_map: HashMap::new(),
             root_refs: Vec::new(),
             page_tree_parent_ref,
@@ -88,7 +88,7 @@ impl ExtractionContext {
         if let Some(ref_) = self.ref_map.get(&ref_) {
             *ref_
         } else {
-            let new_ref = self.next_ref.bump();
+            let new_ref = self.new_ref();
             self.ref_map.insert(ref_, new_ref);
 
             new_ref
@@ -96,18 +96,18 @@ impl ExtractionContext {
     }
 
     pub fn new_ref(&mut self) -> pdf_writer::Ref {
-        self.next_ref.bump()
+        (self.new_ref)()
     }
 }
 
-pub fn extract(
+pub fn extract<'a>(
     pdf: &Pdf,
-    next_ref: Ref,
+    new_ref: Box<dyn FnMut() -> Ref + 'a>,
     page_tree_parent_ref: Ref,
     queries: &[ExtractionQuery],
 ) -> Result<ExtractionResult, ExtractionError> {
     let pages = pdf.pages().ok_or(ExtractionError::LoadPdfError)?;
-    let mut ctx = ExtractionContext::new(next_ref, page_tree_parent_ref);
+    let mut ctx = ExtractionContext::new(new_ref, page_tree_parent_ref);
 
     for query in queries {
         let page = pages
@@ -136,7 +136,6 @@ pub fn extract(
     Ok(ExtractionResult {
         chunk: global_chunk,
         root_refs: ctx.root_refs,
-        next_ref: ctx.next_ref,
     })
 }
 
@@ -178,7 +177,13 @@ pub fn extract_pages_to_pdf(hayro_pdf: &Pdf, page_indices: &[usize]) -> Vec<u8> 
     let page_tree_id = next_ref.bump();
     pdf.catalog(catalog_id).pages(page_tree_id);
 
-    let extracted = extract(&hayro_pdf, next_ref, page_tree_id, &requests).unwrap();
+    let extracted = extract(
+        &hayro_pdf,
+        Box::new(|| next_ref.bump()),
+        page_tree_id,
+        &requests,
+    )
+    .unwrap();
     let count = extracted.root_refs.len();
     pdf.pages(page_tree_id)
         .kids(extracted.root_refs.iter().map(|r| r.unwrap()))
@@ -207,8 +212,13 @@ pub fn extract_pages_as_xobject_to_pdf(hayro_pdf: &Pdf, page_indices: &[usize]) 
         })
         .collect::<Vec<_>>();
 
-    let extracted = extract(&hayro_pdf, next_ref, page_tree_id, &requests).unwrap();
-    next_ref = extracted.next_ref;
+    let extracted = extract(
+        &hayro_pdf,
+        Box::new(|| next_ref.bump()),
+        page_tree_id,
+        &requests,
+    )
+    .unwrap();
     let mut page_refs = vec![];
 
     for (x_object_ref, page_idx) in extracted.root_refs.iter().zip(page_indices) {
