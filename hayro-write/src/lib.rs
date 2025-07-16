@@ -12,12 +12,13 @@ use hayro_syntax::object::dict::keys::{
 };
 use hayro_syntax::object::r#ref::{MaybeRef, ObjRef};
 use hayro_syntax::object::stream::Stream;
-use hayro_syntax::pdf::Pdf;
 use log::warn;
 use pdf_writer::{Chunk, Content, Filter, Finish, Name, Obj, Rect, Ref};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::ops::Deref;
 use std::ops::DerefMut;
+
+pub use hayro_syntax::pdf::Pdf;
 
 #[derive(Copy, Clone, Debug)]
 pub enum ExtractionQueryType {
