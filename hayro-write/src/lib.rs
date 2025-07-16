@@ -60,6 +60,7 @@ pub enum ExtractionError {
 pub struct ExtractionResult {
     pub chunk: Chunk,
     pub root_refs: Vec<Result<Ref, ExtractionError>>,
+    pub page_tree_parent_ref: Ref,
 }
 
 struct ExtractionContext<'a> {
@@ -74,7 +75,8 @@ struct ExtractionContext<'a> {
 }
 
 impl<'a> ExtractionContext<'a> {
-    pub fn new(new_ref: Box<dyn FnMut() -> Ref + 'a>, page_tree_parent_ref: Ref) -> Self {
+    pub fn new(mut new_ref: Box<dyn FnMut() -> Ref + 'a>) -> Self {
+        let page_tree_parent_ref = new_ref();
         Self {
             chunks: vec![],
             visited_objects: HashSet::new(),
@@ -106,11 +108,10 @@ impl<'a> ExtractionContext<'a> {
 pub fn extract<'a>(
     pdf: &Pdf,
     new_ref: Box<dyn FnMut() -> Ref + 'a>,
-    page_tree_parent_ref: Ref,
     queries: &[ExtractionQuery],
 ) -> Result<ExtractionResult, ExtractionError> {
     let pages = pdf.pages().ok_or(ExtractionError::LoadPdfError)?;
-    let mut ctx = ExtractionContext::new(new_ref, page_tree_parent_ref);
+    let mut ctx = ExtractionContext::new(new_ref);
 
     for query in queries {
         let page = pages
@@ -139,6 +140,7 @@ pub fn extract<'a>(
     Ok(ExtractionResult {
         chunk: global_chunk,
         root_refs: ctx.root_refs,
+        page_tree_parent_ref: ctx.page_tree_parent_ref,
     })
 }
 
@@ -177,18 +179,12 @@ pub fn extract_pages_to_pdf(hayro_pdf: &Pdf, page_indices: &[usize]) -> Vec<u8> 
         .collect::<Vec<_>>();
 
     let catalog_id = next_ref.bump();
-    let page_tree_id = next_ref.bump();
-    pdf.catalog(catalog_id).pages(page_tree_id);
 
-    let extracted = extract(
-        &hayro_pdf,
-        Box::new(|| next_ref.bump()),
-        page_tree_id,
-        &requests,
-    )
-    .unwrap();
+    let extracted = extract(&hayro_pdf, Box::new(|| next_ref.bump()), &requests).unwrap();
+    pdf.catalog(catalog_id)
+        .pages(extracted.page_tree_parent_ref);
     let count = extracted.root_refs.len();
-    pdf.pages(page_tree_id)
+    pdf.pages(extracted.page_tree_parent_ref)
         .kids(extracted.root_refs.iter().map(|r| r.unwrap()))
         .count(count as i32);
     pdf.extend(&extracted.chunk);
@@ -205,8 +201,6 @@ pub fn extract_pages_as_xobject_to_pdf(hayro_pdf: &Pdf, page_indices: &[usize]) 
     let mut next_ref = Ref::new(1);
 
     let catalog_id = next_ref.bump();
-    let page_tree_id = next_ref.bump();
-    pdf.catalog(catalog_id).pages(page_tree_id);
     let requests = page_indices
         .iter()
         .map(|i| ExtractionQuery {
@@ -215,13 +209,10 @@ pub fn extract_pages_as_xobject_to_pdf(hayro_pdf: &Pdf, page_indices: &[usize]) 
         })
         .collect::<Vec<_>>();
 
-    let extracted = extract(
-        &hayro_pdf,
-        Box::new(|| next_ref.bump()),
-        page_tree_id,
-        &requests,
-    )
-    .unwrap();
+    let extracted = extract(&hayro_pdf, Box::new(|| next_ref.bump()), &requests).unwrap();
+
+    pdf.catalog(catalog_id)
+        .pages(extracted.page_tree_parent_ref);
     let mut page_refs = vec![];
 
     for (x_object_ref, page_idx) in extracted.root_refs.iter().zip(page_indices) {
@@ -247,7 +238,7 @@ pub fn extract_pages_as_xobject_to_pdf(hayro_pdf: &Pdf, page_indices: &[usize]) 
             render_dimensions.0,
             render_dimensions.1,
         ));
-        page.parent(page_tree_id);
+        page.parent(extracted.page_tree_parent_ref);
         page.contents(stream_id);
         page.finish();
 
@@ -255,7 +246,9 @@ pub fn extract_pages_as_xobject_to_pdf(hayro_pdf: &Pdf, page_indices: &[usize]) 
     }
 
     let count = extracted.root_refs.len();
-    pdf.pages(page_tree_id).kids(page_refs).count(count as i32);
+    pdf.pages(extracted.page_tree_parent_ref)
+        .kids(page_refs)
+        .count(count as i32);
     pdf.extend(&extracted.chunk);
 
     pdf.finish()
