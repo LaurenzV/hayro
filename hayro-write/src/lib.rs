@@ -14,6 +14,7 @@ use hayro_syntax::object::r#ref::{MaybeRef, ObjRef};
 use hayro_syntax::object::stream::Stream;
 use log::warn;
 use pdf_writer::{Chunk, Content, Filter, Finish, Name, Obj, Rect, Ref};
+use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::ops::Deref;
 use std::ops::DerefMut;
@@ -68,6 +69,7 @@ struct ExtractionContext<'a> {
     root_refs: Vec<Result<Ref, ExtractionError>>,
     new_ref: Box<dyn FnMut() -> Ref + 'a>,
     ref_map: HashMap<ObjRef, Ref>,
+    cached_content_streams: HashMap<usize, Ref>,
     page_tree_parent_ref: Ref,
 }
 
@@ -79,6 +81,7 @@ impl<'a> ExtractionContext<'a> {
             to_visit_refs: Vec::new(),
             new_ref,
             ref_map: HashMap::new(),
+            cached_content_streams: HashMap::new(),
             root_refs: Vec::new(),
             page_tree_parent_ref,
         }
@@ -119,7 +122,7 @@ pub fn extract<'a>(
 
         let res = match query.query_type {
             ExtractionQueryType::XObject => write_xobject(page, root_ref, &mut ctx),
-            ExtractionQueryType::Page => write_page(page, root_ref, &mut ctx),
+            ExtractionQueryType::Page => write_page(page, root_ref, query.page_index, &mut ctx),
         };
 
         ctx.root_refs.push(res.map(|_| root_ref));
@@ -261,11 +264,28 @@ pub fn extract_pages_as_xobject_to_pdf(hayro_pdf: &Pdf, page_indices: &[usize]) 
 fn write_page(
     page: &hayro_syntax::document::page::Page,
     page_ref: Ref,
+    page_idx: usize,
     ctx: &mut ExtractionContext,
 ) -> Result<(), ExtractionError> {
     let mut chunk = Chunk::new();
+    let stream_ref = if let Some(cached) = ctx.cached_content_streams.get(&page_idx) {
+        *cached
+    } else {
+        let stream_ref = ctx.new_ref();
+
+        chunk
+            .stream(
+                stream_ref,
+                &deflate_encode(page.page_stream().unwrap_or(b"")),
+            )
+            .filter(Filter::FlateDecode);
+        ctx.cached_content_streams.insert(page_idx, stream_ref);
+
+        stream_ref
+    };
+
     let mut pdf_page = chunk.page(page_ref);
-    let stream_ref = ctx.new_ref();
+
     pdf_page
         .media_box(convert_rect(&page.media_box()))
         .crop_box(convert_rect(&page.crop_box()))
@@ -287,13 +307,6 @@ fn write_page(
     serialize_resources(page.resources(), ctx, &mut pdf_page);
 
     pdf_page.finish();
-
-    chunk
-        .stream(
-            stream_ref,
-            &deflate_encode(page.page_stream().unwrap_or(b"")),
-        )
-        .filter(Filter::FlateDecode);
 
     ctx.chunks.push(chunk);
 
