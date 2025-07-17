@@ -371,18 +371,37 @@ impl Device for Renderer {
     }
 }
 
-pub fn render(page: &Page, settings: InterpreterSettings, scale: f32) -> Pixmap {
-    let (width, height) = page.render_dimensions();
-    let (scaled_width, scaled_height) = ((width * scale) as f64, (height * scale) as f64);
-    let initial_transform = Affine::scale(scale as f64) * page.initial_transform(true);
+pub struct RenderSettings {
+    pub x_scale: f32,
+    pub y_scale: f32,
+    pub width: Option<u16>,
+    pub height: Option<u16>
+}
 
-    let (pix_width, pix_height) = (scaled_width.floor() as u16, scaled_height.floor() as u16);
+impl Default for RenderSettings {
+    fn default() -> Self {
+        Self {
+            x_scale: 1.0,
+            y_scale: 1.0,
+            width: None,
+            height: None
+        }
+    }
+}
+
+pub fn render(page: &Page, interpreter_settings: &InterpreterSettings, render_settings: &RenderSettings) -> Pixmap {
+    let (x_scale, y_scale) = (render_settings.x_scale, render_settings.y_scale);
+    let (width, height) = page.render_dimensions();
+    let (scaled_width, scaled_height) = ((width * x_scale) as f64, (height * y_scale) as f64);
+    let initial_transform = Affine::scale_non_uniform(x_scale as f64, y_scale as f64) * page.initial_transform(true);
+
+    let (pix_width, pix_height) = (render_settings.width.unwrap_or(scaled_width.floor() as u16), render_settings.height.unwrap_or(scaled_height.floor() as u16));
     let mut state = Context::new(
         initial_transform,
         Rect::new(0.0, 0.0, pix_width as f64, pix_height as f64),
         Cache::new(),
         page.xref(),
-        settings,
+        interpreter_settings.clone(),
     );
     let mut device = Renderer {
         ctx: RenderContext::new(pix_width, pix_height),
@@ -451,7 +470,9 @@ pub fn render_png(
                     return None;
                 }
 
-                let pixmap = render(page, settings.clone(), scale);
+                let pixmap = render(page, &settings, &RenderSettings {
+                    x_scale: scale, y_scale: scale, ..Default::default()
+                });
 
                 let mut png_data = Vec::new();
                 let cursor = Cursor::new(&mut png_data);
