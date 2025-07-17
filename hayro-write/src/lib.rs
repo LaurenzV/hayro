@@ -20,7 +20,7 @@ use std::ops::Deref;
 use std::ops::DerefMut;
 
 pub use hayro_syntax::PdfData;
-pub use hayro_syntax::pdf::Pdf;
+pub use hayro_syntax::pdf::{Pdf, PdfVersion};
 
 #[derive(Copy, Clone, Debug)]
 pub enum ExtractionQueryType {
