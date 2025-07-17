@@ -9,7 +9,7 @@ use crate::xref::{XRef, XRefError, fallback, root_xref};
 /// A PDF file.
 pub struct Pdf {
     xref: XRef,
-    header_version: f32,
+    header_version: PdfVersion,
 }
 
 impl Pdf {
@@ -17,7 +17,7 @@ impl Pdf {
     ///
     /// Returns `None` if it was unable to read it.
     pub fn new(data: PdfData) -> Option<Self> {
-        let version = find_version(data.as_ref().as_ref()).unwrap_or(1.0);
+        let version = find_version(data.as_ref().as_ref()).unwrap_or(PdfVersion::Pdf10);
         let xref = match root_xref(data.clone()) {
             Ok(x) => x,
             Err(e) => match e {
@@ -43,7 +43,7 @@ impl Pdf {
     }
 
     /// Return the version of the PDF file.
-    pub fn version(&self) -> f32 {
+    pub fn version(&self) -> PdfVersion {
         self.xref
             .trailer_data()
             .version
@@ -59,7 +59,7 @@ impl Pdf {
     }
 }
 
-fn find_version(data: &[u8]) -> Option<f32> {
+fn find_version(data: &[u8]) -> Option<PdfVersion> {
     let data = &data[..data.len().min(2000)];
     let mut r = Reader::new(data);
 
@@ -67,12 +67,52 @@ fn find_version(data: &[u8]) -> Option<f32> {
         r.read_byte()?;
     }
 
-    r.read_without_context::<f32>()
+    PdfVersion::from_bytes(r.tail()?)
+}
+
+/// The version of a PDF document.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum PdfVersion {
+    /// PDF 1.0.
+    Pdf10,
+    /// PDF 1.1.
+    Pdf11,
+    /// PDF 1.2.
+    Pdf12,
+    /// PDF 1.3.
+    Pdf13,
+    /// PDF 1.4.
+    Pdf14,
+    /// PDF 1.5.
+    Pdf15,
+    /// PDF 1.6.
+    Pdf16,
+    /// PDF 1.7.
+    Pdf17,
+    /// PDF 2.0.
+    Pdf20,
+}
+
+impl PdfVersion {
+    pub(crate) fn from_bytes(bytes: &[u8]) -> Option<PdfVersion> {
+        match bytes.get(..3)? {
+            b"1.0" => Some(PdfVersion::Pdf10),
+            b"1.1" => Some(PdfVersion::Pdf11),
+            b"1.2" => Some(PdfVersion::Pdf12),
+            b"1.3" => Some(PdfVersion::Pdf13),
+            b"1.4" => Some(PdfVersion::Pdf14),
+            b"1.5" => Some(PdfVersion::Pdf15),
+            b"1.6" => Some(PdfVersion::Pdf16),
+            b"1.7" => Some(PdfVersion::Pdf17),
+            b"2.0" => Some(PdfVersion::Pdf20),
+            _ => None,
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::pdf::Pdf;
+    use crate::pdf::{Pdf, PdfVersion};
     use std::sync::Arc;
 
     #[test]
@@ -82,10 +122,18 @@ mod tests {
     }
 
     #[test]
-    fn pdf_version() {
+    fn pdf_version_header() {
         let data = std::fs::read("../hayro-tests/pdfs/pdfjs/alphatrans.pdf").unwrap();
         let pdf = Pdf::new(Arc::new(data)).unwrap();
 
-        assert_eq!(pdf.version(), 1.7);
+        assert_eq!(pdf.version(), PdfVersion::Pdf17);
+    }
+
+    #[test]
+    fn pdf_version_catalog() {
+        let data = std::fs::read("../hayro-tests/downloads/pdfbox/2163.pdf").unwrap();
+        let pdf = Pdf::new(Arc::new(data)).unwrap();
+
+        assert_eq!(pdf.version(), PdfVersion::Pdf14);
     }
 }

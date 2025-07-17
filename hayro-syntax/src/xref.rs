@@ -12,11 +12,13 @@ use crate::object::indirect::IndirectObject;
 use crate::object::name::Name;
 use crate::object::stream::Stream;
 use crate::object::{Object, ObjectLike};
+use crate::pdf::PdfVersion;
 use crate::reader::{Readable, Reader, ReaderContext};
 use log::{error, warn};
 use rustc_hash::FxHashMap;
 use std::cmp::max;
 use std::iter;
+use std::ops::Deref;
 use std::sync::{Arc, RwLock};
 
 pub(crate) const XREF_ENTRY_LEN: usize = 20;
@@ -140,7 +142,9 @@ impl XRef {
 
         let root = trailer_dict.get::<Dict>(ROOT).ok_or(XRefError::Unknown)?;
         let pages_ref = root.get_ref(PAGES).ok_or(XRefError::Unknown)?;
-        let version = root.get::<f32>(VERSION);
+        let version = root
+            .get::<Name>(VERSION)
+            .and_then(|v| PdfVersion::from_bytes(v.deref()));
 
         let td = TrailerData {
             pages_ref: pages_ref.into(),
@@ -324,7 +328,7 @@ struct SomeRepr {
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct TrailerData {
     pub pages_ref: ObjectIdentifier,
-    pub version: Option<f32>,
+    pub version: Option<PdfVersion>,
 }
 
 impl TrailerData {
