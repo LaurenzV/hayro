@@ -21,9 +21,9 @@ use std::ops::Deref;
 pub enum DecodeFailure {
     /// An image stream failed to decode.
     ImageDecode,
-    /// A stream failed to decode.
+    /// A data stream failed to decode.
     StreamDecode,
-    /// A JPEG2000 image was encountered while the `jpeg2000` feature was disabled.
+    /// A JPEG2000 image was encountered, while the `jpeg2000` feature was disabled.
     JpxImage,
     /// An unknown failure occurred.
     Unknown,
@@ -55,6 +55,7 @@ pub enum Filter {
 }
 
 /// An image color space.
+#[derive(Debug, Copy, Clone)]
 pub enum ImageColorSpace {
     /// Grayscale color space.
     Gray,
@@ -74,25 +75,29 @@ impl ImageColorSpace {
     }
 }
 
-/// The result of the filter.
-pub struct FilterResult {
-    /// The decoded data.
-    pub data: Vec<u8>,
+/// Additional data that is extracted from some image streams.
+pub struct ImageData {
     /// An optional alpha channel of the image (will only be set for JPX streams).
     pub alpha: Option<Vec<u8>>,
     /// The color space of the image (will only be set for JPX streams).
-    pub color_space: Option<ImageColorSpace>,
+    pub color_space: ImageColorSpace,
     /// The bits per component of the image (will only be set for JPX streams).
-    pub bits_per_component: Option<u8>,
+    pub bits_per_component: u8,
+}
+
+/// The result of applying a filter.
+pub struct FilterResult {
+    /// The decoded data.
+    pub data: Vec<u8>,
+    /// Additional data that is extracted from JPX image streams..
+    pub image_data: Option<ImageData>,
 }
 
 impl FilterResult {
     fn from_data(data: Vec<u8>) -> Self {
         Self {
             data,
-            alpha: None,
-            color_space: None,
-            bits_per_component: None,
+            image_data: None,
         }
     }
 }

@@ -86,16 +86,12 @@ impl<'a> Stream<'a> {
 
             Ok(current.unwrap_or(FilterResult {
                 data: self.data.to_vec(),
-                alpha: None,
-                color_space: None,
-                bits_per_component: None,
+                image_data: None,
             }))
         } else {
             Ok(FilterResult {
                 data: self.data.to_vec(),
-                alpha: None,
-                color_space: None,
-                bits_per_component: None,
+                image_data: None,
             })
         }
     }
