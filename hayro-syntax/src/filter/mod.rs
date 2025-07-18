@@ -76,11 +76,11 @@ impl ImageColorSpace {
 
 /// Additional data that is extracted from some image streams.
 pub struct ImageData {
-    /// An optional alpha channel of the image (will only be set for JPX streams).
+    /// An optional alpha channel of the image.
     pub alpha: Option<Vec<u8>>,
-    /// The color space of the image (will only be set for JPX streams).
+    /// The color space of the image.
     pub color_space: ImageColorSpace,
-    /// The bits per component of the image (will only be set for JPX streams).
+    /// The bits per component of the image.
     pub bits_per_component: u8,
 }
 
