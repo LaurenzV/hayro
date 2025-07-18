@@ -252,10 +252,6 @@ impl Device for Renderer {
         let (paint_type, paint_transform) = self.convert_paint(paint, true);
         self.ctx
             .stroke_path(path, paint_type, paint_transform, self.cur_mask.clone());
-
-        if self.cur_mask.is_some() {
-            self.ctx.pop_layer();
-        }
     }
 
     fn set_fill_properties(&mut self, fill_props: &FillProps) {
@@ -345,9 +341,22 @@ impl Device for Renderer {
         self.ctx.push_layer(Some(&clip_path.path), None, None, None)
     }
 
-    fn push_transparency_group(&mut self, opacity: f32) {
-        self.ctx
-            .push_layer(None, None, Some(opacity), self.cur_mask.clone());
+    fn push_transparency_group(&mut self, opacity: f32, mask: Option<SoftMask>) {
+        self.ctx.push_layer(
+            None,
+            None,
+            Some(opacity),
+            // TODO: Deduplicate
+            mask.map(|m| {
+                let width = self.ctx.width as u16;
+                let height = self.ctx.height as u16;
+
+                self.soft_mask_cache
+                    .entry(m.id())
+                    .or_insert_with(|| draw_soft_mask(&m, width, height))
+                    .clone()
+            }),
+        );
     }
 
     fn pop_clip_path(&mut self) {
@@ -375,7 +384,7 @@ pub struct RenderSettings {
     pub x_scale: f32,
     pub y_scale: f32,
     pub width: Option<u16>,
-    pub height: Option<u16>
+    pub height: Option<u16>,
 }
 
 impl Default for RenderSettings {
@@ -384,18 +393,28 @@ impl Default for RenderSettings {
             x_scale: 1.0,
             y_scale: 1.0,
             width: None,
-            height: None
+            height: None,
         }
     }
 }
 
-pub fn render(page: &Page, interpreter_settings: &InterpreterSettings, render_settings: &RenderSettings) -> Pixmap {
+pub fn render(
+    page: &Page,
+    interpreter_settings: &InterpreterSettings,
+    render_settings: &RenderSettings,
+) -> Pixmap {
     let (x_scale, y_scale) = (render_settings.x_scale, render_settings.y_scale);
     let (width, height) = page.render_dimensions();
     let (scaled_width, scaled_height) = ((width * x_scale) as f64, (height * y_scale) as f64);
-    let initial_transform = Affine::scale_non_uniform(x_scale as f64, y_scale as f64) * page.initial_transform(true);
+    let initial_transform =
+        Affine::scale_non_uniform(x_scale as f64, y_scale as f64) * page.initial_transform(true);
 
-    let (pix_width, pix_height) = (render_settings.width.unwrap_or(scaled_width.floor() as u16), render_settings.height.unwrap_or(scaled_height.floor() as u16));
+    let (pix_width, pix_height) = (
+        render_settings.width.unwrap_or(scaled_width.floor() as u16),
+        render_settings
+            .height
+            .unwrap_or(scaled_height.floor() as u16),
+    );
     let mut state = Context::new(
         initial_transform,
         Rect::new(0.0, 0.0, pix_width as f64, pix_height as f64),
@@ -470,9 +489,15 @@ pub fn render_png(
                     return None;
                 }
 
-                let pixmap = render(page, &settings, &RenderSettings {
-                    x_scale: scale, y_scale: scale, ..Default::default()
-                });
+                let pixmap = render(
+                    page,
+                    &settings,
+                    &RenderSettings {
+                        x_scale: scale,
+                        y_scale: scale,
+                        ..Default::default()
+                    },
+                );
 
                 let mut png_data = Vec::new();
                 let cursor = Cursor::new(&mut png_data);

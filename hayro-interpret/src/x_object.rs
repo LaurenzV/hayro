@@ -96,12 +96,15 @@ pub(crate) fn draw_form_xobject<'a>(
     context.pre_concat_affine(x_object.matrix);
     context.push_root_transform();
 
-    device.set_soft_mask(context.get().soft_mask.clone());
     device.set_transform(context.get().ctm);
-
     if x_object.is_transparency_group {
-        device.push_transparency_group(context.get().non_stroke_alpha);
+        device.push_transparency_group(
+            context.get().non_stroke_alpha,
+            std::mem::take(&mut context.get_mut().soft_mask),
+        );
     }
+
+    device.set_soft_mask(context.get().soft_mask.clone());
 
     device.push_clip_path(&ClipPath {
         path: Rect::new(
@@ -113,8 +116,6 @@ pub(crate) fn draw_form_xobject<'a>(
         .to_path(0.1),
         fill: Fill::NonZero,
     });
-
-    context.get_mut().soft_mask = None;
 
     interpret(
         iter,
@@ -152,9 +153,13 @@ pub(crate) fn draw_image_xobject(
     ]));
     let transform = context.get().ctm;
     device.set_transform(transform);
+
+    device.push_transparency_group(
+        context.get().non_stroke_alpha,
+        std::mem::take(&mut context.get_mut().soft_mask),
+    );
     // TODO: If image had soft mask, the one from the context should be replaced by it.
     device.set_soft_mask(context.get().soft_mask.clone());
-    device.push_transparency_group(context.get().non_stroke_alpha);
 
     if x_object.is_image_mask {
         if let Some(stencil) = x_object.alpha8() {

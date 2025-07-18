@@ -181,7 +181,7 @@ impl<T: Device> Device for Type3ShapeGlyphDevice<'_, T> {
         self.inner.push_clip_path(clip_path)
     }
 
-    fn push_transparency_group(&mut self, _: f32) {}
+    fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask>) {}
 
     // Technically not valid, I think, but there is a PDFBox test case that contains such a font
     // and everyone seems to render it.

@@ -245,7 +245,7 @@ impl<T: Device> Device for StencilPatternDevice<'_, T> {
         self.inner.push_clip_path(clip_path)
     }
 
-    fn push_transparency_group(&mut self, _: f32) {}
+    fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask>) {}
 
     fn fill_glyph(&mut self, glyph: &Glyph<'_>, _: &Paint) {
         self.inner.fill_glyph(glyph, self.paint)

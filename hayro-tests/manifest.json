@@ -986,5 +986,19 @@
   {
     "id": "resvg_masking_mask_with_image",
     "file": "pdfs/resvg_masking_mask_with_image.pdf"
+  },
+  {
+    "id": "issue40",
+    "file": "pdfs/issue40.link",
+    "md5": "405130c9b2b8e07911a5aaa86f558bee",
+    "link": true
+  },
+  {
+    "id": "text_fading",
+    "file": "pdfs/text-fading.pdf"
+  },
+  {
+    "id": "fireworks",
+    "file": "pdfs/fireworks.pdf"
   }
 ]
