@@ -1,4 +1,4 @@
-//! Decoding filtered data streams.
+//! Results from decoding filtered data streams.
 
 mod ascii_85;
 pub(crate) mod ascii_hex;
@@ -88,7 +88,7 @@ pub struct ImageData {
 pub struct FilterResult {
     /// The decoded data.
     pub data: Vec<u8>,
-    /// Additional data that is extracted from JPX image streams..
+    /// Additional data that is extracted from JPX image streams.
     pub image_data: Option<ImageData>,
 }
 
