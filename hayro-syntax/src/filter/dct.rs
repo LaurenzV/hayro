@@ -1,11 +1,8 @@
-//! A decoder for JPEG data streams.
-
 use crate::object::dict::Dict;
 use zune_jpeg::zune_core::colorspace::ColorSpace;
 use zune_jpeg::zune_core::options::DecoderOptions;
 
-/// Decode a JPEG data stream.
-pub fn decode(data: &[u8], _: Dict) -> Option<Vec<u8>> {
+pub(crate) fn decode(data: &[u8], _: Dict) -> Option<Vec<u8>> {
     // TODO: Handle the color transform attribute
     let mut decoder = zune_jpeg::JpegDecoder::new(data);
     decoder.decode_headers().ok()?;

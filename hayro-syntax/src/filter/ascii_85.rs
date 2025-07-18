@@ -1,7 +1,4 @@
-//! A decoder for ASCII-85-encoded streams.
-
-/// Decode a ASCII-85-encoded stream.
-pub fn decode(data: &[u8]) -> Option<Vec<u8>> {
+pub(crate) fn decode(data: &[u8]) -> Option<Vec<u8>> {
     let mut decoded = vec![];
 
     let mut stream = data

@@ -1,9 +1,6 @@
-//! A decoder for run-length encoded streams.
-
 use crate::reader::Reader;
 
-/// Decode a run-length-encoded stream.
-pub fn decode(data: &[u8]) -> Option<Vec<u8>> {
+pub(crate) fn decode(data: &[u8]) -> Option<Vec<u8>> {
     let mut reader = Reader::new(data);
     let mut decoded = vec![];
 

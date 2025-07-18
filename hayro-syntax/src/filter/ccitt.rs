@@ -19,8 +19,6 @@
  * license.
  */
 
-//! A decoder for CCITT streams, translated from <https://github.com/mozilla/pdf.js/blob/master/src/core/ccitt.js>
-
 use crate::object::dict::Dict;
 use crate::object::dict::keys::{
     BLACK_IS_1, COLUMNS, ENCODED_BYTE_ALIGN, END_OF_BLOCK, END_OF_LINE, K, ROWS,
@@ -28,8 +26,7 @@ use crate::object::dict::keys::{
 use crate::reader::Reader;
 use log::warn;
 
-/// Decode a CCITT data stream.
-pub fn decode(data: &[u8], params: Dict) -> Option<Vec<u8>> {
+pub(crate) fn decode(data: &[u8], params: Dict) -> Option<Vec<u8>> {
     let dp = CCITTFaxDecoderOptions::default();
 
     let params = CCITTFaxDecoderOptions {

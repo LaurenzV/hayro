@@ -1,5 +1,3 @@
-//! A decoder for JBIG2 data streams, ported from pdf.js (<https://github.com/mozilla/pdf.js/blob/master/src/core/jbig2.js>).
-
 /* Copyright 2012 Mozilla Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,8 +24,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::LazyLock;
 
-/// Decode a JBIG2 data stream.
-pub fn decode(data: &[u8], params: Dict) -> Option<Vec<u8>> {
+pub(crate) fn decode(data: &[u8], params: Dict) -> Option<Vec<u8>> {
     let globals = params.get::<Stream>(JBIG2_GLOBALS);
 
     let mut chunks = Vec::new();

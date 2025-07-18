@@ -1,11 +1,8 @@
-//! A decoder for JPX-encoded images.
-
 use crate::bit_reader::{BitSize, BitWriter};
 use crate::filter::{FilterResult, ImageData};
 
-/// Decode a JPX-encoded image stream.
 #[cfg(feature = "jpeg2000")]
-pub fn decode(data: &[u8]) -> Option<FilterResult> {
+pub(crate) fn decode(data: &[u8]) -> Option<FilterResult> {
     use crate::filter::ImageColorSpace;
 
     let image = jpeg2k::Image::from_bytes(data).ok()?;

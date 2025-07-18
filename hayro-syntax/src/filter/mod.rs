@@ -12,7 +12,6 @@ mod run_length;
 use crate::object::dict::Dict;
 use crate::object::dict::keys::*;
 use crate::object::name::Name;
-use crate::util::OptionLog;
 use log::warn;
 use std::ops::Deref;
 
@@ -31,7 +30,7 @@ pub enum DecodeFailure {
 
 /// A filter.
 #[derive(Debug, Copy, Clone)]
-pub enum Filter {
+pub(crate) enum Filter {
     /// The ASCII-hex filter.
     AsciiHexDecode,
     /// The ASCII85 filter.
@@ -138,8 +137,7 @@ impl Filter {
         }
     }
 
-    /// Apply the filter to some data.
-    pub fn apply(&self, data: &[u8], params: Dict) -> Result<FilterResult, DecodeFailure> {
+    pub(crate) fn apply(&self, data: &[u8], params: Dict) -> Result<FilterResult, DecodeFailure> {
         let res = match self {
             Filter::AsciiHexDecode => ascii_hex::decode(data)
                 .map(FilterResult::from_data)

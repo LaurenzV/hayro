@@ -1,18 +1,15 @@
-//! A decoder for LZW and flate-encoded streams.
-
 use crate::bit_reader::{BitChunk, BitChunks, BitReader, BitSize, BitWriter};
 use crate::object::dict::Dict;
 use crate::object::dict::keys::{BITS_PER_COMPONENT, COLORS, COLUMNS, EARLY_CHANGE, PREDICTOR};
 use log::warn;
 
-pub mod flate {
+pub(crate) mod flate {
     use crate::filter::lzw_flate::{PredictorParams, apply_predictor};
     use crate::object::dict::Dict;
     use flate2::read::{DeflateDecoder, ZlibDecoder};
     use std::io::Read;
 
-    /// Decode a flate-encoded stream.
-    pub fn decode(data: &[u8], params: Dict) -> Option<Vec<u8>> {
+    pub(crate) fn decode(data: &[u8], params: Dict) -> Option<Vec<u8>> {
         let decoded = zlib_stream(data).or_else(|| deflate_stream(data))?;
         let params = PredictorParams::from_params(&params);
         apply_predictor(decoded, &params)
@@ -33,14 +30,14 @@ pub mod flate {
     }
 }
 
-pub mod lzw {
+pub(crate) mod lzw {
     use crate::bit_reader::{BitReader, BitSize};
     use crate::filter::lzw_flate::{PredictorParams, apply_predictor};
     use crate::object::dict::Dict;
     use log::warn;
 
     /// Decode a LZW-encoded stream.
-    pub fn decode(data: &[u8], params: Dict) -> Option<Vec<u8>> {
+    pub(crate) fn decode(data: &[u8], params: Dict) -> Option<Vec<u8>> {
         let params = PredictorParams::from_params(&params);
 
         let decoded = decode_impl(data, params.early_change)?;
