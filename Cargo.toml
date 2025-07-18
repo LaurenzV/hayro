@@ -16,22 +16,22 @@ hayro-render = { path = "hayro-render", default-features = true }
 hayro-syntax = { path = "hayro-syntax", default-features = true }
 hayro-write = { path = "hayro-write" }
 
-bitflags = { version = "2.9.1" }
-bytemuck = { version = "1.23.1" }
-image = { version = "0.25.6", default-features = false }
-jpeg2k = { version = "0.9.1", default-features = false, features = ["openjp2"] }
-kurbo = { version = "0.11.1" }
-log = { version = "0.4.22" }
-flate2 = { version = "1.0", default-features = false, features = ["rust_backend"] }
-oxipng = { version = "9.1.5" }
-peniko = { version = "0.4.0", features = ["bytemuck"] }
-once_cell = { version = "1.20.3" }
-phf = { version = "0.11.3" }
-qcms = { version = "0.3.0" }
-rustc-hash = { version = "2.1.0" }
-skrifa = { version = "0.32.0" }
-smallvec = { version = "1.13.2" }
-yoke = { version = "0.8.0" }
-pdf-writer = "0.13.0"
+bitflags = { version = "2.9" }
+bytemuck = { version = "1.23" }
+image = { version = "0.25", default-features = false }
+jpeg2k = { version = "0.10", default-features = false, features = ["openjp2"] }
+kurbo = { version = "0.11" }
+log = { version = "0.4" }
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+oxipng = { version = "9.1" }
+peniko = { version = "0.4", features = ["bytemuck"] }
+once_cell = { version = "1.20" }
+phf = { version = "0.11" }
+qcms = { version = "0.3" }
+rustc-hash = { version = "2.1" }
+skrifa = { version = "0.32" }
+smallvec = { version = "1" }
+yoke = { version = "0.8" }
+pdf-writer = "0.13"
 sitro = { git = "https://github.com/LaurenzV/sitro", rev="fb804b3" }
 zune-jpeg = { version = "0.4" }
