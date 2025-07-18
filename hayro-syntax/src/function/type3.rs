@@ -7,7 +7,7 @@ use smallvec::smallvec;
 
 /// A type 3 function (stitching function).
 #[derive(Debug)]
-pub struct Type3 {
+pub(crate) struct Type3 {
     functions: Vec<Function>,
     bounds: Vec<f32>,
     encode: TupleVec,
@@ -16,7 +16,7 @@ pub struct Type3 {
 
 impl Type3 {
     /// Create a new type 3 function.
-    pub fn new(dict: &Dict) -> Option<Self> {
+    pub(crate) fn new(dict: &Dict) -> Option<Self> {
         let clamper = Clamper::new(dict)?;
 
         let functions = dict
@@ -40,7 +40,7 @@ impl Type3 {
     }
 
     /// Evaluate the function with the given input.
-    pub fn eval(&self, input: f32) -> Option<Values> {
+    pub(crate) fn eval(&self, input: f32) -> Option<Values> {
         let mut input = [input];
         self.clamper.clamp_input(&mut input);
 

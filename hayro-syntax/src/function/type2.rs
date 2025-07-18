@@ -6,16 +6,16 @@ use smallvec::{SmallVec, smallvec};
 
 /// A type 2 function (exponential function).
 #[derive(Debug)]
-pub struct Type2 {
-    pub(crate) c0: Values,
-    pub(crate) c1: Values,
-    pub(crate) clamper: Clamper,
-    pub(crate) n: f32,
+pub(crate) struct Type2 {
+    c0: Values,
+    c1: Values,
+    clamper: Clamper,
+    n: f32,
 }
 
 impl Type2 {
     /// Create a new type 2 function.
-    pub fn new(dict: &Dict) -> Option<Self> {
+    pub(crate) fn new(dict: &Dict) -> Option<Self> {
         let c0 = dict.get::<Values>(C0).unwrap_or(smallvec![0.0]);
         let c1 = dict.get::<Values>(C1).unwrap_or(smallvec![1.0]);
         let clamper = Clamper::new(dict)?;
@@ -25,7 +25,7 @@ impl Type2 {
     }
 
     /// Evaluate the function with the given input.
-    pub fn eval(&self, input: f32) -> Values {
+    pub(crate) fn eval(&self, input: f32) -> Values {
         let mut input = [input];
         self.clamper.clamp_input(&mut input);
 

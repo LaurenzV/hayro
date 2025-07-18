@@ -11,14 +11,14 @@ use std::ops::Rem;
 
 /// A type 4 function (postscript function).
 #[derive(Debug)]
-pub struct Type4 {
+pub(crate) struct Type4 {
     program: Vec<PostScriptOp>,
     clamper: Clamper,
 }
 
 impl Type4 {
     /// Create a new type 4 function.
-    pub fn new(stream: &Stream) -> Option<Self> {
+    pub(crate) fn new(stream: &Stream) -> Option<Self> {
         let dict = stream.dict().clone();
         let clamper = Clamper::new(&dict)?;
 
@@ -29,7 +29,7 @@ impl Type4 {
     }
 
     /// Evaluate the function with the given input.
-    pub fn eval(&self, mut input: Values) -> Option<Values> {
+    pub(crate) fn eval(&self, mut input: Values) -> Option<Values> {
         self.clamper.clamp_input(&mut input);
 
         let mut arg_stack = InterpreterStack::new();

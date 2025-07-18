@@ -10,7 +10,7 @@ use std::collections::HashMap;
 
 /// A type 0 function (sampled function).
 #[derive(Debug)]
-pub struct Type0 {
+pub(crate) struct Type0 {
     sizes: IntVec,
     table: HashMap<Key, IntVec>,
     clamper: Clamper,
@@ -22,7 +22,7 @@ pub struct Type0 {
 
 impl Type0 {
     /// Create a new type 0 function.
-    pub fn new(stream: &Stream) -> Option<Self> {
+    pub(crate) fn new(stream: &Stream) -> Option<Self> {
         let dict = stream.dict();
         let bits_per_sample = dict.get::<u8>(BITS_PER_SAMPLE)?;
 
@@ -69,7 +69,7 @@ impl Type0 {
     }
 
     /// Evaluate a type 0 function with the given input.
-    pub fn eval(&self, mut input: Values) -> Option<Values> {
+    pub(crate) fn eval(&self, mut input: Values) -> Option<Values> {
         if input.len() != self.sizes.len() {
             warn!("wrong number of arguments for sampled function");
 
@@ -136,7 +136,7 @@ struct Interpolator {
 }
 
 impl Interpolator {
-    pub fn new(
+    fn new(
         input: FloatVec,
         in_prev: IntVec,
         in_next: IntVec,
@@ -152,7 +152,7 @@ impl Interpolator {
         }
     }
 
-    pub fn interpolate(&self, table: &HashMap<Key, IntVec>) -> FloatVec {
+    fn interpolate(&self, table: &HashMap<Key, IntVec>) -> FloatVec {
         self.interpolate_inner(smallvec![0; self.input.len()], 0, table)
     }
 
