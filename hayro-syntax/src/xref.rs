@@ -108,7 +108,7 @@ fn fallback_xref_map(data: &[u8]) -> (XrefMap, Option<&[u8]>) {
 static DUMMY_XREF: &'static XRef = &XRef(Inner::Dummy);
 
 /// An xref table.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct XRef(Inner);
 
 impl XRef {
@@ -123,11 +123,11 @@ impl XRef {
         // and then populate the data.
         let trailer_data = TrailerData::dummy();
 
-        let mut xref = Self(Inner::Some {
-            data: Data::new(data),
-            map: Arc::new(RwLock::new(SomeRepr { xref_map, repaired })),
+        let mut xref = Self(Inner::Some(Arc::new(SomeRepr {
+            data: Arc::new(Data::new(data)),
+            map: Arc::new(RwLock::new(MapRepr { xref_map, repaired })),
             trailer_data,
-        });
+        })));
 
         let mut r = Reader::new(&trailer_dict_data);
         let trailer_dict = r
@@ -153,8 +153,8 @@ impl XRef {
 
         match &mut xref.0 {
             Inner::Dummy => unreachable!(),
-            Inner::Some { trailer_data, .. } => {
-                *trailer_data = td;
+            Inner::Some(r) => {
+                Arc::make_mut(r).trailer_data = td;
             }
         }
 
@@ -164,8 +164,8 @@ impl XRef {
     fn is_repaired(&self) -> bool {
         match &self.0 {
             Inner::Dummy => false,
-            Inner::Some { map, .. } => {
-                let locked = map.read().unwrap();
+            Inner::Some(r) => {
+                let locked = r.map.read().unwrap();
                 locked.repaired
             }
         }
@@ -178,22 +178,22 @@ impl XRef {
     pub(crate) fn len(&self) -> usize {
         match &self.0 {
             Inner::Dummy => 0,
-            Inner::Some { map, .. } => map.read().unwrap().xref_map.len(),
+            Inner::Some(r) => r.map.read().unwrap().xref_map.len(),
         }
     }
 
     pub(crate) fn trailer_data(&self) -> &TrailerData {
         match &self.0 {
             Inner::Dummy => unreachable!(),
-            Inner::Some { trailer_data, .. } => trailer_data,
+            Inner::Some(r) => &r.trailer_data,
         }
     }
 
     pub(crate) fn objects(&self) -> impl IntoIterator<Item = Object<'_>> + '_ {
         match &self.0 {
             Inner::Dummy => unimplemented!(),
-            Inner::Some { map, .. } => iter::from_fn(move || {
-                let locked = map.read().unwrap();
+            Inner::Some(r) => iter::from_fn(move || {
+                let locked = r.map.read().unwrap();
                 let mut iter = locked.xref_map.keys();
 
                 iter.next().and_then(|k| self.get(*k))
@@ -202,14 +202,14 @@ impl XRef {
     }
 
     pub(crate) fn repair(&self) {
-        let Inner::Some { map, data, .. } = &self.0 else {
+        let Inner::Some(r) = &self.0 else {
             unreachable!();
         };
 
-        let mut locked = map.try_write().unwrap();
+        let mut locked = r.map.try_write().unwrap();
         assert!(!locked.repaired);
 
-        let (xref_map, _) = fallback_xref_map(data.get());
+        let (xref_map, _) = fallback_xref_map(r.data.get());
         locked.xref_map = xref_map;
         locked.repaired = true;
     }
@@ -220,13 +220,13 @@ impl XRef {
     where
         T: ObjectLike<'a>,
     {
-        let Inner::Some { map, data, .. } = &self.0 else {
+        let Inner::Some(repr) = &self.0 else {
             return None;
         };
 
-        let locked = map.try_read().unwrap();
+        let locked = repr.map.try_read().unwrap();
 
-        let mut r = Reader::new(data.get());
+        let mut r = Reader::new(repr.data.get());
 
         let entry = *locked.xref_map.get(&id).or_else(|| {
             // An indirect reference to an undefined object shall not be considered an error by a PDF processor; it
@@ -277,7 +277,7 @@ impl XRef {
                 let id = ObjectIdentifier::new(id as i32, 0);
 
                 let stream = self.get::<Stream>(id)?;
-                let data = data.get_with(id, self)?;
+                let data = repr.data.get_with(id, self)?;
                 let object_stream =
                     ObjectStream::new(stream, data, ReaderContext::new(self, false))?;
                 object_stream.get(index)
@@ -322,7 +322,7 @@ type XrefMap = FxHashMap<ObjectIdentifier, EntryType>;
 
 /// Representation of a proper xref table.
 #[derive(Debug)]
-struct SomeRepr {
+struct MapRepr {
     xref_map: XrefMap,
     repaired: bool,
 }
@@ -342,16 +342,19 @@ impl TrailerData {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
+struct SomeRepr {
+    data: Arc<Data>,
+    map: Arc<RwLock<MapRepr>>,
+    trailer_data: TrailerData,
+}
+
+#[derive(Debug, Clone)]
 enum Inner {
     /// A dummy xref table that doesn't have any entries.
     Dummy,
     /// A proper xref table.
-    Some {
-        data: Data,
-        map: Arc<RwLock<SomeRepr>>,
-        trailer_data: TrailerData,
-    },
+    Some(Arc<SomeRepr>),
 }
 
 #[derive(Debug)]

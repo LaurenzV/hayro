@@ -13,6 +13,7 @@ pub use crate::object::rect::Rect;
 pub use crate::object::r#ref::{MaybeRef, ObjRef};
 pub use crate::object::stream::Stream;
 pub use crate::object::string::String;
+use crate::xref::XRef;
 
 mod bool;
 mod null;
@@ -245,6 +246,22 @@ pub fn dict_or_stream<'a>(obj: &Object<'a>) -> Option<(Dict<'a>, Option<Stream<'
         Some((dict, None))
     } else {
         None
+    }
+}
+
+pub(crate) struct ObjectData {
+    start_offset: usize,
+    end_offset: usize,
+    xref: XRef,
+}
+
+impl ObjectData {
+    pub(crate) fn new(start_offset: usize, end_offset: usize, xref: XRef) -> Self {
+        Self {
+            start_offset,
+            end_offset,
+            xref,
+        }
     }
 }
 

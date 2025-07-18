@@ -10,7 +10,7 @@ use std::vec;
 use std::vec::Vec;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Pod, Zeroable)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
+#[cfg_attr(carfeature = "serde", derive(serde::Deserialize, serde::Serialize))]
 #[repr(C)]
 pub struct PremulRgba8 {
     /// Red component.
