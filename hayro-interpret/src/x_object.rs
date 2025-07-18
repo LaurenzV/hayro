@@ -3,8 +3,8 @@ use crate::color::ColorSpace;
 use crate::context::Context;
 use crate::device::Device;
 use crate::image::{AlphaData, RgbData};
-use crate::interpret;
 use crate::interpret::path::get_paint;
+use crate::{FillRule, interpret};
 use hayro_syntax::bit_reader::{BitReader, BitSize};
 use hayro_syntax::content::{TypedIter, UntypedIter};
 use hayro_syntax::document::page::Resources;
@@ -17,7 +17,6 @@ use hayro_syntax::object::name::Name;
 use hayro_syntax::object::stream::Stream;
 use kurbo::{Affine, Rect, Shape};
 use log::warn;
-use peniko::Fill;
 use smallvec::SmallVec;
 use std::ops::Deref;
 
@@ -114,7 +113,7 @@ pub(crate) fn draw_form_xobject<'a>(
             x_object.bbox[3] as f64,
         )
         .to_path(0.1),
-        fill: Fill::NonZero,
+        fill: FillRule::NonZero,
     });
 
     interpret(
@@ -346,7 +345,7 @@ impl<'a> ImageXObject<'a> {
                 .decode_raw()?
                 .chunks(self.color_space.num_components() as usize)
                 .flat_map(|v| {
-                    let c = self.color_space.to_rgba(v, 1.0).to_rgba8().to_u8_array();
+                    let c = self.color_space.to_rgba(v, 1.0).to_rgba8();
                     [c[0], c[1], c[2]]
                 })
                 .collect::<Vec<_>>();

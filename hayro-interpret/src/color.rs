@@ -8,16 +8,73 @@ use hayro_syntax::object::name::Name;
 use hayro_syntax::object::stream::Stream;
 use hayro_syntax::object::{Object, string};
 use log::warn;
-use peniko::color::palette::css::BLACK;
-use peniko::color::{AlphaColor, Srgb};
 use qcms::Transform;
 use smallvec::{SmallVec, ToSmallVec, smallvec};
 use std::fmt::{Debug, Formatter};
+use std::marker::PhantomData;
 use std::ops::Deref;
 use std::sync::{Arc, LazyLock};
 
 /// A storage for the components of colors.
 pub type ColorComponents = SmallVec<[f32; 4]>;
+
+/// An RGB color with an alpha channel.
+#[derive(Debug, Copy, Clone)]
+pub struct AlphaColor {
+    components: [f32; 4],
+}
+
+impl AlphaColor {
+    /// A black color.
+    pub const BLACK: Self = Self::new([0., 0., 0., 1.]);
+
+    /// A transparent color.
+    pub const TRANSPARENT: Self = Self::new([0., 0., 0., 0.]);
+
+    /// A white color.
+    pub const WHITE: Self = Self::new([1., 1., 1., 1.]);
+
+    /// Create a new color from the given components.
+    pub const fn new(components: [f32; 4]) -> Self {
+        Self { components }
+    }
+
+    pub const fn from_rgb8(r: u8, g: u8, b: u8) -> Self {
+        let components = [u8_to_f32(r), u8_to_f32(g), u8_to_f32(b), 1.];
+        Self::new(components)
+    }
+
+    pub fn premultiplied(&self) -> [f32; 4] {
+        [
+            self.components[0] * self.components[3],
+            self.components[1] * self.components[3],
+            self.components[2] * self.components[3],
+            self.components[3],
+        ]
+    }
+
+    pub const fn from_rgba8(r: u8, g: u8, b: u8, a: u8) -> Self {
+        let components = [u8_to_f32(r), u8_to_f32(g), u8_to_f32(b), u8_to_f32(a)];
+        Self::new(components)
+    }
+
+    pub fn to_rgba8(&self) -> [u8; 4] {
+        [
+            (self.components[0] * 255.0 + 0.5) as u8,
+            (self.components[1] * 255.0 + 0.5) as u8,
+            (self.components[2] * 255.0 + 0.5) as u8,
+            (self.components[3] * 255.0 + 0.5) as u8,
+        ]
+    }
+
+    pub fn components(&self) -> [f32; 4] {
+        self.components
+    }
+}
+
+const fn u8_to_f32(x: u8) -> f32 {
+    x as f32 * (1.0 / 255.0)
+}
 
 #[derive(Debug)]
 enum ColorSpaceType {
@@ -225,11 +282,11 @@ impl ColorSpace {
     }
 
     /// Turn the given component values and opacity into an RGBA color.
-    pub fn to_rgba(&self, c: &[f32], opacity: f32) -> AlphaColor<Srgb> {
-        self.to_rgba_inner(c, opacity).unwrap_or(BLACK)
+    pub fn to_rgba(&self, c: &[f32], opacity: f32) -> AlphaColor {
+        self.to_rgba_inner(c, opacity).unwrap_or(AlphaColor::BLACK)
     }
 
-    fn to_rgba_inner(&self, c: &[f32], opacity: f32) -> Option<AlphaColor<Srgb>> {
+    fn to_rgba_inner(&self, c: &[f32], opacity: f32) -> Option<AlphaColor> {
         let color = match self.0.as_ref() {
             ColorSpaceType::DeviceRgb => {
                 AlphaColor::new([*c.first()?, *c.get(1)?, *c.get(2)?, opacity])
@@ -269,7 +326,7 @@ impl ColorSpace {
             }
             ColorSpaceType::Indexed(i) => i.to_rgb(*c.first()?, opacity),
             ColorSpaceType::Separation(s) => s.to_rgba(*c.first()?, opacity),
-            ColorSpaceType::Pattern(_) => BLACK,
+            ColorSpaceType::Pattern(_) => AlphaColor::BLACK,
             ColorSpaceType::DeviceN(d) => d.to_rgba(c, opacity),
         };
 
@@ -592,7 +649,7 @@ impl Indexed {
         })
     }
 
-    pub fn to_rgb(&self, val: f32, opacity: f32) -> AlphaColor<Srgb> {
+    pub fn to_rgb(&self, val: f32, opacity: f32) -> AlphaColor {
         let idx = (val.clamp(0.0, self.hival as f32) + 0.5) as usize;
         self.base.to_rgba(self.values[idx].as_slice(), opacity)
     }
@@ -623,7 +680,7 @@ impl Separation {
         })
     }
 
-    fn to_rgba(&self, c: f32, opacity: f32) -> AlphaColor<Srgb> {
+    fn to_rgba(&self, c: f32, opacity: f32) -> AlphaColor {
         let res = self
             .tint_transform
             .eval(smallvec![c])
@@ -657,7 +714,7 @@ impl DeviceN {
         })
     }
 
-    fn to_rgba(&self, c: &[f32], opacity: f32) -> AlphaColor<Srgb> {
+    fn to_rgba(&self, c: &[f32], opacity: f32) -> AlphaColor {
         let res = self
             .tint_transform
             .eval(c.to_smallvec())
@@ -768,7 +825,7 @@ impl Color {
     }
 
     /// Return the color as an RGBA color.
-    pub fn to_rgba(&self) -> AlphaColor<Srgb> {
+    pub fn to_rgba(&self) -> AlphaColor {
         self.color_space.to_rgba(&self.components, self.opacity)
     }
 }

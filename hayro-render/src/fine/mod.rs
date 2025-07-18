@@ -15,7 +15,6 @@ use crate::tile::Tile;
 use core::fmt::Debug;
 use core::iter;
 use kurbo::{Point, Vec2};
-use peniko::{BlendMode, Compose, Mix};
 
 pub(crate) const COLOR_COMPONENTS: usize = 4;
 pub(crate) const TILE_HEIGHT_COMPONENTS: usize = Tile::HEIGHT as usize * COLOR_COMPONENTS;
@@ -89,14 +88,7 @@ impl Fine {
     pub(crate) fn run_cmd(&mut self, cmd: &Cmd, alphas: &[u8], paints: &[EncodedPaint]) {
         match cmd {
             Cmd::Fill(f) => {
-                self.fill(
-                    usize::from(f.x),
-                    usize::from(f.width),
-                    &f.paint,
-                    f.blend_mode
-                        .unwrap_or(BlendMode::new(Mix::Normal, Compose::SrcOver)),
-                    paints,
-                );
+                self.fill(usize::from(f.x), usize::from(f.width), &f.paint, paints);
             }
             Cmd::AlphaFill(s) => match (s.alpha_idx, s.mask.as_ref()) {
                 (Some(alpha_idx), mask) => {
@@ -122,8 +114,6 @@ impl Fine {
                                 ]
                             }),
                             &s.paint,
-                            s.blend_mode
-                                .unwrap_or(BlendMode::new(Mix::Normal, Compose::SrcOver)),
                             paints,
                         );
                     } else {
@@ -132,8 +122,6 @@ impl Fine {
                             usize::from(s.width),
                             a_slice.chunks_exact(4).map(|e| [e[0], e[1], e[2], e[3]]),
                             &s.paint,
-                            s.blend_mode
-                                .unwrap_or(BlendMode::new(Mix::Normal, Compose::SrcOver)),
                             paints,
                         );
                     }
@@ -149,8 +137,6 @@ impl Fine {
                         usize::from(s.width),
                         mask_iter,
                         &s.paint,
-                        s.blend_mode
-                            .unwrap_or(BlendMode::new(Mix::Normal, Compose::SrcOver)),
                         paints,
                     );
                 }
@@ -169,8 +155,8 @@ impl Fine {
                 let aslice = &alphas[cs.alpha_idx..];
                 self.clip_strip(cs.x as usize, cs.width as usize, aslice);
             }
-            Cmd::Blend(cb) => {
-                self.apply_blend(*cb);
+            Cmd::Blend() => {
+                self.apply_blend();
             }
             Cmd::Opacity(o) => {
                 if *o != 1.0 {
@@ -214,14 +200,7 @@ impl Fine {
     }
 
     /// Fill at a given x and with a width using the given paint.
-    pub fn fill(
-        &mut self,
-        x: usize,
-        width: usize,
-        fill: &Paint,
-        blend_mode: BlendMode,
-        encoded_paints: &[EncodedPaint],
-    ) {
+    pub fn fill(&mut self, x: usize, width: usize, fill: &Paint, encoded_paints: &[EncodedPaint]) {
         let blend_buf = &mut self.blend_buf.last_mut().unwrap()[x * TILE_HEIGHT_COMPONENTS..]
             [..TILE_HEIGHT_COMPONENTS * width];
         let color_buf =
@@ -230,21 +209,17 @@ impl Fine {
         let start_x = self.wide_coords.0 * WideTile::WIDTH + x as u16;
         let start_y = self.wide_coords.1 * Tile::HEIGHT;
 
-        let default_blend = blend_mode == BlendMode::new(Mix::Normal, Compose::SrcOver);
-
         fn fill_complex_paint(
             color_buf: &mut [f32],
             blend_buf: &mut [f32],
             has_opacities: bool,
-            blend_mode: BlendMode,
             filler: impl Painter,
         ) {
             if has_opacities {
                 filler.paint(color_buf);
-                fill::blend(
+                fill::alpha_composite(
                     blend_buf,
                     color_buf.chunks_exact(4).map(|e| [e[0], e[1], e[2], e[3]]),
-                    blend_mode,
                 );
             } else {
                 // Similarly to solid colors we can just override the previous values
@@ -258,7 +233,7 @@ impl Fine {
                 let color = color.0;
 
                 // If color is completely opaque we can just memcopy the colors.
-                if color[3] == 1.0 && default_blend {
+                if color[3] == 1.0 {
                     for t in blend_buf.chunks_exact_mut(COLOR_COMPONENTS) {
                         t.copy_from_slice(&color);
                     }
@@ -266,7 +241,7 @@ impl Fine {
                     return;
                 }
 
-                fill::blend(blend_buf, iter::repeat(color), blend_mode);
+                fill::alpha_composite(blend_buf, iter::repeat(color));
             }
             Paint::Indexed(paint) => {
                 let encoded_paint = &encoded_paints[paint.index()];
@@ -274,11 +249,11 @@ impl Fine {
                 match encoded_paint {
                     EncodedPaint::Image(i) => {
                         let filler = ShaderFiller::new(i, start_x, start_y);
-                        fill_complex_paint(color_buf, blend_buf, true, blend_mode, filler);
+                        fill_complex_paint(color_buf, blend_buf, true, filler);
                     }
                     EncodedPaint::Shading(s) => {
                         let filler = ShaderFiller::new(s, start_x, start_y);
-                        fill_complex_paint(color_buf, blend_buf, true, blend_mode, filler);
+                        fill_complex_paint(color_buf, blend_buf, true, filler);
                     }
                     EncodedPaint::Mask(i) => {
                         let filler = ShaderFiller::new(i, start_x, start_y);
@@ -306,7 +281,6 @@ impl Fine {
         width: usize,
         alphas: impl Iterator<Item = [u8; Tile::HEIGHT as usize]>,
         fill: &Paint,
-        blend_mode: BlendMode,
         paints: &[EncodedPaint],
     ) {
         let blend_buf = &mut self.blend_buf.last_mut().unwrap()[x * TILE_HEIGHT_COMPONENTS..]
@@ -319,7 +293,7 @@ impl Fine {
 
         match fill {
             Paint::Solid(color) => {
-                strip::blend(blend_buf, iter::repeat(color.0), blend_mode, alphas);
+                strip::alpha_composite(blend_buf, iter::repeat(color.0), alphas);
             }
             Paint::Indexed(paint) => {
                 let encoded_paint = &paints[paint.index()];
@@ -329,10 +303,9 @@ impl Fine {
                         let filler = ShaderFiller::new(i, start_x, start_y);
                         filler.paint(color_buf);
 
-                        strip::blend(
+                        strip::alpha_composite(
                             blend_buf,
                             color_buf.chunks_exact(4).map(|e| [e[0], e[1], e[2], e[3]]),
-                            blend_mode,
                             alphas,
                         );
                     }
@@ -340,10 +313,9 @@ impl Fine {
                         let filler = ShaderFiller::new(s, start_x, start_y);
                         filler.paint(color_buf);
 
-                        strip::blend(
+                        strip::alpha_composite(
                             blend_buf,
                             color_buf.chunks_exact(4).map(|e| [e[0], e[1], e[2], e[3]]),
-                            blend_mode,
                             alphas,
                         );
                     }
@@ -375,16 +347,15 @@ impl Fine {
         }
     }
 
-    fn apply_blend(&mut self, blend_mode: BlendMode) {
+    fn apply_blend(&mut self) {
         let (source_buffer, rest) = self.blend_buf.split_last_mut().unwrap();
         let target_buffer = rest.last_mut().unwrap();
 
-        fill::blend(
+        fill::alpha_composite(
             target_buffer,
             source_buffer
                 .chunks_exact(4)
                 .map(|e| [e[0], e[1], e[2], e[3]]),
-            blend_mode,
         );
     }
 
@@ -483,18 +454,6 @@ pub(crate) mod fill {
     // formulas.
 
     use crate::fine::{COLOR_COMPONENTS, TILE_HEIGHT_COMPONENTS};
-    use peniko::{BlendMode, Compose, Mix};
-
-    pub(crate) fn blend<T: Iterator<Item = [f32; COLOR_COMPONENTS]>>(
-        target: &mut [f32],
-        source: T,
-        blend_mode: BlendMode,
-    ) {
-        match (blend_mode.mix, blend_mode.compose) {
-            (Mix::Normal, Compose::SrcOver) => alpha_composite(target, source),
-            _ => unreachable!(),
-        }
-    }
 
     pub(crate) fn alpha_composite<T: Iterator<Item = [f32; COLOR_COMPONENTS]>>(
         target: &mut [f32],
@@ -514,22 +473,6 @@ pub(crate) mod fill {
 pub(crate) mod strip {
     use crate::fine::{COLOR_COMPONENTS, TILE_HEIGHT_COMPONENTS};
     use crate::tile::Tile;
-    use peniko::{BlendMode, Compose, Mix};
-
-    pub(crate) fn blend<
-        T: Iterator<Item = [f32; COLOR_COMPONENTS]>,
-        A: Iterator<Item = [u8; Tile::HEIGHT as usize]>,
-    >(
-        target: &mut [f32],
-        source: T,
-        blend_mode: BlendMode,
-        alphas: A,
-    ) {
-        match (blend_mode.mix, blend_mode.compose) {
-            (Mix::Normal, Compose::SrcOver) => alpha_composite(target, source, alphas),
-            _ => unreachable!(),
-        }
-    }
 
     pub(crate) fn alpha_composite<
         T: Iterator<Item = [f32; COLOR_COMPONENTS]>,

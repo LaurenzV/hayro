@@ -24,7 +24,6 @@ kurbo = { version = "0.11" }
 log = { version = "0.4" }
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 oxipng = { version = "9.1" }
-peniko = { version = "0.4", features = ["bytemuck"] }
 once_cell = { version = "1.20" }
 phf = { version = "0.11" }
 qcms = { version = "0.3" }

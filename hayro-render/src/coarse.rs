@@ -6,8 +6,9 @@
 use crate::mask::Mask;
 use crate::paint::{Paint, PremulColor};
 use crate::{strip::Strip, tile::Tile};
-use peniko::color::palette::css::TRANSPARENT;
-use peniko::{BlendMode, Compose, Fill};
+use hayro_interpret::FillRule;
+use hayro_interpret::MaskType::Alpha;
+use hayro_interpret::color::AlphaColor;
 use std::vec;
 use std::{boxed::Box, vec::Vec};
 
@@ -15,9 +16,6 @@ use std::{boxed::Box, vec::Vec};
 struct Layer {
     /// Whether the layer has a clip associated with it.
     clip: bool,
-    /// The blend mode with which this layer should be blended into
-    /// the previous layer.
-    blend_mode: BlendMode,
     /// An opacity to apply to the whole layer before blending it
     /// into the backdrop.
     opacity: f32,
@@ -49,7 +47,7 @@ struct Clip {
     /// The rendered path in sparse strip representation
     pub strips: Box<[Strip]>,
     /// The fill rule used for this clip
-    pub fill_rule: Fill,
+    pub fill_rule: FillRule,
 }
 
 /// A bounding box
@@ -140,7 +138,7 @@ impl Wide {
     /// Reset all tiles in the container.
     pub fn reset(&mut self) {
         for tile in &mut self.tiles {
-            tile.bg = PremulColor::from_alpha_color(TRANSPARENT);
+            tile.bg = PremulColor::from_alpha_color(AlphaColor::TRANSPARENT);
             tile.cmds.clear();
         }
         self.layer_stack.clear();
@@ -197,7 +195,7 @@ impl Wide {
     pub fn generate(
         &mut self,
         strip_buf: &[Strip],
-        fill_rule: Fill,
+        fill_rule: FillRule,
         paint: Paint,
         mask: Option<Mask>,
     ) {
@@ -267,7 +265,6 @@ impl Wide {
                     alpha_idx: Some((col * u32::from(Tile::HEIGHT)) as usize),
                     mask: mask.clone(),
                     paint: paint.clone(),
-                    blend_mode: None,
                 };
                 x += width;
                 col += u32::from(width);
@@ -277,8 +274,8 @@ impl Wide {
             // Determine if the region between this strip and the next should be filled
             // based on the fill rule (NonZero or EvenOdd)
             let active_fill = match fill_rule {
-                Fill::NonZero => next_strip.winding != 0,
-                Fill::EvenOdd => next_strip.winding % 2 != 0,
+                FillRule::NonZero => next_strip.winding != 0,
+                FillRule::EvenOdd => next_strip.winding % 2 != 0,
             };
 
             // If region should be filled and both strips are on the same row,
@@ -311,14 +308,12 @@ impl Wide {
     /// Push a new layer with the given properties.
     pub fn push_layer(
         &mut self,
-        clip_path: Option<(impl Into<Box<[Strip]>>, Fill)>,
-        blend_mode: BlendMode,
+        clip_path: Option<(impl Into<Box<[Strip]>>, FillRule)>,
         mask: Option<Mask>,
         opacity: f32,
     ) {
         let layer = Layer {
             clip: clip_path.is_some(),
-            blend_mode,
             opacity,
             mask,
         };
@@ -353,7 +348,7 @@ impl Wide {
                     t.mask(mask);
                 }
                 t.opacity(layer.opacity);
-                t.blend(layer.blend_mode);
+                t.blend();
                 t.pop_buf();
             }
         }
@@ -371,7 +366,7 @@ impl Wide {
     ///    - If covered by zero winding: `push_zero_clip`
     ///    - If fully covered by non-zero winding: do nothing (clip is a no-op)
     ///    - If partially covered: `push_clip`
-    pub fn push_clip(&mut self, strips: impl Into<Box<[Strip]>>, fill_rule: Fill) {
+    pub fn push_clip(&mut self, strips: impl Into<Box<[Strip]>>, fill_rule: FillRule) {
         let strips = strips.into();
         let n_strips = strips.len();
 
@@ -438,8 +433,8 @@ impl Wide {
             if cur_wtile_x < wtile_x_clamped {
                 // If winding is zero or doesn't match fill rule, these wide tiles are outside the path
                 let is_inside = match fill_rule {
-                    Fill::NonZero => strip.winding != 0,
-                    Fill::EvenOdd => strip.winding % 2 != 0,
+                    FillRule::NonZero => strip.winding != 0,
+                    FillRule::EvenOdd => strip.winding % 2 != 0,
                 };
                 if !is_inside {
                     for wtile_x in cur_wtile_x..wtile_x_clamped {
@@ -560,8 +555,8 @@ impl Wide {
                 // TODO: The winding check is probably not needed; if there was a fill,
                 // the logic below should have advanced wtile_x.
                 let is_inside = match fill_rule {
-                    Fill::NonZero => strip.winding != 0,
-                    Fill::EvenOdd => strip.winding % 2 != 0,
+                    FillRule::NonZero => strip.winding != 0,
+                    FillRule::EvenOdd => strip.winding % 2 != 0,
                 };
                 if !is_inside {
                     for wtile_x in cur_wtile_x..wtile_x_clamped {
@@ -621,8 +616,8 @@ impl Wide {
 
             // Handle fill regions between strips based on fill rule
             let is_inside = match fill_rule {
-                Fill::NonZero => next_strip.winding != 0,
-                Fill::EvenOdd => next_strip.winding % 2 != 0,
+                FillRule::NonZero => next_strip.winding != 0,
+                FillRule::EvenOdd => next_strip.winding % 2 != 0,
             };
             if is_inside && strip_y == next_strip.strip_y() {
                 if cur_wtile_x >= clip_bbox.x1() {
@@ -717,7 +712,7 @@ impl WideTile {
     /// Create a new wide tile.
     pub fn new() -> Self {
         Self {
-            bg: PremulColor::from_alpha_color(TRANSPARENT),
+            bg: PremulColor::from_alpha_color(AlphaColor::TRANSPARENT),
             cmds: vec![],
             n_zero_clip: 0,
             n_clip: 0,
@@ -761,15 +756,9 @@ impl WideTile {
                         paint,
                         alpha_idx: None,
                         mask: Some(mask),
-                        blend_mode: None,
                     }));
                 } else {
-                    self.cmds.push(Cmd::Fill(CmdFill {
-                        x,
-                        width,
-                        paint,
-                        blend_mode: None,
-                    }));
+                    self.cmds.push(Cmd::Fill(CmdFill { x, width, paint }));
                 }
             }
         }
@@ -839,43 +828,6 @@ impl WideTile {
             // we can just pop it instead.
             self.cmds.pop();
         } else {
-            if self.cmds.len() >= 3 {
-                // If we have a non-destructive blend mode with just a single fill/strip,
-                // inline the blend mode instead.
-                let (_, tail) = self.cmds.split_at(self.cmds.len() - 3);
-
-                let updated = match tail {
-                    [Cmd::PushBuf, Cmd::AlphaFill(a), Cmd::Blend(b)] => {
-                        if !b.is_destructive() && a.blend_mode.is_none() {
-                            let mut blended = a.clone();
-                            blended.blend_mode = Some(*b);
-                            Some(Cmd::AlphaFill(blended))
-                        } else {
-                            None
-                        }
-                    }
-                    [Cmd::PushBuf, Cmd::Fill(a), Cmd::Blend(b)] => {
-                        if !b.is_destructive() && a.blend_mode.is_none() {
-                            let mut blended = a.clone();
-                            blended.blend_mode = Some(*b);
-                            Some(Cmd::Fill(blended))
-                        } else {
-                            None
-                        }
-                    }
-                    _ => None,
-                };
-
-                if let Some(updated) = updated {
-                    self.cmds.pop();
-                    self.cmds.pop();
-                    self.cmds.pop();
-                    self.cmds.push(updated);
-
-                    return;
-                }
-            }
-
             self.cmds.push(Cmd::PopBuf);
         }
 
@@ -895,11 +847,11 @@ impl WideTile {
     }
 
     /// Blend the current buffer into the previous buffer in the stack.
-    pub fn blend(&mut self, blend_mode: BlendMode) {
+    pub fn blend(&mut self) {
         // Optimization: If no drawing happened since the last `PushBuf` and the blend mode
         // is not destructive, we do not need to do any blending at all.
-        if !matches!(self.cmds.last(), Some(&Cmd::PushBuf)) || blend_mode.is_destructive() {
-            self.cmds.push(Cmd::Blend(blend_mode));
+        if !matches!(self.cmds.last(), Some(&Cmd::PushBuf)) {
+            self.cmds.push(Cmd::Blend());
         }
     }
 }
@@ -929,7 +881,7 @@ pub enum Cmd {
     ///
     /// This command will blend the contents of the current buffer into the previous buffer in
     /// the stack.
-    Blend(BlendMode),
+    Blend(),
     /// Apply an opacity mask to the current buffer.
     Opacity(f32),
     /// Apply a mask to the current buffer.
@@ -945,8 +897,6 @@ pub struct CmdFill {
     pub width: u16,
     /// The paint that should be used to fill the area.
     pub paint: Paint,
-    /// The blend mode to apply before drawing the contents.
-    pub blend_mode: Option<BlendMode>,
 }
 
 /// Fill a consecutive region of a wide tile with an alpha mask.
@@ -961,8 +911,6 @@ pub struct CmdAlphaFill {
     pub mask: Option<Mask>,
     /// The paint that should be used to fill the area.
     pub paint: Paint,
-    /// A blend mode to apply before drawing the contents.
-    pub blend_mode: Option<BlendMode>,
 }
 
 /// Same as fill, but copies top of clip stack to next on stack.
@@ -983,25 +931,4 @@ pub struct CmdClipAlphaFill {
     pub width: u32,
     /// The start index into the alpha buffer of the command.
     pub alpha_idx: usize,
-}
-
-trait BlendModeExt {
-    /// Whether a blend mode might cause destructive changes in the backdrop.
-    /// This disallows certain optimizations (like for example inlining a blend mode
-    /// or only applying a blend mode to the current clipping area).
-    fn is_destructive(&self) -> bool;
-}
-
-impl BlendModeExt for BlendMode {
-    fn is_destructive(&self) -> bool {
-        matches!(
-            self.compose,
-            Compose::Clear
-                | Compose::Copy
-                | Compose::SrcIn
-                | Compose::DestIn
-                | Compose::SrcOut
-                | Compose::DestAtop
-        )
-    }
 }

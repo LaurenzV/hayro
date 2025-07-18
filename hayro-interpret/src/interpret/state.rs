@@ -1,10 +1,10 @@
+use crate::FillRule;
 use crate::color::{ColorComponents, ColorSpace};
 use crate::font::{Font, UNITS_PER_EM};
 use crate::interpret::text::TextRenderingMode;
 use crate::pattern::Pattern;
 use crate::soft_mask::SoftMask;
 use kurbo::{Affine, BezPath, Cap, Join, Vec2};
-use peniko::Fill;
 use smallvec::SmallVec;
 
 #[derive(Clone, Debug)]
@@ -39,7 +39,7 @@ pub(crate) struct State<'a> {
     pub(crate) soft_mask: Option<SoftMask<'a>>,
     // Strictly speaking not part of the graphics state, but we keep it there for
     // consistency.
-    pub(crate) fill_rule: Fill,
+    pub(crate) fill_rule: FillRule,
     pub(crate) n_clips: u32,
 }
 

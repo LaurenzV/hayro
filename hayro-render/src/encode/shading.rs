@@ -1,19 +1,17 @@
 use crate::encode::{EncodeExt, EncodedPaint, Shader};
 use crate::fine::Sampler;
 use crate::paint::{IndexedPaint, Paint};
-use hayro_interpret::color::{ColorComponents, ColorSpace};
+use hayro_interpret::color::{AlphaColor, ColorComponents, ColorSpace};
 use hayro_interpret::pattern::ShadingPattern;
 use hayro_interpret::shading::{ShadingFunction, ShadingType, Triangle};
 use kurbo::{Affine, Point};
-use peniko::color::palette::css::TRANSPARENT;
-use peniko::color::{AlphaColor, Srgb};
 use rustc_hash::FxHashMap;
 use smallvec::{ToSmallVec, smallvec};
 
 #[derive(Debug)]
 pub(crate) struct EncodedShading {
     pub(crate) color_space: ColorSpace,
-    pub(crate) background_color: AlphaColor<Srgb>,
+    pub(crate) background_color: AlphaColor,
     pub(crate) shading_type: EncodedShadingType,
 }
 
@@ -25,7 +23,7 @@ impl Sampler for EncodedShading {
     fn sample_impl(&self, pos: Point) -> [f32; 4] {
         self.shading_type
             .eval(pos, self.background_color, &self.color_space)
-            .map(|v| v.components)
+            .map(|v| v.components())
             .unwrap_or([0.0, 0.0, 0.0, 0.0])
     }
 }
@@ -118,7 +116,7 @@ impl EncodeExt for ShadingPattern {
             .background
             .as_ref()
             .map(|b| color_space.to_rgba(b, 1.0))
-            .unwrap_or(TRANSPARENT);
+            .unwrap_or(AlphaColor::TRANSPARENT);
 
         let encoded = EncodedShading {
             color_space,
@@ -256,9 +254,9 @@ impl EncodedShadingType {
     pub(crate) fn eval(
         &self,
         pos: Point,
-        bg_color: AlphaColor<Srgb>,
+        bg_color: AlphaColor,
         color_space: &ColorSpace,
-    ) -> Option<AlphaColor<Srgb>> {
+    ) -> Option<AlphaColor> {
         match self {
             EncodedShadingType::FunctionBased { domain, function } => {
                 if !domain.contains(pos) {
@@ -322,7 +320,7 @@ impl EncodedShadingType {
                     Some(bg_color)
                 }
             }
-            EncodedShadingType::Dummy => Some(TRANSPARENT),
+            EncodedShadingType::Dummy => Some(AlphaColor::TRANSPARENT),
         }
     }
 }

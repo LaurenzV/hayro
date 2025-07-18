@@ -3,7 +3,7 @@ use crate::color::ColorSpace;
 use crate::convert::convert_transform;
 use crate::font::Font;
 use crate::interpret::state::{State, TextState};
-use crate::{FillProps, InterpreterSettings, StrokeProps};
+use crate::{FillProps, FillRule, InterpreterSettings, StrokeProps};
 use hayro_syntax::content::ops::Transform;
 use hayro_syntax::document::page::Resources;
 use hayro_syntax::object::Object;
@@ -13,7 +13,6 @@ use hayro_syntax::object::r#ref::ObjRef;
 use hayro_syntax::xref::XRef;
 use kurbo::{Affine, BezPath, Cap, Join, Point};
 use log::warn;
-use peniko::Fill;
 use smallvec::smallvec;
 use std::collections::HashMap;
 
@@ -22,7 +21,7 @@ pub struct Context<'a> {
     path: BezPath,
     sub_path_start: Point,
     last_point: Point,
-    clip: Option<Fill>,
+    clip: Option<FillRule>,
     font_cache: HashMap<ObjRef, Option<Font<'a>>>,
     root_transforms: Vec<Affine>,
     bbox: Vec<kurbo::Rect>,
@@ -58,7 +57,7 @@ impl<'a> Context<'a> {
             none_stroke_cs: ColorSpace::device_gray(),
             non_stroke_color: smallvec![0.0],
             stroke_alpha: 1.0,
-            fill_rule: Fill::NonZero,
+            fill_rule: FillRule::NonZero,
             n_clips: 0,
             soft_mask: None,
             text_state: TextState::default(),
@@ -156,11 +155,11 @@ impl<'a> Context<'a> {
         &mut self.last_point
     }
 
-    pub(crate) fn clip(&self) -> &Option<Fill> {
+    pub(crate) fn clip(&self) -> &Option<FillRule> {
         &self.clip
     }
 
-    pub(crate) fn clip_mut(&mut self) -> &mut Option<Fill> {
+    pub(crate) fn clip_mut(&mut self) -> &mut Option<FillRule> {
         &mut self.clip
     }
 

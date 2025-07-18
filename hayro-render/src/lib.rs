@@ -3,35 +3,33 @@ use crate::mask::Mask;
 use crate::paint::{Image, PaintType};
 use crate::pixmap::Pixmap;
 use crate::render::RenderContext;
+pub use hayro_interpret::FontData;
+pub use hayro_interpret::InterpreterSettings;
 use hayro_interpret::cache::Cache;
 use hayro_interpret::clip_path::ClipPath;
+use hayro_interpret::color::AlphaColor;
 use hayro_interpret::context::Context;
 use hayro_interpret::device::Device;
+pub use hayro_interpret::font::FontQuery;
 use hayro_interpret::font::Glyph;
+pub use hayro_interpret::font::standard_font::StandardFont;
 use hayro_interpret::pattern::Pattern;
 use hayro_interpret::util::FloatExt;
 use hayro_interpret::{
-    AlphaData, FillProps, MaskType, Paint, RgbData, SoftMask, StrokeProps, interpret,
+    AlphaData, FillProps, FillRule, MaskType, Paint, RgbData, SoftMask, StrokeProps, interpret,
 };
 use hayro_syntax::document::page::{A4, Page, Rotation};
 use hayro_syntax::object::ObjectIdentifier;
+use hayro_syntax::object::dict::keys::P;
+pub use hayro_syntax::pdf::Pdf;
 use image::codecs::png::PngEncoder;
 use image::imageops::FilterType;
 use image::{DynamicImage, ExtendedColorType, ImageBuffer, ImageEncoder, RgbImage};
 use kurbo::{Affine, BezPath, Point, Rect, Shape};
-use peniko::Fill;
-use peniko::color::palette::css::WHITE;
 use std::collections::HashMap;
 use std::io::Cursor;
 use std::ops::RangeInclusive;
 use std::sync::Arc;
-
-pub use hayro_interpret::FontData;
-pub use hayro_interpret::InterpreterSettings;
-pub use hayro_interpret::font::FontQuery;
-pub use hayro_interpret::font::standard_font::StandardFont;
-use hayro_syntax::object::dict::keys::P;
-pub use hayro_syntax::pdf::Pdf;
 
 mod coarse;
 mod encode;
@@ -270,7 +268,7 @@ impl Device for Renderer {
         alpha: Option<hayro_interpret::AlphaData>,
     ) {
         if let Some(ref mask) = self.cur_mask {
-            self.ctx.push_layer(None, None, None, Some(mask.clone()));
+            self.ctx.push_layer(None, None, Some(mask.clone()));
         }
 
         self.ctx.set_anti_aliasing(false);
@@ -284,11 +282,10 @@ impl Device for Renderer {
 
     fn draw_stencil_image(&mut self, stencil: AlphaData, paint: &Paint) {
         self.ctx.set_anti_aliasing(false);
-        self.ctx
-            .push_layer(None, None, Some(1.0), self.cur_mask.clone());
+        self.ctx.push_layer(None, Some(1.0), self.cur_mask.clone());
         let old_rule = self.ctx.fill_rule;
         self.set_fill_properties(&FillProps {
-            fill_rule: Fill::NonZero,
+            fill_rule: FillRule::NonZero,
         });
         let (converted_paint, paint_transform) = self.convert_paint(paint, false);
         self.ctx.fill_rect(
@@ -338,12 +335,11 @@ impl Device for Renderer {
 
     fn push_clip_path(&mut self, clip_path: &ClipPath) {
         self.ctx.set_fill_rule(clip_path.fill);
-        self.ctx.push_layer(Some(&clip_path.path), None, None, None)
+        self.ctx.push_layer(Some(&clip_path.path), None, None)
     }
 
     fn push_transparency_group(&mut self, opacity: f32, mask: Option<SoftMask>) {
         self.ctx.push_layer(
-            None,
             None,
             Some(opacity),
             // TODO: Deduplicate
@@ -431,13 +427,13 @@ pub fn render(
 
     device.ctx.fill_rect(
         &Rect::new(0.0, 0.0, pix_width as f64, pix_height as f64),
-        WHITE.into(),
+        AlphaColor::WHITE.into(),
         Affine::IDENTITY,
         None,
     );
     device.push_clip_path(&ClipPath {
         path: initial_transform * page.view_box().to_path(0.1),
-        fill: Fill::NonZero,
+        fill: FillRule::NonZero,
     });
 
     device.set_transform(initial_transform);

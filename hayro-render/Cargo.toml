@@ -8,9 +8,8 @@ autotests = false
 hayro-syntax = { path = "../hayro-syntax", default-features = false }
 hayro-interpret = { path = "../hayro-interpret", default-features = false }
 kurbo = { workspace = true }
-peniko = { workspace = true }
 image = { workspace = true, features = ["png"] }
-bytemuck = { workspace = true }
+bytemuck = { workspace = true, features = ["bytemuck_derive"] }
 smallvec = { workspace = true }
 rustc-hash = { workspace = true }
 

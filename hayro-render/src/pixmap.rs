@@ -3,10 +3,124 @@
 
 //! A simple pixmap type.
 
+use bytemuck::{Pod, Zeroable};
+use hayro_interpret::color::AlphaColor;
 use image::{ImageBuffer, Rgba};
-use peniko::color::{PremulRgba8, Rgba8};
 use std::vec;
 use std::vec::Vec;
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Pod, Zeroable)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
+#[repr(C)]
+pub struct PremulRgba8 {
+    /// Red component.
+    pub r: u8,
+    /// Green component.
+    pub g: u8,
+    /// Blue component.
+    pub b: u8,
+    /// Alpha component.
+    pub a: u8,
+}
+
+impl PremulRgba8 {
+    /// Returns the color as a `[u8; 4]`.
+    ///
+    /// The color values will be in the order `[r, g, b, a]`.
+    #[must_use]
+    pub const fn to_u8_array(self) -> [u8; 4] {
+        [self.r, self.g, self.b, self.a]
+    }
+
+    /// Convert the `[u8; 4]` byte array into a `PremulRgba8` color.
+    ///
+    /// The color values must be given in the order `[r, g, b, a]`.
+    #[must_use]
+    pub const fn from_u8_array([r, g, b, a]: [u8; 4]) -> Self {
+        Self { r, g, b, a }
+    }
+
+    /// Returns the color as a little-endian packed value, with `r` the least significant byte and
+    /// `a` the most significant.
+    #[must_use]
+    pub const fn to_u32(self) -> u32 {
+        u32::from_ne_bytes(self.to_u8_array())
+    }
+
+    /// Interpret the little-endian packed value as a color, with `r` the least significant byte
+    /// and `a` the most significant.
+    #[must_use]
+    pub const fn from_u32(packed_bytes: u32) -> Self {
+        Self::from_u8_array(u32::to_ne_bytes(packed_bytes))
+    }
+}
+
+/// A packed representation of sRGB colors.
+///
+/// Encoding sRGB with 8 bits per component is extremely common, as
+/// it is efficient and convenient, even if limited in accuracy and
+/// gamut.
+///
+/// This is not meant to be a general purpose color type and is
+/// intended for use with [`AlphaColor::to_rgba8`] and [`OpaqueColor::to_rgba8`].
+///
+/// For a pre-multiplied packed representation, see [`PremulRgba8`].
+///
+/// [`AlphaColor::to_rgba8`]: crate::AlphaColor::to_rgba8
+/// [`OpaqueColor::to_rgba8`]: crate::OpaqueColor::to_rgba8
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Pod, Zeroable)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
+#[repr(C)]
+pub struct Rgba8 {
+    /// Red component.
+    pub r: u8,
+    /// Green component.
+    pub g: u8,
+    /// Blue component.
+    pub b: u8,
+    /// Alpha component.
+    ///
+    /// Alpha is interpreted as separated alpha.
+    pub a: u8,
+}
+
+impl Rgba8 {
+    /// Returns the color as a `[u8; 4]`.
+    ///
+    /// The color values will be in the order `[r, g, b, a]`.
+    #[must_use]
+    pub const fn to_u8_array(self) -> [u8; 4] {
+        [self.r, self.g, self.b, self.a]
+    }
+
+    /// Convert the `[u8; 4]` byte array into an `Rgba8` color.
+    ///
+    /// The color values must be given in the order `[r, g, b, a]`.
+    #[must_use]
+    pub const fn from_u8_array([r, g, b, a]: [u8; 4]) -> Self {
+        Self { r, g, b, a }
+    }
+
+    /// Returns the color as a little-endian packed value, with `r` the least significant byte and
+    /// `a` the most significant.
+    #[must_use]
+    pub const fn to_u32(self) -> u32 {
+        u32::from_ne_bytes(self.to_u8_array())
+    }
+
+    /// Interpret the little-endian packed value as a color, with `r` the least significant byte
+    /// and `a` the most significant.
+    #[must_use]
+    pub const fn from_u32(packed_bytes: u32) -> Self {
+        Self::from_u8_array(u32::to_ne_bytes(packed_bytes))
+    }
+}
+
+impl From<Rgba8> for AlphaColor {
+    fn from(value: Rgba8) -> Self {
+        Self::from_rgba8(value.r, value.g, value.b, value.a)
+    }
+}
 
 /// A pixmap of premultiplied RGBA8 values backed by [`u8`][core::u8].
 #[derive(Debug, Clone)]

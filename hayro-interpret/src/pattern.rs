@@ -8,7 +8,8 @@ use crate::interpret::state::State;
 use crate::shading::Shading;
 use crate::soft_mask::SoftMask;
 use crate::{
-    AlphaData, FillProps, InterpreterSettings, Paint, PaintType, RgbData, StrokeProps, interpret,
+    AlphaData, FillProps, FillRule, InterpreterSettings, Paint, PaintType, RgbData, StrokeProps,
+    interpret,
 };
 use hayro_syntax::content::{TypedIter, UntypedIter};
 use hayro_syntax::document::page::Resources;
@@ -22,7 +23,6 @@ use hayro_syntax::object::{Object, dict_or_stream};
 use hayro_syntax::xref::XRef;
 use kurbo::{Affine, BezPath, Shape};
 use log::warn;
-use peniko::Fill;
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
 
@@ -174,7 +174,7 @@ impl<'a> TilingPattern<'a> {
 
         let clip_path = ClipPath {
             path: initial_transform * self.bbox.to_path(0.1),
-            fill: Fill::NonZero,
+            fill: FillRule::NonZero,
         };
         device.push_clip_path(&clip_path);
 

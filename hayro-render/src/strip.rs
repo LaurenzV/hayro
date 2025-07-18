@@ -5,7 +5,7 @@
 
 use crate::flatten::Line;
 use crate::tile::{Tile, Tiles};
-use peniko::Fill;
+use hayro_interpret::FillRule;
 
 /// A strip.
 #[derive(Debug, Clone, Copy)]
@@ -33,7 +33,7 @@ pub fn render(
     tiles: &Tiles,
     strip_buf: &mut Vec<Strip>,
     alpha_buf: &mut Vec<u8>,
-    fill_rule: Fill,
+    fill_rule: FillRule,
     lines: &[Line],
     anti_aliasing: bool,
 ) {
@@ -100,10 +100,10 @@ pub fn render(
                 };
             }
             match fill_rule {
-                Fill::NonZero => {
+                FillRule::NonZero => {
                     fill!(|area: f32| area.abs())
                 }
-                Fill::EvenOdd => {
+                FillRule::EvenOdd => {
                     // As in other parts of the code, we avoid using `round` since it's very
                     // slow on x86.
                     fill!(|area: f32| (area - 2.0 * ((0.5 * area) + 0.5).floor()).abs())

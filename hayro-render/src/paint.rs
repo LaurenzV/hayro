@@ -4,8 +4,8 @@
 //! Types for paints.
 
 use crate::encode::Buffer;
+use hayro_interpret::color::AlphaColor;
 use hayro_interpret::pattern::ShadingPattern;
-use peniko::color::{AlphaColor, Srgb};
 use std::sync::Arc;
 
 /// A paint that needs to be resolved via its index.
@@ -43,8 +43,8 @@ pub enum Paint {
     Indexed(IndexedPaint),
 }
 
-impl From<AlphaColor<Srgb>> for Paint {
-    fn from(value: AlphaColor<Srgb>) -> Self {
+impl From<AlphaColor> for Paint {
+    fn from(value: AlphaColor) -> Self {
         Self::Solid(PremulColor::from_alpha_color(value))
     }
 }
@@ -66,8 +66,8 @@ pub struct PremulColor(pub [f32; 4]);
 
 impl PremulColor {
     /// Create a new premultiplied color.
-    pub fn from_alpha_color(color: AlphaColor<Srgb>) -> Self {
-        Self(color.premultiply().components)
+    pub fn from_alpha_color(color: AlphaColor) -> Self {
+        Self(color.premultiplied())
     }
 
     /// Return whether the color is opaque (i.e. doesn't have transparency).
@@ -80,15 +80,15 @@ impl PremulColor {
 #[derive(Debug, Clone)]
 pub enum PaintType {
     /// A solid color.
-    Solid(AlphaColor<Srgb>),
+    Solid(AlphaColor),
     /// An image.
     Image(Image),
     /// A shading pattern.
     ShadingPattern(ShadingPattern),
 }
 
-impl From<AlphaColor<Srgb>> for PaintType {
-    fn from(value: AlphaColor<Srgb>) -> Self {
+impl From<AlphaColor> for PaintType {
+    fn from(value: AlphaColor) -> Self {
         Self::Solid(value)
     }
 }

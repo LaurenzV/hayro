@@ -13,8 +13,8 @@ use crate::pixmap::Pixmap;
 use crate::strip::Strip;
 use crate::tile::Tiles;
 use crate::{flatten, strip};
+use hayro_interpret::FillRule;
 use kurbo::{Affine, BezPath, Cap, Join, Rect, Shape, Stroke};
-use peniko::{BlendMode, Compose, Fill, Mix};
 use std::vec;
 use std::vec::Vec;
 
@@ -32,7 +32,7 @@ pub struct RenderContext {
     paint_bbox: Option<Rect>,
     pub(crate) stroke: Stroke,
     pub(crate) transform: Affine,
-    pub(crate) fill_rule: Fill,
+    pub(crate) fill_rule: FillRule,
     pub(crate) encoded_paints: Vec<EncodedPaint>,
     pub(crate) anti_aliasing: bool,
 }
@@ -48,7 +48,7 @@ impl RenderContext {
         let strip_buf = vec![];
 
         let transform = Affine::IDENTITY;
-        let fill_rule = Fill::NonZero;
+        let fill_rule = FillRule::NonZero;
         let stroke = Stroke {
             width: 1.0,
             join: Join::Bevel,
@@ -112,7 +112,7 @@ impl RenderContext {
         if let Some(bbox) = self.paint_bbox {
             let old_transform = self.transform;
             self.transform = paint_transform;
-            self.push_layer(Some(&bbox.to_path(0.1)), None, None, None);
+            self.push_layer(Some(&bbox.to_path(0.1)), None, None);
             self.transform = old_transform;
         }
     }
@@ -134,7 +134,7 @@ impl RenderContext {
         let paint = self.encode_paint(paint_type, paint_transform);
         self.apply_paint_bbox(paint_transform);
         flatten::stroke(path, &self.stroke, self.transform, &mut self.line_buf);
-        self.render_path(Fill::NonZero, paint, mask);
+        self.render_path(FillRule::NonZero, paint, mask);
         self.unapply_paint_bbox();
     }
 
@@ -162,7 +162,6 @@ impl RenderContext {
     pub fn push_layer(
         &mut self,
         clip_path: Option<&BezPath>,
-        blend_mode: Option<BlendMode>,
         opacity: Option<f32>,
         mask: Option<Mask>,
     ) {
@@ -182,12 +181,7 @@ impl RenderContext {
             }
         });
 
-        self.wide.push_layer(
-            clip,
-            blend_mode.unwrap_or(BlendMode::new(Mix::Normal, Compose::SrcOver)),
-            mask,
-            opacity.unwrap_or(1.0),
-        );
+        self.wide.push_layer(clip, mask, opacity.unwrap_or(1.0));
     }
 
     /// Pop the last-pushed layer.
@@ -201,7 +195,7 @@ impl RenderContext {
     }
 
     /// Set the current fill rule.
-    pub fn set_fill_rule(&mut self, fill_rule: Fill) {
+    pub fn set_fill_rule(&mut self, fill_rule: FillRule) {
         self.fill_rule = fill_rule;
     }
 
@@ -274,12 +268,12 @@ impl RenderContext {
     }
 
     // Assumes that `line_buf` contains the flattened path.
-    fn render_path(&mut self, fill_rule: Fill, paint: Paint, mask: Option<Mask>) {
+    fn render_path(&mut self, fill_rule: FillRule, paint: Paint, mask: Option<Mask>) {
         self.make_strips(fill_rule);
         self.wide.generate(&self.strip_buf, fill_rule, paint, mask);
     }
 
-    fn make_strips(&mut self, fill_rule: Fill) {
+    fn make_strips(&mut self, fill_rule: FillRule) {
         self.tiles
             .make_tiles(&self.line_buf, self.width, self.height);
         self.tiles.sort_tiles();

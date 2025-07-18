@@ -10,7 +10,6 @@ use hayro_syntax::object::number::Number;
 use hayro_syntax::object::{Object, dict_or_stream};
 use kurbo::{Affine, Cap, Join, Point, Shape};
 use log::warn;
-use peniko::Fill;
 use smallvec::{SmallVec, smallvec};
 use std::ops::Deref;
 use std::sync::Arc;
@@ -62,9 +61,15 @@ pub struct StrokeProps {
     pub dash_offset: f32,
 }
 
+#[derive(Clone, Debug, Copy)]
+pub enum FillRule {
+    NonZero,
+    EvenOdd,
+}
+
 #[derive(Clone, Debug)]
 pub struct FillProps {
-    pub fill_rule: Fill,
+    pub fill_rule: FillRule,
 }
 
 #[derive(Clone)]
@@ -172,23 +177,23 @@ pub fn interpret<'a, 'b>(
                 context.path_mut().move_to(p);
             }
             TypedOperation::FillPathEvenOdd(_) => {
-                context.get_mut().fill_rule = Fill::EvenOdd;
+                context.get_mut().fill_rule = FillRule::EvenOdd;
                 fill_path(context, device);
             }
             TypedOperation::FillPathNonZero(_) => {
-                context.get_mut().fill_rule = Fill::NonZero;
+                context.get_mut().fill_rule = FillRule::NonZero;
                 fill_path(context, device);
             }
             TypedOperation::FillPathNonZeroCompatibility(_) => {
-                context.get_mut().fill_rule = Fill::NonZero;
+                context.get_mut().fill_rule = FillRule::NonZero;
                 fill_path(context, device);
             }
             TypedOperation::FillAndStrokeEvenOdd(_) => {
-                context.get_mut().fill_rule = Fill::EvenOdd;
+                context.get_mut().fill_rule = FillRule::EvenOdd;
                 fill_stroke_path(context, device);
             }
             TypedOperation::FillAndStrokeNonZero(_) => {
-                context.get_mut().fill_rule = Fill::NonZero;
+                context.get_mut().fill_rule = FillRule::NonZero;
                 fill_stroke_path(context, device);
             }
             TypedOperation::CloseAndStrokePath(_) => {
@@ -197,12 +202,12 @@ pub fn interpret<'a, 'b>(
             }
             TypedOperation::CloseFillAndStrokeEvenOdd(_) => {
                 context.path_mut().close_path();
-                context.get_mut().fill_rule = Fill::EvenOdd;
+                context.get_mut().fill_rule = FillRule::EvenOdd;
                 fill_stroke_path(context, device);
             }
             TypedOperation::CloseFillAndStrokeNonZero(_) => {
                 context.path_mut().close_path();
-                context.get_mut().fill_rule = Fill::NonZero;
+                context.get_mut().fill_rule = FillRule::NonZero;
                 fill_stroke_path(context, device);
             }
             TypedOperation::NonStrokeColorDeviceGray(s) => {
@@ -306,10 +311,10 @@ pub fn interpret<'a, 'b>(
                 }
             }
             TypedOperation::ClipNonZero(_) => {
-                *(context.clip_mut()) = Some(Fill::NonZero);
+                *(context.clip_mut()) = Some(FillRule::NonZero);
             }
             TypedOperation::ClipEvenOdd(_) => {
-                *(context.clip_mut()) = Some(Fill::EvenOdd);
+                *(context.clip_mut()) = Some(FillRule::EvenOdd);
             }
             TypedOperation::RestoreState(_) => restore_state(context, device),
             TypedOperation::FlatnessTolerance(_) => {
@@ -404,7 +409,7 @@ pub fn interpret<'a, 'b>(
                     device.set_transform(context.get().ctm);
                     device.push_clip_path(&ClipPath {
                         path: context.get().text_state.clip_paths.clone(),
-                        fill: Fill::NonZero,
+                        fill: FillRule::NonZero,
                     });
                     context.get_mut().n_clips += 1;
                 }
