@@ -8,30 +8,28 @@ use hayro_syntax::object::number::Number;
 use hayro_syntax::object::r#ref::MaybeRef;
 use hayro_syntax::object::stream::Stream;
 use hayro_syntax::object::{Object, array, dict, name, string};
-use lazy_static::lazy_static;
 use pdf_writer::{Chunk, Dict, Obj, Ref};
 use std::collections::HashSet;
 use std::ops::Deref;
 use std::ops::DerefMut;
+use std::sync::LazyLock;
 
-lazy_static! {
-    static ref IGNORE_KEYS: HashSet<&'static [u8]> = {
-        let mut m = HashSet::new();
+static IGNORE_KEYS: LazyLock<HashSet<&'static [u8]>> = LazyLock::new(|| {
+    let mut m = HashSet::new();
 
-        m.insert(METADATA);
-        m.insert(STRUCT_PARENT);
-        m.insert(OC);
-        m.insert(AF);
-        m.insert(PT_DATA);
-        m.insert(REF);
-        m.insert(LAST_MODIFIED);
-        m.insert(PIECE_INFO);
-        m.insert(STRUCT_PARENTS);
-        m.insert(OPI);
+    m.insert(METADATA);
+    m.insert(STRUCT_PARENT);
+    m.insert(OC);
+    m.insert(AF);
+    m.insert(PT_DATA);
+    m.insert(REF);
+    m.insert(LAST_MODIFIED);
+    m.insert(PIECE_INFO);
+    m.insert(STRUCT_PARENTS);
+    m.insert(OPI);
 
-        m
-    };
-}
+    m
+});
 
 pub(crate) trait WriteDirect {
     fn write_direct(&self, obj: Obj, _: &mut ExtractionContext);

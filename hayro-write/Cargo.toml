@@ -12,4 +12,3 @@ hayro-syntax = { path = "../hayro-syntax" }
 pdf-writer = { workspace = true }
 flate2 = { workspace = true }
 log = { workspace = true }
-lazy_static = { workspace = true }

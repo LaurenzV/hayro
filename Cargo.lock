@@ -444,7 +444,8 @@ dependencies = [
 [[package]]
 name = "font-types"
 version = "0.9.0"
-source = "git+https://github.com/googlefonts/fontations?rev=b5c3030#b5c3030a19f2b7e7fe3fb7a0f38b01e63352aea9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "02a596f5713680923a2080d86de50fe472fb290693cf0f701187a1c8b36996b7"
 dependencies = [
  "bytemuck",
 ]
@@ -602,7 +603,6 @@ version = "0.1.0"
 dependencies = [
  "flate2",
  "hayro-syntax",
- "lazy_static",
  "log",
  "pdf-writer",
 ]
@@ -769,12 +769,6 @@ dependencies = [
  "arrayvec",
  "smallvec",
 ]
-
-[[package]]
-name = "lazy_static"
-version = "1.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 
 [[package]]
 name = "lebe"
@@ -1302,7 +1296,8 @@ dependencies = [
 [[package]]
 name = "read-fonts"
 version = "0.30.1"
-source = "git+https://github.com/googlefonts/fontations?rev=b5c3030#b5c3030a19f2b7e7fe3fb7a0f38b01e63352aea9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "192735ef611aac958468e670cb98432c925426f3cb71521fda202130f7388d91"
 dependencies = [
  "bytemuck",
  "font-types",
@@ -1477,7 +1472,8 @@ dependencies = [
 [[package]]
 name = "skrifa"
 version = "0.32.0"
-source = "git+https://github.com/googlefonts/fontations?rev=b5c3030#b5c3030a19f2b7e7fe3fb7a0f38b01e63352aea9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e6d632b5a73f566303dbeabd344dc3e716fd4ddc9a70d6fc8ea8e6f06617da97"
 dependencies = [
  "bytemuck",
  "read-fonts",

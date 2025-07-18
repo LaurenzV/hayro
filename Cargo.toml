@@ -29,10 +29,9 @@ once_cell = { version = "1.20.3" }
 phf = { version = "0.11.3" }
 qcms = { version = "0.3.0" }
 rustc-hash = { version = "2.1.0" }
-skrifa = { git = "https://github.com/googlefonts/fontations", rev = "b5c3030" }
+skrifa = { version = "0.32.0" }
 smallvec = { version = "1.13.2" }
 yoke = { version = "0.8.0" }
 pdf-writer = "0.13.0"
 sitro = { git = "https://github.com/LaurenzV/sitro", rev="fb804b3" }
-lazy_static = "1.5.0"
 zune-jpeg = { version = "0.4" }
