@@ -345,9 +345,22 @@ impl Device for Renderer {
         self.ctx.push_layer(Some(&clip_path.path), None, None, None)
     }
 
-    fn push_transparency_group(&mut self, opacity: f32) {
-        self.ctx
-            .push_layer(None, None, Some(opacity), self.cur_mask.clone());
+    fn push_transparency_group(&mut self, opacity: f32, mask: Option<SoftMask>) {
+        self.ctx.push_layer(
+            None,
+            None,
+            Some(opacity),
+            // TODO: Deduplicate
+            mask.map(|m| {
+                let width = self.ctx.width as u16;
+                let height = self.ctx.height as u16;
+
+                self.soft_mask_cache
+                    .entry(m.id())
+                    .or_insert_with(|| draw_soft_mask(&m, width, height))
+                    .clone()
+            }),
+        );
     }
 
     fn pop_clip_path(&mut self) {
