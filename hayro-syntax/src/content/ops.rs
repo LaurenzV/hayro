@@ -1,4 +1,4 @@
-//! Content stream operators
+//! Content stream operators.
 
 use crate::content::{Instruction, OPERANDS_THRESHOLD, OperatorTrait, Stack};
 use crate::object::Object;
@@ -106,9 +106,7 @@ mod tests {
             TypedInstruction::NonStrokeColorDeviceRgb(NonStrokeColorDeviceRgb(n(1), n(0), n(0))),
         ];
 
-        let elements = TypedIter::new(UntypedIter::new(input))
-            .into_iter()
-            .collect::<Vec<_>>();
+        let elements = TypedIter::new(input).into_iter().collect::<Vec<_>>();
         assert_eq!(elements, expected,)
     }
 
@@ -132,9 +130,7 @@ f
             TypedInstruction::FillPathNonZero(FillPathNonZero),
         ];
 
-        let elements = TypedIter::new(UntypedIter::new(input))
-            .into_iter()
-            .collect::<Vec<_>>();
+        let elements = TypedIter::new(input).into_iter().collect::<Vec<_>>();
         assert_eq!(elements, expected,)
     }
 
@@ -160,9 +156,7 @@ f
             )),
         ];
 
-        let elements = TypedIter::new(UntypedIter::new(input))
-            .into_iter()
-            .collect::<Vec<_>>();
+        let elements = TypedIter::new(input).into_iter().collect::<Vec<_>>();
 
         assert_eq!(elements, expected);
     }
@@ -178,9 +172,7 @@ f
             ),
         )];
 
-        let elements = TypedIter::new(UntypedIter::new(input))
-            .into_iter()
-            .collect::<Vec<_>>();
+        let elements = TypedIter::new(input).into_iter().collect::<Vec<_>>();
 
         assert_eq!(elements, expected);
     }
@@ -197,9 +189,7 @@ f
             TypedInstruction::EndMarkedContent(EndMarkedContent),
         ];
 
-        let elements = TypedIter::new(UntypedIter::new(input))
-            .into_iter()
-            .collect::<Vec<_>>();
+        let elements = TypedIter::new(input).into_iter().collect::<Vec<_>>();
 
         assert_eq!(elements, expected);
     }
@@ -216,9 +206,7 @@ f
             TypedInstruction::EndMarkedContent(EndMarkedContent),
         ];
 
-        let elements = TypedIter::new(UntypedIter::new(input))
-            .into_iter()
-            .collect::<Vec<_>>();
+        let elements = TypedIter::new(input).into_iter().collect::<Vec<_>>();
 
         assert_eq!(elements, expected);
     }

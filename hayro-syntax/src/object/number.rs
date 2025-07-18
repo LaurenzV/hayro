@@ -12,6 +12,11 @@ use std::str::FromStr;
 pub struct Number(pub(crate) InternalNumber);
 
 impl Number {
+    /// The number zero.
+    pub const ZERO: Number = Number::from_i32(0);
+    /// The number one.
+    pub const ONE: Number = Number::from_i32(1);
+
     /// Returns the number as a f64.
     pub fn as_f64(&self) -> f64 {
         match self.0 {
@@ -54,12 +59,12 @@ impl Number {
     }
 
     /// Create a new `Number` from a f32 number.
-    pub fn from_f32(num: f32) -> Self {
+    pub const fn from_f32(num: f32) -> Self {
         Self(InternalNumber::Real(num))
     }
 
     /// Create a new `Number` from a i32 number.
-    pub fn from_i32(num: i32) -> Self {
+    pub const fn from_i32(num: i32) -> Self {
         Self(InternalNumber::Integer(num))
     }
 }

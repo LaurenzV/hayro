@@ -335,7 +335,7 @@ impl<'a> Page<'a> {
 
     /// Return an iterator over the operators in the page's content stream.
     pub fn typed_operations(&self) -> TypedIter {
-        TypedIter::new(self.operations().into_iter())
+        TypedIter::from_untyped(self.operations().into_iter())
     }
 }
 

@@ -93,7 +93,7 @@ pub(crate) fn draw_form_xobject<'a>(
     context: &mut Context<'a>,
     device: &mut impl Device,
 ) {
-    let iter = TypedIter::new(UntypedIter::new(x_object.decoded.as_ref()));
+    let iter = TypedIter::new(x_object.decoded.as_ref());
 
     context.path_mut().truncate(0);
     context.save_state();

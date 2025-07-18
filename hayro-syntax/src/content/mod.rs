@@ -1,7 +1,34 @@
-//! PDF content operators.
-//!
-//! This module provides facilities to read and interpret PDF content streams using
-//! high-level types.
+/*!
+PDF content operators.
+
+This module provides facilities to read and interpret PDF content streams using
+high-level types.
+
+```
+use hayro_syntax::object::number::Number;
+use hayro_syntax::content::*;
+use hayro_syntax::content::ops::*;
+
+let content_stream = b"1 0 0 -1 0 200 cm
+0 1.0 0 rg
+0 0 m
+200 0 l
+200 200 l
+0 200 l
+h
+f";
+
+let mut iter = TypedIter::new(content_stream);
+assert!(matches!(iter.next(), Some(TypedInstruction::Transform(_))));
+assert!(matches!(iter.next(), Some(TypedInstruction::NonStrokeColorDeviceRgb(_))));
+assert!(matches!(iter.next(), Some(TypedInstruction::MoveTo(_))));
+assert!(matches!(iter.next(), Some(TypedInstruction::LineTo(_))));
+assert!(matches!(iter.next(), Some(TypedInstruction::LineTo(_))));
+assert!(matches!(iter.next(), Some(TypedInstruction::LineTo(_))));
+assert!(matches!(iter.next(), Some(TypedInstruction::ClosePath(_))));
+assert!(matches!(iter.next(), Some(TypedInstruction::FillPathNonZero(_))));
+```
+*/
 
 #[allow(missing_docs)]
 pub mod ops;
@@ -197,7 +224,13 @@ pub struct TypedIter<'a> {
 
 impl<'a> TypedIter<'a> {
     /// Create a new typed iterator.
-    pub fn new(untyped: UntypedIter<'a>) -> TypedIter<'a> {
+    pub fn new(data: &'a [u8]) -> TypedIter<'a> {
+        Self {
+            untyped: UntypedIter::new(data),
+        }
+    }
+
+    pub(crate) fn from_untyped(untyped: UntypedIter<'a>) -> TypedIter<'a> {
         Self { untyped }
     }
 }

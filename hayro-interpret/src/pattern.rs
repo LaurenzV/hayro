@@ -170,7 +170,7 @@ impl<'a> TilingPattern<'a> {
             self.stream.dict().get(RESOURCES).unwrap_or_default(),
             self.parent_resources.clone(),
         );
-        let iter = TypedIter::new(UntypedIter::new(decoded.as_ref()));
+        let iter = TypedIter::new(decoded.as_ref());
 
         let clip_path = ClipPath {
             path: initial_transform * self.bbox.to_path(0.1),
