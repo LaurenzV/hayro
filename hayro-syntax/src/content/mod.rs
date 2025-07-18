@@ -5,7 +5,7 @@ This module provides facilities to read and interpret PDF content streams using
 high-level types.
 
 ```
-use hayro_syntax::object::number::Number;
+use hayro_syntax::object::Number;
 use hayro_syntax::content::*;
 use hayro_syntax::content::ops::*;
 
@@ -34,9 +34,9 @@ assert!(matches!(iter.next(), Some(TypedInstruction::FillPathNonZero(_))));
 pub mod ops;
 
 use crate::content::ops::TypedInstruction;
+use crate::object::Stream;
 use crate::object::dict::InlineImageDict;
 use crate::object::name::{Name, skip_name_like};
-use crate::object::stream::Stream;
 use crate::object::{Object, ObjectLike};
 use crate::reader::{Readable, Reader, ReaderContext, Skippable};
 use log::warn;

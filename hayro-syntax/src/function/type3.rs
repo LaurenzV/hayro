@@ -1,7 +1,7 @@
 use crate::function::{Clamper, Function, TupleVec, Values, interpolate};
+use crate::object::Array;
+use crate::object::Dict;
 use crate::object::Object;
-use crate::object::array::Array;
-use crate::object::dict::Dict;
 use crate::object::dict::keys::{BOUNDS, ENCODE, FUNCTIONS};
 use smallvec::smallvec;
 

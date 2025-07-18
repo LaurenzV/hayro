@@ -1,12 +1,12 @@
 //! Content stream operators.
 
 use crate::content::{Instruction, OPERANDS_THRESHOLD, OperatorTrait, Stack};
+use crate::object;
+use crate::object::Array;
+use crate::object::Name;
+use crate::object::Number;
 use crate::object::Object;
-use crate::object::array::Array;
-use crate::object::name::Name;
-use crate::object::number::Number;
-use crate::object::stream::Stream;
-use crate::object::string;
+use crate::object::Stream;
 use smallvec::{SmallVec, smallvec};
 
 use crate::content::macros::{op_all, op_impl, op0, op1, op2, op3, op4, op6};
@@ -77,10 +77,10 @@ mod tests {
         SetGraphicsState, StrokeColorNamed, Transform, TypedInstruction,
     };
     use crate::content::{TypedIter, UntypedIter};
+    use crate::object::Dict;
+    use crate::object::Name;
+    use crate::object::Number;
     use crate::object::Object;
-    use crate::object::dict::Dict;
-    use crate::object::name::Name;
-    use crate::object::number::Number;
     use crate::reader::Readable;
     use smallvec::smallvec;
 

@@ -125,7 +125,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::object::r#ref::ObjRef;
+    use crate::object::ObjRef;
     use crate::reader::Reader;
 
     #[test]

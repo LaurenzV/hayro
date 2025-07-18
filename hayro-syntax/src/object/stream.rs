@@ -1,10 +1,10 @@
 //! Stream objects.
 
 use crate::filter::Filter;
-use crate::object::array::Array;
-use crate::object::dict::Dict;
+use crate::object::Array;
+use crate::object::Dict;
+use crate::object::Name;
 use crate::object::dict::keys::{DECODE_PARMS, DP, F, FILTER, LENGTH};
-use crate::object::name::Name;
 use crate::object::{Object, ObjectLike};
 use crate::reader::{Readable, Reader, ReaderContext, Skippable};
 use crate::util::OptionLog;
@@ -273,7 +273,7 @@ impl<'a> ObjectLike<'a> for Stream<'a> {}
 
 #[cfg(test)]
 mod tests {
-    use crate::object::stream::Stream;
+    use crate::object::Stream;
     use crate::reader::{Reader, ReaderContext};
 
     #[test]

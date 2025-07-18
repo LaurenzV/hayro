@@ -1,30 +1,33 @@
 //! Parsing and reading from PDF objects.
 
-use crate::object::name::{Name, skip_name_like};
+use crate::object::name::skip_name_like;
 use crate::reader::{Readable, Reader, ReaderContext, Skippable};
 use std::fmt::Debug;
 
 pub use crate::object::array::Array;
 pub use crate::object::dict::Dict;
+pub use crate::object::name::Name;
 pub use crate::object::null::Null;
 pub use crate::object::number::Number;
+pub use crate::object::rect::Rect;
+pub use crate::object::r#ref::{MaybeRef, ObjRef};
 pub use crate::object::stream::Stream;
 pub use crate::object::string::String;
 
+mod bool;
+mod null;
+mod number;
+mod rect;
+mod r#ref;
+mod string;
 mod tuple;
 
 pub(crate) mod indirect;
+pub(crate) mod name;
 
 pub mod array;
-pub mod bool;
 pub mod dict;
-pub mod name;
-pub mod null;
-pub mod number;
-pub mod rect;
-pub mod r#ref;
 pub mod stream;
-pub mod string;
 
 /// A trait for PDF objects.
 pub(crate) trait ObjectLike<'a>: TryFrom<Object<'a>> + Readable<'a> + Debug + Clone {}

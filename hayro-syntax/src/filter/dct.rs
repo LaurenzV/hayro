@@ -1,4 +1,4 @@
-use crate::object::dict::Dict;
+use crate::object::Dict;
 use zune_jpeg::zune_core::colorspace::ColorSpace;
 use zune_jpeg::zune_core::options::DecoderOptions;
 

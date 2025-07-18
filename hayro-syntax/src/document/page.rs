@@ -1,13 +1,13 @@
 //! Reading the pages of a PDF document.
 
 use crate::content::{TypedIter, UntypedIter};
-use crate::object::array::Array;
-use crate::object::dict::Dict;
+use crate::object::Array;
+use crate::object::Dict;
+use crate::object::Name;
+use crate::object::Rect;
+use crate::object::Stream;
 use crate::object::dict::keys::*;
-use crate::object::name::Name;
-use crate::object::rect::Rect;
-use crate::object::r#ref::{MaybeRef, ObjRef};
-use crate::object::stream::Stream;
+use crate::object::{MaybeRef, ObjRef};
 use crate::object::{Object, ObjectLike};
 use crate::reader::ReaderContext;
 use crate::util::FloatExt;

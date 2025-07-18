@@ -307,18 +307,18 @@ pub struct NextLineUsingLeading;
 op0!(NextLineUsingLeading, "T*");
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct ShowText<'a>(pub string::String<'a>);
+pub struct ShowText<'a>(pub object::String<'a>);
 op1!(ShowText<'a>, "Tj");
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct NextLineAndShowText<'a>(pub string::String<'a>);
+pub struct NextLineAndShowText<'a>(pub object::String<'a>);
 op1!(NextLineAndShowText<'a>, "'");
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct ShowTextWithParameters<'a>(
     pub Number,
     pub Number,
-    pub string::String<'a>,
+    pub object::String<'a>,
 );
 op3!(ShowTextWithParameters<'a>, "\"");
 

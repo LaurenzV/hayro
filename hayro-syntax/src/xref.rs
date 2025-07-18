@@ -2,15 +2,15 @@
 
 use crate::PdfData;
 use crate::data::Data;
+use crate::object::Array;
+use crate::object::Dict;
+use crate::object::Name;
 use crate::object::ObjectIdentifier;
-use crate::object::array::Array;
-use crate::object::dict::Dict;
+use crate::object::Stream;
 use crate::object::dict::keys::{
     ENCRYPT, FIRST, INDEX, N, PAGES, PREV, ROOT, SIZE, TYPE, VERSION, W, XREF_STM,
 };
 use crate::object::indirect::IndirectObject;
-use crate::object::name::Name;
-use crate::object::stream::Stream;
 use crate::object::{Object, ObjectLike};
 use crate::pdf::PdfVersion;
 use crate::reader::{Readable, Reader, ReaderContext};

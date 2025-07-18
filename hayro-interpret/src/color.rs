@@ -1,12 +1,13 @@
 //! PDF colors and color spaces.
 
 use hayro_syntax::function::Function;
-use hayro_syntax::object::array::Array;
-use hayro_syntax::object::dict::Dict;
+use hayro_syntax::object;
+use hayro_syntax::object::Array;
+use hayro_syntax::object::Dict;
+use hayro_syntax::object::Name;
+use hayro_syntax::object::Object;
+use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::*;
-use hayro_syntax::object::name::Name;
-use hayro_syntax::object::stream::Stream;
-use hayro_syntax::object::{Object, string};
 use log::warn;
 use qcms::Transform;
 use smallvec::{SmallVec, ToSmallVec, smallvec};
@@ -622,7 +623,7 @@ impl Indexed {
             let data = iter
                 .next::<Stream>()
                 .and_then(|s| s.decoded().ok())
-                .or_else(|| iter.next::<string::String>().map(|s| s.get().to_vec()))?;
+                .or_else(|| iter.next::<object::String>().map(|s| s.get().to_vec()))?;
 
             let num_components = base_color_space.num_components();
 

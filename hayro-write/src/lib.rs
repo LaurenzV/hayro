@@ -4,14 +4,14 @@ use crate::primitive::{WriteDirect, WriteIndirect};
 use flate2::Compression;
 use flate2::write::ZlibEncoder;
 use hayro_syntax::document::page::{Resources, Rotation};
+use hayro_syntax::object::Dict;
 use hayro_syntax::object::Object;
-use hayro_syntax::object::dict::Dict;
+use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::{
     COLORSPACE, CONTENTS, EXT_G_STATE, FILTER, FONT, GROUP, PATTERN, PROPERTIES, RESOURCES,
     SHADING, XOBJECT,
 };
-use hayro_syntax::object::r#ref::{MaybeRef, ObjRef};
-use hayro_syntax::object::stream::Stream;
+use hayro_syntax::object::{MaybeRef, ObjRef};
 use log::warn;
 use pdf_writer::{Chunk, Content, Filter, Finish, Name, Obj, Rect, Ref};
 use std::collections::hash_map::Entry;
@@ -352,37 +352,37 @@ fn serialize_resources(
     let ext_g_states = collect_resources(
         &resources,
         |r| r.ext_g_states.clone(),
-        hayro_syntax::object::name::Name::new(EXT_G_STATE),
+        hayro_syntax::object::Name::new(EXT_G_STATE),
     );
     let shadings = collect_resources(
         &resources,
         |r| r.shadings.clone(),
-        hayro_syntax::object::name::Name::new(SHADING),
+        hayro_syntax::object::Name::new(SHADING),
     );
     let patterns = collect_resources(
         &resources,
         |r| r.patterns.clone(),
-        hayro_syntax::object::name::Name::new(PATTERN),
+        hayro_syntax::object::Name::new(PATTERN),
     );
     let x_objects = collect_resources(
         &resources,
         |r| r.x_objects.clone(),
-        hayro_syntax::object::name::Name::new(XOBJECT),
+        hayro_syntax::object::Name::new(XOBJECT),
     );
     let color_spaces = collect_resources(
         &resources,
         |r| r.color_spaces.clone(),
-        hayro_syntax::object::name::Name::new(COLORSPACE),
+        hayro_syntax::object::Name::new(COLORSPACE),
     );
     let fonts = collect_resources(
         &resources,
         |r| r.fonts.clone(),
-        hayro_syntax::object::name::Name::new(FONT),
+        hayro_syntax::object::Name::new(FONT),
     );
     let properties = collect_resources(
         &resources,
         |r| r.properties.clone(),
-        hayro_syntax::object::name::Name::new(PROPERTIES),
+        hayro_syntax::object::Name::new(PROPERTIES),
     );
 
     if !(ext_g_states.is_empty()
@@ -420,8 +420,8 @@ fn serialize_resources(
 fn collect_resources<'a>(
     resources: &Resources<'a>,
     mut get_dict: impl FnMut(&Resources<'a>) -> Dict<'a> + Clone,
-    name: hayro_syntax::object::name::Name<'a>,
-) -> BTreeMap<hayro_syntax::object::name::Name<'a>, MaybeRef<Object<'a>>> {
+    name: hayro_syntax::object::Name<'a>,
+) -> BTreeMap<hayro_syntax::object::Name<'a>, MaybeRef<Object<'a>>> {
     let mut map = BTreeMap::new();
     collect_resources_inner(resources, get_dict, name, &mut map);
     map
@@ -430,8 +430,8 @@ fn collect_resources<'a>(
 fn collect_resources_inner<'a>(
     resources: &Resources<'a>,
     mut get_dict: impl FnMut(&Resources<'a>) -> Dict<'a> + Clone,
-    name: hayro_syntax::object::name::Name<'a>,
-    map: &mut BTreeMap<hayro_syntax::object::name::Name<'a>, MaybeRef<Object<'a>>>,
+    name: hayro_syntax::object::Name<'a>,
+    map: &mut BTreeMap<hayro_syntax::object::Name<'a>, MaybeRef<Object<'a>>>,
 ) {
     // Process parents first, so that duplicates get overridden by the current dictionary.
     if let Some(parent) = resources.parent() {
@@ -454,7 +454,7 @@ pub(crate) fn deflate_encode(data: &[u8]) -> Vec<u8> {
     e.finish().unwrap()
 }
 
-fn convert_rect(hy_rect: &hayro_syntax::object::rect::Rect) -> pdf_writer::Rect {
+fn convert_rect(hy_rect: &hayro_syntax::object::Rect) -> pdf_writer::Rect {
     pdf_writer::Rect::new(
         hy_rect.x0 as f32,
         hy_rect.y0 as f32,

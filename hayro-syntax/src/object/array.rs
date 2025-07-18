@@ -307,8 +307,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use crate::object::Array;
     use crate::object::Object;
-    use crate::object::array::Array;
     use crate::object::r#ref::{MaybeRef, ObjRef};
     use crate::reader::{Reader, ReaderContext};
     use crate::xref::XRef;

@@ -3,7 +3,7 @@ use crate::device::Device;
 use crate::font::Glyph;
 use crate::interpret::path::get_paint;
 use hayro_syntax::document::page::Resources;
-use hayro_syntax::object::string;
+use hayro_syntax::object;
 use kurbo::Affine;
 use log::warn;
 
@@ -11,7 +11,7 @@ pub(crate) fn show_text_string<'a>(
     ctx: &mut Context<'a>,
     device: &mut impl Device,
     resources: &Resources<'a>,
-    text: string::String,
+    text: object::String,
 ) {
     let Some(font) = ctx.get().text_state.font.clone() else {
         warn!("tried to show text without active font");

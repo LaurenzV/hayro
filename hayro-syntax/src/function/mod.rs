@@ -12,7 +12,7 @@ use crate::function::type0::Type0;
 use crate::function::type2::Type2;
 use crate::function::type3::Type3;
 use crate::function::type4::Type4;
-use crate::object::dict::Dict;
+use crate::object::Dict;
 use crate::object::dict::keys::{DOMAIN, FUNCTION_TYPE, RANGE};
 use crate::object::{Object, dict_or_stream};
 use log::warn;

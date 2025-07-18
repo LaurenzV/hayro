@@ -14,9 +14,9 @@
  */
 
 use crate::filter::ccitt::{CCITTFaxDecoder, CCITTFaxDecoderOptions};
-use crate::object::dict::Dict;
+use crate::object::Dict;
+use crate::object::Stream;
 use crate::object::dict::keys::JBIG2_GLOBALS;
-use crate::object::stream::Stream;
 use crate::reader::Reader as CrateReader;
 use log::warn;
 use std::cell::{OnceCell, RefCell};

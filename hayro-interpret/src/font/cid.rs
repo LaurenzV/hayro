@@ -1,11 +1,11 @@
 use crate::font::blob::{CffFontBlob, OpenTypeFontBlob};
 use crate::util::OptionLog;
 use crate::{InterpreterWarning, WarningSinkFn};
-use hayro_syntax::object::array::Array;
-use hayro_syntax::object::dict::Dict;
+use hayro_syntax::object::Array;
+use hayro_syntax::object::Dict;
+use hayro_syntax::object::Name;
+use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::*;
-use hayro_syntax::object::name::Name;
-use hayro_syntax::object::stream::Stream;
 use kurbo::{BezPath, Vec2};
 use log::warn;
 use skrifa::raw::TableProvider;

@@ -122,7 +122,7 @@ ops = {
 def rust_type(t: Type) -> str:
     return {
         Type.Number: "Number",
-        Type.String: "string::String<'a>",
+        Type.String: "object::String<'a>",
         Type.Array: "Array<'a>",
         Type.Object: "Object<'a>",
         Type.Stream: "Stream<'a>",

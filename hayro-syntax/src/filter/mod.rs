@@ -9,9 +9,9 @@ mod jpx;
 mod lzw_flate;
 mod run_length;
 
-use crate::object::dict::Dict;
+use crate::object::Dict;
+use crate::object::Name;
 use crate::object::dict::keys::*;
-use crate::object::name::Name;
 use crate::object::stream::{DecodeFailure, FilterResult};
 use log::warn;
 use std::ops::Deref;

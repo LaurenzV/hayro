@@ -1,13 +1,11 @@
 use crate::ExtractionContext;
+use hayro_syntax::object;
 use hayro_syntax::object::dict::keys::{
     AF, LAST_MODIFIED, LENGTH, METADATA, OC, OPI, PIECE_INFO, PT_DATA, REF, REFERENCE,
     STRUCT_PARENT, STRUCT_PARENTS,
 };
-use hayro_syntax::object::null::Null;
-use hayro_syntax::object::number::Number;
-use hayro_syntax::object::r#ref::MaybeRef;
-use hayro_syntax::object::stream::Stream;
-use hayro_syntax::object::{Object, array, dict, name, string};
+use hayro_syntax::object::{MaybeRef, Null, Number, Stream};
+use hayro_syntax::object::{Object, array, dict};
 use pdf_writer::{Chunk, Dict, Obj, Ref};
 use std::collections::HashSet;
 use std::ops::Deref;
@@ -35,7 +33,7 @@ pub(crate) trait WriteDirect {
     fn write_direct(&self, obj: Obj, _: &mut ExtractionContext);
 }
 
-impl WriteDirect for hayro_syntax::object::r#ref::ObjRef {
+impl WriteDirect for hayro_syntax::object::ObjRef {
     fn write_direct(&self, obj: Obj, ctx: &mut ExtractionContext) {
         ctx.to_visit_refs.push(*self);
         let mapped_ref = ctx.map_ref(*self);
@@ -43,7 +41,7 @@ impl WriteDirect for hayro_syntax::object::r#ref::ObjRef {
     }
 }
 
-impl WriteDirect for hayro_syntax::object::number::Number {
+impl WriteDirect for hayro_syntax::object::Number {
     fn write_direct(&self, obj: Obj, _: &mut ExtractionContext) {
         let float_num = self.as_f64();
 
@@ -61,25 +59,25 @@ impl WriteDirect for bool {
     }
 }
 
-impl WriteDirect for hayro_syntax::object::null::Null {
+impl WriteDirect for hayro_syntax::object::Null {
     fn write_direct(&self, obj: Obj, _: &mut ExtractionContext) {
         obj.primitive(pdf_writer::Null);
     }
 }
 
-impl WriteDirect for hayro_syntax::object::string::String<'_> {
+impl WriteDirect for object::String<'_> {
     fn write_direct(&self, obj: Obj, _: &mut ExtractionContext) {
         obj.primitive(pdf_writer::Str(self.get().as_ref()))
     }
 }
 
-impl WriteDirect for hayro_syntax::object::name::Name<'_> {
+impl WriteDirect for hayro_syntax::object::Name<'_> {
     fn write_direct(&self, obj: Obj, _: &mut ExtractionContext) {
         obj.primitive(pdf_writer::Name(self.deref()));
     }
 }
 
-impl WriteDirect for hayro_syntax::object::array::Array<'_> {
+impl WriteDirect for hayro_syntax::object::Array<'_> {
     fn write_direct(&self, obj: Obj, ctx: &mut ExtractionContext) {
         let mut arr = obj.array();
         for item in self.raw_iter() {
@@ -115,7 +113,7 @@ fn write_dict(
     }
 }
 
-impl WriteDirect for hayro_syntax::object::dict::Dict<'_> {
+impl WriteDirect for hayro_syntax::object::Dict<'_> {
     fn write_direct(&self, obj: Obj, ctx: &mut ExtractionContext) {
         let mut dict = obj.dict();
 
@@ -155,8 +153,8 @@ macro_rules! write_indirect {
 write_indirect!(Null);
 write_indirect!(bool);
 write_indirect!(Number);
-write_indirect!(string::String<'_>);
-write_indirect!(name::Name<'_>);
+write_indirect!(object::String<'_>);
+write_indirect!(object::Name<'_>);
 write_indirect!(dict::Dict<'_>);
 write_indirect!(array::Array<'_>);
 

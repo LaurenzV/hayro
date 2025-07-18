@@ -1,5 +1,5 @@
 use crate::object::ObjectIdentifier;
-use crate::object::stream::Stream;
+use crate::object::Stream;
 use crate::xref::XRef;
 use crate::{NUM_SLOTS, PdfData};
 use std::collections::HashMap;

@@ -219,7 +219,7 @@ pub(crate) fn is_digit(byte: u8) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use crate::object::number::Number;
+    use crate::object::Number;
     use crate::reader::Reader;
 
     #[test]

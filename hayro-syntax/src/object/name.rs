@@ -160,7 +160,7 @@ pub(crate) fn skip_name_like(r: &mut Reader, solidus: bool) -> Option<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::object::name::Name;
+    use crate::object::Name;
     use crate::reader::Reader;
     use std::ops::Deref;
 

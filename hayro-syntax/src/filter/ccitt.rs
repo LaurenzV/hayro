@@ -19,7 +19,7 @@
  * license.
  */
 
-use crate::object::dict::Dict;
+use crate::object::Dict;
 use crate::object::dict::keys::{
     BLACK_IS_1, COLUMNS, ENCODED_BYTE_ALIGN, END_OF_BLOCK, END_OF_LINE, K, ROWS,
 };

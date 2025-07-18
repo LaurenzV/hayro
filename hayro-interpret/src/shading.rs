@@ -3,15 +3,15 @@ use crate::color::{ColorComponents, ColorSpace};
 use crate::util::{FloatExt, PointExt};
 use hayro_syntax::bit_reader::{BitReader, BitSize};
 use hayro_syntax::function::{Function, Values, interpolate};
+use hayro_syntax::object::Array;
+use hayro_syntax::object::Dict;
 use hayro_syntax::object::Object;
-use hayro_syntax::object::array::Array;
-use hayro_syntax::object::dict::Dict;
+use hayro_syntax::object::Rect;
+use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::{
     BACKGROUND, BBOX, BITS_PER_COMPONENT, BITS_PER_COORDINATE, BITS_PER_FLAG, COLORSPACE, COORDS,
     DECODE, DOMAIN, EXTEND, FUNCTION, MATRIX, SHADING_TYPE, VERTICES_PER_ROW,
 };
-use hayro_syntax::object::rect::Rect;
-use hayro_syntax::object::stream::Stream;
 use kurbo::{Affine, CubicBez, ParamCurve, Point, Shape};
 use log::warn;
 use smallvec::{SmallVec, smallvec};

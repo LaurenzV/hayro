@@ -26,7 +26,7 @@ impl Readable<'_> for Null {
 
 #[cfg(test)]
 mod tests {
-    use crate::object::null::Null;
+    use crate::object::Null;
     use crate::reader::Reader;
 
     #[test]

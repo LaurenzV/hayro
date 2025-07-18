@@ -1,11 +1,11 @@
 use crate::bit_reader::{BitChunk, BitChunks, BitReader, BitSize, BitWriter};
-use crate::object::dict::Dict;
+use crate::object::Dict;
 use crate::object::dict::keys::{BITS_PER_COMPONENT, COLORS, COLUMNS, EARLY_CHANGE, PREDICTOR};
 use log::warn;
 
 pub(crate) mod flate {
     use crate::filter::lzw_flate::{PredictorParams, apply_predictor};
-    use crate::object::dict::Dict;
+    use crate::object::Dict;
     use flate2::read::{DeflateDecoder, ZlibDecoder};
     use std::io::Read;
 
@@ -33,7 +33,7 @@ pub(crate) mod flate {
 pub(crate) mod lzw {
     use crate::bit_reader::{BitReader, BitSize};
     use crate::filter::lzw_flate::{PredictorParams, apply_predictor};
-    use crate::object::dict::Dict;
+    use crate::object::Dict;
     use log::warn;
 
     /// Decode a LZW-encoded stream.
@@ -450,7 +450,7 @@ impl Predictor for Paeth {
 #[rustfmt::skip]
 mod tests {
     use crate::filter::lzw_flate::{PredictorParams, apply_predictor, flate, lzw};
-    use crate::object::dict::Dict;
+    use crate::object::Dict;
 
     #[test]
     fn decode_lzw() {

@@ -1,7 +1,7 @@
 use crate::content;
 use crate::function::{Clamper, Values};
-use crate::object::number::Number;
-use crate::object::stream::Stream;
+use crate::object::Number;
+use crate::object::Stream;
 use crate::reader::{Reader, ReaderContext};
 use crate::util::OptionLog;
 use log::error;
@@ -553,7 +553,7 @@ impl PostScriptOp {
 mod tests {
     use crate::function::type4::{PostScriptOp, Type4, parse_procedure};
     use crate::function::{Clamper, Function, FunctionType, Values};
-    use crate::object::number::Number;
+    use crate::object::Number;
     use std::sync::Arc;
 
     use smallvec::smallvec;

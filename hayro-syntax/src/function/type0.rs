@@ -1,8 +1,8 @@
 use crate::bit_reader::{BitReader, BitSize};
 use crate::function::{Clamper, TupleVec, Values, interpolate};
-use crate::object::array::Array;
+use crate::object::Array;
+use crate::object::Stream;
 use crate::object::dict::keys::{BITS_PER_SAMPLE, DECODE, ENCODE, SIZE};
-use crate::object::stream::Stream;
 use crate::util::OptionLog;
 use log::{error, warn};
 use smallvec::{SmallVec, ToSmallVec, smallvec};

@@ -4,9 +4,9 @@ use crate::font::standard_font::{StandardFont, StandardFontBlob, select_standard
 use crate::font::true_type::{read_encoding, read_widths};
 use crate::font::{Encoding, FallbackFontQuery, FontQuery};
 use crate::{FontResolverFn, InterpreterSettings};
-use hayro_syntax::object::dict::Dict;
+use hayro_syntax::object::Dict;
+use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::{FONT_DESC, FONT_FILE, FONT_FILE3};
-use hayro_syntax::object::stream::Stream;
 use kurbo::{Affine, BezPath};
 use log::warn;
 use skrifa::GlyphId;

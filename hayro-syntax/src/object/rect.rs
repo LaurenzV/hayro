@@ -1,6 +1,6 @@
 //! Rectangles.
 
-use crate::object::array::Array;
+use crate::object::Array;
 use crate::object::{Object, ObjectLike};
 use crate::reader::{Readable, Reader, ReaderContext};
 

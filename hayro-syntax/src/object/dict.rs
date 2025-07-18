@@ -1,8 +1,8 @@
 //! Dictionary objects.
 
+use crate::object::Name;
+use crate::object::Null;
 use crate::object::macros::object;
-use crate::object::name::Name;
-use crate::object::null::Null;
 use crate::object::r#ref::{MaybeRef, ObjRef};
 use crate::object::{Object, ObjectLike};
 use crate::reader::{Readable, Reader, ReaderContext, Skippable};
@@ -886,9 +886,9 @@ pub mod keys {
 
 #[cfg(test)]
 mod tests {
+    use crate::object::Name;
+    use crate::object::Number;
     use crate::object::dict::{Dict, InlineImageDict};
-    use crate::object::name::Name;
-    use crate::object::number::Number;
     use crate::object::string;
     use crate::reader::{Reader, ReaderContext};
 
