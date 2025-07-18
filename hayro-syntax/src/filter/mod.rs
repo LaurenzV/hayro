@@ -1,4 +1,4 @@
-//! Decoding data streams.
+//! Decoding filtered data streams.
 
 mod ascii_85;
 pub(crate) mod ascii_hex;
