@@ -2,10 +2,11 @@ use crate::object::r#ref::MaybeRef;
 use crate::object::{Object, ObjectLike};
 use crate::reader::{Readable, Reader, ReaderContext};
 use std::fmt::Debug;
+
 // Note that tuples don't correspond to any specific PDF object. Instead, they simply
 // represent a number of PDF objects that are only separated by whitespaces, i.e.
 // in an array. We only have those implementations so that it is easier to iterate
-// over tuples of items in a PDF array, which is something that happens quite often.
+// over tuples of items in a PDF array, which happens quite often.
 
 impl<'a, T, U> Readable<'a> for (T, U)
 where

@@ -10,7 +10,7 @@ use std::fmt::{Debug, Formatter};
 pub struct ObjRef {
     /// The object number.
     pub obj_number: i32,
-    /// The generation nunber.
+    /// The generation number.
     pub gen_number: i32,
 }
 

@@ -1,4 +1,4 @@
-//! Rectangles.
+//! Rectangle objects.
 
 use crate::object::Array;
 use crate::object::{Object, ObjectLike};

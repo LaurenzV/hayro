@@ -12,8 +12,8 @@ use std::fmt::{Debug, Formatter};
 use std::ops::Deref;
 use std::sync::Arc;
 
-/// A dictionary, which is a key-value map, keys being names and values being any direct PDF
-/// objects.
+/// A dictionary, which is a key-value map, keys being names, and values being any PDF object or
+/// objetc reference.
 #[derive(Clone)]
 pub struct Dict<'a>(Arc<Repr<'a>>);
 
@@ -59,7 +59,8 @@ impl<'a> Dict<'a> {
             .contains_key(&Name::from_unescaped(key.deref()))
     }
 
-    /// Returns the entry of a key as a specific type, and resolve it in case it's an object reference.
+    /// Returns the entry of a key as a specific object, or try to resolve it in case it's
+    /// an object reference.
     #[allow(
         private_bounds,
         reason = "users shouldn't be able to implement `ObjectLike` for custom objects."
@@ -71,7 +72,7 @@ impl<'a> Dict<'a> {
         self.get_raw::<T>(key.as_ref())?.resolve(self.0.ctx)
     }
 
-    /// Returns the entry of a key as a specific type, and resolve it in case it's an object reference.
+    /// Get the object reference linked to a key.
     pub fn get_ref<'b>(&self, key: impl Deref<Target = [u8]>) -> Option<ObjRef> {
         let offset = *self.0.offsets.get(&Name::from_unescaped(key.as_ref()))?;
 

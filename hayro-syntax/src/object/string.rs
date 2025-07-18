@@ -9,11 +9,11 @@ use std::borrow::Cow;
 
 /// A hex-encoded string.
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
-pub struct HexString<'a>(&'a [u8], bool);
+struct HexString<'a>(&'a [u8], bool);
 
 impl HexString<'_> {
     /// Returns the content of the string.
-    pub fn get(&self) -> Vec<u8> {
+    fn get(&self) -> Vec<u8> {
         if self.1 {
             let mut cleaned = Vec::with_capacity(self.0.len() + 1);
 
@@ -91,11 +91,11 @@ fn parse_hex(r: &mut Reader<'_>) -> Option<bool> {
 
 /// A literal string.
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Hash)]
-pub struct LiteralString<'a>(&'a [u8], bool);
+struct LiteralString<'a>(&'a [u8], bool);
 
 impl<'a> LiteralString<'a> {
     /// Returns the content of the string.
-    pub fn get(&self) -> Cow<'a, [u8]> {
+    fn get(&self) -> Cow<'a, [u8]> {
         if self.1 {
             let mut cleaned = vec![];
             let mut r = Reader::new(self.0);

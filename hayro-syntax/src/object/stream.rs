@@ -19,12 +19,12 @@ pub struct Stream<'a> {
 }
 
 impl<'a> Stream<'a> {
-    /// Return the raw (potentially with some applied filters) data of the stream.
+    /// Return the raw (potentially filtered) data of the stream.
     pub fn raw_data(&self) -> &'a [u8] {
         self.data
     }
 
-    /// Return the raw (potentially with some applied filters) data of the stream.
+    /// Return the raw, underlying dictionary of the stream.
     pub fn dict(&self) -> &Dict<'a> {
         &self.dict
     }
@@ -37,8 +37,8 @@ impl<'a> Stream<'a> {
         self.decoded_image().map(|r| r.data)
     }
 
-    /// Return the decoded data of the stream, and return image metadata in case
-    /// the data stream is a JPX stream.
+    /// Return the decoded data of the stream, and return image metadata
+    /// if available.
     pub fn decoded_image(&self) -> Result<FilterResult, DecodeFailure> {
         if let Some(filter) = self
             .dict
@@ -139,7 +139,7 @@ impl<'a> Readable<'a> for Stream<'a> {
 }
 
 #[derive(Debug, Copy, Clone)]
-/// A failure that can occur during decoding.
+/// A failure that can occur during decoding a data stream.
 pub enum DecodeFailure {
     /// An image stream failed to decode.
     ImageDecode,

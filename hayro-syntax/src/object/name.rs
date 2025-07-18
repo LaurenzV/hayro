@@ -99,7 +99,7 @@ impl<'a> Name<'a> {
         Self(data)
     }
 
-    /// Create a new name from an unescape bytes string.
+    /// Create a new name from an unescaped bytes string.
     pub(crate) const fn from_unescaped(data: &'a [u8]) -> Name<'a> {
         Self(Cow::Borrowed(data))
     }
