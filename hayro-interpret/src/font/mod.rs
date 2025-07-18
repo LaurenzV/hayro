@@ -333,25 +333,25 @@ pub enum FontQuery {
 #[derive(Debug, Clone)]
 pub struct FallbackFontQuery {
     /// The postscript name of the font.
-    post_script_name: Option<String>,
+    pub post_script_name: Option<String>,
     /// The name of the font.
-    font_name: Option<String>,
+    pub font_name: Option<String>,
     /// The family of the font.
-    font_family: Option<String>,
+    pub font_family: Option<String>,
     /// The stretch of the font.
-    font_stretch: FontStretch,
+    pub font_stretch: FontStretch,
     /// The weight of the font.
-    font_weight: u32,
+    pub font_weight: u32,
     /// Whether the font is monospaced.
-    is_fixed_pitch: bool,
+    pub is_fixed_pitch: bool,
     /// Whether the font is serif.
-    is_serif: bool,
+    pub is_serif: bool,
     /// Whether the font is italic.
-    is_italic: bool,
+    pub is_italic: bool,
     /// Whether the font is bold.
-    is_bold: bool,
+    pub is_bold: bool,
     /// Whether the font is small cap.
-    is_small_cap: bool,
+    pub is_small_cap: bool,
 }
 
 impl FallbackFontQuery {
