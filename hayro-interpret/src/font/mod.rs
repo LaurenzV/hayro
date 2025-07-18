@@ -8,7 +8,7 @@ use crate::font::true_type::TrueTypeFont;
 use crate::font::type1::Type1Font;
 use crate::font::type3::Type3;
 use crate::interpret::state::State;
-use crate::{FontResolverFn, InterpreterSettings, Paint};
+use crate::{FontResolverFn, InterpreterSettings, Paint, WarningSinkFn};
 use bitflags::bitflags;
 use hayro_syntax::document::page::Resources;
 use hayro_syntax::object::dict::Dict;
@@ -91,7 +91,11 @@ impl<'a> Type3Glyph<'a> {
 pub(crate) struct Font<'a>(FontType<'a>);
 
 impl<'a> Font<'a> {
-    pub(crate) fn new(dict: &Dict<'a>, resolver: &FontResolverFn) -> Option<Self> {
+    pub(crate) fn new(
+        dict: &Dict<'a>,
+        resolver: &FontResolverFn,
+        warning_sink: &WarningSinkFn,
+    ) -> Option<Self> {
         let f_type = match dict.get::<Name>(SUBTYPE)?.deref() {
             TYPE1 | MM_TYPE1 => FontType::Type1(Arc::new(Type1Font::new(dict, resolver)?)),
             TRUE_TYPE => TrueTypeFont::new(dict)
@@ -102,7 +106,7 @@ impl<'a> Font<'a> {
                         .map(Arc::new)
                         .map(FontType::Type1)
                 })?,
-            TYPE0 => FontType::Type0(Arc::new(Type0Font::new(dict)?)),
+            TYPE0 => FontType::Type0(Arc::new(Type0Font::new(dict, warning_sink)?)),
             TYPE3 => FontType::Type3(Arc::new(Type3::new(dict))),
             f => {
                 println!(

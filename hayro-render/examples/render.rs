@@ -19,6 +19,7 @@ fn main() {
             FontQuery::Standard(s) => Some(get_standard(&s)),
             FontQuery::Fallback(f) => Some(get_standard(&f.pick_standard_font())),
         }),
+        ..Default::default()
     };
 
     let pixmaps = render_png(&pdf, 1.0, settings, None).unwrap();

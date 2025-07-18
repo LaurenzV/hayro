@@ -1,6 +1,6 @@
 //! Stream objects.
 
-use crate::filter::{Filter, FilterResult};
+use crate::filter::{DecodeFailure, Filter, FilterResult};
 use crate::object::array::Array;
 use crate::object::dict::Dict;
 use crate::object::dict::keys::{DECODE_PARMS, DP, F, FILTER, LENGTH};
@@ -33,13 +33,13 @@ impl<'a> Stream<'a> {
     ///
     /// Note that the result of this method will not be cached, so calling it multiple
     /// times is expensive.
-    pub fn decoded(&self) -> Option<Vec<u8>> {
+    pub fn decoded(&self) -> Result<Vec<u8>, DecodeFailure> {
         self.decoded_image().map(|r| r.data)
     }
 
     /// Return the decoded data of the stream, and return image metadata in case
     /// the data stream is a JPX stream.
-    pub fn decoded_image(&self) -> Option<FilterResult> {
+    pub fn decoded_image(&self) -> Result<FilterResult, DecodeFailure> {
         if let Some(filter) = self
             .dict
             .get::<Name>(F)
@@ -60,7 +60,8 @@ impl<'a> Stream<'a> {
             let filters = filters
                 .iter::<Name>()
                 .map(|n| Filter::from_name(n))
-                .collect::<Option<Vec<_>>>()?;
+                .collect::<Option<Vec<_>>>()
+                .ok_or(DecodeFailure::Unknown)?;
             let params = self
                 .dict
                 .get::<Array>(DP)
@@ -83,14 +84,14 @@ impl<'a> Stream<'a> {
                 current = Some(new);
             }
 
-            Some(current.unwrap_or(FilterResult {
+            Ok(current.unwrap_or(FilterResult {
                 data: self.data.to_vec(),
                 alpha: None,
                 color_space: None,
                 bits_per_component: None,
             }))
         } else {
-            Some(FilterResult {
+            Ok(FilterResult {
                 data: self.data.to_vec(),
                 alpha: None,
                 color_space: None,
@@ -188,7 +189,7 @@ fn parse_fallback<'a>(r: &mut Reader<'a>, dict: &Dict<'a>) -> Option<Stream<'a>>
             };
 
             // Try decoding the stream to see if it is valid.
-            if stream.decoded().is_some() {
+            if stream.decoded().is_ok() {
                 info!("managed to reconstruct the stream");
 
                 // Seems like we found the end!

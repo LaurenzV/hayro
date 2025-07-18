@@ -34,7 +34,7 @@ pub fn decode(data: &[u8], params: Dict) -> Option<Vec<u8>> {
 
     // std::fs::write("out.jb2", data);
 
-    if let Some(globals_data) = globals.and_then(|g| g.decoded()) {
+    if let Some(globals_data) = globals.and_then(|g| g.decoded().ok()) {
         // std::fs::write("globals_data.jb2", &globals_data);
         chunks.push(Chunk {
             data: globals_data.clone(),

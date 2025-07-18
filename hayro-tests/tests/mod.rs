@@ -178,6 +178,7 @@ pub fn run_render_test(name: &str, file_path: &str, range_str: Option<&str>) {
             FontQuery::Standard(s) => Some(get_standard(&s)),
             FontQuery::Fallback(f) => Some(get_standard(&f.pick_standard_font())),
         }),
+        ..Default::default()
     };
 
     let range = range_str.and_then(parse_range);

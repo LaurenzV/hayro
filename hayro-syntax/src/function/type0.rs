@@ -44,7 +44,7 @@ impl Type0 {
         let decode = dict.get::<TupleVec>(DECODE).unwrap_or(range.clone());
 
         let data = {
-            let decoded = stream.decoded()?;
+            let decoded = stream.decoded().ok()?;
             let mut buf = vec![];
             let mut reader = BitReader::new(&decoded);
 

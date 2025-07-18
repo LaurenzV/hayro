@@ -4,10 +4,11 @@ use crate::context::Context;
 use crate::device::Device;
 use crate::image::{AlphaData, RgbData};
 use crate::interpret::path::get_paint;
-use crate::{FillRule, interpret};
+use crate::{FillRule, InterpreterWarning, WarningSinkFn, interpret};
 use hayro_syntax::bit_reader::{BitReader, BitSize};
 use hayro_syntax::content::{TypedIter, UntypedIter};
 use hayro_syntax::document::page::Resources;
+use hayro_syntax::filter::DecodeFailure;
 use hayro_syntax::function::interpolate;
 use hayro_syntax::object::Object;
 use hayro_syntax::object::array::Array;
@@ -26,10 +27,14 @@ pub enum XObject<'a> {
 }
 
 impl<'a> XObject<'a> {
-    pub fn new(stream: &Stream<'a>) -> Option<Self> {
+    pub fn new(stream: &Stream<'a>, warning_sink: &WarningSinkFn) -> Option<Self> {
         let dict = stream.dict();
         match dict.get::<Name>(SUBTYPE)?.deref() {
-            IMAGE => Some(Self::ImageXObject(ImageXObject::new(stream, |_| None)?)),
+            IMAGE => Some(Self::ImageXObject(ImageXObject::new(
+                stream,
+                |_| None,
+                warning_sink,
+            )?)),
             FORM => Some(Self::FormXObject(FormXObject::new(stream)?)),
             _ => None,
         }
@@ -48,7 +53,7 @@ impl<'a> FormXObject<'a> {
     fn new(stream: &Stream<'a>) -> Option<Self> {
         let dict = stream.dict();
 
-        let decoded = stream.decoded()?;
+        let decoded = stream.decoded().ok()?;
         let resources = dict.get::<Dict>(RESOURCES).unwrap_or_default();
 
         let matrix = Affine::new(
@@ -185,6 +190,7 @@ pub struct ImageXObject<'a> {
     is_image_mask: bool,
     data_smask: Option<Vec<u8>>,
     pub dict: Dict<'a>,
+    warning_sink: WarningSinkFn,
     bits_per_component: u8,
 }
 
@@ -192,10 +198,17 @@ impl<'a> ImageXObject<'a> {
     pub(crate) fn new(
         stream: &Stream<'a>,
         resolve_cs: impl FnOnce(&Name) -> Option<ColorSpace>,
+        warning_sink: &WarningSinkFn,
     ) -> Option<Self> {
         let dict = stream.dict();
 
-        let decoded = stream.decoded_image()?;
+        let decoded = stream
+            .decoded_image()
+            .map_err(|e| match e {
+                DecodeFailure::JpxImage => warning_sink(InterpreterWarning::JpxImage),
+                _ => warning_sink(InterpreterWarning::ImageDecodeFailure),
+            })
+            .ok()?;
         let interpolate = dict
             .get::<bool>(I)
             .or_else(|| dict.get::<bool>(INTERPOLATE))
@@ -252,6 +265,7 @@ impl<'a> ImageXObject<'a> {
             data_smask: decoded.alpha,
             height,
             color_space,
+            warning_sink: warning_sink.clone(),
             interpolate,
             decode,
             is_image_mask: image_mask,
@@ -300,7 +314,7 @@ impl<'a> ImageXObject<'a> {
                         return None;
                     }
                 } else if let Some(s_mask) = self.dict.get::<Stream>(SMASK) {
-                    ImageXObject::new(&s_mask, |_| None).and_then(|s| {
+                    ImageXObject::new(&s_mask, |_| None, &self.warning_sink).and_then(|s| {
                         if let Some(decoded) = s.decode_raw() {
                             Some((decoded, s.width, s.height, s.interpolate))
                         } else {
@@ -308,7 +322,7 @@ impl<'a> ImageXObject<'a> {
                         }
                     })?
                 } else if let Some(mask) = self.dict.get::<Stream>(MASK) {
-                    if let Some(obj) = ImageXObject::new(&mask, |_| None) {
+                    if let Some(obj) = ImageXObject::new(&mask, |_| None, &self.warning_sink) {
                         let mut mask_data = obj.decode_raw()?;
                         mask_data = mask_data.iter().map(|v| 1.0 - *v).collect();
 

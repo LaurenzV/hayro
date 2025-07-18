@@ -152,6 +152,7 @@ impl PdfViewer {
                 FontQuery::Standard(s) => Some(get_standard(&s)),
                 FontQuery::Fallback(f) => Some(get_standard(&f.pick_standard_font())),
             }),
+            ..Default::default()
         };
 
         let pixmaps = hayro_render::render_png(

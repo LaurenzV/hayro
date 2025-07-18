@@ -50,6 +50,7 @@ pub use soft_mask::{MaskType, SoftMask};
 /// A container for the bytes of a PDF file.
 pub type FontData = Arc<dyn AsRef<[u8]> + Send + Sync>;
 pub type FontResolverFn = Arc<dyn Fn(&FontQuery) -> Option<FontData> + Send + Sync>;
+pub type WarningSinkFn = Arc<dyn Fn(InterpreterWarning) + Send + Sync>;
 
 #[derive(Clone, Debug)]
 pub struct StrokeProps {
@@ -108,14 +109,32 @@ pub struct InterpreterSettings {
     /// For the `Symbol` and `ZapfDingBats` fonts, you should also prefer the system fonts, and if
     /// not available to you, you can, similarly to above, use the corresponding fonts from Foxit.
     pub font_resolver: FontResolverFn,
+
+    /// In certain cases, `hayro` will emit a warning in case an issue was encountered while interpreting
+    /// the PDF file. Providing a callback allows you to catch those warnings and handle them, if desired.
+    pub warning_sink: WarningSinkFn,
 }
 
 impl Default for InterpreterSettings {
     fn default() -> Self {
         Self {
             font_resolver: Arc::new(|_| None),
+            warning_sink: Arc::new(|_| {}),
         }
     }
+}
+
+#[derive(Copy, Clone, Debug)]
+/// Warnings that can occur while interpreting a PDF file.
+pub enum InterpreterWarning {
+    /// A JPX image was encountered, even though the `jpeg2000` feature is not enabled.
+    JpxImage,
+    /// An unsupported font kind was encountered.
+    ///
+    /// Currently, only CID fonts with non-identity encoding are unsupported.
+    UnsupportedFont,
+    /// An image failed to decode.
+    ImageDecodeFailure,
 }
 
 pub fn interpret<'a, 'b>(
@@ -482,16 +501,21 @@ pub fn interpret<'a, 'b>(
             }
             TypedOperation::ShapeGlyph(_) => {}
             TypedOperation::XObject(x) => {
-                if let Some(x_object) =
-                    resources.get_x_object(x.0, Box::new(|_| None), Box::new(|s| XObject::new(&s)))
-                {
+                if let Some(x_object) = resources.get_x_object(
+                    x.0,
+                    Box::new(|_| None),
+                    Box::new(|s| XObject::new(&s, &context.settings.warning_sink)),
+                ) {
                     draw_xobject(&x_object, resources, context, device);
                 }
             }
             TypedOperation::InlineImage(i) => {
-                if let Some(x_object) = ImageXObject::new(&i.0, |name| {
-                    context.get_color_space(resources, name.clone())
-                }) {
+                let warning_sink = context.settings.warning_sink.clone();
+                if let Some(x_object) = ImageXObject::new(
+                    &i.0,
+                    |name| context.get_color_space(resources, name.clone()),
+                    &warning_sink,
+                ) {
                     draw_image_xobject(&x_object, context, device);
                 }
             }

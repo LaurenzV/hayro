@@ -1,8 +1,8 @@
-use crate::InterpreterSettings;
 use crate::cache::Cache;
 use crate::context::Context;
 use crate::device::Device;
 use crate::x_object::{XObject, draw_xobject};
+use crate::{InterpreterSettings, WarningSinkFn};
 use hayro_syntax::document::page::Resources;
 use hayro_syntax::object::ObjectIdentifier;
 use hayro_syntax::object::dict::Dict;
@@ -68,7 +68,7 @@ impl<'a> SoftMask<'a> {
         // same xobject, the ID will be the same.
         let obj_id = dict.get_ref(G)?.into();
         let group_stream = dict.get::<Stream>(G)?;
-        let group = XObject::new(&group_stream)?;
+        let group = XObject::new(&group_stream, &context.settings.warning_sink)?;
         let mask_type = match dict.get::<Name>(S)?.deref() {
             LUMINOSITY => MaskType::Luminosity,
             ALPHA => MaskType::Alpha,

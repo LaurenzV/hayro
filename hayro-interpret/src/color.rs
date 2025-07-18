@@ -109,7 +109,7 @@ impl ColorSpaceType {
                     let dict = icc_stream.dict();
                     let num_components = dict.get::<usize>(N)?;
 
-                    return ICCProfile::new(icc_stream.decoded()?.as_ref(), num_components)
+                    return ICCProfile::new(icc_stream.decoded().ok()?.as_ref(), num_components)
                         .map(ColorSpaceType::ICCBased)
                         .or_else(|| {
                             dict.get::<Object>(ALTERNATE)
@@ -621,7 +621,7 @@ impl Indexed {
         let values = {
             let data = iter
                 .next::<Stream>()
-                .and_then(|s| s.decoded())
+                .and_then(|s| s.decoded().ok())
                 .or_else(|| iter.next::<string::String>().map(|s| s.get().to_vec()))?;
 
             let num_components = base_color_space.num_components();

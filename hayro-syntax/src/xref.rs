@@ -79,7 +79,7 @@ fn fallback_xref_map(data: &[u8]) -> (XrefMap, Option<&[u8]>) {
 
             if let Some(stream) = old_r.read::<Stream>(dummy_ctx) {
                 if stream.dict().get::<Name>(TYPE).as_deref() == Some(b"ObjStm")
-                    && let Some(data) = stream.decoded()
+                    && let Some(data) = stream.decoded().ok()
                     && let Some(last_obj_num) = last_obj_num
                 {
                     if let Some(obj_stream) = ObjectStream::new(stream, &data, dummy_ctx) {
@@ -506,7 +506,7 @@ fn populate_from_xref_stream<'a>(
         warn!("first field in xref stream was longer than 1");
     }
 
-    let xref_data = stream.decoded()?;
+    let xref_data = stream.decoded().ok()?;
     let mut xref_reader = Reader::new(xref_data.as_ref());
 
     if let Some(arr) = stream.dict().get::<Array>(INDEX) {

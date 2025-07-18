@@ -64,7 +64,7 @@ impl Data {
                 self.map.lock().unwrap().insert(id, idx);
 
                 let stream = xref.get::<Stream>(id)?;
-                self.slots[idx].set(stream.decoded()).unwrap();
+                self.slots[idx].set(stream.decoded().ok()).unwrap();
 
                 let val = self.slots[idx].get().unwrap().as_deref();
                 idx += 1;

@@ -63,14 +63,6 @@ pub fn decode(data: &[u8]) -> Option<FilterResult> {
     })
 }
 
-/// A stub-method for decoding a JPX-encoded image stream. Always returns `None`.
-#[cfg(not(feature = "jpeg2000"))]
-pub fn decode(_: &[u8]) -> Option<FilterResult> {
-    log::warn!("JPEG2000 images are not supported in the current build");
-
-    None
-}
-
 fn scale(
     data: &[u8],
     bit_per_component: u8,

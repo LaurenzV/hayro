@@ -165,7 +165,7 @@ impl<'a> TilingPattern<'a> {
             state,
         );
 
-        let decoded = self.stream.decoded()?;
+        let decoded = self.stream.decoded().ok()?;
         let resources = Resources::from_parent(
             self.stream.dict().get(RESOURCES).unwrap_or_default(),
             self.parent_resources.clone(),

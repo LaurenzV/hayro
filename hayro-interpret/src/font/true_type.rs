@@ -40,7 +40,7 @@ impl TrueTypeFont {
         let (encoding, differences) = read_encoding(dict);
         let base_font = descriptor
             .get::<Stream>(FONT_FILE2)
-            .and_then(|s| s.decoded())
+            .and_then(|s| s.decoded().ok())
             .and_then(|d| OpenTypeFontBlob::new(Arc::new(d.to_vec()), 0))?;
 
         let mut glyph_names = HashMap::new();

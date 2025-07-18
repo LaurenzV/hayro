@@ -16,6 +16,19 @@ use crate::util::OptionLog;
 use log::warn;
 use std::ops::Deref;
 
+#[derive(Debug, Copy, Clone)]
+/// A failure that can occur during decoding.
+pub enum DecodeFailure {
+    /// An image stream failed to decode.
+    ImageDecode,
+    /// A stream failed to decode.
+    StreamDecode,
+    /// A JPEG2000 image was encountered while the `jpeg2000` feature was disabled.
+    JpxImage,
+    /// An unknown failure occurred.
+    Unknown,
+}
+
 /// A filter.
 #[derive(Debug, Copy, Clone)]
 pub enum Filter {
@@ -121,21 +134,47 @@ impl Filter {
     }
 
     /// Apply the filter to some data.
-    pub fn apply(&self, data: &[u8], params: Dict) -> Option<FilterResult> {
-        match self {
-            Filter::AsciiHexDecode => ascii_hex::decode(data).map(FilterResult::from_data),
-            Filter::Ascii85Decode => ascii_85::decode(data).map(FilterResult::from_data),
-            Filter::RunLengthDecode => run_length::decode(data).map(FilterResult::from_data),
-            Filter::LzwDecode => lzw_flate::lzw::decode(data, params).map(FilterResult::from_data),
-            Filter::DctDecode => dct::decode(data, params).map(FilterResult::from_data),
-            Filter::FlateDecode => {
-                lzw_flate::flate::decode(data, params).map(FilterResult::from_data)
+    pub fn apply(&self, data: &[u8], params: Dict) -> Result<FilterResult, DecodeFailure> {
+        let res = match self {
+            Filter::AsciiHexDecode => ascii_hex::decode(data)
+                .map(FilterResult::from_data)
+                .ok_or(DecodeFailure::StreamDecode),
+            Filter::Ascii85Decode => ascii_85::decode(data)
+                .map(FilterResult::from_data)
+                .ok_or(DecodeFailure::StreamDecode),
+            Filter::RunLengthDecode => run_length::decode(data)
+                .map(FilterResult::from_data)
+                .ok_or(DecodeFailure::StreamDecode),
+            Filter::LzwDecode => lzw_flate::lzw::decode(data, params)
+                .map(FilterResult::from_data)
+                .ok_or(DecodeFailure::StreamDecode),
+            Filter::DctDecode => dct::decode(data, params)
+                .map(FilterResult::from_data)
+                .ok_or(DecodeFailure::ImageDecode),
+            Filter::FlateDecode => lzw_flate::flate::decode(data, params)
+                .map(FilterResult::from_data)
+                .ok_or(DecodeFailure::StreamDecode),
+            Filter::CcittFaxDecode => ccitt::decode(data, params)
+                .map(FilterResult::from_data)
+                .ok_or(DecodeFailure::ImageDecode),
+            Filter::Jbig2Decode => Ok(FilterResult::from_data(
+                jbig2::decode(data, params).ok_or(DecodeFailure::ImageDecode)?,
+            )),
+            #[cfg(feature = "jpeg2000")]
+            Filter::JpxDecode => jpx::decode(data).ok_or(DecodeFailure::ImageDecode),
+            #[cfg(not(feature = "jpeg2000"))]
+            Filter::JpxDecode => {
+                log::warn!("JPEG2000 images are not supported in the current build");
+
+                Err(DecodeFailure::JpxImage)
             }
-            Filter::CcittFaxDecode => ccitt::decode(data, params).map(FilterResult::from_data),
-            Filter::Jbig2Decode => Some(FilterResult::from_data(jbig2::decode(data, params)?)),
-            Filter::JpxDecode => jpx::decode(data),
-            _ => None,
+            _ => Err(DecodeFailure::StreamDecode),
+        };
+
+        if res.is_err() {
+            warn!("failed to apply filter {}", self.debug_name());
         }
-        .error_none(&format!("failed to apply filter {}", self.debug_name()))
+
+        res
     }
 }

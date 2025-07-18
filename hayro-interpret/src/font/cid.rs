@@ -1,5 +1,6 @@
 use crate::font::blob::{CffFontBlob, OpenTypeFontBlob};
 use crate::util::OptionLog;
+use crate::{InterpreterWarning, WarningSinkFn};
 use hayro_syntax::object::array::Array;
 use hayro_syntax::object::dict::Dict;
 use hayro_syntax::object::dict::keys::*;
@@ -25,10 +26,13 @@ pub(crate) struct Type0Font {
 }
 
 impl Type0Font {
-    pub(crate) fn new(dict: &Dict) -> Option<Self> {
-        let encoding = dict
-            .get::<Name>(ENCODING)
-            .warn_none("CID fonts with custom encoding are currently unsupported")?;
+    pub(crate) fn new(dict: &Dict, warning_sink: &WarningSinkFn) -> Option<Self> {
+        let encoding = dict.get::<Name>(ENCODING).or_else(|| {
+            warn!("CID fonts with custom encoding are currently unsupported");
+            warning_sink(InterpreterWarning::UnsupportedFont);
+
+            None
+        })?;
 
         let horizontal = encoding.deref() == IDENTITY_H;
 
@@ -139,12 +143,12 @@ impl FontType {
         // some leeway.
 
         if let Some(stream) = descriptor.get::<Stream>(FONT_FILE2) {
-            let decoded = stream.decoded()?;
+            let decoded = stream.decoded().ok()?;
             let data = Arc::new(decoded.to_vec());
 
             return Some(Self::TrueType(OpenTypeFontBlob::new(data, 0)?));
         } else if let Some(stream) = descriptor.get::<Stream>(FONT_FILE3) {
-            let decoded = stream.decoded()?;
+            let decoded = stream.decoded().ok()?;
 
             return match stream.dict().get::<Name>(SUBTYPE)?.deref() {
                 CID_FONT_TYPE0C => {
@@ -188,7 +192,7 @@ impl CidToGIdMap {
                 None
             }
         } else if let Some(stream) = dict.get::<Stream>(CID_TO_GID_MAP) {
-            let decoded = stream.decoded()?;
+            let decoded = stream.decoded().ok()?;
             let mut map = HashMap::new();
 
             for (cid, gid) in decoded.chunks_exact(2).enumerate() {

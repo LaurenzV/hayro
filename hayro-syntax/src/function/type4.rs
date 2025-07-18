@@ -24,7 +24,7 @@ impl Type4 {
 
         Some(Self {
             clamper,
-            program: parse_procedure(&stream.decoded()?)?,
+            program: parse_procedure(&stream.decoded().ok()?)?,
         })
     }
 
