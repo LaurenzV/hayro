@@ -215,6 +215,7 @@ impl XRef {
     }
 
     /// Return the object with the given identifier.
+    #[allow(private_bounds)]
     pub fn get<'a, T>(&'a self, id: ObjectIdentifier) -> Option<T>
     where
         T: ObjectLike<'a>,
@@ -661,7 +662,7 @@ struct ObjectStream<'a> {
 }
 
 impl<'a> ObjectStream<'a> {
-    pub fn new(inner: Stream<'a>, data: &'a [u8], ctx: ReaderContext<'a>) -> Option<Self> {
+    fn new(inner: Stream<'a>, data: &'a [u8], ctx: ReaderContext<'a>) -> Option<Self> {
         let num_objects = inner.dict().get::<usize>(N)?;
         let first_offset = inner.dict().get::<usize>(FIRST)?;
 
@@ -681,7 +682,7 @@ impl<'a> ObjectStream<'a> {
         Some(Self { data, ctx, offsets })
     }
 
-    pub fn get<T>(&self, index: u32) -> Option<T>
+    fn get<T>(&self, index: u32) -> Option<T>
     where
         T: ObjectLike<'a>,
     {

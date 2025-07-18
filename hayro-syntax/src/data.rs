@@ -7,15 +7,17 @@ use std::fmt::{Debug, Formatter};
 use std::sync::Mutex;
 use std::sync::OnceLock;
 use std::sync::atomic::AtomicUsize;
+use log::warn;
 
 /// A structure for storing the data of the PDF.
 // To explain further: This crate uses a zero-parse approach, meaning that objects like
 // dictionaries or arrays always store the underlying data and parse objects lazily as needed,
 // instead of allocating the data and storing it in an owned way. However, the problem is that
-// not all data is readily available: Objects can also be stored in an object stream, in which
-// case we first need to decode the stream before we can access the data.
+// not all data is readily available in the original data of the PDF: Objects can also be 
+// stored in an object streams, in which case we first need to decode the stream before we can 
+// access the data.
 //
-// The purpose of `Data` is to allow us to access original data as well as maybe decoded data
+// The purpose of `Data` is to allow us to access the original data as well as maybe decoded data
 // by faking the same lifetime, so that we don't run into lifetime issues when dealing with
 // PDF objects that actually stem from different data sources.
 pub(crate) struct Data {
@@ -59,6 +61,8 @@ impl Data {
             let mut idx = self.counter.load(std::sync::atomic::Ordering::SeqCst);
 
             if idx >= NUM_SLOTS {
+                warn!("exceeded the maximum number of slots");
+                
                 None
             } else {
                 self.map.lock().unwrap().insert(id, idx);

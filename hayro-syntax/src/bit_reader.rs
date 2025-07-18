@@ -15,12 +15,12 @@ impl BitSize {
         if value > 32 { None } else { Some(Self(value)) }
     }
 
-    /// Return the number of bits of the bit size.
+    /// Return the number of bits.
     pub fn bits(&self) -> usize {
         self.0 as usize
     }
 
-    /// Return the bit mask of the bit size.
+    /// Return the bit mask.
     pub fn mask(&self) -> u32 {
         ((1u64 << self.0 as u64) - 1) as u32
     }
@@ -232,7 +232,7 @@ pub(crate) struct BitChunk {
 }
 
 impl BitChunk {
-    pub fn iter(&self) -> impl Iterator<Item = u16> + '_ {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = u16> + '_ {
         self.bits.iter().copied()
     }
 
