@@ -1,6 +1,6 @@
 //! Content stream operators
 
-use crate::content::{OPERANDS_THRESHOLD, Operation, OperatorTrait, Stack};
+use crate::content::{Instruction, OPERANDS_THRESHOLD, OperatorTrait, Stack};
 use crate::object::Object;
 use crate::object::array::Array;
 use crate::object::name::Name;
@@ -74,7 +74,7 @@ mod tests {
     use crate::content::ops::{
         BeginMarkedContentWithProperties, ClosePath, EndMarkedContent, FillPathNonZero, LineTo,
         MarkedContentPointWithProperties, MoveTo, NonStrokeColorDeviceRgb, NonStrokeColorNamed,
-        SetGraphicsState, StrokeColorNamed, Transform, TypedOperation,
+        SetGraphicsState, StrokeColorNamed, Transform, TypedInstruction,
     };
     use crate::content::{TypedIter, UntypedIter};
     use crate::object::Object;
@@ -101,9 +101,9 @@ mod tests {
 ";
 
         let expected = vec![
-            TypedOperation::Transform(Transform(n(1), n(0), n(0), n(-1), n(0), n(200))),
-            TypedOperation::SetGraphicsState(SetGraphicsState(Name::new(b"g0"))),
-            TypedOperation::NonStrokeColorDeviceRgb(NonStrokeColorDeviceRgb(n(1), n(0), n(0))),
+            TypedInstruction::Transform(Transform(n(1), n(0), n(0), n(-1), n(0), n(200))),
+            TypedInstruction::SetGraphicsState(SetGraphicsState(Name::new(b"g0"))),
+            TypedInstruction::NonStrokeColorDeviceRgb(NonStrokeColorDeviceRgb(n(1), n(0), n(0))),
         ];
 
         let elements = TypedIter::new(UntypedIter::new(input))
@@ -124,12 +124,12 @@ f
 ";
 
         let expected = vec![
-            TypedOperation::MoveTo(MoveTo(n(20), n(20))),
-            TypedOperation::LineTo(LineTo(n(180), n(20))),
-            TypedOperation::LineTo(LineTo(f(180.1), f(180.1))),
-            TypedOperation::LineTo(LineTo(n(20), n(180))),
-            TypedOperation::ClosePath(ClosePath),
-            TypedOperation::FillPathNonZero(FillPathNonZero),
+            TypedInstruction::MoveTo(MoveTo(n(20), n(20))),
+            TypedInstruction::LineTo(LineTo(n(180), n(20))),
+            TypedInstruction::LineTo(LineTo(f(180.1), f(180.1))),
+            TypedInstruction::LineTo(LineTo(n(20), n(180))),
+            TypedInstruction::ClosePath(ClosePath),
+            TypedInstruction::FillPathNonZero(FillPathNonZero),
         ];
 
         let elements = TypedIter::new(UntypedIter::new(input))
@@ -146,11 +146,11 @@ f
 ";
 
         let expected = vec![
-            TypedOperation::NonStrokeColorNamed(NonStrokeColorNamed(
+            TypedInstruction::NonStrokeColorNamed(NonStrokeColorNamed(
                 smallvec![Number::from_i32(0)],
                 None,
             )),
-            TypedOperation::StrokeColorNamed(StrokeColorNamed(
+            TypedInstruction::StrokeColorNamed(StrokeColorNamed(
                 smallvec![
                     Number::from_f32(0.1),
                     Number::from_f32(0.2),
@@ -171,7 +171,7 @@ f
     fn dp() {
         let input = b"/Attribute<</ShowCenterPoint false >> DP";
 
-        let expected = vec![TypedOperation::MarkedContentPointWithProperties(
+        let expected = vec![TypedInstruction::MarkedContentPointWithProperties(
             MarkedContentPointWithProperties(
                 Name::new(b"Attribute"),
                 Object::Dict(Dict::from_bytes(b"<</ShowCenterPoint false >>").unwrap()),
@@ -190,11 +190,11 @@ f
         let input = b"/Span << /MCID 0 /Alt (Alt)>> BDC EMC";
 
         let expected = vec![
-            TypedOperation::BeginMarkedContentWithProperties(BeginMarkedContentWithProperties(
+            TypedInstruction::BeginMarkedContentWithProperties(BeginMarkedContentWithProperties(
                 Name::new(b"Span"),
                 Object::Dict(Dict::from_bytes(b"<< /MCID 0 /Alt (Alt)>>").unwrap()),
             )),
-            TypedOperation::EndMarkedContent(EndMarkedContent),
+            TypedInstruction::EndMarkedContent(EndMarkedContent),
         ];
 
         let elements = TypedIter::new(UntypedIter::new(input))
@@ -209,11 +209,11 @@ f
         let input = b"/Span /Name BDC EMC";
 
         let expected = vec![
-            TypedOperation::BeginMarkedContentWithProperties(BeginMarkedContentWithProperties(
+            TypedInstruction::BeginMarkedContentWithProperties(BeginMarkedContentWithProperties(
                 Name::new(b"Span"),
                 Object::Name(Name::new(b"Name")),
             )),
-            TypedOperation::EndMarkedContent(EndMarkedContent),
+            TypedInstruction::EndMarkedContent(EndMarkedContent),
         ];
 
         let elements = TypedIter::new(UntypedIter::new(input))

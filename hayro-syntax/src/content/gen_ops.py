@@ -161,7 +161,7 @@ def gen_enum_variant(name, types):
 
 def gen_dispatch_match(code, name, types):
     escaped_code = code.replace('"', '\\"')
-    return f'b"{escaped_code}" => {name}::from_stack(&operation.operands)?.into(),'
+    return f'b"{escaped_code}" => {name}::from_stack(&instruction.operands)?.into(),'
 
 # Generate all code pieces
 structs = []
@@ -180,18 +180,18 @@ struct_block = "\n\n".join(structs)
 
 enum_block = (
         "#[derive(Debug, PartialEq, Clone)]\n"
-        "pub enum TypedOperation<'a> {\n"
+        "pub enum TypedInstruction<'a> {\n"
         + "    " + ",\n    ".join(enum_variants) + ",\n"
                                                    "    Fallback(Operator<'a>),\n}"
 )
 
 dispatch_block = (
-        "impl<'a> TypedOperation<'a> {\n"
-        "    pub(crate) fn dispatch(operation: &Operation<'a>) -> Option<TypedOperation<'a>> {\n"
-        "        let op_name = operation.operator.as_ref();\n"
+        "impl<'a> TypedInstruction<'a> {\n"
+        "    pub(crate) fn dispatch(instruction: &Instruction<'a>) -> Option<TypedInstruction<'a>> {\n"
+        "        let op_name = instruction.operator.as_ref();\n"
         "        Some(match op_name {\n"
         + "            " + "\n            ".join(dispatch_arms) + "\n"
-                                                                  "            _ => return Self::Fallback(operation.operator.clone()).into(),\n"
+                                                                  "            _ => return Self::Fallback(instruction.operator.clone()).into(),\n"
                                                                   "        })\n"
                                                                   "    }\n"
                                                                   "}"

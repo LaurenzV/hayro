@@ -1,7 +1,7 @@
 use crate::convert::{convert_line_cap, convert_line_join};
 use crate::device::Device;
 use clip_path::ClipPath;
-use hayro_syntax::content::ops::{LineCap, LineJoin, TypedOperation};
+use hayro_syntax::content::ops::{LineCap, LineJoin, TypedInstruction};
 use hayro_syntax::document::page::Resources;
 use hayro_syntax::object::dict::Dict;
 use hayro_syntax::object::dict::keys::SMASK;
@@ -138,7 +138,7 @@ pub enum InterpreterWarning {
 }
 
 pub fn interpret<'a, 'b>(
-    ops: impl Iterator<Item = TypedOperation<'b>>,
+    ops: impl Iterator<Item = TypedInstruction<'b>>,
     resources: &Resources<'a>,
     context: &mut Context<'a>,
     device: &mut impl Device,
@@ -149,37 +149,37 @@ pub fn interpret<'a, 'b>(
 
     for op in ops {
         match op {
-            TypedOperation::SaveState(_) => save_sate(context),
-            TypedOperation::StrokeColorDeviceRgb(s) => {
+            TypedInstruction::SaveState(_) => save_sate(context),
+            TypedInstruction::StrokeColorDeviceRgb(s) => {
                 context.get_mut().stroke_cs = ColorSpace::device_rgb();
                 context.get_mut().stroke_color =
                     smallvec![s.0.as_f32(), s.1.as_f32(), s.2.as_f32()];
             }
-            TypedOperation::StrokeColorDeviceGray(s) => {
+            TypedInstruction::StrokeColorDeviceGray(s) => {
                 context.get_mut().stroke_cs = ColorSpace::device_gray();
                 context.get_mut().stroke_color = smallvec![s.0.as_f32()];
             }
-            TypedOperation::StrokeColorCmyk(s) => {
+            TypedInstruction::StrokeColorCmyk(s) => {
                 context.get_mut().stroke_cs = ColorSpace::device_cmyk();
                 context.get_mut().stroke_color =
                     smallvec![s.0.as_f32(), s.1.as_f32(), s.2.as_f32(), s.3.as_f32()];
             }
-            TypedOperation::LineWidth(w) => {
+            TypedInstruction::LineWidth(w) => {
                 context.get_mut().line_width = w.0.as_f32();
             }
-            TypedOperation::LineCap(c) => {
+            TypedInstruction::LineCap(c) => {
                 context.get_mut().line_cap = convert_line_cap(c);
             }
-            TypedOperation::LineJoin(j) => {
+            TypedInstruction::LineJoin(j) => {
                 context.get_mut().line_join = convert_line_join(j);
             }
-            TypedOperation::MiterLimit(l) => {
+            TypedInstruction::MiterLimit(l) => {
                 context.get_mut().miter_limit = l.0.as_f32();
             }
-            TypedOperation::Transform(t) => {
+            TypedInstruction::Transform(t) => {
                 context.pre_concat_transform(t);
             }
-            TypedOperation::RectPath(r) => {
+            TypedInstruction::RectPath(r) => {
                 let rect = kurbo::Rect::new(
                     r.0.as_f64(),
                     r.1.as_f64(),
@@ -189,61 +189,61 @@ pub fn interpret<'a, 'b>(
                 .to_path(0.1);
                 context.path_mut().extend(rect);
             }
-            TypedOperation::MoveTo(m) => {
+            TypedInstruction::MoveTo(m) => {
                 let p = Point::new(m.0.as_f64(), m.1.as_f64());
                 *(context.last_point_mut()) = p;
                 *(context.sub_path_start_mut()) = p;
                 context.path_mut().move_to(p);
             }
-            TypedOperation::FillPathEvenOdd(_) => {
+            TypedInstruction::FillPathEvenOdd(_) => {
                 context.get_mut().fill_rule = FillRule::EvenOdd;
                 fill_path(context, device);
             }
-            TypedOperation::FillPathNonZero(_) => {
+            TypedInstruction::FillPathNonZero(_) => {
                 context.get_mut().fill_rule = FillRule::NonZero;
                 fill_path(context, device);
             }
-            TypedOperation::FillPathNonZeroCompatibility(_) => {
+            TypedInstruction::FillPathNonZeroCompatibility(_) => {
                 context.get_mut().fill_rule = FillRule::NonZero;
                 fill_path(context, device);
             }
-            TypedOperation::FillAndStrokeEvenOdd(_) => {
+            TypedInstruction::FillAndStrokeEvenOdd(_) => {
                 context.get_mut().fill_rule = FillRule::EvenOdd;
                 fill_stroke_path(context, device);
             }
-            TypedOperation::FillAndStrokeNonZero(_) => {
+            TypedInstruction::FillAndStrokeNonZero(_) => {
                 context.get_mut().fill_rule = FillRule::NonZero;
                 fill_stroke_path(context, device);
             }
-            TypedOperation::CloseAndStrokePath(_) => {
+            TypedInstruction::CloseAndStrokePath(_) => {
                 context.path_mut().close_path();
                 stroke_path(context, device);
             }
-            TypedOperation::CloseFillAndStrokeEvenOdd(_) => {
+            TypedInstruction::CloseFillAndStrokeEvenOdd(_) => {
                 context.path_mut().close_path();
                 context.get_mut().fill_rule = FillRule::EvenOdd;
                 fill_stroke_path(context, device);
             }
-            TypedOperation::CloseFillAndStrokeNonZero(_) => {
+            TypedInstruction::CloseFillAndStrokeNonZero(_) => {
                 context.path_mut().close_path();
                 context.get_mut().fill_rule = FillRule::NonZero;
                 fill_stroke_path(context, device);
             }
-            TypedOperation::NonStrokeColorDeviceGray(s) => {
+            TypedInstruction::NonStrokeColorDeviceGray(s) => {
                 context.get_mut().none_stroke_cs = ColorSpace::device_gray();
                 context.get_mut().non_stroke_color = smallvec![s.0.as_f32()];
             }
-            TypedOperation::NonStrokeColorDeviceRgb(s) => {
+            TypedInstruction::NonStrokeColorDeviceRgb(s) => {
                 context.get_mut().none_stroke_cs = ColorSpace::device_rgb();
                 context.get_mut().non_stroke_color =
                     smallvec![s.0.as_f32(), s.1.as_f32(), s.2.as_f32()];
             }
-            TypedOperation::NonStrokeColorCmyk(s) => {
+            TypedInstruction::NonStrokeColorCmyk(s) => {
                 context.get_mut().none_stroke_cs = ColorSpace::device_cmyk();
                 context.get_mut().non_stroke_color =
                     smallvec![s.0.as_f32(), s.1.as_f32(), s.2.as_f32(), s.3.as_f32()];
             }
-            TypedOperation::LineTo(m) => {
+            TypedInstruction::LineTo(m) => {
                 let last_point = *context.last_point();
                 let mut p = Point::new(m.0.as_f64(), m.1.as_f64());
                 *(context.last_point_mut()) = p;
@@ -254,7 +254,7 @@ pub fn interpret<'a, 'b>(
 
                 context.path_mut().line_to(p);
             }
-            TypedOperation::CubicTo(c) => {
+            TypedInstruction::CubicTo(c) => {
                 let p1 = Point::new(c.0.as_f64(), c.1.as_f64());
                 let p2 = Point::new(c.2.as_f64(), c.3.as_f64());
                 let p3 = Point::new(c.4.as_f64(), c.5.as_f64());
@@ -263,7 +263,7 @@ pub fn interpret<'a, 'b>(
 
                 context.path_mut().curve_to(p1, p2, p3)
             }
-            TypedOperation::CubicStartTo(c) => {
+            TypedInstruction::CubicStartTo(c) => {
                 let p1 = *context.last_point();
                 let p2 = Point::new(c.0.as_f64(), c.1.as_f64());
                 let p3 = Point::new(c.2.as_f64(), c.3.as_f64());
@@ -272,7 +272,7 @@ pub fn interpret<'a, 'b>(
 
                 context.path_mut().curve_to(p1, p2, p3)
             }
-            TypedOperation::CubicEndTo(c) => {
+            TypedInstruction::CubicEndTo(c) => {
                 let p2 = Point::new(c.0.as_f64(), c.1.as_f64());
                 let p3 = Point::new(c.2.as_f64(), c.3.as_f64());
 
@@ -280,12 +280,12 @@ pub fn interpret<'a, 'b>(
 
                 context.path_mut().curve_to(p2, p3, p3)
             }
-            TypedOperation::ClosePath(_) => {
+            TypedInstruction::ClosePath(_) => {
                 context.path_mut().close_path();
 
                 *(context.last_point_mut()) = *context.sub_path_start();
             }
-            TypedOperation::SetGraphicsState(gs) => {
+            TypedInstruction::SetGraphicsState(gs) => {
                 if let Some(gs) = resources
                     .get_ext_g_state::<Dict>(gs.0.clone(), Box::new(|_| None), Box::new(Some))
                     .warn_none(&format!("failed to get extgstate {}", gs.0.as_str()))
@@ -293,10 +293,10 @@ pub fn interpret<'a, 'b>(
                     handle_gs(&gs, context, resources);
                 }
             }
-            TypedOperation::StrokePath(_) => {
+            TypedInstruction::StrokePath(_) => {
                 stroke_path(context, device);
             }
-            TypedOperation::EndPath(_) => {
+            TypedInstruction::EndPath(_) => {
                 if let Some(clip) = *context.clip()
                     && !context.path().elements().is_empty()
                 {
@@ -313,7 +313,7 @@ pub fn interpret<'a, 'b>(
 
                 context.path_mut().truncate(0);
             }
-            TypedOperation::NonStrokeColor(c) => {
+            TypedInstruction::NonStrokeColor(c) => {
                 let fill_c = &mut context.get_mut().non_stroke_color;
                 fill_c.truncate(0);
 
@@ -321,7 +321,7 @@ pub fn interpret<'a, 'b>(
                     fill_c.push(e.as_f32());
                 }
             }
-            TypedOperation::StrokeColor(c) => {
+            TypedInstruction::StrokeColor(c) => {
                 let stroke_c = &mut context.get_mut().stroke_color;
                 stroke_c.truncate(0);
 
@@ -329,17 +329,17 @@ pub fn interpret<'a, 'b>(
                     stroke_c.push(e.as_f32());
                 }
             }
-            TypedOperation::ClipNonZero(_) => {
+            TypedInstruction::ClipNonZero(_) => {
                 *(context.clip_mut()) = Some(FillRule::NonZero);
             }
-            TypedOperation::ClipEvenOdd(_) => {
+            TypedInstruction::ClipEvenOdd(_) => {
                 *(context.clip_mut()) = Some(FillRule::EvenOdd);
             }
-            TypedOperation::RestoreState(_) => restore_state(context, device),
-            TypedOperation::FlatnessTolerance(_) => {
+            TypedInstruction::RestoreState(_) => restore_state(context, device),
+            TypedInstruction::FlatnessTolerance(_) => {
                 // Ignore for now.
             }
-            TypedOperation::ColorSpaceStroke(c) => {
+            TypedInstruction::ColorSpaceStroke(c) => {
                 let cs = if let Some(named) = ColorSpace::new_from_name(c.0.clone()) {
                     named
                 } else {
@@ -351,7 +351,7 @@ pub fn interpret<'a, 'b>(
                 context.get_mut().stroke_color = cs.initial_color();
                 context.get_mut().stroke_cs = cs;
             }
-            TypedOperation::ColorSpaceNonStroke(c) => {
+            TypedInstruction::ColorSpaceNonStroke(c) => {
                 let cs = if let Some(named) = ColorSpace::new_from_name(c.0.clone()) {
                     named
                 } else {
@@ -363,7 +363,7 @@ pub fn interpret<'a, 'b>(
                 context.get_mut().non_stroke_color = cs.initial_color();
                 context.get_mut().none_stroke_cs = cs;
             }
-            TypedOperation::DashPattern(p) => {
+            TypedInstruction::DashPattern(p) => {
                 context.get_mut().dash_offset = p.1.as_f32();
                 // kurbo apparently cannot properly deal with offsets that are exactly 0.
                 context.get_mut().dash_array =
@@ -371,10 +371,10 @@ pub fn interpret<'a, 'b>(
                         .map(|n| if n == 0.0 { 0.01 } else { n })
                         .collect();
             }
-            TypedOperation::RenderingIntent(_) => {
+            TypedInstruction::RenderingIntent(_) => {
                 // Ignore for now.
             }
-            TypedOperation::NonStrokeColorNamed(n) => {
+            TypedInstruction::NonStrokeColorNamed(n) => {
                 context.get_mut().non_stroke_color = n.0.into_iter().map(|n| n.as_f32()).collect();
                 context.get_mut().non_stroke_pattern = n.1.and_then(|name| {
                     resources.get_pattern(
@@ -384,7 +384,7 @@ pub fn interpret<'a, 'b>(
                     )
                 });
             }
-            TypedOperation::StrokeColorNamed(n) => {
+            TypedInstruction::StrokeColorNamed(n) => {
                 context.get_mut().stroke_color = n.0.into_iter().map(|n| n.as_f32()).collect();
                 context.get_mut().stroke_pattern = n.1.and_then(|name| {
                     resources.get_pattern(
@@ -394,16 +394,16 @@ pub fn interpret<'a, 'b>(
                     )
                 });
             }
-            TypedOperation::BeginMarkedContentWithProperties(_) => {}
-            TypedOperation::MarkedContentPointWithProperties(_) => {}
-            TypedOperation::EndMarkedContent(_) => {}
-            TypedOperation::MarkedContentPoint(_) => {}
-            TypedOperation::BeginMarkedContent(_) => {}
-            TypedOperation::BeginText(_) => {
+            TypedInstruction::BeginMarkedContentWithProperties(_) => {}
+            TypedInstruction::MarkedContentPointWithProperties(_) => {}
+            TypedInstruction::EndMarkedContent(_) => {}
+            TypedInstruction::MarkedContentPoint(_) => {}
+            TypedInstruction::BeginMarkedContent(_) => {}
+            TypedInstruction::BeginText(_) => {
                 context.get_mut().text_state.text_matrix = Affine::IDENTITY;
                 context.get_mut().text_state.text_line_matrix = Affine::IDENTITY;
             }
-            TypedOperation::SetTextMatrix(m) => {
+            TypedInstruction::SetTextMatrix(m) => {
                 let m = Affine::new([
                     m.0.as_f64(),
                     m.1.as_f64(),
@@ -415,7 +415,7 @@ pub fn interpret<'a, 'b>(
                 context.get_mut().text_state.text_line_matrix = m;
                 context.get_mut().text_state.text_matrix = m;
             }
-            TypedOperation::EndText(_) => {
+            TypedInstruction::EndText(_) => {
                 let has_outline = context
                     .get()
                     .text_state
@@ -435,15 +435,15 @@ pub fn interpret<'a, 'b>(
 
                 context.get_mut().text_state.clip_paths.truncate(0);
             }
-            TypedOperation::TextFont(t) => {
+            TypedInstruction::TextFont(t) => {
                 let font = context.get_font(resources, t.0);
                 context.get_mut().text_state.font_size = t.1.as_f32();
                 context.get_mut().text_state.font = font;
             }
-            TypedOperation::ShowText(s) => {
+            TypedInstruction::ShowText(s) => {
                 text::show_text_string(context, device, resources, s.0);
             }
-            TypedOperation::ShowTexts(s) => {
+            TypedInstruction::ShowTexts(s) => {
                 for obj in s.0.iter::<Object>() {
                     if let Some(adjustment) = obj.clone().into_f32() {
                         context.get_mut().text_state.apply_adjustment(adjustment);
@@ -452,30 +452,30 @@ pub fn interpret<'a, 'b>(
                     }
                 }
             }
-            TypedOperation::HorizontalScaling(h) => {
+            TypedInstruction::HorizontalScaling(h) => {
                 context.get_mut().text_state.horizontal_scaling = h.0.as_f32();
             }
-            TypedOperation::TextLeading(tl) => {
+            TypedInstruction::TextLeading(tl) => {
                 context.get_mut().text_state.leading = tl.0.as_f32();
             }
-            TypedOperation::CharacterSpacing(c) => {
+            TypedInstruction::CharacterSpacing(c) => {
                 context.get_mut().text_state.char_space = c.0.as_f32()
             }
-            TypedOperation::WordSpacing(w) => {
+            TypedInstruction::WordSpacing(w) => {
                 context.get_mut().text_state.word_space = w.0.as_f32();
             }
-            TypedOperation::NextLine(n) => {
+            TypedInstruction::NextLine(n) => {
                 let (tx, ty) = (n.0.as_f64(), n.1.as_f64());
                 text::next_line(context, tx, ty)
             }
-            TypedOperation::NextLineUsingLeading(_) => {
+            TypedInstruction::NextLineUsingLeading(_) => {
                 text::next_line(context, 0.0, -context.get().text_state.leading as f64);
             }
-            TypedOperation::NextLineAndShowText(n) => {
+            TypedInstruction::NextLineAndShowText(n) => {
                 text::next_line(context, 0.0, -context.get().text_state.leading as f64);
                 text::show_text_string(context, device, resources, n.0)
             }
-            TypedOperation::TextRenderingMode(r) => {
+            TypedInstruction::TextRenderingMode(r) => {
                 let mode = match r.0.as_i32() {
                     0 => TextRenderingMode::Fill,
                     1 => TextRenderingMode::Stroke,
@@ -494,13 +494,13 @@ pub fn interpret<'a, 'b>(
 
                 context.get_mut().text_state.render_mode = mode;
             }
-            TypedOperation::NextLineAndSetLeading(n) => {
+            TypedInstruction::NextLineAndSetLeading(n) => {
                 let (tx, ty) = (n.0.as_f64(), n.1.as_f64());
                 context.get_mut().text_state.leading = -ty as f32;
                 text::next_line(context, tx, ty)
             }
-            TypedOperation::ShapeGlyph(_) => {}
-            TypedOperation::XObject(x) => {
+            TypedInstruction::ShapeGlyph(_) => {}
+            TypedInstruction::XObject(x) => {
                 if let Some(x_object) = resources.get_x_object(
                     x.0,
                     Box::new(|_| None),
@@ -509,7 +509,7 @@ pub fn interpret<'a, 'b>(
                     draw_xobject(&x_object, resources, context, device);
                 }
             }
-            TypedOperation::InlineImage(i) => {
+            TypedInstruction::InlineImage(i) => {
                 let warning_sink = context.settings.warning_sink.clone();
                 if let Some(x_object) = ImageXObject::new(
                     &i.0,
@@ -519,10 +519,10 @@ pub fn interpret<'a, 'b>(
                     draw_image_xobject(&x_object, context, device);
                 }
             }
-            TypedOperation::TextRise(t) => {
+            TypedInstruction::TextRise(t) => {
                 context.get_mut().text_state.rise = t.0.as_f32();
             }
-            TypedOperation::Shading(s) => {
+            TypedInstruction::Shading(s) => {
                 if let Some(sp) = resources
                     .get_shading(s.0, Box::new(|_| None), Box::new(Some))
                     .and_then(|o| dict_or_stream(&o))
@@ -554,10 +554,10 @@ pub fn interpret<'a, 'b>(
                     warn!("failed to process shading");
                 }
             }
-            TypedOperation::BeginCompatibility(_) => {}
-            TypedOperation::EndCompatibility(_) => {}
-            TypedOperation::ColorGlyph(_) => {}
-            TypedOperation::ShowTextWithParameters(t) => {
+            TypedInstruction::BeginCompatibility(_) => {}
+            TypedInstruction::EndCompatibility(_) => {}
+            TypedInstruction::ColorGlyph(_) => {}
+            TypedInstruction::ShowTextWithParameters(t) => {
                 context.get_mut().text_state.word_space = t.0.as_f32();
                 context.get_mut().text_state.char_space = t.1.as_f32();
                 text::next_line(context, 0.0, -context.get().text_state.leading as f64);

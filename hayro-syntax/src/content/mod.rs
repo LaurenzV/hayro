@@ -6,7 +6,7 @@
 #[allow(missing_docs)]
 pub mod ops;
 
-use crate::content::ops::TypedOperation;
+use crate::content::ops::TypedInstruction;
 use crate::object::dict::InlineImageDict;
 use crate::object::name::{Name, skip_name_like};
 use crate::object::stream::Stream;
@@ -18,7 +18,7 @@ use std::fmt::{Debug, Formatter};
 use std::ops::Deref;
 
 // 6 operands are used for example for ctm or cubic curves,
-// but anything above should be pretty rare (for example for
+// but anything above should be pretty rare (only for example for
 // DeviceN color spaces)
 const OPERANDS_THRESHOLD: usize = 6;
 
@@ -65,8 +65,7 @@ impl<'a> Readable<'a> for Operator<'a> {
     }
 }
 
-/// An iterator over PDF content streams that provides access to the operators
-/// in a raw manner by only exposing the operator name and its arguments on the stack.
+/// An iterator over operators in the PDF content streams, providing raw access to the instructions.
 #[derive(Clone)]
 pub struct UntypedIter<'a> {
     reader: Reader<'a>,
@@ -92,7 +91,7 @@ impl<'a> UntypedIter<'a> {
 }
 
 impl<'a> Iterator for UntypedIter<'a> {
-    type Item = Operation<'a>;
+    type Item = Instruction<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.stack.clear();
@@ -147,9 +146,13 @@ impl<'a> Iterator for UntypedIter<'a> {
 
                             while let Some(bytes) = find_reader.peek_bytes(2) {
                                 if bytes == b"EI" {
+                                    // We found another "EI" without a corresponding "BI", so the
+                                    // EI we found above is not the end of data.
                                     self.reader.read_bytes(2)?;
                                     continue 'outer;
                                 } else if bytes == b"BI" {
+                                    // Possibly another inline image, if so, the previously found "EI"
+                                    // is indeed the end of data.
                                     let mut cloned = find_reader.clone();
                                     cloned.read_bytes(2)?;
                                     if cloned.read_without_context::<InlineImageDict>().is_some() {
@@ -172,7 +175,7 @@ impl<'a> Iterator for UntypedIter<'a> {
                     }
                 }
 
-                return Some(Operation {
+                return Some(Instruction {
                     operands: self.stack.clone(),
                     operator,
                 });
@@ -185,7 +188,7 @@ impl<'a> Iterator for UntypedIter<'a> {
     }
 }
 
-/// An iterator over PDF content streams that provide access to the operators
+/// An iterator over PDF content streams that provide access to the instructions
 /// in a typed fashion.
 #[derive(Clone)]
 pub struct TypedIter<'a> {
@@ -200,31 +203,31 @@ impl<'a> TypedIter<'a> {
 }
 
 impl<'a> Iterator for TypedIter<'a> {
-    type Item = TypedOperation<'a>;
+    type Item = TypedInstruction<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.untyped
             .next()
-            .and_then(|op| TypedOperation::dispatch(&op))
+            .and_then(|op| TypedInstruction::dispatch(&op))
     }
 }
 
-/// An operation in a content stream.
-pub struct Operation<'a> {
-    /// The operands of the operator.
+/// An instruction (= operator and its operands) in a content stream.
+pub struct Instruction<'a> {
+    /// The stack containing the operands.
     pub operands: Stack<'a>,
     /// The actual operator.
     pub operator: Operator<'a>,
 }
 
-impl<'a> Operation<'a> {
-    /// An iterator over the operands of the operation.
+impl<'a> Instruction<'a> {
+    /// An iterator over the operands of the instruction.
     pub fn operands(self) -> OperandIterator<'a> {
         OperandIterator::new(self.operands)
     }
 }
 
-/// A stack holding the values for an operation.
+/// A stack holding the arguments of an operator.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Stack<'a>(SmallVec<[Object<'a>; OPERANDS_THRESHOLD]>);
 
@@ -268,7 +271,7 @@ impl<'a> Stack<'a> {
     }
 }
 
-/// An iterator over the operands of an operations.
+/// An iterator over the operands of an operator.
 pub struct OperandIterator<'a> {
     stack: Stack<'a>,
     cur_index: usize,
@@ -289,6 +292,7 @@ impl<'a> Iterator for OperandIterator<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(item) = self.stack.get::<Object<'a>>(self.cur_index) {
             self.cur_index += 1;
+
             Some(item)
         } else {
             None
@@ -298,7 +302,7 @@ impl<'a> Iterator for OperandIterator<'a> {
 
 pub(crate) trait OperatorTrait<'a>
 where
-    Self: Sized + Into<TypedOperation<'a>> + TryFrom<TypedOperation<'a>>,
+    Self: Sized + Into<TypedInstruction<'a>> + TryFrom<TypedInstruction<'a>>,
 {
     const OPERATOR: &'static str;
 
@@ -328,18 +332,18 @@ mod macros {
                 }
             }
 
-            impl<'a> From<$t$(<$l>),*> for TypedOperation<'a> {
+            impl<'a> From<$t$(<$l>),*> for TypedInstruction<'a> {
                 fn from(value: $t$(<$l>),*) -> Self {
-                    TypedOperation::$t(value)
+                    TypedInstruction::$t(value)
                 }
             }
 
-            impl<'a> TryFrom<TypedOperation<'a>> for $t$(<$l>),* {
+            impl<'a> TryFrom<TypedInstruction<'a>> for $t$(<$l>),* {
                 type Error = ();
 
-                fn try_from(value: TypedOperation<'a>) -> std::result::Result<Self, Self::Error> {
+                fn try_from(value: TypedInstruction<'a>) -> std::result::Result<Self, Self::Error> {
                     match value {
-                        TypedOperation::$t(e) => Ok(e),
+                        TypedInstruction::$t(e) => Ok(e),
                         _ => Err(())
                     }
                 }
