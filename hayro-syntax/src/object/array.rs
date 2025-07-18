@@ -1,4 +1,4 @@
-//! Array objects.
+//! Arrays.
 
 use crate::object::macros::object;
 use crate::object::r#ref::MaybeRef;

@@ -1,4 +1,4 @@
-//! Boolean objects.
+//! Booleans.
 
 use crate::object::Object;
 use crate::object::macros::object;

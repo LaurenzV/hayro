@@ -1,4 +1,4 @@
-//! Number objects.
+//! Numbers.
 
 use crate::object::macros::object;
 use crate::object::{Object, ObjectLike};
@@ -7,7 +7,7 @@ use log::debug;
 use std::fmt::Debug;
 use std::str::FromStr;
 
-/// A PDF number.
+/// A number.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Number(pub(crate) InternalNumber);
 

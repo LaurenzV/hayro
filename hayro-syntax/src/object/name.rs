@@ -1,4 +1,4 @@
-//! Name objects.
+//! Names.
 
 use crate::object::Object;
 use crate::object::macros::object;
@@ -14,7 +14,7 @@ enum Cow<'a> {
     Owned(Vec<u8>),
 }
 
-/// A PDF name.
+/// A name.
 #[derive(Debug, Clone)]
 pub struct Name<'a>(Cow<'a>);
 

@@ -1,4 +1,4 @@
-//! Stream objects.
+//! Streams.
 
 use crate::filter::Filter;
 use crate::object::Array;

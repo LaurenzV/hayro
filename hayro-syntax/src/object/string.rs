@@ -1,4 +1,4 @@
-//! String objects.
+//! Strings.
 
 use crate::filter::ascii_hex::decode_hex_string;
 use crate::object::macros::object;

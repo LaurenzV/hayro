@@ -1,4 +1,4 @@
-//! Dictionary objects.
+//! Dictionaries.
 
 use crate::object::Name;
 use crate::object::Null;
