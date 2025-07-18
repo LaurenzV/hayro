@@ -65,17 +65,18 @@ feature, unless you absolutely need to be able to support such images.
 
 use std::sync::Arc;
 
+pub(crate) mod data;
+pub(crate) mod filter;
+pub(crate) mod util;
+
 pub mod bit_reader;
 pub mod content;
-pub(crate) mod data;
 pub mod document;
-pub mod filter;
 pub mod function;
 pub mod object;
 pub mod pdf;
 pub mod reader;
 pub mod trivia;
-pub(crate) mod util;
 pub mod xref;
 
 const NUM_SLOTS: usize = 10000;

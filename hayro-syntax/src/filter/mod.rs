@@ -12,93 +12,22 @@ mod run_length;
 use crate::object::dict::Dict;
 use crate::object::dict::keys::*;
 use crate::object::name::Name;
+use crate::object::stream::{DecodeFailure, FilterResult};
 use log::warn;
 use std::ops::Deref;
 
 #[derive(Debug, Copy, Clone)]
-/// A failure that can occur during decoding.
-pub enum DecodeFailure {
-    /// An image stream failed to decode.
-    ImageDecode,
-    /// A data stream failed to decode.
-    StreamDecode,
-    /// A JPEG2000 image was encountered, while the `jpeg2000` feature was disabled.
-    JpxImage,
-    /// An unknown failure occurred.
-    Unknown,
-}
-
-/// A filter.
-#[derive(Debug, Copy, Clone)]
 pub(crate) enum Filter {
-    /// The ASCII-hex filter.
     AsciiHexDecode,
-    /// The ASCII85 filter.
     Ascii85Decode,
-    /// The LZW filter.
     LzwDecode,
-    /// The flate (zlib/deflate) filter.
     FlateDecode,
-    /// The run-length filter.
     RunLengthDecode,
-    /// The CCITT Fax filter.
     CcittFaxDecode,
-    /// The JBIG2 filter.
     Jbig2Decode,
-    /// The DCT (JPEG) filter.
     DctDecode,
-    /// The JPX (JPEG 2000) filter.
     JpxDecode,
-    /// The crypt filter.
     Crypt,
-}
-
-/// An image color space.
-#[derive(Debug, Copy, Clone)]
-pub enum ImageColorSpace {
-    /// Grayscale color space.
-    Gray,
-    /// RGB color space.
-    Rgb,
-    /// CMYK color space.
-    Cmyk,
-}
-
-impl ImageColorSpace {
-    fn num_components(&self) -> u8 {
-        match self {
-            ImageColorSpace::Gray => 1,
-            ImageColorSpace::Rgb => 3,
-            ImageColorSpace::Cmyk => 4,
-        }
-    }
-}
-
-/// Additional data that is extracted from some image streams.
-pub struct ImageData {
-    /// An optional alpha channel of the image.
-    pub alpha: Option<Vec<u8>>,
-    /// The color space of the image.
-    pub color_space: ImageColorSpace,
-    /// The bits per component of the image.
-    pub bits_per_component: u8,
-}
-
-/// The result of applying a filter.
-pub struct FilterResult {
-    /// The decoded data.
-    pub data: Vec<u8>,
-    /// Additional data that is extracted from JPX image streams.
-    pub image_data: Option<ImageData>,
-}
-
-impl FilterResult {
-    fn from_data(data: Vec<u8>) -> Self {
-        Self {
-            data,
-            image_data: None,
-        }
-    }
 }
 
 impl Filter {

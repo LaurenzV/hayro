@@ -8,13 +8,13 @@ use crate::{FillRule, InterpreterWarning, WarningSinkFn, interpret};
 use hayro_syntax::bit_reader::{BitReader, BitSize};
 use hayro_syntax::content::{TypedIter, UntypedIter};
 use hayro_syntax::document::page::Resources;
-use hayro_syntax::filter::DecodeFailure;
 use hayro_syntax::function::interpolate;
 use hayro_syntax::object::Object;
 use hayro_syntax::object::array::Array;
 use hayro_syntax::object::dict::Dict;
 use hayro_syntax::object::dict::keys::*;
 use hayro_syntax::object::name::Name;
+use hayro_syntax::object::stream::DecodeFailure;
 use hayro_syntax::object::stream::Stream;
 use kurbo::{Affine, Rect, Shape};
 use log::warn;
@@ -250,11 +250,13 @@ impl<'a> ImageXObject<'a> {
                         .as_ref()
                         .map(|i| i.color_space)
                         .map(|c| match c {
-                            hayro_syntax::filter::ImageColorSpace::Gray => {
+                            hayro_syntax::object::stream::ImageColorSpace::Gray => {
                                 ColorSpace::device_gray()
                             }
-                            hayro_syntax::filter::ImageColorSpace::Rgb => ColorSpace::device_rgb(),
-                            hayro_syntax::filter::ImageColorSpace::Cmyk => {
+                            hayro_syntax::object::stream::ImageColorSpace::Rgb => {
+                                ColorSpace::device_rgb()
+                            }
+                            hayro_syntax::object::stream::ImageColorSpace::Cmyk => {
                                 ColorSpace::device_cmyk()
                             }
                         })

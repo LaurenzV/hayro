@@ -1,6 +1,6 @@
 //! Stream objects.
 
-use crate::filter::{DecodeFailure, Filter, FilterResult};
+use crate::filter::Filter;
 use crate::object::array::Array;
 use crate::object::dict::Dict;
 use crate::object::dict::keys::{DECODE_PARMS, DP, F, FILTER, LENGTH};
@@ -135,6 +135,67 @@ impl<'a> Readable<'a> for Stream<'a> {
                 parse_fallback(r, &dict)
             })
             .error_none("was unable to manually parse the stream")
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+/// A failure that can occur during decoding.
+pub enum DecodeFailure {
+    /// An image stream failed to decode.
+    ImageDecode,
+    /// A data stream failed to decode.
+    StreamDecode,
+    /// A JPEG2000 image was encountered, while the `jpeg2000` feature was disabled.
+    JpxImage,
+    /// An unknown failure occurred.
+    Unknown,
+}
+
+/// An image color space.
+#[derive(Debug, Copy, Clone)]
+pub enum ImageColorSpace {
+    /// Grayscale color space.
+    Gray,
+    /// RGB color space.
+    Rgb,
+    /// CMYK color space.
+    Cmyk,
+}
+
+impl ImageColorSpace {
+    pub(crate) fn num_components(&self) -> u8 {
+        match self {
+            ImageColorSpace::Gray => 1,
+            ImageColorSpace::Rgb => 3,
+            ImageColorSpace::Cmyk => 4,
+        }
+    }
+}
+
+/// Additional data that is extracted from some image streams.
+pub struct ImageData {
+    /// An optional alpha channel of the image.
+    pub alpha: Option<Vec<u8>>,
+    /// The color space of the image.
+    pub color_space: ImageColorSpace,
+    /// The bits per component of the image.
+    pub bits_per_component: u8,
+}
+
+/// The result of applying a filter.
+pub struct FilterResult {
+    /// The decoded data.
+    pub data: Vec<u8>,
+    /// Additional data that is extracted from JPX image streams.
+    pub image_data: Option<ImageData>,
+}
+
+impl FilterResult {
+    pub(crate) fn from_data(data: Vec<u8>) -> Self {
+        Self {
+            data,
+            image_data: None,
+        }
     }
 }
 

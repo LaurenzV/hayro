@@ -1,9 +1,10 @@
 use crate::bit_reader::{BitSize, BitWriter};
-use crate::filter::{FilterResult, ImageData};
+use crate::filter::FilterResult;
+use crate::object::stream::ImageData;
 
 #[cfg(feature = "jpeg2000")]
 pub(crate) fn decode(data: &[u8]) -> Option<FilterResult> {
-    use crate::filter::ImageColorSpace;
+    use crate::object::stream::ImageColorSpace;
 
     let image = jpeg2k::Image::from_bytes(data).ok()?;
     let width = image.width();
