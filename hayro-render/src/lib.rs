@@ -252,10 +252,6 @@ impl Device for Renderer {
         let (paint_type, paint_transform) = self.convert_paint(paint, true);
         self.ctx
             .stroke_path(path, paint_type, paint_transform, self.cur_mask.clone());
-
-        if self.cur_mask.is_some() {
-            self.ctx.pop_layer();
-        }
     }
 
     fn set_fill_properties(&mut self, fill_props: &FillProps) {

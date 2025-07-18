@@ -996,5 +996,9 @@
   {
     "id": "text_fading",
     "file": "pdfs/text-fading.pdf"
+  },
+  {
+    "id": "fireworks",
+    "file": "pdfs/fireworks.pdf"
   }
 ]
