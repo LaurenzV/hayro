@@ -538,7 +538,7 @@ pub(crate) mod cached {
 
     pub(crate) struct CachedPages {
         pages: Pages<'static>,
-        // NOTE: `pages` references the data in `xref`, so it's important that `xref
+        // NOTE: `pages` references the data in `xref`, so it's important that `xref`
         // appears after `pages` in the struct definition to ensure correct drop order.
         xref: Box<XRef>,
     }
