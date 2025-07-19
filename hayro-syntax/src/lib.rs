@@ -70,9 +70,9 @@ pub(crate) mod util;
 
 pub mod bit_reader;
 pub mod content;
-pub mod document;
 pub mod function;
 pub mod object;
+pub mod page;
 pub mod pdf;
 pub mod reader;
 pub mod trivia;

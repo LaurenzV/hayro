@@ -529,7 +529,7 @@ pub const A4: Rect = Rect {
 };
 
 pub(crate) mod cached {
-    use crate::document::page::Pages;
+    use crate::page::Pages;
     use crate::reader::ReaderContext;
     use crate::xref::XRef;
     use std::ops::Deref;

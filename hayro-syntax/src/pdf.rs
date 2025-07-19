@@ -1,9 +1,9 @@
 //! The starting point for reading PDF files.
 
 use crate::PdfData;
-use crate::document::page::cached::CachedPages;
-use crate::document::page::{Page, Pages};
 use crate::object::Object;
+use crate::page::cached::CachedPages;
+use crate::page::{Page, Pages};
 use crate::reader::{Reader, ReaderContext};
 use crate::xref::{XRef, XRefError, fallback, root_xref};
 use std::ops::Deref;

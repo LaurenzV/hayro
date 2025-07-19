@@ -18,9 +18,9 @@ use hayro_interpret::util::FloatExt;
 use hayro_interpret::{
     AlphaData, FillProps, FillRule, MaskType, Paint, RgbData, SoftMask, StrokeProps, interpret,
 };
-use hayro_syntax::document::page::{A4, Page, Rotation};
 use hayro_syntax::object::ObjectIdentifier;
 use hayro_syntax::object::dict::keys::P;
+use hayro_syntax::page::{A4, Page, Rotation};
 pub use hayro_syntax::pdf::Pdf;
 use image::codecs::png::PngEncoder;
 use image::imageops::FilterType;

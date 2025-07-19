@@ -2,8 +2,8 @@ use crate::context::Context;
 use crate::device::Device;
 use crate::font::Glyph;
 use crate::interpret::path::get_paint;
-use hayro_syntax::document::page::Resources;
 use hayro_syntax::object;
+use hayro_syntax::page::Resources;
 use kurbo::Affine;
 use log::warn;
 

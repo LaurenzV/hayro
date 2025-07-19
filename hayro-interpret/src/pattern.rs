@@ -12,7 +12,6 @@ use crate::{
     interpret,
 };
 use hayro_syntax::content::{TypedIter, UntypedIter};
-use hayro_syntax::document::page::Resources;
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Rect;
 use hayro_syntax::object::Stream;
@@ -20,6 +19,7 @@ use hayro_syntax::object::dict::keys::{
     BBOX, EXT_G_STATE, MATRIX, PAINT_TYPE, RESOURCES, SHADING, X_STEP, Y_STEP,
 };
 use hayro_syntax::object::{Object, dict_or_stream};
+use hayro_syntax::page::Resources;
 use hayro_syntax::xref::XRef;
 use kurbo::{Affine, BezPath, Shape};
 use log::warn;
