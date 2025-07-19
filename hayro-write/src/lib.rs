@@ -1,3 +1,13 @@
+/*!
+A crate for converting PDF pages into either XObjects or a new page via [`pdf-writer`].
+
+This is an internal crate and not meant for external use. Therefore, it's not very well
+documented.
+*/
+
+#![forbid(unsafe_code)]
+#![deny(missing_docs)]
+
 mod primitive;
 
 use crate::primitive::{WriteDirect, WriteIndirect};
@@ -5,7 +15,6 @@ use flate2::Compression;
 use flate2::write::ZlibEncoder;
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Object;
-use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::{
     COLORSPACE, CONTENTS, EXT_G_STATE, FILTER, FONT, GROUP, PATTERN, PROPERTIES, RESOURCES,
     SHADING, XOBJECT,
@@ -14,96 +23,13 @@ use hayro_syntax::object::{MaybeRef, ObjRef};
 use hayro_syntax::page::{Resources, Rotation};
 use log::warn;
 use pdf_writer::{Chunk, Content, Filter, Finish, Name, Obj, Rect, Ref};
-use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::ops::Deref;
 use std::ops::DerefMut;
 
 pub use hayro_syntax::{Pdf, PdfData, PdfVersion};
 
-#[derive(Copy, Clone, Debug)]
-pub enum ExtractionQueryType {
-    XObject,
-    Page,
-}
-
-#[derive(Copy, Clone, Debug)]
-pub struct ExtractionQuery {
-    query_type: ExtractionQueryType,
-    page_index: usize,
-}
-
-impl ExtractionQuery {
-    pub fn new_page(page_index: usize) -> Self {
-        Self {
-            query_type: ExtractionQueryType::Page,
-            page_index,
-        }
-    }
-
-    pub fn new_xobject(page_index: usize) -> Self {
-        Self {
-            query_type: ExtractionQueryType::XObject,
-            page_index,
-        }
-    }
-}
-
-#[derive(Debug, Copy, Clone)]
-pub enum ExtractionError {
-    LoadPdfError,
-    InvalidPageIndex(usize),
-    InvalidPdf,
-}
-
-pub struct ExtractionResult {
-    pub chunk: Chunk,
-    pub root_refs: Vec<Result<Ref, ExtractionError>>,
-    pub page_tree_parent_ref: Ref,
-}
-
-struct ExtractionContext<'a> {
-    chunks: Vec<Chunk>,
-    visited_objects: HashSet<ObjRef>,
-    to_visit_refs: Vec<ObjRef>,
-    root_refs: Vec<Result<Ref, ExtractionError>>,
-    new_ref: Box<dyn FnMut() -> Ref + 'a>,
-    ref_map: HashMap<ObjRef, Ref>,
-    cached_content_streams: HashMap<usize, Ref>,
-    page_tree_parent_ref: Ref,
-}
-
-impl<'a> ExtractionContext<'a> {
-    pub fn new(mut new_ref: Box<dyn FnMut() -> Ref + 'a>) -> Self {
-        let page_tree_parent_ref = new_ref();
-        Self {
-            chunks: vec![],
-            visited_objects: HashSet::new(),
-            to_visit_refs: Vec::new(),
-            new_ref,
-            ref_map: HashMap::new(),
-            cached_content_streams: HashMap::new(),
-            root_refs: Vec::new(),
-            page_tree_parent_ref,
-        }
-    }
-
-    pub fn map_ref(&mut self, ref_: ObjRef) -> pdf_writer::Ref {
-        if let Some(ref_) = self.ref_map.get(&ref_) {
-            *ref_
-        } else {
-            let new_ref = self.new_ref();
-            self.ref_map.insert(ref_, new_ref);
-
-            new_ref
-        }
-    }
-
-    pub fn new_ref(&mut self) -> pdf_writer::Ref {
-        (self.new_ref)()
-    }
-}
-
+/// Apply the extraction queries to the given PDF and return the results.
 pub fn extract<'a>(
     pdf: &Pdf,
     new_ref: Box<dyn FnMut() -> Ref + 'a>,
@@ -127,6 +53,8 @@ pub fn extract<'a>(
         ctx.root_refs.push(res.map(|_| root_ref));
     }
 
+    // Now we have shallowly extracted all pages, now go through all dependencies until there aren't
+    // any anymore.
     write_dependencies(pdf, &mut ctx);
 
     let mut global_chunk = Chunk::new();
@@ -142,8 +70,103 @@ pub fn extract<'a>(
     })
 }
 
+/// A type of extraction query, indicating as what kind of
+/// object you want to extract the page.
+#[derive(Copy, Clone, Debug)]
+pub enum ExtractionQueryType {
+    /// Extract the page as an XObject.
+    XObject,
+    /// Extract the page as a new page.
+    Page,
+}
+
+/// An extraction query.
+#[derive(Copy, Clone, Debug)]
+pub struct ExtractionQuery {
+    query_type: ExtractionQueryType,
+    page_index: usize,
+}
+
+impl ExtractionQuery {
+    /// Create a new page extraction query with the given page index.
+    pub fn new_page(page_index: usize) -> Self {
+        Self {
+            query_type: ExtractionQueryType::Page,
+            page_index,
+        }
+    }
+
+    /// Create a new XObject extraction query with the given page index.
+    pub fn new_xobject(page_index: usize) -> Self {
+        Self {
+            query_type: ExtractionQueryType::XObject,
+            page_index,
+        }
+    }
+}
+
+/// An error that occurred during page extraction.
+#[derive(Debug, Copy, Clone)]
+pub enum ExtractionError {
+    /// An invalid page index was given.
+    InvalidPageIndex(usize),
+}
+
+/// The result of an extraction.
+pub struct ExtractionResult {
+    /// The chunk containing all objects as well as their dependencies.
+    pub chunk: Chunk,
+    /// The root references of the pages/XObject, one for each extraction query.
+    pub root_refs: Vec<Result<Ref, ExtractionError>>,
+    /// The reference to the page tree parent that was generated.
+    pub page_tree_parent_ref: Ref,
+}
+
+struct ExtractionContext<'a> {
+    chunks: Vec<Chunk>,
+    visited_objects: HashSet<ObjRef>,
+    to_visit_refs: Vec<ObjRef>,
+    root_refs: Vec<Result<Ref, ExtractionError>>,
+    new_ref: Box<dyn FnMut() -> Ref + 'a>,
+    ref_map: HashMap<ObjRef, Ref>,
+    cached_content_streams: HashMap<usize, Ref>,
+    page_tree_parent_ref: Ref,
+}
+
+impl<'a> ExtractionContext<'a> {
+    fn new(mut new_ref: Box<dyn FnMut() -> Ref + 'a>) -> Self {
+        let page_tree_parent_ref = new_ref();
+        Self {
+            chunks: vec![],
+            visited_objects: HashSet::new(),
+            to_visit_refs: Vec::new(),
+            new_ref,
+            ref_map: HashMap::new(),
+            cached_content_streams: HashMap::new(),
+            root_refs: Vec::new(),
+            page_tree_parent_ref,
+        }
+    }
+
+    pub(crate) fn map_ref(&mut self, ref_: ObjRef) -> Ref {
+        if let Some(ref_) = self.ref_map.get(&ref_) {
+            *ref_
+        } else {
+            let new_ref = self.new_ref();
+            self.ref_map.insert(ref_, new_ref);
+
+            new_ref
+        }
+    }
+
+    pub(crate) fn new_ref(&mut self) -> Ref {
+        (self.new_ref)()
+    }
+}
+
 fn write_dependencies(pdf: &Pdf, ctx: &mut ExtractionContext) {
     while let Some(ref_) = ctx.to_visit_refs.pop() {
+        // Don't visit objects twice!
         if ctx.visited_objects.contains(&ref_) {
             continue;
         }
@@ -161,7 +184,6 @@ fn write_dependencies(pdf: &Pdf, ctx: &mut ExtractionContext) {
     }
 }
 
-// Only used for testing.
 /// Extract the given pages from the PDF and resave them as a new PDF. This function shouldn't be
 /// used directly and only exists for test purposes.
 #[doc(hidden)]
@@ -190,6 +212,8 @@ pub fn extract_pages_to_pdf(hayro_pdf: &Pdf, page_indices: &[usize]) -> Vec<u8> 
     pdf.finish()
 }
 
+/// Extract the given pages as XObjects from the PDF and resave them as a new PDF.
+/// This function shouldn't be used directly and only exists for test purposes.
 #[doc(hidden)]
 pub fn extract_pages_as_xobject_to_pdf(hayro_pdf: &Pdf, page_indices: &[usize]) -> Vec<u8> {
     let hayro_pages = hayro_pdf.pages();
@@ -259,6 +283,8 @@ fn write_page(
     ctx: &mut ExtractionContext,
 ) -> Result<(), ExtractionError> {
     let mut chunk = Chunk::new();
+    // Note: We can cache content stream references, but _not_ the page references themselves.
+    // Acrobat for some reason doesn't like duplicate page references in the page tree.
     let stream_ref = if let Some(cached) = ctx.cached_content_streams.get(&page_idx) {
         *cached
     } else {
@@ -417,7 +443,7 @@ fn serialize_resources(
 
 fn collect_resources<'a>(
     resources: &Resources<'a>,
-    mut get_dict: impl FnMut(&Resources<'a>) -> Dict<'a> + Clone,
+    get_dict: impl FnMut(&Resources<'a>) -> Dict<'a> + Clone,
     name: hayro_syntax::object::Name<'a>,
 ) -> BTreeMap<hayro_syntax::object::Name<'a>, MaybeRef<Object<'a>>> {
     let mut map = BTreeMap::new();
@@ -432,6 +458,8 @@ fn collect_resources_inner<'a>(
     map: &mut BTreeMap<hayro_syntax::object::Name<'a>, MaybeRef<Object<'a>>>,
 ) {
     // Process parents first, so that duplicates get overridden by the current dictionary.
+    // Since for inheritance, the current dictionary always has priority over entries in the
+    // parent dictionary.
     if let Some(parent) = resources.parent() {
         collect_resources_inner(parent, get_dict.clone(), name, map);
     }
@@ -453,7 +481,7 @@ pub(crate) fn deflate_encode(data: &[u8]) -> Vec<u8> {
 }
 
 fn convert_rect(hy_rect: &hayro_syntax::object::Rect) -> pdf_writer::Rect {
-    pdf_writer::Rect::new(
+    Rect::new(
         hy_rect.x0 as f32,
         hy_rect.y0 as f32,
         hy_rect.x1 as f32,
