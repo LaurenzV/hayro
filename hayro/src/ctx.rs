@@ -202,15 +202,6 @@ impl RenderContext {
         self.transform = transform;
     }
 
-    /// Reset the render context.
-    pub fn reset(&mut self) {
-        self.line_buf.clear();
-        self.tiles.reset();
-        self.alphas.clear();
-        self.strip_buf.clear();
-        self.wide.reset();
-    }
-
     /// Render the current context into a buffer.
     /// The buffer is expected to be in premultiplied RGBA8 format with length `width * height * 4`
     pub(crate) fn render_to_buffer(&self, buffer: &mut [u8], width: u16, height: u16) {
@@ -245,7 +236,7 @@ impl RenderContext {
     }
 
     /// Render the current context into a pixmap.
-    pub fn render_to_pixmap(&self, pixmap: &mut Pixmap) {
+    pub(crate) fn render_to_pixmap(&self, pixmap: &mut Pixmap) {
         let width = pixmap.width();
         let height = pixmap.height();
         self.render_to_buffer(pixmap.data_as_u8_slice_mut(), width, height);
@@ -253,16 +244,6 @@ impl RenderContext {
 
     pub(crate) fn set_anti_aliasing(&mut self, val: bool) {
         self.anti_aliasing = val;
-    }
-
-    /// Return the width of the pixmap.
-    pub fn width(&self) -> u16 {
-        self.width
-    }
-
-    /// Return the height of the pixmap.
-    pub fn height(&self) -> u16 {
-        self.height
     }
 
     // Assumes that `line_buf` contains the flattened path.

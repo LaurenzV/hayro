@@ -4,7 +4,7 @@
 use bytemuck::{Pod, Zeroable};
 use hayro_interpret::color::AlphaColor;
 use image::codecs::png::PngEncoder;
-use image::{ExtendedColorType, ImageBuffer, ImageEncoder, Rgba};
+use image::{ExtendedColorType, ImageEncoder};
 use std::io::Cursor;
 use std::vec;
 use std::vec::Vec;
@@ -24,18 +24,8 @@ pub(crate) struct PremulRgba8 {
 
 impl PremulRgba8 {
     #[must_use]
-    pub(crate) const fn to_u8_array(self) -> [u8; 4] {
-        [self.r, self.g, self.b, self.a]
-    }
-
-    #[must_use]
     pub(crate) const fn from_u8_array([r, g, b, a]: [u8; 4]) -> Self {
         Self { r, g, b, a }
-    }
-
-    #[must_use]
-    pub(crate) const fn to_u32(self) -> u32 {
-        u32::from_ne_bytes(self.to_u8_array())
     }
 
     #[must_use]
@@ -51,38 +41,6 @@ pub(crate) struct Rgba8 {
     pub g: u8,
     pub b: u8,
     pub a: u8,
-}
-
-impl Rgba8 {
-    /// Returns the color as a `[u8; 4]`.
-    ///
-    /// The color values will be in the order `[r, g, b, a]`.
-    #[must_use]
-    pub const fn to_u8_array(self) -> [u8; 4] {
-        [self.r, self.g, self.b, self.a]
-    }
-
-    /// Convert the `[u8; 4]` byte array into an `Rgba8` color.
-    ///
-    /// The color values must be given in the order `[r, g, b, a]`.
-    #[must_use]
-    pub const fn from_u8_array([r, g, b, a]: [u8; 4]) -> Self {
-        Self { r, g, b, a }
-    }
-
-    /// Returns the color as a little-endian packed value, with `r` the least significant byte and
-    /// `a` the most significant.
-    #[must_use]
-    pub const fn to_u32(self) -> u32 {
-        u32::from_ne_bytes(self.to_u8_array())
-    }
-
-    /// Interpret the little-endian packed value as a color, with `r` the least significant byte
-    /// and `a` the most significant.
-    #[must_use]
-    pub const fn from_u32(packed_bytes: u32) -> Self {
-        Self::from_u8_array(u32::to_ne_bytes(packed_bytes))
-    }
 }
 
 impl From<Rgba8> for AlphaColor {
@@ -131,23 +89,6 @@ impl Pixmap {
         }
     }
 
-    pub(crate) fn resize(&mut self, width: u16, height: u16) {
-        self.width = width;
-        self.height = height;
-        self.buf.resize(
-            usize::from(width) * usize::from(height),
-            PremulRgba8::from_u32(0),
-        );
-    }
-
-    pub(crate) fn shrink_to_fit(&mut self) {
-        self.buf.shrink_to_fit();
-    }
-
-    pub(crate) fn capacity(&self) -> usize {
-        self.buf.capacity()
-    }
-
     /// Return the width of the pixmap.
     pub fn width(&self) -> u16 {
         self.width
@@ -165,13 +106,6 @@ impl Pixmap {
         &self.buf
     }
 
-    /// Returns a mutable reference to the underlying data as premultiplied RGBA8.
-    ///
-    /// The pixels are in row-major order.
-    pub(crate) fn data_mut(&mut self) -> &mut [PremulRgba8] {
-        &mut self.buf
-    }
-
     /// Returns a reference to the underlying data as premultiplied RGBA8.
     ///
     /// The pixels are in row-major order. Each pixel consists of four bytes in the order
@@ -186,15 +120,6 @@ impl Pixmap {
     /// `[r, g, b, a]`.
     pub fn data_as_u8_slice_mut(&mut self) -> &mut [u8] {
         bytemuck::cast_slice_mut(&mut self.buf)
-    }
-
-    /// Sample a pixel from the pixmap.
-    ///
-    /// The pixel data is [premultiplied RGBA8][PremulRgba8].
-    #[inline(always)]
-    pub(crate) fn sample(&self, x: u16, y: u16) -> PremulRgba8 {
-        let idx = self.width as usize * y as usize + x as usize;
-        self.buf[idx]
     }
 
     /// Consume the pixmap, returning the data as the underlying [`Vec`] of premultiplied RGBA8.

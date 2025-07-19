@@ -16,30 +16,15 @@ This crate has one feature, `jpeg2000`. See the description of
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
-use crate::encode::{Buffer, x_y_advances};
-use crate::mask::Mask;
-use crate::paint::{Image, PaintType};
 use crate::renderer::Renderer;
+use hayro_interpret::ClipPath;
 use hayro_interpret::Context;
 use hayro_interpret::Device;
 use hayro_interpret::color::AlphaColor;
-use hayro_interpret::font::Glyph;
-use hayro_interpret::hayro_syntax::object::ObjectIdentifier;
 use hayro_interpret::hayro_syntax::page::Page;
-use hayro_interpret::pattern::Pattern;
-use hayro_interpret::util::FloatExt;
-use hayro_interpret::{ClipPath, LumaData};
-use hayro_interpret::{
-    FillProps, FillRule, MaskType, Paint, RgbData, SoftMask, StrokeProps, interpret,
-};
-use image::codecs::png::PngEncoder;
-use image::imageops::FilterType;
-use image::{DynamicImage, ExtendedColorType, ImageBuffer, ImageEncoder, RgbImage};
-use kurbo::{Affine, BezPath, Point, Rect, Shape};
-use std::collections::HashMap;
-use std::io::Cursor;
+use hayro_interpret::{FillRule, interpret};
+use kurbo::{Affine, Rect, Shape};
 use std::ops::RangeInclusive;
-use std::sync::Arc;
 
 use crate::ctx::RenderContext;
 pub use hayro_interpret::font::{FontData, FontQuery, StandardFont};

@@ -1,6 +1,6 @@
 //! This example shows you how you can render a PDF file to PNG.
 
-use hayro::{Pdf, RenderSettings, render, render_pdf};
+use hayro::{Pdf, RenderSettings, render};
 use hayro_interpret::InterpreterSettings;
 use hayro_interpret::font::{FontData, FontQuery, StandardFont};
 use std::sync::Arc;

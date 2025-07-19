@@ -515,16 +515,6 @@ pub(crate) fn to_rgba8(c: &[f32; 4]) -> [u8; 4] {
     rgba
 }
 
-pub(crate) fn from_rgba8(c: &[u8; 4]) -> [f32; 4] {
-    let mut rgba32 = [0f32; 4];
-
-    for i in 0..4 {
-        rgba32[i] = c[i] as f32 / 255.0;
-    }
-
-    rgba32
-}
-
 /// Trait for sampling values from image-like structures
 pub trait Sampler {
     fn interpolate(&self) -> bool;

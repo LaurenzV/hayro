@@ -5,7 +5,6 @@ use crate::mask::Mask;
 use crate::paint::{Paint, PremulColor};
 use crate::{strip::Strip, tile::Tile};
 use hayro_interpret::FillRule;
-use hayro_interpret::MaskType::Alpha;
 use hayro_interpret::color::AlphaColor;
 use std::vec;
 use std::{boxed::Box, vec::Vec};
