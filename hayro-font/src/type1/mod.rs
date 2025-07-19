@@ -1,4 +1,4 @@
-//! Reading Type1 tables.
+//! Reading Type1 fonts.
 
 mod charstring;
 mod charstring_parser;

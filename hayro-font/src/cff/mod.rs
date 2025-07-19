@@ -172,9 +172,6 @@ impl<'a> Table<'a> {
     }
 
     /// Resolves a Glyph ID for a code point.
-    ///
-    /// Similar to [`Face::glyph_index`](crate::Face::glyph_index) but 8bit
-    /// and uses CFF encoding and charset tables instead of TrueType `cmap`.
     pub fn glyph_index(&self, code_point: u8) -> Option<GlyphId> {
         match self.kind {
             FontKind::SID(ref sid_meta) => {
@@ -192,10 +189,6 @@ impl<'a> Table<'a> {
     }
 
     /// Returns a glyph width.
-    ///
-    /// This value is different from outline bbox width and is stored separately.
-    ///
-    /// Technically similar to [`Face::glyph_hor_advance`](crate::Face::glyph_hor_advance).
     pub fn glyph_width(&self, glyph_id: GlyphId) -> Option<u16> {
         match self.kind {
             FontKind::SID(ref sid) => {
