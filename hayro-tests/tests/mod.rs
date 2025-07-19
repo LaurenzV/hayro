@@ -4,7 +4,6 @@ use hayro::StandardFont;
 use hayro::{FontData, InterpreterSettings};
 use image::{Rgba, RgbaImage, load_from_memory};
 use once_cell::sync::Lazy;
-use pdf_writer::Ref;
 use sitro::{RenderOptions, Renderer};
 use std::cmp::max;
 use std::ops::RangeInclusive;
