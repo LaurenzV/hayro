@@ -1,20 +1,20 @@
-use std::ops::Deref;
 use crate::FillRule;
 use crate::color::{ColorComponents, ColorSpace};
+use crate::context::Context;
+use crate::convert::{convert_line_cap, convert_line_join};
+use crate::device::Device;
 use crate::font::{Font, UNITS_PER_EM};
 use crate::interpret::text::TextRenderingMode;
 use crate::pattern::Pattern;
 use crate::soft_mask::SoftMask;
+use crate::util::OptionLog;
+use hayro_syntax::content::ops::{LineCap, LineJoin};
+use hayro_syntax::object::dict::keys::SMASK;
+use hayro_syntax::object::{Dict, Name, Number};
+use hayro_syntax::page::Resources;
 use kurbo::{Affine, BezPath, Cap, Join, Vec2};
 use smallvec::SmallVec;
-use hayro_syntax::content::ops::{LineCap, LineJoin};
-use hayro_syntax::object::{Dict, Name, Number};
-use hayro_syntax::object::dict::keys::SMASK;
-use hayro_syntax::page::Resources;
-use crate::context::Context;
-use crate::convert::{convert_line_cap, convert_line_join};
-use crate::device::Device;
-use crate::util::OptionLog;
+use std::ops::Deref;
 
 #[derive(Clone, Debug)]
 pub(crate) struct State<'a> {
@@ -213,7 +213,11 @@ pub(crate) fn restore_state(ctx: &mut Context, device: &mut impl Device) {
     }
 }
 
-pub(crate) fn handle_gs<'a>(dict: &Dict<'a>, context: &mut Context<'a>, parent_resources: &Resources<'a>) {
+pub(crate) fn handle_gs<'a>(
+    dict: &Dict<'a>,
+    context: &mut Context<'a>,
+    parent_resources: &Resources<'a>,
+) {
     for key in dict.keys() {
         handle_gs_single(dict, key.clone(), context, parent_resources).warn_none(&format!(
             "invalid value in graphics state for {}",

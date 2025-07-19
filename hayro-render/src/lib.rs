@@ -6,7 +6,6 @@ use crate::render::RenderContext;
 pub use hayro_interpret::FontData;
 pub use hayro_interpret::InterpreterSettings;
 use hayro_interpret::cache::Cache;
-use hayro_interpret::{ClipPath, LumaData};
 use hayro_interpret::color::AlphaColor;
 use hayro_interpret::context::Context;
 use hayro_interpret::device::Device;
@@ -15,6 +14,7 @@ use hayro_interpret::font::Glyph;
 pub use hayro_interpret::font::StandardFont;
 use hayro_interpret::pattern::Pattern;
 use hayro_interpret::util::FloatExt;
+use hayro_interpret::{ClipPath, LumaData};
 use hayro_interpret::{
     FillProps, FillRule, MaskType, Paint, RgbData, SoftMask, StrokeProps, interpret,
 };

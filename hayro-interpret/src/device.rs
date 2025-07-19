@@ -1,9 +1,9 @@
 use crate::ClipPath;
 use crate::font::Glyph;
-use crate::{LumaData, RgbData};
 use crate::paint::Paint;
 use crate::soft_mask::SoftMask;
 use crate::{FillProps, StrokeProps};
+use crate::{LumaData, RgbData};
 use kurbo::{Affine, BezPath};
 
 pub trait Device {

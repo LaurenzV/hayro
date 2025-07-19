@@ -1,11 +1,3 @@
-use std::sync::Arc;
-use kurbo::{Affine, Point, Shape};
-use log::warn;
-use smallvec::smallvec;
-use hayro_syntax::content::ops::TypedInstruction;
-use hayro_syntax::object::{dict_or_stream, Dict, Object};
-use hayro_syntax::page::Resources;
-use crate::{FillRule, FontResolverFn, WarningSinkFn};
 use crate::ClipPath;
 use crate::color::ColorSpace;
 use crate::context::Context;
@@ -17,7 +9,15 @@ use crate::interpret::text::TextRenderingMode;
 use crate::pattern::{Pattern, ShadingPattern};
 use crate::shading::Shading;
 use crate::util::OptionLog;
-use crate::x_object::{draw_image_xobject, draw_xobject, ImageXObject, XObject};
+use crate::x_object::{ImageXObject, XObject, draw_image_xobject, draw_xobject};
+use crate::{FillRule, FontResolverFn, WarningSinkFn};
+use hayro_syntax::content::ops::TypedInstruction;
+use hayro_syntax::object::{Dict, Object, dict_or_stream};
+use hayro_syntax::page::Resources;
+use kurbo::{Affine, Point, Shape};
+use log::warn;
+use smallvec::smallvec;
+use std::sync::Arc;
 
 pub(crate) mod path;
 pub(crate) mod state;
@@ -136,7 +136,7 @@ pub fn interpret<'a, 'b>(
                     r.0.as_f64() + r.2.as_f64(),
                     r.1.as_f64() + r.3.as_f64(),
                 )
-                    .to_path(0.1);
+                .to_path(0.1);
                 context.path_mut().extend(rect);
             }
             TypedInstruction::MoveTo(m) => {

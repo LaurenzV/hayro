@@ -1,5 +1,5 @@
-use kurbo::BezPath;
 use crate::FillRule;
+use kurbo::BezPath;
 
 /// A clip path.
 #[derive(Debug, Clone)]
@@ -35,4 +35,3 @@ pub struct LumaData {
     /// Whether the image should be interpolated.
     pub interpolate: bool,
 }
-

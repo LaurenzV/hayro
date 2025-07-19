@@ -14,9 +14,9 @@ mod paint;
 pub mod pattern;
 pub mod shading;
 mod soft_mask;
+mod types;
 pub mod util;
 pub mod x_object;
-mod types;
 
 use crate::font::FontQuery;
 
@@ -52,5 +52,3 @@ pub enum FillRule {
 pub struct FillProps {
     pub fill_rule: FillRule,
 }
-
-

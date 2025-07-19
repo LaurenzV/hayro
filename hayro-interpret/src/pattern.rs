@@ -1,5 +1,5 @@
-use crate::cache::Cache;
 use crate::ClipPath;
+use crate::cache::Cache;
 use crate::color::{Color, ColorSpace};
 use crate::context::Context;
 use crate::device::Device;
@@ -8,7 +8,7 @@ use crate::interpret::state::State;
 use crate::shading::Shading;
 use crate::soft_mask::SoftMask;
 use crate::{
-    LumaData, FillProps, FillRule, InterpreterSettings, Paint, PaintType, RgbData, StrokeProps,
+    FillProps, FillRule, InterpreterSettings, LumaData, Paint, PaintType, RgbData, StrokeProps,
     interpret,
 };
 use hayro_syntax::content::{TypedIter, UntypedIter};

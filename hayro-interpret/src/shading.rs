@@ -1,5 +1,4 @@
 /// PDF shadings.
-
 use crate::color::{ColorComponents, ColorSpace};
 use crate::util::{FloatExt, PointExt};
 use hayro_syntax::bit_reader::{BitReader, BitSize};
@@ -331,7 +330,7 @@ impl Triangle {
     pub fn bounding_box(&self) -> kurbo::Rect {
         self.kurbo_tri.bounding_box()
     }
-    
+
     fn barycentric_coords(&self, p: Point) -> (f32, f32, f32) {
         let (a, b, c) = (self.p0.point, self.p1.point, self.p2.point);
         let v0 = b - a;
@@ -1112,8 +1111,8 @@ fn read_tensor_product_patch_mesh(
                     control_points[i] = Point::new(x as f64, y as f64);
                 }
 
-                colors[2] = read_colors(&mut reader)?;   
-                colors[3] = read_colors(&mut reader)?; 
+                colors[2] = read_colors(&mut reader)?;
+                colors[3] = read_colors(&mut reader)?;
 
                 prev_patch = Some(TensorProductPatch {
                     control_points,
@@ -1126,7 +1125,7 @@ fn read_tensor_product_patch_mesh(
                 control_points[0] = prev.control_points[6];
                 control_points[1] = prev.control_points[7];
                 control_points[2] = prev.control_points[8];
-                control_points[3] = prev.control_points[9]; 
+                control_points[3] = prev.control_points[9];
                 colors[0] = prev.colors[2].clone();
                 colors[1] = prev.colors[3].clone();
 
@@ -1150,7 +1149,7 @@ fn read_tensor_product_patch_mesh(
                 control_points[0] = prev.control_points[9];
                 control_points[1] = prev.control_points[10];
                 control_points[2] = prev.control_points[11];
-                control_points[3] = prev.control_points[0]; 
+                control_points[3] = prev.control_points[0];
                 colors[0] = prev.colors[3].clone();
                 colors[1] = prev.colors[0].clone();
 
