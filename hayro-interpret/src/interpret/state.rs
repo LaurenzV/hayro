@@ -1,3 +1,4 @@
+use std::ops::Deref;
 use crate::FillRule;
 use crate::color::{ColorComponents, ColorSpace};
 use crate::font::{Font, UNITS_PER_EM};
@@ -6,6 +7,14 @@ use crate::pattern::Pattern;
 use crate::soft_mask::SoftMask;
 use kurbo::{Affine, BezPath, Cap, Join, Vec2};
 use smallvec::SmallVec;
+use hayro_syntax::content::ops::{LineCap, LineJoin};
+use hayro_syntax::object::{Dict, Name, Number};
+use hayro_syntax::object::dict::keys::SMASK;
+use hayro_syntax::page::Resources;
+use crate::context::Context;
+use crate::convert::{convert_line_cap, convert_line_join};
+use crate::device::Device;
+use crate::util::OptionLog;
 
 #[derive(Clone, Debug)]
 pub(crate) struct State<'a> {
@@ -187,4 +196,60 @@ pub(crate) struct PaintData<'a> {
     pub(crate) color: ColorComponents,
     pub(crate) color_space: ColorSpace,
     pub(crate) pattern: Option<Pattern<'a>>,
+}
+
+pub(crate) fn save_sate(ctx: &mut Context) {
+    ctx.save_state();
+}
+
+pub(crate) fn restore_state(ctx: &mut Context, device: &mut impl Device) {
+    let mut num_clips = ctx.get().n_clips;
+    ctx.restore_state();
+    let target_clips = ctx.get().n_clips;
+
+    while num_clips > target_clips {
+        device.pop_clip_path();
+        num_clips -= 1;
+    }
+}
+
+pub(crate) fn handle_gs<'a>(dict: &Dict<'a>, context: &mut Context<'a>, parent_resources: &Resources<'a>) {
+    for key in dict.keys() {
+        handle_gs_single(dict, key.clone(), context, parent_resources).warn_none(&format!(
+            "invalid value in graphics state for {}",
+            key.as_str()
+        ));
+    }
+}
+
+pub(crate) fn handle_gs_single<'a>(
+    dict: &Dict<'a>,
+    key: Name,
+    context: &mut Context<'a>,
+    parent_resources: &Resources<'a>,
+) -> Option<()> {
+    // TODO Can we use constants here somehow?
+    match key.as_str() {
+        "LW" => context.get_mut().line_width = dict.get::<f32>(key)?,
+        "LC" => context.get_mut().line_cap = convert_line_cap(LineCap(dict.get::<Number>(key)?)),
+        "LJ" => context.get_mut().line_join = convert_line_join(LineJoin(dict.get::<Number>(key)?)),
+        "ML" => context.get_mut().miter_limit = dict.get::<f32>(key)?,
+        "CA" => context.get_mut().stroke_alpha = dict.get::<f32>(key)?,
+        "ca" => context.get_mut().non_stroke_alpha = dict.get::<f32>(key)?,
+        "SMask" => {
+            if let Some(name) = dict.get::<Name>(SMASK) {
+                if name.deref() == b"None" {
+                    context.get_mut().soft_mask = None;
+                }
+            } else {
+                context.get_mut().soft_mask = dict
+                    .get::<Dict>(SMASK)
+                    .and_then(|d| SoftMask::new(&d, context, parent_resources.clone()));
+            }
+        }
+        "Type" => {}
+        _ => {}
+    }
+
+    Some(())
 }

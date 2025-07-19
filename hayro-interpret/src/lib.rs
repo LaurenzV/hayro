@@ -3,15 +3,11 @@ use crate::device::Device;
 use clip_path::ClipPath;
 use hayro_syntax::content::ops::{LineCap, LineJoin, TypedInstruction};
 use hayro_syntax::object::Dict;
-use hayro_syntax::object::Name;
-use hayro_syntax::object::Number;
-use hayro_syntax::object::dict::keys::SMASK;
 use hayro_syntax::object::{Object, dict_or_stream};
 use hayro_syntax::page::Resources;
 use kurbo::{Affine, Cap, Join, Point, Shape};
 use log::warn;
 use smallvec::{SmallVec, smallvec};
-use std::ops::Deref;
 use std::sync::Arc;
 
 pub mod cache;
@@ -46,6 +42,7 @@ pub use image::{AlphaData, RgbData};
 use interpret::text;
 pub use paint::{Paint, PaintType};
 pub use soft_mask::{MaskType, SoftMask};
+use crate::interpret::state::{handle_gs, restore_state, save_sate};
 
 /// A container for the bytes of a PDF file.
 pub type FontData = Arc<dyn AsRef<[u8]> + Send + Sync>;
@@ -572,60 +569,4 @@ pub fn interpret<'a, 'b>(
     while context.num_states() > num_states {
         restore_state(context, device);
     }
-}
-
-fn save_sate(ctx: &mut Context) {
-    ctx.save_state();
-}
-
-fn restore_state(ctx: &mut Context, device: &mut impl Device) {
-    let mut num_clips = ctx.get().n_clips;
-    ctx.restore_state();
-    let target_clips = ctx.get().n_clips;
-
-    while num_clips > target_clips {
-        device.pop_clip_path();
-        num_clips -= 1;
-    }
-}
-
-fn handle_gs<'a>(dict: &Dict<'a>, context: &mut Context<'a>, parent_resources: &Resources<'a>) {
-    for key in dict.keys() {
-        handle_gs_single(dict, key.clone(), context, parent_resources).warn_none(&format!(
-            "invalid value in graphics state for {}",
-            key.as_str()
-        ));
-    }
-}
-
-fn handle_gs_single<'a>(
-    dict: &Dict<'a>,
-    key: Name,
-    context: &mut Context<'a>,
-    parent_resources: &Resources<'a>,
-) -> Option<()> {
-    // TODO Can we use constants here somehow?
-    match key.as_str() {
-        "LW" => context.get_mut().line_width = dict.get::<f32>(key)?,
-        "LC" => context.get_mut().line_cap = convert_line_cap(LineCap(dict.get::<Number>(key)?)),
-        "LJ" => context.get_mut().line_join = convert_line_join(LineJoin(dict.get::<Number>(key)?)),
-        "ML" => context.get_mut().miter_limit = dict.get::<f32>(key)?,
-        "CA" => context.get_mut().stroke_alpha = dict.get::<f32>(key)?,
-        "ca" => context.get_mut().non_stroke_alpha = dict.get::<f32>(key)?,
-        "SMask" => {
-            if let Some(name) = dict.get::<Name>(SMASK) {
-                if name.deref() == b"None" {
-                    context.get_mut().soft_mask = None;
-                }
-            } else {
-                context.get_mut().soft_mask = dict
-                    .get::<Dict>(SMASK)
-                    .and_then(|d| SoftMask::new(&d, context, parent_resources.clone()));
-            }
-        }
-        "Type" => {}
-        _ => {}
-    }
-
-    Some(())
 }
