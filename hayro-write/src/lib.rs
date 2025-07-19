@@ -1,8 +1,8 @@
 /*!
-A crate for converting PDF pages into either XObjects or a new page via [`pdf-writer`].
+A crate for converting PDF pages into either XObjects or a new page via [`pdf-writer`](https://docs.rs/pdf-writer/).
 
-This is an internal crate and not meant for external use. Therefore, it's not very well
-documented.
+This is an internal crate and not meant for external use. Therefore, it's not very
+well-documented.
 */
 
 #![forbid(unsafe_code)]
@@ -26,7 +26,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::ops::Deref;
 use std::ops::DerefMut;
 
-pub use hayro_syntax::{Pdf, PdfData, PdfVersion};
+pub use hayro_syntax::{LoadPdfError, Pdf, PdfData, PdfVersion};
 
 /// Apply the extraction queries to the given PDF and return the results.
 pub fn extract<'a>(
