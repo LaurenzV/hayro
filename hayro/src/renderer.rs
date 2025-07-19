@@ -134,8 +134,8 @@ impl Renderer {
                         xs = xs.max(min_x_scale).min(max_x_scale);
                         ys = ys.max(min_y_scale).min(max_y_scale);
 
-                        let mut x_step = xs * t.x_step;
-                        let mut y_step = ys * t.y_step;
+                        let x_step = xs * t.x_step;
+                        let y_step = ys * t.y_step;
 
                         let scaled_width = bbox.width() as f32 * xs;
                         let scaled_height = bbox.height() as f32 * ys;
@@ -154,17 +154,15 @@ impl Renderer {
                         let mut pix = Pixmap::new(pix_width, pix_height);
                         renderer.ctx.render_to_pixmap(&mut pix);
 
-                        // TODO: Add tests
+                        // TODO: Fix these
                         if x_step < 0.0 {
                             initial_transform *=
                                 Affine::new([-1.0, 0.0, 0.0, 1.0, scaled_width as f64, 0.0]);
-                            x_step = x_step.abs();
                         }
 
                         if y_step < 0.0 {
                             initial_transform *=
                                 Affine::new([1.0, 0.0, 0.0, -1.0, 0.0, scaled_height as f64]);
-                            y_step = y_step.abs();
                         }
 
                         let buffer = Buffer::new_u8(

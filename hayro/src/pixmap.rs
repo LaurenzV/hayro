@@ -67,28 +67,6 @@ impl Pixmap {
         Self { width, height, buf }
     }
 
-    /// Create a new pixmap with the given premultiplied RGBA8 data.
-    ///
-    /// The `data` vector must be of length `width * height` exactly.
-    ///
-    /// The pixels are in row-major order.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the `data` vector is not of length `width * height`.
-    pub fn from_parts(data: Vec<PremulRgba8>, width: u16, height: u16) -> Self {
-        assert_eq!(
-            data.len(),
-            usize::from(width) * usize::from(height),
-            "Expected `data` to have length of exactly `width * height`"
-        );
-        Self {
-            width,
-            height,
-            buf: data,
-        }
-    }
-
     /// Return the width of the pixmap.
     pub fn width(&self) -> u16 {
         self.width
@@ -127,31 +105,6 @@ impl Pixmap {
     /// The pixels are in row-major order.
     pub fn take_u8(self) -> Vec<u8> {
         bytemuck::cast_vec(self.buf)
-    }
-
-    /// Consume the pixmap, returning the data as (unpremultiplied) RGBA8.
-    ///
-    /// Not fast, but useful for saving to PNG etc.
-    ///
-    /// The pixels are in row-major order.
-    pub(crate) fn take_unpremultiplied(self) -> Vec<Rgba8> {
-        self.buf
-            .into_iter()
-            .map(|PremulRgba8 { r, g, b, a }| {
-                let alpha = 255.0 / f32::from(a);
-                if a != 0 {
-                    let unpremultiply = |component| (f32::from(component) * alpha + 0.5) as u8;
-                    Rgba8 {
-                        r: unpremultiply(r),
-                        g: unpremultiply(g),
-                        b: unpremultiply(b),
-                        a,
-                    }
-                } else {
-                    Rgba8 { r, g, b, a }
-                }
-            })
-            .collect()
     }
 
     /// Encode the pixmap into a PNG file.

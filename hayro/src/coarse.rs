@@ -132,16 +132,6 @@ impl Wide {
         !self.layer_stack.is_empty()
     }
 
-    /// Reset all tiles in the container.
-    pub(crate) fn reset(&mut self) {
-        for tile in &mut self.tiles {
-            tile.bg = PremulColor::from_alpha_color(AlphaColor::TRANSPARENT);
-            tile.cmds.clear();
-        }
-        self.layer_stack.clear();
-        self.clip_stack.clear();
-    }
-
     /// Return the number of horizontal tiles.
     pub(crate) fn width_tiles(&self) -> u16 {
         self.width.div_ceil(WideTile::WIDTH)
