@@ -1,4 +1,5 @@
-/// PDF shadings.
+//! PDF shadings.
+
 use crate::color::{ColorComponents, ColorSpace};
 use crate::util::{FloatExt, PointExt};
 use hayro_syntax::bit_reader::{BitReader, BitSize};
@@ -118,7 +119,7 @@ pub struct Shading {
 }
 
 impl Shading {
-    pub fn new(dict: &Dict, stream: Option<&Stream>) -> Option<Self> {
+    pub(crate) fn new(dict: &Dict, stream: Option<&Stream>) -> Option<Self> {
         let shading_num = dict.get::<u8>(SHADING_TYPE)?;
 
         let color_space = ColorSpace::new(dict.get(COLORSPACE)?)?;
@@ -288,6 +289,7 @@ pub struct Triangle {
 }
 
 impl Triangle {
+    /// Create a new triangle.
     pub fn new(p0: TriangleVertex, p1: TriangleVertex, p2: TriangleVertex) -> Self {
         let v0 = p1.point - p0.point;
         let v1 = p2.point - p0.point;
@@ -308,6 +310,7 @@ impl Triangle {
             d11,
         }
     }
+    
     /// Get the interpolated colors of the point from the triangle.
     ///
     /// Returns `None` if the point is not inside of the triangle.
@@ -326,10 +329,12 @@ impl Triangle {
         result
     }
 
+    /// Return whether the point is contained within the triangle.
     pub fn contains_point(&self, pos: Point) -> bool {
         self.kurbo_tri.winding(pos) != 0
     }
 
+    /// Return the bounding box of the triangle.
     pub fn bounding_box(&self) -> kurbo::Rect {
         self.kurbo_tri.bounding_box()
     }
@@ -384,7 +389,7 @@ pub struct TensorProductPatch {
 }
 
 impl CoonsPatch {
-    /// Map a coordinate from the unit square of the patch to it's actual coordinate.
+    /// Map the point to the coordinates of the coons patch.
     pub fn map_coordinate(&self, p: Point) -> Point {
         let (u, v) = (p.x, p.y);
 
@@ -403,6 +408,7 @@ impl CoonsPatch {
         (sc + sd - sb).to_point()
     }
 
+    /// Approximate the patch by triangles.
     pub fn to_triangles(&self) -> Vec<Triangle> {
         const GRID_SIZE: usize = 20;
         let mut grid = vec![vec![Point::ZERO; GRID_SIZE]; GRID_SIZE];
@@ -502,7 +508,7 @@ impl TensorProductPatch {
         }
     }
 
-    /// Map a coordinate from the unit square of the patch to its actual coordinate using tensor-product formula.
+    /// Map the point to the coordinates of the tensor product patch.
     pub fn map_coordinate(&self, p: Point) -> Point {
         let (u, v) = (p.x, p.y);
 
@@ -544,6 +550,7 @@ impl TensorProductPatch {
         Point::new(x, y)
     }
 
+    /// Approximate the tensor product patch mesh by triangles.
     pub fn to_triangles(&self) -> Vec<Triangle> {
         const GRID_SIZE: usize = 20;
         let mut grid = vec![vec![Point::ZERO; GRID_SIZE]; GRID_SIZE];
