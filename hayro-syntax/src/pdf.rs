@@ -13,6 +13,7 @@ pub struct Pdf {
     xref: Arc<XRef>,
     header_version: PdfVersion,
     pages: CachedPages,
+    data: PdfData,
 }
 
 /// An error that occurred while loading a PDF file.
@@ -34,7 +35,7 @@ impl Pdf {
         let xref = match root_xref(data.clone()) {
             Ok(x) => x,
             Err(e) => match e {
-                XRefError::Unknown => fallback(data).ok_or(LoadPdfError::Invalid)?,
+                XRefError::Unknown => fallback(data.clone()).ok_or(LoadPdfError::Invalid)?,
                 XRefError::Encrypted => return Err(LoadPdfError::Encryption),
             },
         };
@@ -46,6 +47,7 @@ impl Pdf {
             xref,
             header_version: version,
             pages,
+            data,
         })
     }
 
@@ -65,6 +67,11 @@ impl Pdf {
             .trailer_data()
             .version
             .unwrap_or(self.header_version)
+    }
+
+    /// Return the underlying data of the PDF file.
+    pub fn data(&self) -> &PdfData {
+        &self.data
     }
 
     /// Return the pages of the PDF file.
