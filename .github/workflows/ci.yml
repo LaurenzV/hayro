@@ -17,7 +17,7 @@ jobs:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@cargo-hack
-      - run: RUSTFLAGS="-D warnings" cargo clippy -p hayro_syntax
+      - run: RUSTFLAGS="-D warnings" cargo clippy -p hayro-syntax
       - run: cargo fmt --check --all
       - run: RUSTFLAGS="-D warnings" cargo doc --workspace --no-deps
       - run: RUSTFLAGS="-D warnings" cargo hack check --each-feature -p hayro-syntax
