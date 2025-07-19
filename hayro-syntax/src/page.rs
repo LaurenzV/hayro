@@ -136,17 +136,14 @@ pub struct Page<'a> {
 
 impl<'a> Page<'a> {
     fn new(dict: Dict<'a>, ctx: &PagesContext, resources: Resources<'a>) -> Page<'a> {
-        let media_box = dict
-            .get::<Rect>(MEDIA_BOX)
-            .or_else(|| ctx.media_box)
-            .unwrap_or(A4);
+        let media_box = dict.get::<Rect>(MEDIA_BOX).or(ctx.media_box).unwrap_or(A4);
 
         let crop_box = dict
             .get::<Rect>(CROP_BOX)
-            .or_else(|| ctx.crop_box)
+            .or(ctx.crop_box)
             .unwrap_or(media_box);
 
-        let rotation = match dict.get::<u32>(ROTATE).or_else(|| ctx.rotate).unwrap_or(0) % 360 {
+        let rotation = match dict.get::<u32>(ROTATE).or(ctx.rotate).unwrap_or(0) % 360 {
             0 => Rotation::None,
             90 => Rotation::Horizontal,
             180 => Rotation::Flipped,
@@ -154,7 +151,7 @@ impl<'a> Page<'a> {
             _ => Rotation::None,
         };
 
-        let ctx = resources.ctx.clone();
+        let ctx = resources.ctx;
         let resources =
             Resources::from_parent(dict.get::<Dict>(RESOURCES).unwrap_or_default(), resources);
 
@@ -372,7 +369,7 @@ impl<'a> Resources<'a> {
         let shadings = resources.get::<Dict>(SHADING).unwrap_or_default();
         let properties = resources.get::<Dict>(PROPERTIES).unwrap_or_default();
 
-        let parent = parent.map(|r| Box::new(r));
+        let parent = parent.map(Box::new);
 
         Self {
             parent,
@@ -404,7 +401,7 @@ impl<'a> Resources<'a> {
 
         match dict.get_raw::<T>(name.deref())? {
             MaybeRef::Ref(ref_) => {
-                cache(ref_).or_else(|| self.ctx.xref.get::<T>(ref_.into()).and_then(|t| resolve(t)))
+                cache(ref_).or_else(|| self.ctx.xref.get::<T>(ref_.into()).and_then(&mut resolve))
             }
             MaybeRef::NotRef(i) => resolve(i),
         }

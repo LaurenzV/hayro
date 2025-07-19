@@ -37,7 +37,7 @@ impl<'a> Dict<'a> {
         let repr = Repr {
             data: &[],
             offsets: Default::default(),
-            ctx: ReaderContext::new(&XRef::dummy(), false),
+            ctx: ReaderContext::new(XRef::dummy(), false),
         };
 
         Self(Arc::new(repr))

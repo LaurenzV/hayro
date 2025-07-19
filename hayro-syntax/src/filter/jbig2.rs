@@ -51,7 +51,7 @@ pub(crate) fn decode(data: &[u8], params: Dict) -> Option<Vec<u8>> {
 
     // JBIG2 had black as 1 and white as 0, inverting the colors.
     for b in &mut buf {
-        *b = *b ^ 0xFF;
+        *b ^= 0xFF;
     }
 
     Some(buf)
@@ -132,17 +132,9 @@ struct Chunk {
     end: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct Jbig2Header {
     random_access: bool,
-}
-
-impl Default for Jbig2Header {
-    fn default() -> Self {
-        Self {
-            random_access: false,
-        }
-    }
 }
 
 fn read_segments(
@@ -401,7 +393,7 @@ fn decode_integer(
     const MAX_INT_32: i32 = i32::MAX;
 
     if let Some(signed_value) = signed_value {
-        if signed_value >= MIN_INT_32 && signed_value <= MAX_INT_32 {
+        if (MIN_INT_32..=MAX_INT_32).contains(&signed_value) {
             return Some(signed_value);
         }
     }
@@ -918,7 +910,7 @@ fn decode_bitmap_template0(
         let mut context_label = (row2.borrow()[0] as u32) << 13
             | (row2.borrow().get(1).copied().unwrap_or(0) as u32) << 12
             | (row2.borrow().get(2).copied().unwrap_or(0) as u32) << 11
-            | (row1.borrow().get(0).copied().unwrap_or(0) as u32) << 7
+            | (row1.borrow().first().copied().unwrap_or(0) as u32) << 7
             | (row1.borrow().get(1).copied().unwrap_or(0) as u32) << 6
             | (row1.borrow().get(2).copied().unwrap_or(0) as u32) << 5
             | (row1.borrow().get(3).copied().unwrap_or(0) as u32) << 4;
@@ -1112,9 +1104,7 @@ fn decode_bitmap(
                         }
                     }
 
-                    if shift > 0 {
-                        shift -= 1;
-                    }
+                    shift = shift.saturating_sub(1);
                 }
             }
 
@@ -1286,13 +1276,11 @@ fn decode_symbol_dictionary(
 
         loop {
             let delta_width = if huffman {
-                let result = huffman_tables
+                huffman_tables
                     .as_ref()
                     .unwrap()
                     .width_table
-                    .decode(huffman_input.clone().unwrap())?;
-
-                result
+                    .decode(huffman_input.unwrap())?
             } else {
                 decoding_context.decode_integer("IADW") // 6.5.7
             };
@@ -1381,7 +1369,7 @@ fn decode_symbol_dictionary(
         }
 
         if huffman && !refinement {
-            let huffman_input = huffman_input.clone().unwrap();
+            let huffman_input = huffman_input.unwrap();
 
             // 6.5.9 Height class collective bitmap
             let bitmap_size = huffman_tables
@@ -1411,7 +1399,7 @@ fn decode_symbol_dictionary(
                 drop(input);
 
                 let result = decode_mmr_bitmap(
-                    &huffman_input,
+                    huffman_input,
                     total_width as usize,
                     current_height as usize,
                     false,
@@ -1453,14 +1441,13 @@ fn decode_symbol_dictionary(
 
     while flags.len() < total_symbols_length {
         let run_length = if huffman {
-            let huffman_input = huffman_input.clone().unwrap();
-            let res = table_b1
+            let huffman_input = huffman_input.unwrap();
+
+            table_b1
                 .as_ref()
                 .unwrap()
                 .decode(huffman_input)?
-                .ok_or_else(|| Jbig2Error::new("Got OOB for run length"))?;
-
-            res
+                .ok_or_else(|| Jbig2Error::new("Got OOB for run length"))?
         } else {
             decoding_context
                 .decode_integer("IAEX")
@@ -1704,8 +1691,7 @@ fn decode_text_region(
                         }
                         _ => {
                             return Err(Jbig2Error::new(&format!(
-                                "operator {} is not supported",
-                                combination_operator
+                                "operator {combination_operator} is not supported"
                             )));
                         }
                     }
@@ -1740,8 +1726,7 @@ fn decode_text_region(
                         }
                         _ => {
                             return Err(Jbig2Error::new(&format!(
-                                "operator {} is not supported",
-                                combination_operator
+                                "operator {combination_operator} is not supported"
                             )));
                         }
                     }
@@ -1842,8 +1827,7 @@ fn decode_halftone_region(
     }
     if combination_operator != 0 {
         return Err(Jbig2Error::new(&format!(
-            "operator \"{}\" is not supported in halftone region",
-            combination_operator
+            "operator \"{combination_operator}\" is not supported in halftone region"
         )));
     }
 
@@ -1985,8 +1969,7 @@ fn read_segment_header(data: &[u8], start: usize) -> Result<SegmentHeader, Jbig2
         || SEGMENT_TYPES[segment_type as usize].is_none()
     {
         return Err(Jbig2Error::new(&format!(
-            "invalid segment type: {}",
-            segment_type
+            "invalid segment type: {segment_type}"
         )));
     }
 
@@ -2379,9 +2362,7 @@ fn build_standard_table(number: u32) -> HuffmanTable {
         lines.push(HuffmanLine::new(&line_data));
     }
 
-    let table = HuffmanTable::new(lines, true);
-
-    table
+    HuffmanTable::new(lines, true)
 }
 
 // Bitmap type for 2D bitmap data
@@ -2622,7 +2603,7 @@ impl HuffmanTreeNode {
 
         if self.is_leaf {
             if self.is_oob {
-                println!("{}[{}] LEAF: OOB", indent_str, path);
+                println!("{indent_str}[{path}] LEAF: OOB");
             } else {
                 println!(
                     "{}[{}] LEAF: rangeLow={}, rangeLength={}, isLowerRange={}",
@@ -2630,14 +2611,14 @@ impl HuffmanTreeNode {
                 );
             }
         } else {
-            println!("{}[{}] NODE", indent_str, path);
+            println!("{indent_str}[{path}] NODE");
 
             if let Some(ref child) = self.children[0] {
-                child.print_node(indent + 1, &format!("{}0", path));
+                child.print_node(indent + 1, &format!("{path}0"));
             }
 
             if let Some(ref child) = self.children[1] {
-                child.print_node(indent + 1, &format!("{}1", path));
+                child.print_node(indent + 1, &format!("{path}1"));
             }
         }
     }
@@ -2662,9 +2643,8 @@ impl HuffmanTable {
             }
         }
 
-        let table = Self { root_node };
         // table.print_tree();
-        table
+        Self { root_node }
     }
 
     fn decode(&self, reader: &Reader) -> Result<Option<i32>, Jbig2Error> {
@@ -2807,7 +2787,7 @@ impl Jbig2Image {
         // Parse all segments from chunks first
         for chunk in chunks {
             if let Err(e) = self.parse_chunk(chunk) {
-                warn!("Error parsing JBIG2 chunk: {}", e);
+                warn!("Error parsing JBIG2 chunk: {e}");
                 return None;
             }
         }
@@ -2816,7 +2796,7 @@ impl Jbig2Image {
         let mut visitor = SimpleSegmentVisitor::new();
 
         if let Err(e) = process_segments(&self.segments, &mut visitor) {
-            warn!("Error processing JBIG2 segments: {}", e);
+            warn!("Error processing JBIG2 segments: {e}");
             return None;
         }
 
@@ -2943,10 +2923,8 @@ impl SimpleSegmentVisitor {
                     let mut offset = offset0;
 
                     for j in 0..width {
-                        if j < bitmap[i].len() && bitmap[i][j] != 0 {
-                            if offset < buffer.len() {
-                                buffer[offset] |= mask;
-                            }
+                        if j < bitmap[i].len() && bitmap[i][j] != 0 && offset < buffer.len() {
+                            buffer[offset] |= mask;
                         }
                         mask >>= 1;
                         if mask == 0 {
@@ -2967,10 +2945,8 @@ impl SimpleSegmentVisitor {
                     let mut offset = offset0;
 
                     for j in 0..width {
-                        if j < bitmap[i].len() && bitmap[i][j] != 0 {
-                            if offset < buffer.len() {
-                                buffer[offset] ^= mask;
-                            }
+                        if j < bitmap[i].len() && bitmap[i][j] != 0 && offset < buffer.len() {
+                            buffer[offset] ^= mask;
                         }
                         mask >>= 1;
                         if mask == 0 {
@@ -2983,8 +2959,7 @@ impl SimpleSegmentVisitor {
             }
             _ => {
                 return Err(Jbig2Error::new(&format!(
-                    "operator {} is not supported",
-                    combination_operator
+                    "operator {combination_operator} is not supported"
                 )));
             }
         }
@@ -3012,8 +2987,7 @@ impl SimpleSegmentVisitor {
             &mut decoding_context,
         )?;
 
-        let res = self.draw_bitmap(&region.info, &bitmap);
-        res
+        self.draw_bitmap(&region.info, &bitmap)
     }
 
     fn on_symbol_dictionary(
@@ -3295,7 +3269,7 @@ impl SimpleSegmentVisitor {
 
         // Delta S table selection based on huffmanDS selector
         let s_table = match region.huffman_ds {
-            0 | 1 | 2 => get_standard_table(region.huffman_ds as u32 + 8)?,
+            0..=2 => get_standard_table(region.huffman_ds as u32 + 8)?,
             3 => {
                 let table =
                     get_custom_huffman_table(custom_index, referred_segments, &self.custom_tables)?
@@ -3308,13 +3282,11 @@ impl SimpleSegmentVisitor {
 
         // Delta T table selection based on huffmanDT selector
         let t_table = match region.huffman_dt {
-            0 | 1 | 2 => get_standard_table(region.huffman_dt as u32 + 11)?,
+            0..=2 => get_standard_table(region.huffman_dt as u32 + 11)?,
             3 => {
-                let table =
-                    get_custom_huffman_table(custom_index, referred_segments, &self.custom_tables)?
-                        .clone();
                 // custom_index += 1;
-                table
+                get_custom_huffman_table(custom_index, referred_segments, &self.custom_tables)?
+                    .clone()
             }
             _ => return Err(Jbig2Error::new("invalid Huffman DT selector")),
         };
@@ -3754,8 +3726,8 @@ fn process_segment(
             let mmr = (halftone_region_flags & 1) != 0;
             let template = ((halftone_region_flags >> 1) & 3) as usize;
             let enable_skip = (halftone_region_flags & 8) != 0;
-            let combination_operator = ((halftone_region_flags >> 4) & 7) as u8;
-            let default_pixel_value = ((halftone_region_flags >> 7) & 1) as u8;
+            let combination_operator = (halftone_region_flags >> 4) & 7;
+            let default_pixel_value = (halftone_region_flags >> 7) & 1;
 
             if position + 16 > data.len() {
                 return Err(Jbig2Error::new("insufficient data for halftone grid"));
@@ -3853,8 +3825,8 @@ fn process_segment(
             // Extract all flags from pageSegmentFlags exactly like JavaScript
             let lossless = (page_segment_flags & 1) != 0;
             let refinement = (page_segment_flags & 2) != 0;
-            let default_pixel_value = ((page_segment_flags >> 2) & 1) as u8;
-            let combination_operator = ((page_segment_flags >> 3) & 3) as u8;
+            let default_pixel_value = (page_segment_flags >> 2) & 1;
+            let combination_operator = (page_segment_flags >> 3) & 3;
             let requires_buffer = (page_segment_flags & 32) != 0;
             let combination_operator_override = (page_segment_flags & 64) != 0;
 

@@ -36,7 +36,7 @@ pub(crate) fn root_xref(data: PdfData) -> Result<XRef, XRefError> {
     let trailer = populate_xref_impl(data.as_ref().as_ref(), xref_pos, &mut xref_map)
         .ok_or(XRefError::Unknown)?;
 
-    XRef::new(data.clone(), xref_map, &trailer, false)
+    XRef::new(data.clone(), xref_map, trailer, false)
 }
 
 /// Try to manually parse the PDF to build an xref table and trailer dictionary.
@@ -105,7 +105,7 @@ fn fallback_xref_map(data: &[u8]) -> (XrefMap, Option<&[u8]>) {
     (xref_map, trailer_dict.map(|d| d.data()))
 }
 
-static DUMMY_XREF: &'static XRef = &XRef(Inner::Dummy);
+static DUMMY_XREF: &XRef = &XRef(Inner::Dummy);
 
 /// An xref table.
 #[derive(Debug, Clone)]
@@ -129,7 +129,7 @@ impl XRef {
             trailer_data,
         })));
 
-        let mut r = Reader::new(&trailer_dict_data);
+        let mut r = Reader::new(trailer_dict_data);
         let trailer_dict = r
             .read_with_context::<Dict>(ReaderContext::new(&xref, false))
             .ok_or(XRefError::Unknown)?;
@@ -228,7 +228,7 @@ impl XRef {
 
         let mut r = Reader::new(repr.data.get());
 
-        let entry = *locked.xref_map.get(&id).or_else(|| {
+        let entry = *locked.xref_map.get(&id).or({
             // An indirect reference to an undefined object shall not be considered an error by a PDF processor; it
             // shall be treated as a reference to the null object.
             None
@@ -258,8 +258,7 @@ impl XRef {
                 // The xref table is broken, try to repair if not already repaired.
                 if self.is_repaired() {
                     error!(
-                        "attempt was made at repairing xref, but object {:?} still couldn't be read",
-                        id
+                        "attempt was made at repairing xref, but object {id:?} still couldn't be read"
                     );
 
                     None
@@ -371,7 +370,7 @@ impl XRefEntry {
             let mut accum = 0;
 
             for byte in data {
-                accum = accum * 10;
+                accum *= 10;
 
                 match *byte {
                     b'0'..=b'9' => accum += (*byte - b'0') as u32,
@@ -514,9 +513,9 @@ fn populate_from_xref_stream<'a>(
     let mut xref_reader = Reader::new(xref_data.as_ref());
 
     if let Some(arr) = stream.dict().get::<Array>(INDEX) {
-        let mut iter = arr.iter::<(u32, u32)>();
+        let iter = arr.iter::<(u32, u32)>();
 
-        while let Some((start, num_elements)) = iter.next() {
+        for (start, num_elements) in iter {
             xref_stream_subsection(
                 &mut xref_reader,
                 start,
@@ -559,7 +558,7 @@ fn xref_stream_num<'a>(data: &[u8]) -> Option<u32> {
             }
         }
         n => {
-            warn!("invalid xref stream number {}", n);
+            warn!("invalid xref stream number {n}");
 
             return None;
         }
@@ -629,7 +628,7 @@ fn xref_stream_subsection<'a>(
                 );
             }
             _ => {
-                warn!("xref has unknown field type {}", f_type);
+                warn!("xref has unknown field type {f_type}");
 
                 return None;
             }
@@ -669,7 +668,7 @@ impl<'a> ObjectStream<'a> {
         let num_objects = inner.dict().get::<usize>(N)?;
         let first_offset = inner.dict().get::<usize>(FIRST)?;
 
-        let mut r = Reader::new(data.as_ref());
+        let mut r = Reader::new(data);
 
         let mut offsets = vec![];
 
@@ -690,7 +689,7 @@ impl<'a> ObjectStream<'a> {
         T: ObjectLike<'a>,
     {
         let offset = self.offsets.get(index as usize)?.1;
-        let mut r = Reader::new(&self.data);
+        let mut r = Reader::new(self.data);
         r.jump(offset);
 
         r.read_with_context::<T>(self.ctx)

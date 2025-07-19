@@ -8,7 +8,7 @@ pub(crate) trait OptionLog {
 impl<T> OptionLog for Option<T> {
     fn error_none(self, f: &str) -> Self {
         self.or_else(|| {
-            error!("{}", f);
+            error!("{f}");
 
             None
         })

@@ -264,6 +264,12 @@ impl<'a> Instruction<'a> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Stack<'a>(SmallVec<[Object<'a>; OPERANDS_THRESHOLD]>);
 
+impl<'a> Default for Stack<'a> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<'a> Stack<'a> {
     /// Create a new, empty stack.
     pub fn new() -> Self {

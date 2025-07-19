@@ -95,7 +95,7 @@ pub(crate) mod lzw {
                         let new_entry = table.register(prev_code, first_byte)?;
                         decoded.extend_from_slice(new_entry);
                     } else {
-                        warn!("LZW decode error: code {} not found and prev is None", new);
+                        warn!("LZW decode error: code {new} not found and prev is None");
                         return None;
                     }
 
@@ -189,7 +189,7 @@ impl PredictorParams {
     }
 
     fn bytes_per_pixel(&self) -> u8 {
-        (self.bits_per_pixel() + 7) / 8
+        self.bits_per_pixel().div_ceil(8)
     }
 
     fn row_length_in_bytes(&self) -> Option<usize> {
@@ -230,10 +230,7 @@ impl PredictorParams {
             colors: dict.get(COLORS).unwrap_or(1),
             bits_per_component: dict.get(BITS_PER_COMPONENT).unwrap_or(8),
             columns: dict.get(COLUMNS).unwrap_or(1),
-            early_change: dict
-                .get::<u8>(EARLY_CHANGE)
-                .map(|e| if e == 0 { false } else { true })
-                .unwrap_or(true),
+            early_change: dict.get::<u8>(EARLY_CHANGE).map(|e| e != 0).unwrap_or(true),
         }
     }
 }
@@ -327,7 +324,7 @@ fn apply_predictor(data: Vec<u8>, params: &PredictorParams) -> Option<Vec<u8>> {
                             bit_size,
                         )?,
                         n => {
-                            warn!("invalid PNG predictor {}", n);
+                            warn!("invalid PNG predictor {n}");
 
                             return None;
                         }
@@ -343,7 +340,7 @@ fn apply_predictor(data: Vec<u8>, params: &PredictorParams) -> Option<Vec<u8>> {
                         bit_size,
                     );
                 } else {
-                    warn!("unknown predictor {}", i);
+                    warn!("unknown predictor {i}");
 
                     return None;
                 }
@@ -385,7 +382,7 @@ fn apply<'a, T: Predictor>(
 
         prev_col = {
             let out_data = writer.get_data();
-            let mut reader = BitReader::new_with(&out_data, old_pos);
+            let mut reader = BitReader::new_with(out_data, old_pos);
             BitChunk::from_reader(&mut reader, bit_size, chunk_len).unwrap()
         };
 

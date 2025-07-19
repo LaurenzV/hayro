@@ -22,10 +22,11 @@ impl Type3 {
         let functions = dict
             .get::<Array>(FUNCTIONS)
             .and_then(|d| d.iter::<Object>().map(|o| Function::new(&o)).collect())?;
-        let domain = *clamper.domain.get(0)?;
+        let domain = *clamper.domain.first()?;
         let mut bounds = vec![domain.0 - 0.0001];
-        dict.get::<Array>(BOUNDS)
-            .map(|a| bounds.extend(a.iter::<f32>()));
+        if let Some(a) = dict.get::<Array>(BOUNDS) {
+            bounds.extend(a.iter::<f32>())
+        }
         // Add a small delta so that the interval is considered to be closed on the right.
         bounds.push(domain.1 + 0.0001);
 
@@ -63,7 +64,7 @@ impl Type3 {
 }
 
 fn find_interval(bounds: &[f32], x: f32) -> Option<usize> {
-    if x < *bounds.get(0)? || x >= *bounds.last()? {
+    if x < *bounds.first()? || x >= *bounds.last()? {
         return None;
     }
 

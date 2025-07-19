@@ -33,7 +33,7 @@ fn scn_fn<'a>(
             Object::Number(n) => nums.push(*n),
             Object::Name(n) => name = Some(n.clone()),
             _ => {
-                warn!("encountered unknown object {:?} when parsing scn/SCN", o);
+                warn!("encountered unknown object {o:?} when parsing scn/SCN");
 
                 return None;
             }

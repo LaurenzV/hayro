@@ -93,8 +93,8 @@ where
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            MaybeRef::Ref(r) => write!(f, "{:?}", r),
-            MaybeRef::NotRef(nr) => write!(f, "{:?}", nr),
+            MaybeRef::Ref(r) => write!(f, "{r:?}"),
+            MaybeRef::NotRef(nr) => write!(f, "{nr:?}"),
         }
     }
 }

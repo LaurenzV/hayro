@@ -241,10 +241,8 @@ impl Skippable for ObjectIdentifier {
 pub fn dict_or_stream<'a>(obj: &Object<'a>) -> Option<(Dict<'a>, Option<Stream<'a>>)> {
     if let Some(stream) = obj.clone().cast::<Stream>() {
         Some((stream.dict().clone(), Some(stream)))
-    } else if let Some(dict) = obj.clone().cast::<Dict>() {
-        Some((dict, None))
     } else {
-        None
+        obj.clone().cast::<Dict>().map(|dict| (dict, None))
     }
 }
 

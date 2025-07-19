@@ -67,7 +67,7 @@ impl<'a> Stream<'a> {
                 .get::<Array>(DP)
                 .or_else(|| self.dict.get::<Array>(DECODE_PARMS))
                 .map(|a| a.iter::<Object>().collect())
-                .unwrap_or(vec![]);
+                .unwrap_or_default();
 
             let mut current: Option<FilterResult> = None;
 

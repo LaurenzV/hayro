@@ -27,7 +27,7 @@ impl Type0 {
         let bits_per_sample = dict.get::<u8>(BITS_PER_SAMPLE)?;
 
         if !matches!(bits_per_sample, 1 | 2 | 4 | 8 | 16 | 24 | 32) {
-            error!("invalid bits per sample: {}", bits_per_sample);
+            error!("invalid bits per sample: {bits_per_sample}");
 
             return None;
         }
@@ -192,30 +192,28 @@ impl Interpolator {
 
                 out
             }
+        } else if self.in_prev[step] == self.in_next[step] {
+            coord[step] = self.in_prev[step];
+            self.interpolate_inner(coord, step + 1, table)
         } else {
-            if self.in_prev[step] == self.in_next[step] {
-                coord[step] = self.in_prev[step];
-                self.interpolate_inner(coord, step + 1, table)
-            } else {
-                coord[step] = self.in_prev[step];
-                let val1 = self.interpolate_inner(coord.clone(), step + 1, table);
-                coord[step] = self.in_next[step];
-                let val2 = self.interpolate_inner(coord, step + 1, table);
+            coord[step] = self.in_prev[step];
+            let val1 = self.interpolate_inner(coord.clone(), step + 1, table);
+            coord[step] = self.in_next[step];
+            let val2 = self.interpolate_inner(coord, step + 1, table);
 
-                let mut out = smallvec![0.0; self.out_len];
+            let mut out = smallvec![0.0; self.out_len];
 
-                for i in 0..self.out_len {
-                    out[i] = interpolate(
-                        self.input[step],
-                        self.in_prev[step] as f32,
-                        self.in_next[step] as f32,
-                        val1[i],
-                        val2[i],
-                    )
-                }
-
-                out
+            for i in 0..self.out_len {
+                out[i] = interpolate(
+                    self.input[step],
+                    self.in_prev[step] as f32,
+                    self.in_next[step] as f32,
+                    val1[i],
+                    val2[i],
+                )
             }
+
+            out
         }
     }
 }

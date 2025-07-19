@@ -71,12 +71,10 @@ impl Skippable for Array<'_> {
 
             if let Some(()) = r.forward_tag(b"]") {
                 return Some(());
+            } else if is_content_stream {
+                r.skip_not_in_content_stream::<Object>()?;
             } else {
-                if is_content_stream {
-                    r.skip_not_in_content_stream::<Object>()?;
-                } else {
-                    r.skip_not_in_content_stream::<MaybeRef<Object>>()?;
-                }
+                r.skip_not_in_content_stream::<MaybeRef<Object>>()?;
             }
         }
     }
@@ -143,7 +141,7 @@ impl<'a, T> ResolvedArrayIter<'a, T> {
     fn new(data: &'a [u8], ctx: ReaderContext<'a>) -> Self {
         Self {
             flex_iter: FlexArrayIter::new(data, ctx),
-            phantom_data: PhantomData::default(),
+            phantom_data: PhantomData,
         }
     }
 }

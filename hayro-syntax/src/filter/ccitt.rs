@@ -1388,7 +1388,7 @@ impl<'a> CCITTFaxDecoder<'a> {
             }
         }
 
-        warn!("bad white code: {}", code);
+        warn!("bad white code: {code}");
 
         self.eat_bits(1);
         1
@@ -1765,7 +1765,7 @@ impl<'a> CCITTFaxDecoder<'a> {
                             code1 = self.look_bits(12);
 
                             if code1 != 1 {
-                                warn!("bad rtc code: {}", code1);
+                                warn!("bad rtc code: {code1}");
                             }
 
                             self.eat_bits(12);

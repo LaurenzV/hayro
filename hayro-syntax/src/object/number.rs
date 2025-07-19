@@ -34,7 +34,7 @@ impl Number {
 
                 // Double check whether conversion didn't overflow.
                 if converted as i32 != i {
-                    debug!("integer {} was truncated to {}", i, converted);
+                    debug!("integer {i} was truncated to {converted}");
                 }
 
                 converted
@@ -49,7 +49,7 @@ impl Number {
                 let res = r as i32;
 
                 if !(r.trunc() == r) {
-                    debug!("float {} was truncated to {}", r, res);
+                    debug!("float {r} was truncated to {res}");
                 }
 
                 res
@@ -214,7 +214,7 @@ impl TryFrom<Object<'_>> for f64 {
 impl ObjectLike<'_> for f64 {}
 
 pub(crate) fn is_digit(byte: u8) -> bool {
-    byte >= b'0' && byte <= b'9'
+    byte.is_ascii_digit()
 }
 
 #[cfg(test)]
@@ -358,7 +358,7 @@ mod tests {
             Reader::new("98349.432534".as_bytes())
                 .read_without_context::<f32>()
                 .unwrap(),
-            98349.432534
+            98_349.43
         );
     }
 

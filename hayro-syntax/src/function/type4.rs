@@ -222,7 +222,7 @@ fn eval_inner(procedure: &[PostScriptOp], arg_stack: &mut InterpreterStack) -> O
                 two_f!(|n1: f32, n2: f32| {
                     let mut res = n1.atan2(n2).to_degrees() % 360.0;
                     if res < 0.0 {
-                        res = res + 360.0;
+                        res += 360.0;
                     }
 
                     res
@@ -538,7 +538,7 @@ impl PostScriptOp {
                 b"pop" => Self::Pop,
                 b"roll" => Self::Roll,
                 _ => {
-                    error!("encountered unknown postscript operator {:?}", op);
+                    error!("encountered unknown postscript operator {op:?}");
 
                     return None;
                 }

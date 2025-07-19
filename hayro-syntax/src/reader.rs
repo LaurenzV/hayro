@@ -102,7 +102,7 @@ impl<'a> Reader<'a> {
 
     #[inline]
     pub(crate) fn read_without_context<T: Readable<'a>>(&mut self) -> Option<T> {
-        self.read::<T>(ReaderContext::new(&XRef::dummy(), true))
+        self.read::<T>(ReaderContext::new(XRef::dummy(), true))
     }
 
     #[inline]

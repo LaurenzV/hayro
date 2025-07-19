@@ -76,7 +76,7 @@ impl<'a> Name<'a> {
             }
         }
 
-        let data = if !data.iter().any(|c| *c == b'#') {
+        let data = if !data.contains(&b'#') {
             Cow::Borrowed(data)
         } else {
             let mut cleaned = vec![];
@@ -106,7 +106,7 @@ impl<'a> Name<'a> {
 
     /// Return a string representation of the name.
     pub fn as_str(&self) -> &str {
-        std::str::from_utf8(&self.deref()).unwrap_or("{non-ascii key}")
+        std::str::from_utf8(self.deref()).unwrap_or("{non-ascii key}")
     }
 }
 
@@ -141,13 +141,10 @@ pub(crate) fn skip_name_like(r: &mut Reader, solidus: bool) -> Option<()> {
 
     let old = r.offset();
 
-    while let Some(b) = r.eat(|n| is_regular_character(n)) {
-        match b {
-            b'#' => {
-                r.eat(|n| n.is_ascii_hexdigit())?;
-                r.eat(|n| n.is_ascii_hexdigit())?;
-            }
-            _ => {}
+    while let Some(b) = r.eat(is_regular_character) {
+        if b == b'#' {
+            r.eat(|n| n.is_ascii_hexdigit())?;
+            r.eat(|n| n.is_ascii_hexdigit())?;
         }
     }
 

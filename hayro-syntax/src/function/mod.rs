@@ -55,8 +55,8 @@ impl Function {
     pub fn eval(&self, input: Values) -> Option<Values> {
         match self.0.as_ref() {
             FunctionType::Type0(t0) => t0.eval(input),
-            FunctionType::Type2(t2) => Some(t2.eval(*input.get(0)?)),
-            FunctionType::Type3(t3) => t3.eval(*input.get(0)?),
+            FunctionType::Type2(t2) => Some(t2.eval(*input.first()?)),
+            FunctionType::Type3(t3) => t3.eval(*input.first()?),
             FunctionType::Type4(t4) => Some(t4.eval(input)?),
         }
     }
