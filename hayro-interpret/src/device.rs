@@ -1,6 +1,6 @@
-use crate::clip_path::ClipPath;
+use crate::ClipPath;
 use crate::font::Glyph;
-use crate::image::{AlphaData, RgbData};
+use crate::{LumaData, RgbData};
 use crate::paint::Paint;
 use crate::soft_mask::SoftMask;
 use crate::{FillProps, StrokeProps};
@@ -17,8 +17,8 @@ pub trait Device {
     fn push_transparency_group(&mut self, opacity: f32, mask: Option<SoftMask>);
     fn fill_glyph(&mut self, glyph: &Glyph<'_>, paint: &Paint);
     fn stroke_glyph(&mut self, glyph: &Glyph<'_>, paint: &Paint);
-    fn draw_rgba_image(&mut self, image: RgbData, alpha: Option<AlphaData>);
-    fn draw_stencil_image(&mut self, stencil: AlphaData, paint: &Paint);
+    fn draw_rgba_image(&mut self, image: RgbData, alpha: Option<LumaData>);
+    fn draw_stencil_image(&mut self, stencil: LumaData, paint: &Paint);
     fn pop_clip_path(&mut self);
     fn pop_transparency_group(&mut self);
 }

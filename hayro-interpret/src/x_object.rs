@@ -1,8 +1,8 @@
-use crate::clip_path::ClipPath;
+use crate::ClipPath;
 use crate::color::ColorSpace;
 use crate::context::Context;
 use crate::device::Device;
-use crate::image::{AlphaData, RgbData};
+use crate::{LumaData, RgbData};
 use crate::interpret::path::get_paint;
 use crate::{FillRule, InterpreterWarning, WarningSinkFn, interpret};
 use hayro_syntax::bit_reader::{BitReader, BitSize};
@@ -286,14 +286,14 @@ impl<'a> ImageXObject<'a> {
         })
     }
 
-    pub fn alpha8(&self) -> Option<AlphaData> {
+    pub fn alpha8(&self) -> Option<LumaData> {
         let data_len = self.width as usize * self.height as usize;
 
         if self.is_image_mask {
             let decoded = self.decode_raw()?;
 
-            return Some(AlphaData {
-                stencil_data: fix_image_length(
+            return Some(LumaData {
+                data: fix_image_length(
                     decoded
                         .iter()
                         .map(|alpha| ((1.0 - *alpha) * 255.0 + 0.5) as u8)
@@ -352,8 +352,8 @@ impl<'a> ImageXObject<'a> {
                 255,
             );
 
-            Some(AlphaData {
-                stencil_data: u8_data,
+            Some(LumaData {
+                data: u8_data,
                 width,
                 height,
                 interpolate,
@@ -380,7 +380,7 @@ impl<'a> ImageXObject<'a> {
         };
 
         Some(RgbData {
-            image_data: data,
+            data,
             width: self.width,
             height: self.height,
             interpolate: self.interpolate,

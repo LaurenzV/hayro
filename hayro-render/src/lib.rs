@@ -6,7 +6,7 @@ use crate::render::RenderContext;
 pub use hayro_interpret::FontData;
 pub use hayro_interpret::InterpreterSettings;
 use hayro_interpret::cache::Cache;
-use hayro_interpret::clip_path::ClipPath;
+use hayro_interpret::{ClipPath, LumaData};
 use hayro_interpret::color::AlphaColor;
 use hayro_interpret::context::Context;
 use hayro_interpret::device::Device;
@@ -16,7 +16,7 @@ pub use hayro_interpret::font::StandardFont;
 use hayro_interpret::pattern::Pattern;
 use hayro_interpret::util::FloatExt;
 use hayro_interpret::{
-    AlphaData, FillProps, FillRule, MaskType, Paint, RgbData, SoftMask, StrokeProps, interpret,
+    FillProps, FillRule, MaskType, Paint, RgbData, SoftMask, StrokeProps, interpret,
 };
 pub use hayro_syntax::Pdf;
 use hayro_syntax::object::ObjectIdentifier;
@@ -49,7 +49,7 @@ struct Renderer {
 }
 
 impl Renderer {
-    fn draw_image(&mut self, rgb_data: RgbData, alpha_data: Option<AlphaData>, is_stencil: bool) {
+    fn draw_image(&mut self, rgb_data: RgbData, alpha_data: Option<LumaData>, is_stencil: bool) {
         let mut cur_transform = self.ctx.transform;
 
         let (x_scale, y_scale) = {
@@ -62,14 +62,14 @@ impl Renderer {
         let interpolate = rgb_data.interpolate;
 
         let rgb_data = if x_scale >= 1.0 && y_scale >= 1.0 {
-            rgb_data.image_data
+            rgb_data.data
         } else {
             // Resize the image, either doing down- or upsampling.
             let new_width = (rgb_width as f32 * x_scale).ceil().max(1.0) as u32;
             let new_height = (rgb_height as f32 * y_scale).ceil().max(1.0) as u32;
 
             let image = DynamicImage::ImageRgb8(
-                ImageBuffer::from_raw(rgb_width, rgb_height, rgb_data.image_data.clone()).unwrap(),
+                ImageBuffer::from_raw(rgb_width, rgb_height, rgb_data.data.clone()).unwrap(),
             );
             let resized = image.resize_exact(new_width, new_height, FilterType::CatmullRom);
 
@@ -93,14 +93,14 @@ impl Renderer {
                     ImageBuffer::from_raw(
                         alpha_data.width,
                         alpha_data.height,
-                        alpha_data.stencil_data.clone(),
+                        alpha_data.data.clone(),
                     )
                     .unwrap(),
                 );
                 let resized = image.resize_exact(rgb_width, rgb_height, FilterType::CatmullRom);
                 resized.to_luma8().into_raw()
             } else {
-                alpha_data.stencil_data
+                alpha_data.data
             }
         } else {
             vec![255; rgb_width as usize * rgb_height as usize]
@@ -264,7 +264,7 @@ impl Device for Renderer {
     fn draw_rgba_image(
         &mut self,
         image: hayro_interpret::RgbData,
-        alpha: Option<hayro_interpret::AlphaData>,
+        alpha: Option<hayro_interpret::LumaData>,
     ) {
         if let Some(ref mask) = self.cur_mask {
             self.ctx.push_layer(None, None, Some(mask.clone()));
@@ -279,7 +279,7 @@ impl Device for Renderer {
         }
     }
 
-    fn draw_stencil_image(&mut self, stencil: AlphaData, paint: &Paint) {
+    fn draw_stencil_image(&mut self, stencil: LumaData, paint: &Paint) {
         self.ctx.set_anti_aliasing(false);
         self.ctx.push_layer(None, Some(1.0), self.cur_mask.clone());
         let old_rule = self.ctx.fill_rule;
@@ -294,7 +294,7 @@ impl Device for Renderer {
             None,
         );
         let rgb_data = RgbData {
-            image_data: vec![0; stencil.width as usize * stencil.height as usize * 3],
+            data: vec![0; stencil.width as usize * stencil.height as usize * 3],
             width: stencil.width,
             height: stencil.height,
             interpolate: stencil.interpolate,

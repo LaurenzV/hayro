@@ -8,7 +8,7 @@ hayro-syntax = { workspace = true }
 kurbo = { workspace = true }
 smallvec = { workspace = true }
 log = { workspace = true }
-qcms=  { workspace = true }
+qcms =  { workspace = true }
 phf = { workspace = true, features = ["macros"] }
 skrifa = { workspace = true }
 yoke = { workspace = true, features = ["derive"]}

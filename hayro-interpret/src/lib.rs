@@ -3,13 +3,11 @@ use smallvec::{SmallVec, smallvec};
 use std::sync::Arc;
 
 pub mod cache;
-pub mod clip_path;
 pub mod color;
 pub mod context;
 mod convert;
 pub mod device;
 pub mod font;
-mod image;
 mod interpret;
 pub mod mask;
 mod paint;
@@ -18,14 +16,14 @@ pub mod shading;
 mod soft_mask;
 pub mod util;
 pub mod x_object;
-
+mod types;
 
 use crate::font::FontQuery;
 
 pub use hayro_syntax::*;
 pub use interpret::*;
+pub use types::*;
 
-pub use image::{AlphaData, RgbData};
 pub use paint::{Paint, PaintType};
 pub use soft_mask::{MaskType, SoftMask};
 

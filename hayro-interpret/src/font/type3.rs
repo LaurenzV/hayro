@@ -1,10 +1,10 @@
-use crate::clip_path::ClipPath;
+use crate::ClipPath;
 use crate::context::Context;
 use crate::device::Device;
 use crate::font::glyph_simulator::GlyphSimulator;
 use crate::font::true_type::{read_encoding, read_widths};
 use crate::font::{Encoding, Glyph, Type3Glyph, UNITS_PER_EM};
-use crate::image::{AlphaData, RgbData};
+use crate::{LumaData, RgbData};
 use crate::paint::Paint;
 use crate::soft_mask::SoftMask;
 use crate::{FillProps, StrokeProps, interpret};
@@ -195,9 +195,9 @@ impl<T: Device> Device for Type3ShapeGlyphDevice<'_, T> {
         self.inner.stroke_glyph(g, p);
     }
 
-    fn draw_rgba_image(&mut self, _: RgbData, _: Option<AlphaData>) {}
+    fn draw_rgba_image(&mut self, _: RgbData, _: Option<LumaData>) {}
 
-    fn draw_stencil_image(&mut self, stencil: AlphaData, _: &Paint) {
+    fn draw_stencil_image(&mut self, stencil: LumaData, _: &Paint) {
         self.inner.draw_stencil_image(stencil, self.paint);
     }
 

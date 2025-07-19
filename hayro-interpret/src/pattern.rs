@@ -1,5 +1,5 @@
 use crate::cache::Cache;
-use crate::clip_path::ClipPath;
+use crate::ClipPath;
 use crate::color::{Color, ColorSpace};
 use crate::context::Context;
 use crate::device::Device;
@@ -8,7 +8,7 @@ use crate::interpret::state::State;
 use crate::shading::Shading;
 use crate::soft_mask::SoftMask;
 use crate::{
-    AlphaData, FillProps, FillRule, InterpreterSettings, Paint, PaintType, RgbData, StrokeProps,
+    LumaData, FillProps, FillRule, InterpreterSettings, Paint, PaintType, RgbData, StrokeProps,
     interpret,
 };
 use hayro_syntax::content::{TypedIter, UntypedIter};
@@ -255,9 +255,9 @@ impl<T: Device> Device for StencilPatternDevice<'_, T> {
         self.inner.stroke_glyph(glyph, self.paint)
     }
 
-    fn draw_rgba_image(&mut self, _: RgbData, _: Option<AlphaData>) {}
+    fn draw_rgba_image(&mut self, _: RgbData, _: Option<LumaData>) {}
 
-    fn draw_stencil_image(&mut self, stencil: AlphaData, _: &Paint) {
+    fn draw_stencil_image(&mut self, stencil: LumaData, _: &Paint) {
         self.inner.draw_stencil_image(stencil, self.paint);
     }
 

@@ -6,7 +6,7 @@ use hayro_syntax::content::ops::TypedInstruction;
 use hayro_syntax::object::{dict_or_stream, Dict, Object};
 use hayro_syntax::page::Resources;
 use crate::{FillRule, FontResolverFn, WarningSinkFn};
-use crate::clip_path::ClipPath;
+use crate::ClipPath;
 use crate::color::ColorSpace;
 use crate::context::Context;
 use crate::convert::{convert_line_cap, convert_line_join};
