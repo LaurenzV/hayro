@@ -16,7 +16,7 @@ fn main() {
 
     let interpreter_settings = InterpreterSettings {
         font_resolver: Arc::new(|query| match query {
-            FontQuery::Standard(s) => Some(get_standard(&s)),
+            FontQuery::Standard(s) => Some(get_standard(s)),
             FontQuery::Fallback(f) => Some(get_standard(&f.pick_standard_font())),
         }),
         ..Default::default()
@@ -26,7 +26,7 @@ fn main() {
 
     for (idx, page) in pdf.pages().iter().enumerate() {
         let pixmap = render(page, &interpreter_settings, &render_settings);
-        std::fs::write(format!("rendered_{}.png", idx), &pixmap.take_png()).unwrap();
+        std::fs::write(format!("rendered_{idx}.png"), pixmap.take_png()).unwrap();
     }
 }
 
@@ -97,11 +97,11 @@ impl log::Log for SimpleLogger {
             let args = record.args();
 
             match record.level() {
-                log::Level::Error => eprintln!("Error (in {}:{}): {}", target, line, args),
-                log::Level::Warn => eprintln!("Warning (in {}:{}): {}", target, line, args),
-                log::Level::Info => eprintln!("Info (in {}:{}): {}", target, line, args),
-                log::Level::Debug => eprintln!("Debug (in {}:{}): {}", target, line, args),
-                log::Level::Trace => eprintln!("Trace (in {}:{}): {}", target, line, args),
+                log::Level::Error => eprintln!("Error (in {target}:{line}): {args}"),
+                log::Level::Warn => eprintln!("Warning (in {target}:{line}): {args}"),
+                log::Level::Info => eprintln!("Info (in {target}:{line}): {args}"),
+                log::Level::Debug => eprintln!("Debug (in {target}:{line}): {args}"),
+                log::Level::Trace => eprintln!("Trace (in {target}:{line}): {args}"),
             }
         }
     }

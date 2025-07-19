@@ -316,8 +316,8 @@ impl Device for Renderer {
             Some(opacity),
             // TODO: Deduplicate
             mask.map(|m| {
-                let width = self.ctx.width as u16;
-                let height = self.ctx.height as u16;
+                let width = self.ctx.width;
+                let height = self.ctx.height;
 
                 self.soft_mask_cache
                     .entry(m.id())
@@ -337,8 +337,8 @@ impl Device for Renderer {
 
     fn set_soft_mask(&mut self, mask: Option<SoftMask>) {
         self.cur_mask = mask.map(|m| {
-            let width = self.ctx.width as u16;
-            let height = self.ctx.height as u16;
+            let width = self.ctx.width;
+            let height = self.ctx.height;
 
             self.soft_mask_cache
                 .entry(m.id())

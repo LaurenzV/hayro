@@ -735,18 +735,16 @@ impl WideTile {
             if let Some(bg) = bg {
                 self.cmds.clear();
                 self.bg = bg;
+            } else if let Some(mask) = mask {
+                self.cmds.push(Cmd::AlphaFill(CmdAlphaFill {
+                    x,
+                    width,
+                    paint,
+                    alpha_idx: None,
+                    mask: Some(mask),
+                }));
             } else {
-                if let Some(mask) = mask {
-                    self.cmds.push(Cmd::AlphaFill(CmdAlphaFill {
-                        x,
-                        width,
-                        paint,
-                        alpha_idx: None,
-                        mask: Some(mask),
-                    }));
-                } else {
-                    self.cmds.push(Cmd::Fill(CmdFill { x, width, paint }));
-                }
+                self.cmds.push(Cmd::Fill(CmdFill { x, width, paint }));
             }
         }
     }
