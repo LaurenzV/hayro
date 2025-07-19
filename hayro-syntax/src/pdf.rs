@@ -1,19 +1,18 @@
 //! The starting point for reading PDF files.
 
 use crate::PdfData;
+use crate::document::page::cached::CachedPages;
 use crate::document::page::{Page, Pages};
 use crate::object::Object;
 use crate::reader::{Reader, ReaderContext};
 use crate::xref::{XRef, XRefError, fallback, root_xref};
 use std::ops::Deref;
-use std::sync::Arc;
-use yoke::Yoke;
 
 /// A PDF file.
 pub struct Pdf {
     xref: XRef,
     header_version: PdfVersion,
-    pages: PagesYoke,
+    pages: CachedPages,
 }
 
 impl Pdf {
@@ -30,15 +29,8 @@ impl Pdf {
             },
         };
 
-        let wrapper = Box::new(xref.clone());
-
-        let pages = PagesYoke::try_attach_to_cart(wrapper, |xref| {
-            let ctx = ReaderContext::new(xref, false);
-            xref.get(xref.trailer_data().pages_ref)
-                .and_then(|p| Pages::new(p, ctx, xref))
-                .ok_or(())
-        })
-        .ok()?;
+        let boxed_xref = Box::new(xref.clone());
+        let pages = CachedPages::new(boxed_xref)?;
 
         Some(Self {
             xref,
@@ -167,5 +159,3 @@ mod tests {
         assert_eq!(pdf.version(), PdfVersion::Pdf14);
     }
 }
-
-type PagesYoke = Yoke<Pages<'static>, Box<XRef>>;

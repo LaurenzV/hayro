@@ -17,9 +17,7 @@ use log::warn;
 use std::cell::OnceCell;
 use std::collections::HashSet;
 use std::ops::Deref;
-use yoke::Yokeable;
 
-#[derive(Yokeable)]
 /// A structure holding the pages of a PDF document.
 pub struct Pages<'a> {
     /// The pages of the document.
@@ -531,3 +529,41 @@ pub const A4: Rect = Rect {
     x1: 210.0 * POINTS_PER_MM,
     y1: 297.0 * POINTS_PER_MM,
 };
+
+pub(crate) mod cached {
+    use crate::document::page::Pages;
+    use crate::reader::ReaderContext;
+    use crate::xref::XRef;
+    use std::ops::Deref;
+
+    pub(crate) struct CachedPages {
+        pages: Pages<'static>,
+        // NOTE: `pages` references the data in `xref`, so it's important that `xref
+        // appears after `pages` in the struct definition to ensure correct drop order.
+        xref: Box<XRef>,
+    }
+
+    impl CachedPages {
+        pub(crate) fn new(xref: Box<XRef>) -> Option<Self> {
+            // SAFETY:
+            // - The XRef's location is stable in memory:
+            //   - We wrapped it in a `Box`, which implements `StableDeref`.
+            //   - The struct owns the `Box`, ensuring that the value is not dropped during the whole
+            //     duration.
+            // - The internal 'static lifetime is not leaked because its rewritten
+            //   to the self-lifetime in `pages()`.
+            let xref_reference: &'static XRef = unsafe { std::mem::transmute(xref.deref()) };
+
+            let ctx = ReaderContext::new(xref_reference, false);
+            let pages = xref_reference
+                .get(xref.trailer_data().pages_ref)
+                .and_then(|p| Pages::new(p, ctx, xref_reference))?;
+
+            Some(Self { pages, xref })
+        }
+
+        pub(crate) fn get(&self) -> &Pages {
+            &self.pages
+        }
+    }
+}

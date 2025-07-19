@@ -477,7 +477,6 @@ dependencies = [
  "log",
  "rustc-hash",
  "smallvec",
- "yoke",
  "zune-jpeg",
 ]
 

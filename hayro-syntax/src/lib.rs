@@ -60,7 +60,6 @@ might be restricted in the targets you can build to. Because of this, I recommen
 feature, unless you absolutely need to be able to support such images.
 */
 
-#![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
 use std::sync::Arc;
