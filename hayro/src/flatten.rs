@@ -11,7 +11,7 @@ const TOL: f64 = 0.25;
 
 /// A point.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Point {
+pub(crate) struct Point {
     /// The x coordinate of the point.
     pub x: f32,
     /// The y coordinate of the point.
@@ -51,7 +51,7 @@ impl core::ops::Mul<f32> for Point {
 
 /// A line.
 #[derive(Clone, Copy, Debug)]
-pub struct Line {
+pub(crate) struct Line {
     /// The start point of the line.
     pub p0: Point,
     /// The end point of the line.
@@ -60,13 +60,13 @@ pub struct Line {
 
 impl Line {
     /// Create a new line.
-    pub fn new(p0: Point, p1: Point) -> Self {
+    pub(crate) fn new(p0: Point, p1: Point) -> Self {
         Self { p0, p1 }
     }
 }
 
 /// Flatten a filled bezier path into line segments.
-pub fn fill(path: &BezPath, affine: Affine, line_buf: &mut Vec<Line>) {
+pub(crate) fn fill(path: &BezPath, affine: Affine, line_buf: &mut Vec<Line>) {
     line_buf.clear();
     let mut start = kurbo::Point::default();
     let mut p0 = kurbo::Point::default();
@@ -106,7 +106,7 @@ pub fn fill(path: &BezPath, affine: Affine, line_buf: &mut Vec<Line>) {
 }
 
 /// Flatten a stroked bezier path into line segments.
-pub fn stroke(path: &BezPath, style: &Stroke, affine: Affine, line_buf: &mut Vec<Line>) {
+pub(crate) fn stroke(path: &BezPath, style: &Stroke, affine: Affine, line_buf: &mut Vec<Line>) {
     let expanded = kurbo::stroke(path.iter(), style, &StrokeOpts::default(), TOL);
     fill(&expanded, affine, line_buf);
 }

@@ -423,6 +423,7 @@ dependencies = [
  "hayro-interpret",
  "image 0.25.6",
  "kurbo",
+ "log",
  "rustc-hash",
  "smallvec",
 ]

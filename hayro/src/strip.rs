@@ -9,7 +9,7 @@ use hayro_interpret::FillRule;
 
 /// A strip.
 #[derive(Debug, Clone, Copy)]
-pub struct Strip {
+pub(crate) struct Strip {
     /// The x coordinate of the strip, in user coordinates.
     pub x: u16,
     /// The y coordinate of the strip, in user coordinates.
@@ -22,14 +22,14 @@ pub struct Strip {
 
 impl Strip {
     /// Return the y coordinate of the strip, in strip units.
-    pub fn strip_y(&self) -> u16 {
+    pub(crate) fn strip_y(&self) -> u16 {
         self.y / Tile::HEIGHT
     }
 }
 
 /// Render the tiles stored in `tiles` into the strip and alpha buffer.
 /// The strip buffer will be cleared in the beginning.
-pub fn render(
+pub(crate) fn render(
     tiles: &Tiles,
     strip_buf: &mut Vec<Strip>,
     alpha_buf: &mut Vec<u8>,

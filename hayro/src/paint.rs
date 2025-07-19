@@ -13,7 +13,7 @@ use std::sync::Arc;
 // this thin wrapper around u32, so we can change the underlying
 // representation without breaking the API.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct IndexedPaint(u32);
+pub(crate) struct IndexedPaint(u32);
 
 impl IndexedPaint {
     /// Create a new indexed paint from an index.
@@ -36,7 +36,7 @@ impl IndexedPaint {
 ///    determined by the frontend. The intended way of using this is to store a vector
 ///    of paints and store its index inside `IndexedPaint`.
 #[derive(Debug, Clone, PartialEq)]
-pub enum Paint {
+pub(crate) enum Paint {
     /// A premultiplied RGBA8 color.
     Solid(PremulColor),
     /// A paint that needs to be resolved via an index.
@@ -51,10 +51,8 @@ impl From<AlphaColor> for Paint {
 
 /// An image.
 #[derive(Debug, Clone)]
-pub struct Image {
-    /// The underlying pixmap of the image.
+pub(crate) struct Image {
     pub buffer: Arc<Buffer<4>>,
-    /// Hint for desired rendering quality.
     pub interpolate: bool,
     pub is_stencil: bool,
     pub is_pattern: bool,
@@ -62,7 +60,7 @@ pub struct Image {
 
 /// A premultiplied color.
 #[derive(Debug, Clone, PartialEq, Copy)]
-pub struct PremulColor(pub [f32; 4]);
+pub(crate) struct PremulColor(pub [f32; 4]);
 
 impl PremulColor {
     /// Create a new premultiplied color.
@@ -78,7 +76,7 @@ impl PremulColor {
 
 /// A kind of paint that can be used for filling and stroking shapes.
 #[derive(Debug, Clone)]
-pub enum PaintType {
+pub(crate) enum PaintType {
     /// A solid color.
     Solid(AlphaColor),
     /// An image.

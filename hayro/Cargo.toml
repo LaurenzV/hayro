@@ -12,6 +12,9 @@ bytemuck = { workspace = true, features = ["bytemuck_derive"] }
 smallvec = { workspace = true }
 rustc-hash = { workspace = true }
 
+[dev-dependencies]
+log = { workspace = true }
+
 [features]
 default = []
 jpeg2000 = ["hayro-interpret/jpeg2000"]

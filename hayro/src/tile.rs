@@ -10,7 +10,7 @@ use std::vec::Vec;
 /// The max number of lines per path.
 ///
 /// Trying to render a path with more lines than this may result in visual artifacts.
-pub const MAX_LINES_PER_PATH: u32 = 1 << 31;
+pub(crate) const MAX_LINES_PER_PATH: u32 = 1 << 31;
 
 /// A tile represents an aligned area on the pixmap, used to subdivide the viewport into sub-areas
 /// (currently 4x4) and analyze line intersections inside each such area.
@@ -24,7 +24,7 @@ pub const MAX_LINES_PER_PATH: u32 = 1 << 31;
 /// the compilation target.
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
-pub struct Tile {
+pub(crate) struct Tile {
     // The field ordering is important.
     //
     // The given ordering (variant over little and big endian compilation targets), ensures that
@@ -46,29 +46,29 @@ pub struct Tile {
     ///
     /// The last bit is 1 if and only if the lines crosses the tile's top edge. Lines making this
     /// crossing increment or decrement the coarse tile winding, depending on the line direction.
-    pub packed_winding_line_idx: u32,
+    pub(crate) packed_winding_line_idx: u32,
 
     #[cfg(target_endian = "little")]
     /// The index of the tile in the x direction.
-    pub x: u16,
+    pub(crate) x: u16,
 
     #[cfg(target_endian = "little")]
     /// The index of the tile in the y direction.
-    pub y: u16,
+    pub(crate) y: u16,
 }
 
 impl Tile {
     /// The width of a tile in pixels.
-    pub const WIDTH: u16 = 4;
+    pub(crate) const WIDTH: u16 = 4;
 
     /// The height of a tile in pixels.
-    pub const HEIGHT: u16 = 4;
+    pub(crate) const HEIGHT: u16 = 4;
 
     /// Create a new tile.
     ///
     /// `line_idx` must be smaller than [`MAX_LINES_PER_PATH`].
     #[inline]
-    pub const fn new(x: u16, y: u16, line_idx: u32, winding: bool) -> Self {
+    pub(crate) const fn new(x: u16, y: u16, line_idx: u32, winding: bool) -> Self {
         #[cfg(debug_assertions)]
         if line_idx >= MAX_LINES_PER_PATH {
             panic!("Max. number of lines per path exceeded.");
@@ -82,25 +82,25 @@ impl Tile {
 
     /// Check whether two tiles are at the same location.
     #[inline]
-    pub const fn same_loc(&self, other: &Self) -> bool {
+    pub(crate) const fn same_loc(&self, other: &Self) -> bool {
         self.same_row(other) && self.x == other.x
     }
 
     /// Check whether `self` is adjacent to the left of `other`.
     #[inline]
-    pub const fn prev_loc(&self, other: &Self) -> bool {
+    pub(crate) const fn prev_loc(&self, other: &Self) -> bool {
         self.same_row(other) && self.x + 1 == other.x
     }
 
     /// Check whether two tiles are on the same row.
     #[inline]
-    pub const fn same_row(&self, other: &Self) -> bool {
+    pub(crate) const fn same_row(&self, other: &Self) -> bool {
         self.y == other.y
     }
 
     /// The index of the line this tile belongs to into the line buffer.
     #[inline]
-    pub const fn line_idx(&self) -> u32 {
+    pub(crate) const fn line_idx(&self) -> u32 {
         self.packed_winding_line_idx & (MAX_LINES_PER_PATH - 1)
     }
 
@@ -109,7 +109,7 @@ impl Tile {
     /// Lines making this crossing increment or decrement the coarse tile winding, depending on the
     /// line direction.
     #[inline]
-    pub const fn winding(&self) -> bool {
+    pub(crate) const fn winding(&self) -> bool {
         (self.packed_winding_line_idx & MAX_LINES_PER_PATH) != 0
     }
 
@@ -148,7 +148,7 @@ impl Eq for Tile {}
 
 /// Handles the tiling of paths.
 #[derive(Clone, Debug)]
-pub struct Tiles {
+pub(crate) struct Tiles {
     tile_buf: Vec<Tile>,
     sorted: bool,
 }
@@ -161,7 +161,7 @@ impl Default for Tiles {
 
 impl Tiles {
     /// Create a new tiles container.
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             tile_buf: vec![],
             sorted: false,
@@ -169,23 +169,23 @@ impl Tiles {
     }
 
     /// Get the number of tiles in the container.
-    pub fn len(&self) -> u32 {
+    pub(crate) fn len(&self) -> u32 {
         self.tile_buf.len() as u32
     }
 
     /// Returns `true` if the container has no tiles.
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.tile_buf.is_empty()
     }
 
     /// Reset the tiles' container.
-    pub fn reset(&mut self) {
+    pub(crate) fn reset(&mut self) {
         self.tile_buf.clear();
         self.sorted = false;
     }
 
     /// Sort the tiles in the container.
-    pub fn sort_tiles(&mut self) {
+    pub(crate) fn sort_tiles(&mut self) {
         self.sorted = true;
         self.tile_buf.sort_unstable();
     }
@@ -194,7 +194,7 @@ impl Tiles {
     ///
     /// Panics if the container hasn't been sorted before.
     #[inline]
-    pub fn get(&self, index: u32) -> &Tile {
+    pub(crate) fn get(&self, index: u32) -> &Tile {
         assert!(
             self.sorted,
             "attempted to call `get` before sorting the tile container."
@@ -207,7 +207,7 @@ impl Tiles {
     ///
     /// Panics if the container hasn't been sorted before.
     #[inline]
-    pub fn iter(&self) -> impl Iterator<Item = &Tile> {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &Tile> {
         assert!(
             self.sorted,
             "attempted to call `iter` before sorting the tile container."
@@ -224,7 +224,7 @@ impl Tiles {
     // TODO: Tiles are clamped to the left edge of the viewport, but lines fully to the left of the
     // viewport are not culled yet. These lines impact winding, and would need forwarding of
     // winding to the strip generation stage.
-    pub fn make_tiles(&mut self, lines: &[Line], width: u16, height: u16) {
+    pub(crate) fn make_tiles(&mut self, lines: &[Line], width: u16, height: u16) {
         self.reset();
 
         if width == 0 || height == 0 {

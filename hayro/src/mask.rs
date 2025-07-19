@@ -9,7 +9,7 @@ use std::vec::Vec;
 
 /// A mask.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Mask {
+pub(crate) struct Mask {
     data: Arc<Vec<u8>>,
     width: u16,
     height: u16,
@@ -17,12 +17,12 @@ pub struct Mask {
 
 impl Mask {
     /// Create a new alpha mask from the pixmap.
-    pub fn new_alpha(pixmap: &Pixmap) -> Self {
+    pub(crate) fn new_alpha(pixmap: &Pixmap) -> Self {
         Self::new_with(pixmap, true)
     }
 
     /// Create a new luminance mask from the pixmap.
-    pub fn new_luminance(pixmap: &Pixmap) -> Self {
+    pub(crate) fn new_luminance(pixmap: &Pixmap) -> Self {
         Self::new_with(pixmap, false)
     }
 
@@ -56,12 +56,12 @@ impl Mask {
     }
 
     /// Return the width of the mask.
-    pub fn width(&self) -> u16 {
+    pub(crate) fn width(&self) -> u16 {
         self.width
     }
 
     /// Return the height of the mask.
-    pub fn height(&self) -> u16 {
+    pub(crate) fn height(&self) -> u16 {
         self.height
     }
 
@@ -69,7 +69,7 @@ impl Mask {
     ///
     /// This function might panic or yield a wrong result if the location
     /// is out-of-bounds.
-    pub fn sample(&self, x: u16, y: u16) -> u8 {
+    pub(crate) fn sample(&self, x: u16, y: u16) -> u8 {
         if x >= self.width || y >= self.height {
             255
         } else {
