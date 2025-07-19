@@ -1,5 +1,7 @@
 //! PDF shadings.
 
+#![allow(clippy::needless_range_loop)]
+
 use crate::color::{ColorComponents, ColorSpace};
 use crate::util::{FloatExt, PointExt};
 use hayro_syntax::bit_reader::{BitReader, BitSize};

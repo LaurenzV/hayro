@@ -23,6 +23,7 @@ use outline::OutlineFont;
 use skrifa::GlyphId;
 use std::fmt::Debug;
 use std::ops::Deref;
+use std::rc::Rc;
 use std::sync::Arc;
 
 mod blob;
@@ -77,7 +78,7 @@ impl OutlineGlyph {
 
 /// A type3 glyph.
 pub struct Type3Glyph<'a> {
-    pub(crate) font: Arc<Type3<'a>>,
+    pub(crate) font: Rc<Type3<'a>>,
     pub(crate) glyph_id: GlyphId,
     pub(crate) state: State<'a>,
     pub(crate) parent_resources: Resources<'a>,
@@ -105,17 +106,17 @@ impl<'a> Font<'a> {
         warning_sink: &WarningSinkFn,
     ) -> Option<Self> {
         let f_type = match dict.get::<Name>(SUBTYPE)?.deref() {
-            TYPE1 | MM_TYPE1 => FontType::Type1(Arc::new(Type1Font::new(dict, resolver)?)),
+            TYPE1 | MM_TYPE1 => FontType::Type1(Rc::new(Type1Font::new(dict, resolver)?)),
             TRUE_TYPE => TrueTypeFont::new(dict)
-                .map(Arc::new)
+                .map(Rc::new)
                 .map(FontType::TrueType)
                 .or_else(|| {
                     Type1Font::new(dict, resolver)
-                        .map(Arc::new)
+                        .map(Rc::new)
                         .map(FontType::Type1)
                 })?,
-            TYPE0 => FontType::Type0(Arc::new(Type0Font::new(dict, warning_sink)?)),
-            TYPE3 => FontType::Type3(Arc::new(Type3::new(dict))),
+            TYPE0 => FontType::Type0(Rc::new(Type0Font::new(dict, warning_sink)?)),
+            TYPE3 => FontType::Type3(Rc::new(Type3::new(dict))),
             f => {
                 warn!(
                     "unimplemented font type {:?}",
@@ -254,10 +255,10 @@ impl<'a> Font<'a> {
 
 #[derive(Clone, Debug)]
 enum FontType<'a> {
-    Type1(Arc<Type1Font>),
-    TrueType(Arc<TrueTypeFont>),
-    Type0(Arc<Type0Font>),
-    Type3(Arc<Type3<'a>>),
+    Type1(Rc<Type1Font>),
+    TrueType(Rc<TrueTypeFont>),
+    Type0(Rc<Type0Font>),
+    Type3(Rc<Type3<'a>>),
 }
 
 #[derive(Debug)]

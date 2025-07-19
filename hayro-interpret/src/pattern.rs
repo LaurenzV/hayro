@@ -34,7 +34,7 @@ pub enum Pattern<'a> {
     /// A shading pattern.
     Shading(ShadingPattern),
     /// A tiling pattern.
-    Tiling(TilingPattern<'a>),
+    Tiling(Box<TilingPattern<'a>>),
 }
 
 impl<'a> Pattern<'a> {
@@ -46,7 +46,9 @@ impl<'a> Pattern<'a> {
         if let Some(dict) = object.clone().into_dict() {
             Some(Self::Shading(ShadingPattern::new(&dict)?))
         } else if let Some(stream) = object.clone().into_stream() {
-            Some(Self::Tiling(TilingPattern::new(stream, ctx, resources)?))
+            Some(Self::Tiling(Box::new(TilingPattern::new(
+                stream, ctx, resources,
+            )?)))
         } else {
             None
         }
