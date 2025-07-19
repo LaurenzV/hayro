@@ -16,7 +16,7 @@ fn main() {
     let pdf = Pdf::new(Arc::new(data)).unwrap();
     let pages = pdf.pages();
 
-    for page in pages.get() {
+    for page in pages.iter() {
         for op in page.typed_operations() {
             println!("{:?}", op);
         }

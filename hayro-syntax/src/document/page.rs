@@ -18,13 +18,6 @@ use std::cell::OnceCell;
 use std::collections::HashSet;
 use std::ops::Deref;
 
-/// A structure holding the pages of a PDF document.
-pub struct Pages<'a> {
-    /// The pages of the document.
-    pages: Vec<Page<'a>>,
-    xref: &'a XRef,
-}
-
 /// Attributes that can be inherited.
 #[derive(Debug, Clone)]
 struct PagesContext {
@@ -41,6 +34,13 @@ impl PagesContext {
             rotate: None,
         }
     }
+}
+
+/// A structure holding the pages of a PDF document.
+pub struct Pages<'a> {
+    /// The pages of the document.
+    pages: Vec<Page<'a>>,
+    xref: &'a XRef,
 }
 
 impl<'a> Pages<'a> {
@@ -62,19 +62,17 @@ impl<'a> Pages<'a> {
         Some(Self { pages, xref })
     }
 
-    /// The number of available pages.
-    pub fn len(&self) -> usize {
-        self.pages.len()
-    }
-
-    /// Return the pages of the document.
-    pub fn get(&self) -> &[Page<'a>] {
-        &self.pages
-    }
-
     /// Return the xref table (of the document the pages belong to).   
     pub fn xref(&self) -> &'a XRef {
         self.xref
+    }
+}
+
+impl<'a> Deref for Pages<'a> {
+    type Target = [Page<'a>];
+
+    fn deref(&self) -> &Self::Target {
+        &self.pages
     }
 }
 

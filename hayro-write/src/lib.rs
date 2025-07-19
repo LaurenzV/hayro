@@ -115,7 +115,6 @@ pub fn extract<'a>(
 
     for query in queries {
         let page = pages
-            .get()
             .get(query.page_index)
             .ok_or(ExtractionError::InvalidPageIndex(query.page_index))?;
 
@@ -195,7 +194,7 @@ pub fn extract_pages_to_pdf(hayro_pdf: &Pdf, page_indices: &[usize]) -> Vec<u8> 
 #[doc(hidden)]
 pub fn extract_pages_as_xobject_to_pdf(hayro_pdf: &Pdf, page_indices: &[usize]) -> Vec<u8> {
     let hayro_pages = hayro_pdf.pages();
-    let page_list = hayro_pages.get();
+    let page_list = hayro_pages.as_ref();
 
     let mut pdf = pdf_writer::Pdf::new();
     let mut next_ref = Ref::new(1);
