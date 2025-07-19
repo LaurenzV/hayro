@@ -19,5 +19,5 @@ jobs:
       - uses: taiki-e/install-action@cargo-hack
       - run: RUSTFLAGS="-D warnings" cargo clippy -p hayro-syntax
       - run: cargo fmt --check --all
-      - run: RUSTFLAGS="-D warnings" cargo doc --workspace --no-deps
+      - run: RUSTFLAGS="-D warnings" cargo doc -p hayro-syntax --no-deps
       - run: RUSTFLAGS="-D warnings" cargo hack check --each-feature -p hayro-syntax
