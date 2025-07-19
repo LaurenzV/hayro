@@ -1,17 +1,18 @@
+use crate::ctx::RenderContext;
 use crate::encode::{Buffer, x_y_advances};
 use crate::mask::Mask;
 use crate::paint::{Image, PaintType};
 use crate::pixmap::Pixmap;
-use crate::{RenderContext, draw_soft_mask, min_factor};
 use hayro_interpret::font::Glyph;
 use hayro_interpret::hayro_syntax::object::ObjectIdentifier;
 use hayro_interpret::pattern::Pattern;
 use hayro_interpret::{
-    ClipPath, Device, FillProps, FillRule, LumaData, Paint, RgbData, SoftMask, StrokeProps,
+    ClipPath, Device, FillProps, FillRule, LumaData, MaskType, Paint, RgbData, SoftMask,
+    StrokeProps,
 };
 use image::imageops::FilterType;
 use image::{DynamicImage, ImageBuffer};
-use kurbo::{Affine, BezPath, Rect};
+use kurbo::{Affine, BezPath, Point, Rect};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -347,4 +348,36 @@ impl Device for Renderer {
                 .clone()
         });
     }
+}
+
+fn draw_soft_mask(mask: &SoftMask, width: u16, height: u16) -> Mask {
+    let mut renderer = Renderer {
+        ctx: RenderContext::new(width, height),
+        inside_pattern: false,
+        cur_mask: None,
+        soft_mask_cache: Default::default(),
+    };
+    mask.interpret(&mut renderer);
+    let mut pix = Pixmap::new(width, height);
+    renderer.ctx.render_to_pixmap(&mut pix);
+
+    match mask.mask_type() {
+        MaskType::Luminosity => Mask::new_luminance(&pix),
+        MaskType::Alpha => Mask::new_alpha(&pix),
+    }
+}
+
+pub(crate) fn min_factor(transform: &Affine) -> f32 {
+    let scale_skew_transform = {
+        let c = transform.as_coeffs();
+        Affine::new([c[0], c[1], c[2], c[3], 0.0, 0.0])
+    };
+
+    let x_advance = scale_skew_transform * Point::new(1.0, 0.0);
+    let y_advance = scale_skew_transform * Point::new(0.0, 1.0);
+
+    x_advance
+        .to_vec2()
+        .length()
+        .min(y_advance.to_vec2().length()) as f32
 }

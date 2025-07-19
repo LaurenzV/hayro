@@ -19,7 +19,7 @@ use std::vec::Vec;
 pub(crate) const DEFAULT_TOLERANCE: f64 = 0.1;
 /// A render context.
 #[derive(Debug)]
-pub struct RenderContext {
+pub(crate) struct RenderContext {
     pub(crate) width: u16,
     pub(crate) height: u16,
     pub(crate) wide: Wide,
@@ -37,7 +37,7 @@ pub struct RenderContext {
 
 impl RenderContext {
     /// Create a new render context with the given width and height in pixels.
-    pub fn new(width: u16, height: u16) -> Self {
+    pub(crate) fn new(width: u16, height: u16) -> Self {
         let wide = Wide::new(width, height);
 
         let alphas = vec![];

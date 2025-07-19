@@ -102,7 +102,7 @@ pub struct Pixmap {
 
 impl Pixmap {
     /// Create a new pixmap with the given width and height in pixels.
-    pub fn new(width: u16, height: u16) -> Self {
+    pub(crate) fn new(width: u16, height: u16) -> Self {
         let buf = vec![PremulRgba8::from_u32(0); width as usize * height as usize];
         Self { width, height, buf }
     }

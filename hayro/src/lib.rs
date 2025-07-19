@@ -1,12 +1,13 @@
 use crate::encode::{Buffer, x_y_advances};
 use crate::mask::Mask;
 use crate::paint::{Image, PaintType};
-use crate::pixmap::Pixmap;
+use crate::renderer::Renderer;
 use hayro_interpret::Context;
 use hayro_interpret::Device;
 use hayro_interpret::color::AlphaColor;
 use hayro_interpret::font::Glyph;
 use hayro_interpret::hayro_syntax::object::ObjectIdentifier;
+use hayro_interpret::hayro_syntax::page::Page;
 use hayro_interpret::pattern::Pattern;
 use hayro_interpret::util::FloatExt;
 use hayro_interpret::{ClipPath, LumaData};
@@ -22,11 +23,10 @@ use std::io::Cursor;
 use std::ops::RangeInclusive;
 use std::sync::Arc;
 
-use crate::renderer::Renderer;
-pub use ctx::RenderContext;
+use crate::ctx::RenderContext;
 pub use hayro_interpret::font::{FontData, FontQuery, StandardFont};
-use hayro_interpret::hayro_syntax::page::Page;
 pub use hayro_interpret::{InterpreterSettings, Pdf};
+pub use pixmap::Pixmap;
 
 mod coarse;
 mod ctx;
@@ -40,10 +40,17 @@ mod renderer;
 mod strip;
 mod tile;
 
+/// Settings to apply during rendering.
 pub struct RenderSettings {
+    /// How much the contents should be scaled into the x direction.
     pub x_scale: f32,
+    /// How much the contents should be scaled into the y direction.
     pub y_scale: f32,
+    /// The width of the viewport. If this is set to `None`, the width will be chosen
+    /// automatically based on the scale factor and the dimensions of the PDF.
     pub width: Option<u16>,
+    /// The height of the viewport. If this is set to `None`, the height will be chosen
+    /// automatically based on the scale factor and the dimensions of the PDF.
     pub height: Option<u16>,
 }
 
@@ -112,24 +119,8 @@ pub fn render(
 
     let mut pixmap = Pixmap::new(pix_width, pix_height);
     device.ctx.render_to_pixmap(&mut pixmap);
+
     pixmap
-}
-
-fn draw_soft_mask(mask: &SoftMask, width: u16, height: u16) -> Mask {
-    let mut renderer = Renderer {
-        ctx: RenderContext::new(width, height),
-        inside_pattern: false,
-        cur_mask: None,
-        soft_mask_cache: Default::default(),
-    };
-    mask.interpret(&mut renderer);
-    let mut pix = Pixmap::new(width, height);
-    renderer.ctx.render_to_pixmap(&mut pix);
-
-    match mask.mask_type() {
-        MaskType::Luminosity => Mask::new_luminance(&pix),
-        MaskType::Alpha => Mask::new_alpha(&pix),
-    }
 }
 
 pub fn render_png(
@@ -174,19 +165,4 @@ pub fn render_png(
         .collect();
 
     Some(rendered)
-}
-
-pub(crate) fn min_factor(transform: &Affine) -> f32 {
-    let scale_skew_transform = {
-        let c = transform.as_coeffs();
-        Affine::new([c[0], c[1], c[2], c[3], 0.0, 0.0])
-    };
-
-    let x_advance = scale_skew_transform * Point::new(1.0, 0.0);
-    let y_advance = scale_skew_transform * Point::new(0.0, 1.0);
-
-    x_advance
-        .to_vec2()
-        .length()
-        .min(y_advance.to_vec2().length()) as f32
 }
