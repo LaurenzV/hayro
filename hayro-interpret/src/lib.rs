@@ -2,7 +2,7 @@
 A crate for interpreting PDF files.
 
 This crate provides an abstraction to interpret the content of a PDF file and render them
-into an abstract `Device`, which clients can implement as needed. This allows you, for
+into an abstract [`Device`], which clients can implement as needed. This allows you, for
 example, to render PDF files to bitmaps (which is what the `hayro-render` crate does), or other formats
 such as SVG.
 
@@ -31,7 +31,8 @@ pub mod util;
 
 pub use context::*;
 pub use device::*;
-pub use hayro_syntax::*;
+pub use hayro_syntax;
+pub use hayro_syntax::Pdf;
 pub use interpret::*;
 pub use soft_mask::*;
 pub use types::*;
