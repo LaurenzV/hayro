@@ -27,15 +27,15 @@ pub(crate) fn decrypt(data: &[u8], use_decryption: bool) -> Option<Vec<u8>> {
     let mut b = [0u8; 4];
     b[0] = b00;
 
-    for i in 1..=3 {
+    for byte in b.iter_mut().skip(1) {
         let c = stream.read_byte()?;
-        b[i] = c;
+        *byte = c;
     }
 
     let mut is_bin = false;
 
-    for i in 0..4 {
-        if !b[i].is_ascii_hexdigit() {
+    for byte in &b {
+        if !byte.is_ascii_hexdigit() {
             is_bin = true;
         }
     }
@@ -43,8 +43,8 @@ pub(crate) fn decrypt(data: &[u8], use_decryption: bool) -> Option<Vec<u8>> {
     if is_bin {
         let mut out = vec![];
 
-        for i in 0..4 {
-            decrypt(b[i]);
+        for byte in &b {
+            decrypt(*byte);
         }
 
         for b in stream.tail()? {

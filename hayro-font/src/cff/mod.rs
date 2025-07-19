@@ -1,6 +1,8 @@
 //! A [Compact Font Format Table](
 //! https://docs.microsoft.com/en-us/typography/opentype/spec/cff) implementation.
 
+#![allow(clippy::upper_case_acronyms)]
+
 // Useful links:
 // http://wwwimages.adobe.com/content/dam/Adobe/en/devnet/font/pdfs/5176.CFF.pdf
 // http://wwwimages.adobe.com/content/dam/Adobe/en/devnet/font/pdfs/5177.Type2.pdf
@@ -926,8 +928,10 @@ fn parse_sid_metadata<'a>(
     top_dict: TopDict,
     encoding: Encoding<'a>,
 ) -> Option<FontKind<'a>> {
-    let mut metadata = SIDMetadata::default();
-    metadata.encoding = encoding;
+    let mut metadata = SIDMetadata {
+        encoding,
+        ..Default::default()
+    };
 
     let private_dict = if let Some(range) = top_dict.private_dict_range.clone() {
         parse_private_dict(data.get(range)?)
@@ -970,16 +974,15 @@ fn parse_cid_metadata(data: &[u8], top_dict: TopDict, number_of_glyphs: u16) -> 
         return None;
     }
 
-    let mut metadata = CIDMetadata::default();
-
-    metadata.fd_array = {
-        let mut s = Stream::new_at(data, fd_array_offset)?;
-        parse_index::<u16>(&mut s)?
-    };
-
-    metadata.fd_select = {
-        let mut s = Stream::new_at(data, fd_select_offset)?;
-        parse_fd_select(number_of_glyphs, &mut s)?
+    let metadata = CIDMetadata {
+        fd_array: {
+            let mut s = Stream::new_at(data, fd_array_offset)?;
+            parse_index::<u16>(&mut s)?
+        },
+        fd_select: {
+            let mut s = Stream::new_at(data, fd_select_offset)?;
+            parse_fd_select(number_of_glyphs, &mut s)?
+        },
     };
 
     Some(FontKind::CID(metadata))

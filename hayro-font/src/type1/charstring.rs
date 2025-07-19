@@ -176,7 +176,7 @@ fn _parse_char_string(
                         let base_char_string = ctx
                             .params
                             .charstrings
-                            .get(&base_char.ok_or(OutlineError::InvalidSeacCode)?.to_string())
+                            .get(base_char.ok_or(OutlineError::InvalidSeacCode)?)
                             .ok_or(OutlineError::InvalidSeacCode)?;
                         _parse_char_string(ctx, base_char_string, depth + 1, p)?;
                         p.x = dx + p.sbx - asb;
@@ -185,11 +185,7 @@ fn _parse_char_string(
                         let accent_char_string = ctx
                             .params
                             .charstrings
-                            .get(
-                                &accent_char
-                                    .ok_or(OutlineError::InvalidSeacCode)?
-                                    .to_string(),
-                            )
+                            .get(accent_char.ok_or(OutlineError::InvalidSeacCode)?)
                             .ok_or(OutlineError::InvalidSeacCode)?;
                         _parse_char_string(ctx, accent_char_string, depth + 1, p)?;
                         break;
