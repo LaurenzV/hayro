@@ -9,4 +9,4 @@ A demo tool can be found at https://laurenzv.github.io/hayro/. Note that embedde
 in the web version.
 
 # License
-This crate is available under the Apache 2.0 license.
+ALl crates in this repository are available under the Apache 2.0 license.
