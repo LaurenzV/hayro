@@ -50,11 +50,10 @@ pub fn check_render(name: &str, snapshot_path: PathBuf, document: RenderedDocume
     // Ensure the snapshots subdirectory exists
     let _ = std::fs::create_dir_all(&refs_path);
 
-    // Use the name without the prefix for the actual filename
-    let snapshot_name = if name.starts_with("pdfjs_") {
-        &name[6..] // Remove "pdfjs_" prefix
-    } else if name.starts_with("pdfbox_") {
-        &name[7..] // Remove "pdfbox_" prefix
+    let snapshot_name = if let Some(name) = name.strip_prefix("pdfjs_") {
+        name
+    } else if let Some(name) = name.strip_prefix("pdfbox_") {
+        name
     } else {
         name
     };
@@ -174,7 +173,7 @@ pub fn run_render_test(name: &str, file_path: &str, range_str: Option<&str>) {
 
     let settings = InterpreterSettings {
         font_resolver: Arc::new(|query| match query {
-            FontQuery::Standard(s) => Some(get_standard(&s)),
+            FontQuery::Standard(s) => Some(get_standard(s)),
             FontQuery::Fallback(f) => Some(get_standard(&f.pick_standard_font())),
         }),
         ..Default::default()
@@ -208,7 +207,7 @@ pub fn run_write_test(
     };
 
     if STORE.is_some() {
-        let _ = std::fs::create_dir_all(&STORE_PATH.clone());
+        let _ = std::fs::create_dir_all(STORE_PATH.clone());
 
         std::fs::write(STORE_PATH.join(format!("{name}.pdf")), &buf).unwrap();
     }

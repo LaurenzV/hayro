@@ -40,9 +40,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     for path in &pdf_files {
         let filename = path.file_name().unwrap();
-        println!("Processing: {:?}", filename);
+        println!("Processing: {filename:?}");
 
-        let pdf_bytes = fs::read(&path)?;
+        let pdf_bytes = fs::read(path)?;
         let data = Arc::new(pdf_bytes);
 
         match Pdf::new(data) {
@@ -50,7 +50,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let page_count = hayro_pdf.pages().len();
 
                 if page_count == 0 {
-                    eprintln!("  Warning: No pages found in {:?}", filename);
+                    eprintln!("  Warning: No pages found in {filename:?}");
                     continue;
                 }
 
@@ -62,10 +62,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let output_path = output_dir.join(filename);
                 fs::write(&output_path, output_bytes)?;
 
-                println!("  Rewrote {} pages to {:?}", page_count, output_path);
+                println!("  Rewrote {page_count} pages to {output_path:?}");
             }
             Err(_) => {
-                eprintln!("  Error parsing {:?}", filename);
+                eprintln!("  Error parsing {filename:?}");
             }
         }
     }
