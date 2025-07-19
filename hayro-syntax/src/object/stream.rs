@@ -62,7 +62,7 @@ impl<'a> Stream<'a> {
                 .map(|n| Filter::from_name(n))
                 .collect::<Option<Vec<_>>>()
                 .ok_or(DecodeFailure::Unknown)?;
-            let params = self
+            let params: Vec<_> = self
                 .dict
                 .get::<Array>(DP)
                 .or_else(|| self.dict.get::<Array>(DECODE_PARMS))

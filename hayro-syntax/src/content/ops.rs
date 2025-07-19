@@ -106,7 +106,7 @@ mod tests {
             TypedInstruction::NonStrokeColorDeviceRgb(NonStrokeColorDeviceRgb(n(1), n(0), n(0))),
         ];
 
-        let elements = TypedIter::new(input).into_iter().collect::<Vec<_>>();
+        let elements = TypedIter::new(input).collect::<Vec<_>>();
         assert_eq!(elements, expected,)
     }
 
@@ -130,7 +130,7 @@ f
             TypedInstruction::FillPathNonZero(FillPathNonZero),
         ];
 
-        let elements = TypedIter::new(input).into_iter().collect::<Vec<_>>();
+        let elements = TypedIter::new(input).collect::<Vec<_>>();
         assert_eq!(elements, expected,)
     }
 
@@ -156,7 +156,7 @@ f
             )),
         ];
 
-        let elements = TypedIter::new(input).into_iter().collect::<Vec<_>>();
+        let elements = TypedIter::new(input).collect::<Vec<_>>();
 
         assert_eq!(elements, expected);
     }
@@ -172,7 +172,7 @@ f
             ),
         )];
 
-        let elements = TypedIter::new(input).into_iter().collect::<Vec<_>>();
+        let elements = TypedIter::new(input).collect::<Vec<_>>();
 
         assert_eq!(elements, expected);
     }
@@ -189,7 +189,7 @@ f
             TypedInstruction::EndMarkedContent(EndMarkedContent),
         ];
 
-        let elements = TypedIter::new(input).into_iter().collect::<Vec<_>>();
+        let elements = TypedIter::new(input).collect::<Vec<_>>();
 
         assert_eq!(elements, expected);
     }
@@ -206,7 +206,7 @@ f
             TypedInstruction::EndMarkedContent(EndMarkedContent),
         ];
 
-        let elements = TypedIter::new(input).into_iter().collect::<Vec<_>>();
+        let elements = TypedIter::new(input).collect::<Vec<_>>();
 
         assert_eq!(elements, expected);
     }

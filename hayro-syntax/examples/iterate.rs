@@ -18,7 +18,7 @@ fn main() {
 
     for page in pages.iter() {
         for op in page.typed_operations() {
-            println!("{:?}", op);
+            println!("{op:?}");
         }
     }
 }

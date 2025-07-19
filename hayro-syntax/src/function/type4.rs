@@ -554,6 +554,7 @@ mod tests {
     use crate::function::type4::{PostScriptOp, Type4, parse_procedure};
     use crate::function::{Clamper, Function, FunctionType, Values};
     use crate::object::Number;
+    use std::f32::consts::LN_10;
     use std::sync::Arc;
 
     use smallvec::smallvec;
@@ -678,7 +679,7 @@ mod tests {
 
     #[test]
     fn op_ln() {
-        op_impl("10 ln", &[2.3025851]);
+        op_impl("10 ln", &[LN_10]);
         op_impl("100 ln", &[4.6051702]);
     }
 

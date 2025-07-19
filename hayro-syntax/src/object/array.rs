@@ -315,13 +315,13 @@ mod tests {
 
     fn array_impl(data: &[u8]) -> Option<Vec<Object>> {
         Reader::new(data)
-            .read_with_context::<Array>(ReaderContext::new(&XRef::dummy(), false))
+            .read_with_context::<Array>(ReaderContext::new(XRef::dummy(), false))
             .map(|a| a.iter::<Object>().collect::<Vec<_>>())
     }
 
     fn array_ref_impl(data: &[u8]) -> Option<Vec<MaybeRef<Object>>> {
         Reader::new(data)
-            .read_with_context::<Array>(ReaderContext::new(&XRef::dummy(), false))
+            .read_with_context::<Array>(ReaderContext::new(XRef::dummy(), false))
             .map(|a| a.raw_iter().collect::<Vec<_>>())
     }
 

@@ -32,31 +32,28 @@ mod tests {
 
     #[test]
     fn bool_true() {
-        assert_eq!(
+        assert!(
             Reader::new("true".as_bytes())
                 .read_without_context::<bool>()
-                .unwrap(),
-            true
+                .unwrap()
         );
     }
 
     #[test]
     fn bool_false() {
-        assert_eq!(
-            Reader::new("false".as_bytes())
+        assert!(
+            !Reader::new("false".as_bytes())
                 .read_without_context::<bool>()
-                .unwrap(),
-            false
+                .unwrap()
         );
     }
 
     #[test]
     fn bool_trailing() {
-        assert_eq!(
+        assert!(
             Reader::new("trueabdf".as_bytes())
                 .read_without_context::<bool>()
-                .unwrap(),
-            true
+                .unwrap()
         );
     }
 }

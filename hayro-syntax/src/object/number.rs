@@ -384,11 +384,10 @@ mod tests {
 
     #[test]
     fn real_failing() {
-        assert_eq!(
+        assert!(
             Reader::new("+abc".as_bytes())
                 .read_without_context::<f32>()
-                .is_none(),
-            true
+                .is_none()
         );
     }
 

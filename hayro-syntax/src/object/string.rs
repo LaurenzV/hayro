@@ -359,21 +359,19 @@ mod tests {
 
     #[test]
     fn hex_string_invalid_1() {
-        assert_eq!(
+        assert!(
             Reader::new("<".as_bytes())
                 .read_without_context::<HexString>()
-                .is_none(),
-            true
+                .is_none()
         );
     }
 
     #[test]
     fn hex_string_invalid_2() {
-        assert_eq!(
+        assert!(
             Reader::new("34AD".as_bytes())
                 .read_without_context::<HexString>()
-                .is_none(),
-            true
+                .is_none()
         );
     }
 
