@@ -7,7 +7,7 @@ fn render_fuzzed(file: &[u8]) {
     let data = Arc::new(file.to_vec());
     let pdf = Pdf::new(data);
 
-    if let Some(pdf) = pdf {
+    if let Ok(pdf) = pdf {
         let _pixmaps = render_png(&pdf, 1.0, InterpreterSettings::default(), None);
     }
 }

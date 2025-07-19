@@ -125,7 +125,7 @@ impl PdfViewer {
     #[wasm_bindgen]
     pub fn load_pdf(&mut self, data: &[u8]) -> Result<(), JsValue> {
         let pdf = Pdf::new(Arc::new(data.to_vec()))
-            .ok_or_else(|| JsValue::from_str("Failed to parse PDF"))?;
+            .map_err(|_| JsValue::from_str("Failed to parse PDF"))?;
 
         let pages = pdf.pages();
 

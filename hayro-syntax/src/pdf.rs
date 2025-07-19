@@ -15,24 +15,33 @@ pub struct Pdf {
     pages: CachedPages,
 }
 
+/// An error that occurred while loading a PDF file.
+#[derive(Debug, Copy, Clone)]
+pub enum LoadPdfError {
+    /// The PDF was encrypted. Encrypted PDF files are currently not supported.
+    Encryption,
+    /// The PDF was invalid or could not be parsed due to some other unknown reason.
+    Invalid,
+}
+
 impl Pdf {
     /// Try to read the given PDF file.
     ///
     /// Returns `None` if it was unable to read it.
-    pub fn new(data: PdfData) -> Option<Self> {
+    pub fn new(data: PdfData) -> Result<Self, LoadPdfError> {
         let version = find_version(data.as_ref().as_ref()).unwrap_or(PdfVersion::Pdf10);
         let xref = match root_xref(data.clone()) {
             Ok(x) => x,
             Err(e) => match e {
-                XRefError::Unknown => fallback(data)?,
-                XRefError::Encrypted => return None,
+                XRefError::Unknown => fallback(data).ok_or(LoadPdfError::Invalid)?,
+                XRefError::Encrypted => return Err(LoadPdfError::Encryption),
             },
         };
 
         let boxed_xref = Box::new(xref.clone());
-        let pages = CachedPages::new(boxed_xref)?;
+        let pages = CachedPages::new(boxed_xref).ok_or(LoadPdfError::Invalid)?;
 
-        Some(Self {
+        Ok(Self {
             xref,
             header_version: version,
             pages,

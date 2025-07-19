@@ -47,7 +47,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let data = Arc::new(pdf_bytes);
 
         match Pdf::new(data) {
-            Some(hayro_pdf) => {
+            Ok(hayro_pdf) => {
                 let page_count = hayro_pdf.pages().len();
 
                 if page_count == 0 {
@@ -65,7 +65,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 println!("  Rewrote {} pages to {:?}", page_count, output_path);
             }
-            None => {
+            Err(_) => {
                 eprintln!("  Error parsing {:?}", filename);
             }
         }
