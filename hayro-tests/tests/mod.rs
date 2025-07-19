@@ -185,7 +185,11 @@ pub fn run_render_test(name: &str, file_path: &str, range_str: Option<&str>) {
     check_render(
         name,
         RENDER_SNAPSHOTS_PATH.clone(),
-        hayro::render_png(&pdf, 1.0, settings, range).unwrap(),
+        hayro::render_pdf(&pdf, 1.0, settings, range)
+            .unwrap()
+            .into_iter()
+            .map(|d| d.take_png())
+            .collect(),
     );
 }
 

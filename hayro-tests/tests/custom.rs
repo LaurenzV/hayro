@@ -1,6 +1,6 @@
 use hayro::InterpreterSettings;
 use hayro::Pdf;
-use hayro::render_png;
+use hayro::render_pdf;
 use std::sync::Arc;
 
 fn render_fuzzed(file: &[u8]) {
@@ -8,7 +8,7 @@ fn render_fuzzed(file: &[u8]) {
     let pdf = Pdf::new(data);
 
     if let Ok(pdf) = pdf {
-        let _pixmaps = render_png(&pdf, 1.0, InterpreterSettings::default(), None);
+        let _pixmaps = render_pdf(&pdf, 1.0, InterpreterSettings::default(), None);
     }
 }
 

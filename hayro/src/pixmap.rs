@@ -3,7 +3,9 @@
 
 use bytemuck::{Pod, Zeroable};
 use hayro_interpret::color::AlphaColor;
-use image::{ImageBuffer, Rgba};
+use image::codecs::png::PngEncoder;
+use image::{ExtendedColorType, ImageBuffer, ImageEncoder, Rgba};
+use std::io::Cursor;
 use std::vec;
 use std::vec::Vec;
 
@@ -227,13 +229,20 @@ impl Pixmap {
             .collect()
     }
 
-    pub fn save_png(self, path: impl AsRef<std::path::Path>) {
-        let width = self.width as u32;
-        let height = self.height as u32;
-        let data = self.take_unpremultiplied();
-        let as_u8: &[u8] = bytemuck::cast_slice(&data);
+    /// Encode the pixmap into a PNG file.
+    pub fn take_png(self) -> Vec<u8> {
+        let mut png_data = Vec::new();
+        let cursor = Cursor::new(&mut png_data);
+        let encoder = PngEncoder::new(cursor);
+        encoder
+            .write_image(
+                self.data_as_u8_slice(),
+                self.width() as u32,
+                self.height() as u32,
+                ExtendedColorType::Rgba8,
+            )
+            .expect("Failed to encode image");
 
-        let image: ImageBuffer<Rgba<u8>, _> = ImageBuffer::from_raw(width, height, as_u8).unwrap();
-        image.save(path).unwrap()
+        png_data
     }
 }

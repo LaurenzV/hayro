@@ -1,3 +1,21 @@
+/*!
+A crate for rendering PDF files.
+
+This crate allows you to render PDF files into a pixmap. For more information on how to
+use this crate, see the [example](https://github.com/LaurenzV/hayro/tree/master/hayro/examples) in
+the GitHub repository.
+
+This crate is still very much in development, because of this, documentation is currently still
+very lacking.
+
+## Cargo features
+This crate has one feature, `jpeg2000`. See the description of
+[`hayro-syntax`](https://docs.rs/hayro-syntax/latest/hayro_syntax/#cargo-features) for more information.
+*/
+
+#![forbid(unsafe_code)]
+#![deny(missing_docs)]
+
 use crate::encode::{Buffer, x_y_advances};
 use crate::mask::Mask;
 use crate::paint::{Image, PaintType};
@@ -65,6 +83,7 @@ impl Default for RenderSettings {
     }
 }
 
+/// Render the page with the given settings to a pixmap.
 pub fn render(
     page: &Page,
     interpreter_settings: &InterpreterSettings,
@@ -123,12 +142,14 @@ pub fn render(
     pixmap
 }
 
-pub fn render_png(
+// Just a convenience method for testing.
+#[doc(hidden)]
+pub fn render_pdf(
     pdf: &Pdf,
     scale: f32,
     settings: InterpreterSettings,
     range: Option<RangeInclusive<usize>>,
-) -> Option<Vec<Vec<u8>>> {
+) -> Option<Vec<Pixmap>> {
     let rendered = pdf
         .pages()
         .iter()
@@ -148,19 +169,7 @@ pub fn render_png(
                 },
             );
 
-            let mut png_data = Vec::new();
-            let cursor = Cursor::new(&mut png_data);
-            let encoder = PngEncoder::new(cursor);
-            encoder
-                .write_image(
-                    pixmap.data_as_u8_slice(),
-                    pixmap.width() as u32,
-                    pixmap.height() as u32,
-                    ExtendedColorType::Rgba8,
-                )
-                .expect("Failed to encode image");
-
-            Some(png_data)
+            Some(pixmap)
         })
         .collect();
 

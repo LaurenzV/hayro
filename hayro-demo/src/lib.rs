@@ -1,5 +1,5 @@
 use console_error_panic_hook;
-use hayro::{FontData, FontQuery, InterpreterSettings, StandardFont};
+use hayro::{FontData, FontQuery, InterpreterSettings, RenderSettings, StandardFont};
 use hayro_syntax::Pdf;
 use js_sys;
 use std::sync::Arc;
@@ -139,13 +139,17 @@ impl PdfViewer {
     #[wasm_bindgen]
     pub fn render_current_page(&self) -> Result<Vec<u8>, JsValue> {
         let pdf = self.pdf.as_ref().ok_or("No PDF loaded")?;
+        let page = pdf
+            .pages()
+            .get(self.current_page)
+            .ok_or("Page out of bounds")?;
 
         if self.current_page >= self.total_pages {
             return Err(JsValue::from_str("Page out of bounds"));
         }
 
         // TODO: Fetch fonts lazily
-        let settings = InterpreterSettings {
+        let interpreter_settings = InterpreterSettings {
             font_resolver: Arc::new(|query| match query {
                 FontQuery::Standard(s) => Some(get_standard(&s)),
                 FontQuery::Fallback(f) => Some(get_standard(&f.pick_standard_font())),
@@ -153,18 +157,15 @@ impl PdfViewer {
             ..Default::default()
         };
 
-        let pixmaps = hayro::render_png(
-            pdf,
-            2.0,
-            settings,
-            Some(self.current_page..=self.current_page),
-        );
+        let render_settings = RenderSettings {
+            x_scale: 2.0,
+            y_scale: 2.0,
+            ..Default::default()
+        };
 
-        pixmaps
-            .as_ref()
-            .and_then(|p| p.first())
-            .cloned()
-            .ok_or_else(|| JsValue::from_str("Failed to render page"))
+        let pixmap = hayro::render(page, &interpreter_settings, &render_settings);
+
+        Ok(pixmap.take_png())
     }
 
     #[wasm_bindgen]
