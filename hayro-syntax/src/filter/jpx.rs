@@ -21,7 +21,7 @@ pub(crate) fn decode(data: &[u8]) -> Option<FilterResult> {
     let components = image.components();
     let bpc = components
         .iter()
-        .fold(std::u32::MIN, |max, c| max.max(c.precision())) as u8;
+        .fold(u32::MIN, |max, c| max.max(c.precision())) as u8;
     let cs = match components.iter().filter(|c| !c.is_alpha()).count() {
         1 => ImageColorSpace::Gray,
         3 => ImageColorSpace::Rgb,
