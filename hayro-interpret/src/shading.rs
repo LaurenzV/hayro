@@ -17,6 +17,8 @@ use log::warn;
 use smallvec::{SmallVec, smallvec};
 use std::sync::Arc;
 
+// TODO: Deduplicate the parsing code!
+
 /// The function supplied to a shading.
 #[derive(Debug, Clone)]
 pub enum ShadingFunction {
@@ -98,6 +100,7 @@ pub enum ShadingType {
         /// An optional function used for calculating the sampled color values.
         function: Option<ShadingFunction>,
     },
+    /// A dummy shading that should just be drawn transparent.
     Dummy,
 }
 
