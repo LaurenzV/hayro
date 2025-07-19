@@ -59,7 +59,7 @@ pub fn extract<'a>(
     let mut global_chunk = Chunk::new();
 
     for chunk in &ctx.chunks {
-        global_chunk.extend(&chunk)
+        global_chunk.extend(chunk)
     }
 
     Ok(ExtractionResult {
@@ -178,7 +178,7 @@ fn write_dependencies(pdf: &Pdf, ctx: &mut ExtractionContext) {
 
             ctx.visited_objects.insert(ref_);
         } else {
-            warn!("failed to extract object with ref: {:?}", ref_);
+            warn!("failed to extract object with ref: {ref_:?}");
         }
     }
 }
@@ -199,7 +199,7 @@ pub fn extract_pages_to_pdf(hayro_pdf: &Pdf, page_indices: &[usize]) -> Vec<u8> 
 
     let catalog_id = next_ref.bump();
 
-    let extracted = extract(&hayro_pdf, Box::new(|| next_ref.bump()), &requests).unwrap();
+    let extracted = extract(hayro_pdf, Box::new(|| next_ref.bump()), &requests).unwrap();
     pdf.catalog(catalog_id)
         .pages(extracted.page_tree_parent_ref);
     let count = extracted.root_refs.len();
@@ -230,7 +230,7 @@ pub fn extract_pages_as_xobject_to_pdf(hayro_pdf: &Pdf, page_indices: &[usize]) 
         })
         .collect::<Vec<_>>();
 
-    let extracted = extract(&hayro_pdf, Box::new(|| next_ref.bump()), &requests).unwrap();
+    let extracted = extract(hayro_pdf, Box::new(|| next_ref.bump()), &requests).unwrap();
 
     pdf.catalog(catalog_id)
         .pages(extracted.page_tree_parent_ref);
@@ -372,41 +372,13 @@ fn serialize_resources(
     ctx: &mut ExtractionContext,
     writer: &mut impl ResourcesExt,
 ) {
-    let ext_g_states = collect_resources(
-        &resources,
-        |r| r.ext_g_states.clone(),
-        hayro_syntax::object::Name::new(EXT_G_STATE),
-    );
-    let shadings = collect_resources(
-        &resources,
-        |r| r.shadings.clone(),
-        hayro_syntax::object::Name::new(SHADING),
-    );
-    let patterns = collect_resources(
-        &resources,
-        |r| r.patterns.clone(),
-        hayro_syntax::object::Name::new(PATTERN),
-    );
-    let x_objects = collect_resources(
-        &resources,
-        |r| r.x_objects.clone(),
-        hayro_syntax::object::Name::new(XOBJECT),
-    );
-    let color_spaces = collect_resources(
-        &resources,
-        |r| r.color_spaces.clone(),
-        hayro_syntax::object::Name::new(COLORSPACE),
-    );
-    let fonts = collect_resources(
-        &resources,
-        |r| r.fonts.clone(),
-        hayro_syntax::object::Name::new(FONT),
-    );
-    let properties = collect_resources(
-        &resources,
-        |r| r.properties.clone(),
-        hayro_syntax::object::Name::new(PROPERTIES),
-    );
+    let ext_g_states = collect_resources(resources, |r| r.ext_g_states.clone());
+    let shadings = collect_resources(resources, |r| r.shadings.clone());
+    let patterns = collect_resources(resources, |r| r.patterns.clone());
+    let x_objects = collect_resources(resources, |r| r.x_objects.clone());
+    let color_spaces = collect_resources(resources, |r| r.color_spaces.clone());
+    let fonts = collect_resources(resources, |r| r.fonts.clone());
+    let properties = collect_resources(resources, |r| r.properties.clone());
 
     if !(ext_g_states.is_empty()
         && shadings.is_empty()
@@ -443,24 +415,22 @@ fn serialize_resources(
 fn collect_resources<'a>(
     resources: &Resources<'a>,
     get_dict: impl FnMut(&Resources<'a>) -> Dict<'a> + Clone,
-    name: hayro_syntax::object::Name<'a>,
 ) -> BTreeMap<hayro_syntax::object::Name<'a>, MaybeRef<Object<'a>>> {
     let mut map = BTreeMap::new();
-    collect_resources_inner(resources, get_dict, name, &mut map);
+    collect_resources_inner(resources, get_dict, &mut map);
     map
 }
 
 fn collect_resources_inner<'a>(
     resources: &Resources<'a>,
     mut get_dict: impl FnMut(&Resources<'a>) -> Dict<'a> + Clone,
-    name: hayro_syntax::object::Name<'a>,
     map: &mut BTreeMap<hayro_syntax::object::Name<'a>, MaybeRef<Object<'a>>>,
 ) {
     // Process parents first, so that duplicates get overridden by the current dictionary.
     // Since for inheritance, the current dictionary always has priority over entries in the
     // parent dictionary.
     if let Some(parent) = resources.parent() {
-        collect_resources_inner(parent, get_dict.clone(), name, map);
+        collect_resources_inner(parent, get_dict.clone(), map);
     }
 
     let dict = get_dict(resources);
