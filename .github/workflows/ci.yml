@@ -7,18 +7,17 @@ on:
     branches: [ master, main ]
 
 jobs:
-  format-check:
-    name: Check formatting
+  checks:
+    name: Check clippy, formatting, and documentation
     runs-on: ubuntu-latest
-    
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Setup Rust
-      uses: dtolnay/rust-toolchain@stable
-      with:
-        components: rustfmt
-        
-    - name: Check formatting
-      run: cargo fmt --all -- --check
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.87.0
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@cargo-hack
+      - run: RUSTFLAGS="-D warnings" cargo clippy -p hayro_syntax
+      - run: cargo fmt --check --all
+      - run: RUSTFLAGS="-D warnings" cargo doc --workspace --no-deps
+      - run: RUSTFLAGS="-D warnings" cargo hack check --each-feature -p hayro-syntax
