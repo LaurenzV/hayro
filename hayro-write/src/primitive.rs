@@ -1,8 +1,8 @@
 use crate::ExtractionContext;
 use hayro_syntax::object;
 use hayro_syntax::object::dict::keys::{
-    AF, LAST_MODIFIED, LENGTH, METADATA, OC, OPI, PIECE_INFO, PT_DATA, REF, REFERENCE,
-    STRUCT_PARENT, STRUCT_PARENTS,
+    AF, LAST_MODIFIED, LENGTH, METADATA, OC, OPI, PIECE_INFO, PT_DATA, REF, STRUCT_PARENT,
+    STRUCT_PARENTS,
 };
 use hayro_syntax::object::{MaybeRef, Null, Number, Stream};
 use hayro_syntax::object::{Object, array, dict};

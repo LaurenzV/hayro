@@ -16,14 +16,13 @@ use flate2::write::ZlibEncoder;
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Object;
 use hayro_syntax::object::dict::keys::{
-    COLORSPACE, CONTENTS, EXT_G_STATE, FILTER, FONT, GROUP, PATTERN, PROPERTIES, RESOURCES,
-    SHADING, XOBJECT,
+    COLORSPACE, EXT_G_STATE, FONT, GROUP, PATTERN, PROPERTIES, SHADING, XOBJECT,
 };
 use hayro_syntax::object::{MaybeRef, ObjRef};
 use hayro_syntax::page::{Resources, Rotation};
 use log::warn;
-use pdf_writer::{Chunk, Content, Filter, Finish, Name, Obj, Rect, Ref};
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use pdf_writer::{Chunk, Content, Filter, Finish, Name, Rect, Ref};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::ops::Deref;
 use std::ops::DerefMut;
 
