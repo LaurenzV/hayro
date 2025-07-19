@@ -38,14 +38,20 @@ pub struct LumaData {
     pub interpolate: bool,
 }
 
+/// A type of paint.
 #[derive(Clone, Debug)]
 pub enum PaintType<'a> {
+    /// A solid RGBA color.
     Color(Color),
+    /// A PDF pattern.
     Pattern(Pattern<'a>),
 }
 
+/// A paint.
 #[derive(Clone, Debug)]
 pub struct Paint<'a> {
+    /// A transform to apply to the paint.
     pub paint_transform: Affine,
+    /// The underlying type of paint.
     pub paint_type: PaintType<'a>,
 }

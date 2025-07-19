@@ -323,7 +323,7 @@ impl FontStretch {
 bitflags! {
     /// Bitflags describing various characteristics of fonts.
     #[derive(Debug)]
-    pub struct FontFlags: u32 {
+    pub(crate) struct FontFlags: u32 {
         const FIXED_PITCH = 1 << 0;
         const SERIF = 1 << 1;
         const SYMBOLIC = 1 << 2;

@@ -87,6 +87,7 @@ pub enum InterpreterWarning {
     ImageDecodeFailure,
 }
 
+/// Interpret the instructions from `ops` and render them into the device.
 pub fn interpret<'a, 'b>(
     ops: impl Iterator<Item = TypedInstruction<'b>>,
     resources: &Resources<'a>,
