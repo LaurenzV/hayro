@@ -8,7 +8,7 @@ readme.workspace = true
 license.workspace = true
 
 [dependencies]
-hayro-syntax = { path = "../hayro-syntax" }
+hayro-syntax = { workspace = true }
 pdf-writer = { workspace = true }
 flate2 = { workspace = true }
 log = { workspace = true }
