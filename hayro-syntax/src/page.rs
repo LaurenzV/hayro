@@ -38,7 +38,6 @@ impl PagesContext {
 
 /// A structure holding the pages of a PDF document.
 pub struct Pages<'a> {
-    /// The pages of the document.
     pages: Vec<Page<'a>>,
     xref: &'a XRef,
 }
@@ -231,7 +230,7 @@ impl<'a> Page<'a> {
         self.crop_box
     }
 
-    /// Get the crop box of the page.
+    /// Return the intersection of crop box and media box.
     pub fn intersected_crop_box(&self) -> Rect {
         self.crop_box().intersect(self.media_box())
     }
@@ -248,11 +247,6 @@ impl<'a> Page<'a> {
                 crop_box.height().max(1.0) as f32,
             )
         }
-    }
-
-    /// A clip path that should be applied initially, representing the visible area.
-    pub fn view_box(&self) -> Rect {
-        self.intersected_crop_box()
     }
 
     /// Return the initial transform that should be applied when rendering. This accounts for a
@@ -315,7 +309,7 @@ impl<'a> Page<'a> {
         (base_width, base_height)
     }
 
-    /// Get the operations of the content stream of the page.
+    /// Return an untyped iterator over the operators of the page's content stream.
     pub fn operations(&self) -> UntypedIter {
         self.operations_impl().unwrap_or(UntypedIter::empty())
     }
@@ -325,13 +319,12 @@ impl<'a> Page<'a> {
         &self.inner
     }
 
-    // TODO: Remove?
     /// Get the xref table (of the document the page belongs to).
     pub fn xref(&self) -> &'a XRef {
         self.ctx.xref
     }
 
-    /// Return an iterator over the operators in the page's content stream.
+    /// Return a typed iterator over the operators of the page's content stream.
     pub fn typed_operations(&self) -> TypedIter {
         TypedIter::from_untyped(self.operations().into_iter())
     }

@@ -6,60 +6,61 @@ A low-level library for reading PDF files.
 
 This crate implements most of the points in the `Syntax` chapter of the PDF reference, and therefore
 serves as a very good basis for building various abstractions on top of it, without having to reimplement
-the PDF parsing logic. 
+the PDF parsing logic.
 
 This crate does not provide more high-level functionality, such as parsing fonts or color spaces.
 Such functionality is out-of-scope for `hayro-syntax`, since this crate is supposed to be
-as light-weight and application-agnostic as possible. Functionality-wise, this crate is therefore
-pretty much feature-complete, though more low-level APIs might be added in the future.
+as *light-weight* and *application-agnostic* as possible. Functionality-wise, this crate is therefore
+close to feature-complete (the main missing feature is support for encrypted documents), though more 
+low-level APIs might be added in the future.
 
 ## Example
-This short example shows how you can iterate over the operations of the content stream of all pages
-in a PDF file.
+This short example shows you how to load a PDF file and iterate over the content streams of all
+pages.
 ```rust
 use std::path::PathBuf;
 use std::sync::Arc;
 use hayro_syntax::Pdf;
 
-let data = std::fs::read(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../hayro-render/pdfs/text_with_rise.pdf")).unwrap();
+let data = std::fs::read(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../hayro-tests/pdfs/text_with_rise.pdf")).unwrap();
 let pdf = Pdf::new(Arc::new(data)).unwrap();
-let pages = pdf.pages().unwrap();
+let pages = pdf.pages();
 
-for page in pages {
+for page in pages.iter() {
     for op in page.typed_operations() {
         println!("{:?}", op);
     }
 }
 ```
 
+## Safety
+There is one usage of `unsafe`, needed to implement caching using a self-referential struct. Other
+than that, there is no usage of `unsafe`, especially in _any_ of the parser code.
+
 ## Features
 The supported features include:
 - Parsing the xref table in all of its possible formats, including xref streams.
-- Parsing of all objects (also in object streams).
-- Parsing and evaluating of PDF functions.
+- Best-effort attempt at repairing broken PDF files.
+- Parsing of all objects types (also in object streams).
+- Parsing and evaluating PDF functions.
 - Parsing and decoding PDF streams.
-- Iterating over pages in a PDF as well as their content streams in a typed fashion.
-- The crate is very lightweight in comparison to other PDF crates, at least if you don't enable
-  the jpeg2000 feature.
+- Iterating over pages as well as their content streams in a typed fashion.
+- The crate is very lightweight, especially in comparison to other PDF crates, assuming you don't
+  enable the `jpeg2000` feature (see further below).
 
 ## Limitations
-I would like to highlight the following limitations:
-
-- There are still features missing, for example, support for encrypted PDFs. In addition to that,
+- There are still a few features missing, for example, support for encrypted PDFs. In addition to that,
   many properties (like page annotations) are currently not exposed.
-- This crate is for read-only processing, you cannot directly use it to manipulate PDF files. 
+- This crate is for read-only processing, you cannot directly use it to manipulate PDF files.
   If you need to do that, there are other crates in the Rust ecosystem that are suitable for this.
-- I do want to note that the main reason this crate exists is to serve as a foundation for 
-  `hayro-render`. Therefore, I am not planning on adding many other features that aren't needed
-  to rasterize PDFs. But I am open to feedback, and if the crate covers everything
-  you need, you are more than free to use it directly!
 
 ## Cargo features
 This crate has one feature, `jpeg2000`. PDF allows for the insertion of JPEG2000 images. However,
-unfortunately, JPEG2000 is a very complicated format. There exists a Rust crate that allows decoding
-such images (which is also used by `hayro-syntax`), but it is a very heavy dependency, has a lot of
-unsafe code (due to having been ported with `c2rust`), and also has a dependency on libc, meaning that you
-might be restricted in the targets you can build to. Because of this, I recommend not enabling this
-feature, unless you absolutely need to be able to support such images.
+unfortunately, JPEG2000 is a very complicated format. There exists a Rust 
+[jpeg2k](https://github.com/Neopallium/jpeg2k) crate that allows decoding such images. However, it is a 
+relatively heavy dependency, a lot of unsafe code (due to having been ported with `c2rust`), and 
+also has a dependency on libc, meaning that you might be restricted in the targets you can build to. 
+Because of this, I recommend not enabling this feature unless you absolutely need to be able to 
+support such images.
 
 <!-- cargo-rdme end -->

@@ -432,7 +432,7 @@ pub fn render(
         None,
     );
     device.push_clip_path(&ClipPath {
-        path: initial_transform * page.view_box().to_path(0.1),
+        path: initial_transform * page.intersected_crop_box().to_path(0.1),
         fill: FillRule::NonZero,
     });
 
