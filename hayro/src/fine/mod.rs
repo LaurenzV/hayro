@@ -1,9 +1,6 @@
 // Copyright 2025 the Vello Authors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! Fine rasterization runs the commands in each wide tile to determine the final RGBA value
-//! of each pixel and pack it into the pixmap.
-
 mod shader;
 
 use crate::coarse::{Cmd, WideTile};
@@ -19,15 +16,14 @@ use kurbo::{Point, Vec2};
 pub(crate) const COLOR_COMPONENTS: usize = 4;
 pub(crate) const TILE_HEIGHT_COMPONENTS: usize = Tile::HEIGHT as usize * COLOR_COMPONENTS;
 #[doc(hidden)]
-pub const SCRATCH_BUF_SIZE: usize =
+pub(crate) const SCRATCH_BUF_SIZE: usize =
     WideTile::WIDTH as usize * Tile::HEIGHT as usize * COLOR_COMPONENTS;
 
-pub type ScratchBuf<F> = [F; SCRATCH_BUF_SIZE];
+pub(crate) type ScratchBuf<F> = [F; SCRATCH_BUF_SIZE];
 
 #[derive(Debug)]
 #[doc(hidden)]
-/// This is an internal struct, do not access directly.
-pub struct Fine {
+pub(crate) struct Fine {
     pub(crate) width: u16,
     pub(crate) height: u16,
     pub(crate) wide_coords: (u16, u16),
@@ -37,7 +33,7 @@ pub struct Fine {
 
 impl Fine {
     /// Create a new fine rasterizer.
-    pub fn new(width: u16, height: u16) -> Self {
+    pub(crate) fn new(width: u16, height: u16) -> Self {
         let blend_buf = [0.0; SCRATCH_BUF_SIZE];
         let color_buf = [0.0; SCRATCH_BUF_SIZE];
 
@@ -51,11 +47,11 @@ impl Fine {
     }
 
     /// Set the coordinates of the current wide tile that is being processed (in tile units).
-    pub fn set_coords(&mut self, x: u16, y: u16) {
+    pub(crate) fn set_coords(&mut self, x: u16, y: u16) {
         self.wide_coords = (x, y);
     }
 
-    pub fn clear(&mut self, premul_color: [f32; 4]) {
+    pub(crate) fn clear(&mut self, premul_color: [f32; 4]) {
         let blend_buf = self.blend_buf.last_mut().unwrap();
 
         if premul_color[0] == premul_color[1]
@@ -71,8 +67,7 @@ impl Fine {
         }
     }
 
-    #[doc(hidden)]
-    pub fn pack(&mut self, out_buf: &mut [u8]) {
+    pub(crate) fn pack(&mut self, out_buf: &mut [u8]) {
         let blend_buf = self.blend_buf.last_mut().unwrap();
 
         pack(
@@ -200,7 +195,13 @@ impl Fine {
     }
 
     /// Fill at a given x and with a width using the given paint.
-    pub fn fill(&mut self, x: usize, width: usize, fill: &Paint, encoded_paints: &[EncodedPaint]) {
+    pub(crate) fn fill(
+        &mut self,
+        x: usize,
+        width: usize,
+        fill: &Paint,
+        encoded_paints: &[EncodedPaint],
+    ) {
         let blend_buf = &mut self.blend_buf.last_mut().unwrap()[x * TILE_HEIGHT_COMPONENTS..]
             [..TILE_HEIGHT_COMPONENTS * width];
         let color_buf =
@@ -275,7 +276,7 @@ impl Fine {
     }
 
     /// Strip at a given x and with a width using the given paint and alpha values.
-    pub fn strip(
+    pub(crate) fn strip(
         &mut self,
         x: usize,
         width: usize,

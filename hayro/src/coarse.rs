@@ -1,8 +1,6 @@
 // Copyright 2025 the Vello Authors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! Generating and processing wide tiles.
-
 use crate::mask::Mask;
 use crate::paint::{Paint, PremulColor};
 use crate::{strip::Strip, tile::Tile};
@@ -26,7 +24,7 @@ struct Layer {
 
 /// A container for wide tiles.
 #[derive(Debug)]
-pub struct Wide {
+pub(crate) struct Wide {
     /// The width of the container.
     pub width: u16,
     /// The height of the container.
@@ -110,7 +108,7 @@ impl Bbox {
 
 impl Wide {
     /// Create a new container for wide tiles.
-    pub fn new(width: u16, height: u16) -> Self {
+    pub(crate) fn new(width: u16, height: u16) -> Self {
         let width_tiles = width.div_ceil(WideTile::WIDTH);
         let height_tiles = height.div_ceil(Tile::HEIGHT);
         let mut tiles = Vec::with_capacity(usize::from(width_tiles) * usize::from(height_tiles));
@@ -131,12 +129,12 @@ impl Wide {
     }
 
     /// Whether there are any existing layers that haven't been popped yet.
-    pub fn has_layers(&self) -> bool {
+    pub(crate) fn has_layers(&self) -> bool {
         !self.layer_stack.is_empty()
     }
 
     /// Reset all tiles in the container.
-    pub fn reset(&mut self) {
+    pub(crate) fn reset(&mut self) {
         for tile in &mut self.tiles {
             tile.bg = PremulColor::from_alpha_color(AlphaColor::TRANSPARENT);
             tile.cmds.clear();
@@ -146,19 +144,19 @@ impl Wide {
     }
 
     /// Return the number of horizontal tiles.
-    pub fn width_tiles(&self) -> u16 {
+    pub(crate) fn width_tiles(&self) -> u16 {
         self.width.div_ceil(WideTile::WIDTH)
     }
 
     /// Return the number of vertical tiles.
-    pub fn height_tiles(&self) -> u16 {
+    pub(crate) fn height_tiles(&self) -> u16 {
         self.height.div_ceil(Tile::HEIGHT)
     }
 
     /// Get the wide tile at a certain index.
     ///
     /// Panics if the index is out-of-range.
-    pub fn get(&self, x: u16, y: u16) -> &WideTile {
+    pub(crate) fn get(&self, x: u16, y: u16) -> &WideTile {
         assert!(
             x < self.width_tiles() && y < self.height_tiles(),
             "attempted to access out-of-bounds wide tile"
@@ -170,7 +168,7 @@ impl Wide {
     /// Get mutable access to the wide tile at a certain index.
     ///
     /// Panics if the index is out-of-range.
-    pub fn get_mut(&mut self, x: u16, y: u16) -> &mut WideTile {
+    pub(crate) fn get_mut(&mut self, x: u16, y: u16) -> &mut WideTile {
         assert!(
             x < self.width_tiles() && y < self.height_tiles(),
             "attempted to access out-of-bounds wide tile"
@@ -192,7 +190,7 @@ impl Wide {
     ///    - Generate alpha fill commands for the intersected wide tiles
     /// 2. For active fill regions (determined by fill rule):
     ///    - Generate solid fill commands for the regions between strips
-    pub fn generate(
+    pub(crate) fn generate(
         &mut self,
         strip_buf: &[Strip],
         fill_rule: FillRule,
@@ -306,7 +304,7 @@ impl Wide {
     }
 
     /// Push a new layer with the given properties.
-    pub fn push_layer(
+    pub(crate) fn push_layer(
         &mut self,
         clip_path: Option<(impl Into<Box<[Strip]>>, FillRule)>,
         mask: Option<Mask>,
@@ -332,7 +330,7 @@ impl Wide {
     }
 
     /// Pop a previously pushed layer.
-    pub fn pop_layer(&mut self) {
+    pub(crate) fn pop_layer(&mut self) {
         // This method basically unwinds everything we did in `push_layer`.
         let layer = self.layer_stack.pop().unwrap();
 
@@ -366,7 +364,7 @@ impl Wide {
     ///    - If covered by zero winding: `push_zero_clip`
     ///    - If fully covered by non-zero winding: do nothing (clip is a no-op)
     ///    - If partially covered: `push_clip`
-    pub fn push_clip(&mut self, strips: impl Into<Box<[Strip]>>, fill_rule: FillRule) {
+    pub(crate) fn push_clip(&mut self, strips: impl Into<Box<[Strip]>>, fill_rule: FillRule) {
         let strips = strips.into();
         let n_strips = strips.len();
 
@@ -692,7 +690,7 @@ impl Wide {
 
 /// A wide tile.
 #[derive(Debug)]
-pub struct WideTile {
+pub(crate) struct WideTile {
     /// The background of the tile.
     pub bg: PremulColor,
     /// The draw commands of the tile.
@@ -710,7 +708,7 @@ impl WideTile {
     pub const WIDTH: u16 = 256;
 
     /// Create a new wide tile.
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             bg: PremulColor::from_alpha_color(AlphaColor::TRANSPARENT),
             cmds: vec![],
@@ -771,7 +769,7 @@ impl WideTile {
     }
 
     /// Adds a new clip region to the current wide tile.
-    pub fn push_clip(&mut self) {
+    pub(crate) fn push_clip(&mut self) {
         if !self.is_zero_clip() {
             self.push_buf();
             self.n_clip += 1;
@@ -779,7 +777,7 @@ impl WideTile {
     }
 
     /// Removes the most recently added clip region from the current wide tile.
-    pub fn pop_clip(&mut self) {
+    pub(crate) fn pop_clip(&mut self) {
         if !self.is_zero_clip() {
             self.pop_buf();
             self.n_clip -= 1;
@@ -787,42 +785,42 @@ impl WideTile {
     }
 
     /// Adds a zero-winding clip region to the stack.
-    pub fn push_zero_clip(&mut self) {
+    pub(crate) fn push_zero_clip(&mut self) {
         self.n_zero_clip += 1;
     }
 
     /// Removes the most recently added zero-winding clip region.
-    pub fn pop_zero_clip(&mut self) {
+    pub(crate) fn pop_zero_clip(&mut self) {
         self.n_zero_clip -= 1;
     }
 
     /// Checks if the current clip region is a zero-winding clip.
-    pub fn is_zero_clip(&mut self) -> bool {
+    pub(crate) fn is_zero_clip(&mut self) -> bool {
         self.n_zero_clip > 0
     }
 
     /// Applies a clip strip operation with the given parameters.
-    pub fn clip_strip(&mut self, cmd_clip_strip: CmdClipAlphaFill) {
+    pub(crate) fn clip_strip(&mut self, cmd_clip_strip: CmdClipAlphaFill) {
         if !self.is_zero_clip() && !matches!(self.cmds.last(), Some(Cmd::PushBuf)) {
             self.cmds.push(Cmd::ClipStrip(cmd_clip_strip));
         }
     }
 
     /// Applies a clip fill operation at the specified position and width.
-    pub fn clip_fill(&mut self, x: u32, width: u32) {
+    pub(crate) fn clip_fill(&mut self, x: u32, width: u32) {
         if !self.is_zero_clip() && !matches!(self.cmds.last(), Some(Cmd::PushBuf)) {
             self.cmds.push(Cmd::ClipFill(CmdClipFill { x, width }));
         }
     }
 
     /// Push a buffer.
-    pub fn push_buf(&mut self) {
+    pub(crate) fn push_buf(&mut self) {
         self.cmds.push(Cmd::PushBuf);
         self.n_bufs += 1;
     }
 
     /// Pop the most recent buffer.
-    pub fn pop_buf(&mut self) {
+    pub(crate) fn pop_buf(&mut self) {
         if matches!(self.cmds.last(), Some(&Cmd::PushBuf)) {
             // Optimization: If no drawing happened between the last `PushBuf`,
             // we can just pop it instead.
@@ -835,19 +833,19 @@ impl WideTile {
     }
 
     /// Apply an opacity to the whole buffer.
-    pub fn opacity(&mut self, opacity: f32) {
+    pub(crate) fn opacity(&mut self, opacity: f32) {
         if opacity != 1.0 {
             self.cmds.push(Cmd::Opacity(opacity));
         }
     }
 
     /// Apply a mask to the whole buffer.
-    pub fn mask(&mut self, mask: Mask) {
+    pub(crate) fn mask(&mut self, mask: Mask) {
         self.cmds.push(Cmd::Mask(mask));
     }
 
     /// Blend the current buffer into the previous buffer in the stack.
-    pub fn blend(&mut self) {
+    pub(crate) fn blend(&mut self) {
         // Optimization: If no drawing happened since the last `PushBuf` and the blend mode
         // is not destructive, we do not need to do any blending at all.
         if !matches!(self.cmds.last(), Some(&Cmd::PushBuf)) {
@@ -858,7 +856,7 @@ impl WideTile {
 
 /// A drawing command.
 #[derive(Debug, PartialEq)]
-pub enum Cmd {
+pub(crate) enum Cmd {
     /// A fill command.
     Fill(CmdFill),
     /// A fill command with alpha mask.
@@ -890,7 +888,7 @@ pub enum Cmd {
 
 /// Fill a consecutive region of a wide tile.
 #[derive(Debug, Clone, PartialEq)]
-pub struct CmdFill {
+pub(crate) struct CmdFill {
     /// The horizontal start position of the command in pixels.
     pub x: u16,
     /// The width of the command in pixels.
@@ -901,7 +899,7 @@ pub struct CmdFill {
 
 /// Fill a consecutive region of a wide tile with an alpha mask.
 #[derive(Debug, Clone, PartialEq)]
-pub struct CmdAlphaFill {
+pub(crate) struct CmdAlphaFill {
     /// The horizontal start position of the command in pixels.
     pub x: u16,
     /// The width of the command in pixels.
@@ -915,7 +913,7 @@ pub struct CmdAlphaFill {
 
 /// Same as fill, but copies top of clip stack to next on stack.
 #[derive(Debug, PartialEq, Eq)]
-pub struct CmdClipFill {
+pub(crate) struct CmdClipFill {
     /// The horizontal start position of the command in pixels.
     pub x: u32,
     /// The width of the command in pixels.
@@ -924,7 +922,7 @@ pub struct CmdClipFill {
 
 /// Same as strip, but composites top of clip stack to next on stack.
 #[derive(Debug, PartialEq, Eq)]
-pub struct CmdClipAlphaFill {
+pub(crate) struct CmdClipAlphaFill {
     /// The horizontal start position of the command in pixels.
     pub x: u32,
     /// The width of the command in pixels.

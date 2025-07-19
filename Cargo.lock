@@ -421,10 +421,8 @@ version = "0.1.0"
 dependencies = [
  "bytemuck",
  "hayro-interpret",
- "hayro-syntax",
  "image 0.25.6",
  "kurbo",
- "log",
  "rustc-hash",
  "smallvec",
 ]

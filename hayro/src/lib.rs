@@ -2,24 +2,17 @@ use crate::encode::{Buffer, x_y_advances};
 use crate::mask::Mask;
 use crate::paint::{Image, PaintType};
 use crate::pixmap::Pixmap;
-use crate::render::RenderContext;
 use hayro_interpret::Context;
 use hayro_interpret::Device;
-pub use hayro_interpret::InterpreterSettings;
 use hayro_interpret::color::AlphaColor;
-pub use hayro_interpret::font::FontData;
-pub use hayro_interpret::font::FontQuery;
 use hayro_interpret::font::Glyph;
-pub use hayro_interpret::font::StandardFont;
+use hayro_interpret::hayro_syntax::object::ObjectIdentifier;
 use hayro_interpret::pattern::Pattern;
 use hayro_interpret::util::FloatExt;
 use hayro_interpret::{ClipPath, LumaData};
 use hayro_interpret::{
     FillProps, FillRule, MaskType, Paint, RgbData, SoftMask, StrokeProps, interpret,
 };
-pub use hayro_syntax::Pdf;
-use hayro_syntax::object::ObjectIdentifier;
-use hayro_syntax::page::{A4, Page, Rotation};
 use image::codecs::png::PngEncoder;
 use image::imageops::FilterType;
 use image::{DynamicImage, ExtendedColorType, ImageBuffer, ImageEncoder, RgbImage};
@@ -29,14 +22,19 @@ use std::io::Cursor;
 use std::ops::RangeInclusive;
 use std::sync::Arc;
 
+pub use ctx::RenderContext;
+pub use hayro_interpret::font::{FontData, FontQuery, StandardFont};
+use hayro_interpret::hayro_syntax::page::Page;
+pub use hayro_interpret::{InterpreterSettings, Pdf};
+
 mod coarse;
+mod ctx;
 mod encode;
 mod fine;
 mod flatten;
 mod mask;
 mod paint;
 mod pixmap;
-pub mod render;
 mod strip;
 mod tile;
 

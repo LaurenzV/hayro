@@ -10,10 +10,10 @@ readme = "README.md"
 license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
+hayro = { path = "hayro", default-features = false }
 hayro-font = { path = "hayro-font" }
-hayro-interpret = { path = "hayro-interpret", default-features = true }
-hayro = { path = "hayro", default-features = true }
-hayro-syntax = { path = "hayro-syntax", default-features = true }
+hayro-interpret = { path = "hayro-interpret", default-features = false }
+hayro-syntax = { path = "hayro-syntax", default-features = false }
 hayro-write = { path = "hayro-write" }
 
 bitflags = { version = "2.9" }
