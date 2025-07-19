@@ -17,17 +17,17 @@ hayro-syntax = { path = "hayro-syntax", default-features = false }
 hayro-write = { path = "hayro-write" }
 
 bitflags = { version = "2.9" }
-bytemuck = { version = "1.23" }
+bytemuck = { version = "1" }
 image = { version = "0.25", default-features = false }
 jpeg2k = { version = "0.10", default-features = false, features = ["openjp2"] }
 kurbo = { version = "0.11" }
 log = { version = "0.4" }
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
-oxipng = { version = "9.1" }
-once_cell = { version = "1.20" }
+oxipng = { version = "9" }
+once_cell = { version = "1" }
 phf = { version = "0.11" }
 qcms = { version = "0.3" }
-rustc-hash = { version = "2.1" }
+rustc-hash = { version = "2" }
 skrifa = { version = "0.32" }
 smallvec = { version = "1" }
 yoke = { version = "0.8" }
