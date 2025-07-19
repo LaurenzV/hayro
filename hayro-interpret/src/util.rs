@@ -1,3 +1,5 @@
+//! A number of utility methods.
+
 use log::warn;
 use skrifa::GlyphId;
 use skrifa::raw::tables::cmap::CmapSubtable;
@@ -47,6 +49,7 @@ pub trait FloatExt: Sized + Sub<f32, Output = f32> + Copy {
         self.is_nearly_zero_within_tolerance(SCALAR_NEARLY_ZERO)
     }
 
+    /// Whether the number is nearly equal to another number.
     fn is_nearly_equal(&self, other: f32) -> bool {
         (*self - other).is_nearly_zero()
     }

@@ -22,10 +22,10 @@ use crate::font::FontQuery;
 
 pub use hayro_syntax::*;
 pub use interpret::*;
+pub use soft_mask::*;
 pub use types::*;
 
 pub use paint::{Paint, PaintType};
-pub use soft_mask::{MaskType, SoftMask};
 
 /// A container for the bytes of a PDF file.
 pub type FontData = Arc<dyn AsRef<[u8]> + Send + Sync>;

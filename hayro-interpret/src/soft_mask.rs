@@ -16,13 +16,16 @@ use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 use std::sync::Arc;
 
+/// Type type of mask.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MaskType {
+    /// A luminosity mask.
     Luminosity,
+    /// An alpha mask.
     Alpha,
 }
 
-struct SoftMaskRepr<'a> {
+struct Repr<'a> {
     obj_id: ObjectIdentifier,
     group: XObject<'a>,
     mask_type: MaskType,
@@ -34,8 +37,9 @@ struct SoftMaskRepr<'a> {
     xref: &'a XRef,
 }
 
+/// A soft mask.
 #[derive(Clone)]
-pub struct SoftMask<'a>(Arc<SoftMaskRepr<'a>>);
+pub struct SoftMask<'a>(Arc<Repr<'a>>);
 
 impl Debug for SoftMask<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -45,7 +49,7 @@ impl Debug for SoftMask<'_> {
 
 impl Hash for SoftMask<'_> {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        // Soft masks are unique identified by their object
+        // Soft masks are uniquely identified by their object
         self.0.obj_id.hash(state);
     }
 }
@@ -75,7 +79,7 @@ impl<'a> SoftMask<'a> {
             _ => return None,
         };
 
-        Some(Self(Arc::new(SoftMaskRepr {
+        Some(Self(Arc::new(Repr {
             obj_id,
             group,
             mask_type,
@@ -88,6 +92,7 @@ impl<'a> SoftMask<'a> {
         })))
     }
 
+    /// Interpret the contents of the mask into the given device.
     pub fn interpret(&self, device: &mut impl Device) {
         let mut ctx = Context::new(
             self.0.root_transform,
@@ -99,10 +104,14 @@ impl<'a> SoftMask<'a> {
         draw_xobject(&self.0.group, &self.0.parent_resources, &mut ctx, device);
     }
 
+    /// Return the object identifier of the mask.
+    ///
+    /// This can be used as a unique identifier for caching purposes.
     pub fn id(&self) -> ObjectIdentifier {
         self.0.obj_id
     }
 
+    /// Return the underlying mask type.
     pub fn mask_type(&self) -> MaskType {
         self.0.mask_type
     }
