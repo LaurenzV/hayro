@@ -19,7 +19,7 @@ use crate::object::Stream;
 use crate::object::dict::keys::JBIG2_GLOBALS;
 use crate::reader::Reader as CrateReader;
 use log::warn;
-use std::cell::{OnceCell, RefCell};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::LazyLock;

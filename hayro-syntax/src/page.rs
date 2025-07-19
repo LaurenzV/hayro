@@ -15,7 +15,6 @@ use crate::xref::XRef;
 use kurbo::Affine;
 use log::warn;
 use std::cell::OnceCell;
-use std::collections::HashSet;
 use std::ops::Deref;
 
 /// Attributes that can be inherited.
@@ -531,7 +530,7 @@ pub(crate) mod cached {
         pages: Pages<'static>,
         // NOTE: `pages` references the data in `xref`, so it's important that `xref`
         // appears after `pages` in the struct definition to ensure correct drop order.
-        xref: Box<XRef>,
+        _xref: Box<XRef>,
     }
 
     impl CachedPages {
@@ -550,7 +549,7 @@ pub(crate) mod cached {
                 .get(xref.trailer_data().pages_ref)
                 .and_then(|p| Pages::new(p, ctx, xref_reference))?;
 
-            Some(Self { pages, xref })
+            Some(Self { pages, _xref: xref })
         }
 
         pub(crate) fn get(&self) -> &Pages {

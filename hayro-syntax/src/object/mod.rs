@@ -249,22 +249,6 @@ pub fn dict_or_stream<'a>(obj: &Object<'a>) -> Option<(Dict<'a>, Option<Stream<'
     }
 }
 
-pub(crate) struct ObjectData {
-    start_offset: usize,
-    end_offset: usize,
-    xref: XRef,
-}
-
-impl ObjectData {
-    pub(crate) fn new(start_offset: usize, end_offset: usize, xref: XRef) -> Self {
-        Self {
-            start_offset,
-            end_offset,
-            xref,
-        }
-    }
-}
-
 mod macros {
     macro_rules! object {
         ($t:ident $(<$l:lifetime>),*, $s:ident) => {

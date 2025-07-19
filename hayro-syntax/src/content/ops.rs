@@ -71,12 +71,12 @@ op_impl!(
 
 #[cfg(test)]
 mod tests {
+    use crate::content::TypedIter;
     use crate::content::ops::{
         BeginMarkedContentWithProperties, ClosePath, EndMarkedContent, FillPathNonZero, LineTo,
         MarkedContentPointWithProperties, MoveTo, NonStrokeColorDeviceRgb, NonStrokeColorNamed,
         SetGraphicsState, StrokeColorNamed, Transform, TypedInstruction,
     };
-    use crate::content::{TypedIter, UntypedIter};
     use crate::object::Dict;
     use crate::object::Name;
     use crate::object::Number;

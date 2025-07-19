@@ -132,7 +132,8 @@ impl<'a> BitWriter<'a> {
     }
 
     /// Align the writer to the next byte boundary.
-    pub fn align(&mut self) {
+    #[cfg(feature = "jpeg2000")]
+    pub(crate) fn align(&mut self) {
         let bit_pos = self.bit_pos();
 
         if bit_pos % 8 != 0 {

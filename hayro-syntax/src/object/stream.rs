@@ -162,16 +162,6 @@ pub enum ImageColorSpace {
     Cmyk,
 }
 
-impl ImageColorSpace {
-    pub(crate) fn num_components(&self) -> u8 {
-        match self {
-            ImageColorSpace::Gray => 1,
-            ImageColorSpace::Rgb => 3,
-            ImageColorSpace::Cmyk => 4,
-        }
-    }
-}
-
 /// Additional data that is extracted from some image streams.
 pub struct ImageData {
     /// An optional alpha channel of the image.

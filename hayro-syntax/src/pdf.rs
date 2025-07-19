@@ -2,9 +2,9 @@
 
 use crate::PdfData;
 use crate::object::Object;
+use crate::page::Pages;
 use crate::page::cached::CachedPages;
-use crate::page::{Page, Pages};
-use crate::reader::{Reader, ReaderContext};
+use crate::reader::Reader;
 use crate::xref::{XRef, XRefError, fallback, root_xref};
 use std::ops::Deref;
 
@@ -128,19 +128,6 @@ impl PdfVersion {
     }
 }
 
-#[derive(Clone, Debug)]
-struct XRefWrapper {
-    xref: XRef,
-}
-
-impl Deref for XRefWrapper {
-    type Target = XRef;
-
-    fn deref(&self) -> &Self::Target {
-        &self.xref
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use crate::pdf::{Pdf, PdfVersion};
@@ -149,7 +136,7 @@ mod tests {
     #[test]
     fn issue_49() {
         let data = Arc::new([]);
-        let pdf = Pdf::new(data);
+        let _ = Pdf::new(data);
     }
 
     #[test]
