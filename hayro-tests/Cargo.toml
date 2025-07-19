@@ -14,7 +14,7 @@ name = "tests"
 path = "tests/mod.rs"
 
 [dependencies]
-hayro-render = { path = "../hayro-render", features = ["jpeg2000"] }
+hayro = { path = "../hayro", features = ["jpeg2000"] }
 hayro-write = { workspace = true }
 pdf-writer = { workspace = true }
 

@@ -416,11 +416,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bf151400ff0baff5465007dd2f3e717f3fe502074ca563069ce3a6629d07b289"
 
 [[package]]
+name = "hayro"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "hayro-interpret",
+ "hayro-syntax",
+ "image 0.25.6",
+ "kurbo",
+ "log",
+ "rustc-hash",
+ "smallvec",
+]
+
+[[package]]
 name = "hayro-demo"
 version = "0.1.0"
 dependencies = [
  "console_error_panic_hook",
- "hayro-render",
+ "hayro",
  "hayro-syntax",
  "js-sys",
  "log",
@@ -454,20 +468,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "hayro-render"
-version = "0.1.0"
-dependencies = [
- "bytemuck",
- "hayro-interpret",
- "hayro-syntax",
- "image 0.25.6",
- "kurbo",
- "log",
- "rustc-hash",
- "smallvec",
-]
-
-[[package]]
 name = "hayro-syntax"
 version = "0.0.1"
 dependencies = [
@@ -484,7 +484,7 @@ dependencies = [
 name = "hayro-tests"
 version = "0.1.0"
 dependencies = [
- "hayro-render",
+ "hayro",
  "hayro-write",
  "image 0.25.6",
  "once_cell",

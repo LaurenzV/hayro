@@ -1,6 +1,6 @@
-use hayro_render::InterpreterSettings;
-use hayro_render::Pdf;
-use hayro_render::render_png;
+use hayro::InterpreterSettings;
+use hayro::Pdf;
+use hayro::render_png;
 use std::sync::Arc;
 
 fn render_fuzzed(file: &[u8]) {

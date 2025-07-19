@@ -1,4 +1,4 @@
-use hayro_render::Pdf;
+use hayro::Pdf;
 use pdf_writer::{Dict, Name, Obj};
 use std::fs;
 use std::path::Path;

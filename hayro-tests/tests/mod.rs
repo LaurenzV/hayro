@@ -1,7 +1,7 @@
-use hayro_render::FontQuery;
-use hayro_render::Pdf;
-use hayro_render::StandardFont;
-use hayro_render::{FontData, InterpreterSettings};
+use hayro::FontQuery;
+use hayro::Pdf;
+use hayro::StandardFont;
+use hayro::{FontData, InterpreterSettings};
 use image::{Rgba, RgbaImage, load_from_memory};
 use once_cell::sync::Lazy;
 use pdf_writer::Ref;
@@ -185,7 +185,7 @@ pub fn run_render_test(name: &str, file_path: &str, range_str: Option<&str>) {
     check_render(
         name,
         RENDER_SNAPSHOTS_PATH.clone(),
-        hayro_render::render_png(&pdf, 1.0, settings, range).unwrap(),
+        hayro::render_png(&pdf, 1.0, settings, range).unwrap(),
     );
 }
 

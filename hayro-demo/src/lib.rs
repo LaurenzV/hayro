@@ -1,5 +1,5 @@
 use console_error_panic_hook;
-use hayro_render::{FontData, FontQuery, InterpreterSettings, StandardFont};
+use hayro::{FontData, FontQuery, InterpreterSettings, StandardFont};
 use hayro_syntax::Pdf;
 use js_sys;
 use std::sync::Arc;
@@ -153,7 +153,7 @@ impl PdfViewer {
             ..Default::default()
         };
 
-        let pixmaps = hayro_render::render_png(
+        let pixmaps = hayro::render_png(
             pdf,
             2.0,
             settings,

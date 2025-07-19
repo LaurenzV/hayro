@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["hayro-interpret", "hayro-render","hayro-syntax", "hayro-demo", "hayro-tests", "hayro-write"]
+members = ["hayro-interpret", "hayro","hayro-syntax", "hayro-demo", "hayro-tests", "hayro-write"]
 
 [workspace.package]
 authors = ["Laurenz Stampfl <laurenz.stampfl@gmail.com>"]
@@ -12,7 +12,7 @@ license = "MIT OR Apache-2.0"
 [workspace.dependencies]
 hayro-font = { path = "hayro-font" }
 hayro-interpret = { path = "hayro-interpret", default-features = true }
-hayro-render = { path = "hayro-render", default-features = true }
+hayro = { path = "hayro", default-features = true }
 hayro-syntax = { path = "hayro-syntax", default-features = true }
 hayro-write = { path = "hayro-write" }
 

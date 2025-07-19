@@ -26,5 +26,5 @@ features = [
 [dependencies.hayro-syntax]
 workspace = true
 
-[dependencies.hayro-render]
+[dependencies.hayro]
 workspace = true
