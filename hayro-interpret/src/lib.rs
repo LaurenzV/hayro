@@ -13,7 +13,6 @@ pub mod color;
 pub mod context;
 pub mod device;
 pub mod font;
-pub mod mask;
 pub mod pattern;
 pub mod shading;
 pub mod util;
