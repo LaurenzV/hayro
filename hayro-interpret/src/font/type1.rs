@@ -3,7 +3,7 @@ use crate::font::glyph_simulator::GlyphSimulator;
 use crate::font::standard_font::{StandardFont, StandardFontBlob, select_standard_font};
 use crate::font::true_type::{read_encoding, read_widths};
 use crate::font::{Encoding, FallbackFontQuery, FontQuery};
-use crate::{FontResolverFn, InterpreterSettings};
+use crate::FontResolverFn;
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::{FONT_DESC, FONT_FILE, FONT_FILE3};

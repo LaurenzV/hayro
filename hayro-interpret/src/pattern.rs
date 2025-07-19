@@ -13,7 +13,7 @@ use crate::{
     FillProps, FillRule, InterpreterSettings, LumaData, Paint, PaintType, RgbData, StrokeProps,
     interpret,
 };
-use hayro_syntax::content::{TypedIter, UntypedIter};
+use hayro_syntax::content::TypedIter;
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Rect;
 use hayro_syntax::object::Stream;

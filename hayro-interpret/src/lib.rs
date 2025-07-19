@@ -14,9 +14,6 @@ useful for rendering to PNG or SVG, though this will be improved upon in the fut
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
-use kurbo::{Affine, Cap, Join, Point, Shape};
-use smallvec::{SmallVec, smallvec};
-use std::sync::Arc;
 
 mod cache;
 mod context;
@@ -33,7 +30,6 @@ pub mod pattern;
 pub mod shading;
 pub mod util;
 
-use crate::font::FontQuery;
 
 pub use context::*;
 pub use device::*;

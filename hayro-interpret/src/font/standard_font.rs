@@ -3,7 +3,7 @@ use crate::font::blob::{CffFontBlob, OpenTypeFontBlob};
 use crate::font::generated::{metrics, standard, symbol, zapf_dings};
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Name;
-use hayro_syntax::object::dict::keys::{BASE_FONT, P};
+use hayro_syntax::object::dict::keys::BASE_FONT;
 use kurbo::BezPath;
 use skrifa::GlyphId16;
 use skrifa::raw::TableProvider;

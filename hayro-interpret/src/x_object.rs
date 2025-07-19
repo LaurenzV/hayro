@@ -6,7 +6,7 @@ use crate::interpret::path::get_paint;
 use crate::{FillRule, InterpreterWarning, WarningSinkFn, interpret};
 use crate::{LumaData, RgbData};
 use hayro_syntax::bit_reader::{BitReader, BitSize};
-use hayro_syntax::content::{TypedIter, UntypedIter};
+use hayro_syntax::content::TypedIter;
 use hayro_syntax::function::interpolate;
 use hayro_syntax::object::Array;
 use hayro_syntax::object::Dict;

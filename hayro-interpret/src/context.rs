@@ -2,7 +2,7 @@ use crate::cache::Cache;
 use crate::color::ColorSpace;
 use crate::convert::convert_transform;
 use crate::font::Font;
-use crate::interpret::state::{State, TextState};
+use crate::interpret::state::State;
 use crate::{FillProps, FillRule, InterpreterSettings, StrokeProps};
 use hayro_syntax::content::ops::Transform;
 use hayro_syntax::object::Dict;
@@ -11,9 +11,8 @@ use hayro_syntax::object::ObjRef;
 use hayro_syntax::object::Object;
 use hayro_syntax::page::Resources;
 use hayro_syntax::xref::XRef;
-use kurbo::{Affine, BezPath, Cap, Join, Point};
+use kurbo::{Affine, BezPath, Point};
 use log::warn;
-use smallvec::smallvec;
 use std::collections::HashMap;
 
 /// A context for interpreting PDF files.

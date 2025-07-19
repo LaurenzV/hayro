@@ -2,7 +2,6 @@ use crate::font::blob::OpenTypeFontBlob;
 use crate::font::generated::{glyph_names, mac_os_roman, mac_roman};
 use crate::font::{Encoding, FontFlags};
 use crate::util::{CodeMapExt, OptionLog};
-use bitflags::bitflags;
 use hayro_syntax::object::Array;
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Name;

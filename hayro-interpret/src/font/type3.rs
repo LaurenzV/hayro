@@ -9,7 +9,7 @@ use crate::soft_mask::SoftMask;
 use crate::{FillProps, StrokeProps, interpret};
 use crate::{LumaData, RgbData};
 use hayro_syntax::content::ops::TypedInstruction;
-use hayro_syntax::content::{TypedIter, UntypedIter};
+use hayro_syntax::content::TypedIter;
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::{CHAR_PROCS, FONT_MATRIX, RESOURCES};
