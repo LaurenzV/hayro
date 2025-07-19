@@ -1,3 +1,5 @@
+//! This is just a test script to make it easier to manually test `hayro-write`.
+
 use hayro::Pdf;
 use std::fs;
 use std::path::Path;
@@ -17,7 +19,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     fs::create_dir_all(output_dir)?;
 
-    // Collect all PDF files and sort them
     let mut pdf_files: Vec<_> = fs::read_dir(input_dir)?
         .filter_map(|entry| {
             let entry = entry.ok()?;
@@ -30,7 +31,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
         .collect();
 
-    // Sort by filename
     pdf_files.sort_by(|a, b| {
         a.file_name()
             .unwrap()
