@@ -1,11 +1,7 @@
 use crate::bit_reader::{BitSize, BitWriter};
-#[cfg(feature = "jpeg2000")]
 use crate::filter::FilterResult;
-use crate::object::stream::ImageColorSpace;
-#[cfg(feature = "jpeg2000")]
-use crate::object::stream::ImageData;
+use crate::object::stream::{ImageColorSpace, ImageData};
 
-#[cfg(feature = "jpeg2000")]
 impl ImageColorSpace {
     fn num_components(&self) -> u8 {
         match self {
@@ -16,7 +12,6 @@ impl ImageColorSpace {
     }
 }
 
-#[cfg(feature = "jpeg2000")]
 pub(crate) fn decode(data: &[u8]) -> Option<FilterResult> {
     use crate::object::stream::ImageColorSpace;
 
@@ -77,7 +72,6 @@ pub(crate) fn decode(data: &[u8]) -> Option<FilterResult> {
     })
 }
 
-#[cfg(feature = "jpeg2000")]
 fn scale(
     data: &[u8],
     bit_per_component: u8,

@@ -6,7 +6,6 @@ use crate::page::Pages;
 use crate::page::cached::CachedPages;
 use crate::reader::Reader;
 use crate::xref::{XRef, XRefError, fallback, root_xref};
-use std::ops::Deref;
 
 /// A PDF file.
 pub struct Pdf {

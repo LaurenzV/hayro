@@ -5,6 +5,7 @@ pub(crate) mod ascii_hex;
 mod ccitt;
 mod dct;
 mod jbig2;
+#[cfg(feature = "jpeg2000")]
 mod jpx;
 mod lzw_flate;
 mod run_length;

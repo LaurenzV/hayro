@@ -13,7 +13,6 @@ pub use crate::object::rect::Rect;
 pub use crate::object::r#ref::{MaybeRef, ObjRef};
 pub use crate::object::stream::Stream;
 pub use crate::object::string::String;
-use crate::xref::XRef;
 
 mod bool;
 mod null;

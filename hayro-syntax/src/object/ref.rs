@@ -68,7 +68,7 @@ where
     T: ObjectLike<'a>,
 {
     /// Resolve the `MaybeRef` object with the given xref table.
-    pub fn resolve(self, ctx: ReaderContext<'a>) -> Option<T> {
+    pub(crate) fn resolve(self, ctx: ReaderContext<'a>) -> Option<T> {
         match self {
             MaybeRef::Ref(r) => ctx.xref.get::<T>(r.into()),
             MaybeRef::NotRef(t) => Some(t),

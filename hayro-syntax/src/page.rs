@@ -359,7 +359,7 @@ impl<'a> Resources<'a> {
     }
 
     /// Create a new `Resources` object.
-    pub fn new(
+    pub(crate) fn new(
         resources: Dict<'a>,
         parent: Option<Resources<'a>>,
         ctx: ReaderContext<'a>,
