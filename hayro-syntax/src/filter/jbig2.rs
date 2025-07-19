@@ -14,6 +14,7 @@
  */
 
 #![allow(clippy::needless_range_loop)]
+#![allow(clippy::too_many_arguments)]
 
 use crate::filter::ccitt::{CCITTFaxDecoder, CCITTFaxDecoderOptions};
 use crate::object::Dict;

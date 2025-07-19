@@ -1283,6 +1283,7 @@ impl<'a> CCITTFaxDecoder<'a> {
             self.coding_line[self.coding_pos] = a1;
         } else if a1 < self.coding_line[self.coding_pos] {
             #[allow(unused_comparisons)]
+            #[allow(clippy::absurd_extreme_comparisons)]
             if a1 < 0 {
                 warn!("invalid code");
 
