@@ -1,3 +1,5 @@
+//! PDF patterns.
+
 use crate::ClipPath;
 use crate::cache::Cache;
 use crate::color::{Color, ColorSpace};
@@ -26,14 +28,17 @@ use log::warn;
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
 
+/// A PDF pattern.
 #[derive(Debug, Clone)]
 pub enum Pattern<'a> {
+    /// A shading pattern.
     Shading(ShadingPattern),
+    /// A tiling pattern.
     Tiling(TilingPattern<'a>),
 }
 
 impl<'a> Pattern<'a> {
-    pub fn new(object: Object<'a>, ctx: &Context<'a>, resources: &Resources<'a>) -> Option<Self> {
+    pub(crate) fn new(object: Object<'a>, ctx: &Context<'a>, resources: &Resources<'a>) -> Option<Self> {
         if let Some(dict) = object.clone().into_dict() {
             Some(Self::Shading(ShadingPattern::new(&dict)?))
         } else if let Some(stream) = object.clone().into_stream() {
@@ -44,14 +49,17 @@ impl<'a> Pattern<'a> {
     }
 }
 
+/// A shading pattern.
 #[derive(Clone, Debug)]
 pub struct ShadingPattern {
+    /// The underlying shading of the pattern.
     pub shading: Arc<Shading>,
+    /// A transformation matrix to apply prior to rendering.
     pub matrix: Affine,
 }
 
 impl ShadingPattern {
-    pub fn new(dict: &Dict) -> Option<Self> {
+    pub(crate) fn new(dict: &Dict) -> Option<Self> {
         let shading = dict.get::<Object>(SHADING).and_then(|o| {
             let (dict, stream) = dict_or_stream(&o)?;
 
@@ -73,11 +81,16 @@ impl ShadingPattern {
     }
 }
 
+/// A tiling pattern.
 #[derive(Clone)]
 pub struct TilingPattern<'a> {
+    /// The bbox of the tiling pattern.
     pub bbox: Rect,
+    /// The step in the x direction.
     pub x_step: f32,
+    /// The step in the y direction.
     pub y_step: f32,
+    /// A transformation to apply prior to rendering.
     pub matrix: Affine,
     stream: Stream<'a>,
     is_color: bool,
@@ -97,7 +110,7 @@ impl Debug for TilingPattern<'_> {
 }
 
 impl<'a> TilingPattern<'a> {
-    pub fn new(stream: Stream<'a>, ctx: &Context<'a>, resources: &Resources<'a>) -> Option<Self> {
+    pub(crate) fn new(stream: Stream<'a>, ctx: &Context<'a>, resources: &Resources<'a>) -> Option<Self> {
         let dict = stream.dict();
 
         let bbox = dict.get::<Rect>(BBOX)?;
@@ -146,6 +159,7 @@ impl<'a> TilingPattern<'a> {
         })
     }
 
+    /// Interpret the contents of the pattern into the given device.
     pub fn interpret(
         &self,
         device: &mut impl Device,
