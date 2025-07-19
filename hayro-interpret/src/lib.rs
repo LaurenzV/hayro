@@ -1,17 +1,20 @@
+
+#![forbid(unsafe_code)]
+
 use kurbo::{Affine, Cap, Join, Point, Shape};
 use smallvec::{SmallVec, smallvec};
 use std::sync::Arc;
 
 mod cache;
+mod context;
 mod convert;
+mod device;
 mod interpret;
 mod soft_mask;
 mod types;
 mod x_object;
 
 pub mod color;
-pub mod context;
-pub mod device;
 pub mod font;
 pub mod pattern;
 pub mod shading;
@@ -19,6 +22,8 @@ pub mod util;
 
 use crate::font::FontQuery;
 
+pub use context::*;
+pub use device::*;
 pub use hayro_syntax::*;
 pub use interpret::*;
 pub use soft_mask::*;
