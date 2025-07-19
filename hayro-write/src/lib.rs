@@ -26,6 +26,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::ops::Deref;
 use std::ops::DerefMut;
 
+pub use hayro_syntax::page::{Page, Pages};
 pub use hayro_syntax::{LoadPdfError, Pdf, PdfData, PdfVersion};
 
 /// Apply the extraction queries to the given PDF and return the results.

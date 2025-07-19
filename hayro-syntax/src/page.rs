@@ -14,8 +14,8 @@ use crate::util::FloatExt;
 use crate::xref::XRef;
 use kurbo::Affine;
 use log::warn;
-use std::cell::OnceCell;
 use std::ops::Deref;
+use std::sync::OnceLock;
 
 /// Attributes that can be inherited.
 #[derive(Debug, Clone)]
@@ -129,7 +129,7 @@ pub struct Page<'a> {
     media_box: kurbo::Rect,
     crop_box: kurbo::Rect,
     rotation: Rotation,
-    page_streams: OnceCell<Option<Vec<u8>>>,
+    page_streams: OnceLock<Option<Vec<u8>>>,
     resources: Resources<'a>,
     ctx: ReaderContext<'a>,
 }
@@ -160,7 +160,7 @@ impl<'a> Page<'a> {
             media_box,
             crop_box,
             rotation,
-            page_streams: OnceCell::new(),
+            page_streams: OnceLock::new(),
             resources,
             ctx,
         }
