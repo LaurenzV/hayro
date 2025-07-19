@@ -13,6 +13,7 @@ smallvec = { workspace = true }
 zune-jpeg = { workspace = true }
 jpeg2k = { workspace = true, optional = true }
 flate2 = { workspace = true }
+yoke = { workspace = true, features = ["derive"] }
 
 [features]
 default = []

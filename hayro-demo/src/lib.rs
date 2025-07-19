@@ -127,9 +127,7 @@ impl PdfViewer {
         let pdf = Pdf::new(Arc::new(data.to_vec()))
             .ok_or_else(|| JsValue::from_str("Failed to parse PDF"))?;
 
-        let pages = pdf
-            .pages()
-            .ok_or_else(|| JsValue::from_str("Failed to get pages"))?;
+        let pages = pdf.pages();
 
         self.total_pages = pages.len();
         self.pdf = Some(pdf);

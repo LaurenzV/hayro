@@ -48,7 +48,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         match Pdf::new(data) {
             Some(hayro_pdf) => {
-                let page_count = hayro_pdf.pages().map(|pages| pages.len()).unwrap_or(0);
+                let page_count = hayro_pdf.pages().len();
 
                 if page_count == 0 {
                     eprintln!("  Warning: No pages found in {:?}", filename);

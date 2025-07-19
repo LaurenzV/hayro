@@ -5,11 +5,15 @@ use crate::document::page::{Page, Pages};
 use crate::object::Object;
 use crate::reader::{Reader, ReaderContext};
 use crate::xref::{XRef, XRefError, fallback, root_xref};
+use std::ops::Deref;
+use std::sync::Arc;
+use yoke::Yoke;
 
 /// A PDF file.
 pub struct Pdf {
     xref: XRef,
     header_version: PdfVersion,
+    pages: PagesYoke,
 }
 
 impl Pdf {
@@ -26,9 +30,20 @@ impl Pdf {
             },
         };
 
+        let wrapper = Box::new(xref.clone());
+
+        let pages = PagesYoke::try_attach_to_cart(wrapper, |xref| {
+            let ctx = ReaderContext::new(xref, false);
+            xref.get(xref.trailer_data().pages_ref)
+                .and_then(|p| Pages::new(p, ctx, xref))
+                .ok_or(())
+        })
+        .ok()?;
+
         Some(Self {
             xref,
             header_version: version,
+            pages,
         })
     }
 
@@ -51,11 +66,8 @@ impl Pdf {
     }
 
     /// Return the pages of the PDF file.
-    pub fn pages(&self) -> Option<Pages> {
-        let ctx = ReaderContext::new(&self.xref, false);
-        self.xref
-            .get(self.xref.trailer_data().pages_ref)
-            .and_then(|p| Pages::new(p, ctx, &self.xref))
+    pub fn pages(&self) -> &Pages {
+        self.pages.get()
     }
 
     /// Return the xref of the PDF file.
@@ -115,6 +127,19 @@ impl PdfVersion {
     }
 }
 
+#[derive(Clone, Debug)]
+struct XRefWrapper {
+    xref: XRef,
+}
+
+impl Deref for XRefWrapper {
+    type Target = XRef;
+
+    fn deref(&self) -> &Self::Target {
+        &self.xref
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::pdf::{Pdf, PdfVersion};
@@ -142,3 +167,5 @@ mod tests {
         assert_eq!(pdf.version(), PdfVersion::Pdf14);
     }
 }
+
+type PagesYoke = Yoke<Pages<'static>, Box<XRef>>;

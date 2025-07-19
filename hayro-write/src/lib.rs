@@ -110,7 +110,7 @@ pub fn extract<'a>(
     new_ref: Box<dyn FnMut() -> Ref + 'a>,
     queries: &[ExtractionQuery],
 ) -> Result<ExtractionResult, ExtractionError> {
-    let pages = pdf.pages().ok_or(ExtractionError::LoadPdfError)?;
+    let pages = pdf.pages();
     let mut ctx = ExtractionContext::new(new_ref);
 
     for query in queries {
@@ -194,7 +194,7 @@ pub fn extract_pages_to_pdf(hayro_pdf: &Pdf, page_indices: &[usize]) -> Vec<u8> 
 
 #[doc(hidden)]
 pub fn extract_pages_as_xobject_to_pdf(hayro_pdf: &Pdf, page_indices: &[usize]) -> Vec<u8> {
-    let hayro_pages = hayro_pdf.pages().unwrap();
+    let hayro_pages = hayro_pdf.pages();
     let page_list = hayro_pages.get();
 
     let mut pdf = pdf_writer::Pdf::new();

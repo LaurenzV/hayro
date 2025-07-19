@@ -17,7 +17,9 @@ use log::warn;
 use std::cell::OnceCell;
 use std::collections::HashSet;
 use std::ops::Deref;
+use yoke::Yokeable;
 
+#[derive(Yokeable)]
 /// A structure holding the pages of a PDF document.
 pub struct Pages<'a> {
     /// The pages of the document.

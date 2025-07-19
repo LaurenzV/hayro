@@ -475,46 +475,43 @@ pub fn render_png(
     settings: InterpreterSettings,
     range: Option<RangeInclusive<usize>>,
 ) -> Option<Vec<Vec<u8>>> {
-    if let Some(pages) = pdf.pages() {
-        let rendered = pages
-            .get()
-            .iter()
-            .enumerate()
-            .flat_map(|(idx, page)| {
-                if range.clone().is_some_and(|range| !range.contains(&idx)) {
-                    return None;
-                }
+    let rendered = pdf
+        .pages()
+        .get()
+        .iter()
+        .enumerate()
+        .flat_map(|(idx, page)| {
+            if range.clone().is_some_and(|range| !range.contains(&idx)) {
+                return None;
+            }
 
-                let pixmap = render(
-                    page,
-                    &settings,
-                    &RenderSettings {
-                        x_scale: scale,
-                        y_scale: scale,
-                        ..Default::default()
-                    },
-                );
+            let pixmap = render(
+                page,
+                &settings,
+                &RenderSettings {
+                    x_scale: scale,
+                    y_scale: scale,
+                    ..Default::default()
+                },
+            );
 
-                let mut png_data = Vec::new();
-                let cursor = Cursor::new(&mut png_data);
-                let encoder = PngEncoder::new(cursor);
-                encoder
-                    .write_image(
-                        pixmap.data_as_u8_slice(),
-                        pixmap.width() as u32,
-                        pixmap.height() as u32,
-                        ExtendedColorType::Rgba8,
-                    )
-                    .expect("Failed to encode image");
+            let mut png_data = Vec::new();
+            let cursor = Cursor::new(&mut png_data);
+            let encoder = PngEncoder::new(cursor);
+            encoder
+                .write_image(
+                    pixmap.data_as_u8_slice(),
+                    pixmap.width() as u32,
+                    pixmap.height() as u32,
+                    ExtendedColorType::Rgba8,
+                )
+                .expect("Failed to encode image");
 
-                Some(png_data)
-            })
-            .collect();
+            Some(png_data)
+        })
+        .collect();
 
-        return Some(rendered);
-    }
-
-    None
+    return Some(rendered);
 }
 
 pub(crate) fn min_factor(transform: &Affine) -> f32 {

@@ -14,7 +14,7 @@ fn main() {
     )
     .unwrap();
     let pdf = Pdf::new(Arc::new(data)).unwrap();
-    let pages = pdf.pages().unwrap();
+    let pages = pdf.pages();
 
     for page in pages.get() {
         for op in page.typed_operations() {
