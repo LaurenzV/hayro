@@ -67,6 +67,8 @@ use std::sync::Arc;
 pub(crate) mod data;
 pub(crate) mod filter;
 pub(crate) mod pdf;
+pub(crate) mod reader;
+pub(crate) mod trivia;
 pub(crate) mod util;
 
 pub mod bit_reader;
@@ -74,13 +76,9 @@ pub mod content;
 pub mod function;
 pub mod object;
 pub mod page;
-pub mod reader;
-pub mod trivia;
 pub mod xref;
 
 pub use pdf::*;
-
-const NUM_SLOTS: usize = 10000;
 
 /// A container for the bytes of a PDF file.
 pub type PdfData = Arc<dyn AsRef<[u8]> + Send + Sync>;

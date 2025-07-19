@@ -1,13 +1,15 @@
+use crate::PdfData;
 use crate::object::ObjectIdentifier;
 use crate::object::Stream;
 use crate::xref::XRef;
-use crate::{NUM_SLOTS, PdfData};
 use log::warn;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::sync::Mutex;
 use std::sync::OnceLock;
 use std::sync::atomic::AtomicUsize;
+
+const NUM_SLOTS: usize = 10000;
 
 /// A structure for storing the data of the PDF.
 // To explain further: This crate uses a zero-parse approach, meaning that objects like
