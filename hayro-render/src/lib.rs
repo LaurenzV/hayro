@@ -12,7 +12,7 @@ use hayro_interpret::context::Context;
 use hayro_interpret::device::Device;
 pub use hayro_interpret::font::FontQuery;
 use hayro_interpret::font::Glyph;
-pub use hayro_interpret::font::standard_font::StandardFont;
+pub use hayro_interpret::font::StandardFont;
 use hayro_interpret::pattern::Pattern;
 use hayro_interpret::util::FloatExt;
 use hayro_interpret::{
@@ -20,7 +20,6 @@ use hayro_interpret::{
 };
 pub use hayro_syntax::Pdf;
 use hayro_syntax::object::ObjectIdentifier;
-use hayro_syntax::object::dict::keys::P;
 use hayro_syntax::page::{A4, Page, Rotation};
 use image::codecs::png::PngEncoder;
 use image::imageops::FilterType;

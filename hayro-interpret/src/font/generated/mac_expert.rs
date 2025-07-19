@@ -1,7 +1,6 @@
 // See <https://github.com/apache/pdfbox/blob/4438b8fdc67a3a9ebfb194595d0e81f88b708a37/pdfbox/src/main/java/org/apache/pdfbox/pdmodel/font/encoding/MacExpertEncoding.java>
 use phf::phf_map;
 
-/// Map a code to a glyph name using mac expert encoding.
 pub(crate) fn get(code: u8) -> Option<&'static str> {
     MAC_EXPERT.get(&code).copied()
 }

@@ -3,7 +3,6 @@ use crate::context::Context;
 use crate::device::Device;
 use crate::font::cid::Type0Font;
 use crate::font::generated::{mac_expert, mac_os_roman, mac_roman, standard, win_ansi};
-use crate::font::standard_font::StandardFont;
 use crate::font::true_type::TrueTypeFont;
 use crate::font::type1::Type1Font;
 use crate::font::type3::Type3;
@@ -28,12 +27,14 @@ mod cid;
 mod generated;
 mod glyph_simulator;
 pub(crate) mod outline;
-pub mod standard_font;
+mod standard_font;
 mod true_type;
 mod type1;
 pub(crate) mod type3;
 
 pub(crate) const UNITS_PER_EM: f32 = 1000.0;
+
+pub use standard_font::StandardFont;
 
 /// A glyph that can be drawn.
 pub enum Glyph<'a> {

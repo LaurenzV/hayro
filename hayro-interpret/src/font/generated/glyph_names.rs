@@ -1,6 +1,5 @@
 use phf::phf_map;
 
-/// Convert a glyph name from the Adobe glyph name list to its Unicode codepoint.
 pub(crate) fn get(name: &str) -> Option<&'static str> {
     GLYPH_NAMES.get(name).copied()
 }

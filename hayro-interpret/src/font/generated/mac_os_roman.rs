@@ -1,7 +1,6 @@
 // See <https://github.com/apache/pdfbox/blob/4438b8fdc67a3a9ebfb194595d0e81f88b708a37/pdfbox/src/main/java/org/apache/pdfbox/pdmodel/font/encoding/MacOSRomanEncoding.java.java>
 use phf::phf_map;
 
-/// Map a code to a glyph name using mac os roman encoding.
 pub(crate) fn get(code: u8) -> Option<&'static str> {
     MAC_OS_ROMAN.get(&code).copied()
 }

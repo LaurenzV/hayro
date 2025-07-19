@@ -1,6 +1,5 @@
 use phf::phf_map;
 
-/// Map a code to a glyph name using zapf dings encoding.
 pub(crate) fn get(code: u8) -> Option<&'static str> {
     ZAPF_DING_BATS.get(&code).copied()
 }
