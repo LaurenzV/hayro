@@ -6,7 +6,6 @@ use kurbo::BezPath;
 use skrifa::GlyphId;
 use skrifa::outline::OutlinePen;
 use std::rc::Rc;
-use std::sync::Arc;
 
 pub(crate) struct OutlinePath(pub(crate) BezPath);
 
