@@ -1,4 +1,5 @@
 /// PDF shadings.
+
 use crate::color::{ColorComponents, ColorSpace};
 use crate::util::{FloatExt, PointExt};
 use hayro_syntax::bit_reader::{BitReader, BitSize};
