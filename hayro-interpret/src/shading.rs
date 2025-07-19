@@ -331,10 +331,7 @@ impl Triangle {
     pub fn bounding_box(&self) -> kurbo::Rect {
         self.kurbo_tri.bounding_box()
     }
-
-    /// Return the barycentric coordinates of the point in the triangle.
-    ///
-    /// Returns `None` if the point is not inside of the triangle.
+    
     fn barycentric_coords(&self, p: Point) -> (f32, f32, f32) {
         let (a, b, c) = (self.p0.point, self.p1.point, self.p2.point);
         let v0 = b - a;
@@ -890,7 +887,6 @@ fn read_coons_patch_mesh(
         )
     };
 
-    // Helper to read a single color (or t value)
     let read_colors = |reader: &mut BitReader| -> Option<ColorComponents> {
         let mut colors = smallvec![];
         if has_function {
@@ -911,7 +907,6 @@ fn read_coons_patch_mesh(
         Some(colors)
     };
 
-    // State for implicit control points/colors
     let mut prev_patch: Option<CoonsPatch> = None;
     let mut patches = vec![];
 
@@ -1057,7 +1052,6 @@ fn read_tensor_product_patch_mesh(
         )
     };
 
-    // Helper to read a single color (or t value)
     let read_colors = |reader: &mut BitReader| -> Option<ColorComponents> {
         let mut colors = smallvec![];
         if has_function {
@@ -1078,7 +1072,6 @@ fn read_tensor_product_patch_mesh(
         Some(colors)
     };
 
-    // State for implicit control points/colors
     let mut prev_patch: Option<TensorProductPatch> = None;
     let mut patches = vec![];
 
@@ -1119,9 +1112,8 @@ fn read_tensor_product_patch_mesh(
                     control_points[i] = Point::new(x as f64, y as f64);
                 }
 
-                // Read colors for new top-right and bottom-right corners
-                colors[2] = read_colors(&mut reader)?; // top-right  
-                colors[3] = read_colors(&mut reader)?; // bottom-right
+                colors[2] = read_colors(&mut reader)?;   
+                colors[3] = read_colors(&mut reader)?; 
 
                 prev_patch = Some(TensorProductPatch {
                     control_points,
@@ -1129,16 +1121,14 @@ fn read_tensor_product_patch_mesh(
                 });
             }
             2 => {
-                // Bottom edge sharing - previous patch's bottom edge becomes new patch's top edge
                 let prev = prev_patch.as_ref()?;
 
-                // For 4x4 grid: bottom edge is [12, 13, 14, 15], top edge is [0, 1, 2, 3]
-                control_points[0] = prev.control_points[6]; // bottom-left -> top-left
-                control_points[1] = prev.control_points[7]; // -> top edge
-                control_points[2] = prev.control_points[8]; // -> top edge
-                control_points[3] = prev.control_points[9]; // bottom-right -> top-right
-                colors[0] = prev.colors[2].clone(); // prev bottom-left -> new top-left
-                colors[1] = prev.colors[3].clone(); // prev bottom-right -> new top-right
+                control_points[0] = prev.control_points[6];
+                control_points[1] = prev.control_points[7];
+                control_points[2] = prev.control_points[8];
+                control_points[3] = prev.control_points[9]; 
+                colors[0] = prev.colors[2].clone();
+                colors[1] = prev.colors[3].clone();
 
                 for i in 4..16 {
                     let x = interpolate_coord(reader.read(bp_coord)?, x_min, x_max);
@@ -1146,9 +1136,8 @@ fn read_tensor_product_patch_mesh(
                     control_points[i] = Point::new(x as f64, y as f64);
                 }
 
-                // Read colors for new bottom corners
-                colors[2] = read_colors(&mut reader)?; // bottom-left
-                colors[3] = read_colors(&mut reader)?; // bottom-right
+                colors[2] = read_colors(&mut reader)?;
+                colors[3] = read_colors(&mut reader)?;
 
                 prev_patch = Some(TensorProductPatch {
                     control_points,
@@ -1156,16 +1145,14 @@ fn read_tensor_product_patch_mesh(
                 });
             }
             3 => {
-                // Left edge sharing - previous patch's left edge becomes new patch's right edge
                 let prev = prev_patch.as_ref()?;
 
-                // For 4x4 grid: left edge is [0, 4, 8, 12], right edge is [3, 7, 11, 15]
-                control_points[0] = prev.control_points[9]; // bottom-left -> top-left
-                control_points[1] = prev.control_points[10]; // -> top edge
-                control_points[2] = prev.control_points[11]; // -> top edge
-                control_points[3] = prev.control_points[0]; // bottom-right -> top-right
-                colors[0] = prev.colors[3].clone(); // prev bottom-left -> new top-left
-                colors[1] = prev.colors[0].clone(); // prev bottom-right -> new top-right
+                control_points[0] = prev.control_points[9];
+                control_points[1] = prev.control_points[10];
+                control_points[2] = prev.control_points[11];
+                control_points[3] = prev.control_points[0]; 
+                colors[0] = prev.colors[3].clone();
+                colors[1] = prev.colors[0].clone();
 
                 for i in 4..16 {
                     let x = interpolate_coord(reader.read(bp_coord)?, x_min, x_max);
@@ -1173,9 +1160,8 @@ fn read_tensor_product_patch_mesh(
                     control_points[i] = Point::new(x as f64, y as f64);
                 }
 
-                // Read colors for new left corners
-                colors[2] = read_colors(&mut reader)?; // top-left
-                colors[3] = read_colors(&mut reader)?; // bottom-left
+                colors[2] = read_colors(&mut reader)?;
+                colors[3] = read_colors(&mut reader)?;
 
                 prev_patch = Some(TensorProductPatch {
                     control_points,
