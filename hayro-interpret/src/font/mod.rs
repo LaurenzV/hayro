@@ -37,6 +37,9 @@ pub(crate) mod type3;
 
 pub(crate) const UNITS_PER_EM: f32 = 1000.0;
 
+/// A container for the bytes of a PDF file.
+pub type FontData = Arc<dyn AsRef<[u8]> + Send + Sync>;
+
 pub use standard_font::StandardFont;
 
 /// A glyph that can be drawn.

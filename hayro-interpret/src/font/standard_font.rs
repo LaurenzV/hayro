@@ -1,4 +1,4 @@
-use crate::FontData;
+use crate::font::FontData;
 use crate::font::blob::{CffFontBlob, OpenTypeFontBlob};
 use crate::font::generated::{metrics, standard, symbol, zapf_dings};
 use hayro_syntax::object::Dict;

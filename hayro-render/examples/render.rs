@@ -1,6 +1,5 @@
-use hayro_interpret::font::FontQuery;
-use hayro_interpret::font::StandardFont;
-use hayro_interpret::{FontData, InterpreterSettings};
+use hayro_interpret::InterpreterSettings;
+use hayro_interpret::font::{FontData, FontQuery, StandardFont};
 use hayro_render::render_png;
 use hayro_syntax::Pdf;
 use std::sync::Arc;

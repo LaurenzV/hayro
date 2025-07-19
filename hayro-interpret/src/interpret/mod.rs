@@ -1,8 +1,10 @@
 use crate::ClipPath;
+use crate::FillRule;
 use crate::color::ColorSpace;
 use crate::context::Context;
 use crate::convert::{convert_line_cap, convert_line_join};
 use crate::device::Device;
+use crate::font::{FontData, FontQuery};
 use crate::interpret::path::{fill_path, fill_path_impl, fill_stroke_path, stroke_path};
 use crate::interpret::state::{handle_gs, restore_state, save_sate};
 use crate::interpret::text::TextRenderingMode;
@@ -10,7 +12,6 @@ use crate::pattern::{Pattern, ShadingPattern};
 use crate::shading::Shading;
 use crate::util::OptionLog;
 use crate::x_object::{ImageXObject, XObject, draw_image_xobject, draw_xobject};
-use crate::{FillRule, FontResolverFn, WarningSinkFn};
 use hayro_syntax::content::ops::TypedInstruction;
 use hayro_syntax::object::{Dict, Object, dict_or_stream};
 use hayro_syntax::page::Resources;
@@ -22,6 +23,11 @@ use std::sync::Arc;
 pub(crate) mod path;
 pub(crate) mod state;
 pub(crate) mod text;
+
+/// A callback function for resolving font queries.
+pub type FontResolverFn = Arc<dyn Fn(&FontQuery) -> Option<FontData> + Send + Sync>;
+/// A callback function for resolving warnings during interpretation.
+pub type WarningSinkFn = Arc<dyn Fn(InterpreterWarning) + Send + Sync>;
 
 #[derive(Clone)]
 /// Settings that should be applied during the interpretation process.
