@@ -41,6 +41,7 @@ impl Default for Parameters {
     }
 }
 
+/// A Type1 font table.
 #[derive(Debug, Clone)]
 pub struct Table {
     params: Arc<Parameters>,
@@ -142,6 +143,7 @@ impl Table {
         Some(())
     }
 
+    /// Return the glyph name of the code point.
     pub fn code_to_string(&self, code_point: u8) -> Option<&str> {
         self.params.encoding_type.encode(code_point)
     }

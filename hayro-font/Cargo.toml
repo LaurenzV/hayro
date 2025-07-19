@@ -12,4 +12,4 @@ repository = { workspace = true }
 
 [dependencies]
 log =  { workspace = true }
-phf = { workspace = true }
+phf = { workspace = true, features = ["macros"] }
