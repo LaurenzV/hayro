@@ -1,9 +1,9 @@
+use crate::InterpreterSettings;
 use crate::cache::Cache;
 use crate::context::Context;
 use crate::device::Device;
 use crate::interpret::state::State;
 use crate::x_object::{XObject, draw_xobject};
-use crate::InterpreterSettings;
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Name;
 use hayro_syntax::object::ObjectIdentifier;

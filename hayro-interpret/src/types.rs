@@ -44,7 +44,7 @@ pub enum PaintType<'a> {
     /// A solid RGBA color.
     Color(Color),
     /// A PDF pattern.
-    Pattern(Pattern<'a>),
+    Pattern(Box<Pattern<'a>>),
 }
 
 /// A paint.

@@ -47,7 +47,7 @@ pub enum Glyph<'a> {
     /// A glyph defined by an outline.
     Outline(OutlineGlyph),
     /// A type3 glyph, defined by PDF drawing instructions.
-    Type3(Type3Glyph<'a>),
+    Type3(Box<Type3Glyph<'a>>),
 }
 
 impl Glyph<'_> {
@@ -198,7 +198,7 @@ impl<'a> Font<'a> {
                     glyph_transform,
                 };
 
-                Glyph::Type3(shape_glyph)
+                Glyph::Type3(Box::new(shape_glyph))
             }
         }
     }

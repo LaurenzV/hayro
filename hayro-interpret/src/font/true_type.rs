@@ -140,7 +140,7 @@ impl TrueTypeFont {
             }
 
             if glyph.is_none() {
-                if let Some(gid) = self.glyph_names.get(&lookup.to_string()) {
+                if let Some(gid) = self.glyph_names.get(lookup) {
                     glyph = Some(*gid);
                 }
             }

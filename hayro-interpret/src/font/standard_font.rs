@@ -214,7 +214,9 @@ impl StandardFontBlob {
     pub(crate) fn from_data(data: FontData) -> Option<Self> {
         if let Some(blob) = CffFontBlob::new(data.clone()) {
             Some(Self::new_cff(blob))
-        } else { OpenTypeFontBlob::new(data, 0).map(Self::new_otf) }
+        } else {
+            OpenTypeFontBlob::new(data, 0).map(Self::new_otf)
+        }
     }
 
     pub(crate) fn new_cff(blob: CffFontBlob) -> Self {

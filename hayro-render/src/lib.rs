@@ -137,7 +137,7 @@ impl Renderer {
         match paint.paint_type.clone() {
             hayro_interpret::PaintType::Color(c) => (c.to_rgba().into(), Affine::IDENTITY),
             hayro_interpret::PaintType::Pattern(p) => {
-                match p {
+                match *p {
                     Pattern::Shading(s) => (s.into(), paint.paint_transform),
                     Pattern::Tiling(t) => {
                         const MAX_PIXMAP_SIZE: f32 = 3000.0;
