@@ -18,10 +18,10 @@ use hayro_interpret::util::FloatExt;
 use hayro_interpret::{
     AlphaData, FillProps, FillRule, MaskType, Paint, RgbData, SoftMask, StrokeProps, interpret,
 };
+pub use hayro_syntax::Pdf;
 use hayro_syntax::object::ObjectIdentifier;
 use hayro_syntax::object::dict::keys::P;
 use hayro_syntax::page::{A4, Page, Rotation};
-pub use hayro_syntax::pdf::Pdf;
 use image::codecs::png::PngEncoder;
 use image::imageops::FilterType;
 use image::{DynamicImage, ExtendedColorType, ImageBuffer, ImageEncoder, RgbImage};

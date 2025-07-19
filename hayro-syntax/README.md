@@ -19,7 +19,7 @@ in a PDF file.
 ```rust
 use std::path::PathBuf;
 use std::sync::Arc;
-use hayro_syntax::pdf::Pdf;
+use hayro_syntax::Pdf;
 
 let data = std::fs::read(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../hayro-render/pdfs/text_with_rise.pdf")).unwrap();
 let pdf = Pdf::new(Arc::new(data)).unwrap();

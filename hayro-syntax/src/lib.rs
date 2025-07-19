@@ -16,7 +16,7 @@ in a PDF file.
 ```rust
 use std::path::PathBuf;
 use std::sync::Arc;
-use hayro_syntax::pdf::Pdf;
+use hayro_syntax::Pdf;
 
 let data = std::fs::read(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../hayro-tests/pdfs/text_with_rise.pdf")).unwrap();
 let pdf = Pdf::new(Arc::new(data)).unwrap();
@@ -66,6 +66,7 @@ use std::sync::Arc;
 
 pub(crate) mod data;
 pub(crate) mod filter;
+pub(crate) mod pdf;
 pub(crate) mod util;
 
 pub mod bit_reader;
@@ -73,10 +74,11 @@ pub mod content;
 pub mod function;
 pub mod object;
 pub mod page;
-pub mod pdf;
 pub mod reader;
 pub mod trivia;
 pub mod xref;
+
+pub use pdf::*;
 
 const NUM_SLOTS: usize = 10000;
 

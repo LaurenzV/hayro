@@ -2,7 +2,7 @@ use hayro_interpret::font::FontQuery;
 use hayro_interpret::font::standard_font::StandardFont;
 use hayro_interpret::{FontData, InterpreterSettings};
 use hayro_render::render_png;
-use hayro_syntax::pdf::Pdf;
+use hayro_syntax::Pdf;
 use std::sync::Arc;
 
 fn main() {

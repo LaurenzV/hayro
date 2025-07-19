@@ -1,6 +1,6 @@
 //! This example shows how you can iterate over the content stream of all pages in the PDF.
 
-use hayro_syntax::pdf::Pdf;
+use hayro_syntax::Pdf;
 use std::path::PathBuf;
 use std::sync::Arc;
 
