@@ -1,3 +1,5 @@
+//! This example shows you how you can render a PDF file to PNG.
+
 use hayro_interpret::InterpreterSettings;
 use hayro_interpret::font::{FontData, FontQuery, StandardFont};
 use hayro_render::render_png;
@@ -9,7 +11,7 @@ fn main() {
         log::set_max_level(log::LevelFilter::Trace);
     }
 
-    let file = std::fs::read("/Users/lstampfl/Programming/GitHub/sitro/pdf/in.pdf").unwrap();
+    let file = std::fs::read(std::env::args().nth(1).unwrap()).unwrap();
     let data = Arc::new(file);
     let pdf = Pdf::new(data).unwrap();
 
@@ -23,7 +25,9 @@ fn main() {
 
     let pixmaps = render_png(&pdf, 1.0, settings, None).unwrap();
 
-    std::fs::write("out.png", &pixmaps[0]).unwrap();
+    for (idx, pixmap) in pixmaps.iter().enumerate() {
+        std::fs::write(format!("rendered_{}.png", idx), &pixmap).unwrap();
+    }
 }
 
 fn get_standard(font: &StandardFont) -> FontData {

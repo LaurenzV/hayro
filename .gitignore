@@ -1,5 +1,3 @@
 target
 .DS_STORE
-hayro-render/examples/sort.rs
-hayro-compare/pdfium
-hayro-compare/hayro
+rendered_*.png
