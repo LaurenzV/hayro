@@ -13,7 +13,7 @@ impl<T> OptionLog for Option<T> {
     #[inline]
     fn warn_none(self, f: &str) -> Self {
         self.or_else(|| {
-            warn!("{}", f);
+            warn!("{f}");
 
             None
         })
@@ -32,7 +32,7 @@ impl CodeMapExt for CmapSubtable<'_> {
             CmapSubtable::Format6(f) => f.map_codepoint(code),
             CmapSubtable::Format12(f) => f.map_codepoint(code),
             _ => {
-                warn!("unsupported cmap table {:?}", self);
+                warn!("unsupported cmap table {self:?}");
 
                 None
             }

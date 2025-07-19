@@ -169,10 +169,8 @@ pub(crate) fn draw_image_xobject(
         if let Some(stencil) = x_object.alpha8() {
             device.draw_stencil_image(stencil, &get_paint(context, false));
         }
-    } else {
-        if let Some(rgb_image) = x_object.rgb8() {
-            device.draw_rgba_image(rgb_image, x_object.alpha8());
-        }
+    } else if let Some(rgb_image) = x_object.rgb8() {
+        device.draw_rgba_image(rgb_image, x_object.alpha8());
     }
 
     device.pop_transparency_group();
@@ -292,7 +290,7 @@ impl<'a> ImageXObject<'a> {
         if self.is_image_mask {
             let decoded = self.decode_raw()?;
 
-            return Some(LumaData {
+            Some(LumaData {
                 data: fix_image_length(
                     decoded
                         .iter()
@@ -304,7 +302,7 @@ impl<'a> ImageXObject<'a> {
                 width: self.width,
                 height: self.height,
                 interpolate: self.interpolate,
-            });
+            })
         } else {
             let (f32_data, width, height, interpolate) =
                 if let Some(1) = self.dict.get::<u8>(SMASK_IN_DATA) {
@@ -437,7 +435,7 @@ fn decode(
         1..8 | 9..16 => {
             let mut buf = vec![];
             let bpc = BitSize::from_u8(bits_per_component)?;
-            let mut reader = BitReader::new(data.as_ref());
+            let mut reader = BitReader::new(data);
 
             for _ in 0..height {
                 for _ in 0..width {
@@ -461,7 +459,7 @@ fn decode(
             .map(|v| (u16::from_be_bytes([v[0], v[1]])))
             .collect(),
         _ => {
-            warn!("unsupported bits per component: {}", bits_per_component);
+            warn!("unsupported bits per component: {bits_per_component}");
             return None;
         }
     };

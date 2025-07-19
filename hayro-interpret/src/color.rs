@@ -754,8 +754,7 @@ impl ICCProfile {
             4 => qcms::DataType::CMYK,
             _ => {
                 warn!(
-                    "unsupported number of components {} for ICC profile",
-                    number_components
+                    "unsupported number of components {number_components} for ICC profile"
                 );
 
                 return None;

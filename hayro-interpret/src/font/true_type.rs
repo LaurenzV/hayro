@@ -99,7 +99,7 @@ impl TrueTypeFont {
                             let convert = |input: &str| {
                                 u32::from_str_radix(input, 16)
                                     .ok()
-                                    .and_then(|n| char::from_u32(n))
+                                    .and_then(char::from_u32)
                                     .map(|s| s.to_string())
                             };
 

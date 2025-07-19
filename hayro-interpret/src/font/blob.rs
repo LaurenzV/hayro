@@ -33,7 +33,7 @@ impl Type1FontBlob {
     }
 
     pub(crate) fn table(&self) -> &type1::Table {
-        &self.0.as_ref()
+        self.0.as_ref()
     }
 
     pub(crate) fn outline_glyph(&self, name: &str) -> BezPath {

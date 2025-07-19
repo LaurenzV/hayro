@@ -3,8 +3,9 @@ use std::any::Any;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+type CacheMap = HashMap<ObjectIdentifier, Option<Box<dyn Any>>>;
 #[derive(Clone)]
-pub(crate) struct Cache(Arc<Mutex<HashMap<ObjectIdentifier, Option<Box<dyn Any>>>>>);
+pub(crate) struct Cache(Arc<Mutex<CacheMap>>);
 
 impl Default for Cache {
     fn default() -> Self {

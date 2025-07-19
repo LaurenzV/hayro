@@ -406,7 +406,7 @@ impl FallbackFontQuery {
 
             if let Some(flags) = descriptor
                 .get::<u32>(FLAGS)
-                .map(|n| FontFlags::from_bits_truncate(n))
+                .map(FontFlags::from_bits_truncate)
             {
                 data.is_serif = flags.contains(FontFlags::SERIF);
                 data.is_italic = flags.contains(FontFlags::ITALIC)
