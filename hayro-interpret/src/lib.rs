@@ -2,21 +2,22 @@ use kurbo::{Affine, Cap, Join, Point, Shape};
 use smallvec::{SmallVec, smallvec};
 use std::sync::Arc;
 
+mod convert;
+mod interpret;
+mod paint;
+mod soft_mask;
+mod types;
+mod x_object;
+
 pub mod cache;
 pub mod color;
 pub mod context;
-mod convert;
 pub mod device;
 pub mod font;
-mod interpret;
 pub mod mask;
-mod paint;
 pub mod pattern;
 pub mod shading;
-mod soft_mask;
-mod types;
 pub mod util;
-pub mod x_object;
 
 use crate::font::FontQuery;
 

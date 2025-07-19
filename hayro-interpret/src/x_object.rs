@@ -21,13 +21,13 @@ use log::warn;
 use smallvec::SmallVec;
 use std::ops::Deref;
 
-pub enum XObject<'a> {
+pub(crate) enum XObject<'a> {
     FormXObject(FormXObject<'a>),
     ImageXObject(ImageXObject<'a>),
 }
 
 impl<'a> XObject<'a> {
-    pub fn new(stream: &Stream<'a>, warning_sink: &WarningSinkFn) -> Option<Self> {
+    pub(crate) fn new(stream: &Stream<'a>, warning_sink: &WarningSinkFn) -> Option<Self> {
         let dict = stream.dict();
         match dict.get::<Name>(SUBTYPE)?.deref() {
             IMAGE => Some(Self::ImageXObject(ImageXObject::new(
@@ -41,8 +41,8 @@ impl<'a> XObject<'a> {
     }
 }
 
-pub struct FormXObject<'a> {
-    pub decoded: Vec<u8>,
+pub(crate) struct FormXObject<'a> {
+    pub(crate) decoded: Vec<u8>,
     matrix: Affine,
     bbox: [f32; 4],
     is_transparency_group: bool,
@@ -180,7 +180,7 @@ pub(crate) fn draw_image_xobject(
     context.restore_state();
 }
 
-pub struct ImageXObject<'a> {
+pub(crate) struct ImageXObject<'a> {
     pub decoded: Vec<u8>,
     pub width: u32,
     pub height: u32,
@@ -286,7 +286,7 @@ impl<'a> ImageXObject<'a> {
         })
     }
 
-    pub fn alpha8(&self) -> Option<LumaData> {
+    pub(crate) fn alpha8(&self) -> Option<LumaData> {
         let data_len = self.width as usize * self.height as usize;
 
         if self.is_image_mask {
@@ -361,7 +361,7 @@ impl<'a> ImageXObject<'a> {
         }
     }
 
-    pub fn rgb8(&self) -> Option<RgbData> {
+    pub(crate) fn rgb8(&self) -> Option<RgbData> {
         let data = if self.is_image_mask {
             return None;
         } else {
