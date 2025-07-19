@@ -6,10 +6,11 @@ use crate::page::Pages;
 use crate::page::cached::CachedPages;
 use crate::reader::Reader;
 use crate::xref::{XRef, XRefError, fallback, root_xref};
+use std::sync::Arc;
 
 /// A PDF file.
 pub struct Pdf {
-    xref: XRef,
+    xref: Arc<XRef>,
     header_version: PdfVersion,
     pages: CachedPages,
 }
@@ -37,9 +38,9 @@ impl Pdf {
                 XRefError::Encrypted => return Err(LoadPdfError::Encryption),
             },
         };
+        let xref = Arc::new(xref);
 
-        let boxed_xref = Box::new(xref.clone());
-        let pages = CachedPages::new(boxed_xref).ok_or(LoadPdfError::Invalid)?;
+        let pages = CachedPages::new(xref.clone()).ok_or(LoadPdfError::Invalid)?;
 
         Ok(Self {
             xref,

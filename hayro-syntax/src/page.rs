@@ -522,16 +522,17 @@ pub(crate) mod cached {
     use crate::reader::ReaderContext;
     use crate::xref::XRef;
     use std::ops::Deref;
+    use std::sync::Arc;
 
     pub(crate) struct CachedPages {
         pages: Pages<'static>,
         // NOTE: `pages` references the data in `xref`, so it's important that `xref`
         // appears after `pages` in the struct definition to ensure correct drop order.
-        _xref: Box<XRef>,
+        _xref: Arc<XRef>,
     }
 
     impl CachedPages {
-        pub(crate) fn new(xref: Box<XRef>) -> Option<Self> {
+        pub(crate) fn new(xref: Arc<XRef>) -> Option<Self> {
             // SAFETY:
             // - The XRef's location is stable in memory:
             //   - We wrapped it in a `Box`, which implements `StableDeref`.
@@ -549,7 +550,7 @@ pub(crate) mod cached {
             Some(Self { pages, _xref: xref })
         }
 
-        pub(crate) fn get(&self) -> &Pages {
+        pub(crate) fn get(&self) -> &Pages<'_> {
             &self.pages
         }
     }
