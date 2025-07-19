@@ -1,6 +1,6 @@
 use crate::ClipPath;
+use crate::Paint;
 use crate::font::Glyph;
-use crate::paint::Paint;
 use crate::soft_mask::SoftMask;
 use crate::{FillProps, StrokeProps};
 use crate::{LumaData, RgbData};

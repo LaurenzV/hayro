@@ -1,5 +1,7 @@
 use crate::FillRule;
-use kurbo::BezPath;
+use crate::color::Color;
+use crate::pattern::Pattern;
+use kurbo::{Affine, BezPath};
 
 /// A clip path.
 #[derive(Debug, Clone)]
@@ -34,4 +36,16 @@ pub struct LumaData {
     pub height: u32,
     /// Whether the image should be interpolated.
     pub interpolate: bool,
+}
+
+#[derive(Clone, Debug)]
+pub enum PaintType<'a> {
+    Color(Color),
+    Pattern(Pattern<'a>),
+}
+
+#[derive(Clone, Debug)]
+pub struct Paint<'a> {
+    pub paint_transform: Affine,
+    pub paint_type: PaintType<'a>,
 }

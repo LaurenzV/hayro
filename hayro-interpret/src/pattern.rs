@@ -38,7 +38,11 @@ pub enum Pattern<'a> {
 }
 
 impl<'a> Pattern<'a> {
-    pub(crate) fn new(object: Object<'a>, ctx: &Context<'a>, resources: &Resources<'a>) -> Option<Self> {
+    pub(crate) fn new(
+        object: Object<'a>,
+        ctx: &Context<'a>,
+        resources: &Resources<'a>,
+    ) -> Option<Self> {
         if let Some(dict) = object.clone().into_dict() {
             Some(Self::Shading(ShadingPattern::new(&dict)?))
         } else if let Some(stream) = object.clone().into_stream() {
@@ -110,7 +114,11 @@ impl Debug for TilingPattern<'_> {
 }
 
 impl<'a> TilingPattern<'a> {
-    pub(crate) fn new(stream: Stream<'a>, ctx: &Context<'a>, resources: &Resources<'a>) -> Option<Self> {
+    pub(crate) fn new(
+        stream: Stream<'a>,
+        ctx: &Context<'a>,
+        resources: &Resources<'a>,
+    ) -> Option<Self> {
         let dict = stream.dict();
 
         let bbox = dict.get::<Rect>(BBOX)?;

@@ -1,8 +1,8 @@
 use crate::Paint;
+use crate::PaintType;
 use crate::color::Color;
 use crate::context::Context;
 use crate::device::Device;
-use crate::paint::PaintType;
 use kurbo::{Affine, BezPath};
 
 pub(crate) fn fill_path(context: &mut Context, device: &mut impl Device) {

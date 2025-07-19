@@ -310,7 +310,7 @@ impl Triangle {
             d11,
         }
     }
-    
+
     /// Get the interpolated colors of the point from the triangle.
     ///
     /// Returns `None` if the point is not inside of the triangle.
