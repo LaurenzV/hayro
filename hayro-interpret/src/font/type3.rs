@@ -90,7 +90,7 @@ impl<'a> Type3<'a> {
 
         let mut context = Context::new_with(
             state.ctm,
-            // TODO: bbox?
+            // TODO: Get a proper bbox.
             Rect::new(0.0, 0.0, 1.0, 1.0),
             glyph.cache.clone(),
             glyph.xref,

@@ -1,5 +1,4 @@
 use crate::font::blob::{CffFontBlob, OpenTypeFontBlob};
-use crate::util::OptionLog;
 use crate::{InterpreterWarning, WarningSinkFn};
 use hayro_syntax::object::Array;
 use hayro_syntax::object::Dict;

@@ -1,3 +1,5 @@
+//! Interacting with the different kinds of PDF fonts.
+
 use crate::cache::Cache;
 use crate::context::Context;
 use crate::device::Device;
@@ -16,6 +18,7 @@ use hayro_syntax::object::dict::keys::*;
 use hayro_syntax::page::Resources;
 use hayro_syntax::xref::XRef;
 use kurbo::{Affine, BezPath, Vec2};
+use log::warn;
 use outline::OutlineFont;
 use skrifa::GlyphId;
 use std::fmt::Debug;
@@ -40,7 +43,7 @@ pub use standard_font::StandardFont;
 pub enum Glyph<'a> {
     /// A glyph defined by an outline.
     Outline(OutlineGlyph),
-    /// A glyph defined by PDF drawing instructions.
+    /// A type3 glyph, defined by PDF drawing instructions.
     Type3(Type3Glyph<'a>),
 }
 
@@ -69,6 +72,7 @@ impl OutlineGlyph {
     }
 }
 
+/// A type3 glyph.
 pub struct Type3Glyph<'a> {
     pub(crate) font: Arc<Type3<'a>>,
     pub(crate) glyph_id: GlyphId,
@@ -110,7 +114,7 @@ impl<'a> Font<'a> {
             TYPE0 => FontType::Type0(Arc::new(Type0Font::new(dict, warning_sink)?)),
             TYPE3 => FontType::Type3(Arc::new(Type3::new(dict))),
             f => {
-                println!(
+                warn!(
                     "unimplemented font type {:?}",
                     std::str::from_utf8(f).unwrap_or("unknown type")
                 );
@@ -277,21 +281,31 @@ impl Encoding {
     }
 }
 
+/// The font stretch.
 #[derive(Debug, Copy, Clone)]
 pub enum FontStretch {
+    /// Normal.
     Normal,
+    /// Ultra condensed.
     UltraCondensed,
+    /// Extra condensed.
     ExtraCondensed,
+    /// Condensed.
     Condensed,
+    /// Semi condensed.
     SemiCondensed,
+    /// Semi expanded.
     SemiExpanded,
+    /// Expanded.
     Expanded,
+    /// Extra expanded.
     ExtraExpanded,
+    /// Ultra expanded.
     UltraExpanded,
 }
 
 impl FontStretch {
-    pub fn from_string(s: &str) -> Self {
+    fn from_string(s: &str) -> Self {
         match s {
             "UltraCondensed" => FontStretch::UltraCondensed,
             "ExtraCondensed" => FontStretch::ExtraCondensed,
@@ -327,6 +341,9 @@ pub enum FontQuery {
     /// A query for one of the 14 PDF standard fonts.
     Standard(StandardFont),
     /// A query for a font that is not embedded in the PDF file.
+    ///
+    /// Note that this type of query is currently not supported,
+    /// but will be implemented in the future.
     Fallback(FallbackFontQuery),
 }
 
