@@ -221,7 +221,7 @@ fn _parse_char_string(
                             p.parse_flex()?;
                             p.is_flexing = false;
                         } else {
-                            trace!("ignoring call_other_subr with {}, {}", subr_index, n_args);
+                            trace!("ignoring call_other_subr with {subr_index}, {n_args}");
                         }
                     }
                     tb_operator::POP => {
@@ -282,7 +282,7 @@ fn _parse_char_string(
             }
             255 => p.parse_int4(&mut s)?,
             _ => {
-                warn!("unrecognized charstring op: {}", op);
+                warn!("unrecognized charstring op: {op}");
             }
         }
     }
