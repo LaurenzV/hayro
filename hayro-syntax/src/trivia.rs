@@ -4,10 +4,7 @@ use crate::reader::{Readable, Reader, ReaderContext, Skippable};
 
 #[inline(always)]
 pub(crate) fn is_white_space_character(char: u8) -> bool {
-    match char {
-        0x00 | 0x09 | 0x0a | 0x0c | 0x0d | 0x20 => true,
-        _ => false,
-    }
+    matches!(char, 0x00 | 0x09 | 0x0a | 0x0c | 0x0d | 0x20)
 }
 
 #[inline(always)]
@@ -24,10 +21,7 @@ pub(crate) fn is_regular_character(char: u8) -> bool {
 
 #[inline(always)]
 pub(crate) fn is_eol_character(char: u8) -> bool {
-    match char {
-        0x0a | 0x0d => true,
-        _ => false,
-    }
+    matches!(char, 0x0a | 0x0d)
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Hash)]

@@ -52,8 +52,13 @@ impl<'a> Dict<'a> {
         self.0.offsets.len()
     }
 
+    /// Return whether the dictionary is empty.
+    pub fn is_empty(&self) -> bool {
+        self.0.offsets.is_empty()
+    }
+
     /// Checks whether the dictionary contains an entry with a specific key.
-    pub fn contains_key<'b>(&self, key: impl Deref<Target = [u8]>) -> bool {
+    pub fn contains_key(&self, key: impl Deref<Target = [u8]>) -> bool {
         self.0
             .offsets
             .contains_key(&Name::from_unescaped(key.deref()))
@@ -73,7 +78,7 @@ impl<'a> Dict<'a> {
     }
 
     /// Get the object reference linked to a key.
-    pub fn get_ref<'b>(&self, key: impl Deref<Target = [u8]>) -> Option<ObjRef> {
+    pub fn get_ref(&self, key: impl Deref<Target = [u8]>) -> Option<ObjRef> {
         let offset = *self.0.offsets.get(&Name::from_unescaped(key.as_ref()))?;
 
         Reader::new(&self.0.data[offset..]).read_with_context::<ObjRef>(self.0.ctx)

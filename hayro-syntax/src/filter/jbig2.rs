@@ -13,6 +13,8 @@
  * limitations under the License.
  */
 
+#![allow(clippy::needless_range_loop)]
+
 use crate::filter::ccitt::{CCITTFaxDecoder, CCITTFaxDecoderOptions};
 use crate::object::Dict;
 use crate::object::Stream;

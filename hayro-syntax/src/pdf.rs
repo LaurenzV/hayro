@@ -23,6 +23,7 @@ pub enum LoadPdfError {
     Invalid,
 }
 
+#[allow(clippy::len_without_is_empty)]
 impl Pdf {
     /// Try to read the given PDF file.
     ///

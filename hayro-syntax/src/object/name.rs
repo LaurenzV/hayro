@@ -35,6 +35,7 @@ impl PartialEq for Name<'_> {
 
 impl Eq for Name<'_> {}
 
+#[allow(clippy::non_canonical_partial_ord_impl)]
 impl PartialOrd for Name<'_> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         self.deref().partial_cmp(other.deref())

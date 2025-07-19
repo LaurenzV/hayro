@@ -71,10 +71,10 @@ impl<'a> Stream<'a> {
 
             let mut current: Option<FilterResult> = None;
 
-            for i in 0..filters.len() {
+            for (i, filter) in filters.iter().enumerate() {
                 let params = params.get(i).and_then(|p| p.clone().cast::<Dict>());
 
-                let new = filters[i].apply(
+                let new = filter.apply(
                     current
                         .as_ref()
                         .map(|c| c.data.as_ref())

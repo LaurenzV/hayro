@@ -541,7 +541,7 @@ fn populate_from_xref_stream<'a>(
     Some(stream.dict().data())
 }
 
-fn xref_stream_num<'a>(data: &[u8]) -> Option<u32> {
+fn xref_stream_num(data: &[u8]) -> Option<u32> {
     Some(match data.len() {
         0 => return None,
         1 => u8::from_be(data[0]) as u32,

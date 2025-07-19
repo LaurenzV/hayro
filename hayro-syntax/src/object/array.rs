@@ -175,6 +175,7 @@ impl<'a> FlexArrayIter<'a> {
         private_bounds,
         reason = "users shouldn't be able to implement `ObjectLike` for custom objects."
     )]
+    #[allow(clippy::should_implement_trait)]
     /// Try reading the next item as a specific object from the array.
     pub fn next<T: ObjectLike<'a>>(&mut self) -> Option<T> {
         self.reader.skip_white_spaces_and_comments();
