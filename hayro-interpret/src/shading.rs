@@ -945,9 +945,8 @@ fn read_coons_patch_mesh(
                     control_points[i] = Point::new(x as f64, y as f64);
                 }
 
-                for i in 2..4 {
-                    colors[i] = read_colors(&mut reader)?;
-                }
+                colors[2] = read_colors(&mut reader)?;
+                colors[3] = read_colors(&mut reader)?;
 
                 prev_patch = Some(CoonsPatch {
                     control_points,
@@ -969,9 +968,8 @@ fn read_coons_patch_mesh(
                     control_points[i] = Point::new(x as f64, y as f64);
                 }
 
-                for i in 2..4 {
-                    colors[i] = read_colors(&mut reader)?;
-                }
+                colors[2] = read_colors(&mut reader)?;
+                colors[3] = read_colors(&mut reader)?;
 
                 prev_patch = Some(CoonsPatch {
                     control_points,
@@ -993,9 +991,8 @@ fn read_coons_patch_mesh(
                     control_points[i] = Point::new(x as f64, y as f64);
                 }
 
-                for i in 2..4 {
-                    colors[i] = read_colors(&mut reader)?;
-                }
+                colors[2] = read_colors(&mut reader)?;
+                colors[3] = read_colors(&mut reader)?;
 
                 prev_patch = Some(CoonsPatch {
                     control_points,
