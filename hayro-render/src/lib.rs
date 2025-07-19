@@ -5,7 +5,6 @@ use crate::pixmap::Pixmap;
 use crate::render::RenderContext;
 pub use hayro_interpret::FontData;
 pub use hayro_interpret::InterpreterSettings;
-use hayro_interpret::cache::Cache;
 use hayro_interpret::color::AlphaColor;
 use hayro_interpret::context::Context;
 use hayro_interpret::device::Device;
@@ -413,7 +412,6 @@ pub fn render(
     let mut state = Context::new(
         initial_transform,
         Rect::new(0.0, 0.0, pix_width as f64, pix_height as f64),
-        Cache::new(),
         page.xref(),
         interpreter_settings.clone(),
     );

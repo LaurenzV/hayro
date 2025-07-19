@@ -1,6 +1,7 @@
 use crate::cache::Cache;
 use crate::context::Context;
 use crate::device::Device;
+use crate::interpret::state::State;
 use crate::x_object::{XObject, draw_xobject};
 use crate::{InterpreterSettings, WarningSinkFn};
 use hayro_syntax::object::Dict;
@@ -94,12 +95,14 @@ impl<'a> SoftMask<'a> {
 
     /// Interpret the contents of the mask into the given device.
     pub fn interpret(&self, device: &mut impl Device) {
-        let mut ctx = Context::new(
+        let state = State::new(self.0.root_transform);
+        let mut ctx = Context::new_with(
             self.0.root_transform,
             self.0.bbox,
             self.0.object_cache.clone(),
             self.0.xref,
             self.0.settings.clone(),
+            state,
         );
         draw_xobject(&self.0.group, &self.0.parent_resources, &mut ctx, device);
     }

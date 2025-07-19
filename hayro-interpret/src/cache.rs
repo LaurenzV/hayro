@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 #[derive(Clone)]
-pub struct Cache(Arc<Mutex<HashMap<ObjectIdentifier, Option<Box<dyn Any>>>>>);
+pub(crate) struct Cache(Arc<Mutex<HashMap<ObjectIdentifier, Option<Box<dyn Any>>>>>);
 
 impl Default for Cache {
     fn default() -> Self {

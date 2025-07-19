@@ -2,13 +2,13 @@ use kurbo::{Affine, Cap, Join, Point, Shape};
 use smallvec::{SmallVec, smallvec};
 use std::sync::Arc;
 
+mod cache;
 mod convert;
 mod interpret;
 mod soft_mask;
 mod types;
 mod x_object;
 
-pub mod cache;
 pub mod color;
 pub mod context;
 pub mod device;

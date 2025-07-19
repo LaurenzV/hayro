@@ -13,7 +13,7 @@ use hayro_syntax::object::dict::keys::SMASK;
 use hayro_syntax::object::{Dict, Name, Number};
 use hayro_syntax::page::Resources;
 use kurbo::{Affine, BezPath, Cap, Join, Vec2};
-use smallvec::SmallVec;
+use smallvec::{SmallVec, smallvec};
 use std::ops::Deref;
 
 #[derive(Clone, Debug)]
@@ -52,7 +52,40 @@ pub(crate) struct State<'a> {
     pub(crate) n_clips: u32,
 }
 
+impl Default for State<'_> {
+    fn default() -> Self {
+        State {
+            line_width: 1.0,
+            line_cap: Cap::Butt,
+            line_join: Join::Miter,
+            miter_limit: 10.0,
+            dash_array: smallvec![],
+            dash_offset: 0.0,
+            ctm: Affine::IDENTITY,
+            non_stroke_alpha: 1.0,
+            stroke_cs: ColorSpace::device_gray(),
+            stroke_color: smallvec![0.0,],
+            none_stroke_cs: ColorSpace::device_gray(),
+            non_stroke_color: smallvec![0.0],
+            stroke_alpha: 1.0,
+            fill_rule: FillRule::NonZero,
+            n_clips: 0,
+            soft_mask: None,
+            text_state: TextState::default(),
+            stroke_pattern: None,
+            non_stroke_pattern: None,
+        }
+    }
+}
+
 impl<'a> State<'a> {
+    pub(crate) fn new(initial_transform: Affine) -> Self {
+        Self {
+            ctm: initial_transform,
+            ..Default::default()
+        }
+    }
+
     pub(crate) fn stroke_data(&self) -> PaintData<'a> {
         PaintData {
             alpha: self.stroke_alpha,
