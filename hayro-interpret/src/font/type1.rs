@@ -1,5 +1,6 @@
 use crate::FontResolverFn;
 use crate::font::blob::{CffFontBlob, Type1FontBlob};
+use crate::font::generated::glyph_names;
 use crate::font::glyph_simulator::GlyphSimulator;
 use crate::font::standard_font::{StandardFont, StandardFontBlob, select_standard_font};
 use crate::font::true_type::{read_encoding, read_widths};
@@ -13,7 +14,6 @@ use skrifa::GlyphId;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::Arc;
-use crate::font::generated::glyph_names;
 
 #[derive(Debug)]
 pub(crate) struct Type1Font(Kind);
@@ -145,13 +145,15 @@ impl StandardKind {
     fn map_code(&self, code: u8) -> GlyphId {
         let result = self
             .code_to_ps_name(code)
-            .and_then(|c| 
-                self.base_font_blob.name_to_glyph(c)
-                    .or_else(|| {
-                        // If the font doesn't have a POST table, try to map via unicode instead.
-                        glyph_names::get(c).and_then(|c| self.base_font_blob.unicode_to_glyph(c.chars().nth(0).unwrap() as u32))
+            .and_then(|c| {
+                self.base_font_blob.name_to_glyph(c).or_else(|| {
+                    // If the font doesn't have a POST table, try to map via unicode instead.
+                    glyph_names::get(c).and_then(|c| {
+                        self.base_font_blob
+                            .unicode_to_glyph(c.chars().nth(0).unwrap() as u32)
                     })
-            )
+                })
+            })
             .unwrap_or(GlyphId::NOTDEF);
         self.glyph_to_code.borrow_mut().insert(result, code);
 
