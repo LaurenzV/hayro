@@ -1,7 +1,7 @@
 use crate::color::Color;
 use crate::pattern::Pattern;
 use kurbo::{Affine, BezPath, Cap, Join};
-use smallvec::SmallVec;
+use smallvec::{SmallVec, smallvec};
 
 /// A clip path.
 #[derive(Debug, Clone)]
@@ -73,6 +73,19 @@ pub struct StrokeProps {
     pub dash_offset: f32,
 }
 
+impl Default for StrokeProps {
+    fn default() -> Self {
+        Self {
+            line_width: 1.0,
+            line_cap: Cap::Butt,
+            line_join: Join::Miter,
+            miter_limit: 10.0,
+            dash_array: smallvec![],
+            dash_offset: 0.0,
+        }
+    }
+}
+
 /// A fill rule.
 #[derive(Clone, Debug, Copy)]
 pub enum FillRule {
@@ -87,4 +100,12 @@ pub enum FillRule {
 pub struct FillProps {
     /// The fill rule.
     pub fill_rule: FillRule,
+}
+
+impl Default for FillProps {
+    fn default() -> Self {
+        Self {
+            fill_rule: FillRule::NonZero,
+        }
+    }
 }

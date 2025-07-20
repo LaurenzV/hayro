@@ -1,0 +1,99 @@
+use hayro_interpret::font::{FontData, FontQuery, StandardFont};
+use hayro_interpret::{InterpreterSettings, Pdf};
+use hayro_svg::convert;
+use std::sync::Arc;
+
+fn main() {
+    let pdf = std::fs::read(std::env::args().nth(1).unwrap()).unwrap();
+    let loaded = Pdf::new(Arc::new(pdf)).unwrap();
+    let first_page = &loaded.pages()[0];
+
+    let interpreter_settings = InterpreterSettings {
+        font_resolver: Arc::new(|query| match query {
+            FontQuery::Standard(s) => Some((get_standard(s), 0)),
+            FontQuery::Fallback(f) => Some((get_standard(&f.pick_standard_font()), 0)),
+        }),
+        ..Default::default()
+    };
+
+    std::fs::write("out.svg", convert(first_page, &interpreter_settings)).unwrap();
+}
+
+fn get_standard(font: &StandardFont) -> FontData {
+    let data = match font {
+        StandardFont::Helvetica => {
+            &include_bytes!("../../assets/standard_fonts/LiberationSans-Regular.ttf")[..]
+        }
+        StandardFont::HelveticaBold => {
+            &include_bytes!("../../assets/standard_fonts/LiberationSans-Bold.ttf")[..]
+        }
+        StandardFont::HelveticaOblique => {
+            &include_bytes!("../../assets/standard_fonts/LiberationSans-Italic.ttf")[..]
+        }
+        StandardFont::HelveticaBoldOblique => {
+            &include_bytes!("../../assets/standard_fonts/LiberationSans-BoldItalic.ttf")[..]
+        }
+        StandardFont::Courier => {
+            &include_bytes!("../../assets/standard_fonts/LiberationMono-Regular.ttf")[..]
+        }
+        StandardFont::CourierBold => {
+            &include_bytes!("../../assets/standard_fonts/LiberationMono-Bold.ttf")[..]
+        }
+        StandardFont::CourierOblique => {
+            &include_bytes!("../../assets/standard_fonts/LiberationMono-Italic.ttf")[..]
+        }
+        StandardFont::CourierBoldOblique => {
+            &include_bytes!("../../assets/standard_fonts/LiberationMono-BoldItalic.ttf")[..]
+        }
+        StandardFont::TimesRoman => {
+            &include_bytes!("../../assets/standard_fonts/LiberationSerif-Regular.ttf")[..]
+        }
+        StandardFont::TimesBold => {
+            &include_bytes!("../../assets/standard_fonts/LiberationSerif-Bold.ttf")[..]
+        }
+        StandardFont::TimesItalic => {
+            &include_bytes!("../../assets/standard_fonts/LiberationSerif-Italic.ttf")[..]
+        }
+        StandardFont::TimesBoldItalic => {
+            &include_bytes!("../../assets/standard_fonts/LiberationSerif-BoldItalic.ttf")[..]
+        }
+        StandardFont::ZapfDingBats => {
+            &include_bytes!("../../assets/standard_fonts/FoxitDingbats.pfb")[..]
+        }
+        StandardFont::Symbol => &include_bytes!("../../assets/standard_fonts/FoxitSymbol.pfb")[..],
+    };
+
+    Arc::new(data)
+}
+
+/// A simple stderr logger.
+static LOGGER: SimpleLogger = SimpleLogger;
+struct SimpleLogger;
+impl log::Log for SimpleLogger {
+    fn enabled(&self, metadata: &log::Metadata) -> bool {
+        metadata.level() <= log::LevelFilter::Warn
+    }
+
+    fn log(&self, record: &log::Record) {
+        if self.enabled(record.metadata()) {
+            let target = if !record.target().is_empty() {
+                record.target()
+            } else {
+                record.module_path().unwrap_or_default()
+            };
+
+            let line = record.line().unwrap_or(0);
+            let args = record.args();
+
+            match record.level() {
+                log::Level::Error => eprintln!("Error (in {target}:{line}): {args}"),
+                log::Level::Warn => eprintln!("Warning (in {target}:{line}): {args}"),
+                log::Level::Info => eprintln!("Info (in {target}:{line}): {args}"),
+                log::Level::Debug => eprintln!("Debug (in {target}:{line}): {args}"),
+                log::Level::Trace => eprintln!("Trace (in {target}:{line}): {args}"),
+            }
+        }
+    }
+
+    fn flush(&self) {}
+}

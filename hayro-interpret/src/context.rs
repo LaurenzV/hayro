@@ -201,16 +201,7 @@ impl<'a> Context<'a> {
     }
 
     pub(crate) fn stroke_props(&self) -> StrokeProps {
-        let state = self.get();
-
-        StrokeProps {
-            line_width: state.line_width,
-            line_cap: state.line_cap,
-            line_join: state.line_join,
-            miter_limit: state.miter_limit,
-            dash_array: state.dash_array.clone(),
-            dash_offset: state.dash_offset,
-        }
+        self.get().stroke_props.clone()
     }
 
     pub(crate) fn num_states(&self) -> usize {
@@ -218,10 +209,6 @@ impl<'a> Context<'a> {
     }
 
     pub(crate) fn fill_props(&self) -> FillProps {
-        let state = self.get();
-
-        FillProps {
-            fill_rule: state.fill_rule,
-        }
+        self.get().fill_props.clone()
     }
 }
