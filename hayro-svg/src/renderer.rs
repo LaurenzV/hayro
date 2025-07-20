@@ -15,22 +15,24 @@ pub(crate) struct SvgRenderer {
 impl SvgRenderer {
     fn fill_path(&mut self, path: &BezPath, paint: &Paint) {
         let svg_path = path.to_svg();
-        let paint = convert_paint(paint);
+        let (fill, alpha) = convert_paint(paint);
 
         self.xml.start_element("path");
         self.xml.write_attribute("d", &svg_path);
-        self.xml.write_attribute("fill", &paint);
+        self.xml.write_attribute("fill", &fill);
+        self.xml.write_attribute("fill-opacity", &alpha);
         self.write_transform();
         self.xml.end_element();
     }
 
     fn stroke_path(&mut self, path: &BezPath, paint: &Paint) {
         let svg_path = path.to_svg();
-        let paint = convert_paint(paint);
+        let (fill, alpha) = convert_paint(paint);
 
         self.xml.start_element("path");
         self.xml.write_attribute("d", &svg_path);
-        self.xml.write_attribute("stroke", &paint);
+        self.xml.write_attribute("stroke", &fill);
+        self.xml.write_attribute("stroke-opacity", &alpha);
         self.xml.write_attribute("fill", "none");
         self.write_transform();
         self.xml.end_element();
@@ -115,6 +117,8 @@ impl SvgRenderer {
     pub(crate) fn write_header(&mut self, size: (f32, f32)) {
         self.xml.start_element("svg");
         self.xml
+            .write_attribute_fmt("viewBox", format_args!("0 0 {} {}", size.0, size.1));
+        self.xml
             .write_attribute_fmt("width", format_args!("{}", size.0));
         self.xml
             .write_attribute_fmt("height", format_args!("{}", size.1));
@@ -140,18 +144,21 @@ fn convert_transform(transform: &Affine) -> String {
         .join(" ")
 }
 
-fn convert_paint(paint: &Paint) -> String {
+fn convert_paint(paint: &Paint) -> (String, f32) {
     match &paint.paint_type {
         PaintType::Color(c) => {
-            format!(
+            let rgba8 = c.to_rgba().to_rgba8();
+            let color = format!(
                 "#{}",
-                c.to_rgba()
-                    .to_rgba8()
+                &rgba8[0..3]
                     .iter()
                     .map(|b| format!("{:02x}", b))
                     .collect::<String>()
-            )
+            );
+            let alpha = rgba8[3] as f32 / 255.0;
+
+            (color, alpha)
         }
-        PaintType::Pattern(_) => "black".to_string(),
+        PaintType::Pattern(_) => ("black".to_string(), 1.0),
     }
 }
