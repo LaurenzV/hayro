@@ -75,12 +75,9 @@ impl SvgRenderer {
         self.xml.write_attribute("id", "glyph");
 
         for (id, glyph) in self.glyphs.iter() {
-            self.xml.start_element("symbol");
-            self.xml.write_attribute("overflow", "visible");
-            self.xml.write_attribute("id", &id);
             self.xml.start_element("path");
+            self.xml.write_attribute("id", &id);
             self.xml.write_attribute("d", &glyph.to_svg());
-            self.xml.end_element();
             self.xml.end_element();
         }
 
@@ -123,8 +120,7 @@ impl Device for SvgRenderer {
                     .insert_with(o.identifier().cache_key(), || o.outline());
 
                 self.xml.start_element("use");
-                self.xml
-                    .write_attribute_fmt("xlink:href", format_args!("#{id}"));
+                self.xml.write_attribute_fmt("href", format_args!("#{id}"));
                 self.write_transform(Some(self.transform * o.glyph_transform));
                 self.write_paint(paint, false);
                 self.xml.end_element();
