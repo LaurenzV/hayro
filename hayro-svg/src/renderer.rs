@@ -42,13 +42,13 @@ impl SvgRenderer {
 
         if is_stroke {
             self.xml.write_attribute("stroke", &fill);
-            if alpha != 0.0 {
+            if alpha != 1.0 {
                 self.xml.write_attribute("stroke-opacity", &alpha);
             }
         } else {
             self.xml.write_attribute("fill", &fill);
 
-            if alpha != 0.0 {
+            if alpha != 1.0 {
                 self.xml.write_attribute("fill-opacity", &alpha);
             }
         }
