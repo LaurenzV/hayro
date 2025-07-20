@@ -479,6 +479,7 @@ version = "0.1.0"
 dependencies = [
  "base64",
  "hayro-interpret",
+ "image 0.25.6",
  "kurbo",
  "log",
  "xmlwriter",

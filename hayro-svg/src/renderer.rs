@@ -1,12 +1,15 @@
+use base64::Engine;
 use hayro_interpret::font::Glyph;
 use hayro_interpret::{
     CacheKey, ClipPath, Device, FillProps, LumaData, Paint, PaintType, RgbData, SoftMask,
     StrokeProps,
 };
+use image::{DynamicImage, ImageBuffer, ImageFormat};
 use kurbo::{Affine, BezPath};
 use std::collections::HashMap;
 use std::fmt;
 use std::fmt::{Display, Formatter};
+use std::io::Cursor;
 use xmlwriter::{Options, XmlWriter};
 
 pub(crate) struct SvgRenderer {
@@ -120,7 +123,8 @@ impl Device for SvgRenderer {
                     .insert_with(o.identifier().cache_key(), || o.outline());
 
                 self.xml.start_element("use");
-                self.xml.write_attribute_fmt("href", format_args!("#{id}"));
+                self.xml
+                    .write_attribute_fmt("xlink:href", format_args!("#{id}"));
                 self.write_transform(Some(self.transform * o.glyph_transform));
                 self.write_paint(paint, false);
                 self.xml.end_element();
@@ -140,7 +144,49 @@ impl Device for SvgRenderer {
         }
     }
 
-    fn draw_rgba_image(&mut self, image: RgbData, alpha: Option<LumaData>) {}
+    fn draw_rgba_image(&mut self, image: RgbData, alpha: Option<LumaData>) {
+        let scaling = if image.interpolate {
+            "smooth"
+        } else {
+            "pixelated"
+        };
+
+        let image = if let Some(alpha) = alpha {
+            if alpha.interpolate == image.interpolate
+                && alpha.width == image.width
+                && alpha.height == image.height
+            {
+                let interleaved = image
+                    .data
+                    .chunks(3)
+                    .zip(alpha.data)
+                    .flat_map(|(rgb, a)| [rgb[0], rgb[1], rgb[2], a])
+                    .collect::<Vec<u8>>();
+
+                DynamicImage::ImageRgba8(
+                    ImageBuffer::from_raw(image.width, image.height, interleaved).unwrap(),
+                )
+            } else {
+                unimplemented!();
+            }
+        } else {
+            DynamicImage::ImageRgb8(
+                ImageBuffer::from_raw(image.width, image.height, image.data.clone()).unwrap(),
+            )
+        };
+
+        let base64 = convert_image_to_base64_url(&image);
+
+        self.xml.start_element("image");
+        self.xml.write_attribute("xlink:href", &base64);
+        self.write_transform(None);
+        self.xml.write_attribute("width", &image.width());
+        self.xml.write_attribute("height", &image.height());
+        self.xml.write_attribute("preserveAspectRatio", "none");
+        self.xml
+            .write_attribute("style", &format_args!("image-rendering: {scaling}"));
+        self.xml.end_element();
+    }
 
     fn draw_stencil_image(&mut self, stencil: LumaData, paint: &Paint) {}
 
@@ -208,6 +254,18 @@ fn convert_paint(paint: &Paint) -> (String, f32) {
         }
         PaintType::Pattern(_) => ("black".to_string(), 1.0),
     }
+}
+
+pub fn convert_image_to_base64_url(image: &DynamicImage) -> String {
+    let mut png_buffer = Vec::new();
+    let mut cursor = Cursor::new(&mut png_buffer);
+    image.write_to(&mut cursor, ImageFormat::Png).unwrap();
+
+    let mut url = "data:image/png;base64,".to_string();
+    let data = base64::engine::general_purpose::STANDARD.encode(png_buffer);
+    url.push_str(&data);
+
+    url
 }
 
 #[derive(Debug, Clone)]
