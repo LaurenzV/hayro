@@ -13,6 +13,7 @@ phf = { workspace = true, features = ["macros"] }
 skrifa = { workspace = true }
 yoke = { workspace = true, features = ["derive"]}
 hayro-font = { workspace = true }
+siphasher = { workspace = true }
 bitflags = { workspace = true }
 
 [features]

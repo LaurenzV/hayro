@@ -1,8 +1,11 @@
 //! A number of utility methods.
 
+use hayro_syntax::object::Dict;
 use log::warn;
+use siphasher::sip128::{Hasher128, SipHasher13};
 use skrifa::GlyphId;
 use skrifa::raw::tables::cmap::CmapSubtable;
+use std::hash::Hash;
 use std::ops::Sub;
 
 pub(crate) trait OptionLog {
@@ -83,4 +86,17 @@ impl PointExt for kurbo::Point {
     fn y(&self) -> f32 {
         self.y as f32
     }
+}
+
+/// Calculate a 128-bit siphash of a value.
+pub(crate) fn hash128<T: Hash + ?Sized>(value: &T) -> u128 {
+    let mut state = SipHasher13::new();
+    value.hash(&mut state);
+    state.finish128().as_u128()
+}
+
+pub(crate) fn cache_key_from_dict(dict: &Dict) -> u128 {
+    dict.obj_id()
+        .map(|o| hash128(&o))
+        .unwrap_or(hash128(dict.data()))
 }

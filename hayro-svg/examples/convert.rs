@@ -5,8 +5,7 @@ use std::sync::Arc;
 
 fn main() {
     let pdf = std::fs::read(std::env::args().nth(1).unwrap()).unwrap();
-    let loaded = Pdf::new(Arc::new(pdf)).unwrap();
-    let first_page = &loaded.pages()[0];
+    let pdf = Pdf::new(Arc::new(pdf)).unwrap();
 
     let interpreter_settings = InterpreterSettings {
         font_resolver: Arc::new(|query| match query {
@@ -16,7 +15,10 @@ fn main() {
         ..Default::default()
     };
 
-    std::fs::write("out.svg", convert(first_page, &interpreter_settings)).unwrap();
+    for (idx, page) in pdf.pages().iter().enumerate() {
+        let svg = convert(page, &interpreter_settings);
+        std::fs::write(format!("rendered_{idx}.svg"), svg).unwrap();
+    }
 }
 
 fn get_standard(font: &StandardFont) -> FontData {

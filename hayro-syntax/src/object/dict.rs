@@ -1,9 +1,9 @@
 //! Dictionaries.
 
-use crate::object::Name;
 use crate::object::Null;
 use crate::object::macros::object;
 use crate::object::r#ref::{MaybeRef, ObjRef};
+use crate::object::{Name, ObjectIdentifier};
 use crate::object::{Object, ObjectLike};
 use crate::reader::{Readable, Reader, ReaderContext, Skippable};
 use crate::xref::XRef;
@@ -43,7 +43,8 @@ impl<'a> Dict<'a> {
         Self(Arc::new(repr))
     }
 
-    pub(crate) fn data(&self) -> &'a [u8] {
+    /// Get the raw bytes underlying to the dictionary.
+    pub fn data(&self) -> &'a [u8] {
         self.0.data
     }
 
@@ -97,6 +98,11 @@ impl<'a> Dict<'a> {
             let obj = self.get_raw(k.deref()).unwrap();
             (k, obj)
         })
+    }
+
+    /// Return the object identifier of the dict, if it's an indirect object.
+    pub fn obj_id(&self) -> Option<ObjectIdentifier> {
+        self.0.ctx.obj_number
     }
 
     /// Return the raw entry for a specific key.

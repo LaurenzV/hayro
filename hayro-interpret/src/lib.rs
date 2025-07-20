@@ -33,6 +33,7 @@ pub mod pattern;
 pub mod shading;
 pub mod util;
 
+pub use cache::CacheKey;
 pub use context::*;
 pub use device::*;
 pub use hayro_syntax;

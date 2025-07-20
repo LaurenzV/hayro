@@ -1,3 +1,4 @@
+use crate::CacheKey;
 use crate::font::cid::Type0Font;
 use crate::font::true_type::TrueTypeFont;
 use crate::font::type1::Type1Font;
@@ -63,6 +64,16 @@ pub(crate) enum OutlineFont {
     Type1(Rc<Type1Font>),
     TrueType(Rc<TrueTypeFont>),
     Type0(Rc<Type0Font>),
+}
+
+impl CacheKey for OutlineFont {
+    fn cache_key(&self) -> u128 {
+        match self {
+            OutlineFont::Type1(f) => f.cache_key(),
+            OutlineFont::TrueType(t) => t.cache_key(),
+            OutlineFont::Type0(t0) => t0.cache_key(),
+        }
+    }
 }
 
 impl OutlineFont {
