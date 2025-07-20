@@ -1,11 +1,12 @@
 //! A number of utility methods.
 
 use hayro_syntax::object::Dict;
+use kurbo::BezPath;
 use log::warn;
 use siphasher::sip128::{Hasher128, SipHasher13};
 use skrifa::GlyphId;
 use skrifa::raw::tables::cmap::CmapSubtable;
-use std::hash::Hash;
+use std::hash::{Hash, Hasher};
 use std::ops::Sub;
 
 pub(crate) trait OptionLog {

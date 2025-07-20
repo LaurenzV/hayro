@@ -1,5 +1,7 @@
+use crate::CacheKey;
 use crate::color::Color;
 use crate::pattern::Pattern;
+use crate::util::hash128;
 use kurbo::{Affine, BezPath, Cap, Join};
 use smallvec::{SmallVec, smallvec};
 
@@ -10,6 +12,12 @@ pub struct ClipPath {
     pub path: BezPath,
     /// The fill rule.
     pub fill: FillRule,
+}
+
+impl CacheKey for ClipPath {
+    fn cache_key(&self) -> u128 {
+        hash128(&(&self.path.to_svg(), &self.fill))
+    }
 }
 
 /// A structure holding 3-channel RGB data.
@@ -87,7 +95,7 @@ impl Default for StrokeProps {
 }
 
 /// A fill rule.
-#[derive(Clone, Debug, Copy)]
+#[derive(Clone, Debug, Copy, Hash, PartialEq, Eq)]
 pub enum FillRule {
     /// Non-zero filling.
     NonZero,

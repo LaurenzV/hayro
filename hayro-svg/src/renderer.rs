@@ -1,7 +1,7 @@
 use base64::Engine;
 use hayro_interpret::font::Glyph;
 use hayro_interpret::{
-    CacheKey, ClipPath, Device, FillProps, LumaData, Paint, PaintType, RgbData, SoftMask,
+    CacheKey, ClipPath, Device, FillProps, FillRule, LumaData, Paint, PaintType, RgbData, SoftMask,
     StrokeProps,
 };
 use image::{DynamicImage, ImageBuffer, ImageFormat};
@@ -12,12 +12,18 @@ use std::fmt::{Display, Formatter};
 use std::io::Cursor;
 use xmlwriter::{Options, XmlWriter};
 
+struct CachedClipPath {
+    path: BezPath,
+    fill_rule: FillRule,
+}
+
 pub(crate) struct SvgRenderer {
     xml: XmlWriter,
     transform: Affine,
     fill_props: FillProps,
     stroke_props: StrokeProps,
     glyphs: Deduplicator<BezPath>,
+    clip_paths: Deduplicator<CachedClipPath>,
 }
 
 impl SvgRenderer {
@@ -86,6 +92,31 @@ impl SvgRenderer {
 
         self.xml.end_element();
     }
+
+    fn write_clip_path_defs(&mut self) {
+        if self.clip_paths.is_empty() {
+            return;
+        }
+
+        self.xml.start_element("defs");
+        self.xml.write_attribute("id", "clip-path");
+
+        for (id, clip_path) in self.clip_paths.iter() {
+            self.xml.start_element("clipPath");
+            self.xml.write_attribute("id", &id);
+            self.xml.start_element("path");
+            self.xml.write_attribute("d", &clip_path.path.to_svg());
+
+            if clip_path.fill_rule == FillRule::EvenOdd {
+                self.xml.write_attribute("clip-rule", "evenodd");
+            }
+
+            self.xml.end_element();
+            self.xml.end_element();
+        }
+
+        self.xml.end_element();
+    }
 }
 
 impl Device for SvgRenderer {
@@ -111,7 +142,18 @@ impl Device for SvgRenderer {
         self.fill_props = fill_props.clone();
     }
 
-    fn push_clip_path(&mut self, clip_path: &ClipPath) {}
+    fn push_clip_path(&mut self, clip_path: &ClipPath) {
+        let clip_id = self
+            .clip_paths
+            .insert_with(clip_path.cache_key(), || CachedClipPath {
+                path: self.transform * clip_path.path.clone(),
+                fill_rule: clip_path.fill,
+            });
+
+        self.xml.start_element("g");
+        self.xml
+            .write_attribute_fmt("clip-path", format_args!("url(#{clip_id})"));
+    }
 
     fn push_transparency_group(&mut self, opacity: f32, mask: Option<SoftMask>) {}
 
@@ -190,7 +232,9 @@ impl Device for SvgRenderer {
 
     fn draw_stencil_image(&mut self, stencil: LumaData, paint: &Paint) {}
 
-    fn pop_clip_path(&mut self) {}
+    fn pop_clip_path(&mut self) {
+        self.xml.end_element();
+    }
 
     fn pop_transparency_group(&mut self) {}
 }
@@ -203,6 +247,7 @@ impl SvgRenderer {
             fill_props: FillProps::default(),
             stroke_props: StrokeProps::default(),
             glyphs: Deduplicator::new('g'),
+            clip_paths: Deduplicator::new('c'),
         }
     }
 
@@ -222,6 +267,7 @@ impl SvgRenderer {
 
     pub(crate) fn finish(mut self) -> String {
         self.write_glyph_defs();
+        self.write_clip_path_defs();
         // Close the `svg` element.
         self.xml.end_element();
         self.xml.end_document()
