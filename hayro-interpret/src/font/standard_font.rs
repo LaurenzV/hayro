@@ -248,6 +248,13 @@ impl StandardFontBlob {
             Self::Otf(_, glyph_names) => glyph_names.get(name).copied(),
         }
     }
+    
+    pub(crate) fn unicode_to_glyph(&self, code: u32) -> Option<skrifa::GlyphId> {
+        match self {
+            Self::Cff(_) => None,
+            Self::Otf(blob, _) => blob.font_ref().cmap().ok().and_then(|c| c.map_codepoint(code)),
+        }
+    }
 
     pub(crate) fn outline_glyph(&self, glyph: skrifa::GlyphId) -> BezPath {
         // Standard fonts have empty outlines for these, but in Liberation Sans
