@@ -7,7 +7,7 @@ mod renderer;
 
 pub fn convert(page: &Page, interpreter_settings: &InterpreterSettings) -> String {
     let mut state = Context::new(
-        Affine::IDENTITY,
+        page.initial_transform(true),
         Rect::new(
             0.0,
             0.0,

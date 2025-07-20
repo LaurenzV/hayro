@@ -37,8 +37,10 @@ impl SvgRenderer {
     }
 
     fn write_transform(&mut self) {
-        self.xml
-            .write_attribute("transform", &convert_transform(&self.transform));
+        self.xml.write_attribute(
+            "transform",
+            &format!("matrix({})", &convert_transform(&self.transform)),
+        );
     }
 }
 
@@ -69,9 +71,27 @@ impl Device for SvgRenderer {
 
     fn push_transparency_group(&mut self, opacity: f32, mask: Option<SoftMask>) {}
 
-    fn fill_glyph(&mut self, glyph: &Glyph<'_>, paint: &Paint) {}
+    fn fill_glyph(&mut self, glyph: &Glyph<'_>, paint: &Paint) {
+        match glyph {
+            Glyph::Outline(o) => {
+                let path = o.glyph_transform * o.outline();
+                let paint = paint.clone();
+                self.fill_path(&path, &paint);
+            }
+            Glyph::Type3(_) => {}
+        }
+    }
 
-    fn stroke_glyph(&mut self, glyph: &Glyph<'_>, paint: &Paint) {}
+    fn stroke_glyph(&mut self, glyph: &Glyph<'_>, paint: &Paint) {
+        match glyph {
+            Glyph::Outline(o) => {
+                let path = o.glyph_transform * o.outline();
+                let paint = paint.clone();
+                self.stroke_path(&path, &paint);
+            }
+            Glyph::Type3(_) => {}
+        }
+    }
 
     fn draw_rgba_image(&mut self, image: RgbData, alpha: Option<LumaData>) {}
 
@@ -95,9 +115,9 @@ impl SvgRenderer {
     pub(crate) fn write_header(&mut self, size: (f32, f32)) {
         self.xml.start_element("svg");
         self.xml
-            .write_attribute_fmt("width", format_args!("{}px", size.0));
+            .write_attribute_fmt("width", format_args!("{}", size.0));
         self.xml
-            .write_attribute_fmt("height", format_args!("{}px", size.1));
+            .write_attribute_fmt("height", format_args!("{}", size.1));
         self.xml
             .write_attribute("xmlns", "http://www.w3.org/2000/svg");
         self.xml
