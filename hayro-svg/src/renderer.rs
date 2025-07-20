@@ -1,8 +1,12 @@
 use hayro_interpret::font::Glyph;
 use hayro_interpret::{
-    ClipPath, Device, FillProps, LumaData, Paint, PaintType, RgbData, SoftMask, StrokeProps,
+    CacheKey, ClipPath, Device, FillProps, LumaData, Paint, PaintType, RgbData, SoftMask,
+    StrokeProps,
 };
 use kurbo::{Affine, BezPath};
+use std::collections::HashMap;
+use std::fmt;
+use std::fmt::{Display, Formatter};
 use xmlwriter::{Options, XmlWriter};
 
 pub(crate) struct SvgRenderer {
@@ -10,39 +14,72 @@ pub(crate) struct SvgRenderer {
     transform: Affine,
     fill_props: FillProps,
     stroke_props: StrokeProps,
+    glyphs: Deduplicator<BezPath>,
 }
 
 impl SvgRenderer {
     fn fill_path(&mut self, path: &BezPath, paint: &Paint) {
         let svg_path = path.to_svg();
-        let (fill, alpha) = convert_paint(paint);
 
         self.xml.start_element("path");
         self.xml.write_attribute("d", &svg_path);
-        self.xml.write_attribute("fill", &fill);
-        self.xml.write_attribute("fill-opacity", &alpha);
-        self.write_transform();
+        self.write_paint(paint, false);
+        self.write_transform(None);
         self.xml.end_element();
+    }
+
+    fn write_paint(&mut self, paint: &Paint, is_stroke: bool) {
+        let (fill, alpha) = convert_paint(paint);
+
+        if is_stroke {
+            self.xml.write_attribute("stroke", &fill);
+            self.xml.write_attribute("stroke-opacity", &alpha);
+        } else {
+            self.xml.write_attribute("fill", &fill);
+            self.xml.write_attribute("fill-opacity", &alpha);
+        }
     }
 
     fn stroke_path(&mut self, path: &BezPath, paint: &Paint) {
         let svg_path = path.to_svg();
-        let (fill, alpha) = convert_paint(paint);
 
         self.xml.start_element("path");
         self.xml.write_attribute("d", &svg_path);
-        self.xml.write_attribute("stroke", &fill);
-        self.xml.write_attribute("stroke-opacity", &alpha);
+        self.write_paint(paint, true);
         self.xml.write_attribute("fill", "none");
-        self.write_transform();
+        self.write_transform(None);
         self.xml.end_element();
     }
 
-    fn write_transform(&mut self) {
+    fn write_transform(&mut self, transform: Option<Affine>) {
         self.xml.write_attribute(
             "transform",
-            &format!("matrix({})", &convert_transform(&self.transform)),
+            &format!(
+                "matrix({})",
+                &convert_transform(&transform.unwrap_or(self.transform))
+            ),
         );
+    }
+
+    fn write_glyph_defs(&mut self) {
+        if self.glyphs.is_empty() {
+            return;
+        }
+
+        self.xml.start_element("defs");
+        self.xml.write_attribute("id", "glyph");
+
+        for (id, glyph) in self.glyphs.iter() {
+            self.xml.start_element("symbol");
+            self.xml.write_attribute("overflow", "visible");
+            self.xml.write_attribute("id", &id);
+            self.xml.start_element("path");
+            self.xml.write_attribute("d", &glyph.to_svg());
+            self.xml.end_element();
+            self.xml.end_element();
+        }
+
+        self.xml.end_element();
     }
 }
 
@@ -76,9 +113,16 @@ impl Device for SvgRenderer {
     fn fill_glyph(&mut self, glyph: &Glyph<'_>, paint: &Paint) {
         match glyph {
             Glyph::Outline(o) => {
-                let path = o.glyph_transform * o.outline();
-                let paint = paint.clone();
-                self.fill_path(&path, &paint);
+                let id = self
+                    .glyphs
+                    .insert_with(o.identifier().cache_key(), || o.outline());
+
+                self.xml.start_element("use");
+                self.xml
+                    .write_attribute_fmt("xlink:href", format_args!("#{id}"));
+                self.write_transform(Some(self.transform * o.glyph_transform));
+                self.write_paint(paint, false);
+                self.xml.end_element();
             }
             Glyph::Type3(_) => {}
         }
@@ -111,6 +155,7 @@ impl SvgRenderer {
             transform: Affine::IDENTITY,
             fill_props: FillProps::default(),
             stroke_props: StrokeProps::default(),
+            glyphs: Deduplicator::new('g'),
         }
     }
 
@@ -129,8 +174,9 @@ impl SvgRenderer {
     }
 
     pub(crate) fn finish(mut self) -> String {
+        self.write_glyph_defs();
+        // Close the `svg` element.
         self.xml.end_element();
-
         self.xml.end_document()
     }
 }
@@ -160,5 +206,53 @@ fn convert_paint(paint: &Paint) -> (String, f32) {
             (color, alpha)
         }
         PaintType::Pattern(_) => ("black".to_string(), 1.0),
+    }
+}
+
+#[derive(Debug, Clone)]
+struct Deduplicator<T> {
+    kind: char,
+    vec: Vec<(u128, T)>,
+    present: HashMap<u128, Id>,
+}
+
+impl<T> Deduplicator<T> {
+    fn new(kind: char) -> Self {
+        Self {
+            kind,
+            vec: Vec::new(),
+            present: HashMap::new(),
+        }
+    }
+
+    fn insert_with<F>(&mut self, hash: u128, f: F) -> Id
+    where
+        F: FnOnce() -> T,
+    {
+        *self.present.entry(hash).or_insert_with(|| {
+            let index = self.vec.len();
+            self.vec.push((hash, f()));
+            Id(self.kind, index as u64)
+        })
+    }
+
+    fn iter(&self) -> impl Iterator<Item = (Id, &T)> {
+        self.vec
+            .iter()
+            .enumerate()
+            .map(|(i, (id, v))| (Id(self.kind, i as u64), v))
+    }
+
+    fn is_empty(&self) -> bool {
+        self.vec.is_empty()
+    }
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+struct Id(char, u64);
+
+impl Display for Id {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}{:0X}", self.0, self.1)
     }
 }
