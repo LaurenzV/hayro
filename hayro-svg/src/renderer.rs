@@ -33,10 +33,15 @@ impl SvgRenderer {
 
         if is_stroke {
             self.xml.write_attribute("stroke", &fill);
-            self.xml.write_attribute("stroke-opacity", &alpha);
+            if alpha != 0.0 {
+                self.xml.write_attribute("stroke-opacity", &alpha);
+            }
         } else {
             self.xml.write_attribute("fill", &fill);
-            self.xml.write_attribute("fill-opacity", &alpha);
+
+            if alpha != 0.0 {
+                self.xml.write_attribute("fill-opacity", &alpha);
+            }
         }
     }
 
@@ -185,7 +190,7 @@ fn convert_transform(transform: &Affine) -> String {
     transform
         .as_coeffs()
         .iter()
-        .map(|c| c.to_string())
+        .map(|c| (*c as f32).to_string())
         .collect::<Vec<String>>()
         .join(" ")
 }
@@ -253,6 +258,6 @@ struct Id(char, u64);
 
 impl Display for Id {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}{:0X}", self.0, self.1)
+        write!(f, "{}{}", self.0, self.1)
     }
 }
