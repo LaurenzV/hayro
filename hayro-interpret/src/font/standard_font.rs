@@ -211,11 +211,11 @@ pub(crate) enum StandardFontBlob {
 }
 
 impl StandardFontBlob {
-    pub(crate) fn from_data(data: FontData) -> Option<Self> {
+    pub(crate) fn from_data(data: FontData, index: u32) -> Option<Self> {
         if let Some(blob) = CffFontBlob::new(data.clone()) {
             Some(Self::new_cff(blob))
         } else {
-            OpenTypeFontBlob::new(data, 0).map(Self::new_otf)
+            OpenTypeFontBlob::new(data, index).map(Self::new_otf)
         }
     }
 

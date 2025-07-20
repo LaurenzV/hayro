@@ -115,8 +115,8 @@ impl StandardKind {
         let widths = read_widths(dict, &descriptor);
 
         let (encoding, encoding_map) = read_encoding(dict);
-        let base_font_blob =
-            StandardFontBlob::from_data(resolver(&FontQuery::Standard(base_font))?)?;
+        let (blob, index) = resolver(&FontQuery::Standard(base_font))?;
+        let base_font_blob = StandardFontBlob::from_data(blob, index)?;
 
         Some(Self {
             base_font,

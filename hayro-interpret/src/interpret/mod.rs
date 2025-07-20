@@ -25,7 +25,10 @@ pub(crate) mod state;
 pub(crate) mod text;
 
 /// A callback function for resolving font queries.
-pub type FontResolverFn = Arc<dyn Fn(&FontQuery) -> Option<FontData> + Send + Sync>;
+///
+/// The first argument is the raw data, the second argument is the index in case the font
+/// is a TTC, otherwise it should be 0.
+pub type FontResolverFn = Arc<dyn Fn(&FontQuery) -> Option<(FontData, u32)> + Send + Sync>;
 /// A callback function for resolving warnings during interpretation.
 pub type WarningSinkFn = Arc<dyn Fn(InterpreterWarning) + Send + Sync>;
 

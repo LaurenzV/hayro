@@ -151,8 +151,8 @@ impl PdfViewer {
         // TODO: Fetch fonts lazily
         let interpreter_settings = InterpreterSettings {
             font_resolver: Arc::new(|query| match query {
-                FontQuery::Standard(s) => Some(get_standard(&s)),
-                FontQuery::Fallback(f) => Some(get_standard(&f.pick_standard_font())),
+                FontQuery::Standard(s) => Some((get_standard(&s), 0)),
+                FontQuery::Fallback(f) => Some((get_standard(&f.pick_standard_font()), 0)),
             }),
             ..Default::default()
         };
