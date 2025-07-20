@@ -5,11 +5,11 @@ use hayro_interpret::{
     StrokeProps,
 };
 use image::{DynamicImage, ImageBuffer, ImageFormat};
-use kurbo::{Affine, BezPath};
+use kurbo::{Affine, BezPath, PathEl};
 use std::collections::HashMap;
-use std::fmt;
 use std::fmt::{Display, Formatter};
-use std::io::Cursor;
+use std::io::{Cursor, Write};
+use std::{fmt, io};
 use xmlwriter::{Options, XmlWriter};
 
 struct CachedClipPath {
@@ -28,7 +28,7 @@ pub(crate) struct SvgRenderer {
 
 impl SvgRenderer {
     fn fill_path(&mut self, path: &BezPath, paint: &Paint) {
-        let svg_path = path.to_svg();
+        let svg_path = path.to_svg_f32();
 
         self.xml.start_element("path");
         self.xml.write_attribute("d", &svg_path);
@@ -55,7 +55,7 @@ impl SvgRenderer {
     }
 
     fn stroke_path(&mut self, path: &BezPath, paint: &Paint) {
-        let svg_path = path.to_svg();
+        let svg_path = path.to_svg_f32();
 
         self.xml.start_element("path");
         self.xml.write_attribute("d", &svg_path);
@@ -86,7 +86,7 @@ impl SvgRenderer {
         for (id, glyph) in self.glyphs.iter() {
             self.xml.start_element("path");
             self.xml.write_attribute("id", &id);
-            self.xml.write_attribute("d", &glyph.to_svg());
+            self.xml.write_attribute("d", &glyph.to_svg_f32());
             self.xml.end_element();
         }
 
@@ -105,7 +105,7 @@ impl SvgRenderer {
             self.xml.start_element("clipPath");
             self.xml.write_attribute("id", &id);
             self.xml.start_element("path");
-            self.xml.write_attribute("d", &clip_path.path.to_svg());
+            self.xml.write_attribute("d", &clip_path.path.to_svg_f32());
 
             if clip_path.fill_rule == FillRule::EvenOdd {
                 self.xml.write_attribute("clip-rule", "evenodd");
@@ -359,5 +359,49 @@ struct Id(char, u64);
 impl Display for Id {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}{}", self.0, self.1)
+    }
+}
+
+trait BezPathExt {
+    fn to_svg_f32(&self) -> String {
+        let mut buffer = Vec::new();
+        self.write_to_f32(&mut buffer).unwrap();
+        String::from_utf8(buffer).unwrap()
+    }
+
+    fn write_to_f32<W: Write>(&self, writer: W) -> io::Result<()>;
+}
+
+impl BezPathExt for BezPath {
+    fn to_svg_f32(&self) -> String {
+        let mut buffer = Vec::new();
+        self.write_to_f32(&mut buffer).unwrap();
+        String::from_utf8(buffer).unwrap()
+    }
+
+    /// Write the SVG representation of this path to the provided buffer.
+    fn write_to_f32<W: Write>(&self, mut writer: W) -> io::Result<()> {
+        for (i, el) in self.elements().iter().enumerate() {
+            if i > 0 {
+                write!(writer, " ")?;
+            }
+            match *el {
+                PathEl::MoveTo(p) => write!(writer, "M{},{}", p.x as f32, p.y as f32)?,
+                PathEl::LineTo(p) => write!(writer, "L{},{}", p.x as f32, p.y as f32)?,
+                PathEl::QuadTo(p1, p2) => write!(
+                    writer,
+                    "Q{},{} {},{}",
+                    p1.x as f32, p1.y as f32, p2.x as f32, p2.y as f32
+                )?,
+                PathEl::CurveTo(p1, p2, p3) => write!(
+                    writer,
+                    "C{},{} {},{} {},{}",
+                    p1.x as f32, p1.y as f32, p2.x as f32, p2.y as f32, p3.x as f32, p3.y as f32
+                )?,
+                PathEl::ClosePath => write!(writer, "Z")?,
+            }
+        }
+
+        Ok(())
     }
 }
