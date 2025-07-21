@@ -37,6 +37,11 @@ fn pdfbox_2814() {
 }
 
 #[test]
+fn image_interpolate() {
+    run_svg_test("image_interpolate", "pdfs/image_interpolate.pdf", None);
+}
+
+#[test]
 fn image_jbig2_4() {
     run_svg_test("image_jbig2_4", "downloads/image_jbig2_4.pdf", Some("..=0"));
 }
