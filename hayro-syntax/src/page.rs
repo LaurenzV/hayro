@@ -535,8 +535,8 @@ pub(crate) mod cached {
         pub(crate) fn new(xref: Arc<XRef>) -> Option<Self> {
             // SAFETY:
             // - The XRef's location is stable in memory:
-            //   - We wrapped it in a `Box`, which implements `StableDeref`.
-            //   - The struct owns the `Box`, ensuring that the value is not dropped during the whole
+            //   - We wrapped it in a `Arc`, which implements `StableDeref`.
+            //   - The struct owns the `Arc`, ensuring that the inner value is not dropped during the whole
             //     duration.
             // - The internal 'static lifetime is not leaked because its rewritten
             //   to the self-lifetime in `pages()`.
