@@ -14,6 +14,7 @@ hayro = { path = "hayro", default-features = false }
 hayro-font = { path = "hayro-font" }
 hayro-interpret = { path = "hayro-interpret", default-features = false }
 hayro-syntax = { path = "hayro-syntax", default-features = false }
+hayro-svg = { path = "hayro-svg", default-features = false }
 hayro-write = { path = "hayro-write" }
 
 bitflags = { version = "2.9" }
@@ -22,6 +23,7 @@ image = { version = "0.25", default-features = false }
 jpeg2k = { version = "0.10", default-features = false, features = ["openjp2"] }
 kurbo = { version = "0.11" }
 log = { version = "0.4" }
+resvg = { version = "0.45.1" }
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 oxipng = { version = "9" }
 once_cell = { version = "1" }
