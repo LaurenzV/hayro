@@ -148,7 +148,7 @@ impl Device for SvgRenderer {
         self.stroke_props = stroke_props.clone();
     }
 
-    fn set_soft_mask(&mut self, mask: Option<SoftMask>) {}
+    fn set_soft_mask(&mut self, _: Option<SoftMask>) {}
 
     fn fill_path(&mut self, path: &BezPath, paint: &Paint) {
         Self::fill_path(self, path, paint);
@@ -171,7 +171,7 @@ impl Device for SvgRenderer {
             .write_attribute_fmt("clip-path", format_args!("url(#{clip_id})"));
     }
 
-    fn push_transparency_group(&mut self, opacity: f32, mask: Option<SoftMask>) {}
+    fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask>) {}
 
     fn fill_glyph(&mut self, glyph: &Glyph<'_>, paint: &Paint) {
         match glyph {
@@ -341,7 +341,7 @@ pub fn convert_image_to_base64_url(image: &DynamicImage) -> String {
 #[derive(Debug, Clone)]
 struct Deduplicator<T> {
     kind: char,
-    vec: Vec<(u128, T)>,
+    vec: Vec<T>,
     present: HashMap<u128, Id>,
 }
 
@@ -360,7 +360,7 @@ impl<T> Deduplicator<T> {
     {
         *self.present.entry(hash).or_insert_with(|| {
             let index = self.vec.len();
-            self.vec.push((hash, f()));
+            self.vec.push(f());
             Id(self.kind, index as u64)
         })
     }
@@ -369,7 +369,7 @@ impl<T> Deduplicator<T> {
         self.vec
             .iter()
             .enumerate()
-            .map(|(i, (id, v))| (Id(self.kind, i as u64), v))
+            .map(|(i, v)| (Id(self.kind, i as u64), v))
     }
 
     fn is_empty(&self) -> bool {

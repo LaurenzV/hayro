@@ -1,7 +1,7 @@
 use crate::renderer::SvgRenderer;
 use hayro_interpret::hayro_syntax::page::Page;
 use hayro_interpret::{Context, InterpreterSettings, interpret};
-use kurbo::{Affine, Rect};
+use kurbo::Rect;
 
 mod renderer;
 
