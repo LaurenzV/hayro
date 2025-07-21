@@ -78,7 +78,7 @@ impl SvgRenderer {
     fn write_image(&mut self, image: &DynamicImage, interpolate: bool) {
         let scaling = if interpolate { "smooth" } else { "pixelated" };
 
-        let base64 = convert_image_to_base64_url(&image);
+        let base64 = convert_image_to_base64_url(image);
 
         self.xml.start_element("image");
         self.xml.write_attribute("xlink:href", &base64);
@@ -315,7 +315,7 @@ fn convert_paint(paint: &Paint) -> (String, f32) {
                 "#{}",
                 &rgba8[0..3]
                     .iter()
-                    .map(|b| format!("{:02x}", b))
+                    .map(|b| format!("{b:02x}"))
                     .collect::<String>()
             );
             let alpha = rgba8[3] as f32 / 255.0;
