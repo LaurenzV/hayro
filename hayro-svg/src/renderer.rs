@@ -75,6 +75,22 @@ impl SvgRenderer {
         );
     }
 
+    fn write_image(&mut self, image: &DynamicImage, interpolate: bool) {
+        let scaling = if interpolate { "smooth" } else { "pixelated" };
+
+        let base64 = convert_image_to_base64_url(&image);
+
+        self.xml.start_element("image");
+        self.xml.write_attribute("xlink:href", &base64);
+        self.write_transform(None);
+        self.xml.write_attribute("width", &image.width());
+        self.xml.write_attribute("height", &image.height());
+        self.xml.write_attribute("preserveAspectRatio", "none");
+        self.xml
+            .write_attribute("style", &format_args!("image-rendering: {scaling}"));
+        self.xml.end_element();
+    }
+
     fn write_glyph_defs(&mut self) {
         if self.glyphs.is_empty() {
             return;
@@ -187,11 +203,7 @@ impl Device for SvgRenderer {
     }
 
     fn draw_rgba_image(&mut self, image: RgbData, alpha: Option<LumaData>) {
-        let scaling = if image.interpolate {
-            "smooth"
-        } else {
-            "pixelated"
-        };
+        let interpolate = image.interpolate;
 
         let image = if let Some(alpha) = alpha {
             if alpha.interpolate == image.interpolate
@@ -217,20 +229,32 @@ impl Device for SvgRenderer {
             )
         };
 
-        let base64 = convert_image_to_base64_url(&image);
-
-        self.xml.start_element("image");
-        self.xml.write_attribute("xlink:href", &base64);
-        self.write_transform(None);
-        self.xml.write_attribute("width", &image.width());
-        self.xml.write_attribute("height", &image.height());
-        self.xml.write_attribute("preserveAspectRatio", "none");
-        self.xml
-            .write_attribute("style", &format_args!("image-rendering: {scaling}"));
-        self.xml.end_element();
+        self.write_image(&image, interpolate);
     }
 
-    fn draw_stencil_image(&mut self, stencil: LumaData, paint: &Paint) {}
+    fn draw_stencil_image(&mut self, stencil: LumaData, paint: &Paint) {
+        let interpolate = stencil.interpolate;
+
+        let image = match &paint.paint_type {
+            PaintType::Color(c) => {
+                let color = c.to_rgba().to_rgba8();
+                let image = stencil
+                    .data
+                    .iter()
+                    .flat_map(|d| if *d == 255 { color } else { [0, 0, 0, 0] })
+                    .collect::<Vec<u8>>();
+
+                DynamicImage::ImageRgba8(
+                    ImageBuffer::from_raw(stencil.width, stencil.height, image).unwrap(),
+                )
+            }
+            PaintType::Pattern(_) => {
+                unreachable!();
+            }
+        };
+
+        self.write_image(&image, interpolate);
+    }
 
     fn pop_clip_path(&mut self) {
         self.xml.end_element();

@@ -54,3 +54,8 @@ fn text_rendering_stroking_clipping() {
         None,
     );
 }
+
+#[test]
+fn image_ccit_4() {
+    run_svg_test("image_ccit_4", "pdfs/image_ccit_4.pdf", None);
+}
