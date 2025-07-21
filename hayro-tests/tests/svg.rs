@@ -1,4 +1,4 @@
-use crate::{run_render_test, run_svg_test};
+use crate::run_svg_test;
 
 // TODO: Ideally those tests are also generated from the manifest files so they stay in sync.
 

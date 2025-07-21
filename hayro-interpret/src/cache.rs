@@ -2,7 +2,6 @@ use crate::util::hash128;
 use hayro_syntax::object::{Dict, ObjectIdentifier, Stream};
 use std::any::Any;
 use std::collections::HashMap;
-use std::hash::Hash;
 use std::sync::{Arc, Mutex};
 
 type CacheMap = HashMap<ObjectIdentifier, Option<Box<dyn Any + Send + Sync>>>;

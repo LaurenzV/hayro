@@ -7,13 +7,13 @@ use crate::interpret::text::TextRenderingMode;
 use crate::pattern::Pattern;
 use crate::soft_mask::SoftMask;
 use crate::util::OptionLog;
-use crate::{FillProps, FillRule, StrokeProps};
+use crate::{FillProps, StrokeProps};
 use hayro_syntax::content::ops::{LineCap, LineJoin};
 use hayro_syntax::object::dict::keys::SMASK;
 use hayro_syntax::object::{Dict, Name, Number};
 use hayro_syntax::page::Resources;
-use kurbo::{Affine, BezPath, Cap, Join, Vec2};
-use smallvec::{SmallVec, smallvec};
+use kurbo::{Affine, BezPath, Vec2};
+use smallvec::smallvec;
 use std::ops::Deref;
 
 #[derive(Clone, Debug)]
