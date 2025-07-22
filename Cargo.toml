@@ -12,7 +12,7 @@ license = "MIT OR Apache-2.0"
 [workspace.dependencies]
 hayro = { path = "hayro", default-features = false }
 hayro-font = { path = "hayro-font", version = "0.1.0" }
-hayro-interpret = { path = "hayro-interpret", default-features = false }
+hayro-interpret = { path = "hayro-interpret", version = "0.1.0", default-features = false }
 hayro-syntax = { path = "hayro-syntax", version = "0.1.0", default-features = false }
 hayro-write = { path = "hayro-write" }
 
