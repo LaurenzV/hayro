@@ -1,13 +1,11 @@
 [package]
 name = "hayro-font"
-version = "0.1.0"
-authors = [
-    "Laurenz Stampfl <laurenz.stampfl@gmail.com>",
-]
+description = "A parser for CFF and Type1 fonts."
 keywords = ["pdf", "cff", "type1"]
+version = "0.1.0"
+authors = { workspace = true }
 edition = { workspace = true }
 license = { workspace = true }
-description = "A parser for CFF and Type1 fonts."
 repository = { workspace = true }
 
 [dependencies]
