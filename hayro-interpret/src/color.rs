@@ -834,7 +834,7 @@ impl Color {
 
 static CMYK_TRANSFORM: LazyLock<ICCProfile> = LazyLock::new(|| {
     ICCProfile::new(
-        include_bytes!("../../assets/CGATS001Compat-v2-micro.icc"),
+        include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../assets/CGATS001Compat-v2-micro.icc")),
         4,
     )
     .unwrap()
