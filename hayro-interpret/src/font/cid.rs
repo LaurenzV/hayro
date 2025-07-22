@@ -1,5 +1,5 @@
 use crate::font::blob::{CffFontBlob, OpenTypeFontBlob};
-use crate::{InterpreterWarning, WarningSinkFn};
+use crate::{CacheKey, InterpreterWarning, WarningSinkFn};
 use hayro_syntax::object::Array;
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Name;
@@ -17,6 +17,7 @@ use std::sync::Arc;
 pub(crate) struct Type0Font {
     font_type: FontType,
     horizontal: bool,
+    cache_key: u128,
     dw: f32,
     dw2: (f32, f32),
     widths: HashMap<u16, f32>,
@@ -54,8 +55,10 @@ impl Type0Font {
             .and_then(|a| read_widths2(&a))
             .unwrap_or_default();
         let cid_to_gid_map = CidToGIdMap::new(&descendant_font).unwrap_or_default();
+        let cache_key = dict.cache_key();
 
         Some(Self {
+            cache_key,
             horizontal,
             font_type,
             dw: default_width,
@@ -124,6 +127,12 @@ impl Type0Font {
                 -self.dw2.0 as f64,
             )
         }
+    }
+}
+
+impl CacheKey for Type0Font {
+    fn cache_key(&self) -> u128 {
+        self.cache_key
     }
 }
 

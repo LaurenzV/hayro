@@ -1,4 +1,3 @@
-use crate::FillRule;
 use crate::color::{ColorComponents, ColorSpace};
 use crate::context::Context;
 use crate::convert::{convert_line_cap, convert_line_join};
@@ -8,23 +7,19 @@ use crate::interpret::text::TextRenderingMode;
 use crate::pattern::Pattern;
 use crate::soft_mask::SoftMask;
 use crate::util::OptionLog;
+use crate::{FillProps, StrokeProps};
 use hayro_syntax::content::ops::{LineCap, LineJoin};
 use hayro_syntax::object::dict::keys::SMASK;
 use hayro_syntax::object::{Dict, Name, Number};
 use hayro_syntax::page::Resources;
-use kurbo::{Affine, BezPath, Cap, Join, Vec2};
-use smallvec::{SmallVec, smallvec};
+use kurbo::{Affine, BezPath, Vec2};
+use smallvec::smallvec;
 use std::ops::Deref;
 
 #[derive(Clone, Debug)]
 pub(crate) struct State<'a> {
     // Stroke parameters.
-    pub(crate) line_width: f32,
-    pub(crate) line_cap: Cap,
-    pub(crate) line_join: Join,
-    pub(crate) miter_limit: f32,
-    pub(crate) dash_array: SmallVec<[f32; 4]>,
-    pub(crate) dash_offset: f32,
+    pub(crate) stroke_props: StrokeProps,
 
     // Stroke paint parameters.
     pub(crate) stroke_color: ColorComponents,
@@ -48,19 +43,14 @@ pub(crate) struct State<'a> {
     pub(crate) soft_mask: Option<SoftMask<'a>>,
     // Strictly speaking not part of the graphics state, but we keep it there for
     // consistency.
-    pub(crate) fill_rule: FillRule,
+    pub(crate) fill_props: FillProps,
     pub(crate) n_clips: u32,
 }
 
 impl Default for State<'_> {
     fn default() -> Self {
         State {
-            line_width: 1.0,
-            line_cap: Cap::Butt,
-            line_join: Join::Miter,
-            miter_limit: 10.0,
-            dash_array: smallvec![],
-            dash_offset: 0.0,
+            stroke_props: StrokeProps::default(),
             ctm: Affine::IDENTITY,
             non_stroke_alpha: 1.0,
             stroke_cs: ColorSpace::device_gray(),
@@ -68,7 +58,7 @@ impl Default for State<'_> {
             none_stroke_cs: ColorSpace::device_gray(),
             non_stroke_color: smallvec![0.0],
             stroke_alpha: 1.0,
-            fill_rule: FillRule::NonZero,
+            fill_props: FillProps::default(),
             n_clips: 0,
             soft_mask: None,
             text_state: TextState::default(),
@@ -267,10 +257,16 @@ pub(crate) fn handle_gs_single<'a>(
 ) -> Option<()> {
     // TODO Can we use constants here somehow?
     match key.as_str() {
-        "LW" => context.get_mut().line_width = dict.get::<f32>(key)?,
-        "LC" => context.get_mut().line_cap = convert_line_cap(LineCap(dict.get::<Number>(key)?)),
-        "LJ" => context.get_mut().line_join = convert_line_join(LineJoin(dict.get::<Number>(key)?)),
-        "ML" => context.get_mut().miter_limit = dict.get::<f32>(key)?,
+        "LW" => context.get_mut().stroke_props.line_width = dict.get::<f32>(key)?,
+        "LC" => {
+            context.get_mut().stroke_props.line_cap =
+                convert_line_cap(LineCap(dict.get::<Number>(key)?))
+        }
+        "LJ" => {
+            context.get_mut().stroke_props.line_join =
+                convert_line_join(LineJoin(dict.get::<Number>(key)?))
+        }
+        "ML" => context.get_mut().stroke_props.miter_limit = dict.get::<f32>(key)?,
         "CA" => context.get_mut().stroke_alpha = dict.get::<f32>(key)?,
         "ca" => context.get_mut().non_stroke_alpha = dict.get::<f32>(key)?,
         "SMask" => {

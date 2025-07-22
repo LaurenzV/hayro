@@ -1,4 +1,3 @@
-use crate::ClipPath;
 use crate::Paint;
 use crate::context::Context;
 use crate::device::Device;
@@ -6,6 +5,7 @@ use crate::font::glyph_simulator::GlyphSimulator;
 use crate::font::true_type::{read_encoding, read_widths};
 use crate::font::{Encoding, Glyph, Type3Glyph, UNITS_PER_EM};
 use crate::soft_mask::SoftMask;
+use crate::{CacheKey, ClipPath};
 use crate::{FillProps, StrokeProps, interpret};
 use crate::{LumaData, RgbData};
 use hayro_syntax::content::TypedIter;
@@ -136,6 +136,12 @@ impl<'a> Type3<'a> {
         }
 
         Some(())
+    }
+}
+
+impl CacheKey for Type3<'_> {
+    fn cache_key(&self) -> u128 {
+        self.dict.cache_key()
     }
 }
 

@@ -1000,5 +1000,9 @@
   {
     "id": "fireworks",
     "file": "pdfs/fireworks.pdf"
+  },
+  {
+    "id": "image_interpolate",
+    "file": "pdfs/image_interpolate.pdf"
   }
 ]

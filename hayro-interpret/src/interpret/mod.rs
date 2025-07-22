@@ -125,16 +125,16 @@ pub fn interpret<'a, 'b>(
                     smallvec![s.0.as_f32(), s.1.as_f32(), s.2.as_f32(), s.3.as_f32()];
             }
             TypedInstruction::LineWidth(w) => {
-                context.get_mut().line_width = w.0.as_f32();
+                context.get_mut().stroke_props.line_width = w.0.as_f32();
             }
             TypedInstruction::LineCap(c) => {
-                context.get_mut().line_cap = convert_line_cap(c);
+                context.get_mut().stroke_props.line_cap = convert_line_cap(c);
             }
             TypedInstruction::LineJoin(j) => {
-                context.get_mut().line_join = convert_line_join(j);
+                context.get_mut().stroke_props.line_join = convert_line_join(j);
             }
             TypedInstruction::MiterLimit(l) => {
-                context.get_mut().miter_limit = l.0.as_f32();
+                context.get_mut().stroke_props.miter_limit = l.0.as_f32();
             }
             TypedInstruction::Transform(t) => {
                 context.pre_concat_transform(t);
@@ -156,23 +156,23 @@ pub fn interpret<'a, 'b>(
                 context.path_mut().move_to(p);
             }
             TypedInstruction::FillPathEvenOdd(_) => {
-                context.get_mut().fill_rule = FillRule::EvenOdd;
+                context.get_mut().fill_props.fill_rule = FillRule::EvenOdd;
                 fill_path(context, device);
             }
             TypedInstruction::FillPathNonZero(_) => {
-                context.get_mut().fill_rule = FillRule::NonZero;
+                context.get_mut().fill_props.fill_rule = FillRule::NonZero;
                 fill_path(context, device);
             }
             TypedInstruction::FillPathNonZeroCompatibility(_) => {
-                context.get_mut().fill_rule = FillRule::NonZero;
+                context.get_mut().fill_props.fill_rule = FillRule::NonZero;
                 fill_path(context, device);
             }
             TypedInstruction::FillAndStrokeEvenOdd(_) => {
-                context.get_mut().fill_rule = FillRule::EvenOdd;
+                context.get_mut().fill_props.fill_rule = FillRule::EvenOdd;
                 fill_stroke_path(context, device);
             }
             TypedInstruction::FillAndStrokeNonZero(_) => {
-                context.get_mut().fill_rule = FillRule::NonZero;
+                context.get_mut().fill_props.fill_rule = FillRule::NonZero;
                 fill_stroke_path(context, device);
             }
             TypedInstruction::CloseAndStrokePath(_) => {
@@ -181,12 +181,12 @@ pub fn interpret<'a, 'b>(
             }
             TypedInstruction::CloseFillAndStrokeEvenOdd(_) => {
                 context.path_mut().close_path();
-                context.get_mut().fill_rule = FillRule::EvenOdd;
+                context.get_mut().fill_props.fill_rule = FillRule::EvenOdd;
                 fill_stroke_path(context, device);
             }
             TypedInstruction::CloseFillAndStrokeNonZero(_) => {
                 context.path_mut().close_path();
-                context.get_mut().fill_rule = FillRule::NonZero;
+                context.get_mut().fill_props.fill_rule = FillRule::NonZero;
                 fill_stroke_path(context, device);
             }
             TypedInstruction::NonStrokeColorDeviceGray(s) => {
@@ -324,9 +324,9 @@ pub fn interpret<'a, 'b>(
                 context.get_mut().none_stroke_cs = cs;
             }
             TypedInstruction::DashPattern(p) => {
-                context.get_mut().dash_offset = p.1.as_f32();
+                context.get_mut().stroke_props.dash_offset = p.1.as_f32();
                 // kurbo apparently cannot properly deal with offsets that are exactly 0.
-                context.get_mut().dash_array =
+                context.get_mut().stroke_props.dash_array =
                     p.0.iter::<f32>()
                         .map(|n| if n == 0.0 { 0.01 } else { n })
                         .collect();

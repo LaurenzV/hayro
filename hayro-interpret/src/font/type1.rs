@@ -1,10 +1,10 @@
-use crate::FontResolverFn;
 use crate::font::blob::{CffFontBlob, Type1FontBlob};
 use crate::font::generated::glyph_names;
 use crate::font::glyph_simulator::GlyphSimulator;
 use crate::font::standard_font::{StandardFont, StandardFontBlob, select_standard_font};
 use crate::font::true_type::{read_encoding, read_widths};
 use crate::font::{Encoding, FallbackFontQuery, FontQuery};
+use crate::{CacheKey, FontResolverFn};
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::{FONT_DESC, FONT_FILE, FONT_FILE3};
@@ -16,10 +16,12 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 #[derive(Debug)]
-pub(crate) struct Type1Font(Kind);
+pub(crate) struct Type1Font(u128, Kind);
 
 impl Type1Font {
     pub(crate) fn new(dict: &Dict, resolver: &FontResolverFn) -> Option<Self> {
+        let cache_key = dict.cache_key();
+
         let fallback = || {
             // TODO: Actually use fallback fonts
             let fallback_query = FallbackFontQuery::new(dict);
@@ -33,21 +35,24 @@ impl Type1Font {
                 standard_font.as_str()
             );
 
-            Some(Self(Kind::Standard(StandardKind::new_with_standard(
-                dict,
-                standard_font,
-                true,
-                resolver,
-            )?)))
+            Some(Self(
+                cache_key,
+                Kind::Standard(StandardKind::new_with_standard(
+                    dict,
+                    standard_font,
+                    true,
+                    resolver,
+                )?),
+            ))
         };
 
         let inner = if let Some(standard) = StandardKind::new(dict, resolver) {
-            Self(Kind::Standard(standard))
+            Self(cache_key, Kind::Standard(standard))
         } else if is_cff(dict) {
-            Self(Kind::Cff(CffKind::new(dict)?))
+            Self(cache_key, Kind::Cff(CffKind::new(dict)?))
         } else if is_type1(dict) {
             if let Some(f) = Type1Kind::new(dict) {
-                Self(Kind::Type1(f))
+                Self(cache_key, Kind::Type1(f))
             } else {
                 return fallback();
             }
@@ -59,7 +64,7 @@ impl Type1Font {
     }
 
     pub(crate) fn map_code(&self, code: u8) -> GlyphId {
-        match &self.0 {
+        match &self.1 {
             Kind::Standard(s) => s.map_code(code),
             Kind::Type1(s) => s.map_code(code),
             Kind::Cff(c) => c.map_code(code),
@@ -67,7 +72,7 @@ impl Type1Font {
     }
 
     pub(crate) fn outline_glyph(&self, glyph: GlyphId) -> BezPath {
-        match &self.0 {
+        match &self.1 {
             Kind::Standard(s) => s.outline_glyph(glyph),
             Kind::Cff(c) => c.outline_glyph(glyph),
             Kind::Type1(t) => t.outline_glyph(glyph),
@@ -75,11 +80,17 @@ impl Type1Font {
     }
 
     pub(crate) fn glyph_width(&self, code: u8) -> Option<f32> {
-        match &self.0 {
+        match &self.1 {
             Kind::Standard(s) => s.glyph_width(code),
             Kind::Cff(c) => c.glyph_width(code),
             Kind::Type1(t) => t.glyph_width(code),
         }
+    }
+}
+
+impl CacheKey for Type1Font {
+    fn cache_key(&self) -> u128 {
+        self.0
     }
 }
 

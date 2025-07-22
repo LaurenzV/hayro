@@ -4,6 +4,8 @@ use hayro::StandardFont;
 use hayro::{FontData, InterpreterSettings};
 use image::{Rgba, RgbaImage, load_from_memory};
 use once_cell::sync::Lazy;
+use resvg::tiny_skia::{Color, Pixmap};
+use resvg::usvg::{Options, Transform, Tree};
 use sitro::{RenderOptions, Renderer};
 use std::cmp::max;
 use std::ops::RangeInclusive;
@@ -14,6 +16,7 @@ use std::sync::Arc;
 #[allow(non_snake_case)]
 mod render;
 mod custom;
+mod svg;
 mod write;
 
 const REPLACE: Option<&str> = option_env!("REPLACE");
@@ -31,6 +34,8 @@ pub(crate) static DIFFS_PATH: Lazy<PathBuf> = Lazy::new(|| {
 });
 pub(crate) static RENDER_SNAPSHOTS_PATH: Lazy<PathBuf> =
     Lazy::new(|| WORKSPACE_PATH.join("snapshots/render"));
+pub(crate) static SVG_SNAPSHOTS_PATH: Lazy<PathBuf> =
+    Lazy::new(|| WORKSPACE_PATH.join("snapshots/svg"));
 pub(crate) static WRITE_SNAPSHOTS_PATH: Lazy<PathBuf> =
     Lazy::new(|| WORKSPACE_PATH.join("snapshots/write"));
 pub(crate) static STORE_PATH: Lazy<PathBuf> = Lazy::new(|| WORKSPACE_PATH.join("store"));
@@ -189,6 +194,44 @@ pub fn run_render_test(name: &str, file_path: &str, range_str: Option<&str>) {
             .map(|d| d.take_png())
             .collect(),
     );
+}
+
+pub fn run_svg_test(name: &str, file_path: &str, range_str: Option<&str>) {
+    let pdf = load_pdf(file_path);
+
+    let settings = InterpreterSettings {
+        font_resolver: Arc::new(|query| match query {
+            FontQuery::Standard(s) => Some((get_standard(s), 0)),
+            FontQuery::Fallback(f) => Some((get_standard(&f.pick_standard_font()), 0)),
+        }),
+        ..Default::default()
+    };
+
+    let range = range_str.and_then(parse_range);
+
+    let converted = pdf
+        .pages()
+        .iter()
+        .enumerate()
+        .flat_map(|(idx, p)| {
+            if range.clone().is_some_and(|range| !range.contains(&idx)) {
+                return None;
+            }
+
+            let svg = hayro_svg::convert(p, &settings);
+            let tree = Tree::from_data(svg.as_bytes(), &Options::default()).unwrap();
+            let mut pixmap = Pixmap::new(
+                tree.size().width().ceil() as u32,
+                tree.size().height().ceil() as u32,
+            )
+            .unwrap();
+            pixmap.fill(Color::WHITE);
+            resvg::render(&tree, Transform::default(), &mut pixmap.as_mut());
+            Some(pixmap.encode_png().unwrap())
+        })
+        .collect::<Vec<_>>();
+
+    check_render(name, SVG_SNAPSHOTS_PATH.clone(), converted);
 }
 
 pub fn run_write_test(

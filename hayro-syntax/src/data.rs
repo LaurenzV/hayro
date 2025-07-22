@@ -1,15 +1,11 @@
 use crate::PdfData;
 use crate::object::ObjectIdentifier;
 use crate::object::Stream;
+use crate::util::SegmentList;
 use crate::xref::XRef;
-use log::warn;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::sync::Mutex;
-use std::sync::OnceLock;
-use std::sync::atomic::AtomicUsize;
-
-const NUM_SLOTS: usize = 10000;
 
 /// A structure for storing the data of the PDF.
 // To explain further: This crate uses a zero-parse approach, meaning that objects like
@@ -24,9 +20,9 @@ const NUM_SLOTS: usize = 10000;
 // PDF objects that actually stem from different data sources.
 pub(crate) struct Data {
     data: PdfData,
-    slots: Vec<OnceLock<Option<Vec<u8>>>>,
+    // 32 segments are more than enough as we can't have more objects than this.
+    decoded: SegmentList<Option<Vec<u8>>, 32>,
     map: Mutex<HashMap<ObjectIdentifier, usize>>,
-    counter: AtomicUsize,
 }
 
 impl Debug for Data {
@@ -38,15 +34,10 @@ impl Debug for Data {
 impl Data {
     /// Create a new `Data` structure.
     pub fn new(data: PdfData) -> Self {
-        let map = Mutex::new(HashMap::new());
-        let slots = vec![OnceLock::new(); NUM_SLOTS];
-        let counter = AtomicUsize::new(0);
-
         Self {
             data,
-            slots,
-            map,
-            counter,
+            decoded: SegmentList::new(),
+            map: Mutex::new(HashMap::new()),
         }
     }
 
@@ -57,28 +48,22 @@ impl Data {
 
     /// Get access to the data of a decoded object stream.
     pub(crate) fn get_with(&self, id: ObjectIdentifier, xref: &XRef) -> Option<&[u8]> {
-        if let Some(idx) = self.map.lock().unwrap().get(&id) {
-            self.slots[*idx].get()?.as_deref()
+        if let Some(&idx) = self.map.lock().unwrap().get(&id) {
+            self.decoded.get(idx)?.as_deref()
         } else {
-            let mut idx = self.counter.load(std::sync::atomic::Ordering::SeqCst);
-
-            if idx >= NUM_SLOTS {
-                warn!("exceeded the maximum number of slots");
-
-                None
-            } else {
-                self.map.lock().unwrap().insert(id, idx);
-
-                let stream = xref.get::<Stream>(id)?;
-                self.slots[idx].set(stream.decoded().ok()).unwrap();
-
-                let val = self.slots[idx].get().unwrap().as_deref();
-                idx += 1;
-
-                self.counter.store(idx, std::sync::atomic::Ordering::SeqCst);
-
-                val
-            }
+            // Block scope to keep the lock short-lived.
+            let idx = {
+                let mut locked = self.map.lock().unwrap();
+                let idx = locked.len();
+                locked.insert(id, idx);
+                idx
+            };
+            self.decoded
+                .get_or_init(idx, || {
+                    let stream = xref.get::<Stream>(id)?;
+                    stream.decoded().ok()
+                })
+                .as_deref()
         }
     }
 }

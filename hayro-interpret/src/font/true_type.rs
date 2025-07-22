@@ -1,3 +1,4 @@
+use crate::CacheKey;
 use crate::font::blob::OpenTypeFontBlob;
 use crate::font::generated::{glyph_names, mac_os_roman, mac_roman};
 use crate::font::{Encoding, FontFlags};
@@ -20,6 +21,7 @@ use std::sync::Arc;
 
 #[derive(Debug)]
 pub(crate) struct TrueTypeFont {
+    cache_key: u128,
     base_font: OpenTypeFontBlob,
     widths: Vec<f32>,
     font_flags: Option<FontFlags>,
@@ -53,8 +55,11 @@ impl TrueTypeFont {
             }
         }
 
+        let cache_key = dict.cache_key();
+
         Some(Self {
             base_font,
+            cache_key,
             differences,
             widths,
             glyph_names,
@@ -210,6 +215,12 @@ pub(crate) fn read_widths(dict: &Dict, descriptor: &Dict) -> Vec<f32> {
     }
 
     widths
+}
+
+impl CacheKey for TrueTypeFont {
+    fn cache_key(&self) -> u128 {
+        self.cache_key
+    }
 }
 
 pub(crate) fn read_encoding(dict: &Dict) -> (Encoding, HashMap<u8, String>) {

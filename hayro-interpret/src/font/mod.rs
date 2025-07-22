@@ -9,7 +9,7 @@ use crate::font::true_type::TrueTypeFont;
 use crate::font::type1::Type1Font;
 use crate::font::type3::Type3;
 use crate::interpret::state::State;
-use crate::{FontResolverFn, InterpreterSettings, Paint, WarningSinkFn};
+use crate::{CacheKey, FontResolverFn, InterpreterSettings, Paint, WarningSinkFn};
 use bitflags::bitflags;
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Name;
@@ -41,6 +41,7 @@ pub(crate) const UNITS_PER_EM: f32 = 1000.0;
 /// A container for the bytes of a PDF file.
 pub type FontData = Arc<dyn AsRef<[u8]> + Send + Sync>;
 
+use crate::util::hash128;
 pub use standard_font::StandardFont;
 
 /// A glyph that can be drawn.
@@ -60,12 +61,27 @@ impl Glyph<'_> {
     }
 }
 
+/// An identifier that uniquely identifies a glyph, for caching purposes.
+#[derive(Clone, Debug)]
+pub struct GlyphIdentifier {
+    id: GlyphId,
+    font: OutlineFont,
+}
+
+impl CacheKey for GlyphIdentifier {
+    fn cache_key(&self) -> u128 {
+        hash128(&(self.id, self.font.cache_key()))
+    }
+}
+
 /// A glyph defined by an outline.
 #[derive(Clone, Debug)]
 pub struct OutlineGlyph {
     pub(crate) id: GlyphId,
     pub(crate) font: OutlineFont,
     /// A transform that should be applied to the glyph before drawing.
+    ///
+    /// Note that this transform will not automatically be applied when calling `outline`.
     pub glyph_transform: Affine,
 }
 
@@ -73,6 +89,18 @@ impl OutlineGlyph {
     /// Return the outline of the glyph, assuming an upem value of 1000.
     pub fn outline(&self) -> BezPath {
         self.font.outline_glyph(self.id)
+    }
+
+    /// Return the identifier of the glyph. You can use this to calculate the cache key
+    /// for the glyph.
+    ///
+    /// Note that the `glyph_transform` attribute is not considered in the cache key of
+    /// the identifier, only the glyph ID and the font.
+    pub fn identifier(&self) -> GlyphIdentifier {
+        GlyphIdentifier {
+            id: self.id,
+            font: self.font.clone(),
+        }
     }
 }
 
@@ -97,7 +125,7 @@ impl<'a> Type3Glyph<'a> {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct Font<'a>(FontType<'a>);
+pub(crate) struct Font<'a>(u128, FontType<'a>);
 
 impl<'a> Font<'a> {
     pub(crate) fn new(
@@ -127,11 +155,13 @@ impl<'a> Font<'a> {
             }
         };
 
-        Some(Self(f_type))
+        let cache_key = dict.cache_key();
+
+        Some(Self(cache_key, f_type))
     }
 
     pub(crate) fn map_code(&self, code: u16) -> GlyphId {
-        match &self.0 {
+        match &self.1 {
             FontType::Type1(f) => {
                 debug_assert!(code <= u8::MAX as u16);
 
@@ -162,7 +192,7 @@ impl<'a> Font<'a> {
             * Affine::scale(1.0 / UNITS_PER_EM as f64)
             * Affine::translate(origin_displacement);
 
-        match &self.0 {
+        match &self.1 {
             FontType::Type1(t) => {
                 let font = OutlineFont::Type1(t.clone());
                 Glyph::Outline(OutlineGlyph {
@@ -205,7 +235,7 @@ impl<'a> Font<'a> {
     }
 
     pub(crate) fn code_advance(&self, code: u16) -> Vec2 {
-        match &self.0 {
+        match &self.1 {
             FontType::Type1(t) => {
                 debug_assert!(code <= u8::MAX as u16);
 
@@ -226,7 +256,7 @@ impl<'a> Font<'a> {
     }
 
     pub(crate) fn origin_displacement(&self, code: u16) -> Vec2 {
-        match &self.0 {
+        match &self.1 {
             FontType::Type1(_) => Vec2::default(),
             FontType::TrueType(_) => Vec2::default(),
             FontType::Type0(t) => t.origin_displacement(code),
@@ -235,7 +265,7 @@ impl<'a> Font<'a> {
     }
 
     pub(crate) fn code_len(&self) -> usize {
-        match &self.0 {
+        match &self.1 {
             FontType::Type1(_) => 1,
             FontType::TrueType(_) => 1,
             FontType::Type0(t) => t.code_len(),
@@ -244,12 +274,18 @@ impl<'a> Font<'a> {
     }
 
     pub(crate) fn is_horizontal(&self) -> bool {
-        match &self.0 {
+        match &self.1 {
             FontType::Type1(_) => true,
             FontType::TrueType(_) => true,
             FontType::Type0(t) => t.is_horizontal(),
             FontType::Type3(_) => true,
         }
+    }
+}
+
+impl CacheKey for Font<'_> {
+    fn cache_key(&self) -> u128 {
+        self.0
     }
 }
 

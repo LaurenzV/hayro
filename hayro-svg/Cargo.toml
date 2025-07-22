@@ -1,0 +1,18 @@
+[package]
+name = "hayro-svg"
+version = "0.1.0"
+authors.workspace = true
+edition.workspace = true
+repository.workspace = true
+readme.workspace = true
+license.workspace = true
+
+[dependencies]
+hayro-interpret = { workspace = true }
+xmlwriter = { workspace = true }
+kurbo = { workspace = true }
+image = { workspace = true, features = ["png"] }
+base64 = { workspace = true }
+
+[dev-dependencies]
+log = { workspace = true }

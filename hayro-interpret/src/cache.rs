@@ -1,4 +1,5 @@
-use hayro_syntax::object::ObjectIdentifier;
+use crate::util::hash128;
+use hayro_syntax::object::{Dict, ObjectIdentifier, Stream};
 use std::any::Any;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -30,5 +31,25 @@ impl Cache {
             .or_insert_with(|| f().map(|val| Box::new(val) as Box<dyn Any + Send + Sync>))
             .as_ref()
             .and_then(|val| val.downcast_ref::<T>().cloned())
+    }
+}
+
+/// A trait for objects that can generate a unique cache key.
+pub trait CacheKey {
+    /// Returns the cache key for this object.
+    fn cache_key(&self) -> u128;
+}
+
+impl CacheKey for Dict<'_> {
+    fn cache_key(&self) -> u128 {
+        self.obj_id()
+            .map(|o| hash128(&o))
+            .unwrap_or(hash128(self.data()))
+    }
+}
+
+impl CacheKey for Stream<'_> {
+    fn cache_key(&self) -> u128 {
+        self.dict().cache_key()
     }
 }

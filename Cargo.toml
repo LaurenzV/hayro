@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["hayro-interpret", "hayro","hayro-syntax", "hayro-demo", "hayro-tests", "hayro-write"]
+members = ["hayro-interpret", "hayro", "hayro-syntax", "hayro-demo", "hayro-tests", "hayro-write", "hayro-svg"]
 
 [workspace.package]
 authors = ["Laurenz Stampfl <laurenz.stampfl@gmail.com>"]
@@ -14,23 +14,28 @@ hayro = { path = "hayro", default-features = false }
 hayro-font = { path = "hayro-font", version = "0.1.0" }
 hayro-interpret = { path = "hayro-interpret", version = "0.1.0", default-features = false }
 hayro-syntax = { path = "hayro-syntax", version = "0.1.0", default-features = false }
+hayro-svg = { path = "hayro-svg", default-features = false }
 hayro-write = { path = "hayro-write", version = "0.1.0" }
 
 bitflags = { version = "2.9" }
 bytemuck = { version = "1" }
 image = { version = "0.25", default-features = false }
 jpeg2k = { version = "0.10", default-features = false, features = ["openjp2"] }
-kurbo = { version = "0.11" }
+kurbo = { version = "0.11.2" }
 log = { version = "0.4" }
+resvg = { version = "0.45.1" }
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 oxipng = { version = "9" }
 once_cell = { version = "1" }
 phf = { version = "0.11" }
 qcms = { version = "0.3" }
 rustc-hash = { version = "2" }
+siphasher = "1"
 skrifa = { version = "0.32" }
 smallvec = { version = "1" }
 yoke = { version = "0.8" }
 pdf-writer = "0.13"
 sitro = { git = "https://github.com/LaurenzV/sitro", rev="fb804b3" }
+xmlwriter = { version = "0.1" }
+base64 = { version = "0.22" }
 zune-jpeg = { version = "0.4" }
