@@ -468,7 +468,7 @@ dependencies = [
 
 [[package]]
 name = "hayro-syntax"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "flate2",
  "jpeg2k",
