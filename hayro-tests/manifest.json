@@ -1004,5 +1004,9 @@
   {
     "id": "image_interpolate",
     "file": "pdfs/image_interpolate.pdf"
+  },
+  {
+    "id": "tile_clamp_bug",
+    "file": "pdfs/tile_clamp_bug.pdf"
   }
 ]

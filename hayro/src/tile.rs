@@ -265,7 +265,10 @@ impl Tiles {
                 let y_top_tiles = (line_top_y as u16).min(tile_rows);
                 let y_bottom_tiles = (line_bottom_y.ceil() as u16).min(tile_rows);
 
-                let x = line_left_x as u16;
+                // Clamp all tiles that are strictly on the right of the viewport to the tile x coordinate
+                // right next to the outside of the viewport. If we don't do this, we might end up
+                // with too big tile coordinates, which will cause overflows in strip rendering.
+                let x = (line_left_x as u16).min(tile_columns + 1);
                 for y_idx in y_top_tiles..y_bottom_tiles {
                     let y = f32::from(y_idx);
 
