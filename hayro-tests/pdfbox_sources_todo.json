@@ -28,10 +28,6 @@
   "5134": [
     "https://issues.apache.org/jira/secure/attachment/13022705/gs-bugzilla687307-2.pdf"
   ],
-  "4328": [
-    // Previously JPEG2000 image that doesn't render, now its just missing text
-    "https://issues.apache.org/jira/secure/attachment/12941881/001659-p14.pdf" 
-  ],
   "2103": [
     // Artifacts in the rendered JPEG image.
     "https://issues.apache.org/jira/secure/attachment/12647559/000001_MTEXT_CS6.pdf"
@@ -58,7 +54,6 @@
   "2006": "encrypted PDF",
   "2027": "encrypted PDF",
   "2180": "extremely slow because we don't cache patterns",
-  "2204": "jpx with indexed cs",
   "2265": "takes long, renders wrong, perhaps mask",
   "2345": "encrypted pdf",
   "2347": "encrypted pdf",
@@ -103,7 +98,6 @@
   "4060": "image with deviceN, takes long, renders slow",
   "4064": "wrong ctm, doesnt render",
   "4077": "shading not rendering, maybe transparency",
-  "4081": "jpx image render wrongly",
   "4093": "text doesnt render",
   "4149": "pdf renders endlessly",
   "4218": "masks with interpolate",

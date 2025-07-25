@@ -204,6 +204,11 @@
     "last_page": 0
   },
   "1147": "https://issues.apache.org/jira/secure/attachment/12500650/p1logo.pdf",
+  "2204": {
+    "link": "https://issues.apache.org/jira/secure/attachment/12655396/PDFBOX-2204-012411.pdf",
+    "first_page": 10,
+    "last_page": 10
+  },
   "2241": "https://issues.apache.org/jira/secure/attachment/12657611/2.pdf",
   "2243": "https://issues.apache.org/jira/secure/attachment/12657991/PDFBOX-2243-050659.pdf",
   "2244": "https://issues.apache.org/jira/secure/attachment/12657999/PDFBOX-2244-040483.pdf",
@@ -348,6 +353,7 @@
   "4010": "https://issues.apache.org/jira/secure/attachment/12897592/PDFBOX-4010-noprint-reduced.pdf",
   "4015": "https://issues.apache.org/jira/secure/attachment/12898013/PDFBOX-4015.pdf",
   "4059": "https://issues.apache.org/jira/secure/attachment/12905318/1773433_WILL.pdf",
+  "4081": "https://issues.apache.org/jira/secure/attachment/12907678/selection3.pdf",
   "4085": "https://issues.apache.org/jira/secure/attachment/12908130/AAAA3d.pdf",
   "4114": "https://issues.apache.org/jira/secure/attachment/12911037/highResPdf.pdf",
   "4110": "https://issues.apache.org/jira/secure/attachment/12910605/flight_receipt.pdf",
@@ -363,6 +369,7 @@
   "4279": "https://issues.apache.org/jira/secure/attachment/12933227/pop-bugzilla62905.pdf",
   "4320": "https://issues.apache.org/jira/secure/attachment/12940751/scanned.pdf",
   "4326": "https://issues.apache.org/jira/secure/attachment/12941825/PDFJS-10026.pdf",
+  "4328": "https://issues.apache.org/jira/secure/attachment/12941881/001659-p14.pdf",
   "4330": "https://issues.apache.org/jira/secure/attachment/12942260/pop-bugzilla37292.pdf",
   "4395": [
     "https://issues.apache.org/jira/secure/attachment/12950591/accents_Type1.pdf",
