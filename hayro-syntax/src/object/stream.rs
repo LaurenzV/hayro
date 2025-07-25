@@ -19,16 +19,10 @@ pub struct Stream<'a> {
 }
 
 /// Additional parameters for decoding images.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Default)]
 pub struct ImageDecodeParams {
     /// Whether the color space of the image is an indexed color space.
     pub is_indexed: bool,
-}
-
-impl Default for ImageDecodeParams {
-    fn default() -> Self {
-        Self { is_indexed: false }
-    }
 }
 
 impl<'a> Stream<'a> {
