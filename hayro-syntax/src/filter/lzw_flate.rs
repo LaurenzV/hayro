@@ -231,7 +231,7 @@ pub(crate) mod flate {
 
                 let check = nlen_low | (nlen_high << 8);
 
-                if check != (!block_len & 0xffff) && (block_len != 0 || check != 0) {
+                if check != !block_len && (block_len != 0 || check != 0) {
                     // Ignoring error for bad "empty" block
                     warn!("Bad uncompressed block length in flate stream");
                 }
