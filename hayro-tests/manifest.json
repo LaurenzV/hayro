@@ -1008,5 +1008,12 @@
   {
     "id": "tile_clamp_bug",
     "file": "pdfs/tile_clamp_bug.pdf"
+  },
+  {
+    "id": "issue51",
+    "file": "pdfs/issue51.link",
+    "md5": "630c7811430eb8042af9cac8767e3749",
+    "last_page": 1,
+    "link": true
   }
 ]
