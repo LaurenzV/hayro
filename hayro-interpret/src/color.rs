@@ -115,18 +115,24 @@ impl ColorSpaceType {
                     let dict = icc_stream.dict();
                     let num_components = dict.get::<usize>(N)?;
 
-                    return ICCProfile::new(icc_stream.decoded().ok()?.as_ref(), num_components)
-                        .map(ColorSpaceType::ICCBased)
-                        .or_else(|| {
-                            dict.get::<Object>(ALTERNATE)
-                                .and_then(|o| ColorSpaceType::new(o, cache))
-                        })
-                        .or_else(|| match dict.get::<u8>(N) {
-                            Some(1) => Some(ColorSpaceType::DeviceGray),
-                            Some(3) => Some(ColorSpaceType::DeviceRgb),
-                            Some(4) => Some(ColorSpaceType::DeviceCmyk),
-                            _ => None,
-                        });
+                    return cache.get_or_insert_with(icc_stream.obj_id(), || {
+                        if let Some(decoded) = icc_stream.decoded().ok().as_ref() {
+                            ICCProfile::new(decoded, num_components)
+                                .map(ColorSpaceType::ICCBased)
+                                .or_else(|| {
+                                    dict.get::<Object>(ALTERNATE)
+                                        .and_then(|o| ColorSpaceType::new(o, cache))
+                                })
+                                .or_else(|| match dict.get::<u8>(N) {
+                                    Some(1) => Some(ColorSpaceType::DeviceGray),
+                                    Some(3) => Some(ColorSpaceType::DeviceRgb),
+                                    Some(4) => Some(ColorSpaceType::DeviceCmyk),
+                                    _ => None,
+                                })
+                        } else {
+                            None
+                        }
+                    });
                 }
                 CALCMYK => return Some(ColorSpaceType::DeviceCmyk),
                 CALGRAY => {

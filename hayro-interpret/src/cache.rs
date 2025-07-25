@@ -2,6 +2,7 @@ use crate::util::hash128;
 use hayro_syntax::object::{Dict, ObjectIdentifier, Stream};
 use std::any::Any;
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use std::sync::{Arc, Mutex};
 
 type CacheMap = HashMap<ObjectIdentifier, Option<Box<dyn Any + Send + Sync>>>;
@@ -24,13 +25,27 @@ impl Cache {
         id: ObjectIdentifier,
         f: impl FnOnce() -> Option<T>,
     ) -> Option<T> {
-        self.0
-            .lock()
-            .unwrap()
-            .entry(id)
-            .or_insert_with(|| f().map(|val| Box::new(val) as Box<dyn Any + Send + Sync>))
-            .as_ref()
-            .and_then(|val| val.downcast_ref::<T>().cloned())
+        let mut locked = self.0.lock().unwrap();
+
+        // We can't use `get_or_insert_with` here, because if the closure makes another access to the
+        // cache, we end up with a deadlock.
+        match locked.entry(id) {
+            Entry::Occupied(o) => o
+                .get()
+                .as_ref()
+                .and_then(|val| val.downcast_ref::<T>().cloned()),
+            Entry::Vacant(_) => {
+                drop(locked);
+                let val = f();
+                self.0.lock().unwrap().insert(
+                    id,
+                    val.clone()
+                        .map(|val| Box::new(val) as Box<dyn Any + Send + Sync>),
+                );
+
+                val
+            }
+        }
     }
 }
 
