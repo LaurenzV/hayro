@@ -28,12 +28,8 @@
   "5134": [
     "https://issues.apache.org/jira/secure/attachment/13022705/gs-bugzilla687307-2.pdf"
   ],
-  "4326": [
-    // JPEG2000 image that doesn't render
-    "https://issues.apache.org/jira/secure/attachment/12941825/PDFJS-10026.pdf" 
-  ],
   "4328": [
-    // JPEG2000 image that doesn't render
+    // Previously JPEG2000 image that doesn't render, now its just missing text
     "https://issues.apache.org/jira/secure/attachment/12941881/001659-p14.pdf" 
   ],
   "2103": [
@@ -62,7 +58,7 @@
   "2006": "encrypted PDF",
   "2027": "encrypted PDF",
   "2180": "extremely slow because we don't cache patterns",
-  "2205": "jpx with indexed cs",
+  "2204": "jpx with indexed cs",
   "2265": "takes long, renders wrong, perhaps mask",
   "2345": "encrypted pdf",
   "2347": "encrypted pdf",

@@ -19,7 +19,7 @@ pub(crate) fn decode(data: &[u8], params: &ImageDecodeParams) -> Option<FilterRe
     let mut jpx_params = DecodeParameters::new();
 
     if params.is_indexed {
-        jpx_params = jpx_params.test_flag();
+        jpx_params = jpx_params.ignore_pclr_cmap_cdef();
     }
 
     let image = jpeg2k::Image::from_bytes_with(data, jpx_params).ok()?;
