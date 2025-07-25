@@ -18,6 +18,19 @@ pub struct Stream<'a> {
     data: &'a [u8],
 }
 
+/// Additional parameters for decoding images.
+#[derive(Clone, PartialEq)]
+pub struct ImageDecodeParams {
+    /// Whether the color space of the image is an indexed color space.
+    pub is_indexed: bool,
+}
+
+impl Default for ImageDecodeParams {
+    fn default() -> Self {
+        Self { is_indexed: false }
+    }
+}
+
 impl<'a> Stream<'a> {
     /// Return the raw (potentially filtered) data of the stream.
     pub fn raw_data(&self) -> &'a [u8] {
@@ -39,12 +52,16 @@ impl<'a> Stream<'a> {
     /// Note that the result of this method will not be cached, so calling it multiple
     /// times is expensive.
     pub fn decoded(&self) -> Result<Vec<u8>, DecodeFailure> {
-        self.decoded_image().map(|r| r.data)
+        self.decoded_image(&ImageDecodeParams::default())
+            .map(|r| r.data)
     }
 
     /// Return the decoded data of the stream, and return image metadata
     /// if available.
-    pub fn decoded_image(&self) -> Result<FilterResult, DecodeFailure> {
+    pub fn decoded_image(
+        &self,
+        image_params: &ImageDecodeParams,
+    ) -> Result<FilterResult, DecodeFailure> {
         if let Some(filter) = self
             .dict
             .get::<Name>(F)
@@ -56,7 +73,7 @@ impl<'a> Stream<'a> {
                 .get::<Dict>(DP)
                 .or_else(|| self.dict.get::<Dict>(DECODE_PARMS));
 
-            filter.apply(self.data, params.clone().unwrap_or_default())
+            filter.apply(self.data, params.clone().unwrap_or_default(), image_params)
         } else if let Some(filters) = self
             .dict
             .get::<Array>(F)
@@ -85,6 +102,7 @@ impl<'a> Stream<'a> {
                         .map(|c| c.data.as_ref())
                         .unwrap_or(self.data),
                     params.clone().unwrap_or_default(),
+                    image_params,
                 )?;
                 current = Some(new);
             }

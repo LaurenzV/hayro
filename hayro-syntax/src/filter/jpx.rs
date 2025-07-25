@@ -1,6 +1,7 @@
 use crate::bit_reader::{BitSize, BitWriter};
 use crate::filter::FilterResult;
-use crate::object::stream::{ImageColorSpace, ImageData};
+use crate::object::stream::{ImageColorSpace, ImageData, ImageDecodeParams};
+use jpeg2k::DecodeParameters;
 
 impl ImageColorSpace {
     fn num_components(&self) -> u8 {
@@ -12,10 +13,16 @@ impl ImageColorSpace {
     }
 }
 
-pub(crate) fn decode(data: &[u8]) -> Option<FilterResult> {
+pub(crate) fn decode(data: &[u8], params: &ImageDecodeParams) -> Option<FilterResult> {
     use crate::object::stream::ImageColorSpace;
 
-    let image = jpeg2k::Image::from_bytes(data).ok()?;
+    let mut jpx_params = DecodeParameters::new();
+
+    if params.is_indexed {
+        jpx_params = jpx_params.test_flag();
+    }
+
+    let image = jpeg2k::Image::from_bytes_with(data, jpx_params).ok()?;
     let width = image.width();
     let height = image.height();
     let components = image.components();

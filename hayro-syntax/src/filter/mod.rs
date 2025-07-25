@@ -13,7 +13,7 @@ mod run_length;
 use crate::object::Dict;
 use crate::object::Name;
 use crate::object::dict::keys::*;
-use crate::object::stream::{DecodeFailure, FilterResult};
+use crate::object::stream::{DecodeFailure, FilterResult, ImageDecodeParams};
 use log::warn;
 use std::ops::Deref;
 
@@ -67,7 +67,12 @@ impl Filter {
         }
     }
 
-    pub(crate) fn apply(&self, data: &[u8], params: Dict) -> Result<FilterResult, DecodeFailure> {
+    pub(crate) fn apply(
+        &self,
+        data: &[u8],
+        params: Dict,
+        image_params: &ImageDecodeParams,
+    ) -> Result<FilterResult, DecodeFailure> {
         let res = match self {
             Filter::AsciiHexDecode => ascii_hex::decode(data)
                 .map(FilterResult::from_data)
@@ -94,7 +99,7 @@ impl Filter {
                 jbig2::decode(data, params).ok_or(DecodeFailure::ImageDecode)?,
             )),
             #[cfg(feature = "jpeg2000")]
-            Filter::JpxDecode => jpx::decode(data).ok_or(DecodeFailure::ImageDecode),
+            Filter::JpxDecode => jpx::decode(data, image_params).ok_or(DecodeFailure::ImageDecode),
             #[cfg(not(feature = "jpeg2000"))]
             Filter::JpxDecode => {
                 log::warn!("JPEG2000 images are not supported in the current build");

@@ -20,7 +20,7 @@ hayro-write = { path = "hayro-write", version = "0.1.0" }
 bitflags = { version = "2.9" }
 bytemuck = { version = "1" }
 image = { version = "0.25", default-features = false }
-jpeg2k = { version = "0.10", default-features = false, features = ["openjp2"] }
+jpeg2k = { path = "../jpeg2k", default-features = false, features = ["openjp2"] }
 kurbo = { version = "0.11.2" }
 log = { version = "0.4" }
 resvg = { version = "0.45.1" }
@@ -39,3 +39,6 @@ sitro = { git = "https://github.com/LaurenzV/sitro", rev="fb804b3" }
 xmlwriter = { version = "0.1" }
 base64 = { version = "0.22" }
 zune-jpeg = { version = "0.4" }
+
+[patch.crates-io]
+jpeg2k = { path = "../jpeg2k" }

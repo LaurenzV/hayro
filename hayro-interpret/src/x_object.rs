@@ -15,7 +15,7 @@ use hayro_syntax::object::Name;
 use hayro_syntax::object::Object;
 use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::*;
-use hayro_syntax::object::stream::DecodeFailure;
+use hayro_syntax::object::stream::{DecodeFailure, ImageDecodeParams};
 use hayro_syntax::page::Resources;
 use kurbo::{Affine, Rect, Shape};
 use log::warn;
@@ -208,34 +208,12 @@ impl<'a> ImageXObject<'a> {
     ) -> Option<Self> {
         let dict = stream.dict();
 
-        let decoded = stream
-            .decoded_image()
-            .map_err(|e| match e {
-                DecodeFailure::JpxImage => warning_sink(InterpreterWarning::JpxImage),
-                _ => warning_sink(InterpreterWarning::ImageDecodeFailure),
-            })
-            .ok()?;
-        let interpolate = dict
-            .get::<bool>(I)
-            .or_else(|| dict.get::<bool>(INTERPOLATE))
-            .unwrap_or(false);
         let image_mask = dict
             .get::<bool>(IM)
             .or_else(|| dict.get::<bool>(IMAGE_MASK))
             .unwrap_or(false);
-        let bits_per_component = if image_mask {
-            1
-        } else {
-            decoded
-                .image_data
-                .as_ref()
-                .map(|i| i.bits_per_component)
-                .or_else(|| dict.get::<u8>(BPC))
-                .or_else(|| dict.get::<u8>(BITS_PER_COMPONENT))
-                .unwrap_or(8)
-        };
-        let color_space = if image_mask {
-            ColorSpace::device_gray()
+        let image_cs = if image_mask {
+            Some(ColorSpace::device_gray())
         } else {
             let cs_obj = dict
                 .get::<Object>(CS)
@@ -250,25 +228,55 @@ impl<'a> ImageXObject<'a> {
                         .and_then(|c| c.into_name())
                         .and_then(|n| resolve_cs(&n))
                 })
-                .or_else(|| {
-                    decoded
-                        .image_data
-                        .as_ref()
-                        .map(|i| i.color_space)
-                        .map(|c| match c {
-                            hayro_syntax::object::stream::ImageColorSpace::Gray => {
-                                ColorSpace::device_gray()
-                            }
-                            hayro_syntax::object::stream::ImageColorSpace::Rgb => {
-                                ColorSpace::device_rgb()
-                            }
-                            hayro_syntax::object::stream::ImageColorSpace::Cmyk => {
-                                ColorSpace::device_cmyk()
-                            }
-                        })
-                })
-                .unwrap_or(ColorSpace::device_gray())
         };
+
+        let decode_params = ImageDecodeParams {
+            is_indexed: image_cs.as_ref().is_some_and(|cs| cs.is_indexed()),
+        };
+
+        let decoded = stream
+            .decoded_image(&decode_params)
+            .map_err(|e| match e {
+                DecodeFailure::JpxImage => warning_sink(InterpreterWarning::JpxImage),
+                _ => warning_sink(InterpreterWarning::ImageDecodeFailure),
+            })
+            .ok()?;
+        let interpolate = dict
+            .get::<bool>(I)
+            .or_else(|| dict.get::<bool>(INTERPOLATE))
+            .unwrap_or(false);
+        let bits_per_component = if image_mask {
+            1
+        } else {
+            decoded
+                .image_data
+                .as_ref()
+                .map(|i| i.bits_per_component)
+                .or_else(|| dict.get::<u8>(BPC))
+                .or_else(|| dict.get::<u8>(BITS_PER_COMPONENT))
+                .unwrap_or(8)
+        };
+
+        let color_space = image_cs
+            .or_else(|| {
+                decoded
+                    .image_data
+                    .as_ref()
+                    .map(|i| i.color_space)
+                    .map(|c| match c {
+                        hayro_syntax::object::stream::ImageColorSpace::Gray => {
+                            ColorSpace::device_gray()
+                        }
+                        hayro_syntax::object::stream::ImageColorSpace::Rgb => {
+                            ColorSpace::device_rgb()
+                        }
+                        hayro_syntax::object::stream::ImageColorSpace::Cmyk => {
+                            ColorSpace::device_cmyk()
+                        }
+                    })
+            })
+            .unwrap_or(ColorSpace::device_gray());
+
         let decode = dict
             .get::<Array>(D)
             .or_else(|| dict.get::<Array>(DECODE))
