@@ -510,6 +510,7 @@ use crate::run_render_test;
 #[test] fn pdfbox_2966() { run_render_test("pdfbox_2966", "downloads/pdfbox/2966.pdf", None); }
 #[test] fn pdfbox_3031() { run_render_test("pdfbox_3031", "downloads/pdfbox/3031.pdf", None); }
 #[test] fn pdfbox_3041() { run_render_test("pdfbox_3041", "downloads/pdfbox/3041.pdf", None); }
+#[test] fn pdfbox_3045() { run_render_test("pdfbox_3045", "downloads/pdfbox/3045.pdf", None); }
 #[test] fn pdfbox_3118() { run_render_test("pdfbox_3118", "downloads/pdfbox/3118.pdf", None); }
 #[test] fn pdfbox_3185() { run_render_test("pdfbox_3185", "downloads/pdfbox/3185.pdf", None); }
 #[test] fn pdfbox_3223() { run_render_test("pdfbox_3223", "downloads/pdfbox/3223.pdf", None); }

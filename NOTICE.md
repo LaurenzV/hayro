@@ -9,6 +9,7 @@ under the Apache 2.0 license:
 - The CalRGB and CalGray conversion code.
 - The code for decoding CCITTFax images.
 - The code for decoding JBIG2 images.
+- The flate decoder.
 
 The following parts of code have been adapted from [pdf-rs](https://github.com/pdf-rs/pdf), available under the
 Apache 2.0 license:
