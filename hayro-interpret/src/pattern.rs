@@ -44,7 +44,10 @@ impl<'a> Pattern<'a> {
         resources: &Resources<'a>,
     ) -> Option<Self> {
         if let Some(dict) = object.clone().into_dict() {
-            Some(Self::Shading(ShadingPattern::new(&dict)?))
+            Some(Self::Shading(ShadingPattern::new(
+                &dict,
+                &ctx.object_cache,
+            )?))
         } else if let Some(stream) = object.clone().into_stream() {
             Some(Self::Tiling(Box::new(TilingPattern::new(
                 stream, ctx, resources,
@@ -65,11 +68,11 @@ pub struct ShadingPattern {
 }
 
 impl ShadingPattern {
-    pub(crate) fn new(dict: &Dict) -> Option<Self> {
+    pub(crate) fn new(dict: &Dict, cache: &Cache) -> Option<Self> {
         let shading = dict.get::<Object>(SHADING).and_then(|o| {
             let (dict, stream) = dict_or_stream(&o)?;
 
-            Shading::new(&dict, stream.as_ref())
+            Shading::new(&dict, stream.as_ref(), cache)
         })?;
         let matrix = dict
             .get::<[f64; 6]>(MATRIX)

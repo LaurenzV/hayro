@@ -461,20 +461,23 @@ pub fn interpret<'a, 'b>(
             }
             TypedInstruction::ShapeGlyph(_) => {}
             TypedInstruction::XObject(x) => {
+                let cache = context.object_cache.clone();
                 if let Some(x_object) = resources.get_x_object(
                     x.0,
                     Box::new(|_| None),
-                    Box::new(|s| XObject::new(&s, &context.settings.warning_sink)),
+                    Box::new(|s| XObject::new(&s, &context.settings.warning_sink, &cache)),
                 ) {
                     draw_xobject(&x_object, resources, context, device);
                 }
             }
             TypedInstruction::InlineImage(i) => {
                 let warning_sink = context.settings.warning_sink.clone();
+                let cache = context.object_cache.clone();
                 if let Some(x_object) = ImageXObject::new(
                     &i.0,
                     |name| context.get_color_space(resources, name.clone()),
                     &warning_sink,
+                    &cache,
                 ) {
                     draw_image_xobject(&x_object, context, device);
                 }
@@ -486,7 +489,7 @@ pub fn interpret<'a, 'b>(
                 if let Some(sp) = resources
                     .get_shading(s.0, Box::new(|_| None), Box::new(Some))
                     .and_then(|o| dict_or_stream(&o))
-                    .and_then(|s| Shading::new(&s.0, s.1.as_ref()))
+                    .and_then(|s| Shading::new(&s.0, s.1.as_ref(), &context.object_cache))
                     .map(|s| {
                         Pattern::Shading(ShadingPattern {
                             shading: Arc::new(s),

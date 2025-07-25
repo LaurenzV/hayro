@@ -2,6 +2,7 @@
 
 #![allow(clippy::needless_range_loop)]
 
+use crate::cache::Cache;
 use crate::color::{ColorComponents, ColorSpace};
 use crate::util::{FloatExt, PointExt};
 use hayro_syntax::bit_reader::{BitReader, BitSize};
@@ -19,7 +20,6 @@ use kurbo::{Affine, CubicBez, ParamCurve, Point, Shape};
 use log::warn;
 use smallvec::{SmallVec, smallvec};
 use std::sync::Arc;
-
 // TODO: Deduplicate the parsing code!
 
 /// The function supplied to a shading.
@@ -121,10 +121,10 @@ pub struct Shading {
 }
 
 impl Shading {
-    pub(crate) fn new(dict: &Dict, stream: Option<&Stream>) -> Option<Self> {
+    pub(crate) fn new(dict: &Dict, stream: Option<&Stream>, cache: &Cache) -> Option<Self> {
         let shading_num = dict.get::<u8>(SHADING_TYPE)?;
 
-        let color_space = ColorSpace::new(dict.get(COLORSPACE)?)?;
+        let color_space = ColorSpace::new(dict.get(COLORSPACE)?, cache)?;
 
         let shading_type = match shading_num {
             1 => {

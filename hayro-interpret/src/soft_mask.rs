@@ -73,7 +73,11 @@ impl<'a> SoftMask<'a> {
         // same xobject, the ID will be the same.
         let obj_id = dict.get_ref(G)?.into();
         let group_stream = dict.get::<Stream>(G)?;
-        let group = XObject::new(&group_stream, &context.settings.warning_sink)?;
+        let group = XObject::new(
+            &group_stream,
+            &context.settings.warning_sink,
+            &context.object_cache,
+        )?;
         let mask_type = match dict.get::<Name>(S)?.deref() {
             LUMINOSITY => MaskType::Luminosity,
             ALPHA => MaskType::Alpha,

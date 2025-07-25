@@ -193,10 +193,10 @@ impl<'a> Context<'a> {
                 self.object_cache.get_or_insert_with(ref_.into(), || {
                     resources
                         .resolve_ref::<Object>(ref_)
-                        .map(|o| ColorSpace::new(o))
+                        .map(|o| ColorSpace::new(o, &self.object_cache))
                 })
             }),
-            Box::new(|c| Some(ColorSpace::new(c))),
+            Box::new(|c| Some(ColorSpace::new(c, &self.object_cache))),
         )?
     }
 

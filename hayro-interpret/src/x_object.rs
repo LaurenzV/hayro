@@ -1,4 +1,5 @@
 use crate::ClipPath;
+use crate::cache::Cache;
 use crate::color::ColorSpace;
 use crate::context::Context;
 use crate::device::Device;
@@ -27,13 +28,18 @@ pub(crate) enum XObject<'a> {
 }
 
 impl<'a> XObject<'a> {
-    pub(crate) fn new(stream: &Stream<'a>, warning_sink: &WarningSinkFn) -> Option<Self> {
+    pub(crate) fn new(
+        stream: &Stream<'a>,
+        warning_sink: &WarningSinkFn,
+        cache: &Cache,
+    ) -> Option<Self> {
         let dict = stream.dict();
         match dict.get::<Name>(SUBTYPE)?.deref() {
             IMAGE => Some(Self::ImageXObject(ImageXObject::new(
                 stream,
                 |_| None,
                 warning_sink,
+                cache,
             )?)),
             FORM => Some(Self::FormXObject(FormXObject::new(stream)?)),
             _ => None,
@@ -183,6 +189,7 @@ pub(crate) struct ImageXObject<'a> {
     pub width: u32,
     pub height: u32,
     color_space: ColorSpace,
+    cache: Cache,
     interpolate: bool,
     decode: SmallVec<[(f32, f32); 4]>,
     is_image_mask: bool,
@@ -197,6 +204,7 @@ impl<'a> ImageXObject<'a> {
         stream: &Stream<'a>,
         resolve_cs: impl FnOnce(&Name) -> Option<ColorSpace>,
         warning_sink: &WarningSinkFn,
+        cache: &Cache,
     ) -> Option<Self> {
         let dict = stream.dict();
 
@@ -235,7 +243,7 @@ impl<'a> ImageXObject<'a> {
 
             cs_obj
                 .clone()
-                .and_then(|c| ColorSpace::new(c))
+                .and_then(|c| ColorSpace::new(c, cache))
                 // Inline images can also refer to color spaces by name.
                 .or_else(|| {
                     cs_obj
@@ -272,6 +280,7 @@ impl<'a> ImageXObject<'a> {
         Some(Self {
             decoded: decoded.data,
             width,
+            cache: cache.clone(),
             data_smask: decoded.image_data.and_then(|i| i.alpha),
             height,
             color_space,
@@ -324,15 +333,19 @@ impl<'a> ImageXObject<'a> {
                         return None;
                     }
                 } else if let Some(s_mask) = self.dict.get::<Stream>(SMASK) {
-                    ImageXObject::new(&s_mask, |_| None, &self.warning_sink).and_then(|s| {
-                        if let Some(decoded) = s.decode_raw() {
-                            Some((decoded, s.width, s.height, s.interpolate))
-                        } else {
-                            None
-                        }
-                    })?
+                    ImageXObject::new(&s_mask, |_| None, &self.warning_sink, &self.cache).and_then(
+                        |s| {
+                            if let Some(decoded) = s.decode_raw() {
+                                Some((decoded, s.width, s.height, s.interpolate))
+                            } else {
+                                None
+                            }
+                        },
+                    )?
                 } else if let Some(mask) = self.dict.get::<Stream>(MASK) {
-                    if let Some(obj) = ImageXObject::new(&mask, |_| None, &self.warning_sink) {
+                    if let Some(obj) =
+                        ImageXObject::new(&mask, |_| None, &self.warning_sink, &self.cache)
+                    {
                         let mut mask_data = obj.decode_raw()?;
                         mask_data = mask_data.iter().map(|v| 1.0 - *v).collect();
 

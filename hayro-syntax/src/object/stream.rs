@@ -1,10 +1,10 @@
 //! Streams.
 
 use crate::filter::Filter;
-use crate::object::Array;
 use crate::object::Dict;
 use crate::object::Name;
 use crate::object::dict::keys::{DECODE_PARMS, DP, F, FILTER, LENGTH};
+use crate::object::{Array, ObjectIdentifier};
 use crate::object::{Object, ObjectLike};
 use crate::reader::{Readable, Reader, ReaderContext, Skippable};
 use crate::util::OptionLog;
@@ -27,6 +27,11 @@ impl<'a> Stream<'a> {
     /// Return the raw, underlying dictionary of the stream.
     pub fn dict(&self) -> &Dict<'a> {
         &self.dict
+    }
+
+    /// Return the object identifier of the stream.
+    pub fn obj_id(&self) -> ObjectIdentifier {
+        self.dict.obj_id().unwrap()
     }
 
     /// Return the decoded data of the stream.

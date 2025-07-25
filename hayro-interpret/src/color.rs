@@ -1,5 +1,6 @@
 //! PDF colors and color spaces.
 
+use crate::cache::Cache;
 use hayro_syntax::function::Function;
 use hayro_syntax::object;
 use hayro_syntax::object::Array;
@@ -81,7 +82,7 @@ const fn u8_to_f32(x: u8) -> f32 {
     x as f32 * (1.0 / 255.0)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum ColorSpaceType {
     DeviceCmyk,
     DeviceGray,
@@ -97,11 +98,11 @@ enum ColorSpaceType {
 }
 
 impl ColorSpaceType {
-    fn new(object: Object) -> Option<Self> {
-        Self::new_inner(object)
+    fn new(object: Object, cache: &Cache) -> Option<Self> {
+        Self::new_inner(object, cache)
     }
 
-    fn new_inner(object: Object) -> Option<ColorSpaceType> {
+    fn new_inner(object: Object, cache: &Cache) -> Option<ColorSpaceType> {
         if let Some(name) = object.clone().into_name() {
             return Self::new_from_name(name.clone());
         } else if let Some(color_array) = object.clone().into_array() {
@@ -118,7 +119,7 @@ impl ColorSpaceType {
                         .map(ColorSpaceType::ICCBased)
                         .or_else(|| {
                             dict.get::<Object>(ALTERNATE)
-                                .and_then(|o| ColorSpaceType::new(o))
+                                .and_then(|o| ColorSpaceType::new(o, cache))
                         })
                         .or_else(|| match dict.get::<u8>(N) {
                             Some(1) => Some(ColorSpaceType::DeviceGray),
@@ -143,16 +144,23 @@ impl ColorSpaceType {
                     let lab_dict = iter.next::<Dict>()?;
                     return Some(ColorSpaceType::Lab(Lab::new(&lab_dict)?));
                 }
-                INDEXED | I => return Some(ColorSpaceType::Indexed(Indexed::new(&color_array)?)),
-                SEPARATION => {
-                    return Some(ColorSpaceType::Separation(Separation::new(&color_array)?));
+                INDEXED | I => {
+                    return Some(ColorSpaceType::Indexed(Indexed::new(&color_array, cache)?));
                 }
-                DEVICE_N => return Some(ColorSpaceType::DeviceN(DeviceN::new(&color_array)?)),
+                SEPARATION => {
+                    return Some(ColorSpaceType::Separation(Separation::new(
+                        &color_array,
+                        cache,
+                    )?));
+                }
+                DEVICE_N => {
+                    return Some(ColorSpaceType::DeviceN(DeviceN::new(&color_array, cache)?));
+                }
                 PATTERN => {
                     let _ = iter.next::<Name>();
                     let cs = iter
                         .next::<Object>()
-                        .and_then(|o| ColorSpace::new(o))
+                        .and_then(|o| ColorSpace::new(o, cache))
                         .unwrap_or(ColorSpace::device_rgb());
                     return Some(ColorSpaceType::Pattern(cs));
                 }
@@ -184,8 +192,8 @@ pub struct ColorSpace(Arc<ColorSpaceType>);
 
 impl ColorSpace {
     /// Create a new color space from the given object.
-    pub(crate) fn new(object: Object) -> Option<ColorSpace> {
-        Some(Self(Arc::new(ColorSpaceType::new(object)?)))
+    pub(crate) fn new(object: Object, cache: &Cache) -> Option<ColorSpace> {
+        Some(Self(Arc::new(ColorSpaceType::new(object, cache)?)))
     }
 
     /// Create a new color space from the name.
@@ -339,7 +347,7 @@ impl ColorSpace {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct CalGray {
     white_point: [f32; 3],
     black_point: [f32; 3],
@@ -380,7 +388,7 @@ impl CalGray {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct CalRgb {
     white_point: [f32; 3],
     black_point: [f32; 3],
@@ -547,7 +555,7 @@ impl CalRgb {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Lab {
     white_point: [f32; 3],
     _black_point: [f32; 3],
@@ -608,7 +616,7 @@ impl Lab {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Indexed {
     values: Vec<Vec<f32>>,
     hival: u8,
@@ -616,11 +624,11 @@ struct Indexed {
 }
 
 impl Indexed {
-    fn new(array: &Array) -> Option<Self> {
+    fn new(array: &Array, cache: &Cache) -> Option<Self> {
         let mut iter = array.flex_iter();
         // Skip name
         let _ = iter.next::<Name>()?;
-        let base_color_space = ColorSpace::new(iter.next::<Object>()?)?;
+        let base_color_space = ColorSpace::new(iter.next::<Object>()?, cache)?;
         let hival = iter.next::<u8>()?;
 
         let values = {
@@ -660,19 +668,19 @@ impl Indexed {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Separation {
     alternate_space: ColorSpace,
     tint_transform: Function,
 }
 
 impl Separation {
-    fn new(array: &Array) -> Option<Self> {
+    fn new(array: &Array, cache: &Cache) -> Option<Self> {
         let mut iter = array.flex_iter();
         // Skip `/Separation`
         let _ = iter.next::<Name>()?;
         let name = iter.next::<Name>()?;
-        let alternate_space = ColorSpace::new(iter.next::<Object>()?)?;
+        let alternate_space = ColorSpace::new(iter.next::<Object>()?, cache)?;
         let tint_transform = Function::new(&iter.next::<Object>()?)?;
 
         if matches!(name.as_str(), "All" | "None") {
@@ -695,7 +703,7 @@ impl Separation {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct DeviceN {
     alternate_space: ColorSpace,
     num_components: usize,
@@ -703,13 +711,13 @@ struct DeviceN {
 }
 
 impl DeviceN {
-    fn new(array: &Array) -> Option<Self> {
+    fn new(array: &Array, cache: &Cache) -> Option<Self> {
         let mut iter = array.flex_iter();
         // Skip `/DeviceN`
         let _ = iter.next::<Name>()?;
         // Skip `Name`.
         let num_components = iter.next::<Array>()?.iter::<Name>().count();
-        let alternate_space = ColorSpace::new(iter.next::<Object>()?)?;
+        let alternate_space = ColorSpace::new(iter.next::<Object>()?, cache)?;
         let tint_transform = Function::new(&iter.next::<Object>()?)?;
 
         Some(Self {
