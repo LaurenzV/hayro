@@ -147,6 +147,8 @@ impl TrueTypeFont {
             if glyph.is_none() {
                 if let Some(gid) = self.glyph_names.get(lookup) {
                     glyph = Some(*gid);
+                } else if let Some(gid) = glyph_num_string(lookup) {
+                    glyph = Some(GlyphId::new(gid));
                 }
             }
         } else if let Ok(cmap) = self.base_font.font_ref().cmap() {
@@ -215,6 +217,14 @@ pub(crate) fn read_widths(dict: &Dict, descriptor: &Dict) -> Vec<f32> {
     }
 
     widths
+}
+
+fn glyph_num_string(s: &str) -> Option<u32> {
+    if !s.starts_with('g') || s.len() < 2 {
+        return None;
+    }
+
+    s[1..].parse::<u32>().ok()
 }
 
 impl CacheKey for TrueTypeFont {
