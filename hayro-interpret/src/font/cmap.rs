@@ -147,7 +147,7 @@ impl CMap {
 
     /// Check if this is an Identity CMap
     pub fn is_identity_cmap(&self) -> bool {
-        self.name == "Identity-H" || self.name == "Identity-V"
+        self.built_in_cmap && (self.name == "Identity-H" || self.name == "Identity-V")
     }
 
     pub fn contains(&self, code: u32) -> bool {
@@ -288,9 +288,20 @@ impl CMapLexer {
 
         let remaining = &self.input[self.position..];
         
-        // Handle hex strings
+        // Handle dictionary delimiters
+        if remaining.starts_with(">>") {
+            self.position += 2;
+            return Token::Command(">>".to_string());
+        }
+        
+        // Handle hex strings and dictionary start
         if remaining.starts_with('<') {
             return self.parse_hex_string();
+        }
+        
+        // Handle PostScript strings (parentheses)
+        if remaining.starts_with('(') {
+            return self.parse_ps_string();
         }
         
         // Handle arrays
@@ -324,6 +335,13 @@ impl CMapLexer {
     }
 
     fn parse_hex_string(&mut self) -> Token {
+        // Check if it's actually a dictionary delimiter <<
+        let remaining = &self.input[self.position..];
+        if remaining.starts_with("<<") {
+            self.position += 2;
+            return Token::Command("<<".to_string());
+        }
+        
         self.position += 1; // Skip '<'
         let mut hex_string = String::new();
         
@@ -357,6 +375,41 @@ impl CMapLexer {
         
         // println!("Converted hex bytes: {:?}", result_bytes); // Debug
         Token::HexString(result_bytes)
+    }
+
+    fn parse_ps_string(&mut self) -> Token {
+        self.position += 1; // Skip '('
+        let mut string = String::new();
+        let mut paren_depth = 1;
+        
+        while self.position < self.input.len() && paren_depth > 0 {
+            let ch = self.input.chars().nth(self.position).unwrap();
+            match ch {
+                '(' => {
+                    paren_depth += 1;
+                    string.push(ch);
+                }
+                ')' => {
+                    paren_depth -= 1;
+                    if paren_depth > 0 {
+                        string.push(ch);
+                    }
+                }
+                '\\' => {
+                    // Handle escape sequences
+                    self.position += 1;
+                    if self.position < self.input.len() {
+                        let escaped = self.input.chars().nth(self.position).unwrap();
+                        string.push('\\');
+                        string.push(escaped);
+                    }
+                }
+                _ => string.push(ch),
+            }
+            self.position += 1;
+        }
+        
+        Token::String(string)
     }
 
     fn parse_array(&mut self) -> Token {
@@ -596,6 +649,7 @@ pub fn parse_cmap(input: String) -> Result<CMap, String> {
                 } else if name == "CMapName" {
                     parse_cmap_name(&mut cmap, &mut lexer)?;
                 }
+                // Skip other names like CIDInit, FontName, etc.
             }
             Token::Command(ref cmd) => {
                 match cmd.as_str() {
@@ -617,12 +671,22 @@ pub fn parse_cmap(input: String) -> Result<CMap, String> {
                         parse_bf_range(&mut cmap, &mut lexer)?;
                     }
                     "begincidrange" => {
+                        // println!("Found begincidrange");
                         parse_cid_range(&mut cmap, &mut lexer)?;
                     }
-                    _ => {}
+                    // Skip PostScript constructs and other unknown commands
+                    "def" | "dict" | "begin" | "end" | "findresource" | "<<" | ">>" | 
+                    "pop" | "currentdict" | "defineresource" => {
+                        // These are PostScript constructs that we can ignore
+                    }
+                    _ => {
+                        // Skip any other unknown commands
+                    }
                 }
             }
-            _ => {}
+            Token::String(_) | Token::HexString(_) | Token::Integer(_) | Token::Array(_) => {
+                // Skip standalone tokens that aren't part of a command we recognize
+            }
         }
     }
 
@@ -848,5 +912,58 @@ endcodespacerange"#.to_string();
         assert!(cmap.contains(0x41));
         assert!(cmap.contains(0xFFFF));
         assert!(!cmap.contains(0x10000));
+    }
+
+    #[test]
+    fn test_simple_cidrange() {
+        let input = r#"1 begincidrange
+<00> <FF> 0
+endcidrange"#.to_string();
+        
+        let cmap = parse_cmap(input).unwrap();
+        
+        // Should map codes 0x00-0xFF to CIDs 0-255
+        assert_eq!(cmap.lookup(0x00), Some(CMapValue::Cid(0)));
+        assert_eq!(cmap.lookup(0x41), Some(CMapValue::Cid(65))); // 'A'
+        assert_eq!(cmap.lookup(0xFF), Some(CMapValue::Cid(255)));
+        assert_eq!(cmap.lookup(0x100), None); // Beyond range
+    }
+
+    #[test]
+    fn test_complex_cmap_with_postscript() {
+        let input = r#"/CIDInit /ProcSet findresource begin
+12 dict begin
+begincmap
+/CIDSystemInfo
+<< /Registry (Adobe)
+/Ordering (Identity)
+/Supplement 0
+>> def
+/CMapName /Identity-H def
+/CMapType 2 def
+1 begincodespacerange
+<00> <FF>
+endcodespacerange
+1 begincidrange
+<00> <FF> 0
+endcidrange
+endcmap
+CMapName currentdict /CMap defineresource pop
+end
+end"#.to_string();
+        
+        let cmap = parse_cmap(input).unwrap();
+        
+        // Debug: print the cmap state
+        // println!("CMap name: {}", cmap.name);
+        // println!("CMap num_codespace_ranges: {}", cmap.num_codespace_ranges);
+        // println!("CMap map length: {}", cmap.map.len());
+        
+        // Should successfully parse and create mapping
+        assert_eq!(cmap.lookup(0x00), Some(CMapValue::Cid(0)));
+        assert_eq!(cmap.lookup(0x41), Some(CMapValue::Cid(65))); // 'A'
+        assert_eq!(cmap.lookup(0xFF), Some(CMapValue::Cid(255)));
+        assert_eq!(cmap.lookup(0x100), None); // Beyond range
+        assert_eq!(cmap.name, "Identity-H");
     }
 }
