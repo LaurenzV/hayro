@@ -295,7 +295,7 @@ fn read_encoding(object: &Object) -> Option<CMap> {
             }
 
             let decoded = s.decoded().ok()?;
-            parse_cmap(std::str::from_utf8(&decoded).ok()?.to_string())
+            parse_cmap(std::str::from_utf8(&decoded).ok()?)
         }
         _ => None,
     }

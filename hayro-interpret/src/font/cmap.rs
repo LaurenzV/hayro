@@ -1,9 +1,10 @@
-/// Ported from <https://github.com/mozilla/pdf.js/blob/master/src/core/cmap.js>
+//! Ported from <https://github.com/mozilla/pdf.js/blob/master/src/core/cmap.js>
+
 use std::collections::HashMap;
 
 const MAX_MAP_RANGE: u32 = (1 << 24) - 1; // 0xFFFFFF
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct CMap {
     codespace_ranges: [Vec<u32>; 4],
     map: HashMap<u32, u32>,
@@ -195,7 +196,7 @@ fn expect_int(obj: &Token) -> Option<i32> {
 }
 
 #[derive(Debug, Clone)]
-pub enum Token {
+enum Token {
     String(String),
     HexString(Vec<u8>), // Raw bytes from hex string
     Integer(i32),
@@ -204,17 +205,17 @@ pub enum Token {
     EOF,
 }
 
-pub struct CMapLexer {
-    input: String,
+struct CMapLexer<'a> {
+    input: &'a str,
     position: usize,
 }
 
-impl CMapLexer {
-    pub fn new(input: String) -> Self {
+impl<'a> CMapLexer<'a> {
+    fn new(input: &'a str) -> Self {
         CMapLexer { input, position: 0 }
     }
 
-    pub fn get_obj(&mut self) -> Token {
+    fn get_obj(&mut self) -> Token {
         self.skip_whitespace();
 
         if self.position >= self.input.len() {
@@ -307,8 +308,6 @@ impl CMapLexer {
             self.position += 1;
         }
 
-        // println!("Parsed hex string: {}", hex_string); // Debug
-
         // Convert hex string to raw bytes
         let mut result_bytes = Vec::new();
         for chunk in hex_string.chars().collect::<Vec<_>>().chunks(2) {
@@ -323,7 +322,6 @@ impl CMapLexer {
             }
         }
 
-        // println!("Converted hex bytes: {:?}", result_bytes); // Debug
         Token::HexString(result_bytes)
     }
 
@@ -585,7 +583,7 @@ fn parse_cmap_name(cmap: &mut CMap, lexer: &mut CMapLexer) -> Option<()> {
     }
 }
 
-pub fn parse_cmap(input: String) -> Option<CMap> {
+pub fn parse_cmap(input: &str) -> Option<CMap> {
     let mut cmap = CMap::new();
     let mut lexer = CMapLexer::new(input);
 
@@ -621,11 +619,8 @@ pub fn parse_cmap(input: String) -> Option<CMap> {
                     "begincidrange" => {
                         parse_cid_range(&mut cmap, &mut lexer)?;
                     }
-                    // Skip PostScript constructs and other unknown commands.
                     "def" | "dict" | "begin" | "end" | "findresource" | "<<" | ">>" | "pop"
-                    | "currentdict" | "defineresource" => {
-                        // These are PostScript constructs that we can ignore.
-                    }
+                    | "currentdict" | "defineresource" => {}
                     _ => {
                         // Skip any other unknown commands.
                     }
@@ -652,7 +647,7 @@ mod tests {
 endbfchar"#
             .to_string();
 
-        let cmap = parse_cmap(input).unwrap();
+        let cmap = parse_cmap(&input).unwrap();
 
         assert_eq!(cmap.lookup_code(0x03), Some(0x00));
         assert_eq!(cmap.lookup_code(0x04), Some(0x01));
@@ -666,11 +661,11 @@ endbfchar"#
 endbfrange"#
             .to_string();
 
-        let cmap = parse_cmap(input).unwrap();
+        let cmap = parse_cmap(&input).unwrap();
 
         assert!(cmap.lookup_code(0x05).is_none());
         assert_eq!(cmap.lookup_code(0x06), Some(0x00));
-        assert_eq!(cmap.lookup_code(0x0b), Some(0x01));
+        assert_eq!(cmap.lookup_code(0x0b), Some(0x05));
         assert!(cmap.lookup_code(0x0c).is_none());
     }
 
@@ -681,7 +676,7 @@ endbfrange"#
 endbfrange"#
             .to_string();
 
-        let cmap = parse_cmap(input).unwrap();
+        let cmap = parse_cmap(&input).unwrap();
 
         assert!(cmap.lookup_code(0x0c).is_none());
         assert_eq!(cmap.lookup_code(0x0d), Some(0x00));
@@ -696,7 +691,7 @@ endbfrange"#
 endcidchar"#
             .to_string();
 
-        let cmap = parse_cmap(input).unwrap();
+        let cmap = parse_cmap(&input).unwrap();
 
         assert_eq!(cmap.lookup_code(0x14), Some(0x00));
         assert!(cmap.lookup_code(0x15).is_none());
@@ -709,7 +704,7 @@ endcidchar"#
 endcidrange"#
             .to_string();
 
-        let cmap = parse_cmap(input).unwrap();
+        let cmap = parse_cmap(&input).unwrap();
 
         assert!(cmap.lookup_code(0x15).is_none());
         assert_eq!(cmap.lookup_code(0x16), Some(0x00));
@@ -724,15 +719,10 @@ endcidrange"#
 endcodespacerange"#
             .to_string();
 
-        let cmap = parse_cmap(input).unwrap();
+        let cmap = parse_cmap(&input).unwrap();
 
-        // Debug: Check if codespace ranges were parsed correctly
-        println!("Codespace ranges: {:?}", cmap.codespace_ranges);
-
-        // Use the new read_char_code_bytes method to handle raw bytes
         let test_bytes = [0x8E, 0xA1, 0xA1, 0xA1];
         let (charcode, length) = cmap.read_code(&test_bytes, 0);
-        println!("Got charcode: {:#x}, length: {}", charcode, length);
         assert_eq!(charcode, 0x8ea1a1a1);
         assert_eq!(length, 4);
     }
@@ -741,7 +731,7 @@ endcodespacerange"#
     fn test_parse_cmap_name() {
         let input = r#"/CMapName /Identity-H def"#.to_string();
 
-        let cmap = parse_cmap(input).unwrap();
+        let cmap = parse_cmap(&input).unwrap();
         assert_eq!(cmap.name, "Identity-H");
     }
 
@@ -749,7 +739,7 @@ endcodespacerange"#
     fn test_parse_wmode() {
         let input = r#"/WMode 1 def"#.to_string();
 
-        let cmap = parse_cmap(input).unwrap();
+        let cmap = parse_cmap(&input).unwrap();
         assert_eq!(cmap.vertical, true);
     }
 
@@ -760,13 +750,11 @@ endcodespacerange"#
         assert_eq!(cmap.name, "Identity-H");
         assert_eq!(cmap.vertical, false);
 
-        // Test identity mapping
-        assert_eq!(cmap.lookup_code(0x41), Some(0x41)); // 'A'
+        assert_eq!(cmap.lookup_code(0x41), Some(0x41));
         assert_eq!(cmap.lookup_code(0x1234), Some(0x1234));
         assert_eq!(cmap.lookup_code(0xFFFF), Some(0xFFFF));
-        assert_eq!(cmap.lookup_code(0x10000), None); // Beyond 2-byte range
+        assert_eq!(cmap.lookup_code(0x10000), None);
 
-        // Test read_char_code with 2-byte values
         let test_bytes = [0x12, 0x34];
         let (charcode, length) = cmap.read_code(&test_bytes, 0);
         assert_eq!(charcode, 0x1234);
@@ -780,11 +768,10 @@ endcodespacerange"#
         assert_eq!(cmap.name, "Identity-V");
         assert_eq!(cmap.vertical, true);
 
-        // Test identity mapping
-        assert_eq!(cmap.lookup_code(0x41), Some(0x41)); // 'A'
+        assert_eq!(cmap.lookup_code(0x41), Some(0x41));
         assert_eq!(cmap.lookup_code(0x1234), Some(0x1234));
         assert_eq!(cmap.lookup_code(0xFFFF), Some(0xFFFF));
-        assert_eq!(cmap.lookup_code(0x10000), None); // Beyond 2-byte range
+        assert_eq!(cmap.lookup_code(0x10000), None);
     }
 
     #[test]
@@ -794,13 +781,13 @@ endcodespacerange"#
 endcidrange"#
             .to_string();
 
-        let cmap = parse_cmap(input).unwrap();
+        let cmap = parse_cmap(&input).unwrap();
 
         // Should map codes 0x00-0xFF to CIDs 0-255
         assert_eq!(cmap.lookup_code(0x00), Some(0));
-        assert_eq!(cmap.lookup_code(0x41), Some(65)); // 'A'
+        assert_eq!(cmap.lookup_code(0x41), Some(65));
         assert_eq!(cmap.lookup_code(0xFF), Some(255));
-        assert_eq!(cmap.lookup_code(0x100), None); // Beyond range
+        assert_eq!(cmap.lookup_code(0x100), None);
     }
 
     #[test]
@@ -827,18 +814,12 @@ end
 end"#
             .to_string();
 
-        let cmap = parse_cmap(input).unwrap();
+        let cmap = parse_cmap(&input).unwrap();
 
-        // Debug: print the cmap state
-        // println!("CMap name: {}", cmap.name);
-        // println!("CMap num_codespace_ranges: {}", cmap.num_codespace_ranges);
-        // println!("CMap map length: {}", cmap.map.len());
-
-        // Should successfully parse and create mapping
         assert_eq!(cmap.lookup_code(0x00), Some(0));
-        assert_eq!(cmap.lookup_code(0x41), Some(65)); // 'A'
+        assert_eq!(cmap.lookup_code(0x41), Some(65));
         assert_eq!(cmap.lookup_code(0xFF), Some(255));
-        assert_eq!(cmap.lookup_code(0x100), None); // Beyond range
+        assert_eq!(cmap.lookup_code(0x100), None);
         assert_eq!(cmap.name, "Identity-H");
     }
 }
