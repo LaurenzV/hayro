@@ -35,6 +35,7 @@ mod standard_font;
 mod true_type;
 mod type1;
 pub(crate) mod type3;
+mod cmap;
 
 pub(crate) const UNITS_PER_EM: f32 = 1000.0;
 
