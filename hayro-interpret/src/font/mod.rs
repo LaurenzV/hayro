@@ -129,10 +129,7 @@ impl<'a> Type3Glyph<'a> {
 pub(crate) struct Font<'a>(u128, FontType<'a>);
 
 impl<'a> Font<'a> {
-    pub(crate) fn new(
-        dict: &Dict<'a>,
-        resolver: &FontResolverFn,
-    ) -> Option<Self> {
+    pub(crate) fn new(dict: &Dict<'a>, resolver: &FontResolverFn) -> Option<Self> {
         let f_type = match dict.get::<Name>(SUBTYPE)?.deref() {
             TYPE1 | MM_TYPE1 => FontType::Type1(Rc::new(Type1Font::new(dict, resolver)?)),
             TRUE_TYPE => TrueTypeFont::new(dict)

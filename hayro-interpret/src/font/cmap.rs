@@ -1,5 +1,4 @@
 /// Ported from <https://github.com/mozilla/pdf.js/blob/master/src/core/cmap.js>
-
 use std::collections::HashMap;
 
 const MAX_MAP_RANGE: u32 = (1 << 24) - 1; // 0xFFFFFF
@@ -30,7 +29,7 @@ impl CMap {
 
     pub(crate) fn identity_h() -> Self {
         let mut cmap = CMap::new();
-        
+
         cmap.name = "Identity-H".to_string();
         cmap.vertical = false;
         cmap.add_codespace_range(2, 0, 0xFFFF);
@@ -39,13 +38,13 @@ impl CMap {
 
     pub(crate) fn identity_v() -> Self {
         let mut cmap = CMap::new();
-        
+
         cmap.name = "Identity-V".to_string();
         cmap.vertical = true;
         cmap.add_codespace_range(2, 0, 0xFFFF);
         cmap
     }
-    
+
     pub(crate) fn is_vertical(&self) -> bool {
         self.vertical
     }
@@ -83,7 +82,7 @@ impl CMap {
             current_low += 1;
             current_dst += 1;
         }
-        
+
         Some(())
     }
 
@@ -114,16 +113,11 @@ impl CMap {
             current_dst = String::from_utf8_lossy(&bytes).to_string();
             current_low += 1;
         }
-        
+
         Some(())
     }
 
-    fn map_bf_range_to_array(
-        &mut self,
-        low: u32,
-        high: u32,
-        array: Vec<CMapValue>,
-    ) -> Option<()> {
+    fn map_bf_range_to_array(&mut self, low: u32, high: u32, array: Vec<CMapValue>) -> Option<()> {
         if high - low > MAX_MAP_RANGE {
             return None;
         }
@@ -136,7 +130,7 @@ impl CMap {
             current_low += 1;
             i += 1;
         }
-        
+
         Some(())
     }
 
@@ -449,7 +443,7 @@ fn parse_bf_char(cmap: &mut CMap, lexer: &mut CMapLexer) -> Option<()> {
             }
         }
     }
-    
+
     Some(())
 }
 
@@ -506,7 +500,7 @@ fn parse_bf_range(cmap: &mut CMap, lexer: &mut CMapLexer) -> Option<()> {
             }
         }
     }
-    
+
     Some(())
 }
 
@@ -525,7 +519,7 @@ fn parse_cid_char(cmap: &mut CMap, lexer: &mut CMapLexer) -> Option<()> {
             }
         }
     }
-    
+
     Some(())
 }
 
@@ -550,7 +544,7 @@ fn parse_cid_range(cmap: &mut CMap, lexer: &mut CMapLexer) -> Option<()> {
             }
         }
     }
-    
+
     Some(())
 }
 
@@ -578,7 +572,7 @@ fn parse_codespace_range(cmap: &mut CMap, lexer: &mut CMapLexer) -> Option<()> {
             }
         }
     }
-    
+
     Some(())
 }
 
@@ -587,7 +581,7 @@ fn parse_wmode(cmap: &mut CMap, lexer: &mut CMapLexer) -> Option<()> {
     if let Some(val) = expect_int(&obj) {
         cmap.vertical = val != 0;
     }
-    
+
     Some(())
 }
 
