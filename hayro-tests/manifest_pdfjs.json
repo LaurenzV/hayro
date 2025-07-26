@@ -258,6 +258,10 @@
     "file": "pdfs/bug911034.pdf"
   },
   {
+    "id": "bug920426",
+    "file": "pdfs/bug920426.pdf"
+  },
+  {
     "id": "calgray",
     "file": "pdfs/calgray.pdf"
   },
@@ -355,6 +359,10 @@
     "file": "pdfs/issue17848.pdf"
   },
   {
+    "id": "issue18117",
+    "file": "pdfs/issue18117.pdf"
+  },
+  {
     "id": "issue18816",
     "file": "pdfs/issue18816.pdf"
   },
@@ -389,8 +397,16 @@
     "last_page": 0
   },
   {
+    "id": "issue2931",
+    "file": "pdfs/issue2931.pdf"
+  },
+  {
     "id": "issue2948",
     "file": "pdfs/issue2948.pdf"
+  },
+  {
+    "id": "issue3323",
+    "file": "pdfs/issue3323.pdf"
   },
   {
     "id": "issue3384",
@@ -420,6 +436,10 @@
   {
     "id": "issue4379",
     "file": "pdfs/issue4379.pdf"
+  },
+  {
+    "id": "issue4402_reduced",
+    "file": "pdfs/issue4402_reduced.pdf"
   },
   {
     "id": "issue4573",
@@ -485,6 +505,14 @@
     "md5": "098658008fc2bf7d433fd0d6d468a9e1",
     "link": true,
     "last_page": 0
+  },
+  {
+    "id": "issue9534_reduced",
+    "file": "pdfs/issue9534_reduced.pdf"
+  },
+  {
+    "id": "issue9915",
+    "file": "pdfs/issue9915_reduced.pdf"
   },
   {
     "id": "jbig2_symbol_offset",

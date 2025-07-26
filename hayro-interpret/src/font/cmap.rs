@@ -123,6 +123,13 @@ impl CMap {
             Some(value.clone())
         } else if let Some(ref use_cmap) = self.use_cmap {
             use_cmap.lookup(code)
+        } else if self.is_identity_cmap() {
+            // For identity CMaps, return the code itself if within range
+            if code <= 0xFFFF {
+                Some(CMapValue::Cid(code))
+            } else {
+                None
+            }
         } else {
             None
         }
@@ -134,6 +141,11 @@ impl CMap {
                 .use_cmap
                 .as_ref()
                 .map_or(false, |use_cmap| use_cmap.contains(code))
+            || (self.is_identity_cmap() && code <= 0xFFFF)
+    }
+
+    fn is_identity_cmap(&self) -> bool {
+        (self.name == "Identity-H" || self.name == "Identity-V") && self.map.is_empty()
     }
 
     pub fn read_char_code(&self, s: &str, offset: usize) -> (u32, usize) {
@@ -927,7 +939,7 @@ endcodespacerange"#
 
     #[test]
     fn test_identity_h_cmap() {
-        let cmap = IdentityCMap::new(false, 2);
+        let cmap = CMap::identity_h();
 
         assert_eq!(cmap.name, "Identity-H");
         assert_eq!(cmap.vertical, false);
@@ -945,18 +957,14 @@ endcodespacerange"#
 
         // Test read_char_code with 2-byte values
         let test_bytes = [0x12, 0x34];
-        let mut result = CharCodeResult {
-            charcode: 0,
-            length: 0,
-        };
-        cmap.read_char_code_bytes(&test_bytes, 0, &mut result);
-        assert_eq!(result.charcode, 0x1234);
-        assert_eq!(result.length, 2);
+        let (charcode, length) = cmap.read_char_code_bytes(&test_bytes, 0);
+        assert_eq!(charcode, 0x1234);
+        assert_eq!(length, 2);
     }
 
     #[test]
     fn test_identity_v_cmap() {
-        let cmap = IdentityCMap::new(true, 2);
+        let cmap = CMap::identity_v();
 
         assert_eq!(cmap.name, "Identity-V");
         assert_eq!(cmap.vertical, true);

@@ -87,3 +87,10 @@ standard_fonts_no_system_fonts
 issue1597
 issue10519
 issue13242
+bug920426
+issue2931
+issue3323
+issue4402_reduced
+issue9534_reduced
+issue9915
+issue18117
