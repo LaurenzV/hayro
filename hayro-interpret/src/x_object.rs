@@ -167,19 +167,28 @@ pub(crate) fn draw_image_xobject(
     let transform = context.get().ctm;
     device.set_transform(transform);
 
+    let alpha = x_object.alpha8();
+
+    let mut soft_mask = std::mem::take(&mut context.get_mut().soft_mask);
+
+    // If image has smask, the soft mask from the graphics state should be discarde.
+    if alpha.is_some() {
+        soft_mask = None;
+    }
+
     device.push_transparency_group(
         context.get().non_stroke_alpha,
-        std::mem::take(&mut context.get_mut().soft_mask),
+        std::mem::take(&mut soft_mask),
     );
-    // TODO: If image had soft mask, the one from the context should be replaced by it.
-    device.set_soft_mask(context.get().soft_mask.clone());
+
+    device.set_soft_mask(None);
 
     if x_object.is_image_mask {
-        if let Some(stencil) = x_object.alpha8() {
+        if let Some(stencil) = alpha {
             device.draw_stencil_image(stencil, &get_paint(context, false));
         }
     } else if let Some(rgb_image) = x_object.rgb8() {
-        device.draw_rgba_image(rgb_image, x_object.alpha8());
+        device.draw_rgba_image(rgb_image, alpha);
     }
 
     device.pop_transparency_group();
