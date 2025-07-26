@@ -46,7 +46,7 @@ impl CMap {
 
     pub(crate) fn lookup_code(&self, code: u32) -> Option<u32> {
         if let Some(value) = self.map.get(&code) {
-            Some(value.clone())
+            Some(*value)
         } else if self.is_identity_cmap() {
             if code <= 0xFFFF { Some(code) } else { None }
         } else {
@@ -116,7 +116,7 @@ impl CMap {
         let mut i = 0;
 
         while current_low <= high && i < array.len() {
-            self.map.insert(current_low, array[i].clone());
+            self.map.insert(current_low, array[i]);
             current_low += 1;
             i += 1;
         }
@@ -159,7 +159,7 @@ impl CMap {
 }
 
 fn bf_string_char(str: &str) -> u32 {
-    str.chars().nth(0).unwrap_or(0 as char) as u32
+    str.chars().next().unwrap_or(0 as char) as u32
 }
 
 fn str_to_int(s: &str) -> u32 {
@@ -169,7 +169,7 @@ fn str_to_int(s: &str) -> u32 {
         // we can safely cast back to get the original byte value
         a = (a << 8) | (ch as u32 & 0xFF);
     }
-    a & 0xFFFFFFFF
+    a
 }
 
 fn expect_string(obj: &Token) -> Option<String> {
@@ -202,7 +202,7 @@ enum Token {
     Integer(i32),
     Command(String),
     Name(String),
-    EOF,
+    Eof,
 }
 
 struct CMapLexer<'a> {
@@ -219,7 +219,7 @@ impl<'a> CMapLexer<'a> {
         self.skip_whitespace();
 
         if self.position >= self.input.len() {
-            return Token::EOF;
+            return Token::Eof;
         }
 
         let remaining = &self.input[self.position..];
@@ -394,7 +394,7 @@ impl<'a> CMapLexer<'a> {
         }
 
         if token.is_empty() {
-            return Token::EOF;
+            return Token::Eof;
         }
 
         if let Ok(num) = token.parse::<i32>() {
@@ -409,7 +409,7 @@ fn parse_bf_char(cmap: &mut CMap, lexer: &mut CMapLexer) -> Option<()> {
     loop {
         let obj = lexer.get_obj();
         match obj {
-            Token::EOF => break,
+            Token::Eof => break,
             Token::Command(cmd) if cmd == "endbfchar" => return Some(()),
             ref token => {
                 let src_str = expect_string(token)?;
@@ -440,7 +440,7 @@ fn parse_bf_range(cmap: &mut CMap, lexer: &mut CMapLexer) -> Option<()> {
     loop {
         let obj = lexer.get_obj();
         match obj {
-            Token::EOF => break,
+            Token::Eof => break,
             Token::Command(cmd) if cmd == "endbfrange" => return Some(()),
             ref token => {
                 let low_str = expect_string(token)?;
@@ -466,7 +466,7 @@ fn parse_bf_range(cmap: &mut CMap, lexer: &mut CMapLexer) -> Option<()> {
                                     let array_obj = lexer.get_obj();
                                     match array_obj {
                                         Token::Command(cmd) if cmd == "]" => break,
-                                        Token::EOF => break,
+                                        Token::Eof => break,
                                         Token::Integer(val) => array.push(val as u32),
                                         ref arr_token => {
                                             if let Some(val_str) = expect_string(arr_token) {
@@ -495,7 +495,7 @@ fn parse_cid_char(cmap: &mut CMap, lexer: &mut CMapLexer) -> Option<()> {
     loop {
         let obj = lexer.get_obj();
         match obj {
-            Token::EOF => break,
+            Token::Eof => break,
             Token::Command(cmd) if cmd == "endcidchar" => return Some(()),
             ref token => {
                 let src_str = expect_string(token)?;
@@ -514,7 +514,7 @@ fn parse_cid_range(cmap: &mut CMap, lexer: &mut CMapLexer) -> Option<()> {
     loop {
         let obj = lexer.get_obj();
         match obj {
-            Token::EOF => break,
+            Token::Eof => break,
             Token::Command(cmd) if cmd == "endcidrange" => return Some(()),
             ref token => {
                 let low_str = expect_string(token)?;
@@ -539,7 +539,7 @@ fn parse_codespace_range(cmap: &mut CMap, lexer: &mut CMapLexer) -> Option<()> {
     loop {
         let obj = lexer.get_obj();
         match obj {
-            Token::EOF => break,
+            Token::Eof => break,
             Token::Command(cmd) if cmd == "endcodespacerange" => return Some(()),
             ref token => {
                 let low_str = expect_string(token)?;
@@ -590,7 +590,7 @@ pub fn parse_cmap(input: &str) -> Option<CMap> {
     loop {
         let obj = lexer.get_obj();
         match obj {
-            Token::EOF => break,
+            Token::Eof => break,
             Token::Name(ref name) => {
                 if name == "WMode" {
                     parse_wmode(&mut cmap, &mut lexer)?;
@@ -740,7 +740,7 @@ endcodespacerange"#
         let input = r#"/WMode 1 def"#.to_string();
 
         let cmap = parse_cmap(&input).unwrap();
-        assert_eq!(cmap.vertical, true);
+        assert!(cmap.vertical);
     }
 
     #[test]
@@ -748,7 +748,7 @@ endcodespacerange"#
         let cmap = CMap::identity_h();
 
         assert_eq!(cmap.name, "Identity-H");
-        assert_eq!(cmap.vertical, false);
+        assert!(!cmap.vertical);
 
         assert_eq!(cmap.lookup_code(0x41), Some(0x41));
         assert_eq!(cmap.lookup_code(0x1234), Some(0x1234));
@@ -766,7 +766,7 @@ endcodespacerange"#
         let cmap = CMap::identity_v();
 
         assert_eq!(cmap.name, "Identity-V");
-        assert_eq!(cmap.vertical, true);
+        assert!(cmap.vertical);
 
         assert_eq!(cmap.lookup_code(0x41), Some(0x41));
         assert_eq!(cmap.lookup_code(0x1234), Some(0x1234));

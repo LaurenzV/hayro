@@ -283,7 +283,7 @@ fn read_encoding(object: &Object) -> Option<CMap> {
             IDENTITY_H => Some(CMap::identity_h()),
             IDENTITY_V => Some(CMap::identity_v()),
             _ => {
-                warn!("built-in encodings are not supported yet: {:?}", n);
+                warn!("built-in encodings are not supported yet: {n:?}");
 
                 None
             }
