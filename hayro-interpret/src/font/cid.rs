@@ -1,5 +1,5 @@
 use crate::font::blob::{CffFontBlob, OpenTypeFontBlob};
-use crate::font::cmap::{CMap, parse_cmap};
+use crate::font::cmap::{CMap, CMapValue, parse_cmap};
 use crate::{CacheKey, InterpreterWarning, WarningSinkFn};
 use hayro_syntax::bit_reader::BitReader;
 use hayro_syntax::object::Dict;

@@ -158,8 +158,7 @@ impl<'a> TextState<'a> {
         self.text_matrix *= Affine::new([1.0, 0.0, 0.0, 1.0, tx as f64, ty as f64]);
     }
 
-    pub(crate) fn apply_code_advance(&mut self, char_code: u32) {
-        let not_cid = self.font.as_ref().map(|f| !f.is_cid()).unwrap_or(true);
+    pub(crate) fn apply_code_advance(&mut self, char_code: u32, code_len: usize) {
         let glyph_advance = self
             .font
             .as_ref()
@@ -167,7 +166,7 @@ impl<'a> TextState<'a> {
             .unwrap_or(Vec2::ZERO);
         let horizontal = self.font_horizontal();
 
-        let word_space = if char_code == 32 && not_cid {
+        let word_space = if char_code == 32 && code_len == 1 {
             self.word_space
         } else {
             0.0

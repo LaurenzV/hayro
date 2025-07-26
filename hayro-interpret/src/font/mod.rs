@@ -161,10 +161,6 @@ impl<'a> Font<'a> {
         Some(Self(cache_key, f_type))
     }
 
-    pub(crate) fn is_cid(&self) -> bool {
-        matches!(self.1, FontType::Type0(_))
-    }
-
     pub(crate) fn map_code(&self, code: u32) -> GlyphId {
         match &self.1 {
             FontType::Type1(f) => {

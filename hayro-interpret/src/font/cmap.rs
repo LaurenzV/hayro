@@ -19,6 +19,12 @@ pub enum CMapValue {
     BfString(String),
 }
 
+#[derive(Debug)]
+pub struct CharCodeResult {
+    pub charcode: u32,
+    pub length: usize,
+}
+
 impl CMap {
     pub fn new(built_in_cmap: bool) -> Self {
         CMap {
@@ -30,26 +36,6 @@ impl CMap {
             use_cmap: None,
             built_in_cmap,
         }
-    }
-
-    /// Creates an Identity-H CMap (horizontal identity mapping)
-    pub fn identity_h() -> Self {
-        let mut cmap = CMap::new(true);
-        cmap.name = "Identity-H".to_string();
-        cmap.vertical = false;
-        // Add 2-byte codespace range covering all possible 2-byte values
-        cmap.add_codespace_range(2, 0, 0xFFFF);
-        cmap
-    }
-
-    /// Creates an Identity-V CMap (vertical identity mapping)
-    pub fn identity_v() -> Self {
-        let mut cmap = CMap::new(true);
-        cmap.name = "Identity-V".to_string();
-        cmap.vertical = true;
-        // Add 2-byte codespace range covering all possible 2-byte values
-        cmap.add_codespace_range(2, 0, 0xFFFF);
-        cmap
     }
 
     pub fn add_codespace_range(&mut self, n: usize, low: u32, high: u32) {
@@ -133,15 +119,6 @@ impl CMap {
     }
 
     pub fn lookup(&self, code: u32) -> Option<CMapValue> {
-        // For Identity CMaps, map directly to CID
-        if self.is_identity_cmap() {
-            if code <= 0xFFFF {
-                return Some(CMapValue::Cid(code));
-            } else {
-                return None;
-            }
-        }
-
         if let Some(value) = self.map.get(&code) {
             Some(value.clone())
         } else if let Some(ref use_cmap) = self.use_cmap {
@@ -151,17 +128,7 @@ impl CMap {
         }
     }
 
-    /// Check if this is an Identity CMap
-    pub fn is_identity_cmap(&self) -> bool {
-        self.built_in_cmap && (self.name == "Identity-H" || self.name == "Identity-V")
-    }
-
     pub fn contains(&self, code: u32) -> bool {
-        // For Identity CMaps, contains all codes up to 0xFFFF
-        if self.is_identity_cmap() {
-            return code <= 0xFFFF;
-        }
-
         self.map.contains_key(&code)
             || self
                 .use_cmap
@@ -239,14 +206,43 @@ impl CMap {
     pub fn length(&self) -> usize {
         self.map.len()
     }
+
+    pub fn get_map(&self) -> &HashMap<u32, CMapValue> {
+        &self.map
+    }
+
+    pub fn for_each<F>(&self, mut callback: F)
+    where
+        F: FnMut(usize, &CMapValue),
+    {
+        // Most maps have fewer than 65536 entries, and for those we use normal
+        // array iteration. But really sparse tables are possible -- e.g. with
+        // indices in the *billions*. For such tables we use for..in, which isn't
+        // ideal because it stringifies the indices for all present elements, but
+        // it does avoid iterating over every undefined entry.
+        let length = self.map.len();
+        if length <= 0x10000 {
+            for (&i, value) in &self.map {
+                callback(i as usize, value);
+            }
+        } else {
+            // For very large sparse arrays, we still iterate normally in Rust
+            // since we don't have the same performance concerns as JavaScript's for..in
+            for (&i, value) in &self.map {
+                callback(i as usize, value);
+            }
+        }
+    }
 }
 
 fn str_to_int(s: &str) -> u32 {
     let mut a = 0u32;
-    for byte in s.bytes() {
-        a = (a << 8) | byte as u32;
+    for ch in s.chars() {
+        // Since we created these strings from bytes using char::from(byte),
+        // we can safely cast back to get the original byte value
+        a = (a << 8) | (ch as u32 & 0xFF);
     }
-    a
+    a & 0xFFFFFFFF
 }
 
 fn bytes_to_int(bytes: &[u8]) -> u32 {
@@ -257,14 +253,170 @@ fn bytes_to_int(bytes: &[u8]) -> u32 {
     a
 }
 
-fn expect_string(_token: &str) -> Result<(), String> {
-    // In this simplified implementation, we assume all tokens are valid strings
-    Ok(())
+// A special case of CMap, where the _map array implicitly has a length of
+// 65536 and each element is equal to its index.
+#[derive(Debug, Clone)]
+pub struct IdentityCMap {
+    pub vertical: bool,
+    pub name: String,
+    codespace_ranges: [Vec<u32>; 4],
+    num_codespace_ranges: usize,
 }
 
-fn expect_int(_value: i32) -> Result<(), String> {
-    // Simple validation that the value is a valid integer
-    Ok(())
+impl IdentityCMap {
+    pub fn new(vertical: bool, n: usize) -> Self {
+        let mut cmap = IdentityCMap {
+            vertical,
+            name: if vertical {
+                "Identity-V".to_string()
+            } else {
+                "Identity-H".to_string()
+            },
+            codespace_ranges: [Vec::new(), Vec::new(), Vec::new(), Vec::new()],
+            num_codespace_ranges: 0,
+        };
+        cmap.add_codespace_range(n, 0, 0xffff);
+        cmap
+    }
+
+    fn add_codespace_range(&mut self, n: usize, low: u32, high: u32) {
+        if n > 0 && n <= 4 {
+            self.codespace_ranges[n - 1].push(low);
+            self.codespace_ranges[n - 1].push(high);
+            self.num_codespace_ranges += 1;
+        }
+    }
+
+    pub fn lookup(&self, code: u32) -> Option<CMapValue> {
+        if code <= 0xffff {
+            Some(CMapValue::Cid(code))
+        } else {
+            None
+        }
+    }
+
+    pub fn contains(&self, code: u32) -> bool {
+        code <= 0xffff
+    }
+
+    pub fn for_each<F>(&self, mut callback: F)
+    where
+        F: FnMut(usize, &CMapValue),
+    {
+        for i in 0..=0xffff {
+            let value = CMapValue::Cid(i);
+            callback(i as usize, &value);
+        }
+    }
+
+    pub fn length(&self) -> usize {
+        0x10000
+    }
+
+    pub fn read_char_code(&self, s: &str, offset: usize, out: &mut CharCodeResult) {
+        let mut c = 0u32;
+        let bytes = s.as_bytes();
+        let codespace_ranges = &self.codespace_ranges;
+
+        // 9.7.6.2 CMap Mapping - The code length is at most 4
+        for n in 0..codespace_ranges.len() {
+            if offset + n >= bytes.len() {
+                break;
+            }
+            c = ((c << 8) | bytes[offset + n] as u32) & 0xFFFFFFFF;
+
+            // Check each codespace range to see if it falls within
+            let codespace_range = &codespace_ranges[n];
+            let mut k = 0;
+            while k < codespace_range.len() {
+                let low = codespace_range[k];
+                k += 1;
+                let high = codespace_range[k];
+                k += 1;
+                if c >= low && c <= high {
+                    out.charcode = c;
+                    out.length = n + 1;
+                    return;
+                }
+            }
+        }
+
+        out.charcode = 0;
+        out.length = 1;
+    }
+
+    pub fn read_char_code_bytes(&self, bytes: &[u8], offset: usize, out: &mut CharCodeResult) {
+        let mut c = 0u32;
+        let codespace_ranges = &self.codespace_ranges;
+
+        // 9.7.6.2 CMap Mapping - The code length is at most 4
+        for n in 0..codespace_ranges.len() {
+            if offset + n >= bytes.len() {
+                break;
+            }
+            c = ((c << 8) | bytes[offset + n] as u32) & 0xFFFFFFFF;
+
+            // Check each codespace range to see if it falls within
+            let codespace_range = &codespace_ranges[n];
+            let mut k = 0;
+            while k < codespace_range.len() {
+                let low = codespace_range[k];
+                k += 1;
+                let high = codespace_range[k];
+                k += 1;
+                if c >= low && c <= high {
+                    out.charcode = c;
+                    out.length = n + 1;
+                    return;
+                }
+            }
+        }
+
+        out.charcode = 0;
+        out.length = 1;
+    }
+}
+
+// Helper functions for backward compatibility
+impl CMap {
+    pub fn identity_h() -> Self {
+        let mut cmap = CMap::new(true);
+        cmap.name = "Identity-H".to_string();
+        cmap.vertical = false;
+        cmap.add_codespace_range(2, 0, 0xFFFF);
+        cmap
+    }
+
+    pub fn identity_v() -> Self {
+        let mut cmap = CMap::new(true);
+        cmap.name = "Identity-V".to_string();
+        cmap.vertical = true;
+        cmap.add_codespace_range(2, 0, 0xFFFF);
+        cmap
+    }
+}
+
+fn expect_string(obj: &Token) -> Result<String, String> {
+    match obj {
+        Token::HexString(bytes) => {
+            // Convert bytes to string the same way pdf.js does: using String.fromCharCode
+            // Each byte becomes a character with that character code
+            let mut result = String::new();
+            for &byte in bytes {
+                result.push(char::from(byte));
+            }
+            Ok(result)
+        }
+        Token::String(s) => Ok(s.clone()),
+        _ => Err("Malformed CMap: expected string.".to_string()),
+    }
+}
+
+fn expect_int(obj: &Token) -> Result<i32, String> {
+    match obj {
+        Token::Integer(i) => Ok(*i),
+        _ => Err("Malformed CMap: expected int.".to_string()),
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -296,6 +448,21 @@ impl CMapLexer {
         }
 
         let remaining = &self.input[self.position..];
+
+        // Handle PostScript comments (% to end of line)
+        if remaining.starts_with('%') {
+            // Skip to end of line
+            while self.position < self.input.len() {
+                let ch = self.input.chars().nth(self.position).unwrap();
+                self.position += 1;
+                if ch == '\n' || ch == '\r' {
+                    break;
+                }
+            }
+            // Skip any additional whitespace and try again
+            self.skip_whitespace();
+            return self.get_obj();
+        }
 
         // Handle dictionary delimiters
         if remaining.starts_with(">>") {
@@ -473,18 +640,13 @@ pub fn parse_bf_char(cmap: &mut CMap, lexer: &mut CMapLexer) -> Result<(), Strin
         match obj {
             Token::EOF => break,
             Token::Command(cmd) if cmd == "endbfchar" => return Ok(()),
-            Token::HexString(src_bytes) => {
-                let src = bytes_to_int(&src_bytes);
+            ref token => {
+                let src_str = expect_string(token)?;
+                let src = str_to_int(&src_str);
                 let dst_obj = lexer.get_obj();
-                match dst_obj {
-                    Token::HexString(dst_bytes) => {
-                        let dst_string = String::from_utf8_lossy(&dst_bytes).to_string();
-                        cmap.map_one(src, CMapValue::BfString(dst_string));
-                    }
-                    _ => return Err("Expected string after bf char source".to_string()),
-                }
+                let dst_str = expect_string(&dst_obj)?;
+                cmap.map_one(src, CMapValue::BfString(dst_str));
             }
-            _ => return Err("Expected string in bf char".to_string()),
         }
     }
     Ok(())
@@ -496,47 +658,51 @@ pub fn parse_bf_range(cmap: &mut CMap, lexer: &mut CMapLexer) -> Result<(), Stri
         match obj {
             Token::EOF => break,
             Token::Command(cmd) if cmd == "endbfrange" => return Ok(()),
-            Token::HexString(low_bytes) => {
-                let low = bytes_to_int(&low_bytes);
+            ref token => {
+                let low_str = expect_string(token)?;
+                let low = str_to_int(&low_str);
 
                 let high_obj = lexer.get_obj();
-                let high = match high_obj {
-                    Token::HexString(high_bytes) => bytes_to_int(&high_bytes),
-                    _ => return Err("Expected string for high value in bf range".to_string()),
-                };
+                let high_str = expect_string(&high_obj)?;
+                let high = str_to_int(&high_str);
 
                 let dst_obj = lexer.get_obj();
                 match dst_obj {
                     Token::Integer(dst_int) => {
-                        let dst_low = String::from_utf8(vec![dst_int as u8]).unwrap_or_default();
+                        let dst_low = char::from(dst_int as u8).to_string();
                         cmap.map_bf_range(low, high, dst_low)?;
                     }
-                    Token::HexString(dst_bytes) => {
-                        let dst_string = String::from_utf8_lossy(&dst_bytes).to_string();
-                        cmap.map_bf_range(low, high, dst_string)?;
-                    }
-                    Token::Command(cmd) if cmd == "[" => {
-                        let mut array = Vec::new();
-                        loop {
-                            let array_obj = lexer.get_obj();
-                            match array_obj {
-                                Token::Command(cmd) if cmd == "]" => break,
-                                Token::EOF => break,
-                                Token::Integer(val) => array.push(CMapValue::Cid(val as u32)),
-                                Token::HexString(val_bytes) => {
-                                    let val_string =
-                                        String::from_utf8_lossy(&val_bytes).to_string();
-                                    array.push(CMapValue::BfString(val_string));
+                    ref token => {
+                        if let Ok(dst_str) = expect_string(token) {
+                            cmap.map_bf_range(low, high, dst_str)?;
+                        } else if let Token::Command(cmd) = token {
+                            if cmd == "[" {
+                                let mut array = Vec::new();
+                                loop {
+                                    let array_obj = lexer.get_obj();
+                                    match array_obj {
+                                        Token::Command(cmd) if cmd == "]" => break,
+                                        Token::EOF => break,
+                                        Token::Integer(val) => {
+                                            array.push(CMapValue::Cid(val as u32))
+                                        }
+                                        ref arr_token => {
+                                            if let Ok(val_str) = expect_string(arr_token) {
+                                                array.push(CMapValue::BfString(val_str));
+                                            }
+                                        }
+                                    }
                                 }
-                                _ => {}
+                                cmap.map_bf_range_to_array(low, high, array)?;
+                            } else {
+                                return Err("Invalid bf range destination".to_string());
                             }
+                        } else {
+                            return Err("Invalid bf range destination".to_string());
                         }
-                        cmap.map_bf_range_to_array(low, high, array)?;
                     }
-                    _ => return Err("Invalid bf range destination".to_string()),
                 }
             }
-            _ => return Err("Expected string in bf range".to_string()),
         }
     }
     Ok(())
@@ -548,17 +714,13 @@ pub fn parse_cid_char(cmap: &mut CMap, lexer: &mut CMapLexer) -> Result<(), Stri
         match obj {
             Token::EOF => break,
             Token::Command(cmd) if cmd == "endcidchar" => return Ok(()),
-            Token::HexString(src_bytes) => {
-                let src = bytes_to_int(&src_bytes);
+            ref token => {
+                let src_str = expect_string(token)?;
+                let src = str_to_int(&src_str);
                 let dst_obj = lexer.get_obj();
-                match dst_obj {
-                    Token::Integer(dst) => {
-                        cmap.map_one(src, CMapValue::Cid(dst as u32));
-                    }
-                    _ => return Err("Expected integer after cid char source".to_string()),
-                }
+                let dst = expect_int(&dst_obj)?;
+                cmap.map_one(src, CMapValue::Cid(dst as u32));
             }
-            _ => return Err("Expected string in cid char".to_string()),
         }
     }
     Ok(())
@@ -570,24 +732,19 @@ pub fn parse_cid_range(cmap: &mut CMap, lexer: &mut CMapLexer) -> Result<(), Str
         match obj {
             Token::EOF => break,
             Token::Command(cmd) if cmd == "endcidrange" => return Ok(()),
-            Token::HexString(low_bytes) => {
-                let low = bytes_to_int(&low_bytes);
+            ref token => {
+                let low_str = expect_string(token)?;
+                let low = str_to_int(&low_str);
 
                 let high_obj = lexer.get_obj();
-                let high = match high_obj {
-                    Token::HexString(high_bytes) => bytes_to_int(&high_bytes),
-                    _ => return Err("Expected string for high value in cid range".to_string()),
-                };
+                let high_str = expect_string(&high_obj)?;
+                let high = str_to_int(&high_str);
 
                 let dst_obj = lexer.get_obj();
-                match dst_obj {
-                    Token::Integer(dst_low) => {
-                        cmap.map_cid_range(low, high, dst_low as u32)?;
-                    }
-                    _ => return Err("Expected integer for destination in cid range".to_string()),
-                }
+                let dst_low = expect_int(&dst_obj)?;
+
+                cmap.map_cid_range(low, high, dst_low as u32)?;
             }
-            _ => return Err("Expected string in cid range".to_string()),
         }
     }
     Ok(())
@@ -596,29 +753,25 @@ pub fn parse_cid_range(cmap: &mut CMap, lexer: &mut CMapLexer) -> Result<(), Str
 pub fn parse_codespace_range(cmap: &mut CMap, lexer: &mut CMapLexer) -> Result<(), String> {
     loop {
         let obj = lexer.get_obj();
-        // println!("In parse_codespace_range, token: {:?}", obj);
         match obj {
             Token::EOF => break,
             Token::Command(cmd) if cmd == "endcodespacerange" => return Ok(()),
-            Token::HexString(low_bytes) => {
-                let low = bytes_to_int(&low_bytes);
-                // println!("Low value: {}, bytes: {:?}, byte_len: {}", low, low_bytes, low_bytes.len());
+            ref token => {
+                let low_str = expect_string(token)?;
+                if low_str.is_empty() {
+                    continue;
+                }
+                let low = str_to_int(&low_str);
 
                 let high_obj = lexer.get_obj();
-                // println!("High token: {:?}", high_obj);
-                match high_obj {
-                    Token::HexString(high_bytes) => {
-                        let high = bytes_to_int(&high_bytes);
-                        // println!("High value: {}, bytes: {:?}, byte_len: {}", high, high_bytes, high_bytes.len());
-                        // println!("Adding codespace range: n={}, low={}, high={}", high_bytes.len(), low, high);
-                        cmap.add_codespace_range(high_bytes.len(), low, high);
-                    }
-                    _ => {
-                        return Err("Expected string for high value in codespace range".to_string());
-                    }
+                let high_str = expect_string(&high_obj)?;
+                if high_str.is_empty() {
+                    return Err("Invalid codespace range.".to_string());
                 }
+                let high = str_to_int(&high_str);
+
+                cmap.add_codespace_range(high_str.chars().count(), low, high);
             }
-            _ => return Err("Expected string in codespace range".to_string()),
         }
     }
     Ok(())
@@ -626,13 +779,10 @@ pub fn parse_codespace_range(cmap: &mut CMap, lexer: &mut CMapLexer) -> Result<(
 
 pub fn parse_wmode(cmap: &mut CMap, lexer: &mut CMapLexer) -> Result<(), String> {
     let obj = lexer.get_obj();
-    match obj {
-        Token::Integer(val) => {
-            cmap.vertical = val != 0;
-            Ok(())
-        }
-        _ => Err("Expected integer for WMode".to_string()),
+    if let Ok(val) = expect_int(&obj) {
+        cmap.vertical = val != 0;
     }
+    Ok(())
 }
 
 pub fn parse_cmap_name(cmap: &mut CMap, lexer: &mut CMapLexer) -> Result<(), String> {
@@ -642,17 +792,17 @@ pub fn parse_cmap_name(cmap: &mut CMap, lexer: &mut CMapLexer) -> Result<(), Str
             cmap.name = name;
             Ok(())
         }
-        _ => Err("Expected name for CMapName".to_string()),
+        _ => Ok(()), // Don't error on unexpected tokens, just ignore
     }
 }
 
 pub fn parse_cmap(input: String) -> Result<CMap, String> {
     let mut cmap = CMap::new(false);
     let mut lexer = CMapLexer::new(input);
+    let mut previous: Option<Token> = None;
 
     loop {
         let obj = lexer.get_obj();
-        // println!("Token: {:?}", obj);  // Debug line
         match obj {
             Token::EOF => break,
             Token::Name(ref name) => {
@@ -661,16 +811,16 @@ pub fn parse_cmap(input: String) -> Result<CMap, String> {
                 } else if name == "CMapName" {
                     parse_cmap_name(&mut cmap, &mut lexer)?;
                 }
-                // Skip other names like CIDInit, FontName, etc.
+                previous = Some(obj);
             }
             Token::Command(ref cmd) => {
                 match cmd.as_str() {
                     "endcmap" => break,
                     "usecmap" => {
                         // Handle usecmap - for now just skip
+                        // In pdf.js this would set embeddedUseCMap from previous
                     }
                     "begincodespacerange" => {
-                        // println!("Found begincodespacerange");
                         parse_codespace_range(&mut cmap, &mut lexer)?;
                     }
                     "beginbfchar" => {
@@ -683,7 +833,6 @@ pub fn parse_cmap(input: String) -> Result<CMap, String> {
                         parse_bf_range(&mut cmap, &mut lexer)?;
                     }
                     "begincidrange" => {
-                        // println!("Found begincidrange");
                         parse_cid_range(&mut cmap, &mut lexer)?;
                     }
                     // Skip PostScript constructs and other unknown commands
@@ -859,12 +1008,13 @@ endcodespacerange"#
         let cmap = parse_cmap(input).unwrap();
 
         // Debug: Check if codespace ranges were parsed correctly
-        // println!("Codespace ranges: {:?}", cmap.codespace_ranges);
-        // println!("Num codespace ranges: {}", cmap.num_codespace_ranges);
+        println!("Codespace ranges: {:?}", cmap.codespace_ranges);
+        println!("Num codespace ranges: {}", cmap.num_codespace_ranges);
 
         // Use the new read_char_code_bytes method to handle raw bytes
         let test_bytes = [0x8E, 0xA1, 0xA1, 0xA1];
         let (charcode, length) = cmap.read_char_code_bytes(&test_bytes, 0);
+        println!("Got charcode: {:#x}, length: {}", charcode, length);
         assert_eq!(charcode, 0x8ea1a1a1);
         assert_eq!(length, 4);
     }
@@ -887,12 +1037,10 @@ endcodespacerange"#
 
     #[test]
     fn test_identity_h_cmap() {
-        let cmap = CMap::identity_h();
+        let cmap = IdentityCMap::new(false, 2);
 
         assert_eq!(cmap.name, "Identity-H");
         assert_eq!(cmap.vertical, false);
-        assert!(cmap.built_in_cmap);
-        assert!(cmap.is_identity_cmap());
 
         // Test identity mapping
         assert_eq!(cmap.lookup(0x41), Some(CMapValue::Cid(0x41))); // 'A'
@@ -907,19 +1055,21 @@ endcodespacerange"#
 
         // Test read_char_code with 2-byte values
         let test_bytes = [0x12, 0x34];
-        let (charcode, length) = cmap.read_char_code_bytes(&test_bytes, 0);
-        assert_eq!(charcode, 0x1234);
-        assert_eq!(length, 2);
+        let mut result = CharCodeResult {
+            charcode: 0,
+            length: 0,
+        };
+        cmap.read_char_code_bytes(&test_bytes, 0, &mut result);
+        assert_eq!(result.charcode, 0x1234);
+        assert_eq!(result.length, 2);
     }
 
     #[test]
     fn test_identity_v_cmap() {
-        let cmap = CMap::identity_v();
+        let cmap = IdentityCMap::new(true, 2);
 
         assert_eq!(cmap.name, "Identity-V");
         assert_eq!(cmap.vertical, true);
-        assert!(cmap.built_in_cmap);
-        assert!(cmap.is_identity_cmap());
 
         // Test identity mapping
         assert_eq!(cmap.lookup(0x41), Some(CMapValue::Cid(0x41))); // 'A'
@@ -986,5 +1136,35 @@ end"#
         assert_eq!(cmap.lookup(0xFF), Some(CMapValue::Cid(255)));
         assert_eq!(cmap.lookup(0x100), None); // Beyond range
         assert_eq!(cmap.name, "Identity-H");
+    }
+
+    #[test]
+    fn another_cmap() {
+        let loaded = std::str::from_utf8(
+            &std::fs::read(
+                "/Users/lstampfl/Programming/GitHub/hayro/hayro-interpret/src/font/cmap.txt",
+            )
+            .unwrap(),
+        )
+        .unwrap()
+        .to_string();
+        let cmap = parse_cmap(loaded).unwrap();
+
+        // Verify the CMAP was parsed correctly
+        assert_eq!(cmap.name, "CM10");
+        assert!(!cmap.vertical);
+        assert_eq!(cmap.num_codespace_ranges, 1);
+        assert_eq!(cmap.codespace_ranges[1], vec![0, 65535]); // 2-byte range 0x0000-0xFFFF
+        assert!(!cmap.map.is_empty()); // Should have character mappings
+
+        // Test a few specific mappings from the file
+        assert_eq!(
+            cmap.lookup(0x20),
+            Some(CMapValue::BfString("\0\u{3}".to_string()))
+        ); // space
+        assert_eq!(
+            cmap.lookup(0x21),
+            Some(CMapValue::BfString("\0\u{4}".to_string()))
+        ); // exclamation
     }
 }

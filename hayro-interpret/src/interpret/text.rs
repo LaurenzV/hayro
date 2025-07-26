@@ -36,7 +36,7 @@ pub(crate) fn show_text_string<'a>(
         );
         show_glyph(ctx, device, &glyph);
 
-        ctx.get_mut().text_state.apply_code_advance(code);
+        ctx.get_mut().text_state.apply_code_advance(code, adv);
     }
 }
 
