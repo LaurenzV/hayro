@@ -28,6 +28,7 @@ use std::sync::Arc;
 
 mod blob;
 mod cid;
+mod cmap;
 mod generated;
 mod glyph_simulator;
 pub(crate) mod outline;
@@ -35,7 +36,6 @@ mod standard_font;
 mod true_type;
 mod type1;
 pub(crate) mod type3;
-mod cmap;
 
 pub(crate) const UNITS_PER_EM: f32 = 1000.0;
 
@@ -160,7 +160,7 @@ impl<'a> Font<'a> {
 
         Some(Self(cache_key, f_type))
     }
-    
+
     pub(crate) fn is_cid(&self) -> bool {
         matches!(self.1, FontType::Type0(_))
     }
@@ -268,7 +268,7 @@ impl<'a> Font<'a> {
             FontType::Type3(_) => Vec2::default(),
         }
     }
-    
+
     pub(crate) fn read_code(&self, bytes: &[u8], offset: usize) -> (u32, usize) {
         match &self.1 {
             FontType::Type1(_) => (bytes[offset] as u32, 1),

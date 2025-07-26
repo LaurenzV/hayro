@@ -84,3 +84,6 @@ issue6769
 issue8895
 endchar
 standard_fonts_no_system_fonts
+issue1597
+issue10519
+issue13242

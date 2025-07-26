@@ -1,10 +1,12 @@
 use crate::font::blob::{CffFontBlob, OpenTypeFontBlob};
+use crate::font::cmap::{CMap, parse_cmap};
 use crate::{CacheKey, InterpreterWarning, WarningSinkFn};
-use hayro_syntax::object::{Array, Object};
+use hayro_syntax::bit_reader::BitReader;
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Name;
 use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::*;
+use hayro_syntax::object::{Array, Object};
 use kurbo::{BezPath, Vec2};
 use log::warn;
 use skrifa::raw::TableProvider;
@@ -12,8 +14,6 @@ use skrifa::{FontRef, GlyphId};
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::sync::Arc;
-use hayro_syntax::bit_reader::BitReader;
-use crate::font::cmap::{parse_cmap, CMap};
 
 #[derive(Debug)]
 pub(crate) struct Type0Font {
@@ -111,7 +111,7 @@ impl Type0Font {
     pub(crate) fn is_horizontal(&self) -> bool {
         self.horizontal
     }
-    
+
     pub(crate) fn read_code(&self, bytes: &[u8], offset: usize) -> (u32, usize) {
         self.cmap.read_char_code_bytes(bytes, offset)
     }
@@ -273,23 +273,21 @@ fn read_widths2(arr: &Array) -> Option<HashMap<u32, [f32; 3]>> {
 
 fn read_encoding(object: &Object) -> Option<CMap> {
     match object {
-        Object::Name(n) => {
-            match n.deref() {
-                IDENTITY_H => Some(CMap::identity_h()),
-                IDENTITY_V => Some(CMap::identity_v()),
-                _ => {
-                    warn!("built-in encodings are not supported yet: {:?}", n);
-                    
-                    None
-                }
+        Object::Name(n) => match n.deref() {
+            IDENTITY_H => Some(CMap::identity_h()),
+            IDENTITY_V => Some(CMap::identity_v()),
+            _ => {
+                warn!("built-in encodings are not supported yet: {:?}", n);
+
+                None
             }
-        }
+        },
         Object::Stream(s) => {
             let dict = s.dict();
             if dict.contains_key(USE_CMAP) {
                 warn!("USE_CMAP is not supported yet");
             }
-            
+
             let decoded = s.decoded().ok()?;
             parse_cmap(std::str::from_utf8(&decoded).ok()?.to_string()).ok()
         }

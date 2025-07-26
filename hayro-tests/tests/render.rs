@@ -309,10 +309,13 @@ use crate::run_render_test;
 #[test] fn pdfjs_gradientfill() { run_render_test("pdfjs_gradientfill", "pdfs/pdfjs/gradientfill.pdf", None); }
 #[test] fn pdfjs_helloworld_bad() { run_render_test("pdfjs_helloworld_bad", "pdfs/pdfjs/helloworld-bad.pdf", None); }
 #[test] fn pdfjs_images_1bit_grayscale() { run_render_test("pdfjs_images_1bit_grayscale", "pdfs/pdfjs/images_1bit_grayscale.pdf", None); }
+#[test] fn pdfjs_issue10519() { run_render_test("pdfjs_issue10519", "pdfs/pdfjs/issue10519_reduced.pdf", None); }
 #[test] fn pdfjs_issue1309() { run_render_test("pdfjs_issue1309", "downloads/pdfjs/issue1309.pdf", None); }
+#[test] fn pdfjs_issue13242() { run_render_test("pdfjs_issue13242", "pdfs/pdfjs/issue13242.pdf", None); }
 #[test] fn pdfjs_issue13372() { run_render_test("pdfjs_issue13372", "pdfs/pdfjs/issue13372.pdf", None); }
 #[test] fn pdfjs_issue14297() { run_render_test("pdfjs_issue14297", "pdfs/pdfjs/issue14297.pdf", None); }
 #[test] fn pdfjs_issue15716() { run_render_test("pdfjs_issue15716", "pdfs/pdfjs/issue15716.pdf", None); }
+#[test] fn pdfjs_issue1597() { run_render_test("pdfjs_issue1597", "downloads/pdfjs/issue1597.pdf", None); }
 #[test] fn pdfjs_issue17065() { run_render_test("pdfjs_issue17065", "pdfs/pdfjs/issue17065.pdf", None); }
 #[test] fn pdfjs_issue17848() { run_render_test("pdfjs_issue17848", "pdfs/pdfjs/issue17848.pdf", None); }
 #[test] fn pdfjs_issue18816() { run_render_test("pdfjs_issue18816", "pdfs/pdfjs/issue18816.pdf", None); }

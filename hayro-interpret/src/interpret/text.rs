@@ -2,11 +2,11 @@ use crate::context::Context;
 use crate::device::Device;
 use crate::font::Glyph;
 use crate::interpret::path::get_paint;
+use hayro_syntax::bit_reader::BitReader;
 use hayro_syntax::object;
 use hayro_syntax::page::Resources;
 use kurbo::Affine;
 use log::warn;
-use hayro_syntax::bit_reader::BitReader;
 
 pub(crate) fn show_text_string<'a>(
     ctx: &mut Context<'a>,
@@ -19,7 +19,7 @@ pub(crate) fn show_text_string<'a>(
 
         return;
     };
-    
+
     let text_str = text.get();
     let bytes = text_str.as_ref();
     let mut cur_idx = 0;

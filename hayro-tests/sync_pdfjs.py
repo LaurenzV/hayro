@@ -332,9 +332,7 @@ class PDFJSSync:
         # Step 1: Add explicitly whitelisted entries (not blacklisted, not with excluded flags)
         whitelisted_entries = []
         for entry in pdfjs_manifest:
-            if (self.matches_whitelist(entry["id"]) and 
-                not self.matches_blacklist(entry["id"]) and 
-                not self.has_excluded_flags(entry)):
+            if (self.matches_whitelist(entry["id"])):
                 whitelisted_entries.append(entry)
                 matching_entries.append(entry)
                 

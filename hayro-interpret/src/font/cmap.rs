@@ -64,7 +64,7 @@ impl CMap {
         if high - low > MAX_MAP_RANGE {
             return Err("mapCidRange - ignoring data above MAX_MAP_RANGE.".to_string());
         }
-        
+
         let mut current_low = low;
         let mut current_dst = dst_low;
         while current_low <= high {
@@ -82,10 +82,11 @@ impl CMap {
 
         let mut current_low = low;
         let mut current_dst = dst_low;
-        
+
         while current_low <= high {
-            self.map.insert(current_low, CMapValue::BfString(current_dst.clone()));
-            
+            self.map
+                .insert(current_low, CMapValue::BfString(current_dst.clone()));
+
             // Increment the last byte of the string
             let mut bytes = current_dst.into_bytes();
             if let Some(last_byte) = bytes.last_mut() {
@@ -106,14 +107,19 @@ impl CMap {
         Ok(())
     }
 
-    pub fn map_bf_range_to_array(&mut self, low: u32, high: u32, array: Vec<CMapValue>) -> Result<(), String> {
+    pub fn map_bf_range_to_array(
+        &mut self,
+        low: u32,
+        high: u32,
+        array: Vec<CMapValue>,
+    ) -> Result<(), String> {
         if high - low > MAX_MAP_RANGE {
             return Err("mapBfRangeToArray - ignoring data above MAX_MAP_RANGE.".to_string());
         }
 
         let mut current_low = low;
         let mut i = 0;
-        
+
         while current_low <= high && i < array.len() {
             self.map.insert(current_low, array[i].clone());
             current_low += 1;
@@ -156,21 +162,24 @@ impl CMap {
             return code <= 0xFFFF;
         }
 
-        self.map.contains_key(&code) || 
-        self.use_cmap.as_ref().map_or(false, |use_cmap| use_cmap.contains(code))
+        self.map.contains_key(&code)
+            || self
+                .use_cmap
+                .as_ref()
+                .map_or(false, |use_cmap| use_cmap.contains(code))
     }
 
     pub fn read_char_code(&self, s: &str, offset: usize) -> (u32, usize) {
         let mut c = 0u32;
         let bytes = s.as_bytes();
-        
+
         for n in 0..4.min(bytes.len() - offset) {
             if offset + n >= bytes.len() {
                 break;
             }
-            
+
             c = (c << 8) | bytes[offset + n] as u32;
-            
+
             let codespace_range = &self.codespace_ranges[n];
             for chunk in codespace_range.chunks(2) {
                 if chunk.len() == 2 {
@@ -182,20 +191,20 @@ impl CMap {
                 }
             }
         }
-        
+
         (0, 1)
     }
 
     pub fn read_char_code_bytes(&self, bytes: &[u8], offset: usize) -> (u32, usize) {
         let mut c = 0u32;
-        
+
         for n in 0..4.min(bytes.len() - offset) {
             if offset + n >= bytes.len() {
                 break;
             }
-            
+
             c = (c << 8) | bytes[offset + n] as u32;
-            
+
             let codespace_range = &self.codespace_ranges[n];
             for chunk in codespace_range.chunks(2) {
                 if chunk.len() == 2 {
@@ -207,7 +216,7 @@ impl CMap {
                 }
             }
         }
-        
+
         (0, 1)
     }
 
@@ -281,44 +290,44 @@ impl CMapLexer {
 
     pub fn get_obj(&mut self) -> Token {
         self.skip_whitespace();
-        
+
         if self.position >= self.input.len() {
             return Token::EOF;
         }
 
         let remaining = &self.input[self.position..];
-        
+
         // Handle dictionary delimiters
         if remaining.starts_with(">>") {
             self.position += 2;
             return Token::Command(">>".to_string());
         }
-        
+
         // Handle hex strings and dictionary start
         if remaining.starts_with('<') {
             return self.parse_hex_string();
         }
-        
+
         // Handle PostScript strings (parentheses)
         if remaining.starts_with('(') {
             return self.parse_ps_string();
         }
-        
+
         // Handle arrays
         if remaining.starts_with('[') {
             return self.parse_array();
         }
-        
+
         if remaining.starts_with(']') {
             self.position += 1;
             return Token::Command("]".to_string());
         }
-        
+
         // Handle names
         if remaining.starts_with('/') {
             return self.parse_name();
         }
-        
+
         // Handle numbers and commands
         self.parse_token()
     }
@@ -341,10 +350,10 @@ impl CMapLexer {
             self.position += 2;
             return Token::Command("<<".to_string());
         }
-        
+
         self.position += 1; // Skip '<'
         let mut hex_string = String::new();
-        
+
         while self.position < self.input.len() {
             let ch = self.input.chars().nth(self.position).unwrap();
             if ch == '>' {
@@ -356,9 +365,9 @@ impl CMapLexer {
             }
             self.position += 1;
         }
-        
+
         // println!("Parsed hex string: {}", hex_string); // Debug
-        
+
         // Convert hex string to raw bytes
         let mut result_bytes = Vec::new();
         for chunk in hex_string.chars().collect::<Vec<_>>().chunks(2) {
@@ -367,12 +376,12 @@ impl CMapLexer {
             } else {
                 format!("{}0", chunk[0])
             };
-            
+
             if let Ok(byte_val) = u8::from_str_radix(&hex_byte, 16) {
                 result_bytes.push(byte_val);
             }
         }
-        
+
         // println!("Converted hex bytes: {:?}", result_bytes); // Debug
         Token::HexString(result_bytes)
     }
@@ -381,7 +390,7 @@ impl CMapLexer {
         self.position += 1; // Skip '('
         let mut string = String::new();
         let mut paren_depth = 1;
-        
+
         while self.position < self.input.len() && paren_depth > 0 {
             let ch = self.input.chars().nth(self.position).unwrap();
             match ch {
@@ -408,7 +417,7 @@ impl CMapLexer {
             }
             self.position += 1;
         }
-        
+
         Token::String(string)
     }
 
@@ -420,7 +429,7 @@ impl CMapLexer {
     fn parse_name(&mut self) -> Token {
         self.position += 1; // Skip '/'
         let mut name = String::new();
-        
+
         while self.position < self.input.len() {
             let ch = self.input.chars().nth(self.position).unwrap();
             if ch.is_whitespace() || "[]<>(){}/%".contains(ch) {
@@ -429,13 +438,13 @@ impl CMapLexer {
             name.push(ch);
             self.position += 1;
         }
-        
+
         Token::Name(name)
     }
 
     fn parse_token(&mut self) -> Token {
         let mut token = String::new();
-        
+
         while self.position < self.input.len() {
             let ch = self.input.chars().nth(self.position).unwrap();
             if ch.is_whitespace() || "[]<>(){}/%".contains(ch) {
@@ -444,11 +453,11 @@ impl CMapLexer {
             token.push(ch);
             self.position += 1;
         }
-        
+
         if token.is_empty() {
             return Token::EOF;
         }
-        
+
         // Try to parse as integer
         if let Ok(num) = token.parse::<i32>() {
             Token::Integer(num)
@@ -489,13 +498,13 @@ pub fn parse_bf_range(cmap: &mut CMap, lexer: &mut CMapLexer) -> Result<(), Stri
             Token::Command(cmd) if cmd == "endbfrange" => return Ok(()),
             Token::HexString(low_bytes) => {
                 let low = bytes_to_int(&low_bytes);
-                
+
                 let high_obj = lexer.get_obj();
                 let high = match high_obj {
                     Token::HexString(high_bytes) => bytes_to_int(&high_bytes),
                     _ => return Err("Expected string for high value in bf range".to_string()),
                 };
-                
+
                 let dst_obj = lexer.get_obj();
                 match dst_obj {
                     Token::Integer(dst_int) => {
@@ -515,7 +524,8 @@ pub fn parse_bf_range(cmap: &mut CMap, lexer: &mut CMapLexer) -> Result<(), Stri
                                 Token::EOF => break,
                                 Token::Integer(val) => array.push(CMapValue::Cid(val as u32)),
                                 Token::HexString(val_bytes) => {
-                                    let val_string = String::from_utf8_lossy(&val_bytes).to_string();
+                                    let val_string =
+                                        String::from_utf8_lossy(&val_bytes).to_string();
                                     array.push(CMapValue::BfString(val_string));
                                 }
                                 _ => {}
@@ -562,13 +572,13 @@ pub fn parse_cid_range(cmap: &mut CMap, lexer: &mut CMapLexer) -> Result<(), Str
             Token::Command(cmd) if cmd == "endcidrange" => return Ok(()),
             Token::HexString(low_bytes) => {
                 let low = bytes_to_int(&low_bytes);
-                
+
                 let high_obj = lexer.get_obj();
                 let high = match high_obj {
                     Token::HexString(high_bytes) => bytes_to_int(&high_bytes),
                     _ => return Err("Expected string for high value in cid range".to_string()),
                 };
-                
+
                 let dst_obj = lexer.get_obj();
                 match dst_obj {
                     Token::Integer(dst_low) => {
@@ -593,7 +603,7 @@ pub fn parse_codespace_range(cmap: &mut CMap, lexer: &mut CMapLexer) -> Result<(
             Token::HexString(low_bytes) => {
                 let low = bytes_to_int(&low_bytes);
                 // println!("Low value: {}, bytes: {:?}, byte_len: {}", low, low_bytes, low_bytes.len());
-                
+
                 let high_obj = lexer.get_obj();
                 // println!("High token: {:?}", high_obj);
                 match high_obj {
@@ -603,7 +613,9 @@ pub fn parse_codespace_range(cmap: &mut CMap, lexer: &mut CMapLexer) -> Result<(
                         // println!("Adding codespace range: n={}, low={}, high={}", high_bytes.len(), low, high);
                         cmap.add_codespace_range(high_bytes.len(), low, high);
                     }
-                    _ => return Err("Expected string for high value in codespace range".to_string()),
+                    _ => {
+                        return Err("Expected string for high value in codespace range".to_string());
+                    }
                 }
             }
             _ => return Err("Expected string in codespace range".to_string()),
@@ -675,8 +687,8 @@ pub fn parse_cmap(input: String) -> Result<CMap, String> {
                         parse_cid_range(&mut cmap, &mut lexer)?;
                     }
                     // Skip PostScript constructs and other unknown commands
-                    "def" | "dict" | "begin" | "end" | "findresource" | "<<" | ">>" | 
-                    "pop" | "currentdict" | "defineresource" => {
+                    "def" | "dict" | "begin" | "end" | "findresource" | "<<" | ">>" | "pop"
+                    | "currentdict" | "defineresource" => {
                         // These are PostScript constructs that we can ignore
                     }
                     _ => {
@@ -702,22 +714,23 @@ mod tests {
         let input = r#"2 beginbfchar
 <03> <00>
 <04> <01>
-endbfchar"#.to_string();
-        
+endbfchar"#
+            .to_string();
+
         let cmap = parse_cmap(input).unwrap();
-        
+
         if let Some(CMapValue::BfString(val)) = cmap.lookup(0x03) {
             assert_eq!(val.chars().next().unwrap() as u32, 0x00);
         } else {
             panic!("Expected BfString value for 0x03");
         }
-        
+
         if let Some(CMapValue::BfString(val)) = cmap.lookup(0x04) {
             assert_eq!(val.chars().next().unwrap() as u32, 0x01);
         } else {
             panic!("Expected BfString value for 0x04");
         }
-        
+
         assert!(cmap.lookup(0x05).is_none());
     }
 
@@ -725,24 +738,25 @@ endbfchar"#.to_string();
     fn test_parse_beginbfrange_with_range() {
         let input = r#"1 beginbfrange
 <06> <0B> 0
-endbfrange"#.to_string();
-        
+endbfrange"#
+            .to_string();
+
         let cmap = parse_cmap(input).unwrap();
-        
+
         assert!(cmap.lookup(0x05).is_none());
-        
+
         if let Some(CMapValue::BfString(val)) = cmap.lookup(0x06) {
             assert_eq!(val.chars().next().unwrap() as u32, 0x00);
         } else {
             panic!("Expected BfString value for 0x06");
         }
-        
+
         if let Some(CMapValue::BfString(val)) = cmap.lookup(0x0b) {
             assert_eq!(val.chars().next().unwrap() as u32, 0x05);
         } else {
             panic!("Expected BfString value for 0x0b");
         }
-        
+
         assert!(cmap.lookup(0x0c).is_none());
     }
 
@@ -750,24 +764,25 @@ endbfrange"#.to_string();
     fn test_parse_beginbfrange_with_array() {
         let input = r#"1 beginbfrange
 <0D> <12> [ 0 1 2 3 4 5 ]
-endbfrange"#.to_string();
-        
+endbfrange"#
+            .to_string();
+
         let cmap = parse_cmap(input).unwrap();
-        
+
         assert!(cmap.lookup(0x0c).is_none());
-        
+
         if let Some(CMapValue::Cid(val)) = cmap.lookup(0x0d) {
             assert_eq!(val, 0x00);
         } else {
             panic!("Expected Cid value for 0x0d");
         }
-        
+
         if let Some(CMapValue::Cid(val)) = cmap.lookup(0x12) {
             assert_eq!(val, 0x05);
         } else {
             panic!("Expected Cid value for 0x12");
         }
-        
+
         assert!(cmap.lookup(0x13).is_none());
     }
 
@@ -775,16 +790,17 @@ endbfrange"#.to_string();
     fn test_parse_begincidchar() {
         let input = r#"1 begincidchar
 <14> 0
-endcidchar"#.to_string();
-        
+endcidchar"#
+            .to_string();
+
         let cmap = parse_cmap(input).unwrap();
-        
+
         if let Some(CMapValue::Cid(val)) = cmap.lookup(0x14) {
             assert_eq!(val, 0x00);
         } else {
             panic!("Expected Cid value for 0x14");
         }
-        
+
         assert!(cmap.lookup(0x15).is_none());
     }
 
@@ -792,24 +808,25 @@ endcidchar"#.to_string();
     fn test_parse_begincidrange() {
         let input = r#"1 begincidrange
 <0016> <001B> 0
-endcidrange"#.to_string();
-        
+endcidrange"#
+            .to_string();
+
         let cmap = parse_cmap(input).unwrap();
-        
+
         assert!(cmap.lookup(0x15).is_none());
-        
+
         if let Some(CMapValue::Cid(val)) = cmap.lookup(0x16) {
             assert_eq!(val, 0x00);
         } else {
             panic!("Expected Cid value for 0x16");
         }
-        
+
         if let Some(CMapValue::Cid(val)) = cmap.lookup(0x1b) {
             assert_eq!(val, 0x05);
         } else {
             panic!("Expected Cid value for 0x1b");
         }
-        
+
         assert!(cmap.lookup(0x1c).is_none());
     }
 
@@ -818,14 +835,15 @@ endcidrange"#.to_string();
         let input = r#"1 begincodespacerange
 <01> <02>
 <00000003> <00000004>
-endcodespacerange"#.to_string();
-        
+endcodespacerange"#
+            .to_string();
+
         let cmap = parse_cmap(input).unwrap();
-        
+
         let (charcode, length) = cmap.read_char_code("\x01", 0);
         assert_eq!(charcode, 1);
         assert_eq!(length, 1);
-        
+
         let (charcode, length) = cmap.read_char_code("\x00\x00\x00\x03", 0);
         assert_eq!(charcode, 3);
         assert_eq!(length, 4);
@@ -835,14 +853,15 @@ endcodespacerange"#.to_string();
     fn test_parse_4_byte_codespace_ranges() {
         let input = r#"1 begincodespacerange
 <8EA1A1A1> <8EA1FEFE>
-endcodespacerange"#.to_string();
-        
+endcodespacerange"#
+            .to_string();
+
         let cmap = parse_cmap(input).unwrap();
-        
+
         // Debug: Check if codespace ranges were parsed correctly
         // println!("Codespace ranges: {:?}", cmap.codespace_ranges);
         // println!("Num codespace ranges: {}", cmap.num_codespace_ranges);
-        
+
         // Use the new read_char_code_bytes method to handle raw bytes
         let test_bytes = [0x8E, 0xA1, 0xA1, 0xA1];
         let (charcode, length) = cmap.read_char_code_bytes(&test_bytes, 0);
@@ -853,7 +872,7 @@ endcodespacerange"#.to_string();
     #[test]
     fn test_parse_cmap_name() {
         let input = r#"/CMapName /Identity-H def"#.to_string();
-        
+
         let cmap = parse_cmap(input).unwrap();
         assert_eq!(cmap.name, "Identity-H");
     }
@@ -861,7 +880,7 @@ endcodespacerange"#.to_string();
     #[test]
     fn test_parse_wmode() {
         let input = r#"/WMode 1 def"#.to_string();
-        
+
         let cmap = parse_cmap(input).unwrap();
         assert_eq!(cmap.vertical, true);
     }
@@ -869,23 +888,23 @@ endcodespacerange"#.to_string();
     #[test]
     fn test_identity_h_cmap() {
         let cmap = CMap::identity_h();
-        
+
         assert_eq!(cmap.name, "Identity-H");
         assert_eq!(cmap.vertical, false);
         assert!(cmap.built_in_cmap);
         assert!(cmap.is_identity_cmap());
-        
+
         // Test identity mapping
         assert_eq!(cmap.lookup(0x41), Some(CMapValue::Cid(0x41))); // 'A'
         assert_eq!(cmap.lookup(0x1234), Some(CMapValue::Cid(0x1234)));
         assert_eq!(cmap.lookup(0xFFFF), Some(CMapValue::Cid(0xFFFF)));
         assert_eq!(cmap.lookup(0x10000), None); // Beyond 2-byte range
-        
+
         // Test contains
         assert!(cmap.contains(0x41));
         assert!(cmap.contains(0xFFFF));
         assert!(!cmap.contains(0x10000));
-        
+
         // Test read_char_code with 2-byte values
         let test_bytes = [0x12, 0x34];
         let (charcode, length) = cmap.read_char_code_bytes(&test_bytes, 0);
@@ -896,18 +915,18 @@ endcodespacerange"#.to_string();
     #[test]
     fn test_identity_v_cmap() {
         let cmap = CMap::identity_v();
-        
+
         assert_eq!(cmap.name, "Identity-V");
         assert_eq!(cmap.vertical, true);
         assert!(cmap.built_in_cmap);
         assert!(cmap.is_identity_cmap());
-        
+
         // Test identity mapping
         assert_eq!(cmap.lookup(0x41), Some(CMapValue::Cid(0x41))); // 'A'
         assert_eq!(cmap.lookup(0x1234), Some(CMapValue::Cid(0x1234)));
         assert_eq!(cmap.lookup(0xFFFF), Some(CMapValue::Cid(0xFFFF)));
         assert_eq!(cmap.lookup(0x10000), None); // Beyond 2-byte range
-        
+
         // Test contains
         assert!(cmap.contains(0x41));
         assert!(cmap.contains(0xFFFF));
@@ -918,10 +937,11 @@ endcodespacerange"#.to_string();
     fn test_simple_cidrange() {
         let input = r#"1 begincidrange
 <00> <FF> 0
-endcidrange"#.to_string();
-        
+endcidrange"#
+            .to_string();
+
         let cmap = parse_cmap(input).unwrap();
-        
+
         // Should map codes 0x00-0xFF to CIDs 0-255
         assert_eq!(cmap.lookup(0x00), Some(CMapValue::Cid(0)));
         assert_eq!(cmap.lookup(0x41), Some(CMapValue::Cid(65))); // 'A'
@@ -950,15 +970,16 @@ endcidrange
 endcmap
 CMapName currentdict /CMap defineresource pop
 end
-end"#.to_string();
-        
+end"#
+            .to_string();
+
         let cmap = parse_cmap(input).unwrap();
-        
+
         // Debug: print the cmap state
         // println!("CMap name: {}", cmap.name);
         // println!("CMap num_codespace_ranges: {}", cmap.num_codespace_ranges);
         // println!("CMap map length: {}", cmap.map.len());
-        
+
         // Should successfully parse and create mapping
         assert_eq!(cmap.lookup(0x00), Some(CMapValue::Cid(0)));
         assert_eq!(cmap.lookup(0x41), Some(CMapValue::Cid(65))); // 'A'
