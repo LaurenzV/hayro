@@ -31,7 +31,7 @@ impl Type0Font {
     pub(crate) fn new(dict: &Dict, warning_sink: &WarningSinkFn) -> Option<Self> {
         let cmap = read_encoding(&dict.get::<Object>(ENCODING)?)?;
 
-        let horizontal = !cmap.vertical;
+        let horizontal = !cmap.is_vertical();
 
         let descendant_font = dict.get::<Array>(DESCENDANT_FONTS)?.iter::<Dict>().next()?;
         let font_descriptor = descendant_font.get::<Dict>(FONT_DESC)?;
@@ -298,7 +298,7 @@ fn read_encoding(object: &Object) -> Option<CMap> {
             }
 
             let decoded = s.decoded().ok()?;
-            parse_cmap(std::str::from_utf8(&decoded).ok()?.to_string()).ok()
+            parse_cmap(std::str::from_utf8(&decoded).ok()?.to_string())
         }
         _ => None,
     }

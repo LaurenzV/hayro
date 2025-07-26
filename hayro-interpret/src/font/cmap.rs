@@ -6,10 +6,10 @@ const MAX_MAP_RANGE: u32 = (1 << 24) - 1; // 0xFFFFFF
 
 #[derive(Debug, Clone)]
 pub(crate) struct CMap {
-    pub codespace_ranges: [Vec<u32>; 4],
+    codespace_ranges: [Vec<u32>; 4],
     map: HashMap<u32, CMapValue>,
-    pub name: String,
-    pub vertical: bool,
+    name: String,
+    vertical: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -18,14 +18,8 @@ pub enum CMapValue {
     BfString(String),
 }
 
-#[derive(Debug)]
-pub struct CharCodeResult {
-    pub charcode: u32,
-    pub length: usize,
-}
-
 impl CMap {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         CMap {
             codespace_ranges: [Vec::new(), Vec::new(), Vec::new(), Vec::new()],
             map: HashMap::new(),
@@ -34,16 +28,38 @@ impl CMap {
         }
     }
 
-    pub fn add_codespace_range(&mut self, n: usize, low: u32, high: u32) {
+    pub(crate) fn identity_h() -> Self {
+        let mut cmap = CMap::new();
+        
+        cmap.name = "Identity-H".to_string();
+        cmap.vertical = false;
+        cmap.add_codespace_range(2, 0, 0xFFFF);
+        cmap
+    }
+
+    pub(crate) fn identity_v() -> Self {
+        let mut cmap = CMap::new();
+        
+        cmap.name = "Identity-V".to_string();
+        cmap.vertical = true;
+        cmap.add_codespace_range(2, 0, 0xFFFF);
+        cmap
+    }
+    
+    pub(crate) fn is_vertical(&self) -> bool {
+        self.vertical
+    }
+
+    fn add_codespace_range(&mut self, n: usize, low: u32, high: u32) {
         if n > 0 && n <= 4 {
             self.codespace_ranges[n - 1].push(low);
             self.codespace_ranges[n - 1].push(high);
         }
     }
 
-    pub fn map_cid_range(&mut self, low: u32, high: u32, dst_low: u32) -> Result<(), String> {
+    fn map_cid_range(&mut self, low: u32, high: u32, dst_low: u32) -> Option<()> {
         if high - low > MAX_MAP_RANGE {
-            return Err("mapCidRange - ignoring data above MAX_MAP_RANGE.".to_string());
+            return None;
         }
 
         let mut current_low = low;
@@ -53,12 +69,13 @@ impl CMap {
             current_low += 1;
             current_dst += 1;
         }
-        Ok(())
+        
+        Some(())
     }
 
-    pub fn map_bf_range(&mut self, low: u32, high: u32, dst_low: String) -> Result<(), String> {
+    pub fn map_bf_range(&mut self, low: u32, high: u32, dst_low: String) -> Option<()> {
         if high - low > MAX_MAP_RANGE {
-            return Err("mapBfRange - ignoring data above MAX_MAP_RANGE.".to_string());
+            return None;
         }
 
         let mut current_low = low;
@@ -85,7 +102,8 @@ impl CMap {
             current_dst = String::from_utf8_lossy(&bytes).to_string();
             current_low += 1;
         }
-        Ok(())
+        
+        Some(())
     }
 
     pub fn map_bf_range_to_array(
@@ -93,9 +111,9 @@ impl CMap {
         low: u32,
         high: u32,
         array: Vec<CMapValue>,
-    ) -> Result<(), String> {
+    ) -> Option<()> {
         if high - low > MAX_MAP_RANGE {
-            return Err("mapBfRangeToArray - ignoring data above MAX_MAP_RANGE.".to_string());
+            return None;
         }
 
         let mut current_low = low;
@@ -106,7 +124,8 @@ impl CMap {
             current_low += 1;
             i += 1;
         }
-        Ok(())
+        
+        Some(())
     }
 
     pub fn map_one(&mut self, src: u32, dst: CMapValue) {
@@ -254,26 +273,7 @@ fn bytes_to_int(bytes: &[u8]) -> u32 {
     a
 }
 
-// Helper functions for backward compatibility
-impl CMap {
-    pub fn identity_h() -> Self {
-        let mut cmap = CMap::new();
-        cmap.name = "Identity-H".to_string();
-        cmap.vertical = false;
-        cmap.add_codespace_range(2, 0, 0xFFFF);
-        cmap
-    }
-
-    pub fn identity_v() -> Self {
-        let mut cmap = CMap::new();
-        cmap.name = "Identity-V".to_string();
-        cmap.vertical = true;
-        cmap.add_codespace_range(2, 0, 0xFFFF);
-        cmap
-    }
-}
-
-fn expect_string(obj: &Token) -> Result<String, String> {
+fn expect_string(obj: &Token) -> Option<String> {
     match obj {
         Token::HexString(bytes) => {
             // Convert bytes to string the same way pdf.js does: using String.fromCharCode
@@ -282,17 +282,17 @@ fn expect_string(obj: &Token) -> Result<String, String> {
             for &byte in bytes {
                 result.push(char::from(byte));
             }
-            Ok(result)
+            Some(result)
         }
-        Token::String(s) => Ok(s.clone()),
-        _ => Err("Malformed CMap: expected string.".to_string()),
+        Token::String(s) => Some(s.clone()),
+        _ => None,
     }
 }
 
-fn expect_int(obj: &Token) -> Result<i32, String> {
+fn expect_int(obj: &Token) -> Option<i32> {
     match obj {
-        Token::Integer(i) => Ok(*i),
-        _ => Err("Malformed CMap: expected int.".to_string()),
+        Token::Integer(i) => Some(*i),
+        _ => None,
     }
 }
 
@@ -511,12 +511,12 @@ impl CMapLexer {
     }
 }
 
-pub fn parse_bf_char(cmap: &mut CMap, lexer: &mut CMapLexer) -> Result<(), String> {
+pub fn parse_bf_char(cmap: &mut CMap, lexer: &mut CMapLexer) -> Option<()> {
     loop {
         let obj = lexer.get_obj();
         match obj {
             Token::EOF => break,
-            Token::Command(cmd) if cmd == "endbfchar" => return Ok(()),
+            Token::Command(cmd) if cmd == "endbfchar" => return Some(()),
             ref token => {
                 let src_str = expect_string(token)?;
                 let src = str_to_int(&src_str);
@@ -540,15 +540,16 @@ pub fn parse_bf_char(cmap: &mut CMap, lexer: &mut CMapLexer) -> Result<(), Strin
             }
         }
     }
-    Ok(())
+    
+    Some(())
 }
 
-pub fn parse_bf_range(cmap: &mut CMap, lexer: &mut CMapLexer) -> Result<(), String> {
+pub fn parse_bf_range(cmap: &mut CMap, lexer: &mut CMapLexer) -> Option<()> {
     loop {
         let obj = lexer.get_obj();
         match obj {
             Token::EOF => break,
-            Token::Command(cmd) if cmd == "endbfrange" => return Ok(()),
+            Token::Command(cmd) if cmd == "endbfrange" => return Some(()),
             ref token => {
                 let low_str = expect_string(token)?;
                 let low = str_to_int(&low_str);
@@ -564,7 +565,7 @@ pub fn parse_bf_range(cmap: &mut CMap, lexer: &mut CMapLexer) -> Result<(), Stri
                         cmap.map_bf_range(low, high, dst_low)?;
                     }
                     ref token => {
-                        if let Ok(dst_str) = expect_string(token) {
+                        if let Some(dst_str) = expect_string(token) {
                             cmap.map_bf_range(low, high, dst_str)?;
                         } else if let Token::Command(cmd) = token {
                             if cmd == "[" {
@@ -578,7 +579,7 @@ pub fn parse_bf_range(cmap: &mut CMap, lexer: &mut CMapLexer) -> Result<(), Stri
                                             array.push(CMapValue::Cid(val as u32))
                                         }
                                         ref arr_token => {
-                                            if let Ok(val_str) = expect_string(arr_token) {
+                                            if let Some(val_str) = expect_string(arr_token) {
                                                 array.push(CMapValue::BfString(val_str));
                                             }
                                         }
@@ -586,25 +587,26 @@ pub fn parse_bf_range(cmap: &mut CMap, lexer: &mut CMapLexer) -> Result<(), Stri
                                 }
                                 cmap.map_bf_range_to_array(low, high, array)?;
                             } else {
-                                return Err("Invalid bf range destination".to_string());
+                                return None;
                             }
                         } else {
-                            return Err("Invalid bf range destination".to_string());
+                            return None;
                         }
                     }
                 }
             }
         }
     }
-    Ok(())
+    
+    Some(())
 }
 
-pub fn parse_cid_char(cmap: &mut CMap, lexer: &mut CMapLexer) -> Result<(), String> {
+pub fn parse_cid_char(cmap: &mut CMap, lexer: &mut CMapLexer) -> Option<()> {
     loop {
         let obj = lexer.get_obj();
         match obj {
             Token::EOF => break,
-            Token::Command(cmd) if cmd == "endcidchar" => return Ok(()),
+            Token::Command(cmd) if cmd == "endcidchar" => return Some(()),
             ref token => {
                 let src_str = expect_string(token)?;
                 let src = str_to_int(&src_str);
@@ -614,15 +616,16 @@ pub fn parse_cid_char(cmap: &mut CMap, lexer: &mut CMapLexer) -> Result<(), Stri
             }
         }
     }
-    Ok(())
+    
+    Some(())
 }
 
-pub fn parse_cid_range(cmap: &mut CMap, lexer: &mut CMapLexer) -> Result<(), String> {
+pub fn parse_cid_range(cmap: &mut CMap, lexer: &mut CMapLexer) -> Option<()> {
     loop {
         let obj = lexer.get_obj();
         match obj {
             Token::EOF => break,
-            Token::Command(cmd) if cmd == "endcidrange" => return Ok(()),
+            Token::Command(cmd) if cmd == "endcidrange" => return Some(()),
             ref token => {
                 let low_str = expect_string(token)?;
                 let low = str_to_int(&low_str);
@@ -638,15 +641,16 @@ pub fn parse_cid_range(cmap: &mut CMap, lexer: &mut CMapLexer) -> Result<(), Str
             }
         }
     }
-    Ok(())
+    
+    Some(())
 }
 
-pub fn parse_codespace_range(cmap: &mut CMap, lexer: &mut CMapLexer) -> Result<(), String> {
+pub fn parse_codespace_range(cmap: &mut CMap, lexer: &mut CMapLexer) -> Option<()> {
     loop {
         let obj = lexer.get_obj();
         match obj {
             Token::EOF => break,
-            Token::Command(cmd) if cmd == "endcodespacerange" => return Ok(()),
+            Token::Command(cmd) if cmd == "endcodespacerange" => return Some(()),
             ref token => {
                 let low_str = expect_string(token)?;
                 if low_str.is_empty() {
@@ -657,7 +661,7 @@ pub fn parse_codespace_range(cmap: &mut CMap, lexer: &mut CMapLexer) -> Result<(
                 let high_obj = lexer.get_obj();
                 let high_str = expect_string(&high_obj)?;
                 if high_str.is_empty() {
-                    return Err("Invalid codespace range.".to_string());
+                    return None;
                 }
                 let high = str_to_int(&high_str);
 
@@ -665,29 +669,31 @@ pub fn parse_codespace_range(cmap: &mut CMap, lexer: &mut CMapLexer) -> Result<(
             }
         }
     }
-    Ok(())
+    
+    Some(())
 }
 
-pub fn parse_wmode(cmap: &mut CMap, lexer: &mut CMapLexer) -> Result<(), String> {
+pub fn parse_wmode(cmap: &mut CMap, lexer: &mut CMapLexer) -> Option<()> {
     let obj = lexer.get_obj();
-    if let Ok(val) = expect_int(&obj) {
+    if let Some(val) = expect_int(&obj) {
         cmap.vertical = val != 0;
     }
-    Ok(())
+    
+    Some(())
 }
 
-pub fn parse_cmap_name(cmap: &mut CMap, lexer: &mut CMapLexer) -> Result<(), String> {
+pub fn parse_cmap_name(cmap: &mut CMap, lexer: &mut CMapLexer) -> Option<()> {
     let obj = lexer.get_obj();
     match obj {
         Token::Name(name) => {
             cmap.name = name;
-            Ok(())
+            Some(())
         }
-        _ => Ok(()), // Don't error on unexpected tokens, just ignore
+        _ => Some(()), // Don't error on unexpected tokens, just ignore
     }
 }
 
-pub fn parse_cmap(input: String) -> Result<CMap, String> {
+pub fn parse_cmap(input: String) -> Option<CMap> {
     let mut cmap = CMap::new();
     let mut lexer = CMapLexer::new(input);
     let mut previous: Option<Token> = None;
@@ -742,7 +748,7 @@ pub fn parse_cmap(input: String) -> Result<CMap, String> {
         }
     }
 
-    Ok(cmap)
+    Some(cmap)
 }
 
 #[cfg(test)]
