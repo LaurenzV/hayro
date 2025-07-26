@@ -1,7 +1,6 @@
 use crate::font::blob::{CffFontBlob, OpenTypeFontBlob};
 use crate::font::cmap::{CMap, CMapValue, parse_cmap};
-use crate::{CacheKey, InterpreterWarning, WarningSinkFn};
-use hayro_syntax::bit_reader::BitReader;
+use crate::{CacheKey, WarningSinkFn};
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Name;
 use hayro_syntax::object::Stream;
@@ -23,7 +22,7 @@ pub(crate) struct Type0Font {
     dw: f32,
     dw2: (f32, f32),
     widths: HashMap<u32, f32>,
-    cmap: CMap,
+    encoding: CMap,
     widths2: HashMap<u32, [f32; 3]>,
     cid_to_gid_map: CidToGIdMap,
 }
@@ -58,7 +57,7 @@ impl Type0Font {
         Some(Self {
             cache_key,
             horizontal,
-            cmap,
+            encoding: cmap,
             font_type,
             dw: default_width,
             dw2,
@@ -91,7 +90,7 @@ impl Type0Font {
     }
 
     fn code_to_cid(&self, code: u32) -> Option<u32> {
-        self.cmap.lookup(code).and_then(|v| match v {
+        self.encoding.lookup(code).and_then(|v| match v {
             CMapValue::Cid(c) => Some(c),
             CMapValue::BfString(s) => s.chars().nth(0).map(|c| c as u32),
         })
@@ -124,7 +123,7 @@ impl Type0Font {
     }
 
     pub(crate) fn read_code(&self, bytes: &[u8], offset: usize) -> (u32, usize) {
-        self.cmap.read_char_code_bytes(bytes, offset)
+        self.encoding.read_char_code_bytes(bytes, offset)
     }
 
     pub(crate) fn origin_displacement(&self, code: u32) -> Vec2 {

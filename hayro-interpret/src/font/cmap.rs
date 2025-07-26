@@ -1,16 +1,15 @@
+/// Ported from <https://github.com/mozilla/pdf.js/blob/master/src/core/cmap.js>
+
 use std::collections::HashMap;
 
 const MAX_MAP_RANGE: u32 = (1 << 24) - 1; // 0xFFFFFF
 
 #[derive(Debug, Clone)]
-pub struct CMap {
+pub(crate) struct CMap {
     pub codespace_ranges: [Vec<u32>; 4],
-    pub num_codespace_ranges: usize,
     map: HashMap<u32, CMapValue>,
     pub name: String,
     pub vertical: bool,
-    pub use_cmap: Option<Box<CMap>>,
-    pub built_in_cmap: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -26,15 +25,12 @@ pub struct CharCodeResult {
 }
 
 impl CMap {
-    pub fn new(built_in_cmap: bool) -> Self {
+    pub fn new() -> Self {
         CMap {
             codespace_ranges: [Vec::new(), Vec::new(), Vec::new(), Vec::new()],
-            num_codespace_ranges: 0,
             map: HashMap::new(),
             name: String::new(),
             vertical: false,
-            use_cmap: None,
-            built_in_cmap,
         }
     }
 
@@ -42,7 +38,6 @@ impl CMap {
         if n > 0 && n <= 4 {
             self.codespace_ranges[n - 1].push(low);
             self.codespace_ranges[n - 1].push(high);
-            self.num_codespace_ranges += 1;
         }
     }
 
@@ -121,8 +116,6 @@ impl CMap {
     pub fn lookup(&self, code: u32) -> Option<CMapValue> {
         if let Some(value) = self.map.get(&code) {
             Some(value.clone())
-        } else if let Some(ref use_cmap) = self.use_cmap {
-            use_cmap.lookup(code)
         } else if self.is_identity_cmap() {
             // For identity CMaps, return the code itself if within range
             if code <= 0xFFFF {
@@ -137,10 +130,6 @@ impl CMap {
 
     pub fn contains(&self, code: u32) -> bool {
         self.map.contains_key(&code)
-            || self
-                .use_cmap
-                .as_ref()
-                .map_or(false, |use_cmap| use_cmap.contains(code))
             || (self.is_identity_cmap() && code <= 0xFFFF)
     }
 
@@ -268,7 +257,7 @@ fn bytes_to_int(bytes: &[u8]) -> u32 {
 // Helper functions for backward compatibility
 impl CMap {
     pub fn identity_h() -> Self {
-        let mut cmap = CMap::new(true);
+        let mut cmap = CMap::new();
         cmap.name = "Identity-H".to_string();
         cmap.vertical = false;
         cmap.add_codespace_range(2, 0, 0xFFFF);
@@ -276,7 +265,7 @@ impl CMap {
     }
 
     pub fn identity_v() -> Self {
-        let mut cmap = CMap::new(true);
+        let mut cmap = CMap::new();
         cmap.name = "Identity-V".to_string();
         cmap.vertical = true;
         cmap.add_codespace_range(2, 0, 0xFFFF);
@@ -699,7 +688,7 @@ pub fn parse_cmap_name(cmap: &mut CMap, lexer: &mut CMapLexer) -> Result<(), Str
 }
 
 pub fn parse_cmap(input: String) -> Result<CMap, String> {
-    let mut cmap = CMap::new(false);
+    let mut cmap = CMap::new();
     let mut lexer = CMapLexer::new(input);
     let mut previous: Option<Token> = None;
 
@@ -911,7 +900,6 @@ endcodespacerange"#
 
         // Debug: Check if codespace ranges were parsed correctly
         println!("Codespace ranges: {:?}", cmap.codespace_ranges);
-        println!("Num codespace ranges: {}", cmap.num_codespace_ranges);
 
         // Use the new read_char_code_bytes method to handle raw bytes
         let test_bytes = [0x8E, 0xA1, 0xA1, 0xA1];
@@ -1051,7 +1039,6 @@ end"#
         // Verify the CMAP was parsed correctly
         assert_eq!(cmap.name, "CM10");
         assert!(!cmap.vertical);
-        assert_eq!(cmap.num_codespace_ranges, 1);
         assert_eq!(cmap.codespace_ranges[1], vec![0, 65535]); // 2-byte range 0x0000-0xFFFF
         assert!(!cmap.map.is_empty()); // Should have character mappings
 
