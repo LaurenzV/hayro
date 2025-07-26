@@ -1,6 +1,6 @@
 use crate::CacheKey;
 use crate::font::blob::{CffFontBlob, OpenTypeFontBlob};
-use crate::font::cmap::{CMap, CMapValue, parse_cmap};
+use crate::font::cmap::{CMap, parse_cmap};
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Name;
 use hayro_syntax::object::Stream;
@@ -90,10 +90,7 @@ impl Type0Font {
     }
 
     fn code_to_cid(&self, code: u32) -> Option<u32> {
-        self.encoding.lookup_code(code).and_then(|v| match v {
-            CMapValue::Cid(c) => Some(c),
-            CMapValue::BfString(s) => s.chars().nth(0).map(|c| c as u32),
-        })
+        self.encoding.lookup_code(code)
     }
 
     pub(crate) fn outline_glyph(&self, glyph: GlyphId) -> BezPath {

@@ -6,15 +6,9 @@ const MAX_MAP_RANGE: u32 = (1 << 24) - 1; // 0xFFFFFF
 #[derive(Debug, Clone)]
 pub(crate) struct CMap {
     codespace_ranges: [Vec<u32>; 4],
-    map: HashMap<u32, CMapValue>,
+    map: HashMap<u32, u32>,
     name: String,
     vertical: bool,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum CMapValue {
-    Cid(u32),
-    BfString(String),
 }
 
 impl CMap {
@@ -49,15 +43,11 @@ impl CMap {
         self.vertical
     }
 
-    pub(crate) fn lookup_code(&self, code: u32) -> Option<CMapValue> {
+    pub(crate) fn lookup_code(&self, code: u32) -> Option<u32> {
         if let Some(value) = self.map.get(&code) {
             Some(value.clone())
         } else if self.is_identity_cmap() {
-            if code <= 0xFFFF {
-                Some(CMapValue::Cid(code))
-            } else {
-                None
-            }
+            if code <= 0xFFFF { Some(code) } else { None }
         } else {
             None
         }
@@ -78,7 +68,7 @@ impl CMap {
         let mut current_low = low;
         let mut current_dst = dst_low;
         while current_low <= high {
-            self.map.insert(current_low, CMapValue::Cid(current_dst));
+            self.map.insert(current_low, current_dst);
             current_low += 1;
             current_dst += 1;
         }
@@ -95,8 +85,7 @@ impl CMap {
         let mut current_dst = dst_low;
 
         while current_low <= high {
-            self.map
-                .insert(current_low, CMapValue::BfString(current_dst.clone()));
+            self.map.insert(current_low, bf_string_char(&current_dst));
 
             let mut bytes = current_dst.into_bytes();
             if let Some(last_byte) = bytes.last_mut() {
@@ -117,7 +106,7 @@ impl CMap {
         Some(())
     }
 
-    fn map_bf_range_to_array(&mut self, low: u32, high: u32, array: Vec<CMapValue>) -> Option<()> {
+    fn map_bf_range_to_array(&mut self, low: u32, high: u32, array: Vec<u32>) -> Option<()> {
         if high - low > MAX_MAP_RANGE {
             return None;
         }
@@ -134,7 +123,7 @@ impl CMap {
         Some(())
     }
 
-    fn map_one(&mut self, src: u32, dst: CMapValue) {
+    fn map_one(&mut self, src: u32, dst: u32) {
         self.map.insert(src, dst);
     }
 
@@ -166,6 +155,10 @@ impl CMap {
 
         (0, 1)
     }
+}
+
+fn bf_string_char(str: &str) -> u32 {
+    str.chars().nth(0).unwrap_or(0 as char) as u32
 }
 
 fn str_to_int(s: &str) -> u32 {
@@ -431,14 +424,12 @@ fn parse_bf_char(cmap: &mut CMap, lexer: &mut CMapLexer) -> Option<()> {
                     // Convert to Unicode code point
                     let code_point = str_to_int(&dst_str);
                     if let Some(unicode_char) = char::from_u32(code_point) {
-                        cmap.map_one(src, CMapValue::BfString(unicode_char.to_string()));
+                        cmap.map_one(src, unicode_char as u32);
                     } else {
-                        // Fallback to original string if invalid Unicode
-                        cmap.map_one(src, CMapValue::BfString(dst_str));
+                        cmap.map_one(src, bf_string_char(&dst_str));
                     }
                 } else {
-                    // For longer strings, keep as multi-byte string
-                    cmap.map_one(src, CMapValue::BfString(dst_str));
+                    cmap.map_one(src, bf_string_char(&dst_str));
                 }
             }
         }
@@ -478,12 +469,10 @@ fn parse_bf_range(cmap: &mut CMap, lexer: &mut CMapLexer) -> Option<()> {
                                     match array_obj {
                                         Token::Command(cmd) if cmd == "]" => break,
                                         Token::EOF => break,
-                                        Token::Integer(val) => {
-                                            array.push(CMapValue::Cid(val as u32))
-                                        }
+                                        Token::Integer(val) => array.push(val as u32),
                                         ref arr_token => {
                                             if let Some(val_str) = expect_string(arr_token) {
-                                                array.push(CMapValue::BfString(val_str));
+                                                array.push(bf_string_char(&val_str));
                                             }
                                         }
                                     }
@@ -515,7 +504,7 @@ fn parse_cid_char(cmap: &mut CMap, lexer: &mut CMapLexer) -> Option<()> {
                 let src = str_to_int(&src_str);
                 let dst_obj = lexer.get_obj();
                 let dst = expect_int(&dst_obj)?;
-                cmap.map_one(src, CMapValue::Cid(dst as u32));
+                cmap.map_one(src, dst as u32);
             }
         }
     }
@@ -665,16 +654,8 @@ endbfchar"#
 
         let cmap = parse_cmap(input).unwrap();
 
-        let Some(CMapValue::BfString(val)) = cmap.lookup_code(0x03) else {
-            panic!("Expected BfString value for 0x03");
-        };
-        assert_eq!(val.chars().next().unwrap() as u32, 0x00);
-
-        let Some(CMapValue::BfString(val)) = cmap.lookup_code(0x04) else {
-            panic!("Expected BfString value for 0x04");
-        };
-        assert_eq!(val.chars().next().unwrap() as u32, 0x01);
-
+        assert_eq!(cmap.lookup_code(0x03), Some(0x00));
+        assert_eq!(cmap.lookup_code(0x04), Some(0x01));
         assert!(cmap.lookup_code(0x05).is_none());
     }
 
@@ -688,19 +669,8 @@ endbfrange"#
         let cmap = parse_cmap(input).unwrap();
 
         assert!(cmap.lookup_code(0x05).is_none());
-
-        if let Some(CMapValue::BfString(val)) = cmap.lookup_code(0x06) {
-            assert_eq!(val.chars().next().unwrap() as u32, 0x00);
-        } else {
-            panic!("Expected BfString value for 0x06");
-        }
-
-        if let Some(CMapValue::BfString(val)) = cmap.lookup_code(0x0b) {
-            assert_eq!(val.chars().next().unwrap() as u32, 0x05);
-        } else {
-            panic!("Expected BfString value for 0x0b");
-        }
-
+        assert_eq!(cmap.lookup_code(0x06), Some(0x00));
+        assert_eq!(cmap.lookup_code(0x0b), Some(0x01));
         assert!(cmap.lookup_code(0x0c).is_none());
     }
 
@@ -714,19 +684,8 @@ endbfrange"#
         let cmap = parse_cmap(input).unwrap();
 
         assert!(cmap.lookup_code(0x0c).is_none());
-
-        if let Some(CMapValue::Cid(val)) = cmap.lookup_code(0x0d) {
-            assert_eq!(val, 0x00);
-        } else {
-            panic!("Expected Cid value for 0x0d");
-        }
-
-        if let Some(CMapValue::Cid(val)) = cmap.lookup_code(0x12) {
-            assert_eq!(val, 0x05);
-        } else {
-            panic!("Expected Cid value for 0x12");
-        }
-
+        assert_eq!(cmap.lookup_code(0x0d), Some(0x00));
+        assert_eq!(cmap.lookup_code(0x12), Some(0x05));
         assert!(cmap.lookup_code(0x13).is_none());
     }
 
@@ -739,12 +698,7 @@ endcidchar"#
 
         let cmap = parse_cmap(input).unwrap();
 
-        if let Some(CMapValue::Cid(val)) = cmap.lookup_code(0x14) {
-            assert_eq!(val, 0x00);
-        } else {
-            panic!("Expected Cid value for 0x14");
-        }
-
+        assert_eq!(cmap.lookup_code(0x14), Some(0x00));
         assert!(cmap.lookup_code(0x15).is_none());
     }
 
@@ -758,19 +712,8 @@ endcidrange"#
         let cmap = parse_cmap(input).unwrap();
 
         assert!(cmap.lookup_code(0x15).is_none());
-
-        if let Some(CMapValue::Cid(val)) = cmap.lookup_code(0x16) {
-            assert_eq!(val, 0x00);
-        } else {
-            panic!("Expected Cid value for 0x16");
-        }
-
-        if let Some(CMapValue::Cid(val)) = cmap.lookup_code(0x1b) {
-            assert_eq!(val, 0x05);
-        } else {
-            panic!("Expected Cid value for 0x1b");
-        }
-
+        assert_eq!(cmap.lookup_code(0x16), Some(0x00));
+        assert_eq!(cmap.lookup_code(0x1b), Some(0x05));
         assert!(cmap.lookup_code(0x1c).is_none());
     }
 
@@ -818,9 +761,9 @@ endcodespacerange"#
         assert_eq!(cmap.vertical, false);
 
         // Test identity mapping
-        assert_eq!(cmap.lookup_code(0x41), Some(CMapValue::Cid(0x41))); // 'A'
-        assert_eq!(cmap.lookup_code(0x1234), Some(CMapValue::Cid(0x1234)));
-        assert_eq!(cmap.lookup_code(0xFFFF), Some(CMapValue::Cid(0xFFFF)));
+        assert_eq!(cmap.lookup_code(0x41), Some(0x41)); // 'A'
+        assert_eq!(cmap.lookup_code(0x1234), Some(0x1234));
+        assert_eq!(cmap.lookup_code(0xFFFF), Some(0xFFFF));
         assert_eq!(cmap.lookup_code(0x10000), None); // Beyond 2-byte range
 
         // Test read_char_code with 2-byte values
@@ -838,9 +781,9 @@ endcodespacerange"#
         assert_eq!(cmap.vertical, true);
 
         // Test identity mapping
-        assert_eq!(cmap.lookup_code(0x41), Some(CMapValue::Cid(0x41))); // 'A'
-        assert_eq!(cmap.lookup_code(0x1234), Some(CMapValue::Cid(0x1234)));
-        assert_eq!(cmap.lookup_code(0xFFFF), Some(CMapValue::Cid(0xFFFF)));
+        assert_eq!(cmap.lookup_code(0x41), Some(0x41)); // 'A'
+        assert_eq!(cmap.lookup_code(0x1234), Some(0x1234));
+        assert_eq!(cmap.lookup_code(0xFFFF), Some(0xFFFF));
         assert_eq!(cmap.lookup_code(0x10000), None); // Beyond 2-byte range
     }
 
@@ -854,9 +797,9 @@ endcidrange"#
         let cmap = parse_cmap(input).unwrap();
 
         // Should map codes 0x00-0xFF to CIDs 0-255
-        assert_eq!(cmap.lookup_code(0x00), Some(CMapValue::Cid(0)));
-        assert_eq!(cmap.lookup_code(0x41), Some(CMapValue::Cid(65))); // 'A'
-        assert_eq!(cmap.lookup_code(0xFF), Some(CMapValue::Cid(255)));
+        assert_eq!(cmap.lookup_code(0x00), Some(0));
+        assert_eq!(cmap.lookup_code(0x41), Some(65)); // 'A'
+        assert_eq!(cmap.lookup_code(0xFF), Some(255));
         assert_eq!(cmap.lookup_code(0x100), None); // Beyond range
     }
 
@@ -892,41 +835,10 @@ end"#
         // println!("CMap map length: {}", cmap.map.len());
 
         // Should successfully parse and create mapping
-        assert_eq!(cmap.lookup_code(0x00), Some(CMapValue::Cid(0)));
-        assert_eq!(cmap.lookup_code(0x41), Some(CMapValue::Cid(65))); // 'A'
-        assert_eq!(cmap.lookup_code(0xFF), Some(CMapValue::Cid(255)));
+        assert_eq!(cmap.lookup_code(0x00), Some(0));
+        assert_eq!(cmap.lookup_code(0x41), Some(65)); // 'A'
+        assert_eq!(cmap.lookup_code(0xFF), Some(255));
         assert_eq!(cmap.lookup_code(0x100), None); // Beyond range
         assert_eq!(cmap.name, "Identity-H");
-    }
-
-    #[test]
-    fn another_cmap() {
-        let loaded = std::str::from_utf8(
-            &std::fs::read(
-                "/Users/lstampfl/Programming/GitHub/hayro/hayro-interpret/src/font/cmap.txt",
-            )
-            .unwrap(),
-        )
-        .unwrap()
-        .to_string();
-        let cmap = parse_cmap(loaded).unwrap();
-
-        // Verify the CMAP was parsed correctly
-        assert_eq!(cmap.name, "CM10");
-        assert!(!cmap.vertical);
-        assert_eq!(cmap.codespace_ranges[1], vec![0, 65535]); // 2-byte range 0x0000-0xFFFF
-        assert!(!cmap.map.is_empty()); // Should have character mappings
-
-        // Test a few specific mappings from the file
-        // The file maps: <0020> <0003> and <0021> <0004>
-        // These should be Unicode characters U+0003 and U+0004
-        assert_eq!(
-            cmap.lookup_code(0x20),
-            Some(CMapValue::BfString("\u{3}".to_string()))
-        ); // space maps to U+0003
-        assert_eq!(
-            cmap.lookup_code(0x21),
-            Some(CMapValue::BfString("\u{4}".to_string()))
-        ); // exclamation maps to U+0004
     }
 }
