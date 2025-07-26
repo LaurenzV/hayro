@@ -9,7 +9,7 @@ use crate::font::true_type::TrueTypeFont;
 use crate::font::type1::Type1Font;
 use crate::font::type3::Type3;
 use crate::interpret::state::State;
-use crate::{CacheKey, FontResolverFn, InterpreterSettings, Paint, WarningSinkFn};
+use crate::{CacheKey, FontResolverFn, InterpreterSettings, Paint};
 use bitflags::bitflags;
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Name;
@@ -132,7 +132,6 @@ impl<'a> Font<'a> {
     pub(crate) fn new(
         dict: &Dict<'a>,
         resolver: &FontResolverFn,
-        warning_sink: &WarningSinkFn,
     ) -> Option<Self> {
         let f_type = match dict.get::<Name>(SUBTYPE)?.deref() {
             TYPE1 | MM_TYPE1 => FontType::Type1(Rc::new(Type1Font::new(dict, resolver)?)),
@@ -144,7 +143,7 @@ impl<'a> Font<'a> {
                         .map(Rc::new)
                         .map(FontType::Type1)
                 })?,
-            TYPE0 => FontType::Type0(Rc::new(Type0Font::new(dict, warning_sink)?)),
+            TYPE0 => FontType::Type0(Rc::new(Type0Font::new(dict)?)),
             TYPE3 => FontType::Type3(Rc::new(Type3::new(dict))),
             f => {
                 warn!(

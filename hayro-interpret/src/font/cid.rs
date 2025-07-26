@@ -1,6 +1,6 @@
 use crate::font::blob::{CffFontBlob, OpenTypeFontBlob};
 use crate::font::cmap::{CMap, CMapValue, parse_cmap};
-use crate::{CacheKey, WarningSinkFn};
+use crate::CacheKey;
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Name;
 use hayro_syntax::object::Stream;
@@ -28,7 +28,7 @@ pub(crate) struct Type0Font {
 }
 
 impl Type0Font {
-    pub(crate) fn new(dict: &Dict, warning_sink: &WarningSinkFn) -> Option<Self> {
+    pub(crate) fn new(dict: &Dict) -> Option<Self> {
         let cmap = read_encoding(&dict.get::<Object>(ENCODING)?)?;
 
         let horizontal = !cmap.is_vertical();
@@ -90,7 +90,7 @@ impl Type0Font {
     }
 
     fn code_to_cid(&self, code: u32) -> Option<u32> {
-        self.encoding.lookup(code).and_then(|v| match v {
+        self.encoding.lookup_code(code).and_then(|v| match v {
             CMapValue::Cid(c) => Some(c),
             CMapValue::BfString(s) => s.chars().nth(0).map(|c| c as u32),
         })
@@ -123,7 +123,7 @@ impl Type0Font {
     }
 
     pub(crate) fn read_code(&self, bytes: &[u8], offset: usize) -> (u32, usize) {
-        self.encoding.read_char_code_bytes(bytes, offset)
+        self.encoding.read_code(bytes, offset)
     }
 
     pub(crate) fn origin_displacement(&self, code: u32) -> Vec2 {

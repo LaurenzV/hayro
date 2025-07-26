@@ -166,7 +166,6 @@ impl<'a> Context<'a> {
                             Font::new(
                                 &o,
                                 &self.settings.font_resolver,
-                                &self.settings.warning_sink,
                             )
                         })
                     })
@@ -176,7 +175,6 @@ impl<'a> Context<'a> {
                 Font::new(
                     &c,
                     &self.settings.font_resolver,
-                    &self.settings.warning_sink,
                 )
             }),
         )
