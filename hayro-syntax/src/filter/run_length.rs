@@ -1,14 +1,23 @@
 use crate::reader::Reader;
+use log::warn;
 
 pub(crate) fn decode(data: &[u8]) -> Option<Vec<u8>> {
     let mut reader = Reader::new(data);
     let mut decoded = vec![];
 
+    if decode_inner(&mut reader, &mut decoded).is_none() {
+        warn!("run-length decode stream ended prematurely");
+    }
+
+    Some(decoded)
+}
+
+fn decode_inner(reader: &mut Reader, decoded: &mut Vec<u8>) -> Option<()> {
     loop {
         let length = reader.read_byte()?;
 
         match length {
-            128 => return Some(decoded),
+            128 => return Some(()),
             0..=127 => decoded.extend(reader.read_bytes(length as usize + 1)?),
             _ => {
                 let length = 257 - length as usize;
