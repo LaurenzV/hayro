@@ -31,7 +31,6 @@ pub(crate) struct Type0Font {
 impl Type0Font {
     pub(crate) fn new(dict: &Dict, warning_sink: &WarningSinkFn) -> Option<Self> {
         let cmap = read_encoding(&dict.get::<Object>(ENCODING)?)?;
-        println!("{:?}", cmap);
 
         let horizontal = !cmap.vertical;
 
