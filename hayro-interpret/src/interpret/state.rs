@@ -13,9 +13,9 @@ use hayro_syntax::object::dict::keys::SMASK;
 use hayro_syntax::object::{Dict, Name, Number};
 use hayro_syntax::page::Resources;
 use kurbo::{Affine, BezPath, Vec2};
+use log::warn;
 use smallvec::smallvec;
 use std::ops::Deref;
-use log::warn;
 
 #[derive(Clone, Debug)]
 pub(crate) struct State<'a> {
