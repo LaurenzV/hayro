@@ -61,7 +61,7 @@ fn fallback_xref_map(data: &[u8]) -> (XrefMap, Option<&[u8]>) {
 
     let mut r = Reader::new(data);
 
-    let dummy_ctx = ReaderContext::dummy();
+    let mut dummy_ctx = ReaderContext::dummy();
     let mut last_obj_num = None;
 
     loop {
@@ -72,6 +72,7 @@ fn fallback_xref_map(data: &[u8]) -> (XrefMap, Option<&[u8]>) {
         if let Some(obj_id) = r.read::<ObjectIdentifier>(dummy_ctx) {
             xref_map.insert(obj_id, EntryType::Normal(cur_pos));
             last_obj_num = Some(obj_id);
+            dummy_ctx.obj_number = Some(obj_id);
         } else if let Some(dict) = r.read::<Dict>(dummy_ctx) {
             if dict.contains_key(SIZE) && dict.contains_key(ROOT) {
                 trailer_dict = Some(dict.clone());

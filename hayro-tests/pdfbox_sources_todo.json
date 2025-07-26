@@ -140,7 +140,7 @@
   "5611": "glyphs dont render",
   "5616": "table lines dont display",
   "5704": "missing character",
-  "5782": "pdf doesnt open",
+  "5782": "doesnt open in nearly any other pdf viewer, causes a stack overflow.",
   "5795": "image renders wrongly",
   "5802": "image and text doesnt render",
   "5839": "text not displaying",
