@@ -112,6 +112,9 @@ pub(crate) fn draw_form_xobject<'a>(
             context.get().non_stroke_alpha,
             std::mem::take(&mut context.get_mut().soft_mask),
         );
+
+        context.get_mut().non_stroke_alpha = 1.0;
+        context.get_mut().stroke_alpha = 1.0;
     }
 
     device.set_soft_mask(context.get().soft_mask.clone());
