@@ -85,7 +85,7 @@ impl Type0Font {
                         .map(|g| GlyphId::new(g.0 as u32))
                         .unwrap_or(GlyphId::NOTDEF)
                 } else {
-                    GlyphId::new(cid)
+                    self.cid_to_gid_map.map(cid as u16)
                 }
             }
         }
