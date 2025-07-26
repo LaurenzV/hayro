@@ -285,7 +285,7 @@ pub(crate) fn handle_gs_single<'a>(
             let name = dict.get::<Name>(key)?;
             let mode = name.as_str();
             if mode != "Normal" {
-                warn!("blend mode {} is not supported", mode);
+                warn!("blend mode {mode} is not supported");
             }
         }
         "Type" => {}
