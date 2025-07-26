@@ -1,6 +1,6 @@
 use crate::font::blob::{CffFontBlob, OpenTypeFontBlob};
 use crate::{CacheKey, InterpreterWarning, WarningSinkFn};
-use hayro_syntax::object::Array;
+use hayro_syntax::object::{Array, Object};
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Name;
 use hayro_syntax::object::Stream;
@@ -12,6 +12,8 @@ use skrifa::{FontRef, GlyphId};
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::sync::Arc;
+use hayro_syntax::bit_reader::BitReader;
+use crate::font::cmap::{parse_cmap, CMap};
 
 #[derive(Debug)]
 pub(crate) struct Type0Font {
@@ -20,21 +22,18 @@ pub(crate) struct Type0Font {
     cache_key: u128,
     dw: f32,
     dw2: (f32, f32),
-    widths: HashMap<u16, f32>,
-    widths2: HashMap<u16, [f32; 3]>,
+    widths: HashMap<u32, f32>,
+    cmap: CMap,
+    widths2: HashMap<u32, [f32; 3]>,
     cid_to_gid_map: CidToGIdMap,
 }
 
 impl Type0Font {
     pub(crate) fn new(dict: &Dict, warning_sink: &WarningSinkFn) -> Option<Self> {
-        let encoding = dict.get::<Name>(ENCODING).or_else(|| {
-            warn!("CID fonts with custom encoding are currently unsupported");
-            warning_sink(InterpreterWarning::UnsupportedFont);
+        let cmap = read_encoding(&dict.get::<Object>(ENCODING)?)?;
+        println!("{:?}", cmap);
 
-            None
-        })?;
-
-        let horizontal = encoding.deref() == IDENTITY_H;
+        let horizontal = !cmap.vertical;
 
         let descendant_font = dict.get::<Array>(DESCENDANT_FONTS)?.iter::<Dict>().next()?;
         let font_descriptor = descendant_font.get::<Dict>(FONT_DESC)?;
@@ -60,6 +59,7 @@ impl Type0Font {
         Some(Self {
             cache_key,
             horizontal,
+            cmap,
             font_type,
             dw: default_width,
             dw2,
@@ -69,15 +69,15 @@ impl Type0Font {
         })
     }
 
-    pub(crate) fn map_code(&self, code: u16) -> GlyphId {
+    pub(crate) fn map_code(&self, code: u32) -> GlyphId {
         match &self.font_type {
-            FontType::TrueType(_) => self.cid_to_gid_map.map(code),
+            FontType::TrueType(_) => self.cid_to_gid_map.map(code as u16),
             FontType::Cff(c) => {
                 let table = c.table();
 
                 if table.is_cid() {
                     table
-                        .glyph_index_by_cid(code)
+                        .glyph_index_by_cid(code as u16)
                         .map(|g| GlyphId::new(g.0 as u32))
                         .unwrap_or(GlyphId::NOTDEF)
                 } else {
@@ -94,7 +94,7 @@ impl Type0Font {
         }
     }
 
-    pub(crate) fn code_advance(&self, code: u16) -> Vec2 {
+    pub(crate) fn code_advance(&self, code: u32) -> Vec2 {
         if self.horizontal {
             Vec2::new(self.horizontal_width(code) as f64, 0.0)
         } else if let Some([w, _, _]) = self.widths2.get(&code) {
@@ -104,19 +104,19 @@ impl Type0Font {
         }
     }
 
-    fn horizontal_width(&self, code: u16) -> f32 {
+    fn horizontal_width(&self, code: u32) -> f32 {
         self.widths.get(&code).copied().unwrap_or(self.dw)
     }
 
     pub(crate) fn is_horizontal(&self) -> bool {
         self.horizontal
     }
-
-    pub(crate) fn code_len(&self) -> usize {
-        2
+    
+    pub(crate) fn read_code(&self, bytes: &[u8], offset: usize) -> (u32, usize) {
+        self.cmap.read_char_code_bytes(bytes, offset)
     }
 
-    pub(crate) fn origin_displacement(&self, code: u16) -> Vec2 {
+    pub(crate) fn origin_displacement(&self, code: u32) -> Vec2 {
         if self.is_horizontal() {
             Vec2::default()
         } else if let Some([_, v1, v2]) = self.widths2.get(&code) {
@@ -223,17 +223,17 @@ impl CidToGIdMap {
     }
 }
 
-fn read_widths(arr: &Array) -> Option<HashMap<u16, f32>> {
+fn read_widths(arr: &Array) -> Option<HashMap<u32, f32>> {
     let mut map = HashMap::new();
     let mut iter = arr.flex_iter();
 
     loop {
-        if let Some((mut first, range)) = iter.next::<(u16, Array)>() {
+        if let Some((mut first, range)) = iter.next::<(u32, Array)>() {
             for width in range.iter::<f32>() {
                 map.insert(first, width);
                 first = first.checked_add(1)?;
             }
-        } else if let Some((first, second, width)) = iter.next::<(u16, u16, f32)>() {
+        } else if let Some((first, second, width)) = iter.next::<(u32, u32, f32)>() {
             for i in first..=second {
                 map.insert(i, width);
             }
@@ -245,12 +245,12 @@ fn read_widths(arr: &Array) -> Option<HashMap<u16, f32>> {
     Some(map)
 }
 
-fn read_widths2(arr: &Array) -> Option<HashMap<u16, [f32; 3]>> {
+fn read_widths2(arr: &Array) -> Option<HashMap<u32, [f32; 3]>> {
     let mut map = HashMap::new();
     let mut iter = arr.flex_iter();
 
     loop {
-        if let Some((mut first, range)) = iter.next::<(u16, Array)>() {
+        if let Some((mut first, range)) = iter.next::<(u32, Array)>() {
             let mut iter = range.iter::<f32>();
 
             while let Some(w) = iter.next() {
@@ -259,7 +259,7 @@ fn read_widths2(arr: &Array) -> Option<HashMap<u16, [f32; 3]>> {
                 map.insert(first, [w, v1, v2]);
                 first = first.checked_add(1)?;
             }
-        } else if let Some((first, second, w, v1, v2)) = iter.next::<(u16, u16, f32, f32, f32)>() {
+        } else if let Some((first, second, w, v1, v2)) = iter.next::<(u32, u32, f32, f32, f32)>() {
             for i in first..=second {
                 map.insert(i, [w, v1, v2]);
             }
@@ -269,4 +269,30 @@ fn read_widths2(arr: &Array) -> Option<HashMap<u16, [f32; 3]>> {
     }
 
     Some(map)
+}
+
+fn read_encoding(object: &Object) -> Option<CMap> {
+    match object {
+        Object::Name(n) => {
+            match n.deref() {
+                IDENTITY_H => Some(CMap::identity_h()),
+                IDENTITY_V => Some(CMap::identity_v()),
+                _ => {
+                    warn!("built-in encodings are not supported yet: {:?}", n);
+                    
+                    None
+                }
+            }
+        }
+        Object::Stream(s) => {
+            let dict = s.dict();
+            if dict.contains_key(USE_CMAP) {
+                warn!("USE_CMAP is not supported yet");
+            }
+            
+            let decoded = s.decoded().ok()?;
+            parse_cmap(std::str::from_utf8(&decoded).ok()?.to_string()).ok()
+        }
+        _ => None,
+    }
 }

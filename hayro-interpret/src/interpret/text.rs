@@ -6,6 +6,7 @@ use hayro_syntax::object;
 use hayro_syntax::page::Resources;
 use kurbo::Affine;
 use log::warn;
+use hayro_syntax::bit_reader::BitReader;
 
 pub(crate) fn show_text_string<'a>(
     ctx: &mut Context<'a>,
@@ -18,14 +19,14 @@ pub(crate) fn show_text_string<'a>(
 
         return;
     };
+    
+    let text_str = text.get();
+    let bytes = text_str.as_ref();
+    let mut cur_idx = 0;
 
-    let code_len = font.code_len();
-    for b in text.get().chunks(code_len) {
-        let code = match code_len {
-            1 => b[0] as u16,
-            2 => u16::from_be_bytes([b[0], b[1]]),
-            _ => unimplemented!(),
-        };
+    while cur_idx < bytes.len() {
+        let (code, adv) = font.read_code(bytes, cur_idx);
+        cur_idx += adv;
 
         let glyph = font.get_glyph(
             font.map_code(code),

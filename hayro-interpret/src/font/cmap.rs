@@ -13,7 +13,7 @@ pub struct CMap {
     pub built_in_cmap: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum CMapValue {
     Cid(u32),
     BfString(String),
@@ -30,6 +30,26 @@ impl CMap {
             use_cmap: None,
             built_in_cmap,
         }
+    }
+
+    /// Creates an Identity-H CMap (horizontal identity mapping)
+    pub fn identity_h() -> Self {
+        let mut cmap = CMap::new(true);
+        cmap.name = "Identity-H".to_string();
+        cmap.vertical = false;
+        // Add 2-byte codespace range covering all possible 2-byte values
+        cmap.add_codespace_range(2, 0, 0xFFFF);
+        cmap
+    }
+
+    /// Creates an Identity-V CMap (vertical identity mapping)
+    pub fn identity_v() -> Self {
+        let mut cmap = CMap::new(true);
+        cmap.name = "Identity-V".to_string();
+        cmap.vertical = true;
+        // Add 2-byte codespace range covering all possible 2-byte values
+        cmap.add_codespace_range(2, 0, 0xFFFF);
+        cmap
     }
 
     pub fn add_codespace_range(&mut self, n: usize, low: u32, high: u32) {
@@ -106,9 +126,18 @@ impl CMap {
         self.map.insert(src, dst);
     }
 
-    pub fn lookup(&self, code: u32) -> Option<&CMapValue> {
+    pub fn lookup(&self, code: u32) -> Option<CMapValue> {
+        // For Identity CMaps, map directly to CID
+        if self.is_identity_cmap() {
+            if code <= 0xFFFF {
+                return Some(CMapValue::Cid(code));
+            } else {
+                return None;
+            }
+        }
+
         if let Some(value) = self.map.get(&code) {
-            Some(value)
+            Some(value.clone())
         } else if let Some(ref use_cmap) = self.use_cmap {
             use_cmap.lookup(code)
         } else {
@@ -116,7 +145,17 @@ impl CMap {
         }
     }
 
+    /// Check if this is an Identity CMap
+    pub fn is_identity_cmap(&self) -> bool {
+        self.name == "Identity-H" || self.name == "Identity-V"
+    }
+
     pub fn contains(&self, code: u32) -> bool {
+        // For Identity CMaps, contains all codes up to 0xFFFF
+        if self.is_identity_cmap() {
+            return code <= 0xFFFF;
+        }
+
         self.map.contains_key(&code) || 
         self.use_cmap.as_ref().map_or(false, |use_cmap| use_cmap.contains(code))
     }
@@ -654,13 +693,13 @@ endbfrange"#.to_string();
         assert!(cmap.lookup(0x0c).is_none());
         
         if let Some(CMapValue::Cid(val)) = cmap.lookup(0x0d) {
-            assert_eq!(*val, 0x00);
+            assert_eq!(val, 0x00);
         } else {
             panic!("Expected Cid value for 0x0d");
         }
         
         if let Some(CMapValue::Cid(val)) = cmap.lookup(0x12) {
-            assert_eq!(*val, 0x05);
+            assert_eq!(val, 0x05);
         } else {
             panic!("Expected Cid value for 0x12");
         }
@@ -677,7 +716,7 @@ endcidchar"#.to_string();
         let cmap = parse_cmap(input).unwrap();
         
         if let Some(CMapValue::Cid(val)) = cmap.lookup(0x14) {
-            assert_eq!(*val, 0x00);
+            assert_eq!(val, 0x00);
         } else {
             panic!("Expected Cid value for 0x14");
         }
@@ -696,13 +735,13 @@ endcidrange"#.to_string();
         assert!(cmap.lookup(0x15).is_none());
         
         if let Some(CMapValue::Cid(val)) = cmap.lookup(0x16) {
-            assert_eq!(*val, 0x00);
+            assert_eq!(val, 0x00);
         } else {
             panic!("Expected Cid value for 0x16");
         }
         
         if let Some(CMapValue::Cid(val)) = cmap.lookup(0x1b) {
-            assert_eq!(*val, 0x05);
+            assert_eq!(val, 0x05);
         } else {
             panic!("Expected Cid value for 0x1b");
         }
@@ -761,5 +800,53 @@ endcodespacerange"#.to_string();
         
         let cmap = parse_cmap(input).unwrap();
         assert_eq!(cmap.vertical, true);
+    }
+
+    #[test]
+    fn test_identity_h_cmap() {
+        let cmap = CMap::identity_h();
+        
+        assert_eq!(cmap.name, "Identity-H");
+        assert_eq!(cmap.vertical, false);
+        assert!(cmap.built_in_cmap);
+        assert!(cmap.is_identity_cmap());
+        
+        // Test identity mapping
+        assert_eq!(cmap.lookup(0x41), Some(CMapValue::Cid(0x41))); // 'A'
+        assert_eq!(cmap.lookup(0x1234), Some(CMapValue::Cid(0x1234)));
+        assert_eq!(cmap.lookup(0xFFFF), Some(CMapValue::Cid(0xFFFF)));
+        assert_eq!(cmap.lookup(0x10000), None); // Beyond 2-byte range
+        
+        // Test contains
+        assert!(cmap.contains(0x41));
+        assert!(cmap.contains(0xFFFF));
+        assert!(!cmap.contains(0x10000));
+        
+        // Test read_char_code with 2-byte values
+        let test_bytes = [0x12, 0x34];
+        let (charcode, length) = cmap.read_char_code_bytes(&test_bytes, 0);
+        assert_eq!(charcode, 0x1234);
+        assert_eq!(length, 2);
+    }
+
+    #[test]
+    fn test_identity_v_cmap() {
+        let cmap = CMap::identity_v();
+        
+        assert_eq!(cmap.name, "Identity-V");
+        assert_eq!(cmap.vertical, true);
+        assert!(cmap.built_in_cmap);
+        assert!(cmap.is_identity_cmap());
+        
+        // Test identity mapping
+        assert_eq!(cmap.lookup(0x41), Some(CMapValue::Cid(0x41))); // 'A'
+        assert_eq!(cmap.lookup(0x1234), Some(CMapValue::Cid(0x1234)));
+        assert_eq!(cmap.lookup(0xFFFF), Some(CMapValue::Cid(0xFFFF)));
+        assert_eq!(cmap.lookup(0x10000), None); // Beyond 2-byte range
+        
+        // Test contains
+        assert!(cmap.contains(0x41));
+        assert!(cmap.contains(0xFFFF));
+        assert!(!cmap.contains(0x10000));
     }
 }

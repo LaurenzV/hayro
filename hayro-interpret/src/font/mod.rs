@@ -160,22 +160,26 @@ impl<'a> Font<'a> {
 
         Some(Self(cache_key, f_type))
     }
+    
+    pub(crate) fn is_cid(&self) -> bool {
+        matches!(self.1, FontType::Type0(_))
+    }
 
-    pub(crate) fn map_code(&self, code: u16) -> GlyphId {
+    pub(crate) fn map_code(&self, code: u32) -> GlyphId {
         match &self.1 {
             FontType::Type1(f) => {
-                debug_assert!(code <= u8::MAX as u16);
+                debug_assert!(code <= u8::MAX as u32);
 
                 f.map_code(code as u8)
             }
             FontType::TrueType(t) => {
-                debug_assert!(code <= u8::MAX as u16);
+                debug_assert!(code <= u8::MAX as u32);
 
                 t.map_code(code as u8)
             }
             FontType::Type0(t) => t.map_code(code),
             FontType::Type3(t) => {
-                debug_assert!(code <= u8::MAX as u16);
+                debug_assert!(code <= u8::MAX as u32);
 
                 t.map_code(code as u8)
             }
@@ -235,28 +239,28 @@ impl<'a> Font<'a> {
         }
     }
 
-    pub(crate) fn code_advance(&self, code: u16) -> Vec2 {
+    pub(crate) fn code_advance(&self, code: u32) -> Vec2 {
         match &self.1 {
             FontType::Type1(t) => {
-                debug_assert!(code <= u8::MAX as u16);
+                debug_assert!(code <= u8::MAX as u32);
 
                 Vec2::new(t.glyph_width(code as u8).unwrap_or(0.0) as f64, 0.0)
             }
             FontType::TrueType(t) => {
-                debug_assert!(code <= u8::MAX as u16);
+                debug_assert!(code <= u8::MAX as u32);
 
                 Vec2::new(t.glyph_width(code as u8) as f64, 0.0)
             }
             FontType::Type0(t) => t.code_advance(code),
             FontType::Type3(t) => {
-                debug_assert!(code <= u8::MAX as u16);
+                debug_assert!(code <= u8::MAX as u32);
 
                 Vec2::new(t.glyph_width(code as u8) as f64, 0.0)
             }
         }
     }
 
-    pub(crate) fn origin_displacement(&self, code: u16) -> Vec2 {
+    pub(crate) fn origin_displacement(&self, code: u32) -> Vec2 {
         match &self.1 {
             FontType::Type1(_) => Vec2::default(),
             FontType::TrueType(_) => Vec2::default(),
@@ -264,13 +268,13 @@ impl<'a> Font<'a> {
             FontType::Type3(_) => Vec2::default(),
         }
     }
-
-    pub(crate) fn code_len(&self) -> usize {
+    
+    pub(crate) fn read_code(&self, bytes: &[u8], offset: usize) -> (u32, usize) {
         match &self.1 {
-            FontType::Type1(_) => 1,
-            FontType::TrueType(_) => 1,
-            FontType::Type0(t) => t.code_len(),
-            FontType::Type3(_) => 1,
+            FontType::Type1(_) => (bytes[offset] as u32, 1),
+            FontType::TrueType(_) => (bytes[offset] as u32, 1),
+            FontType::Type0(t) => t.read_code(bytes, offset),
+            FontType::Type3(_) => (bytes[offset] as u32, 1),
         }
     }
 
