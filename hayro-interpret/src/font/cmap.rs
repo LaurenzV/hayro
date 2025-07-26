@@ -253,130 +253,6 @@ fn bytes_to_int(bytes: &[u8]) -> u32 {
     a
 }
 
-// A special case of CMap, where the _map array implicitly has a length of
-// 65536 and each element is equal to its index.
-#[derive(Debug, Clone)]
-pub struct IdentityCMap {
-    pub vertical: bool,
-    pub name: String,
-    codespace_ranges: [Vec<u32>; 4],
-    num_codespace_ranges: usize,
-}
-
-impl IdentityCMap {
-    pub fn new(vertical: bool, n: usize) -> Self {
-        let mut cmap = IdentityCMap {
-            vertical,
-            name: if vertical {
-                "Identity-V".to_string()
-            } else {
-                "Identity-H".to_string()
-            },
-            codespace_ranges: [Vec::new(), Vec::new(), Vec::new(), Vec::new()],
-            num_codespace_ranges: 0,
-        };
-        cmap.add_codespace_range(n, 0, 0xffff);
-        cmap
-    }
-
-    fn add_codespace_range(&mut self, n: usize, low: u32, high: u32) {
-        if n > 0 && n <= 4 {
-            self.codespace_ranges[n - 1].push(low);
-            self.codespace_ranges[n - 1].push(high);
-            self.num_codespace_ranges += 1;
-        }
-    }
-
-    pub fn lookup(&self, code: u32) -> Option<CMapValue> {
-        if code <= 0xffff {
-            Some(CMapValue::Cid(code))
-        } else {
-            None
-        }
-    }
-
-    pub fn contains(&self, code: u32) -> bool {
-        code <= 0xffff
-    }
-
-    pub fn for_each<F>(&self, mut callback: F)
-    where
-        F: FnMut(usize, &CMapValue),
-    {
-        for i in 0..=0xffff {
-            let value = CMapValue::Cid(i);
-            callback(i as usize, &value);
-        }
-    }
-
-    pub fn length(&self) -> usize {
-        0x10000
-    }
-
-    pub fn read_char_code(&self, s: &str, offset: usize, out: &mut CharCodeResult) {
-        let mut c = 0u32;
-        let bytes = s.as_bytes();
-        let codespace_ranges = &self.codespace_ranges;
-
-        // 9.7.6.2 CMap Mapping - The code length is at most 4
-        for n in 0..codespace_ranges.len() {
-            if offset + n >= bytes.len() {
-                break;
-            }
-            c = ((c << 8) | bytes[offset + n] as u32) & 0xFFFFFFFF;
-
-            // Check each codespace range to see if it falls within
-            let codespace_range = &codespace_ranges[n];
-            let mut k = 0;
-            while k < codespace_range.len() {
-                let low = codespace_range[k];
-                k += 1;
-                let high = codespace_range[k];
-                k += 1;
-                if c >= low && c <= high {
-                    out.charcode = c;
-                    out.length = n + 1;
-                    return;
-                }
-            }
-        }
-
-        out.charcode = 0;
-        out.length = 1;
-    }
-
-    pub fn read_char_code_bytes(&self, bytes: &[u8], offset: usize, out: &mut CharCodeResult) {
-        let mut c = 0u32;
-        let codespace_ranges = &self.codespace_ranges;
-
-        // 9.7.6.2 CMap Mapping - The code length is at most 4
-        for n in 0..codespace_ranges.len() {
-            if offset + n >= bytes.len() {
-                break;
-            }
-            c = ((c << 8) | bytes[offset + n] as u32) & 0xFFFFFFFF;
-
-            // Check each codespace range to see if it falls within
-            let codespace_range = &codespace_ranges[n];
-            let mut k = 0;
-            while k < codespace_range.len() {
-                let low = codespace_range[k];
-                k += 1;
-                let high = codespace_range[k];
-                k += 1;
-                if c >= low && c <= high {
-                    out.charcode = c;
-                    out.length = n + 1;
-                    return;
-                }
-            }
-        }
-
-        out.charcode = 0;
-        out.length = 1;
-    }
-}
-
 // Helper functions for backward compatibility
 impl CMap {
     pub fn identity_h() -> Self {
@@ -645,7 +521,21 @@ pub fn parse_bf_char(cmap: &mut CMap, lexer: &mut CMapLexer) -> Result<(), Strin
                 let src = str_to_int(&src_str);
                 let dst_obj = lexer.get_obj();
                 let dst_str = expect_string(&dst_obj)?;
-                cmap.map_one(src, CMapValue::BfString(dst_str));
+                // For beginbfchar, if the destination is a short hex string (like <0003>),
+                // it represents a Unicode code point, not a multi-byte string
+                if dst_str.chars().count() <= 2 {
+                    // Convert to Unicode code point
+                    let code_point = str_to_int(&dst_str);
+                    if let Some(unicode_char) = char::from_u32(code_point) {
+                        cmap.map_one(src, CMapValue::BfString(unicode_char.to_string()));
+                    } else {
+                        // Fallback to original string if invalid Unicode
+                        cmap.map_one(src, CMapValue::BfString(dst_str));
+                    }
+                } else {
+                    // For longer strings, keep as multi-byte string
+                    cmap.map_one(src, CMapValue::BfString(dst_str));
+                }
             }
         }
     }
@@ -1158,13 +1048,15 @@ end"#
         assert!(!cmap.map.is_empty()); // Should have character mappings
 
         // Test a few specific mappings from the file
+        // The file maps: <0020> <0003> and <0021> <0004>
+        // These should be Unicode characters U+0003 and U+0004
         assert_eq!(
             cmap.lookup(0x20),
-            Some(CMapValue::BfString("\0\u{3}".to_string()))
-        ); // space
+            Some(CMapValue::BfString("\u{3}".to_string()))
+        ); // space maps to U+0003
         assert_eq!(
             cmap.lookup(0x21),
-            Some(CMapValue::BfString("\0\u{4}".to_string()))
-        ); // exclamation
+            Some(CMapValue::BfString("\u{4}".to_string()))
+        ); // exclamation maps to U+0004
     }
 }

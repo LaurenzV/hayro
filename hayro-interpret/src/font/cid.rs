@@ -70,21 +70,32 @@ impl Type0Font {
     }
 
     pub(crate) fn map_code(&self, code: u32) -> GlyphId {
+        let Some(cid) = self.code_to_cid(code) else {
+            return GlyphId::NOTDEF;
+        };
+
         match &self.font_type {
-            FontType::TrueType(_) => self.cid_to_gid_map.map(code as u16),
+            FontType::TrueType(_) => self.cid_to_gid_map.map(cid as u16),
             FontType::Cff(c) => {
                 let table = c.table();
 
                 if table.is_cid() {
                     table
-                        .glyph_index_by_cid(code as u16)
+                        .glyph_index_by_cid(cid as u16)
                         .map(|g| GlyphId::new(g.0 as u32))
                         .unwrap_or(GlyphId::NOTDEF)
                 } else {
-                    GlyphId::new(code as u32)
+                    GlyphId::new(cid)
                 }
             }
         }
+    }
+
+    fn code_to_cid(&self, code: u32) -> Option<u32> {
+        self.cmap.lookup(code).and_then(|v| match v {
+            CMapValue::Cid(c) => Some(c),
+            CMapValue::BfString(s) => s.chars().nth(0).map(|c| c as u32),
+        })
     }
 
     pub(crate) fn outline_glyph(&self, glyph: GlyphId) -> BezPath {
@@ -95,17 +106,18 @@ impl Type0Font {
     }
 
     pub(crate) fn code_advance(&self, code: u32) -> Vec2 {
+        let cid = self.code_to_cid(code).unwrap_or(0);
         if self.horizontal {
-            Vec2::new(self.horizontal_width(code) as f64, 0.0)
-        } else if let Some([w, _, _]) = self.widths2.get(&code) {
+            Vec2::new(self.horizontal_width(cid) as f64, 0.0)
+        } else if let Some([w, _, _]) = self.widths2.get(&cid) {
             Vec2::new(0.0, *w as f64)
         } else {
             Vec2::new(0.0, self.dw2.1 as f64)
         }
     }
 
-    fn horizontal_width(&self, code: u32) -> f32 {
-        self.widths.get(&code).copied().unwrap_or(self.dw)
+    fn horizontal_width(&self, cid: u32) -> f32 {
+        self.widths.get(&cid).copied().unwrap_or(self.dw)
     }
 
     pub(crate) fn is_horizontal(&self) -> bool {
@@ -117,15 +129,14 @@ impl Type0Font {
     }
 
     pub(crate) fn origin_displacement(&self, code: u32) -> Vec2 {
+        let cid = self.code_to_cid(code).unwrap_or(0);
+
         if self.is_horizontal() {
             Vec2::default()
-        } else if let Some([_, v1, v2]) = self.widths2.get(&code) {
+        } else if let Some([_, v1, v2]) = self.widths2.get(&cid) {
             Vec2::new(-*v1 as f64, -*v2 as f64)
         } else {
-            Vec2::new(
-                -self.horizontal_width(code) as f64 / 2.0,
-                -self.dw2.0 as f64,
-            )
+            Vec2::new(-self.horizontal_width(cid) as f64 / 2.0, -self.dw2.0 as f64)
         }
     }
 }
