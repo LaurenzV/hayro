@@ -1,15 +1,15 @@
 {
   "4217": [
+    // Self-overlapping coons-patches
     "https://issues.apache.org/jira/secure/attachment/12924579/gs-bugzilla687307-2-bad-coons.pdf",
     "https://issues.apache.org/jira/secure/attachment/12922798/shade_via_1.3_006.pdf"
   ],
   "1915": [
+    // Shading somehow doesn't show up
     "https://issues.apache.org/jira/secure/attachment/12649689/mcafeeU5.pdf"
   ],
-  "1958": [
-    "https://issues.apache.org/jira/secure/attachment/12848966/gs-bugzilla690297.pdf"
-  ],
   "1968": [
+    // Self-overlapping coons-patch
     "https://issues.apache.org/jira/secure/attachment/12633464/texample-rgb-triangle.pdf"
   ],
   "2452": [
@@ -17,10 +17,8 @@
     "https://issues.apache.org/jira/secure/attachment/12676864/test.pdf"
   ],
   "4914": [
+    // Broken in nearly all viewers, but it seem slike it sohuld be possible to extract linear gradient
     "https://issues.apache.org/jira/secure/attachment/13007430/POPPLER-938.pdf"
-  ],
-  "5134": [
-    "https://issues.apache.org/jira/secure/attachment/13022705/gs-bugzilla687307-2.pdf"
   ],
   "2103": [
     // Artifacts in the rendered JPEG image.
