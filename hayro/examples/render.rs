@@ -15,9 +15,10 @@ fn main() {
     let pdf = Pdf::new(data).unwrap();
 
     let interpreter_settings = InterpreterSettings {
+        #[cfg(feature = "embed-fonts")]
         font_resolver: Arc::new(|query| match query {
-            FontQuery::Standard(s) => Some((get_standard(s), 0)),
-            FontQuery::Fallback(f) => Some((get_standard(&f.pick_standard_font()), 0)),
+            FontQuery::Standard(s) => Some(s.get_font_data()),
+            FontQuery::Fallback(f) => Some(f.pick_standard_font().get_font_data()),
         }),
         ..Default::default()
     };
@@ -28,53 +29,6 @@ fn main() {
         let pixmap = render(page, &interpreter_settings, &render_settings);
         std::fs::write(format!("rendered_{idx}.png"), pixmap.take_png()).unwrap();
     }
-}
-
-fn get_standard(font: &StandardFont) -> FontData {
-    let data = match font {
-        StandardFont::Helvetica => {
-            &include_bytes!("../../assets/standard_fonts/LiberationSans-Regular.ttf")[..]
-        }
-        StandardFont::HelveticaBold => {
-            &include_bytes!("../../assets/standard_fonts/LiberationSans-Bold.ttf")[..]
-        }
-        StandardFont::HelveticaOblique => {
-            &include_bytes!("../../assets/standard_fonts/LiberationSans-Italic.ttf")[..]
-        }
-        StandardFont::HelveticaBoldOblique => {
-            &include_bytes!("../../assets/standard_fonts/LiberationSans-BoldItalic.ttf")[..]
-        }
-        StandardFont::Courier => {
-            &include_bytes!("../../assets/standard_fonts/LiberationMono-Regular.ttf")[..]
-        }
-        StandardFont::CourierBold => {
-            &include_bytes!("../../assets/standard_fonts/LiberationMono-Bold.ttf")[..]
-        }
-        StandardFont::CourierOblique => {
-            &include_bytes!("../../assets/standard_fonts/LiberationMono-Italic.ttf")[..]
-        }
-        StandardFont::CourierBoldOblique => {
-            &include_bytes!("../../assets/standard_fonts/LiberationMono-BoldItalic.ttf")[..]
-        }
-        StandardFont::TimesRoman => {
-            &include_bytes!("../../assets/standard_fonts/LiberationSerif-Regular.ttf")[..]
-        }
-        StandardFont::TimesBold => {
-            &include_bytes!("../../assets/standard_fonts/LiberationSerif-Bold.ttf")[..]
-        }
-        StandardFont::TimesItalic => {
-            &include_bytes!("../../assets/standard_fonts/LiberationSerif-Italic.ttf")[..]
-        }
-        StandardFont::TimesBoldItalic => {
-            &include_bytes!("../../assets/standard_fonts/LiberationSerif-BoldItalic.ttf")[..]
-        }
-        StandardFont::ZapfDingBats => {
-            &include_bytes!("../../assets/standard_fonts/FoxitDingbats.pfb")[..]
-        }
-        StandardFont::Symbol => &include_bytes!("../../assets/standard_fonts/FoxitSymbol.pfb")[..],
-    };
-
-    Arc::new(data)
 }
 
 /// A simple stderr logger.

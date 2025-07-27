@@ -12,6 +12,7 @@ wasm-bindgen-futures = "0.4"
 js-sys = "0.3"
 console_error_panic_hook = "0.1.7"
 log = "0.4"
+hayro = { workspace = true, features = ["embed-fonts"]}
 
 [dependencies.web-sys]
 version = "0.3"
@@ -22,9 +23,3 @@ features = [
   "Url",
   "Window",
 ]
-
-[dependencies.hayro-syntax]
-workspace = true
-
-[dependencies.hayro]
-workspace = true

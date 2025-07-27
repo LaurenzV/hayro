@@ -20,4 +20,5 @@ log = { workspace = true }
 [features]
 default = []
 jpeg2000 = ["hayro-interpret/jpeg2000"]
+embed-fonts = ["hayro-interpret/embed-fonts"]
 

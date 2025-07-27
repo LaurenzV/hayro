@@ -126,6 +126,66 @@ impl StandardFont {
             StandardFont::Symbol => "Symbol",
         }
     }
+
+    /// Return suitable font data for the given standard font.
+    ///
+    /// Currently, this will return the corresponding Foxit font, which is a set of permissibly
+    /// licensed fonts that is also very light-weight.
+    ///
+    /// You can use the result of this method in your implementation of [`FontResolverFn`].
+    ///
+    /// [`FontResolverFn`]: crate::FontResolverFn
+    #[cfg(feature = "embed-fonts")]
+    pub fn get_font_data(&self) -> (FontData, u32) {
+        use std::sync::Arc;
+
+        let data = match self {
+            StandardFont::Helvetica => {
+                &include_bytes!("../../../assets/standard_fonts/FoxitSans.pfb")[..]
+            }
+            StandardFont::HelveticaBold => {
+                &include_bytes!("../../../assets/standard_fonts/FoxitSansBold.pfb")[..]
+            }
+            StandardFont::HelveticaOblique => {
+                &include_bytes!("../../../assets/standard_fonts/FoxitSansItalic.pfb")[..]
+            }
+            StandardFont::HelveticaBoldOblique => {
+                &include_bytes!("../../../assets/standard_fonts/FoxitSansBoldItalic.pfb")[..]
+            }
+            StandardFont::Courier => {
+                &include_bytes!("../../../assets/standard_fonts/FoxitFixed.pfb")[..]
+            }
+            StandardFont::CourierBold => {
+                &include_bytes!("../../../assets/standard_fonts/FoxitFixedBold.pfb")[..]
+            }
+            StandardFont::CourierOblique => {
+                &include_bytes!("../../../assets/standard_fonts/FoxitFixedItalic.pfb")[..]
+            }
+            StandardFont::CourierBoldOblique => {
+                &include_bytes!("../../../assets/standard_fonts/FoxitFixedBoldItalic.pfb")[..]
+            }
+            StandardFont::TimesRoman => {
+                &include_bytes!("../../../assets/standard_fonts/FoxitSerif.pfb")[..]
+            }
+            StandardFont::TimesBold => {
+                &include_bytes!("../../../assets/standard_fonts/FoxitSerifBold.pfb")[..]
+            }
+            StandardFont::TimesItalic => {
+                &include_bytes!("../../../assets/standard_fonts/FoxitSerifItalic.pfb")[..]
+            }
+            StandardFont::TimesBoldItalic => {
+                &include_bytes!("../../../assets/standard_fonts/FoxitSerifBoldItalic.pfb")[..]
+            }
+            StandardFont::ZapfDingBats => {
+                &include_bytes!("../../../assets/standard_fonts/FoxitDingbats.pfb")[..]
+            }
+            StandardFont::Symbol => {
+                include_bytes!("../../../assets/standard_fonts/FoxitSymbol.pfb")
+            }
+        };
+
+        (Arc::new(data), 0)
+    }
 }
 
 pub(crate) fn select_standard_font(dict: &Dict) -> Option<StandardFont> {

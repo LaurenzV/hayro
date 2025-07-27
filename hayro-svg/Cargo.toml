@@ -14,5 +14,8 @@ kurbo = { workspace = true }
 image = { workspace = true, features = ["png"] }
 base64 = { workspace = true }
 
+[features]
+embed-fonts = ["hayro-interpret/embed-fonts"]
+
 [dev-dependencies]
 log = { workspace = true }

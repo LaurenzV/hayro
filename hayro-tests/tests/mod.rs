@@ -173,16 +173,20 @@ fn load_pdf(path: &str) -> Pdf {
     Pdf::new(data).unwrap()
 }
 
-pub fn run_render_test(name: &str, file_path: &str, range_str: Option<&str>) {
-    let pdf = load_pdf(file_path);
-
-    let settings = InterpreterSettings {
+fn interpreter_settings() -> InterpreterSettings {
+    InterpreterSettings {
         font_resolver: Arc::new(|query| match query {
             FontQuery::Standard(s) => Some((get_standard(s), 0)),
             FontQuery::Fallback(f) => Some((get_standard(&f.pick_standard_font()), 0)),
         }),
         ..Default::default()
-    };
+    }
+}
+
+pub fn run_render_test(name: &str, file_path: &str, range_str: Option<&str>) {
+    let pdf = load_pdf(file_path);
+
+    let settings = interpreter_settings();
 
     let range = range_str.and_then(parse_range);
     check_render(
@@ -199,13 +203,7 @@ pub fn run_render_test(name: &str, file_path: &str, range_str: Option<&str>) {
 pub fn run_svg_test(name: &str, file_path: &str, range_str: Option<&str>) {
     let pdf = load_pdf(file_path);
 
-    let settings = InterpreterSettings {
-        font_resolver: Arc::new(|query| match query {
-            FontQuery::Standard(s) => Some((get_standard(s), 0)),
-            FontQuery::Fallback(f) => Some((get_standard(&f.pick_standard_font()), 0)),
-        }),
-        ..Default::default()
-    };
+    let settings = interpreter_settings();
 
     let range = range_str.and_then(parse_range);
 
@@ -318,6 +316,8 @@ fn is_pix_diff(pixel1: &Rgba<u8>, pixel2: &Rgba<u8>) -> bool {
         || pixel1.0[3] != pixel2.0[3]
 }
 
+// We don't use the `embed-fonts` feature because we use the more complete liberation fonts for
+// testing.
 fn get_standard(font: &StandardFont) -> FontData {
     let data = match font {
         StandardFont::Helvetica => {
