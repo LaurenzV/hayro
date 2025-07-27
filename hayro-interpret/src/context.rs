@@ -1,9 +1,9 @@
 use crate::cache::Cache;
 use crate::color::ColorSpace;
 use crate::convert::convert_transform;
-use crate::font::{Font, FontData, FontQuery};
+use crate::font::Font;
 use crate::interpret::state::State;
-use crate::{FillProps, FillRule, FontResolverFn, InterpreterSettings, StrokeProps};
+use crate::{FillProps, FillRule, InterpreterSettings, StrokeProps};
 use hayro_syntax::content::ops::Transform;
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Name;

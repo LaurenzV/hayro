@@ -1,4 +1,3 @@
-use hayro_interpret::font::{FontData, FontQuery, StandardFont};
 use hayro_interpret::{InterpreterSettings, Pdf};
 use hayro_svg::convert;
 use std::sync::Arc;
