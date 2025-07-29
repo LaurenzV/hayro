@@ -28,6 +28,7 @@ mod types;
 mod x_object;
 
 pub mod color;
+pub mod encode;
 pub mod font;
 pub mod pattern;
 pub mod shading;
