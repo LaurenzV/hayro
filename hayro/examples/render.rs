@@ -2,7 +2,6 @@
 
 use hayro::{Pdf, RenderSettings, render};
 use hayro_interpret::InterpreterSettings;
-use hayro_interpret::font::FontQuery;
 use std::sync::Arc;
 
 fn main() {
@@ -17,8 +16,8 @@ fn main() {
     let interpreter_settings = InterpreterSettings {
         #[cfg(feature = "embed-fonts")]
         font_resolver: Arc::new(|query| match query {
-            FontQuery::Standard(s) => Some(s.get_font_data()),
-            FontQuery::Fallback(f) => Some(f.pick_standard_font().get_font_data()),
+            hayro::FontQuery::Standard(s) => Some(s.get_font_data()),
+            hayro::FontQuery::Fallback(f) => Some(f.pick_standard_font().get_font_data()),
         }),
         ..Default::default()
     };

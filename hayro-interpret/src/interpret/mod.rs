@@ -260,9 +260,8 @@ pub fn interpret<'a, 'b>(
                 if let Some(clip) = *context.clip()
                     && !context.path().elements().is_empty()
                 {
-                    device.set_transform(context.get().ctm);
                     device.push_clip_path(&ClipPath {
-                        path: context.path().clone(),
+                        path: context.get().ctm * context.path().clone(),
                         fill: clip,
                     });
 
@@ -385,9 +384,8 @@ pub fn interpret<'a, 'b>(
                     .is_some();
 
                 if has_outline {
-                    device.set_transform(context.get().ctm);
                     device.push_clip_path(&ClipPath {
-                        path: context.get().text_state.clip_paths.clone(),
+                        path: context.get().ctm * context.get().text_state.clip_paths.clone(),
                         fill: FillRule::NonZero,
                     });
                     context.get_mut().n_clips += 1;

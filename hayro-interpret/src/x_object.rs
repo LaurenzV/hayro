@@ -106,7 +106,6 @@ pub(crate) fn draw_form_xobject<'a>(
     context.pre_concat_affine(x_object.matrix);
     context.push_root_transform();
 
-    device.set_transform(context.get().ctm);
     if x_object.is_transparency_group {
         device.push_transparency_group(
             context.get().non_stroke_alpha,
@@ -120,13 +119,14 @@ pub(crate) fn draw_form_xobject<'a>(
     device.set_soft_mask(context.get().soft_mask.clone());
 
     device.push_clip_path(&ClipPath {
-        path: Rect::new(
-            x_object.bbox[0] as f64,
-            x_object.bbox[1] as f64,
-            x_object.bbox[2] as f64,
-            x_object.bbox[3] as f64,
-        )
-        .to_path(0.1),
+        path: context.get().ctm
+            * Rect::new(
+                x_object.bbox[0] as f64,
+                x_object.bbox[1] as f64,
+                x_object.bbox[2] as f64,
+                x_object.bbox[3] as f64,
+            )
+            .to_path(0.1),
         fill: FillRule::NonZero,
     });
 
@@ -165,7 +165,6 @@ pub(crate) fn draw_image_xobject(
         1.0,
     ]));
     let transform = context.get().ctm;
-    device.set_transform(transform);
 
     let alpha = x_object.alpha8();
 
@@ -185,10 +184,10 @@ pub(crate) fn draw_image_xobject(
 
     if x_object.is_image_mask {
         if let Some(stencil) = alpha {
-            device.draw_stencil_image(stencil, &get_paint(context, false));
+            device.draw_stencil_image(stencil, transform, &get_paint(context, false));
         }
     } else if let Some(rgb_image) = x_object.rgb8() {
-        device.draw_rgba_image(rgb_image, alpha);
+        device.draw_rgba_image(rgb_image, transform, alpha);
     }
 
     device.pop_transparency_group();

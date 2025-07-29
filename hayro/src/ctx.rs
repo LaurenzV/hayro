@@ -108,10 +108,7 @@ impl RenderContext {
 
     fn apply_paint_bbox(&mut self, paint_transform: Affine) {
         if let Some(bbox) = self.paint_bbox {
-            let old_transform = self.transform;
-            self.transform = paint_transform;
-            self.push_layer(Some(&bbox.to_path(0.1)), None, None);
-            self.transform = old_transform;
+            self.push_layer(Some(&(paint_transform * bbox.to_path(0.1))), None, None);
         }
     }
 
@@ -164,7 +161,7 @@ impl RenderContext {
         mask: Option<Mask>,
     ) {
         let clip = if let Some(c) = clip_path {
-            flatten::fill(c, self.transform, &mut self.line_buf);
+            flatten::fill(c, Affine::IDENTITY, &mut self.line_buf);
             self.make_strips(self.fill_rule);
             Some((self.strip_buf.as_slice(), self.fill_rule))
         } else {

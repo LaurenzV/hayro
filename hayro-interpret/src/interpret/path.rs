@@ -30,15 +30,14 @@ pub(crate) fn fill_path_impl(
     path: Option<&BezPath>,
 ) {
     let base_transform = context.get().ctm;
-    device.set_transform(base_transform);
 
     let paint = get_paint(context, false);
     device.set_fill_properties(&context.fill_props());
     device.set_soft_mask(context.get().soft_mask.clone());
 
     match path {
-        None => device.fill_path(context.path(), &paint),
-        Some(path) => device.fill_path(path, &paint),
+        None => device.fill_path(context.path(), base_transform, &paint),
+        Some(path) => device.fill_path(path, base_transform, &paint),
     };
 }
 
@@ -48,15 +47,14 @@ pub(crate) fn stroke_path_impl(
     path: Option<&BezPath>,
 ) {
     let base_transform = context.get().ctm;
-    device.set_transform(base_transform);
 
-    device.set_stroke_properties(&context.stroke_props());
+    let stroke_props = context.stroke_props();
     device.set_soft_mask(context.get().soft_mask.clone());
     let paint = get_paint(context, true);
 
     match path {
-        None => device.stroke_path(context.path(), &paint),
-        Some(path) => device.stroke_path(path, &paint),
+        None => device.stroke_path(context.path(), base_transform, &paint, &stroke_props),
+        Some(path) => device.stroke_path(path, base_transform, &paint, &stroke_props),
     };
 }
 

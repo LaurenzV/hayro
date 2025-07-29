@@ -136,21 +136,22 @@ impl SvgRenderer {
 }
 
 impl Device for SvgRenderer {
-    fn set_transform(&mut self, affine: Affine) {
-        self.transform = affine;
-    }
-
-    fn stroke_path(&mut self, path: &BezPath, paint: &Paint) {
-        Self::stroke_path(self, path, paint);
-    }
-
-    fn set_stroke_properties(&mut self, stroke_props: &StrokeProps) {
+    fn stroke_path(
+        &mut self,
+        path: &BezPath,
+        transform: Affine,
+        paint: &Paint,
+        stroke_props: &StrokeProps,
+    ) {
+        self.transform = transform;
         self.stroke_props = stroke_props.clone();
+        Self::stroke_path(self, path, paint);
     }
 
     fn set_soft_mask(&mut self, _: Option<SoftMask>) {}
 
-    fn fill_path(&mut self, path: &BezPath, paint: &Paint) {
+    fn fill_path(&mut self, path: &BezPath, transform: Affine, paint: &Paint) {
+        self.transform = transform;
         Self::fill_path(self, path, paint);
     }
 
@@ -162,7 +163,7 @@ impl Device for SvgRenderer {
         let clip_id = self
             .clip_paths
             .insert_with(clip_path.cache_key(), || CachedClipPath {
-                path: self.transform * clip_path.path.clone(),
+                path: clip_path.path.clone(),
                 fill_rule: clip_path.fill,
             });
 
@@ -173,7 +174,9 @@ impl Device for SvgRenderer {
 
     fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask>) {}
 
-    fn fill_glyph(&mut self, glyph: &Glyph<'_>, paint: &Paint) {
+    fn fill_glyph(&mut self, glyph: &Glyph<'_>, transform: Affine, paint: &Paint) {
+        self.transform = transform;
+
         match glyph {
             Glyph::Outline(o) => {
                 let id = self
@@ -191,7 +194,16 @@ impl Device for SvgRenderer {
         }
     }
 
-    fn stroke_glyph(&mut self, glyph: &Glyph<'_>, paint: &Paint) {
+    fn stroke_glyph(
+        &mut self,
+        glyph: &Glyph<'_>,
+        transform: Affine,
+        paint: &Paint,
+        stroke_props: &StrokeProps,
+    ) {
+        self.stroke_props = stroke_props.clone();
+        self.transform = transform;
+
         match glyph {
             Glyph::Outline(o) => {
                 let path = o.glyph_transform * o.outline();
@@ -202,7 +214,9 @@ impl Device for SvgRenderer {
         }
     }
 
-    fn draw_rgba_image(&mut self, image: RgbData, alpha: Option<LumaData>) {
+    fn draw_rgba_image(&mut self, image: RgbData, transform: Affine, alpha: Option<LumaData>) {
+        self.transform = transform;
+
         let interpolate = image.interpolate;
 
         let image = if let Some(alpha) = alpha {
@@ -232,7 +246,9 @@ impl Device for SvgRenderer {
         self.write_image(&image, interpolate);
     }
 
-    fn draw_stencil_image(&mut self, stencil: LumaData, paint: &Paint) {
+    fn draw_stencil_image(&mut self, stencil: LumaData, transform: Affine, paint: &Paint) {
+        self.transform = transform;
+
         let interpolate = stencil.interpolate;
 
         let image = match &paint.paint_type {

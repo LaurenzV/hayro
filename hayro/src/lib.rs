@@ -110,8 +110,6 @@ pub fn render(
         fill: FillRule::NonZero,
     });
 
-    device.set_transform(initial_transform);
-
     interpret(
         page.typed_operations(),
         page.resources(),

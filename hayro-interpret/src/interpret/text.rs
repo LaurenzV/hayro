@@ -46,22 +46,20 @@ pub(crate) fn next_line(ctx: &mut Context, tx: f64, ty: f64) {
 }
 
 pub(crate) fn show_glyph<'a>(ctx: &mut Context<'a>, device: &mut impl Device, glyph: &Glyph<'a>) {
-    device.set_transform(ctx.get().ctm);
-
     device.set_soft_mask(ctx.get().soft_mask.clone());
-    device.set_stroke_properties(&ctx.stroke_props());
+    let stroke_props = ctx.stroke_props();
     device.set_fill_properties(&ctx.fill_props());
 
     match ctx.get().text_state.render_mode {
         TextRenderingMode::Fill => {
-            device.fill_glyph(glyph, &get_paint(ctx, false));
+            device.fill_glyph(glyph, ctx.get().ctm, &get_paint(ctx, false));
         }
         TextRenderingMode::Stroke => {
-            device.stroke_glyph(glyph, &get_paint(ctx, true));
+            device.stroke_glyph(glyph, ctx.get().ctm, &get_paint(ctx, true), &stroke_props);
         }
         TextRenderingMode::FillStroke => {
-            device.fill_glyph(glyph, &get_paint(ctx, false));
-            device.stroke_glyph(glyph, &get_paint(ctx, true));
+            device.fill_glyph(glyph, ctx.get().ctm, &get_paint(ctx, false));
+            device.stroke_glyph(glyph, ctx.get().ctm, &get_paint(ctx, true), &stroke_props);
         }
         TextRenderingMode::Invisible => {}
         TextRenderingMode::Clip => {
@@ -69,16 +67,16 @@ pub(crate) fn show_glyph<'a>(ctx: &mut Context<'a>, device: &mut impl Device, gl
         }
         TextRenderingMode::FillAndClip => {
             clip_glyph(ctx, glyph, glyph.glyph_transform());
-            device.fill_glyph(glyph, &get_paint(ctx, false));
+            device.fill_glyph(glyph, ctx.get().ctm, &get_paint(ctx, false));
         }
         TextRenderingMode::StrokeAndClip => {
             clip_glyph(ctx, glyph, glyph.glyph_transform());
-            device.stroke_glyph(glyph, &get_paint(ctx, true));
+            device.stroke_glyph(glyph, ctx.get().ctm, &get_paint(ctx, true), &stroke_props);
         }
         TextRenderingMode::FillAndStrokeAndClip => {
             clip_glyph(ctx, glyph, glyph.glyph_transform());
-            device.fill_glyph(glyph, &get_paint(ctx, false));
-            device.stroke_glyph(glyph, &get_paint(ctx, true));
+            device.fill_glyph(glyph, ctx.get().ctm, &get_paint(ctx, false));
+            device.stroke_glyph(glyph, ctx.get().ctm, &get_paint(ctx, true), &stroke_props);
         }
     }
 }

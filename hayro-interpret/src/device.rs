@@ -8,16 +8,19 @@ use kurbo::{Affine, BezPath};
 
 /// A trait for a device that can be used to process PDF drawing instructions.
 pub trait Device {
-    /// Set the current transform for paths, glyphs and images.
-    fn set_transform(&mut self, affine: Affine);
     /// Stroke a path.
-    fn stroke_path(&mut self, path: &BezPath, paint: &Paint);
+    fn stroke_path(
+        &mut self,
+        path: &BezPath,
+        transform: Affine,
+        paint: &Paint,
+        stroke_props: &StrokeProps,
+    );
     /// Set the properties for future stroking operations.
-    fn set_stroke_properties(&mut self, stroke_props: &StrokeProps);
     /// Set a soft mask to be used for future drawing instructions.
     fn set_soft_mask(&mut self, mask: Option<SoftMask>);
     /// Fill a path.
-    fn fill_path(&mut self, path: &BezPath, paint: &Paint);
+    fn fill_path(&mut self, path: &BezPath, transform: Affine, paint: &Paint);
     /// Set the properties for future filling operations.
     fn set_fill_properties(&mut self, fill_props: &FillProps);
     /// Push a new clip path to the clip stack.
@@ -25,13 +28,19 @@ pub trait Device {
     /// Push a new transparency group to the blend stack.
     fn push_transparency_group(&mut self, opacity: f32, mask: Option<SoftMask>);
     /// Fill a glyph.
-    fn fill_glyph(&mut self, glyph: &Glyph<'_>, paint: &Paint);
+    fn fill_glyph(&mut self, glyph: &Glyph<'_>, transform: Affine, paint: &Paint);
     /// Stroke a glyph.
-    fn stroke_glyph(&mut self, glyph: &Glyph<'_>, paint: &Paint);
+    fn stroke_glyph(
+        &mut self,
+        glyph: &Glyph<'_>,
+        transform: Affine,
+        paint: &Paint,
+        stroke_props: &StrokeProps,
+    );
     /// Draw an RGBA image.
-    fn draw_rgba_image(&mut self, image: RgbData, alpha: Option<LumaData>);
+    fn draw_rgba_image(&mut self, image: RgbData, transform: Affine, alpha: Option<LumaData>);
     /// Draw a stencil image with the given paint.
-    fn draw_stencil_image(&mut self, stencil: LumaData, paint: &Paint);
+    fn draw_stencil_image(&mut self, stencil: LumaData, transform: Affine, paint: &Paint);
     /// Pop the last clip path from the clip stack.
     fn pop_clip_path(&mut self);
     /// Pop the last transparency group from the blend stack.

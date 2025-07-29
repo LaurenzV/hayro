@@ -24,6 +24,30 @@ pub(crate) struct Renderer {
 }
 
 impl Renderer {
+    fn set_stroke_properties(&mut self, stroke_props: &StrokeProps) {
+        // Best-effort attempt to ensure a line width of at least 1.
+        let min_factor = min_factor(&self.ctx.transform);
+        let mut line_width = stroke_props.line_width.max(0.01);
+        let transformed_width = line_width * min_factor;
+
+        // Only enforce line width if not inside of pattern.
+        if transformed_width < 1.0 && !self.inside_pattern {
+            line_width /= transformed_width;
+        }
+
+        let stroke = kurbo::Stroke {
+            width: line_width as f64,
+            join: stroke_props.line_join,
+            miter_limit: stroke_props.miter_limit as f64,
+            start_cap: stroke_props.line_cap,
+            end_cap: stroke_props.line_cap,
+            dash_pattern: stroke_props.dash_array.iter().map(|n| *n as f64).collect(),
+            dash_offset: stroke_props.dash_offset as f64,
+        };
+
+        self.ctx.set_stroke(stroke);
+    }
+
     fn draw_image(&mut self, rgb_data: RgbData, alpha_data: Option<LumaData>, is_stencil: bool) {
         let mut cur_transform = self.ctx.transform;
 
@@ -190,35 +214,16 @@ impl Renderer {
 }
 
 impl Device for Renderer {
-    fn set_transform(&mut self, affine: Affine) {
-        self.ctx.set_transform(affine);
-    }
+    fn stroke_path(
+        &mut self,
+        path: &BezPath,
+        transform: Affine,
+        paint: &Paint,
+        stroke_props: &StrokeProps,
+    ) {
+        self.ctx.set_transform(transform);
+        self.set_stroke_properties(stroke_props);
 
-    fn set_stroke_properties(&mut self, stroke_props: &StrokeProps) {
-        // Best-effort attempt to ensure a line width of at least 1.
-        let min_factor = min_factor(&self.ctx.transform);
-        let mut line_width = stroke_props.line_width.max(0.01);
-        let transformed_width = line_width * min_factor;
-
-        // Only enforce line width if not inside of pattern.
-        if transformed_width < 1.0 && !self.inside_pattern {
-            line_width /= transformed_width;
-        }
-
-        let stroke = kurbo::Stroke {
-            width: line_width as f64,
-            join: stroke_props.line_join,
-            miter_limit: stroke_props.miter_limit as f64,
-            start_cap: stroke_props.line_cap,
-            end_cap: stroke_props.line_cap,
-            dash_pattern: stroke_props.dash_array.iter().map(|n| *n as f64).collect(),
-            dash_offset: stroke_props.dash_offset as f64,
-        };
-
-        self.ctx.set_stroke(stroke);
-    }
-
-    fn stroke_path(&mut self, path: &BezPath, paint: &Paint) {
         let (paint_type, paint_transform) = self.convert_paint(paint, true);
         self.ctx
             .stroke_path(path, paint_type, paint_transform, self.cur_mask.clone());
@@ -228,7 +233,8 @@ impl Device for Renderer {
         self.ctx.set_fill_rule(fill_props.fill_rule);
     }
 
-    fn fill_path(&mut self, path: &BezPath, paint: &Paint) {
+    fn fill_path(&mut self, path: &BezPath, transform: Affine, paint: &Paint) {
+        self.ctx.set_transform(transform);
         let (paint_type, paint_transform) = self.convert_paint(paint, false);
         self.ctx
             .fill_path(path, paint_type, paint_transform, self.cur_mask.clone());
@@ -237,8 +243,10 @@ impl Device for Renderer {
     fn draw_rgba_image(
         &mut self,
         image: hayro_interpret::RgbData,
+        transform: Affine,
         alpha: Option<hayro_interpret::LumaData>,
     ) {
+        self.ctx.set_transform(transform);
         if let Some(ref mask) = self.cur_mask {
             self.ctx.push_layer(None, None, Some(mask.clone()));
         }
@@ -252,7 +260,8 @@ impl Device for Renderer {
         }
     }
 
-    fn draw_stencil_image(&mut self, stencil: LumaData, paint: &Paint) {
+    fn draw_stencil_image(&mut self, stencil: LumaData, transform: Affine, paint: &Paint) {
+        self.ctx.set_transform(transform);
         self.ctx.set_anti_aliasing(false);
         self.ctx.push_layer(None, Some(1.0), self.cur_mask.clone());
         let old_rule = self.ctx.fill_rule;
@@ -281,11 +290,11 @@ impl Device for Renderer {
         self.ctx.set_anti_aliasing(true);
     }
 
-    fn fill_glyph(&mut self, glyph: &Glyph<'_>, paint: &Paint) {
+    fn fill_glyph(&mut self, glyph: &Glyph<'_>, transform: Affine, paint: &Paint) {
         match glyph {
             Glyph::Outline(o) => {
                 let outline = o.glyph_transform * o.outline();
-                self.fill_path(&outline, paint);
+                self.fill_path(&outline, transform, paint);
             }
             Glyph::Type3(s) => {
                 s.interpret(self, paint);
@@ -293,11 +302,17 @@ impl Device for Renderer {
         }
     }
 
-    fn stroke_glyph(&mut self, glyph: &Glyph<'_>, paint: &Paint) {
+    fn stroke_glyph(
+        &mut self,
+        glyph: &Glyph<'_>,
+        transform: Affine,
+        paint: &Paint,
+        stroke_props: &StrokeProps,
+    ) {
         match glyph {
             Glyph::Outline(o) => {
                 let outline = o.glyph_transform * o.outline();
-                self.stroke_path(&outline, paint);
+                self.stroke_path(&outline, transform, paint, stroke_props);
             }
             Glyph::Type3(s) => {
                 s.interpret(self, paint);
