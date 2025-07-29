@@ -18,9 +18,21 @@ pub(crate) struct Shader<T: Sampler> {
     pub(crate) sampler: T,
 }
 
+impl Shader<EncodedImage> {
+    pub(crate) fn new(base_transform: Affine, image: EncodedImage) -> Shader<EncodedImage> {
+        Self::new_inner(base_transform, image)
+    }
+}
+
+impl Shader<EncodedShading> {
+    pub(crate) fn new(shading: EncodedShading) -> Shader<EncodedShading> {
+        Self::new_inner(shading.base_transform, shading)
+    }
+}
+
 impl<T: Sampler> Shader<T> {
-    pub(crate) fn new(transform: Affine, sampler: T) -> Shader<T> {
-        let transform = transform * Affine::translate((0.5, 0.5));
+    fn new_inner(base_transform: Affine, sampler: T) -> Shader<T> {
+        let transform = base_transform * Affine::translate((0.5, 0.5));
         let (x_advance, y_advance) = x_y_advances(&transform);
 
         Shader {

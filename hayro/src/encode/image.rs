@@ -21,7 +21,7 @@ impl EncodeExt for Image {
             is_pattern: self.is_pattern,
         };
 
-        let shader = Shader::new(transform.inverse(), encoded);
+        let shader = Shader::<EncodedImage>::new(transform.inverse(), encoded);
 
         if self.is_stencil {
             paints.push(EncodedPaint::Mask(shader));

@@ -10,6 +10,7 @@ use smallvec::{ToSmallVec, smallvec};
 
 #[derive(Debug)]
 pub(crate) struct EncodedShading {
+    pub(crate) base_transform: Affine,
     pub(crate) color_space: ColorSpace,
     pub(crate) background_color: AlphaColor,
     pub(crate) shading_type: EncodedShadingType,
@@ -122,9 +123,10 @@ impl EncodeExt for ShadingPattern {
             color_space,
             background_color,
             shading_type,
+            base_transform
         };
 
-        let shader = Shader::new(base_transform, encoded);
+        let shader = Shader::<EncodedShading>::new(encoded);
         paints.push(EncodedPaint::Shading(shader));
         Paint::Indexed(IndexedPaint::new(idx))
     }
