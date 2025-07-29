@@ -652,8 +652,9 @@ dependencies = [
 
 [[package]]
 name = "jpeg2k"
-version = "0.10.0"
-source = "git+https://github.com/LaurenzV/jpeg2k?rev=fed421f#fed421fcb471b140c761b5e43e5c38f52f79b35a"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "be2982db6b9f254c9df44d89bcfdc758924d538f576d9649f5b10008150f2a60"
 dependencies = [
  "anyhow",
  "log",
