@@ -1,20 +1,31 @@
 use base64::Engine;
+use hayro_interpret::color::Color;
+use hayro_interpret::encode::EncodedShadingPattern;
 use hayro_interpret::font::Glyph;
+use hayro_interpret::pattern::{Pattern, ShadingPattern};
+use hayro_interpret::shading::Shading;
 use hayro_interpret::{
     CacheKey, ClipPath, Device, FillRule, LumaData, Paint, PaintType, RgbData, SoftMask,
     StrokeProps,
 };
 use image::{DynamicImage, ImageBuffer, ImageFormat};
-use kurbo::{Affine, BezPath, PathEl};
+use kurbo::{Affine, BezPath, PathEl, Point, Rect, Vec2};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::io::{Cursor, Write};
+use std::sync::Arc;
 use std::{fmt, io};
 use xmlwriter::{Options, XmlWriter};
 
 struct CachedClipPath {
     path: BezPath,
     fill_rule: FillRule,
+}
+
+struct CachedShading {
+    pattern: ShadingPattern,
+    transform: Affine,
+    bbox: Rect,
 }
 
 pub(crate) struct SvgRenderer {
@@ -24,21 +35,29 @@ pub(crate) struct SvgRenderer {
     stroke_props: StrokeProps,
     glyphs: Deduplicator<BezPath>,
     clip_paths: Deduplicator<CachedClipPath>,
+    shadings: Deduplicator<CachedShading>,
 }
 
 impl SvgRenderer {
     fn fill_path(&mut self, path: &BezPath, paint: &Paint) {
         let svg_path = path.to_svg_f32();
 
-        self.xml.start_element("path");
-        self.xml.write_attribute("d", &svg_path);
-        self.write_paint(paint, false);
-        self.write_transform(None);
-        self.xml.end_element();
+        match &paint.paint_type {
+            PaintType::Color(c) => {
+                self.xml.start_element("path");
+                self.xml.write_attribute("d", &svg_path);
+                self.write_color(&c, false);
+                self.write_transform(None);
+                self.xml.end_element();
+            }
+            PaintType::Pattern(_) => {
+                unimplemented!();
+            }
+        }
     }
 
-    fn write_paint(&mut self, paint: &Paint, is_stroke: bool) {
-        let (fill, alpha) = convert_paint(paint);
+    fn write_color(&mut self, color: &Color, is_stroke: bool) {
+        let (fill, alpha) = convert_color(color);
 
         if is_stroke {
             self.xml.write_attribute("stroke", &fill);
@@ -57,12 +76,19 @@ impl SvgRenderer {
     fn stroke_path(&mut self, path: &BezPath, paint: &Paint) {
         let svg_path = path.to_svg_f32();
 
-        self.xml.start_element("path");
-        self.xml.write_attribute("d", &svg_path);
-        self.write_paint(paint, true);
-        self.xml.write_attribute("fill", "none");
-        self.write_transform(None);
-        self.xml.end_element();
+        match &paint.paint_type {
+            PaintType::Color(c) => {
+                self.xml.start_element("path");
+                self.xml.write_attribute("d", &svg_path);
+                self.write_color(c, true);
+                self.xml.write_attribute("fill", "none");
+                self.write_transform(None);
+                self.xml.end_element();
+            }
+            PaintType::Pattern(_) => {
+                unimplemented!();
+            }
+        }
     }
 
     fn write_transform(&mut self, transform: Option<Affine>) {
@@ -75,14 +101,23 @@ impl SvgRenderer {
         );
     }
 
-    fn write_image(&mut self, image: &DynamicImage, interpolate: bool) {
+    fn write_image(
+        &mut self,
+        image: &DynamicImage,
+        interpolate: bool,
+        id: Option<Id>,
+        transform: Option<Affine>,
+    ) {
         let scaling = if interpolate { "smooth" } else { "pixelated" };
 
         let base64 = convert_image_to_base64_url(image);
 
         self.xml.start_element("image");
+        if let Some(id) = id {
+            self.xml.write_attribute("id", &id);
+        }
+        self.write_transform(transform);
         self.xml.write_attribute("xlink:href", &base64);
-        self.write_transform(None);
         self.xml.write_attribute("width", &image.width());
         self.xml.write_attribute("height", &image.height());
         self.xml.write_attribute("preserveAspectRatio", "none");
@@ -133,6 +168,23 @@ impl SvgRenderer {
 
         self.xml.end_element();
     }
+
+    fn write_shading_defs(&mut self) {
+        if self.shadings.is_empty() {
+            return;
+        }
+
+        let shadings = std::mem::take(&mut self.shadings);
+
+        self.xml.start_element("defs");
+        self.xml.write_attribute("id", "shading");
+
+        for (id, shading) in shadings.iter() {
+            let encoded = shading.pattern.encode(shading.transform);
+            let (image, transform) = render_texture(shading.bbox, &encoded);
+            self.write_image(&image, false, Some(id), Some(transform));
+        }
+    }
 }
 
 impl Device for SvgRenderer {
@@ -180,12 +232,23 @@ impl Device for SvgRenderer {
                     .glyphs
                     .insert_with(o.identifier().cache_key(), || o.outline());
 
-                self.xml.start_element("use");
-                self.xml
-                    .write_attribute_fmt("xlink:href", format_args!("#{id}"));
-                self.write_transform(Some(self.transform * o.glyph_transform));
-                self.write_paint(paint, false);
-                self.xml.end_element();
+                match &paint.paint_type {
+                    PaintType::Color(c) => {
+                        self.xml.start_element("use");
+                        self.xml
+                            .write_attribute_fmt("xlink:href", format_args!("#{id}"));
+                        self.write_transform(Some(self.transform * o.glyph_transform));
+
+                        self.write_color(c, false);
+                        self.xml.end_element();
+                    }
+                    PaintType::Pattern(p) => match p.as_ref() {
+                        Pattern::Shading(s) => {}
+                        Pattern::Tiling(_) => {
+                            unimplemented!()
+                        }
+                    },
+                }
             }
             Glyph::Type3(_) => {}
         }
@@ -240,7 +303,7 @@ impl Device for SvgRenderer {
             )
         };
 
-        self.write_image(&image, interpolate);
+        self.write_image(&image, interpolate, None, None);
     }
 
     fn draw_stencil_image(&mut self, stencil: LumaData, transform: Affine, paint: &Paint) {
@@ -266,7 +329,7 @@ impl Device for SvgRenderer {
             }
         };
 
-        self.write_image(&image, interpolate);
+        self.write_image(&image, interpolate, None, None);
     }
 
     fn pop_clip_path(&mut self) {
@@ -285,6 +348,7 @@ impl SvgRenderer {
             stroke_props: StrokeProps::default(),
             glyphs: Deduplicator::new('g'),
             clip_paths: Deduplicator::new('c'),
+            shadings: Deduplicator::new('s'),
         }
     }
 
@@ -320,23 +384,18 @@ fn convert_transform(transform: &Affine) -> String {
         .join(" ")
 }
 
-fn convert_paint(paint: &Paint) -> (String, f32) {
-    match &paint.paint_type {
-        PaintType::Color(c) => {
-            let rgba8 = c.to_rgba().to_rgba8();
-            let color = format!(
-                "#{}",
-                &rgba8[0..3]
-                    .iter()
-                    .map(|b| format!("{b:02x}"))
-                    .collect::<String>()
-            );
-            let alpha = rgba8[3] as f32 / 255.0;
+fn convert_color(color: &Color) -> (String, f32) {
+    let rgba8 = color.to_rgba().to_rgba8();
+    let color = format!(
+        "#{}",
+        &rgba8[0..3]
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect::<String>()
+    );
+    let alpha = rgba8[3] as f32 / 255.0;
 
-            (color, alpha)
-        }
-        PaintType::Pattern(_) => ("black".to_string(), 1.0),
-    }
+    (color, alpha)
 }
 
 pub fn convert_image_to_base64_url(image: &DynamicImage) -> String {
@@ -356,6 +415,12 @@ struct Deduplicator<T> {
     kind: char,
     vec: Vec<T>,
     present: HashMap<u128, Id>,
+}
+
+impl<T> Default for Deduplicator<T> {
+    fn default() -> Self {
+        Self::new('-')
+    }
 }
 
 impl<T> Deduplicator<T> {
@@ -441,4 +506,74 @@ impl BezPathExt for BezPath {
 
         Ok(())
     }
+}
+
+fn render_texture(bbox: Rect, shading_pattern: &EncodedShadingPattern) -> (DynamicImage, Affine) {
+    const MIN_RES: f32 = 1000.0;
+    const MAX_RES: f32 = 3000.0;
+
+    let base_width = bbox.width() as f32;
+    let base_height = bbox.height() as f32;
+    let total_scale = {
+        let w_scale = (MIN_RES / base_width).max(MAX_RES / base_width);
+        let h_scale = (MIN_RES / base_height).min(MAX_RES / base_height);
+
+        w_scale.min(h_scale)
+    };
+
+    let width = (base_width * total_scale).ceil() as u32;
+    let height = (base_height * total_scale).ceil() as u32;
+
+    let image_transform = Affine::new([
+        total_scale as f64,
+        0.0,
+        0.0,
+        total_scale as f64,
+        -bbox.x0,
+        -bbox.y0,
+    ]);
+    let initial_transform = image_transform * shading_pattern.base_transform;
+    let (x_advance, y_advance) = x_y_advances(&initial_transform);
+
+    let mut buf = vec![0u8; width as usize * height as usize * 4];
+    let mut start_point = initial_transform * Point::new(0.0, 0.0);
+
+    for row in buf.chunks_exact_mut(width as usize * 4) {
+        let mut point = start_point;
+
+        for pixel in row.chunks_exact_mut(4) {
+            let sample = shading_pattern.sample(point);
+            let converted = [
+                (sample[0] * 255.0 + 0.5) as u8,
+                (sample[1] * 255.0 + 0.5) as u8,
+                (sample[2] * 255.0 + 0.5) as u8,
+                (sample[3] * 255.0 + 0.5) as u8,
+            ];
+
+            pixel.copy_from_slice(&converted);
+
+            point += x_advance;
+        }
+
+        start_point += y_advance;
+    }
+
+    let image = DynamicImage::ImageRgba8(ImageBuffer::from_raw(width, height, buf).unwrap());
+
+    (image, image_transform.inverse())
+}
+
+fn x_y_advances(transform: &Affine) -> (Vec2, Vec2) {
+    let scale_skew_transform = {
+        let c = transform.as_coeffs();
+        Affine::new([c[0], c[1], c[2], c[3], 0.0, 0.0])
+    };
+
+    let x_advance = scale_skew_transform * Point::new(1.0, 0.0);
+    let y_advance = scale_skew_transform * Point::new(0.0, 1.0);
+
+    (
+        Vec2::new(x_advance.x, x_advance.y),
+        Vec2::new(y_advance.x, y_advance.y),
+    )
 }

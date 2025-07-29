@@ -2,6 +2,7 @@
 
 #![allow(clippy::needless_range_loop)]
 
+use crate::CacheKey;
 use crate::cache::Cache;
 use crate::color::{ColorComponents, ColorSpace};
 use crate::util::{FloatExt, PointExt};
@@ -110,6 +111,7 @@ pub enum ShadingType {
 /// A PDF shading.
 #[derive(Clone, Debug)]
 pub struct Shading {
+    cache_key: u128,
     /// The type of shading.
     pub shading_type: Arc<ShadingType>,
     /// The color space of the shading.
@@ -122,6 +124,8 @@ pub struct Shading {
 
 impl Shading {
     pub(crate) fn new(dict: &Dict, stream: Option<&Stream>, cache: &Cache) -> Option<Self> {
+        let cache_key = dict.cache_key();
+
         let shading_num = dict.get::<u8>(SHADING_TYPE)?;
 
         let color_space = ColorSpace::new(dict.get(COLORSPACE)?, cache)?;
@@ -267,11 +271,18 @@ impl Shading {
             .map(|a| a.iter::<f32>().collect::<SmallVec<_>>());
 
         Some(Self {
+            cache_key,
             shading_type: Arc::new(shading_type),
             color_space,
             bbox,
             background,
         })
+    }
+}
+
+impl CacheKey for Shading {
+    fn cache_key(&self) -> u128 {
+        self.cache_key
     }
 }
 
