@@ -10,8 +10,7 @@ use crate::interpret::state::State;
 use crate::shading::Shading;
 use crate::soft_mask::SoftMask;
 use crate::{
-    FillProps, FillRule, InterpreterSettings, LumaData, Paint, PaintType, RgbData, StrokeProps,
-    interpret,
+    FillRule, InterpreterSettings, LumaData, Paint, PaintType, RgbData, StrokeProps, interpret,
 };
 use hayro_syntax::content::TypedIter;
 use hayro_syntax::object::Dict;
@@ -259,12 +258,8 @@ impl<T: Device> Device for StencilPatternDevice<'_, T> {
 
     fn set_soft_mask(&mut self, _: Option<SoftMask>) {}
 
-    fn fill_path(&mut self, path: &BezPath, transform: Affine, _: &Paint) {
-        self.inner.fill_path(path, transform, self.paint)
-    }
-
-    fn set_fill_properties(&mut self, fill_props: &FillProps) {
-        self.inner.set_fill_properties(fill_props)
+    fn fill_path(&mut self, path: &BezPath, transform: Affine, _: &Paint, fill_rule: FillRule) {
+        self.inner.fill_path(path, transform, self.paint, fill_rule)
     }
 
     fn push_clip_path(&mut self, clip_path: &ClipPath) {

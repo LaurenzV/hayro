@@ -1,8 +1,8 @@
-use crate::ClipPath;
 use crate::Paint;
+use crate::StrokeProps;
 use crate::font::Glyph;
 use crate::soft_mask::SoftMask;
-use crate::{FillProps, StrokeProps};
+use crate::{ClipPath, FillRule};
 use crate::{LumaData, RgbData};
 use kurbo::{Affine, BezPath};
 
@@ -20,9 +20,7 @@ pub trait Device {
     /// Set a soft mask to be used for future drawing instructions.
     fn set_soft_mask(&mut self, mask: Option<SoftMask>);
     /// Fill a path.
-    fn fill_path(&mut self, path: &BezPath, transform: Affine, paint: &Paint);
-    /// Set the properties for future filling operations.
-    fn set_fill_properties(&mut self, fill_props: &FillProps);
+    fn fill_path(&mut self, path: &BezPath, transform: Affine, paint: &Paint, fill_rule: FillRule);
     /// Push a new clip path to the clip stack.
     fn push_clip_path(&mut self, clip_path: &ClipPath);
     /// Push a new transparency group to the blend stack.

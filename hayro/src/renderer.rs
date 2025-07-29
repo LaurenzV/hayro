@@ -7,8 +7,7 @@ use hayro_interpret::font::Glyph;
 use hayro_interpret::hayro_syntax::object::ObjectIdentifier;
 use hayro_interpret::pattern::Pattern;
 use hayro_interpret::{
-    ClipPath, Device, FillProps, FillRule, LumaData, MaskType, Paint, RgbData, SoftMask,
-    StrokeProps,
+    ClipPath, Device, FillRule, LumaData, MaskType, Paint, RgbData, SoftMask, StrokeProps,
 };
 use image::imageops::FilterType;
 use image::{DynamicImage, ImageBuffer};
@@ -229,11 +228,8 @@ impl Device for Renderer {
             .stroke_path(path, paint_type, paint_transform, self.cur_mask.clone());
     }
 
-    fn set_fill_properties(&mut self, fill_props: &FillProps) {
-        self.ctx.set_fill_rule(fill_props.fill_rule);
-    }
-
-    fn fill_path(&mut self, path: &BezPath, transform: Affine, paint: &Paint) {
+    fn fill_path(&mut self, path: &BezPath, transform: Affine, paint: &Paint, fill_rule: FillRule) {
+        self.ctx.set_fill_rule(fill_rule);
         self.ctx.set_transform(transform);
         let (paint_type, paint_transform) = self.convert_paint(paint, false);
         self.ctx
@@ -265,9 +261,7 @@ impl Device for Renderer {
         self.ctx.set_anti_aliasing(false);
         self.ctx.push_layer(None, Some(1.0), self.cur_mask.clone());
         let old_rule = self.ctx.fill_rule;
-        self.set_fill_properties(&FillProps {
-            fill_rule: FillRule::NonZero,
-        });
+        self.ctx.set_fill_rule(FillRule::NonZero);
         let (converted_paint, paint_transform) = self.convert_paint(paint, false);
         self.ctx.fill_rect(
             &Rect::new(0.0, 0.0, stencil.width as f64, stencil.height as f64),
@@ -284,9 +278,7 @@ impl Device for Renderer {
         self.draw_image(rgb_data, Some(stencil), true);
         self.ctx.pop_layer();
 
-        self.set_fill_properties(&FillProps {
-            fill_rule: old_rule,
-        });
+        self.ctx.set_fill_rule(old_rule);
         self.ctx.set_anti_aliasing(true);
     }
 
@@ -294,7 +286,7 @@ impl Device for Renderer {
         match glyph {
             Glyph::Outline(o) => {
                 let outline = o.glyph_transform * o.outline();
-                self.fill_path(&outline, transform, paint);
+                self.fill_path(&outline, transform, paint, FillRule::NonZero);
             }
             Glyph::Type3(s) => {
                 s.interpret(self, paint);

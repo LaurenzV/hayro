@@ -1,4 +1,3 @@
-use crate::Paint;
 use crate::context::Context;
 use crate::device::Device;
 use crate::font::glyph_simulator::GlyphSimulator;
@@ -6,8 +5,9 @@ use crate::font::true_type::{read_encoding, read_widths};
 use crate::font::{Encoding, Glyph, Type3Glyph, UNITS_PER_EM};
 use crate::soft_mask::SoftMask;
 use crate::{CacheKey, ClipPath};
-use crate::{FillProps, StrokeProps, interpret};
+use crate::{FillRule, Paint};
 use crate::{LumaData, RgbData};
+use crate::{StrokeProps, interpret};
 use hayro_syntax::content::TypedIter;
 use hayro_syntax::content::ops::TypedInstruction;
 use hayro_syntax::object::Dict;
@@ -174,12 +174,8 @@ impl<T: Device> Device for Type3ShapeGlyphDevice<'_, T> {
 
     fn set_soft_mask(&mut self, _: Option<SoftMask>) {}
 
-    fn fill_path(&mut self, path: &BezPath, transform: Affine, _: &Paint) {
-        self.inner.fill_path(path, transform, self.paint)
-    }
-
-    fn set_fill_properties(&mut self, fill_props: &FillProps) {
-        self.inner.set_fill_properties(fill_props)
+    fn fill_path(&mut self, path: &BezPath, transform: Affine, _: &Paint, fill_rule: FillRule) {
+        self.inner.fill_path(path, transform, self.paint, fill_rule)
     }
 
     fn push_clip_path(&mut self, clip_path: &ClipPath) {

@@ -7,7 +7,7 @@ use crate::interpret::text::TextRenderingMode;
 use crate::pattern::Pattern;
 use crate::soft_mask::SoftMask;
 use crate::util::OptionLog;
-use crate::{FillProps, StrokeProps};
+use crate::{FillRule, StrokeProps};
 use hayro_syntax::content::ops::{LineCap, LineJoin};
 use hayro_syntax::object::dict::keys::SMASK;
 use hayro_syntax::object::{Dict, Name, Number};
@@ -44,7 +44,7 @@ pub(crate) struct State<'a> {
     pub(crate) soft_mask: Option<SoftMask<'a>>,
     // Strictly speaking not part of the graphics state, but we keep it there for
     // consistency.
-    pub(crate) fill_props: FillProps,
+    pub(crate) fill_rule: FillRule,
     pub(crate) n_clips: u32,
 }
 
@@ -59,7 +59,7 @@ impl Default for State<'_> {
             none_stroke_cs: ColorSpace::device_gray(),
             non_stroke_color: smallvec![0.0],
             stroke_alpha: 1.0,
-            fill_props: FillProps::default(),
+            fill_rule: FillRule::NonZero,
             n_clips: 0,
             soft_mask: None,
             text_state: TextState::default(),

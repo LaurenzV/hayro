@@ -102,18 +102,3 @@ pub enum FillRule {
     /// Even-odd filling.
     EvenOdd,
 }
-
-/// Fill properties.
-#[derive(Clone, Debug)]
-pub struct FillProps {
-    /// The fill rule.
-    pub fill_rule: FillRule,
-}
-
-impl Default for FillProps {
-    fn default() -> Self {
-        Self {
-            fill_rule: FillRule::NonZero,
-        }
-    }
-}

@@ -32,12 +32,12 @@ pub(crate) fn fill_path_impl(
     let base_transform = context.get().ctm;
 
     let paint = get_paint(context, false);
-    device.set_fill_properties(&context.fill_props());
+    let fill_rule = context.fill_rule();
     device.set_soft_mask(context.get().soft_mask.clone());
 
     match path {
-        None => device.fill_path(context.path(), base_transform, &paint),
-        Some(path) => device.fill_path(path, base_transform, &paint),
+        None => device.fill_path(context.path(), base_transform, &paint, fill_rule),
+        Some(path) => device.fill_path(path, base_transform, &paint, fill_rule),
     };
 }
 

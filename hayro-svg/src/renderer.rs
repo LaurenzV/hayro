@@ -1,7 +1,7 @@
 use base64::Engine;
 use hayro_interpret::font::Glyph;
 use hayro_interpret::{
-    CacheKey, ClipPath, Device, FillProps, FillRule, LumaData, Paint, PaintType, RgbData, SoftMask,
+    CacheKey, ClipPath, Device, FillRule, LumaData, Paint, PaintType, RgbData, SoftMask,
     StrokeProps,
 };
 use image::{DynamicImage, ImageBuffer, ImageFormat};
@@ -20,7 +20,7 @@ struct CachedClipPath {
 pub(crate) struct SvgRenderer {
     xml: XmlWriter,
     transform: Affine,
-    fill_props: FillProps,
+    fill_rule: FillRule,
     stroke_props: StrokeProps,
     glyphs: Deduplicator<BezPath>,
     clip_paths: Deduplicator<CachedClipPath>,
@@ -150,13 +150,10 @@ impl Device for SvgRenderer {
 
     fn set_soft_mask(&mut self, _: Option<SoftMask>) {}
 
-    fn fill_path(&mut self, path: &BezPath, transform: Affine, paint: &Paint) {
+    fn fill_path(&mut self, path: &BezPath, transform: Affine, paint: &Paint, fill_rule: FillRule) {
         self.transform = transform;
+        self.fill_rule = fill_rule;
         Self::fill_path(self, path, paint);
-    }
-
-    fn set_fill_properties(&mut self, fill_props: &FillProps) {
-        self.fill_props = fill_props.clone();
     }
 
     fn push_clip_path(&mut self, clip_path: &ClipPath) {
@@ -284,7 +281,7 @@ impl SvgRenderer {
         Self {
             xml: XmlWriter::new(Options::default()),
             transform: Affine::IDENTITY,
-            fill_props: FillProps::default(),
+            fill_rule: FillRule::NonZero,
             stroke_props: StrokeProps::default(),
             glyphs: Deduplicator::new('g'),
             clip_paths: Deduplicator::new('c'),
