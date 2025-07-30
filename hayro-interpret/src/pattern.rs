@@ -1,6 +1,6 @@
 //! PDF patterns.
 
-use crate::ClipPath;
+use crate::{CacheKey, ClipPath};
 use crate::cache::Cache;
 use crate::color::{Color, ColorSpace};
 use crate::context::Context;
@@ -26,6 +26,7 @@ use kurbo::{Affine, BezPath, Shape};
 use log::warn;
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
+use crate::util::hash128;
 
 /// A PDF pattern.
 #[derive(Debug, Clone)]
@@ -86,6 +87,12 @@ impl ShadingPattern {
             shading: Arc::new(shading),
             matrix,
         })
+    }
+}
+
+impl CacheKey for ShadingPattern {
+    fn cache_key(&self) -> u128 {
+        hash128(&(self.shading.cache_key(), self.matrix.cache_key()))
     }
 }
 

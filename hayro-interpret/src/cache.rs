@@ -4,6 +4,7 @@ use std::any::Any;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::sync::{Arc, Mutex};
+use kurbo::Affine;
 
 type CacheMap = HashMap<ObjectIdentifier, Option<Box<dyn Any + Send + Sync>>>;
 #[derive(Clone)]
@@ -66,5 +67,19 @@ impl CacheKey for Dict<'_> {
 impl CacheKey for Stream<'_> {
     fn cache_key(&self) -> u128 {
         self.dict().cache_key()
+    }
+}
+
+impl CacheKey for Affine {
+    fn cache_key(&self) -> u128 {
+        let c = self.as_coeffs();
+        hash128(&[
+            c[0].to_bits(),
+            c[1].to_bits(),
+            c[2].to_bits(),
+            c[3].to_bits(),
+            c[4].to_bits(),
+            c[5].to_bits(),
+        ])
     }
 }

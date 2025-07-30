@@ -9,7 +9,7 @@ use hayro_interpret::{
     StrokeProps,
 };
 use image::{DynamicImage, ImageBuffer, ImageFormat};
-use kurbo::{Affine, BezPath, PathEl, Point, Rect, Vec2};
+use kurbo::{Affine, BezPath, PathEl, Point, Rect, Shape, Vec2};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::io::{Cursor, Write};
@@ -50,8 +50,28 @@ impl SvgRenderer {
                 self.write_transform(None);
                 self.xml.end_element();
             }
-            PaintType::Pattern(_) => {
-                unimplemented!();
+            PaintType::Pattern(p) => {
+                match p.as_ref() {
+                    Pattern::Shading(s) => {
+                        let bbox = path.bounding_box();
+                        let id = self
+                            .shadings
+                            .insert_with(s.cache_key(), || CachedShading {
+                                pattern: s.clone(),
+                                transform: paint.paint_transform,
+                                bbox,
+                            });
+                        
+                        self.xml.start_element("use");
+                        self.xml
+                            .write_attribute_fmt("xlink:href", format_args!("#{id}"));
+                        self.write_transform(None);
+                        self.xml.end_element();
+                    }
+                    Pattern::Tiling(_) => {
+                        unimplemented!()
+                    }
+                }
             }
         }
     }
@@ -180,7 +200,7 @@ impl SvgRenderer {
         self.xml.write_attribute("id", "shading");
 
         for (id, shading) in shadings.iter() {
-            let encoded = shading.pattern.encode(shading.transform);
+            let encoded = shading.pattern.encode(Affine::IDENTITY);
             let (image, transform) = render_texture(shading.bbox, &encoded);
             self.write_image(&image, false, Some(id), Some(transform));
         }
@@ -369,6 +389,7 @@ impl SvgRenderer {
     pub(crate) fn finish(mut self) -> String {
         self.write_glyph_defs();
         self.write_clip_path_defs();
+        self.write_shading_defs();
         // Close the `svg` element.
         self.xml.end_element();
         self.xml.end_document()
