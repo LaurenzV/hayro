@@ -56,6 +56,12 @@ pub trait CacheKey {
     fn cache_key(&self) -> u128;
 }
 
+impl<T: CacheKey, U: CacheKey> CacheKey for (T, U) {
+    fn cache_key(&self) -> u128 {
+        hash128(&(self.0.cache_key(), self.1.cache_key()))
+    }
+}
+
 impl CacheKey for Dict<'_> {
     fn cache_key(&self) -> u128 {
         self.obj_id()

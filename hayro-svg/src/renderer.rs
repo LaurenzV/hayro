@@ -22,6 +22,11 @@ struct CachedClipPath {
     fill_rule: FillRule,
 }
 
+struct CachedShadingPattern {
+    transform: Affine,
+    shading: Id
+}
+
 struct CachedShading {
     pattern: ShadingPattern,
     transform: Affine,
@@ -36,6 +41,7 @@ pub(crate) struct SvgRenderer {
     glyphs: Deduplicator<BezPath>,
     clip_paths: Deduplicator<CachedClipPath>,
     shadings: Deduplicator<CachedShading>,
+    shading_patterns: Deduplicator<CachedShadingPattern>,
 }
 
 impl SvgRenderer {
@@ -382,6 +388,7 @@ impl SvgRenderer {
             glyphs: Deduplicator::new('g'),
             clip_paths: Deduplicator::new('c'),
             shadings: Deduplicator::new('s'),
+            shading_patterns: Deduplicator::new('v'),
         }
     }
 
