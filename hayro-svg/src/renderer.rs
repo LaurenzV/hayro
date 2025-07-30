@@ -54,9 +54,8 @@ impl SvgRenderer {
                 match p.as_ref() {
                     Pattern::Shading(s) => {
                         self.xml.start_element("g");
-                        self.write_transform(None);
                         let clip_id = self.insert_clip(&ClipPath {
-                            path: path.clone(),
+                            path: self.transform * path.clone(),
                             // TODO: Make configurable
                             fill: FillRule::NonZero,
                         });
@@ -212,7 +211,7 @@ impl SvgRenderer {
         for (id, shading) in shadings.iter() {
             let encoded = shading.pattern.encode(shading.transform);
             let (image, transform) = render_texture(shading.bbox, &encoded);
-            self.write_image(&image, false, Some(id), Some(transform));
+            self.write_image(&image, true, Some(id), Some(transform));
         }
     }
     
@@ -592,7 +591,7 @@ fn render_texture(bbox: Rect, shading_pattern: &EncodedShadingPattern) -> (Dynam
     
     image.save("test.png").unwrap();
 
-    (image, Affine::translate((-bbox.x0, -bbox.y0)) * Affine::scale(inv_scale as f64))
+    (image, Affine::translate((bbox.x0, bbox.y0)) * Affine::scale(inv_scale as f64))
 }
 
 fn x_y_advances(transform: &Affine) -> (Vec2, Vec2) {

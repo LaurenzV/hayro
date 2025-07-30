@@ -64,3 +64,8 @@ fn image_ccit_4() {
 fn gradient_on_rect() {
     run_svg_test("gradient_on_rect", "pdfs/gradient_on_rect.pdf", None);
 }
+
+#[test]
+fn gradient_on_rotated_rect() {
+    run_svg_test("gradient_on_rotated_rect", "pdfs/gradient_on_rotated_rect.pdf", None);
+}
