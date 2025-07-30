@@ -53,6 +53,16 @@ impl SvgRenderer {
             PaintType::Pattern(p) => {
                 match p.as_ref() {
                     Pattern::Shading(s) => {
+                        self.xml.start_element("g");
+                        self.write_transform(None);
+                        let clip_id = self.insert_clip(&ClipPath {
+                            path: path.clone(),
+                            // TODO: Make configurable
+                            fill: FillRule::NonZero,
+                        });
+                        self.xml
+                            .write_attribute_fmt("clip-path", format_args!("url(#{clip_id})"));
+                        
                         let bbox = (self.transform * path).bounding_box();
                         let id = self
                             .shadings
@@ -65,7 +75,7 @@ impl SvgRenderer {
                         self.xml.start_element("use");
                         self.xml
                             .write_attribute_fmt("xlink:href", format_args!("#{id}"));
-                        self.write_transform(None);
+                        self.xml.end_element();
                         self.xml.end_element();
                     }
                     Pattern::Tiling(_) => {
@@ -205,6 +215,15 @@ impl SvgRenderer {
             self.write_image(&image, false, Some(id), Some(transform));
         }
     }
+    
+    fn insert_clip(&mut self, clip_path: &ClipPath) -> Id {
+        self
+            .clip_paths
+            .insert_with(clip_path.cache_key(), || CachedClipPath {
+                path: clip_path.path.clone(),
+                fill_rule: clip_path.fill,
+            })
+    }
 }
 
 impl Device for SvgRenderer {
@@ -229,12 +248,7 @@ impl Device for SvgRenderer {
     }
 
     fn push_clip_path(&mut self, clip_path: &ClipPath) {
-        let clip_id = self
-            .clip_paths
-            .insert_with(clip_path.cache_key(), || CachedClipPath {
-                path: clip_path.path.clone(),
-                fill_rule: clip_path.fill,
-            });
+        let clip_id = self.insert_clip(clip_path);
 
         self.xml.start_element("g");
         self.xml
