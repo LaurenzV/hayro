@@ -53,7 +53,7 @@ impl SvgRenderer {
             PaintType::Pattern(p) => {
                 match p.as_ref() {
                     Pattern::Shading(s) => {
-                        let bbox = path.bounding_box();
+                        let bbox = (self.transform * path).bounding_box();
                         let id = self
                             .shadings
                             .insert_with(s.cache_key(), || CachedShading {
@@ -200,7 +200,7 @@ impl SvgRenderer {
         self.xml.write_attribute("id", "shading");
 
         for (id, shading) in shadings.iter() {
-            let encoded = shading.pattern.encode(Affine::IDENTITY);
+            let encoded = shading.pattern.encode(shading.transform);
             let (image, transform) = render_texture(shading.bbox, &encoded);
             self.write_image(&image, false, Some(id), Some(transform));
         }
@@ -530,8 +530,8 @@ impl BezPathExt for BezPath {
 }
 
 fn render_texture(bbox: Rect, shading_pattern: &EncodedShadingPattern) -> (DynamicImage, Affine) {
-    const MIN_RES: f32 = 1000.0;
-    const MAX_RES: f32 = 3000.0;
+    const MIN_RES: f32 = 800.0;
+    const MAX_RES: f32 = 2200.0;
 
     let base_width = bbox.width() as f32;
     let base_height = bbox.height() as f32;
@@ -539,7 +539,8 @@ fn render_texture(bbox: Rect, shading_pattern: &EncodedShadingPattern) -> (Dynam
         let w_scale = (MIN_RES / base_width).max(MAX_RES / base_width);
         let h_scale = (MIN_RES / base_height).min(MAX_RES / base_height);
 
-        w_scale.min(h_scale)
+        // w_scale.min(h_scale)
+        1.0
     };
 
     let width = (base_width * total_scale).ceil() as u32;
@@ -550,19 +551,20 @@ fn render_texture(bbox: Rect, shading_pattern: &EncodedShadingPattern) -> (Dynam
         0.0,
         0.0,
         total_scale as f64,
-        -bbox.x0,
-        -bbox.y0,
+        0.0,
+        0.0,
     ]);
-    let initial_transform = image_transform * shading_pattern.base_transform;
+    let initial_transform = image_transform * shading_pattern.base_transform * Affine::translate((0.5, 0.5));
     let (x_advance, y_advance) = x_y_advances(&initial_transform);
 
     let mut buf = vec![0u8; width as usize * height as usize * 4];
-    let mut start_point = initial_transform * Point::new(0.0, 0.0);
+    let mut start_point = initial_transform * Point::new(bbox.x0, bbox.y0);
 
     for row in buf.chunks_exact_mut(width as usize * 4) {
         let mut point = start_point;
 
         for pixel in row.chunks_exact_mut(4) {
+            // println!("sampling {:?}", point);
             let sample = shading_pattern.sample(point);
             let converted = [
                 (sample[0] * 255.0 + 0.5) as u8,
@@ -580,6 +582,8 @@ fn render_texture(bbox: Rect, shading_pattern: &EncodedShadingPattern) -> (Dynam
     }
 
     let image = DynamicImage::ImageRgba8(ImageBuffer::from_raw(width, height, buf).unwrap());
+    
+    image.save("test.png").unwrap();
 
     (image, image_transform.inverse())
 }
