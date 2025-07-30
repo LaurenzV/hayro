@@ -3,7 +3,6 @@ use hayro_interpret::color::Color;
 use hayro_interpret::encode::EncodedShadingPattern;
 use hayro_interpret::font::Glyph;
 use hayro_interpret::pattern::{Pattern, ShadingPattern};
-use hayro_interpret::shading::Shading;
 use hayro_interpret::{
     CacheKey, ClipPath, Device, FillRule, LumaData, Paint, PaintType, RgbData, SoftMask,
     StrokeProps,
@@ -13,7 +12,6 @@ use kurbo::{Affine, BezPath, PathEl, Point, Rect, Shape, Vec2};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::io::{Cursor, Write};
-use std::sync::Arc;
 use std::{fmt, io};
 use xmlwriter::{Options, XmlWriter};
 
@@ -24,7 +22,8 @@ struct CachedClipPath {
 
 struct CachedShadingPattern {
     transform: Affine,
-    shading: Id
+    shading: Id,
+    bbox: Rect,
 }
 
 struct CachedShading {
@@ -59,17 +58,8 @@ impl SvgRenderer {
             PaintType::Pattern(p) => {
                 match p.as_ref() {
                     Pattern::Shading(s) => {
-                        self.xml.start_element("g");
-                        let clip_id = self.insert_clip(&ClipPath {
-                            path: self.transform * path.clone(),
-                            // TODO: Make configurable
-                            fill: FillRule::NonZero,
-                        });
-                        self.xml
-                            .write_attribute_fmt("clip-path", format_args!("url(#{clip_id})"));
-                        
                         let bbox = (self.transform * path).bounding_box();
-                        let id = self
+                        let shading_id = self
                             .shadings
                             .insert_with(s.cache_key(), || CachedShading {
                                 pattern: s.clone(),
@@ -77,11 +67,21 @@ impl SvgRenderer {
                                 bbox,
                             });
                         
-                        self.xml.start_element("use");
+                        let inverse_transform = self.transform.inverse();
+                        let pattern_id = self.shading_patterns
+                            .insert_with((s.clone(), inverse_transform).cache_key(), || CachedShadingPattern {
+                                transform: inverse_transform,
+                                bbox,
+                                shading: shading_id,
+                            });
+
+                        self.xml.start_element("path");
+                        self.xml.write_attribute("d", &svg_path);
                         self.xml
-                            .write_attribute_fmt("xlink:href", format_args!("#{id}"));
+                            .write_attribute_fmt("fill", format_args!("url(#{pattern_id})"));
+                        self.write_transform(None);
                         self.xml.end_element();
-                        self.xml.end_element();
+                        
                     }
                     Pattern::Tiling(_) => {
                         unimplemented!()
@@ -203,6 +203,32 @@ impl SvgRenderer {
 
         self.xml.end_element();
     }
+    
+    fn write_shading_pattern_defs(&mut self) {
+        if self.shading_patterns.is_empty() {
+            return;
+        }
+
+        self.xml.start_element("defs");
+        self.xml.write_attribute("id", "shading-pattern");
+
+        for (id, shading) in self.shading_patterns.iter() {
+            self.xml.start_element("pattern");
+            self.xml.write_attribute("id", &id);
+            self.xml.write_attribute("patternUnits", "userSpaceOnUse");
+            self.xml.write_attribute("width", &shading.bbox.x1);
+            self.xml.write_attribute("height", &shading.bbox.y1);
+            self.xml.write_attribute("patternTransform", &format!("matrix({})", convert_transform(&shading.transform)));
+
+            self.xml.start_element("use");
+            self.xml.write_attribute("xlink:href", &format!("#{}", shading.shading));
+            self.xml.end_element();
+            
+            self.xml.end_element();
+        }
+        
+        self.xml.end_element();
+    }
 
     fn write_shading_defs(&mut self) {
         if self.shadings.is_empty() {
@@ -219,6 +245,8 @@ impl SvgRenderer {
             let (image, transform) = render_texture(shading.bbox, &encoded);
             self.write_image(&image, true, Some(id), Some(transform));
         }
+        
+        self.xml.end_element();
     }
     
     fn insert_clip(&mut self, clip_path: &ClipPath) -> Id {
@@ -410,6 +438,7 @@ impl SvgRenderer {
         self.write_glyph_defs();
         self.write_clip_path_defs();
         self.write_shading_defs();
+        self.write_shading_pattern_defs();
         // Close the `svg` element.
         self.xml.end_element();
         self.xml.end_document()
