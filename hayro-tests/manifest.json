@@ -1015,5 +1015,13 @@
     "md5": "630c7811430eb8042af9cac8767e3749",
     "last_page": 1,
     "link": true
+  },
+  {
+    "id": "gradient_on_rect",
+    "file": "pdfs/gradient_on_rect.pdf"
+  },
+  {
+    "id": "gradient_on_rotated_rect",
+    "file": "pdfs/gradient_on_rotated_rect.pdf"
   }
 ]
