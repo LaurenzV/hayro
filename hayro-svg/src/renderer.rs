@@ -539,22 +539,15 @@ fn render_texture(bbox: Rect, shading_pattern: &EncodedShadingPattern) -> (Dynam
         let w_scale = (MIN_RES / base_width).max(MAX_RES / base_width);
         let h_scale = (MIN_RES / base_height).min(MAX_RES / base_height);
 
-        // w_scale.min(h_scale)
-        1.0
+        w_scale.min(h_scale)
     };
+    let inv_scale = 1.0 / total_scale;
 
     let width = (base_width * total_scale).ceil() as u32;
     let height = (base_height * total_scale).ceil() as u32;
 
-    let image_transform = Affine::new([
-        total_scale as f64,
-        0.0,
-        0.0,
-        total_scale as f64,
-        0.0,
-        0.0,
-    ]);
-    let initial_transform = image_transform * shading_pattern.base_transform * Affine::translate((0.5, 0.5));
+
+    let initial_transform = Affine::scale(inv_scale as f64) * shading_pattern.base_transform * Affine::translate((0.5, 0.5));
     let (x_advance, y_advance) = x_y_advances(&initial_transform);
 
     let mut buf = vec![0u8; width as usize * height as usize * 4];
@@ -585,7 +578,7 @@ fn render_texture(bbox: Rect, shading_pattern: &EncodedShadingPattern) -> (Dynam
     
     image.save("test.png").unwrap();
 
-    (image, image_transform.inverse())
+    (image, Affine::translate((-bbox.x0, -bbox.y0)) * Affine::scale(inv_scale as f64))
 }
 
 fn x_y_advances(transform: &Affine) -> (Vec2, Vec2) {
