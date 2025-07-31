@@ -61,7 +61,7 @@ impl<'a> SvgRenderer<'a> {
             PaintType::Color(c) => {
                 self.xml.start_element("path");
                 self.xml.write_attribute("d", &svg_path);
-                self.write_color(&c, false);
+                self.write_color(c, false);
                 self.write_transform(None);
                 self.xml.end_element();
             }
@@ -496,7 +496,7 @@ impl<'a> SvgRenderer<'a> {
             shadings: Deduplicator::new('s'),
             shading_patterns: Deduplicator::new('v'),
             tiling_patterns: Deduplicator::new('t'),
-            phantom_data: PhantomData::default(),
+            phantom_data: PhantomData,
         }
     }
 
