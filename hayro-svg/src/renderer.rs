@@ -2,7 +2,7 @@ use base64::Engine;
 use hayro_interpret::color::Color;
 use hayro_interpret::encode::EncodedShadingPattern;
 use hayro_interpret::font::Glyph;
-use hayro_interpret::pattern::{Pattern, ShadingPattern};
+use hayro_interpret::pattern::{Pattern, ShadingPattern, TilingPattern};
 use hayro_interpret::{
     CacheKey, ClipPath, Device, FillRule, LumaData, Paint, PaintType, RgbData, SoftMask,
     StrokeProps,
@@ -28,6 +28,12 @@ struct CachedShadingPattern {
     bbox: Rect,
 }
 
+#[derive(Clone)]
+struct CachedTilingPattern<'a> {
+    transform: Affine,
+    tiling_pattern: TilingPattern<'a>
+}
+
 struct CachedShading {
     pattern: ShadingPattern,
     transform: Affine,
@@ -43,11 +49,12 @@ pub(crate) struct SvgRenderer<'a> {
     clip_paths: Deduplicator<CachedClipPath>,
     shadings: Deduplicator<CachedShading>,
     shading_patterns: Deduplicator<CachedShadingPattern>,
+    tiling_patterns: Deduplicator<CachedTilingPattern<'a>>,
     phantom_data: PhantomData<&'a ()>,
 }
 
 impl<'a> SvgRenderer<'a> {
-    fn fill_path(&mut self, path: &BezPath, paint: &Paint) {
+    fn fill_path(&mut self, path: &BezPath, paint: &Paint<'a>) {
         let svg_path = path.to_svg_f32();
 
         match &paint.paint_type {
@@ -86,8 +93,22 @@ impl<'a> SvgRenderer<'a> {
                         self.xml.end_element();
                         
                     }
-                    Pattern::Tiling(_) => {
-                        unimplemented!()
+                    Pattern::Tiling(t) => {
+                        let inverse_transform = self.transform.inverse();
+                        let pattern = *t.clone();
+                        
+                        let pattern_id = self.tiling_patterns
+                            .insert_with((pattern.clone(), inverse_transform).cache_key(), || CachedTilingPattern {
+                                transform: inverse_transform * paint.paint_transform,
+                                tiling_pattern: pattern
+                            });
+
+                        self.xml.start_element("path");
+                        self.xml.write_attribute("d", &svg_path);
+                        self.xml
+                            .write_attribute_fmt("fill", format_args!("url(#{pattern_id})"));
+                        self.write_transform(None);
+                        self.xml.end_element();
                     }
                 }
             }
@@ -130,13 +151,21 @@ impl<'a> SvgRenderer<'a> {
     }
 
     fn write_transform(&mut self, transform: Option<Affine>) {
-        self.xml.write_attribute(
-            "transform",
-            &format!(
-                "matrix({})",
-                &convert_transform(&transform.unwrap_or(self.transform))
-            ),
-        );
+        let transform = transform.unwrap_or(self.transform);
+        let is_identity = {
+            let c = transform.as_coeffs();
+            c[0] == 1.0 && c[1] == 0.0 && c[2] == 0.0 && c[3] == 1.0 && c[4] == 0.0 && c[5] == 0.0
+        };
+        
+        if !is_identity {
+            self.xml.write_attribute(
+                "transform",
+                &format!(
+                    "matrix({})",
+                    &convert_transform(&transform)
+                ),
+            );
+        }
     }
 
     fn write_image(
@@ -230,6 +259,36 @@ impl<'a> SvgRenderer<'a> {
             self.xml.end_element();
         }
         
+        self.xml.end_element();
+    }
+    
+    fn write_tiling_pattern_defs(&mut self) {
+        if self.tiling_patterns.is_empty() {
+            return;
+        }
+
+        self.xml.start_element("defs");
+        self.xml.write_attribute("id", "tiling-pattern");
+        
+        let patterns = self.tiling_patterns.iter().map(|i| (i.0, i.1.clone())).collect::<Vec<_>>();
+
+        for (id, pattern) in patterns {
+            let pattern = pattern.clone();
+            let transform = pattern.transform * pattern.tiling_pattern.matrix;
+            
+            self.xml.start_element("pattern");
+            self.xml.write_attribute("id", &id);
+            self.xml.write_attribute("patternUnits", "userSpaceOnUse");
+            self.xml.write_attribute("width", &pattern.tiling_pattern.x_step);
+            self.xml.write_attribute("height", &pattern.tiling_pattern.y_step);
+            self.xml.write_attribute("patternTransform", &format!("matrix({})", convert_transform(&transform)));
+
+            // TODO: Write bbox
+            pattern.tiling_pattern.interpret(self, Affine::IDENTITY, false);
+
+            self.xml.end_element();
+        }
+
         self.xml.end_element();
     }
 
@@ -420,6 +479,7 @@ impl<'a> SvgRenderer<'a> {
             clip_paths: Deduplicator::new('c'),
             shadings: Deduplicator::new('s'),
             shading_patterns: Deduplicator::new('v'),
+            tiling_patterns: Deduplicator::new('t'),
             phantom_data: PhantomData::default()
         }
     }
@@ -439,10 +499,15 @@ impl<'a> SvgRenderer<'a> {
     }
 
     pub(crate) fn finish(mut self) -> String {
+        let mut old_xml = std::mem::replace(&mut self.xml, XmlWriter::new(Options::default()));
+        self.write_tiling_pattern_defs();
+        std::mem::swap(&mut self.xml, &mut old_xml);
+        
         self.write_glyph_defs();
         self.write_clip_path_defs();
         self.write_shading_defs();
         self.write_shading_pattern_defs();
+        self.write_tiling_pattern_defs();
         // Close the `svg` element.
         self.xml.end_element();
         self.xml.end_document()

@@ -69,3 +69,8 @@ fn gradient_on_rect() {
 fn gradient_on_rotated_rect() {
     run_svg_test("gradient_on_rotated_rect", "pdfs/gradient_on_rotated_rect.pdf", None);
 }
+
+#[test]
+fn pattern_tiling_simple() {
+    run_svg_test("pattern_tiling_simple", "pdfs/pattern_tiling_simple.pdf", None);
+}

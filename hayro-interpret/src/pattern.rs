@@ -99,6 +99,7 @@ impl CacheKey for ShadingPattern {
 /// A tiling pattern.
 #[derive(Clone)]
 pub struct TilingPattern<'a> {
+    cache_key: u128,
     /// The bbox of the tiling pattern.
     pub bbox: Rect,
     /// The step in the x direction.
@@ -130,6 +131,7 @@ impl<'a> TilingPattern<'a> {
         ctx: &Context<'a>,
         resources: &Resources<'a>,
     ) -> Option<Self> {
+        let cache_key = stream.cache_key();
         let dict = stream.dict();
 
         let bbox = dict.get::<Rect>(BBOX)?;
@@ -162,6 +164,7 @@ impl<'a> TilingPattern<'a> {
         let stroke_paint = Color::new(stroke_cs, state.stroke_color.clone(), state.stroke_alpha);
 
         Some(Self {
+            cache_key,
             bbox,
             x_step,
             y_step,
@@ -233,6 +236,12 @@ impl<'a> TilingPattern<'a> {
         device.pop_clip_path();
 
         Some(())
+    }
+}
+
+impl CacheKey for TilingPattern<'_> {
+    fn cache_key(&self) -> u128 {
+        self.cache_key
     }
 }
 
