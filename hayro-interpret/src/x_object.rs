@@ -147,8 +147,8 @@ pub(crate) fn draw_form_xobject<'a, 'b>(
     context.restore_state();
 }
 
-pub(crate) fn draw_image_xobject<'a>(
-    x_object: &ImageXObject<'a>,
+pub(crate) fn draw_image_xobject<'a, 'b>(
+    x_object: &ImageXObject<'b>,
     context: &mut Context<'a>,
     device: &mut impl Device<'a>,
 ) {

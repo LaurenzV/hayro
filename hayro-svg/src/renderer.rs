@@ -259,7 +259,7 @@ impl SvgRenderer {
     }
 }
 
-impl Device for SvgRenderer {
+impl Device<'_> for SvgRenderer {
     fn stroke_path(
         &mut self,
         path: &BezPath,

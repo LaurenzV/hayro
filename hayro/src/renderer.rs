@@ -212,7 +212,7 @@ impl Renderer {
     }
 }
 
-impl Device for Renderer {
+impl Device<'_> for Renderer {
     fn stroke_path(
         &mut self,
         path: &BezPath,
