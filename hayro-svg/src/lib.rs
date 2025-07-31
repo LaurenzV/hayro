@@ -17,7 +17,7 @@ pub fn convert(page: &Page, interpreter_settings: &InterpreterSettings) -> Strin
         page.xref(),
         interpreter_settings.clone(),
     );
-    let mut device = SvgRenderer::new();
+    let mut device = SvgRenderer::new(page);
     device.write_header(page.render_dimensions());
 
     interpret(

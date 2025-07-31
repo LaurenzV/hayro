@@ -13,7 +13,9 @@ use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::io::{Cursor, Write};
 use std::{fmt, io};
+use std::marker::PhantomData;
 use xmlwriter::{Options, XmlWriter};
+use hayro_interpret::hayro_syntax::page::Page;
 
 struct CachedClipPath {
     path: BezPath,
@@ -32,7 +34,7 @@ struct CachedShading {
     bbox: Rect,
 }
 
-pub(crate) struct SvgRenderer {
+pub(crate) struct SvgRenderer<'a> {
     xml: XmlWriter,
     transform: Affine,
     fill_rule: FillRule,
@@ -41,9 +43,10 @@ pub(crate) struct SvgRenderer {
     clip_paths: Deduplicator<CachedClipPath>,
     shadings: Deduplicator<CachedShading>,
     shading_patterns: Deduplicator<CachedShadingPattern>,
+    phantom_data: PhantomData<&'a ()>,
 }
 
-impl SvgRenderer {
+impl<'a> SvgRenderer<'a> {
     fn fill_path(&mut self, path: &BezPath, paint: &Paint) {
         let svg_path = path.to_svg_f32();
 
@@ -259,12 +262,12 @@ impl SvgRenderer {
     }
 }
 
-impl Device<'_> for SvgRenderer {
+impl<'a> Device<'a> for SvgRenderer<'a> {
     fn stroke_path(
         &mut self,
         path: &BezPath,
         transform: Affine,
-        paint: &Paint,
+        paint: &Paint<'a>,
         stroke_props: &StrokeProps,
     ) {
         self.transform = transform;
@@ -272,9 +275,9 @@ impl Device<'_> for SvgRenderer {
         Self::stroke_path(self, path, paint);
     }
 
-    fn set_soft_mask(&mut self, _: Option<SoftMask>) {}
+    fn set_soft_mask(&mut self, _: Option<SoftMask<'a>>) {}
 
-    fn fill_path(&mut self, path: &BezPath, transform: Affine, paint: &Paint, fill_rule: FillRule) {
+    fn fill_path(&mut self, path: &BezPath, transform: Affine, paint: &Paint<'a>, fill_rule: FillRule) {
         self.transform = transform;
         self.fill_rule = fill_rule;
         Self::fill_path(self, path, paint);
@@ -288,9 +291,9 @@ impl Device<'_> for SvgRenderer {
             .write_attribute_fmt("clip-path", format_args!("url(#{clip_id})"));
     }
 
-    fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask>) {}
+    fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask<'a>>) {}
 
-    fn fill_glyph(&mut self, glyph: &Glyph<'_>, transform: Affine, paint: &Paint) {
+    fn fill_glyph(&mut self, glyph: &Glyph<'a>, transform: Affine, paint: &Paint<'a>) {
         self.transform = transform;
 
         match glyph {
@@ -323,7 +326,7 @@ impl Device<'_> for SvgRenderer {
 
     fn stroke_glyph(
         &mut self,
-        glyph: &Glyph<'_>,
+        glyph: &Glyph<'a>,
         transform: Affine,
         paint: &Paint,
         stroke_props: &StrokeProps,
@@ -406,8 +409,8 @@ impl Device<'_> for SvgRenderer {
     fn pop_transparency_group(&mut self) {}
 }
 
-impl SvgRenderer {
-    pub(crate) fn new() -> Self {
+impl<'a> SvgRenderer<'a> {
+    pub(crate) fn new(_: &'a Page<'a>) -> Self {
         Self {
             xml: XmlWriter::new(Options::default()),
             transform: Affine::IDENTITY,
@@ -417,6 +420,7 @@ impl SvgRenderer {
             clip_paths: Deduplicator::new('c'),
             shadings: Deduplicator::new('s'),
             shading_patterns: Deduplicator::new('v'),
+            phantom_data: PhantomData::default()
         }
     }
 
