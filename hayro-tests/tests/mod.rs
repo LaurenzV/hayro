@@ -221,9 +221,13 @@ pub fn run_svg_test(name: &str, file_path: &str, range_str: Option<&str>) {
             if STORE.is_some() {
                 let _ = std::fs::create_dir_all(STORE_PATH.clone());
 
-                std::fs::write(STORE_PATH.join(format!("{name}_{}.svg", idx)), svg.as_bytes()).unwrap();
+                std::fs::write(
+                    STORE_PATH.join(format!("{name}_{}.svg", idx)),
+                    svg.as_bytes(),
+                )
+                .unwrap();
             }
-            
+
             let tree = Tree::from_data(svg.as_bytes(), &Options::default()).unwrap();
             let mut pixmap = Pixmap::new(
                 tree.size().width().ceil() as u32,

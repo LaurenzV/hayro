@@ -45,7 +45,11 @@ pub(crate) fn next_line(ctx: &mut Context, tx: f64, ty: f64) {
     ctx.get_mut().text_state.text_matrix = new_matrix;
 }
 
-pub(crate) fn show_glyph<'a>(ctx: &mut Context<'a>, device: &mut impl Device<'a>, glyph: &Glyph<'a>) {
+pub(crate) fn show_glyph<'a>(
+    ctx: &mut Context<'a>,
+    device: &mut impl Device<'a>,
+    glyph: &Glyph<'a>,
+) {
     device.set_soft_mask(ctx.get().soft_mask.clone());
     let stroke_props = ctx.stroke_props();
 

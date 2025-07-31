@@ -2,6 +2,7 @@ use base64::Engine;
 use hayro_interpret::color::Color;
 use hayro_interpret::encode::EncodedShadingPattern;
 use hayro_interpret::font::Glyph;
+use hayro_interpret::hayro_syntax::page::Page;
 use hayro_interpret::pattern::{Pattern, ShadingPattern, TilingPattern};
 use hayro_interpret::{
     CacheKey, ClipPath, Device, FillRule, LumaData, Paint, PaintType, RgbData, SoftMask,
@@ -12,10 +13,9 @@ use kurbo::{Affine, BezPath, PathEl, Point, Rect, Shape, Vec2};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::io::{Cursor, Write};
-use std::{fmt, io};
 use std::marker::PhantomData;
+use std::{fmt, io};
 use xmlwriter::{Options, XmlWriter};
-use hayro_interpret::hayro_syntax::page::Page;
 
 struct CachedClipPath {
     path: BezPath,
@@ -31,7 +31,7 @@ struct CachedShadingPattern {
 #[derive(Clone)]
 struct CachedTilingPattern<'a> {
     transform: Affine,
-    tiling_pattern: TilingPattern<'a>
+    tiling_pattern: TilingPattern<'a>,
 }
 
 struct CachedShading {
@@ -65,53 +65,52 @@ impl<'a> SvgRenderer<'a> {
                 self.write_transform(None);
                 self.xml.end_element();
             }
-            PaintType::Pattern(p) => {
-                match p.as_ref() {
-                    Pattern::Shading(s) => {
-                        let bbox = (self.transform * path).bounding_box();
-                        let shading_id = self
-                            .shadings
-                            .insert_with(s.cache_key(), || CachedShading {
-                                pattern: s.clone(),
-                                transform: paint.paint_transform,
-                                bbox,
-                            });
-                        
-                        let inverse_transform = self.transform.inverse();
-                        let pattern_id = self.shading_patterns
-                            .insert_with((s.clone(), inverse_transform).cache_key(), || CachedShadingPattern {
-                                transform: inverse_transform,
-                                bbox,
-                                shading: shading_id,
-                            });
+            PaintType::Pattern(p) => match p.as_ref() {
+                Pattern::Shading(s) => {
+                    let bbox = (self.transform * path).bounding_box();
+                    let shading_id = self.shadings.insert_with(s.cache_key(), || CachedShading {
+                        pattern: s.clone(),
+                        transform: paint.paint_transform,
+                        bbox,
+                    });
 
-                        self.xml.start_element("path");
-                        self.xml.write_attribute("d", &svg_path);
-                        self.xml
-                            .write_attribute_fmt("fill", format_args!("url(#{pattern_id})"));
-                        self.write_transform(None);
-                        self.xml.end_element();
-                        
-                    }
-                    Pattern::Tiling(t) => {
-                        let inverse_transform = self.transform.inverse();
-                        let pattern = *t.clone();
-                        
-                        let pattern_id = self.tiling_patterns
-                            .insert_with((pattern.clone(), inverse_transform).cache_key(), || CachedTilingPattern {
-                                transform: inverse_transform * paint.paint_transform,
-                                tiling_pattern: pattern
-                            });
+                    let inverse_transform = self.transform.inverse();
+                    let pattern_id = self.shading_patterns.insert_with(
+                        (s.clone(), inverse_transform).cache_key(),
+                        || CachedShadingPattern {
+                            transform: inverse_transform,
+                            bbox,
+                            shading: shading_id,
+                        },
+                    );
 
-                        self.xml.start_element("path");
-                        self.xml.write_attribute("d", &svg_path);
-                        self.xml
-                            .write_attribute_fmt("fill", format_args!("url(#{pattern_id})"));
-                        self.write_transform(None);
-                        self.xml.end_element();
-                    }
+                    self.xml.start_element("path");
+                    self.xml.write_attribute("d", &svg_path);
+                    self.xml
+                        .write_attribute_fmt("fill", format_args!("url(#{pattern_id})"));
+                    self.write_transform(None);
+                    self.xml.end_element();
                 }
-            }
+                Pattern::Tiling(t) => {
+                    let inverse_transform = self.transform.inverse();
+                    let pattern = *t.clone();
+
+                    let pattern_id = self.tiling_patterns.insert_with(
+                        (pattern.clone(), inverse_transform).cache_key(),
+                        || CachedTilingPattern {
+                            transform: inverse_transform * paint.paint_transform,
+                            tiling_pattern: pattern,
+                        },
+                    );
+
+                    self.xml.start_element("path");
+                    self.xml.write_attribute("d", &svg_path);
+                    self.xml
+                        .write_attribute_fmt("fill", format_args!("url(#{pattern_id})"));
+                    self.write_transform(None);
+                    self.xml.end_element();
+                }
+            },
         }
     }
 
@@ -156,14 +155,11 @@ impl<'a> SvgRenderer<'a> {
             let c = transform.as_coeffs();
             c[0] == 1.0 && c[1] == 0.0 && c[2] == 0.0 && c[3] == 1.0 && c[4] == 0.0 && c[5] == 0.0
         };
-        
+
         if !is_identity {
             self.xml.write_attribute(
                 "transform",
-                &format!(
-                    "matrix({})",
-                    &convert_transform(&transform)
-                ),
+                &format!("matrix({})", &convert_transform(&transform)),
             );
         }
     }
@@ -235,7 +231,7 @@ impl<'a> SvgRenderer<'a> {
 
         self.xml.end_element();
     }
-    
+
     fn write_shading_pattern_defs(&mut self) {
         if self.shading_patterns.is_empty() {
             return;
@@ -250,18 +246,22 @@ impl<'a> SvgRenderer<'a> {
             self.xml.write_attribute("patternUnits", "userSpaceOnUse");
             self.xml.write_attribute("width", &shading.bbox.x1);
             self.xml.write_attribute("height", &shading.bbox.y1);
-            self.xml.write_attribute("patternTransform", &format!("matrix({})", convert_transform(&shading.transform)));
+            self.xml.write_attribute(
+                "patternTransform",
+                &format!("matrix({})", convert_transform(&shading.transform)),
+            );
 
             self.xml.start_element("use");
-            self.xml.write_attribute("xlink:href", &format!("#{}", shading.shading));
+            self.xml
+                .write_attribute("xlink:href", &format!("#{}", shading.shading));
             self.xml.end_element();
-            
+
             self.xml.end_element();
         }
-        
+
         self.xml.end_element();
     }
-    
+
     fn write_tiling_pattern_defs(&mut self) {
         if self.tiling_patterns.is_empty() {
             return;
@@ -269,22 +269,33 @@ impl<'a> SvgRenderer<'a> {
 
         self.xml.start_element("defs");
         self.xml.write_attribute("id", "tiling-pattern");
-        
-        let patterns = self.tiling_patterns.iter().map(|i| (i.0, i.1.clone())).collect::<Vec<_>>();
+
+        let patterns = self
+            .tiling_patterns
+            .iter()
+            .map(|i| (i.0, i.1.clone()))
+            .collect::<Vec<_>>();
 
         for (id, pattern) in patterns {
             let pattern = pattern.clone();
             let transform = pattern.transform * pattern.tiling_pattern.matrix;
-            
+
             self.xml.start_element("pattern");
             self.xml.write_attribute("id", &id);
             self.xml.write_attribute("patternUnits", "userSpaceOnUse");
-            self.xml.write_attribute("width", &pattern.tiling_pattern.x_step);
-            self.xml.write_attribute("height", &pattern.tiling_pattern.y_step);
-            self.xml.write_attribute("patternTransform", &format!("matrix({})", convert_transform(&transform)));
+            self.xml
+                .write_attribute("width", &pattern.tiling_pattern.x_step);
+            self.xml
+                .write_attribute("height", &pattern.tiling_pattern.y_step);
+            self.xml.write_attribute(
+                "patternTransform",
+                &format!("matrix({})", convert_transform(&transform)),
+            );
 
             // TODO: Write bbox
-            pattern.tiling_pattern.interpret(self, Affine::IDENTITY, false);
+            pattern
+                .tiling_pattern
+                .interpret(self, Affine::IDENTITY, false);
 
             self.xml.end_element();
         }
@@ -307,13 +318,12 @@ impl<'a> SvgRenderer<'a> {
             let (image, transform) = render_texture(shading.bbox, &encoded);
             self.write_image(&image, true, Some(id), Some(transform));
         }
-        
+
         self.xml.end_element();
     }
-    
+
     fn insert_clip(&mut self, clip_path: &ClipPath) -> Id {
-        self
-            .clip_paths
+        self.clip_paths
             .insert_with(clip_path.cache_key(), || CachedClipPath {
                 path: clip_path.path.clone(),
                 fill_rule: clip_path.fill,
@@ -336,7 +346,13 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
 
     fn set_soft_mask(&mut self, _: Option<SoftMask<'a>>) {}
 
-    fn fill_path(&mut self, path: &BezPath, transform: Affine, paint: &Paint<'a>, fill_rule: FillRule) {
+    fn fill_path(
+        &mut self,
+        path: &BezPath,
+        transform: Affine,
+        paint: &Paint<'a>,
+        fill_rule: FillRule,
+    ) {
         self.transform = transform;
         self.fill_rule = fill_rule;
         Self::fill_path(self, path, paint);
@@ -372,7 +388,7 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
                         self.xml.end_element();
                     }
                     PaintType::Pattern(p) => match p.as_ref() {
-                        Pattern::Shading(s) => {}
+                        Pattern::Shading(_) => {}
                         Pattern::Tiling(_) => {
                             unimplemented!()
                         }
@@ -480,7 +496,7 @@ impl<'a> SvgRenderer<'a> {
             shadings: Deduplicator::new('s'),
             shading_patterns: Deduplicator::new('v'),
             tiling_patterns: Deduplicator::new('t'),
-            phantom_data: PhantomData::default()
+            phantom_data: PhantomData::default(),
         }
     }
 
@@ -502,7 +518,7 @@ impl<'a> SvgRenderer<'a> {
         let mut old_xml = std::mem::replace(&mut self.xml, XmlWriter::new(Options::default()));
         self.write_tiling_pattern_defs();
         std::mem::swap(&mut self.xml, &mut old_xml);
-        
+
         self.write_glyph_defs();
         self.write_clip_path_defs();
         self.write_shading_defs();
@@ -657,8 +673,9 @@ fn render_texture(bbox: Rect, shading_pattern: &EncodedShadingPattern) -> (Dynam
     let width = (base_width * SCALE).ceil() as u32;
     let height = (base_height * SCALE).ceil() as u32;
 
-
-    let initial_transform = Affine::scale(INV_SCALE as f64) * shading_pattern.base_transform * Affine::translate((0.5, 0.5));
+    let initial_transform = Affine::scale(INV_SCALE as f64)
+        * shading_pattern.base_transform
+        * Affine::translate((0.5, 0.5));
     let (x_advance, y_advance) = x_y_advances(&initial_transform);
 
     let mut buf = vec![0u8; width as usize * height as usize * 4];
@@ -686,10 +703,13 @@ fn render_texture(bbox: Rect, shading_pattern: &EncodedShadingPattern) -> (Dynam
     }
 
     let image = DynamicImage::ImageRgba8(ImageBuffer::from_raw(width, height, buf).unwrap());
-    
+
     image.save("test.png").unwrap();
 
-    (image, Affine::translate((bbox.x0, bbox.y0)) * Affine::scale(INV_SCALE as f64))
+    (
+        image,
+        Affine::translate((bbox.x0, bbox.y0)) * Affine::scale(INV_SCALE as f64),
+    )
 }
 
 fn x_y_advances(transform: &Affine) -> (Vec2, Vec2) {

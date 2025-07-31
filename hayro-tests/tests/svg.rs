@@ -67,10 +67,36 @@ fn gradient_on_rect() {
 
 #[test]
 fn gradient_on_rotated_rect() {
-    run_svg_test("gradient_on_rotated_rect", "pdfs/gradient_on_rotated_rect.pdf", None);
+    run_svg_test(
+        "gradient_on_rotated_rect",
+        "pdfs/gradient_on_rotated_rect.pdf",
+        None,
+    );
 }
 
 #[test]
 fn pattern_tiling_simple() {
-    run_svg_test("pattern_tiling_simple", "pdfs/pattern_tiling_simple.pdf", None);
+    run_svg_test(
+        "pattern_tiling_simple",
+        "pdfs/pattern_tiling_simple.pdf",
+        None,
+    );
+}
+
+#[test]
+fn pattern_tiling_nested() {
+    run_svg_test(
+        "pattern_tiling_nested",
+        "pdfs/pattern_tiling_nested.pdf",
+        None,
+    );
+}
+
+#[test]
+fn pattern_tiling_rotated() {
+    run_svg_test(
+        "pattern_tiling_rotated",
+        "pdfs/pattern_tiling_rotated.pdf",
+        None,
+    );
 }

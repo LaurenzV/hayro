@@ -1,6 +1,5 @@
 //! PDF patterns.
 
-use crate::{CacheKey, ClipPath};
 use crate::cache::Cache;
 use crate::color::{Color, ColorSpace};
 use crate::context::Context;
@@ -9,6 +8,8 @@ use crate::font::Glyph;
 use crate::interpret::state::State;
 use crate::shading::Shading;
 use crate::soft_mask::SoftMask;
+use crate::util::hash128;
+use crate::{CacheKey, ClipPath};
 use crate::{
     FillRule, InterpreterSettings, LumaData, Paint, PaintType, RgbData, StrokeProps, interpret,
 };
@@ -26,7 +27,6 @@ use kurbo::{Affine, BezPath, Shape};
 use log::warn;
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
-use crate::util::hash128;
 
 /// A PDF pattern.
 #[derive(Debug, Clone)]
@@ -275,7 +275,8 @@ impl<'a, T: Device<'a>> Device<'a> for StencilPatternDevice<'a, '_, T> {
     fn set_soft_mask(&mut self, _: Option<SoftMask>) {}
 
     fn fill_path(&mut self, path: &BezPath, transform: Affine, _: &Paint, fill_rule: FillRule) {
-        self.inner.fill_path(path, transform, &self.paint, fill_rule)
+        self.inner
+            .fill_path(path, transform, &self.paint, fill_rule)
     }
 
     fn push_clip_path(&mut self, clip_path: &ClipPath) {

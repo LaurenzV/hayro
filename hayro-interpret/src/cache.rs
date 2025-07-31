@@ -1,10 +1,10 @@
 use crate::util::hash128;
 use hayro_syntax::object::{Dict, ObjectIdentifier, Stream};
+use kurbo::Affine;
 use std::any::Any;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::sync::{Arc, Mutex};
-use kurbo::Affine;
 
 type CacheMap = HashMap<ObjectIdentifier, Option<Box<dyn Any + Send + Sync>>>;
 #[derive(Clone)]

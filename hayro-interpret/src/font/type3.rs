@@ -175,7 +175,8 @@ impl<'a, T: Device<'a>> Device<'a> for Type3ShapeGlyphDevice<'a, '_, T> {
     fn set_soft_mask(&mut self, _: Option<SoftMask>) {}
 
     fn fill_path(&mut self, path: &BezPath, transform: Affine, _: &Paint, fill_rule: FillRule) {
-        self.inner.fill_path(path, transform, &self.paint, fill_rule)
+        self.inner
+            .fill_path(path, transform, &self.paint, fill_rule)
     }
 
     fn push_clip_path(&mut self, clip_path: &ClipPath) {

@@ -20,7 +20,13 @@ pub trait Device<'a> {
     /// Set a soft mask to be used for future drawing instructions.
     fn set_soft_mask(&mut self, mask: Option<SoftMask<'a>>);
     /// Fill a path.
-    fn fill_path(&mut self, path: &BezPath, transform: Affine, paint: &Paint<'a>, fill_rule: FillRule);
+    fn fill_path(
+        &mut self,
+        path: &BezPath,
+        transform: Affine,
+        paint: &Paint<'a>,
+        fill_rule: FillRule,
+    );
     /// Push a new clip path to the clip stack.
     fn push_clip_path(&mut self, clip_path: &ClipPath);
     /// Push a new transparency group to the blend stack.
