@@ -225,7 +225,7 @@ pub(crate) fn save_sate(ctx: &mut Context) {
     ctx.save_state();
 }
 
-pub(crate) fn restore_state(ctx: &mut Context, device: &mut impl Device) {
+pub(crate) fn restore_state<'a>(ctx: &mut Context<'a>, device: &mut impl Device<'a>) {
     let mut num_clips = ctx.get().n_clips;
     ctx.restore_state();
     let target_clips = ctx.get().n_clips;

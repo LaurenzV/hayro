@@ -181,7 +181,7 @@ impl<'a> TilingPattern<'a> {
     /// Interpret the contents of the pattern into the given device.
     pub fn interpret(
         &self,
-        device: &mut impl Device,
+        device: &mut impl Device<'a>,
         initial_transform: Affine,
         is_stroke: bool,
     ) -> Option<()> {
@@ -226,7 +226,7 @@ impl<'a> TilingPattern<'a> {
                 }
             };
 
-            let mut device = StencilPatternDevice::new(device, &paint);
+            let mut device = StencilPatternDevice::new(device, paint.clone());
             interpret(iter, &resources, &mut context, &mut device);
         }
 
@@ -236,13 +236,13 @@ impl<'a> TilingPattern<'a> {
     }
 }
 
-struct StencilPatternDevice<'a, T: Device> {
-    inner: &'a mut T,
-    paint: &'a Paint<'a>,
+struct StencilPatternDevice<'a, 'b, T: Device<'a>> {
+    inner: &'b mut T,
+    paint: Paint<'a>,
 }
 
-impl<'a, T: Device> StencilPatternDevice<'a, T> {
-    pub fn new(device: &'a mut T, paint: &'a Paint<'a>) -> Self {
+impl<'a, 'b, T: Device<'a>> StencilPatternDevice<'a, 'b, T> {
+    pub fn new(device: &'b mut T, paint: Paint<'a>) -> Self {
         Self {
             inner: device,
             paint,
@@ -251,7 +251,7 @@ impl<'a, T: Device> StencilPatternDevice<'a, T> {
 }
 
 // Only filling, stroking of paths and stencil masks are allowed.
-impl<T: Device> Device for StencilPatternDevice<'_, T> {
+impl<'a, T: Device<'a>> Device<'a> for StencilPatternDevice<'a, '_, T> {
     fn stroke_path(
         &mut self,
         path: &BezPath,
@@ -260,13 +260,13 @@ impl<T: Device> Device for StencilPatternDevice<'_, T> {
         stroke_props: &StrokeProps,
     ) {
         self.inner
-            .stroke_path(path, transform, self.paint, stroke_props)
+            .stroke_path(path, transform, &self.paint, stroke_props)
     }
 
     fn set_soft_mask(&mut self, _: Option<SoftMask>) {}
 
     fn fill_path(&mut self, path: &BezPath, transform: Affine, _: &Paint, fill_rule: FillRule) {
-        self.inner.fill_path(path, transform, self.paint, fill_rule)
+        self.inner.fill_path(path, transform, &self.paint, fill_rule)
     }
 
     fn push_clip_path(&mut self, clip_path: &ClipPath) {
@@ -275,26 +275,26 @@ impl<T: Device> Device for StencilPatternDevice<'_, T> {
 
     fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask>) {}
 
-    fn fill_glyph(&mut self, glyph: &Glyph<'_>, transform: Affine, _: &Paint) {
-        self.inner.fill_glyph(glyph, transform, self.paint)
+    fn fill_glyph(&mut self, glyph: &Glyph<'a>, transform: Affine, _: &Paint) {
+        self.inner.fill_glyph(glyph, transform, &self.paint)
     }
 
     fn stroke_glyph(
         &mut self,
-        glyph: &Glyph<'_>,
+        glyph: &Glyph<'a>,
         transform: Affine,
         _: &Paint,
         stroke_props: &StrokeProps,
     ) {
         self.inner
-            .stroke_glyph(glyph, transform, self.paint, stroke_props)
+            .stroke_glyph(glyph, transform, &self.paint, stroke_props)
     }
 
     fn draw_rgba_image(&mut self, _: RgbData, _: Affine, _: Option<LumaData>) {}
 
     fn draw_stencil_image(&mut self, stencil: LumaData, transform: Affine, _: &Paint) {
         self.inner
-            .draw_stencil_image(stencil, transform, self.paint);
+            .draw_stencil_image(stencil, transform, &self.paint);
     }
 
     fn pop_clip_path(&mut self) {

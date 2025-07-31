@@ -83,7 +83,7 @@ pub(crate) fn draw_xobject<'a>(
     x_object: &XObject<'a>,
     resources: &Resources<'a>,
     context: &mut Context<'a>,
-    device: &mut impl Device,
+    device: &mut impl Device<'a>,
 ) {
     match x_object {
         XObject::FormXObject(f) => draw_form_xobject(resources, f, context, device),
@@ -93,11 +93,11 @@ pub(crate) fn draw_xobject<'a>(
     }
 }
 
-pub(crate) fn draw_form_xobject<'a>(
+pub(crate) fn draw_form_xobject<'a, 'b>(
     resources: &Resources<'a>,
-    x_object: &FormXObject<'a>,
+    x_object: &'b FormXObject<'a>,
     context: &mut Context<'a>,
-    device: &mut impl Device,
+    device: &mut impl Device<'a>,
 ) {
     let iter = TypedIter::new(x_object.decoded.as_ref());
 
@@ -147,10 +147,10 @@ pub(crate) fn draw_form_xobject<'a>(
     context.restore_state();
 }
 
-pub(crate) fn draw_image_xobject(
-    x_object: &ImageXObject<'_>,
-    context: &mut Context<'_>,
-    device: &mut impl Device,
+pub(crate) fn draw_image_xobject<'a>(
+    x_object: &ImageXObject<'a>,
+    context: &mut Context<'a>,
+    device: &mut impl Device<'a>,
 ) {
     let width = x_object.width as f64;
     let height = x_object.height as f64;

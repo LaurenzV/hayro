@@ -98,7 +98,7 @@ impl<'a> SoftMask<'a> {
     }
 
     /// Interpret the contents of the mask into the given device.
-    pub fn interpret(&self, device: &mut impl Device) {
+    pub fn interpret(&self, device: &mut impl Device<'a>) {
         let state = State::new(self.0.root_transform);
         let mut ctx = Context::new_with(
             self.0.root_transform,

@@ -5,28 +5,28 @@ use crate::context::Context;
 use crate::device::Device;
 use kurbo::{Affine, BezPath};
 
-pub(crate) fn fill_path(context: &mut Context, device: &mut impl Device) {
+pub(crate) fn fill_path<'a>(context: &mut Context<'a>, device: &mut impl Device<'a>) {
     fill_path_impl(context, device, None);
 
     context.path_mut().truncate(0);
 }
 
-pub(crate) fn stroke_path(context: &mut Context, device: &mut impl Device) {
+pub(crate) fn stroke_path<'a>(context: &mut Context<'a>, device: &mut impl Device<'a>) {
     stroke_path_impl(context, device, None);
 
     context.path_mut().truncate(0);
 }
 
-pub(crate) fn fill_stroke_path(context: &mut Context, device: &mut impl Device) {
+pub(crate) fn fill_stroke_path<'a>(context: &mut Context<'a>, device: &mut impl Device<'a>) {
     fill_path_impl(context, device, None);
     stroke_path_impl(context, device, None);
 
     context.path_mut().truncate(0);
 }
 
-pub(crate) fn fill_path_impl(
-    context: &mut Context,
-    device: &mut impl Device,
+pub(crate) fn fill_path_impl<'a>(
+    context: &mut Context<'a>,
+    device: &mut impl Device<'a>,
     path: Option<&BezPath>,
 ) {
     let base_transform = context.get().ctm;
@@ -41,9 +41,9 @@ pub(crate) fn fill_path_impl(
     };
 }
 
-pub(crate) fn stroke_path_impl(
-    context: &mut Context,
-    device: &mut impl Device,
+pub(crate) fn stroke_path_impl<'a>(
+    context: &mut Context<'a>,
+    device: &mut impl Device<'a>,
     path: Option<&BezPath>,
 ) {
     let base_transform = context.get().ctm;

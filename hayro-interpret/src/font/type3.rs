@@ -79,9 +79,9 @@ impl<'a> Type3<'a> {
 
     pub(crate) fn render_glyph(
         &self,
-        glyph: &Type3Glyph,
-        paint: &Paint,
-        device: &mut impl Device,
+        glyph: &Type3Glyph<'a>,
+        paint: &Paint<'a>,
+        device: &mut impl Device<'a>,
     ) -> Option<()> {
         let mut state = glyph.state.clone();
         let root_transform =
@@ -129,7 +129,7 @@ impl<'a> Type3<'a> {
         );
 
         if is_shape_glyph {
-            let mut device = Type3ShapeGlyphDevice::new(device, paint);
+            let mut device = Type3ShapeGlyphDevice::new(device, paint.clone());
             interpret(iter, &resources, &mut context, &mut device);
         } else {
             interpret(iter, &resources, &mut context, device);
@@ -145,13 +145,13 @@ impl CacheKey for Type3<'_> {
     }
 }
 
-struct Type3ShapeGlyphDevice<'a, T: Device> {
-    inner: &'a mut T,
-    paint: &'a Paint<'a>,
+struct Type3ShapeGlyphDevice<'a, 'b, T: Device<'a>> {
+    inner: &'b mut T,
+    paint: Paint<'a>,
 }
 
-impl<'a, T: Device> Type3ShapeGlyphDevice<'a, T> {
-    pub fn new(device: &'a mut T, paint: &'a Paint<'a>) -> Self {
+impl<'a, 'b, T: Device<'a>> Type3ShapeGlyphDevice<'a, 'b, T> {
+    pub fn new(device: &'b mut T, paint: Paint<'a>) -> Self {
         Self {
             inner: device,
             paint,
@@ -160,7 +160,7 @@ impl<'a, T: Device> Type3ShapeGlyphDevice<'a, T> {
 }
 
 // Only filling, stroking of paths and stencil masks are allowed.
-impl<T: Device> Device for Type3ShapeGlyphDevice<'_, T> {
+impl<'a, T: Device<'a>> Device<'a> for Type3ShapeGlyphDevice<'a, '_, T> {
     fn stroke_path(
         &mut self,
         path: &BezPath,
@@ -169,13 +169,13 @@ impl<T: Device> Device for Type3ShapeGlyphDevice<'_, T> {
         stroke_props: &StrokeProps,
     ) {
         self.inner
-            .stroke_path(path, transform, self.paint, stroke_props)
+            .stroke_path(path, transform, &self.paint, stroke_props)
     }
 
     fn set_soft_mask(&mut self, _: Option<SoftMask>) {}
 
     fn fill_path(&mut self, path: &BezPath, transform: Affine, _: &Paint, fill_rule: FillRule) {
-        self.inner.fill_path(path, transform, self.paint, fill_rule)
+        self.inner.fill_path(path, transform, &self.paint, fill_rule)
     }
 
     fn push_clip_path(&mut self, clip_path: &ClipPath) {
@@ -186,7 +186,7 @@ impl<T: Device> Device for Type3ShapeGlyphDevice<'_, T> {
 
     // Technically not valid, I think, but there is a PDFBox test case that contains such a font
     // and everyone seems to render it.
-    fn fill_glyph(&mut self, g: &Glyph<'_>, transform: Affine, p: &Paint) {
+    fn fill_glyph(&mut self, g: &Glyph<'a>, transform: Affine, p: &Paint<'a>) {
         self.inner.fill_glyph(g, transform, p);
     }
 
@@ -194,9 +194,9 @@ impl<T: Device> Device for Type3ShapeGlyphDevice<'_, T> {
     // and everyone seems to render it.
     fn stroke_glyph(
         &mut self,
-        g: &Glyph<'_>,
+        g: &Glyph<'a>,
         transform: Affine,
-        p: &Paint,
+        p: &Paint<'a>,
         stroke_props: &StrokeProps,
     ) {
         self.inner.stroke_glyph(g, transform, p, stroke_props);
@@ -206,7 +206,7 @@ impl<T: Device> Device for Type3ShapeGlyphDevice<'_, T> {
 
     fn draw_stencil_image(&mut self, stencil: LumaData, transform: Affine, _: &Paint) {
         self.inner
-            .draw_stencil_image(stencil, transform, self.paint);
+            .draw_stencil_image(stencil, transform, &self.paint);
     }
 
     fn pop_clip_path(&mut self) {

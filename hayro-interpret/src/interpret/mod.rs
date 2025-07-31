@@ -101,7 +101,7 @@ pub fn interpret<'a, 'b>(
     ops: impl Iterator<Item = TypedInstruction<'b>>,
     resources: &Resources<'a>,
     context: &mut Context<'a>,
-    device: &mut impl Device,
+    device: &mut impl Device<'a>,
 ) {
     let num_states = context.num_states();
 

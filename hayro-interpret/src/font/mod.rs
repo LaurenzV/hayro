@@ -120,7 +120,7 @@ pub struct Type3Glyph<'a> {
 /// A glyph defined by PDF drawing instructions.
 impl<'a> Type3Glyph<'a> {
     /// Draw the type3 glyph to the given device.
-    pub fn interpret(&self, device: &mut impl Device, paint: &Paint) {
+    pub fn interpret(&self, device: &mut impl Device<'a>, paint: &Paint<'a>) {
         self.font.render_glyph(self, paint, device);
     }
 }
