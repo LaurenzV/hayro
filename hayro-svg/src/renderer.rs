@@ -704,8 +704,6 @@ fn render_texture(bbox: Rect, shading_pattern: &EncodedShadingPattern) -> (Dynam
 
     let image = DynamicImage::ImageRgba8(ImageBuffer::from_raw(width, height, buf).unwrap());
 
-    image.save("test.png").unwrap();
-
     (
         image,
         Affine::translate((bbox.x0, bbox.y0)) * Affine::scale(INV_SCALE as f64),

@@ -242,6 +242,8 @@ use crate::run_render_test;
 #[test] fn image_interpolate() { run_render_test("image_interpolate", "pdfs/image_interpolate.pdf", None); }
 #[test] fn tile_clamp_bug() { run_render_test("tile_clamp_bug", "pdfs/tile_clamp_bug.pdf", None); }
 #[test] fn issue51() { run_render_test("issue51", "downloads/issue51.pdf", Some("..=1")); }
+#[test] fn gradient_on_rect() { run_render_test("gradient_on_rect", "pdfs/gradient_on_rect.pdf", None); }
+#[test] fn gradient_on_rotated_rect() { run_render_test("gradient_on_rotated_rect", "pdfs/gradient_on_rotated_rect.pdf", None); }
 #[test] fn pdfjs_20130226130259() { run_render_test("pdfjs_20130226130259", "downloads/pdfjs/20130226130259.pdf", Some("0..=0")); }
 #[test] fn pdfjs_IdentityToUnicodeMap_charCodeOf() { run_render_test("pdfjs_IdentityToUnicodeMap_charCodeOf", "pdfs/pdfjs/IdentityToUnicodeMap_charCodeOf.pdf", None); }
 #[test] fn pdfjs_IndexedCS_negative_and_high() { run_render_test("pdfjs_IndexedCS_negative_and_high", "pdfs/pdfjs/IndexedCS_negative_and_high.pdf", None); }
