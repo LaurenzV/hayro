@@ -312,7 +312,7 @@ pub(crate) mod flate {
                         }
 
                         // Copy from previous output
-                        let start = self.output.len().saturating_sub(distance);
+                        let start = self.output.len().wrapping_sub(distance);
                         for _ in 0..length {
                             if start < self.output.len() {
                                 let byte = self.output[self.output.len() - distance];

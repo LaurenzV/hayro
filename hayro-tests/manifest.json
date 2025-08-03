@@ -1023,5 +1023,9 @@
   {
     "id": "gradient_on_rotated_rect",
     "file": "pdfs/gradient_on_rotated_rect.pdf"
+  },
+  {
+    "id": "issue53",
+    "file": "pdfs/issue53.pdf"
   }
 ]

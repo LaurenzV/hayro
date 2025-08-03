@@ -358,8 +358,6 @@ mod macros {
                     if $n != u8::MAX as usize {
                         if stack.len() != $n {
                             warn!("wrong stack length {} for operator {}, expected {}", stack.len(), Self::OPERATOR, $n);
-
-                            return None;
                         }
                     }
 
