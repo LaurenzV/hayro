@@ -80,13 +80,14 @@ impl<'a> Type3<'a> {
     pub(crate) fn render_glyph(
         &self,
         glyph: &Type3Glyph<'a>,
+        transform: Affine,
         glyph_transform: Affine,
         paint: &Paint<'a>,
         device: &mut impl Device<'a>,
     ) -> Option<()> {
         let mut state = glyph.state.clone();
         let root_transform =
-            state.ctm * glyph_transform * self.matrix * Affine::scale(UNITS_PER_EM as f64);
+            transform * glyph_transform * self.matrix * Affine::scale(UNITS_PER_EM as f64);
         state.ctm = root_transform;
 
         let mut context = Context::new_with(

@@ -109,10 +109,11 @@ impl<'a> Type3Glyph<'a> {
     pub fn interpret(
         &self,
         device: &mut impl Device<'a>,
+        transform: Affine,
         glyph_transform: Affine,
         paint: &Paint<'a>,
     ) {
-        self.font.render_glyph(self, glyph_transform, paint, device);
+        self.font.render_glyph(self, transform, glyph_transform, paint, device);
     }
 }
 

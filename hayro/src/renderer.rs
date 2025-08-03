@@ -287,7 +287,7 @@ impl Device<'_> for Renderer {
                 self.fill_path(&outline, transform, paint, FillRule::NonZero);
             }
             Glyph::Type3(s) => {
-                s.interpret(self, glyph_transform, paint);
+                s.interpret(self, transform, glyph_transform, paint);
             }
         }
     }
@@ -306,7 +306,7 @@ impl Device<'_> for Renderer {
                 self.stroke_path(&outline, transform, paint, stroke_props);
             }
             Glyph::Type3(s) => {
-                s.interpret(self, glyph_transform, paint);
+                s.interpret(self, transform, glyph_transform, paint);
             }
         }
     }
