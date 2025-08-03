@@ -131,6 +131,7 @@ issue2442
 issue2537
 issue2829
 issue2840
+issue3062
 
 # not working gradient
 issue2761
