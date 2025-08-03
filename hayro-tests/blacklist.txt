@@ -108,6 +108,11 @@ bug1734802
 bug1753983
 bug1905623
 bug1953099
+bug854315
+bug866395
+
+# maybe soft mask not working correctly
+bug852992
 
 # maybe clip path not working on second page?
-pdfjs_bug1946953
+bug1946953

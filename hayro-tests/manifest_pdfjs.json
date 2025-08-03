@@ -314,6 +314,74 @@
     "file": "pdfs/bug1942064.pdf"
   },
   {
+    "id": "bug766138",
+    "file": "pdfs/bug766138.link",
+    "md5": "b171f5cf8d9834348112fba60ee54f8c",
+    "link": true
+  },
+  {
+    "id": "bug816075",
+    "file": "pdfs/bug816075.pdf"
+  },
+  {
+    "id": "bug847420",
+    "file": "pdfs/bug847420.pdf"
+  },
+  {
+    "id": "bug850854",
+    "file": "pdfs/bug850854.pdf",
+    "first_page": 0,
+    "last_page": 0
+  },
+  {
+    "id": "bug857031",
+    "file": "pdfs/bug857031.link",
+    "md5": "f11ecd7f75675e0cafbc9880c1a586c7",
+    "link": true,
+    "last_page": 0
+  },
+  {
+    "id": "bug858128",
+    "file": "pdfs/bug858128.link",
+    "md5": "46c7e78250b623782832801d4e6de2dc",
+    "link": true,
+    "last_page": 0
+  },
+  {
+    "id": "bug859204",
+    "file": "pdfs/bug859204.pdf"
+  },
+  {
+    "id": "bug860632",
+    "file": "pdfs/bug860632.pdf",
+    "last_page": 0
+  },
+  {
+    "id": "bug864847",
+    "file": "pdfs/bug864847.pdf"
+  },
+  {
+    "id": "bug878026",
+    "file": "pdfs/bug878026.pdf",
+    "first_page": 0,
+    "last_page": 0
+  },
+  {
+    "id": "bug878194",
+    "file": "pdfs/bug878194.link",
+    "md5": "c616b21fd2a1a65acc2de0f41e59a8b5",
+    "link": true,
+    "first_page": 3,
+    "last_page": 3
+  },
+  {
+    "id": "bug887152",
+    "file": "pdfs/bug887152.link",
+    "md5": "783a3e7b1de2cf40a47ffe1f36a41d4f",
+    "link": true,
+    "last_page": 0
+  },
+  {
     "id": "bug893730",
     "file": "pdfs/bug893730.pdf"
   },
