@@ -1,7 +1,7 @@
 use crate::encode::{Buffer, EncodeExt, EncodedPaint, Shader};
 use crate::fine::Sampler;
 use crate::paint::{Image, IndexedPaint, Paint};
-use kurbo::{Affine, Point};
+use kurbo::Point;
 use std::sync::Arc;
 
 #[derive(Debug)]
@@ -12,7 +12,7 @@ pub(crate) struct EncodedImage {
 }
 
 impl EncodeExt for Image {
-    fn encode_into(&self, paints: &mut Vec<EncodedPaint>, transform: Affine) -> Paint {
+    fn encode_into(&self, paints: &mut Vec<EncodedPaint>) -> Paint {
         let idx = paints.len();
 
         let encoded = EncodedImage {
@@ -21,7 +21,7 @@ impl EncodeExt for Image {
             is_pattern: self.is_pattern,
         };
 
-        let shader = Shader::<EncodedImage>::new(transform.inverse(), encoded);
+        let shader = Shader::<EncodedImage>::new(self.transform.inverse(), encoded);
 
         if self.is_stencil {
             paints.push(EncodedPaint::Mask(shader));

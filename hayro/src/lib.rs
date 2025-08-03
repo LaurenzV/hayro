@@ -102,7 +102,6 @@ pub fn render(
     device.ctx.fill_rect(
         &Rect::new(0.0, 0.0, pix_width as f64, pix_height as f64),
         AlphaColor::WHITE.into(),
-        Affine::IDENTITY,
         None,
     );
     device.push_clip_path(&ClipPath {

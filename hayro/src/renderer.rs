@@ -118,26 +118,22 @@ impl Renderer {
             interpolate,
             is_stencil,
             is_pattern: false,
+            transform: self.ctx.transform,
         };
 
         self.ctx.fill_rect(
             &Rect::new(0.0, 0.0, rgb_width as f64, rgb_height as f64),
             image.into(),
-            self.ctx.transform,
             None,
         );
     }
 
-    fn convert_paint(
-        &mut self,
-        paint: &hayro_interpret::Paint,
-        is_stroke: bool,
-    ) -> (PaintType, Affine) {
-        match paint.paint_type.clone() {
-            hayro_interpret::PaintType::Color(c) => (c.to_rgba().into(), Affine::IDENTITY),
-            hayro_interpret::PaintType::Pattern(p) => {
+    fn convert_paint(&mut self, paint: &hayro_interpret::Paint, is_stroke: bool) -> PaintType {
+        match paint.clone() {
+            hayro_interpret::Paint::Color(c) => c.to_rgba().into(),
+            hayro_interpret::Paint::Pattern(p) => {
                 match *p {
-                    Pattern::Shading(s) => (s.into(), paint.paint_transform),
+                    Pattern::Shading(s) => s.into(),
                     Pattern::Tiling(t) => {
                         const MAX_PIXMAP_SIZE: f32 = 3000.0;
                         // TODO: Raise this limit and perform downsampling if reached
@@ -151,7 +147,7 @@ impl Renderer {
                         let min_y_scale = MIN_PIXMAP_SIZE / bbox.height() as f32;
 
                         let (mut xs, mut ys) = {
-                            let (x, y) = x_y_advances(&(paint.paint_transform * t.matrix));
+                            let (x, y) = x_y_advances(&(t.matrix));
                             (x.length() as f32, y.length() as f32)
                         };
                         xs = xs.max(min_x_scale).min(max_x_scale);
@@ -194,17 +190,17 @@ impl Renderer {
                             pix_height as u32,
                         );
 
-                        let final_transform =
-                            paint.paint_transform * t.matrix * initial_transform.inverse();
+                        let final_transform = t.matrix * initial_transform.inverse();
 
                         let image = PaintType::Image(Image {
                             buffer: Arc::new(buffer),
                             interpolate: true,
                             is_stencil: false,
                             is_pattern: true,
+                            transform: final_transform,
                         });
 
-                        (image, final_transform)
+                        image
                     }
                 }
             }
@@ -223,17 +219,16 @@ impl Device<'_> for Renderer {
         self.ctx.set_transform(transform);
         self.set_stroke_properties(stroke_props);
 
-        let (paint_type, paint_transform) = self.convert_paint(paint, true);
+        let paint_type = self.convert_paint(paint, true);
         self.ctx
-            .stroke_path(path, paint_type, paint_transform, self.cur_mask.clone());
+            .stroke_path(path, paint_type, self.cur_mask.clone());
     }
 
     fn fill_path(&mut self, path: &BezPath, transform: Affine, paint: &Paint, fill_rule: FillRule) {
         self.ctx.set_fill_rule(fill_rule);
         self.ctx.set_transform(transform);
-        let (paint_type, paint_transform) = self.convert_paint(paint, false);
-        self.ctx
-            .fill_path(path, paint_type, paint_transform, self.cur_mask.clone());
+        let paint_type = self.convert_paint(paint, false);
+        self.ctx.fill_path(path, paint_type, self.cur_mask.clone());
     }
 
     fn draw_rgba_image(
@@ -262,11 +257,10 @@ impl Device<'_> for Renderer {
         self.ctx.push_layer(None, Some(1.0), self.cur_mask.clone());
         let old_rule = self.ctx.fill_rule;
         self.ctx.set_fill_rule(FillRule::NonZero);
-        let (converted_paint, paint_transform) = self.convert_paint(paint, false);
+        let converted_paint = self.convert_paint(paint, false);
         self.ctx.fill_rect(
             &Rect::new(0.0, 0.0, stencil.width as f64, stencil.height as f64),
             converted_paint,
-            paint_transform,
             None,
         );
         let rgb_data = RgbData {

@@ -6,6 +6,7 @@
 use crate::encode::Buffer;
 use hayro_interpret::color::AlphaColor;
 use hayro_interpret::pattern::ShadingPattern;
+use kurbo::Affine;
 use std::sync::Arc;
 
 /// A paint that needs to be resolved via its index.
@@ -56,6 +57,7 @@ pub(crate) struct Image {
     pub interpolate: bool,
     pub is_stencil: bool,
     pub is_pattern: bool,
+    pub transform: Affine,
 }
 
 /// A premultiplied color.

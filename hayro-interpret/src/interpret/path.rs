@@ -1,9 +1,8 @@
 use crate::Paint;
-use crate::PaintType;
 use crate::color::Color;
 use crate::context::Context;
 use crate::device::Device;
-use kurbo::{Affine, BezPath};
+use kurbo::BezPath;
 
 pub(crate) fn fill_path<'a>(context: &mut Context<'a>, device: &mut impl Device<'a>) {
     fill_path_impl(context, device, None);
@@ -66,18 +65,14 @@ pub(crate) fn get_paint<'a>(context: &Context<'a>, is_stroke: bool) -> Paint<'a>
     };
 
     if data.color_space.is_pattern()
-        && let Some(pattern) = data.pattern
+        && let Some(mut pattern) = data.pattern
     {
-        Paint {
-            paint_type: PaintType::Pattern(Box::new(pattern)),
-            paint_transform: context.root_transform(),
-        }
+        pattern.pre_concat_transform(context.root_transform());
+
+        Paint::Pattern(Box::new(pattern))
     } else {
         let color = Color::new(data.color_space, data.color, data.alpha);
 
-        Paint {
-            paint_type: PaintType::Color(color),
-            paint_transform: Affine::IDENTITY,
-        }
+        Paint::Color(color)
     }
 }

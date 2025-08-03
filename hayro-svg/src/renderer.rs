@@ -5,8 +5,7 @@ use hayro_interpret::font::Glyph;
 use hayro_interpret::hayro_syntax::page::Page;
 use hayro_interpret::pattern::{Pattern, ShadingPattern, TilingPattern};
 use hayro_interpret::{
-    CacheKey, ClipPath, Device, FillRule, LumaData, Paint, PaintType, RgbData, SoftMask,
-    StrokeProps,
+    CacheKey, ClipPath, Device, FillRule, LumaData, Paint, RgbData, SoftMask, StrokeProps,
 };
 use image::{DynamicImage, ImageBuffer, ImageFormat};
 use kurbo::{Affine, BezPath, PathEl, Point, Rect, Shape, Vec2};
@@ -36,7 +35,6 @@ struct CachedTilingPattern<'a> {
 
 struct CachedShading {
     pattern: ShadingPattern,
-    transform: Affine,
     bbox: Rect,
 }
 
@@ -57,20 +55,19 @@ impl<'a> SvgRenderer<'a> {
     fn fill_path(&mut self, path: &BezPath, paint: &Paint<'a>) {
         let svg_path = path.to_svg_f32();
 
-        match &paint.paint_type {
-            PaintType::Color(c) => {
+        match &paint {
+            Paint::Color(c) => {
                 self.xml.start_element("path");
                 self.xml.write_attribute("d", &svg_path);
                 self.write_color(c, false);
                 self.write_transform(None);
                 self.xml.end_element();
             }
-            PaintType::Pattern(p) => match p.as_ref() {
+            Paint::Pattern(p) => match p.as_ref() {
                 Pattern::Shading(s) => {
                     let bbox = (self.transform * path).bounding_box();
                     let shading_id = self.shadings.insert_with(s.cache_key(), || CachedShading {
                         pattern: s.clone(),
-                        transform: paint.paint_transform,
                         bbox,
                     });
 
@@ -98,7 +95,7 @@ impl<'a> SvgRenderer<'a> {
                     let pattern_id = self.tiling_patterns.insert_with(
                         (pattern.clone(), inverse_transform).cache_key(),
                         || CachedTilingPattern {
-                            transform: inverse_transform * paint.paint_transform,
+                            transform: inverse_transform,
                             tiling_pattern: pattern,
                         },
                     );
@@ -134,8 +131,8 @@ impl<'a> SvgRenderer<'a> {
     fn stroke_path(&mut self, path: &BezPath, paint: &Paint) {
         let svg_path = path.to_svg_f32();
 
-        match &paint.paint_type {
-            PaintType::Color(c) => {
+        match &paint {
+            Paint::Color(c) => {
                 self.xml.start_element("path");
                 self.xml.write_attribute("d", &svg_path);
                 self.write_color(c, true);
@@ -143,7 +140,7 @@ impl<'a> SvgRenderer<'a> {
                 self.write_transform(None);
                 self.xml.end_element();
             }
-            PaintType::Pattern(_) => {
+            Paint::Pattern(_) => {
                 unimplemented!();
             }
         }
@@ -314,7 +311,7 @@ impl<'a> SvgRenderer<'a> {
         self.xml.write_attribute("id", "shading");
 
         for (id, shading) in shadings.iter() {
-            let encoded = shading.pattern.encode(shading.transform);
+            let encoded = shading.pattern.encode();
             let (image, transform) = render_texture(shading.bbox, &encoded);
             self.write_image(&image, true, Some(id), Some(transform));
         }
@@ -377,8 +374,8 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
                     .glyphs
                     .insert_with(o.identifier().cache_key(), || o.outline());
 
-                match &paint.paint_type {
-                    PaintType::Color(c) => {
+                match &paint {
+                    Paint::Color(c) => {
                         self.xml.start_element("use");
                         self.xml
                             .write_attribute_fmt("xlink:href", format_args!("#{id}"));
@@ -387,7 +384,7 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
                         self.write_color(c, false);
                         self.xml.end_element();
                     }
-                    PaintType::Pattern(p) => match p.as_ref() {
+                    Paint::Pattern(p) => match p.as_ref() {
                         Pattern::Shading(_) => {}
                         Pattern::Tiling(_) => {
                             unimplemented!()
@@ -456,8 +453,8 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
 
         let interpolate = stencil.interpolate;
 
-        let image = match &paint.paint_type {
-            PaintType::Color(c) => {
+        let image = match &paint {
+            Paint::Color(c) => {
                 let color = c.to_rgba().to_rgba8();
                 let image = stencil
                     .data
@@ -469,7 +466,7 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
                     ImageBuffer::from_raw(stencil.width, stencil.height, image).unwrap(),
                 )
             }
-            PaintType::Pattern(_) => {
+            Paint::Pattern(_) => {
                 unreachable!();
             }
         };

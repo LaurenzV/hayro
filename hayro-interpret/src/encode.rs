@@ -29,7 +29,7 @@ impl EncodedShadingPattern {
 
 impl ShadingPattern {
     /// Encode the shading pattern.
-    pub fn encode(&self, paint_transform: Affine) -> EncodedShadingPattern {
+    pub fn encode(&self) -> EncodedShadingPattern {
         let base_transform;
 
         let shading_type = match self.shading.shading_type.as_ref() {
@@ -38,7 +38,7 @@ impl ShadingPattern {
                 matrix,
                 function,
             } => {
-                base_transform = (paint_transform * self.matrix * *matrix).inverse();
+                base_transform = (self.matrix * *matrix).inverse();
                 encode_function_shading(domain, function)
             }
             ShadingType::RadialAxial {
@@ -51,7 +51,7 @@ impl ShadingPattern {
                 let (encoded, initial_transform) =
                     encode_axial_shading(*coords, *domain, function, *extend, *axial);
 
-                base_transform = initial_transform * (paint_transform * self.matrix).inverse();
+                base_transform = initial_transform * self.matrix.inverse();
 
                 encoded
             }
@@ -59,7 +59,7 @@ impl ShadingPattern {
                 triangles,
                 function,
             } => {
-                let full_transform = paint_transform * self.matrix;
+                let full_transform = self.matrix;
                 let samples = sample_triangles(triangles, full_transform);
 
                 base_transform = Affine::IDENTITY;
@@ -75,7 +75,7 @@ impl ShadingPattern {
                     .flat_map(|p| p.to_triangles())
                     .collect::<Vec<_>>();
 
-                let full_transform = paint_transform * self.matrix;
+                let full_transform = self.matrix;
                 let samples = sample_triangles(&triangles, full_transform);
 
                 base_transform = Affine::IDENTITY;
@@ -91,7 +91,7 @@ impl ShadingPattern {
                     .flat_map(|p| p.to_triangles())
                     .collect::<Vec<_>>();
 
-                let full_transform = paint_transform * self.matrix;
+                let full_transform = self.matrix;
                 let samples = sample_triangles(&triangles, full_transform);
 
                 base_transform = Affine::IDENTITY;

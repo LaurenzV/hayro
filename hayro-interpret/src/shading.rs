@@ -17,7 +17,7 @@ use hayro_syntax::object::dict::keys::{
     BACKGROUND, BBOX, BITS_PER_COMPONENT, BITS_PER_COORDINATE, BITS_PER_FLAG, COLORSPACE, COORDS,
     DECODE, DOMAIN, EXTEND, FUNCTION, MATRIX, SHADING_TYPE, VERTICES_PER_ROW,
 };
-use kurbo::{Affine, CubicBez, ParamCurve, Point, Shape};
+use kurbo::{Affine, BezPath, CubicBez, ParamCurve, Point, Shape};
 use log::warn;
 use smallvec::{SmallVec, smallvec};
 use std::sync::Arc;
@@ -116,8 +116,8 @@ pub struct Shading {
     pub shading_type: Arc<ShadingType>,
     /// The color space of the shading.
     pub color_space: ColorSpace,
-    /// The bounding box of the shading.
-    pub bbox: Option<Rect>,
+    /// A clip path that should be applied to the shading.
+    pub clip_path: Option<BezPath>,
     /// The background color of the shading.
     pub background: Option<SmallVec<[f32; 4]>>,
 }
@@ -274,7 +274,7 @@ impl Shading {
             cache_key,
             shading_type: Arc::new(shading_type),
             color_space,
-            bbox,
+            clip_path: bbox.map(|r| r.to_path(0.1)),
             background,
         })
     }

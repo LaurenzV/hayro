@@ -1,5 +1,5 @@
 use console_error_panic_hook;
-use hayro::{FontData, FontQuery, InterpreterSettings, Pdf, RenderSettings, StandardFont};
+use hayro::{FontQuery, InterpreterSettings, Pdf, RenderSettings};
 use js_sys;
 use std::sync::Arc;
 use wasm_bindgen::prelude::*;

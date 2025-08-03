@@ -49,7 +49,7 @@ impl<T: Sampler> Shader<T> {
 }
 
 pub(crate) trait EncodeExt {
-    fn encode_into(&self, paints: &mut Vec<EncodedPaint>, transform: Affine) -> Paint;
+    fn encode_into(&self, paints: &mut Vec<EncodedPaint>) -> Paint;
 }
 
 #[derive(Debug)]

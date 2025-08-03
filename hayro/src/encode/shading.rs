@@ -3,7 +3,7 @@ use crate::fine::Sampler;
 use crate::paint::{IndexedPaint, Paint};
 use hayro_interpret::encode::EncodedShadingPattern;
 use hayro_interpret::pattern::ShadingPattern;
-use kurbo::{Affine, Point};
+use kurbo::Point;
 
 impl Sampler for EncodedShadingPattern {
     fn interpolate(&self) -> bool {
@@ -16,10 +16,10 @@ impl Sampler for EncodedShadingPattern {
 }
 
 impl EncodeExt for ShadingPattern {
-    fn encode_into(&self, paints: &mut Vec<EncodedPaint>, transform: Affine) -> Paint {
+    fn encode_into(&self, paints: &mut Vec<EncodedPaint>) -> Paint {
         let idx = paints.len();
 
-        let encoded = self.encode(transform);
+        let encoded = self.encode();
 
         let shader = Shader::<EncodedShadingPattern>::new(encoded);
         paints.push(EncodedPaint::Shading(shader));

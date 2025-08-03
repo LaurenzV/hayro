@@ -10,9 +10,7 @@ use crate::shading::Shading;
 use crate::soft_mask::SoftMask;
 use crate::util::hash128;
 use crate::{CacheKey, ClipPath};
-use crate::{
-    FillRule, InterpreterSettings, LumaData, Paint, PaintType, RgbData, StrokeProps, interpret,
-};
+use crate::{FillRule, InterpreterSettings, LumaData, Paint, RgbData, StrokeProps, interpret};
 use hayro_syntax::content::TypedIter;
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Rect;
@@ -54,6 +52,17 @@ impl<'a> Pattern<'a> {
             )?)))
         } else {
             None
+        }
+    }
+
+    pub(crate) fn pre_concat_transform(&mut self, transform: Affine) {
+        match self {
+            Self::Shading(p) => {
+                p.matrix = transform * p.matrix;
+                let transformed_clip_path = p.shading.clip_path.clone().map(|r| (transform * r));
+                Arc::make_mut(&mut p.shading).clip_path = transformed_clip_path
+            }
+            Self::Tiling(p) => p.matrix = transform * p.matrix,
         }
     }
 }
@@ -218,15 +227,9 @@ impl<'a> TilingPattern<'a> {
             interpret(iter, &resources, &mut context, device);
         } else {
             let paint = if !is_stroke {
-                Paint {
-                    paint_transform: Default::default(),
-                    paint_type: PaintType::Color(self.non_stroking_paint.clone()),
-                }
+                Paint::Color(self.non_stroking_paint.clone())
             } else {
-                Paint {
-                    paint_transform: Default::default(),
-                    paint_type: PaintType::Color(self.stroke_paint.clone()),
-                }
+                Paint::Color(self.stroke_paint.clone())
             };
 
             let mut device = StencilPatternDevice::new(device, paint.clone());

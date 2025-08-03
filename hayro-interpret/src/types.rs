@@ -2,7 +2,7 @@ use crate::CacheKey;
 use crate::color::Color;
 use crate::pattern::Pattern;
 use crate::util::hash128;
-use kurbo::{Affine, BezPath, Cap, Join};
+use kurbo::{BezPath, Cap, Join};
 use smallvec::{SmallVec, smallvec};
 
 /// A clip path.
@@ -48,20 +48,11 @@ pub struct LumaData {
 
 /// A type of paint.
 #[derive(Clone, Debug)]
-pub enum PaintType<'a> {
+pub enum Paint<'a> {
     /// A solid RGBA color.
     Color(Color),
     /// A PDF pattern.
     Pattern(Box<Pattern<'a>>),
-}
-
-/// A paint.
-#[derive(Clone, Debug)]
-pub struct Paint<'a> {
-    /// A transform to apply to the paint.
-    pub paint_transform: Affine,
-    /// The underlying type of paint.
-    pub paint_type: PaintType<'a>,
 }
 
 /// Stroke properties.

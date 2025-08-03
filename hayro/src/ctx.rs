@@ -27,7 +27,7 @@ pub(crate) struct RenderContext {
     pub(crate) line_buf: Vec<Line>,
     pub(crate) tiles: Tiles,
     pub(crate) strip_buf: Vec<Strip>,
-    paint_bbox: Option<Rect>,
+    paint_clip_path: Option<BezPath>,
     pub(crate) stroke: Stroke,
     pub(crate) transform: Affine,
     pub(crate) fill_rule: FillRule,
@@ -66,7 +66,7 @@ impl RenderContext {
             tiles,
             strip_buf,
             transform,
-            paint_bbox: None,
+            paint_clip_path: None,
             fill_rule,
             stroke,
             encoded_paints,
@@ -74,46 +74,40 @@ impl RenderContext {
         }
     }
 
-    fn encode_paint(&mut self, paint_type: PaintType, paint_transform: Affine) -> Paint {
+    fn encode_paint(&mut self, paint_type: PaintType) -> Paint {
         match paint_type {
             PaintType::Solid(s) => {
-                self.paint_bbox = None;
+                self.paint_clip_path = None;
                 s.into()
             }
             PaintType::Image(i) => {
-                self.paint_bbox = None;
-                i.encode_into(&mut self.encoded_paints, paint_transform)
+                self.paint_clip_path = None;
+                i.encode_into(&mut self.encoded_paints)
             }
             PaintType::ShadingPattern(s) => {
-                self.paint_bbox = s.shading.bbox;
-                s.encode_into(&mut self.encoded_paints, paint_transform)
+                self.paint_clip_path = s.shading.clip_path.clone();
+                s.encode_into(&mut self.encoded_paints)
             }
         }
     }
 
     /// Fill a path.
-    pub(crate) fn fill_path(
-        &mut self,
-        path: &BezPath,
-        paint_type: PaintType,
-        paint_transform: Affine,
-        mask: Option<Mask>,
-    ) {
-        let paint = self.encode_paint(paint_type, paint_transform);
-        self.apply_paint_bbox(paint_transform);
+    pub(crate) fn fill_path(&mut self, path: &BezPath, paint_type: PaintType, mask: Option<Mask>) {
+        let paint = self.encode_paint(paint_type);
+        self.apply_paint_bbox();
         flatten::fill(path, self.transform, &mut self.line_buf);
         self.render_path(self.fill_rule, paint, mask);
         self.unapply_paint_bbox();
     }
 
-    fn apply_paint_bbox(&mut self, paint_transform: Affine) {
-        if let Some(bbox) = self.paint_bbox {
-            self.push_layer(Some(&(paint_transform * bbox.to_path(0.1))), None, None);
+    fn apply_paint_bbox(&mut self) {
+        if let Some(clip_path) = self.paint_clip_path.clone() {
+            self.push_layer(Some(&clip_path), None, None);
         }
     }
 
     fn unapply_paint_bbox(&mut self) {
-        if self.paint_bbox.is_some() {
+        if self.paint_clip_path.is_some() {
             self.pop_layer();
         }
     }
@@ -123,30 +117,18 @@ impl RenderContext {
         &mut self,
         path: &BezPath,
         paint_type: PaintType,
-        paint_transform: Affine,
         mask: Option<Mask>,
     ) {
-        let paint = self.encode_paint(paint_type, paint_transform);
-        self.apply_paint_bbox(paint_transform);
+        let paint = self.encode_paint(paint_type);
+        self.apply_paint_bbox();
         flatten::stroke(path, &self.stroke, self.transform, &mut self.line_buf);
         self.render_path(FillRule::NonZero, paint, mask);
         self.unapply_paint_bbox();
     }
 
     /// Fill a rectangle.
-    pub(crate) fn fill_rect(
-        &mut self,
-        rect: &Rect,
-        paint_type: PaintType,
-        paint_transform: Affine,
-        mask: Option<Mask>,
-    ) {
-        self.fill_path(
-            &rect.to_path(DEFAULT_TOLERANCE),
-            paint_type,
-            paint_transform,
-            mask,
-        );
+    pub(crate) fn fill_rect(&mut self, rect: &Rect, paint_type: PaintType, mask: Option<Mask>) {
+        self.fill_path(&rect.to_path(DEFAULT_TOLERANCE), paint_type, mask);
     }
 
     /// Push a new layer with the given properties.
