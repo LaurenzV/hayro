@@ -191,7 +191,7 @@ class TestGenerator:
                 # Remove pdfs/ prefix and add pdfjs subdirectory
                 original_file = entry['file'].replace('pdfs/', '')
                 file_path = f"pdfs/pdfjs/{original_file}"
-            func_name = f"pdfjs_{entry_id.replace('-', '_')}"
+            func_name = f"pdfjs_{entry_id.replace('-', '_').replace('.', '_')}"
         elif is_pdfbox:
             if is_link:
                 file_path = f"downloads/pdfbox/{entry_id}.pdf"
@@ -199,13 +199,13 @@ class TestGenerator:
                 # Remove pdfs/ prefix and add pdfbox subdirectory
                 original_file = entry['file'].replace('pdfs/', '')
                 file_path = f"pdfs/pdfbox/{original_file}"
-            func_name = f"pdfbox_{entry_id.replace('-', '_')}"
+            func_name = f"pdfbox_{entry_id.replace('-', '_').replace('.', '_')}"
         else:
             if is_link:
                 file_path = f"downloads/{entry_id}.pdf"
             else:
                 file_path = entry['file']
-            func_name = entry_id.replace('-', '_')
+            func_name = entry_id.replace('-', '_').replace('.', '_')
             
         return f'#[test] fn {func_name}() {{ run_render_test("{func_name}", "{file_path}", {length}); }}'
         

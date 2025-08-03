@@ -3,6 +3,7 @@ annotation_*
 annotation-*
 *xfa*
 forms_*
+*freetext*
 *textfields*
 *highlight*
 *optionalcontent*
@@ -18,6 +19,13 @@ ZapfDingbats
 
 # Ignore those tests because they are not interesting to us or we don't want to support.
 artofwar
+ContentStreamCycleType3insideType3
+ContentStreamNoCycleType3insideType3
+decodeACSuccessive
+doc_actions
+cmykjpeg_nowasm
+fips197
+fit11-talk
 
 # CMAP table is broken, therefore we can't map codepoint to a glyph
 bug1050040
@@ -38,6 +46,9 @@ bug1650302_reduce
 # smask
 bug1123803
 bug1199237
+
+# colorkeymask
+colorkeymask
 
 # this pdf is pretty broken, and while we can display most of it, some of the images are cut off, seemingly because the
 # flate decompressor doesn't process everything
@@ -110,9 +121,16 @@ bug1905623
 bug1953099
 bug854315
 bug866395
+bug921409
 
 # maybe soft mask not working correctly
 bug852992
 
 # maybe clip path not working on second page?
 bug1946953
+
+# image rendered with pink background
+bug956965
+
+# wrong handling of extgstate text
+extgstate

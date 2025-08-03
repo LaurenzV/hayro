@@ -382,6 +382,19 @@
     "last_page": 0
   },
   {
+    "id": "bug888437",
+    "file": "pdfs/bug888437.link",
+    "md5": "93370cd589a08732a05601441c899bcb",
+    "link": true
+  },
+  {
+    "id": "bug889327",
+    "file": "pdfs/bug889327.link",
+    "md5": "b45cd63419241c40731f98d0e1dac082",
+    "link": true,
+    "last_page": 0
+  },
+  {
     "id": "bug893730",
     "file": "pdfs/bug893730.pdf"
   },
@@ -390,12 +403,42 @@
     "file": "pdfs/bug894572.pdf"
   },
   {
+    "id": "bug898853.pdf",
+    "file": "pdfs/bug898853.pdf"
+  },
+  {
+    "id": "bug903856",
+    "file": "pdfs/bug903856.pdf",
+    "first_page": 0,
+    "last_page": 0
+  },
+  {
     "id": "bug911034",
     "file": "pdfs/bug911034.pdf"
   },
   {
     "id": "bug920426",
     "file": "pdfs/bug920426.pdf"
+  },
+  {
+    "id": "bug921760",
+    "file": "pdfs/bug921760.link",
+    "md5": "1aa136d786a65b0d7cce7bdb3c58c6c3",
+    "link": true,
+    "first_page": 0,
+    "last_page": 0
+  },
+  {
+    "id": "bug946506",
+    "file": "pdfs/bug946506.pdf",
+    "first_page": 0,
+    "last_page": 0
+  },
+  {
+    "id": "cable",
+    "file": "pdfs/cable.link",
+    "md5": "09a41b9a759d60c698228224ab85b46d",
+    "link": true
   },
   {
     "id": "calgray",
@@ -441,6 +484,41 @@
   {
     "id": "endchar",
     "file": "pdfs/endchar.pdf"
+  },
+  {
+    "id": "font_ascent_descent",
+    "file": "pdfs/font_ascent_descent.pdf"
+  },
+  {
+    "id": "franz",
+    "file": "pdfs/franz.pdf"
+  },
+  {
+    "id": "franz_2",
+    "file": "pdfs/franz_2.pdf"
+  },
+  {
+    "id": "freeculture",
+    "file": "pdfs/freeculture.pdf",
+    "last_page": 4
+  },
+  {
+    "id": "geothermal.pdf",
+    "file": "pdfs/geothermal.pdf.link",
+    "md5": "ecffc0ce38ffdf1e90dc952f186e9a91",
+    "link": true,
+    "last_page": 4
+  },
+  {
+    "id": "german-umlaut",
+    "file": "pdfs/german-umlaut-r.pdf"
+  },
+  {
+    "id": "gesamt",
+    "file": "pdfs/gesamt.link",
+    "md5": "743aaa6f46ed0a42864f079d632d942e",
+    "link": true,
+    "last_page": 0
   },
   {
     "id": "gradientfill",
