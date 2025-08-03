@@ -1,3 +1,4 @@
+# Excluded because we don't support those yet
 annotation_*
 annotation-*
 *xfa*
@@ -15,7 +16,7 @@ Type3WordSpacing
 xobject-image
 ZapfDingbats
 
-# Specific tests to exclude
+# Ignore those tests because they are not interesting to us or we don't want to support.
 artofwar
 
 # CMAP table is broken, therefore we can't map codepoint to a glyph
@@ -43,3 +44,60 @@ bug1199237
 bug1130815-text
 bug1130815
 bug1130815-eq
+
+# doesnt parse / has encryption
+p020121130574743273239
+artofwar
+bug1250079
+bug1425312
+bug1723568
+bug1782186
+bug1815476-save-print
+bug1820909
+bug1826783-display
+bug810214
+bug865858
+bug900822
+bug951051
+protected-stamp-editor-save-print
+i9-pdf
+ichiji
+intelisa-eq
+issue1049
+issue1096
+issue11526
+issue12294-print
+issue13132
+issue13433
+issue13748
+issue13751
+issue1419.pdf
+issue15577
+issue15893_reduced
+issue16081
+issue16464
+issue16843-text
+issue16863
+issue17069
+issue17215-annotations
+issue19484_1
+issue19484_2
+issue2386
+issue3371
+issue4926
+issue5752
+issue5909_original
+issue6010_1
+issue6010_2
+issue6364
+issue7303
+issue7665
+issue9105_other
+issue9418
+protectip
+shavian-load
+tutorial
+wdsg_fitc
+
+# takes long time
+filled-background-range
