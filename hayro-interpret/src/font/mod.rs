@@ -113,7 +113,8 @@ impl<'a> Type3Glyph<'a> {
         glyph_transform: Affine,
         paint: &Paint<'a>,
     ) {
-        self.font.render_glyph(self, transform, glyph_transform, paint, device);
+        self.font
+            .render_glyph(self, transform, glyph_transform, paint, device);
     }
 }
 
