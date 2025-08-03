@@ -101,3 +101,8 @@ wdsg_fitc
 
 # takes long time
 filled-background-range
+
+# missing text
+bug1727053
+bug1734802
+bug1753983
