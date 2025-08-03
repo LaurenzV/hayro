@@ -1411,8 +1411,69 @@
     "file": "pdfs/issue7507.pdf"
   },
   {
+    "id": "issue7544",
+    "file": "pdfs/issue7544.pdf"
+  },
+  {
+    "id": "issue7696",
+    "file": "pdfs/issue7696.pdf"
+  },
+  {
+    "id": "issue7769",
+    "file": "pdfs/issue7769.pdf"
+  },
+  {
+    "id": "issue7828",
+    "file": "pdfs/issue7828.link",
+    "md5": "462f96c877f5761fc3176156e3526184",
+    "link": true
+  },
+  {
+    "id": "issue7855",
+    "file": "pdfs/issue7855.pdf"
+  },
+  {
     "id": "issue7901",
     "file": "pdfs/issue7901.pdf"
+  },
+  {
+    "id": "issue8047",
+    "file": "pdfs/issue8047.link",
+    "md5": "83f1b9f7e95caa8e2625390afd7c7276",
+    "link": true,
+    "last_page": 0
+  },
+  {
+    "id": "issue8061",
+    "file": "pdfs/issue8061.pdf"
+  },
+  {
+    "id": "issue8076",
+    "file": "pdfs/issue8076.link",
+    "md5": "4a866bff4209956a6cfa2e2c9456f421",
+    "link": true
+  },
+  {
+    "id": "issue8088",
+    "file": "pdfs/issue8088.pdf",
+    "first_page": 0,
+    "last_page": 2
+  },
+  {
+    "id": "issue8092",
+    "file": "pdfs/issue8092.pdf"
+  },
+  {
+    "id": "issue8097",
+    "file": "pdfs/issue8097_reduced.pdf"
+  },
+  {
+    "id": "issue8111",
+    "file": "pdfs/issue8111.pdf"
+  },
+  {
+    "id": "issue8125",
+    "file": "pdfs/issue8125.pdf"
   },
   {
     "id": "issue818",
@@ -1422,12 +1483,45 @@
     "last_page": 0
   },
   {
+    "id": "issue8182",
+    "file": "pdfs/issue8182.link",
+    "md5": "e295ae13dcbefd449f9a4957aed5e582",
+    "link": true,
+    "last_page": 0
+  },
+  {
+    "id": "issue8187",
+    "file": "pdfs/issue8187.pdf"
+  },
+  {
+    "id": "issue8234",
+    "file": "pdfs/issue8234.pdf"
+  },
+  {
+    "id": "issue8380",
+    "file": "pdfs/issue8380.link",
+    "md5": "2782af6a4d0540fcea3897560f842094",
+    "link": true
+  },
+  {
     "id": "issue840",
     "file": "pdfs/issue840.pdf"
   },
   {
+    "id": "issue8424",
+    "file": "pdfs/issue8424.pdf"
+  },
+  {
     "id": "issue845",
     "file": "pdfs/issue845r.pdf"
+  },
+  {
+    "id": "issue8565",
+    "file": "pdfs/issue8565.pdf"
+  },
+  {
+    "id": "issue8570",
+    "file": "pdfs/issue8570.pdf"
   },
   {
     "id": "issue8895",

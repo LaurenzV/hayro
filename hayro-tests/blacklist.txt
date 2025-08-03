@@ -115,6 +115,7 @@ wdsg_fitc
 
 # takes long time
 filled-background-range
+issue8078
 
 # missing text
 bug1727053
@@ -145,9 +146,22 @@ issue6286
 issue6410
 issue6692
 issue6782
+issue7598
+issue7835
+
+# mediabox / cropbox issue
+issue7872
 
 # wrong rendering
 issue6931
+issue8019
+issue8117
+issue8169
+issue8330
+issue8480
+
+# logo rendered wrong
+issue8022
 
 #missing gradient
 issue6737
