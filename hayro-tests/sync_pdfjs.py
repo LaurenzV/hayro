@@ -20,8 +20,9 @@ import hashlib
 import requests
 import fnmatch
 import shutil
+import re
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
 
 def load_list_from_file(file_path: Path) -> List[str]:
     """Load a list of patterns from a text file, one per line."""
@@ -89,6 +90,23 @@ class PDFJSSync:
     def is_eq_type(self, entry: Dict[str, Any]) -> bool:
         """Check if entry is of type 'eq' (equality test)."""
         return entry.get("type", "eq") == "eq"
+        
+    def extract_sort_key(self, test_id: str) -> Tuple[str, int]:
+        """Extract a sort key from test ID, treating trailing numbers specially.
+        
+        For example:
+        - 'issue1010' -> ('issue', 1010)
+        - 'issue10326' -> ('issue', 10326)
+        - 'test_name' -> ('test_name', float('inf'))
+        """
+        match = re.match(r'^(.*?)(\d+)$', test_id)
+        if match:
+            prefix = match.group(1)
+            number = int(match.group(2))
+            return (prefix.lower(), number)
+        else:
+            # No trailing number, sort after numbered entries
+            return (test_id.lower(), float('inf'))
         
     def calculate_md5(self, file_path: Path) -> str:
         """Calculate MD5 hash of a file."""
@@ -518,8 +536,8 @@ class PDFJSSync:
                 entry["id"] not in existing_ids):
                 filtered_entries.append(entry)
         
-        # Sort alphabetically and return first N entries
-        sorted_entries = sorted(filtered_entries, key=lambda x: x["id"].lower())
+        # Sort using custom key that handles trailing numbers properly
+        sorted_entries = sorted(filtered_entries, key=lambda x: self.extract_sort_key(x["id"]))
         return sorted_entries[:n]
         
     def preview_selection(self):
@@ -543,7 +561,7 @@ class PDFJSSync:
                                  self.is_eq_type(entry))]
         
         print(f"\n📋 Whitelisted entries ({len(whitelisted_entries)}):")
-        for entry in sorted(whitelisted_entries, key=lambda x: x["id"]):
+        for entry in sorted(whitelisted_entries, key=lambda x: self.extract_sort_key(x["id"])):
             print(f"  - {entry['id']}")
             
         # Get alphabetical entries

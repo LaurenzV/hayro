@@ -30,6 +30,9 @@ fit11-talk
 # CMAP table is broken, therefore we can't map codepoint to a glyph
 bug1050040
 
+# missing image on page 1
+High-Pressure-Measurement-WP-001287
+
 #investigate
 bug1250079
 bug1308536
@@ -122,6 +125,7 @@ bug1953099
 bug854315
 bug866395
 bug921409
+issue215
 
 # maybe soft mask not working correctly
 bug852992
