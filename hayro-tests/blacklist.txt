@@ -141,9 +141,30 @@ issue5701
 issue5751
 issue5801
 issue5946
+issue6286
+issue6410
+issue6692
+issue6782
+
+# wrong rendering
+issue6931
+
+#missing gradient
+issue6737
+
+# weird gray bar
+issue6707
+
+# missing image
+issue6621
 
 # missing letters
 issue6132
+
+# never finishes
+issue6541
+issue7200
+issue7454
 
 # wrong font in text?
 issue4934
