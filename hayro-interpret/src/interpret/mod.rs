@@ -533,7 +533,7 @@ pub fn interpret<'a, 'b>(
     while context.num_states() > num_states {
         restore_state(context, device);
     }
-    
+
     // Invalid files may still have pending clip paths.
     if context.num_states() <= 1 {
         while context.get().n_clips > 0 {
@@ -541,5 +541,4 @@ pub fn interpret<'a, 'b>(
             context.get_mut().n_clips -= 1;
         }
     }
-    
 }
