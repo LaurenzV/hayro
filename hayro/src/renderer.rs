@@ -192,15 +192,13 @@ impl Renderer {
 
                         let final_transform = t.matrix * initial_transform.inverse();
 
-                        let image = PaintType::Image(Image {
+                        PaintType::Image(Image {
                             buffer: Arc::new(buffer),
                             interpolate: true,
                             is_stencil: false,
                             is_pattern: true,
                             transform: final_transform,
-                        });
-
-                        image
+                        })
                     }
                 }
             }
