@@ -1032,12 +1032,30 @@
     "file": "pdfs/coons-allflags-withfunction.pdf"
   },
   {
+    "id": "issue4244",
+    "file": "pdfs/issue4244.link",
+    "md5": "26845274a32a537182ced1fd693a38b2",
+    "link": true
+  },
+  {
+    "id": "issue4304",
+    "file": "pdfs/issue4304.pdf"
+  },
+  {
     "id": "issue4379",
     "file": "pdfs/issue4379.pdf"
   },
   {
+    "id": "issue4398",
+    "file": "pdfs/issue4398.pdf"
+  },
+  {
     "id": "issue4402_reduced",
     "file": "pdfs/issue4402_reduced.pdf"
+  },
+  {
+    "id": "issue4436",
+    "file": "pdfs/issue4436r.pdf"
   },
   {
     "id": "issue4573",
@@ -1046,8 +1064,72 @@
     "last_page": 0
   },
   {
+    "id": "issue4575",
+    "file": "pdfs/issue4575.pdf"
+  },
+  {
+    "id": "issue4648",
+    "file": "pdfs/issue4648.link",
+    "md5": "9906cb55f190b8a2d340ea34093ed763",
+    "link": true,
+    "first_page": 0,
+    "last_page": 3
+  },
+  {
+    "id": "issue4650",
+    "file": "pdfs/issue4650.pdf",
+    "first_page": 0,
+    "last_page": 0
+  },
+  {
     "id": "issue4706",
     "file": "pdfs/issue4706.pdf"
+  },
+  {
+    "id": "issue4800",
+    "file": "pdfs/issue4800.pdf"
+  },
+  {
+    "id": "issue4801",
+    "file": "pdfs/issue4801.pdf"
+  },
+  {
+    "id": "issue4875",
+    "file": "pdfs/issue4875.pdf"
+  },
+  {
+    "id": "issue4881",
+    "file": "pdfs/issue4881.pdf"
+  },
+  {
+    "id": "issue4883",
+    "file": "pdfs/issue4883.link",
+    "md5": "2fac0d9a189ca5fcef8626153d050be8",
+    "link": true,
+    "first_page": 0,
+    "last_page": 0
+  },
+  {
+    "id": "issue4909",
+    "file": "pdfs/issue4909.pdf"
+  },
+  {
+    "id": "issue5010",
+    "file": "pdfs/issue5010.pdf",
+    "first_page": 0,
+    "last_page": 0
+  },
+  {
+    "id": "issue5039",
+    "file": "pdfs/issue5039.pdf"
+  },
+  {
+    "id": "issue5070",
+    "file": "pdfs/issue5070.pdf"
+  },
+  {
+    "id": "issue5084",
+    "file": "pdfs/issue5084.pdf"
   },
   {
     "id": "issue5138",
@@ -1064,6 +1146,22 @@
   {
     "id": "issue5256",
     "file": "pdfs/issue5256.pdf"
+  },
+  {
+    "id": "issue5280",
+    "file": "pdfs/issue5280.pdf"
+  },
+  {
+    "id": "issue5291",
+    "file": "pdfs/issue5291.pdf"
+  },
+  {
+    "id": "issue5334",
+    "file": "pdfs/issue5334.pdf"
+  },
+  {
+    "id": "issue5421",
+    "file": "pdfs/issue5421.pdf"
   },
   {
     "id": "issue5470",

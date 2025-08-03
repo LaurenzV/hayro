@@ -132,6 +132,25 @@ issue2537
 issue2829
 issue2840
 issue3062
+issue4668
+issue4722
+issue5044
+issue5244
+
+# wrong font in text?
+issue4934
+
+# cut off image
+issue4890
+
+# pixelated image mask
+issue4246
+
+# missing grid lines
+issue4260
+
+# weirdly spaced text
+issue4630
 
 # not working gradient
 issue2761
