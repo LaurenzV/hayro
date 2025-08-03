@@ -136,6 +136,14 @@ issue4668
 issue4722
 issue5044
 issue5244
+issue5501
+issue5701
+issue5751
+issue5801
+issue5946
+
+# missing letters
+issue6132
 
 # wrong font in text?
 issue4934
