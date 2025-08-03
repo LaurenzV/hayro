@@ -106,3 +106,8 @@ filled-background-range
 bug1727053
 bug1734802
 bug1753983
+bug1905623
+bug1953099
+
+# maybe clip path not working on second page?
+pdfjs_bug1946953

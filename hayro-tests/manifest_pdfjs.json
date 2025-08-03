@@ -281,6 +281,39 @@
     "file": "pdfs/bug1799927.pdf"
   },
   {
+    "id": "bug1898802",
+    "file": "pdfs/bug1898802.link",
+    "md5": "65c3af306253faa8967982812aff523e",
+    "link": true,
+    "last_page": 0
+  },
+  {
+    "id": "bug1899804",
+    "file": "pdfs/bug1899804.link",
+    "md5": "53d82575d6d5d314404ede8970073e1b",
+    "link": true
+  },
+  {
+    "id": "bug1901253",
+    "file": "pdfs/bug1901253.link",
+    "md5": "0d903ece5a3c60f868a3f3217be0353d",
+    "link": true
+  },
+  {
+    "id": "bug1903731",
+    "file": "pdfs/bug1903731.link",
+    "md5": "c90d1b03a62d0221e5f5609e3db16a38",
+    "link": true
+  },
+  {
+    "id": "bug1919513",
+    "file": "pdfs/bug1919513.pdf"
+  },
+  {
+    "id": "bug1942064",
+    "file": "pdfs/bug1942064.pdf"
+  },
+  {
     "id": "bug893730",
     "file": "pdfs/bug893730.pdf"
   },
