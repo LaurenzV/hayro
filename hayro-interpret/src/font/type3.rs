@@ -80,12 +80,13 @@ impl<'a> Type3<'a> {
     pub(crate) fn render_glyph(
         &self,
         glyph: &Type3Glyph<'a>,
+        glyph_transform: Affine,
         paint: &Paint<'a>,
         device: &mut impl Device<'a>,
     ) -> Option<()> {
         let mut state = glyph.state.clone();
         let root_transform =
-            state.ctm * glyph.glyph_transform * self.matrix * Affine::scale(UNITS_PER_EM as f64);
+            state.ctm * glyph_transform * self.matrix * Affine::scale(UNITS_PER_EM as f64);
         state.ctm = root_transform;
 
         let mut context = Context::new_with(
@@ -187,8 +188,14 @@ impl<'a, T: Device<'a>> Device<'a> for Type3ShapeGlyphDevice<'a, '_, T> {
 
     // Technically not valid, I think, but there is a PDFBox test case that contains such a font
     // and everyone seems to render it.
-    fn fill_glyph(&mut self, g: &Glyph<'a>, transform: Affine, p: &Paint<'a>) {
-        self.inner.fill_glyph(g, transform, p);
+    fn fill_glyph(
+        &mut self,
+        g: &Glyph<'a>,
+        transform: Affine,
+        glyph_transform: Affine,
+        p: &Paint<'a>,
+    ) {
+        self.inner.fill_glyph(g, transform, glyph_transform, p);
     }
 
     // Technically not valid, I think, but there is a PDFBox test case that contains such a font
@@ -197,10 +204,12 @@ impl<'a, T: Device<'a>> Device<'a> for Type3ShapeGlyphDevice<'a, '_, T> {
         &mut self,
         g: &Glyph<'a>,
         transform: Affine,
+        glyph_transform: Affine,
         p: &Paint<'a>,
         stroke_props: &StrokeProps,
     ) {
-        self.inner.stroke_glyph(g, transform, p, stroke_props);
+        self.inner
+            .stroke_glyph(g, transform, glyph_transform, p, stroke_props);
     }
 
     fn draw_rgba_image(&mut self, _: RgbData, _: Affine, _: Option<LumaData>) {}

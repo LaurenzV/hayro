@@ -274,14 +274,20 @@ impl Device<'_> for Renderer {
         self.ctx.set_anti_aliasing(true);
     }
 
-    fn fill_glyph(&mut self, glyph: &Glyph<'_>, transform: Affine, paint: &Paint) {
+    fn fill_glyph(
+        &mut self,
+        glyph: &Glyph<'_>,
+        transform: Affine,
+        glyph_transform: Affine,
+        paint: &Paint,
+    ) {
         match glyph {
             Glyph::Outline(o) => {
-                let outline = o.glyph_transform * o.outline();
+                let outline = glyph_transform * o.outline();
                 self.fill_path(&outline, transform, paint, FillRule::NonZero);
             }
             Glyph::Type3(s) => {
-                s.interpret(self, paint);
+                s.interpret(self, glyph_transform, paint);
             }
         }
     }
@@ -290,16 +296,17 @@ impl Device<'_> for Renderer {
         &mut self,
         glyph: &Glyph<'_>,
         transform: Affine,
+        glyph_transform: Affine,
         paint: &Paint,
         stroke_props: &StrokeProps,
     ) {
         match glyph {
             Glyph::Outline(o) => {
-                let outline = o.glyph_transform * o.outline();
+                let outline = glyph_transform * o.outline();
                 self.stroke_path(&outline, transform, paint, stroke_props);
             }
             Glyph::Type3(s) => {
-                s.interpret(self, paint);
+                s.interpret(self, glyph_transform, paint);
             }
         }
     }

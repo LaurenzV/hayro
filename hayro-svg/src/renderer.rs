@@ -365,7 +365,13 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
 
     fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask<'a>>) {}
 
-    fn fill_glyph(&mut self, glyph: &Glyph<'a>, transform: Affine, paint: &Paint<'a>) {
+    fn fill_glyph(
+        &mut self,
+        glyph: &Glyph<'a>,
+        transform: Affine,
+        glyph_transform: Affine,
+        paint: &Paint<'a>,
+    ) {
         self.transform = transform;
 
         match glyph {
@@ -379,7 +385,7 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
                         self.xml.start_element("use");
                         self.xml
                             .write_attribute_fmt("xlink:href", format_args!("#{id}"));
-                        self.write_transform(Some(self.transform * o.glyph_transform));
+                        self.write_transform(Some(self.transform * glyph_transform));
 
                         self.write_color(c, false);
                         self.xml.end_element();
@@ -400,6 +406,7 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
         &mut self,
         glyph: &Glyph<'a>,
         transform: Affine,
+        glyph_transform: Affine,
         paint: &Paint,
         stroke_props: &StrokeProps,
     ) {
@@ -408,7 +415,7 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
 
         match glyph {
             Glyph::Outline(o) => {
-                let path = o.glyph_transform * o.outline();
+                let path = glyph_transform * o.outline();
                 let paint = paint.clone();
                 self.stroke_path(&path, &paint);
             }

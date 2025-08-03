@@ -32,12 +32,19 @@ pub trait Device<'a> {
     /// Push a new transparency group to the blend stack.
     fn push_transparency_group(&mut self, opacity: f32, mask: Option<SoftMask<'a>>);
     /// Fill a glyph.
-    fn fill_glyph(&mut self, glyph: &Glyph<'a>, transform: Affine, paint: &Paint<'a>);
+    fn fill_glyph(
+        &mut self,
+        glyph: &Glyph<'a>,
+        transform: Affine,
+        glyph_transform: Affine,
+        paint: &Paint<'a>,
+    );
     /// Stroke a glyph.
     fn stroke_glyph(
         &mut self,
         glyph: &Glyph<'a>,
         transform: Affine,
+        glyph_transform: Affine,
         paint: &Paint<'a>,
         stroke_props: &StrokeProps,
     );

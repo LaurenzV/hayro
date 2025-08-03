@@ -288,19 +288,27 @@ impl<'a, T: Device<'a>> Device<'a> for StencilPatternDevice<'a, '_, T> {
 
     fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask>) {}
 
-    fn fill_glyph(&mut self, glyph: &Glyph<'a>, transform: Affine, _: &Paint) {
-        self.inner.fill_glyph(glyph, transform, &self.paint)
+    fn fill_glyph(
+        &mut self,
+        glyph: &Glyph<'a>,
+        transform: Affine,
+        glyph_transform: Affine,
+        _: &Paint,
+    ) {
+        self.inner
+            .fill_glyph(glyph, transform, glyph_transform, &self.paint)
     }
 
     fn stroke_glyph(
         &mut self,
         glyph: &Glyph<'a>,
         transform: Affine,
+        glyph_transform: Affine,
         _: &Paint,
         stroke_props: &StrokeProps,
     ) {
         self.inner
-            .stroke_glyph(glyph, transform, &self.paint, stroke_props)
+            .stroke_glyph(glyph, transform, glyph_transform, &self.paint, stroke_props)
     }
 
     fn draw_rgba_image(&mut self, _: RgbData, _: Affine, _: Option<LumaData>) {}

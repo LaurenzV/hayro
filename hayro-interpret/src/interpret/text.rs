@@ -27,13 +27,13 @@ pub(crate) fn show_text_string<'a>(
         let (code, adv) = font.read_code(bytes, cur_idx);
         cur_idx += adv;
 
-        let glyph = font.get_glyph(
+        let (glyph, glyph_transform) = font.get_glyph(
             font.map_code(code),
             ctx,
             resources,
             font.origin_displacement(code),
         );
-        show_glyph(ctx, device, &glyph);
+        show_glyph(ctx, device, &glyph, glyph_transform);
 
         ctx.get_mut().text_state.apply_code_advance(code, adv);
     }
@@ -49,37 +49,82 @@ pub(crate) fn show_glyph<'a>(
     ctx: &mut Context<'a>,
     device: &mut impl Device<'a>,
     glyph: &Glyph<'a>,
+    glyph_transform: Affine,
 ) {
     device.set_soft_mask(ctx.get().soft_mask.clone());
     let stroke_props = ctx.stroke_props();
 
     match ctx.get().text_state.render_mode {
         TextRenderingMode::Fill => {
-            device.fill_glyph(glyph, ctx.get().ctm, &get_paint(ctx, false));
+            device.fill_glyph(
+                glyph,
+                ctx.get().ctm,
+                glyph_transform,
+                &get_paint(ctx, false),
+            );
         }
         TextRenderingMode::Stroke => {
-            device.stroke_glyph(glyph, ctx.get().ctm, &get_paint(ctx, true), &stroke_props);
+            device.stroke_glyph(
+                glyph,
+                ctx.get().ctm,
+                glyph_transform,
+                &get_paint(ctx, true),
+                &stroke_props,
+            );
         }
         TextRenderingMode::FillStroke => {
-            device.fill_glyph(glyph, ctx.get().ctm, &get_paint(ctx, false));
-            device.stroke_glyph(glyph, ctx.get().ctm, &get_paint(ctx, true), &stroke_props);
+            device.fill_glyph(
+                glyph,
+                ctx.get().ctm,
+                glyph_transform,
+                &get_paint(ctx, false),
+            );
+            device.stroke_glyph(
+                glyph,
+                ctx.get().ctm,
+                glyph_transform,
+                &get_paint(ctx, true),
+                &stroke_props,
+            );
         }
         TextRenderingMode::Invisible => {}
         TextRenderingMode::Clip => {
-            clip_glyph(ctx, glyph, glyph.glyph_transform());
+            clip_glyph(ctx, glyph, glyph_transform);
         }
         TextRenderingMode::FillAndClip => {
-            clip_glyph(ctx, glyph, glyph.glyph_transform());
-            device.fill_glyph(glyph, ctx.get().ctm, &get_paint(ctx, false));
+            clip_glyph(ctx, glyph, glyph_transform);
+            device.fill_glyph(
+                glyph,
+                ctx.get().ctm,
+                glyph_transform,
+                &get_paint(ctx, false),
+            );
         }
         TextRenderingMode::StrokeAndClip => {
-            clip_glyph(ctx, glyph, glyph.glyph_transform());
-            device.stroke_glyph(glyph, ctx.get().ctm, &get_paint(ctx, true), &stroke_props);
+            clip_glyph(ctx, glyph, glyph_transform);
+            device.stroke_glyph(
+                glyph,
+                ctx.get().ctm,
+                glyph_transform,
+                &get_paint(ctx, true),
+                &stroke_props,
+            );
         }
         TextRenderingMode::FillAndStrokeAndClip => {
-            clip_glyph(ctx, glyph, glyph.glyph_transform());
-            device.fill_glyph(glyph, ctx.get().ctm, &get_paint(ctx, false));
-            device.stroke_glyph(glyph, ctx.get().ctm, &get_paint(ctx, true), &stroke_props);
+            clip_glyph(ctx, glyph, glyph_transform);
+            device.fill_glyph(
+                glyph,
+                ctx.get().ctm,
+                glyph_transform,
+                &get_paint(ctx, false),
+            );
+            device.stroke_glyph(
+                glyph,
+                ctx.get().ctm,
+                glyph_transform,
+                &get_paint(ctx, true),
+                &stroke_props,
+            );
         }
     }
 }

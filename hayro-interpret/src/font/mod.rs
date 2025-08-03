@@ -53,15 +53,6 @@ pub enum Glyph<'a> {
     Type3(Box<Type3Glyph<'a>>),
 }
 
-impl Glyph<'_> {
-    pub(crate) fn glyph_transform(&self) -> Affine {
-        match self {
-            Glyph::Outline(o) => o.glyph_transform,
-            Glyph::Type3(s) => s.glyph_transform,
-        }
-    }
-}
-
 /// An identifier that uniquely identifies a glyph, for caching purposes.
 #[derive(Clone, Debug)]
 pub struct GlyphIdentifier {
@@ -80,10 +71,6 @@ impl CacheKey for GlyphIdentifier {
 pub struct OutlineGlyph {
     pub(crate) id: GlyphId,
     pub(crate) font: OutlineFont,
-    /// A transform that should be applied to the glyph before drawing.
-    ///
-    /// Note that this transform will not automatically be applied when calling `outline`.
-    pub glyph_transform: Affine,
 }
 
 impl OutlineGlyph {
@@ -112,7 +99,6 @@ pub struct Type3Glyph<'a> {
     pub(crate) state: State<'a>,
     pub(crate) parent_resources: Resources<'a>,
     pub(crate) cache: Cache,
-    pub(crate) glyph_transform: Affine,
     pub(crate) xref: &'a XRef,
     pub(crate) settings: InterpreterSettings,
 }
@@ -120,8 +106,13 @@ pub struct Type3Glyph<'a> {
 /// A glyph defined by PDF drawing instructions.
 impl<'a> Type3Glyph<'a> {
     /// Draw the type3 glyph to the given device.
-    pub fn interpret(&self, device: &mut impl Device<'a>, paint: &Paint<'a>) {
-        self.font.render_glyph(self, paint, device);
+    pub fn interpret(
+        &self,
+        device: &mut impl Device<'a>,
+        glyph_transform: Affine,
+        paint: &Paint<'a>,
+    ) {
+        self.font.render_glyph(self, glyph_transform, paint, device);
     }
 }
 
@@ -184,35 +175,23 @@ impl<'a> Font<'a> {
         ctx: &mut Context<'a>,
         resources: &Resources<'a>,
         origin_displacement: Vec2,
-    ) -> Glyph<'a> {
+    ) -> (Glyph<'a>, Affine) {
         let glyph_transform = ctx.get().text_state.full_transform()
             * Affine::scale(1.0 / UNITS_PER_EM as f64)
             * Affine::translate(origin_displacement);
 
-        match &self.1 {
+        let glyph = match &self.1 {
             FontType::Type1(t) => {
                 let font = OutlineFont::Type1(t.clone());
-                Glyph::Outline(OutlineGlyph {
-                    id: glyph,
-                    font,
-                    glyph_transform,
-                })
+                Glyph::Outline(OutlineGlyph { id: glyph, font })
             }
             FontType::TrueType(t) => {
                 let font = OutlineFont::TrueType(t.clone());
-                Glyph::Outline(OutlineGlyph {
-                    id: glyph,
-                    font,
-                    glyph_transform,
-                })
+                Glyph::Outline(OutlineGlyph { id: glyph, font })
             }
             FontType::Type0(t) => {
                 let font = OutlineFont::Type0(t.clone());
-                Glyph::Outline(OutlineGlyph {
-                    id: glyph,
-                    font,
-                    glyph_transform,
-                })
+                Glyph::Outline(OutlineGlyph { id: glyph, font })
             }
             FontType::Type3(t) => {
                 let shape_glyph = Type3Glyph {
@@ -223,12 +202,13 @@ impl<'a> Font<'a> {
                     cache: ctx.object_cache.clone(),
                     xref: ctx.xref,
                     settings: ctx.settings.clone(),
-                    glyph_transform,
                 };
 
                 Glyph::Type3(Box::new(shape_glyph))
             }
-        }
+        };
+
+        (glyph, glyph_transform)
     }
 
     pub(crate) fn code_advance(&self, code: u32) -> Vec2 {
