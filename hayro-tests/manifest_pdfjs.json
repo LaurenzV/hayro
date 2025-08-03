@@ -236,14 +236,49 @@
     "file": "pdfs/bug1650302_reduced.pdf"
   },
   {
+    "id": "bug1703683_page2_reduced",
+    "file": "pdfs/bug1703683_page2_reduced.pdf"
+  },
+  {
+    "id": "bug1721218_reduced",
+    "file": "pdfs/bug1721218_reduced.pdf"
+  },
+  {
     "id": "bug1743245",
     "file": "pdfs/bug1743245.pdf"
+  },
+  {
+    "id": "bug1749563",
+    "file": "pdfs/bug1749563.link",
+    "md5": "11294f6071a8dcc25b0e18953cee68fa",
+    "link": true,
+    "first_page": 0,
+    "last_page": 0
+  },
+  {
+    "id": "bug1753075",
+    "file": "pdfs/bug1753075.link",
+    "md5": "12716fa2dc3e0b3a61d88fef10abc7cf",
+    "link": true,
+    "last_page": 0
+  },
+  {
+    "id": "bug1755507",
+    "file": "pdfs/bug1755507.pdf"
   },
   {
     "id": "bug1791583",
     "file": "pdfs/bug1791583.link",
     "md5": "1ff6badc865c9a5e9a0dc0b7131ffe28",
     "link": true
+  },
+  {
+    "id": "bug1795263",
+    "file": "pdfs/bug1795263.pdf"
+  },
+  {
+    "id": "bug1799927",
+    "file": "pdfs/bug1799927.pdf"
   },
   {
     "id": "bug893730",
