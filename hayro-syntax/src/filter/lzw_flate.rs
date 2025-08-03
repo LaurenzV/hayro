@@ -277,7 +277,7 @@ pub(crate) mod flate {
                         return;
                     } else {
                         let code1 = code1 - 257;
-                        let length_info = LENGTH_DECODE[code1 as usize];
+                        let length_info = LENGTH_DECODE.get(code1 as usize).copied().unwrap_or(0);
                         let extra_bits = (length_info >> 16) as u8;
                         let mut length = (length_info & 0xffff) as usize;
 
