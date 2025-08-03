@@ -126,6 +126,14 @@ bug854315
 bug866395
 bug921409
 issue215
+issue2128
+issue2442
+issue2537
+issue2829
+issue2840
+
+# not working gradient
+issue2761
 
 # maybe soft mask not working correctly
 bug852992

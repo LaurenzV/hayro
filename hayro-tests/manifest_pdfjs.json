@@ -776,6 +776,13 @@
     "last_page": 0
   },
   {
+    "id": "issue1998",
+    "file": "pdfs/issue1998.link",
+    "md5": "586e0213be2f461360ec26770b5a4e48",
+    "link": true,
+    "last_page": 1
+  },
+  {
     "id": "issue2006",
     "file": "pdfs/issue2006.link",
     "md5": "71ec73831ece9b508ad20efa6ff28642",
@@ -783,8 +790,42 @@
     "last_page": 0
   },
   {
+    "id": "issue2074",
+    "file": "pdfs/issue2074.pdf"
+  },
+  {
+    "id": "issue2098",
+    "file": "pdfs/issue2098.link",
+    "md5": "e9fa2b7cb935ffb95b510322d1e047e1",
+    "link": true,
+    "first_page": 0,
+    "last_page": 0
+  },
+  {
+    "id": "issue2139",
+    "file": "pdfs/issue2139.link",
+    "md5": "ee4072992e7c5ffd5063181916a2fcae",
+    "link": true
+  },
+  {
+    "id": "issue2176",
+    "file": "pdfs/issue2176.pdf"
+  },
+  {
     "id": "issue2177-eq",
     "file": "pdfs/issue2177.pdf"
+  },
+  {
+    "id": "issue2462",
+    "file": "pdfs/issue2462.pdf"
+  },
+  {
+    "id": "issue2531",
+    "file": "pdfs/issue2531.link",
+    "md5": "c58e6642d8a6e2ddd5e07a543ef8f30d",
+    "link": true,
+    "first_page": 3,
+    "last_page": 3
   },
   {
     "id": "issue2618",
@@ -801,6 +842,37 @@
     "last_page": 0
   },
   {
+    "id": "issue2770",
+    "file": "pdfs/issue2770.link",
+    "md5": "36070d756d06eaa35c2227efb069fb1b",
+    "link": true
+  },
+  {
+    "id": "issue2799",
+    "file": "pdfs/issue2799.link",
+    "md5": "3d3224eae54bbae5fc76224a2af49486",
+    "link": true,
+    "last_page": 0
+  },
+  {
+    "id": "issue2833",
+    "file": "pdfs/issue2833.pdf",
+    "last_page": 0
+  },
+  {
+    "id": "issue2856",
+    "file": "pdfs/issue2856.link",
+    "md5": "a13033722b99d7b24a1383ac793d2b51",
+    "link": true
+  },
+  {
+    "id": "issue2881",
+    "file": "pdfs/issue2881.link",
+    "md5": "ea6ade27d2cb146676d23dcd6605d5ee",
+    "link": true,
+    "last_page": 0
+  },
+  {
     "id": "issue2884_reduced",
     "file": "pdfs/issue2884_reduced.pdf",
     "last_page": 0
@@ -812,6 +884,17 @@
   {
     "id": "issue2948",
     "file": "pdfs/issue2948.pdf"
+  },
+  {
+    "id": "issue2956",
+    "file": "pdfs/issue2956.pdf"
+  },
+  {
+    "id": "issue2984",
+    "file": "pdfs/issue2984.link",
+    "md5": "a8e81e7b7c6d8b0ec26bbfee9954f110",
+    "link": true,
+    "last_page": 0
   },
   {
     "id": "issue3323",
