@@ -5,7 +5,9 @@ use crate::context::Context;
 use crate::convert::{convert_line_cap, convert_line_join};
 use crate::device::Device;
 use crate::font::{FontData, FontQuery};
-use crate::interpret::path::{close_path, fill_path, fill_path_impl, fill_stroke_path, stroke_path};
+use crate::interpret::path::{
+    close_path, fill_path, fill_path_impl, fill_stroke_path, stroke_path,
+};
 use crate::interpret::state::{handle_gs, restore_state, save_sate};
 use crate::interpret::text::TextRenderingMode;
 use crate::pattern::{Pattern, ShadingPattern};
