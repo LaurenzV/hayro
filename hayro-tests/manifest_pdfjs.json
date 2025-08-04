@@ -554,6 +554,10 @@
     "file": "pdfs/issue1002.pdf"
   },
   {
+    "id": "issue10084",
+    "file": "pdfs/issue10084_reduced.pdf"
+  },
+  {
     "id": "issue1010",
     "file": "pdfs/issue1010.link",
     "md5": "f991ef093484a107fe9f59dff18fc155",
@@ -564,6 +568,13 @@
     "file": "pdfs/issue1015.link",
     "md5": "b61503d1b445742b665212866afb60e2",
     "link": true
+  },
+  {
+    "id": "issue10326",
+    "file": "pdfs/issue10326.link",
+    "md5": "015c13b09ef735ea1204f38992c60487",
+    "link": true,
+    "last_page": 0
   },
   {
     "id": "issue10519",
@@ -1524,9 +1535,42 @@
     "file": "pdfs/issue8570.pdf"
   },
   {
+    "id": "issue8613",
+    "file": "pdfs/issue8613.link",
+    "md5": "bc7ad2db75710aa9916c5769e0c02123",
+    "link": true
+  },
+  {
+    "id": "issue8697",
+    "file": "pdfs/issue8697.pdf"
+  },
+  {
+    "id": "issue8707",
+    "file": "pdfs/issue8707.pdf"
+  },
+  {
+    "id": "issue8798",
+    "file": "pdfs/issue8798r.pdf"
+  },
+  {
+    "id": "issue8823",
+    "file": "pdfs/issue8823.pdf"
+  },
+  {
     "id": "issue8895",
     "file": "pdfs/issue8895.link",
     "md5": "098658008fc2bf7d433fd0d6d468a9e1",
+    "link": true,
+    "last_page": 0
+  },
+  {
+    "id": "issue9105",
+    "file": "pdfs/issue9105_reduced.pdf"
+  },
+  {
+    "id": "issue9129",
+    "file": "pdfs/issue9129.link",
+    "md5": "939ffc8d6d29b1d74e9d0f98b227b97f",
     "link": true,
     "last_page": 0
   },
@@ -1542,16 +1586,59 @@
     "last_page": 2
   },
   {
+    "id": "issue9243",
+    "file": "pdfs/issue9243.pdf"
+  },
+  {
     "id": "issue925",
     "file": "pdfs/issue925.pdf"
+  },
+  {
+    "id": "issue9262",
+    "file": "pdfs/issue9262_reduced.pdf"
+  },
+  {
+    "id": "issue9278",
+    "file": "pdfs/issue9278.pdf"
+  },
+  {
+    "id": "issue9285",
+    "file": "pdfs/issue9285.link",
+    "md5": "aa53ad98a72fd76c414101927951448b",
+    "link": true,
+    "last_page": 0
+  },
+  {
+    "id": "issue9458",
+    "file": "pdfs/issue9458.pdf"
   },
   {
     "id": "issue9534_reduced",
     "file": "pdfs/issue9534_reduced.pdf"
   },
   {
+    "id": "issue9540",
+    "file": "pdfs/issue9540.link",
+    "md5": "7de7979270c9136bdd737428185fbbed",
+    "link": true
+  },
+  {
+    "id": "issue9679",
+    "file": "pdfs/issue9679.link",
+    "md5": "3077d06add3875705aa1021c7b116023",
+    "link": true
+  },
+  {
+    "id": "issue9713",
+    "file": "pdfs/issue9713.pdf"
+  },
+  {
     "id": "issue9915",
     "file": "pdfs/issue9915_reduced.pdf"
+  },
+  {
+    "id": "issue9940",
+    "file": "pdfs/issue9940.pdf"
   },
   {
     "id": "jbig2_symbol_offset",

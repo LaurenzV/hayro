@@ -148,6 +148,26 @@ issue6692
 issue6782
 issue7598
 issue7835
+issue8586
+issue8614
+issue9084
+issue9195
+issue9252
+issue9367
+issue9425
+issue9949
+
+#black rect
+issue10339
+
+# weird purple lines on page 0
+issue9462
+
+# issue with image
+issue9650
+
+# text should be bold but isnt
+issue9291
 
 # mediabox / cropbox issue
 issue7872
