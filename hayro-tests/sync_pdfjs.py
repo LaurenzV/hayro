@@ -163,25 +163,32 @@ class PDFJSSync:
             print(f"✘ Failed to download {dest_name}: {e}")
             return False
             
-    def copy_pdf_file(self, source_path: Path, dest_name: str) -> bool:
-        """Copy a PDF file from PDF.js to our pdfs directory."""
+    def create_github_link_file(self, pdf_filename: str, dest_name: str) -> str:
+        """Create a .link file pointing to the GitHub repository for a PDF file."""
         # Create pdfjs subdirectory in pdfs
         pdfjs_pdfs_dir = self.our_pdfs_dir / "pdfjs"
         pdfjs_pdfs_dir.mkdir(exist_ok=True)
-        dest_path = pdfjs_pdfs_dir / f"{dest_name}.pdf"
+        link_path = pdfjs_pdfs_dir / f"{dest_name}.link"
+        
+        # Construct GitHub URL
+        github_url = f"https://github.com/mozilla/pdf.js/raw/master/test/pdfs/{pdf_filename}"
         
         try:
-            if dest_path.exists():
-                print(f"✔ {dest_name}.pdf already exists, skipping copy")
-                return True
-                
-            shutil.copy2(source_path, dest_path)
-            print(f"📄 Copied {dest_name}.pdf")
-            return True
+            if link_path.exists():
+                existing_url = link_path.read_text().strip()
+                if existing_url == github_url:
+                    print(f"✔ {dest_name}.link already exists with correct URL")
+                    return github_url
+                else:
+                    print(f"⚠ {dest_name}.link exists but URL differs, updating...")
+            
+            link_path.write_text(github_url)
+            print(f"🔗 Created {dest_name}.link -> GitHub")
+            return github_url
             
         except Exception as e:
-            print(f"✘ Failed to copy {dest_name}.pdf: {e}")
-            return False
+            print(f"✘ Failed to create {dest_name}.link: {e}")
+            return None
             
     def copy_link_file(self, source_path: Path, dest_name: str) -> bool:
         """Copy a .link file from PDF.js to our pdfs directory."""
@@ -203,28 +210,23 @@ class PDFJSSync:
             print(f"✘ Failed to copy {dest_name}.link: {e}")
             return False
             
-    def convert_pdfjs_entry_to_our_format(self, entry: Dict[str, Any]) -> Dict[str, Any]:
+    def convert_pdfjs_entry_to_our_format(self, entry: Dict[str, Any], md5_hash: str = None) -> Dict[str, Any]:
         """Convert a PDF.js manifest entry to our manifest format."""
         
-        # Determine the actual filename
-        if entry.get("link", False):
-            filename = f"{entry['id']}.link"
-        else:
-            file_path = entry.get("file", f"pdfs/{entry['id']}.pdf")
-            if file_path.startswith("pdfs/"):
-                filename = file_path[5:]  # Remove "pdfs/" prefix
-            else:
-                filename = file_path
+        # All files are now links
+        filename = f"{entry['id']}.link"
         
         our_entry = {
             "id": entry["id"],
-            "file": f"pdfs/{filename}"
+            "file": f"pdfs/{filename}",
+            "link": True
         }
         
-        # Copy MD5 if it's a link
+        # Add MD5 - either from original entry (for actual .link files) or passed in (for GitHub links)
         if entry.get("link", False):
             our_entry["md5"] = entry["md5"]
-            our_entry["link"] = True
+        elif md5_hash:
+            our_entry["md5"] = md5_hash
             
         # Convert page range (PDF.js uses firstPage/lastPage, we use first_page/last_page)
         if "firstPage" in entry:
@@ -250,13 +252,7 @@ class PDFJSSync:
             if entry_id not in current_whitelist_ids:
                 print(f"🧹 Cleaning up {entry_id} (no longer in whitelist)...")
                 
-                # Remove PDF file from pdfjs subdirectory
-                pdf_path = self.our_pdfs_dir / "pdfjs" / f"{entry_id}.pdf"
-                if pdf_path.exists():
-                    pdf_path.unlink()
-                    print(f"  ✔ Removed pdfjs/{entry_id}.pdf")
-                
-                # Remove link file from pdfjs subdirectory
+                # Remove link file from pdfjs subdirectory (all entries are now links)
                 link_path = self.our_pdfs_dir / "pdfjs" / f"{entry_id}.link"
                 if link_path.exists():
                     link_path.unlink()
@@ -287,32 +283,24 @@ class PDFJSSync:
             
         cleaned_count = 0
         
+        # Also clean up any old PDF files that might exist in pdfjs subdirectory
+        # since we're now using only links
+        pdfjs_pdfs_dir = self.our_pdfs_dir / "pdfjs"
+        if pdfjs_pdfs_dir.exists():
+            for pdf_file in pdfjs_pdfs_dir.glob("*.pdf"):
+                pdf_file.unlink()
+                print(f"  ✔ Removed old PDF file: pdfjs/{pdf_file.name}")
+                cleaned_count += 1
+        
         for entry in pdfjs_entries:
             entry_id = entry["id"]
-            is_link = entry.get("link", False)
-            
-            # Clean up stale PDF files from root pdfs directory
-            if not is_link:
-                # Get the actual filename from the manifest
-                file_path = entry["file"]
-                if file_path.startswith("pdfs/"):
-                    filename = file_path[5:]  # Remove "pdfs/" prefix
-                else:
-                    filename = file_path
-                    
-                stale_pdf_path = self.our_pdfs_dir / filename
-                if stale_pdf_path.exists():
-                    stale_pdf_path.unlink()
-                    print(f"  ✔ Removed stale {filename}")
-                    cleaned_count += 1
             
             # Clean up stale link files from root pdfs directory
-            if is_link:
-                stale_link_path = self.our_pdfs_dir / f"{entry_id}.link"
-                if stale_link_path.exists():
-                    stale_link_path.unlink()
-                    print(f"  ✔ Removed stale {entry_id}.link")
-                    cleaned_count += 1
+            stale_link_path = self.our_pdfs_dir / f"{entry_id}.link"
+            if stale_link_path.exists():
+                stale_link_path.unlink()
+                print(f"  ✔ Removed stale {entry_id}.link")
+                cleaned_count += 1
             
             # Clean up stale downloaded files from root downloads directory
             stale_download_path = self.our_downloads_dir / f"{entry_id}.pdf"
@@ -464,8 +452,11 @@ class PDFJSSync:
                     failed_count += 1
                     continue
                     
+                # Convert to our manifest format (link entries already have MD5)
+                our_entry = self.convert_pdfjs_entry_to_our_format(entry)
+                    
             else:
-                # Handle regular PDF files - use the actual filename from manifest
+                # Handle regular PDF files - create GitHub link instead of copying
                 file_path = entry.get("file", f"pdfs/{entry_id}.pdf")
                 if file_path.startswith("pdfs/"):
                     actual_filename = file_path[5:]  # Remove "pdfs/" prefix
@@ -478,14 +469,23 @@ class PDFJSSync:
                     failed_count += 1
                     continue
                     
-                # Copy the PDF file preserving the original filename
-                dest_filename = actual_filename.replace('.pdf', '')  # Remove .pdf extension for dest name
-                if not self.copy_pdf_file(pdf_file_path, dest_filename):
+                # Create a link file pointing to GitHub instead of copying
+                github_url = self.create_github_link_file(actual_filename, entry_id)
+                if not github_url:
                     failed_count += 1
                     continue
                     
-            # Convert to our manifest format
-            our_entry = self.convert_pdfjs_entry_to_our_format(entry)
+                # Calculate MD5 of the actual PDF file for verification
+                md5_hash = self.calculate_md5(pdf_file_path)
+                
+                # Download the PDF for local use (same as with .link files)
+                if not self.download_pdf_from_link(self.our_pdfs_dir / "pdfjs" / f"{entry_id}.link", md5_hash, entry_id):
+                    failed_count += 1
+                    continue
+                    
+                # Convert to our manifest format with MD5
+                our_entry = self.convert_pdfjs_entry_to_our_format(entry, md5_hash)
+                
             our_manifest_entries.append(our_entry)
             success_count += 1
             

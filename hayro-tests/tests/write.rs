@@ -159,7 +159,7 @@ fn write_page_with_inherited_resources_1() {
 fn write_page_with_inherited_resources_2() {
     run_write_test(
         "write_page_with_inherited_resources_2",
-        "pdfs/pdfjs/issue17065.pdf",
+        "downloads/pdfjs/issue17065.pdf",
         &[0],
         Renderer::Pdfium,
         true,
