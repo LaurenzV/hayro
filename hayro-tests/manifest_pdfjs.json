@@ -1063,8 +1063,37 @@
     "file": "pdfs/issue14953.pdf"
   },
   {
+    "id": "issue14982",
+    "file": "pdfs/issue14982.link",
+    "md5": "bbd7d7f75f51a477b56b6e3f69174d06",
+    "link": true
+  },
+  {
+    "id": "issue14990",
+    "file": "pdfs/issue14990.link",
+    "md5": "0fb397e1506acc4ab8e68c18212a1362",
+    "link": true,
+    "first_page": 24,
+    "last_page": 24
+  },
+  {
     "id": "issue1512",
     "file": "pdfs/issue1512r.pdf"
+  },
+  {
+    "id": "issue15220",
+    "file": "pdfs/issue15220.link",
+    "md5": "0864a9e3860c0cb5e98b5eb23287fba4",
+    "link": true,
+    "last_page": 0
+  },
+  {
+    "id": "issue15289",
+    "file": "pdfs/issue15289.link",
+    "md5": "f3d20aee398e052ac3dce7cc030f50de",
+    "link": true,
+    "first_page": 0,
+    "last_page": 0
   },
   {
     "id": "issue1536",
@@ -1079,16 +1108,69 @@
     "file": "pdfs/issue15716.pdf"
   },
   {
+    "id": "issue15833",
+    "file": "pdfs/issue15833.link",
+    "md5": "9562d027b980ea2779dcfb1669f9cf7e",
+    "link": true,
+    "last_page": 0
+  },
+  {
     "id": "issue1597",
     "file": "pdfs/issue1597.link",
     "md5": "a5ebef467fd6e2fc0aeb56c9eb725ae3",
     "link": true
   },
   {
+    "id": "issue16287",
+    "file": "pdfs/issue16287.pdf"
+  },
+  {
     "id": "issue1629",
     "file": "pdfs/issue1629.link",
     "md5": "0f2cbbf268383a377e95e6bbe36c6a9a",
     "link": true
+  },
+  {
+    "id": "issue16300",
+    "file": "pdfs/issue16300.link",
+    "md5": "45ac5cd3a159a4e9152bc1fdb685750d",
+    "link": true
+  },
+  {
+    "id": "issue16395",
+    "file": "pdfs/issue16395.link",
+    "md5": "a5de985711ec27cd2a2ed97d5f1c536c",
+    "link": true,
+    "first_page": 2,
+    "last_page": 2
+  },
+  {
+    "id": "issue16432",
+    "file": "pdfs/issue16432.link",
+    "md5": "b67b0324c307d8af43d11b0edec88e3e",
+    "link": true,
+    "last_page": 0
+  },
+  {
+    "id": "issue16444",
+    "file": "pdfs/issue16444.link",
+    "md5": "b3f594ad122e281c615bb2d62c5ccd4d",
+    "link": true
+  },
+  {
+    "id": "issue16454",
+    "file": "pdfs/issue16454.link",
+    "md5": "82fe0c54a96667472ce999be7a789199",
+    "link": true,
+    "last_page": 0
+  },
+  {
+    "id": "issue16485",
+    "file": "pdfs/issue16485.link",
+    "md5": "8a2c43161e0d89469fc7ed345c7bd3b1",
+    "link": true,
+    "first_page": 265,
+    "last_page": 265
   },
   {
     "id": "issue1655",

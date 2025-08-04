@@ -26,6 +26,13 @@ doc_actions
 cmykjpeg_nowasm
 fips197
 fit11-talk
+issue16021
+
+# tiling with negative step
+issue16038
+
+# transfer func
+issue16114
 
 # CMAP table is broken, therefore we can't map codepoint to a glyph
 bug1050040
@@ -167,6 +174,26 @@ issue12418
 issue13343
 issue13916
 issue14917
+issue15033
+issue15044
+issue15139
+issue15292
+issue15441
+issue15443
+issue15559
+issue15594
+issue15604
+issue15784
+issue15977
+
+# panic in jbig
+issue15942
+
+# doesnt finish
+issue16263
+
+# noto color emoji, some page doesnt finish
+issue16127
 
 # weird letter
 issue14462
@@ -213,6 +240,7 @@ issue8117
 issue8169
 issue8330
 issue8480
+issue15492
 
 # logo rendered wrong
 issue8022
