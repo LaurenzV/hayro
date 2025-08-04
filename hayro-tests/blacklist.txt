@@ -158,6 +158,22 @@ issue9425
 issue9949
 issue11088
 issue11242
+issue11549
+issue11555
+issue11578
+issue11740
+issue11915
+issue12418
+
+#black bars
+issue12295
+
+
+# weird pink blackground
+issue11931
+
+# wrong text
+issue11768
 
 # maybe blend mode
 issue11279
