@@ -1173,6 +1173,10 @@
     "last_page": 265
   },
   {
+    "id": "issue16538",
+    "file": "pdfs/issue16538.pdf"
+  },
+  {
     "id": "issue1655",
     "file": "pdfs/issue1655r.pdf"
   },
@@ -1183,6 +1187,29 @@
     "link": true,
     "first_page": 9,
     "last_page": 9
+  },
+  {
+    "id": "issue16742",
+    "file": "pdfs/issue16742.pdf"
+  },
+  {
+    "id": "issue16759",
+    "file": "pdfs/issue16759.link",
+    "md5": "07d97ae84f3d757e7ed20c628b94ecd5",
+    "link": true,
+    "last_page": 0
+  },
+  {
+    "id": "issue16782",
+    "file": "pdfs/issue16782.link",
+    "md5": "b203313ae62c0dac2585fae1c5fa6f8b",
+    "link": true
+  },
+  {
+    "id": "issue16839",
+    "file": "pdfs/issue16839.link",
+    "md5": "413fceec0ac31e079dc487bf4c5e44d8",
+    "link": true
   },
   {
     "id": "issue1685",
@@ -1209,6 +1236,16 @@
     "last_page": 9
   },
   {
+    "id": "issue17147",
+    "file": "pdfs/issue17147.pdf"
+  },
+  {
+    "id": "issue17169",
+    "file": "pdfs/issue17169.link",
+    "md5": "fa57aa9442c5e2d6d9e61bbb8856a55f",
+    "link": true
+  },
+  {
     "id": "issue1721",
     "file": "pdfs/issue1721.link",
     "md5": "b47177f9e5197a76ec498733ecab60e6",
@@ -1216,8 +1253,42 @@
     "last_page": 1
   },
   {
+    "id": "issue17289",
+    "file": "pdfs/issue17289.link",
+    "md5": "acf5bb9e4309ba1c4b3568e7c4a7dd73",
+    "link": true
+  },
+  {
+    "id": "issue17689",
+    "file": "pdfs/issue17689.link",
+    "md5": "2d260d3795e551fa047eef7c3dbab45b",
+    "link": true,
+    "first_page": 1,
+    "last_page": 1
+  },
+  {
+    "id": "issue17779",
+    "file": "pdfs/issue17779.link",
+    "md5": "764b72e8e56e22662b321b308254fd2b",
+    "link": true
+  },
+  {
+    "id": "issue17794",
+    "file": "pdfs/issue17794.link",
+    "md5": "a66b5b938cb44ae241cad845cc3b5d2d",
+    "link": true
+  },
+  {
+    "id": "issue17808",
+    "file": "pdfs/issue17808.pdf"
+  },
+  {
     "id": "issue17848",
     "file": "pdfs/issue17848.pdf"
+  },
+  {
+    "id": "issue17929",
+    "file": "pdfs/issue17929.pdf"
   },
   {
     "id": "issue1796",
@@ -1225,6 +1296,16 @@
     "md5": "9b9b60dc2a4cc3ea05932785d71304fe",
     "link": true,
     "last_page": 1
+  },
+  {
+    "id": "issue18058",
+    "file": "pdfs/issue18058.link",
+    "md5": "da8fcdf25c83ecb2d4be315be5affc3c",
+    "link": true
+  },
+  {
+    "id": "issue18059",
+    "file": "pdfs/issue18059.pdf"
   },
   {
     "id": "issue1810",
@@ -1238,6 +1319,57 @@
     "file": "pdfs/issue18117.pdf"
   },
   {
+    "id": "issue18122",
+    "file": "pdfs/issue18122.link",
+    "md5": "b9be483e6bc0f35994f536d8f6a685c1",
+    "link": true,
+    "last_page": 0
+  },
+  {
+    "id": "issue18138",
+    "file": "pdfs/issue18138.link",
+    "md5": "06136495b2dee5faed2e87c4e49d17fd",
+    "link": true,
+    "last_page": 0
+  },
+  {
+    "id": "issue18208",
+    "file": "pdfs/issue18208.link",
+    "md5": "d07311117b5cc970159b09977898996b",
+    "link": true,
+    "last_page": 0
+  },
+  {
+    "id": "issue18298",
+    "file": "pdfs/issue18298.link",
+    "md5": "30a6108220c41ec88fa92ff45924a6cb",
+    "link": true,
+    "last_page": 0
+  },
+  {
+    "id": "issue18444",
+    "file": "pdfs/issue18444.link",
+    "md5": "233b7b72d67133044338a728d52d58a9",
+    "link": true,
+    "first_page": 0,
+    "last_page": 0
+  },
+  {
+    "id": "issue18529",
+    "file": "pdfs/issue18529.pdf"
+  },
+  {
+    "id": "issue18645",
+    "file": "pdfs/issue18645.pdf"
+  },
+  {
+    "id": "issue18765",
+    "file": "pdfs/issue18765.link",
+    "md5": "7763ead2aa69db3a5263f92bb1922e31",
+    "link": true,
+    "last_page": 0
+  },
+  {
     "id": "issue1877",
     "file": "pdfs/issue1877.link",
     "md5": "feac01f414f2e6792e4d3174944622f5",
@@ -1245,8 +1377,19 @@
     "last_page": 0
   },
   {
+    "id": "issue18801",
+    "file": "pdfs/issue18801.link",
+    "md5": "580258d9a282bfbec7b74da076bbccc9",
+    "link": true,
+    "last_page": 0
+  },
+  {
     "id": "issue18816",
     "file": "pdfs/issue18816.pdf"
+  },
+  {
+    "id": "issue18894",
+    "file": "pdfs/issue18894.pdf"
   },
   {
     "id": "issue1905",

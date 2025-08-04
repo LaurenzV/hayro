@@ -123,6 +123,8 @@ wdsg_fitc
 # takes long time
 filled-background-range
 issue8078
+issue17190
+issue17061
 
 # missing text
 bug1727053
@@ -185,6 +187,13 @@ issue15594
 issue15604
 issue15784
 issue15977
+issue17671
+
+# colors turn into grey
+issue17906
+
+#black rectangle
+issue18466
 
 # panic in jbig
 issue15942
