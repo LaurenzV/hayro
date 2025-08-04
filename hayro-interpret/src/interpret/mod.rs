@@ -5,7 +5,7 @@ use crate::context::Context;
 use crate::convert::{convert_line_cap, convert_line_join};
 use crate::device::Device;
 use crate::font::{FontData, FontQuery};
-use crate::interpret::path::{fill_path, fill_path_impl, fill_stroke_path, stroke_path};
+use crate::interpret::path::{close_path, fill_path, fill_path_impl, fill_stroke_path, stroke_path};
 use crate::interpret::state::{handle_gs, restore_state, save_sate};
 use crate::interpret::text::TextRenderingMode;
 use crate::pattern::{Pattern, ShadingPattern};
@@ -177,16 +177,16 @@ pub fn interpret<'a, 'b>(
                 fill_stroke_path(context, device);
             }
             TypedInstruction::CloseAndStrokePath(_) => {
-                context.path_mut().close_path();
+                close_path(context);
                 stroke_path(context, device);
             }
             TypedInstruction::CloseFillAndStrokeEvenOdd(_) => {
-                context.path_mut().close_path();
+                close_path(context);
                 context.get_mut().fill_rule = FillRule::EvenOdd;
                 fill_stroke_path(context, device);
             }
             TypedInstruction::CloseFillAndStrokeNonZero(_) => {
-                context.path_mut().close_path();
+                close_path(context);
                 context.get_mut().fill_rule = FillRule::NonZero;
                 fill_stroke_path(context, device);
             }
@@ -242,9 +242,7 @@ pub fn interpret<'a, 'b>(
                 context.path_mut().curve_to(p2, p3, p3)
             }
             TypedInstruction::ClosePath(_) => {
-                context.path_mut().close_path();
-
-                *(context.last_point_mut()) = *context.sub_path_start();
+                close_path(context);
             }
             TypedInstruction::SetGraphicsState(gs) => {
                 if let Some(gs) = resources

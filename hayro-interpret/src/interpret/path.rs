@@ -2,7 +2,7 @@ use crate::Paint;
 use crate::color::Color;
 use crate::context::Context;
 use crate::device::Device;
-use kurbo::BezPath;
+use kurbo::{BezPath, PathEl};
 
 pub(crate) fn fill_path<'a>(context: &mut Context<'a>, device: &mut impl Device<'a>) {
     fill_path_impl(context, device, None);
@@ -21,6 +21,17 @@ pub(crate) fn fill_stroke_path<'a>(context: &mut Context<'a>, device: &mut impl 
     stroke_path_impl(context, device, None);
 
     context.path_mut().truncate(0);
+}
+
+pub(crate) fn close_path(context: &mut Context<'_>) {
+    // This is necessary to prevent artifacts (see for example issue 157),
+    // but it does cause some weird lines (maybe conflation artifacts) in
+    // pdftc_900k_0907.
+    if context.path().elements().last() != Some(&PathEl::ClosePath) {
+        context.path_mut().close_path();
+
+        *(context.last_point_mut()) = *context.sub_path_start();
+    }
 }
 
 pub(crate) fn fill_path_impl<'a>(
