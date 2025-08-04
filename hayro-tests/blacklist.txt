@@ -164,9 +164,18 @@ issue11578
 issue11740
 issue11915
 issue12418
+issue13343
+issue13916
+issue14917
+
+# weird letter
+issue14462
 
 #black bars
 issue12295
+
+# missing pages maybe? compare with other viewers
+issue13783
 
 
 # weird pink blackground
