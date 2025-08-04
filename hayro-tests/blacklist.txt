@@ -156,6 +156,15 @@ issue9252
 issue9367
 issue9425
 issue9949
+issue11088
+issue11242
+
+# maybe blend mode
+issue11279
+
+# missing image
+issue10880
+issue10989
 
 #black rect
 issue10339
