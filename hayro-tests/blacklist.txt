@@ -8,6 +8,8 @@ forms_*
 *highlight*
 *optionalcontent*
 blendmode
+*oc*
+*wasm*
 
 # Look into it
 ccitt_EndOfBlock_false
@@ -16,6 +18,9 @@ ShowText-ShadingPattern
 Type3WordSpacing
 xobject-image
 ZapfDingbats
+
+# stackoverflow
+issue19800
 
 # Ignore those tests because they are not interesting to us or we don't want to support.
 artofwar
@@ -27,6 +32,8 @@ cmykjpeg_nowasm
 fips197
 fit11-talk
 issue16021
+issue16114-disable-isOffscreenCanvasSupported
+issue19326_main_thread_fetch
 
 # tiling with negative step
 issue16038
@@ -193,6 +200,8 @@ issue11144_reduced
 issue11651-eq
 issue19550
 issue19695
+issue2391-1
+issue3521.pdf
 
 # user units
 issue19176
@@ -264,6 +273,8 @@ issue8169
 issue8330
 issue8480
 issue15492
+issue269_1
+issue269_2
 
 # logo rendered wrong
 issue8022
