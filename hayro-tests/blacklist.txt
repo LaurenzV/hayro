@@ -9,7 +9,6 @@ forms_*
 *optionalcontent*
 blendmode
 *oc*
-*wasm*
 
 # Look into it
 ccitt_EndOfBlock_false
@@ -20,7 +19,10 @@ xobject-image
 ZapfDingbats
 
 # stackoverflow
-issue19800
+issue19800-eq
+
+# misapplied soft mask
+issue7891_bc1
 
 # Ignore those tests because they are not interesting to us or we don't want to support.
 artofwar
@@ -34,9 +36,17 @@ fit11-talk
 issue16021
 issue16114-disable-isOffscreenCanvasSupported
 issue19326_main_thread_fetch
+*wasm*
+*non-embedded*
+*thread*
+*sOffscreenCanvasSupported*
+js-buttons
 
 # tiling with negative step
 issue16038
+
+# missing image
+issue 12841
 
 # transfer func
 issue16114
@@ -202,6 +212,8 @@ issue19550
 issue19695
 issue2391-1
 issue3521.pdf
+issue14917
+issue12841
 
 # user units
 issue19176
