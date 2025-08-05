@@ -188,6 +188,20 @@ issue15604
 issue15784
 issue15977
 issue17671
+issue11131_reduced
+issue11144_reduced
+issue11651-eq
+issue19550
+issue19695
+
+# user units
+issue19176
+
+# issue with jpx image?
+issue19326
+
+#pdf layers
+issue12007_reduced
 
 # colors turn into grey
 issue17906
@@ -266,10 +280,14 @@ issue6621
 # missing letters
 issue6132
 
+#crashes big
+issue18973
+
 # never finishes
 issue6541
 issue7200
 issue7454
+issue19517
 
 # wrong font in text?
 issue4934
