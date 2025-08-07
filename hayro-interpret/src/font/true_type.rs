@@ -1,5 +1,5 @@
 use crate::CacheKey;
-use crate::font::blob::OpenTypeFontBlob;
+use crate::font::blob::{CffFontBlob, OpenTypeFontBlob};
 use crate::font::generated::{glyph_names, mac_os_roman, mac_roman};
 use crate::font::{Encoding, FontFlags};
 use crate::util::{CodeMapExt, OptionLog};
@@ -27,6 +27,9 @@ pub(crate) struct TrueTypeFont {
     font_flags: Option<FontFlags>,
     glyph_names: HashMap<String, GlyphId>,
     encoding: Encoding,
+    // Only used for PDFs that mistakenly embed a
+    // CFF font.
+    cff_blob: Option<CffFontBlob>,
     differences: HashMap<u8, String>,
     cached_mappings: RefCell<HashMap<u8, GlyphId>>,
 }
@@ -56,11 +59,16 @@ impl TrueTypeFont {
         }
 
         let cache_key = dict.cache_key();
+        
+        let cff_font_blob = base_font.font_ref().cff().ok().and_then(|cff| {
+            CffFontBlob::new(Arc::new(cff.offset_data().as_ref().to_vec()))
+        });
 
         Some(Self {
             base_font,
             cache_key,
             differences,
+            cff_blob: cff_font_blob,
             widths,
             glyph_names,
             font_flags,
@@ -79,20 +87,34 @@ impl TrueTypeFont {
             .map(|f| f.contains(FontFlags::NON_SYMBOLIC))
             .unwrap_or(false)
     }
+    
+    fn code_to_name(&self, code: u8) -> Option<&str> {
+        self
+            .differences
+            .get(&code)
+            .map(|s| s.as_str())
+            .or_else(|| self.encoding.map_code(code))
+    }
 
     pub(crate) fn map_code(&self, code: u8) -> GlyphId {
         if let Some(glyph) = self.cached_mappings.borrow().get(&code) {
             return *glyph;
+        }
+        
+        if let Some(blob) = self.cff_blob.as_ref() {
+            let table = blob.table();
+            
+            return self.code_to_name(code)
+                .and_then(|name| table.glyph_index_by_name(name))
+                .map(|g| GlyphId::new(g.0 as u32))
+                .unwrap_or(GlyphId::NOTDEF);
         }
 
         let mut glyph = None;
 
         if self.is_non_symbolic() {
             let Some(lookup) = self
-                .differences
-                .get(&code)
-                .map(|s| s.as_str())
-                .or_else(|| self.encoding.map_code(code))
+                .code_to_name(code)
             else {
                 return GlyphId::NOTDEF;
             };
