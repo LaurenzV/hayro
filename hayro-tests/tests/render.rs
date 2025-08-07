@@ -545,6 +545,7 @@ use crate::run_render_test;
 #[test] fn pdfjs_issue2176() { run_render_test("pdfjs_issue2176", "downloads/pdfjs/issue2176.pdf", None); }
 #[test] fn pdfjs_issue2177_eq() { run_render_test("pdfjs_issue2177_eq", "downloads/pdfjs/issue2177-eq.pdf", None); }
 #[test] fn pdfjs_issue2391_2() { run_render_test("pdfjs_issue2391_2", "downloads/pdfjs/issue2391-2.pdf", None); }
+#[test] fn pdfjs_issue2442() { run_render_test("pdfjs_issue2442", "downloads/pdfjs/issue2442.pdf", Some("..=0")); }
 #[test] fn pdfjs_issue2462() { run_render_test("pdfjs_issue2462", "downloads/pdfjs/issue2462.pdf", None); }
 #[test] fn pdfjs_issue2531() { run_render_test("pdfjs_issue2531", "downloads/pdfjs/issue2531.pdf", Some("3..=3")); }
 #[test] fn pdfjs_issue2618() { run_render_test("pdfjs_issue2618", "downloads/pdfjs/issue2618.pdf", Some("..=0")); }

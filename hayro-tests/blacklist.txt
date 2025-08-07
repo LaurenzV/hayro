@@ -152,8 +152,6 @@ bug1953099
 bug854315
 bug866395
 bug921409
-issue2128
-issue2442
 issue2537
 issue2829
 issue2840
@@ -213,6 +211,9 @@ issue2391-1
 issue3521.pdf
 issue14917
 issue12841
+
+#cid font with custom encoding
+issue2128
 
 # user units
 issue19176

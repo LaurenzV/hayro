@@ -1927,6 +1927,13 @@
     "md5": "7e68756d11021a087383eaac95ba45dd"
   },
   {
+    "id": "issue2442",
+    "file": "pdfs/issue2442.link",
+    "link": true,
+    "md5": "4656e36c44f44c71a499f02ce6c781d3",
+    "last_page": 0
+  },
+  {
     "id": "issue2462",
     "file": "pdfs/issue2462.link",
     "link": true,
