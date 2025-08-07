@@ -59,10 +59,12 @@ impl TrueTypeFont {
         }
 
         let cache_key = dict.cache_key();
-        
-        let cff_font_blob = base_font.font_ref().cff().ok().and_then(|cff| {
-            CffFontBlob::new(Arc::new(cff.offset_data().as_ref().to_vec()))
-        });
+
+        let cff_font_blob = base_font
+            .font_ref()
+            .cff()
+            .ok()
+            .and_then(|cff| CffFontBlob::new(Arc::new(cff.offset_data().as_ref().to_vec())));
 
         Some(Self {
             base_font,
@@ -87,10 +89,9 @@ impl TrueTypeFont {
             .map(|f| f.contains(FontFlags::NON_SYMBOLIC))
             .unwrap_or(false)
     }
-    
+
     fn code_to_name(&self, code: u8) -> Option<&str> {
-        self
-            .differences
+        self.differences
             .get(&code)
             .map(|s| s.as_str())
             .or_else(|| self.encoding.map_code(code))
@@ -100,11 +101,12 @@ impl TrueTypeFont {
         if let Some(glyph) = self.cached_mappings.borrow().get(&code) {
             return *glyph;
         }
-        
+
         if let Some(blob) = self.cff_blob.as_ref() {
             let table = blob.table();
-            
-            return self.code_to_name(code)
+
+            return self
+                .code_to_name(code)
                 .and_then(|name| table.glyph_index_by_name(name))
                 .map(|g| GlyphId::new(g.0 as u32))
                 .unwrap_or(GlyphId::NOTDEF);
@@ -113,9 +115,7 @@ impl TrueTypeFont {
         let mut glyph = None;
 
         if self.is_non_symbolic() {
-            let Some(lookup) = self
-                .code_to_name(code)
-            else {
+            let Some(lookup) = self.code_to_name(code) else {
                 return GlyphId::NOTDEF;
             };
 
