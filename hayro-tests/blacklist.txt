@@ -152,14 +152,8 @@ bug1953099
 bug854315
 bug866395
 bug921409
-issue2537
-issue2829
-issue2840
-issue3062
-issue4668
-issue4722
-issue5044
-issue5244
+
+
 issue5501
 issue5701
 issue5751
@@ -212,8 +206,20 @@ issue3521.pdf
 issue14917
 issue12841
 
+#smask with transfer function
+issue5044
+
+# broken loca table
+issue2537
+
+# cid font without embedded file
+issue2840
+issue4722
+issue5244
+
 #cid font with custom encoding
 issue2128
+issue2829
 
 # user units
 issue19176
