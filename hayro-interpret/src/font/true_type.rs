@@ -175,7 +175,9 @@ impl TrueTypeFont {
             }
         } else if let Ok(cmap) = self.base_font.font_ref().cmap() {
             for record in cmap.encoding_records() {
-                if record.platform_id() == PlatformId::Windows && matches!(record.encoding_id(),  0 | 1) {
+                if record.platform_id() == PlatformId::Windows
+                    && matches!(record.encoding_id(), 0 | 1)
+                {
                     if let Ok(subtable) = record.subtable(cmap.offset_data()) {
                         for offset in [0x0000u32, 0xF000, 0xF100, 0xF200] {
                             glyph = glyph
