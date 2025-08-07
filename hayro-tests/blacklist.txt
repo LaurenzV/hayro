@@ -153,7 +153,6 @@ bug854315
 bug866395
 bug921409
 
-issue5701
 issue5751
 issue5801
 issue5946
