@@ -183,7 +183,10 @@ impl TrueTypeFont {
                                 .filter(|g| *g != GlyphId::NOTDEF)
                         }
                     }
-                } else if record.platform_id() == PlatformId::Macintosh && record.encoding_id() == 0
+                } else if matches!(
+                    record.platform_id(),
+                    PlatformId::Macintosh | PlatformId::Unicode
+                ) && record.encoding_id() == 0
                 {
                     if let Ok(subtable) = record.subtable(cmap.offset_data()) {
                         glyph = glyph
