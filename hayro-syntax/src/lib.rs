@@ -69,10 +69,10 @@ The supported features include:
 This crate has one feature, `jpeg2000`. PDF allows for the insertion of JPEG2000 images. However,
 unfortunately, JPEG2000 is a very complicated format. There exists a Rust
 [jpeg2k](https://github.com/Neopallium/jpeg2k) crate that allows decoding such images. However, it is a
-relatively heavy dependency, has a lot of unsafe code (due to having been ported with `c2rust`), and
-also has a dependency on libc, meaning that you might be restricted in the targets you can build to.
-Because of this, I recommend not enabling this feature unless you absolutely need to be able to
-support such images.
+relatively heavy dependency, has a lot of unsafe code (due to having been ported with 
+[c2rust](https://c2rust.com/)), and also has a dependency on libc, meaning that you might be 
+restricted in the targets you can build to. Because of this, I recommend not enabling this feature 
+unless you absolutely need to be able to support such images.
 */
 
 #![deny(missing_docs)]
