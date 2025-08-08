@@ -10,13 +10,13 @@ fn main() {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../hayro/pdfs/text_with_rise.pdf"),
     )
     .unwrap();
-    
+
     // Then create a new PDF file from it.
     //
     // Here we are just unwrapping in case reading the file failed, but you
     // might instead want to apply proper error handling.
     let pdf = Pdf::new(Arc::new(data)).unwrap();
-    
+
     // First access all pages, and then iterate over the operators of each page's
     // content stream and print them.
     let pages = pdf.pages();
