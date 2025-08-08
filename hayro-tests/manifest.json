@@ -1031,5 +1031,10 @@
   {
     "id": "issue175",
     "file": "pdfs/issue175.pdf"
+  },
+  {
+    "id": "issue_typst_6723",
+    "file": "pdfs/issue_typst_6723.link",
+    "link": true
   }
 ]

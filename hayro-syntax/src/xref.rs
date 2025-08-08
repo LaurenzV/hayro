@@ -272,12 +272,12 @@ impl XRef {
                     self.get::<T>(id)
                 }
             }
-            EntryType::ObjStream(id, index) => {
+            EntryType::ObjStream(obj_stram_gen_num, index) => {
                 // Generation number is implicitly 0.
-                let id = ObjectIdentifier::new(id as i32, 0);
+                let obj_stream_id = ObjectIdentifier::new(obj_stram_gen_num as i32, 0);
 
-                let stream = self.get::<Stream>(id)?;
-                let data = repr.data.get_with(id, self)?;
+                let stream = self.get::<Stream>(obj_stream_id)?;
+                let data = repr.data.get_with(obj_stream_id, self)?;
                 let object_stream =
                     ObjectStream::new(stream, data, ReaderContext::new(self, false))?;
                 object_stream.get(index)
@@ -692,6 +692,7 @@ impl<'a> ObjectStream<'a> {
         let offset = self.offsets.get(index as usize)?.1;
         let mut r = Reader::new(self.data);
         r.jump(offset);
+        r.skip_white_spaces_and_comments();
 
         r.read_with_context::<T>(self.ctx)
     }
