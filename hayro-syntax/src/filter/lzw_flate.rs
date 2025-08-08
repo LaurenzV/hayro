@@ -38,7 +38,7 @@ pub(crate) mod flate {
 
     /// Ported from <https://github.com/mozilla/pdf.js/blob/master/src/core/flate_stream.js>
     mod fallback {
-        use log::{info, warn};
+        use log::warn;
 
         pub(crate) fn decode(data: &[u8]) -> Option<Vec<u8>> {
             flate_decode(data)
@@ -163,7 +163,7 @@ pub(crate) mod flate {
                 let hdr = match self.get_bits(3) {
                     Some(h) => h,
                     None => {
-                        info!("Bad block header in flate stream");
+                        warn!("bad block header in flate stream");
                         self.eof = true;
                         return;
                     }
@@ -180,7 +180,7 @@ pub(crate) mod flate {
                     1 => self.read_compressed_block(true),
                     2 => self.read_compressed_block(false),
                     _ => {
-                        warn!("Unknown block type in flate stream");
+                        warn!("unknown block type in flate stream");
                         self.eof = true;
                     }
                 }
@@ -194,7 +194,7 @@ pub(crate) mod flate {
                 let len_low = match self.get_byte() {
                     Some(b) => b as u16,
                     None => {
-                        info!("Bad block header in flate stream");
+                        warn!("bad block header in flate stream");
                         self.eof = true;
                         return;
                     }
@@ -203,7 +203,7 @@ pub(crate) mod flate {
                 let len_high = match self.get_byte() {
                     Some(b) => b as u16,
                     None => {
-                        info!("Bad block header in flate stream");
+                        warn!("bad block header in flate stream");
                         self.eof = true;
                         return;
                     }
@@ -214,7 +214,7 @@ pub(crate) mod flate {
                 let nlen_low = match self.get_byte() {
                     Some(b) => b as u16,
                     None => {
-                        info!("Bad block header in flate stream");
+                        warn!("bad block header in flate stream");
                         self.eof = true;
                         return;
                     }
@@ -223,7 +223,7 @@ pub(crate) mod flate {
                 let nlen_high = match self.get_byte() {
                     Some(b) => b as u16,
                     None => {
-                        info!("Bad block header in flate stream");
+                        warn!("bad block header in flate stream");
                         self.eof = true;
                         return;
                     }
@@ -233,7 +233,7 @@ pub(crate) mod flate {
 
                 if check != !block_len && (block_len != 0 || check != 0) {
                     // Ignoring error for bad "empty" block
-                    warn!("Bad uncompressed block length in flate stream");
+                    warn!("bad uncompressed block length in flate stream");
                 }
 
                 if block_len == 0 {
@@ -573,7 +573,7 @@ pub(crate) mod lzw {
             let next = match reader.read(bit_size) {
                 Some(code) => code as usize,
                 None => {
-                    warn!("Premature EOF in LZW stream, EOD code missing");
+                    warn!("premature EOF in LZW stream, EOD code missing");
                     return Some(decoded);
                 }
             };
@@ -587,7 +587,7 @@ pub(crate) mod lzw {
                 EOD => return Some(decoded),
                 new => {
                     if new > table.size() {
-                        warn!("Invalid LZW code: {} (table size: {})", new, table.size());
+                        warn!("invalid LZW code: {} (table size: {})", new, table.size());
                         return None;
                     }
 
