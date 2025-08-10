@@ -69,7 +69,7 @@ pub struct InterpreterSettings {
     ///
     /// For the `Symbol` and `ZapfDingBats` fonts, you should also prefer the system fonts, and if
     /// not available to you, you can, similarly to above, use the corresponding fonts from Foxit.
-    /// 
+    ///
     /// If you don't want having to deal with this, you can just enable the `embed-fonts` feature
     /// and use the default implementation of the callback.
     pub font_resolver: FontResolverFn,
