@@ -15,7 +15,7 @@ hayro-font = { path = "hayro-font", version = "0.1.0" }
 hayro-interpret = { path = "hayro-interpret", version = "0.2.0", default-features = false }
 hayro-syntax = { path = "hayro-syntax", version = "0.2.0", default-features = false }
 hayro-svg = { path = "hayro-svg", default-features = false }
-hayro-write = { path = "hayro-write", version = "0.1.0" }
+hayro-write = { path = "hayro-write", version = "0.2.0" }
 
 bitflags = { version = "2.9" }
 bytemuck = { version = "1" }
