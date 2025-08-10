@@ -22,7 +22,7 @@ use hayro_interpret::Device;
 use hayro_interpret::color::AlphaColor;
 use hayro_interpret::hayro_syntax::page::Page;
 use hayro_interpret::{ClipPath, interpret_page};
-use hayro_interpret::{FillRule, interpret};
+use hayro_interpret::FillRule;
 use kurbo::{Affine, Rect, Shape};
 use std::ops::RangeInclusive;
 
