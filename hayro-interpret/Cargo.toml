@@ -20,6 +20,9 @@ siphasher = { workspace = true }
 bitflags = { workspace = true }
 rustc-hash = { workspace = true }
 
+[dev-dependencies]
+image = { workspace = true, features = ["png"] }
+
 [features]
 default = []
 # Add support for decoding JPEG2000 images.

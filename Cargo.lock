@@ -506,6 +506,7 @@ dependencies = [
  "bitflags 2.9.1",
  "hayro-font",
  "hayro-syntax",
+ "image 0.25.6",
  "kurbo",
  "log",
  "phf",

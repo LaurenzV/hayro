@@ -16,7 +16,7 @@ use crate::util::OptionLog;
 use crate::x_object::{ImageXObject, XObject, draw_image_xobject, draw_xobject};
 use hayro_syntax::content::ops::TypedInstruction;
 use hayro_syntax::object::{Dict, Object, dict_or_stream};
-use hayro_syntax::page::Resources;
+use hayro_syntax::page::{Page, Resources};
 use kurbo::{Affine, Point, Shape};
 use log::warn;
 use smallvec::smallvec;
@@ -105,6 +105,16 @@ pub enum InterpreterWarning {
     UnsupportedFont,
     /// An image failed to decode.
     ImageDecodeFailure,
+}
+
+/// interpret the contents of the page and render them into the device.
+pub fn interpret_page<'a>(
+    page: &Page<'a>,
+    context: &mut Context<'a>,
+    device: &mut impl Device<'a>,
+) {
+    let resources = page.resources();
+    interpret(page.typed_operations(), resources, context, device)
 }
 
 /// Interpret the instructions from `ops` and render them into the device.

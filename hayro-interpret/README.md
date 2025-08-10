@@ -16,11 +16,15 @@ It should be noted that this crate is still very much in development. Therefore 
 lacks pretty much any documentation on how to use it. It's current API also only really makes it
 useful for rendering to PNG or SVG, though this will be improved upon in the future.
 
+## Examples
+See the `examples` folder on the GitHub repository. Apart from that, you can also consult
+the implementation of `hayro` and `hayro-svg` to get an idea on how to use this crate.
+
 ## Safety
 This crate forbids unsafe code via a crate-level attribute.
 
 ## Cargo features
-This crate has two optional features: 
+This crate has two optional features:
 - `jpeg2000`: See the description of [`hayro-syntax`](https://docs.rs/hayro-syntax/latest/hayro_syntax/#cargo-features) for more information.
 - `embed-fonts`: PDF processors are required to support 14 predefined fonts that do not need to be
   embedded into a PDF file. If you enable this feature, hayro will embed a (permissively-licensed)
