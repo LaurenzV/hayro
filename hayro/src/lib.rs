@@ -19,10 +19,10 @@ This crate has one feature, `jpeg2000`. See the description of
 use crate::renderer::Renderer;
 use hayro_interpret::Context;
 use hayro_interpret::Device;
+use hayro_interpret::FillRule;
 use hayro_interpret::color::AlphaColor;
 use hayro_interpret::hayro_syntax::page::Page;
 use hayro_interpret::{ClipPath, interpret_page};
-use hayro_interpret::FillRule;
 use kurbo::{Affine, Rect, Shape};
 use std::ops::RangeInclusive;
 
