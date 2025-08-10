@@ -328,39 +328,23 @@ fn is_pix_diff(pixel1: &Rgba<u8>, pixel2: &Rgba<u8>) -> bool {
 // testing.
 fn get_standard(font: &StandardFont) -> FontData {
     let data = match font {
-        StandardFont::Helvetica => {
-            &include_bytes!("../assets/LiberationSans-Regular.ttf")[..]
-        }
-        StandardFont::HelveticaBold => {
-            &include_bytes!("../assets/LiberationSans-Bold.ttf")[..]
-        }
+        StandardFont::Helvetica => &include_bytes!("../assets/LiberationSans-Regular.ttf")[..],
+        StandardFont::HelveticaBold => &include_bytes!("../assets/LiberationSans-Bold.ttf")[..],
         StandardFont::HelveticaOblique => {
             &include_bytes!("../assets/LiberationSans-Italic.ttf")[..]
         }
         StandardFont::HelveticaBoldOblique => {
             &include_bytes!("../assets/LiberationSans-BoldItalic.ttf")[..]
         }
-        StandardFont::Courier => {
-            &include_bytes!("../assets/LiberationMono-Regular.ttf")[..]
-        }
-        StandardFont::CourierBold => {
-            &include_bytes!("../assets/LiberationMono-Bold.ttf")[..]
-        }
-        StandardFont::CourierOblique => {
-            &include_bytes!("../assets/LiberationMono-Italic.ttf")[..]
-        }
+        StandardFont::Courier => &include_bytes!("../assets/LiberationMono-Regular.ttf")[..],
+        StandardFont::CourierBold => &include_bytes!("../assets/LiberationMono-Bold.ttf")[..],
+        StandardFont::CourierOblique => &include_bytes!("../assets/LiberationMono-Italic.ttf")[..],
         StandardFont::CourierBoldOblique => {
             &include_bytes!("../assets/LiberationMono-BoldItalic.ttf")[..]
         }
-        StandardFont::TimesRoman => {
-            &include_bytes!("../assets/LiberationSerif-Regular.ttf")[..]
-        }
-        StandardFont::TimesBold => {
-            &include_bytes!("../assets/LiberationSerif-Bold.ttf")[..]
-        }
-        StandardFont::TimesItalic => {
-            &include_bytes!("../assets/LiberationSerif-Italic.ttf")[..]
-        }
+        StandardFont::TimesRoman => &include_bytes!("../assets/LiberationSerif-Regular.ttf")[..],
+        StandardFont::TimesBold => &include_bytes!("../assets/LiberationSerif-Bold.ttf")[..],
+        StandardFont::TimesItalic => &include_bytes!("../assets/LiberationSerif-Italic.ttf")[..],
         StandardFont::TimesBoldItalic => {
             &include_bytes!("../assets/LiberationSerif-BoldItalic.ttf")[..]
         }
