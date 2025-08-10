@@ -898,10 +898,10 @@ pub mod keys {
 
 #[cfg(test)]
 mod tests {
+    use crate::object::Name;
     use crate::object::Number;
     use crate::object::dict::{Dict, InlineImageDict};
     use crate::object::string;
-    use crate::object::Name;
     use crate::reader::{Reader, ReaderContext};
 
     fn dict_impl(data: &[u8]) -> Option<Dict> {
