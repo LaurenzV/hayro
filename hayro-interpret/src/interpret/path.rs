@@ -27,7 +27,7 @@ pub(crate) fn close_path(context: &mut Context<'_>) {
     // This is necessary to prevent artifacts (see for example issue 157),
     // but it does cause some weird lines (maybe conflation artifacts) in
     // pdftc_900k_0907.
-    if context.path().elements().last() != Some(&PathEl::ClosePath) {
+    if context.path().elements().last() != Some(&PathEl::ClosePath) && !context.path().is_empty() {
         context.path_mut().close_path();
 
         *(context.last_point_mut()) = *context.sub_path_start();
