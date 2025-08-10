@@ -1,6 +1,6 @@
 use crate::renderer::SvgRenderer;
 use hayro_interpret::hayro_syntax::page::Page;
-use hayro_interpret::{Context, InterpreterSettings, interpret};
+use hayro_interpret::{Context, InterpreterSettings, interpret_page};
 use kurbo::Rect;
 
 mod renderer;
@@ -20,12 +20,7 @@ pub fn convert(page: &Page, interpreter_settings: &InterpreterSettings) -> Strin
     let mut device = SvgRenderer::new(page);
     device.write_header(page.render_dimensions());
 
-    interpret(
-        page.typed_operations(),
-        page.resources(),
-        &mut state,
-        &mut device,
-    );
+    interpret_page(page, &mut state, &mut device);
 
     device.finish()
 }

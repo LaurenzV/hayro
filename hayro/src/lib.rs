@@ -17,11 +17,11 @@ This crate has one feature, `jpeg2000`. See the description of
 #![deny(missing_docs)]
 
 use crate::renderer::Renderer;
-use hayro_interpret::ClipPath;
 use hayro_interpret::Context;
 use hayro_interpret::Device;
 use hayro_interpret::color::AlphaColor;
 use hayro_interpret::hayro_syntax::page::Page;
+use hayro_interpret::{ClipPath, interpret_page};
 use hayro_interpret::{FillRule, interpret};
 use kurbo::{Affine, Rect, Shape};
 use std::ops::RangeInclusive;
@@ -109,12 +109,7 @@ pub fn render(
         fill: FillRule::NonZero,
     });
 
-    interpret(
-        page.typed_operations(),
-        page.resources(),
-        &mut state,
-        &mut device,
-    );
+    interpret_page(page, &mut state, &mut device);
 
     device.pop_clip_path();
 
