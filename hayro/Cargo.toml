@@ -1,6 +1,6 @@
 [package]
 name = "hayro"
-version = "0.1.0"
+version = "0.2.0"
 description = "A rasterizer for PDF files."
 edition = { workspace = true }
 repository = { workspace = true }
@@ -11,8 +11,6 @@ hayro-interpret = { workspace = true }
 kurbo = { workspace = true }
 image = { workspace = true, features = ["png"] }
 bytemuck = { workspace = true, features = ["bytemuck_derive"] }
-smallvec = { workspace = true }
-rustc-hash = { workspace = true }
 
 [dev-dependencies]
 log = { workspace = true }
