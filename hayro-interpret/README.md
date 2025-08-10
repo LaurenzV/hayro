@@ -1,5 +1,8 @@
 # hayro-interpret
 
+[![Crates.io](https://img.shields.io/crates/v/hayro-interpret.svg)](https://crates.io/crates/hayro-interpret)
+[![Documentation](https://docs.rs/hayro-interpret/badge.svg)](https://docs.rs/hayro-interpret)
+
 <!-- cargo-rdme start -->
 
 A crate for interpreting PDF files.
@@ -13,4 +16,18 @@ It should be noted that this crate is still very much in development. Therefore 
 lacks pretty much any documentation on how to use it. It's current API also only really makes it
 useful for rendering to PNG or SVG, though this will be improved upon in the future.
 
+## Safety
+This crate forbids unsafe code via a crate-level attribute.
+
+## Cargo features
+This crate has two optional features: 
+- `jpeg2000`: See the description of [`hayro-syntax`](https://docs.rs/hayro-syntax/latest/hayro_syntax/#cargo-features) for more information.
+- `embed-fonts`: PDF processors are required to support 14 predefined fonts that do not need to be
+  embedded into a PDF file. If you enable this feature, hayro will embed a (permissively-licensed)
+  substitute for each font, so that you don't have to implement your custom font loading logic. This
+  will add around ~240KB to your binary.
+
 <!-- cargo-rdme end -->
+
+## License
+This crate is available under the Apache 2.0 license.

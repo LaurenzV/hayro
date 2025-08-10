@@ -10,9 +10,16 @@ It should be noted that this crate is still very much in development. Therefore 
 lacks pretty much any documentation on how to use it. It's current API also only really makes it
 useful for rendering to PNG or SVG, though this will be improved upon in the future.
 
-## Cargo features
-This crate has one feature, `jpeg2000`. See the description of
-[`hayro-syntax`](https://docs.rs/hayro-syntax/latest/hayro_syntax/#cargo-features) for more information.
+# Safety
+This crate forbids unsafe code via a crate-level attribute.
+
+# Cargo features
+This crate has two optional features: 
+- `jpeg2000`: See the description of [`hayro-syntax`](https://docs.rs/hayro-syntax/latest/hayro_syntax/#cargo-features) for more information.
+- `embed-fonts`: PDF processors are required to support 14 predefined fonts that do not need to be
+  embedded into a PDF file. If you enable this feature, hayro will embed a (permissively-licensed)
+  substitute for each font, so that you don't have to implement your custom font loading logic. This
+  will add around ~240KB to your binary.
 */
 
 #![forbid(unsafe_code)]

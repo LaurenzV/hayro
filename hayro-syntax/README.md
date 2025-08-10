@@ -81,3 +81,6 @@ restricted in the targets you can build to. Because of this, I recommend not ena
 unless you absolutely need to be able to support such images.
 
 <!-- cargo-rdme end -->
+
+## License
+This crate is available under the Apache 2.0 license.
