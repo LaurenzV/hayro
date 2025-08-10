@@ -5,8 +5,8 @@ use crate::object::macros::object;
 use crate::object::{Object, ObjectLike};
 use crate::reader::{Readable, Reader, ReaderContext, Skippable};
 use crate::trivia::is_white_space_character;
-use std::borrow::Cow;
 use log::warn;
+use std::borrow::Cow;
 
 /// A hex-encoded string.
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
@@ -115,11 +115,13 @@ impl<'a> LiteralString<'a> {
                                     if is_octal_digit(n1) && is_octal_digit(n2) {
                                         let bytes = [next, n1, n2];
                                         let str = std::str::from_utf8(&bytes).unwrap();
-                                        
+
                                         if let Ok(num) = u8::from_str_radix(str, 8) {
                                             cleaned.push(num);
-                                        }   else {
-                                            warn!("overflow occurred while parsing octal literal string");
+                                        } else {
+                                            warn!(
+                                                "overflow occurred while parsing octal literal string"
+                                            );
                                         }
                                     } else {
                                         // Ignore the solidus and treat as normal characters.
