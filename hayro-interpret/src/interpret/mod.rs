@@ -69,6 +69,9 @@ pub struct InterpreterSettings {
     ///
     /// For the `Symbol` and `ZapfDingBats` fonts, you should also prefer the system fonts, and if
     /// not available to you, you can, similarly to above, use the corresponding fonts from Foxit.
+    /// 
+    /// If you don't want having to deal with this, you can just enable the `embed-fonts` feature
+    /// and use the default implementation of the callback.
     pub font_resolver: FontResolverFn,
 
     /// In certain cases, `hayro` will emit a warning in case an issue was encountered while interpreting
@@ -79,7 +82,13 @@ pub struct InterpreterSettings {
 impl Default for InterpreterSettings {
     fn default() -> Self {
         Self {
+            #[cfg(not(feature = "embed-fonts"))]
             font_resolver: Arc::new(|_| None),
+            #[cfg(feature = "embed-fonts")]
+            font_resolver: Arc::new(|query| match query {
+                FontQuery::Standard(s) => Some(s.get_font_data()),
+                FontQuery::Fallback(f) => Some(f.pick_standard_font().get_font_data()),
+            }),
             warning_sink: Arc::new(|_| {}),
         }
     }
