@@ -365,9 +365,9 @@ fn get_standard(font: &StandardFont) -> FontData {
             &include_bytes!("../../assets/standard_fonts/LiberationSerif-BoldItalic.ttf")[..]
         }
         StandardFont::ZapfDingBats => {
-            &include_bytes!("../../assets/standard_fonts/FoxitDingbats.pfb")[..]
+            &include_bytes!("../../hayro-interpret/assets/FoxitDingbats.pfb")[..]
         }
-        StandardFont::Symbol => &include_bytes!("../../assets/standard_fonts/FoxitSymbol.pfb")[..],
+        StandardFont::Symbol => &include_bytes!("../../hayro-interpret/assets/FoxitSymbol.pfb")[..],
     };
 
     Arc::new(data)

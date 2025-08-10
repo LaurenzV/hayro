@@ -140,47 +140,31 @@ impl StandardFont {
         use std::sync::Arc;
 
         let data = match self {
-            StandardFont::Helvetica => {
-                &include_bytes!("../../../assets/standard_fonts/FoxitSans.pfb")[..]
-            }
-            StandardFont::HelveticaBold => {
-                &include_bytes!("../../../assets/standard_fonts/FoxitSansBold.pfb")[..]
-            }
+            StandardFont::Helvetica => &include_bytes!("../../assets/FoxitSans.pfb")[..],
+            StandardFont::HelveticaBold => &include_bytes!("../../assets/FoxitSansBold.pfb")[..],
             StandardFont::HelveticaOblique => {
-                &include_bytes!("../../../assets/standard_fonts/FoxitSansItalic.pfb")[..]
+                &include_bytes!("../../assets/FoxitSansItalic.pfb")[..]
             }
             StandardFont::HelveticaBoldOblique => {
-                &include_bytes!("../../../assets/standard_fonts/FoxitSansBoldItalic.pfb")[..]
+                &include_bytes!("../../assets/FoxitSansBoldItalic.pfb")[..]
             }
-            StandardFont::Courier => {
-                &include_bytes!("../../../assets/standard_fonts/FoxitFixed.pfb")[..]
-            }
-            StandardFont::CourierBold => {
-                &include_bytes!("../../../assets/standard_fonts/FoxitFixedBold.pfb")[..]
-            }
+            StandardFont::Courier => &include_bytes!("../../assets/FoxitFixed.pfb")[..],
+            StandardFont::CourierBold => &include_bytes!("../../assets/FoxitFixedBold.pfb")[..],
             StandardFont::CourierOblique => {
-                &include_bytes!("../../../assets/standard_fonts/FoxitFixedItalic.pfb")[..]
+                &include_bytes!("../../assets/FoxitFixedItalic.pfb")[..]
             }
             StandardFont::CourierBoldOblique => {
-                &include_bytes!("../../../assets/standard_fonts/FoxitFixedBoldItalic.pfb")[..]
+                &include_bytes!("../../assets/FoxitFixedBoldItalic.pfb")[..]
             }
-            StandardFont::TimesRoman => {
-                &include_bytes!("../../../assets/standard_fonts/FoxitSerif.pfb")[..]
-            }
-            StandardFont::TimesBold => {
-                &include_bytes!("../../../assets/standard_fonts/FoxitSerifBold.pfb")[..]
-            }
-            StandardFont::TimesItalic => {
-                &include_bytes!("../../../assets/standard_fonts/FoxitSerifItalic.pfb")[..]
-            }
+            StandardFont::TimesRoman => &include_bytes!("../../assets/FoxitSerif.pfb")[..],
+            StandardFont::TimesBold => &include_bytes!("../../assets/FoxitSerifBold.pfb")[..],
+            StandardFont::TimesItalic => &include_bytes!("../../assets/FoxitSerifItalic.pfb")[..],
             StandardFont::TimesBoldItalic => {
-                &include_bytes!("../../../assets/standard_fonts/FoxitSerifBoldItalic.pfb")[..]
+                &include_bytes!("../../assets/FoxitSerifBoldItalic.pfb")[..]
             }
-            StandardFont::ZapfDingBats => {
-                &include_bytes!("../../../assets/standard_fonts/FoxitDingbats.pfb")[..]
-            }
+            StandardFont::ZapfDingBats => &include_bytes!("../../assets/FoxitDingbats.pfb")[..],
             StandardFont::Symbol => {
-                include_bytes!("../../../assets/standard_fonts/FoxitSymbol.pfb")
+                include_bytes!("../../assets/FoxitSymbol.pfb")
             }
         };
 
