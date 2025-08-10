@@ -4,7 +4,7 @@ use hayro_syntax::object::dict::keys::{
     AF, LAST_MODIFIED, LENGTH, METADATA, OC, OPI, PIECE_INFO, PT_DATA, REF, STRUCT_PARENT,
     STRUCT_PARENTS,
 };
-use hayro_syntax::object::{MaybeRef, Null, Number, Stream};
+use hayro_syntax::object::{MaybeRef, Null, Number, ObjectIdentifier, Stream};
 use hayro_syntax::object::{Object, array, dict};
 use pdf_writer::{Chunk, Dict, Obj, Ref};
 use std::collections::HashSet;
@@ -35,9 +35,21 @@ pub(crate) trait WriteDirect {
 
 impl WriteDirect for hayro_syntax::object::ObjRef {
     fn write_direct(&self, obj: Obj, ctx: &mut ExtractionContext) {
-        ctx.to_visit_refs.push(*self);
-        let mapped_ref = ctx.map_ref(*self);
-        obj.primitive(mapped_ref);
+        // Check whether the object is actually valid/exists. Otherwise, we need to write a null
+        // object instead. If we don't, we might end up with dangling object references that
+        // don't actually exist in the PDF chunk, which will lead to a panic in krilla when renumbering.
+        let valid = *ctx.valid_ref_cache.entry(*self).or_insert_with(|| {
+            let id = ObjectIdentifier::new(self.obj_number, self.gen_number);
+            ctx.pdf.xref().get::<Object>(id).is_some()
+        });
+
+        if valid {
+            ctx.to_visit_refs.push(*self);
+            let mapped_ref = ctx.map_ref(*self);
+            obj.primitive(mapped_ref);
+        } else {
+            obj.primitive(pdf_writer::Null);
+        }
     }
 }
 

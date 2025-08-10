@@ -36,7 +36,7 @@ pub fn extract<'a>(
     queries: &[ExtractionQuery],
 ) -> Result<ExtractionResult, ExtractionError> {
     let pages = pdf.pages();
-    let mut ctx = ExtractionContext::new(new_ref);
+    let mut ctx = ExtractionContext::new(new_ref, pdf);
 
     for query in queries {
         let page = pages
@@ -126,7 +126,9 @@ struct ExtractionContext<'a> {
     chunks: Vec<Chunk>,
     visited_objects: HashSet<ObjRef>,
     to_visit_refs: Vec<ObjRef>,
+    valid_ref_cache: HashMap<ObjRef, bool>,
     root_refs: Vec<Result<Ref, ExtractionError>>,
+    pdf: &'a Pdf,
     new_ref: Box<dyn FnMut() -> Ref + 'a>,
     ref_map: HashMap<ObjRef, Ref>,
     cached_content_streams: HashMap<usize, Ref>,
@@ -134,12 +136,14 @@ struct ExtractionContext<'a> {
 }
 
 impl<'a> ExtractionContext<'a> {
-    fn new(mut new_ref: Box<dyn FnMut() -> Ref + 'a>) -> Self {
+    fn new(mut new_ref: Box<dyn FnMut() -> Ref + 'a>, pdf: &'a Pdf) -> Self {
         let page_tree_parent_ref = new_ref();
         Self {
             chunks: vec![],
             visited_objects: HashSet::new(),
             to_visit_refs: Vec::new(),
+            valid_ref_cache: HashMap::new(),
+            pdf,
             new_ref,
             ref_map: HashMap::new(),
             cached_content_streams: HashMap::new(),

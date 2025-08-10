@@ -1,7 +1,9 @@
 use crate::{load_pdf, run_write_test};
+use hayro::Pdf;
 use hayro_write::ExtractionQuery;
 use pdf_writer::Ref;
 use sitro::Renderer;
+use std::sync::Arc;
 
 #[test]
 fn write_page_basic_1() {
@@ -300,4 +302,24 @@ fn write_xobject_contents_array() {
         Renderer::Pdfium,
         false,
     );
+}
+
+#[test]
+fn write_null_objects() {
+    let hayro_pdf = load_pdf("pdfs/other/issue188.pdf");
+    // Ghostscript still complains that this is an invalid PDF since a dictionary is expected
+    // for fonts, but not sure if there is anything better we can do in the first place if the
+    // object doesn't exist at all / is invalid.
+    let extracted = hayro_write::extract_pages_to_pdf(&hayro_pdf, &[0]);
+
+    let reread = Pdf::new(Arc::new(extracted)).unwrap();
+    let dict = reread.pages()[0]
+        .raw()
+        .get::<hayro_syntax::object::Dict>(&b"Resources"[..])
+        .unwrap()
+        .get::<hayro_syntax::object::Dict>(&b"Font"[..])
+        .unwrap();
+    let data = dict.data();
+
+    assert_eq!(data, b"<<\n      /F1 5 0 R\n      /F2 null\n    >>");
 }
