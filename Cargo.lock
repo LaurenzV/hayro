@@ -819,8 +819,7 @@ dependencies = [
 [[package]]
 name = "pdf-writer"
 version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ea27c5015ab81753fc61e49f8cde74999346605ee148bb20008ef3d3150e0dc"
+source = "git+https://github.com/typst/pdf-writer?rev=143a1c3#143a1c3543a1422a22bda40a68022d0d9ad3a40e"
 dependencies = [
  "bitflags 2.9.1",
  "itoa",
