@@ -1,8 +1,8 @@
 /*!
 A crate for rendering PDF files.
 
-This crate allows you to render pages of a PDF file into bitmaps. It is supposed relatively lightweight,
-since we do not have any dependencies on the GPU. All the rendering happens on the CPU.
+This crate allows you to render pages of a PDF file into bitmaps. It is supposed to be relatively 
+lightweight, since we do not have any dependencies on the GPU. All the rendering happens on the CPU.
 
 The ultimate goal of this crate is to be a *feature-complete* and *performant* PDF rasterizer. 
 With that said, we are currently still very far away from reaching that goal: So far, no effort
