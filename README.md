@@ -1,12 +1,28 @@
 # hayro
 
+[![Crates.io](https://img.shields.io/crates/v/hayro.svg)](https://crates.io/crates/hayro)
+[![Documentation](https://docs.rs/hayro/badge.svg)](https://docs.rs/hayro)
+
 An experimental, work-in-progress PDF rasterizer.
 
-In its current state, it is probably the most comprehensive implementation of a PDF rasterizer in pure Rust,
-but it still lacks a lot of features and has many issues. The codebase is also in dire need of a cleanup and documentation.
+`hayro` is a Rust crate with a simple task: It allows you to render one or many pages of a PDF file into a bitmap image. This is a huge task, as the PDF specification is _huge_ and contains many features. In addition to that, there are millions of PDF files out there with many edge cases, so a solid PDF renderer should be able to handle those as well as possible.
 
-A demo tool can be found at https://laurenzv.github.io/hayro/. Note that embedded JPEG2000 images are not supported
-in the web version.
+This is not the first attempt at writing a PDF renderer in Rust, but, to the best of my knowledge, this is currently the most feature-complete library. There are still a few important features that `hayro` can currently doesn't support, including loading encrypted/password-protected PDFs and rendering blend modes and knockout transparency groups. With that said, we _do_ support most of the main features, meaning that you should be able to render the "average" PDF file without encountering any issues. This statement is underpinned by the fact that `hayro` is able to handle the 1000+ PDFs in our test suite, which to a large part have been scraped from the `PDFBOX` and `pdf.js` test regression suites.
 
-# License
+But, this crate is still in a very development stage, and there are many issues remaining that need to be addressed, including performance, which has not been a focus at all so far.
+
+## Crates
+
+While the main goal of `hayro` is rendering PDF files, the `hayro` project actually encompasses a number of different crates which can in theory used independently. These include:
+- [`hayro-syntax`](hayro-syntax): A crate for low-level reading and parsing of PDF files.
+- [`hayro-interpret`](hayro-interpret): A crate for interpreting PDF pages and rendering them into an abstract `Device` implementation.
+- [`hayro`](hayro): A crate for rendering PDF files into bitmaps.
+- [`hayro-font`](hayro-font): A crate for parsing Type1 and CFF fonts.
+- [`hayro-svg`](hayro-svg): A WIP crate for converting PDF files to SVG. This crate is still very much in development and currently not intended to be used.
+
+## Demo
+
+A demo tool can be found at https://laurenzv.github.io/hayro/. Please note that this is not intended to be a PDF viewer application: It misses many important features like zooming, selecting text and important optimizations for improving the user experience. It's really just meant as a quick way to test the rendering capabilities of `hayro`. Note that PDFs with embedded JPEG2000 images will not display correctly in this web demo.
+
+## License
 All crates in this repository are available under the Apache 2.0 license.
