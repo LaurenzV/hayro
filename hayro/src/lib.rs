@@ -7,7 +7,7 @@ lightweight, since we do not have any dependencies on the GPU. All the rendering
 The ultimate goal of this crate is to be a *feature-complete* and *performant* PDF rasterizer. 
 With that said, we are currently still very far away from reaching that goal: So far, no effort
 has been put into performance optimizations, as we are still working on implementing missing features.
-With that said, this crate is currently undoubtedly the most comprehensive and feature complete 
+However, this crate is currently the most comprehensive and feature-complete 
 implementation of a PDF rasterizer in pure Rust. This claim is supported by the fact that we currently
 include over 1000 PDF files in our regression test suite. The majority of those have been scraped
 from the `pdf.js` and `PDFBOX` test suites and therefore represent a very large and diverse sample
