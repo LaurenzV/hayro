@@ -12,7 +12,6 @@ This is not the first attempt at writing a PDF renderer in Rust, but, to the bes
 But, this crate is still in a very development stage, and there are many issues remaining that need to be addressed, including performance, which has not been a focus at all so far but will become a priority in the future.
 
 ## Crates
-
 While the main goal of `hayro` is rendering PDF files, the `hayro` project actually encompasses a number of different crates which can in theory used independently. These include:
 - [`hayro-syntax`](hayro-syntax): A crate for low-level reading and parsing of PDF files.
 - [`hayro-interpret`](hayro-interpret): A crate for interpreting PDF pages and rendering them into an abstract `Device` implementation.
@@ -21,7 +20,6 @@ While the main goal of `hayro` is rendering PDF files, the `hayro` project actua
 - [`hayro-svg`](hayro-svg): A WIP crate for converting PDF files to SVG. This crate is still very much in development and currently not intended to be used.
 
 ## Demo
-
 A demo tool can be found at https://laurenzv.github.io/hayro/. Please note that this is not intended to be a PDF viewer application: It misses many important features like zooming, selecting text and important optimizations for improving the user experience. It's really just meant as a quick way to test the rendering capabilities of `hayro`. Note that PDFs with embedded JPEG2000 images will not display correctly in this web demo.
 
 ## License
