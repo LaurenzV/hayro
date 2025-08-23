@@ -1,6 +1,6 @@
-use crate::ClipPath;
 use crate::font::Glyph;
 use crate::soft_mask::SoftMask;
+use crate::{ClipPath, Image};
 use crate::{GlyphDrawMode, Paint, PathDrawMode};
 use crate::{LumaData, RgbData};
 use kurbo::{Affine, BezPath};
@@ -31,10 +31,8 @@ pub trait Device<'a> {
         paint: &Paint<'a>,
         draw_mode: &GlyphDrawMode,
     );
-    /// Draw an RGBA image.
-    fn draw_rgba_image(&mut self, image: RgbData, transform: Affine, alpha: Option<LumaData>);
-    /// Draw a stencil image with the given paint.
-    fn draw_stencil_image(&mut self, stencil: LumaData, transform: Affine, paint: &Paint<'a>);
+    /// Draw an image.
+    fn draw_image(&mut self, image: Image<'_>, transform: Affine);
     /// Pop the last clip path from the clip stack.
     fn pop_clip_path(&mut self);
     /// Pop the last transparency group from the blend stack.

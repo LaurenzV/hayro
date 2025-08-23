@@ -5,8 +5,8 @@
 
 use hayro_interpret::font::Glyph;
 use hayro_interpret::{
-    ClipPath, Context, Device, GlyphDrawMode, InterpreterSettings, LumaData, Paint, PathDrawMode,
-    RgbData, SoftMask, interpret_page,
+    ClipPath, Context, Device, GlyphDrawMode, Image, InterpreterSettings, LumaData, Paint,
+    PathDrawMode, RgbData, SoftMask, interpret_page,
 };
 use hayro_syntax::Pdf;
 use image::{DynamicImage, ImageBuffer};
@@ -71,45 +71,60 @@ impl Device<'_> for ImageExtractor {
     ) {
     }
 
-    // The alpha and RGB channels are provided separately.
-    fn draw_rgba_image(&mut self, image: RgbData, _: Affine, alpha: Option<LumaData>) {
-        let image = if let Some(alpha) = alpha {
-            // This is not complete, as it can in theory happen that the alpha channel has a different
-            // dimension than the RGB channel. We ignore this edge case for this example.
-            if alpha.width == image.width && alpha.height == image.height {
-                let interleaved = image
-                    .data
-                    .chunks(3)
-                    .zip(alpha.data)
-                    .flat_map(|(rgb, a)| [rgb[0], rgb[1], rgb[2], a])
-                    .collect::<Vec<u8>>();
-
-                DynamicImage::ImageRgba8(
-                    ImageBuffer::from_raw(image.width, image.height, interleaved).unwrap(),
-                )
-            } else {
-                DynamicImage::ImageRgb8(
-                    ImageBuffer::from_raw(image.width, image.height, image.data.clone()).unwrap(),
-                )
-            }
-        } else {
-            DynamicImage::ImageRgb8(
-                ImageBuffer::from_raw(image.width, image.height, image.data.clone()).unwrap(),
-            )
-        };
-
-        self.0.push(image);
-    }
-
-    // Stencil images are grey-channel images that should be painted using the color stored in
-    // `paint`. For simplicity, we just store them as grey-channel for now.
-    fn draw_stencil_image(&mut self, stencil: LumaData, _: Affine, _: &Paint<'_>) {
-        self.0.push(DynamicImage::ImageLuma8(
-            ImageBuffer::from_raw(stencil.width, stencil.height, stencil.data.clone()).unwrap(),
-        ))
-    }
-
     fn pop_clip_path(&mut self) {}
 
     fn pop_transparency_group(&mut self) {}
+
+    fn draw_image(&mut self, image: Image<'_>, _: Affine) {
+        match image {
+            Image::Stencil(s) => {
+                s.with_stencil(|stencil, _paint| {
+                    // Stencil images are gray-channel images that should be painted using the color stored in
+                    // `paint`. For simplicity, we just store them as gray-channel for now.
+                    self.0.push(DynamicImage::ImageLuma8(
+                        ImageBuffer::from_raw(stencil.width, stencil.height, stencil.data.clone())
+                            .unwrap(),
+                    ))
+                })
+            }
+            Image::Raster(r) => {
+                // The alpha and RGB channels are provided separately.
+                r.with_rgba(|image, alpha| {
+                    let image = if let Some(alpha) = alpha {
+                        // This is not complete, as it can in theory happen that the alpha channel has a different
+                        // dimension than the RGB channel. We ignore this edge case for this example.
+                        if alpha.width == image.width && alpha.height == image.height {
+                            let interleaved = image
+                                .data
+                                .chunks(3)
+                                .zip(alpha.data)
+                                .flat_map(|(rgb, a)| [rgb[0], rgb[1], rgb[2], a])
+                                .collect::<Vec<u8>>();
+
+                            DynamicImage::ImageRgba8(
+                                ImageBuffer::from_raw(image.width, image.height, interleaved)
+                                    .unwrap(),
+                            )
+                        } else {
+                            DynamicImage::ImageRgb8(
+                                ImageBuffer::from_raw(
+                                    image.width,
+                                    image.height,
+                                    image.data.clone(),
+                                )
+                                .unwrap(),
+                            )
+                        }
+                    } else {
+                        DynamicImage::ImageRgb8(
+                            ImageBuffer::from_raw(image.width, image.height, image.data.clone())
+                                .unwrap(),
+                        )
+                    };
+
+                    self.0.push(image);
+                })
+            }
+        }
+    }
 }

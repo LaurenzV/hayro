@@ -9,7 +9,7 @@ use crate::interpret::state::State;
 use crate::shading::Shading;
 use crate::soft_mask::SoftMask;
 use crate::util::hash128;
-use crate::{CacheKey, ClipPath, GlyphDrawMode, PathDrawMode};
+use crate::{CacheKey, ClipPath, GlyphDrawMode, Image, PathDrawMode};
 use crate::{FillRule, InterpreterSettings, LumaData, Paint, RgbData, interpret};
 use hayro_syntax::content::TypedIter;
 use hayro_syntax::object::Dict;
@@ -295,11 +295,11 @@ impl<'a, T: Device<'a>> Device<'a> for StencilPatternDevice<'a, '_, T> {
             .draw_glyph(g, transform, glyph_transform, p, draw_mode);
     }
 
-    fn draw_rgba_image(&mut self, _: RgbData, _: Affine, _: Option<LumaData>) {}
-
-    fn draw_stencil_image(&mut self, stencil: LumaData, transform: Affine, _: &Paint) {
-        self.inner
-            .draw_stencil_image(stencil, transform, &self.paint);
+    fn draw_image(&mut self, image: Image<'_>, transform: Affine) {
+        match &image {
+            Image::Stencil(_) => self.inner.draw_image(image, transform),
+            _ => {}
+        }
     }
 
     fn pop_clip_path(&mut self) {

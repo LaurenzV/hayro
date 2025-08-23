@@ -267,49 +267,51 @@ impl Renderer {
 }
 
 impl Device<'_> for Renderer {
-    fn draw_rgba_image(
-        &mut self,
-        image: hayro_interpret::RgbData,
-        transform: Affine,
-        alpha: Option<hayro_interpret::LumaData>,
-    ) {
-        self.ctx.set_transform(transform);
-        if let Some(ref mask) = self.cur_mask {
-            self.ctx.push_layer(None, None, Some(mask.clone()));
+    fn draw_image(&mut self, image: hayro_interpret::Image<'_>, transform: Affine) {
+        match image {
+            hayro_interpret::Image::Stencil(s) => {
+                s.with_stencil(|stencil, paint| {
+                    self.ctx.set_transform(transform);
+                    self.ctx.set_anti_aliasing(false);
+                    self.ctx.push_layer(None, Some(1.0), self.cur_mask.clone());
+                    let old_rule = self.ctx.fill_rule;
+                    self.ctx.set_fill_rule(FillRule::NonZero);
+                    let converted_paint = self.convert_paint(paint, false);
+                    self.ctx.fill_rect(
+                        &Rect::new(0.0, 0.0, stencil.width as f64, stencil.height as f64),
+                        converted_paint,
+                        None,
+                    );
+                    let rgb_data = RgbData {
+                        data: vec![0; stencil.width as usize * stencil.height as usize * 3],
+                        width: stencil.width,
+                        height: stencil.height,
+                        interpolate: stencil.interpolate,
+                    };
+                    self.draw_image(rgb_data, Some(stencil), true);
+                    self.ctx.pop_layer();
+
+                    self.ctx.set_fill_rule(old_rule);
+                    self.ctx.set_anti_aliasing(true);
+                });
+            }
+            hayro_interpret::Image::Raster(r) => {
+                r.with_rgba(|rgb, alpha| {
+                    self.ctx.set_transform(transform);
+                    if let Some(ref mask) = self.cur_mask {
+                        self.ctx.push_layer(None, None, Some(mask.clone()));
+                    }
+
+                    self.ctx.set_anti_aliasing(false);
+                    self.draw_image(rgb, alpha, false);
+                    self.ctx.set_anti_aliasing(true);
+
+                    if self.cur_mask.is_some() {
+                        self.ctx.pop_layer();
+                    }
+                });
+            }
         }
-
-        self.ctx.set_anti_aliasing(false);
-        self.draw_image(image, alpha, false);
-        self.ctx.set_anti_aliasing(true);
-
-        if self.cur_mask.is_some() {
-            self.ctx.pop_layer();
-        }
-    }
-
-    fn draw_stencil_image(&mut self, stencil: LumaData, transform: Affine, paint: &Paint) {
-        self.ctx.set_transform(transform);
-        self.ctx.set_anti_aliasing(false);
-        self.ctx.push_layer(None, Some(1.0), self.cur_mask.clone());
-        let old_rule = self.ctx.fill_rule;
-        self.ctx.set_fill_rule(FillRule::NonZero);
-        let converted_paint = self.convert_paint(paint, false);
-        self.ctx.fill_rect(
-            &Rect::new(0.0, 0.0, stencil.width as f64, stencil.height as f64),
-            converted_paint,
-            None,
-        );
-        let rgb_data = RgbData {
-            data: vec![0; stencil.width as usize * stencil.height as usize * 3],
-            width: stencil.width,
-            height: stencil.height,
-            interpolate: stencil.interpolate,
-        };
-        self.draw_image(rgb_data, Some(stencil), true);
-        self.ctx.pop_layer();
-
-        self.ctx.set_fill_rule(old_rule);
-        self.ctx.set_anti_aliasing(true);
     }
 
     fn push_clip_path(&mut self, clip_path: &ClipPath) {

@@ -1,4 +1,3 @@
-use crate::Paint;
 use crate::context::Context;
 use crate::device::Device;
 use crate::font::glyph_simulator::GlyphSimulator;
@@ -7,6 +6,7 @@ use crate::font::{Encoding, Glyph, Type3Glyph, UNITS_PER_EM};
 use crate::interpret;
 use crate::soft_mask::SoftMask;
 use crate::{CacheKey, ClipPath, GlyphDrawMode, PathDrawMode};
+use crate::{Image, Paint};
 use crate::{LumaData, RgbData};
 use hayro_syntax::content::TypedIter;
 use hayro_syntax::content::ops::TypedInstruction;
@@ -196,16 +196,16 @@ impl<'a, T: Device<'a>> Device<'a> for Type3ShapeGlyphDevice<'a, '_, T> {
             .draw_glyph(g, transform, glyph_transform, p, draw_mode);
     }
 
-    fn draw_rgba_image(&mut self, _: RgbData, _: Affine, _: Option<LumaData>) {}
-
-    fn draw_stencil_image(&mut self, stencil: LumaData, transform: Affine, _: &Paint) {
-        self.inner
-            .draw_stencil_image(stencil, transform, &self.paint);
-    }
-
     fn pop_clip_path(&mut self) {
         self.inner.pop_clip_path()
     }
 
     fn pop_transparency_group(&mut self) {}
+
+    fn draw_image(&mut self, image: Image<'_>, transform: Affine) {
+        match &image {
+            Image::Stencil(s) => self.inner.draw_image(image, transform),
+            _ => {}
+        }
+    }
 }

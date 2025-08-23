@@ -24,27 +24,20 @@ impl CacheKey for ClipPath {
 
 /// A stencil image.
 pub struct StencilImage<'a> {
-    image_xobject: ImageXObject<'a>,
-    paint: Paint<'a>,
+    pub(crate) image_xobject: ImageXObject<'a>,
+    pub(crate) paint: Paint<'a>,
 }
 
 impl<'a> StencilImage<'a> {
-    /// Return the stencil data of the image.
-    ///
-    /// Returns `None` if the data of the stencil image was invalid, in which case
-    /// it should be ignored.
-    ///
-    /// The reason this can happen is that `hayro` can't validate the data without actually decoding
-    /// it, which would be expensive.
-    pub fn stencil_data(&self) -> Option<LumaData> {
-        self.image_xobject
+    /// Perform some operation with the stencil data of the image.
+    pub fn with_stencil(&self, func: impl FnOnce(LumaData, &Paint<'a>)) {
+        if let Some(luma) = self
+            .image_xobject
             .decoded_object()
             .and_then(|d| d.luma_data)
-    }
-
-    /// Return the paint the stencil image should be painted with.
-    pub fn paint(&self) -> &Paint<'a> {
-        &self.paint
+        {
+            func(luma, &self.paint);
+        }
     }
 }
 
@@ -58,20 +51,14 @@ impl CacheKey for StencilImage<'_> {
 pub struct RasterImage<'a>(pub(crate) ImageXObject<'a>);
 
 impl RasterImage<'_> {
-    /// Returns the image as RGB.
-    ///
-    /// Returns `None` if the image couldn't be decoded because it is invalid, in which case
-    /// it should be ignored.
-    ///
-    /// The reason this can happen is that `hayro` can't validate the data without actually decoding
-    /// it, which would be expensive.
-    pub fn rgba_channels(&self) -> (Option<RgbData>, Option<LumaData>) {
+    /// Perform some operation with the RGB and alpha channel of the image.
+    pub fn with_rgba(&self, func: impl FnOnce(RgbData, Option<LumaData>)) {
         let decoded = self.0.decoded_object();
 
-        if let Some(decoded) = decoded {
-            (decoded.rgb_data, decoded.luma_data)
-        } else {
-            (None, None)
+        if let Some(decoded) = decoded
+            && let Some(rgb) = decoded.rgb_data
+        {
+            func(rgb, decoded.luma_data)
         }
     }
 }

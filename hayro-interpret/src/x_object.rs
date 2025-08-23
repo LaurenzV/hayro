@@ -3,7 +3,7 @@ use crate::color::ColorSpace;
 use crate::context::Context;
 use crate::device::Device;
 use crate::interpret::path::get_paint;
-use crate::{CacheKey, ClipPath, RasterImage, StencilImage};
+use crate::{CacheKey, ClipPath, Image, RasterImage, StencilImage};
 use crate::{FillRule, InterpreterWarning, WarningSinkFn, interpret};
 use crate::{LumaData, RgbData};
 use hayro_syntax::bit_reader::{BitReader, BitSize};
@@ -183,23 +183,22 @@ pub(crate) fn draw_image_xobject<'a, 'b>(
 
     device.set_soft_mask(None);
 
-    let decoded = x_object.decoded_object();
+    let image = if x_object.is_image_mask {
+        Image::Stencil(StencilImage {
+            image_xobject: x_object.clone(),
+            paint: get_paint(context, false),
+        })
+    } else {
+        Image::Raster(RasterImage(x_object.clone()))
+    };
 
-    if let Some(decoded) = decoded {
-        if x_object.is_image_mask {
-            if let Some(stencil) = decoded.luma_data {
-                device.draw_stencil_image(stencil, transform, &get_paint(context, false));
-            }
-        } else if let Some(rgb_image) = decoded.rgb_data {
-            device.draw_rgba_image(rgb_image, transform, decoded.luma_data);
-        }
-    }
-
+    device.draw_image(image, transform);
     device.pop_transparency_group();
 
     context.restore_state();
 }
 
+#[derive(Clone)]
 pub(crate) struct ImageXObject<'a> {
     width: u32,
     height: u32,

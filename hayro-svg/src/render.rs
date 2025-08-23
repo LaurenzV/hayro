@@ -3,8 +3,8 @@ use crate::{Id, hash128};
 use hayro_interpret::font::Glyph;
 use hayro_interpret::hayro_syntax::page::Page;
 use hayro_interpret::{
-    CacheKey, ClipPath, Device, FillRule, GlyphDrawMode, LumaData, Paint, PathDrawMode, RgbData,
-    SoftMask,
+    CacheKey, ClipPath, Device, FillRule, GlyphDrawMode, Image, LumaData, Paint, PathDrawMode,
+    RgbData, SoftMask,
 };
 use kurbo::{Affine, BezPath, PathEl};
 use std::collections::HashMap;
@@ -193,19 +193,26 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
 
     fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask<'a>>) {}
 
-    fn draw_rgba_image(&mut self, image: RgbData, transform: Affine, alpha: Option<LumaData>) {
-        Self::draw_rgba_image(self, image, transform, alpha);
-    }
-
-    fn draw_stencil_image(&mut self, stencil: LumaData, transform: Affine, paint: &Paint) {
-        Self::draw_stencil_image(self, stencil, transform, paint);
-    }
-
     fn pop_clip_path(&mut self) {
         self.xml.end_element();
     }
 
     fn pop_transparency_group(&mut self) {}
+
+    fn draw_image(&mut self, image: Image<'_>, transform: Affine) {
+        match image {
+            Image::Stencil(s) => {
+                s.with_stencil(|s, paint| {
+                    Self::draw_stencil_image(self, s, transform, paint);
+                });
+            }
+            Image::Raster(r) => {
+                r.with_rgba(|rgb, alpha| {
+                    Self::draw_rgba_image(self, rgb, transform, alpha);
+                });
+            }
+        }
+    }
 }
 
 impl<'a> SvgRenderer<'a> {
