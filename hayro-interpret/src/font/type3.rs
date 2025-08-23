@@ -202,12 +202,9 @@ impl<'a, T: Device<'a>> Device<'a> for Type3ShapeGlyphDevice<'a, '_, T> {
     fn pop_transparency_group(&mut self) {}
 
     fn draw_image(&mut self, image: Image<'_>, transform: Affine) {
-        match image {
-            Image::Stencil(mut s) => {
-                s.paint = self.paint.clone();
-                self.inner.draw_image(Image::Stencil(s), transform)
-            }
-            _ => {}
+        if let Image::Stencil(mut s) = image {
+            s.paint = self.paint.clone();
+            self.inner.draw_image(Image::Stencil(s), transform)
         }
     }
 }

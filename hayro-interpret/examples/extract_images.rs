@@ -5,8 +5,8 @@
 
 use hayro_interpret::font::Glyph;
 use hayro_interpret::{
-    ClipPath, Context, Device, GlyphDrawMode, Image, InterpreterSettings, Paint,
-    PathDrawMode, SoftMask, interpret_page,
+    ClipPath, Context, Device, GlyphDrawMode, Image, InterpreterSettings, Paint, PathDrawMode,
+    SoftMask, interpret_page,
 };
 use hayro_syntax::Pdf;
 use image::{DynamicImage, ImageBuffer};

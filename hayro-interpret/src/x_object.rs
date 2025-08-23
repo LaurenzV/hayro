@@ -412,9 +412,7 @@ impl DecodedImageXObject {
                     if let Some(obj) =
                         ImageXObject::new(&mask, |_| None, &obj.warning_sink, &obj.cache, true)
                     {
-                        obj.decoded_object()
-                            .and_then(|d| d.luma_data)
-                            .map(|d| d)
+                        obj.decoded_object().and_then(|d| d.luma_data)
                     } else {
                         None
                     }
