@@ -296,8 +296,11 @@ impl<'a, T: Device<'a>> Device<'a> for StencilPatternDevice<'a, '_, T> {
     }
 
     fn draw_image(&mut self, image: Image<'_>, transform: Affine) {
-        match &image {
-            Image::Stencil(_) => self.inner.draw_image(image, transform),
+        match image {
+            Image::Stencil(mut s) => {
+                s.paint = self.paint.clone();
+                self.inner.draw_image(Image::Stencil(s), transform)
+            }
             _ => {}
         }
     }
