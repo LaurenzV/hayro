@@ -11,7 +11,7 @@ impl SvgRenderer<'_> {
         image: &DynamicImage,
         interpolate: bool,
         id: Option<Id>,
-        transform: Option<Affine>,
+        transform: Affine,
     ) {
         let scaling = if interpolate { "smooth" } else { "pixelated" };
 
