@@ -43,41 +43,43 @@ impl<'a> SvgRenderer<'a> {
 
                 (color, alpha)
             }
-            Paint::Pattern(p) => match p.as_ref() {
-                Pattern::Shading(s) => {
-                    let bbox = (path_transform * path).bounding_box();
-                    let shading_id = self.shadings.insert_with(s.cache_key(), || CachedShading {
-                        pattern: s.clone(),
-                        bbox,
-                    });
+            Paint::Pattern(p) => {
+                let id = match p.as_ref() {
+                    Pattern::Shading(s) => {
+                        let bbox = (path_transform * path).bounding_box();
+                        let shading_id =
+                            self.shadings.insert_with(s.cache_key(), || CachedShading {
+                                pattern: s.clone(),
+                                bbox,
+                            });
 
-                    let inverse_transform = path_transform.inverse();
-                    let pattern_id = self.shading_patterns.insert_with(
-                        (s.clone(), inverse_transform).cache_key(),
-                        || CachedShadingPattern {
-                            transform: inverse_transform,
-                            bbox,
-                            shading: shading_id,
-                        },
-                    );
+                        let inverse_transform = path_transform.inverse();
 
-                    (format!("url(#{pattern_id})"), 1.0)
-                }
-                Pattern::Tiling(t) => {
-                    let inverse_transform = path_transform.inverse();
-                    let pattern = *t.clone();
+                        self.shading_patterns.insert_with(
+                            (s.clone(), inverse_transform).cache_key(),
+                            || CachedShadingPattern {
+                                transform: inverse_transform,
+                                bbox,
+                                shading: shading_id,
+                            },
+                        )
+                    }
+                    Pattern::Tiling(t) => {
+                        let inverse_transform = path_transform.inverse();
+                        let pattern = *t.clone();
 
-                    let pattern_id = self.tiling_patterns.insert_with(
-                        (pattern.clone(), inverse_transform).cache_key(),
-                        || CachedTilingPattern {
-                            transform: inverse_transform,
-                            tiling_pattern: pattern,
-                        },
-                    );
+                        self.tiling_patterns.insert_with(
+                            (pattern.clone(), inverse_transform).cache_key(),
+                            || CachedTilingPattern {
+                                transform: inverse_transform,
+                                tiling_pattern: pattern,
+                            },
+                        )
+                    }
+                };
 
-                    (format!("url(#{pattern_id})"), 1.0)
-                }
-            },
+                (format!("url(#{id})"), 1.0)
+            }
         };
 
         if is_stroke {
