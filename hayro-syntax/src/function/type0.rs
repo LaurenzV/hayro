@@ -101,7 +101,7 @@ impl Type0 {
             self.range.len(),
         );
 
-        let interpolated = interpolator.interpolate(&self.table);
+        let interpolated = interpolator.interpolate(&self.table)?;
 
         let mut out = interpolated
             .iter()
@@ -152,7 +152,7 @@ impl Interpolator {
         }
     }
 
-    fn interpolate(&self, table: &HashMap<Key, IntVec>) -> FloatVec {
+    fn interpolate(&self, table: &HashMap<Key, IntVec>) -> Option<FloatVec> {
         self.interpolate_inner(smallvec![0; self.input.len()], 0, table)
     }
 
@@ -161,22 +161,22 @@ impl Interpolator {
         mut coord: IntVec,
         step: usize,
         table: &HashMap<Key, IntVec>,
-    ) -> FloatVec {
+    ) -> Option<FloatVec> {
         if step == self.input.len() - 1 {
             if self.in_prev[step] == self.in_next[step] {
                 coord[step] = self.in_prev[step];
-                table
-                    .get(&Key::from_raw(&self.sizes, &coord))
-                    .unwrap()
+                
+                Some(table
+                    .get(&Key::from_raw(&self.sizes, &coord))?
                     .clone()
                     .iter()
                     .map(|n| *n as f32)
-                    .collect()
+                    .collect())
             } else {
                 coord[step] = self.in_prev[step];
-                let val1 = table.get(&Key::from_raw(&self.sizes, &coord)).unwrap();
+                let val1 = table.get(&Key::from_raw(&self.sizes, &coord))?;
                 coord[step] = self.in_next[step];
-                let val2 = table.get(&Key::from_raw(&self.sizes, &coord)).unwrap();
+                let val2 = table.get(&Key::from_raw(&self.sizes, &coord))?;
 
                 let mut out = smallvec![0.0; self.out_len];
 
@@ -190,16 +190,16 @@ impl Interpolator {
                     )
                 }
 
-                out
+                Some(out)
             }
         } else if self.in_prev[step] == self.in_next[step] {
             coord[step] = self.in_prev[step];
             self.interpolate_inner(coord, step + 1, table)
         } else {
             coord[step] = self.in_prev[step];
-            let val1 = self.interpolate_inner(coord.clone(), step + 1, table);
+            let val1 = self.interpolate_inner(coord.clone(), step + 1, table)?;
             coord[step] = self.in_next[step];
-            let val2 = self.interpolate_inner(coord, step + 1, table);
+            let val2 = self.interpolate_inner(coord, step + 1, table)?;
 
             let mut out = smallvec![0.0; self.out_len];
 
@@ -213,7 +213,7 @@ impl Interpolator {
                 )
             }
 
-            out
+            Some(out)
         }
     }
 }
