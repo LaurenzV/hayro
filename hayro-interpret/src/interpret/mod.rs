@@ -226,41 +226,49 @@ pub fn interpret<'a, 'b>(
                     smallvec![s.0.as_f32(), s.1.as_f32(), s.2.as_f32(), s.3.as_f32()];
             }
             TypedInstruction::LineTo(m) => {
-                let last_point = *context.last_point();
-                let mut p = Point::new(m.0.as_f64(), m.1.as_f64());
-                *(context.last_point_mut()) = p;
-                if last_point == p {
-                    // Add a small delta so that zero width lines can still have a round stroke.
-                    p.x += 0.0001;
-                }
+                if !context.path().elements().is_empty() {
+                    let last_point = *context.last_point();
+                    let mut p = Point::new(m.0.as_f64(), m.1.as_f64());
+                    *(context.last_point_mut()) = p;
+                    if last_point == p {
+                        // Add a small delta so that zero width lines can still have a round stroke.
+                        p.x += 0.0001;
+                    }
 
-                context.path_mut().line_to(p);
+                    context.path_mut().line_to(p);
+                }
             }
             TypedInstruction::CubicTo(c) => {
-                let p1 = Point::new(c.0.as_f64(), c.1.as_f64());
-                let p2 = Point::new(c.2.as_f64(), c.3.as_f64());
-                let p3 = Point::new(c.4.as_f64(), c.5.as_f64());
+                if !context.path().elements().is_empty() {
+                    let p1 = Point::new(c.0.as_f64(), c.1.as_f64());
+                    let p2 = Point::new(c.2.as_f64(), c.3.as_f64());
+                    let p3 = Point::new(c.4.as_f64(), c.5.as_f64());
 
-                *(context.last_point_mut()) = p3;
+                    *(context.last_point_mut()) = p3;
 
-                context.path_mut().curve_to(p1, p2, p3)
+                    context.path_mut().curve_to(p1, p2, p3)
+                }
             }
             TypedInstruction::CubicStartTo(c) => {
-                let p1 = *context.last_point();
-                let p2 = Point::new(c.0.as_f64(), c.1.as_f64());
-                let p3 = Point::new(c.2.as_f64(), c.3.as_f64());
+                if !context.path().elements().is_empty() {
+                    let p1 = *context.last_point();
+                    let p2 = Point::new(c.0.as_f64(), c.1.as_f64());
+                    let p3 = Point::new(c.2.as_f64(), c.3.as_f64());
 
-                *(context.last_point_mut()) = p3;
+                    *(context.last_point_mut()) = p3;
 
-                context.path_mut().curve_to(p1, p2, p3)
+                    context.path_mut().curve_to(p1, p2, p3)
+                }
             }
             TypedInstruction::CubicEndTo(c) => {
-                let p2 = Point::new(c.0.as_f64(), c.1.as_f64());
-                let p3 = Point::new(c.2.as_f64(), c.3.as_f64());
+                if !context.path().elements().is_empty() {
+                    let p2 = Point::new(c.0.as_f64(), c.1.as_f64());
+                    let p3 = Point::new(c.2.as_f64(), c.3.as_f64());
 
-                *(context.last_point_mut()) = p3;
+                    *(context.last_point_mut()) = p3;
 
-                context.path_mut().curve_to(p2, p3, p3)
+                    context.path_mut().curve_to(p2, p3, p3)
+                }
             }
             TypedInstruction::ClosePath(_) => {
                 close_path(context);
