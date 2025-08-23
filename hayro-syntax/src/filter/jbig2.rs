@@ -395,10 +395,10 @@ fn decode_integer(
     const MIN_INT_32: i32 = i32::MIN;
     const MAX_INT_32: i32 = i32::MAX;
 
-    if let Some(signed_value) = signed_value {
-        if (MIN_INT_32..=MAX_INT_32).contains(&signed_value) {
-            return Some(signed_value);
-        }
+    if let Some(signed_value) = signed_value
+        && (MIN_INT_32..=MAX_INT_32).contains(&signed_value)
+    {
+        return Some(signed_value);
     }
 
     None

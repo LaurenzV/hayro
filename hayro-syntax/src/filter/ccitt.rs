@@ -1334,11 +1334,11 @@ impl<'a> CCITTFaxDecoder<'a> {
         if self.eoblock {
             let code = self.look_bits(7);
 
-            if let Some(p) = TWO_DIM_TABLE.get(code as usize) {
-                if p[0] > 0 {
-                    self.eat_bits(p[0] as usize);
-                    return p[1];
-                }
+            if let Some(p) = TWO_DIM_TABLE.get(code as usize)
+                && p[0] > 0
+            {
+                self.eat_bits(p[0] as usize);
+                return p[1];
             }
         } else {
             let (found, value, matched) = self.find_table_code(1, 7, &TWO_DIM_TABLE, None);

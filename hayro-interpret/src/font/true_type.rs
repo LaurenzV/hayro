@@ -121,47 +121,49 @@ impl TrueTypeFont {
 
             if let Ok(cmap) = self.base_font.font_ref().cmap() {
                 for record in cmap.encoding_records() {
-                    if record.platform_id() == PlatformId::Windows && record.encoding_id() == 1 {
-                        if let Ok(subtable) = record.subtable(cmap.offset_data()) {
-                            let convert = |input: &str| {
-                                u32::from_str_radix(input, 16)
-                                    .ok()
-                                    .and_then(char::from_u32)
-                                    .map(|s| s.to_string())
-                            };
+                    if record.platform_id() == PlatformId::Windows
+                        && record.encoding_id() == 1
+                        && let Ok(subtable) = record.subtable(cmap.offset_data())
+                    {
+                        let convert = |input: &str| {
+                            u32::from_str_radix(input, 16)
+                                .ok()
+                                .and_then(char::from_u32)
+                                .map(|s| s.to_string())
+                        };
 
-                            glyph = glyph.or_else(|| {
-                                glyph_names::get(lookup)
-                                    .map(|n| n.to_string())
-                                    .or_else(|| {
-                                        lookup
-                                            .starts_with("uni")
-                                            .then(|| lookup.get(3..).and_then(convert))
-                                            .or_else(|| {
-                                                lookup
-                                                    .starts_with("u")
-                                                    .then(|| lookup.get(1..).and_then(convert))
-                                            })
-                                            .flatten()
-                                    })
-                                    .and_then(|n| n.chars().next())
-                                    .and_then(|c| subtable.map_codepoint(c))
-                                    .filter(|g| *g != GlyphId::NOTDEF)
-                            })
-                        }
+                        glyph = glyph.or_else(|| {
+                            glyph_names::get(lookup)
+                                .map(|n| n.to_string())
+                                .or_else(|| {
+                                    lookup
+                                        .starts_with("uni")
+                                        .then(|| lookup.get(3..).and_then(convert))
+                                        .or_else(|| {
+                                            lookup
+                                                .starts_with("u")
+                                                .then(|| lookup.get(1..).and_then(convert))
+                                        })
+                                        .flatten()
+                                })
+                                .and_then(|n| n.chars().next())
+                                .and_then(|c| subtable.map_codepoint(c))
+                                .filter(|g| *g != GlyphId::NOTDEF)
+                        })
                     }
                 }
 
                 for record in cmap.encoding_records() {
-                    if record.platform_id() == PlatformId::Macintosh && record.encoding_id() == 0 {
-                        if let Ok(subtable) = record.subtable(cmap.offset_data()) {
-                            glyph = glyph.or_else(|| {
-                                mac_os_roman::get_inverse(lookup)
-                                    .or_else(|| mac_roman::get_inverse(lookup))
-                                    .and_then(|c| subtable.map_codepoint(c))
-                                    .filter(|g| *g != GlyphId::NOTDEF)
-                            })
-                        }
+                    if record.platform_id() == PlatformId::Macintosh
+                        && record.encoding_id() == 0
+                        && let Ok(subtable) = record.subtable(cmap.offset_data())
+                    {
+                        glyph = glyph.or_else(|| {
+                            mac_os_roman::get_inverse(lookup)
+                                .or_else(|| mac_roman::get_inverse(lookup))
+                                .and_then(|c| subtable.map_codepoint(c))
+                                .filter(|g| *g != GlyphId::NOTDEF)
+                        })
                     }
                 }
             }
@@ -189,12 +191,11 @@ impl TrueTypeFont {
                     record.platform_id(),
                     PlatformId::Macintosh | PlatformId::Unicode
                 ) && record.encoding_id() == 0
+                    && let Ok(subtable) = record.subtable(cmap.offset_data())
                 {
-                    if let Ok(subtable) = record.subtable(cmap.offset_data()) {
-                        glyph = glyph
-                            .or_else(|| subtable.map_codepoint(code))
-                            .filter(|g| *g != GlyphId::NOTDEF)
-                    }
+                    glyph = glyph
+                        .or_else(|| subtable.map_codepoint(code))
+                        .filter(|g| *g != GlyphId::NOTDEF)
                 }
             }
         }

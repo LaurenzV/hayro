@@ -212,13 +212,13 @@ fn extract_pfb_segments(pfb: &[u8]) -> Option<Cow<'static, [u8]>> {
         }
 
         let ar = barr_list[i];
-        if i == type_list.len() - 1 && ar.len() < 600 {
-            if let Ok(s) = std::str::from_utf8(ar) {
-                if s.contains("cleartomark") {
-                    cleartomark_segment = Some(ar);
-                    continue;
-                }
-            }
+        if i == type_list.len() - 1
+            && ar.len() < 600
+            && let Ok(s) = std::str::from_utf8(ar)
+            && s.contains("cleartomark")
+        {
+            cleartomark_segment = Some(ar);
+            continue;
         }
         pfbdata.extend_from_slice(ar);
     }

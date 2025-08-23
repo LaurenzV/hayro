@@ -464,17 +464,17 @@ fn convert_rect(hy_rect: &hayro_syntax::object::Rect) -> pdf_writer::Rect {
 }
 
 trait ResourcesExt {
-    fn resources(&mut self) -> pdf_writer::writers::Resources;
+    fn resources(&mut self) -> pdf_writer::writers::Resources<'_>;
 }
 
 impl ResourcesExt for pdf_writer::writers::Page<'_> {
-    fn resources(&mut self) -> pdf_writer::writers::Resources {
+    fn resources(&mut self) -> pdf_writer::writers::Resources<'_> {
         Self::resources(self)
     }
 }
 
 impl ResourcesExt for pdf_writer::writers::FormXObject<'_> {
-    fn resources(&mut self) -> pdf_writer::writers::Resources {
+    fn resources(&mut self) -> pdf_writer::writers::Resources<'_> {
         Self::resources(self)
     }
 }

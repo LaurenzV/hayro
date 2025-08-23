@@ -634,11 +634,11 @@ fn _parse_char_string(
                 // Parse and remember the local subroutine for the current glyph.
                 // Since it's a pretty complex task, we're doing it only when
                 // a local subroutine is actually requested by the glyphs charstring.
-                if ctx.local_subrs.is_none() {
-                    if let FontKind::CID(ref cid) = ctx.metadata.kind {
-                        ctx.local_subrs =
-                            parse_cid_local_subrs(ctx.metadata.table_data, ctx.glyph_id, cid);
-                    }
+                if ctx.local_subrs.is_none()
+                    && let FontKind::CID(ref cid) = ctx.metadata.kind
+                {
+                    ctx.local_subrs =
+                        parse_cid_local_subrs(ctx.metadata.table_data, ctx.glyph_id, cid);
                 }
 
                 if let Some(local_subrs) = ctx.local_subrs {

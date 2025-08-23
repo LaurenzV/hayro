@@ -86,13 +86,13 @@ pub(crate) fn decrypt(data: &[u8], use_decryption: bool) -> Option<Vec<u8>> {
         }
 
         // Handle odd number of hex digits (pad with '0')
-        if i < hex_chars.len() {
-            if let Some(byte) = hex_to_byte(hex_chars[i], '0') {
-                if i >= 4 {
-                    out.push(decrypt(byte));
-                } else {
-                    decrypt(byte);
-                }
+        if i < hex_chars.len()
+            && let Some(byte) = hex_to_byte(hex_chars[i], '0')
+        {
+            if i >= 4 {
+                out.push(decrypt(byte));
+            } else {
+                decrypt(byte);
             }
         }
 

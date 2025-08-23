@@ -199,7 +199,7 @@ impl<'a> Page<'a> {
                 } else {
                     warn!("contents entry of page was neither stream nor array of streams");
 
-                    return None;
+                    None
                 }
             })
             .as_ref()

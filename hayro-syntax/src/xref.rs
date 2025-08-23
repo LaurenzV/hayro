@@ -78,20 +78,18 @@ fn fallback_xref_map(data: &[u8]) -> (XrefMap, Option<&[u8]>) {
                 trailer_dict = Some(dict.clone());
             }
 
-            if let Some(stream) = old_r.read::<Stream>(dummy_ctx) {
-                if stream.dict().get::<Name>(TYPE).as_deref() == Some(b"ObjStm")
-                    && let Some(data) = stream.decoded().ok()
-                    && let Some(last_obj_num) = last_obj_num
-                {
-                    if let Some(obj_stream) = ObjectStream::new(stream, &data, dummy_ctx) {
-                        for (idx, (obj_num, _)) in obj_stream.offsets.iter().enumerate() {
-                            let id = ObjectIdentifier::new(*obj_num as i32, 0);
-                            xref_map.insert(
-                                id,
-                                EntryType::ObjStream(last_obj_num.obj_num as u32, idx as u32),
-                            );
-                        }
-                    }
+            if let Some(stream) = old_r.read::<Stream>(dummy_ctx)
+                && stream.dict().get::<Name>(TYPE).as_deref() == Some(b"ObjStm")
+                && let Some(data) = stream.decoded().ok()
+                && let Some(last_obj_num) = last_obj_num
+                && let Some(obj_stream) = ObjectStream::new(stream, &data, dummy_ctx)
+            {
+                for (idx, (obj_num, _)) in obj_stream.offsets.iter().enumerate() {
+                    let id = ObjectIdentifier::new(*obj_num as i32, 0);
+                    xref_map.insert(
+                        id,
+                        EntryType::ObjStream(last_obj_num.obj_num as u32, idx as u32),
+                    );
                 }
             }
         } else {
