@@ -702,7 +702,7 @@ fn read_free_form_triangles(
             // Just read the parametric value.
             colors.push(interpolate_comp(
                 reader.read(bp_comp)?,
-                *decode.get(0)?,
+                *decode.first()?,
                 *decode.get(1)?,
             ));
         } else {
@@ -812,7 +812,7 @@ fn read_lattice_triangles(
             // Just read the parametric value.
             colors.push(interpolate_comp(
                 reader.read(bp_comp)?,
-                *decode.get(0)?,
+                *decode.first()?,
                 *decode.get(1)?,
             ));
         } else {
@@ -914,7 +914,7 @@ fn read_coons_patch_mesh(
         if has_function {
             colors.push(interpolate_comp(
                 reader.read(bp_comp)?,
-                *decode.get(0)?,
+                *decode.first()?,
                 *decode.get(1)?,
             ));
         } else {
@@ -1076,7 +1076,7 @@ fn read_tensor_product_patch_mesh(
         if has_function {
             colors.push(interpolate_comp(
                 reader.read(bp_comp)?,
-                *decode.get(0)?,
+                *decode.first()?,
                 *decode.get(1)?,
             ));
         } else {
