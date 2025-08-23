@@ -299,7 +299,7 @@ impl<'a> Stream<'a> {
 
                 self.read_byte();
             } else {
-                let tok = self.next_token().unwrap();
+                let tok = self.next_token()?;
                 if tok == b"end" {
                     break;
                 }
@@ -315,7 +315,7 @@ impl<'a> Stream<'a> {
                     break;
                 };
                 bin_len = len;
-                let tok = self.next_token().unwrap();
+                let tok = self.next_token()?;
 
                 if tok == RD || tok == RD_ALT {
                     self.read_byte();
@@ -333,7 +333,7 @@ impl<'a> Stream<'a> {
                 decrypted_bytes,
             );
 
-            let tok = self.next_token().unwrap();
+            let tok = self.next_token()?;
             if tok == ND || tok == ND_ALT {
             } else {
                 error!("invalid charstring in end, expected ND, found {tok:?}");

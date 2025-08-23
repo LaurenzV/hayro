@@ -91,6 +91,12 @@ fn issue203() {
 }
 
 #[test]
+fn issue207() {
+    let file = include_bytes!("../pdfs/crash/issue207.pdf");
+    render_fuzzed(file);
+}
+
+#[test]
 fn issue208() {
     let file = include_bytes!("../pdfs/crash/issue208.pdf");
     render_fuzzed(file);
