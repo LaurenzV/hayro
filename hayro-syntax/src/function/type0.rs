@@ -165,13 +165,15 @@ impl Interpolator {
         if step == self.input.len() - 1 {
             if self.in_prev[step] == self.in_next[step] {
                 coord[step] = self.in_prev[step];
-                
-                Some(table
-                    .get(&Key::from_raw(&self.sizes, &coord))?
-                    .clone()
-                    .iter()
-                    .map(|n| *n as f32)
-                    .collect())
+
+                Some(
+                    table
+                        .get(&Key::from_raw(&self.sizes, &coord))?
+                        .clone()
+                        .iter()
+                        .map(|n| *n as f32)
+                        .collect(),
+                )
             } else {
                 coord[step] = self.in_prev[step];
                 let val1 = table.get(&Key::from_raw(&self.sizes, &coord))?;
