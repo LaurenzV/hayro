@@ -1,3 +1,4 @@
+use crate::Id;
 use base64::Engine;
 use hayro_interpret::color::Color;
 use hayro_interpret::encode::EncodedShadingPattern;
@@ -8,14 +9,13 @@ use hayro_interpret::{
     CacheKey, ClipPath, Device, FillRule, LumaData, Paint, RgbData, SoftMask, StrokeProps,
 };
 use image::{DynamicImage, ImageBuffer, ImageFormat};
-use kurbo::{stroke, Affine, BezPath, PathEl, Point, Rect, Shape, Vec2};
+use kurbo::{Affine, BezPath, PathEl, Point, Rect, Shape, Vec2, stroke};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::io::{Cursor, Write};
 use std::marker::PhantomData;
 use std::{fmt, io};
 use xmlwriter::{Options, XmlWriter};
-use crate::Id;
 
 struct CachedClipPath {
     path: BezPath,

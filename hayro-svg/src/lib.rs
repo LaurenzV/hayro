@@ -1,13 +1,13 @@
-use std::collections::HashMap;
-use std::fmt;
-use std::fmt::{Display, Formatter};
 use crate::renderer::SvgRenderer;
 use hayro_interpret::hayro_syntax::page::Page;
 use hayro_interpret::{Context, InterpreterSettings, interpret_page};
 use kurbo::Rect;
+use std::collections::HashMap;
+use std::fmt;
+use std::fmt::{Display, Formatter};
 
-mod renderer;
 pub(crate) mod image;
+mod renderer;
 
 pub fn convert(page: &Page, interpreter_settings: &InterpreterSettings) -> String {
     let mut state = Context::new(

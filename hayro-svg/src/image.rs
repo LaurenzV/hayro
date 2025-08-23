@@ -1,9 +1,9 @@
-use std::io::Cursor;
+use crate::Id;
+use crate::renderer::SvgRenderer;
 use base64::Engine;
 use image::{DynamicImage, ImageFormat};
 use kurbo::Affine;
-use crate::Id;
-use crate::renderer::SvgRenderer;
+use std::io::Cursor;
 
 impl SvgRenderer<'_> {
     pub(crate) fn write_image(
