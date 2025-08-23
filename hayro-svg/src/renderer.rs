@@ -40,16 +40,16 @@ struct CachedShading {
 }
 
 pub(crate) struct SvgRenderer<'a> {
-    xml: XmlWriter,
-    transform: Affine,
-    fill_rule: FillRule,
-    stroke_props: StrokeProps,
-    glyphs: Deduplicator<BezPath>,
-    clip_paths: Deduplicator<CachedClipPath>,
-    shadings: Deduplicator<CachedShading>,
-    shading_patterns: Deduplicator<CachedShadingPattern>,
-    tiling_patterns: Deduplicator<CachedTilingPattern<'a>>,
-    phantom_data: PhantomData<&'a ()>,
+    pub(crate) xml: XmlWriter,
+    pub(crate) transform: Affine,
+    pub(crate) fill_rule: FillRule,
+    pub(crate) stroke_props: StrokeProps,
+    pub(crate) glyphs: Deduplicator<BezPath>,
+    pub(crate) clip_paths: Deduplicator<CachedClipPath>,
+    pub(crate) shadings: Deduplicator<CachedShading>,
+    pub(crate) shading_patterns: Deduplicator<CachedShadingPattern>,
+    pub(crate) tiling_patterns: Deduplicator<CachedTilingPattern<'a>>,
+    pub(crate) phantom_data: PhantomData<&'a ()>,
 }
 
 impl<'a> SvgRenderer<'a> {
@@ -147,7 +147,7 @@ impl<'a> SvgRenderer<'a> {
         }
     }
 
-    fn write_transform(&mut self, transform: Option<Affine>) {
+    pub(crate) fn write_transform(&mut self, transform: Option<Affine>) {
         let transform = transform.unwrap_or(self.transform);
         let is_identity = {
             let c = transform.as_coeffs();
@@ -160,31 +160,6 @@ impl<'a> SvgRenderer<'a> {
                 &format!("matrix({})", &convert_transform(&transform)),
             );
         }
-    }
-
-    fn write_image(
-        &mut self,
-        image: &DynamicImage,
-        interpolate: bool,
-        id: Option<Id>,
-        transform: Option<Affine>,
-    ) {
-        let scaling = if interpolate { "smooth" } else { "pixelated" };
-
-        let base64 = convert_image_to_base64_url(image);
-
-        self.xml.start_element("image");
-        if let Some(id) = id {
-            self.xml.write_attribute("id", &id);
-        }
-        self.write_transform(transform);
-        self.xml.write_attribute("xlink:href", &base64);
-        self.xml.write_attribute("width", &image.width());
-        self.xml.write_attribute("height", &image.height());
-        self.xml.write_attribute("preserveAspectRatio", "none");
-        self.xml
-            .write_attribute("style", &format_args!("image-rendering: {scaling}"));
-        self.xml.end_element();
     }
 
     fn write_glyph_defs(&mut self) {
@@ -556,18 +531,6 @@ fn convert_color(color: &Color) -> (String, f32) {
     let alpha = rgba8[3] as f32 / 255.0;
 
     (color, alpha)
-}
-
-pub fn convert_image_to_base64_url(image: &DynamicImage) -> String {
-    let mut png_buffer = Vec::new();
-    let mut cursor = Cursor::new(&mut png_buffer);
-    image.write_to(&mut cursor, ImageFormat::Png).unwrap();
-
-    let mut url = "data:image/png;base64,".to_string();
-    let data = base64::engine::general_purpose::STANDARD.encode(png_buffer);
-    url.push_str(&data);
-
-    url
 }
 
 #[derive(Debug, Clone)]

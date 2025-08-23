@@ -7,6 +7,7 @@ use hayro_interpret::{Context, InterpreterSettings, interpret_page};
 use kurbo::Rect;
 
 mod renderer;
+pub(crate) mod image;
 
 pub fn convert(page: &Page, interpreter_settings: &InterpreterSettings) -> String {
     let mut state = Context::new(
