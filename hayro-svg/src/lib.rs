@@ -1,4 +1,4 @@
-use crate::renderer::SvgRenderer;
+use crate::render::SvgRenderer;
 use hayro_interpret::hayro_syntax::page::Page;
 use hayro_interpret::{Context, InterpreterSettings, interpret_page};
 use kurbo::Rect;
@@ -6,7 +6,7 @@ use std::fmt;
 use std::fmt::{Display, Formatter};
 
 pub(crate) mod image;
-mod renderer;
+mod render;
 
 pub fn convert(page: &Page, interpreter_settings: &InterpreterSettings) -> String {
     let mut state = Context::new(

@@ -1,5 +1,5 @@
 use crate::Id;
-use crate::renderer::SvgRenderer;
+use crate::render::SvgRenderer;
 use base64::Engine;
 use image::{DynamicImage, ImageBuffer, ImageFormat};
 use kurbo::Affine;
