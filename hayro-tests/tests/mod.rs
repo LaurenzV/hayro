@@ -15,7 +15,7 @@ use std::sync::Arc;
 #[rustfmt::skip]
 #[allow(non_snake_case)]
 mod render;
-mod fuzz;
+mod crash;
 mod svg;
 mod write;
 
@@ -49,7 +49,7 @@ pub fn check_render(name: &str, snapshot_path: PathBuf, document: RenderedDocume
     } else if name.starts_with("pdfbox_") {
         snapshot_path.join("pdfbox")
     } else {
-        snapshot_path.clone()
+        snapshot_path.join("custom")
     };
 
     // Ensure the snapshots subdirectory exists

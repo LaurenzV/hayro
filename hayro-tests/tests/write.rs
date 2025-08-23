@@ -9,7 +9,7 @@ use std::sync::Arc;
 fn write_page_basic_1() {
     run_write_test(
         "write_page_basic_1",
-        "pdfs/clip_path_evenodd.pdf",
+        "pdfs/custom/clip_path_evenodd.pdf",
         &[0],
         Renderer::Pdfium,
         true,
@@ -18,7 +18,7 @@ fn write_page_basic_1() {
 
 #[test]
 fn dont_cache_page_references() {
-    let hayro_pdf = load_pdf("pdfs/clip_path_evenodd.pdf");
+    let hayro_pdf = load_pdf("pdfs/custom/clip_path_evenodd.pdf");
     let mut next_ref = Ref::new(1);
     let extracted = hayro_write::extract(
         &hayro_pdf,
@@ -39,7 +39,7 @@ fn dont_cache_page_references() {
 fn write_page_basic_2() {
     run_write_test(
         "write_page_basic_2",
-        "pdfs/integration_coat_of_arms.pdf",
+        "pdfs/custom/integration_coat_of_arms.pdf",
         &[0],
         Renderer::Mupdf,
         true,
@@ -50,7 +50,7 @@ fn write_page_basic_2() {
 fn write_page_basic_with_xobject() {
     run_write_test(
         "write_page_basic_with_xobject",
-        "pdfs/xobject_1.pdf",
+        "pdfs/custom/xobject_1.pdf",
         &[0],
         Renderer::Pdfium,
         true,
@@ -61,7 +61,7 @@ fn write_page_basic_with_xobject() {
 fn write_page_basic_with_text() {
     run_write_test(
         "write_page_basic_with_text",
-        "pdfs/pdftc_900k_0156_page_2.pdf",
+        "pdfs/custom/pdftc_900k_0156_page_2.pdf",
         &[0],
         Renderer::Pdfium,
         true,
@@ -83,7 +83,7 @@ fn write_page_with_shading() {
 fn write_page_duplicated_page() {
     run_write_test(
         "write_page_duplicated_page",
-        "pdfs/integration_diagram.pdf",
+        "pdfs/custom/integration_diagram.pdf",
         &[0, 0],
         Renderer::Pdfium,
         true,
@@ -94,7 +94,7 @@ fn write_page_duplicated_page() {
 fn write_page_mediabox_1() {
     run_write_test(
         "write_page_mediabox_1",
-        "pdfs/page_media_box_bottom_left.pdf",
+        "pdfs/custom/page_media_box_bottom_left.pdf",
         &[0],
         Renderer::Pdfium,
         true,
@@ -105,7 +105,7 @@ fn write_page_mediabox_1() {
 fn write_page_rotation() {
     run_write_test(
         "write_page_rotation",
-        "pdfs/page_rotation_270.pdf",
+        "pdfs/custom/page_rotation_270.pdf",
         &[0],
         Renderer::Pdfium,
         true,
@@ -187,7 +187,7 @@ fn write_page_with_properties() {
 fn write_xobject_basic_1() {
     run_write_test(
         "write_xobject_basic_1",
-        "pdfs/clip_path_evenodd.pdf",
+        "pdfs/custom/clip_path_evenodd.pdf",
         &[0],
         Renderer::Pdfium,
         false,
@@ -198,7 +198,7 @@ fn write_xobject_basic_1() {
 fn write_xobject_basic_2() {
     run_write_test(
         "write_xobject_basic_2",
-        "pdfs/integration_coat_of_arms.pdf",
+        "pdfs/custom/integration_coat_of_arms.pdf",
         &[0],
         Renderer::Mupdf,
         false,
@@ -209,7 +209,7 @@ fn write_xobject_basic_2() {
 fn write_xobject_mediabox_1() {
     run_write_test(
         "write_xobject_mediabox_1",
-        "pdfs/page_media_box_bottom_left.pdf",
+        "pdfs/custom/page_media_box_bottom_left.pdf",
         &[0],
         Renderer::Pdfium,
         false,
@@ -220,7 +220,7 @@ fn write_xobject_mediabox_1() {
 fn write_xobject_mediabox_2() {
     run_write_test(
         "write_xobject_mediabox_2",
-        "pdfs/page_media_box_top_left.pdf",
+        "pdfs/custom/page_media_box_top_left.pdf",
         &[0],
         Renderer::Pdfium,
         false,
@@ -231,7 +231,7 @@ fn write_xobject_mediabox_2() {
 fn write_xobject_mediabox_3() {
     run_write_test(
         "write_xobject_mediabox_3",
-        "pdfs/page_media_box_zoomed_out.pdf",
+        "pdfs/custom/page_media_box_zoomed_out.pdf",
         &[0],
         Renderer::Pdfium,
         false,
@@ -242,7 +242,7 @@ fn write_xobject_mediabox_3() {
 fn write_xobject_rotation_none() {
     run_write_test(
         "write_xobject_rotation_none",
-        "pdfs/page_rotation_none.pdf",
+        "pdfs/custom/page_rotation_none.pdf",
         &[0],
         Renderer::Pdfium,
         false,
@@ -253,7 +253,7 @@ fn write_xobject_rotation_none() {
 fn write_xobject_rotation_90() {
     run_write_test(
         "write_xobject_rotation_90",
-        "pdfs/page_rotation_90.pdf",
+        "pdfs/custom/page_rotation_90.pdf",
         &[0],
         Renderer::Pdfium,
         false,
@@ -264,7 +264,7 @@ fn write_xobject_rotation_90() {
 fn write_xobject_rotation_180() {
     run_write_test(
         "write_xobject_rotation_180",
-        "pdfs/page_rotation_180.pdf",
+        "pdfs/custom/page_rotation_180.pdf",
         &[0],
         Renderer::Pdfium,
         false,
@@ -275,7 +275,7 @@ fn write_xobject_rotation_180() {
 fn write_xobject_rotation_270() {
     run_write_test(
         "write_xobject_rotation_270",
-        "pdfs/page_rotation_270.pdf",
+        "pdfs/custom/page_rotation_270.pdf",
         &[0],
         Renderer::Pdfium,
         false,

@@ -904,7 +904,7 @@ mod tests {
     use crate::object::string;
     use crate::reader::{Reader, ReaderContext};
 
-    fn dict_impl(data: &[u8]) -> Option<Dict> {
+    fn dict_impl(data: &[u8]) -> Option<Dict<'_>> {
         Reader::new(data).read_with_context::<Dict>(ReaderContext::dummy())
     }
 

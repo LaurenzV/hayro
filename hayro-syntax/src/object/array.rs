@@ -312,13 +312,13 @@ mod tests {
     use crate::reader::{Reader, ReaderContext};
     use crate::xref::XRef;
 
-    fn array_impl(data: &[u8]) -> Option<Vec<Object>> {
+    fn array_impl(data: &[u8]) -> Option<Vec<Object<'_>>> {
         Reader::new(data)
             .read_with_context::<Array>(ReaderContext::new(XRef::dummy(), false))
             .map(|a| a.iter::<Object>().collect::<Vec<_>>())
     }
 
-    fn array_ref_impl(data: &[u8]) -> Option<Vec<MaybeRef<Object>>> {
+    fn array_ref_impl(data: &[u8]) -> Option<Vec<MaybeRef<Object<'_>>>> {
         Reader::new(data)
             .read_with_context::<Array>(ReaderContext::new(XRef::dummy(), false))
             .map(|a| a.raw_iter().collect::<Vec<_>>())

@@ -23,7 +23,7 @@ use std::sync::Arc;
 
 // First load the data that constitutes the PDF file.
 let data = std::fs::read(
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../hayro-tests/pdfs/text_with_rise.pdf"),
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../hayro-tests/pdfs/custom/text_with_rise.pdf"),
 )
 .unwrap();
 
