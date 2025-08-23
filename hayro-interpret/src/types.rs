@@ -55,6 +55,24 @@ pub enum Paint<'a> {
     Pattern(Box<Pattern<'a>>),
 }
 
+/// The draw mode that should be used for a path.
+#[derive(Clone, Debug)]
+pub enum PathDrawMode {
+    /// Draw using a fill.
+    Fill(FillRule),
+    /// Draw using a stroke.
+    Stroke(StrokeProps),
+}
+
+/// The draw mode that should be used for a glyph.
+#[derive(Clone, Debug)]
+pub enum GlyphDrawMode {
+    /// Draw using a fill.
+    Fill,
+    /// Draw using a stroke.
+    Stroke(StrokeProps),
+}
+
 /// Stroke properties.
 #[derive(Clone, Debug)]
 pub struct StrokeProps {

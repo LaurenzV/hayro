@@ -9,8 +9,8 @@ use crate::interpret::state::State;
 use crate::shading::Shading;
 use crate::soft_mask::SoftMask;
 use crate::util::hash128;
-use crate::{CacheKey, ClipPath};
-use crate::{FillRule, InterpreterSettings, LumaData, Paint, RgbData, StrokeProps, interpret};
+use crate::{CacheKey, ClipPath, GlyphDrawMode, PathDrawMode};
+use crate::{FillRule, InterpreterSettings, LumaData, Paint, RgbData, interpret};
 use hayro_syntax::content::TypedIter;
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Rect;
@@ -264,23 +264,18 @@ impl<'a, 'b, T: Device<'a>> StencilPatternDevice<'a, 'b, T> {
 
 // Only filling, stroking of paths and stencil masks are allowed.
 impl<'a, T: Device<'a>> Device<'a> for StencilPatternDevice<'a, '_, T> {
-    fn stroke_path(
+    fn draw_path(
         &mut self,
         path: &BezPath,
         transform: Affine,
         _: &Paint,
-        stroke_props: &StrokeProps,
+        draw_mode: &PathDrawMode,
     ) {
         self.inner
-            .stroke_path(path, transform, &self.paint, stroke_props)
+            .draw_path(path, transform, &self.paint, draw_mode)
     }
 
     fn set_soft_mask(&mut self, _: Option<SoftMask>) {}
-
-    fn fill_path(&mut self, path: &BezPath, transform: Affine, _: &Paint, fill_rule: FillRule) {
-        self.inner
-            .fill_path(path, transform, &self.paint, fill_rule)
-    }
 
     fn push_clip_path(&mut self, clip_path: &ClipPath) {
         self.inner.push_clip_path(clip_path)
@@ -288,27 +283,16 @@ impl<'a, T: Device<'a>> Device<'a> for StencilPatternDevice<'a, '_, T> {
 
     fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask>) {}
 
-    fn fill_glyph(
+    fn draw_glyph(
         &mut self,
-        glyph: &Glyph<'a>,
+        g: &Glyph<'a>,
         transform: Affine,
         glyph_transform: Affine,
-        _: &Paint,
+        p: &Paint<'a>,
+        draw_mode: &GlyphDrawMode,
     ) {
         self.inner
-            .fill_glyph(glyph, transform, glyph_transform, &self.paint)
-    }
-
-    fn stroke_glyph(
-        &mut self,
-        glyph: &Glyph<'a>,
-        transform: Affine,
-        glyph_transform: Affine,
-        _: &Paint,
-        stroke_props: &StrokeProps,
-    ) {
-        self.inner
-            .stroke_glyph(glyph, transform, glyph_transform, &self.paint, stroke_props)
+            .draw_glyph(g, transform, glyph_transform, p, draw_mode);
     }
 
     fn draw_rgba_image(&mut self, _: RgbData, _: Affine, _: Option<LumaData>) {}

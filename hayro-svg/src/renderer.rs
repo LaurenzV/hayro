@@ -5,7 +5,8 @@ use hayro_interpret::font::Glyph;
 use hayro_interpret::hayro_syntax::page::Page;
 use hayro_interpret::pattern::{Pattern, ShadingPattern, TilingPattern};
 use hayro_interpret::{
-    CacheKey, ClipPath, Device, FillRule, LumaData, Paint, RgbData, SoftMask, StrokeProps,
+    CacheKey, ClipPath, Device, FillRule, GlyphDrawMode, LumaData, Paint, PathDrawMode, RgbData,
+    SoftMask, StrokeProps,
 };
 use image::{DynamicImage, ImageBuffer};
 use kurbo::{Affine, BezPath, PathEl, Point, Rect, Shape, Vec2};
@@ -104,6 +105,59 @@ impl<'a> SvgRenderer<'a> {
                     self.xml.end_element();
                 }
             },
+        }
+    }
+
+    fn fill_glyph(
+        &mut self,
+        glyph: &Glyph<'a>,
+        transform: Affine,
+        glyph_transform: Affine,
+        paint: &Paint<'a>,
+    ) {
+        match glyph {
+            Glyph::Outline(o) => {
+                let id = self
+                    .glyphs
+                    .insert_with(o.identifier().cache_key(), || o.outline());
+
+                match &paint {
+                    Paint::Color(c) => {
+                        self.xml.start_element("use");
+                        self.xml
+                            .write_attribute_fmt("xlink:href", format_args!("#{id}"));
+                        self.write_transform(transform * glyph_transform);
+
+                        self.write_color(c, false);
+                        self.xml.end_element();
+                    }
+                    Paint::Pattern(p) => match p.as_ref() {
+                        Pattern::Shading(_) => {}
+                        Pattern::Tiling(_) => {
+                            unimplemented!()
+                        }
+                    },
+                }
+            }
+            Glyph::Type3(_) => {}
+        }
+    }
+
+    fn stroke_glyph(
+        &mut self,
+        glyph: &Glyph<'a>,
+        transform: Affine,
+        glyph_transform: Affine,
+        paint: &Paint,
+        stroke_props: &StrokeProps,
+    ) {
+        match glyph {
+            Glyph::Outline(o) => {
+                let path = glyph_transform * o.outline();
+                let paint = paint.clone();
+                self.stroke_path(&path, transform, stroke_props, &paint);
+            }
+            Glyph::Type3(_) => {}
         }
     }
 
@@ -299,26 +353,41 @@ impl<'a> SvgRenderer<'a> {
 }
 
 impl<'a> Device<'a> for SvgRenderer<'a> {
-    fn stroke_path(
-        &mut self,
-        path: &BezPath,
-        transform: Affine,
-        paint: &Paint<'a>,
-        stroke_props: &StrokeProps,
-    ) {
-        Self::stroke_path(self, path, transform, stroke_props, paint);
-    }
-
     fn set_soft_mask(&mut self, _: Option<SoftMask<'a>>) {}
 
-    fn fill_path(
+    fn draw_path(
         &mut self,
         path: &BezPath,
         transform: Affine,
         paint: &Paint<'a>,
-        fill_rule: FillRule,
+        draw_mode: &PathDrawMode,
     ) {
-        Self::fill_path(self, path, transform, fill_rule, paint);
+        match draw_mode {
+            PathDrawMode::Fill(f) => {
+                Self::fill_path(self, path, transform, *f, paint);
+            }
+            PathDrawMode::Stroke(s) => {
+                Self::stroke_path(self, path, transform, s, paint);
+            }
+        }
+    }
+
+    fn draw_glyph(
+        &mut self,
+        glyph: &Glyph<'a>,
+        transform: Affine,
+        glyph_transform: Affine,
+        paint: &Paint<'a>,
+        draw_mode: &GlyphDrawMode,
+    ) {
+        match draw_mode {
+            GlyphDrawMode::Fill => {
+                Self::fill_glyph(self, glyph, transform, glyph_transform, paint);
+            }
+            GlyphDrawMode::Stroke(s) => {
+                Self::stroke_glyph(self, glyph, transform, glyph_transform, paint, s);
+            }
+        }
     }
 
     fn push_clip_path(&mut self, clip_path: &ClipPath) {
@@ -330,59 +399,6 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
     }
 
     fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask<'a>>) {}
-
-    fn fill_glyph(
-        &mut self,
-        glyph: &Glyph<'a>,
-        transform: Affine,
-        glyph_transform: Affine,
-        paint: &Paint<'a>,
-    ) {
-        match glyph {
-            Glyph::Outline(o) => {
-                let id = self
-                    .glyphs
-                    .insert_with(o.identifier().cache_key(), || o.outline());
-
-                match &paint {
-                    Paint::Color(c) => {
-                        self.xml.start_element("use");
-                        self.xml
-                            .write_attribute_fmt("xlink:href", format_args!("#{id}"));
-                        self.write_transform(transform * glyph_transform);
-
-                        self.write_color(c, false);
-                        self.xml.end_element();
-                    }
-                    Paint::Pattern(p) => match p.as_ref() {
-                        Pattern::Shading(_) => {}
-                        Pattern::Tiling(_) => {
-                            unimplemented!()
-                        }
-                    },
-                }
-            }
-            Glyph::Type3(_) => {}
-        }
-    }
-
-    fn stroke_glyph(
-        &mut self,
-        glyph: &Glyph<'a>,
-        transform: Affine,
-        glyph_transform: Affine,
-        paint: &Paint,
-        stroke_props: &StrokeProps,
-    ) {
-        match glyph {
-            Glyph::Outline(o) => {
-                let path = glyph_transform * o.outline();
-                let paint = paint.clone();
-                self.stroke_path(&path, transform, stroke_props, &paint);
-            }
-            Glyph::Type3(_) => {}
-        }
-    }
 
     fn draw_rgba_image(&mut self, image: RgbData, transform: Affine, alpha: Option<LumaData>) {
         let interpolate = image.interpolate;

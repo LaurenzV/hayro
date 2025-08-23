@@ -7,7 +7,8 @@ use hayro_interpret::font::Glyph;
 use hayro_interpret::hayro_syntax::object::ObjectIdentifier;
 use hayro_interpret::pattern::Pattern;
 use hayro_interpret::{
-    ClipPath, Device, FillRule, LumaData, MaskType, Paint, RgbData, SoftMask, StrokeProps,
+    ClipPath, Device, FillRule, GlyphDrawMode, LumaData, MaskType, Paint, PathDrawMode, RgbData,
+    SoftMask, StrokeProps,
 };
 use image::imageops::FilterType;
 use image::{DynamicImage, ImageBuffer};
@@ -204,9 +205,7 @@ impl Renderer {
             }
         }
     }
-}
 
-impl Device<'_> for Renderer {
     fn stroke_path(
         &mut self,
         path: &BezPath,
@@ -229,6 +228,45 @@ impl Device<'_> for Renderer {
         self.ctx.fill_path(path, paint_type, self.cur_mask.clone());
     }
 
+    fn fill_glyph(
+        &mut self,
+        glyph: &Glyph<'_>,
+        transform: Affine,
+        glyph_transform: Affine,
+        paint: &Paint,
+    ) {
+        match glyph {
+            Glyph::Outline(o) => {
+                let outline = glyph_transform * o.outline();
+                self.fill_path(&outline, transform, paint, FillRule::NonZero);
+            }
+            Glyph::Type3(s) => {
+                s.interpret(self, transform, glyph_transform, paint);
+            }
+        }
+    }
+
+    fn stroke_glyph(
+        &mut self,
+        glyph: &Glyph<'_>,
+        transform: Affine,
+        glyph_transform: Affine,
+        paint: &Paint,
+        stroke_props: &StrokeProps,
+    ) {
+        match glyph {
+            Glyph::Outline(o) => {
+                let outline = glyph_transform * o.outline();
+                self.stroke_path(&outline, transform, paint, stroke_props);
+            }
+            Glyph::Type3(s) => {
+                s.interpret(self, transform, glyph_transform, paint);
+            }
+        }
+    }
+}
+
+impl Device<'_> for Renderer {
     fn draw_rgba_image(
         &mut self,
         image: hayro_interpret::RgbData,
@@ -274,43 +312,6 @@ impl Device<'_> for Renderer {
         self.ctx.set_anti_aliasing(true);
     }
 
-    fn fill_glyph(
-        &mut self,
-        glyph: &Glyph<'_>,
-        transform: Affine,
-        glyph_transform: Affine,
-        paint: &Paint,
-    ) {
-        match glyph {
-            Glyph::Outline(o) => {
-                let outline = glyph_transform * o.outline();
-                self.fill_path(&outline, transform, paint, FillRule::NonZero);
-            }
-            Glyph::Type3(s) => {
-                s.interpret(self, transform, glyph_transform, paint);
-            }
-        }
-    }
-
-    fn stroke_glyph(
-        &mut self,
-        glyph: &Glyph<'_>,
-        transform: Affine,
-        glyph_transform: Affine,
-        paint: &Paint,
-        stroke_props: &StrokeProps,
-    ) {
-        match glyph {
-            Glyph::Outline(o) => {
-                let outline = glyph_transform * o.outline();
-                self.stroke_path(&outline, transform, paint, stroke_props);
-            }
-            Glyph::Type3(s) => {
-                s.interpret(self, transform, glyph_transform, paint);
-            }
-        }
-    }
-
     fn push_clip_path(&mut self, clip_path: &ClipPath) {
         self.ctx.set_fill_rule(clip_path.fill);
         self.ctx.push_layer(Some(&clip_path.path), None, None)
@@ -351,6 +352,41 @@ impl Device<'_> for Renderer {
                 .or_insert_with(|| draw_soft_mask(&m, width, height))
                 .clone()
         });
+    }
+
+    fn draw_path(
+        &mut self,
+        path: &BezPath,
+        transform: Affine,
+        paint: &Paint<'_>,
+        draw_mode: &PathDrawMode,
+    ) {
+        match draw_mode {
+            PathDrawMode::Fill(f) => {
+                Self::fill_path(self, path, transform, paint, *f);
+            }
+            PathDrawMode::Stroke(s) => {
+                Self::stroke_path(self, path, transform, paint, s);
+            }
+        }
+    }
+
+    fn draw_glyph(
+        &mut self,
+        glyph: &Glyph<'_>,
+        transform: Affine,
+        glyph_transform: Affine,
+        paint: &Paint<'_>,
+        draw_mode: &GlyphDrawMode,
+    ) {
+        match draw_mode {
+            GlyphDrawMode::Fill => {
+                Self::fill_glyph(self, glyph, transform, glyph_transform, paint);
+            }
+            GlyphDrawMode::Stroke(s) => {
+                Self::stroke_glyph(self, glyph, transform, glyph_transform, paint, s);
+            }
+        }
     }
 }
 

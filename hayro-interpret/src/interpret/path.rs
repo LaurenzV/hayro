@@ -1,7 +1,7 @@
-use crate::Paint;
 use crate::color::Color;
 use crate::context::Context;
 use crate::device::Device;
+use crate::{Paint, PathDrawMode};
 use kurbo::{BezPath, PathEl};
 
 pub(crate) fn fill_path<'a>(context: &mut Context<'a>, device: &mut impl Device<'a>) {
@@ -46,8 +46,15 @@ pub(crate) fn fill_path_impl<'a>(
     device.set_soft_mask(context.get().soft_mask.clone());
 
     match path {
-        None => device.fill_path(context.path(), base_transform, &paint, fill_rule),
-        Some(path) => device.fill_path(path, base_transform, &paint, fill_rule),
+        None => device.draw_path(
+            context.path(),
+            base_transform,
+            &paint,
+            &PathDrawMode::Fill(fill_rule),
+        ),
+        Some(path) => {
+            device.draw_path(path, base_transform, &paint, &PathDrawMode::Fill(fill_rule))
+        }
     };
 }
 
@@ -63,8 +70,18 @@ pub(crate) fn stroke_path_impl<'a>(
     let paint = get_paint(context, true);
 
     match path {
-        None => device.stroke_path(context.path(), base_transform, &paint, &stroke_props),
-        Some(path) => device.stroke_path(path, base_transform, &paint, &stroke_props),
+        None => device.draw_path(
+            context.path(),
+            base_transform,
+            &paint,
+            &PathDrawMode::Stroke(stroke_props),
+        ),
+        Some(path) => device.draw_path(
+            path,
+            base_transform,
+            &paint,
+            &PathDrawMode::Stroke(stroke_props),
+        ),
     };
 }
 

@@ -1,13 +1,13 @@
+use crate::Paint;
 use crate::context::Context;
 use crate::device::Device;
 use crate::font::glyph_simulator::GlyphSimulator;
 use crate::font::true_type::{read_encoding, read_widths};
 use crate::font::{Encoding, Glyph, Type3Glyph, UNITS_PER_EM};
+use crate::interpret;
 use crate::soft_mask::SoftMask;
-use crate::{CacheKey, ClipPath};
-use crate::{FillRule, Paint};
+use crate::{CacheKey, ClipPath, GlyphDrawMode, PathDrawMode};
 use crate::{LumaData, RgbData};
-use crate::{StrokeProps, interpret};
 use hayro_syntax::content::TypedIter;
 use hayro_syntax::content::ops::TypedInstruction;
 use hayro_syntax::object::Dict;
@@ -163,22 +163,17 @@ impl<'a, 'b, T: Device<'a>> Type3ShapeGlyphDevice<'a, 'b, T> {
 
 // Only filling, stroking of paths and stencil masks are allowed.
 impl<'a, T: Device<'a>> Device<'a> for Type3ShapeGlyphDevice<'a, '_, T> {
-    fn stroke_path(
+    fn set_soft_mask(&mut self, _: Option<SoftMask>) {}
+
+    fn draw_path(
         &mut self,
         path: &BezPath,
         transform: Affine,
         _: &Paint,
-        stroke_props: &StrokeProps,
+        draw_mode: &PathDrawMode,
     ) {
         self.inner
-            .stroke_path(path, transform, &self.paint, stroke_props)
-    }
-
-    fn set_soft_mask(&mut self, _: Option<SoftMask>) {}
-
-    fn fill_path(&mut self, path: &BezPath, transform: Affine, _: &Paint, fill_rule: FillRule) {
-        self.inner
-            .fill_path(path, transform, &self.paint, fill_rule)
+            .draw_path(path, transform, &self.paint, draw_mode)
     }
 
     fn push_clip_path(&mut self, clip_path: &ClipPath) {
@@ -189,28 +184,16 @@ impl<'a, T: Device<'a>> Device<'a> for Type3ShapeGlyphDevice<'a, '_, T> {
 
     // Technically not valid, I think, but there is a PDFBox test case that contains such a font
     // and everyone seems to render it.
-    fn fill_glyph(
+    fn draw_glyph(
         &mut self,
         g: &Glyph<'a>,
         transform: Affine,
         glyph_transform: Affine,
         p: &Paint<'a>,
-    ) {
-        self.inner.fill_glyph(g, transform, glyph_transform, p);
-    }
-
-    // Technically not valid, I think, but there is a PDFBox test case that contains such a font
-    // and everyone seems to render it.
-    fn stroke_glyph(
-        &mut self,
-        g: &Glyph<'a>,
-        transform: Affine,
-        glyph_transform: Affine,
-        p: &Paint<'a>,
-        stroke_props: &StrokeProps,
+        draw_mode: &GlyphDrawMode,
     ) {
         self.inner
-            .stroke_glyph(g, transform, glyph_transform, p, stroke_props);
+            .draw_glyph(g, transform, glyph_transform, p, draw_mode);
     }
 
     fn draw_rgba_image(&mut self, _: RgbData, _: Affine, _: Option<LumaData>) {}

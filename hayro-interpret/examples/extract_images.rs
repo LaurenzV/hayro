@@ -5,8 +5,8 @@
 
 use hayro_interpret::font::Glyph;
 use hayro_interpret::{
-    ClipPath, Context, Device, FillRule, InterpreterSettings, LumaData, Paint, RgbData, SoftMask,
-    StrokeProps, interpret_page,
+    ClipPath, Context, Device, GlyphDrawMode, InterpreterSettings, LumaData, Paint, PathDrawMode,
+    RgbData, SoftMask, interpret_page,
 };
 use hayro_syntax::Pdf;
 use image::{DynamicImage, ImageBuffer};
@@ -16,7 +16,7 @@ use std::sync::Arc;
 
 fn main() {
     let data = std::fs::read(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../hayro-tests/pdfs/image_rgb8.pdf"),
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../hayro-tests/pdfs/custom/image_rgb8.pdf"),
     )
     .unwrap();
 
@@ -53,25 +53,21 @@ impl ImageExtractor {
 /// Implement `Device` for `ImageExtractor`. We can ignore most operations and only
 /// need to implement `draw_rgba_image` and `draw_stencil_image`.
 impl Device<'_> for ImageExtractor {
-    fn stroke_path(&mut self, _: &BezPath, _: Affine, _: &Paint<'_>, _: &StrokeProps) {}
-
     fn set_soft_mask(&mut self, _: Option<SoftMask<'_>>) {}
 
-    fn fill_path(&mut self, _: &BezPath, _: Affine, _: &Paint<'_>, _: FillRule) {}
+    fn draw_path(&mut self, _: &BezPath, _: Affine, _: &Paint<'_>, _: &PathDrawMode) {}
 
     fn push_clip_path(&mut self, _: &ClipPath) {}
 
     fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask<'_>>) {}
 
-    fn fill_glyph(&mut self, _: &Glyph<'_>, _: Affine, _: Affine, _: &Paint<'_>) {}
-
-    fn stroke_glyph(
+    fn draw_glyph(
         &mut self,
         _: &Glyph<'_>,
         _: Affine,
         _: Affine,
         _: &Paint<'_>,
-        _: &StrokeProps,
+        _: &GlyphDrawMode,
     ) {
     }
 
