@@ -702,8 +702,8 @@ fn read_free_form_triangles(
             // Just read the parametric value.
             colors.push(interpolate_comp(
                 reader.read(bp_comp)?,
-                decode[0],
-                decode[1],
+                *decode.get(0)?,
+                *decode.get(1)?,
             ));
         } else {
             for (_, decode) in (0..num_components).zip(decode.chunks_exact(2)) {
@@ -812,8 +812,8 @@ fn read_lattice_triangles(
             // Just read the parametric value.
             colors.push(interpolate_comp(
                 reader.read(bp_comp)?,
-                decode[0],
-                decode[1],
+                *decode.get(0)?,
+                *decode.get(1)?,
             ));
         } else {
             for (_, decode) in (0..num_components).zip(decode.chunks_exact(2)) {
@@ -914,8 +914,8 @@ fn read_coons_patch_mesh(
         if has_function {
             colors.push(interpolate_comp(
                 reader.read(bp_comp)?,
-                decode[0],
-                decode[1],
+                *decode.get(0)?,
+                *decode.get(1)?,
             ));
         } else {
             for (_, decode) in (0..num_components).zip(decode.chunks_exact(2)) {
@@ -1076,8 +1076,8 @@ fn read_tensor_product_patch_mesh(
         if has_function {
             colors.push(interpolate_comp(
                 reader.read(bp_comp)?,
-                decode[0],
-                decode[1],
+                *decode.get(0)?,
+                *decode.get(1)?,
             ));
         } else {
             for (_, decode) in (0..num_components).zip(decode.chunks_exact(2)) {
