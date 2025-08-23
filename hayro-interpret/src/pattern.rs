@@ -10,7 +10,7 @@ use crate::shading::Shading;
 use crate::soft_mask::SoftMask;
 use crate::util::hash128;
 use crate::{CacheKey, ClipPath, GlyphDrawMode, Image, PathDrawMode};
-use crate::{FillRule, InterpreterSettings, LumaData, Paint, RgbData, interpret};
+use crate::{FillRule, InterpreterSettings, Paint, interpret};
 use hayro_syntax::content::TypedIter;
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Rect;

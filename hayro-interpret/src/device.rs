@@ -2,7 +2,6 @@ use crate::font::Glyph;
 use crate::soft_mask::SoftMask;
 use crate::{ClipPath, Image};
 use crate::{GlyphDrawMode, Paint, PathDrawMode};
-use crate::{LumaData, RgbData};
 use kurbo::{Affine, BezPath};
 
 /// A trait for a device that can be used to process PDF drawing instructions.

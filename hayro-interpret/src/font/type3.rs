@@ -7,7 +7,6 @@ use crate::interpret;
 use crate::soft_mask::SoftMask;
 use crate::{CacheKey, ClipPath, GlyphDrawMode, PathDrawMode};
 use crate::{Image, Paint};
-use crate::{LumaData, RgbData};
 use hayro_syntax::content::TypedIter;
 use hayro_syntax::content::ops::TypedInstruction;
 use hayro_syntax::object::Dict;

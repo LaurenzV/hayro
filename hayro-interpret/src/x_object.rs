@@ -15,7 +15,7 @@ use hayro_syntax::object::Name;
 use hayro_syntax::object::Object;
 use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::*;
-use hayro_syntax::object::stream::{DecodeFailure, FilterResult, ImageDecodeParams};
+use hayro_syntax::object::stream::{DecodeFailure, ImageDecodeParams};
 use hayro_syntax::page::Resources;
 use kurbo::{Affine, Rect, Shape};
 use log::warn;
@@ -414,7 +414,7 @@ impl DecodedImageXObject {
                     {
                         obj.decoded_object()
                             .and_then(|d| d.luma_data)
-                            .map(|mut d| d)
+                            .map(|d| d)
                     } else {
                         None
                     }

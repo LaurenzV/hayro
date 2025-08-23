@@ -2,10 +2,9 @@ use crate::CacheKey;
 use crate::color::Color;
 use crate::pattern::Pattern;
 use crate::util::hash128;
-use crate::x_object::{DecodedImageXObject, ImageXObject};
+use crate::x_object::ImageXObject;
 use kurbo::{BezPath, Cap, Join};
 use smallvec::{SmallVec, smallvec};
-use std::sync::OnceLock;
 
 /// A clip path.
 #[derive(Debug, Clone)]

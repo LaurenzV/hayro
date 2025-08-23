@@ -3,8 +3,7 @@ use crate::{Id, hash128};
 use hayro_interpret::font::Glyph;
 use hayro_interpret::hayro_syntax::page::Page;
 use hayro_interpret::{
-    CacheKey, ClipPath, Device, FillRule, GlyphDrawMode, Image, LumaData, Paint, PathDrawMode,
-    RgbData, SoftMask,
+    CacheKey, ClipPath, Device, FillRule, GlyphDrawMode, Image, Paint, PathDrawMode, SoftMask,
 };
 use kurbo::{Affine, BezPath, PathEl};
 use std::collections::HashMap;
