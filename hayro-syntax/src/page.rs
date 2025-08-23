@@ -166,7 +166,7 @@ impl<'a> Page<'a> {
         }
     }
 
-    fn operations_impl(&self) -> Option<UntypedIter> {
+    fn operations_impl(&self) -> Option<UntypedIter<'_>> {
         let stream = self.page_stream()?;
         let iter = UntypedIter::new(stream);
 
@@ -306,7 +306,7 @@ impl<'a> Page<'a> {
     }
 
     /// Return an untyped iterator over the operators of the page's content stream.
-    pub fn operations(&self) -> UntypedIter {
+    pub fn operations(&self) -> UntypedIter<'_> {
         self.operations_impl().unwrap_or(UntypedIter::empty())
     }
 
@@ -321,7 +321,7 @@ impl<'a> Page<'a> {
     }
 
     /// Return a typed iterator over the operators of the page's content stream.
-    pub fn typed_operations(&self) -> TypedIter {
+    pub fn typed_operations(&self) -> TypedIter<'_> {
         TypedIter::from_untyped(self.operations())
     }
 }

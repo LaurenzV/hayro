@@ -336,7 +336,7 @@ fn eval_inner(procedure: &[PostScriptOp], arg_stack: &mut InterpreterStack) -> O
             PostScriptOp::Or => {
                 four!(
                     |n1: f32, n2: f32| ((n1 as i32) | (n2 as i32)) as f32,
-                    |b1: bool, b2: bool| (b1 || b2)
+                    |b1: bool, b2: bool| b1 || b2
                 );
             }
             PostScriptOp::True => {

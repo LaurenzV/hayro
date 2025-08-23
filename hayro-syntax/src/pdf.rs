@@ -57,7 +57,7 @@ impl Pdf {
     }
 
     /// Return an iterator over all objects defined in the PDF file.
-    pub fn objects(&self) -> impl IntoIterator<Item = Object> {
+    pub fn objects(&self) -> impl IntoIterator<Item = Object<'_>> {
         self.xref.objects()
     }
 
@@ -75,7 +75,7 @@ impl Pdf {
     }
 
     /// Return the pages of the PDF file.
-    pub fn pages(&self) -> &Pages {
+    pub fn pages(&self) -> &Pages<'_> {
         self.pages.get()
     }
 

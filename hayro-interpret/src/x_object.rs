@@ -488,7 +488,7 @@ fn decode(
         8 => data.iter().map(|v| *v as u16).collect(),
         16 => data
             .chunks(2)
-            .map(|v| (u16::from_be_bytes([v[0], v[1]])))
+            .map(|v| u16::from_be_bytes([v[0], v[1]]))
             .collect(),
         _ => {
             warn!("unsupported bits per component: {bits_per_component}");

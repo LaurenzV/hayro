@@ -1873,7 +1873,7 @@ impl<'a> CCITTFaxDecoder<'a> {
         c
     }
 
-    pub(crate) fn source(&self) -> &Reader {
+    pub(crate) fn source(&self) -> &Reader<'_> {
         self.source
     }
 }

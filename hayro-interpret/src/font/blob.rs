@@ -67,7 +67,7 @@ impl CffFontBlob {
         Some(Self(Arc::new(yoke)))
     }
 
-    pub(crate) fn table(&self) -> &cff::Table {
+    pub(crate) fn table(&self) -> &cff::Table<'_> {
         &self.0.as_ref().get().table
     }
 
@@ -131,15 +131,15 @@ impl OpenTypeFontBlob {
         Some(Self(Arc::new(font_ref_yoke)))
     }
 
-    pub(crate) fn font_ref(&self) -> &FontRef {
+    pub(crate) fn font_ref(&self) -> &FontRef<'_> {
         &self.0.as_ref().get().font_ref
     }
 
-    pub(crate) fn glyph_metrics(&self) -> &GlyphMetrics {
+    pub(crate) fn glyph_metrics(&self) -> &GlyphMetrics<'_> {
         &self.0.as_ref().get().glyph_metrics
     }
 
-    fn outline_glyphs(&self) -> &OutlineGlyphCollection {
+    fn outline_glyphs(&self) -> &OutlineGlyphCollection<'_> {
         &self.0.as_ref().get().outline_glyphs
     }
 
