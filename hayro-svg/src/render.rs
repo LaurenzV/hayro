@@ -152,96 +152,6 @@ impl<'a> SvgRenderer<'a> {
         self.xml.end_element();
     }
 
-    fn write_shading_pattern_defs(&mut self) {
-        if self.shading_patterns.is_empty() {
-            return;
-        }
-
-        self.xml.start_element("defs");
-        self.xml.write_attribute("id", "shading-pattern");
-
-        for (id, shading) in self.shading_patterns.iter() {
-            self.xml.start_element("pattern");
-            self.xml.write_attribute("id", &id);
-            self.xml.write_attribute("patternUnits", "userSpaceOnUse");
-            self.xml.write_attribute("width", &shading.bbox.x1);
-            self.xml.write_attribute("height", &shading.bbox.y1);
-            self.xml.write_attribute(
-                "patternTransform",
-                &format!("matrix({})", convert_transform(&shading.transform)),
-            );
-
-            self.xml.start_element("use");
-            self.xml
-                .write_attribute("xlink:href", &format!("#{}", shading.shading));
-            self.xml.end_element();
-
-            self.xml.end_element();
-        }
-
-        self.xml.end_element();
-    }
-
-    fn write_tiling_pattern_defs(&mut self) {
-        if self.tiling_patterns.is_empty() {
-            return;
-        }
-
-        self.xml.start_element("defs");
-        self.xml.write_attribute("id", "tiling-pattern");
-
-        let patterns = self
-            .tiling_patterns
-            .iter()
-            .map(|i| (i.0, i.1.clone()))
-            .collect::<Vec<_>>();
-
-        for (id, pattern) in patterns {
-            let pattern = pattern.clone();
-            let transform = pattern.transform * pattern.tiling_pattern.matrix;
-
-            self.xml.start_element("pattern");
-            self.xml.write_attribute("id", &id);
-            self.xml.write_attribute("patternUnits", "userSpaceOnUse");
-            self.xml
-                .write_attribute("width", &pattern.tiling_pattern.x_step);
-            self.xml
-                .write_attribute("height", &pattern.tiling_pattern.y_step);
-            self.xml.write_attribute(
-                "patternTransform",
-                &format!("matrix({})", convert_transform(&transform)),
-            );
-
-            // TODO: Write bbox
-            pattern
-                .tiling_pattern
-                .interpret(self, Affine::IDENTITY, false);
-
-            self.xml.end_element();
-        }
-
-        self.xml.end_element();
-    }
-
-    fn write_shading_defs(&mut self) {
-        if self.shadings.is_empty() {
-            return;
-        }
-
-        let shadings = std::mem::take(&mut self.shadings);
-
-        self.xml.start_element("defs");
-        self.xml.write_attribute("id", "shading");
-
-        for (id, shading) in shadings.iter() {
-            let encoded = shading.pattern.encode();
-            let (image, transform) = render_texture(shading.bbox, &encoded);
-            self.write_image(&image, true, Some(id), transform);
-        }
-
-        self.xml.end_element();
-    }
-
     fn insert_clip(&mut self, clip_path: &ClipPath) -> Id {
         self.clip_paths
             .insert_with(clip_path.cache_key(), || CachedClipPath {
@@ -343,7 +253,7 @@ impl<'a> SvgRenderer<'a> {
     }
 }
 
-fn convert_transform(transform: &Affine) -> String {
+pub(crate) fn convert_transform(transform: &Affine) -> String {
     transform
         .as_coeffs()
         .iter()
@@ -385,14 +295,14 @@ impl<T> Deduplicator<T> {
         })
     }
 
-    fn iter(&self) -> impl Iterator<Item = (Id, &T)> {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = (Id, &T)> {
         self.vec
             .iter()
             .enumerate()
             .map(|(i, v)| (Id(self.kind, i as u64), v))
     }
 
-    fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.vec.is_empty()
     }
 }
@@ -439,66 +349,4 @@ impl BezPathExt for BezPath {
 
         Ok(())
     }
-}
-
-fn render_texture(bbox: Rect, shading_pattern: &EncodedShadingPattern) -> (DynamicImage, Affine) {
-    const SCALE: f32 = 2.0;
-    const INV_SCALE: f32 = 1.0 / SCALE;
-
-    let base_width = bbox.width() as f32;
-    let base_height = bbox.height() as f32;
-
-    let width = (base_width * SCALE).ceil() as u32;
-    let height = (base_height * SCALE).ceil() as u32;
-
-    let initial_transform = Affine::scale(INV_SCALE as f64)
-        * shading_pattern.base_transform
-        * Affine::translate((0.5, 0.5));
-    let (x_advance, y_advance) = x_y_advances(&initial_transform);
-
-    let mut buf = vec![0u8; width as usize * height as usize * 4];
-    let mut start_point = initial_transform * Point::new(bbox.x0, bbox.y0);
-
-    for row in buf.chunks_exact_mut(width as usize * 4) {
-        let mut point = start_point;
-
-        for pixel in row.chunks_exact_mut(4) {
-            // println!("sampling {:?}", point);
-            let sample = shading_pattern.sample(point);
-            let converted = [
-                (sample[0] * 255.0 + 0.5) as u8,
-                (sample[1] * 255.0 + 0.5) as u8,
-                (sample[2] * 255.0 + 0.5) as u8,
-                (sample[3] * 255.0 + 0.5) as u8,
-            ];
-
-            pixel.copy_from_slice(&converted);
-
-            point += x_advance;
-        }
-
-        start_point += y_advance;
-    }
-
-    let image = DynamicImage::ImageRgba8(ImageBuffer::from_raw(width, height, buf).unwrap());
-
-    (
-        image,
-        Affine::translate((bbox.x0, bbox.y0)) * Affine::scale(INV_SCALE as f64),
-    )
-}
-
-fn x_y_advances(transform: &Affine) -> (Vec2, Vec2) {
-    let scale_skew_transform = {
-        let c = transform.as_coeffs();
-        Affine::new([c[0], c[1], c[2], c[3], 0.0, 0.0])
-    };
-
-    let x_advance = scale_skew_transform * Point::new(1.0, 0.0);
-    let y_advance = scale_skew_transform * Point::new(0.0, 1.0);
-
-    (
-        Vec2::new(x_advance.x, x_advance.y),
-        Vec2::new(y_advance.x, y_advance.y),
-    )
 }
