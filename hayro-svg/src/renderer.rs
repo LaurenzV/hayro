@@ -401,57 +401,11 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
     fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask<'a>>) {}
 
     fn draw_rgba_image(&mut self, image: RgbData, transform: Affine, alpha: Option<LumaData>) {
-        let interpolate = image.interpolate;
-
-        let image = if let Some(alpha) = alpha {
-            if alpha.interpolate == image.interpolate
-                && alpha.width == image.width
-                && alpha.height == image.height
-            {
-                let interleaved = image
-                    .data
-                    .chunks(3)
-                    .zip(alpha.data)
-                    .flat_map(|(rgb, a)| [rgb[0], rgb[1], rgb[2], a])
-                    .collect::<Vec<u8>>();
-
-                DynamicImage::ImageRgba8(
-                    ImageBuffer::from_raw(image.width, image.height, interleaved).unwrap(),
-                )
-            } else {
-                unimplemented!();
-            }
-        } else {
-            DynamicImage::ImageRgb8(
-                ImageBuffer::from_raw(image.width, image.height, image.data.clone()).unwrap(),
-            )
-        };
-
-        self.write_image(&image, interpolate, None, transform);
+        Self::draw_rgba_image(self, image, transform, alpha);
     }
 
     fn draw_stencil_image(&mut self, stencil: LumaData, transform: Affine, paint: &Paint) {
-        let interpolate = stencil.interpolate;
-
-        let image = match &paint {
-            Paint::Color(c) => {
-                let color = c.to_rgba().to_rgba8();
-                let image = stencil
-                    .data
-                    .iter()
-                    .flat_map(|d| if *d == 255 { color } else { [0, 0, 0, 0] })
-                    .collect::<Vec<u8>>();
-
-                DynamicImage::ImageRgba8(
-                    ImageBuffer::from_raw(stencil.width, stencil.height, image).unwrap(),
-                )
-            }
-            Paint::Pattern(_) => {
-                unreachable!();
-            }
-        };
-
-        self.write_image(&image, interpolate, None, transform);
+        Self::draw_stencil_image(self, stencil, transform, paint);
     }
 
     fn pop_clip_path(&mut self) {
