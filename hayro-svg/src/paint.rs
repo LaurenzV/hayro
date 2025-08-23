@@ -1,10 +1,10 @@
-use image::{DynamicImage, ImageBuffer};
 use crate::Id;
-use crate::render::{convert_transform, SvgRenderer};
+use crate::render::{SvgRenderer, convert_transform};
+use hayro_interpret::encode::EncodedShadingPattern;
 use hayro_interpret::pattern::{Pattern, ShadingPattern, TilingPattern};
 use hayro_interpret::{CacheKey, Paint};
+use image::{DynamicImage, ImageBuffer};
 use kurbo::{Affine, BezPath, Point, Rect, Shape, Vec2};
-use hayro_interpret::encode::EncodedShadingPattern;
 
 #[derive(Clone)]
 pub(crate) struct CachedTilingPattern<'a> {
@@ -190,7 +190,10 @@ impl<'a> SvgRenderer<'a> {
     }
 }
 
-fn render_shading_texture(bbox: Rect, shading_pattern: &EncodedShadingPattern) -> (DynamicImage, Affine) {
+fn render_shading_texture(
+    bbox: Rect,
+    shading_pattern: &EncodedShadingPattern,
+) -> (DynamicImage, Affine) {
     const SCALE: f32 = 2.0;
     const INV_SCALE: f32 = 1.0 / SCALE;
 

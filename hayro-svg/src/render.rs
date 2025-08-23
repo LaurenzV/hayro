@@ -1,14 +1,12 @@
 use crate::paint::{CachedShading, CachedShadingPattern, CachedTilingPattern};
 use crate::{Id, hash128};
-use hayro_interpret::encode::EncodedShadingPattern;
 use hayro_interpret::font::Glyph;
 use hayro_interpret::hayro_syntax::page::Page;
 use hayro_interpret::{
     CacheKey, ClipPath, Device, FillRule, GlyphDrawMode, LumaData, Paint, PathDrawMode, RgbData,
-    SoftMask, StrokeProps,
+    SoftMask,
 };
-use image::{DynamicImage, ImageBuffer};
-use kurbo::{Affine, BezPath, PathEl, Point, Rect, Shape, Vec2};
+use kurbo::{Affine, BezPath, PathEl};
 use std::collections::HashMap;
 use std::io;
 use std::io::Write;
