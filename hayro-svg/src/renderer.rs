@@ -15,6 +15,7 @@ use std::io::{Cursor, Write};
 use std::marker::PhantomData;
 use std::{fmt, io};
 use xmlwriter::{Options, XmlWriter};
+use crate::Id;
 
 struct CachedClipPath {
     path: BezPath,
@@ -611,15 +612,6 @@ impl<T> Deduplicator<T> {
 
     fn is_empty(&self) -> bool {
         self.vec.is_empty()
-    }
-}
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-struct Id(char, u64);
-
-impl Display for Id {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}{}", self.0, self.1)
     }
 }
 
