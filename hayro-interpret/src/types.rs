@@ -2,9 +2,10 @@ use crate::CacheKey;
 use crate::color::Color;
 use crate::pattern::Pattern;
 use crate::util::hash128;
-use crate::x_object::ImageXObject;
+use crate::x_object::{DecodedImageXObject, ImageXObject};
 use kurbo::{BezPath, Cap, Join};
 use smallvec::{SmallVec, smallvec};
+use std::sync::OnceLock;
 
 /// A clip path.
 #[derive(Debug, Clone)]
@@ -22,7 +23,10 @@ impl CacheKey for ClipPath {
 }
 
 /// A stencil image.
-pub struct StencilImage<'a>(pub(crate) ImageXObject<'a>, pub(crate) Paint<'a>);
+pub struct StencilImage<'a> {
+    image_xobject: ImageXObject<'a>,
+    paint: Paint<'a>,
+}
 
 impl<'a> StencilImage<'a> {
     /// Return the stencil data of the image.
@@ -33,18 +37,20 @@ impl<'a> StencilImage<'a> {
     /// The reason this can happen is that `hayro` can't validate the data without actually decoding
     /// it, which would be expensive.
     pub fn stencil_data(&self) -> Option<LumaData> {
-        self.0.alpha8()
+        self.image_xobject
+            .decoded_object()
+            .and_then(|d| d.luma_data)
     }
 
     /// Return the paint the stencil image should be painted with.
     pub fn paint(&self) -> &Paint<'a> {
-        &self.1
+        &self.paint
     }
 }
 
 impl CacheKey for StencilImage<'_> {
     fn cache_key(&self) -> u128 {
-        self.0.cache_key()
+        self.image_xobject.cache_key()
     }
 }
 
@@ -59,15 +65,14 @@ impl RasterImage<'_> {
     ///
     /// The reason this can happen is that `hayro` can't validate the data without actually decoding
     /// it, which would be expensive.
-    pub fn rgb_channel(&self) -> Option<RgbData> {
-        self.0.rgb8()
-    }
+    pub fn rgba_channels(&self) -> (Option<RgbData>, Option<LumaData>) {
+        let decoded = self.0.decoded_object();
 
-    /// Returns the alpha channel of the image.
-    ///
-    /// Returns `None` if the image doesn't have an alpha channel.
-    pub fn alpha_channel(&self) -> Option<LumaData> {
-        self.0.alpha8()
+        if let Some(decoded) = decoded {
+            (decoded.rgb_data, decoded.luma_data)
+        } else {
+            (None, None)
+        }
     }
 }
 

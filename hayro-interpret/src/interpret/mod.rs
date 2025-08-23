@@ -504,6 +504,7 @@ pub fn interpret<'a, 'b>(
                     |name| context.get_color_space(resources, name.clone()),
                     &warning_sink,
                     &cache,
+                    false,
                 ) {
                     draw_image_xobject(&x_object, context, device);
                 }
