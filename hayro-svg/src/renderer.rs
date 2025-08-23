@@ -1,5 +1,4 @@
 use crate::Id;
-use base64::Engine;
 use hayro_interpret::color::Color;
 use hayro_interpret::encode::EncodedShadingPattern;
 use hayro_interpret::font::Glyph;
@@ -8,13 +7,12 @@ use hayro_interpret::pattern::{Pattern, ShadingPattern, TilingPattern};
 use hayro_interpret::{
     CacheKey, ClipPath, Device, FillRule, LumaData, Paint, RgbData, SoftMask, StrokeProps,
 };
-use image::{DynamicImage, ImageBuffer, ImageFormat};
-use kurbo::{Affine, BezPath, PathEl, Point, Rect, Shape, Vec2, stroke};
+use image::{DynamicImage, ImageBuffer};
+use kurbo::{Affine, BezPath, PathEl, Point, Rect, Shape, Vec2};
 use std::collections::HashMap;
-use std::fmt::{Display, Formatter};
-use std::io::{Cursor, Write};
+use std::io;
+use std::io::Write;
 use std::marker::PhantomData;
-use std::{fmt, io};
 use xmlwriter::{Options, XmlWriter};
 
 struct CachedClipPath {
@@ -41,11 +39,11 @@ struct CachedShading {
 
 pub(crate) struct SvgRenderer<'a> {
     pub(crate) xml: XmlWriter,
-    pub(crate) glyphs: Deduplicator<BezPath>,
-    pub(crate) clip_paths: Deduplicator<CachedClipPath>,
-    pub(crate) shadings: Deduplicator<CachedShading>,
-    pub(crate) shading_patterns: Deduplicator<CachedShadingPattern>,
-    pub(crate) tiling_patterns: Deduplicator<CachedTilingPattern<'a>>,
+    glyphs: Deduplicator<BezPath>,
+    clip_paths: Deduplicator<CachedClipPath>,
+    shadings: Deduplicator<CachedShading>,
+    shading_patterns: Deduplicator<CachedShadingPattern>,
+    tiling_patterns: Deduplicator<CachedTilingPattern<'a>>,
     pub(crate) phantom_data: PhantomData<&'a ()>,
 }
 

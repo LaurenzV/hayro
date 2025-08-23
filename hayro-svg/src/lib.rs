@@ -2,7 +2,6 @@ use crate::renderer::SvgRenderer;
 use hayro_interpret::hayro_syntax::page::Page;
 use hayro_interpret::{Context, InterpreterSettings, interpret_page};
 use kurbo::Rect;
-use std::collections::HashMap;
 use std::fmt;
 use std::fmt::{Display, Formatter};
 
@@ -35,50 +34,5 @@ pub(crate) struct Id(char, u64);
 impl Display for Id {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}{}", self.0, self.1)
-    }
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct Deduplicator<T> {
-    kind: char,
-    vec: Vec<T>,
-    present: HashMap<u128, Id>,
-}
-
-impl<T> Default for Deduplicator<T> {
-    fn default() -> Self {
-        Self::new('-')
-    }
-}
-
-impl<T> Deduplicator<T> {
-    fn new(kind: char) -> Self {
-        Self {
-            kind,
-            vec: Vec::new(),
-            present: HashMap::new(),
-        }
-    }
-
-    fn insert_with<F>(&mut self, hash: u128, f: F) -> Id
-    where
-        F: FnOnce() -> T,
-    {
-        *self.present.entry(hash).or_insert_with(|| {
-            let index = self.vec.len();
-            self.vec.push(f());
-            Id(self.kind, index as u64)
-        })
-    }
-
-    fn iter(&self) -> impl Iterator<Item = (Id, &T)> {
-        self.vec
-            .iter()
-            .enumerate()
-            .map(|(i, v)| (Id(self.kind, i as u64), v))
-    }
-
-    fn is_empty(&self) -> bool {
-        self.vec.is_empty()
     }
 }
