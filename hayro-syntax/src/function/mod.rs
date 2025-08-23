@@ -82,7 +82,7 @@ impl Clamper {
         }
 
         for ((min, max), val) in self.domain.iter().zip(input.iter_mut()) {
-            *val = val.clamp(*min, *max);
+            *val = val.min(*max).max(*min);
         }
     }
 
@@ -93,7 +93,7 @@ impl Clamper {
             }
 
             for ((min, max), val) in range.iter().zip(output.iter_mut()) {
-                *val = val.clamp(*min, *max);
+                *val = val.min(*max).max(*min);
             }
         }
     }
