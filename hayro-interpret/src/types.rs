@@ -2,6 +2,7 @@ use crate::CacheKey;
 use crate::color::Color;
 use crate::pattern::Pattern;
 use crate::util::hash128;
+use crate::x_object::ImageXObject;
 use kurbo::{BezPath, Cap, Join};
 use smallvec::{SmallVec, smallvec};
 
@@ -17,6 +18,79 @@ pub struct ClipPath {
 impl CacheKey for ClipPath {
     fn cache_key(&self) -> u128 {
         hash128(&(&self.path.to_svg(), &self.fill))
+    }
+}
+
+/// A stencil image.
+pub struct StencilImage<'a>(pub(crate) ImageXObject<'a>, pub(crate) Paint<'a>);
+
+impl<'a> StencilImage<'a> {
+    /// Return the stencil data of the image.
+    ///
+    /// Returns `None` if the data of the stencil image was invalid, in which case
+    /// it should be ignored.
+    ///
+    /// The reason this can happen is that `hayro` can't validate the data without actually decoding
+    /// it, which would be expensive.
+    pub fn stencil_data(&self) -> Option<LumaData> {
+        self.0.alpha8()
+    }
+
+    /// Return the paint the stencil image should be painted with.
+    pub fn paint(&self) -> &Paint<'a> {
+        &self.1
+    }
+}
+
+impl CacheKey for StencilImage<'_> {
+    fn cache_key(&self) -> u128 {
+        self.0.cache_key()
+    }
+}
+
+/// A raster image.
+pub struct RasterImage<'a>(pub(crate) ImageXObject<'a>);
+
+impl RasterImage<'_> {
+    /// Returns the image as RGB.
+    ///
+    /// Returns `None` if the image couldn't be decoded because it is invalid, in which case
+    /// it should be ignored.
+    ///
+    /// The reason this can happen is that `hayro` can't validate the data without actually decoding
+    /// it, which would be expensive.
+    pub fn rgb_channel(&self) -> Option<RgbData> {
+        self.0.rgb8()
+    }
+
+    /// Returns the alpha channel of the image.
+    ///
+    /// Returns `None` if the image doesn't have an alpha channel.
+    pub fn alpha_channel(&self) -> Option<LumaData> {
+        self.0.alpha8()
+    }
+}
+
+impl CacheKey for RasterImage<'_> {
+    fn cache_key(&self) -> u128 {
+        self.0.cache_key()
+    }
+}
+
+/// A type of image.
+pub enum Image<'a> {
+    /// A stencil image.
+    Stencil(StencilImage<'a>),
+    /// A normal raster image.
+    Raster(RasterImage<'a>),
+}
+
+impl<'a> CacheKey for Image<'a> {
+    fn cache_key(&self) -> u128 {
+        match self {
+            Image::Stencil(i) => i.cache_key(),
+            Image::Raster(i) => i.cache_key(),
+        }
     }
 }
 

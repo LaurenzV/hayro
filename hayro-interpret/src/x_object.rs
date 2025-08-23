@@ -1,9 +1,9 @@
-use crate::ClipPath;
 use crate::cache::Cache;
 use crate::color::ColorSpace;
 use crate::context::Context;
 use crate::device::Device;
 use crate::interpret::path::get_paint;
+use crate::{CacheKey, ClipPath};
 use crate::{FillRule, InterpreterWarning, WarningSinkFn, interpret};
 use crate::{LumaData, RgbData};
 use hayro_syntax::bit_reader::{BitReader, BitSize};
@@ -426,6 +426,12 @@ impl<'a> ImageXObject<'a> {
             self.bits_per_component,
             &self.decode,
         )
+    }
+}
+
+impl CacheKey for ImageXObject<'_> {
+    fn cache_key(&self) -> u128 {
+        self.dict.cache_key()
     }
 }
 
