@@ -344,3 +344,15 @@ bug956965
 
 # wrong handling of extgstate text
 extgstate
+
+# these render correctly but take a long time, use as benchmarking
+issue10717
+issue17190_1
+bug1901253
+issue18896
+issue6741
+issue8076
+bug1721218_reduced
+issue6365
+issue4648
+issue17289
