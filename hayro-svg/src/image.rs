@@ -1,13 +1,18 @@
 use crate::Id;
 use crate::render::SvgRenderer;
 use base64::Engine;
+use hayro_interpret::{LumaData, Paint, RgbData};
 use image::{DynamicImage, ImageBuffer, ImageFormat};
 use kurbo::Affine;
 use std::io::Cursor;
-use hayro_interpret::{LumaData, Paint, RgbData};
 
 impl SvgRenderer<'_> {
-    pub(crate) fn draw_rgba_image(&mut self, image: RgbData, transform: Affine, alpha: Option<LumaData>) {
+    pub(crate) fn draw_rgba_image(
+        &mut self,
+        image: RgbData,
+        transform: Affine,
+        alpha: Option<LumaData>,
+    ) {
         // TODO: Cache images
         let interpolate = image.interpolate;
 
@@ -38,7 +43,12 @@ impl SvgRenderer<'_> {
         self.write_image(&image, interpolate, None, transform);
     }
 
-    pub(crate) fn draw_stencil_image(&mut self, stencil: LumaData, transform: Affine, paint: &Paint) {
+    pub(crate) fn draw_stencil_image(
+        &mut self,
+        stencil: LumaData,
+        transform: Affine,
+        paint: &Paint,
+    ) {
         let interpolate = stencil.interpolate;
 
         let image = match &paint {
@@ -61,7 +71,7 @@ impl SvgRenderer<'_> {
 
         self.write_image(&image, interpolate, None, transform);
     }
-    
+
     pub(crate) fn write_image(
         &mut self,
         image: &DynamicImage,

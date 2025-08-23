@@ -10,6 +10,7 @@ license.workspace = true
 [dependencies]
 hayro-interpret = { workspace = true }
 xmlwriter = { workspace = true }
+siphasher = { workspace = true }
 kurbo = { workspace = true }
 image = { workspace = true, features = ["png"] }
 base64 = { workspace = true }

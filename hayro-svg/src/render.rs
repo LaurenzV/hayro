@@ -1,9 +1,8 @@
-use crate::Id;
-use hayro_interpret::color::Color;
+use crate::paint::{CachedShading, CachedShadingPattern, CachedTilingPattern};
+use crate::{Id, hash128};
 use hayro_interpret::encode::EncodedShadingPattern;
 use hayro_interpret::font::Glyph;
 use hayro_interpret::hayro_syntax::page::Page;
-use hayro_interpret::pattern::{Pattern, ShadingPattern, TilingPattern};
 use hayro_interpret::{
     CacheKey, ClipPath, Device, FillRule, GlyphDrawMode, LumaData, Paint, PathDrawMode, RgbData,
     SoftMask, StrokeProps,
@@ -21,179 +20,79 @@ struct CachedClipPath {
     fill_rule: FillRule,
 }
 
-struct CachedShadingPattern {
-    transform: Affine,
-    shading: Id,
-    bbox: Rect,
-}
-
-#[derive(Clone)]
-struct CachedTilingPattern<'a> {
-    transform: Affine,
-    tiling_pattern: TilingPattern<'a>,
-}
-
-struct CachedShading {
-    pattern: ShadingPattern,
-    bbox: Rect,
+struct CachedGlyph {
+    path: BezPath,
 }
 
 pub(crate) struct SvgRenderer<'a> {
     pub(crate) xml: XmlWriter,
-    glyphs: Deduplicator<BezPath>,
+    glyphs: Deduplicator<CachedGlyph>,
     clip_paths: Deduplicator<CachedClipPath>,
-    shadings: Deduplicator<CachedShading>,
-    shading_patterns: Deduplicator<CachedShadingPattern>,
-    tiling_patterns: Deduplicator<CachedTilingPattern<'a>>,
+    pub(crate) shadings: Deduplicator<CachedShading>,
+    pub(crate) shading_patterns: Deduplicator<CachedShadingPattern>,
+    pub(crate) tiling_patterns: Deduplicator<CachedTilingPattern<'a>>,
     pub(crate) phantom_data: PhantomData<&'a ()>,
 }
 
 impl<'a> SvgRenderer<'a> {
-    fn fill_path(&mut self, path: &BezPath, transform: Affine, _: FillRule, paint: &Paint<'a>) {
-        let svg_path = path.to_svg_f32();
-
-        match &paint {
-            Paint::Color(c) => {
-                self.xml.start_element("path");
-                self.xml.write_attribute("d", &svg_path);
-                self.write_color(c, false);
-                self.write_transform(transform);
-                self.xml.end_element();
-            }
-            Paint::Pattern(p) => match p.as_ref() {
-                Pattern::Shading(s) => {
-                    let bbox = (transform * path).bounding_box();
-                    let shading_id = self.shadings.insert_with(s.cache_key(), || CachedShading {
-                        pattern: s.clone(),
-                        bbox,
-                    });
-
-                    let inverse_transform = transform.inverse();
-                    let pattern_id = self.shading_patterns.insert_with(
-                        (s.clone(), inverse_transform).cache_key(),
-                        || CachedShadingPattern {
-                            transform: inverse_transform,
-                            bbox,
-                            shading: shading_id,
-                        },
-                    );
-
-                    self.xml.start_element("path");
-                    self.xml.write_attribute("d", &svg_path);
-                    self.xml
-                        .write_attribute_fmt("fill", format_args!("url(#{pattern_id})"));
-                    self.write_transform(transform);
-                    self.xml.end_element();
-                }
-                Pattern::Tiling(t) => {
-                    let inverse_transform = transform.inverse();
-                    let pattern = *t.clone();
-
-                    let pattern_id = self.tiling_patterns.insert_with(
-                        (pattern.clone(), inverse_transform).cache_key(),
-                        || CachedTilingPattern {
-                            transform: inverse_transform,
-                            tiling_pattern: pattern,
-                        },
-                    );
-
-                    self.xml.start_element("path");
-                    self.xml.write_attribute("d", &svg_path);
-                    self.xml
-                        .write_attribute_fmt("fill", format_args!("url(#{pattern_id})"));
-                    self.write_transform(transform);
-                    self.xml.end_element();
-                }
-            },
-        }
-    }
-
-    fn fill_glyph(
+    fn draw_glyph(
         &mut self,
         glyph: &Glyph<'a>,
         transform: Affine,
         glyph_transform: Affine,
         paint: &Paint<'a>,
+        mode: &GlyphDrawMode,
     ) {
         match glyph {
             Glyph::Outline(o) => {
-                let id = self
-                    .glyphs
-                    .insert_with(o.identifier().cache_key(), || o.outline());
+                let outline = o.outline();
+                let cache_key = hash128(&(o.identifier().cache_key(), glyph_transform.cache_key()));
+                let id = self.glyphs.insert_with(cache_key, || CachedGlyph {
+                    path: glyph_transform * outline.clone(),
+                });
 
-                match &paint {
-                    Paint::Color(c) => {
-                        self.xml.start_element("use");
-                        self.xml
-                            .write_attribute_fmt("xlink:href", format_args!("#{id}"));
-                        self.write_transform(transform * glyph_transform);
-
-                        self.write_color(c, false);
-                        self.xml.end_element();
-                    }
-                    Paint::Pattern(p) => match p.as_ref() {
-                        Pattern::Shading(_) => {}
-                        Pattern::Tiling(_) => {
-                            unimplemented!()
-                        }
-                    },
-                }
-            }
-            Glyph::Type3(_) => {}
-        }
-    }
-
-    fn stroke_glyph(
-        &mut self,
-        glyph: &Glyph<'a>,
-        transform: Affine,
-        glyph_transform: Affine,
-        paint: &Paint,
-        stroke_props: &StrokeProps,
-    ) {
-        match glyph {
-            Glyph::Outline(o) => {
-                let path = glyph_transform * o.outline();
-                let paint = paint.clone();
-                self.stroke_path(&path, transform, stroke_props, &paint);
-            }
-            Glyph::Type3(_) => {}
-        }
-    }
-
-    fn write_color(&mut self, color: &Color, is_stroke: bool) {
-        let (fill, alpha) = convert_color(color);
-
-        if is_stroke {
-            self.xml.write_attribute("stroke", &fill);
-            if alpha != 1.0 {
-                self.xml.write_attribute("stroke-opacity", &alpha);
-            }
-        } else {
-            self.xml.write_attribute("fill", &fill);
-
-            if alpha != 1.0 {
-                self.xml.write_attribute("fill-opacity", &alpha);
-            }
-        }
-    }
-
-    fn stroke_path(&mut self, path: &BezPath, transform: Affine, _: &StrokeProps, paint: &Paint) {
-        let svg_path = path.to_svg_f32();
-
-        match &paint {
-            Paint::Color(c) => {
-                self.xml.start_element("path");
-                self.xml.write_attribute("d", &svg_path);
-                self.write_color(c, true);
-                self.xml.write_attribute("fill", "none");
+                self.xml.start_element("use");
+                self.xml
+                    .write_attribute_fmt("xlink:href", format_args!("#{id}"));
                 self.write_transform(transform);
+
+                match mode {
+                    GlyphDrawMode::Fill => {
+                        self.write_paint(paint, &outline, transform, false);
+                    }
+                    GlyphDrawMode::Stroke(_) => {
+                        self.write_paint(paint, &outline, transform, true);
+                    }
+                }
                 self.xml.end_element();
             }
-            Paint::Pattern(_) => {
-                unimplemented!();
+            Glyph::Type3(_) => {}
+        }
+    }
+
+    fn draw_path(
+        &mut self,
+        path: &BezPath,
+        transform: Affine,
+        paint: &Paint<'a>,
+        draw_mode: &PathDrawMode,
+    ) {
+        let svg_path = path.to_svg_f32();
+
+        self.xml.start_element("path");
+        self.xml.write_attribute("d", &svg_path);
+
+        match draw_mode {
+            PathDrawMode::Fill(_) => {
+                self.write_paint(paint, path, transform, false);
+            }
+            PathDrawMode::Stroke(_) => {
+                self.write_paint(paint, path, transform, true);
             }
         }
+
+        self.write_transform(transform);
+        self.xml.end_element();
     }
 
     pub(crate) fn write_transform(&mut self, transform: Affine) {
@@ -221,7 +120,7 @@ impl<'a> SvgRenderer<'a> {
         for (id, glyph) in self.glyphs.iter() {
             self.xml.start_element("path");
             self.xml.write_attribute("id", &id);
-            self.xml.write_attribute("d", &glyph.to_svg_f32());
+            self.xml.write_attribute("d", &glyph.path.to_svg_f32());
             self.xml.end_element();
         }
 
@@ -362,14 +261,7 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
         paint: &Paint<'a>,
         draw_mode: &PathDrawMode,
     ) {
-        match draw_mode {
-            PathDrawMode::Fill(f) => {
-                Self::fill_path(self, path, transform, *f, paint);
-            }
-            PathDrawMode::Stroke(s) => {
-                Self::stroke_path(self, path, transform, s, paint);
-            }
-        }
+        Self::draw_path(self, path, transform, paint, draw_mode);
     }
 
     fn draw_glyph(
@@ -380,14 +272,7 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
         paint: &Paint<'a>,
         draw_mode: &GlyphDrawMode,
     ) {
-        match draw_mode {
-            GlyphDrawMode::Fill => {
-                Self::fill_glyph(self, glyph, transform, glyph_transform, paint);
-            }
-            GlyphDrawMode::Stroke(s) => {
-                Self::stroke_glyph(self, glyph, transform, glyph_transform, paint, s);
-            }
-        }
+        Self::draw_glyph(self, glyph, transform, glyph_transform, paint, draw_mode);
     }
 
     fn push_clip_path(&mut self, clip_path: &ClipPath) {
@@ -467,22 +352,8 @@ fn convert_transform(transform: &Affine) -> String {
         .join(" ")
 }
 
-fn convert_color(color: &Color) -> (String, f32) {
-    let rgba8 = color.to_rgba().to_rgba8();
-    let color = format!(
-        "#{}",
-        &rgba8[0..3]
-            .iter()
-            .map(|b| format!("{b:02x}"))
-            .collect::<String>()
-    );
-    let alpha = rgba8[3] as f32 / 255.0;
-
-    (color, alpha)
-}
-
 #[derive(Debug, Clone)]
-struct Deduplicator<T> {
+pub(crate) struct Deduplicator<T> {
     kind: char,
     vec: Vec<T>,
     present: HashMap<u128, Id>,
@@ -503,7 +374,7 @@ impl<T> Deduplicator<T> {
         }
     }
 
-    fn insert_with<F>(&mut self, hash: u128, f: F) -> Id
+    pub(crate) fn insert_with<F>(&mut self, hash: u128, f: F) -> Id
     where
         F: FnOnce() -> T,
     {
