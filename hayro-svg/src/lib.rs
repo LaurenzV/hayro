@@ -7,9 +7,9 @@ use hayro_interpret::hayro_syntax::page::Page;
 use hayro_interpret::util::FloatExt;
 use hayro_interpret::{
     CacheKey, ClipPath, Context, Device, GlyphDrawMode, Image, InterpreterSettings, Paint,
-    PathDrawMode, SoftMask, interpret_page,
+    PathDrawMode, SoftMask, StrokeProps, interpret_page,
 };
-use kurbo::{Affine, BezPath, Rect};
+use kurbo::{Affine, BezPath, Cap, Join, Rect};
 use siphasher::sip128::{Hasher128, SipHasher13};
 use std::collections::HashMap;
 use std::fmt;
@@ -92,6 +92,47 @@ impl<'a> SvgRenderer<'a> {
         if let Some(mask_id) = mask_id {
             self.xml
                 .write_attribute_fmt("mask", format_args!("url(#{mask_id})"));
+        }
+    }
+
+    pub(crate) fn write_stroke_properties(&mut self, stroke_props: &StrokeProps) {
+        if !stroke_props.line_width.is_nearly_equal(1.0) {
+            self.xml
+                .write_attribute("stroke-width", &stroke_props.line_width)
+        }
+
+        match stroke_props.line_cap {
+            Cap::Butt => {}
+            Cap::Square => self.xml.write_attribute("stroke-linecap", "square"),
+            Cap::Round => self.xml.write_attribute("stroke-linecap", "round"),
+        }
+
+        match stroke_props.line_join {
+            Join::Bevel => self.xml.write_attribute("stroke-linejoin", "bevel"),
+            Join::Miter => {}
+            Join::Round => self.xml.write_attribute("stroke-linejoin", "round"),
+        }
+
+        if !stroke_props.miter_limit.is_nearly_equal(4.0) {
+            self.xml
+                .write_attribute("stroke-miterlimit", &stroke_props.miter_limit);
+        }
+
+        if !stroke_props.dash_offset.is_nearly_equal(0.0) {
+            self.xml
+                .write_attribute("stroke-dashoffset", &stroke_props.dash_offset);
+        }
+
+        if !stroke_props.dash_array.is_empty() {
+            self.xml.write_attribute(
+                "stroke-dasharray",
+                &stroke_props
+                    .dash_array
+                    .iter()
+                    .map(|v| v.to_string())
+                    .collect::<Vec<String>>()
+                    .join(","),
+            );
         }
     }
 }

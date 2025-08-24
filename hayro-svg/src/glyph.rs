@@ -47,7 +47,8 @@ impl<'a> SvgRenderer<'a> {
                     GlyphDrawMode::Fill => {
                         self.write_paint(paint, &outline, transform, false);
                     }
-                    GlyphDrawMode::Stroke(_) => {
+                    GlyphDrawMode::Stroke(s) => {
+                        self.write_stroke_properties(s);
                         self.write_paint(paint, &outline, transform, true);
                     }
                 }

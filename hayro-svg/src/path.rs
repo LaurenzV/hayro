@@ -24,8 +24,8 @@ impl<'a> SvgRenderer<'a> {
                 }
                 self.write_paint(paint, path, transform, false);
             }
-            PathDrawMode::Stroke(_) => {
-                // TODO: Write stroke attributes
+            PathDrawMode::Stroke(s) => {
+                self.write_stroke_properties(s);
                 self.write_paint(paint, path, transform, true);
             }
         }

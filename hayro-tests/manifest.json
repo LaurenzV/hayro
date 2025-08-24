@@ -1040,5 +1040,9 @@
   {
     "id": "fillrule_evenodd",
     "file": "pdfs/custom/fillrule_evenodd.pdf"
+  },
+  {
+    "id": "stroke_properties",
+    "file": "pdfs/custom/stroke_properties.pdf"
   }
 ]

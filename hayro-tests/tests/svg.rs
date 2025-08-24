@@ -172,3 +172,12 @@ fn pdfjs_issue13372() {
 fn fillrule_evenodd() {
     run_svg_test("fillrule_evenodd", "pdfs/custom/fillrule_evenodd.pdf", None);
 }
+
+#[test]
+fn stroke_properties() {
+    run_svg_test(
+        "stroke_properties",
+        "pdfs/custom/stroke_properties.pdf",
+        None,
+    );
+}
