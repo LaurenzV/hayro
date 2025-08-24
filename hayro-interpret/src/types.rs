@@ -120,6 +120,19 @@ pub enum Paint<'a> {
     Pattern(Box<Pattern<'a>>),
 }
 
+impl CacheKey for Paint<'_> {
+    fn cache_key(&self) -> u128 {
+        match self {
+            Paint::Color(c) => {
+                // TODO: We should actually cache the color with color space etc., not just the
+                // RGBA8 version.
+                hash128(&c.to_rgba().to_rgba8())
+            }
+            Paint::Pattern(p) => p.cache_key(),
+        }
+    }
+}
+
 /// The draw mode that should be used for a path.
 #[derive(Clone, Debug)]
 pub enum PathDrawMode {

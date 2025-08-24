@@ -1,8 +1,8 @@
 use crate::clip::CachedClipPath;
-use crate::glyph::CachedGlyph;
+use crate::glyph::{CachedOutlineGlyph, CachedType3Glyph};
 use crate::mask::CachedMask;
 use crate::paint::{CachedShading, CachedShadingPattern, CachedTilingPattern};
-use hayro_interpret::font::Glyph;
+use hayro_interpret::font::{Glyph, Type3Glyph};
 use hayro_interpret::hayro_syntax::page::Page;
 use hayro_interpret::util::FloatExt;
 use hayro_interpret::{
@@ -47,7 +47,8 @@ pub fn convert(page: &Page, interpreter_settings: &InterpreterSettings) -> Strin
 
 pub(crate) struct SvgRenderer<'a> {
     pub(crate) xml: XmlWriter,
-    pub(crate) glyphs: Deduplicator<CachedGlyph>,
+    pub(crate) outline_glyphs: Deduplicator<CachedOutlineGlyph>,
+    pub(crate) type3_glyphs: Deduplicator<CachedType3Glyph<'a>>,
     pub(crate) clip_paths: Deduplicator<CachedClipPath>,
     pub(crate) masks: Deduplicator<CachedMask<'a>>,
     pub(crate) shadings: Deduplicator<CachedShading>,
@@ -182,7 +183,8 @@ impl<'a> SvgRenderer<'a> {
     pub(crate) fn new(_: &'a Page<'a>) -> Self {
         Self {
             xml: XmlWriter::new(Options::default()),
-            glyphs: Deduplicator::new('g'),
+            outline_glyphs: Deduplicator::new('g'),
+            type3_glyphs: Deduplicator::new('e'),
             clip_paths: Deduplicator::new('c'),
             masks: Deduplicator::new('m'),
             shadings: Deduplicator::new('s'),

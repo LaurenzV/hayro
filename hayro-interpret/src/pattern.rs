@@ -67,6 +67,15 @@ impl<'a> Pattern<'a> {
     }
 }
 
+impl CacheKey for Pattern<'_> {
+    fn cache_key(&self) -> u128 {
+        match self {
+            Self::Shading(p) => p.cache_key(),
+            Self::Tiling(p) => p.cache_key(),
+        }
+    }
+}
+
 /// A shading pattern.
 #[derive(Clone, Debug)]
 pub struct ShadingPattern {

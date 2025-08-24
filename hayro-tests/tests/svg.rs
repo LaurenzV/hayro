@@ -135,3 +135,12 @@ fn mask_with_clip_path() {
         None,
     );
 }
+
+#[test]
+fn font_type3_shape_glyphs() {
+    run_svg_test(
+        "font_type3_shape_glyphs",
+        "pdfs/custom/font_type3_shape_glyphs.pdf",
+        None,
+    );
+}
