@@ -3,6 +3,7 @@ use crate::glyph::CachedGlyph;
 use crate::paint::{CachedShading, CachedShadingPattern, CachedTilingPattern};
 use hayro_interpret::font::Glyph;
 use hayro_interpret::hayro_syntax::page::Page;
+use hayro_interpret::util::FloatExt;
 use hayro_interpret::{
     CacheKey, ClipPath, Context, Device, GlyphDrawMode, Image, InterpreterSettings, Paint,
     PathDrawMode, SoftMask, interpret_page,
@@ -54,16 +55,27 @@ pub(crate) struct SvgRenderer<'a> {
 
 impl<'a> SvgRenderer<'a> {
     pub(crate) fn write_transform(&mut self, transform: Affine) {
-        let is_identity = {
-            let c = transform.as_coeffs();
-            c[0] == 1.0 && c[1] == 0.0 && c[2] == 0.0 && c[3] == 1.0 && c[4] == 0.0 && c[5] == 0.0
-        };
+        let c = transform.as_coeffs();
+        let has_scale = !(c[0] as f32).is_nearly_equal(1.0) || !(c[3] as f32).is_nearly_equal(1.0);
+        let has_skew = !(c[1] as f32).is_nearly_equal(0.0) || !(c[2] as f32).is_nearly_equal(0.0);
+        let has_translate =
+            !(c[4] as f32).is_nearly_equal(0.0) || !(c[5] as f32).is_nearly_equal(0.0);
+        let is_identity = !has_scale && !has_skew && !has_translate;
 
         if !is_identity {
-            self.xml.write_attribute(
-                "transform",
-                &format!("matrix({})", &convert_transform(&transform)),
-            );
+            let transform = match (has_scale, has_skew, has_translate) {
+                (true, false, false) => {
+                    format!("scale({} {})", c[0] as f32, c[3] as f32)
+                }
+                (false, false, true) => {
+                    format!("translate({} {})", c[4] as f32, c[5] as f32)
+                }
+                _ => {
+                    format!("matrix({})", &convert_transform(&transform))
+                }
+            };
+
+            self.xml.write_attribute("transform", &transform);
         }
     }
 }
