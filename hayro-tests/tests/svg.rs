@@ -170,9 +170,5 @@ fn pdfjs_issue13372() {
 
 #[test]
 fn fillrule_evenodd() {
-    run_svg_test(
-        "fillrule_evenodd",
-        "pdfs/custom/fillrule_evenodd.pdf",
-        None,
-    );
+    run_svg_test("fillrule_evenodd", "pdfs/custom/fillrule_evenodd.pdf", None);
 }
