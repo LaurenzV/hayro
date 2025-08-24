@@ -288,8 +288,11 @@ pub fn interpret<'a, 'b>(
                 if let Some(clip) = *context.clip()
                     && !context.path().elements().is_empty()
                 {
+                    let clip_path = context.get().ctm * context.path().clone();
+                    context.push_bbox(clip_path.bounding_box());
+                    
                     device.push_clip_path(&ClipPath {
-                        path: context.get().ctm * context.path().clone(),
+                        path: clip_path,
                         fill: clip,
                     });
 
@@ -412,8 +415,12 @@ pub fn interpret<'a, 'b>(
                     .is_some();
 
                 if has_outline {
+                    let clip_path = context.get().ctm * context.get().text_state.clip_paths.clone();
+                    
+                    context.push_bbox(clip_path.bounding_box());
+                    
                     device.push_clip_path(&ClipPath {
-                        path: context.get().ctm * context.get().text_state.clip_paths.clone(),
+                        path: clip_path,
                         fill: FillRule::NonZero,
                     });
                     context.get_mut().n_clips += 1;
@@ -566,6 +573,7 @@ pub fn interpret<'a, 'b>(
     // Invalid files may still have pending clip paths.
     while context.get().n_clips > n_clips {
         device.pop_clip_path();
+        context.pop_bbox();
         context.get_mut().n_clips -= 1;
     }
 }

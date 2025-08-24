@@ -232,6 +232,7 @@ pub(crate) fn restore_state<'a>(ctx: &mut Context<'a>, device: &mut impl Device<
 
     while num_clips > target_clips {
         device.pop_clip_path();
+        ctx.pop_bbox();
         num_clips -= 1;
     }
 }
