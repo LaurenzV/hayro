@@ -46,6 +46,11 @@ fn pdfbox_2726() {
 }
 
 #[test]
+fn pdfbox_3640() {
+    run_svg_test("pdfbox_3640", "downloads/pdfbox/3640.pdf", None);
+}
+
+#[test]
 fn pdfbox_3647() {
     run_svg_test("pdfbox_3647", "downloads/pdfbox/3647.pdf", None);
 }

@@ -83,12 +83,12 @@ impl<'a> Context<'a> {
             kurbo::Rect::new(0.0, 0.0, 1.0, 1.0)
         })
     }
-    
+
     pub(crate) fn push_bbox(&mut self, bbox: kurbo::Rect) {
         let new = self.bbox().intersect(bbox);
         self.bbox.push(new);
     }
-    
+
     pub(crate) fn pop_bbox(&mut self) {
         self.bbox.pop();
     }

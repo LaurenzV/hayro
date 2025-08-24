@@ -290,7 +290,7 @@ pub fn interpret<'a, 'b>(
                 {
                     let clip_path = context.get().ctm * context.path().clone();
                     context.push_bbox(clip_path.bounding_box());
-                    
+
                     device.push_clip_path(&ClipPath {
                         path: clip_path,
                         fill: clip,
@@ -416,9 +416,9 @@ pub fn interpret<'a, 'b>(
 
                 if has_outline {
                     let clip_path = context.get().ctm * context.get().text_state.clip_paths.clone();
-                    
+
                     context.push_bbox(clip_path.bounding_box());
-                    
+
                     device.push_clip_path(&ClipPath {
                         path: clip_path,
                         fill: FillRule::NonZero,
