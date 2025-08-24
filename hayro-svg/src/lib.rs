@@ -10,6 +10,7 @@ use std::hash::Hash;
 pub(crate) mod image;
 pub(crate) mod paint;
 mod render;
+mod glyph;
 
 pub fn convert(page: &Page, interpreter_settings: &InterpreterSettings) -> String {
     let mut state = Context::new(

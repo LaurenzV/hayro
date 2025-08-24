@@ -28,6 +28,7 @@ pub trait Device<'a> {
         transform: Affine,
         glyph_transform: Affine,
         paint: &Paint<'a>,
+        // TODO: Move this into outline glyph.
         draw_mode: &GlyphDrawMode,
     );
     /// Draw an image.
