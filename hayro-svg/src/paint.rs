@@ -1,4 +1,4 @@
-use crate::Id;
+use crate::{hash128, Id};
 use crate::{SvgRenderer, convert_transform};
 use hayro_interpret::encode::EncodedShadingPattern;
 use hayro_interpret::pattern::{Pattern, ShadingPattern, TilingPattern};
@@ -49,11 +49,14 @@ impl<'a> SvgRenderer<'a> {
                 let id = match p.as_ref() {
                     Pattern::Shading(s) => {
                         let bbox = (path_transform * path).bounding_box();
-                        let shading_id =
-                            self.shadings.insert_with(s.cache_key(), || CachedShading {
+                        let shading_id = {
+                            let cache_key = hash128(&(s.cache_key(), bbox.x0.to_bits(), bbox.x1.to_bits(), bbox.y0.to_bits(), bbox.y1.to_bits()));
+                            
+                            self.shadings.insert_with(cache_key, || CachedShading {
                                 pattern: s.clone(),
                                 bbox,
-                            });
+                            })
+                        };
 
                         let inverse_transform = path_transform.inverse();
 
