@@ -84,7 +84,7 @@ impl<'a> SvgRenderer<'a> {
         }
     }
 
-    fn push_transparency_group_inner(&mut self, _: f32, mask: Option<MaskKind<'a>>) {
+    fn push_transparency_group_inner(&mut self, opacity: f32, mask: Option<MaskKind<'a>>) {
         let mask_id = mask.map(|m| self.get_mask_id(m));
 
         self.xml.start_element("g");
@@ -92,6 +92,11 @@ impl<'a> SvgRenderer<'a> {
         if let Some(mask_id) = mask_id {
             self.xml
                 .write_attribute_fmt("mask", format_args!("url(#{mask_id})"));
+        }
+        
+        if !opacity.is_nearly_equal(1.0) {
+            self.xml
+                .write_attribute("opacity", &opacity.to_string());
         }
     }
 
