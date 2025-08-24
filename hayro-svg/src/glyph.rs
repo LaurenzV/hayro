@@ -13,6 +13,7 @@ pub(crate) struct CachedOutlineGlyph {
 pub(crate) struct CachedType3Glyph<'a> {
     // TODO: Use Arc instead?
     glyph: Box<Type3Glyph<'a>>,
+    transform: Affine,
     glyph_transform: Affine,
     paint: Paint<'a>,
 }
@@ -55,13 +56,14 @@ impl<'a> SvgRenderer<'a> {
             Glyph::Type3(t) => {
                 let cache_key = hash128(&(
                     t.cache_key(),
+                    transform.cache_key(),
                     glyph_transform.cache_key(),
                     paint.cache_key(),
                 ));
 
                 if !self.outline_glyphs.contains(cache_key) {
                     self.with_dummy(|r| {
-                        t.interpret(r, Affine::IDENTITY, glyph_transform, paint);
+                        t.interpret(r, transform, glyph_transform, paint);
                     });
                 }
 
@@ -69,6 +71,7 @@ impl<'a> SvgRenderer<'a> {
                     .type3_glyphs
                     .insert_with(cache_key, || CachedType3Glyph {
                         glyph: t.clone(),
+                        transform,
                         glyph_transform,
                         paint: paint.clone(),
                     });
@@ -76,7 +79,6 @@ impl<'a> SvgRenderer<'a> {
                 self.xml.start_element("use");
                 self.xml
                     .write_attribute_fmt("xlink:href", format_args!("#{id}"));
-                self.write_transform(transform);
                 self.xml.end_element();
             }
         }
@@ -107,7 +109,7 @@ impl<'a> SvgRenderer<'a> {
                 self.xml.write_attribute("id", &id);
                 glyph
                     .glyph
-                    .interpret(self, Affine::IDENTITY, glyph.glyph_transform, &glyph.paint);
+                    .interpret(self, glyph.transform, glyph.glyph_transform, &glyph.paint);
                 self.xml.end_element();
             }
 
