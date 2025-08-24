@@ -153,3 +153,12 @@ fn font_type3_filled_glyphs() {
         None,
     );
 }
+
+#[test]
+fn font_type3_stroked_glyphs() {
+    run_svg_test(
+        "font_type3_stroked_glyphs",
+        "pdfs/custom/font_type3_stroked_glyphs.pdf",
+        None,
+    );
+}

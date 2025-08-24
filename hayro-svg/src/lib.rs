@@ -2,7 +2,7 @@ use crate::clip::CachedClipPath;
 use crate::glyph::{CachedOutlineGlyph, CachedType3Glyph};
 use crate::mask::CachedMask;
 use crate::paint::{CachedShading, CachedShadingPattern, CachedTilingPattern};
-use hayro_interpret::font::{Glyph, Type3Glyph};
+use hayro_interpret::font::Glyph;
 use hayro_interpret::hayro_syntax::page::Page;
 use hayro_interpret::util::FloatExt;
 use hayro_interpret::{

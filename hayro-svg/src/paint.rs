@@ -1,4 +1,4 @@
-use crate::{hash128, Id};
+use crate::{Id, hash128};
 use crate::{SvgRenderer, convert_transform};
 use hayro_interpret::encode::EncodedShadingPattern;
 use hayro_interpret::pattern::{Pattern, ShadingPattern, TilingPattern};
@@ -50,8 +50,14 @@ impl<'a> SvgRenderer<'a> {
                     Pattern::Shading(s) => {
                         let bbox = (path_transform * path).bounding_box();
                         let shading_id = {
-                            let cache_key = hash128(&(s.cache_key(), bbox.x0.to_bits(), bbox.x1.to_bits(), bbox.y0.to_bits(), bbox.y1.to_bits()));
-                            
+                            let cache_key = hash128(&(
+                                s.cache_key(),
+                                bbox.x0.to_bits(),
+                                bbox.x1.to_bits(),
+                                bbox.y0.to_bits(),
+                                bbox.y1.to_bits(),
+                            ));
+
                             self.shadings.insert_with(cache_key, || CachedShading {
                                 pattern: s.clone(),
                                 bbox,
@@ -210,13 +216,14 @@ fn render_shading_texture(
 
     let width = (base_width * SCALE).ceil() as u32;
     let height = (base_height * SCALE).ceil() as u32;
-    
-    let (x_advance, y_advance) = x_y_advances(&(Affine::scale(INV_SCALE as f64)
-        * shading_pattern.base_transform));
+
+    let (x_advance, y_advance) =
+        x_y_advances(&(Affine::scale(INV_SCALE as f64) * shading_pattern.base_transform));
 
     let mut buf = vec![0u8; width as usize * height as usize * 4];
     let mut start_point = shading_pattern.base_transform
-        * Affine::translate((0.5, 0.5)) * Point::new(bbox.x0, bbox.y0);
+        * Affine::translate((0.5, 0.5))
+        * Point::new(bbox.x0, bbox.y0);
 
     for row in buf.chunks_exact_mut(width as usize * 4) {
         let mut point = start_point;
