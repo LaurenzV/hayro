@@ -1,3 +1,5 @@
+use crate::clip::CachedClipPath;
+use crate::glyph::CachedGlyph;
 use crate::paint::{CachedShading, CachedShadingPattern, CachedTilingPattern};
 use crate::{Id, hash128};
 use hayro_interpret::font::Glyph;
@@ -11,17 +13,11 @@ use std::io;
 use std::io::Write;
 use std::marker::PhantomData;
 use xmlwriter::{Options, XmlWriter};
-use crate::glyph::CachedGlyph;
-
-struct CachedClipPath {
-    path: BezPath,
-    fill_rule: FillRule,
-}
 
 pub(crate) struct SvgRenderer<'a> {
     pub(crate) xml: XmlWriter,
     pub(crate) glyphs: Deduplicator<CachedGlyph>,
-    clip_paths: Deduplicator<CachedClipPath>,
+    pub(crate) clip_paths: Deduplicator<CachedClipPath>,
     pub(crate) shadings: Deduplicator<CachedShading>,
     pub(crate) shading_patterns: Deduplicator<CachedShadingPattern>,
     pub(crate) tiling_patterns: Deduplicator<CachedTilingPattern<'a>>,
@@ -29,32 +25,6 @@ pub(crate) struct SvgRenderer<'a> {
 }
 
 impl<'a> SvgRenderer<'a> {
-
-    fn draw_path(
-        &mut self,
-        path: &BezPath,
-        transform: Affine,
-        paint: &Paint<'a>,
-        draw_mode: &PathDrawMode,
-    ) {
-        let svg_path = path.to_svg_f32();
-
-        self.xml.start_element("path");
-        self.xml.write_attribute("d", &svg_path);
-
-        match draw_mode {
-            PathDrawMode::Fill(_) => {
-                self.write_paint(paint, path, transform, false);
-            }
-            PathDrawMode::Stroke(_) => {
-                self.write_paint(paint, path, transform, true);
-            }
-        }
-
-        self.write_transform(transform);
-        self.xml.end_element();
-    }
-
     pub(crate) fn write_transform(&mut self, transform: Affine) {
         let is_identity = {
             let c = transform.as_coeffs();
@@ -67,39 +37,6 @@ impl<'a> SvgRenderer<'a> {
                 &format!("matrix({})", &convert_transform(&transform)),
             );
         }
-    }
-
-    fn write_clip_path_defs(&mut self) {
-        if self.clip_paths.is_empty() {
-            return;
-        }
-
-        self.xml.start_element("defs");
-        self.xml.write_attribute("id", "clip-path");
-
-        for (id, clip_path) in self.clip_paths.iter() {
-            self.xml.start_element("clipPath");
-            self.xml.write_attribute("id", &id);
-            self.xml.start_element("path");
-            self.xml.write_attribute("d", &clip_path.path.to_svg_f32());
-
-            if clip_path.fill_rule == FillRule::EvenOdd {
-                self.xml.write_attribute("clip-rule", "evenodd");
-            }
-
-            self.xml.end_element();
-            self.xml.end_element();
-        }
-
-        self.xml.end_element();
-    }
-
-    fn insert_clip(&mut self, clip_path: &ClipPath) -> Id {
-        self.clip_paths
-            .insert_with(clip_path.cache_key(), || CachedClipPath {
-                path: clip_path.path.clone(),
-                fill_rule: clip_path.fill,
-            })
     }
 }
 
@@ -128,7 +65,12 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
     }
 
     fn push_clip_path(&mut self, clip_path: &ClipPath) {
-        let clip_id = self.insert_clip(clip_path);
+        let clip_id = self
+            .clip_paths
+            .insert_with(clip_path.cache_key(), || CachedClipPath {
+                path: clip_path.path.clone(),
+                fill_rule: clip_path.fill,
+            });
 
         self.xml.start_element("g");
         self.xml
@@ -253,49 +195,5 @@ impl<T> Deduplicator<T> {
 
     pub(crate) fn is_empty(&self) -> bool {
         self.vec.is_empty()
-    }
-}
-
-pub(crate) trait BezPathExt {
-    fn to_svg_f32(&self) -> String {
-        let mut buffer = Vec::new();
-        self.write_to_f32(&mut buffer).unwrap();
-        String::from_utf8(buffer).unwrap()
-    }
-
-    fn write_to_f32<W: Write>(&self, writer: W) -> io::Result<()>;
-}
-
-impl BezPathExt for BezPath {
-    fn to_svg_f32(&self) -> String {
-        let mut buffer = Vec::new();
-        self.write_to_f32(&mut buffer).unwrap();
-        String::from_utf8(buffer).unwrap()
-    }
-
-    /// Write the SVG representation of this path to the provided buffer.
-    fn write_to_f32<W: Write>(&self, mut writer: W) -> io::Result<()> {
-        for (i, el) in self.elements().iter().enumerate() {
-            if i > 0 {
-                write!(writer, " ")?;
-            }
-            match *el {
-                PathEl::MoveTo(p) => write!(writer, "M{},{}", p.x as f32, p.y as f32)?,
-                PathEl::LineTo(p) => write!(writer, "L{},{}", p.x as f32, p.y as f32)?,
-                PathEl::QuadTo(p1, p2) => write!(
-                    writer,
-                    "Q{},{} {},{}",
-                    p1.x as f32, p1.y as f32, p2.x as f32, p2.y as f32
-                )?,
-                PathEl::CurveTo(p1, p2, p3) => write!(
-                    writer,
-                    "C{},{} {},{} {},{}",
-                    p1.x as f32, p1.y as f32, p2.x as f32, p2.y as f32, p3.x as f32, p3.y as f32
-                )?,
-                PathEl::ClosePath => write!(writer, "Z")?,
-            }
-        }
-
-        Ok(())
     }
 }

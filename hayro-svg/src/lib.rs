@@ -7,10 +7,12 @@ use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::hash::Hash;
 
+mod clip;
+mod glyph;
 pub(crate) mod image;
 pub(crate) mod paint;
+mod path;
 mod render;
-mod glyph;
 
 pub fn convert(page: &Page, interpreter_settings: &InterpreterSettings) -> String {
     let mut state = Context::new(

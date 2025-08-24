@@ -1,8 +1,9 @@
-use kurbo::{Affine, BezPath};
+use crate::hash128;
+use crate::path::BezPathExt;
+use crate::render::SvgRenderer;
 use hayro_interpret::font::Glyph;
 use hayro_interpret::{CacheKey, GlyphDrawMode, Paint};
-use crate::hash128;
-use crate::render::{BezPathExt, SvgRenderer};
+use kurbo::{Affine, BezPath};
 
 pub(crate) struct CachedGlyph {
     path: BezPath,
