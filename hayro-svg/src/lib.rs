@@ -167,12 +167,19 @@ impl<'a> SvgRenderer<'a> {
         self.xml
             .write_attribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
     }
+    
+    // We need this because we have a small problem. `xmlwriter` doesn't allow us to write sub-streams
+    // of XML while we are writing our main stream. This means that objects that need to be interpreted
+    // (like patterns or mask) all need to be written to the XML in the end. On the other hand, once
+    // we get to `finish` all of the registerd resources must already have been registered. This isn't
+    // the case if masks or patterns use new resources that haven't been registered before. As a result,
+    pub(crate) fn with_dummy(&mut self, f: impl FnOnce(&mut Self)) {
+        let mut old_xml = std::mem::replace(&mut self.xml, XmlWriter::new(Options::default()));
+        f(self);
+        std::mem::swap(&mut self.xml, &mut old_xml);
+    }
 
     pub(crate) fn finish(mut self) -> String {
-        let mut old_xml = std::mem::replace(&mut self.xml, XmlWriter::new(Options::default()));
-        self.write_tiling_pattern_defs();
-        std::mem::swap(&mut self.xml, &mut old_xml);
-
         self.write_glyph_defs();
         self.write_clip_path_defs();
         self.write_shading_defs();
@@ -213,6 +220,10 @@ impl<T> Deduplicator<T> {
             vec: Vec::new(),
             present: HashMap::new(),
         }
+    }
+    
+    pub(crate) fn contains(&self, hash: u128) -> bool {
+        self.present.contains_key(&hash)
     }
 
     pub(crate) fn insert_with<F>(&mut self, hash: u128, f: F) -> Id

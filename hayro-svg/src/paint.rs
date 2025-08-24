@@ -69,9 +69,16 @@ impl<'a> SvgRenderer<'a> {
                     Pattern::Tiling(t) => {
                         let inverse_transform = path_transform.inverse();
                         let pattern = *t.clone();
+                        let cache_key = (pattern.clone(), inverse_transform).cache_key();
 
+                        if !self.tiling_patterns.contains(cache_key) {
+                            self.with_dummy(|r| {
+                                t.interpret(r, Affine::IDENTITY, false);
+                            })
+                        }
+                        
                         self.tiling_patterns.insert_with(
-                            (pattern.clone(), inverse_transform).cache_key(),
+                            cache_key,
                             || CachedTilingPattern {
                                 transform: inverse_transform,
                                 tiling_pattern: pattern,
