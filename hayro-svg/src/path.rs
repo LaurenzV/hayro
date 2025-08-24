@@ -1,5 +1,5 @@
 use crate::SvgRenderer;
-use hayro_interpret::{Paint, PathDrawMode};
+use hayro_interpret::{FillRule, Paint, PathDrawMode};
 use kurbo::{Affine, BezPath, PathEl};
 use std::io;
 use std::io::Write;
@@ -18,10 +18,14 @@ impl<'a> SvgRenderer<'a> {
         self.xml.write_attribute("d", &svg_path);
 
         match draw_mode {
-            PathDrawMode::Fill(_) => {
+            PathDrawMode::Fill(f) => {
+                if *f == FillRule::EvenOdd {
+                    self.xml.write_attribute("fill-rule", "evenodd");
+                }
                 self.write_paint(paint, path, transform, false);
             }
             PathDrawMode::Stroke(_) => {
+                // TODO: Write stroke attributes
                 self.write_paint(paint, path, transform, true);
             }
         }

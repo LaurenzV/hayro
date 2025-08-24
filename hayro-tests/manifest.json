@@ -1036,5 +1036,9 @@
     "id": "issue_typst_6723",
     "file": "pdfs/custom/issue_typst_6723.link",
     "link": true
+  },
+  {
+    "id": "fillrule_evenodd",
+    "file": "pdfs/custom/fillrule_evenodd.pdf"
   }
 ]
