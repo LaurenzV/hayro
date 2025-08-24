@@ -135,7 +135,7 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
     }
 
     fn push_transparency_group(&mut self, opacity: f32, mask: Option<SoftMask<'a>>) {
-        self.push_transparency_group_inner(opacity, mask.map(|m| MaskKind::SoftMask(m)));
+        self.push_transparency_group_inner(opacity, mask.map(MaskKind::SoftMask));
     }
 
     fn draw_glyph(
@@ -163,7 +163,7 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
         match image {
             Image::Stencil(s) => {
                 s.with_stencil(|s, paint| {
-                    Self::draw_stencil_image(self, s, transform, &paint);
+                    Self::draw_stencil_image(self, s, transform, paint);
                 });
             }
             Image::Raster(r) => {
