@@ -32,7 +32,7 @@ pub trait Device<'a> {
         draw_mode: &GlyphDrawMode,
     );
     /// Draw an image.
-    fn draw_image(&mut self, image: Image<'_>, transform: Affine);
+    fn draw_image(&mut self, image: Image<'a, '_>, transform: Affine);
     /// Pop the last clip path from the clip stack.
     fn pop_clip_path(&mut self);
     /// Pop the last transparency group from the blend stack.

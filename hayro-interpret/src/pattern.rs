@@ -304,7 +304,7 @@ impl<'a, T: Device<'a>> Device<'a> for StencilPatternDevice<'a, '_, T> {
             .draw_glyph(g, transform, glyph_transform, p, draw_mode);
     }
 
-    fn draw_image(&mut self, image: Image<'_>, transform: Affine) {
+    fn draw_image(&mut self, image: Image<'a, '_>, transform: Affine) {
         if let Image::Stencil(mut s) = image {
             s.paint = self.paint.clone();
             self.inner.draw_image(Image::Stencil(s), transform)

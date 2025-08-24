@@ -22,12 +22,12 @@ impl CacheKey for ClipPath {
 }
 
 /// A stencil image.
-pub struct StencilImage<'a> {
-    pub(crate) image_xobject: ImageXObject<'a>,
+pub struct StencilImage<'a, 'b> {
     pub(crate) paint: Paint<'a>,
+    pub(crate) image_xobject: ImageXObject<'b>,
 }
 
-impl<'a> StencilImage<'a> {
+impl<'a, 'b> StencilImage<'a, 'b> {
     /// Perform some operation with the stencil data of the image.
     pub fn with_stencil(&self, func: impl FnOnce(LumaData, &Paint<'a>)) {
         if let Some(luma) = self
@@ -40,7 +40,7 @@ impl<'a> StencilImage<'a> {
     }
 }
 
-impl CacheKey for StencilImage<'_> {
+impl CacheKey for StencilImage<'_, '_> {
     fn cache_key(&self) -> u128 {
         self.image_xobject.cache_key()
     }
@@ -69,14 +69,14 @@ impl CacheKey for RasterImage<'_> {
 }
 
 /// A type of image.
-pub enum Image<'a> {
+pub enum Image<'a, 'b> {
     /// A stencil image.
-    Stencil(StencilImage<'a>),
+    Stencil(StencilImage<'a, 'b>),
     /// A normal raster image.
-    Raster(RasterImage<'a>),
+    Raster(RasterImage<'b>),
 }
 
-impl<'a> CacheKey for Image<'a> {
+impl CacheKey for Image<'_, '_> {
     fn cache_key(&self) -> u128 {
         match self {
             Image::Stencil(i) => i.cache_key(),

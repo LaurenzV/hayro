@@ -1,6 +1,6 @@
 use crate::clip::CachedClipPath;
 use crate::glyph::{CachedOutlineGlyph, CachedType3Glyph};
-use crate::mask::CachedMask;
+use crate::mask::MaskKind;
 use crate::paint::{CachedShading, CachedShadingPattern, CachedTilingPattern};
 use hayro_interpret::font::Glyph;
 use hayro_interpret::hayro_syntax::page::Page;
@@ -50,7 +50,7 @@ pub(crate) struct SvgRenderer<'a> {
     pub(crate) outline_glyphs: Deduplicator<CachedOutlineGlyph>,
     pub(crate) type3_glyphs: Deduplicator<CachedType3Glyph<'a>>,
     pub(crate) clip_paths: Deduplicator<CachedClipPath>,
-    pub(crate) masks: Deduplicator<CachedMask<'a>>,
+    pub(crate) masks: Deduplicator<MaskKind<'a>>,
     pub(crate) shadings: Deduplicator<CachedShading>,
     pub(crate) shading_patterns: Deduplicator<CachedShadingPattern>,
     pub(crate) tiling_patterns: Deduplicator<CachedTilingPattern<'a>>,
@@ -81,6 +81,17 @@ impl<'a> SvgRenderer<'a> {
             };
 
             self.xml.write_attribute("transform", &transform);
+        }
+    }
+
+    fn push_transparency_group_inner(&mut self, _: f32, mask: Option<MaskKind<'a>>) {
+        let mask_id = mask.map(|m| self.get_mask_id(m));
+
+        self.xml.start_element("g");
+
+        if let Some(mask_id) = mask_id {
+            self.xml
+                .write_attribute_fmt("mask", format_args!("url(#{mask_id})"));
         }
     }
 }
@@ -123,15 +134,8 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
             .write_attribute_fmt("clip-path", format_args!("url(#{clip_id})"));
     }
 
-    fn push_transparency_group(&mut self, _: f32, mask: Option<SoftMask<'a>>) {
-        let mask_id = mask.map(|m| self.get_mask_id(m));
-
-        self.xml.start_element("g");
-
-        if let Some(mask_id) = mask_id {
-            self.xml
-                .write_attribute_fmt("mask", format_args!("url(#{mask_id})"));
-        }
+    fn push_transparency_group(&mut self, opacity: f32, mask: Option<SoftMask<'a>>) {
+        self.push_transparency_group_inner(opacity, mask.map(|m| MaskKind::SoftMask(m)));
     }
 
     fn draw_glyph(
@@ -155,11 +159,11 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
         }
     }
 
-    fn draw_image(&mut self, image: Image<'_>, transform: Affine) {
+    fn draw_image(&mut self, image: Image<'a, '_>, transform: Affine) {
         match image {
             Image::Stencil(s) => {
                 s.with_stencil(|s, paint| {
-                    Self::draw_stencil_image(self, s, transform, paint);
+                    Self::draw_stencil_image(self, s, transform, &paint);
                 });
             }
             Image::Raster(r) => {

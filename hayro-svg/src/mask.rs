@@ -1,20 +1,46 @@
-use crate::{Id, SvgRenderer};
+use crate::{Id, SvgRenderer, hash128};
 use hayro_interpret::{CacheKey, MaskType, SoftMask};
+use image::DynamicImage;
+use kurbo::Affine;
+use std::sync::Arc;
+
+pub(crate) struct ImageLuminanceMask {
+    pub(crate) image: DynamicImage,
+    pub(crate) transform: Affine,
+    pub(crate) interpolate: bool,
+}
 
 #[derive(Clone)]
-pub(crate) struct CachedMask<'a>(SoftMask<'a>);
+pub(crate) enum MaskKind<'a> {
+    SoftMask(SoftMask<'a>),
+    Image(Arc<ImageLuminanceMask>),
+}
 
 impl<'a> SvgRenderer<'a> {
-    pub(crate) fn get_mask_id(&mut self, mask: SoftMask<'a>) -> Id {
-        let cache_key = mask.cache_key();
+    pub(crate) fn get_mask_id(&mut self, mask: MaskKind<'a>) -> Id {
+        match mask {
+            MaskKind::SoftMask(mask) => {
+                let cache_key = mask.cache_key();
 
-        if !self.masks.contains(cache_key) {
-            self.with_dummy(|r| {
-                mask.interpret(r);
-            })
+                if !self.masks.contains(cache_key) {
+                    self.with_dummy(|r| {
+                        mask.interpret(r);
+                    })
+                }
+
+                self.masks
+                    .insert_with(cache_key, || MaskKind::SoftMask(mask))
+            }
+            MaskKind::Image(mask) => {
+                let cache_key = hash128(&(
+                    mask.interpolate,
+                    mask.transform.cache_key(),
+                    mask.image.as_bytes(),
+                ));
+
+                self.masks.insert_with(cache_key, || MaskKind::Image(mask))
+            }
         }
-
-        self.masks.insert_with(cache_key, || CachedMask(mask))
     }
 
     pub(crate) fn write_mask_defs(&mut self) {
@@ -32,11 +58,16 @@ impl<'a> SvgRenderer<'a> {
             self.xml.write_attribute("id", &id);
             self.xml.write_attribute("maskUnits", "userSpaceOnUse");
 
-            if mask.0.mask_type() != MaskType::Luminosity {
-                self.xml.write_attribute("mask-type", "alpha");
-            }
+            match mask {
+                MaskKind::SoftMask(mask) => {
+                    if mask.mask_type() != MaskType::Luminosity {
+                        self.xml.write_attribute("mask-type", "alpha");
+                    }
 
-            mask.0.interpret(self);
+                    mask.interpret(self);
+                }
+                MaskKind::Image(i) => self.write_image(&i.image, i.interpolate, None, i.transform),
+            }
 
             self.xml.end_element();
         }

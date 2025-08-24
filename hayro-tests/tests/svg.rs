@@ -162,3 +162,8 @@ fn font_type3_stroked_glyphs() {
         None,
     );
 }
+
+#[test]
+fn pdfjs_issue13372() {
+    run_svg_test("pdfjs_issue13372", "downloads/pdfjs/issue13372.pdf", None);
+}

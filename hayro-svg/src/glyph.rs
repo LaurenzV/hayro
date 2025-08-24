@@ -67,6 +67,7 @@ impl<'a> SvgRenderer<'a> {
                     });
                 }
 
+                // TODO: Apply transforms to group if possible
                 let id = self
                     .type3_glyphs
                     .insert_with(cache_key, || CachedType3Glyph {

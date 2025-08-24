@@ -1,12 +1,14 @@
 use crate::Id;
 use crate::SvgRenderer;
+use crate::mask::{ImageLuminanceMask, MaskKind};
 use base64::Engine;
-use hayro_interpret::{LumaData, Paint, RgbData};
+use hayro_interpret::{Device, FillRule, LumaData, Paint, PathDrawMode, RgbData};
 use image::{DynamicImage, ImageBuffer, ImageFormat};
-use kurbo::Affine;
+use kurbo::{Affine, Rect, Shape};
 use std::io::Cursor;
+use std::sync::Arc;
 
-impl SvgRenderer<'_> {
+impl<'a> SvgRenderer<'a> {
     pub(crate) fn draw_rgba_image(
         &mut self,
         image: RgbData,
@@ -47,11 +49,11 @@ impl SvgRenderer<'_> {
         &mut self,
         stencil: LumaData,
         transform: Affine,
-        paint: &Paint,
+        paint: &Paint<'a>,
     ) {
         let interpolate = stencil.interpolate;
 
-        let image = match &paint {
+        match &paint {
             Paint::Color(c) => {
                 let color = c.to_rgba().to_rgba8();
                 let image = stencil
@@ -60,16 +62,35 @@ impl SvgRenderer<'_> {
                     .flat_map(|d| if *d == 255 { color } else { [0, 0, 0, 0] })
                     .collect::<Vec<u8>>();
 
-                DynamicImage::ImageRgba8(
+                let image = DynamicImage::ImageRgba8(
                     ImageBuffer::from_raw(stencil.width, stencil.height, image).unwrap(),
-                )
+                );
+
+                self.write_image(&image, interpolate, None, transform);
             }
             Paint::Pattern(_) => {
-                unreachable!();
+                let mask = {
+                    let image = DynamicImage::ImageLuma8(
+                        ImageBuffer::from_raw(stencil.width, stencil.height, stencil.data).unwrap(),
+                    );
+
+                    ImageLuminanceMask {
+                        image,
+                        transform,
+                        interpolate,
+                    }
+                };
+
+                self.push_transparency_group_inner(1.0, Some(MaskKind::Image(Arc::new(mask))));
+                self.draw_path(
+                    &Rect::new(0.0, 0.0, stencil.width as f64, stencil.height as f64).to_path(0.1),
+                    transform,
+                    paint,
+                    &PathDrawMode::Fill(FillRule::NonZero),
+                );
+                self.pop_transparency_group();
             }
         };
-
-        self.write_image(&image, interpolate, None, transform);
     }
 
     pub(crate) fn write_image(

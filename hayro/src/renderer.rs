@@ -266,8 +266,8 @@ impl Renderer {
     }
 }
 
-impl Device<'_> for Renderer {
-    fn draw_image(&mut self, image: hayro_interpret::Image<'_>, transform: Affine) {
+impl<'a> Device<'a> for Renderer {
+    fn draw_image(&mut self, image: hayro_interpret::Image<'a, '_>, transform: Affine) {
         match image {
             hayro_interpret::Image::Stencil(s) => {
                 s.with_stencil(|stencil, paint| {

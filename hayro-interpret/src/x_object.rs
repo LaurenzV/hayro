@@ -185,8 +185,8 @@ pub(crate) fn draw_image_xobject<'a, 'b>(
 
     let image = if x_object.is_image_mask {
         Image::Stencil(StencilImage {
-            image_xobject: x_object.clone(),
             paint: get_paint(context, false),
+            image_xobject: x_object.clone(),
         })
     } else {
         Image::Raster(RasterImage(x_object.clone()))

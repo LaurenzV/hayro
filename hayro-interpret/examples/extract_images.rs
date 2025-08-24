@@ -75,7 +75,7 @@ impl Device<'_> for ImageExtractor {
 
     fn pop_transparency_group(&mut self) {}
 
-    fn draw_image(&mut self, image: Image<'_>, _: Affine) {
+    fn draw_image(&mut self, image: Image<'_, '_>, _: Affine) {
         match image {
             Image::Stencil(s) => {
                 s.with_stencil(|stencil, _paint| {
