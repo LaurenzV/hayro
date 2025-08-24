@@ -328,6 +328,12 @@ impl<T> Deduplicator<T> {
         })
     }
 
+    pub(crate) fn insert(&mut self, value: T) -> Id {
+        let index = self.vec.len();
+        self.vec.push(value);
+        Id(self.kind, index as u64)
+    }
+
     pub(crate) fn iter(&self) -> impl Iterator<Item = (Id, &T)> {
         self.vec
             .iter()

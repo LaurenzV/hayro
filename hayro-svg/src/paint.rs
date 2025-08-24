@@ -1,8 +1,9 @@
+use crate::clip::CachedClipPath;
 use crate::{Id, hash128};
 use crate::{SvgRenderer, convert_transform};
 use hayro_interpret::encode::EncodedShadingPattern;
 use hayro_interpret::pattern::{Pattern, ShadingPattern, TilingPattern};
-use hayro_interpret::{CacheKey, Paint};
+use hayro_interpret::{CacheKey, FillRule, Paint};
 use image::{DynamicImage, ImageBuffer};
 use kurbo::{Affine, BezPath, Point, Rect, Shape, Vec2};
 
@@ -15,6 +16,7 @@ pub(crate) struct CachedTilingPattern<'a> {
 pub(crate) struct CachedShadingPattern {
     pub(crate) transform: Affine,
     pub(crate) shading: Id,
+    pub(crate) clip_path: Option<Id>,
     pub(crate) bbox: Rect,
 }
 
@@ -64,6 +66,13 @@ impl<'a> SvgRenderer<'a> {
                             })
                         };
 
+                        let clip_path = s.shading.clip_path.clone().map(|path| {
+                            self.clip_paths.insert(CachedClipPath {
+                                path,
+                                fill_rule: FillRule::NonZero,
+                            })
+                        });
+
                         let inverse_transform = path_transform.inverse();
 
                         self.shading_patterns.insert_with(
@@ -71,6 +80,7 @@ impl<'a> SvgRenderer<'a> {
                             || CachedShadingPattern {
                                 transform: inverse_transform,
                                 bbox,
+                                clip_path,
                                 shading: shading_id,
                             },
                         )
@@ -133,6 +143,10 @@ impl<'a> SvgRenderer<'a> {
             );
 
             self.xml.start_element("use");
+            if let Some(clip) = shading.clip_path {
+                self.xml
+                    .write_attribute_fmt("clip-path", format_args!("url(#{})", clip));
+            }
             self.xml
                 .write_attribute("xlink:href", &format!("#{}", shading.shading));
             self.xml.end_element();
