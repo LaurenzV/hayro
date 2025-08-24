@@ -1,9 +1,10 @@
-use crate::{CacheKey, InterpreterSettings};
 use crate::cache::Cache;
 use crate::context::Context;
 use crate::device::Device;
 use crate::interpret::state::State;
+use crate::util::hash128;
 use crate::x_object::{XObject, draw_xobject};
+use crate::{CacheKey, InterpreterSettings};
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Name;
 use hayro_syntax::object::ObjectIdentifier;
@@ -16,7 +17,6 @@ use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 use std::sync::Arc;
-use crate::util::hash128;
 
 /// Type type of mask.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

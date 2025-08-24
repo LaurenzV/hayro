@@ -76,14 +76,12 @@ impl<'a> SvgRenderer<'a> {
                                 t.interpret(r, Affine::IDENTITY, false);
                             })
                         }
-                        
-                        self.tiling_patterns.insert_with(
-                            cache_key,
-                            || CachedTilingPattern {
+
+                        self.tiling_patterns
+                            .insert_with(cache_key, || CachedTilingPattern {
                                 transform: inverse_transform,
                                 tiling_pattern: pattern,
-                            },
-                        )
+                            })
                     }
                 };
 

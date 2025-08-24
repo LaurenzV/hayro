@@ -1,5 +1,6 @@
 use crate::clip::CachedClipPath;
 use crate::glyph::CachedGlyph;
+use crate::mask::CachedMask;
 use crate::paint::{CachedShading, CachedShadingPattern, CachedTilingPattern};
 use hayro_interpret::font::Glyph;
 use hayro_interpret::hayro_syntax::page::Page;
@@ -16,14 +17,13 @@ use std::fmt::{Display, Formatter};
 use std::hash::Hash;
 use std::marker::PhantomData;
 use xmlwriter::{Options, XmlWriter};
-use crate::mask::CachedMask;
 
 mod clip;
 mod glyph;
 pub(crate) mod image;
+mod mask;
 pub(crate) mod paint;
 mod path;
-mod mask;
 
 pub fn convert(page: &Page, interpreter_settings: &InterpreterSettings) -> String {
     let mut state = Context::new(
@@ -97,14 +97,16 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
         draw_mode: &PathDrawMode,
     ) {
         let push_group = self.cur_mask.is_some();
-        
+
         if push_group {
             self.push_transparency_group(1.0, self.cur_mask.clone());
         }
-        
+
         Self::draw_path(self, path, transform, paint, draw_mode);
-        
-        if push_group { self.pop_transparency_group(); }
+
+        if push_group {
+            self.pop_transparency_group();
+        }
     }
 
     fn push_clip_path(&mut self, clip_path: &ClipPath) {
@@ -124,12 +126,11 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
         let mask_id = mask.map(|m| self.get_mask_id(m));
 
         self.xml.start_element("g");
-        
+
         if let Some(mask_id) = mask_id {
             self.xml
                 .write_attribute_fmt("mask", format_args!("url(#{mask_id})"));
         }
-        
     }
 
     fn draw_glyph(
@@ -145,10 +146,12 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
         if push_group {
             self.push_transparency_group(1.0, self.cur_mask.clone());
         }
-        
+
         Self::draw_glyph(self, glyph, transform, glyph_transform, paint, draw_mode);
 
-        if push_group { self.pop_transparency_group(); }
+        if push_group {
+            self.pop_transparency_group();
+        }
     }
 
     fn draw_image(&mut self, image: Image<'_>, transform: Affine) {
@@ -203,7 +206,7 @@ impl<'a> SvgRenderer<'a> {
         self.xml
             .write_attribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
     }
-    
+
     // We need this because we have a small problem. `xmlwriter` doesn't allow us to write sub-streams
     // of XML while we are writing our main stream. This means that objects that need to be interpreted
     // (like patterns or mask) all need to be written to the XML in the end. On the other hand, once
@@ -258,7 +261,7 @@ impl<T> Deduplicator<T> {
             present: HashMap::new(),
         }
     }
-    
+
     pub(crate) fn contains(&self, hash: u128) -> bool {
         self.present.contains_key(&hash)
     }

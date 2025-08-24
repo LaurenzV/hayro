@@ -1,7 +1,5 @@
-use kurbo::Affine;
-use hayro_interpret::pattern::TilingPattern;
+use crate::{Id, SvgRenderer};
 use hayro_interpret::{CacheKey, MaskType, SoftMask};
-use crate::{convert_transform, Id, SvgRenderer};
 
 #[derive(Clone)]
 pub(crate) struct CachedMask<'a>(SoftMask<'a>);
@@ -26,14 +24,14 @@ impl<'a> SvgRenderer<'a> {
 
         self.xml.start_element("defs");
         self.xml.write_attribute("id", "mask");
-        
+
         let masks = self.masks.clone();
 
         for (id, mask) in masks.iter() {
             self.xml.start_element("mask");
             self.xml.write_attribute("id", &id);
             self.xml.write_attribute("maskUnits", "userSpaceOnUse");
-            
+
             if mask.0.mask_type() != MaskType::Luminosity {
                 self.xml.write_attribute("mask-type", "alpha");
             }
