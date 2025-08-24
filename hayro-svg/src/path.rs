@@ -1,4 +1,4 @@
-use crate::render::SvgRenderer;
+use crate::SvgRenderer;
 use hayro_interpret::{Paint, PathDrawMode};
 use kurbo::{Affine, BezPath, PathEl};
 use std::io;

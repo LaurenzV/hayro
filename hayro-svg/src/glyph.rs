@@ -1,6 +1,6 @@
+use crate::SvgRenderer;
 use crate::hash128;
 use crate::path::BezPathExt;
-use crate::render::SvgRenderer;
 use hayro_interpret::font::Glyph;
 use hayro_interpret::{CacheKey, GlyphDrawMode, Paint};
 use kurbo::{Affine, BezPath};

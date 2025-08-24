@@ -1,5 +1,5 @@
 use crate::Id;
-use crate::render::SvgRenderer;
+use crate::SvgRenderer;
 use base64::Engine;
 use hayro_interpret::{LumaData, Paint, RgbData};
 use image::{DynamicImage, ImageBuffer, ImageFormat};

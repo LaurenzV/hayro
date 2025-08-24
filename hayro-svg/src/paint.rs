@@ -1,5 +1,5 @@
 use crate::Id;
-use crate::render::{SvgRenderer, convert_transform};
+use crate::{SvgRenderer, convert_transform};
 use hayro_interpret::encode::EncodedShadingPattern;
 use hayro_interpret::pattern::{Pattern, ShadingPattern, TilingPattern};
 use hayro_interpret::{CacheKey, Paint};

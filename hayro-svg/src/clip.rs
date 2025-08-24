@@ -1,5 +1,5 @@
+use crate::SvgRenderer;
 use crate::path::BezPathExt;
-use crate::render::SvgRenderer;
 use hayro_interpret::FillRule;
 use kurbo::BezPath;
 
