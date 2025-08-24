@@ -11,38 +11,63 @@ use std::sync::Arc;
 impl<'a> SvgRenderer<'a> {
     pub(crate) fn draw_rgba_image(
         &mut self,
-        image: RgbData,
+        rgb_data: RgbData,
         transform: Affine,
         alpha: Option<LumaData>,
     ) {
-        // TODO: Cache images
-        let interpolate = image.interpolate;
-
-        let image = if let Some(alpha) = alpha {
-            if alpha.interpolate == image.interpolate
-                && alpha.width == image.width
-                && alpha.height == image.height
+        if let Some(alpha) = alpha {
+            if alpha.interpolate == rgb_data.interpolate
+                && alpha.width == rgb_data.width
+                && alpha.height == rgb_data.height
             {
-                let interleaved = image
+                let interleaved = rgb_data
                     .data
                     .chunks(3)
                     .zip(alpha.data)
                     .flat_map(|(rgb, a)| [rgb[0], rgb[1], rgb[2], a])
                     .collect::<Vec<u8>>();
 
-                DynamicImage::ImageRgba8(
-                    ImageBuffer::from_raw(image.width, image.height, interleaved).unwrap(),
-                )
+                let image = DynamicImage::ImageRgba8(
+                    ImageBuffer::from_raw(rgb_data.width, rgb_data.height, interleaved).unwrap(),
+                );
+
+                self.write_image(&image, rgb_data.interpolate, None, transform);
             } else {
-                unimplemented!();
+                let image = DynamicImage::ImageRgb8(
+                    ImageBuffer::from_raw(rgb_data.width, rgb_data.height, rgb_data.data.clone())
+                        .unwrap(),
+                );
+
+                let alpha = {
+                    let image = DynamicImage::ImageLuma8(
+                        ImageBuffer::from_raw(alpha.width, alpha.height, alpha.data).unwrap(),
+                    );
+
+                    let transform = transform
+                        * Affine::scale_non_uniform(
+                            rgb_data.width as f64 / alpha.width as f64,
+                            rgb_data.height as f64 / alpha.height as f64,
+                        );
+
+                    ImageLuminanceMask {
+                        image,
+                        transform,
+                        interpolate: alpha.interpolate,
+                    }
+                };
+
+                self.push_transparency_group_inner(1.0, Some(MaskKind::Image(Arc::new(alpha))));
+                self.write_image(&image, rgb_data.interpolate, None, transform);
+                self.pop_transparency_group();
             }
         } else {
-            DynamicImage::ImageRgb8(
-                ImageBuffer::from_raw(image.width, image.height, image.data.clone()).unwrap(),
-            )
-        };
+            let image = DynamicImage::ImageRgb8(
+                ImageBuffer::from_raw(rgb_data.width, rgb_data.height, rgb_data.data.clone())
+                    .unwrap(),
+            );
 
-        self.write_image(&image, interpolate, None, transform);
+            self.write_image(&image, rgb_data.interpolate, None, transform);
+        };
     }
 
     pub(crate) fn draw_stencil_image(
