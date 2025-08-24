@@ -192,11 +192,15 @@ pub fn run_render_test(name: &str, file_path: &str, range_str: Option<&str>) {
     check_render(
         name,
         RENDER_SNAPSHOTS_PATH.clone(),
-        render_pdf(&pdf, settings, range)
+        render_pdf(&pdf, settings, range),
     );
 }
 
-fn render_pdf(pdf: &Pdf, settings: InterpreterSettings, range: Option<RangeInclusive<usize>>) -> Vec<Vec<u8>> {
+fn render_pdf(
+    pdf: &Pdf,
+    settings: InterpreterSettings,
+    range: Option<RangeInclusive<usize>>,
+) -> Vec<Vec<u8>> {
     hayro::render_pdf(&pdf, 1.0, settings, range)
         .unwrap()
         .into_iter()
@@ -204,9 +208,13 @@ fn render_pdf(pdf: &Pdf, settings: InterpreterSettings, range: Option<RangeInclu
         .collect()
 }
 
-fn render_svg(pdf: &Pdf, name: &str, settings: InterpreterSettings, range: Option<RangeInclusive<usize>>) -> Vec<Vec<u8>> {
-    pdf
-        .pages()
+fn render_svg(
+    pdf: &Pdf,
+    name: &str,
+    settings: InterpreterSettings,
+    range: Option<RangeInclusive<usize>>,
+) -> Vec<Vec<u8>> {
+    pdf.pages()
         .iter()
         .enumerate()
         .flat_map(|(idx, p)| {
@@ -228,7 +236,7 @@ fn render_svg(pdf: &Pdf, name: &str, settings: InterpreterSettings, range: Optio
                 tree.size().width().ceil() as u32,
                 tree.size().height().ceil() as u32,
             )
-                .unwrap();
+            .unwrap();
             pixmap.fill(Color::WHITE);
             resvg::render(&tree, Transform::default(), &mut pixmap.as_mut());
             Some(pixmap.encode_png().unwrap())

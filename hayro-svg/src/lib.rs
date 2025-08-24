@@ -93,10 +93,9 @@ impl<'a> SvgRenderer<'a> {
             self.xml
                 .write_attribute_fmt("mask", format_args!("url(#{mask_id})"));
         }
-        
+
         if !opacity.is_nearly_equal(1.0) {
-            self.xml
-                .write_attribute("opacity", &opacity.to_string());
+            self.xml.write_attribute("opacity", &opacity.to_string());
         }
     }
 
