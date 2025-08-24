@@ -16,12 +16,14 @@ use std::fmt::{Display, Formatter};
 use std::hash::Hash;
 use std::marker::PhantomData;
 use xmlwriter::{Options, XmlWriter};
+use crate::mask::CachedMask;
 
 mod clip;
 mod glyph;
 pub(crate) mod image;
 pub(crate) mod paint;
 mod path;
+mod mask;
 
 pub fn convert(page: &Page, interpreter_settings: &InterpreterSettings) -> String {
     let mut state = Context::new(
@@ -47,10 +49,12 @@ pub(crate) struct SvgRenderer<'a> {
     pub(crate) xml: XmlWriter,
     pub(crate) glyphs: Deduplicator<CachedGlyph>,
     pub(crate) clip_paths: Deduplicator<CachedClipPath>,
+    pub(crate) masks: Deduplicator<CachedMask<'a>>,
     pub(crate) shadings: Deduplicator<CachedShading>,
     pub(crate) shading_patterns: Deduplicator<CachedShadingPattern>,
     pub(crate) tiling_patterns: Deduplicator<CachedTilingPattern<'a>>,
     pub(crate) phantom_data: PhantomData<&'a ()>,
+    pub(crate) cur_mask: Option<SoftMask<'a>>,
 }
 
 impl<'a> SvgRenderer<'a> {
@@ -81,7 +85,9 @@ impl<'a> SvgRenderer<'a> {
 }
 
 impl<'a> Device<'a> for SvgRenderer<'a> {
-    fn set_soft_mask(&mut self, _: Option<SoftMask<'a>>) {}
+    fn set_soft_mask(&mut self, mask: Option<SoftMask<'a>>) {
+        self.cur_mask = mask;
+    }
 
     fn draw_path(
         &mut self,
@@ -90,7 +96,15 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
         paint: &Paint<'a>,
         draw_mode: &PathDrawMode,
     ) {
+        let push_group = self.cur_mask.is_some();
+        
+        if push_group {
+            self.push_transparency_group(1.0, self.cur_mask.clone());
+        }
+        
         Self::draw_path(self, path, transform, paint, draw_mode);
+        
+        if push_group { self.pop_transparency_group(); }
     }
 
     fn push_clip_path(&mut self, clip_path: &ClipPath) {
@@ -106,7 +120,17 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
             .write_attribute_fmt("clip-path", format_args!("url(#{clip_id})"));
     }
 
-    fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask<'a>>) {}
+    fn push_transparency_group(&mut self, _: f32, mask: Option<SoftMask<'a>>) {
+        let mask_id = mask.map(|m| self.get_mask_id(m));
+
+        self.xml.start_element("g");
+        
+        if let Some(mask_id) = mask_id {
+            self.xml
+                .write_attribute_fmt("mask", format_args!("url(#{mask_id})"));
+        }
+        
+    }
 
     fn draw_glyph(
         &mut self,
@@ -116,7 +140,15 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
         paint: &Paint<'a>,
         draw_mode: &GlyphDrawMode,
     ) {
+        let push_group = self.cur_mask.is_some();
+
+        if push_group {
+            self.push_transparency_group(1.0, self.cur_mask.clone());
+        }
+        
         Self::draw_glyph(self, glyph, transform, glyph_transform, paint, draw_mode);
+
+        if push_group { self.pop_transparency_group(); }
     }
 
     fn draw_image(&mut self, image: Image<'_>, transform: Affine) {
@@ -138,7 +170,9 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
         self.xml.end_element();
     }
 
-    fn pop_transparency_group(&mut self) {}
+    fn pop_transparency_group(&mut self) {
+        self.xml.end_element();
+    }
 }
 
 impl<'a> SvgRenderer<'a> {
@@ -147,9 +181,11 @@ impl<'a> SvgRenderer<'a> {
             xml: XmlWriter::new(Options::default()),
             glyphs: Deduplicator::new('g'),
             clip_paths: Deduplicator::new('c'),
+            masks: Deduplicator::new('m'),
             shadings: Deduplicator::new('s'),
             shading_patterns: Deduplicator::new('v'),
             tiling_patterns: Deduplicator::new('t'),
+            cur_mask: None,
             phantom_data: PhantomData,
         }
     }
@@ -181,6 +217,7 @@ impl<'a> SvgRenderer<'a> {
 
     pub(crate) fn finish(mut self) -> String {
         self.write_glyph_defs();
+        self.write_mask_defs();
         self.write_clip_path_defs();
         self.write_shading_defs();
         self.write_shading_pattern_defs();

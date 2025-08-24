@@ -1,4 +1,4 @@
-use crate::InterpreterSettings;
+use crate::{CacheKey, InterpreterSettings};
 use crate::cache::Cache;
 use crate::context::Context;
 use crate::device::Device;
@@ -16,6 +16,7 @@ use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 use std::sync::Arc;
+use crate::util::hash128;
 
 /// Type type of mask.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -62,6 +63,12 @@ impl PartialEq for SoftMask<'_> {
 }
 
 impl Eq for SoftMask<'_> {}
+
+impl CacheKey for SoftMask<'_> {
+    fn cache_key(&self) -> u128 {
+        hash128(self)
+    }
+}
 
 impl<'a> SoftMask<'a> {
     pub(crate) fn new(

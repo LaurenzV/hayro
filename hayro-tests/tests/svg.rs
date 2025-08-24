@@ -108,3 +108,30 @@ fn pattern_tiling_rotated() {
         None,
     );
 }
+
+#[test]
+fn mask_luminance() {
+    run_svg_test(
+        "mask_luminance",
+        "pdfs/custom/resvg_masking_mask_mask_type_luminance.pdf",
+        None,
+    );
+}
+
+#[test]
+fn mask_alpha() {
+    run_svg_test(
+        "mask_alpha",
+        "pdfs/custom/resvg_masking_mask_mask_type_alpha.pdf",
+        None,
+    );
+}
+
+#[test]
+fn mask_with_clip_path() {
+    run_svg_test(
+        "mask_with_clip_path",
+        "pdfs/custom/resvg_masking_mask_with_clip_path.pdf",
+        None,
+    );
+}
