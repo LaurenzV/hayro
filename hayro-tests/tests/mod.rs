@@ -213,10 +213,9 @@ fn render_pdf(
                 let dir = STORE_PATH.join("pdf");
                 let _ = std::fs::create_dir_all(&dir);
 
-                std::fs::write(dir.join(format!("{name}_{idx}.png")), &png)
-                    .unwrap();
+                std::fs::write(dir.join(format!("{name}_{idx}.png")), &png).unwrap();
             }
-            
+
             png
         })
         .collect()
@@ -242,8 +241,7 @@ fn render_svg(
                 let dir = STORE_PATH.join("svg");
                 let _ = std::fs::create_dir_all(&dir);
 
-                std::fs::write(dir.join(format!("{name}_{idx}.svg")), svg.as_bytes())
-                    .unwrap();
+                std::fs::write(dir.join(format!("{name}_{idx}.svg")), svg.as_bytes()).unwrap();
             }
 
             let tree = Tree::from_data(svg.as_bytes(), &Options::default()).unwrap();
