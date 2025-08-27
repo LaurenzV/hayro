@@ -192,19 +192,33 @@ pub fn run_render_test(name: &str, file_path: &str, range_str: Option<&str>) {
     check_render(
         name,
         RENDER_SNAPSHOTS_PATH.clone(),
-        render_pdf(&pdf, settings, range),
+        render_pdf(&pdf, name, settings, range),
     );
 }
 
 fn render_pdf(
     pdf: &Pdf,
+    name: &str,
     settings: InterpreterSettings,
     range: Option<RangeInclusive<usize>>,
 ) -> Vec<Vec<u8>> {
     hayro::render_pdf(&pdf, 1.0, settings, range)
         .unwrap()
         .into_iter()
-        .map(|d| d.take_png())
+        .enumerate()
+        .map(|(idx, d)| {
+            let png = d.take_png();
+
+            if STORE.is_some() {
+                let dir = STORE_PATH.join("pdf");
+                let _ = std::fs::create_dir_all(&dir);
+
+                std::fs::write(dir.join(format!("{name}_{idx}.png")), &png)
+                    .unwrap();
+            }
+            
+            png
+        })
         .collect()
 }
 
@@ -225,9 +239,10 @@ fn render_svg(
             let svg = hayro_svg::convert(p, &settings);
 
             if STORE.is_some() {
-                let _ = std::fs::create_dir_all(STORE_PATH.clone());
+                let dir = STORE_PATH.join("svg");
+                let _ = std::fs::create_dir_all(&dir);
 
-                std::fs::write(STORE_PATH.join(format!("{name}_{idx}.svg")), svg.as_bytes())
+                std::fs::write(dir.join(format!("{name}_{idx}.svg")), svg.as_bytes())
                     .unwrap();
             }
 
