@@ -785,7 +785,7 @@ impl ICCProfile {
 
         let transform = src_profile
             .create_transform_8bit(src_layout, &dest_profile, Layout::Rgb, TransformOptions::default())
-            .unwrap();
+            .ok()?;
 
         Some(Self(Arc::new(ICCColorRepr {
             transform,
