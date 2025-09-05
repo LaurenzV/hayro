@@ -10,11 +10,11 @@ use hayro_syntax::object::Object;
 use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::*;
 use log::warn;
+use moxcms::{ColorProfile, DataColorSpace, Layout, Transform8BitExecutor, TransformOptions};
 use smallvec::{SmallVec, ToSmallVec, smallvec};
 use std::fmt::{Debug, Formatter};
 use std::ops::Deref;
 use std::sync::{Arc, LazyLock};
-use moxcms::{ColorProfile, DataColorSpace, Layout, Transform8BitExecutor, TransformOptions};
 
 /// A storage for the components of colors.
 pub type ColorComponents = SmallVec<[f32; 4]>;
@@ -764,12 +764,12 @@ impl Debug for ICCProfile {
 impl ICCProfile {
     fn new(profile: &[u8], number_components: usize) -> Option<Self> {
         let src_profile = ColorProfile::new_from_slice(profile).ok()?;
-        
+
         // Temporary workaround as 3 PDFs don't render correctly without this.
         if src_profile.color_space == DataColorSpace::Lab {
             return None;
         }
-        
+
         let dest_profile = ColorProfile::new_srgb();
 
         let src_layout = match number_components {
@@ -784,7 +784,12 @@ impl ICCProfile {
         };
 
         let transform = src_profile
-            .create_transform_8bit(src_layout, &dest_profile, Layout::Rgb, TransformOptions::default())
+            .create_transform_8bit(
+                src_layout,
+                &dest_profile,
+                Layout::Rgb,
+                TransformOptions::default(),
+            )
             .ok()?;
 
         Some(Self(Arc::new(ICCColorRepr {
@@ -819,7 +824,8 @@ impl ICCProfile {
                 &mut srgb,
             ),
             _ => return None,
-        }.ok()?;
+        }
+        .ok()?;
 
         Some(srgb)
     }
