@@ -25,7 +25,6 @@ kurbo = { version = "0.11.2" }
 log = { version = "0.4" }
 resvg = { version = "0.45.1" }
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
-oxipng = { version = "9" }
 once_cell = { version = "1" }
 phf = { version = "0.11" }
 qcms = { version = "0.3" }
