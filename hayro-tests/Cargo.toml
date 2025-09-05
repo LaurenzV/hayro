@@ -24,5 +24,4 @@ resvg = { workspace = true }
 once_cell = { workspace = true }
 hayro-syntax = { workspace = true }
 image = {  workspace = true }
-oxipng = { workspace = true }
 sitro = { workspace = true }

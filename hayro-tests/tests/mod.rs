@@ -79,12 +79,6 @@ pub fn check_render(name: &str, snapshot_path: PathBuf, document: RenderedDocume
 
             if !ref_path.exists() {
                 std::fs::write(&ref_path, page).unwrap();
-                oxipng::optimize(
-                    &oxipng::InFile::Path(ref_path.clone()),
-                    &oxipng::OutFile::from_path(ref_path),
-                    &oxipng::Options::max_compression(),
-                )
-                .unwrap();
                 ref_created = true;
 
                 return;
@@ -107,12 +101,6 @@ pub fn check_render(name: &str, snapshot_path: PathBuf, document: RenderedDocume
 
                 if REPLACE.is_some() {
                     std::fs::write(&ref_path, page).unwrap();
-                    oxipng::optimize(
-                        &oxipng::InFile::Path(ref_path.clone()),
-                        &oxipng::OutFile::from_path(ref_path),
-                        &oxipng::Options::max_compression(),
-                    )
-                    .unwrap();
                     test_replaced = true;
                 }
 
