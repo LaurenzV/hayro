@@ -27,7 +27,7 @@ resvg = { version = "0.45.1" }
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 once_cell = { version = "1" }
 phf = { version = "0.11" }
-qcms = { version = "0.3" }
+moxcms = { version = "0.7.5" }
 rustc-hash = { version = "2" }
 siphasher = "1"
 skrifa = { version = "0.33" }

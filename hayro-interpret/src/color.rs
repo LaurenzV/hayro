@@ -10,11 +10,11 @@ use hayro_syntax::object::Object;
 use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::*;
 use log::warn;
-use qcms::Transform;
 use smallvec::{SmallVec, ToSmallVec, smallvec};
 use std::fmt::{Debug, Formatter};
 use std::ops::Deref;
 use std::sync::{Arc, LazyLock};
+use moxcms::{ColorProfile, DataColorSpace, Layout, Transform8BitExecutor, TransformOptions};
 
 /// A storage for the components of colors.
 pub type ColorComponents = SmallVec<[f32; 4]>;
@@ -748,7 +748,7 @@ impl DeviceN {
 }
 
 struct ICCColorRepr {
-    transform: Transform,
+    transform: Box<Transform8BitExecutor>,
     number_components: usize,
 }
 
@@ -763,14 +763,19 @@ impl Debug for ICCProfile {
 
 impl ICCProfile {
     fn new(profile: &[u8], number_components: usize) -> Option<Self> {
-        let input = qcms::Profile::new_from_slice(profile, false)?;
-        let mut output = qcms::Profile::new_sRGB();
-        output.precache_output_transform();
+        let src_profile = ColorProfile::new_from_slice(profile).ok()?;
+        
+        // Temporary workaround as 3 PDFs don't render correctly without this.
+        if src_profile.color_space == DataColorSpace::Lab {
+            return None;
+        }
+        
+        let dest_profile = ColorProfile::new_srgb();
 
-        let data_type = match number_components {
-            1 => qcms::DataType::Gray8,
-            3 => qcms::DataType::RGB8,
-            4 => qcms::DataType::CMYK,
+        let src_layout = match number_components {
+            1 => Layout::Gray,
+            3 => Layout::Rgb,
+            4 => Layout::Rgba,
             _ => {
                 warn!("unsupported number of components {number_components} for ICC profile");
 
@@ -778,13 +783,9 @@ impl ICCProfile {
             }
         };
 
-        let transform = Transform::new_to(
-            &input,
-            &output,
-            data_type,
-            qcms::DataType::RGB8,
-            qcms::Intent::default(),
-        )?;
+        let transform = src_profile
+            .create_transform_8bit(src_layout, &dest_profile, Layout::Rgb, TransformOptions::default())
+            .unwrap();
 
         Some(Self(Arc::new(ICCColorRepr {
             transform,
@@ -799,8 +800,8 @@ impl ICCProfile {
             1 => self
                 .0
                 .transform
-                .convert(&[f32_to_u8(*c.first()?)], &mut srgb),
-            3 => self.0.transform.convert(
+                .transform(&[f32_to_u8(*c.first()?)], &mut srgb),
+            3 => self.0.transform.transform(
                 &[
                     f32_to_u8(*c.first()?),
                     f32_to_u8(*c.get(1)?),
@@ -808,7 +809,7 @@ impl ICCProfile {
                 ],
                 &mut srgb,
             ),
-            4 => self.0.transform.convert(
+            4 => self.0.transform.transform(
                 &[
                     f32_to_u8(*c.first()?),
                     f32_to_u8(*c.get(1)?),
@@ -818,7 +819,7 @@ impl ICCProfile {
                 &mut srgb,
             ),
             _ => return None,
-        }
+        }.ok()?;
 
         Some(srgb)
     }

@@ -326,8 +326,8 @@ dependencies = [
  "image 0.25.6",
  "kurbo",
  "log",
+ "moxcms",
  "phf",
- "qcms",
  "rustc-hash",
  "siphasher",
  "skrifa",
@@ -535,6 +535,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "moxcms"
+version = "0.7.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ddd32fa8935aeadb8a8a6b6b351e40225570a37c43de67690383d87ef170cd08"
+dependencies = [
+ "num-traits",
+ "pxfm",
+]
+
+[[package]]
 name = "num-traits"
 version = "0.2.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -644,10 +654,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "qcms"
-version = "0.3.0"
+name = "pxfm"
+version = "0.1.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "edecfcd5d755a5e5d98e24cf43113e7cdaec5a070edd0f6b250c03a573da30fa"
+checksum = "376f733579ac4d3b9fbf0afca99bf8f6b698d541118affca554d0b86f73c2470"
+dependencies = [
+ "num-traits",
+]
 
 [[package]]
 name = "qoi"
