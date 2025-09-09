@@ -21,16 +21,16 @@ bitflags = { version = "2.9" }
 bytemuck = { version = "1" }
 image = { version = "0.25", default-features = false }
 jpeg2k = { version = "0.10.1", default-features = false, features = ["openjp2"] }
-kurbo = { version = "0.11.2" }
+kurbo = { version = "0.12.0" }
 log = { version = "0.4" }
 resvg = { version = "0.45.1" }
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 once_cell = { version = "1" }
-phf = { version = "0.11" }
+phf = { version = "0.13.1" }
 moxcms = { version = "0.7.5" }
 rustc-hash = { version = "2" }
 siphasher = "1"
-skrifa = { version = "0.33" }
+skrifa = { version = "0.37.0" }
 smallvec = { version = "1" }
 yoke = { version = "0.8" }
 pdf-writer = { git = "https://github.com/typst/pdf-writer", rev = "143a1c3" }
