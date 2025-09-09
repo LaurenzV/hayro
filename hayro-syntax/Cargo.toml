@@ -1,6 +1,6 @@
 [package]
 name = "hayro-syntax"
-version = "0.2.0"
+version = "0.3.0"
 description = "A low-level crate for reading PDF files."
 edition = { workspace = true }
 repository = { workspace = true }
