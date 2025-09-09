@@ -1,3 +1,14 @@
+/*!
+A crate for converting PDF pages to SVG files.
+
+This is the pendant to [`hayro`](https://crates.io/crates/hayro), but allows you to export to
+SVG instead of bitmap images. See the description of that crate for more information on the
+supported features and limitations.
+*/
+
+#![forbid(unsafe_code)]
+#![deny(missing_docs)]
+
 use crate::clip::CachedClipPath;
 use crate::glyph::{CachedOutlineGlyph, CachedType3Glyph};
 use crate::mask::MaskKind;
@@ -25,6 +36,7 @@ mod mask;
 pub(crate) mod paint;
 mod path;
 
+/// Convert the given page into an SVG string.
 pub fn convert(page: &Page, interpreter_settings: &InterpreterSettings) -> String {
     let mut state = Context::new(
         page.initial_transform(true),
