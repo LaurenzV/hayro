@@ -436,6 +436,11 @@ fn get_rgb_data(
     cs: &ColorSpace,
     interpolate: bool,
 ) -> Option<RgbData> {
+    // To prevent a panic when calling the `chunks` method.
+    if cs.num_components() == 0 {
+        return None;
+    }
+
     let data_len = width as usize * height as usize * 3;
 
     let decoded = decoded

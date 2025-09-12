@@ -35,6 +35,12 @@ impl Type0 {
         let clamper = Clamper::new(dict)?;
         let range = clamper.range.clone()?;
 
+        if range.len() == 0 {
+            warn!("encountered Type0 function with invalid range length 0.");
+
+            return None;
+        }
+
         let sizes = dict.get::<Array>(SIZE)?.iter::<u32>().collect::<IntVec>();
 
         let encode = dict

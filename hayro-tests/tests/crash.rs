@@ -122,6 +122,12 @@ fn issue208() {
 }
 
 #[test]
+fn issue222() {
+    let file = include_bytes!("../pdfs/crash/issue222.pdf");
+    render(file);
+}
+
+#[test]
 fn issue223() {
     let file = include_bytes!("../pdfs/crash/issue223.pdf");
     render(file);
