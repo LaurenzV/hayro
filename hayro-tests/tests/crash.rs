@@ -98,6 +98,12 @@ fn issue204() {
 }
 
 #[test]
+fn issue205() {
+    let file = include_bytes!("../pdfs/crash/issue205.pdf");
+    render(file);
+}
+
+#[test]
 fn issue206() {
     let file = include_bytes!("../pdfs/crash/issue206.pdf");
     render(file);
