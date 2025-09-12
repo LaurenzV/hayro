@@ -8,7 +8,22 @@ use skrifa::GlyphId;
 use skrifa::outline::OutlinePen;
 use std::rc::Rc;
 
-pub(crate) struct OutlinePath(pub(crate) BezPath);
+pub(crate) struct OutlinePath(BezPath);
+
+impl OutlinePath {
+    pub fn new() -> Self {
+        let mut path = BezPath::new();
+        // This is to guard against paths that don't have `MoveTo` as the first command, which
+        // can trigger a panic in kurbo.
+        path.move_to((0.0, 0.0));
+
+        Self(path)
+    }
+
+    pub fn take(self) -> BezPath {
+        self.0
+    }
+}
 
 impl OutlinePen for OutlinePath {
     #[inline]

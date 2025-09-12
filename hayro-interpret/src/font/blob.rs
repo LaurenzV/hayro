@@ -37,11 +37,11 @@ impl Type1FontBlob {
     }
 
     pub(crate) fn outline_glyph(&self, name: &str) -> BezPath {
-        let mut path = OutlinePath(BezPath::new());
+        let mut path = OutlinePath::new();
 
         self.table().outline(name, &mut path).unwrap_or_default();
 
-        Affine::scale(UNITS_PER_EM as f64) * convert_matrix(self.table().matrix()) * path.0
+        Affine::scale(UNITS_PER_EM as f64) * convert_matrix(self.table().matrix()) * path.take()
     }
 }
 
@@ -72,7 +72,7 @@ impl CffFontBlob {
     }
 
     pub(crate) fn outline_glyph(&self, glyph: GlyphId) -> BezPath {
-        let mut path = OutlinePath(BezPath::new());
+        let mut path = OutlinePath::new();
 
         let Ok(_) = self
             .table()
@@ -81,7 +81,7 @@ impl CffFontBlob {
             return BezPath::new();
         };
 
-        Affine::scale(UNITS_PER_EM as f64) * convert_matrix(self.table().matrix()) * path.0
+        Affine::scale(UNITS_PER_EM as f64) * convert_matrix(self.table().matrix()) * path.take()
     }
 }
 
@@ -144,7 +144,7 @@ impl OpenTypeFontBlob {
     }
 
     pub(crate) fn outline_glyph(&self, glyph: GlyphId) -> BezPath {
-        let mut path = OutlinePath(BezPath::new());
+        let mut path = OutlinePath::new();
 
         let draw_settings = if let Some(instance) = self.0.get().hinting_instance.as_ref() {
             // Note: We always hint at the font size `UNITS_PER_EM`, which obviously isn't very useful. We don't do this
@@ -160,7 +160,7 @@ impl OpenTypeFontBlob {
         };
 
         let _ = outline.draw(draw_settings, &mut path);
-        path.0
+        path.take()
     }
 
     pub(crate) fn num_glyphs(&self) -> u16 {
