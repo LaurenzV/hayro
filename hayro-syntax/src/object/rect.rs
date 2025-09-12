@@ -15,12 +15,16 @@ impl Readable<'_> for Rect {
 
 fn from_arr(array: &Array) -> Option<Rect> {
     let mut iter = array.iter::<f32>();
+    let x0 = iter.next()? as f64;
+    let y0 = iter.next()? as f64;
+    let x1 = iter.next()? as f64;
+    let y1 = iter.next()? as f64;
 
     Some(Rect::new(
-        iter.next()? as f64,
-        iter.next()? as f64,
-        iter.next()? as f64,
-        iter.next()? as f64,
+        x0.min(x1),
+        y0.min(y1),
+        x1.max(x0),
+        y1.max(y0),
     ))
 }
 
