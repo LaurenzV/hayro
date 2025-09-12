@@ -20,12 +20,7 @@ fn from_arr(array: &Array) -> Option<Rect> {
     let x1 = iter.next()? as f64;
     let y1 = iter.next()? as f64;
 
-    Some(Rect::new(
-        x0.min(x1),
-        y0.min(y1),
-        x1.max(x0),
-        y1.max(y0),
-    ))
+    Some(Rect::new(x0.min(x1), y0.min(y1), x1.max(x0), y1.max(y0)))
 }
 
 impl TryFrom<Object<'_>> for Rect {
