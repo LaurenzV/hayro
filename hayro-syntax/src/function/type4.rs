@@ -393,10 +393,9 @@ fn eval_inner(procedure: &[PostScriptOp], arg_stack: &mut InterpreterStack) -> O
             PostScriptOp::Roll => {
                 let j = arg_stack.pop()?.as_f32() as i32;
                 let n = arg_stack.pop()?.as_f32() as u32 as usize;
+                let trimmed_n = arg_stack.len().checked_sub(n)?;
 
-                let n = arg_stack.len().checked_sub(n)?;
-
-                let target = &mut arg_stack.items_mut()[n..];
+                let target = &mut arg_stack.items_mut()[trimmed_n..];
 
                 if target.is_empty() {
                     continue;
