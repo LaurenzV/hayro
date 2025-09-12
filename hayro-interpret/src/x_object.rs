@@ -322,7 +322,7 @@ impl DecodedImageXObject {
 
         let dict = obj.stream.dict();
 
-        let bits_per_component = if obj.is_image_mask {
+        let mut bits_per_component = if obj.is_image_mask {
             1
         } else {
             decoded
@@ -334,6 +334,20 @@ impl DecodedImageXObject {
                 .unwrap_or(8)
         };
 
+        if !matches!(bits_per_component, 1 | 2 | 4 | 8 | 16) {
+            bits_per_component = ((decoded.data.len() as u64 * 8)
+                / (obj.width as u64 * obj.height as u64 * color_space.num_components() as u64))
+                as u8;
+        }
+
+        let components = get_components(
+            &decoded.data,
+            obj.width,
+            obj.height,
+            &color_space,
+            bits_per_component,
+        )?;
+
         let f32_data = {
             let decode_arr = dict
                 .get::<Array>(D)
@@ -341,14 +355,7 @@ impl DecodedImageXObject {
                 .map(|a| a.iter::<(f32, f32)>().collect::<SmallVec<_>>())
                 .unwrap_or(color_space.default_decode_arr(bits_per_component as f32));
 
-            decode(
-                &decoded.data,
-                obj.width,
-                obj.height,
-                &color_space,
-                bits_per_component,
-                &decode_arr,
-            )?
+            decode(&components, &color_space, bits_per_component, &decode_arr)?
         };
 
         let rgb_data = if obj.is_image_mask || obj.force_luma {
@@ -416,6 +423,28 @@ impl DecodedImageXObject {
                     } else {
                         None
                     }
+                } else if let Some(color_key_mask) = dict.get::<SmallVec<[u16; 4]>>(MASK) {
+                    let mut mask_data = vec![];
+
+                    for pixel in components.chunks_exact(color_space.num_components() as usize) {
+                        let mut mask_val = 0;
+
+                        for (component, min_max) in pixel.iter().zip(color_key_mask.chunks_exact(2))
+                        {
+                            if *component > min_max[1] || *component < min_max[0] {
+                                mask_val = 255;
+                            }
+                        }
+
+                        mask_data.push(mask_val);
+                    }
+
+                    Some(LumaData {
+                        data: fix_image_length(mask_data, data_len, 255),
+                        width: obj.width,
+                        height: obj.height,
+                        interpolate: obj.interpolate,
+                    })
                 } else {
                     None
                 }
@@ -475,31 +504,14 @@ fn fix_image_length(mut image: Vec<u8>, length: usize, filler: u8) -> Vec<u8> {
     image
 }
 
-fn decode(
+fn get_components(
     data: &[u8],
     width: u32,
     height: u32,
     color_space: &ColorSpace,
-    mut bits_per_component: u8,
-    decode: &[(f32, f32)],
-) -> Option<Vec<f32>> {
-    if !matches!(bits_per_component, 1 | 2 | 4 | 8 | 16) {
-        bits_per_component = ((data.len() as u64 * 8)
-            / (width as u64 * height as u64 * color_space.num_components() as u64))
-            as u8;
-    }
-
-    let interpolate = |n: f32, d_min: f32, d_max: f32| {
-        interpolate(
-            n,
-            0.0,
-            2.0f32.powi(bits_per_component as i32) - 1.0,
-            d_min,
-            d_max,
-        )
-    };
-
-    let adjusted_components = match bits_per_component {
+    bits_per_component: u8,
+) -> Option<Vec<u16>> {
+    let result = match bits_per_component {
         1..8 | 9..16 => {
             let mut buf = vec![];
             let bpc = BitSize::from_u8(bits_per_component)?;
@@ -532,10 +544,29 @@ fn decode(
         }
     };
 
+    Some(result)
+}
+
+fn decode(
+    components: &[u16],
+    color_space: &ColorSpace,
+    bits_per_component: u8,
+    decode: &[(f32, f32)],
+) -> Option<Vec<f32>> {
+    let interpolate = |n: f32, d_min: f32, d_max: f32| {
+        interpolate(
+            n,
+            0.0,
+            2.0f32.powi(bits_per_component as i32) - 1.0,
+            d_min,
+            d_max,
+        )
+    };
+
     let mut decoded_arr = vec![];
 
-    for components in adjusted_components.chunks(color_space.num_components() as usize) {
-        for (component, (d_min, d_max)) in components.iter().zip(decode) {
+    for pixel in components.chunks(color_space.num_components() as usize) {
+        for (component, (d_min, d_max)) in pixel.iter().zip(decode) {
             decoded_arr.push(interpolate(*component as f32, *d_min, *d_max));
         }
     }

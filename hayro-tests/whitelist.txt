@@ -101,3 +101,4 @@ issue3062
 issue4668
 issue5501
 issue5701
+colorkeymask

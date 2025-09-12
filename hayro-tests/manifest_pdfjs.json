@@ -580,6 +580,12 @@
     "md5": "85d162b48ce98503a382d96f574f70a2"
   },
   {
+    "id": "colorkeymask",
+    "file": "pdfs/colorkeymask.link",
+    "link": true,
+    "md5": "9f11e815b485f7f0e1fa5c116c636cf9"
+  },
+  {
     "id": "colorspace_atan",
     "file": "pdfs/colorspace_atan.link",
     "link": true,

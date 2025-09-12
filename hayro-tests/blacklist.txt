@@ -74,8 +74,6 @@ bug1650302_reduce
 bug1123803
 bug1199237
 
-# colorkeymask
-colorkeymask
 
 # this pdf is pretty broken, and while we can display most of it, some of the images are cut off, seemingly because the
 # flate decompressor doesn't process everything

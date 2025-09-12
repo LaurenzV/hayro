@@ -12,10 +12,6 @@
     // Self-overlapping coons-patch
     "https://issues.apache.org/jira/secure/attachment/12633464/texample-rgb-triangle.pdf"
   ],
-  "2452": [
-    // Color mask
-    "https://issues.apache.org/jira/secure/attachment/12676864/test.pdf"
-  ],
   "4914": [
     // Broken in nearly all viewers, but it seem slike it sohuld be possible to extract linear gradient
     "https://issues.apache.org/jira/secure/attachment/13007430/POPPLER-938.pdf"
@@ -41,7 +37,6 @@
   "1606": "encrypted PDF",
   "1908": "transparency groups",
   "1910": "encryption",
-  "1934": "color mask",
   "2006": "encrypted PDF",
   "2027": "encrypted PDF",
   "2180": "extremely slow because we don't cache patterns",
