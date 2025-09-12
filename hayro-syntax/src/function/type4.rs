@@ -393,11 +393,21 @@ fn eval_inner(procedure: &[PostScriptOp], arg_stack: &mut InterpreterStack) -> O
             PostScriptOp::Roll => {
                 let j = arg_stack.pop()?.as_f32() as i32;
                 let n = arg_stack.pop()?.as_f32() as u32 as usize;
+
                 let n = arg_stack.len().checked_sub(n)?;
+
+                let target = &mut arg_stack.items_mut()[n..];
+
+                if target.is_empty() {
+                    continue;
+                }
+
                 if j >= 0 {
-                    arg_stack.items_mut()[n..].rotate_right(j as usize);
+                    let shift = j as usize % target.len();
+                    target.rotate_right(shift);
                 } else {
-                    arg_stack.items_mut()[n..].rotate_left((-j) as usize);
+                    let shift = (-j) as usize % target.len();
+                    target.rotate_left(shift);
                 }
             }
         }
@@ -874,6 +884,8 @@ mod tests {
         op_impl("1 2 3 3 -1 roll", &[2.0, 3.0, 1.0]);
         op_impl("1 2 3 3 1 roll", &[3.0, 1.0, 2.0]);
         op_impl("1 2 3 3 0 roll", &[1.0, 2.0, 3.0]);
+        op_impl("1 2 3 3 5 roll", &[2.0, 3.0, 1.0]);
+        op_impl("0 2 roll", &[]);
         op_impl(
             "1 2 3 4 5 6 7 5 2 roll",
             &[1.0, 2.0, 6.0, 7.0, 3.0, 4.0, 5.0],
