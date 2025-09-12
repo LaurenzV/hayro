@@ -704,10 +704,10 @@ fn parse_int(str: &str) -> Option<i64> {
             let number_str = &str[hash_idx + 1..];
 
             let radix = radix_str.parse::<u32>().ok()?;
-            
+
             if radix >= 2 && radix <= 36 {
                 i64::from_str_radix(number_str, radix).ok()
-            }  else {
+            } else {
                 None
             }
         } else {
