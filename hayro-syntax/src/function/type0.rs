@@ -35,7 +35,7 @@ impl Type0 {
         let clamper = Clamper::new(dict)?;
         let range = clamper.range.clone()?;
 
-        if range.len() == 0 {
+        if range.is_empty() {
             warn!("encountered Type0 function with invalid range length 0.");
 
             return None;
