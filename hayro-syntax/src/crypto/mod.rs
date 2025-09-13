@@ -6,6 +6,7 @@ use crate::object::dict::keys::{FILTER, LENGTH, R, V};
 
 mod algo;
 mod rc4;
+mod md5;
 
 pub(crate) struct CryptoDict {
     algorithm: Algorithm
