@@ -92,6 +92,7 @@ pub mod function;
 pub mod object;
 pub mod page;
 pub mod xref;
+mod crypto;
 
 pub use pdf::*;
 
