@@ -1044,5 +1044,9 @@
   {
     "id": "stroke_properties",
     "file": "pdfs/custom/stroke_properties.pdf"
+  },
+  {
+    "id": "encrypted_rc4_rev2",
+    "file": "pdfs/custom/encrypted_rc4_rev2.pdf"
   }
 ]

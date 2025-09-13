@@ -115,6 +115,10 @@ impl<'a> Dict<'a> {
 
         Reader::new(&self.0.data[offset..]).read_with_context::<MaybeRef<T>>(self.0.ctx)
     }
+
+    pub(crate) fn ctx(&self) -> ReaderContext<'a> {
+        self.0.ctx
+    }
 }
 
 impl Debug for Dict<'_> {

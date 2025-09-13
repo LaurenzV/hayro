@@ -9,6 +9,7 @@ use crate::object::{Object, ObjectLike};
 use crate::reader::{Readable, Reader, ReaderContext, Skippable};
 use crate::util::OptionLog;
 use log::{info, warn};
+use std::borrow::Cow;
 use std::fmt::{Debug, Formatter};
 
 /// A stream of arbitrary data.
@@ -56,6 +57,18 @@ impl<'a> Stream<'a> {
         &self,
         image_params: &ImageDecodeParams,
     ) -> Result<FilterResult, DecodeFailure> {
+        let ctx = self.dict.ctx();
+
+        let data = if ctx.xref.needs_decryption(&ctx) {
+            Cow::Owned(
+                ctx.xref
+                    .decrypt(self.dict.obj_id().unwrap(), &self.data)
+                    .ok_or(DecodeFailure::Decryption)?,
+            )
+        } else {
+            Cow::Borrowed(self.data)
+        };
+
         if let Some(filter) = self
             .dict
             .get::<Name>(F)
@@ -67,7 +80,7 @@ impl<'a> Stream<'a> {
                 .get::<Dict>(DP)
                 .or_else(|| self.dict.get::<Dict>(DECODE_PARMS));
 
-            filter.apply(self.data, params.clone().unwrap_or_default(), image_params)
+            filter.apply(&data, params.clone().unwrap_or_default(), image_params)
         } else if let Some(filters) = self
             .dict
             .get::<Array>(F)
@@ -91,10 +104,7 @@ impl<'a> Stream<'a> {
                 let params = params.get(i).and_then(|p| p.clone().cast::<Dict>());
 
                 let new = filter.apply(
-                    current
-                        .as_ref()
-                        .map(|c| c.data.as_ref())
-                        .unwrap_or(self.data),
+                    current.as_ref().map(|c| c.data.as_ref()).unwrap_or(&data),
                     params.clone().unwrap_or_default(),
                     image_params,
                 )?;
@@ -102,12 +112,12 @@ impl<'a> Stream<'a> {
             }
 
             Ok(current.unwrap_or(FilterResult {
-                data: self.data.to_vec(),
+                data: data.to_vec(),
                 image_data: None,
             }))
         } else {
             Ok(FilterResult {
-                data: self.data.to_vec(),
+                data: data.to_vec(),
                 image_data: None,
             })
         }
@@ -164,6 +174,8 @@ pub enum DecodeFailure {
     StreamDecode,
     /// A JPEG2000 image was encountered, while the `jpeg2000` feature was disabled.
     JpxImage,
+    /// A failure occurred while decrypting a file.
+    Decryption,
     /// An unknown failure occurred.
     Unknown,
 }

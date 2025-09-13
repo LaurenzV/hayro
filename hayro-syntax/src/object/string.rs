@@ -7,15 +7,18 @@ use crate::reader::{Readable, Reader, ReaderContext, Skippable};
 use crate::trivia::is_white_space_character;
 use log::warn;
 use std::borrow::Cow;
+use std::hash::{Hash, Hasher};
+
+// TODO: Make `HexString` and `LiteralString` own their values.
 
 /// A hex-encoded string.
-#[derive(PartialEq, Eq, Copy, Clone, Debug)]
-struct HexString<'a>(&'a [u8], bool);
+#[derive(Copy, Clone, Debug)]
+struct HexString<'a>(&'a [u8], bool, ReaderContext<'a>);
 
 impl HexString<'_> {
     /// Returns the content of the string.
     fn get(&self) -> Vec<u8> {
-        if self.1 {
+        let decoded = if self.1 {
             let mut cleaned = Vec::with_capacity(self.0.len() + 1);
 
             for b in self.0.iter().copied() {
@@ -33,7 +36,23 @@ impl HexString<'_> {
         } else {
             // We made sure while parsing that it is a valid hex string.
             decode_hex_string(self.0).unwrap()
+        };
+
+        if self.2.xref.needs_decryption(&self.2) {
+            self.2
+                .xref
+                .decrypt(self.2.obj_number.unwrap(), &decoded)
+                .unwrap_or(vec![])
+        } else {
+            decoded
         }
+    }
+}
+
+impl PartialEq for HexString<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        // TODO: We probably want to ignore escapes.
+        self.0 == other.0 && self.1 == other.1
     }
 }
 
@@ -44,7 +63,7 @@ impl Skippable for HexString<'_> {
 }
 
 impl<'a> Readable<'a> for HexString<'a> {
-    fn read(r: &mut Reader<'a>, _: ReaderContext) -> Option<Self> {
+    fn read(r: &mut Reader<'a>, ctx: ReaderContext<'a>) -> Option<Self> {
         let start = r.offset();
         let mut dirty = parse_hex(r)?;
         let end = r.offset();
@@ -53,7 +72,7 @@ impl<'a> Readable<'a> for HexString<'a> {
         let result = r.range(start + 1..end - 1).unwrap();
         dirty |= result.len() % 2 != 0;
 
-        Some(HexString(result, dirty))
+        Some(HexString(result, dirty, ctx))
     }
 }
 
@@ -91,13 +110,13 @@ fn parse_hex(r: &mut Reader<'_>) -> Option<bool> {
 }
 
 /// A literal string.
-#[derive(Debug, Eq, PartialEq, Clone, Copy, Hash)]
-struct LiteralString<'a>(&'a [u8], bool);
+#[derive(Debug, Clone, Copy)]
+struct LiteralString<'a>(&'a [u8], bool, ReaderContext<'a>);
 
 impl<'a> LiteralString<'a> {
     /// Returns the content of the string.
     fn get(&self) -> Cow<'a, [u8]> {
-        if self.1 {
+        let decoded = if self.1 {
             let mut cleaned = vec![];
             let mut r = Reader::new(self.0);
 
@@ -173,7 +192,31 @@ impl<'a> LiteralString<'a> {
             Cow::Owned(cleaned)
         } else {
             Cow::Borrowed(self.0)
+        };
+
+        if self.2.xref.needs_decryption(&self.2) {
+            Cow::Owned(
+                self.2
+                    .xref
+                    .decrypt(self.2.obj_number.unwrap(), &decoded)
+                    .unwrap_or(vec![]),
+            )
+        } else {
+            decoded
         }
+    }
+}
+
+impl Hash for LiteralString<'_> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
+        self.1.hash(state);
+    }
+}
+
+impl PartialEq for LiteralString<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.eq(other.0) && self.1.eq(&other.1)
     }
 }
 
@@ -184,7 +227,7 @@ impl Skippable for LiteralString<'_> {
 }
 
 impl<'a> Readable<'a> for LiteralString<'a> {
-    fn read(r: &mut Reader<'a>, _: ReaderContext) -> Option<Self> {
+    fn read(r: &mut Reader<'a>, ctx: ReaderContext<'a>) -> Option<Self> {
         let start = r.offset();
         let dirty = parse_literal(r)?;
         let end = r.offset();
@@ -192,7 +235,7 @@ impl<'a> Readable<'a> for LiteralString<'a> {
         // Exclude outer brackets
         let result = r.range(start + 1..end - 1).unwrap();
 
-        Some(LiteralString(result, dirty))
+        Some(LiteralString(result, dirty, ctx))
     }
 }
 

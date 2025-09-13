@@ -1,6 +1,6 @@
 //! Reading and querying the xref table of a PDF file.
 
-use crate::PdfData;
+use crate::crypto::{DecryptionError, Decryptor, get};
 use crate::data::Data;
 use crate::object::Array;
 use crate::object::Dict;
@@ -8,14 +8,16 @@ use crate::object::Name;
 use crate::object::ObjectIdentifier;
 use crate::object::Stream;
 use crate::object::dict::keys::{
-    ENCRYPT, FIRST, INDEX, N, PAGES, PREV, ROOT, SIZE, TYPE, VERSION, W, XREF_STM,
+    ENCRYPT, FIRST, ID, INDEX, N, PAGES, PREV, ROOT, SIZE, TYPE, VERSION, W, XREF_STM,
 };
 use crate::object::indirect::IndirectObject;
 use crate::object::{Object, ObjectLike};
 use crate::pdf::PdfVersion;
 use crate::reader::{Readable, Reader, ReaderContext};
+use crate::{PdfData, object};
 use log::{error, warn};
 use rustc_hash::FxHashMap;
+use std::borrow::Cow;
 use std::cmp::max;
 use std::iter;
 use std::ops::Deref;
@@ -26,7 +28,7 @@ pub(crate) const XREF_ENTRY_LEN: usize = 20;
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum XRefError {
     Unknown,
-    Encrypted,
+    Encryption(DecryptionError),
 }
 
 /// Parse the "root" xref from the PDF.
@@ -125,6 +127,7 @@ impl XRef {
         let mut xref = Self(Inner::Some(Arc::new(SomeRepr {
             data: Arc::new(Data::new(data)),
             map: Arc::new(RwLock::new(MapRepr { xref_map, repaired })),
+            decryptor: Arc::new(Decryptor::None),
             trailer_data,
         })));
 
@@ -133,11 +136,18 @@ impl XRef {
             .read_with_context::<Dict>(ReaderContext::new(&xref, false))
             .ok_or(XRefError::Unknown)?;
 
-        if trailer_dict.get::<Dict>(ENCRYPT).is_some() {
-            warn!("encrypted PDF files are not yet supported");
+        let decryptor = if let Some(encryption_dict) = trailer_dict.get::<Dict>(ENCRYPT) {
+            let Some(id) = trailer_dict
+                .get::<Array>(ID)
+                .and_then(|a| a.flex_iter().next::<object::String>())
+            else {
+                return Err(XRefError::Encryption(DecryptionError::MissingIDEntry));
+            };
 
-            return Err(XRefError::Encrypted);
-        }
+            get(&encryption_dict, id.get().as_ref()).map_err(|c| XRefError::Encryption(c))?
+        } else {
+            Decryptor::None
+        };
 
         let root = trailer_dict.get::<Dict>(ROOT).ok_or(XRefError::Unknown)?;
         let pages_ref = root.get_ref(PAGES).ok_or(XRefError::Unknown)?;
@@ -154,6 +164,7 @@ impl XRef {
             Inner::Dummy => unreachable!(),
             Inner::Some(r) => {
                 Arc::make_mut(r).trailer_data = td;
+                Arc::make_mut(r).decryptor = Arc::new(decryptor);
             }
         }
 
@@ -211,6 +222,28 @@ impl XRef {
         let (xref_map, _) = fallback_xref_map(r.data.get());
         locked.xref_map = xref_map;
         locked.repaired = true;
+    }
+
+    #[inline]
+    pub(crate) fn needs_decryption(&self, ctx: &ReaderContext) -> bool {
+        match &self.0 {
+            Inner::Dummy => false,
+            Inner::Some(r) => {
+                if matches!(r.decryptor.as_ref(), Decryptor::None) {
+                    false
+                } else {
+                    !ctx.in_content_stream
+                }
+            }
+        }
+    }
+
+    #[inline]
+    pub(crate) fn decrypt(&self, id: ObjectIdentifier, data: &[u8]) -> Option<Vec<u8>> {
+        match &self.0 {
+            Inner::Dummy => Some(data.to_vec()),
+            Inner::Some(r) => r.decryptor.decrypt(id, data),
+        }
     }
 
     /// Return the object with the given identifier.
@@ -344,6 +377,7 @@ impl TrailerData {
 struct SomeRepr {
     data: Arc<Data>,
     map: Arc<RwLock<MapRepr>>,
+    decryptor: Arc<Decryptor>,
     trailer_data: TrailerData,
 }
 

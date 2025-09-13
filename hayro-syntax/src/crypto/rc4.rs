@@ -41,6 +41,10 @@ impl Rc4 {
 
         output
     }
+
+    pub(crate) fn encrypt(&mut self, data: &[u8]) -> Vec<u8> {
+        self.decrypt(data)
+    }
 }
 
 #[cfg(test)]

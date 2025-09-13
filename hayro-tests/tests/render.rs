@@ -249,6 +249,7 @@ use crate::run_render_test;
 #[test] fn issue_typst_6723() { run_render_test("issue_typst_6723", "downloads/issue_typst_6723.pdf", None); }
 #[test] fn fillrule_evenodd() { run_render_test("fillrule_evenodd", "pdfs/custom/fillrule_evenodd.pdf", None); }
 #[test] fn stroke_properties() { run_render_test("stroke_properties", "pdfs/custom/stroke_properties.pdf", None); }
+#[test] fn encrypted_rc4_rev2() { run_render_test("encrypted_rc4_rev2", "pdfs/custom/encrypted_rc4_rev2.pdf", None); }
 #[test] fn pdfjs_20130226130259() { run_render_test("pdfjs_20130226130259", "downloads/pdfjs/20130226130259.pdf", Some("0..=0")); }
 #[test] fn pdfjs_IdentityToUnicodeMap_charCodeOf() { run_render_test("pdfjs_IdentityToUnicodeMap_charCodeOf", "downloads/pdfjs/IdentityToUnicodeMap_charCodeOf.pdf", None); }
 #[test] fn pdfjs_IndexedCS_negative_and_high() { run_render_test("pdfjs_IndexedCS_negative_and_high", "downloads/pdfjs/IndexedCS_negative_and_high.pdf", None); }

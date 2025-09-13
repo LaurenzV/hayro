@@ -36,7 +36,7 @@ impl Pdf {
             Ok(x) => x,
             Err(e) => match e {
                 XRefError::Unknown => fallback(data.clone()).ok_or(LoadPdfError::Invalid)?,
-                XRefError::Encrypted => return Err(LoadPdfError::Encryption),
+                XRefError::Encryption(_) => return Err(LoadPdfError::Encryption),
             },
         };
         let xref = Arc::new(xref);
