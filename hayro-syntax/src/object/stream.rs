@@ -1,9 +1,10 @@
 //! Streams.
 
 use crate::filter::Filter;
+use crate::object;
 use crate::object::Dict;
 use crate::object::Name;
-use crate::object::dict::keys::{DECODE_PARMS, DP, F, FILTER, LENGTH};
+use crate::object::dict::keys::{DECODE_PARMS, DP, F, FILTER, LENGTH, TYPE};
 use crate::object::{Array, ObjectIdentifier};
 use crate::object::{Object, ObjectLike};
 use crate::reader::{Readable, Reader, ReaderContext, Skippable};
@@ -59,7 +60,13 @@ impl<'a> Stream<'a> {
     ) -> Result<FilterResult, DecodeFailure> {
         let ctx = self.dict.ctx();
 
-        let data = if ctx.xref.needs_decryption(&ctx) {
+        let data = if ctx.xref.needs_decryption(&ctx)
+            && self
+                .dict
+                .get::<object::String>(TYPE)
+                .map(|t| t.get().as_ref() != b"XRef")
+                .unwrap_or(true)
+        {
             Cow::Owned(
                 ctx.xref
                     .decrypt(self.dict.obj_id().unwrap(), &self.data)

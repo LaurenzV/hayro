@@ -197,23 +197,15 @@ fn read_inner<'a>(
                 let name = r.read_without_context::<Name>()?;
                 r.skip_white_spaces_and_comments();
 
-                // Keys with null objects should be treated as non-existing.
-                let is_null = {
-                    let mut nr = Reader::new(r.tail()?);
-
-                    if ctx.in_content_stream {
-                        nr.read_with_context::<Null>(ctx)
-                    } else {
-                        nr.read_with_context::<MaybeRef<Null>>(ctx)
-                            .and_then(|n| n.resolve(ctx))
-                    }
-                    .is_some()
-                };
-
-                if !is_null {
-                    let offset = r.offset() - start_offset;
-                    offsets.insert(name, offset);
-                }
+                // Do note that we are including objects in our dictionary even if they
+                // are the null object, meaning that a call to `contains_key` will return `true`
+                // even if the object is the null object. The PDF reference in theory requires
+                // us to treat them as non-existing. Previously, we included a check to determine
+                // whether the object is `null` before inserting it, but that caused problems
+                // in some test cases where encryption + object streams are involved (as we would
+                // attempt to read an object stream before having resolved the encryption dictionary).
+                let offset = r.offset() - start_offset;
+                offsets.insert(name, offset);
 
                 if ctx.in_content_stream {
                     r.skip::<Object>(ctx.in_content_stream)?;

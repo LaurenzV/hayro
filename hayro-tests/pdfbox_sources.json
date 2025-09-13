@@ -38,6 +38,10 @@
     "last_page": 0
   },
   "647": "https://issues.apache.org/jira/secure/attachment/12437881/Function%20Structure%20example.pdf",
+  "660": {
+    "link": "https://issues.apache.org/jira/secure/attachment/12438582/enroll_California.pdf",
+    "last_page": 0
+  },
   "682": {
     "link": "https://issues.apache.org/jira/secure/attachment/12441092/795f.pdf",
     "last_page": 1
@@ -66,6 +70,10 @@
   "1348": "https://issues.apache.org/jira/secure/attachment/12533436/98281340210146699.pdf",
   "1442": "https://issues.apache.org/jira/secure/attachment/12552794/clientfocus.pdf",
   "1451": "https://issues.apache.org/jira/secure/attachment/12554671/Alfresco_Enterprise4_Mobile.pdf",
+  "1606": {
+    "link": "https://issues.apache.org/jira/secure/attachment/12584260/00-214%20EU%20Data%20Protection%20Directive%20Update%2012-1.pdf",
+    "last_page": 0
+  },
   "1607": {
     "link": "https://issues.apache.org/jira/secure/attachment/12584297/pdf-govdocs-036902.pdf",
     "last_page": 1
@@ -159,10 +167,18 @@
     "https://issues.apache.org/jira/secure/attachment/12647115/PDFBOX-2100-gouraud-RGB-function.pdf"
   ],
   "1958": "https://issues.apache.org/jira/secure/attachment/12632189/cinnebar.pdf",
+  "2006": {
+    "link": "https://issues.apache.org/jira/secure/attachment/12584260/00-214%20EU%20Data%20Protection%20Directive%20Update%2012-1.pdf",
+    "last_page": 0
+  },
   "2027": [
     {
       "link": "https://issues.apache.org/jira/secure/attachment/12640055/Vortrag_Roej.pdf",
       "last_page": 0
+    },
+    {
+      "link": "https://issues.apache.org/jira/secure/attachment/12640054/Vortrag_Busch.pdf",
+      "last_page": 4
     }
   ],
   "2046": "https://issues.apache.org/jira/secure/attachment/12642198/issue.pdf",
@@ -309,6 +325,10 @@
   "3501": "https://issues.apache.org/jira/secure/attachment/12828850/PDFBOX-3501.pdf",
   "3505": "https://issues.apache.org/jira/secure/attachment/12829416/PDFBOX_NO-BREAK%20SPACE.pdf",
   "3516": "https://issues.apache.org/jira/secure/attachment/12830848/PDFJS-7138.pdf",
+  "3526": {
+    "link": "https://issues.apache.org/jira/secure/attachment/12832464/601501018.pdf",
+    "last_page": 0
+  },
   "3562": "https://issues.apache.org/jira/secure/attachment/12838397/PDFBOX-3562-BitsPerFlag2.pdf",
   "3591": {
     "link": "https://issues.apache.org/jira/secure/attachment/12840266/Vagueness%20and%20the%20Rule%20of%20Law-%20Reconsidering%20Installment%20Land%20Con.pdf",
