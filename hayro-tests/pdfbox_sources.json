@@ -159,6 +159,12 @@
     "https://issues.apache.org/jira/secure/attachment/12647115/PDFBOX-2100-gouraud-RGB-function.pdf"
   ],
   "1958": "https://issues.apache.org/jira/secure/attachment/12632189/cinnebar.pdf",
+  "2027": [
+    {
+      "link": "https://issues.apache.org/jira/secure/attachment/12640055/Vortrag_Roej.pdf",
+      "last_page": 0
+    }
+  ],
   "2046": "https://issues.apache.org/jira/secure/attachment/12642198/issue.pdf",
   "2059": "https://issues.apache.org/jira/secure/attachment/12643344/DPH%20032014.pdf",
   "2090": "https://issues.apache.org/jira/secure/attachment/12646348/Kommunikationsbedingungen-Einlagen_FIDOR-Bank.pdf",
@@ -224,6 +230,7 @@
     "last_page": 2
   },
   "2344": "https://issues.apache.org/jira/secure/attachment/12668313/PDFBOX-2344-233644-p10.pdf",
+  "2345": "https://issues.apache.org/jira/secure/attachment/12668322/out.pdf",
   "2350": {
     "link": "https://issues.apache.org/jira/secure/attachment/12670292/PDFBOX-2350-289451-endless.pdf",
     "last_page": 0

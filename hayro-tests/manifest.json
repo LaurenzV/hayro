@@ -1048,5 +1048,9 @@
   {
     "id": "encrypted_rc4_rev2",
     "file": "pdfs/custom/encrypted_rc4_rev2.pdf"
+  },
+  {
+    "id": "encrypted_rc4_rev3",
+    "file": "pdfs/custom/encrypted_rc4_rev3.pdf"
   }
 ]
