@@ -1,5 +1,4 @@
 pub(crate) enum Algorithm {
     None,
-    Rc4
+    Rc4,
 }
-

@@ -76,6 +76,7 @@ unless you absolutely need to be able to support such images.
 */
 
 #![deny(missing_docs)]
+extern crate core;
 
 use std::sync::Arc;
 
@@ -88,11 +89,11 @@ pub(crate) mod util;
 
 pub mod bit_reader;
 pub mod content;
+mod crypto;
 pub mod function;
 pub mod object;
 pub mod page;
 pub mod xref;
-mod crypto;
 
 pub use pdf::*;
 
