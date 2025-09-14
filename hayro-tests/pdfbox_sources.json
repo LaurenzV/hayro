@@ -55,6 +55,11 @@
   "795": "https://issues.apache.org/jira/secure/attachment/12452515/b.pdf",
   "813": "https://issues.apache.org/jira/secure/attachment/12453725/CancerSummReport_34914.pdf",
   "905": "https://issues.apache.org/jira/secure/attachment/12466799/nullpointer%20pdfToImage.pdf",
+  "907": {
+    "link": "https://issues.apache.org/jira/secure/attachment/12460494/MBTA_Review_2009.pdf",
+    "last_page": 0
+  },
+  "918": "https://issues.apache.org/jira/secure/attachment/12466136/SO%20VS%20LR%20PORTAL.pdf",
   "1058": {
     "link": "https://issues.apache.org/jira/secure/attachment/12504481/EnviroNewsSummer2009.pdf",
     "last_page": 1
@@ -70,6 +75,9 @@
   "1348": "https://issues.apache.org/jira/secure/attachment/12533436/98281340210146699.pdf",
   "1442": "https://issues.apache.org/jira/secure/attachment/12552794/clientfocus.pdf",
   "1451": "https://issues.apache.org/jira/secure/attachment/12554671/Alfresco_Enterprise4_Mobile.pdf",
+  "1593": [
+    "https://issues.apache.org/jira/secure/attachment/12582059/Test.pdf"
+  ],
   "1606": {
     "link": "https://issues.apache.org/jira/secure/attachment/12584260/00-214%20EU%20Data%20Protection%20Directive%20Update%2012-1.pdf",
     "last_page": 0
@@ -381,6 +389,7 @@
     "last_page": 0
   },
   "3932": "https://issues.apache.org/jira/secure/attachment/12887373/PDFJS-8895-p1.pdf",
+  "3933": "https://issues.apache.org/jira/secure/attachment/12887842/Beispiel2.pdf",
   "3934": "https://issues.apache.org/jira/secure/attachment/12887766/BCZSFNQAB62TUBURWG6B3ZOZCG5IH46P.pdf",
   "3948": "https://issues.apache.org/jira/secure/attachment/12890034/EUWO6SQS5TM4VGOMRD3FLXZHU35V2CP2.pdf",
   "3956": {
