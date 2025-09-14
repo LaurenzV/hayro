@@ -365,6 +365,12 @@
     "md5": "e6ad013c24e58e5b40c3bae50f04c8e8"
   },
   {
+    "id": "bug1826783-display",
+    "file": "pdfs/bug1826783-display.link",
+    "link": true,
+    "md5": "93e706efee15dd7b32d32d66f15a3ea2"
+  },
+  {
     "id": "bug1898802",
     "file": "pdfs/bug1898802.link",
     "md5": "65c3af306253faa8967982812aff523e",
@@ -707,10 +713,29 @@
     "last_page": 6
   },
   {
+    "id": "i9-pdf",
+    "file": "pdfs/i9-pdf.link",
+    "link": true,
+    "md5": "ba7cd54fdff083bb389295bc0415f6c5"
+  },
+  {
+    "id": "ichiji",
+    "file": "pdfs/ichiji.link",
+    "link": true,
+    "md5": "66b645802d33513cd598886e017392b8"
+  },
+  {
     "id": "images_1bit_grayscale",
     "file": "pdfs/images_1bit_grayscale.link",
     "link": true,
     "md5": "e1c36a19563944891bd30cfc0199d07f"
+  },
+  {
+    "id": "intelisa-eq",
+    "file": "pdfs/intelisa-eq.link",
+    "link": true,
+    "md5": "24643ebe348a568cfe6a532055c71493",
+    "last_page": 99
   },
   {
     "id": "isssue18194",
@@ -768,6 +793,12 @@
     "md5": "bb26f68493e33af17b256a6ffe777a24"
   },
   {
+    "id": "issue1049",
+    "file": "pdfs/issue1049.link",
+    "link": true,
+    "md5": "15473fffcdde9fb8f3756a4cf1aab347"
+  },
+  {
     "id": "issue10491",
     "file": "pdfs/issue10491.link",
     "md5": "0759ec46739b13bb0b66170a18d33d4f",
@@ -810,6 +841,13 @@
     "file": "pdfs/issue10665.link",
     "link": true,
     "md5": "4c8938c808153f6b3840e8a5eb68b804"
+  },
+  {
+    "id": "issue1096",
+    "file": "pdfs/issue1096.link",
+    "link": true,
+    "md5": "7f75d2b4b93c78d401ff39e8c1b00612",
+    "last_page": 8
   },
   {
     "id": "issue11004",
@@ -1186,6 +1224,13 @@
     "md5": "0bc5329623fd554174c5e7653f904e28"
   },
   {
+    "id": "issue13433",
+    "file": "pdfs/issue13433.link",
+    "link": true,
+    "md5": "4038cd87ff48fd54b3c4a36593d2ba03",
+    "last_page": 0
+  },
+  {
     "id": "issue13447-eq",
     "file": "pdfs/issue13447-eq.link",
     "link": true,
@@ -1265,6 +1310,14 @@
     "file": "pdfs/issue14165.link",
     "link": true,
     "md5": "917850af2a387475b34b00010200897d"
+  },
+  {
+    "id": "issue1419.pdf",
+    "file": "pdfs/issue1419.pdf.link",
+    "link": true,
+    "md5": "b5b6c6405d7b48418bccf97277957664",
+    "first_page": 1,
+    "last_page": 1
   },
   {
     "id": "issue14200",
@@ -1910,6 +1963,13 @@
     "md5": "48a808278bf31de8414c4e03ecd0900a"
   },
   {
+    "id": "issue2386",
+    "file": "pdfs/issue2386.link",
+    "link": true,
+    "md5": "7dc787639aa6765214e9ff5494d231ed",
+    "last_page": 1
+  },
+  {
     "id": "issue2391-2",
     "file": "pdfs/issue2391-2.link",
     "link": true,
@@ -2331,6 +2391,12 @@
     "md5": "ecd62637532aa8383837ef11d72a96b9"
   },
   {
+    "id": "issue4926",
+    "file": "pdfs/issue4926.link",
+    "link": true,
+    "md5": "ed881c8ea2f9bc4be94ecb7f2b2c149b"
+  },
+  {
     "id": "issue5010",
     "file": "pdfs/issue5010.link",
     "first_page": 0,
@@ -2515,6 +2581,13 @@
     "file": "pdfs/issue5874.link",
     "link": true,
     "md5": "25922edf223aa91bc259663d0a34a6ab"
+  },
+  {
+    "id": "issue5909_original",
+    "file": "pdfs/issue5909_original.link",
+    "link": true,
+    "md5": "65c169b6f540b27ac0ff2738a80d1e14",
+    "last_page": 1
   },
   {
     "id": "issue5939",
@@ -2750,6 +2823,13 @@
     "file": "pdfs/issue7101.link",
     "link": true,
     "md5": "cc9cabe12ac9ad49e5372ef33d10aeb4"
+  },
+  {
+    "id": "issue7303",
+    "file": "pdfs/issue7303.link",
+    "link": true,
+    "md5": "3a5a4ab6755d6c3b0c490996b83d69d2",
+    "last_page": 1
   },
   {
     "id": "issue7308",
