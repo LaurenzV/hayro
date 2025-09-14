@@ -10,6 +10,10 @@ forms_*
 blendmode
 *oc*
 
+# xfa
+issue13748
+issue13751
+
 # Look into it
 ccitt_EndOfBlock_false
 jbig2_huffman_2
@@ -82,6 +86,7 @@ bug1130815-eq
 
 # password-protected
 bug1782186
+issue15893_reduced
 
 # image missing
 issue6364
@@ -91,14 +96,9 @@ p020121130574743273239
 bug1250079
 protected-stamp-editor-save-print
 issue12294-print
-issue13748
-issue13751
 issue15577
-issue15893_reduced
-issue16081
 issue16464
 issue16843-text
-issue16863
 issue17069
 issue17215-annotations
 issue19484_1
@@ -110,10 +110,6 @@ issue6010_2
 issue7665
 issue9105_other
 issue9418
-protectip
-shavian-load
-tutorial
-wdsg_fitc
 
 # takes long time
 filled-background-range

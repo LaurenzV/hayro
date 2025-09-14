@@ -402,6 +402,7 @@ use crate::run_render_test;
 #[test] fn pdfjs_issue11451() { run_render_test("pdfjs_issue11451", "downloads/pdfjs/issue11451.pdf", Some("..=0")); }
 #[test] fn pdfjs_issue11473() { run_render_test("pdfjs_issue11473", "downloads/pdfjs/issue11473.pdf", None); }
 #[test] fn pdfjs_issue11477() { run_render_test("pdfjs_issue11477", "downloads/pdfjs/issue11477.pdf", None); }
+#[test] fn pdfjs_issue11526() { run_render_test("pdfjs_issue11526", "downloads/pdfjs/issue11526.pdf", Some("..=0")); }
 #[test] fn pdfjs_issue11532() { run_render_test("pdfjs_issue11532", "downloads/pdfjs/issue11532.pdf", Some("1..=1")); }
 #[test] fn pdfjs_issue1155() { run_render_test("pdfjs_issue1155", "downloads/pdfjs/issue1155.pdf", None); }
 #[test] fn pdfjs_issue11678() { run_render_test("pdfjs_issue11678", "downloads/pdfjs/issue11678.pdf", Some("1..=1")); }
@@ -755,6 +756,7 @@ use crate::run_render_test;
 #[test] fn pdfjs_operator_in_TJ_array() { run_render_test("pdfjs_operator_in_TJ_array", "downloads/pdfjs/operator-in-TJ-array.pdf", None); }
 #[test] fn pdfjs_pattern_text_embedded_font() { run_render_test("pdfjs_pattern_text_embedded_font", "downloads/pdfjs/pattern_text_embedded_font.pdf", None); }
 #[test] fn pdfjs_personwithdog() { run_render_test("pdfjs_personwithdog", "downloads/pdfjs/personwithdog.pdf", None); }
+#[test] fn pdfjs_protectip() { run_render_test("pdfjs_protectip", "downloads/pdfjs/protectip.pdf", None); }
 #[test] fn pdfjs_simpletype3font() { run_render_test("pdfjs_simpletype3font", "downloads/pdfjs/simpletype3font.pdf", None); }
 #[test] fn pdfjs_standard_fonts_no_system_fonts() { run_render_test("pdfjs_standard_fonts_no_system_fonts", "downloads/pdfjs/standard_fonts_no_system_fonts.pdf", None); }
 #[test] fn pdfjs_type4psfunc() { run_render_test("pdfjs_type4psfunc", "downloads/pdfjs/type4psfunc.pdf", None); }

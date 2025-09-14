@@ -961,6 +961,13 @@
     "md5": "f4e5735569afce79e52b3fd56d10ae13"
   },
   {
+    "id": "issue11526",
+    "file": "pdfs/issue11526.link",
+    "link": true,
+    "md5": "9babc771fc8792f43e4ada46b0daff8c",
+    "last_page": 0
+  },
+  {
     "id": "issue11532",
     "file": "pdfs/issue11532.link",
     "md5": "9216481d259ae2b8d747236e745cbc80",
@@ -3230,6 +3237,12 @@
     "file": "pdfs/personwithdog.link",
     "link": true,
     "md5": "cd68fb2ce00dab97801b3e51495b99e3"
+  },
+  {
+    "id": "protectip",
+    "file": "pdfs/protectip.link",
+    "link": true,
+    "md5": "676e7a7b8f96d04825361832b1838a93"
   },
   {
     "id": "simpletype3font",

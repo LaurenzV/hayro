@@ -124,3 +124,8 @@ issue7303
 issue11526
 issue13132
 issue13433
+
+issue16081
+issue16863
+protectip
+shavian-load
