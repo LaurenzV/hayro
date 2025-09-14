@@ -102,3 +102,10 @@ issue4668
 issue5501
 issue5701
 colorkeymask
+bug1815476-save-print
+bug810214
+bug865858
+bug900822
+bug951051
+bug1425312
+bug1723568

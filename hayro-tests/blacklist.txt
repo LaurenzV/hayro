@@ -62,7 +62,6 @@ bug1250079
 bug1308536
 bug1365930
 bug1354114
-bug1425312
 bug1443140
 bug1652224
 bug1659412
@@ -86,17 +85,9 @@ bug1782186
 
 # doesnt parse / has encryption
 p020121130574743273239
-artofwar
 bug1250079
-bug1425312
-bug1723568
-bug1815476-save-print
 bug1820909
 bug1826783-display
-bug810214
-bug865858
-bug900822
-bug951051
 protected-stamp-editor-save-print
 i9-pdf
 ichiji
