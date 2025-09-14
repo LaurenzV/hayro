@@ -1,10 +1,18 @@
+//! Cryptographic implementations for hayro, ported from pdf.js.
+//!
+//! **Important note**: Please keep in mind that these haven't been
+//! audited and should not be used for security-critical purposes, like creating new
+//! encrypted PDFs. They solely serve the purpose of being able to decrypt and read
+//! _already_ encrypted documents, where security isn't really relevant.
+
 use crate::crypto::rc4::Rc4;
 use crate::object;
-use crate::object::dict::keys::{FILTER, LENGTH, O, P, R, U, V};
+use crate::object::dict::keys::{CF, CFM, FILTER, LENGTH, O, P, R, STM_F, STR_F, U, V};
 use crate::object::{Dict, Name, Object, ObjectIdentifier};
-use std::borrow::Cow;
+use std::collections::HashMap;
 use std::ops::Deref;
 
+mod aes;
 mod algo;
 mod md5;
 mod rc4;
@@ -17,33 +25,64 @@ pub enum DecryptionError {
     UnsupportedAlgorithm,
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub(crate) enum DecryptorTag {
+    None,
+    Rc4,
+    Aes128,
+    Aes256,
+}
+
+impl DecryptorTag {
+    fn from_name(name: &Name) -> Option<Self> {
+        match name.as_str() {
+            "None" | "Identity" => Some(Self::None),
+            "V2" => Some(Self::Rc4),
+            "AESV2" => Some(Self::Aes128),
+            "AESV3" => Some(Self::Aes256),
+            _ => None,
+        }
+    }
+}
 #[derive(Debug)]
 pub(crate) enum Decryptor {
     None,
-    Rc4(Vec<u8>),
+    Rc4 { key: Vec<u8> },
+    Aes128 { key: Vec<u8>, dict: CryptDictionary },
+}
+
+#[derive(Debug, Copy, Clone)]
+pub(crate) enum DecryptionTarget {
+    String,
+    Stream,
 }
 
 impl Decryptor {
-    pub(crate) fn decrypt(&self, id: ObjectIdentifier, data: &[u8]) -> Option<Vec<u8>> {
+    pub(crate) fn decrypt(
+        &self,
+        id: ObjectIdentifier,
+        data: &[u8],
+        target: DecryptionTarget,
+    ) -> Option<Vec<u8>> {
         match self {
             Decryptor::None => Some(data.to_vec()),
-            Decryptor::Rc4(r) => {
-                let n = r.len();
+            Decryptor::Rc4 { key } => {
+                let n = key.len();
 
                 // Algorithm 1:
                 // a) Obtain the object number and generation number from the object identifier of
                 // the string or stream to be encrypted (see 7.3.10, "Indirect objects"). If the
                 // string is a direct object, use the identifier of the indirect object containing
                 // it.
-                let mut key = r.clone();
+                let mut key = key.clone();
 
                 // b) For all strings and streams without crypt filter specifier; treating the
                 // object number and generation number as binary integers, extend the original
                 // n-byte file encryption key to n + 5 bytes by appending the low-order 3 bytes of
                 // the object number and the low-order 2 bytes of the generation number in that
                 // order, low-order byte first.
-                key.extend(&id.obj_num.to_le_bytes()[..3]); // Low 3 bytes
-                key.extend(&id.gen_num.to_le_bytes()[..2]); // Low 2 bytes
+                key.extend(&id.obj_num.to_le_bytes()[..3]);
+                key.extend(&id.gen_num.to_le_bytes()[..2]);
 
                 // c) Initialise the MD5 hash function and pass the result of step (b) as input
                 // to this function.
@@ -57,6 +96,7 @@ impl Decryptor {
                 let mut rc = Rc4::new(final_key);
                 Some(rc.decrypt(data))
             }
+            _ => unimplemented!(),
         }
     }
 }
@@ -68,6 +108,76 @@ const DEFAULT_USER_PASSWORD: [u8; 32] = [
 
 pub(crate) struct CryptoDict {
     algorithm: Decryptor,
+}
+
+#[derive(Debug, Copy, Clone)]
+struct DecryptorData {
+    stream_filter: CryptDictionary,
+    string_filter: CryptDictionary,
+}
+
+impl DecryptorData {
+    fn from_dict(dict: &Dict) -> Option<Self> {
+        let mut mappings = HashMap::new();
+
+        if let Some(dict) = dict.get::<Dict>(CF) {
+            for key in dict.keys() {
+                if let Some(dict) = dict.get::<Dict>(key.clone()) {
+                    if let Some(crypt_dict) = CryptDictionary::from_dict(&dict) {
+                        mappings.insert(key.as_str().to_string(), crypt_dict);
+                    }
+                }
+            }
+        }
+
+        let stm_f = *mappings.get(dict.get::<Name>(STM_F)?.as_str())?;
+        let str_f = *mappings.get(dict.get::<Name>(STR_F)?.as_str())?;
+
+        Some(Self {
+            stream_filter: stm_f,
+            string_filter: str_f,
+        })
+    }
+
+    fn single(dict: CryptDictionary) -> Self {
+        Self {
+            stream_filter: dict,
+            string_filter: dict,
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+struct CryptDictionary {
+    cfm: DecryptorTag,
+    length: u16,
+}
+
+impl CryptDictionary {
+    fn new(tag: DecryptorTag, length: u16) -> Self {
+        Self { cfm: tag, length }
+    }
+}
+
+impl CryptDictionary {
+    fn from_dict(dict: &Dict) -> Option<Self> {
+        let cfm = DecryptorTag::from_name(&dict.get::<Name>(CFM)?)?;
+        // The standard security handler expresses the Length entry in bytes (e.g., 32 means a
+        // length of 256 bits) and public-key security handlers express it as is (e.g., 256 means a
+        // length of 256 bits).
+        // Note: We only support the standard security handler.
+        let mut length = dict.get::<u16>(LENGTH)?;
+
+        // When CFM is AESV2, the Length key shall have the value of 128. When
+        // CFM is AESV3, the Length key shall have a value of 256.
+        if cfm == DecryptorTag::Aes128 {
+            length = 16;
+        } else if cfm == DecryptorTag::Aes256 {
+            length = 32;
+        }
+
+        Some(CryptDictionary { cfm, length })
+    }
 }
 
 pub(crate) fn get(dict: &Dict, id: &[u8]) -> Result<Decryptor, DecryptionError> {
@@ -85,24 +195,24 @@ pub(crate) fn get(dict: &Dict, id: &[u8]) -> Result<Decryptor, DecryptionError> 
     let revision = dict
         .get::<u8>(R)
         .ok_or(DecryptionError::InvalidEncryption)?;
-    let algorithm = match encryption_v {
-        1 => Decryptor::Rc4,
-        2 => {
-            let length = dict.get::<u32>(LENGTH).unwrap_or(40);
+    let length = match encryption_v {
+        1 => 40,
+        2 => dict.get::<u16>(LENGTH).unwrap_or(40),
+        4 => 128,
+        _ => unimplemented!(),
+    };
 
-            Decryptor::Rc4
-        }
+    let (algorithm, data) = match encryption_v {
+        1 => (DecryptorTag::Rc4, None),
+        2 => (DecryptorTag::Rc4, None),
+        4 => (
+            DecryptorTag::Aes128,
+            Some(DecryptorData::from_dict(dict).ok_or(DecryptionError::InvalidEncryption)?),
+        ),
         _ => {
             return Err(DecryptionError::UnsupportedAlgorithm);
         }
     };
-
-    let length = match encryption_v {
-        1 => 40,
-        2 => dict.get::<u32>(LENGTH).unwrap_or(40),
-        _ => unreachable!(),
-    }
-    .min(128);
 
     let byte_length = length / 8;
 
@@ -238,5 +348,11 @@ pub(crate) fn get(dict: &Dict, id: &[u8]) -> Result<Decryptor, DecryptionError> 
         _ => unimplemented!(),
     }
 
-    Ok(Decryptor::Rc4(decryption_key))
+    match algorithm {
+        DecryptorTag::None => Ok(Decryptor::None),
+        DecryptorTag::Rc4 => Ok(Decryptor::Rc4 {
+            key: decryption_key,
+        }),
+        _ => unimplemented!(),
+    }
 }

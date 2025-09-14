@@ -1,6 +1,6 @@
 //! Reading and querying the xref table of a PDF file.
 
-use crate::crypto::{DecryptionError, Decryptor, get};
+use crate::crypto::{DecryptionError, DecryptionTarget, Decryptor, get};
 use crate::data::Data;
 use crate::object::Array;
 use crate::object::Dict;
@@ -239,10 +239,15 @@ impl XRef {
     }
 
     #[inline]
-    pub(crate) fn decrypt(&self, id: ObjectIdentifier, data: &[u8]) -> Option<Vec<u8>> {
+    pub(crate) fn decrypt(
+        &self,
+        id: ObjectIdentifier,
+        data: &[u8],
+        target: DecryptionTarget,
+    ) -> Option<Vec<u8>> {
         match &self.0 {
             Inner::Dummy => Some(data.to_vec()),
-            Inner::Some(r) => r.decryptor.decrypt(id, data),
+            Inner::Some(r) => r.decryptor.decrypt(id, data, target),
         }
     }
 

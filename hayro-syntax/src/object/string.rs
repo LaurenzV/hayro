@@ -1,5 +1,6 @@
 //! Strings.
 
+use crate::crypto::DecryptionTarget;
 use crate::filter::ascii_hex::decode_hex_string;
 use crate::object::macros::object;
 use crate::object::{Object, ObjectLike};
@@ -8,7 +9,6 @@ use crate::trivia::is_white_space_character;
 use log::warn;
 use std::borrow::Cow;
 use std::hash::{Hash, Hasher};
-
 // TODO: Make `HexString` and `LiteralString` own their values.
 
 /// A hex-encoded string.
@@ -41,7 +41,11 @@ impl HexString<'_> {
         if self.2.xref.needs_decryption(&self.2) {
             self.2
                 .xref
-                .decrypt(self.2.obj_number.unwrap(), &decoded)
+                .decrypt(
+                    self.2.obj_number.unwrap(),
+                    &decoded,
+                    DecryptionTarget::String,
+                )
                 .unwrap_or(vec![])
         } else {
             decoded
@@ -198,7 +202,11 @@ impl<'a> LiteralString<'a> {
             Cow::Owned(
                 self.2
                     .xref
-                    .decrypt(self.2.obj_number.unwrap(), &decoded)
+                    .decrypt(
+                        self.2.obj_number.unwrap(),
+                        &decoded,
+                        DecryptionTarget::String,
+                    )
                     .unwrap_or(vec![]),
             )
         } else {

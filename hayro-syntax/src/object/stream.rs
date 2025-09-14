@@ -1,5 +1,6 @@
 //! Streams.
 
+use crate::crypto::DecryptionTarget;
 use crate::filter::Filter;
 use crate::object;
 use crate::object::Dict;
@@ -69,7 +70,11 @@ impl<'a> Stream<'a> {
         {
             Cow::Owned(
                 ctx.xref
-                    .decrypt(self.dict.obj_id().unwrap(), &self.data)
+                    .decrypt(
+                        self.dict.obj_id().unwrap(),
+                        &self.data,
+                        DecryptionTarget::Stream,
+                    )
                     .ok_or(DecodeFailure::Decryption)?,
             )
         } else {

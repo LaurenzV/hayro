@@ -1,3 +1,5 @@
+//! Ported from <https://github.com/mozilla/pdf.js/blob/master/src/core/crypto.js>.
+
 #[derive(Clone)]
 pub(crate) struct Rc4 {
     a: u8,
