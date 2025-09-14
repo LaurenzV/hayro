@@ -187,13 +187,6 @@ impl DecryptorData {
             string_filter: str_f,
         })
     }
-
-    fn single(dict: CryptDictionary) -> Self {
-        Self {
-            stream_filter: dict,
-            string_filter: dict,
-        }
-    }
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -249,6 +242,7 @@ pub(crate) fn get(dict: &Dict, id: &[u8]) -> Result<Decryptor, DecryptionError> 
         1 => 40,
         2 => dict.get::<u16>(LENGTH).unwrap_or(40),
         4 => 128,
+        5 => 256,
         _ => unimplemented!(),
     };
 
@@ -257,6 +251,10 @@ pub(crate) fn get(dict: &Dict, id: &[u8]) -> Result<Decryptor, DecryptionError> 
         2 => (DecryptorTag::Rc4, None),
         4 => (
             DecryptorTag::Aes128,
+            Some(DecryptorData::from_dict(dict).ok_or(DecryptionError::InvalidEncryption)?),
+        ),
+        5 => (
+            DecryptorTag::Aes256,
             Some(DecryptorData::from_dict(dict).ok_or(DecryptionError::InvalidEncryption)?),
         ),
         _ => {
