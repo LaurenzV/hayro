@@ -65,30 +65,47 @@ impl Decryptor {
         &self,
         id: ObjectIdentifier,
         data: &[u8],
-        // TODO: Support different targets?
-        _: DecryptionTarget,
+        target: DecryptionTarget,
     ) -> Option<Vec<u8>> {
         match self {
             Decryptor::None => Some(data.to_vec()),
-            Decryptor::Rc4 { key } => key_hash(key, id, false, |key| {
-                let mut rc = Rc4::new(key);
-                Some(rc.decrypt(data))
-            }),
-            Decryptor::Aes128 { key, .. } => {
-                key_hash(key, id, true, |key| {
-                    // If using the AES algorithm, the Cipher Block Chaining (CBC) mode, which requires an initialization
-                    // vector, is used. The block size parameter is set to 16 bytes, and the initialization vector is a 16-byte
-                    // random number that is stored as the first 16 bytes of the encrypted stream or string.
-                    let cipher = AES128Cipher::new(key).ok()?;
-                    let (iv, data) = data.split_at_checked(16)?;
-                    let iv: [u8; 16] = iv.try_into().ok()?;
-
-                    Some(cipher.decrypt_cbc(data, &iv))
-                })
+            Decryptor::Rc4 { key } => decrypt_rc4(key, data, id),
+            Decryptor::Aes128 { key, dict } => {
+                let crypt_dict = match target {
+                    DecryptionTarget::String => dict.string_filter,
+                    DecryptionTarget::Stream => dict.stream_filter
+                };
+                
+                match crypt_dict.cfm {
+                    DecryptorTag::None => Some(data.to_vec()),
+                    DecryptorTag::Rc4 => decrypt_rc4(key, data, id),
+                    DecryptorTag::Aes128 => decrypt_aes128(key, data, id),
+                    DecryptorTag::Aes256 => unimplemented!()
+                }
             }
             _ => unimplemented!(),
         }
     }
+}
+
+fn decrypt_aes128(key: &[u8], data: &[u8], id: ObjectIdentifier) -> Option<Vec<u8>> {
+    key_hash(key, id, true, |key| {
+        // If using the AES algorithm, the Cipher Block Chaining (CBC) mode, which requires an initialization
+        // vector, is used. The block size parameter is set to 16 bytes, and the initialization vector is a 16-byte
+        // random number that is stored as the first 16 bytes of the encrypted stream or string.
+        let cipher = AES128Cipher::new(key).ok()?;
+        let (iv, data) = data.split_at_checked(16)?;
+        let iv: [u8; 16] = iv.try_into().ok()?;
+
+        Some(cipher.decrypt_cbc(data, &iv))
+    })
+}
+
+fn decrypt_rc4(key: &[u8], data: &[u8], id: ObjectIdentifier) -> Option<Vec<u8>> {
+    key_hash(key, id, false, |key| {
+        let mut rc = Rc4::new(key);
+        Some(rc.decrypt(data))
+    })
 }
 
 fn key_hash(

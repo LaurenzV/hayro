@@ -34,7 +34,7 @@
   "1570": "transparency groups",
   "1593": "encryption",
   "1908": "transparency groups",
-  "1910": "encryption",
+  "1910": "/V 4 encryption with custom dicitonary, CId font with built-in encoding",
   "2180": "extremely slow because we don't cache patterns",
   "2265": "takes long, renders wrong, perhaps mask",
   "2347": "encrypted pdf",
