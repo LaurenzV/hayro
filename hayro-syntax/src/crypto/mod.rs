@@ -73,14 +73,14 @@ impl Decryptor {
             Decryptor::Aes128 { key, dict } => {
                 let crypt_dict = match target {
                     DecryptionTarget::String => dict.string_filter,
-                    DecryptionTarget::Stream => dict.stream_filter
+                    DecryptionTarget::Stream => dict.stream_filter,
                 };
-                
+
                 match crypt_dict.cfm {
                     DecryptorTag::None => Some(data.to_vec()),
                     DecryptorTag::Rc4 => decrypt_rc4(key, data, id),
                     DecryptorTag::Aes128 => decrypt_aes128(key, data, id),
-                    DecryptorTag::Aes256 => unimplemented!()
+                    DecryptorTag::Aes256 => unimplemented!(),
                 }
             }
             _ => unimplemented!(),
