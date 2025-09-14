@@ -5,9 +5,12 @@
 //! encrypted PDFs. They solely serve the purpose of being able to decrypt and read
 //! _already_ encrypted documents, where security isn't really relevant.
 
+use crate::crypto::aes::AES128Cipher;
 use crate::crypto::rc4::Rc4;
 use crate::object;
-use crate::object::dict::keys::{CF, CFM, FILTER, LENGTH, O, P, R, STM_F, STR_F, U, V};
+use crate::object::dict::keys::{
+    CF, CFM, ENCRYPT_META_DATA, FILTER, LENGTH, O, P, R, STM_F, STR_F, U, V,
+};
 use crate::object::{Dict, Name, Object, ObjectIdentifier};
 use std::collections::HashMap;
 use std::ops::Deref;
@@ -48,7 +51,7 @@ impl DecryptorTag {
 pub(crate) enum Decryptor {
     None,
     Rc4 { key: Vec<u8> },
-    Aes128 { key: Vec<u8>, dict: CryptDictionary },
+    Aes128 { key: Vec<u8>, dict: DecryptorData },
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -62,43 +65,72 @@ impl Decryptor {
         &self,
         id: ObjectIdentifier,
         data: &[u8],
-        target: DecryptionTarget,
+        // TODO: Support different targets?
+        _: DecryptionTarget,
     ) -> Option<Vec<u8>> {
         match self {
             Decryptor::None => Some(data.to_vec()),
-            Decryptor::Rc4 { key } => {
-                let n = key.len();
-
-                // Algorithm 1:
-                // a) Obtain the object number and generation number from the object identifier of
-                // the string or stream to be encrypted (see 7.3.10, "Indirect objects"). If the
-                // string is a direct object, use the identifier of the indirect object containing
-                // it.
-                let mut key = key.clone();
-
-                // b) For all strings and streams without crypt filter specifier; treating the
-                // object number and generation number as binary integers, extend the original
-                // n-byte file encryption key to n + 5 bytes by appending the low-order 3 bytes of
-                // the object number and the low-order 2 bytes of the generation number in that
-                // order, low-order byte first.
-                key.extend(&id.obj_num.to_le_bytes()[..3]);
-                key.extend(&id.gen_num.to_le_bytes()[..2]);
-
-                // c) Initialise the MD5 hash function and pass the result of step (b) as input
-                // to this function.
-                let hash = md5::calculate(&key);
-
-                // d) Use the first (n + 5) bytes, up to a maximum of 16, of the output
-                // from the MD5 hash as the key for the RC4 or AES symmetric key algorithms,
-                // along with the string or stream data to be encrypted.
-                let final_key = &hash[..std::cmp::min(16, n + 5)];
-
-                let mut rc = Rc4::new(final_key);
+            Decryptor::Rc4 { key } => key_hash(key, id, false, |key| {
+                let mut rc = Rc4::new(key);
                 Some(rc.decrypt(data))
+            }),
+            Decryptor::Aes128 { key, .. } => {
+                key_hash(key, id, true, |key| {
+                    // If using the AES algorithm, the Cipher Block Chaining (CBC) mode, which requires an initialization
+                    // vector, is used. The block size parameter is set to 16 bytes, and the initialization vector is a 16-byte
+                    // random number that is stored as the first 16 bytes of the encrypted stream or string.
+                    let cipher = AES128Cipher::new(key).ok()?;
+                    let (iv, data) = data.split_at_checked(16)?;
+                    let iv: [u8; 16] = iv.try_into().ok()?;
+
+                    Some(cipher.decrypt_cbc(data, &iv))
+                })
             }
             _ => unimplemented!(),
         }
     }
+}
+
+fn key_hash(
+    key: &[u8],
+    id: ObjectIdentifier,
+    aes: bool,
+    with_key: impl FnOnce(&[u8]) -> Option<Vec<u8>>,
+) -> Option<Vec<u8>> {
+    let n = key.len();
+
+    // Algorithm 1:
+    // a) Obtain the object number and generation number from the object identifier of
+    // the string or stream to be encrypted (see 7.3.10, "Indirect objects"). If the
+    // string is a direct object, use the identifier of the indirect object containing
+    // it.
+    let mut key = key.to_vec();
+
+    // b) For all strings and streams without crypt filter specifier; treating the
+    // object number and generation number as binary integers, extend the original
+    // n-byte file encryption key to n + 5 bytes by appending the low-order 3 bytes of
+    // the object number and the low-order 2 bytes of the generation number in that
+    // order, low-order byte first.
+    key.extend(&id.obj_num.to_le_bytes()[..3]);
+    key.extend(&id.gen_num.to_le_bytes()[..2]);
+
+    // If using the AES algorithm, extend the file encryption key an additional 4 bytes by adding the value
+    // "sAlT", which corresponds to the hexadecimal values 0x73, 0x41, 0x6C, 0x54. (This addition is done
+    // for backward compatibility and is not intended to provide additional security.)
+    if aes {
+        key.extend(b"sAlT")
+    }
+
+    // c) Initialise the MD5 hash function and pass the result of step (b) as input
+    // to this function.
+    let hash = md5::calculate(&key);
+
+    // d) Use the first (n + 5) bytes, up to a maximum of 16, of the output
+    // from the MD5 hash as the key for the RC4 or AES symmetric key algorithms,
+    // along with the string or stream data to be encrypted.
+    let final_key = &hash[..std::cmp::min(16, n + 5)];
+
+    with_key(&final_key)
 }
 
 const DEFAULT_USER_PASSWORD: [u8; 32] = [
@@ -192,6 +224,7 @@ pub(crate) fn get(dict: &Dict, id: &[u8]) -> Result<Decryptor, DecryptionError> 
     let encryption_v = dict
         .get::<u8>(V)
         .ok_or(DecryptionError::InvalidEncryption)?;
+    let encrypt_metadata = dict.get::<bool>(ENCRYPT_META_DATA).unwrap_or(true);
     let revision = dict
         .get::<u8>(R)
         .ok_or(DecryptionError::InvalidEncryption)?;
@@ -253,8 +286,11 @@ pub(crate) fn get(dict: &Dict, id: &[u8]) -> Result<Decryptor, DecryptionError> 
             // e) Pass the first element of the file’s file identifier array to the MD5 hash function.
             md5_input.extend(id);
 
-            // f) TODO: (Security handlers of revision 4 or greater) If document metadata
+            // f) (Security handlers of revision 4 or greater) If document metadata
             // is not being encrypted, pass 4 bytes with the value 0xFFFFFFFF to the MD5 hash function.
+            if !encrypt_metadata && revision >= 4 {
+                md5_input.extend(&[0xff, 0xff, 0xff, 0xff])
+            }
 
             // g) Finish the hash.
             let mut hash = md5::calculate(&md5_input);
@@ -352,6 +388,10 @@ pub(crate) fn get(dict: &Dict, id: &[u8]) -> Result<Decryptor, DecryptionError> 
         DecryptorTag::None => Ok(Decryptor::None),
         DecryptorTag::Rc4 => Ok(Decryptor::Rc4 {
             key: decryption_key,
+        }),
+        DecryptorTag::Aes128 => Ok(Decryptor::Aes128 {
+            key: decryption_key,
+            dict: data.unwrap(),
         }),
         _ => unimplemented!(),
     }

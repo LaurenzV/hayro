@@ -1052,5 +1052,9 @@
   {
     "id": "encrypted_rc4_rev3",
     "file": "pdfs/custom/encrypted_rc4_rev3.pdf"
+  },
+  {
+    "id": "encrypted_aes_128",
+    "file": "pdfs/custom/encrypted_aes_128.pdf"
   }
 ]
