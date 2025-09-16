@@ -14,6 +14,7 @@ use crate::object::dict::keys::{
 use crate::object::{Dict, Name, Object, ObjectIdentifier};
 use std::collections::HashMap;
 use std::ops::Deref;
+use crate::crypto::DecryptionError::InvalidEncryption;
 
 mod aes;
 mod algo;
@@ -276,53 +277,67 @@ pub(crate) fn get(dict: &Dict, id: &[u8]) -> Result<Decryptor, DecryptionError> 
             .to_be_bytes(),
     );
 
-    let decryption_key = match revision {
-        revision if revision <= 4 => {
-            // Algorithm 2: Computing a file encryption key in order to encrypt a
-            // document (revision 4 and earlier)
+    let decryption_key = if revision <= 4  {
+        // Algorithm 2: Computing a file encryption key in order to encrypt a
+        // document (revision 4 and earlier)
 
-            let mut md5_input = vec![];
+        let mut md5_input = vec![];
 
-            // a) TODO: Convert password to PDFDocEncoding.
-            let password = DEFAULT_USER_PASSWORD;
+        // a) TODO: Convert password to PDFDocEncoding.
+        let password = DEFAULT_USER_PASSWORD;
 
-            // b) Initialise the MD5 hash function and pass the
-            // result of step a) as input to this function.
-            md5_input.extend(&password);
+        // b) Initialise the MD5 hash function and pass the
+        // result of step a) as input to this function.
+        md5_input.extend(&password);
 
-            // c) Pass the value of the encryption dictionary’s O entry
-            // to the MD5 hash function.
-            md5_input.extend(owner_password.get().as_ref());
+        // c) Pass the value of the encryption dictionary’s O entry
+        // to the MD5 hash function.
+        md5_input.extend(owner_password.get().as_ref());
 
-            // d) Convert the integer value of the P entry to a 32-bit unsigned
-            // binary number and pass these bytes to the MD5 hash function, low-order byte first.
-            md5_input.extend(permissions.to_le_bytes());
+        // d) Convert the integer value of the P entry to a 32-bit unsigned
+        // binary number and pass these bytes to the MD5 hash function, low-order byte first.
+        md5_input.extend(permissions.to_le_bytes());
 
-            // e) Pass the first element of the file’s file identifier array to the MD5 hash function.
-            md5_input.extend(id);
+        // e) Pass the first element of the file’s file identifier array to the MD5 hash function.
+        md5_input.extend(id);
 
-            // f) (Security handlers of revision 4 or greater) If document metadata
-            // is not being encrypted, pass 4 bytes with the value 0xFFFFFFFF to the MD5 hash function.
-            if !encrypt_metadata && revision >= 4 {
-                md5_input.extend(&[0xff, 0xff, 0xff, 0xff])
-            }
-
-            // g) Finish the hash.
-            let mut hash = md5::calculate(&md5_input);
-
-            // h) For revisions >= 3, do the following 50 times: Take the output from the previous
-            // MD5 hash and pass the first n bytes of the output as input into a new MD5 hash,
-            // where n is the number of bytes of the file encryption key as defined by the value
-            // of the encryption dictionary’s `Length` entry.
-            if revision >= 3 {
-                for _ in 0..50 {
-                    hash = md5::calculate(&hash[..byte_length as usize]);
-                }
-            }
-
-            hash[..byte_length as usize].to_vec()
+        // f) (Security handlers of revision 4 or greater) If document metadata
+        // is not being encrypted, pass 4 bytes with the value 0xFFFFFFFF to the MD5 hash function.
+        if !encrypt_metadata && revision >= 4 {
+            md5_input.extend(&[0xff, 0xff, 0xff, 0xff])
         }
-        _ => unimplemented!(),
+
+        // g) Finish the hash.
+        let mut hash = md5::calculate(&md5_input);
+
+        // h) For revisions >= 3, do the following 50 times: Take the output from the previous
+        // MD5 hash and pass the first n bytes of the output as input into a new MD5 hash,
+        // where n is the number of bytes of the file encryption key as defined by the value
+        // of the encryption dictionary’s `Length` entry.
+        if revision >= 3 {
+            for _ in 0..50 {
+                hash = md5::calculate(&hash[..byte_length as usize]);
+            }
+        }
+
+        hash[..byte_length as usize].to_vec()
+    }   else {
+        unimplemented!();
+        // // Algorithm 2.A: Retrieving the file encryption key from an encrypted
+        // // document in order to decrypt it (revision 6 and later)
+        // 
+        // // a) The UTF-8 password string shall be generated from Unicode input by processing 
+        // // the input string with  the SASLprep (Internet RFC 4013) profile of stringprep 
+        // // (Internet RFC 3454) using the Normalize and BiDi options, and then converting to 
+        // // a UTF-8 representation.
+        // 
+        // // b) Truncate the UTF-8 representation to 127 bytes if it is longer than 127 bytes.
+        // 
+        //  let owner_password = owner_password.get().as_ref();
+        // let (password, tail) = owner_password.split_at_checked(32).ok_or(InvalidEncryption)?;
+        // let (validation_salt, key_salt) = tail.split_at_checked(8).ok_or(InvalidEncryption)?;
+        
+        
     };
 
     // Verify password
