@@ -327,6 +327,38 @@ impl<const KEY_SIZE: usize, const ROUNDS: usize> AESCipher<KEY_SIZE, ROUNDS> {
         state
     }
 
+    /// Encrypt data with CBC mode and add PKCS#7 padding
+    pub fn encrypt_cbc(&self, data: &[u8], iv: &[u8; 16]) -> Vec<u8> {
+        let mut result = Vec::new();
+        let mut current_iv = *iv;
+
+        // Add PKCS#7 padding
+        let mut padded_data = data.to_vec();
+        let pad_len = 16 - (data.len() % 16);
+        if pad_len == 0 {
+            padded_data.extend(vec![16u8; 16]);
+        } else {
+            padded_data.extend(vec![pad_len as u8; pad_len]);
+        }
+
+        // Encrypt blocks
+        for chunk in padded_data.chunks_exact(16) {
+            let mut block = [0u8; 16];
+            block.copy_from_slice(chunk);
+
+            // XOR with previous ciphertext (CBC)
+            for i in 0..16 {
+                block[i] ^= current_iv[i];
+            }
+
+            let encrypted = self.encrypt_block(&block);
+            result.extend_from_slice(&encrypted);
+            current_iv = encrypted;
+        }
+
+        result
+    }
+
     /// Decrypt data with CBC mode and remove PKCS#7 padding
     pub fn decrypt_cbc(&self, data: &[u8], iv: &[u8; 16]) -> Vec<u8> {
         let mut result = Vec::new();
@@ -367,11 +399,13 @@ impl<const KEY_SIZE: usize, const ROUNDS: usize> AESCipher<KEY_SIZE, ROUNDS> {
 mod tests {
     use super::*;
     use aes::{Aes128, Aes256};
-    use aes::cipher::{KeyInit, BlockEncrypt, BlockDecrypt, BlockEncryptMut, generic_array::GenericArray};
-    use cbc::{Encryptor, cipher::{KeyIvInit, block_padding::Pkcs7}};
+    use aes::cipher::{KeyInit, BlockEncrypt, BlockDecrypt, BlockEncryptMut, BlockDecryptMut, generic_array::GenericArray};
+    use cbc::{Encryptor, Decryptor, cipher::{KeyIvInit, block_padding::Pkcs7}};
 
     type Aes128Cbc = Encryptor<Aes128>;
+    type Aes128CbcDec = Decryptor<Aes128>;
     type Aes256Cbc = Encryptor<Aes256>;
+    type Aes256CbcDec = Decryptor<Aes256>;
 
     fn aes_128_block_test(key: &[u8; 16], plaintext: &[u8; 16]) {
         let our_cipher = AES128Cipher::new(key).unwrap();
@@ -410,25 +444,53 @@ mod tests {
     fn aes_128_cbc_test(key: &[u8; 16], iv: &[u8; 16], plaintext: &[u8]) {
         let our_cipher = AES128Cipher::new(key).unwrap();
 
+        // Test our encryption against external decryption
+        let our_ciphertext = our_cipher.encrypt_cbc(plaintext, iv);
+
+        let external_decryptor = Aes128CbcDec::new_from_slices(key, iv).unwrap();
+        let mut external_buffer = our_ciphertext.clone();
+        let external_decrypted = external_decryptor.decrypt_padded_mut::<Pkcs7>(&mut external_buffer).unwrap();
+
+        assert_eq!(external_decrypted, plaintext, "AES-128 CBC: our encryption should be decryptable by external crate");
+
+        // Test external encryption against our decryption
         let external_encryptor = Aes128Cbc::new_from_slices(key, iv).unwrap();
         let mut buffer = plaintext.to_vec();
         buffer.resize(plaintext.len() + 16, 0);
-        let ciphertext = external_encryptor.encrypt_padded_mut::<Pkcs7>(&mut buffer, plaintext.len()).unwrap();
+        let external_ciphertext = external_encryptor.encrypt_padded_mut::<Pkcs7>(&mut buffer, plaintext.len()).unwrap();
 
-        let our_decrypted = our_cipher.decrypt_cbc(ciphertext, iv);
-        assert_eq!(our_decrypted, plaintext, "AES-128 CBC decryption should match original plaintext");
+        let our_decrypted = our_cipher.decrypt_cbc(external_ciphertext, iv);
+        assert_eq!(our_decrypted, plaintext, "AES-128 CBC: external encryption should be decryptable by our implementation");
+
+        // Test roundtrip with our implementation
+        let our_roundtrip = our_cipher.decrypt_cbc(&our_ciphertext, iv);
+        assert_eq!(our_roundtrip, plaintext, "AES-128 CBC: our roundtrip should work");
     }
 
     fn aes_256_cbc_test(key: &[u8; 32], iv: &[u8; 16], plaintext: &[u8]) {
         let our_cipher = AES256Cipher::new(key).unwrap();
 
+        // Test our encryption against external decryption
+        let our_ciphertext = our_cipher.encrypt_cbc(plaintext, iv);
+
+        let external_decryptor = Aes256CbcDec::new_from_slices(key, iv).unwrap();
+        let mut external_buffer = our_ciphertext.clone();
+        let external_decrypted = external_decryptor.decrypt_padded_mut::<Pkcs7>(&mut external_buffer).unwrap();
+
+        assert_eq!(external_decrypted, plaintext, "AES-256 CBC: our encryption should be decryptable by external crate");
+
+        // Test external encryption against our decryption
         let external_encryptor = Aes256Cbc::new_from_slices(key, iv).unwrap();
         let mut buffer = plaintext.to_vec();
         buffer.resize(plaintext.len() + 16, 0);
-        let ciphertext = external_encryptor.encrypt_padded_mut::<Pkcs7>(&mut buffer, plaintext.len()).unwrap();
+        let external_ciphertext = external_encryptor.encrypt_padded_mut::<Pkcs7>(&mut buffer, plaintext.len()).unwrap();
 
-        let our_decrypted = our_cipher.decrypt_cbc(ciphertext, iv);
-        assert_eq!(our_decrypted, plaintext, "AES-256 CBC decryption should match original plaintext");
+        let our_decrypted = our_cipher.decrypt_cbc(external_ciphertext, iv);
+        assert_eq!(our_decrypted, plaintext, "AES-256 CBC: external encryption should be decryptable by our implementation");
+
+        // Test roundtrip with our implementation
+        let our_roundtrip = our_cipher.decrypt_cbc(&our_ciphertext, iv);
+        assert_eq!(our_roundtrip, plaintext, "AES-256 CBC: our roundtrip should work");
     }
 
     #[test]
@@ -482,6 +544,68 @@ mod tests {
 
         for (key, plaintext) in test_cases {
             aes_256_block_test(&key, &plaintext);
+        }
+    }
+
+    #[test]
+    fn test_aes128_encryption_decryption() {
+        let test_cases = [
+            (
+                [0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c],
+                [0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f],
+                b"Hello, World!" as &[u8]
+            ),
+            (
+                [0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f],
+                [0xff; 16],
+                b"The quick brown fox jumps over the lazy dog"
+            ),
+            (
+                [0xff; 16],
+                [0x00; 16],
+                b"AES-128 encryption test vector for CBC mode with PKCS7 padding"
+            ),
+            (
+                [0xaa; 16],
+                [0x55; 16],
+                &vec![0x42u8; 100]
+            ),
+        ];
+
+        for (key, iv, plaintext) in test_cases {
+            aes_128_cbc_test(&key, &iv, plaintext);
+        }
+    }
+
+    #[test]
+    fn test_aes256_encryption_decryption() {
+        let test_cases = [
+            (
+                [0x60, 0x3d, 0xeb, 0x10, 0x15, 0xca, 0x71, 0xbe, 0x2b, 0x73, 0xae, 0xf0, 0x85, 0x7d, 0x77, 0x81,
+                 0x1f, 0x35, 0x2c, 0x07, 0x3b, 0x61, 0x08, 0xd7, 0x2d, 0x98, 0x10, 0xa3, 0x09, 0x14, 0xdf, 0xf4],
+                [0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f],
+                b"Hello, World!" as &[u8]
+            ),
+            (
+                [0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+                 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f],
+                [0xff; 16],
+                b"The quick brown fox jumps over the lazy dog"
+            ),
+            (
+                [0xff; 32],
+                [0x00; 16],
+                b"AES-256 encryption test vector for CBC mode with PKCS7 padding"
+            ),
+            (
+                [0xaa; 32],
+                [0x55; 16],
+                &vec![0x42u8; 100]
+            ),
+        ];
+
+        for (key, iv, plaintext) in test_cases {
+            aes_256_cbc_test(&key, &iv, plaintext);
         }
     }
 
