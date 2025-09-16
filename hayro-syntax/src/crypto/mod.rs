@@ -21,6 +21,8 @@ mod algo;
 mod md5;
 mod rc4;
 mod sha256;
+mod sha384;
+mod sha512;
 
 #[derive(Debug, Copy, Clone)]
 pub enum DecryptionError {

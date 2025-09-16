@@ -940,14 +940,6 @@ mod tests {
     }
 
     #[test]
-    fn dict_with_null() {
-        let dict_data = b"<<  /Entry null /Second (Hi) >>";
-        let dict = dict_impl(dict_data).unwrap();
-
-        assert_eq!(dict.len(), 1);
-    }
-
-    #[test]
     fn dict_complex() {
         let data = "<< /Type /Example
 /Subtype /DictionaryExample

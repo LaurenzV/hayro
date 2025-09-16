@@ -50,7 +50,6 @@ const fn little_sigma_1(x: u32) -> u32 {
 }
 
 pub(crate) fn calculate(data: &[u8]) -> [u8; 32] {
-    // Initial hash values (first 32 bits of the fractional parts of the square roots of the first 8 primes)
     let mut h = [
         0x6a09e667_u32,
         0xbb67ae85,
@@ -62,26 +61,19 @@ pub(crate) fn calculate(data: &[u8]) -> [u8; 32] {
         0x5be0cd19,
     ];
 
-    // Pre-processing: padding
     let bit_len = data.len() as u64 * 8;
-    let padded_len = ((data.len() + 9 + 63) / 64) * 64; // Round up to nearest multiple of 64
+    let padded_len = ((data.len() + 9 + 63) / 64) * 64;
     let mut padded = vec![0u8; padded_len];
 
-    // Copy original data
     padded[..data.len()].copy_from_slice(data);
-
-    // Add padding bit
     padded[data.len()] = 0x80;
 
-    // Add length as 64-bit big-endian integer at the end
     let len_bytes = bit_len.to_be_bytes();
     padded[padded_len - 8..].copy_from_slice(&len_bytes);
 
-    // Process message in 512-bit (64-byte) chunks
     for chunk in padded.chunks_exact(64) {
         let mut w = [0u32; 64];
 
-        // Break chunk into sixteen 32-bit big-endian words
         for (i, word_bytes) in chunk.chunks_exact(4).enumerate() {
             w[i] = u32::from_be_bytes([
                 word_bytes[0],
@@ -91,7 +83,6 @@ pub(crate) fn calculate(data: &[u8]) -> [u8; 32] {
             ]);
         }
 
-        // Extend the first 16 words into the remaining 48 words
         for i in 16..64 {
             w[i] = little_sigma_1(w[i - 2])
                 .wrapping_add(w[i - 7])
@@ -99,10 +90,8 @@ pub(crate) fn calculate(data: &[u8]) -> [u8; 32] {
                 .wrapping_add(w[i - 16]);
         }
 
-        // Initialize working variables
         let [mut a, mut b, mut c, mut d, mut e, mut f, mut g, mut h_var] = h;
 
-        // Main loop
         for i in 0..64 {
             let temp1 = h_var
                 .wrapping_add(sigma_1(e))
@@ -132,7 +121,6 @@ pub(crate) fn calculate(data: &[u8]) -> [u8; 32] {
         h[7] = h[7].wrapping_add(h_var);
     }
 
-    // Produce the final hash value as a 256-bit number (32 bytes)
     let mut result = [0u8; 32];
     for (i, &hash_word) in h.iter().enumerate() {
         let bytes = hash_word.to_be_bytes();
@@ -145,37 +133,22 @@ pub(crate) fn calculate(data: &[u8]) -> [u8; 32] {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sha2::{Sha256, Digest};
 
     #[test]
     fn correctness() {
-        assert_eq!(
-            calculate(b""),
-            [0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14, 0x9a, 0xfb, 0xf4, 0xc8, 0x99, 0x6f, 0xb9, 0x24,
-                0x27, 0xae, 0x41, 0xe4, 0x64, 0x9b, 0x93, 0x4c, 0xa4, 0x95, 0x99, 0x1b, 0x78, 0x52, 0xb8, 0x55]
-        );
+        let test_cases = [
+            b"" as &[u8],
+            b"a",
+            b"abc",
+            b"Hello, World!",
+            &[0xde, 0xad, 0xbe, 0xef],
+        ];
 
-        assert_eq!(
-            calculate(b"a"),
-            [0xca, 0x97, 0x81, 0x12, 0xca, 0x1b, 0xbd, 0xca, 0xfa, 0xc2, 0x31, 0xb3, 0x9a, 0x23, 0xdc, 0x4d,
-                0xa7, 0x86, 0xef, 0xf8, 0x14, 0x7c, 0x4e, 0x72, 0xb9, 0x80, 0x77, 0x85, 0xaf, 0xee, 0x48, 0xbb]
-        );
-
-        assert_eq!(
-            calculate(b"abc"),
-            [0xba, 0x78, 0x16, 0xbf, 0x8f, 0x01, 0xcf, 0xea, 0x41, 0x41, 0x40, 0xde, 0x5d, 0xae, 0x22, 0x23,
-                0xb0, 0x03, 0x61, 0xa3, 0x96, 0x17, 0x7a, 0x9c, 0xb4, 0x10, 0xff, 0x61, 0xf2, 0x00, 0x15, 0xad]
-        );
-
-        assert_eq!(
-            calculate(b"Hello, World!"),
-            [0xdf, 0xfd, 0x60, 0x21, 0xbb, 0x2b, 0xd5, 0xb0, 0xaf, 0x67, 0x62, 0x90, 0x80, 0x9e, 0xc3, 0xa5,
-                0x31, 0x91, 0xdd, 0x81, 0xc7, 0xf7, 0x0a, 0x4b, 0x28, 0x68, 0x8a, 0x36, 0x21, 0x82, 0x98, 0x6f]
-        );
-
-        assert_eq!(
-            calculate(&[0xde, 0xad, 0xbe, 0xef]),
-            [0x5f, 0x78, 0xc3, 0x32, 0x74, 0xe4, 0x3f, 0xa9, 0xde, 0x56, 0x59, 0x26, 0x5c, 0x1d, 0x91, 0x7e,
-                0x25, 0xc0, 0x37, 0x22, 0xdc, 0xb0, 0xb8, 0xd2, 0x7d, 0xb8, 0xd5, 0xfe, 0xaa, 0x81, 0x39, 0x53]
-        );
+        for test_case in test_cases {
+            let our_result = calculate(test_case);
+            let expected = Sha256::digest(test_case);
+            assert_eq!(our_result, expected.as_slice(), "Failed for input: {:?}", test_case);
+        }
     }
 }
