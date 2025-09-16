@@ -362,3 +362,219 @@ impl<const KEY_SIZE: usize, const ROUNDS: usize> AESCipher<KEY_SIZE, ROUNDS> {
         result
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use aes::{Aes128, Aes256};
+    use aes::cipher::{KeyInit, BlockEncrypt, BlockDecrypt, BlockEncryptMut, generic_array::GenericArray};
+    use cbc::{Encryptor, cipher::{KeyIvInit, block_padding::Pkcs7}};
+
+    type Aes128Cbc = Encryptor<Aes128>;
+    type Aes256Cbc = Encryptor<Aes256>;
+
+    fn aes_128_block_test(key: &[u8; 16], plaintext: &[u8; 16]) {
+        let our_cipher = AES128Cipher::new(key).unwrap();
+
+        let external_cipher = Aes128::new_from_slice(key).unwrap();
+        let mut external_block = GenericArray::clone_from_slice(plaintext);
+        external_cipher.encrypt_block(&mut external_block);
+
+        let our_ciphertext = our_cipher.encrypt_block(plaintext);
+        assert_eq!(our_ciphertext, external_block.as_slice(), "AES-128 encryption should match external crate");
+
+        let our_decrypted = our_cipher.decrypt_block(&our_ciphertext);
+        assert_eq!(our_decrypted, *plaintext, "AES-128 roundtrip should recover original plaintext");
+
+        external_cipher.decrypt_block(&mut external_block);
+        assert_eq!(external_block.as_slice(), plaintext, "External crate roundtrip verification");
+    }
+
+    fn aes_256_block_test(key: &[u8; 32], plaintext: &[u8; 16]) {
+        let our_cipher = AES256Cipher::new(key).unwrap();
+
+        let external_cipher = Aes256::new_from_slice(key).unwrap();
+        let mut external_block = GenericArray::clone_from_slice(plaintext);
+        external_cipher.encrypt_block(&mut external_block);
+
+        let our_ciphertext = our_cipher.encrypt_block(plaintext);
+        assert_eq!(our_ciphertext, external_block.as_slice(), "AES-256 encryption should match external crate");
+
+        let our_decrypted = our_cipher.decrypt_block(&our_ciphertext);
+        assert_eq!(our_decrypted, *plaintext, "AES-256 roundtrip should recover original plaintext");
+
+        external_cipher.decrypt_block(&mut external_block);
+        assert_eq!(external_block.as_slice(), plaintext, "External crate roundtrip verification");
+    }
+
+    fn aes_128_cbc_test(key: &[u8; 16], iv: &[u8; 16], plaintext: &[u8]) {
+        let our_cipher = AES128Cipher::new(key).unwrap();
+
+        let external_encryptor = Aes128Cbc::new_from_slices(key, iv).unwrap();
+        let mut buffer = plaintext.to_vec();
+        buffer.resize(plaintext.len() + 16, 0);
+        let ciphertext = external_encryptor.encrypt_padded_mut::<Pkcs7>(&mut buffer, plaintext.len()).unwrap();
+
+        let our_decrypted = our_cipher.decrypt_cbc(ciphertext, iv);
+        assert_eq!(our_decrypted, plaintext, "AES-128 CBC decryption should match original plaintext");
+    }
+
+    fn aes_256_cbc_test(key: &[u8; 32], iv: &[u8; 16], plaintext: &[u8]) {
+        let our_cipher = AES256Cipher::new(key).unwrap();
+
+        let external_encryptor = Aes256Cbc::new_from_slices(key, iv).unwrap();
+        let mut buffer = plaintext.to_vec();
+        buffer.resize(plaintext.len() + 16, 0);
+        let ciphertext = external_encryptor.encrypt_padded_mut::<Pkcs7>(&mut buffer, plaintext.len()).unwrap();
+
+        let our_decrypted = our_cipher.decrypt_cbc(ciphertext, iv);
+        assert_eq!(our_decrypted, plaintext, "AES-256 CBC decryption should match original plaintext");
+    }
+
+    #[test]
+    fn test_aes128_block_operations() {
+        let test_cases = [
+            (
+                [0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c],
+                [0x32, 0x43, 0xf6, 0xa8, 0x88, 0x5a, 0x30, 0x8d, 0x31, 0x31, 0x98, 0xa2, 0xe0, 0x37, 0x07, 0x34]
+            ),
+            (
+                [0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f],
+                [0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff]
+            ),
+            (
+                [0xff; 16],
+                [0x00; 16]
+            ),
+            (
+                [0x00; 16],
+                [0xff; 16]
+            ),
+        ];
+
+        for (key, plaintext) in test_cases {
+            aes_128_block_test(&key, &plaintext);
+        }
+    }
+
+    #[test]
+    fn test_aes256_block_operations() {
+        let test_cases = [
+            (
+                [0x60, 0x3d, 0xeb, 0x10, 0x15, 0xca, 0x71, 0xbe, 0x2b, 0x73, 0xae, 0xf0, 0x85, 0x7d, 0x77, 0x81,
+                 0x1f, 0x35, 0x2c, 0x07, 0x3b, 0x61, 0x08, 0xd7, 0x2d, 0x98, 0x10, 0xa3, 0x09, 0x14, 0xdf, 0xf4],
+                [0x6b, 0xc1, 0xbe, 0xe2, 0x2e, 0x40, 0x9f, 0x96, 0xe9, 0x3d, 0x7e, 0x11, 0x73, 0x93, 0x17, 0x2a]
+            ),
+            (
+                [0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+                 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f],
+                [0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff]
+            ),
+            (
+                [0xff; 32],
+                [0x00; 16]
+            ),
+            (
+                [0x00; 32],
+                [0xff; 16]
+            ),
+        ];
+
+        for (key, plaintext) in test_cases {
+            aes_256_block_test(&key, &plaintext);
+        }
+    }
+
+    #[test]
+    fn test_aes128_cbc_decryption() {
+        let test_cases = [
+            (
+                [0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c],
+                [0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f],
+                b"Hello, World!" as &[u8]
+            ),
+            (
+                [0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f],
+                [0xff; 16],
+                b"The quick brown fox jumps over the lazy dog"
+            ),
+            (
+                [0xff; 16],
+                [0x00; 16],
+                b"AES-128 test vector for CBC mode with PKCS7 padding"
+            ),
+            (
+                [0xaa; 16],
+                [0x55; 16],
+                &vec![0x42u8; 100]
+            ),
+        ];
+
+        for (key, iv, plaintext) in test_cases {
+            aes_128_cbc_test(&key, &iv, plaintext);
+        }
+    }
+
+    #[test]
+    fn test_aes256_cbc_decryption() {
+        let test_cases = [
+            (
+                [0x60, 0x3d, 0xeb, 0x10, 0x15, 0xca, 0x71, 0xbe, 0x2b, 0x73, 0xae, 0xf0, 0x85, 0x7d, 0x77, 0x81,
+                 0x1f, 0x35, 0x2c, 0x07, 0x3b, 0x61, 0x08, 0xd7, 0x2d, 0x98, 0x10, 0xa3, 0x09, 0x14, 0xdf, 0xf4],
+                [0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f],
+                b"Hello, World!" as &[u8]
+            ),
+            (
+                [0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+                 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f],
+                [0xff; 16],
+                b"The quick brown fox jumps over the lazy dog"
+            ),
+            (
+                [0xff; 32],
+                [0x00; 16],
+                b"AES-256 test vector for CBC mode with PKCS7 padding"
+            ),
+            (
+                [0xaa; 32],
+                [0x55; 16],
+                &vec![0x42u8; 100]
+            ),
+        ];
+
+        for (key, iv, plaintext) in test_cases {
+            aes_256_cbc_test(&key, &iv, plaintext);
+        }
+    }
+
+    #[test]
+    fn test_edge_cases() {
+        let key128 = [0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c];
+        let key256 = [0x60, 0x3d, 0xeb, 0x10, 0x15, 0xca, 0x71, 0xbe, 0x2b, 0x73, 0xae, 0xf0, 0x85, 0x7d, 0x77, 0x81,
+                      0x1f, 0x35, 0x2c, 0x07, 0x3b, 0x61, 0x08, 0xd7, 0x2d, 0x98, 0x10, 0xa3, 0x09, 0x14, 0xdf, 0xf4];
+        let iv = [0x00; 16];
+
+        aes_128_cbc_test(&key128, &iv, b"");
+        aes_256_cbc_test(&key256, &iv, b"");
+
+        aes_128_cbc_test(&key128, &iv, b"a");
+        aes_256_cbc_test(&key256, &iv, b"a");
+
+        aes_128_cbc_test(&key128, &iv, &vec![0xffu8; 15]);
+        aes_256_cbc_test(&key256, &iv, &vec![0xffu8; 15]);
+
+        aes_128_cbc_test(&key128, &iv, &vec![0xffu8; 16]);
+        aes_256_cbc_test(&key256, &iv, &vec![0xffu8; 16]);
+
+        aes_128_cbc_test(&key128, &iv, &vec![0xffu8; 17]);
+        aes_256_cbc_test(&key256, &iv, &vec![0xffu8; 17]);
+    }
+
+    #[test]
+    fn test_invalid_key_lengths() {
+        assert!(AES128Cipher::new(&[0u8; 15]).is_err());
+        assert!(AES128Cipher::new(&[0u8; 17]).is_err());
+        assert!(AES256Cipher::new(&[0u8; 31]).is_err());
+        assert!(AES256Cipher::new(&[0u8; 33]).is_err());
+    }
+}
