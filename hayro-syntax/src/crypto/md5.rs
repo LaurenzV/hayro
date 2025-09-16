@@ -87,124 +87,65 @@ pub(crate) fn calculate(data: &[u8]) -> [u8; 16] {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use md5;
 
-    // Tests were cross-compared against the md5 crate.
+    fn md5_test(data: &[u8]) {
+        let our_result = calculate(data);
+
+        let external_result = md5::compute(data);
+
+        assert_eq!(our_result, external_result.as_slice(),
+                   "MD5 calculation should match external md5 crate for input: {:?}", data);
+    }
 
     #[test]
     fn test_empty_and_short_inputs() {
-        assert_eq!(
-            calculate(b""),
-            [
-                0xd4, 0x1d, 0x8c, 0xd9, 0x8f, 0x00, 0xb2, 0x04, 0xe9, 0x80, 0x09, 0x98, 0xec, 0xf8,
-                0x42, 0x7e
-            ]
-        );
-        assert_eq!(
-            calculate(b"a"),
-            [
-                0x0c, 0xc1, 0x75, 0xb9, 0xc0, 0xf1, 0xb6, 0xa8, 0x31, 0xc3, 0x99, 0xe2, 0x69, 0x77,
-                0x26, 0x61
-            ]
-        );
-        assert_eq!(
-            calculate(b"abc"),
-            [
-                0x90, 0x01, 0x50, 0x98, 0x3c, 0xd2, 0x4f, 0xb0, 0xd6, 0x96, 0x3f, 0x7d, 0x28, 0xe1,
-                0x7f, 0x72
-            ]
-        );
+        md5_test(b"");
+        md5_test(b"a");
+        md5_test(b"abc");
     }
 
     #[test]
     fn test_common_text() {
-        assert_eq!(
-            calculate(b"Hello, World!"),
-            [
-                0x65, 0xa8, 0xe2, 0x7d, 0x88, 0x79, 0x28, 0x38, 0x31, 0xb6, 0x64, 0xbd, 0x8b, 0x7f,
-                0x0a, 0xd4
-            ]
-        );
-        assert_eq!(
-            calculate(b"The quick brown fox jumps over the lazy dog"),
-            [
-                0x9e, 0x10, 0x7d, 0x9d, 0x37, 0x2b, 0xb6, 0x82, 0x6b, 0xd8, 0x1d, 0x35, 0x42, 0xa4,
-                0x19, 0xd6
-            ]
-        );
-        assert_eq!(
-            calculate(b"abcdefghijklmnopqrstuvwxyz"),
-            [
-                0xc3, 0xfc, 0xd3, 0xd7, 0x61, 0x92, 0xe4, 0x00, 0x7d, 0xfb, 0x49, 0x6c, 0xca, 0x67,
-                0xe1, 0x3b
-            ]
-        );
+        md5_test(b"Hello, World!");
+        md5_test(b"The quick brown fox jumps over the lazy dog");
+        md5_test(b"abcdefghijklmnopqrstuvwxyz");
     }
 
     #[test]
     fn test_block_boundaries() {
-        assert_eq!(
-            calculate(b"1234567890123456789012345678901234567890123456789012345"),
-            [
-                0xc9, 0xcc, 0xf1, 0x68, 0x91, 0x4a, 0x1b, 0xcf, 0xc3, 0x22, 0x9f, 0x19, 0x48, 0xe6,
-                0x7d, 0xa0
-            ]
-        );
-        assert_eq!(
-            calculate(b"1234567890123456789012345678901234567890123456789012345678901234"),
-            [
-                0xeb, 0x6c, 0x41, 0x79, 0xc0, 0xa7, 0xc8, 0x2c, 0xc2, 0x82, 0x8c, 0x1e, 0x63, 0x38,
-                0xe1, 0x65
-            ]
-        );
+        md5_test(b"1234567890123456789012345678901234567890123456789012345");
+        md5_test(b"1234567890123456789012345678901234567890123456789012345678901234");
     }
 
     #[test]
     fn test_binary_and_special_data() {
-        assert_eq!(
-            calculate(&[0u8; 100]),
-            [
-                0x6d, 0x0b, 0xb0, 0x09, 0x54, 0xce, 0xb7, 0xfb, 0xee, 0x43, 0x6b, 0xb5, 0x5a, 0x83,
-                0x97, 0xa9
-            ]
-        );
-        assert_eq!(
-            calculate(&(0u8..=255u8).collect::<Vec<u8>>()),
-            [
-                0xe2, 0xc8, 0x65, 0xdb, 0x41, 0x62, 0xbe, 0xd9, 0x63, 0xbf, 0xaa, 0x9e, 0xf6, 0xac,
-                0x18, 0xf0
-            ]
-        );
-        assert_eq!(
-            calculate("🦀💎".as_bytes()),
-            [
-                0xbc, 0xab, 0xb9, 0x04, 0x18, 0xab, 0x44, 0xce, 0xca, 0xa9, 0x53, 0xd9, 0x73, 0x9f,
-                0x85, 0x0c
-            ]
-        );
+        md5_test(&[0u8; 100]);
+        md5_test(&(0u8..=255u8).collect::<Vec<u8>>());
+        md5_test("🦀💎".as_bytes());
     }
 
     #[test]
     fn test_large_and_repetitive() {
-        assert_eq!(
-            calculate(&b"0123456789".repeat(100)),
-            [
-                0x42, 0x70, 0x08, 0xb3, 0xfe, 0x19, 0x2f, 0x66, 0x3d, 0x66, 0x5f, 0x56, 0xcd, 0x75,
-                0x71, 0x6c
-            ]
-        );
-        assert_eq!(
-            calculate(b"1234567890"),
-            [
-                0xe8, 0x07, 0xf1, 0xfc, 0xf8, 0x2d, 0x13, 0x2f, 0x9b, 0xb0, 0x18, 0xca, 0x67, 0x38,
-                0xa1, 0x9f
-            ]
-        );
-        assert_eq!(
-            calculate(b"abcabcabc"),
-            [
-                0x97, 0xac, 0x82, 0xa5, 0xb8, 0x25, 0x23, 0x9e, 0x78, 0x2d, 0x03, 0x39, 0xe2, 0xd7,
-                0xb9, 0x10
-            ]
-        );
+        md5_test(&b"0123456789".repeat(100));
+        md5_test(b"1234567890");
+        md5_test(b"abcabcabc");
+    }
+
+    #[test]
+    fn test_various_lengths() {
+        for i in 0..=100 {
+            let data = vec![b'x'; i];
+            md5_test(&data);
+        }
+    }
+
+    #[test]
+    fn test_boundary_conditions() {
+        md5_test(&vec![0xFF; 55]);
+        md5_test(&vec![0xFF; 56]);
+        md5_test(&vec![0xFF; 63]);
+        md5_test(&vec![0xFF; 64]);
+        md5_test(&vec![0xFF; 65]);
     }
 }
