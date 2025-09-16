@@ -5,7 +5,7 @@
 //! encrypted PDFs. They solely serve the purpose of being able to decrypt and read
 //! _already_ encrypted documents, where security isn't really relevant.
 
-use crate::crypto::aes::AES128Cipher;
+use crate::crypto::aes::{AES128Cipher, AES256Cipher};
 use crate::crypto::rc4::Rc4;
 use crate::object;
 use crate::object::dict::keys::{
@@ -14,6 +14,9 @@ use crate::object::dict::keys::{
 use crate::object::{Dict, Name, Object, ObjectIdentifier};
 use std::collections::HashMap;
 use std::ops::Deref;
+use ::aes::Aes128;
+use ::aes::cipher::KeyInit;
+use smallvec::ExtendFromSlice;
 use crate::crypto::DecryptionError::InvalidEncryption;
 
 mod aes;
@@ -268,10 +271,10 @@ pub(crate) fn get(dict: &Dict, id: &[u8]) -> Result<Decryptor, DecryptionError> 
 
     let byte_length = length / 8;
 
-    let owner_password = dict
+    let owner_string = dict
         .get::<object::String>(O)
         .ok_or(DecryptionError::InvalidEncryption)?;
-    let user_password = dict
+    let user_string = dict
         .get::<object::String>(U)
         .ok_or(DecryptionError::InvalidEncryption)?;
     let permissions = u32::from_be_bytes(
@@ -295,7 +298,7 @@ pub(crate) fn get(dict: &Dict, id: &[u8]) -> Result<Decryptor, DecryptionError> 
 
         // c) Pass the value of the encryption dictionary’s O entry
         // to the MD5 hash function.
-        md5_input.extend(owner_password.get().as_ref());
+        md5_input.extend(owner_string.get().as_ref());
 
         // d) Convert the integer value of the P entry to a 32-bit unsigned
         // binary number and pass these bytes to the MD5 hash function, low-order byte first.
@@ -324,23 +327,82 @@ pub(crate) fn get(dict: &Dict, id: &[u8]) -> Result<Decryptor, DecryptionError> 
         }
 
         hash[..byte_length as usize].to_vec()
-    }   else {
+    } else {
+        // Algorithm 2.A: Retrieving the file encryption key from an encrypted
+        // document in order to decrypt it (revision 6 and later)
+        
+        // a) The UTF-8 password string shall be generated from Unicode input by processing the input string with
+        // the SASLprep (Internet RFC 4013) profile of stringprep (Internet RFC 3454) using the Normalize and BiDi
+        // options, and then converting to a UTF-8 representation.
+        // b) Truncate the UTF-8 representation to 127 bytes if it is longer than 127 bytes.
+        
+        let password = b"";
+        
+        let owner_string = owner_string.get();
+        let (owner_hash, owner_tail) = owner_string.split_at_checked(32).ok_or(InvalidEncryption)?;
+        let (owner_validation_salt, owner_key_salt) = owner_tail.split_at_checked(8).ok_or(InvalidEncryption)?;
+
+        let user_string = user_string.get();
+        let (user_hash, user_tail) = user_string.split_at_checked(32).ok_or(InvalidEncryption)?;
+        let (user_validation_salt, user_key_salt) = user_tail.split_at(8);
+
+        // c) Test the password against the owner key by computing a hash using algorithm 2.B
+        // with an input string consisting of the UTF-8 password concatenated with the 8 bytes of
+        // owner Validation Salt, concatenated with the 48-byte U string. If the 32-byte result
+        // matches the first 32 bytes of the O string, this is the owner password.
+        let computed_hash = algo_2b(password, owner_validation_salt, &user_string, true)?;
+        
+        if computed_hash == owner_hash {
+            panic!("correct password!");
+        }   else {
+            panic!("wrong password!");
+        }
+        
         unimplemented!();
-        // // Algorithm 2.A: Retrieving the file encryption key from an encrypted
-        // // document in order to decrypt it (revision 6 and later)
+
+        // let is_owner_password = computed_owner_hash == owner_hash;
         // 
-        // // a) The UTF-8 password string shall be generated from Unicode input by processing 
-        // // the input string with  the SASLprep (Internet RFC 4013) profile of stringprep 
-        // // (Internet RFC 3454) using the Normalize and BiDi options, and then converting to 
-        // // a UTF-8 representation.
+        // if is_owner_password {
+        //     // d) Compute an intermediate owner key by computing a hash using algorithm 2.B with an input string
+        //     // consisting of the UTF-8 owner password concatenated with the 8 bytes of owner Key Salt,
+        //     // concatenated with the 48-byte U string. The 32-byte result is the key used to decrypt the 32-byte OE string
+        //     // using AES-256 in CBC mode with no padding and an initialization vector of zero. The 32-byte result is the file encryption key.
+        //     let intermediate_owner_key = compute_hash_rev6(password, owner_key_salt, Some(user_bytes));
         // 
-        // // b) Truncate the UTF-8 representation to 127 bytes if it is longer than 127 bytes.
+        //     // Get OE string for decryption
+        //     let oe_string = dict.get::<object::String>("OE".into())
+        //         .ok_or(DecryptionError::InvalidEncryption)?;
+        //     let oe_bytes = oe_string.get().as_ref();
         // 
-        //  let owner_password = owner_password.get().as_ref();
-        // let (password, tail) = owner_password.split_at_checked(32).ok_or(InvalidEncryption)?;
-        // let (validation_salt, key_salt) = tail.split_at_checked(8).ok_or(InvalidEncryption)?;
-        
-        
+        //     if oe_bytes.len() != 32 {
+        //         return Err(DecryptionError::InvalidEncryption);
+        //     }
+        // 
+        //     // Decrypt OE using AES-256 CBC with zero IV
+        //     let cipher = AES256Cipher::new(&intermediate_owner_key).map_err(|_| DecryptionError::InvalidEncryption)?;
+        //     let zero_iv = [0u8; 16];
+        //     cipher.decrypt_cbc(oe_bytes, &zero_iv)
+        // } else {
+        //     // e) Compute an intermediate user key by computing a hash using algorithm 2.B with an input string
+        //     // consisting of the UTF-8 user password concatenated with the 8 bytes of user Key Salt. The 32-byte result
+        //     // is the key used to decrypt the 32-byte UE string using AES-256 in CBC mode with no padding and an
+        //     // initialization vector of zero. The 32-byte result is the file encryption key.
+        //     let intermediate_user_key = compute_hash_rev6(password, user_key_salt, None);
+        // 
+        //     // Get UE string for decryption
+        //     let ue_string = dict.get::<object::String>("UE".into())
+        //         .ok_or(DecryptionError::InvalidEncryption)?;
+        //     let ue_bytes = ue_string.get().as_ref();
+        // 
+        //     if ue_bytes.len() != 32 {
+        //         return Err(DecryptionError::InvalidEncryption);
+        //     }
+        // 
+        //     // Decrypt UE using AES-256 CBC with zero IV
+        //     let cipher = AES256Cipher::new(&intermediate_user_key).map_err(|_| DecryptionError::InvalidEncryption)?;
+        //     let zero_iv = [0u8; 16];
+        //     cipher.decrypt_cbc(ue_bytes, &zero_iv)
+        // }
     };
 
     // Verify password
@@ -402,12 +464,12 @@ pub(crate) fn get(dict: &Dict, id: &[u8]) -> Result<Decryptor, DecryptionError> 
 
             match revision {
                 2 => {
-                    if result.as_slice() != user_password.get().as_ref() {
+                    if result.as_slice() != user_string.get().as_ref() {
                         return Err(DecryptionError::PasswordProtected);
                     }
                 }
                 3 | 4 => {
-                    if Some(&result[..16]) != user_password.get().as_ref().get(0..16) {
+                    if Some(&result[..16]) != user_string.get().as_ref().get(0..16) {
                         return Err(DecryptionError::PasswordProtected);
                     }
                 }
@@ -428,4 +490,89 @@ pub(crate) fn get(dict: &Dict, id: &[u8]) -> Result<Decryptor, DecryptionError> 
         }),
         _ => unimplemented!(),
     }
+}
+
+/// Algorithm 2.B: Computing a hash (revision 6 and later)
+fn algo_2b(password: &[u8], validation_salt: &[u8], user_string: &[u8], check_owner: bool) -> Result<[u8; 32], DecryptionError> {
+    // Take the SHA-256 hash of the original input to the algorithm and name the resulting 
+    // 32 bytes, K.
+    let mut k = {
+        let mut input = Vec::new();
+        input.extend_from_slice(password);
+        input.extend_from_slice(validation_salt);
+        
+        if check_owner {
+            input.extend_from_slice(user_string);
+        }
+
+        sha256::calculate(&input).to_vec()
+    };
+
+    let mut round: u16 = 0;
+
+    // Perform the following steps (a)-(d) 64 times:
+    loop {
+        // a) Make a new string, K1, consisting of 64 repetitions of the sequence: 
+        // input password, K, the 48-byte user key. The 48 byte user key is only used when 
+        // checking the owner password or creating the owner key. If checking the user 
+        // password or creating the user key, K1 is the concatenation of the input 
+        // password and K.
+        let k1 = {
+            let mut single: Vec<u8> = vec![];
+            single.extend(password);
+            single.extend(&k);
+            
+            if check_owner {
+                single.extend(user_string);
+            }
+            
+            single.repeat(64)
+        };
+
+        // b) Encrypt K1 with the AES-128 (CBC, no padding) algorithm, 
+        // using the first 16 bytes of K as the key and the second 16 bytes of K as the 
+        // initialization vector. The result of this encryption is E.
+        let e = {
+            let aes = AES128Cipher::new(&k[..16]).map_err(|_| InvalidEncryption)?;
+            aes.encrypt_cbc(&k1, &k[16..32].try_into().unwrap())
+        };
+
+        // c) Taking the first 16 bytes of E as an unsigned big-endian integer, 
+        // compute the remainder, modulo 3. If the result is 0, the next hash used is 
+        // SHA-256, if the result is 1, the next hash used is SHA-384, if the result is
+        // 2, the next hash used is SHA-512.
+        let num = u128::from_be_bytes(e[..16].try_into().unwrap()) % 3;
+
+        // d) Using the hash algorithm determined in step c, take the hash of E. 
+        // The result is a new value of K, which will be 32, 48, or 64 bytes in length.
+        k = match num {
+            0 => sha256::calculate(&e).to_vec(),
+            1 => sha384::calculate(&e).to_vec(),
+            2 => sha512::calculate(&e).to_vec(),
+            _ => unreachable!(),
+        };
+
+        // Repeat the process (a-d) with this new value for K. Following 64 rounds 
+        // (round number 0 to round number 63), do the following, starting with round 
+        // number 64:
+        if round >= 63 {
+            // e) Look at the very last byte of E. If the value of that byte 
+            // (taken as an unsigned integer) is greater than the round number - 32, 
+            // repeat steps (a-d) again.
+            let last_byte = *e.last().unwrap();
+
+            // f) Repeat from steps (a-e) until the value of the last byte 
+            // is ≤ (round number) - 32.
+            if last_byte as u16 <= round - 32 {
+                break;
+            }
+        }
+
+        round += 1;
+    }
+
+    // The first 32 bytes of the final K are the output of the algorithm.
+    let mut result = [0u8; 32];
+    result.copy_from_slice(&k[..32]);
+    Ok(result)
 }

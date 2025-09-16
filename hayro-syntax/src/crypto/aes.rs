@@ -342,7 +342,7 @@ impl<const KEY_SIZE: usize, const ROUNDS: usize> AESCipher<KEY_SIZE, ROUNDS> {
         }
 
         // Encrypt blocks
-        for chunk in padded_data.chunks_exact(16) {
+        for chunk in padded_data.chunks(16) {
             let mut block = [0u8; 16];
             block.copy_from_slice(chunk);
 

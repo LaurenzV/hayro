@@ -14,12 +14,13 @@ smallvec = { workspace = true }
 zune-jpeg = { workspace = true }
 jpeg2k = { workspace = true, optional = true }
 flate2 = { workspace = true }
+aes = "0.8"
+cbc = "0.1"
 
 [dev-dependencies]
 sha2 = "0.10"
 md5 = "0.8"
-aes = "0.8"
-cbc = "0.1"
+
 
 [features]
 default = []
