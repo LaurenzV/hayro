@@ -14,9 +14,7 @@ use crate::object::dict::keys::{
 use crate::object::{Dict, Name, Object, ObjectIdentifier};
 use std::collections::HashMap;
 use std::ops::Deref;
-use ::aes::Aes128;
-use ::aes::cipher::KeyInit;
-use smallvec::ExtendFromSlice;
+use ::aes::cipher::KeyIvInit;
 use crate::crypto::DecryptionError::InvalidEncryption;
 
 mod aes;
@@ -350,7 +348,7 @@ pub(crate) fn get(dict: &Dict, id: &[u8]) -> Result<Decryptor, DecryptionError> 
         // with an input string consisting of the UTF-8 password concatenated with the 8 bytes of
         // owner Validation Salt, concatenated with the 48-byte U string. If the 32-byte result
         // matches the first 32 bytes of the O string, this is the owner password.
-        let computed_hash = algo_2b(password, owner_validation_salt, &user_string, true)?;
+        let computed_hash = algo_2b(password, owner_validation_salt, Some(&user_string))?;
         
         if computed_hash == owner_hash {
             panic!("correct password!");
@@ -493,7 +491,7 @@ pub(crate) fn get(dict: &Dict, id: &[u8]) -> Result<Decryptor, DecryptionError> 
 }
 
 /// Algorithm 2.B: Computing a hash (revision 6 and later)
-fn algo_2b(password: &[u8], validation_salt: &[u8], user_string: &[u8], check_owner: bool) -> Result<[u8; 32], DecryptionError> {
+fn algo_2b(password: &[u8], validation_salt: &[u8], user_string: Option<&[u8]>, revision: u8) -> Result<[u8; 32], DecryptionError> {
     // Take the SHA-256 hash of the original input to the algorithm and name the resulting 
     // 32 bytes, K.
     let mut k = {
@@ -501,12 +499,23 @@ fn algo_2b(password: &[u8], validation_salt: &[u8], user_string: &[u8], check_ow
         input.extend_from_slice(password);
         input.extend_from_slice(validation_salt);
         
-        if check_owner {
+        if let Some(user_string) = user_string {
             input.extend_from_slice(user_string);
         }
 
-        sha256::calculate(&input).to_vec()
+        let hash = sha256::calculate(&input);
+        
+        // Apparently revision 5 only uses this hash.
+        if revision == 5 {
+            return Ok(hash);
+        }
+        
+        hash
     };
+    
+    unimplemented!();
+    
+    return Ok(k.try_into().unwrap());
 
     let mut round: u16 = 0;
 
@@ -517,7 +526,7 @@ fn algo_2b(password: &[u8], validation_salt: &[u8], user_string: &[u8], check_ow
         // checking the owner password or creating the owner key. If checking the user 
         // password or creating the user key, K1 is the concatenation of the input 
         // password and K.
-        let k1 = {
+        let mut k1 = {
             let mut single: Vec<u8> = vec![];
             single.extend(password);
             single.extend(&k);
