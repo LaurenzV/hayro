@@ -189,9 +189,10 @@ impl DecryptorData {
         if let Some(dict) = dict.get::<Dict>(CF) {
             for key in dict.keys() {
                 if let Some(dict) = dict.get::<Dict>(key.clone())
-                    && let Some(crypt_dict) = CryptDictionary::from_dict(&dict) {
-                        mappings.insert(key.as_str().to_string(), crypt_dict);
-                    }
+                    && let Some(crypt_dict) = CryptDictionary::from_dict(&dict)
+                {
+                    mappings.insert(key.as_str().to_string(), crypt_dict);
+                }
             }
         }
 
