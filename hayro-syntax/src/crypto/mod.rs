@@ -547,7 +547,12 @@ fn algo_2b(password: &[u8], validation_salt: &[u8], user_string: Option<&[u8]>, 
         // initialization vector. The result of this encryption is E.
         let e = {
             let aes = AES128Cipher::new(&k[..16]).map_err(|_| InvalidEncryption)?;
-            aes.encrypt_cbc(&k1, &k[16..32].try_into().unwrap())
+            let mut res = aes.encrypt_cbc(&k1, &k[16..32].try_into().unwrap());
+            
+            // Remove padding that was added by `encrypt_cbc`.
+            res.truncate(k1.len());
+            
+            res
         };
     
         // c) Taking the first 16 bytes of E as an unsigned big-endian integer, 

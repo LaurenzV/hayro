@@ -1060,5 +1060,9 @@
   {
     "id": "encrypted_aes_256",
     "file": "pdfs/custom/encrypted_aes_256.pdf"
+  },
+  {
+    "id": "encrypted_aes_256_hardened",
+    "file": "pdfs/custom/encrypted_aes_256_hardened.pdf"
   }
 ]
