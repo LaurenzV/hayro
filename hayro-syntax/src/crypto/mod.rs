@@ -518,80 +518,74 @@ fn algo_2b(password: &[u8], validation_salt: &[u8], user_string: Option<&[u8]>, 
             return Ok(hash);
         }
         
-        hash
+        hash.to_vec()
     };
     
-    // TODO: Support revision 6
+    let mut round: u16 = 0;
     
-    unimplemented!();
-    // 
-    // return Ok(k.try_into().unwrap());
-    // 
-    // let mut round: u16 = 0;
-    // 
-    // // Perform the following steps (a)-(d) 64 times:
-    // loop {
-    //     // a) Make a new string, K1, consisting of 64 repetitions of the sequence: 
-    //     // input password, K, the 48-byte user key. The 48 byte user key is only used when 
-    //     // checking the owner password or creating the owner key. If checking the user 
-    //     // password or creating the user key, K1 is the concatenation of the input 
-    //     // password and K.
-    //     let mut k1 = {
-    //         let mut single: Vec<u8> = vec![];
-    //         single.extend(password);
-    //         single.extend(&k);
-    //         
-    //         if check_owner {
-    //             single.extend(user_string);
-    //         }
-    //         
-    //         single.repeat(64)
-    //     };
-    // 
-    //     // b) Encrypt K1 with the AES-128 (CBC, no padding) algorithm, 
-    //     // using the first 16 bytes of K as the key and the second 16 bytes of K as the 
-    //     // initialization vector. The result of this encryption is E.
-    //     let e = {
-    //         let aes = AES128Cipher::new(&k[..16]).map_err(|_| InvalidEncryption)?;
-    //         aes.encrypt_cbc(&k1, &k[16..32].try_into().unwrap())
-    //     };
-    // 
-    //     // c) Taking the first 16 bytes of E as an unsigned big-endian integer, 
-    //     // compute the remainder, modulo 3. If the result is 0, the next hash used is 
-    //     // SHA-256, if the result is 1, the next hash used is SHA-384, if the result is
-    //     // 2, the next hash used is SHA-512.
-    //     let num = u128::from_be_bytes(e[..16].try_into().unwrap()) % 3;
-    // 
-    //     // d) Using the hash algorithm determined in step c, take the hash of E. 
-    //     // The result is a new value of K, which will be 32, 48, or 64 bytes in length.
-    //     k = match num {
-    //         0 => sha256::calculate(&e).to_vec(),
-    //         1 => sha384::calculate(&e).to_vec(),
-    //         2 => sha512::calculate(&e).to_vec(),
-    //         _ => unreachable!(),
-    //     };
-    // 
-    //     // Repeat the process (a-d) with this new value for K. Following 64 rounds 
-    //     // (round number 0 to round number 63), do the following, starting with round 
-    //     // number 64:
-    //     if round >= 63 {
-    //         // e) Look at the very last byte of E. If the value of that byte 
-    //         // (taken as an unsigned integer) is greater than the round number - 32, 
-    //         // repeat steps (a-d) again.
-    //         let last_byte = *e.last().unwrap();
-    // 
-    //         // f) Repeat from steps (a-e) until the value of the last byte 
-    //         // is ≤ (round number) - 32.
-    //         if last_byte as u16 <= round - 32 {
-    //             break;
-    //         }
-    //     }
-    // 
-    //     round += 1;
-    // }
-    // 
-    // // The first 32 bytes of the final K are the output of the algorithm.
-    // let mut result = [0u8; 32];
-    // result.copy_from_slice(&k[..32]);
-    // Ok(result)
+    // Perform the following steps (a)-(d) 64 times:
+    loop {
+        // a) Make a new string, K1, consisting of 64 repetitions of the sequence: 
+        // input password, K, the 48-byte user key. The 48 byte user key is only used when 
+        // checking the owner password or creating the owner key. If checking the user 
+        // password or creating the user key, K1 is the concatenation of the input 
+        // password and K.
+        let k1 = {
+            let mut single: Vec<u8> = vec![];
+            single.extend(password);
+            single.extend(&k);
+            
+            if let Some(user_string) = user_string {
+                single.extend(user_string);
+            }
+            
+            single.repeat(64)
+        };
+    
+        // b) Encrypt K1 with the AES-128 (CBC, no padding) algorithm, 
+        // using the first 16 bytes of K as the key and the second 16 bytes of K as the 
+        // initialization vector. The result of this encryption is E.
+        let e = {
+            let aes = AES128Cipher::new(&k[..16]).map_err(|_| InvalidEncryption)?;
+            aes.encrypt_cbc(&k1, &k[16..32].try_into().unwrap())
+        };
+    
+        // c) Taking the first 16 bytes of E as an unsigned big-endian integer, 
+        // compute the remainder, modulo 3. If the result is 0, the next hash used is 
+        // SHA-256, if the result is 1, the next hash used is SHA-384, if the result is
+        // 2, the next hash used is SHA-512.
+        let num = u128::from_be_bytes(e[..16].try_into().unwrap()) % 3;
+    
+        // d) Using the hash algorithm determined in step c, take the hash of E. 
+        // The result is a new value of K, which will be 32, 48, or 64 bytes in length.
+        k = match num {
+            0 => sha256::calculate(&e).to_vec(),
+            1 => sha384::calculate(&e).to_vec(),
+            2 => sha512::calculate(&e).to_vec(),
+            _ => unreachable!(),
+        };
+    
+        // Repeat the process (a-d) with this new value for K. Following 64 rounds 
+        // (round number 0 to round number 63), do the following, starting with round 
+        // number 64:
+        if round >= 63 {
+            // e) Look at the very last byte of E. If the value of that byte 
+            // (taken as an unsigned integer) is greater than the round number - 32, 
+            // repeat steps (a-d) again.
+            let last_byte = *e.last().unwrap();
+    
+            // f) Repeat from steps (a-e) until the value of the last byte 
+            // is ≤ (round number) - 32.
+            if last_byte as u16 <= round - 32 {
+                break;
+            }
+        }
+    
+        round += 1;
+    }
+    
+    // The first 32 bytes of the final K are the output of the algorithm.
+    let mut result = [0u8; 32];
+    result.copy_from_slice(&k[..32]);
+    Ok(result)
 }
