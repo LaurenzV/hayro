@@ -102,7 +102,6 @@ pub(crate) fn calculate(data: &[u8]) -> [u8; 32] {
             a = temp1.wrapping_add(temp2);
         }
 
-        // Add this chunk's hash to result so far
         h[0] = h[0].wrapping_add(a);
         h[1] = h[1].wrapping_add(b);
         h[2] = h[2].wrapping_add(c);

@@ -76,7 +76,6 @@ unless you absolutely need to be able to support such images.
 */
 
 #![deny(missing_docs)]
-extern crate core;
 
 use std::sync::Arc;
 

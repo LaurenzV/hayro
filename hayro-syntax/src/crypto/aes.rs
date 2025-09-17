@@ -56,15 +56,12 @@ impl AESCore {
     }
 
     fn shift_rows(state: &mut [u8; 16]) {
-        // Row 0: no shift
-        // Row 1: shift left by 1
         let temp = state[1];
         state[1] = state[5];
         state[5] = state[9];
         state[9] = state[13];
         state[13] = temp;
 
-        // Row 2: shift left by 2
         let temp1 = state[2];
         let temp2 = state[6];
         state[2] = state[10];
@@ -72,7 +69,6 @@ impl AESCore {
         state[10] = temp1;
         state[14] = temp2;
 
-        // Row 3: shift left by 3 (right by 1)
         let temp = state[15];
         state[15] = state[11];
         state[11] = state[7];
@@ -80,17 +76,13 @@ impl AESCore {
         state[3] = temp;
     }
 
-    /// InvShiftRows transformation
     fn inv_shift_rows(state: &mut [u8; 16]) {
-        // Row 0: no shift
-        // Row 1: shift right by 1 (left by 3)
         let temp = state[13];
         state[13] = state[9];
         state[9] = state[5];
         state[5] = state[1];
         state[1] = temp;
 
-        // Row 2: shift right by 2
         let temp1 = state[2];
         let temp2 = state[6];
         state[2] = state[10];
@@ -98,7 +90,6 @@ impl AESCore {
         state[10] = temp1;
         state[14] = temp2;
 
-        // Row 3: shift right by 3 (left by 1)
         let temp = state[3];
         state[3] = state[7];
         state[7] = state[11];
@@ -106,7 +97,6 @@ impl AESCore {
         state[15] = temp;
     }
 
-    /// Galois field multiplication
     fn gf_mul(a: u8, b: u8) -> u8 {
         let mut result = 0;
         let mut aa = a;
@@ -126,7 +116,6 @@ impl AESCore {
         result
     }
 
-    /// MixColumns transformation using functional approach
     fn mix_columns(state: &mut [u8; 16]) {
         (0..4).for_each(|i| {
             let col = i * 4;
@@ -139,7 +128,6 @@ impl AESCore {
         });
     }
 
-    /// InvMixColumns transformation using functional approach
     fn inv_mix_columns(state: &mut [u8; 16]) {
         (0..4).for_each(|i| {
             let col = i * 4;
@@ -164,7 +152,6 @@ impl AESCore {
         });
     }
 
-    /// AddRoundKey transformation using iterator zip
     fn add_round_key(state: &mut [u8; 16], round_key: &[u8; 16]) {
         state
             .iter_mut()
@@ -198,7 +185,6 @@ impl<const KEY_SIZE: usize, const ROUNDS: usize> AESCipher<KEY_SIZE, ROUNDS> {
         Some(AESCipher { round_keys })
     }
 
-    /// AES-128 key expansion
     fn expand_key_128(round_keys: &mut [[u8; 16]; ROUNDS], key: &[u8]) {
         round_keys[0].copy_from_slice(&key[..16]);
 
@@ -329,7 +315,6 @@ impl<const KEY_SIZE: usize, const ROUNDS: usize> AESCipher<KEY_SIZE, ROUNDS> {
 
             let decrypted = self.decrypt_block(&block);
 
-            // XOR with previous block (CBC)
             let mut plain_block = [0u8; 16];
             for i in 0..16 {
                 plain_block[i] = decrypted[i] ^ prev_block[i];
