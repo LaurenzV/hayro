@@ -1064,5 +1064,15 @@
   {
     "id": "encrypted_aes_256_hardened",
     "file": "pdfs/custom/encrypted_aes_256_hardened.pdf"
+  },
+  {
+    "id": "issue10_1",
+    "file": "pdfs/custom/issue10_1.link",
+    "link": true
+  },
+  {
+    "id": "issue10_2",
+    "file": "pdfs/custom/issue10_2.link",
+    "link": true
   }
 ]
