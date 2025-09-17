@@ -252,6 +252,7 @@ use crate::run_render_test;
 #[test] fn encrypted_rc4_rev2() { run_render_test("encrypted_rc4_rev2", "pdfs/custom/encrypted_rc4_rev2.pdf", None); }
 #[test] fn encrypted_rc4_rev3() { run_render_test("encrypted_rc4_rev3", "pdfs/custom/encrypted_rc4_rev3.pdf", None); }
 #[test] fn encrypted_aes_128() { run_render_test("encrypted_aes_128", "pdfs/custom/encrypted_aes_128.pdf", None); }
+#[test] fn encrypted_aes_256() { run_render_test("encrypted_aes_256", "pdfs/custom/encrypted_aes_256.pdf", None); }
 #[test] fn pdfjs_20130226130259() { run_render_test("pdfjs_20130226130259", "downloads/pdfjs/20130226130259.pdf", Some("0..=0")); }
 #[test] fn pdfjs_IdentityToUnicodeMap_charCodeOf() { run_render_test("pdfjs_IdentityToUnicodeMap_charCodeOf", "downloads/pdfjs/IdentityToUnicodeMap_charCodeOf.pdf", None); }
 #[test] fn pdfjs_IndexedCS_negative_and_high() { run_render_test("pdfjs_IndexedCS_negative_and_high", "downloads/pdfjs/IndexedCS_negative_and_high.pdf", None); }
@@ -808,7 +809,8 @@ use crate::run_render_test;
 #[test] fn pdfbox_1348() { run_render_test("pdfbox_1348", "downloads/pdfbox/1348.pdf", None); }
 #[test] fn pdfbox_1442() { run_render_test("pdfbox_1442", "downloads/pdfbox/1442.pdf", None); }
 #[test] fn pdfbox_1451() { run_render_test("pdfbox_1451", "downloads/pdfbox/1451.pdf", None); }
-#[test] fn pdfbox_1593() { run_render_test("pdfbox_1593", "downloads/pdfbox/1593.pdf", None); }
+#[test] fn pdfbox_1593_1() { run_render_test("pdfbox_1593_1", "downloads/pdfbox/1593_1.pdf", None); }
+#[test] fn pdfbox_1593_2() { run_render_test("pdfbox_1593_2", "downloads/pdfbox/1593_2.pdf", None); }
 #[test] fn pdfbox_1606() { run_render_test("pdfbox_1606", "downloads/pdfbox/1606.pdf", Some("..=0")); }
 #[test] fn pdfbox_1607() { run_render_test("pdfbox_1607", "downloads/pdfbox/1607.pdf", Some("..=1")); }
 #[test] fn pdfbox_1620() { run_render_test("pdfbox_1620", "downloads/pdfbox/1620.pdf", None); }

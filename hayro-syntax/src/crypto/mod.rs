@@ -8,11 +8,10 @@
 use crate::crypto::aes::{AES128Cipher, AES256Cipher};
 use crate::crypto::rc4::Rc4;
 use crate::object;
-use crate::object::dict::keys::{CF, CFM, ENCRYPT_META_DATA, FILTER, LENGTH, O, OE, P, R, STM_F, STR_F, U, V};
+use crate::object::dict::keys::{CF, CFM, ENCRYPT_META_DATA, FILTER, LENGTH, O, OE, P, R, STM_F, STR_F, U, UE, V};
 use crate::object::{Dict, Name, Object, ObjectIdentifier};
 use std::collections::HashMap;
 use std::ops::Deref;
-use ::aes::cipher::KeyIvInit;
 use crate::crypto::DecryptionError::{InvalidEncryption, PasswordProtected};
 
 mod aes;
@@ -74,7 +73,7 @@ impl Decryptor {
         match self {
             Decryptor::None => Some(data.to_vec()),
             Decryptor::Rc4 { key } => decrypt_rc4(key, data, id),
-            Decryptor::Aes128 { key, dict } => {
+            Decryptor::Aes128 { key, dict } | Decryptor::Aes256 { key, dict } => {
                 let crypt_dict = match target {
                     DecryptionTarget::String => dict.string_filter,
                     DecryptionTarget::Stream => dict.stream_filter,
@@ -84,7 +83,7 @@ impl Decryptor {
                     DecryptorTag::None => Some(data.to_vec()),
                     DecryptorTag::Rc4 => decrypt_rc4(key, data, id),
                     DecryptorTag::Aes128 => decrypt_aes128(key, data, id),
-                    DecryptorTag::Aes256 => unimplemented!(),
+                    DecryptorTag::Aes256 => decrypt_aes256(key, data),
                 }
             }
             _ => unimplemented!(),
@@ -92,8 +91,22 @@ impl Decryptor {
     }
 }
 
+/// Algorithm 1.A: Encryption of data using the AES algorithms
+fn decrypt_aes256(key: &[u8], data: &[u8]) -> Option<Vec<u8>> {
+    // a) Use the 32-byte file encryption key for the AES-256 symmetric key algorithm, 
+    // along with the string or stream data to be encrypted.
+    // Use the AES algorithm in Cipher Block Chaining (CBC) mode, which requires an initialization
+    // vector. The block size parameter is set to 16 bytes, and the initialization 
+    // vector is a 16-byte random number that is stored as the first 16 bytes of the 
+    // encrypted stream or string.
+    let (iv, data) = data.split_at_checked(16)?;
+    let iv: [u8; 16] = iv.try_into().ok()?;
+    let cipher = AES256Cipher::new(key).ok()?;
+    Some(cipher.decrypt_cbc(data, &iv))
+}
+
 fn decrypt_aes128(key: &[u8], data: &[u8], id: ObjectIdentifier) -> Option<Vec<u8>> {
-    key_hash(key, id, true, |key| {
+    algo_1(key, id, true, |key| {
         // If using the AES algorithm, the Cipher Block Chaining (CBC) mode, which requires an initialization
         // vector, is used. The block size parameter is set to 16 bytes, and the initialization vector is a 16-byte
         // random number that is stored as the first 16 bytes of the encrypted stream or string.
@@ -106,21 +119,20 @@ fn decrypt_aes128(key: &[u8], data: &[u8], id: ObjectIdentifier) -> Option<Vec<u
 }
 
 fn decrypt_rc4(key: &[u8], data: &[u8], id: ObjectIdentifier) -> Option<Vec<u8>> {
-    key_hash(key, id, false, |key| {
+    algo_1(key, id, false, |key| {
         let mut rc = Rc4::new(key);
         Some(rc.decrypt(data))
     })
 }
 
-fn key_hash(
+/// Algorithm 1: Encryption of data using the RC4 or AES algorithms
+fn algo_1(
     key: &[u8],
     id: ObjectIdentifier,
     aes: bool,
     with_key: impl FnOnce(&[u8]) -> Option<Vec<u8>>,
 ) -> Option<Vec<u8>> {
     let n = key.len();
-
-    // Algorithm 1:
     // a) Obtain the object number and generation number from the object identifier of
     // the string or stream to be encrypted (see 7.3.10, "Indirect objects"). If the
     // string is a direct object, use the identifier of the indirect object containing
@@ -406,43 +418,64 @@ pub(crate) fn get(dict: &Dict, id: &[u8]) -> Result<Decryptor, DecryptionError> 
         // b) Truncate the UTF-8 representation to 127 bytes if it is longer than 127 bytes.
         
         let owner_string = owner_string.get();
-        let (owner_hash, owner_tail) = owner_string.split_at_checked(32).ok_or(InvalidEncryption)?;
+        let (owner_hash, owner_tail) = owner_string
+            // Trim tail in case it's too long.
+            .get(..48).ok_or(InvalidEncryption)?
+            .split_at_checked(32).ok_or(InvalidEncryption)?;
         let (owner_validation_salt, owner_key_salt) = owner_tail.split_at_checked(8).ok_or(InvalidEncryption)?;
 
         let user_string = user_string.get();
+        let (user_hash, user_tail) = user_string
+            // Trim tail in case it's too long.
+            .get(..48).ok_or(InvalidEncryption)?
+            .split_at_checked(32).ok_or(InvalidEncryption)?;
+        let (user_validation_salt, user_key_salt) = user_tail.split_at_checked(8).ok_or(InvalidEncryption)?;
 
         // c) Test the password against the owner key by computing a hash using algorithm 2.B
         // with an input string consisting of the UTF-8 password concatenated with the 8 bytes of
         // owner Validation Salt, concatenated with the 48-byte U string. If the 32-byte result
         // matches the first 32 bytes of the O string, this is the owner password.
-        if algo_2b(PASSWORD, owner_validation_salt, Some(&user_string), revision)? != owner_hash {
-            return Err(PasswordProtected);
+        if algo_2b(PASSWORD, owner_validation_salt, Some(&user_string), revision)? == owner_hash {
+            // d) Compute an intermediate owner key by computing a hash using algorithm 2.B with an input string
+            // consisting of the UTF-8 owner password concatenated with the 8 bytes of owner Key Salt,
+            // concatenated with the 48-byte U string. The 32-byte result is the key used to decrypt the 32-byte OE string
+            // using AES-256 in CBC mode with no padding and an initialization vector of zero. The 32-byte result is the file encryption key.
+            let intermediate_owner_key = algo_2b(PASSWORD, owner_key_salt, Some(&user_string), revision)?;
+
+            let oe_string = dict.get::<object::String>(OE)
+                .ok_or(DecryptionError::InvalidEncryption)?;
+
+            if oe_string.get().len() != 32 {
+                return Err(DecryptionError::InvalidEncryption);
+            }
+
+            let cipher = AES256Cipher::new(&intermediate_owner_key).map_err(|_| DecryptionError::InvalidEncryption)?;
+            let zero_iv = [0u8; 16];
+
+            cipher.decrypt_cbc(&oe_string.get(), &zero_iv)
+        }   else if algo_2b(PASSWORD, user_validation_salt, None, revision)? == user_hash {
+            // e) Compute an intermediate user key by computing a hash using algorithm 2.B with an input string
+            // consisting of the UTF-8 user password concatenated with the 8 bytes of user Key Salt. The 32-byte result
+            // is the key used to decrypt the 32-byte UE string using AES-256 in CBC mode with no padding and an
+            // initialization vector of zero. The 32-byte result is the file encryption key.
+            let intermediate_key = algo_2b(PASSWORD, user_key_salt, None, revision)?;
+
+            let ue_string = dict.get::<object::String>(UE)
+                .ok_or(InvalidEncryption)?;
+
+            if ue_string.get().len() != 32 {
+                return Err(InvalidEncryption);
+            }
+
+            let cipher = AES256Cipher::new(&intermediate_key).map_err(|_| InvalidEncryption)?;
+            let zero_iv = [0u8; 16];
+
+            cipher.decrypt_cbc(&ue_string.get(), &zero_iv)
+        }   else {
+            return Err(DecryptionError::PasswordProtected);
         }
 
-        // d) Compute an intermediate owner key by computing a hash using algorithm 2.B with an input string
-        // consisting of the UTF-8 owner password concatenated with the 8 bytes of owner Key Salt,
-        // concatenated with the 48-byte U string. The 32-byte result is the key used to decrypt the 32-byte OE string
-        // using AES-256 in CBC mode with no padding and an initialization vector of zero. The 32-byte result is the file encryption key.
-        let intermediate_owner_key = algo_2b(PASSWORD, owner_key_salt, Some(&user_string), revision)?;
-    
-        let oe_string = dict.get::<object::String>(OE)
-            .ok_or(DecryptionError::InvalidEncryption)?;
-    
-        if oe_string.get().len() != 32 {
-            return Err(DecryptionError::InvalidEncryption);
-        }
-    
-        let cipher = AES256Cipher::new(&intermediate_owner_key).map_err(|_| DecryptionError::InvalidEncryption)?;
-        let zero_iv = [0u8; 16];
-        
-        cipher.decrypt_cbc(&oe_string.get(), &zero_iv)
-        
-        // TODO: Handle case of user password.
-        // e) Compute an intermediate user key by computing a hash using algorithm 2.B with an input string
-        // consisting of the UTF-8 user password concatenated with the 8 bytes of user Key Salt. The 32-byte result
-        // is the key used to decrypt the 32-byte UE string using AES-256 in CBC mode with no padding and an
-        // initialization vector of zero. The 32-byte result is the file encryption key.
-        //
+        // TODO:
         // f) Decrypt the 16-byte Perms string using AES-256 in ECB mode with an initialization vector of zero and
         // the file encryption key as the key. Verify that bytes 9-11 of the result are the characters "a", "d",
         // "b". Bytes 0-3 of the decrypted Perms entry, treated as a little-endian integer, are the user 
@@ -491,74 +524,74 @@ fn algo_2b(password: &[u8], validation_salt: &[u8], user_string: Option<&[u8]>, 
     // TODO: Support revision 6
     
     unimplemented!();
-    
-    return Ok(k.try_into().unwrap());
-
-    let mut round: u16 = 0;
-
-    // Perform the following steps (a)-(d) 64 times:
-    loop {
-        // a) Make a new string, K1, consisting of 64 repetitions of the sequence: 
-        // input password, K, the 48-byte user key. The 48 byte user key is only used when 
-        // checking the owner password or creating the owner key. If checking the user 
-        // password or creating the user key, K1 is the concatenation of the input 
-        // password and K.
-        let mut k1 = {
-            let mut single: Vec<u8> = vec![];
-            single.extend(password);
-            single.extend(&k);
-            
-            if check_owner {
-                single.extend(user_string);
-            }
-            
-            single.repeat(64)
-        };
-
-        // b) Encrypt K1 with the AES-128 (CBC, no padding) algorithm, 
-        // using the first 16 bytes of K as the key and the second 16 bytes of K as the 
-        // initialization vector. The result of this encryption is E.
-        let e = {
-            let aes = AES128Cipher::new(&k[..16]).map_err(|_| InvalidEncryption)?;
-            aes.encrypt_cbc(&k1, &k[16..32].try_into().unwrap())
-        };
-
-        // c) Taking the first 16 bytes of E as an unsigned big-endian integer, 
-        // compute the remainder, modulo 3. If the result is 0, the next hash used is 
-        // SHA-256, if the result is 1, the next hash used is SHA-384, if the result is
-        // 2, the next hash used is SHA-512.
-        let num = u128::from_be_bytes(e[..16].try_into().unwrap()) % 3;
-
-        // d) Using the hash algorithm determined in step c, take the hash of E. 
-        // The result is a new value of K, which will be 32, 48, or 64 bytes in length.
-        k = match num {
-            0 => sha256::calculate(&e).to_vec(),
-            1 => sha384::calculate(&e).to_vec(),
-            2 => sha512::calculate(&e).to_vec(),
-            _ => unreachable!(),
-        };
-
-        // Repeat the process (a-d) with this new value for K. Following 64 rounds 
-        // (round number 0 to round number 63), do the following, starting with round 
-        // number 64:
-        if round >= 63 {
-            // e) Look at the very last byte of E. If the value of that byte 
-            // (taken as an unsigned integer) is greater than the round number - 32, 
-            // repeat steps (a-d) again.
-            let last_byte = *e.last().unwrap();
-
-            // f) Repeat from steps (a-e) until the value of the last byte 
-            // is ≤ (round number) - 32.
-            if last_byte as u16 <= round - 32 {
-                break;
-            }
-        }
-
-        round += 1;
-    }
-
-    // The first 32 bytes of the final K are the output of the algorithm.
-    let mut result = [0u8; 32];
-    result.copy_from_slice(&k[..32]);
-    Ok(result)
+    // 
+    // return Ok(k.try_into().unwrap());
+    // 
+    // let mut round: u16 = 0;
+    // 
+    // // Perform the following steps (a)-(d) 64 times:
+    // loop {
+    //     // a) Make a new string, K1, consisting of 64 repetitions of the sequence: 
+    //     // input password, K, the 48-byte user key. The 48 byte user key is only used when 
+    //     // checking the owner password or creating the owner key. If checking the user 
+    //     // password or creating the user key, K1 is the concatenation of the input 
+    //     // password and K.
+    //     let mut k1 = {
+    //         let mut single: Vec<u8> = vec![];
+    //         single.extend(password);
+    //         single.extend(&k);
+    //         
+    //         if check_owner {
+    //             single.extend(user_string);
+    //         }
+    //         
+    //         single.repeat(64)
+    //     };
+    // 
+    //     // b) Encrypt K1 with the AES-128 (CBC, no padding) algorithm, 
+    //     // using the first 16 bytes of K as the key and the second 16 bytes of K as the 
+    //     // initialization vector. The result of this encryption is E.
+    //     let e = {
+    //         let aes = AES128Cipher::new(&k[..16]).map_err(|_| InvalidEncryption)?;
+    //         aes.encrypt_cbc(&k1, &k[16..32].try_into().unwrap())
+    //     };
+    // 
+    //     // c) Taking the first 16 bytes of E as an unsigned big-endian integer, 
+    //     // compute the remainder, modulo 3. If the result is 0, the next hash used is 
+    //     // SHA-256, if the result is 1, the next hash used is SHA-384, if the result is
+    //     // 2, the next hash used is SHA-512.
+    //     let num = u128::from_be_bytes(e[..16].try_into().unwrap()) % 3;
+    // 
+    //     // d) Using the hash algorithm determined in step c, take the hash of E. 
+    //     // The result is a new value of K, which will be 32, 48, or 64 bytes in length.
+    //     k = match num {
+    //         0 => sha256::calculate(&e).to_vec(),
+    //         1 => sha384::calculate(&e).to_vec(),
+    //         2 => sha512::calculate(&e).to_vec(),
+    //         _ => unreachable!(),
+    //     };
+    // 
+    //     // Repeat the process (a-d) with this new value for K. Following 64 rounds 
+    //     // (round number 0 to round number 63), do the following, starting with round 
+    //     // number 64:
+    //     if round >= 63 {
+    //         // e) Look at the very last byte of E. If the value of that byte 
+    //         // (taken as an unsigned integer) is greater than the round number - 32, 
+    //         // repeat steps (a-d) again.
+    //         let last_byte = *e.last().unwrap();
+    // 
+    //         // f) Repeat from steps (a-e) until the value of the last byte 
+    //         // is ≤ (round number) - 32.
+    //         if last_byte as u16 <= round - 32 {
+    //             break;
+    //         }
+    //     }
+    // 
+    //     round += 1;
+    // }
+    // 
+    // // The first 32 bytes of the final K are the output of the algorithm.
+    // let mut result = [0u8; 32];
+    // result.copy_from_slice(&k[..32]);
+    // Ok(result)
 }

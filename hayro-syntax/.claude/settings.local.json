@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo test:*)",
+      "Read(//Users/lstampfl/Programming/GitHub/pdf.js/src/core/**)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

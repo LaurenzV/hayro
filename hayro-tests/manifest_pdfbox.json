@@ -292,9 +292,15 @@
     "link": true
   },
   {
-    "id": "1593",
-    "file": "pdfs/1593.link",
+    "id": "1593_1",
+    "file": "pdfs/1593_1.link",
     "md5": "996012e443c0820c30f8daee134335b0",
+    "link": true
+  },
+  {
+    "id": "1593_2",
+    "file": "pdfs/1593_2.link",
+    "md5": "051c3c936a17cf595e7a55e1a7fd0649",
     "link": true
   },
   {
