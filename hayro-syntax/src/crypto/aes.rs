@@ -356,8 +356,7 @@ impl<const KEY_SIZE: usize, const ROUNDS: usize> AESCipher<KEY_SIZE, ROUNDS> {
 mod tests {
     use super::*;
     use aes::cipher::{
-        BlockDecrypt, BlockDecryptMut, BlockEncrypt, BlockEncryptMut, KeyInit,
-        generic_array::GenericArray,
+        BlockDecryptMut, BlockEncrypt, BlockEncryptMut, KeyInit, generic_array::GenericArray,
     };
     use aes::{Aes128, Aes256};
     use cbc::{

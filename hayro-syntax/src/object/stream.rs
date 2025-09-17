@@ -29,9 +29,32 @@ pub struct ImageDecodeParams {
 }
 
 impl<'a> Stream<'a> {
-    /// Return the raw (potentially filtered) data of the stream.
-    pub fn raw_data(&self) -> &[u8] {
-        self.data
+    /// Return the raw, decrypted data of the stream.
+    ///
+    /// Stream filters will not be applied.
+    pub fn raw_data(&self) -> Cow<'a, [u8]> {
+        let ctx = self.dict.ctx();
+
+        if ctx.xref.needs_decryption(&ctx)
+            && self
+                .dict
+                .get::<object::String>(TYPE)
+                .map(|t| t.get().as_ref() != b"XRef")
+                .unwrap_or(true)
+        {
+            Cow::Owned(
+                ctx.xref
+                    .decrypt(
+                        self.dict.obj_id().unwrap(),
+                        &self.data,
+                        DecryptionTarget::Stream,
+                    )
+                    // TODO: MAybe an error would be better?
+                    .unwrap_or(vec![]),
+            )
+        } else {
+            Cow::Borrowed(self.data)
+        }
     }
 
     /// Return the raw, underlying dictionary of the stream.
@@ -59,27 +82,7 @@ impl<'a> Stream<'a> {
         &self,
         image_params: &ImageDecodeParams,
     ) -> Result<FilterResult, DecodeFailure> {
-        let ctx = self.dict.ctx();
-
-        let data = if ctx.xref.needs_decryption(&ctx)
-            && self
-                .dict
-                .get::<object::String>(TYPE)
-                .map(|t| t.get().as_ref() != b"XRef")
-                .unwrap_or(true)
-        {
-            Cow::Owned(
-                ctx.xref
-                    .decrypt(
-                        self.dict.obj_id().unwrap(),
-                        &self.data,
-                        DecryptionTarget::Stream,
-                    )
-                    .ok_or(DecodeFailure::Decryption)?,
-            )
-        } else {
-            Cow::Borrowed(self.data)
-        };
+        let data = self.raw_data();
 
         if let Some(filter) = self
             .dict

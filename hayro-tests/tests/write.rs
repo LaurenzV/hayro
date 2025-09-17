@@ -168,6 +168,17 @@ fn write_page_with_inherited_resources_2() {
     );
 }
 
+#[test]
+fn write_page_with_encryption_1() {
+    run_write_test(
+        "write_page_with_encryption_1",
+        "downloads/issue10_1.pdf",
+        &[0],
+        Renderer::Pdfium,
+        true,
+    );
+}
+
 // Not writing the `Properties` entry of `Resources` causes rendering issues in
 // Quartz, and ghostscript prints a warning.
 #[cfg(target_os = "macos")]

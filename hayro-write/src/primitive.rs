@@ -173,7 +173,8 @@ write_indirect!(array::Array<'_>);
 impl WriteIndirect for Stream<'_> {
     fn write_indirect(&self, chunk: &mut Chunk, id: Ref, ctx: &mut ExtractionContext) {
         // TODO: Handle `Crypt` filter
-        let mut obj = chunk.stream(id, self.raw_data());
+        let data = self.raw_data();
+        let mut obj = chunk.stream(id, &data);
         write_dict(self.dict(), obj.deref_mut(), ctx, true);
     }
 }
