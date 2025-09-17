@@ -94,8 +94,12 @@ mod tests {
 
         let external_result = md5::compute(data);
 
-        assert_eq!(our_result, external_result.as_slice(),
-                   "MD5 calculation should match external md5 crate for input: {:?}", data);
+        assert_eq!(
+            our_result,
+            external_result.as_slice(),
+            "MD5 calculation should match external md5 crate for input: {:?}",
+            data
+        );
     }
 
     #[test]

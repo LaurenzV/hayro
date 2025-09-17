@@ -26,7 +26,7 @@ pub(crate) fn calculate(data: &[u8]) -> [u8; 48] {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sha2::{Sha384, Digest};
+    use sha2::{Digest, Sha384};
 
     #[test]
     fn correctness() {
@@ -41,7 +41,12 @@ mod tests {
         for test_case in test_cases {
             let our_result = calculate(test_case);
             let expected = Sha384::digest(test_case);
-            assert_eq!(our_result, expected.as_slice(), "Failed for input: {:?}", test_case);
+            assert_eq!(
+                our_result,
+                expected.as_slice(),
+                "Failed for input: {:?}",
+                test_case
+            );
         }
     }
 }
