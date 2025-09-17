@@ -120,7 +120,7 @@ pub(super) const fn little_sigma_1(x: u64) -> u64 {
 
 pub(super) fn calculate_with_initial_values(data: &[u8], h: &mut [u64; 8]) {
     let bit_len = data.len() as u128 * 8;
-    let padded_len = ((data.len() + 17 + 127) / 128) * 128; // Round up to nearest multiple of 128
+    let padded_len = (data.len() + 17).div_ceil(128) * 128; // Round up to nearest multiple of 128
     let mut padded = vec![0u8; padded_len];
 
     padded[..data.len()].copy_from_slice(data);

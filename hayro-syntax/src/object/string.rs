@@ -46,7 +46,7 @@ impl HexString<'_> {
                     &decoded,
                     DecryptionTarget::String,
                 )
-                .unwrap_or(vec![])
+                .unwrap_or_default()
         } else {
             decoded
         }
@@ -207,7 +207,7 @@ impl<'a> LiteralString<'a> {
                         &decoded,
                         DecryptionTarget::String,
                     )
-                    .unwrap_or(vec![]),
+                    .unwrap_or_default(),
             )
         } else {
             decoded

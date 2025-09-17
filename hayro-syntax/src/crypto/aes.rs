@@ -339,14 +339,13 @@ impl<const KEY_SIZE: usize, const ROUNDS: usize> AESCipher<KEY_SIZE, ROUNDS> {
             prev_block = block;
         }
 
-        if let Some(&pad_len) = result.last() {
-            if pad_len > 0 && pad_len <= 16 && result.len() >= pad_len as usize {
+        if let Some(&pad_len) = result.last()
+            && pad_len > 0 && pad_len <= 16 && result.len() >= pad_len as usize {
                 let start = result.len() - pad_len as usize;
                 if result[start..].iter().all(|&b| b == pad_len) {
                     result.truncate(start);
                 }
             }
-        }
 
         result
     }

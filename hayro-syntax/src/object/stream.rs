@@ -46,11 +46,11 @@ impl<'a> Stream<'a> {
                 ctx.xref
                     .decrypt(
                         self.dict.obj_id().unwrap(),
-                        &self.data,
+                        self.data,
                         DecryptionTarget::Stream,
                     )
                     // TODO: MAybe an error would be better?
-                    .unwrap_or(vec![]),
+                    .unwrap_or_default(),
             )
         } else {
             Cow::Borrowed(self.data)

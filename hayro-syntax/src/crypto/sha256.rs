@@ -59,7 +59,7 @@ pub(crate) fn calculate(data: &[u8]) -> [u8; 32] {
     ];
 
     let bit_len = data.len() as u64 * 8;
-    let padded_len = ((data.len() + 9 + 63) / 64) * 64;
+    let padded_len = (data.len() + 9).div_ceil(64) * 64;
     let mut padded = vec![0u8; padded_len];
 
     padded[..data.len()].copy_from_slice(data);

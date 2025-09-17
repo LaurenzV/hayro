@@ -12,8 +12,8 @@ impl Rc4 {
         let mut s = [0u8; 256];
         let key_length = key.len();
 
-        for i in 0..256 {
-            s[i] = i as u8;
+        for (i, s) in s.iter_mut().enumerate() {
+            *s = i as u8;
         }
 
         let mut j = 0u8;

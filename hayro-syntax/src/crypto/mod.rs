@@ -168,7 +168,7 @@ fn algo_1(
     // along with the string or stream data to be encrypted.
     let final_key = &hash[..std::cmp::min(16, n + 5)];
 
-    with_key(&final_key)
+    with_key(final_key)
 }
 
 const PASSWORD_PADDING: [u8; 32] = [
@@ -188,11 +188,10 @@ impl DecryptorData {
 
         if let Some(dict) = dict.get::<Dict>(CF) {
             for key in dict.keys() {
-                if let Some(dict) = dict.get::<Dict>(key.clone()) {
-                    if let Some(crypt_dict) = CryptDictionary::from_dict(&dict) {
+                if let Some(dict) = dict.get::<Dict>(key.clone())
+                    && let Some(crypt_dict) = CryptDictionary::from_dict(&dict) {
                         mappings.insert(key.as_str().to_string(), crypt_dict);
                     }
-                }
             }
         }
 
@@ -237,7 +236,7 @@ impl CryptDictionary {
 }
 
 pub(crate) fn get(dict: &Dict, id: &[u8]) -> Result<Decryptor, DecryptionError> {
-    const PASSWORD: &[u8; 0] = &b"";
+    const PASSWORD: &[u8; 0] = b"";
 
     let filter = dict
         .get::<Name>(FILTER)
@@ -375,7 +374,7 @@ pub(crate) fn get(dict: &Dict, id: &[u8]) -> Result<Decryptor, DecryptionError> 
                 for i in 1..=19 {
                     let mut key = decryption_key.clone();
                     for byte in &mut key {
-                        *byte = *byte ^ i;
+                        *byte ^= i;
                     }
 
                     let mut rc = Rc4::new(&key);

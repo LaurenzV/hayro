@@ -143,7 +143,7 @@ impl XRef {
                 return Err(XRefError::Encryption(DecryptionError::MissingIDEntry));
             };
 
-            get(&encryption_dict, id.get().as_ref()).map_err(|c| XRefError::Encryption(c))?
+            get(&encryption_dict, id.get().as_ref()).map_err(XRefError::Encryption)?
         } else {
             Decryptor::None
         };
