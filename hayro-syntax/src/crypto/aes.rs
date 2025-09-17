@@ -19,7 +19,6 @@ const S_BOX: [u8; 256] = [
     0x8c, 0xa1, 0x89, 0x0d, 0xbf, 0xe6, 0x42, 0x68, 0x41, 0x99, 0x2d, 0x0f, 0xb0, 0x54, 0xbb, 0x16,
 ];
 
-/// AES inverse S-box
 const INV_S_BOX: [u8; 256] = [
     0x52, 0x09, 0x6a, 0xd5, 0x30, 0x36, 0xa5, 0x38, 0xbf, 0x40, 0xa3, 0x9e, 0x81, 0xf3, 0xd7, 0xfb,
     0x7c, 0xe3, 0x39, 0x82, 0x9b, 0x2f, 0xff, 0x87, 0x34, 0x8e, 0x43, 0x44, 0xc4, 0xde, 0xe9, 0xcb,
@@ -39,28 +38,23 @@ const INV_S_BOX: [u8; 256] = [
     0x17, 0x2b, 0x04, 0x7e, 0xba, 0x77, 0xd6, 0x26, 0xe1, 0x69, 0x14, 0x63, 0x55, 0x21, 0x0c, 0x7d,
 ];
 
-/// Rcon values for AES key expansion  
 const RCON: [u8; 10] = [0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36];
 
-/// Core AES operations and transformations
 struct AESCore;
 
 impl AESCore {
-    /// SubBytes transformation using iterator
     fn sub_bytes(state: &mut [u8; 16]) {
         state
             .iter_mut()
             .for_each(|byte| *byte = S_BOX[*byte as usize]);
     }
 
-    /// InvSubBytes transformation using iterator
     fn inv_sub_bytes(state: &mut [u8; 16]) {
         state
             .iter_mut()
             .for_each(|byte| *byte = INV_S_BOX[*byte as usize]);
     }
 
-    /// ShiftRows transformation
     fn shift_rows(state: &mut [u8; 16]) {
         // Row 0: no shift
         // Row 1: shift left by 1
@@ -181,7 +175,7 @@ impl AESCore {
 
 /// Errors that can occur during AES operations
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AESError {
+pub(crate) enum AESError {
     InvalidKeyLength,
     InvalidDataLength,
     InvalidPadding,
@@ -189,21 +183,16 @@ pub enum AESError {
 
 type Result<T> = std::result::Result<T, AESError>;
 
-/// Generic AES cipher supporting different key sizes
 #[derive(Clone)]
-pub struct AESCipher<const KEY_SIZE: usize, const ROUNDS: usize> {
+pub(crate) struct AESCipher<const KEY_SIZE: usize, const ROUNDS: usize> {
     round_keys: [[u8; 16]; ROUNDS],
 }
 
-/// AES-128 cipher (128-bit key, 11 rounds)
-pub type AES128Cipher = AESCipher<16, 11>;
-
-/// AES-256 cipher (256-bit key, 15 rounds)  
-pub type AES256Cipher = AESCipher<32, 15>;
+pub(crate) type AES128Cipher = AESCipher<16, 11>;
+pub(crate) type AES256Cipher = AESCipher<32, 15>;
 
 impl<const KEY_SIZE: usize, const ROUNDS: usize> AESCipher<KEY_SIZE, ROUNDS> {
-    /// Create new AES cipher with key expansion
-    pub fn new(key: &[u8]) -> Result<Self> {
+    pub(crate) fn new(key: &[u8]) -> Result<Self> {
         if key.len() != KEY_SIZE {
             return Err(AESError::InvalidKeyLength);
         }
@@ -227,14 +216,11 @@ impl<const KEY_SIZE: usize, const ROUNDS: usize> AESCipher<KEY_SIZE, ROUNDS> {
             let mut temp = [0u8; 4];
             temp.copy_from_slice(&round_keys[i - 1][12..16]);
 
-            // RotWord and SubWord
             temp.rotate_left(1);
             temp.iter_mut().for_each(|b| *b = S_BOX[*b as usize]);
 
-            // XOR with Rcon
             temp[0] ^= RCON[i - 1];
 
-            // Generate new round key using functional approach
             (0..4).for_each(|j| {
                 (0..4).for_each(|k| {
                     round_keys[i][j * 4 + k] = round_keys[i - 1][j * 4 + k] ^ temp[k];
@@ -246,7 +232,6 @@ impl<const KEY_SIZE: usize, const ROUNDS: usize> AESCipher<KEY_SIZE, ROUNDS> {
         });
     }
 
-    /// AES-256 key expansion  
     fn expand_key_256(round_keys: &mut [[u8; 16]; ROUNDS], key: &[u8]) {
         round_keys[0].copy_from_slice(&key[0..16]);
         round_keys[1].copy_from_slice(&key[16..32]);
@@ -255,18 +240,15 @@ impl<const KEY_SIZE: usize, const ROUNDS: usize> AESCipher<KEY_SIZE, ROUNDS> {
             let mut temp = [0u8; 4];
 
             if i % 2 == 0 {
-                // RotWord and SubWord for even rounds
                 temp.copy_from_slice(&round_keys[i - 1][12..16]);
                 temp.rotate_left(1);
                 temp.iter_mut().for_each(|b| *b = S_BOX[*b as usize]);
                 temp[0] ^= RCON[(i / 2) - 1];
             } else {
-                // SubWord only for odd rounds
                 temp.copy_from_slice(&round_keys[i - 1][12..16]);
                 temp.iter_mut().for_each(|b| *b = S_BOX[*b as usize]);
             }
 
-            // Generate new round key
             (0..4).for_each(|j| {
                 (0..4).for_each(|k| {
                     round_keys[i][j * 4 + k] = round_keys[i - 2][j * 4 + k] ^ temp[k];
@@ -278,14 +260,11 @@ impl<const KEY_SIZE: usize, const ROUNDS: usize> AESCipher<KEY_SIZE, ROUNDS> {
         });
     }
 
-    /// Encrypt a single 16-byte block
-    pub fn encrypt_block(&self, input: &[u8; 16]) -> [u8; 16] {
+    pub(crate) fn encrypt_block(&self, input: &[u8; 16]) -> [u8; 16] {
         let mut state = *input;
 
-        // Initial AddRoundKey
         AESCore::add_round_key(&mut state, &self.round_keys[0]);
 
-        // Main rounds (different count for AES-128 vs AES-256)
         let main_rounds = ROUNDS - 1;
         (1..main_rounds).for_each(|round| {
             AESCore::sub_bytes(&mut state);
@@ -294,7 +273,6 @@ impl<const KEY_SIZE: usize, const ROUNDS: usize> AESCipher<KEY_SIZE, ROUNDS> {
             AESCore::add_round_key(&mut state, &self.round_keys[round]);
         });
 
-        // Final round (no MixColumns)
         AESCore::sub_bytes(&mut state);
         AESCore::shift_rows(&mut state);
         AESCore::add_round_key(&mut state, &self.round_keys[main_rounds]);
@@ -302,18 +280,15 @@ impl<const KEY_SIZE: usize, const ROUNDS: usize> AESCipher<KEY_SIZE, ROUNDS> {
         state
     }
 
-    /// Decrypt a single 16-byte block
-    pub fn decrypt_block(&self, input: &[u8; 16]) -> [u8; 16] {
+    pub(crate) fn decrypt_block(&self, input: &[u8; 16]) -> [u8; 16] {
         let mut state = *input;
 
         let main_rounds = ROUNDS - 1;
 
-        // Reverse final round
         AESCore::add_round_key(&mut state, &self.round_keys[main_rounds]);
         AESCore::inv_shift_rows(&mut state);
         AESCore::inv_sub_bytes(&mut state);
 
-        // Main rounds in reverse using functional approach
         (1..main_rounds).rev().for_each(|round| {
             AESCore::add_round_key(&mut state, &self.round_keys[round]);
             AESCore::inv_mix_columns(&mut state);
@@ -321,18 +296,15 @@ impl<const KEY_SIZE: usize, const ROUNDS: usize> AESCipher<KEY_SIZE, ROUNDS> {
             AESCore::inv_sub_bytes(&mut state);
         });
 
-        // Initial AddRoundKey
         AESCore::add_round_key(&mut state, &self.round_keys[0]);
 
         state
     }
 
-    /// Encrypt data with CBC mode and add PKCS#7 padding
-    pub fn encrypt_cbc(&self, data: &[u8], iv: &[u8; 16]) -> Vec<u8> {
+    pub(crate) fn encrypt_cbc(&self, data: &[u8], iv: &[u8; 16]) -> Vec<u8> {
         let mut result = Vec::new();
         let mut current_iv = *iv;
 
-        // Add PKCS#7 padding
         let mut padded_data = data.to_vec();
         let pad_len = 16 - (data.len() % 16);
         if pad_len == 0 {
@@ -341,12 +313,10 @@ impl<const KEY_SIZE: usize, const ROUNDS: usize> AESCipher<KEY_SIZE, ROUNDS> {
             padded_data.extend(vec![pad_len as u8; pad_len]);
         }
 
-        // Encrypt blocks
         for chunk in padded_data.chunks(16) {
             let mut block = [0u8; 16];
             block.copy_from_slice(chunk);
 
-            // XOR with previous ciphertext (CBC)
             for i in 0..16 {
                 block[i] ^= current_iv[i];
             }
@@ -359,12 +329,10 @@ impl<const KEY_SIZE: usize, const ROUNDS: usize> AESCipher<KEY_SIZE, ROUNDS> {
         result
     }
 
-    /// Decrypt data with CBC mode and remove PKCS#7 padding
-    pub fn decrypt_cbc(&self, data: &[u8], iv: &[u8; 16]) -> Vec<u8> {
+    pub(crate) fn decrypt_cbc(&self, data: &[u8], iv: &[u8; 16]) -> Vec<u8> {
         let mut result = Vec::new();
         let mut prev_block = *iv;
 
-        // Decrypt blocks
         for chunk in data.chunks_exact(16) {
             let mut block = [0u8; 16];
             block.copy_from_slice(chunk);
@@ -381,7 +349,6 @@ impl<const KEY_SIZE: usize, const ROUNDS: usize> AESCipher<KEY_SIZE, ROUNDS> {
             prev_block = block;
         }
 
-        // Remove PKCS#7 padding
         if let Some(&pad_len) = result.last() {
             if pad_len > 0 && pad_len <= 16 && result.len() >= pad_len as usize {
                 let start = result.len() - pad_len as usize;
@@ -415,13 +382,10 @@ mod tests {
         external_cipher.encrypt_block(&mut external_block);
 
         let our_ciphertext = our_cipher.encrypt_block(plaintext);
-        assert_eq!(our_ciphertext, external_block.as_slice(), "AES-128 encryption should match external crate");
+        assert_eq!(our_ciphertext, external_block.as_slice(), "encryption should match");
 
         let our_decrypted = our_cipher.decrypt_block(&our_ciphertext);
-        assert_eq!(our_decrypted, *plaintext, "AES-128 roundtrip should recover original plaintext");
-
-        external_cipher.decrypt_block(&mut external_block);
-        assert_eq!(external_block.as_slice(), plaintext, "External crate roundtrip verification");
+        assert_eq!(our_decrypted, *plaintext, "roundtrip should recover original plaintext");
     }
 
     fn aes_256_block_test(key: &[u8; 32], plaintext: &[u8; 16]) {
@@ -432,19 +396,15 @@ mod tests {
         external_cipher.encrypt_block(&mut external_block);
 
         let our_ciphertext = our_cipher.encrypt_block(plaintext);
-        assert_eq!(our_ciphertext, external_block.as_slice(), "AES-256 encryption should match external crate");
+        assert_eq!(our_ciphertext, external_block.as_slice(), "encryption should match");
 
         let our_decrypted = our_cipher.decrypt_block(&our_ciphertext);
-        assert_eq!(our_decrypted, *plaintext, "AES-256 roundtrip should recover original plaintext");
-
-        external_cipher.decrypt_block(&mut external_block);
-        assert_eq!(external_block.as_slice(), plaintext, "External crate roundtrip verification");
+        assert_eq!(our_decrypted, *plaintext, "roundtrip should recover original plaintext");
     }
 
     fn aes_128_cbc_test(key: &[u8; 16], iv: &[u8; 16], plaintext: &[u8]) {
         let our_cipher = AES128Cipher::new(key).unwrap();
 
-        // Test our encryption against external decryption
         let our_ciphertext = our_cipher.encrypt_cbc(plaintext, iv);
 
         let external_decryptor = Aes128CbcDec::new_from_slices(key, iv).unwrap();
@@ -453,7 +413,6 @@ mod tests {
 
         assert_eq!(external_decrypted, plaintext, "AES-128 CBC: our encryption should be decryptable by external crate");
 
-        // Test external encryption against our decryption
         let external_encryptor = Aes128Cbc::new_from_slices(key, iv).unwrap();
         let mut buffer = plaintext.to_vec();
         buffer.resize(plaintext.len() + 16, 0);
@@ -462,7 +421,6 @@ mod tests {
         let our_decrypted = our_cipher.decrypt_cbc(external_ciphertext, iv);
         assert_eq!(our_decrypted, plaintext, "AES-128 CBC: external encryption should be decryptable by our implementation");
 
-        // Test roundtrip with our implementation
         let our_roundtrip = our_cipher.decrypt_cbc(&our_ciphertext, iv);
         assert_eq!(our_roundtrip, plaintext, "AES-128 CBC: our roundtrip should work");
     }
@@ -470,7 +428,6 @@ mod tests {
     fn aes_256_cbc_test(key: &[u8; 32], iv: &[u8; 16], plaintext: &[u8]) {
         let our_cipher = AES256Cipher::new(key).unwrap();
 
-        // Test our encryption against external decryption
         let our_ciphertext = our_cipher.encrypt_cbc(plaintext, iv);
 
         let external_decryptor = Aes256CbcDec::new_from_slices(key, iv).unwrap();
@@ -479,7 +436,6 @@ mod tests {
 
         assert_eq!(external_decrypted, plaintext, "AES-256 CBC: our encryption should be decryptable by external crate");
 
-        // Test external encryption against our decryption
         let external_encryptor = Aes256Cbc::new_from_slices(key, iv).unwrap();
         let mut buffer = plaintext.to_vec();
         buffer.resize(plaintext.len() + 16, 0);
@@ -488,7 +444,6 @@ mod tests {
         let our_decrypted = our_cipher.decrypt_cbc(external_ciphertext, iv);
         assert_eq!(our_decrypted, plaintext, "AES-256 CBC: external encryption should be decryptable by our implementation");
 
-        // Test roundtrip with our implementation
         let our_roundtrip = our_cipher.decrypt_cbc(&our_ciphertext, iv);
         assert_eq!(our_roundtrip, plaintext, "AES-256 CBC: our roundtrip should work");
     }

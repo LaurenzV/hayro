@@ -59,7 +59,7 @@ mod rc4_tests {
     }
 
     #[test]
-    fn rc4_vectors() {
+    fn correctness() {
         assert_eq!(rc4_decrypt(b"a", &[0x68]), b"x");
         assert_eq!(rc4_decrypt(b"key", &[0x7F, 0x09, 0x47, 0x99]), b"test");
         assert_eq!(

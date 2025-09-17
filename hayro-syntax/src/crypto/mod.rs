@@ -15,7 +15,6 @@ use std::ops::Deref;
 use crate::crypto::DecryptionError::{InvalidEncryption, PasswordProtected};
 
 mod aes;
-mod algo;
 mod md5;
 mod rc4;
 mod sha256;
