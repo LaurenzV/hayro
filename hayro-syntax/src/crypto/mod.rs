@@ -5,14 +5,14 @@
 //! encrypted PDFs. They solely serve the purpose of being able to decrypt and read
 //! _already_ encrypted documents, where security isn't really relevant.
 
-use crate::crypto::DecryptionError::{InvalidEncryption, PasswordProtected};
+use crate::crypto::DecryptionError::InvalidEncryption;
 use crate::crypto::aes::{AES128Cipher, AES256Cipher};
 use crate::crypto::rc4::Rc4;
 use crate::object;
 use crate::object::dict::keys::{
     CF, CFM, ENCRYPT_META_DATA, FILTER, LENGTH, O, OE, P, R, STM_F, STR_F, U, UE, V,
 };
-use crate::object::{Dict, Name, Object, ObjectIdentifier};
+use crate::object::{Dict, Name, ObjectIdentifier};
 use std::collections::HashMap;
 use std::ops::Deref;
 
@@ -23,16 +23,21 @@ mod sha256;
 mod sha384;
 mod sha512;
 
+/// An error that occurred during decryption.
 #[derive(Debug, Copy, Clone)]
 pub enum DecryptionError {
+    /// The ID entry is missing in the PDF.
     MissingIDEntry,
+    /// The PDF is password-protected (currently not supported).
     PasswordProtected,
+    /// The PDF has invalid encryption.
     InvalidEncryption,
+    /// The PDF uses an unsupported encryption algorithm.
     UnsupportedAlgorithm,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub(crate) enum DecryptorTag {
+enum DecryptorTag {
     None,
     Rc4,
     Aes128,
@@ -87,7 +92,6 @@ impl Decryptor {
                     DecryptorTag::Aes256 => decrypt_aes256(key, data),
                 }
             }
-            _ => unimplemented!(),
         }
     }
 }
@@ -102,7 +106,7 @@ fn decrypt_aes256(key: &[u8], data: &[u8]) -> Option<Vec<u8>> {
     // encrypted stream or string.
     let (iv, data) = data.split_at_checked(16)?;
     let iv: [u8; 16] = iv.try_into().ok()?;
-    let cipher = AES256Cipher::new(key).ok()?;
+    let cipher = AES256Cipher::new(key)?;
     Some(cipher.decrypt_cbc(data, &iv))
 }
 
@@ -111,7 +115,7 @@ fn decrypt_aes128(key: &[u8], data: &[u8], id: ObjectIdentifier) -> Option<Vec<u
         // If using the AES algorithm, the Cipher Block Chaining (CBC) mode, which requires an initialization
         // vector, is used. The block size parameter is set to 16 bytes, and the initialization vector is a 16-byte
         // random number that is stored as the first 16 bytes of the encrypted stream or string.
-        let cipher = AES128Cipher::new(key).ok()?;
+        let cipher = AES128Cipher::new(key)?;
         let (iv, data) = data.split_at_checked(16)?;
         let iv: [u8; 16] = iv.try_into().ok()?;
 
@@ -172,12 +176,8 @@ const PASSWORD_PADDING: [u8; 32] = [
     0x2E, 0x2E, 0x00, 0xB6, 0xD0, 0x68, 0x3E, 0x80, 0x2F, 0x0C, 0xA9, 0xFE, 0x64, 0x53, 0x69, 0x7A,
 ];
 
-pub(crate) struct CryptoDict {
-    algorithm: Decryptor,
-}
-
 #[derive(Debug, Copy, Clone)]
-struct DecryptorData {
+pub(crate) struct DecryptorData {
     stream_filter: CryptDictionary,
     string_filter: CryptDictionary,
 }
@@ -209,13 +209,7 @@ impl DecryptorData {
 #[derive(Debug, Copy, Clone)]
 struct CryptDictionary {
     cfm: DecryptorTag,
-    length: u16,
-}
-
-impl CryptDictionary {
-    fn new(tag: DecryptorTag, length: u16) -> Self {
-        Self { cfm: tag, length }
-    }
+    _length: u16,
 }
 
 impl CryptDictionary {
@@ -235,7 +229,7 @@ impl CryptDictionary {
             length = 32;
         }
 
-        Some(CryptDictionary { cfm, length })
+        Some(CryptDictionary { cfm, _length: length })
     }
 }
 
@@ -465,7 +459,7 @@ pub(crate) fn get(dict: &Dict, id: &[u8]) -> Result<Decryptor, DecryptionError> 
             }
 
             let cipher = AES256Cipher::new(&intermediate_owner_key)
-                .map_err(|_| DecryptionError::InvalidEncryption)?;
+                .ok_or(InvalidEncryption)?;
             let zero_iv = [0u8; 16];
 
             cipher.decrypt_cbc(&oe_string.get(), &zero_iv)
@@ -482,7 +476,7 @@ pub(crate) fn get(dict: &Dict, id: &[u8]) -> Result<Decryptor, DecryptionError> 
                 return Err(InvalidEncryption);
             }
 
-            let cipher = AES256Cipher::new(&intermediate_key).map_err(|_| InvalidEncryption)?;
+            let cipher = AES256Cipher::new(&intermediate_key).ok_or(InvalidEncryption)?;
             let zero_iv = [0u8; 16];
 
             cipher.decrypt_cbc(&ue_string.get(), &zero_iv)
@@ -566,7 +560,7 @@ fn algo_2b(
         // using the first 16 bytes of K as the key and the second 16 bytes of K as the
         // initialization vector. The result of this encryption is E.
         let e = {
-            let aes = AES128Cipher::new(&k[..16]).map_err(|_| InvalidEncryption)?;
+            let aes = AES128Cipher::new(&k[..16]).ok_or(InvalidEncryption)?;
             let mut res = aes.encrypt_cbc(&k1, &k[16..32].try_into().unwrap());
 
             // Remove padding that was added by `encrypt_cbc`.

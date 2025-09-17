@@ -173,15 +173,6 @@ impl AESCore {
     }
 }
 
-/// Errors that can occur during AES operations
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum AESError {
-    InvalidKeyLength,
-    InvalidDataLength,
-    InvalidPadding,
-}
-
-type Result<T> = std::result::Result<T, AESError>;
 
 #[derive(Clone)]
 pub(crate) struct AESCipher<const KEY_SIZE: usize, const ROUNDS: usize> {
@@ -192,9 +183,9 @@ pub(crate) type AES128Cipher = AESCipher<16, 11>;
 pub(crate) type AES256Cipher = AESCipher<32, 15>;
 
 impl<const KEY_SIZE: usize, const ROUNDS: usize> AESCipher<KEY_SIZE, ROUNDS> {
-    pub(crate) fn new(key: &[u8]) -> Result<Self> {
+    pub(crate) fn new(key: &[u8]) -> Option<Self> {
         if key.len() != KEY_SIZE {
-            return Err(AESError::InvalidKeyLength);
+            return None;
         }
 
         let mut round_keys = [[0u8; 16]; ROUNDS];
@@ -202,10 +193,10 @@ impl<const KEY_SIZE: usize, const ROUNDS: usize> AESCipher<KEY_SIZE, ROUNDS> {
         match KEY_SIZE {
             16 => Self::expand_key_128(&mut round_keys, key),
             32 => Self::expand_key_256(&mut round_keys, key),
-            _ => return Err(AESError::InvalidKeyLength),
+            _ => return None,
         }
 
-        Ok(AESCipher { round_keys })
+        Some(AESCipher { round_keys })
     }
 
     /// AES-128 key expansion
@@ -735,9 +726,9 @@ mod tests {
 
     #[test]
     fn test_invalid_key_lengths() {
-        assert!(AES128Cipher::new(&[0u8; 15]).is_err());
-        assert!(AES128Cipher::new(&[0u8; 17]).is_err());
-        assert!(AES256Cipher::new(&[0u8; 31]).is_err());
-        assert!(AES256Cipher::new(&[0u8; 33]).is_err());
+        assert!(AES128Cipher::new(&[0u8; 15]).is_none());
+        assert!(AES128Cipher::new(&[0u8; 17]).is_none());
+        assert!(AES256Cipher::new(&[0u8; 31]).is_none());
+        assert!(AES256Cipher::new(&[0u8; 33]).is_none());
     }
 }

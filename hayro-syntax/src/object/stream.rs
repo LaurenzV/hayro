@@ -30,7 +30,7 @@ pub struct ImageDecodeParams {
 
 impl<'a> Stream<'a> {
     /// Return the raw (potentially filtered) data of the stream.
-    pub fn raw_data(&self) -> &'a [u8] {
+    pub fn raw_data(&self) -> &[u8] {
         self.data
     }
 

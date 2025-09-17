@@ -17,7 +17,6 @@ use crate::reader::{Readable, Reader, ReaderContext};
 use crate::{PdfData, object};
 use log::{error, warn};
 use rustc_hash::FxHashMap;
-use std::borrow::Cow;
 use std::cmp::max;
 use std::iter;
 use std::ops::Deref;

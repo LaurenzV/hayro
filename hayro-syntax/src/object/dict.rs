@@ -1,6 +1,5 @@
 //! Dictionaries.
 
-use crate::object::Null;
 use crate::object::macros::object;
 use crate::object::r#ref::{MaybeRef, ObjRef};
 use crate::object::{Name, ObjectIdentifier};

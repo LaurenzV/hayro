@@ -16,7 +16,7 @@ Such functionality is out-of-scope for `hayro-syntax`, since this crate is suppo
 as *light-weight* and *application-agnostic* as possible. 
 
 Functionality-wise, this crate is therefore close to feature-complete. The main missing feature 
-is support for encrypted and password-protected documents, as well as improved support for JPEG2000
+is support for password-protected documents, as well as improved support for JPEG2000
 documents. In addition to that, more low-level APIs might be added in the future.
 
 ## Example
@@ -65,7 +65,7 @@ The supported features include:
   enable the `jpeg2000` feature (see further below for more information).
 
 ## Limitations
-- There are still a few features missing, for example, support for encrypted and 
+- There are still a few features missing, for example, support for 
   password-protected PDFs. In addition to that, many properties (like page annotations) are 
   currently not exposed.
 - This crate is for read-only processing, you cannot directly use it to manipulate PDF files.
