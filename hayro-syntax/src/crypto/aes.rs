@@ -173,7 +173,6 @@ impl AESCore {
     }
 }
 
-
 #[derive(Clone)]
 pub(crate) struct AESCipher<const KEY_SIZE: usize, const ROUNDS: usize> {
     round_keys: [[u8; 16]; ROUNDS],

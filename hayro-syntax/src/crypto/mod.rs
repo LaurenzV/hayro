@@ -229,7 +229,10 @@ impl CryptDictionary {
             length = 32;
         }
 
-        Some(CryptDictionary { cfm, _length: length })
+        Some(CryptDictionary {
+            cfm,
+            _length: length,
+        })
     }
 }
 
@@ -458,8 +461,7 @@ pub(crate) fn get(dict: &Dict, id: &[u8]) -> Result<Decryptor, DecryptionError> 
                 return Err(DecryptionError::InvalidEncryption);
             }
 
-            let cipher = AES256Cipher::new(&intermediate_owner_key)
-                .ok_or(InvalidEncryption)?;
+            let cipher = AES256Cipher::new(&intermediate_owner_key).ok_or(InvalidEncryption)?;
             let zero_iv = [0u8; 16];
 
             cipher.decrypt_cbc(&oe_string.get(), &zero_iv)
