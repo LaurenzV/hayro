@@ -130,7 +130,7 @@ fn fallback_xref_map(data: &[u8]) -> (XrefMap, Option<&[u8]>) {
             }
         }
     }
-    
+
     (xref_map, trailer_dict.map(|d| d.data()))
 }
 
