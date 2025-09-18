@@ -108,7 +108,6 @@ issue5752
 issue6010_1
 issue6010_2
 issue9105_other
-issue9418
 
 # takes long time
 filled-background-range

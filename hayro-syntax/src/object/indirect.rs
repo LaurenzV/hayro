@@ -1,6 +1,7 @@
 use crate::object::{ObjectIdentifier, ObjectLike};
 use crate::reader::{Readable, Reader, ReaderContext, Skippable};
 
+#[derive(Debug, Clone)]
 pub(crate) struct IndirectObject<T> {
     id: ObjectIdentifier,
     inner: T,
