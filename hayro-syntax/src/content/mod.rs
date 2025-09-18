@@ -169,14 +169,64 @@ impl<'a> Iterator for UntypedIter<'a> {
                             // stream. See also <https://github.com/pdf-association/pdf-issues/issues/543>
                             // PDF 2.0 does have a `/Length` attribute we can read, but since it's relatively
                             // new we don't bother trying to read it.
-                            let mut find_reader = Reader::new(&self.reader.tail()?[2..]);
+                            let tail = &self.reader.tail()?[2..];
+                            let mut find_reader = Reader::new(tail);
 
                             while let Some(bytes) = find_reader.peek_bytes(2) {
                                 if bytes == b"EI" {
-                                    // We found another "EI" without a corresponding "BI", so the
-                                    // EI we found above is not the end of data.
-                                    self.reader.read_bytes(2)?;
-                                    continue 'outer;
+                                    let analyze_data = &tail;
+
+                                    // If there is any binary data in-between, we for sure
+                                    // have not reached the end.
+                                    if analyze_data.iter().any(|c| !c.is_ascii()) {
+                                        self.reader.read_bytes(2)?;
+                                        continue 'outer;
+                                    }
+
+                                    // Otherwise, the only possibility that we reached an
+                                    // "EI", even though the previous one was valid, is
+                                    // that it's part of a string in the content
+                                    // stream that follows the inline image. Therefore,
+                                    // it should be valid to interpret `tail` as a content
+                                    // stream and there should be at least one text-related
+                                    // operator that can be parsed correctly.
+
+                                    let mut iter = TypedIter::new(tail);
+                                    let mut found = false;
+                                    let mut counter = 0;
+
+                                    while let Some(op) = iter.next() {
+                                        // If we have read more than 20 valid operators, it should be
+                                        // safe to assume that we are in a content stream, so abort
+                                        // early. The only situation where this could reasonably
+                                        // be violated is if we have 20 subsequent instances of
+                                        // q/Q in the image data, which seems very unlikely.
+                                        if counter >= 20 {
+                                            found = true;
+                                            break;
+                                        }
+
+                                        if matches!(
+                                            op,
+                                            TypedInstruction::NextLineAndShowText(_)
+                                                | TypedInstruction::ShowText(_)
+                                                | TypedInstruction::ShowTexts(_)
+                                                | TypedInstruction::ShowTextWithParameters(_)
+                                        ) {
+                                            // Now it should be safe to assume that the
+                                            // previous `EI` was the correct one.
+                                            found = true;
+                                            break;
+                                        }
+                                        counter += 1;
+                                    }
+
+                                    if !found {
+                                        // Seems like the data in-between is not a valid content
+                                        // stream, so we are likely still within the image data.
+                                        self.reader.read_bytes(2)?;
+                                        continue 'outer;
+                                    }
                                 } else if bytes == b"BI" {
                                     // Possibly another inline image, if so, the previously found "EI"
                                     // is indeed the end of data.
