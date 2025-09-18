@@ -2,7 +2,6 @@
 
 use crate::crypto::{DecryptionError, DecryptionTarget, Decryptor, get};
 use crate::data::Data;
-use crate::object::{Array, MaybeRef};
 use crate::object::Dict;
 use crate::object::Name;
 use crate::object::ObjectIdentifier;
@@ -11,6 +10,7 @@ use crate::object::dict::keys::{
     ENCRYPT, FIRST, ID, INDEX, N, PAGES, PREV, ROOT, SIZE, TYPE, VERSION, W, XREF_STM,
 };
 use crate::object::indirect::IndirectObject;
+use crate::object::{Array, MaybeRef};
 use crate::object::{Object, ObjectLike};
 use crate::pdf::PdfVersion;
 use crate::reader::{Readable, Reader, ReaderContext};
@@ -101,23 +101,23 @@ fn fallback_xref_map(data: &[u8]) -> (XrefMap, Option<&[u8]>) {
             break;
         }
     }
-    
+
     // Try to choose the right trailer dict by doing basic validation.
     let mut trailer_dict = None;
-    
+
     for dict in trailer_dicts {
         if let Some(root_id) = dict.get_raw::<Dict>(ROOT) {
-            let check = |dict: &Dict| -> bool {
-                dict.contains_key(PAGES)
-            };
-            
+            let check = |dict: &Dict| -> bool { dict.contains_key(PAGES) };
+
             match root_id {
                 MaybeRef::Ref(r) => {
                     if let Some(EntryType::Normal(offset)) = xref_map.get(&r.into()) {
                         let mut reader = Reader::new(&data[*offset..]);
-                        
-                        if let Some(obj) =reader.read_with_context::<IndirectObject<Dict>>(dummy_ctx)
-                        && check(&obj.clone().get()) {
+
+                        if let Some(obj) =
+                            reader.read_with_context::<IndirectObject<Dict>>(dummy_ctx)
+                            && check(&obj.clone().get())
+                        {
                             trailer_dict = Some(dict);
                         }
                     }
@@ -130,7 +130,7 @@ fn fallback_xref_map(data: &[u8]) -> (XrefMap, Option<&[u8]>) {
             }
         }
     }
-    
+
     eprintln!("{:?}", trailer_dict);
 
     (xref_map, trailer_dict.map(|d| d.data()))
