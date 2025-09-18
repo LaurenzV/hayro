@@ -191,11 +191,10 @@ impl<'a> Iterator for UntypedIter<'a> {
                                     // stream and there should be at least one text-related
                                     // operator that can be parsed correctly.
 
-                                    let mut iter = TypedIter::new(tail);
+                                    let iter = TypedIter::new(tail);
                                     let mut found = false;
-                                    let mut counter = 0;
 
-                                    while let Some(op) = iter.next() {
+                                    for (counter, op) in iter.enumerate() {
                                         // If we have read more than 20 valid operators, it should be
                                         // safe to assume that we are in a content stream, so abort
                                         // early. The only situation where this could reasonably
@@ -218,7 +217,6 @@ impl<'a> Iterator for UntypedIter<'a> {
                                             found = true;
                                             break;
                                         }
-                                        counter += 1;
                                     }
 
                                     if !found {
