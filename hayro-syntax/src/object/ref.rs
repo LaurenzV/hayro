@@ -71,7 +71,7 @@ where
     /// Resolve the `MaybeRef` object with the given xref table.
     pub(crate) fn resolve(self, ctx: &ReaderContext<'a>) -> Option<T> {
         match self {
-            MaybeRef::Ref(r) => ctx.xref.get::<T>(r.into()),
+            MaybeRef::Ref(r) => ctx.xref.get_with::<T>(r.into(), ctx),
             MaybeRef::NotRef(t) => Some(t),
         }
     }

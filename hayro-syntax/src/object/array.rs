@@ -182,7 +182,7 @@ impl<'a> FlexArrayIter<'a> {
 
         if !self.reader.at_end() {
             return match self.reader.read_with_context::<MaybeRef<T>>(&self.ctx)? {
-                MaybeRef::Ref(r) => self.ctx.xref.get::<T>(r.into()),
+                MaybeRef::Ref(r) => self.ctx.xref.get_with::<T>(r.into(), &self.ctx),
                 MaybeRef::NotRef(i) => Some(i),
             };
         }

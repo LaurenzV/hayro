@@ -230,7 +230,11 @@ fn read_inner<'a>(
         }
     };
 
-    Some(Dict(Arc::new(Repr { data, offsets, ctx: ctx.clone() })))
+    Some(Dict(Arc::new(Repr {
+        data,
+        offsets,
+        ctx: ctx.clone(),
+    })))
 }
 
 object!(Dict<'a>, Dict);

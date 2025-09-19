@@ -3,6 +3,7 @@
 use crate::object::ObjectIdentifier;
 use crate::trivia::{Comment, is_eol_character, is_white_space_character};
 use crate::xref::XRef;
+use smallvec::{SmallVec, smallvec};
 use std::ops::Range;
 
 /// A reader for reading bytes and PDF objects.
@@ -266,6 +267,7 @@ pub(crate) struct ReaderContext<'a> {
     pub(crate) xref: &'a XRef,
     pub(crate) in_content_stream: bool,
     pub(crate) obj_number: Option<ObjectIdentifier>,
+    pub(crate) parent_chain: SmallVec<[ObjectIdentifier; 4]>,
 }
 
 impl<'a> ReaderContext<'a> {
@@ -274,6 +276,7 @@ impl<'a> ReaderContext<'a> {
             xref,
             in_content_stream,
             obj_number: None,
+            parent_chain: smallvec![],
         }
     }
 

@@ -14,7 +14,6 @@ fn render(file: &[u8]) {
 }
 
 #[test]
-#[ignore]
 fn issue50() {
     let file = include_bytes!("../pdfs/crash/issue50.pdf");
     render(file);

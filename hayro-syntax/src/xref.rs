@@ -239,7 +239,8 @@ impl XRef {
                 let locked = r.map.read().unwrap();
                 let mut iter = locked.xref_map.keys();
 
-                iter.next().and_then(|k| self.get(*k))
+                iter.next()
+                    .and_then(|k| self.get_with(*k, &ReaderContext::new(self, false)))
             }),
         }
     }
@@ -290,6 +291,20 @@ impl XRef {
     where
         T: ObjectLike<'a>,
     {
+        let ctx = ReaderContext::new(self, false);
+        self.get_with(id, &ctx)
+    }
+
+    /// Return the object with the given identifier.
+    #[allow(private_bounds)]
+    pub(crate) fn get_with<'a, T>(
+        &'a self,
+        id: ObjectIdentifier,
+        ctx: &ReaderContext<'a>,
+    ) -> Option<T>
+    where
+        T: ObjectLike<'a>,
+    {
         let Inner::Some(repr) = &self.0 else {
             return None;
         };
@@ -305,13 +320,14 @@ impl XRef {
         })?;
         drop(locked);
 
+        let mut ctx = ctx.clone();
+        ctx.in_content_stream = false;
+
         match entry {
             EntryType::Normal(offset) => {
                 r.jump(offset);
 
-                if let Some(object) =
-                    r.read_with_context::<IndirectObject<T>>(&ReaderContext::new(self, false))
-                {
+                if let Some(object) = r.read_with_context::<IndirectObject<T>>(&ctx) {
                     if object.id() == &id {
                         return Some(object.get());
                     }
@@ -338,17 +354,16 @@ impl XRef {
                     self.repair();
 
                     // Now try reading again.
-                    self.get::<T>(id)
+                    self.get_with::<T>(id, &ctx)
                 }
             }
             EntryType::ObjStream(obj_stram_gen_num, index) => {
                 // Generation number is implicitly 0.
                 let obj_stream_id = ObjectIdentifier::new(obj_stram_gen_num as i32, 0);
 
-                let stream = self.get::<Stream>(obj_stream_id)?;
-                let data = repr.data.get_with(obj_stream_id, self)?;
-                let object_stream =
-                    ObjectStream::new(stream, data, &ReaderContext::new(self, false))?;
+                let stream = self.get_with::<Stream>(obj_stream_id, &ctx)?;
+                let data = repr.data.get_with(obj_stream_id, &ctx)?;
+                let object_stream = ObjectStream::new(stream, data, &ctx)?;
                 object_stream.get(index)
             }
         }
@@ -752,7 +767,11 @@ impl<'a> ObjectStream<'a> {
             offsets.push((obj_num, first_offset + relative_offset));
         }
 
-        Some(Self { data, ctx: ctx.clone(), offsets })
+        Some(Self {
+            data,
+            ctx: ctx.clone(),
+            offsets,
+        })
     }
 
     fn get<T>(&self, index: u32) -> Option<T>

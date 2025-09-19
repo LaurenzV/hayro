@@ -387,7 +387,7 @@ impl<'a> Resources<'a> {
     /// Resolve an object reference to an object.
     #[allow(private_bounds)]
     pub fn resolve_ref<T: ObjectLike<'a>>(&self, ref_: ObjRef) -> Option<T> {
-        self.ctx.xref.get(ref_.into())
+        self.ctx.xref.get_with(ref_.into(), &self.ctx)
     }
 
     fn get_resource<T: ObjectLike<'a>, U>(
@@ -400,9 +400,12 @@ impl<'a> Resources<'a> {
         // TODO: Cache non-ref resources as well
 
         match dict.get_raw::<T>(name.deref())? {
-            MaybeRef::Ref(ref_) => {
-                cache(ref_).or_else(|| self.ctx.xref.get::<T>(ref_.into()).and_then(&mut resolve))
-            }
+            MaybeRef::Ref(ref_) => cache(ref_).or_else(|| {
+                self.ctx
+                    .xref
+                    .get_with::<T>(ref_.into(), &self.ctx)
+                    .and_then(&mut resolve)
+            }),
             MaybeRef::NotRef(i) => resolve(i),
         }
     }
@@ -544,7 +547,7 @@ pub(crate) mod cached {
 
             let ctx = ReaderContext::new(xref_reference, false);
             let pages = xref_reference
-                .get(xref.trailer_data().pages_ref)
+                .get_with(xref.trailer_data().pages_ref, &ctx)
                 .and_then(|p| Pages::new(p, &ctx, xref_reference))?;
 
             Some(Self { pages, _xref: xref })

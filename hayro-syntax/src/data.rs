@@ -1,8 +1,8 @@
 use crate::PdfData;
 use crate::object::ObjectIdentifier;
 use crate::object::Stream;
+use crate::reader::ReaderContext;
 use crate::util::SegmentList;
-use crate::xref::XRef;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::sync::Mutex;
@@ -47,7 +47,7 @@ impl Data {
     }
 
     /// Get access to the data of a decoded object stream.
-    pub(crate) fn get_with(&self, id: ObjectIdentifier, xref: &XRef) -> Option<&[u8]> {
+    pub(crate) fn get_with(&self, id: ObjectIdentifier, ctx: &ReaderContext) -> Option<&[u8]> {
         if let Some(&idx) = self.map.lock().unwrap().get(&id) {
             self.decoded.get(idx)?.as_deref()
         } else {
@@ -60,7 +60,7 @@ impl Data {
             };
             self.decoded
                 .get_or_init(idx, || {
-                    let stream = xref.get::<Stream>(id)?;
+                    let stream = ctx.xref.get_with::<Stream>(id, ctx)?;
                     stream.decoded().ok()
                 })
                 .as_deref()

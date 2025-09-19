@@ -1,5 +1,6 @@
 use crate::object::{ObjectIdentifier, ObjectLike};
 use crate::reader::{Readable, Reader, ReaderContext, Skippable};
+use log::warn;
 
 #[derive(Debug, Clone)]
 pub(crate) struct IndirectObject<T> {
@@ -24,7 +25,15 @@ where
     fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
         let mut ctx = ctx.clone();
         let id = r.read_without_context::<ObjectIdentifier>()?;
+
+        if ctx.parent_chain.contains(&id) {
+            warn!("cycle detected in indirect object: {:?}", id);
+
+            return None;
+        }
+
         ctx.obj_number = Some(id);
+        ctx.parent_chain.push(id);
         r.skip_white_spaces_and_comments();
         let inner = r.read_with_context::<T>(&ctx)?;
         r.skip_white_spaces_and_comments();
