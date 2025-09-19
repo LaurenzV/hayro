@@ -13,14 +13,7 @@ fn main() {
     let data = Arc::new(file);
     let pdf = Pdf::new(data).unwrap();
 
-    let interpreter_settings = InterpreterSettings {
-        #[cfg(feature = "embed-fonts")]
-        font_resolver: Arc::new(|query| match query {
-            hayro::FontQuery::Standard(s) => Some(s.get_font_data()),
-            hayro::FontQuery::Fallback(f) => Some(f.pick_standard_font().get_font_data()),
-        }),
-        ..Default::default()
-    };
+    let interpreter_settings = InterpreterSettings::default();
 
     let render_settings = RenderSettings::default();
 

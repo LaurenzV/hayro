@@ -24,7 +24,7 @@ rustc-hash = { workspace = true }
 image = { workspace = true, features = ["png"] }
 
 [features]
-default = []
+default = ["embed-fonts"]
 # Add support for decoding JPEG2000 images.
 jpeg2000 = ["hayro-syntax/jpeg2000"]
 # Embed a light-weight set of fonts (around 240KB) that can be used as a substitute for the 14 PDF standard fonts.
