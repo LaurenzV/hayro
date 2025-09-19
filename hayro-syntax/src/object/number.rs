@@ -73,15 +73,17 @@ impl Skippable for Number {
     fn skip(r: &mut Reader<'_>, _: bool) -> Option<()> {
         r.forward_if(|b| b == b'+' || b == b'-');
 
+        // Some PDFs have weird trailing minuses, so try to accept those as well.
         match r.peek_byte()? {
             b'.' => {
                 r.read_byte()?;
-                r.forward_while_1(is_digit)?;
+                r.forward_while_1(is_digit_or_minus)?;
             }
-            (b'0'..=b'9') => {
-                r.forward_while_1(is_digit)?;
+
+            b'0'..=b'9' | b'-' => {
+                r.forward_while_1(is_digit_or_minus)?;
                 if let Some(()) = r.forward_tag(b".") {
-                    r.forward_while(is_digit);
+                    r.forward_while(is_digit_or_minus);
                 }
             }
             _ => return None,
@@ -97,7 +99,11 @@ impl Readable<'_> for Number {
         // worth optimizing (i.e. reading the number directly from the bytes instead
         // of first parsing it to a number).
 
-        let data = r.skip::<Number>(ctx.in_content_stream)?;
+        let mut data = r.skip::<Number>(ctx.in_content_stream)?;
+        // Some weird PDFs have trailing minus in the fraction of number, try to strip those.
+        if let Some(idx) = data[1..].iter().position(|b| *b == b'-') {
+            data = &data[..idx.saturating_sub(1)];
+        }
         // We need to use f64 here, so that we can still parse a full `i32` without losing
         // precision.
         let num = f64::from_str(std::str::from_utf8(data).ok()?).ok()?;
@@ -215,6 +221,10 @@ impl ObjectLike<'_> for f64 {}
 
 pub(crate) fn is_digit(byte: u8) -> bool {
     byte.is_ascii_digit()
+}
+
+pub(crate) fn is_digit_or_minus(byte: u8) -> bool {
+    is_digit(byte) || byte == b'-'
 }
 
 #[cfg(test)]
