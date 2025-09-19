@@ -58,7 +58,6 @@
   "3937": "no text, gibberish in pdf.js",
   "3965": "truetype text doesnt render",
   "4001": "some edge case with line feeds not rendering",
-  "4006": "crashes when rendering",
   "4060": "image with deviceN, takes long, renders slow",
   "4064": "wrong ctm, doesnt render",
   "4077": "shading not rendering, maybe transparency",
