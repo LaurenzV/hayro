@@ -16,10 +16,6 @@
     // Broken in nearly all viewers, but it seem slike it sohuld be possible to extract linear gradient
     "https://issues.apache.org/jira/secure/attachment/13007430/POPPLER-938.pdf"
   ],
-  "2103": [
-    // Artifacts in the rendered JPEG image.
-    "https://issues.apache.org/jira/secure/attachment/12647559/000001_MTEXT_CS6.pdf"
-  ],
   "423": "password-protected",
   "457": "CCIT-encoded, failed to parse stream",
   "509": "japanese text withnon-embedded font",
