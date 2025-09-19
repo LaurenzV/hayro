@@ -43,7 +43,7 @@ impl Skippable for ObjRef {
 }
 
 impl Readable<'_> for ObjRef {
-    fn read(r: &mut Reader<'_>, _: ReaderContext) -> Option<Self> {
+    fn read(r: &mut Reader<'_>, _: &ReaderContext) -> Option<Self> {
         let obj_ref = r.read_without_context::<i32>()?;
         r.skip_white_spaces();
         let gen_num = r.read_without_context::<i32>()?;
@@ -69,7 +69,7 @@ where
     T: ObjectLike<'a>,
 {
     /// Resolve the `MaybeRef` object with the given xref table.
-    pub(crate) fn resolve(self, ctx: ReaderContext<'a>) -> Option<T> {
+    pub(crate) fn resolve(self, ctx: &ReaderContext<'a>) -> Option<T> {
         match self {
             MaybeRef::Ref(r) => ctx.xref.get::<T>(r.into()),
             MaybeRef::NotRef(t) => Some(t),
@@ -115,7 +115,7 @@ impl<'a, T> Readable<'a> for MaybeRef<T>
 where
     T: Readable<'a>,
 {
-    fn read(r: &mut Reader<'a>, ctx: ReaderContext<'a>) -> Option<Self> {
+    fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
         if let Some(obj) = r.read::<ObjRef>(ctx) {
             Some(Self::Ref(obj))
         } else {

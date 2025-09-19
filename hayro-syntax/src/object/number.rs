@@ -94,7 +94,7 @@ impl Skippable for Number {
 }
 
 impl Readable<'_> for Number {
-    fn read(r: &mut Reader<'_>, ctx: ReaderContext) -> Option<Self> {
+    fn read(r: &mut Reader<'_>, ctx: &ReaderContext) -> Option<Self> {
         // TODO: This function is probably the biggest bottleneck in content parsing, so
         // worth optimizing (i.e. reading the number directly from the bytes instead
         // of first parsing it to a number).
@@ -141,7 +141,7 @@ macro_rules! int_num {
         }
 
         impl<'a> Readable<'a> for $i {
-            fn read(r: &mut Reader<'a>, ctx: ReaderContext<'a>) -> Option<$i> {
+            fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<$i> {
                 r.read::<Number>(ctx)
                     .map(|n| n.as_i32())
                     .and_then(|n| n.try_into().ok())
@@ -176,7 +176,7 @@ impl Skippable for f32 {
 }
 
 impl Readable<'_> for f32 {
-    fn read(r: &mut Reader, _: ReaderContext) -> Option<Self> {
+    fn read(r: &mut Reader, _: &ReaderContext) -> Option<Self> {
         r.read_without_context::<Number>().map(|n| n.as_f32())
     }
 }
@@ -201,7 +201,7 @@ impl Skippable for f64 {
 }
 
 impl Readable<'_> for f64 {
-    fn read(r: &mut Reader, _: ReaderContext) -> Option<Self> {
+    fn read(r: &mut Reader, _: &ReaderContext) -> Option<Self> {
         r.read_without_context::<Number>().map(|n| n.as_f64())
     }
 }

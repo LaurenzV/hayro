@@ -45,7 +45,7 @@ impl<'a> Pages<'a> {
     /// Create a new `Pages` object.
     pub(crate) fn new(
         pages_dict: Dict<'a>,
-        ctx: ReaderContext<'a>,
+        ctx: &ReaderContext<'a>,
         xref: &'a XRef,
     ) -> Option<Pages<'a>> {
         let mut pages = vec![];
@@ -151,7 +151,7 @@ impl<'a> Page<'a> {
             _ => Rotation::None,
         };
 
-        let ctx = resources.ctx;
+        let ctx = resources.ctx.clone();
         let resources =
             Resources::from_parent(dict.get::<Dict>(RESOURCES).unwrap_or_default(), resources);
 
@@ -350,16 +350,16 @@ pub struct Resources<'a> {
 impl<'a> Resources<'a> {
     /// Create a new `Resources` object from a dictionary with a parent.
     pub fn from_parent(resources: Dict<'a>, parent: Resources<'a>) -> Resources<'a> {
-        let ctx = parent.ctx;
+        let ctx = parent.ctx.clone();
 
-        Self::new(resources, Some(parent), ctx)
+        Self::new(resources, Some(parent), &ctx)
     }
 
     /// Create a new `Resources` object.
     pub(crate) fn new(
         resources: Dict<'a>,
         parent: Option<Resources<'a>>,
-        ctx: ReaderContext<'a>,
+        ctx: &ReaderContext<'a>,
     ) -> Resources<'a> {
         let ext_g_states = resources.get::<Dict>(EXT_G_STATE).unwrap_or_default();
         let fonts = resources.get::<Dict>(FONT).unwrap_or_default();
@@ -380,7 +380,7 @@ impl<'a> Resources<'a> {
             x_objects,
             patterns,
             shadings,
-            ctx,
+            ctx: ctx.clone(),
         }
     }
 
@@ -545,7 +545,7 @@ pub(crate) mod cached {
             let ctx = ReaderContext::new(xref_reference, false);
             let pages = xref_reference
                 .get(xref.trailer_data().pages_ref)
-                .and_then(|p| Pages::new(p, ctx, xref_reference))?;
+                .and_then(|p| Pages::new(p, &ctx, xref_reference))?;
 
             Some(Self { pages, _xref: xref })
         }

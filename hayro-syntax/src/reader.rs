@@ -82,7 +82,7 @@ impl<'a> Reader<'a> {
     // encounter a number we know it's a number, and don't need to do a look-ahead to ensure
     // that it's not an object reference.
     #[inline]
-    pub(crate) fn read<T: Readable<'a>>(&mut self, ctx: ReaderContext<'a>) -> Option<T> {
+    pub(crate) fn read<T: Readable<'a>>(&mut self, ctx: &ReaderContext<'a>) -> Option<T> {
         let old_offset = self.offset;
 
         T::read(self, ctx).or_else(|| {
@@ -95,14 +95,14 @@ impl<'a> Reader<'a> {
     #[inline]
     pub(crate) fn read_with_context<T: Readable<'a>>(
         &mut self,
-        ctx: ReaderContext<'a>,
+        ctx: &ReaderContext<'a>,
     ) -> Option<T> {
         self.read::<T>(ctx)
     }
 
     #[inline]
     pub(crate) fn read_without_context<T: Readable<'a>>(&mut self) -> Option<T> {
-        self.read::<T>(ReaderContext::new(XRef::dummy(), true))
+        self.read::<T>(&ReaderContext::new(XRef::dummy(), true))
     }
 
     #[inline]
@@ -261,7 +261,7 @@ impl<'a> Reader<'a> {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct ReaderContext<'a> {
     pub(crate) xref: &'a XRef,
     pub(crate) in_content_stream: bool,
@@ -283,12 +283,12 @@ impl<'a> ReaderContext<'a> {
 }
 
 pub(crate) trait Readable<'a>: Sized {
-    fn read(r: &mut Reader<'a>, ctx: ReaderContext<'a>) -> Option<Self>;
+    fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self>;
     fn from_bytes(b: &'a [u8]) -> Option<Self> {
         let mut r = Reader::new(b);
         let xref = XRef::dummy();
 
-        Self::read(&mut r, ReaderContext::new(xref, false))
+        Self::read(&mut r, &ReaderContext::new(xref, false))
     }
 }
 

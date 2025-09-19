@@ -37,7 +37,7 @@ impl Skippable for Comment<'_> {
 }
 
 impl<'a> Readable<'a> for Comment<'a> {
-    fn read(r: &mut Reader<'a>, _: ReaderContext) -> Option<Self> {
+    fn read(r: &mut Reader<'a>, _: &ReaderContext) -> Option<Self> {
         let bytes = r.skip_in_content_stream::<Comment>()?;
         let bytes = bytes.get(1..bytes.len()).unwrap();
 

@@ -27,7 +27,7 @@ impl PartialEq for Array<'_> {
 impl<'a> Array<'a> {
     /// Returns an iterator over the objects of the array.
     pub fn raw_iter(&self) -> ArrayIter<'a> {
-        ArrayIter::new(self.data, self.ctx)
+        ArrayIter::new(self.data, &self.ctx)
     }
 
     /// Returns an iterator over the resolved objects of the array.
@@ -39,12 +39,12 @@ impl<'a> Array<'a> {
     where
         T: ObjectLike<'a>,
     {
-        ResolvedArrayIter::new(self.data, self.ctx)
+        ResolvedArrayIter::new(self.data, &self.ctx)
     }
 
     /// Return a flex iterator over the items in the array.
     pub fn flex_iter(&self) -> FlexArrayIter<'a> {
-        FlexArrayIter::new(self.data, self.ctx)
+        FlexArrayIter::new(self.data, &self.ctx)
     }
 }
 
@@ -87,12 +87,12 @@ impl Default for Array<'_> {
 }
 
 impl<'a> Readable<'a> for Array<'a> {
-    fn read(r: &mut Reader<'a>, ctx: ReaderContext<'a>) -> Option<Self> {
+    fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
         let bytes = r.skip::<Array>(ctx.in_content_stream)?;
 
         Some(Self {
             data: &bytes[1..bytes.len() - 1],
-            ctx,
+            ctx: ctx.clone(),
         })
     }
 }
@@ -104,10 +104,10 @@ pub struct ArrayIter<'a> {
 }
 
 impl<'a> ArrayIter<'a> {
-    fn new(data: &'a [u8], ctx: ReaderContext<'a>) -> Self {
+    fn new(data: &'a [u8], ctx: &ReaderContext<'a>) -> Self {
         Self {
             reader: Reader::new(data),
-            ctx,
+            ctx: ctx.clone(),
         }
     }
 }
@@ -122,7 +122,7 @@ impl<'a> Iterator for ArrayIter<'a> {
             // Objects are already guaranteed to be valid.
             let item = self
                 .reader
-                .read_with_context::<MaybeRef<Object>>(self.ctx)
+                .read_with_context::<MaybeRef<Object>>(&self.ctx)
                 .unwrap();
             return Some(item);
         }
@@ -138,7 +138,7 @@ pub struct ResolvedArrayIter<'a, T> {
 }
 
 impl<'a, T> ResolvedArrayIter<'a, T> {
-    fn new(data: &'a [u8], ctx: ReaderContext<'a>) -> Self {
+    fn new(data: &'a [u8], ctx: &ReaderContext<'a>) -> Self {
         Self {
             flex_iter: FlexArrayIter::new(data, ctx),
             phantom_data: PhantomData,
@@ -164,10 +164,10 @@ pub struct FlexArrayIter<'a> {
 }
 
 impl<'a> FlexArrayIter<'a> {
-    fn new(data: &'a [u8], ctx: ReaderContext<'a>) -> Self {
+    fn new(data: &'a [u8], ctx: &ReaderContext<'a>) -> Self {
         Self {
             reader: Reader::new(data),
-            ctx,
+            ctx: ctx.clone(),
         }
     }
 
@@ -181,7 +181,7 @@ impl<'a> FlexArrayIter<'a> {
         self.reader.skip_white_spaces_and_comments();
 
         if !self.reader.at_end() {
-            return match self.reader.read_with_context::<MaybeRef<T>>(self.ctx)? {
+            return match self.reader.read_with_context::<MaybeRef<T>>(&self.ctx)? {
                 MaybeRef::Ref(r) => self.ctx.xref.get::<T>(r.into()),
                 MaybeRef::NotRef(i) => Some(i),
             };
@@ -228,7 +228,7 @@ where
 }
 
 impl<'a, T: ObjectLike<'a> + Copy + Default, const C: usize> Readable<'a> for [T; C] {
-    fn read(r: &mut Reader<'a>, ctx: ReaderContext<'a>) -> Option<Self> {
+    fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
         let array = Array::read(r, ctx)?;
         array.try_into().ok()
     }
@@ -256,7 +256,7 @@ impl<'a, T: ObjectLike<'a>> TryFrom<Object<'a>> for Vec<T> {
 }
 
 impl<'a, T: ObjectLike<'a>> Readable<'a> for Vec<T> {
-    fn read(r: &mut Reader<'a>, ctx: ReaderContext<'a>) -> Option<Self> {
+    fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
         let array = Array::read(r, ctx)?;
         array.try_into().ok()
     }
@@ -290,7 +290,7 @@ impl<'a, U: ObjectLike<'a>, T: ObjectLike<'a> + smallvec::Array<Item = U>> TryFr
 impl<'a, U: ObjectLike<'a>, T: ObjectLike<'a> + smallvec::Array<Item = U>> Readable<'a>
     for SmallVec<T>
 {
-    fn read(r: &mut Reader<'a>, ctx: ReaderContext<'a>) -> Option<Self> {
+    fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
         let array = Array::read(r, ctx)?;
         array.try_into().ok()
     }
@@ -314,13 +314,13 @@ mod tests {
 
     fn array_impl(data: &[u8]) -> Option<Vec<Object<'_>>> {
         Reader::new(data)
-            .read_with_context::<Array>(ReaderContext::new(XRef::dummy(), false))
+            .read_with_context::<Array>(&ReaderContext::new(XRef::dummy(), false))
             .map(|a| a.iter::<Object>().collect::<Vec<_>>())
     }
 
     fn array_ref_impl(data: &[u8]) -> Option<Vec<MaybeRef<Object<'_>>>> {
         Reader::new(data)
-            .read_with_context::<Array>(ReaderContext::new(XRef::dummy(), false))
+            .read_with_context::<Array>(&ReaderContext::new(XRef::dummy(), false))
             .map(|a| a.raw_iter().collect::<Vec<_>>())
     }
 

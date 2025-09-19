@@ -74,14 +74,14 @@ impl<'a> Dict<'a> {
     where
         T: ObjectLike<'a>,
     {
-        self.get_raw::<T>(key.as_ref())?.resolve(self.0.ctx)
+        self.get_raw::<T>(key.as_ref())?.resolve(&self.0.ctx)
     }
 
     /// Get the object reference linked to a key.
     pub fn get_ref(&self, key: impl Deref<Target = [u8]>) -> Option<ObjRef> {
         let offset = *self.0.offsets.get(&Name::from_unescaped(key.as_ref()))?;
 
-        Reader::new(&self.0.data[offset..]).read_with_context::<ObjRef>(self.0.ctx)
+        Reader::new(&self.0.data[offset..]).read_with_context::<ObjRef>(&self.0.ctx)
     }
 
     /// Returns an iterator over all keys in the dictionary.
@@ -112,11 +112,11 @@ impl<'a> Dict<'a> {
     {
         let offset = *self.0.offsets.get(&Name::from_unescaped(key.as_ref()))?;
 
-        Reader::new(&self.0.data[offset..]).read_with_context::<MaybeRef<T>>(self.0.ctx)
+        Reader::new(&self.0.data[offset..]).read_with_context::<MaybeRef<T>>(&self.0.ctx)
     }
 
-    pub(crate) fn ctx(&self) -> ReaderContext<'a> {
-        self.0.ctx
+    pub(crate) fn ctx(&self) -> &ReaderContext<'a> {
+        &self.0.ctx
     }
 }
 
@@ -129,7 +129,7 @@ impl Debug for Dict<'_> {
             r.jump(*val);
             debug_struct.field(
                 &format!("{:?}", key.as_str()),
-                &r.read_with_context::<MaybeRef<Object>>(ReaderContext::dummy())
+                &r.read_with_context::<MaybeRef<Object>>(&ReaderContext::dummy())
                     .unwrap(),
             );
         }
@@ -166,14 +166,14 @@ impl Skippable for Dict<'_> {
 }
 
 impl<'a> Readable<'a> for Dict<'a> {
-    fn read(r: &mut Reader<'a>, ctx: ReaderContext<'a>) -> Option<Self> {
+    fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
         read_inner(r, ctx, Some(b"<<"), b">>")
     }
 }
 
 fn read_inner<'a>(
     r: &mut Reader<'a>,
-    ctx: ReaderContext<'a>,
+    ctx: &ReaderContext<'a>,
     start_tag: Option<&[u8]>,
     end_tag: &[u8],
 ) -> Option<Dict<'a>> {
@@ -230,7 +230,7 @@ fn read_inner<'a>(
         }
     };
 
-    Some(Dict(Arc::new(Repr { data, offsets, ctx })))
+    Some(Dict(Arc::new(Repr { data, offsets, ctx: ctx.clone() })))
 }
 
 object!(Dict<'a>, Dict);
@@ -250,7 +250,7 @@ impl<'a> InlineImageDict<'a> {
 }
 
 impl<'a> Readable<'a> for InlineImageDict<'a> {
-    fn read(r: &mut Reader<'a>, ctx: ReaderContext<'a>) -> Option<Self> {
+    fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
         Some(Self(read_inner(r, ctx, None, b"ID")?))
     }
 }

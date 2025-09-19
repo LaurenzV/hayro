@@ -74,7 +74,7 @@ impl Skippable for Operator<'_> {
 }
 
 impl<'a> Readable<'a> for Operator<'a> {
-    fn read(r: &mut Reader<'a>, _: ReaderContext) -> Option<Self> {
+    fn read(r: &mut Reader<'a>, _: &ReaderContext) -> Option<Self> {
         let data = {
             let start = r.offset();
             skip_name_like(r, false)?;

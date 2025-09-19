@@ -12,7 +12,7 @@ use std::hash::{Hash, Hasher};
 // TODO: Make `HexString` and `LiteralString` own their values.
 
 /// A hex-encoded string.
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Debug)]
 struct HexString<'a>(&'a [u8], bool, ReaderContext<'a>);
 
 impl HexString<'_> {
@@ -67,7 +67,7 @@ impl Skippable for HexString<'_> {
 }
 
 impl<'a> Readable<'a> for HexString<'a> {
-    fn read(r: &mut Reader<'a>, ctx: ReaderContext<'a>) -> Option<Self> {
+    fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
         let start = r.offset();
         let mut dirty = parse_hex(r)?;
         let end = r.offset();
@@ -76,7 +76,7 @@ impl<'a> Readable<'a> for HexString<'a> {
         let result = r.range(start + 1..end - 1).unwrap();
         dirty |= result.len() % 2 != 0;
 
-        Some(HexString(result, dirty, ctx))
+        Some(HexString(result, dirty, ctx.clone()))
     }
 }
 
@@ -114,7 +114,7 @@ fn parse_hex(r: &mut Reader<'_>) -> Option<bool> {
 }
 
 /// A literal string.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct LiteralString<'a>(&'a [u8], bool, ReaderContext<'a>);
 
 impl<'a> LiteralString<'a> {
@@ -235,7 +235,7 @@ impl Skippable for LiteralString<'_> {
 }
 
 impl<'a> Readable<'a> for LiteralString<'a> {
-    fn read(r: &mut Reader<'a>, ctx: ReaderContext<'a>) -> Option<Self> {
+    fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
         let start = r.offset();
         let dirty = parse_literal(r)?;
         let end = r.offset();
@@ -243,7 +243,7 @@ impl<'a> Readable<'a> for LiteralString<'a> {
         // Exclude outer brackets
         let result = r.range(start + 1..end - 1).unwrap();
 
-        Some(LiteralString(result, dirty, ctx))
+        Some(LiteralString(result, dirty, ctx.clone()))
     }
 }
 
@@ -329,7 +329,7 @@ impl Skippable for String<'_> {
 }
 
 impl<'a> Readable<'a> for String<'a> {
-    fn read(r: &mut Reader<'a>, _: ReaderContext) -> Option<Self> {
+    fn read(r: &mut Reader<'a>, _: &ReaderContext) -> Option<Self> {
         let inner = match r.peek_byte()? {
             b'<' => InnerString::Hex(r.read_without_context::<HexString>()?),
             b'(' => InnerString::Literal(r.read_without_context::<LiteralString>()?),
