@@ -1,5 +1,5 @@
 use skrifa::GlyphId;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 
 #[derive(Debug)]
@@ -8,7 +8,7 @@ pub(crate) struct GlyphSimulator {
     // to OpenType fonts.
     glyph_to_string: RefCell<HashMap<GlyphId, String>>,
     string_to_glyph: RefCell<HashMap<String, GlyphId>>,
-    glyph_counter: RefCell<u32>,
+    glyph_counter: Cell<u32>,
 }
 
 impl GlyphSimulator {
@@ -22,7 +22,7 @@ impl GlyphSimulator {
         Self {
             glyph_to_string: RefCell::new(glyph_to_string),
             string_to_glyph: RefCell::new(string_to_glyph),
-            glyph_counter: RefCell::new(1),
+            glyph_counter: Cell::new(1),
         }
     }
 
@@ -30,7 +30,7 @@ impl GlyphSimulator {
         if let Some(g) = self.string_to_glyph.borrow().get(string) {
             *g
         } else {
-            let gid = GlyphId::new(*self.glyph_counter.borrow());
+            let gid = GlyphId::new(self.glyph_counter.get());
             self.string_to_glyph
                 .borrow_mut()
                 .insert(string.to_string(), gid);
@@ -38,7 +38,7 @@ impl GlyphSimulator {
                 .borrow_mut()
                 .insert(gid, string.to_string());
 
-            *self.glyph_counter.borrow_mut() += 1;
+            self.glyph_counter.set(self.glyph_counter.get() + 1);
 
             gid
         }
