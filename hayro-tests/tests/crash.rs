@@ -168,3 +168,9 @@ fn issue236() {
     let file = include_bytes!("../pdfs/crash/issue236.pdf");
     render(file);
 }
+
+#[test]
+fn page_tree_cycle() {
+    let file = include_bytes!("../pdfs/crash/page_tree_cycle.pdf");
+    render(file);
+}
