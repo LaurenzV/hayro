@@ -44,6 +44,7 @@ pub(crate) fn root_xref(data: PdfData) -> Result<XRef, XRefError> {
 pub(crate) fn fallback(data: PdfData) -> Option<XRef> {
     warn!("xref table was invalid, trying to manually build xref table");
     let (xref_map, trailer_dict) = fallback_xref_map(data.as_ref().as_ref());
+    eprintln!("{:?}", xref_map);
 
     if let Some(trailer_dict_data) = trailer_dict {
         warn!("rebuild xref table with {} entries", xref_map.len());
@@ -71,9 +72,14 @@ fn fallback_xref_map(data: &[u8]) -> (XrefMap, Option<&[u8]>) {
         let mut old_r = r.clone();
 
         if let Some(obj_id) = r.read::<ObjectIdentifier>(dummy_ctx) {
-            xref_map.insert(obj_id, EntryType::Normal(cur_pos));
-            last_obj_num = Some(obj_id);
-            dummy_ctx.obj_number = Some(obj_id);
+            let mut cloned = r.clone();
+            // Check that the object following it is actually valid before inserting it.
+            cloned.skip_white_spaces_and_comments();
+            if cloned.skip::<Object>(false).is_some() {
+                xref_map.insert(obj_id, EntryType::Normal(cur_pos));
+                last_obj_num = Some(obj_id);
+                dummy_ctx.obj_number = Some(obj_id);
+            }
         } else if let Some(dict) = r.read::<Dict>(dummy_ctx) {
             if dict.contains_key(SIZE) && dict.contains_key(ROOT) {
                 trailer_dicts.push(dict);
