@@ -493,7 +493,7 @@ pub(crate) fn get(dict: &Dict, id: &[u8]) -> Result<Decryptor, DecryptionError> 
         // permissions. They shall match the value in the P key.
     };
 
-    // See pdf.js issue 19484
+    // See pdf.js issue 19484.
     if encryption_v == 4 && decryption_key.len() < 16 {
         decryption_key.resize(16, 0)
     }
