@@ -35,7 +35,7 @@ impl<'a> Stream<'a> {
     pub fn raw_data(&self) -> Cow<'a, [u8]> {
         let ctx = self.dict.ctx();
 
-        if ctx.xref.needs_decryption(&ctx)
+        if ctx.xref.needs_decryption(ctx)
             && self
                 .dict
                 .get::<object::String>(TYPE)
