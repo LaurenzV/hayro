@@ -87,7 +87,6 @@ pub(crate) fn calculate(data: &[u8]) -> [u8; 16] {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use md5;
 
     fn md5_test(data: &[u8]) {
         let our_result = calculate(data);

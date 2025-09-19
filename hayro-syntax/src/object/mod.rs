@@ -274,7 +274,7 @@ mod tests {
 
     fn object_impl(data: &[u8]) -> Option<Object<'_>> {
         let mut r = Reader::new(data);
-        r.read_with_context::<Object>(ReaderContext::dummy())
+        r.read_with_context::<Object>(&ReaderContext::dummy())
     }
 
     #[test]

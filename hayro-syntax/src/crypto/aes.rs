@@ -563,7 +563,7 @@ mod tests {
                 [0x00; 16],
                 b"AES-128 encryption test vector for CBC mode with PKCS7 padding",
             ),
-            ([0xaa; 16], [0x55; 16], &vec![0x42u8; 100]),
+            ([0xaa; 16], [0x55; 16], &[0x42u8; 100]),
         ];
 
         for (key, iv, plaintext) in test_cases {
@@ -600,7 +600,7 @@ mod tests {
                 [0x00; 16],
                 b"AES-256 encryption test vector for CBC mode with PKCS7 padding",
             ),
-            ([0xaa; 32], [0x55; 16], &vec![0x42u8; 100]),
+            ([0xaa; 32], [0x55; 16], &[0x42u8; 100]),
         ];
 
         for (key, iv, plaintext) in test_cases {
@@ -635,7 +635,7 @@ mod tests {
                 [0x00; 16],
                 b"AES-128 test vector for CBC mode with PKCS7 padding",
             ),
-            ([0xaa; 16], [0x55; 16], &vec![0x42u8; 100]),
+            ([0xaa; 16], [0x55; 16], &[0x42u8; 100]),
         ];
 
         for (key, iv, plaintext) in test_cases {
@@ -672,7 +672,7 @@ mod tests {
                 [0x00; 16],
                 b"AES-256 test vector for CBC mode with PKCS7 padding",
             ),
-            ([0xaa; 32], [0x55; 16], &vec![0x42u8; 100]),
+            ([0xaa; 32], [0x55; 16], &[0x42u8; 100]),
         ];
 
         for (key, iv, plaintext) in test_cases {
@@ -699,14 +699,14 @@ mod tests {
         aes_128_cbc_test(&key128, &iv, b"a");
         aes_256_cbc_test(&key256, &iv, b"a");
 
-        aes_128_cbc_test(&key128, &iv, &vec![0xffu8; 15]);
-        aes_256_cbc_test(&key256, &iv, &vec![0xffu8; 15]);
+        aes_128_cbc_test(&key128, &iv, &[0xffu8; 15]);
+        aes_256_cbc_test(&key256, &iv, &[0xffu8; 15]);
 
-        aes_128_cbc_test(&key128, &iv, &vec![0xffu8; 16]);
-        aes_256_cbc_test(&key256, &iv, &vec![0xffu8; 16]);
+        aes_128_cbc_test(&key128, &iv, &[0xffu8; 16]);
+        aes_256_cbc_test(&key256, &iv, &[0xffu8; 16]);
 
-        aes_128_cbc_test(&key128, &iv, &vec![0xffu8; 17]);
-        aes_256_cbc_test(&key256, &iv, &vec![0xffu8; 17]);
+        aes_128_cbc_test(&key128, &iv, &[0xffu8; 17]);
+        aes_256_cbc_test(&key256, &iv, &[0xffu8; 17]);
     }
 
     #[test]

@@ -190,7 +190,7 @@ fn render_pdf(
     settings: InterpreterSettings,
     range: Option<RangeInclusive<usize>>,
 ) -> Vec<Vec<u8>> {
-    hayro::render_pdf(&pdf, 1.0, settings, range)
+    hayro::render_pdf(pdf, 1.0, settings, range)
         .unwrap()
         .into_iter()
         .enumerate()

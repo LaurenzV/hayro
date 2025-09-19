@@ -920,7 +920,7 @@ mod tests {
     use crate::reader::{Reader, ReaderContext};
 
     fn dict_impl(data: &[u8]) -> Option<Dict<'_>> {
-        Reader::new(data).read_with_context::<Dict>(ReaderContext::dummy())
+        Reader::new(data).read_with_context::<Dict>(&ReaderContext::dummy())
     }
 
     #[test]
@@ -973,7 +973,7 @@ mod tests {
 >>";
 
         let dict = Reader::new(data.as_bytes())
-            .read_with_context::<Dict>(ReaderContext::dummy())
+            .read_with_context::<Dict>(&ReaderContext::dummy())
             .unwrap();
         assert_eq!(dict.len(), 6);
         assert!(dict.get::<Name>(Name::new(b"Type")).is_some());
@@ -1008,7 +1008,7 @@ mod tests {
         let dict_data = b"/W 17 /H 17 /CS /RGB /BPC 8 /F [ /A85 /LZW ] ID ";
 
         let dict = Reader::new(&dict_data[..])
-            .read_with_context::<InlineImageDict>(ReaderContext::dummy())
+            .read_with_context::<InlineImageDict>(&ReaderContext::dummy())
             .unwrap();
 
         assert_eq!(dict.get_dict().len(), 5);
