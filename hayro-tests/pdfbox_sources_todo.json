@@ -53,7 +53,7 @@
   "3694": "image, takes very long",
   "3703": "text renders with wrong color",
   "3728": "no text shows up",
-  "3813": "for some reason image isnt rendered",
+  "3813": "blendmode multiply",
   "3923": "PDF without embedded CID font",
   "3937": "no text, gibberish in pdf.js",
   "3965": "truetype text doesnt render",
