@@ -44,7 +44,6 @@ pub(crate) fn root_xref(data: PdfData) -> Result<XRef, XRefError> {
 pub(crate) fn fallback(data: PdfData) -> Option<XRef> {
     warn!("xref table was invalid, trying to manually build xref table");
     let (xref_map, trailer_dict) = fallback_xref_map(data.as_ref().as_ref());
-    eprintln!("{:?}", xref_map);
 
     if let Some(trailer_dict_data) = trailer_dict {
         warn!("rebuild xref table with {} entries", xref_map.len());
