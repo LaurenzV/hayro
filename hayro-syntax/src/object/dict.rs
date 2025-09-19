@@ -147,7 +147,12 @@ impl Skippable for Dict<'_> {
             if let Some(()) = r.forward_tag(b">>") {
                 break Some(());
             } else {
-                r.skip::<Name>(is_content_stream)?;
+                let Some(_) = r.skip::<Name>(is_content_stream) else {
+                    // In case there is garbage in-between, be lenient and just try to skip it.
+                    r.skip::<Object>(is_content_stream)?;
+                    continue;
+                };
+
                 r.skip_white_spaces_and_comments();
 
                 if is_content_stream {
@@ -193,7 +198,17 @@ fn read_inner<'a>(
 
                 break &dict_data[..end_offset];
             } else {
-                let name = r.read_without_context::<Name>()?;
+                let Some(name) = r.read_without_context::<Name>() else {
+                    if start_tag.is_some() {
+                        // In case there is garbage in-between, be lenient and just try to skip it.
+                        // But only do this if we are parsing a proper dictionary as opposed to an
+                        // inline dictionary.
+                        r.read::<Object>(ctx)?;
+                        continue;
+                    } else {
+                        return None;
+                    }
+                };
                 r.skip_white_spaces_and_comments();
 
                 // Do note that we are including objects in our dictionary even if they
@@ -893,10 +908,11 @@ pub mod keys {
 
 #[cfg(test)]
 mod tests {
-    use crate::object::Name;
     use crate::object::Number;
+    use crate::object::dict::keys::{COLORSPACE, EXT_G_STATE, FONT, PROC_SET};
     use crate::object::dict::{Dict, InlineImageDict};
     use crate::object::string;
+    use crate::object::{Name, ObjRef};
     use crate::reader::{Reader, ReaderContext};
 
     fn dict_impl(data: &[u8]) -> Option<Dict<'_>> {
@@ -1000,5 +1016,30 @@ mod tests {
         let dict = dict_impl(dict_data).unwrap();
 
         assert!(dict.contains_key(b"PANTONE 104 C".as_ref()));
+    }
+
+    #[test]
+    fn garbage_in_between() {
+        let dict_data = b"<< 
+/ProcSet [ /PDF /Text ] 
+/Font << /F4 31 0 R /F6 23 0 R >> 
+/ExtGState << /GS2 14 0 R
+2000
+ /GS3 15 0 R >> 
+/ColorSpace << /Cs5 13 0 R >> 
+>> ";
+        let dict = dict_impl(dict_data).unwrap();
+
+        assert!(dict.contains_key(PROC_SET));
+        assert!(dict.contains_key(FONT));
+        assert!(dict.contains_key(EXT_G_STATE));
+        assert!(dict.contains_key(COLORSPACE));
+
+        let Some(dict) = dict.get::<Dict>(EXT_G_STATE) else {
+            panic!("failed to parse ext g state");
+        };
+
+        assert_eq!(dict.get_ref("GS2".as_ref()), Some(ObjRef::new(14, 0)));
+        assert_eq!(dict.get_ref("GS3".as_ref()), Some(ObjRef::new(15, 0)));
     }
 }
