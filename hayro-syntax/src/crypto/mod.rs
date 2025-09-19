@@ -257,7 +257,7 @@ pub(crate) fn get(dict: &Dict, id: &[u8]) -> Result<Decryptor, DecryptionError> 
     let length = match encryption_v {
         1 => 40,
         2 => dict.get::<u16>(LENGTH).unwrap_or(40),
-        4 => 128,
+        4 => dict.get::<u16>(LENGTH).unwrap_or(128),
         5 => 256,
         _ => unimplemented!(),
     };
@@ -292,7 +292,7 @@ pub(crate) fn get(dict: &Dict, id: &[u8]) -> Result<Decryptor, DecryptionError> 
             .to_be_bytes(),
     );
 
-    let decryption_key = if revision <= 4 {
+    let mut decryption_key = if revision <= 4 {
         // Algorithm 2: Computing a file encryption key in order to encrypt a
         // document (revision 4 and earlier)
 
@@ -492,6 +492,11 @@ pub(crate) fn get(dict: &Dict, id: &[u8]) -> Result<Decryptor, DecryptionError> 
         // "b". Bytes 0-3 of the decrypted Perms entry, treated as a little-endian integer, are the user
         // permissions. They shall match the value in the P key.
     };
+
+    // See pdf.js issue 19484
+    if encryption_v == 4 && decryption_key.len() < 16 {
+        decryption_key.resize(16, 0)
+    }
 
     match algorithm {
         DecryptorTag::None => Ok(Decryptor::None),

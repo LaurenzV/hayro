@@ -134,3 +134,5 @@ issue9418
 issue16464
 issue16843-text
 issue17069
+issue19484_1
+issue19484_2

@@ -1906,6 +1906,18 @@
     "md5": "b2de376f7e96fa2b6afc00dac016c40a"
   },
   {
+    "id": "issue19484_1",
+    "file": "pdfs/issue19484_1.link",
+    "link": true,
+    "md5": "4e9e78a84226dbdddbd735388ccc2dcd"
+  },
+  {
+    "id": "issue19484_2",
+    "file": "pdfs/issue19484_2.link",
+    "link": true,
+    "md5": "cd3050eda9fa18a7e6a78c702f9890bb"
+  },
+  {
     "id": "issue19494",
     "file": "pdfs/issue19494.link",
     "link": true,

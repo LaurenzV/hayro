@@ -95,11 +95,11 @@ issue15893_reduced
 # image missing
 issue6364
 
+# trailer dict is cut off
+issue15577
+
 # doesnt parse / has encryption
 bug1250079
-issue15577
-issue19484_1
-issue19484_2
 
 issue17215-annotations
 
