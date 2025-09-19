@@ -234,8 +234,8 @@
   {
     "id": "bug1260585",
     "file": "pdfs/bug1260585.link",
-    "md5": "9415b1eb00a43c97c15328cd4c8d136a",
     "link": true,
+    "md5": "9415b1eb00a43c97c15328cd4c8d136a",
     "last_page": 0
   },
   {
@@ -363,6 +363,12 @@
     "file": "pdfs/bug1799927.link",
     "link": true,
     "md5": "e6ad013c24e58e5b40c3bae50f04c8e8"
+  },
+  {
+    "id": "bug1820909",
+    "file": "pdfs/bug1820909.link",
+    "link": true,
+    "md5": "d95a83a868671a03cbf322f16b2e2b9d"
   },
   {
     "id": "bug1826783-display",
@@ -528,6 +534,12 @@
     "md5": "37c37702bf98d33f9f74e2380c4d1a3f"
   },
   {
+    "id": "bug900822",
+    "file": "pdfs/bug900822.link",
+    "link": true,
+    "md5": "70e2a3c5922574eeda169c955cf9d084"
+  },
+  {
     "id": "bug903856",
     "file": "pdfs/bug903856.link",
     "first_page": 0,
@@ -562,6 +574,13 @@
     "last_page": 0,
     "link": true,
     "md5": "c28911b5c31bdc337c2ce404c5971cfc"
+  },
+  {
+    "id": "bug951051",
+    "file": "pdfs/bug951051.link",
+    "link": true,
+    "md5": "05d325a5112bd3f6022367dab7bc07b9",
+    "last_page": 0
   },
   {
     "id": "cable",
@@ -1183,6 +1202,12 @@
     "last_page": 1
   },
   {
+    "id": "issue13132",
+    "file": "pdfs/issue13132.link",
+    "link": true,
+    "md5": "1b28964b9188047bc6c786302c95029f"
+  },
+  {
     "id": "issue13147",
     "file": "pdfs/issue13147.link",
     "link": true,
@@ -1478,6 +1503,12 @@
     "md5": "a5ebef467fd6e2fc0aeb56c9eb725ae3"
   },
   {
+    "id": "issue16081",
+    "file": "pdfs/issue16081.link",
+    "link": true,
+    "md5": "e890d55c9527a116431ebef3efb960ff"
+  },
+  {
     "id": "issue16287",
     "file": "pdfs/issue16287.link",
     "link": true,
@@ -1521,6 +1552,13 @@
     "file": "pdfs/issue16454.link",
     "md5": "82fe0c54a96667472ce999be7a789199",
     "link": true,
+    "last_page": 0
+  },
+  {
+    "id": "issue16464",
+    "file": "pdfs/issue16464.link",
+    "link": true,
+    "md5": "2bd97ff909e2185605788daa70de38ee",
     "last_page": 0
   },
   {
@@ -1577,11 +1615,24 @@
     "link": true
   },
   {
+    "id": "issue16843-text",
+    "file": "pdfs/issue16843-text.link",
+    "link": true,
+    "md5": "2845b2f7f02690c388c24c488297028a",
+    "last_page": 0
+  },
+  {
     "id": "issue1685",
     "file": "pdfs/issue1685.link",
     "md5": "b22c3741e6bd0e613d3eb3325ad31f7d",
     "link": true,
     "last_page": 1
+  },
+  {
+    "id": "issue16863",
+    "file": "pdfs/issue16863.link",
+    "link": true,
+    "md5": "af8abe281721f92a0d46646969f061de"
   },
   {
     "id": "issue1687",
@@ -2757,8 +2808,8 @@
   {
     "id": "issue6549",
     "file": "pdfs/issue6549.link",
-    "md5": "699aeea73a6f45375022ffc6cc80f12a",
     "link": true,
+    "md5": "699aeea73a6f45375022ffc6cc80f12a",
     "first_page": 1,
     "last_page": 2
   },
@@ -2897,6 +2948,12 @@
     "file": "pdfs/issue7580-eq.link",
     "link": true,
     "md5": "44dd5a9b4373fcab9890cf567722a766"
+  },
+  {
+    "id": "issue7665",
+    "file": "pdfs/issue7665.link",
+    "link": true,
+    "md5": "f1199d16195a61e8232e2d1e742ed46b"
   },
   {
     "id": "issue7696",
@@ -3249,6 +3306,12 @@
     "file": "pdfs/protectip.link",
     "link": true,
     "md5": "676e7a7b8f96d04825361832b1838a93"
+  },
+  {
+    "id": "shavian-load",
+    "file": "pdfs/shavian-load.link",
+    "link": true,
+    "md5": "4fabf0a03e82693007435020bc446f9b"
   },
   {
     "id": "simpletype3font",

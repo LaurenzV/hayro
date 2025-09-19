@@ -45,6 +45,7 @@ issue19326_main_thread_fetch
 *thread*
 *sOffscreenCanvasSupported*
 js-buttons
+protected-stamp-editor-save-print
 
 # tiling with negative step
 issue16038
@@ -77,6 +78,9 @@ bug1650302_reduce
 bug1123803
 bug1199237
 
+# missing text (probably not-embedded font), page rotated wrongly
+p020121130574743273239
+
 
 # this pdf is pretty broken, and while we can display most of it, some of the images are cut off, seemingly because the
 # flate decompressor doesn't process everything
@@ -92,22 +96,19 @@ issue15893_reduced
 issue6364
 
 # doesnt parse / has encryption
-p020121130574743273239
 bug1250079
-protected-stamp-editor-save-print
-issue12294-print
 issue15577
-issue16464
-issue16843-text
-issue17069
-issue17215-annotations
 issue19484_1
 issue19484_2
+
+issue17215-annotations
+
 issue3371
 issue5752
 issue6010_1
 issue6010_2
 issue9105_other
+issue12294-print
 
 # takes long time
 filled-background-range

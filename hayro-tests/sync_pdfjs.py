@@ -89,7 +89,7 @@ class PDFJSSync:
         
     def is_eq_type(self, entry: Dict[str, Any]) -> bool:
         """Check if entry is of type 'eq' (equality test)."""
-        return entry.get("type", "eq") == "eq"
+        return True
         
     def extract_sort_key(self, test_id: str) -> Tuple[str, int]:
         """Extract a sort key from test ID, treating trailing numbers specially.
