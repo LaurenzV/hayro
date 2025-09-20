@@ -74,10 +74,6 @@ bug1671312_ArialNarrow
 bug1671312_reduced
 bug1650302_reduce
 
-# smask
-bug1123803
-bug1199237
-
 # missing text (probably not-embedded font), page rotated wrongly
 p020121130574743273239
 
