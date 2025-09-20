@@ -15,7 +15,7 @@ use std::sync::Arc;
 #[rustfmt::skip]
 #[allow(non_snake_case)]
 mod render;
-mod crash;
+mod load;
 mod svg;
 mod write;
 
