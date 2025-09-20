@@ -23,7 +23,7 @@ jobs:
       - run: RUSTFLAGS="-D warnings" cargo hack check --each-feature --workspace --exclude hayro-demo
         
   load_tests:
-    name: Run the `load` tests
+    name: Run the load tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
