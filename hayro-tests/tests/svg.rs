@@ -201,3 +201,12 @@ fn stroke_properties() {
         None,
     );
 }
+
+#[test]
+fn issue_isolate_shading_transform() {
+    run_svg_test(
+        "issue_isolate_shading_transform",
+        "pdfs/custom/issue_isolate_shading_transform.pdf",
+        None,
+    );
+}
