@@ -157,6 +157,12 @@
     "last_page": 0
   },
   {
+    "id": "bug1123803",
+    "file": "pdfs/bug1123803.link",
+    "link": true,
+    "md5": "0f3870ac5ad8899aec34d734e045a514"
+  },
+  {
     "id": "bug1132849",
     "file": "pdfs/bug1132849.link",
     "link": true,
@@ -206,6 +212,14 @@
     "file": "pdfs/bug1186827.link",
     "link": true,
     "md5": "6c5526ae1a9d66cb517153001afc196e"
+  },
+  {
+    "id": "bug1199237",
+    "file": "pdfs/bug1199237.link",
+    "link": true,
+    "md5": "e9a63d3207ccc65a4955d5723546e962",
+    "first_page": 0,
+    "last_page": 0
   },
   {
     "id": "bug1200096",
