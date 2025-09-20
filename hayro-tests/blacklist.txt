@@ -114,7 +114,6 @@ bug1753983
 bug1905623
 bug1953099
 bug854315
-bug866395
 bug921760
 bug921409
 
@@ -126,7 +125,6 @@ issue6286
 issue6410
 issue6692
 issue6782
-issue7598
 issue7835
 issue8586
 issue8614
@@ -134,7 +132,6 @@ issue9084
 issue9195
 issue9252
 issue9367
-issue9425
 issue9949
 issue11088
 issue11242
@@ -233,6 +230,8 @@ issue11279
 # corrupt jpeg image
 issue10880
 issue10989
+issue9425
+
 
 #black rect
 issue10339

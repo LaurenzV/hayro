@@ -336,6 +336,7 @@ use crate::run_render_test;
 #[test] fn pdfjs_bug860632() { run_render_test("pdfjs_bug860632", "downloads/pdfjs/bug860632.pdf", Some("..=0")); }
 #[test] fn pdfjs_bug864847() { run_render_test("pdfjs_bug864847", "downloads/pdfjs/bug864847.pdf", None); }
 #[test] fn pdfjs_bug865858() { run_render_test("pdfjs_bug865858", "downloads/pdfjs/bug865858.pdf", None); }
+#[test] fn pdfjs_bug866395() { run_render_test("pdfjs_bug866395", "downloads/pdfjs/bug866395.pdf", None); }
 #[test] fn pdfjs_bug878026() { run_render_test("pdfjs_bug878026", "downloads/pdfjs/bug878026.pdf", Some("0..=0")); }
 #[test] fn pdfjs_bug878194() { run_render_test("pdfjs_bug878194", "downloads/pdfjs/bug878194.pdf", Some("3..=3")); }
 #[test] fn pdfjs_bug887152() { run_render_test("pdfjs_bug887152", "downloads/pdfjs/bug887152.pdf", Some("..=0")); }
@@ -717,6 +718,7 @@ use crate::run_render_test;
 #[test] fn pdfjs_issue7507() { run_render_test("pdfjs_issue7507", "downloads/pdfjs/issue7507.pdf", None); }
 #[test] fn pdfjs_issue7544() { run_render_test("pdfjs_issue7544", "downloads/pdfjs/issue7544.pdf", None); }
 #[test] fn pdfjs_issue7580_eq() { run_render_test("pdfjs_issue7580_eq", "downloads/pdfjs/issue7580-eq.pdf", None); }
+#[test] fn pdfjs_issue7598() { run_render_test("pdfjs_issue7598", "downloads/pdfjs/issue7598.pdf", None); }
 #[test] fn pdfjs_issue7665() { run_render_test("pdfjs_issue7665", "downloads/pdfjs/issue7665.pdf", None); }
 #[test] fn pdfjs_issue7696() { run_render_test("pdfjs_issue7696", "downloads/pdfjs/issue7696.pdf", None); }
 #[test] fn pdfjs_issue7769() { run_render_test("pdfjs_issue7769", "downloads/pdfjs/issue7769.pdf", None); }

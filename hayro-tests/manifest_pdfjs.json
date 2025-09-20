@@ -502,6 +502,12 @@
     "md5": "7a81bd987dc1d95e9a0be46b7c3f2e18"
   },
   {
+    "id": "bug866395",
+    "file": "pdfs/bug866395.link",
+    "link": true,
+    "md5": "f03bc77e84637241980b09a0a220f575"
+  },
+  {
     "id": "bug878026",
     "file": "pdfs/bug878026.link",
     "first_page": 0,
@@ -2960,6 +2966,12 @@
     "file": "pdfs/issue7580-eq.link",
     "link": true,
     "md5": "44dd5a9b4373fcab9890cf567722a766"
+  },
+  {
+    "id": "issue7598",
+    "file": "pdfs/issue7598.link",
+    "link": true,
+    "md5": "c5bc5a779bfcb4b234f853231b56cf60"
   },
   {
     "id": "issue7665",
