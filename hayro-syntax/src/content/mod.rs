@@ -435,6 +435,11 @@ mod macros {
             }
         };
     }
+    
+    // The `shift` parameter will always be 0 in valid PDFs. The purpose of the parameter is
+    // so that in case there are garbage operands in the content stream, we prefer to use
+    // the operands that are closer to the operator instead of the values at the bottom
+    // of the stack.
 
     macro_rules! op0 {
         ($t:ident $(<$l:lifetime>),*, $e:expr) => {
@@ -444,8 +449,10 @@ mod macros {
 
     macro_rules! op1 {
         ($t:ident $(<$l:lifetime>),*, $e:expr) => {
-            crate::content::macros::op_impl!($t$(<$l>),*, $e, 1, |stack: &Stack<'a>|
-            Some(Self(stack.get(0)?)));
+            crate::content::macros::op_impl!($t$(<$l>),*, $e, 1, |stack: &Stack<'a>| {
+                let shift = stack.len().saturating_sub(1);
+                Some(Self(stack.get(0 + shift)?))
+            });
         }
     }
 
@@ -458,33 +465,41 @@ mod macros {
 
     macro_rules! op2 {
         ($t:ident $(<$l:lifetime>),*, $e:expr) => {
-            crate::content::macros::op_impl!($t$(<$l>),*, $e, 2, |stack: &Stack<'a>|
-            Some(Self(stack.get(0)?, stack.get(1)?)));
+            crate::content::macros::op_impl!($t$(<$l>),*, $e, 2, |stack: &Stack<'a>| {
+                let shift = stack.len().saturating_sub(2);
+                Some(Self(stack.get(0 + shift)?, stack.get(1 + shift)?))
+            });
         }
     }
 
     macro_rules! op3 {
         ($t:ident $(<$l:lifetime>),*, $e:expr) => {
-            crate::content::macros::op_impl!($t$(<$l>),*, $e, 3, |stack: &Stack<'a>|
-            Some(Self(stack.get(0)?, stack.get(1)?,
-            stack.get(2)?)));
+            crate::content::macros::op_impl!($t$(<$l>),*, $e, 3, |stack: &Stack<'a>| {
+                let shift = stack.len().saturating_sub(3);
+                Some(Self(stack.get(0 + shift)?, stack.get(1 + shift)?, 
+                stack.get(2 + shift)?))
+            });
         }
     }
 
     macro_rules! op4 {
         ($t:ident $(<$l:lifetime>),*, $e:expr) => {
-            crate::content::macros::op_impl!($t$(<$l>),*, $e, 4, |stack: &Stack<'a>|
-            Some(Self(stack.get(0)?, stack.get(1)?,
-            stack.get(2)?, stack.get(3)?)));
+            crate::content::macros::op_impl!($t$(<$l>),*, $e, 4, |stack: &Stack<'a>| {
+               let shift = stack.len().saturating_sub(4); 
+            Some(Self(stack.get(0 + shift)?, stack.get(1 + shift)?,
+            stack.get(2 + shift)?, stack.get(3 + shift)?))
+            });
         }
     }
 
     macro_rules! op6 {
         ($t:ident $(<$l:lifetime>),*, $e:expr) => {
-            crate::content::macros::op_impl!($t$(<$l>),*, $e, 6, |stack: &Stack<'a>|
-            Some(Self(stack.get(0)?, stack.get(1)?,
-            stack.get(2)?, stack.get(3)?,
-            stack.get(4)?, stack.get(5)?)));
+            crate::content::macros::op_impl!($t$(<$l>),*, $e, 6, |stack: &Stack<'a>| {
+                let shift = stack.len().saturating_sub(6);
+            Some(Self(stack.get(0 + shift)?, stack.get(1 + shift)?,
+            stack.get(2 + shift)?, stack.get(3 + shift)?,
+            stack.get(4 + shift)?, stack.get(5 + shift)?))
+            });
         }
     }
 

@@ -143,7 +143,6 @@ issue11915
 issue12418
 issue13343
 issue13916
-issue14917
 issue15033
 issue15044
 issue15139
@@ -163,7 +162,6 @@ issue19550
 issue19695
 issue2391-1
 issue3521.pdf
-issue14917
 issue12841
 issue16432
 issue16464
