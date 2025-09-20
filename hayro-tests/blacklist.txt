@@ -59,9 +59,6 @@ issue16114
 # CMAP table is broken, therefore we can't map codepoint to a glyph
 bug1050040
 
-# missing image on page 1
-High-Pressure-Measurement-WP-001287
-
 #investigate
 bug1250079
 bug1308536
