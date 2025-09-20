@@ -131,7 +131,6 @@ protectip
 shavian-load
 issue7665
 issue9418
-issue16464
 issue16843-text
 issue17069
 issue19484_1

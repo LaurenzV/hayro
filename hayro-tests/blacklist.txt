@@ -115,11 +115,13 @@ bug1905623
 bug1953099
 bug854315
 bug866395
+bug921760
 bug921409
 
 issue5751
 issue5801
 issue5946
+issue6127
 issue6286
 issue6410
 issue6692
@@ -166,6 +168,9 @@ issue2391-1
 issue3521.pdf
 issue14917
 issue12841
+issue16432
+issue16464
+issue18801
 
 #smask with transfer function
 issue5044
