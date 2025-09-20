@@ -49,7 +49,7 @@ impl Type0 {
 
         let decode = dict.get::<TupleVec>(DECODE).unwrap_or(range.clone());
 
-        let data = {
+        let mut data = {
             let decoded = stream.decoded().ok()?;
             let mut buf = vec![];
             let mut reader = BitReader::new(&decoded);
@@ -60,6 +60,13 @@ impl Type0 {
 
             buf
         };
+
+        let num_expected_entries = sizes.iter().fold(1, |i1, i2| i1 * *i2 as usize) * range.len();
+
+        if data.len() != num_expected_entries {
+            warn!("Type0 function didn't have the expected number of sample entries.");
+            data.truncate(num_expected_entries);
+        }
 
         let table = build_table(&data, &sizes, range.len())?;
 

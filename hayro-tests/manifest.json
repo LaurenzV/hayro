@@ -1074,5 +1074,9 @@
     "id": "issue10_2",
     "file": "pdfs/custom/issue10_2.link",
     "link": true
+  },
+  {
+    "id": "type0_function_too_many_entries",
+    "file": "pdfs/custom/type0_function_too_many_entries.pdf"
   }
 ]
