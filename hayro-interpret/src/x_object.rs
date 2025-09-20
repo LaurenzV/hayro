@@ -334,7 +334,7 @@ impl DecodedImageXObject {
                 .image_data
                 .as_ref()
                 .map(|i| i.bits_per_component)
-                .or_else(|| dict_bpc)
+                .or(dict_bpc)
                 .unwrap_or(8)
         };
 
