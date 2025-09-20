@@ -193,9 +193,6 @@ issue19176
 # built-in encoding
 issue5752
 
-# issue with jpx image?
-issue19326
-
 #pdf layers
 issue12007_reduced
 

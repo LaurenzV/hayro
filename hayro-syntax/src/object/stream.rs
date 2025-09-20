@@ -26,6 +26,8 @@ pub struct Stream<'a> {
 pub struct ImageDecodeParams {
     /// Whether the color space of the image is an indexed color space.
     pub is_indexed: bool,
+    /// The bits per component of the image, if that information is available.
+    pub bpc: Option<u8>,
 }
 
 impl<'a> Stream<'a> {

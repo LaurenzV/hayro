@@ -285,8 +285,15 @@ pub(crate) struct DecodedImageXObject {
 
 impl DecodedImageXObject {
     fn new(obj: &ImageXObject) -> Option<Self> {
+        let dict = obj.stream.dict();
+
+        let dict_bpc = dict
+            .get::<u8>(BPC)
+            .or_else(|| dict.get::<u8>(BITS_PER_COMPONENT));
+
         let decode_params = ImageDecodeParams {
             is_indexed: obj.color_space.as_ref().is_some_and(|cs| cs.is_indexed()),
+            bpc: dict_bpc,
         };
 
         let decoded = obj
@@ -320,8 +327,6 @@ impl DecodedImageXObject {
             })
             .unwrap_or(ColorSpace::device_gray());
 
-        let dict = obj.stream.dict();
-
         let mut bits_per_component = if obj.is_image_mask {
             1
         } else {
@@ -329,8 +334,7 @@ impl DecodedImageXObject {
                 .image_data
                 .as_ref()
                 .map(|i| i.bits_per_component)
-                .or_else(|| dict.get::<u8>(BPC))
-                .or_else(|| dict.get::<u8>(BITS_PER_COMPONENT))
+                .or_else(|| dict_bpc)
                 .unwrap_or(8)
         };
 

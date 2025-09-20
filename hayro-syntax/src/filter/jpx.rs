@@ -26,9 +26,11 @@ pub(crate) fn decode(data: &[u8], params: &ImageDecodeParams) -> Option<FilterRe
     let width = image.width();
     let height = image.height();
     let components = image.components();
-    let bpc = components
-        .iter()
-        .fold(u32::MIN, |max, c| max.max(c.precision())) as u8;
+    let bpc = params.bpc.unwrap_or(
+        components
+            .iter()
+            .fold(u32::MIN, |max, c| max.max(c.precision())) as u8,
+    );
     let cs = match components.iter().filter(|c| !c.is_alpha()).count() {
         1 => ImageColorSpace::Gray,
         3 => ImageColorSpace::Rgb,

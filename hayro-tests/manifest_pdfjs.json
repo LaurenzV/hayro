@@ -1894,6 +1894,12 @@
     "last_page": 1
   },
   {
+    "id": "issue19326",
+    "file": "pdfs/issue19326.link",
+    "link": true,
+    "md5": "b4d937017daf439a6318501428e0c6ba"
+  },
+  {
     "id": "issue1936",
     "file": "pdfs/issue1936.link",
     "md5": "7302eb9b6a626308e2a933aaed9e1756",
