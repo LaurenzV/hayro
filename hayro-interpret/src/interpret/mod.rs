@@ -546,6 +546,7 @@ pub fn interpret<'a, 'b>(
 
                     device.pop_transparency_group();
 
+                    context.pop_root_transform();
                     context.restore_state();
                 } else {
                     warn!("failed to process shading");
