@@ -230,7 +230,7 @@ issue11768
 # maybe blend mode
 issue11279
 
-# missing image
+# corrupt jpeg image
 issue10880
 issue10989
 
