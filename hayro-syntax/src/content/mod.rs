@@ -435,7 +435,7 @@ mod macros {
             }
         };
     }
-    
+
     // The `shift` parameter will always be 0 in valid PDFs. The purpose of the parameter is
     // so that in case there are garbage operands in the content stream, we prefer to use
     // the operands that are closer to the operator instead of the values at the bottom
@@ -476,7 +476,7 @@ mod macros {
         ($t:ident $(<$l:lifetime>),*, $e:expr) => {
             crate::content::macros::op_impl!($t$(<$l>),*, $e, 3, |stack: &Stack<'a>| {
                 let shift = stack.len().saturating_sub(3);
-                Some(Self(stack.get(0 + shift)?, stack.get(1 + shift)?, 
+                Some(Self(stack.get(0 + shift)?, stack.get(1 + shift)?,
                 stack.get(2 + shift)?))
             });
         }
@@ -485,7 +485,7 @@ mod macros {
     macro_rules! op4 {
         ($t:ident $(<$l:lifetime>),*, $e:expr) => {
             crate::content::macros::op_impl!($t$(<$l>),*, $e, 4, |stack: &Stack<'a>| {
-               let shift = stack.len().saturating_sub(4); 
+               let shift = stack.len().saturating_sub(4);
             Some(Self(stack.get(0 + shift)?, stack.get(1 + shift)?,
             stack.get(2 + shift)?, stack.get(3 + shift)?))
             });
