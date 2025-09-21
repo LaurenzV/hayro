@@ -3273,6 +3273,14 @@
     "md5": "ee54358d8b2fdc75dc8da5220cf8e8da"
   },
   {
+    "id": "issue9462",
+    "file": "pdfs/issue9462.link",
+    "link": true,
+    "md5": "0a2895b0aa8a8ef730a20b4116cd996c",
+    "first_page": 2,
+    "last_page": 2
+  },
+  {
     "id": "issue9534_reduced",
     "file": "pdfs/issue9534_reduced.link",
     "link": true,

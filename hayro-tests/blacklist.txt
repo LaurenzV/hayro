@@ -51,9 +51,6 @@ issue17215-annotations
 # tiling with negative step
 issue16038
 
-# missing image
-issue 12841
-
 # transfer func
 issue16114
 
@@ -223,13 +220,10 @@ issue11279
 issue10880
 issue10989
 issue9425
-
+issue 12841
 
 #black rect
 issue10339
-
-# weird purple lines on page 0
-issue9462
 
 # issue with image
 issue9650

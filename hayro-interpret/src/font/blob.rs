@@ -98,7 +98,17 @@ impl Debug for OpenTypeFontBlob {
 impl OpenTypeFontBlob {
     pub(crate) fn new(data: FontData, index: u32) -> Option<Self> {
         // Check first whether the font is valid so we can unwrap in the closure.
-        let _ = FontRef::from_index(data.as_ref().as_ref(), index).ok()?;
+        let f = FontRef::from_index(data.as_ref().as_ref(), index).ok()?;
+        // Reject fonts with invalid post table version, fixes pdf.js issue 9462. Not sure if there
+        // is a better fix, for some reason skrifa accepts the font which is completely invalid.
+        let invalid = f.post().is_ok_and(|p| match p.version().to_major_minor() {
+            (1, 0) | (2, 0) | (2, 5) | (3, 0) => false,
+            _ => true,
+        });
+
+        if invalid {
+            return None;
+        }
 
         let font_ref_yoke =
             Yoke::<OTFYoke<'static>, FontData>::attach_to_cart(data.clone(), |data| {
