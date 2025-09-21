@@ -171,6 +171,12 @@
     "md5": "0f3870ac5ad8899aec34d734e045a514"
   },
   {
+    "id": "bug1130815-eq",
+    "file": "pdfs/bug1130815-eq.link",
+    "link": true,
+    "md5": "3ff3b550c3af766991b2a1b11d00de85"
+  },
+  {
     "id": "bug1132849",
     "file": "pdfs/bug1132849.link",
     "link": true,

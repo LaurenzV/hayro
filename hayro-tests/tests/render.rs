@@ -284,6 +284,7 @@ use crate::run_render_test;
 #[test] fn pdfjs_bug1108301() { run_render_test("pdfjs_bug1108301", "downloads/pdfjs/bug1108301.pdf", None); }
 #[test] fn pdfjs_bug1108753() { run_render_test("pdfjs_bug1108753", "downloads/pdfjs/bug1108753.pdf", Some("0..=0")); }
 #[test] fn pdfjs_bug1123803() { run_render_test("pdfjs_bug1123803", "downloads/pdfjs/bug1123803.pdf", None); }
+#[test] fn pdfjs_bug1130815_eq() { run_render_test("pdfjs_bug1130815_eq", "downloads/pdfjs/bug1130815-eq.pdf", None); }
 #[test] fn pdfjs_bug1132849() { run_render_test("pdfjs_bug1132849", "downloads/pdfjs/bug1132849.pdf", None); }
 #[test] fn pdfjs_bug1140761() { run_render_test("pdfjs_bug1140761", "downloads/pdfjs/bug1140761.pdf", Some("0..=0")); }
 #[test] fn pdfjs_bug1142033() { run_render_test("pdfjs_bug1142033", "downloads/pdfjs/bug1142033.pdf", Some("..=0")); }
