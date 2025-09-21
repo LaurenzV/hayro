@@ -31,7 +31,6 @@ issue7891_bc1
 # Ignore those tests because they are not interesting to us or we don't want to support.
 artofwar
 ContentStreamCycleType3insideType3
-ContentStreamNoCycleType3insideType3
 decodeACSuccessive
 doc_actions
 cmykjpeg_nowasm
@@ -215,6 +214,7 @@ issue11768
 
 # maybe blend mode
 issue11279
+issue4890
 
 # corrupt jpeg image
 issue10880
@@ -272,9 +272,6 @@ issue19517
 # wrong font in text?
 issue4934
 
-# cut off image
-issue4890
-
 # pixelated image mask
 issue4246
 
@@ -286,7 +283,6 @@ issue4630
 
 # not working gradient
 issue2761
-
 
 # image rendered with pink background
 bug956965

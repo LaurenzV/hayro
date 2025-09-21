@@ -4,6 +4,7 @@ use crate::font::glyph_simulator::GlyphSimulator;
 use crate::font::true_type::{read_encoding, read_widths};
 use crate::font::{Encoding, Glyph, Type3Glyph, UNITS_PER_EM};
 use crate::interpret;
+use crate::interpret::state::TextState;
 use crate::soft_mask::SoftMask;
 use crate::{CacheKey, ClipPath, GlyphDrawMode, PathDrawMode};
 use crate::{Image, Paint};
@@ -88,6 +89,10 @@ impl<'a> Type3<'a> {
         let root_transform =
             transform * glyph_transform * self.matrix * Affine::scale(UNITS_PER_EM as f64);
         state.ctm = root_transform;
+
+        // Not sure if this is mentioned anywhere, but I do think we need to reset the text state
+        // (though the graphics state itself should be preserved).
+        state.text_state = TextState::default();
 
         let mut context = Context::new_with(
             state.ctm,
@@ -181,8 +186,6 @@ impl<'a, T: Device<'a>> Device<'a> for Type3ShapeGlyphDevice<'a, '_, T> {
 
     fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask>) {}
 
-    // Technically not valid, I think, but there is a PDFBox test case that contains such a font
-    // and everyone seems to render it.
     fn draw_glyph(
         &mut self,
         g: &Glyph<'a>,

@@ -5,7 +5,7 @@ use crate::color::{Color, ColorSpace};
 use crate::context::Context;
 use crate::device::Device;
 use crate::font::Glyph;
-use crate::interpret::state::State;
+use crate::interpret::state::{State, TextState};
 use crate::shading::Shading;
 use crate::soft_mask::SoftMask;
 use crate::util::hash128;
@@ -161,15 +161,13 @@ impl<'a> TilingPattern<'a> {
             .map(Affine::new)
             .unwrap_or_default();
 
-        let state = ctx.get();
+        let state = ctx.get().clone();
 
-        let fill_cs = ctx
-            .get()
+        let fill_cs = state
             .none_stroke_cs
             .pattern_cs()
             .unwrap_or(ColorSpace::device_gray());
-        let stroke_cs = ctx
-            .get()
+        let stroke_cs = state
             .stroke_cs
             .pattern_cs()
             .unwrap_or(ColorSpace::device_gray());
@@ -208,6 +206,9 @@ impl<'a> TilingPattern<'a> {
     ) -> Option<()> {
         let mut state = (*self.state).clone();
         state.ctm = initial_transform;
+        // Not sure if this is mentioned anywhere, but I do think we need to reset the text state
+        // (though the graphics state itself should be preserved).
+        state.text_state = TextState::default();
 
         let mut context = Context::new_with(
             state.ctm,

@@ -259,6 +259,7 @@ use crate::run_render_test;
 #[test] fn type0_function_too_many_entries() { run_render_test("type0_function_too_many_entries", "pdfs/custom/type0_function_too_many_entries.pdf", None); }
 #[test] fn issue_isolate_shading_transform() { run_render_test("issue_isolate_shading_transform", "pdfs/custom/issue_isolate_shading_transform.pdf", None); }
 #[test] fn pdfjs_20130226130259() { run_render_test("pdfjs_20130226130259", "downloads/pdfjs/20130226130259.pdf", Some("0..=0")); }
+#[test] fn pdfjs_ContentStreamNoCycleType3insideType3() { run_render_test("pdfjs_ContentStreamNoCycleType3insideType3", "downloads/pdfjs/ContentStreamNoCycleType3insideType3.pdf", None); }
 #[test] fn pdfjs_High_Pressure_Measurement_WP_001287() { run_render_test("pdfjs_High_Pressure_Measurement_WP_001287", "downloads/pdfjs/High-Pressure-Measurement-WP-001287.pdf", Some("2..=2")); }
 #[test] fn pdfjs_IdentityToUnicodeMap_charCodeOf() { run_render_test("pdfjs_IdentityToUnicodeMap_charCodeOf", "downloads/pdfjs/IdentityToUnicodeMap_charCodeOf.pdf", None); }
 #[test] fn pdfjs_IndexedCS_negative_and_high() { run_render_test("pdfjs_IndexedCS_negative_and_high", "downloads/pdfjs/IndexedCS_negative_and_high.pdf", None); }
