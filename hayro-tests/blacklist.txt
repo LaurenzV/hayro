@@ -287,11 +287,6 @@ issue4630
 # not working gradient
 issue2761
 
-# maybe soft mask not working correctly
-bug852992
-
-# maybe clip path not working on second page?
-bug1946953
 
 # image rendered with pink background
 bug956965

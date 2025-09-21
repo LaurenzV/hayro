@@ -104,7 +104,7 @@ impl Type0 {
         }
 
         let in_prev = key.iter().map(|v| v.floor() as u32).collect::<IntVec>();
-        let in_next = key.iter().map(|v| v.floor() as u32).collect::<IntVec>();
+        let in_next = key.iter().map(|v| v.ceil() as u32).collect::<IntVec>();
 
         let interpolator = Interpolator::new(
             key.clone().to_smallvec(),

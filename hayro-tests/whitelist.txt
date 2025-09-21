@@ -145,3 +145,5 @@ issue14917
 bug1130815-eq
 # TODO: include all pages
 issue9462
+bug1946953
+bug852992
