@@ -26,7 +26,6 @@ use std::collections::HashMap;
 use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::hash::Hash;
-use std::marker::PhantomData;
 use xmlwriter::{Options, XmlWriter};
 
 mod clip;
@@ -66,7 +65,7 @@ pub(crate) struct SvgRenderer<'a> {
     pub(crate) shadings: Deduplicator<CachedShading>,
     pub(crate) shading_patterns: Deduplicator<CachedShadingPattern>,
     pub(crate) tiling_patterns: Deduplicator<CachedTilingPattern<'a>>,
-    pub(crate) phantom_data: PhantomData<&'a ()>,
+    pub(crate) dimensions: (f32, f32),
     pub(crate) cur_mask: Option<SoftMask<'a>>,
 }
 
@@ -241,7 +240,7 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
 }
 
 impl<'a> SvgRenderer<'a> {
-    pub(crate) fn new(_: &'a Page<'a>) -> Self {
+    pub(crate) fn new(page: &'a Page<'a>) -> Self {
         Self {
             xml: XmlWriter::new(Options::default()),
             outline_glyphs: Deduplicator::new('g'),
@@ -252,7 +251,7 @@ impl<'a> SvgRenderer<'a> {
             shading_patterns: Deduplicator::new('v'),
             tiling_patterns: Deduplicator::new('t'),
             cur_mask: None,
-            phantom_data: PhantomData,
+            dimensions: page.render_dimensions(),
         }
     }
 

@@ -1082,5 +1082,9 @@
   {
     "id": "issue_isolate_shading_transform",
     "file": "pdfs/custom/issue_isolate_shading_transform.pdf"
+  },
+  {
+    "id": "mask_bc",
+    "file": "pdfs/custom/mask_bc.pdf"
   }
 ]
