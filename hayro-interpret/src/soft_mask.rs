@@ -107,7 +107,6 @@ impl<'a> SoftMask<'a> {
         let cs = ColorSpace::new(
             group.dict.get::<Dict>(GROUP)?.get::<Object>(CS)?,
             &context.object_cache,
-            None,
         )?;
         let transfer_function = dict
             .get::<Object>(TR)

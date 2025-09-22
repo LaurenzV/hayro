@@ -235,7 +235,6 @@ issue9291
 issue7872
 
 # wrong rendering
-issue6931
 issue8019
 issue8117
 issue8169
