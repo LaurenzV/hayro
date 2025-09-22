@@ -5,7 +5,7 @@ use crate::interpret::state::State;
 use crate::util::hash128;
 use crate::x_object::{XObject, draw_xobject};
 use crate::{CacheKey, InterpreterSettings};
-use hayro_syntax::object::Dict;
+use hayro_syntax::object::{Dict, Object};
 use hayro_syntax::object::Name;
 use hayro_syntax::object::ObjectIdentifier;
 use hayro_syntax::object::Stream;
@@ -17,6 +17,8 @@ use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 use std::sync::Arc;
+use smallvec::smallvec;
+use hayro_syntax::function::Function;
 
 /// Type type of mask.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -27,6 +29,24 @@ pub enum MaskType {
     Alpha,
 }
 
+/// A transfer function to apply to the opacity values of a mask.
+pub struct TransferFunction(Function);
+
+impl TransferFunction {
+    /// Apply the transfer function to the given value.
+    /// 
+    /// The input value needs to be between 0 and 1 and the return value is
+    /// guaranteed to be between 0 and 1.
+    #[inline]
+    pub fn apply(&self, val: f32) -> f32 {
+        self.0.eval(smallvec![val])
+            .and_then(|v| v.first().copied())
+            .unwrap_or(0.0)
+            .min(1.0)
+            .max(0.0)
+    }
+}
+
 struct Repr<'a> {
     obj_id: ObjectIdentifier,
     group: XObject<'a>,
@@ -35,6 +55,7 @@ struct Repr<'a> {
     root_transform: Affine,
     bbox: kurbo::Rect,
     object_cache: Cache,
+    transfer_function: Option<TransferFunction>,
     settings: InterpreterSettings,
     xref: &'a XRef,
 }
@@ -85,6 +106,9 @@ impl<'a> SoftMask<'a> {
             &context.settings.warning_sink,
             &context.object_cache,
         )?;
+        let transfer_function = dict.get::<Object>(TR)
+            .and_then(|o| Function::new(&o))
+            .map(|f| TransferFunction(f));
         let mask_type = match dict.get::<Name>(S)?.deref() {
             LUMINOSITY => MaskType::Luminosity,
             ALPHA => MaskType::Alpha,
@@ -96,6 +120,7 @@ impl<'a> SoftMask<'a> {
             group,
             mask_type,
             root_transform: context.get().ctm,
+            transfer_function,
             bbox: context.bbox(),
             object_cache: context.object_cache.clone(),
             settings: context.settings.clone(),
@@ -128,5 +153,10 @@ impl<'a> SoftMask<'a> {
     /// Return the underlying mask type.
     pub fn mask_type(&self) -> MaskType {
         self.0.mask_type
+    }
+    
+    /// Return the transfer function that should be used for the mask.
+    pub fn transfer_function(&self) -> Option<&TransferFunction> {
+        self.0.transfer_function.as_ref()
     }
 }

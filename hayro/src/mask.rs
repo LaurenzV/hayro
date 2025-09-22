@@ -10,9 +10,9 @@ use std::vec::Vec;
 /// A mask.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Mask {
-    data: Arc<Vec<u8>>,
-    width: u16,
-    height: u16,
+    pub(crate) data: Arc<Vec<u8>>,
+    pub(crate) width: u16,
+    pub(crate) height: u16,
 }
 
 impl Mask {
