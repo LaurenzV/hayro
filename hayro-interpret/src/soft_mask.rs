@@ -44,8 +44,7 @@ impl TransferFunction {
             .eval(smallvec![val])
             .and_then(|v| v.first().copied())
             .unwrap_or(0.0)
-            .min(1.0)
-            .max(0.0)
+            .clamp(0.0, 1.0)
     }
 }
 
@@ -112,7 +111,7 @@ impl<'a> SoftMask<'a> {
         let transfer_function = dict
             .get::<Object>(TR)
             .and_then(|o| Function::new(&o))
-            .map(|f| TransferFunction(f));
+            .map(TransferFunction);
         let (mask_type, background) = match dict.get::<Name>(S)?.deref() {
             LUMINOSITY => {
                 let color = dict
