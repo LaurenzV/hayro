@@ -206,8 +206,4 @@ impl<'a> Context<'a> {
     pub(crate) fn num_states(&self) -> usize {
         self.states.len()
     }
-
-    pub(crate) fn fill_rule(&self) -> FillRule {
-        self.get().fill_rule
-    }
 }

@@ -1,11 +1,15 @@
 use crate::color::Color;
 use crate::context::Context;
 use crate::device::Device;
-use crate::{Paint, PathDrawMode};
+use crate::{FillRule, Paint, PathDrawMode};
 use kurbo::{BezPath, PathEl};
 
-pub(crate) fn fill_path<'a>(context: &mut Context<'a>, device: &mut impl Device<'a>) {
-    fill_path_impl(context, device, None);
+pub(crate) fn fill_path<'a>(
+    context: &mut Context<'a>,
+    device: &mut impl Device<'a>,
+    fill_rule: FillRule,
+) {
+    fill_path_impl(context, device, fill_rule, None);
 
     context.path_mut().truncate(0);
 }
@@ -16,8 +20,12 @@ pub(crate) fn stroke_path<'a>(context: &mut Context<'a>, device: &mut impl Devic
     context.path_mut().truncate(0);
 }
 
-pub(crate) fn fill_stroke_path<'a>(context: &mut Context<'a>, device: &mut impl Device<'a>) {
-    fill_path_impl(context, device, None);
+pub(crate) fn fill_stroke_path<'a>(
+    context: &mut Context<'a>,
+    device: &mut impl Device<'a>,
+    fill_rule: FillRule,
+) {
+    fill_path_impl(context, device, fill_rule, None);
     stroke_path_impl(context, device, None);
 
     context.path_mut().truncate(0);
@@ -37,12 +45,12 @@ pub(crate) fn close_path(context: &mut Context<'_>) {
 pub(crate) fn fill_path_impl<'a>(
     context: &mut Context<'a>,
     device: &mut impl Device<'a>,
+    fill_rule: FillRule,
     path: Option<&BezPath>,
 ) {
     let base_transform = context.get().ctm;
 
     let paint = get_paint(context, false);
-    let fill_rule = context.fill_rule();
     device.set_soft_mask(context.get().graphics_state.soft_mask.clone());
 
     match path {

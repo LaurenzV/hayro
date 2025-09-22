@@ -178,24 +178,19 @@ pub fn interpret<'a, 'b>(
                 context.path_mut().move_to(p);
             }
             TypedInstruction::FillPathEvenOdd(_) => {
-                context.get_mut().fill_rule = FillRule::EvenOdd;
-                fill_path(context, device);
+                fill_path(context, device, FillRule::EvenOdd);
             }
             TypedInstruction::FillPathNonZero(_) => {
-                context.get_mut().fill_rule = FillRule::NonZero;
-                fill_path(context, device);
+                fill_path(context, device, FillRule::NonZero);
             }
             TypedInstruction::FillPathNonZeroCompatibility(_) => {
-                context.get_mut().fill_rule = FillRule::NonZero;
-                fill_path(context, device);
+                fill_path(context, device, FillRule::NonZero);
             }
             TypedInstruction::FillAndStrokeEvenOdd(_) => {
-                context.get_mut().fill_rule = FillRule::EvenOdd;
-                fill_stroke_path(context, device);
+                fill_stroke_path(context, device, FillRule::EvenOdd);
             }
             TypedInstruction::FillAndStrokeNonZero(_) => {
-                context.get_mut().fill_rule = FillRule::NonZero;
-                fill_stroke_path(context, device);
+                fill_stroke_path(context, device, FillRule::NonZero);
             }
             TypedInstruction::CloseAndStrokePath(_) => {
                 close_path(context);
@@ -203,13 +198,11 @@ pub fn interpret<'a, 'b>(
             }
             TypedInstruction::CloseFillAndStrokeEvenOdd(_) => {
                 close_path(context);
-                context.get_mut().fill_rule = FillRule::EvenOdd;
-                fill_stroke_path(context, device);
+                fill_stroke_path(context, device, FillRule::EvenOdd);
             }
             TypedInstruction::CloseFillAndStrokeNonZero(_) => {
                 close_path(context);
-                context.get_mut().fill_rule = FillRule::NonZero;
-                fill_stroke_path(context, device);
+                fill_stroke_path(context, device, FillRule::NonZero);
             }
             TypedInstruction::NonStrokeColorDeviceGray(s) => {
                 context.get_mut().graphics_state.none_stroke_cs = ColorSpace::device_gray();
@@ -544,7 +537,7 @@ pub fn interpret<'a, 'b>(
 
                     let bbox = context.bbox().to_path(0.1);
                     let inverted_bbox = context.get().ctm.inverse() * bbox;
-                    fill_path_impl(context, device, Some(&inverted_bbox));
+                    fill_path_impl(context, device, FillRule::NonZero, Some(&inverted_bbox));
 
                     device.pop_transparency_group();
 

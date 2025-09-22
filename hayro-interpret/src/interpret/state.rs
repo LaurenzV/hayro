@@ -1,3 +1,4 @@
+use crate::StrokeProps;
 use crate::color::{ColorComponents, ColorSpace};
 use crate::context::Context;
 use crate::convert::{convert_line_cap, convert_line_join};
@@ -7,7 +8,6 @@ use crate::interpret::text::TextRenderingMode;
 use crate::pattern::Pattern;
 use crate::soft_mask::SoftMask;
 use crate::util::OptionLog;
-use crate::{FillRule, StrokeProps};
 use hayro_syntax::content::ops::{LineCap, LineJoin};
 use hayro_syntax::object::dict::keys::SMASK;
 use hayro_syntax::object::{Dict, Name, Number};
@@ -24,11 +24,8 @@ pub(crate) struct State<'a> {
     pub(crate) graphics_state: GraphicsState<'a>,
     pub(crate) text_state: TextState<'a>,
     pub(crate) ctm: Affine,
-
-    // Miscellaneous.
     // Strictly speaking not part of the graphics state, but we keep it there for
     // consistency.
-    pub(crate) fill_rule: FillRule,
     pub(crate) n_clips: u32,
 }
 
@@ -36,7 +33,6 @@ impl Default for State<'_> {
     fn default() -> Self {
         State {
             ctm: Affine::IDENTITY,
-            fill_rule: FillRule::NonZero,
             n_clips: 0,
             text_state: TextState::default(),
             graphics_state: GraphicsState::default(),
