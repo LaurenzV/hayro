@@ -164,20 +164,26 @@ impl<'a> TilingPattern<'a> {
         let state = ctx.get().clone();
 
         let fill_cs = state
+            .graphics_state
             .none_stroke_cs
             .pattern_cs()
             .unwrap_or(ColorSpace::device_gray());
         let stroke_cs = state
+            .graphics_state
             .stroke_cs
             .pattern_cs()
             .unwrap_or(ColorSpace::device_gray());
 
         let non_stroking_paint = Color::new(
             fill_cs,
-            state.non_stroke_color.clone(),
-            state.non_stroke_alpha,
+            state.graphics_state.non_stroke_color.clone(),
+            state.graphics_state.non_stroke_alpha,
         );
-        let stroke_paint = Color::new(stroke_cs, state.stroke_color.clone(), state.stroke_alpha);
+        let stroke_paint = Color::new(
+            stroke_cs,
+            state.graphics_state.stroke_color.clone(),
+            state.graphics_state.stroke_alpha,
+        );
 
         Some(Self {
             cache_key,

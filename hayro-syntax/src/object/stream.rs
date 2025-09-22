@@ -258,7 +258,10 @@ fn parse_fallback<'a>(r: &mut Reader<'a>, dict: &Dict<'a>) -> Option<Stream<'a>>
         r.read_byte()?;
     }
 
-    r.forward_tag(b"\n").or_else(|| r.forward_tag(b"\r\n"))?;
+    r.forward_tag(b"\n")
+        .or_else(|| r.forward_tag(b"\r\n"))
+        // Technically not allowed, but no reason to not try it.
+        .or_else(|| r.forward_tag(b"\r"))?;
 
     let data_start = r.tail()?;
     let start = r.offset();

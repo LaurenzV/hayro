@@ -133,30 +133,30 @@ pub fn interpret<'a, 'b>(
         match op {
             TypedInstruction::SaveState(_) => save_sate(context),
             TypedInstruction::StrokeColorDeviceRgb(s) => {
-                context.get_mut().stroke_cs = ColorSpace::device_rgb();
-                context.get_mut().stroke_color =
+                context.get_mut().graphics_state.stroke_cs = ColorSpace::device_rgb();
+                context.get_mut().graphics_state.stroke_color =
                     smallvec![s.0.as_f32(), s.1.as_f32(), s.2.as_f32()];
             }
             TypedInstruction::StrokeColorDeviceGray(s) => {
-                context.get_mut().stroke_cs = ColorSpace::device_gray();
-                context.get_mut().stroke_color = smallvec![s.0.as_f32()];
+                context.get_mut().graphics_state.stroke_cs = ColorSpace::device_gray();
+                context.get_mut().graphics_state.stroke_color = smallvec![s.0.as_f32()];
             }
             TypedInstruction::StrokeColorCmyk(s) => {
-                context.get_mut().stroke_cs = ColorSpace::device_cmyk();
-                context.get_mut().stroke_color =
+                context.get_mut().graphics_state.stroke_cs = ColorSpace::device_cmyk();
+                context.get_mut().graphics_state.stroke_color =
                     smallvec![s.0.as_f32(), s.1.as_f32(), s.2.as_f32(), s.3.as_f32()];
             }
             TypedInstruction::LineWidth(w) => {
-                context.get_mut().stroke_props.line_width = w.0.as_f32();
+                context.get_mut().graphics_state.stroke_props.line_width = w.0.as_f32();
             }
             TypedInstruction::LineCap(c) => {
-                context.get_mut().stroke_props.line_cap = convert_line_cap(c);
+                context.get_mut().graphics_state.stroke_props.line_cap = convert_line_cap(c);
             }
             TypedInstruction::LineJoin(j) => {
-                context.get_mut().stroke_props.line_join = convert_line_join(j);
+                context.get_mut().graphics_state.stroke_props.line_join = convert_line_join(j);
             }
             TypedInstruction::MiterLimit(l) => {
-                context.get_mut().stroke_props.miter_limit = l.0.as_f32();
+                context.get_mut().graphics_state.stroke_props.miter_limit = l.0.as_f32();
             }
             TypedInstruction::Transform(t) => {
                 context.pre_concat_transform(t);
@@ -212,17 +212,17 @@ pub fn interpret<'a, 'b>(
                 fill_stroke_path(context, device);
             }
             TypedInstruction::NonStrokeColorDeviceGray(s) => {
-                context.get_mut().none_stroke_cs = ColorSpace::device_gray();
-                context.get_mut().non_stroke_color = smallvec![s.0.as_f32()];
+                context.get_mut().graphics_state.none_stroke_cs = ColorSpace::device_gray();
+                context.get_mut().graphics_state.non_stroke_color = smallvec![s.0.as_f32()];
             }
             TypedInstruction::NonStrokeColorDeviceRgb(s) => {
-                context.get_mut().none_stroke_cs = ColorSpace::device_rgb();
-                context.get_mut().non_stroke_color =
+                context.get_mut().graphics_state.none_stroke_cs = ColorSpace::device_rgb();
+                context.get_mut().graphics_state.non_stroke_color =
                     smallvec![s.0.as_f32(), s.1.as_f32(), s.2.as_f32()];
             }
             TypedInstruction::NonStrokeColorCmyk(s) => {
-                context.get_mut().none_stroke_cs = ColorSpace::device_cmyk();
-                context.get_mut().non_stroke_color =
+                context.get_mut().graphics_state.none_stroke_cs = ColorSpace::device_cmyk();
+                context.get_mut().graphics_state.non_stroke_color =
                     smallvec![s.0.as_f32(), s.1.as_f32(), s.2.as_f32(), s.3.as_f32()];
             }
             TypedInstruction::LineTo(m) => {
@@ -304,7 +304,7 @@ pub fn interpret<'a, 'b>(
                 context.path_mut().truncate(0);
             }
             TypedInstruction::NonStrokeColor(c) => {
-                let fill_c = &mut context.get_mut().non_stroke_color;
+                let fill_c = &mut context.get_mut().graphics_state.non_stroke_color;
                 fill_c.truncate(0);
 
                 for e in c.0 {
@@ -312,7 +312,7 @@ pub fn interpret<'a, 'b>(
                 }
             }
             TypedInstruction::StrokeColor(c) => {
-                let stroke_c = &mut context.get_mut().stroke_color;
+                let stroke_c = &mut context.get_mut().graphics_state.stroke_color;
                 stroke_c.truncate(0);
 
                 for e in c.0 {
@@ -338,8 +338,8 @@ pub fn interpret<'a, 'b>(
                         .unwrap_or(ColorSpace::device_gray())
                 };
 
-                context.get_mut().stroke_color = cs.initial_color();
-                context.get_mut().stroke_cs = cs;
+                context.get_mut().graphics_state.stroke_color = cs.initial_color();
+                context.get_mut().graphics_state.stroke_cs = cs;
             }
             TypedInstruction::ColorSpaceNonStroke(c) => {
                 let cs = if let Some(named) = ColorSpace::new_from_name(c.0.clone()) {
@@ -350,13 +350,13 @@ pub fn interpret<'a, 'b>(
                         .unwrap_or(ColorSpace::device_gray())
                 };
 
-                context.get_mut().non_stroke_color = cs.initial_color();
-                context.get_mut().none_stroke_cs = cs;
+                context.get_mut().graphics_state.non_stroke_color = cs.initial_color();
+                context.get_mut().graphics_state.none_stroke_cs = cs;
             }
             TypedInstruction::DashPattern(p) => {
-                context.get_mut().stroke_props.dash_offset = p.1.as_f32();
+                context.get_mut().graphics_state.stroke_props.dash_offset = p.1.as_f32();
                 // kurbo apparently cannot properly deal with offsets that are exactly 0.
-                context.get_mut().stroke_props.dash_array =
+                context.get_mut().graphics_state.stroke_props.dash_array =
                     p.0.iter::<f32>()
                         .map(|n| if n == 0.0 { 0.01 } else { n })
                         .collect();
@@ -365,8 +365,9 @@ pub fn interpret<'a, 'b>(
                 // Ignore for now.
             }
             TypedInstruction::NonStrokeColorNamed(n) => {
-                context.get_mut().non_stroke_color = n.0.into_iter().map(|n| n.as_f32()).collect();
-                context.get_mut().non_stroke_pattern = n.1.and_then(|name| {
+                context.get_mut().graphics_state.non_stroke_color =
+                    n.0.into_iter().map(|n| n.as_f32()).collect();
+                context.get_mut().graphics_state.non_stroke_pattern = n.1.and_then(|name| {
                     resources.get_pattern(
                         name,
                         Box::new(|_| None),
@@ -375,8 +376,9 @@ pub fn interpret<'a, 'b>(
                 });
             }
             TypedInstruction::StrokeColorNamed(n) => {
-                context.get_mut().stroke_color = n.0.into_iter().map(|n| n.as_f32()).collect();
-                context.get_mut().stroke_pattern = n.1.and_then(|name| {
+                context.get_mut().graphics_state.stroke_color =
+                    n.0.into_iter().map(|n| n.as_f32()).collect();
+                context.get_mut().graphics_state.stroke_pattern = n.1.and_then(|name| {
                     resources.get_pattern(
                         name,
                         Box::new(|_| None),
@@ -534,11 +536,11 @@ pub fn interpret<'a, 'b>(
                     context.save_state();
                     context.push_root_transform();
                     let st = context.get_mut();
-                    st.non_stroke_pattern = Some(sp);
-                    st.none_stroke_cs = ColorSpace::pattern();
+                    st.graphics_state.non_stroke_pattern = Some(sp);
+                    st.graphics_state.none_stroke_cs = ColorSpace::pattern();
 
-                    device.set_soft_mask(st.soft_mask.clone());
-                    device.push_transparency_group(st.non_stroke_alpha, None);
+                    device.set_soft_mask(st.graphics_state.soft_mask.clone());
+                    device.push_transparency_group(st.graphics_state.non_stroke_alpha, None);
 
                     let bbox = context.bbox().to_path(0.1);
                     let inverted_bbox = context.get().ctm.inverse() * bbox;

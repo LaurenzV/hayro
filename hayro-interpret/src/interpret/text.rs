@@ -52,7 +52,7 @@ pub(crate) fn show_glyph<'a>(
     glyph: &Glyph<'a>,
     glyph_transform: Affine,
 ) {
-    device.set_soft_mask(ctx.get().soft_mask.clone());
+    device.set_soft_mask(ctx.get().graphics_state.soft_mask.clone());
     let stroke_props = ctx.stroke_props();
 
     match ctx.get().text_state.render_mode {

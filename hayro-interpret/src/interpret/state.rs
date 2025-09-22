@@ -19,29 +19,13 @@ use std::ops::Deref;
 
 #[derive(Clone, Debug)]
 pub(crate) struct State<'a> {
-    // Stroke parameters.
-    pub(crate) stroke_props: StrokeProps,
-
-    // Stroke paint parameters.
-    pub(crate) stroke_color: ColorComponents,
-    pub(crate) stroke_pattern: Option<Pattern<'a>>,
-    pub(crate) stroke_cs: ColorSpace,
-    pub(crate) stroke_alpha: f32,
-
-    // Non-stroke paint parameters.
-    pub(crate) non_stroke_color: ColorComponents,
-    pub(crate) non_stroke_pattern: Option<Pattern<'a>>,
-    pub(crate) none_stroke_cs: ColorSpace,
-    pub(crate) non_stroke_alpha: f32,
-
-    // Text state.
+    // Note that the text state and ctm are theoretically part of the graphics state,
+    // but we keep them separate for simplicity.
+    pub(crate) graphics_state: GraphicsState<'a>,
     pub(crate) text_state: TextState<'a>,
-
-    // CTM.
     pub(crate) ctm: Affine,
 
     // Miscellaneous.
-    pub(crate) soft_mask: Option<SoftMask<'a>>,
     // Strictly speaking not part of the graphics state, but we keep it there for
     // consistency.
     pub(crate) fill_rule: FillRule,
@@ -51,20 +35,11 @@ pub(crate) struct State<'a> {
 impl Default for State<'_> {
     fn default() -> Self {
         State {
-            stroke_props: StrokeProps::default(),
             ctm: Affine::IDENTITY,
-            non_stroke_alpha: 1.0,
-            stroke_cs: ColorSpace::device_gray(),
-            stroke_color: smallvec![0.0,],
-            none_stroke_cs: ColorSpace::device_gray(),
-            non_stroke_color: smallvec![0.0],
-            stroke_alpha: 1.0,
             fill_rule: FillRule::NonZero,
             n_clips: 0,
-            soft_mask: None,
             text_state: TextState::default(),
-            stroke_pattern: None,
-            non_stroke_pattern: None,
+            graphics_state: GraphicsState::default(),
         }
     }
 }
@@ -79,19 +54,19 @@ impl<'a> State<'a> {
 
     pub(crate) fn stroke_data(&self) -> PaintData<'a> {
         PaintData {
-            alpha: self.stroke_alpha,
-            color: self.stroke_color.clone(),
-            color_space: self.stroke_cs.clone(),
-            pattern: self.stroke_pattern.clone(),
+            alpha: self.graphics_state.stroke_alpha,
+            color: self.graphics_state.stroke_color.clone(),
+            color_space: self.graphics_state.stroke_cs.clone(),
+            pattern: self.graphics_state.stroke_pattern.clone(),
         }
     }
 
     pub(crate) fn non_stroke_data(&self) -> PaintData<'a> {
         PaintData {
-            alpha: self.non_stroke_alpha,
-            color: self.non_stroke_color.clone(),
-            color_space: self.none_stroke_cs.clone(),
-            pattern: self.non_stroke_pattern.clone(),
+            alpha: self.graphics_state.non_stroke_alpha,
+            color: self.graphics_state.non_stroke_color.clone(),
+            color_space: self.graphics_state.none_stroke_cs.clone(),
+            pattern: self.graphics_state.non_stroke_pattern.clone(),
         }
     }
 }
@@ -214,6 +189,43 @@ impl Default for TextState<'_> {
     }
 }
 
+#[derive(Clone, Debug)]
+pub(crate) struct GraphicsState<'a> {
+    // Stroke parameters.
+    pub(crate) stroke_props: StrokeProps,
+
+    // Stroke paint parameters.
+    pub(crate) stroke_color: ColorComponents,
+    pub(crate) stroke_pattern: Option<Pattern<'a>>,
+    pub(crate) stroke_cs: ColorSpace,
+    pub(crate) stroke_alpha: f32,
+
+    // Non-stroke paint parameters.
+    pub(crate) non_stroke_color: ColorComponents,
+    pub(crate) non_stroke_pattern: Option<Pattern<'a>>,
+    pub(crate) none_stroke_cs: ColorSpace,
+    pub(crate) non_stroke_alpha: f32,
+
+    pub(crate) soft_mask: Option<SoftMask<'a>>,
+}
+
+impl Default for GraphicsState<'_> {
+    fn default() -> Self {
+        GraphicsState {
+            stroke_props: StrokeProps::default(),
+            non_stroke_alpha: 1.0,
+            stroke_cs: ColorSpace::device_gray(),
+            stroke_color: smallvec![0.0,],
+            none_stroke_cs: ColorSpace::device_gray(),
+            non_stroke_color: smallvec![0.0],
+            stroke_alpha: 1.0,
+            stroke_pattern: None,
+            non_stroke_pattern: None,
+            soft_mask: None,
+        }
+    }
+}
+
 pub(crate) struct PaintData<'a> {
     pub(crate) alpha: f32,
     pub(crate) color: ColorComponents,
@@ -258,25 +270,25 @@ pub(crate) fn handle_gs_single<'a>(
 ) -> Option<()> {
     // TODO Can we use constants here somehow?
     match key.as_str() {
-        "LW" => context.get_mut().stroke_props.line_width = dict.get::<f32>(key)?,
+        "LW" => context.get_mut().graphics_state.stroke_props.line_width = dict.get::<f32>(key)?,
         "LC" => {
-            context.get_mut().stroke_props.line_cap =
+            context.get_mut().graphics_state.stroke_props.line_cap =
                 convert_line_cap(LineCap(dict.get::<Number>(key)?))
         }
         "LJ" => {
-            context.get_mut().stroke_props.line_join =
+            context.get_mut().graphics_state.stroke_props.line_join =
                 convert_line_join(LineJoin(dict.get::<Number>(key)?))
         }
-        "ML" => context.get_mut().stroke_props.miter_limit = dict.get::<f32>(key)?,
-        "CA" => context.get_mut().stroke_alpha = dict.get::<f32>(key)?,
-        "ca" => context.get_mut().non_stroke_alpha = dict.get::<f32>(key)?,
+        "ML" => context.get_mut().graphics_state.stroke_props.miter_limit = dict.get::<f32>(key)?,
+        "CA" => context.get_mut().graphics_state.stroke_alpha = dict.get::<f32>(key)?,
+        "ca" => context.get_mut().graphics_state.non_stroke_alpha = dict.get::<f32>(key)?,
         "SMask" => {
             if let Some(name) = dict.get::<Name>(SMASK) {
                 if name.deref() == b"None" {
-                    context.get_mut().soft_mask = None;
+                    context.get_mut().graphics_state.soft_mask = None;
                 }
             } else {
-                context.get_mut().soft_mask = dict
+                context.get_mut().graphics_state.soft_mask = dict
                     .get::<Dict>(SMASK)
                     .and_then(|d| SoftMask::new(&d, context, parent_resources.clone()));
             }

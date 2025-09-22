@@ -80,7 +80,7 @@ fn fallback_xref_map(data: &[u8]) -> (XrefMap, Option<&[u8]>) {
                 dummy_ctx.obj_number = Some(obj_id);
             }
         } else if let Some(dict) = r.read::<Dict>(&dummy_ctx) {
-            if dict.contains_key(SIZE) && dict.contains_key(ROOT) {
+            if dict.contains_key(ROOT) {
                 trailer_dicts.push(dict);
             }
 

@@ -109,15 +109,15 @@ pub(crate) fn draw_form_xobject<'a, 'b>(
 
     if x_object.is_transparency_group {
         device.push_transparency_group(
-            context.get().non_stroke_alpha,
-            std::mem::take(&mut context.get_mut().soft_mask),
+            context.get().graphics_state.non_stroke_alpha,
+            std::mem::take(&mut context.get_mut().graphics_state.soft_mask),
         );
 
-        context.get_mut().non_stroke_alpha = 1.0;
-        context.get_mut().stroke_alpha = 1.0;
+        context.get_mut().graphics_state.non_stroke_alpha = 1.0;
+        context.get_mut().graphics_state.stroke_alpha = 1.0;
     }
 
-    device.set_soft_mask(context.get().soft_mask.clone());
+    device.set_soft_mask(context.get().graphics_state.soft_mask.clone());
 
     device.push_clip_path(&ClipPath {
         path: context.get().ctm
@@ -169,7 +169,7 @@ pub(crate) fn draw_image_xobject<'a, 'b>(
 
     let has_alpha = x_object.has_alpha();
 
-    let mut soft_mask = std::mem::take(&mut context.get_mut().soft_mask);
+    let mut soft_mask = std::mem::take(&mut context.get_mut().graphics_state.soft_mask);
 
     // If image has smask, the soft mask from the graphics state should be discarde.
     if has_alpha {
@@ -177,7 +177,7 @@ pub(crate) fn draw_image_xobject<'a, 'b>(
     }
 
     device.push_transparency_group(
-        context.get().non_stroke_alpha,
+        context.get().graphics_state.non_stroke_alpha,
         std::mem::take(&mut soft_mask),
     );
 

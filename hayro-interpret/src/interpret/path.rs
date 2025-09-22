@@ -43,7 +43,7 @@ pub(crate) fn fill_path_impl<'a>(
 
     let paint = get_paint(context, false);
     let fill_rule = context.fill_rule();
-    device.set_soft_mask(context.get().soft_mask.clone());
+    device.set_soft_mask(context.get().graphics_state.soft_mask.clone());
 
     match path {
         None => device.draw_path(
@@ -66,7 +66,7 @@ pub(crate) fn stroke_path_impl<'a>(
     let base_transform = context.get().ctm;
 
     let stroke_props = context.stroke_props();
-    device.set_soft_mask(context.get().soft_mask.clone());
+    device.set_soft_mask(context.get().graphics_state.soft_mask.clone());
     let paint = get_paint(context, true);
 
     match path {
