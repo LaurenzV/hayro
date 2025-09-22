@@ -210,3 +210,8 @@ fn issue_isolate_shading_transform() {
         None,
     );
 }
+
+#[test]
+fn mask_bc() {
+    run_svg_test("mask_bc", "pdfs/custom/mask_bc.pdf", None);
+}

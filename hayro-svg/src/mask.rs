@@ -1,7 +1,8 @@
 use crate::{Id, SvgRenderer, hash128};
-use hayro_interpret::{CacheKey, MaskType, SoftMask};
+use hayro_interpret::color::AlphaColor;
+use hayro_interpret::{CacheKey, FillRule, MaskType, Paint, PathDrawMode, SoftMask};
 use image::DynamicImage;
-use kurbo::Affine;
+use kurbo::{Affine, Rect, Shape};
 use std::sync::Arc;
 
 pub(crate) struct ImageLuminanceMask {
@@ -64,7 +65,31 @@ impl<'a> SvgRenderer<'a> {
                         self.xml.write_attribute("mask-type", "alpha");
                     }
 
+                    let bg_color = mask.background_color();
+                    let use_bg = bg_color.to_rgba().to_rgba8() != AlphaColor::BLACK.to_rgba8();
+
+                    if use_bg {
+                        self.draw_path(
+                            &Rect::new(
+                                0.0,
+                                0.0,
+                                self.dimensions.0 as f64,
+                                self.dimensions.1 as f64,
+                            )
+                            .to_path(0.1),
+                            Affine::IDENTITY,
+                            &Paint::Color(bg_color),
+                            &PathDrawMode::Fill(FillRule::NonZero),
+                        );
+                        self.xml.start_element("g");
+                        self.xml.write_attribute("style", "isolation:isolate");
+                    }
+
                     mask.interpret(self);
+
+                    if use_bg {
+                        self.xml.end_element();
+                    }
                 }
                 MaskKind::Image(i) => self.write_image(&i.image, i.interpolate, None, i.transform),
             }
