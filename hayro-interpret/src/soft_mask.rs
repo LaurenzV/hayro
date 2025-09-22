@@ -99,6 +99,7 @@ impl<'a> SoftMask<'a> {
             }
             ALPHA => (
                 MaskType::Alpha,
+                // Background color attribute should only be used with luminosity masks.
                 Color::new(ColorSpace::device_gray(), smallvec![0.0], 1.0),
             ),
             _ => return None,
