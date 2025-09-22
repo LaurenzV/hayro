@@ -9,13 +9,20 @@ use crate::pattern::Pattern;
 use crate::soft_mask::SoftMask;
 use crate::util::OptionLog;
 use hayro_syntax::content::ops::{LineCap, LineJoin};
-use hayro_syntax::object::dict::keys::SMASK;
-use hayro_syntax::object::{Dict, Name, Number};
+use hayro_syntax::function::Function;
+use hayro_syntax::object::dict::keys::{SMASK, TR, TR2};
+use hayro_syntax::object::{Dict, Name, Number, Object};
 use hayro_syntax::page::Resources;
 use kurbo::{Affine, BezPath, Vec2};
 use log::warn;
 use smallvec::smallvec;
 use std::ops::Deref;
+
+#[derive(Clone, Debug)]
+pub(crate) enum ActiveTransferFunction {
+    Single(Function),
+    Four([Function; 4]),
+}
 
 #[derive(Clone, Debug)]
 pub(crate) struct State<'a> {
@@ -203,6 +210,7 @@ pub(crate) struct GraphicsState<'a> {
     pub(crate) non_stroke_alpha: f32,
 
     pub(crate) soft_mask: Option<SoftMask<'a>>,
+    pub(crate) transfer_function: Option<ActiveTransferFunction>,
 }
 
 impl Default for GraphicsState<'_> {
@@ -218,6 +226,7 @@ impl Default for GraphicsState<'_> {
             stroke_pattern: None,
             non_stroke_pattern: None,
             soft_mask: None,
+            transfer_function: None,
         }
     }
 }
@@ -278,6 +287,26 @@ pub(crate) fn handle_gs_single<'a>(
         "ML" => context.get_mut().graphics_state.stroke_props.miter_limit = dict.get::<f32>(key)?,
         "CA" => context.get_mut().graphics_state.stroke_alpha = dict.get::<f32>(key)?,
         "ca" => context.get_mut().graphics_state.non_stroke_alpha = dict.get::<f32>(key)?,
+        "TR" | "TR2" => {
+            let function = match dict.get::<Object>(TR2).or_else(|| dict.get::<Object>(TR))? {
+                Object::Array(array) => {
+                    let mut iter = array.iter::<Object>();
+                    let functions = [
+                        Function::new(&iter.next()?)?,
+                        Function::new(&iter.next()?)?,
+                        Function::new(&iter.next()?)?,
+                        Function::new(&iter.next()?)?,
+                    ];
+
+                    Some(ActiveTransferFunction::Four(functions))
+                }
+                // Only `Identity` and `Default` are valid, which both just reset it.
+                Object::Name(_) => None,
+                o => Some(ActiveTransferFunction::Single(Function::new(&o)?)),
+            };
+
+            context.get_mut().graphics_state.transfer_function = function;
+        }
         "SMask" => {
             if let Some(name) = dict.get::<Name>(SMASK) {
                 if name.deref() == b"None" {

@@ -3,12 +3,13 @@ use crate::color::ColorSpace;
 use crate::context::Context;
 use crate::device::Device;
 use crate::interpret::path::get_paint;
+use crate::interpret::state::ActiveTransferFunction;
 use crate::{CacheKey, ClipPath, Image, RasterImage, StencilImage};
 use crate::{FillRule, InterpreterWarning, WarningSinkFn, interpret};
 use crate::{LumaData, RgbData};
 use hayro_syntax::bit_reader::{BitReader, BitSize};
 use hayro_syntax::content::TypedIter;
-use hayro_syntax::function::interpolate;
+use hayro_syntax::function::{Function, interpolate};
 use hayro_syntax::object::Array;
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Name;
@@ -19,7 +20,7 @@ use hayro_syntax::object::stream::{DecodeFailure, ImageDecodeParams};
 use hayro_syntax::page::Resources;
 use kurbo::{Affine, Rect, Shape};
 use log::warn;
-use smallvec::SmallVec;
+use smallvec::{SmallVec, smallvec};
 use std::ops::Deref;
 
 pub(crate) enum XObject<'a> {
@@ -32,6 +33,7 @@ impl<'a> XObject<'a> {
         stream: &Stream<'a>,
         warning_sink: &WarningSinkFn,
         cache: &Cache,
+        transfer_function: Option<ActiveTransferFunction>,
     ) -> Option<Self> {
         let dict = stream.dict();
         match dict.get::<Name>(SUBTYPE)?.deref() {
@@ -41,6 +43,7 @@ impl<'a> XObject<'a> {
                 warning_sink,
                 cache,
                 false,
+                transfer_function,
             )?)),
             FORM => Some(Self::FormXObject(FormXObject::new(stream)?)),
             _ => None,
@@ -210,6 +213,7 @@ pub(crate) struct ImageXObject<'a> {
     is_image_mask: bool,
     force_luma: bool,
     stream: Stream<'a>,
+    transfer_function: Option<ActiveTransferFunction>,
     warning_sink: WarningSinkFn,
 }
 
@@ -220,6 +224,7 @@ impl<'a> ImageXObject<'a> {
         warning_sink: &WarningSinkFn,
         cache: &Cache,
         force_luma: bool,
+        transfer_function: Option<ActiveTransferFunction>,
     ) -> Option<Self> {
         let dict = stream.dict();
 
@@ -260,6 +265,7 @@ impl<'a> ImageXObject<'a> {
             height,
             color_space: image_cs,
             warning_sink: warning_sink.clone(),
+            transfer_function,
             interpolate,
             stream: stream.clone(),
             is_image_mask: image_mask,
@@ -364,7 +370,7 @@ impl DecodedImageXObject {
             decode(&components, &color_space, bits_per_component, &decode_arr)?
         };
 
-        let rgb_data = if obj.is_image_mask || obj.force_luma {
+        let mut rgb_data = if obj.is_image_mask || obj.force_luma {
             None
         } else {
             {
@@ -377,6 +383,33 @@ impl DecodedImageXObject {
                 )
             }
         };
+
+        if let Some(transfer_function) = &obj.transfer_function
+            && let Some(rgb_data) = &mut rgb_data
+        {
+            let apply_single = |data: u8, function: &Function| {
+                function
+                    .eval(smallvec![data as f32 / 255.0])
+                    .and_then(|v| v.first().copied())
+                    .map(|v| (v * 255.0 + 0.5) as u8)
+                    .unwrap_or(data)
+            };
+
+            match transfer_function {
+                ActiveTransferFunction::Single(s) => {
+                    for data in &mut rgb_data.data {
+                        *data = apply_single(*data, s);
+                    }
+                }
+                ActiveTransferFunction::Four(f) => {
+                    for data in rgb_data.data.chunks_exact_mut(3) {
+                        data[0] = apply_single(data[0], &f[0]);
+                        data[1] = apply_single(data[1], &f[1]);
+                        data[2] = apply_single(data[2], &f[2]);
+                    }
+                }
+            }
+        }
 
         let luma_data = {
             let data_len = obj.width as usize * obj.height as usize;
@@ -419,12 +452,17 @@ impl DecodedImageXObject {
                         None
                     }
                 } else if let Some(s_mask) = dict.get::<Stream>(SMASK) {
-                    ImageXObject::new(&s_mask, |_| None, &obj.warning_sink, &obj.cache, true)
+                    ImageXObject::new(&s_mask, |_| None, &obj.warning_sink, &obj.cache, true, None)
                         .and_then(|s| s.decoded_object().and_then(|d| d.luma_data))
                 } else if let Some(mask) = dict.get::<Stream>(MASK) {
-                    if let Some(obj) =
-                        ImageXObject::new(&mask, |_| None, &obj.warning_sink, &obj.cache, true)
-                    {
+                    if let Some(obj) = ImageXObject::new(
+                        &mask,
+                        |_| None,
+                        &obj.warning_sink,
+                        &obj.cache,
+                        true,
+                        None,
+                    ) {
                         obj.decoded_object().and_then(|d| d.luma_data)
                     } else {
                         None

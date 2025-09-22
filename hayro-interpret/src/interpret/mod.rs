@@ -490,16 +490,25 @@ pub fn interpret<'a, 'b>(
             TypedInstruction::ShapeGlyph(_) => {}
             TypedInstruction::XObject(x) => {
                 let cache = context.object_cache.clone();
+                let transfer_function = context.get().graphics_state.transfer_function.clone();
                 if let Some(x_object) = resources.get_x_object(
                     x.0,
                     Box::new(|_| None),
-                    Box::new(|s| XObject::new(&s, &context.settings.warning_sink, &cache)),
+                    Box::new(|s| {
+                        XObject::new(
+                            &s,
+                            &context.settings.warning_sink,
+                            &cache,
+                            transfer_function.clone(),
+                        )
+                    }),
                 ) {
                     draw_xobject(&x_object, resources, context, device);
                 }
             }
             TypedInstruction::InlineImage(i) => {
                 let warning_sink = context.settings.warning_sink.clone();
+                let transfer_function = context.get().graphics_state.transfer_function.clone();
                 let cache = context.object_cache.clone();
                 if let Some(x_object) = ImageXObject::new(
                     &i.0,
@@ -507,6 +516,7 @@ pub fn interpret<'a, 'b>(
                     &warning_sink,
                     &cache,
                     false,
+                    transfer_function,
                 ) {
                     draw_image_xobject(&x_object, context, device);
                 }
