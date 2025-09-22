@@ -6,6 +6,7 @@ use crate::interpret::state::State;
 use crate::util::hash128;
 use crate::x_object::{FormXObject, draw_form_xobject};
 use crate::{CacheKey, InterpreterSettings};
+use hayro_syntax::function::Function;
 use hayro_syntax::object::Name;
 use hayro_syntax::object::ObjectIdentifier;
 use hayro_syntax::object::Stream;
@@ -19,8 +20,6 @@ use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 use std::sync::Arc;
-use smallvec::smallvec;
-use hayro_syntax::function::Function;
 
 /// Type type of mask.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -36,12 +35,13 @@ pub struct TransferFunction(Function);
 
 impl TransferFunction {
     /// Apply the transfer function to the given value.
-    /// 
+    ///
     /// The input value needs to be between 0 and 1 and the return value is
     /// guaranteed to be between 0 and 1.
     #[inline]
     pub fn apply(&self, val: f32) -> f32 {
-        self.0.eval(smallvec![val])
+        self.0
+            .eval(smallvec![val])
             .and_then(|v| v.first().copied())
             .unwrap_or(0.0)
             .min(1.0)
@@ -109,7 +109,8 @@ impl<'a> SoftMask<'a> {
             group.dict.get::<Dict>(GROUP)?.get::<Object>(CS)?,
             &context.object_cache,
         )?;
-        let transfer_function = dict.get::<Object>(TR)
+        let transfer_function = dict
+            .get::<Object>(TR)
             .and_then(|o| Function::new(&o))
             .map(|f| TransferFunction(f));
         let (mask_type, background) = match dict.get::<Name>(S)?.deref() {

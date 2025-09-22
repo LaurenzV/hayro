@@ -61,6 +61,7 @@ impl<'a> SvgRenderer<'a> {
 
             match mask {
                 MaskKind::SoftMask(mask) => {
+                    // TODO: Support transfer functions
                     if mask.mask_type() != MaskType::Luminosity {
                         self.xml.write_attribute("mask-type", "alpha");
                     }

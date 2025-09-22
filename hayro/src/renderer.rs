@@ -427,18 +427,18 @@ fn draw_soft_mask(mask: &SoftMask, width: u16, height: u16) -> Mask {
         MaskType::Luminosity => Mask::new_luminance(&pix),
         MaskType::Alpha => Mask::new_alpha(&pix),
     };
-    
+
     if let Some(transfer_function) = mask.transfer_function() {
         let mut map = Vec::new();
         for i in 0u8..=255 {
             map.push((transfer_function.apply(i as f32 / 255.0) * 255.0 + 0.5) as u8);
         }
-        
+
         for pixel in Arc::make_mut(&mut rendered_mask.data) {
             *pixel = map[*pixel as usize];
         }
     }
-    
+
     rendered_mask
 }
 
