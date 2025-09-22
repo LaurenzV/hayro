@@ -53,11 +53,12 @@ pub(crate) struct FormXObject<'a> {
     matrix: Affine,
     bbox: [f32; 4],
     is_transparency_group: bool,
+    pub(crate) dict: Dict<'a>,
     resources: Dict<'a>,
 }
 
 impl<'a> FormXObject<'a> {
-    fn new(stream: &Stream<'a>) -> Option<Self> {
+    pub(crate) fn new(stream: &Stream<'a>) -> Option<Self> {
         let dict = stream.dict();
 
         let decoded = stream.decoded().ok()?;
@@ -75,6 +76,7 @@ impl<'a> FormXObject<'a> {
             matrix,
             is_transparency_group,
             bbox,
+            dict: dict.clone(),
             resources,
         })
     }

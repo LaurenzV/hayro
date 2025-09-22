@@ -3,6 +3,7 @@ use crate::encode::{Buffer, x_y_advances};
 use crate::mask::Mask;
 use crate::paint::{Image, PaintType};
 use crate::pixmap::Pixmap;
+use hayro_interpret::color::AlphaColor;
 use hayro_interpret::font::Glyph;
 use hayro_interpret::hayro_syntax::object::ObjectIdentifier;
 use hayro_interpret::pattern::Pattern;
@@ -399,7 +400,26 @@ fn draw_soft_mask(mask: &SoftMask, width: u16, height: u16) -> Mask {
         cur_mask: None,
         soft_mask_cache: Default::default(),
     };
+
+    let bg_color = mask.background_color().to_rgba();
+    let apply_bg = bg_color.to_rgba8() != AlphaColor::BLACK.to_rgba8();
+
+    if apply_bg {
+        let paint_type = bg_color.into();
+        renderer.ctx.fill_rect(
+            &Rect::new(0.0, 0.0, width as f64, height as f64),
+            paint_type,
+            None,
+        );
+        renderer.ctx.push_layer(None, None, None);
+    }
+
     mask.interpret(&mut renderer);
+
+    if apply_bg {
+        renderer.ctx.pop_layer();
+    }
+
     let mut pix = Pixmap::new(width, height);
     renderer.ctx.render_to_pixmap(&mut pix);
 

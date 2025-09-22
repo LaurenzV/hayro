@@ -1,18 +1,20 @@
 use crate::cache::Cache;
+use crate::color::{Color, ColorComponents, ColorSpace};
 use crate::context::Context;
 use crate::device::Device;
 use crate::interpret::state::State;
 use crate::util::hash128;
-use crate::x_object::{XObject, draw_xobject};
+use crate::x_object::{FormXObject, draw_form_xobject};
 use crate::{CacheKey, InterpreterSettings};
-use hayro_syntax::object::Dict;
 use hayro_syntax::object::Name;
 use hayro_syntax::object::ObjectIdentifier;
 use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::*;
+use hayro_syntax::object::{Dict, Object};
 use hayro_syntax::page::Resources;
 use hayro_syntax::xref::XRef;
 use kurbo::Affine;
+use smallvec::smallvec;
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
@@ -29,13 +31,14 @@ pub enum MaskType {
 
 struct Repr<'a> {
     obj_id: ObjectIdentifier,
-    group: XObject<'a>,
+    group: FormXObject<'a>,
     mask_type: MaskType,
     parent_resources: Resources<'a>,
     root_transform: Affine,
     bbox: kurbo::Rect,
     object_cache: Cache,
     settings: InterpreterSettings,
+    background: Color,
     xref: &'a XRef,
 }
 
@@ -80,14 +83,24 @@ impl<'a> SoftMask<'a> {
         // same xobject, the ID will be the same.
         let obj_id = dict.get_ref(G)?.into();
         let group_stream = dict.get::<Stream>(G)?;
-        let group = XObject::new(
-            &group_stream,
-            &context.settings.warning_sink,
+        let group = FormXObject::new(&group_stream)?;
+        let cs = ColorSpace::new(
+            group.dict.get::<Dict>(GROUP)?.get::<Object>(CS)?,
             &context.object_cache,
         )?;
-        let mask_type = match dict.get::<Name>(S)?.deref() {
-            LUMINOSITY => MaskType::Luminosity,
-            ALPHA => MaskType::Alpha,
+        let (mask_type, background) = match dict.get::<Name>(S)?.deref() {
+            LUMINOSITY => {
+                let color = dict
+                    .get::<ColorComponents>(BC)
+                    .map(|c| Color::new(cs, c, 1.0))
+                    .unwrap_or(Color::new(ColorSpace::device_gray(), smallvec![0.0], 1.0));
+
+                (MaskType::Luminosity, color)
+            }
+            ALPHA => (
+                MaskType::Alpha,
+                Color::new(ColorSpace::device_gray(), smallvec![0.0], 1.0),
+            ),
             _ => return None,
         };
 
@@ -100,6 +113,7 @@ impl<'a> SoftMask<'a> {
             object_cache: context.object_cache.clone(),
             settings: context.settings.clone(),
             xref: context.xref,
+            background,
             parent_resources,
         })))
     }
@@ -115,7 +129,7 @@ impl<'a> SoftMask<'a> {
             self.0.settings.clone(),
             state,
         );
-        draw_xobject(&self.0.group, &self.0.parent_resources, &mut ctx, device);
+        draw_form_xobject(&self.0.parent_resources, &self.0.group, &mut ctx, device);
     }
 
     /// Return the object identifier of the mask.
@@ -128,5 +142,10 @@ impl<'a> SoftMask<'a> {
     /// Return the underlying mask type.
     pub fn mask_type(&self) -> MaskType {
         self.0.mask_type
+    }
+
+    /// The background color against which the mask should be composited.
+    pub fn background_color(&self) -> Color {
+        self.0.background.clone()
     }
 }
