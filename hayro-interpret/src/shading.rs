@@ -754,7 +754,7 @@ fn read_free_form_triangles(
         let (p0, p1, p2) = (a.clone()?, b.clone()?, c.clone()?);
 
         if p0.point.nearly_same(p1.point) || p1.point.nearly_same(p2.point) {
-            return None;
+            continue;
         }
 
         triangles.push(Triangle::new(a.clone()?, b.clone()?, c.clone()?));

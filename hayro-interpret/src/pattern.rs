@@ -118,6 +118,7 @@ impl CacheKey for ShadingPattern {
 #[derive(Clone)]
 pub struct TilingPattern<'a> {
     cache_key: u128,
+    ctx_bbox: Rect,
     /// The bbox of the tiling pattern.
     pub bbox: Rect,
     /// The step in the x direction.
@@ -162,6 +163,7 @@ impl<'a> TilingPattern<'a> {
             .unwrap_or_default();
 
         let state = ctx.get().clone();
+        let ctx_bbox = ctx.bbox();
 
         let fill_cs = state
             .graphics_state
@@ -191,6 +193,7 @@ impl<'a> TilingPattern<'a> {
             x_step,
             y_step,
             matrix,
+            ctx_bbox,
             is_color,
             stream,
             stroke_paint,
@@ -219,7 +222,7 @@ impl<'a> TilingPattern<'a> {
         let mut context = Context::new_with(
             state.ctm,
             // TODO: bbox?
-            kurbo::Rect::new(0.0, 0.0, 1.0, 1.0),
+            (initial_transform * self.ctx_bbox.to_path(0.1)).bounding_box(),
             self.cache.clone(),
             self.xref,
             self.settings.clone(),

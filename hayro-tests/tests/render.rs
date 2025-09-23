@@ -985,6 +985,7 @@ use crate::run_render_test;
 #[test] fn pdfbox_3246() { run_render_test("pdfbox_3246", "downloads/pdfbox/3246.pdf", None); }
 #[test] fn pdfbox_3273() { run_render_test("pdfbox_3273", "downloads/pdfbox/3273.pdf", None); }
 #[test] fn pdfbox_3293() { run_render_test("pdfbox_3293", "downloads/pdfbox/3293.pdf", None); }
+#[test] fn pdfbox_3297() { run_render_test("pdfbox_3297", "downloads/pdfbox/3297.pdf", Some("..=0")); }
 #[test] fn pdfbox_3304() { run_render_test("pdfbox_3304", "downloads/pdfbox/3304.pdf", None); }
 #[test] fn pdfbox_3369() { run_render_test("pdfbox_3369", "downloads/pdfbox/3369.pdf", None); }
 #[test] fn pdfbox_3423() { run_render_test("pdfbox_3423", "downloads/pdfbox/3423.pdf", None); }

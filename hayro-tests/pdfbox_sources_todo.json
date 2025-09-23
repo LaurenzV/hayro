@@ -40,7 +40,6 @@
   "2957": "text spacing issues",
   "3000": "collection of transparency ghroup stuff",
   "3107": "single character not displaying",
-  "3297": "failed to process shading",
   "3457": "bullet points dont show, CID without embedded",
   "3465": "luminosity blending mode",
   "3558": "jbig2 soft mask, image is 1x1 but soft mask 2000x2000, probably problems because we resize" ,
