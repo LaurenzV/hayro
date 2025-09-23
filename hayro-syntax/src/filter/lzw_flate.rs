@@ -812,7 +812,7 @@ fn apply_predictor(data: Vec<u8>, params: &PredictorParams) -> Option<Vec<u8>> {
                             chunk_len,
                             bit_size,
                         )?,
-                        0 | _ => {
+                        _ => {
                             // Just copy the data.
                             let mut reader = BitReader::new(in_data);
 
