@@ -752,15 +752,20 @@ fn apply_predictor(data: Vec<u8>, params: &PredictorParams) -> Option<Vec<u8>> {
                 return None;
             }
 
-            let colors = params.colors as usize;
-            let bit_size = if is_png_predictor {
-                BitSize::from_u8(8).unwrap()
+            let (bit_size, chunk_len) = if is_png_predictor {
+                (
+                    BitSize::from_u8(8).unwrap(),
+                    (params.colors * params.bits_per_component).div_ceil(8) as usize,
+                )
             } else {
-                BitSize::from_u8(params.bits_per_component)?
+                (
+                    BitSize::from_u8(params.bits_per_component)?,
+                    params.colors as usize,
+                )
             };
             let zero_row = vec![0; row_len];
-            let mut prev_row = BitChunks::new(&zero_row, bit_size, colors)?;
-            let zero_col = BitChunk::new(0, colors);
+            let mut prev_row = BitChunks::new(&zero_row, bit_size, chunk_len)?;
+            let zero_col = BitChunk::new(0, chunk_len);
             let mut out = vec![0; num_rows * row_len];
             let mut writer = BitWriter::new(&mut out, bit_size)?;
 
@@ -768,7 +773,7 @@ fn apply_predictor(data: Vec<u8>, params: &PredictorParams) -> Option<Vec<u8>> {
                 if is_png_predictor {
                     let predictor = in_row[0];
                     let in_data = &in_row[1..];
-                    let in_data_chunks = BitChunks::new(in_data, bit_size, colors)?;
+                    let in_data_chunks = BitChunks::new(in_data, bit_size, chunk_len)?;
 
                     match predictor {
                         1 => apply::<Sub>(
@@ -777,7 +782,7 @@ fn apply_predictor(data: Vec<u8>, params: &PredictorParams) -> Option<Vec<u8>> {
                             zero_col.clone(),
                             in_data_chunks,
                             &mut writer,
-                            colors,
+                            chunk_len,
                             bit_size,
                         )?,
                         2 => apply::<Up>(
@@ -786,7 +791,7 @@ fn apply_predictor(data: Vec<u8>, params: &PredictorParams) -> Option<Vec<u8>> {
                             zero_col.clone(),
                             in_data_chunks,
                             &mut writer,
-                            colors,
+                            chunk_len,
                             bit_size,
                         )?,
                         3 => apply::<Avg>(
@@ -795,7 +800,7 @@ fn apply_predictor(data: Vec<u8>, params: &PredictorParams) -> Option<Vec<u8>> {
                             zero_col.clone(),
                             in_data_chunks,
                             &mut writer,
-                            colors,
+                            chunk_len,
                             bit_size,
                         )?,
                         4 => apply::<Paeth>(
@@ -804,7 +809,7 @@ fn apply_predictor(data: Vec<u8>, params: &PredictorParams) -> Option<Vec<u8>> {
                             zero_col.clone(),
                             in_data_chunks,
                             &mut writer,
-                            colors,
+                            chunk_len,
                             bit_size,
                         )?,
                         0 | _ => {
@@ -821,9 +826,9 @@ fn apply_predictor(data: Vec<u8>, params: &PredictorParams) -> Option<Vec<u8>> {
                         prev_row,
                         zero_col.clone(),
                         zero_col.clone(),
-                        BitChunks::new(in_row, bit_size, colors)?,
+                        BitChunks::new(in_row, bit_size, chunk_len)?,
                         &mut writer,
-                        colors,
+                        chunk_len,
                         bit_size,
                     );
                 } else {
@@ -834,7 +839,7 @@ fn apply_predictor(data: Vec<u8>, params: &PredictorParams) -> Option<Vec<u8>> {
 
                 let (data, new_writer) = writer.split_off();
                 writer = new_writer;
-                prev_row = BitChunks::new(data, bit_size, colors)?;
+                prev_row = BitChunks::new(data, bit_size, chunk_len)?;
             }
 
             Some(out)
