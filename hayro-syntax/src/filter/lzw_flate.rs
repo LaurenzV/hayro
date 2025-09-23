@@ -701,7 +701,7 @@ impl PredictorParams {
     }
 
     fn row_length_in_bytes(&self) -> usize {
-       (self.columns * self.bits_per_pixel() as usize).div_ceil(8)
+        (self.columns * self.bits_per_pixel() as usize).div_ceil(8)
     }
 }
 
@@ -746,12 +746,6 @@ fn apply_predictor(data: Vec<u8>, params: &PredictorParams) -> Option<Vec<u8>> {
 
             let num_rows = data.len() / total_row_len;
 
-            if num_rows * total_row_len != data.len() {
-                warn!("data length didn't match");
-
-                return None;
-            }
-
             if !matches!(params.bits_per_component, 1 | 2 | 4 | 8 | 16) {
                 warn!("invalid bits per component {}", params.bits_per_component);
 
@@ -759,7 +753,11 @@ fn apply_predictor(data: Vec<u8>, params: &PredictorParams) -> Option<Vec<u8>> {
             }
 
             let colors = params.colors as usize;
-            let bit_size = BitSize::from_u8(params.bits_per_component)?;
+            let bit_size = if is_png_predictor {
+                BitSize::from_u8(8).unwrap()
+            } else {
+                BitSize::from_u8(params.bits_per_component)?
+            };
             let zero_row = vec![0; row_len];
             let mut prev_row = BitChunks::new(&zero_row, bit_size, colors)?;
             let zero_col = BitChunk::new(0, colors);
@@ -773,14 +771,6 @@ fn apply_predictor(data: Vec<u8>, params: &PredictorParams) -> Option<Vec<u8>> {
                     let in_data_chunks = BitChunks::new(in_data, bit_size, colors)?;
 
                     match predictor {
-                        0 => {
-                            // Just copy the data.
-                            let mut reader = BitReader::new(in_data);
-
-                            while let Some(data) = reader.read(bit_size) {
-                                writer.write(data as u16);
-                            }
-                        }
                         1 => apply::<Sub>(
                             prev_row,
                             zero_col.clone(),
@@ -817,10 +807,13 @@ fn apply_predictor(data: Vec<u8>, params: &PredictorParams) -> Option<Vec<u8>> {
                             colors,
                             bit_size,
                         )?,
-                        n => {
-                            warn!("invalid PNG predictor {n}");
+                        0 | _ => {
+                            // Just copy the data.
+                            let mut reader = BitReader::new(in_data);
 
-                            return None;
+                            while let Some(data) = reader.read(bit_size) {
+                                writer.write(data as u16);
+                            }
                         }
                     }
                 } else if i == 2 {

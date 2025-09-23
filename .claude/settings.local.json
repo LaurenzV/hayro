@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo run:*)",
+      "Bash(python3:*)",
+      "Read(//Users/lstampfl/Programming/GitHub/pdfbox/**)",
+      "Bash(mvn:*)",
+      "Bash(java:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
