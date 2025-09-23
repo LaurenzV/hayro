@@ -20,12 +20,10 @@ pub struct EncodedShadingPattern {
 impl EncodedShadingPattern {
     /// Sample the shading at the given position.
     pub fn sample(&self, pos: Point) -> [f32; 4] {
-        let res = self
-            .shading_type
+        self.shading_type
             .eval(pos, self.background_color, &self.color_space)
             .map(|v| v.components())
-            .unwrap_or([0.0, 0.0, 0.0, 0.0]);
-        res
+            .unwrap_or([0.0, 0.0, 0.0, 0.0])
     }
 }
 
