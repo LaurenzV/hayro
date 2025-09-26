@@ -434,13 +434,13 @@ pub(crate) fn get(dict: &Dict, id: &[u8]) -> Result<Decryptor, DecryptionError> 
         // with an input string consisting of the UTF-8 password concatenated with the 8 bytes of
         // owner Validation Salt, concatenated with the 48-byte U string. If the 32-byte result
         // matches the first 32 bytes of the O string, this is the owner password.
-        if algo_2b(PASSWORD, owner_validation_salt, Some(&trimmed_us), revision)? == owner_hash {
+        if algo_2b(PASSWORD, owner_validation_salt, Some(trimmed_us), revision)? == owner_hash {
             // d) Compute an intermediate owner key by computing a hash using algorithm 2.B with an input string
             // consisting of the UTF-8 owner password concatenated with the 8 bytes of owner Key Salt,
             // concatenated with the 48-byte U string. The 32-byte result is the key used to decrypt the 32-byte OE string
             // using AES-256 in CBC mode with no padding and an initialization vector of zero. The 32-byte result is the file encryption key.
             let intermediate_owner_key =
-                algo_2b(PASSWORD, owner_key_salt, Some(&trimmed_us), revision)?;
+                algo_2b(PASSWORD, owner_key_salt, Some(trimmed_us), revision)?;
 
             let oe_string = dict
                 .get::<object::String>(OE)
