@@ -72,7 +72,7 @@ pub fn check_render(name: &str, snapshot_path: PathBuf, document: RenderedDocume
             let suffix = if document.len() == 1 {
                 format!("{name}.png")
             } else {
-                format!("{name}_{page_num}.png")
+                format!("{name}_p{page_num}.png")
             };
 
             let ref_path = refs_path.join(&suffix);
