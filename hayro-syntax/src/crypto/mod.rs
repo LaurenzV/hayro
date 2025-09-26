@@ -593,7 +593,8 @@ fn algo_2b(
 
             // f) Repeat from steps (a-e) until the value of the last byte
             // is < (round number) - 32.
-            if (last_byte as u16) < round - 32 {
+            // For some reason we need to use <= here?
+            if (last_byte as u16) <= round - 32 {
                 break;
             }
         }
