@@ -478,8 +478,10 @@ dependencies = [
  "image 0.25.8",
  "once_cell",
  "pdf-writer",
+ "rayon",
  "resvg",
  "sitro",
+ "walkdir",
 ]
 
 [[package]]

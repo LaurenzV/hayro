@@ -9,6 +9,10 @@ license.workspace = true
 publish = false
 autotests = false
 
+[[bin]]
+name = "iterate"
+path = "src/iterate.rs"
+
 [[test]]
 name = "tests"
 path = "tests/mod.rs"
@@ -19,6 +23,8 @@ hayro-write = { workspace = true }
 hayro-svg = { workspace = true }
 pdf-writer = { workspace = true }
 resvg = { workspace = true }
+walkdir = "2"
+rayon = "1.8"
 
 [dev-dependencies]
 once_cell = { workspace = true }
