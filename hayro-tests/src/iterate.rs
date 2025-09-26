@@ -1,4 +1,4 @@
-use hayro::{InterpreterSettings, Pdf, render_pdf};
+use hayro::Pdf;
 use rayon::prelude::*;
 use std::env;
 use std::fs;
@@ -31,13 +31,7 @@ fn main() {
     pdf_paths.par_iter().for_each(|path| {
         let data = Arc::new(fs::read(&path).unwrap());
         match Pdf::new(data) {
-            Ok(_) => {
-                // println!("  ✓ Successfully loaded PDF");
-                // match render_pdf(&pdf, 1.0, InterpreterSettings::default(), None) {
-                //     Some(_) => println!("  ✓ Successfully rendered PDF"),
-                //     None => println!("  ✗ Failed to render PDF"),
-                // }
-            }
+            Ok(_) => {}
             Err(e) => println!("  ✗ Failed to load PDF {path:?}: {:?}", e),
         }
     });
