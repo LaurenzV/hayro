@@ -48,6 +48,8 @@ pub fn check_render(name: &str, snapshot_path: PathBuf, document: RenderedDocume
         snapshot_path.join("pdfjs")
     } else if name.starts_with("pdfbox_") {
         snapshot_path.join("pdfbox")
+    } else if name.starts_with("corpus_") {
+        snapshot_path.join("corpus")
     } else {
         snapshot_path.join("custom")
     };
@@ -58,6 +60,8 @@ pub fn check_render(name: &str, snapshot_path: PathBuf, document: RenderedDocume
     let snapshot_name = if let Some(name) = name.strip_prefix("pdfjs_") {
         name
     } else if let Some(name) = name.strip_prefix("pdfbox_") {
+        name
+    } else if let Some(name) = name.strip_prefix("corpus_") {
         name
     } else {
         name

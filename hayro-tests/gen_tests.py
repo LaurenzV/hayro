@@ -10,13 +10,19 @@ class TestGenerator:
         self.custom_manifest_path = self.script_dir / 'manifest.json'
         self.pdfjs_manifest_path = self.script_dir / 'manifest_pdfjs.json'
         self.pdfbox_manifest_path = self.script_dir / 'manifest_pdfbox.json'
+        self.corpus_manifest_path = self.script_dir / 'manifest_corpus.json'
         self.pdfs_dir = self.script_dir / 'pdfs'
         self.downloads_dir = self.script_dir / 'downloads'
+        self.corpus_dir = self.pdfs_dir / 'corpus'
         self.output_file = self.script_dir / 'tests' / 'render.rs'
         
     def ensure_downloads_dir(self):
         """Create downloads directory if it doesn't exist."""
         self.downloads_dir.mkdir(exist_ok=True)
+
+    def ensure_corpus_dir(self):
+        """Create corpus directory if it doesn't exist."""
+        self.corpus_dir.mkdir(exist_ok=True)
         
     def calculate_md5(self, file_path: Path) -> str:
         """Calculate MD5 hash of a file."""
@@ -37,6 +43,8 @@ class TestGenerator:
                 dest_dir = self.downloads_dir / "pdfjs"
             elif 'pdfbox' in str(link_path):
                 dest_dir = self.downloads_dir / "pdfbox"
+            elif 'corpus' in str(link_path):
+                dest_dir = self.downloads_dir / "corpus"
             else:
                 dest_dir = self.downloads_dir
             dest_dir.mkdir(exist_ok=True)
@@ -118,7 +126,7 @@ class TestGenerator:
             
         return all_entries
             
-    def process_entry(self, entry: dict, is_pdfjs: bool = False, is_pdfbox: bool = False) -> bool:
+    def process_entry(self, entry: dict, is_pdfjs: bool = False, is_pdfbox: bool = False, is_corpus: bool = False) -> bool:
         """Process a single manifest entry, downloading if necessary."""
         entry_id = entry['id']
         file_path = entry['file']
@@ -131,38 +139,42 @@ class TestGenerator:
             return False
             
         if is_link:
-            # Handle link files - they should be in pdfs/pdfjs/ or pdfs/pdfbox/ for respective entries
+            # Handle link files - they should be in pdfs/pdfjs/, pdfs/pdfbox/, or corpus/ for respective entries
             if is_pdfjs:
                 link_path = self.pdfs_dir / f"pdfjs/{file_path.replace('pdfs/', '')}"
             elif is_pdfbox:
                 link_path = self.pdfs_dir / f"pdfbox/{file_path.replace('pdfs/', '')}"
+            elif is_corpus:
+                link_path = self.pdfs_dir / f"corpus/{file_path.replace('pdfs/', '')}"
             else:
                 link_path = self.pdfs_dir / file_path.replace('pdfs/', '')
-                
+
             if not link_path.exists():
                 print(f"✘ Link file not found: {link_path}")
                 return False
-                
-            success = self.download_pdf(link_path, expected_md5, is_pdfjs or is_pdfbox)
+
+            success = self.download_pdf(link_path, expected_md5, is_pdfjs or is_pdfbox or is_corpus)
             if not success:
                 print(f"✘ Failed to download or verify {entry_id}")
                 return False
         else:
-            # Check if PDF file exists - in pdfs/pdfjs/ or pdfs/pdfbox/ for respective entries
+            # Check if PDF file exists - in pdfs/pdfjs/, pdfs/pdfbox/, or corpus/ for respective entries
             if is_pdfjs:
                 pdf_path = self.pdfs_dir / f"pdfjs/{file_path.replace('pdfs/', '')}"
             elif is_pdfbox:
                 pdf_path = self.pdfs_dir / f"pdfbox/{file_path.replace('pdfs/', '')}"
+            elif is_corpus:
+                pdf_path = self.pdfs_dir / f"corpus/{file_path.replace('pdfs/', '')}"
             else:
                 pdf_path = self.pdfs_dir / file_path.replace('pdfs/', '')
-                
+
             if not pdf_path.exists():
                 print(f"✘ PDF file not found: {pdf_path}")
                 return False
                 
         return True
         
-    def generate_rust_function(self, entry: dict, is_pdfjs: bool = False, is_pdfbox: bool = False) -> str:
+    def generate_rust_function(self, entry: dict, is_pdfjs: bool = False, is_pdfbox: bool = False, is_corpus: bool = False) -> str:
         """Generate Rust test function for a manifest entry."""
         entry_id = entry['id']
         is_link = entry.get('link', False)
@@ -200,6 +212,14 @@ class TestGenerator:
                 original_file = entry['file'].replace('pdfs/', '')
                 file_path = f"pdfs/pdfbox/{original_file}"
             func_name = f"pdfbox_{entry_id.replace('-', '_').replace('.', '_')}"
+        elif is_corpus:
+            if is_link:
+                file_path = f"downloads/corpus/{entry_id}.pdf"
+            else:
+                # Remove pdfs/ prefix and add corpus subdirectory
+                original_file = entry['file'].replace('pdfs/', '')
+                file_path = f"pdfs/corpus/{original_file}"
+            func_name = f"corpus_{entry_id.replace('-', '_').replace('.', '_')}"
         else:
             if is_link:
                 file_path = f"downloads/{entry_id}.pdf"
@@ -213,8 +233,9 @@ class TestGenerator:
         """Main function to generate tests from manifest."""
         print("🚀 Starting test generation from manifest...")
         
-        # Ensure downloads directory exists
+        # Ensure downloads and corpus directories exist
         self.ensure_downloads_dir()
+        self.ensure_corpus_dir()
         
         # Process all entries and generate Rust functions
         rust_functions = []
@@ -256,7 +277,7 @@ class TestGenerator:
             with open(self.pdfbox_manifest_path, 'r') as f:
                 pdfbox_entries = json.load(f)
                 print(f"📋 Processing {len(pdfbox_entries)} pdfbox entries")
-                
+
                 for entry in pdfbox_entries:
                     if self.process_entry(entry, is_pdfbox=True):
                         rust_functions.append(self.generate_rust_function(entry, is_pdfbox=True))
@@ -265,6 +286,21 @@ class TestGenerator:
                         skipped_count += 1
         else:
             print("⚠ Pdfbox manifest not found, skipping")
+
+        # Load and process corpus manifest
+        if self.corpus_manifest_path.exists():
+            with open(self.corpus_manifest_path, 'r') as f:
+                corpus_entries = json.load(f)
+                print(f"📋 Processing {len(corpus_entries)} corpus entries")
+
+                for entry in corpus_entries:
+                    if self.process_entry(entry, is_corpus=True):
+                        rust_functions.append(self.generate_rust_function(entry, is_corpus=True))
+                        processed_count += 1
+                    else:
+                        skipped_count += 1
+        else:
+            print("⚠ Corpus manifest not found, skipping")
             
         if not rust_functions:
             print("✘ No test functions generated")

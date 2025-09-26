@@ -1148,3 +1148,4 @@ use crate::run_render_test;
 #[test] fn pdfbox_5963() { run_render_test("pdfbox_5963", "downloads/pdfbox/5963.pdf", None); }
 #[test] fn pdfbox_5992_1() { run_render_test("pdfbox_5992_1", "downloads/pdfbox/5992_1.pdf", None); }
 #[test] fn pdfbox_5992_2() { run_render_test("pdfbox_5992_2", "downloads/pdfbox/5992_2.pdf", None); }
+#[test] fn corpus_0000120() { run_render_test("corpus_0000120", "downloads/corpus/0000120.pdf", None); }

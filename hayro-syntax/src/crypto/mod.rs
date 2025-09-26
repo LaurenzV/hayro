@@ -415,23 +415,18 @@ pub(crate) fn get(dict: &Dict, id: &[u8]) -> Result<Decryptor, DecryptionError> 
         // options, and then converting to a UTF-8 representation.
         // b) Truncate the UTF-8 representation to 127 bytes if it is longer than 127 bytes.
 
-        let owner_string = owner_string.get();
-        let (owner_hash, owner_tail) = owner_string
-            // Trim tail in case it's too long.
-            .get(..48)
-            .ok_or(InvalidEncryption)?
-            .split_at_checked(32)
-            .ok_or(InvalidEncryption)?;
+        let string_len = if revision <= 4 { 32 } else { 48 };
+
+        let os = owner_string.get();
+        let trimmed_os = os.get(..string_len).ok_or(InvalidEncryption)?;
+
+        let (owner_hash, owner_tail) = trimmed_os.split_at_checked(32).ok_or(InvalidEncryption)?;
         let (owner_validation_salt, owner_key_salt) =
             owner_tail.split_at_checked(8).ok_or(InvalidEncryption)?;
 
-        let user_string = user_string.get();
-        let (user_hash, user_tail) = user_string
-            // Trim tail in case it's too long.
-            .get(..48)
-            .ok_or(InvalidEncryption)?
-            .split_at_checked(32)
-            .ok_or(InvalidEncryption)?;
+        let us = user_string.get();
+        let trimmed_us = us.get(..string_len).ok_or(InvalidEncryption)?;
+        let (user_hash, user_tail) = trimmed_us.split_at_checked(32).ok_or(InvalidEncryption)?;
         let (user_validation_salt, user_key_salt) =
             user_tail.split_at_checked(8).ok_or(InvalidEncryption)?;
 
@@ -439,19 +434,13 @@ pub(crate) fn get(dict: &Dict, id: &[u8]) -> Result<Decryptor, DecryptionError> 
         // with an input string consisting of the UTF-8 password concatenated with the 8 bytes of
         // owner Validation Salt, concatenated with the 48-byte U string. If the 32-byte result
         // matches the first 32 bytes of the O string, this is the owner password.
-        if algo_2b(
-            PASSWORD,
-            owner_validation_salt,
-            Some(&user_string),
-            revision,
-        )? == owner_hash
-        {
+        if algo_2b(PASSWORD, owner_validation_salt, Some(&trimmed_us), revision)? == owner_hash {
             // d) Compute an intermediate owner key by computing a hash using algorithm 2.B with an input string
             // consisting of the UTF-8 owner password concatenated with the 8 bytes of owner Key Salt,
             // concatenated with the 48-byte U string. The 32-byte result is the key used to decrypt the 32-byte OE string
             // using AES-256 in CBC mode with no padding and an initialization vector of zero. The 32-byte result is the file encryption key.
             let intermediate_owner_key =
-                algo_2b(PASSWORD, owner_key_salt, Some(&user_string), revision)?;
+                algo_2b(PASSWORD, owner_key_salt, Some(&trimmed_us), revision)?;
 
             let oe_string = dict
                 .get::<object::String>(OE)
@@ -591,23 +580,23 @@ fn algo_2b(
             _ => unreachable!(),
         };
 
+        round += 1;
+
         // Repeat the process (a-d) with this new value for K. Following 64 rounds
         // (round number 0 to round number 63), do the following, starting with round
         // number 64:
-        if round >= 63 {
+        if round > 63 {
             // e) Look at the very last byte of E. If the value of that byte
             // (taken as an unsigned integer) is greater than the round number - 32,
             // repeat steps (a-d) again.
             let last_byte = *e.last().unwrap();
 
             // f) Repeat from steps (a-e) until the value of the last byte
-            // is ≤ (round number) - 32.
-            if last_byte as u16 <= round - 32 {
+            // is < (round number) - 32.
+            if (last_byte as u16) <= round - 32 {
                 break;
             }
         }
-
-        round += 1;
     }
 
     // The first 32 bytes of the final K are the output of the algorithm.
