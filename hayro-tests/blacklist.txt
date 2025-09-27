@@ -237,10 +237,7 @@ issue9291
 issue7872
 
 # wrong rendering
-issue8019
-issue8117
 issue8169
-issue8330
 issue8480
 issue15492
 issue269_1
@@ -248,6 +245,7 @@ issue269_2
 
 # blend mode multiply
 issue8022
+issue8019
 
 # missing letters
 issue6132

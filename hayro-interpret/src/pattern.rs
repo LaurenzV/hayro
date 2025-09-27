@@ -8,7 +8,7 @@ use crate::font::Glyph;
 use crate::interpret::state::{State, TextState};
 use crate::shading::Shading;
 use crate::soft_mask::SoftMask;
-use crate::util::hash128;
+use crate::util::{FloatExt, hash128};
 use crate::{CacheKey, ClipPath, GlyphDrawMode, Image, PathDrawMode};
 use crate::{FillRule, InterpreterSettings, Paint, interpret};
 use hayro_syntax::content::TypedIter;
@@ -156,6 +156,11 @@ impl<'a> TilingPattern<'a> {
         let bbox = dict.get::<Rect>(BBOX)?;
         let x_step = dict.get::<f32>(X_STEP)?;
         let y_step = dict.get::<f32>(Y_STEP)?;
+
+        if x_step.is_nearly_zero() || y_step.is_nearly_zero() || bbox.is_zero_area() {
+            return None;
+        }
+
         let is_color = dict.get::<u8>(PAINT_TYPE)? == 1;
         let matrix = dict
             .get::<[f64; 6]>(MATRIX)

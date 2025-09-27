@@ -1,8 +1,9 @@
-use crate::color::Color;
+use crate::color::{Color, ColorSpace};
 use crate::context::Context;
 use crate::device::Device;
 use crate::{FillRule, Paint, PathDrawMode};
 use kurbo::{BezPath, PathEl};
+use smallvec::smallvec;
 
 pub(crate) fn fill_path<'a>(
     context: &mut Context<'a>,
@@ -100,12 +101,15 @@ pub(crate) fn get_paint<'a>(context: &Context<'a>, is_stroke: bool) -> Paint<'a>
         context.get().non_stroke_data()
     };
 
-    if data.color_space.is_pattern()
-        && let Some(mut pattern) = data.pattern
-    {
-        pattern.pre_concat_transform(context.root_transform());
+    if data.color_space.is_pattern() {
+        if let Some(mut pattern) = data.pattern {
+            pattern.pre_concat_transform(context.root_transform());
 
-        Paint::Pattern(Box::new(pattern))
+            Paint::Pattern(Box::new(pattern))
+        } else {
+            // Pattern was likely invalid, use transparent paint.
+            Paint::Color(Color::new(ColorSpace::device_gray(), smallvec![0.0], 0.0))
+        }
     } else {
         let color = Color::new(data.color_space, data.color, data.alpha);
 

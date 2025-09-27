@@ -3132,6 +3132,12 @@
     "md5": "14a2b3c19ed3d6cd7e138cdc141aa4a8"
   },
   {
+    "id": "issue8117",
+    "file": "pdfs/issue8117.link",
+    "link": true,
+    "md5": "0c805ae480dd523148a16fe7ed0fc867"
+  },
+  {
     "id": "issue8125",
     "file": "pdfs/issue8125.link",
     "link": true,
@@ -3162,6 +3168,13 @@
     "file": "pdfs/issue8234.link",
     "link": true,
     "md5": "32650fc60c51a9813b98bc9876dc15af"
+  },
+  {
+    "id": "issue8330",
+    "file": "pdfs/issue8330.link",
+    "link": true,
+    "md5": "9010093d07dd62d3b49378fd48cf45f9",
+    "last_page": 0
   },
   {
     "id": "issue8380",
