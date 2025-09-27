@@ -422,10 +422,7 @@ impl CoonsPatch {
 
     /// Approximate the patch by triangles.
     pub fn to_triangles(&self) -> Vec<Triangle> {
-        generate_patch_triangles(
-            |p| self.map_coordinate(p),
-            |p| self.interpolate(p),
-        )
+        generate_patch_triangles(|p| self.map_coordinate(p), |p| self.interpolate(p))
     }
 
     /// Get the interpolated colors of the point from the patch.
@@ -509,10 +506,7 @@ impl TensorProductPatch {
 
     /// Approximate the tensor product patch mesh by triangles.
     pub fn to_triangles(&self) -> Vec<Triangle> {
-        generate_patch_triangles(
-            |p| self.map_coordinate(p),
-            |p| self.interpolate(p),
-        )
+        generate_patch_triangles(|p| self.map_coordinate(p), |p| self.interpolate(p))
     }
 
     /// Get the interpolated colors of the point from the patch.
@@ -612,7 +606,14 @@ struct InterpolationHelpers {
 }
 
 impl InterpolationHelpers {
-    fn new(bp_coord: BitSize, bp_comp: BitSize, x_min: f32, x_max: f32, y_min: f32, y_max: f32) -> Self {
+    fn new(
+        bp_coord: BitSize,
+        bp_comp: BitSize,
+        x_min: f32,
+        x_max: f32,
+        y_min: f32,
+        y_max: f32,
+    ) -> Self {
         let coord_max = 2.0f32.powi(bp_coord.bits() as i32) - 1.0;
         let comp_max = 2.0f32.powi(bp_comp.bits() as i32) - 1.0;
         Self {
@@ -623,7 +624,7 @@ impl InterpolationHelpers {
             x_min,
             x_max,
             y_min,
-            y_max
+            y_max,
         }
     }
 
@@ -641,7 +642,12 @@ impl InterpolationHelpers {
         Some(Point::new(x as f64, y as f64))
     }
 
-    fn read_colors(&self, reader: &mut BitReader, has_function: bool, decode: &[f32]) -> Option<ColorComponents> {
+    fn read_colors(
+        &self,
+        reader: &mut BitReader,
+        has_function: bool,
+        decode: &[f32],
+    ) -> Option<ColorComponents> {
         let mut colors = smallvec![];
         if has_function {
             colors.push(self.interpolate_comp(
@@ -662,7 +668,13 @@ impl InterpolationHelpers {
         Some(colors)
     }
 
-    fn read_triangle_vertex(&self, reader: &mut BitReader, bpf: BitSize, has_function: bool, decode: &[f32]) -> Option<TriangleVertex> {
+    fn read_triangle_vertex(
+        &self,
+        reader: &mut BitReader,
+        bpf: BitSize,
+        has_function: bool,
+        decode: &[f32],
+    ) -> Option<TriangleVertex> {
         let flag = reader.read(bpf)?;
         let point = self.read_point(reader)?;
         let colors = self.read_colors(reader, has_function, decode)?;
@@ -935,7 +947,11 @@ where
     Some(patches)
 }
 
-fn copy_patch_control_points(flag: u32, prev_control_points: &[Point], control_points: &mut [Point]) {
+fn copy_patch_control_points(
+    flag: u32,
+    prev_control_points: &[Point],
+    control_points: &mut [Point],
+) {
     match flag {
         1 => {
             control_points[0] = prev_control_points[3];
@@ -974,7 +990,7 @@ fn read_tensor_product_patch_mesh(
         bp_comp,
         has_function,
         decode,
-        16, 
+        16,
         |control_points, colors| TensorProductPatch {
             control_points,
             colors,
