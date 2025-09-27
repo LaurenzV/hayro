@@ -703,9 +703,12 @@ use crate::run_render_test;
 #[test] fn pdfjs_issue6360() { run_render_test("pdfjs_issue6360", "downloads/pdfjs/issue6360.pdf", Some("0..=0")); }
 #[test] fn pdfjs_issue6387_canvas() { run_render_test("pdfjs_issue6387_canvas", "downloads/pdfjs/issue6387-canvas.pdf", None); }
 #[test] fn pdfjs_issue6413() { run_render_test("pdfjs_issue6413", "downloads/pdfjs/issue6413.pdf", None); }
+#[test] fn pdfjs_issue6541() { run_render_test("pdfjs_issue6541", "downloads/pdfjs/issue6541.pdf", None); }
 #[test] fn pdfjs_issue6549() { run_render_test("pdfjs_issue6549", "downloads/pdfjs/issue6549.pdf", Some("1..=2")); }
 #[test] fn pdfjs_issue6652() { run_render_test("pdfjs_issue6652", "downloads/pdfjs/issue6652.pdf", None); }
+#[test] fn pdfjs_issue6707() { run_render_test("pdfjs_issue6707", "downloads/pdfjs/issue6707.pdf", Some("..=0")); }
 #[test] fn pdfjs_issue6721_reduced() { run_render_test("pdfjs_issue6721_reduced", "downloads/pdfjs/issue6721_reduced.pdf", Some("0..=0")); }
+#[test] fn pdfjs_issue6737() { run_render_test("pdfjs_issue6737", "downloads/pdfjs/issue6737.pdf", Some("..=0")); }
 #[test] fn pdfjs_issue6769() { run_render_test("pdfjs_issue6769", "downloads/pdfjs/issue6769.pdf", None); }
 #[test] fn pdfjs_issue6769_no_matrix() { run_render_test("pdfjs_issue6769_no_matrix", "downloads/pdfjs/issue6769_no_matrix.pdf", None); }
 #[test] fn pdfjs_issue6889() { run_render_test("pdfjs_issue6889", "downloads/pdfjs/issue6889.pdf", None); }
@@ -716,6 +719,7 @@ use crate::run_render_test;
 #[test] fn pdfjs_issue7020() { run_render_test("pdfjs_issue7020", "downloads/pdfjs/issue7020.pdf", None); }
 #[test] fn pdfjs_issue7074_reduced() { run_render_test("pdfjs_issue7074_reduced", "downloads/pdfjs/issue7074_reduced.pdf", None); }
 #[test] fn pdfjs_issue7101() { run_render_test("pdfjs_issue7101", "downloads/pdfjs/issue7101.pdf", None); }
+#[test] fn pdfjs_issue7200() { run_render_test("pdfjs_issue7200", "downloads/pdfjs/issue7200.pdf", None); }
 #[test] fn pdfjs_issue7303() { run_render_test("pdfjs_issue7303", "downloads/pdfjs/issue7303.pdf", Some("..=1")); }
 #[test] fn pdfjs_issue7308() { run_render_test("pdfjs_issue7308", "downloads/pdfjs/issue7308.pdf", None); }
 #[test] fn pdfjs_issue7339() { run_render_test("pdfjs_issue7339", "downloads/pdfjs/issue7339.pdf", None); }

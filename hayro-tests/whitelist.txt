@@ -149,4 +149,8 @@ bug1946953
 bug852992
 ContentStreamNoCycleType3insideType3
 issue6931
+issue6737
+issue6707
+issue6541
+issue7200
 

@@ -46,6 +46,8 @@ issue19326_main_thread_fetch
 js-buttons
 protected-stamp-editor-save-print
 issue17215-annotations
+# monster jp2 image
+issue19517
 
 # tiling with negative step
 issue16038
@@ -225,7 +227,7 @@ issue 12841
 #black rect
 issue10339
 
-# issue with image
+# image has different resolution than indicated in dictionary
 issue9650
 
 # text should be bold but isnt
@@ -244,17 +246,8 @@ issue15492
 issue269_1
 issue269_2
 
-# logo rendered wrong
+# blend mode multiply
 issue8022
-
-#missing gradient
-issue6737
-
-# weird gray bar
-issue6707
-
-# missing image
-issue6621
 
 # missing letters
 issue6132
@@ -262,11 +255,8 @@ issue6132
 #crashes big
 issue18973
 
-# never finishes
-issue6541
-issue7200
+# weird issue with wingdings font where metadata is wrong
 issue7454
-issue19517
 
 # wrong font in text?
 issue4934
