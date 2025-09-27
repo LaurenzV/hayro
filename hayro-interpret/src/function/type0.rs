@@ -1,9 +1,8 @@
-use crate::bit_reader::{BitReader, BitSize};
 use crate::function::{Clamper, TupleVec, Values, interpolate};
-use crate::object::Array;
-use crate::object::Stream;
-use crate::object::dict::keys::{BITS_PER_SAMPLE, DECODE, ENCODE, SIZE};
-use crate::util::OptionLog;
+use hayro_syntax::bit_reader::{BitReader, BitSize};
+use hayro_syntax::object::Array;
+use hayro_syntax::object::Stream;
+use hayro_syntax::object::dict::keys::{BITS_PER_SAMPLE, DECODE, ENCODE, SIZE};
 use log::{error, warn};
 use smallvec::{SmallVec, ToSmallVec, smallvec};
 use std::collections::HashMap;
@@ -283,13 +282,14 @@ impl Key {
     }
 
     fn increment_index(&mut self, index: usize) -> Option<()> {
-        let size = self
-            .sizes
-            .get(index)
-            .error_none("overflowed key in sampled function")?;
+        let size = *self.sizes.get(index).or_else(|| {
+            error!("overflowed key in sampled function");
+
+            None
+        })?;
         let val = self.parts.get_mut(index)?;
 
-        if *val >= (*size - 1) {
+        if *val >= (size - 1) {
             *val = 0;
             self.increment_index(index + 1)?;
         } else {

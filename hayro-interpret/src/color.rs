@@ -1,7 +1,7 @@
 //! PDF colors and color spaces.
 
 use crate::cache::Cache;
-use hayro_syntax::function::Function;
+use crate::function::Function;
 use hayro_syntax::object;
 use hayro_syntax::object::Array;
 use hayro_syntax::object::Dict;

@@ -33,6 +33,7 @@ mod cache;
 mod context;
 mod convert;
 mod device;
+mod function;
 mod interpret;
 mod soft_mask;
 mod types;

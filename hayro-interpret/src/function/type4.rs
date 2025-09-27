@@ -1,9 +1,8 @@
-use crate::content;
 use crate::function::{Clamper, Values};
-use crate::object::Number;
-use crate::object::Stream;
-use crate::reader::{Reader, ReaderContext};
-use crate::util::OptionLog;
+use hayro_syntax::content;
+use hayro_syntax::object::Number;
+use hayro_syntax::object::Stream;
+use hayro_syntax::reader::{Reader, ReaderContext};
 use log::error;
 use smallvec::SmallVec;
 use std::array;
@@ -417,7 +416,7 @@ fn eval_inner(procedure: &[PostScriptOp], arg_stack: &mut InterpreterStack) -> O
 
 fn parse_procedure(data: &[u8]) -> Option<Vec<PostScriptOp>> {
     let mut r = Reader::new(data);
-    parse_procedure_inner(&mut r).error_none("failed to read postscript program")
+    parse_procedure_inner(&mut r)
 }
 
 fn parse_procedure_inner(r: &mut Reader) -> Option<Vec<PostScriptOp>> {
@@ -562,10 +561,10 @@ impl PostScriptOp {
 mod tests {
     use crate::function::type4::{PostScriptOp, Type4, parse_procedure};
     use crate::function::{Clamper, Function, FunctionType, Values};
-    use crate::object::Number;
     use std::f32::consts::LN_10;
     use std::sync::Arc;
 
+    use hayro_syntax::object::Number;
     use smallvec::smallvec;
 
     #[test]

@@ -1,7 +1,7 @@
 use crate::function::{Clamper, Values};
-use crate::object::Dict;
-use crate::object::Number;
-use crate::object::dict::keys::{C0, C1, N};
+use hayro_syntax::object::Dict;
+use hayro_syntax::object::Number;
+use hayro_syntax::object::dict::keys::{C0, C1, N};
 use smallvec::{SmallVec, smallvec};
 
 /// A type 2 function (exponential function).
@@ -46,8 +46,8 @@ impl Type2 {
 mod tests {
     use crate::function::Function;
 
-    use crate::object::Object;
-    use crate::object::{Dict, FromBytes};
+    use hayro_syntax::object::Object;
+    use hayro_syntax::object::{Dict, FromBytes};
     use smallvec::smallvec;
 
     #[test]

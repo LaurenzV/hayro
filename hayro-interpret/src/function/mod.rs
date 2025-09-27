@@ -12,15 +12,15 @@ use crate::function::type0::Type0;
 use crate::function::type2::Type2;
 use crate::function::type3::Type3;
 use crate::function::type4::Type4;
-use crate::object::Dict;
-use crate::object::dict::keys::{DOMAIN, FUNCTION_TYPE, RANGE};
-use crate::object::{Object, dict_or_stream};
+use hayro_syntax::object::Dict;
+use hayro_syntax::object::dict::keys::{DOMAIN, FUNCTION_TYPE, RANGE};
+use hayro_syntax::object::{Object, dict_or_stream};
 use log::warn;
 use smallvec::SmallVec;
 use std::sync::Arc;
 
 /// The input/output type of functions.
-pub type Values = SmallVec<[f32; 4]>;
+pub(crate) type Values = SmallVec<[f32; 4]>;
 type TupleVec = SmallVec<[(f32, f32); 4]>;
 
 #[derive(Debug)]

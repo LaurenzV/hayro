@@ -1,8 +1,8 @@
 use crate::function::{Clamper, Function, TupleVec, Values, interpolate};
-use crate::object::Array;
-use crate::object::Dict;
-use crate::object::Object;
-use crate::object::dict::keys::{BOUNDS, ENCODE, FUNCTIONS};
+use hayro_syntax::object::Array;
+use hayro_syntax::object::Dict;
+use hayro_syntax::object::Object;
+use hayro_syntax::object::dict::keys::{BOUNDS, ENCODE, FUNCTIONS};
 use smallvec::smallvec;
 
 /// A type 3 function (stitching function).
@@ -83,7 +83,7 @@ fn find_interval(bounds: &[f32], x: f32) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::object::FromBytes;
+    use hayro_syntax::object::FromBytes;
 
     #[test]
     fn simple() {

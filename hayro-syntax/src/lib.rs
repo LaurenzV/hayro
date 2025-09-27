@@ -59,7 +59,7 @@ The supported features include:
   enable the `jpeg2000` feature (see further below for more information).
 
 # Limitations
-- There are still a few features missing, for example, support for encrypted and
+- There are still a few features missing, for example, support for
   password-protected PDFs. In addition to that, many properties (like page annotations) are
   currently not exposed.
 - This crate is for read-only processing, you cannot directly use it to manipulate PDF files.
@@ -82,17 +82,19 @@ use std::sync::Arc;
 pub(crate) mod data;
 pub(crate) mod filter;
 pub(crate) mod pdf;
-pub(crate) mod reader;
 pub(crate) mod trivia;
 pub(crate) mod util;
 
 pub mod bit_reader;
 pub mod content;
 mod crypto;
-pub mod function;
 pub mod object;
 pub mod page;
 pub mod xref;
+
+// This module should only be used by hayro crates and is considered an implementation detail.
+#[doc(hidden)]
+pub mod reader;
 
 pub use pdf::*;
 
