@@ -2127,6 +2127,12 @@
     "last_page": 0
   },
   {
+    "id": "issue2761",
+    "file": "pdfs/issue2761.link",
+    "link": true,
+    "md5": "35df0b8cff4afec0c08f08c6a5bc9857"
+  },
+  {
     "id": "issue2770",
     "file": "pdfs/issue2770.link",
     "md5": "36070d756d06eaa35c2227efb069fb1b",

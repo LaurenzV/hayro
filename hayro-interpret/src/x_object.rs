@@ -519,7 +519,7 @@ fn get_rgb_data(
     let decoded = decoded
         .chunks(cs.num_components() as usize)
         .flat_map(|v| {
-            let c = cs.to_rgba(v, 1.0).to_rgba8();
+            let c = cs.to_rgba(v, 1.0, false).to_rgba8();
             [c[0], c[1], c[2]]
         })
         .collect::<Vec<_>>();

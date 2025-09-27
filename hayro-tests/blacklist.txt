@@ -270,9 +270,6 @@ issue4260
 # weirdly spaced text
 issue4630
 
-# not working gradient
-issue2761
-
 # image rendered with pink background
 bug956965
 

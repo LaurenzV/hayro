@@ -306,11 +306,12 @@ impl ColorSpace {
     }
 
     /// Turn the given component values and opacity into an RGBA color.
-    pub fn to_rgba(&self, c: &[f32], opacity: f32) -> AlphaColor {
-        self.to_rgba_inner(c, opacity).unwrap_or(AlphaColor::BLACK)
+    pub fn to_rgba(&self, c: &[f32], opacity: f32, manual_scale: bool) -> AlphaColor {
+        self.to_rgba_inner(c, opacity, manual_scale)
+            .unwrap_or(AlphaColor::BLACK)
     }
 
-    fn to_rgba_inner(&self, c: &[f32], opacity: f32) -> Option<AlphaColor> {
+    fn to_rgba_inner(&self, c: &[f32], opacity: f32, manual_scale: bool) -> Option<AlphaColor> {
         let color = match self.0.as_ref() {
             ColorSpaceType::DeviceRgb => {
                 AlphaColor::new([*c.first()?, *c.get(1)?, *c.get(2)?, opacity])
@@ -344,7 +345,7 @@ impl ColorSpace {
             }
             ColorSpaceType::Lab(lab) => {
                 let opacity = f32_to_u8(opacity);
-                let srgb = lab.to_rgb([*c.first()?, *c.get(1)?, *c.get(2)?]);
+                let srgb = lab.to_rgb([*c.first()?, *c.get(1)?, *c.get(2)?], manual_scale);
 
                 AlphaColor::from_rgba8(srgb[0], srgb[1], srgb[2], opacity)
             }
@@ -596,8 +597,16 @@ impl Lab {
         }
     }
 
-    fn to_rgb(&self, c: [f32; 3]) -> [u8; 3] {
-        let (l, a, b) = (c[0], c[1], c[2]);
+    fn to_rgb(&self, c: [f32; 3], manual_scale: bool) -> [u8; 3] {
+        let (mut l, mut a, mut b) = (c[0], c[1], c[2]);
+
+        // If we used an indexed color space, the values will be between 0.0 and 1.0,
+        // so we need to manually scale them.
+        if manual_scale {
+            l *= 100.0;
+            a = self.range[0] + a * (self.range[1] - self.range[0]);
+            b = self.range[2] + b * (self.range[3] - self.range[2]);
+        }
 
         let m = (l + 16.0) / 116.0;
         let l = m + a / 500.0;
@@ -675,7 +684,8 @@ impl Indexed {
 
     pub fn to_rgb(&self, val: f32, opacity: f32) -> AlphaColor {
         let idx = (val.clamp(0.0, self.hival as f32) + 0.5) as usize;
-        self.base.to_rgba(self.values[idx].as_slice(), opacity)
+        self.base
+            .to_rgba(self.values[idx].as_slice(), opacity, true)
     }
 }
 
@@ -710,7 +720,7 @@ impl Separation {
             .eval(smallvec![c])
             .unwrap_or(self.alternate_space.initial_color());
 
-        self.alternate_space.to_rgba(&res, opacity)
+        self.alternate_space.to_rgba(&res, opacity, false)
     }
 }
 
@@ -743,7 +753,7 @@ impl DeviceN {
             .tint_transform
             .eval(c.to_smallvec())
             .unwrap_or(self.alternate_space.initial_color());
-        self.alternate_space.to_rgba(&res, opacity)
+        self.alternate_space.to_rgba(&res, opacity, false)
     }
 }
 
@@ -854,7 +864,8 @@ impl Color {
 
     /// Return the color as an RGBA color.
     pub fn to_rgba(&self) -> AlphaColor {
-        self.color_space.to_rgba(&self.components, self.opacity)
+        self.color_space
+            .to_rgba(&self.components, self.opacity, false)
     }
 }
 
