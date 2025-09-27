@@ -83,8 +83,7 @@ fn find_interval(bounds: &[f32], x: f32) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    use crate::reader::Readable;
+    use crate::object::FromBytes;
 
     #[test]
     fn simple() {

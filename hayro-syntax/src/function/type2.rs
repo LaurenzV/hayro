@@ -46,9 +46,8 @@ impl Type2 {
 mod tests {
     use crate::function::Function;
 
-    use crate::object::Dict;
     use crate::object::Object;
-    use crate::reader::Readable;
+    use crate::object::{Dict, FromBytes};
     use smallvec::smallvec;
 
     #[test]

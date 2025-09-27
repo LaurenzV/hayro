@@ -196,6 +196,18 @@ impl<'a> Readable<'a> for Object<'a> {
     }
 }
 
+/// A trait for objects that can be parsed from a simple byte stream.
+pub trait FromBytes<'a>: Sized {
+    /// Try to read the object from the given bytes.
+    fn from_bytes(b: &'a [u8]) -> Option<Self>;
+}
+
+impl<'a, T: Readable<'a>> FromBytes<'a> for T {
+    fn from_bytes(b: &'a [u8]) -> Option<Self> {
+        Self::from_bytes_impl(b)
+    }
+}
+
 /// An identifier for a PDF object.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct ObjectIdentifier {

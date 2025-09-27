@@ -287,7 +287,7 @@ impl<'a> ReaderContext<'a> {
 
 pub(crate) trait Readable<'a>: Sized {
     fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self>;
-    fn from_bytes(b: &'a [u8]) -> Option<Self> {
+    fn from_bytes_impl(b: &'a [u8]) -> Option<Self> {
         let mut r = Reader::new(b);
         let xref = XRef::dummy();
 

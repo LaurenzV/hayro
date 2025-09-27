@@ -77,11 +77,10 @@ mod tests {
         MarkedContentPointWithProperties, MoveTo, NonStrokeColorDeviceRgb, NonStrokeColorNamed,
         SetGraphicsState, StrokeColorNamed, Transform, TypedInstruction,
     };
-    use crate::object::Dict;
     use crate::object::Name;
     use crate::object::Number;
     use crate::object::Object;
-    use crate::reader::Readable;
+    use crate::object::{Dict, FromBytes};
     use smallvec::smallvec;
 
     fn n(num: i32) -> Number {
