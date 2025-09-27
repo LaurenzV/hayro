@@ -49,6 +49,11 @@ impl<'a> Reader<'a> {
     }
 
     #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.data.is_empty()
+    }
+
+    #[inline]
     pub fn range(&self, range: Range<usize>) -> Option<&'a [u8]> {
         self.data.get(range)
     }
