@@ -848,7 +848,6 @@ fn read_coons_patch_mesh(
                 colors,
             }
         },
-        copy_patch_control_points,
     )
 }
 
@@ -862,7 +861,6 @@ fn read_patch_mesh<P, F>(
     decode: &[f32],
     control_points_count: usize,
     create_patch: F,
-    copy_control_points: fn(flag: u32, prev_control_points: &[Point], control_points: &mut [Point]),
 ) -> Option<Vec<P>>
 where
     F: Fn([Point; 16], [ColorComponents; 4]) -> P,
@@ -904,7 +902,7 @@ where
                 let prev_points = prev_patch_points.as_ref()?;
                 let prev_colors = prev_patch_colors.as_ref()?;
 
-                copy_control_points(flag, prev_points, &mut control_points);
+                copy_patch_control_points(flag, prev_points, &mut control_points);
 
                 match flag {
                     1 => {
@@ -995,7 +993,6 @@ fn read_tensor_product_patch_mesh(
             control_points,
             colors,
         },
-        copy_patch_control_points,
     )
 }
 
