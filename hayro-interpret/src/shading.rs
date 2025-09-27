@@ -819,6 +819,41 @@ fn read_coons_patch_mesh(
     has_function: bool,
     decode: &[f32],
 ) -> Option<Vec<CoonsPatch>> {
+    read_patch_mesh(
+        data,
+        bpf,
+        bp_coord,
+        bp_comp,
+        has_function,
+        decode,
+        12, // Coons patches have 12 control points
+        |control_points, colors| {
+            let mut coons_points = [Point::ZERO; 12];
+            coons_points.copy_from_slice(&control_points[0..12]);
+            CoonsPatch {
+                control_points: coons_points,
+                colors,
+            }
+        },
+        copy_coons_control_points,
+    )
+}
+
+/// Generic patch mesh reading function that works for both Coons and Tensor Product patches
+fn read_patch_mesh<P, F>(
+    data: &[u8],
+    bpf: u8,
+    bp_coord: u8,
+    bp_comp: u8,
+    has_function: bool,
+    decode: &[f32],
+    control_points_count: usize,
+    create_patch: F,
+    copy_control_points: fn(flag: u32, prev_control_points: &[Point], control_points: &mut [Point]),
+) -> Option<Vec<P>>
+where
+    F: Fn([Point; 16], [ColorComponents; 4]) -> P,
+{
     let bpf = BitSize::from_u8(bpf)?;
     let bp_coord = BitSize::from_u8(bp_coord)?;
     let bp_comp = BitSize::from_u8(bp_comp)?;
@@ -831,16 +866,17 @@ fn read_coons_patch_mesh(
         helpers.read_colors(reader, has_function, decode)
     };
 
-    let mut prev_patch: Option<CoonsPatch> = None;
+    let mut prev_patch_points: Option<Vec<Point>> = None;
+    let mut prev_patch_colors: Option<[ColorComponents; 4]> = None;
     let mut patches = vec![];
 
     while let Some(flag) = reader.read(bpf) {
-        let mut control_points = [Point::ZERO; 12];
+        let mut control_points = vec![Point::ZERO; 16]; // Always allocate 16, use subset as needed
         let mut colors = [smallvec![], smallvec![], smallvec![], smallvec![]];
 
         match flag {
             0 => {
-                for i in 0..12 {
+                for i in 0..control_points_count {
                     control_points[i] = helpers.read_point(&mut reader)?;
                 }
 
@@ -848,83 +884,104 @@ fn read_coons_patch_mesh(
                     colors[i] = read_colors(&mut reader)?;
                 }
 
-                prev_patch = Some(CoonsPatch {
-                    control_points,
-                    colors: colors.clone(),
-                });
+                prev_patch_points = Some(control_points.clone());
+                prev_patch_colors = Some(colors.clone());
             }
-            1 => {
-                let prev = prev_patch.as_ref()?;
+            1..=3 => {
+                let prev_points = prev_patch_points.as_ref()?;
+                let prev_colors = prev_patch_colors.as_ref()?;
 
-                control_points[0] = prev.control_points[3];
-                control_points[1] = prev.control_points[4];
-                control_points[2] = prev.control_points[5];
-                control_points[3] = prev.control_points[6];
-                colors[0] = prev.colors[1].clone();
-                colors[1] = prev.colors[2].clone();
-                for i in 4..12 {
+                copy_control_points(flag, prev_points, &mut control_points);
+
+                // Copy appropriate colors based on flag
+                match flag {
+                    1 => {
+                        colors[0] = prev_colors[1].clone();
+                        colors[1] = prev_colors[2].clone();
+                    }
+                    2 => {
+                        colors[0] = prev_colors[2].clone();
+                        colors[1] = prev_colors[3].clone();
+                    }
+                    3 => {
+                        colors[0] = prev_colors[3].clone();
+                        colors[1] = prev_colors[0].clone();
+                    }
+                    _ => unreachable!(),
+                }
+
+                for i in 4..control_points_count {
                     control_points[i] = helpers.read_point(&mut reader)?;
                 }
 
                 colors[2] = read_colors(&mut reader)?;
                 colors[3] = read_colors(&mut reader)?;
 
-                prev_patch = Some(CoonsPatch {
-                    control_points,
-                    colors: colors.clone(),
-                });
-            }
-            2 => {
-                let prev = prev_patch.as_ref()?;
-                control_points[0] = prev.control_points[6];
-                control_points[1] = prev.control_points[7];
-                control_points[2] = prev.control_points[8];
-                control_points[3] = prev.control_points[9];
-                colors[0] = prev.colors[2].clone();
-                colors[1] = prev.colors[3].clone();
-
-                for i in 4..12 {
-                    control_points[i] = helpers.read_point(&mut reader)?;
-                }
-
-                colors[2] = read_colors(&mut reader)?;
-                colors[3] = read_colors(&mut reader)?;
-
-                prev_patch = Some(CoonsPatch {
-                    control_points,
-                    colors: colors.clone(),
-                });
-            }
-            3 => {
-                let prev = prev_patch.as_ref()?;
-                control_points[0] = prev.control_points[9];
-                control_points[1] = prev.control_points[10];
-                control_points[2] = prev.control_points[11];
-                control_points[3] = prev.control_points[0];
-                colors[0] = prev.colors[3].clone();
-                colors[1] = prev.colors[0].clone();
-
-                for i in 4..12 {
-                    control_points[i] = helpers.read_point(&mut reader)?;
-                }
-
-                colors[2] = read_colors(&mut reader)?;
-                colors[3] = read_colors(&mut reader)?;
-
-                prev_patch = Some(CoonsPatch {
-                    control_points,
-                    colors: colors.clone(),
-                });
+                prev_patch_points = Some(control_points.clone());
+                prev_patch_colors = Some(colors.clone());
             }
             _ => break,
         }
 
-        patches.push(CoonsPatch {
-            control_points,
-            colors,
-        });
+        // Convert to fixed-size array for the create_patch function
+        let mut fixed_points = [Point::ZERO; 16];
+        for i in 0..16 {
+            if i < control_points.len() {
+                fixed_points[i] = control_points[i];
+            }
+        }
+
+        patches.push(create_patch(fixed_points, colors));
     }
     Some(patches)
+}
+
+fn copy_coons_control_points(flag: u32, prev_control_points: &[Point], control_points: &mut [Point]) {
+    match flag {
+        1 => {
+            control_points[0] = prev_control_points[3];
+            control_points[1] = prev_control_points[4];
+            control_points[2] = prev_control_points[5];
+            control_points[3] = prev_control_points[6];
+        }
+        2 => {
+            control_points[0] = prev_control_points[6];
+            control_points[1] = prev_control_points[7];
+            control_points[2] = prev_control_points[8];
+            control_points[3] = prev_control_points[9];
+        }
+        3 => {
+            control_points[0] = prev_control_points[9];
+            control_points[1] = prev_control_points[10];
+            control_points[2] = prev_control_points[11];
+            control_points[3] = prev_control_points[0];
+        }
+        _ => {}
+    }
+}
+
+fn copy_tensor_control_points(flag: u32, prev_control_points: &[Point], control_points: &mut [Point]) {
+    match flag {
+        1 => {
+            control_points[0] = prev_control_points[3];
+            control_points[1] = prev_control_points[4];
+            control_points[2] = prev_control_points[5];
+            control_points[3] = prev_control_points[6];
+        }
+        2 => {
+            control_points[0] = prev_control_points[6];
+            control_points[1] = prev_control_points[7];
+            control_points[2] = prev_control_points[8];
+            control_points[3] = prev_control_points[9];
+        }
+        3 => {
+            control_points[0] = prev_control_points[9];
+            control_points[1] = prev_control_points[10];
+            control_points[2] = prev_control_points[11];
+            control_points[3] = prev_control_points[0];
+        }
+        _ => {}
+    }
 }
 
 fn read_tensor_product_patch_mesh(
@@ -935,115 +992,20 @@ fn read_tensor_product_patch_mesh(
     has_function: bool,
     decode: &[f32],
 ) -> Option<Vec<TensorProductPatch>> {
-    let bpf = BitSize::from_u8(bpf)?;
-    let bp_coord = BitSize::from_u8(bp_coord)?;
-    let bp_comp = BitSize::from_u8(bp_comp)?;
-
-    let ([x_min, x_max, y_min, y_max], decode) = split_decode(decode)?;
-    let mut reader = BitReader::new(data);
-    let helpers = InterpolationHelpers::new(bp_coord, bp_comp, x_min, x_max, y_min, y_max);
-
-    let read_colors = |reader: &mut BitReader| -> Option<ColorComponents> {
-        helpers.read_colors(reader, has_function, decode)
-    };
-
-    let mut prev_patch: Option<TensorProductPatch> = None;
-    let mut patches = vec![];
-
-    while let Some(flag) = reader.read(bpf) {
-        let mut control_points = [Point::ZERO; 16];
-        let mut colors = [smallvec![], smallvec![], smallvec![], smallvec![]];
-
-        match flag {
-            0 => {
-                for i in 0..16 {
-                    control_points[i] = helpers.read_point(&mut reader)?;
-                }
-
-                for i in 0..4 {
-                    colors[i] = read_colors(&mut reader)?;
-                }
-
-                prev_patch = Some(TensorProductPatch {
-                    control_points,
-                    colors: colors.clone(),
-                });
-            }
-            1 => {
-                let prev = prev_patch.as_ref()?;
-
-                control_points[0] = prev.control_points[3];
-                control_points[1] = prev.control_points[4];
-                control_points[2] = prev.control_points[5];
-                control_points[3] = prev.control_points[6];
-                colors[0] = prev.colors[1].clone();
-                colors[1] = prev.colors[2].clone();
-
-                for i in 4..16 {
-                    control_points[i] = helpers.read_point(&mut reader)?;
-                }
-
-                colors[2] = read_colors(&mut reader)?;
-                colors[3] = read_colors(&mut reader)?;
-
-                prev_patch = Some(TensorProductPatch {
-                    control_points,
-                    colors: colors.clone(),
-                });
-            }
-            2 => {
-                let prev = prev_patch.as_ref()?;
-
-                control_points[0] = prev.control_points[6];
-                control_points[1] = prev.control_points[7];
-                control_points[2] = prev.control_points[8];
-                control_points[3] = prev.control_points[9];
-                colors[0] = prev.colors[2].clone();
-                colors[1] = prev.colors[3].clone();
-
-                for i in 4..16 {
-                    control_points[i] = helpers.read_point(&mut reader)?;
-                }
-
-                colors[2] = read_colors(&mut reader)?;
-                colors[3] = read_colors(&mut reader)?;
-
-                prev_patch = Some(TensorProductPatch {
-                    control_points,
-                    colors: colors.clone(),
-                });
-            }
-            3 => {
-                let prev = prev_patch.as_ref()?;
-
-                control_points[0] = prev.control_points[9];
-                control_points[1] = prev.control_points[10];
-                control_points[2] = prev.control_points[11];
-                control_points[3] = prev.control_points[0];
-                colors[0] = prev.colors[3].clone();
-                colors[1] = prev.colors[0].clone();
-
-                for i in 4..16 {
-                    control_points[i] = helpers.read_point(&mut reader)?;
-                }
-
-                colors[2] = read_colors(&mut reader)?;
-                colors[3] = read_colors(&mut reader)?;
-
-                prev_patch = Some(TensorProductPatch {
-                    control_points,
-                    colors: colors.clone(),
-                });
-            }
-            _ => break,
-        }
-
-        patches.push(TensorProductPatch {
+    read_patch_mesh(
+        data,
+        bpf,
+        bp_coord,
+        bp_comp,
+        has_function,
+        decode,
+        16, // Tensor product patches have 16 control points
+        |control_points, colors| TensorProductPatch {
             control_points,
             colors,
-        });
-    }
-    Some(patches)
+        },
+        copy_tensor_control_points,
+    )
 }
 
 fn read_function(dict: &Dict, color_space: &ColorSpace) -> Option<ShadingFunction> {
