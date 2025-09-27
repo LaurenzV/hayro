@@ -852,6 +852,7 @@ fn read_coons_patch_mesh(
 }
 
 /// Generic patch mesh reading function that works for both Coons and Tensor Product patches.
+#[allow(clippy::too_many_arguments)]
 fn read_patch_mesh<P, F>(
     data: &[u8],
     bpf: u8,
