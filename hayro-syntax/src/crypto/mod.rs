@@ -434,13 +434,15 @@ pub(crate) fn get(dict: &Dict, id: &[u8]) -> Result<Decryptor, DecryptionError> 
         // with an input string consisting of the UTF-8 password concatenated with the 8 bytes of
         // owner Validation Salt, concatenated with the 48-byte U string. If the 32-byte result
         // matches the first 32 bytes of the O string, this is the owner password.
-        if algo_2b(PASSWORD, owner_validation_salt, Some(trimmed_us), revision)? == owner_hash {
+        if compute_hash_rev56(PASSWORD, owner_validation_salt, Some(trimmed_us), revision)?
+            == owner_hash
+        {
             // d) Compute an intermediate owner key by computing a hash using algorithm 2.B with an input string
             // consisting of the UTF-8 owner password concatenated with the 8 bytes of owner Key Salt,
             // concatenated with the 48-byte U string. The 32-byte result is the key used to decrypt the 32-byte OE string
             // using AES-256 in CBC mode with no padding and an initialization vector of zero. The 32-byte result is the file encryption key.
             let intermediate_owner_key =
-                algo_2b(PASSWORD, owner_key_salt, Some(trimmed_us), revision)?;
+                compute_hash_rev56(PASSWORD, owner_key_salt, Some(trimmed_us), revision)?;
 
             let oe_string = dict
                 .get::<object::String>(OE)
@@ -454,12 +456,12 @@ pub(crate) fn get(dict: &Dict, id: &[u8]) -> Result<Decryptor, DecryptionError> 
             let zero_iv = [0u8; 16];
 
             cipher.decrypt_cbc(&oe_string.get(), &zero_iv)
-        } else if algo_2b(PASSWORD, user_validation_salt, None, revision)? == user_hash {
+        } else if compute_hash_rev56(PASSWORD, user_validation_salt, None, revision)? == user_hash {
             // e) Compute an intermediate user key by computing a hash using algorithm 2.B with an input string
             // consisting of the UTF-8 user password concatenated with the 8 bytes of user Key Salt. The 32-byte result
             // is the key used to decrypt the 32-byte UE string using AES-256 in CBC mode with no padding and an
             // initialization vector of zero. The 32-byte result is the file encryption key.
-            let intermediate_key = algo_2b(PASSWORD, user_key_salt, None, revision)?;
+            let intermediate_key = compute_hash_rev56(PASSWORD, user_key_salt, None, revision)?;
 
             let ue_string = dict.get::<object::String>(UE).ok_or(InvalidEncryption)?;
 
@@ -504,7 +506,7 @@ pub(crate) fn get(dict: &Dict, id: &[u8]) -> Result<Decryptor, DecryptionError> 
 }
 
 /// Algorithm 2.B: Computing a hash (revision 6 and later)
-fn algo_2b(
+fn compute_hash_rev56(
     password: &[u8],
     validation_salt: &[u8],
     user_string: Option<&[u8]>,
