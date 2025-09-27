@@ -758,6 +758,7 @@ use crate::run_render_test;
 #[test] fn pdfjs_issue840() { run_render_test("pdfjs_issue840", "downloads/pdfjs/issue840.pdf", None); }
 #[test] fn pdfjs_issue8424() { run_render_test("pdfjs_issue8424", "downloads/pdfjs/issue8424.pdf", None); }
 #[test] fn pdfjs_issue845() { run_render_test("pdfjs_issue845", "downloads/pdfjs/issue845.pdf", None); }
+#[test] fn pdfjs_issue8480() { run_render_test("pdfjs_issue8480", "downloads/pdfjs/issue8480.pdf", None); }
 #[test] fn pdfjs_issue8565() { run_render_test("pdfjs_issue8565", "downloads/pdfjs/issue8565.pdf", None); }
 #[test] fn pdfjs_issue8570() { run_render_test("pdfjs_issue8570", "downloads/pdfjs/issue8570.pdf", None); }
 #[test] fn pdfjs_issue8613() { run_render_test("pdfjs_issue8613", "downloads/pdfjs/issue8613.pdf", None); }

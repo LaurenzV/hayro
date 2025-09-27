@@ -3201,6 +3201,12 @@
     "md5": "b5f8fe4005cf3fb685fdb4a4c44ee4a2"
   },
   {
+    "id": "issue8480",
+    "file": "pdfs/issue8480.link",
+    "link": true,
+    "md5": "769bc07bf8041d95667f2d32aaf75665"
+  },
+  {
     "id": "issue8565",
     "file": "pdfs/issue8565.link",
     "link": true,

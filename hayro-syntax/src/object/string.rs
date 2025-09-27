@@ -133,31 +133,37 @@ impl<'a> LiteralString<'a> {
                             let second = r.read_byte();
                             let third = r.read_byte();
 
-                            match (second, third) {
+                            let bytes = match (second, third) {
                                 (Some(n1), Some(n2)) => {
-                                    if is_octal_digit(n1) && is_octal_digit(n2) {
-                                        let bytes = [next, n1, n2];
-                                        let str = std::str::from_utf8(&bytes).unwrap();
-
-                                        if let Ok(num) = u8::from_str_radix(str, 8) {
-                                            cleaned.push(num);
-                                        } else {
-                                            warn!(
-                                                "overflow occurred while parsing octal literal string"
-                                            );
+                                    match (is_octal_digit(n1), is_octal_digit(n2)) {
+                                        (true, true) => [next, n1, n2],
+                                        (true, _) => {
+                                            r.jump(r.offset() - 1);
+                                            [b'0', next, n1]
                                         }
-                                    } else {
-                                        // Ignore the solidus and treat as normal characters.
-                                        cleaned.push(next);
-                                        cleaned.push(n1);
-                                        cleaned.push(n2);
+                                        _ => {
+                                            r.jump(r.offset() - 2);
+                                            [b'0', b'0', next]
+                                        }
                                     }
                                 }
                                 (Some(n1), None) => {
-                                    cleaned.push(next);
-                                    cleaned.push(n1);
+                                    if is_octal_digit(n1) {
+                                        [b'0', next, n1]
+                                    } else {
+                                        r.jump(r.offset() - 1);
+                                        [b'0', b'0', next]
+                                    }
                                 }
-                                _ => cleaned.push(next),
+                                _ => [b'0', b'0', next],
+                            };
+
+                            let str = std::str::from_utf8(&bytes).unwrap();
+
+                            if let Ok(num) = u8::from_str_radix(str, 8) {
+                                cleaned.push(num);
+                            } else {
+                                warn!("overflow occurred while parsing octal literal string");
                             }
                         } else {
                             match next {
@@ -556,6 +562,28 @@ mod tests {
                 .unwrap()
                 .get(),
             b"36ab".to_vec()
+        )
+    }
+
+    #[test]
+    fn literal_string_11() {
+        assert_eq!(
+            Reader::new("(\\00Y)".as_bytes())
+                .read_without_context::<String>()
+                .unwrap()
+                .get(),
+            b"\0Y".to_vec()
+        )
+    }
+
+    #[test]
+    fn literal_string_12() {
+        assert_eq!(
+            Reader::new("(\\0Y)".as_bytes())
+                .read_without_context::<String>()
+                .unwrap()
+                .get(),
+            b"\0Y".to_vec()
         )
     }
 
