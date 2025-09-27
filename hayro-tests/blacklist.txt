@@ -224,6 +224,8 @@ issue10989
 issue9425
 issue 12841
 issue8169
+issue15492
+
 
 #black rect
 issue10339
@@ -238,7 +240,6 @@ issue9291
 issue7872
 
 # wrong rendering
-issue15492
 issue269_1
 issue269_2
 
