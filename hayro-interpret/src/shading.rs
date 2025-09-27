@@ -67,10 +67,10 @@ pub enum ShadingType {
     RadialAxial {
         /// The coordinates of the shading.
         ///
-        /// For axial shadings, only the first 4 entries are relevant, representing the x/y coordinates.
+        /// For axial shadings, only the first 4 entries are relevant, representing the x/y coordinates
         /// of the first point and the coordinates for the second point.
         ///
-        /// For radial shadings, the coordinates contain the x/y coordinates as well as the radius.
+        /// For radial shadings, the coordinates contain the x/y coordinates as well as the radius
         /// for both circles.
         coords: [f32; 6],
         /// The domain of the shading.
