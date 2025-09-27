@@ -23,6 +23,13 @@ mod sha256;
 mod sha384;
 mod sha512;
 
+const PASSWORD_PADDING: [u8; 32] = [
+    0x28, 0xBF, 0x4E, 0x5E, 0x4E, 0x75, 0x8A, 0x41, 0x64, 0x00, 0x4E, 0x56, 0xFF, 0xFA, 0x01, 0x08,
+    0x2E, 0x2E, 0x00, 0xB6, 0xD0, 0x68, 0x3E, 0x80, 0x2F, 0x0C, 0xA9, 0xFE, 0x64, 0x53, 0x69, 0x7A,
+];
+
+const PASSWORD: &[u8; 0] = b"";
+
 /// An error that occurred during decryption.
 #[derive(Debug, Copy, Clone)]
 pub enum DecryptionError {
@@ -97,21 +104,15 @@ impl Decryptor {
 }
 
 pub(crate) fn get(dict: &Dict, id: &[u8]) -> Result<Decryptor, DecryptionError> {
-    let filter = dict
-        .get::<Name>(FILTER)
-        .ok_or(DecryptionError::InvalidEncryption)?;
+    let filter = dict.get::<Name>(FILTER).ok_or(InvalidEncryption)?;
 
     if filter.deref() != b"Standard" {
         return Err(DecryptionError::UnsupportedAlgorithm);
     }
 
-    let encryption_v = dict
-        .get::<u8>(V)
-        .ok_or(DecryptionError::InvalidEncryption)?;
+    let encryption_v = dict.get::<u8>(V).ok_or(InvalidEncryption)?;
     let encrypt_metadata = dict.get::<bool>(ENCRYPT_META_DATA).unwrap_or(true);
-    let revision = dict
-        .get::<u8>(R)
-        .ok_or(DecryptionError::InvalidEncryption)?;
+    let revision = dict.get::<u8>(R).ok_or(InvalidEncryption)?;
     let length = match encryption_v {
         1 => 40,
         2 => dict.get::<u16>(LENGTH).unwrap_or(40),
@@ -125,11 +126,11 @@ pub(crate) fn get(dict: &Dict, id: &[u8]) -> Result<Decryptor, DecryptionError> 
         2 => (DecryptorTag::Rc4, None),
         4 => (
             DecryptorTag::Aes128,
-            Some(DecryptorData::from_dict(dict).ok_or(DecryptionError::InvalidEncryption)?),
+            Some(DecryptorData::from_dict(dict).ok_or(InvalidEncryption)?),
         ),
         5 | 6 => (
             DecryptorTag::Aes256,
-            Some(DecryptorData::from_dict(dict).ok_or(DecryptionError::InvalidEncryption)?),
+            Some(DecryptorData::from_dict(dict).ok_or(InvalidEncryption)?),
         ),
         _ => {
             return Err(DecryptionError::UnsupportedAlgorithm);
@@ -138,33 +139,25 @@ pub(crate) fn get(dict: &Dict, id: &[u8]) -> Result<Decryptor, DecryptionError> 
 
     let byte_length = length / 8;
 
-    let owner_string = dict
-        .get::<object::String>(O)
-        .ok_or(DecryptionError::InvalidEncryption)?;
-    let user_string = dict
-        .get::<object::String>(U)
-        .ok_or(DecryptionError::InvalidEncryption)?;
-    let permissions = u32::from_be_bytes(
-        dict.get::<i32>(P)
-            .ok_or(DecryptionError::InvalidEncryption)?
-            .to_be_bytes(),
-    );
+    let owner_string = dict.get::<object::String>(O).ok_or(InvalidEncryption)?;
+    let user_string = dict.get::<object::String>(U).ok_or(InvalidEncryption)?;
+    let permissions =
+        u32::from_be_bytes(dict.get::<i32>(P).ok_or(InvalidEncryption)?.to_be_bytes());
 
     let mut decryption_key = if revision <= 4 {
-        let key = compute_decryption_key_rev1234(
+        let key = decryption_key_rev1234(
             encrypt_metadata,
             revision,
             byte_length,
             &owner_string,
             permissions,
             id,
-            &user_string,
         )?;
         authenticate_password_rev234(revision, &key, id, &user_string)?;
 
         key
     } else {
-        algorithm_2a_retrieve_encryption_key(dict, revision, &owner_string, &user_string)?
+        decryption_key_rev56(dict, revision, &owner_string, &user_string)?
     };
 
     // See pdf.js issue 19484.
@@ -188,12 +181,8 @@ pub(crate) fn get(dict: &Dict, id: &[u8]) -> Result<Decryptor, DecryptionError> 
     }
 }
 
-fn decrypt_aes256(key: &[u8], data: &[u8]) -> Option<Vec<u8>> {
-    algorithm_1a_aes256_decryption(key, data)
-}
-
 /// Algorithm 1.A: Encryption of data using the AES algorithms
-fn algorithm_1a_aes256_decryption(key: &[u8], data: &[u8]) -> Option<Vec<u8>> {
+fn decrypt_aes256(key: &[u8], data: &[u8]) -> Option<Vec<u8>> {
     // a) Use the 32-byte file encryption key for the AES-256 symmetric key algorithm,
     // along with the string or stream data to be encrypted.
     // Use the AES algorithm in Cipher Block Chaining (CBC) mode, which requires an initialization
@@ -207,7 +196,7 @@ fn algorithm_1a_aes256_decryption(key: &[u8], data: &[u8]) -> Option<Vec<u8>> {
 }
 
 fn decrypt_aes128(key: &[u8], data: &[u8], id: ObjectIdentifier) -> Option<Vec<u8>> {
-    algo_1(key, id, true, |key| {
+    decrypt_rc_aes(key, id, true, |key| {
         // If using the AES algorithm, the Cipher Block Chaining (CBC) mode, which requires an initialization
         // vector, is used. The block size parameter is set to 16 bytes, and the initialization vector is a 16-byte
         // random number that is stored as the first 16 bytes of the encrypted stream or string.
@@ -220,23 +209,14 @@ fn decrypt_aes128(key: &[u8], data: &[u8], id: ObjectIdentifier) -> Option<Vec<u
 }
 
 fn decrypt_rc4(key: &[u8], data: &[u8], id: ObjectIdentifier) -> Option<Vec<u8>> {
-    algo_1(key, id, false, |key| {
+    decrypt_rc_aes(key, id, false, |key| {
         let mut rc = Rc4::new(key);
         Some(rc.decrypt(data))
     })
 }
 
-fn algo_1(
-    key: &[u8],
-    id: ObjectIdentifier,
-    aes: bool,
-    with_key: impl FnOnce(&[u8]) -> Option<Vec<u8>>,
-) -> Option<Vec<u8>> {
-    algorithm_1_rc4_aes_encryption(key, id, aes, with_key)
-}
-
 /// Algorithm 1: Encryption of data using the RC4 or AES algorithms
-fn algorithm_1_rc4_aes_encryption(
+fn decrypt_rc_aes(
     key: &[u8],
     id: ObjectIdentifier,
     aes: bool,
@@ -275,13 +255,6 @@ fn algorithm_1_rc4_aes_encryption(
 
     with_key(final_key)
 }
-
-const PASSWORD_PADDING: [u8; 32] = [
-    0x28, 0xBF, 0x4E, 0x5E, 0x4E, 0x75, 0x8A, 0x41, 0x64, 0x00, 0x4E, 0x56, 0xFF, 0xFA, 0x01, 0x08,
-    0x2E, 0x2E, 0x00, 0xB6, 0xD0, 0x68, 0x3E, 0x80, 0x2F, 0x0C, 0xA9, 0xFE, 0x64, 0x53, 0x69, 0x7A,
-];
-
-const PASSWORD: &[u8; 0] = b"";
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct DecryptorData {
@@ -447,18 +420,17 @@ fn compute_hash_rev56(
 }
 
 /// Algorithm 2: Computing a file encryption key in order to encrypt a document (revision 4 and earlier)
-fn compute_decryption_key_rev1234(
+fn decryption_key_rev1234(
     encrypt_metadata: bool,
     revision: u8,
     byte_length: u16,
     owner_string: &object::String,
     permissions: u32,
     id: &[u8],
-    user_string: &object::String,
 ) -> Result<Vec<u8>, DecryptionError> {
     let mut md5_input = vec![];
 
-    // a) TODO: Convert password to PDFDocEncoding.
+    // a) Convert password to PDFDocEncoding.
     let password = PASSWORD_PADDING;
 
     // b) Initialise the MD5 hash function and pass the
@@ -508,8 +480,8 @@ fn authenticate_password_rev234(
 ) -> Result<(), DecryptionError> {
     // a) Perform all but the last step of Algorithm 4 (revision 2) or Algorithm 5 (revision 3 + 4).
     let result = match revision {
-        2 => algorithm_4_rev2_password_verification(decryption_key),
-        3 | 4 => algorithm_5_rev34_password_verification(decryption_key, id),
+        2 => authenticate_password_rev2(decryption_key),
+        3 | 4 => authenticate_password_rev34(decryption_key, id),
         _ => return Err(DecryptionError::InvalidEncryption),
     };
 
@@ -534,7 +506,7 @@ fn authenticate_password_rev234(
 }
 
 /// Algorithm 4: Password verification for revision 2
-fn algorithm_4_rev2_password_verification(decryption_key: &[u8]) -> Vec<u8> {
+fn authenticate_password_rev2(decryption_key: &[u8]) -> Vec<u8> {
     // a) Create a file encryption key based on the user password string.
     // b) Encrypt the 32-byte padding string using an RC4 encryption
     // function with the file encryption key from the preceding step.
@@ -543,7 +515,7 @@ fn algorithm_4_rev2_password_verification(decryption_key: &[u8]) -> Vec<u8> {
 }
 
 /// Algorithm 5: Password verification for revision 3 and 4
-fn algorithm_5_rev34_password_verification(decryption_key: &[u8], id: &[u8]) -> Vec<u8> {
+fn authenticate_password_rev34(decryption_key: &[u8], id: &[u8]) -> Vec<u8> {
     // a) Create a file encryption key based on the user password string.
     let mut rc = Rc4::new(decryption_key);
 
@@ -580,7 +552,7 @@ fn algorithm_5_rev34_password_verification(decryption_key: &[u8], id: &[u8]) -> 
 }
 
 /// Algorithm 2.A: Retrieving the file encryption key from an encrypted document in order to decrypt it (revision 6 and later)
-fn algorithm_2a_retrieve_encryption_key(
+fn decryption_key_rev56(
     dict: &Dict,
     revision: u8,
     owner_string: &object::String,
