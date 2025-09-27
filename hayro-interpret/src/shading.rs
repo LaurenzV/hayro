@@ -593,7 +593,7 @@ fn read_free_form_triangles(
     Some(triangles)
 }
 
-/// Common interpolation functions used across different shading types
+/// Common interpolation functions used across different shading types.
 struct InterpolationHelpers {
     bp_coord: BitSize,
     bp_comp: BitSize,
@@ -688,12 +688,12 @@ impl InterpolationHelpers {
     }
 }
 
-/// Split decode array into coordinate bounds and component decode values
+/// Split decode array into coordinate bounds and component decode values.
 fn split_decode(decode: &[f32]) -> Option<([f32; 4], &[f32])> {
     decode.split_first_chunk::<4>().map(|(a, b)| (*a, b))
 }
 
-/// Generate triangles from a grid of points using a mapping function
+/// Generate triangles from a grid of points using a mapping function.
 fn generate_patch_triangles<F, I>(map_coordinate: F, interpolate: I) -> Vec<Triangle>
 where
     F: Fn(Point) -> Point,
@@ -852,7 +852,7 @@ fn read_coons_patch_mesh(
     )
 }
 
-/// Generic patch mesh reading function that works for both Coons and Tensor Product patches
+/// Generic patch mesh reading function that works for both Coons and Tensor Product patches.
 fn read_patch_mesh<P, F>(
     data: &[u8],
     bpf: u8,
