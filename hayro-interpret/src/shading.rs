@@ -67,10 +67,10 @@ pub enum ShadingType {
     RadialAxial {
         /// The coordinates of the shading.
         ///
-        /// For axial shadings, only the first 4 entries are relevant, representing the x/y coordinates
+        /// For axial shadings, only the first 4 entries are relevant, representing the x/y coordinates.
         /// of the first point and the coordinates for the second point.
         ///
-        /// For radial shadings, the coordinates contain the x/y coordinates as well as the radius
+        /// For radial shadings, the coordinates contain the x/y coordinates as well as the radius.
         /// for both circles.
         coords: [f32; 6],
         /// The domain of the shading.
@@ -702,19 +702,19 @@ where
     const GRID_SIZE: usize = 20;
     let mut grid = vec![vec![Point::ZERO; GRID_SIZE]; GRID_SIZE];
 
-    // Create grid by mapping unit square coordinates
+    // Create grid by mapping unit square coordinates.
     for i in 0..GRID_SIZE {
         for j in 0..GRID_SIZE {
-            let u = i as f64 / (GRID_SIZE - 1) as f64; // 0.0 to 1.0 (left to right)
-            let v = j as f64 / (GRID_SIZE - 1) as f64; // 0.0 to 1.0 (top to bottom)
+            let u = i as f64 / (GRID_SIZE - 1) as f64; // 0.0 to 1.0 (left to right).
+            let v = j as f64 / (GRID_SIZE - 1) as f64; // 0.0 to 1.0 (top to bottom).
 
-            // Map unit square coordinate to patch coordinate
+            // Map unit square coordinate to patch coordinate.
             let unit_point = Point::new(u, v);
             grid[i][j] = map_coordinate(unit_point);
         }
     }
 
-    // Create triangles from adjacent grid points
+    // Create triangles from adjacent grid points.
     let mut triangles = vec![];
 
     for i in 0..(GRID_SIZE - 1) {
@@ -724,13 +724,13 @@ where
             let p01 = grid[i][j + 1];
             let p11 = grid[i + 1][j + 1];
 
-            // Calculate unit square coordinates for color interpolation
+            // Calculate unit square coordinates for color interpolation.
             let u0 = i as f64 / (GRID_SIZE - 1) as f64;
             let u1 = (i + 1) as f64 / (GRID_SIZE - 1) as f64;
             let v0 = j as f64 / (GRID_SIZE - 1) as f64;
             let v1 = (j + 1) as f64 / (GRID_SIZE - 1) as f64;
 
-            // Create triangle vertices with interpolated colors
+            // Create triangle vertices with interpolated colors.
             let v00 = TriangleVertex {
                 flag: 0,
                 point: p00,
@@ -884,7 +884,7 @@ where
     let mut patches = vec![];
 
     while let Some(flag) = reader.read(bpf) {
-        let mut control_points = vec![Point::ZERO; 16]; // Always allocate 16, use subset as needed
+        let mut control_points = vec![Point::ZERO; 16]; // Always allocate 16, use subset as needed.
         let mut colors = [smallvec![], smallvec![], smallvec![], smallvec![]];
 
         match flag {
