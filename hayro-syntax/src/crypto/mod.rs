@@ -96,8 +96,104 @@ impl Decryptor {
     }
 }
 
-/// Algorithm 1.A: Encryption of data using the AES algorithms
+pub(crate) fn get(dict: &Dict, id: &[u8]) -> Result<Decryptor, DecryptionError> {
+    let filter = dict
+        .get::<Name>(FILTER)
+        .ok_or(DecryptionError::InvalidEncryption)?;
+
+    if filter.deref() != b"Standard" {
+        return Err(DecryptionError::UnsupportedAlgorithm);
+    }
+
+    let encryption_v = dict
+        .get::<u8>(V)
+        .ok_or(DecryptionError::InvalidEncryption)?;
+    let encrypt_metadata = dict.get::<bool>(ENCRYPT_META_DATA).unwrap_or(true);
+    let revision = dict
+        .get::<u8>(R)
+        .ok_or(DecryptionError::InvalidEncryption)?;
+    let length = match encryption_v {
+        1 => 40,
+        2 => dict.get::<u16>(LENGTH).unwrap_or(40),
+        4 => dict.get::<u16>(LENGTH).unwrap_or(128),
+        5 => 256,
+        _ => unimplemented!(),
+    };
+
+    let (algorithm, data) = match encryption_v {
+        1 => (DecryptorTag::Rc4, None),
+        2 => (DecryptorTag::Rc4, None),
+        4 => (
+            DecryptorTag::Aes128,
+            Some(DecryptorData::from_dict(dict).ok_or(DecryptionError::InvalidEncryption)?),
+        ),
+        5 | 6 => (
+            DecryptorTag::Aes256,
+            Some(DecryptorData::from_dict(dict).ok_or(DecryptionError::InvalidEncryption)?),
+        ),
+        _ => {
+            return Err(DecryptionError::UnsupportedAlgorithm);
+        }
+    };
+
+    let byte_length = length / 8;
+
+    let owner_string = dict
+        .get::<object::String>(O)
+        .ok_or(DecryptionError::InvalidEncryption)?;
+    let user_string = dict
+        .get::<object::String>(U)
+        .ok_or(DecryptionError::InvalidEncryption)?;
+    let permissions = u32::from_be_bytes(
+        dict.get::<i32>(P)
+            .ok_or(DecryptionError::InvalidEncryption)?
+            .to_be_bytes(),
+    );
+
+    let mut decryption_key = if revision <= 4 {
+        let key = compute_decryption_key_rev1234(
+            encrypt_metadata,
+            revision,
+            byte_length,
+            &owner_string,
+            permissions,
+            id,
+            &user_string,
+        )?;
+        authenticate_password_rev234(revision, &key, id, &user_string)?;
+
+        key
+    } else {
+        algorithm_2a_retrieve_encryption_key(dict, revision, &owner_string, &user_string)?
+    };
+
+    // See pdf.js issue 19484.
+    if encryption_v == 4 && decryption_key.len() < 16 {
+        decryption_key.resize(16, 0)
+    }
+
+    match algorithm {
+        DecryptorTag::None => Ok(Decryptor::None),
+        DecryptorTag::Rc4 => Ok(Decryptor::Rc4 {
+            key: decryption_key,
+        }),
+        DecryptorTag::Aes128 => Ok(Decryptor::Aes128 {
+            key: decryption_key,
+            dict: data.unwrap(),
+        }),
+        DecryptorTag::Aes256 => Ok(Decryptor::Aes256 {
+            key: decryption_key,
+            dict: data.unwrap(),
+        }),
+    }
+}
+
 fn decrypt_aes256(key: &[u8], data: &[u8]) -> Option<Vec<u8>> {
+    algorithm_1a_aes256_decryption(key, data)
+}
+
+/// Algorithm 1.A: Encryption of data using the AES algorithms
+fn algorithm_1a_aes256_decryption(key: &[u8], data: &[u8]) -> Option<Vec<u8>> {
     // a) Use the 32-byte file encryption key for the AES-256 symmetric key algorithm,
     // along with the string or stream data to be encrypted.
     // Use the AES algorithm in Cipher Block Chaining (CBC) mode, which requires an initialization
@@ -130,8 +226,17 @@ fn decrypt_rc4(key: &[u8], data: &[u8], id: ObjectIdentifier) -> Option<Vec<u8>>
     })
 }
 
-/// Algorithm 1: Encryption of data using the RC4 or AES algorithms
 fn algo_1(
+    key: &[u8],
+    id: ObjectIdentifier,
+    aes: bool,
+    with_key: impl FnOnce(&[u8]) -> Option<Vec<u8>>,
+) -> Option<Vec<u8>> {
+    algorithm_1_rc4_aes_encryption(key, id, aes, with_key)
+}
+
+/// Algorithm 1: Encryption of data using the RC4 or AES algorithms
+fn algorithm_1_rc4_aes_encryption(
     key: &[u8],
     id: ObjectIdentifier,
     aes: bool,
@@ -175,6 +280,8 @@ const PASSWORD_PADDING: [u8; 32] = [
     0x28, 0xBF, 0x4E, 0x5E, 0x4E, 0x75, 0x8A, 0x41, 0x64, 0x00, 0x4E, 0x56, 0xFF, 0xFA, 0x01, 0x08,
     0x2E, 0x2E, 0x00, 0xB6, 0xD0, 0x68, 0x3E, 0x80, 0x2F, 0x0C, 0xA9, 0xFE, 0x64, 0x53, 0x69, 0x7A,
 ];
+
+const PASSWORD: &[u8; 0] = b"";
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct DecryptorData {
@@ -233,275 +340,6 @@ impl CryptDictionary {
             cfm,
             _length: length,
         })
-    }
-}
-
-pub(crate) fn get(dict: &Dict, id: &[u8]) -> Result<Decryptor, DecryptionError> {
-    const PASSWORD: &[u8; 0] = b"";
-
-    let filter = dict
-        .get::<Name>(FILTER)
-        .ok_or(DecryptionError::InvalidEncryption)?;
-
-    if filter.deref() != b"Standard" {
-        return Err(DecryptionError::UnsupportedAlgorithm);
-    }
-
-    let encryption_v = dict
-        .get::<u8>(V)
-        .ok_or(DecryptionError::InvalidEncryption)?;
-    let encrypt_metadata = dict.get::<bool>(ENCRYPT_META_DATA).unwrap_or(true);
-    let revision = dict
-        .get::<u8>(R)
-        .ok_or(DecryptionError::InvalidEncryption)?;
-    let length = match encryption_v {
-        1 => 40,
-        2 => dict.get::<u16>(LENGTH).unwrap_or(40),
-        4 => dict.get::<u16>(LENGTH).unwrap_or(128),
-        5 => 256,
-        _ => unimplemented!(),
-    };
-
-    let (algorithm, data) = match encryption_v {
-        1 => (DecryptorTag::Rc4, None),
-        2 => (DecryptorTag::Rc4, None),
-        4 => (
-            DecryptorTag::Aes128,
-            Some(DecryptorData::from_dict(dict).ok_or(DecryptionError::InvalidEncryption)?),
-        ),
-        5 | 6 => (
-            DecryptorTag::Aes256,
-            Some(DecryptorData::from_dict(dict).ok_or(DecryptionError::InvalidEncryption)?),
-        ),
-        _ => {
-            return Err(DecryptionError::UnsupportedAlgorithm);
-        }
-    };
-
-    let byte_length = length / 8;
-
-    let owner_string = dict
-        .get::<object::String>(O)
-        .ok_or(DecryptionError::InvalidEncryption)?;
-    let user_string = dict
-        .get::<object::String>(U)
-        .ok_or(DecryptionError::InvalidEncryption)?;
-    let permissions = u32::from_be_bytes(
-        dict.get::<i32>(P)
-            .ok_or(DecryptionError::InvalidEncryption)?
-            .to_be_bytes(),
-    );
-
-    let mut decryption_key = if revision <= 4 {
-        // Algorithm 2: Computing a file encryption key in order to encrypt a
-        // document (revision 4 and earlier)
-
-        let mut md5_input = vec![];
-
-        // a) TODO: Convert password to PDFDocEncoding.
-        let password = PASSWORD_PADDING;
-
-        // b) Initialise the MD5 hash function and pass the
-        // result of step a) as input to this function.
-        md5_input.extend(&password);
-
-        // c) Pass the value of the encryption dictionary’s O entry
-        // to the MD5 hash function.
-        md5_input.extend(owner_string.get().as_ref());
-
-        // d) Convert the integer value of the P entry to a 32-bit unsigned
-        // binary number and pass these bytes to the MD5 hash function, low-order byte first.
-        md5_input.extend(permissions.to_le_bytes());
-
-        // e) Pass the first element of the file’s file identifier array to the MD5 hash function.
-        md5_input.extend(id);
-
-        // f) (Security handlers of revision 4 or greater) If document metadata
-        // is not being encrypted, pass 4 bytes with the value 0xFFFFFFFF to the MD5 hash function.
-        if !encrypt_metadata && revision >= 4 {
-            md5_input.extend(&[0xff, 0xff, 0xff, 0xff])
-        }
-
-        // g) Finish the hash.
-        let mut hash = md5::calculate(&md5_input);
-
-        // h) For revisions >= 3, do the following 50 times: Take the output from the previous
-        // MD5 hash and pass the first n bytes of the output as input into a new MD5 hash,
-        // where n is the number of bytes of the file encryption key as defined by the value
-        // of the encryption dictionary’s `Length` entry.
-        if revision >= 3 {
-            for _ in 0..50 {
-                hash = md5::calculate(&hash[..byte_length as usize]);
-            }
-        }
-
-        let decryption_key = hash[..byte_length as usize].to_vec();
-
-        // Verify password
-        // Algorithm 6
-        // a) Perform all but the last step of Algorithm 4 (revision 2) or Algorithm 5 (revision 3 + 4).
-        let result = match revision {
-            2 => {
-                // Algorithm 4
-                // a) Create a file encryption key based on the user password string.
-                // b) Encrypt the 32-byte padding string using an RC4 encryption
-                // function with the file encryption key from the preceding step.
-                let mut rc = Rc4::new(&decryption_key);
-                rc.decrypt(&PASSWORD_PADDING)
-            }
-            3 | 4 => {
-                // Algorithm 5
-                // a) Create a file encryption key based on the user password string.
-                let mut rc = Rc4::new(&decryption_key);
-
-                let mut input = vec![];
-                // b) Initialise the MD5 hash function and pass the 32-byte padding string.
-                input.extend(PASSWORD_PADDING);
-
-                // c) Pass the first element of the file’s file identifier array to the hash function
-                // and finish the hash.
-                input.extend(id);
-                let hash = md5::calculate(&input);
-
-                // d) Encrypt the 16-byte result of the hash, using an RC4 encryption function with
-                // the encryption key from step (a).
-                let mut encrypted = rc.encrypt(&hash);
-
-                // e) Do the following 19 times: Take the output from the previous invocation of the
-                // RC4 function and pass it as input to a new invocation of the function; use a file
-                // encryption key generated by taking each byte of the original file encryption key
-                // obtained in step (a) and performing an XOR (exclusive or) operation between that
-                // byte and the single-byte value of the iteration counter (from 1 to 19).
-                for i in 1..=19 {
-                    let mut key = decryption_key.clone();
-                    for byte in &mut key {
-                        *byte ^= i;
-                    }
-
-                    let mut rc = Rc4::new(&key);
-                    encrypted = rc.encrypt(&encrypted);
-                }
-
-                encrypted.resize(32, 0);
-                encrypted
-            }
-            _ => unimplemented!(),
-        };
-
-        // b) If the result of step (a) is equal to the value of the encryption dictionary’s
-        // U entry (comparing on the first 16 bytes in the case of security handlers of
-        // revision 3 or greater), the password supplied is the correct user password.
-        match revision {
-            2 => {
-                if result.as_slice() != user_string.get().as_ref() {
-                    return Err(DecryptionError::PasswordProtected);
-                }
-            }
-            3 | 4 => {
-                if Some(&result[..16]) != user_string.get().as_ref().get(0..16) {
-                    return Err(DecryptionError::PasswordProtected);
-                }
-            }
-            _ => unreachable!(),
-        }
-
-        decryption_key
-    } else {
-        // Algorithm 2.A: Retrieving the file encryption key from an encrypted
-        // document in order to decrypt it (revision 6 and later)
-
-        // a) The UTF-8 password string shall be generated from Unicode input by processing the input string with
-        // the SASLprep (Internet RFC 4013) profile of stringprep (Internet RFC 3454) using the Normalize and BiDi
-        // options, and then converting to a UTF-8 representation.
-        // b) Truncate the UTF-8 representation to 127 bytes if it is longer than 127 bytes.
-
-        let string_len = if revision <= 4 { 32 } else { 48 };
-
-        let os = owner_string.get();
-        let trimmed_os = os.get(..string_len).ok_or(InvalidEncryption)?;
-
-        let (owner_hash, owner_tail) = trimmed_os.split_at_checked(32).ok_or(InvalidEncryption)?;
-        let (owner_validation_salt, owner_key_salt) =
-            owner_tail.split_at_checked(8).ok_or(InvalidEncryption)?;
-
-        let us = user_string.get();
-        let trimmed_us = us.get(..string_len).ok_or(InvalidEncryption)?;
-        let (user_hash, user_tail) = trimmed_us.split_at_checked(32).ok_or(InvalidEncryption)?;
-        let (user_validation_salt, user_key_salt) =
-            user_tail.split_at_checked(8).ok_or(InvalidEncryption)?;
-
-        // c) Test the password against the owner key by computing a hash using algorithm 2.B
-        // with an input string consisting of the UTF-8 password concatenated with the 8 bytes of
-        // owner Validation Salt, concatenated with the 48-byte U string. If the 32-byte result
-        // matches the first 32 bytes of the O string, this is the owner password.
-        if compute_hash_rev56(PASSWORD, owner_validation_salt, Some(trimmed_us), revision)?
-            == owner_hash
-        {
-            // d) Compute an intermediate owner key by computing a hash using algorithm 2.B with an input string
-            // consisting of the UTF-8 owner password concatenated with the 8 bytes of owner Key Salt,
-            // concatenated with the 48-byte U string. The 32-byte result is the key used to decrypt the 32-byte OE string
-            // using AES-256 in CBC mode with no padding and an initialization vector of zero. The 32-byte result is the file encryption key.
-            let intermediate_owner_key =
-                compute_hash_rev56(PASSWORD, owner_key_salt, Some(trimmed_us), revision)?;
-
-            let oe_string = dict
-                .get::<object::String>(OE)
-                .ok_or(DecryptionError::InvalidEncryption)?;
-
-            if oe_string.get().len() != 32 {
-                return Err(DecryptionError::InvalidEncryption);
-            }
-
-            let cipher = AES256Cipher::new(&intermediate_owner_key).ok_or(InvalidEncryption)?;
-            let zero_iv = [0u8; 16];
-
-            cipher.decrypt_cbc(&oe_string.get(), &zero_iv)
-        } else if compute_hash_rev56(PASSWORD, user_validation_salt, None, revision)? == user_hash {
-            // e) Compute an intermediate user key by computing a hash using algorithm 2.B with an input string
-            // consisting of the UTF-8 user password concatenated with the 8 bytes of user Key Salt. The 32-byte result
-            // is the key used to decrypt the 32-byte UE string using AES-256 in CBC mode with no padding and an
-            // initialization vector of zero. The 32-byte result is the file encryption key.
-            let intermediate_key = compute_hash_rev56(PASSWORD, user_key_salt, None, revision)?;
-
-            let ue_string = dict.get::<object::String>(UE).ok_or(InvalidEncryption)?;
-
-            if ue_string.get().len() != 32 {
-                return Err(InvalidEncryption);
-            }
-
-            let cipher = AES256Cipher::new(&intermediate_key).ok_or(InvalidEncryption)?;
-            let zero_iv = [0u8; 16];
-
-            cipher.decrypt_cbc(&ue_string.get(), &zero_iv)
-        } else {
-            return Err(DecryptionError::PasswordProtected);
-        }
-
-        // TODO:
-        // f) Decrypt the 16-byte Perms string using AES-256 in ECB mode with an initialization vector of zero and
-        // the file encryption key as the key. Verify that bytes 9-11 of the result are the characters "a", "d",
-        // "b". Bytes 0-3 of the decrypted Perms entry, treated as a little-endian integer, are the user
-        // permissions. They shall match the value in the P key.
-    };
-
-    // See pdf.js issue 19484.
-    if encryption_v == 4 && decryption_key.len() < 16 {
-        decryption_key.resize(16, 0)
-    }
-
-    match algorithm {
-        DecryptorTag::None => Ok(Decryptor::None),
-        DecryptorTag::Rc4 => Ok(Decryptor::Rc4 {
-            key: decryption_key,
-        }),
-        DecryptorTag::Aes128 => Ok(Decryptor::Aes128 {
-            key: decryption_key,
-            dict: data.unwrap(),
-        }),
-        DecryptorTag::Aes256 => Ok(Decryptor::Aes256 {
-            key: decryption_key,
-            dict: data.unwrap(),
-        }),
     }
 }
 
@@ -606,4 +444,218 @@ fn compute_hash_rev56(
     let mut result = [0u8; 32];
     result.copy_from_slice(&k[..32]);
     Ok(result)
+}
+
+/// Algorithm 2: Computing a file encryption key in order to encrypt a document (revision 4 and earlier)
+fn compute_decryption_key_rev1234(
+    encrypt_metadata: bool,
+    revision: u8,
+    byte_length: u16,
+    owner_string: &object::String,
+    permissions: u32,
+    id: &[u8],
+    user_string: &object::String,
+) -> Result<Vec<u8>, DecryptionError> {
+    let mut md5_input = vec![];
+
+    // a) TODO: Convert password to PDFDocEncoding.
+    let password = PASSWORD_PADDING;
+
+    // b) Initialise the MD5 hash function and pass the
+    // result of step a) as input to this function.
+    md5_input.extend(&password);
+
+    // c) Pass the value of the encryption dictionary's O entry
+    // to the MD5 hash function.
+    md5_input.extend(owner_string.get().as_ref());
+
+    // d) Convert the integer value of the P entry to a 32-bit unsigned
+    // binary number and pass these bytes to the MD5 hash function, low-order byte first.
+    md5_input.extend(permissions.to_le_bytes());
+
+    // e) Pass the first element of the file's file identifier array to the MD5 hash function.
+    md5_input.extend(id);
+
+    // f) (Security handlers of revision 4 or greater) If document metadata
+    // is not being encrypted, pass 4 bytes with the value 0xFFFFFFFF to the MD5 hash function.
+    if !encrypt_metadata && revision >= 4 {
+        md5_input.extend(&[0xff, 0xff, 0xff, 0xff])
+    }
+
+    // g) Finish the hash.
+    let mut hash = md5::calculate(&md5_input);
+
+    // h) For revisions >= 3, do the following 50 times: Take the output from the previous
+    // MD5 hash and pass the first n bytes of the output as input into a new MD5 hash,
+    // where n is the number of bytes of the file encryption key as defined by the value
+    // of the encryption dictionary's `Length` entry.
+    if revision >= 3 {
+        for _ in 0..50 {
+            hash = md5::calculate(&hash[..byte_length as usize]);
+        }
+    }
+
+    let decryption_key = hash[..byte_length as usize].to_vec();
+    Ok(decryption_key)
+}
+
+/// Algorithm 6: Verify password
+fn authenticate_password_rev234(
+    revision: u8,
+    decryption_key: &[u8],
+    id: &[u8],
+    user_string: &object::String,
+) -> Result<(), DecryptionError> {
+    // a) Perform all but the last step of Algorithm 4 (revision 2) or Algorithm 5 (revision 3 + 4).
+    let result = match revision {
+        2 => algorithm_4_rev2_password_verification(decryption_key),
+        3 | 4 => algorithm_5_rev34_password_verification(decryption_key, id),
+        _ => return Err(DecryptionError::InvalidEncryption),
+    };
+
+    // b) If the result of step (a) is equal to the value of the encryption dictionary's
+    // U entry (comparing on the first 16 bytes in the case of security handlers of
+    // revision 3 or greater), the password supplied is the correct user password.
+    match revision {
+        2 => {
+            if result.as_slice() != user_string.get().as_ref() {
+                return Err(DecryptionError::PasswordProtected);
+            }
+        }
+        3 | 4 => {
+            if Some(&result[..16]) != user_string.get().as_ref().get(0..16) {
+                return Err(DecryptionError::PasswordProtected);
+            }
+        }
+        _ => unreachable!(),
+    }
+
+    Ok(())
+}
+
+/// Algorithm 4: Password verification for revision 2
+fn algorithm_4_rev2_password_verification(decryption_key: &[u8]) -> Vec<u8> {
+    // a) Create a file encryption key based on the user password string.
+    // b) Encrypt the 32-byte padding string using an RC4 encryption
+    // function with the file encryption key from the preceding step.
+    let mut rc = Rc4::new(decryption_key);
+    rc.decrypt(&PASSWORD_PADDING)
+}
+
+/// Algorithm 5: Password verification for revision 3 and 4
+fn algorithm_5_rev34_password_verification(decryption_key: &[u8], id: &[u8]) -> Vec<u8> {
+    // a) Create a file encryption key based on the user password string.
+    let mut rc = Rc4::new(decryption_key);
+
+    let mut input = vec![];
+    // b) Initialise the MD5 hash function and pass the 32-byte padding string.
+    input.extend(PASSWORD_PADDING);
+
+    // c) Pass the first element of the file's file identifier array to the hash function
+    // and finish the hash.
+    input.extend(id);
+    let hash = md5::calculate(&input);
+
+    // d) Encrypt the 16-byte result of the hash, using an RC4 encryption function with
+    // the encryption key from step (a).
+    let mut encrypted = rc.encrypt(&hash);
+
+    // e) Do the following 19 times: Take the output from the previous invocation of the
+    // RC4 function and pass it as input to a new invocation of the function; use a file
+    // encryption key generated by taking each byte of the original file encryption key
+    // obtained in step (a) and performing an XOR (exclusive or) operation between that
+    // byte and the single-byte value of the iteration counter (from 1 to 19).
+    for i in 1..=19 {
+        let mut key = decryption_key.to_vec();
+        for byte in &mut key {
+            *byte ^= i;
+        }
+
+        let mut rc = Rc4::new(&key);
+        encrypted = rc.encrypt(&encrypted);
+    }
+
+    encrypted.resize(32, 0);
+    encrypted
+}
+
+/// Algorithm 2.A: Retrieving the file encryption key from an encrypted document in order to decrypt it (revision 6 and later)
+fn algorithm_2a_retrieve_encryption_key(
+    dict: &Dict,
+    revision: u8,
+    owner_string: &object::String,
+    user_string: &object::String,
+) -> Result<Vec<u8>, DecryptionError> {
+    // a) The UTF-8 password string shall be generated from Unicode input by processing the input string with
+    // the SASLprep (Internet RFC 4013) profile of stringprep (Internet RFC 3454) using the Normalize and BiDi
+    // options, and then converting to a UTF-8 representation.
+    // b) Truncate the UTF-8 representation to 127 bytes if it is longer than 127 bytes.
+
+    let string_len = if revision <= 4 { 32 } else { 48 };
+
+    let os = owner_string.get();
+    let trimmed_os = os.get(..string_len).ok_or(InvalidEncryption)?;
+
+    let (owner_hash, owner_tail) = trimmed_os.split_at_checked(32).ok_or(InvalidEncryption)?;
+    let (owner_validation_salt, owner_key_salt) =
+        owner_tail.split_at_checked(8).ok_or(InvalidEncryption)?;
+
+    let us = user_string.get();
+    let trimmed_us = us.get(..string_len).ok_or(InvalidEncryption)?;
+    let (user_hash, user_tail) = trimmed_us.split_at_checked(32).ok_or(InvalidEncryption)?;
+    let (user_validation_salt, user_key_salt) =
+        user_tail.split_at_checked(8).ok_or(InvalidEncryption)?;
+
+    // c) Test the password against the owner key by computing a hash using algorithm 2.B
+    // with an input string consisting of the UTF-8 password concatenated with the 8 bytes of
+    // owner Validation Salt, concatenated with the 48-byte U string. If the 32-byte result
+    // matches the first 32 bytes of the O string, this is the owner password.
+    if compute_hash_rev56(PASSWORD, owner_validation_salt, Some(trimmed_us), revision)?
+        == owner_hash
+    {
+        // d) Compute an intermediate owner key by computing a hash using algorithm 2.B with an input string
+        // consisting of the UTF-8 owner password concatenated with the 8 bytes of owner Key Salt,
+        // concatenated with the 48-byte U string. The 32-byte result is the key used to decrypt the 32-byte OE string
+        // using AES-256 in CBC mode with no padding and an initialization vector of zero. The 32-byte result is the file encryption key.
+        let intermediate_owner_key =
+            compute_hash_rev56(PASSWORD, owner_key_salt, Some(trimmed_us), revision)?;
+
+        let oe_string = dict
+            .get::<object::String>(OE)
+            .ok_or(DecryptionError::InvalidEncryption)?;
+
+        if oe_string.get().len() != 32 {
+            return Err(DecryptionError::InvalidEncryption);
+        }
+
+        let cipher = AES256Cipher::new(&intermediate_owner_key).ok_or(InvalidEncryption)?;
+        let zero_iv = [0u8; 16];
+
+        Ok(cipher.decrypt_cbc(&oe_string.get(), &zero_iv))
+    } else if compute_hash_rev56(PASSWORD, user_validation_salt, None, revision)? == user_hash {
+        // e) Compute an intermediate user key by computing a hash using algorithm 2.B with an input string
+        // consisting of the UTF-8 user password concatenated with the 8 bytes of user Key Salt. The 32-byte result
+        // is the key used to decrypt the 32-byte UE string using AES-256 in CBC mode with no padding and an
+        // initialization vector of zero. The 32-byte result is the file encryption key.
+        let intermediate_key = compute_hash_rev56(PASSWORD, user_key_salt, None, revision)?;
+
+        let ue_string = dict.get::<object::String>(UE).ok_or(InvalidEncryption)?;
+
+        if ue_string.get().len() != 32 {
+            return Err(InvalidEncryption);
+        }
+
+        let cipher = AES256Cipher::new(&intermediate_key).ok_or(InvalidEncryption)?;
+        let zero_iv = [0u8; 16];
+
+        Ok(cipher.decrypt_cbc(&ue_string.get(), &zero_iv))
+    } else {
+        Err(DecryptionError::PasswordProtected)
+    }
+
+    // TODO:
+    // f) Decrypt the 16-byte Perms string using AES-256 in ECB mode with an initialization vector of zero and
+    // the file encryption key as the key. Verify that bytes 9-11 of the result are the characters "a", "d",
+    // "b". Bytes 0-3 of the decrypted Perms entry, treated as a little-endian integer, are the user
+    // permissions. They shall match the value in the P key.
 }
