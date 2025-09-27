@@ -51,7 +51,7 @@ impl ShadingFunction {
     }
 }
 
-/// A type of shading
+/// A type of shading.
 #[derive(Debug)]
 pub enum ShadingType {
     /// A function-based shading.
@@ -603,6 +603,8 @@ fn read_free_form_triangles(
 struct InterpolationHelpers {
     bp_coord: BitSize,
     bp_comp: BitSize,
+    coord_max: f32,
+    comp_max: f32,
     x_min: f32,
     x_max: f32,
     y_min: f32,
@@ -611,27 +613,26 @@ struct InterpolationHelpers {
 
 impl InterpolationHelpers {
     fn new(bp_coord: BitSize, bp_comp: BitSize, x_min: f32, x_max: f32, y_min: f32, y_max: f32) -> Self {
-        Self { bp_coord, bp_comp, x_min, x_max, y_min, y_max }
+        let coord_max = 2.0f32.powi(bp_coord.bits() as i32) - 1.0;
+        let comp_max = 2.0f32.powi(bp_comp.bits() as i32) - 1.0;
+        Self {
+            bp_coord,
+            bp_comp,
+            coord_max,
+            comp_max,
+            x_min,
+            x_max,
+            y_min,
+            y_max
+        }
     }
 
     fn interpolate_coord(&self, n: u32, d_min: f32, d_max: f32) -> f32 {
-        interpolate(
-            n as f32,
-            0.0,
-            2.0f32.powi(self.bp_coord.bits() as i32) - 1.0,
-            d_min,
-            d_max,
-        )
+        interpolate(n as f32, 0.0, self.coord_max, d_min, d_max)
     }
 
     fn interpolate_comp(&self, n: u32, d_min: f32, d_max: f32) -> f32 {
-        interpolate(
-            n as f32,
-            0.0,
-            2.0f32.powi(self.bp_comp.bits() as i32) - 1.0,
-            d_min,
-            d_max,
-        )
+        interpolate(n as f32, 0.0, self.comp_max, d_min, d_max)
     }
 
     fn read_point(&self, reader: &mut BitReader) -> Option<Point> {
@@ -826,7 +827,7 @@ fn read_coons_patch_mesh(
         bp_comp,
         has_function,
         decode,
-        12, // Coons patches have 12 control points
+        12,
         |control_points, colors| {
             let mut coons_points = [Point::ZERO; 12];
             coons_points.copy_from_slice(&control_points[0..12]);
@@ -835,7 +836,7 @@ fn read_coons_patch_mesh(
                 colors,
             }
         },
-        copy_coons_control_points,
+        copy_patch_control_points,
     )
 }
 
@@ -893,7 +894,6 @@ where
 
                 copy_control_points(flag, prev_points, &mut control_points);
 
-                // Copy appropriate colors based on flag
                 match flag {
                     1 => {
                         colors[0] = prev_colors[1].clone();
@@ -923,7 +923,6 @@ where
             _ => break,
         }
 
-        // Convert to fixed-size array for the create_patch function
         let mut fixed_points = [Point::ZERO; 16];
         for i in 0..16 {
             if i < control_points.len() {
@@ -936,31 +935,7 @@ where
     Some(patches)
 }
 
-fn copy_coons_control_points(flag: u32, prev_control_points: &[Point], control_points: &mut [Point]) {
-    match flag {
-        1 => {
-            control_points[0] = prev_control_points[3];
-            control_points[1] = prev_control_points[4];
-            control_points[2] = prev_control_points[5];
-            control_points[3] = prev_control_points[6];
-        }
-        2 => {
-            control_points[0] = prev_control_points[6];
-            control_points[1] = prev_control_points[7];
-            control_points[2] = prev_control_points[8];
-            control_points[3] = prev_control_points[9];
-        }
-        3 => {
-            control_points[0] = prev_control_points[9];
-            control_points[1] = prev_control_points[10];
-            control_points[2] = prev_control_points[11];
-            control_points[3] = prev_control_points[0];
-        }
-        _ => {}
-    }
-}
-
-fn copy_tensor_control_points(flag: u32, prev_control_points: &[Point], control_points: &mut [Point]) {
+fn copy_patch_control_points(flag: u32, prev_control_points: &[Point], control_points: &mut [Point]) {
     match flag {
         1 => {
             control_points[0] = prev_control_points[3];
@@ -999,12 +974,12 @@ fn read_tensor_product_patch_mesh(
         bp_comp,
         has_function,
         decode,
-        16, // Tensor product patches have 16 control points
+        16, 
         |control_points, colors| TensorProductPatch {
             control_points,
             colors,
         },
-        copy_tensor_control_points,
+        copy_patch_control_points,
     )
 }
 
