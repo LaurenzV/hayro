@@ -483,6 +483,8 @@ impl XRefEntry {
 fn populate_xref_impl<'a>(data: &'a [u8], pos: usize, xref_map: &mut XrefMap) -> Option<&'a [u8]> {
     let mut reader = Reader::new(data);
     reader.jump(pos);
+    // In case the position points to before the object number of a xref stream.
+    reader.skip_white_spaces_and_comments();
 
     let mut r2 = reader.clone();
     if reader
