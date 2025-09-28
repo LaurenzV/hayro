@@ -25,6 +25,8 @@ pdf-writer = { workspace = true }
 resvg = { workspace = true }
 walkdir = "2"
 rayon = "1.8"
+memchr = { version = "2.7.6"}
+
 
 [dev-dependencies]
 once_cell = { workspace = true }
