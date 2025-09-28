@@ -7,11 +7,21 @@ pub(crate) fn decode(data: &[u8], params: Dict) -> Option<Vec<u8>> {
     let mut decoder = zune_jpeg::JpegDecoder::new(data);
     decoder.decode_headers().ok()?;
 
+    let jpeg_data = extract_jpeg_data(data)?;
+
     let color_transform = params.get::<u8>(COLOR_TRANSFORM);
 
     let mut out_colorspace = match decoder.get_input_colorspace().unwrap() {
         ColorSpace::YCbCr => {
-            if color_transform.is_none_or(|c| c == 1) {
+            if jpeg_data.app14.is_none()
+                && jpeg_data.components.get(0)?.id == b'R'
+                && jpeg_data.components.get(1)?.id == b'G'
+                && jpeg_data.components.get(2)?.id == b'B'
+            {
+                // pdf.js issue 11931, actual image data is RGB but zune-jpeg seems to register
+                // YCbCr, so choose YCbCr to prevent zune-jpeg from applying the transform.
+                ColorSpace::YCbCr
+            } else if color_transform.is_none_or(|c| c == 1) {
                 ColorSpace::RGB
             } else {
                 ColorSpace::YCbCr
@@ -55,4 +65,96 @@ pub(crate) fn decode(data: &[u8], params: Dict) -> Option<Vec<u8>> {
     }
 
     Some(decoded)
+}
+
+#[derive(Debug)]
+struct App14Segment {
+    _version: u16,
+    _flags0: u16,
+    _flags1: u16,
+    _color_transform: u8,
+}
+
+#[derive(Debug)]
+struct JpegComponent {
+    id: u8,
+    _h_sampling: u8,
+    _v_sampling: u8,
+    _quantization_table: u8,
+}
+
+#[derive(Debug)]
+struct JpegData {
+    app14: Option<App14Segment>,
+    components: Vec<JpegComponent>,
+}
+
+fn extract_jpeg_data(jpeg_bytes: &[u8]) -> Option<JpegData> {
+    if jpeg_bytes.len() < 4 || &jpeg_bytes[0..2] != &[0xFF, 0xD8] {
+        return None;
+    }
+
+    let mut pos = 2;
+    let mut app14 = None;
+    let mut components = Vec::new();
+
+    while pos + 3 < jpeg_bytes.len() {
+        if jpeg_bytes[pos] != 0xFF {
+            return None;
+        }
+
+        let marker = jpeg_bytes[pos + 1];
+
+        if marker == 0xFF {
+            pos += 1;
+            continue;
+        }
+
+        if (0xD0..=0xD7).contains(&marker) || marker == 0x01 || marker == 0xDA {
+            break;
+        }
+
+        if pos + 3 >= jpeg_bytes.len() {
+            break;
+        }
+
+        let length = u16::from_be_bytes([jpeg_bytes[pos + 2], jpeg_bytes[pos + 3]]) as usize;
+
+        // Extract APP14 segment
+        if marker == 0xEE && pos + 2 + length <= jpeg_bytes.len() {
+            let app14_data = &jpeg_bytes[pos + 4..pos + 2 + length];
+            if app14_data.len() >= 12 && &app14_data[0..5] == b"Adobe" {
+                app14 = Some(App14Segment {
+                    _version: u16::from_be_bytes([app14_data[5], app14_data[6]]),
+                    _flags0: u16::from_be_bytes([app14_data[7], app14_data[8]]),
+                    _flags1: u16::from_be_bytes([app14_data[9], app14_data[10]]),
+                    _color_transform: app14_data[11],
+                });
+            }
+        }
+
+        // Extract SOF (Start of Frame) components
+        if (0xC0..=0xCF).contains(&marker) && marker != 0xC4 && marker != 0xC8 && marker != 0xCC {
+            if pos + 10 <= jpeg_bytes.len() {
+                let num_components = jpeg_bytes[pos + 9] as usize;
+
+                for i in 0..num_components {
+                    let comp_pos = pos + 10 + i * 3;
+                    if comp_pos + 2 < jpeg_bytes.len() {
+                        let sampling = jpeg_bytes[comp_pos + 1];
+                        components.push(JpegComponent {
+                            id: jpeg_bytes[comp_pos],
+                            _h_sampling: (sampling >> 4) & 0x0F,
+                            _v_sampling: sampling & 0x0F,
+                            _quantization_table: jpeg_bytes[comp_pos + 2],
+                        });
+                    }
+                }
+            }
+        }
+
+        pos += 2 + length;
+    }
+
+    Some(JpegData { app14, components })
 }

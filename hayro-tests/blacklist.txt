@@ -200,9 +200,6 @@ issue14462
 #black bars
 issue12295
 
-# weird pink blackground
-issue11931
-
 # wrong text
 issue11768
 
