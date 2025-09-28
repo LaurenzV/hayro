@@ -21,6 +21,7 @@ use hayro_syntax::page::Resources;
 use kurbo::{Affine, Rect, Shape};
 use log::warn;
 use smallvec::{SmallVec, smallvec};
+use std::iter;
 use std::ops::Deref;
 
 pub(crate) enum XObject<'a> {
@@ -360,7 +361,7 @@ impl DecodedImageXObject {
             bits_per_component,
         )?;
 
-        let f32_data = {
+        let mut f32_data = {
             let decode_arr = dict
                 .get::<Array>(D)
                 .or_else(|| dict.get::<Array>(DECODE))
@@ -370,18 +371,26 @@ impl DecodedImageXObject {
             decode(&components, &color_space, bits_per_component, &decode_arr)?
         };
 
+        let width = obj.width;
+        let mut height = obj.height;
+        let row_len = width as usize * color_space.num_components() as usize;
+
+        if (row_len * height as usize) < f32_data.len() {
+            // Too much data, truncate it.
+            f32_data.truncate(row_len * height as usize);
+        } else if (row_len * width as usize) > f32_data.len() {
+            // Too little data, adapt the height and pad.
+            height = f32_data.len().div_ceil(row_len) as u32;
+
+            if f32_data.len() % row_len > 0 {
+                f32_data.extend(iter::repeat_n(0.0, row_len - (f32_data.len() % row_len)));
+            }
+        }
+
         let mut rgb_data = if obj.is_image_mask || obj.force_luma {
             None
         } else {
-            {
-                get_rgb_data(
-                    &f32_data,
-                    obj.width,
-                    obj.height,
-                    &color_space,
-                    obj.interpolate,
-                )
-            }
+            { get_rgb_data(&f32_data, width, height, &color_space, obj.interpolate) }
         };
 
         if let Some(transfer_function) = &obj.transfer_function
@@ -412,7 +421,7 @@ impl DecodedImageXObject {
         }
 
         let luma_data = {
-            let data_len = obj.width as usize * obj.height as usize;
+            let data_len = width as usize * height as usize;
 
             if obj.is_image_mask || obj.force_luma {
                 let data = if obj.is_image_mask {
@@ -428,9 +437,9 @@ impl DecodedImageXObject {
                 };
 
                 Some(LumaData {
-                    data: fix_image_length(data, data_len, 255),
-                    width: obj.width,
-                    height: obj.height,
+                    data: fix_image_length(data, data_len, 0),
+                    width,
+                    height,
                     interpolate: obj.interpolate,
                 })
             } else {
@@ -440,12 +449,12 @@ impl DecodedImageXObject {
                     let smask_data = decoded.image_data.and_then(|i| i.alpha);
 
                     if let Some(data) = smask_data {
-                        let fixed = fix_image_length(data, data_len, 255);
+                        let fixed = fix_image_length(data, data_len, 0);
 
                         Some(LumaData {
                             data: fixed,
-                            width: obj.width,
-                            height: obj.height,
+                            width,
+                            height,
                             interpolate: obj.interpolate,
                         })
                     } else {
@@ -484,9 +493,9 @@ impl DecodedImageXObject {
                     }
 
                     Some(LumaData {
-                        data: fix_image_length(mask_data, data_len, 255),
-                        width: obj.width,
-                        height: obj.height,
+                        data: fix_image_length(mask_data, data_len, 0),
+                        width,
+                        height,
                         interpolate: obj.interpolate,
                     })
                 } else {
@@ -514,8 +523,6 @@ fn get_rgb_data(
         return None;
     }
 
-    let data_len = width as usize * height as usize * 3;
-
     let decoded = decoded
         .chunks(cs.num_components() as usize)
         .flat_map(|v| {
@@ -525,7 +532,7 @@ fn get_rgb_data(
         .collect::<Vec<_>>();
 
     Some(RgbData {
-        data: fix_image_length(decoded, data_len, 0),
+        data: decoded,
         width,
         height,
         interpolate,

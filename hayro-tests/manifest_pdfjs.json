@@ -280,6 +280,12 @@
     "last_page": 0
   },
   {
+    "id": "bug1308536",
+    "file": "pdfs/bug1308536.link",
+    "link": true,
+    "md5": "cc2258981e33ad8d96acbf87318716d5"
+  },
+  {
     "id": "bug1337429",
     "file": "pdfs/bug1337429.link",
     "link": true,
@@ -1359,6 +1365,14 @@
     "file": "pdfs/issue13626.link",
     "md5": "68bc1c2459d56e8c33f5a12a88c9df7d",
     "link": true
+  },
+  {
+    "id": "issue13783",
+    "file": "pdfs/issue13783.link",
+    "link": true,
+    "md5": "6958d827afa566efbd82f53271ea5cd6",
+    "first_page": 6,
+    "last_page": 6
   },
   {
     "id": "issue13794",
@@ -2551,6 +2565,12 @@
     "file": "pdfs/issue5039.link",
     "link": true,
     "md5": "5c131f458ee6b65cc096ccaf0474ee3a"
+  },
+  {
+    "id": "issue5044",
+    "file": "pdfs/issue5044.link",
+    "link": true,
+    "md5": "44788cd31dcb4a2495ded34a84c4a765"
   },
   {
     "id": "issue5070",

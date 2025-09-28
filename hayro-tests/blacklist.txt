@@ -59,7 +59,6 @@ issue16114
 bug1050040
 
 #investigate
-bug1308536
 bug1365930
 bug1354114
 bug1443140
@@ -159,9 +158,6 @@ issue16432
 issue16464
 issue18801
 
-#smask with transfer function
-issue5044
-
 # broken loca table
 issue2537
 
@@ -183,10 +179,10 @@ issue5752
 #pdf layers
 issue12007_reduced
 
-# colors turn into grey
+# widget annotation
 issue17906
 
-#black rectangle
+#black rectangle, type0 without embeddedf font
 issue18466
 
 # panic in jbig
@@ -203,10 +199,6 @@ issue14462
 
 #black bars
 issue12295
-
-# missing pages maybe? compare with other viewers
-issue13783
-
 
 # weird pink blackground
 issue11931

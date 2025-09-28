@@ -304,6 +304,7 @@ use crate::run_render_test;
 #[test] fn pdfjs_bug1252420() { run_render_test("pdfjs_bug1252420", "downloads/pdfjs/bug1252420.pdf", None); }
 #[test] fn pdfjs_bug1260585() { run_render_test("pdfjs_bug1260585", "downloads/pdfjs/bug1260585.pdf", Some("..=0")); }
 #[test] fn pdfjs_bug1292316() { run_render_test("pdfjs_bug1292316", "downloads/pdfjs/bug1292316.pdf", Some("..=0")); }
+#[test] fn pdfjs_bug1308536() { run_render_test("pdfjs_bug1308536", "downloads/pdfjs/bug1308536.pdf", None); }
 #[test] fn pdfjs_bug1337429() { run_render_test("pdfjs_bug1337429", "downloads/pdfjs/bug1337429.pdf", None); }
 #[test] fn pdfjs_bug1392647() { run_render_test("pdfjs_bug1392647", "downloads/pdfjs/bug1392647.pdf", None); }
 #[test] fn pdfjs_bug1393476() { run_render_test("pdfjs_bug1393476", "downloads/pdfjs/bug1393476.pdf", None); }
@@ -472,6 +473,7 @@ use crate::run_render_test;
 #[test] fn pdfjs_issue13561_reduced() { run_render_test("pdfjs_issue13561_reduced", "downloads/pdfjs/issue13561_reduced.pdf", None); }
 #[test] fn pdfjs_issue13610() { run_render_test("pdfjs_issue13610", "downloads/pdfjs/issue13610.pdf", None); }
 #[test] fn pdfjs_issue13626() { run_render_test("pdfjs_issue13626", "downloads/pdfjs/issue13626.pdf", None); }
+#[test] fn pdfjs_issue13783() { run_render_test("pdfjs_issue13783", "downloads/pdfjs/issue13783.pdf", Some("6..=6")); }
 #[test] fn pdfjs_issue13794() { run_render_test("pdfjs_issue13794", "downloads/pdfjs/issue13794.pdf", Some("2..")); }
 #[test] fn pdfjs_issue13851() { run_render_test("pdfjs_issue13851", "downloads/pdfjs/issue13851.pdf", None); }
 #[test] fn pdfjs_issue13931_default() { run_render_test("pdfjs_issue13931_default", "downloads/pdfjs/issue13931-default.pdf", None); }
@@ -655,6 +657,7 @@ use crate::run_render_test;
 #[test] fn pdfjs_issue4926() { run_render_test("pdfjs_issue4926", "downloads/pdfjs/issue4926.pdf", None); }
 #[test] fn pdfjs_issue5010() { run_render_test("pdfjs_issue5010", "downloads/pdfjs/issue5010.pdf", Some("0..=0")); }
 #[test] fn pdfjs_issue5039() { run_render_test("pdfjs_issue5039", "downloads/pdfjs/issue5039.pdf", None); }
+#[test] fn pdfjs_issue5044() { run_render_test("pdfjs_issue5044", "downloads/pdfjs/issue5044.pdf", None); }
 #[test] fn pdfjs_issue5070() { run_render_test("pdfjs_issue5070", "downloads/pdfjs/issue5070.pdf", None); }
 #[test] fn pdfjs_issue5084() { run_render_test("pdfjs_issue5084", "downloads/pdfjs/issue5084.pdf", None); }
 #[test] fn pdfjs_issue5138() { run_render_test("pdfjs_issue5138", "downloads/pdfjs/issue5138.pdf", None); }
