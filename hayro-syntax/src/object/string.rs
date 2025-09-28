@@ -539,7 +539,7 @@ mod tests {
                 .read_without_context::<String>()
                 .unwrap()
                 .get(),
-            b"3".to_vec()
+            b"\x03".to_vec()
         )
     }
 
@@ -550,7 +550,7 @@ mod tests {
                 .read_without_context::<String>()
                 .unwrap()
                 .get(),
-            b"36".to_vec()
+            b"\x1e".to_vec()
         )
     }
 
@@ -561,7 +561,7 @@ mod tests {
                 .read_without_context::<String>()
                 .unwrap()
                 .get(),
-            b"36ab".to_vec()
+            b"\x1eab".to_vec()
         )
     }
 
@@ -601,14 +601,13 @@ mod tests {
 
     #[test]
     fn literal_string_invalid() {
-        // In this case, we just ignore the solidus and treat it as literal numbers.
         assert_eq!(
             Reader::new("(Hi \\778)".as_bytes())
                 .read_without_context::<LiteralString>()
                 .unwrap()
                 .get()
                 .to_vec(),
-            b"Hi 778".to_vec()
+            b"Hi \x3F8".to_vec()
         );
     }
 
