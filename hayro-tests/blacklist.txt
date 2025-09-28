@@ -224,9 +224,6 @@ issue9650
 # text should be bold but isnt
 issue9291
 
-# mediabox / cropbox issue
-issue7872
-
 # optional content groups
 issue269_1
 issue269_2
@@ -246,7 +243,6 @@ issue4934
 
 # pixelated image mask
 issue4246
-
 
 # weirdly spaced text
 issue4630

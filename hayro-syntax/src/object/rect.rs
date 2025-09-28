@@ -6,9 +6,9 @@ use crate::reader::{Readable, Reader, ReaderContext};
 
 pub use kurbo::Rect;
 
-impl Readable<'_> for Rect {
-    fn read(r: &mut Reader<'_>, _: &ReaderContext) -> Option<Self> {
-        let arr = r.read_without_context::<Array>()?;
+impl<'a> Readable<'a> for Rect {
+    fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
+        let arr = r.read::<Array>(ctx)?;
         from_arr(&arr)
     }
 }

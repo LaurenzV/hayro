@@ -3121,6 +3121,12 @@
     "md5": "290d4d5da041ffbcb1ea5d3b0ed8ee91"
   },
   {
+    "id": "issue7872",
+    "file": "pdfs/issue7872.link",
+    "link": true,
+    "md5": "81781dfecfcb7e9cd9cc7e60f8b747b7"
+  },
+  {
     "id": "issue7891_bc0",
     "file": "pdfs/issue7891_bc0.link",
     "link": true,
