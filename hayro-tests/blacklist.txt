@@ -255,11 +255,12 @@ issue4934
 # pixelated image mask
 issue4246
 
-# missing grid lines
-issue4260
 
 # weirdly spaced text
 issue4630
+
+#crash in jbig decoder
+issue18973
 
 # wrong handling of extgstate text
 extgstate
@@ -275,4 +276,3 @@ bug1721218_reduced
 issue6365
 issue4648
 issue17289
-issue18973

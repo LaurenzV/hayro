@@ -2425,6 +2425,12 @@
     "link": true
   },
   {
+    "id": "issue4260",
+    "file": "pdfs/issue4260.link",
+    "link": true,
+    "md5": "6b39ebc8c4dddc41f1b031c070c212ad"
+  },
+  {
     "id": "issue4304",
     "file": "pdfs/issue4304.link",
     "link": true,

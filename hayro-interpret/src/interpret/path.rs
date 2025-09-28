@@ -1,8 +1,9 @@
 use crate::color::{Color, ColorSpace};
 use crate::context::Context;
 use crate::device::Device;
-use crate::{FillRule, Paint, PathDrawMode};
-use kurbo::{BezPath, PathEl};
+use crate::util::FloatExt;
+use crate::{FillRule, Paint, PathDrawMode, StrokeProps};
+use kurbo::{BezPath, Cap, Join, PathEl, Shape};
 use smallvec::smallvec;
 
 pub(crate) fn fill_path<'a>(
@@ -54,16 +55,43 @@ pub(crate) fn fill_path_impl<'a>(
     let paint = get_paint(context, false);
     device.set_soft_mask(context.get().graphics_state.soft_mask.clone());
 
+    let mut draw = |path: &BezPath| {
+        // pdf.js issue 4260: Replace zero-sized paths with a small stroke instead.
+        let bbox = path.bounding_box();
+
+        match (
+            (bbox.width() as f32).is_nearly_zero(),
+            (bbox.height() as f32).is_nearly_zero(),
+        ) {
+            (false, false) => {
+                device.draw_path(path, base_transform, &paint, &PathDrawMode::Fill(fill_rule))
+            }
+            _ => {
+                let mut path = BezPath::new();
+                path.move_to((bbox.x0, bbox.y0));
+                path.line_to((bbox.x1, bbox.y1));
+
+                let stroke_props = StrokeProps {
+                    // TODO: Make dependent on transform?
+                    line_width: 0.001,
+                    line_join: Join::Bevel,
+                    line_cap: Cap::Butt,
+                    ..Default::default()
+                };
+
+                device.draw_path(
+                    &path,
+                    base_transform,
+                    &paint,
+                    &PathDrawMode::Stroke(stroke_props),
+                );
+            }
+        };
+    };
+
     match path {
-        None => device.draw_path(
-            context.path(),
-            base_transform,
-            &paint,
-            &PathDrawMode::Fill(fill_rule),
-        ),
-        Some(path) => {
-            device.draw_path(path, base_transform, &paint, &PathDrawMode::Fill(fill_rule))
-        }
+        None => draw(context.path()),
+        Some(path) => draw(path),
     };
 }
 
