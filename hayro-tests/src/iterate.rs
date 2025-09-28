@@ -12,6 +12,9 @@ static IGNORE_LIST: &[&str] = &[
     // Password-protected
     "0000300", "0004569", "0006766", "0007159", "0008404", "0010697",
     
+    // Broken but works in other viewers
+    "0010055",
+    
     // Broken PDF, maybe fixable
     "0000399", "0003304", 
     
