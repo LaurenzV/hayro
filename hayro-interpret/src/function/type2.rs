@@ -19,7 +19,7 @@ impl Type2 {
         let c0 = dict.get::<Values>(C0).unwrap_or(smallvec![0.0]);
         let c1 = dict.get::<Values>(C1).unwrap_or(smallvec![1.0]);
         let clamper = Clamper::new(dict)?;
-        let n = dict.get::<Number>(N)?.as_f32();
+        let n = dict.get::<Number>(N)?.as_f64() as f32;
 
         Some(Self { c0, c1, clamper, n })
     }

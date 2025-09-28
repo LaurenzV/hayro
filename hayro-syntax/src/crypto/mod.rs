@@ -141,8 +141,15 @@ pub(crate) fn get(dict: &Dict, id: &[u8]) -> Result<Decryptor, DecryptionError> 
 
     let owner_string = dict.get::<object::String>(O).ok_or(InvalidEncryption)?;
     let user_string = dict.get::<object::String>(U).ok_or(InvalidEncryption)?;
-    let permissions =
-        u32::from_be_bytes(dict.get::<i32>(P).ok_or(InvalidEncryption)?.to_be_bytes());
+    let permissions = {
+        let raw = dict.get::<i64>(P).ok_or(InvalidEncryption)?;
+
+        if raw < 0 {
+            u32::from_be_bytes((raw as i32).to_be_bytes())
+        } else {
+            raw as u32
+        }
+    };
 
     let mut decryption_key = if revision <= 4 {
         let key = decryption_key_rev1234(
@@ -153,7 +160,7 @@ pub(crate) fn get(dict: &Dict, id: &[u8]) -> Result<Decryptor, DecryptionError> 
             permissions,
             id,
         )?;
-        authenticate_password_rev234(revision, &key, id, &user_string)?;
+        authenticate_user_password_rev234(revision, &key, id, &user_string)?;
 
         key
     } else {
@@ -471,8 +478,8 @@ fn decryption_key_rev1234(
     Ok(decryption_key)
 }
 
-/// Algorithm 6: Verify password
-fn authenticate_password_rev234(
+/// Algorithm 6: Authenticating the user password
+fn authenticate_user_password_rev234(
     revision: u8,
     decryption_key: &[u8],
     id: &[u8],
@@ -480,8 +487,8 @@ fn authenticate_password_rev234(
 ) -> Result<(), DecryptionError> {
     // a) Perform all but the last step of Algorithm 4 (revision 2) or Algorithm 5 (revision 3 + 4).
     let result = match revision {
-        2 => authenticate_password_rev2(decryption_key),
-        3 | 4 => authenticate_password_rev34(decryption_key, id),
+        2 => user_password_rev2(decryption_key),
+        3 | 4 => user_password_rev34(decryption_key, id),
         _ => return Err(DecryptionError::InvalidEncryption),
     };
 
@@ -505,8 +512,9 @@ fn authenticate_password_rev234(
     Ok(())
 }
 
-/// Algorithm 4: Password verification for revision 2
-fn authenticate_password_rev2(decryption_key: &[u8]) -> Vec<u8> {
+/// Algorithm 4: Computing the encryption dictionary’s U-entry value
+/// (Security handlers of revision 2).
+fn user_password_rev2(decryption_key: &[u8]) -> Vec<u8> {
     // a) Create a file encryption key based on the user password string.
     // b) Encrypt the 32-byte padding string using an RC4 encryption
     // function with the file encryption key from the preceding step.
@@ -514,8 +522,9 @@ fn authenticate_password_rev2(decryption_key: &[u8]) -> Vec<u8> {
     rc.decrypt(&PASSWORD_PADDING)
 }
 
-/// Algorithm 5: Password verification for revision 3 and 4
-fn authenticate_password_rev34(decryption_key: &[u8], id: &[u8]) -> Vec<u8> {
+/// Algorithm 5: Computing the encryption dictionary’s U (user password)
+/// value (Security handlers of revision 3 or 4).
+fn user_password_rev34(decryption_key: &[u8], id: &[u8]) -> Vec<u8> {
     // a) Create a file encryption key based on the user password string.
     let mut rc = Rc4::new(decryption_key);
 

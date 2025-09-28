@@ -464,7 +464,7 @@ pub fn interpret<'a, 'b>(
                 text::show_text_string(context, device, resources, n.0)
             }
             TypedInstruction::TextRenderingMode(r) => {
-                let mode = match r.0.as_i32() {
+                let mode = match r.0.as_i64() {
                     0 => TextRenderingMode::Fill,
                     1 => TextRenderingMode::Stroke,
                     2 => TextRenderingMode::FillStroke,
@@ -474,7 +474,7 @@ pub fn interpret<'a, 'b>(
                     6 => TextRenderingMode::FillAndStrokeAndClip,
                     7 => TextRenderingMode::Clip,
                     _ => {
-                        warn!("unknown text rendering mode {}", r.0.as_i32());
+                        warn!("unknown text rendering mode {}", r.0.as_i64());
 
                         TextRenderingMode::Fill
                     }

@@ -12,7 +12,7 @@ pub(crate) fn convert_transform(t: Transform) -> kurbo::Affine {
 }
 
 pub(crate) fn convert_line_cap(lc: LineCap) -> kurbo::Cap {
-    match lc.0.as_i32() {
+    match lc.0.as_i64() {
         0 => kurbo::Cap::Butt,
         1 => kurbo::Cap::Round,
         2 => kurbo::Cap::Square,
@@ -21,7 +21,7 @@ pub(crate) fn convert_line_cap(lc: LineCap) -> kurbo::Cap {
 }
 
 pub(crate) fn convert_line_join(lc: LineJoin) -> kurbo::Join {
-    match lc.0.as_i32() {
+    match lc.0.as_i64() {
         0 => kurbo::Join::Miter,
         1 => kurbo::Join::Round,
         2 => kurbo::Join::Bevel,

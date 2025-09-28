@@ -210,7 +210,7 @@ fn eval_inner(procedure: &[PostScriptOp], arg_stack: &mut InterpreterStack) -> O
 
     for op in procedure {
         match op {
-            PostScriptOp::Number(n) => arg_stack.push(Argument::Float(n.as_f32()))?,
+            PostScriptOp::Number(n) => arg_stack.push(Argument::Float(n.as_f64() as f32))?,
             PostScriptOp::Abs => {
                 one_f!(|n: f32| n.abs());
             }

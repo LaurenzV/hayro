@@ -20,7 +20,7 @@ impl Number {
     /// Returns the number as a f64.
     pub fn as_f64(&self) -> f64 {
         match self.0 {
-            InternalNumber::Real(r) => r as f64,
+            InternalNumber::Real(r) => r,
             InternalNumber::Integer(i) => i as f64,
         }
     }
@@ -28,25 +28,16 @@ impl Number {
     /// Returns the number as a f32.
     pub fn as_f32(&self) -> f32 {
         match self.0 {
-            InternalNumber::Real(r) => r,
-            InternalNumber::Integer(i) => {
-                let converted = i as f32;
-
-                // Double check whether conversion didn't overflow.
-                if converted as i32 != i {
-                    debug!("integer {i} was truncated to {converted}");
-                }
-
-                converted
-            }
+            InternalNumber::Real(r) => r as f32,
+            InternalNumber::Integer(i) => i as f32,
         }
     }
 
-    /// Returns the number as an i32.
-    pub fn as_i32(&self) -> i32 {
+    /// Returns the number as an i64.
+    pub fn as_i64(&self) -> i64 {
         match self.0 {
             InternalNumber::Real(r) => {
-                let res = r as i32;
+                let res = r as i64;
 
                 if !(r.trunc() == r) {
                     debug!("float {r} was truncated to {res}");
@@ -60,12 +51,12 @@ impl Number {
 
     /// Create a new `Number` from an f32 number.
     pub const fn from_f32(num: f32) -> Self {
-        Self(InternalNumber::Real(num))
+        Self(InternalNumber::Real(num as f64))
     }
 
     /// Create a new `Number` from an i32 number.
     pub const fn from_i32(num: i32) -> Self {
-        Self(InternalNumber::Integer(num))
+        Self(InternalNumber::Integer(num as i64))
     }
 }
 
@@ -109,9 +100,9 @@ impl Readable<'_> for Number {
         let num = f64::from_str(std::str::from_utf8(data).ok()?).ok()?;
 
         if num.fract() == 0.0 {
-            Some(Number(InternalNumber::Integer(num as i32)))
+            Some(Number(InternalNumber::Integer(num as i64)))
         } else {
-            Some(Number(InternalNumber::Real(num as f32)))
+            Some(Number(InternalNumber::Real(num)))
         }
     }
 }
@@ -120,8 +111,8 @@ object!(Number, Number);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum InternalNumber {
-    Real(f32),
-    Integer(i32),
+    Real(f64),
+    Integer(i64),
 }
 
 macro_rules! int_num {
@@ -143,7 +134,7 @@ macro_rules! int_num {
         impl<'a> Readable<'a> for $i {
             fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<$i> {
                 r.read::<Number>(ctx)
-                    .map(|n| n.as_i32())
+                    .map(|n| n.as_i64())
                     .and_then(|n| n.try_into().ok())
             }
         }
@@ -153,7 +144,7 @@ macro_rules! int_num {
 
             fn try_from(value: Object<'_>) -> std::result::Result<Self, Self::Error> {
                 match value {
-                    Object::Number(n) => n.as_i32().try_into().ok().ok_or(()),
+                    Object::Number(n) => n.as_i64().try_into().ok().ok_or(()),
                     _ => Err(()),
                 }
             }
@@ -164,6 +155,7 @@ macro_rules! int_num {
 }
 
 int_num!(i32);
+int_num!(i64);
 int_num!(u32);
 int_num!(u16);
 int_num!(usize);
@@ -177,7 +169,8 @@ impl Skippable for f32 {
 
 impl Readable<'_> for f32 {
     fn read(r: &mut Reader, _: &ReaderContext) -> Option<Self> {
-        r.read_without_context::<Number>().map(|n| n.as_f32())
+        r.read_without_context::<Number>()
+            .map(|n| n.as_f64() as f32)
     }
 }
 
@@ -186,7 +179,7 @@ impl TryFrom<Object<'_>> for f32 {
 
     fn try_from(value: Object<'_>) -> Result<Self, Self::Error> {
         match value {
-            Object::Number(n) => Ok(n.as_f32()),
+            Object::Number(n) => Ok(n.as_f64() as f32),
             _ => Err(()),
         }
     }
@@ -440,8 +433,18 @@ mod tests {
             Reader::new("38359922".as_bytes())
                 .read_without_context::<Number>()
                 .unwrap()
-                .as_i32(),
+                .as_i64(),
             38359922
+        );
+    }
+
+    #[test]
+    fn large_number_2() {
+        assert_eq!(
+            Reader::new("4294966260".as_bytes())
+                .read_without_context::<u32>()
+                .unwrap(),
+            4294966260
         );
     }
 }
