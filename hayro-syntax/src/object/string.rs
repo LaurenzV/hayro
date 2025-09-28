@@ -74,7 +74,7 @@ impl<'a> Readable<'a> for HexString<'a> {
 
         // Exclude outer brackets.
         let result = r.range(start + 1..end - 1).unwrap();
-        dirty |= result.len() % 2 != 0;
+        dirty |= !result.len().is_multiple_of(2);
 
         Some(HexString(result, dirty, ctx.clone()))
     }

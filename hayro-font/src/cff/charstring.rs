@@ -180,7 +180,7 @@ impl CharStringParser<'_> {
             return Err(OutlineError::MissingMoveTo);
         }
 
-        if self.stack.len() % 6 != 0 {
+        if !self.stack.len().is_multiple_of(6) {
             return Err(OutlineError::InvalidArgumentsStackLength);
         }
 
@@ -213,7 +213,7 @@ impl CharStringParser<'_> {
             return Err(OutlineError::InvalidArgumentsStackLength);
         }
 
-        if (self.stack.len() - 2) % 6 != 0 {
+        if !(self.stack.len() - 2).is_multiple_of(6) {
             return Err(OutlineError::InvalidArgumentsStackLength);
         }
 
@@ -291,7 +291,7 @@ impl CharStringParser<'_> {
             i += 1;
         }
 
-        if (self.stack.len() - i) % 4 != 0 {
+        if !(self.stack.len() - i).is_multiple_of(4) {
             return Err(OutlineError::InvalidArgumentsStackLength);
         }
 
@@ -327,7 +327,7 @@ impl CharStringParser<'_> {
             i += 1;
         }
 
-        if (self.stack.len() - i) % 4 != 0 {
+        if !(self.stack.len() - i).is_multiple_of(4) {
             return Err(OutlineError::InvalidArgumentsStackLength);
         }
 

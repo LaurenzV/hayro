@@ -50,7 +50,7 @@ pub(crate) mod flate {
                 let flg = data[1];
 
                 if (cmf & 0x0f) == 0x08
-                    && ((cmf as u16) << 8 | flg as u16) % 31 == 0
+                    && ((cmf as u16) << 8 | flg as u16).is_multiple_of(31)
                     && (flg & 0x20) == 0
                 {
                     let mut stream = FlateStream::new(&data[2..]);
