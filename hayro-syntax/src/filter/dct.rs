@@ -14,7 +14,7 @@ pub(crate) fn decode(data: &[u8], params: Dict) -> Option<Vec<u8>> {
     let mut out_colorspace = match decoder.get_input_colorspace().unwrap() {
         ColorSpace::YCbCr => {
             if jpeg_data.app14.is_none()
-                && jpeg_data.components.get(0)?.id == b'R'
+                && jpeg_data.components.first()?.id == b'R'
                 && jpeg_data.components.get(1)?.id == b'G'
                 && jpeg_data.components.get(2)?.id == b'B'
             {
@@ -90,7 +90,7 @@ struct JpegData {
 }
 
 fn extract_jpeg_data(jpeg_bytes: &[u8]) -> Option<JpegData> {
-    if jpeg_bytes.len() < 4 || &jpeg_bytes[0..2] != &[0xFF, 0xD8] {
+    if jpeg_bytes.len() < 4 || jpeg_bytes[0..2] != [0xFF, 0xD8] {
         return None;
     }
 
@@ -134,21 +134,24 @@ fn extract_jpeg_data(jpeg_bytes: &[u8]) -> Option<JpegData> {
         }
 
         // Extract SOF (Start of Frame) components
-        if (0xC0..=0xCF).contains(&marker) && marker != 0xC4 && marker != 0xC8 && marker != 0xCC {
-            if pos + 10 <= jpeg_bytes.len() {
-                let num_components = jpeg_bytes[pos + 9] as usize;
+        if (0xC0..=0xCF).contains(&marker)
+            && marker != 0xC4
+            && marker != 0xC8
+            && marker != 0xCC
+            && pos + 10 <= jpeg_bytes.len()
+        {
+            let num_components = jpeg_bytes[pos + 9] as usize;
 
-                for i in 0..num_components {
-                    let comp_pos = pos + 10 + i * 3;
-                    if comp_pos + 2 < jpeg_bytes.len() {
-                        let sampling = jpeg_bytes[comp_pos + 1];
-                        components.push(JpegComponent {
-                            id: jpeg_bytes[comp_pos],
-                            _h_sampling: (sampling >> 4) & 0x0F,
-                            _v_sampling: sampling & 0x0F,
-                            _quantization_table: jpeg_bytes[comp_pos + 2],
-                        });
-                    }
+            for i in 0..num_components {
+                let comp_pos = pos + 10 + i * 3;
+                if comp_pos + 2 < jpeg_bytes.len() {
+                    let sampling = jpeg_bytes[comp_pos + 1];
+                    components.push(JpegComponent {
+                        id: jpeg_bytes[comp_pos],
+                        _h_sampling: (sampling >> 4) & 0x0F,
+                        _v_sampling: sampling & 0x0F,
+                        _quantization_table: jpeg_bytes[comp_pos + 2],
+                    });
                 }
             }
         }
