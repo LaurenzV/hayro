@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use walkdir::WalkDir;
 
-static IGNORE_LIST: &[&'static str] = &[
+static IGNORE_LIST: &[&str] = &[
     // Password-protected
     "0000300", // Broken PDF, maybe fixable
     "0000399", // HTML
