@@ -390,7 +390,7 @@ impl DecodedImageXObject {
         let mut rgb_data = if obj.is_image_mask || obj.force_luma {
             None
         } else {
-            { get_rgb_data(&f32_data, width, height, &color_space, obj.interpolate) }
+            get_rgb_data(&f32_data, width, height, &color_space, obj.interpolate)
         };
 
         if let Some(transfer_function) = &obj.transfer_function
