@@ -1,15 +1,25 @@
 use crate::object::Dict;
+use crate::object::dict::keys::COLOR_TRANSFORM;
 use zune_jpeg::zune_core::colorspace::ColorSpace;
 use zune_jpeg::zune_core::options::DecoderOptions;
 
-pub(crate) fn decode(data: &[u8], _: Dict) -> Option<Vec<u8>> {
-    // TODO: Handle the color transform attribute
+pub(crate) fn decode(data: &[u8], params: Dict) -> Option<Vec<u8>> {
     let mut decoder = zune_jpeg::JpegDecoder::new(data);
     decoder.decode_headers().ok()?;
 
+    let color_transform = params.get::<u8>(COLOR_TRANSFORM);
+
     let mut out_colorspace = match decoder.get_input_colorspace().unwrap() {
-        ColorSpace::RGB | ColorSpace::RGBA | ColorSpace::YCbCr => ColorSpace::RGB,
+        ColorSpace::YCbCr => {
+            if color_transform.is_none_or(|c| c == 1) {
+                ColorSpace::RGB
+            } else {
+                ColorSpace::YCbCr
+            }
+        }
+        ColorSpace::RGB | ColorSpace::RGBA => ColorSpace::RGB,
         ColorSpace::Luma | ColorSpace::LumaA => ColorSpace::Luma,
+        // TODO: Find test case with color transform on cmyk
         ColorSpace::CMYK => ColorSpace::CMYK,
         ColorSpace::YCCK => ColorSpace::YCCK,
         _ => ColorSpace::RGB,

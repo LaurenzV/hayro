@@ -392,6 +392,7 @@ pub mod keys {
     key!(COLORANTS, b"Colorants");
     key!(COLORS, b"Colors");
     key!(COLORSPACE, b"ColorSpace");
+    key!(COLOR_TRANSFORM, b"ColorTransform");
     key!(COLUMNS, b"Columns");
     key!(COMPATIBLE, b"Compatible");
     key!(COMPONENTS, b"Components");

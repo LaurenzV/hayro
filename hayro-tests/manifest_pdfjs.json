@@ -637,6 +637,14 @@
     "last_page": 0
   },
   {
+    "id": "bug956965",
+    "file": "pdfs/bug956965.link",
+    "link": true,
+    "md5": "9b2f1176c797ee84e989a507e745f89d",
+    "first_page": 32,
+    "last_page": 32
+  },
+  {
     "id": "cable",
     "file": "pdfs/cable.link",
     "md5": "09a41b9a759d60c698228224ab85b46d",
@@ -846,6 +854,12 @@
     "md5": "015c13b09ef735ea1204f38992c60487",
     "link": true,
     "last_page": 0
+  },
+  {
+    "id": "issue10339",
+    "file": "pdfs/issue10339.link",
+    "link": true,
+    "md5": "e34ef74f188080f8194c7d8e8b68c562"
   },
   {
     "id": "issue10388",

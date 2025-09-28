@@ -226,10 +226,6 @@ issue 12841
 issue8169
 issue15492
 
-
-#black rect
-issue10339
-
 # image has different resolution than indicated in dictionary
 issue9650
 
@@ -239,7 +235,7 @@ issue9291
 # mediabox / cropbox issue
 issue7872
 
-# wrong rendering
+# optional content groups
 issue269_1
 issue269_2
 
@@ -249,9 +245,6 @@ issue8019
 
 # missing letters
 issue6132
-
-#crashes big
-issue18973
 
 # weird issue with wingdings font where metadata is wrong
 issue7454
@@ -268,9 +261,6 @@ issue4260
 # weirdly spaced text
 issue4630
 
-# image rendered with pink background
-bug956965
-
 # wrong handling of extgstate text
 extgstate
 
@@ -285,3 +275,4 @@ bug1721218_reduced
 issue6365
 issue4648
 issue17289
+issue18973
