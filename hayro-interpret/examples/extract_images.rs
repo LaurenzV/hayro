@@ -38,7 +38,7 @@ fn main() {
 
     // Then just save all of the images!
     for (idx, img) in extractor.0.iter().enumerate() {
-        img.save(format!("image_{}.png", idx)).unwrap();
+        img.save(format!("image_{idx}.png")).unwrap();
     }
 }
 

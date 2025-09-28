@@ -96,8 +96,7 @@ mod tests {
         assert_eq!(
             our_result,
             external_result.as_slice(),
-            "MD5 calculation should match external md5 crate for input: {:?}",
-            data
+            "MD5 calculation should match external md5 crate for input: {data:?}"
         );
     }
 

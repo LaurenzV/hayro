@@ -27,7 +27,7 @@ where
         let id = r.read_without_context::<ObjectIdentifier>()?;
 
         if ctx.parent_chain.contains(&id) {
-            warn!("cycle detected in indirect object: {:?}", id);
+            warn!("cycle detected in indirect object: {id:?}");
 
             return None;
         }

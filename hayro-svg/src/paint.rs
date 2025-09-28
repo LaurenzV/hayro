@@ -145,7 +145,7 @@ impl<'a> SvgRenderer<'a> {
             self.xml.start_element("use");
             if let Some(clip) = shading.clip_path {
                 self.xml
-                    .write_attribute_fmt("clip-path", format_args!("url(#{})", clip));
+                    .write_attribute_fmt("clip-path", format_args!("url(#{clip})"));
             }
             self.xml
                 .write_attribute("xlink:href", &format!("#{}", shading.shading));

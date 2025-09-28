@@ -228,8 +228,7 @@ mod tests {
             assert_eq!(
                 our_result,
                 expected.as_slice(),
-                "Failed for input: {:?}",
-                test_case
+                "Failed for input: {test_case:?}"
             );
         }
     }
