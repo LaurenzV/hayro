@@ -254,6 +254,11 @@ impl ColorSpace {
         matches!(self.0.as_ref(), ColorSpaceType::Indexed(_))
     }
 
+    /// Return `true` if the current color space is the RGB color space.
+    pub(crate) fn is_rgb(&self) -> bool {
+        matches!(self.0.as_ref(), ColorSpaceType::DeviceRgb)
+    }
+
     /// Get the default decode array for the color space.
     pub(crate) fn default_decode_arr(&self, n: f32) -> SmallVec<[(f32, f32); 4]> {
         match self.0.as_ref() {
