@@ -569,7 +569,7 @@ mod tests {
 
     #[test]
     fn lex_1() {
-        let program = b"{ copy dup 0.4545 exch roll }";
+        let program = b"{ copy dup 2.0 exch roll }";
         let parsed = parse_procedure(program).unwrap();
 
         assert_eq!(
@@ -577,7 +577,7 @@ mod tests {
             vec![
                 PostScriptOp::Copy,
                 PostScriptOp::Dup,
-                PostScriptOp::Number(Number::from_f32(0.4545)),
+                PostScriptOp::Number(Number::from_i32(2)),
                 PostScriptOp::Exch,
                 PostScriptOp::Roll,
             ]
