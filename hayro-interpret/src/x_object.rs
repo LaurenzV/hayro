@@ -366,7 +366,7 @@ impl DecodedImageXObject {
 
         let mut luma_data = None;
 
-        let mut rgb_data = if is_luma {
+        let rgb_data = if is_luma {
             let components = get_components(
                 &decoded.data,
                 obj.width,
@@ -377,7 +377,7 @@ impl DecodedImageXObject {
 
             let f32_data = { decode(&components, &color_space, bits_per_component, &decode_arr)? };
 
-            let data = if obj.is_image_mask {
+            let mut data = if obj.is_image_mask {
                 f32_data
                     .iter()
                     .map(|alpha| ((1.0 - *alpha) * 255.0 + 0.5) as u8)
@@ -388,6 +388,8 @@ impl DecodedImageXObject {
                     .map(|alpha| (*alpha * 255.0 + 0.5) as u8)
                     .collect()
             };
+
+            fix_image_length(&mut data, width, &mut height, 0, &color_space);
 
             luma_data = Some(LumaData {
                 data,
@@ -406,7 +408,10 @@ impl DecodedImageXObject {
             && decode_arr.as_ref() == [(0.0, 1.0), (0.0, 1.0), (0.0, 1.0)]
             && !is_luma
         {
-            panic!();
+            // This is actually the most common case, where the PDF is embedded as a 8-bit RGB color
+            // and no special decode array. In this case, we can prevent the round-trip from
+            // f32 back to u8 and just return the raw decoded data, which will already be in
+            // RGB8 with values between 0 and 255.
             fix_image_length(&mut decoded.data, width, &mut height, 0, &color_space);
 
             Some(RgbData {
@@ -465,6 +470,9 @@ impl DecodedImageXObject {
             rgb_data
         };
 
+        let width = obj.width;
+        let mut height = obj.height;
+
         if !is_luma {
             let dict = obj.stream.dict();
 
@@ -472,8 +480,6 @@ impl DecodedImageXObject {
                 let smask_data = decoded.image_data.and_then(|i| i.alpha);
 
                 if let Some(mut data) = smask_data {
-                    let width = obj.width;
-                    let mut height = obj.height;
                     fix_image_length(&mut data, width, &mut height, 0, &ColorSpace::device_gray());
 
                     Some(LumaData {
