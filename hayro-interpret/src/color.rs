@@ -118,7 +118,17 @@ impl ColorSpaceType {
                     return cache.get_or_insert_with(icc_stream.obj_id(), || {
                         if let Some(decoded) = icc_stream.decoded().ok().as_ref() {
                             ICCProfile::new(decoded, num_components)
-                                .map(ColorSpaceType::ICCBased)
+                                .map(|icc| {
+                                    // TODO: For SVG and PNG we can assume that the output color space is
+                                    // sRGB. If we ever implement PDF-to-PDF, we probably want to
+                                    // let the user pass the native color type and don't make this optimization
+                                    // if it's not sRGB.
+                                    if icc.is_srgb() {
+                                        ColorSpaceType::DeviceRgb
+                                    }   else {
+                                        ColorSpaceType::ICCBased(icc)
+                                    }
+                                })
                                 .or_else(|| {
                                     dict.get::<Object>(ALTERNATE)
                                         .and_then(|o| ColorSpaceType::new(o, cache))
@@ -760,6 +770,7 @@ impl DeviceN {
 struct ICCColorRepr {
     transform: Box<Transform8BitExecutor>,
     number_components: usize,
+    is_srgb: bool,
 }
 
 #[derive(Clone)]
@@ -802,10 +813,22 @@ impl ICCProfile {
             )
             .ok()?;
 
+        // Check for sRGB profile by reading the device model field (bytes 52-55 of ICC header)
+        const SRGB_MARKER: &[u8] = b"sRGB";
+        let is_srgb = profile
+            .get(52..56)
+            .map(|device_model| device_model == SRGB_MARKER)
+            .unwrap_or(false);
+
         Some(Self(Arc::new(ICCColorRepr {
             transform,
             number_components,
+            is_srgb,
         })))
+    }
+
+    fn is_srgb(&self) -> bool {
+        self.0.is_srgb
     }
 
     fn to_rgb(&self, c: &[f32]) -> Option<[u8; 3]> {
