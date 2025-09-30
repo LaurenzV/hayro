@@ -125,7 +125,7 @@ impl ColorSpaceType {
                                     // if it's not sRGB.
                                     if icc.is_srgb() {
                                         ColorSpaceType::DeviceRgb
-                                    }   else {
+                                    } else {
                                         ColorSpaceType::ICCBased(icc)
                                     }
                                 })
