@@ -604,7 +604,7 @@ fn fix_image_length<T: Copy>(
         // Too little data, adapt the height and pad.
         *height = image.len().div_ceil(row_len) as u32;
 
-        if image.len() % row_len > 0 {
+        if !image.len().is_multiple_of(row_len) {
             image.extend(iter::repeat_n(filler, row_len - (image.len() % row_len)));
         }
     }
