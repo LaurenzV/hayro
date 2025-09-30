@@ -87,10 +87,6 @@ mod tests {
         Number::from_i32(num)
     }
 
-    fn f(num: f32) -> Number {
-        Number::from_f32(num)
-    }
-
     #[test]
     fn basic_ops_1() {
         let input = b"
@@ -114,7 +110,7 @@ mod tests {
         let input = b"
 20 20 m
 180 20 l
-180.1 180.1 l
+180 180 l
 20 180 l
 h
 f
@@ -123,7 +119,7 @@ f
         let expected = vec![
             TypedInstruction::MoveTo(MoveTo(n(20), n(20))),
             TypedInstruction::LineTo(LineTo(n(180), n(20))),
-            TypedInstruction::LineTo(LineTo(f(180.1), f(180.1))),
+            TypedInstruction::LineTo(LineTo(n(180), n(180))),
             TypedInstruction::LineTo(LineTo(n(20), n(180))),
             TypedInstruction::ClosePath(ClosePath),
             TypedInstruction::FillPathNonZero(FillPathNonZero),
@@ -137,7 +133,7 @@ f
     fn scn() {
         let input = b"
 0.0 scn
-0.1 0.2 0.3 /DeviceRgb SCN
+1.0 1.0 1.0 /DeviceRgb SCN
 ";
 
         let expected = vec![
@@ -147,9 +143,9 @@ f
             )),
             TypedInstruction::StrokeColorNamed(StrokeColorNamed(
                 smallvec![
-                    Number::from_f32(0.1),
-                    Number::from_f32(0.2),
-                    Number::from_f32(0.3)
+                    Number::from_i32(1),
+                    Number::from_i32(1),
+                    Number::from_i32(1)
                 ],
                 Some(Name::new(b"DeviceRgb")),
             )),

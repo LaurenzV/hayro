@@ -259,7 +259,7 @@ impl Renderer {
                 let paint_type = self.convert_paint(paint, false);
                 let base_outline = self.glyph_cache.entry(id).or_insert_with(|| o.outline());
                 self.ctx
-                    .fill_path(&base_outline, paint_type, self.cur_mask.clone());
+                    .fill_path(base_outline, paint_type, self.cur_mask.clone());
             }
             Glyph::Type3(s) => {
                 s.interpret(self, transform, glyph_transform, paint);
