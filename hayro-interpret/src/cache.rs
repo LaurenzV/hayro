@@ -64,9 +64,7 @@ impl<T: CacheKey, U: CacheKey> CacheKey for (T, U) {
 
 impl CacheKey for Dict<'_> {
     fn cache_key(&self) -> u128 {
-        self.obj_id()
-            .map(|o| hash128(&o))
-            .unwrap_or(hash128(self.data()))
+        hash128(self.data())
     }
 }
 

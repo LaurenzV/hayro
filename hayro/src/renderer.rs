@@ -8,8 +8,8 @@ use hayro_interpret::font::Glyph;
 use hayro_interpret::hayro_syntax::object::ObjectIdentifier;
 use hayro_interpret::pattern::Pattern;
 use hayro_interpret::{
-    ClipPath, Device, FillRule, GlyphDrawMode, LumaData, MaskType, Paint, PathDrawMode, RgbData,
-    SoftMask, StrokeProps,
+    CacheKey, ClipPath, Device, FillRule, GlyphDrawMode, LumaData, MaskType, Paint, PathDrawMode,
+    RgbData, SoftMask, StrokeProps,
 };
 use image::imageops::FilterType;
 use image::{DynamicImage, ImageBuffer};
@@ -21,10 +21,21 @@ pub(crate) struct Renderer {
     pub(crate) ctx: RenderContext,
     pub(crate) inside_pattern: bool,
     pub(crate) soft_mask_cache: HashMap<ObjectIdentifier, Mask>,
+    pub(crate) glyph_cache: HashMap<u128, BezPath>,
     pub(crate) cur_mask: Option<Mask>,
 }
 
 impl Renderer {
+    pub(crate) fn new(width: u16, height: u16) -> Self {
+        Self {
+            ctx: RenderContext::new(width, height),
+            inside_pattern: false,
+            soft_mask_cache: Default::default(),
+            glyph_cache: Default::default(),
+            cur_mask: None,
+        }
+    }
+
     fn set_stroke_properties(&mut self, stroke_props: &StrokeProps) {
         // Best-effort attempt to ensure a line width of at least 1.
         let min_factor = min_factor(&self.ctx.transform);
@@ -167,6 +178,7 @@ impl Renderer {
                             ctx: RenderContext::new(pix_width, pix_height),
                             cur_mask: None,
                             inside_pattern: true,
+                            glyph_cache: HashMap::new(),
                             soft_mask_cache: Default::default(),
                         };
                         let mut initial_transform =
@@ -238,8 +250,16 @@ impl Renderer {
     ) {
         match glyph {
             Glyph::Outline(o) => {
-                let outline = glyph_transform * o.outline();
-                self.fill_path(&outline, transform, paint, FillRule::NonZero);
+                let id = o.identifier().cache_key();
+
+                // Can't use `fill_path` here because we need to borrow the outline from the glyph
+                // cache.
+                self.ctx.set_fill_rule(FillRule::NonZero);
+                self.ctx.set_transform(transform * glyph_transform);
+                let paint_type = self.convert_paint(paint, false);
+                let base_outline = self.glyph_cache.entry(id).or_insert_with(|| o.outline());
+                self.ctx
+                    .fill_path(&base_outline, paint_type, self.cur_mask.clone());
             }
             Glyph::Type3(s) => {
                 s.interpret(self, transform, glyph_transform, paint);
@@ -257,8 +277,19 @@ impl Renderer {
     ) {
         match glyph {
             Glyph::Outline(o) => {
-                let outline = glyph_transform * o.outline();
-                self.stroke_path(&outline, transform, paint, stroke_props);
+                let id = o.identifier().cache_key();
+                let base_outline = self
+                    .glyph_cache
+                    .entry(id)
+                    .or_insert_with(|| o.outline())
+                    .clone();
+
+                self.stroke_path(
+                    &(glyph_transform * base_outline),
+                    transform,
+                    paint,
+                    stroke_props,
+                );
             }
             Glyph::Type3(s) => {
                 s.interpret(self, transform, glyph_transform, paint);
@@ -394,12 +425,7 @@ impl<'a> Device<'a> for Renderer {
 }
 
 fn draw_soft_mask(mask: &SoftMask, width: u16, height: u16) -> Mask {
-    let mut renderer = Renderer {
-        ctx: RenderContext::new(width, height),
-        inside_pattern: false,
-        cur_mask: None,
-        soft_mask_cache: Default::default(),
-    };
+    let mut renderer = Renderer::new(width, height);
 
     let bg_color = mask.background_color().to_rgba();
     let apply_bg = bg_color.to_rgba8() != AlphaColor::BLACK.to_rgba8();

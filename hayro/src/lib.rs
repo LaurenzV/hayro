@@ -44,7 +44,6 @@ use hayro_interpret::{ClipPath, interpret_page};
 use kurbo::{Affine, Rect, Shape};
 use std::ops::RangeInclusive;
 
-use crate::ctx::RenderContext;
 pub use hayro_interpret::font::{FontData, FontQuery, StandardFont};
 pub use hayro_interpret::{InterpreterSettings, Pdf};
 pub use pixmap::Pixmap;
@@ -110,12 +109,7 @@ pub fn render(
         page.xref(),
         interpreter_settings.clone(),
     );
-    let mut device = Renderer {
-        ctx: RenderContext::new(pix_width, pix_height),
-        inside_pattern: false,
-        soft_mask_cache: Default::default(),
-        cur_mask: None,
-    };
+    let mut device = Renderer::new(pix_width, pix_height);
 
     device.ctx.fill_rect(
         &Rect::new(0.0, 0.0, pix_width as f64, pix_height as f64),
