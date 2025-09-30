@@ -813,7 +813,6 @@ impl ICCProfile {
             )
             .ok()?;
 
-        // Check for sRGB profile by reading the device model field (bytes 52-55 of ICC header)
         const SRGB_MARKER: &[u8] = b"sRGB";
         let is_srgb = profile
             .get(52..56)
