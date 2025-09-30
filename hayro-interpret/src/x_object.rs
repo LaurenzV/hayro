@@ -373,21 +373,11 @@ impl DecodedImageXObject {
 
         let width = obj.width;
         let mut height = obj.height;
-        let row_len = width as usize * color_space.num_components() as usize;
+        let is_luma = obj.is_image_mask || obj.force_luma;
 
-        if (row_len * height as usize) < f32_data.len() {
-            // Too much data, truncate it.
-            f32_data.truncate(row_len * height as usize);
-        } else if (row_len * width as usize) > f32_data.len() {
-            // Too little data, adapt the height and pad.
-            height = f32_data.len().div_ceil(row_len) as u32;
+        fix_image_length(&mut f32_data, width, &mut height, 0.0, &color_space);
 
-            if f32_data.len() % row_len > 0 {
-                f32_data.extend(iter::repeat_n(0.0, row_len - (f32_data.len() % row_len)));
-            }
-        }
-
-        let mut rgb_data = if obj.is_image_mask || obj.force_luma {
+        let mut rgb_data = if is_luma {
             None
         } else {
             get_rgb_data(&f32_data, width, height, &color_space, obj.interpolate)
@@ -421,9 +411,7 @@ impl DecodedImageXObject {
         }
 
         let luma_data = {
-            let data_len = width as usize * height as usize;
-
-            if obj.is_image_mask || obj.force_luma {
+            if is_luma {
                 let data = if obj.is_image_mask {
                     f32_data
                         .iter()
@@ -437,7 +425,7 @@ impl DecodedImageXObject {
                 };
 
                 Some(LumaData {
-                    data: fix_image_length(data, data_len, 0),
+                    data,
                     width,
                     height,
                     interpolate: obj.interpolate,
@@ -448,11 +436,19 @@ impl DecodedImageXObject {
                 if let Some(1) = dict.get::<u8>(SMASK_IN_DATA) {
                     let smask_data = decoded.image_data.and_then(|i| i.alpha);
 
-                    if let Some(data) = smask_data {
-                        let fixed = fix_image_length(data, data_len, 0);
+                    if let Some(mut data) = smask_data {
+                        let width = obj.width;
+                        let mut height = obj.height;
+                        fix_image_length(
+                            &mut data,
+                            width,
+                            &mut height,
+                            0,
+                            &ColorSpace::device_gray(),
+                        );
 
                         Some(LumaData {
-                            data: fixed,
+                            data,
                             width,
                             height,
                             interpolate: obj.interpolate,
@@ -479,6 +475,9 @@ impl DecodedImageXObject {
                 } else if let Some(color_key_mask) = dict.get::<SmallVec<[u16; 4]>>(MASK) {
                     let mut mask_data = vec![];
 
+                    let width = obj.width;
+                    let mut height = obj.height;
+
                     for pixel in components.chunks_exact(color_space.num_components() as usize) {
                         let mut mask_val = 0;
 
@@ -492,8 +491,16 @@ impl DecodedImageXObject {
                         mask_data.push(mask_val);
                     }
 
+                    fix_image_length(
+                        &mut mask_data,
+                        width,
+                        &mut height,
+                        0,
+                        &ColorSpace::device_gray(),
+                    );
+
                     Some(LumaData {
-                        data: fix_image_length(mask_data, data_len, 0),
+                        data: mask_data,
                         width,
                         height,
                         interpolate: obj.interpolate,
@@ -545,14 +552,26 @@ impl CacheKey for ImageXObject<'_> {
     }
 }
 
-fn fix_image_length(mut image: Vec<u8>, length: usize, filler: u8) -> Vec<u8> {
-    image.truncate(length);
+fn fix_image_length<T: Copy>(
+    image: &mut Vec<T>,
+    width: u32,
+    height: &mut u32,
+    filler: T,
+    cs: &ColorSpace,
+) {
+    let row_len = width as usize * cs.num_components() as usize;
 
-    while image.len() < length {
-        image.push(filler);
+    if (row_len * *height as usize) < image.len() {
+        // Too much data, truncate it.
+        image.truncate(row_len * *height as usize);
+    } else if (row_len * width as usize) > image.len() {
+        // Too little data, adapt the height and pad.
+        *height = image.len().div_ceil(row_len) as u32;
+
+        if image.len() % row_len > 0 {
+            image.extend(iter::repeat_n(filler, row_len - (image.len() % row_len)));
+        }
     }
-
-    image
 }
 
 fn get_components(
