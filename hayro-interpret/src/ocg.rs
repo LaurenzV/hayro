@@ -2,7 +2,6 @@ use hayro_syntax::object::dict::keys::{BASE_STATE, D, OCGS, OCPROPERTIES, OFF, O
 use hayro_syntax::object::{Array, Dict, Name, ObjectIdentifier};
 use std::collections::HashSet;
 
-#[doc(hidden)]
 pub(crate) struct OcgState {
     inactive_ocgs: HashSet<ObjectIdentifier>,
     visibility_stack: Vec<bool>,
