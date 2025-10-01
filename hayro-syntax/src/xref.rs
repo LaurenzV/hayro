@@ -182,6 +182,7 @@ impl XRef {
             Decryptor::None
         };
 
+        let root_ref = trailer_dict.get_ref(ROOT).ok_or(XRefError::Unknown)?;
         let root = trailer_dict.get::<Dict>(ROOT).ok_or(XRefError::Unknown)?;
         let pages_ref = root.get_ref(PAGES).ok_or(XRefError::Unknown)?;
         let version = root
@@ -190,6 +191,7 @@ impl XRef {
 
         let td = TrailerData {
             pages_ref: pages_ref.into(),
+            root_ref: root_ref.into(),
             version,
         };
 
@@ -230,6 +232,11 @@ impl XRef {
             Inner::Dummy => unreachable!(),
             Inner::Some(r) => &r.trailer_data,
         }
+    }
+
+    /// Get the root catalog dictionary.
+    pub fn catalog(&self) -> Option<Dict<'_>> {
+        self.get(self.trailer_data().root_ref)
     }
 
     pub(crate) fn objects(&self) -> impl IntoIterator<Item = Object<'_>> + '_ {
@@ -414,6 +421,7 @@ struct MapRepr {
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct TrailerData {
     pub pages_ref: ObjectIdentifier,
+    pub root_ref: ObjectIdentifier,
     pub version: Option<PdfVersion>,
 }
 
@@ -421,6 +429,7 @@ impl TrailerData {
     pub fn dummy() -> Self {
         Self {
             pages_ref: ObjectIdentifier::new(0, 0),
+            root_ref: ObjectIdentifier::new(0, 0),
             version: None,
         }
     }

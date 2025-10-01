@@ -379,11 +379,46 @@ pub fn interpret<'a, 'b>(
                     )
                 });
             }
-            TypedInstruction::BeginMarkedContentWithProperties(_) => {}
+            TypedInstruction::BeginMarkedContentWithProperties(bdc) => {
+                use hayro_syntax::object::dict::keys::OC;
+                use hayro_syntax::object::dict_or_stream;
+
+                // Properties can be either:
+                // 1. A Name that references an entry in the Resources/Properties dictionary
+                // 2. An inline dictionary with an OC key
+
+                let mut found_ocg = false;
+
+                // First, try to resolve as a name in the Properties dictionary
+                if let Some(name) = bdc.1.clone().into_name() {
+                    if let Some(ocg_ref) = resources.properties.get_ref(&*name) {
+                        context.ocg_state.begin_ocg(ocg_ref.into());
+                        found_ocg = true;
+                    }
+                }
+
+                // If not found as a name, try as an inline dictionary
+                if !found_ocg {
+                    if let Some((props, _)) = dict_or_stream(&bdc.1) {
+                        if let Some(oc_ref) = props.get_ref(OC) {
+                            context.ocg_state.begin_ocg(oc_ref.into());
+                            found_ocg = true;
+                        }
+                    }
+                }
+
+                if !found_ocg {
+                    context.ocg_state.begin_marked_content();
+                }
+            }
             TypedInstruction::MarkedContentPointWithProperties(_) => {}
-            TypedInstruction::EndMarkedContent(_) => {}
+            TypedInstruction::EndMarkedContent(_) => {
+                context.ocg_state.end_marked_content();
+            }
             TypedInstruction::MarkedContentPoint(_) => {}
-            TypedInstruction::BeginMarkedContent(_) => {}
+            TypedInstruction::BeginMarkedContent(_) => {
+                context.ocg_state.begin_marked_content();
+            }
             TypedInstruction::BeginText(_) => {
                 context.get_mut().text_state.text_matrix = Affine::IDENTITY;
                 context.get_mut().text_state.text_line_matrix = Affine::IDENTITY;

@@ -3,6 +3,7 @@ use crate::color::ColorSpace;
 use crate::convert::convert_transform;
 use crate::font::Font;
 use crate::interpret::state::State;
+use crate::ocg::OcgState;
 use crate::{FillRule, InterpreterSettings, StrokeProps};
 use hayro_syntax::content::ops::Transform;
 use hayro_syntax::object::Dict;
@@ -28,6 +29,7 @@ pub struct Context<'a> {
     pub(crate) settings: InterpreterSettings,
     pub(crate) object_cache: Cache,
     pub(crate) xref: &'a XRef,
+    pub(crate) ocg_state: OcgState,
 }
 
 impl<'a> Context<'a> {
@@ -52,6 +54,10 @@ impl<'a> Context<'a> {
         settings: InterpreterSettings,
         state: State<'a>,
     ) -> Self {
+        let ocg_state = xref.catalog()
+            .map(|catalog| OcgState::new(&catalog))
+            .unwrap_or_else(|| OcgState::empty());
+
         Self {
             states: vec![state],
             settings,
@@ -64,6 +70,7 @@ impl<'a> Context<'a> {
             path: BezPath::new(),
             font_cache: HashMap::new(),
             object_cache: cache,
+            ocg_state,
         }
     }
 

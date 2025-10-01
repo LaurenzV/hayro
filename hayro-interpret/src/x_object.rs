@@ -92,6 +92,10 @@ pub(crate) fn draw_xobject<'a>(
     context: &mut Context<'a>,
     device: &mut impl Device<'a>,
 ) {
+    if !context.ocg_state.is_visible() {
+        return;
+    }
+
     match x_object {
         XObject::FormXObject(f) => draw_form_xobject(resources, f, context, device),
         XObject::ImageXObject(i) => {
