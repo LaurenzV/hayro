@@ -243,7 +243,7 @@ impl XRef {
         self.trailer_data().root_ref.into()
     }
 
-    /// Whether the PDF has optional content groups
+    /// Whether the PDF has optional content groups.
     pub fn has_optional_content_groups(&self) -> bool {
         match &self.0 {
             Inner::Dummy => false,

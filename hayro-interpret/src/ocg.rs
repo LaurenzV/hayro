@@ -3,7 +3,7 @@ use hayro_syntax::object::{Array, Dict, Name, ObjectIdentifier};
 use std::collections::HashSet;
 
 #[doc(hidden)]
-pub struct OcgState {
+pub(crate) struct OcgState {
     inactive_ocgs: HashSet<ObjectIdentifier>,
     visibility_stack: Vec<bool>,
 }
@@ -66,22 +66,22 @@ impl OcgState {
         }
     }
 
-    pub fn begin_ocg(&mut self, ocg_id: ObjectIdentifier) {
+    pub(crate) fn begin_ocg(&mut self, ocg_id: ObjectIdentifier) {
         let is_active = !self.inactive_ocgs.contains(&ocg_id);
         let visible = self.is_visible() && is_active;
         self.visibility_stack.push(visible);
     }
 
-    pub fn begin_marked_content(&mut self) {
+    pub(crate) fn begin_marked_content(&mut self) {
         let visible = self.is_visible();
         self.visibility_stack.push(visible);
     }
 
-    pub fn end_marked_content(&mut self) {
+    pub(crate) fn end_marked_content(&mut self) {
         self.visibility_stack.pop();
     }
 
-    pub fn is_visible(&self) -> bool {
+    pub(crate) fn is_visible(&self) -> bool {
         self.visibility_stack.last().copied().unwrap_or(true)
     }
 }
