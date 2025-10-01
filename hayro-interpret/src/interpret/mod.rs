@@ -560,6 +560,10 @@ pub fn interpret<'a, 'b>(
                 context.get_mut().text_state.rise = t.0.as_f32();
             }
             TypedInstruction::Shading(s) => {
+                if !context.ocg_state.is_visible() {
+                    continue;
+                }
+                
                 if let Some(sp) = resources
                     .get_shading(s.0, Box::new(|_| None), Box::new(Some))
                     .and_then(|o| dict_or_stream(&o))

@@ -92,10 +92,6 @@ pub(crate) fn draw_xobject<'a>(
     context: &mut Context<'a>,
     device: &mut impl Device<'a>,
 ) {
-    if !context.ocg_state.is_visible() {
-        return;
-    }
-
     match x_object {
         XObject::FormXObject(f) => draw_form_xobject(resources, f, context, device),
         XObject::ImageXObject(i) => {
@@ -110,6 +106,10 @@ pub(crate) fn draw_form_xobject<'a, 'b>(
     context: &mut Context<'a>,
     device: &mut impl Device<'a>,
 ) {
+    if !context.ocg_state.is_visible() {
+        return;
+    }
+    
     let iter = TypedIter::new(x_object.decoded.as_ref());
 
     context.path_mut().truncate(0);
@@ -163,6 +163,10 @@ pub(crate) fn draw_image_xobject<'a, 'b>(
     context: &mut Context<'a>,
     device: &mut impl Device<'a>,
 ) {
+    if !context.ocg_state.is_visible() {
+        return;
+    }
+    
     let width = x_object.width as f64;
     let height = x_object.height as f64;
 
