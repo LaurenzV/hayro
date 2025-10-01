@@ -48,7 +48,7 @@ HYPERFINE_ARGS="--runs 5 --warmup 1 --sort command"
 COMMANDS=()
 
 if [ -f "$HAYRO_BIN" ]; then
-    COMMANDS+=("--command-name 'hayro' '$HAYRO_BIN $PDF_FILE $HAYRO_DIR'")
+    COMMANDS+=("--command-name 'hayro' '$HAYRO_BIN $PDF_FILE $HAYRO_DIR 1.0'")
 else
     echo "Warning: hayro binary not found at $HAYRO_BIN"
 fi

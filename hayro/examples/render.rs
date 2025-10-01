@@ -11,6 +11,10 @@ fn main() {
 
     let file = std::fs::read(std::env::args().nth(1).unwrap()).unwrap();
     let output_dir = std::env::args().nth(2).unwrap_or_else(|| ".".to_string());
+    let scale = std::env::args()
+        .nth(3)
+        .and_then(|s| s.parse::<f32>().ok())
+        .unwrap_or(1.0);
 
     // Create output directory if it doesn't exist
     std::fs::create_dir_all(&output_dir).unwrap();
@@ -20,7 +24,11 @@ fn main() {
 
     let interpreter_settings = InterpreterSettings::default();
 
-    let render_settings = RenderSettings::default();
+    let render_settings = RenderSettings {
+        x_scale: scale,
+        y_scale: scale,
+        ..Default::default()
+    };
 
     for (idx, page) in pdf.pages().iter().enumerate() {
         let pixmap = render(page, &interpreter_settings, &render_settings);
