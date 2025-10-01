@@ -14,7 +14,7 @@ use crate::object::{Array, MaybeRef};
 use crate::object::{Object, ObjectLike};
 use crate::pdf::PdfVersion;
 use crate::reader::{Readable, Reader, ReaderContext};
-use crate::{PdfData, object};
+use crate::{PdfData, object, OcgState};
 use log::{error, warn};
 use rustc_hash::FxHashMap;
 use std::cmp::max;
@@ -235,9 +235,9 @@ impl XRef {
     }
 
     /// Return the default optional content state.
-    pub fn ocg_state(&self) -> crate::OcgState {
-        let catalog: Option<Dict<'_>> = self.get(self.trailer_data().root_ref);
-        crate::OcgState::from_catalog(catalog.as_ref())
+    pub fn ocg_state(&self) -> OcgState {
+        let catalog = self.get::<Dict>(self.trailer_data().root_ref).unwrap();
+        OcgState::from_catalog(&catalog)
     }
 
     pub(crate) fn objects(&self) -> impl IntoIterator<Item = Object<'_>> + '_ {
