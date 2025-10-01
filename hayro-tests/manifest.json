@@ -1094,5 +1094,10 @@
   {
     "id": "flate_predictor_invalid",
     "file": "pdfs/custom/flate_predictor_invalid.pdf"
+  },
+  {
+    "id": "issue141",
+    "link": true,
+    "file": "pdfs/custom/issue141.link"
   }
 ]

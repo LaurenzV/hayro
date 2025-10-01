@@ -4,23 +4,19 @@ use crate::object::dict::keys::{BASE_STATE, D, OCGS, OCPROPERTIES, OFF, ON};
 
 #[doc(hidden)]
 pub struct OcgState {
-    active_ocgs: HashSet<ObjectIdentifier>,
-    all_active: bool,
+    inactive_ocgs: HashSet<ObjectIdentifier>,
     visibility_stack: Vec<bool>,
 }
 
 impl OcgState {
     fn dummy() -> OcgState {
         OcgState {
-            active_ocgs: Default::default(),
-            all_active: true,
+            inactive_ocgs: Default::default(),
             visibility_stack: vec![],
         }
     }
     
     pub(crate) fn from_catalog(catalog: &Dict) -> Self {
-        let active_ocgs = HashSet::new();
-        
         let Some(ocproperties) = catalog.get::<Dict>(OCPROPERTIES) else {
             return Self::dummy();
         };
@@ -29,16 +25,16 @@ impl OcgState {
             return Self::dummy();
         };
         
-        let mut active = HashSet::new();
+        let mut inactive = HashSet::new();
 
         let base_state = config.get::<Name>(BASE_STATE)
             .and_then(|b| BaseState::from_name(b.as_ref()));
         
-        if base_state == Some(BaseState::On) && let Some(ocgs) = ocproperties.get::<Array>(OCGS) {
+        if base_state.unwrap_or(BaseState::On) == BaseState::Off && let Some(ocgs) = ocproperties.get::<Array>(OCGS) {
             for item in  ocgs.raw_iter() {
                 if let Some(ref_) = item.as_obj_ref() {
                     let id: ObjectIdentifier = ref_.into();
-                    active.insert(id);
+                    inactive.insert(id);
                 }
             }
         }
@@ -49,9 +45,9 @@ impl OcgState {
                     if let Some(ref_) = item.as_obj_ref() {
                         let id: ObjectIdentifier = ref_.into();
                         if insert_active {
-                            active.insert(id);
+                            inactive.remove(&id);
                         } else {
-                            active.remove(&id);
+                            inactive.insert(id);
                         }
                     }
                 }
@@ -62,14 +58,13 @@ impl OcgState {
         read_ocg_array(OFF, false);
         
         Self {
-            active_ocgs,
-            all_active: false,
+            inactive_ocgs: inactive,
             visibility_stack: Vec::new(),
         }
     }
 
     pub fn begin_ocg(&mut self, ocg_id: ObjectIdentifier) {
-        let is_active = self.active_ocgs.contains(&ocg_id) || self.all_active;
+        let is_active = !self.inactive_ocgs.contains(&ocg_id);
         let visible = self.is_visible() && is_active;
         self.visibility_stack.push(visible);
     }

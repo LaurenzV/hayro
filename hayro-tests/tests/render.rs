@@ -261,6 +261,7 @@ use crate::run_render_test;
 #[test] fn mask_bc() { run_render_test("mask_bc", "pdfs/custom/mask_bc.pdf", None); }
 #[test] fn flate_predictor_bpc_1() { run_render_test("flate_predictor_bpc_1", "pdfs/custom/flate_predictor_bpc_1.pdf", None); }
 #[test] fn flate_predictor_invalid() { run_render_test("flate_predictor_invalid", "pdfs/custom/flate_predictor_invalid.pdf", None); }
+#[test] fn issue141() { run_render_test("issue141", "downloads/issue141.pdf", None); }
 #[test] fn pdfjs_20130226130259() { run_render_test("pdfjs_20130226130259", "downloads/pdfjs/20130226130259.pdf", Some("0..=0")); }
 #[test] fn pdfjs_ContentStreamNoCycleType3insideType3() { run_render_test("pdfjs_ContentStreamNoCycleType3insideType3", "downloads/pdfjs/ContentStreamNoCycleType3insideType3.pdf", None); }
 #[test] fn pdfjs_High_Pressure_Measurement_WP_001287() { run_render_test("pdfjs_High_Pressure_Measurement_WP_001287", "downloads/pdfjs/High-Pressure-Measurement-WP-001287.pdf", Some("2..=2")); }
