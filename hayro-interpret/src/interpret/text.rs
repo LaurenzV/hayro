@@ -52,7 +52,6 @@ pub(crate) fn show_glyph<'a>(
     glyph: &Glyph<'a>,
     glyph_transform: Affine,
 ) {
-    // Skip drawing if OCG is not visible (but text position adjustments still happen in caller)
     if !ctx.ocg_state.is_visible() {
         return;
     }

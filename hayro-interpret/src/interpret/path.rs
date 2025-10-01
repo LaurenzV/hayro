@@ -50,7 +50,6 @@ pub(crate) fn fill_path_impl<'a>(
     fill_rule: FillRule,
     path: Option<&BezPath>,
 ) {
-    // Skip drawing if OCG is not visible
     if !context.ocg_state.is_visible() {
         return;
     }
@@ -105,7 +104,6 @@ pub(crate) fn stroke_path_impl<'a>(
     device: &mut impl Device<'a>,
     path: Option<&BezPath>,
 ) {
-    // Skip drawing if OCG is not visible
     if !context.ocg_state.is_visible() {
         return;
     }
