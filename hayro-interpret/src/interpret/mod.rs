@@ -15,6 +15,7 @@ use crate::shading::Shading;
 use crate::util::OptionLog;
 use crate::x_object::{ImageXObject, XObject, draw_image_xobject, draw_xobject};
 use hayro_syntax::content::ops::TypedInstruction;
+use hayro_syntax::object::dict::keys::OC;
 use hayro_syntax::object::{Dict, Object, dict_or_stream};
 use hayro_syntax::page::{Page, Resources};
 use kurbo::{Affine, Point, Shape};
@@ -380,34 +381,19 @@ pub fn interpret<'a, 'b>(
                 });
             }
             TypedInstruction::BeginMarkedContentWithProperties(bdc) => {
-                use hayro_syntax::object::dict::keys::OC;
-                use hayro_syntax::object::dict_or_stream;
-
                 // Properties can be either:
                 // 1. A Name that references an entry in the Resources/Properties dictionary
                 // 2. An inline dictionary with an OC key
 
-                let mut found_ocg = false;
-
-                // First, try to resolve as a name in the Properties dictionary
-                if let Some(name) = bdc.1.clone().into_name() {
-                    if let Some(ocg_ref) = resources.properties.get_ref(&*name) {
-                        context.ocg_state.begin_ocg(ocg_ref.into());
-                        found_ocg = true;
-                    }
-                }
-
-                // If not found as a name, try as an inline dictionary
-                if !found_ocg {
-                    if let Some((props, _)) = dict_or_stream(&bdc.1) {
-                        if let Some(oc_ref) = props.get_ref(OC) {
-                            context.ocg_state.begin_ocg(oc_ref.into());
-                            found_ocg = true;
-                        }
-                    }
-                }
-
-                if !found_ocg {
+                if let Some(name) = bdc.1.clone().into_name()
+                    && let Some(ocg_ref) = resources.properties.get_ref(name.clone())
+                {
+                    context.ocg_state.begin_ocg(ocg_ref.into());
+                } else if let Some((props, _)) = dict_or_stream(&bdc.1)
+                    && let Some(oc_ref) = props.get_ref(OC)
+                {
+                    context.ocg_state.begin_ocg(oc_ref.into());
+                } else {
                     context.ocg_state.begin_marked_content();
                 }
             }
