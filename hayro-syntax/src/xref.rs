@@ -6,7 +6,9 @@ use crate::object::Dict;
 use crate::object::Name;
 use crate::object::ObjectIdentifier;
 use crate::object::Stream;
-use crate::object::dict::keys::{ENCRYPT, FIRST, ID, INDEX, N, OCPROPERTIES, PAGES, PREV, ROOT, SIZE, TYPE, VERSION, W, XREF_STM};
+use crate::object::dict::keys::{
+    ENCRYPT, FIRST, ID, INDEX, N, OCPROPERTIES, PAGES, PREV, ROOT, SIZE, TYPE, VERSION, W, XREF_STM,
+};
 use crate::object::indirect::IndirectObject;
 use crate::object::{Array, MaybeRef};
 use crate::object::{Object, ObjectLike};
@@ -235,12 +237,12 @@ impl XRef {
             Inner::Some(r) => &r.trailer_data,
         }
     }
-    
+
     /// Return the object ID of the root dictionary.
     pub fn root_id(&self) -> ObjectIdentifier {
         self.trailer_data().root_ref.into()
     }
-    
+
     /// Whether the PDF has optional content groups
     pub fn has_optional_content_groups(&self) -> bool {
         match &self.0 {

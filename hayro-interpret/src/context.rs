@@ -3,6 +3,7 @@ use crate::color::ColorSpace;
 use crate::convert::convert_transform;
 use crate::font::Font;
 use crate::interpret::state::State;
+use crate::ocg::OcgState;
 use crate::{FillRule, InterpreterSettings, StrokeProps};
 use hayro_syntax::content::ops::Transform;
 use hayro_syntax::object::Dict;
@@ -14,7 +15,6 @@ use hayro_syntax::xref::XRef;
 use kurbo::{Affine, BezPath, Point};
 use log::warn;
 use std::collections::HashMap;
-use crate::ocg::OcgState;
 
 /// A context for interpreting PDF files.
 pub struct Context<'a> {
@@ -59,7 +59,7 @@ impl<'a> Context<'a> {
             let catalog = xref.get::<Dict>(root_ref).unwrap();
             OcgState::from_catalog(&catalog)
         };
-        
+
         Self {
             states: vec![state],
             settings,
