@@ -81,7 +81,6 @@ use std::sync::Arc;
 
 pub(crate) mod data;
 pub(crate) mod filter;
-mod ocg;
 pub(crate) mod pdf;
 pub(crate) mod trivia;
 pub(crate) mod util;
@@ -98,10 +97,6 @@ pub mod xref;
 pub mod reader;
 
 pub use pdf::*;
-
-// OCG state is exposed for use by hayro-interpret but is considered an implementation detail
-#[doc(hidden)]
-pub use ocg::OcgState;
 
 /// A container for the bytes of a PDF file.
 pub type PdfData = Arc<dyn AsRef<[u8]> + Send + Sync>;

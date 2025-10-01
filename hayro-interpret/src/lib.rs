@@ -35,6 +35,7 @@ mod convert;
 mod device;
 mod function;
 mod interpret;
+mod ocg;
 mod soft_mask;
 mod types;
 mod x_object;

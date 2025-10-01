@@ -1,5 +1,5 @@
-use crate::object::dict::keys::{BASE_STATE, D, OCGS, OCPROPERTIES, OFF, ON};
-use crate::object::{Array, Dict, Name, ObjectIdentifier};
+use hayro_syntax::object::dict::keys::{BASE_STATE, D, OCGS, OCPROPERTIES, OFF, ON};
+use hayro_syntax::object::{Array, Dict, Name, ObjectIdentifier};
 use std::collections::HashSet;
 
 #[doc(hidden)]
@@ -17,11 +17,11 @@ impl OcgState {
     }
 
     pub(crate) fn from_catalog(catalog: &Dict) -> Self {
-        let Some(ocproperties) = catalog.get::<Dict>(OCPROPERTIES) else {
+        let Some(oc_properties) = catalog.get::<Dict>(OCPROPERTIES) else {
             return Self::dummy();
         };
 
-        let Some(config) = ocproperties.get::<Dict>(D) else {
+        let Some(config) = oc_properties.get::<Dict>(D) else {
             return Self::dummy();
         };
 
@@ -32,7 +32,7 @@ impl OcgState {
             .and_then(|b| BaseState::from_name(b.as_ref()));
 
         if base_state.unwrap_or(BaseState::On) == BaseState::Off
-            && let Some(ocgs) = ocproperties.get::<Array>(OCGS)
+            && let Some(ocgs) = oc_properties.get::<Array>(OCGS)
         {
             for item in ocgs.raw_iter() {
                 if let Some(ref_) = item.as_obj_ref() {

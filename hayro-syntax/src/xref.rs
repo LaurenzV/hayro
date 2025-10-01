@@ -6,15 +6,13 @@ use crate::object::Dict;
 use crate::object::Name;
 use crate::object::ObjectIdentifier;
 use crate::object::Stream;
-use crate::object::dict::keys::{
-    ENCRYPT, FIRST, ID, INDEX, N, PAGES, PREV, ROOT, SIZE, TYPE, VERSION, W, XREF_STM,
-};
+use crate::object::dict::keys::{ENCRYPT, FIRST, ID, INDEX, N, OCPROPERTIES, PAGES, PREV, ROOT, SIZE, TYPE, VERSION, W, XREF_STM};
 use crate::object::indirect::IndirectObject;
 use crate::object::{Array, MaybeRef};
 use crate::object::{Object, ObjectLike};
 use crate::pdf::PdfVersion;
 use crate::reader::{Readable, Reader, ReaderContext};
-use crate::{OcgState, PdfData, object};
+use crate::{PdfData, object};
 use log::{error, warn};
 use rustc_hash::FxHashMap;
 use std::cmp::max;
@@ -161,6 +159,7 @@ impl XRef {
             data: Arc::new(Data::new(data)),
             map: Arc::new(RwLock::new(MapRepr { xref_map, repaired })),
             decryptor: Arc::new(Decryptor::None),
+            has_ocgs: false,
             trailer_data,
         })));
 
@@ -185,6 +184,7 @@ impl XRef {
         let root_ref = trailer_dict.get_ref(ROOT).ok_or(XRefError::Unknown)?;
         let root = trailer_dict.get::<Dict>(ROOT).ok_or(XRefError::Unknown)?;
         let pages_ref = root.get_ref(PAGES).ok_or(XRefError::Unknown)?;
+        let has_ocgs = root.get::<Dict>(OCPROPERTIES).is_some();
         let version = root
             .get::<Name>(VERSION)
             .and_then(|v| PdfVersion::from_bytes(v.deref()));
@@ -198,8 +198,10 @@ impl XRef {
         match &mut xref.0 {
             Inner::Dummy => unreachable!(),
             Inner::Some(r) => {
-                Arc::make_mut(r).trailer_data = td;
-                Arc::make_mut(r).decryptor = Arc::new(decryptor);
+                let mutable = Arc::make_mut(r);
+                mutable.trailer_data = td;
+                mutable.decryptor = Arc::new(decryptor);
+                mutable.has_ocgs = has_ocgs;
             }
         }
 
@@ -233,11 +235,18 @@ impl XRef {
             Inner::Some(r) => &r.trailer_data,
         }
     }
-
-    /// Return the default optional content state.
-    pub fn ocg_state(&self) -> OcgState {
-        let catalog = self.get::<Dict>(self.trailer_data().root_ref).unwrap();
-        OcgState::from_catalog(&catalog)
+    
+    /// Return the object ID of the root dictionary.
+    pub fn root_id(&self) -> ObjectIdentifier {
+        self.trailer_data().root_ref.into()
+    }
+    
+    /// Whether the PDF has optional content groups
+    pub fn has_optional_content_groups(&self) -> bool {
+        match &self.0 {
+            Inner::Dummy => false,
+            Inner::Some(r) => r.has_ocgs,
+        }
     }
 
     pub(crate) fn objects(&self) -> impl IntoIterator<Item = Object<'_>> + '_ {
@@ -441,6 +450,7 @@ struct SomeRepr {
     data: Arc<Data>,
     map: Arc<RwLock<MapRepr>>,
     decryptor: Arc<Decryptor>,
+    has_ocgs: bool,
     trailer_data: TrailerData,
 }
 

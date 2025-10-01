@@ -4,7 +4,6 @@ use crate::convert::convert_transform;
 use crate::font::Font;
 use crate::interpret::state::State;
 use crate::{FillRule, InterpreterSettings, StrokeProps};
-use hayro_syntax::OcgState;
 use hayro_syntax::content::ops::Transform;
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Name;
@@ -15,6 +14,7 @@ use hayro_syntax::xref::XRef;
 use kurbo::{Affine, BezPath, Point};
 use log::warn;
 use std::collections::HashMap;
+use crate::ocg::OcgState;
 
 /// A context for interpreting PDF files.
 pub struct Context<'a> {
@@ -54,6 +54,12 @@ impl<'a> Context<'a> {
         settings: InterpreterSettings,
         state: State<'a>,
     ) -> Self {
+        let ocg_state = {
+            let root_ref = xref.root_id();
+            let catalog = xref.get::<Dict>(root_ref).unwrap();
+            OcgState::from_catalog(&catalog)
+        };
+        
         Self {
             states: vec![state],
             settings,
@@ -66,7 +72,7 @@ impl<'a> Context<'a> {
             path: BezPath::new(),
             font_cache: HashMap::new(),
             object_cache: cache,
-            ocg_state: xref.ocg_state(),
+            ocg_state,
         }
     }
 
