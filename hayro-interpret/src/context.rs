@@ -3,7 +3,6 @@ use crate::color::ColorSpace;
 use crate::convert::convert_transform;
 use crate::font::Font;
 use crate::interpret::state::State;
-use crate::ocg::OcgState;
 use crate::{FillRule, InterpreterSettings, StrokeProps};
 use hayro_syntax::content::ops::Transform;
 use hayro_syntax::object::Dict;
@@ -12,6 +11,7 @@ use hayro_syntax::object::ObjRef;
 use hayro_syntax::object::Object;
 use hayro_syntax::page::Resources;
 use hayro_syntax::xref::XRef;
+use hayro_syntax::OcgState;
 use kurbo::{Affine, BezPath, Point};
 use log::warn;
 use std::collections::HashMap;
@@ -54,8 +54,6 @@ impl<'a> Context<'a> {
         settings: InterpreterSettings,
         state: State<'a>,
     ) -> Self {
-        let ocg_state = OcgState::from_catalog(xref.catalog().as_ref());
-
         Self {
             states: vec![state],
             settings,
@@ -68,7 +66,7 @@ impl<'a> Context<'a> {
             path: BezPath::new(),
             font_cache: HashMap::new(),
             object_cache: cache,
-            ocg_state,
+            ocg_state: xref.ocg_state(),
         }
     }
 

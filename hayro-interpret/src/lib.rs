@@ -38,7 +38,6 @@ mod interpret;
 mod soft_mask;
 mod types;
 mod x_object;
-mod ocg;
 
 
 pub mod color;

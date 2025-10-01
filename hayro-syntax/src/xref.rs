@@ -234,9 +234,10 @@ impl XRef {
         }
     }
 
-    #[doc(hidden)]
-    pub fn catalog(&self) -> Option<Dict<'_>> {
-        self.get(self.trailer_data().root_ref)
+    /// Return the default optional content state.
+    pub fn ocg_state(&self) -> crate::OcgState {
+        let catalog: Option<Dict<'_>> = self.get(self.trailer_data().root_ref);
+        crate::OcgState::from_catalog(catalog.as_ref())
     }
 
     pub(crate) fn objects(&self) -> impl IntoIterator<Item = Object<'_>> + '_ {

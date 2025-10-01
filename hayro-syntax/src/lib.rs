@@ -84,6 +84,7 @@ pub(crate) mod filter;
 pub(crate) mod pdf;
 pub(crate) mod trivia;
 pub(crate) mod util;
+mod ocg;
 
 pub mod bit_reader;
 pub mod content;
@@ -97,6 +98,10 @@ pub mod xref;
 pub mod reader;
 
 pub use pdf::*;
+
+// OCG state is exposed for use by hayro-interpret but is considered an implementation detail
+#[doc(hidden)]
+pub use ocg::OcgState;
 
 /// A container for the bytes of a PDF file.
 pub type PdfData = Arc<dyn AsRef<[u8]> + Send + Sync>;
