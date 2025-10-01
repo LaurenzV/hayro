@@ -10,6 +10,11 @@ fn main() {
     }
 
     let file = std::fs::read(std::env::args().nth(1).unwrap()).unwrap();
+    let output_dir = std::env::args().nth(2).unwrap_or_else(|| ".".to_string());
+
+    // Create output directory if it doesn't exist
+    std::fs::create_dir_all(&output_dir).unwrap();
+
     let data = Arc::new(file);
     let pdf = Pdf::new(data).unwrap();
 
@@ -19,7 +24,8 @@ fn main() {
 
     for (idx, page) in pdf.pages().iter().enumerate() {
         let pixmap = render(page, &interpreter_settings, &render_settings);
-        std::fs::write(format!("rendered_{idx}.png"), pixmap.take_png()).unwrap();
+        let output_path = format!("{}/rendered_{idx}.png", output_dir);
+        std::fs::write(output_path, pixmap.take_png()).unwrap();
     }
 }
 

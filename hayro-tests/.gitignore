@@ -2,7 +2,4 @@ diffs
 snapshots
 downloads
 store
-pdfs_without_page_attrs/
-rewritten_pdfs/
-copy_pdfs_without_pages.py
-examples/rewrite_pdfs
+outputs
