@@ -44,6 +44,7 @@ impl<'a> BitReader<'a> {
     }
 
     /// Align the reader to the next byte boundary.
+    #[inline]
     pub fn align(&mut self) {
         let bit_pos = self.bit_pos();
 
@@ -53,6 +54,7 @@ impl<'a> BitReader<'a> {
     }
 
     /// Read the given number of bits from the byte stream.
+    #[inline(always)]
     pub fn read(&mut self, bit_size: BitSize) -> Option<u32> {
         let byte_pos = self.byte_pos();
 
@@ -89,10 +91,12 @@ impl<'a> BitReader<'a> {
         Some(item)
     }
 
+    #[inline]
     fn byte_pos(&self) -> usize {
         self.cur_pos / 8
     }
 
+    #[inline]
     fn bit_pos(&self) -> usize {
         self.cur_pos % 8
     }
