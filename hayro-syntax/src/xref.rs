@@ -240,7 +240,7 @@ impl XRef {
 
     /// Return the object ID of the root dictionary.
     pub fn root_id(&self) -> ObjectIdentifier {
-        self.trailer_data().root_ref.into()
+        self.trailer_data().root_ref
     }
 
     /// Whether the PDF has optional content groups.

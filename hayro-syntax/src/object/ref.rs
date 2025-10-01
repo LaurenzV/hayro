@@ -63,7 +63,7 @@ pub enum MaybeRef<T> {
     NotRef(T),
 }
 
-impl<'a, T> MaybeRef<T> {
+impl<T> MaybeRef<T> {
     /// If the object is an object reference, return it.
     pub fn as_obj_ref(&self) -> Option<ObjRef> {
         match self {
