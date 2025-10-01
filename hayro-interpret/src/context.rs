@@ -54,9 +54,7 @@ impl<'a> Context<'a> {
         settings: InterpreterSettings,
         state: State<'a>,
     ) -> Self {
-        let ocg_state = xref.catalog()
-            .map(|catalog| OcgState::new(&catalog))
-            .unwrap_or_else(|| OcgState::empty());
+        let ocg_state = OcgState::from_catalog(xref.catalog().as_ref());
 
         Self {
             states: vec![state],

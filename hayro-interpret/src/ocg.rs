@@ -4,23 +4,20 @@ use hayro_syntax::object::dict::keys::{BASE_STATE, D, OCGS, OCPROPERTIES, OFF, O
 
 pub(crate) struct OcgState {
     active_ocgs: HashSet<ObjectIdentifier>,
-    stack: Vec<Option<ObjectIdentifier>>,
+    // Stack of visibility states. If any element is false, content is not visible.
+    // This allows O(1) visibility checks instead of iterating.
+    visibility_stack: Vec<bool>,
 }
 
 impl OcgState {
-    pub fn new(catalog: &Dict) -> Self {
-        let active_ocgs = Self::read_default_active_ocgs(catalog);
+    pub fn from_catalog(catalog: Option<&Dict>) -> Self {
+        let active_ocgs = catalog
+            .map(Self::read_default_active_ocgs)
+            .unwrap_or_default();
 
         Self {
             active_ocgs,
-            stack: Vec::new(),
-        }
-    }
-
-    pub fn empty() -> Self {
-        Self {
-            active_ocgs: HashSet::new(),
-            stack: Vec::new(),
+            visibility_stack: Vec::new(),
         }
     }
 
@@ -43,27 +40,28 @@ impl OcgState {
         // Collect which OCGs are explicitly mentioned in ON or OFF
         let mut explicitly_set = HashSet::new();
 
-        // First, apply ON array - these OCGs are explicitly visible
-        if let Some(on_arr) = config.get::<Array>(ON) {
-            for item in on_arr.raw_iter() {
-                if let Some(ref_) = item.as_obj_ref() {
-                    let id: ObjectIdentifier = ref_.into();
-                    active.insert(id);
-                    explicitly_set.insert(id);
+        // Helper to read OCG refs from an array
+        let mut read_ocg_array = |key, insert_active: bool| {
+            if let Some(arr) = config.get::<Array>(key) {
+                for item in arr.raw_iter() {
+                    if let Some(ref_) = item.as_obj_ref() {
+                        let id: ObjectIdentifier = ref_.into();
+                        if insert_active {
+                            active.insert(id);
+                        } else {
+                            active.remove(&id);
+                        }
+                        explicitly_set.insert(id);
+                    }
                 }
             }
-        }
+        };
 
-        // Then, apply OFF array - these OCGs are explicitly hidden
-        if let Some(off_arr) = config.get::<Array>(OFF) {
-            for item in off_arr.raw_iter() {
-                if let Some(ref_) = item.as_obj_ref() {
-                    let id: ObjectIdentifier = ref_.into();
-                    active.remove(&id);
-                    explicitly_set.insert(id);
-                }
-            }
-        }
+        // Apply ON array - these OCGs are explicitly visible
+        read_ocg_array(ON, true);
+
+        // Apply OFF array - these OCGs are explicitly hidden
+        read_ocg_array(OFF, false);
 
         // For OCGs not explicitly set, apply BaseState
         if let BaseState::On = base_state {
@@ -83,26 +81,26 @@ impl OcgState {
     }
 
     pub fn begin_ocg(&mut self, ocg_id: ObjectIdentifier) {
-        self.stack.push(Some(ocg_id));
+        let is_active = self.active_ocgs.contains(&ocg_id);
+        // If already invisible, stay invisible. Otherwise use the OCG's state.
+        let visible = self.is_visible() && is_active;
+        self.visibility_stack.push(visible);
     }
 
     pub fn begin_marked_content(&mut self) {
-        self.stack.push(None);
+        // Non-OCG marked content inherits parent visibility
+        let visible = self.is_visible();
+        self.visibility_stack.push(visible);
     }
 
     pub fn end_marked_content(&mut self) {
-        self.stack.pop();
+        self.visibility_stack.pop();
     }
 
     pub fn is_visible(&self) -> bool {
-        for item in &self.stack {
-            if let Some(ocg_id) = item {
-                if !self.active_ocgs.contains(ocg_id) {
-                    return false;
-                }
-            }
-        }
-        true
+        // If stack is empty, everything is visible
+        // Otherwise, check the top of the stack (most recent visibility state)
+        self.visibility_stack.last().copied().unwrap_or(true)
     }
 }
 

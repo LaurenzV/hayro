@@ -234,7 +234,7 @@ impl XRef {
         }
     }
 
-    /// Get the root catalog dictionary.
+    #[doc(hidden)]
     pub fn catalog(&self) -> Option<Dict<'_>> {
         self.get(self.trailer_data().root_ref)
     }
