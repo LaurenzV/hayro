@@ -14,7 +14,7 @@ use crate::object::{Array, MaybeRef};
 use crate::object::{Object, ObjectLike};
 use crate::pdf::PdfVersion;
 use crate::reader::{Readable, Reader, ReaderContext};
-use crate::{PdfData, object, OcgState};
+use crate::{OcgState, PdfData, object};
 use log::{error, warn};
 use rustc_hash::FxHashMap;
 use std::cmp::max;

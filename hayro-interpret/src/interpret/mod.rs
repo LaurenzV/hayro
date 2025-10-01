@@ -563,7 +563,7 @@ pub fn interpret<'a, 'b>(
                 if !context.ocg_state.is_visible() {
                     continue;
                 }
-                
+
                 if let Some(sp) = resources
                     .get_shading(s.0, Box::new(|_| None), Box::new(Some))
                     .and_then(|o| dict_or_stream(&o))

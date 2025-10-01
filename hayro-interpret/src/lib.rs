@@ -39,7 +39,6 @@ mod soft_mask;
 mod types;
 mod x_object;
 
-
 pub mod color;
 pub mod encode;
 pub mod font;

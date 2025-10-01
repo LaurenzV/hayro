@@ -81,10 +81,10 @@ use std::sync::Arc;
 
 pub(crate) mod data;
 pub(crate) mod filter;
+mod ocg;
 pub(crate) mod pdf;
 pub(crate) mod trivia;
 pub(crate) mod util;
-mod ocg;
 
 pub mod bit_reader;
 pub mod content;

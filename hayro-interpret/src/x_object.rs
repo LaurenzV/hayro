@@ -109,7 +109,7 @@ pub(crate) fn draw_form_xobject<'a, 'b>(
     if !context.ocg_state.is_visible() {
         return;
     }
-    
+
     let iter = TypedIter::new(x_object.decoded.as_ref());
 
     context.path_mut().truncate(0);
@@ -166,7 +166,7 @@ pub(crate) fn draw_image_xobject<'a, 'b>(
     if !context.ocg_state.is_visible() {
         return;
     }
-    
+
     let width = x_object.width as f64;
     let height = x_object.height as f64;
 

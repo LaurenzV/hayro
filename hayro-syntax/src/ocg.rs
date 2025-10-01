@@ -1,6 +1,6 @@
-use std::collections::HashSet;
-use crate::object::{Array, Dict, Name, ObjectIdentifier};
 use crate::object::dict::keys::{BASE_STATE, D, OCGS, OCPROPERTIES, OFF, ON};
+use crate::object::{Array, Dict, Name, ObjectIdentifier};
+use std::collections::HashSet;
 
 #[doc(hidden)]
 pub struct OcgState {
@@ -15,7 +15,7 @@ impl OcgState {
             visibility_stack: vec![],
         }
     }
-    
+
     pub(crate) fn from_catalog(catalog: &Dict) -> Self {
         let Some(ocproperties) = catalog.get::<Dict>(OCPROPERTIES) else {
             return Self::dummy();
@@ -24,21 +24,24 @@ impl OcgState {
         let Some(config) = ocproperties.get::<Dict>(D) else {
             return Self::dummy();
         };
-        
+
         let mut inactive = HashSet::new();
 
-        let base_state = config.get::<Name>(BASE_STATE)
+        let base_state = config
+            .get::<Name>(BASE_STATE)
             .and_then(|b| BaseState::from_name(b.as_ref()));
-        
-        if base_state.unwrap_or(BaseState::On) == BaseState::Off && let Some(ocgs) = ocproperties.get::<Array>(OCGS) {
-            for item in  ocgs.raw_iter() {
+
+        if base_state.unwrap_or(BaseState::On) == BaseState::Off
+            && let Some(ocgs) = ocproperties.get::<Array>(OCGS)
+        {
+            for item in ocgs.raw_iter() {
                 if let Some(ref_) = item.as_obj_ref() {
                     let id: ObjectIdentifier = ref_.into();
                     inactive.insert(id);
                 }
             }
         }
-        
+
         let mut read_ocg_array = |key, insert_active: bool| {
             if let Some(arr) = config.get::<Array>(key) {
                 for item in arr.raw_iter() {
@@ -56,7 +59,7 @@ impl OcgState {
 
         read_ocg_array(ON, true);
         read_ocg_array(OFF, false);
-        
+
         Self {
             inactive_ocgs: inactive,
             visibility_stack: Vec::new(),
@@ -87,7 +90,7 @@ impl OcgState {
 enum BaseState {
     On,
     Off,
-    Unchanged
+    Unchanged,
 }
 
 impl BaseState {
@@ -96,7 +99,7 @@ impl BaseState {
             b"ON" => Some(BaseState::On),
             b"OFF" => Some(BaseState::Off),
             b"Unchanged" => Some(BaseState::Unchanged),
-            _ => None
+            _ => None,
         }
     }
 }
