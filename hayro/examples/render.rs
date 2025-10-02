@@ -33,7 +33,7 @@ fn main() {
     for (idx, page) in pdf.pages().iter().enumerate() {
         let pixmap = render(page, &interpreter_settings, &render_settings);
         let output_path = format!("{}/rendered_{idx}.png", output_dir);
-        std::fs::write(output_path, pixmap.take_png()).unwrap();
+        std::fs::write(output_path, pixmap.into_png().unwrap()).unwrap();
     }
 }
 

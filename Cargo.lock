@@ -158,6 +158,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "color"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a18ef4657441fb193b65f34dc39b3781f0dfec23d3bd94d0eeb4e88cde421edb"
+dependencies = [
+ "bytemuck",
+]
+
+[[package]]
 name = "color_quant"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -303,6 +312,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "fearless_simd"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eb8f822f06d1b452a9207f11ce3292f7ee6c23d5d2e7ddfd07990a9107804850"
+dependencies = [
+ "bytemuck",
+]
+
+[[package]]
 name = "flate2"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -395,6 +413,7 @@ dependencies = [
  "image 0.25.8",
  "kurbo 0.12.0",
  "log",
+ "vello_cpu",
 ]
 
 [[package]]
@@ -635,6 +654,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f9fbbcab51052fe104eb5e5d351cf728d30a5be1fe14d9be8a3b097481fb97de"
 
 [[package]]
+name = "linebender_resource_handle"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d4a5ff6bcca6c4867b1c4fd4ef63e4db7436ef363e0ad7531d1558856bae64f4"
+
+[[package]]
 name = "log"
 version = "0.4.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -719,6 +744,19 @@ dependencies = [
  "itoa",
  "memchr",
  "ryu",
+]
+
+[[package]]
+name = "peniko"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b3c76095c9a636173600478e0373218c7b955335048c2bcd12dc6a79657649d8"
+dependencies = [
+ "bytemuck",
+ "color",
+ "kurbo 0.12.0",
+ "linebender_resource_handle",
+ "smallvec",
 ]
 
 [[package]]
@@ -1328,6 +1366,27 @@ dependencies = [
  "unicode-script",
  "unicode-vo",
  "xmlwriter",
+]
+
+[[package]]
+name = "vello_common"
+version = "0.0.1"
+dependencies = [
+ "bytemuck",
+ "fearless_simd",
+ "log",
+ "peniko",
+ "png 0.17.16",
+ "skrifa",
+ "smallvec",
+]
+
+[[package]]
+name = "vello_cpu"
+version = "0.0.1"
+dependencies = [
+ "bytemuck",
+ "vello_common",
 ]
 
 [[package]]

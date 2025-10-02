@@ -117,7 +117,7 @@ impl PdfViewer {
 
         let pixmap = hayro::render(page, &interpreter_settings, &render_settings);
 
-        Ok(pixmap.take_png())
+        Ok(pixmap.into_png().unwrap())
     }
 
     #[wasm_bindgen]

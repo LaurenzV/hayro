@@ -38,3 +38,4 @@ sitro = { git = "https://github.com/LaurenzV/sitro", rev="fb804b3" }
 xmlwriter = { version = "0.1" }
 base64 = { version = "0.22" }
 zune-jpeg = { version = "0.4" }
+vello_cpu = { path = "../vello/sparse_strips/vello_cpu", default-features = false, features = ["std", "png"] }

@@ -38,29 +38,20 @@ use crate::renderer::Renderer;
 use hayro_interpret::Context;
 use hayro_interpret::Device;
 use hayro_interpret::FillRule;
-use hayro_interpret::color::AlphaColor;
+pub use hayro_interpret::font::{FontData, FontQuery, StandardFont};
 use hayro_interpret::hayro_syntax::page::Page;
 use hayro_interpret::{ClipPath, interpret_page};
+pub use hayro_interpret::{InterpreterSettings, Pdf};
 use kurbo::{Affine, Rect, Shape};
 use std::ops::RangeInclusive;
+pub use vello_cpu::Pixmap;
+use vello_cpu::color::palette::css::WHITE;
+use vello_cpu::{Level, RenderMode};
 
-pub use hayro_interpret::font::{FontData, FontQuery, StandardFont};
-pub use hayro_interpret::{InterpreterSettings, Pdf};
-pub use pixmap::Pixmap;
-
-mod coarse;
-mod ctx;
-mod encode;
-mod fine;
-mod flatten;
-mod mask;
-mod paint;
-mod pixmap;
 mod renderer;
-mod strip;
-mod tile;
 
 /// Settings to apply during rendering.
+#[derive(Clone, Copy)]
 pub struct RenderSettings {
     /// How much the contents should be scaled into the x direction.
     pub x_scale: f32,
@@ -109,13 +100,19 @@ pub fn render(
         page.xref(),
         interpreter_settings.clone(),
     );
-    let mut device = Renderer::new(pix_width, pix_height);
 
-    device.ctx.fill_rect(
-        &Rect::new(0.0, 0.0, pix_width as f64, pix_height as f64),
-        AlphaColor::WHITE.into(),
-        None,
-    );
+    let vc_settings = vello_cpu::RenderSettings {
+        level: Level::new(),
+        num_threads: 0,
+        render_mode: RenderMode::OptimizeSpeed,
+    };
+
+    let mut device = Renderer::new(pix_width, pix_height, vc_settings);
+
+    device.ctx.set_paint(WHITE);
+    device
+        .ctx
+        .fill_rect(&Rect::new(0.0, 0.0, pix_width as f64, pix_height as f64));
     device.push_clip_path(&ClipPath {
         path: initial_transform * page.intersected_crop_box().to_path(0.1),
         fill: FillRule::NonZero,
@@ -163,4 +160,11 @@ pub fn render_pdf(
         .collect();
 
     Some(rendered)
+}
+
+pub(crate) fn derive_settings(settings: &vello_cpu::RenderSettings) -> vello_cpu::RenderSettings {
+    vello_cpu::RenderSettings {
+        num_threads: 0,
+        ..*settings
+    }
 }
