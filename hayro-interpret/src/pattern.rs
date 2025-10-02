@@ -8,7 +8,7 @@ use crate::font::Glyph;
 use crate::interpret::state::{State, TextState};
 use crate::shading::Shading;
 use crate::soft_mask::SoftMask;
-use crate::util::{FloatExt, hash128};
+use crate::util::{Float32Ext, hash128};
 use crate::{CacheKey, ClipPath, GlyphDrawMode, Image, PathDrawMode};
 use crate::{FillRule, InterpreterSettings, Paint, interpret};
 use hayro_syntax::content::TypedIter;

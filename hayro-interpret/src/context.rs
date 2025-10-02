@@ -2,8 +2,9 @@ use crate::cache::Cache;
 use crate::color::ColorSpace;
 use crate::convert::convert_transform;
 use crate::font::Font;
-use crate::interpret::state::State;
+use crate::interpret::state::{ClipType, State};
 use crate::ocg::OcgState;
+use crate::util::Float64Ext;
 use crate::{ClipPath, Device, FillRule, InterpreterSettings, StrokeProps};
 use hayro_syntax::content::ops::Transform;
 use hayro_syntax::object::Dict;
@@ -12,7 +13,7 @@ use hayro_syntax::object::ObjRef;
 use hayro_syntax::object::Object;
 use hayro_syntax::page::Resources;
 use hayro_syntax::xref::XRef;
-use kurbo::{Affine, BezPath, Point, Shape};
+use kurbo::{Affine, BezPath, PathEl, Point, Rect, Shape};
 use log::warn;
 use std::collections::HashMap;
 
@@ -105,19 +106,41 @@ impl<'a> Context<'a> {
         fill: FillRule,
         device: &mut impl Device<'a>,
     ) {
+        if let Some(clip_rect) = path_as_rect(&clip_path) {
+            let cur_bbox = self.bbox();
+
+            // If the clip path is a rect and completely covers the current bbox, don't emit it.
+            if cur_bbox
+                .min_x()
+                .is_nearly_greater_or_equal(clip_rect.min_x())
+                && cur_bbox
+                    .min_y()
+                    .is_nearly_greater_or_equal(clip_rect.min_y())
+                && cur_bbox.max_x().is_nearly_less_or_equal(clip_rect.max_x())
+                && cur_bbox.max_y().is_nearly_less_or_equal(clip_rect.max_y())
+            {
+                self.get_mut().clips.push(ClipType::Dummy);
+                return;
+            }
+        }
+
         let bbox = clip_path.bounding_box();
         device.push_clip_path(&ClipPath {
             path: clip_path,
             fill,
         });
         self.push_bbox(bbox);
-        self.get_mut().n_clips += 1;
+        self.get_mut().clips.push(ClipType::Real);
     }
 
     pub(crate) fn pop_clip_path(&mut self, device: &mut impl Device<'a>) {
-        device.pop_clip_path();
-        self.pop_bbox();
-        self.get_mut().n_clips -= 1;
+        match self.get_mut().clips.pop() {
+            Some(ClipType::Real) => {
+                device.pop_clip_path();
+                self.pop_bbox();
+            }
+            _ => {}
+        }
     }
 
     /// test
@@ -141,12 +164,16 @@ impl<'a> Context<'a> {
     }
 
     pub(crate) fn restore_state(&mut self, device: &mut impl Device<'a>) {
-        let Some(target_clips) = self.states.get(self.states.len() - 2).map(|s| s.n_clips) else {
+        let Some(target_clips) = self
+            .states
+            .get(self.states.len() - 2)
+            .map(|s| s.clips.len())
+        else {
             warn!("underflowed graphics state");
             return;
         };
 
-        while self.get().n_clips > target_clips {
+        while self.get().clips.len() > target_clips {
             self.pop_clip_path(device);
         }
 
@@ -243,4 +270,36 @@ impl<'a> Context<'a> {
     pub(crate) fn num_states(&self) -> usize {
         self.states.len()
     }
+}
+
+fn path_as_rect(path: &BezPath) -> Option<Rect> {
+    let bbox = path.bounding_box();
+    let (min_x, min_y, max_x, max_y) = (bbox.min_x(), bbox.min_y(), bbox.max_x(), bbox.max_y());
+
+    if path.elements().len() > 5 {
+        return None;
+    }
+
+    let mut is_rect = true;
+
+    let check_point = |p: Point| {
+        (p.x.is_nearly_equal(min_x) || p.x.is_nearly_equal(max_x))
+            && (p.y.is_nearly_equal(min_y) || p.y.is_nearly_equal(max_y))
+    };
+
+    for el in path.elements() {
+        match el {
+            PathEl::MoveTo(p) => is_rect &= check_point(*p),
+            PathEl::LineTo(l) => is_rect &= check_point(*l),
+            PathEl::QuadTo(_, _) => {
+                return None;
+            }
+            PathEl::CurveTo(_, _, _) => {
+                return None;
+            }
+            PathEl::ClosePath => {}
+        }
+    }
+
+    is_rect.then_some(bbox)
 }

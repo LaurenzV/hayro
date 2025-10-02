@@ -1,7 +1,7 @@
 use crate::color::{Color, ColorSpace};
 use crate::context::Context;
 use crate::device::Device;
-use crate::util::FloatExt;
+use crate::util::Float32Ext;
 use crate::{FillRule, Paint, PathDrawMode, StrokeProps};
 use kurbo::{BezPath, Cap, Join, PathEl, Shape};
 use smallvec::smallvec;

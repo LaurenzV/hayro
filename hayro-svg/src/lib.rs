@@ -15,7 +15,7 @@ use crate::mask::MaskKind;
 use crate::paint::{CachedShading, CachedShadingPattern, CachedTilingPattern};
 use hayro_interpret::font::Glyph;
 use hayro_interpret::hayro_syntax::page::Page;
-use hayro_interpret::util::FloatExt;
+use hayro_interpret::util::Float32Ext;
 use hayro_interpret::{
     CacheKey, ClipPath, Context, Device, GlyphDrawMode, Image, InterpreterSettings, Paint,
     PathDrawMode, SoftMask, StrokeProps, interpret_page,

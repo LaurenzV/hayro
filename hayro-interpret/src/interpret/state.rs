@@ -24,6 +24,12 @@ pub(crate) enum ActiveTransferFunction {
 }
 
 #[derive(Clone, Debug)]
+pub(crate) enum ClipType {
+    Dummy,
+    Real,
+}
+
+#[derive(Clone, Debug)]
 pub(crate) struct State<'a> {
     // Note that the text state and ctm are theoretically part of the graphics state,
     // but we keep them separate for simplicity.
@@ -32,14 +38,14 @@ pub(crate) struct State<'a> {
     pub(crate) ctm: Affine,
     // Strictly speaking not part of the graphics state, but we keep it there for
     // consistency.
-    pub(crate) n_clips: u32,
+    pub(crate) clips: Vec<ClipType>,
 }
 
 impl Default for State<'_> {
     fn default() -> Self {
         State {
             ctm: Affine::IDENTITY,
-            n_clips: 0,
+            clips: vec![],
             text_state: TextState::default(),
             graphics_state: GraphicsState::default(),
         }

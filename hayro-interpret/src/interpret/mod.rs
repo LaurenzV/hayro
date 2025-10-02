@@ -125,7 +125,6 @@ pub fn interpret<'a, 'b>(
     device: &mut impl Device<'a>,
 ) {
     let num_states = context.num_states();
-    let n_clips = context.get().n_clips;
 
     context.save_state();
 
@@ -585,10 +584,5 @@ pub fn interpret<'a, 'b>(
 
     while context.num_states() > num_states {
         context.restore_state(device);
-    }
-
-    // Invalid files may still have pending clip paths.
-    while context.get().n_clips > n_clips {
-        context.pop_clip_path(device);
     }
 }

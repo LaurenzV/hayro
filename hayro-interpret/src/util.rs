@@ -42,10 +42,10 @@ impl CodeMapExt for CmapSubtable<'_> {
     }
 }
 
-const SCALAR_NEARLY_ZERO: f32 = 1.0 / (1 << 12) as f32;
+const SCALAR_NEARLY_ZERO: f32 = 1.0 / (1 << 8) as f32;
 
 /// A number of useful methods for f32 numbers.
-pub trait FloatExt: Sized + Sub<f32, Output = f32> + Copy {
+pub trait Float32Ext: Sized + Sub<f32, Output = f32> + Copy + PartialOrd<f32> {
     /// Whether the number is approximately 0.
     fn is_nearly_zero(&self) -> bool {
         self.is_nearly_zero_within_tolerance(SCALAR_NEARLY_ZERO)
@@ -56,12 +56,56 @@ pub trait FloatExt: Sized + Sub<f32, Output = f32> + Copy {
         (*self - other).is_nearly_zero()
     }
 
+    /// Whether the number is nearly equal to another number.
+    fn is_nearly_less_or_equal(&self, other: f32) -> bool {
+        (*self - other).is_nearly_zero() || *self < other
+    }
+
+    /// Whether the number is nearly equal to another number.
+    fn is_nearly_greater_or_equal(&self, other: f32) -> bool {
+        (*self - other).is_nearly_zero() || *self > other
+    }
+
     /// Whether the number is approximately 0, with a given tolerance.
     fn is_nearly_zero_within_tolerance(&self, tolerance: f32) -> bool;
 }
 
-impl FloatExt for f32 {
+impl Float32Ext for f32 {
     fn is_nearly_zero_within_tolerance(&self, tolerance: f32) -> bool {
+        debug_assert!(tolerance >= 0.0, "tolerance must be positive");
+
+        self.abs() <= tolerance
+    }
+}
+
+/// A number of useful methods for f64 numbers.
+pub trait Float64Ext: Sized + Sub<f64, Output = f64> + Copy + PartialOrd<f64> {
+    /// Whether the number is approximately 0.
+    fn is_nearly_zero(&self) -> bool {
+        self.is_nearly_zero_within_tolerance(SCALAR_NEARLY_ZERO as f64)
+    }
+
+    /// Whether the number is nearly equal to another number.
+    fn is_nearly_equal(&self, other: f64) -> bool {
+        (*self - other).is_nearly_zero()
+    }
+
+    /// Whether the number is nearly equal to another number.
+    fn is_nearly_less_or_equal(&self, other: f64) -> bool {
+        (*self - other).is_nearly_zero() || *self < other
+    }
+
+    /// Whether the number is nearly equal to another number.
+    fn is_nearly_greater_or_equal(&self, other: f64) -> bool {
+        (*self - other).is_nearly_zero() || *self > other
+    }
+
+    /// Whether the number is approximately 0, with a given tolerance.
+    fn is_nearly_zero_within_tolerance(&self, tolerance: f64) -> bool;
+}
+
+impl Float64Ext for f64 {
+    fn is_nearly_zero_within_tolerance(&self, tolerance: f64) -> bool {
         debug_assert!(tolerance >= 0.0, "tolerance must be positive");
 
         self.abs() <= tolerance
