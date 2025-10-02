@@ -203,7 +203,7 @@ impl Renderer {
                                 x_extend: peniko::Extend::Repeat,
                                 y_extend: peniko::Extend::Repeat,
                                 quality: ImageQuality::Medium,
-                                alpha: 0.0,
+                                alpha: 1.0,
                             },
                         };
 
@@ -272,7 +272,7 @@ impl Renderer {
                                 x_extend: peniko::Extend::Pad,
                                 y_extend: peniko::Extend::Pad,
                                 quality: ImageQuality::Medium,
-                                alpha: 0.0,
+                                alpha: 1.0,
                             },
                         };
 
