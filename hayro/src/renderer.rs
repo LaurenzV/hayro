@@ -353,10 +353,6 @@ impl Renderer {
 
 impl<'a> Device<'a> for Renderer {
     fn draw_image(&mut self, image: hayro_interpret::Image<'a, '_>, transform: Affine) {
-        if let Some(mask) = self.cur_mask.clone() {
-            self.ctx.push_layer(None, None, None, Some(mask));
-        }
-
         self.ctx.set_paint_transform(Affine::IDENTITY);
         self.ctx.set_aliasing_threshold(Some(1));
 
@@ -375,15 +371,11 @@ impl<'a> Device<'a> for Renderer {
                                 color[3],
                             );
 
-                            let push_layer = self.cur_mask.is_some() || alpha != 255;
+                            let push_layer = alpha != 255;
                             self.ctx.set_transform(transform);
                             if push_layer {
-                                self.ctx.push_layer(
-                                    None,
-                                    None,
-                                    Some(alpha as f32 / 255.0),
-                                    self.cur_mask.clone(),
-                                );
+                                self.ctx
+                                    .push_layer(None, None, Some(alpha as f32 / 255.0), None);
                             }
                             let old_rule = *self.ctx.fill_rule();
                             self.ctx.set_fill_rule(Fill::NonZero);
@@ -454,22 +446,12 @@ impl<'a> Device<'a> for Renderer {
             hayro_interpret::Image::Raster(r) => {
                 r.with_rgba(|rgb, alpha| {
                     self.ctx.set_transform(transform);
-                    if let Some(ref mask) = self.cur_mask {
-                        self.ctx.push_layer(None, None, None, Some(mask.clone()));
-                    }
                     self.draw_image(rgb, alpha);
-
-                    if self.cur_mask.is_some() {
-                        self.ctx.pop_layer();
-                    }
                 });
             }
         }
 
         self.ctx.set_aliasing_threshold(None);
-        if self.cur_mask.is_some() {
-            self.ctx.pop_layer();
-        }
     }
 
     fn push_clip_path(&mut self, clip_path: &ClipPath) {
@@ -514,6 +496,7 @@ impl<'a> Device<'a> for Renderer {
                 .or_insert_with(|| draw_soft_mask(&m, settings, width, height))
                 .clone()
         });
+        self.ctx.set_mask(self.cur_mask.clone());
     }
 
     fn draw_path(
@@ -523,10 +506,6 @@ impl<'a> Device<'a> for Renderer {
         paint: &Paint<'_>,
         draw_mode: &PathDrawMode,
     ) {
-        if let Some(mask) = self.cur_mask.clone() {
-            self.ctx.push_layer(None, None, None, Some(mask));
-        }
-
         match draw_mode {
             PathDrawMode::Fill(f) => {
                 Self::fill_path(self, path, transform, paint, *f);
@@ -534,10 +513,6 @@ impl<'a> Device<'a> for Renderer {
             PathDrawMode::Stroke(s) => {
                 Self::stroke_path(self, path, transform, paint, s);
             }
-        }
-
-        if self.cur_mask.is_some() {
-            self.ctx.pop_layer();
         }
     }
 
@@ -549,10 +524,6 @@ impl<'a> Device<'a> for Renderer {
         paint: &Paint<'_>,
         draw_mode: &GlyphDrawMode,
     ) {
-        if let Some(mask) = self.cur_mask.clone() {
-            self.ctx.push_layer(None, None, None, Some(mask));
-        }
-
         match draw_mode {
             GlyphDrawMode::Fill => {
                 Self::fill_glyph(self, glyph, transform, glyph_transform, paint);
@@ -560,10 +531,6 @@ impl<'a> Device<'a> for Renderer {
             GlyphDrawMode::Stroke(s) => {
                 Self::stroke_glyph(self, glyph, transform, glyph_transform, paint, s);
             }
-        }
-
-        if self.cur_mask.is_some() {
-            self.ctx.pop_layer();
         }
     }
 }
