@@ -37,7 +37,7 @@ echo "Scale: $SCALE (${DPI} DPI)"
 echo "Output directory: $OUTPUTS_DIR"
 echo ""
 
-HYPERFINE_ARGS="--runs 5 --warmup 1 --sort command"
+HYPERFINE_ARGS="--runs 1 --warmup 1 --sort command"
 COMMANDS=()
 
 add_renderer() {

@@ -48,6 +48,8 @@ protected-stamp-editor-save-print
 issue17215-annotations
 # monster jp2 image
 issue19517
+# very large ccitt image
+issue17190_1
 
 # tiling with negative step
 issue16038
@@ -251,13 +253,23 @@ issue18973
 extgstate
 
 # these render correctly but take a long time, use as benchmarking
+
+# ballon type3 emojis which is decoded time and time again
 issue10717
-issue17190_1
+#big jpx image, can be reduced during decoding
 bug1901253
+# jbig/jpx image + a lot of resizing, takes 6 secs
 issue18896
+# very large ccitt fax image, resizing takes long as well as
+# decoding and encoding the components
 issue6741
+# basically the same as above
 issue8076
+# likely missing caching of shading function
 bug1721218_reduced
+# yet again lots of decoding/encoding for greyscale image
 issue6365
+# JPX images taking lots of time to decode, some time spent in get_components/etc.
 issue4648
+# Another big JPX image, can probably be resized at decoding time.
 issue17289
