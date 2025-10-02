@@ -347,12 +347,12 @@ impl Renderer {
                     .or_insert_with(|| o.outline());
 
                 self.fill_path(
-                    &base_outline,
+                    base_outline,
                     transform * glyph_transform,
                     paint,
                     FillRule::NonZero,
                 );
-                
+
                 self.glyph_cache = cache;
             }
             Glyph::Type3(s) => {
