@@ -133,12 +133,9 @@ impl<'a> Context<'a> {
     }
 
     pub(crate) fn pop_clip_path(&mut self, device: &mut impl Device<'a>) {
-        match self.get_mut().clips.pop() {
-            Some(ClipType::Real) => {
-                device.pop_clip_path();
-                self.pop_bbox();
-            }
-            _ => {}
+        if let Some(ClipType::Real) = self.get_mut().clips.pop() {
+            device.pop_clip_path();
+            self.pop_bbox();
         }
     }
 
