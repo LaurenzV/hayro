@@ -199,7 +199,7 @@ fn render_pdf(
         .into_iter()
         .enumerate()
         .map(|(idx, d)| {
-            let png = d.take_png();
+            let png = d.into_png().unwrap();
 
             if STORE.is_some() {
                 let dir = STORE_PATH.join("pdf");
