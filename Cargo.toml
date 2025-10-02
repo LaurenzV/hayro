@@ -24,7 +24,7 @@ jpeg2k = { version = "0.10.1", default-features = false, features = ["openjp2"] 
 kurbo = { version = "0.12.0" }
 log = { version = "0.4" }
 resvg = { version = "0.45.1" }
-flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+flate2 = { version = "1", default-features = false, features = ["zlib-rs"] }
 once_cell = { version = "1" }
 phf = { version = "0.13.1" }
 moxcms = { version = "0.7.5" }

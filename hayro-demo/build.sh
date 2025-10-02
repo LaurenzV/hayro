@@ -4,7 +4,7 @@ echo "Building Hayro Demo for deployment..."
 
 # Build WASM module
 echo "Building WASM module..."
-wasm-pack build --target web --out-dir www
+RUSTFLAGS="-C target-feature=+simd128" wasm-pack build --target web --out-dir www
 
 # Create dist directory
 echo "Creating distribution directory..."
