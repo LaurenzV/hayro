@@ -23,7 +23,7 @@ pub(crate) struct Renderer {
     pub(crate) ctx: RenderContext,
     pub(crate) inside_pattern: bool,
     pub(crate) soft_mask_cache: HashMap<ObjectIdentifier, Mask>,
-    pub(crate) glyph_cache: HashMap<u128, BezPath>,
+    pub(crate) glyph_cache: Option<HashMap<u128, BezPath>>,
     pub(crate) cur_mask: Option<Mask>,
 }
 
@@ -33,7 +33,7 @@ impl Renderer {
             ctx: RenderContext::new_with(width, height, settings),
             inside_pattern: false,
             soft_mask_cache: Default::default(),
-            glyph_cache: HashMap::new(),
+            glyph_cache: Some(HashMap::new()),
             cur_mask: None,
         }
     }
@@ -247,7 +247,7 @@ impl Renderer {
                             cur_mask: None,
                             inside_pattern: true,
                             soft_mask_cache: Default::default(),
-                            glyph_cache: Default::default(),
+                            glyph_cache: Some(HashMap::new()),
                         };
                         let mut initial_transform =
                             Affine::new([xs as f64, 0.0, 0.0, ys as f64, -bbox.x0, -bbox.y0]);
@@ -338,18 +338,22 @@ impl Renderer {
         match glyph {
             Glyph::Outline(o) => {
                 let id = o.identifier().cache_key();
-                let base_outline = self
-                    .glyph_cache
+                // Otherwise we run into lifetime issues.
+                let mut cache = std::mem::take(&mut self.glyph_cache);
+                let base_outline = cache
+                    .as_mut()
+                    .unwrap()
                     .entry(id)
-                    .or_insert_with(|| o.outline())
-                    .clone();
+                    .or_insert_with(|| o.outline());
 
                 self.fill_path(
-                    &(glyph_transform * base_outline),
-                    transform,
+                    &base_outline,
+                    transform * glyph_transform,
                     paint,
                     FillRule::NonZero,
                 );
+                
+                self.glyph_cache = cache;
             }
             Glyph::Type3(s) => {
                 s.interpret(self, transform, glyph_transform, paint);
@@ -370,6 +374,8 @@ impl Renderer {
                 let id = o.identifier().cache_key();
                 let base_outline = self
                     .glyph_cache
+                    .as_mut()
+                    .unwrap()
                     .entry(id)
                     .or_insert_with(|| o.outline())
                     .clone();
@@ -622,7 +628,7 @@ fn draw_soft_mask(
         inside_pattern: false,
         cur_mask: None,
         soft_mask_cache: Default::default(),
-        glyph_cache: Default::default(),
+        glyph_cache: Some(HashMap::new()),
     };
 
     let bg_color = mask.background_color().to_rgba();
