@@ -3,18 +3,21 @@ use hayro_interpret::encode::EncodedShadingPattern;
 use hayro_interpret::font::Glyph;
 use hayro_interpret::hayro_syntax::object::ObjectIdentifier;
 use hayro_interpret::pattern::Pattern;
-use hayro_interpret::{CacheKey, ClipPath, Device, FillRule, GlyphDrawMode, LumaData, MaskType, Paint, PathDrawMode, RgbData, SoftMask, StrokeProps};
+use hayro_interpret::{
+    CacheKey, ClipPath, Device, FillRule, GlyphDrawMode, LumaData, MaskType, Paint, PathDrawMode,
+    RgbData, SoftMask, StrokeProps,
+};
 use image::imageops::FilterType;
 use image::{DynamicImage, ImageBuffer};
 use kurbo::{Affine, BezPath, Point, Rect, Shape, Vec2};
 use std::collections::HashMap;
 use std::sync::Arc;
+use vello_cpu::color::palette::css::BLACK;
 use vello_cpu::color::{AlphaColor, PremulRgba8, Srgb};
 use vello_cpu::peniko::{Fill, ImageQuality, ImageSampler};
 use vello_cpu::{
     Image, ImageSource, Mask, PaintType, Pixmap, RenderContext, RenderSettings, peniko,
 };
-use vello_cpu::color::palette::css::BLACK;
 
 pub(crate) struct Renderer {
     pub(crate) ctx: RenderContext,
@@ -160,9 +163,8 @@ impl Renderer {
 
         self.ctx.set_transform(transform);
         self.ctx.set_paint(image);
-        self.ctx.fill_rect(
-            &Rect::new(0.0, 0.0, width as f64, height as f64),
-        );
+        self.ctx
+            .fill_rect(&Rect::new(0.0, 0.0, width as f64, height as f64));
     }
 
     #[must_use]
@@ -385,9 +387,6 @@ impl Renderer {
         }
     }
 }
-
-// TODO: Once vello_cpu supports it, dont use layers for masks but simply directly with the
-// path
 
 impl<'a> Device<'a> for Renderer {
     fn draw_image(&mut self, image: hayro_interpret::Image<'a, '_>, transform: Affine) {
@@ -631,10 +630,12 @@ fn draw_soft_mask(
     let apply_bg = bg_color.to_rgba8() != BLACK.to_rgba8().to_u8_array();
 
     if apply_bg {
-        renderer.ctx.set_paint(AlphaColor::<Srgb>::new(bg_color.components()));
-        renderer.ctx.fill_rect(
-            &Rect::new(0.0, 0.0, width as f64, height as f64),
-        );
+        renderer
+            .ctx
+            .set_paint(AlphaColor::<Srgb>::new(bg_color.components()));
+        renderer
+            .ctx
+            .fill_rect(&Rect::new(0.0, 0.0, width as f64, height as f64));
         renderer.ctx.push_layer(None, None, None, None);
     }
 
@@ -643,7 +644,7 @@ fn draw_soft_mask(
     if apply_bg {
         renderer.ctx.pop_layer();
     }
-    
+
     let mut pix = Pixmap::new(width, height);
     renderer.ctx.flush();
     renderer.ctx.render_to_pixmap(&mut pix);
@@ -655,10 +656,13 @@ fn draw_soft_mask(
 
     if let Some(transfer_function) = mask.transfer_function() {
         let mut map = Vec::new();
-        
+
         for y in 0..rendered_mask.height() {
             for x in 0..rendered_mask.width() {
-                map.push((transfer_function.apply(rendered_mask.sample(x, y) as f32 / 255.0) * 255.0 + 0.5) as u8);
+                map.push(
+                    (transfer_function.apply(rendered_mask.sample(x, y) as f32 / 255.0) * 255.0
+                        + 0.5) as u8,
+                );
             }
         }
 
