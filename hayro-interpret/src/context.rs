@@ -275,22 +275,24 @@ impl<'a> Context<'a> {
 fn path_as_rect(path: &BezPath) -> Option<Rect> {
     let bbox = path.bounding_box();
     let (min_x, min_y, max_x, max_y) = (bbox.min_x(), bbox.min_y(), bbox.max_x(), bbox.max_y());
+    let mut touched = [false; 4];
 
-    if path.elements().len() > 5 {
+    // One MoveTo, three LineTo, one ClosePath
+    if path.elements().len() != 5 {
         return None;
     }
 
-    let mut is_rect = true;
-
-    let check_point = |p: Point| {
-        (p.x.is_nearly_equal(min_x) || p.x.is_nearly_equal(max_x))
-            && (p.y.is_nearly_equal(min_y) || p.y.is_nearly_equal(max_y))
+    let mut check_point = |p: Point| {
+        touched[0] |= p.x.is_nearly_equal(min_x);
+        touched[1] |= p.y.is_nearly_equal(min_y);
+        touched[2] |= p.x.is_nearly_equal(max_x);
+        touched[3] |= p.y.is_nearly_equal(max_y);
     };
 
     for el in path.elements() {
         match el {
-            PathEl::MoveTo(p) => is_rect &= check_point(*p),
-            PathEl::LineTo(l) => is_rect &= check_point(*l),
+            PathEl::MoveTo(p) => check_point(*p),
+            PathEl::LineTo(l) => check_point(*l),
             PathEl::QuadTo(_, _) => {
                 return None;
             }
@@ -301,5 +303,9 @@ fn path_as_rect(path: &BezPath) -> Option<Rect> {
         }
     }
 
-    is_rect.then_some(bbox)
+    if touched[0] && touched[1] && touched[2] && touched[3] {
+        Some(bbox)
+    } else {
+        None
+    }
 }
