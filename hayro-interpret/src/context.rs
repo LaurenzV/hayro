@@ -4,7 +4,7 @@ use crate::convert::convert_transform;
 use crate::font::Font;
 use crate::interpret::state::State;
 use crate::ocg::OcgState;
-use crate::{FillRule, InterpreterSettings, StrokeProps};
+use crate::{ClipPath, Device, FillRule, InterpreterSettings, StrokeProps};
 use hayro_syntax::content::ops::Transform;
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Name;
@@ -12,7 +12,7 @@ use hayro_syntax::object::ObjRef;
 use hayro_syntax::object::Object;
 use hayro_syntax::page::Resources;
 use hayro_syntax::xref::XRef;
-use kurbo::{Affine, BezPath, Point};
+use kurbo::{Affine, BezPath, Point, Shape};
 use log::warn;
 use std::collections::HashMap;
 
@@ -93,12 +93,35 @@ impl<'a> Context<'a> {
         })
     }
 
-    pub(crate) fn push_bbox(&mut self, bbox: kurbo::Rect) {
+    /// test
+    pub fn push_bbox(&mut self, bbox: kurbo::Rect) {
         let new = self.bbox().intersect(bbox);
         self.bbox.push(new);
     }
 
-    pub(crate) fn pop_bbox(&mut self) {
+    pub(crate) fn push_clip_path(
+        &mut self,
+        clip_path: BezPath,
+        fill: FillRule,
+        device: &mut impl Device<'a>,
+    ) {
+        let bbox = clip_path.bounding_box();
+        device.push_clip_path(&ClipPath {
+            path: clip_path,
+            fill,
+        });
+        self.push_bbox(bbox);
+        self.get_mut().n_clips += 1;
+    }
+
+    pub(crate) fn pop_clip_path(&mut self, device: &mut impl Device<'a>) {
+        device.pop_clip_path();
+        self.pop_bbox();
+        self.get_mut().n_clips -= 1;
+    }
+
+    /// test
+    pub fn pop_bbox(&mut self) {
         self.bbox.pop();
     }
 
@@ -117,12 +140,17 @@ impl<'a> Context<'a> {
             .unwrap_or(Affine::IDENTITY)
     }
 
-    pub(crate) fn restore_state(&mut self) {
-        if self.states.len() > 1 {
-            self.states.pop();
-        } else {
-            warn!("overflow in `restore_state");
+    pub(crate) fn restore_state(&mut self, device: &mut impl Device<'a>) {
+        let Some(target_clips) = self.states.get(self.states.len() - 2).map(|s| s.n_clips) else {
+            warn!("underflowed graphics state");
+            return;
+        };
+
+        while self.get().n_clips > target_clips {
+            self.pop_clip_path(device);
         }
+
+        self.states.pop();
     }
 
     pub(crate) fn path(&self) -> &BezPath {

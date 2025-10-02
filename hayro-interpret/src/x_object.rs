@@ -155,7 +155,7 @@ pub(crate) fn draw_form_xobject<'a, 'b>(
     }
 
     context.pop_root_transform();
-    context.restore_state();
+    context.restore_state(device);
 }
 
 pub(crate) fn draw_image_xobject<'a, 'b>(
@@ -209,7 +209,7 @@ pub(crate) fn draw_image_xobject<'a, 'b>(
     device.draw_image(image, transform);
     device.pop_transparency_group();
 
-    context.restore_state();
+    context.restore_state(device);
 }
 
 #[derive(Clone)]

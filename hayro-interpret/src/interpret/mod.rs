@@ -1,4 +1,3 @@
-use crate::ClipPath;
 use crate::FillRule;
 use crate::color::ColorSpace;
 use crate::context::Context;
@@ -8,7 +7,7 @@ use crate::font::{FontData, FontQuery};
 use crate::interpret::path::{
     close_path, fill_path, fill_path_impl, fill_stroke_path, stroke_path,
 };
-use crate::interpret::state::{handle_gs, restore_state, save_sate};
+use crate::interpret::state::handle_gs;
 use crate::interpret::text::TextRenderingMode;
 use crate::pattern::{Pattern, ShadingPattern};
 use crate::shading::Shading;
@@ -128,11 +127,11 @@ pub fn interpret<'a, 'b>(
     let num_states = context.num_states();
     let n_clips = context.get().n_clips;
 
-    save_sate(context);
+    context.save_state();
 
     for op in ops {
         match op {
-            TypedInstruction::SaveState(_) => save_sate(context),
+            TypedInstruction::SaveState(_) => context.save_state(),
             TypedInstruction::StrokeColorDeviceRgb(s) => {
                 context.get_mut().graphics_state.stroke_cs = ColorSpace::device_rgb();
                 context.get_mut().graphics_state.stroke_color =
@@ -283,14 +282,7 @@ pub fn interpret<'a, 'b>(
                     && !context.path().elements().is_empty()
                 {
                     let clip_path = context.get().ctm * context.path().clone();
-                    context.push_bbox(clip_path.bounding_box());
-
-                    device.push_clip_path(&ClipPath {
-                        path: clip_path,
-                        fill: clip,
-                    });
-
-                    context.get_mut().n_clips += 1;
+                    context.push_clip_path(clip_path, clip, device);
 
                     *(context.clip_mut()) = None;
                 }
@@ -319,7 +311,7 @@ pub fn interpret<'a, 'b>(
             TypedInstruction::ClipEvenOdd(_) => {
                 *(context.clip_mut()) = Some(FillRule::EvenOdd);
             }
-            TypedInstruction::RestoreState(_) => restore_state(context, device),
+            TypedInstruction::RestoreState(_) => context.restore_state(device),
             TypedInstruction::FlatnessTolerance(_) => {
                 // Ignore for now.
             }
@@ -433,13 +425,7 @@ pub fn interpret<'a, 'b>(
                 if has_outline {
                     let clip_path = context.get().ctm * context.get().text_state.clip_paths.clone();
 
-                    context.push_bbox(clip_path.bounding_box());
-
-                    device.push_clip_path(&ClipPath {
-                        path: clip_path,
-                        fill: FillRule::NonZero,
-                    });
-                    context.get_mut().n_clips += 1;
+                    context.push_clip_path(clip_path, FillRule::NonZero, device);
                 }
 
                 context.get_mut().text_state.clip_paths.truncate(0);
@@ -577,7 +563,7 @@ pub fn interpret<'a, 'b>(
                     device.pop_transparency_group();
 
                     context.pop_root_transform();
-                    context.restore_state();
+                    context.restore_state(device);
                 } else {
                     warn!("failed to process shading");
                 }
@@ -598,13 +584,11 @@ pub fn interpret<'a, 'b>(
     }
 
     while context.num_states() > num_states {
-        restore_state(context, device);
+        context.restore_state(device);
     }
 
     // Invalid files may still have pending clip paths.
     while context.get().n_clips > n_clips {
-        device.pop_clip_path();
-        context.pop_bbox();
-        context.get_mut().n_clips -= 1;
+        context.pop_clip_path(device);
     }
 }
