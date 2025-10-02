@@ -1,6 +1,6 @@
 [package]
 name = "hayro-interpret"
-version = "0.3.0"
+version = "0.4.0"
 description = "A crate for interpreting PDF files."
 edition = { workspace = true }
 repository = { workspace = true }

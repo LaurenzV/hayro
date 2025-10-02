@@ -10,11 +10,11 @@ readme = "README.md"
 license = "Apache-2.0"
 
 [workspace.dependencies]
-hayro = { path = "hayro", version = "0.3.0", default-features = false }
-hayro-font = { path = "hayro-font", version = "0.2.0" }
-hayro-interpret = { path = "hayro-interpret", version = "0.3.0", default-features = false }
-hayro-syntax = { path = "hayro-syntax", version = "0.3.0", default-features = false }
-hayro-svg = { path = "hayro-svg", version = "0.1.0", default-features = false }
+hayro = { path = "hayro", version = "0.4.0", default-features = false }
+hayro-font = { path = "hayro-font", version = "0.3.0" }
+hayro-interpret = { path = "hayro-interpret", version = "0.4.0", default-features = false }
+hayro-syntax = { path = "hayro-syntax", version = "0.4.0", default-features = false }
+hayro-svg = { path = "hayro-svg", version = "0.2.0", default-features = false }
 hayro-write = { path = "hayro-write", version = "0.3.0" }
 
 bitflags = { version = "2.9" }

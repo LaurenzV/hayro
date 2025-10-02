@@ -1,6 +1,6 @@
 [package]
 name = "hayro-svg"
-version = "0.1.0"
+version = "0.2.0"
 description = "Converting PDF pages into SVG files."
 authors.workspace = true
 edition.workspace = true
