@@ -625,10 +625,24 @@ fn draw_soft_mask(
     renderer.ctx.flush();
     renderer.ctx.render_to_pixmap(&mut pix);
 
-    match mask.mask_type() {
+    let mut rendered_mask = match mask.mask_type() {
         MaskType::Luminosity => Mask::new_luminance(&pix),
         MaskType::Alpha => Mask::new_alpha(&pix),
+    };
+
+    if let Some(transfer_function) = mask.transfer_function() {
+        let mut map = Vec::new();
+        
+        for y in 0..rendered_mask.height() {
+            for x in 0..rendered_mask.width() {
+                map.push((transfer_function.apply(rendered_mask.sample(x, y) as f32 / 255.0) * 255.0 + 0.5) as u8);
+            }
+        }
+
+        rendered_mask = Mask::from_parts(map, rendered_mask.width(), rendered_mask.height());
     }
+
+    rendered_mask
 }
 
 pub(crate) fn min_factor(transform: &Affine) -> f32 {
