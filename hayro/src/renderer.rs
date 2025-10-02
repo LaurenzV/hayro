@@ -271,8 +271,8 @@ impl Renderer {
                         let image = Image {
                             image: ImageSource::Pixmap(Arc::new(pix)),
                             sampler: ImageSampler {
-                                x_extend: peniko::Extend::Pad,
-                                y_extend: peniko::Extend::Pad,
+                                x_extend: peniko::Extend::Repeat,
+                                y_extend: peniko::Extend::Repeat,
                                 quality: ImageQuality::Medium,
                                 alpha: 1.0,
                             },
