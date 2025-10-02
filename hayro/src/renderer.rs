@@ -251,6 +251,7 @@ impl Renderer {
                             Affine::new([xs as f64, 0.0, 0.0, ys as f64, -bbox.x0, -bbox.y0]);
                         t.interpret(&mut renderer, initial_transform, is_stroke);
                         let mut pix = Pixmap::new(pix_width, pix_height);
+                        renderer.ctx.flush();
                         renderer.ctx.render_to_pixmap(&mut pix);
 
                         // TODO: Fix these
@@ -621,6 +622,7 @@ fn draw_soft_mask(
     }
     
     let mut pix = Pixmap::new(width, height);
+    renderer.ctx.flush();
     renderer.ctx.render_to_pixmap(&mut pix);
 
     match mask.mask_type() {
