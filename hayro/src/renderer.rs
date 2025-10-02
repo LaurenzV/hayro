@@ -141,14 +141,28 @@ impl Renderer {
     }
 
     fn draw_pixmap(&mut self, pixmap: Arc<Pixmap>, interpolate: bool, transform: Affine) {
-        let quality = if interpolate {
+        let quality = if !interpolate {
             ImageQuality::Low
         } else {
             ImageQuality::Medium
         };
 
+        let (width, height) = (pixmap.width(), pixmap.height());
+        let image = Image {
+            image: ImageSource::Pixmap(pixmap),
+            sampler: ImageSampler {
+                x_extend: peniko::Extend::Pad,
+                y_extend: peniko::Extend::Pad,
+                quality,
+                alpha: 1.0,
+            },
+        };
+
         self.ctx.set_transform(transform);
-        self.ctx.draw_pixmap(pixmap, quality);
+        self.ctx.set_paint(image);
+        self.ctx.fill_rect(
+            &Rect::new(0.0, 0.0, width as f64, height as f64),
+        );
     }
 
     #[must_use]
