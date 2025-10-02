@@ -19,6 +19,7 @@ pub struct EncodedShadingPattern {
 
 impl EncodedShadingPattern {
     /// Sample the shading at the given position.
+    #[inline]
     pub fn sample(&self, pos: Point) -> [f32; 4] {
         self.shading_type
             .eval(pos, self.background_color, &self.color_space)

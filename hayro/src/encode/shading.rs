@@ -6,10 +6,12 @@ use hayro_interpret::pattern::ShadingPattern;
 use kurbo::Point;
 
 impl Sampler for EncodedShadingPattern {
+    #[inline]
     fn interpolate(&self) -> bool {
         false
     }
 
+    #[inline]
     fn sample_impl(&self, pos: Point) -> [f32; 4] {
         Self::sample(self, pos)
     }

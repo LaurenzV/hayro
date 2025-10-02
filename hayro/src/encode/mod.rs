@@ -43,6 +43,7 @@ impl<T: Sampler> Shader<T> {
         }
     }
 
+    #[inline]
     pub(crate) fn sample(&self, pos: Point) -> [f32; 4] {
         self.sampler.sample(pos)
     }

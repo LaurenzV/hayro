@@ -34,10 +34,12 @@ impl EncodeExt for Image {
 }
 
 impl Sampler for EncodedImage {
+    #[inline]
     fn interpolate(&self) -> bool {
         self.interpolate
     }
 
+    #[inline]
     fn sample_impl(&self, mut pos: Point) -> [f32; 4] {
         if self.is_pattern {
             let extend = |val: f64, max: f64| val - (val / max).floor() * max;
