@@ -118,7 +118,7 @@ pub(crate) fn get(dict: &Dict, id: &[u8]) -> Result<Decryptor, DecryptionError> 
         2 => dict.get::<u16>(LENGTH).unwrap_or(40),
         4 => dict.get::<u16>(LENGTH).unwrap_or(128),
         5 => 256,
-        _ => unimplemented!(),
+        _ => return Err(DecryptionError::UnsupportedAlgorithm),
     };
 
     let (algorithm, data) = match encryption_v {
