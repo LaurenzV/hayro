@@ -17,6 +17,7 @@ use vello_cpu::peniko::{Fill, ImageQuality, ImageSampler};
 use vello_cpu::{
     Image, ImageSource, Mask, PaintType, Pixmap, RenderContext, RenderSettings, peniko,
 };
+use vello_cpu::color::palette::css::BLACK;
 
 pub(crate) struct Renderer {
     pub(crate) ctx: RenderContext,
@@ -601,7 +602,24 @@ fn draw_soft_mask(
         cur_mask: None,
         soft_mask_cache: Default::default(),
     };
+
+    let bg_color = mask.background_color().to_rgba();
+    let apply_bg = bg_color.to_rgba8() != BLACK.to_rgba8().to_u8_array();
+
+    if apply_bg {
+        renderer.ctx.set_paint(AlphaColor::<Srgb>::new(bg_color.components()));
+        renderer.ctx.fill_rect(
+            &Rect::new(0.0, 0.0, width as f64, height as f64),
+        );
+        renderer.ctx.push_layer(None, None, None, None);
+    }
+
     mask.interpret(&mut renderer);
+
+    if apply_bg {
+        renderer.ctx.pop_layer();
+    }
+    
     let mut pix = Pixmap::new(width, height);
     renderer.ctx.render_to_pixmap(&mut pix);
 
