@@ -40,7 +40,7 @@ impl Renderer {
 
     fn set_stroke_properties(&mut self, stroke_props: &StrokeProps) {
         // Best-effort attempt to ensure a line width of at least 1.
-        let min_factor = min_factor(&self.ctx.transform());
+        let min_factor = min_factor(self.ctx.transform());
         let mut line_width = stroke_props.line_width.max(0.01);
         let transformed_width = line_width * min_factor;
 
@@ -138,7 +138,7 @@ impl Renderer {
 
         self.ctx.set_fill_rule(convert_fill_rule(fill));
         self.ctx.set_transform(Affine::IDENTITY);
-        self.ctx.push_clip_path(&clip_path);
+        self.ctx.push_clip_path(clip_path);
 
         self.ctx.set_transform(old_transform);
     }
@@ -187,7 +187,7 @@ impl Renderer {
 
                         if is_stroke {
                             // Try to account for stroke in bbox.
-                            let (a1, a2) = x_y_advances(&path_transform);
+                            let (a1, a2) = x_y_advances(path_transform);
                             let factor = a1.length().max(a2.length()) * self.ctx.stroke().width;
                             bbox = bbox.inflate(factor, factor);
                         }
@@ -585,8 +585,7 @@ fn render_shading_texture(
 
     let (x_advance, y_advance) = x_y_advances(&shading_pattern.base_transform);
 
-    let mut buf =
-        vec![PremulRgba8::from(PremulRgba8::from_u32(0)); width as usize * height as usize];
+    let mut buf = vec![PremulRgba8::from_u32(0); width as usize * height as usize];
     let mut start_point = shading_pattern.base_transform
         * Affine::translate((0.5, 0.5))
         * Point::new(path_bbox.x0, path_bbox.y0);
