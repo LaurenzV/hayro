@@ -1,14 +1,18 @@
 [package]
 name = "hayro-demo"
 version = "0.1.0"
-edition = "2021"
+description = "A demo application for hayro using WASM."
+authors = { workspace = true }
+edition = { workspace = true }
+repository = { workspace = true }
+license = { workspace = true }
+publish = false
 
 [lib]
 crate-type = ["cdylib"]
 
 [dependencies]
 wasm-bindgen = "0.2"
-wasm-bindgen-futures = "0.4"
 js-sys = "0.3"
 console_error_panic_hook = "0.1.7"
 log = "0.4"
