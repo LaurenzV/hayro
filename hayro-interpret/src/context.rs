@@ -94,8 +94,7 @@ impl<'a> Context<'a> {
         })
     }
 
-    /// test
-    pub fn push_bbox(&mut self, bbox: kurbo::Rect) {
+    fn push_bbox(&mut self, bbox: kurbo::Rect) {
         let new = self.bbox().intersect(bbox);
         self.bbox.push(new);
     }
@@ -143,8 +142,7 @@ impl<'a> Context<'a> {
         }
     }
 
-    /// test
-    pub fn pop_bbox(&mut self) {
+    fn pop_bbox(&mut self) {
         self.bbox.pop();
     }
 
