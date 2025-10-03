@@ -72,7 +72,7 @@ impl Renderer {
             let mut renderer = Renderer::new(
                 self.ctx.width(),
                 self.ctx.height(),
-                derive_settings(&self.ctx.render_settings()),
+                derive_settings(self.ctx.render_settings()),
             );
             let mut mask_pix = Pixmap::new(self.ctx.width(), self.ctx.height());
             let rgb_data = RgbData {
