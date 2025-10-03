@@ -422,7 +422,16 @@ impl CoonsPatch {
 
     /// Approximate the patch by triangles.
     pub fn to_triangles(&self) -> Vec<Triangle> {
-        generate_patch_triangles(|p| self.map_coordinate(p), |p| self.interpolate(p))
+        self.to_triangles_with_resolution(1.0)
+    }
+
+    /// Approximate the patch by triangles with adaptive grid size based on resolution.
+    pub fn to_triangles_with_resolution(&self, resolution_scale: f64) -> Vec<Triangle> {
+        generate_patch_triangles(
+            |p| self.map_coordinate(p),
+            |p| self.interpolate(p),
+            resolution_scale,
+        )
     }
 
     /// Get the interpolated colors of the point from the patch.
@@ -506,7 +515,16 @@ impl TensorProductPatch {
 
     /// Approximate the tensor product patch mesh by triangles.
     pub fn to_triangles(&self) -> Vec<Triangle> {
-        generate_patch_triangles(|p| self.map_coordinate(p), |p| self.interpolate(p))
+        self.to_triangles_with_resolution(1.0)
+    }
+
+    /// Approximate the tensor product patch mesh by triangles with adaptive grid size based on resolution.
+    pub fn to_triangles_with_resolution(&self, resolution_scale: f64) -> Vec<Triangle> {
+        generate_patch_triangles(
+            |p| self.map_coordinate(p),
+            |p| self.interpolate(p),
+            resolution_scale,
+        )
     }
 
     /// Get the interpolated colors of the point from the patch.
@@ -694,19 +712,25 @@ fn split_decode(decode: &[f32]) -> Option<([f32; 4], &[f32])> {
 }
 
 /// Generate triangles from a grid of points using a mapping function.
-fn generate_patch_triangles<F, I>(map_coordinate: F, interpolate: I) -> Vec<Triangle>
+fn generate_patch_triangles<F, I>(
+    map_coordinate: F,
+    interpolate: I,
+    resolution_scale: f64,
+) -> Vec<Triangle>
 where
     F: Fn(Point) -> Point,
     I: Fn(Point) -> ColorComponents,
 {
-    const GRID_SIZE: usize = 20;
-    let mut grid = vec![vec![Point::ZERO; GRID_SIZE]; GRID_SIZE];
+    // Adaptive grid size based on resolution
+    // Base grid size of 20, scaled by resolution factor, clamped between 8 and 80
+    let grid_size = ((20.0 * resolution_scale.sqrt()).round() as usize).clamp(8, 80);
+    let mut grid = vec![vec![Point::ZERO; grid_size]; grid_size];
 
     // Create grid by mapping unit square coordinates.
-    for i in 0..GRID_SIZE {
-        for j in 0..GRID_SIZE {
-            let u = i as f64 / (GRID_SIZE - 1) as f64; // 0.0 to 1.0 (left to right).
-            let v = j as f64 / (GRID_SIZE - 1) as f64; // 0.0 to 1.0 (top to bottom).
+    for i in 0..grid_size {
+        for j in 0..grid_size {
+            let u = i as f64 / (grid_size - 1) as f64; // 0.0 to 1.0 (left to right).
+            let v = j as f64 / (grid_size - 1) as f64; // 0.0 to 1.0 (top to bottom).
 
             // Map unit square coordinate to patch coordinate.
             let unit_point = Point::new(u, v);
@@ -717,18 +741,18 @@ where
     // Create triangles from adjacent grid points.
     let mut triangles = vec![];
 
-    for i in 0..(GRID_SIZE - 1) {
-        for j in 0..(GRID_SIZE - 1) {
+    for i in 0..(grid_size - 1) {
+        for j in 0..(grid_size - 1) {
             let p00 = grid[i][j];
             let p10 = grid[i + 1][j];
             let p01 = grid[i][j + 1];
             let p11 = grid[i + 1][j + 1];
 
             // Calculate unit square coordinates for color interpolation.
-            let u0 = i as f64 / (GRID_SIZE - 1) as f64;
-            let u1 = (i + 1) as f64 / (GRID_SIZE - 1) as f64;
-            let v0 = j as f64 / (GRID_SIZE - 1) as f64;
-            let v1 = (j + 1) as f64 / (GRID_SIZE - 1) as f64;
+            let u0 = i as f64 / (grid_size - 1) as f64;
+            let u1 = (i + 1) as f64 / (grid_size - 1) as f64;
+            let v0 = j as f64 / (grid_size - 1) as f64;
+            let v1 = (j + 1) as f64 / (grid_size - 1) as f64;
 
             // Create triangle vertices with interpolated colors.
             let v00 = TriangleVertex {
@@ -752,8 +776,17 @@ where
                 colors: interpolate(Point::new(u1, v1)),
             };
 
-            triangles.push(Triangle::new(v00.clone(), v10.clone(), v01.clone()));
-            triangles.push(Triangle::new(v10.clone(), v11.clone(), v01.clone()));
+            // Create triangles without inflation to avoid white artifacts
+            triangles.push(Triangle::new(
+                v00.clone(),
+                v10.clone(),
+                v01.clone(),
+            ));
+            triangles.push(Triangle::new(
+                v10.clone(),
+                v11.clone(),
+                v01.clone(),
+            ));
         }
     }
 
@@ -996,6 +1029,7 @@ fn read_tensor_product_patch_mesh(
         },
     )
 }
+
 
 fn read_function(dict: &Dict, color_space: &ColorSpace) -> Option<ShadingFunction> {
     if let Some(arr) = dict.get::<Array>(FUNCTION) {

@@ -70,9 +70,12 @@ impl ShadingPattern {
                 }
             }
             ShadingType::CoonsPatchMesh { patches, function } => {
+                // Calculate resolution scale based on transform
+                let resolution_scale = calculate_resolution_scale(self.matrix);
+
                 let triangles = patches
                     .iter()
-                    .flat_map(|p| p.to_triangles())
+                    .flat_map(|p| p.to_triangles_with_resolution(resolution_scale))
                     .collect::<Vec<_>>();
 
                 let full_transform = self.matrix;
@@ -86,9 +89,12 @@ impl ShadingPattern {
                 }
             }
             ShadingType::TensorProductPatchMesh { patches, function } => {
+                // Calculate resolution scale based on transform
+                let resolution_scale = calculate_resolution_scale(self.matrix);
+
                 let triangles = patches
                     .iter()
-                    .flat_map(|p| p.to_triangles())
+                    .flat_map(|p| p.to_triangles_with_resolution(resolution_scale))
                     .collect::<Vec<_>>();
 
                 let full_transform = self.matrix;
@@ -338,6 +344,20 @@ fn unit_to_line(p0: Point, p1: Point) -> Affine {
         p0.x,
         p0.y,
     ])
+}
+
+/// Calculate resolution scale factor from transform matrix.
+/// This determines how much detail is needed based on the scaling in the transform.
+fn calculate_resolution_scale(transform: Affine) -> f64 {
+    // Extract scaling factors from the transformation matrix
+    let scale_x = (transform.as_coeffs()[0].powi(2) + transform.as_coeffs()[1].powi(2)).sqrt();
+    let scale_y = (transform.as_coeffs()[2].powi(2) + transform.as_coeffs()[3].powi(2)).sqrt();
+
+    // Use the geometric mean of the scaling factors
+    let scale = (scale_x * scale_y).sqrt();
+
+    // Clamp the resolution scale between 0.25 and 4.0 to avoid extremes
+    scale.clamp(0.25, 4.0)
 }
 
 fn radial_pos(
