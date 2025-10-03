@@ -63,7 +63,25 @@ impl Renderer {
     }
     
     fn draw_image_with_alpha_mask(&mut self, rgb_data: RgbData, alpha_data: LumaData) {
-        unimplemented!();
+        let mask = {
+            let mut renderer = Renderer::new(alpha_data.width as u16, alpha_data.height as u16, derive_settings(&self.ctx.render_settings()));
+            let mut mask_pix = Pixmap::new(alpha_data.width as u16, alpha_data.height as u16);
+            let rgb_data = RgbData {
+                data: alpha_data.data.into_iter().flat_map(|v| [v, v, v]).collect(),
+                width: alpha_data.width,
+                height: alpha_data.height,
+                interpolate: alpha_data.interpolate,
+            };
+            renderer.ctx.set_transform(*self.ctx.transform());
+            renderer.draw_image(rgb_data, None);
+            renderer.ctx.flush();
+            renderer.ctx.render_to_pixmap(&mut mask_pix);
+            Mask::new_luminance(&mask_pix)
+        };
+        
+        self.ctx.push_mask_layer(mask);
+        self.draw_image(rgb_data, None);
+        self.ctx.pop_layer();
     }
 
     fn draw_image(&mut self, rgb_data: RgbData, alpha_data: Option<LumaData>) {
