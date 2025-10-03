@@ -240,9 +240,6 @@ issue7454
 # wrong font in text?
 issue4934
 
-# pixelated image mask
-issue4246
-
 # weirdly spaced text
 issue4630
 
