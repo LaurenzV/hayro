@@ -1,13 +1,14 @@
 //! The starting point for reading PDF files.
 
 use crate::PdfData;
-use crate::crypto::DecryptionError;
 use crate::object::Object;
 use crate::page::Pages;
 use crate::page::cached::CachedPages;
 use crate::reader::Reader;
 use crate::xref::{XRef, XRefError, fallback, root_xref};
 use std::sync::Arc;
+
+pub use crate::crypto::DecryptionError;
 
 /// A PDF file.
 pub struct Pdf {

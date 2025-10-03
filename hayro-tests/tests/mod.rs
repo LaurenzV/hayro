@@ -2,6 +2,7 @@ use hayro::FontQuery;
 use hayro::Pdf;
 use hayro::StandardFont;
 use hayro::{FontData, InterpreterSettings};
+use hayro_syntax::{DecryptionError, LoadPdfError};
 use image::{Rgba, RgbaImage, load_from_memory};
 use once_cell::sync::Lazy;
 use resvg::tiny_skia::{Color, Pixmap};
@@ -373,4 +374,20 @@ fn get_standard(font: &StandardFont) -> FontData {
     };
 
     Arc::new(data)
+}
+
+#[test]
+fn visibility() {
+    #[expect(dead_code)]
+    fn decryption(error: &LoadPdfError) {
+        match error {
+            LoadPdfError::Decryption(d) => match d {
+                DecryptionError::MissingIDEntry => {}
+                DecryptionError::PasswordProtected => {}
+                DecryptionError::InvalidEncryption => {}
+                DecryptionError::UnsupportedAlgorithm => {}
+            },
+            LoadPdfError::Invalid => {}
+        }
+    }
 }
