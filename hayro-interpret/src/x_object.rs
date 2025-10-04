@@ -129,6 +129,7 @@ pub(crate) fn draw_form_xobject<'a, 'b>(
     }
 
     device.set_soft_mask(context.get().graphics_state.soft_mask.clone());
+    device.set_blend_mode(context.get().graphics_state.blend_mode);
 
     device.push_clip_path(&ClipPath {
         path: context.get().ctm
