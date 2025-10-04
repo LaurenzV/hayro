@@ -2,7 +2,7 @@ use crate::Id;
 use crate::SvgRenderer;
 use crate::mask::{ImageLuminanceMask, MaskKind};
 use base64::Engine;
-use hayro_interpret::{Device, FillRule, LumaData, Paint, PathDrawMode, RgbData};
+use hayro_interpret::{BlendMode, Device, FillRule, LumaData, Paint, PathDrawMode, RgbData};
 use image::{DynamicImage, ImageBuffer, ImageFormat};
 use kurbo::{Affine, Rect, Shape};
 use std::io::Cursor;
@@ -56,7 +56,11 @@ impl<'a> SvgRenderer<'a> {
                     }
                 };
 
-                self.push_transparency_group_inner(1.0, Some(MaskKind::Image(Arc::new(alpha))));
+                self.push_transparency_group_inner(
+                    1.0,
+                    Some(MaskKind::Image(Arc::new(alpha))),
+                    BlendMode::Normal,
+                );
                 self.write_image(&image, rgb_data.interpolate, None, transform);
                 self.pop_transparency_group();
             }
@@ -106,7 +110,11 @@ impl<'a> SvgRenderer<'a> {
                     }
                 };
 
-                self.push_transparency_group_inner(1.0, Some(MaskKind::Image(Arc::new(mask))));
+                self.push_transparency_group_inner(
+                    1.0,
+                    Some(MaskKind::Image(Arc::new(mask))),
+                    BlendMode::Normal,
+                );
                 self.draw_path(
                     &Rect::new(0.0, 0.0, stencil.width as f64, stencil.height as f64).to_path(0.1),
                     transform,

@@ -215,3 +215,8 @@ fn issue_isolate_shading_transform() {
 fn mask_bc() {
     run_svg_test("mask_bc", "pdfs/custom/mask_bc.pdf", None);
 }
+
+#[test]
+fn pdfjs_issue11279() {
+    run_svg_test("pdfjs_issue11279", "downloads/pdfjs/issue11279.pdf", None);
+}
