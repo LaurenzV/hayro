@@ -22,7 +22,12 @@ pub trait Device<'a> {
     /// Push a new clip path to the clip stack.
     fn push_clip_path(&mut self, clip_path: &ClipPath);
     /// Push a new transparency group to the blend stack.
-    fn push_transparency_group(&mut self, opacity: f32, mask: Option<SoftMask<'a>>, blend_mode: BlendMode);
+    fn push_transparency_group(
+        &mut self,
+        opacity: f32,
+        mask: Option<SoftMask<'a>>,
+        blend_mode: BlendMode,
+    );
     /// Draw a glyph.
     fn draw_glyph(
         &mut self,

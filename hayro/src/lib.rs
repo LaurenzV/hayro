@@ -35,11 +35,11 @@ This crate has two optional features:
 #![deny(missing_docs)]
 
 use crate::renderer::Renderer;
-use hayro_interpret::{BlendMode, Context};
 use hayro_interpret::Device;
 use hayro_interpret::FillRule;
 pub use hayro_interpret::font::{FontData, FontQuery, StandardFont};
 use hayro_interpret::hayro_syntax::page::Page;
+use hayro_interpret::{BlendMode, Context};
 use hayro_interpret::{ClipPath, interpret_page};
 pub use hayro_interpret::{InterpreterSettings, Pdf};
 use kurbo::{Affine, Rect, Shape};

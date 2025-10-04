@@ -3,7 +3,10 @@ use hayro_interpret::encode::EncodedShadingPattern;
 use hayro_interpret::font::Glyph;
 use hayro_interpret::hayro_syntax::object::ObjectIdentifier;
 use hayro_interpret::pattern::Pattern;
-use hayro_interpret::{BlendMode, CacheKey, ClipPath, Device, FillRule, GlyphDrawMode, LumaData, MaskType, Paint, PathDrawMode, RgbData, SoftMask, StrokeProps};
+use hayro_interpret::{
+    BlendMode, CacheKey, ClipPath, Device, FillRule, GlyphDrawMode, LumaData, MaskType, Paint,
+    PathDrawMode, RgbData, SoftMask, StrokeProps,
+};
 use image::imageops::FilterType;
 use image::{DynamicImage, ImageBuffer};
 use kurbo::{Affine, BezPath, Point, Rect, Shape, Vec2};
@@ -178,16 +181,17 @@ impl Renderer {
             r.draw_pixmap(Arc::new(pixmap), quality, cur_transform);
         });
     }
-    
+
     // TODO: Remove this method once vello_cpu supports inline blends.
     fn with_blend(&mut self, op: impl FnOnce(&mut Renderer)) {
         let push = self.cur_blend_mode != BlendMode::default();
         if push {
-            self.ctx.push_blend_layer(convert_blend_mode(self.cur_blend_mode))
+            self.ctx
+                .push_blend_layer(convert_blend_mode(self.cur_blend_mode))
         }
-        
+
         op(self);
-        
+
         if push {
             self.ctx.pop_layer();
         }
@@ -477,11 +481,16 @@ impl<'a> Device<'a> for Renderer {
                                 color[3],
                             );
 
-                            let push_layer = alpha != 255 || self.cur_blend_mode != BlendMode::default();
+                            let push_layer =
+                                alpha != 255 || self.cur_blend_mode != BlendMode::default();
                             self.ctx.set_transform(transform);
                             if push_layer {
-                                self.ctx
-                                    .push_layer(None, Some(convert_blend_mode(self.cur_blend_mode)), Some(alpha as f32 / 255.0), None);
+                                self.ctx.push_layer(
+                                    None,
+                                    Some(convert_blend_mode(self.cur_blend_mode)),
+                                    Some(alpha as f32 / 255.0),
+                                    None,
+                                );
                             }
                             let old_rule = *self.ctx.fill_rule();
                             self.ctx.set_fill_rule(Fill::NonZero);
@@ -566,7 +575,12 @@ impl<'a> Device<'a> for Renderer {
         self.push_clip_path_inner(&clip_path.path, clip_path.fill);
     }
 
-    fn push_transparency_group(&mut self, opacity: f32, mask: Option<SoftMask>, blend_mode: BlendMode) {
+    fn push_transparency_group(
+        &mut self,
+        opacity: f32,
+        mask: Option<SoftMask>,
+        blend_mode: BlendMode,
+    ) {
         let settings = *self.ctx.render_settings();
         self.ctx.push_layer(
             None,

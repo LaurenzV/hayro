@@ -58,6 +58,7 @@ pub(crate) fn fill_path_impl<'a>(
 
     let paint = get_paint(context, false);
     device.set_soft_mask(context.get().graphics_state.soft_mask.clone());
+    device.set_blend_mode(context.get().graphics_state.blend_mode);
 
     let mut draw = |path: &BezPath| {
         // pdf.js issue 4260: Replace zero-sized paths with a small stroke instead.
@@ -112,6 +113,7 @@ pub(crate) fn stroke_path_impl<'a>(
 
     let stroke_props = context.stroke_props();
     device.set_soft_mask(context.get().graphics_state.soft_mask.clone());
+    device.set_blend_mode(context.get().graphics_state.blend_mode);
     let paint = get_paint(context, true);
 
     match path {

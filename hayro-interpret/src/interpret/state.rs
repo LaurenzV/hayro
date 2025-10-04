@@ -11,7 +11,7 @@ use crate::types::BlendMode;
 use crate::util::OptionLog;
 use hayro_syntax::content::ops::{LineCap, LineJoin};
 use hayro_syntax::object::dict::keys::{SMASK, TR, TR2};
-use hayro_syntax::object::{Dict, Name, Number, Object};
+use hayro_syntax::object::{Array, Dict, Name, Number, Object};
 use hayro_syntax::page::Resources;
 use kurbo::{Affine, BezPath, Vec2};
 use log::warn;
@@ -311,34 +311,52 @@ pub(crate) fn handle_gs_single<'a>(
             }
         }
         "BM" => {
-            let name = dict.get::<Name>(key)?;
-            let blend_mode = match name.as_str() {
-                "Normal" => BlendMode::Normal,
-                "Multiply" => BlendMode::Multiply,
-                "Screen" => BlendMode::Screen,
-                "Overlay" => BlendMode::Overlay,
-                "Darken" => BlendMode::Darken,
-                "Lighten" => BlendMode::Lighten,
-                "ColorDodge" => BlendMode::ColorDodge,
-                "ColorBurn" => BlendMode::ColorBurn,
-                "HardLight" => BlendMode::HardLight,
-                "SoftLight" => BlendMode::SoftLight,
-                "Difference" => BlendMode::Difference,
-                "Exclusion" => BlendMode::Exclusion,
-                "Hue" => BlendMode::Hue,
-                "Saturation" => BlendMode::Saturation,
-                "Color" => BlendMode::Color,
-                "Luminosity" => BlendMode::Luminosity,
-                mode => {
-                    warn!("unknown blend mode {mode}, defaulting to Normal");
-                    BlendMode::Normal
+            if let Some(name) = dict.get::<Name>(key.clone()) {
+                if let Some(bm) = convert_blend_mode(name.as_str()) {
+                    context.get_mut().graphics_state.blend_mode = bm;
+
+                    return Some(());
                 }
-            };
-            context.get_mut().graphics_state.blend_mode = blend_mode;
+            } else if let Some(arr) = dict.get::<Array>(key) {
+                for name in arr.iter::<Name>() {
+                    if let Some(bm) = convert_blend_mode(name.as_str()) {
+                        context.get_mut().graphics_state.blend_mode = bm;
+
+                        return Some(());
+                    }
+                }
+            }
+
+            warn!("unknown blend mode, defaulting to Normal");
+            context.get_mut().graphics_state.blend_mode = BlendMode::Normal;
         }
         "Type" => {}
         _ => {}
     }
 
     Some(())
+}
+
+fn convert_blend_mode(name: &str) -> Option<BlendMode> {
+    let bm = match name {
+        "Normal" => BlendMode::Normal,
+        "Multiply" => BlendMode::Multiply,
+        "Screen" => BlendMode::Screen,
+        "Overlay" => BlendMode::Overlay,
+        "Darken" => BlendMode::Darken,
+        "Lighten" => BlendMode::Lighten,
+        "ColorDodge" => BlendMode::ColorDodge,
+        "ColorBurn" => BlendMode::ColorBurn,
+        "HardLight" => BlendMode::HardLight,
+        "SoftLight" => BlendMode::SoftLight,
+        "Difference" => BlendMode::Difference,
+        "Exclusion" => BlendMode::Exclusion,
+        "Hue" => BlendMode::Hue,
+        "Saturation" => BlendMode::Saturation,
+        "Color" => BlendMode::Color,
+        "Luminosity" => BlendMode::Luminosity,
+        _ => return None,
+    };
+
+    Some(bm)
 }

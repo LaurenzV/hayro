@@ -16,7 +16,10 @@ use crate::paint::{CachedShading, CachedShadingPattern, CachedTilingPattern};
 use hayro_interpret::font::Glyph;
 use hayro_interpret::hayro_syntax::page::Page;
 use hayro_interpret::util::Float32Ext;
-use hayro_interpret::{CacheKey, ClipPath, Context, Device, GlyphDrawMode, Image, InterpreterSettings, Paint, PathDrawMode, SoftMask, StrokeProps, interpret_page, BlendMode};
+use hayro_interpret::{
+    BlendMode, CacheKey, ClipPath, Context, Device, GlyphDrawMode, Image, InterpreterSettings,
+    Paint, PathDrawMode, SoftMask, StrokeProps, interpret_page,
+};
 use kurbo::{Affine, BezPath, Cap, Join, Rect};
 use siphasher::sip128::{Hasher128, SipHasher13};
 use std::collections::HashMap;
@@ -192,7 +195,12 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
             .write_attribute_fmt("clip-path", format_args!("url(#{clip_id})"));
     }
 
-    fn push_transparency_group(&mut self, opacity: f32, mask: Option<SoftMask<'a>>, blend_mode: BlendMode) {
+    fn push_transparency_group(
+        &mut self,
+        opacity: f32,
+        mask: Option<SoftMask<'a>>,
+        blend_mode: BlendMode,
+    ) {
         self.push_transparency_group_inner(opacity, mask.map(MaskKind::SoftMask));
     }
 

@@ -205,10 +205,6 @@ issue12295
 # wrong text
 issue11768
 
-# maybe blend mode
-issue11279
-issue4890
-
 # corrupt jpeg image
 issue10880
 issue10989
@@ -226,10 +222,6 @@ issue9291
 # optional content groups
 issue269_1
 issue269_2
-
-# blend mode multiply
-issue8022
-issue8019
 
 # missing letters
 issue6132

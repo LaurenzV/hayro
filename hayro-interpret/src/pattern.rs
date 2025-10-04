@@ -332,7 +332,5 @@ impl<'a, T: Device<'a>> Device<'a> for StencilPatternDevice<'a, '_, T> {
 
     fn pop_transparency_group(&mut self) {}
 
-    fn set_blend_mode(&mut self, _: BlendMode) {
-        
-    }
+    fn set_blend_mode(&mut self, _: BlendMode) {}
 }
