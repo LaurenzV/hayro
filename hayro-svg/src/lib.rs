@@ -253,7 +253,7 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
     }
 
     fn draw_image(&mut self, image: Image<'a, '_>, transform: Affine) {
-        // TODO: With Self::Group?
+        // TODO: Use Self::group
         match image {
             Image::Stencil(s) => {
                 s.with_stencil(|s, paint| {
