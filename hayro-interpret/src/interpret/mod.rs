@@ -1,4 +1,4 @@
-use crate::FillRule;
+use crate::{BlendMode, FillRule};
 use crate::color::ColorSpace;
 use crate::context::Context;
 use crate::convert::{convert_line_cap, convert_line_join};
@@ -553,7 +553,8 @@ pub fn interpret<'a, 'b>(
                     st.graphics_state.none_stroke_cs = ColorSpace::pattern();
 
                     device.set_soft_mask(st.graphics_state.soft_mask.clone());
-                    device.push_transparency_group(st.graphics_state.non_stroke_alpha, None);
+                    device.set_blend_mode(st.graphics_state.blend_mode);
+                    device.push_transparency_group(st.graphics_state.non_stroke_alpha, None, BlendMode::default());
 
                     let bbox = context.bbox().to_path(0.1);
                     let inverted_bbox = context.get().ctm.inverse() * bbox;

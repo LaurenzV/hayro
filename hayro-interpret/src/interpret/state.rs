@@ -7,6 +7,7 @@ use crate::function::Function;
 use crate::interpret::text::TextRenderingMode;
 use crate::pattern::Pattern;
 use crate::soft_mask::SoftMask;
+use crate::types::BlendMode;
 use crate::util::OptionLog;
 use hayro_syntax::content::ops::{LineCap, LineJoin};
 use hayro_syntax::object::dict::keys::{SMASK, TR, TR2};
@@ -216,6 +217,7 @@ pub(crate) struct GraphicsState<'a> {
 
     pub(crate) soft_mask: Option<SoftMask<'a>>,
     pub(crate) transfer_function: Option<ActiveTransferFunction>,
+    pub(crate) blend_mode: BlendMode,
 }
 
 impl Default for GraphicsState<'_> {
@@ -232,6 +234,7 @@ impl Default for GraphicsState<'_> {
             non_stroke_pattern: None,
             soft_mask: None,
             transfer_function: None,
+            blend_mode: BlendMode::default(),
         }
     }
 }
@@ -309,10 +312,29 @@ pub(crate) fn handle_gs_single<'a>(
         }
         "BM" => {
             let name = dict.get::<Name>(key)?;
-            let mode = name.as_str();
-            if mode != "Normal" {
-                warn!("blend mode {mode} is not supported");
-            }
+            let blend_mode = match name.as_str() {
+                "Normal" => BlendMode::Normal,
+                "Multiply" => BlendMode::Multiply,
+                "Screen" => BlendMode::Screen,
+                "Overlay" => BlendMode::Overlay,
+                "Darken" => BlendMode::Darken,
+                "Lighten" => BlendMode::Lighten,
+                "ColorDodge" => BlendMode::ColorDodge,
+                "ColorBurn" => BlendMode::ColorBurn,
+                "HardLight" => BlendMode::HardLight,
+                "SoftLight" => BlendMode::SoftLight,
+                "Difference" => BlendMode::Difference,
+                "Exclusion" => BlendMode::Exclusion,
+                "Hue" => BlendMode::Hue,
+                "Saturation" => BlendMode::Saturation,
+                "Color" => BlendMode::Color,
+                "Luminosity" => BlendMode::Luminosity,
+                mode => {
+                    warn!("unknown blend mode {mode}, defaulting to Normal");
+                    BlendMode::Normal
+                }
+            };
+            context.get_mut().graphics_state.blend_mode = blend_mode;
         }
         "Type" => {}
         _ => {}

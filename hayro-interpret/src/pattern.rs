@@ -9,7 +9,7 @@ use crate::interpret::state::{State, TextState};
 use crate::shading::Shading;
 use crate::soft_mask::SoftMask;
 use crate::util::{Float32Ext, hash128};
-use crate::{CacheKey, ClipPath, GlyphDrawMode, Image, PathDrawMode};
+use crate::{BlendMode, CacheKey, ClipPath, GlyphDrawMode, Image, PathDrawMode};
 use crate::{FillRule, InterpreterSettings, Paint, interpret};
 use hayro_syntax::content::TypedIter;
 use hayro_syntax::object::Dict;
@@ -305,7 +305,7 @@ impl<'a, T: Device<'a>> Device<'a> for StencilPatternDevice<'a, '_, T> {
         self.inner.push_clip_path(clip_path)
     }
 
-    fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask>) {}
+    fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask>, _: BlendMode) {}
 
     fn draw_glyph(
         &mut self,
@@ -331,4 +331,8 @@ impl<'a, T: Device<'a>> Device<'a> for StencilPatternDevice<'a, '_, T> {
     }
 
     fn pop_transparency_group(&mut self) {}
+
+    fn set_blend_mode(&mut self, _: BlendMode) {
+        
+    }
 }

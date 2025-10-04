@@ -5,7 +5,7 @@ use crate::device::Device;
 use crate::function::{Function, interpolate};
 use crate::interpret::path::get_paint;
 use crate::interpret::state::ActiveTransferFunction;
-use crate::{CacheKey, ClipPath, Image, RasterImage, StencilImage};
+use crate::{BlendMode, CacheKey, ClipPath, Image, RasterImage, StencilImage};
 use crate::{FillRule, InterpreterWarning, WarningSinkFn, interpret};
 use crate::{LumaData, RgbData};
 use hayro_syntax::bit_reader::{BitReader, BitSize};
@@ -121,6 +121,7 @@ pub(crate) fn draw_form_xobject<'a, 'b>(
         device.push_transparency_group(
             context.get().graphics_state.non_stroke_alpha,
             std::mem::take(&mut context.get_mut().graphics_state.soft_mask),
+            std::mem::take(&mut context.get_mut().graphics_state.blend_mode),
         );
 
         context.get_mut().graphics_state.non_stroke_alpha = 1.0;
@@ -184,6 +185,7 @@ pub(crate) fn draw_image_xobject<'a, 'b>(
     let has_alpha = x_object.has_alpha();
 
     let mut soft_mask = std::mem::take(&mut context.get_mut().graphics_state.soft_mask);
+    let blend_mode = std::mem::take(&mut context.get_mut().graphics_state.blend_mode);
 
     // If image has smask, the soft mask from the graphics state should be discarde.
     if has_alpha {
@@ -193,9 +195,11 @@ pub(crate) fn draw_image_xobject<'a, 'b>(
     device.push_transparency_group(
         context.get().graphics_state.non_stroke_alpha,
         std::mem::take(&mut soft_mask),
+        blend_mode,
     );
 
     device.set_soft_mask(None);
+    device.set_blend_mode(BlendMode::default());
 
     let image = if x_object.is_image_mask {
         Image::Stencil(StencilImage {

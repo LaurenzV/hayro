@@ -4,10 +4,7 @@
 //! Note that you must have downloaded the corresponding PDF file for the example to work.
 
 use hayro_interpret::font::Glyph;
-use hayro_interpret::{
-    ClipPath, Context, Device, GlyphDrawMode, Image, InterpreterSettings, Paint, PathDrawMode,
-    SoftMask, interpret_page,
-};
+use hayro_interpret::{ClipPath, Context, Device, GlyphDrawMode, Image, InterpreterSettings, Paint, PathDrawMode, SoftMask, interpret_page, BlendMode};
 use hayro_syntax::Pdf;
 use image::{DynamicImage, ImageBuffer};
 use kurbo::{Affine, BezPath, Rect};
@@ -59,7 +56,7 @@ impl Device<'_> for ImageExtractor {
 
     fn push_clip_path(&mut self, _: &ClipPath) {}
 
-    fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask<'_>>) {}
+    fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask<'_>>, _: BlendMode) {}
 
     fn draw_glyph(
         &mut self,
@@ -126,5 +123,9 @@ impl Device<'_> for ImageExtractor {
                 })
             }
         }
+    }
+
+    fn set_blend_mode(&mut self, _: BlendMode) {
+     
     }
 }

@@ -3,10 +3,7 @@ use hayro_interpret::encode::EncodedShadingPattern;
 use hayro_interpret::font::Glyph;
 use hayro_interpret::hayro_syntax::object::ObjectIdentifier;
 use hayro_interpret::pattern::Pattern;
-use hayro_interpret::{
-    CacheKey, ClipPath, Device, FillRule, GlyphDrawMode, LumaData, MaskType, Paint, PathDrawMode,
-    RgbData, SoftMask, StrokeProps,
-};
+use hayro_interpret::{BlendMode, CacheKey, ClipPath, Device, FillRule, GlyphDrawMode, LumaData, MaskType, Paint, PathDrawMode, RgbData, SoftMask, StrokeProps};
 use image::imageops::FilterType;
 use image::{DynamicImage, ImageBuffer};
 use kurbo::{Affine, BezPath, Point, Rect, Shape, Vec2};
@@ -14,7 +11,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use vello_cpu::color::palette::css::BLACK;
 use vello_cpu::color::{AlphaColor, PremulRgba8, Srgb};
-use vello_cpu::peniko::{Fill, ImageQuality, ImageSampler};
+use vello_cpu::peniko::{Compose, Fill, ImageQuality, ImageSampler, Mix};
 use vello_cpu::{
     Image, ImageSource, Mask, PaintType, Pixmap, RenderContext, RenderSettings, peniko,
 };
@@ -25,6 +22,7 @@ pub(crate) struct Renderer {
     pub(crate) soft_mask_cache: HashMap<ObjectIdentifier, Mask>,
     pub(crate) glyph_cache: Option<HashMap<u128, BezPath>>,
     pub(crate) cur_mask: Option<Mask>,
+    pub(crate) cur_blend_mode: BlendMode,
 }
 
 impl Renderer {
@@ -35,6 +33,7 @@ impl Renderer {
             soft_mask_cache: Default::default(),
             glyph_cache: Some(HashMap::new()),
             cur_mask: None,
+            cur_blend_mode: Default::default(),
         }
     }
 
@@ -175,7 +174,23 @@ impl Renderer {
             rgb_height as u16,
         );
 
-        self.draw_pixmap(Arc::new(pixmap), quality, cur_transform);
+        self.with_blend(|r| {
+            r.draw_pixmap(Arc::new(pixmap), quality, cur_transform);
+        });
+    }
+    
+    // TODO: Remove this method once vello_cpu supports inline blends.
+    fn with_blend(&mut self, op: impl FnOnce(&mut Renderer)) {
+        let push = self.cur_blend_mode != BlendMode::default();
+        if push {
+            self.ctx.push_blend_layer(convert_blend_mode(self.cur_blend_mode))
+        }
+        
+        op(self);
+        
+        if push {
+            self.ctx.pop_layer();
+        }
     }
 
     fn push_clip_path_inner(&mut self, clip_path: &BezPath, fill: FillRule) {
@@ -287,6 +302,7 @@ impl Renderer {
                             inside_pattern: true,
                             soft_mask_cache: Default::default(),
                             glyph_cache: Some(HashMap::new()),
+                            cur_blend_mode: Default::default(),
                         };
                         let mut initial_transform =
                             Affine::new([xs as f64, 0.0, 0.0, ys as f64, -bbox.x0, -bbox.y0]);
@@ -345,7 +361,9 @@ impl Renderer {
         if let Some(clip_path) = clip_path.as_ref() {
             self.push_clip_path_inner(clip_path, FillRule::NonZero);
         }
-        self.ctx.stroke_path(path);
+        self.with_blend(|r| {
+            r.ctx.stroke_path(path);
+        });
         if clip_path.is_some() {
             self.ctx.pop_clip_path();
         }
@@ -360,7 +378,9 @@ impl Renderer {
             self.push_clip_path_inner(clip_path, fill_rule);
         }
 
-        self.ctx.fill_path(path);
+        self.with_blend(|r| {
+            r.ctx.fill_path(path);
+        });
 
         if clip_path.is_some() {
             self.ctx.pop_clip_path();
@@ -395,7 +415,9 @@ impl Renderer {
                 self.glyph_cache = cache;
             }
             Glyph::Type3(s) => {
-                s.interpret(self, transform, glyph_transform, paint);
+                self.with_blend(|r| {
+                    s.interpret(r, transform, glyph_transform, paint);
+                });
             }
         }
     }
@@ -427,7 +449,9 @@ impl Renderer {
                 );
             }
             Glyph::Type3(s) => {
-                s.interpret(self, transform, glyph_transform, paint);
+                self.with_blend(|r| {
+                    s.interpret(r, transform, glyph_transform, paint);
+                });
             }
         }
     }
@@ -453,11 +477,11 @@ impl<'a> Device<'a> for Renderer {
                                 color[3],
                             );
 
-                            let push_layer = alpha != 255;
+                            let push_layer = alpha != 255 || self.cur_blend_mode != BlendMode::default();
                             self.ctx.set_transform(transform);
                             if push_layer {
                                 self.ctx
-                                    .push_layer(None, None, Some(alpha as f32 / 255.0), None);
+                                    .push_layer(None, Some(convert_blend_mode(self.cur_blend_mode)), Some(alpha as f32 / 255.0), None);
                             }
                             let old_rule = *self.ctx.fill_rule();
                             self.ctx.set_fill_rule(Fill::NonZero);
@@ -505,7 +529,7 @@ impl<'a> Device<'a> for Renderer {
 
                             self.ctx.push_layer(
                                 None,
-                                None,
+                                Some(convert_blend_mode(self.cur_blend_mode)),
                                 None,
                                 Some(Mask::new_luminance(&mask_pix)),
                             );
@@ -528,7 +552,9 @@ impl<'a> Device<'a> for Renderer {
             hayro_interpret::Image::Raster(r) => {
                 r.with_rgba(|rgb, alpha| {
                     self.ctx.set_transform(transform);
-                    self.draw_image(rgb, alpha);
+                    self.with_blend(|r| {
+                        r.draw_image(rgb, alpha);
+                    })
                 });
             }
         }
@@ -540,11 +566,11 @@ impl<'a> Device<'a> for Renderer {
         self.push_clip_path_inner(&clip_path.path, clip_path.fill);
     }
 
-    fn push_transparency_group(&mut self, opacity: f32, mask: Option<SoftMask>) {
+    fn push_transparency_group(&mut self, opacity: f32, mask: Option<SoftMask>, blend_mode: BlendMode) {
         let settings = *self.ctx.render_settings();
         self.ctx.push_layer(
             None,
-            None,
+            Some(convert_blend_mode(blend_mode)),
             Some(opacity),
             // TODO: Deduplicate
             mask.map(|m| {
@@ -615,6 +641,10 @@ impl<'a> Device<'a> for Renderer {
             }
         }
     }
+
+    fn set_blend_mode(&mut self, blend_mode: BlendMode) {
+        self.cur_blend_mode = blend_mode;
+    }
 }
 
 // TODO: Deduplicate with hayro-svg?
@@ -668,6 +698,7 @@ fn draw_soft_mask(
         cur_mask: None,
         soft_mask_cache: Default::default(),
         glyph_cache: Some(HashMap::new()),
+        cur_blend_mode: Default::default(),
     };
 
     let bg_color = mask.background_color().to_rgba();
@@ -751,4 +782,27 @@ fn convert_fill_rule(fill_rule: FillRule) -> Fill {
         FillRule::NonZero => Fill::NonZero,
         FillRule::EvenOdd => Fill::EvenOdd,
     }
+}
+
+fn convert_blend_mode(blend_mode: BlendMode) -> peniko::BlendMode {
+    let mix = match blend_mode {
+        BlendMode::Normal => Mix::Normal,
+        BlendMode::Multiply => Mix::Multiply,
+        BlendMode::Screen => Mix::Screen,
+        BlendMode::Overlay => Mix::Overlay,
+        BlendMode::Darken => Mix::Darken,
+        BlendMode::Lighten => Mix::Lighten,
+        BlendMode::ColorDodge => Mix::ColorDodge,
+        BlendMode::ColorBurn => Mix::ColorBurn,
+        BlendMode::HardLight => Mix::HardLight,
+        BlendMode::SoftLight => Mix::SoftLight,
+        BlendMode::Difference => Mix::Difference,
+        BlendMode::Exclusion => Mix::Exclusion,
+        BlendMode::Hue => Mix::Hue,
+        BlendMode::Saturation => Mix::Saturation,
+        BlendMode::Color => Mix::Color,
+        BlendMode::Luminosity => Mix::Luminosity,
+    };
+
+    peniko::BlendMode::new(mix, Compose::SrcOver)
 }

@@ -189,3 +189,41 @@ pub enum FillRule {
     /// Even-odd filling.
     EvenOdd,
 }
+
+/// A blend mode.
+#[derive(Clone, Debug, Copy, Hash, PartialEq, Eq, Default)]
+pub enum BlendMode {
+    /// Normal blend mode (default).
+    #[default]
+    Normal,
+    /// Multiply blend mode.
+    Multiply,
+    /// Screen blend mode.
+    Screen,
+    /// Overlay blend mode.
+    Overlay,
+    /// Darken blend mode.
+    Darken,
+    /// Lighten blend mode.
+    Lighten,
+    /// ColorDodge blend mode.
+    ColorDodge,
+    /// ColorBurn blend mode.
+    ColorBurn,
+    /// HardLight blend mode.
+    HardLight,
+    /// SoftLight blend mode.
+    SoftLight,
+    /// Difference blend mode.
+    Difference,
+    /// Exclusion blend mode.
+    Exclusion,
+    /// Hue blend mode.
+    Hue,
+    /// Saturation blend mode.
+    Saturation,
+    /// Color blend mode.
+    Color,
+    /// Luminosity blend mode.
+    Luminosity,
+}

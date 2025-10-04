@@ -16,10 +16,7 @@ use crate::paint::{CachedShading, CachedShadingPattern, CachedTilingPattern};
 use hayro_interpret::font::Glyph;
 use hayro_interpret::hayro_syntax::page::Page;
 use hayro_interpret::util::Float32Ext;
-use hayro_interpret::{
-    CacheKey, ClipPath, Context, Device, GlyphDrawMode, Image, InterpreterSettings, Paint,
-    PathDrawMode, SoftMask, StrokeProps, interpret_page,
-};
+use hayro_interpret::{CacheKey, ClipPath, Context, Device, GlyphDrawMode, Image, InterpreterSettings, Paint, PathDrawMode, SoftMask, StrokeProps, interpret_page, BlendMode};
 use kurbo::{Affine, BezPath, Cap, Join, Rect};
 use siphasher::sip128::{Hasher128, SipHasher13};
 use std::collections::HashMap;
@@ -67,6 +64,7 @@ pub(crate) struct SvgRenderer<'a> {
     pub(crate) tiling_patterns: Deduplicator<CachedTilingPattern<'a>>,
     pub(crate) dimensions: (f32, f32),
     pub(crate) cur_mask: Option<SoftMask<'a>>,
+    pub(crate) cur_blend_mode: BlendMode,
 }
 
 impl<'a> SvgRenderer<'a> {
@@ -157,6 +155,10 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
         self.cur_mask = mask;
     }
 
+    fn set_blend_mode(&mut self, blend_mode: BlendMode) {
+        self.cur_blend_mode = blend_mode;
+    }
+
     fn draw_path(
         &mut self,
         path: &BezPath,
@@ -167,7 +169,7 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
         let push_group = self.cur_mask.is_some();
 
         if push_group {
-            self.push_transparency_group(1.0, self.cur_mask.clone());
+            self.push_transparency_group(1.0, self.cur_mask.clone(), self.cur_blend_mode);
         }
 
         Self::draw_path(self, path, transform, paint, draw_mode);
@@ -190,7 +192,7 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
             .write_attribute_fmt("clip-path", format_args!("url(#{clip_id})"));
     }
 
-    fn push_transparency_group(&mut self, opacity: f32, mask: Option<SoftMask<'a>>) {
+    fn push_transparency_group(&mut self, opacity: f32, mask: Option<SoftMask<'a>>, blend_mode: BlendMode) {
         self.push_transparency_group_inner(opacity, mask.map(MaskKind::SoftMask));
     }
 
@@ -205,7 +207,7 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
         let push_group = self.cur_mask.is_some();
 
         if push_group {
-            self.push_transparency_group(1.0, self.cur_mask.clone());
+            self.push_transparency_group(1.0, self.cur_mask.clone(), self.cur_blend_mode);
         }
 
         Self::draw_glyph(self, glyph, transform, glyph_transform, paint, draw_mode);
@@ -252,6 +254,7 @@ impl<'a> SvgRenderer<'a> {
             tiling_patterns: Deduplicator::new('t'),
             cur_mask: None,
             dimensions: page.render_dimensions(),
+            cur_blend_mode: Default::default(),
         }
     }
 

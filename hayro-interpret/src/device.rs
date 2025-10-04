@@ -1,6 +1,6 @@
 use crate::font::Glyph;
 use crate::soft_mask::SoftMask;
-use crate::{ClipPath, Image};
+use crate::{BlendMode, ClipPath, Image};
 use crate::{GlyphDrawMode, Paint, PathDrawMode};
 use kurbo::{Affine, BezPath};
 
@@ -9,6 +9,8 @@ pub trait Device<'a> {
     /// Set the properties for future stroking operations.
     /// Set a soft mask to be used for future drawing instructions.
     fn set_soft_mask(&mut self, mask: Option<SoftMask<'a>>);
+    /// Set the blend mode that should be used for rendering operations.
+    fn set_blend_mode(&mut self, blend_mode: BlendMode);
     /// Draw a path.
     fn draw_path(
         &mut self,
@@ -20,7 +22,7 @@ pub trait Device<'a> {
     /// Push a new clip path to the clip stack.
     fn push_clip_path(&mut self, clip_path: &ClipPath);
     /// Push a new transparency group to the blend stack.
-    fn push_transparency_group(&mut self, opacity: f32, mask: Option<SoftMask<'a>>);
+    fn push_transparency_group(&mut self, opacity: f32, mask: Option<SoftMask<'a>>, blend_mode: BlendMode);
     /// Draw a glyph.
     fn draw_glyph(
         &mut self,
