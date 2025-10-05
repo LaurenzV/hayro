@@ -341,6 +341,7 @@ impl XRef {
 
         let mut ctx = ctx.clone();
         ctx.in_content_stream = false;
+        ctx.parent_chain.push(id);
 
         match entry {
             EntryType::Normal(offset) => {
