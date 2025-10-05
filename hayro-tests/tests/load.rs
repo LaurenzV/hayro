@@ -1,6 +1,6 @@
-use hayro::InterpreterSettings;
 use hayro::Pdf;
 use hayro::render_pdf;
+use hayro::{InterpreterSettings, RenderSettings, render};
 use std::sync::Arc;
 
 fn load(file: &[u8]) {
@@ -165,6 +165,12 @@ fn issue235() {
 #[test]
 fn issue236() {
     let file = include_bytes!("../pdfs/load/issue236.pdf");
+    load(file);
+}
+
+#[test]
+fn issue323() {
+    let file = include_bytes!("../pdfs/load/issue323.pdf");
     load(file);
 }
 
