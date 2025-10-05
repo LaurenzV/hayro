@@ -610,10 +610,10 @@ fn fix_image_length<T: Copy>(
 ) {
     let row_len = width as usize * cs.num_components() as usize;
 
-    if (row_len * *height as usize) < image.len() {
-        // Too much data, truncate it.
+    if (row_len * *height as usize) <= image.len() {
+        // Too much data (or just the right amount), truncate it.
         image.truncate(row_len * *height as usize);
-    } else if (row_len * width as usize) > image.len() {
+    } else {
         // Too little data, adapt the height and pad.
         *height = image.len().div_ceil(row_len) as u32;
 
