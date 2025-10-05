@@ -1,6 +1,6 @@
+use hayro::InterpreterSettings;
 use hayro::Pdf;
 use hayro::render_pdf;
-use hayro::{InterpreterSettings, RenderSettings, render};
 use std::sync::Arc;
 
 fn load(file: &[u8]) {
