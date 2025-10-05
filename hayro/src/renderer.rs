@@ -26,6 +26,7 @@ pub(crate) struct Renderer {
     pub(crate) glyph_cache: Option<HashMap<u128, BezPath>>,
     pub(crate) cur_mask: Option<Mask>,
     pub(crate) cur_blend_mode: BlendMode,
+    pub(crate) in_type3_glyph: bool,
 }
 
 impl Renderer {
@@ -37,6 +38,7 @@ impl Renderer {
             glyph_cache: Some(HashMap::new()),
             cur_mask: None,
             cur_blend_mode: Default::default(),
+            in_type3_glyph: false,
         }
     }
 
@@ -99,7 +101,8 @@ impl Renderer {
     }
 
     fn draw_image(&mut self, rgb_data: RgbData, alpha_data: Option<LumaData>) {
-        let mut cur_transform = *self.ctx.transform();
+        let cur_transform = *self.ctx.transform();
+        let mut additional_transform = Affine::IDENTITY;
 
         let (x_scale, y_scale) = {
             let (x, y) = x_y_advances(&cur_transform);
@@ -131,7 +134,7 @@ impl Renderer {
             }
         };
 
-        let quality = if rgb_data.interpolate {
+        let mut quality = if rgb_data.interpolate {
             ImageQuality::Medium
         } else {
             ImageQuality::Low
@@ -144,6 +147,11 @@ impl Renderer {
             let new_width = (rgb_width as f32 * x_scale).ceil().max(1.0) as u32;
             let new_height = (rgb_height as f32 * y_scale).ceil().max(1.0) as u32;
 
+            // For bitmap glyphs, quality is particularly important, so use `High` here.
+            if self.in_type3_glyph {
+                quality = ImageQuality::High;
+            };
+
             let image = DynamicImage::ImageRgba8(
                 ImageBuffer::from_raw(rgb_width, rgb_height, rgba_data.clone()).unwrap(),
             );
@@ -154,7 +162,7 @@ impl Renderer {
             let t_scale_x = rgb_width as f32 / new_width as f32;
             let t_scale_y = rgb_height as f32 / new_height as f32;
 
-            cur_transform *= Affine::scale_non_uniform(t_scale_x as f64, t_scale_y as f64);
+            additional_transform = Affine::scale_non_uniform(t_scale_x as f64, t_scale_y as f64);
 
             rgb_width = new_width;
             rgb_height = new_height;
@@ -171,6 +179,29 @@ impl Renderer {
                 .to_u8_array()
         }
 
+        // The problem is that by default, when applying a bilinear or bicubic scaling, we will
+        // sample pixels using an extend (pad/reflect/repeat). For glyphs, this is undesirable
+        // as the glyphs will look very bold. Therefore, for glyphs it is more desirable to sample
+        // a transparent pixel when reaching the border. Thus, we wrap glyphs in a transparent frame
+        // of pixel width 2.
+        if self.in_type3_glyph {
+            let mut padded_image = vec![];
+            padded_image.extend(vec![0; (4 * rgb_width as usize + 16) * 2]);
+
+            for row in rgba_data.chunks_exact(rgb_width as usize * 4) {
+                padded_image.extend([0; 8]);
+                padded_image.extend(row);
+                padded_image.extend([0; 8]);
+            }
+
+            padded_image.extend(vec![0; (4 * rgb_width as usize + 16) * 2]);
+            rgb_width += 4;
+            rgb_height += 4;
+            additional_transform *= Affine::translate((-2.0, -2.0));
+
+            rgba_data = padded_image;
+        }
+
         let pixmap = Pixmap::from_parts(
             bytemuck::cast_vec(rgba_data),
             rgb_width as u16,
@@ -178,7 +209,11 @@ impl Renderer {
         );
 
         self.with_blend(|r| {
-            r.draw_pixmap(Arc::new(pixmap), quality, cur_transform);
+            r.draw_pixmap(
+                Arc::new(pixmap),
+                quality,
+                cur_transform * additional_transform,
+            );
         });
     }
 
@@ -307,6 +342,7 @@ impl Renderer {
                             soft_mask_cache: Default::default(),
                             glyph_cache: Some(HashMap::new()),
                             cur_blend_mode: Default::default(),
+                            in_type3_glyph: false,
                         };
                         let mut initial_transform =
                             Affine::new([xs as f64, 0.0, 0.0, ys as f64, -bbox.x0, -bbox.y0]);
@@ -419,9 +455,11 @@ impl Renderer {
                 self.glyph_cache = cache;
             }
             Glyph::Type3(s) => {
+                self.in_type3_glyph = true;
                 self.with_blend(|r| {
                     s.interpret(r, transform, glyph_transform, paint);
                 });
+                self.in_type3_glyph = false;
             }
         }
     }
@@ -713,6 +751,7 @@ fn draw_soft_mask(
         soft_mask_cache: Default::default(),
         glyph_cache: Some(HashMap::new()),
         cur_blend_mode: Default::default(),
+        in_type3_glyph: false,
     };
 
     let bg_color = mask.background_color().to_rgba();
