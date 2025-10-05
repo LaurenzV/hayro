@@ -191,7 +191,6 @@ impl Interpolator {
                 let val1 = table.get(&Key::from_raw(&self.sizes, &coord))?;
                 coord[step] = self.in_next[step];
                 let val2 = table.get(&Key::from_raw(&self.sizes, &coord))?;
-
                 let mut out = smallvec![0.0; self.out_len];
 
                 for i in 0..self.out_len {
@@ -238,7 +237,7 @@ fn build_table(data: &[u32], sizes: &[u32], n: usize) -> Option<HashMap<Key, Int
 
     let mut first = true;
 
-    for b in data.chunks(n) {
+    for b in data.chunks_exact(n) {
         if !first {
             key.increment();
         }
