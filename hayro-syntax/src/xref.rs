@@ -380,6 +380,12 @@ impl XRef {
                 // Generation number is implicitly 0.
                 let obj_stream_id = ObjectIdentifier::new(obj_stram_gen_num as i32, 0);
 
+                if obj_stream_id == id {
+                    warn!("cycle detected in object stream");
+
+                    return None;
+                }
+
                 let stream = self.get_with::<Stream>(obj_stream_id, &ctx)?;
                 let data = repr.data.get_with(obj_stream_id, &ctx)?;
                 let object_stream = ObjectStream::new(stream, data, &ctx)?;
