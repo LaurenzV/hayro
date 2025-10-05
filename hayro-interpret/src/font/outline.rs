@@ -12,12 +12,7 @@ pub(crate) struct OutlinePath(BezPath);
 
 impl OutlinePath {
     pub fn new() -> Self {
-        let mut path = BezPath::new();
-        // This is to guard against paths that don't have `MoveTo` as the first command, which
-        // can trigger a panic in kurbo.
-        path.move_to((0.0, 0.0));
-
-        Self(path)
+        Self(BezPath::new())
     }
 
     pub fn take(self) -> BezPath {
@@ -33,22 +28,30 @@ impl OutlinePen for OutlinePath {
 
     #[inline]
     fn line_to(&mut self, x: f32, y: f32) {
-        self.0.line_to((x, y));
+        if !self.0.elements().is_empty() {
+            self.0.line_to((x, y));
+        }
     }
 
     #[inline]
     fn quad_to(&mut self, cx: f32, cy: f32, x: f32, y: f32) {
-        self.0.quad_to((cx, cy), (x, y));
+        if !self.0.elements().is_empty() {
+            self.0.quad_to((cx, cy), (x, y));
+        }
     }
 
     #[inline]
     fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
-        self.0.curve_to((cx0, cy0), (cx1, cy1), (x, y));
+        if !self.0.elements().is_empty() {
+            self.0.curve_to((cx0, cy0), (cx1, cy1), (x, y));
+        }
     }
 
     #[inline]
     fn close(&mut self) {
-        self.0.close_path();
+        if !self.0.elements().is_empty() {
+            self.0.close_path();
+        }
     }
 }
 
@@ -58,19 +61,27 @@ impl OutlineBuilder for OutlinePath {
     }
 
     fn line_to(&mut self, x: f32, y: f32) {
-        self.0.line_to((x, y));
+        if !self.0.elements().is_empty() {
+            self.0.line_to((x, y));
+        }
     }
 
     fn quad_to(&mut self, x1: f32, y1: f32, x: f32, y: f32) {
-        self.0.quad_to((x1, y1), (x, y));
+        if !self.0.elements().is_empty() {
+            self.0.quad_to((x1, y1), (x, y));
+        }
     }
 
     fn curve_to(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x: f32, y: f32) {
-        self.0.curve_to((x1, y1), (x2, y2), (x, y));
+        if !self.0.elements().is_empty() {
+            self.0.curve_to((x1, y1), (x2, y2), (x, y));
+        }
     }
 
     fn close(&mut self) {
-        self.0.close_path();
+        if !self.0.elements().is_empty() {
+            self.0.close_path();
+        }
     }
 }
 
