@@ -272,6 +272,10 @@ impl<'a> ImageXObject<'a> {
         let width = dict.get::<u32>(W).or_else(|| dict.get::<u32>(WIDTH))?;
         let height = dict.get::<u32>(H).or_else(|| dict.get::<u32>(HEIGHT))?;
 
+        if width == 0 || height == 0 {
+            return None;
+        }
+
         Some(Self {
             force_luma,
             width,
@@ -402,7 +406,7 @@ impl DecodedImageXObject {
                     .collect()
             };
 
-            fix_image_length(&mut data, width, &mut height, 0, &color_space);
+            fix_image_length(&mut data, width, &mut height, 0, &color_space)?;
 
             luma_data = Some(LumaData {
                 data,
@@ -425,7 +429,7 @@ impl DecodedImageXObject {
             // and no special decode array. In this case, we can prevent the round-trip from
             // f32 back to u8 and just return the raw decoded data, which will already be in
             // RGB8 with values between 0 and 255.
-            fix_image_length(&mut decoded.data, width, &mut height, 0, &color_space);
+            fix_image_length(&mut decoded.data, width, &mut height, 0, &color_space)?;
 
             Some(RgbData {
                 data: decoded.data.clone(),
@@ -448,7 +452,7 @@ impl DecodedImageXObject {
             let width = obj.width;
             let mut height = obj.height;
 
-            fix_image_length(&mut f32_data, width, &mut height, 0.0, &color_space);
+            fix_image_length(&mut f32_data, width, &mut height, 0.0, &color_space)?;
 
             let mut rgb_data =
                 get_rgb_data(&f32_data, width, height, &color_space, obj.interpolate);
@@ -493,7 +497,7 @@ impl DecodedImageXObject {
                 let smask_data = decoded.image_data.and_then(|i| i.alpha);
 
                 if let Some(mut data) = smask_data {
-                    fix_image_length(&mut data, width, &mut height, 0, &ColorSpace::device_gray());
+                    fix_image_length(&mut data, width, &mut height, 0, &ColorSpace::device_gray())?;
 
                     Some(LumaData {
                         data,
@@ -547,7 +551,7 @@ impl DecodedImageXObject {
                     &mut height,
                     0,
                     &ColorSpace::device_gray(),
-                );
+                )?;
 
                 Some(LumaData {
                     data: mask_data,
@@ -601,13 +605,14 @@ impl CacheKey for ImageXObject<'_> {
     }
 }
 
+#[must_use]
 fn fix_image_length<T: Copy>(
     image: &mut Vec<T>,
     width: u32,
     height: &mut u32,
     filler: T,
     cs: &ColorSpace,
-) {
+) -> Option<()> {
     let row_len = width as usize * cs.num_components() as usize;
 
     if (row_len * *height as usize) <= image.len() {
@@ -620,6 +625,12 @@ fn fix_image_length<T: Copy>(
         if !image.len().is_multiple_of(row_len) {
             image.extend(iter::repeat_n(filler, row_len - (image.len() % row_len)));
         }
+    }
+
+    if width == 0 || *height == 0 {
+        None
+    } else {
+        Some(())
     }
 }
 
