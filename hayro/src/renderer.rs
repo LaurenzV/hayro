@@ -285,6 +285,13 @@ impl Renderer {
                             bbox = bbox.inflate(factor, factor);
                         }
 
+                        bbox = bbox.intersect(Rect::new(
+                            0.0,
+                            0.0,
+                            self.ctx.width() as f64,
+                            self.ctx.height() as f64,
+                        ));
+
                         let encoded = s.encode();
                         let (image, width, height, transform) =
                             render_shading_texture(bbox, &encoded);
