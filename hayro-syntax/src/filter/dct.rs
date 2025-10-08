@@ -1,43 +1,58 @@
 use crate::object::Dict;
 use crate::object::dict::keys::COLOR_TRANSFORM;
+use crate::object::stream::ImageDecodeParams;
+use std::io::Cursor;
+use std::num::NonZeroU32;
 use zune_jpeg::zune_core::colorspace::ColorSpace;
 use zune_jpeg::zune_core::options::DecoderOptions;
 
-pub(crate) fn decode(data: &[u8], params: Dict) -> Option<Vec<u8>> {
-    let mut decoder = zune_jpeg::JpegDecoder::new(data);
+pub(crate) fn decode(
+    data: &[u8],
+    params: Dict,
+    image_params: &ImageDecodeParams,
+) -> Option<Vec<u8>> {
+    let reader = Cursor::new(data);
+    let mut decoder = zune_jpeg::JpegDecoder::new(reader);
     decoder.decode_headers().ok()?;
 
     let jpeg_data = extract_jpeg_data(data)?;
 
     let color_transform = params.get::<u8>(COLOR_TRANSFORM);
 
-    let mut out_colorspace = match decoder.get_input_colorspace().unwrap() {
-        ColorSpace::YCbCr => {
-            if jpeg_data.app14.is_none()
-                && jpeg_data.components.first()?.id == b'R'
-                && jpeg_data.components.get(1)?.id == b'G'
-                && jpeg_data.components.get(2)?.id == b'B'
-            {
-                // pdf.js issue 11931, actual image data is RGB but zune-jpeg seems to register
-                // YCbCr, so choose YCbCr to prevent zune-jpeg from applying the transform.
-                ColorSpace::YCbCr
-            } else if color_transform.is_none_or(|c| c == 1) {
-                ColorSpace::RGB
-            } else {
-                ColorSpace::YCbCr
+    let mut out_colorspace = if let Some(num_components) = image_params.num_components
+        && !matches!(num_components, 1 | 3 | 4)
+    {
+        ColorSpace::MultiBand(NonZeroU32::new(num_components as u32)?)
+    } else {
+        match decoder.input_colorspace().unwrap() {
+            ColorSpace::YCbCr => {
+                if jpeg_data.app14.is_none()
+                    && jpeg_data.components.first()?.id == b'R'
+                    && jpeg_data.components.get(1)?.id == b'G'
+                    && jpeg_data.components.get(2)?.id == b'B'
+                {
+                    // pdf.js issue 11931, actual image data is RGB but zune-jpeg seems to register
+                    // YCbCr, so choose YCbCr to prevent zune-jpeg from applying the transform.
+                    ColorSpace::YCbCr
+                } else if color_transform.is_none_or(|c| c == 1) {
+                    ColorSpace::RGB
+                } else {
+                    ColorSpace::YCbCr
+                }
             }
+            ColorSpace::RGB | ColorSpace::RGBA => ColorSpace::RGB,
+            ColorSpace::Luma | ColorSpace::LumaA => ColorSpace::Luma,
+            // TODO: Find test case with color transform on cmyk
+            ColorSpace::CMYK => ColorSpace::CMYK,
+            ColorSpace::YCCK => ColorSpace::YCCK,
+            _ => ColorSpace::RGB,
         }
-        ColorSpace::RGB | ColorSpace::RGBA => ColorSpace::RGB,
-        ColorSpace::Luma | ColorSpace::LumaA => ColorSpace::Luma,
-        // TODO: Find test case with color transform on cmyk
-        ColorSpace::CMYK => ColorSpace::CMYK,
-        ColorSpace::YCCK => ColorSpace::YCCK,
-        _ => ColorSpace::RGB,
     };
 
     decoder.set_options(DecoderOptions::default().jpeg_set_out_colorspace(out_colorspace));
     let mut decoded = decoder.decode().ok().or_else(|| {
-        let mut decoder = zune_jpeg::JpegDecoder::new(data);
+        let reader = Cursor::new(data);
+        let mut decoder = zune_jpeg::JpegDecoder::new(reader);
         decoder.decode_headers().ok()?;
         // It's possible that the APP14 marker is set, so that zune_jpeg will set the input colorspace
         // to a different one. So try decoding again with the different color space. This is probably

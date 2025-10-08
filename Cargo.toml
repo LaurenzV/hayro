@@ -37,5 +37,5 @@ pdf-writer = "0.14.0"
 sitro = { git = "https://github.com/LaurenzV/sitro", rev="fb804b3" }
 xmlwriter = { version = "0.1" }
 base64 = { version = "0.22" }
-zune-jpeg = { version = "0.4" }
+zune-jpeg = { version = "0.5" }
 vello_cpu = { git = "https://github.com/linebender/vello", rev = "c7bbc094", default-features = false, features = ["std", "png"] }

@@ -71,7 +71,7 @@ impl Filter {
         &self,
         data: &[u8],
         params: Dict,
-        _image_params: &ImageDecodeParams,
+        image_params: &ImageDecodeParams,
     ) -> Result<FilterResult, DecodeFailure> {
         let res = match self {
             Filter::AsciiHexDecode => ascii_hex::decode(data)
@@ -86,7 +86,7 @@ impl Filter {
             Filter::LzwDecode => lzw_flate::lzw::decode(data, params)
                 .map(FilterResult::from_data)
                 .ok_or(DecodeFailure::StreamDecode),
-            Filter::DctDecode => dct::decode(data, params)
+            Filter::DctDecode => dct::decode(data, params, image_params)
                 .map(FilterResult::from_data)
                 .ok_or(DecodeFailure::ImageDecode),
             Filter::FlateDecode => lzw_flate::flate::decode(data, params)
@@ -99,7 +99,7 @@ impl Filter {
                 jbig2::decode(data, params).ok_or(DecodeFailure::ImageDecode)?,
             )),
             #[cfg(feature = "jpeg2000")]
-            Filter::JpxDecode => jpx::decode(data, _image_params).ok_or(DecodeFailure::ImageDecode),
+            Filter::JpxDecode => jpx::decode(data, image_params).ok_or(DecodeFailure::ImageDecode),
             #[cfg(not(feature = "jpeg2000"))]
             Filter::JpxDecode => {
                 log::warn!("JPEG2000 images are not supported in the current build");

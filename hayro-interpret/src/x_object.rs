@@ -317,9 +317,14 @@ impl DecodedImageXObject {
             .get::<u8>(BPC)
             .or_else(|| dict.get::<u8>(BITS_PER_COMPONENT));
 
+        let color_space = obj.color_space.clone();
+
+        let is_indexed = obj.color_space.as_ref().is_some_and(|cs| cs.is_indexed());
+
         let decode_params = ImageDecodeParams {
-            is_indexed: obj.color_space.as_ref().is_some_and(|cs| cs.is_indexed()),
+            is_indexed,
             bpc: dict_bpc,
+            num_components: color_space.as_ref().map(|c| c.num_components()),
         };
 
         let mut decoded = obj
@@ -331,9 +336,7 @@ impl DecodedImageXObject {
             })
             .ok()?;
 
-        let color_space = obj
-            .color_space
-            .clone()
+        let color_space = color_space
             .or_else(|| {
                 decoded
                     .image_data

@@ -28,6 +28,8 @@ pub struct ImageDecodeParams {
     pub is_indexed: bool,
     /// The bits per component of the image, if that information is available.
     pub bpc: Option<u8>,
+    /// The components per channel of the image, if that information is available.
+    pub num_components: Option<u8>,
 }
 
 impl<'a> Stream<'a> {

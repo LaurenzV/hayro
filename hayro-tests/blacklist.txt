@@ -81,9 +81,6 @@ issue3371
 issue6010_1
 issue6010_2
 
-# jpeg image with 2 deviceN components
-issue6364
-
 # trailer dict is cut off
 bug1250079
 
