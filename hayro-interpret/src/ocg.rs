@@ -85,6 +85,12 @@ impl OcgState {
     }
 }
 
+impl Default for OcgState {
+    fn default() -> Self {
+        Self::dummy()
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 enum BaseState {
     On,
