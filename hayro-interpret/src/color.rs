@@ -83,7 +83,7 @@ const fn u8_to_f32(x: u8) -> f32 {
 }
 
 #[derive(Debug, Clone)]
-enum ColorSpaceType {
+pub(crate) enum ColorSpaceType {
     DeviceCmyk,
     DeviceGray,
     DeviceRgb,
@@ -231,6 +231,10 @@ impl ColorSpace {
     pub(crate) fn device_cmyk() -> ColorSpace {
         Self(Arc::new(ColorSpaceType::DeviceCmyk))
     }
+    
+    pub(crate) fn cs_type(&self) -> &ColorSpaceType {
+        self.0.as_ref()
+    }
 
     /// Return the pattern color space.
     pub(crate) fn pattern() -> ColorSpace {
@@ -375,7 +379,7 @@ impl ColorSpace {
 }
 
 #[derive(Debug, Clone)]
-struct CalGray {
+pub(crate) struct CalGray {
     white_point: [f32; 3],
     black_point: [f32; 3],
     gamma: f32,
@@ -416,7 +420,7 @@ impl CalGray {
 }
 
 #[derive(Debug, Clone)]
-struct CalRgb {
+pub(crate) struct CalRgb {
     white_point: [f32; 3],
     black_point: [f32; 3],
     matrix: [f32; 9],
@@ -583,7 +587,7 @@ impl CalRgb {
 }
 
 #[derive(Debug, Clone)]
-struct Lab {
+pub(crate) struct Lab {
     white_point: [f32; 3],
     _black_point: [f32; 3],
     range: [f32; 4],
@@ -652,7 +656,7 @@ impl Lab {
 }
 
 #[derive(Debug, Clone)]
-struct Indexed {
+pub(crate) struct Indexed {
     values: Vec<Vec<f32>>,
     hival: u8,
     base: Box<ColorSpace>,
@@ -705,7 +709,7 @@ impl Indexed {
 }
 
 #[derive(Debug, Clone)]
-struct Separation {
+pub(crate) struct Separation {
     alternate_space: ColorSpace,
     tint_transform: Function,
 }
@@ -740,7 +744,7 @@ impl Separation {
 }
 
 #[derive(Debug, Clone)]
-struct DeviceN {
+pub(crate) struct DeviceN {
     alternate_space: ColorSpace,
     num_components: usize,
     tint_transform: Function,
@@ -779,7 +783,7 @@ struct ICCColorRepr {
 }
 
 #[derive(Clone)]
-struct ICCProfile(Arc<ICCColorRepr>);
+pub(crate) struct ICCProfile(Arc<ICCColorRepr>);
 
 impl Debug for ICCProfile {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -833,6 +837,29 @@ impl ICCProfile {
 
     fn is_srgb(&self) -> bool {
         self.0.is_srgb
+    }
+    
+    pub(crate) fn image_to_rgb(&self, image: &[u8]) -> Option<Vec<u8>> {
+        let mut res = vec![0; image.len()];
+
+        match self.0.number_components {
+            1 => self
+                .0
+                .transform
+                .transform(&image, &mut res),
+            3 => self.0.transform.transform(
+                &image,
+                &mut res,
+            ),
+            4 => self.0.transform.transform(
+                &image,
+                &mut res,
+            ),
+            _ => return None,
+        }
+            .ok()?;
+        
+        Some(res)
     }
 
     fn to_rgb(&self, c: &[f32]) -> Option<[u8; 3]> {
