@@ -1,5 +1,5 @@
 use crate::cache::Cache;
-use crate::color::{ColorSpace, ColorSpaceType};
+use crate::color::{ColorSpace, ToRgb};
 use crate::context::Context;
 use crate::device::Device;
 use crate::function::{Function, interpolate};
@@ -422,10 +422,13 @@ impl DecodedImageXObject {
                 rgb_data: None,
                 luma_data,
             });
-        } else if bits_per_component == 8 &&
-            (color_space.is_rgb() ||  matches!(color_space.cs_type(), ColorSpaceType::ICCBased(_)))
+        } else if bits_per_component == 8
+            && color_space.supports_u8()
             && obj.transfer_function.is_none()
-            && decode_arr.as_ref() == [(0.0, 1.0), (0.0, 1.0), (0.0, 1.0)]
+            && decode_arr.as_slice()
+                == color_space
+                    .default_decode_arr(bits_per_component as f32)
+                    .as_slice()
             && !is_luma
         {
             // This is actually the most common case, where the PDF is embedded as a 8-bit RGB color
@@ -433,17 +436,11 @@ impl DecodedImageXObject {
             // f32 back to u8 and just return the raw decoded data, which will already be in
             // RGB8 with values between 0 and 255.
             fix_image_length(&mut decoded.data, width, &mut height, 0, &color_space)?;
-            
-            let data = if color_space.is_rgb() {
-                decoded.data.clone()
-            }   else if let ColorSpaceType::ICCBased(icc ) = color_space.cs_type() {
-                icc.image_to_rgb(&decoded.data)?
-            }   else {
-                unreachable!()
-            };
+            let mut output_buf = vec![0; width as usize * height as usize * 3];
+            color_space.from_u8(&decoded.data, &mut output_buf)?;
 
             Some(RgbData {
-                data,
+                data: output_buf,
                 width,
                 height,
                 interpolate: obj.interpolate,
@@ -594,16 +591,11 @@ fn get_rgb_data(
         return None;
     }
 
-    let decoded = decoded
-        .chunks(cs.num_components() as usize)
-        .flat_map(|v| {
-            let c = cs.to_rgba(v, 1.0, false).to_rgba8();
-            [c[0], c[1], c[2]]
-        })
-        .collect::<Vec<_>>();
+    let mut output = vec![0; width as usize * height as usize * 3];
+    cs.from_f32(decoded, &mut output, false);
 
     Some(RgbData {
-        data: decoded,
+        data: output,
         width,
         height,
         interpolate,
