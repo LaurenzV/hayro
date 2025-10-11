@@ -835,8 +835,7 @@ impl ToRgb for DeviceN {
                     .unwrap_or(self.alternate_space.initial_color())
             })
             .collect::<Vec<_>>();
-        self.alternate_space
-            .from_f32(&evaluated, output, false)
+        self.alternate_space.from_f32(&evaluated, output, false)
     }
 }
 
