@@ -745,7 +745,7 @@ impl Indexed {
 
 impl ToRgb for Indexed {
     fn from_f32(&self, input: &[f32], output: &mut [u8], _: bool) -> Option<()> {
-        let mut indexed = vec![0.0; self.base.num_components() as usize];
+        let mut indexed = vec![0.0; input.len() * self.base.num_components() as usize];
 
         for (input, output) in input
             .iter()
@@ -826,7 +826,7 @@ impl DeviceN {
 }
 
 impl ToRgb for DeviceN {
-    fn from_f32(&self, input: &[f32], output: &mut [u8], manual_scale: bool) -> Option<()> {
+    fn from_f32(&self, input: &[f32], output: &mut [u8], _: bool) -> Option<()> {
         let evaluated = input
             .chunks_exact(self.num_components)
             .flat_map(|n| {
@@ -836,7 +836,7 @@ impl ToRgb for DeviceN {
             })
             .collect::<Vec<_>>();
         self.alternate_space
-            .from_f32(&evaluated, output, manual_scale)
+            .from_f32(&evaluated, output, false)
     }
 }
 
