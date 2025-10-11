@@ -437,7 +437,7 @@ impl DecodedImageXObject {
             // RGB8 with values between 0 and 255.
             fix_image_length(&mut decoded.data, width, &mut height, 0, &color_space)?;
             let mut output_buf = vec![0; width as usize * height as usize * 3];
-            color_space.from_u8(&decoded.data, &mut output_buf)?;
+            color_space.convert_u8(&decoded.data, &mut output_buf)?;
 
             Some(RgbData {
                 data: output_buf,
@@ -592,7 +592,7 @@ fn get_rgb_data(
     }
 
     let mut output = vec![0; width as usize * height as usize * 3];
-    cs.from_f32(decoded, &mut output, false);
+    cs.convert_f32(decoded, &mut output, false);
 
     Some(RgbData {
         data: output,

@@ -323,11 +323,11 @@ impl ColorSpace {
 }
 
 impl ToRgb for ColorSpace {
-    fn from_f32(&self, input: &[f32], output: &mut [u8], manual_scale: bool) -> Option<()> {
+    fn convert_f32(&self, input: &[f32], output: &mut [u8], manual_scale: bool) -> Option<()> {
         match self.0.as_ref() {
             ColorSpaceType::DeviceCmyk => {
                 let converted = input.iter().copied().map(f32_to_u8).collect::<Vec<_>>();
-                CMYK_TRANSFORM.from_u8(&converted, output)
+                CMYK_TRANSFORM.convert_u8(&converted, output)
             }
             ColorSpaceType::DeviceGray => {
                 let converted = input.iter().copied().map(f32_to_u8).collect::<Vec<_>>();
@@ -345,14 +345,14 @@ impl ToRgb for ColorSpace {
 
                 Some(())
             }
-            ColorSpaceType::Pattern(i) => i.from_f32(input, output, manual_scale),
-            ColorSpaceType::Indexed(i) => i.from_f32(input, output, manual_scale),
-            ColorSpaceType::ICCBased(i) => i.from_f32(input, output, manual_scale),
-            ColorSpaceType::CalGray(i) => i.from_f32(input, output, manual_scale),
-            ColorSpaceType::CalRgb(i) => i.from_f32(input, output, manual_scale),
-            ColorSpaceType::Lab(i) => i.from_f32(input, output, manual_scale),
-            ColorSpaceType::Separation(i) => i.from_f32(input, output, manual_scale),
-            ColorSpaceType::DeviceN(i) => i.from_f32(input, output, manual_scale),
+            ColorSpaceType::Pattern(i) => i.convert_f32(input, output, manual_scale),
+            ColorSpaceType::Indexed(i) => i.convert_f32(input, output, manual_scale),
+            ColorSpaceType::ICCBased(i) => i.convert_f32(input, output, manual_scale),
+            ColorSpaceType::CalGray(i) => i.convert_f32(input, output, manual_scale),
+            ColorSpaceType::CalRgb(i) => i.convert_f32(input, output, manual_scale),
+            ColorSpaceType::Lab(i) => i.convert_f32(input, output, manual_scale),
+            ColorSpaceType::Separation(i) => i.convert_f32(input, output, manual_scale),
+            ColorSpaceType::DeviceN(i) => i.convert_f32(input, output, manual_scale),
         }
     }
 
@@ -372,9 +372,9 @@ impl ToRgb for ColorSpace {
         }
     }
 
-    fn from_u8(&self, input: &[u8], output: &mut [u8]) -> Option<()> {
+    fn convert_u8(&self, input: &[u8], output: &mut [u8]) -> Option<()> {
         match self.0.as_ref() {
-            ColorSpaceType::DeviceCmyk => CMYK_TRANSFORM.from_u8(input, output),
+            ColorSpaceType::DeviceCmyk => CMYK_TRANSFORM.convert_u8(input, output),
             ColorSpaceType::DeviceGray => {
                 for (input, output) in input.iter().zip(output.chunks_exact_mut(3)) {
                     output.copy_from_slice(&[*input, *input, *input]);
@@ -387,14 +387,14 @@ impl ToRgb for ColorSpace {
 
                 Some(())
             }
-            ColorSpaceType::Pattern(i) => i.from_u8(input, output),
-            ColorSpaceType::Indexed(i) => i.from_u8(input, output),
-            ColorSpaceType::ICCBased(i) => i.from_u8(input, output),
-            ColorSpaceType::CalGray(i) => i.from_u8(input, output),
-            ColorSpaceType::CalRgb(i) => i.from_u8(input, output),
-            ColorSpaceType::Lab(i) => i.from_u8(input, output),
-            ColorSpaceType::Separation(i) => i.from_u8(input, output),
-            ColorSpaceType::DeviceN(i) => i.from_u8(input, output),
+            ColorSpaceType::Pattern(i) => i.convert_u8(input, output),
+            ColorSpaceType::Indexed(i) => i.convert_u8(input, output),
+            ColorSpaceType::ICCBased(i) => i.convert_u8(input, output),
+            ColorSpaceType::CalGray(i) => i.convert_u8(input, output),
+            ColorSpaceType::CalRgb(i) => i.convert_u8(input, output),
+            ColorSpaceType::Lab(i) => i.convert_u8(input, output),
+            ColorSpaceType::Separation(i) => i.convert_u8(input, output),
+            ColorSpaceType::DeviceN(i) => i.convert_u8(input, output),
         }
     }
 }
@@ -422,7 +422,7 @@ impl CalGray {
 }
 
 impl ToRgb for CalGray {
-    fn from_f32(&self, input: &[f32], output: &mut [u8], _: bool) -> Option<()> {
+    fn convert_f32(&self, input: &[f32], output: &mut [u8], _: bool) -> Option<()> {
         for (input, output) in input.iter().copied().zip(output.chunks_exact_mut(3)) {
             let g = self.gamma;
             let (_xw, yw, _zw) = {
@@ -583,7 +583,7 @@ impl CalRgb {
 }
 
 impl ToRgb for CalRgb {
-    fn from_f32(&self, input: &[f32], output: &mut [u8], _: bool) -> Option<()> {
+    fn convert_f32(&self, input: &[f32], output: &mut [u8], _: bool) -> Option<()> {
         for (input, output) in input.chunks_exact(3).zip(output.chunks_exact_mut(3)) {
             let input = [
                 input[0].clamp(0.0, 1.0),
@@ -653,7 +653,7 @@ impl Lab {
 }
 
 impl ToRgb for Lab {
-    fn from_f32(&self, input: &[f32], output: &mut [u8], manual_scale: bool) -> Option<()> {
+    fn convert_f32(&self, input: &[f32], output: &mut [u8], manual_scale: bool) -> Option<()> {
         for (input, output) in input.chunks_exact(3).zip(output.chunks_exact_mut(3)) {
             let (mut l, mut a, mut b) = (input[0], input[1], input[2]);
 
@@ -744,7 +744,7 @@ impl Indexed {
 }
 
 impl ToRgb for Indexed {
-    fn from_f32(&self, input: &[f32], output: &mut [u8], _: bool) -> Option<()> {
+    fn convert_f32(&self, input: &[f32], output: &mut [u8], _: bool) -> Option<()> {
         let mut indexed = vec![0.0; input.len() * self.base.num_components() as usize];
 
         for (input, output) in input
@@ -756,7 +756,7 @@ impl ToRgb for Indexed {
             output.copy_from_slice(&self.values[idx]);
         }
 
-        self.base.from_f32(&indexed, output, true)
+        self.base.convert_f32(&indexed, output, true)
     }
 }
 
@@ -787,7 +787,7 @@ impl Separation {
 }
 
 impl ToRgb for Separation {
-    fn from_f32(&self, input: &[f32], output: &mut [u8], _: bool) -> Option<()> {
+    fn convert_f32(&self, input: &[f32], output: &mut [u8], _: bool) -> Option<()> {
         let evaluated = input
             .iter()
             .flat_map(|n| {
@@ -796,7 +796,7 @@ impl ToRgb for Separation {
                     .unwrap_or(self.alternate_space.initial_color())
             })
             .collect::<Vec<_>>();
-        self.alternate_space.from_f32(&evaluated, output, false)
+        self.alternate_space.convert_f32(&evaluated, output, false)
     }
 }
 
@@ -826,7 +826,7 @@ impl DeviceN {
 }
 
 impl ToRgb for DeviceN {
-    fn from_f32(&self, input: &[f32], output: &mut [u8], _: bool) -> Option<()> {
+    fn convert_f32(&self, input: &[f32], output: &mut [u8], _: bool) -> Option<()> {
         let evaluated = input
             .chunks_exact(self.num_components)
             .flat_map(|n| {
@@ -835,7 +835,7 @@ impl ToRgb for DeviceN {
                     .unwrap_or(self.alternate_space.initial_color())
             })
             .collect::<Vec<_>>();
-        self.alternate_space.from_f32(&evaluated, output, false)
+        self.alternate_space.convert_f32(&evaluated, output, false)
     }
 }
 
@@ -904,20 +904,20 @@ impl ICCProfile {
 }
 
 impl ToRgb for ICCProfile {
-    fn from_f32(&self, input: &[f32], output: &mut [u8], _: bool) -> Option<()> {
+    fn convert_f32(&self, input: &[f32], output: &mut [u8], _: bool) -> Option<()> {
         let converted = input.iter().copied().map(f32_to_u8).collect::<Vec<_>>();
-        self.from_u8(converted.as_slice(), output)
+        self.convert_u8(converted.as_slice(), output)
     }
 
     fn supports_u8(&self) -> bool {
         true
     }
 
-    fn from_u8(&self, input: &[u8], output: &mut [u8]) -> Option<()> {
+    fn convert_u8(&self, input: &[u8], output: &mut [u8]) -> Option<()> {
         if self.is_srgb() {
             output.copy_from_slice(input);
         } else {
-            self.0.transform.transform(&input, output).ok()?;
+            self.0.transform.transform(input, output).ok()?;
         }
 
         Some(())
@@ -958,11 +958,11 @@ static CMYK_TRANSFORM: LazyLock<ICCProfile> = LazyLock::new(|| {
 });
 
 pub(crate) trait ToRgb {
-    fn from_f32(&self, input: &[f32], output: &mut [u8], manual_scale: bool) -> Option<()>;
+    fn convert_f32(&self, input: &[f32], output: &mut [u8], manual_scale: bool) -> Option<()>;
     fn supports_u8(&self) -> bool {
         false
     }
-    fn from_u8(&self, _: &[u8], _: &mut [u8]) -> Option<()> {
+    fn convert_u8(&self, _: &[u8], _: &mut [u8]) -> Option<()> {
         unimplemented!();
     }
     fn to_alpha_color(
@@ -972,7 +972,7 @@ pub(crate) trait ToRgb {
         manual_scale: bool,
     ) -> Option<AlphaColor> {
         let mut output = [0; 3];
-        self.from_f32(input, &mut output, manual_scale)?;
+        self.convert_f32(input, &mut output, manual_scale)?;
         Some(AlphaColor::from_rgba8(
             output[0],
             output[1],
