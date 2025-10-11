@@ -421,8 +421,8 @@ impl CoonsPatch {
     }
 
     /// Approximate the patch by triangles.
-    pub fn to_triangles(&self) -> Vec<Triangle> {
-        generate_patch_triangles(|p| self.map_coordinate(p), |p| self.interpolate(p))
+    pub fn to_triangles(&self, buffer: &mut Vec<Triangle>) {
+        generate_patch_triangles(|p| self.map_coordinate(p), |p| self.interpolate(p), buffer)
     }
 
     /// Get the interpolated colors of the point from the patch.
@@ -505,8 +505,8 @@ impl TensorProductPatch {
     }
 
     /// Approximate the tensor product patch mesh by triangles.
-    pub fn to_triangles(&self) -> Vec<Triangle> {
-        generate_patch_triangles(|p| self.map_coordinate(p), |p| self.interpolate(p))
+    pub fn to_triangles(&self, buffer: &mut Vec<Triangle>) {
+        generate_patch_triangles(|p| self.map_coordinate(p), |p| self.interpolate(p), buffer)
     }
 
     /// Get the interpolated colors of the point from the patch.
@@ -694,7 +694,7 @@ fn split_decode(decode: &[f32]) -> Option<([f32; 4], &[f32])> {
 }
 
 /// Generate triangles from a grid of points using a mapping function.
-fn generate_patch_triangles<F, I>(map_coordinate: F, interpolate: I) -> Vec<Triangle>
+fn generate_patch_triangles<F, I>(map_coordinate: F, interpolate: I, buffer: &mut Vec<Triangle>)
 where
     F: Fn(Point) -> Point,
     I: Fn(Point) -> ColorComponents,
@@ -713,9 +713,6 @@ where
             grid[i][j] = map_coordinate(unit_point);
         }
     }
-
-    // Create triangles from adjacent grid points.
-    let mut triangles = vec![];
 
     for i in 0..(GRID_SIZE - 1) {
         for j in 0..(GRID_SIZE - 1) {
@@ -752,12 +749,11 @@ where
                 colors: interpolate(Point::new(u1, v1)),
             };
 
-            triangles.push(Triangle::new(v00.clone(), v10.clone(), v01.clone()));
-            triangles.push(Triangle::new(v10.clone(), v11.clone(), v01.clone()));
+            buffer.push(Triangle::new(v00.clone(), v10.clone(), v01.clone()));
+             buffer.push(Triangle::new(v10.clone(), v11.clone(), v01.clone()));
         }
     }
 
-    triangles
 }
 
 fn read_lattice_triangles(

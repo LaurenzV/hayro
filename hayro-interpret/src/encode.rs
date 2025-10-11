@@ -71,10 +71,10 @@ impl ShadingPattern {
                 }
             }
             ShadingType::CoonsPatchMesh { patches, function } => {
-                let triangles = patches
-                    .iter()
-                    .flat_map(|p| p.to_triangles())
-                    .collect::<Vec<_>>();
+                let mut triangles = vec![];
+                for patch in patches {
+                    patch.to_triangles(&mut triangles);
+                }
 
                 let full_transform = self.matrix;
                 let samples = sample_triangles(&triangles, full_transform);
@@ -87,10 +87,10 @@ impl ShadingPattern {
                 }
             }
             ShadingType::TensorProductPatchMesh { patches, function } => {
-                let triangles = patches
-                    .iter()
-                    .flat_map(|p| p.to_triangles())
-                    .collect::<Vec<_>>();
+                let mut triangles = vec![];
+                for patch in patches {
+                    patch.to_triangles(&mut triangles);
+                }
 
                 let full_transform = self.matrix;
                 let samples = sample_triangles(&triangles, full_transform);
