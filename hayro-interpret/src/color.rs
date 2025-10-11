@@ -745,13 +745,17 @@ impl Indexed {
 
 impl ToRgb for Indexed {
     fn from_f32(&self, input: &[f32], output: &mut [u8], _: bool) -> Option<()> {
-        let indexed = input
+        let mut indexed = vec![0.0; self.base.num_components() as usize];
+
+        for (input, output) in input
             .iter()
-            .flat_map(|n| {
-                let idx = (n.clamp(0.0, self.hival as f32) + 0.5) as usize;
-                self.values[idx].clone()
-            })
-            .collect::<Vec<_>>();
+            .copied()
+            .zip(indexed.chunks_exact_mut(self.base.num_components() as usize))
+        {
+            let idx = (input.clamp(0.0, self.hival as f32) + 0.5) as usize;
+            output.copy_from_slice(&self.values[idx]);
+        }
+
         self.base.from_f32(&indexed, output, true)
     }
 }
