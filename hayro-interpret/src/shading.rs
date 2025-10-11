@@ -750,10 +750,9 @@ where
             };
 
             buffer.push(Triangle::new(v00.clone(), v10.clone(), v01.clone()));
-             buffer.push(Triangle::new(v10.clone(), v11.clone(), v01.clone()));
+            buffer.push(Triangle::new(v10.clone(), v11.clone(), v01.clone()));
         }
     }
-
 }
 
 fn read_lattice_triangles(
