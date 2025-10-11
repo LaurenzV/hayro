@@ -89,7 +89,12 @@ impl PdfViewer {
     }
 
     #[wasm_bindgen]
-    pub fn render_current_page(&self) -> Result<Vec<u8>, JsValue> {
+    pub fn render_current_page(
+        &self,
+        viewport_width: f32,
+        viewport_height: f32,
+        device_pixel_ratio: f32,
+    ) -> Result<js_sys::Array, JsValue> {
         let pdf = self.pdf.as_ref().ok_or("No PDF loaded")?;
         let page = pdf
             .pages()
@@ -109,15 +114,44 @@ impl PdfViewer {
             ..Default::default()
         };
 
+        // Get the page's natural size at 1:1 scale
+        let render_settings_base = RenderSettings {
+            x_scale: 1.0,
+            y_scale: 1.0,
+            ..Default::default()
+        };
+        let base_pixmap = hayro::render(page, &interpreter_settings, &render_settings_base);
+        let base_width = base_pixmap.width() as f32;
+        let base_height = base_pixmap.height() as f32;
+
+        // Calculate scale to fit in viewport (accounting for device pixel ratio)
+        let target_width = viewport_width * device_pixel_ratio;
+        let target_height = viewport_height * device_pixel_ratio;
+
+        let scale_x = target_width / base_width;
+        let scale_y = target_height / base_height;
+        let scale = scale_x.min(scale_y);
+
+        // Render at the calculated scale
         let render_settings = RenderSettings {
-            x_scale: 2.0,
-            y_scale: 2.0,
+            x_scale: scale,
+            y_scale: scale,
             ..Default::default()
         };
 
         let pixmap = hayro::render(page, &interpreter_settings, &render_settings);
 
-        Ok(pixmap.into_png().unwrap())
+        // Return array: [width, height, pixel_data]
+        let result = js_sys::Array::new_with_length(3);
+        result.set(0, JsValue::from(pixmap.width()));
+        result.set(1, JsValue::from(pixmap.height()));
+
+        // Cast Vec<Rgba8> to Vec<u8>
+        let rgba_data = pixmap.take_unpremultiplied();
+        let byte_data: Vec<u8> = bytemuck::cast_vec(rgba_data);
+        result.set(2, JsValue::from(byte_data));
+
+        Ok(result)
     }
 
     #[wasm_bindgen]

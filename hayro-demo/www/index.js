@@ -134,25 +134,26 @@ async function run() {
 
     async function renderCurrentPage() {
         if (!pdfViewer) return;
-        
+
         try {
-            const pngData = pdfViewer.render_current_page();
-            
-            const blob = new Blob([pngData], { type: 'image/png' });
-            const imageUrl = URL.createObjectURL(blob);
-            
-            const img = new Image();
-            img.onload = () => {
-                currentImage = img;
-                drawImage();
-                updatePageInfo();
-                URL.revokeObjectURL(imageUrl);
-            };
-            img.onerror = () => {
-                console.error('Error loading rendered image');
-            };
-            img.src = imageUrl;
-            
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight - 120;
+            const dpr = window.devicePixelRatio || 1;
+
+            // Render with viewport-aware scaling
+            const result = pdfViewer.render_current_page(viewportWidth, viewportHeight, dpr);
+            const width = result[0];
+            const height = result[1];
+            const rgbaData = result[2];
+
+            // Create ImageData from raw RGBA pixels
+            const imageData = new ImageData(new Uint8ClampedArray(rgbaData), width, height);
+
+            // Store dimensions for drawImage
+            currentImage = { imageData, width, height };
+            drawImage();
+            updatePageInfo();
+
         } catch (error) {
             console.error('Error rendering page:', error);
         }
@@ -163,27 +164,19 @@ async function run() {
 
         const ctx = canvas.getContext('2d');
         const dpr = window.devicePixelRatio || 1;
-        
-        const viewportWidth = window.innerWidth;
-        const viewportHeight = window.innerHeight - 120;
-        
-        const scaleX = viewportWidth / currentImage.width;
-        const scaleY = viewportHeight / currentImage.height;
-        const scale = Math.min(scaleX, scaleY, 1);
-        
-        const scaledWidth = currentImage.width * scale;
-        const scaledHeight = currentImage.height * scale;
-        
-        canvas.width = scaledWidth * dpr;
-        canvas.height = scaledHeight * dpr;
-        
-        canvas.style.width = scaledWidth + 'px';
-        canvas.style.height = scaledHeight + 'px';
-        
-        ctx.scale(dpr, dpr);
-        
-        ctx.clearRect(0, 0, scaledWidth, scaledHeight);
-        ctx.drawImage(currentImage, 0, 0, scaledWidth, scaledHeight);
+
+        // The image is already rendered at the correct size, just display it
+        canvas.width = currentImage.width;
+        canvas.height = currentImage.height;
+
+        // Set CSS size to logical pixels
+        canvas.style.width = (currentImage.width / dpr) + 'px';
+        canvas.style.height = (currentImage.height / dpr) + 'px';
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Put the image data directly onto the canvas (no scaling needed)
+        ctx.putImageData(currentImage.imageData, 0, 0);
     }
 
     function updatePageInfo() {
