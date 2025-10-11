@@ -1,4 +1,5 @@
 use crate::derive_settings;
+use fast_image_resize::{PixelType, ResizeAlg, ResizeOptions, Resizer, images::Image as FirImage};
 use hayro_interpret::encode::EncodedShadingPattern;
 use hayro_interpret::font::Glyph;
 use hayro_interpret::hayro_syntax::object::ObjectIdentifier;
@@ -7,7 +8,6 @@ use hayro_interpret::{
     BlendMode, CacheKey, ClipPath, Device, FillRule, GlyphDrawMode, LumaData, MaskType, Paint,
     PathDrawMode, RgbData, SoftMask, StrokeProps,
 };
-use fast_image_resize::{images::Image as FirImage, ResizeAlg, ResizeOptions, Resizer, PixelType};
 use kurbo::{Affine, BezPath, Point, Rect, Shape, Vec2};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -151,25 +151,21 @@ impl Renderer {
                 quality = ImageQuality::High;
             };
 
-            let src_image = FirImage::from_vec_u8(
-                rgb_width,
-                rgb_height,
-                rgba_data,
-                PixelType::U8x4,
-            ).unwrap();
+            let src_image =
+                FirImage::from_vec_u8(rgb_width, rgb_height, rgba_data, PixelType::U8x4).unwrap();
 
-            let mut dst_image = FirImage::new(
-                new_width,
-                new_height,
-                PixelType::U8x4,
-            );
+            let mut dst_image = FirImage::new(new_width, new_height, PixelType::U8x4);
 
             let mut resizer = Resizer::new();
-            resizer.resize(
-                &src_image,
-                &mut dst_image,
-                &ResizeOptions::new().resize_alg(ResizeAlg::Convolution(fast_image_resize::FilterType::CatmullRom)),
-            ).unwrap();
+            resizer
+                .resize(
+                    &src_image,
+                    &mut dst_image,
+                    &ResizeOptions::new().resize_alg(ResizeAlg::Convolution(
+                        fast_image_resize::FilterType::CatmullRom,
+                    )),
+                )
+                .unwrap();
 
             let t_scale_x = rgb_width as f32 / new_width as f32;
             let t_scale_y = rgb_height as f32 / new_height as f32;
