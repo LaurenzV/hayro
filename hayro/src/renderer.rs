@@ -7,8 +7,7 @@ use hayro_interpret::{
     BlendMode, CacheKey, ClipPath, Device, FillRule, GlyphDrawMode, LumaData, MaskType, Paint,
     PathDrawMode, RgbData, SoftMask, StrokeProps,
 };
-use image::imageops::FilterType;
-use image::{DynamicImage, ImageBuffer};
+use fast_image_resize::{images::Image as FirImage, ResizeAlg, ResizeOptions, Resizer, PixelType};
 use kurbo::{Affine, BezPath, Point, Rect, Shape, Vec2};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -152,13 +151,26 @@ impl Renderer {
                 quality = ImageQuality::High;
             };
 
-            let image = DynamicImage::ImageRgba8(
-                ImageBuffer::from_raw(rgb_width, rgb_height, rgba_data.clone()).unwrap(),
-            );
-            let resized = image.resize_exact(new_width, new_height, FilterType::CatmullRom);
+            let src_image = FirImage::from_vec_u8(
+                rgb_width,
+                rgb_height,
+                rgba_data,
+                PixelType::U8x4,
+            ).unwrap();
 
-            let new_width = resized.width();
-            let new_height = resized.height();
+            let mut dst_image = FirImage::new(
+                new_width,
+                new_height,
+                PixelType::U8x4,
+            );
+
+            let mut resizer = Resizer::new();
+            resizer.resize(
+                &src_image,
+                &mut dst_image,
+                &ResizeOptions::new().resize_alg(ResizeAlg::Convolution(fast_image_resize::FilterType::CatmullRom)),
+            ).unwrap();
+
             let t_scale_x = rgb_width as f32 / new_width as f32;
             let t_scale_y = rgb_height as f32 / new_height as f32;
 
@@ -167,7 +179,7 @@ impl Renderer {
             rgb_width = new_width;
             rgb_height = new_height;
 
-            resized.to_rgba8().into_raw()
+            dst_image.into_vec()
         };
 
         let (chunks, _) = rgba_data.as_chunks_mut::<4>();
