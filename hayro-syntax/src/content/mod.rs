@@ -33,9 +33,7 @@ assert!(matches!(iter.next(), Some(TypedInstruction::FillPathNonZero(_))));
 #[allow(missing_docs)]
 pub mod ops;
 
-use crate::content::ops::{
-    ClosePath, CubicEndTo, CubicStartTo, CubicTo, LineTo, MoveTo, RectPath, TypedInstruction,
-};
+use crate::content::ops::TypedInstruction;
 use crate::object::Stream;
 use crate::object::dict::InlineImageDict;
 use crate::object::name::{Name, skip_name_like};
