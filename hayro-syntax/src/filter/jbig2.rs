@@ -1599,7 +1599,10 @@ fn decode_text_region(
                         != 0
                 };
 
-            let mut symbol_bitmap = &input_symbols[symbol_id as usize];
+            // Some PDFs in the corpus crash here for some reason.
+            let Some(mut symbol_bitmap) = input_symbols.get(symbol_id as usize) else {
+                continue;
+            };
             let mut symbol_width = symbol_bitmap[0].len();
             let mut symbol_height = symbol_bitmap.len();
             let refined_bitmap_storage: Option<Bitmap>;
