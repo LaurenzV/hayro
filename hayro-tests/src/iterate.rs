@@ -1,4 +1,5 @@
 use hayro::Pdf;
+use hayro_syntax::Filter;
 use memchr::memmem::Finder;
 use rayon::prelude::*;
 use std::env;
@@ -75,6 +76,9 @@ fn main() {
             Ok(pdf) => {
                 for obj in pdf.objects() {
                     if let Some(stream) = obj.into_stream() {
+                        if !stream.filters().contains(&Filter::DctDecode) {
+                            continue;
+                        }
                         let s = stream.decoded();
 
                         if s.is_err() {

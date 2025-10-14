@@ -18,7 +18,7 @@ use log::warn;
 use std::ops::Deref;
 
 /// A data filter.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Filter {
     /// ASCII hexadecimal encoding.
     AsciiHexDecode,

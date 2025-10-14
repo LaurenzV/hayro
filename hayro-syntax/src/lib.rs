@@ -96,6 +96,7 @@ pub mod xref;
 #[doc(hidden)]
 pub mod reader;
 
+pub use filter::*;
 pub use pdf::*;
 
 /// A container for the bytes of a PDF file.

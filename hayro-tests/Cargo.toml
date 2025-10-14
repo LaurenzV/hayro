@@ -21,6 +21,7 @@ path = "tests/mod.rs"
 hayro = { workspace = true , features = ["jpeg2000"] }
 hayro-write = { workspace = true }
 hayro-svg = { workspace = true }
+hayro-syntax = { workspace = true }
 pdf-writer = { workspace = true }
 resvg = { workspace = true }
 walkdir = "2"
