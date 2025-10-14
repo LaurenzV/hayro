@@ -37,6 +37,7 @@ pub(crate) mod flate {
     }
 
     /// Ported from <https://github.com/mozilla/pdf.js/blob/master/src/core/flate_stream.js>
+    /// TODO: Rewrite this in idiomatic Rust.
     mod fallback {
         use log::warn;
 
@@ -144,7 +145,7 @@ pub(crate) mod flate {
                     }
                 }
 
-                let code = codes[(self.code_buf & ((1 << max_len) - 1)) as usize];
+                let code = codes.get((self.code_buf & ((1 << max_len) - 1)) as usize)?;
                 let code_len = (code >> 16) as u8;
                 let code_val = code & 0xffff;
 
