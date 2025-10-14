@@ -254,13 +254,20 @@ impl XRef {
     pub(crate) fn objects(&self) -> impl IntoIterator<Item = Object<'_>> + '_ {
         match &self.0 {
             Inner::Dummy => unimplemented!(),
-            Inner::Some(r) => iter::from_fn(move || {
+            Inner::Some(r) => {
                 let locked = r.map.read().unwrap();
-                let mut iter = locked.xref_map.keys();
+                let mut iter = locked
+                    .xref_map
+                    .keys()
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .into_iter();
 
-                iter.next()
-                    .and_then(|k| self.get_with(*k, &ReaderContext::new(self, false)))
-            }),
+                iter::from_fn(move || {
+                    iter.next()
+                        .and_then(|k| self.get_with(k, &ReaderContext::new(self, false)))
+                })
+            }
         }
     }
 
