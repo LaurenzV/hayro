@@ -12,7 +12,10 @@ pub(crate) fn decode(
     image_params: &ImageDecodeParams,
 ) -> Option<Vec<u8>> {
     let reader = Cursor::new(data);
-    let mut decoder = zune_jpeg::JpegDecoder::new(reader);
+    let options = DecoderOptions::default()
+        .set_max_width(u16::MAX as usize)
+        .set_max_height(u16::MAX as usize);
+    let mut decoder = zune_jpeg::JpegDecoder::new_with_options(reader, options);
     decoder.decode_headers().ok()?;
 
     let jpeg_data = extract_jpeg_data(data)?;
@@ -52,7 +55,7 @@ pub(crate) fn decode(
     decoder.set_options(DecoderOptions::default().jpeg_set_out_colorspace(out_colorspace));
     let mut decoded = decoder.decode().ok().or_else(|| {
         let reader = Cursor::new(data);
-        let mut decoder = zune_jpeg::JpegDecoder::new(reader);
+        let mut decoder = zune_jpeg::JpegDecoder::new_with_options(reader, options);
         decoder.decode_headers().ok()?;
         // It's possible that the APP14 marker is set, so that zune_jpeg will set the input colorspace
         // to a different one. So try decoding again with the different color space. This is probably
