@@ -162,7 +162,7 @@ impl<'a> Context<'a> {
     pub(crate) fn restore_state(&mut self, device: &mut impl Device<'a>) {
         let Some(target_clips) = self
             .states
-            .get(self.states.len() - 2)
+            .get(self.states.len().saturating_sub(2))
             .map(|s| s.clips.len())
         else {
             warn!("underflowed graphics state");
@@ -173,7 +173,10 @@ impl<'a> Context<'a> {
             self.pop_clip_path(device);
         }
 
-        self.states.pop();
+        // The first state should never be popped.
+        if self.states.len() > 1 {
+            self.states.pop();
+        }
     }
 
     pub(crate) fn path(&self) -> &BezPath {
