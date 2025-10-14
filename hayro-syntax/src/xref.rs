@@ -780,7 +780,7 @@ struct ObjectStream<'a> {
 }
 
 impl<'a> ObjectStream<'a> {
-    fn new(inner: Stream<'a>, data: &'a [u8], ctx: &ReaderContext<'a>) -> Option<Self> {
+    fn new(inner: Stream<'_>, data: &'a [u8], ctx: &ReaderContext<'a>) -> Option<Self> {
         let num_objects = inner.dict().get::<usize>(N)?;
         let first_offset = inner.dict().get::<usize>(FIRST)?;
 

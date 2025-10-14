@@ -17,17 +17,28 @@ use crate::object::stream::{DecodeFailure, FilterResult, ImageDecodeParams};
 use log::warn;
 use std::ops::Deref;
 
+/// A data filter.
 #[derive(Debug, Copy, Clone)]
-pub(crate) enum Filter {
+pub enum Filter {
+    /// ASCII hexadecimal encoding.
     AsciiHexDecode,
+    /// ASCII base-85 encoding.
     Ascii85Decode,
+    /// Lempel-Ziv-Welch (LZW) compression.
     LzwDecode,
+    /// DEFLATE compression (zlib/gzip).
     FlateDecode,
+    /// Run-length encoding compression.
     RunLengthDecode,
+    /// CCITT Group 3 or Group 4 fax compression.
     CcittFaxDecode,
+    /// JBIG2 compression for bi-level images.
     Jbig2Decode,
+    /// JPEG (DCT) compression.
     DctDecode,
+    /// JPEG 2000 compression.
     JpxDecode,
+    /// Encryption filter.
     Crypt,
 }
 

@@ -11,14 +11,23 @@ use crate::object::{Object, ObjectLike};
 use crate::reader::{Readable, Reader, ReaderContext, Skippable};
 use crate::util::OptionLog;
 use log::{info, warn};
+use smallvec::SmallVec;
 use std::borrow::Cow;
 use std::fmt::{Debug, Formatter};
 
 /// A stream of arbitrary data.
-#[derive(Clone, PartialEq)]
+#[derive(Clone)]
 pub struct Stream<'a> {
     dict: Dict<'a>,
+    filters: SmallVec<[Filter; 2]>,
+    filter_params: SmallVec<[Dict<'a>; 2]>,
     data: &'a [u8],
+}
+
+impl PartialEq for Stream<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.dict == other.dict && self.data == other.data
+    }
 }
 
 /// Additional parameters for decoding images.
@@ -33,6 +42,51 @@ pub struct ImageDecodeParams {
 }
 
 impl<'a> Stream<'a> {
+    pub(crate) fn new(data: &'a [u8], dict: Dict<'a>) -> Self {
+        let mut collected_filters = SmallVec::new();
+        let mut collected_params = SmallVec::new();
+
+        if let Some(filter) = dict
+            .get::<Name>(F)
+            .or_else(|| dict.get::<Name>(FILTER))
+            .and_then(|n| Filter::from_name(n))
+        {
+            let params = dict
+                .get::<Dict>(DP)
+                .or_else(|| dict.get::<Dict>(DECODE_PARMS))
+                .unwrap_or_default();
+
+            collected_filters.push(filter);
+            collected_params.push(params);
+        } else if let Some(filters) = dict.get::<Array>(F).or_else(|| dict.get::<Array>(FILTER)) {
+            let filters = filters.iter::<Name>().map(|n| Filter::from_name(n));
+            let mut params = dict
+                .get::<Array>(DP)
+                .or_else(|| dict.get::<Array>(DECODE_PARMS))
+                .map(|a| a.iter::<Object>());
+
+            for filter in filters {
+                let params = params
+                    .as_mut()
+                    .and_then(|p| p.next())
+                    .and_then(|p| p.into_dict())
+                    .unwrap_or_default();
+
+                if let Some(filter) = filter {
+                    collected_filters.push(filter);
+                    collected_params.push(params);
+                }
+            }
+        }
+
+        Self {
+            dict,
+            filters: collected_filters,
+            filter_params: collected_params,
+            data,
+        }
+    }
+
     /// Return the raw, decrypted data of the stream.
     ///
     /// Stream filters will not be applied.
@@ -71,6 +125,11 @@ impl<'a> Stream<'a> {
         self.dict.obj_id().unwrap()
     }
 
+    /// Return the filters that are applied to the stream.
+    pub fn filters(&self) -> &[Filter] {
+        &self.filters
+    }
+
     /// Return the decoded data of the stream.
     ///
     /// Note that the result of this method will not be cached, so calling it multiple
@@ -88,62 +147,21 @@ impl<'a> Stream<'a> {
     ) -> Result<FilterResult, DecodeFailure> {
         let data = self.raw_data();
 
-        if let Some(filter) = self
-            .dict
-            .get::<Name>(F)
-            .or_else(|| self.dict.get::<Name>(FILTER))
-            .and_then(|n| Filter::from_name(n))
-        {
-            let params = self
-                .dict
-                .get::<Dict>(DP)
-                .or_else(|| self.dict.get::<Dict>(DECODE_PARMS));
+        let mut current: Option<FilterResult> = None;
 
-            filter.apply(&data, params.clone().unwrap_or_default(), image_params)
-        } else if let Some(filters) = self
-            .dict
-            .get::<Array>(F)
-            .or_else(|| self.dict.get::<Array>(FILTER))
-        {
-            let filters = filters
-                .iter::<Name>()
-                .map(|n| Filter::from_name(n))
-                .collect::<Option<Vec<_>>>()
-                .ok_or(DecodeFailure::Unknown)?;
-            let params: Vec<_> = self
-                .dict
-                .get::<Array>(DP)
-                .or_else(|| self.dict.get::<Array>(DECODE_PARMS))
-                .map(|a| a.iter::<Object>().collect())
-                .unwrap_or_default();
-
-            let mut current: Option<FilterResult> = None;
-
-            for (i, filter) in filters.iter().enumerate() {
-                let params = params.get(i).and_then(|p| p.clone().cast::<Dict>());
-
-                let new = filter.apply(
-                    current.as_ref().map(|c| c.data.as_ref()).unwrap_or(&data),
-                    params.clone().unwrap_or_default(),
-                    image_params,
-                )?;
-                current = Some(new);
-            }
-
-            Ok(current.unwrap_or(FilterResult {
-                data: data.to_vec(),
-                image_data: None,
-            }))
-        } else {
-            Ok(FilterResult {
-                data: data.to_vec(),
-                image_data: None,
-            })
+        for (filter, params) in self.filters.iter().zip(self.filter_params.iter()) {
+            let new = filter.apply(
+                current.as_ref().map(|c| c.data.as_ref()).unwrap_or(&data),
+                params.clone(),
+                image_params,
+            )?;
+            current = Some(new);
         }
-    }
 
-    pub(crate) fn from_raw(data: &'a [u8], dict: Dict<'a>) -> Self {
-        Self { dict, data }
+        Ok(current.unwrap_or(FilterResult {
+            data: data.to_vec(),
+            image_data: None,
+        }))
     }
 }
 
@@ -249,10 +267,7 @@ fn parse_proper<'a>(r: &mut Reader<'a>, dict: &Dict<'a>) -> Option<Stream<'a>> {
     r.skip_white_spaces();
     r.forward_tag(b"endstream")?;
 
-    Some(Stream {
-        data,
-        dict: dict.clone(),
-    })
+    Some(Stream::new(data, dict.clone()))
 }
 
 fn parse_fallback<'a>(r: &mut Reader<'a>, dict: &Dict<'a>) -> Option<Stream<'a>> {
@@ -281,10 +296,7 @@ fn parse_fallback<'a>(r: &mut Reader<'a>, dict: &Dict<'a>) -> Option<Stream<'a>>
                 continue;
             }
 
-            let stream = Stream {
-                data,
-                dict: dict.clone(),
-            };
+            let stream = Stream::new(data, dict.clone());
 
             // Try decoding the stream to see if it is valid.
             if stream.decoded().is_ok() {

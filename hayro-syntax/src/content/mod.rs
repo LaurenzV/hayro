@@ -161,7 +161,7 @@ impl<'a> Iterator for UntypedIter<'a> {
                             let end_offset = self.reader.offset() - start_offset;
                             let image_data = &stream_data[..end_offset];
 
-                            let stream = Stream::from_raw(image_data, dict.clone());
+                            let stream = Stream::new(image_data, dict.clone());
 
                             // Note that there is a possibility that the encoded stream data
                             // contains the "EI" operator as part of the data, in which case we

@@ -442,12 +442,12 @@ impl Renderer {
         }
     }
 
-    fn fill_glyph(
+    fn fill_glyph<'a>(
         &mut self,
-        glyph: &Glyph<'_>,
+        glyph: &Glyph<'a>,
         transform: Affine,
         glyph_transform: Affine,
-        paint: &Paint,
+        paint: &Paint<'a>,
     ) {
         match glyph {
             Glyph::Outline(o) => {
@@ -479,12 +479,12 @@ impl Renderer {
         }
     }
 
-    fn stroke_glyph(
+    fn stroke_glyph<'a>(
         &mut self,
-        glyph: &Glyph<'_>,
+        glyph: &Glyph<'a>,
         transform: Affine,
         glyph_transform: Affine,
-        paint: &Paint,
+        paint: &Paint<'a>,
         stroke_props: &StrokeProps,
     ) {
         match glyph {
@@ -693,10 +693,10 @@ impl<'a> Device<'a> for Renderer {
 
     fn draw_glyph(
         &mut self,
-        glyph: &Glyph<'_>,
+        glyph: &Glyph<'a>,
         transform: Affine,
         glyph_transform: Affine,
-        paint: &Paint<'_>,
+        paint: &Paint<'a>,
         draw_mode: &GlyphDrawMode,
     ) {
         match draw_mode {
