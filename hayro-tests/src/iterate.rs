@@ -4,6 +4,7 @@ use rayon::prelude::*;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::atomic::AtomicU32;
 use std::sync::{Arc, Mutex};
 use walkdir::WalkDir;
 
@@ -60,6 +61,8 @@ fn main() {
 
     let entries = Mutex::new(vec![]);
 
+    let count = AtomicU32::new(0);
+
     pdf_paths.par_iter().for_each(|path| {
         let data = Arc::new(fs::read(path).unwrap());
         let name = path.file_stem().unwrap().to_str().unwrap().to_string();
@@ -69,7 +72,21 @@ fn main() {
         }
 
         match Pdf::new(data.clone()) {
-            Ok(_) => {}
+            Ok(pdf) => {
+                for obj in pdf.objects() {
+                    if let Some(stream) = obj.into_stream() {
+                        let s = stream.decoded();
+
+                        if s.is_err() {
+                            println!(
+                                "Failed to decode with filters {:?}: {:?}",
+                                stream.filters(),
+                                name
+                            );
+                        }
+                    }
+                }
+            }
             Err(e) => {
                 let finder = Finder::new("html");
                 let reason = if finder.find(data.as_slice()).is_some() {
@@ -77,15 +94,14 @@ fn main() {
                 } else {
                     format!("{:?}", e)
                 };
+                println!("{} - {}", name, reason);
                 entries.lock().unwrap().push((name, reason));
             }
         }
+
+        let count = count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        if count % 2000 == 0 {
+            println!("Processed {} PDFs", count);
+        }
     });
-
-    let mut inner = Mutex::into_inner(entries).unwrap();
-    inner.sort_by(|(a, _), (b, _)| a.cmp(b));
-
-    for entry in inner {
-        println!("{} - {}", entry.0, entry.1);
-    }
 }
