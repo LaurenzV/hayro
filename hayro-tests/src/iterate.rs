@@ -1,12 +1,11 @@
 use hayro::Pdf;
-use hayro_syntax::{DecryptionError, Filter, LoadPdfError};
 use memchr::memmem::Finder;
 use rayon::prelude::*;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::sync::atomic::AtomicU32;
-use std::sync::{Arc, Mutex};
 use walkdir::WalkDir;
 
 #[rustfmt::skip]
@@ -96,7 +95,7 @@ fn main() {
         }
 
         let count = count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        if count % 2000 == 0 {
+        if count.is_multiple_of(2000) {
             println!("Processed {} PDFs", count);
         }
     });
