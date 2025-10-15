@@ -44,7 +44,7 @@ pub(crate) fn root_xref(data: PdfData) -> Result<XRef, XRefError> {
 /// Try to manually parse the PDF to build an xref table and trailer dictionary.
 pub(crate) fn fallback(data: PdfData) -> Option<XRef> {
     warn!("xref table was invalid, trying to manually build xref table");
-    let (xref_map, trailer_dict) = fallback_xref_map(data.as_ref().as_ref());
+    let (xref_map, trailer_dict) = fallback_xref_map(&data);
 
     if let Some(trailer_dict_data) = trailer_dict {
         warn!("rebuild xref table with {} entries", xref_map.len());
@@ -57,13 +57,20 @@ pub(crate) fn fallback(data: PdfData) -> Option<XRef> {
     }
 }
 
-fn fallback_xref_map(data: &[u8]) -> (XrefMap, Option<&[u8]>) {
+fn fallback_xref_map(data: &PdfData) -> (XrefMap, Option<&[u8]>) {
+    fallback_xref_map_inner(data, ReaderContext::dummy(), true)
+}
+
+fn fallback_xref_map_inner<'a>(
+    data: &'a PdfData,
+    mut dummy_ctx: ReaderContext<'a>,
+    recurse: bool,
+) -> (XrefMap, Option<&'a [u8]>) {
     let mut xref_map = FxHashMap::default();
     let mut trailer_dicts = vec![];
 
-    let mut r = Reader::new(data);
+    let mut r = Reader::new(data.as_ref().as_ref());
 
-    let mut dummy_ctx = ReaderContext::dummy();
     let mut last_obj_num = None;
 
     loop {
@@ -118,7 +125,7 @@ fn fallback_xref_map(data: &[u8]) -> (XrefMap, Option<&[u8]>) {
             match root_id {
                 MaybeRef::Ref(r) => {
                     if let Some(EntryType::Normal(offset)) = xref_map.get(&r.into()) {
-                        let mut reader = Reader::new(&data[*offset..]);
+                        let mut reader = Reader::new(&data.as_ref().as_ref()[*offset..]);
 
                         if let Some(obj) =
                             reader.read_with_context::<IndirectObject<Dict>>(&dummy_ctx)
@@ -134,6 +141,27 @@ fn fallback_xref_map(data: &[u8]) -> (XrefMap, Option<&[u8]>) {
                     }
                 }
             }
+        }
+    }
+
+    let has_encryption = trailer_dict
+        .as_ref()
+        .is_some_and(|t| t.contains_key(ENCRYPT));
+
+    if has_encryption && recurse {
+        // The problem is that in this case, we have used a dummy reader context which does not have
+        // a decryptor. Therefore, we were unable to decrypt any of the object streams and missed
+        // all objects that are inside of such a stream. Therefore, we need to redo the process
+        // using a `ReaderContext` that does have the ability to decrypt.
+        if let Ok(xref) = XRef::new(
+            data.clone(),
+            xref_map.clone(),
+            trailer_dict.as_ref().map(|d| d.data()).unwrap(),
+            true,
+        ) {
+            let ctx = ReaderContext::new(&xref, false);
+            let (patched_map, _) = fallback_xref_map_inner(data, ctx, false);
+            xref_map = patched_map;
         }
     }
 
@@ -171,23 +199,7 @@ impl XRef {
             .read_with_context::<Dict>(&ReaderContext::new(&xref, false))
             .ok_or(XRefError::Unknown)?;
 
-        let decryptor = if let Some(encryption_dict) = trailer_dict.get::<Dict>(ENCRYPT) {
-            let id = if let Some(id) = trailer_dict
-                .get::<Array>(ID)
-                .and_then(|a| a.flex_iter().next::<object::String>())
-            {
-                id.get().to_vec()
-            } else if encryption_dict.get::<u8>(R).is_none_or(|r| r <= 4) {
-                // ID is not needed for rev 5 and 6.
-                return Err(XRefError::Encryption(DecryptionError::MissingIDEntry));
-            } else {
-                vec![]
-            };
-
-            get(&encryption_dict, &id).map_err(XRefError::Encryption)?
-        } else {
-            Decryptor::None
-        };
+        let decryptor = get_decryptor(&trailer_dict)?;
 
         let root_ref = trailer_dict.get_ref(ROOT).ok_or(XRefError::Unknown)?;
         let root = trailer_dict.get::<Dict>(ROOT).ok_or(XRefError::Unknown)?;
@@ -285,7 +297,7 @@ impl XRef {
         let mut locked = r.map.try_write().unwrap();
         assert!(!locked.repaired);
 
-        let (xref_map, _) = fallback_xref_map(r.data.get());
+        let (xref_map, _) = fallback_xref_map(&r.data.get());
         locked.xref_map = xref_map;
         locked.repaired = true;
     }
@@ -343,7 +355,7 @@ impl XRef {
 
         let locked = repr.map.try_read().unwrap();
 
-        let mut r = Reader::new(repr.data.get());
+        let mut r = Reader::new(repr.data.get().as_ref().as_ref());
 
         let entry = *locked.xref_map.get(&id).or({
             // An indirect reference to an undefined object shall not be considered an error by a PDF processor; it
@@ -784,6 +796,26 @@ fn read_xref_table_trailer<'a>(
     reader.skip_white_spaces();
 
     reader.read_with_context::<Dict>(ctx)
+}
+
+fn get_decryptor(trailer_dict: &Dict) -> Result<Decryptor, XRefError> {
+    if let Some(encryption_dict) = trailer_dict.get::<Dict>(ENCRYPT) {
+        let id = if let Some(id) = trailer_dict
+            .get::<Array>(ID)
+            .and_then(|a| a.flex_iter().next::<object::String>())
+        {
+            id.get().to_vec()
+        } else if encryption_dict.get::<u8>(R).is_none_or(|r| r <= 4) {
+            // ID is not needed for rev 5 and 6.
+            return Err(XRefError::Encryption(DecryptionError::MissingIDEntry));
+        } else {
+            vec![]
+        };
+
+        get(&encryption_dict, &id).map_err(XRefError::Encryption)
+    } else {
+        Ok(Decryptor::None)
+    }
 }
 
 struct ObjectStream<'a> {

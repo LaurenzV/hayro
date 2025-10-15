@@ -42,8 +42,8 @@ impl Data {
     }
 
     /// Get access to the original data of the PDF.
-    pub(crate) fn get(&self) -> &[u8] {
-        self.data.as_ref().as_ref()
+    pub(crate) fn get(&self) -> &PdfData {
+        &self.data
     }
 
     /// Get access to the data of a decoded object stream.
