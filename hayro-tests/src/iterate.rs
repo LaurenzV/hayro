@@ -1,5 +1,5 @@
 use hayro::Pdf;
-use hayro_syntax::Filter;
+use hayro_syntax::{DecryptionError, Filter, LoadPdfError};
 use memchr::memmem::Finder;
 use rayon::prelude::*;
 use std::env;
@@ -12,13 +12,15 @@ use walkdir::WalkDir;
 #[rustfmt::skip]
 static IGNORE_LIST: &[&str] = &[
     // Password-protected
-    "0000300", "0004569", "0006766", "0007159", "0008404", "0010697", "0015407",
+    "0000300", "0004569", "0006766", "0007159", "0008404", "0010697", "0015407", "0021311", 
+    "0024617", "0023496", "0025709", "0023957", "0032605", "0017669", "0030672", "0018317", 
+    "0029028", "0029047", "0031090", "0029063", "0023040",
     
     // Broken but works in other viewers
-    "0010055", "0012156",
+    "0010055", "0012156", "0026666",
     
     // Broken PDF, maybe fixable
-    "0000399", "0003304", "0016072",
+    "0000399", "0003304", "0016072", "0017877", "0027069", "0027591", 
     
     // HTML
     "0000819", "0000920", "0001589", "0002064", "0002187", "0002244", "0002372", "0002554",
@@ -26,7 +28,14 @@ static IGNORE_LIST: &[&str] = &[
     "0004997", "0006169", "0006207", "0006339", "0006844", "0008443", "0008674", "0008978",
     "0009309", "0009464", "0009706", "0010117", "0010216", "0010902", "0011171", "0011398", 
     "0012117", "0012730", "0013178", "0013425", "0013587", "0013721", "0014006", "0014380", 
-    "0015073", "0015740", "0016112", "0016335", "0016620",
+    "0015073", "0015740", "0016112", "0016335", "0016620", "0027676", "0027711", "0027958", 
+    "0030263", "0028017", "0026590", "0022312", "0026641", "0029294", "0026660", "0018066", 
+    "0026686", "0028171", "0026831", "0030557", "0021599", "0022634", "0018346", "0028367", 
+    "0029696", "0018417", "0021747", "0021857", "0022077", "0030922", "0031948", "0027492", 
+    "0024274", "0019413", "0032055", "0019706", "0032086", "0032096", "0019762", "0019782", 
+    "0031403", "0032231", "0019637", "0020498", "0032430", "0021142", "0032755", "0031769", 
+    "0021090", "0020881", "0032878", "0025439", "0033538", "0029331",
+    
     // Invalid PDFs
     "0002229", "0002883", "0002897", "0003147", "0004099", "0004791", "0004853", "0005482", 
     "0005637", "0006036", "0006262", "0007559", "0009290", "0009944", "0010114", "0010472",
@@ -60,8 +69,6 @@ fn main() {
 
     println!("Found {} PDF files", pdf_paths.len());
 
-    let entries = Mutex::new(vec![]);
-
     let count = AtomicU32::new(0);
 
     pdf_paths.par_iter().for_each(|path| {
@@ -73,33 +80,18 @@ fn main() {
         }
 
         match Pdf::new(data.clone()) {
-            Ok(pdf) => {
-                for obj in pdf.objects() {
-                    if let Some(stream) = obj.into_stream() {
-                        if !stream.filters().contains(&Filter::DctDecode) {
-                            continue;
-                        }
-                        let s = stream.decoded();
-
-                        if s.is_err() {
-                            println!(
-                                "Failed to decode with filters {:?}: {:?}",
-                                stream.filters(),
-                                name
-                            );
-                        }
-                    }
-                }
-            }
+            Ok(_) => {}
             Err(e) => {
-                let finder = Finder::new("html");
-                let reason = if finder.find(data.as_slice()).is_some() {
+                let html_finder = Finder::new("html");
+                let script_finder = Finder::new("<script");
+                let reason = if html_finder.find(data.as_slice()).is_some()
+                    || script_finder.find(data.as_slice()).is_some()
+                {
                     "html".to_string()
                 } else {
                     format!("{:?}", e)
                 };
                 println!("{} - {}", name, reason);
-                entries.lock().unwrap().push((name, reason));
             }
         }
 
