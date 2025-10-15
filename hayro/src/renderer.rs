@@ -143,8 +143,14 @@ impl Renderer {
             rgba_data
         } else {
             // Resize the image, either doing down- or upsampling.
-            let new_width = (rgb_width as f32 * x_scale).ceil().max(1.0) as u32;
-            let new_height = (rgb_height as f32 * y_scale).ceil().max(1.0) as u32;
+            let new_width = (rgb_width as f32 * x_scale)
+                .ceil()
+                .max(1.0)
+                .min((u16::MAX / 2) as f32) as u32;
+            let new_height = (rgb_height as f32 * y_scale)
+                .ceil()
+                .max(1.0)
+                .min((u16::MAX / 2) as f32) as u32;
 
             // For bitmap glyphs, quality is particularly important, so use `High` here.
             if self.in_type3_glyph {
