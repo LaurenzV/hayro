@@ -41,15 +41,20 @@ impl Renderer {
         }
     }
 
-    fn set_stroke_properties(&mut self, stroke_props: &StrokeProps) {
-        // Best-effort attempt to ensure a line width of at least 1.
+    fn set_stroke_properties(&mut self, stroke_props: &StrokeProps, is_text: bool) {
+        let threshold = if is_text { 0.25 } else { 1.0 };
+
+        // Best-effort attempt to ensure a line width of at least 1.0, as required by the PDF
+        // specification. If we are stroking text, we reduce the threshold as it will otherwise
+        // lead to very bold-looking text at low resolutions.
         let min_factor = min_factor(self.ctx.transform());
         let mut line_width = stroke_props.line_width.max(0.01);
         let transformed_width = line_width * min_factor;
 
         // Only enforce line width if not inside of pattern.
-        if transformed_width < 1.0 && !self.inside_pattern {
+        if transformed_width < threshold && !self.inside_pattern {
             line_width /= transformed_width;
+            line_width *= threshold;
         }
 
         let stroke = kurbo::Stroke {
@@ -414,9 +419,10 @@ impl Renderer {
         transform: Affine,
         paint: &Paint,
         stroke_props: &StrokeProps,
+        is_text: bool,
     ) {
         self.ctx.set_transform(transform);
-        self.set_stroke_properties(stroke_props);
+        self.set_stroke_properties(stroke_props, is_text);
 
         let clip_path = self.set_paint(paint, path, true);
         if let Some(clip_path) = clip_path.as_ref() {
@@ -509,6 +515,7 @@ impl Renderer {
                     transform,
                     paint,
                     stroke_props,
+                    true,
                 );
             }
             Glyph::Type3(s) => {
@@ -692,7 +699,7 @@ impl<'a> Device<'a> for Renderer {
                 Self::fill_path(self, path, transform, paint, *f);
             }
             PathDrawMode::Stroke(s) => {
-                Self::stroke_path(self, path, transform, paint, s);
+                Self::stroke_path(self, path, transform, paint, s, false);
             }
         }
     }
