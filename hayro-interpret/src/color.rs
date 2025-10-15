@@ -311,7 +311,7 @@ impl ColorSpace {
             ColorSpaceType::Indexed(_) => 1,
             ColorSpaceType::Separation(_) => 1,
             ColorSpaceType::Pattern(p) => p.num_components(),
-            ColorSpaceType::DeviceN(d) => d.num_components as u8,
+            ColorSpaceType::DeviceN(d) => d.num_components,
         }
     }
 
