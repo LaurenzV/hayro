@@ -297,7 +297,7 @@ impl XRef {
         let mut locked = r.map.try_write().unwrap();
         assert!(!locked.repaired);
 
-        let (xref_map, _) = fallback_xref_map(&r.data.get());
+        let (xref_map, _) = fallback_xref_map(r.data.get());
         locked.xref_map = xref_map;
         locked.repaired = true;
     }
