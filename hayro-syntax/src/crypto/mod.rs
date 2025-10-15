@@ -31,7 +31,7 @@ const PASSWORD_PADDING: [u8; 32] = [
 const PASSWORD: &[u8; 0] = b"";
 
 /// An error that occurred during decryption.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum DecryptionError {
     /// The ID entry is missing in the PDF.
     MissingIDEntry,

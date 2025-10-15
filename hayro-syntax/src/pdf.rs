@@ -19,7 +19,7 @@ pub struct Pdf {
 }
 
 /// An error that occurred while loading a PDF file.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum LoadPdfError {
     /// An error occurred while processing an encrypted document.
     Decryption(DecryptionError),

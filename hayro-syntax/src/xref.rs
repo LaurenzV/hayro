@@ -7,7 +7,8 @@ use crate::object::Name;
 use crate::object::ObjectIdentifier;
 use crate::object::Stream;
 use crate::object::dict::keys::{
-    ENCRYPT, FIRST, ID, INDEX, N, OCPROPERTIES, PAGES, PREV, ROOT, SIZE, TYPE, VERSION, W, XREF_STM,
+    ENCRYPT, FIRST, ID, INDEX, N, OCPROPERTIES, PAGES, PREV, R, ROOT, SIZE, TYPE, VERSION, W,
+    XREF_STM,
 };
 use crate::object::indirect::IndirectObject;
 use crate::object::{Array, MaybeRef};
@@ -171,14 +172,21 @@ impl XRef {
             .ok_or(XRefError::Unknown)?;
 
         let decryptor = if let Some(encryption_dict) = trailer_dict.get::<Dict>(ENCRYPT) {
-            let Some(id) = trailer_dict
+            let id = if let Some(id) = trailer_dict
                 .get::<Array>(ID)
                 .and_then(|a| a.flex_iter().next::<object::String>())
-            else {
-                return Err(XRefError::Encryption(DecryptionError::MissingIDEntry));
+            {
+                id.get().to_vec()
+            } else {
+                if encryption_dict.get::<u8>(R).is_none_or(|r| r <= 4) {
+                    // ID is not needed for rev 5 and 6.
+                    return Err(XRefError::Encryption(DecryptionError::MissingIDEntry));
+                } else {
+                    vec![]
+                }
             };
 
-            get(&encryption_dict, id.get().as_ref()).map_err(XRefError::Encryption)?
+            get(&encryption_dict, &id).map_err(XRefError::Encryption)?
         } else {
             Decryptor::None
         };
