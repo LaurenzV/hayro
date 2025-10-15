@@ -270,7 +270,7 @@ impl ColorSpace {
             ],
             ColorSpaceType::Indexed(_) => smallvec![(0.0, 2.0f32.powf(n) - 1.0)],
             ColorSpaceType::Separation(_) => smallvec![(0.0, 1.0)],
-            ColorSpaceType::DeviceN(d) => smallvec![(0.0, 1.0); d.num_components],
+            ColorSpaceType::DeviceN(d) => smallvec![(0.0, 1.0); d.num_components as usize],
             // Not a valid image color space.
             ColorSpaceType::Pattern(_) => smallvec![(0.0, 1.0)],
         }
@@ -294,7 +294,7 @@ impl ColorSpace {
             ColorSpaceType::Indexed(_) => smallvec![0.0],
             ColorSpaceType::Separation(_) => smallvec![1.0],
             ColorSpaceType::Pattern(c) => c.initial_color(),
-            ColorSpaceType::DeviceN(d) => smallvec![1.0; d.num_components],
+            ColorSpaceType::DeviceN(d) => smallvec![1.0; d.num_components as usize],
         }
     }
 
@@ -803,7 +803,7 @@ impl ToRgb for Separation {
 #[derive(Debug, Clone)]
 pub(crate) struct DeviceN {
     alternate_space: ColorSpace,
-    num_components: usize,
+    num_components: u8,
     tint_transform: Function,
 }
 
@@ -813,9 +813,13 @@ impl DeviceN {
         // Skip `/DeviceN`
         let _ = iter.next::<Name>()?;
         // Skip `Name`.
-        let num_components = iter.next::<Array>()?.iter::<Name>().count();
+        let num_components = u8::try_from(iter.next::<Array>()?.iter::<Name>().count()).ok()?;
         let alternate_space = ColorSpace::new(iter.next::<Object>()?, cache)?;
         let tint_transform = Function::new(&iter.next::<Object>()?)?;
+
+        if num_components == 0 {
+            return None;
+        }
 
         Some(Self {
             alternate_space,
@@ -828,7 +832,7 @@ impl DeviceN {
 impl ToRgb for DeviceN {
     fn convert_f32(&self, input: &[f32], output: &mut [u8], _: bool) -> Option<()> {
         let evaluated = input
-            .chunks_exact(self.num_components)
+            .chunks_exact(self.num_components as usize)
             .flat_map(|n| {
                 self.tint_transform
                     .eval(n.to_smallvec())
