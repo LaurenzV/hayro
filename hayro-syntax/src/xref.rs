@@ -177,13 +177,11 @@ impl XRef {
                 .and_then(|a| a.flex_iter().next::<object::String>())
             {
                 id.get().to_vec()
+            } else if encryption_dict.get::<u8>(R).is_none_or(|r| r <= 4) {
+                // ID is not needed for rev 5 and 6.
+                return Err(XRefError::Encryption(DecryptionError::MissingIDEntry));
             } else {
-                if encryption_dict.get::<u8>(R).is_none_or(|r| r <= 4) {
-                    // ID is not needed for rev 5 and 6.
-                    return Err(XRefError::Encryption(DecryptionError::MissingIDEntry));
-                } else {
-                    vec![]
-                }
+                vec![]
             };
 
             get(&encryption_dict, &id).map_err(XRefError::Encryption)?
