@@ -100,10 +100,11 @@ fn resolve_pages<'a>(
     let kids = pages_dict.get::<Array<'a>>(KIDS)?;
 
     for dict in kids.iter::<Dict>() {
-        match dict.get::<Name>(TYPE)?.deref() {
-            PAGES => resolve_pages(dict, entries, ctx.clone(), resources.clone())?,
-            PAGE => entries.push(Page::new(dict, &ctx, resources.clone())),
-            _ => return None,
+        match dict.get::<Name>(TYPE).as_deref() {
+            Some(PAGES) => resolve_pages(dict, entries, ctx.clone(), resources.clone())?,
+            // Let's be lenient and assume it's a `Page` in case it's `None` or something else
+            // (see corpus test case 0083781).
+            Some(PAGE) | _ => entries.push(Page::new(dict, &ctx, resources.clone())),
         }
     }
 
