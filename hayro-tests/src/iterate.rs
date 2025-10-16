@@ -21,7 +21,7 @@ static IGNORE_LIST: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
         "0060563", "0095373", "0061317", "0097349", "0098054", "0090237", "0093278",
         
         // Works in other PDF viewers
-        "0054044", "0083781", "0092523",
+        "0083781", "0092523",
         
         // Returns invalid encryption, but is just password-protected
         "0090598",

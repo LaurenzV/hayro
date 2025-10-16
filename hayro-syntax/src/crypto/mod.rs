@@ -126,11 +126,11 @@ pub(crate) fn get(dict: &Dict, id: &[u8]) -> Result<Decryptor, DecryptionError> 
         2 => (DecryptorTag::Rc4, None),
         4 => (
             DecryptorTag::Aes128,
-            Some(DecryptorData::from_dict(dict).ok_or(InvalidEncryption)?),
+            Some(DecryptorData::from_dict(dict, length).ok_or(InvalidEncryption)?),
         ),
         5 | 6 => (
             DecryptorTag::Aes256,
-            Some(DecryptorData::from_dict(dict).ok_or(InvalidEncryption)?),
+            Some(DecryptorData::from_dict(dict, length).ok_or(InvalidEncryption)?),
         ),
         _ => {
             return Err(DecryptionError::UnsupportedAlgorithm);
@@ -270,13 +270,13 @@ pub(crate) struct DecryptorData {
 }
 
 impl DecryptorData {
-    fn from_dict(dict: &Dict) -> Option<Self> {
+    fn from_dict(dict: &Dict, default_length: u16) -> Option<Self> {
         let mut mappings = HashMap::new();
 
         if let Some(dict) = dict.get::<Dict>(CF) {
             for key in dict.keys() {
                 if let Some(dict) = dict.get::<Dict>(key.clone())
-                    && let Some(crypt_dict) = CryptDictionary::from_dict(&dict)
+                    && let Some(crypt_dict) = CryptDictionary::from_dict(&dict, default_length)
                 {
                     mappings.insert(key.as_str().to_string(), crypt_dict);
                 }
@@ -300,13 +300,13 @@ struct CryptDictionary {
 }
 
 impl CryptDictionary {
-    fn from_dict(dict: &Dict) -> Option<Self> {
+    fn from_dict(dict: &Dict, default_length: u16) -> Option<Self> {
         let cfm = DecryptorTag::from_name(&dict.get::<Name>(CFM)?)?;
         // The standard security handler expresses the Length entry in bytes (e.g., 32 means a
         // length of 256 bits) and public-key security handlers express it as is (e.g., 256 means a
         // length of 256 bits).
         // Note: We only support the standard security handler.
-        let mut length = dict.get::<u16>(LENGTH)?;
+        let mut length = dict.get::<u16>(LENGTH).unwrap_or(default_length / 8);
 
         // When CFM is AESV2, the Length key shall have the value of 128. When
         // CFM is AESV3, the Length key shall have a value of 256.
