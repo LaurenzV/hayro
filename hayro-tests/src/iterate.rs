@@ -1,5 +1,4 @@
 use hayro::Pdf;
-use hayro_syntax::{DecryptionError, LoadPdfError};
 use memchr::memmem::Finder;
 use rayon::prelude::*;
 use std::collections::HashSet;
