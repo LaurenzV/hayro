@@ -1,4 +1,5 @@
 use hayro::Pdf;
+use hayro_syntax::{DecryptionError, LoadPdfError};
 use memchr::memmem::Finder;
 use rayon::prelude::*;
 use std::collections::HashSet;
@@ -10,16 +11,15 @@ use std::sync::{Arc, LazyLock};
 use walkdir::WalkDir;
 
 #[rustfmt::skip]
-
 static IGNORE_LIST: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
     let list = &[
         // Password-protected
         "0000300", "0004569", "0006766", "0007159", "0008404", "0010697", "0015407", "0021311", 
         "0024617", "0023496", "0025709", "0023957", "0032605", "0017669", "0030672", "0018317", 
-        "0029028", "0029047", "0031090", "0029063", "0023040",
-        
-        // Broken but works in other viewers
-        "0012156", "0026666",
+        "0029028", "0029047", "0031090", "0029063", "0023040", "0044179", "0050583", "0039233", 
+        "0046280", "0040420", "0040495", "0046836", "0041847", "0068926", "0072306", "0064042", 
+        "0076921", "0064846", "0077568", "0057222", "0065390", "0056150", "0074700", "0094987", 
+        "0060563", "0095373", "0061317", "0097349", "0098054", "0090237", "0093278",
         
         // Broken PDF, maybe fixable
         "0000399", "0003304", "0016072", "0017877", "0027069", "0027591", 
@@ -127,7 +127,6 @@ fn main() {
                 {
                     "html".to_string()
                 } else {
-                    return;
                     format!("{:?}", e)
                 };
                 println!("{} - {}", name, reason);
