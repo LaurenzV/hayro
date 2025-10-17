@@ -26,7 +26,7 @@ impl EncodedShadingPattern {
             .eval(pos, self.background_color, &self.color_space)
             .map(|v| {
                 let mut components = v.components();
-                components[3] = components[3] * self.opacity;
+                components[3] *= self.opacity;
 
                 components
             })
