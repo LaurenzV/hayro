@@ -748,7 +748,7 @@ where
                 point: p11,
                 colors: interpolate(Point::new(u1, v1)),
             };
-            
+
             let inflate_point = |p: Point, mid: Point| -> Point {
                 const INFLATION_FACTOR: f64 = 1.025;
                 mid + (p - mid) * INFLATION_FACTOR
@@ -761,12 +761,20 @@ where
                 triangle.p0.point = inflate_point(triangle.p0.point, mid);
                 triangle.p1.point = inflate_point(triangle.p1.point, mid);
                 triangle.p2.point = inflate_point(triangle.p2.point, mid);
-                
+
                 triangle
             };
-            
-            buffer.push(inflate(Triangle::new(v00.clone(), v10.clone(), v01.clone())));
-            buffer.push(inflate(Triangle::new(v10.clone(), v11.clone(), v01.clone())));
+
+            buffer.push(inflate(Triangle::new(
+                v00.clone(),
+                v10.clone(),
+                v01.clone(),
+            )));
+            buffer.push(inflate(Triangle::new(
+                v10.clone(),
+                v11.clone(),
+                v01.clone(),
+            )));
         }
     }
 }
