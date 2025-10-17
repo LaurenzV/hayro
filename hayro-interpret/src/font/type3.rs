@@ -128,11 +128,19 @@ impl<'a> Type3<'a> {
 
             is_shape_glyph
         };
-
-        let resources = Resources::from_parent(
+        
+        let mut resources = Resources::from_parent(
             self.dict.get(RESOURCES).unwrap_or_default(),
             glyph.parent_resources.clone(),
         );
+        
+        // Technically not valid, but also support by Adobe Acrobat. See PDFBOX-5294.
+        if let Some(procs_resources) = program.dict().get::<Dict>(RESOURCES) {
+            resources = Resources::from_parent(
+                procs_resources,
+                resources,
+            )
+        }
 
         if is_shape_glyph {
             let mut device = Type3ShapeGlyphDevice::new(device, paint.clone());
