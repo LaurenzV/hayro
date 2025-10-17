@@ -278,7 +278,7 @@
   ],
   "2436": "https://issues.apache.org/jira/secure/attachment/12675440/h1.pdf",
   "2445": "https://issues.apache.org/jira/secure/attachment/12667462/PDFBOX-2335-203040-p17.pdf",
-  "2452": "https://issues.apache.org/jira/secure/attachment/12676864/test.pdf",
+  "2452": "https://issues.apache.org/jira/se3694cure/attachment/12676864/test.pdf",
   "2448": "https://issues.apache.org/jira/secure/attachment/12676712/115258.pdf",
   "2489": "https://issues.apache.org/jira/secure/attachment/12679981/012397-p67.pdf",
   "2495": {
@@ -291,6 +291,7 @@
     "last_page": 1
   },
   "2555": "https://issues.apache.org/jira/secure/attachment/12854792/PDFBOX-2555-Knockout-text.pdf",
+  "2558": "https://issues.apache.org/jira/secure/attachment/12747195/opp.pdf",
   "2561": "https://issues.apache.org/jira/secure/attachment/12686780/jagpdf_doc_color_spaces.pdf",
   "2585": "https://issues.apache.org/jira/secure/attachment/12689376/PDFBOX-2585-390618.pdf",
   "2598": "https://issues.apache.org/jira/secure/attachment/12691680/PDFBOX-2598-020616-p3.pdf",
@@ -370,6 +371,7 @@
   "3654": "https://issues.apache.org/jira/secure/attachment/12848079/testcase2.pdf",
   "3657": "https://issues.apache.org/jira/secure/attachment/12848289/p39.pdf",
   "3661": "https://issues.apache.org/jira/secure/attachment/12848855/simple_malformed_doc.pdf",
+  "3670": "https://issues.apache.org/jira/secure/attachment/12850268/im.pdf",
   "3676": "https://issues.apache.org/jira/secure/attachment/12851010/PDFBOX-3676.pdf",
   "3678": "https://issues.apache.org/jira/secure/attachment/12851414/BTB0010010004.1-Bit_Jbig2.pdf",
   "3686": "https://issues.apache.org/jira/secure/attachment/12852867/040669-p25.pdf",
@@ -428,8 +430,10 @@
   "4114": "https://issues.apache.org/jira/secure/attachment/12911037/highResPdf.pdf",
   "4110": "https://issues.apache.org/jira/secure/attachment/12910605/flight_receipt.pdf",
   "4200": "https://issues.apache.org/jira/secure/attachment/12919854/invalid.pdf",
+  "4149": "https://issues.apache.org/jira/secure/attachment/12913925/SB_Flyer_SpargelPromo_03-062018.pdf",
   "4201": "https://issues.apache.org/jira/secure/attachment/12919887/testDoc2.pdf",
   "4211": "https://issues.apache.org/jira/secure/attachment/12922467/page_iii_%282%29.pdf",
+  "4218": "https://issues.apache.org/jira/secure/attachment/12922800/image_via_1.3_006.pdf",
   "4228": "https://issues.apache.org/jira/secure/attachment/12924707/example.pdf",
   "4245": "https://issues.apache.org/jira/secure/attachment/12928212/gs-bugzilla690022.pdf",
   "4246": "https://issues.apache.org/jira/secure/attachment/12928186/xerox.pdf",
@@ -454,7 +458,9 @@
     "https://issues.apache.org/jira/secure/attachment/12985587/PDFBOX-4516_TvT.pdf",
     "https://issues.apache.org/jira/secure/attachment/13000419/PDFBOX-4815-dithered-stencil.pdf"
   ],
+  "4518": "https://issues.apache.org/jira/secure/attachment/12966270/Bottom_plate-Model.pdf",
   "4520": "https://issues.apache.org/jira/secure/attachment/12966447/orginalPdf.pdf",
+  "4527": "https://issues.apache.org/jira/secure/attachment/12967164/doc_with_conversion_issue.pdf",
   "4530": "https://issues.apache.org/jira/secure/attachment/12967362/page-3.pdf",
   "4559": {
     "link": "https://issues.apache.org/jira/secure/attachment/12970915/test.pdf",
@@ -489,6 +495,7 @@
   "4858": "https://issues.apache.org/jira/secure/attachment/13004689/20200603155752-null.pdf",
   "4863": "https://issues.apache.org/jira/secure/attachment/13005152/fonts_embedded_as_glyph_anonimized.pdf",
   "4900": "https://issues.apache.org/jira/secure/attachment/13006540/TwoCircles_NS-None.pdf",
+  "4913": "https://issues.apache.org/jira/secure/attachment/13007421/POPPLER-938.pdf",
   "4915": {
     "link": "https://issues.apache.org/jira/secure/attachment/13007675/Black%20Bullet%20-%20Volume%2001%20-%20Those%20Who%20Would%20Be%20Gods%20%5BYen%20Press%5D%5BKobo_Kitzoku%5D.pdf",
     "last_page": 0
@@ -510,6 +517,7 @@
   "5054": "https://issues.apache.org/jira/secure/attachment/13017472/PDFJS-12705-type3.pdf",
   "5079": "https://issues.apache.org/jira/secure/attachment/13018679/PDF2.0imagewithBPC.pdf",
   "5097": "https://issues.apache.org/jira/secure/attachment/13019989/document%283%29.pdf",
+  "5134": "https://issues.apache.org/jira/secure/attachment/13022514/Plan%20zum%20Testen.pdf",
   "5140": "https://issues.apache.org/jira/secure/attachment/13022936/TC_DFKaiShuSB.pdf",
   "5260": "https://issues.apache.org/jira/secure/attachment/13032111/1628753334187.pdf",
   "5275": "https://issues.apache.org/jira/secure/attachment/13033020/PDFBOX-5275-p5.pdf",
@@ -517,6 +525,7 @@
   "5296": "https://issues.apache.org/jira/secure/attachment/13035113/gs-bugzilla690816.pdf",
   "5302": "https://issues.apache.org/jira/secure/attachment/13035191/pdf200029.pdf",
   "5307": "https://issues.apache.org/jira/secure/attachment/13035344/issue_file.pdf",
+  "5310": "https://issues.apache.org/jira/secure/attachment/13035494/PDFJS-3096.pdf",
   "5337": "https://issues.apache.org/jira/secure/attachment/13036969/Stein%2021622%20Edelstahl-Abdeckung.pdf",
   "5386": "https://issues.apache.org/jira/secure/attachment/13040988/cover.pdf",
   "5403": "https://issues.apache.org/jira/secure/attachment/13041734/bad%20rendering.pdf",
@@ -572,10 +581,14 @@
     "link": "https://issues.apache.org/jira/secure/attachment/13073557/jbig2_blank_thumbnail.pdf",
     "last_page": 1
   },
+  "5952": "https://issues.apache.org/jira/secure/attachment/13074624/ijms-25-00052-v2.pdf_12.pdf",
   "5957": "https://issues.apache.org/jira/secure/attachment/13074749/VERAPDF-1335-InlineImage.pdf",
   "5963": "https://issues.apache.org/jira/secure/attachment/13074981/PDFJS-19532-Type3.pdf",
+  "5989": "https://issues.apache.org/jira/secure/attachment/13076037/document-issue-blank-page.pdf",
   "5992": [
     "https://issues.apache.org/jira/secure/attachment/13076193/broken.pdf",
     "https://issues.apache.org/jira/secure/attachment/13076198/EDGE11896203.pdf"
-  ]
+  ],
+  "6008": "https://issues.apache.org/jira/secure/attachment/13076505/72641_585_1_114077_6.pdf",
+  "6024": "https://issues.apache.org/jira/secure/attachment/13077101/DN-A4-20250604-A-06-Nyheter.pdf"
 }
