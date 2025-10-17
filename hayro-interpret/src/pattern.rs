@@ -45,6 +45,7 @@ impl<'a> Pattern<'a> {
             Some(Self::Shading(ShadingPattern::new(
                 &dict,
                 &ctx.object_cache,
+                ctx.get().graphics_state.non_stroke_alpha,
             )?))
         } else if let Some(stream) = object.clone().into_stream() {
             Some(Self::Tiling(Box::new(TilingPattern::new(
@@ -83,10 +84,12 @@ pub struct ShadingPattern {
     pub shading: Arc<Shading>,
     /// A transformation matrix to apply prior to rendering.
     pub matrix: Affine,
+    /// An additional opacity to apply to the shading pattern.
+    pub opacity: f32,
 }
 
 impl ShadingPattern {
-    pub(crate) fn new(dict: &Dict, cache: &Cache) -> Option<Self> {
+    pub(crate) fn new(dict: &Dict, cache: &Cache, opacity: f32) -> Option<Self> {
         let shading = dict.get::<Object>(SHADING).and_then(|o| {
             let (dict, stream) = dict_or_stream(&o)?;
 
@@ -103,6 +106,7 @@ impl ShadingPattern {
 
         Some(Self {
             shading: Arc::new(shading),
+            opacity,
             matrix,
         })
     }

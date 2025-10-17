@@ -15,6 +15,7 @@ pub struct EncodedShadingPattern {
     pub(crate) color_space: ColorSpace,
     pub(crate) background_color: AlphaColor,
     pub(crate) shading_type: EncodedShadingType,
+    pub(crate) opacity: f32,
 }
 
 impl EncodedShadingPattern {
@@ -23,7 +24,12 @@ impl EncodedShadingPattern {
     pub fn sample(&self, pos: Point) -> [f32; 4] {
         self.shading_type
             .eval(pos, self.background_color, &self.color_space)
-            .map(|v| v.components())
+            .map(|v| {
+                let mut components = v.components();
+                components[3] = components[3] * self.opacity;
+
+                components
+            })
             .unwrap_or([0.0, 0.0, 0.0, 0.0])
     }
 }
@@ -123,6 +129,7 @@ impl ShadingPattern {
             background_color,
             shading_type,
             base_transform,
+            opacity: self.opacity,
         }
     }
 }

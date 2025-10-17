@@ -1,3 +1,4 @@
+use crate::FillRule;
 use crate::color::ColorSpace;
 use crate::context::Context;
 use crate::convert::{convert_line_cap, convert_line_join};
@@ -12,7 +13,6 @@ use crate::pattern::{Pattern, ShadingPattern};
 use crate::shading::Shading;
 use crate::util::OptionLog;
 use crate::x_object::{ImageXObject, XObject, draw_image_xobject, draw_xobject};
-use crate::{BlendMode, FillRule};
 use hayro_syntax::content::ops::TypedInstruction;
 use hayro_syntax::object::dict::keys::OC;
 use hayro_syntax::object::{Dict, Object, dict_or_stream};
@@ -543,6 +543,7 @@ pub fn interpret<'a, 'b>(
                         Pattern::Shading(ShadingPattern {
                             shading: Arc::new(s),
                             matrix: Affine::IDENTITY,
+                            opacity: context.get().graphics_state.non_stroke_alpha,
                         })
                     })
                 {
@@ -554,17 +555,10 @@ pub fn interpret<'a, 'b>(
 
                     device.set_soft_mask(st.graphics_state.soft_mask.clone());
                     device.set_blend_mode(st.graphics_state.blend_mode);
-                    device.push_transparency_group(
-                        st.graphics_state.non_stroke_alpha,
-                        None,
-                        BlendMode::default(),
-                    );
 
                     let bbox = context.bbox().to_path(0.1);
                     let inverted_bbox = context.get().ctm.inverse() * bbox;
                     fill_path_impl(context, device, FillRule::NonZero, Some(&inverted_bbox));
-
-                    device.pop_transparency_group();
 
                     context.pop_root_transform();
                     context.restore_state(device);
