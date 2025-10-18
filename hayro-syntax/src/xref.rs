@@ -506,13 +506,13 @@ impl XRefEntry {
     pub(crate) fn read(data: &[u8]) -> Option<XRefEntry> {
         #[inline(always)]
         fn parse_u32(data: &[u8]) -> Option<u32> {
-            let mut accum = 0;
+            let mut accum = 0u32;
 
             for byte in data {
-                accum *= 10;
+                accum = accum.checked_mul(10)?;
 
                 match *byte {
-                    b'0'..=b'9' => accum += (*byte - b'0') as u32,
+                    b'0'..=b'9' => accum = accum.checked_add((*byte - b'0') as u32)?,
                     _ => return None,
                 }
             }
@@ -521,7 +521,7 @@ impl XRefEntry {
         }
 
         let offset = parse_u32(&data[0..10])? as usize;
-        let gen_number = parse_u32(&data[11..16])? as i32;
+        let gen_number = i32::try_from(parse_u32(&data[11..16])?).ok()?;
 
         let used = data[17] == b'n';
 
