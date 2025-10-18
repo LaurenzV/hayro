@@ -27,7 +27,7 @@ resvg = { version = "0.45.1" }
 flate2 = { version = "1", default-features = false, features = ["zlib-rs"] }
 once_cell = { version = "1" }
 phf = { version = "0.13.1" }
-moxcms = { git = "https://github.com/awxkee/moxcms", rev = "8c5301b" }
+moxcms = { git = "https://github.com/awxkee/moxcms", rev = "f7b3d6d" }
 rustc-hash = { version = "2" }
 siphasher = "1"
 skrifa = { version = "0.37.0" }

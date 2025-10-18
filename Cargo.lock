@@ -470,7 +470,7 @@ dependencies = [
  "image 0.25.8",
  "kurbo 0.12.0",
  "log",
- "moxcms 0.7.6",
+ "moxcms 0.7.7",
  "phf",
  "rustc-hash",
  "siphasher",
@@ -747,8 +747,8 @@ dependencies = [
 
 [[package]]
 name = "moxcms"
-version = "0.7.6"
-source = "git+https://github.com/awxkee/moxcms?rev=8c5301b#8c5301b089188233f7e4656cd8ad27e122246d0f"
+version = "0.7.7"
+source = "git+https://github.com/awxkee/moxcms?rev=f7b3d6d#f7b3d6d4de46171593505bd88c81c3cf2f6e360b"
 dependencies = [
  "num-traits",
  "pxfm",
