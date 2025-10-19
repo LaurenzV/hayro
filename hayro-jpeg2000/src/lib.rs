@@ -1,10 +1,9 @@
+use hayro_common::byte::Reader;
 use crate::boxes::{
     COLOUR_SPECIFICATION, FILE_TYPE, IMAGE_HEADER, JP2_HEADER, JP2_SIGNATURE, read_box,
 };
-use crate::reader::Reader;
 
 pub mod boxes;
-pub mod reader;
 
 /// Image metadata extracted from JP2 Header box.
 #[derive(Debug, Clone)]
@@ -81,23 +80,23 @@ impl ImageMetadata {
     }
 }
 
-pub fn read(data: &[u8]) -> Option<ImageMetadata> {
+pub fn read(data: &[u8]) -> Result<ImageMetadata, &'static str> {
     let mut reader = Reader::new(data);
-    let signature_box = read_box(&mut reader)?;
+    let signature_box = read_box(&mut reader).ok_or("failed to read signature box")?;
 
     if signature_box.box_type != JP2_SIGNATURE {
-        return None;
+        return Err("invalid JP2 signature");
     }
 
-    let file_type_box = read_box(&mut reader)?;
+    let file_type_box = read_box(&mut reader).ok_or("failed to read file type box")?;
 
     if file_type_box.box_type != FILE_TYPE {
-        return None;
+        return Err("invalid JP2 file type");
     }
 
     // Read boxes until we find the JP2 Header box
     while !reader.at_end() {
-        let current_box = read_box(&mut reader)?;
+        let current_box = read_box(&mut reader).ok_or("failed to read JP2 box")?;
 
         if current_box.box_type == JP2_HEADER {
             // Parse the JP2 Header box (superbox)
@@ -106,8 +105,6 @@ pub fn read(data: &[u8]) -> Option<ImageMetadata> {
                 width: 0,
                 num_components: 0,
                 bits_per_component: 0,
-                compression_type: 0,
-                colourspace_unknown: 0,
                 has_intellectual_property: 0,
                 colour_method: None,
                 enumerated_colourspace: None,
@@ -118,14 +115,14 @@ pub fn read(data: &[u8]) -> Option<ImageMetadata> {
 
             // Read child boxes within JP2 Header box
             while !jp2h_reader.at_end() {
-                let child_box = read_box(&mut jp2h_reader)?;
+                let child_box = read_box(&mut jp2h_reader).ok_or("failed to read JP2 box")?;
 
                 match child_box.box_type {
                     IMAGE_HEADER => {
-                        metadata.parse_ihdr(child_box.data)?;
+                        metadata.parse_ihdr(child_box.data).ok_or("failed to parse image header")?;
                     }
                     COLOUR_SPECIFICATION => {
-                        metadata.parse_colr(child_box.data)?;
+                        metadata.parse_colr(child_box.data).ok_or("failed to parse colour")?;
                     }
                     _ => {
                         // Ignore other boxes for now
@@ -133,9 +130,9 @@ pub fn read(data: &[u8]) -> Option<ImageMetadata> {
                 }
             }
 
-            return Some(metadata);
+            return Ok(metadata);
         }
     }
 
-    None
+    Err("failed to read image")
 }

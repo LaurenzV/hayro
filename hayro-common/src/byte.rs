@@ -182,4 +182,30 @@ impl<'a> Reader<'a> {
 
         Some(())
     }
+
+    /// Read a u16 integer (in big endian order).
+    #[inline]
+    pub fn read_u16(&mut self) -> Option<u16> {
+        let bytes = self.read_bytes(2)?;
+
+        Some(u16::from_be_bytes([bytes[0], bytes[1]]))
+    }
+
+    /// Read a u32 integer (in big endian order).
+    #[inline]
+    pub fn read_u32(&mut self) -> Option<u32> {
+        let bytes = self.read_bytes(4)?;
+
+        Some(u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
+    }
+
+    /// Read a u64 integer (in big endian order).
+    #[inline]
+    pub fn read_u64(&mut self) -> Option<u64> {
+        let bytes = self.read_bytes(8)?;
+
+        Some(u64::from_be_bytes([
+            bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
+        ]))
+    }
 }

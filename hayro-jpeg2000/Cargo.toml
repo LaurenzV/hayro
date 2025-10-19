@@ -8,3 +8,4 @@ readme.workspace = true
 license.workspace = true
 
 [dependencies]
+hayro-common = { workspace = true }
