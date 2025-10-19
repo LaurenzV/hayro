@@ -509,7 +509,6 @@ dependencies = [
  "flate2",
  "hayro-common",
  "jpeg2k",
- "kurbo 0.12.0",
  "log",
  "md5",
  "rustc-hash",
@@ -542,6 +541,7 @@ version = "0.3.0"
 dependencies = [
  "flate2",
  "hayro-syntax",
+ "kurbo 0.12.0",
  "log",
  "pdf-writer",
 ]

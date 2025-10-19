@@ -6,7 +6,7 @@ use crate::CacheKey;
 use crate::cache::Cache;
 use crate::color::{ColorComponents, ColorSpace};
 use crate::function::{Function, Values, interpolate};
-use crate::util::{Float32Ext, PointExt};
+use crate::util::{Float32Ext, PointExt, RectExt};
 use hayro_common::bit::{BitReader, BitSize};
 use hayro_syntax::object::Array;
 use hayro_syntax::object::Dict;
@@ -264,7 +264,7 @@ impl Shading {
             _ => return None,
         };
 
-        let bbox = dict.get::<Rect>(BBOX);
+        let bbox = dict.get::<Rect>(BBOX).map(|r| r.to_kurbo());
         let background = dict
             .get::<Array>(BACKGROUND)
             .map(|a| a.iter::<f32>().collect::<SmallVec<_>>());

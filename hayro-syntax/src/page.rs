@@ -12,7 +12,6 @@ use crate::object::{Object, ObjectLike};
 use crate::reader::ReaderContext;
 use crate::util::FloatExt;
 use crate::xref::XRef;
-use kurbo::Affine;
 use log::warn;
 use std::ops::Deref;
 use std::sync::OnceLock;
@@ -127,8 +126,8 @@ pub enum Rotation {
 /// A PDF page.
 pub struct Page<'a> {
     inner: Dict<'a>,
-    media_box: kurbo::Rect,
-    crop_box: kurbo::Rect,
+    media_box: Rect,
+    crop_box: Rect,
     rotation: Rotation,
     page_streams: OnceLock<Option<Vec<u8>>>,
     resources: Resources<'a>,
@@ -232,7 +231,9 @@ impl<'a> Page<'a> {
         self.crop_box().intersect(self.media_box())
     }
 
-    fn base_dimensions(&self) -> (f32, f32) {
+    /// Return the base dimensions of the page (same as `intersected_crop_box`, but with special
+    /// handling applied for zero-area pages).
+    pub fn base_dimensions(&self) -> (f32, f32) {
         let crop_box = self.intersected_crop_box();
 
         if (crop_box.width() as f32).is_nearly_zero() || (crop_box.height() as f32).is_nearly_zero()
@@ -244,49 +245,6 @@ impl<'a> Page<'a> {
                 crop_box.height().max(1.0) as f32,
             )
         }
-    }
-
-    /// Return the initial transform that should be applied when rendering. This accounts for a
-    /// number of factors, such as the mismatch between PDF's y-up and most renderers' y-down
-    /// coordinate system, the rotation of the page and the offset of the crop box.
-    pub fn initial_transform(&self, invert_y: bool) -> kurbo::Affine {
-        let crop_box = self.intersected_crop_box();
-        let (_, base_height) = self.base_dimensions();
-        let (width, height) = self.render_dimensions();
-
-        let horizontal_t =
-            Affine::rotate(90.0f64.to_radians()) * Affine::translate((0.0, -width as f64));
-        let flipped_horizontal_t =
-            Affine::translate((0.0, height as f64)) * Affine::rotate(-90.0f64.to_radians());
-
-        let rotation_transform = match self.rotation() {
-            Rotation::None => Affine::IDENTITY,
-            Rotation::Horizontal => {
-                if invert_y {
-                    horizontal_t
-                } else {
-                    flipped_horizontal_t
-                }
-            }
-            Rotation::Flipped => {
-                Affine::scale(-1.0) * Affine::translate((-width as f64, -height as f64))
-            }
-            Rotation::FlippedHorizontal => {
-                if invert_y {
-                    flipped_horizontal_t
-                } else {
-                    horizontal_t
-                }
-            }
-        };
-
-        let inversion_transform = if invert_y {
-            Affine::new([1.0, 0.0, 0.0, -1.0, 0.0, base_height as f64])
-        } else {
-            Affine::IDENTITY
-        };
-
-        rotation_transform * inversion_transform * Affine::translate((-crop_box.x0, -crop_box.y0))
     }
 
     /// Return the with and height of the page that should be assumed when rendering the page.

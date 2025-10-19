@@ -39,6 +39,7 @@ use hayro_interpret::Device;
 use hayro_interpret::FillRule;
 pub use hayro_interpret::font::{FontData, FontQuery, StandardFont};
 use hayro_interpret::hayro_syntax::page::Page;
+use hayro_interpret::util::{PageExt, RectExt};
 use hayro_interpret::{BlendMode, Context};
 use hayro_interpret::{ClipPath, interpret_page};
 pub use hayro_interpret::{InterpreterSettings, Pdf};
@@ -114,7 +115,7 @@ pub fn render(
         .ctx
         .fill_rect(&Rect::new(0.0, 0.0, pix_width as f64, pix_height as f64));
     device.push_clip_path(&ClipPath {
-        path: initial_transform * page.intersected_crop_box().to_path(0.1),
+        path: initial_transform * page.intersected_crop_box().to_kurbo().to_path(0.1),
         fill: FillRule::NonZero,
     });
 

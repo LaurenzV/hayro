@@ -8,12 +8,11 @@ use crate::font::Glyph;
 use crate::interpret::state::State;
 use crate::shading::Shading;
 use crate::soft_mask::SoftMask;
-use crate::util::{Float32Ext, hash128};
+use crate::util::{Float32Ext, RectExt, hash128};
 use crate::{BlendMode, CacheKey, ClipPath, GlyphDrawMode, Image, PathDrawMode};
 use crate::{FillRule, InterpreterSettings, Paint, interpret};
 use hayro_syntax::content::TypedIter;
 use hayro_syntax::object::Dict;
-use hayro_syntax::object::Rect;
 use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::{
     BBOX, EXT_G_STATE, MATRIX, PAINT_TYPE, RESOURCES, SHADING, X_STEP, Y_STEP,
@@ -21,7 +20,7 @@ use hayro_syntax::object::dict::keys::{
 use hayro_syntax::object::{Object, dict_or_stream};
 use hayro_syntax::page::Resources;
 use hayro_syntax::xref::XRef;
-use kurbo::{Affine, BezPath, Shape};
+use kurbo::{Affine, BezPath, Rect, Shape};
 use log::warn;
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
@@ -156,7 +155,7 @@ impl<'a> TilingPattern<'a> {
         let cache_key = stream.cache_key();
         let dict = stream.dict();
 
-        let bbox = dict.get::<Rect>(BBOX)?;
+        let bbox = dict.get::<hayro_syntax::object::Rect>(BBOX)?.to_kurbo();
         let x_step = dict.get::<f32>(X_STEP)?;
         let y_step = dict.get::<f32>(Y_STEP)?;
 
