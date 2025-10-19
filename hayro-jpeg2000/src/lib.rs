@@ -1,9 +1,8 @@
 use hayro_common::byte::Reader;
-use crate::boxes::{
-    COLOUR_SPECIFICATION, FILE_TYPE, IMAGE_HEADER, JP2_HEADER, JP2_SIGNATURE, read_box,
-};
+use crate::boxes::{COLOUR_SPECIFICATION, FILE_TYPE, IMAGE_HEADER, JP2_HEADER, JP2_SIGNATURE, read_box, tag_to_string, CONTIGUOUS_CODESTREAM};
 
 pub mod boxes;
+mod codestream;
 
 /// Image metadata extracted from JP2 Header box.
 #[derive(Debug, Clone)]
@@ -93,6 +92,8 @@ pub fn read(data: &[u8]) -> Result<ImageMetadata, &'static str> {
     if file_type_box.box_type != FILE_TYPE {
         return Err("invalid JP2 file type");
     }
+    
+    let mut metadata = Err("failed to read metadata");
 
     // Read boxes until we find the JP2 Header box
     while !reader.at_end() {
@@ -100,7 +101,7 @@ pub fn read(data: &[u8]) -> Result<ImageMetadata, &'static str> {
 
         if current_box.box_type == JP2_HEADER {
             // Parse the JP2 Header box (superbox)
-            let mut metadata = ImageMetadata {
+            let mut image_metadata = ImageMetadata {
                 height: 0,
                 width: 0,
                 num_components: 0,
@@ -119,20 +120,26 @@ pub fn read(data: &[u8]) -> Result<ImageMetadata, &'static str> {
 
                 match child_box.box_type {
                     IMAGE_HEADER => {
-                        metadata.parse_ihdr(child_box.data).ok_or("failed to parse image header")?;
+                        image_metadata.parse_ihdr(child_box.data).ok_or("failed to parse image header")?;
                     }
                     COLOUR_SPECIFICATION => {
-                        metadata.parse_colr(child_box.data).ok_or("failed to parse colour")?;
+                        image_metadata.parse_colr(child_box.data).ok_or("failed to parse colour")?;
                     }
                     _ => {
+                        eprintln!("ignoring box {}", tag_to_string(child_box.box_type));
                         // Ignore other boxes for now
                     }
                 }
             }
 
-            return Ok(metadata);
+            metadata = Ok(image_metadata);
+        } else if current_box.box_type == CONTIGUOUS_CODESTREAM {
+            codestream::read(current_box.data)?;
+        } else {
+            eprintln!("ignoring outer box {}", tag_to_string(current_box.box_type));
         }
+        
     }
 
-    Err("failed to read image")
+    metadata
 }
