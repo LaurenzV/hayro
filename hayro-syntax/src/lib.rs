@@ -85,7 +85,6 @@ pub(crate) mod pdf;
 pub(crate) mod trivia;
 pub(crate) mod util;
 
-pub mod bit_reader;
 pub mod content;
 mod crypto;
 pub mod object;

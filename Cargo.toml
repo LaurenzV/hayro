@@ -1,6 +1,15 @@
 [workspace]
 resolver = "2"
-members = ["hayro-interpret", "hayro", "hayro-syntax", "hayro-demo", "hayro-tests", "hayro-write", "hayro-svg"]
+members = [
+    "hayro-interpret", 
+    "hayro", 
+    "hayro-syntax", 
+    "hayro-demo", 
+    "hayro-tests", 
+    "hayro-write", 
+    "hayro-svg", 
+    "hayro-common"
+]
 
 [workspace.package]
 authors = ["Laurenz Stampfl <laurenz.stampfl@gmail.com>"]
@@ -11,11 +20,12 @@ license = "Apache-2.0"
 
 [workspace.dependencies]
 hayro = { path = "hayro", version = "0.4.0", default-features = false }
-hayro-font = { path = "hayro-font", version = "0.3.0" }
+hayro-common = { path = "hayro-common", version = "0.1.0", default-features = false }
+hayro-font = { path = "hayro-font", version = "0.3.0", default-features = false }
 hayro-interpret = { path = "hayro-interpret", version = "0.4.0", default-features = false }
 hayro-syntax = { path = "hayro-syntax", version = "0.4.0", default-features = false }
 hayro-svg = { path = "hayro-svg", version = "0.2.0", default-features = false }
-hayro-write = { path = "hayro-write", version = "0.3.0" }
+hayro-write = { path = "hayro-write", version = "0.3.0", default-features = false }
 
 bitflags = { version = "2.9" }
 bytemuck = { version = "1" }

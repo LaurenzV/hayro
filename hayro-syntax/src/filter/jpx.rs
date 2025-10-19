@@ -1,6 +1,6 @@
-use crate::bit_reader::{BitSize, BitWriter};
 use crate::filter::FilterResult;
 use crate::object::stream::{ImageColorSpace, ImageData, ImageDecodeParams};
+use hayro_common::bit::{BitSize, BitWriter};
 use jpeg2k::DecodeParameters;
 
 impl ImageColorSpace {

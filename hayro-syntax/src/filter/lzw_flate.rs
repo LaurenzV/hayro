@@ -1,6 +1,6 @@
-use crate::bit_reader::{BitChunk, BitChunks, BitReader, BitSize, BitWriter};
 use crate::object::Dict;
 use crate::object::dict::keys::{BITS_PER_COMPONENT, COLORS, COLUMNS, EARLY_CHANGE, PREDICTOR};
+use hayro_common::bit::{BitChunk, BitChunks, BitReader, BitSize, BitWriter};
 use log::warn;
 
 pub(crate) mod flate {
@@ -544,9 +544,9 @@ pub(crate) mod flate {
 }
 
 pub(crate) mod lzw {
-    use crate::bit_reader::{BitReader, BitSize};
     use crate::filter::lzw_flate::{PredictorParams, apply_predictor};
     use crate::object::Dict;
+    use hayro_common::bit::{BitReader, BitSize};
     use log::warn;
 
     /// Decode a LZW-encoded stream.

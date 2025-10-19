@@ -8,7 +8,7 @@ use crate::interpret::state::ActiveTransferFunction;
 use crate::{BlendMode, CacheKey, ClipPath, Image, RasterImage, StencilImage};
 use crate::{FillRule, InterpreterWarning, WarningSinkFn, interpret};
 use crate::{LumaData, RgbData};
-use hayro_syntax::bit_reader::{BitReader, BitSize};
+use hayro_common::bit::{BitReader, BitSize};
 use hayro_syntax::content::TypedIter;
 use hayro_syntax::object::Array;
 use hayro_syntax::object::Dict;

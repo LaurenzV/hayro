@@ -440,6 +440,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "hayro-common"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "smallvec",
+]
+
+[[package]]
 name = "hayro-demo"
 version = "0.1.0"
 dependencies = [
@@ -465,6 +473,7 @@ name = "hayro-interpret"
 version = "0.4.0"
 dependencies = [
  "bitflags 2.9.4",
+ "hayro-common",
  "hayro-font",
  "hayro-syntax",
  "image 0.25.8",
@@ -499,6 +508,7 @@ dependencies = [
  "aes",
  "cbc",
  "flate2",
+ "hayro-common",
  "jpeg2k",
  "kurbo 0.12.0",
  "log",

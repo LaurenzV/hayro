@@ -1,0 +1,11 @@
+[package]
+name = "hayro-common"
+version = "0.1.0"
+description = "A crate containing utility methods/structs for all hayro crates."
+edition = { workspace = true }
+repository = { workspace = true }
+license = { workspace = true }
+
+[dependencies]
+log = { workspace = true }
+smallvec = { workspace = true }

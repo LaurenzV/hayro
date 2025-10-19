@@ -11,6 +11,7 @@ log = { workspace = true }
 kurbo = { workspace = true }
 rustc-hash = { workspace = true }
 smallvec = { workspace = true }
+hayro-common = { workspace = true }
 zune-jpeg = { workspace = true }
 jpeg2k = { workspace = true, optional = true }
 flate2 = { workspace = true }

@@ -7,6 +7,7 @@ repository = { workspace = true }
 license = { workspace = true }
 
 [dependencies]
+hayro-common = { workspace = true }
 hayro-syntax = { workspace = true }
 kurbo = { workspace = true }
 smallvec = { workspace = true }
