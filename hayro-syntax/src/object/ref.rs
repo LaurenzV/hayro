@@ -2,7 +2,8 @@
 
 use crate::object::ObjectIdentifier;
 use crate::object::ObjectLike;
-use crate::reader::{Readable, Reader, ReaderContext, Skippable};
+use crate::reader::Reader;
+use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 use std::fmt::{Debug, Formatter};
 
 /// A reference to an object.
@@ -138,6 +139,7 @@ where
 mod tests {
     use crate::object::ObjRef;
     use crate::reader::Reader;
+    use crate::reader::ReaderExt;
 
     #[test]
     fn ref_1() {

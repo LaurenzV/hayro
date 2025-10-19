@@ -3,7 +3,8 @@
 use crate::object::macros::object;
 use crate::object::r#ref::MaybeRef;
 use crate::object::{FromBytes, Object, ObjectLike};
-use crate::reader::{Readable, Reader, ReaderContext, Skippable};
+use crate::reader::Reader;
+use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 use log::warn;
 use smallvec::SmallVec;
 use std::fmt::{Debug, Formatter};
@@ -309,7 +310,8 @@ mod tests {
     use crate::object::Array;
     use crate::object::Object;
     use crate::object::r#ref::{MaybeRef, ObjRef};
-    use crate::reader::{Reader, ReaderContext};
+    use crate::reader::Reader;
+    use crate::reader::{ReaderContext, ReaderExt};
     use crate::xref::XRef;
 
     fn array_impl(data: &[u8]) -> Option<Vec<Object<'_>>> {

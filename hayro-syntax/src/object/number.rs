@@ -2,7 +2,8 @@
 
 use crate::object::macros::object;
 use crate::object::{Object, ObjectLike};
-use crate::reader::{Readable, Reader, ReaderContext, Skippable};
+use crate::reader::Reader;
+use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 use log::debug;
 use std::fmt::Debug;
 use std::str::FromStr;
@@ -224,6 +225,7 @@ pub(crate) fn is_digit_or_minus(byte: u8) -> bool {
 mod tests {
     use crate::object::Number;
     use crate::reader::Reader;
+    use crate::reader::ReaderExt;
 
     #[test]
     fn int_1() {

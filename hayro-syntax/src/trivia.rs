@@ -1,6 +1,7 @@
 //! Comments and white spaces.
 
-use crate::reader::{Readable, Reader, ReaderContext, Skippable};
+use crate::reader::Reader;
+use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 
 #[inline(always)]
 pub(crate) fn is_white_space_character(char: u8) -> bool {

@@ -4,7 +4,8 @@ use crate::crypto::DecryptionTarget;
 use crate::filter::ascii_hex::decode_hex_string;
 use crate::object::macros::object;
 use crate::object::{Object, ObjectLike};
-use crate::reader::{Readable, Reader, ReaderContext, Skippable};
+use crate::reader::Reader;
+use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 use crate::trivia::is_white_space_character;
 use log::warn;
 use std::borrow::Cow;
@@ -354,6 +355,7 @@ fn is_octal_digit(byte: u8) -> bool {
 mod tests {
     use crate::object::string::{HexString, LiteralString, String};
     use crate::reader::Reader;
+    use crate::reader::ReaderExt;
 
     #[test]
     fn hex_string_empty() {

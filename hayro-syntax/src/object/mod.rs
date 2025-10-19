@@ -1,18 +1,18 @@
 //! Parsing and reading from PDF objects.
 
-use crate::object::name::skip_name_like;
-use crate::reader::{Readable, Reader, ReaderContext, Skippable};
-use std::fmt::Debug;
-
 pub use crate::object::array::Array;
 pub use crate::object::dict::Dict;
 pub use crate::object::name::Name;
+use crate::object::name::skip_name_like;
 pub use crate::object::null::Null;
 pub use crate::object::number::Number;
 pub use crate::object::rect::Rect;
 pub use crate::object::r#ref::{MaybeRef, ObjRef};
 pub use crate::object::stream::Stream;
 pub use crate::object::string::String;
+use crate::reader::Reader;
+use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
+use std::fmt::Debug;
 
 mod bool;
 mod null;
@@ -282,7 +282,8 @@ mod macros {
 #[cfg(test)]
 mod tests {
     use crate::object::Object;
-    use crate::reader::{Reader, ReaderContext};
+    use crate::reader::Reader;
+    use crate::reader::{ReaderContext, ReaderExt};
 
     fn object_impl(data: &[u8]) -> Option<Object<'_>> {
         let mut r = Reader::new(data);

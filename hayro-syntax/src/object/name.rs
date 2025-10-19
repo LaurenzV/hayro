@@ -2,7 +2,8 @@
 
 use crate::object::Object;
 use crate::object::macros::object;
-use crate::reader::{Readable, Reader, ReaderContext, Skippable};
+use crate::reader::Reader;
+use crate::reader::{Readable, ReaderContext, Skippable};
 use crate::trivia::is_regular_character;
 use std::fmt::Debug;
 use std::hash::Hash;
@@ -160,6 +161,7 @@ pub(crate) fn skip_name_like(r: &mut Reader, solidus: bool) -> Option<()> {
 mod tests {
     use crate::object::Name;
     use crate::reader::Reader;
+    use crate::reader::ReaderExt;
     use std::ops::Deref;
 
     #[test]

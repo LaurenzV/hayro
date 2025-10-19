@@ -2,8 +2,9 @@
 
 use crate::object::Array;
 use crate::object::{Object, ObjectLike};
-use crate::reader::{Readable, Reader, ReaderContext};
+use crate::reader::{Readable, ReaderContext, ReaderExt};
 
+use crate::reader::Reader;
 pub use kurbo::Rect;
 
 impl<'a> Readable<'a> for Rect {

@@ -8,7 +8,8 @@ use crate::object::Name;
 use crate::object::dict::keys::{DECODE_PARMS, DP, F, FILTER, LENGTH, TYPE};
 use crate::object::{Array, ObjectIdentifier};
 use crate::object::{Object, ObjectLike};
-use crate::reader::{Readable, Reader, ReaderContext, Skippable};
+use crate::reader::Reader;
+use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 use crate::util::OptionLog;
 use log::{info, warn};
 use smallvec::SmallVec;
@@ -327,7 +328,8 @@ impl<'a> ObjectLike<'a> for Stream<'a> {}
 #[cfg(test)]
 mod tests {
     use crate::object::Stream;
-    use crate::reader::{Reader, ReaderContext};
+    use crate::reader::Reader;
+    use crate::reader::{ReaderContext, ReaderExt};
 
     #[test]
     fn stream() {

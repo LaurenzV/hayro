@@ -2,7 +2,8 @@
 
 use crate::object::Object;
 use crate::object::macros::object;
-use crate::reader::{Readable, Reader, ReaderContext, Skippable};
+use crate::reader::Reader;
+use crate::reader::{Readable, ReaderContext, Skippable};
 
 /// The null object.
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Hash)]
@@ -28,6 +29,7 @@ impl Readable<'_> for Null {
 mod tests {
     use crate::object::Null;
     use crate::reader::Reader;
+    use crate::reader::ReaderExt;
 
     #[test]
     fn null() {

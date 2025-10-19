@@ -4,7 +4,8 @@ use crate::object::macros::object;
 use crate::object::r#ref::{MaybeRef, ObjRef};
 use crate::object::{Name, ObjectIdentifier};
 use crate::object::{Object, ObjectLike};
-use crate::reader::{Readable, Reader, ReaderContext, Skippable};
+use crate::reader::Reader;
+use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 use crate::xref::XRef;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
@@ -918,7 +919,8 @@ mod tests {
     use crate::object::dict::{Dict, InlineImageDict};
     use crate::object::string;
     use crate::object::{Name, ObjRef};
-    use crate::reader::{Reader, ReaderContext};
+    use crate::reader::Reader;
+    use crate::reader::{ReaderContext, ReaderExt};
 
     fn dict_impl(data: &[u8]) -> Option<Dict<'_>> {
         Reader::new(data).read_with_context::<Dict>(&ReaderContext::dummy())

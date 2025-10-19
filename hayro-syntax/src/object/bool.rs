@@ -2,7 +2,8 @@
 
 use crate::object::Object;
 use crate::object::macros::object;
-use crate::reader::{Readable, Reader, ReaderContext, Skippable};
+use crate::reader::Reader;
+use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 
 impl Skippable for bool {
     fn skip(r: &mut Reader<'_>, _: bool) -> Option<()> {
@@ -29,6 +30,7 @@ object!(bool, Boolean);
 #[cfg(test)]
 mod tests {
     use crate::reader::Reader;
+    use crate::reader::ReaderExt;
 
     #[test]
     fn bool_true() {

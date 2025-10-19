@@ -20,7 +20,7 @@ use crate::filter::ccitt::{CCITTFaxDecoder, CCITTFaxDecoderOptions};
 use crate::object::Dict;
 use crate::object::Stream;
 use crate::object::dict::keys::JBIG2_GLOBALS;
-use crate::reader::Reader as CrateReader;
+use hayro_common::byte::Reader as CrateReader;
 use log::warn;
 use std::cell::RefCell;
 use std::collections::HashMap;

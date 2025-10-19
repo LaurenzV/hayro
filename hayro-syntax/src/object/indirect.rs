@@ -1,5 +1,6 @@
 use crate::object::{ObjectIdentifier, ObjectLike};
-use crate::reader::{Readable, Reader, ReaderContext, Skippable};
+use crate::reader::Reader;
+use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 use log::warn;
 
 #[derive(Debug, Clone)]
