@@ -273,7 +273,7 @@ fn read_header(reader: &mut Reader) -> Result<SizeData, &'static str> {
         return Err("expected SIZ marker after SOC");
     }
 
-    let size_data = size_marker(reader)?;
+    let size_data = size_marker(reader).ok_or("failed to read SIZ marker")?;
 
     let mut _cod = None;
     let mut _qcd: Option<()> = None;
@@ -287,11 +287,12 @@ fn read_header(reader: &mut Reader) -> Result<SizeData, &'static str> {
             markers::SOT => break,
             markers::COD => {
                 reader.read_marker()?;
-                _cod = Some(cod_marker(reader)?);
+                _cod = Some(cod_marker(reader).ok_or("failed to read COD marker")?);
             }
             markers::COC => {
                 reader.read_marker()?;
-                let (component_index, coc) = coc_marker(reader, size_data.csiz)?;
+                let (component_index, coc) = coc_marker(reader, size_data.csiz)
+                    .ok_or("failed to read COC marker")?;
                 _component_coding_styles[component_index as usize] = Some(coc);
             }
             m => {
@@ -303,27 +304,26 @@ fn read_header(reader: &mut Reader) -> Result<SizeData, &'static str> {
     Ok(size_data)
 }
 
-fn size_marker(reader: &mut Reader) -> Result<SizeData, &'static str> {
-    let _lsiz = reader.read_u16()
-        .ok_or("failed to read SIZ length")?;
+fn size_marker(reader: &mut Reader) -> Option<SizeData> {
+    let _lsiz = reader.read_u16()?;
 
     // Read SIZ parameters
-    let rsiz = reader.read_u16().ok_or("failed to read Rsiz")?;
-    let xsiz = reader.read_u32().ok_or("failed to read Xsiz")?;
-    let ysiz = reader.read_u32().ok_or("failed to read Ysiz")?;
-    let x_osiz = reader.read_u32().ok_or("failed to read XOsiz")?;
-    let y_osiz = reader.read_u32().ok_or("failed to read YOsiz")?;
-    let xt_siz = reader.read_u32().ok_or("failed to read XTsiz")?;
-    let yt_siz = reader.read_u32().ok_or("failed to read YTsiz")?;
-    let xto_siz = reader.read_u32().ok_or("failed to read XTOsiz")?;
-    let yto_siz = reader.read_u32().ok_or("failed to read YTOsiz")?;
-    let csiz = reader.read_u16().ok_or("failed to read Csiz")?;
+    let rsiz = reader.read_u16()?;
+    let xsiz = reader.read_u32()?;
+    let ysiz = reader.read_u32()?;
+    let x_osiz = reader.read_u32()?;
+    let y_osiz = reader.read_u32()?;
+    let xt_siz = reader.read_u32()?;
+    let yt_siz = reader.read_u32()?;
+    let xto_siz = reader.read_u32()?;
+    let yto_siz = reader.read_u32()?;
+    let csiz = reader.read_u16()?;
 
     let mut components = Vec::with_capacity(csiz as usize);
     for _ in 0..csiz {
-        let ssiz = reader.read_byte().ok_or("failed to read Ssiz")?;
-        let x_rsiz = reader.read_byte().ok_or("failed to read XRsiz")?;
-        let y_rsiz = reader.read_byte().ok_or("failed to read YRsiz")?;
+        let ssiz = reader.read_byte()?;
+        let x_rsiz = reader.read_byte()?;
+        let y_rsiz = reader.read_byte()?;
 
         let precision = (ssiz & 0x7F) + 1;
         let is_signed = (ssiz & 0x80) != 0;
@@ -336,7 +336,7 @@ fn size_marker(reader: &mut Reader) -> Result<SizeData, &'static str> {
         });
     }
 
-    Ok(SizeData {
+    Some(SizeData {
         rsiz,
         xsiz,
         ysiz,
@@ -355,28 +355,28 @@ fn size_marker(reader: &mut Reader) -> Result<SizeData, &'static str> {
 fn read_coding_style_parameters(
     reader: &mut Reader,
     coding_style: &CodingStyle,
-) -> Result<CodingStyleParameters, &'static str> {
-    let num_decomposition_levels = reader.read_byte().ok_or("failed to read decomposition levels")?;
-    let code_block_width = reader.read_byte().ok_or("failed to read code-block width")?;
-    let code_block_height = reader.read_byte().ok_or("failed to read code-block height")?;
+) -> Option<CodingStyleParameters> {
+    let num_decomposition_levels = reader.read_byte()?;
+    let code_block_width = reader.read_byte()?;
+    let code_block_height = reader.read_byte()?;
 
-    let code_block_style_val = reader.read_byte().ok_or("failed to read code-block style")?;
+    let code_block_style_val = reader.read_byte()?;
     let code_block_style = CodeBlockStyle::from_u8(code_block_style_val);
 
-    let transformation_val = reader.read_byte().ok_or("failed to read transformation")?;
-    let transformation = WaveletTransform::from_u8(transformation_val)?;
+    let transformation_val = reader.read_byte()?;
+    let transformation = WaveletTransform::from_u8(transformation_val).ok()?;
 
     // Check if precinct sizes are present
     let mut precinct_sizes = Vec::new();
     if coding_style.has_precincts() {
         // Read precinct sizes for each resolution level (num_decomposition_levels + 1)
         for _ in 0..=num_decomposition_levels {
-            let precinct_size = reader.read_byte().ok_or("failed to read precinct size")?;
+            let precinct_size = reader.read_byte()?;
             precinct_sizes.push(precinct_size);
         }
     }
 
-    Ok(CodingStyleParameters {
+    Some(CodingStyleParameters {
         num_decomposition_levels,
         code_block_width,
         code_block_height,
@@ -386,22 +386,22 @@ fn read_coding_style_parameters(
     })
 }
 
-fn cod_marker(reader: &mut Reader) -> Result<CodingStyleDefault, &'static str> {
-    let lcod = reader.read_u16().ok_or("failed to read COD length")?;
+fn cod_marker(reader: &mut Reader) -> Option<CodingStyleDefault> {
+    let lcod = reader.read_u16()?;
     println!("  -> Segment length: {} bytes", lcod);
 
     // Read Scod - coding style
-    let scod_val = reader.read_byte().ok_or("failed to read Scod")?;
+    let scod_val = reader.read_byte()?;
     let scod = CodingStyle::from_u8(scod_val);
 
     // Read SGcod - coding style parameters (32 bits)
-    let progression_order_val = reader.read_byte().ok_or("failed to read progression order")?;
-    let progression_order = ProgressionOrder::from_u8(progression_order_val)?;
+    let progression_order_val = reader.read_byte()?;
+    let progression_order = ProgressionOrder::from_u8(progression_order_val).ok()?;
 
-    let num_layers = reader.read_u16().ok_or("failed to read number of layers")?;
+    let num_layers = reader.read_u16()?;
 
-    let mct_val = reader.read_byte().ok_or("failed to read MCT")?;
-    let mct = MultipleComponentTransform::from_u8(mct_val)?;
+    let mct_val = reader.read_byte()?;
+    let mct = MultipleComponentTransform::from_u8(mct_val).ok()?;
 
     // Read SPcod - coding style parameters (variable)
     let parameters = read_coding_style_parameters(reader, &scod)?;
@@ -423,7 +423,7 @@ fn cod_marker(reader: &mut Reader) -> Result<CodingStyleDefault, &'static str> {
         println!("    Precinct sizes: {} values", parameters.precinct_sizes.len());
     }
 
-    Ok(CodingStyleDefault {
+    Some(CodingStyleDefault {
         scod,
         progression_order,
         num_layers,
@@ -432,21 +432,21 @@ fn cod_marker(reader: &mut Reader) -> Result<CodingStyleDefault, &'static str> {
     })
 }
 
-fn coc_marker(reader: &mut Reader, csiz: u16) -> Result<(u16, CodingStyleComponent), &'static str> {
-    let lcoc = reader.read_u16().ok_or("failed to read COC length")?;
+fn coc_marker(reader: &mut Reader, csiz: u16) -> Option<(u16, CodingStyleComponent)> {
+    let lcoc = reader.read_u16()?;
     println!("  -> Segment length: {} bytes", lcoc);
 
     // Read Ccoc - component index (8 or 16 bits depending on number of components)
     let component_index = if csiz < 257 {
-        reader.read_byte().ok_or("failed to read Ccoc")? as u16
+        reader.read_byte()? as u16
     } else {
-        reader.read_u16().ok_or("failed to read Ccoc")?
+        reader.read_u16()?
     };
 
     println!("  COC parameters for component {}:", component_index);
 
     // Read Scoc - coding style for this component
-    let scoc_val = reader.read_byte().ok_or("failed to read Scoc")?;
+    let scoc_val = reader.read_byte()?;
     let scoc = CodingStyle::from_u8(scoc_val);
 
     // Read SPcoc - coding style parameters (same structure as SPcod from COD)
@@ -470,7 +470,7 @@ fn coc_marker(reader: &mut Reader, csiz: u16) -> Result<(u16, CodingStyleCompone
         parameters,
     };
 
-    Ok((component_index, coc))
+    Some((component_index, coc))
 }
 
 fn skip_code(marker_code: u8) -> bool {
