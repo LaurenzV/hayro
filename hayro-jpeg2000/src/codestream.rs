@@ -196,6 +196,28 @@ struct ComponentInfo {
     y_rsiz: u8,
 }
 
+/// Quantization style (Table A.28).
+#[derive(Debug, Clone, Copy)]
+enum QuantizationStyle {
+    /// No quantization.
+    NoQuantization = 0,
+    /// Scalar derived (values signalled for N/LL sub-band only).
+    ScalarDerived = 1,
+    /// Scalar expounded (values signalled for each sub-band).
+    ScalarExpounded = 2,
+}
+
+impl QuantizationStyle {
+    fn from_u8(value: u8) -> Result<Self, &'static str> {
+        match value & 0x1F {
+            0 => Ok(QuantizationStyle::NoQuantization),
+            1 => Ok(QuantizationStyle::ScalarDerived),
+            2 => Ok(QuantizationStyle::ScalarExpounded),
+            _ => Err("invalid quantization style"),
+        }
+    }
+}
+
 /// Common coding style parameters (SPcod/SPcoc).
 #[derive(Clone, Debug)]
 struct CodingStyleParameters {
@@ -211,6 +233,17 @@ struct CodingStyleParameters {
     transformation: WaveletTransform,
     /// Precinct sizes for each resolution level (if present).
     precinct_sizes: Vec<u8>,
+}
+
+/// Common quantization parameters (SPqcd/SPqcc).
+#[derive(Clone, Debug)]
+struct QuantizationParameters {
+    /// Quantization style.
+    quantization_style: QuantizationStyle,
+    /// Number of guard bits.
+    guard_bits: u8,
+    /// Quantization step size values.
+    step_sizes: Vec<u16>,
 }
 
 struct CodingStyleDefault {
@@ -232,6 +265,18 @@ struct CodingStyleComponent {
     scoc: CodingStyle,
     /// Common coding style parameters (SPcoc).
     parameters: CodingStyleParameters,
+}
+
+#[derive(Debug, Clone)]
+struct QuantizationDefault {
+    /// Common quantization parameters (SPqcd).
+    parameters: QuantizationParameters,
+}
+
+#[derive(Clone)]
+struct QuantizationComponent {
+    /// Common quantization parameters (SPqcc).
+    parameters: QuantizationParameters,
 }
 
 struct SizeData {
@@ -267,11 +312,12 @@ fn read_header(reader: &mut Reader) -> Result<SizeData, &'static str> {
     let size_data = size_marker(reader).ok_or("failed to read SIZ marker")?;
 
     let mut _cod = None;
-    let mut _qcd: Option<()> = None;
+    let mut _qcd = None;
 
-    // Initialize vector for component-specific coding styles
+    // Initialize vectors for component-specific styles
     let num_components = size_data.csiz as usize;
     let mut _component_coding_styles: Vec<Option<CodingStyleComponent>> = vec![None; num_components];
+    let mut _component_quantization_styles: Vec<Option<QuantizationComponent>> = vec![None; num_components];
 
     loop {
         match reader.peek_marker()? {
@@ -285,6 +331,18 @@ fn read_header(reader: &mut Reader) -> Result<SizeData, &'static str> {
                 let (component_index, coc) = coc_marker(reader, size_data.csiz)
                     .ok_or("failed to read COC marker")?;
                 _component_coding_styles[component_index as usize] = Some(coc);
+            }
+            markers::QCD => {
+                reader.read_marker()?;
+                _qcd = Some(qcd_marker(reader).ok_or("failed to read QCD marker")?);
+                
+                eprintln!("{:?}", _qcd);
+            }
+            markers::QCC => {
+                reader.read_marker()?;
+                let (component_index, qcc) = qcc_marker(reader, size_data.csiz)
+                    .ok_or("failed to read QCC marker")?;
+                _component_quantization_styles[component_index as usize] = Some(qcc);
             }
             m => {
                 panic!("marker: {}", markers::to_string(m));
@@ -428,6 +486,89 @@ fn coc_marker(reader: &mut Reader, csiz: u16) -> Option<(u16, CodingStyleCompone
     };
 
     Some((component_index, coc))
+}
+
+/// Reads common quantization parameters (SPqcd/SPqcc).
+fn read_quantization_parameters(
+    reader: &mut Reader,
+    quantization_style: QuantizationStyle,
+    remaining_bytes: usize,
+) -> Option<QuantizationParameters> {
+    let mut step_sizes = Vec::new();
+
+    match quantization_style {
+        QuantizationStyle::NoQuantization => {
+            // 8 bits per band (5 bits exponent, 3 bits reserved)
+            for _ in 0..remaining_bytes {
+                let value = reader.read_byte()? as u16;
+                step_sizes.push(value);
+            }
+        }
+        QuantizationStyle::ScalarDerived => {
+            let value = reader.read_u16()?;
+            step_sizes.push(value);
+        }
+        QuantizationStyle::ScalarExpounded => {
+            // 16 bits per band
+            let num_bands = remaining_bytes / 2;
+            for _ in 0..num_bands {
+                let value = reader.read_u16()?;
+                step_sizes.push(value);
+            }
+        }
+    }
+
+    Some(QuantizationParameters {
+        quantization_style,
+        guard_bits: 0, // Will be set by caller
+        step_sizes,
+    })
+}
+
+fn qcd_marker(reader: &mut Reader) -> Option<QuantizationDefault> {
+    let lqcd = reader.read_u16()?;
+
+    // Read Sqcd - quantization style and guard bits
+    let sqcd_val = reader.read_byte()?;
+    let quantization_style = QuantizationStyle::from_u8(sqcd_val & 0x1F).ok()?;
+    let guard_bits = (sqcd_val >> 5) & 0x07;
+
+    // Calculate remaining bytes for step sizes
+    let remaining_bytes = (lqcd - 3) as usize; 
+
+    // Read SPqcd - quantization step size values
+    let mut parameters = read_quantization_parameters(reader, quantization_style, remaining_bytes)?;
+    parameters.guard_bits = guard_bits;
+
+    Some(QuantizationDefault { parameters })
+}
+
+fn qcc_marker(reader: &mut Reader, csiz: u16) -> Option<(u16, QuantizationComponent)> {
+    let lqcc = reader.read_u16()?;
+
+    // Read Cqcc - component index (8 or 16 bits depending on number of components)
+    let component_index = if csiz < 257 {
+        reader.read_byte()? as u16
+    } else {
+        reader.read_u16()?
+    };
+
+    // Read Sqcc - quantization style and guard bits for this component
+    let sqcc_val = reader.read_byte()?;
+    let quantization_style = QuantizationStyle::from_u8(sqcc_val & 0x1F).ok()?;
+    let guard_bits = (sqcc_val >> 5) & 0x07;
+
+    // Calculate remaining bytes for step sizes
+    let component_index_size = if csiz < 257 { 1 } else { 2 };
+    let remaining_bytes = (lqcc - 2 - component_index_size - 1) as usize; // Total length - Lqcc (2) - Cqcc - Sqcc (1)
+
+    // Read SPqcc - quantization step size values
+    let mut parameters = read_quantization_parameters(reader, quantization_style, remaining_bytes)?;
+    parameters.guard_bits = guard_bits;
+
+    let qcc = QuantizationComponent { parameters };
+
+    Some((component_index, qcc))
 }
 
 fn skip_code(marker_code: u8) -> bool {
