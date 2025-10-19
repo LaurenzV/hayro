@@ -13,9 +13,9 @@ the PDF parsing logic.
 
 This crate does not provide more high-level functionality, such as parsing fonts or color spaces.
 Such functionality is out-of-scope for `hayro-syntax`, since this crate is supposed to be
-as *light-weight* and *application-agnostic* as possible. 
+as *light-weight* and *application-agnostic* as possible.
 
-Functionality-wise, this crate is therefore close to feature-complete. The main missing feature 
+Functionality-wise, this crate is therefore close to feature-complete. The main missing feature
 is support for password-protected documents, as well as improved support for JPEG2000
 documents. In addition to that, more low-level APIs might be added in the future.
 
@@ -29,7 +29,7 @@ use std::sync::Arc;
 
 // First load the data that constitutes the PDF file.
 let data = std::fs::read(
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../hayro/pdfs/text_with_rise.pdf"),
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../hayro-tests/pdfs/custom/text_with_rise.pdf"),
 )
 .unwrap();
 
@@ -58,15 +58,14 @@ The supported features include:
 - Parsing xref tables in all its possible formats, including xref streams.
 - Best-effort attempt at repairing PDF files with broken xref tables.
 - Parsing of all objects types (also in object streams).
-- Parsing and evaluating PDF functions.
 - Parsing and decoding PDF streams.
 - Iterating over pages as well as their content streams in a typed or untyped fashion.
 - The crate is very lightweight, especially in comparison to other PDF crates, assuming you don't
   enable the `jpeg2000` feature (see further below for more information).
 
 ## Limitations
-- There are still a few features missing, for example, support for 
-  password-protected PDFs. In addition to that, many properties (like page annotations) are 
+- There are still a few features missing, for example, support for
+  password-protected PDFs. In addition to that, many properties (like page annotations) are
   currently not exposed.
 - This crate is for read-only processing, you cannot directly use it to manipulate PDF files.
   If you need to do that, there are other crates in the Rust ecosystem that are suitable for this.
@@ -75,9 +74,9 @@ The supported features include:
 This crate has one feature, `jpeg2000`. PDF allows for the insertion of JPEG2000 images. However,
 unfortunately, JPEG2000 is a very complicated format. There exists a Rust
 [jpeg2k](https://github.com/Neopallium/jpeg2k) crate that allows decoding such images. However, it is a
-relatively heavy dependency, has a lot of unsafe code (due to having been ported with 
-[c2rust](https://c2rust.com/)), and also has a dependency on libc, meaning that you might be 
-restricted in the targets you can build to. Because of this, I recommend not enabling this feature 
+relatively heavy dependency, has a lot of unsafe code (due to having been ported with
+[c2rust](https://c2rust.com/)), and also has a dependency on libc, meaning that you might be
+restricted in the targets you can build to. Because of this, I recommend not enabling this feature
 unless you absolutely need to be able to support such images.
 
 <!-- cargo-rdme end -->

@@ -52,7 +52,6 @@ The supported features include:
 - Parsing xref tables in all its possible formats, including xref streams.
 - Best-effort attempt at repairing PDF files with broken xref tables.
 - Parsing of all objects types (also in object streams).
-- Parsing and evaluating PDF functions.
 - Parsing and decoding PDF streams.
 - Iterating over pages as well as their content streams in a typed or untyped fashion.
 - The crate is very lightweight, especially in comparison to other PDF crates, assuming you don't
