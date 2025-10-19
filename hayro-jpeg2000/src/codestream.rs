@@ -205,15 +205,9 @@ struct ComponentInfo {
     y_rsiz: u8,
 }
 
-struct CodingStyleDefault {
-    /// Coding style for all components.
-    scod: CodingStyle,
-    /// Progression order.
-    progression_order: ProgressionOrder,
-    /// Number of layers.
-    num_layers: u16,
-    /// Multiple component transformation usage.
-    mct: MultipleComponentTransform,
+/// Common coding style parameters (SPcod/SPcoc).
+#[derive(Clone, Debug)]
+struct CodingStyleParameters {
     /// Number of decomposition levels.
     num_decomposition_levels: u8,
     /// Code-block width exponent offset value (xcb).
@@ -226,6 +220,27 @@ struct CodingStyleDefault {
     transformation: WaveletTransform,
     /// Precinct sizes for each resolution level (if present).
     precinct_sizes: Vec<u8>,
+}
+
+struct CodingStyleDefault {
+    /// Coding style for all components.
+    scod: CodingStyle,
+    /// Progression order.
+    progression_order: ProgressionOrder,
+    /// Number of layers.
+    num_layers: u16,
+    /// Multiple component transformation usage.
+    mct: MultipleComponentTransform,
+    /// Common coding style parameters (SPcod).
+    parameters: CodingStyleParameters,
+}
+
+#[derive(Clone)]
+struct CodingStyleComponent {
+    /// Coding style for this component.
+    scoc: CodingStyle,
+    /// Common coding style parameters (SPcoc).
+    parameters: CodingStyleParameters,
 }
 
 struct SizeData {
@@ -263,6 +278,10 @@ fn read_header(reader: &mut Reader) -> Result<SizeData, &'static str> {
     let mut _cod = None;
     let mut _qcd: Option<()> = None;
 
+    // Initialize vector for component-specific coding styles
+    let num_components = size_data.csiz as usize;
+    let mut _component_coding_styles: Vec<Option<CodingStyleComponent>> = vec![None; num_components];
+
     loop {
         match reader.peek_marker()? {
             markers::SOT => break,
@@ -270,7 +289,11 @@ fn read_header(reader: &mut Reader) -> Result<SizeData, &'static str> {
                 reader.read_marker()?;
                 _cod = Some(cod_marker(reader)?);
             }
-            markers::QCD => todo!(),
+            markers::COC => {
+                reader.read_marker()?;
+                let (component_index, coc) = coc_marker(reader, size_data.csiz)?;
+                _component_coding_styles[component_index as usize] = Some(coc);
+            }
             m => {
                 panic!("marker: {}", markers::to_string(m));
             }
@@ -328,6 +351,41 @@ fn size_marker(reader: &mut Reader) -> Result<SizeData, &'static str> {
     })
 }
 
+/// Reads common coding style parameters (SPcod/SPcoc).
+fn read_coding_style_parameters(
+    reader: &mut Reader,
+    coding_style: &CodingStyle,
+) -> Result<CodingStyleParameters, &'static str> {
+    let num_decomposition_levels = reader.read_byte().ok_or("failed to read decomposition levels")?;
+    let code_block_width = reader.read_byte().ok_or("failed to read code-block width")?;
+    let code_block_height = reader.read_byte().ok_or("failed to read code-block height")?;
+
+    let code_block_style_val = reader.read_byte().ok_or("failed to read code-block style")?;
+    let code_block_style = CodeBlockStyle::from_u8(code_block_style_val);
+
+    let transformation_val = reader.read_byte().ok_or("failed to read transformation")?;
+    let transformation = WaveletTransform::from_u8(transformation_val)?;
+
+    // Check if precinct sizes are present
+    let mut precinct_sizes = Vec::new();
+    if coding_style.has_precincts() {
+        // Read precinct sizes for each resolution level (num_decomposition_levels + 1)
+        for _ in 0..=num_decomposition_levels {
+            let precinct_size = reader.read_byte().ok_or("failed to read precinct size")?;
+            precinct_sizes.push(precinct_size);
+        }
+    }
+
+    Ok(CodingStyleParameters {
+        num_decomposition_levels,
+        code_block_width,
+        code_block_height,
+        code_block_style,
+        transformation,
+        precinct_sizes,
+    })
+}
+
 fn cod_marker(reader: &mut Reader) -> Result<CodingStyleDefault, &'static str> {
     let lcod = reader.read_u16().ok_or("failed to read COD length")?;
     println!("  -> Segment length: {} bytes", lcod);
@@ -346,25 +404,7 @@ fn cod_marker(reader: &mut Reader) -> Result<CodingStyleDefault, &'static str> {
     let mct = MultipleComponentTransform::from_u8(mct_val)?;
 
     // Read SPcod - coding style parameters (variable)
-    let num_decomposition_levels = reader.read_byte().ok_or("failed to read decomposition levels")?;
-    let code_block_width = reader.read_byte().ok_or("failed to read code-block width")?;
-    let code_block_height = reader.read_byte().ok_or("failed to read code-block height")?;
-
-    let code_block_style_val = reader.read_byte().ok_or("failed to read code-block style")?;
-    let code_block_style = CodeBlockStyle::from_u8(code_block_style_val);
-
-    let transformation_val = reader.read_byte().ok_or("failed to read transformation")?;
-    let transformation = WaveletTransform::from_u8(transformation_val)?;
-
-    // Check if precinct sizes are present
-    let mut precinct_sizes = Vec::new();
-    if scod.has_precincts() {
-        // Read precinct sizes for each resolution level (num_decomposition_levels + 1)
-        for _ in 0..=num_decomposition_levels {
-            let precinct_size = reader.read_byte().ok_or("failed to read precinct size")?;
-            precinct_sizes.push(precinct_size);
-        }
-    }
+    let parameters = read_coding_style_parameters(reader, &scod)?;
 
     println!("  COD parameters:");
     println!("    Scod: {:?}", scod);
@@ -374,13 +414,13 @@ fn cod_marker(reader: &mut Reader) -> Result<CodingStyleDefault, &'static str> {
     println!("    Progression order: {}", progression_order.as_str());
     println!("    Number of layers: {}", num_layers);
     println!("    MCT: {:?}", mct);
-    println!("    Decomposition levels: {}", num_decomposition_levels);
-    println!("    Code-block width exponent: {}", code_block_width);
-    println!("    Code-block height exponent: {}", code_block_height);
-    println!("    Code-block style: {:?}", code_block_style);
-    println!("    Transformation: {}", transformation.as_str());
+    println!("    Decomposition levels: {}", parameters.num_decomposition_levels);
+    println!("    Code-block width exponent: {}", parameters.code_block_width);
+    println!("    Code-block height exponent: {}", parameters.code_block_height);
+    println!("    Code-block style: {:?}", parameters.code_block_style);
+    println!("    Transformation: {}", parameters.transformation.as_str());
     if scod.has_precincts() {
-        println!("    Precinct sizes: {} values", precinct_sizes.len());
+        println!("    Precinct sizes: {} values", parameters.precinct_sizes.len());
     }
 
     Ok(CodingStyleDefault {
@@ -388,13 +428,49 @@ fn cod_marker(reader: &mut Reader) -> Result<CodingStyleDefault, &'static str> {
         progression_order,
         num_layers,
         mct,
-        num_decomposition_levels,
-        code_block_width,
-        code_block_height,
-        code_block_style,
-        transformation,
-        precinct_sizes,
+        parameters,
     })
+}
+
+fn coc_marker(reader: &mut Reader, csiz: u16) -> Result<(u16, CodingStyleComponent), &'static str> {
+    let lcoc = reader.read_u16().ok_or("failed to read COC length")?;
+    println!("  -> Segment length: {} bytes", lcoc);
+
+    // Read Ccoc - component index (8 or 16 bits depending on number of components)
+    let component_index = if csiz < 257 {
+        reader.read_byte().ok_or("failed to read Ccoc")? as u16
+    } else {
+        reader.read_u16().ok_or("failed to read Ccoc")?
+    };
+
+    println!("  COC parameters for component {}:", component_index);
+
+    // Read Scoc - coding style for this component
+    let scoc_val = reader.read_byte().ok_or("failed to read Scoc")?;
+    let scoc = CodingStyle::from_u8(scoc_val);
+
+    // Read SPcoc - coding style parameters (same structure as SPcod from COD)
+    let parameters = read_coding_style_parameters(reader, &scoc)?;
+
+    println!("    Scoc: {:?}", scoc);
+    println!("      - Uses SOP markers: {}", scoc.uses_sop_markers());
+    println!("      - Uses EPH marker: {}", scoc.uses_eph_marker());
+    println!("      - Has precincts: {}", scoc.has_precincts());
+    println!("    Decomposition levels: {}", parameters.num_decomposition_levels);
+    println!("    Code-block width exponent: {}", parameters.code_block_width);
+    println!("    Code-block height exponent: {}", parameters.code_block_height);
+    println!("    Code-block style: {:?}", parameters.code_block_style);
+    println!("    Transformation: {}", parameters.transformation.as_str());
+    if scoc.has_precincts() {
+        println!("    Precinct sizes: {} values", parameters.precinct_sizes.len());
+    }
+
+    let coc = CodingStyleComponent {
+        scoc,
+        parameters,
+    };
+
+    Ok((component_index, coc))
 }
 
 fn skip_code(marker_code: u8) -> bool {
