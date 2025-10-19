@@ -57,14 +57,15 @@ pub(crate) fn read(stream: &[u8]) -> Result<(), &'static str> {
 
 struct ComponentInfo {
     /// Precision (depth) in bits and sign of the component samples
-    ssiz: u8,
+    precision: u8,
+    is_signed: bool,
     /// Horizontal separation of a sample with respect to the reference grid
     x_rsiz: u8,
     /// Vertical separation of a sample with respect to the reference grid
     y_rsiz: u8,
 }
 
-struct HeaderData {
+struct SizeData {
     /// Decoder capabilities
     rsiz: u16,
     /// Width of the reference grid
@@ -89,9 +90,9 @@ struct HeaderData {
     components: Vec<ComponentInfo>,
 }
 
-fn read_header(reader: &mut Reader) -> Result<HeaderData, &'static str> {
-    // Read the next marker - should be SIZ
+fn read_header(reader: &mut Reader) -> Result<SizeData, &'static str> {
     let marker_prefix = reader.read_byte().ok_or("failed to read marker prefix")?;
+    
     if marker_prefix != 0xFF {
         return Err("invalid marker: expected 0xFF prefix");
     }
@@ -101,12 +102,10 @@ fn read_header(reader: &mut Reader) -> Result<HeaderData, &'static str> {
         return Err("expected SIZ marker after SOC");
     }
 
-    println!(
-        "Found marker: 0xFF{:02X} ({})",
-        marker_code,
-        markers::to_string(marker_code)
-    );
+    read_size(reader)
+}
 
+fn read_size(reader: &mut Reader) -> Result<SizeData, &'static str> {
     let _lsiz = reader.read_u16()
         .ok_or("failed to read SIZ length")?;
 
@@ -122,17 +121,8 @@ fn read_header(reader: &mut Reader) -> Result<HeaderData, &'static str> {
     let yto_siz = reader.read_u32().ok_or("failed to read YTOsiz")?;
     let csiz = reader.read_u16().ok_or("failed to read Csiz")?;
 
-    println!("  SIZ parameters:");
-    println!("    Rsiz: 0x{:04X}", rsiz);
-    println!("    Reference grid: {}x{}", xsiz, ysiz);
-    println!("    Image offset: ({}, {})", x_osiz, y_osiz);
-    println!("    Tile size: {}x{}", xt_siz, yt_siz);
-    println!("    Tile offset: ({}, {})", xto_siz, yto_siz);
-    println!("    Components: {}", csiz);
-
-    // Read component information
     let mut components = Vec::with_capacity(csiz as usize);
-    for i in 0..csiz {
+    for _ in 0..csiz {
         let ssiz = reader.read_byte().ok_or("failed to read Ssiz")?;
         let x_rsiz = reader.read_byte().ok_or("failed to read XRsiz")?;
         let y_rsiz = reader.read_byte().ok_or("failed to read YRsiz")?;
@@ -140,23 +130,15 @@ fn read_header(reader: &mut Reader) -> Result<HeaderData, &'static str> {
         let precision = (ssiz & 0x7F) + 1;
         let is_signed = (ssiz & 0x80) != 0;
 
-        println!(
-            "    Component {}: {} bits, {}, separation: {}x{}",
-            i,
-            precision,
-            if is_signed { "signed" } else { "unsigned" },
-            x_rsiz,
-            y_rsiz
-        );
-
         components.push(ComponentInfo {
-            ssiz,
+            precision,
+            is_signed,
             x_rsiz,
             y_rsiz,
         });
     }
 
-    Ok(HeaderData {
+    Ok(SizeData {
         rsiz,
         xsiz,
         ysiz,
