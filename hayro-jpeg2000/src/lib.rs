@@ -1,5 +1,8 @@
+use crate::boxes::{
+    COLOUR_SPECIFICATION, CONTIGUOUS_CODESTREAM, FILE_TYPE, IMAGE_HEADER, JP2_HEADER,
+    JP2_SIGNATURE, read_box, tag_to_string,
+};
 use hayro_common::byte::Reader;
-use crate::boxes::{COLOUR_SPECIFICATION, FILE_TYPE, IMAGE_HEADER, JP2_HEADER, JP2_SIGNATURE, read_box, tag_to_string, CONTIGUOUS_CODESTREAM};
 
 pub mod boxes;
 mod codestream;
@@ -92,7 +95,7 @@ pub fn read(data: &[u8]) -> Result<ImageMetadata, &'static str> {
     if file_type_box.box_type != FILE_TYPE {
         return Err("invalid JP2 file type");
     }
-    
+
     let mut metadata = Err("failed to read metadata");
 
     // Read boxes until we find the JP2 Header box
@@ -120,10 +123,14 @@ pub fn read(data: &[u8]) -> Result<ImageMetadata, &'static str> {
 
                 match child_box.box_type {
                     IMAGE_HEADER => {
-                        image_metadata.parse_ihdr(child_box.data).ok_or("failed to parse image header")?;
+                        image_metadata
+                            .parse_ihdr(child_box.data)
+                            .ok_or("failed to parse image header")?;
                     }
                     COLOUR_SPECIFICATION => {
-                        image_metadata.parse_colr(child_box.data).ok_or("failed to parse colour")?;
+                        image_metadata
+                            .parse_colr(child_box.data)
+                            .ok_or("failed to parse colour")?;
                     }
                     _ => {
                         eprintln!("ignoring box {}", tag_to_string(child_box.box_type));
@@ -138,7 +145,6 @@ pub fn read(data: &[u8]) -> Result<ImageMetadata, &'static str> {
         } else {
             eprintln!("ignoring outer box {}", tag_to_string(current_box.box_type));
         }
-        
     }
 
     metadata
