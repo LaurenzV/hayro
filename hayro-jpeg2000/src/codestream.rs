@@ -55,61 +55,201 @@ pub(crate) fn read(stream: &[u8]) -> Result<(), &'static str> {
     Ok(())
 }
 
+/// Progression order (Table A.16).
+#[derive(Debug, Clone, Copy)]
+enum ProgressionOrder {
+    /// Layer-resolution level-component-position progression.
+    LRCP = 0,
+    /// Resolution level-layer-component-position progression.
+    RLCP = 1,
+    /// Resolution level-position-component-layer progression.
+    RPCL = 2,
+    /// Position-component-resolution level-layer progression.
+    PCRL = 3,
+    /// Component-position-resolution level-layer progression.
+    CPRL = 4,
+}
+
+impl ProgressionOrder {
+    fn from_u8(value: u8) -> Result<Self, &'static str> {
+        match value {
+            0 => Ok(ProgressionOrder::LRCP),
+            1 => Ok(ProgressionOrder::RLCP),
+            2 => Ok(ProgressionOrder::RPCL),
+            3 => Ok(ProgressionOrder::PCRL),
+            4 => Ok(ProgressionOrder::CPRL),
+            _ => Err("invalid progression order"),
+        }
+    }
+
+    fn as_str(&self) -> &'static str {
+        match self {
+            ProgressionOrder::LRCP => "LRCP (Layer-resolution level-component-position)",
+            ProgressionOrder::RLCP => "RLCP (Resolution level-layer-component-position)",
+            ProgressionOrder::RPCL => "RPCL (Resolution level-position-component-layer)",
+            ProgressionOrder::PCRL => "PCRL (Position-component-resolution level-layer)",
+            ProgressionOrder::CPRL => "CPRL (Component-position-resolution level-layer)",
+        }
+    }
+}
+
+/// Multiple component transformation type (Table A.17).
+#[derive(Debug, Clone, Copy)]
+enum MultipleComponentTransform {
+    /// No multiple component transformation specified.
+    None = 0,
+    /// Component transformation used (irreversible or reversible).
+    Used = 1,
+}
+
+impl MultipleComponentTransform {
+    fn from_u8(value: u8) -> Result<Self, &'static str> {
+        match value {
+            0 => Ok(MultipleComponentTransform::None),
+            1 => Ok(MultipleComponentTransform::Used),
+            _ => Err("invalid MCT value"),
+        }
+    }
+}
+
+/// Wavelet transformation type (Table A.20).
+#[derive(Debug, Clone, Copy)]
+enum WaveletTransform {
+    /// 9-7 irreversible filter.
+    Irreversible97 = 0,
+    /// 5-3 reversible filter.
+    Reversible53 = 1,
+}
+
+impl WaveletTransform {
+    fn from_u8(value: u8) -> Result<Self, &'static str> {
+        match value {
+            0 => Ok(WaveletTransform::Irreversible97),
+            1 => Ok(WaveletTransform::Reversible53),
+            _ => Err("invalid transformation type"),
+        }
+    }
+
+    fn as_str(&self) -> &'static str {
+        match self {
+            WaveletTransform::Irreversible97 => "9-7 irreversible",
+            WaveletTransform::Reversible53 => "5-3 reversible",
+        }
+    }
+}
+
+/// Coding style flags for Scod parameter (Table A.13).
+#[derive(Debug, Clone, Copy)]
+struct CodingStyle {
+    raw: u8,
+}
+
+impl CodingStyle {
+    fn from_u8(value: u8) -> Self {
+        CodingStyle { raw: value }
+    }
+
+    /// Returns true if user-defined precincts are used (bit 0).
+    fn has_precincts(&self) -> bool {
+        (self.raw & 0x01) != 0
+    }
+
+    /// Returns true if SOP marker segments may be used (bit 0).
+    fn uses_sop_markers(&self) -> bool {
+        (self.raw & 0x01) != 0
+    }
+
+    /// Returns true if EPH marker shall be used (bit 1).
+    fn uses_eph_marker(&self) -> bool {
+        (self.raw & 0x02) != 0
+    }
+}
+
+/// Code-block style flags (Table A.19).
+#[derive(Debug, Clone, Copy)]
+struct CodeBlockStyle {
+    /// Selective arithmetic coding bypass.
+    selective_arithmetic_coding_bypass: bool,
+    /// Reset context probabilities on coding pass boundaries.
+    reset_context_probabilities: bool,
+    /// Termination on each coding pass.
+    termination_on_each_pass: bool,
+    /// Vertically causal context.
+    vertically_causal_context: bool,
+    /// Predictable termination.
+    predictable_termination: bool,
+    /// Segmentation symbols are used.
+    segmentation_symbols: bool,
+}
+
+impl CodeBlockStyle {
+    fn from_u8(value: u8) -> Self {
+        CodeBlockStyle {
+            selective_arithmetic_coding_bypass: (value & 0x01) != 0,
+            reset_context_probabilities: (value & 0x02) != 0,
+            termination_on_each_pass: (value & 0x04) != 0,
+            vertically_causal_context: (value & 0x08) != 0,
+            predictable_termination: (value & 0x10) != 0,
+            segmentation_symbols: (value & 0x20) != 0,
+        }
+    }
+}
+
 struct ComponentInfo {
-    /// Precision (depth) in bits and sign of the component samples
+    /// Precision (depth) in bits and sign of the component samples.
     precision: u8,
     is_signed: bool,
-    /// Horizontal separation of a sample with respect to the reference grid
+    /// Horizontal separation of a sample with respect to the reference grid.
     x_rsiz: u8,
-    /// Vertical separation of a sample with respect to the reference grid
+    /// Vertical separation of a sample with respect to the reference grid.
     y_rsiz: u8,
 }
 
 struct CodingStyleDefault {
-    /// Coding style for all components
-    scod: u8,
-    /// Progression order
-    progression_order: u8,
-    /// Number of layers
+    /// Coding style for all components.
+    scod: CodingStyle,
+    /// Progression order.
+    progression_order: ProgressionOrder,
+    /// Number of layers.
     num_layers: u16,
-    /// Multiple component transformation usage
-    mct: u8,
-    /// Number of decomposition levels
+    /// Multiple component transformation usage.
+    mct: MultipleComponentTransform,
+    /// Number of decomposition levels.
     num_decomposition_levels: u8,
-    /// Code-block width exponent offset value (xcb)
+    /// Code-block width exponent offset value (xcb).
     code_block_width: u8,
-    /// Code-block height exponent offset value (ycb)
+    /// Code-block height exponent offset value (ycb).
     code_block_height: u8,
-    /// Code-block style
-    code_block_style: u8,
-    /// Wavelet transformation used
-    transformation: u8,
-    /// Precinct sizes for each resolution level (if present)
+    /// Code-block style.
+    code_block_style: CodeBlockStyle,
+    /// Wavelet transformation used.
+    transformation: WaveletTransform,
+    /// Precinct sizes for each resolution level (if present).
     precinct_sizes: Vec<u8>,
 }
 
 struct SizeData {
-    /// Decoder capabilities
+    /// Decoder capabilities.
     rsiz: u16,
-    /// Width of the reference grid
+    /// Width of the reference grid.
     xsiz: u32,
-    /// Height of the reference grid
+    /// Height of the reference grid.
     ysiz: u32,
-    /// Horizontal offset from the origin of the reference grid to the left side of the image area
+    /// Horizontal offset from the origin of the reference grid to the left side of the image area.
     x_osiz: u32,
-    /// Vertical offset from the origin of the reference grid to the top side of the image area
+    /// Vertical offset from the origin of the reference grid to the top side of the image area.
     y_osiz: u32,
-    /// Width of one reference tile with respect to the reference grid
+    /// Width of one reference tile with respect to the reference grid.
     xt_siz: u32,
-    /// Height of one reference tile with respect to the reference grid
+    /// Height of one reference tile with respect to the reference grid.
     yt_siz: u32,
-    /// Horizontal offset from the origin of the reference grid to the left side of the first tile
+    /// Horizontal offset from the origin of the reference grid to the left side of the first tile.
     xto_siz: u32,
-    /// Vertical offset from the origin of the reference grid to the top side of the first tile
+    /// Vertical offset from the origin of the reference grid to the top side of the first tile.
     yto_siz: u32,
-    /// Number of components in the image
+    /// Number of components in the image.
     csiz: u16,
-    /// Component information
+    /// Component information.
     components: Vec<ComponentInfo>,
 }
 
@@ -193,26 +333,32 @@ fn cod_marker(reader: &mut Reader) -> Result<CodingStyleDefault, &'static str> {
     println!("  -> Segment length: {} bytes", lcod);
 
     // Read Scod - coding style
-    let scod = reader.read_byte().ok_or("failed to read Scod")?;
+    let scod_val = reader.read_byte().ok_or("failed to read Scod")?;
+    let scod = CodingStyle::from_u8(scod_val);
 
     // Read SGcod - coding style parameters (32 bits)
-    let progression_order = reader.read_byte().ok_or("failed to read progression order")?;
+    let progression_order_val = reader.read_byte().ok_or("failed to read progression order")?;
+    let progression_order = ProgressionOrder::from_u8(progression_order_val)?;
+
     let num_layers = reader.read_u16().ok_or("failed to read number of layers")?;
-    let mct = reader.read_byte().ok_or("failed to read MCT")?;
+
+    let mct_val = reader.read_byte().ok_or("failed to read MCT")?;
+    let mct = MultipleComponentTransform::from_u8(mct_val)?;
 
     // Read SPcod - coding style parameters (variable)
     let num_decomposition_levels = reader.read_byte().ok_or("failed to read decomposition levels")?;
     let code_block_width = reader.read_byte().ok_or("failed to read code-block width")?;
     let code_block_height = reader.read_byte().ok_or("failed to read code-block height")?;
-    let code_block_style = reader.read_byte().ok_or("failed to read code-block style")?;
-    let transformation = reader.read_byte().ok_or("failed to read transformation")?;
+
+    let code_block_style_val = reader.read_byte().ok_or("failed to read code-block style")?;
+    let code_block_style = CodeBlockStyle::from_u8(code_block_style_val);
+
+    let transformation_val = reader.read_byte().ok_or("failed to read transformation")?;
+    let transformation = WaveletTransform::from_u8(transformation_val)?;
 
     // Check if precinct sizes are present
-    // Bit 0 of Scod indicates if precincts are user-defined (1) or default (0)
-    let has_precincts = (scod & 0x01) != 0;
-
     let mut precinct_sizes = Vec::new();
-    if has_precincts {
+    if scod.has_precincts() {
         // Read precinct sizes for each resolution level (num_decomposition_levels + 1)
         for _ in 0..=num_decomposition_levels {
             let precinct_size = reader.read_byte().ok_or("failed to read precinct size")?;
@@ -221,16 +367,19 @@ fn cod_marker(reader: &mut Reader) -> Result<CodingStyleDefault, &'static str> {
     }
 
     println!("  COD parameters:");
-    println!("    Scod: 0x{:02X}", scod);
-    println!("    Progression order: {}", progression_order);
+    println!("    Scod: {:?}", scod);
+    println!("      - Uses SOP markers: {}", scod.uses_sop_markers());
+    println!("      - Uses EPH marker: {}", scod.uses_eph_marker());
+    println!("      - Has precincts: {}", scod.has_precincts());
+    println!("    Progression order: {}", progression_order.as_str());
     println!("    Number of layers: {}", num_layers);
-    println!("    MCT: {}", mct);
+    println!("    MCT: {:?}", mct);
     println!("    Decomposition levels: {}", num_decomposition_levels);
     println!("    Code-block width exponent: {}", code_block_width);
     println!("    Code-block height exponent: {}", code_block_height);
-    println!("    Code-block style: 0x{:02X}", code_block_style);
-    println!("    Transformation: {}", transformation);
-    if has_precincts {
+    println!("    Code-block style: {:?}", code_block_style);
+    println!("    Transformation: {}", transformation.as_str());
+    if scod.has_precincts() {
         println!("    Precinct sizes: {} values", precinct_sizes.len());
     }
 
@@ -274,50 +423,50 @@ impl ReaderExt for Reader<'_> {
 
 /// Table A.2: The different marker segments.
 mod markers {
-    /// Start of codestream - 'SOC'
+    /// Start of codestream - 'SOC'.
     pub(crate) const SOC: u8 = 0x4F;
-    /// Start of tile-part - 'SOT'
+    /// Start of tile-part - 'SOT'.
     pub(crate) const SOT: u8 = 0x90;
-    /// Start of data - 'SOD'
+    /// Start of data - 'SOD'.
     pub(crate) const SOD: u8 = 0x93;
-    /// End of codestream - 'EOC'
+    /// End of codestream - 'EOC'.
     pub(crate) const EOC: u8 = 0xD9;
 
-    /// Image and tile size - 'SIZ'
+    /// Image and tile size - 'SIZ'.
     pub(crate) const SIZ: u8 = 0x51;
 
-    /// Coding style default - 'COD'
+    /// Coding style default - 'COD'.
     pub(crate) const COD: u8 = 0x52;
-    /// Coding component - 'COC'
+    /// Coding component - 'COC'.
     pub(crate) const COC: u8 = 0x53;
-    /// Region-of-interest - 'RGN'
+    /// Region-of-interest - 'RGN'.
     pub(crate) const RGN: u8 = 0x5E;
-    /// Quantization default - 'QCD'
+    /// Quantization default - 'QCD'.
     pub(crate) const QCD: u8 = 0x5C;
-    /// Quantization component - 'QCC'
+    /// Quantization component - 'QCC'.
     pub(crate) const QCC: u8 = 0x5D;
-    /// Progression order change - 'POC'
+    /// Progression order change - 'POC'.
     pub(crate) const POC: u8 = 0x5F;
 
-    /// Tile-part lengths - 'TLM'
+    /// Tile-part lengths - 'TLM'.
     pub(crate) const TLM: u8 = 0x55;
-    /// Packet length, main header - 'PLM'
+    /// Packet length, main header - 'PLM'.
     pub(crate) const PLM: u8 = 0x57;
-    /// Packet length, tile-part header - 'PLT'
+    /// Packet length, tile-part header - 'PLT'.
     pub(crate) const PLT: u8 = 0x58;
-    /// Packed packet headers, main header - 'PPM'
+    /// Packed packet headers, main header - 'PPM'.
     pub(crate) const PPM: u8 = 0x60;
-    /// Packed packet headers, tile-part header - 'PPT'
+    /// Packed packet headers, tile-part header - 'PPT'.
     pub(crate) const PPT: u8 = 0x61;
 
-    /// Start of packet - 'SOP'
+    /// Start of packet - 'SOP'.
     pub(crate) const SOP: u8 = 0x91;
-    /// End of packet header - 'EPH'
+    /// End of packet header - 'EPH'.
     pub(crate) const EPH: u8 = 0x92;
 
-    /// Component registration - 'CRG'
+    /// Component registration - 'CRG'.
     pub(crate) const CRG: u8 = 0x63;
-    /// Comment - 'COM'
+    /// Comment - 'COM'.
     pub(crate) const COM: u8 = 0x64;
 
     pub(crate) fn to_string(marker: u8) -> &'static str {
