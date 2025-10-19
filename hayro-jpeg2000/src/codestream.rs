@@ -17,36 +17,29 @@ pub(crate) fn read(stream: &[u8]) -> Result<(), &'static str> {
             marker_code,
             markers::to_string(marker_code)
         );
-
-        // All markers with the marker code between 0xFF30 and 0xFF3F have no marker
-        // segment parameters. They shall be skipped by the decoder.
-        let is_delimiter = matches!(marker_code, markers::SOC | markers::SOD | markers::EOC)
-            || (marker_code >= 0x30 && marker_code <= 0x3F);
-
-        if is_delimiter {
-            // Special handling for SOD - everything after is compressed image data
-            if marker_code == markers::SOD {
-                println!("  -> Remaining bytes are compressed image data");
-                // For now, just skip to end
-                reader.jump_to_end();
-                break;
-            }
-        } else {
-            let length = reader
-                .read_u16()
-                .ok_or("failed to read marker segment length")?
-                .checked_sub(2)
-                .ok_or("invalid marker segment length")?;
-
-            println!("  -> Segment length: {} bytes", length);
-
-            reader
-                .read_bytes(length as usize)
-                .ok_or("failed to skip marker segment parameters")?;
-        }
+        
+        match marker_code {
+            markers::SOC => read_header(&mut reader)?,
+            i if skip_code(i) => continue,
+            _ => unimplemented!()
+        };
     }
 
     Ok(())
+}
+
+struct HeaderData {
+    
+}
+
+fn read_header(reader: &mut Reader) -> Result<HeaderData, &'static str> {
+    
+}
+
+fn skip_code(marker_code: u8) -> bool {
+    // All markers with the marker code between 0xFF30 and 0xFF3F have no marker
+    // segment parameters. They shall be skipped by the decoder.
+    marker_code >= 0x30 && marker_code <= 0x3F
 }
 
 /// Table A.2: The different marker segments.
