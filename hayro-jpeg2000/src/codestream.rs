@@ -65,6 +65,29 @@ struct ComponentInfo {
     y_rsiz: u8,
 }
 
+struct CodingStyleDefault {
+    /// Coding style for all components
+    scod: u8,
+    /// Progression order
+    progression_order: u8,
+    /// Number of layers
+    num_layers: u16,
+    /// Multiple component transformation usage
+    mct: u8,
+    /// Number of decomposition levels
+    num_decomposition_levels: u8,
+    /// Code-block width exponent offset value (xcb)
+    code_block_width: u8,
+    /// Code-block height exponent offset value (ycb)
+    code_block_height: u8,
+    /// Code-block style
+    code_block_style: u8,
+    /// Wavelet transformation used
+    transformation: u8,
+    /// Precinct sizes for each resolution level (if present)
+    precinct_sizes: Vec<u8>,
+}
+
 struct SizeData {
     /// Decoder capabilities
     rsiz: u16,
@@ -96,21 +119,24 @@ fn read_header(reader: &mut Reader) -> Result<SizeData, &'static str> {
     }
 
     let size_data = size_marker(reader)?;
-    
-    let mut cod = None;
-    let mut qcd = None;
-    
+
+    let mut _cod = None;
+    let mut _qcd: Option<()> = None;
+
     loop {
         match reader.peek_marker()? {
             markers::SOT => break,
-            markers::COD => todo!(),
+            markers::COD => {
+                reader.read_marker()?;
+                _cod = Some(cod_marker(reader)?);
+            }
             markers::QCD => todo!(),
             m => {
                 panic!("marker: {}", markers::to_string(m));
             }
         }
     }
-    
+
     Ok(size_data)
 }
 
@@ -159,6 +185,66 @@ fn size_marker(reader: &mut Reader) -> Result<SizeData, &'static str> {
         yto_siz,
         csiz,
         components,
+    })
+}
+
+fn cod_marker(reader: &mut Reader) -> Result<CodingStyleDefault, &'static str> {
+    let lcod = reader.read_u16().ok_or("failed to read COD length")?;
+    println!("  -> Segment length: {} bytes", lcod);
+
+    // Read Scod - coding style
+    let scod = reader.read_byte().ok_or("failed to read Scod")?;
+
+    // Read SGcod - coding style parameters (32 bits)
+    let progression_order = reader.read_byte().ok_or("failed to read progression order")?;
+    let num_layers = reader.read_u16().ok_or("failed to read number of layers")?;
+    let mct = reader.read_byte().ok_or("failed to read MCT")?;
+
+    // Read SPcod - coding style parameters (variable)
+    let num_decomposition_levels = reader.read_byte().ok_or("failed to read decomposition levels")?;
+    let code_block_width = reader.read_byte().ok_or("failed to read code-block width")?;
+    let code_block_height = reader.read_byte().ok_or("failed to read code-block height")?;
+    let code_block_style = reader.read_byte().ok_or("failed to read code-block style")?;
+    let transformation = reader.read_byte().ok_or("failed to read transformation")?;
+
+    // Check if precinct sizes are present
+    // Bit 0 of Scod indicates if precincts are user-defined (1) or default (0)
+    let has_precincts = (scod & 0x01) != 0;
+
+    let mut precinct_sizes = Vec::new();
+    if has_precincts {
+        // Read precinct sizes for each resolution level (num_decomposition_levels + 1)
+        for _ in 0..=num_decomposition_levels {
+            let precinct_size = reader.read_byte().ok_or("failed to read precinct size")?;
+            precinct_sizes.push(precinct_size);
+        }
+    }
+
+    println!("  COD parameters:");
+    println!("    Scod: 0x{:02X}", scod);
+    println!("    Progression order: {}", progression_order);
+    println!("    Number of layers: {}", num_layers);
+    println!("    MCT: {}", mct);
+    println!("    Decomposition levels: {}", num_decomposition_levels);
+    println!("    Code-block width exponent: {}", code_block_width);
+    println!("    Code-block height exponent: {}", code_block_height);
+    println!("    Code-block style: 0x{:02X}", code_block_style);
+    println!("    Transformation: {}", transformation);
+    if has_precincts {
+        println!("    Precinct sizes: {} values", precinct_sizes.len());
+    }
+
+    Ok(CodingStyleDefault {
+        scod,
+        progression_order,
+        num_layers,
+        mct,
+        num_decomposition_levels,
+        code_block_width,
+        code_block_height,
+        code_block_style,
+        transformation,
+        precinct_sizes,
     })
 }
 
