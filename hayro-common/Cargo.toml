@@ -7,5 +7,4 @@ repository = { workspace = true }
 license = { workspace = true }
 
 [dependencies]
-log = { workspace = true }
 smallvec = { workspace = true }

@@ -1,6 +1,5 @@
 //! A simple bit reader and writer.
 
-use log::warn;
 use smallvec::{SmallVec, smallvec};
 use std::fmt::Debug;
 
@@ -210,8 +209,6 @@ impl<'a> BitChunks<'a> {
     /// Create a new iterator over bit chunks.
     pub fn new(data: &'a [u8], bit_size: BitSize, chunk_len: usize) -> Option<Self> {
         if bit_size.0 > 16 {
-            warn!("BitChunks doesn't support working with bit sizes > 16.");
-
             return None;
         }
 
@@ -265,8 +262,6 @@ impl BitChunk {
         chunk_len: usize,
     ) -> Option<Self> {
         if bit_size.0 > 16 {
-            warn!("BitChunk doesn't support working with bit sizes > 16.");
-
             return None;
         }
 

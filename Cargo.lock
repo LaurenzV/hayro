@@ -443,7 +443,6 @@ dependencies = [
 name = "hayro-common"
 version = "0.1.0"
 dependencies = [
- "log",
  "smallvec",
 ]
 
