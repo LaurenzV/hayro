@@ -91,21 +91,30 @@ struct SizeData {
 }
 
 fn read_header(reader: &mut Reader) -> Result<SizeData, &'static str> {
-    let marker_prefix = reader.read_byte().ok_or("failed to read marker prefix")?;
-    
-    if marker_prefix != 0xFF {
-        return Err("invalid marker: expected 0xFF prefix");
-    }
-
-    let marker_code = reader.read_byte().ok_or("failed to read marker code")?;
-    if marker_code != markers::SIZ {
+    if reader.read_marker()? != markers::SIZ {
         return Err("expected SIZ marker after SOC");
     }
 
-    read_size(reader)
+    let size_data = size_marker(reader)?;
+    
+    let mut cod = None;
+    let mut qcd = None;
+    
+    loop {
+        match reader.peek_marker()? {
+            markers::SOT => break,
+            markers::COD => todo!(),
+            markers::QCD => todo!(),
+            m => {
+                panic!("marker: {}", markers::to_string(m));
+            }
+        }
+    }
+    
+    Ok(size_data)
 }
 
-fn read_size(reader: &mut Reader) -> Result<SizeData, &'static str> {
+fn size_marker(reader: &mut Reader) -> Result<SizeData, &'static str> {
     let _lsiz = reader.read_u16()
         .ok_or("failed to read SIZ length")?;
 
@@ -157,6 +166,24 @@ fn skip_code(marker_code: u8) -> bool {
     // All markers with the marker code between 0xFF30 and 0xFF3F have no marker
     // segment parameters. They shall be skipped by the decoder.
     marker_code >= 0x30 && marker_code <= 0x3F
+}
+
+trait ReaderExt: Clone {
+    fn read_marker(&mut self) -> Result<u8, &'static str>;
+    fn peek_marker(&mut self) -> Result<u8, &'static str> {
+        self.clone().read_marker()
+    }
+}
+
+impl ReaderExt for Reader<'_> {
+    fn read_marker(&mut self) -> Result<u8, &'static str> {
+        if self.peek_byte().ok_or("invalid marker")? != 0xFF {
+            return Err("invalid marker");
+        }
+        
+        self.read_byte().unwrap();
+        self.read_byte().ok_or("invalid marker")
+    }
 }
 
 /// Table A.2: The different marker segments.
