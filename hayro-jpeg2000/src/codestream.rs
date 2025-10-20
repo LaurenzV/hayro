@@ -17,7 +17,13 @@ pub(crate) fn read(stream: &[u8]) -> Result<(), &'static str> {
         }
         
         let header = read_header(&mut reader)?;
-        let _ = read_first_tile_part(&mut reader, &header).ok_or("failed to read first tile part")?;
+        
+        let mut tiles = vec![];
+        tiles.push(read_tile_part(&mut reader, &header).ok_or("failed to read first tile part")?);
+        
+        while reader.peek_marker() == Some(markers::SOT) {
+            tiles.push(read_tile_part(&mut reader, &header).ok_or("failed to read a tile part")?);
+        }
         eprintln!("header: {:?}", header);
     }
 
@@ -286,12 +292,17 @@ struct SizeData {
 }
 
 #[derive(Debug)]
-struct Header {
-    size_data: SizeData,
+struct DecodeData {
     cod: CodingStyleDefault,
     cod_components: Vec<Option<CodingStyleComponent>>,
     qcd: QuantizationDefault,
     qcd_components: Vec<Option<QuantizationComponent>>
+}
+
+#[derive(Debug)]
+struct Header {
+    size_data: SizeData,
+    decode_data: DecodeData,
 }
 
 fn read_header(reader: &mut Reader) -> Result<Header, &'static str> {
@@ -342,14 +353,21 @@ fn read_header(reader: &mut Reader) -> Result<Header, &'static str> {
 
     Ok(Header {
         size_data,
-        cod: cod.ok_or("missing COD marker")?,
-        cod_components,
-        qcd: qcd.ok_or("missing QCD marker")?,
-        qcd_components,
+        decode_data: DecodeData {
+            cod: cod.ok_or("missing COD marker")?,
+            cod_components,
+            qcd: qcd.ok_or("missing QCD marker")?,
+            qcd_components,
+        }
     })
 }
 
-fn read_first_tile_part(reader: &mut Reader, header: &Header) -> Option<()> {
+struct TilePart<'a> {
+    data: &'a [u8],
+    decode_data: DecodeData,
+}
+
+fn read_tile_part<'a>(reader: &mut Reader<'a>, header: &Header) -> Option<TilePart<'a>> {
     if reader.read_marker().ok()? != markers::SOT {
         return None;
     }
@@ -363,15 +381,12 @@ fn read_first_tile_part(reader: &mut Reader, header: &Header) -> Option<()> {
             
             data
         }   else {
-            // Subtract 10 to account for the marker length.
-            
-            let length = (sot_marker.tile_part_length as usize).checked_sub(10)?;
+            // Subtract 12 to account for the marker length.
+            let length = (sot_marker.tile_part_length as usize).checked_sub(12)?;
 
             let data = reader.tail()?.get(..sot_marker.tile_part_length as usize)?;
             // Skip to the very end in the original reader.
             reader.skip_bytes(length)?;
-            let temp = reader.tail()?;
-            eprintln!("{:?}", &temp[..10]);
             
             data
         };
@@ -390,24 +405,27 @@ fn read_first_tile_part(reader: &mut Reader, header: &Header) -> Option<()> {
 
     loop {
         match tile_part_reader.peek_marker()? {
-            markers::SOD => break,
+            markers::SOD => {
+                tile_part_reader.read_marker().ok()?;
+                break
+            },
             markers::EOC => break,
             markers::COD => {
-                reader.read_marker().ok()?;
-                cod = Some(cod_marker(reader)?);
+                tile_part_reader.read_marker().ok()?;
+                cod = Some(cod_marker(&mut tile_part_reader)?);
             }
             markers::COC => {
-                reader.read_marker().ok()?;
-                let (component_index, coc) = coc_marker(reader, header.size_data.csiz)?;
+                tile_part_reader.read_marker().ok()?;
+                let (component_index, coc) = coc_marker(&mut tile_part_reader, header.size_data.csiz)?;
                 cod_components[component_index as usize] = Some(coc);
             }
             markers::QCD => {
-                reader.read_marker().ok()?;
-                qcd = Some(qcd_marker(reader)?);
+                tile_part_reader.read_marker().ok()?;
+                qcd = Some(qcd_marker(&mut tile_part_reader)?);
             }
             markers::QCC => {
-                reader.read_marker().ok()?;
-                let (component_index, qcc) = qcc_marker(reader, header.size_data.csiz)?;
+                tile_part_reader.read_marker().ok()?;
+                let (component_index, qcc) = qcc_marker(&mut tile_part_reader, header.size_data.csiz)?;
                 qcd_components[component_index as usize] = Some(qcc);
             }
             m => {
@@ -416,7 +434,15 @@ fn read_first_tile_part(reader: &mut Reader, header: &Header) -> Option<()> {
         }
     }
     
-    Some(())
+    Some(TilePart {
+        data: tile_part_reader.tail()?,
+        decode_data: DecodeData {
+            cod: cod?,
+            cod_components,
+            qcd: qcd?,
+            qcd_components,
+        }
+    })
 }
 
 struct TilePartHeader {
