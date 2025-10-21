@@ -374,6 +374,7 @@ fn read_header(reader: &mut Reader) -> Result<Header, &'static str> {
 }
 
 struct TilePart<'a> {
+    header: TilePartHeader,
     data: &'a [u8],
 }
 
@@ -382,7 +383,7 @@ fn read_tile_part<'a>(reader: &mut Reader<'a>, header: &Header) -> Option<TilePa
         return None;
     }
 
-    let mut tile_part_reader = {
+    let (mut tile_part_reader, header) = {
         let sot_marker = sot_marker(reader)?;
         let data = if sot_marker.tile_part_length == 0 {
             // Data goes until EOC
@@ -401,7 +402,7 @@ fn read_tile_part<'a>(reader: &mut Reader<'a>, header: &Header) -> Option<TilePa
             data
         };
 
-        Reader::new(data)
+        (Reader::new(data), sot_marker)
     };
 
     loop {
@@ -419,6 +420,7 @@ fn read_tile_part<'a>(reader: &mut Reader<'a>, header: &Header) -> Option<TilePa
 
     Some(TilePart {
         data: tile_part_reader.tail()?,
+        header,
     })
 }
 

@@ -134,7 +134,6 @@ pub fn read(data: &[u8]) -> Result<ImageMetadata, &'static str> {
                     }
                     _ => {
                         eprintln!("ignoring box {}", tag_to_string(child_box.box_type));
-                        // Ignore other boxes for now
                     }
                 }
             }
