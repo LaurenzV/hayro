@@ -3,15 +3,8 @@ use hayro_common::byte::Reader;
 pub(crate) fn read(stream: &[u8]) -> Result<(), &'static str> {
     let mut reader = Reader::new(stream);
 
-    let marker_prefix = reader.read_byte().ok_or("failed to read marker prefix")?;
-
-    if marker_prefix != 0xFF {
-        return Err("invalid marker: expected 0xFF prefix");
-    }
-
-    let marker_code = reader.read_byte().ok_or("failed to read marker code")?;
-
-    if marker_code != markers::SOC {
+    let marker = reader.read_marker()?;
+    if marker != markers::SOC {
         return Err("invalid marker: expected SOC marker");
     }
 
@@ -23,8 +16,6 @@ pub(crate) fn read(stream: &[u8]) -> Result<(), &'static str> {
     while reader.peek_marker() == Some(markers::SOT) {
         tiles.push(read_tile_part(&mut reader, &header).ok_or("failed to read a tile part")?);
     }
-    eprintln!("header: {:?}", header);
-    eprintln!("{:?}", reader.tail());
 
     if reader.read_marker()? != markers::EOC {
         return Err("invalid marker: expected EOC marker");
@@ -36,37 +27,22 @@ pub(crate) fn read(stream: &[u8]) -> Result<(), &'static str> {
 /// Progression order (Table A.16).
 #[derive(Debug, Clone, Copy)]
 enum ProgressionOrder {
-    /// Layer-resolution level-component-position progression.
-    LRCP = 0,
-    /// Resolution level-layer-component-position progression.
-    RLCP = 1,
-    /// Resolution level-position-component-layer progression.
-    RPCL = 2,
-    /// Position-component-resolution level-layer progression.
-    PCRL = 3,
-    /// Component-position-resolution level-layer progression.
-    CPRL = 4,
+    Lrcp,
+    Rlcp,
+    Rpcl,
+    Pcrl,
+    Cprl,
 }
 
 impl ProgressionOrder {
     fn from_u8(value: u8) -> Result<Self, &'static str> {
         match value {
-            0 => Ok(ProgressionOrder::LRCP),
-            1 => Ok(ProgressionOrder::RLCP),
-            2 => Ok(ProgressionOrder::RPCL),
-            3 => Ok(ProgressionOrder::PCRL),
-            4 => Ok(ProgressionOrder::CPRL),
+            0 => Ok(ProgressionOrder::Lrcp),
+            1 => Ok(ProgressionOrder::Rlcp),
+            2 => Ok(ProgressionOrder::Rpcl),
+            3 => Ok(ProgressionOrder::Pcrl),
+            4 => Ok(ProgressionOrder::Cprl),
             _ => Err("invalid progression order"),
-        }
-    }
-
-    fn as_str(&self) -> &'static str {
-        match self {
-            ProgressionOrder::LRCP => "LRCP (Layer-resolution level-component-position)",
-            ProgressionOrder::RLCP => "RLCP (Resolution level-layer-component-position)",
-            ProgressionOrder::RPCL => "RPCL (Resolution level-position-component-layer)",
-            ProgressionOrder::PCRL => "PCRL (Position-component-resolution level-layer)",
-            ProgressionOrder::CPRL => "CPRL (Component-position-resolution level-layer)",
         }
     }
 }
@@ -74,10 +50,8 @@ impl ProgressionOrder {
 /// Multiple component transformation type (Table A.17).
 #[derive(Debug, Clone, Copy)]
 enum MultipleComponentTransform {
-    /// No multiple component transformation specified.
-    None = 0,
-    /// Component transformation used (irreversible or reversible).
-    Used = 1,
+    None,
+    Used,
 }
 
 impl MultipleComponentTransform {
@@ -93,10 +67,8 @@ impl MultipleComponentTransform {
 /// Wavelet transformation type (Table A.20).
 #[derive(Debug, Clone, Copy)]
 enum WaveletTransform {
-    /// 9-7 irreversible filter.
-    Irreversible97 = 0,
-    /// 5-3 reversible filter.
-    Reversible53 = 1,
+    Irreversible97,
+    Reversible53,
 }
 
 impl WaveletTransform {
@@ -107,37 +79,27 @@ impl WaveletTransform {
             _ => Err("invalid transformation type"),
         }
     }
-
-    fn as_str(&self) -> &'static str {
-        match self {
-            WaveletTransform::Irreversible97 => "9-7 irreversible",
-            WaveletTransform::Reversible53 => "5-3 reversible",
-        }
-    }
 }
 
-/// Coding style flags for Scod parameter (Table A.13).
+/// Coding style flags (Table A.13).
 #[derive(Debug, Clone, Copy)]
-struct CodingStyle {
+struct CodingStyleFlags {
     raw: u8,
 }
 
-impl CodingStyle {
+impl CodingStyleFlags {
     fn from_u8(value: u8) -> Self {
-        CodingStyle { raw: value }
+        CodingStyleFlags { raw: value }
     }
 
-    /// Returns true if user-defined precincts are used (bit 0).
     fn has_precincts(&self) -> bool {
         (self.raw & 0x01) != 0
     }
 
-    /// Returns true if SOP marker segments may be used (bit 0).
     fn uses_sop_markers(&self) -> bool {
         (self.raw & 0x01) != 0
     }
 
-    /// Returns true if EPH marker shall be used (bit 1).
     fn uses_eph_marker(&self) -> bool {
         (self.raw & 0x02) != 0
     }
@@ -209,62 +171,44 @@ impl QuantizationStyle {
 /// Common coding style parameters (SPcod/SPcoc).
 #[derive(Clone, Debug)]
 struct CodingStyleParameters {
-    /// Number of decomposition levels.
     num_decomposition_levels: u8,
-    /// Code-block width exponent offset value (xcb).
     code_block_width: u8,
-    /// Code-block height exponent offset value (ycb).
     code_block_height: u8,
-    /// Code-block style.
     code_block_style: CodeBlockStyle,
-    /// Wavelet transformation used.
     transformation: WaveletTransform,
-    /// Precinct sizes for each resolution level (if present).
     precinct_sizes: Vec<u8>,
 }
 
 /// Common quantization parameters (SPqcd/SPqcc).
 #[derive(Clone, Debug)]
 struct QuantizationParameters {
-    /// Quantization style.
     quantization_style: QuantizationStyle,
-    /// Number of guard bits.
     guard_bits: u8,
-    /// Quantization step size values.
     step_sizes: Vec<u16>,
 }
 
 #[derive(Debug, Clone)]
 struct CodingStyleInfo {
-    /// Coding style for all components.
-    scod: CodingStyle,
-    /// Progression order.
+    style: CodingStyleFlags,
     progression_order: ProgressionOrder,
-    /// Number of layers.
     num_layers: u16,
-    /// Multiple component transformation usage.
     mct: MultipleComponentTransform,
-    /// Common coding style parameters (SPcod).
     parameters: CodingStyleParameters,
 }
 
 #[derive(Clone, Debug)]
 struct CodingStyleComponent {
-    /// Coding style for this component.
-    scoc: CodingStyle,
-    /// Common coding style parameters (SPcoc).
+    scoc: CodingStyleFlags,
     parameters: CodingStyleParameters,
 }
 
 #[derive(Debug, Clone)]
 struct QuantizationInfo {
-    /// Common quantization parameters (SPqcd).
     parameters: QuantizationParameters,
 }
 
 #[derive(Clone, Debug)]
 struct QuantizationComponent {
-    /// Common quantization parameters (SPqcc).
     parameters: QuantizationParameters,
 }
 
@@ -359,7 +303,7 @@ fn read_header(reader: &mut Reader) -> Result<Header, &'static str> {
 
                 // COC takes precedence over COD if available.
                 if let Some(coc) = coc {
-                    cloned.scod = coc.scoc;
+                    cloned.style = coc.scoc;
                     cloned.parameters = coc.parameters;
                 }
 
@@ -496,7 +440,7 @@ fn size_marker(reader: &mut Reader) -> Option<SizeData> {
 /// Reads common coding style parameters (SPcod/SPcoc).
 fn read_coding_style_parameters(
     reader: &mut Reader,
-    coding_style: &CodingStyle,
+    coding_style: &CodingStyleFlags,
 ) -> Option<CodingStyleParameters> {
     let num_decomposition_levels = reader.read_byte()?;
     let code_block_width = reader.read_byte()?;
@@ -529,51 +473,41 @@ fn read_coding_style_parameters(
 }
 
 fn cod_marker(reader: &mut Reader) -> Option<CodingStyleInfo> {
-    let _lcod = reader.read_u16()?;
+    // Length.
+    let _ = reader.read_u16()?;
 
-    // Read Scod - coding style
-    let scod_val = reader.read_byte()?;
-    let scod = CodingStyle::from_u8(scod_val);
-
-    // Read SGcod - coding style parameters (32 bits)
-    let progression_order_val = reader.read_byte()?;
-    let progression_order = ProgressionOrder::from_u8(progression_order_val).ok()?;
+    let coding_style = CodingStyleFlags::from_u8(reader.read_byte()?);
+    let progression_order = ProgressionOrder::from_u8(reader.read_byte()?).ok()?;
 
     let num_layers = reader.read_u16()?;
+    let mct = MultipleComponentTransform::from_u8(reader.read_byte()?).ok()?;
 
-    let mct_val = reader.read_byte()?;
-    let mct = MultipleComponentTransform::from_u8(mct_val).ok()?;
-
-    // Read SPcod - coding style parameters (variable)
-    let parameters = read_coding_style_parameters(reader, &scod)?;
+    let coding_style_parameters = read_coding_style_parameters(reader, &coding_style)?;
 
     Some(CodingStyleInfo {
-        scod,
+        style: coding_style,
         progression_order,
         num_layers,
         mct,
-        parameters,
+        parameters: coding_style_parameters,
     })
 }
 
 fn coc_marker(reader: &mut Reader, csiz: u16) -> Option<(u16, CodingStyleComponent)> {
-    let _lcoc = reader.read_u16()?;
+    // Length.
+    let _ = reader.read_u16()?;
 
-    // Read Ccoc - component index (8 or 16 bits depending on number of components)
     let component_index = if csiz < 257 {
         reader.read_byte()? as u16
     } else {
         reader.read_u16()?
     };
-
-    // Read Scoc - coding style for this component
-    let scoc_val = reader.read_byte()?;
-    let scoc = CodingStyle::from_u8(scoc_val);
+    let coding_style = CodingStyleFlags::from_u8(reader.read_byte()?);
 
     // Read SPcoc - coding style parameters (same structure as SPcod from COD)
-    let parameters = read_coding_style_parameters(reader, &scoc)?;
+    let parameters = read_coding_style_parameters(reader, &coding_style)?;
 
-    let coc = CodingStyleComponent { scoc, parameters };
+    let coc = CodingStyleComponent { scoc: coding_style, parameters };
 
     Some((component_index, coc))
 }
@@ -685,7 +619,7 @@ impl ReaderExt for Reader<'_> {
     }
 }
 
-/// Table A.2: The different marker segments.
+/// Marker codes (Table A.2).
 mod markers {
     /// Start of codestream - 'SOC'.
     pub(crate) const SOC: u8 = 0x4F;
@@ -735,16 +669,16 @@ mod markers {
 
     pub(crate) fn to_string(marker: u8) -> &'static str {
         match marker {
-            // Delimiting markers
+            // Delimiting markers.
             SOC => "SOC",
             SOT => "SOT",
             SOD => "SOD",
             EOC => "EOC",
 
-            // Fixed information
+            // Fixed information.
             SIZ => "SIZ",
 
-            // Functional markers
+            // Functional markers.
             COD => "COD",
             COC => "COC",
             RGN => "RGN",
@@ -752,22 +686,21 @@ mod markers {
             QCC => "QCC",
             POC => "POC",
 
-            // Pointer markers
+            // Pointer markers.
             TLM => "TLM",
             PLM => "PLM",
             PLT => "PLT",
             PPM => "PPM",
             PPT => "PPT",
 
-            // In-bit-stream markers
+            // In-bit-stream markers.
             SOP => "SOP",
             EPH => "EPH",
 
-            // Informational markers
+            // Informational markers.
             CRG => "CRG",
             COM => "COM",
 
-            // Unknown marker
             _ => "UNKNOWN",
         }
     }
