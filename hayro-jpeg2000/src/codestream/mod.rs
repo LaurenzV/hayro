@@ -259,7 +259,7 @@ fn read_header(reader: &mut Reader) -> Result<Header, &'static str> {
             markers::QCC => {
                 reader.read_marker()?;
                 let (component_index, qcc) =
-                    qcc_marker(reader, size_data.csiz).ok_or("failed to read QCC marker")?;
+                    qcc_marker(reader, num_components).ok_or("failed to read QCC marker")?;
                 qcd_components[component_index as usize] = Some(qcc);
             }
             m => {
