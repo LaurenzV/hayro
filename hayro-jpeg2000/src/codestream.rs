@@ -24,8 +24,6 @@ pub(crate) fn read(stream: &[u8]) -> Result<(), &'static str> {
     Ok(())
 }
 
-
-
 #[derive(Debug)]
 struct Header {
     size_data: SizeData,
@@ -103,7 +101,6 @@ fn read_header(reader: &mut Reader) -> Result<Header, &'static str> {
             .collect(),
     })
 }
-
 
 struct TilePart<'a> {
     header: TilePartHeader,
@@ -338,7 +335,7 @@ struct SizeData {
     grid_width: u32,
     /// Height of the reference grid (Ysiz).
     grid_height: u32,
-    /// Horizontal offset from the origin of the reference grid to the 
+    /// Horizontal offset from the origin of the reference grid to the
     /// left side of the image area (XOsiz).
     image_area_x_offset: u32,
     /// Vertical offset from the origin of the reference grid to the top side of the image area (YOsiz).
@@ -359,7 +356,7 @@ struct SizeData {
 fn sot_marker(reader: &mut Reader) -> Option<TilePartHeader> {
     // Length.
     let _ = reader.read_u16()?;
-    
+
     let tile_index = reader.read_u16()?;
     let tile_part_length = reader.read_u32()?;
     let tile_part_index = reader.read_byte()?;
@@ -379,7 +376,7 @@ fn size_marker(reader: &mut Reader) -> Option<SizeData> {
     let _ = reader.read_u16()?;
     // Decoder capabilities.
     let _ = reader.read_u16()?;
-    
+
     let xsiz = reader.read_u32()?;
     let ysiz = reader.read_u32()?;
     let x_osiz = reader.read_u32()?;
@@ -433,7 +430,6 @@ fn coding_style_parameters(
 
     let mut precinct_sizes = Vec::new();
     if coding_style.has_precincts() {
-        
         for _ in 0..resolution_level {
             let precinct_size = reader.read_byte()?;
             precinct_sizes.push(precinct_size);
@@ -487,7 +483,10 @@ fn coc_marker(reader: &mut Reader, csiz: u16) -> Option<(u16, CodingStyleCompone
     // Read SPcoc - coding style parameters (same structure as SPcod from COD)
     let parameters = coding_style_parameters(reader, &coding_style)?;
 
-    let coc = CodingStyleComponent { scoc: coding_style, parameters };
+    let coc = CodingStyleComponent {
+        scoc: coding_style,
+        parameters,
+    };
 
     Some((component_index, coc))
 }
@@ -524,11 +523,11 @@ fn qcc_marker(reader: &mut Reader, csiz: u16) -> Option<(u16, QuantizationInfo)>
     let guard_bits = (sqcc_val >> 5) & 0x07;
 
     let component_index_size = if csiz < 257 { 1 } else { 2 };
-    let remaining_bytes = (length - 2 - component_index_size - 1) as usize; 
+    let remaining_bytes = (length - 2 - component_index_size - 1) as usize;
 
     let mut parameters = quantization_parameters(reader, quantization_style, remaining_bytes)?;
     parameters.guard_bits = guard_bits;
-    
+
     Some((component_index, parameters))
 }
 
