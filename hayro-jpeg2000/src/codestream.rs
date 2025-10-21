@@ -108,17 +108,11 @@ impl CodingStyleFlags {
 /// Code-block style flags (Table A.19).
 #[derive(Debug, Clone, Copy)]
 struct CodeBlockStyle {
-    /// Selective arithmetic coding bypass.
     selective_arithmetic_coding_bypass: bool,
-    /// Reset context probabilities on coding pass boundaries.
     reset_context_probabilities: bool,
-    /// Termination on each coding pass.
     termination_on_each_pass: bool,
-    /// Vertically causal context.
     vertically_causal_context: bool,
-    /// Predictable termination.
     predictable_termination: bool,
-    /// Segmentation symbols are used.
     segmentation_symbols: bool,
 }
 
@@ -135,26 +129,21 @@ impl CodeBlockStyle {
     }
 }
 
+/// Component information (A.5.1 and Table A.11).
 #[derive(Debug)]
 struct ComponentInfo {
-    /// Precision (depth) in bits and sign of the component samples.
     precision: u8,
     is_signed: bool,
-    /// Horizontal separation of a sample with respect to the reference grid.
-    x_rsiz: u8,
-    /// Vertical separation of a sample with respect to the reference grid.
-    y_rsiz: u8,
+    horizontal_resolution: u8,
+    vertical_resolution: u8,
 }
 
 /// Quantization style (Table A.28).
 #[derive(Debug, Clone, Copy)]
 enum QuantizationStyle {
-    /// No quantization.
-    NoQuantization = 0,
-    /// Scalar derived (values signalled for N/LL sub-band only).
-    ScalarDerived = 1,
-    /// Scalar expounded (values signalled for each sub-band).
-    ScalarExpounded = 2,
+    NoQuantization,
+    ScalarDerived,
+    ScalarExpounded,
 }
 
 impl QuantizationStyle {
@@ -168,7 +157,7 @@ impl QuantizationStyle {
     }
 }
 
-/// Common coding style parameters (SPcod/SPcoc).
+/// Common coding style parameters (A.6.1 and A.6.2).
 #[derive(Clone, Debug)]
 struct CodingStyleParameters {
     num_decomposition_levels: u8,
@@ -179,14 +168,15 @@ struct CodingStyleParameters {
     precinct_sizes: Vec<u8>,
 }
 
-/// Common quantization parameters (SPqcd/SPqcc).
+/// Common quantization parameters (A.6.4 and A.6.5).
 #[derive(Clone, Debug)]
-struct QuantizationParameters {
+struct QuantizationInfo {
     quantization_style: QuantizationStyle,
     guard_bits: u8,
     step_sizes: Vec<u16>,
 }
 
+/// Default values for coding style (A.6.1).
 #[derive(Debug, Clone)]
 struct CodingStyleInfo {
     style: CodingStyleFlags,
@@ -196,20 +186,11 @@ struct CodingStyleInfo {
     parameters: CodingStyleParameters,
 }
 
+/// Values of coding style for each component (A.6.2).
 #[derive(Clone, Debug)]
 struct CodingStyleComponent {
     scoc: CodingStyleFlags,
     parameters: CodingStyleParameters,
-}
-
-#[derive(Debug, Clone)]
-struct QuantizationInfo {
-    parameters: QuantizationParameters,
-}
-
-#[derive(Clone, Debug)]
-struct QuantizationComponent {
-    parameters: QuantizationParameters,
 }
 
 #[derive(Debug)]
@@ -255,7 +236,6 @@ fn read_header(reader: &mut Reader) -> Result<Header, &'static str> {
     let mut cod = None;
     let mut qcd = None;
 
-    // Initialize vectors for component-specific styles
     let num_components = size_data.csiz as usize;
     let mut cod_components = vec![None; num_components];
     let mut qcd_components = vec![None; num_components];
@@ -417,8 +397,8 @@ fn size_marker(reader: &mut Reader) -> Option<SizeData> {
         components.push(ComponentInfo {
             precision,
             is_signed,
-            x_rsiz,
-            y_rsiz,
+            horizontal_resolution: x_rsiz,
+            vertical_resolution: y_rsiz,
         });
     }
 
@@ -517,7 +497,7 @@ fn read_quantization_parameters(
     reader: &mut Reader,
     quantization_style: QuantizationStyle,
     remaining_bytes: usize,
-) -> Option<QuantizationParameters> {
+) -> Option<QuantizationInfo> {
     let mut step_sizes = Vec::new();
 
     match quantization_style {
@@ -542,7 +522,7 @@ fn read_quantization_parameters(
         }
     }
 
-    Some(QuantizationParameters {
+    Some(QuantizationInfo {
         quantization_style,
         guard_bits: 0, // Will be set by caller
         step_sizes,
