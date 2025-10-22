@@ -1,16 +1,14 @@
+use crate::codestream::{CodingStyleInfo, Header, QuantizationInfo, ReaderExt, markers};
 use hayro_common::byte::Reader;
-use crate::codestream::{markers, CodingStyleInfo, Header, QuantizationInfo, ReaderExt};
 
 #[derive(Clone, Debug)]
 pub(crate) struct Tile<'a> {
-    pub(crate) parts: Vec<TilePart<'a>>
+    pub(crate) parts: Vec<TilePart<'a>>,
 }
 
 impl Tile<'_> {
     fn new() -> Tile<'static> {
-        Tile {
-            parts: vec![],
-        }
+        Tile { parts: vec![] }
     }
 }
 
@@ -21,7 +19,10 @@ pub(crate) struct TilePart<'a> {
     pub(crate) qcd_components: Vec<QuantizationInfo>,
 }
 
-pub(crate) fn read_tiles<'a>(reader: &mut Reader<'a>, main_header: &Header) -> Result<Vec<Tile<'a>>, &'static str> {
+pub(crate) fn read_tiles<'a>(
+    reader: &mut Reader<'a>,
+    main_header: &Header,
+) -> Result<Vec<Tile<'a>>, &'static str> {
     let mut parsed_tile_parts = {
         let mut buf = vec![];
         buf.push(read_tile_part(reader, &main_header).ok_or("failed to read first tile part")?);
@@ -34,23 +35,27 @@ pub(crate) fn read_tiles<'a>(reader: &mut Reader<'a>, main_header: &Header) -> R
             return Err("invalid marker: expected EOC marker");
         }
 
-        buf.sort_by(|t1, t2| (t1.tile_index, t1.tile_part_index).cmp(&(t2.tile_index, t2.tile_part_index)));
-        
+        buf.sort_by(|t1, t2| {
+            (t1.tile_index, t1.tile_part_index).cmp(&(t2.tile_index, t2.tile_part_index))
+        });
+
         buf
     };
-    
+
     let mut tiles = vec![Tile::new(); main_header.size_data.num_tiles() as usize];
-    
+
     for tile_part in parsed_tile_parts {
-        let cur_tile = tiles.get_mut(tile_part.tile_index as usize).ok_or("tile part had invalid tile index")?;
-        
+        let cur_tile = tiles
+            .get_mut(tile_part.tile_index as usize)
+            .ok_or("tile part had invalid tile index")?;
+
         cur_tile.parts.push(TilePart {
             data: tile_part.data,
             cod_components: tile_part.cod_components.clone(),
             qcd_components: tile_part.qcd_components.clone(),
         });
     }
-    
+
     Ok(tiles)
 }
 
