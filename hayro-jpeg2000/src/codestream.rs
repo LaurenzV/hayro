@@ -291,7 +291,7 @@ pub(crate) struct SizeData {
     /// Vertical offset from the origin of the reference grid to the top side of the first tile (YTOSiz).
     pub(crate) tile_y_offset: u32,
     /// Component information (SSiz/XRSiz/YRSiz).
-    components: Vec<ComponentInfo>,
+    pub(crate) components: Vec<ComponentInfo>,
 }
 
 impl SizeData {

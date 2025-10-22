@@ -36,7 +36,7 @@ pub(crate) struct Tile<'a> {
 impl Tile<'_> {
     fn new(idx: u32, size_data: &SizeData) -> Tile<'static> {
         // See B-6.
-        let p = idx & size_data.num_x_tiles();
+        let p = idx % size_data.num_x_tiles();
         // I believe the `ceil` in the spec should be a `floor` instead.
         let q = (idx as f64 / size_data.num_x_tiles() as f64).floor() as u32;
 
@@ -222,4 +222,137 @@ pub(crate) fn sot_marker(reader: &mut Reader) -> Option<TilePartHeader> {
         tile_part_index,
         num_tile_parts,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Test case for the example in B.4.
+    #[test]
+    fn test_jpeg2000_standard_example_b4() {
+        let size_data = SizeData {
+            reference_grid_width: 1432,
+            reference_grid_height: 954,
+            image_area_x_offset: 152,
+            image_area_y_offset: 234,
+            tile_width: 396,
+            tile_height: 297,
+            tile_x_offset: 0,
+            tile_y_offset: 0,
+            components: vec![
+                ComponentInfo {
+                    precision: 8,
+                    is_signed: false,
+                    horizontal_resolution: 1,
+                    vertical_resolution: 1,
+                },
+                ComponentInfo {
+                    precision: 8,
+                    is_signed: false,
+                    horizontal_resolution: 2,
+                    vertical_resolution: 2,
+                },
+            ],
+        };
+
+        assert_eq!(size_data.image_width(), 1280);
+        assert_eq!(size_data.image_height(), 720);
+
+        assert_eq!(size_data.num_x_tiles(), 4);
+        assert_eq!(size_data.num_y_tiles(), 4);
+        assert_eq!(size_data.num_tiles(), 16);
+
+        let component_0 = &size_data.components[0];
+        let component_1 = &size_data.components[1];
+
+        let tile_0_0 = Tile::new(0, &size_data);
+        let coords_0_0 = tile_0_0.tile_coords(component_0);
+        assert_eq!(coords_0_0.x0, 152);
+        assert_eq!(coords_0_0.y0, 234);
+        assert_eq!(coords_0_0.x1, 396);
+        assert_eq!(coords_0_0.y1, 297);
+        assert_eq!(coords_0_0.width(), 244);
+        assert_eq!(coords_0_0.height(), 63);
+
+        let tile_1_0 = Tile::new(1, &size_data);
+        let coords_1_0 = tile_1_0.tile_coords(component_0);
+        assert_eq!(coords_1_0.x0, 396);
+        assert_eq!(coords_1_0.y0, 234);
+        assert_eq!(coords_1_0.x1, 792);
+        assert_eq!(coords_1_0.y1, 297);
+        assert_eq!(coords_1_0.width(), 396);
+        assert_eq!(coords_1_0.height(), 63);
+
+        let tile_0_1 = Tile::new(4, &size_data);
+        let coords_0_1 = tile_0_1.tile_coords(component_0);
+        assert_eq!(coords_0_1.x0, 152);
+        assert_eq!(coords_0_1.y0, 297);
+        assert_eq!(coords_0_1.x1, 396);
+        assert_eq!(coords_0_1.y1, 594);
+        assert_eq!(coords_0_1.width(), 244);
+        assert_eq!(coords_0_1.height(), 297);
+
+        let tile_1_1 = Tile::new(5, &size_data);
+        let coords_1_1 = tile_1_1.tile_coords(component_0);
+        assert_eq!(coords_1_1.x0, 396);
+        assert_eq!(coords_1_1.y0, 297);
+        assert_eq!(coords_1_1.x1, 792);
+        assert_eq!(coords_1_1.y1, 594);
+        assert_eq!(coords_1_1.width(), 396);
+        assert_eq!(coords_1_1.height(), 297);
+
+        let tile_3_3 = Tile::new(15, &size_data);
+        let coords_3_3 = tile_3_3.tile_coords(component_0);
+        assert_eq!(coords_3_3.x0, 1188);
+        assert_eq!(coords_3_3.y0, 891);
+        assert_eq!(coords_3_3.x1, 1432);
+        assert_eq!(coords_3_3.y1, 954);
+        assert_eq!(coords_3_3.width(), 244);
+        assert_eq!(coords_3_3.height(), 63);
+
+        let tile_0_0_comp1 = tile_0_0.tile_coords(component_1);
+        assert_eq!(tile_0_0_comp1.x0, 76);
+        assert_eq!(tile_0_0_comp1.y0, 117);
+        assert_eq!(tile_0_0_comp1.x1, 198);
+        assert_eq!(tile_0_0_comp1.y1, 149);
+        assert_eq!(tile_0_0_comp1.width(), 122);
+        assert_eq!(tile_0_0_comp1.height(), 32);
+
+        let tile_1_0_comp1 = tile_1_0.tile_coords(component_1);
+        assert_eq!(tile_1_0_comp1.x0, 198);
+        assert_eq!(tile_1_0_comp1.y0, 117);
+        assert_eq!(tile_1_0_comp1.x1, 396);
+        assert_eq!(tile_1_0_comp1.y1, 149);
+        assert_eq!(tile_1_0_comp1.width(), 198);
+        assert_eq!(tile_1_0_comp1.height(), 32);
+
+        let tile_0_1_comp1 = tile_0_1.tile_coords(component_1);
+        assert_eq!(tile_0_1_comp1.x0, 76);
+        assert_eq!(tile_0_1_comp1.y0, 149);
+        assert_eq!(tile_0_1_comp1.x1, 198);
+        assert_eq!(tile_0_1_comp1.y1, 297);
+        assert_eq!(tile_0_1_comp1.width(), 122);
+        assert_eq!(tile_0_1_comp1.height(), 148);
+
+        let tile_1_1_comp1 = tile_1_1.tile_coords(component_1);
+        assert_eq!(tile_1_1_comp1.x0, 198);
+        assert_eq!(tile_1_1_comp1.y0, 149);
+        assert_eq!(tile_1_1_comp1.x1, 396);
+        assert_eq!(tile_1_1_comp1.y1, 297);
+        assert_eq!(tile_1_1_comp1.width(), 198);
+        assert_eq!(tile_1_1_comp1.height(), 148);
+
+        let tile_2_1 = Tile::new(6, &size_data);
+        let tile_2_1_comp1 = tile_2_1.tile_coords(component_1);
+        assert_eq!(tile_2_1_comp1.x0, 396);
+        assert_eq!(tile_2_1_comp1.y0, 149);
+        assert_eq!(tile_2_1_comp1.x1, 594);
+        assert_eq!(tile_2_1_comp1.y1, 297);
+        assert_eq!(tile_2_1_comp1.width(), 198);
+        assert_eq!(tile_2_1_comp1.height(), 148);
+
+        assert_eq!(tile_1_1_comp1.width(), tile_2_1_comp1.width());
+        assert_eq!(tile_1_1_comp1.height(), tile_2_1_comp1.height());
+    }
 }
