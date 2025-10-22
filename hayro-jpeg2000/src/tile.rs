@@ -67,7 +67,7 @@ impl<'a> Tile<'a> {
             raw_coords: coordinates,
         }
     }
-    
+
     pub(crate) fn tile_parts(&self) -> impl Iterator<Item = TilePart<'_, '_>> {
         self.tile_part_infos.iter().map(|t| TilePart {
             data: t.data,
@@ -78,7 +78,7 @@ impl<'a> Tile<'a> {
     fn raw_tile_coords(&self) -> IntRect {
         self.raw_coords
     }
-    
+
     /// Compute the coordinates of the tiles for the resolution of the given component.
     fn tile_coords(&self, info: &ComponentInfo) -> IntRect {
         if info.horizontal_resolution == 1 && info.vertical_resolution == 1 {
@@ -109,7 +109,7 @@ pub(crate) struct TilePartInfo<'a> {
 #[derive(Clone, Debug)]
 pub(crate) struct TilePart<'a, 'b> {
     pub(crate) data: &'a [u8],
-    pub(crate) tile: &'b Tile<'b>
+    pub(crate) tile: &'b Tile<'b>,
 }
 
 pub(crate) fn read_tiles<'a>(

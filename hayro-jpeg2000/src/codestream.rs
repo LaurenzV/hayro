@@ -311,12 +311,12 @@ impl SizeData {
     pub(crate) fn num_tiles(&self) -> u32 {
         self.num_x_tiles() * self.num_y_tiles()
     }
-    
+
     /// Return the overall width of the image.
     pub(crate) fn image_width(&self) -> u32 {
         self.reference_grid_width - self.image_area_x_offset
     }
-    
+
     /// Return the overall height of the image.
     pub(crate) fn image_height(&self) -> u32 {
         self.reference_grid_height - self.image_area_y_offset
