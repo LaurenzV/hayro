@@ -66,6 +66,10 @@ impl Tile<'_> {
         }
     }
 
+    fn raw_tile_coords(&self) -> IntRect {
+        self.raw_coords
+    }
+    
     /// Compute the coordinates of the tiles for the resolution of the given component.
     fn tile_coords(&self, info: &ComponentInfo) -> IntRect {
         if info.horizontal_resolution == 1 && info.vertical_resolution == 1 {
