@@ -83,7 +83,7 @@ fn read_header(reader: &mut Reader) -> Result<Header, &'static str> {
 
                 // COC takes precedence over COD if available.
                 if let Some(coc) = coc {
-                    cloned.style = coc.scoc;
+                    cloned.flags = coc.flags;
                     cloned.parameters = coc.parameters;
                 }
 
@@ -257,7 +257,7 @@ pub(crate) struct QuantizationInfo {
 /// Default values for coding style (A.6.1).
 #[derive(Debug, Clone)]
 pub(crate) struct CodingStyleInfo {
-    style: CodingStyleFlags,
+    flags: CodingStyleFlags,
     progression_order: ProgressionOrder,
     num_layers: u16,
     mct: MultipleComponentTransform,
@@ -267,7 +267,7 @@ pub(crate) struct CodingStyleInfo {
 /// Values of coding style for each component (A.6.2).
 #[derive(Clone, Debug)]
 struct CodingStyleComponent {
-    scoc: CodingStyleFlags,
+    flags: CodingStyleFlags,
     parameters: CodingStyleParameters,
 }
 
@@ -456,7 +456,7 @@ fn cod_marker(reader: &mut Reader) -> Option<CodingStyleInfo> {
     let coding_style_parameters = coding_style_parameters(reader, &coding_style)?;
 
     Some(CodingStyleInfo {
-        style: coding_style,
+        flags: coding_style,
         progression_order,
         num_layers,
         mct,
@@ -480,7 +480,7 @@ fn coc_marker(reader: &mut Reader, csiz: u16) -> Option<(u16, CodingStyleCompone
     let parameters = coding_style_parameters(reader, &coding_style)?;
 
     let coc = CodingStyleComponent {
-        scoc: coding_style,
+        flags: coding_style,
         parameters,
     };
 
