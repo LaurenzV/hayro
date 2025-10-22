@@ -95,8 +95,6 @@ impl Tile<'_> {
 #[derive(Clone, Debug)]
 pub(crate) struct TilePart<'a> {
     pub(crate) data: &'a [u8],
-    pub(crate) cod_components: Vec<CodingStyleInfo>,
-    pub(crate) qcd_components: Vec<QuantizationInfo>,
 }
 
 pub(crate) fn read_tiles<'a>(
@@ -134,8 +132,6 @@ pub(crate) fn read_tiles<'a>(
 
         cur_tile.parts.push(TilePart {
             data: tile_part.data,
-            cod_components: tile_part.cod_components.clone(),
-            qcd_components: tile_part.qcd_components.clone(),
         });
     }
 
@@ -145,8 +141,6 @@ pub(crate) fn read_tiles<'a>(
 struct ParsedTilePart<'a> {
     tile_index: u16,
     tile_part_index: u8,
-    cod_components: Vec<CodingStyleInfo>,
-    qcd_components: Vec<QuantizationInfo>,
     data: &'a [u8],
 }
 
@@ -194,8 +188,6 @@ fn read_tile_part<'a>(reader: &mut Reader<'a>, main_header: &Header) -> Option<P
         data: tile_part_reader.tail()?,
         tile_index: header.tile_index,
         tile_part_index: header.tile_part_index,
-        cod_components: main_header.cod_components.clone(),
-        qcd_components: main_header.qcd_components.clone(),
     })
 }
 
