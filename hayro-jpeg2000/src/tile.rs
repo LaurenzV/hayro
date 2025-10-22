@@ -1,4 +1,6 @@
-use crate::codestream::{CodingStyleInfo, Header, QuantizationInfo, ReaderExt, SizeData, markers, ComponentInfo};
+use crate::codestream::{
+    CodingStyleInfo, ComponentInfo, Header, QuantizationInfo, ReaderExt, SizeData, markers,
+};
 use hayro_common::byte::Reader;
 
 #[derive(Clone, Copy, Debug)]
@@ -63,16 +65,22 @@ impl Tile<'_> {
             raw_coords: coordinates,
         }
     }
-    
+
     /// Compute the coordinates of the tiles for the resolution of the given component.
     fn tile_coords(&self, info: &ComponentInfo) -> IntRect {
         if info.horizontal_resolution == 1 && info.vertical_resolution == 1 {
             self.raw_coords
-        }   else {
+        } else {
             // As described in B-12.
-            let x0 = self.raw_coords.x0.div_ceil(info.horizontal_resolution as u32);
+            let x0 = self
+                .raw_coords
+                .x0
+                .div_ceil(info.horizontal_resolution as u32);
             let y0 = self.raw_coords.y0.div_ceil(info.vertical_resolution as u32);
-            let x1 = self.raw_coords.x1.div_ceil(info.horizontal_resolution as u32);
+            let x1 = self
+                .raw_coords
+                .x1
+                .div_ceil(info.horizontal_resolution as u32);
             let y1 = self.raw_coords.y1.div_ceil(info.vertical_resolution as u32);
 
             IntRect::new(x0, y0, x1, y1)

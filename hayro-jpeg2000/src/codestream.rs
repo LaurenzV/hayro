@@ -324,8 +324,10 @@ fn size_marker(reader: &mut Reader) -> Result<SizeData, &'static str> {
     {
         return Err("invalid image dimensions");
     }
-    
-    if size_data.tile_x_offset >= size_data.reference_grid_width || size_data.tile_y_offset >= size_data.reference_grid_height {
+
+    if size_data.tile_x_offset >= size_data.reference_grid_width
+        || size_data.tile_y_offset >= size_data.reference_grid_height
+    {
         return Err("invalid image dimensions");
     }
 
@@ -345,7 +347,7 @@ fn size_marker(reader: &mut Reader) -> Result<SizeData, &'static str> {
     {
         return Err("tile offsets are invalid");
     }
-    
+
     for comp in &size_data.components {
         if comp.precision == 0 || comp.vertical_resolution == 0 || comp.horizontal_resolution == 0 {
             return Err("invalid component metadata");
