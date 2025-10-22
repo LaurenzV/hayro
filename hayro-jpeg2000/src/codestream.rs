@@ -209,11 +209,11 @@ impl CodeBlockStyle {
 
 /// Component information (A.5.1 and Table A.11).
 #[derive(Debug)]
-struct ComponentInfo {
-    precision: u8,
-    is_signed: bool,
-    horizontal_resolution: u8,
-    vertical_resolution: u8,
+pub(crate) struct ComponentInfo {
+    pub(crate) precision: u8,
+    pub(crate) is_signed: bool,
+    pub(crate) horizontal_resolution: u8,
+    pub(crate) vertical_resolution: u8,
 }
 
 /// Quantization style (Table A.28).
@@ -340,6 +340,12 @@ fn size_marker(reader: &mut Reader) -> Result<SizeData, &'static str> {
         || size_data.tile_y_offset + size_data.tile_height <= size_data.image_area_y_offset
     {
         return Err("tile offsets are invalid");
+    }
+    
+    for comp in &size_data.components {
+        if comp.precision == 0 || comp.vertical_resolution == 0 || comp.horizontal_resolution == 0 {
+            return Err("invalid component metadata");
+        }
     }
 
     Ok(size_data)
