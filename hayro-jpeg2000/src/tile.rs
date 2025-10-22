@@ -29,12 +29,13 @@ impl IntRect {
 
 #[derive(Clone, Debug)]
 pub(crate) struct Tile<'a> {
+    size_data: &'a SizeData,
     tile_part_infos: Vec<TilePartInfo<'a>>,
     raw_coords: IntRect,
 }
 
-impl Tile<'_> {
-    fn new(idx: u32, size_data: &SizeData) -> Tile<'static> {
+impl<'a> Tile<'a> {
+    fn new(idx: u32, size_data: &'a SizeData) -> Tile<'a> {
         // See B-6.
         let p = idx % size_data.num_x_tiles();
         // I believe the `ceil` in the spec should be a `floor` instead.
@@ -61,6 +62,7 @@ impl Tile<'_> {
         let coordinates = IntRect::new(x0, y0, x1, y1);
 
         Tile {
+            size_data,
             tile_part_infos: vec![],
             raw_coords: coordinates,
         }
@@ -112,7 +114,7 @@ pub(crate) struct TilePart<'a, 'b> {
 
 pub(crate) fn read_tiles<'a>(
     reader: &mut Reader<'a>,
-    main_header: &Header,
+    main_header: &'a Header,
 ) -> Result<Vec<Tile<'a>>, &'static str> {
     let mut parsed_tile_parts = {
         let mut buf = vec![];
