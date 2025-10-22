@@ -34,11 +34,9 @@ impl<'a> BitReader<'a> {
 
     /// Read the given number of bits from the byte stream.
     ///
-    /// Panics if `bit_size` > 32.
+    /// Returns `None` if `bit_size` > 32.
     #[inline(always)]
     pub fn read(&mut self, bit_size: u8) -> Option<u32> {
-        assert!(bit_size <= 32);
-
         let byte_pos = self.byte_pos();
 
         if byte_pos >= self.data.len() {
