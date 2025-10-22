@@ -542,10 +542,6 @@ fn read_free_form_triangles(
     has_function: bool,
     decode: &[f32],
 ) -> Option<Vec<Triangle>> {
-    let bpf = bpf;
-    let bp_cord = bp_cord;
-    let bp_comp = bp_comp;
-
     let mut triangles = vec![];
 
     let ([x_min, x_max, y_min, y_max], decode) = split_decode(decode)?;
@@ -780,9 +776,6 @@ fn read_lattice_triangles(
     vertices_per_row: u32,
     decode: &[f32],
 ) -> Option<Vec<Triangle>> {
-    let bp_cord = bp_cord;
-    let bp_comp = bp_comp;
-
     let mut lattices = vec![];
 
     let ([x_min, x_max, y_min, y_max], decode) = split_decode(decode)?;
@@ -878,10 +871,6 @@ fn read_patch_mesh<P, F>(
 where
     F: Fn([Point; 16], [ColorComponents; 4]) -> P,
 {
-    let bpf = bpf;
-    let bp_coord = bp_coord;
-    let bp_comp = bp_comp;
-
     let ([x_min, x_max, y_min, y_max], decode) = split_decode(decode)?;
     let mut reader = BitReader::new(data);
     let helpers = InterpolationHelpers::new(bp_coord, bp_comp, x_min, x_max, y_min, y_max);
