@@ -1,14 +1,67 @@
-use crate::codestream::{CodingStyleInfo, Header, QuantizationInfo, ReaderExt, markers};
+use crate::codestream::{CodingStyleInfo, Header, QuantizationInfo, ReaderExt, SizeData, markers};
 use hayro_common::byte::Reader;
+
+#[derive(Clone, Debug)]
+pub(crate) struct IntRect {
+    pub(crate) x0: u32,
+    pub(crate) y0: u32,
+    pub(crate) x1: u32,
+    pub(crate) y1: u32,
+}
+
+impl IntRect {
+    pub(crate) fn new(x0: u32, y0: u32, x1: u32, y1: u32) -> Self {
+        Self { x0, y0, x1, y1 }
+    }
+
+    pub(crate) fn width(&self) -> u32 {
+        // See B-11.
+        self.x1 - self.x0
+    }
+
+    pub(crate) fn height(&self) -> u32 {
+        // See B-11.
+        self.y1 - self.y0
+    }
+}
 
 #[derive(Clone, Debug)]
 pub(crate) struct Tile<'a> {
     pub(crate) parts: Vec<TilePart<'a>>,
+    pub(crate) coordinates: IntRect,
 }
 
 impl Tile<'_> {
-    fn new() -> Tile<'static> {
-        Tile { parts: vec![] }
+    fn new(idx: u32, size_data: &SizeData) -> Tile<'static> {
+        // See B-6.
+        let p = idx & size_data.num_x_tiles();
+        // I believe the `ceil` in the spec should be a `floor` instead.
+        let q = (idx as f64 / size_data.num_x_tiles() as f64).floor() as u32;
+
+        // See B-7, B-8, B-9 and B-10.
+        let x0 = u32::max(
+            size_data.tile_x_offset + p * size_data.tile_width,
+            size_data.image_area_x_offset,
+        );
+        let y0 = u32::max(
+            size_data.tile_y_offset + q * size_data.tile_height,
+            size_data.image_area_y_offset,
+        );
+        let x1 = u32::min(
+            size_data.tile_x_offset + (p + 1) * size_data.tile_width,
+            size_data.image_area_width,
+        );
+        let y1 = u32::min(
+            size_data.tile_y_offset + (q + 1) * size_data.tile_height,
+            size_data.image_area_height,
+        );
+
+        let coordinates = IntRect::new(x0, y0, x1, y1);
+
+        Tile {
+            parts: vec![],
+            coordinates,
+        }
     }
 }
 
@@ -42,7 +95,10 @@ pub(crate) fn read_tiles<'a>(
         buf
     };
 
-    let mut tiles = vec![Tile::new(); main_header.size_data.num_tiles() as usize];
+    let mut tiles = (0..main_header.size_data.num_tiles() as usize)
+        .into_iter()
+        .map(|idx| Tile::new(idx as u32, &main_header.size_data))
+        .collect::<Vec<_>>();
 
     for tile_part in parsed_tile_parts {
         let cur_tile = tiles

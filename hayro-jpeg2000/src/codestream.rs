@@ -274,22 +274,22 @@ struct CodingStyleComponent {
 #[derive(Debug)]
 pub(crate) struct SizeData {
     /// Width of the reference grid (Xsiz).
-    grid_width: u32,
+    pub(crate) image_area_width: u32,
     /// Height of the reference grid (Ysiz).
-    grid_height: u32,
+    pub(crate) image_area_height: u32,
     /// Horizontal offset from the origin of the reference grid to the
     /// left side of the image area (XOsiz).
-    image_area_x_offset: u32,
+    pub(crate) image_area_x_offset: u32,
     /// Vertical offset from the origin of the reference grid to the top side of the image area (YOsiz).
-    image_area_y_offset: u32,
+    pub(crate) image_area_y_offset: u32,
     /// Width of one reference tile with respect to the reference grid (XTSiz).
-    tile_width: u32,
+    pub(crate) tile_width: u32,
     /// Height of one reference tile with respect to the reference grid (YTSiz).
-    tile_height: u32,
+    pub(crate) tile_height: u32,
     /// Horizontal offset from the origin of the reference grid to the left side of the first tile (XTOSiz).
-    tile_x_offset: u32,
+    pub(crate) tile_x_offset: u32,
     /// Vertical offset from the origin of the reference grid to the top side of the first tile (YTOSiz).
-    tile_y_offset: u32,
+    pub(crate) tile_y_offset: u32,
     /// Component information (SSiz/XRSiz/YRSiz).
     components: Vec<ComponentInfo>,
 }
@@ -298,13 +298,13 @@ impl SizeData {
     /// The number of tiles in the x direction.
     pub(crate) fn num_x_tiles(&self) -> u32 {
         // See formula B-5.
-        (self.grid_width - self.tile_x_offset).div_ceil(self.tile_width)
+        (self.image_area_width - self.tile_x_offset).div_ceil(self.tile_width)
     }
 
     /// The number of tiles in the y direction.
     pub(crate) fn num_y_tiles(&self) -> u32 {
         // See formula B-5.
-        (self.grid_height - self.tile_y_offset).div_ceil(self.tile_height)
+        (self.image_area_height - self.tile_y_offset).div_ceil(self.tile_height)
     }
 
     /// The total number of tiles.
@@ -319,8 +319,8 @@ fn size_marker(reader: &mut Reader) -> Result<SizeData, &'static str> {
 
     if size_data.tile_width == 0
         || size_data.tile_height == 0
-        || size_data.grid_width == 0
-        || size_data.grid_height == 0
+        || size_data.image_area_width == 0
+        || size_data.image_area_height == 0
     {
         return Err("invalid image dimensions");
     }
@@ -379,8 +379,8 @@ fn size_marker_inner(reader: &mut Reader) -> Option<SizeData> {
     }
 
     Some(SizeData {
-        grid_width: xsiz,
-        grid_height: ysiz,
+        image_area_width: xsiz,
+        image_area_height: ysiz,
         image_area_x_offset: x_osiz,
         image_area_y_offset: y_osiz,
         tile_width: xt_siz,
