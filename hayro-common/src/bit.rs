@@ -71,14 +71,22 @@ impl<'a> BitReader<'a> {
         Some(item)
     }
 
+    /// Get the current byte position.
     #[inline]
-    fn byte_pos(&self) -> usize {
+    pub fn byte_pos(&self) -> usize {
         self.cur_pos / 8
     }
 
+    /// Get the current bit position.
     #[inline]
-    fn bit_pos(&self) -> usize {
+    pub fn bit_pos(&self) -> usize {
         self.cur_pos % 8
+    }
+    
+    /// Get the full byte (aligned to the byte boundary) of the current position.
+    #[inline]
+    pub fn cur_byte(&self) -> Option<u8> {
+        self.data.get(self.byte_pos()).copied()   
     }
 }
 

@@ -1,4 +1,7 @@
+use hayro_common::bit::BitReader;
 use hayro_common::byte::Reader;
+use crate::t2::process_tiles;
+use crate::tile::read_tiles;
 
 pub(crate) fn read(stream: &[u8]) -> Result<(), &'static str> {
     let mut reader = Reader::new(stream);
@@ -9,26 +12,18 @@ pub(crate) fn read(stream: &[u8]) -> Result<(), &'static str> {
     }
 
     let header = read_header(&mut reader)?;
-
-    let mut tiles = vec![];
-    tiles.push(read_tile_part(&mut reader, &header).ok_or("failed to read first tile part")?);
-
-    while reader.peek_marker() == Some(markers::SOT) {
-        tiles.push(read_tile_part(&mut reader, &header).ok_or("failed to read a tile part")?);
-    }
-
-    if reader.read_marker()? != markers::EOC {
-        return Err("invalid marker: expected EOC marker");
-    }
-
+    let tiles = read_tiles(&mut reader, &header)?;
+    
+    process_tiles(&tiles, &header);
+    
     Ok(())
 }
 
 #[derive(Debug)]
-struct Header {
-    size_data: SizeData,
-    cod_components: Vec<CodingStyleInfo>,
-    qcd_components: Vec<QuantizationInfo>,
+pub(crate) struct Header {
+    pub(crate) size_data: SizeData,
+    pub(crate) cod_components: Vec<CodingStyleInfo>,
+    pub(crate) qcd_components: Vec<QuantizationInfo>,
 }
 
 fn read_header(reader: &mut Reader) -> Result<Header, &'static str> {
@@ -102,71 +97,18 @@ fn read_header(reader: &mut Reader) -> Result<Header, &'static str> {
     })
 }
 
-struct TilePart<'a> {
-    header: TilePartHeader,
-    data: &'a [u8],
-}
-
-fn read_tile_part<'a>(reader: &mut Reader<'a>, header: &Header) -> Option<TilePart<'a>> {
-    if reader.read_marker().ok()? != markers::SOT {
-        return None;
-    }
-
-    let (mut tile_part_reader, header) = {
-        let sot_marker = sot_marker(reader)?;
-        let data = if sot_marker.tile_part_length == 0 {
-            // Data goes until EOC.
-            let data = reader.tail()?;
-            reader.jump_to_end();
-
-            data
-        } else {
-            // Subtract 12 to account for the marker length.
-            let length = (sot_marker.tile_part_length as usize).checked_sub(12)?;
-
-            let data = reader.tail()?.get(..length)?;
-            // Skip to the very end in the original reader.
-            reader.skip_bytes(length)?;
-
-            data
-        };
-
-        (Reader::new(data), sot_marker)
-    };
-
-    loop {
-        match tile_part_reader.peek_marker()? {
-            markers::SOD => {
-                tile_part_reader.read_marker().ok()?;
-                break;
-            }
-            markers::EOC => break,
-            m => {
-                panic!("marker: {}", markers::to_string(m));
-            }
-        }
-    }
-
-    Some(TilePart {
-        data: tile_part_reader.tail()?,
-        header,
-    })
-}
-
-struct TilePartHeader {
-    tile_index: u16,
-    tile_part_length: u32,
-    tile_part_index: u8,
-    num_tile_parts: u8,
-}
-
 /// Progression order (Table A.16).
 #[derive(Debug, Clone, Copy)]
 enum ProgressionOrder {
+    /// Layer-Resolution-Component-Position.
     Lrcp,
+    /// Resolution-Layer-Component-Position.
     Rlcp,
+    /// Resolution-Position-Component-Layer.
     Rpcl,
+    /// Position-Component-Resolution-Layer.
     Pcrl,
+    /// Component-Position-Resolution-Layer.
     Cprl,
 }
 
@@ -306,7 +248,7 @@ struct CodingStyleParameters {
 
 /// Common quantization parameters (A.6.4 and A.6.5).
 #[derive(Clone, Debug)]
-struct QuantizationInfo {
+pub(crate) struct QuantizationInfo {
     quantization_style: QuantizationStyle,
     guard_bits: u8,
     step_sizes: Vec<u16>,
@@ -314,7 +256,7 @@ struct QuantizationInfo {
 
 /// Default values for coding style (A.6.1).
 #[derive(Debug, Clone)]
-struct CodingStyleInfo {
+pub(crate) struct CodingStyleInfo {
     style: CodingStyleFlags,
     progression_order: ProgressionOrder,
     num_layers: u16,
@@ -350,24 +292,6 @@ struct SizeData {
     tile_y_offset: u32,
     /// Component information (SSiz/XRSiz/YRSiz).
     components: Vec<ComponentInfo>,
-}
-
-/// SOT marker (A.4.2).
-fn sot_marker(reader: &mut Reader) -> Option<TilePartHeader> {
-    // Length.
-    let _ = reader.read_u16()?;
-
-    let tile_index = reader.read_u16()?;
-    let tile_part_length = reader.read_u32()?;
-    let tile_part_index = reader.read_byte()?;
-    let num_tile_parts = reader.read_byte()?;
-
-    Some(TilePartHeader {
-        tile_index,
-        tile_part_length,
-        tile_part_index,
-        num_tile_parts,
-    })
 }
 
 /// SIZ marker (A.5.1).
@@ -573,7 +497,7 @@ fn skip_code(marker_code: u8) -> bool {
     marker_code >= 0x30 && marker_code <= 0x3F
 }
 
-trait ReaderExt: Clone {
+pub(crate) trait ReaderExt: Clone {
     fn read_marker(&mut self) -> Result<u8, &'static str>;
     fn peek_marker(&mut self) -> Option<u8> {
         self.clone().read_marker().ok()
@@ -592,7 +516,7 @@ impl ReaderExt for Reader<'_> {
 }
 
 /// Marker codes (Table A.2).
-mod markers {
+pub(crate) mod markers {
     /// Start of codestream - 'SOC'.
     pub(crate) const SOC: u8 = 0x4F;
     /// Start of tile-part - 'SOT'.

@@ -1,7 +1,7 @@
 use hayro_jpeg2000::read;
 
 fn main() {
-    let data = std::fs::read("/Users/lstampfl/Programming/GitHub/serenity/Tests/LibGfx/test-inputs/jpeg2000/kakadu-lossless-rgba-u16-prog1-layers1-res6.jp2").unwrap();
+    let data = std::fs::read("/Users/lstampfl/Programming/GitHub/hayro/hayro-jpeg2000/test.jp2").unwrap();
 
     match read(&data) {
         Ok(metadata) => {
