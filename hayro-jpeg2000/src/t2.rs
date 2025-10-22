@@ -4,7 +4,7 @@ use hayro_common::bit::BitReader;
 
 pub(crate) fn process_tiles(tiles: &[Tile], header: &Header) -> Option<()> {
     for tile in tiles {
-        for part_tile in &tile.parts {
+        for part_tile in tile.tile_parts() {
             let mut reader = BitReader::new(&part_tile.data);
             let zero_length = reader.read(1)?;
         }

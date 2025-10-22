@@ -29,7 +29,7 @@ impl IntRect {
 
 #[derive(Clone, Debug)]
 pub(crate) struct Tile<'a> {
-    pub(crate) parts: Vec<TilePart<'a>>,
+    tile_part_infos: Vec<TilePartInfo<'a>>,
     raw_coords: IntRect,
 }
 
@@ -61,9 +61,16 @@ impl Tile<'_> {
         let coordinates = IntRect::new(x0, y0, x1, y1);
 
         Tile {
-            parts: vec![],
+            tile_part_infos: vec![],
             raw_coords: coordinates,
         }
+    }
+    
+    pub(crate) fn tile_parts(&self) -> impl Iterator<Item = TilePart<'_, '_>> {
+        self.tile_part_infos.iter().map(|t| TilePart {
+            data: t.data,
+            tile: self,
+        })
     }
 
     fn raw_tile_coords(&self) -> IntRect {
@@ -93,8 +100,14 @@ impl Tile<'_> {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct TilePart<'a> {
+pub(crate) struct TilePartInfo<'a> {
     pub(crate) data: &'a [u8],
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct TilePart<'a, 'b> {
+    pub(crate) data: &'a [u8],
+    pub(crate) tile: &'b Tile<'b>
 }
 
 pub(crate) fn read_tiles<'a>(
@@ -130,7 +143,7 @@ pub(crate) fn read_tiles<'a>(
             .get_mut(tile_part.tile_index as usize)
             .ok_or("tile part had invalid tile index")?;
 
-        cur_tile.parts.push(TilePart {
+        cur_tile.tile_part_infos.push(TilePartInfo {
             data: tile_part.data,
         });
     }
