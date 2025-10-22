@@ -49,11 +49,11 @@ impl Tile<'_> {
         );
         let x1 = u32::min(
             size_data.tile_x_offset + (p + 1) * size_data.tile_width,
-            size_data.image_area_width,
+            size_data.reference_grid_width,
         );
         let y1 = u32::min(
             size_data.tile_y_offset + (q + 1) * size_data.tile_height,
-            size_data.image_area_height,
+            size_data.reference_grid_height,
         );
 
         let coordinates = IntRect::new(x0, y0, x1, y1);

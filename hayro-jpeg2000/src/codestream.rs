@@ -274,9 +274,9 @@ struct CodingStyleComponent {
 #[derive(Debug)]
 pub(crate) struct SizeData {
     /// Width of the reference grid (Xsiz).
-    pub(crate) image_area_width: u32,
+    pub(crate) reference_grid_width: u32,
     /// Height of the reference grid (Ysiz).
-    pub(crate) image_area_height: u32,
+    pub(crate) reference_grid_height: u32,
     /// Horizontal offset from the origin of the reference grid to the
     /// left side of the image area (XOsiz).
     pub(crate) image_area_x_offset: u32,
@@ -298,13 +298,13 @@ impl SizeData {
     /// The number of tiles in the x direction.
     pub(crate) fn num_x_tiles(&self) -> u32 {
         // See formula B-5.
-        (self.image_area_width - self.tile_x_offset).div_ceil(self.tile_width)
+        (self.reference_grid_width - self.tile_x_offset).div_ceil(self.tile_width)
     }
 
     /// The number of tiles in the y direction.
     pub(crate) fn num_y_tiles(&self) -> u32 {
         // See formula B-5.
-        (self.image_area_height - self.tile_y_offset).div_ceil(self.tile_height)
+        (self.reference_grid_height - self.tile_y_offset).div_ceil(self.tile_height)
     }
 
     /// The total number of tiles.
@@ -319,9 +319,13 @@ fn size_marker(reader: &mut Reader) -> Result<SizeData, &'static str> {
 
     if size_data.tile_width == 0
         || size_data.tile_height == 0
-        || size_data.image_area_width == 0
-        || size_data.image_area_height == 0
+        || size_data.reference_grid_width == 0
+        || size_data.reference_grid_height == 0
     {
+        return Err("invalid image dimensions");
+    }
+    
+    if size_data.tile_x_offset >= size_data.reference_grid_width || size_data.tile_y_offset >= size_data.reference_grid_height {
         return Err("invalid image dimensions");
     }
 
@@ -385,8 +389,8 @@ fn size_marker_inner(reader: &mut Reader) -> Option<SizeData> {
     }
 
     Some(SizeData {
-        image_area_width: xsiz,
-        image_area_height: ysiz,
+        reference_grid_width: xsiz,
+        reference_grid_height: ysiz,
         image_area_x_offset: x_osiz,
         image_area_y_offset: y_osiz,
         tile_width: xt_siz,
