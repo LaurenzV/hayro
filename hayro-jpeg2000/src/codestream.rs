@@ -1,7 +1,7 @@
-use hayro_common::bit::BitReader;
-use hayro_common::byte::Reader;
 use crate::t2::process_tiles;
 use crate::tile::read_tiles;
+use hayro_common::bit::BitReader;
+use hayro_common::byte::Reader;
 
 pub(crate) fn read(stream: &[u8]) -> Result<(), &'static str> {
     let mut reader = Reader::new(stream);
@@ -13,9 +13,9 @@ pub(crate) fn read(stream: &[u8]) -> Result<(), &'static str> {
 
     let header = read_header(&mut reader)?;
     let tiles = read_tiles(&mut reader, &header)?;
-    
+
     process_tiles(&tiles, &header);
-    
+
     Ok(())
 }
 
@@ -31,7 +31,7 @@ fn read_header(reader: &mut Reader) -> Result<Header, &'static str> {
         return Err("expected SIZ marker after SOC");
     }
 
-    let size_data = size_marker(reader).ok_or("failed to read SIZ marker")?;
+    let size_data = size_marker(reader)?;
 
     let mut cod = None;
     let mut qcd = None;
@@ -272,7 +272,7 @@ struct CodingStyleComponent {
 }
 
 #[derive(Debug)]
-struct SizeData {
+pub(crate) struct SizeData {
     /// Width of the reference grid (Xsiz).
     grid_width: u32,
     /// Height of the reference grid (Ysiz).
@@ -294,8 +294,58 @@ struct SizeData {
     components: Vec<ComponentInfo>,
 }
 
+impl SizeData {
+    /// The number of tiles in the x direction.
+    pub(crate) fn num_x_tiles(&self) -> u32 {
+        // See formula B-5.
+        (self.grid_width - self.tile_x_offset).div_ceil(self.tile_width)
+    }
+
+    /// The number of tiles in the y direction.
+    pub(crate) fn num_y_tiles(&self) -> u32 {
+        // See formula B-5.
+        (self.grid_height - self.tile_y_offset).div_ceil(self.tile_height)
+    }
+
+    /// The total number of tiles.
+    pub(crate) fn num_tiles(&self) -> u32 {
+        self.num_x_tiles() * self.num_y_tiles()
+    }
+}
+
 /// SIZ marker (A.5.1).
-fn size_marker(reader: &mut Reader) -> Option<SizeData> {
+fn size_marker(reader: &mut Reader) -> Result<SizeData, &'static str> {
+    let size_data = size_marker_inner(reader).ok_or("failed to read SIZ marker")?;
+
+    if size_data.tile_width == 0
+        || size_data.tile_height == 0
+        || size_data.grid_width == 0
+        || size_data.grid_height == 0
+    {
+        return Err("invalid image dimensions");
+    }
+
+    // The tile grid offsets (XTOsiz, YTOsiz) are constrained to be no greater than the
+    // image area offsets (B-3).
+    if size_data.tile_x_offset > size_data.image_area_x_offset
+        || size_data.tile_y_offset > size_data.image_area_y_offset
+    {
+        return Err("tile offsets are invalid");
+    }
+
+    // Also, the tile size plus the tile offset shall be greater than the image area offset.
+    // This ensures that the first tile (tile 0) will contain at least one reference grid point
+    // from the image area (B-4).
+    if size_data.tile_x_offset + size_data.tile_width <= size_data.image_area_x_offset
+        || size_data.tile_y_offset + size_data.tile_height <= size_data.image_area_y_offset
+    {
+        return Err("tile offsets are invalid");
+    }
+
+    Ok(size_data)
+}
+
+fn size_marker_inner(reader: &mut Reader) -> Option<SizeData> {
     // Length.
     let _ = reader.read_u16()?;
     // Decoder capabilities.

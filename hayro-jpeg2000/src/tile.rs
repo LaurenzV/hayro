@@ -1,6 +1,7 @@
 use hayro_common::byte::Reader;
 use crate::codestream::{markers, CodingStyleInfo, Header, QuantizationInfo, ReaderExt};
 
+#[derive(Clone, Debug)]
 pub(crate) struct Tile<'a> {
     pub(crate) parts: Vec<TilePart<'a>>
 }
@@ -13,6 +14,7 @@ impl Tile<'_> {
     }
 }
 
+#[derive(Clone, Debug)]
 pub(crate) struct TilePart<'a> {
     pub(crate) data: &'a [u8],
     pub(crate) cod_components: Vec<CodingStyleInfo>,
@@ -33,23 +35,15 @@ pub(crate) fn read_tiles<'a>(reader: &mut Reader<'a>, main_header: &Header) -> R
         }
 
         buf.sort_by(|t1, t2| (t1.tile_index, t1.tile_part_index).cmp(&(t2.tile_index, t2.tile_part_index)));
+        
         buf
     };
     
-    // TODO: Calculate number of tiles manually.
-    let mut num_tiles = parsed_tile_parts.iter().map(|t| t.tile_index + 1).max().unwrap_or(0);
-    let mut tiles = vec![Tile::new()];
+    let mut tiles = vec![Tile::new(); main_header.size_data.num_tiles() as usize];
     
     for tile_part in parsed_tile_parts {
-        if tile_part.tile_index as usize != tiles.len() - 1 {
-            if tile_part.tile_index as usize !=  tiles.len() {
-                return Err("invalid tile order");
-            }
-            
-            tiles.push(Tile::new());
-        }
+        let cur_tile = tiles.get_mut(tile_part.tile_index as usize).ok_or("tile part had invalid tile index")?;
         
-        let cur_tile = tiles.last_mut().unwrap();
         cur_tile.parts.push(TilePart {
             data: tile_part.data,
             cod_components: tile_part.cod_components.clone(),
