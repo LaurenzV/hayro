@@ -1,6 +1,6 @@
 use crate::filter::FilterResult;
 use crate::object::stream::{ImageColorSpace, ImageData, ImageDecodeParams};
-use hayro_common::bit::{BitSize, BitWriter};
+use hayro_common::bit::BitWriter;
 use jpeg2k::DecodeParameters;
 
 impl ImageColorSpace {
@@ -89,8 +89,7 @@ fn scale(
     height: u32,
 ) -> Option<Vec<u8>> {
     let mut input = vec![0; ((width + 1) * num_components as u32 * height) as usize];
-    let bit_size = BitSize::from_u8(bit_per_component)?;
-    let mut writer = BitWriter::new(&mut input, bit_size)?;
+    let mut writer = BitWriter::new(&mut input, bit_per_component)?;
 
     let old_max = ((1 << 8) - 1) as f32;
     let new_max = ((1 << bit_per_component) - 1) as f32;

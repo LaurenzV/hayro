@@ -1,5 +1,5 @@
 use crate::function::{Clamper, TupleVec, Values, interpolate};
-use hayro_common::bit::{BitReader, BitSize};
+use hayro_common::bit::BitReader;
 use hayro_syntax::object::Array;
 use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::{BITS_PER_SAMPLE, DECODE, ENCODE, SIZE};
@@ -53,7 +53,7 @@ impl Type0 {
             let mut buf = vec![];
             let mut reader = BitReader::new(&decoded);
 
-            while let Some(data) = reader.read(BitSize::from_u8(bits_per_sample)?) {
+            while let Some(data) = reader.read(bits_per_sample) {
                 buf.push(data);
             }
 

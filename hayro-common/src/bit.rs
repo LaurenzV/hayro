@@ -3,27 +3,6 @@
 use smallvec::{SmallVec, smallvec};
 use std::fmt::Debug;
 
-/// A bit size.
-#[derive(PartialEq, Eq, Debug, Clone, Copy)]
-pub struct BitSize(u8);
-
-impl BitSize {
-    /// Create a new `BitSize`. Returns `None` if the number is bigger than 32.
-    pub fn from_u8(value: u8) -> Option<Self> {
-        if value > 32 { None } else { Some(Self(value)) }
-    }
-
-    /// Return the number of bits.
-    pub fn bits(&self) -> usize {
-        self.0 as usize
-    }
-
-    /// Return the bit mask.
-    pub fn mask(&self) -> u32 {
-        ((1u64 << self.0 as u64) - 1) as u32
-    }
-}
-
 /// A bit reader.
 pub struct BitReader<'a> {
     data: &'a [u8],
@@ -54,15 +33,19 @@ impl<'a> BitReader<'a> {
     }
 
     /// Read the given number of bits from the byte stream.
+    ///
+    /// Panics if `bit_size` > 32.
     #[inline(always)]
-    pub fn read(&mut self, bit_size: BitSize) -> Option<u32> {
+    pub fn read(&mut self, bit_size: u8) -> Option<u32> {
+        assert!(bit_size <= 32);
+
         let byte_pos = self.byte_pos();
 
         if byte_pos >= self.data.len() {
             return None;
         }
 
-        let item = match bit_size.0 {
+        let item = match bit_size {
             8 => {
                 let item = self.data[byte_pos] as u32;
                 self.cur_pos += 8;
@@ -71,17 +54,16 @@ impl<'a> BitReader<'a> {
             }
             0..=32 => {
                 let bit_pos = self.bit_pos();
-                let end_byte_pos = (bit_pos + bit_size.0 as usize - 1) / 8;
+                let end_byte_pos = (bit_pos + bit_size as usize - 1) / 8;
                 let mut read = [0u8; 8];
 
                 for (i, r) in read.iter_mut().enumerate().take(end_byte_pos + 1) {
                     *r = *self.data.get(byte_pos + i)?;
                 }
 
-                let item = (u64::from_be_bytes(read) >> (64 - bit_pos - bit_size.0 as usize))
-                    as u32
-                    & bit_size.mask();
-                self.cur_pos += bit_size.0 as usize;
+                let item = (u64::from_be_bytes(read) >> (64 - bit_pos - bit_size as usize)) as u32
+                    & bit_mask(bit_size);
+                self.cur_pos += bit_size as usize;
 
                 Some(item)
             }
@@ -102,18 +84,22 @@ impl<'a> BitReader<'a> {
     }
 }
 
+/// Get the mask for the given bit size.
+pub fn bit_mask(bit_size: u8) -> u32 {
+    ((1u64 << bit_size as u64) - 1) as u32
+}
 /// A bit writer.
 #[derive(Debug)]
 pub struct BitWriter<'a> {
     data: &'a mut [u8],
     cur_pos: usize,
-    bit_size: BitSize,
+    bit_size: u8,
 }
 
 impl<'a> BitWriter<'a> {
     /// Create a new bit writer. Only bit sizes of 1, 2, 4, 8, and 16 are supported.
-    pub fn new(data: &'a mut [u8], bit_size: BitSize) -> Option<Self> {
-        if !matches!(bit_size.0, 1 | 2 | 4 | 8 | 16) {
+    pub fn new(data: &'a mut [u8], bit_size: u8) -> Option<Self> {
+        if !matches!(bit_size, 1 | 2 | 4 | 8 | 16) {
             return None;
         }
 
@@ -170,16 +156,16 @@ impl<'a> BitWriter<'a> {
         let byte_pos = self.byte_pos();
         let bit_size = self.bit_size;
 
-        match bit_size.0 {
+        match bit_size {
             1 | 2 | 4 => {
                 let bit_pos = self.bit_pos();
 
                 let base = self.data.get(byte_pos)?;
-                let shift = 8 - self.bit_size.bits() - bit_pos;
-                let item = ((val & self.bit_size.mask() as u16) as u8) << shift;
+                let shift = 8 - self.bit_size as usize - bit_pos;
+                let item = ((val & bit_mask(self.bit_size) as u16) as u8) << shift;
 
                 *(self.data.get_mut(byte_pos)?) = *base | item;
-                self.cur_pos += bit_size.bits();
+                self.cur_pos += bit_size as usize;
             }
             8 => {
                 *(self.data.get_mut(byte_pos)?) = val as u8;
@@ -201,14 +187,14 @@ impl<'a> BitWriter<'a> {
 /// An iterator over bit chunks.
 pub struct BitChunks<'a> {
     reader: BitReader<'a>,
-    bit_size: BitSize,
+    bit_size: u8,
     chunk_len: usize,
 }
 
 impl<'a> BitChunks<'a> {
     /// Create a new iterator over bit chunks.
-    pub fn new(data: &'a [u8], bit_size: BitSize, chunk_len: usize) -> Option<Self> {
-        if bit_size.0 > 16 {
+    pub fn new(data: &'a [u8], bit_size: u8, chunk_len: usize) -> Option<Self> {
+        if bit_size > 16 {
             return None;
         }
 
@@ -256,12 +242,8 @@ impl BitChunk {
     }
 
     /// Create a new bit chunk from the given reader.
-    pub fn from_reader(
-        bit_reader: &mut BitReader,
-        bit_size: BitSize,
-        chunk_len: usize,
-    ) -> Option<Self> {
-        if bit_size.0 > 16 {
+    pub fn from_reader(bit_reader: &mut BitReader, bit_size: u8, chunk_len: usize) -> Option<Self> {
+        if bit_size > 16 {
             return None;
         }
 
@@ -279,26 +261,20 @@ impl BitChunk {
 mod tests {
     use super::*;
 
-    const BS1: BitSize = BitSize(1);
-    const BS2: BitSize = BitSize(2);
-    const BS4: BitSize = BitSize(4);
-    const BS8: BitSize = BitSize(8);
-    const BS16: BitSize = BitSize(16);
-
     #[test]
     fn bit_reader_16() {
         let data = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06];
         let mut reader = BitReader::new(&data);
         assert_eq!(
-            reader.read(BS16).unwrap() as u16,
+            reader.read(16).unwrap() as u16,
             u16::from_be_bytes([0x01, 0x02])
         );
         assert_eq!(
-            reader.read(BS16).unwrap() as u16,
+            reader.read(16).unwrap() as u16,
             u16::from_be_bytes([0x03, 0x04])
         );
         assert_eq!(
-            reader.read(BS16).unwrap() as u16,
+            reader.read(16).unwrap() as u16,
             u16::from_be_bytes([0x05, 0x06])
         );
     }
@@ -306,7 +282,7 @@ mod tests {
     #[test]
     fn bit_writer_16() {
         let mut buf = vec![0u8; 6];
-        let mut writer = BitWriter::new(&mut buf, BitSize::from_u8(16).unwrap()).unwrap();
+        let mut writer = BitWriter::new(&mut buf, 16).unwrap();
         writer.write(u16::from_be_bytes([0x01, 0x02])).unwrap();
         writer.write(u16::from_be_bytes([0x03, 0x04])).unwrap();
         writer.write(u16::from_be_bytes([0x05, 0x06])).unwrap();
@@ -318,46 +294,25 @@ mod tests {
     fn bit_reader_12() {
         let data = [0b10011000, 0b00011111, 0b10101001, 0b11101001, 0b00011010];
         let mut reader = BitReader::new(&data);
-        assert_eq!(
-            reader.read(BitSize::from_u8(12).unwrap()).unwrap(),
-            0b100110000001
-        );
-        assert_eq!(
-            reader.read(BitSize::from_u8(12).unwrap()).unwrap(),
-            0b111110101001
-        );
-        assert_eq!(
-            reader.read(BitSize::from_u8(12).unwrap()).unwrap(),
-            0b111010010001
-        );
+        assert_eq!(reader.read(12).unwrap(), 0b100110000001);
+        assert_eq!(reader.read(12).unwrap(), 0b111110101001);
+        assert_eq!(reader.read(12).unwrap(), 0b111010010001);
     }
 
     #[test]
     fn bit_reader_9() {
         let data = [0b10011000, 0b00011111, 0b10101001, 0b11101001, 0b00011010];
         let mut reader = BitReader::new(&data);
-        assert_eq!(
-            reader.read(BitSize::from_u8(9).unwrap()).unwrap(),
-            0b100110000
-        );
-        assert_eq!(
-            reader.read(BitSize::from_u8(9).unwrap()).unwrap(),
-            0b001111110
-        );
-        assert_eq!(
-            reader.read(BitSize::from_u8(9).unwrap()).unwrap(),
-            0b101001111
-        );
-        assert_eq!(
-            reader.read(BitSize::from_u8(9).unwrap()).unwrap(),
-            0b010010001
-        );
+        assert_eq!(reader.read(9).unwrap(), 0b100110000);
+        assert_eq!(reader.read(9).unwrap(), 0b001111110);
+        assert_eq!(reader.read(9).unwrap(), 0b101001111);
+        assert_eq!(reader.read(9).unwrap(), 0b010010001);
     }
 
     #[test]
     fn bit_writer_8() {
         let mut buf = vec![0u8; 3];
-        let mut writer = BitWriter::new(&mut buf, BitSize::from_u8(8).unwrap()).unwrap();
+        let mut writer = BitWriter::new(&mut buf, 8).unwrap();
         writer.write(0x01).unwrap();
         writer.write(0x02).unwrap();
         writer.write(0x03).unwrap();
@@ -369,15 +324,15 @@ mod tests {
     fn bit_reader_8() {
         let data = [0x01, 0x02, 0x03];
         let mut reader = BitReader::new(&data);
-        assert_eq!(reader.read(BS8).unwrap(), 0x01);
-        assert_eq!(reader.read(BS8).unwrap(), 0x02);
-        assert_eq!(reader.read(BS8).unwrap(), 0x03);
+        assert_eq!(reader.read(8).unwrap(), 0x01);
+        assert_eq!(reader.read(8).unwrap(), 0x02);
+        assert_eq!(reader.read(8).unwrap(), 0x03);
     }
 
     #[test]
     fn bit_writer_4() {
         let mut buf = vec![0u8; 3];
-        let mut writer = BitWriter::new(&mut buf, BitSize::from_u8(4).unwrap()).unwrap();
+        let mut writer = BitWriter::new(&mut buf, 4).unwrap();
         writer.write(0b1001).unwrap();
         writer.write(0b1000).unwrap();
         writer.write(0b0001).unwrap();
@@ -392,18 +347,18 @@ mod tests {
     fn bit_reader_4() {
         let data = [0b10011000, 0b00011111, 0b10101001];
         let mut reader = BitReader::new(&data);
-        assert_eq!(reader.read(BS4).unwrap(), 0b1001);
-        assert_eq!(reader.read(BS4).unwrap(), 0b1000);
-        assert_eq!(reader.read(BS4).unwrap(), 0b0001);
-        assert_eq!(reader.read(BS4).unwrap(), 0b1111);
-        assert_eq!(reader.read(BS4).unwrap(), 0b1010);
-        assert_eq!(reader.read(BS4).unwrap(), 0b1001);
+        assert_eq!(reader.read(4).unwrap(), 0b1001);
+        assert_eq!(reader.read(4).unwrap(), 0b1000);
+        assert_eq!(reader.read(4).unwrap(), 0b0001);
+        assert_eq!(reader.read(4).unwrap(), 0b1111);
+        assert_eq!(reader.read(4).unwrap(), 0b1010);
+        assert_eq!(reader.read(4).unwrap(), 0b1001);
     }
 
     #[test]
     fn bit_writer_2() {
         let mut buf = vec![0u8; 2];
-        let mut writer = BitWriter::new(&mut buf, BitSize::from_u8(2).unwrap()).unwrap();
+        let mut writer = BitWriter::new(&mut buf, 2).unwrap();
         writer.write(0b10).unwrap();
         writer.write(0b01).unwrap();
         writer.write(0b10).unwrap();
@@ -420,20 +375,20 @@ mod tests {
     fn bit_reader_2() {
         let data = [0b10011000, 0b00010000];
         let mut reader = BitReader::new(&data);
-        assert_eq!(reader.read(BS2).unwrap(), 0b10);
-        assert_eq!(reader.read(BS2).unwrap(), 0b01);
-        assert_eq!(reader.read(BS2).unwrap(), 0b10);
-        assert_eq!(reader.read(BS2).unwrap(), 0b00);
-        assert_eq!(reader.read(BS2).unwrap(), 0b00);
-        assert_eq!(reader.read(BS2).unwrap(), 0b01);
-        assert_eq!(reader.read(BS2).unwrap(), 0b00);
-        assert_eq!(reader.read(BS2).unwrap(), 0b00);
+        assert_eq!(reader.read(2).unwrap(), 0b10);
+        assert_eq!(reader.read(2).unwrap(), 0b01);
+        assert_eq!(reader.read(2).unwrap(), 0b10);
+        assert_eq!(reader.read(2).unwrap(), 0b00);
+        assert_eq!(reader.read(2).unwrap(), 0b00);
+        assert_eq!(reader.read(2).unwrap(), 0b01);
+        assert_eq!(reader.read(2).unwrap(), 0b00);
+        assert_eq!(reader.read(2).unwrap(), 0b00);
     }
 
     #[test]
     fn bit_writer_1() {
         let mut buf = vec![0u8; 2];
-        let mut writer = BitWriter::new(&mut buf, BitSize::from_u8(1).unwrap()).unwrap();
+        let mut writer = BitWriter::new(&mut buf, 1).unwrap();
         writer.write(0b1).unwrap();
         writer.write(0b0).unwrap();
         writer.write(0b0).unwrap();
@@ -459,49 +414,49 @@ mod tests {
     fn bit_reader_1() {
         let data = [0b10011000, 0b00010000];
         let mut reader = BitReader::new(&data);
-        assert_eq!(reader.read(BS1).unwrap(), 0b1);
-        assert_eq!(reader.read(BS1).unwrap(), 0b0);
-        assert_eq!(reader.read(BS1).unwrap(), 0b0);
-        assert_eq!(reader.read(BS1).unwrap(), 0b1);
-        assert_eq!(reader.read(BS1).unwrap(), 0b1);
-        assert_eq!(reader.read(BS1).unwrap(), 0b0);
-        assert_eq!(reader.read(BS1).unwrap(), 0b0);
-        assert_eq!(reader.read(BS1).unwrap(), 0b0);
+        assert_eq!(reader.read(1).unwrap(), 0b1);
+        assert_eq!(reader.read(1).unwrap(), 0b0);
+        assert_eq!(reader.read(1).unwrap(), 0b0);
+        assert_eq!(reader.read(1).unwrap(), 0b1);
+        assert_eq!(reader.read(1).unwrap(), 0b1);
+        assert_eq!(reader.read(1).unwrap(), 0b0);
+        assert_eq!(reader.read(1).unwrap(), 0b0);
+        assert_eq!(reader.read(1).unwrap(), 0b0);
 
-        assert_eq!(reader.read(BS1).unwrap(), 0b0);
-        assert_eq!(reader.read(BS1).unwrap(), 0b0);
-        assert_eq!(reader.read(BS1).unwrap(), 0b0);
-        assert_eq!(reader.read(BS1).unwrap(), 0b1);
-        assert_eq!(reader.read(BS1).unwrap(), 0b0);
-        assert_eq!(reader.read(BS1).unwrap(), 0b0);
-        assert_eq!(reader.read(BS1).unwrap(), 0b0);
-        assert_eq!(reader.read(BS1).unwrap(), 0b0);
+        assert_eq!(reader.read(1).unwrap(), 0b0);
+        assert_eq!(reader.read(1).unwrap(), 0b0);
+        assert_eq!(reader.read(1).unwrap(), 0b0);
+        assert_eq!(reader.read(1).unwrap(), 0b1);
+        assert_eq!(reader.read(1).unwrap(), 0b0);
+        assert_eq!(reader.read(1).unwrap(), 0b0);
+        assert_eq!(reader.read(1).unwrap(), 0b0);
+        assert_eq!(reader.read(1).unwrap(), 0b0);
     }
 
     #[test]
     fn bit_reader_align() {
         let data = [0b10011000, 0b00010000];
         let mut reader = BitReader::new(&data);
-        assert_eq!(reader.read(BS1).unwrap(), 0b1);
-        assert_eq!(reader.read(BS1).unwrap(), 0b0);
-        assert_eq!(reader.read(BS1).unwrap(), 0b0);
-        assert_eq!(reader.read(BS1).unwrap(), 0b1);
+        assert_eq!(reader.read(1).unwrap(), 0b1);
+        assert_eq!(reader.read(1).unwrap(), 0b0);
+        assert_eq!(reader.read(1).unwrap(), 0b0);
+        assert_eq!(reader.read(1).unwrap(), 0b1);
         reader.align();
 
-        assert_eq!(reader.read(BS1).unwrap(), 0b0);
-        assert_eq!(reader.read(BS1).unwrap(), 0b0);
-        assert_eq!(reader.read(BS1).unwrap(), 0b0);
-        assert_eq!(reader.read(BS1).unwrap(), 0b1);
-        assert_eq!(reader.read(BS1).unwrap(), 0b0);
-        assert_eq!(reader.read(BS1).unwrap(), 0b0);
-        assert_eq!(reader.read(BS1).unwrap(), 0b0);
-        assert_eq!(reader.read(BS1).unwrap(), 0b0);
+        assert_eq!(reader.read(1).unwrap(), 0b0);
+        assert_eq!(reader.read(1).unwrap(), 0b0);
+        assert_eq!(reader.read(1).unwrap(), 0b0);
+        assert_eq!(reader.read(1).unwrap(), 0b1);
+        assert_eq!(reader.read(1).unwrap(), 0b0);
+        assert_eq!(reader.read(1).unwrap(), 0b0);
+        assert_eq!(reader.read(1).unwrap(), 0b0);
+        assert_eq!(reader.read(1).unwrap(), 0b0);
     }
 
     #[test]
     fn bit_reader_chunks() {
         let data = [0b10011000, 0b00010000];
-        let mut reader = BitChunks::new(&data, BitSize::from_u8(1).unwrap(), 3).unwrap();
+        let mut reader = BitChunks::new(&data, 1, 3).unwrap();
         assert_eq!(reader.next().unwrap().bits.as_ref(), &[0b1, 0b0, 0b0]);
         assert_eq!(reader.next().unwrap().bits.as_ref(), &[0b1, 0b1, 0b0]);
         assert_eq!(reader.next().unwrap().bits.as_ref(), &[0b0, 0b0, 0b0]);
@@ -513,15 +468,12 @@ mod tests {
     fn bit_reader_varying_bit_sizes() {
         let data = [0b10011000, 0b00011111, 0b10101001];
         let mut reader = BitReader::new(&data);
-        assert_eq!(reader.read(BS4).unwrap(), 0b1001);
-        assert_eq!(reader.read(BS1).unwrap(), 0b1);
-        assert_eq!(reader.read(BS4).unwrap(), 0b0000);
-        assert_eq!(reader.read(BitSize::from_u8(5).unwrap()).unwrap(), 0b00111);
-        assert_eq!(reader.read(BS1).unwrap(), 0b1);
-        assert_eq!(reader.read(BS2).unwrap(), 0b11);
-        assert_eq!(
-            reader.read(BitSize::from_u8(7).unwrap()).unwrap(),
-            0b0101001
-        );
+        assert_eq!(reader.read(4).unwrap(), 0b1001);
+        assert_eq!(reader.read(1).unwrap(), 0b1);
+        assert_eq!(reader.read(4).unwrap(), 0b0000);
+        assert_eq!(reader.read(5).unwrap(), 0b00111);
+        assert_eq!(reader.read(1).unwrap(), 0b1);
+        assert_eq!(reader.read(2).unwrap(), 0b11);
+        assert_eq!(reader.read(7).unwrap(), 0b0101001);
     }
 }

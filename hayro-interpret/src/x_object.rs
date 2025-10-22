@@ -8,7 +8,7 @@ use crate::interpret::state::ActiveTransferFunction;
 use crate::{BlendMode, CacheKey, ClipPath, Image, RasterImage, StencilImage};
 use crate::{FillRule, InterpreterWarning, WarningSinkFn, interpret};
 use crate::{LumaData, RgbData};
-use hayro_common::bit::{BitReader, BitSize};
+use hayro_common::bit::BitReader;
 use hayro_syntax::content::TypedIter;
 use hayro_syntax::object::Array;
 use hayro_syntax::object::Dict;
@@ -647,7 +647,7 @@ fn get_components(
     let result = match bits_per_component {
         1..8 | 9..16 => {
             let mut buf = vec![];
-            let bpc = BitSize::from_u8(bits_per_component)?;
+            let bpc = bits_per_component;
             let mut reader = BitReader::new(data);
 
             for _ in 0..height {

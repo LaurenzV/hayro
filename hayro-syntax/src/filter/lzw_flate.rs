@@ -1,6 +1,6 @@
 use crate::object::Dict;
 use crate::object::dict::keys::{BITS_PER_COMPONENT, COLORS, COLUMNS, EARLY_CHANGE, PREDICTOR};
-use hayro_common::bit::{BitChunk, BitChunks, BitReader, BitSize, BitWriter};
+use hayro_common::bit::{BitChunk, BitChunks, BitReader, BitWriter, bit_mask};
 use log::warn;
 
 pub(crate) mod flate {
@@ -546,7 +546,7 @@ pub(crate) mod flate {
 pub(crate) mod lzw {
     use crate::filter::lzw_flate::{PredictorParams, apply_predictor};
     use crate::object::Dict;
-    use hayro_common::bit::{BitReader, BitSize};
+    use hayro_common::bit::BitReader;
     use log::warn;
 
     /// Decode a LZW-encoded stream.
@@ -565,7 +565,7 @@ pub(crate) mod lzw {
 
     fn decode_impl(data: &[u8], early_change: bool) -> Option<Vec<u8>> {
         let mut table = Table::new(early_change);
-        let mut bit_size = BitSize::from_u8(table.code_length())?;
+        let mut bit_size = table.code_length();
         let mut reader = BitReader::new(data);
         let mut decoded = vec![];
         let mut prev = None;
@@ -583,7 +583,7 @@ pub(crate) mod lzw {
                 CLEAR_TABLE => {
                     table.clear();
                     prev = None;
-                    bit_size = BitSize::from_u8(table.code_length())?;
+                    bit_size = table.code_length();
                 }
                 EOD => return Some(decoded),
                 new => {
@@ -612,7 +612,7 @@ pub(crate) mod lzw {
                         return None;
                     }
 
-                    bit_size = BitSize::from_u8(table.code_length())?;
+                    bit_size = table.code_length();
                     prev = Some(new);
                 }
             }
@@ -755,14 +755,11 @@ fn apply_predictor(data: Vec<u8>, params: &PredictorParams) -> Option<Vec<u8>> {
 
             let (bit_size, chunk_len) = if is_png_predictor {
                 (
-                    BitSize::from_u8(8).unwrap(),
+                    8,
                     (params.colors * params.bits_per_component).div_ceil(8) as usize,
                 )
             } else {
-                (
-                    BitSize::from_u8(params.bits_per_component)?,
-                    params.colors as usize,
-                )
+                (params.bits_per_component, params.colors as usize)
             };
             let zero_row = vec![0; row_len];
             let mut prev_row = BitChunks::new(&zero_row, bit_size, chunk_len)?;
@@ -855,7 +852,7 @@ fn apply<'a, T: Predictor>(
     cur_row: BitChunks<'a>,
     writer: &mut BitWriter<'a>,
     chunk_len: usize,
-    bit_size: BitSize,
+    bit_size: u8,
 ) -> Option<()> {
     for (cur_row, prev_row) in cur_row.zip(prev_row) {
         let old_pos = writer.cur_pos();
@@ -869,8 +866,9 @@ fn apply<'a, T: Predictor>(
             // Note that the wrapping behavior when adding inside the predictors is dependent on the
             // bit size, so it wouldn't be triggered for bits per component < 16. So we mask out
             // the bytes manually, which is equivalent to a wrapping add.
-            writer
-                .write(T::predict(cur_row, prev_row, prev_col, top_left) & bit_size.mask() as u16);
+            writer.write(
+                T::predict(cur_row, prev_row, prev_col, top_left) & bit_mask(bit_size) as u16,
+            );
         }
 
         prev_col = {
