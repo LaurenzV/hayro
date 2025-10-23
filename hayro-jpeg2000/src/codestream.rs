@@ -1,5 +1,5 @@
 use crate::t2::process_tiles;
-use crate::tile::{read_tiles, IntRect};
+use crate::tile::{IntRect, TilePart, TilePartInstance, read_tiles};
 use hayro_common::bit::BitReader;
 use hayro_common::byte::Reader;
 
@@ -141,7 +141,7 @@ impl MultipleComponentTransform {
 
 /// Wavelet transformation type (Table A.20).
 #[derive(Debug, Clone, Copy)]
-enum WaveletTransform {
+pub(crate) enum WaveletTransform {
     Irreversible97,
     Reversible53,
 }
@@ -157,8 +157,8 @@ impl WaveletTransform {
 }
 
 /// Coding style flags (Table A.13).
-#[derive(Debug, Clone, Copy)]
-struct CodingStyleFlags {
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct CodingStyleFlags {
     raw: u8,
 }
 
@@ -181,8 +181,8 @@ impl CodingStyleFlags {
 }
 
 /// Code-block style flags (Table A.19).
-#[derive(Debug, Clone, Copy)]
-struct CodeBlockStyle {
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct CodeBlockStyle {
     selective_arithmetic_coding_bypass: bool,
     reset_context_probabilities: bool,
     termination_on_each_pass: bool,
@@ -206,7 +206,7 @@ impl CodeBlockStyle {
 
 /// Quantization style (Table A.28).
 #[derive(Debug, Clone, Copy)]
-enum QuantizationStyle {
+pub(crate) enum QuantizationStyle {
     NoQuantization,
     ScalarDerived,
     ScalarExpounded,
@@ -237,9 +237,9 @@ pub(crate) struct CodingStyleParameters {
 /// Common quantization parameters (A.6.4 and A.6.5).
 #[derive(Clone, Debug)]
 pub(crate) struct QuantizationInfo {
-    quantization_style: QuantizationStyle,
-    guard_bits: u8,
-    step_sizes: Vec<u16>,
+    pub(crate) quantization_style: QuantizationStyle,
+    pub(crate) guard_bits: u8,
+    pub(crate) step_sizes: Vec<u16>,
 }
 
 /// Default values for coding style (A.6.1).
@@ -310,12 +310,12 @@ impl SizeData {
 
         IntRect::new(x0, y0, x1, y1)
     }
-    
+
     pub(crate) fn tile_x_coord(&self, idx: u32) -> u32 {
         // See B-6.
         idx % self.num_x_tiles()
     }
-    
+
     pub(crate) fn tile_y_coord(&self, idx: u32) -> u32 {
         // See B-6.
         // I believe the `ceil` in the spec should be a `floor` instead.
@@ -340,9 +340,9 @@ pub(crate) struct ComponentInfo {
 }
 
 impl ComponentInfo {
-    /// Return the coordinates of the rectangle scaled by the horizontal and vertical 
+    /// Return the coordinates of the rectangle scaled by the horizontal and vertical
     /// resolution of the component.
-    fn scaled_rect(&self, tile_rect: IntRect) -> IntRect {
+    pub(crate) fn scaled_rect(&self, tile_rect: IntRect) -> IntRect {
         if self.size_info.horizontal_resolution == 1 && self.size_info.vertical_resolution == 1 {
             tile_rect
         } else {
@@ -350,33 +350,48 @@ impl ComponentInfo {
             let t_x0 = tile_rect
                 .x0
                 .div_ceil(self.size_info.horizontal_resolution as u32);
-            let t_y0 = tile_rect.y0.div_ceil(self.size_info.vertical_resolution as u32);
+            let t_y0 = tile_rect
+                .y0
+                .div_ceil(self.size_info.vertical_resolution as u32);
             let t_x1 = tile_rect
                 .x1
                 .div_ceil(self.size_info.horizontal_resolution as u32);
-            let t_y1 = tile_rect.y1.div_ceil(self.size_info.vertical_resolution as u32);
+            let t_y1 = tile_rect
+                .y1
+                .div_ceil(self.size_info.vertical_resolution as u32);
 
             IntRect::new(t_x0, t_y0, t_x1, t_y1)
         }
     }
-    
-    /// Given the rectangle of a tile, return the coordinates of the rectangle at the given
-    /// resolution in the given component.
-    fn resolution_dimension(&self, tile_rect: IntRect, resolution: u8) -> IntRect {
-        // See formula B-14.
-        let r = resolution;
-        let n_l = self
-            .coding_style_parameters
-            .parameters
-            .num_decomposition_levels;
-        let IntRect { x0, y0, x1, y1 } = part.tile.tile_coords(&component_info.size_info);
 
-        let tx0 = x0.div_ceil(2u32.pow(n_l as u32 - r as u32));
-        let ty0 = y0.div_ceil(2u32.pow(n_l as u32 - r as u32));
-        let tx1 = x1.div_ceil(2u32.pow(n_l as u32 - r as u32));
-        let ty1 = y1.div_ceil(2u32.pow(n_l as u32 - r as u32));
+    pub(crate) fn tile_part_instance<'a, 'b>(
+        &'b self,
+        part: TilePart<'a, 'b>,
+        resolution: u8,
+    ) -> TilePartInstance<'a, 'b> {
+        let dimensions = {
+            // See formula B-14.
+            let r = resolution;
+            let n_l = self
+                .coding_style_parameters
+                .parameters
+                .num_decomposition_levels;
+            let IntRect { x0, y0, x1, y1 } = self.scaled_rect(part.tile.rect);
 
-        IntRect::new(tx0, ty0, tx1, ty1)
+            let tx0 = x0.div_ceil(2u32.pow(n_l as u32 - r as u32));
+            let ty0 = y0.div_ceil(2u32.pow(n_l as u32 - r as u32));
+            let tx1 = x1.div_ceil(2u32.pow(n_l as u32 - r as u32));
+            let ty1 = y1.div_ceil(2u32.pow(n_l as u32 - r as u32));
+
+            IntRect::new(tx0, ty0, tx1, ty1)
+        };
+
+        TilePartInstance {
+            tile_part: part,
+            resolution,
+            component_info: self,
+            dimensions,
+        }
     }
 }
 
