@@ -237,13 +237,13 @@ impl QuantizationStyle {
 
 /// Common coding style parameters (A.6.1 and A.6.2).
 #[derive(Clone, Debug)]
-struct CodingStyleParameters {
-    num_decomposition_levels: u8,
-    code_block_width: u8,
-    code_block_height: u8,
-    code_block_style: CodeBlockStyle,
-    transformation: WaveletTransform,
-    precinct_sizes: Vec<u8>,
+pub(crate) struct CodingStyleParameters {
+    pub(crate) num_decomposition_levels: u8,
+    pub(crate) code_block_width: u8,
+    pub(crate) code_block_height: u8,
+    pub(crate) code_block_style: CodeBlockStyle,
+    pub(crate) transformation: WaveletTransform,
+    pub(crate) precinct_sizes: Vec<u8>,
 }
 
 /// Common quantization parameters (A.6.4 and A.6.5).
@@ -257,11 +257,11 @@ pub(crate) struct QuantizationInfo {
 /// Default values for coding style (A.6.1).
 #[derive(Debug, Clone)]
 pub(crate) struct CodingStyleInfo {
-    flags: CodingStyleFlags,
-    progression_order: ProgressionOrder,
-    num_layers: u16,
-    mct: MultipleComponentTransform,
-    parameters: CodingStyleParameters,
+    pub(crate) flags: CodingStyleFlags,
+    pub(crate) progression_order: ProgressionOrder,
+    pub(crate) num_layers: u16,
+    pub(crate) mct: MultipleComponentTransform,
+    pub(crate) parameters: CodingStyleParameters,
 }
 
 /// Values of coding style for each component (A.6.2).
