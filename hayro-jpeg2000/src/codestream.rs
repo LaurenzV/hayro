@@ -22,7 +22,8 @@ pub(crate) fn read(stream: &[u8]) -> Result<(), &'static str> {
 #[derive(Debug)]
 pub(crate) struct Header {
     pub(crate) size_data: SizeData,
-    pub(crate) cod_components: Vec<CodingStyleInfo>,
+    pub(crate) global_coding_style: GlobalCodingStyleInfo,
+    pub(crate) component_coding_styles: Vec<ComponentCodingStyle>,
     pub(crate) qcd_components: Vec<QuantizationInfo>,
 }
 
@@ -76,19 +77,10 @@ fn read_header(reader: &mut Reader) -> Result<Header, &'static str> {
 
     Ok(Header {
         size_data,
-        cod_components: cod_components
+        global_coding_style: cod.clone(),
+        component_coding_styles: cod_components
             .into_iter()
-            .map(|coc| {
-                let mut cloned = cod.clone();
-
-                // COC takes precedence over COD if available.
-                if let Some(coc) = coc {
-                    cloned.flags = coc.flags;
-                    cloned.parameters = coc.parameters;
-                }
-
-                cloned
-            })
+            .map(|coc| coc.unwrap_or(cod.component_parameters.clone()))
             .collect(),
         qcd_components: qcd_components
             .into_iter()
@@ -256,19 +248,19 @@ pub(crate) struct QuantizationInfo {
 
 /// Default values for coding style (A.6.1).
 #[derive(Debug, Clone)]
-pub(crate) struct CodingStyleInfo {
-    pub(crate) flags: CodingStyleFlags,
+pub(crate) struct GlobalCodingStyleInfo {
     pub(crate) progression_order: ProgressionOrder,
     pub(crate) num_layers: u16,
     pub(crate) mct: MultipleComponentTransform,
-    pub(crate) parameters: CodingStyleParameters,
+    // This is the default used for all components, if not overridden by COC.
+    pub(crate) component_parameters: ComponentCodingStyle,
 }
 
 /// Values of coding style for each component (A.6.2).
 #[derive(Clone, Debug)]
-struct CodingStyleComponent {
-    flags: CodingStyleFlags,
-    parameters: CodingStyleParameters,
+pub(crate) struct ComponentCodingStyle {
+    pub(crate) flags: CodingStyleFlags,
+    pub(crate) parameters: CodingStyleParameters,
 }
 
 #[derive(Debug)]
@@ -446,29 +438,31 @@ fn coding_style_parameters(
 }
 
 /// COD marker (A.6.1).
-fn cod_marker(reader: &mut Reader) -> Option<CodingStyleInfo> {
+fn cod_marker(reader: &mut Reader) -> Option<GlobalCodingStyleInfo> {
     // Length.
     let _ = reader.read_u16()?;
 
-    let coding_style = CodingStyleFlags::from_u8(reader.read_byte()?);
+    let coding_style_flags = CodingStyleFlags::from_u8(reader.read_byte()?);
     let progression_order = ProgressionOrder::from_u8(reader.read_byte()?).ok()?;
 
     let num_layers = reader.read_u16()?;
     let mct = MultipleComponentTransform::from_u8(reader.read_byte()?).ok()?;
 
-    let coding_style_parameters = coding_style_parameters(reader, &coding_style)?;
+    let coding_style_parameters = coding_style_parameters(reader, &coding_style_flags)?;
 
-    Some(CodingStyleInfo {
-        flags: coding_style,
+    Some(GlobalCodingStyleInfo {
         progression_order,
         num_layers,
         mct,
-        parameters: coding_style_parameters,
+        component_parameters: ComponentCodingStyle {
+            flags: coding_style_flags,
+            parameters: coding_style_parameters,
+        },
     })
 }
 
 /// COC marker (A.6.2).
-fn coc_marker(reader: &mut Reader, csiz: u16) -> Option<(u16, CodingStyleComponent)> {
+fn coc_marker(reader: &mut Reader, csiz: u16) -> Option<(u16, ComponentCodingStyle)> {
     // Length.
     let _ = reader.read_u16()?;
 
@@ -482,7 +476,7 @@ fn coc_marker(reader: &mut Reader, csiz: u16) -> Option<(u16, CodingStyleCompone
     // Read SPcoc - coding style parameters (same structure as SPcod from COD)
     let parameters = coding_style_parameters(reader, &coding_style)?;
 
-    let coc = CodingStyleComponent {
+    let coc = ComponentCodingStyle {
         flags: coding_style,
         parameters,
     };

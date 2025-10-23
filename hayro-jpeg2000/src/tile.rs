@@ -1,5 +1,6 @@
 use crate::codestream::{
-    CodingStyleInfo, ComponentInfo, Header, QuantizationInfo, ReaderExt, SizeData, markers,
+    ComponentCodingStyle, ComponentInfo, GlobalCodingStyleInfo, Header, QuantizationInfo,
+    ReaderExt, SizeData, markers,
 };
 use hayro_common::byte::Reader;
 
@@ -119,7 +120,8 @@ pub(crate) struct TilePart<'a, 'b> {
 pub(crate) struct TilePartInstance<'a, 'b> {
     pub(crate) tile_part: TilePart<'a, 'b>,
     pub(crate) resolution: u8,
-    pub(crate) coding_style: &'b CodingStyleInfo,
+    pub(crate) component_coding_style: &'b ComponentCodingStyle,
+    pub(crate) global_coding_style: &'b GlobalCodingStyleInfo,
     pub(crate) component_info: &'b ComponentInfo,
     pub(crate) dimensions: IntRect,
     ppx: u8,
@@ -130,15 +132,16 @@ impl<'a, 'b> TilePartInstance<'a, 'b> {
     fn new(part: TilePart<'a, 'b>, component_idx: u16, resolution: u8) -> Self {
         let header = part.tile.header;
         let component_info = &header.size_data.components[component_idx as usize];
-        let coding_style = &header.cod_components[component_idx as usize];
-        let (ppx, ppy) = header.cod_components[component_idx as usize]
+        let component_coding_style = &header.component_coding_styles[component_idx as usize];
+        let global_coding_style = &header.global_coding_style;
+        let (ppx, ppy) = header.component_coding_styles[component_idx as usize]
             .parameters
             .precinct_exponents[resolution as usize];
 
         let dimensions = {
             // See formula B-14.
             let r = resolution;
-            let n_l = coding_style.parameters.num_decomposition_levels;
+            let n_l = component_coding_style.parameters.num_decomposition_levels;
             let IntRect { x0, y0, x1, y1 } = part.tile.tile_coords(component_info);
 
             let tx0 = x0.div_ceil(2u32.pow(n_l as u32 - r as u32));
@@ -153,7 +156,8 @@ impl<'a, 'b> TilePartInstance<'a, 'b> {
             tile_part: part,
             resolution,
             component_info,
-            coding_style,
+            global_coding_style,
+            component_coding_style,
             dimensions,
             ppx,
             ppy,
@@ -185,35 +189,35 @@ impl<'a, 'b> TilePartInstance<'a, 'b> {
             y1.div_ceil(2u32.pow(self.ppy as u32)) - y0 / 2u32.pow(self.ppy as u32)
         }
     }
-    
+
     fn num_precincts(&self) -> u32 {
         self.num_precincts_x() * self.num_precincts_y()
     }
-    
+
     fn code_block_width(&self) -> u8 {
         // See B-17.
-        let xcb = self.coding_style.parameters.code_block_width;
-        
+        let xcb = self.component_coding_style.parameters.code_block_width;
+
         if self.resolution > 0 {
             u8::min(xcb, self.ppx - 1)
-        }   else {
+        } else {
             u8::min(xcb, self.ppx)
         }
     }
-    
+
     fn code_block_height(&self) -> u8 {
         // See B-18.
-        let ycb = self.coding_style.parameters.code_block_height;
-        
+        let ycb = self.component_coding_style.parameters.code_block_height;
+
         if self.resolution > 0 {
             u8::min(ycb, self.ppy - 1)
-        }   else {
+        } else {
             u8::min(ycb, self.ppy)
         }
     }
-    
+
     fn num_layers(&self) -> u16 {
-        self.coding_style.num_layers
+        self.global_coding_style.num_layers
     }
 }
 
@@ -370,7 +374,7 @@ mod tests {
 
         let header = Header {
             size_data,
-            cod_components: vec![],
+            component_coding_styles: vec![],
             qcd_components: vec![],
         };
 

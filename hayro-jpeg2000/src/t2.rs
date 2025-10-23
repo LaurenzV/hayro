@@ -15,7 +15,7 @@ pub(crate) fn process_tiles(tiles: &[Tile], header: &Header) -> Option<()> {
 fn process_packet(tile: &TilePart) -> Option<()> {
     let mut reader = BitReader::new(&tile.data);
     let zero_length = reader.read(1)?;
-    
+
     Some(())
 }
 
