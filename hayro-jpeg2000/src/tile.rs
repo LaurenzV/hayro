@@ -52,6 +52,8 @@ impl<'a> Tile<'a> {
             size_data.tile_y_offset + q * size_data.tile_height,
             size_data.image_area_y_offset,
         );
+        
+        // Note that `x1` and `y1` are exclusive.
         let x1 = u32::min(
             size_data.tile_x_offset + (p + 1) * size_data.tile_width,
             size_data.reference_grid_width,
