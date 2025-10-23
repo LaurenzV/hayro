@@ -1,15 +1,21 @@
 use crate::codestream::Header;
-use crate::tile::Tile;
+use crate::tile::{Tile, TilePart};
 use hayro_common::bit::BitReader;
 
 pub(crate) fn process_tiles(tiles: &[Tile], header: &Header) -> Option<()> {
     for tile in tiles {
-        for part_tile in tile.tile_parts() {
-            let mut reader = BitReader::new(&part_tile.data);
-            let zero_length = reader.read(1)?;
+        for tile_part in tile.tile_parts() {
+            process_packet(&tile_part)?;
         }
     }
 
+    Some(())
+}
+
+fn process_packet(tile: &TilePart) -> Option<()> {
+    let mut reader = BitReader::new(&tile.data);
+    let zero_length = reader.read(1)?;
+    
     Some(())
 }
 
