@@ -1,8 +1,7 @@
 use crate::codestream::ComponentInfo;
 use crate::tile::{TilePart, TilePartInstance};
-use std::path::{Components, Iter};
 
-#[derive(Default, Copy, Clone)]
+#[derive(Default, Copy, Clone, Debug)]
 pub(crate) struct ProgressionData {
     layer_num: u16,
     resolution: u16,
@@ -108,7 +107,7 @@ impl<'a> IteratorState<'a> {
         self.data.precinct += 1;
 
         if self.data.precinct >= self.tile_part_instance.num_precincts() {
-            self.data.resolution = 0;
+            self.data.precinct = 0;
 
             true
         } else {
@@ -121,18 +120,17 @@ pub(crate) trait ProgressionIterator<'a>: Iterator<Item = ProgressionData> {
     fn new(iterator_input: IteratorInput<'a>) -> Self;
 }
 
-pub(crate) struct RlcpProgression<'a> {
-    data: ProgressionData,
+pub(crate) struct ResolutionLevelLayerComponentPositionProgressionIterator<'a> {
     state: IteratorState<'a>,
 }
 
-impl Iterator for RlcpProgression<'_> {
+impl Iterator for ResolutionLevelLayerComponentPositionProgressionIterator<'_> {
     type Item = ProgressionData;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.state.first {
             self.state.first = false;
-            return Some(self.data);
+            return Some(self.state.data);
         }
 
         if self.state.advance_precinct() {
@@ -145,18 +143,17 @@ impl Iterator for RlcpProgression<'_> {
             }
         }
 
-        Some(self.data)
+        Some(self.state.data)
     }
 }
 
-impl<'a> ProgressionIterator<'a> for RlcpProgression<'a> {
+impl<'a> ProgressionIterator<'a> for ResolutionLevelLayerComponentPositionProgressionIterator<'a> {
     fn new(input: IteratorInput<'a>) -> Self {
         let data = ProgressionData::default();
         let instance = input.component_infos[data.component as usize]
             .tile_part_instance(input.tile_part, data.resolution);
 
         Self {
-            data,
             state: IteratorState::new(input, instance),
         }
     }

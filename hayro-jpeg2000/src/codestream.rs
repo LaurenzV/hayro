@@ -97,26 +97,21 @@ fn read_header(reader: &mut Reader) -> Result<Header, &'static str> {
 /// Progression order (Table A.16).
 #[derive(Debug, Clone, Copy)]
 enum ProgressionOrder {
-    /// Layer-Resolution-Component-Position.
-    Lrcp,
-    /// Resolution-Layer-Component-Position.
-    Rlcp,
-    /// Resolution-Position-Component-Layer.
-    Rpcl,
-    /// Position-Component-Resolution-Layer.
-    Pcrl,
-    /// Component-Position-Resolution-Layer.
-    Cprl,
+    LayerResolutionComponentPosition,
+    ResolutionLayerComponentPosition,
+    ResolutionPositionComponentLayer,
+    PositionComponentResolutionLayer,
+    ComponentPositionResolutionLayer,
 }
 
 impl ProgressionOrder {
     fn from_u8(value: u8) -> Result<Self, &'static str> {
         match value {
-            0 => Ok(ProgressionOrder::Lrcp),
-            1 => Ok(ProgressionOrder::Rlcp),
-            2 => Ok(ProgressionOrder::Rpcl),
-            3 => Ok(ProgressionOrder::Pcrl),
-            4 => Ok(ProgressionOrder::Cprl),
+            0 => Ok(ProgressionOrder::LayerResolutionComponentPosition),
+            1 => Ok(ProgressionOrder::ResolutionLayerComponentPosition),
+            2 => Ok(ProgressionOrder::ResolutionPositionComponentLayer),
+            3 => Ok(ProgressionOrder::PositionComponentResolutionLayer),
+            4 => Ok(ProgressionOrder::ComponentPositionResolutionLayer),
             _ => Err("invalid progression order"),
         }
     }
@@ -528,12 +523,18 @@ fn coding_style_parameters(
 
     let mut precinct_exponents = Vec::new();
     if coding_style.has_precincts() {
-        // Table A.21.
+        // "Entropy coder with precincts defined below."
         for _ in 0..num_resolution_levels {
+            // Table A.21.
             let precinct_size = reader.read_byte()?;
             let width_exp = precinct_size & 0xF;
             let height_exp = precinct_size >> 4;
             precinct_exponents.push((width_exp, height_exp));
+        }
+    } else {
+        // "Entropy coder, precincts with PPx = 15 and PPy = 15"
+        for _ in 0..num_resolution_levels {
+            precinct_exponents.push((15, 15));
         }
     }
 
