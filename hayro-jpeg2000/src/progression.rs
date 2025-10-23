@@ -1,4 +1,4 @@
-#[derive(Default)]
+#[derive(Default, Copy, Clone)]
 pub(crate) struct ProgressionData {
     layer_num: u16,
     resolution: u8,
@@ -31,19 +31,52 @@ impl MaxData {
     }
 }
 
-trait ProgressionIterator: Iterator<Item = ProgressionData> {
-    fn new(layers: u16, num_resolutions: u8, num_components: u8, precincts: u32) -> Self;
+pub(crate) trait ProgressionIterator: Iterator<Item = ProgressionData> {
+    fn new(layers: u16, resolutions: u8, components: u8, precincts: u32) -> Self;
 }
 
-pub(crate) struct LrcpProgressor {
+pub(crate) struct RlcpProgression {
     data: ProgressionData,
     max_data: MaxData,
 }
 
-impl Iterator for LrcpProgressor {
+impl Iterator for RlcpProgression {
     type Item = ProgressionData;
 
     fn next(&mut self) -> Option<Self::Item> {
-        todo!()
+        if self.max_data.is_max_precinct(self.data.precinct) {
+            self.data.precinct = 0;
+            self.data.component += 1;
+        }
+
+        if self.max_data.is_max_component(self.data.component) {
+            self.data.component = 0;
+            self.data.layer_num += 1;
+        }
+
+        if self.max_data.is_max_layer(self.data.layer_num) {
+            self.data.layer_num = 0;
+            self.data.resolution += 1;
+        }
+
+        if self.max_data.is_max_resolution(self.data.resolution) {
+            return None;
+        }
+
+        Some(self.data)
+    }
+}
+
+impl ProgressionIterator for RlcpProgression {
+    fn new(layers: u16, resolutions: u8, components: u8, precincts: u32) -> Self {
+        Self {
+            data: Default::default(),
+            max_data: MaxData {
+                layers,
+                resolutions,
+                components,
+                precincts,
+            },
+        }
     }
 }
