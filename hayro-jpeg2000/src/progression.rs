@@ -3,10 +3,10 @@ use crate::tile::{TilePart, TilePartInstance};
 
 #[derive(Default, Copy, Clone, Debug)]
 pub(crate) struct ProgressionData {
-    layer_num: u16,
-    resolution: u16,
-    component: u8,
-    precinct: u32,
+    pub(crate) layer_num: u16,
+    pub(crate) resolution: u16,
+    pub(crate) component: u8,
+    pub(crate) precinct: u32,
 }
 
 pub(crate) struct IteratorInput<'a> {

@@ -96,7 +96,7 @@ fn read_header(reader: &mut Reader) -> Result<Header, &'static str> {
 
 /// Progression order (Table A.16).
 #[derive(Debug, Clone, Copy)]
-enum ProgressionOrder {
+pub(crate) enum ProgressionOrder {
     LayerResolutionComponentPosition,
     ResolutionLayerComponentPosition,
     ResolutionPositionComponentLayer,

@@ -1,6 +1,7 @@
-use crate::codestream::Header;
+use crate::codestream::{Header, ProgressionOrder};
 use crate::progression::{
-    IteratorInput, ProgressionIterator, ResolutionLevelLayerComponentPositionProgressionIterator,
+    IteratorInput, ProgressionData, ProgressionIterator,
+    ResolutionLevelLayerComponentPositionProgressionIterator,
 };
 use crate::tile::{Tile, TilePart};
 use hayro_common::bit::BitReader;
@@ -8,23 +9,42 @@ use hayro_common::bit::BitReader;
 pub(crate) fn process_tiles(tiles: &[Tile], header: &Header) -> Option<()> {
     for tile in tiles {
         for tile_part in tile.tile_parts() {
-            process_packet(&tile_part, header)?;
+            let iter_input = IteratorInput::new(
+                &tile_part,
+                &header.component_infos,
+                header.global_coding_style.num_layers,
+            );
+
+            match header.global_coding_style.progression_order {
+                ProgressionOrder::ResolutionLayerComponentPosition => {
+                    let iter =
+                        ResolutionLevelLayerComponentPositionProgressionIterator::new(iter_input);
+                    process_packet(&tile_part, header, iter)?;
+                }
+                _ => unimplemented!(),
+            }
         }
     }
 
     Some(())
 }
 
-fn process_packet(tile: &TilePart, header: &Header) -> Option<()> {
-    let input = IteratorInput::new(
-        tile,
-        &header.component_infos,
-        header.global_coding_style.num_layers,
-    );
-    let iter = ResolutionLevelLayerComponentPositionProgressionIterator::new(input);
-
+fn process_packet<'a, T: ProgressionIterator<'a>>(
+    tile: &TilePart,
+    header: &Header,
+    mut iterator: T,
+) -> Option<()> {
     let mut reader = BitReader::new(&tile.data);
-    let zero_length = reader.read(1)?;
+
+    while let Some(ProgressionData {
+        layer_num,
+        resolution,
+        component,
+        precinct,
+    }) = iterator.next()
+    {
+        
+    }
 
     Some(())
 }
