@@ -189,6 +189,32 @@ impl<'a, 'b> TilePartInstance<'a, 'b> {
     fn num_precincts(&self) -> u32 {
         self.num_precincts_x() * self.num_precincts_y()
     }
+    
+    fn code_block_width(&self) -> u8 {
+        // See B-17.
+        let xcb = self.coding_style.parameters.code_block_width;
+        
+        if self.resolution > 0 {
+            u8::min(xcb, self.ppx - 1)
+        }   else {
+            u8::min(xcb, self.ppx)
+        }
+    }
+    
+    fn code_block_height(&self) -> u8 {
+        // See B-18.
+        let ycb = self.coding_style.parameters.code_block_height;
+        
+        if self.resolution > 0 {
+            u8::min(ycb, self.ppy - 1)
+        }   else {
+            u8::min(ycb, self.ppy)
+        }
+    }
+    
+    fn num_layers(&self) -> u16 {
+        self.coding_style.num_layers
+    }
 }
 
 pub(crate) fn read_tiles<'a>(
