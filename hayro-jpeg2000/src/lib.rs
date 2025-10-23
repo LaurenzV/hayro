@@ -8,6 +8,7 @@ pub mod boxes;
 mod codestream;
 mod progression;
 mod t2;
+mod tag_tree;
 mod tile;
 
 /// Image metadata extracted from JP2 Header box.

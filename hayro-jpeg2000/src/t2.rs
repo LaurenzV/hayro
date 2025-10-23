@@ -42,9 +42,7 @@ fn process_packet<'a, T: ProgressionIterator<'a>>(
         component,
         precinct,
     }) = iterator.next()
-    {
-        
-    }
+    {}
 
     Some(())
 }
