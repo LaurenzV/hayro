@@ -52,7 +52,7 @@ impl<'a> Tile<'a> {
             size_data.tile_y_offset + q * size_data.tile_height,
             size_data.image_area_y_offset,
         );
-        
+
         // Note that `x1` and `y1` are exclusive.
         let x1 = u32::min(
             size_data.tile_x_offset + (p + 1) * size_data.tile_width,
@@ -121,33 +121,73 @@ pub(crate) struct TilePartInstance<'a, 'b> {
     pub(crate) resolution: u8,
     pub(crate) coding_style: &'b CodingStyleInfo,
     pub(crate) component_info: &'b ComponentInfo,
+    pub(crate) dimensions: IntRect,
+    ppx: u8,
+    ppy: u8,
 }
 
 impl<'a, 'b> TilePartInstance<'a, 'b> {
     fn new(part: TilePart<'a, 'b>, component_idx: u16, resolution: u8) -> Self {
-        let component_info = &part.tile.header.size_data.components[component_idx as usize];
-        let coding_style = &part.tile.header.cod_components[component_idx as usize];
+        let header = part.tile.header;
+        let component_info = &header.size_data.components[component_idx as usize];
+        let coding_style = &header.cod_components[component_idx as usize];
+        let (ppx, ppy) = header.cod_components[component_idx as usize]
+            .parameters
+            .precinct_exponents[resolution as usize];
+
+        let dimensions = {
+            // See formula B-14.
+            let r = resolution;
+            let n_l = coding_style.parameters.num_decomposition_levels;
+            let IntRect { x0, y0, x1, y1 } = part.tile.tile_coords(component_info);
+
+            let tx0 = x0.div_ceil(2u32.pow(n_l as u32 - r as u32));
+            let ty0 = y0.div_ceil(2u32.pow(n_l as u32 - r as u32));
+            let tx1 = x1.div_ceil(2u32.pow(n_l as u32 - r as u32));
+            let ty1 = y1.div_ceil(2u32.pow(n_l as u32 - r as u32));
+
+            IntRect::new(tx0, ty0, tx1, ty1)
+        };
 
         Self {
             tile_part: part,
             resolution,
             component_info,
             coding_style,
+            dimensions,
+            ppx,
+            ppy,
         }
     }
 
     fn dimensions(&self) -> IntRect {
-        // See formula B-14.
-        let r = self.resolution;
-        let n_l = self.coding_style.parameters.num_decomposition_levels;
-        let IntRect { x0, y0, x1, y1 } = self.tile_part.tile.tile_coords(&self.component_info);
+        self.dimensions
+    }
 
-        let tx0 = x0.div_ceil(2u32.pow(n_l as u32 - r as u32));
-        let ty0 = y0.div_ceil(2u32.pow(n_l as u32 - r as u32));
-        let tx1 = x1.div_ceil(2u32.pow(n_l as u32 - r as u32));
-        let ty1 = y1.div_ceil(2u32.pow(n_l as u32 - r as u32));
+    fn num_precincts_x(&self) -> u32 {
+        // See B-16.
+        let IntRect { x0, x1, .. } = self.dimensions;
 
-        IntRect::new(tx0, ty0, tx1, ty1)
+        if x0 == x1 {
+            0
+        } else {
+            x1.div_ceil(2u32.pow(self.ppx as u32)) - x0 / 2u32.pow(self.ppx as u32)
+        }
+    }
+
+    fn num_precincts_y(&self) -> u32 {
+        // See B-16.
+        let IntRect { y0, y1, .. } = self.dimensions;
+
+        if y0 == y1 {
+            0
+        } else {
+            y1.div_ceil(2u32.pow(self.ppy as u32)) - y0 / 2u32.pow(self.ppy as u32)
+        }
+    }
+    
+    fn num_precincts(&self) -> u32 {
+        self.num_precincts_x() * self.num_precincts_y()
     }
 }
 
