@@ -64,14 +64,14 @@ pub(crate) struct TilePart<'a> {
 }
 
 pub(crate) struct TilePartInstance<'a> {
-    pub(crate) tile_part: TilePart<'a>,
-    pub(crate) resolution: u8,
+    pub(crate) tile_part: &'a TilePart<'a>,
+    pub(crate) resolution: u16,
     pub(crate) component_info: &'a ComponentInfo,
     pub(crate) dimensions: IntRect,
 }
 
 impl<'a> TilePartInstance<'a> {
-    fn ppx(&self) -> u8 {
+    pub(crate) fn ppx(&self) -> u8 {
         self.component_info
             .coding_style_parameters
             .parameters
@@ -79,7 +79,7 @@ impl<'a> TilePartInstance<'a> {
             .0
     }
 
-    fn ppy(&self) -> u8 {
+    pub(crate) fn ppy(&self) -> u8 {
         self.component_info
             .coding_style_parameters
             .parameters
@@ -87,11 +87,11 @@ impl<'a> TilePartInstance<'a> {
             .1
     }
 
-    fn dimensions(&self) -> IntRect {
+    pub(crate) fn dimensions(&self) -> IntRect {
         self.dimensions
     }
 
-    fn num_precincts_x(&self) -> u32 {
+    pub(crate) fn num_precincts_x(&self) -> u32 {
         // See B-16.
         let IntRect { x0, x1, .. } = self.dimensions;
 
@@ -102,7 +102,7 @@ impl<'a> TilePartInstance<'a> {
         }
     }
 
-    fn num_precincts_y(&self) -> u32 {
+    pub(crate) fn num_precincts_y(&self) -> u32 {
         // See B-16.
         let IntRect { y0, y1, .. } = self.dimensions;
 
@@ -113,11 +113,11 @@ impl<'a> TilePartInstance<'a> {
         }
     }
 
-    fn num_precincts(&self) -> u32 {
+    pub(crate) fn num_precincts(&self) -> u32 {
         self.num_precincts_x() * self.num_precincts_y()
     }
 
-    fn code_block_width(&self) -> u8 {
+    pub(crate) fn code_block_width(&self) -> u8 {
         // See B-17.
         let xcb = self
             .component_info
@@ -132,7 +132,7 @@ impl<'a> TilePartInstance<'a> {
         }
     }
 
-    fn code_block_height(&self) -> u8 {
+    pub(crate) fn code_block_height(&self) -> u8 {
         // See B-18.
         let ycb = self
             .component_info
@@ -289,6 +289,7 @@ mod tests {
             flags: CodingStyleFlags::default(),
             parameters: CodingStyleParameters {
                 num_decomposition_levels: 0,
+                num_resolution_levels: 0,
                 code_block_width: 0,
                 code_block_height: 0,
                 code_block_style: CodeBlockStyle::default(),

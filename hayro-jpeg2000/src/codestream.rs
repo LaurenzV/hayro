@@ -226,7 +226,8 @@ impl QuantizationStyle {
 /// Common coding style parameters (A.6.1 and A.6.2).
 #[derive(Clone, Debug)]
 pub(crate) struct CodingStyleParameters {
-    pub(crate) num_decomposition_levels: u8,
+    pub(crate) num_decomposition_levels: u16,
+    pub(crate) num_resolution_levels: u16,
     pub(crate) code_block_width: u8,
     pub(crate) code_block_height: u8,
     pub(crate) code_block_style: CodeBlockStyle,
@@ -366,8 +367,8 @@ impl ComponentInfo {
 
     pub(crate) fn tile_part_instance<'a>(
         &'a self,
-        part: TilePart<'a>,
-        resolution: u8,
+        part: &'a TilePart<'a>,
+        resolution: u16,
     ) -> TilePartInstance<'a> {
         let dimensions = {
             // See formula B-14.
@@ -518,8 +519,8 @@ fn coding_style_parameters(
     reader: &mut Reader,
     coding_style: &CodingStyleFlags,
 ) -> Option<CodingStyleParameters> {
-    let num_decomposition_levels = reader.read_byte()?;
-    let resolution_level = num_decomposition_levels.checked_add(1)?;
+    let num_decomposition_levels = reader.read_byte()? as u16;
+    let num_resolution_levels = num_decomposition_levels.checked_add(1)?;
     let code_block_width = reader.read_byte()?;
     let code_block_height = reader.read_byte()?;
     let code_block_style = CodeBlockStyle::from_u8(reader.read_byte()?);
@@ -528,7 +529,7 @@ fn coding_style_parameters(
     let mut precinct_exponents = Vec::new();
     if coding_style.has_precincts() {
         // Table A.21.
-        for _ in 0..resolution_level {
+        for _ in 0..num_resolution_levels {
             let precinct_size = reader.read_byte()?;
             let width_exp = precinct_size & 0xF;
             let height_exp = precinct_size >> 4;
@@ -538,6 +539,7 @@ fn coding_style_parameters(
 
     Some(CodingStyleParameters {
         num_decomposition_levels,
+        num_resolution_levels,
         code_block_width,
         code_block_height,
         code_block_style,

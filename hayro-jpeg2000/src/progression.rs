@@ -1,82 +1,163 @@
+use crate::codestream::ComponentInfo;
+use crate::tile::{TilePart, TilePartInstance};
+use std::path::{Components, Iter};
+
 #[derive(Default, Copy, Clone)]
 pub(crate) struct ProgressionData {
     layer_num: u16,
-    resolution: u8,
+    resolution: u16,
     component: u8,
     precinct: u32,
 }
 
-struct MaxData {
+pub(crate) struct IteratorInput<'a> {
     layers: u16,
-    resolutions: u8,
-    components: u8,
-    precincts: u32,
+    tile_part: &'a TilePart<'a>,
+    component_infos: &'a [ComponentInfo],
+    resolutions: u16,
 }
 
-impl MaxData {
-    fn is_max_layer(&self, layer: u16) -> bool {
-        layer >= self.layers
-    }
+impl<'a> IteratorInput<'a> {
+    pub(crate) fn new(
+        tile_part: &'a TilePart<'a>,
+        component_infos: &'a [ComponentInfo],
+        layers: u16,
+    ) -> Self {
+        let resolutions = component_infos
+            .iter()
+            .map(|c| c.coding_style_parameters.parameters.num_resolution_levels)
+            .max()
+            .unwrap();
 
-    fn is_max_resolution(&self, resolution: u8) -> bool {
-        resolution >= self.resolutions
-    }
-
-    fn is_max_component(&self, component: u8) -> bool {
-        component >= self.components
-    }
-
-    fn is_max_precinct(&self, precinct: u32) -> bool {
-        precinct >= self.precincts
+        Self {
+            layers,
+            component_infos,
+            tile_part,
+            resolutions,
+        }
     }
 }
 
-pub(crate) trait ProgressionIterator: Iterator<Item = ProgressionData> {
-    fn new(layers: u16, resolutions: u8, components: u8, precincts: u32) -> Self;
-}
-
-pub(crate) struct RlcpProgression {
+struct IteratorState<'a> {
+    input: IteratorInput<'a>,
     data: ProgressionData,
-    max_data: MaxData,
+    first: bool,
+    tile_part_instance: TilePartInstance<'a>,
 }
 
-impl Iterator for RlcpProgression {
+impl<'a> IteratorState<'a> {
+    fn new(input: IteratorInput<'a>, tile_part_instance: TilePartInstance<'a>) -> Self {
+        Self {
+            input,
+            data: Default::default(),
+            first: true,
+            tile_part_instance,
+        }
+    }
+
+    fn advance_layer(&mut self) -> bool {
+        self.data.layer_num += 1;
+
+        if self.data.layer_num >= self.input.layers {
+            self.data.layer_num = 0;
+
+            true
+        } else {
+            false
+        }
+    }
+
+    fn advance_resolution(&mut self) -> bool {
+        self.data.resolution += 1;
+
+        let spilled = if self.data.resolution >= self.input.resolutions {
+            self.data.resolution = 0;
+
+            true
+        } else {
+            false
+        };
+
+        self.update_tile_part_instance();
+
+        spilled
+    }
+
+    fn advance_component(&mut self) -> bool {
+        self.data.component += 1;
+
+        let spilled = if self.data.component >= self.input.component_infos.len() as u8 {
+            self.data.component = 0;
+            true
+        } else {
+            false
+        };
+
+        self.update_tile_part_instance();
+
+        spilled
+    }
+
+    fn update_tile_part_instance(&mut self) {
+        let component = &self.input.component_infos[self.data.component as usize];
+        self.tile_part_instance =
+            component.tile_part_instance(self.input.tile_part, self.data.resolution);
+    }
+
+    fn advance_precinct(&mut self) -> bool {
+        self.data.precinct += 1;
+
+        if self.data.precinct >= self.tile_part_instance.num_precincts() {
+            self.data.resolution = 0;
+
+            true
+        } else {
+            false
+        }
+    }
+}
+
+pub(crate) trait ProgressionIterator<'a>: Iterator<Item = ProgressionData> {
+    fn new(iterator_input: IteratorInput<'a>) -> Self;
+}
+
+pub(crate) struct RlcpProgression<'a> {
+    data: ProgressionData,
+    state: IteratorState<'a>,
+}
+
+impl Iterator for RlcpProgression<'_> {
     type Item = ProgressionData;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.max_data.is_max_precinct(self.data.precinct) {
-            self.data.precinct = 0;
-            self.data.component += 1;
+        if self.state.first {
+            self.state.first = false;
+            return Some(self.data);
         }
 
-        if self.max_data.is_max_component(self.data.component) {
-            self.data.component = 0;
-            self.data.layer_num += 1;
-        }
-
-        if self.max_data.is_max_layer(self.data.layer_num) {
-            self.data.layer_num = 0;
-            self.data.resolution += 1;
-        }
-
-        if self.max_data.is_max_resolution(self.data.resolution) {
-            return None;
+        if self.state.advance_precinct() {
+            if self.state.advance_component() {
+                if self.state.advance_layer() {
+                    if self.state.advance_resolution() {
+                        return None;
+                    }
+                }
+            }
         }
 
         Some(self.data)
     }
 }
 
-impl ProgressionIterator for RlcpProgression {
-    fn new(layers: u16, resolutions: u8, components: u8, precincts: u32) -> Self {
+impl<'a> ProgressionIterator<'a> for RlcpProgression<'a> {
+    fn new(input: IteratorInput<'a>) -> Self {
+        let data = ProgressionData::default();
+        let instance = input.component_infos[data.component as usize]
+            .tile_part_instance(input.tile_part, data.resolution);
+
         Self {
-            data: Default::default(),
-            max_data: MaxData {
-                layers,
-                resolutions,
-                components,
-                precincts,
-            },
+            data,
+            state: IteratorState::new(input, instance),
         }
     }
 }
