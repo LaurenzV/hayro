@@ -1,5 +1,5 @@
 use crate::t2::process_tiles;
-use crate::tile::read_tiles;
+use crate::tile::{read_tiles, IntRect};
 use hayro_common::bit::BitReader;
 use hayro_common::byte::Reader;
 
@@ -282,6 +282,47 @@ pub(crate) struct SizeData {
     pub(crate) component_sizes: Vec<ComponentSizeInfo>,
 }
 
+impl SizeData {
+    /// Return the raw coordinates of the tile with the given index.
+    pub(crate) fn tile_coords(&self, idx: u32) -> IntRect {
+        let x_coord = self.tile_x_coord(idx);
+        let y_coord = self.tile_y_coord(idx);
+
+        // See B-7, B-8, B-9 and B-10.
+        let x0 = u32::max(
+            self.tile_x_offset + x_coord * self.tile_width,
+            self.image_area_x_offset,
+        );
+        let y0 = u32::max(
+            self.tile_y_offset + y_coord * self.tile_height,
+            self.image_area_y_offset,
+        );
+
+        // Note that `x1` and `y1` are exclusive.
+        let x1 = u32::min(
+            self.tile_x_offset + (x_coord + 1) * self.tile_width,
+            self.reference_grid_width,
+        );
+        let y1 = u32::min(
+            self.tile_y_offset + (y_coord + 1) * self.tile_height,
+            self.reference_grid_height,
+        );
+
+        IntRect::new(x0, y0, x1, y1)
+    }
+    
+    pub(crate) fn tile_x_coord(&self, idx: u32) -> u32 {
+        // See B-6.
+        idx % self.num_x_tiles()
+    }
+    
+    pub(crate) fn tile_y_coord(&self, idx: u32) -> u32 {
+        // See B-6.
+        // I believe the `ceil` in the spec should be a `floor` instead.
+        (idx as f64 / self.num_x_tiles() as f64).floor() as u32
+    }
+}
+
 /// Component information (A.5.1 and Table A.11).
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct ComponentSizeInfo {
@@ -296,6 +337,27 @@ pub(crate) struct ComponentInfo {
     pub(crate) size_info: ComponentSizeInfo,
     pub(crate) coding_style_parameters: ComponentCodingStyle,
     pub(crate) quantization_info: QuantizationInfo,
+}
+
+impl ComponentInfo {
+    /// Given the rectangle of a tile, return the coordinates of the rectangle at the given
+    /// resolution in the given component.
+    fn resolution_dimension(&self, tile_rect: IntRect, resolution: u8) -> IntRect {
+        // See formula B-14.
+        let r = resolution;
+        let n_l = self
+            .coding_style_parameters
+            .parameters
+            .num_decomposition_levels;
+        let IntRect { x0, y0, x1, y1 } = part.tile.tile_coords(&component_info.size_info);
+
+        let tx0 = x0.div_ceil(2u32.pow(n_l as u32 - r as u32));
+        let ty0 = y0.div_ceil(2u32.pow(n_l as u32 - r as u32));
+        let tx1 = x1.div_ceil(2u32.pow(n_l as u32 - r as u32));
+        let ty1 = y1.div_ceil(2u32.pow(n_l as u32 - r as u32));
+
+        IntRect::new(tx0, ty0, tx1, ty1)
+    }
 }
 
 impl SizeData {

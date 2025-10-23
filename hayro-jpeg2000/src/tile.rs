@@ -36,36 +36,11 @@ pub(crate) struct Tile<'a> {
 
 impl<'a> Tile<'a> {
     fn new(idx: u32, size_data: &SizeData) -> Tile<'a> {
-        // See B-6.
-        let p = idx % size_data.num_x_tiles();
-        // I believe the `ceil` in the spec should be a `floor` instead.
-        let q = (idx as f64 / size_data.num_x_tiles() as f64).floor() as u32;
-
-        // See B-7, B-8, B-9 and B-10.
-        let x0 = u32::max(
-            size_data.tile_x_offset + p * size_data.tile_width,
-            size_data.image_area_x_offset,
-        );
-        let y0 = u32::max(
-            size_data.tile_y_offset + q * size_data.tile_height,
-            size_data.image_area_y_offset,
-        );
-
-        // Note that `x1` and `y1` are exclusive.
-        let x1 = u32::min(
-            size_data.tile_x_offset + (p + 1) * size_data.tile_width,
-            size_data.reference_grid_width,
-        );
-        let y1 = u32::min(
-            size_data.tile_y_offset + (q + 1) * size_data.tile_height,
-            size_data.reference_grid_height,
-        );
-
-        let coordinates = IntRect::new(x0, y0, x1, y1);
+        let raw_coords = size_data.tile_coords(idx);
 
         Tile {
             tile_part_infos: vec![],
-            raw_coords: coordinates,
+            raw_coords,
         }
     }
 
