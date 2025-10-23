@@ -243,7 +243,7 @@ pub(crate) struct CodingStyleParameters {
     pub(crate) code_block_height: u8,
     pub(crate) code_block_style: CodeBlockStyle,
     pub(crate) transformation: WaveletTransform,
-    pub(crate) precinct_sizes: Vec<u8>,
+    pub(crate) precinct_exponents: Vec<(u8, u8)>,
 }
 
 /// Common quantization parameters (A.6.4 and A.6.5).
@@ -424,11 +424,14 @@ fn coding_style_parameters(
     let code_block_style = CodeBlockStyle::from_u8(reader.read_byte()?);
     let transformation = WaveletTransform::from_u8(reader.read_byte()?).ok()?;
 
-    let mut precinct_sizes = Vec::new();
+    let mut precinct_exponents = Vec::new();
     if coding_style.has_precincts() {
+        // Table A.21.
         for _ in 0..resolution_level {
             let precinct_size = reader.read_byte()?;
-            precinct_sizes.push(precinct_size);
+            let width_exp = precinct_size & 0xF;
+            let height_exp = precinct_size >> 4;
+            precinct_exponents.push((width_exp, height_exp));
         }
     }
 
@@ -438,7 +441,7 @@ fn coding_style_parameters(
         code_block_height,
         code_block_style,
         transformation,
-        precinct_sizes,
+        precinct_exponents,
     })
 }
 
