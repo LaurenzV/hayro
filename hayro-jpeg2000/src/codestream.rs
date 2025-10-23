@@ -340,6 +340,26 @@ pub(crate) struct ComponentInfo {
 }
 
 impl ComponentInfo {
+    /// Return the coordinates of the rectangle scaled by the horizontal and vertical 
+    /// resolution of the component.
+    fn scaled_rect(&self, tile_rect: IntRect) -> IntRect {
+        if self.size_info.horizontal_resolution == 1 && self.size_info.vertical_resolution == 1 {
+            tile_rect
+        } else {
+            // As described in B-12.
+            let t_x0 = tile_rect
+                .x0
+                .div_ceil(self.size_info.horizontal_resolution as u32);
+            let t_y0 = tile_rect.y0.div_ceil(self.size_info.vertical_resolution as u32);
+            let t_x1 = tile_rect
+                .x1
+                .div_ceil(self.size_info.horizontal_resolution as u32);
+            let t_y1 = tile_rect.y1.div_ceil(self.size_info.vertical_resolution as u32);
+
+            IntRect::new(t_x0, t_y0, t_x1, t_y1)
+        }
+    }
+    
     /// Given the rectangle of a tile, return the coordinates of the rectangle at the given
     /// resolution in the given component.
     fn resolution_dimension(&self, tile_rect: IntRect, resolution: u8) -> IntRect {
