@@ -44,7 +44,7 @@ impl<'a> Tile<'a> {
         }
     }
 
-    pub(crate) fn tile_parts(&self) -> impl Iterator<Item = TilePart<'_, '_>> {
+    pub(crate) fn tile_parts(&self) -> impl Iterator<Item = TilePart<'_>> {
         self.tile_part_infos.iter().map(|t| TilePart {
             data: t.data,
             tile: self,
@@ -58,19 +58,19 @@ pub(crate) struct TilePartInfo<'a> {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct TilePart<'a, 'b> {
+pub(crate) struct TilePart<'a> {
     pub(crate) data: &'a [u8],
-    pub(crate) tile: &'b Tile<'b>,
+    pub(crate) tile: &'a Tile<'a>,
 }
 
-pub(crate) struct TilePartInstance<'a, 'b> {
-    pub(crate) tile_part: TilePart<'a, 'b>,
+pub(crate) struct TilePartInstance<'a> {
+    pub(crate) tile_part: TilePart<'a>,
     pub(crate) resolution: u8,
-    pub(crate) component_info: &'b ComponentInfo,
+    pub(crate) component_info: &'a ComponentInfo,
     pub(crate) dimensions: IntRect,
 }
 
-impl<'a, 'b> TilePartInstance<'a, 'b> {
+impl<'a> TilePartInstance<'a> {
     fn ppx(&self) -> u8 {
         self.component_info
             .coding_style_parameters

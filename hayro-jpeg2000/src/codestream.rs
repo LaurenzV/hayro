@@ -364,11 +364,11 @@ impl ComponentInfo {
         }
     }
 
-    pub(crate) fn tile_part_instance<'a, 'b>(
-        &'b self,
-        part: TilePart<'a, 'b>,
+    pub(crate) fn tile_part_instance<'a>(
+        &'a self,
+        part: TilePart<'a>,
         resolution: u8,
-    ) -> TilePartInstance<'a, 'b> {
+    ) -> TilePartInstance<'a> {
         let dimensions = {
             // See formula B-14.
             let r = resolution;
