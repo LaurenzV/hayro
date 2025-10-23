@@ -23,8 +23,7 @@ pub(crate) fn read(stream: &[u8]) -> Result<(), &'static str> {
 pub(crate) struct Header {
     pub(crate) size_data: SizeData,
     pub(crate) global_coding_style: GlobalCodingStyleInfo,
-    pub(crate) component_coding_styles: Vec<ComponentCodingStyle>,
-    pub(crate) qcd_components: Vec<QuantizationInfo>,
+    pub(crate) component_infos: Vec<ComponentInfo>,
 }
 
 fn read_header(reader: &mut Reader) -> Result<Header, &'static str> {
@@ -37,7 +36,7 @@ fn read_header(reader: &mut Reader) -> Result<Header, &'static str> {
     let mut cod = None;
     let mut qcd = None;
 
-    let num_components = size_data.components.len() as u16;
+    let num_components = size_data.component_sizes.len() as u16;
     let mut cod_components = vec![None; num_components as usize];
     let mut qcd_components = vec![None; num_components as usize];
 
@@ -75,17 +74,23 @@ fn read_header(reader: &mut Reader) -> Result<Header, &'static str> {
     let cod = cod.ok_or("missing COD marker")?;
     let qcd = qcd.ok_or("missing QCD marker")?;
 
+    let component_infos = size_data
+        .component_sizes
+        .iter()
+        .enumerate()
+        .map(|(idx, csi)| ComponentInfo {
+            size_info: *csi,
+            coding_style_parameters: cod_components[idx]
+                .clone()
+                .unwrap_or(cod.component_parameters.clone()),
+            quantization_info: qcd_components[idx].clone().unwrap_or(qcd.clone()),
+        })
+        .collect();
+
     Ok(Header {
         size_data,
         global_coding_style: cod.clone(),
-        component_coding_styles: cod_components
-            .into_iter()
-            .map(|coc| coc.unwrap_or(cod.component_parameters.clone()))
-            .collect(),
-        qcd_components: qcd_components
-            .into_iter()
-            .map(|c| c.unwrap_or(qcd.clone()))
-            .collect(),
+        component_infos,
     })
 }
 
@@ -199,15 +204,6 @@ impl CodeBlockStyle {
     }
 }
 
-/// Component information (A.5.1 and Table A.11).
-#[derive(Debug)]
-pub(crate) struct ComponentInfo {
-    pub(crate) precision: u8,
-    pub(crate) is_signed: bool,
-    pub(crate) horizontal_resolution: u8,
-    pub(crate) vertical_resolution: u8,
-}
-
 /// Quantization style (Table A.28).
 #[derive(Debug, Clone, Copy)]
 enum QuantizationStyle {
@@ -283,7 +279,23 @@ pub(crate) struct SizeData {
     /// Vertical offset from the origin of the reference grid to the top side of the first tile (YTOSiz).
     pub(crate) tile_y_offset: u32,
     /// Component information (SSiz/XRSiz/YRSiz).
-    pub(crate) components: Vec<ComponentInfo>,
+    pub(crate) component_sizes: Vec<ComponentSizeInfo>,
+}
+
+/// Component information (A.5.1 and Table A.11).
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ComponentSizeInfo {
+    pub(crate) precision: u8,
+    pub(crate) is_signed: bool,
+    pub(crate) horizontal_resolution: u8,
+    pub(crate) vertical_resolution: u8,
+}
+
+#[derive(Debug)]
+pub(crate) struct ComponentInfo {
+    pub(crate) size_info: ComponentSizeInfo,
+    pub(crate) coding_style_parameters: ComponentCodingStyle,
+    pub(crate) quantization_info: QuantizationInfo,
 }
 
 impl SizeData {
@@ -350,7 +362,7 @@ fn size_marker(reader: &mut Reader) -> Result<SizeData, &'static str> {
         return Err("tile offsets are invalid");
     }
 
-    for comp in &size_data.components {
+    for comp in &size_data.component_sizes {
         if comp.precision == 0 || comp.vertical_resolution == 0 || comp.horizontal_resolution == 0 {
             return Err("invalid component metadata");
         }
@@ -384,7 +396,7 @@ fn size_marker_inner(reader: &mut Reader) -> Option<SizeData> {
         let precision = (ssiz & 0x7F) + 1;
         let is_signed = (ssiz & 0x80) != 0;
 
-        components.push(ComponentInfo {
+        components.push(ComponentSizeInfo {
             precision,
             is_signed,
             horizontal_resolution: x_rsiz,
@@ -401,7 +413,7 @@ fn size_marker_inner(reader: &mut Reader) -> Option<SizeData> {
         tile_height: yt_siz,
         tile_x_offset: xto_siz,
         tile_y_offset: yto_siz,
-        components,
+        component_sizes: components,
     })
 }
 
