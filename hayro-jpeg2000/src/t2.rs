@@ -40,7 +40,19 @@ struct CodeBlock<'a> {
     has_been_included: bool,
     missing_bit_planes: u8,
     number_of_coding_passes: u32,
+    l_block: u32,
     coefficients: Vec<u8>,
+}
+
+#[derive(Clone)]
+struct Layer<'a> {
+    data: &'a [u8],
+    segments: Vec<Segment>
+}
+
+#[derive(Clone)]
+struct Segment {
+    number_of_coding_passes: u32,
 }
 
 pub(crate) fn process_tiles(tiles: &[Tile], header: &Header) -> Option<()> {
@@ -88,7 +100,7 @@ fn process_packet<'a, T: ProgressionIterator<'a>>(
 
     while !reader.at_end() {
         let progression_data = progression_iterator.next()?;
-        let zero_length = reader.read(1)?;
+        let zero_length = reader.read_packet_header_bits(1)?;
 
         // B.10.3 Zero length packet
         // "The first bit in the packet header denotes whether the packet has a length of zero
@@ -113,7 +125,7 @@ fn process_packet<'a, T: ProgressionIterator<'a>>(
                     // a single bit is used to represent the information, where a 1
                     // means that the code-block is included in this layer and a 0 means
                     // that it is not."
-                    reader.read(1)? == 1
+                    reader.read_packet_header_bits(1)? == 1
                 } else {
                     // "For code-blocks that have not been previously included in any packet,
                     // this information is signalled with a separate tag tree code for each precinct
@@ -173,36 +185,69 @@ fn process_packet<'a, T: ProgressionIterator<'a>>(
                 // "The number of coding passes included in this packet from each code-block is
                 // identified in the packet header using the codewords shown in Table B.4. This
                 // table provides for the possibility of signalling up to 164 coding passes.
-                code_block.number_of_coding_passes = if reader.peak(8) == Some(0xff) {
-                    reader.read(8)?;
-                    reader.read(8)? + 37
+                let added_coding_passes = if reader.peak_packet_header_bits(8) == Some(0xff) {
+                    reader.read_packet_header_bits(8)?;
+                    reader.read_packet_header_bits(8)? + 37
                 } else if reader.peak(4) == Some(0x0f) {
-                    reader.read(4)?;
+                    reader.read_packet_header_bits(4)?;
                     // TODO: Validate that sequence is not 1111 1
-                    reader.read(5)? + 6
+                    reader.read_packet_header_bits(5)? + 6
                 } else if reader.peak(4) == Some(0b1110) {
-                    reader.read(4)?;
+                    reader.read_packet_header_bits(4)?;
                     5
                 } else if reader.peak(4) == Some(0b1101) {
-                    reader.read(4)?;
+                    reader.read_packet_header_bits(4)?;
                     4
                 } else if reader.peak(4) == Some(0b1100) {
-                    reader.read(4)?;
+                    reader.read_packet_header_bits(4)?;
                     3
                 } else if reader.peak(2) == Some(0b10) {
-                    reader.read(2)?;
+                    reader.read_packet_header_bits(2)?;
                     2
                 } else if reader.peak(1) == Some(0) {
-                    reader.read(1)?;
+                    reader.read_packet_header_bits(1)?;
                     1
                 } else {
                     return None;
                 };
+                
+                // TODO: Everything below here still broken
+                
+                code_block.number_of_coding_passes += added_coding_passes;
 
                 eprintln!(
                     "number of coding passes: {}",
                     code_block.number_of_coding_passes
                 );
+                
+                // B.10.7.1 Single codeword segment
+                // "A codeword segment is the number of bytes contributed to a packet by a 
+                // code-block. The length of a codeword segment is represented by a binary number of length:
+                // bits = Lblock + floor(log_2(coding passes added))
+                // where Lblock is a code-block state variable. A separate Lblock is used for each 
+                // code-block in the precinct. The value of Lblock is initially set to three. The 
+                // number of bytes contributed by each code-block is preceded by signalling bits 
+                // that increase the value of Lblock, as needed. A signalling bit of zero indicates 
+                // the current value of Lblock is sufficient. If there are k ones followed by a 
+                // zero, the value of Lblock is incremented by k. While Lblock can only increase, 
+                // the number of bits used to signal the length of the code-block contribution can 
+                // increase or decrease depending on the number of coding passes included."
+                let mut k = 0;
+                
+                while reader.read_packet_header_bits(1)? == 1 {
+                    k += 1;
+                }
+                
+                code_block.l_block += k;
+                let length_bits =  code_block.l_block + added_coding_passes.ilog2();
+                let length = reader.read_packet_header_bits(length_bits as u8)?;
+                reader.align();
+                
+                for _ in 0..length {
+                    let _ = reader.read(8)?;
+                }
+                
+                
             }
         }
     }
@@ -366,6 +411,7 @@ fn build_precinct_code_blocks(
                 layers: vec![&[]; num_layers as usize],
                 has_been_included: false,
                 missing_bit_planes: 0,
+                l_block: 3,
                 number_of_coding_passes: 0,
                 coefficients: vec![],
             });
@@ -380,23 +426,33 @@ fn build_precinct_code_blocks(
 }
 
 trait BitReaderExt {
-    fn read_packet_header_bit(&mut self, bit_size: u8) -> Option<u32>;
+    fn read_packet_header_bits(&mut self, bit_size: u8) -> Option<u32>;
+    fn peak_packet_header_bits(&mut self, bit_size: u8) -> Option<u32>;
 }
 
 impl BitReaderExt for BitReader<'_> {
-    fn read_packet_header_bit(&mut self, bit_size: u8) -> Option<u32> {
-        let cur_byte_pos = self.byte_pos();
-        let has_stuffing = self.cur_byte()? == 0xFF;
-
-        let bit = self.read(bit_size)?;
-
-        if self.byte_pos() != cur_byte_pos && has_stuffing {
+    fn read_packet_header_bits(&mut self, bit_size: u8) -> Option<u32> {
+        let mut bit = 0;
+        
+        for _ in 0..bit_size {
             // B.10.1: If the value of the byte is 0xFF, the next byte includes an extra zero bit
             // stuffed into the MSB.
-            let stuff_bit = self.read(1)?;
-            assert_eq!(stuff_bit, 0);
+            // Check if the next bit is at a new byte boundary.
+            if self.byte_pos() != (self.bit_pos() + 1) / 8 {
+                if self.cur_byte()? == 0xFF {
+                    let stuff_bit = self.read(1)?;
+                    
+                    assert_eq!(stuff_bit, 0, "invalid stuffing bit");
+                }
+            }
+            
+            bit = (bit << 1) | self.read(bit_size)?;
         }
-
+        
         Some(bit)
+    }
+
+    fn peak_packet_header_bits(&mut self, bit_size: u8) -> Option<u32> {
+        self.clone().read_packet_header_bits(bit_size)
     }
 }
