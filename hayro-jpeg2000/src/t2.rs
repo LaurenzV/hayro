@@ -135,6 +135,12 @@ fn process_packet<'a, T: ProgressionIterator<'a>>(
                     )? <= progression_data.layer_num as u32
                 };
 
+                eprintln!("code-block inclusion: {}", is_included);
+
+                if !is_included {
+                    continue;
+                }
+
                 let included_first_time = is_included && !code_block.has_been_included;
 
                 // B.10.5 Zero bit-plane information
@@ -155,6 +161,10 @@ fn process_packet<'a, T: ProgressionIterator<'a>>(
                         &mut reader,
                         u32::MAX,
                     )? as u8;
+                    eprintln!(
+                        "zero bit-plane information: {}",
+                        code_block.missing_bit_planes
+                    );
                 }
 
                 code_block.has_been_included |= is_included;
@@ -187,7 +197,12 @@ fn process_packet<'a, T: ProgressionIterator<'a>>(
                     1
                 } else {
                     return None;
-                }
+                };
+
+                eprintln!(
+                    "number of coding passes: {}",
+                    code_block.number_of_coding_passes
+                );
             }
         }
     }
@@ -290,14 +305,13 @@ fn build_precincts(
                 .height()
                 .div_ceil(tile_instance.code_block_height());
 
-            // let blocks = build_precinct_code_blocks(
-            //     precinct_rect,
-            //     &tile_instance,
-            //     code_blocks_y,
-            //     code_blocks_x,
-            //     header.global_coding_style.num_layers,
-            // );
-            let blocks = vec![];
+            let blocks = build_precinct_code_blocks(
+                precinct_rect,
+                &tile_instance,
+                code_blocks_y,
+                code_blocks_x,
+                header.global_coding_style.num_layers,
+            );
 
             eprintln!(
                 "Precinct rect: {:?}, code blocks width: {code_blocks_x}, code blocks height: {code_blocks_y}",
