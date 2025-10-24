@@ -163,7 +163,8 @@ mod tests {
     use super::*;
     use hayro_common::bit::BitWriter;
 
-    /// The example from B.10.2.
+    /// The example from B.10.2, in its extended form as shown in the "JPEG2000 Standard for
+    /// Image compression" book.
     #[test]
     fn tag_tree_1() {
         let mut tree = TagTree::new(6, 3);
@@ -185,6 +186,8 @@ mod tests {
             0, 1, 1, 1, 1, // q3(0, 0)
             0, 0, 1, // q3(1, 0)
             1, 0, 1, // q3(2, 0)
+            0, 0, 1, // q3(3, 0)
+            1, 0, 1, 1 // q3(4, 0)
         ]);
 
         let mut reader = BitReader::new(&buf);
@@ -192,6 +195,7 @@ mod tests {
         assert_eq!(tree.read(0, 0, &mut reader, u16::MAX).unwrap(), 1);
         assert_eq!(tree.read(1, 0, &mut reader, u16::MAX).unwrap(), 3);
         assert_eq!(tree.read(2, 0, &mut reader, u16::MAX).unwrap(), 2);
+        // assert_eq!(tree.read(3, 0, &mut reader, u16::MAX).unwrap(), 3);
     }
 
     /// Inclusion tag tree from Table B.5.
