@@ -1,13 +1,39 @@
-#[derive(Debug, Default, PartialEq, Eq, Clone)]
+use hayro_common::bit::BitReader;
+
+#[derive(Debug, PartialEq, Eq, Clone, Default)]
 pub(crate) struct TagNode {
+    width: u16,
+    height: u16,
     value: u16,
     initialized: bool,
+    level: u16,
     children: Vec<Box<TagNode>>,
 }
 
 impl TagNode {
+    fn new(width: u16, height: u16, level: u16) -> Self {
+        Self {
+            width,
+            height,
+            level,
+            value: 0,
+            initialized: false,
+            children: vec![],
+        }
+    }
+    
+    fn x_split(&self) -> u16 {
+        u16::min(1 << (self.level - 1), self.width)
+    }
+    
+    fn y_split(&self) -> u16 {
+        u16::min(1 << (self.level - 1), self.height)
+    }
+}
+
+impl TagNode {
     fn build(width: u16, height: u16, level: u16) -> Self {
-        let mut tag = TagNode::default();
+        let mut tag = TagNode::new(width, height, level);
 
         if level == 0 {
             assert!(width <= 1 && height <= 1);
@@ -15,12 +41,13 @@ impl TagNode {
             return tag;
         }
 
+        let x_split = tag.x_split();
+        let y_split = tag.y_split();
+
         let mut push = |node: TagNode| {
             tag.children.push(Box::new(node));
         };
-
-        let x_split = u16::min(1 << (level - 1), width);
-        let y_split = u16::min(1 << (level - 1), height);
+        
         let extend_x = width > x_split;
         let extend_y = height > y_split;
 
@@ -40,9 +67,40 @@ impl TagNode {
 
         tag
     }
+
+    fn read(&mut self, x: u16, y: u16, reader: &mut BitReader, parent_val: u16, max_val: u16) -> Option<u16> {
+        if !self.initialized {
+            let mut val = parent_val;
+            
+            while reader.read(1)? == 0 {
+                val += 1;
+            }
+            
+            self.initialized = true;
+            self.value = val;
+        }
+
+        if max_val < self.value || self.level == 0 {
+            return Some(self.value);
+        }
+        
+        let x_split = self.x_split();
+        let y_split = self.y_split();
+        
+        match (x >= x_split, y >= y_split) {
+            (false, false) => self.children[0].read(x, y, reader, self.value, max_val),
+            (false, true) => self.children[0].read(x, y - y_split, reader, self.value, max_val),
+            (true, false) => self.children[0].read(x - x_split, y_split, reader, self.value, max_val),
+            (true, true) => self.children[0].read(x - x_split, y - y_split, reader, self.value, max_val),
+        }
+    }
 }
 
-pub(crate) struct TagTree(TagNode);
+pub(crate) struct TagTree {
+    root: TagNode,
+    width: u16,
+    height: u16,
+}
 
 impl TagTree {
     pub(crate) fn new(width: u16, height: u16) -> Self {
@@ -50,27 +108,55 @@ impl TagTree {
             width.next_power_of_two().ilog2(),
             height.next_power_of_two().ilog2(),
         );
-        Self(TagNode::build(width, height, level as u16))
+        
+        Self {
+            root: TagNode::build(width, height, level as u16),
+            width,
+            height,
+        }
+    }
+    
+    pub(crate) fn read(&mut self, x: u16, y: u16, reader: &mut BitReader, max_val: u16) -> Option<u16> {
+        assert!(x < self.width && y < self.height);
+        
+        self.root.read(x, y, reader, 0, max_val)
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use hayro_common::bit::BitWriter;
     use super::*;
 
     /// The example from B.10.2.
     #[test]
     fn tag_tree_1() {
-        let tree = TagTree::new(6, 3);
+        let mut tree = TagTree::new(6, 3);
 
-        assert_eq!(tree.0.children.len(), 2);
-        assert_eq!(tree.0.children[0].children.len(), 4);
-        assert_eq!(tree.0.children[0].children[0].children.len(), 4);
-        assert_eq!(tree.0.children[0].children[1].children.len(), 4);
-        assert_eq!(tree.0.children[0].children[2].children.len(), 2);
-        assert_eq!(tree.0.children[0].children[3].children.len(), 2);
-        assert_eq!(tree.0.children[1].children.len(), 2);
-        assert_eq!(tree.0.children[1].children[0].children.len(), 4);
-        assert_eq!(tree.0.children[1].children[1].children.len(), 2);
+        assert_eq!(tree.root.children.len(), 2);
+        assert_eq!(tree.root.children[0].children.len(), 4);
+        assert_eq!(tree.root.children[0].children[0].children.len(), 4);
+        assert_eq!(tree.root.children[0].children[1].children.len(), 4);
+        assert_eq!(tree.root.children[0].children[2].children.len(), 2);
+        assert_eq!(tree.root.children[0].children[3].children.len(), 2);
+        assert_eq!(tree.root.children[1].children.len(), 2);
+        assert_eq!(tree.root.children[1].children[0].children.len(), 4);
+        assert_eq!(tree.root.children[1].children[1].children.len(), 2);
+        
+        
+        let mut buf = vec![0; 2];
+        
+        let mut writer = BitWriter::new(&mut buf, 1).unwrap();
+        writer.write_bits([ 
+            0, 1, 1, 1, 1, // q3(0, 0)
+            0, 0, 1,       // q3(1, 0)
+            1, 0, 1,       // q3(2, 0)
+        ]);
+        
+        let mut reader = BitReader::new(&buf);
+        
+        // assert_eq!(tree.read(0, 0, &mut reader, u16::MAX).unwrap(), 1);
+        // assert_eq!(tree.read(1, 0, &mut reader, u16::MAX).unwrap(), 3);
+        // assert_eq!(tree.read(2, 0, &mut reader, u16::MAX).unwrap(), 2);
     }
 }

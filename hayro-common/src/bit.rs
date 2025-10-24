@@ -188,6 +188,15 @@ impl<'a> BitWriter<'a> {
 
         Some(())
     }
+    
+    /// Write multiple numbers at once.
+    pub fn write_bits(&mut self, bits: impl IntoIterator<Item = u16>) -> Option<()> {
+        for bit in bits {
+            self.write(bit)?;
+        }
+        
+        Some(())
+    }
 }
 
 /// An iterator over bit chunks.
