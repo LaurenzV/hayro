@@ -101,14 +101,14 @@ impl TagNode {
         let top = y < top_left_height;
 
         match (left, top) {
-            (false, false) => self.children[0].read(x, y, reader, self.value, max_val),
-            (true, false) => {
+            (true, true) => self.children[0].read(x, y, reader, self.value, max_val),
+            (false, true) => {
                 self.children[1].read(x - top_left_width, y, reader, self.value, max_val)
             }
-            (false, true) => {
+            (true, false) => {
                 self.children[2].read(x, y - top_left_height, reader, self.value, max_val) 
             }
-            (true, true) => self.children[3].read(x - top_left_width, y - top_left_height, reader, self.value, max_val),
+            (false, false) => self.children[3].read(x - top_left_width, y - top_left_height, reader, self.value, max_val),
         }
     }
 }
@@ -167,7 +167,7 @@ mod tests {
         assert_eq!(tree.root.children[1].children[0].real_children(), 4);
         assert_eq!(tree.root.children[1].children[2].real_children(), 2);
 
-        let mut buf = vec![0; 2];
+        let mut buf = vec![0; 3];
 
         let mut writer = BitWriter::new(&mut buf, 1).unwrap();
         writer.write_bits([
@@ -183,7 +183,8 @@ mod tests {
         assert_eq!(tree.read(0, 0, &mut reader, u16::MAX).unwrap(), 1);
         assert_eq!(tree.read(1, 0, &mut reader, u16::MAX).unwrap(), 3);
         assert_eq!(tree.read(2, 0, &mut reader, u16::MAX).unwrap(), 2);
-        // assert_eq!(tree.read(3, 0, &mut reader, u16::MAX).unwrap(), 3);
+        assert_eq!(tree.read(3, 0, &mut reader, u16::MAX).unwrap(), 3);
+        assert_eq!(tree.read(4, 0, &mut reader, u16::MAX).unwrap(), 2);
     }
 
     /// Inclusion tag tree from Table B.5.
