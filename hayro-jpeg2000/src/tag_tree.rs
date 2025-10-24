@@ -29,9 +29,12 @@ impl TagNode {
     fn y_split(&self) -> u16 {
         u16::min(1 << (self.level - 1), self.height)
     }
-    
+
     fn real_children(&self) -> usize {
-        self.children.iter().map(|c| if c.width > 0 && c.height > 0 { 1 } else { 0 }).sum()
+        self.children
+            .iter()
+            .map(|c| if c.width > 0 && c.height > 0 { 1 } else { 0 })
+            .sum()
     }
 }
 
@@ -54,9 +57,21 @@ impl TagNode {
 
         // Note that some nodes are technically invalid and might have a width/height of 0.
         push(TagNode::build(top_left_width, top_left_height, level - 1));
-        push(TagNode::build(width - top_left_width, top_left_height, level - 1));
-        push(TagNode::build(top_left_width, height - top_left_height, level - 1));
-        push(TagNode::build(width - top_left_width, height - top_left_height, level - 1));
+        push(TagNode::build(
+            width - top_left_width,
+            top_left_height,
+            level - 1,
+        ));
+        push(TagNode::build(
+            top_left_width,
+            height - top_left_height,
+            level - 1,
+        ));
+        push(TagNode::build(
+            width - top_left_width,
+            height - top_left_height,
+            level - 1,
+        ));
 
         tag
     }
@@ -71,18 +86,18 @@ impl TagNode {
     ) -> Option<u16> {
         if !self.initialized {
             let mut val = u16::max(parent_val, self.value);
-            
+
             loop {
                 if val >= max_val {
                     break;
                 }
-                
+
                 match reader.read(1)? {
                     0 => val += 1,
                     1 => {
                         self.initialized = true;
                         break;
-                    },
+                    }
                     _ => unreachable!(),
                 }
             }
@@ -106,9 +121,15 @@ impl TagNode {
                 self.children[1].read(x - top_left_width, y, reader, self.value, max_val)
             }
             (true, false) => {
-                self.children[2].read(x, y - top_left_height, reader, self.value, max_val) 
+                self.children[2].read(x, y - top_left_height, reader, self.value, max_val)
             }
-            (false, false) => self.children[3].read(x - top_left_width, y - top_left_height, reader, self.value, max_val),
+            (false, false) => self.children[3].read(
+                x - top_left_width,
+                y - top_left_height,
+                reader,
+                self.value,
+                max_val,
+            ),
         }
     }
 }
@@ -175,7 +196,7 @@ mod tests {
             0, 0, 1, // q3(1, 0)
             1, 0, 1, // q3(2, 0)
             0, 0, 1, // q3(3, 0)
-            1, 0, 1, 1 // q3(4, 0)
+            1, 0, 1, 1, // q3(4, 0)
         ]);
 
         let mut reader = BitReader::new(&buf);
