@@ -3,14 +3,16 @@ use crate::progression::{
     IteratorInput, ProgressionData, ProgressionIterator,
     ResolutionLevelLayerComponentPositionProgressionIterator,
 };
+use crate::tag_tree::TagTree;
 use crate::tile::{IntRect, Tile, TileInstance, TilePart};
 use hayro_common::bit::BitReader;
 
 struct ComponentData<'a> {
-    subbands: Vec<SubBand<'a>>,
+    subbands: Vec<Vec<SubBand<'a>>>,
 }
 
-enum SubbandType {
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum SubbandType {
     LowLow,
     LowHigh,
     HighLow,
@@ -19,6 +21,7 @@ enum SubbandType {
 
 struct SubBand<'a> {
     subband_type: SubbandType,
+    rect: IntRect,
     precincts: Vec<Precinct<'a>>,
 }
 
@@ -26,12 +29,17 @@ struct SubBand<'a> {
 struct Precinct<'a> {
     area: IntRect,
     code_blocks: Vec<CodeBlock<'a>>,
+    code_inclusion_tree: TagTree,
+    zero_bitplane_tree: TagTree,
 }
 
 #[derive(Clone)]
 struct CodeBlock<'a> {
     area: IntRect,
     layers: Vec<&'a [u8]>,
+    has_been_included: bool,
+    missing_bit_planes: u8,
+    number_of_coding_passes: u32,
     coefficients: Vec<u8>,
 }
 
@@ -76,13 +84,113 @@ fn process_packet<'a, T: ProgressionIterator<'a>>(
     component_data: &mut [ComponentData<'a>],
     mut progression_iterator: &mut T,
 ) -> Option<()> {
-    let progression_data = progression_iterator.next()?;
-    
-    let component = &mut component_data[progression_data.component as usize];
-    let sub_band = &mut component.subbands[progression_data.resolution as usize];
-    let precinct = &mut sub_band.precincts[progression_data.precinct as usize];
-    
     let mut reader = BitReader::new(&tile.data);
+
+    while !reader.at_end() {
+        let progression_data = progression_iterator.next()?;
+        let zero_length = reader.read(1)?;
+
+        // B.10.3 Zero length packet
+        // "The first bit in the packet header denotes whether the packet has a length of zero
+        // (empty packet). The value 0 indicates a zero length; no code-blocks are included in this
+        // case. The value 1 indicates a non-zero length.
+        if zero_length == 0 {
+            continue;
+        }
+
+        // TODO: What to do with the note below B.10.3?
+
+        let component = &mut component_data[progression_data.component as usize];
+        let sub_bands = &mut component.subbands[progression_data.resolution as usize];
+
+        for sub_band in sub_bands {
+            let precinct = &mut sub_band.precincts[progression_data.precinct as usize];
+
+            for code_block in &mut precinct.code_blocks {
+                // B.10.4 Code-block inclusion
+                let is_included = if code_block.has_been_included {
+                    // "For code-blocks that have been included in a previous packet,
+                    // a single bit is used to represent the information, where a 1
+                    // means that the code-block is included in this layer and a 0 means
+                    // that it is not."
+                    reader.read(1)? == 1
+                } else {
+                    // "For code-blocks that have not been previously included in any packet,
+                    // this information is signalled with a separate tag tree code for each precinct
+                    // as confined to a sub-band. The values in this tag tree are the number of the
+                    // layer in which the current code-block is first included. Although the exact
+                    // sequence of bits that represent the inclusion tag tree appears in the bit
+                    // stream, only the bits needed for determining whether the code-block is
+                    // included are placed in the packet header. If some of the tag tree is already
+                    // known from previous code-blocks or previous layers, it is not repeated.
+                    // Likewise, only as much of the tag tree as is needed to determine inclusion in
+                    // the current layer is included. If a code-block is not included until a later
+                    // layer, then only a partial tag tree is included at that point in the bit
+                    // stream."
+                    precinct.code_inclusion_tree.read(
+                        code_block.area.x0,
+                        code_block.area.y0,
+                        &mut reader,
+                        progression_data.layer_num as u32 + 1,
+                    )? <= progression_data.layer_num as u32
+                };
+
+                let included_first_time = is_included && !code_block.has_been_included;
+
+                // B.10.5 Zero bit-plane information
+                // "If a code-block is included for the first time, the packet header contains
+                // information identifying the actual number of bit-planes used to represent
+                // coefficients from the code-block. The maximum number of bit-planes available
+                // for the representation of coefficients in any sub-band, b, is given by Mb as
+                // defined in Equation (E-2). In general, however, the
+                // number of actual bit-planes for which coding passes are generated is Mb – P,
+                // where the number of missing most significant bit-planes, P, may vary from
+                // code-block to code-block; these missing bit-planes are all taken to be zero. The
+                // value of P is coded in the packet header with a separate tag tree for every
+                // precinct, in the same manner as the code block inclusion information."
+                if included_first_time {
+                    code_block.missing_bit_planes = precinct.zero_bitplane_tree.read(
+                        code_block.area.x0,
+                        code_block.area.y0,
+                        &mut reader,
+                        u32::MAX,
+                    )? as u8;
+                }
+
+                code_block.has_been_included |= is_included;
+
+                // B.10.6 Number of coding passes
+                // "The number of coding passes included in this packet from each code-block is
+                // identified in the packet header using the codewords shown in Table B.4. This
+                // table provides for the possibility of signalling up to 164 coding passes.
+                code_block.number_of_coding_passes = if reader.peak(8) == Some(0xff) {
+                    reader.read(8)?;
+                    reader.read(8)? + 37
+                } else if reader.peak(4) == Some(0x0f) {
+                    reader.read(4)?;
+                    // TODO: Validate that sequence is not 1111 1
+                    reader.read(5)? + 6
+                } else if reader.peak(4) == Some(0b1110) {
+                    reader.read(4)?;
+                    5
+                } else if reader.peak(4) == Some(0b1101) {
+                    reader.read(4)?;
+                    4
+                } else if reader.peak(4) == Some(0b1100) {
+                    reader.read(4)?;
+                    3
+                } else if reader.peak(2) == Some(0b10) {
+                    reader.read(2)?;
+                    2
+                } else if reader.peak(1) == Some(0) {
+                    reader.read(1)?;
+                    1
+                } else {
+                    return None;
+                }
+            }
+        }
+    }
 
     Some(())
 }
@@ -99,60 +207,108 @@ fn build_component_data(tile: &Tile, header: &Header) -> Vec<ComponentData<'stat
             .num_resolution_levels
         {
             let tile_instance = component_info.tile_instance(&tile, resolution);
-            let precincts = build_precincts(&tile_instance);
-            
+
+            eprintln!("resolution: {}", resolution);
+
             if resolution == 0 {
-                bands.push(SubBand {
+                let decomposition_level = component_info
+                    .coding_style_parameters
+                    .parameters
+                    .num_decomposition_levels;
+                let rect = tile_instance.sub_band_rect(SubbandType::LowLow, decomposition_level);
+
+                eprintln!(
+                    "Sub-band rect: {:?}, ll rect: {:?}",
+                    rect, tile_instance.resolution_transformed_rect
+                );
+                let precincts = build_precincts(&tile_instance, rect, header);
+
+                bands.push(vec![SubBand {
                     subband_type: SubbandType::LowLow,
+                    rect,
                     precincts,
-                });
-            }  else {
-                bands.extend([SubBand {
-                    subband_type: SubbandType::HighLow,
-                    precincts: precincts.clone(),
-                }, SubBand {
-                    subband_type: SubbandType::LowHigh,
-                    precincts: precincts.clone(),
-                }, SubBand {
-                    subband_type: SubbandType::HighHigh,
-                    precincts: precincts.clone(),
                 }]);
+            } else {
+                let decomposition_level = component_info
+                    .coding_style_parameters
+                    .parameters
+                    .num_decomposition_levels
+                    - (resolution - 1);
+
+                let mut sub_bands = vec![];
+
+                for sb_type in [
+                    SubbandType::HighLow,
+                    SubbandType::LowHigh,
+                    SubbandType::HighHigh,
+                ] {
+                    let rect = tile_instance.sub_band_rect(sb_type, decomposition_level);
+                    let precincts = build_precincts(&tile_instance, rect, header);
+                    eprintln!(
+                        "Sub-band rect: {:?}, ll rect: {:?}",
+                        rect, tile_instance.resolution_transformed_rect
+                    );
+                    sub_bands.push(SubBand {
+                        subband_type: sb_type,
+                        rect,
+                        precincts: precincts.clone(),
+                    })
+                }
+
+                bands.push(sub_bands);
             }
         }
-        
-        component_data.push(ComponentData {
-            subbands: bands,
-        })
+
+        component_data.push(ComponentData { subbands: bands })
     }
 
     component_data
 }
 
-fn build_precincts(tile_instance: &TileInstance) -> Vec<Precinct<'static>> {
+fn build_precincts(
+    tile_instance: &TileInstance,
+    sub_band_rect: IntRect,
+    header: &Header,
+) -> Vec<Precinct<'static>> {
     let mut precincts = vec![];
 
     let precinct_width = tile_instance.precinct_width();
     let precinct_height = tile_instance.precinct_height();
 
-    let mut y0 = tile_instance.dimensions.y0;
-
-    let x1 = tile_instance.dimensions.x1;
-    let y1 = tile_instance.dimensions.y1;
+    let mut y0 = tile_instance.resolution_transformed_rect.y0;
 
     for _ in 0..tile_instance.num_precincts_y() {
-        let mut x0 = tile_instance.dimensions.x0;
+        let mut x0 = tile_instance.resolution_transformed_rect.x0;
 
         for _ in 0..tile_instance.num_precincts_x() {
-            let width = u32::min(precinct_width, (x1 - x0));
-            let height = u32::min(precinct_height, (y1 - y0));
+            let precinct_rect = IntRect::from_xywh(x0, y0, precinct_width, precinct_height);
 
-            let precinct_rect = IntRect::from_xywh(x0, y0, width, height);
+            let code_blocks_x = sub_band_rect
+                .width()
+                .div_ceil(tile_instance.code_block_width());
+            let code_blocks_y = sub_band_rect
+                .height()
+                .div_ceil(tile_instance.code_block_height());
 
-            let blocks = build_precinct_code_blocks(precinct_rect, &tile_instance);
+            // let blocks = build_precinct_code_blocks(
+            //     precinct_rect,
+            //     &tile_instance,
+            //     code_blocks_y,
+            //     code_blocks_x,
+            //     header.global_coding_style.num_layers,
+            // );
+            let blocks = vec![];
+
+            eprintln!(
+                "Precinct rect: {:?}, code blocks width: {code_blocks_x}, code blocks height: {code_blocks_y}",
+                precinct_rect
+            );
 
             precincts.push(Precinct {
                 area: precinct_rect,
                 code_blocks: blocks,
+                code_inclusion_tree: TagTree::new(code_blocks_x, code_blocks_y),
+                zero_bitplane_tree: TagTree::new(code_blocks_x, code_blocks_y),
             });
 
             x0 += precinct_width;
@@ -167,6 +323,9 @@ fn build_precincts(tile_instance: &TileInstance) -> Vec<Precinct<'static>> {
 fn build_precinct_code_blocks(
     precinct_rect: IntRect,
     tile_instance: &TileInstance,
+    code_blocks_x: u32,
+    code_blocks_y: u32,
+    num_layers: u16,
 ) -> Vec<CodeBlock<'static>> {
     let mut blocks = vec![];
 
@@ -175,10 +334,14 @@ fn build_precinct_code_blocks(
     let code_block_width = tile_instance.code_block_width();
     let code_block_height = tile_instance.code_block_height();
 
-    for _ in 0..tile_instance.code_blocks_y() {
+    for _ in 0..code_blocks_y {
         let mut x = precinct_rect.x0;
 
-        for _ in 0..tile_instance.code_blocks_x() {
+        // eprintln!("num blocks: {:?}", code_blocks_y);
+        // eprintln!("height: {:?}", code_block_height);
+
+        for _ in 0..code_blocks_x {
+            // eprintln!("{} {} {}", precinct_rect.y0, y, precinct_rect.y1);
             let width = u32::min(code_block_width, precinct_rect.x1 - x);
             let height = u32::min(code_block_height, precinct_rect.y1 - y);
 
@@ -186,7 +349,10 @@ fn build_precinct_code_blocks(
 
             blocks.push(CodeBlock {
                 area,
-                layers: vec![],
+                layers: vec![&[]; num_layers as usize],
+                has_been_included: false,
+                missing_bit_planes: 0,
+                number_of_coding_passes: 0,
                 coefficients: vec![],
             });
 

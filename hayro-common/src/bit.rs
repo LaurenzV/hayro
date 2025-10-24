@@ -4,6 +4,7 @@ use smallvec::{SmallVec, smallvec};
 use std::fmt::Debug;
 
 /// A bit reader.
+#[derive(Debug, Clone)]
 pub struct BitReader<'a> {
     data: &'a [u8],
     cur_pos: usize,
@@ -69,6 +70,16 @@ impl<'a> BitReader<'a> {
         }?;
 
         Some(item)
+    }
+
+    /// Peak the given number of bits.
+    pub fn peak(&mut self, bit_size: u8) -> Option<u32> {
+        self.clone().read(bit_size)
+    }
+
+    /// Whether the bit reader has read all bytes.
+    pub fn at_end(&self) -> bool {
+        self.byte_pos() >= self.data.len()
     }
 
     /// Get the current byte position.

@@ -5,22 +5,22 @@ fn main() {
 
     match read(&data) {
         Ok(metadata) => {
-            println!("Image Metadata:");
-            println!("  Width: {}", metadata.width);
-            println!("  Height: {}", metadata.height);
-            println!("  Components: {}", metadata.num_components);
-            println!("  Bits per component: {}", metadata.bits_per_component);
-            println!("  Has IP: {}", metadata.has_intellectual_property);
-
-            if let Some(method) = metadata.colour_method {
-                println!("  Colour method: {}", method);
-                if let Some(enum_cs) = metadata.enumerated_colourspace {
-                    println!("  Enumerated colourspace: {}", enum_cs);
-                }
-                if let Some(ref profile) = metadata.icc_profile {
-                    println!("  ICC profile size: {} bytes", profile.len());
-                }
-            }
+            // println!("Image Metadata:");
+            // println!("  Width: {}", metadata.width);
+            // println!("  Height: {}", metadata.height);
+            // println!("  Components: {}", metadata.num_components);
+            // println!("  Bits per component: {}", metadata.bits_per_component);
+            // println!("  Has IP: {}", metadata.has_intellectual_property);
+            //
+            // if let Some(method) = metadata.colour_method {
+            //     println!("  Colour method: {}", method);
+            //     if let Some(enum_cs) = metadata.enumerated_colourspace {
+            //         println!("  Enumerated colourspace: {}", enum_cs);
+            //     }
+            //     if let Some(ref profile) = metadata.icc_profile {
+            //         println!("  ICC profile size: {} bytes", profile.len());
+            //     }
+            // }
         }
         Err(e) => {
             println!("Failed to read JP2 file: {}", e);

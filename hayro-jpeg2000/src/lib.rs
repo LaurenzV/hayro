@@ -137,7 +137,7 @@ pub fn read(data: &[u8]) -> Result<ImageMetadata, &'static str> {
                             .ok_or("failed to parse colour")?;
                     }
                     _ => {
-                        eprintln!("ignoring box {}", tag_to_string(child_box.box_type));
+                        // eprintln!("ignoring box {}", tag_to_string(child_box.box_type));
                     }
                 }
             }
@@ -146,7 +146,7 @@ pub fn read(data: &[u8]) -> Result<ImageMetadata, &'static str> {
         } else if current_box.box_type == CONTIGUOUS_CODESTREAM {
             codestream::read(current_box.data)?;
         } else {
-            eprintln!("ignoring outer box {}", tag_to_string(current_box.box_type));
+            // eprintln!("ignoring outer box {}", tag_to_string(current_box.box_type));
         }
     }
 

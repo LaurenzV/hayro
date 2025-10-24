@@ -2,16 +2,16 @@ use hayro_common::bit::BitReader;
 
 #[derive(Debug, PartialEq, Eq, Clone, Default)]
 pub(crate) struct TagNode {
-    width: u16,
-    height: u16,
-    value: u16,
+    width: u32,
+    height: u32,
+    value: u32,
     initialized: bool,
     level: u16,
     children: Vec<Box<TagNode>>,
 }
 
 impl TagNode {
-    fn new(width: u16, height: u16, level: u16) -> Self {
+    fn new(width: u32, height: u32, level: u16) -> Self {
         Self {
             width,
             height,
@@ -22,12 +22,12 @@ impl TagNode {
         }
     }
 
-    fn x_split(&self) -> u16 {
-        u16::min(1 << (self.level - 1), self.width)
+    fn x_split(&self) -> u32 {
+        u32::min(1 << (self.level - 1), self.width)
     }
 
-    fn y_split(&self) -> u16 {
-        u16::min(1 << (self.level - 1), self.height)
+    fn y_split(&self) -> u32 {
+        u32::min(1 << (self.level - 1), self.height)
     }
 
     fn real_children(&self) -> usize {
@@ -39,7 +39,7 @@ impl TagNode {
 }
 
 impl TagNode {
-    fn build(width: u16, height: u16, level: u16) -> Self {
+    fn build(width: u32, height: u32, level: u16) -> Self {
         let mut tag = TagNode::new(width, height, level);
 
         if level == 0 {
@@ -78,14 +78,14 @@ impl TagNode {
 
     fn read(
         &mut self,
-        x: u16,
-        y: u16,
+        x: u32,
+        y: u32,
         reader: &mut BitReader,
-        parent_val: u16,
-        max_val: u16,
-    ) -> Option<u16> {
+        parent_val: u32,
+        max_val: u32,
+    ) -> Option<u32> {
         if !self.initialized {
-            let mut val = u16::max(parent_val, self.value);
+            let mut val = u32::max(parent_val, self.value);
 
             loop {
                 if val >= max_val {
@@ -134,14 +134,15 @@ impl TagNode {
     }
 }
 
+#[derive(Clone)]
 pub(crate) struct TagTree {
     root: TagNode,
-    width: u16,
-    height: u16,
+    width: u32,
+    height: u32,
 }
 
 impl TagTree {
-    pub(crate) fn new(width: u16, height: u16) -> Self {
+    pub(crate) fn new(width: u32, height: u32) -> Self {
         let level = u32::max(
             width.next_power_of_two().ilog2(),
             height.next_power_of_two().ilog2(),
@@ -156,11 +157,11 @@ impl TagTree {
 
     pub(crate) fn read(
         &mut self,
-        x: u16,
-        y: u16,
+        x: u32,
+        y: u32,
         reader: &mut BitReader,
-        max_val: u16,
-    ) -> Option<u16> {
+        max_val: u32,
+    ) -> Option<u32> {
         assert!(x < self.width && y < self.height);
 
         self.root.read(x, y, reader, 0, max_val)
@@ -201,11 +202,11 @@ mod tests {
 
         let mut reader = BitReader::new(&buf);
 
-        assert_eq!(tree.read(0, 0, &mut reader, u16::MAX).unwrap(), 1);
-        assert_eq!(tree.read(1, 0, &mut reader, u16::MAX).unwrap(), 3);
-        assert_eq!(tree.read(2, 0, &mut reader, u16::MAX).unwrap(), 2);
-        assert_eq!(tree.read(3, 0, &mut reader, u16::MAX).unwrap(), 3);
-        assert_eq!(tree.read(4, 0, &mut reader, u16::MAX).unwrap(), 2);
+        assert_eq!(tree.read(0, 0, &mut reader, u32::MAX).unwrap(), 1);
+        assert_eq!(tree.read(1, 0, &mut reader, u32::MAX).unwrap(), 3);
+        assert_eq!(tree.read(2, 0, &mut reader, u32::MAX).unwrap(), 2);
+        assert_eq!(tree.read(3, 0, &mut reader, u32::MAX).unwrap(), 3);
+        assert_eq!(tree.read(4, 0, &mut reader, u32::MAX).unwrap(), 2);
     }
 
     /// Inclusion tag tree from Table B.5.
