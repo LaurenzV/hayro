@@ -77,22 +77,32 @@ impl TagNode {
         max_val: u16,
     ) -> Option<u16> {
         if !self.initialized {
-            let mut val = parent_val;
-
-            while reader.read(1)? == 0 {
-                val += 1;
+            let mut val = u16::max(parent_val, self.value);
+            
+            loop {
+                if val >= max_val {
+                    break;
+                }
+                
+                match reader.read(1)? {
+                    0 => val += 1,
+                    1 => {
+                        self.initialized = true;
+                        break;
+                    },
+                    _ => unreachable!(),
+                }
             }
 
-            self.initialized = true;
             self.value = val;
         }
 
-        if max_val < self.value || self.level == 0 {
+        if self.value >= max_val || self.level == 0 {
             return Some(self.value);
         }
 
-        let x_split_idx = (self.x_split() - 1);
-        let y_split_idx = (self.y_split() - 1);
+        let x_split_idx = self.x_split() - 1;
+        let y_split_idx = self.y_split() - 1;
 
         match (x > x_split_idx, y > y_split_idx) {
             (false, false) => self.children[0].read(x, y, reader, self.value, max_val),
@@ -182,5 +192,35 @@ mod tests {
         assert_eq!(tree.read(0, 0, &mut reader, u16::MAX).unwrap(), 1);
         assert_eq!(tree.read(1, 0, &mut reader, u16::MAX).unwrap(), 3);
         assert_eq!(tree.read(2, 0, &mut reader, u16::MAX).unwrap(), 2);
+    }
+
+    /// Inclusion tag tree from Table B.5.
+    #[test]
+    fn tag_tree_2() {
+        let mut tree = TagTree::new(3, 2);
+
+        let mut buf = vec![0; 1];
+
+        let mut writer = BitWriter::new(&mut buf, 1).unwrap();
+        writer.write_bits([
+            1, 1,
+            1, // Code-block 0, 0 included for the first time (partial inclusion tag tree)
+            1, // Code-block 1, 0 included for the first time (partial inclusion tag tree)
+            0, // Code-block 2, 0 not yet included (partial tag tree)
+            0, // Code-block 0, 1 not yet included
+            0, // Code-block 1, 2 not yet included
+               // Code-block 2, 1 not yet included (no data needed, already conveyed by partial tag tree for code-block 2, 0)
+        ]);
+
+        let mut reader = BitReader::new(&buf);
+
+        let next_layer = 1;
+
+        assert_eq!(tree.read(0, 0, &mut reader, next_layer).unwrap(), 0);
+        assert_eq!(tree.read(1, 0, &mut reader, next_layer).unwrap(), 0);
+        assert_eq!(tree.read(2, 0, &mut reader, next_layer).unwrap(), 1);
+        assert_eq!(tree.read(0, 1, &mut reader, next_layer).unwrap(), 1);
+        assert_eq!(tree.read(1, 1, &mut reader, next_layer).unwrap(), 1);
+        assert_eq!(tree.read(2, 1, &mut reader, next_layer).unwrap(), 1);
     }
 }
