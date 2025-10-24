@@ -99,7 +99,11 @@ impl TagNode {
             (true, false) => {
                 self.children[1].read(x - x_split_idx, y_split_idx, reader, self.value, max_val)
             }
-            (false, true) => self.children[2].read(x, y - y_split_idx, reader, self.value, max_val),
+            (false, true) => {
+                let idx = if self.children.len() > 1 { 2 } else { 1 };
+
+                self.children[idx].read(x, y - y_split_idx, reader, self.value, max_val)
+            }
             (true, true) => self.children[3].read(
                 x - x_split_idx,
                 y - y_split_idx,
