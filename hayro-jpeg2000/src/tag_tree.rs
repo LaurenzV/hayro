@@ -29,6 +29,10 @@ impl TagNode {
     fn y_split(&self) -> u16 {
         u16::min(1 << (self.level - 1), self.height)
     }
+    
+    fn real_children(&self) -> usize {
+        self.children.iter().map(|c| if c.width > 0 && c.height > 0 { 1 } else { 0 }).sum()
+    }
 }
 
 impl TagNode {
@@ -41,29 +45,18 @@ impl TagNode {
             return tag;
         }
 
-        let x_split = tag.x_split();
-        let y_split = tag.y_split();
+        let top_left_width = tag.x_split();
+        let top_left_height = tag.y_split();
 
         let mut push = |node: TagNode| {
             tag.children.push(Box::new(node));
         };
 
-        let extend_x = width > x_split;
-        let extend_y = height > y_split;
-
-        push(TagNode::build(x_split, y_split, level - 1));
-
-        if extend_x {
-            push(TagNode::build(width - x_split, y_split, level - 1));
-        }
-
-        if extend_y {
-            push(TagNode::build(x_split, height - y_split, level - 1));
-        }
-
-        if extend_x && extend_y {
-            push(TagNode::build(width - x_split, height - y_split, level - 1));
-        }
+        // Note that some nodes are technically invalid and might have a width/height of 0.
+        push(TagNode::build(top_left_width, top_left_height, level - 1));
+        push(TagNode::build(width - top_left_width, top_left_height, level - 1));
+        push(TagNode::build(top_left_width, height - top_left_height, level - 1));
+        push(TagNode::build(width - top_left_width, height - top_left_height, level - 1));
 
         tag
     }
@@ -101,26 +94,21 @@ impl TagNode {
             return Some(self.value);
         }
 
-        let x_split_idx = self.x_split() - 1;
-        let y_split_idx = self.y_split() - 1;
+        let top_left_width = self.x_split();
+        let top_left_height = self.y_split();
 
-        match (x > x_split_idx, y > y_split_idx) {
+        let left = x < top_left_width;
+        let top = y < top_left_height;
+
+        match (left, top) {
             (false, false) => self.children[0].read(x, y, reader, self.value, max_val),
             (true, false) => {
-                self.children[1].read(x - x_split_idx, y_split_idx, reader, self.value, max_val)
+                self.children[1].read(x - top_left_width, y, reader, self.value, max_val)
             }
             (false, true) => {
-                let idx = if self.children.len() > 1 { 2 } else { 1 };
-
-                self.children[idx].read(x, y - y_split_idx, reader, self.value, max_val)
+                self.children[2].read(x, y - top_left_height, reader, self.value, max_val) 
             }
-            (true, true) => self.children[3].read(
-                x - x_split_idx,
-                y - y_split_idx,
-                reader,
-                self.value,
-                max_val,
-            ),
+            (true, true) => self.children[3].read(x - top_left_width, y - top_left_height, reader, self.value, max_val),
         }
     }
 }
@@ -169,15 +157,15 @@ mod tests {
     fn tag_tree_1() {
         let mut tree = TagTree::new(6, 3);
 
-        assert_eq!(tree.root.children.len(), 2);
-        assert_eq!(tree.root.children[0].children.len(), 4);
-        assert_eq!(tree.root.children[0].children[0].children.len(), 4);
-        assert_eq!(tree.root.children[0].children[1].children.len(), 4);
-        assert_eq!(tree.root.children[0].children[2].children.len(), 2);
-        assert_eq!(tree.root.children[0].children[3].children.len(), 2);
-        assert_eq!(tree.root.children[1].children.len(), 2);
-        assert_eq!(tree.root.children[1].children[0].children.len(), 4);
-        assert_eq!(tree.root.children[1].children[1].children.len(), 2);
+        assert_eq!(tree.root.real_children(), 2);
+        assert_eq!(tree.root.children[0].real_children(), 4);
+        assert_eq!(tree.root.children[0].children[0].real_children(), 4);
+        assert_eq!(tree.root.children[0].children[1].real_children(), 4);
+        assert_eq!(tree.root.children[0].children[2].real_children(), 2);
+        assert_eq!(tree.root.children[0].children[3].real_children(), 2);
+        assert_eq!(tree.root.children[1].real_children(), 2);
+        assert_eq!(tree.root.children[1].children[0].real_children(), 4);
+        assert_eq!(tree.root.children[1].children[2].real_children(), 2);
 
         let mut buf = vec![0; 2];
 
