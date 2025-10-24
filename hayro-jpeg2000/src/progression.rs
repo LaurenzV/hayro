@@ -100,7 +100,7 @@ impl<'a> IteratorState<'a> {
     fn update_tile_part_instance(&mut self) {
         let component = &self.input.component_infos[self.data.component as usize];
         self.tile_part_instance =
-            component.tile_part_instance(self.input.tile_part, self.data.resolution);
+            component.tile_instance(self.input.tile_part, self.data.resolution);
     }
 
     fn advance_precinct(&mut self) -> bool {
@@ -151,7 +151,7 @@ impl<'a> ProgressionIterator<'a> for ResolutionLevelLayerComponentPositionProgre
     fn new(input: IteratorInput<'a>) -> Self {
         let data = ProgressionData::default();
         let instance = input.component_infos[data.component as usize]
-            .tile_part_instance(input.tile_part, data.resolution);
+            .tile_instance(input.tile_part, data.resolution);
 
         Self {
             state: IteratorState::new(input, instance),

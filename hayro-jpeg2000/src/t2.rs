@@ -3,8 +3,39 @@ use crate::progression::{
     IteratorInput, ProgressionData, ProgressionIterator,
     ResolutionLevelLayerComponentPositionProgressionIterator,
 };
-use crate::tile::{Tile, TilePart};
+use crate::tile::{IntRect, Tile, TilePart};
 use hayro_common::bit::BitReader;
+
+struct ComponentData<'a> {
+    subbands: Vec<SubBands<'a>>
+}
+
+enum SubBands<'a> {
+    Lowest(SubBand<'a>),
+    High(SubBand<'a>, SubBand<'a>, SubBand<'a>)
+}
+
+enum SubbandType {
+    LowLow,
+    LowHigh,
+    HighLow,
+    HighHigh
+}
+
+struct SubBand<'a> {
+    subband_type: SubbandType,
+    precincts: Vec<Precinct<'a>>
+}
+
+struct Precinct<'a> {
+    area: IntRect,
+    code_blocks: Vec<CodeBlock<'a>>
+}
+
+struct CodeBlock<'a> {
+    layers: Vec<&'a [u8]>,
+    coefficients: Vec<u8>
+}
 
 pub(crate) fn process_tiles(tiles: &[Tile], header: &Header) -> Option<()> {
     for tile in tiles {
@@ -45,6 +76,15 @@ fn process_packet<'a, T: ProgressionIterator<'a>>(
     {}
 
     Some(())
+}
+
+fn build_component_data(tile: &Tile, header: &Header) -> Vec<ComponentData<'static>> {
+    unimplemented!();
+    // for component_info in &header.component_infos {
+    //     let rect = component_info.scaled_rect(tile.rect);
+    //     
+    //     for resolution in 0..component_info.coding_style_parameters.parameters.num_resolution_levels
+    // }
 }
 
 trait BitReaderExt {

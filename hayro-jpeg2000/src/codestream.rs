@@ -360,7 +360,7 @@ impl ComponentInfo {
         }
     }
 
-    pub(crate) fn tile_part_instance<'a>(
+    pub(crate) fn tile_instance<'a>(
         &'a self,
         part: &'a TilePart<'a>,
         resolution: u16,
