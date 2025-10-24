@@ -304,7 +304,7 @@ impl SizeData {
             self.reference_grid_height,
         );
 
-        IntRect::new(x0, y0, x1, y1)
+        IntRect::from_ltrb(x0, y0, x1, y1)
     }
 
     pub(crate) fn tile_x_coord(&self, idx: u32) -> u32 {
@@ -356,7 +356,7 @@ impl ComponentInfo {
                 .y1
                 .div_ceil(self.size_info.vertical_resolution as u32);
 
-            IntRect::new(t_x0, t_y0, t_x1, t_y1)
+            IntRect::from_ltrb(t_x0, t_y0, t_x1, t_y1)
         }
     }
 
@@ -379,7 +379,7 @@ impl ComponentInfo {
             let tx1 = x1.div_ceil(2u32.pow(n_l as u32 - r as u32));
             let ty1 = y1.div_ceil(2u32.pow(n_l as u32 - r as u32));
 
-            IntRect::new(tx0, ty0, tx1, ty1)
+            IntRect::from_ltrb(tx0, ty0, tx1, ty1)
         };
 
         TileInstance {

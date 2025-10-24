@@ -13,8 +13,17 @@ pub(crate) struct IntRect {
 }
 
 impl IntRect {
-    pub(crate) fn new(x0: u32, y0: u32, x1: u32, y1: u32) -> Self {
+    pub(crate) fn from_ltrb(x0: u32, y0: u32, x1: u32, y1: u32) -> Self {
         Self { x0, y0, x1, y1 }
+    }
+
+    pub(crate) fn from_xywh(x: u32, y: u32, w: u32, h: u32) -> Self {
+        Self {
+            x0: x,
+            y0: y,
+            x1: x + w,
+            y1: y + h,
+        }
     }
 
     pub(crate) fn width(&self) -> u32 {
@@ -90,6 +99,16 @@ impl<'a> TileInstance<'a> {
         self.dimensions
     }
 
+    pub(crate) fn precinct_width(&self) -> u32 {
+        2u32.pow(self.ppx() as u32)
+            .min(self.dimensions.x1 - self.dimensions.x0)
+    }
+
+    pub(crate) fn precinct_height(&self) -> u32 {
+        2u32.pow(self.ppy() as u32)
+            .min(self.dimensions.y1 - self.dimensions.y0)
+    }
+
     pub(crate) fn num_precincts_x(&self) -> u32 {
         // See B-16.
         let IntRect { x0, x1, .. } = self.dimensions;
@@ -97,7 +116,7 @@ impl<'a> TileInstance<'a> {
         if x0 == x1 {
             0
         } else {
-            x1.div_ceil(2u32.pow(self.ppx() as u32)) - x0 / 2u32.pow(self.ppx() as u32)
+            x1.div_ceil(self.precinct_width()) - x0 / self.precinct_width()
         }
     }
 
@@ -108,7 +127,7 @@ impl<'a> TileInstance<'a> {
         if y0 == y1 {
             0
         } else {
-            y1.div_ceil(2u32.pow(self.ppy() as u32)) - y0 / 2u32.pow(self.ppy() as u32)
+            y1.div_ceil(self.precinct_height()) - y0 / self.precinct_height()
         }
     }
 
@@ -116,7 +135,17 @@ impl<'a> TileInstance<'a> {
         self.num_precincts_x() * self.num_precincts_y()
     }
 
-    pub(crate) fn code_block_width(&self) -> u8 {
+    pub(crate) fn code_blocks_x(&self) -> u32 {
+        self.precinct_width()
+            .div_ceil(self.code_block_width() as u32)
+    }
+
+    pub(crate) fn code_blocks_y(&self) -> u32 {
+        self.precinct_height()
+            .div_ceil(self.code_block_height() as u32)
+    }
+
+    pub(crate) fn code_block_width(&self) -> u32 {
         // See B-17.
         let xcb = self
             .component_info
@@ -124,14 +153,16 @@ impl<'a> TileInstance<'a> {
             .parameters
             .code_block_width;
 
-        if self.resolution > 0 {
+        let xcb = if self.resolution > 0 {
             u8::min(xcb, self.ppx() - 1)
         } else {
             u8::min(xcb, self.ppx())
-        }
+        };
+
+        2u32.pow(xcb as u32)
     }
 
-    pub(crate) fn code_block_height(&self) -> u8 {
+    pub(crate) fn code_block_height(&self) -> u32 {
         // See B-18.
         let ycb = self
             .component_info
@@ -139,11 +170,13 @@ impl<'a> TileInstance<'a> {
             .parameters
             .code_block_height;
 
-        if self.resolution > 0 {
+        let ycb = if self.resolution > 0 {
             u8::min(ycb, self.ppy() - 1)
         } else {
             u8::min(ycb, self.ppy())
-        }
+        };
+
+        2u32.pow(ycb as u32)
     }
 }
 
