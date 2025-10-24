@@ -7,12 +7,7 @@ use crate::tile::{IntRect, Tile, TileInstance, TilePart};
 use hayro_common::bit::BitReader;
 
 struct ComponentData<'a> {
-    subbands: Vec<SubBands<'a>>,
-}
-
-enum SubBands<'a> {
-    Lowest(SubBand<'a>),
-    High(SubBand<'a>, SubBand<'a>, SubBand<'a>),
+    subbands: Vec<SubBand<'a>>,
 }
 
 enum SubbandType {
@@ -27,11 +22,13 @@ struct SubBand<'a> {
     precincts: Vec<Precinct<'a>>,
 }
 
+#[derive(Clone)]
 struct Precinct<'a> {
     area: IntRect,
     code_blocks: Vec<CodeBlock<'a>>,
 }
 
+#[derive(Clone)]
 struct CodeBlock<'a> {
     area: IntRect,
     layers: Vec<&'a [u8]>,
@@ -64,10 +61,10 @@ fn process_tile<'a, T: ProgressionIterator<'a>>(
     header: &Header,
     mut iterator: T,
 ) -> Option<()> {
-    let _ = build_component_data(tile, header);
+    let mut component_data = build_component_data(tile, header);
 
     for tile_part in tile.tile_parts() {
-        process_packet(&tile_part, header, &mut iterator)?;
+        process_packet(&tile_part, header, &mut component_data, &mut iterator)?;
     }
 
     Some(())
@@ -76,26 +73,25 @@ fn process_tile<'a, T: ProgressionIterator<'a>>(
 fn process_packet<'a, T: ProgressionIterator<'a>>(
     tile: &TilePart,
     header: &Header,
-    mut iterator: &mut T,
+    component_data: &mut [ComponentData<'a>],
+    mut progression_iterator: &mut T,
 ) -> Option<()> {
+    let progression_data = progression_iterator.next()?;
+    
+    let component = &mut component_data[progression_data.component as usize];
+    let sub_band = &mut component.subbands[progression_data.resolution as usize];
+    let precinct = &mut sub_band.precincts[progression_data.precinct as usize];
+    
     let mut reader = BitReader::new(&tile.data);
-
-    // while let Some(ProgressionData {
-    //     layer_num,
-    //     resolution,
-    //     component,
-    //     precinct,
-    // }) = iterator.next()
-    // {}
 
     Some(())
 }
 
 fn build_component_data(tile: &Tile, header: &Header) -> Vec<ComponentData<'static>> {
-    // let mut data = vec![];
+    let mut component_data = vec![];
 
     for component_info in &header.component_infos {
-        let rect = component_info.scaled_rect(tile.rect);
+        let mut bands = vec![];
 
         for resolution in 0..component_info
             .coding_style_parameters
@@ -103,12 +99,33 @@ fn build_component_data(tile: &Tile, header: &Header) -> Vec<ComponentData<'stat
             .num_resolution_levels
         {
             let tile_instance = component_info.tile_instance(&tile, resolution);
-
-            build_precincts(&tile_instance);
+            let precincts = build_precincts(&tile_instance);
+            
+            if resolution == 0 {
+                bands.push(SubBand {
+                    subband_type: SubbandType::LowLow,
+                    precincts,
+                });
+            }  else {
+                bands.extend([SubBand {
+                    subband_type: SubbandType::HighLow,
+                    precincts: precincts.clone(),
+                }, SubBand {
+                    subband_type: SubbandType::LowHigh,
+                    precincts: precincts.clone(),
+                }, SubBand {
+                    subband_type: SubbandType::HighHigh,
+                    precincts: precincts.clone(),
+                }]);
+            }
         }
+        
+        component_data.push(ComponentData {
+            subbands: bands,
+        })
     }
 
-    unimplemented!()
+    component_data
 }
 
 fn build_precincts(tile_instance: &TileInstance) -> Vec<Precinct<'static>> {
