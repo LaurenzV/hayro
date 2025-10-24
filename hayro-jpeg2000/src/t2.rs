@@ -47,7 +47,7 @@ struct CodeBlock<'a> {
 #[derive(Clone)]
 struct Layer<'a> {
     data: &'a [u8],
-    segments: Vec<Segment>
+    segments: Vec<Segment>,
 }
 
 #[derive(Clone)]
@@ -210,44 +210,42 @@ fn process_packet<'a, T: ProgressionIterator<'a>>(
                 } else {
                     return None;
                 };
-                
+
                 // TODO: Everything below here still broken
-                
+
                 code_block.number_of_coding_passes += added_coding_passes;
 
                 eprintln!(
                     "number of coding passes: {}",
                     code_block.number_of_coding_passes
                 );
-                
+
                 // B.10.7.1 Single codeword segment
-                // "A codeword segment is the number of bytes contributed to a packet by a 
+                // "A codeword segment is the number of bytes contributed to a packet by a
                 // code-block. The length of a codeword segment is represented by a binary number of length:
                 // bits = Lblock + floor(log_2(coding passes added))
-                // where Lblock is a code-block state variable. A separate Lblock is used for each 
-                // code-block in the precinct. The value of Lblock is initially set to three. The 
-                // number of bytes contributed by each code-block is preceded by signalling bits 
-                // that increase the value of Lblock, as needed. A signalling bit of zero indicates 
-                // the current value of Lblock is sufficient. If there are k ones followed by a 
-                // zero, the value of Lblock is incremented by k. While Lblock can only increase, 
-                // the number of bits used to signal the length of the code-block contribution can 
+                // where Lblock is a code-block state variable. A separate Lblock is used for each
+                // code-block in the precinct. The value of Lblock is initially set to three. The
+                // number of bytes contributed by each code-block is preceded by signalling bits
+                // that increase the value of Lblock, as needed. A signalling bit of zero indicates
+                // the current value of Lblock is sufficient. If there are k ones followed by a
+                // zero, the value of Lblock is incremented by k. While Lblock can only increase,
+                // the number of bits used to signal the length of the code-block contribution can
                 // increase or decrease depending on the number of coding passes included."
                 let mut k = 0;
-                
+
                 while reader.read_packet_header_bits(1)? == 1 {
                     k += 1;
                 }
-                
+
                 code_block.l_block += k;
-                let length_bits =  code_block.l_block + added_coding_passes.ilog2();
+                let length_bits = code_block.l_block + added_coding_passes.ilog2();
                 let length = reader.read_packet_header_bits(length_bits as u8)?;
                 reader.align();
-                
+
                 for _ in 0..length {
                     let _ = reader.read(8)?;
                 }
-                
-                
             }
         }
     }
@@ -433,7 +431,7 @@ trait BitReaderExt {
 impl BitReaderExt for BitReader<'_> {
     fn read_packet_header_bits(&mut self, bit_size: u8) -> Option<u32> {
         let mut bit = 0;
-        
+
         for _ in 0..bit_size {
             // B.10.1: If the value of the byte is 0xFF, the next byte includes an extra zero bit
             // stuffed into the MSB.
@@ -441,14 +439,14 @@ impl BitReaderExt for BitReader<'_> {
             if self.byte_pos() != (self.bit_pos() + 1) / 8 {
                 if self.cur_byte()? == 0xFF {
                     let stuff_bit = self.read(1)?;
-                    
+
                     assert_eq!(stuff_bit, 0, "invalid stuffing bit");
                 }
             }
-            
+
             bit = (bit << 1) | self.read(bit_size)?;
         }
-        
+
         Some(bit)
     }
 
