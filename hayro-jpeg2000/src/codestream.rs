@@ -1,5 +1,5 @@
 use crate::t2::process_tiles;
-use crate::tile::{IntRect, TilePart, TilePartInstance, read_tiles};
+use crate::tile::{IntRect, Tile, TileInstance, TilePart, read_tiles};
 use hayro_common::bit::BitReader;
 use hayro_common::byte::Reader;
 
@@ -362,9 +362,9 @@ impl ComponentInfo {
 
     pub(crate) fn tile_instance<'a>(
         &'a self,
-        part: &'a TilePart<'a>,
+        tile: &Tile<'_>,
         resolution: u16,
-    ) -> TilePartInstance<'a> {
+    ) -> TileInstance<'a> {
         let dimensions = {
             // See formula B-14.
             let r = resolution;
@@ -372,7 +372,7 @@ impl ComponentInfo {
                 .coding_style_parameters
                 .parameters
                 .num_decomposition_levels;
-            let IntRect { x0, y0, x1, y1 } = self.scaled_rect(part.tile.rect);
+            let IntRect { x0, y0, x1, y1 } = self.scaled_rect(tile.rect);
 
             let tx0 = x0.div_ceil(2u32.pow(n_l as u32 - r as u32));
             let ty0 = y0.div_ceil(2u32.pow(n_l as u32 - r as u32));
@@ -382,8 +382,7 @@ impl ComponentInfo {
             IntRect::new(tx0, ty0, tx1, ty1)
         };
 
-        TilePartInstance {
-            tile_part: part,
+        TileInstance {
             resolution,
             component_info: self,
             dimensions,

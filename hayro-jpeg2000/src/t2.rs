@@ -7,54 +7,64 @@ use crate::tile::{IntRect, Tile, TilePart};
 use hayro_common::bit::BitReader;
 
 struct ComponentData<'a> {
-    subbands: Vec<SubBands<'a>>
+    subbands: Vec<SubBands<'a>>,
 }
 
 enum SubBands<'a> {
     Lowest(SubBand<'a>),
-    High(SubBand<'a>, SubBand<'a>, SubBand<'a>)
+    High(SubBand<'a>, SubBand<'a>, SubBand<'a>),
 }
 
 enum SubbandType {
     LowLow,
     LowHigh,
     HighLow,
-    HighHigh
+    HighHigh,
 }
 
 struct SubBand<'a> {
     subband_type: SubbandType,
-    precincts: Vec<Precinct<'a>>
+    precincts: Vec<Precinct<'a>>,
 }
 
 struct Precinct<'a> {
     area: IntRect,
-    code_blocks: Vec<CodeBlock<'a>>
+    code_blocks: Vec<CodeBlock<'a>>,
 }
 
 struct CodeBlock<'a> {
     layers: Vec<&'a [u8]>,
-    coefficients: Vec<u8>
+    coefficients: Vec<u8>,
 }
 
 pub(crate) fn process_tiles(tiles: &[Tile], header: &Header) -> Option<()> {
     for tile in tiles {
-        for tile_part in tile.tile_parts() {
-            let iter_input = IteratorInput::new(
-                &tile_part,
-                &header.component_infos,
-                header.global_coding_style.num_layers,
-            );
+        let iter_input = IteratorInput::new(
+            &tile,
+            &header.component_infos,
+            header.global_coding_style.num_layers,
+        );
 
-            match header.global_coding_style.progression_order {
-                ProgressionOrder::ResolutionLayerComponentPosition => {
-                    let iter =
-                        ResolutionLevelLayerComponentPositionProgressionIterator::new(iter_input);
-                    process_packet(&tile_part, header, iter)?;
-                }
-                _ => unimplemented!(),
+        match header.global_coding_style.progression_order {
+            ProgressionOrder::ResolutionLayerComponentPosition => {
+                let iter =
+                    ResolutionLevelLayerComponentPositionProgressionIterator::new(iter_input);
+                process_tile(&tile, header, iter)?;
             }
+            _ => unimplemented!(),
         }
+    }
+
+    Some(())
+}
+
+fn process_tile<'a, T: ProgressionIterator<'a>>(
+    tile: &Tile,
+    header: &Header,
+    mut iterator: T,
+) -> Option<()> {
+    for tile_part in tile.tile_parts() {
+        process_packet(&tile_part, header, &mut iterator)?;
     }
 
     Some(())
@@ -63,7 +73,7 @@ pub(crate) fn process_tiles(tiles: &[Tile], header: &Header) -> Option<()> {
 fn process_packet<'a, T: ProgressionIterator<'a>>(
     tile: &TilePart,
     header: &Header,
-    mut iterator: T,
+    mut iterator: &mut T,
 ) -> Option<()> {
     let mut reader = BitReader::new(&tile.data);
 
@@ -82,7 +92,7 @@ fn build_component_data(tile: &Tile, header: &Header) -> Vec<ComponentData<'stat
     unimplemented!();
     // for component_info in &header.component_infos {
     //     let rect = component_info.scaled_rect(tile.rect);
-    //     
+    //
     //     for resolution in 0..component_info.coding_style_parameters.parameters.num_resolution_levels
     // }
 }

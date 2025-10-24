@@ -1,5 +1,5 @@
 use crate::codestream::ComponentInfo;
-use crate::tile::{TilePart, TilePartInstance};
+use crate::tile::{Tile, TileInstance, TilePart};
 
 #[derive(Default, Copy, Clone, Debug)]
 pub(crate) struct ProgressionData {
@@ -11,14 +11,14 @@ pub(crate) struct ProgressionData {
 
 pub(crate) struct IteratorInput<'a> {
     layers: u16,
-    tile_part: &'a TilePart<'a>,
+    tile: &'a Tile<'a>,
     component_infos: &'a [ComponentInfo],
     resolutions: u16,
 }
 
 impl<'a> IteratorInput<'a> {
     pub(crate) fn new(
-        tile_part: &'a TilePart<'a>,
+        tile: &'a Tile<'a>,
         component_infos: &'a [ComponentInfo],
         layers: u16,
     ) -> Self {
@@ -31,7 +31,7 @@ impl<'a> IteratorInput<'a> {
         Self {
             layers,
             component_infos,
-            tile_part,
+            tile,
             resolutions,
         }
     }
@@ -41,11 +41,11 @@ struct IteratorState<'a> {
     input: IteratorInput<'a>,
     data: ProgressionData,
     first: bool,
-    tile_part_instance: TilePartInstance<'a>,
+    tile_part_instance: TileInstance<'a>,
 }
 
 impl<'a> IteratorState<'a> {
-    fn new(input: IteratorInput<'a>, tile_part_instance: TilePartInstance<'a>) -> Self {
+    fn new(input: IteratorInput<'a>, tile_part_instance: TileInstance<'a>) -> Self {
         Self {
             input,
             data: Default::default(),
@@ -99,8 +99,7 @@ impl<'a> IteratorState<'a> {
 
     fn update_tile_part_instance(&mut self) {
         let component = &self.input.component_infos[self.data.component as usize];
-        self.tile_part_instance =
-            component.tile_instance(self.input.tile_part, self.data.resolution);
+        self.tile_part_instance = component.tile_instance(self.input.tile, self.data.resolution);
     }
 
     fn advance_precinct(&mut self) -> bool {
@@ -151,7 +150,7 @@ impl<'a> ProgressionIterator<'a> for ResolutionLevelLayerComponentPositionProgre
     fn new(input: IteratorInput<'a>) -> Self {
         let data = ProgressionData::default();
         let instance = input.component_infos[data.component as usize]
-            .tile_instance(input.tile_part, data.resolution);
+            .tile_instance(input.tile, data.resolution);
 
         Self {
             state: IteratorState::new(input, instance),

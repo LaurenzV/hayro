@@ -63,14 +63,13 @@ pub(crate) struct TilePart<'a> {
     pub(crate) tile: &'a Tile<'a>,
 }
 
-pub(crate) struct TilePartInstance<'a> {
-    pub(crate) tile_part: &'a TilePart<'a>,
+pub(crate) struct TileInstance<'a> {
     pub(crate) resolution: u16,
     pub(crate) component_info: &'a ComponentInfo,
     pub(crate) dimensions: IntRect,
 }
 
-impl<'a> TilePartInstance<'a> {
+impl<'a> TileInstance<'a> {
     pub(crate) fn ppx(&self) -> u8 {
         self.component_info
             .coding_style_parameters
