@@ -313,7 +313,6 @@ impl SizeData {
 
     pub(crate) fn tile_y_coord(&self, idx: u32) -> u32 {
         // See B-6.
-        // I believe the `ceil` in the spec should be a `floor` instead.
         (idx as f64 / self.num_x_tiles() as f64).floor() as u32
     }
 }
