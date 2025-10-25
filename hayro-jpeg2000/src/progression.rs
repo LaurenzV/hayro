@@ -134,10 +134,11 @@ impl Iterator for ResolutionLevelLayerComponentPositionProgressionIterator<'_> {
 
         if self.state.advance_precinct()
             && self.state.advance_component()
-                && self.state.advance_layer()
-                    && self.state.advance_resolution() {
-                        return None;
-                    }
+            && self.state.advance_layer()
+            && self.state.advance_resolution()
+        {
+            return None;
+        }
 
         Some(self.state.data)
     }

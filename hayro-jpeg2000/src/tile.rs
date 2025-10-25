@@ -1,6 +1,4 @@
-use crate::codestream::{
-    ComponentInfo, Header, ReaderExt, SizeData, markers,
-};
+use crate::codestream::{ComponentInfo, Header, ReaderExt, SizeData, markers};
 use crate::packet::SubbandType;
 use hayro_common::byte::Reader;
 
@@ -363,8 +361,8 @@ pub(crate) fn sot_marker(reader: &mut Reader) -> Option<TilePartHeader> {
 mod tests {
     use super::*;
     use crate::codestream::{
-        CodeBlockStyle, CodingStyleFlags, CodingStyleParameters, QuantizationStyle,
-        WaveletTransform,
+        CodeBlockStyle, CodingStyleFlags, CodingStyleParameters, ComponentCodingStyle,
+        ComponentSizeInfo, QuantizationInfo, QuantizationStyle, WaveletTransform,
     };
 
     /// Test case for the example in B.4.

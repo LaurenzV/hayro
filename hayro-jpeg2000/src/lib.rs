@@ -6,8 +6,8 @@ use hayro_common::byte::Reader;
 
 pub mod boxes;
 mod codestream;
-mod progression;
 mod packet;
+mod progression;
 mod tag_tree;
 mod tile;
 

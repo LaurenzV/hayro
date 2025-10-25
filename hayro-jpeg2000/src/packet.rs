@@ -1,7 +1,6 @@
 use crate::codestream::{Header, ProgressionOrder};
 use crate::progression::{
-    IteratorInput, ProgressionIterator,
-    ResolutionLevelLayerComponentPositionProgressionIterator,
+    IteratorInput, ProgressionIterator, ResolutionLevelLayerComponentPositionProgressionIterator,
 };
 use crate::tag_tree::TagTree;
 use crate::tile::{IntRect, Tile, TileInstance, TilePart};
@@ -454,12 +453,11 @@ impl BitReaderExt for BitReader<'_> {
             // B.10.1: If the value of the byte is 0xFF, the next byte includes an extra zero bit
             // stuffed into the MSB.
             // Check if the next bit is at a new byte boundary.
-            if self.byte_pos() != (self.bit_pos() + 1) / 8
-                && self.cur_byte()? == 0xFF {
-                    let stuff_bit = self.read(1)?;
+            if self.byte_pos() != (self.bit_pos() + 1) / 8 && self.cur_byte()? == 0xFF {
+                let stuff_bit = self.read(1)?;
 
-                    assert_eq!(stuff_bit, 0, "invalid stuffing bit");
-                }
+                assert_eq!(stuff_bit, 0, "invalid stuffing bit");
+            }
 
             bit = (bit << 1) | self.read(1)?;
         }
