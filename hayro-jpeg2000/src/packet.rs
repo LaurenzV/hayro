@@ -210,7 +210,7 @@ fn process_packet<'a, T: ProgressionIterator<'a>>(
                 } else {
                     return None;
                 };
-                
+
                 code_block.number_of_coding_passes += added_coding_passes;
 
                 eprintln!("number of coding passes: {}", added_coding_passes);
