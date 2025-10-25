@@ -1,13 +1,13 @@
 use crate::boxes::{
     COLOUR_SPECIFICATION, CONTIGUOUS_CODESTREAM, FILE_TYPE, IMAGE_HEADER, JP2_HEADER,
-    JP2_SIGNATURE, read_box, tag_to_string,
+    JP2_SIGNATURE, read_box,
 };
 use hayro_common::byte::Reader;
 
 pub mod boxes;
 mod codestream;
 mod progression;
-mod t2;
+mod packet;
 mod tag_tree;
 mod tile;
 

@@ -1,11 +1,12 @@
 use crate::codestream::{Header, ProgressionOrder};
 use crate::progression::{
-    IteratorInput, ProgressionData, ProgressionIterator,
+    IteratorInput, ProgressionIterator,
     ResolutionLevelLayerComponentPositionProgressionIterator,
 };
 use crate::tag_tree::TagTree;
 use crate::tile::{IntRect, Tile, TileInstance, TilePart};
 use hayro_common::bit::BitReader;
+use hayro_common::byte::Reader;
 
 struct ComponentData<'a> {
     subbands: Vec<Vec<SubBand<'a>>>,
@@ -36,18 +37,14 @@ struct Precinct<'a> {
 #[derive(Clone)]
 struct CodeBlock<'a> {
     area: IntRect,
-    layers: Vec<&'a [u8]>,
+    x_idx: u32,
+    y_idx: u32,
+    layer_data: Vec<&'a [u8]>,
     has_been_included: bool,
     missing_bit_planes: u8,
     number_of_coding_passes: u32,
     l_block: u32,
     coefficients: Vec<u8>,
-}
-
-#[derive(Clone)]
-struct Layer<'a> {
-    data: &'a [u8],
-    segments: Vec<Segment>,
 }
 
 #[derive(Clone)]
@@ -58,7 +55,7 @@ struct Segment {
 pub(crate) fn process_tiles(tiles: &[Tile], header: &Header) -> Option<()> {
     for tile in tiles {
         let iter_input = IteratorInput::new(
-            &tile,
+            tile,
             &header.component_infos,
             header.global_coding_style.num_layers,
         );
@@ -67,7 +64,7 @@ pub(crate) fn process_tiles(tiles: &[Tile], header: &Header) -> Option<()> {
             ProgressionOrder::ResolutionLayerComponentPosition => {
                 let iter =
                     ResolutionLevelLayerComponentPositionProgressionIterator::new(iter_input);
-                process_tile(&tile, header, iter)?;
+                process_tile(tile, header, iter)?;
             }
             _ => unimplemented!(),
         }
@@ -77,7 +74,7 @@ pub(crate) fn process_tiles(tiles: &[Tile], header: &Header) -> Option<()> {
 }
 
 fn process_tile<'a, T: ProgressionIterator<'a>>(
-    tile: &Tile,
+    tile: &'a Tile<'a>,
     header: &Header,
     mut iterator: T,
 ) -> Option<()> {
@@ -91,14 +88,16 @@ fn process_tile<'a, T: ProgressionIterator<'a>>(
 }
 
 fn process_packet<'a, T: ProgressionIterator<'a>>(
-    tile: &TilePart,
+    tile: &TilePart<'a>,
     header: &Header,
     component_data: &mut [ComponentData<'a>],
-    mut progression_iterator: &mut T,
+    progression_iterator: &mut T,
 ) -> Option<()> {
-    let mut reader = BitReader::new(&tile.data);
+    let mut data = tile.data;
 
-    while !reader.at_end() {
+    while !data.is_empty() {
+        let mut reader = BitReader::new(data);
+
         let progression_data = progression_iterator.next()?;
         let zero_length = reader.read_packet_header_bits(1)?;
 
@@ -110,15 +109,17 @@ fn process_packet<'a, T: ProgressionIterator<'a>>(
             continue;
         }
 
+        let mut data_entries = vec![];
+
         // TODO: What to do with the note below B.10.3?
 
         let component = &mut component_data[progression_data.component as usize];
         let sub_bands = &mut component.subbands[progression_data.resolution as usize];
 
-        for sub_band in sub_bands {
+        for (sub_band_idx, sub_band) in sub_bands.iter_mut().enumerate() {
             let precinct = &mut sub_band.precincts[progression_data.precinct as usize];
 
-            for code_block in &mut precinct.code_blocks {
+            for (code_block_idx, code_block) in precinct.code_blocks.iter_mut().enumerate() {
                 // B.10.4 Code-block inclusion
                 let is_included = if code_block.has_been_included {
                     // "For code-blocks that have been included in a previous packet,
@@ -140,8 +141,8 @@ fn process_packet<'a, T: ProgressionIterator<'a>>(
                     // layer, then only a partial tag tree is included at that point in the bit
                     // stream."
                     precinct.code_inclusion_tree.read(
-                        code_block.area.x0,
-                        code_block.area.y0,
+                        code_block.x_idx,
+                        code_block.y_idx,
                         &mut reader,
                         progression_data.layer_num as u32 + 1,
                     )? <= progression_data.layer_num as u32
@@ -168,8 +169,8 @@ fn process_packet<'a, T: ProgressionIterator<'a>>(
                 // precinct, in the same manner as the code block inclusion information."
                 if included_first_time {
                     code_block.missing_bit_planes = precinct.zero_bitplane_tree.read(
-                        code_block.area.x0,
-                        code_block.area.y0,
+                        code_block.x_idx,
+                        code_block.y_idx,
                         &mut reader,
                         u32::MAX,
                     )? as u8;
@@ -188,23 +189,23 @@ fn process_packet<'a, T: ProgressionIterator<'a>>(
                 let added_coding_passes = if reader.peak_packet_header_bits(8) == Some(0xff) {
                     reader.read_packet_header_bits(8)?;
                     reader.read_packet_header_bits(8)? + 37
-                } else if reader.peak(4) == Some(0x0f) {
+                } else if reader.peak_packet_header_bits(4) == Some(0x0f) {
                     reader.read_packet_header_bits(4)?;
                     // TODO: Validate that sequence is not 1111 1
                     reader.read_packet_header_bits(5)? + 6
-                } else if reader.peak(4) == Some(0b1110) {
+                } else if reader.peak_packet_header_bits(4) == Some(0b1110) {
                     reader.read_packet_header_bits(4)?;
                     5
-                } else if reader.peak(4) == Some(0b1101) {
+                } else if reader.peak_packet_header_bits(4) == Some(0b1101) {
                     reader.read_packet_header_bits(4)?;
                     4
-                } else if reader.peak(4) == Some(0b1100) {
+                } else if reader.peak_packet_header_bits(4) == Some(0b1100) {
                     reader.read_packet_header_bits(4)?;
                     3
-                } else if reader.peak(2) == Some(0b10) {
+                } else if reader.peak_packet_header_bits(2) == Some(0b10) {
                     reader.read_packet_header_bits(2)?;
                     2
-                } else if reader.peak(1) == Some(0) {
+                } else if reader.peak_packet_header_bits(1) == Some(0) {
                     reader.read_packet_header_bits(1)?;
                     1
                 } else {
@@ -215,10 +216,7 @@ fn process_packet<'a, T: ProgressionIterator<'a>>(
 
                 code_block.number_of_coding_passes += added_coding_passes;
 
-                eprintln!(
-                    "number of coding passes: {}",
-                    code_block.number_of_coding_passes
-                );
+                eprintln!("number of coding passes: {}", added_coding_passes);
 
                 // B.10.7.1 Single codeword segment
                 // "A codeword segment is the number of bytes contributed to a packet by a
@@ -241,13 +239,31 @@ fn process_packet<'a, T: ProgressionIterator<'a>>(
                 code_block.l_block += k;
                 let length_bits = code_block.l_block + added_coding_passes.ilog2();
                 let length = reader.read_packet_header_bits(length_bits as u8)?;
-                reader.align();
+                data_entries.push((sub_band_idx, code_block_idx, length));
 
-                for _ in 0..length {
-                    let _ = reader.read(8)?;
-                }
+                eprintln!("length: {}", length);
             }
         }
+
+        // TODO: Support multiple codeword segments
+
+        reader.align();
+        let packet_data = reader.tail();
+
+        let mut data_reader = Reader::new(packet_data);
+        let mut total_length = 0;
+
+        for (sub_band_idx, code_block_idx, length) in data_entries {
+            let sub_band = &mut sub_bands[sub_band_idx];
+            let precinct = &mut sub_band.precincts[progression_data.precinct as usize];
+            let code_block = &mut precinct.code_blocks[code_block_idx];
+            let layer = &mut code_block.layer_data[progression_data.layer_num as usize];
+
+            *layer = data_reader.read_bytes(length as usize)?;
+            total_length += length as usize;
+        }
+
+        data = data_reader.tail()?;
     }
 
     Some(())
@@ -264,7 +280,7 @@ fn build_component_data(tile: &Tile, header: &Header) -> Vec<ComponentData<'stat
             .parameters
             .num_resolution_levels
         {
-            let tile_instance = component_info.tile_instance(&tile, resolution);
+            let tile_instance = component_info.tile_instance(tile, resolution);
 
             eprintln!("resolution: {}", resolution);
 
@@ -350,7 +366,7 @@ fn build_precincts(
 
             let blocks = build_precinct_code_blocks(
                 precinct_rect,
-                &tile_instance,
+                tile_instance,
                 code_blocks_y,
                 code_blocks_x,
                 header.global_coding_style.num_layers,
@@ -391,13 +407,13 @@ fn build_precinct_code_blocks(
     let code_block_width = tile_instance.code_block_width();
     let code_block_height = tile_instance.code_block_height();
 
-    for _ in 0..code_blocks_y {
+    for y_idx in 0..code_blocks_y {
         let mut x = precinct_rect.x0;
 
         // eprintln!("num blocks: {:?}", code_blocks_y);
         // eprintln!("height: {:?}", code_block_height);
 
-        for _ in 0..code_blocks_x {
+        for x_idx in 0..code_blocks_x {
             // eprintln!("{} {} {}", precinct_rect.y0, y, precinct_rect.y1);
             let width = u32::min(code_block_width, precinct_rect.x1 - x);
             let height = u32::min(code_block_height, precinct_rect.y1 - y);
@@ -405,8 +421,10 @@ fn build_precinct_code_blocks(
             let area = IntRect::from_xywh(x, y, width, height);
 
             blocks.push(CodeBlock {
+                x_idx,
+                y_idx,
                 area,
-                layers: vec![&[]; num_layers as usize],
+                layer_data: vec![&[]; num_layers as usize],
                 has_been_included: false,
                 missing_bit_planes: 0,
                 l_block: 3,
@@ -423,7 +441,7 @@ fn build_precinct_code_blocks(
     blocks
 }
 
-trait BitReaderExt {
+pub(crate) trait BitReaderExt {
     fn read_packet_header_bits(&mut self, bit_size: u8) -> Option<u32>;
     fn peak_packet_header_bits(&mut self, bit_size: u8) -> Option<u32>;
 }
@@ -436,15 +454,14 @@ impl BitReaderExt for BitReader<'_> {
             // B.10.1: If the value of the byte is 0xFF, the next byte includes an extra zero bit
             // stuffed into the MSB.
             // Check if the next bit is at a new byte boundary.
-            if self.byte_pos() != (self.bit_pos() + 1) / 8 {
-                if self.cur_byte()? == 0xFF {
+            if self.byte_pos() != (self.bit_pos() + 1) / 8
+                && self.cur_byte()? == 0xFF {
                     let stuff_bit = self.read(1)?;
 
                     assert_eq!(stuff_bit, 0, "invalid stuffing bit");
                 }
-            }
 
-            bit = (bit << 1) | self.read(bit_size)?;
+            bit = (bit << 1) | self.read(1)?;
         }
 
         Some(bit)

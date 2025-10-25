@@ -1,6 +1,5 @@
-use crate::t2::process_tiles;
-use crate::tile::{IntRect, Tile, TileInstance, TilePart, read_tiles};
-use hayro_common::bit::BitReader;
+use crate::packet::process_tiles;
+use crate::tile::{IntRect, Tile, TileInstance, read_tiles};
 use hayro_common::byte::Reader;
 
 pub(crate) fn read(stream: &[u8]) -> Result<(), &'static str> {
@@ -681,7 +680,7 @@ fn quantization_parameters(
 fn skip_code(marker_code: u8) -> bool {
     // All markers with the marker code between 0xFF30 and 0xFF3F have no marker
     // segment parameters. They shall be skipped by the decoder.
-    marker_code >= 0x30 && marker_code <= 0x3F
+    (0x30..=0x3F).contains(&marker_code)
 }
 
 pub(crate) trait ReaderExt: Clone {

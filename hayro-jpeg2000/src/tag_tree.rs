@@ -1,3 +1,4 @@
+use crate::packet::BitReaderExt;
 use hayro_common::bit::BitReader;
 
 #[derive(Debug, PartialEq, Eq, Clone, Default)]
@@ -92,7 +93,7 @@ impl TagNode {
                     break;
                 }
 
-                match reader.read(1)? {
+                match reader.read_packet_header_bits(1)? {
                     0 => val += 1,
                     1 => {
                         self.initialized = true;

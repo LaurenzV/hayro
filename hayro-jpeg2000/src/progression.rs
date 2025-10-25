@@ -1,5 +1,5 @@
 use crate::codestream::ComponentInfo;
-use crate::tile::{Tile, TileInstance, TilePart};
+use crate::tile::{Tile, TileInstance};
 
 #[derive(Default, Copy, Clone, Debug)]
 pub(crate) struct ProgressionData {
@@ -132,15 +132,12 @@ impl Iterator for ResolutionLevelLayerComponentPositionProgressionIterator<'_> {
             return Some(self.state.data);
         }
 
-        if self.state.advance_precinct() {
-            if self.state.advance_component() {
-                if self.state.advance_layer() {
-                    if self.state.advance_resolution() {
+        if self.state.advance_precinct()
+            && self.state.advance_component()
+                && self.state.advance_layer()
+                    && self.state.advance_resolution() {
                         return None;
                     }
-                }
-            }
-        }
 
         Some(self.state.data)
     }
