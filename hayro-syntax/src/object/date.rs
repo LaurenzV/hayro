@@ -23,8 +23,6 @@ pub struct DateTime {
 }
 
 impl DateTime {
-    // TODO: Remove dead code annotation
-    #[allow(dead_code)]
     pub(crate) fn from_bytes(bytes: &[u8]) -> Option<DateTime> {
         let mut reader = Reader::new(bytes);
 
