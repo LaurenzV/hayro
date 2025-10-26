@@ -89,7 +89,7 @@ impl Pdf {
 
     /// Return the metadata in the document information dictionary of the document.
     pub fn metadata(&self) -> &Metadata {
-        &self.xref.metadata()
+        self.xref.metadata()
     }
 }
 
