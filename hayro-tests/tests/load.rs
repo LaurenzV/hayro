@@ -1,6 +1,9 @@
 use hayro::InterpreterSettings;
 use hayro::Pdf;
 use hayro::render_pdf;
+use hayro_syntax::object;
+use hayro_syntax::object::dict::keys::AUTHOR;
+use hayro_syntax::object::{Dict, ObjectIdentifier};
 use std::sync::Arc;
 
 fn load(file: &[u8]) {
@@ -268,4 +271,24 @@ fn issue409() {
 fn page_tree_cycle() {
     let file = include_bytes!("../pdfs/load/page_tree_cycle.pdf");
     load(file);
+}
+
+#[test]
+fn metadata_in_object_stream() {
+    // Normally, in an encrypted PDF file strings need to be encrypted when they are not
+    // in a stream. Therefore, we need to ensure that no encryption is applied when the object
+    // itself is in an object stream.
+    let file = include_bytes!("../pdfs/custom/metadata_in_object_stream_encrypted.pdf");
+    let pdf = Pdf::new(Arc::new(file.to_vec())).unwrap();
+
+    if let Some(dict) = pdf.xref().get::<Dict>(ObjectIdentifier::new(13, 0))
+        && let Some(author) = dict.get::<object::String>(AUTHOR)
+    {
+        assert_eq!(
+            std::str::from_utf8(author.get().as_ref()).unwrap(),
+            "Max Mustermann"
+        );
+    } else {
+        panic!("test failed.")
+    }
 }

@@ -128,6 +128,7 @@ impl<'a> ReaderExt<'a> for Reader<'a> {
 pub struct ReaderContext<'a> {
     pub(crate) xref: &'a XRef,
     pub(crate) in_content_stream: bool,
+    pub(crate) in_object_stream: bool,
     pub(crate) obj_number: Option<ObjectIdentifier>,
     pub(crate) parent_chain: SmallVec<[ObjectIdentifier; 4]>,
 }
@@ -138,6 +139,7 @@ impl<'a> ReaderContext<'a> {
             xref,
             in_content_stream,
             obj_number: None,
+            in_object_stream: false,
             parent_chain: smallvec![],
         }
     }

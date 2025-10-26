@@ -332,7 +332,7 @@ impl XRef {
                 if matches!(r.decryptor.as_ref(), Decryptor::None) {
                     false
                 } else {
-                    !ctx.in_content_stream
+                    !ctx.in_content_stream && !ctx.in_object_stream
                 }
             }
         }
@@ -387,10 +387,12 @@ impl XRef {
         drop(locked);
 
         let mut ctx = ctx.clone();
+        ctx.obj_number = Some(id);
         ctx.in_content_stream = false;
 
         match entry {
             EntryType::Normal(offset) => {
+                ctx.in_object_stream = false;
                 r.jump(offset);
 
                 if let Some(object) = r.read_with_context::<IndirectObject<T>>(&ctx) {
@@ -864,11 +866,10 @@ impl<'a> ObjectStream<'a> {
             offsets.push((obj_num, first_offset + relative_offset));
         }
 
-        Some(Self {
-            data,
-            ctx: ctx.clone(),
-            offsets,
-        })
+        let mut ctx = ctx.clone();
+        ctx.in_object_stream = true;
+
+        Some(Self { data, ctx, offsets })
     }
 
     fn get<T>(&self, index: u32) -> Option<T>

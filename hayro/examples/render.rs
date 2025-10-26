@@ -2,6 +2,9 @@
 
 use hayro::{Pdf, RenderSettings, render};
 use hayro_interpret::InterpreterSettings;
+use hayro_interpret::hayro_syntax::object;
+use hayro_interpret::hayro_syntax::object::dict::keys::CREATION_DATE;
+use hayro_interpret::hayro_syntax::object::{Dict, ObjectIdentifier};
 use std::sync::Arc;
 
 fn main() {
