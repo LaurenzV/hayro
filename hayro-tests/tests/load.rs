@@ -2,9 +2,7 @@ use hayro::InterpreterSettings;
 use hayro::Pdf;
 use hayro::render_pdf;
 use hayro_syntax::metadata::Metadata;
-use hayro_syntax::object;
-use hayro_syntax::object::dict::keys::AUTHOR;
-use hayro_syntax::object::{DateTime, Dict, ObjectIdentifier};
+use hayro_syntax::object::DateTime;
 use std::sync::Arc;
 
 fn load(file: &[u8]) {
