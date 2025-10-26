@@ -9,6 +9,7 @@ use crate::xref::{XRef, XRefError, fallback, root_xref};
 use std::sync::Arc;
 
 pub use crate::crypto::DecryptionError;
+use crate::metadata::Metadata;
 
 /// A PDF file.
 pub struct Pdf {
@@ -84,6 +85,11 @@ impl Pdf {
     /// Return the xref of the PDF file.
     pub fn xref(&self) -> &XRef {
         &self.xref
+    }
+
+    /// Return the metadata in the document information dictionary of the document.
+    pub fn metadata(&self) -> &Metadata {
+        &self.xref.metadata()
     }
 }
 

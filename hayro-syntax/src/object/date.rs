@@ -4,14 +4,22 @@ use std::str::FromStr;
 /// A date time.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct DateTime {
-    pub(crate) year: u16,
-    pub(crate) month: u8,
-    pub(crate) day: u8,
-    pub(crate) hour: u8,
-    pub(crate) minute: u8,
-    pub(crate) second: u8,
-    pub(crate) utc_offset_hour: i8,
-    pub(crate) utc_offset_minute: u8,
+    /// The year.
+    pub year: u16,
+    /// The year.
+    pub month: u8,
+    /// The day.
+    pub day: u8,
+    /// The hour.
+    pub hour: u8,
+    /// The minute.
+    pub minute: u8,
+    /// The second.
+    pub second: u8,
+    /// The offset in hours from UTC.
+    pub utc_offset_hour: i8,
+    /// The offset in minutes from UTC.
+    pub utc_offset_minute: u8,
 }
 
 impl DateTime {

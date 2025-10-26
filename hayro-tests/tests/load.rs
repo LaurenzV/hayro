@@ -1,9 +1,10 @@
 use hayro::InterpreterSettings;
 use hayro::Pdf;
 use hayro::render_pdf;
+use hayro_syntax::metadata::Metadata;
 use hayro_syntax::object;
 use hayro_syntax::object::dict::keys::AUTHOR;
-use hayro_syntax::object::{Dict, ObjectIdentifier};
+use hayro_syntax::object::{DateTime, Dict, ObjectIdentifier};
 use std::sync::Arc;
 
 fn load(file: &[u8]) {
@@ -281,14 +282,34 @@ fn metadata_in_object_stream() {
     let file = include_bytes!("../pdfs/custom/metadata_in_object_stream_encrypted.pdf");
     let pdf = Pdf::new(Arc::new(file.to_vec())).unwrap();
 
-    if let Some(dict) = pdf.xref().get::<Dict>(ObjectIdentifier::new(13, 0))
-        && let Some(author) = dict.get::<object::String>(AUTHOR)
-    {
-        assert_eq!(
-            std::str::from_utf8(author.get().as_ref()).unwrap(),
-            "Max Mustermann"
-        );
-    } else {
-        panic!("test failed.")
-    }
+    let expected = Metadata {
+        creation_date: Some(DateTime {
+            year: 2025,
+            month: 10,
+            day: 26,
+            hour: 16,
+            minute: 24,
+            second: 17,
+            utc_offset_hour: 1,
+            utc_offset_minute: 0,
+        }),
+        modification_date: Some(DateTime {
+            year: 2025,
+            month: 10,
+            day: 26,
+            hour: 16,
+            minute: 33,
+            second: 30,
+            utc_offset_hour: 1,
+            utc_offset_minute: 0,
+        }),
+        title: Some("Encrypted Metadata".as_bytes().to_vec()),
+        author: Some("Max Mustermann".as_bytes().to_vec()),
+        subject: None,
+        keywords: None,
+        creator: Some("Typst 0.14.0".as_bytes().to_vec()),
+        producer: None,
+    };
+
+    assert_eq!(pdf.metadata(), &expected);
 }

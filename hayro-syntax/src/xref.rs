@@ -2,16 +2,17 @@
 
 use crate::crypto::{DecryptionError, DecryptionTarget, Decryptor, get};
 use crate::data::Data;
-use crate::object::Dict;
+use crate::metadata::Metadata;
 use crate::object::Name;
 use crate::object::ObjectIdentifier;
 use crate::object::Stream;
 use crate::object::dict::keys::{
-    ENCRYPT, FIRST, ID, INDEX, N, OCPROPERTIES, PAGES, PREV, R, ROOT, SIZE, TYPE, VERSION, W,
-    XREF_STM,
+    AUTHOR, CREATION_DATE, CREATOR, ENCRYPT, FIRST, ID, INDEX, INFO, KEYWORDS, MOD_DATE, N,
+    OCPROPERTIES, PAGES, PREV, PRODUCER, R, ROOT, SIZE, SUBJECT, TITLE, TYPE, VERSION, W, XREF_STM,
 };
 use crate::object::indirect::IndirectObject;
 use crate::object::{Array, MaybeRef};
+use crate::object::{DateTime, Dict};
 use crate::object::{Object, ObjectLike};
 use crate::pdf::PdfVersion;
 use crate::reader::Reader;
@@ -192,6 +193,7 @@ impl XRef {
             map: Arc::new(RwLock::new(MapRepr { xref_map, repaired })),
             decryptor: Arc::new(Decryptor::None),
             has_ocgs: false,
+            metadata: Arc::new(Metadata::default()),
             trailer_data,
         })));
 
@@ -225,6 +227,10 @@ impl XRef {
 
         let root_ref = trailer_dict.get_ref(ROOT).ok_or(XRefError::Unknown)?;
         let root = trailer_dict.get::<Dict>(ROOT).ok_or(XRefError::Unknown)?;
+        let metadata = trailer_dict
+            .get::<Dict>(INFO)
+            .map(|d| parse_metadata(&d))
+            .unwrap_or_default();
         let pages_ref = root.get_ref(PAGES).ok_or(XRefError::Unknown)?;
         let has_ocgs = root.get::<Dict>(OCPROPERTIES).is_some();
         let version = root
@@ -244,6 +250,7 @@ impl XRef {
                 mutable.trailer_data = td;
                 mutable.decryptor = Arc::new(decryptor);
                 mutable.has_ocgs = has_ocgs;
+                mutable.metadata = Arc::new(metadata);
             }
         }
 
@@ -275,6 +282,13 @@ impl XRef {
         match &self.0 {
             Inner::Dummy => unreachable!(),
             Inner::Some(r) => &r.trailer_data,
+        }
+    }
+
+    pub(crate) fn metadata(&self) -> &Metadata {
+        match &self.0 {
+            Inner::Dummy => unreachable!(),
+            Inner::Some(r) => &r.metadata,
         }
     }
 
@@ -506,6 +520,7 @@ impl TrailerData {
 struct SomeRepr {
     data: Arc<Data>,
     map: Arc<RwLock<MapRepr>>,
+    metadata: Arc<Metadata>,
     decryptor: Arc<Decryptor>,
     has_ocgs: bool,
     trailer_data: TrailerData,
@@ -882,5 +897,34 @@ impl<'a> ObjectStream<'a> {
         r.skip_white_spaces_and_comments();
 
         r.read_with_context::<T>(&self.ctx)
+    }
+}
+
+fn parse_metadata(info_dict: &Dict) -> Metadata {
+    Metadata {
+        creation_date: info_dict
+            .get::<object::String>(CREATION_DATE)
+            .and_then(|c| DateTime::from_bytes(c.get().as_ref())),
+        modification_date: info_dict
+            .get::<object::String>(MOD_DATE)
+            .and_then(|c| DateTime::from_bytes(c.get().as_ref())),
+        title: info_dict
+            .get::<object::String>(TITLE)
+            .map(|t| t.get().to_vec()),
+        author: info_dict
+            .get::<object::String>(AUTHOR)
+            .map(|t| t.get().to_vec()),
+        subject: info_dict
+            .get::<object::String>(SUBJECT)
+            .map(|t| t.get().to_vec()),
+        keywords: info_dict
+            .get::<object::String>(KEYWORDS)
+            .map(|t| t.get().to_vec()),
+        creator: info_dict
+            .get::<object::String>(CREATOR)
+            .map(|t| t.get().to_vec()),
+        producer: info_dict
+            .get::<object::String>(PRODUCER)
+            .map(|t| t.get().to_vec()),
     }
 }
