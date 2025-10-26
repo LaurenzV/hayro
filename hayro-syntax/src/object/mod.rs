@@ -15,6 +15,7 @@ use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 use std::fmt::Debug;
 
 mod bool;
+mod date;
 mod null;
 mod number;
 mod rect;
