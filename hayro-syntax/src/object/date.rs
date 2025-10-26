@@ -15,6 +15,8 @@ pub struct DateTime {
 }
 
 impl DateTime {
+    // TODO: Remove dead code annotation
+    #[allow(dead_code)]
     pub(crate) fn from_bytes(bytes: &[u8]) -> Option<DateTime> {
         let mut reader = Reader::new(bytes);
 
@@ -89,6 +91,7 @@ impl DateTime {
 mod tests {
     use super::DateTime;
 
+    #[allow(clippy::too_many_arguments)]
     fn dt(
         year: u16,
         month: u8,
@@ -216,6 +219,6 @@ mod tests {
         assert_eq!(
             parse("D:202307011200-00'45"),
             dt(2023, 7, 1, 12, 0, 0, 0, 45)
-        ); 
+        );
     }
 }

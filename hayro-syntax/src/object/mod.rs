@@ -1,6 +1,7 @@
 //! Parsing and reading from PDF objects.
 
 pub use crate::object::array::Array;
+pub use crate::object::date::DateTime;
 pub use crate::object::dict::Dict;
 pub use crate::object::name::Name;
 use crate::object::name::skip_name_like;
