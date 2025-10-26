@@ -195,12 +195,33 @@ impl XRef {
             trailer_data,
         })));
 
+        // We read the trailer twice, once to determine the encryption used and then a second
+        // time to resolve the catalog dictionary, etc. This allows us to support catalog dictionaries
+        // that are stored in an encrypted object stream.
+
+        let decryptor = {
+            let mut r = Reader::new(trailer_dict_data);
+
+            let trailer_dict = r
+                .read_with_context::<Dict>(&ReaderContext::new(&xref, false))
+                .ok_or(XRefError::Unknown)?;
+
+            get_decryptor(&trailer_dict)?
+        };
+
+        match &mut xref.0 {
+            Inner::Dummy => unreachable!(),
+            Inner::Some(r) => {
+                let mutable = Arc::make_mut(r);
+                mutable.decryptor = Arc::new(decryptor.clone());
+            }
+        }
+
         let mut r = Reader::new(trailer_dict_data);
+
         let trailer_dict = r
             .read_with_context::<Dict>(&ReaderContext::new(&xref, false))
             .ok_or(XRefError::Unknown)?;
-
-        let decryptor = get_decryptor(&trailer_dict)?;
 
         let root_ref = trailer_dict.get_ref(ROOT).ok_or(XRefError::Unknown)?;
         let root = trailer_dict.get::<Dict>(ROOT).ok_or(XRefError::Unknown)?;

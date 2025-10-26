@@ -62,7 +62,7 @@ impl DecryptorTag {
         }
     }
 }
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) enum Decryptor {
     None,
     Rc4 { key: Vec<u8> },
