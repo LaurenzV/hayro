@@ -66,7 +66,7 @@ impl<'a> BitReader<'a> {
 
                 Some(item)
             }
-            _ => unreachable!(),
+            _ => None,
         }?;
 
         Some(item)
