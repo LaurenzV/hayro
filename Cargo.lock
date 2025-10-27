@@ -521,7 +521,7 @@ dependencies = [
  "rustc-hash",
  "sha2",
  "smallvec",
- "zune-jpeg 0.5.0",
+ "zune-jpeg 0.5.3",
 ]
 
 [[package]]
@@ -579,7 +579,7 @@ checksum = "529feb3e6769d234375c4cf1ee2ce713682b8e76538cb13f9fc23e1400a591e7"
 dependencies = [
  "bytemuck",
  "byteorder-lite",
- "moxcms 0.7.5",
+ "moxcms 0.7.8",
  "num-traits",
  "png 0.18.0",
 ]
@@ -753,9 +753,8 @@ dependencies = [
 
 [[package]]
 name = "moxcms"
-version = "0.7.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ddd32fa8935aeadb8a8a6b6b351e40225570a37c43de67690383d87ef170cd08"
+version = "0.7.7"
+source = "git+https://github.com/awxkee/moxcms?rev=f7b3d6d#f7b3d6d4de46171593505bd88c81c3cf2f6e360b"
 dependencies = [
  "num-traits",
  "pxfm",
@@ -763,8 +762,9 @@ dependencies = [
 
 [[package]]
 name = "moxcms"
-version = "0.7.7"
-source = "git+https://github.com/awxkee/moxcms?rev=f7b3d6d#f7b3d6d4de46171593505bd88c81c3cf2f6e360b"
+version = "0.7.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "692af879e4d9383c0fd9dec15524af6b6977c8bf1c6b278a4526d5341347c574"
 dependencies = [
  "num-traits",
  "pxfm",
@@ -1701,9 +1701,9 @@ dependencies = [
 
 [[package]]
 name = "zune-jpeg"
-version = "0.5.0"
+version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d12ab21b54041397254332c4438f8896f29a5efee7b3af43dc130d7b86bf991b"
+checksum = "4e52828f88b271b250a8c74925806a56df2d52789cbfbc50d67d351d2ad1fd5a"
 dependencies = [
  "zune-core 0.5.0",
 ]
