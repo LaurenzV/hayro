@@ -182,291 +182,73 @@ struct QeData {
     switch: bool,
 }
 
+macro_rules! qe {
+    ($($qe:expr, $nmps:expr, $nlps:expr, $switch:expr),+ $(,)?) => {
+        [
+            $(
+                QeData {
+                    qe: $qe,
+                    nmps: $nmps,
+                    nlps: $nlps,
+                    switch: $switch,
+                }
+            ),+
+        ]
+    };
+}
+
 /// QE values and associated data from Table C.2.
-static QE_TABLE: [QeData; 47] = [
-    QeData {
-        qe: 0x5601,
-        nmps: 1,
-        nlps: 1,
-        switch: true,
-    },
-    QeData {
-        qe: 0x3401,
-        nmps: 2,
-        nlps: 6,
-        switch: false,
-    },
-    QeData {
-        qe: 0x1801,
-        nmps: 3,
-        nlps: 9,
-        switch: false,
-    },
-    QeData {
-        qe: 0x0AC1,
-        nmps: 4,
-        nlps: 12,
-        switch: false,
-    },
-    QeData {
-        qe: 0x0521,
-        nmps: 5,
-        nlps: 29,
-        switch: false,
-    },
-    QeData {
-        qe: 0x0221,
-        nmps: 38,
-        nlps: 33,
-        switch: false,
-    },
-    QeData {
-        qe: 0x5601,
-        nmps: 7,
-        nlps: 6,
-        switch: true,
-    },
-    QeData {
-        qe: 0x5401,
-        nmps: 8,
-        nlps: 14,
-        switch: false,
-    },
-    QeData {
-        qe: 0x4801,
-        nmps: 9,
-        nlps: 14,
-        switch: false,
-    },
-    QeData {
-        qe: 0x3801,
-        nmps: 10,
-        nlps: 14,
-        switch: false,
-    },
-    QeData {
-        qe: 0x3001,
-        nmps: 11,
-        nlps: 17,
-        switch: false,
-    },
-    QeData {
-        qe: 0x2401,
-        nmps: 12,
-        nlps: 18,
-        switch: false,
-    },
-    QeData {
-        qe: 0x1C01,
-        nmps: 13,
-        nlps: 20,
-        switch: false,
-    },
-    QeData {
-        qe: 0x1601,
-        nmps: 29,
-        nlps: 21,
-        switch: false,
-    },
-    QeData {
-        qe: 0x5601,
-        nmps: 15,
-        nlps: 14,
-        switch: true,
-    },
-    QeData {
-        qe: 0x5401,
-        nmps: 16,
-        nlps: 14,
-        switch: false,
-    },
-    QeData {
-        qe: 0x5101,
-        nmps: 17,
-        nlps: 15,
-        switch: false,
-    },
-    QeData {
-        qe: 0x4801,
-        nmps: 18,
-        nlps: 16,
-        switch: false,
-    },
-    QeData {
-        qe: 0x3801,
-        nmps: 19,
-        nlps: 17,
-        switch: false,
-    },
-    QeData {
-        qe: 0x3401,
-        nmps: 20,
-        nlps: 18,
-        switch: false,
-    },
-    QeData {
-        qe: 0x3001,
-        nmps: 21,
-        nlps: 19,
-        switch: false,
-    },
-    QeData {
-        qe: 0x2801,
-        nmps: 22,
-        nlps: 19,
-        switch: false,
-    },
-    QeData {
-        qe: 0x2401,
-        nmps: 23,
-        nlps: 20,
-        switch: false,
-    },
-    QeData {
-        qe: 0x2201,
-        nmps: 24,
-        nlps: 21,
-        switch: false,
-    },
-    QeData {
-        qe: 0x1C01,
-        nmps: 25,
-        nlps: 22,
-        switch: false,
-    },
-    QeData {
-        qe: 0x1801,
-        nmps: 26,
-        nlps: 23,
-        switch: false,
-    },
-    QeData {
-        qe: 0x1601,
-        nmps: 27,
-        nlps: 24,
-        switch: false,
-    },
-    QeData {
-        qe: 0x1401,
-        nmps: 28,
-        nlps: 25,
-        switch: false,
-    },
-    QeData {
-        qe: 0x1201,
-        nmps: 29,
-        nlps: 26,
-        switch: false,
-    },
-    QeData {
-        qe: 0x1101,
-        nmps: 30,
-        nlps: 27,
-        switch: false,
-    },
-    QeData {
-        qe: 0x0AC1,
-        nmps: 31,
-        nlps: 28,
-        switch: false,
-    },
-    QeData {
-        qe: 0x09C1,
-        nmps: 32,
-        nlps: 29,
-        switch: false,
-    },
-    QeData {
-        qe: 0x08A1,
-        nmps: 33,
-        nlps: 30,
-        switch: false,
-    },
-    QeData {
-        qe: 0x0521,
-        nmps: 34,
-        nlps: 31,
-        switch: false,
-    },
-    QeData {
-        qe: 0x0441,
-        nmps: 35,
-        nlps: 32,
-        switch: false,
-    },
-    QeData {
-        qe: 0x02A1,
-        nmps: 36,
-        nlps: 33,
-        switch: false,
-    },
-    QeData {
-        qe: 0x0221,
-        nmps: 37,
-        nlps: 34,
-        switch: false,
-    },
-    QeData {
-        qe: 0x0141,
-        nmps: 38,
-        nlps: 35,
-        switch: false,
-    },
-    QeData {
-        qe: 0x0111,
-        nmps: 39,
-        nlps: 36,
-        switch: false,
-    },
-    QeData {
-        qe: 0x0085,
-        nmps: 40,
-        nlps: 37,
-        switch: false,
-    },
-    QeData {
-        qe: 0x0049,
-        nmps: 41,
-        nlps: 38,
-        switch: false,
-    },
-    QeData {
-        qe: 0x0025,
-        nmps: 42,
-        nlps: 39,
-        switch: false,
-    },
-    QeData {
-        qe: 0x0015,
-        nmps: 43,
-        nlps: 40,
-        switch: false,
-    },
-    QeData {
-        qe: 0x0009,
-        nmps: 44,
-        nlps: 41,
-        switch: false,
-    },
-    QeData {
-        qe: 0x0005,
-        nmps: 45,
-        nlps: 42,
-        switch: false,
-    },
-    QeData {
-        qe: 0x0001,
-        nmps: 46,
-        nlps: 43,
-        switch: false,
-    },
-    QeData {
-        qe: 0x5601,
-        nmps: 46,
-        nlps: 46,
-        switch: false,
-    },
-];
+#[rustfmt::skip]
+static QE_TABLE: [QeData; 47] = qe!(
+    0x5601, 1, 1, true,
+    0x3401, 2, 6, false,
+    0x1801, 3, 9, false,
+    0x0AC1, 4, 12, false,
+    0x0521, 5, 29, false,
+    0x0221, 38, 33, false,
+    0x5601, 7, 6, true,
+    0x5401, 8, 14, false,
+    0x4801, 9, 14, false,
+    0x3801, 10, 14, false,
+    0x3001, 11, 17, false,
+    0x2401, 12, 18, false,
+    0x1C01, 13, 20, false,
+    0x1601, 29, 21, false,
+    0x5601, 15, 14, true,
+    0x5401, 16, 14, false,
+    0x5101, 17, 15, false,
+    0x4801, 18, 16, false,
+    0x3801, 19, 17, false,
+    0x3401, 20, 18, false,
+    0x3001, 21, 19, false,
+    0x2801, 22, 19, false,
+    0x2401, 23, 20, false,
+    0x2201, 24, 21, false,
+    0x1C01, 25, 22, false,
+    0x1801, 26, 23, false,
+    0x1601, 27, 24, false,
+    0x1401, 28, 25, false,
+    0x1201, 29, 26, false,
+    0x1101, 30, 27, false,
+    0x0AC1, 31, 28, false,
+    0x09C1, 32, 29, false,
+    0x08A1, 33, 30, false,
+    0x0521, 34, 31, false,
+    0x0441, 35, 32, false,
+    0x02A1, 36, 33, false,
+    0x0221, 37, 34, false,
+    0x0141, 38, 35, false,
+    0x0111, 39, 36, false,
+    0x0085, 40, 37, false,
+    0x0049, 41, 38, false,
+    0x0025, 42, 39, false,
+    0x0015, 43, 40, false,
+    0x0009, 44, 41, false,
+    0x0005, 45, 42, false,
+    0x0001, 46, 43, false,
+    0x5601, 46, 46, false,
+);
+
 
 #[cfg(test)]
 mod tests {
