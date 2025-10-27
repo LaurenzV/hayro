@@ -10,6 +10,7 @@ mod packet;
 mod progression;
 mod tag_tree;
 mod tile;
+mod arithmetic_decoder;
 
 /// Image metadata extracted from JP2 Header box.
 #[derive(Debug, Clone)]
