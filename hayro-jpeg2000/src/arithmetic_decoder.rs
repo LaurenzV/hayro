@@ -249,7 +249,6 @@ static QE_TABLE: [QeData; 47] = qe!(
     0x5601, 46, 46, false,
 );
 
-
 #[cfg(test)]
 mod tests {
     use crate::arithmetic_decoder::{ArithmeticDecoder, DecoderContext};
