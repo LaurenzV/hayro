@@ -36,7 +36,7 @@ impl<'a> ArithmeticDecoder<'a> {
         decoder
     }
 
-    pub(crate) fn read_bit(&mut self, context: &mut DecoderContext) -> u32 {
+    pub(crate) fn read_bit(&mut self, context: &mut ArithmeticDecoderContext) -> u32 {
         self.decode(context)
     }
 
@@ -78,7 +78,7 @@ impl<'a> ArithmeticDecoder<'a> {
     }
 
     /// The LPS_EXCHANGE procedure from C.3.2.
-    fn lps_exchange(&mut self, context: &mut DecoderContext) -> u32 {
+    fn lps_exchange(&mut self, context: &mut ArithmeticDecoderContext) -> u32 {
         let d;
 
         let qe_entry = &QE_TABLE[context.index as usize];
@@ -103,7 +103,7 @@ impl<'a> ArithmeticDecoder<'a> {
 
     /// The DECODE procedure from C.3.2.
     /// We use the version from Annex G from https://www.itu.int/rec/T-REC-T.88-201808-I.
-    fn decode(&mut self, context: &mut DecoderContext) -> u32 {
+    fn decode(&mut self, context: &mut ArithmeticDecoderContext) -> u32 {
         let qe_entry = &QE_TABLE[context.index as usize];
 
         self.a = self.a - qe_entry.qe;
@@ -132,7 +132,7 @@ impl<'a> ArithmeticDecoder<'a> {
     }
 
     /// The MPS_EXCHANGE procedure from C.3.2.
-    fn mps_exchange(&mut self, context: &mut DecoderContext) -> u32 {
+    fn mps_exchange(&mut self, context: &mut ArithmeticDecoderContext) -> u32 {
         let d;
 
         let qe_entry = &QE_TABLE[context.index as usize];
@@ -163,12 +163,12 @@ impl<'a> ArithmeticDecoder<'a> {
 }
 
 #[derive(Copy, Clone, Debug, Default)]
-pub(crate) struct DecoderContext {
+pub(crate) struct ArithmeticDecoderContext {
     pub(crate) index: u32,
     pub(crate) mps: u32,
 }
 
-impl DecoderContext {
+impl ArithmeticDecoderContext {
     pub(crate) fn new(index: u32, mps: u32) -> Self {
         Self { index, mps }
     }
@@ -251,7 +251,7 @@ static QE_TABLE: [QeData; 47] = qe!(
 
 #[cfg(test)]
 mod tests {
-    use crate::arithmetic_decoder::{ArithmeticDecoder, DecoderContext};
+    use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
     use hayro_common::bit::BitWriter;
 
     // Adapted from the Serenity decoder, which in turn took the example from
@@ -273,7 +273,7 @@ mod tests {
 
         let mut decoder = ArithmeticDecoder::new(&input[..]);
         let mut out_buf = vec![0; expected_output.len()];
-        let mut ctx = DecoderContext::default();
+        let mut ctx = ArithmeticDecoderContext::default();
 
         let mut writer = BitWriter::new(&mut out_buf, 1).unwrap();
 

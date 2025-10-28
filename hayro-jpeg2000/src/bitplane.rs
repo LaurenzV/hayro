@@ -3,10 +3,10 @@
 //! Some of the references are taken from the "JPEG2000 Standard for Image Compression" book
 //! instead of the specification.
 
-use crate::arithmetic_decoder::ArithmeticDecoder;
+use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use crate::packet::{CodeBlock, SubbandType};
 
-pub(crate) struct DecodeContext {
+pub(crate) struct BitplaneDecodeContext {
     /// The signs of each coefficient.
     signs: Vec<u8>,
     /// The magnitude of each coefficient that is successively built as we advance through the
@@ -25,9 +25,13 @@ pub(crate) struct DecodeContext {
     width: u32,
     /// The height of the code-block we are processing.
     height: u32,
+    /// The current type of subband that is being processed.
+    subband_type: SubbandType,
+    /// The arithmetic decoder contexts for each context label.
+    contexts: [ArithmeticDecoderContext; 19],
 }
 
-impl DecodeContext {
+impl BitplaneDecodeContext {
     pub(crate) fn new() -> Self {
         Self {
             signs: vec![],
@@ -37,10 +41,31 @@ impl DecodeContext {
             has_zero_coding: vec![],
             width: 0,
             height: 0,
+            subband_type: SubbandType::LowLow,
+            contexts: [ArithmeticDecoderContext::default(); 19],
         }
     }
 
-    pub(crate) fn reset(&mut self, width: u32, height: u32) {
+    fn set_sign(&mut self, pos: &Position, sign: u8) {
+        self.signs[pos.index(self.width)] = sign;
+    }
+
+    fn ad_context(&mut self, ctx_label: u8) -> &mut ArithmeticDecoderContext {
+        &mut self.contexts[ctx_label as usize]
+    }
+
+    fn reset_contexts(&mut self) {
+        for context in &mut self.contexts {
+            context.mps = 0;
+            context.index = 0;
+        }
+
+        self.contexts[0].index = 4;
+        self.contexts[17].index = 3;
+        self.contexts[18].index = 46;
+    }
+
+    fn reset(&mut self, width: u32, height: u32, subband_type: SubbandType) {
         for arr in [
             &mut self.signs,
             &mut self.significance_states,
@@ -59,6 +84,8 @@ impl DecodeContext {
 
         self.width = width;
         self.height = height;
+        self.subband_type = subband_type;
+        self.reset_contexts();
     }
 
     fn significance_state(&self, position: &Position) -> u8 {
@@ -119,17 +146,22 @@ pub(crate) fn decode(code_block: &mut CodeBlock) -> Option<()> {
 
 /// Perform the clean-up pass, specified in D.3.4.
 /// See also the flow chart in Figure 7.3 in the JPEG2000 book.
-fn cleanup_pass(ctx: &mut DecodeContext, decoder: &mut ArithmeticDecoder) -> Option<()> {
+fn cleanup_pass(ctx: &mut BitplaneDecodeContext, decoder: &mut ArithmeticDecoder) -> Option<()> {
     let mut position_iterator = PositionIterator::new(ctx.width, ctx.height);
     let mut cur_pos = position_iterator.next()?;
 
     loop {
         if ctx.significance_state(&cur_pos) == 0 && !ctx.has_zero_coding(&cur_pos) {
             let use_rl = cur_pos.y % 4 == 0 && (ctx.height - cur_pos.y) >= 4;
-            
-            
+
+            let bit = if use_rl {
+                unimplemented!();
+            } else {
+                let ctx_label = context_label_zero_coding(&cur_pos, &ctx);
+                decoder.read_bit(ctx.ad_context(ctx_label))
+            };
         }
-        
+
         if let Some(next) = position_iterator.next() {
             cur_pos = next;
         } else {
@@ -140,15 +172,26 @@ fn cleanup_pass(ctx: &mut DecodeContext, decoder: &mut ArithmeticDecoder) -> Opt
     Some(())
 }
 
+fn decode_sign_bit(
+    pos: &Position,
+    ctx: &mut BitplaneDecodeContext,
+    decoder: &mut ArithmeticDecoder,
+) {
+    let (ctx_label, xor_bit) = context_label_sign_coding(&pos, ctx);
+    let ad_ctx = ctx.ad_context(ctx_label);
+    let sign_bit = decoder.read_bit(ad_ctx) ^ xor_bit as u32;
+    ctx.set_sign(pos, sign_bit as u8);
+}
+
 /// Table D.3.1.
 ///
 /// Returns the context label.
-fn context_label_zero_coding(pos: &Position, ctx: &DecodeContext, subband_type: SubbandType) -> u8 {
+fn context_label_zero_coding(pos: &Position, ctx: &BitplaneDecodeContext) -> u8 {
     let horizontal = ctx.horizontal_reference(pos);
     let vertical = ctx.vertical_reference(pos);
     let diagonal = ctx.diagonal_reference(pos);
 
-    match subband_type {
+    match ctx.subband_type {
         SubbandType::LowLow | SubbandType::LowHigh => {
             if horizontal == 2 {
                 8
@@ -221,8 +264,8 @@ fn context_label_zero_coding(pos: &Position, ctx: &DecodeContext, subband_type: 
 ///
 /// Returns the context label as well as the X bit that needs to be XORed
 /// with the next read bit.
-fn context_label_sign_coding(pos: &Position, ctx: &DecodeContext) -> (u8, u8) {
-    fn neighbor_contribution(ctx: &DecodeContext, x: i64, y: i64) -> i32 {
+fn context_label_sign_coding(pos: &Position, ctx: &BitplaneDecodeContext) -> (u8, u8) {
+    fn neighbor_contribution(ctx: &BitplaneDecodeContext, x: i64, y: i64) -> i32 {
         let sigma = ctx.significance_state_checked(x, y);
 
         let multiplied = if ctx.sign_checked(x, y) == 0 { 1 } else { -1 };
@@ -254,7 +297,7 @@ fn context_label_sign_coding(pos: &Position, ctx: &DecodeContext) -> (u8, u8) {
 /// Table D.4.
 ///
 /// Returns the context label.
-fn context_label_magnitude_refinement_coding(pos: &Position, ctx: &DecodeContext) -> u8 {
+fn context_label_magnitude_refinement_coding(pos: &Position, ctx: &BitplaneDecodeContext) -> u8 {
     if ctx.is_magnitude_refined(pos) {
         16
     } else {
