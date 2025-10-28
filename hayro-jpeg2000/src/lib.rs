@@ -8,6 +8,7 @@ use crate::boxes::{
 use hayro_common::byte::Reader;
 
 mod arithmetic_decoder;
+mod bitplane;
 pub mod boxes;
 mod codestream;
 mod packet;

@@ -34,7 +34,7 @@ struct Precinct<'a> {
 }
 
 #[derive(Clone)]
-struct CodeBlock<'a> {
+pub(crate) struct CodeBlock<'a> {
     area: IntRect,
     x_idx: u32,
     y_idx: u32,
