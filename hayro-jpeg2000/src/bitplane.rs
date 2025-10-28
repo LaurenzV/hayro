@@ -249,30 +249,25 @@ impl Iterator for PositionIterator {
     type Item = Position;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.width == 0 || self.height == 0 || self.cur_row >= self.height {
+        if self.position.y >= self.height || self.position.y == self.cur_row + 4 {
+            self.position.x += 1;
+            self.position.y = self.cur_row;
+        }
+        
+        if self.position.x >= self.width {
+            self.position.x = 0;
+            self.cur_row += 4;
+            self.position.y = self.cur_row;
+        }
+
+        if self.position.y >= self.height {
             return None;
         }
-
-        let current = self.position;
-
+        
+        let pos = self.position;
+        
         self.position.y += 1;
-        if self.position.y >= self.height || self.position.y >= self.cur_row + 4 {
-            self.position.y = self.cur_row;
-            self.position.x += 1;
-
-            if self.position.x >= self.width {
-                self.position.x = 0;
-                self.cur_row += 4;
-
-                if self.cur_row >= self.height {
-                    return Some(current);
-                }
-
-                self.position.y = self.cur_row;
-            }
-        }
-
-        Some(current)
+        Some(pos)
     }
 }
 
@@ -280,9 +275,15 @@ impl Iterator for PositionIterator {
 mod tests {
     use super::PositionIterator;
 
+    macro_rules! pt {
+        ($x:expr, $y:expr) => {
+            ($x as u32, $y as u32)
+        };
+    }
+
     #[test]
-    fn position_iterator_matches_code_block_scan_pattern() {
-        let width = 7;
+    fn position_iterator() {
+        let width = 5;
         let height = 10;
 
         let mut iter = PositionIterator::new(width, height);
@@ -292,21 +293,22 @@ mod tests {
             produced.push((position.x, position.y));
         }
 
-        let mut expected = Vec::new();
-        let mut row_group = 0;
+        let expected = [
+            pt!(0, 0), pt!(0, 1), pt!(0, 2), pt!(0, 3),
+            pt!(1, 0), pt!(1, 1), pt!(1, 2), pt!(1, 3),
+            pt!(2, 0), pt!(2, 1), pt!(2, 2), pt!(2, 3),
+            pt!(3, 0), pt!(3, 1), pt!(3, 2), pt!(3, 3),
+            pt!(4, 0), pt!(4, 1), pt!(4, 2), pt!(4, 3),
+            pt!(0, 4), pt!(0, 5), pt!(0, 6), pt!(0, 7),
+            pt!(1, 4), pt!(1, 5), pt!(1, 6), pt!(1, 7),
+            pt!(2, 4), pt!(2, 5), pt!(2, 6), pt!(2, 7),
+            pt!(3, 4), pt!(3, 5), pt!(3, 6), pt!(3, 7),
+            pt!(4, 4), pt!(4, 5), pt!(4, 6), pt!(4, 7),
+            pt!(0, 8), pt!(0, 9), pt!(1, 8), pt!(1, 9),
+            pt!(2, 8), pt!(2, 9), pt!(3, 8), pt!(3, 9),
+            pt!(4, 8), pt!(4, 9)
+        ];
 
-        while row_group < height {
-            let row_limit = (row_group + 4).min(height);
-
-            for x in 0..width {
-                for y in row_group..row_limit {
-                    expected.push((x, y));
-                }
-            }
-
-            row_group += 4;
-        }
-
-        assert_eq!(produced, expected);
+        assert_eq!(produced.as_slice(), &expected);
     }
 }
