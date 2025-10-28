@@ -1,12 +1,22 @@
 use crate::packet::{CodeBlock, SubbandType};
 
 pub(crate) struct DecodeContext {
+    /// The signs of each coefficient.
     signs: Vec<u8>,
-    magnitude_array: Vec<u8>,
+    /// The magnitude of each coefficient that is successively built as we advance through the
+    /// bitplanes.
+    magnitude_array: Vec<ComponentBitPlanes>,
+    /// The significance state of each coefficient. Will be set to one as soon as the
+    /// first non-zero bit for that coefficient is encountered.
     significance_states: Vec<u8>,
+    /// Whether the coefficient has previously had (at least one) magnitude refinement pass.
     first_magnitude_refinement: Vec<u8>,
-    eta: Vec<u8>,
+    /// Whether the given coefficient belongs to a zero coding pass in the current bitplane.
+    /// These values will be reset every time we advance to a new bitplane.
+    has_zero_coding: Vec<u8>,
+    /// The width of the code-block we are processing.
     width: u32,
+    /// The height of the code-block we are processing.
     height: u32,
 }
 
@@ -17,7 +27,7 @@ impl DecodeContext {
             magnitude_array: vec![],
             significance_states: vec![],
             first_magnitude_refinement: vec![],
-            eta: vec![],
+            has_zero_coding: vec![],
             width: 0,
             height: 0,
         }
@@ -26,14 +36,16 @@ impl DecodeContext {
     pub(crate) fn reset(&mut self, width: u32, height: u32) {
         for arr in [
             &mut self.signs,
-            &mut self.magnitude_array,
             &mut self.significance_states,
             &mut self.first_magnitude_refinement,
-            &mut self.eta,
+            &mut self.has_zero_coding,
         ] {
             arr.clear();
             arr.resize(width as usize * height as usize, 0);
         }
+        
+        self.magnitude_array.clear();
+        self.magnitude_array.resize(width as usize * height as usize, ComponentBitPlanes::default());
 
         self.width = width;
         self.height = height;
@@ -221,6 +233,20 @@ fn context_label_magnitude_refinement_coding(x: u32, y: u32, ctx: &DecodeContext
     }
 }
 
+#[derive(Default, Copy, Clone)]
+struct ComponentBitPlanes {
+    inner: u8,
+    count: u8
+}
+
+impl ComponentBitPlanes {
+    fn push_bit(&mut self, bit: u8) {
+        assert!(self.count < 8);
+        
+        self.inner = (self.inner << 1) | bit & 1;
+    }
+}
+
 #[derive(Default, Copy, Clone, Debug)]
 struct Position {
     x: u32,
@@ -235,13 +261,18 @@ struct PositionIterator {
 }
 
 impl PositionIterator {
-    pub(crate) fn new(width: u32, height: u32) -> Self {
+    fn new(width: u32, height: u32) -> Self {
         Self {
             cur_row: 0,
             position: Position::default(),
             width,
             height,
         }
+    }
+    
+    fn reset(&mut self) {
+        self.cur_row = 0;
+        self.position = Position::default();
     }
 }
 
