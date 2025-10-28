@@ -3,8 +3,8 @@ use crate::packet::{CodeBlock, SubbandType};
 pub(crate) struct DecodeContext {
     signs: Vec<u8>,
     magnitude_array: Vec<u8>,
-    significance_stages: Vec<u8>,
-    sigma_prime: Vec<u8>,
+    significance_states: Vec<u8>,
+    first_magnitude_refinement: Vec<u8>,
     eta: Vec<u8>,
     width: u32,
     height: u32,
@@ -15,8 +15,8 @@ impl DecodeContext {
         Self {
             signs: vec![],
             magnitude_array: vec![],
-            significance_stages: vec![],
-            sigma_prime: vec![],
+            significance_states: vec![],
+            first_magnitude_refinement: vec![],
             eta: vec![],
             width: 0,
             height: 0,
@@ -27,8 +27,8 @@ impl DecodeContext {
         for arr in [
             &mut self.signs,
             &mut self.magnitude_array,
-            &mut self.significance_stages,
-            &mut self.sigma_prime,
+            &mut self.significance_states,
+            &mut self.first_magnitude_refinement,
             &mut self.eta,
         ] {
             arr.clear();
@@ -43,8 +43,16 @@ impl DecodeContext {
         if x < 0 || y < 0 || x >= self.width as i64 || y >= self.height as i64 {
             0
         } else {
-            self.significance_stages[x as usize + y as usize * self.width as usize]
+            self.significance_states[x as usize + y as usize * self.width as usize]
         }
+    }
+    
+    fn is_significant(&self, x: i64, y: i64) -> bool {
+        self.significance_state(x, y) != 0
+    }
+    
+    fn is_magnitude_refined(&self, x: i64, y: i64) -> bool {
+        self.magnitude_array[x as usize + y as usize * self.width as usize] != 0
     }
 
     fn sign(&self, x: i64, y: i64) -> u8 {
@@ -184,5 +192,26 @@ fn context_label_sign_coding(x: u32, y: u32, ctx: &DecodeContext) -> u8 {
         (-1, 0) => 12,
         (-1, -1) => 13,
         _ => unreachable!(),
+    }
+}
+
+fn context_label_magnitude_refinement_coding(x: u32, y: u32, ctx: &DecodeContext) -> u8 {
+    if ctx.is_magnitude_refined(x as i64, y as i64) {
+        16
+    }   else {
+        let x = x as i64;
+        let y = y as i64;
+        let summed = ctx.significance_state(x - 1, y) 
+            + ctx.significance_state(x + 1, y)
+        + ctx.significance_state(x - 1, y - 1)
+        + ctx.significance_state(x - 1, y + 1)
+        + ctx.significance_state(x + 1, y - 1)
+        + ctx.significance_state(x + 1, y + 1);
+        
+        if summed >= 1 {
+            15
+        }   else {
+            14
+        }
     }
 }
