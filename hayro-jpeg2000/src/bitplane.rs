@@ -91,6 +91,9 @@ pub(crate) fn decode(code_block: &mut CodeBlock) -> Option<()> {
     Some(())
 }
 
+/// Table D.3.1.
+/// 
+/// Returns the context label.
 fn context_label_zero_coding(x: u32, y: u32, ctx: &DecodeContext, subband_type: SubbandType) -> u8 {
     let horizontal = ctx.horizontal_reference(x, y);
     let vertical = ctx.vertical_reference(x, y);
@@ -165,7 +168,11 @@ fn context_label_zero_coding(x: u32, y: u32, ctx: &DecodeContext, subband_type: 
     }
 }
 
-fn context_label_sign_coding(x: u32, y: u32, ctx: &DecodeContext) -> u8 {
+/// Table D.3.2.
+/// 
+/// Returns the context label as well as the X bit that needs to be XORed 
+/// with the next read bit.
+fn context_label_sign_coding(x: u32, y: u32, ctx: &DecodeContext) -> (u8, u8) {
     fn neighbor_contribution(ctx: &DecodeContext, x: i64, y: i64) -> i32 {
         let sigma = ctx.significance_state(x, y);
 
@@ -182,31 +189,29 @@ fn context_label_sign_coding(x: u32, y: u32, ctx: &DecodeContext) -> u8 {
     .clamp(-1, 1);
 
     match (h, v) {
-        (1, 1) => 13,
-        (1, 0) => 12,
-        (1, -1) => 11,
-        (0, 1) => 10,
-        (0, 0) => 9,
-        (0, -1) => 10,
-        (-1, 1) => 11,
-        (-1, 0) => 12,
-        (-1, -1) => 13,
+        (1, 1) => (13, 0),
+        (1, 0) => (12, 0),
+        (1, -1) => (11, 0),
+        (0, 1) => (10, 0),
+        (0, 0) => (9, 0),
+        (0, -1) => (10, 1),
+        (-1, 1) => (11, 1),
+        (-1, 0) => (12, 1),
+        (-1, -1) => (13, 1),
         _ => unreachable!(),
     }
 }
 
+/// Table D.4.
+/// 
+/// Returns the context label.
 fn context_label_magnitude_refinement_coding(x: u32, y: u32, ctx: &DecodeContext) -> u8 {
     if ctx.is_magnitude_refined(x as i64, y as i64) {
         16
     }   else {
-        let x = x as i64;
-        let y = y as i64;
-        let summed = ctx.significance_state(x - 1, y) 
-            + ctx.significance_state(x + 1, y)
-        + ctx.significance_state(x - 1, y - 1)
-        + ctx.significance_state(x - 1, y + 1)
-        + ctx.significance_state(x + 1, y - 1)
-        + ctx.significance_state(x + 1, y + 1);
+        let summed = ctx.horizontal_reference(x, y) 
+            + ctx.vertical_reference(x, y)
+            + ctx.diagonal_reference(x, y);
         
         if summed >= 1 {
             15
