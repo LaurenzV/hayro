@@ -1,5 +1,5 @@
 //! Decoding bitplanes into sample coefficients.
-//! 
+//!
 //! Some of the references are taken from the "JPEG2000 Standard for Image Compression" book
 //! instead of the specification.
 
@@ -17,8 +17,8 @@ pub(crate) struct DecodeContext {
     significance_states: Vec<u8>,
     /// Whether the coefficient has previously had (at least one) magnitude refinement pass.
     first_magnitude_refinement: Vec<u8>,
-    /// Whether the given coefficient belongs to a zero coding pass applied as part of sign 
-    /// propagation in the current bitplane. These values will be reset every time we advance to a 
+    /// Whether the given coefficient belongs to a zero coding pass applied as part of sign
+    /// propagation in the current bitplane. These values will be reset every time we advance to a
     /// new bitplane.
     has_zero_coding: Vec<u8>,
     /// The width of the code-block we are processing.
@@ -50,35 +50,30 @@ impl DecodeContext {
             arr.clear();
             arr.resize(width as usize * height as usize, 0);
         }
-        
+
         self.magnitude_array.clear();
-        self.magnitude_array.resize(width as usize * height as usize, ComponentBitPlanes::default());
+        self.magnitude_array.resize(
+            width as usize * height as usize,
+            ComponentBitPlanes::default(),
+        );
 
         self.width = width;
         self.height = height;
     }
 
-    fn significance_state(&self, x: i64, y: i64) -> u8 {
-        if x < 0 || y < 0 || x >= self.width as i64 || y >= self.height as i64 {
-            0
-        } else {
-            self.significance_states[x as usize + y as usize * self.width as usize]
-        }
-    }
-    
-    fn is_significant(&self, x: i64, y: i64) -> bool {
-        self.significance_state(x, y) != 0
-    }
-    
-    fn is_magnitude_refined(&self, x: i64, y: i64) -> bool {
-        self.first_magnitude_refinement[x as usize + y as usize * self.width as usize] != 0
-    }
-    
-    fn has_zero_coding(&self, x: i64, y: i64) -> bool {
-        self.has_zero_coding[x as usize + y as usize * self.width as usize] != 0
+    fn significance_state(&self, position: &Position) -> u8 {
+        self.significance_states[position.index(self.width)]
     }
 
-    fn sign(&self, x: i64, y: i64) -> u8 {
+    fn is_magnitude_refined(&self, position: &Position) -> bool {
+        self.first_magnitude_refinement[position.index(self.width)] != 0
+    }
+
+    fn has_zero_coding(&self, position: &Position) -> bool {
+        self.has_zero_coding[position.index(self.width)] != 0
+    }
+
+    fn sign_checked(&self, x: i64, y: i64) -> u8 {
         if x < 0 || y < 0 || x >= self.width as i64 || y >= self.height as i64 {
             0
         } else {
@@ -86,27 +81,35 @@ impl DecodeContext {
         }
     }
 
+    fn significance_state_checked(&self, x: i64, y: i64) -> u8 {
+        if x < 0 || y < 0 || x >= self.width as i64 || y >= self.height as i64 {
+            0
+        } else {
+            self.significance_state(&Position::new(x as u32, y as u32))
+        }
+    }
+
     /// The horizontal reference value for computing the context for significance
     /// propagation and cleanup pass.
-    fn horizontal_reference(&self, x: u32, y: u32) -> u8 {
-        self.significance_state(x as i64 - 1, y as i64)
-            + self.significance_state(x as i64 + 1, y as i64)
+    fn horizontal_reference(&self, pos: &Position) -> u8 {
+        self.significance_state_checked(pos.x as i64 - 1, pos.y as i64)
+            + self.significance_state_checked(pos.x as i64 + 1, pos.y as i64)
     }
 
     /// The vertical reference value for computing the context for significance
     /// propagation and cleanup pass.
-    fn vertical_reference(&self, x: u32, y: u32) -> u8 {
-        self.significance_state(x as i64, y as i64 - 1)
-            + self.significance_state(x as i64, y as i64 + 1)
+    fn vertical_reference(&self, pos: &Position) -> u8 {
+        self.significance_state_checked(pos.x as i64, pos.y as i64 - 1)
+            + self.significance_state_checked(pos.x as i64, pos.y as i64 + 1)
     }
 
     /// The diagonal reference value for computing the context for significance
     /// propagation and cleanup pass.
-    fn diagonal_reference(&self, x: u32, y: u32) -> u8 {
-        self.significance_state(x as i64 - 1, y as i64 - 1)
-            + self.significance_state(x as i64 + 1, y as i64 - 1)
-            + self.significance_state(x as i64 - 1, y as i64 + 1)
-            + self.significance_state(x as i64 + 1, y as i64 + 1)
+    fn diagonal_reference(&self, pos: &Position) -> u8 {
+        self.significance_state_checked(pos.x as i64 - 1, pos.y as i64 - 1)
+            + self.significance_state_checked(pos.x as i64 + 1, pos.y as i64 - 1)
+            + self.significance_state_checked(pos.x as i64 - 1, pos.y as i64 + 1)
+            + self.significance_state_checked(pos.x as i64 + 1, pos.y as i64 + 1)
     }
 }
 
@@ -116,34 +119,31 @@ pub(crate) fn decode(code_block: &mut CodeBlock) -> Option<()> {
 
 /// Perform the clean-up pass, specified in D.3.4.
 /// See also the flow chart in Figure 7.3 in the JPEG2000 book.
-fn cleanup_pass(
-    context: &mut DecodeContext, 
-    decoder: &mut ArithmeticDecoder
-) -> Option<()> {
+fn cleanup_pass(context: &mut DecodeContext, decoder: &mut ArithmeticDecoder) -> Option<()> {
     let mut position_iterator = PositionIterator::new(context.width, context.height);
     let mut cur_pos = position_iterator.next()?;
-    
+
     loop {
-        // "If there are fewer than four rows remaining in a code-block, then no run-length coding is 
+        // "If there are fewer than four rows remaining in a code-block, then no run-length coding is
         // used. Once again, the significance
         // state of any coefficient is changed immediately after decoding the first 1 magnitude bit.
-        let use_rl =
-        
-        if let Some(next) = position_iterator.next() {
+        let use_rl = if let Some(next) = position_iterator.next() {
             cur_pos = next;
-        }   else {
+        } else {
             break;
-        }
+        };
     }
+
+    Some(())
 }
 
 /// Table D.3.1.
-/// 
+///
 /// Returns the context label.
-fn context_label_zero_coding(x: u32, y: u32, ctx: &DecodeContext, subband_type: SubbandType) -> u8 {
-    let horizontal = ctx.horizontal_reference(x, y);
-    let vertical = ctx.vertical_reference(x, y);
-    let diagonal = ctx.diagonal_reference(x, y);
+fn context_label_zero_coding(pos: &Position, ctx: &DecodeContext, subband_type: SubbandType) -> u8 {
+    let horizontal = ctx.horizontal_reference(pos);
+    let vertical = ctx.vertical_reference(pos);
+    let diagonal = ctx.diagonal_reference(pos);
 
     match subband_type {
         SubbandType::LowLow | SubbandType::LowHigh => {
@@ -215,23 +215,23 @@ fn context_label_zero_coding(x: u32, y: u32, ctx: &DecodeContext, subband_type: 
 }
 
 /// Table D.3.2.
-/// 
-/// Returns the context label as well as the X bit that needs to be XORed 
+///
+/// Returns the context label as well as the X bit that needs to be XORed
 /// with the next read bit.
-fn context_label_sign_coding(x: u32, y: u32, ctx: &DecodeContext) -> (u8, u8) {
+fn context_label_sign_coding(pos: &Position, ctx: &DecodeContext) -> (u8, u8) {
     fn neighbor_contribution(ctx: &DecodeContext, x: i64, y: i64) -> i32 {
-        let sigma = ctx.significance_state(x, y);
+        let sigma = ctx.significance_state_checked(x, y);
 
-        let multiplied = if ctx.sign(x, y) == 0 { 1 } else { -1 };
+        let multiplied = if ctx.sign_checked(x, y) == 0 { 1 } else { -1 };
 
         multiplied * sigma as i32
     }
 
-    let h = (neighbor_contribution(ctx, x as i64 - 1, y as i64)
-        + neighbor_contribution(ctx, x as i64 + 1, y as i64))
+    let h = (neighbor_contribution(ctx, pos.x as i64 - 1, pos.y as i64)
+        + neighbor_contribution(ctx, pos.x as i64 + 1, pos.y as i64))
     .clamp(-1, 1);
-    let v = (neighbor_contribution(ctx, x as i64, y as i64 - 1)
-        + neighbor_contribution(ctx, x as i64, y as i64 + 1))
+    let v = (neighbor_contribution(ctx, pos.x as i64, pos.y as i64 - 1)
+        + neighbor_contribution(ctx, pos.x as i64, pos.y as i64 + 1))
     .clamp(-1, 1);
 
     match (h, v) {
@@ -249,34 +249,30 @@ fn context_label_sign_coding(x: u32, y: u32, ctx: &DecodeContext) -> (u8, u8) {
 }
 
 /// Table D.4.
-/// 
+///
 /// Returns the context label.
-fn context_label_magnitude_refinement_coding(x: u32, y: u32, ctx: &DecodeContext) -> u8 {
-    if ctx.is_magnitude_refined(x as i64, y as i64) {
+fn context_label_magnitude_refinement_coding(pos: &Position, ctx: &DecodeContext) -> u8 {
+    if ctx.is_magnitude_refined(pos) {
         16
-    }   else {
-        let summed = ctx.horizontal_reference(x, y) 
-            + ctx.vertical_reference(x, y)
-            + ctx.diagonal_reference(x, y);
-        
-        if summed >= 1 {
-            15
-        }   else {
-            14
-        }
+    } else {
+        let summed = ctx.horizontal_reference(pos)
+            + ctx.vertical_reference(pos)
+            + ctx.diagonal_reference(pos);
+
+        if summed >= 1 { 15 } else { 14 }
     }
 }
 
 #[derive(Default, Copy, Clone)]
 struct ComponentBitPlanes {
     inner: u8,
-    count: u8
+    count: u8,
 }
 
 impl ComponentBitPlanes {
     fn push_bit(&mut self, bit: u8) {
         assert!(self.count < 8);
-        
+
         self.inner = (self.inner << 1) | bit & 1;
     }
 }
@@ -285,6 +281,16 @@ impl ComponentBitPlanes {
 struct Position {
     x: u32,
     y: u32,
+}
+
+impl Position {
+    fn new(x: u32, y: u32) -> Position {
+        Self { x, y }
+    }
+
+    fn index(&self, width: u32) -> usize {
+        self.x as usize + self.y as usize * width as usize
+    }
 }
 
 struct PositionIterator {
@@ -303,12 +309,12 @@ impl PositionIterator {
             height,
         }
     }
-    
+
     fn reset(&mut self) {
         self.cur_row = 0;
         self.position = Position::default();
     }
-    
+
     fn has_4_columns(&self) -> bool {
         self.height - self.cur_row >= 4
     }
@@ -322,7 +328,7 @@ impl Iterator for PositionIterator {
             self.position.x += 1;
             self.position.y = self.cur_row;
         }
-        
+
         if self.position.x >= self.width {
             self.position.x = 0;
             self.cur_row += 4;
@@ -332,9 +338,9 @@ impl Iterator for PositionIterator {
         if self.position.y >= self.height {
             return None;
         }
-        
+
         let pos = self.position;
-        
+
         self.position.y += 1;
         Some(pos)
     }
@@ -362,6 +368,7 @@ mod tests {
             produced.push((position.x, position.y));
         }
 
+        #[rustfmt::skip]
         let expected = [
             pt!(0, 0), pt!(0, 1), pt!(0, 2), pt!(0, 3),
             pt!(1, 0), pt!(1, 1), pt!(1, 2), pt!(1, 3),
