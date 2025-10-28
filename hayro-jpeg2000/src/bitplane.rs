@@ -220,3 +220,93 @@ fn context_label_magnitude_refinement_coding(x: u32, y: u32, ctx: &DecodeContext
         }
     }
 }
+
+#[derive(Default, Copy, Clone, Debug)]
+struct Position {
+    x: u32,
+    y: u32,
+}
+
+struct PositionIterator {
+    cur_row: u32,
+    position: Position,
+    width: u32,
+    height: u32,
+}
+
+impl PositionIterator {
+    pub(crate) fn new(width: u32, height: u32) -> Self {
+        Self {
+            cur_row: 0,
+            position: Position::default(),
+            width,
+            height,
+        }
+    }
+}
+
+impl Iterator for PositionIterator {
+    type Item = Position;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.width == 0 || self.height == 0 || self.cur_row >= self.height {
+            return None;
+        }
+
+        let current = self.position;
+
+        self.position.y += 1;
+        if self.position.y >= self.height || self.position.y >= self.cur_row + 4 {
+            self.position.y = self.cur_row;
+            self.position.x += 1;
+
+            if self.position.x >= self.width {
+                self.position.x = 0;
+                self.cur_row += 4;
+
+                if self.cur_row >= self.height {
+                    return Some(current);
+                }
+
+                self.position.y = self.cur_row;
+            }
+        }
+
+        Some(current)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PositionIterator;
+
+    #[test]
+    fn position_iterator_matches_code_block_scan_pattern() {
+        let width = 7;
+        let height = 10;
+
+        let mut iter = PositionIterator::new(width, height);
+        let mut produced = Vec::new();
+
+        while let Some(position) = iter.next() {
+            produced.push((position.x, position.y));
+        }
+
+        let mut expected = Vec::new();
+        let mut row_group = 0;
+
+        while row_group < height {
+            let row_limit = (row_group + 4).min(height);
+
+            for x in 0..width {
+                for y in row_group..row_limit {
+                    expected.push((x, y));
+                }
+            }
+
+            row_group += 4;
+        }
+
+        assert_eq!(produced, expected);
+    }
+}
