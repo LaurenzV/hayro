@@ -1,3 +1,9 @@
+//! Decoding bitplanes into sample coefficients.
+//! 
+//! Some of the references are taken from the "JPEG2000 Standard for Image Compression" book
+//! instead of the specification.
+
+use crate::arithmetic_decoder::ArithmeticDecoder;
 use crate::packet::{CodeBlock, SubbandType};
 
 pub(crate) struct DecodeContext {
@@ -11,8 +17,9 @@ pub(crate) struct DecodeContext {
     significance_states: Vec<u8>,
     /// Whether the coefficient has previously had (at least one) magnitude refinement pass.
     first_magnitude_refinement: Vec<u8>,
-    /// Whether the given coefficient belongs to a zero coding pass in the current bitplane.
-    /// These values will be reset every time we advance to a new bitplane.
+    /// Whether the given coefficient belongs to a zero coding pass applied as part of sign 
+    /// propagation in the current bitplane. These values will be reset every time we advance to a 
+    /// new bitplane.
     has_zero_coding: Vec<u8>,
     /// The width of the code-block we are processing.
     width: u32,
@@ -64,7 +71,11 @@ impl DecodeContext {
     }
     
     fn is_magnitude_refined(&self, x: i64, y: i64) -> bool {
-        self.magnitude_array[x as usize + y as usize * self.width as usize] != 0
+        self.first_magnitude_refinement[x as usize + y as usize * self.width as usize] != 0
+    }
+    
+    fn has_zero_coding(&self, x: i64, y: i64) -> bool {
+        self.has_zero_coding[x as usize + y as usize * self.width as usize] != 0
     }
 
     fn sign(&self, x: i64, y: i64) -> u8 {
@@ -101,6 +112,29 @@ impl DecodeContext {
 
 pub(crate) fn decode(code_block: &mut CodeBlock) -> Option<()> {
     Some(())
+}
+
+/// Perform the clean-up pass, specified in D.3.4.
+/// See also the flow chart in Figure 7.3 in the JPEG2000 book.
+fn cleanup_pass(
+    context: &mut DecodeContext, 
+    decoder: &mut ArithmeticDecoder
+) -> Option<()> {
+    let mut position_iterator = PositionIterator::new(context.width, context.height);
+    let mut cur_pos = position_iterator.next()?;
+    
+    loop {
+        // "If there are fewer than four rows remaining in a code-block, then no run-length coding is 
+        // used. Once again, the significance
+        // state of any coefficient is changed immediately after decoding the first 1 magnitude bit.
+        let use_rl =
+        
+        if let Some(next) = position_iterator.next() {
+            cur_pos = next;
+        }   else {
+            break;
+        }
+    }
 }
 
 /// Table D.3.1.
@@ -273,6 +307,10 @@ impl PositionIterator {
     fn reset(&mut self) {
         self.cur_row = 0;
         self.position = Position::default();
+    }
+    
+    fn has_4_columns(&self) -> bool {
+        self.height - self.cur_row >= 4
     }
 }
 
