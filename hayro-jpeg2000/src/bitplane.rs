@@ -156,3 +156,33 @@ fn context_label_zero_coding(x: u32, y: u32, ctx: &DecodeContext, subband_type: 
         }
     }
 }
+
+fn context_label_sign_coding(x: u32, y: u32, ctx: &DecodeContext) -> u8 {
+    fn neighbor_contribution(ctx: &DecodeContext, x: i64, y: i64) -> i32 {
+        let sigma = ctx.significance_state(x, y);
+
+        let multiplied = if ctx.sign(x, y) == 0 { 1 } else { -1 };
+
+        multiplied * sigma as i32
+    }
+
+    let h = (neighbor_contribution(ctx, x as i64 - 1, y as i64)
+        + neighbor_contribution(ctx, x as i64 + 1, y as i64))
+    .clamp(-1, 1);
+    let v = (neighbor_contribution(ctx, x as i64, y as i64 - 1)
+        + neighbor_contribution(ctx, x as i64, y as i64 + 1))
+    .clamp(-1, 1);
+
+    match (h, v) {
+        (1, 1) => 13,
+        (1, 0) => 12,
+        (1, -1) => 11,
+        (0, 1) => 10,
+        (0, 0) => 9,
+        (0, -1) => 10,
+        (-1, 1) => 11,
+        (-1, 0) => 12,
+        (-1, -1) => 13,
+        _ => unreachable!(),
+    }
+}
