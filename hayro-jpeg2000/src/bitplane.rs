@@ -119,15 +119,18 @@ pub(crate) fn decode(code_block: &mut CodeBlock) -> Option<()> {
 
 /// Perform the clean-up pass, specified in D.3.4.
 /// See also the flow chart in Figure 7.3 in the JPEG2000 book.
-fn cleanup_pass(context: &mut DecodeContext, decoder: &mut ArithmeticDecoder) -> Option<()> {
-    let mut position_iterator = PositionIterator::new(context.width, context.height);
+fn cleanup_pass(ctx: &mut DecodeContext, decoder: &mut ArithmeticDecoder) -> Option<()> {
+    let mut position_iterator = PositionIterator::new(ctx.width, ctx.height);
     let mut cur_pos = position_iterator.next()?;
 
     loop {
-        // "If there are fewer than four rows remaining in a code-block, then no run-length coding is
-        // used. Once again, the significance
-        // state of any coefficient is changed immediately after decoding the first 1 magnitude bit.
-        let use_rl = if let Some(next) = position_iterator.next() {
+        if ctx.significance_state(&cur_pos) == 0 && !ctx.has_zero_coding(&cur_pos) {
+            let use_rl = cur_pos.y % 4 == 0 && (ctx.height - cur_pos.y) >= 4;
+            
+            
+        }
+        
+        if let Some(next) = position_iterator.next() {
             cur_pos = next;
         } else {
             break;
