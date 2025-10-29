@@ -206,7 +206,7 @@ fn decode_inner(code_block: &mut CodeBlock, decoder: &mut impl BitDecoder) -> Op
     cleanup_pass(&mut ctx, decoder);
 
     for (sign, magnitude) in ctx.signs.iter().zip(ctx.magnitude_array) {
-        let mut num = magnitude.get() as i8;
+        let mut num = magnitude.get() as i16;
         if *sign != 0 {
             num = -num;
         }

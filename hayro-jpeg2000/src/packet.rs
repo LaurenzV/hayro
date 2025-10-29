@@ -43,7 +43,7 @@ pub(crate) struct CodeBlock<'a> {
     pub(crate) missing_bit_planes: u8,
     pub(crate) number_of_coding_passes: u32,
     pub(crate) l_block: u32,
-    pub(crate) coefficients: Vec<i8>,
+    pub(crate) coefficients: Vec<i16>,
 }
 
 #[derive(Clone)]
