@@ -91,6 +91,11 @@ fn process_tile<'a, T: ProgressionIterator<'a>>(
             for subband in resolution_level {
                 for precinct in &mut subband.precincts {
                     for codeblock in &mut precinct.code_blocks {
+                        eprintln!(
+                            "decoding block {}x{}",
+                            codeblock.area.width(),
+                            codeblock.area.height()
+                        );
                         bitplane::decode(
                             codeblock,
                             subband.subband_type,
@@ -99,6 +104,7 @@ fn process_tile<'a, T: ProgressionIterator<'a>>(
                                 .parameters
                                 .code_block_style,
                         )?;
+                        eprintln!("{:?}", codeblock.coefficients);
                     }
                 }
             }
@@ -386,6 +392,7 @@ fn build_precincts(
             let blocks = build_precinct_code_blocks(
                 precinct_rect,
                 tile_instance,
+                sub_band_rect,
                 code_blocks_y,
                 code_blocks_x,
                 header.global_coding_style.num_layers,
@@ -415,6 +422,7 @@ fn build_precincts(
 fn build_precinct_code_blocks(
     precinct_rect: IntRect,
     tile_instance: &TileInstance,
+    sub_band_rect: IntRect,
     code_blocks_x: u32,
     code_blocks_y: u32,
     num_layers: u16,
@@ -437,7 +445,7 @@ fn build_precinct_code_blocks(
             let width = u32::min(code_block_width, precinct_rect.x1 - x);
             let height = u32::min(code_block_height, precinct_rect.y1 - y);
 
-            let area = IntRect::from_xywh(x, y, width, height);
+            let area = IntRect::from_xywh(x, y, width, height).intersect(sub_band_rect);
 
             blocks.push(CodeBlock {
                 x_idx,
