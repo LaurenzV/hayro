@@ -149,14 +149,47 @@ impl BitplaneDecodeContext {
 }
 
 pub(crate) fn decode(code_block: &mut CodeBlock) -> Option<()> {
-    // let mut decoder = ArithmeticDecoder::new()
-    // 
-    // Some(())
+    let mut combined_layer_data: Vec<u8> = vec![];
+
+    for data in &code_block.layer_data {
+        combined_layer_data.extend(*data);
+    }
+
+    let combined_layers = code_block
+        .layer_data
+        .iter()
+        .flat_map(|d| d.to_vec())
+        .collect::<Vec<_>>();
+    let mut decoder = ArithmeticDecoder::new(&combined_layers);
+
+    decode_inner(code_block, &mut decoder)
 }
 
-/// Perform the clean-up pass, specified in D.3.4.
+fn decode_inner(code_block: &mut CodeBlock, decoder: &mut impl BitDecoder) -> Option<()> {
+    let mut ctx = BitplaneDecodeContext::new();
+    ctx.reset(
+        code_block.area.width(),
+        code_block.area.height(),
+        SubbandType::LowLow,
+    );
+    cleanup_pass(&mut ctx, decoder);
+    Some(())
+}
+
+// We use a trait so that we can mock the arithmetic decoder for tests.
+trait BitDecoder {
+    fn read_bit(&mut self, context: &mut ArithmeticDecoderContext) -> u32;
+}
+
+impl BitDecoder for ArithmeticDecoder<'_> {
+    fn read_bit(&mut self, context: &mut ArithmeticDecoderContext) -> u32 {
+        Self::read_bit(self, context)
+    }
+}
+
+/// Perform the cleanup pass, specified in D.3.4.
 /// See also the flow chart in Figure 7.3 in the JPEG2000 book.
-fn cleanup_pass(ctx: &mut BitplaneDecodeContext, decoder: &mut ArithmeticDecoder) -> Option<()> {
+fn cleanup_pass(ctx: &mut BitplaneDecodeContext, decoder: &mut impl BitDecoder) -> Option<()> {
     let mut position_iterator = PositionIterator::new(ctx.width, ctx.height);
 
     loop {
@@ -165,9 +198,22 @@ fn cleanup_pass(ctx: &mut BitplaneDecodeContext, decoder: &mut ArithmeticDecoder
         };
 
         if ctx.significance_state(&cur_pos) == 0 && !ctx.has_zero_coding(&cur_pos) {
-            let use_rl = cur_pos.y % 4 == 0 && (ctx.height - cur_pos.y) >= 4;
+            let zero_neighbor = |pos: Position| {
+                let horizontal = ctx.horizontal_reference(&pos);
+                let vertical = ctx.vertical_reference(&pos);
+                let diagonal = ctx.diagonal_reference(&pos);
 
-            if use_rl {
+                horizontal + vertical + diagonal == 0
+            };
+
+            let use_rl = cur_pos.y % 4 == 0
+                && (ctx.height - cur_pos.y) >= 4
+                && zero_neighbor(cur_pos)
+                && zero_neighbor(Position::new(cur_pos.x, cur_pos.y + 1))
+                && zero_neighbor(Position::new(cur_pos.x, cur_pos.y + 2))
+                && zero_neighbor(Position::new(cur_pos.x, cur_pos.y + 3));
+
+            let bit = if use_rl {
                 // "If the four contiguous coefficients in the column being scanned are all decoded
                 // in the cleanup pass and the context label for all is 0 (including context
                 // coefficients from previous magnitude, significance and cleanup passes), then the
@@ -183,28 +229,31 @@ fn cleanup_pass(ctx: &mut BitplaneDecodeContext, decoder: &mut ArithmeticDecoder
                         cur_pos = position_iterator.next()?;
                         ctx.push_magnitude_bit(&cur_pos, 0);
                     }
+
+                    continue;
                 } else {
                     let mut num_zeroes = decoder.read_bit(ctx.ad_context(18));
                     num_zeroes = (num_zeroes << 1) | decoder.read_bit(ctx.ad_context(18));
 
-                    if num_zeroes > 0 {
+                    for _ in 0..num_zeroes {
                         ctx.push_magnitude_bit(&cur_pos, 0);
-
-                        for _ in 0..(num_zeroes - 1) {
-                            cur_pos = position_iterator.next()?;
-                            ctx.push_magnitude_bit(&cur_pos, 0);
-                        }
+                        cur_pos = position_iterator.next()?;
                     }
+
+                    1
                 }
             } else {
                 let ctx_label = context_label_zero_coding(&cur_pos, &ctx);
-                let bit = decoder.read_bit(ctx.ad_context(ctx_label));
 
-                if bit == 1 {
-                    decode_sign_bit(&cur_pos, ctx, decoder);
-                    ctx.set_significance_state(&cur_pos);
-                }
+                decoder.read_bit(ctx.ad_context(ctx_label))
             };
+
+            ctx.push_magnitude_bit(&cur_pos, bit as u8);
+
+            if bit == 1 {
+                decode_sign_bit(&cur_pos, ctx, decoder);
+                ctx.set_significance_state(&cur_pos);
+            }
         }
     }
 
@@ -212,11 +261,7 @@ fn cleanup_pass(ctx: &mut BitplaneDecodeContext, decoder: &mut ArithmeticDecoder
 }
 
 /// Section D.3.2
-fn decode_sign_bit(
-    pos: &Position,
-    ctx: &mut BitplaneDecodeContext,
-    decoder: &mut ArithmeticDecoder,
-) {
+fn decode_sign_bit(pos: &Position, ctx: &mut BitplaneDecodeContext, decoder: &mut impl BitDecoder) {
     fn context_label_sign_coding(pos: &Position, ctx: &BitplaneDecodeContext) -> (u8, u8) {
         fn neighbor_contribution(ctx: &BitplaneDecodeContext, x: i64, y: i64) -> i32 {
             let sigma = ctx.significance_state_checked(x, y);
@@ -431,8 +476,19 @@ impl Iterator for PositionIterator {
 
 #[cfg(test)]
 mod tests {
-    use super::PositionIterator;
-    use hayro_common::bit::BitWriter;
+    use super::{BitDecoder, PositionIterator, decode, decode_inner};
+    use crate::arithmetic_decoder::ArithmeticDecoderContext;
+    use crate::packet::CodeBlock;
+    use crate::tile::IntRect;
+    use hayro_common::bit::{BitReader, BitWriter};
+
+    struct DummyBitDecoder<'a>(BitReader<'a>);
+
+    impl BitDecoder for DummyBitDecoder<'_> {
+        fn read_bit(&mut self, context: &mut ArithmeticDecoderContext) -> u32 {
+            self.0.read(1).unwrap()
+        }
+    }
 
     macro_rules! pt {
         ($x:expr, $y:expr) => {
@@ -478,35 +534,46 @@ mod tests {
         let data = {
             let mut buf = vec![0; 8];
             let mut writer = BitWriter::new(&mut buf, 1).unwrap();
-            
+
             // CUP bitplane 2.
             writer.write_bits([
                 1, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
             ]);
 
             // SPP bitplane 1.
-            writer.write_bits([
-                1,0,1,1,0,0,0,0,1,0,1,1,0,0,1,1,1,0
-            ]);
+            writer.write_bits([1, 0, 1, 1, 0, 0, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 1, 0]);
 
             // MRP bitplane 1.
-            writer.write_bits([
-                0,1,1,0
-            ]);
-            
+            writer.write_bits([0, 1, 1, 0]);
+
             // No CUP for bitplane 1.
-            
+
             // SPP for bitplane 0.
-            writer.write_bits([
-                0,0,1,0,0,0,1,0
-            ]);
+            writer.write_bits([0, 0, 1, 0, 0, 0, 1, 0]);
 
             // MRP for bitplane 0.
-            writer.write_bits([
-                1,1,0,1,0,0,0,1,1,0
-            ]);
+            writer.write_bits([1, 1, 0, 1, 0, 0, 0, 1, 1, 0]);
 
             // No CUP for bitplane 0.
+
+            buf
         };
+
+        let bit_reader = BitReader::new(&data);
+        let mut decoder = DummyBitDecoder(bit_reader);
+
+        let mut code_block = CodeBlock {
+            area: IntRect::from_xywh(0, 0, 4, 4),
+            x_idx: 0,
+            y_idx: 0,
+            layer_data: vec![&data],
+            has_been_included: false,
+            missing_bit_planes: 0,
+            number_of_coding_passes: 7,
+            l_block: 0,
+            coefficients: vec![],
+        };
+
+        decode_inner(&mut code_block, &mut decoder);
     }
 }

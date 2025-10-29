@@ -35,15 +35,15 @@ struct Precinct<'a> {
 
 #[derive(Clone)]
 pub(crate) struct CodeBlock<'a> {
-    area: IntRect,
-    x_idx: u32,
-    y_idx: u32,
-    layer_data: Vec<&'a [u8]>,
-    has_been_included: bool,
-    missing_bit_planes: u8,
-    number_of_coding_passes: u32,
-    l_block: u32,
-    coefficients: Vec<u8>,
+    pub(crate) area: IntRect,
+    pub(crate) x_idx: u32,
+    pub(crate) y_idx: u32,
+    pub(crate) layer_data: Vec<&'a [u8]>,
+    pub(crate) has_been_included: bool,
+    pub(crate) missing_bit_planes: u8,
+    pub(crate) number_of_coding_passes: u32,
+    pub(crate) l_block: u32,
+    pub(crate) coefficients: Vec<u8>,
 }
 
 #[derive(Clone)]
