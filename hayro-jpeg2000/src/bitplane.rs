@@ -4,6 +4,7 @@
 //! instead of the specification.
 
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
+use crate::codestream::CodeBlockStyle;
 use crate::packet::{CodeBlock, SubbandType};
 
 pub(crate) struct BitplaneDecodeContext {
@@ -168,7 +169,21 @@ impl BitplaneDecodeContext {
     }
 }
 
-pub(crate) fn decode(code_block: &mut CodeBlock) -> Option<()> {
+pub(crate) fn decode(
+    code_block: &mut CodeBlock,
+    subband_type: SubbandType,
+    style: &CodeBlockStyle,
+) -> Option<()> {
+    if style.selective_arithmetic_coding_bypass
+        || style.segmentation_symbols
+        || style.vertically_causal_context
+        || style.predictable_termination
+        || style.termination_on_each_pass
+        || style.reset_context_probabilities
+    {
+        unimplemented!();
+    }
+
     let mut combined_layer_data: Vec<u8> = vec![];
 
     for data in &code_block.layer_data {
@@ -182,28 +197,48 @@ pub(crate) fn decode(code_block: &mut CodeBlock) -> Option<()> {
         .collect::<Vec<_>>();
     let mut decoder = ArithmeticDecoder::new(&combined_layers);
 
-    decode_inner(code_block, &mut decoder)
+    decode_inner(code_block, subband_type, &mut decoder)
 }
 
-fn decode_inner(code_block: &mut CodeBlock, decoder: &mut impl BitDecoder) -> Option<()> {
+fn decode_inner(
+    code_block: &mut CodeBlock,
+    subband_type: SubbandType,
+    decoder: &mut impl BitDecoder,
+) -> Option<()> {
     let mut ctx = BitplaneDecodeContext::new();
     ctx.reset(
         code_block.area.width(),
         code_block.area.height(),
-        SubbandType::LowLow,
+        subband_type,
     );
 
-    cleanup_pass(&mut ctx, decoder);
-    ctx.reset_for_next_bitplane();
+    for coding_pass in 0..code_block.number_of_coding_passes {
+        enum PassType {
+            Cleanup,
+            SignificancePropagation,
+            MagnitudeRefinement,
+        }
 
-    significance_propagation_pass(&mut ctx, decoder);
-    magnitude_refinement_pass(&mut ctx, decoder);
-    cleanup_pass(&mut ctx, decoder);
-    ctx.reset_for_next_bitplane();
+        let pass = match (coding_pass % 3) {
+            0 => PassType::Cleanup,
+            1 => PassType::SignificancePropagation,
+            2 => PassType::MagnitudeRefinement,
+            _ => unreachable!(),
+        };
 
-    significance_propagation_pass(&mut ctx, decoder);
-    magnitude_refinement_pass(&mut ctx, decoder);
-    cleanup_pass(&mut ctx, decoder);
+        match pass {
+            PassType::Cleanup => {
+                cleanup_pass(&mut ctx, decoder);
+                ctx.reset_for_next_bitplane();
+            }
+            PassType::SignificancePropagation => {
+                significance_propagation_pass(&mut ctx, decoder);
+            }
+            PassType::MagnitudeRefinement => {
+                magnitude_refinement_pass(&mut ctx, decoder);
+            }
+        }
+    }
 
     for (sign, magnitude) in ctx.signs.iter().zip(ctx.magnitude_array) {
         let mut num = magnitude.get() as i16;
@@ -567,7 +602,7 @@ impl Iterator for PositionIterator {
 mod tests {
     use super::{BitDecoder, PositionIterator, decode, decode_inner};
     use crate::arithmetic_decoder::ArithmeticDecoderContext;
-    use crate::packet::CodeBlock;
+    use crate::packet::{CodeBlock, SubbandType};
     use crate::tile::IntRect;
     use hayro_common::bit::{BitReader, BitWriter};
 
@@ -663,7 +698,7 @@ mod tests {
             coefficients: vec![],
         };
 
-        decode_inner(&mut code_block, &mut decoder);
+        decode_inner(&mut code_block, SubbandType::LowLow, &mut decoder);
 
         assert_eq!(
             code_block.coefficients,

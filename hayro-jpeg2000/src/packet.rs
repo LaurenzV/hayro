@@ -1,3 +1,4 @@
+use crate::bitplane;
 use crate::codestream::{Header, ProgressionOrder};
 use crate::progression::{
     IteratorInput, ProgressionIterator, ResolutionLevelLayerComponentPositionProgressionIterator,
@@ -20,9 +21,9 @@ pub(crate) enum SubbandType {
 }
 
 struct SubBand<'a> {
-    subband_type: SubbandType,
-    rect: IntRect,
-    precincts: Vec<Precinct<'a>>,
+    pub(crate) subband_type: SubbandType,
+    pub(crate) rect: IntRect,
+    pub(crate) precincts: Vec<Precinct<'a>>,
 }
 
 #[derive(Clone)]
@@ -80,13 +81,34 @@ fn process_tile<'a, T: ProgressionIterator<'a>>(
     let mut component_data = build_component_data(tile, header);
 
     for tile_part in tile.tile_parts() {
-        process_packet(&tile_part, header, &mut component_data, &mut iterator)?;
+        parse_packet(&tile_part, header, &mut component_data, &mut iterator)?;
+    }
+
+    for (component_data, component_info) in
+        component_data.iter_mut().zip(header.component_infos.iter())
+    {
+        for resolution_level in &mut component_data.subbands {
+            for subband in resolution_level {
+                for precinct in &mut subband.precincts {
+                    for codeblock in &mut precinct.code_blocks {
+                        bitplane::decode(
+                            codeblock,
+                            subband.subband_type,
+                            &component_info
+                                .coding_style_parameters
+                                .parameters
+                                .code_block_style,
+                        )?;
+                    }
+                }
+            }
+        }
     }
 
     Some(())
 }
 
-fn process_packet<'a, T: ProgressionIterator<'a>>(
+fn parse_packet<'a, T: ProgressionIterator<'a>>(
     tile: &TilePart<'a>,
     header: &Header,
     component_data: &mut [ComponentData<'a>],

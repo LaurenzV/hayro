@@ -177,12 +177,12 @@ impl CodingStyleFlags {
 /// Code-block style flags (Table A.19).
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct CodeBlockStyle {
-    selective_arithmetic_coding_bypass: bool,
-    reset_context_probabilities: bool,
-    termination_on_each_pass: bool,
-    vertically_causal_context: bool,
-    predictable_termination: bool,
-    segmentation_symbols: bool,
+    pub(crate) selective_arithmetic_coding_bypass: bool,
+    pub(crate) reset_context_probabilities: bool,
+    pub(crate) termination_on_each_pass: bool,
+    pub(crate) vertically_causal_context: bool,
+    pub(crate) predictable_termination: bool,
+    pub(crate) segmentation_symbols: bool,
 }
 
 impl CodeBlockStyle {
