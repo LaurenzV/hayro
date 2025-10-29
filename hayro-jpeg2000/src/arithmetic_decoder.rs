@@ -154,11 +154,13 @@ impl<'a> ArithmeticDecoder<'a> {
     }
 
     fn b(&self) -> u8 {
-        self.data[self.bp as usize]
+        // TODO: Not sure why, but we need to yield 0xff in case we are out-of-bounds.
+        *self.data.get(self.bp as usize).unwrap_or(&0xff)
     }
 
     fn b1(&self) -> u8 {
-        self.data[(self.bp + 1) as usize]
+        // TODO: Not sure why, but we need to yield 0xff in case we are out-of-bounds.
+        *self.data.get((self.bp + 1) as usize).unwrap_or(&0xff)
     }
 }
 

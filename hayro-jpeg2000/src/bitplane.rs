@@ -601,7 +601,8 @@ impl Iterator for PositionIterator {
 #[cfg(test)]
 mod tests {
     use super::{BitDecoder, PositionIterator, decode, decode_inner};
-    use crate::arithmetic_decoder::ArithmeticDecoderContext;
+    use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
+    use crate::codestream::CodeBlockStyle;
     use crate::packet::{CodeBlock, SubbandType};
     use crate::tile::IntRect;
     use hayro_common::bit::{BitReader, BitWriter};
@@ -654,7 +655,7 @@ mod tests {
 
     /// Example 7.3.2 in the JPEG2000 book.
     #[test]
-    fn bitplane_decoding() {
+    fn bitplane_decoding_1() {
         let data = {
             let mut buf = vec![0; 8];
             let mut writer = BitWriter::new(&mut buf, 1).unwrap();
@@ -704,5 +705,61 @@ mod tests {
             code_block.coefficients,
             vec![3, 0, 0, 5, -3, 7, 2, 1, -4, -1, -2, 3, 0, 6, 0, 2]
         );
+    }
+
+    // First packet from example in Section J.10.4.
+    #[test]
+    fn bitplane_decoding_2() {
+        let data = vec![0x01, 0x8f, 0x0d, 0xc8, 0x75, 0x5d];
+
+        let bit_reader = BitReader::new(&data);
+
+        let mut code_block = CodeBlock {
+            area: IntRect::from_xywh(0, 0, 1, 5),
+            x_idx: 0,
+            y_idx: 0,
+            layer_data: vec![&data],
+            has_been_included: false,
+            missing_bit_planes: 0,
+            number_of_coding_passes: 16,
+            l_block: 0,
+            coefficients: vec![],
+        };
+
+        decode(
+            &mut code_block,
+            SubbandType::LowLow,
+            &CodeBlockStyle::default(),
+        );
+
+        assert_eq!(code_block.coefficients, vec![-26, -22, -30, -32, -19]);
+    }
+
+    // Second packet from example in Section J.10.4.
+    #[test]
+    fn bitplane_decoding_3() {
+        let data = vec![0x0F, 0xB1, 0x76];
+
+        let bit_reader = BitReader::new(&data);
+
+        let mut code_block = CodeBlock {
+            area: IntRect::from_xywh(0, 0, 1, 4),
+            x_idx: 0,
+            y_idx: 0,
+            layer_data: vec![&data],
+            has_been_included: false,
+            missing_bit_planes: 0,
+            number_of_coding_passes: 7,
+            l_block: 0,
+            coefficients: vec![],
+        };
+
+        decode(
+            &mut code_block,
+            SubbandType::LowHigh,
+            &CodeBlockStyle::default(),
+        );
+
+        assert_eq!(code_block.coefficients, vec![1, 5, 1, 0]);
     }
 }
