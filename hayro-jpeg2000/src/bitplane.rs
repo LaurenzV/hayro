@@ -92,6 +92,10 @@ impl BitplaneDecodeContext {
         self.significance_states[position.index(self.width)]
     }
 
+    fn is_significant(&self, position: &Position) -> bool {
+        self.significance_states[position.index(self.width)] != 0
+    }
+
     fn set_significance_state(&mut self, position: &Position) {
         self.significance_states[position.index(self.width)] = 1;
     }
@@ -146,6 +150,10 @@ impl BitplaneDecodeContext {
             + self.significance_state_checked(pos.x as i64 - 1, pos.y as i64 + 1)
             + self.significance_state_checked(pos.x as i64 + 1, pos.y as i64 + 1)
     }
+    
+    fn neighborhood_significances(&self, pos: &Position) -> u8 {
+        self.horizontal_reference(pos) + self.vertical_reference(pos) + self.diagonal_reference(pos)
+    }
 }
 
 pub(crate) fn decode(code_block: &mut CodeBlock) -> Option<()> {
@@ -197,21 +205,13 @@ fn cleanup_pass(ctx: &mut BitplaneDecodeContext, decoder: &mut impl BitDecoder) 
             break;
         };
 
-        if ctx.significance_state(&cur_pos) == 0 && !ctx.has_zero_coding(&cur_pos) {
-            let zero_neighbor = |pos: Position| {
-                let horizontal = ctx.horizontal_reference(&pos);
-                let vertical = ctx.vertical_reference(&pos);
-                let diagonal = ctx.diagonal_reference(&pos);
-
-                horizontal + vertical + diagonal == 0
-            };
-
+        if !ctx.is_significant(&cur_pos) && !ctx.has_zero_coding(&cur_pos) {
             let use_rl = cur_pos.y % 4 == 0
                 && (ctx.height - cur_pos.y) >= 4
-                && zero_neighbor(cur_pos)
-                && zero_neighbor(Position::new(cur_pos.x, cur_pos.y + 1))
-                && zero_neighbor(Position::new(cur_pos.x, cur_pos.y + 2))
-                && zero_neighbor(Position::new(cur_pos.x, cur_pos.y + 3));
+                && ctx.neighborhood_significances(&cur_pos) == 0
+                && ctx.neighborhood_significances(&Position::new(cur_pos.x, cur_pos.y + 1)) == 0
+                && ctx.neighborhood_significances(&Position::new(cur_pos.x, cur_pos.y + 2)) == 0
+                && ctx.neighborhood_significances(&Position::new(cur_pos.x, cur_pos.y + 3)) == 0;
 
             let bit = if use_rl {
                 // "If the four contiguous coefficients in the column being scanned are all decoded
@@ -244,7 +244,6 @@ fn cleanup_pass(ctx: &mut BitplaneDecodeContext, decoder: &mut impl BitDecoder) 
                 }
             } else {
                 let ctx_label = context_label_zero_coding(&cur_pos, &ctx);
-
                 decoder.read_bit(ctx.ad_context(ctx_label))
             };
 
@@ -260,7 +259,31 @@ fn cleanup_pass(ctx: &mut BitplaneDecodeContext, decoder: &mut impl BitDecoder) 
     Some(())
 }
 
-/// Section D.3.2
+/// Section D.3.1.
+/// See also the flow chart in Figure 7.4 in the JPEG2000 book.
+fn significance_propagation_pass(ctx: &mut BitplaneDecodeContext, decoder: &mut impl BitDecoder) -> Option<()> {
+    let mut position_iterator = PositionIterator::new(ctx.width, ctx.height);
+    
+    loop {
+        let Some(cur_pos) = position_iterator.next() else {
+            break;
+        };
+        
+        if !ctx.is_significant(&cur_pos) && ctx.neighborhood_significances(&cur_pos) != 0 {
+            let ctx_label = context_label_zero_coding(&cur_pos, &ctx);
+            let bit = decoder.read_bit(ctx.ad_context(ctx_label));
+            
+            if bit == 1 {
+                decode_sign_bit(&cur_pos, ctx, decoder);
+                ctx.set_significance_state(&cur_pos);
+            }
+        }
+    }
+    
+    Some(())
+}
+
+/// Section D.3.2.
 fn decode_sign_bit(pos: &Position, ctx: &mut BitplaneDecodeContext, decoder: &mut impl BitDecoder) {
     fn context_label_sign_coding(pos: &Position, ctx: &BitplaneDecodeContext) -> (u8, u8) {
         fn neighbor_contribution(ctx: &BitplaneDecodeContext, x: i64, y: i64) -> i32 {
