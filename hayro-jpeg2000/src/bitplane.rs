@@ -149,7 +149,9 @@ impl BitplaneDecodeContext {
 }
 
 pub(crate) fn decode(code_block: &mut CodeBlock) -> Option<()> {
-    Some(())
+    // let mut decoder = ArithmeticDecoder::new()
+    // 
+    // Some(())
 }
 
 /// Perform the clean-up pass, specified in D.3.4.
@@ -430,6 +432,7 @@ impl Iterator for PositionIterator {
 #[cfg(test)]
 mod tests {
     use super::PositionIterator;
+    use hayro_common::bit::BitWriter;
 
     macro_rules! pt {
         ($x:expr, $y:expr) => {
@@ -467,5 +470,43 @@ mod tests {
         ];
 
         assert_eq!(produced.as_slice(), &expected);
+    }
+
+    /// Example 7.3.2 in the JPEG2000 book.
+    #[test]
+    fn bitplane_decoding() {
+        let data = {
+            let mut buf = vec![0; 8];
+            let mut writer = BitWriter::new(&mut buf, 1).unwrap();
+            
+            // CUP bitplane 2.
+            writer.write_bits([
+                1, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
+            ]);
+
+            // SPP bitplane 1.
+            writer.write_bits([
+                1,0,1,1,0,0,0,0,1,0,1,1,0,0,1,1,1,0
+            ]);
+
+            // MRP bitplane 1.
+            writer.write_bits([
+                0,1,1,0
+            ]);
+            
+            // No CUP for bitplane 1.
+            
+            // SPP for bitplane 0.
+            writer.write_bits([
+                0,0,1,0,0,0,1,0
+            ]);
+
+            // MRP for bitplane 0.
+            writer.write_bits([
+                1,1,0,1,0,0,0,1,1,0
+            ]);
+
+            // No CUP for bitplane 0.
+        };
     }
 }
