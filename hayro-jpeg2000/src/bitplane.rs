@@ -88,6 +88,10 @@ impl BitplaneDecodeContext {
         self.reset_contexts();
     }
 
+    fn reset_for_next_bitplane(&mut self) {
+        self.has_zero_coding = vec![0; self.has_zero_coding.len()];
+    }
+
     fn significance_state(&self, position: &Position) -> u8 {
         self.significance_states[position.index(self.width)]
     }
@@ -98,6 +102,14 @@ impl BitplaneDecodeContext {
 
     fn set_significance_state(&mut self, position: &Position) {
         self.significance_states[position.index(self.width)] = 1;
+    }
+
+    fn set_has_zero_coding(&mut self, position: &Position) {
+        self.has_zero_coding[position.index(self.width)] = 1;
+    }
+
+    fn set_has_magnitude_refinement(&mut self, position: &Position) {
+        self.first_magnitude_refinement[position.index(self.width)] = 1;
     }
 
     fn is_magnitude_refined(&self, position: &Position) -> bool {
@@ -150,7 +162,7 @@ impl BitplaneDecodeContext {
             + self.significance_state_checked(pos.x as i64 - 1, pos.y as i64 + 1)
             + self.significance_state_checked(pos.x as i64 + 1, pos.y as i64 + 1)
     }
-    
+
     fn neighborhood_significances(&self, pos: &Position) -> u8 {
         self.horizontal_reference(pos) + self.vertical_reference(pos) + self.diagonal_reference(pos)
     }
@@ -180,7 +192,27 @@ fn decode_inner(code_block: &mut CodeBlock, decoder: &mut impl BitDecoder) -> Op
         code_block.area.height(),
         SubbandType::LowLow,
     );
+
     cleanup_pass(&mut ctx, decoder);
+    ctx.reset_for_next_bitplane();
+
+    significance_propagation_pass(&mut ctx, decoder);
+    magnitude_refinement_pass(&mut ctx, decoder);
+    cleanup_pass(&mut ctx, decoder);
+    ctx.reset_for_next_bitplane();
+
+    significance_propagation_pass(&mut ctx, decoder);
+    magnitude_refinement_pass(&mut ctx, decoder);
+    cleanup_pass(&mut ctx, decoder);
+
+    for (sign, magnitude) in ctx.signs.iter().zip(ctx.magnitude_array) {
+        let mut num = magnitude.get() as i8;
+        if *sign != 0 {
+            num = -num;
+        }
+        code_block.coefficients.push(num);
+    }
+
     Some(())
 }
 
@@ -261,25 +293,54 @@ fn cleanup_pass(ctx: &mut BitplaneDecodeContext, decoder: &mut impl BitDecoder) 
 
 /// Section D.3.1.
 /// See also the flow chart in Figure 7.4 in the JPEG2000 book.
-fn significance_propagation_pass(ctx: &mut BitplaneDecodeContext, decoder: &mut impl BitDecoder) -> Option<()> {
+fn significance_propagation_pass(
+    ctx: &mut BitplaneDecodeContext,
+    decoder: &mut impl BitDecoder,
+) -> Option<()> {
     let mut position_iterator = PositionIterator::new(ctx.width, ctx.height);
-    
+
     loop {
         let Some(cur_pos) = position_iterator.next() else {
             break;
         };
-        
+
         if !ctx.is_significant(&cur_pos) && ctx.neighborhood_significances(&cur_pos) != 0 {
             let ctx_label = context_label_zero_coding(&cur_pos, &ctx);
             let bit = decoder.read_bit(ctx.ad_context(ctx_label));
-            
+            ctx.push_magnitude_bit(&cur_pos, bit as u8);
+            ctx.set_has_zero_coding(&cur_pos);
+
             if bit == 1 {
                 decode_sign_bit(&cur_pos, ctx, decoder);
                 ctx.set_significance_state(&cur_pos);
             }
         }
     }
-    
+
+    Some(())
+}
+
+/// Perform the magnitude refinement pass, specified in D.3.3.
+/// See also the flow chart in Figure 7.5 in the JPEG2000 book.
+fn magnitude_refinement_pass(
+    ctx: &mut BitplaneDecodeContext,
+    decoder: &mut impl BitDecoder,
+) -> Option<()> {
+    let mut position_iterator = PositionIterator::new(ctx.width, ctx.height);
+
+    loop {
+        let Some(cur_pos) = position_iterator.next() else {
+            break;
+        };
+
+        if ctx.is_significant(&cur_pos) && !ctx.has_zero_coding(&cur_pos) {
+            let ctx_label = context_label_magnitude_refinement_coding(&cur_pos, &ctx);
+            let bit = decoder.read_bit(ctx.ad_context(ctx_label));
+            ctx.push_magnitude_bit(&cur_pos, bit as u8);
+            ctx.set_has_magnitude_refinement(&cur_pos);
+        }
+    }
+
     Some(())
 }
 
@@ -425,6 +486,11 @@ impl ComponentBitPlanes {
         assert!(bit < 2);
 
         self.inner = (self.inner << 1) | bit;
+        self.count += 1;
+    }
+
+    fn get(&self) -> u8 {
+        self.inner
     }
 }
 
@@ -598,5 +664,10 @@ mod tests {
         };
 
         decode_inner(&mut code_block, &mut decoder);
+
+        assert_eq!(
+            code_block.coefficients,
+            vec![3, 0, 0, 5, -3, 7, 2, 1, -4, -1, -2, 3, 0, 6, 0, 2]
+        );
     }
 }
