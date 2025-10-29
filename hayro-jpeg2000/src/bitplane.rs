@@ -92,12 +92,20 @@ impl BitplaneDecodeContext {
         self.significance_states[position.index(self.width)]
     }
 
+    fn set_significance_state(&mut self, position: &Position) {
+        self.significance_states[position.index(self.width)] = 1;
+    }
+
     fn is_magnitude_refined(&self, position: &Position) -> bool {
         self.first_magnitude_refinement[position.index(self.width)] != 0
     }
 
     fn has_zero_coding(&self, position: &Position) -> bool {
         self.has_zero_coding[position.index(self.width)] != 0
+    }
+
+    fn push_magnitude_bit(&mut self, position: &Position, bit: u8) {
+        self.magnitude_array[position.index(self.width)].push_bit(bit);
     }
 
     fn sign_checked(&self, x: i64, y: i64) -> u8 {
@@ -148,42 +156,102 @@ pub(crate) fn decode(code_block: &mut CodeBlock) -> Option<()> {
 /// See also the flow chart in Figure 7.3 in the JPEG2000 book.
 fn cleanup_pass(ctx: &mut BitplaneDecodeContext, decoder: &mut ArithmeticDecoder) -> Option<()> {
     let mut position_iterator = PositionIterator::new(ctx.width, ctx.height);
-    let mut cur_pos = position_iterator.next()?;
 
     loop {
+        let Some(mut cur_pos) = position_iterator.next() else {
+            break;
+        };
+
         if ctx.significance_state(&cur_pos) == 0 && !ctx.has_zero_coding(&cur_pos) {
             let use_rl = cur_pos.y % 4 == 0 && (ctx.height - cur_pos.y) >= 4;
 
-            let bit = if use_rl {
-                unimplemented!();
+            if use_rl {
+                // "If the four contiguous coefficients in the column being scanned are all decoded
+                // in the cleanup pass and the context label for all is 0 (including context
+                // coefficients from previous magnitude, significance and cleanup passes), then the
+                // unique run-length context is given to the arithmetic decoder along with the bit
+                // stream. If the symbol 0 is returned, then all four contiguous coefficients in
+                // the column remain insignificant and are set to zero.
+                let bit = decoder.read_bit(ctx.ad_context(17));
+
+                if bit == 0 {
+                    ctx.push_magnitude_bit(&cur_pos, 0);
+
+                    for _ in 0..3 {
+                        cur_pos = position_iterator.next()?;
+                        ctx.push_magnitude_bit(&cur_pos, 0);
+                    }
+                } else {
+                    let mut num_zeroes = decoder.read_bit(ctx.ad_context(18));
+                    num_zeroes = (num_zeroes << 1) | decoder.read_bit(ctx.ad_context(18));
+
+                    if num_zeroes > 0 {
+                        ctx.push_magnitude_bit(&cur_pos, 0);
+
+                        for _ in 0..(num_zeroes - 1) {
+                            cur_pos = position_iterator.next()?;
+                            ctx.push_magnitude_bit(&cur_pos, 0);
+                        }
+                    }
+                }
             } else {
                 let ctx_label = context_label_zero_coding(&cur_pos, &ctx);
-                decoder.read_bit(ctx.ad_context(ctx_label))
+                let bit = decoder.read_bit(ctx.ad_context(ctx_label));
+
+                if bit == 1 {
+                    decode_sign_bit(&cur_pos, ctx, decoder);
+                    ctx.set_significance_state(&cur_pos);
+                }
             };
         }
-
-        if let Some(next) = position_iterator.next() {
-            cur_pos = next;
-        } else {
-            break;
-        };
     }
 
     Some(())
 }
 
+/// Section D.3.2
 fn decode_sign_bit(
     pos: &Position,
     ctx: &mut BitplaneDecodeContext,
     decoder: &mut ArithmeticDecoder,
 ) {
+    fn context_label_sign_coding(pos: &Position, ctx: &BitplaneDecodeContext) -> (u8, u8) {
+        fn neighbor_contribution(ctx: &BitplaneDecodeContext, x: i64, y: i64) -> i32 {
+            let sigma = ctx.significance_state_checked(x, y);
+
+            let multiplied = if ctx.sign_checked(x, y) == 0 { 1 } else { -1 };
+
+            multiplied * sigma as i32
+        }
+
+        let h = (neighbor_contribution(ctx, pos.x as i64 - 1, pos.y as i64)
+            + neighbor_contribution(ctx, pos.x as i64 + 1, pos.y as i64))
+        .clamp(-1, 1);
+        let v = (neighbor_contribution(ctx, pos.x as i64, pos.y as i64 - 1)
+            + neighbor_contribution(ctx, pos.x as i64, pos.y as i64 + 1))
+        .clamp(-1, 1);
+
+        match (h, v) {
+            (1, 1) => (13, 0),
+            (1, 0) => (12, 0),
+            (1, -1) => (11, 0),
+            (0, 1) => (10, 0),
+            (0, 0) => (9, 0),
+            (0, -1) => (10, 1),
+            (-1, 1) => (11, 1),
+            (-1, 0) => (12, 1),
+            (-1, -1) => (13, 1),
+            _ => unreachable!(),
+        }
+    }
+
     let (ctx_label, xor_bit) = context_label_sign_coding(&pos, ctx);
     let ad_ctx = ctx.ad_context(ctx_label);
     let sign_bit = decoder.read_bit(ad_ctx) ^ xor_bit as u32;
     ctx.set_sign(pos, sign_bit as u8);
 }
 
-/// Table D.3.1.
+/// Section D.3.1.
 ///
 /// Returns the context label.
 fn context_label_zero_coding(pos: &Position, ctx: &BitplaneDecodeContext) -> u8 {
@@ -260,40 +328,6 @@ fn context_label_zero_coding(pos: &Position, ctx: &BitplaneDecodeContext) -> u8 
     }
 }
 
-/// Table D.3.2.
-///
-/// Returns the context label as well as the X bit that needs to be XORed
-/// with the next read bit.
-fn context_label_sign_coding(pos: &Position, ctx: &BitplaneDecodeContext) -> (u8, u8) {
-    fn neighbor_contribution(ctx: &BitplaneDecodeContext, x: i64, y: i64) -> i32 {
-        let sigma = ctx.significance_state_checked(x, y);
-
-        let multiplied = if ctx.sign_checked(x, y) == 0 { 1 } else { -1 };
-
-        multiplied * sigma as i32
-    }
-
-    let h = (neighbor_contribution(ctx, pos.x as i64 - 1, pos.y as i64)
-        + neighbor_contribution(ctx, pos.x as i64 + 1, pos.y as i64))
-    .clamp(-1, 1);
-    let v = (neighbor_contribution(ctx, pos.x as i64, pos.y as i64 - 1)
-        + neighbor_contribution(ctx, pos.x as i64, pos.y as i64 + 1))
-    .clamp(-1, 1);
-
-    match (h, v) {
-        (1, 1) => (13, 0),
-        (1, 0) => (12, 0),
-        (1, -1) => (11, 0),
-        (0, 1) => (10, 0),
-        (0, 0) => (9, 0),
-        (0, -1) => (10, 1),
-        (-1, 1) => (11, 1),
-        (-1, 0) => (12, 1),
-        (-1, -1) => (13, 1),
-        _ => unreachable!(),
-    }
-}
-
 /// Table D.4.
 ///
 /// Returns the context label.
@@ -318,8 +352,9 @@ struct ComponentBitPlanes {
 impl ComponentBitPlanes {
     fn push_bit(&mut self, bit: u8) {
         assert!(self.count < 8);
+        assert!(bit < 2);
 
-        self.inner = (self.inner << 1) | bit & 1;
+        self.inner = (self.inner << 1) | bit;
     }
 }
 
