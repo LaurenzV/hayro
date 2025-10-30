@@ -2,8 +2,26 @@
 
 use crate::codestream::WaveletTransform;
 
+/// The 1D_SR procedure from F.3.6
+fn _1d_sr(y: &mut [f64], i0: usize, i1: usize, transform: &WaveletTransform) {
+    if i0 == i1 - 1 {
+        if i0 % 2 != 0 {
+            y[i0] = y[i0] / 2.0;
+        }
+        
+        return;
+    }
+    
+    _1d_extr(y, i0, i1, transform);
+    
+    match transform {
+        WaveletTransform::Irreversible97 => unimplemented!(),
+        WaveletTransform::Reversible53 => _1d_filter_53r(y, i0, i1)
+    }
+}
+
 /// The 1D FILTER 5-3R procedure from F.3.8.1.
-fn filter_1d_53(y: &mut [f64], i0: usize, i1: usize) {
+fn _1d_filter_53r(y: &mut [f64], i0: usize, i1: usize) {
     // (F-5)
     for n in i0 /2..(i1 / 2) + 1 {
         let base_idx = 2 * n;
@@ -18,7 +36,7 @@ fn filter_1d_53(y: &mut [f64], i0: usize, i1: usize) {
 }
 
 /// The 1D_EXTR procedure.
-fn extend_1d(y: &mut [f64], i0: usize, i1: usize, transform: &WaveletTransform) {
+fn _1d_extr(y: &mut [f64], i0: usize, i1: usize, transform: &WaveletTransform) {
     let i_left = match transform {
         WaveletTransform::Reversible53 => if i0 % 2 == 0 { 1 } else { 2 },
         WaveletTransform::Irreversible97 => if i0 % 2 == 0 { 3 } else { 4 },
@@ -66,7 +84,7 @@ mod tests {
     #[test]
     fn extend_1d() {
         let mut data = [0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 0.0, 0.0];
-        super::extend_1d(&mut data, 3, 9, &WaveletTransform::Reversible53);
+        super::_1d_extr(&mut data, 3, 9, &WaveletTransform::Reversible53);
         
         assert_eq!(data, [0.0, 3.0, 2.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 5.0, 4.0]);
     }
