@@ -199,7 +199,7 @@ impl CodeBlockStyle {
 }
 
 /// Quantization style (Table A.28).
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum QuantizationStyle {
     NoQuantization,
     ScalarDerived,

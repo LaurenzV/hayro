@@ -11,6 +11,7 @@ mod arithmetic_decoder;
 pub(crate) mod bitplane;
 pub mod boxes;
 mod codestream;
+mod dequantize;
 mod packet;
 mod progression;
 mod tag_tree;
