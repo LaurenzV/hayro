@@ -104,11 +104,13 @@ fn process_tile<'a, T: ProgressionIterator<'a>>(
                                 .parameters
                                 .code_block_style,
                         )?;
-                        
-                        if component_info.quantization_info.quantization_style != QuantizationStyle::NoQuantization {
+
+                        if component_info.quantization_info.quantization_style
+                            != QuantizationStyle::NoQuantization
+                        {
                             panic!("quantization not implemented yet.");
                         }
-                        
+
                         eprintln!("{:?}", codeblock.coefficients);
                     }
                 }
