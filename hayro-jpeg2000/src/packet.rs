@@ -5,7 +5,7 @@ use crate::progression::{
 };
 use crate::tag_tree::TagTree;
 use crate::tile::{IntRect, Tile, TileInstance, TilePart};
-use crate::{bitplane, idwt};
+use crate::{ChannelType, bitplane, idwt};
 use hayro_common::bit::BitReader;
 use hayro_common::byte::Reader;
 
@@ -58,13 +58,19 @@ struct Segment {
 pub(crate) fn process_tiles(tiles: &[Tile], header: &Header) -> Option<Vec<ChannelData>> {
     let mut channels = vec![];
 
-    for info in &header.component_infos {
+    for (idx, info) in header.component_infos.iter().enumerate() {
         channels.push(ChannelData {
             container: ChannelContainer::U8(vec![
                 0;
                 (header.size_data.reference_grid_width * header.size_data.reference_grid_height)
                     as usize
             ]),
+            is_alpha: header
+                .metadata
+                .channel_definitions
+                .get(idx)
+                .map(|c| c.channel_type == ChannelType::Opacity)
+                .unwrap_or(false),
             bit_depth: info.size_info.precision,
         })
     }

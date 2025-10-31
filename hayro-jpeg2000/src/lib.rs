@@ -3,8 +3,8 @@
 
 use crate::bitmap::Bitmap;
 use crate::boxes::{
-    COLOUR_SPECIFICATION, CONTIGUOUS_CODESTREAM, FILE_TYPE, IMAGE_HEADER, JP2_HEADER,
-    JP2_SIGNATURE, read_box,
+    CHANNEL_DEFINITION, COLOUR_SPECIFICATION, CONTIGUOUS_CODESTREAM, FILE_TYPE, IMAGE_HEADER,
+    JP2_HEADER, JP2_SIGNATURE, read_box, tag_to_string,
 };
 use hayro_common::byte::Reader;
 
@@ -40,6 +40,54 @@ pub struct ImageMetadata {
     pub enumerated_colourspace: Option<u32>,
     /// ICC profile data (if colour_method = 2).
     pub icc_profile: Option<Vec<u8>>,
+    /// Channel definitions specified by the Channel Definition box (cdef).
+    pub channel_definitions: Vec<ChannelDefinition>,
+}
+
+/// Association between codestream components/channels and their semantic role.
+#[derive(Debug, Clone)]
+pub struct ChannelDefinition {
+    pub channel_index: u16,
+    pub channel_type: ChannelType,
+    pub association: ChannelAssociation,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChannelType {
+    Colour,
+    Opacity,
+    PremultipliedOpacity,
+    Reserved(u16),
+    Unspecified,
+}
+
+impl ChannelType {
+    fn from_raw(value: u16) -> Self {
+        match value {
+            0 => ChannelType::Colour,
+            1 => ChannelType::Opacity,
+            2 => ChannelType::PremultipliedOpacity,
+            u16::MAX => ChannelType::Unspecified,
+            v => ChannelType::Reserved(v),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChannelAssociation {
+    WholeImage,
+    Colour(u16),
+    Unspecified,
+}
+
+impl ChannelAssociation {
+    fn from_raw(value: u16) -> Self {
+        match value {
+            0 => ChannelAssociation::WholeImage,
+            u16::MAX => ChannelAssociation::Unspecified,
+            v => ChannelAssociation::Colour(v),
+        }
+    }
 }
 
 impl ImageMetadata {
@@ -55,10 +103,41 @@ impl ImageMetadata {
         self.width = reader.read_u32()?;
         self.num_components = reader.read_u16()?;
         self.bits_per_component = reader.read_byte()?;
+
+        if self.bits_per_component == 255 {
+            unimplemented!();
+        }
+
         let _compression_type = reader.read_byte()?;
         let _colorspace_unknown = reader.read_byte()?;
         let _has_intellectual_property = reader.read_byte()?;
 
+        Some(())
+    }
+
+    /// Parse Channel Definition box (cdef) data.
+    fn parse_cdef(&mut self, data: &[u8]) -> Option<()> {
+        if data.len() < 2 {
+            return None;
+        }
+
+        let mut reader = Reader::new(data);
+        let count = reader.read_u16()? as usize;
+        let mut definitions = Vec::with_capacity(count);
+
+        for _ in 0..count {
+            let channel_index = reader.read_u16()?;
+            let channel_type = reader.read_u16()?;
+            let association = reader.read_u16()?;
+
+            definitions.push(ChannelDefinition {
+                channel_index,
+                channel_type: ChannelType::from_raw(channel_type),
+                association: ChannelAssociation::from_raw(association),
+            });
+        }
+
+        self.channel_definitions = definitions;
         Some(())
     }
 
@@ -127,6 +206,7 @@ pub fn read(data: &[u8]) -> Result<Bitmap, &'static str> {
                 colour_method: None,
                 enumerated_colourspace: None,
                 icc_profile: None,
+                channel_definitions: Vec::new(),
             };
 
             let mut jp2h_reader = Reader::new(current_box.data);
@@ -141,6 +221,11 @@ pub fn read(data: &[u8]) -> Result<Bitmap, &'static str> {
                             .parse_ihdr(child_box.data)
                             .ok_or("failed to parse image header")?;
                     }
+                    CHANNEL_DEFINITION => {
+                        image_metadata
+                            .parse_cdef(child_box.data)
+                            .ok_or("failed to parse channel definition")?;
+                    }
                     COLOUR_SPECIFICATION => {
                         image_metadata
                             .parse_colr(child_box.data)
@@ -154,9 +239,11 @@ pub fn read(data: &[u8]) -> Result<Bitmap, &'static str> {
 
             metadata = Ok(image_metadata);
         } else if current_box.box_type == CONTIGUOUS_CODESTREAM {
-            channels = Ok(codestream::read(current_box.data)?);
+            if let Ok(metadata) = &metadata {
+                channels = Ok(codestream::read(current_box.data, metadata.clone())?);
+            }
         } else {
-            // eprintln!("ignoring outer box {}", tag_to_string(current_box.box_type));
+            eprintln!("ignoring outer box {}", tag_to_string(current_box.box_type));
         }
     }
 

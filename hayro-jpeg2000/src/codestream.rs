@@ -1,9 +1,14 @@
+use crate::ImageMetadata;
 use crate::bitmap::{Bitmap, ChannelData};
 use crate::packet::process_tiles;
 use crate::tile::{IntRect, Tile, TileInstance, read_tiles};
 use hayro_common::byte::Reader;
+use std::fs::Metadata;
 
-pub(crate) fn read(stream: &[u8]) -> Result<Vec<ChannelData>, &'static str> {
+pub(crate) fn read(
+    stream: &[u8],
+    metadata: ImageMetadata,
+) -> Result<Vec<ChannelData>, &'static str> {
     let mut reader = Reader::new(stream);
 
     let marker = reader.read_marker()?;
@@ -11,7 +16,7 @@ pub(crate) fn read(stream: &[u8]) -> Result<Vec<ChannelData>, &'static str> {
         return Err("invalid marker: expected SOC marker");
     }
 
-    let header = read_header(&mut reader)?;
+    let header = read_header(&mut reader, metadata)?;
     let tiles = read_tiles(&mut reader, &header)?;
 
     process_tiles(&tiles, &header).ok_or("failed to decode image")
@@ -22,9 +27,10 @@ pub(crate) struct Header {
     pub(crate) size_data: SizeData,
     pub(crate) global_coding_style: GlobalCodingStyleInfo,
     pub(crate) component_infos: Vec<ComponentInfo>,
+    pub(crate) metadata: ImageMetadata,
 }
 
-fn read_header(reader: &mut Reader) -> Result<Header, &'static str> {
+fn read_header(reader: &mut Reader, metadata: ImageMetadata) -> Result<Header, &'static str> {
     if reader.read_marker()? != markers::SIZ {
         return Err("expected SIZ marker after SOC");
     }
@@ -87,6 +93,7 @@ fn read_header(reader: &mut Reader) -> Result<Header, &'static str> {
 
     Ok(Header {
         size_data,
+        metadata,
         global_coding_style: cod.clone(),
         component_infos,
     })

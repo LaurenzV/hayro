@@ -18,6 +18,7 @@ pub enum ChannelContainer {
 pub struct ChannelData {
     pub container: ChannelContainer,
     pub bit_depth: u8,
+    pub is_alpha: bool,
 }
 
 impl ChannelData {

@@ -2,11 +2,14 @@ use hayro_jpeg2000::read;
 use image::{DynamicImage, ImageBuffer};
 
 fn main() {
-    let data = std::fs::read("hayro-jpeg2000/test.jp2").unwrap();
+    let data = std::fs::read("/Users/lstampfl/Programming/GitHub/serenity/Tests/LibGfx/test-inputs/jpeg2000/kakadu-lossless-gray-alpha-u8-prog1-layers1-res6.jp2").unwrap();
 
     match read(&data) {
         Ok(bitmap) => {
             let (width, height) = (bitmap.metadata.width, bitmap.metadata.height);
+
+            let has_alpha = bitmap.channels.iter().any(|c| c.is_alpha);
+            let num_channels = bitmap.channels.len();
 
             let channels = bitmap
                 .channels
@@ -14,9 +17,27 @@ fn main() {
                 .map(|c| c.into_8bit())
                 .collect::<Vec<_>>();
 
-            let dynamic = match channels.len() {
-                1 => DynamicImage::ImageLuma8(
-                    ImageBuffer::from_raw(width, height, channels[0].clone()).unwrap(),
+            let interleaved = if num_channels == 1 {
+                channels[0].clone()
+            } else {
+                let mut interleaved = vec![];
+                let num_samples = channels.iter().map(|c| c.len()).min().unwrap();
+
+                for sample_idx in 0..num_samples {
+                    for channel_idx in 0..num_channels {
+                        interleaved.push(channels[channel_idx][sample_idx]);
+                    }
+                }
+
+                interleaved
+            };
+
+            let dynamic = match (num_channels, has_alpha) {
+                (1, false) => DynamicImage::ImageLuma8(
+                    ImageBuffer::from_raw(width, height, interleaved).unwrap(),
+                ),
+                (2, true) => DynamicImage::ImageLumaA8(
+                    ImageBuffer::from_raw(width, height, interleaved).unwrap(),
                 ),
                 _ => unimplemented!(),
             };
