@@ -492,6 +492,7 @@ name = "hayro-jpeg2000"
 version = "0.1.0"
 dependencies = [
  "hayro-common",
+ "image 0.25.8",
 ]
 
 [[package]]

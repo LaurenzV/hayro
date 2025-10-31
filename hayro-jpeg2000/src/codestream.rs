@@ -1,8 +1,9 @@
+use crate::bitmap::{Bitmap, ChannelData};
 use crate::packet::process_tiles;
 use crate::tile::{IntRect, Tile, TileInstance, read_tiles};
 use hayro_common::byte::Reader;
 
-pub(crate) fn read(stream: &[u8]) -> Result<(), &'static str> {
+pub(crate) fn read(stream: &[u8]) -> Result<Vec<ChannelData>, &'static str> {
     let mut reader = Reader::new(stream);
 
     let marker = reader.read_marker()?;
@@ -13,9 +14,7 @@ pub(crate) fn read(stream: &[u8]) -> Result<(), &'static str> {
     let header = read_header(&mut reader)?;
     let tiles = read_tiles(&mut reader, &header)?;
 
-    process_tiles(&tiles, &header);
-
-    Ok(())
+    process_tiles(&tiles, &header).ok_or("failed to decode image")
 }
 
 #[derive(Debug)]
@@ -117,8 +116,8 @@ impl ProgressionOrder {
 }
 
 /// Multiple component transformation type (Table A.17).
-#[derive(Debug, Clone, Copy)]
-enum MultipleComponentTransform {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum MultipleComponentTransform {
     None,
     Used,
 }
@@ -463,6 +462,10 @@ fn size_marker(reader: &mut Reader) -> Result<SizeData, &'static str> {
         if comp.precision == 0 || comp.vertical_resolution == 0 || comp.horizontal_resolution == 0 {
             return Err("invalid component metadata");
         }
+
+        if comp.vertical_resolution != 1 || comp.horizontal_resolution != 1 {
+            unimplemented!();
+        }
     }
 
     Ok(size_data)
@@ -492,6 +495,10 @@ fn size_marker_inner(reader: &mut Reader) -> Option<SizeData> {
 
         let precision = (ssiz & 0x7F) + 1;
         let is_signed = (ssiz & 0x80) != 0;
+
+        if precision > 8 {
+            unimplemented!();
+        }
 
         components.push(ComponentSizeInfo {
             precision,
@@ -540,6 +547,10 @@ fn coding_style_parameters(
         for _ in 0..num_resolution_levels {
             precinct_exponents.push((15, 15));
         }
+    }
+
+    if coding_style.uses_sop_markers() || coding_style.uses_eph_marker() {
+        unimplemented!();
     }
 
     Some(CodingStyleParameters {

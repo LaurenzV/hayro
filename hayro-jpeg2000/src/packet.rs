@@ -1,4 +1,5 @@
-use crate::codestream::{Header, ProgressionOrder, QuantizationStyle};
+use crate::bitmap::{Bitmap, ChannelContainer, ChannelData};
+use crate::codestream::{Header, MultipleComponentTransform, ProgressionOrder, QuantizationStyle};
 use crate::progression::{
     IteratorInput, ProgressionIterator, ResolutionLevelLayerComponentPositionProgressionIterator,
 };
@@ -54,7 +55,20 @@ struct Segment {
     number_of_coding_passes: u32,
 }
 
-pub(crate) fn process_tiles(tiles: &[Tile], header: &Header) -> Option<()> {
+pub(crate) fn process_tiles(tiles: &[Tile], header: &Header) -> Option<Vec<ChannelData>> {
+    let mut channels = vec![];
+
+    for info in &header.component_infos {
+        channels.push(ChannelData {
+            container: ChannelContainer::U8(vec![
+                0;
+                (header.size_data.reference_grid_width * header.size_data.reference_grid_height)
+                    as usize
+            ]),
+            bit_depth: info.size_info.precision,
+        })
+    }
+
     for tile in tiles {
         let iter_input = IteratorInput::new(
             tile,
@@ -66,19 +80,20 @@ pub(crate) fn process_tiles(tiles: &[Tile], header: &Header) -> Option<()> {
             ProgressionOrder::ResolutionLayerComponentPosition => {
                 let iter =
                     ResolutionLevelLayerComponentPositionProgressionIterator::new(iter_input);
-                process_tile(tile, header, iter)?;
+                process_tile(tile, header, iter, &mut channels)?;
             }
             _ => unimplemented!(),
         }
     }
 
-    Some(())
+    Some(channels)
 }
 
 fn process_tile<'a, T: ProgressionIterator<'a>>(
     tile: &'a Tile<'a>,
     header: &Header,
     mut iterator: T,
+    channels: &mut [ChannelData],
 ) -> Option<()> {
     let mut component_data = build_component_data(tile, header);
 
@@ -86,8 +101,10 @@ fn process_tile<'a, T: ProgressionIterator<'a>>(
         parse_packet(&tile_part, header, &mut component_data, &mut iterator)?;
     }
 
-    for (component_data, component_info) in
-        component_data.iter_mut().zip(header.component_infos.iter())
+    for ((component_data, component_info), channel_data) in component_data
+        .iter_mut()
+        .zip(header.component_infos.iter())
+        .zip(channels.iter_mut())
     {
         for resolution_level in &mut component_data.subbands {
             for subband in resolution_level {
@@ -137,13 +154,41 @@ fn process_tile<'a, T: ProgressionIterator<'a>>(
             }
         }
 
-        let coefficients = idwt::apply(
+        let mut samples = idwt::apply(
             &component_data.subbands,
             component_info
                 .coding_style_parameters
                 .parameters
                 .transformation,
         );
+
+        if header.global_coding_style.mct == MultipleComponentTransform::Used {
+            unimplemented!();
+        }
+
+        for sample in &mut samples {
+            *sample += (1 << component_info.size_info.precision - 1) as f32;
+        }
+
+        let tile_x_offset = tile.rect.x0;
+        let tile_y_offset = tile.rect.y0;
+
+        match &mut channel_data.container {
+            ChannelContainer::U8(c) => {
+                for y in tile_y_offset..(tile_y_offset + tile.rect.height()) {
+                    let output = &mut c
+                        [(y * header.size_data.reference_grid_width + tile_x_offset) as usize..]
+                        [..tile.rect.width() as usize];
+                    let input =
+                        &samples[(y * tile.rect.width()) as usize..][..tile.rect.width() as usize];
+
+                    for (i, o) in input.iter().zip(output.iter_mut()) {
+                        *o = *i as u8;
+                    }
+                }
+            }
+            _ => unimplemented!(),
+        }
     }
 
     Some(())

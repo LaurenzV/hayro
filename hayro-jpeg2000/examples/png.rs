@@ -1,10 +1,28 @@
 use hayro_jpeg2000::read;
+use image::{DynamicImage, ImageBuffer};
 
 fn main() {
     let data = std::fs::read("hayro-jpeg2000/test.jp2").unwrap();
 
     match read(&data) {
-        Ok(metadata) => {
+        Ok(bitmap) => {
+            let (width, height) = (bitmap.metadata.width, bitmap.metadata.height);
+
+            let channels = bitmap
+                .channels
+                .into_iter()
+                .map(|c| c.into_8bit())
+                .collect::<Vec<_>>();
+
+            let dynamic = match channels.len() {
+                1 => DynamicImage::ImageLuma8(
+                    ImageBuffer::from_raw(width, height, channels[0].clone()).unwrap(),
+                ),
+                _ => unimplemented!(),
+            };
+
+            dynamic.save("out.png").unwrap();
+
             // println!("Image Metadata:");
             // println!("  Width: {}", metadata.width);
             // println!("  Height: {}", metadata.height);

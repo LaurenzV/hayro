@@ -1,6 +1,7 @@
 // TODO: Remove
 #![allow(warnings)]
 
+use crate::bitmap::Bitmap;
 use crate::boxes::{
     COLOUR_SPECIFICATION, CONTIGUOUS_CODESTREAM, FILE_TYPE, IMAGE_HEADER, JP2_HEADER,
     JP2_SIGNATURE, read_box,
@@ -8,6 +9,7 @@ use crate::boxes::{
 use hayro_common::byte::Reader;
 
 mod arithmetic_decoder;
+pub mod bitmap;
 pub(crate) mod bitplane;
 pub mod boxes;
 mod codestream;
@@ -93,7 +95,7 @@ impl ImageMetadata {
     }
 }
 
-pub fn read(data: &[u8]) -> Result<ImageMetadata, &'static str> {
+pub fn read(data: &[u8]) -> Result<Bitmap, &'static str> {
     let mut reader = Reader::new(data);
     let signature_box = read_box(&mut reader).ok_or("failed to read signature box")?;
 
@@ -108,6 +110,7 @@ pub fn read(data: &[u8]) -> Result<ImageMetadata, &'static str> {
     }
 
     let mut metadata = Err("failed to read metadata");
+    let mut channels = Err("failed to decode image");
 
     // Read boxes until we find the JP2 Header box
     while !reader.at_end() {
@@ -151,11 +154,14 @@ pub fn read(data: &[u8]) -> Result<ImageMetadata, &'static str> {
 
             metadata = Ok(image_metadata);
         } else if current_box.box_type == CONTIGUOUS_CODESTREAM {
-            codestream::read(current_box.data)?;
+            channels = Ok(codestream::read(current_box.data)?);
         } else {
             // eprintln!("ignoring outer box {}", tag_to_string(current_box.box_type));
         }
     }
 
-    metadata
+    Ok(Bitmap {
+        channels: channels?,
+        metadata: metadata?,
+    })
 }
