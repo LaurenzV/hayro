@@ -2,7 +2,10 @@ use crate::bitmap::{Bitmap, ChannelContainer, ChannelData};
 use crate::codestream::{
     Header, MultipleComponentTransform, ProgressionOrder, QuantizationStyle, WaveletTransform,
 };
-use crate::progression::{IteratorInput, LayerResolutionLevelComponentPositionProgressionIterator, ProgressionIterator, ResolutionLevelLayerComponentPositionProgressionIterator};
+use crate::progression::{
+    IteratorInput, LayerResolutionLevelComponentPositionProgressionIterator, ProgressionIterator,
+    ResolutionLevelLayerComponentPositionProgressionIterator,
+};
 use crate::tag_tree::TagTree;
 use crate::tile::{IntRect, Tile, TileInstance, TilePart};
 use crate::{ChannelType, bitplane, idwt};

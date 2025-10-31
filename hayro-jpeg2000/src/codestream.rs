@@ -584,7 +584,7 @@ fn com_marker(reader: &mut Reader) -> Option<()> {
     // Length.
     let length = reader.read_u16()?.checked_sub(2)?;
     reader.skip_bytes(length as usize)?;
-    
+
     Some(())
 }
 
