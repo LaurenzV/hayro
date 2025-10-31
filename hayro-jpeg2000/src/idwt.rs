@@ -6,7 +6,7 @@ use crate::tile::IntRect;
 const PADDING_SHIFT: usize = 4;
 
 /// The HOR_SR procedure from F.3.4.
-fn hor_sr(a: &mut [f64], rect: IntRect, transform: &WaveletTransform) {
+fn hor_sr(a: &mut [f32], rect: IntRect, transform: &WaveletTransform) {
     // Add a padding of 8 to account for the _1d_extr procedure.
     let mut buf = vec![0.0; rect.width() as usize + 8];
 
@@ -29,7 +29,7 @@ fn hor_sr(a: &mut [f64], rect: IntRect, transform: &WaveletTransform) {
 }
 
 /// The VER_SR procedure from F.3.5.
-fn ver_sr(a: &mut [f64], rect: IntRect, transform: &WaveletTransform) {
+fn ver_sr(a: &mut [f32], rect: IntRect, transform: &WaveletTransform) {
     // Add a padding of 8 to account for the _1d_extr procedure.
     let mut buf = vec![0.0; rect.height() as usize + 8];
     
@@ -56,7 +56,7 @@ fn ver_sr(a: &mut [f64], rect: IntRect, transform: &WaveletTransform) {
 }
 
 /// The 1D_SR procedure from F.3.6
-fn _1d_sr(y: &mut [f64], i0: usize, i1: usize, transform: &WaveletTransform) {
+fn _1d_sr(y: &mut [f32], i0: usize, i1: usize, transform: &WaveletTransform) {
     if i0 == i1 - 1 {
         if i0 % 2 != 0 {
             y[i0] = y[i0] / 2.0;
@@ -74,7 +74,7 @@ fn _1d_sr(y: &mut [f64], i0: usize, i1: usize, transform: &WaveletTransform) {
 }
 
 /// The 1D FILTER 5-3R procedure from F.3.8.1.
-fn _1d_filter_53r(y: &mut [f64], i0: usize, i1: usize) {
+fn _1d_filter_53r(y: &mut [f32], i0: usize, i1: usize) {
     // (F-5)
     for n in i0 /2..(i1 / 2) + 1 {
         let base_idx = 2 * n;
@@ -89,7 +89,7 @@ fn _1d_filter_53r(y: &mut [f64], i0: usize, i1: usize) {
 }
 
 /// The 1D_EXTR procedure.
-fn _1d_extr(y: &mut [f64], i0: usize, i1: usize, transform: &WaveletTransform) {
+fn _1d_extr(y: &mut [f32], i0: usize, i1: usize, transform: &WaveletTransform) {
     let i_left = match transform {
         WaveletTransform::Reversible53 => if i0 % 2 == 0 { 1 } else { 2 },
         WaveletTransform::Irreversible97 => if i0 % 2 == 0 { 3 } else { 4 },
