@@ -1,10 +1,10 @@
-use crate::{bitplane, idwt};
 use crate::codestream::{Header, ProgressionOrder, QuantizationStyle};
 use crate::progression::{
     IteratorInput, ProgressionIterator, ResolutionLevelLayerComponentPositionProgressionIterator,
 };
 use crate::tag_tree::TagTree;
 use crate::tile::{IntRect, Tile, TileInstance, TilePart};
+use crate::{bitplane, idwt};
 use hayro_common::bit::BitReader;
 use hayro_common::byte::Reader;
 
@@ -112,26 +112,38 @@ fn process_tile<'a, T: ProgressionIterator<'a>>(
                         {
                             panic!("quantization not implemented yet.");
                         }
-                        
+
                         // Copy the coefficients into the subband.
-                        
+
                         let x_offset = codeblock.area.x0 - subband.rect.x0;
                         let y_offset = codeblock.area.y0 - subband.rect.y0;
-                        
-                        for (y, in_row) in codeblock.coefficients.chunks_exact(codeblock.area.width() as usize).enumerate() {
-                            let out_row = &mut subband.coefficients[((y_offset + y as u32) * subband.rect.width()) as usize + x_offset as usize..];
-                            
+
+                        for (y, in_row) in codeblock
+                            .coefficients
+                            .chunks_exact(codeblock.area.width() as usize)
+                            .enumerate()
+                        {
+                            let out_row = &mut subband.coefficients[((y_offset + y as u32)
+                                * subband.rect.width())
+                                as usize
+                                + x_offset as usize..];
+
                             for (input, output) in in_row.iter().zip(out_row.iter_mut()) {
                                 *output = *input as f32;
                             }
                         }
-
                     }
                 }
             }
         }
-        
-        let coefficients = idwt::apply(&component_data.subbands, component_info.coding_style_parameters.parameters.transformation);
+
+        let coefficients = idwt::apply(
+            &component_data.subbands,
+            component_info
+                .coding_style_parameters
+                .parameters
+                .transformation,
+        );
     }
 
     Some(())
