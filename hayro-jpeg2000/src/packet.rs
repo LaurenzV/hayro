@@ -2,9 +2,7 @@ use crate::bitmap::{Bitmap, ChannelContainer, ChannelData};
 use crate::codestream::{
     Header, MultipleComponentTransform, ProgressionOrder, QuantizationStyle, WaveletTransform,
 };
-use crate::progression::{
-    IteratorInput, ProgressionIterator, ResolutionLevelLayerComponentPositionProgressionIterator,
-};
+use crate::progression::{IteratorInput, LayerResolutionLevelComponentPositionProgressionIterator, ProgressionIterator, ResolutionLevelLayerComponentPositionProgressionIterator};
 use crate::tag_tree::TagTree;
 use crate::tile::{IntRect, Tile, TileInstance, TilePart};
 use crate::{ChannelType, bitplane, idwt};
@@ -349,9 +347,9 @@ fn parse_packet<'a, T: ProgressionIterator<'a>>(
                 // "The number of coding passes included in this packet from each code-block is
                 // identified in the packet header using the codewords shown in Table B.4. This
                 // table provides for the possibility of signalling up to 164 coding passes.
-                let added_coding_passes = if reader.peak_packet_header_bits(8) == Some(0xff) {
-                    reader.read_packet_header_bits(8)?;
-                    reader.read_packet_header_bits(8)? + 37
+                let added_coding_passes = if reader.peak_packet_header_bits(9) == Some(0x1ff) {
+                    reader.read_packet_header_bits(9)?;
+                    reader.read_packet_header_bits(7)? + 37
                 } else if reader.peak_packet_header_bits(4) == Some(0x0f) {
                     reader.read_packet_header_bits(4)?;
                     // TODO: Validate that sequence is not 1111 1
