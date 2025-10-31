@@ -24,6 +24,7 @@ struct SubBand<'a> {
     pub(crate) subband_type: SubbandType,
     pub(crate) rect: IntRect,
     pub(crate) precincts: Vec<Precinct<'a>>,
+    pub(crate) coefficients: Vec<f32>,
 }
 
 #[derive(Clone)]
@@ -110,8 +111,20 @@ fn process_tile<'a, T: ProgressionIterator<'a>>(
                         {
                             panic!("quantization not implemented yet.");
                         }
+                        
+                        // Copy the coefficients into the subband.
+                        
+                        let x_offset = codeblock.area.x0 - subband.rect.x0;
+                        let y_offset = codeblock.area.y0 - subband.rect.y0;
+                        
+                        for (y, in_row) in codeblock.coefficients.chunks_exact(codeblock.area.width() as usize).enumerate() {
+                            let out_row = &mut subband.coefficients[((y_offset + y as u32) * subband.rect.width()) as usize + x_offset as usize..];
+                            
+                            for (input, output) in in_row.iter().zip(out_row.iter_mut()) {
+                                *output = *input as f32;
+                            }
+                        }
 
-                        eprintln!("{:?}", codeblock.coefficients);
                     }
                 }
             }
@@ -333,6 +346,7 @@ fn build_component_data(tile: &Tile, header: &Header) -> Vec<ComponentData<'stat
                     subband_type: SubbandType::LowLow,
                     rect,
                     precincts,
+                    coefficients: vec![0.0; (rect.width() * rect.height()) as usize],
                 }]);
             } else {
                 let decomposition_level = component_info
@@ -358,6 +372,7 @@ fn build_component_data(tile: &Tile, header: &Header) -> Vec<ComponentData<'stat
                         subband_type: sb_type,
                         rect,
                         precincts: precincts.clone(),
+                        coefficients: vec![0.0; (rect.width() * rect.height()) as usize],
                     })
                 }
 
