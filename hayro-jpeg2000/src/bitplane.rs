@@ -121,7 +121,7 @@ impl BitplaneDecodeContext {
         self.has_zero_coding[position.index(self.width)] != 0
     }
 
-    fn push_magnitude_bit(&mut self, position: &Position, bit: u8) {
+    fn push_magnitude_bit(&mut self, position: &Position, bit: u16) {
         self.magnitude_array[position.index(self.width)].push_bit(bit);
     }
 
@@ -314,7 +314,7 @@ fn cleanup_pass(ctx: &mut BitplaneDecodeContext, decoder: &mut impl BitDecoder) 
                 decoder.read_bit(ctx.ad_context(ctx_label))
             };
 
-            ctx.push_magnitude_bit(&cur_pos, bit as u8);
+            ctx.push_magnitude_bit(&cur_pos, bit as u16);
 
             if bit == 1 {
                 decode_sign_bit(&cur_pos, ctx, decoder);
@@ -342,7 +342,7 @@ fn significance_propagation_pass(
         if !ctx.is_significant(&cur_pos) && ctx.neighborhood_significances(&cur_pos) != 0 {
             let ctx_label = context_label_zero_coding(&cur_pos, &ctx);
             let bit = decoder.read_bit(ctx.ad_context(ctx_label));
-            ctx.push_magnitude_bit(&cur_pos, bit as u8);
+            ctx.push_magnitude_bit(&cur_pos, bit as u16);
             ctx.set_has_zero_coding(&cur_pos);
 
             if bit == 1 {
@@ -371,7 +371,7 @@ fn magnitude_refinement_pass(
         if ctx.is_significant(&cur_pos) && !ctx.has_zero_coding(&cur_pos) {
             let ctx_label = context_label_magnitude_refinement_coding(&cur_pos, &ctx);
             let bit = decoder.read_bit(ctx.ad_context(ctx_label));
-            ctx.push_magnitude_bit(&cur_pos, bit as u8);
+            ctx.push_magnitude_bit(&cur_pos, bit as u16);
             ctx.set_has_magnitude_refinement(&cur_pos);
         }
     }
@@ -511,20 +511,20 @@ fn context_label_magnitude_refinement_coding(pos: &Position, ctx: &BitplaneDecod
 
 #[derive(Default, Copy, Clone)]
 struct ComponentBitPlanes {
-    inner: u8,
+    inner: u16,
     count: u8,
 }
 
 impl ComponentBitPlanes {
-    fn push_bit(&mut self, bit: u8) {
-        assert!(self.count < 8);
+    fn push_bit(&mut self, bit: u16) {
+        assert!(self.count < 16);
         assert!(bit < 2);
 
         self.inner = (self.inner << 1) | bit;
         self.count += 1;
     }
 
-    fn get(&self) -> u8 {
+    fn get(&self) -> u16 {
         self.inner
     }
 }
