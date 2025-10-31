@@ -1,6 +1,7 @@
 use crate::codestream::{ComponentInfo, Header, ReaderExt, SizeData, markers};
 use crate::packet::SubbandType;
 use hayro_common::byte::Reader;
+use crate::codestream::markers::{EPH, SOP};
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct IntRect {
@@ -292,7 +293,15 @@ fn read_tile_part<'a>(reader: &mut Reader<'a>, main_header: &Header) -> Option<P
 
     let (mut tile_part_reader, header) = {
         let sot_marker = sot_marker(reader)?;
-        let data = if sot_marker.tile_part_length == 0 {
+        
+        if main_header.global_coding_style.component_parameters.flags.may_use_sop_markers() {
+            if reader.peek_marker() == Some(SOP) {
+                reader.read_marker().ok()?;
+                reader.skip_bytes(4)?;
+            }
+        }
+        
+        let mut data = if sot_marker.tile_part_length == 0 {
             // Data goes until EOC.
             let data = reader.tail()?;
             reader.jump_to_end();
@@ -308,6 +317,16 @@ fn read_tile_part<'a>(reader: &mut Reader<'a>, main_header: &Header) -> Option<P
 
             data
         };
+        
+        if main_header.global_coding_style.component_parameters.flags.uses_eph_marker() {
+            let (head, tail) = data.split_at(data.len() - 2);
+            
+            if tail[1] != EPH {
+                return None;
+            }
+            
+            data =  head;
+        }
 
         (Reader::new(data), sot_marker)
     };
