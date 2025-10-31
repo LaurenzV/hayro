@@ -6,7 +6,8 @@ use std::fmt::Debug;
 /// A bit reader.
 #[derive(Debug, Clone)]
 pub struct BitReader<'a> {
-    data: &'a [u8],
+    /// The underlying bytes of the bit reader.
+    pub data: &'a [u8],
     cur_pos: usize,
 }
 
@@ -88,10 +89,16 @@ impl<'a> BitReader<'a> {
         self.cur_pos / 8
     }
 
-    /// Get the current bit position.
+    /// Get the current position within the byte.
     #[inline]
     pub fn bit_pos(&self) -> usize {
         self.cur_pos % 8
+    }
+
+    /// Get the current position in bits.
+    #[inline]
+    pub fn cur_pos(&self) -> usize {
+        self.cur_pos
     }
 
     /// Get the tail (aligned to the current byte position) of the data.

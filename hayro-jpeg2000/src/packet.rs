@@ -352,7 +352,7 @@ fn parse_packet<'a, T: ProgressionIterator<'a>>(
                 let length = reader.read_packet_header_bits(length_bits as u8)?;
                 data_entries.push((sub_band_idx, code_block_idx, length));
 
-                eprintln!("length: {}", length);
+                eprintln!("length(0) {}", length);
             }
         }
 
@@ -569,10 +569,14 @@ impl BitReaderExt for BitReader<'_> {
             // B.10.1: If the value of the byte is 0xFF, the next byte includes an extra zero bit
             // stuffed into the MSB.
             // Check if the next bit is at a new byte boundary.
-            if self.byte_pos() != (self.bit_pos() + 1) / 8 && self.cur_byte()? == 0xFF {
-                let stuff_bit = self.read(1)?;
+            if self.bit_pos() == 0 && self.byte_pos() > 0 {
+                let last_byte = self.data[self.byte_pos() - 1];
+                
+                if last_byte == 0xff {
+                    let stuff_bit = self.read(1)?;
 
-                assert_eq!(stuff_bit, 0, "invalid stuffing bit");
+                    assert_eq!(stuff_bit, 0, "invalid stuffing bit");
+                }
             }
 
             bit = (bit << 1) | self.read(1)?;
