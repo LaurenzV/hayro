@@ -571,7 +571,7 @@ impl BitReaderExt for BitReader<'_> {
             // Check if the next bit is at a new byte boundary.
             if self.bit_pos() == 0 && self.byte_pos() > 0 {
                 let last_byte = self.data[self.byte_pos() - 1];
-                
+
                 if last_byte == 0xff {
                     let stuff_bit = self.read(1)?;
 
