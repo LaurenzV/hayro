@@ -16,7 +16,7 @@ mod packet;
 mod progression;
 mod tag_tree;
 mod tile;
-mod idwt;
+pub(crate) mod idwt;
 
 /// Image metadata extracted from JP2 Header box.
 #[derive(Debug, Clone)]

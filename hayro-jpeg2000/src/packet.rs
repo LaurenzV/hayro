@@ -1,4 +1,4 @@
-use crate::bitplane;
+use crate::{bitplane, idwt};
 use crate::codestream::{Header, ProgressionOrder, QuantizationStyle};
 use crate::progression::{
     IteratorInput, ProgressionIterator, ResolutionLevelLayerComponentPositionProgressionIterator,
@@ -29,7 +29,7 @@ pub(crate) struct SubBand<'a> {
 }
 
 #[derive(Clone)]
-struct Precinct<'a> {
+pub(crate) struct Precinct<'a> {
     area: IntRect,
     code_blocks: Vec<CodeBlock<'a>>,
     code_inclusion_tree: TagTree,
@@ -130,6 +130,8 @@ fn process_tile<'a, T: ProgressionIterator<'a>>(
                 }
             }
         }
+        
+        let coefficients = idwt::apply(&component_data.subbands, component_info.coding_style_parameters.parameters.transformation);
     }
 
     Some(())

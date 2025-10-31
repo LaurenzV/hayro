@@ -1,15 +1,16 @@
 //! Performing the inverse discrete wavelet transform, as specified in Annex F.
 
 use crate::codestream::WaveletTransform;
-use crate::packet::SubBand;
+use crate::packet::{SubBand, SubbandType};
 use crate::tile::IntRect;
 
 const PADDING_SHIFT: usize = 4;
 
-fn idwt(subbands: &[Vec<SubBand>]) -> Vec<f32> {
+pub(crate) fn apply(subbands: &[Vec<SubBand>], transform: WaveletTransform) -> Vec<f32> {
     let mut ll_subband = subbands[0][0].clone();
     
     for subbands in &subbands[1..] {
+        eprintln!("coefficients: {:?}", ll_subband.coefficients.iter().map(|v| *v as i32).collect::<Vec<_>>());
         let [hl, lh, hh] = subbands.as_slice() else { unreachable!() };
         
         let new_rect = {
@@ -21,20 +22,58 @@ fn idwt(subbands: &[Vec<SubBand>]) -> Vec<f32> {
             IntRect::from_xywh(x0, y0, x1, y1)
         };
         
-        ll_subband = _2d_sr(&ll_subband, &hl, &lh, &hh, &new_rect);
+        ll_subband = _2d_sr(&ll_subband, &hl, &lh, &hh, new_rect, transform);
     }
     
     ll_subband.coefficients
 }
 
-fn _2d_sr(ll: &SubBand, hl: &SubBand, lh: &SubBand, hh: &SubBand, rect: &IntRect) -> SubBand<'static> {
-    unimplemented!()
+fn _2d_sr(ll: &SubBand, hl: &SubBand, lh: &SubBand, hh: &SubBand, rect: IntRect, transform: WaveletTransform) -> SubBand<'static> {
+    let mut coefficients = _2d_interleave(ll, hl, lh, hh, rect);
+
+    eprintln!("{:?}", &coefficients);
+    
+    
+    let temp_rect = IntRect::from_ltrb(0, 0, rect.width(), rect.height());
+    
+    hor_sr(&mut coefficients, temp_rect, &transform);
+    eprintln!("{:?}", &coefficients);
+    ver_sr(&mut coefficients, temp_rect, &transform);
+    eprintln!("{:?}", &coefficients);
+    
+    SubBand {
+        subband_type: SubbandType::LowLow,
+        rect,
+        precincts: vec![],
+        coefficients,
+    }
 }
 
-fn _2d_interleave(ll: &SubBand, hl: &SubBand, lh: &SubBand, hh: &SubBand, rect: &IntRect) -> Vec<f32> {
+fn _2d_interleave(ll: &SubBand, hl: &SubBand, lh: &SubBand, hh: &SubBand, rect: IntRect) -> Vec<f32> {
     let mut coefficients = vec![0.0; (rect.width() * rect.height()) as usize];
     for subband in [ll, hl, lh, hh] {
+        let u_max = match subband.subband_type {
+            SubbandType::LowLow | SubbandType::LowHigh => rect.width().div_ceil(2),
+            SubbandType::HighLow | SubbandType::HighHigh => rect.width() / 2
+        };
         
+        let v_max = match subband.subband_type {
+            SubbandType::LowLow | SubbandType::HighLow => rect.height().div_ceil(2),
+            SubbandType::LowHigh | SubbandType::HighHigh => rect.height() / 2,
+        };
+        
+        for v in 0..v_max {
+            for u in 0..u_max {
+                let (x, y) = match subband.subband_type {
+                    SubbandType::LowLow => (2 * u, 2 * v),
+                    SubbandType::LowHigh => (2 * u, 2 * v + 1),
+                    SubbandType::HighLow => (2 * u + 1, 2 * v),
+                    SubbandType::HighHigh => (2 * u + 1, 2 * v + 1),
+                };
+                
+                coefficients[(y * rect.width() + x) as usize] = subband.coefficients[(v * subband.rect.width() + u) as usize];
+            }
+        }
     }
     
     coefficients
