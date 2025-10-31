@@ -119,6 +119,43 @@ pub(crate) trait ProgressionIterator<'a>: Iterator<Item = ProgressionData> {
     fn new(iterator_input: IteratorInput<'a>) -> Self;
 }
 
+pub(crate) struct LayerResolutionLevelComponentPositionProgressionIterator<'a> {
+    state: IteratorState<'a>,
+}
+
+impl Iterator for LayerResolutionLevelComponentPositionProgressionIterator<'_> {
+    type Item = ProgressionData;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.state.first {
+            self.state.first = false;
+            return Some(self.state.data);
+        }
+
+        if self.state.advance_precinct()
+            && self.state.advance_component()
+            && self.state.advance_resolution()
+            && self.state.advance_layer()
+        {
+            return None;
+        }
+
+        Some(self.state.data)
+    }
+}
+
+impl<'a> ProgressionIterator<'a> for LayerResolutionLevelComponentPositionProgressionIterator<'a> {
+    fn new(input: IteratorInput<'a>) -> Self {
+        let data = ProgressionData::default();
+        let instance = input.component_infos[data.component as usize]
+            .tile_instance(input.tile, data.resolution);
+
+        Self {
+            state: IteratorState::new(input, instance),
+        }
+    }
+}
+
 pub(crate) struct ResolutionLevelLayerComponentPositionProgressionIterator<'a> {
     state: IteratorState<'a>,
 }

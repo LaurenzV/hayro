@@ -88,6 +88,11 @@ pub(crate) fn process_tiles(tiles: &[Tile], header: &Header) -> Option<Vec<Chann
                     ResolutionLevelLayerComponentPositionProgressionIterator::new(iter_input);
                 process_tile(tile, header, iter)?
             }
+            ProgressionOrder::LayerResolutionComponentPosition => {
+                let iter =
+                    LayerResolutionLevelComponentPositionProgressionIterator::new(iter_input);
+                process_tile(tile, header, iter)?
+            }
             _ => unimplemented!(),
         };
 
