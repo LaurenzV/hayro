@@ -1,6 +1,59 @@
 //! Performing the inverse discrete wavelet transform, as specified in Annex F.
 
 use crate::codestream::WaveletTransform;
+use crate::tile::IntRect;
+
+const PADDING_SHIFT: usize = 4;
+
+/// The HOR_SR procedure from F.3.4.
+fn hor_sr(a: &mut [f64], rect: IntRect, transform: &WaveletTransform) {
+    // Add a padding of 8 to account for the _1d_extr procedure.
+    let mut buf = vec![0.0; rect.width() as usize + 8];
+
+    for v in rect.y0..rect.y1 {
+        buf.clear();
+        // Add left padding for 1D_EXTR procedure.
+        buf.extend_from_slice(&[0.0; PADDING_SHIFT]);
+
+        // Extract row into buffer.
+        buf.extend_from_slice(&a[(rect.width() * v) as usize..][..rect.width() as usize]);
+
+        // Add right padding for 1D_EXTR procedure.
+        buf.extend_from_slice(&[0.0; PADDING_SHIFT]);
+
+        _1d_sr(&mut buf, PADDING_SHIFT, PADDING_SHIFT + rect.width() as usize, transform);
+
+        // Put values back into original array.
+        a[(rect.width() * v) as usize..][..rect.width() as usize].copy_from_slice(&buf[PADDING_SHIFT..][..rect.width() as usize]);
+    }
+}
+
+/// The VER_SR procedure from F.3.5.
+fn ver_sr(a: &mut [f64], rect: IntRect, transform: &WaveletTransform) {
+    // Add a padding of 8 to account for the _1d_extr procedure.
+    let mut buf = vec![0.0; rect.height() as usize + 8];
+    
+    for u in rect.x0..rect.x1 {
+        buf.clear();
+        // Add left padding for 1D_EXTR procedure.
+        buf.extend_from_slice(&[0.0; PADDING_SHIFT]);
+        
+        // Extract column into buffer.
+        for y in rect.y0..rect.y1 {
+            buf.push(a[(u + rect.width() * y) as usize]);
+        }
+        
+        // Add right padding for 1D_EXTR procedure.
+        buf.extend_from_slice(&[0.0; PADDING_SHIFT]);
+        
+        _1d_sr(&mut buf, PADDING_SHIFT, PADDING_SHIFT + rect.height() as usize, transform);
+        
+        // Put values back into original array.
+        for (idx, y) in (rect.y0..rect.y1).enumerate() {
+            a[(u + rect.width() * y) as usize] = buf[PADDING_SHIFT + idx]
+        }
+    }
+}
 
 /// The 1D_SR procedure from F.3.6
 fn _1d_sr(y: &mut [f64], i0: usize, i1: usize, transform: &WaveletTransform) {
