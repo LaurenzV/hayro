@@ -39,6 +39,9 @@ fn main() {
                 (2, true) => DynamicImage::ImageLumaA8(
                     ImageBuffer::from_raw(width, height, interleaved).unwrap(),
                 ),
+                (3, false) => DynamicImage::ImageRgb8(
+                    ImageBuffer::from_raw(width, height, interleaved).unwrap(),
+                ),
                 _ => unimplemented!(),
             };
 

@@ -27,7 +27,14 @@ pub(crate) fn apply(subbands: &[Vec<SubBand>], transform: WaveletTransform) -> V
         ll_subband = _2d_sr(&ll_subband, &hl, &lh, &hh, new_rect, transform);
     }
 
-    eprintln!("{:?}", &ll_subband.coefficients.iter().map(|n| *n as i32).collect::<Vec<i32>>());
+    eprintln!(
+        "{:?}",
+        &ll_subband
+            .coefficients
+            .iter()
+            .map(|n| *n as i32)
+            .collect::<Vec<i32>>()
+    );
 
     ll_subband.coefficients
 }

@@ -38,6 +38,10 @@ snapshot_test!(
     kakadu_lossless_gray_alpha_u8_prog1_layers1_res6,
     "kakadu-lossless-gray-alpha-u8-prog1-layers1-res6.jp2"
 );
+snapshot_test!(
+    kakadu_lossless_rgb_u8_prog1_layers1_res6_mct,
+    "kakadu-lossless-rgb-u8-prog1-layers1-res6-mct.jp2"
+);
 
 fn run_asset_test(file_name: &str) {
     let asset_path = ASSETS_PATH.join(file_name);
@@ -119,6 +123,9 @@ fn bitmap_to_dynamic_image(bitmap: Bitmap) -> DynamicImage {
         }
         (2, true) => {
             DynamicImage::ImageLumaA8(ImageBuffer::from_raw(width, height, interleaved).unwrap())
+        }
+        (3, false) => {
+            DynamicImage::ImageRgb8(ImageBuffer::from_raw(width, height, interleaved).unwrap())
         }
         _ => unimplemented!(),
     }

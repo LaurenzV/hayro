@@ -399,7 +399,7 @@ impl ComponentInfo {
             resolution_transformed_rect,
         }
     }
-    
+
     pub(crate) fn wavelet_transform(&self) -> WaveletTransform {
         self.coding_style_parameters.parameters.transformation
     }
