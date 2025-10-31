@@ -2,7 +2,7 @@ use hayro_jpeg2000::read;
 use image::{DynamicImage, ImageBuffer};
 
 fn main() {
-    let data = std::fs::read("/Users/lstampfl/Programming/GitHub/serenity/Tests/LibGfx/test-inputs/jpeg2000/kakadu-lossless-gray-alpha-u8-prog1-layers1-res6.jp2").unwrap();
+    let data = std::fs::read("hayro-jpeg2000/test.jp2").unwrap();
 
     match read(&data) {
         Ok(bitmap) => {
