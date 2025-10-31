@@ -1,9 +1,46 @@
 //! Performing the inverse discrete wavelet transform, as specified in Annex F.
 
 use crate::codestream::WaveletTransform;
+use crate::packet::SubBand;
 use crate::tile::IntRect;
 
 const PADDING_SHIFT: usize = 4;
+
+fn idwt(subbands: &[Vec<SubBand>]) -> Vec<f32> {
+    let mut ll_subband = subbands[0][0].clone();
+    
+    for subbands in &subbands[1..] {
+        let [hl, lh, hh] = subbands.as_slice() else { unreachable!() };
+        
+        let new_rect = {
+            let x0 = ll_subband.rect.x0;
+            let x1 = x0 + ll_subband.rect.width() + hl.rect.width();
+            let y0 = ll_subband.rect.y0;
+            let y1 = y0 + ll_subband.rect.height() + lh.rect.height();
+            
+            IntRect::from_xywh(x0, y0, x1, y1)
+        };
+        
+        ll_subband = _2d_sr(&ll_subband, &hl, &lh, &hh, &new_rect);
+    }
+    
+    ll_subband.coefficients
+}
+
+fn _2d_sr(ll: &SubBand, hl: &SubBand, lh: &SubBand, hh: &SubBand, rect: &IntRect) -> SubBand<'static> {
+    unimplemented!()
+}
+
+fn _2d_interleave(ll: &SubBand, hl: &SubBand, lh: &SubBand, hh: &SubBand, rect: &IntRect) -> Vec<f32> {
+    let mut coefficients = vec![0.0; (rect.width() * rect.height()) as usize];
+    for subband in [ll, hl, lh, hh] {
+        
+    }
+    
+    coefficients
+}
+
+
 
 /// The HOR_SR procedure from F.3.4.
 fn hor_sr(a: &mut [f32], rect: IntRect, transform: &WaveletTransform) {

@@ -20,7 +20,8 @@ pub(crate) enum SubbandType {
     HighHigh,
 }
 
-struct SubBand<'a> {
+#[derive(Clone)]
+pub(crate) struct SubBand<'a> {
     pub(crate) subband_type: SubbandType,
     pub(crate) rect: IntRect,
     pub(crate) precincts: Vec<Precinct<'a>>,
