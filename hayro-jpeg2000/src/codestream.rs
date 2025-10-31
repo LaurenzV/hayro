@@ -69,6 +69,10 @@ fn read_header(reader: &mut Reader, metadata: ImageMetadata) -> Result<Header, &
                     qcc_marker(reader, num_components).ok_or("failed to read QCC marker")?;
                 qcd_components[component_index as usize] = Some(qcc);
             }
+            markers::COM => {
+                reader.read_marker()?;
+                com_marker(reader).ok_or("failed to read COM marker")?;
+            }
             m => {
                 panic!("marker: {}", markers::to_string(m));
             }
@@ -573,6 +577,15 @@ fn coding_style_parameters(
         transformation,
         precinct_exponents,
     })
+}
+
+/// COM Marker (A.9.2).
+fn com_marker(reader: &mut Reader) -> Option<()> {
+    // Length.
+    let length = reader.read_u16()?.checked_sub(2)?;
+    reader.skip_bytes(length as usize)?;
+    
+    Some(())
 }
 
 /// COD marker (A.6.1).
