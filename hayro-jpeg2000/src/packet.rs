@@ -439,7 +439,7 @@ fn parse_packet<'a, T: ProgressionIterator<'a>>(
 fn build_component_data(tile: &Tile, header: &Header) -> Vec<ComponentData<'static>> {
     let mut component_data = vec![];
 
-    for component_info in &header.component_infos {
+    for (component_idx, component_info) in header.component_infos.iter().enumerate() {
         let mut bands = vec![];
 
         for resolution in 0..component_info
@@ -459,8 +459,12 @@ fn build_component_data(tile: &Tile, header: &Header) -> Vec<ComponentData<'stat
                 let rect = tile_instance.sub_band_rect(SubbandType::LowLow, decomposition_level);
 
                 eprintln!(
-                    "Sub-band rect: {:?}, ll rect: {:?}",
-                    rect, tile_instance.resolution_transformed_rect
+                    "Sub-band rect: [{},{} {}x{}], ll rect: [{},{} {}x{}]",
+                    rect.x0, rect.y0, rect.width(), rect.height(),
+                    tile_instance.resolution_transformed_rect.x0,
+                    tile_instance.resolution_transformed_rect.y0,
+                    tile_instance.resolution_transformed_rect.width(),
+                    tile_instance.resolution_transformed_rect.height(),
                 );
                 let precincts = build_precincts(&tile_instance, rect, header);
 
@@ -479,17 +483,26 @@ fn build_component_data(tile: &Tile, header: &Header) -> Vec<ComponentData<'stat
 
                 let mut sub_bands = vec![];
 
-                for sb_type in [
+                for (subband_idx, sb_type) in [
                     SubbandType::HighLow,
                     SubbandType::LowHigh,
                     SubbandType::HighHigh,
-                ] {
+                ].into_iter().enumerate() {
                     let rect = tile_instance.sub_band_rect(sb_type, decomposition_level);
-                    let precincts = build_precincts(&tile_instance, rect, header);
+
+                    eprintln!("r {} making sub-band {} for component {}", resolution, subband_idx, component_idx);
                     eprintln!(
-                        "Sub-band rect: {:?}, ll rect: {:?}",
-                        rect, tile_instance.resolution_transformed_rect
+                        "Sub-band rect: [{},{} {}x{}], ll rect: [{},{} {}x{}]",
+                        rect.x0, rect.y0, rect.width(), rect.height(),
+                        tile_instance.resolution_transformed_rect.x0,
+                        tile_instance.resolution_transformed_rect.y0,
+                        tile_instance.resolution_transformed_rect.width(),
+                        tile_instance.resolution_transformed_rect.height(),
                     );
+                    
+                    let precincts = build_precincts(&tile_instance, rect, header);
+
+                    
                     sub_bands.push(SubBand {
                         subband_type: sb_type,
                         rect,
@@ -517,19 +530,23 @@ fn build_precincts(
 
     let precinct_width = tile_instance.precinct_width();
     let precinct_height = tile_instance.precinct_height();
+    
+    let num_precincts_y = tile_instance.num_precincts_y();
+    let num_precincts_x = tile_instance.num_precincts_x();
 
     let mut y0 = tile_instance.resolution_transformed_rect.y0;
 
-    for _ in 0..tile_instance.num_precincts_y() {
+    for _y in 0..num_precincts_y {
         let mut x0 = tile_instance.resolution_transformed_rect.x0;
 
-        for _ in 0..tile_instance.num_precincts_x() {
+        for _x in 0..num_precincts_x {
             let precinct_rect = IntRect::from_xywh(x0, y0, precinct_width, precinct_height);
 
-            let code_blocks_x = sub_band_rect
+            let code_block_area = IntRect::from_ltrb(x0, y0, u32::min(precinct_rect.x1, sub_band_rect.x1), u32::min(precinct_rect.y1, sub_band_rect.y1));
+            let code_blocks_x = code_block_area
                 .width()
                 .div_ceil(tile_instance.code_block_width());
-            let code_blocks_y = sub_band_rect
+            let code_blocks_y = code_block_area
                 .height()
                 .div_ceil(tile_instance.code_block_height());
 
@@ -537,14 +554,15 @@ fn build_precincts(
                 precinct_rect,
                 tile_instance,
                 sub_band_rect,
-                code_blocks_y,
                 code_blocks_x,
+                code_blocks_y,
                 header.global_coding_style.num_layers,
             );
 
             eprintln!(
-                "Precinct rect: {:?}, code blocks width: {code_blocks_x}, code blocks height: {code_blocks_y}",
-                precinct_rect
+                "Precinct rect: [{},{} {}x{}], num_code_blocks_wide: {}, num_code_blocks_high: {}",
+                precinct_rect.x0, precinct_rect.y0, precinct_rect.width(), precinct_rect.height(),
+                code_blocks_x, code_blocks_y
             );
 
             precincts.push(Precinct {
