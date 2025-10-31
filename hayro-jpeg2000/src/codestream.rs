@@ -140,7 +140,7 @@ impl MultipleComponentTransform {
 }
 
 /// Wavelet transformation type (Table A.20).
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum WaveletTransform {
     Irreversible97,
     Reversible53,
@@ -398,6 +398,10 @@ impl ComponentInfo {
             tile_component_rect,
             resolution_transformed_rect,
         }
+    }
+    
+    pub(crate) fn wavelet_transform(&self) -> WaveletTransform {
+        self.coding_style_parameters.parameters.transformation
     }
 }
 
