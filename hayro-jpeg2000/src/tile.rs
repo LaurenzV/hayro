@@ -1,6 +1,7 @@
 use crate::codestream::{ComponentInfo, Header, ReaderExt, SizeData, markers};
 use crate::packet::SubbandType;
 use hayro_common::byte::Reader;
+use crate::boxes::PALETTE;
 use crate::codestream::markers::{EPH, SOP};
 
 #[derive(Clone, Copy, Debug)]
@@ -160,11 +161,19 @@ impl<'a> TileInstance<'a> {
     }
 
     pub(crate) fn precinct_width(&self) -> u32 {
-        2u32.pow(self.ppx() as u32)
+        if self.resolution > 0 {
+            2u32.pow(self.ppx() as u32 - 1)
+        }   else {
+            2u32.pow(self.ppx() as u32)
+        }
     }
 
     pub(crate) fn precinct_height(&self) -> u32 {
-        2u32.pow(self.ppy() as u32)
+       if self.resolution > 0 {
+           2u32.pow(self.ppy() as u32 - 1)
+       }    else {
+           2u32.pow(self.ppy() as u32)
+       }
     }
 
     pub(crate) fn num_precincts_x(&self) -> u32 {
@@ -191,18 +200,6 @@ impl<'a> TileInstance<'a> {
 
     pub(crate) fn num_precincts(&self) -> u32 {
         self.num_precincts_x() * self.num_precincts_y()
-    }
-
-    pub(crate) fn code_blocks_x(&self) -> u32 {
-        self.resolution_transformed_rect()
-            .width()
-            .div_ceil(self.code_block_width())
-    }
-
-    pub(crate) fn code_blocks_y(&self) -> u32 {
-        self.resolution_transformed_rect()
-            .height()
-            .div_ceil(self.code_block_height())
     }
 
     pub(crate) fn code_block_width(&self) -> u32 {
