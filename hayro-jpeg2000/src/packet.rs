@@ -2,13 +2,7 @@ use crate::bitmap::{Bitmap, ChannelContainer, ChannelData};
 use crate::codestream::{
     Header, MultipleComponentTransform, ProgressionOrder, QuantizationStyle, WaveletTransform,
 };
-use crate::progression::{
-    ComponentPositionResolutionLayerProgressionIterator, IteratorInput,
-    LayerResolutionLevelComponentPositionProgressionIterator,
-    PositionComponentResolutionLayerProgressionIterator, ProgressionIterator,
-    ResolutionLevelLayerComponentPositionProgressionIterator,
-    ResolutionPositionComponentLayerProgressionIterator,
-};
+use crate::progression::{IteratorInput, ProgressionData, build_progression_sequence};
 use crate::tag_tree::TagTree;
 use crate::tile::{IntRect, Tile, TileInstance, TilePart};
 use crate::{ChannelType, bitplane, idwt};
@@ -97,30 +91,12 @@ pub(crate) fn process_tiles(tiles: &[Tile], header: &Header) -> Option<Vec<Chann
             header.global_coding_style.num_layers,
         );
 
-        let mut samples = match header.global_coding_style.progression_order {
-            ProgressionOrder::ResolutionLayerComponentPosition => {
-                let iter =
-                    ResolutionLevelLayerComponentPositionProgressionIterator::new(iter_input);
-                process_tile(tile, header, iter)?
-            }
-            ProgressionOrder::LayerResolutionComponentPosition => {
-                let iter =
-                    LayerResolutionLevelComponentPositionProgressionIterator::new(iter_input);
-                process_tile(tile, header, iter)?
-            }
-            ProgressionOrder::ResolutionPositionComponentLayer => {
-                let iter = ResolutionPositionComponentLayerProgressionIterator::new(iter_input);
-                process_tile(tile, header, iter)?
-            }
-            ProgressionOrder::PositionComponentResolutionLayer => {
-                let iter = PositionComponentResolutionLayerProgressionIterator::new(iter_input);
-                process_tile(tile, header, iter)?
-            }
-            ProgressionOrder::ComponentPositionResolutionLayer => {
-                let iter = ComponentPositionResolutionLayerProgressionIterator::new(iter_input);
-                process_tile(tile, header, iter)?
-            }
-        };
+        let progression_sequence =
+            build_progression_sequence(&iter_input, header.global_coding_style.progression_order);
+        let mut progression_index = 0usize;
+
+        let mut samples =
+            process_tile(tile, header, &progression_sequence, &mut progression_index)?;
 
         save_samples(tile, header, &mut channels, &mut samples)?;
     }
@@ -128,15 +104,22 @@ pub(crate) fn process_tiles(tiles: &[Tile], header: &Header) -> Option<Vec<Chann
     Some(channels)
 }
 
-fn process_tile<'a, T: ProgressionIterator<'a>>(
+fn process_tile<'a>(
     tile: &'a Tile<'a>,
     header: &Header,
-    mut iterator: T,
+    progression_sequence: &[ProgressionData],
+    progression_index: &mut usize,
 ) -> Option<Vec<Vec<f32>>> {
     let mut component_data = build_component_data(tile, header);
 
     for tile_part in tile.tile_parts() {
-        parse_packet(&tile_part, header, &mut component_data, &mut iterator)?;
+        parse_packet(
+            &tile_part,
+            header,
+            &mut component_data,
+            progression_sequence,
+            progression_index,
+        )?;
     }
 
     let mut samples = vec![];
@@ -289,18 +272,20 @@ fn save_samples<'a>(
     Some(())
 }
 
-fn parse_packet<'a, T: ProgressionIterator<'a>>(
+fn parse_packet<'a>(
     tile: &TilePart<'a>,
     header: &Header,
     component_data: &mut [ComponentData<'a>],
-    progression_iterator: &mut T,
+    progression_sequence: &[ProgressionData],
+    progression_index: &mut usize,
 ) -> Option<()> {
     let mut data = tile.data;
 
     while !data.is_empty() {
         let mut reader = BitReader::new(data);
 
-        let progression_data = progression_iterator.next()?;
+        let progression_data = *progression_sequence.get(*progression_index)?;
+        *progression_index += 1;
         let zero_length = reader.read_packet_header_bits(1)?;
 
         // B.10.3 Zero length packet

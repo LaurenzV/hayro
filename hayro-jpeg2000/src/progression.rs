@@ -1,5 +1,6 @@
-use crate::codestream::ComponentInfo;
-use crate::tile::{Tile, TileInstance};
+use crate::codestream::{ComponentInfo, ProgressionOrder};
+use crate::tile::{IntRect, Tile, TileInstance};
+use std::cmp::Ordering;
 
 #[derive(Default, Copy, Clone, Debug)]
 pub(crate) struct ProgressionData {
@@ -13,7 +14,7 @@ pub(crate) struct IteratorInput<'a> {
     layers: u16,
     tile: &'a Tile<'a>,
     component_infos: &'a [ComponentInfo],
-    resolutions: u16,
+    max_resolutions: u16,
 }
 
 impl<'a> IteratorInput<'a> {
@@ -22,316 +23,66 @@ impl<'a> IteratorInput<'a> {
         component_infos: &'a [ComponentInfo],
         layers: u16,
     ) -> Self {
-        let resolutions = component_infos
+        let max_resolutions = component_infos
             .iter()
             .map(|c| c.coding_style_parameters.parameters.num_resolution_levels)
             .max()
-            .unwrap();
+            .unwrap_or(0);
 
         Self {
             layers,
             component_infos,
             tile,
-            resolutions,
+            max_resolutions,
         }
     }
 }
 
-struct IteratorState<'a> {
-    input: IteratorInput<'a>,
-    data: ProgressionData,
-    first: bool,
-    tile_part_instance: TileInstance<'a>,
-}
-
-impl<'a> IteratorState<'a> {
-    fn new(input: IteratorInput<'a>, tile_part_instance: TileInstance<'a>) -> Self {
-        Self {
-            input,
-            data: Default::default(),
-            first: true,
-            tile_part_instance,
-        }
-    }
-
-    fn advance_layer(&mut self) -> bool {
-        self.data.layer_num += 1;
-
-        if self.data.layer_num >= self.input.layers {
-            self.data.layer_num = 0;
-
-            true
-        } else {
-            false
-        }
-    }
-
-    fn advance_resolution(&mut self) -> bool {
-        self.data.resolution += 1;
-
-        let spilled = if self.data.resolution >= self.input.resolutions {
-            self.data.resolution = 0;
-
-            true
-        } else {
-            false
-        };
-
-        self.update_tile_part_instance();
-
-        spilled
-    }
-
-    fn advance_component(&mut self) -> bool {
-        self.data.component += 1;
-
-        let spilled = if self.data.component >= self.input.component_infos.len() as u8 {
-            self.data.component = 0;
-            true
-        } else {
-            false
-        };
-
-        self.update_tile_part_instance();
-
-        spilled
-    }
-
-    fn update_tile_part_instance(&mut self) {
-        let component = &self.input.component_infos[self.data.component as usize];
-        self.tile_part_instance = component.tile_instance(self.input.tile, self.data.resolution);
-    }
-
-    fn advance_precinct(&mut self) -> bool {
-        self.data.precinct += 1;
-
-        if self.data.precinct >= self.tile_part_instance.num_precincts() {
-            self.data.precinct = 0;
-
-            true
-        } else {
-            false
-        }
-    }
-}
-
-pub(crate) trait ProgressionIterator<'a>: Iterator<Item = ProgressionData> {
-    fn new(iterator_input: IteratorInput<'a>) -> Self;
-}
-
-pub(crate) struct LayerResolutionLevelComponentPositionProgressionIterator<'a> {
-    state: IteratorState<'a>,
-}
-
-impl Iterator for LayerResolutionLevelComponentPositionProgressionIterator<'_> {
-    type Item = ProgressionData;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.state.first {
-            self.state.first = false;
-            return Some(self.state.data);
-        }
-
-        if self.state.advance_precinct()
-            && self.state.advance_component()
-            && self.state.advance_resolution()
-            && self.state.advance_layer()
-        {
-            return None;
-        }
-
-        Some(self.state.data)
-    }
-}
-
-impl<'a> ProgressionIterator<'a> for LayerResolutionLevelComponentPositionProgressionIterator<'a> {
-    fn new(input: IteratorInput<'a>) -> Self {
-        let data = ProgressionData::default();
-        let instance = input.component_infos[data.component as usize]
-            .tile_instance(input.tile, data.resolution);
-
-        Self {
-            state: IteratorState::new(input, instance),
-        }
-    }
-}
-
-pub(crate) struct ResolutionLevelLayerComponentPositionProgressionIterator<'a> {
-    state: IteratorState<'a>,
-}
-
-impl Iterator for ResolutionLevelLayerComponentPositionProgressionIterator<'_> {
-    type Item = ProgressionData;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.state.first {
-            self.state.first = false;
-            return Some(self.state.data);
-        }
-
-        if self.state.advance_precinct()
-            && self.state.advance_component()
-            && self.state.advance_layer()
-            && self.state.advance_resolution()
-        {
-            return None;
-        }
-
-        Some(self.state.data)
-    }
-}
-
-impl<'a> ProgressionIterator<'a> for ResolutionLevelLayerComponentPositionProgressionIterator<'a> {
-    fn new(input: IteratorInput<'a>) -> Self {
-        let data = ProgressionData::default();
-        let instance = input.component_infos[data.component as usize]
-            .tile_instance(input.tile, data.resolution);
-
-        Self {
-            state: IteratorState::new(input, instance),
-        }
-    }
-}
-
-pub(crate) struct ResolutionPositionComponentLayerProgressionIterator {
-    sequence: Vec<ProgressionData>,
-    index: usize,
-}
-
-impl Iterator for ResolutionPositionComponentLayerProgressionIterator {
-    type Item = ProgressionData;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.index >= self.sequence.len() {
-            None
-        } else {
-            let value = self.sequence[self.index];
-            self.index += 1;
-            Some(value)
-        }
-    }
-}
-
-impl<'a> ProgressionIterator<'a> for ResolutionPositionComponentLayerProgressionIterator {
-    fn new(input: IteratorInput<'a>) -> Self {
-        let sequence = build_resolution_position_component_layer_sequence(&input);
-
-        Self { sequence, index: 0 }
-    }
-}
-
-pub(crate) struct PositionComponentResolutionLayerProgressionIterator {
-    sequence: Vec<ProgressionData>,
-    index: usize,
-}
-
-impl Iterator for PositionComponentResolutionLayerProgressionIterator {
-    type Item = ProgressionData;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.index >= self.sequence.len() {
-            None
-        } else {
-            let value = self.sequence[self.index];
-            self.index += 1;
-            Some(value)
-        }
-    }
-}
-
-impl<'a> ProgressionIterator<'a> for PositionComponentResolutionLayerProgressionIterator {
-    fn new(input: IteratorInput<'a>) -> Self {
-        let sequence = build_position_component_resolution_layer_sequence(&input);
-
-        Self { sequence, index: 0 }
-    }
-}
-
-pub(crate) struct ComponentPositionResolutionLayerProgressionIterator {
-    sequence: Vec<ProgressionData>,
-    index: usize,
-}
-
-impl Iterator for ComponentPositionResolutionLayerProgressionIterator {
-    type Item = ProgressionData;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.index >= self.sequence.len() {
-            None
-        } else {
-            let value = self.sequence[self.index];
-            self.index += 1;
-            Some(value)
-        }
-    }
-}
-
-impl<'a> ProgressionIterator<'a> for ComponentPositionResolutionLayerProgressionIterator {
-    fn new(input: IteratorInput<'a>) -> Self {
-        let sequence = build_component_position_resolution_layer_sequence(&input);
-
-        Self { sequence, index: 0 }
-    }
-}
-
-struct ComponentResolutionData<'a> {
-    tile_instance: TileInstance<'a>,
-    precinct_count: u32,
-    precincts_wide: u32,
-}
-
-fn build_resolution_position_component_layer_sequence<'a>(
+pub(crate) fn build_progression_sequence<'a>(
     input: &IteratorInput<'a>,
+    order: ProgressionOrder,
 ) -> Vec<ProgressionData> {
-    let tile_rect = input.tile.rect;
-    let tx0 = tile_rect.x0 as u64;
-    let tx1 = tile_rect.x1 as u64;
-    let ty0 = tile_rect.y0 as u64;
-    let ty1 = tile_rect.y1 as u64;
+    match order {
+        ProgressionOrder::LayerResolutionComponentPosition => {
+            build_layer_resolution_component_position_sequence(input)
+        }
+        ProgressionOrder::ResolutionLayerComponentPosition => {
+            build_resolution_layer_component_position_sequence(input)
+        }
+        ProgressionOrder::ResolutionPositionComponentLayer => {
+            build_resolution_position_component_layer_sequence(input)
+        }
+        ProgressionOrder::PositionComponentResolutionLayer => {
+            build_position_component_resolution_layer_sequence(input)
+        }
+        ProgressionOrder::ComponentPositionResolutionLayer => {
+            build_component_position_resolution_layer_sequence(input)
+        }
+    }
+}
 
-    let component_data = prepare_component_resolution_data(input);
+fn build_layer_resolution_component_position_sequence(
+    input: &IteratorInput<'_>,
+) -> Vec<ProgressionData> {
     let mut sequence = Vec::new();
 
-    for r in 0..input.resolutions {
-        let r_idx = r as usize;
+    for layer in 0..input.layers {
+        for resolution in 0..input.max_resolutions {
+            let resolution = resolution as u16;
+            let tile_instances = tile_instances_for_resolution(input, resolution);
 
-        for y in ty0..ty1 {
-            for x in tx0..tx1 {
-                for component_idx in 0..input.component_infos.len() {
-                    let Some(res_data) = component_data[component_idx][r_idx].as_ref() else {
-                        continue;
-                    };
-
-                    if res_data.precinct_count == 0 {
-                        continue;
-                    }
-
-                    if !position_matches(
-                        x,
-                        y,
-                        input,
-                        component_idx,
-                        &res_data.tile_instance,
-                        r,
-                        tx0,
-                        ty0,
-                    ) {
-                        continue;
-                    }
-
-                    if let Some(k) = compute_precinct_index(x, y, input, component_idx, res_data, r)
-                    {
-                        if k < res_data.precinct_count {
-                            for layer in 0..input.layers {
-                                sequence.push(ProgressionData {
-                                    layer_num: layer,
-                                    resolution: r,
-                                    component: component_idx as u8,
-                                    precinct: k,
-                                });
-                            }
-                        }
-                    }
+            for (component_idx, tile_instance_opt) in tile_instances.into_iter().enumerate() {
+                let Some(tile_instance) = tile_instance_opt else {
+                    continue;
+                };
+                let precinct_count = tile_instance.num_precincts();
+                for precinct in 0..precinct_count {
+                    sequence.push(ProgressionData {
+                        layer_num: layer,
+                        resolution,
+                        component: component_idx as u8,
+                        precinct,
+                    });
                 }
             }
         }
@@ -340,294 +91,506 @@ fn build_resolution_position_component_layer_sequence<'a>(
     sequence
 }
 
-fn build_position_component_resolution_layer_sequence<'a>(
-    input: &IteratorInput<'a>,
+fn build_resolution_layer_component_position_sequence(
+    input: &IteratorInput<'_>,
 ) -> Vec<ProgressionData> {
-    let tile_rect = input.tile.rect;
-    let tx0 = tile_rect.x0 as u64;
-    let tx1 = tile_rect.x1 as u64;
-    let ty0 = tile_rect.y0 as u64;
-    let ty1 = tile_rect.y1 as u64;
-
-    let component_data = prepare_component_resolution_data(input);
     let mut sequence = Vec::new();
 
-    for y in ty0..ty1 {
-        for x in tx0..tx1 {
-            for (component_idx, component_info) in input.component_infos.iter().enumerate() {
-                let num_resolution_levels = component_info
+    for resolution in 0..input.max_resolutions {
+        let resolution = resolution as u16;
+        let tile_instances = tile_instances_for_resolution(input, resolution);
+
+        for layer in 0..input.layers {
+            for (component_idx, tile_instance_opt) in tile_instances.iter().enumerate() {
+                let Some(tile_instance) = tile_instance_opt else {
+                    continue;
+                };
+                let precinct_count = tile_instance.num_precincts();
+                for precinct in 0..precinct_count {
+                    sequence.push(ProgressionData {
+                        layer_num: layer,
+                        resolution,
+                        component: component_idx as u8,
+                        precinct,
+                    });
+                }
+            }
+        }
+    }
+
+    sequence
+}
+
+fn build_resolution_position_component_layer_sequence(
+    input: &IteratorInput<'_>,
+) -> Vec<ProgressionData> {
+    let mut sequence = Vec::new();
+
+    for resolution in 0..input.max_resolutions {
+        let resolution = resolution as u16;
+        let mut entries = build_entries_for_resolution(input, resolution);
+        emit_progression(
+            &mut entries,
+            input.layers,
+            &mut sequence,
+            compare_resolution_position_component_layer,
+        );
+    }
+
+    sequence
+}
+
+fn build_position_component_resolution_layer_sequence(
+    input: &IteratorInput<'_>,
+) -> Vec<ProgressionData> {
+    let mut sequence = Vec::new();
+    let mut entries = build_entries_for_all_components(input);
+
+    emit_progression(
+        &mut entries,
+        input.layers,
+        &mut sequence,
+        compare_position_component_resolution_layer,
+    );
+
+    sequence
+}
+
+fn build_component_position_resolution_layer_sequence(
+    input: &IteratorInput<'_>,
+) -> Vec<ProgressionData> {
+    let mut sequence = Vec::new();
+    let mut entries = build_entries_for_all_components(input);
+
+    emit_progression(
+        &mut entries,
+        input.layers,
+        &mut sequence,
+        compare_component_position_resolution_layer,
+    );
+
+    sequence
+}
+
+fn tile_instances_for_resolution<'a>(
+    input: &'a IteratorInput<'a>,
+    resolution: u16,
+) -> Vec<Option<TileInstance<'a>>> {
+    input
+        .component_infos
+        .iter()
+        .map(|component_info| {
+            if resolution
+                < component_info
                     .coding_style_parameters
                     .parameters
-                    .num_resolution_levels;
-
-                for r in 0..num_resolution_levels {
-                    let Some(res_data) = component_data[component_idx][r as usize].as_ref() else {
-                        continue;
-                    };
-
-                    if res_data.precinct_count == 0 {
-                        continue;
-                    }
-
-                    if !position_matches(
-                        x,
-                        y,
-                        input,
-                        component_idx,
-                        &res_data.tile_instance,
-                        r,
-                        tx0,
-                        ty0,
-                    ) {
-                        continue;
-                    }
-
-                    if let Some(k) = compute_precinct_index(x, y, input, component_idx, res_data, r)
-                    {
-                        if k < res_data.precinct_count {
-                            for layer in 0..input.layers {
-                                sequence.push(ProgressionData {
-                                    layer_num: layer,
-                                    resolution: r,
-                                    component: component_idx as u8,
-                                    precinct: k,
-                                });
-                            }
-                        }
-                    }
-                }
+                    .num_resolution_levels
+            {
+                Some(component_info.tile_instance(input.tile, resolution))
+            } else {
+                None
             }
-        }
-    }
-
-    sequence
-}
-
-fn build_component_position_resolution_layer_sequence<'a>(
-    input: &IteratorInput<'a>,
-) -> Vec<ProgressionData> {
-    let tile_rect = input.tile.rect;
-    let tx0 = tile_rect.x0 as u64;
-    let tx1 = tile_rect.x1 as u64;
-    let ty0 = tile_rect.y0 as u64;
-    let ty1 = tile_rect.y1 as u64;
-
-    let component_data = prepare_component_resolution_data(input);
-    let mut sequence = Vec::new();
-
-    for (component_idx, component_info) in input.component_infos.iter().enumerate() {
-        let num_resolution_levels = component_info
-            .coding_style_parameters
-            .parameters
-            .num_resolution_levels;
-
-        for y in ty0..ty1 {
-            for x in tx0..tx1 {
-                for r in 0..num_resolution_levels {
-                    let Some(res_data) = component_data[component_idx][r as usize].as_ref() else {
-                        continue;
-                    };
-
-                    if res_data.precinct_count == 0 {
-                        continue;
-                    }
-
-                    if !position_matches(
-                        x,
-                        y,
-                        input,
-                        component_idx,
-                        &res_data.tile_instance,
-                        r,
-                        tx0,
-                        ty0,
-                    ) {
-                        continue;
-                    }
-
-                    if let Some(k) = compute_precinct_index(x, y, input, component_idx, res_data, r)
-                    {
-                        if k < res_data.precinct_count {
-                            for layer in 0..input.layers {
-                                sequence.push(ProgressionData {
-                                    layer_num: layer,
-                                    resolution: r,
-                                    component: component_idx as u8,
-                                    precinct: k,
-                                });
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    sequence
-}
-
-fn prepare_component_resolution_data<'a>(
-    input: &IteratorInput<'a>,
-) -> Vec<Vec<Option<ComponentResolutionData<'a>>>> {
-    let component_count = input.component_infos.len();
-    let max_resolutions = input.resolutions as usize;
-    let mut data = (0..component_count)
-        .map(|_| {
-            std::iter::repeat_with(|| None)
-                .take(max_resolutions)
-                .collect::<Vec<_>>()
         })
-        .collect::<Vec<_>>();
+        .collect()
+}
+
+#[derive(Clone, Copy)]
+struct PrecinctPosition {
+    precinct: u32,
+    x: u32,
+    y: u32,
+}
+
+struct PrecinctState {
+    tile_rect: IntRect,
+    num_decomposition_levels: u32,
+    x: u32,
+    y: u32,
+}
+
+impl PrecinctState {
+    fn new(tile_rect: IntRect, num_decomposition_levels: u32) -> Self {
+        Self {
+            tile_rect,
+            num_decomposition_levels,
+            x: tile_rect.x0,
+            y: tile_rect.y0,
+        }
+    }
+
+    fn next(
+        &mut self,
+        tile_instance: &TileInstance,
+        component_info: &ComponentInfo,
+    ) -> Option<PrecinctPosition> {
+        if tile_instance.num_precincts() == 0
+            || self.tile_rect.x0 >= self.tile_rect.x1
+            || self.tile_rect.y0 >= self.tile_rect.y1
+        {
+            return None;
+        }
+
+        if self.y < self.tile_rect.y0 {
+            self.y = self.tile_rect.y0;
+        }
+        if self.x < self.tile_rect.x0 {
+            self.x = self.tile_rect.x0;
+        }
+
+        loop {
+            if self.y >= self.tile_rect.y1 {
+                return None;
+            }
+
+            if self.matches(tile_instance, component_info) {
+                if let Some(precinct) = self.next_precinct(tile_instance, component_info) {
+                    let position = PrecinctPosition {
+                        precinct,
+                        x: self.x,
+                        y: self.y,
+                    };
+
+                    if self.advance_x() {
+                        self.advance_y();
+                    }
+
+                    return Some(position);
+                }
+            }
+
+            if self.advance_x() && self.advance_y() {
+                return None;
+            }
+        }
+    }
+
+    fn matches(&self, tile_instance: &TileInstance, component_info: &ComponentInfo) -> bool {
+        let n_l = self.num_decomposition_levels;
+        let resolution = tile_instance.resolution as u32;
+        if resolution > n_l {
+            return false;
+        }
+
+        let vertical_resolution = component_info.size_info.vertical_resolution as u32;
+        let horizontal_resolution = component_info.size_info.horizontal_resolution as u32;
+        if vertical_resolution == 0 || horizontal_resolution == 0 {
+            return false;
+        }
+
+        let base_exponent = match n_l.checked_sub(resolution) {
+            Some(value) => value,
+            None => return false,
+        };
+
+        let scale_factor = match pow2_u64(base_exponent) {
+            Some(value) => value,
+            None => return false,
+        };
+
+        let stride_y_exponent = match (tile_instance.ppy() as u32).checked_add(base_exponent) {
+            Some(value) => value,
+            None => return false,
+        };
+        let stride_x_exponent = match (tile_instance.ppx() as u32).checked_add(base_exponent) {
+            Some(value) => value,
+            None => return false,
+        };
+
+        let vertical_stride = match pow2_u64(stride_y_exponent) {
+            Some(value) => vertical_resolution as u64 * value,
+            None => return false,
+        };
+        let horizontal_stride = match pow2_u64(stride_x_exponent) {
+            Some(value) => horizontal_resolution as u64 * value,
+            None => return false,
+        };
+
+        if vertical_stride == 0 || horizontal_stride == 0 {
+            return false;
+        }
+
+        let y_val = self.y as u64;
+        let x_val = self.x as u64;
+        let ty0 = self.tile_rect.y0 as u64;
+        let tx0 = self.tile_rect.x0 as u64;
+        let try0 = tile_instance.resolution_transformed_rect.y0 as u64;
+        let trx0 = tile_instance.resolution_transformed_rect.x0 as u64;
+
+        let matches_vertical = (y_val % vertical_stride == 0)
+            || (y_val == ty0 && (try0 * scale_factor) % vertical_stride != 0);
+
+        if !matches_vertical {
+            return false;
+        }
+
+        (x_val % horizontal_stride == 0)
+            || (x_val == tx0 && (trx0 * scale_factor) % horizontal_stride != 0)
+    }
+
+    fn next_precinct(
+        &self,
+        tile_instance: &TileInstance,
+        component_info: &ComponentInfo,
+    ) -> Option<u32> {
+        let n_l = self.num_decomposition_levels;
+        let resolution = tile_instance.resolution as u32;
+        if resolution > n_l {
+            return None;
+        }
+
+        let base_exponent = n_l.checked_sub(resolution)?;
+        let scale_factor = pow2_u64(base_exponent)?;
+
+        let horizontal_resolution = component_info.size_info.horizontal_resolution as u32;
+        let vertical_resolution = component_info.size_info.vertical_resolution as u32;
+        if horizontal_resolution == 0 || vertical_resolution == 0 {
+            return None;
+        }
+
+        let denom_x = horizontal_resolution as u64 * scale_factor;
+        let denom_y = vertical_resolution as u64 * scale_factor;
+        if denom_x == 0 || denom_y == 0 {
+            return None;
+        }
+
+        let ppx_factor = pow2_u64(tile_instance.ppx() as u32)?;
+        let ppy_factor = pow2_u64(tile_instance.ppy() as u32)?;
+
+        let p1 = ceil_div_u64(self.x as u64, denom_x) / ppx_factor;
+        let p2 = (tile_instance.resolution_transformed_rect.x0 as u64) / ppx_factor;
+        let diff_x = p1.checked_sub(p2)?;
+
+        let p4 = ceil_div_u64(self.y as u64, denom_y) / ppy_factor;
+        let p5 = (tile_instance.resolution_transformed_rect.y0 as u64) / ppy_factor;
+        let diff_y = p4.checked_sub(p5)?;
+
+        let precincts_wide = tile_instance.num_precincts_x() as u64;
+        if precincts_wide == 0 {
+            return None;
+        }
+
+        let precinct_index = diff_x + precincts_wide * diff_y;
+        precinct_index.try_into().ok()
+    }
+
+    fn advance_x(&mut self) -> bool {
+        if self.tile_rect.x0 >= self.tile_rect.x1 {
+            return true;
+        }
+
+        if self.x + 1 >= self.tile_rect.x1 {
+            self.x = self.tile_rect.x0;
+            true
+        } else {
+            self.x += 1;
+            false
+        }
+    }
+
+    fn advance_y(&mut self) -> bool {
+        if self.tile_rect.y0 >= self.tile_rect.y1 {
+            self.y = self.tile_rect.y1;
+            return true;
+        }
+
+        if self.y + 1 >= self.tile_rect.y1 {
+            self.y = self.tile_rect.y1;
+            true
+        } else {
+            self.y += 1;
+            false
+        }
+    }
+}
+
+struct ProgressionEntry<'a> {
+    component_idx: usize,
+    resolution: u16,
+    tile_instance: TileInstance<'a>,
+    state: PrecinctState,
+    current: Option<PrecinctPosition>,
+}
+
+fn build_entries_for_resolution<'a>(
+    input: &'a IteratorInput<'a>,
+    resolution: u16,
+) -> Vec<ProgressionEntry<'a>> {
+    let tile_rect = input.tile.rect;
+    let mut entries = Vec::new();
 
     for (component_idx, component_info) in input.component_infos.iter().enumerate() {
-        let num_resolution_levels = component_info
-            .coding_style_parameters
-            .parameters
-            .num_resolution_levels;
+        if resolution
+            >= component_info
+                .coding_style_parameters
+                .parameters
+                .num_resolution_levels
+        {
+            continue;
+        }
 
-        for r in 0..num_resolution_levels {
-            let tile_instance = component_info.tile_instance(input.tile, r);
-            let precincts_wide = tile_instance.num_precincts_x();
-            let precincts_high = tile_instance.num_precincts_y();
-            let precinct_count = precincts_wide.saturating_mul(precincts_high);
+        let tile_instance = component_info.tile_instance(input.tile, resolution);
+        if tile_instance.num_precincts() == 0 {
+            continue;
+        }
 
-            data[component_idx][r as usize] = Some(ComponentResolutionData {
+        let mut state = PrecinctState::new(
+            tile_rect,
+            component_info
+                .coding_style_parameters
+                .parameters
+                .num_decomposition_levels as u32,
+        );
+        let current = state.next(&tile_instance, component_info);
+
+        if current.is_some() {
+            entries.push(ProgressionEntry {
+                component_idx,
+                resolution,
                 tile_instance,
-                precinct_count,
-                precincts_wide,
+                state,
+                current,
             });
         }
     }
 
-    data
+    entries
 }
 
-fn position_matches(
-    x: u64,
-    y: u64,
-    input: &IteratorInput<'_>,
-    component_idx: usize,
-    tile_instance: &TileInstance,
-    resolution: u16,
-    tx0: u64,
-    ty0: u64,
-) -> bool {
-    let component = &input.component_infos[component_idx];
-    let params = &component.coding_style_parameters.parameters;
+fn build_entries_for_all_components<'a>(input: &'a IteratorInput<'a>) -> Vec<ProgressionEntry<'a>> {
+    let tile_rect = input.tile.rect;
+    let mut entries = Vec::new();
 
-    if resolution as usize >= params.precinct_exponents.len() {
-        return false;
+    for (component_idx, component_info) in input.component_infos.iter().enumerate() {
+        let num_resolution_levels = component_info
+            .coding_style_parameters
+            .parameters
+            .num_resolution_levels;
+
+        for resolution in 0..num_resolution_levels {
+            let tile_instance = component_info.tile_instance(input.tile, resolution);
+            if tile_instance.num_precincts() == 0 {
+                continue;
+            }
+
+            let mut state = PrecinctState::new(
+                tile_rect,
+                component_info
+                    .coding_style_parameters
+                    .parameters
+                    .num_decomposition_levels as u32,
+            );
+            let current = state.next(&tile_instance, component_info);
+
+            if current.is_some() {
+                entries.push(ProgressionEntry {
+                    component_idx,
+                    resolution,
+                    tile_instance,
+                    state,
+                    current,
+                });
+            }
+        }
     }
 
-    let (ppx_u8, ppy_u8) = params.precinct_exponents[resolution as usize];
-    let n_l = params.num_decomposition_levels as u32;
-    if resolution as u32 > n_l {
-        return false;
-    }
-
-    let Some(scale_factor) = pow2_u64(n_l - resolution as u32) else {
-        return false;
-    };
-
-    let shift_x = ppx_u8 as u32 + n_l - resolution as u32;
-    let shift_y = ppy_u8 as u32 + n_l - resolution as u32;
-    let Some(x_period_factor) = pow2_u64(shift_x) else {
-        return false;
-    };
-    let Some(y_period_factor) = pow2_u64(shift_y) else {
-        return false;
-    };
-
-    let x_rsiz = component.size_info.horizontal_resolution as u64;
-    let y_rsiz = component.size_info.vertical_resolution as u64;
-    if x_rsiz == 0 || y_rsiz == 0 {
-        return false;
-    }
-
-    let x_period = x_period_factor.saturating_mul(x_rsiz);
-    let y_period = y_period_factor.saturating_mul(y_rsiz);
-    if x_period == 0 || y_period == 0 {
-        return false;
-    }
-
-    let trx0 = tile_instance.resolution_transformed_rect.x0 as u64;
-    let try0 = tile_instance.resolution_transformed_rect.y0 as u64;
-
-    let y_condition =
-        (y % y_period == 0) || ((y == ty0) && ((try0 * scale_factor) % y_period != 0));
-
-    if !y_condition {
-        return false;
-    }
-
-    let x_condition =
-        (x % x_period == 0) || ((x == tx0) && ((trx0 * scale_factor) % x_period != 0));
-
-    x_condition
+    entries
 }
 
-fn compute_precinct_index(
-    x: u64,
-    y: u64,
-    input: &IteratorInput<'_>,
-    component_idx: usize,
-    res_data: &ComponentResolutionData<'_>,
-    resolution: u16,
-) -> Option<u32> {
-    let component = &input.component_infos[component_idx];
-    let params = &component.coding_style_parameters.parameters;
+fn emit_progression<'a>(
+    entries: &mut [ProgressionEntry<'a>],
+    layers: u16,
+    sequence: &mut Vec<ProgressionData>,
+    compare: impl Fn(
+        &ProgressionEntry<'a>,
+        &PrecinctPosition,
+        &ProgressionEntry<'a>,
+        &PrecinctPosition,
+    ) -> Ordering,
+) {
+    loop {
+        let mut best_index: Option<usize> = None;
 
-    if resolution as usize >= params.precinct_exponents.len() {
-        return None;
+        for (idx, entry) in entries.iter().enumerate() {
+            let Some(position) = entry.current.as_ref() else {
+                continue;
+            };
+
+            best_index = Some(match best_index {
+                None => idx,
+                Some(current_best) => {
+                    let best_entry = &entries[current_best];
+                    let best_position = best_entry.current.as_ref().unwrap();
+                    match compare(entry, position, best_entry, best_position) {
+                        Ordering::Less => idx,
+                        Ordering::Equal => current_best,
+                        Ordering::Greater => current_best,
+                    }
+                }
+            });
+        }
+
+        let Some(best_idx) = best_index else {
+            break;
+        };
+
+        let (_before, after) = entries.split_at_mut(best_idx);
+        let entry = &mut after[0];
+        let position = entry.current.expect("entry must have current value");
+
+        for layer in 0..layers {
+            sequence.push(ProgressionData {
+                layer_num: layer,
+                resolution: entry.resolution,
+                component: entry.component_idx as u8,
+                precinct: position.precinct,
+            });
+        }
+
+        entry.current = entry
+            .state
+            .next(&entry.tile_instance, entry.tile_instance.component_info);
     }
+}
 
-    let (ppx_u8, ppy_u8) = params.precinct_exponents[resolution as usize];
-    let n_l = params.num_decomposition_levels as u32;
-    if resolution as u32 > n_l {
-        return None;
-    }
+fn compare_resolution_position_component_layer(
+    left_entry: &ProgressionEntry,
+    left_pos: &PrecinctPosition,
+    right_entry: &ProgressionEntry,
+    right_pos: &PrecinctPosition,
+) -> Ordering {
+    left_pos
+        .y
+        .cmp(&right_pos.y)
+        .then_with(|| left_pos.x.cmp(&right_pos.x))
+        .then_with(|| left_entry.component_idx.cmp(&right_entry.component_idx))
+}
 
-    let Some(scale_factor) = pow2_u64(n_l - resolution as u32) else {
-        return None;
-    };
-    let Some(x_step) = pow2_u64(ppx_u8 as u32) else {
-        return None;
-    };
-    let Some(y_step) = pow2_u64(ppy_u8 as u32) else {
-        return None;
-    };
+fn compare_position_component_resolution_layer(
+    left_entry: &ProgressionEntry,
+    left_pos: &PrecinctPosition,
+    right_entry: &ProgressionEntry,
+    right_pos: &PrecinctPosition,
+) -> Ordering {
+    left_pos
+        .y
+        .cmp(&right_pos.y)
+        .then_with(|| left_pos.x.cmp(&right_pos.x))
+        .then_with(|| left_entry.component_idx.cmp(&right_entry.component_idx))
+        .then_with(|| left_entry.resolution.cmp(&right_entry.resolution))
+}
 
-    let x_rsiz = component.size_info.horizontal_resolution as u64;
-    let y_rsiz = component.size_info.vertical_resolution as u64;
-    if x_rsiz == 0 || y_rsiz == 0 {
-        return None;
-    }
-
-    let x_denom = x_rsiz.saturating_mul(scale_factor);
-    let y_denom = y_rsiz.saturating_mul(scale_factor);
-    if x_denom == 0 || y_denom == 0 {
-        return None;
-    }
-
-    let ll_rect = res_data.tile_instance.resolution_transformed_rect;
-    let trx0 = ll_rect.x0 as u64;
-    let try0 = ll_rect.y0 as u64;
-
-    let x_index_raw = floor_div_u64(ceil_div_u64(x, x_denom), x_step);
-    let base_x = floor_div_u64(trx0, x_step);
-    let x_index = x_index_raw.checked_sub(base_x)?;
-
-    let y_index_raw = floor_div_u64(ceil_div_u64(y, y_denom), y_step);
-    let base_y = floor_div_u64(try0, y_step);
-    let y_index = y_index_raw.checked_sub(base_y)?;
-
-    let precinct_width = res_data.precincts_wide as u64;
-    if precinct_width == 0 {
-        return None;
-    }
-
-    let precinct_index = x_index + precinct_width * y_index;
-    precinct_index.try_into().ok()
+fn compare_component_position_resolution_layer(
+    left_entry: &ProgressionEntry,
+    left_pos: &PrecinctPosition,
+    right_entry: &ProgressionEntry,
+    right_pos: &PrecinctPosition,
+) -> Ordering {
+    left_entry
+        .component_idx
+        .cmp(&right_entry.component_idx)
+        .then_with(|| left_pos.y.cmp(&right_pos.y))
+        .then_with(|| left_pos.x.cmp(&right_pos.x))
+        .then_with(|| left_entry.resolution.cmp(&right_entry.resolution))
 }
 
 fn ceil_div_u64(numerator: u64, denominator: u64) -> u64 {
@@ -639,14 +602,6 @@ fn ceil_div_u64(numerator: u64, denominator: u64) -> u64 {
         0
     } else {
         (numerator - 1) / denominator + 1
-    }
-}
-
-fn floor_div_u64(numerator: u64, denominator: u64) -> u64 {
-    if denominator == 0 {
-        0
-    } else {
-        numerator / denominator
     }
 }
 
