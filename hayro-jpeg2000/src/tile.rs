@@ -1,4 +1,3 @@
-use crate::boxes::PALETTE;
 use crate::codestream::markers::{EPH, SOP};
 use crate::codestream::{ComponentInfo, Header, ReaderExt, SizeData, markers};
 use crate::packet::SubbandType;
@@ -227,10 +226,10 @@ pub(crate) fn read_tiles<'a>(
 ) -> Result<Vec<Tile<'a>>, &'static str> {
     let parsed_tile_parts = {
         let mut buf = vec![];
-        buf.push(read_tile_part(reader, main_header).ok_or("failed to read first tile part")?);
+        read_tile_part(reader, main_header, &mut buf).ok_or("failed to read first tile part")?;
 
         while reader.peek_marker() == Some(markers::SOT) {
-            buf.push(read_tile_part(reader, main_header).ok_or("failed to read a tile part")?);
+            read_tile_part(reader, main_header, &mut buf).ok_or("failed to read a tile part")?;
         }
 
         if reader.read_marker()? != markers::EOC {
@@ -263,11 +262,11 @@ pub(crate) fn read_tiles<'a>(
 
 struct ParsedTilePart<'a> {
     tile_index: u16,
-    tile_part_index: u8,
+    tile_part_index: u16,
     data: &'a [u8],
 }
 
-fn read_tile_part<'a>(reader: &mut Reader<'a>, main_header: &Header) -> Option<ParsedTilePart<'a>> {
+fn read_tile_part<'a>(reader: &mut Reader<'a>, main_header: &Header, tile_parts: &mut Vec<ParsedTilePart<'a>>) -> Option<()> {
     if reader.read_marker().ok()? != markers::SOT {
         return None;
     }
@@ -340,18 +339,36 @@ fn read_tile_part<'a>(reader: &mut Reader<'a>, main_header: &Header) -> Option<P
             }
         }
     }
-
-    Some(ParsedTilePart {
+    
+    // Let's ignore the tile part index and just calculate it ourselves.
+    let index = match tile_parts.last() {
+        None => 0,
+        Some(p) => {
+            if p.tile_index != header.tile_index {
+                0
+            }   else {
+                p.tile_part_index + 1
+            }
+        }
+    };
+    
+    let tile_part = ParsedTilePart {
         data: tile_part_reader.tail()?,
         tile_index: header.tile_index,
-        tile_part_index: header.tile_part_index,
-    })
+        tile_part_index: index,
+    };
+    
+    tile_parts.push(tile_part);
+
+    Some(())
 }
 
 struct TilePartHeader {
     tile_index: u16,
     tile_part_length: u32,
-    tile_part_index: u8,
+    // This can only be `u8` in theory, but we use u16 so we can handle the
+    // `openjpeg-lossless-rgba-u8-prog0-tile-part-index-overflow` test case.
+    tile_part_index: u16,
     num_tile_parts: u8,
 }
 
@@ -362,7 +379,7 @@ pub(crate) fn sot_marker(reader: &mut Reader) -> Option<TilePartHeader> {
 
     let tile_index = reader.read_u16()?;
     let tile_part_length = reader.read_u32()?;
-    let tile_part_index = reader.read_byte()?;
+    let tile_part_index = reader.read_byte()? as u16;
     let num_tile_parts = reader.read_byte()?;
 
     Some(TilePartHeader {

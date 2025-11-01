@@ -76,6 +76,11 @@ fn openjpeg_lossless_rgba_u8_prog2_tile4x4_cblk4x16_tp3_layers3_res2() {
     run_asset_test("openjpeg-lossless-rgba-u8-prog4-tile4x2-cblk4x16-tp3-layers3-res2.jp2");
 }
 
+#[test]
+fn openjpeg_lossless_rgba_u8_prog0_tile_part_index_overflow() {
+    run_asset_test("openjpeg-lossless-rgba-u8-prog0-tile-part-index-overflow.jp2");
+}
+
 fn run_asset_test(file_name: &str) {
     let asset_path = ASSETS_PATH.join(file_name);
     let data = fs::read(&asset_path).expect("failed to read asset");
