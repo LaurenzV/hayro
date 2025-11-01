@@ -329,6 +329,12 @@ fn read_tile_part<'a>(reader: &mut Reader<'a>, main_header: &Header) -> Option<P
                 break;
             }
             markers::EOC => break,
+            markers::RGN => {
+                tile_part_reader.read_marker().ok()?;
+                let length = tile_part_reader.read_u16()?;
+                let payload = length.checked_sub(2)? as usize;
+                tile_part_reader.skip_bytes(payload)?;
+            }
             m => {
                 panic!("marker: {}", markers::to_string(m));
             }

@@ -46,6 +46,11 @@ fn openjpeg_lossless_rgba_u8_TLM() {
     run_asset_test("openjpeg-lossless-rgba-u8-TLM.jp2");
 }
 
+#[test]
+fn openjpeg_lossless_RGN() {
+    run_asset_test("openjpeg-lossless-RGN.jp2");
+}
+
 fn run_asset_test(file_name: &str) {
     let asset_path = ASSETS_PATH.join(file_name);
     let data = fs::read(&asset_path).expect("failed to read asset");

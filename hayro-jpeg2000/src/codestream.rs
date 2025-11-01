@@ -67,6 +67,10 @@ fn read_header(reader: &mut Reader, metadata: ImageMetadata) -> Result<Header, &
                     qcc_marker(reader, num_components).ok_or("failed to read QCC marker")?;
                 qcd_components[component_index as usize] = Some(qcc);
             }
+            markers::RGN => {
+                reader.read_marker()?;
+                rgn_marker(reader).ok_or("failed to read RGN marker")?;
+            }
             markers::TLM => {
                 reader.read_marker()?;
                 tlm_marker(reader).ok_or("failed to read TLM marker")?;
@@ -579,16 +583,20 @@ fn coding_style_parameters(
 
 /// COM Marker (A.9.2).
 fn com_marker(reader: &mut Reader) -> Option<()> {
-    // Length.
-    let length = reader.read_u16()?.checked_sub(2)?;
-    reader.skip_bytes(length as usize)?;
-
-    Some(())
+    skip_marker_segment(reader)
 }
 
 /// TLM marker (A.7.1).
 fn tlm_marker(reader: &mut Reader) -> Option<()> {
-    // Length.
+    skip_marker_segment(reader)
+}
+
+/// RGN marker (A.6.3).
+fn rgn_marker(reader: &mut Reader) -> Option<()> {
+    skip_marker_segment(reader)
+}
+
+fn skip_marker_segment(reader: &mut Reader) -> Option<()> {
     let length = reader.read_u16()?.checked_sub(2)?;
     reader.skip_bytes(length as usize)?;
 
