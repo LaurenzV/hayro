@@ -60,8 +60,6 @@ fn read_header(reader: &mut Reader, metadata: ImageMetadata) -> Result<Header, &
             markers::QCD => {
                 reader.read_marker()?;
                 qcd = Some(qcd_marker(reader).ok_or("failed to read QCD marker")?);
-
-                // eprintln!("{:?}", qcd);
             }
             markers::QCC => {
                 reader.read_marker()?;

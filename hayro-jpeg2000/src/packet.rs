@@ -77,7 +77,7 @@ pub(crate) fn process_tiles(tiles: &[Tile], header: &Header) -> Option<Vec<Chann
             bit_depth: info.size_info.precision,
         })
     }
-
+    
     for tile in tiles {
         let iter_input = IteratorInput::new(
             tile,
@@ -125,11 +125,11 @@ fn process_tile<'a, T: ProgressionIterator<'a>>(
             for subband in resolution_level {
                 for precinct in &mut subband.precincts {
                     for codeblock in &mut precinct.code_blocks {
-                        eprintln!(
-                            "decoding block {}x{}",
-                            codeblock.area.width(),
-                            codeblock.area.height()
-                        );
+                        // eprintln!(
+                        //     "decoding block {}x{}",
+                        //     codeblock.area.width(),
+                        //     codeblock.area.height()
+                        // );
                         bitplane::decode(
                             codeblock,
                             subband.subband_type,
@@ -188,7 +188,12 @@ fn save_samples<'a>(
     samples: &mut [Vec<f32>],
 ) -> Option<()> {
     if header.global_coding_style.mct == MultipleComponentTransform::Used {
-        let [s0, s1, s2] = samples else { return None };
+        if samples.len() < 3 {
+            return None;
+        }
+        
+        let (s, _) = samples.split_at_mut(3);
+        let [s0, s1, s2] = s else { return None };
 
         let transform = header.component_infos[0].wavelet_transform();
 
@@ -317,7 +322,7 @@ fn parse_packet<'a, T: ProgressionIterator<'a>>(
                     )? <= progression_data.layer_num as u32
                 };
 
-                eprintln!("code-block inclusion: {}", is_included);
+                // eprintln!("code-block inclusion: {}", is_included);
 
                 if !is_included {
                     continue;
@@ -343,10 +348,10 @@ fn parse_packet<'a, T: ProgressionIterator<'a>>(
                         &mut reader,
                         u32::MAX,
                     )? as u8;
-                    eprintln!(
-                        "zero bit-plane information: {}",
-                        code_block.missing_bit_planes
-                    );
+                    // eprintln!(
+                    //     "zero bit-plane information: {}",
+                    //     code_block.missing_bit_planes
+                    // );
                 }
 
                 code_block.has_been_included |= is_included;
@@ -383,7 +388,7 @@ fn parse_packet<'a, T: ProgressionIterator<'a>>(
 
                 code_block.number_of_coding_passes += added_coding_passes;
 
-                eprintln!("number of coding passes: {}", added_coding_passes);
+                // eprintln!("number of coding passes: {}", added_coding_passes);
 
                 // B.10.7.1 Single codeword segment
                 // "A codeword segment is the number of bytes contributed to a packet by a
@@ -408,7 +413,7 @@ fn parse_packet<'a, T: ProgressionIterator<'a>>(
                 let length = reader.read_packet_header_bits(length_bits as u8)?;
                 data_entries.push((sub_band_idx, code_block_idx, length));
 
-                eprintln!("length(0) {}", length);
+                // eprintln!("length(0) {}", length);
             }
         }
 
@@ -447,7 +452,11 @@ fn build_component_data(tile: &Tile, header: &Header) -> Vec<ComponentData<'stat
             .parameters
             .num_resolution_levels
         {
-            let tile_instance =  component_info.tile_instance(tile, resolution);
+            let tile_instance =  if resolution > 0 {
+                component_info.tile_instance(tile, resolution - 1)
+            }   else {
+                component_info.tile_instance(tile, resolution)
+            };
 
             if resolution == 0 {
                 let decomposition_level = component_info
