@@ -182,11 +182,11 @@ impl CodingStyleFlags {
     }
 
     pub(crate) fn may_use_sop_markers(&self) -> bool {
-        (self.raw & 0x01) != 0
+        (self.raw & 0x02) != 0
     }
 
     pub(crate) fn uses_eph_marker(&self) -> bool {
-        (self.raw & 0x02) != 0
+        (self.raw & 0x04) != 0
     }
 }
 

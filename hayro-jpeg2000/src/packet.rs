@@ -1,6 +1,8 @@
 use crate::bitmap::{Bitmap, ChannelContainer, ChannelData};
+use crate::codestream::markers::{EPH, SOP};
 use crate::codestream::{
-    Header, MultipleComponentTransform, ProgressionOrder, QuantizationStyle, WaveletTransform,
+    Header, MultipleComponentTransform, ProgressionOrder, QuantizationStyle, ReaderExt,
+    WaveletTransform,
 };
 use crate::progression::{IteratorInput, ProgressionData, build_progression_sequence};
 use crate::tag_tree::TagTree;
@@ -282,19 +284,25 @@ fn parse_packet<'a>(
     let mut data = tile.data;
 
     while !data.is_empty() {
+        if header
+            .global_coding_style
+            .component_parameters
+            .flags
+            .may_use_sop_markers()
+        {
+            let mut reader = Reader::new(data);
+            if reader.peek_marker() == Some(SOP) {
+                reader.read_marker().ok()?;
+                reader.skip_bytes(4)?;
+                data = reader.tail()?;
+            }
+        }
+
         let mut reader = BitReader::new(data);
 
         let progression_data = *progression_sequence.get(*progression_index)?;
         *progression_index += 1;
         let zero_length = reader.read_packet_header_bits(1)?;
-
-        // B.10.3 Zero length packet
-        // "The first bit in the packet header denotes whether the packet has a length of zero
-        // (empty packet). The value 0 indicates a zero length; no code-blocks are included in this
-        // case. The value 1 indicates a non-zero length.
-        if zero_length == 0 {
-            continue;
-        }
 
         let mut data_entries = vec![];
 
@@ -304,6 +312,14 @@ fn parse_packet<'a>(
         let sub_bands = &mut component.subbands[progression_data.resolution as usize];
 
         for (sub_band_idx, sub_band) in sub_bands.iter_mut().enumerate() {
+            // B.10.3 Zero length packet
+            // "The first bit in the packet header denotes whether the packet has a length of zero
+            // (empty packet). The value 0 indicates a zero length; no code-blocks are included in this
+            // case. The value 1 indicates a non-zero length.
+            if zero_length == 0 {
+                continue;
+            }
+
             let precinct = &mut sub_band.precincts[progression_data.precinct as usize];
 
             for (code_block_idx, code_block) in precinct.code_blocks.iter_mut().enumerate() {
@@ -437,6 +453,17 @@ fn parse_packet<'a>(
 
         let mut data_reader = Reader::new(packet_data);
         let mut total_length = 0;
+
+        if header
+            .global_coding_style
+            .component_parameters
+            .flags
+            .uses_eph_marker()
+        {
+            if data_reader.read_marker().ok()? != EPH {
+                return None;
+            }
+        }
 
         for (sub_band_idx, code_block_idx, length) in data_entries {
             let sub_band = &mut sub_bands[sub_band_idx];

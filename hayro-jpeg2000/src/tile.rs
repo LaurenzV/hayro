@@ -278,19 +278,7 @@ fn read_tile_part<'a>(
     let (mut tile_part_reader, header) = {
         let sot_marker = sot_marker(reader)?;
 
-        if main_header
-            .global_coding_style
-            .component_parameters
-            .flags
-            .may_use_sop_markers()
-        {
-            if reader.peek_marker() == Some(SOP) {
-                reader.read_marker().ok()?;
-                reader.skip_bytes(4)?;
-            }
-        }
-
-        let mut data = if sot_marker.tile_part_length == 0 {
+        let data = if sot_marker.tile_part_length == 0 {
             // Data goes until EOC.
             let data = reader.tail()?;
             reader.jump_to_end();
@@ -306,21 +294,6 @@ fn read_tile_part<'a>(
 
             data
         };
-
-        if main_header
-            .global_coding_style
-            .component_parameters
-            .flags
-            .uses_eph_marker()
-        {
-            let (head, tail) = data.split_at(data.len() - 2);
-
-            if tail[1] != EPH {
-                return None;
-            }
-
-            data = head;
-        }
 
         (Reader::new(data), sot_marker)
     };
