@@ -160,22 +160,6 @@ impl<'a> TileInstance<'a> {
         IntRect::from_ltrb(tbx_0, tby_0, tbx_1, tby_1)
     }
 
-    pub(crate) fn precinct_width(&self) -> u32 {
-        if self.resolution > 0 {
-            2u32.pow(self.ppx() as u32 - 1)
-        }   else {
-            2u32.pow(self.ppx() as u32)
-        }
-    }
-
-    pub(crate) fn precinct_height(&self) -> u32 {
-       if self.resolution > 0 {
-           2u32.pow(self.ppy() as u32 - 1)
-       }    else {
-           2u32.pow(self.ppy() as u32)
-       }
-    }
-
     pub(crate) fn num_precincts_x(&self) -> u32 {
         // See B-16.
         let IntRect { x0, x1, .. } = self.resolution_transformed_rect;
@@ -183,7 +167,7 @@ impl<'a> TileInstance<'a> {
         if x0 == x1 {
             0
         } else {
-            x1.div_ceil(self.precinct_width()) - x0 / self.precinct_width()
+            x1.div_ceil(2u32.pow(self.ppx() as u32)) - x0 / 2u32.pow(self.ppx() as u32)
         }
     }
 
@@ -194,7 +178,7 @@ impl<'a> TileInstance<'a> {
         if y0 == y1 {
             0
         } else {
-            y1.div_ceil(self.precinct_height()) - y0 / self.precinct_height()
+            y1.div_ceil(2u32.pow(self.ppy() as u32)) - y0 / 2u32.pow(self.ppy() as u32)
         }
     }
 

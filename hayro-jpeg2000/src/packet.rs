@@ -536,22 +536,37 @@ fn build_precincts(
     header: &Header,
 ) -> Vec<Precinct<'static>> {
     let mut precincts = vec![];
-
-    let precinct_width = tile_instance.precinct_width();
-    let precinct_height = tile_instance.precinct_height();
     
     let num_precincts_y = tile_instance.num_precincts_y();
     let num_precincts_x = tile_instance.num_precincts_x();
+    
+    let mut ppx = tile_instance.ppx();
+    let mut ppy = tile_instance.ppy();
 
-    let mut y0 = tile_instance.resolution_transformed_rect.y0;
+    let mut y_start = (tile_instance.resolution_transformed_rect.y0 / (1 << ppy)) * (1 << ppy);
+    let mut x_start = (tile_instance.resolution_transformed_rect.x0 / (1 << ppx)) * (1 << ppx);
 
+    // TODO: I don't really understand where the specification mentions this is necessary. Just 
+    // copied this from Serenity.
+    if tile_instance.resolution > 0 {
+        ppx -= 1;
+        ppy -= 1;
+        
+        x_start = x_start / 2;
+        y_start = y_start / 2;
+    }
+    
+    let ppx_pow2 = (1 << ppx);
+    let ppy_pow2 = (1 << ppy);
+    
+    let mut y0 = y_start;
     for _y in 0..num_precincts_y {
-        let mut x0 = tile_instance.resolution_transformed_rect.x0;
+        let mut x0 = x_start;
 
         for _x in 0..num_precincts_x {
-            let precinct_rect = IntRect::from_xywh(x0, y0, precinct_width, precinct_height);
+            let precinct_rect = IntRect::from_xywh(x0, y0, ppx_pow2, ppy_pow2);
 
-            let code_block_area = IntRect::from_ltrb(x0, y0, u32::min(precinct_rect.x1, sub_band_rect.x1), u32::min(precinct_rect.y1, sub_band_rect.y1));
+            let code_block_area = IntRect::from_ltrb(u32::max(precinct_rect.x0, sub_band_rect.x0), u32::max(precinct_rect.y0, sub_band_rect.y0), u32::min(precinct_rect.x1, sub_band_rect.x1), u32::min(precinct_rect.y1, sub_band_rect.y1));
             let code_blocks_x = code_block_area
                 .width()
                 .div_ceil(tile_instance.code_block_width());
@@ -581,10 +596,10 @@ fn build_precincts(
                 zero_bitplane_tree: TagTree::new(code_blocks_x, code_blocks_y),
             });
 
-            x0 += precinct_width;
+            x0 += ppx_pow2;
         }
 
-        y0 += precinct_height;
+        y0 += ppy_pow2;
     }
 
     precincts
