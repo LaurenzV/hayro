@@ -28,6 +28,7 @@ pub(crate) enum SubbandType {
 pub(crate) struct SubBand<'a> {
     pub(crate) subband_type: SubbandType,
     pub(crate) rect: IntRect,
+    pub(crate) ll_rect: IntRect,
     pub(crate) precincts: Vec<Precinct<'a>>,
     pub(crate) coefficients: Vec<f32>,
 }
@@ -481,6 +482,7 @@ fn build_component_data(tile: &Tile, header: &Header) -> Vec<ComponentData<'stat
                 bands.push(vec![SubBand {
                     subband_type: SubbandType::LowLow,
                     rect,
+                    ll_rect: tile_instance.resolution_transformed_rect,
                     precincts,
                     coefficients: vec![0.0; (rect.width() * rect.height()) as usize],
                 }]);
@@ -515,6 +517,7 @@ fn build_component_data(tile: &Tile, header: &Header) -> Vec<ComponentData<'stat
                     
                     sub_bands.push(SubBand {
                         subband_type: sb_type,
+                        ll_rect: tile_instance.resolution_transformed_rect,
                         rect,
                         precincts: precincts.clone(),
                         coefficients: vec![0.0; (rect.width() * rect.height()) as usize],

@@ -15,16 +15,9 @@ pub(crate) fn apply(subbands: &[Vec<SubBand>], tile_rect: IntRect, transform: Wa
             unreachable!()
         };
 
-        let new_rect = {
-            let x0 = ll_subband.rect.x0;
-            let x1 = x0 + ll_subband.rect.width() + hl.rect.width();
-            let y0 = ll_subband.rect.y0;
-            let y1 = y0 + ll_subband.rect.height() + lh.rect.height();
+        let ll_rect = hl.ll_rect;
 
-            IntRect::from_xywh(x0, y0, x1, y1)
-        };
-
-        ll_subband = _2d_sr(&ll_subband, &hl, &lh, &hh, new_rect, transform);
+        ll_subband = _2d_sr(&ll_subband, &hl, &lh, &hh, ll_rect, transform);
     }
 
     let mut trimmed_coefficients = Vec::with_capacity(ll_subband.coefficients.len());
@@ -51,7 +44,6 @@ fn _2d_sr(
     rect: IntRect,
     transform: WaveletTransform,
 ) -> SubBand<'static> {
-    
     let mut coefficients = _2d_interleave(ll, hl, lh, hh, rect);
 
     let temp_rect = IntRect::from_ltrb(0, 0, rect.width(), rect.height());
@@ -61,6 +53,7 @@ fn _2d_sr(
 
     SubBand {
         subband_type: SubbandType::LowLow,
+        ll_rect: rect,
         rect,
         precincts: vec![],
         coefficients,
@@ -75,28 +68,30 @@ fn _2d_interleave(
     rect: IntRect,
 ) -> Vec<f32> {
     let mut coefficients = vec![0.0; (rect.width() * rect.height()) as usize];
+    let IntRect {x0: u0, x1: u1, y0: v0, y1: v1} = rect;
+    
     for subband in [ll, hl, lh, hh] {
-        let u_max = match subband.subband_type {
-            SubbandType::LowLow | SubbandType::LowHigh => rect.width().div_ceil(2),
-            SubbandType::HighLow | SubbandType::HighHigh => rect.width() / 2,
+        let (u_min, u_max) = match subband.subband_type {
+            SubbandType::LowLow | SubbandType::LowHigh => (u0.div_ceil(2), u1.div_ceil(2)),
+            SubbandType::HighLow | SubbandType::HighHigh => (u0 / 2, u1 / 2),
         };
 
-        let v_max = match subband.subband_type {
-            SubbandType::LowLow | SubbandType::HighLow => rect.height().div_ceil(2),
-            SubbandType::LowHigh | SubbandType::HighHigh => rect.height() / 2,
+        let (v_min, v_max) = match subband.subband_type {
+            SubbandType::LowLow | SubbandType::HighLow => (v0.div_ceil(2), v1.div_ceil(2)),
+            SubbandType::LowHigh | SubbandType::HighHigh => (v0 / 2, v1 / 2),
         };
 
-        for v in 0..v_max {
-            for u in 0..u_max {
+        for v_b in v_min..v_max {
+            for u_b in u_min..u_max {
                 let (x, y) = match subband.subband_type {
-                    SubbandType::LowLow => (2 * u, 2 * v),
-                    SubbandType::LowHigh => (2 * u, 2 * v + 1),
-                    SubbandType::HighLow => (2 * u + 1, 2 * v),
-                    SubbandType::HighHigh => (2 * u + 1, 2 * v + 1),
+                    SubbandType::LowLow => (2 * u_b, 2 * v_b),
+                    SubbandType::LowHigh => (2 * u_b, 2 * v_b + 1),
+                    SubbandType::HighLow => (2 * u_b + 1, 2 * v_b),
+                    SubbandType::HighHigh => (2 * u_b + 1, 2 * v_b + 1),
                 };
 
-                coefficients[(y * rect.width() + x) as usize] =
-                    subband.coefficients[(v * subband.rect.width() + u) as usize];
+                coefficients[((y - v0) * rect.width() + (x - u0)) as usize] =
+                    subband.coefficients[((v_b - v_min) * subband.rect.width() + (u_b - u_min)) as usize];
             }
         }
     }
