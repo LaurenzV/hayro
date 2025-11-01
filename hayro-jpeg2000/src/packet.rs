@@ -3,8 +3,11 @@ use crate::codestream::{
     Header, MultipleComponentTransform, ProgressionOrder, QuantizationStyle, WaveletTransform,
 };
 use crate::progression::{
-    IteratorInput, LayerResolutionLevelComponentPositionProgressionIterator, ProgressionIterator,
+    ComponentPositionResolutionLayerProgressionIterator, IteratorInput,
+    LayerResolutionLevelComponentPositionProgressionIterator,
+    PositionComponentResolutionLayerProgressionIterator, ProgressionIterator,
     ResolutionLevelLayerComponentPositionProgressionIterator,
+    ResolutionPositionComponentLayerProgressionIterator,
 };
 use crate::tag_tree::TagTree;
 use crate::tile::{IntRect, Tile, TileInstance, TilePart};
@@ -105,7 +108,18 @@ pub(crate) fn process_tiles(tiles: &[Tile], header: &Header) -> Option<Vec<Chann
                     LayerResolutionLevelComponentPositionProgressionIterator::new(iter_input);
                 process_tile(tile, header, iter)?
             }
-            _ => unimplemented!(),
+            ProgressionOrder::ResolutionPositionComponentLayer => {
+                let iter = ResolutionPositionComponentLayerProgressionIterator::new(iter_input);
+                process_tile(tile, header, iter)?
+            }
+            ProgressionOrder::PositionComponentResolutionLayer => {
+                let iter = PositionComponentResolutionLayerProgressionIterator::new(iter_input);
+                process_tile(tile, header, iter)?
+            }
+            ProgressionOrder::ComponentPositionResolutionLayer => {
+                let iter = ComponentPositionResolutionLayerProgressionIterator::new(iter_input);
+                process_tile(tile, header, iter)?
+            }
         };
 
         save_samples(tile, header, &mut channels, &mut samples)?;
