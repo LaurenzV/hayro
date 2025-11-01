@@ -78,13 +78,16 @@ pub(crate) fn process_tiles(tiles: &[Tile], header: &Header) -> Option<Vec<Chann
             bit_depth: info.size_info.precision,
         })
     }
-    
+
     for (tile_idx, tile) in tiles.iter().enumerate() {
         eprintln!(
             "tile {tile_idx} rect [{},{} {}x{}]",
-            tile.rect.x0, tile.rect.y0, tile.rect.width(), tile.rect.height(),
+            tile.rect.x0,
+            tile.rect.y0,
+            tile.rect.width(),
+            tile.rect.height(),
         );
-        
+
         let iter_input = IteratorInput::new(
             tile,
             &header.component_infos,
@@ -144,18 +147,18 @@ fn process_tile<'a, T: ProgressionIterator<'a>>(
                                 .parameters
                                 .code_block_style,
                         )?;
-    
+
                         if component_info.quantization_info.quantization_style
                             != QuantizationStyle::NoQuantization
                         {
                             panic!("quantization not implemented yet.");
                         }
-    
+
                         // Copy the coefficients into the subband.
-    
+
                         let x_offset = codeblock.area.x0 - subband.rect.x0;
                         let y_offset = codeblock.area.y0 - subband.rect.y0;
-    
+
                         for (y, in_row) in codeblock
                             .coefficients
                             .chunks_exact(codeblock.area.width() as usize)
@@ -165,7 +168,7 @@ fn process_tile<'a, T: ProgressionIterator<'a>>(
                                 * subband.rect.width())
                                 as usize
                                 + x_offset as usize..];
-    
+
                             for (input, output) in in_row.iter().zip(out_row.iter_mut()) {
                                 *output = *input as f32;
                             }
@@ -174,7 +177,7 @@ fn process_tile<'a, T: ProgressionIterator<'a>>(
                 }
             }
         }
-    
+
         samples.push(idwt::apply(
             &component_data.subbands,
             tile.rect,
@@ -198,7 +201,7 @@ fn save_samples<'a>(
         if samples.len() < 3 {
             return None;
         }
-        
+
         let (s, _) = samples.split_at_mut(3);
         let [s0, s1, s2] = s else { return None };
 
@@ -253,8 +256,8 @@ fn save_samples<'a>(
                     let output = &mut c
                         [(y * header.size_data.reference_grid_width + tile_x_offset) as usize..]
                         [..tile.rect.width() as usize];
-                    let input =
-                        &samples[(y * tile.rect.width()) as usize..][..tile.rect.width() as usize];
+                    let input = &samples[((y - tile_y_offset) * tile.rect.width()) as usize..]
+                        [..tile.rect.width() as usize];
 
                     for (i, o) in input.iter().zip(output.iter_mut()) {
                         *o = *i as u8;
@@ -471,7 +474,10 @@ fn build_component_data(tile: &Tile, header: &Header) -> Vec<ComponentData<'stat
                 eprintln!("making nLL for component {}", component_idx);
                 eprintln!(
                     "Sub-band rect: [{},{} {}x{}], ll rect [{},{} {}x{}]",
-                    rect.x0, rect.y0, rect.width(), rect.height(),
+                    rect.x0,
+                    rect.y0,
+                    rect.width(),
+                    rect.height(),
                     tile_instance.resolution_transformed_rect.x0,
                     tile_instance.resolution_transformed_rect.y0,
                     tile_instance.resolution_transformed_rect.width(),
@@ -499,22 +505,32 @@ fn build_component_data(tile: &Tile, header: &Header) -> Vec<ComponentData<'stat
                     SubbandType::HighLow,
                     SubbandType::LowHigh,
                     SubbandType::HighHigh,
-                ].into_iter().enumerate() {
+                ]
+                .into_iter()
+                .enumerate()
+                {
                     let rect = tile_instance.sub_band_rect(sb_type, decomposition_level);
 
-                    eprintln!("r {} making sub-band {} for component {}", resolution, subband_idx + 1, component_idx);
+                    eprintln!(
+                        "r {} making sub-band {} for component {}",
+                        resolution,
+                        subband_idx + 1,
+                        component_idx
+                    );
                     eprintln!(
                         "Sub-band rect: [{},{} {}x{}], ll rect [{},{} {}x{}]",
-                        rect.x0, rect.y0, rect.width(), rect.height(),
+                        rect.x0,
+                        rect.y0,
+                        rect.width(),
+                        rect.height(),
                         tile_instance.resolution_transformed_rect.x0,
                         tile_instance.resolution_transformed_rect.y0,
                         tile_instance.resolution_transformed_rect.width(),
                         tile_instance.resolution_transformed_rect.height(),
                     );
-                    
+
                     let precincts = build_precincts(&tile_instance, rect, header);
 
-                    
                     sub_bands.push(SubBand {
                         subband_type: sb_type,
                         ll_rect: tile_instance.resolution_transformed_rect,
@@ -540,29 +556,29 @@ fn build_precincts(
     header: &Header,
 ) -> Vec<Precinct<'static>> {
     let mut precincts = vec![];
-    
+
     let num_precincts_y = tile_instance.num_precincts_y();
     let num_precincts_x = tile_instance.num_precincts_x();
-    
+
     let mut ppx = tile_instance.ppx();
     let mut ppy = tile_instance.ppy();
 
     let mut y_start = (tile_instance.resolution_transformed_rect.y0 / (1 << ppy)) * (1 << ppy);
     let mut x_start = (tile_instance.resolution_transformed_rect.x0 / (1 << ppx)) * (1 << ppx);
 
-    // TODO: I don't really understand where the specification mentions this is necessary. Just 
+    // TODO: I don't really understand where the specification mentions this is necessary. Just
     // copied this from Serenity.
     if tile_instance.resolution > 0 {
         ppx -= 1;
         ppy -= 1;
-        
+
         x_start = x_start / 2;
         y_start = y_start / 2;
     }
-    
+
     let ppx_pow2 = (1 << ppx);
     let ppy_pow2 = (1 << ppy);
-    
+
     let mut y0 = y_start;
     for _y in 0..num_precincts_y {
         let mut x0 = x_start;
@@ -572,22 +588,27 @@ fn build_precincts(
 
             let cb_width = tile_instance.code_block_width();
             let cb_height = tile_instance.code_block_height();
-            
+
             let cb_x0 = (u32::max(precinct_rect.x0, sub_band_rect.x0) / cb_width) * cb_width;
             let cb_y0 = (u32::max(precinct_rect.y0, sub_band_rect.y0) / cb_height) * cb_height;
-            
-            let code_block_area = IntRect::from_ltrb(cb_x0, cb_y0, u32::min(precinct_rect.x1, sub_band_rect.x1), u32::min(precinct_rect.y1, sub_band_rect.y1));
-            let code_blocks_x = code_block_area
-                .width()
-                .div_ceil(cb_width);
-            let code_blocks_y = code_block_area
-                .height()
-                .div_ceil(cb_height);
+
+            let code_block_area = IntRect::from_ltrb(
+                cb_x0,
+                cb_y0,
+                u32::min(precinct_rect.x1, sub_band_rect.x1),
+                u32::min(precinct_rect.y1, sub_band_rect.y1),
+            );
+            let code_blocks_x = code_block_area.width().div_ceil(cb_width);
+            let code_blocks_y = code_block_area.height().div_ceil(cb_height);
 
             eprintln!(
                 "Precinct rect: [{},{} {}x{}], num_code_blocks_wide: {}, num_code_blocks_high: {}",
-                precinct_rect.x0, precinct_rect.y0, precinct_rect.width(), precinct_rect.height(),
-                code_blocks_x, code_blocks_y
+                precinct_rect.x0,
+                precinct_rect.y0,
+                precinct_rect.width(),
+                precinct_rect.height(),
+                code_blocks_x,
+                code_blocks_y
             );
 
             let blocks = build_precinct_code_blocks(
@@ -637,11 +658,15 @@ fn build_precinct_code_blocks(
         // eprintln!("height: {:?}", code_block_height);
 
         for x_idx in 0..code_blocks_x {
-            let area = IntRect::from_xywh(x, y, code_block_width, code_block_height).intersect(sub_band_rect);
+            let area = IntRect::from_xywh(x, y, code_block_width, code_block_height)
+                .intersect(sub_band_rect);
 
             eprintln!(
                 "Codeblock rect: [{},{} {}x{}]",
-                area.x0, area.y0, area.width(), area.height(),
+                area.x0,
+                area.y0,
+                area.width(),
+                area.height(),
             );
 
             blocks.push(CodeBlock {

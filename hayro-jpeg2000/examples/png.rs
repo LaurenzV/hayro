@@ -42,6 +42,9 @@ fn main() {
                 (3, false) => DynamicImage::ImageRgb8(
                     ImageBuffer::from_raw(width, height, interleaved).unwrap(),
                 ),
+                (4, true) => DynamicImage::ImageRgba8(
+                    ImageBuffer::from_raw(width, height, interleaved).unwrap(),
+                ),
                 _ => unimplemented!(),
             };
 

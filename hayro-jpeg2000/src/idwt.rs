@@ -7,7 +7,11 @@ use std::iter;
 
 const PADDING_SHIFT: usize = 4;
 
-pub(crate) fn apply(subbands: &[Vec<SubBand>], tile_rect: IntRect, transform: WaveletTransform) -> Vec<f32> {
+pub(crate) fn apply(
+    subbands: &[Vec<SubBand>],
+    tile_rect: IntRect,
+    transform: WaveletTransform,
+) -> Vec<f32> {
     let mut ll_subband = subbands[0][0].clone();
 
     for subbands in &subbands[1..] {
@@ -27,9 +31,12 @@ pub(crate) fn apply(subbands: &[Vec<SubBand>], tile_rect: IntRect, transform: Wa
     let skip_x = tile_rect.x0 - ll_subband.rect.x0;
     let take_x = tile_rect.width();
 
-    for row in ll_subband.coefficients.chunks_exact(ll_subband.rect.width() as usize)
+    for row in ll_subband
+        .coefficients
+        .chunks_exact(ll_subband.rect.width() as usize)
         .skip(skip_y as usize)
-        .take(take_y as usize) {
+        .take(take_y as usize)
+    {
         trimmed_coefficients.extend(&row[skip_x as usize..][..take_x as usize])
     }
 
@@ -68,8 +75,13 @@ fn _2d_interleave(
     rect: IntRect,
 ) -> Vec<f32> {
     let mut coefficients = vec![0.0; (rect.width() * rect.height()) as usize];
-    let IntRect {x0: u0, x1: u1, y0: v0, y1: v1} = rect;
-    
+    let IntRect {
+        x0: u0,
+        x1: u1,
+        y0: v0,
+        y1: v1,
+    } = rect;
+
     for subband in [ll, hl, lh, hh] {
         let (u_min, u_max) = match subband.subband_type {
             SubbandType::LowLow | SubbandType::LowHigh => (u0.div_ceil(2), u1.div_ceil(2)),
@@ -90,8 +102,8 @@ fn _2d_interleave(
                     SubbandType::HighHigh => (2 * u_b + 1, 2 * v_b + 1),
                 };
 
-                coefficients[((y - v0) * rect.width() + (x - u0)) as usize] =
-                    subband.coefficients[((v_b - v_min) * subband.rect.width() + (u_b - u_min)) as usize];
+                coefficients[((y - v0) * rect.width() + (x - u0)) as usize] = subband.coefficients
+                    [((v_b - v_min) * subband.rect.width() + (u_b - u_min)) as usize];
             }
         }
     }
