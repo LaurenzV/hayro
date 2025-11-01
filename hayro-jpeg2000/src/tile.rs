@@ -266,7 +266,11 @@ struct ParsedTilePart<'a> {
     data: &'a [u8],
 }
 
-fn read_tile_part<'a>(reader: &mut Reader<'a>, main_header: &Header, tile_parts: &mut Vec<ParsedTilePart<'a>>) -> Option<()> {
+fn read_tile_part<'a>(
+    reader: &mut Reader<'a>,
+    main_header: &Header,
+    tile_parts: &mut Vec<ParsedTilePart<'a>>,
+) -> Option<()> {
     if reader.read_marker().ok()? != markers::SOT {
         return None;
     }
@@ -339,25 +343,25 @@ fn read_tile_part<'a>(reader: &mut Reader<'a>, main_header: &Header, tile_parts:
             }
         }
     }
-    
+
     // Let's ignore the tile part index and just calculate it ourselves.
     let index = match tile_parts.last() {
         None => 0,
         Some(p) => {
             if p.tile_index != header.tile_index {
                 0
-            }   else {
+            } else {
                 p.tile_part_index + 1
             }
         }
     };
-    
+
     let tile_part = ParsedTilePart {
         data: tile_part_reader.tail()?,
         tile_index: header.tile_index,
         tile_part_index: index,
     };
-    
+
     tile_parts.push(tile_part);
 
     Some(())
