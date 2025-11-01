@@ -78,7 +78,12 @@ pub(crate) fn process_tiles(tiles: &[Tile], header: &Header) -> Option<Vec<Chann
         })
     }
     
-    for tile in tiles {
+    for (tile_idx, tile) in tiles.iter().enumerate() {
+        eprintln!(
+            "tile {tile_idx} rect [{},{} {}x{}]",
+            tile.rect.x0, tile.rect.y0, tile.rect.width(), tile.rect.height(),
+        );
+        
         let iter_input = IteratorInput::new(
             tile,
             &header.component_infos,
@@ -452,11 +457,7 @@ fn build_component_data(tile: &Tile, header: &Header) -> Vec<ComponentData<'stat
             .parameters
             .num_resolution_levels
         {
-            let tile_instance =  if resolution > 0 {
-                component_info.tile_instance(tile, resolution - 1)
-            }   else {
-                component_info.tile_instance(tile, resolution)
-            };
+            let tile_instance = component_info.tile_instance(tile, resolution);
 
             if resolution == 0 {
                 let decomposition_level = component_info
@@ -498,7 +499,7 @@ fn build_component_data(tile: &Tile, header: &Header) -> Vec<ComponentData<'stat
                 ].into_iter().enumerate() {
                     let rect = tile_instance.sub_band_rect(sb_type, decomposition_level);
 
-                    eprintln!("r {} making sub-band {} for component {}", resolution, subband_idx, component_idx);
+                    eprintln!("r {} making sub-band {} for component {}", resolution, subband_idx + 1, component_idx);
                     eprintln!(
                         "Sub-band rect: [{},{} {}x{}], ll rect [{},{} {}x{}]",
                         rect.x0, rect.y0, rect.width(), rect.height(),
