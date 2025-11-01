@@ -7,7 +7,7 @@ use std::iter;
 
 const PADDING_SHIFT: usize = 4;
 
-pub(crate) fn apply(subbands: &[Vec<SubBand>], transform: WaveletTransform) -> Vec<f32> {
+pub(crate) fn apply(subbands: &[Vec<SubBand>], tile_rect: IntRect, transform: WaveletTransform) -> Vec<f32> {
     let mut ll_subband = subbands[0][0].clone();
 
     for subbands in &subbands[1..] {
@@ -27,16 +27,20 @@ pub(crate) fn apply(subbands: &[Vec<SubBand>], transform: WaveletTransform) -> V
         ll_subband = _2d_sr(&ll_subband, &hl, &lh, &hh, new_rect, transform);
     }
 
-    // eprintln!(
-    //     "{:?}",
-    //     &ll_subband
-    //         .coefficients
-    //         .iter()
-    //         .map(|n| *n as i32)
-    //         .collect::<Vec<i32>>()
-    // );
+    let mut trimmed_coefficients = Vec::with_capacity(ll_subband.coefficients.len());
 
-    ll_subband.coefficients
+    let skip_y = tile_rect.y0 - ll_subband.rect.y0;
+    let take_y = tile_rect.height();
+    let skip_x = tile_rect.x0 - ll_subband.rect.x0;
+    let take_x = tile_rect.width();
+
+    for row in ll_subband.coefficients.chunks_exact(ll_subband.rect.width() as usize)
+        .skip(skip_y as usize)
+        .take(take_y as usize) {
+        trimmed_coefficients.extend(&row[skip_x as usize..][..take_x as usize])
+    }
+
+    trimmed_coefficients
 }
 
 fn _2d_sr(
@@ -47,6 +51,7 @@ fn _2d_sr(
     rect: IntRect,
     transform: WaveletTransform,
 ) -> SubBand<'static> {
+    
     let mut coefficients = _2d_interleave(ll, hl, lh, hh, rect);
 
     let temp_rect = IntRect::from_ltrb(0, 0, rect.width(), rect.height());

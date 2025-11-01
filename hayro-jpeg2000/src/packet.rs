@@ -176,6 +176,7 @@ fn process_tile<'a, T: ProgressionIterator<'a>>(
     
         samples.push(idwt::apply(
             &component_data.subbands,
+            tile.rect,
             component_info
                 .coding_style_parameters
                 .parameters
