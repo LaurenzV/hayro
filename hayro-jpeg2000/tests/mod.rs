@@ -21,27 +21,20 @@ static DIFFS_PATH: LazyLock<PathBuf> = LazyLock::new(|| {
     path
 });
 
-macro_rules! snapshot_test {
-    ($name:ident, $file:expr) => {
-        #[test]
-        fn $name() {
-            run_asset_test($file);
-        }
-    };
+#[test]
+fn kakadu_lossless_gray_u8_prog1_layers1_res6() {
+    run_asset_test( "kakadu-lossless-gray-u8-prog1-layers1-res6.jp2");
 }
 
-snapshot_test!(
-    kakadu_lossless_gray_u8_prog1_layers1_res6,
-    "kakadu-lossless-gray-u8-prog1-layers1-res6.jp2"
-);
-snapshot_test!(
-    kakadu_lossless_gray_alpha_u8_prog1_layers1_res6,
-    "kakadu-lossless-gray-alpha-u8-prog1-layers1-res6.jp2"
-);
-snapshot_test!(
-    kakadu_lossless_rgb_u8_prog1_layers1_res6_mct,
-    "kakadu-lossless-rgb-u8-prog1-layers1-res6-mct.jp2"
-);
+#[test]
+fn kakadu_lossless_gray_alpha_u8_prog1_layers1_res6() {
+    run_asset_test( "kakadu-lossless-gray-alpha-u8-prog1-layers1-res6.jp2");
+}
+
+#[test]
+fn kakadu_lossless_rgb_u8_prog1_layers1_res6_mct() {
+    run_asset_test(   "kakadu-lossless-rgb-u8-prog1-layers1-res6-mct.jp2");
+}
 
 fn run_asset_test(file_name: &str) {
     let asset_path = ASSETS_PATH.join(file_name);

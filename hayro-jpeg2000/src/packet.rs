@@ -143,18 +143,18 @@ fn process_tile<'a, T: ProgressionIterator<'a>>(
                                 .parameters
                                 .code_block_style,
                         )?;
-
+    
                         if component_info.quantization_info.quantization_style
                             != QuantizationStyle::NoQuantization
                         {
                             panic!("quantization not implemented yet.");
                         }
-
+    
                         // Copy the coefficients into the subband.
-
+    
                         let x_offset = codeblock.area.x0 - subband.rect.x0;
                         let y_offset = codeblock.area.y0 - subband.rect.y0;
-
+    
                         for (y, in_row) in codeblock
                             .coefficients
                             .chunks_exact(codeblock.area.width() as usize)
@@ -164,7 +164,7 @@ fn process_tile<'a, T: ProgressionIterator<'a>>(
                                 * subband.rect.width())
                                 as usize
                                 + x_offset as usize..];
-
+    
                             for (input, output) in in_row.iter().zip(out_row.iter_mut()) {
                                 *output = *input as f32;
                             }
@@ -173,7 +173,7 @@ fn process_tile<'a, T: ProgressionIterator<'a>>(
                 }
             }
         }
-
+    
         samples.push(idwt::apply(
             &component_data.subbands,
             component_info
@@ -566,27 +566,33 @@ fn build_precincts(
         for _x in 0..num_precincts_x {
             let precinct_rect = IntRect::from_xywh(x0, y0, ppx_pow2, ppy_pow2);
 
-            let code_block_area = IntRect::from_ltrb(u32::max(precinct_rect.x0, sub_band_rect.x0), u32::max(precinct_rect.y0, sub_band_rect.y0), u32::min(precinct_rect.x1, sub_band_rect.x1), u32::min(precinct_rect.y1, sub_band_rect.y1));
+            let cb_width = tile_instance.code_block_width();
+            let cb_height = tile_instance.code_block_height();
+            
+            let cb_x0 = (u32::max(precinct_rect.x0, sub_band_rect.x0) / cb_width) * cb_width;
+            let cb_y0 = (u32::max(precinct_rect.y0, sub_band_rect.y0) / cb_height) * cb_height;
+            
+            let code_block_area = IntRect::from_ltrb(cb_x0, cb_y0, u32::min(precinct_rect.x1, sub_band_rect.x1), u32::min(precinct_rect.y1, sub_band_rect.y1));
             let code_blocks_x = code_block_area
                 .width()
-                .div_ceil(tile_instance.code_block_width());
+                .div_ceil(cb_width);
             let code_blocks_y = code_block_area
                 .height()
-                .div_ceil(tile_instance.code_block_height());
-
-            let blocks = build_precinct_code_blocks(
-                precinct_rect,
-                tile_instance,
-                sub_band_rect,
-                code_blocks_x,
-                code_blocks_y,
-                header.global_coding_style.num_layers,
-            );
+                .div_ceil(cb_height);
 
             eprintln!(
                 "Precinct rect: [{},{} {}x{}], num_code_blocks_wide: {}, num_code_blocks_high: {}",
                 precinct_rect.x0, precinct_rect.y0, precinct_rect.width(), precinct_rect.height(),
                 code_blocks_x, code_blocks_y
+            );
+
+            let blocks = build_precinct_code_blocks(
+                code_block_area,
+                sub_band_rect,
+                tile_instance,
+                code_blocks_x,
+                code_blocks_y,
+                header.global_coding_style.num_layers,
             );
 
             precincts.push(Precinct {
@@ -606,32 +612,33 @@ fn build_precincts(
 }
 
 fn build_precinct_code_blocks(
-    precinct_rect: IntRect,
-    tile_instance: &TileInstance,
+    code_block_area: IntRect,
     sub_band_rect: IntRect,
+    tile_instance: &TileInstance,
     code_blocks_x: u32,
     code_blocks_y: u32,
     num_layers: u16,
 ) -> Vec<CodeBlock<'static>> {
     let mut blocks = vec![];
 
-    let mut y = precinct_rect.y0;
+    let mut y = code_block_area.y0;
 
     let code_block_width = tile_instance.code_block_width();
     let code_block_height = tile_instance.code_block_height();
 
     for y_idx in 0..code_blocks_y {
-        let mut x = precinct_rect.x0;
+        let mut x = code_block_area.x0;
 
         // eprintln!("num blocks: {:?}", code_blocks_y);
         // eprintln!("height: {:?}", code_block_height);
 
         for x_idx in 0..code_blocks_x {
-            // eprintln!("{} {} {}", precinct_rect.y0, y, precinct_rect.y1);
-            let width = u32::min(code_block_width, precinct_rect.x1 - x);
-            let height = u32::min(code_block_height, precinct_rect.y1 - y);
+            let area = IntRect::from_xywh(x, y, code_block_width, code_block_height).intersect(sub_band_rect);
 
-            let area = IntRect::from_xywh(x, y, width, height).intersect(sub_band_rect);
+            eprintln!(
+                "Codeblock rect: [{},{} {}x{}]",
+                area.x0, area.y0, area.width(), area.height(),
+            );
 
             blocks.push(CodeBlock {
                 x_idx,
