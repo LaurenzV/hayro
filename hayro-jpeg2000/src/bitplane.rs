@@ -174,6 +174,10 @@ pub(crate) fn decode(
     subband_type: SubbandType,
     style: &CodeBlockStyle,
 ) -> Option<()> {
+    if code_block.number_of_coding_passes == 0 {
+        return Some(());
+    }
+
     if style.selective_arithmetic_coding_bypass
         || style.segmentation_symbols
         || style.vertically_causal_context
