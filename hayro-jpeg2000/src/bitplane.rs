@@ -252,6 +252,8 @@ fn decode_inner(
         code_block.coefficients.push(num);
     }
 
+    // eprintln!("{:?}", code_block.coefficients);
+
     Some(())
 }
 

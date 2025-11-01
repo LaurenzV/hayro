@@ -80,13 +80,13 @@ pub(crate) fn process_tiles(tiles: &[Tile], header: &Header) -> Option<Vec<Chann
     }
 
     for (tile_idx, tile) in tiles.iter().enumerate() {
-        eprintln!(
-            "tile {tile_idx} rect [{},{} {}x{}]",
-            tile.rect.x0,
-            tile.rect.y0,
-            tile.rect.width(),
-            tile.rect.height(),
-        );
+        // eprintln!(
+        //     "tile {tile_idx} rect [{},{} {}x{}]",
+        //     tile.rect.x0,
+        //     tile.rect.y0,
+        //     tile.rect.width(),
+        //     tile.rect.height(),
+        // );
 
         let iter_input = IteratorInput::new(
             tile,
@@ -178,14 +178,18 @@ fn process_tile<'a, T: ProgressionIterator<'a>>(
             }
         }
 
-        samples.push(idwt::apply(
+        let component_samples = idwt::apply(
             &component_data.subbands,
             tile.rect,
             component_info
                 .coding_style_parameters
                 .parameters
                 .transformation,
-        ));
+        );
+
+        // eprintln!("{:?}", component_samples.iter().map(|n| *n as i32).collect::<Vec<_>>());
+
+        samples.push(component_samples);
     }
 
     Some(samples)
@@ -471,18 +475,18 @@ fn build_component_data(tile: &Tile, header: &Header) -> Vec<ComponentData<'stat
                     .num_decomposition_levels;
                 let rect = tile_instance.sub_band_rect(SubbandType::LowLow, decomposition_level);
 
-                eprintln!("making nLL for component {}", component_idx);
-                eprintln!(
-                    "Sub-band rect: [{},{} {}x{}], ll rect [{},{} {}x{}]",
-                    rect.x0,
-                    rect.y0,
-                    rect.width(),
-                    rect.height(),
-                    tile_instance.resolution_transformed_rect.x0,
-                    tile_instance.resolution_transformed_rect.y0,
-                    tile_instance.resolution_transformed_rect.width(),
-                    tile_instance.resolution_transformed_rect.height(),
-                );
+                // eprintln!("making nLL for component {}", component_idx);
+                // eprintln!(
+                //     "Sub-band rect: [{},{} {}x{}], ll rect [{},{} {}x{}]",
+                //     rect.x0,
+                //     rect.y0,
+                //     rect.width(),
+                //     rect.height(),
+                //     tile_instance.resolution_transformed_rect.x0,
+                //     tile_instance.resolution_transformed_rect.y0,
+                //     tile_instance.resolution_transformed_rect.width(),
+                //     tile_instance.resolution_transformed_rect.height(),
+                // );
                 let precincts = build_precincts(&tile_instance, rect, header);
 
                 bands.push(vec![SubBand {
@@ -511,23 +515,23 @@ fn build_component_data(tile: &Tile, header: &Header) -> Vec<ComponentData<'stat
                 {
                     let rect = tile_instance.sub_band_rect(sb_type, decomposition_level);
 
-                    eprintln!(
-                        "r {} making sub-band {} for component {}",
-                        resolution,
-                        subband_idx + 1,
-                        component_idx
-                    );
-                    eprintln!(
-                        "Sub-band rect: [{},{} {}x{}], ll rect [{},{} {}x{}]",
-                        rect.x0,
-                        rect.y0,
-                        rect.width(),
-                        rect.height(),
-                        tile_instance.resolution_transformed_rect.x0,
-                        tile_instance.resolution_transformed_rect.y0,
-                        tile_instance.resolution_transformed_rect.width(),
-                        tile_instance.resolution_transformed_rect.height(),
-                    );
+                    // eprintln!(
+                    //     "r {} making sub-band {} for component {}",
+                    //     resolution,
+                    //     subband_idx + 1,
+                    //     component_idx
+                    // );
+                    // eprintln!(
+                    //     "Sub-band rect: [{},{} {}x{}], ll rect [{},{} {}x{}]",
+                    //     rect.x0,
+                    //     rect.y0,
+                    //     rect.width(),
+                    //     rect.height(),
+                    //     tile_instance.resolution_transformed_rect.x0,
+                    //     tile_instance.resolution_transformed_rect.y0,
+                    //     tile_instance.resolution_transformed_rect.width(),
+                    //     tile_instance.resolution_transformed_rect.height(),
+                    // );
 
                     let precincts = build_precincts(&tile_instance, rect, header);
 
@@ -601,15 +605,15 @@ fn build_precincts(
             let code_blocks_x = code_block_area.width().div_ceil(cb_width);
             let code_blocks_y = code_block_area.height().div_ceil(cb_height);
 
-            eprintln!(
-                "Precinct rect: [{},{} {}x{}], num_code_blocks_wide: {}, num_code_blocks_high: {}",
-                precinct_rect.x0,
-                precinct_rect.y0,
-                precinct_rect.width(),
-                precinct_rect.height(),
-                code_blocks_x,
-                code_blocks_y
-            );
+            // eprintln!(
+            //     "Precinct rect: [{},{} {}x{}], num_code_blocks_wide: {}, num_code_blocks_high: {}",
+            //     precinct_rect.x0,
+            //     precinct_rect.y0,
+            //     precinct_rect.width(),
+            //     precinct_rect.height(),
+            //     code_blocks_x,
+            //     code_blocks_y
+            // );
 
             let blocks = build_precinct_code_blocks(
                 code_block_area,
@@ -661,13 +665,13 @@ fn build_precinct_code_blocks(
             let area = IntRect::from_xywh(x, y, code_block_width, code_block_height)
                 .intersect(sub_band_rect);
 
-            eprintln!(
-                "Codeblock rect: [{},{} {}x{}]",
-                area.x0,
-                area.y0,
-                area.width(),
-                area.height(),
-            );
+            // eprintln!(
+            //     "Codeblock rect: [{},{} {}x{}]",
+            //     area.x0,
+            //     area.y0,
+            //     area.width(),
+            //     area.height(),
+            // );
 
             blocks.push(CodeBlock {
                 x_idx,

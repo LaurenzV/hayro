@@ -53,10 +53,8 @@ fn _2d_sr(
 ) -> SubBand<'static> {
     let mut coefficients = _2d_interleave(ll, hl, lh, hh, rect);
 
-    let temp_rect = IntRect::from_ltrb(0, 0, rect.width(), rect.height());
-
-    hor_sr(&mut coefficients, temp_rect, &transform);
-    ver_sr(&mut coefficients, temp_rect, &transform);
+    hor_sr(&mut coefficients, rect, &transform);
+    ver_sr(&mut coefficients, rect, &transform);
 
     SubBand {
         subband_type: SubbandType::LowLow,
@@ -118,13 +116,15 @@ fn hor_sr(a: &mut [f32], rect: IntRect, transform: &WaveletTransform) {
 
     let shift = PADDING_SHIFT + if rect.x0 % 2 != 0 { 1 } else { 0 };
 
-    for v in rect.y0..rect.y1 {
+    for v in 0..rect.height() {
         buf.clear();
         // Add left padding for 1D_EXTR procedure.
         buf.extend(iter::repeat_n(0.0, shift));
 
+        let start_idx = rect.width() as usize * v as usize;
+
         // Extract row into buffer.
-        buf.extend_from_slice(&a[(rect.width() * v) as usize..][..rect.width() as usize]);
+        buf.extend_from_slice(&a[start_idx..][..rect.width() as usize]);
 
         // Add right padding for 1D_EXTR procedure.
         buf.extend(iter::repeat_n(0.0, shift));
@@ -132,7 +132,7 @@ fn hor_sr(a: &mut [f32], rect: IntRect, transform: &WaveletTransform) {
         _1d_sr(&mut buf, shift, shift + rect.width() as usize, transform);
 
         // Put values back into original array.
-        a[(rect.width() * v) as usize..][..rect.width() as usize]
+        a[start_idx..][..rect.width() as usize]
             .copy_from_slice(&buf[shift..][..rect.width() as usize]);
     }
 }
@@ -144,13 +144,13 @@ fn ver_sr(a: &mut [f32], rect: IntRect, transform: &WaveletTransform) {
 
     let shift = PADDING_SHIFT + if rect.y0 % 2 != 0 { 1 } else { 0 };
 
-    for u in rect.x0..rect.x1 {
+    for u in 0..rect.width() {
         buf.clear();
         // Add left padding for 1D_EXTR procedure.
         buf.extend(iter::repeat_n(0.0, shift));
 
         // Extract column into buffer.
-        for y in rect.y0..rect.y1 {
+        for y in 0..rect.height() {
             buf.push(a[(u + rect.width() * y) as usize]);
         }
 
@@ -160,7 +160,7 @@ fn ver_sr(a: &mut [f32], rect: IntRect, transform: &WaveletTransform) {
         _1d_sr(&mut buf, shift, shift + rect.height() as usize, transform);
 
         // Put values back into original array.
-        for (idx, y) in (rect.y0..rect.y1).enumerate() {
+        for (idx, y) in (0..rect.height()).enumerate() {
             a[(u + rect.width() * y) as usize] = buf[shift + idx]
         }
     }

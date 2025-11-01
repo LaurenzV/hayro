@@ -36,6 +36,11 @@ fn kakadu_lossless_rgb_u8_prog1_layers1_res6_mct() {
     run_asset_test("kakadu-lossless-rgb-u8-prog1-layers1-res6-mct.jp2");
 }
 
+#[test]
+fn kakadu_lossless_rgba_u8_prog1_layers1_res6_mct() {
+    run_asset_test("kakadu-lossless-rgba-u8-prog1-layers1-res6-mct.jp2");
+}
+
 fn run_asset_test(file_name: &str) {
     let asset_path = ASSETS_PATH.join(file_name);
     let data = fs::read(&asset_path).expect("failed to read asset");
@@ -119,6 +124,9 @@ fn bitmap_to_dynamic_image(bitmap: Bitmap) -> DynamicImage {
         }
         (3, false) => {
             DynamicImage::ImageRgb8(ImageBuffer::from_raw(width, height, interleaved).unwrap())
+        }
+        (4, true) => {
+            DynamicImage::ImageRgba8(ImageBuffer::from_raw(width, height, interleaved).unwrap())
         }
         _ => unimplemented!(),
     }
