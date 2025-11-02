@@ -222,7 +222,7 @@ fn decode_inner(
             SignificancePropagation,
             MagnitudeRefinement,
         }
-
+        
         let pass = match (coding_pass % 3) {
             0 => PassType::Cleanup,
             1 => PassType::SignificancePropagation,
@@ -243,6 +243,16 @@ fn decode_inner(
             }
         }
     }
+    
+    let max_bits = ctx.magnitude_array.iter().map(|v| v.count).max().unwrap();
+    
+    // Coding passes don't have to end with a clean-up pass, 
+    // so pad the remaining coefficients in case they don't have `max` bits.
+    for el in &mut ctx.magnitude_array {
+        while el.count < max_bits {
+            el.push_bit(0);
+        }
+    }
 
     for (sign, magnitude) in ctx.signs.iter().zip(ctx.magnitude_array) {
         let mut num = magnitude.get() as i16;
@@ -251,9 +261,7 @@ fn decode_inner(
         }
         code_block.coefficients.push(num);
     }
-
-    // eprintln!("{:?}", code_block.coefficients);
-
+    
     Some(())
 }
 
@@ -515,7 +523,7 @@ fn context_label_magnitude_refinement_coding(pos: &Position, ctx: &BitplaneDecod
     }
 }
 
-#[derive(Default, Copy, Clone)]
+#[derive(Default, Copy, Clone, Debug)]
 struct ComponentBitPlanes {
     inner: u16,
     count: u8,

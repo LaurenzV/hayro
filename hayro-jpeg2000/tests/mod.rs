@@ -116,6 +116,11 @@ fn openjpeg_lossless_rgba_u4() {
     run_asset_test("openjpeg-lossless-rgba-u4.jp2");
 }
 
+#[test]
+fn openjpeg_lossy_quantization_scalar_derived() {
+    run_asset_test("openjpeg-lossy-quantization-scalar-derived.jp2");
+}
+
 fn run_asset_test(file_name: &str) {
     let asset_path = ASSETS_PATH.join(file_name);
     let data = fs::read(&asset_path).expect("failed to read asset");
