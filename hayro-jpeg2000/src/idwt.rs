@@ -209,7 +209,7 @@ fn _1d_filter_97(y: &mut [f32], i0: usize, i1: usize) {
     const KAPPA: f32 = 1.230_174_104_914_001;
 
     // Step 1
-    for i in (i0 / 2 - 1)..(i1 / 2 + 1) {
+    for i in (i0 / 2 - 1)..(i1 / 2 + 2) {
         y[2 * i] = KAPPA * y[2 * i];
     }
 
@@ -235,7 +235,7 @@ fn _1d_filter_97(y: &mut [f32], i0: usize, i1: usize) {
 
     // Step 6
     for i in (i0 / 2)..(i1 / 2) {
-        y[2 * i + 1] = ALPHA * (y[2 * i] + y[2 * i + 2]);
+        y[2 * i + 1] = y[2 * i + 1] - ALPHA * (y[2 * i] + y[2 * i + 2]);
     }
 }
 
