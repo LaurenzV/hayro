@@ -1,5 +1,6 @@
 use hayro_jpeg2000::read;
 use image::{DynamicImage, ImageBuffer};
+use moxcms::{ColorProfile, Layout, TransformOptions};
 use std::env;
 use std::fs;
 use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -21,14 +22,14 @@ fn main() {
 
     for path in inputs {
         let display = path.to_string_lossy();
-        println!("Decoding {}", display);
+        // println!("Decoding {}", display);
 
         let result = catch_unwind(AssertUnwindSafe(|| convert_jp2(&path)));
 
         match result {
             Ok(conversion) => match conversion {
                 Ok(output_path) => {
-                    println!("  Wrote {}", output_path.to_string_lossy());
+                    // println!("  Wrote {}", output_path.to_string_lossy());
                 }
                 Err(err) => {
                     eprintln!("  Failed: {}", err);
@@ -126,6 +127,32 @@ fn convert_jp2(path: &Path) -> Result<PathBuf, String> {
             ImageBuffer::from_raw(width, height, interleaved)
                 .ok_or_else(|| "failed to build rgba buffer".to_string())?,
         ),
+        (4, false) => {
+            let src_profile = ColorProfile::new_from_slice(include_bytes!(
+                "../assets/CGATS001Compat-v2-micro.icc"
+            ))
+            .unwrap();
+            let dest_profile = ColorProfile::new_srgb();
+
+            let src_layout = Layout::Rgba;
+            let transform = src_profile
+                .create_transform_8bit(
+                    src_layout,
+                    &dest_profile,
+                    Layout::Rgb,
+                    TransformOptions::default(),
+                )
+                .unwrap();
+
+            let mut dest = vec![0; (width * height * 3) as usize];
+
+            transform.transform(&interleaved, &mut dest).unwrap();
+
+            DynamicImage::ImageRgb8(
+                ImageBuffer::from_raw(width, height, dest)
+                    .ok_or_else(|| "failed to build rgb buffer".to_string())?,
+            )
+        }
         _ => return Err("unsupported channel configuration".to_string()),
     };
 

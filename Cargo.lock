@@ -493,6 +493,7 @@ version = "0.1.0"
 dependencies = [
  "hayro-common",
  "image 0.25.8",
+ "moxcms 0.7.9",
 ]
 
 [[package]]
@@ -580,7 +581,7 @@ checksum = "529feb3e6769d234375c4cf1ee2ce713682b8e76538cb13f9fc23e1400a591e7"
 dependencies = [
  "bytemuck",
  "byteorder-lite",
- "moxcms 0.7.8",
+ "moxcms 0.7.9",
  "num-traits",
  "png 0.18.0",
 ]
@@ -763,9 +764,9 @@ dependencies = [
 
 [[package]]
 name = "moxcms"
-version = "0.7.8"
+version = "0.7.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "692af879e4d9383c0fd9dec15524af6b6977c8bf1c6b278a4526d5341347c574"
+checksum = "0fbdd3d7436f8b5e892b8b7ea114271ff0fa00bc5acae845d53b07d498616ef6"
 dependencies = [
  "num-traits",
  "pxfm",

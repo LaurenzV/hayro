@@ -12,3 +12,4 @@ hayro-common = { workspace = true }
 
 [dev-dependencies]
 image = { version = "0.25.8", default-features = false, features = ["png"] }
+moxcms = { version = "0.7.9"}
