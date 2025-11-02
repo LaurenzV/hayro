@@ -129,8 +129,11 @@ fn process_tile<'a>(
     for (component_data, component_info) in
         component_data.iter_mut().zip(tile.component_info.iter())
     {
-        for resolution_level in &mut component_data.subbands {
+        for (resolution, resolution_level) in component_data.subbands.iter_mut().enumerate() {
             for subband in resolution_level {
+                let dequantization_step =
+                    dequantization_factor(subband.subband_type, resolution as u16, component_info);
+
                 for precinct in &mut subband.precincts {
                     for codeblock in &mut precinct.code_blocks {
                         // eprintln!(
@@ -146,12 +149,6 @@ fn process_tile<'a>(
                                 .parameters
                                 .code_block_style,
                         )?;
-
-                        if component_info.quantization_info.quantization_style
-                            != QuantizationStyle::NoQuantization
-                        {
-                            panic!("quantization not implemented yet.");
-                        }
 
                         // Copy the coefficients into the subband.
 
@@ -170,6 +167,10 @@ fn process_tile<'a>(
 
                             for (input, output) in in_row.iter().zip(out_row.iter_mut()) {
                                 *output = *input as f32;
+
+                                if let Some(q) = dequantization_step {
+                                    *output *= q;
+                                }
                             }
                         }
                     }
@@ -192,6 +193,68 @@ fn process_tile<'a>(
     }
 
     Some(samples)
+}
+
+fn dequantization_factor(
+    subband_type: SubbandType,
+    resolution: u16,
+    component_info: &ComponentInfo,
+) -> Option<f32> {
+    if component_info.quantization_info.quantization_style == QuantizationStyle::NoQuantization {
+        return None;
+    }
+
+    let n_ll = component_info
+        .coding_style_parameters
+        .parameters
+        .num_decomposition_levels;
+
+    let sb_index = match subband_type {
+        // TODO: Shouldn't be reached.
+        SubbandType::LowLow => u16::MAX,
+        SubbandType::HighLow => 0,
+        SubbandType::LowHigh => 1,
+        SubbandType::HighHigh => 2,
+    };
+
+    let step_sizes = &component_info.quantization_info.step_sizes;
+    let (exponent, mantissa) = match component_info.quantization_info.quantization_style {
+        QuantizationStyle::NoQuantization | QuantizationStyle::ScalarExpounded => {
+            let entry = if resolution == 0 {
+                step_sizes[0]
+            } else {
+                step_sizes[(1 + (resolution - 1) * 3 + sb_index) as usize]
+            };
+
+            (entry.exponent, entry.mantissa)
+        }
+        QuantizationStyle::ScalarDerived => {
+            let e_0 = step_sizes[0].exponent;
+            let mantissa = step_sizes[0].mantissa;
+            let n_b = if resolution == 0 {
+                n_ll
+            } else {
+                n_ll + 1 - resolution
+            };
+
+            (e_0 - n_ll + n_b, mantissa)
+        }
+    };
+
+    let r_b = {
+        let log_gain = match subband_type {
+            SubbandType::LowLow => 0,
+            SubbandType::LowHigh => 1,
+            SubbandType::HighLow => 1,
+            SubbandType::HighHigh => 2,
+        };
+
+        component_info.size_info.precision as u16 + log_gain
+    };
+    let delta_b = 2.0f32.powf(r_b as f32 - exponent as f32)
+        * (1.0 + (mantissa as f32) / (2u32.pow(11) as f32));
+
+    Some(delta_b)
 }
 
 fn save_samples<'a>(
