@@ -1,5 +1,5 @@
 use crate::codestream::markers::{EPH, SOP};
-use crate::codestream::{ComponentInfo, Header, ReaderExt, SizeData, markers};
+use crate::codestream::{ComponentInfo, Header, ReaderExt, SizeData, markers, skip_marker_segment};
 use crate::packet::SubbandType;
 use hayro_common::byte::Reader;
 
@@ -310,6 +310,10 @@ fn read_tile_part<'a>(
                 let length = tile_part_reader.read_u16()?;
                 let payload = length.checked_sub(2)? as usize;
                 tile_part_reader.skip_bytes(payload)?;
+            }
+            markers::PLT => {
+                tile_part_reader.read_marker().ok()?;
+                skip_marker_segment(&mut tile_part_reader)?;
             }
             m => {
                 panic!("marker: {}", markers::to_string(m));

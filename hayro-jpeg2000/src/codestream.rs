@@ -596,7 +596,7 @@ fn rgn_marker(reader: &mut Reader) -> Option<()> {
     skip_marker_segment(reader)
 }
 
-fn skip_marker_segment(reader: &mut Reader) -> Option<()> {
+pub(crate) fn skip_marker_segment(reader: &mut Reader) -> Option<()> {
     let length = reader.read_u16()?.checked_sub(2)?;
     reader.skip_bytes(length as usize)?;
 

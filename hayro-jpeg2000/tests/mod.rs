@@ -101,6 +101,11 @@ fn openjpeg_lossless_rgba_u8_prog0_eph_empty_packets() {
     run_asset_test("openjpeg-lossless-rgba-u8-prog0-EPH-empty-packets.jp2");
 }
 
+#[test]
+fn openjpeg_lossless_rgba_u8_plt() {
+    run_asset_test("openjpeg-lossless-rgba-u8-PLT.jp2");
+}
+
 fn run_asset_test(file_name: &str) {
     let asset_path = ASSETS_PATH.join(file_name);
     let data = fs::read(&asset_path).expect("failed to read asset");
