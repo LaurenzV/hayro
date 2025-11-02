@@ -1,6 +1,6 @@
 use crate::ImageMetadata;
 use crate::bitmap::{Bitmap, ChannelData};
-use crate::packet::process_tiles;
+use crate::packet::{SubbandType, process_tiles};
 use crate::tile::{IntRect, Tile, TileInstance, read_tiles};
 use hayro_common::byte::Reader;
 
@@ -376,6 +376,49 @@ impl ComponentInfo {
                 .div_ceil(self.size_info.vertical_resolution as u32);
 
             IntRect::from_ltrb(t_x0, t_y0, t_x1, t_y1)
+        }
+    }
+
+    pub(crate) fn exponent_mantissa(
+        &self,
+        subband_type: SubbandType,
+        resolution: u16,
+    ) -> (u16, u16) {
+        let n_ll = self
+            .coding_style_parameters
+            .parameters
+            .num_decomposition_levels;
+
+        let sb_index = match subband_type {
+            // TODO: Shouldn't be reached.
+            SubbandType::LowLow => u16::MAX,
+            SubbandType::HighLow => 0,
+            SubbandType::LowHigh => 1,
+            SubbandType::HighHigh => 2,
+        };
+
+        let step_sizes = &self.quantization_info.step_sizes;
+        match self.quantization_info.quantization_style {
+            QuantizationStyle::NoQuantization | QuantizationStyle::ScalarExpounded => {
+                let entry = if resolution == 0 {
+                    step_sizes[0]
+                } else {
+                    step_sizes[(1 + (resolution - 1) * 3 + sb_index) as usize]
+                };
+
+                (entry.exponent, entry.mantissa)
+            }
+            QuantizationStyle::ScalarDerived => {
+                let e_0 = step_sizes[0].exponent;
+                let mantissa = step_sizes[0].mantissa;
+                let n_b = if resolution == 0 {
+                    n_ll
+                } else {
+                    n_ll + 1 - resolution
+                };
+
+                (e_0 - n_ll + n_b, mantissa)
+            }
         }
     }
 

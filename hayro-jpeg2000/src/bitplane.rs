@@ -4,7 +4,7 @@
 //! instead of the specification.
 
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
-use crate::codestream::CodeBlockStyle;
+use crate::codestream::{CodeBlockStyle, ComponentInfo};
 use crate::packet::{CodeBlock, SubbandType};
 
 pub(crate) struct BitplaneDecodeContext {
@@ -66,7 +66,7 @@ impl BitplaneDecodeContext {
         self.contexts[18].index = 46;
     }
 
-    fn reset(&mut self, width: u32, height: u32, subband_type: SubbandType) {
+    fn reset(&mut self, width: u32, height: u32, missing_bitplanes: u8, subband_type: SubbandType) {
         for arr in [
             &mut self.signs,
             &mut self.significance_states,
@@ -82,6 +82,10 @@ impl BitplaneDecodeContext {
             width as usize * height as usize,
             ComponentBitPlanes::default(),
         );
+
+        for mag in &mut self.magnitude_array {
+            mag.count = missing_bitplanes;
+        }
 
         self.width = width;
         self.height = height;
@@ -172,6 +176,7 @@ impl BitplaneDecodeContext {
 pub(crate) fn decode(
     code_block: &mut CodeBlock,
     subband_type: SubbandType,
+    num_bitplanes: u16,
     style: &CodeBlockStyle,
 ) -> Option<()> {
     if code_block.number_of_coding_passes == 0 {
@@ -201,18 +206,20 @@ pub(crate) fn decode(
         .collect::<Vec<_>>();
     let mut decoder = ArithmeticDecoder::new(&combined_layers);
 
-    decode_inner(code_block, subband_type, &mut decoder)
+    decode_inner(code_block, subband_type, num_bitplanes, &mut decoder)
 }
 
 fn decode_inner(
     code_block: &mut CodeBlock,
     subband_type: SubbandType,
+    num_bitplanes: u16,
     decoder: &mut impl BitDecoder,
 ) -> Option<()> {
     let mut ctx = BitplaneDecodeContext::new();
     ctx.reset(
         code_block.area.width(),
         code_block.area.height(),
+        code_block.missing_bit_planes,
         subband_type,
     );
 
@@ -222,7 +229,7 @@ fn decode_inner(
             SignificancePropagation,
             MagnitudeRefinement,
         }
-        
+
         let pass = match (coding_pass % 3) {
             0 => PassType::Cleanup,
             1 => PassType::SignificancePropagation,
@@ -243,13 +250,13 @@ fn decode_inner(
             }
         }
     }
-    
-    let max_bits = ctx.magnitude_array.iter().map(|v| v.count).max().unwrap();
-    
-    // Coding passes don't have to end with a clean-up pass, 
+
+    // let max_bits = ctx.magnitude_array.iter().map(|v| v.count).max().unwrap();
+
+    // Coding passes don't have to end with a clean-up pass,
     // so pad the remaining coefficients in case they don't have `max` bits.
     for el in &mut ctx.magnitude_array {
-        while el.count < max_bits {
+        while (el.count as u16) < num_bitplanes {
             el.push_bit(0);
         }
     }
@@ -261,7 +268,7 @@ fn decode_inner(
         }
         code_block.coefficients.push(num);
     }
-    
+
     Some(())
 }
 
@@ -713,7 +720,7 @@ mod tests {
             coefficients: vec![],
         };
 
-        decode_inner(&mut code_block, SubbandType::LowLow, &mut decoder);
+        decode_inner(&mut code_block, SubbandType::LowLow, 3, &mut decoder);
 
         assert_eq!(
             code_block.coefficients,
@@ -743,6 +750,7 @@ mod tests {
         decode(
             &mut code_block,
             SubbandType::LowLow,
+            6,
             &CodeBlockStyle::default(),
         );
 
@@ -771,6 +779,7 @@ mod tests {
         decode(
             &mut code_block,
             SubbandType::LowHigh,
+            3,
             &CodeBlockStyle::default(),
         );
 
@@ -815,6 +824,7 @@ mod tests {
         decode(
             &mut code_block,
             SubbandType::HighLow,
+            5,
             &CodeBlockStyle::default(),
         );
 
