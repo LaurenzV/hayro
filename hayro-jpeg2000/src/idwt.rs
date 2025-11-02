@@ -179,8 +179,8 @@ fn _1d_sr(y: &mut [f32], i0: usize, i1: usize, transform: &WaveletTransform) {
     _1d_extr(y, i0, i1, transform);
 
     match transform {
-        WaveletTransform::Irreversible97 => unimplemented!(),
         WaveletTransform::Reversible53 => _1d_filter_53r(y, i0, i1),
+        WaveletTransform::Irreversible97 => _1d_filter_97(y, i0, i1),
     }
 }
 
@@ -196,6 +196,46 @@ fn _1d_filter_53r(y: &mut [f32], i0: usize, i1: usize) {
     for n in i0 / 2..(i1 / 2) {
         let base_idx = 2 * n + 1;
         y[base_idx] = y[base_idx] + ((y[base_idx - 1] + y[base_idx + 1]) / 2.0).floor();
+    }
+}
+
+/// The 1D Filter 9-7I procedure from F.3.8.2
+fn _1d_filter_97(y: &mut [f32], i0: usize, i1: usize) {
+    // Table F.4.
+    const ALPHA: f32 = -1.586_134_342_059_924;
+    const BETA: f32 = -0.052_980_118_572_961;
+    const GAMMA: f32 = 0.882_911_075_530_934;
+    const DELTA: f32 = 0.443_506_852_043_971;
+    const KAPPA: f32 = 1.230_174_104_914_001;
+
+    // Step 1
+    for i in (i0 / 2 - 1)..(i1 / 2 + 1) {
+        y[2 * i] = KAPPA * y[2 * i];
+    }
+
+    // Step 2
+    for i in (i0 / 2 - 2)..(i1 / 2 + 2) {
+        y[2 * i + 1] = (1.0 / KAPPA) * y[2 * i + 1];
+    }
+
+    // Step 3
+    for i in (i0 / 2 - 1)..(i1 / 2 + 2) {
+        y[2 * i] = y[2 * i] - DELTA * (y[2 * i - 1] + y[2 * i + 1]);
+    }
+
+    // Step 4
+    for i in (i0 / 2 - 1)..(i1 / 2 + 1) {
+        y[2 * i + 1] = y[2 * i + 1] - GAMMA * (y[2 * i] + y[2 * i + 2]);
+    }
+
+    // Step 5
+    for i in (i0 / 2)..(i1 / 2 + 1) {
+        y[2 * i] = y[2 * i] - BETA * (y[2 * i - 1] + y[2 * i + 1]);
+    }
+
+    // Step 6
+    for i in (i0 / 2)..(i1 / 2) {
+        y[2 * i + 1] = ALPHA * (y[2 * i] + y[2 * i + 2]);
     }
 }
 
