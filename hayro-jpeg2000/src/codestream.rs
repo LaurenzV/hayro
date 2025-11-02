@@ -244,12 +244,18 @@ pub(crate) struct CodingStyleParameters {
     pub(crate) precinct_exponents: Vec<(u8, u8)>,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct StepSize {
+    pub(crate) mantissa: u16,
+    pub(crate) exponent: u16,
+}
+
 /// Common quantization parameters (A.6.4 and A.6.5).
 #[derive(Clone, Debug)]
 pub(crate) struct QuantizationInfo {
     pub(crate) quantization_style: QuantizationStyle,
     pub(crate) guard_bits: u8,
-    pub(crate) step_sizes: Vec<u16>,
+    pub(crate) step_sizes: Vec<StepSize>,
 }
 
 /// Default values for coding style (A.6.1).
@@ -696,24 +702,35 @@ fn quantization_parameters(
 ) -> Option<QuantizationInfo> {
     let mut step_sizes = Vec::new();
 
+    let irreversible = |val: u16| {
+        let exponent = (val >> 11);
+        let mantissa = (val & ((1 << 11) - 1));
+
+        StepSize { exponent, mantissa }
+    };
+
     match quantization_style {
         QuantizationStyle::NoQuantization => {
             // 8 bits per band (5 bits exponent, 3 bits reserved)
             for _ in 0..remaining_bytes {
                 let value = reader.read_byte()? as u16;
-                step_sizes.push(value);
+                step_sizes.push(StepSize {
+                    // Unused.
+                    mantissa: 0,
+                    exponent: (value >> 3),
+                });
             }
         }
         QuantizationStyle::ScalarDerived => {
             let value = reader.read_u16()?;
-            step_sizes.push(value);
+            step_sizes.push(irreversible(value));
         }
         QuantizationStyle::ScalarExpounded => {
-            // 16 bits per band
             let num_bands = remaining_bytes / 2;
             for _ in 0..num_bands {
                 let value = reader.read_u16()?;
-                step_sizes.push(value);
+
+                step_sizes.push(irreversible(value));
             }
         }
     }
