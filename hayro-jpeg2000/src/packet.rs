@@ -136,6 +136,12 @@ fn process_tile<'a>(
 
                 for precinct in &mut subband.precincts {
                     for codeblock in &mut precinct.code_blocks {
+                        let num_bitplanes = {
+                            let (exponent, _) = component_info
+                                .exponent_mantissa(subband.subband_type, resolution as u16);
+                            // Equation (E-2)
+                            component_info.quantization_info.guard_bits as u16 + exponent - 1
+                        };
                         // eprintln!(
                         //     "decoding block {}x{}",
                         //     codeblock.area.width(),
@@ -144,11 +150,14 @@ fn process_tile<'a>(
                         bitplane::decode(
                             codeblock,
                             subband.subband_type,
+                            num_bitplanes,
                             &component_info
                                 .coding_style_parameters
                                 .parameters
                                 .code_block_style,
                         )?;
+
+                        // eprintln!("{:?}", codeblock.coefficients);
 
                         // Copy the coefficients into the subband.
 
@@ -204,42 +213,7 @@ fn dequantization_factor(
         return None;
     }
 
-    let n_ll = component_info
-        .coding_style_parameters
-        .parameters
-        .num_decomposition_levels;
-
-    let sb_index = match subband_type {
-        // TODO: Shouldn't be reached.
-        SubbandType::LowLow => u16::MAX,
-        SubbandType::HighLow => 0,
-        SubbandType::LowHigh => 1,
-        SubbandType::HighHigh => 2,
-    };
-
-    let step_sizes = &component_info.quantization_info.step_sizes;
-    let (exponent, mantissa) = match component_info.quantization_info.quantization_style {
-        QuantizationStyle::NoQuantization | QuantizationStyle::ScalarExpounded => {
-            let entry = if resolution == 0 {
-                step_sizes[0]
-            } else {
-                step_sizes[(1 + (resolution - 1) * 3 + sb_index) as usize]
-            };
-
-            (entry.exponent, entry.mantissa)
-        }
-        QuantizationStyle::ScalarDerived => {
-            let e_0 = step_sizes[0].exponent;
-            let mantissa = step_sizes[0].mantissa;
-            let n_b = if resolution == 0 {
-                n_ll
-            } else {
-                n_ll + 1 - resolution
-            };
-
-            (e_0 - n_ll + n_b, mantissa)
-        }
-    };
+    let (exponent, mantissa) = component_info.exponent_mantissa(subband_type, resolution);
 
     let r_b = {
         let log_gain = match subband_type {
