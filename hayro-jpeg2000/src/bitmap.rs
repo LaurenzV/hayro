@@ -24,7 +24,20 @@ pub struct ChannelData {
 impl ChannelData {
     pub fn into_8bit(self) -> Vec<u8> {
         match self.container {
-            ChannelContainer::U8(d) => d,
+            ChannelContainer::U8(mut d) => {
+                if self.bit_depth == 8 {
+                    return d;
+                }
+
+                let old_max = ((1 << self.bit_depth) - 1) as f32;
+                let new_max = ((1 << 8) - 1) as f32;
+                
+                for sample in &mut d {
+                    *sample = ((*sample as f32 / old_max) * new_max) as u8;
+                }
+                
+                d
+            },
             _ => unimplemented!(),
         }
     }
