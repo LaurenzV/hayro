@@ -107,6 +107,11 @@ fn openjpeg_lossless_rgba_u8_plt() {
 }
 
 #[test]
+fn jasper_tile4x2_res5() {
+    run_asset_test("jasper-tile4x2-res5.jp2");
+}
+
+#[test]
 fn openjpeg_lossless_rgba_u4() {
     run_asset_test("openjpeg-lossless-rgba-u4.jp2");
 }
