@@ -288,7 +288,15 @@ fn save_samples<'a>(
 
         match transform {
             WaveletTransform::Irreversible97 => {
-                unimplemented!()
+                for ((y0, y1), y2) in s0.iter_mut().zip(s1.iter_mut()).zip(s2.iter_mut()) {
+                    let i0 = *y0 + 1.402 * *y2;
+                    let i1 = *y0 - 0.34413 * *y1 - 0.71414 * *y2;
+                    let i2 = *y0 + 1.772 * *y1;
+
+                    *y0 = i0;
+                    *y1 = i1;
+                    *y2 = i2;
+                }
             }
             WaveletTransform::Reversible53 => {
                 for ((y0, y1), y2) in s0.iter_mut().zip(s1.iter_mut()).zip(s2.iter_mut()) {
