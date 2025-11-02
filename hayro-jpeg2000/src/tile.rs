@@ -1,5 +1,8 @@
 use crate::codestream::markers::{EPH, SOP};
-use crate::codestream::{ComponentInfo, Header, ReaderExt, SizeData, markers, skip_marker_segment};
+use crate::codestream::{
+    ComponentCodingStyle, ComponentInfo, Header, QuantizationInfo, ReaderExt, SizeData, markers,
+    skip_marker_segment,
+};
 use crate::packet::SubbandType;
 use hayro_common::byte::Reader;
 
@@ -52,6 +55,7 @@ impl IntRect {
 #[derive(Clone, Debug)]
 pub(crate) struct Tile<'a> {
     tile_part_infos: Vec<TilePartInfo<'a>>,
+    pub(crate) component_info: Vec<ComponentInfo>,
     pub(crate) rect: IntRect,
 }
 
@@ -61,6 +65,7 @@ impl<'a> Tile<'a> {
 
         Tile {
             tile_part_infos: vec![],
+            component_info: vec![],
             rect: raw_coords,
         }
     }
@@ -252,6 +257,10 @@ pub(crate) fn read_tiles<'a>(
             .get_mut(tile_part.tile_index as usize)
             .ok_or("tile part had invalid tile index")?;
 
+        if tile_part.tile_part_index == 0 {
+            cur_tile.component_info = tile_part.component_infos.clone();
+        }
+
         cur_tile.tile_part_infos.push(TilePartInfo {
             data: tile_part.data,
         });
@@ -263,6 +272,7 @@ pub(crate) fn read_tiles<'a>(
 struct ParsedTilePart<'a> {
     tile_index: u16,
     tile_part_index: u16,
+    component_infos: Vec<ComponentInfo>,
     data: &'a [u8],
 }
 
@@ -298,11 +308,49 @@ fn read_tile_part<'a>(
         (Reader::new(data), sot_marker)
     };
 
+    let num_components = main_header.component_infos.len();
+    let mut cod = None;
+    let mut qcd = None;
+    let mut cod_components = vec![None; num_components];
+    let mut qcd_components = vec![None; num_components];
+
     loop {
         match tile_part_reader.peek_marker()? {
             markers::SOD => {
                 tile_part_reader.read_marker().ok()?;
                 break;
+            }
+            markers::COD => {
+                tile_part_reader.read_marker().ok()?;
+                cod = Some(
+                    crate::codestream::cod_marker(&mut tile_part_reader)
+                        .ok_or("failed to read COD marker")
+                        .ok()?,
+                );
+            }
+            markers::COC => {
+                tile_part_reader.read_marker().ok()?;
+                let (component_index, coc) =
+                    crate::codestream::coc_marker(&mut tile_part_reader, num_components as u16)
+                        .ok_or("failed to read COC marker")
+                        .ok()?;
+                cod_components[component_index as usize] = Some(coc);
+            }
+            markers::QCD => {
+                tile_part_reader.read_marker().ok()?;
+                qcd = Some(
+                    crate::codestream::qcd_marker(&mut tile_part_reader)
+                        .ok_or("failed to read QCD marker")
+                        .ok()?,
+                );
+            }
+            markers::QCC => {
+                tile_part_reader.read_marker().ok()?;
+                let (component_index, qcc) =
+                    crate::codestream::qcc_marker(&mut tile_part_reader, num_components as u16)
+                        .ok_or("failed to read QCC marker")
+                        .ok()?;
+                qcd_components[component_index as usize] = Some(qcc);
             }
             markers::EOC => break,
             markers::RGN => {
@@ -333,10 +381,28 @@ fn read_tile_part<'a>(
         }
     };
 
+    let component_infos = main_header
+        .component_infos
+        .iter()
+        .enumerate()
+        .map(|(idx, i)| ComponentInfo {
+            size_info: i.size_info,
+            coding_style_parameters: cod_components[idx]
+                .clone()
+                .or_else(|| cod.clone().map(|c| c.component_parameters))
+                .unwrap_or(i.coding_style_parameters.clone()),
+            quantization_info: qcd_components[idx]
+                .clone()
+                .or_else(|| qcd.clone())
+                .unwrap_or(i.quantization_info.clone()),
+        })
+        .collect();
+
     let tile_part = ParsedTilePart {
         data: tile_part_reader.tail()?,
         tile_index: header.tile_index,
         tile_part_index: index,
+        component_infos,
     };
 
     tile_parts.push(tile_part);

@@ -1,8 +1,8 @@
 use crate::bitmap::{Bitmap, ChannelContainer, ChannelData};
 use crate::codestream::markers::{EPH, SOP};
 use crate::codestream::{
-    Header, MultipleComponentTransform, ProgressionOrder, QuantizationStyle, ReaderExt,
-    WaveletTransform,
+    ComponentInfo, Header, MultipleComponentTransform, ProgressionOrder, QuantizationStyle,
+    ReaderExt, WaveletTransform,
 };
 use crate::progression::{IteratorInput, ProgressionData, build_progression_sequence};
 use crate::tag_tree::TagTree;
@@ -127,7 +127,7 @@ fn process_tile<'a>(
     let mut samples = vec![];
 
     for (component_data, component_info) in
-        component_data.iter_mut().zip(header.component_infos.iter())
+        component_data.iter_mut().zip(tile.component_info.iter())
     {
         for resolution_level in &mut component_data.subbands {
             for subband in resolution_level {
@@ -484,7 +484,7 @@ fn parse_packet<'a>(
 fn build_component_data(tile: &Tile, header: &Header) -> Vec<ComponentData<'static>> {
     let mut component_data = vec![];
 
-    for (component_idx, component_info) in header.component_infos.iter().enumerate() {
+    for (component_idx, component_info) in tile.component_info.iter().enumerate() {
         let mut bands = vec![];
 
         for resolution in 0..component_info

@@ -12,7 +12,6 @@ pub(crate) struct ProgressionData {
 pub(crate) struct IteratorInput<'a> {
     layers: u16,
     tile: &'a Tile<'a>,
-    component_infos: &'a [ComponentInfo],
     max_resolutions: u16,
 }
 
@@ -30,7 +29,6 @@ impl<'a> IteratorInput<'a> {
 
         Self {
             layers,
-            component_infos,
             tile,
             max_resolutions,
         }
@@ -146,7 +144,7 @@ fn build_resolution_position_component_layer_sequence(
                     let Some(tile_instance) = tile_instance_opt else {
                         continue;
                     };
-                    let component_info = &input.component_infos[component_idx];
+                    let component_info = &input.tile.component_info[component_idx];
 
                     if let Some(precinct) =
                         find_precinct_index(tile_instance, component_info, tile_rect, x, y)
@@ -176,7 +174,7 @@ fn build_position_component_resolution_layer_sequence(
 
     for y in tile_rect.y0..tile_rect.y1 {
         for x in tile_rect.x0..tile_rect.x1 {
-            for (component_idx, component_info) in input.component_infos.iter().enumerate() {
+            for (component_idx, component_info) in input.tile.component_info.iter().enumerate() {
                 let num_resolution_levels = component_info
                     .coding_style_parameters
                     .parameters
@@ -211,7 +209,7 @@ fn build_component_position_resolution_layer_sequence(
     let mut sequence = Vec::new();
     let tile_rect = input.tile.rect;
 
-    for (component_idx, component_info) in input.component_infos.iter().enumerate() {
+    for (component_idx, component_info) in input.tile.component_info.iter().enumerate() {
         let num_resolution_levels = component_info
             .coding_style_parameters
             .parameters
@@ -247,7 +245,8 @@ fn tile_instances_for_resolution<'a>(
     resolution: u16,
 ) -> Vec<Option<TileInstance<'a>>> {
     input
-        .component_infos
+        .tile
+        .component_info
         .iter()
         .map(|component_info| {
             if resolution

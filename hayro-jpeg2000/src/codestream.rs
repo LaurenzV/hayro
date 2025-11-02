@@ -3,7 +3,6 @@ use crate::bitmap::{Bitmap, ChannelData};
 use crate::packet::process_tiles;
 use crate::tile::{IntRect, Tile, TileInstance, read_tiles};
 use hayro_common::byte::Reader;
-use std::fs::Metadata;
 
 pub(crate) fn read(
     stream: &[u8],
@@ -342,7 +341,7 @@ pub(crate) struct ComponentSizeInfo {
     pub(crate) vertical_resolution: u8,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct ComponentInfo {
     pub(crate) size_info: ComponentSizeInfo,
     pub(crate) coding_style_parameters: ComponentCodingStyle,
@@ -604,7 +603,7 @@ pub(crate) fn skip_marker_segment(reader: &mut Reader) -> Option<()> {
 }
 
 /// COD marker (A.6.1).
-fn cod_marker(reader: &mut Reader) -> Option<GlobalCodingStyleInfo> {
+pub(crate) fn cod_marker(reader: &mut Reader) -> Option<GlobalCodingStyleInfo> {
     // Length.
     let _ = reader.read_u16()?;
 
@@ -628,7 +627,7 @@ fn cod_marker(reader: &mut Reader) -> Option<GlobalCodingStyleInfo> {
 }
 
 /// COC marker (A.6.2).
-fn coc_marker(reader: &mut Reader, csiz: u16) -> Option<(u16, ComponentCodingStyle)> {
+pub(crate) fn coc_marker(reader: &mut Reader, csiz: u16) -> Option<(u16, ComponentCodingStyle)> {
     // Length.
     let _ = reader.read_u16()?;
 
@@ -651,7 +650,7 @@ fn coc_marker(reader: &mut Reader, csiz: u16) -> Option<(u16, ComponentCodingSty
 }
 
 /// QCD marker (A.6.4).
-fn qcd_marker(reader: &mut Reader) -> Option<QuantizationInfo> {
+pub(crate) fn qcd_marker(reader: &mut Reader) -> Option<QuantizationInfo> {
     // Length.
     let length = reader.read_u16()?;
 
@@ -668,7 +667,7 @@ fn qcd_marker(reader: &mut Reader) -> Option<QuantizationInfo> {
 }
 
 /// QCC marker (A.6.5).
-fn qcc_marker(reader: &mut Reader, csiz: u16) -> Option<(u16, QuantizationInfo)> {
+pub(crate) fn qcc_marker(reader: &mut Reader, csiz: u16) -> Option<(u16, QuantizationInfo)> {
     let length = reader.read_u16()?;
 
     let component_index = if csiz < 257 {
