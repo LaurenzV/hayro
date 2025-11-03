@@ -1,4 +1,4 @@
-use crate::bitmap::{Bitmap, ChannelContainer, ChannelData};
+use crate::bitmap::{Bitmap, ChannelData};
 use crate::codestream::markers::{EPH, SOP};
 use crate::codestream::{
     ComponentInfo, Header, MultipleComponentTransform, ProgressionOrder, QuantizationStyle,
@@ -63,11 +63,11 @@ pub(crate) fn process_tiles(tiles: &[Tile], header: &Header) -> Option<Vec<Chann
 
     for (idx, info) in header.component_infos.iter().enumerate() {
         channels.push(ChannelData {
-            container: ChannelContainer::U8(vec![
-                0;
+            container: vec![
+                0.0;
                 (header.size_data.reference_grid_width * header.size_data.reference_grid_height)
                     as usize
-            ]),
+            ],
             // Will be set later on.
             is_alpha: false,
             bit_depth: info.size_info.precision,
@@ -294,21 +294,14 @@ fn save_samples<'a>(
         let tile_x_offset = tile.rect.x0;
         let tile_y_offset = tile.rect.y0;
 
-        match &mut channel_data.container {
-            ChannelContainer::U8(c) => {
-                for y in tile_y_offset..(tile_y_offset + tile.rect.height()) {
-                    let output = &mut c
-                        [(y * header.size_data.reference_grid_width + tile_x_offset) as usize..]
-                        [..tile.rect.width() as usize];
-                    let input = &samples[((y - tile_y_offset) * tile.rect.width()) as usize..]
-                        [..tile.rect.width() as usize];
+        for y in tile_y_offset..(tile_y_offset + tile.rect.height()) {
+            let output = &mut channel_data.container
+                [(y * header.size_data.reference_grid_width + tile_x_offset) as usize..]
+                [..tile.rect.width() as usize];
+            let input = &samples[((y - tile_y_offset) * tile.rect.width()) as usize..]
+                [..tile.rect.width() as usize];
 
-                    for (i, o) in input.iter().zip(output.iter_mut()) {
-                        *o = *i as u8;
-                    }
-                }
-            }
-            _ => unimplemented!(),
+            output.copy_from_slice(input);
         }
     }
 
