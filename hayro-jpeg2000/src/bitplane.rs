@@ -126,7 +126,7 @@ impl BitplaneDecodeContext {
     }
 
     fn push_magnitude_bit(&mut self, position: &Position, bit: u16) {
-        self.magnitude_array[position.index(self.width)].push_bit(bit);
+        self.magnitude_array[position.index(self.width)].push_bit(bit)
     }
 
     fn sign_checked(&self, x: i64, y: i64) -> u8 {
@@ -178,9 +178,9 @@ pub(crate) fn decode(
     subband_type: SubbandType,
     num_bitplanes: u16,
     style: &CodeBlockStyle,
-) -> Option<()> {
+) -> Result<(), &'static str> {
     if code_block.number_of_coding_passes == 0 {
-        return Some(());
+        return Ok(());
     }
 
     if style.selective_arithmetic_coding_bypass
@@ -190,7 +190,7 @@ pub(crate) fn decode(
         || style.termination_on_each_pass
         || style.reset_context_probabilities
     {
-        unimplemented!();
+        return Err("unsupported code-block style features encountered during decoding");
     }
 
     let mut combined_layer_data: Vec<u8> = vec![];
@@ -207,6 +207,9 @@ pub(crate) fn decode(
     let mut decoder = ArithmeticDecoder::new(&combined_layers);
 
     decode_inner(code_block, subband_type, num_bitplanes, &mut decoder)
+        .ok_or("failed to decode code-block arithmetic data")?;
+
+    Ok(())
 }
 
 fn decode_inner(

@@ -15,7 +15,7 @@ pub(crate) fn read(stream: &[u8]) -> Result<(Header, Vec<ChannelData>), &'static
     let header = read_header(&mut reader)?;
     let tiles = read_tiles(&mut reader, &header)?;
 
-    let channels = process_tiles(&tiles, &header).ok_or("failed to decode image")?;
+    let channels = process_tiles(&tiles, &header)?;
 
     Ok((header, channels))
 }
@@ -76,8 +76,8 @@ fn read_header(reader: &mut Reader) -> Result<Header, &'static str> {
                 reader.read_marker()?;
                 com_marker(reader).ok_or("failed to read COM marker")?;
             }
-            m => {
-                panic!("marker: {}", markers::to_string(m));
+            _ => {
+                return Err("unsupported marker encountered in main header");
             }
         }
     }
@@ -529,8 +529,14 @@ fn size_marker(reader: &mut Reader) -> Result<SizeData, &'static str> {
             return Err("invalid component metadata");
         }
 
+        if comp.precision > 8 {
+            return Err(
+                "unsupported component precision: only components up to 8 bits are handled",
+            );
+        }
+
         if comp.vertical_resolution != 1 || comp.horizontal_resolution != 1 {
-            unimplemented!();
+            return Err("unsupported component resolution: only unit resolutions are handled");
         }
     }
 
@@ -561,10 +567,6 @@ fn size_marker_inner(reader: &mut Reader) -> Option<SizeData> {
 
         let precision = (ssiz & 0x7F) + 1;
         let is_signed = (ssiz & 0x80) != 0;
-
-        if precision > 8 {
-            unimplemented!();
-        }
 
         components.push(ComponentSizeInfo {
             precision,

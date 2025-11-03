@@ -87,27 +87,41 @@ impl ChannelAssociation {
 
 impl ImageMetadata {
     /// Parse Image Header box (ihdr) data.
-    fn parse_ihdr(&mut self, data: &[u8]) -> Option<()> {
+    fn parse_ihdr(&mut self, data: &[u8]) -> Result<(), &'static str> {
         if data.len() < 14 {
-            return None;
+            return Err("image header box too short");
         }
 
         let mut reader = Reader::new(data);
 
-        self.height = reader.read_u32()?;
-        self.width = reader.read_u32()?;
-        let _num_components = reader.read_u16()?;
-        let bits_per_component = reader.read_byte()?;
+        self.height = reader
+            .read_u32()
+            .ok_or("failed to read image height from header")?;
+        self.width = reader
+            .read_u32()
+            .ok_or("failed to read image width from header")?;
+        let _num_components = reader
+            .read_u16()
+            .ok_or("failed to read component count from header")?;
+        let bits_per_component = reader
+            .read_byte()
+            .ok_or("failed to read bits per component from header")?;
 
         if bits_per_component == 255 {
-            unimplemented!();
+            return Err("extended bits-per-component header unsupported");
         }
 
-        let _compression_type = reader.read_byte()?;
-        let _colorspace_unknown = reader.read_byte()?;
-        let _has_intellectual_property = reader.read_byte()?;
+        let _compression_type = reader
+            .read_byte()
+            .ok_or("failed to read compression type from header")?;
+        let _colorspace_unknown = reader
+            .read_byte()
+            .ok_or("failed to read colourspace flag from header")?;
+        let _has_intellectual_property = reader
+            .read_byte()
+            .ok_or("failed to read intellectual property flag from header")?;
 
-        Some(())
+        Ok(())
     }
 
     /// Parse Channel Definition box (cdef) data.
@@ -230,9 +244,7 @@ fn read_jp2_file(data: &[u8]) -> Result<Bitmap, &'static str> {
 
                 match child_box.box_type {
                     IMAGE_HEADER => {
-                        image_metadata
-                            .parse_ihdr(child_box.data)
-                            .ok_or("failed to parse image header")?;
+                        image_metadata.parse_ihdr(child_box.data)?;
                     }
                     CHANNEL_DEFINITION => {
                         image_metadata

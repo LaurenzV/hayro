@@ -21,14 +21,11 @@ fn main() {
     inputs.sort();
 
     for path in inputs {
-        let display = path.to_string_lossy();
-        // println!("Decoding {}", display);
-
         let result = catch_unwind(AssertUnwindSafe(|| convert_jp2(&path)));
 
         match result {
             Ok(conversion) => match conversion {
-                Ok(output_path) => {
+                Ok(_output_path) => {
                     // println!("  Wrote {}", output_path.to_string_lossy());
                 }
                 Err(err) => {

@@ -231,10 +231,10 @@ pub(crate) fn read_tiles<'a>(
 ) -> Result<Vec<Tile<'a>>, &'static str> {
     let parsed_tile_parts = {
         let mut buf = vec![];
-        read_tile_part(reader, main_header, &mut buf).ok_or("failed to read first tile part")?;
+        read_tile_part(reader, main_header, &mut buf)?;
 
         while reader.peek_marker() == Some(markers::SOT) {
-            read_tile_part(reader, main_header, &mut buf).ok_or("failed to read a tile part")?;
+            read_tile_part(reader, main_header, &mut buf)?;
         }
 
         if reader.read_marker()? != markers::EOC {
@@ -280,27 +280,35 @@ fn read_tile_part<'a>(
     reader: &mut Reader<'a>,
     main_header: &Header,
     tile_parts: &mut Vec<ParsedTilePart<'a>>,
-) -> Option<()> {
-    if reader.read_marker().ok()? != markers::SOT {
-        return None;
+) -> Result<(), &'static str> {
+    if reader.read_marker()? != markers::SOT {
+        return Err("expected SOT marker at tile-part start");
     }
 
     let (mut tile_part_reader, header) = {
-        let sot_marker = sot_marker(reader)?;
+        let sot_marker = sot_marker(reader).ok_or("failed to read SOT marker")?;
 
         let data = if sot_marker.tile_part_length == 0 {
             // Data goes until EOC.
-            let data = reader.tail()?;
+            let data = reader.tail().ok_or("failed to read tile-part payload")?;
             reader.jump_to_end();
 
             data
         } else {
             // Subtract 12 to account for the marker length.
-            let length = (sot_marker.tile_part_length as usize).checked_sub(12)?;
+            let length = (sot_marker.tile_part_length as usize)
+                .checked_sub(12)
+                .ok_or("tile-part length shorter than header")?;
 
-            let data = reader.tail()?.get(..length)?;
+            let data = reader
+                .tail()
+                .ok_or("failed to read tile-part payload")?
+                .get(..length)
+                .ok_or("tile-part payload shorter than declared")?;
             // Skip to the very end in the original reader.
-            reader.skip_bytes(length)?;
+            reader
+                .skip_bytes(length)
+                .ok_or("failed to advance past tile-part payload")?;
 
             data
         };
@@ -315,56 +323,62 @@ fn read_tile_part<'a>(
     let mut qcd_components = vec![None; num_components];
 
     loop {
-        match tile_part_reader.peek_marker()? {
+        match tile_part_reader
+            .peek_marker()
+            .ok_or("failed to peek tile-part marker")?
+        {
             markers::SOD => {
-                tile_part_reader.read_marker().ok()?;
+                tile_part_reader.read_marker()?;
                 break;
             }
             markers::COD => {
-                tile_part_reader.read_marker().ok()?;
+                tile_part_reader.read_marker()?;
                 cod = Some(
                     crate::codestream::cod_marker(&mut tile_part_reader)
-                        .ok_or("failed to read COD marker")
-                        .ok()?,
+                        .ok_or("failed to read COD marker")?,
                 );
             }
             markers::COC => {
-                tile_part_reader.read_marker().ok()?;
+                tile_part_reader.read_marker()?;
                 let (component_index, coc) =
                     crate::codestream::coc_marker(&mut tile_part_reader, num_components as u16)
-                        .ok_or("failed to read COC marker")
-                        .ok()?;
+                        .ok_or("failed to read COC marker")?;
                 cod_components[component_index as usize] = Some(coc);
             }
             markers::QCD => {
-                tile_part_reader.read_marker().ok()?;
+                tile_part_reader.read_marker()?;
                 qcd = Some(
                     crate::codestream::qcd_marker(&mut tile_part_reader)
-                        .ok_or("failed to read QCD marker")
-                        .ok()?,
+                        .ok_or("failed to read QCD marker")?,
                 );
             }
             markers::QCC => {
-                tile_part_reader.read_marker().ok()?;
+                tile_part_reader.read_marker()?;
                 let (component_index, qcc) =
                     crate::codestream::qcc_marker(&mut tile_part_reader, num_components as u16)
-                        .ok_or("failed to read QCC marker")
-                        .ok()?;
+                        .ok_or("failed to read QCC marker")?;
                 qcd_components[component_index as usize] = Some(qcc);
             }
             markers::EOC => break,
             markers::RGN => {
-                tile_part_reader.read_marker().ok()?;
-                let length = tile_part_reader.read_u16()?;
-                let payload = length.checked_sub(2)? as usize;
-                tile_part_reader.skip_bytes(payload)?;
+                tile_part_reader.read_marker()?;
+                let length = tile_part_reader
+                    .read_u16()
+                    .ok_or("failed to read RGN marker length")?;
+                let payload = length
+                    .checked_sub(2)
+                    .ok_or("RGN marker length shorter than header")?
+                    as usize;
+                tile_part_reader
+                    .skip_bytes(payload)
+                    .ok_or("failed to skip RGN payload")?;
             }
             markers::PLT => {
-                tile_part_reader.read_marker().ok()?;
-                skip_marker_segment(&mut tile_part_reader)?;
+                tile_part_reader.read_marker()?;
+                skip_marker_segment(&mut tile_part_reader).ok_or("failed to skip PLT marker")?;
             }
-            m => {
-                panic!("marker: {}", markers::to_string(m));
+            _ => {
+                return Err("unsupported tile-part marker encountered");
             }
         }
     }
@@ -399,7 +413,9 @@ fn read_tile_part<'a>(
         .collect();
 
     let tile_part = ParsedTilePart {
-        data: tile_part_reader.tail()?,
+        data: tile_part_reader
+            .tail()
+            .ok_or("failed to capture tile-part payload")?,
         tile_index: header.tile_index,
         tile_part_index: index,
         component_infos,
@@ -407,7 +423,7 @@ fn read_tile_part<'a>(
 
     tile_parts.push(tile_part);
 
-    Some(())
+    Ok(())
 }
 
 struct TilePartHeader {

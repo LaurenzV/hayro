@@ -58,7 +58,10 @@ struct Segment {
     number_of_coding_passes: u32,
 }
 
-pub(crate) fn process_tiles(tiles: &[Tile], header: &Header) -> Option<Vec<ChannelData>> {
+pub(crate) fn process_tiles(
+    tiles: &[Tile],
+    header: &Header,
+) -> Result<Vec<ChannelData>, &'static str> {
     let mut channels = vec![];
 
     for (idx, info) in header.component_infos.iter().enumerate() {
@@ -96,10 +99,11 @@ pub(crate) fn process_tiles(tiles: &[Tile], header: &Header) -> Option<Vec<Chann
         let mut samples =
             process_tile(tile, header, &progression_sequence, &mut progression_index)?;
 
-        save_samples(tile, header, &mut channels, &mut samples)?;
+        save_samples(tile, header, &mut channels, &mut samples)
+            .ok_or("failed to save decoded samples into channels")?;
     }
 
-    Some(channels)
+    Ok(channels)
 }
 
 fn process_tile<'a>(
@@ -107,8 +111,8 @@ fn process_tile<'a>(
     header: &Header,
     progression_sequence: &[ProgressionData],
     progression_index: &mut usize,
-) -> Option<Vec<Vec<f32>>> {
-    let mut component_data = build_component_data(tile, header);
+) -> Result<Vec<Vec<f32>>, &'static str> {
+    let mut component_data = build_component_data(tile, header)?;
 
     for tile_part in tile.tile_parts() {
         parse_packet(
@@ -117,7 +121,8 @@ fn process_tile<'a>(
             &mut component_data,
             progression_sequence,
             progression_index,
-        )?;
+        )
+        .ok_or("failed to parse packet for tile")?;
     }
 
     let mut samples = vec![];
@@ -197,7 +202,7 @@ fn process_tile<'a>(
         samples.push(component_samples);
     }
 
-    Some(samples)
+    Ok(samples)
 }
 
 fn dequantization_factor(
@@ -516,7 +521,10 @@ fn parse_packet<'a>(
     Some(())
 }
 
-fn build_component_data(tile: &Tile, header: &Header) -> Vec<ComponentData<'static>> {
+fn build_component_data(
+    tile: &Tile,
+    header: &Header,
+) -> Result<Vec<ComponentData<'static>>, &'static str> {
     let mut component_data = vec![];
 
     for (component_idx, component_info) in tile.component_info.iter().enumerate() {
@@ -548,7 +556,7 @@ fn build_component_data(tile: &Tile, header: &Header) -> Vec<ComponentData<'stat
                 //     tile_instance.resolution_transformed_rect.width(),
                 //     tile_instance.resolution_transformed_rect.height(),
                 // );
-                let precincts = build_precincts(&tile_instance, rect, header);
+                let precincts = build_precincts(&tile_instance, rect, header)?;
 
                 bands.push(vec![SubBand {
                     subband_type: SubbandType::LowLow,
@@ -594,7 +602,7 @@ fn build_component_data(tile: &Tile, header: &Header) -> Vec<ComponentData<'stat
                     //     tile_instance.resolution_transformed_rect.height(),
                     // );
 
-                    let precincts = build_precincts(&tile_instance, rect, header);
+                    let precincts = build_precincts(&tile_instance, rect, header)?;
 
                     sub_bands.push(SubBand {
                         subband_type: sb_type,
@@ -612,14 +620,14 @@ fn build_component_data(tile: &Tile, header: &Header) -> Vec<ComponentData<'stat
         component_data.push(ComponentData { subbands: bands })
     }
 
-    component_data
+    Ok(component_data)
 }
 
 fn build_precincts(
     tile_instance: &TileInstance,
     sub_band_rect: IntRect,
     header: &Header,
-) -> Vec<Precinct<'static>> {
+) -> Result<Vec<Precinct<'static>>, &'static str> {
     let mut precincts = vec![];
 
     let num_precincts_y = tile_instance.num_precincts_y();
@@ -694,11 +702,14 @@ fn build_precincts(
                 header.global_coding_style.num_layers,
             );
 
+            let code_inclusion_tree = TagTree::new(code_blocks_x, code_blocks_y);
+            let zero_bitplane_tree = TagTree::new(code_blocks_x, code_blocks_y);
+
             precincts.push(Precinct {
                 area: precinct_rect,
                 code_blocks: blocks,
-                code_inclusion_tree: TagTree::new(code_blocks_x, code_blocks_y),
-                zero_bitplane_tree: TagTree::new(code_blocks_x, code_blocks_y),
+                code_inclusion_tree,
+                zero_bitplane_tree,
             });
 
             x0 += ppx_pow2;
@@ -707,7 +718,7 @@ fn build_precincts(
         y0 += ppy_pow2;
     }
 
-    precincts
+    Ok(precincts)
 }
 
 fn build_precinct_code_blocks(
@@ -792,7 +803,9 @@ impl BitReaderExt for BitReader<'_> {
             if last_byte == 0xff {
                 let stuff_bit = self.read(1)?;
 
-                assert_eq!(stuff_bit, 0, "invalid stuffing bit");
+                if stuff_bit != 0 {
+                    return None;
+                }
             }
         }
 
