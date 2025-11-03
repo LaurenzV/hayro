@@ -30,3 +30,4 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.90.0
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --workspace -- "load::"
+      - run: cargo test -p hayro-jpeg2000
