@@ -68,12 +68,8 @@ pub(crate) fn process_tiles(tiles: &[Tile], header: &Header) -> Option<Vec<Chann
                 (header.size_data.reference_grid_width * header.size_data.reference_grid_height)
                     as usize
             ]),
-            is_alpha: header
-                .metadata
-                .channel_definitions
-                .get(idx)
-                .map(|c| c.channel_type == ChannelType::Opacity)
-                .unwrap_or(false),
+            // Will be set later on.
+            is_alpha: false,
             bit_depth: info.size_info.precision,
         })
     }

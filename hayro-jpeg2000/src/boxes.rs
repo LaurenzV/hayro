@@ -61,7 +61,7 @@ pub fn tag_to_string(tag: u32) -> String {
 pub fn read_box<'a>(reader: &mut Reader<'a>) -> Option<Jp2Box<'a>> {
     let l_box = reader.read_u32()?;
     let t_box = reader.read_u32()?;
-
+    
     let data = match l_box {
         // If the value of this field is 0, then the length of the box
         // was not known when the LBox field was written. In this case, this box contains

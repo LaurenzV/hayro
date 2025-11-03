@@ -7,14 +7,14 @@ pub struct Bitmap {
     pub metadata: ImageMetadata,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ChannelContainer {
     U8(Vec<u8>),
     U16(Vec<u16>),
     U32(Vec<u32>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ChannelData {
     pub container: ChannelContainer,
     pub bit_depth: u8,

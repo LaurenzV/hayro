@@ -27,11 +27,6 @@ pub struct ImageMetadata {
     pub height: u32,
     /// Image area width in reference grid points.
     pub width: u32,
-    /// Number of components.
-    pub num_components: u16,
-    /// Bits per component (0-127 = actual bit depth - 1, high bit indicates signed).
-    /// Value of 255 indicates components vary in bit depth.
-    pub bits_per_component: u8,
     /// Intellectual property flag (0 = no IPR box, 1 = contains IPR box).
     pub has_intellectual_property: u8,
     /// Colour specification method (1 = enumerated, 2 = ICC profile).
@@ -101,10 +96,10 @@ impl ImageMetadata {
 
         self.height = reader.read_u32()?;
         self.width = reader.read_u32()?;
-        self.num_components = reader.read_u16()?;
-        self.bits_per_component = reader.read_byte()?;
+        let _num_components = reader.read_u16()?;
+        let bits_per_component = reader.read_byte()?;
 
-        if self.bits_per_component == 255 {
+        if bits_per_component == 255 {
             unimplemented!();
         }
 
@@ -175,6 +170,30 @@ impl ImageMetadata {
 }
 
 pub fn read(data: &[u8]) -> Result<Bitmap, &'static str> {
+    read_jp2_file(data)
+        .or_else(|_| read_jp2_codestream(data))
+}
+
+fn read_jp2_codestream(data: &[u8]) -> Result<Bitmap, &'static str> {
+    let (header, channels) = codestream::read(data)?;
+    
+    let metadata = ImageMetadata {
+        height: header.size_data.image_height(),
+        width: header.size_data.image_width(),
+        has_intellectual_property: 0,
+        colour_method: None,
+        enumerated_colourspace: None,
+        icc_profile: None,
+        channel_definitions: vec![],
+    };
+    
+    Ok(Bitmap {
+        channels,
+        metadata,
+    })
+}
+
+fn read_jp2_file(data: &[u8]) -> Result<Bitmap, &'static str> {
     let mut reader = Reader::new(data);
     let signature_box = read_box(&mut reader).ok_or("failed to read signature box")?;
 
@@ -200,8 +219,6 @@ pub fn read(data: &[u8]) -> Result<Bitmap, &'static str> {
             let mut image_metadata = ImageMetadata {
                 height: 0,
                 width: 0,
-                num_components: 0,
-                bits_per_component: 0,
                 has_intellectual_property: 0,
                 colour_method: None,
                 enumerated_colourspace: None,
@@ -239,16 +256,25 @@ pub fn read(data: &[u8]) -> Result<Bitmap, &'static str> {
 
             metadata = Ok(image_metadata);
         } else if current_box.box_type == CONTIGUOUS_CODESTREAM {
-            if let Ok(metadata) = &metadata {
-                channels = Ok(codestream::read(current_box.data, metadata.clone())?);
-            }
+            channels = Ok(codestream::read(current_box.data)?);
         } else {
             eprintln!("ignoring outer box {}", tag_to_string(current_box.box_type));
         }
     }
+    
+    let (_, mut channels) = channels?;
+    let metadata = metadata?;
+
+    for (idx, channel) in channels.iter_mut().enumerate() {
+        channel.is_alpha = metadata
+            .channel_definitions
+            .get(idx)
+            .map(|c| c.channel_type == ChannelType::Opacity)
+            .unwrap_or(false);
+    }
 
     Ok(Bitmap {
-        channels: channels?,
-        metadata: metadata?,
+        channels,
+        metadata,
     })
 }
