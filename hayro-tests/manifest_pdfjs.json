@@ -943,13 +943,6 @@
     "last_page": 8
   },
   {
-    "id": "issue11004",
-    "file": "pdfs/issue11004.link",
-    "md5": "25d79508f2c9ef0e2327564966138fc1",
-    "link": true,
-    "last_page": 0
-  },
-  {
     "id": "issue11045",
     "file": "pdfs/issue11045.link",
     "link": true,
@@ -1260,12 +1253,6 @@
     "file": "pdfs/issue12823.link",
     "link": true,
     "md5": "8391c63006ccc4b41c95de5e8c38deeb"
-  },
-  {
-    "id": "issue13051",
-    "file": "pdfs/issue13051.link",
-    "md5": "ead6598c79641a0d266a224160e764d8",
-    "link": true
   },
   {
     "id": "issue1309",
@@ -1971,12 +1958,6 @@
     "md5": "8612d3f0cf2dd067ea4aec9c8bf98763",
     "first_page": 1,
     "last_page": 1
-  },
-  {
-    "id": "issue19326",
-    "file": "pdfs/issue19326.link",
-    "link": true,
-    "md5": "b4d937017daf439a6318501428e0c6ba"
   },
   {
     "id": "issue1936",

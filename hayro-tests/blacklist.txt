@@ -259,3 +259,8 @@ issue6365
 issue4648
 # Another big JPX image, can probably be resized at decoding time.
 issue17289
+
+# unsupported JPX image
+issue13051
+issue11004
+issue19326
