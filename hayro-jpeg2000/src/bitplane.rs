@@ -1,7 +1,13 @@
-//! Decoding bitplanes into sample coefficients.
+//! Bitplane decoding.
 //!
-//! Some of the references are taken from the "JPEG2000 Standard for Image Compression" book
-//! instead of the specification.
+//! JPEG2000 groups the samples of each component into their constituent
+//! bit planes and uses a special context-modeling approach to encode the
+//! bits using the arithmetic encoder. In this stage, we need to "revert" the
+//! context-modeling so that we can extract the magnitudes and signs of each
+//! sample.
+//!
+//! Some of the references are taken from the 
+//! "JPEG2000 Standard for Image Compression" book instead of the specification.
 
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use crate::codestream::CodeBlockStyle;
