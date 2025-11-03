@@ -7,6 +7,10 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
 
 fn main() {
+    if let Ok(()) = log::set_logger(&LOGGER) {
+        log::set_max_level(log::LevelFilter::Warn);
+    }
+
     let target = env::args()
         .nth(1)
         .map(PathBuf::from)
@@ -166,4 +170,20 @@ fn convert_jp2(path: &Path) -> Result<PathBuf, String> {
         .map_err(|err| format!("write error: {err}"))?;
 
     Ok(output_path)
+}
+
+static LOGGER: SimpleLogger = SimpleLogger;
+
+struct SimpleLogger;
+
+impl log::Log for SimpleLogger {
+    fn enabled(&self, metadata: &log::Metadata) -> bool {
+        metadata.level() <= log::LevelFilter::Warn
+    }
+
+    fn log(&self, record: &log::Record) {
+        eprintln!("{}", record.args());
+    }
+
+    fn flush(&self) {}
 }

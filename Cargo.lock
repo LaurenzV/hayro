@@ -487,6 +487,7 @@ version = "0.1.0"
 dependencies = [
  "hayro-common",
  "image 0.25.8",
+ "log",
  "moxcms 0.7.9",
 ]
 
