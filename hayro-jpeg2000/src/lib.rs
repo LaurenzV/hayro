@@ -170,13 +170,12 @@ impl ImageMetadata {
 }
 
 pub fn read(data: &[u8]) -> Result<Bitmap, &'static str> {
-    read_jp2_file(data)
-        .or_else(|_| read_jp2_codestream(data))
+    read_jp2_file(data).or_else(|_| read_jp2_codestream(data))
 }
 
 fn read_jp2_codestream(data: &[u8]) -> Result<Bitmap, &'static str> {
     let (header, channels) = codestream::read(data)?;
-    
+
     let metadata = ImageMetadata {
         height: header.size_data.image_height(),
         width: header.size_data.image_width(),
@@ -186,11 +185,8 @@ fn read_jp2_codestream(data: &[u8]) -> Result<Bitmap, &'static str> {
         icc_profile: None,
         channel_definitions: vec![],
     };
-    
-    Ok(Bitmap {
-        channels,
-        metadata,
-    })
+
+    Ok(Bitmap { channels, metadata })
 }
 
 fn read_jp2_file(data: &[u8]) -> Result<Bitmap, &'static str> {
@@ -261,7 +257,7 @@ fn read_jp2_file(data: &[u8]) -> Result<Bitmap, &'static str> {
             eprintln!("ignoring outer box {}", tag_to_string(current_box.box_type));
         }
     }
-    
+
     let (_, mut channels) = channels?;
     let metadata = metadata?;
 
@@ -273,8 +269,5 @@ fn read_jp2_file(data: &[u8]) -> Result<Bitmap, &'static str> {
             .unwrap_or(false);
     }
 
-    Ok(Bitmap {
-        channels,
-        metadata,
-    })
+    Ok(Bitmap { channels, metadata })
 }
