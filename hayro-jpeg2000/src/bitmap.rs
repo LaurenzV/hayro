@@ -20,10 +20,10 @@ impl ChannelData {
             .into_iter()
             .map(|sample| {
                 if self.bit_depth == 8 {
-                    return sample as u8;
+                    return sample.round() as u8;
                 }
 
-                (sample * 255.0 / ((1 << self.bit_depth) - 1) as f32) as u8
+                (sample * 255.0 / ((1 << self.bit_depth) - 1) as f32).round() as u8
             })
             .collect()
     }
