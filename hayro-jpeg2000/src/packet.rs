@@ -1,4 +1,5 @@
 use crate::bitmap::ChannelData;
+use crate::bitplane::BitplaneDecodeContext;
 use crate::codestream::markers::{EPH, SOP};
 use crate::codestream::{
     ComponentInfo, Header, MultipleComponentTransform, ProgressionOrder, QuantizationStyle,
@@ -16,13 +17,12 @@ use crate::tile::{IntRect, Tile, TileInstance, TilePart};
 use crate::{bitplane, idwt};
 use hayro_common::bit::BitReader;
 use hayro_common::byte::Reader;
-use crate::bitplane::BitplaneDecodeContext;
 
 struct ComponentData<'a> {
     subbands: Vec<Vec<SubBand<'a>>>,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum SubbandType {
     LowLow,
     LowHigh,
@@ -49,7 +49,7 @@ pub(crate) struct Precinct<'a> {
 
 #[derive(Clone)]
 pub(crate) struct CodeBlock<'a> {
-    pub(crate) area: IntRect,
+    pub(crate) rect: IntRect,
     pub(crate) x_idx: u32,
     pub(crate) y_idx: u32,
     pub(crate) layer_data: Vec<&'a [u8]>,
@@ -147,10 +147,12 @@ fn process_tile<'a>(
     }
 
     let mut samples = vec![];
-    
-    // Create the context once and then reuse it so that we can reuse the 
+
+    // Create the context once and then reuse it so that we can reuse the
     // allocations.
+    // TODO: Reuse across different tiles.
     let mut bitplane_decode_context = BitplaneDecodeContext::new();
+    let mut layer_buffer = vec![];
 
     for (component_data, component_info) in
         component_data.iter_mut().zip(tile.component_info.iter())
@@ -181,19 +183,20 @@ fn process_tile<'a>(
                                 .coding_style_parameters
                                 .parameters
                                 .code_block_style,
-                            &mut bitplane_decode_context
+                            &mut bitplane_decode_context,
+                            &mut layer_buffer,
                         )?;
 
                         // eprintln!("{:?}", codeblock.coefficients);
 
                         // Copy the coefficients into the subband.
 
-                        let x_offset = codeblock.area.x0 - subband.rect.x0;
-                        let y_offset = codeblock.area.y0 - subband.rect.y0;
+                        let x_offset = codeblock.rect.x0 - subband.rect.x0;
+                        let y_offset = codeblock.rect.y0 - subband.rect.y0;
 
                         for (y, in_row) in codeblock
                             .coefficients
-                            .chunks_exact(codeblock.area.width() as usize)
+                            .chunks_exact(codeblock.rect.width() as usize)
                             .enumerate()
                         {
                             let out_row = &mut subband.coefficients[((y_offset + y as u32)
@@ -780,7 +783,7 @@ fn build_precinct_code_blocks(
             blocks.push(CodeBlock {
                 x_idx,
                 y_idx,
-                area,
+                rect: area,
                 layer_data: vec![&[]; num_layers as usize],
                 has_been_included: false,
                 missing_bit_planes: 0,
