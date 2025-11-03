@@ -266,7 +266,7 @@ fn read_jp2_file(data: &[u8]) -> Result<Bitmap, &'static str> {
         } else if current_box.box_type == CONTIGUOUS_CODESTREAM {
             channels = Ok(codestream::read(current_box.data)?);
         } else {
-            eprintln!("ignoring outer box {}", tag_to_string(current_box.box_type));
+            // eprintln!("ignoring outer box {}", tag_to_string(current_box.box_type));
         }
     }
 
