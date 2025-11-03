@@ -1,5 +1,4 @@
 use crate::ImageMetadata;
-use std::borrow::Cow;
 
 #[derive(Debug)]
 pub struct Bitmap {

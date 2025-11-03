@@ -44,8 +44,8 @@ impl<'a> ArithmeticDecoder<'a> {
         self.c = ((self.current_byte() as u32) ^ 0xff) << 16;
         self.read_byte();
 
-        self.c = self.c << 7;
-        self.shift_count = self.shift_count - 7;
+        self.c <<= 7;
+        self.shift_count -= 7;
         self.a = 0x8000;
     }
 
@@ -77,8 +77,8 @@ impl<'a> ArithmeticDecoder<'a> {
                 self.read_byte();
             }
 
-            self.a = self.a << 1;
-            self.c = self.c << 1;
+            self.a <<= 1;
+            self.c <<= 1;
             self.shift_count -= 1;
 
             if self.a & 0x8000 != 0 {
@@ -117,7 +117,7 @@ impl<'a> ArithmeticDecoder<'a> {
     fn decode(&mut self, context: &mut ArithmeticDecoderContext) -> u32 {
         let qe_entry = &QE_TABLE[context.index as usize];
 
-        self.a = self.a - qe_entry.qe;
+        self.a -= qe_entry.qe;
 
         let d;
 
@@ -131,7 +131,7 @@ impl<'a> ArithmeticDecoder<'a> {
         } else {
             let mut c_high = self.c >> 16;
             let c_low = self.c & 0xffff;
-            c_high = c_high - self.a;
+            c_high -= self.a;
 
             self.c = (c_high << 16) | c_low;
 

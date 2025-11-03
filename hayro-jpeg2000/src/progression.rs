@@ -1,4 +1,4 @@
-use crate::codestream::{ComponentInfo, ProgressionOrder};
+use crate::codestream::ComponentInfo;
 use crate::tile::{IntRect, Tile, TileInstance};
 
 #[derive(Default, Copy, Clone, Debug)]
@@ -42,7 +42,7 @@ pub(crate) fn build_layer_resolution_component_position_sequence(
 
     for layer in 0..input.layers {
         for resolution in 0..input.max_resolutions {
-            let resolution = resolution as u16;
+            let resolution = resolution;
             let tile_instances = tile_instances_for_resolution(input, resolution);
 
             for (component_idx, tile_instance_opt) in tile_instances.into_iter().enumerate() {
@@ -76,7 +76,7 @@ pub(crate) fn build_resolution_layer_component_position_sequence(
     let mut sequence = Vec::new();
 
     for resolution in 0..input.max_resolutions {
-        let resolution = resolution as u16;
+        let resolution = resolution;
         let tile_instances = tile_instances_for_resolution(input, resolution);
 
         for layer in 0..input.layers {
@@ -112,7 +112,6 @@ pub(crate) fn build_resolution_position_component_layer_sequence(
     let tile_rect = input.tile.rect;
 
     for resolution in 0..input.max_resolutions {
-        let resolution = resolution as u16;
         let tile_instances = tile_instances_for_resolution(input, resolution);
 
         for y in tile_rect.y0..tile_rect.y1 {
@@ -287,14 +286,14 @@ fn find_precinct_index(
     let try0 = tile_instance.resolution_transformed_rect.y0 as u64;
     let trx0 = tile_instance.resolution_transformed_rect.x0 as u64;
 
-    let cond1 = y_val % y_stride == 0;
-    let cond2 = y_val == ty0 && (try0 * resolution_scale) % y_stride != 0;
+    let cond1 = y_val.is_multiple_of(y_stride);
+    let cond2 = y_val == ty0 && !(try0 * resolution_scale).is_multiple_of(y_stride);
     if !(cond1 || cond2) {
         return None;
     }
 
-    let cond3 = x_val % x_stride == 0;
-    let cond4 = x_val == tx0 && (trx0 * resolution_scale) % x_stride != 0;
+    let cond3 = x_val.is_multiple_of(x_stride);
+    let cond4 = x_val == tx0 && !(trx0 * resolution_scale).is_multiple_of(x_stride);
     if !(cond3 || cond4) {
         return None;
     }

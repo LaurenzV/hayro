@@ -21,7 +21,7 @@ pub(crate) fn apply(
 
         let ll_rect = hl.ll_rect;
 
-        ll_subband = _2d_sr(&ll_subband, &hl, &lh, &hh, ll_rect, transform);
+        ll_subband = _2d_sr(&ll_subband, hl, lh, hh, ll_rect, transform);
     }
 
     let mut trimmed_coefficients = Vec::with_capacity(ll_subband.coefficients.len());
@@ -114,7 +114,7 @@ fn hor_sr(a: &mut [f32], rect: IntRect, transform: &WaveletTransform) {
     // Add a padding of 8 to account for the _1d_extr procedure.
     let mut buf = vec![0.0; rect.width() as usize + 10];
 
-    let shift = PADDING_SHIFT + if rect.x0 % 2 != 0 { 1 } else { 0 };
+    let shift = PADDING_SHIFT + if !rect.x0.is_multiple_of(2) { 1 } else { 0 };
 
     for v in 0..rect.height() {
         buf.clear();
@@ -142,7 +142,7 @@ fn ver_sr(a: &mut [f32], rect: IntRect, transform: &WaveletTransform) {
     // Add a padding of 8 to account for the _1d_extr procedure.
     let mut buf = vec![0.0; rect.height() as usize + 10];
 
-    let shift = PADDING_SHIFT + if rect.y0 % 2 != 0 { 1 } else { 0 };
+    let shift = PADDING_SHIFT + if !rect.y0.is_multiple_of(2) { 1 } else { 0 };
 
     for u in 0..rect.width() {
         buf.clear();
@@ -169,8 +169,8 @@ fn ver_sr(a: &mut [f32], rect: IntRect, transform: &WaveletTransform) {
 /// The 1D_SR procedure from F.3.6
 fn _1d_sr(y: &mut [f32], i0: usize, i1: usize, transform: &WaveletTransform) {
     if i0 == i1 - 1 {
-        if i0 % 2 != 0 {
-            y[i0] = y[i0] / 2.0;
+        if !i0.is_multiple_of(2) {
+            y[i0] /= 2.0;
         }
 
         return;
@@ -189,53 +189,53 @@ fn _1d_filter_53r(y: &mut [f32], i0: usize, i1: usize) {
     // (F-5)
     for n in i0 / 2..(i1 / 2) + 1 {
         let base_idx = 2 * n;
-        y[base_idx] = y[base_idx] - ((y[base_idx - 1] + y[base_idx + 1] + 2.0) / 4.0).floor();
+        y[base_idx] -= ((y[base_idx - 1] + y[base_idx + 1] + 2.0) / 4.0).floor();
     }
 
     // (F-6)
     for n in i0 / 2..(i1 / 2) {
         let base_idx = 2 * n + 1;
-        y[base_idx] = y[base_idx] + ((y[base_idx - 1] + y[base_idx + 1]) / 2.0).floor();
+        y[base_idx] += ((y[base_idx - 1] + y[base_idx + 1]) / 2.0).floor();
     }
 }
 
 /// The 1D Filter 9-7I procedure from F.3.8.2
 fn _1d_filter_97(y: &mut [f32], i0: usize, i1: usize) {
     // Table F.4.
-    const ALPHA: f32 = -1.586_134_342_059_924;
-    const BETA: f32 = -0.052_980_118_572_961;
-    const GAMMA: f32 = 0.882_911_075_530_934;
-    const DELTA: f32 = 0.443_506_852_043_971;
-    const KAPPA: f32 = 1.230_174_104_914_001;
+    const ALPHA: f32 = -1.586_134_3;
+    const BETA: f32 = -0.052_980_117;
+    const GAMMA: f32 = 0.882_911_1;
+    const DELTA: f32 = 0.443_506_87;
+    const KAPPA: f32 = 1.230_174_1;
 
     // Step 1
     for i in (i0 / 2 - 1)..(i1 / 2 + 2) {
-        y[2 * i] = KAPPA * y[2 * i];
+        y[2 * i] *= KAPPA;
     }
 
     // Step 2
     for i in (i0 / 2 - 2)..(i1 / 2 + 2) {
-        y[2 * i + 1] = (1.0 / KAPPA) * y[2 * i + 1];
+        y[2 * i + 1] *= (1.0 / KAPPA);
     }
 
     // Step 3
     for i in (i0 / 2 - 1)..(i1 / 2 + 2) {
-        y[2 * i] = y[2 * i] - DELTA * (y[2 * i - 1] + y[2 * i + 1]);
+        y[2 * i] -= DELTA * (y[2 * i - 1] + y[2 * i + 1]);
     }
 
     // Step 4
     for i in (i0 / 2 - 1)..(i1 / 2 + 1) {
-        y[2 * i + 1] = y[2 * i + 1] - GAMMA * (y[2 * i] + y[2 * i + 2]);
+        y[2 * i + 1] -= GAMMA * (y[2 * i] + y[2 * i + 2]);
     }
 
     // Step 5
     for i in (i0 / 2)..(i1 / 2 + 1) {
-        y[2 * i] = y[2 * i] - BETA * (y[2 * i - 1] + y[2 * i + 1]);
+        y[2 * i] -= BETA * (y[2 * i - 1] + y[2 * i + 1]);
     }
 
     // Step 6
     for i in (i0 / 2)..(i1 / 2) {
-        y[2 * i + 1] = y[2 * i + 1] - ALPHA * (y[2 * i] + y[2 * i + 2]);
+        y[2 * i + 1] -= ALPHA * (y[2 * i] + y[2 * i + 2]);
     }
 }
 
@@ -243,14 +243,14 @@ fn _1d_filter_97(y: &mut [f32], i0: usize, i1: usize) {
 fn _1d_extr(y: &mut [f32], i0: usize, i1: usize, transform: &WaveletTransform) {
     let i_left = match transform {
         WaveletTransform::Reversible53 => {
-            if i0 % 2 == 0 {
+            if i0.is_multiple_of(2) {
                 1
             } else {
                 2
             }
         }
         WaveletTransform::Irreversible97 => {
-            if i0 % 2 == 0 {
+            if i0.is_multiple_of(2) {
                 3
             } else {
                 4
@@ -260,14 +260,14 @@ fn _1d_extr(y: &mut [f32], i0: usize, i1: usize, transform: &WaveletTransform) {
 
     let i_right = match transform {
         WaveletTransform::Reversible53 => {
-            if i1 % 2 == 0 {
+            if i1.is_multiple_of(2) {
                 2
             } else {
                 1
             }
         }
         WaveletTransform::Irreversible97 => {
-            if i1 % 2 == 0 {
+            if i1.is_multiple_of(2) {
                 4
             } else {
                 3

@@ -1,5 +1,4 @@
-use crate::ImageMetadata;
-use crate::bitmap::{Bitmap, ChannelData};
+use crate::bitmap::ChannelData;
 use crate::packet::{SubbandType, process_tiles};
 use crate::tile::{IntRect, Tile, TileInstance, read_tiles};
 use hayro_common::byte::Reader;
@@ -745,8 +744,8 @@ fn quantization_parameters(
     let mut step_sizes = Vec::new();
 
     let irreversible = |val: u16| {
-        let exponent = (val >> 11);
-        let mantissa = (val & ((1 << 11) - 1));
+        let exponent = val >> 11;
+        let mantissa = val & ((1 << 11) - 1);
 
         StepSize { exponent, mantissa }
     };

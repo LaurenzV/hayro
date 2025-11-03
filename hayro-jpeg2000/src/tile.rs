@@ -1,8 +1,4 @@
-use crate::codestream::markers::{EPH, SOP};
-use crate::codestream::{
-    ComponentCodingStyle, ComponentInfo, Header, QuantizationInfo, ReaderExt, SizeData, markers,
-    skip_marker_segment,
-};
+use crate::codestream::{ComponentInfo, Header, ReaderExt, SizeData, markers, skip_marker_segment};
 use crate::packet::SubbandType;
 use hayro_common::byte::Reader;
 

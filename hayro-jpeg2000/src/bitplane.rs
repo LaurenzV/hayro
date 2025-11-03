@@ -4,7 +4,7 @@
 //! instead of the specification.
 
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
-use crate::codestream::{CodeBlockStyle, ComponentInfo};
+use crate::codestream::CodeBlockStyle;
 use crate::packet::{CodeBlock, SubbandType};
 
 pub(crate) struct BitplaneDecodeContext {
@@ -233,7 +233,7 @@ fn decode_inner(
             MagnitudeRefinement,
         }
 
-        let pass = match (coding_pass % 3) {
+        let pass = match coding_pass % 3 {
             0 => PassType::Cleanup,
             1 => PassType::SignificancePropagation,
             2 => PassType::MagnitudeRefinement,
@@ -334,7 +334,7 @@ fn cleanup_pass(ctx: &mut BitplaneDecodeContext, decoder: &mut impl BitDecoder) 
                     1
                 }
             } else {
-                let ctx_label = context_label_zero_coding(&cur_pos, &ctx);
+                let ctx_label = context_label_zero_coding(&cur_pos, ctx);
                 decoder.read_bit(ctx.ad_context(ctx_label))
             };
 
@@ -364,7 +364,7 @@ fn significance_propagation_pass(
         };
 
         if !ctx.is_significant(&cur_pos) && ctx.neighborhood_significances(&cur_pos) != 0 {
-            let ctx_label = context_label_zero_coding(&cur_pos, &ctx);
+            let ctx_label = context_label_zero_coding(&cur_pos, ctx);
             let bit = decoder.read_bit(ctx.ad_context(ctx_label));
             ctx.push_magnitude_bit(&cur_pos, bit as u16);
             ctx.set_has_zero_coding(&cur_pos);
@@ -393,7 +393,7 @@ fn magnitude_refinement_pass(
         };
 
         if ctx.is_significant(&cur_pos) && !ctx.has_zero_coding(&cur_pos) {
-            let ctx_label = context_label_magnitude_refinement_coding(&cur_pos, &ctx);
+            let ctx_label = context_label_magnitude_refinement_coding(&cur_pos, ctx);
             let bit = decoder.read_bit(ctx.ad_context(ctx_label));
             ctx.push_magnitude_bit(&cur_pos, bit as u16);
             ctx.set_has_magnitude_refinement(&cur_pos);
@@ -435,7 +435,7 @@ fn decode_sign_bit(pos: &Position, ctx: &mut BitplaneDecodeContext, decoder: &mu
         }
     }
 
-    let (ctx_label, xor_bit) = context_label_sign_coding(&pos, ctx);
+    let (ctx_label, xor_bit) = context_label_sign_coding(pos, ctx);
     let ad_ctx = ctx.ad_context(ctx_label);
     let sign_bit = decoder.read_bit(ad_ctx) ^ xor_bit as u32;
     ctx.set_sign(pos, sign_bit as u8);

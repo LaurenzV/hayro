@@ -1,4 +1,4 @@
-use crate::bitmap::{Bitmap, ChannelData};
+use crate::bitmap::ChannelData;
 use crate::codestream::markers::{EPH, SOP};
 use crate::codestream::{
     ComponentInfo, Header, MultipleComponentTransform, ProgressionOrder, QuantizationStyle,
@@ -13,7 +13,7 @@ use crate::progression::{
 };
 use crate::tag_tree::TagTree;
 use crate::tile::{IntRect, Tile, TileInstance, TilePart};
-use crate::{ChannelType, bitplane, idwt};
+use crate::{bitplane, idwt};
 use hayro_common::bit::BitReader;
 use hayro_common::byte::Reader;
 
@@ -313,7 +313,7 @@ fn save_samples<'a>(
         .zip(channels.iter_mut())
     {
         for sample in samples.iter_mut() {
-            *sample += (1 << component_info.size_info.precision - 1) as f32;
+            *sample += (1 << (component_info.size_info.precision - 1)) as f32;
         }
 
         let tile_x_offset = tile.rect.x0;
@@ -517,10 +517,9 @@ fn parse_packet<'a>(
             .component_parameters
             .flags
             .uses_eph_marker()
+            && data_reader.read_marker().ok()? != EPH
         {
-            if data_reader.read_marker().ok()? != EPH {
-                return None;
-            }
+            return None;
         }
 
         for (sub_band_idx, code_block_idx, length) in data_entries {
@@ -663,12 +662,12 @@ fn build_precincts(
         ppx -= 1;
         ppy -= 1;
 
-        x_start = x_start / 2;
-        y_start = y_start / 2;
+        x_start /= 2;
+        y_start /= 2;
     }
 
-    let ppx_pow2 = (1 << ppx);
-    let ppy_pow2 = (1 << ppy);
+    let ppx_pow2 = 1 << ppx;
+    let ppy_pow2 = 1 << ppy;
 
     let mut y0 = y_start;
     for _y in 0..num_precincts_y {
