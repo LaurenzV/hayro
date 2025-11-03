@@ -489,6 +489,7 @@ fn parse_packet<'a>(
 
         // TODO: Support multiple codeword segments (10.7.2)
 
+        reader.read_stuff_bit_if_necessary()?;
         reader.align();
         let packet_data = reader.tail();
 
@@ -772,6 +773,7 @@ fn build_precinct_code_blocks(
 
 pub(crate) trait BitReaderExt {
     fn read_packet_header_bits(&mut self, bit_size: u8) -> Option<u32>;
+    fn read_stuff_bit_if_necessary(&mut self) -> Option<()>;
     fn peak_packet_header_bits(&mut self, bit_size: u8) -> Option<u32>;
 }
 
@@ -780,23 +782,28 @@ impl BitReaderExt for BitReader<'_> {
         let mut bit = 0;
 
         for _ in 0..bit_size {
-            // B.10.1: If the value of the byte is 0xFF, the next byte includes an extra zero bit
-            // stuffed into the MSB.
-            // Check if the next bit is at a new byte boundary.
-            if self.bit_pos() == 0 && self.byte_pos() > 0 {
-                let last_byte = self.data[self.byte_pos() - 1];
-
-                if last_byte == 0xff {
-                    let stuff_bit = self.read(1)?;
-
-                    assert_eq!(stuff_bit, 0, "invalid stuffing bit");
-                }
-            }
-
+            self.read_stuff_bit_if_necessary()?;
             bit = (bit << 1) | self.read(1)?;
         }
 
         Some(bit)
+    }
+
+    fn read_stuff_bit_if_necessary(&mut self) -> Option<()> {
+        // B.10.1: If the value of the byte is 0xFF, the next byte includes an extra zero bit
+        // stuffed into the MSB.
+        // Check if the next bit is at a new byte boundary.
+        if self.bit_pos() == 0 && self.byte_pos() > 0 {
+            let last_byte = self.data[self.byte_pos() - 1];
+
+            if last_byte == 0xff {
+                let stuff_bit = self.read(1)?;
+
+                assert_eq!(stuff_bit, 0, "invalid stuffing bit");
+            }
+        }
+
+        Some(())
     }
 
     fn peak_packet_header_bits(&mut self, bit_size: u8) -> Option<u32> {
