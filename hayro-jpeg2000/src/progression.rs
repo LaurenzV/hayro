@@ -327,7 +327,3 @@ fn find_precinct_index(
 
     precinct.try_into().ok()
 }
-
-fn pow2_u64(exp: u32) -> Option<u64> {
-    if exp >= 64 { None } else { Some(1u64 << exp) }
-}
