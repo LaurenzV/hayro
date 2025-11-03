@@ -4,7 +4,13 @@ use crate::codestream::{
     ComponentInfo, Header, MultipleComponentTransform, ProgressionOrder, QuantizationStyle,
     ReaderExt, WaveletTransform,
 };
-use crate::progression::{IteratorInput, ProgressionData, build_progression_sequence};
+use crate::progression::{
+    IteratorInput, ProgressionData, build_component_position_resolution_layer_sequence,
+    build_layer_resolution_component_position_sequence,
+    build_position_component_resolution_layer_sequence,
+    build_resolution_layer_component_position_sequence,
+    build_resolution_position_component_layer_sequence,
+};
 use crate::tag_tree::TagTree;
 use crate::tile::{IntRect, Tile, TileInstance, TilePart};
 use crate::{ChannelType, bitplane, idwt};
@@ -92,12 +98,28 @@ pub(crate) fn process_tiles(
             header.global_coding_style.num_layers,
         );
 
-        let progression_sequence =
-            build_progression_sequence(&iter_input, header.global_coding_style.progression_order);
-        let mut progression_index = 0usize;
-
-        let mut samples =
-            process_tile(tile, header, &progression_sequence, &mut progression_index)?;
+        let mut samples = match header.global_coding_style.progression_order {
+            ProgressionOrder::LayerResolutionComponentPosition => {
+                let iterator = build_layer_resolution_component_position_sequence(&iter_input);
+                process_tile(tile, header, iterator.into_iter())?
+            }
+            ProgressionOrder::ResolutionLayerComponentPosition => {
+                let iterator = build_resolution_layer_component_position_sequence(&iter_input);
+                process_tile(tile, header, iterator.into_iter())?
+            }
+            ProgressionOrder::ResolutionPositionComponentLayer => {
+                let iterator = build_resolution_position_component_layer_sequence(&iter_input);
+                process_tile(tile, header, iterator.into_iter())?
+            }
+            ProgressionOrder::PositionComponentResolutionLayer => {
+                let iterator = build_position_component_resolution_layer_sequence(&iter_input);
+                process_tile(tile, header, iterator.into_iter())?
+            }
+            ProgressionOrder::ComponentPositionResolutionLayer => {
+                let iterator = build_component_position_resolution_layer_sequence(&iter_input);
+                process_tile(tile, header, iterator.into_iter())?
+            }
+        };
 
         save_samples(tile, header, &mut channels, &mut samples)
             .ok_or("failed to save decoded samples into channels")?;
@@ -109,8 +131,7 @@ pub(crate) fn process_tiles(
 fn process_tile<'a>(
     tile: &'a Tile<'a>,
     header: &Header,
-    progression_sequence: &[ProgressionData],
-    progression_index: &mut usize,
+    mut progression_iterator: impl Iterator<Item = ProgressionData>,
 ) -> Result<Vec<Vec<f32>>, &'static str> {
     let mut component_data = build_component_data(tile, header)?;
 
@@ -119,8 +140,7 @@ fn process_tile<'a>(
             &tile_part,
             header,
             &mut component_data,
-            progression_sequence,
-            progression_index,
+            &mut progression_iterator,
         )
         .ok_or("failed to parse packet for tile")?;
     }
@@ -317,8 +337,7 @@ fn parse_packet<'a>(
     tile: &TilePart<'a>,
     header: &Header,
     component_data: &mut [ComponentData<'a>],
-    progression_sequence: &[ProgressionData],
-    progression_index: &mut usize,
+    mut progression_iterator: impl Iterator<Item = ProgressionData>,
 ) -> Option<()> {
     let mut data = tile.data;
 
@@ -339,8 +358,7 @@ fn parse_packet<'a>(
 
         let mut reader = BitReader::new(data);
 
-        let progression_data = *progression_sequence.get(*progression_index)?;
-        *progression_index += 1;
+        let progression_data = progression_iterator.next()?;
         let zero_length = reader.read_packet_header_bits(1)?;
 
         let mut data_entries = vec![];

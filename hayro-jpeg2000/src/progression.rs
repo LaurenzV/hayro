@@ -35,30 +35,7 @@ impl<'a> IteratorInput<'a> {
     }
 }
 
-pub(crate) fn build_progression_sequence<'a>(
-    input: &IteratorInput<'a>,
-    order: ProgressionOrder,
-) -> Vec<ProgressionData> {
-    match order {
-        ProgressionOrder::LayerResolutionComponentPosition => {
-            build_layer_resolution_component_position_sequence(input)
-        }
-        ProgressionOrder::ResolutionLayerComponentPosition => {
-            build_resolution_layer_component_position_sequence(input)
-        }
-        ProgressionOrder::ResolutionPositionComponentLayer => {
-            build_resolution_position_component_layer_sequence(input)
-        }
-        ProgressionOrder::PositionComponentResolutionLayer => {
-            build_position_component_resolution_layer_sequence(input)
-        }
-        ProgressionOrder::ComponentPositionResolutionLayer => {
-            build_component_position_resolution_layer_sequence(input)
-        }
-    }
-}
-
-fn build_layer_resolution_component_position_sequence(
+pub(crate) fn build_layer_resolution_component_position_sequence(
     input: &IteratorInput<'_>,
 ) -> Vec<ProgressionData> {
     let mut sequence = Vec::new();
@@ -93,7 +70,7 @@ fn build_layer_resolution_component_position_sequence(
     sequence
 }
 
-fn build_resolution_layer_component_position_sequence(
+pub(crate) fn build_resolution_layer_component_position_sequence(
     input: &IteratorInput<'_>,
 ) -> Vec<ProgressionData> {
     let mut sequence = Vec::new();
@@ -128,7 +105,7 @@ fn build_resolution_layer_component_position_sequence(
     sequence
 }
 
-fn build_resolution_position_component_layer_sequence(
+pub(crate) fn build_resolution_position_component_layer_sequence(
     input: &IteratorInput<'_>,
 ) -> Vec<ProgressionData> {
     let mut sequence = Vec::new();
@@ -166,7 +143,7 @@ fn build_resolution_position_component_layer_sequence(
     sequence
 }
 
-fn build_position_component_resolution_layer_sequence(
+pub(crate) fn build_position_component_resolution_layer_sequence(
     input: &IteratorInput<'_>,
 ) -> Vec<ProgressionData> {
     let mut sequence = Vec::new();
@@ -203,7 +180,7 @@ fn build_position_component_resolution_layer_sequence(
     sequence
 }
 
-fn build_component_position_resolution_layer_sequence(
+pub(crate) fn build_component_position_resolution_layer_sequence(
     input: &IteratorInput<'_>,
 ) -> Vec<ProgressionData> {
     let mut sequence = Vec::new();
