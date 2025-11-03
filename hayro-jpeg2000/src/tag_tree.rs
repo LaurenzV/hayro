@@ -1,14 +1,44 @@
+//! The tag tree, described in Section B.10.2.
+//!
+//! Tag trees are quad trees where each leaf stores an integer value.
+//! Each intermediate node stores the smallest value of all of its children.
+//! For example, if a node stores the value 3, it means that all children
+//! have a value of 3 or higher. The root node therefore stores the smallest
+//! values across all children.
+
 use crate::packet::BitReaderExt;
 use hayro_common::bit::BitReader;
+use log::warn;
 
 #[derive(Debug, PartialEq, Eq, Clone, Default)]
 pub(crate) struct TagNode {
+    /// The width of the area covered by the node.
+    ///
+    /// For leaf nodes, this value is always 1. In some cases, the width might
+    /// be 0, in which case the leaf node doesn't actually "exist" and is just
+    /// a dummy node.
     width: u32,
+    /// The height of the area covered by the node.
+    ///
+    /// For leaf nodes, this value is always 1. In some cases, the height might
+    /// be 0, in which case the leaf node doesn't actually "exist" and is just
+    /// a dummy node.
     height: u32,
+    /// The actual value stored in the node. Only valid once `initialized`
+    /// is set to `true`.
     value: u32,
+    /// Whether the node has been fully initialized. The tag tree is not
+    /// stored in its complete form in the JP2 file, but is instead built
+    /// up incrementally, each packet contributing the information of the
+    /// tag tree. The node is therefore only initialized with its actual
+    /// value once we cross it the first time.
     initialized: bool,
+    /// The level inside the tree. Zero indicates that the given node is
+    /// a leaf node, otherwise the level is > 0. The root node has the highest
+    /// level.
     level: u16,
-    children: Vec<Box<TagNode>>,
+    /// The children of the node, some of which might be dummy nodes.
+    children: Vec<TagNode>,
 }
 
 impl TagNode {
@@ -31,10 +61,14 @@ impl TagNode {
         u32::min(1 << (self.level - 1), self.height)
     }
 
+    fn is_dummy(&self) -> bool {
+        self.width == 0 || self.height == 0
+    }
+
     fn real_children(&self) -> usize {
         self.children
             .iter()
-            .map(|c| if c.width > 0 && c.height > 0 { 1 } else { 0 })
+            .map(|c| if !c.is_dummy() { 1 } else { 0 })
             .sum()
     }
 }
@@ -44,19 +78,25 @@ impl TagNode {
         let mut tag = TagNode::new(width, height, level);
 
         if level == 0 {
+            // We reached the leaf node.
             assert!(width <= 1 && height <= 1);
 
             return tag;
         }
 
+        // Determine the width and height of the top-left child node. Based
+        // on this, we can infer the dimensions of all other child nodes.
         let top_left_width = tag.x_split();
         let top_left_height = tag.y_split();
 
         let mut push = |node: TagNode| {
-            tag.children.push(Box::new(node));
+            tag.children.push(node);
         };
 
-        // Note that some nodes are technically invalid and might have a width/height of 0.
+        // We always push four children, but some nodes might in reality have
+        // fewer than that. In this case, the resulting node will simply have
+        // a width or height of 0 and we can recognize that it technically
+        // doesn't exist.
         push(TagNode::build(top_left_width, top_left_height, level - 1));
         push(TagNode::build(
             width - top_left_width,
@@ -93,6 +133,12 @@ impl TagNode {
                     break;
                 }
 
+                // "Each node has an associated current value, which is
+                // initialized to zero (the minimum). A 0 bit in the tag tree
+                // means that the minimum (or the value in the case of the
+                // highest level) is larger than the current value and a 1 bit
+                // means that the minimum (or the value in the case of the
+                // highest level) is equal to the current value."
                 match reader.read_packet_header_bits(1)? {
                     0 => val += 1,
                     1 => {
@@ -106,6 +152,8 @@ impl TagNode {
             self.value = val;
         }
 
+        // Abort early if we already reached the leaf node or the minimum
+        // value of all children is too large.
         if self.value >= max_val || self.level == 0 {
             return Some(self.value);
         }
@@ -144,6 +192,7 @@ pub(crate) struct TagTree {
 
 impl TagTree {
     pub(crate) fn new(width: u32, height: u32) -> Self {
+        // Calculate how many levels the tree has in total.
         let level = u32::max(
             width.next_power_of_two().ilog2(),
             height.next_power_of_two().ilog2(),
@@ -163,7 +212,15 @@ impl TagTree {
         reader: &mut BitReader,
         max_val: u32,
     ) -> Option<u32> {
-        assert!(x < self.width && y < self.height);
+        if x >= self.width || y >= self.height {
+            warn!(
+                "attempted to read invalid index x: {x}, y: {y} in tag\
+            tree with dimensions {}x{}",
+                self.width, self.height
+            );
+
+            return None;
+        }
 
         self.root.read(x, y, reader, 0, max_val)
     }
@@ -174,8 +231,8 @@ mod tests {
     use super::*;
     use hayro_common::bit::BitWriter;
 
-    /// The example from B.10.2, in its extended form as shown in the "JPEG2000 Standard for
-    /// Image compression" book.
+    /// The example from B.10.2, in its extended form as shown in the
+    /// "JPEG2000 Standard for Image compression" book.
     #[test]
     fn tag_tree_1() {
         let mut tree = TagTree::new(6, 3);
@@ -219,13 +276,15 @@ mod tests {
 
         let mut writer = BitWriter::new(&mut buf, 1).unwrap();
         writer.write_bits([
-            1, 1,
-            1, // Code-block 0, 0 included for the first time (partial inclusion tag tree)
-            1, // Code-block 1, 0 included for the first time (partial inclusion tag tree)
+            1, 1, 1, // Code-block 0, 0 included for the first time (partial
+            // inclusion tag tree)
+            1, // Code-block 1, 0 included for the first time (partial
+            // inclusion tag tree)
             0, // Code-block 2, 0 not yet included (partial tag tree)
             0, // Code-block 0, 1 not yet included
             0, // Code-block 1, 2 not yet included
-               // Code-block 2, 1 not yet included (no data needed, already conveyed by partial tag tree for code-block 2, 0)
+               // Code-block 2, 1 not yet included (no data needed, already
+               // conveyed by partial tag tree for code-block 2, 0)
         ]);
 
         let mut reader = BitReader::new(&buf);
