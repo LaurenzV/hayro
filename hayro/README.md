@@ -32,8 +32,7 @@ For usage examples, see the [example](https://github.com/LaurenzV/hayro/tree/mas
 the GitHub repository. 
 
 ### Cargo features
-This crate has two optional features:
-- `jpeg2000`: See the description of [`hayro-syntax`](https://docs.rs/hayro-syntax/latest/hayro_syntax/#cargo-features) for more information.
+This crate has one optional feature:
 - `embed-fonts`: See the description of [`hayro-interpret`](https://docs.rs/hayro-interpret/latest/hayro_interpret/#cargo-features) for more information.
 
 <!-- cargo-rdme end -->

@@ -97,8 +97,6 @@ impl Default for InterpreterSettings {
 #[derive(Copy, Clone, Debug)]
 /// Warnings that can occur while interpreting a PDF file.
 pub enum InterpreterWarning {
-    /// A JPX image was encountered, even though the `jpeg2000` feature is not enabled.
-    JpxImage,
     /// An unsupported font kind was encountered.
     ///
     /// Currently, only CID fonts with non-identity encoding are unsupported.

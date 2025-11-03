@@ -210,8 +210,6 @@ pub enum DecodeFailure {
     ImageDecode,
     /// A data stream failed to decode.
     StreamDecode,
-    /// A JPEG2000 image was encountered, while the `jpeg2000` feature was disabled.
-    JpxImage,
     /// A failure occurred while decrypting a file.
     Decryption,
     /// An unknown failure occurred.

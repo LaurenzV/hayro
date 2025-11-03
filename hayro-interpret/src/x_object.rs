@@ -16,7 +16,7 @@ use hayro_syntax::object::Name;
 use hayro_syntax::object::Object;
 use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::*;
-use hayro_syntax::object::stream::{DecodeFailure, ImageDecodeParams};
+use hayro_syntax::object::stream::ImageDecodeParams;
 use hayro_syntax::page::Resources;
 use kurbo::{Affine, Rect, Shape};
 use log::warn;
@@ -330,10 +330,7 @@ impl DecodedImageXObject {
         let mut decoded = obj
             .stream
             .decoded_image(&decode_params)
-            .map_err(|e| match e {
-                DecodeFailure::JpxImage => (obj.warning_sink)(InterpreterWarning::JpxImage),
-                _ => (obj.warning_sink)(InterpreterWarning::ImageDecodeFailure),
-            })
+            .map_err(|_| InterpreterWarning::ImageDecodeFailure)
             .ok()?;
 
         let color_space = color_space

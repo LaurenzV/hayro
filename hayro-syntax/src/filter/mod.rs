@@ -5,7 +5,6 @@ pub(crate) mod ascii_hex;
 mod ccitt;
 mod dct;
 mod jbig2;
-#[cfg(feature = "jpeg2000")]
 mod jpx;
 mod lzw_flate;
 mod run_length;
@@ -109,14 +108,7 @@ impl Filter {
             Filter::Jbig2Decode => Ok(FilterResult::from_data(
                 jbig2::decode(data, params).ok_or(DecodeFailure::ImageDecode)?,
             )),
-            #[cfg(feature = "jpeg2000")]
             Filter::JpxDecode => jpx::decode(data, image_params).ok_or(DecodeFailure::ImageDecode),
-            #[cfg(not(feature = "jpeg2000"))]
-            Filter::JpxDecode => {
-                log::warn!("JPEG2000 images are not supported in the current build");
-
-                Err(DecodeFailure::JpxImage)
-            }
             _ => Err(DecodeFailure::StreamDecode),
         };
 

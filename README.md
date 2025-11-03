@@ -20,7 +20,7 @@ While the main goal of `hayro` is rendering PDF files, the `hayro` project actua
 - [`hayro-font`](hayro-font): A crate for parsing Type1 and CFF fonts.
 
 ## Demo
-A demo tool can be found at https://laurenzv.github.io/hayro/. Please note that this is not intended to be a PDF viewer application: It misses many important features like zooming, selecting text and important optimizations for improving the user experience. It's really just meant as a quick way to test the rendering capabilities of `hayro`. Note that PDFs with embedded JPEG2000 images will not display correctly in this web demo.
+A demo tool can be found at https://laurenzv.github.io/hayro/. Please note that this is not intended to be a PDF viewer application: It misses many important features like zooming, selecting text and important optimizations for improving the user experience. It's really just meant as a quick way to test the rendering capabilities of `hayro`.
 
 ## License
 All crates in this repository are available under the Apache 2.0 license.

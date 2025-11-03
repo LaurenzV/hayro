@@ -12,7 +12,6 @@ rustc-hash = { workspace = true }
 smallvec = { workspace = true }
 hayro-common = { workspace = true }
 zune-jpeg = { workspace = true }
-jpeg2k = { workspace = true, optional = true }
 flate2 = { workspace = true }
 hayro-jpeg2000 = { workspace = true }
 
@@ -21,8 +20,3 @@ sha2 = "0.10"
 md5 = "0.8"
 aes = "0.8.4"
 cbc = "0.1.2"
-
-
-[features]
-default = []
-jpeg2000 = ["dep:jpeg2k"]

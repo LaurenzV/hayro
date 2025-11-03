@@ -18,7 +18,7 @@ name = "tests"
 path = "tests/mod.rs"
 
 [dependencies]
-hayro = { workspace = true , features = ["jpeg2000"] }
+hayro = { workspace = true }
 hayro-write = { workspace = true }
 hayro-svg = { workspace = true }
 hayro-syntax = { workspace = true }

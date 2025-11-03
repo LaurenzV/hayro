@@ -32,7 +32,6 @@ hayro-write = { path = "hayro-write", version = "0.3.0", default-features = fals
 bitflags = { version = "2.9" }
 bytemuck = { version = "1" }
 image = { version = "0.25", default-features = false }
-jpeg2k = { version = "0.10.1", default-features = false, features = ["openjp2"] }
 kurbo = { version = "0.12.0" }
 log = { version = "0.4" }
 resvg = { version = "0.45.1" }
