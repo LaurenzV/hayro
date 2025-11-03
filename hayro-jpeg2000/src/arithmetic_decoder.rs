@@ -1,16 +1,20 @@
 //! The arithmetic decoder, described in Annex C.
+//!
+//! The arithmetic decoder keeps track of some state and continuously receives
+//! context labels as input, each time yielding a new bit from the original data
+//! as output.
 
 pub(crate) struct ArithmeticDecoder<'a> {
-    /// The underlying data.
+    /// The underlying encoded data.
     data: &'a [u8],
-    /// The C-register, as illustrated in table C.1.
+    /// The C-register (see Table C.1).
     c: u32,
-    /// The A-register, as illustrated in table C.1.
+    /// The A-register (see Table C.1).
     a: u32,
     /// The pointer to the current byte.
-    bp: u32,
-    /// The bit counter.
-    ct: u32,
+    base_pointer: u32,
+    /// The bit shift counter.
+    shift_count: u32,
 }
 
 impl<'a> ArithmeticDecoder<'a> {
@@ -19,57 +23,63 @@ impl<'a> ArithmeticDecoder<'a> {
             data,
             c: 0,
             a: 0,
-            bp: 0,
-            ct: 0,
+            base_pointer: 0,
+            shift_count: 0,
         };
 
-        // The INITDEC procedure from C.3.5.
-        // We use the version from Annex G from https://www.itu.int/rec/T-REC-T.88-201808-I.
-
-        decoder.c = ((decoder.b() as u32) ^ 0xff) << 16;
-        decoder.byte_in();
-
-        decoder.c = decoder.c << 7;
-        decoder.ct = decoder.ct - 7;
-        decoder.a = 0x8000;
+        decoder.initialize();
 
         decoder
     }
 
+    /// Read the next bit using the given context label.
     pub(crate) fn read_bit(&mut self, context: &mut ArithmeticDecoderContext) -> u32 {
         self.decode(context)
     }
 
+    /// The INITDEC procedure from C.3.5.
+    ///
+    /// We use the version from Annex G in https://www.itu.int/rec/T-REC-T.88-201808-I.
+    fn initialize(&mut self) {
+        self.c = ((self.current_byte() as u32) ^ 0xff) << 16;
+        self.read_byte();
+
+        self.c = self.c << 7;
+        self.shift_count = self.shift_count - 7;
+        self.a = 0x8000;
+    }
+
     /// The BYTEIN procedure from C.3.4.
+    ///
     /// We use the version from Annex G from https://www.itu.int/rec/T-REC-T.88-201808-I.
-    fn byte_in(&mut self) {
-        if self.b() == 0xff {
-            let b1 = self.b1();
+    fn read_byte(&mut self) {
+        if self.current_byte() == 0xff {
+            let b1 = self.next_byte();
 
             if b1 > 0x8f {
-                self.ct = 8;
+                self.shift_count = 8;
             } else {
-                self.bp += 1;
-                self.c = self.c + 0xfe00 - ((self.b() as u32) << 9);
-                self.ct = 7;
+                self.base_pointer += 1;
+                self.c = self.c + 0xfe00 - ((self.current_byte() as u32) << 9);
+                self.shift_count = 7;
             }
         } else {
-            self.bp += 1;
-            self.c = self.c + 0xff00 - ((self.b() as u32) << 8);
-            self.ct = 8;
+            self.base_pointer += 1;
+            self.c = self.c + 0xff00 - ((self.current_byte() as u32) << 8);
+            self.shift_count = 8;
         }
     }
 
     /// The RENORMD procedure from C.3.3.
-    fn renorm_d(&mut self) {
+    fn renormalize(&mut self) {
         loop {
-            if self.ct == 0 {
-                self.byte_in();
+            if self.shift_count == 0 {
+                self.read_byte();
             }
 
             self.a = self.a << 1;
             self.c = self.c << 1;
-            self.ct -= 1;
+            self.shift_count -= 1;
 
             if self.a & 0x8000 != 0 {
                 break;
@@ -78,7 +88,7 @@ impl<'a> ArithmeticDecoder<'a> {
     }
 
     /// The LPS_EXCHANGE procedure from C.3.2.
-    fn lps_exchange(&mut self, context: &mut ArithmeticDecoderContext) -> u32 {
+    fn exchange_lps(&mut self, context: &mut ArithmeticDecoderContext) -> u32 {
         let d;
 
         let qe_entry = &QE_TABLE[context.index as usize];
@@ -102,6 +112,7 @@ impl<'a> ArithmeticDecoder<'a> {
     }
 
     /// The DECODE procedure from C.3.2.
+    ///
     /// We use the version from Annex G from https://www.itu.int/rec/T-REC-T.88-201808-I.
     fn decode(&mut self, context: &mut ArithmeticDecoderContext) -> u32 {
         let qe_entry = &QE_TABLE[context.index as usize];
@@ -112,8 +123,8 @@ impl<'a> ArithmeticDecoder<'a> {
 
         if (self.c >> 16) < self.a {
             if self.a & 0x8000 == 0 {
-                d = self.mps_exchange(context);
-                self.renorm_d();
+                d = self.exchange_mps(context);
+                self.renormalize();
             } else {
                 d = context.mps;
             }
@@ -124,15 +135,15 @@ impl<'a> ArithmeticDecoder<'a> {
 
             self.c = (c_high << 16) | c_low;
 
-            d = self.lps_exchange(context);
-            self.renorm_d();
+            d = self.exchange_lps(context);
+            self.renormalize();
         }
 
         d
     }
 
     /// The MPS_EXCHANGE procedure from C.3.2.
-    fn mps_exchange(&mut self, context: &mut ArithmeticDecoderContext) -> u32 {
+    fn exchange_mps(&mut self, context: &mut ArithmeticDecoderContext) -> u32 {
         let d;
 
         let qe_entry = &QE_TABLE[context.index as usize];
@@ -153,14 +164,18 @@ impl<'a> ArithmeticDecoder<'a> {
         d
     }
 
-    fn b(&self) -> u8 {
-        // TODO: Not sure why, but we need to yield 0xff in case we are out-of-bounds.
-        *self.data.get(self.bp as usize).unwrap_or(&0xff)
+    fn current_byte(&self) -> u8 {
+        self.data
+            .get(self.base_pointer as usize)
+            .copied()
+            .unwrap_or(0xFF)
     }
 
-    fn b1(&self) -> u8 {
-        // TODO: Not sure why, but we need to yield 0xff in case we are out-of-bounds.
-        *self.data.get((self.bp + 1) as usize).unwrap_or(&0xff)
+    fn next_byte(&self) -> u8 {
+        self.data
+            .get((self.base_pointer + 1) as usize)
+            .copied()
+            .unwrap_or(0xFF)
     }
 }
 
