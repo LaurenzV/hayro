@@ -1,27 +1,31 @@
 //! Performing the inverse discrete wavelet transform, as specified in Annex F.
 
 use crate::codestream::WaveletTransform;
-use crate::packet::{SubBand, SubbandType};
+use crate::packet::{Decomposition, SubBand, SubbandType};
 use crate::tile::IntRect;
 use std::iter;
 
 const PADDING_SHIFT: usize = 4;
 
 pub(crate) fn apply(
-    subbands: &[Vec<SubBand>],
+    ll_subband: &SubBand,
+    decompositions: &[Decomposition],
     tile_rect: IntRect,
     transform: WaveletTransform,
 ) -> Vec<f32> {
-    let mut ll_subband = subbands[0][0].clone();
+    let mut ll_subband = ll_subband.clone();
 
-    for subbands in &subbands[1..] {
-        let [hl, lh, hh] = subbands.as_slice() else {
-            unreachable!()
-        };
+    for decomposition in decompositions {
+        let ll_rect = decomposition.sub_bands[0].ll_rect;
 
-        let ll_rect = hl.ll_rect;
-
-        ll_subband = _2d_sr(&ll_subband, hl, lh, hh, ll_rect, transform);
+        ll_subband = _2d_sr(
+            &ll_subband,
+            &decomposition.sub_bands[0],
+            &decomposition.sub_bands[1],
+            &decomposition.sub_bands[2],
+            ll_rect,
+            transform,
+        );
     }
 
     let mut trimmed_coefficients = Vec::with_capacity(ll_subband.coefficients.len());
@@ -57,7 +61,7 @@ fn _2d_sr(
     ver_sr(&mut coefficients, rect, &transform);
 
     SubBand {
-        subband_type: SubbandType::LowLow,
+        sub_band_type: SubbandType::LowLow,
         ll_rect: rect,
         rect,
         precincts: vec![],
@@ -81,19 +85,19 @@ fn _2d_interleave(
     } = rect;
 
     for subband in [ll, hl, lh, hh] {
-        let (u_min, u_max) = match subband.subband_type {
+        let (u_min, u_max) = match subband.sub_band_type {
             SubbandType::LowLow | SubbandType::LowHigh => (u0.div_ceil(2), u1.div_ceil(2)),
             SubbandType::HighLow | SubbandType::HighHigh => (u0 / 2, u1 / 2),
         };
 
-        let (v_min, v_max) = match subband.subband_type {
+        let (v_min, v_max) = match subband.sub_band_type {
             SubbandType::LowLow | SubbandType::HighLow => (v0.div_ceil(2), v1.div_ceil(2)),
             SubbandType::LowHigh | SubbandType::HighHigh => (v0 / 2, v1 / 2),
         };
 
         for v_b in v_min..v_max {
             for u_b in u_min..u_max {
-                let (x, y) = match subband.subband_type {
+                let (x, y) = match subband.sub_band_type {
                     SubbandType::LowLow => (2 * u_b, 2 * v_b),
                     SubbandType::LowHigh => (2 * u_b, 2 * v_b + 1),
                     SubbandType::HighLow => (2 * u_b + 1, 2 * v_b),

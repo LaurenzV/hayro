@@ -18,8 +18,15 @@ use crate::{bitplane, idwt};
 use hayro_common::bit::BitReader;
 use hayro_common::byte::Reader;
 
+pub(crate) struct Decomposition<'a> {
+    /// In the order low-high, high-low and high-high.
+    pub(crate) sub_bands: [SubBand<'a>; 3],
+    pub(crate) rect: IntRect,
+}
+
 struct ComponentData<'a> {
-    subbands: Vec<Vec<SubBand<'a>>>,
+    first_ll_subband: SubBand<'a>,
+    decompositions: Vec<Decomposition<'a>>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -32,7 +39,7 @@ pub(crate) enum SubbandType {
 
 #[derive(Clone)]
 pub(crate) struct SubBand<'a> {
-    pub(crate) subband_type: SubbandType,
+    pub(crate) sub_band_type: SubbandType,
     pub(crate) rect: IntRect,
     pub(crate) ll_rect: IntRect,
     pub(crate) precincts: Vec<Precinct<'a>>,
@@ -151,74 +158,35 @@ fn process_tile<'a>(
     // Create the context once and then reuse it so that we can reuse the
     // allocations.
     // TODO: Reuse across different tiles.
-    let mut bitplane_decode_context = BitplaneDecodeContext::new();
+    let mut b_ctx = BitplaneDecodeContext::new();
     let mut layer_buffer = vec![];
 
     for (component_data, component_info) in
         component_data.iter_mut().zip(tile.component_info.iter())
     {
-        for (resolution, resolution_level) in component_data.subbands.iter_mut().enumerate() {
-            for subband in resolution_level {
-                let dequantization_step =
-                    dequantization_factor(subband.subband_type, resolution as u16, component_info);
+        process_sub_band(
+            &mut component_data.first_ll_subband,
+            0,
+            component_info,
+            &mut b_ctx,
+            &mut layer_buffer,
+        )?;
 
-                for precinct in &mut subband.precincts {
-                    for codeblock in &mut precinct.code_blocks {
-                        let num_bitplanes = {
-                            let (exponent, _) = component_info
-                                .exponent_mantissa(subband.subband_type, resolution as u16);
-                            // Equation (E-2)
-                            component_info.quantization_info.guard_bits as u16 + exponent - 1
-                        };
-                        // eprintln!(
-                        //     "decoding block {}x{}",
-                        //     codeblock.area.width(),
-                        //     codeblock.area.height()
-                        // );
-                        bitplane::decode(
-                            codeblock,
-                            subband.subband_type,
-                            num_bitplanes,
-                            &component_info
-                                .coding_style_parameters
-                                .parameters
-                                .code_block_style,
-                            &mut bitplane_decode_context,
-                            &mut layer_buffer,
-                        )?;
-
-                        // eprintln!("{:?}", codeblock.coefficients);
-
-                        // Copy the coefficients into the subband.
-
-                        let x_offset = codeblock.rect.x0 - subband.rect.x0;
-                        let y_offset = codeblock.rect.y0 - subband.rect.y0;
-
-                        for (y, in_row) in codeblock
-                            .coefficients
-                            .chunks_exact(codeblock.rect.width() as usize)
-                            .enumerate()
-                        {
-                            let out_row = &mut subband.coefficients[((y_offset + y as u32)
-                                * subband.rect.width())
-                                as usize
-                                + x_offset as usize..];
-
-                            for (input, output) in in_row.iter().zip(out_row.iter_mut()) {
-                                *output = *input as f32;
-
-                                if let Some(q) = dequantization_step {
-                                    *output *= q;
-                                }
-                            }
-                        }
-                    }
-                }
+        for (resolution, decomposition) in component_data.decompositions.iter_mut().enumerate() {
+            for sub_band in &mut decomposition.sub_bands {
+                process_sub_band(
+                    sub_band,
+                    resolution as u16 + 1,
+                    component_info,
+                    &mut b_ctx,
+                    &mut layer_buffer,
+                )?;
             }
         }
 
         let component_samples = idwt::apply(
-            &component_data.subbands,
+            &component_data.first_ll_subband,
+            &component_data.decompositions,
             tile.rect,
             component_info
                 .coding_style_parameters
@@ -232,6 +200,70 @@ fn process_tile<'a>(
     }
 
     Ok(samples)
+}
+
+fn process_sub_band(
+    subband: &mut SubBand,
+    resolution: u16,
+    component_info: &ComponentInfo,
+    b_ctx: &mut BitplaneDecodeContext,
+    layer_buffer: &mut Vec<u8>,
+) -> Result<(), &'static str> {
+    let dequantization_step =
+        dequantization_factor(subband.sub_band_type, resolution, component_info);
+
+    for precinct in &mut subband.precincts {
+        for codeblock in &mut precinct.code_blocks {
+            let num_bitplanes = {
+                let (exponent, _) =
+                    component_info.exponent_mantissa(subband.sub_band_type, resolution as u16);
+                // Equation (E-2)
+                component_info.quantization_info.guard_bits as u16 + exponent - 1
+            };
+            // eprintln!(
+            //     "decoding block {}x{}",
+            //     codeblock.area.width(),
+            //     codeblock.area.height()
+            // );
+            bitplane::decode(
+                codeblock,
+                subband.sub_band_type,
+                num_bitplanes,
+                &component_info
+                    .coding_style_parameters
+                    .parameters
+                    .code_block_style,
+                b_ctx,
+                layer_buffer,
+            )?;
+
+            // eprintln!("{:?}", codeblock.coefficients);
+
+            // Copy the coefficients into the subband.
+
+            let x_offset = codeblock.rect.x0 - subband.rect.x0;
+            let y_offset = codeblock.rect.y0 - subband.rect.y0;
+
+            for (y, in_row) in codeblock
+                .coefficients
+                .chunks_exact(codeblock.rect.width() as usize)
+                .enumerate()
+            {
+                let out_row = &mut subband.coefficients
+                    [((y_offset + y as u32) * subband.rect.width()) as usize + x_offset as usize..];
+
+                for (input, output) in in_row.iter().zip(out_row.iter_mut()) {
+                    *output = *input as f32;
+
+                    if let Some(q) = dequantization_step {
+                        *output *= q;
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
 }
 
 fn dequantization_factor(
@@ -368,150 +400,41 @@ fn parse_packet<'a>(
         let mut reader = BitReader::new(data);
 
         let progression_data = progression_iterator.next()?;
-        let zero_length = reader.read_packet_header_bits(1)?;
+        let resolution = progression_data.resolution;
+        let zero_length = reader.read_packet_header_bits(1)? == 0;
 
         let mut data_entries = vec![];
+        let component_data = &mut component_data[progression_data.component as usize];
 
-        // TODO: What to do with the note below B.10.3?
+        // B.10.3 Zero length packet
+        // "The first bit in the packet header denotes whether the packet has a length of zero
+        // (empty packet). The value 0 indicates a zero length; no code-blocks are included in this
+        // case. The value 1 indicates a non-zero length."
+        if !zero_length {
+            if resolution == 0 {
+                parse_sub_band(
+                    &mut component_data.first_ll_subband,
+                    0,
+                    &progression_data,
+                    &mut reader,
+                    &mut data_entries,
+                )?;
+            } else {
+                let decomposition = &mut component_data.decompositions[resolution as usize - 1];
 
-        let component = &mut component_data[progression_data.component as usize];
-        let sub_bands = &mut component.subbands[progression_data.resolution as usize];
-
-        for (sub_band_idx, sub_band) in sub_bands.iter_mut().enumerate() {
-            // B.10.3 Zero length packet
-            // "The first bit in the packet header denotes whether the packet has a length of zero
-            // (empty packet). The value 0 indicates a zero length; no code-blocks are included in this
-            // case. The value 1 indicates a non-zero length.
-            if zero_length == 0 {
-                continue;
-            }
-
-            let precinct = &mut sub_band.precincts[progression_data.precinct as usize];
-
-            for (code_block_idx, code_block) in precinct.code_blocks.iter_mut().enumerate() {
-                // B.10.4 Code-block inclusion
-                let is_included = if code_block.has_been_included {
-                    // "For code-blocks that have been included in a previous packet,
-                    // a single bit is used to represent the information, where a 1
-                    // means that the code-block is included in this layer and a 0 means
-                    // that it is not."
-                    reader.read_packet_header_bits(1)? == 1
-                } else {
-                    // "For code-blocks that have not been previously included in any packet,
-                    // this information is signalled with a separate tag tree code for each precinct
-                    // as confined to a sub-band. The values in this tag tree are the number of the
-                    // layer in which the current code-block is first included. Although the exact
-                    // sequence of bits that represent the inclusion tag tree appears in the bit
-                    // stream, only the bits needed for determining whether the code-block is
-                    // included are placed in the packet header. If some of the tag tree is already
-                    // known from previous code-blocks or previous layers, it is not repeated.
-                    // Likewise, only as much of the tag tree as is needed to determine inclusion in
-                    // the current layer is included. If a code-block is not included until a later
-                    // layer, then only a partial tag tree is included at that point in the bit
-                    // stream."
-                    precinct.code_inclusion_tree.read(
-                        code_block.x_idx,
-                        code_block.y_idx,
+                for (sub_band_idx, sub_band) in decomposition.sub_bands.iter_mut().enumerate() {
+                    parse_sub_band(
+                        sub_band,
+                        sub_band_idx,
+                        &progression_data,
                         &mut reader,
-                        progression_data.layer_num as u32 + 1,
-                    )? <= progression_data.layer_num as u32
-                };
-
-                // eprintln!("code-block inclusion: {}", is_included);
-
-                if !is_included {
-                    continue;
+                        &mut data_entries,
+                    )?;
                 }
-
-                let included_first_time = is_included && !code_block.has_been_included;
-
-                // B.10.5 Zero bit-plane information
-                // "If a code-block is included for the first time, the packet header contains
-                // information identifying the actual number of bit-planes used to represent
-                // coefficients from the code-block. The maximum number of bit-planes available
-                // for the representation of coefficients in any sub-band, b, is given by Mb as
-                // defined in Equation (E-2). In general, however, the
-                // number of actual bit-planes for which coding passes are generated is Mb – P,
-                // where the number of missing most significant bit-planes, P, may vary from
-                // code-block to code-block; these missing bit-planes are all taken to be zero. The
-                // value of P is coded in the packet header with a separate tag tree for every
-                // precinct, in the same manner as the code block inclusion information."
-                if included_first_time {
-                    code_block.missing_bit_planes = precinct.zero_bitplane_tree.read(
-                        code_block.x_idx,
-                        code_block.y_idx,
-                        &mut reader,
-                        u32::MAX,
-                    )? as u8;
-                    // eprintln!(
-                    //     "zero bit-plane information: {}",
-                    //     code_block.missing_bit_planes
-                    // );
-                }
-
-                code_block.has_been_included |= is_included;
-
-                // B.10.6 Number of coding passes
-                // "The number of coding passes included in this packet from each code-block is
-                // identified in the packet header using the codewords shown in Table B.4. This
-                // table provides for the possibility of signalling up to 164 coding passes.
-                let added_coding_passes = if reader.peak_packet_header_bits(9) == Some(0x1ff) {
-                    reader.read_packet_header_bits(9)?;
-                    reader.read_packet_header_bits(7)? + 37
-                } else if reader.peak_packet_header_bits(4) == Some(0x0f) {
-                    reader.read_packet_header_bits(4)?;
-                    // TODO: Validate that sequence is not 1111 1
-                    reader.read_packet_header_bits(5)? + 6
-                } else if reader.peak_packet_header_bits(4) == Some(0b1110) {
-                    reader.read_packet_header_bits(4)?;
-                    5
-                } else if reader.peak_packet_header_bits(4) == Some(0b1101) {
-                    reader.read_packet_header_bits(4)?;
-                    4
-                } else if reader.peak_packet_header_bits(4) == Some(0b1100) {
-                    reader.read_packet_header_bits(4)?;
-                    3
-                } else if reader.peak_packet_header_bits(2) == Some(0b10) {
-                    reader.read_packet_header_bits(2)?;
-                    2
-                } else if reader.peak_packet_header_bits(1) == Some(0) {
-                    reader.read_packet_header_bits(1)?;
-                    1
-                } else {
-                    return None;
-                };
-
-                code_block.number_of_coding_passes += added_coding_passes;
-
-                // eprintln!("number of coding passes: {}", added_coding_passes);
-
-                // B.10.7.1 Single codeword segment
-                // "A codeword segment is the number of bytes contributed to a packet by a
-                // code-block. The length of a codeword segment is represented by a binary number of length:
-                // bits = Lblock + floor(log_2(coding passes added))
-                // where Lblock is a code-block state variable. A separate Lblock is used for each
-                // code-block in the precinct. The value of Lblock is initially set to three. The
-                // number of bytes contributed by each code-block is preceded by signalling bits
-                // that increase the value of Lblock, as needed. A signalling bit of zero indicates
-                // the current value of Lblock is sufficient. If there are k ones followed by a
-                // zero, the value of Lblock is incremented by k. While Lblock can only increase,
-                // the number of bits used to signal the length of the code-block contribution can
-                // increase or decrease depending on the number of coding passes included."
-                let mut k = 0;
-
-                while reader.read_packet_header_bits(1)? == 1 {
-                    k += 1;
-                }
-
-                code_block.l_block += k;
-                let length_bits = code_block.l_block + added_coding_passes.ilog2();
-                let length = reader.read_packet_header_bits(length_bits as u8)?;
-                data_entries.push((sub_band_idx, code_block_idx, length));
-
-                // eprintln!("length(0) {}", length);
             }
         }
 
+        // TODO: What to do with the note below B.10.3?
         // TODO: Support multiple codeword segments (10.7.2)
 
         reader.read_stuff_bit_if_necessary()?;
@@ -532,7 +455,11 @@ fn parse_packet<'a>(
         }
 
         for (sub_band_idx, code_block_idx, length) in data_entries {
-            let sub_band = &mut sub_bands[sub_band_idx];
+            let sub_band = if resolution == 0 {
+                &mut component_data.first_ll_subband
+            } else {
+                &mut component_data.decompositions[resolution as usize - 1].sub_bands[sub_band_idx]
+            };
             let precinct = &mut sub_band.precincts[progression_data.precinct as usize];
             let code_block = &mut precinct.code_blocks[code_block_idx];
             let layer = &mut code_block.layer_data[progression_data.layer_num as usize];
@@ -547,6 +474,141 @@ fn parse_packet<'a>(
     Some(())
 }
 
+fn parse_sub_band(
+    sub_band: &mut SubBand,
+    sub_band_idx: usize,
+    progression_data: &ProgressionData,
+    reader: &mut BitReader,
+    data_entries: &mut Vec<(usize, usize, u32)>,
+) -> Option<()> {
+    let precinct = &mut sub_band.precincts[progression_data.precinct as usize];
+
+    for (code_block_idx, code_block) in precinct.code_blocks.iter_mut().enumerate() {
+        // B.10.4 Code-block inclusion
+        let is_included = if code_block.has_been_included {
+            // "For code-blocks that have been included in a previous packet,
+            // a single bit is used to represent the information, where a 1
+            // means that the code-block is included in this layer and a 0 means
+            // that it is not."
+            reader.read_packet_header_bits(1)? == 1
+        } else {
+            // "For code-blocks that have not been previously included in any packet,
+            // this information is signalled with a separate tag tree code for each precinct
+            // as confined to a sub-band. The values in this tag tree are the number of the
+            // layer in which the current code-block is first included. Although the exact
+            // sequence of bits that represent the inclusion tag tree appears in the bit
+            // stream, only the bits needed for determining whether the code-block is
+            // included are placed in the packet header. If some of the tag tree is already
+            // known from previous code-blocks or previous layers, it is not repeated.
+            // Likewise, only as much of the tag tree as is needed to determine inclusion in
+            // the current layer is included. If a code-block is not included until a later
+            // layer, then only a partial tag tree is included at that point in the bit
+            // stream."
+            precinct.code_inclusion_tree.read(
+                code_block.x_idx,
+                code_block.y_idx,
+                reader,
+                progression_data.layer_num as u32 + 1,
+            )? <= progression_data.layer_num as u32
+        };
+
+        // eprintln!("code-block inclusion: {}", is_included);
+
+        if !is_included {
+            continue;
+        }
+
+        let included_first_time = is_included && !code_block.has_been_included;
+
+        // B.10.5 Zero bit-plane information
+        // "If a code-block is included for the first time, the packet header contains
+        // information identifying the actual number of bit-planes used to represent
+        // coefficients from the code-block. The maximum number of bit-planes available
+        // for the representation of coefficients in any sub-band, b, is given by Mb as
+        // defined in Equation (E-2). In general, however, the
+        // number of actual bit-planes for which coding passes are generated is Mb – P,
+        // where the number of missing most significant bit-planes, P, may vary from
+        // code-block to code-block; these missing bit-planes are all taken to be zero. The
+        // value of P is coded in the packet header with a separate tag tree for every
+        // precinct, in the same manner as the code block inclusion information."
+        if included_first_time {
+            code_block.missing_bit_planes = precinct.zero_bitplane_tree.read(
+                code_block.x_idx,
+                code_block.y_idx,
+                reader,
+                u32::MAX,
+            )? as u8;
+            // eprintln!(
+            //     "zero bit-plane information: {}",
+            //     code_block.missing_bit_planes
+            // );
+        }
+
+        code_block.has_been_included |= is_included;
+
+        // B.10.6 Number of coding passes
+        // "The number of coding passes included in this packet from each code-block is
+        // identified in the packet header using the codewords shown in Table B.4. This
+        // table provides for the possibility of signalling up to 164 coding passes.
+        let added_coding_passes = if reader.peak_packet_header_bits(9) == Some(0x1ff) {
+            reader.read_packet_header_bits(9)?;
+            reader.read_packet_header_bits(7)? + 37
+        } else if reader.peak_packet_header_bits(4) == Some(0x0f) {
+            reader.read_packet_header_bits(4)?;
+            // TODO: Validate that sequence is not 1111 1
+            reader.read_packet_header_bits(5)? + 6
+        } else if reader.peak_packet_header_bits(4) == Some(0b1110) {
+            reader.read_packet_header_bits(4)?;
+            5
+        } else if reader.peak_packet_header_bits(4) == Some(0b1101) {
+            reader.read_packet_header_bits(4)?;
+            4
+        } else if reader.peak_packet_header_bits(4) == Some(0b1100) {
+            reader.read_packet_header_bits(4)?;
+            3
+        } else if reader.peak_packet_header_bits(2) == Some(0b10) {
+            reader.read_packet_header_bits(2)?;
+            2
+        } else if reader.peak_packet_header_bits(1) == Some(0) {
+            reader.read_packet_header_bits(1)?;
+            1
+        } else {
+            return None;
+        };
+
+        code_block.number_of_coding_passes += added_coding_passes;
+
+        // eprintln!("number of coding passes: {}", added_coding_passes);
+
+        // B.10.7.1 Single codeword segment
+        // "A codeword segment is the number of bytes contributed to a packet by a
+        // code-block. The length of a codeword segment is represented by a binary number of length:
+        // bits = Lblock + floor(log_2(coding passes added))
+        // where Lblock is a code-block state variable. A separate Lblock is used for each
+        // code-block in the precinct. The value of Lblock is initially set to three. The
+        // number of bytes contributed by each code-block is preceded by signalling bits
+        // that increase the value of Lblock, as needed. A signalling bit of zero indicates
+        // the current value of Lblock is sufficient. If there are k ones followed by a
+        // zero, the value of Lblock is incremented by k. While Lblock can only increase,
+        // the number of bits used to signal the length of the code-block contribution can
+        // increase or decrease depending on the number of coding passes included."
+        let mut k = 0;
+
+        while reader.read_packet_header_bits(1)? == 1 {
+            k += 1;
+        }
+
+        code_block.l_block += k;
+        let length_bits = code_block.l_block + added_coding_passes.ilog2();
+        let length = reader.read_packet_header_bits(length_bits as u8)?;
+        data_entries.push((sub_band_idx, code_block_idx, length));
+
+        // eprintln!("length(0) {}", length);
+    }
+
+    Some(())
+}
+
 fn build_component_data(
     tile: &Tile,
     header: &Header,
@@ -554,7 +616,9 @@ fn build_component_data(
     let mut component_data = vec![];
 
     for (component_idx, component_info) in tile.component_info.iter().enumerate() {
-        let mut bands = vec![];
+        // TODO: IMprove this
+        let mut ll_subband = None;
+        let mut decompositions = vec![];
 
         for resolution in 0..component_info
             .coding_style_parameters
@@ -584,13 +648,13 @@ fn build_component_data(
                 // );
                 let precincts = build_precincts(&tile_instance, rect, header)?;
 
-                bands.push(vec![SubBand {
-                    subband_type: SubbandType::LowLow,
+                ll_subband = Some(SubBand {
+                    sub_band_type: SubbandType::LowLow,
                     rect,
                     ll_rect: tile_instance.resolution_transformed_rect,
                     precincts,
                     coefficients: vec![0.0; (rect.width() * rect.height()) as usize],
-                }]);
+                })
             } else {
                 let decomposition_level = component_info
                     .coding_style_parameters
@@ -598,52 +662,37 @@ fn build_component_data(
                     .num_decomposition_levels
                     - (resolution - 1);
 
-                let mut sub_bands = vec![];
-
-                for (subband_idx, sb_type) in [
-                    SubbandType::HighLow,
-                    SubbandType::LowHigh,
-                    SubbandType::HighHigh,
-                ]
-                .into_iter()
-                .enumerate()
-                {
-                    let rect = tile_instance.sub_band_rect(sb_type, decomposition_level);
-
-                    // eprintln!(
-                    //     "r {} making sub-band {} for component {}",
-                    //     resolution,
-                    //     subband_idx + 1,
-                    //     component_idx
-                    // );
-                    // eprintln!(
-                    //     "Sub-band rect: [{},{} {}x{}], ll rect [{},{} {}x{}]",
-                    //     rect.x0,
-                    //     rect.y0,
-                    //     rect.width(),
-                    //     rect.height(),
-                    //     tile_instance.resolution_transformed_rect.x0,
-                    //     tile_instance.resolution_transformed_rect.y0,
-                    //     tile_instance.resolution_transformed_rect.width(),
-                    //     tile_instance.resolution_transformed_rect.height(),
-                    // );
+                let build_sub_band = |sub_band_type: SubbandType| {
+                    let rect = tile_instance.sub_band_rect(sub_band_type, decomposition_level);
 
                     let precincts = build_precincts(&tile_instance, rect, header)?;
 
-                    sub_bands.push(SubBand {
-                        subband_type: sb_type,
+                    Ok(SubBand {
+                        sub_band_type,
                         ll_rect: tile_instance.resolution_transformed_rect,
                         rect,
                         precincts: precincts.clone(),
                         coefficients: vec![0.0; (rect.width() * rect.height()) as usize],
                     })
-                }
+                };
 
-                bands.push(sub_bands);
+                let decomposition = Decomposition {
+                    sub_bands: [
+                        build_sub_band(SubbandType::HighLow)?,
+                        build_sub_band(SubbandType::LowHigh)?,
+                        build_sub_band(SubbandType::HighHigh)?,
+                    ],
+                    rect: tile_instance.resolution_transformed_rect,
+                };
+
+                decompositions.push(decomposition);
             }
         }
 
-        component_data.push(ComponentData { subbands: bands })
+        component_data.push(ComponentData {
+            decompositions,
+            first_ll_subband: ll_subband.unwrap(),
+        })
     }
 
     Ok(component_data)
