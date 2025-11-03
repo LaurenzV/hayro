@@ -16,6 +16,7 @@ use crate::tile::{IntRect, Tile, TileInstance, TilePart};
 use crate::{bitplane, idwt};
 use hayro_common::bit::BitReader;
 use hayro_common::byte::Reader;
+use crate::bitplane::BitplaneDecodeContext;
 
 struct ComponentData<'a> {
     subbands: Vec<Vec<SubBand<'a>>>,
@@ -146,6 +147,10 @@ fn process_tile<'a>(
     }
 
     let mut samples = vec![];
+    
+    // Create the context once and then reuse it so that we can reuse the 
+    // allocations.
+    let mut bitplane_decode_context = BitplaneDecodeContext::new();
 
     for (component_data, component_info) in
         component_data.iter_mut().zip(tile.component_info.iter())
@@ -176,6 +181,7 @@ fn process_tile<'a>(
                                 .coding_style_parameters
                                 .parameters
                                 .code_block_style,
+                            &mut bitplane_decode_context
                         )?;
 
                         // eprintln!("{:?}", codeblock.coefficients);

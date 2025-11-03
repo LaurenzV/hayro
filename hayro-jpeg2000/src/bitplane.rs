@@ -178,6 +178,7 @@ pub(crate) fn decode(
     subband_type: SubbandType,
     num_bitplanes: u16,
     style: &CodeBlockStyle,
+    ctx: &mut BitplaneDecodeContext,
 ) -> Result<(), &'static str> {
     if code_block.number_of_coding_passes == 0 {
         return Ok(());
@@ -206,7 +207,7 @@ pub(crate) fn decode(
         .collect::<Vec<_>>();
     let mut decoder = ArithmeticDecoder::new(&combined_layers);
 
-    decode_inner(code_block, subband_type, num_bitplanes, &mut decoder)
+    decode_inner(code_block, subband_type, num_bitplanes, &mut decoder, ctx)
         .ok_or("failed to decode code-block arithmetic data")?;
 
     Ok(())
@@ -217,8 +218,8 @@ fn decode_inner(
     subband_type: SubbandType,
     num_bitplanes: u16,
     decoder: &mut impl BitDecoder,
+    ctx: &mut BitplaneDecodeContext,
 ) -> Option<()> {
-    let mut ctx = BitplaneDecodeContext::new();
     ctx.reset(
         code_block.area.width(),
         code_block.area.height(),
@@ -242,14 +243,14 @@ fn decode_inner(
 
         match pass {
             PassType::Cleanup => {
-                cleanup_pass(&mut ctx, decoder);
+                cleanup_pass(ctx, decoder);
                 ctx.reset_for_next_bitplane();
             }
             PassType::SignificancePropagation => {
-                significance_propagation_pass(&mut ctx, decoder);
+                significance_propagation_pass(ctx, decoder);
             }
             PassType::MagnitudeRefinement => {
-                magnitude_refinement_pass(&mut ctx, decoder);
+                magnitude_refinement_pass(ctx, decoder);
             }
         }
     }
@@ -264,7 +265,7 @@ fn decode_inner(
         }
     }
 
-    for (sign, magnitude) in ctx.signs.iter().zip(ctx.magnitude_array) {
+    for (sign, magnitude) in ctx.signs.iter().zip(&ctx.magnitude_array) {
         let mut num = magnitude.get() as i16;
         if *sign != 0 {
             num = -num;
@@ -624,7 +625,7 @@ impl Iterator for PositionIterator {
 
 #[cfg(test)]
 mod tests {
-    use super::{BitDecoder, PositionIterator, decode, decode_inner};
+    use super::{BitDecoder, PositionIterator, decode, decode_inner, BitplaneDecodeContext};
     use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
     use crate::codestream::CodeBlockStyle;
     use crate::packet::{CodeBlock, SubbandType};
@@ -723,7 +724,7 @@ mod tests {
             coefficients: vec![],
         };
 
-        decode_inner(&mut code_block, SubbandType::LowLow, 3, &mut decoder);
+        decode_inner(&mut code_block, SubbandType::LowLow, 3, &mut decoder, &mut BitplaneDecodeContext::new());
 
         assert_eq!(
             code_block.coefficients,
@@ -755,6 +756,7 @@ mod tests {
             SubbandType::LowLow,
             6,
             &CodeBlockStyle::default(),
+            &mut BitplaneDecodeContext::new()
         );
 
         assert_eq!(code_block.coefficients, vec![-26, -22, -30, -32, -19]);
@@ -784,6 +786,7 @@ mod tests {
             SubbandType::LowHigh,
             3,
             &CodeBlockStyle::default(),
+            &mut BitplaneDecodeContext::new()
         );
 
         assert_eq!(code_block.coefficients, vec![1, 5, 1, 0]);
@@ -829,6 +832,7 @@ mod tests {
             SubbandType::HighLow,
             5,
             &CodeBlockStyle::default(),
+            &mut BitplaneDecodeContext::new()
         );
 
         let expected = vec![
