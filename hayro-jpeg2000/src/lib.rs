@@ -13,7 +13,6 @@ pub mod bitmap;
 pub(crate) mod bitplane;
 pub mod boxes;
 mod codestream;
-mod dequantize;
 pub(crate) mod idwt;
 mod packet;
 mod progression;
