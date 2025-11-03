@@ -1,3 +1,9 @@
+//! Progression iterators, defined in Section B.12.
+//!
+//! A progression iterator essentially yields tuples of
+//! (layer_num, resolution, component, precinct) in a specific order that
+//! determines in which order the data appears in the codestream.
+
 use crate::codestream::ComponentInfo;
 use crate::tile::{IntRect, Tile, TileInstance};
 
