@@ -47,8 +47,8 @@ pub(crate) fn decode(data: &[u8], params: &ImageDecodeParams) -> Option<FilterRe
         .unwrap_or(0);
 
     for sample in 0..max_len {
-        for comp in 0..components.len() {
-            buf.push(components[comp].container[sample]);
+        for channel in components.iter() {
+            buf.push(channel.container[sample]);
         }
     }
 
