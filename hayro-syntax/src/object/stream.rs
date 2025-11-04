@@ -11,7 +11,7 @@ use crate::object::{Object, ObjectLike};
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 use crate::util::OptionLog;
-use log::{info, warn};
+use log::warn;
 use smallvec::SmallVec;
 use std::borrow::Cow;
 use std::fmt::{Debug, Formatter};
