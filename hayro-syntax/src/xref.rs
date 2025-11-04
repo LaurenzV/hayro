@@ -102,10 +102,19 @@ fn fallback_xref_map_inner<'a>(
             {
                 for (idx, (obj_num, _)) in obj_stream.offsets.iter().enumerate() {
                     let id = ObjectIdentifier::new(*obj_num as i32, 0);
-                    xref_map.insert(
-                        id,
-                        EntryType::ObjStream(last_obj_num.obj_num as u32, idx as u32),
-                    );
+                    // If we already found an entry for that object number that was not
+                    // inside an object stream. Somewhat arbitrary and maybe
+                    // we can do better, but that seems to work for the current
+                    // set of tests.
+                    if xref_map
+                        .get(&id)
+                        .is_none_or(|e| !matches!(e, &EntryType::Normal(_)))
+                    {
+                        xref_map.insert(
+                            id,
+                            EntryType::ObjStream(last_obj_num.obj_num as u32, idx as u32),
+                        );
+                    }
                 }
             }
         } else {
