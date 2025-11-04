@@ -8,7 +8,7 @@ use crate::object::ObjectIdentifier;
 use crate::object::Stream;
 use crate::object::dict::keys::{
     AUTHOR, CREATION_DATE, CREATOR, ENCRYPT, FIRST, ID, INDEX, INFO, KEYWORDS, MOD_DATE, N,
-    OCPROPERTIES, PAGES, PREV, PRODUCER, R, ROOT, SIZE, SUBJECT, TITLE, TYPE, VERSION, W, XREF_STM,
+    OCPROPERTIES, PAGES, PREV, PRODUCER, ROOT, SIZE, SUBJECT, TITLE, TYPE, VERSION, W, XREF_STM,
 };
 use crate::object::indirect::IndirectObject;
 use crate::object::{Array, MaybeRef};
@@ -853,10 +853,8 @@ fn get_decryptor(trailer_dict: &Dict) -> Result<Decryptor, XRefError> {
             .and_then(|a| a.flex_iter().next::<object::String>())
         {
             id.get().to_vec()
-        } else if encryption_dict.get::<u8>(R).is_none_or(|r| r <= 4) {
-            // ID is not needed for rev 5 and 6.
-            return Err(XRefError::Encryption(DecryptionError::MissingIDEntry));
         } else {
+            // Assume an empty ID entry.
             vec![]
         };
 
