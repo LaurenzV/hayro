@@ -36,8 +36,10 @@ This crate has one optional feature:
 use crate::renderer::Renderer;
 use hayro_interpret::Device;
 use hayro_interpret::FillRule;
-pub use hayro_interpret::font::{FontData, FontQuery, StandardFont};
-use hayro_interpret::hayro_syntax::page::Page;
+pub use hayro_interpret::font::{
+    FallbackFontQuery, FontData, FontQuery, FontStretch, StandardFont,
+};
+pub use hayro_interpret::hayro_syntax::page::{Page, Pages};
 use hayro_interpret::util::{PageExt, RectExt};
 use hayro_interpret::{BlendMode, Context};
 use hayro_interpret::{ClipPath, interpret_page};
