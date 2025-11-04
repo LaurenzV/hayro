@@ -1,6 +1,5 @@
 import os
 import json
-import hashlib
 import requests
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -8,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 class TestGenerator:
     def __init__(self):
         self.script_dir = Path(__file__).resolve().parent
-        self.custom_manifest_path = self.script_dir / 'manifest.json'
+        self.custom_manifest_path = self.script_dir / 'manifest_custom.json'
         self.pdfjs_manifest_path = self.script_dir / 'manifest_pdfjs.json'
         self.pdfbox_manifest_path = self.script_dir / 'manifest_pdfbox.json'
         self.corpus_manifest_path = self.script_dir / 'manifest_corpus.json'
@@ -25,79 +24,35 @@ class TestGenerator:
         """Create corpus directory if it doesn't exist."""
         self.corpus_dir.mkdir(exist_ok=True)
         
-    def calculate_md5(self, file_path: Path) -> str:
-        """Calculate MD5 hash of a file."""
-        hash_md5 = hashlib.md5()
-        with open(file_path, "rb") as f:
-            for chunk in iter(lambda: f.read(4096), b""):
-                hash_md5.update(chunk)
-        return hash_md5.hexdigest()
-        
-    def download_pdf(self, link_path: Path, expected_md5: str = None, is_external: bool = False) -> bool:
-        """Download PDF from link file and verify MD5 if provided."""
-        stem = link_path.stem
-        
-        # Store downloads in appropriate subdirectory for external entries
-        if is_external:
-            # Determine subdirectory based on link file location
-            if 'pdfjs' in str(link_path):
-                dest_dir = self.downloads_dir / "pdfjs"
-            elif 'pdfbox' in str(link_path):
-                dest_dir = self.downloads_dir / "pdfbox"
-            elif 'corpus' in str(link_path):
-                dest_dir = self.downloads_dir / "corpus"
-            else:
-                dest_dir = self.downloads_dir
-            dest_dir.mkdir(exist_ok=True)
-            dest_path = dest_dir / f"{stem}.pdf"
+    def download_pdf(self, entry_id: str, url: str, subdir: str | None = None) -> bool:
+        """Download a PDF to the appropriate downloads subdirectory."""
+        if subdir:
+            dest_dir = self.downloads_dir / subdir
         else:
-            dest_path = self.downloads_dir / f"{stem}.pdf"
-        
-        # If file exists, check MD5
+            dest_dir = self.downloads_dir
+        dest_dir.mkdir(exist_ok=True)
+        dest_path = dest_dir / f"{entry_id}.pdf"
+
         if dest_path.exists():
-            if expected_md5:
-                actual_md5 = self.calculate_md5(dest_path)
-                if actual_md5 == expected_md5:
-                    # print(f"✔ {stem} exists with correct MD5")
-                    return True
-                else:
-                    print(f"⚠ {stem} exists but MD5 mismatch. Re-downloading...")
-                    print(f"  Expected: {expected_md5}")
-                    print(f"  Actual:   {actual_md5}")
-            else:
-                print(f"✔ Skipping {stem} (already downloaded, no MD5 verification)")
-                return True
-        
-        # Download the file
-        url = link_path.read_text().strip()
-        print(f"📥 Downloading {stem} from {url[:50]}...")
-        
+            print(f"✔ Skipping {entry_id} (already downloaded)")
+            return True
+
+        print(f"📥 Downloading {entry_id} from {url[:70]}...")
+
         try:
             response = requests.get(url, stream=True, timeout=30)
             response.raise_for_status()
-            
+
             with open(dest_path, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     f.write(chunk)
-            
-            # Verify MD5 if provided
-            if expected_md5:
-                actual_md5 = self.calculate_md5(dest_path)
-                if actual_md5 == expected_md5:
-                    print(f"✔ Downloaded and verified MD5")
-                    return True
-                else:
-                    print(f"✘ MD5 verification failed!")
-                    print(f"  Expected: {expected_md5}")
-                    print(f"  Actual:   {actual_md5}")
-                    dest_path.unlink()  # Delete the incorrect file
-                    return False
-            else:
-                print(f"✔ Downloaded (no MD5 verification)")
-                return True
-                
+
+            print("✔ Downloaded")
+            return True
         except requests.RequestException as e:
-            print(f"✘ Failed to download {stem}: {e}")
+            print(f"✘ Failed to download {entry_id}: {e}")
+            if dest_path.exists():
+                dest_path.unlink()
             return False
             
     def load_manifests(self) -> list:
@@ -127,6 +82,25 @@ class TestGenerator:
             
         return all_entries
         
+    def _remote_source(self, *, is_pdfjs: bool, is_pdfbox: bool, is_corpus: bool) -> tuple[str, str | None]:
+        """Return the base URL and downloads subdirectory for remote entries."""
+        if is_pdfjs:
+            return "https://hayro-assets.dev/pdfjs/", "pdfjs"
+        if is_pdfbox:
+            return "https://hayro-assets.dev/pdfbox/", "pdfbox"
+        if is_corpus:
+            return "https://hayro-assets.dev/corpus/", "corpus"
+        return "https://hayro-assets.dev/custom/", None
+
+    def _normalize_entry(self, entry, *, assume_link: bool = False):
+        """Ensure manifest entries are dictionaries with at least id/link fields."""
+        if isinstance(entry, str):
+            return {"id": entry, "link": assume_link}
+        if assume_link and not entry.get("link"):
+            entry = dict(entry)
+            entry["link"] = True
+        return entry
+
     def _schedule_entry(self, entry: dict, rust_functions: list, download_futures: dict,
                         executor: ThreadPoolExecutor, processed_count: int, skipped_count: int,
                         *, is_pdfjs: bool = False, is_pdfbox: bool = False, is_corpus: bool = False) -> tuple[int, int]:
@@ -134,39 +108,41 @@ class TestGenerator:
         entry_id = entry['id']
         is_link = entry.get('link', False)
         is_ignored = entry.get('ignore', False)
-        expected_md5 = entry.get('md5')
 
         if is_ignored:
             print(f"⏭ Skipping {entry_id} (ignored)")
             return processed_count, skipped_count + 1
 
-        relative_path = entry['file'].replace('pdfs/', '')
-        if is_pdfjs:
-            base_dir = self.pdfs_dir / 'pdfjs'
-        elif is_pdfbox:
-            base_dir = self.pdfs_dir / 'pdfbox'
-        elif is_corpus:
-            base_dir = self.pdfs_dir / 'corpus'
-        else:
-            base_dir = self.pdfs_dir
-
-        target_path = base_dir / relative_path
-
         if is_link:
-            if not target_path.exists():
-                print(f"✘ Link file not found: {target_path}")
-                return processed_count, skipped_count + 1
+            base_url, subdir = self._remote_source(is_pdfjs=is_pdfjs, is_pdfbox=is_pdfbox, is_corpus=is_corpus)
+            url = f"{base_url}{entry_id}.pdf"
 
             index = len(rust_functions)
             rust_functions.append(None)
             future = executor.submit(
                 self.download_pdf,
-                target_path,
-                expected_md5,
-                is_pdfjs or is_pdfbox or is_corpus,
+                entry_id,
+                url,
+                subdir,
             )
             download_futures[future] = (entry, is_pdfjs, is_pdfbox, is_corpus, index)
         else:
+            if 'file' not in entry:
+                print(f"✘ Missing file path for entry {entry_id}")
+                return processed_count, skipped_count + 1
+
+            relative_path = entry['file'].replace('pdfs/', '')
+            if is_pdfjs:
+                base_dir = self.pdfs_dir / 'pdfjs'
+            elif is_pdfbox:
+                base_dir = self.pdfs_dir / 'pdfbox'
+            elif is_corpus:
+                base_dir = self.pdfs_dir / 'corpus'
+            else:
+                base_dir = self.pdfs_dir
+
+            target_path = base_dir / relative_path
+
             if not target_path.exists():
                 print(f"✘ PDF file not found: {target_path}")
                 return processed_count, skipped_count + 1
@@ -262,7 +238,7 @@ class TestGenerator:
                     
                     for entry in custom_entries:
                         processed_count, skipped_count = self._schedule_entry(
-                            entry,
+                            self._normalize_entry(entry),
                             rust_functions,
                             download_futures,
                             executor,
@@ -280,7 +256,7 @@ class TestGenerator:
                     
                     for entry in pdfjs_entries:
                         processed_count, skipped_count = self._schedule_entry(
-                            entry,
+                            self._normalize_entry(entry, assume_link=True),
                             rust_functions,
                             download_futures,
                             executor,
@@ -299,7 +275,7 @@ class TestGenerator:
 
                     for entry in pdfbox_entries:
                         processed_count, skipped_count = self._schedule_entry(
-                            entry,
+                            self._normalize_entry(entry, assume_link=True),
                             rust_functions,
                             download_futures,
                             executor,
@@ -318,7 +294,7 @@ class TestGenerator:
 
                     for entry in corpus_entries:
                         processed_count, skipped_count = self._schedule_entry(
-                            entry,
+                            self._normalize_entry(entry, assume_link=True),
                             rust_functions,
                             download_futures,
                             executor,
@@ -348,7 +324,7 @@ class TestGenerator:
                         )
                         processed_count += 1
                     else:
-                        print(f"✘ Failed to download or verify {entry_id}")
+                        print(f"✘ Failed to download {entry_id}")
                         skipped_count += 1
                         rust_functions[index] = None
             

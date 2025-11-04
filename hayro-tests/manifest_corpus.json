@@ -1,45 +1,19 @@
 [
-  {
-    "id": "0000120",
-    "file": "pdfs/0000120.link",
-    "link": true
-  },
-  {
-    "id": "0000325",
-    "file": "pdfs/0000325.link",
-    "link": true
-  },
-  {
-    "id": "0002771",
-    "file": "pdfs/0002771.link",
-    "link": true
-  },
-  {
-    "id": "0000157",
-    "file": "pdfs/0000157.link",
-    "link": true
-  },
+  "0000120",
+  "0000325",
+  "0002771",
+  "0000157",
   {
     "id": "0010055",
-    "file": "pdfs/0010055.link",
-    "last_page": 0,
-    "link": true
+    "last_page": 0
   },
   {
     "id": "0025639",
-    "file": "pdfs/0025639.link",
-    "last_page": 0,
-    "link": true
+    "last_page": 0
   },
   {
     "id": "0054044",
-    "file": "pdfs/0054044.link",
-    "last_page": 0,
-    "link": true
+    "last_page": 0
   },
-  {
-    "id": "0083781",
-    "file": "pdfs/0083781.link",
-    "link": true
-  }
+  "0083781"
 ]

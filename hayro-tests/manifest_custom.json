@@ -1,0 +1,1079 @@
+[
+  {
+    "id": "InlineAbbreviations",
+    "file": "pdfs/custom/InlineAbbreviations.pdf"
+  },
+  {
+    "id": "OverlappingGlyphClipping",
+    "file": "pdfs/custom/OverlappingGlyphClipping.pdf"
+  },
+  {
+    "id": "TextClippingModeChanges",
+    "file": "pdfs/custom/TextClippingModeChanges.pdf"
+  },
+  {
+    "id": "clip_path_evenodd",
+    "file": "pdfs/custom/clip_path_evenodd.pdf"
+  },
+  {
+    "id": "clip_path_nested",
+    "file": "pdfs/custom/clip_path_nested.pdf"
+  },
+  {
+    "id": "color_separation_3",
+    "file": "pdfs/custom/color_separation_3.pdf"
+  },
+  {
+    "id": "color_space_icc_gray",
+    "file": "pdfs/custom/color_space_icc_gray.pdf"
+  },
+  {
+    "id": "color_space_icc_invalid_profile",
+    "file": "pdfs/custom/color_space_icc_invalid_profile.pdf"
+  },
+  {
+    "id": "color_space_icc_srgb",
+    "file": "pdfs/custom/color_space_icc_srgb.pdf"
+  },
+  {
+    "id": "color_space_indexed",
+    "file": "pdfs/custom/color_space_indexed.pdf"
+  },
+  {
+    "id": "color_space_lab",
+    "file": "pdfs/custom/color_space_lab.pdf"
+  },
+  {
+    "id": "color_space_separation_1",
+    "file": "pdfs/custom/color_space_separation_1.pdf"
+  },
+  {
+    "id": "color_space_separation_2",
+    "file": "pdfs/custom/color_space_separation_2.pdf"
+  },
+  {
+    "id": "filter_tiff_predictor_gray",
+    "file": "pdfs/custom/filter_tiff_predictor_gray.pdf"
+  },
+  {
+    "id": "font_cid_1",
+    "file": "pdfs/custom/font_cid_1.pdf"
+  },
+  {
+    "id": "font_cid_2",
+    "file": "pdfs/custom/font_cid_2.pdf",
+    "last_page": 0
+  },
+  {
+    "id": "font_cid_3",
+    "file": "pdfs/custom/font_cid_3.pdf"
+  },
+  {
+    "id": "font_cid_4",
+    "file": "pdfs/custom/font_cid_4.pdf"
+  },
+  {
+    "id": "font_cid_5",
+    "file": "pdfs/custom/font_cid_5.pdf"
+  },
+  {
+    "id": "font_cid_6",
+    "file": "pdfs/custom/font_cid_6.pdf"
+  },
+  {
+    "id": "font_cid_7",
+    "file": "pdfs/custom/font_cid_7.pdf"
+  },
+  {
+    "id": "font_standard_1",
+    "file": "pdfs/custom/font_standard_1.pdf"
+  },
+  {
+    "id": "font_standard_2",
+    "file": "pdfs/custom/font_standard_2.pdf",
+    "last_page": 0
+  },
+  {
+    "id": "font_truetype_1",
+    "file": "pdfs/custom/font_truetype_1.pdf"
+  },
+  {
+    "id": "font_truetype_2",
+    "file": "pdfs/custom/font_truetype_2.pdf"
+  },
+  {
+    "id": "font_truetype_3",
+    "file": "pdfs/custom/font_truetype_3.pdf"
+  },
+  {
+    "id": "font_truetype_4",
+    "file": "pdfs/custom/font_truetype_4.pdf"
+  },
+  {
+    "id": "font_truetype_5",
+    "file": "pdfs/custom/font_truetype_5.pdf"
+  },
+  {
+    "id": "font_truetype_6",
+    "file": "pdfs/custom/font_truetype_6.pdf"
+  },
+  {
+    "id": "font_truetype_7",
+    "file": "pdfs/custom/font_truetype_7.pdf",
+    "first_page": 1,
+    "last_page": 1
+  },
+  {
+    "id": "font_truetype_8",
+    "file": "pdfs/custom/font_truetype_8.pdf",
+    "last_page": 0
+  },
+  {
+    "id": "font_truetype_slow_post_lookup",
+    "file": "pdfs/custom/font_truetype_slow_post_lookup.pdf",
+    "last_page": 0
+  },
+  {
+    "id": "font_type1_1",
+    "file": "pdfs/custom/font_type1_1.pdf"
+  },
+  {
+    "id": "font_type1_10",
+    "file": "pdfs/custom/font_type1_10.pdf",
+    "first_page": 0,
+    "last_page": 1
+  },
+  {
+    "id": "font_type1_11",
+    "file": "pdfs/custom/font_type1_11.pdf"
+  },
+  {
+    "id": "font_type1_12",
+    "file": "pdfs/custom/font_type1_12.pdf"
+  },
+  {
+    "id": "font_type1_2",
+    "file": "pdfs/custom/font_type1_2.pdf"
+  },
+  {
+    "id": "font_type1_3",
+    "file": "pdfs/custom/font_type1_3.pdf"
+  },
+  {
+    "id": "font_type1_4",
+    "file": "pdfs/custom/font_type1_4.pdf"
+  },
+  {
+    "id": "font_type1_5",
+    "file": "pdfs/custom/font_type1_5.pdf"
+  },
+  {
+    "id": "font_type1_6",
+    "file": "pdfs/custom/font_type1_6.pdf"
+  },
+  {
+    "id": "font_type1_7",
+    "file": "pdfs/custom/font_type1_7.pdf"
+  },
+  {
+    "id": "font_type1_8",
+    "file": "pdfs/custom/font_type1_8.pdf"
+  },
+  {
+    "id": "font_type1_9",
+    "file": "pdfs/custom/font_type1_9.pdf"
+  },
+  {
+    "id": "font_type1_cff_1",
+    "file": "pdfs/custom/font_type1_cff_1.pdf"
+  },
+  {
+    "id": "font_type1_cff_2",
+    "file": "pdfs/custom/font_type1_cff_2.pdf"
+  },
+  {
+    "id": "font_type1_cff_3",
+    "file": "pdfs/custom/font_type1_cff_3.pdf"
+  },
+  {
+    "id": "font_type1_cff_4",
+    "file": "pdfs/custom/font_type1_cff_4.pdf"
+  },
+  {
+    "id": "font_type1_cff_5",
+    "file": "pdfs/custom/font_type1_cff_5.pdf"
+  },
+  {
+    "id": "font_type1_cff_6",
+    "file": "pdfs/custom/font_type1_cff_6.pdf"
+  },
+  {
+    "id": "font_type3_widths_with_matrix",
+    "file": "pdfs/custom/font_type3_widths_with_matrix.pdf"
+  },
+  {
+    "id": "font_vertical",
+    "file": "pdfs/custom/font_vertical.pdf"
+  },
+  {
+    "id": "fonts_type1_latex",
+    "file": "pdfs/custom/fonts_type1_latex.pdf"
+  },
+  {
+    "id": "function_type0_1",
+    "file": "pdfs/custom/function_type0_1.pdf"
+  },
+  {
+    "id": "function_type0_2",
+    "file": "pdfs/custom/function_type0_2.pdf"
+  },
+  {
+    "id": "image_1_bit_per_component",
+    "file": "pdfs/custom/image_1_bit_per_component.pdf"
+  },
+  {
+    "id": "image_ccit_1",
+    "file": "pdfs/custom/image_ccit_1.pdf"
+  },
+  {
+    "id": "image_ccit_3",
+    "file": "pdfs/custom/image_ccit_3.pdf"
+  },
+  {
+    "id": "image_ccit_4",
+    "file": "pdfs/custom/image_ccit_4.pdf"
+  },
+  {
+    "id": "image_cmyk_icc_jpg",
+    "file": "pdfs/custom/image_cmyk_icc_jpg.pdf"
+  },
+  {
+    "id": "image_cmyk_jpg",
+    "file": "pdfs/custom/image_cmyk_jpg.pdf"
+  },
+  {
+    "id": "image_inline_2",
+    "file": "pdfs/custom/image_inline_2.pdf"
+  },
+  {
+    "id": "image_inline_3",
+    "file": "pdfs/custom/image_inline_3.pdf"
+  },
+  {
+    "id": "image_inline_4",
+    "file": "pdfs/custom/image_inline_4.pdf"
+  },
+  {
+    "id": "image_inline_5",
+    "file": "pdfs/custom/image_inline_5.pdf"
+  },
+  {
+    "id": "image_inline_6",
+    "file": "pdfs/custom/image_inline_6.pdf"
+  },
+  {
+    "id": "image_inline_7",
+    "file": "pdfs/custom/image_inline_7.pdf"
+  },
+  {
+    "id": "image_inline_8",
+    "file": "pdfs/custom/image_inline_8.pdf",
+    "first_page": 2,
+    "last_page": 2
+  },
+  {
+    "id": "image_jbig2_2",
+    "link": true,
+    "first_page": 0,
+    "last_page": 4
+  },
+  {
+    "id": "image_jbig2_3",
+    "link": true
+  },
+  {
+    "id": "image_lab",
+    "file": "pdfs/custom/image_lab.pdf"
+  },
+  {
+    "id": "image_luma16",
+    "file": "pdfs/custom/image_luma16.pdf"
+  },
+  {
+    "id": "image_luma8",
+    "file": "pdfs/custom/image_luma8.pdf"
+  },
+  {
+    "id": "image_luma8_icc",
+    "file": "pdfs/custom/image_luma8_icc.pdf"
+  },
+  {
+    "id": "image_luma8_jpg",
+    "file": "pdfs/custom/image_luma8_jpg.pdf"
+  },
+  {
+    "id": "image_mask",
+    "file": "pdfs/custom/image_mask.pdf"
+  },
+  {
+    "id": "image_mask_4",
+    "file": "pdfs/custom/image_mask_4.pdf"
+  },
+  {
+    "id": "image_mask_hairline",
+    "file": "pdfs/custom/image_mask_hairline.pdf"
+  },
+  {
+    "id": "image_mask_missing_bpc",
+    "file": "pdfs/custom/image_mask_missing_bpc.pdf"
+  },
+  {
+    "id": "image_rgb16",
+    "file": "pdfs/custom/image_rgb16.pdf"
+  },
+  {
+    "id": "image_rgb8",
+    "file": "pdfs/custom/image_rgb8.pdf"
+  },
+  {
+    "id": "image_rgb8_decode",
+    "file": "pdfs/custom/image_rgb8_decode.pdf"
+  },
+  {
+    "id": "image_rgb8_icc",
+    "file": "pdfs/custom/image_rgb8_icc.pdf"
+  },
+  {
+    "id": "image_rgb8_icc_jpg",
+    "file": "pdfs/custom/image_rgb8_icc_jpg.pdf"
+  },
+  {
+    "id": "image_rgb8_jpg",
+    "file": "pdfs/custom/image_rgb8_jpg.pdf"
+  },
+  {
+    "id": "image_rgba16",
+    "file": "pdfs/custom/image_rgba16.pdf"
+  },
+  {
+    "id": "image_rgba8",
+    "file": "pdfs/custom/image_rgba8.pdf"
+  },
+  {
+    "id": "image_rgba8_icc",
+    "file": "pdfs/custom/image_rgba8_icc.pdf"
+  },
+  {
+    "id": "integration_coat_of_arms",
+    "file": "pdfs/custom/integration_coat_of_arms.pdf"
+  },
+  {
+    "id": "integration_diagram",
+    "file": "pdfs/custom/integration_diagram.pdf"
+  },
+  {
+    "id": "integration_matplotlib",
+    "file": "pdfs/custom/integration_matplotlib.pdf"
+  },
+  {
+    "id": "integration_matplotlib_2",
+    "file": "pdfs/custom/integration_matplotlib_2.pdf"
+  },
+  {
+    "id": "issue_clipping_panic",
+    "file": "pdfs/custom/issue_clipping_panic.pdf"
+  },
+  {
+    "id": "issue_cmap_lookup",
+    "file": "pdfs/custom/issue_cmap_lookup.pdf",
+    "last_page": 0
+  },
+  {
+    "id": "issue_cubic_start_end",
+    "file": "pdfs/custom/issue_cubic_start_end.pdf"
+  },
+  {
+    "id": "issue_predictor_with_null",
+    "file": "pdfs/custom/issue_predictor_with_null.pdf"
+  },
+  {
+    "id": "issue_scaled_glyph",
+    "file": "pdfs/custom/issue_scaled_glyph.pdf"
+  },
+  {
+    "id": "issue_stream_abbreviations",
+    "file": "pdfs/custom/issue_stream_abbreviations.pdf",
+    "last_page": 0
+  },
+  {
+    "id": "page_media_box_bottom_left",
+    "file": "pdfs/custom/page_media_box_bottom_left.pdf"
+  },
+  {
+    "id": "page_media_box_bottom_right",
+    "file": "pdfs/custom/page_media_box_bottom_right.pdf"
+  },
+  {
+    "id": "page_media_box_top_left",
+    "file": "pdfs/custom/page_media_box_top_left.pdf"
+  },
+  {
+    "id": "page_media_box_top_right",
+    "file": "pdfs/custom/page_media_box_top_right.pdf"
+  },
+  {
+    "id": "page_media_box_zoomed_out",
+    "file": "pdfs/custom/page_media_box_zoomed_out.pdf"
+  },
+  {
+    "id": "page_rotation_180",
+    "file": "pdfs/custom/page_rotation_180.pdf"
+  },
+  {
+    "id": "page_rotation_270",
+    "file": "pdfs/custom/page_rotation_270.pdf"
+  },
+  {
+    "id": "page_rotation_90",
+    "file": "pdfs/custom/page_rotation_90.pdf"
+  },
+  {
+    "id": "page_rotation_none",
+    "file": "pdfs/custom/page_rotation_none.pdf"
+  },
+  {
+    "id": "path_rendering_1",
+    "file": "pdfs/custom/path_rendering_1.pdf"
+  },
+  {
+    "id": "path_rendering_10",
+    "file": "pdfs/custom/path_rendering_10.pdf"
+  },
+  {
+    "id": "path_rendering_11",
+    "file": "pdfs/custom/path_rendering_11.pdf"
+  },
+  {
+    "id": "path_rendering_12",
+    "file": "pdfs/custom/path_rendering_12.pdf"
+  },
+  {
+    "id": "path_rendering_13",
+    "file": "pdfs/custom/path_rendering_13.pdf"
+  },
+  {
+    "id": "path_rendering_14",
+    "file": "pdfs/custom/path_rendering_14.pdf"
+  },
+  {
+    "id": "path_rendering_15",
+    "file": "pdfs/custom/path_rendering_15.pdf"
+  },
+  {
+    "id": "path_rendering_16",
+    "file": "pdfs/custom/path_rendering_16.pdf"
+  },
+  {
+    "id": "path_rendering_17",
+    "file": "pdfs/custom/path_rendering_17.pdf"
+  },
+  {
+    "id": "path_rendering_2",
+    "file": "pdfs/custom/path_rendering_2.pdf"
+  },
+  {
+    "id": "path_rendering_3",
+    "file": "pdfs/custom/path_rendering_3.pdf"
+  },
+  {
+    "id": "path_rendering_4",
+    "file": "pdfs/custom/path_rendering_4.pdf"
+  },
+  {
+    "id": "path_rendering_5",
+    "file": "pdfs/custom/path_rendering_5.pdf"
+  },
+  {
+    "id": "path_rendering_6",
+    "file": "pdfs/custom/path_rendering_6.pdf"
+  },
+  {
+    "id": "path_rendering_7",
+    "file": "pdfs/custom/path_rendering_7.pdf"
+  },
+  {
+    "id": "path_rendering_8",
+    "file": "pdfs/custom/path_rendering_8.pdf"
+  },
+  {
+    "id": "path_rendering_9",
+    "file": "pdfs/custom/path_rendering_9.pdf"
+  },
+  {
+    "id": "path_rendering_dash_array_0_phase",
+    "file": "pdfs/custom/path_rendering_dash_array_0_phase.pdf"
+  },
+  {
+    "id": "pattern_shading_background",
+    "file": "pdfs/custom/pattern_shading_background.pdf"
+  },
+  {
+    "id": "pattern_shading_bbox",
+    "file": "pdfs/custom/pattern_shading_bbox.pdf"
+  },
+  {
+    "id": "pattern_shading_on_text",
+    "file": "pdfs/custom/pattern_shading_on_text.pdf"
+  },
+  {
+    "id": "pattern_shading_type0_7",
+    "file": "pdfs/custom/pattern_shading_type0_7.pdf"
+  },
+  {
+    "id": "pattern_shading_type1_1",
+    "file": "pdfs/custom/pattern_shading_type1_1.pdf"
+  },
+  {
+    "id": "pattern_shading_type1_2",
+    "file": "pdfs/custom/pattern_shading_type1_2.pdf"
+  },
+  {
+    "id": "pattern_shading_type1_3",
+    "file": "pdfs/custom/pattern_shading_type1_3.pdf"
+  },
+  {
+    "id": "pattern_shading_type1_4",
+    "file": "pdfs/custom/pattern_shading_type1_4.pdf"
+  },
+  {
+    "id": "pattern_shading_type1_5",
+    "file": "pdfs/custom/pattern_shading_type1_5.pdf"
+  },
+  {
+    "id": "pattern_shading_type1_6",
+    "file": "pdfs/custom/pattern_shading_type1_6.pdf"
+  },
+  {
+    "id": "pattern_shading_type1_transform",
+    "file": "pdfs/custom/pattern_shading_type1_transform.pdf"
+  },
+  {
+    "id": "pattern_shading_type2_1",
+    "file": "pdfs/custom/pattern_shading_type2_1.pdf"
+  },
+  {
+    "id": "pattern_shading_type2_2",
+    "file": "pdfs/custom/pattern_shading_type2_2.pdf"
+  },
+  {
+    "id": "pattern_shading_type2_3_stops",
+    "file": "pdfs/custom/pattern_shading_type2_3_stops.pdf"
+  },
+  {
+    "id": "pattern_shading_type2_many",
+    "file": "pdfs/custom/pattern_shading_type2_many.pdf"
+  },
+  {
+    "id": "pattern_shading_type2_no_extend",
+    "file": "pdfs/custom/pattern_shading_type2_no_extend.pdf"
+  },
+  {
+    "id": "pattern_shading_type2_no_extend_with_background",
+    "file": "pdfs/custom/pattern_shading_type2_no_extend_with_background.pdf"
+  },
+  {
+    "id": "pattern_shading_type2_out_of_viewport",
+    "file": "pdfs/custom/pattern_shading_type2_out_of_viewport.pdf"
+  },
+  {
+    "id": "pattern_shading_type2_slanted",
+    "file": "pdfs/custom/pattern_shading_type2_slanted.pdf"
+  },
+  {
+    "id": "pattern_shading_type3_1",
+    "file": "pdfs/custom/pattern_shading_type3_1.pdf"
+  },
+  {
+    "id": "pattern_shading_type3_2",
+    "file": "pdfs/custom/pattern_shading_type3_2.pdf"
+  },
+  {
+    "id": "pattern_shading_type3_3",
+    "file": "pdfs/custom/pattern_shading_type3_3.pdf"
+  },
+  {
+    "id": "pattern_shading_type3_collection",
+    "link": true
+  },
+  {
+    "id": "pattern_shading_type4_1",
+    "link": true
+  },
+  {
+    "id": "pattern_shading_type4_2",
+    "file": "pdfs/custom/pattern_shading_type4_2.pdf"
+  },
+  {
+    "id": "pattern_shading_type5",
+    "link": true
+  },
+  {
+    "id": "pattern_shading_type6",
+    "link": true
+  },
+  {
+    "id": "pattern_shading_type6_2",
+    "file": "pdfs/custom/pattern_shading_type6_2.pdf"
+  },
+  {
+    "id": "rendering_conflation_artifacts",
+    "file": "pdfs/custom/rendering_conflation_artifacts.pdf",
+    "first_page": 2,
+    "last_page": 2
+  },
+  {
+    "id": "shading_operator_1",
+    "file": "pdfs/custom/shading_operator_1.pdf"
+  },
+  {
+    "id": "shading_operator_2",
+    "file": "pdfs/custom/shading_operator_2.pdf"
+  },
+  {
+    "id": "stream_ccit_not_enough_data",
+    "file": "pdfs/custom/stream_ccit_not_enough_data.pdf"
+  },
+  {
+    "id": "stream_flate_bpc_1",
+    "file": "pdfs/custom/stream_flate_bpc_1.pdf",
+    "last_page": 0
+  },
+  {
+    "id": "stream_jpx_1",
+    "file": "pdfs/custom/stream_jpx_1.pdf",
+    "first_page": 2,
+    "last_page": 2
+  },
+  {
+    "id": "stream_jpx_3",
+    "file": "pdfs/custom/stream_jpx_3.pdf",
+    "first_page": 2,
+    "last_page": 2
+  },
+  {
+    "id": "stream_jpx_5",
+    "file": "pdfs/custom/stream_jpx_5.pdf"
+  },
+  {
+    "id": "stream_jpx_6",
+    "file": "pdfs/custom/stream_jpx_6.pdf"
+  },
+  {
+    "id": "text_filled_complex_paint",
+    "file": "pdfs/custom/text_filled_complex_paint.pdf"
+  },
+  {
+    "id": "text_rendering_1",
+    "file": "pdfs/custom/text_rendering_1.pdf"
+  },
+  {
+    "id": "text_rendering_2",
+    "file": "pdfs/custom/text_rendering_2.pdf"
+  },
+  {
+    "id": "text_rendering_3",
+    "file": "pdfs/custom/text_rendering_3.pdf"
+  },
+  {
+    "id": "text_rendering_4",
+    "file": "pdfs/custom/text_rendering_4.pdf"
+  },
+  {
+    "id": "text_rendering_5",
+    "file": "pdfs/custom/text_rendering_5.pdf"
+  },
+  {
+    "id": "text_rendering_clipping",
+    "file": "pdfs/custom/text_rendering_clipping.pdf"
+  },
+  {
+    "id": "text_rendering_stroking_clipping",
+    "file": "pdfs/custom/text_rendering_stroking_clipping.pdf"
+  },
+  {
+    "id": "text_stroked_complex_paint",
+    "file": "pdfs/custom/text_stroked_complex_paint.pdf"
+  },
+  {
+    "id": "text_with_rise",
+    "file": "pdfs/custom/text_with_rise.pdf"
+  },
+  {
+    "id": "xobject_1",
+    "file": "pdfs/custom/xobject_1.pdf"
+  },
+  {
+    "id": "xobject_matrix",
+    "file": "pdfs/custom/xobject_matrix.pdf"
+  },
+  {
+    "id": "xobject_with_fill_opacity",
+    "file": "pdfs/custom/xobject_with_fill_opacity.pdf"
+  },
+  {
+    "id": "image_jbig2_4",
+    "link": true
+  },
+  {
+    "id": "image_jbig2_crash",
+    "file": "pdfs/custom/image_jbig2_crash.pdf"
+  },
+  {
+    "id": "xref_invalid_offsets",
+    "file": "pdfs/custom/xref_invalid_offsets.pdf"
+  },
+  {
+    "id": "pattern_shading_type7",
+    "link": true
+  },
+  {
+    "id": "pattern_shading_type7_background",
+    "file": "pdfs/custom/pattern_shading_type7_background.pdf"
+  },
+  {
+    "id": "pattern_shading_type0_transform",
+    "file": "pdfs/custom/pattern_shading_type0_transform.pdf"
+  },
+  {
+    "id": "issue_panic_with_clip",
+    "file": "pdfs/custom/issue_panic_with_clip.pdf"
+  },
+  {
+    "id": "pdfjs_issue18062",
+    "link": true
+  },
+  {
+    "id": "issue_panic_with_nested_clip",
+    "file": "pdfs/custom/issue_panic_with_nested_clip.pdf"
+  },
+  {
+    "id": "font_type3_filled_glyphs",
+    "file": "pdfs/custom/font_type3_filled_glyphs.pdf"
+  },
+  {
+    "id": "font_type3_stroked_glyphs",
+    "file": "pdfs/custom/font_type3_stroked_glyphs.pdf"
+  },
+  {
+    "id": "font_type3_shape_glyphs",
+    "file": "pdfs/custom/font_type3_shape_glyphs.pdf"
+  },
+  {
+    "id": "pattern_tiling_inner_transform",
+    "file": "pdfs/custom/pattern_tiling_inner_transform.pdf"
+  },
+  {
+    "id": "pattern_tiling_large_x_step",
+    "file": "pdfs/custom/pattern_tiling_large_x_step.pdf"
+  },
+  {
+    "id": "pattern_tiling_lines",
+    "file": "pdfs/custom/pattern_tiling_lines.pdf"
+  },
+  {
+    "id": "pattern_tiling_nested",
+    "file": "pdfs/custom/pattern_tiling_nested.pdf"
+  },
+  {
+    "id": "pattern_tiling_rotated",
+    "file": "pdfs/custom/pattern_tiling_rotated.pdf"
+  },
+  {
+    "id": "pattern_tiling_rotated_shape",
+    "file": "pdfs/custom/pattern_tiling_rotated_shape.pdf"
+  },
+  {
+    "id": "pattern_tiling_simple",
+    "file": "pdfs/custom/pattern_tiling_simple.pdf"
+  },
+  {
+    "id": "pattern_tiling_small",
+    "file": "pdfs/custom/pattern_tiling_small.pdf"
+  },
+  {
+    "id": "pattern_tiling_small_cell",
+    "file": "pdfs/custom/pattern_tiling_small_cell.pdf"
+  },
+  {
+    "id": "pattern_tiling_small_x_and_y_step",
+    "file": "pdfs/custom/pattern_tiling_small_x_and_y_step.pdf"
+  },
+  {
+    "id": "pattern_tiling_small_x_step",
+    "file": "pdfs/custom/pattern_tiling_small_x_step.pdf"
+  },
+  {
+    "id": "pattern_tiling_stencil",
+    "file": "pdfs/custom/pattern_tiling_stencil.pdf"
+  },
+  {
+    "id": "pattern_tiling_with_text",
+    "file": "pdfs/custom/pattern_tiling_with_text.pdf"
+  },
+  {
+    "id": "pdftc_100k_1894",
+    "file": "pdfs/custom/pdftc_100k_1894.pdf",
+    "last_page": 0
+  },
+  {
+    "id": "pdftc_100l_0138",
+    "file": "pdfs/custom/pdftc_100k_0138.pdf"
+  },
+  {
+    "id": "pdftc_100l_1071",
+    "file": "pdfs/custom/pdftc_100k_1071.pdf"
+  },
+  {
+    "id": "pdftc_100l_1731",
+    "file": "pdfs/custom/pdftc_100k_1731.pdf"
+  },
+  {
+    "id": "pdftc_900k_0007_page_4",
+    "file": "pdfs/custom/pdftc_900k_0007_page_4.pdf"
+  },
+  {
+    "id": "pdftc_900k_0012_page_1",
+    "file": "pdfs/custom/pdftc_900k_0012_page_1.pdf"
+  },
+  {
+    "id": "pdftc_900k_0140_page_3",
+    "file": "pdfs/custom/pdftc_900k_0140_page_3.pdf"
+  },
+  {
+    "id": "pdftc_900k_0156_page_2",
+    "file": "pdfs/custom/pdftc_900k_0156_page_2.pdf"
+  },
+  {
+    "id": "pdftc_900k_0240_page_2",
+    "file": "pdfs/custom/pdftc_900k_0240_page_2.pdf"
+  },
+  {
+    "id": "pdftc_900k_0319_page_1",
+    "comment": "note that hinting here is not optimal, the characters look way too bold.",
+    "file": "pdfs/custom/pdftc_900k_0319_page_1.pdf"
+  },
+  {
+    "id": "pdftc_900k_0584_page_1",
+    "file": "pdfs/custom/pdftc_900k_0584_page_1.pdf"
+  },
+  {
+    "id": "pdftc_900k_0907",
+    "file": "pdfs/custom/pdftc_900k_0907.pdf"
+  },
+  {
+    "id": "pdftc_900k_0917_page_1_reduced",
+    "file": "pdfs/custom/pdftc_900k_0917_page_1_reduced.pdf"
+  },
+  {
+    "id": "pdftc_900k_0930_reduced",
+    "file": "pdfs/custom/pdftc_900k_0930_reduced.pdf"
+  },
+  {
+    "id": "pdftc_900k_0974_page_1",
+    "file": "pdfs/custom/pdftc_900k_0974_page_1.pdf"
+  },
+  {
+    "id": "pdftc_900k_1016_page_3",
+    "file": "pdfs/custom/pdftc_900k_1016_page_3.pdf"
+  },
+  {
+    "id": "pdf_render_issue14",
+    "link": true
+  },
+  {
+    "id": "issue11",
+    "file": "pdfs/custom/issue11.pdf"
+  },
+  {
+    "id": "issue_missing_jpeg_image",
+    "file": "pdfs/custom/issue_missing_jpeg_image.pdf"
+  },
+  {
+    "id": "xref_f2_len_8",
+    "file": "pdfs/custom/xref_f2_len_8.pdf",
+    "last_page": 0
+  },
+  {
+    "id": "issue42",
+    "link": true
+  },
+  {
+    "id": "issue41",
+    "file": "pdfs/custom/issue41.pdf"
+  },
+  {
+    "id": "mask_alpha",
+    "file": "pdfs/custom/mask_alpha.pdf"
+  },
+  {
+    "id": "mask_luminosity",
+    "file": "pdfs/custom/mask_luminosity.pdf"
+  },
+  {
+    "id": "resvg_masking_clipPath_mixed_clip_rule",
+    "file": "pdfs/custom/resvg_masking_clipPath_mixed_clip_rule.pdf"
+  },
+  {
+    "id": "resvg_masking_clipPath_nested_clip_path",
+    "file": "pdfs/custom/resvg_masking_clipPath_nested_clip_path.pdf"
+  },
+  {
+    "id": "resvg_masking_clipPath_overlapped_shapes_with_evenodd",
+    "file": "pdfs/custom/resvg_masking_clipPath_overlapped_shapes_with_evenodd.pdf"
+  },
+  {
+    "id": "resvg_masking_mask_with_clip_path",
+    "file": "pdfs/custom/resvg_masking_mask_with_clip_path.pdf"
+  },
+  {
+    "id": "issue44",
+    "file": "pdfs/custom/issue44.pdf"
+  },
+  {
+    "id": "resvg_masking_mask_mask_type_alpha",
+    "file": "pdfs/custom/resvg_masking_mask_mask_type_alpha.pdf"
+  },
+  {
+    "id": "resvg_masking_mask_mask_type_luminance",
+    "file": "pdfs/custom/resvg_masking_mask_mask_type_luminance.pdf"
+  },
+  {
+    "id": "resvg_masking_mask_recursive",
+    "file": "pdfs/custom/resvg_masking_mask_recursive.pdf"
+  },
+  {
+    "id": "resvg_masking_mask_recursive_on_child",
+    "file": "pdfs/custom/resvg_masking_mask_recursive_on_child.pdf"
+  },
+  {
+    "id": "resvg_masking_mask_recursive_on_self",
+    "file": "pdfs/custom/resvg_masking_mask_recursive_on_self.pdf"
+  },
+  {
+    "id": "resvg_masking_mask_transform_on_shape",
+    "file": "pdfs/custom/resvg_masking_mask_transform_on_shape.pdf"
+  },
+  {
+    "id": "resvg_masking_mask_with_image",
+    "file": "pdfs/custom/resvg_masking_mask_with_image.pdf"
+  },
+  {
+    "id": "issue40",
+    "link": true
+  },
+  {
+    "id": "text_fading",
+    "file": "pdfs/custom/text-fading.pdf"
+  },
+  {
+    "id": "fireworks",
+    "file": "pdfs/custom/fireworks.pdf"
+  },
+  {
+    "id": "image_interpolate",
+    "file": "pdfs/custom/image_interpolate.pdf"
+  },
+  {
+    "id": "tile_clamp_bug",
+    "file": "pdfs/custom/tile_clamp_bug.pdf"
+  },
+  {
+    "id": "issue51",
+    "last_page": 1,
+    "link": true
+  },
+  {
+    "id": "gradient_on_rect",
+    "file": "pdfs/custom/gradient_on_rect.pdf"
+  },
+  {
+    "id": "gradient_on_rotated_rect",
+    "file": "pdfs/custom/gradient_on_rotated_rect.pdf"
+  },
+  {
+    "id": "issue53",
+    "file": "pdfs/custom/issue53.pdf"
+  },
+  {
+    "id": "issue175",
+    "file": "pdfs/custom/issue175.pdf"
+  },
+  {
+    "id": "issue_typst_6723",
+    "link": true
+  },
+  {
+    "id": "fillrule_evenodd",
+    "file": "pdfs/custom/fillrule_evenodd.pdf"
+  },
+  {
+    "id": "stroke_properties",
+    "file": "pdfs/custom/stroke_properties.pdf"
+  },
+  {
+    "id": "encrypted_rc4_rev2",
+    "file": "pdfs/custom/encrypted_rc4_rev2.pdf"
+  },
+  {
+    "id": "encrypted_rc4_rev3",
+    "file": "pdfs/custom/encrypted_rc4_rev3.pdf"
+  },
+  {
+    "id": "encrypted_aes_128",
+    "file": "pdfs/custom/encrypted_aes_128.pdf"
+  },
+  {
+    "id": "encrypted_aes_256",
+    "file": "pdfs/custom/encrypted_aes_256.pdf"
+  },
+  {
+    "id": "encrypted_aes_256_hardened",
+    "file": "pdfs/custom/encrypted_aes_256_hardened.pdf"
+  },
+  {
+    "id": "issue10_1",
+    "link": true
+  },
+  {
+    "id": "issue10_2",
+    "link": true
+  },
+  {
+    "id": "type0_function_too_many_entries",
+    "file": "pdfs/custom/type0_function_too_many_entries.pdf"
+  },
+  {
+    "id": "issue_isolate_shading_transform",
+    "file": "pdfs/custom/issue_isolate_shading_transform.pdf"
+  },
+  {
+    "id": "mask_bc",
+    "file": "pdfs/custom/mask_bc.pdf"
+  },
+  {
+    "id": "flate_predictor_bpc_1",
+    "file": "pdfs/custom/flate_predictor_bpc_1.pdf"
+  },
+  {
+    "id": "flate_predictor_invalid",
+    "file": "pdfs/custom/flate_predictor_invalid.pdf"
+  },
+  {
+    "id": "issue141",
+    "link": true
+  },
+  {
+    "id": "catalog-in-objstm-aes",
+    "file": "pdfs/custom/catalog-in-objstm-aes.pdf"
+  }
+]
