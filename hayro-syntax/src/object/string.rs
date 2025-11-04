@@ -206,16 +206,18 @@ impl<'a> LiteralString<'a> {
         };
 
         if self.2.xref.needs_decryption(&self.2) {
-            Cow::Owned(
-                self.2
-                    .xref
-                    .decrypt(
-                        self.2.obj_number.unwrap(),
-                        &decoded,
-                        DecryptionTarget::String,
-                    )
-                    .unwrap_or_default(),
-            )
+            // This might be `None` for example when reading metadata
+            // from the trailer dictionary.
+            if let Some(obj_number) = self.2.obj_number {
+                Cow::Owned(
+                    self.2
+                        .xref
+                        .decrypt(obj_number, &decoded, DecryptionTarget::String)
+                        .unwrap_or_default(),
+                )
+            } else {
+                decoded
+            }
         } else {
             decoded
         }
