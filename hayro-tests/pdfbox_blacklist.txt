@@ -1,0 +1,168 @@
+# Self-overlapping coons-patches
+# https://issues.apache.org/jira/secure/attachment/12924579/gs-bugzilla687307-2-bad-coons.pdf
+# https://issues.apache.org/jira/secure/attachment/12922798/shade_via_1.3_006.pdf
+4217
+
+# Shading somehow doesn't show up
+# https://issues.apache.org/jira/secure/attachment/12649689/mcafeeU5.pdf
+1915
+
+# Self-overlapping coons-patch
+# https://issues.apache.org/jira/secure/attachment/12633464/texample-rgb-triangle.pdf
+1968
+
+# CCIT-encoded, failed to parse stream
+457
+
+# japanese text withnon-embedded font
+509
+
+# weird rectangle (maybe conflation artifact?)
+833
+
+# probably jbig bug, also in firefox
+921
+
+# non-embedded CID font
+1174
+
+# /V 4 encryption with custom dicitonary, CId font with built-in encoding
+1910
+
+# extremely slow because we don't cache patterns
+2180
+
+# DeviceN color space
+2265
+
+# weird border on image with soft mask
+2359
+
+# xstep crashes
+2363
+
+# weird black part, probably bug in type1 parser
+2487
+
+# non-embedded CID font
+2560
+
+# non-embedded CID font
+2599
+
+# missing text, maybe annotation?
+2660
+
+# missing text
+2884
+
+# text spacing issues
+2957
+
+# collection of transparency ghroup stuff
+3000
+
+# single character not displaying
+3107
+
+# bullet points dont show, CID without embedded
+3457
+
+# jbig2 soft mask, image is 1x1 but soft mask 2000x2000, probably problems because we resize
+3558
+
+# cff font with 2 font matrices
+3579
+
+# image, conflation artifacts but seems like it might be possible to fix?
+3694
+
+# no text shows up
+3728
+
+# PDF without embedded CID font
+3923
+
+# no text, gibberish in pdf.js
+3937
+
+# truetype text doesnt render
+3965
+
+# some edge case with line feeds not rendering
+4001
+
+# image with deviceN jpeg, takes long, renders slow
+4060
+
+# text doesnt render
+4093
+
+# built-in CMAP encoding
+4268
+
+# pattern is rendered wrong, couple of other test cases with patterns
+4468
+
+# panic when rendering image with zero-width image?
+4503
+
+# crypt filter
+4517
+
+# jbig iamges that take up a lot of memory and render very slow
+4598
+
+# bullet points mising
+4753
+
+# non-embedded font chinese textt
+4793
+
+# Text renders completely wrong. somehow too big
+4800
+
+# more transparency group stuff
+5065
+
+# second rect has wrong color
+5074
+
+# hyphen missing
+5115
+
+# pattern with soft mask, renders wrong
+5250
+
+# rectangles are not filled properly
+5251
+
+# text doesnt display, rprobs invalid stream
+5283
+
+# couple of devicen test cases
+5370
+
+# missing text
+5463
+
+# transprency group
+5491
+
+# glyphs dont render, embedded font seems to be invalid
+5611
+
+# table lines are too thick?
+5616
+
+# missing character
+5704
+
+# doesnt open in nearly any other pdf viewer, causes a stack overflow.
+5782
+
+# text not displaying
+5839
+
+# type1/cff font doesnt render
+5987
