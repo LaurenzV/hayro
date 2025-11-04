@@ -394,3 +394,6 @@
 
 // Crashes CCITT decoder
 0536622, 0199185, 0599523, 0155999, 0686917, 0473933
+
+// Hang in JBIG decoder
+0557259

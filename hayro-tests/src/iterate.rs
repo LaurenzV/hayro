@@ -69,7 +69,7 @@ fn main() {
 
     let count = AtomicU32::new(0);
 
-    pdf_paths.par_iter().for_each(|path| {
+    pdf_paths.iter().skip(650000).for_each(|path| {
         let name = path.file_stem().unwrap().to_str().unwrap().to_string();
         if IGNORE_LIST.contains(name.as_str()) {
             return;
@@ -77,6 +77,8 @@ fn main() {
 
         let res = catch_unwind(|| {
             let data = Arc::new(fs::read(path).unwrap());
+
+            println!("loading {}", name);
 
             match Pdf::new(data.clone()) {
                 Ok(_) => {}
