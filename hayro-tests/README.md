@@ -42,3 +42,10 @@ REPLACE=1 cargo test --release
 ```
 
 Once the snapshots have been refreshed, run the tests again (without `REPLACE`) to confirm that the suite now passes cleanly.
+
+## Test types
+There are currently four different categories of tests:
+- Load tests: They ensure that a file can be loaded/rendered without crashing. Those tests should ideally be run in debug mode.
+- Render tests: This category makes up the bulk and ensures that PDF render correctly.
+- SVG tests: Those tests are for testing `hayro-svg` by rendering the resulting SVGs with `resvg`.
+- Write tests: Those are for the `hayro-write` crate, which is considered internal. You can ignore those.
