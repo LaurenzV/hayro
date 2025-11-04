@@ -391,3 +391,6 @@
 
 // Crashes flate decoder, password-protected apparently
 0302143
+
+// Crashes CCITT decoder
+0536622, 0199185, 0599523, 0155999, 0686917, 0473933
