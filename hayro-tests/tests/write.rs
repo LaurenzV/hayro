@@ -172,7 +172,7 @@ fn write_page_with_inherited_resources_2() {
 fn write_page_with_encryption_1() {
     run_write_test(
         "write_page_with_encryption_1",
-        "downloads/issue10_1.pdf",
+        "downloads/custom/issue10_1.pdf",
         &[0],
         Renderer::Pdfium,
         true,

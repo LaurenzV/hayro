@@ -71,7 +71,11 @@ fn image_interpolate() {
 
 #[test]
 fn image_jbig2_4() {
-    run_svg_test("image_jbig2_4", "downloads/image_jbig2_4.pdf", Some("..=0"));
+    run_svg_test(
+        "image_jbig2_4",
+        "downloads/custom/image_jbig2_4.pdf",
+        Some("..=0"),
+    );
 }
 
 #[test]

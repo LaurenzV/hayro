@@ -58,11 +58,9 @@ def download_pdf(entry_id: str, url: str, subdir: str | None) -> tuple[bool, str
         return True, "cached"
 
     try:
-        with requests.get(url, stream=True, timeout=30) as response:
-            response.raise_for_status()
-            with open(destination, "wb") as handle:
-                for chunk in response.iter_content(chunk_size=8192):
-                    handle.write(chunk)
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        destination.write_bytes(response.content)
     except requests.RequestException as exc:
         if destination.exists():
             destination.unlink()
