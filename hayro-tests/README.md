@@ -49,3 +49,6 @@ There are currently four different categories of tests:
 - Render tests: This category makes up the bulk and ensures that PDF render correctly.
 - SVG tests: Those tests are for testing `hayro-svg` by rendering the resulting SVGs with `resvg`.
 - Write tests: Those are for the `hayro-write` crate, which is considered internal. You can ignore those.
+
+## Other
+The `blacklist_*.txt` files are simply meant as a temporary file to keep track of pdf.js/PDFBox files that don't render correctly yet. The Rust scripts in the `src` directory are meant for manual testing and can also be ignored.
