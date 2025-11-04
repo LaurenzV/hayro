@@ -305,7 +305,7 @@ impl<const KEY_SIZE: usize, const ROUNDS: usize> AESCipher<KEY_SIZE, ROUNDS> {
         result
     }
 
-    pub(crate) fn decrypt_cbc(&self, data: &[u8], iv: &[u8; 16]) -> Vec<u8> {
+    pub(crate) fn decrypt_cbc(&self, data: &[u8], iv: &[u8; 16], unpad: bool) -> Vec<u8> {
         let mut result = Vec::new();
         let mut prev_block = *iv;
 
@@ -324,7 +324,8 @@ impl<const KEY_SIZE: usize, const ROUNDS: usize> AESCipher<KEY_SIZE, ROUNDS> {
             prev_block = block;
         }
 
-        if let Some(&pad_len) = result.last()
+        if unpad
+            && let Some(&pad_len) = result.last()
             && pad_len > 0
             && pad_len <= 16
             && result.len() >= pad_len as usize
@@ -421,13 +422,13 @@ mod tests {
             .encrypt_padded_mut::<Pkcs7>(&mut buffer, plaintext.len())
             .unwrap();
 
-        let our_decrypted = our_cipher.decrypt_cbc(external_ciphertext, iv);
+        let our_decrypted = our_cipher.decrypt_cbc(external_ciphertext, iv, true);
         assert_eq!(
             our_decrypted, plaintext,
             "AES-128 CBC: external encryption should be decryptable by our implementation"
         );
 
-        let our_roundtrip = our_cipher.decrypt_cbc(&our_ciphertext, iv);
+        let our_roundtrip = our_cipher.decrypt_cbc(&our_ciphertext, iv, true);
         assert_eq!(
             our_roundtrip, plaintext,
             "AES-128 CBC: our roundtrip should work"
@@ -457,13 +458,13 @@ mod tests {
             .encrypt_padded_mut::<Pkcs7>(&mut buffer, plaintext.len())
             .unwrap();
 
-        let our_decrypted = our_cipher.decrypt_cbc(external_ciphertext, iv);
+        let our_decrypted = our_cipher.decrypt_cbc(external_ciphertext, iv, true);
         assert_eq!(
             our_decrypted, plaintext,
             "AES-256 CBC: external encryption should be decryptable by our implementation"
         );
 
-        let our_roundtrip = our_cipher.decrypt_cbc(&our_ciphertext, iv);
+        let our_roundtrip = our_cipher.decrypt_cbc(&our_ciphertext, iv, true);
         assert_eq!(
             our_roundtrip, plaintext,
             "AES-256 CBC: our roundtrip should work"
