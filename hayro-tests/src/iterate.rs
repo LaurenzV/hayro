@@ -69,7 +69,7 @@ fn main() {
 
     let count = AtomicU32::new(0);
 
-    pdf_paths.iter().skip(650000).for_each(|path| {
+    pdf_paths.par_iter().skip(650000).for_each(|path| {
         let name = path.file_stem().unwrap().to_str().unwrap().to_string();
         if IGNORE_LIST.contains(name.as_str()) {
             return;
