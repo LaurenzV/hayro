@@ -297,13 +297,8 @@ fn parse_fallback<'a>(r: &mut Reader<'a>, dict: &Dict<'a>) -> Option<Stream<'a>>
 
             let stream = Stream::new(data, dict.clone());
 
-            // Try decoding the stream to see if it is valid.
-            if stream.decoded().is_ok() {
-                info!("managed to reconstruct the stream");
-
-                // Seems like we found the end!
-                return Some(stream);
-            }
+            // Seems like we found the end!
+            return Some(stream);
         } else {
             r.read_byte()?;
         }
