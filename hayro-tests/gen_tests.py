@@ -3,6 +3,7 @@ import json
 import hashlib
 import requests
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 class TestGenerator:
     def __init__(self):
@@ -125,54 +126,62 @@ class TestGenerator:
             raise FileNotFoundError("No manifest files found or all manifests are empty")
             
         return all_entries
-            
-    def process_entry(self, entry: dict, is_pdfjs: bool = False, is_pdfbox: bool = False, is_corpus: bool = False) -> bool:
-        """Process a single manifest entry, downloading if necessary."""
+        
+    def _schedule_entry(self, entry: dict, rust_functions: list, download_futures: dict,
+                        executor: ThreadPoolExecutor, processed_count: int, skipped_count: int,
+                        *, is_pdfjs: bool = False, is_pdfbox: bool = False, is_corpus: bool = False) -> tuple[int, int]:
+        """Validate an entry and either queue a download or record it immediately."""
         entry_id = entry['id']
-        file_path = entry['file']
         is_link = entry.get('link', False)
         is_ignored = entry.get('ignore', False)
         expected_md5 = entry.get('md5')
-        
+
         if is_ignored:
             print(f"⏭ Skipping {entry_id} (ignored)")
-            return False
-            
-        if is_link:
-            # Handle link files - they should be in pdfs/pdfjs/, pdfs/pdfbox/, or corpus/ for respective entries
-            if is_pdfjs:
-                link_path = self.pdfs_dir / f"pdfjs/{file_path.replace('pdfs/', '')}"
-            elif is_pdfbox:
-                link_path = self.pdfs_dir / f"pdfbox/{file_path.replace('pdfs/', '')}"
-            elif is_corpus:
-                link_path = self.pdfs_dir / f"corpus/{file_path.replace('pdfs/', '')}"
-            else:
-                link_path = self.pdfs_dir / file_path.replace('pdfs/', '')
+            return processed_count, skipped_count + 1
 
-            if not link_path.exists():
-                print(f"✘ Link file not found: {link_path}")
-                return False
-
-            success = self.download_pdf(link_path, expected_md5, is_pdfjs or is_pdfbox or is_corpus)
-            if not success:
-                print(f"✘ Failed to download or verify {entry_id}")
-                return False
+        relative_path = entry['file'].replace('pdfs/', '')
+        if is_pdfjs:
+            base_dir = self.pdfs_dir / 'pdfjs'
+        elif is_pdfbox:
+            base_dir = self.pdfs_dir / 'pdfbox'
+        elif is_corpus:
+            base_dir = self.pdfs_dir / 'corpus'
         else:
-            # Check if PDF file exists - in pdfs/pdfjs/, pdfs/pdfbox/, or corpus/ for respective entries
-            if is_pdfjs:
-                pdf_path = self.pdfs_dir / f"pdfjs/{file_path.replace('pdfs/', '')}"
-            elif is_pdfbox:
-                pdf_path = self.pdfs_dir / f"pdfbox/{file_path.replace('pdfs/', '')}"
-            elif is_corpus:
-                pdf_path = self.pdfs_dir / f"corpus/{file_path.replace('pdfs/', '')}"
-            else:
-                pdf_path = self.pdfs_dir / file_path.replace('pdfs/', '')
+            base_dir = self.pdfs_dir
 
-            if not pdf_path.exists():
-                print(f"✘ PDF file not found: {pdf_path}")
-                return False
-                
-        return True
+        target_path = base_dir / relative_path
+
+        if is_link:
+            if not target_path.exists():
+                print(f"✘ Link file not found: {target_path}")
+                return processed_count, skipped_count + 1
+
+            index = len(rust_functions)
+            rust_functions.append(None)
+            future = executor.submit(
+                self.download_pdf,
+                target_path,
+                expected_md5,
+                is_pdfjs or is_pdfbox or is_corpus,
+            )
+            download_futures[future] = (entry, is_pdfjs, is_pdfbox, is_corpus, index)
+        else:
+            if not target_path.exists():
+                print(f"✘ PDF file not found: {target_path}")
+                return processed_count, skipped_count + 1
+
+            rust_functions.append(
+                self.generate_rust_function(
+                    entry,
+                    is_pdfjs=is_pdfjs,
+                    is_pdfbox=is_pdfbox,
+                    is_corpus=is_corpus,
+                )
+            )
+            processed_count += 1
+
+        return processed_count, skipped_count
         
     def generate_rust_function(self, entry: dict, is_pdfjs: bool = False, is_pdfbox: bool = False, is_corpus: bool = False) -> str:
         """Generate Rust test function for a manifest entry."""
@@ -241,67 +250,110 @@ class TestGenerator:
         rust_functions = []
         processed_count = 0
         skipped_count = 0
+        download_futures = {}
+        max_workers = min(16, (os.cpu_count() or 4) * 2)
         
-        # Load and process custom manifest
-        if self.custom_manifest_path.exists():
-            with open(self.custom_manifest_path, 'r') as f:
-                custom_entries = json.load(f)
-                print(f"📋 Processing {len(custom_entries)} custom entries")
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Load and process custom manifest
+            if self.custom_manifest_path.exists():
+                with open(self.custom_manifest_path, 'r') as f:
+                    custom_entries = json.load(f)
+                    print(f"📋 Processing {len(custom_entries)} custom entries")
+                    
+                    for entry in custom_entries:
+                        processed_count, skipped_count = self._schedule_entry(
+                            entry,
+                            rust_functions,
+                            download_futures,
+                            executor,
+                            processed_count,
+                            skipped_count,
+                        )
+            else:
+                print("⚠ Custom manifest not found, skipping")
                 
-                for entry in custom_entries:
-                    if self.process_entry(entry, is_pdfjs=False):
-                        rust_functions.append(self.generate_rust_function(entry, is_pdfjs=False))
-                        processed_count += 1
-                    else:
-                        skipped_count += 1
-        else:
-            print("⚠ Custom manifest not found, skipping")
-            
-        # Load and process PDF.js manifest
-        if self.pdfjs_manifest_path.exists():
-            with open(self.pdfjs_manifest_path, 'r') as f:
-                pdfjs_entries = json.load(f)
-                print(f"📋 Processing {len(pdfjs_entries)} PDF.js entries")
+            # Load and process PDF.js manifest
+            if self.pdfjs_manifest_path.exists():
+                with open(self.pdfjs_manifest_path, 'r') as f:
+                    pdfjs_entries = json.load(f)
+                    print(f"📋 Processing {len(pdfjs_entries)} PDF.js entries")
+                    
+                    for entry in pdfjs_entries:
+                        processed_count, skipped_count = self._schedule_entry(
+                            entry,
+                            rust_functions,
+                            download_futures,
+                            executor,
+                            processed_count,
+                            skipped_count,
+                            is_pdfjs=True,
+                        )
+            else:
+                print("⚠ PDF.js manifest not found, skipping")
                 
-                for entry in pdfjs_entries:
-                    if self.process_entry(entry, is_pdfjs=True):
-                        rust_functions.append(self.generate_rust_function(entry, is_pdfjs=True))
+            # Load and process pdfbox manifest
+            if self.pdfbox_manifest_path.exists():
+                with open(self.pdfbox_manifest_path, 'r') as f:
+                    pdfbox_entries = json.load(f)
+                    print(f"📋 Processing {len(pdfbox_entries)} pdfbox entries")
+
+                    for entry in pdfbox_entries:
+                        processed_count, skipped_count = self._schedule_entry(
+                            entry,
+                            rust_functions,
+                            download_futures,
+                            executor,
+                            processed_count,
+                            skipped_count,
+                            is_pdfbox=True,
+                        )
+            else:
+                print("⚠ Pdfbox manifest not found, skipping")
+
+            # Load and process corpus manifest
+            if self.corpus_manifest_path.exists():
+                with open(self.corpus_manifest_path, 'r') as f:
+                    corpus_entries = json.load(f)
+                    print(f"📋 Processing {len(corpus_entries)} corpus entries")
+
+                    for entry in corpus_entries:
+                        processed_count, skipped_count = self._schedule_entry(
+                            entry,
+                            rust_functions,
+                            download_futures,
+                            executor,
+                            processed_count,
+                            skipped_count,
+                            is_corpus=True,
+                        )
+            else:
+                print("⚠ Corpus manifest not found, skipping")
+
+            if download_futures:
+                for future in as_completed(download_futures):
+                    entry, is_pdfjs, is_pdfbox, is_corpus, index = download_futures[future]
+                    entry_id = entry['id']
+                    try:
+                        success = future.result()
+                    except Exception as exc:
+                        print(f"✘ Failed to download {entry_id}: {exc}")
+                        success = False
+
+                    if success:
+                        rust_functions[index] = self.generate_rust_function(
+                            entry,
+                            is_pdfjs=is_pdfjs,
+                            is_pdfbox=is_pdfbox,
+                            is_corpus=is_corpus,
+                        )
                         processed_count += 1
                     else:
+                        print(f"✘ Failed to download or verify {entry_id}")
                         skipped_count += 1
-        else:
-            print("⚠ PDF.js manifest not found, skipping")
+                        rust_functions[index] = None
             
-        # Load and process pdfbox manifest
-        if self.pdfbox_manifest_path.exists():
-            with open(self.pdfbox_manifest_path, 'r') as f:
-                pdfbox_entries = json.load(f)
-                print(f"📋 Processing {len(pdfbox_entries)} pdfbox entries")
+        rust_functions = [fn for fn in rust_functions if fn]
 
-                for entry in pdfbox_entries:
-                    if self.process_entry(entry, is_pdfbox=True):
-                        rust_functions.append(self.generate_rust_function(entry, is_pdfbox=True))
-                        processed_count += 1
-                    else:
-                        skipped_count += 1
-        else:
-            print("⚠ Pdfbox manifest not found, skipping")
-
-        # Load and process corpus manifest
-        if self.corpus_manifest_path.exists():
-            with open(self.corpus_manifest_path, 'r') as f:
-                corpus_entries = json.load(f)
-                print(f"📋 Processing {len(corpus_entries)} corpus entries")
-
-                for entry in corpus_entries:
-                    if self.process_entry(entry, is_corpus=True):
-                        rust_functions.append(self.generate_rust_function(entry, is_corpus=True))
-                        processed_count += 1
-                    else:
-                        skipped_count += 1
-        else:
-            print("⚠ Corpus manifest not found, skipping")
-            
         if not rust_functions:
             print("✘ No test functions generated")
             return
