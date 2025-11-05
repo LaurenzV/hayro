@@ -233,7 +233,6 @@ fn process_sub_band(
                     .parameters
                     .code_block_style,
                 b_ctx,
-                layer_buffer,
             )?;
 
             // eprintln!("{:?}", codeblock.coefficients);

@@ -19,13 +19,13 @@ pub(crate) fn decode(
     num_bitplanes: u16,
     style: &CodeBlockStyle,
     ctx: &mut BitplaneDecodeContext,
-    layer_buffer: &mut Vec<u8>,
 ) -> Result<(), &'static str> {
     if code_block.number_of_coding_passes == 0 {
         return Ok(());
     }
 
     ctx.reset(code_block, sub_band_type);
+    let mut layer_buffer = std::mem::take(&mut ctx.layer_buffer).unwrap_or(vec![]);
     layer_buffer.clear();
 
     if style.selective_arithmetic_coding_bypass
@@ -46,6 +46,8 @@ pub(crate) fn decode(
 
     decode_inner(code_block, num_bitplanes, &mut decoder, ctx)
         .ok_or("failed to decode code-block arithmetic data")?;
+
+    ctx.layer_buffer = Some(layer_buffer);
 
     Ok(())
 }
@@ -129,6 +131,10 @@ pub(crate) struct BitplaneDecodeContext {
     sub_band_type: SubBandType,
     /// The arithmetic decoder contexts for each context label.
     contexts: [ArithmeticDecoderContext; 19],
+    /// A buffer used for concatenating the data of layers for a single codeblock.
+    /// The allocation will be taken out at the beginning of a decode operation
+    /// (leaving `None` in place) and be put back after decoding.
+    layer_buffer: Option<Vec<u8>>,
 }
 
 impl BitplaneDecodeContext {
@@ -143,6 +149,7 @@ impl BitplaneDecodeContext {
             height: 0,
             sub_band_type: SubBandType::LowLow,
             contexts: [ArithmeticDecoderContext::default(); 19],
+            layer_buffer: Some(vec![]),
         }
     }
 
@@ -766,7 +773,6 @@ mod tests {
             6,
             &CodeBlockStyle::default(),
             &mut BitplaneDecodeContext::new(),
-            &mut vec![],
         )
         .unwrap();
 
@@ -798,7 +804,6 @@ mod tests {
             3,
             &CodeBlockStyle::default(),
             &mut BitplaneDecodeContext::new(),
-            &mut vec![],
         )
         .unwrap();
 
@@ -846,7 +851,6 @@ mod tests {
             5,
             &CodeBlockStyle::default(),
             &mut BitplaneDecodeContext::new(),
-            &mut vec![],
         )
         .unwrap();
 
