@@ -11,11 +11,11 @@
 
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use crate::codestream::CodeBlockStyle;
-use crate::packet::{CodeBlock, SubbandType};
+use crate::packet::{CodeBlock, SubBandType};
 
 pub(crate) fn decode(
     code_block: &mut CodeBlock,
-    subband_type: SubbandType,
+    subband_type: SubBandType,
     num_bitplanes: u16,
     style: &CodeBlockStyle,
     ctx: &mut BitplaneDecodeContext,
@@ -126,7 +126,7 @@ pub(crate) struct BitplaneDecodeContext {
     /// The height of the code-block we are processing.
     height: u32,
     /// The type of subband the current code block belongs to.
-    subband_type: SubbandType,
+    subband_type: SubBandType,
     /// The arithmetic decoder contexts for each context label.
     contexts: [ArithmeticDecoderContext; 19],
 }
@@ -141,7 +141,7 @@ impl BitplaneDecodeContext {
             has_zero_coding: vec![],
             width: 0,
             height: 0,
-            subband_type: SubbandType::LowLow,
+            subband_type: SubBandType::LowLow,
             contexts: [ArithmeticDecoderContext::default(); 19],
         }
     }
@@ -167,7 +167,7 @@ impl BitplaneDecodeContext {
     }
 
     /// Completely reset context so that it can be reused for a new code-block.
-    fn reset(&mut self, code_block: &CodeBlock, subband_type: SubbandType) {
+    fn reset(&mut self, code_block: &CodeBlock, subband_type: SubBandType) {
         let (width, height) = (code_block.rect.width(), code_block.rect.height());
 
         for arr in [
@@ -455,8 +455,8 @@ fn context_label_zero_coding(pos: &Position, ctx: &BitplaneDecodeContext) -> u8 
     let diagonal = ctx.diagonal_significance_states(pos);
 
     match ctx.subband_type {
-        SubbandType::LowLow | SubbandType::LowHigh | SubbandType::HighLow => {
-            if ctx.subband_type == SubbandType::HighLow {
+        SubBandType::LowLow | SubBandType::LowHigh | SubBandType::HighLow => {
+            if ctx.subband_type == SubBandType::HighLow {
                 std::mem::swap(&mut horizontal, &mut vertical);
             }
 
@@ -480,7 +480,7 @@ fn context_label_zero_coding(pos: &Position, ctx: &BitplaneDecodeContext) -> u8 
                 0
             }
         }
-        SubbandType::HighHigh => {
+        SubBandType::HighHigh => {
             let hv = horizontal + vertical;
 
             if diagonal >= 3 {
@@ -634,7 +634,7 @@ mod tests {
     use super::{BitDecoder, BitplaneDecodeContext, PositionIterator, decode, decode_inner};
     use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
     use crate::codestream::CodeBlockStyle;
-    use crate::packet::{CodeBlock, SubbandType};
+    use crate::packet::{CodeBlock, SubBandType};
     use crate::tile::IntRect;
     use hayro_common::bit::{BitReader, BitWriter};
 
@@ -731,7 +731,7 @@ mod tests {
         };
 
         let mut ctx = BitplaneDecodeContext::new();
-        ctx.reset(&code_block, SubbandType::LowLow);
+        ctx.reset(&code_block, SubBandType::LowLow);
 
         decode_inner(&mut code_block, 3, &mut decoder, &mut ctx);
 
@@ -762,7 +762,7 @@ mod tests {
 
         decode(
             &mut code_block,
-            SubbandType::LowLow,
+            SubBandType::LowLow,
             6,
             &CodeBlockStyle::default(),
             &mut BitplaneDecodeContext::new(),
@@ -794,7 +794,7 @@ mod tests {
 
         decode(
             &mut code_block,
-            SubbandType::LowHigh,
+            SubBandType::LowHigh,
             3,
             &CodeBlockStyle::default(),
             &mut BitplaneDecodeContext::new(),
@@ -842,7 +842,7 @@ mod tests {
 
         decode(
             &mut code_block,
-            SubbandType::HighLow,
+            SubBandType::HighLow,
             5,
             &CodeBlockStyle::default(),
             &mut BitplaneDecodeContext::new(),

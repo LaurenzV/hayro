@@ -5,6 +5,7 @@ use crate::codestream::{
     ComponentInfo, Header, MultipleComponentTransform, ProgressionOrder, QuantizationStyle,
     ReaderExt, WaveletTransform,
 };
+use crate::idwt::IDWTOutput;
 use crate::progression::{
     IteratorInput, ProgressionData, build_component_position_resolution_layer_sequence,
     build_layer_resolution_component_position_sequence,
@@ -30,7 +31,7 @@ struct ComponentData<'a> {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum SubbandType {
+pub(crate) enum SubBandType {
     LowLow,
     LowHigh,
     HighLow,
@@ -39,7 +40,7 @@ pub(crate) enum SubbandType {
 
 #[derive(Clone)]
 pub(crate) struct SubBand<'a> {
-    pub(crate) sub_band_type: SubbandType,
+    pub(crate) sub_band_type: SubBandType,
     pub(crate) rect: IntRect,
     pub(crate) ll_rect: IntRect,
     pub(crate) precincts: Vec<Precinct<'a>>,
@@ -140,7 +141,7 @@ fn process_tile<'a>(
     tile: &'a Tile<'a>,
     header: &Header,
     mut progression_iterator: impl Iterator<Item = ProgressionData>,
-) -> Result<Vec<Vec<f32>>, &'static str> {
+) -> Result<Vec<IDWTOutput>, &'static str> {
     let mut component_data = build_component_data(tile, header)?;
 
     for tile_part in tile.tile_parts() {
@@ -267,7 +268,7 @@ fn process_sub_band(
 }
 
 fn dequantization_factor(
-    subband_type: SubbandType,
+    subband_type: SubBandType,
     resolution: u16,
     component_info: &ComponentInfo,
 ) -> Option<f32> {
@@ -279,10 +280,10 @@ fn dequantization_factor(
 
     let r_b = {
         let log_gain = match subband_type {
-            SubbandType::LowLow => 0,
-            SubbandType::LowHigh => 1,
-            SubbandType::HighLow => 1,
-            SubbandType::HighHigh => 2,
+            SubBandType::LowLow => 0,
+            SubBandType::LowHigh => 1,
+            SubBandType::HighLow => 1,
+            SubBandType::HighHigh => 2,
         };
 
         component_info.size_info.precision as u16 + log_gain
@@ -297,7 +298,7 @@ fn save_samples<'a>(
     tile: &'a Tile<'a>,
     header: &Header,
     channels: &mut [ChannelData],
-    samples: &mut [Vec<f32>],
+    samples: &mut [IDWTOutput],
 ) -> Option<()> {
     if header.global_coding_style.mct == MultipleComponentTransform::Used {
         if samples.len() < 3 {
@@ -306,6 +307,9 @@ fn save_samples<'a>(
 
         let (s, _) = samples.split_at_mut(3);
         let [s0, s1, s2] = s else { return None };
+        let s0 = &mut s0.coefficients;
+        let s1 = &mut s1.coefficients;
+        let s2 = &mut s2.coefficients;
 
         let transform = header.component_infos[0].wavelet_transform();
 
@@ -353,7 +357,7 @@ fn save_samples<'a>(
         .zip(header.component_infos.iter())
         .zip(channels.iter_mut())
     {
-        for sample in samples.iter_mut() {
+        for sample in samples.coefficients.iter_mut() {
             *sample += (1 << (component_info.size_info.precision - 1)) as f32;
         }
 
@@ -364,7 +368,7 @@ fn save_samples<'a>(
             let output = &mut channel_data.container
                 [(y * header.size_data.reference_grid_width + tile_x_offset) as usize..]
                 [..tile.rect.width() as usize];
-            let input = &samples[((y - tile_y_offset) * tile.rect.width()) as usize..]
+            let input = &samples.coefficients[((y - tile_y_offset) * tile.rect.width()) as usize..]
                 [..tile.rect.width() as usize];
 
             output.copy_from_slice(input);
@@ -632,7 +636,7 @@ fn build_component_data(
                     .coding_style_parameters
                     .parameters
                     .num_decomposition_levels;
-                let rect = tile_instance.sub_band_rect(SubbandType::LowLow, decomposition_level);
+                let rect = tile_instance.sub_band_rect(SubBandType::LowLow, decomposition_level);
 
                 // eprintln!("making nLL for component {}", component_idx);
                 // eprintln!(
@@ -649,7 +653,7 @@ fn build_component_data(
                 let precincts = build_precincts(&tile_instance, rect, header)?;
 
                 ll_subband = Some(SubBand {
-                    sub_band_type: SubbandType::LowLow,
+                    sub_band_type: SubBandType::LowLow,
                     rect,
                     ll_rect: tile_instance.resolution_transformed_rect,
                     precincts,
@@ -662,7 +666,7 @@ fn build_component_data(
                     .num_decomposition_levels
                     - (resolution - 1);
 
-                let build_sub_band = |sub_band_type: SubbandType| {
+                let build_sub_band = |sub_band_type: SubBandType| {
                     let rect = tile_instance.sub_band_rect(sub_band_type, decomposition_level);
 
                     let precincts = build_precincts(&tile_instance, rect, header)?;
@@ -678,9 +682,9 @@ fn build_component_data(
 
                 let decomposition = Decomposition {
                     sub_bands: [
-                        build_sub_band(SubbandType::HighLow)?,
-                        build_sub_band(SubbandType::LowHigh)?,
-                        build_sub_band(SubbandType::HighHigh)?,
+                        build_sub_band(SubBandType::HighLow)?,
+                        build_sub_band(SubBandType::LowHigh)?,
+                        build_sub_band(SubBandType::HighHigh)?,
                     ],
                     rect: tile_instance.resolution_transformed_rect,
                 };

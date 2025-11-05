@@ -1,5 +1,5 @@
 use crate::bitmap::ChannelData;
-use crate::packet::{SubbandType, process_tiles};
+use crate::packet::{SubBandType, process_tiles};
 use crate::tile::{IntRect, Tile, TileInstance, read_tiles};
 use hayro_common::byte::Reader;
 
@@ -377,7 +377,7 @@ impl ComponentInfo {
 
     pub(crate) fn exponent_mantissa(
         &self,
-        subband_type: SubbandType,
+        subband_type: SubBandType,
         resolution: u16,
     ) -> (u16, u16) {
         let n_ll = self
@@ -387,10 +387,10 @@ impl ComponentInfo {
 
         let sb_index = match subband_type {
             // TODO: Shouldn't be reached.
-            SubbandType::LowLow => u16::MAX,
-            SubbandType::HighLow => 0,
-            SubbandType::LowHigh => 1,
-            SubbandType::HighHigh => 2,
+            SubBandType::LowLow => u16::MAX,
+            SubBandType::HighLow => 0,
+            SubBandType::LowHigh => 1,
+            SubBandType::HighHigh => 2,
         };
 
         let step_sizes = &self.quantization_info.step_sizes;

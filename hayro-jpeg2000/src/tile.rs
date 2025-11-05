@@ -1,5 +1,5 @@
 use crate::codestream::{ComponentInfo, Header, ReaderExt, SizeData, markers, skip_marker_segment};
-use crate::packet::SubbandType;
+use crate::packet::SubBandType;
 use hayro_common::byte::Reader;
 
 #[derive(Clone, Copy, Debug)]
@@ -115,17 +115,17 @@ impl<'a> TileInstance<'a> {
 
     pub(crate) fn sub_band_rect(
         &self,
-        sub_band_type: SubbandType,
+        sub_band_type: SubBandType,
         decomposition_level: u16,
     ) -> IntRect {
         // Formula B-15.
 
-        let xo_b = if matches!(sub_band_type, SubbandType::HighLow | SubbandType::HighHigh) {
+        let xo_b = if matches!(sub_band_type, SubBandType::HighLow | SubBandType::HighHigh) {
             1
         } else {
             0
         };
-        let yo_b = if matches!(sub_band_type, SubbandType::LowHigh | SubbandType::HighHigh) {
+        let yo_b = if matches!(sub_band_type, SubBandType::LowHigh | SubBandType::HighHigh) {
             1
         } else {
             0
