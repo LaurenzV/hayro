@@ -18,6 +18,7 @@ use crate::tile::{IntRect, Tile, TileInstance, TilePart};
 use crate::{bitplane, idwt};
 use hayro_common::bit::BitReader;
 use hayro_common::byte::Reader;
+use log::trace;
 
 pub(crate) struct Decomposition<'a> {
     /// In the order low-high, high-low and high-high.
@@ -92,13 +93,13 @@ pub(crate) fn process_tiles(
     }
 
     for (tile_idx, tile) in tiles.iter().enumerate() {
-        // eprintln!(
-        //     "tile {tile_idx} rect [{},{} {}x{}]",
-        //     tile.rect.x0,
-        //     tile.rect.y0,
-        //     tile.rect.width(),
-        //     tile.rect.height(),
-        // );
+        trace!(
+            "tile {tile_idx} rect [{},{} {}x{}]",
+            tile.rect.x0,
+            tile.rect.y0,
+            tile.rect.width(),
+            tile.rect.height(),
+        );
 
         let iter_input = IteratorInput::new(
             tile,
@@ -193,8 +194,6 @@ fn process_tile<'a>(
                 .transformation,
         );
 
-        // eprintln!("{:?}", component_samples.iter().map(|n| *n as i32).collect::<Vec<_>>());
-
         idw_output.push(idwt_output);
     }
 
@@ -219,11 +218,7 @@ fn process_sub_band(
                 // Equation (E-2)
                 component_info.quantization_info.guard_bits as u16 + exponent - 1
             };
-            // eprintln!(
-            //     "decoding block {}x{}",
-            //     codeblock.area.width(),
-            //     codeblock.area.height()
-            // );
+
             bitplane::decode(
                 codeblock,
                 sub_band.sub_band_type,
@@ -234,8 +229,6 @@ fn process_sub_band(
                     .code_block_style,
                 b_ctx,
             )?;
-
-            // eprintln!("{:?}", codeblock.coefficients);
 
             // Copy the coefficients into the sub-band.
 
@@ -531,7 +524,7 @@ fn parse_sub_band(
             )? <= progression_data.layer_num as u32
         };
 
-        // eprintln!("code-block inclusion: {}", is_included);
+        trace!("code-block inclusion: {}", is_included);
 
         if !is_included {
             continue;
@@ -557,10 +550,10 @@ fn parse_sub_band(
                 reader,
                 u32::MAX,
             )? as u8;
-            // eprintln!(
-            //     "zero bit-plane information: {}",
-            //     code_block.missing_bit_planes
-            // );
+            trace!(
+                "zero bit-plane information: {}",
+                code_block.missing_bit_planes
+            );
         }
 
         code_block.has_been_included |= is_included;
@@ -597,7 +590,7 @@ fn parse_sub_band(
 
         code_block.number_of_coding_passes += added_coding_passes;
 
-        // eprintln!("number of coding passes: {}", added_coding_passes);
+        trace!("number of coding passes: {}", added_coding_passes);
 
         // B.10.7.1 Single codeword segment
         // "A codeword segment is the number of bytes contributed to a packet by a
@@ -622,7 +615,7 @@ fn parse_sub_band(
         let length = reader.read_packet_header_bits(length_bits as u8)?;
         data_entries.push((sub_band_idx, code_block_idx, length));
 
-        // eprintln!("length(0) {}", length);
+        trace!("length(0) {}", length);
     }
 
     Some(())
@@ -653,18 +646,18 @@ fn build_component_data(
                     .num_decomposition_levels;
                 let rect = tile_instance.sub_band_rect(SubBandType::LowLow, decomposition_level);
 
-                // eprintln!("making nLL for component {}", component_idx);
-                // eprintln!(
-                //     "Sub-band rect: [{},{} {}x{}], ll rect [{},{} {}x{}]",
-                //     rect.x0,
-                //     rect.y0,
-                //     rect.width(),
-                //     rect.height(),
-                //     tile_instance.resolution_transformed_rect.x0,
-                //     tile_instance.resolution_transformed_rect.y0,
-                //     tile_instance.resolution_transformed_rect.width(),
-                //     tile_instance.resolution_transformed_rect.height(),
-                // );
+                trace!("making nLL for component {}", component_idx);
+                trace!(
+                    "Sub-band rect: [{},{} {}x{}], ll rect [{},{} {}x{}]",
+                    rect.x0,
+                    rect.y0,
+                    rect.width(),
+                    rect.height(),
+                    tile_instance.resolution_transformed_rect.x0,
+                    tile_instance.resolution_transformed_rect.y0,
+                    tile_instance.resolution_transformed_rect.width(),
+                    tile_instance.resolution_transformed_rect.height(),
+                );
                 let precincts = build_precincts(&tile_instance, rect, header)?;
 
                 ll_sub_band = Some(SubBand {
@@ -775,15 +768,15 @@ fn build_precincts(
                 code_block_area.height().div_ceil(cb_height)
             };
 
-            // eprintln!(
-            //     "Precinct rect: [{},{} {}x{}], num_code_blocks_wide: {}, num_code_blocks_high: {}",
-            //     precinct_rect.x0,
-            //     precinct_rect.y0,
-            //     precinct_rect.width(),
-            //     precinct_rect.height(),
-            //     code_blocks_x,
-            //     code_blocks_y
-            // );
+            trace!(
+                "Precinct rect: [{},{} {}x{}], num_code_blocks_wide: {}, num_code_blocks_high: {}",
+                precinct_rect.x0,
+                precinct_rect.y0,
+                precinct_rect.width(),
+                precinct_rect.height(),
+                code_blocks_x,
+                code_blocks_y
+            );
 
             let blocks = build_precinct_code_blocks(
                 code_block_area,
@@ -831,20 +824,17 @@ fn build_precinct_code_blocks(
     for y_idx in 0..code_blocks_y {
         let mut x = code_block_area.x0;
 
-        // eprintln!("num blocks: {:?}", code_blocks_y);
-        // eprintln!("height: {:?}", code_block_height);
-
         for x_idx in 0..code_blocks_x {
             let area = IntRect::from_xywh(x, y, code_block_width, code_block_height)
                 .intersect(sub_band_rect);
 
-            // eprintln!(
-            //     "Codeblock rect: [{},{} {}x{}]",
-            //     area.x0,
-            //     area.y0,
-            //     area.width(),
-            //     area.height(),
-            // );
+            trace!(
+                "Codeblock rect: [{},{} {}x{}]",
+                area.x0,
+                area.y0,
+                area.width(),
+                area.height(),
+            );
 
             blocks.push(CodeBlock {
                 x_idx,

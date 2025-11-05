@@ -4,9 +4,10 @@
 use crate::bitmap::Bitmap;
 use crate::boxes::{
     CHANNEL_DEFINITION, COLOUR_SPECIFICATION, CONTIGUOUS_CODESTREAM, FILE_TYPE, IMAGE_HEADER,
-    JP2_HEADER, JP2_SIGNATURE, read_box,
+    JP2_HEADER, JP2_SIGNATURE, read_box, tag_to_string,
 };
 use hayro_common::byte::Reader;
+use log::{debug, trace};
 
 mod arithmetic_decoder;
 pub mod bitmap;
@@ -256,7 +257,7 @@ fn read_jp2_file(data: &[u8]) -> Result<Bitmap, &'static str> {
                             .ok_or("failed to parse colour")?;
                     }
                     _ => {
-                        // eprintln!("ignoring box {}", tag_to_string(child_box.box_type));
+                        debug!("ignoring box {}", tag_to_string(child_box.box_type));
                     }
                 }
             }
@@ -265,7 +266,7 @@ fn read_jp2_file(data: &[u8]) -> Result<Bitmap, &'static str> {
         } else if current_box.box_type == CONTIGUOUS_CODESTREAM {
             channels = Ok(codestream::read(current_box.data)?);
         } else {
-            // eprintln!("ignoring outer box {}", tag_to_string(current_box.box_type));
+            debug!("ignoring outer box {}", tag_to_string(current_box.box_type));
         }
     }
 
