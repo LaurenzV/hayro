@@ -303,14 +303,12 @@ impl XRef {
                 (td, has_ocgs, metadata)
             }
             XRefInput::RootRef(root_ref) => {
-                let root = xref
-                    .get::<Dict>(root_ref.into())
-                    .ok_or(XRefError::Unknown)?;
+                let root = xref.get::<Dict>(root_ref).ok_or(XRefError::Unknown)?;
                 let pages_ref = root.get_ref(PAGES).ok_or(XRefError::Unknown)?;
 
                 let td = TrailerData {
                     pages_ref: pages_ref.into(),
-                    root_ref: root_ref.into(),
+                    root_ref,
                     version: None,
                 };
 
