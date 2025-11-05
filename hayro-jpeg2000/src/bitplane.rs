@@ -15,7 +15,7 @@ use crate::packet::{CodeBlock, SubBandType};
 
 pub(crate) fn decode(
     code_block: &mut CodeBlock,
-    subband_type: SubBandType,
+    sub_band_type: SubBandType,
     num_bitplanes: u16,
     style: &CodeBlockStyle,
     ctx: &mut BitplaneDecodeContext,
@@ -25,7 +25,7 @@ pub(crate) fn decode(
         return Ok(());
     }
 
-    ctx.reset(code_block, subband_type);
+    ctx.reset(code_block, sub_band_type);
     layer_buffer.clear();
 
     if style.selective_arithmetic_coding_bypass
@@ -125,8 +125,8 @@ pub(crate) struct BitplaneDecodeContext {
     width: u32,
     /// The height of the code-block we are processing.
     height: u32,
-    /// The type of subband the current code block belongs to.
-    subband_type: SubBandType,
+    /// The type of sub-band the current code block belongs to.
+    sub_band_type: SubBandType,
     /// The arithmetic decoder contexts for each context label.
     contexts: [ArithmeticDecoderContext; 19],
 }
@@ -141,7 +141,7 @@ impl BitplaneDecodeContext {
             has_zero_coding: vec![],
             width: 0,
             height: 0,
-            subband_type: SubBandType::LowLow,
+            sub_band_type: SubBandType::LowLow,
             contexts: [ArithmeticDecoderContext::default(); 19],
         }
     }
@@ -167,7 +167,7 @@ impl BitplaneDecodeContext {
     }
 
     /// Completely reset context so that it can be reused for a new code-block.
-    fn reset(&mut self, code_block: &CodeBlock, subband_type: SubBandType) {
+    fn reset(&mut self, code_block: &CodeBlock, sub_band_type: SubBandType) {
         let (width, height) = (code_block.rect.width(), code_block.rect.height());
 
         for arr in [
@@ -190,7 +190,7 @@ impl BitplaneDecodeContext {
 
         self.width = width;
         self.height = height;
-        self.subband_type = subband_type;
+        self.sub_band_type = sub_band_type;
         self.reset_contexts();
     }
 
@@ -454,9 +454,9 @@ fn context_label_zero_coding(pos: &Position, ctx: &BitplaneDecodeContext) -> u8 
     let mut vertical = ctx.vertical_significance_states(pos);
     let diagonal = ctx.diagonal_significance_states(pos);
 
-    match ctx.subband_type {
+    match ctx.sub_band_type {
         SubBandType::LowLow | SubBandType::LowHigh | SubBandType::HighLow => {
-            if ctx.subband_type == SubBandType::HighLow {
+            if ctx.sub_band_type == SubBandType::HighLow {
                 std::mem::swap(&mut horizontal, &mut vertical);
             }
 

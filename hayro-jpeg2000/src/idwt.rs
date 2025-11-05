@@ -16,7 +16,7 @@ pub(crate) struct IDWTOutput {
     /// The rect that the samples belong to. This will be equivalent
     /// to the rectangle that forms the smallest decomposition level. It does
     /// not have to be equivalent to the original size of the tile, as the
-    /// subbands that form a tile aren't necessarily aligned to it. Therefore,
+    /// sub-bands that form a tile aren't necessarily aligned to it. Therefore,
     /// the samples need to be trimmed to the tile rectangle afterward.
     pub(crate) rect: IntRect,
 }
@@ -25,23 +25,23 @@ pub(crate) struct IDWTOutput {
 /// will be transformed samples covering the rectangle of the smallest
 /// decomposition level.
 pub(crate) fn apply(
-    // The LL subband for resolution level 0.
-    ll_subband: &SubBand,
+    // The LL sub-band for resolution level 0.
+    ll_sub_band: &SubBand,
     // All decomposition level that make up the tile.
     decompositions: &[Decomposition],
     transform: WaveletTransform,
 ) -> IDWTOutput {
     if decompositions.is_empty() {
         return IDWTOutput {
-            coefficients: ll_subband.clone().coefficients,
-            rect: ll_subband.rect,
+            coefficients: ll_sub_band.clone().coefficients,
+            rect: ll_sub_band.rect,
         };
     }
 
     let mut temp_buf = vec![];
 
     let mut output = filter_2d(
-        IDWTInput::from_sub_band(ll_subband),
+        IDWTInput::from_sub_band(ll_sub_band),
         &decompositions[0],
         transform,
         &mut temp_buf,
@@ -115,34 +115,34 @@ fn interleave_samples(input: IDWTInput, decomposition: &Decomposition) -> Vec<f3
         y1: v1,
     } = decomposition.rect;
 
-    for subband in [
+    for sub_band in [
         input,
         IDWTInput::from_sub_band(&decomposition.sub_bands[0]),
         IDWTInput::from_sub_band(&decomposition.sub_bands[1]),
         IDWTInput::from_sub_band(&decomposition.sub_bands[2]),
     ] {
-        let (u_min, u_max) = match subband.sub_band_type {
+        let (u_min, u_max) = match sub_band.sub_band_type {
             SubBandType::LowLow | SubBandType::LowHigh => (u0.div_ceil(2), u1.div_ceil(2)),
             SubBandType::HighLow | SubBandType::HighHigh => (u0 / 2, u1 / 2),
         };
 
-        let (v_min, v_max) = match subband.sub_band_type {
+        let (v_min, v_max) = match sub_band.sub_band_type {
             SubBandType::LowLow | SubBandType::HighLow => (v0.div_ceil(2), v1.div_ceil(2)),
             SubBandType::LowHigh | SubBandType::HighHigh => (v0 / 2, v1 / 2),
         };
 
         for v_b in v_min..v_max {
             for u_b in u_min..u_max {
-                let (x, y) = match subband.sub_band_type {
+                let (x, y) = match sub_band.sub_band_type {
                     SubBandType::LowLow => (2 * u_b, 2 * v_b),
                     SubBandType::LowHigh => (2 * u_b, 2 * v_b + 1),
                     SubBandType::HighLow => (2 * u_b + 1, 2 * v_b),
                     SubBandType::HighHigh => (2 * u_b + 1, 2 * v_b + 1),
                 };
 
-                coefficients[((y - v0) * decomposition.rect.width() + (x - u0)) as usize] = subband
-                    .coefficients
-                    [((v_b - v_min) * subband.rect.width() + (u_b - u_min)) as usize];
+                coefficients[((y - v0) * decomposition.rect.width() + (x - u0)) as usize] =
+                    sub_band.coefficients
+                        [((v_b - v_min) * sub_band.rect.width() + (u_b - u_min)) as usize];
             }
         }
     }
@@ -159,7 +159,7 @@ fn filter_horizontal(
 ) {
     // There's some subtlety going on here. The extension procedure defined in
     // the spec is based on the start and end values i0 and i1 which are
-    // dependent on the rectangle of the subband we are currently processing.
+    // dependent on the rectangle of the sub-band we are currently processing.
     // The problem is that if we use the values as is, if we for example had the
     // i0/i1 values larger than 1000, we would have to allocate a buffer of
     // length at least 1000, even though the width/height of the rectangle is

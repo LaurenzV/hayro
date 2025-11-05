@@ -26,7 +26,7 @@ pub(crate) struct Decomposition<'a> {
 }
 
 struct ComponentData<'a> {
-    first_ll_subband: SubBand<'a>,
+    first_ll_sub_band: SubBand<'a>,
     decompositions: Vec<Decomposition<'a>>,
 }
 
@@ -165,7 +165,7 @@ fn process_tile<'a>(
         component_data.iter_mut().zip(tile.component_info.iter())
     {
         process_sub_band(
-            &mut component_data.first_ll_subband,
+            &mut component_data.first_ll_sub_band,
             0,
             component_info,
             &mut b_ctx,
@@ -185,7 +185,7 @@ fn process_tile<'a>(
         }
 
         let idwt_output = idwt::apply(
-            &component_data.first_ll_subband,
+            &component_data.first_ll_sub_band,
             &component_data.decompositions,
             component_info
                 .coding_style_parameters
@@ -202,20 +202,20 @@ fn process_tile<'a>(
 }
 
 fn process_sub_band(
-    subband: &mut SubBand,
+    sub_band: &mut SubBand,
     resolution: u16,
     component_info: &ComponentInfo,
     b_ctx: &mut BitplaneDecodeContext,
     layer_buffer: &mut Vec<u8>,
 ) -> Result<(), &'static str> {
     let dequantization_step =
-        dequantization_factor(subband.sub_band_type, resolution, component_info);
+        dequantization_factor(sub_band.sub_band_type, resolution, component_info);
 
-    for precinct in &mut subband.precincts {
+    for precinct in &mut sub_band.precincts {
         for codeblock in &mut precinct.code_blocks {
             let num_bitplanes = {
                 let (exponent, _) =
-                    component_info.exponent_mantissa(subband.sub_band_type, resolution as u16);
+                    component_info.exponent_mantissa(sub_band.sub_band_type, resolution as u16);
                 // Equation (E-2)
                 component_info.quantization_info.guard_bits as u16 + exponent - 1
             };
@@ -226,7 +226,7 @@ fn process_sub_band(
             // );
             bitplane::decode(
                 codeblock,
-                subband.sub_band_type,
+                sub_band.sub_band_type,
                 num_bitplanes,
                 &component_info
                     .coding_style_parameters
@@ -238,18 +238,20 @@ fn process_sub_band(
 
             // eprintln!("{:?}", codeblock.coefficients);
 
-            // Copy the coefficients into the subband.
+            // Copy the coefficients into the sub-band.
 
-            let x_offset = codeblock.rect.x0 - subband.rect.x0;
-            let y_offset = codeblock.rect.y0 - subband.rect.y0;
+            let x_offset = codeblock.rect.x0 - sub_band.rect.x0;
+            let y_offset = codeblock.rect.y0 - sub_band.rect.y0;
 
             for (y, in_row) in codeblock
                 .coefficients
                 .chunks_exact(codeblock.rect.width() as usize)
                 .enumerate()
             {
-                let out_row = &mut subband.coefficients
-                    [((y_offset + y as u32) * subband.rect.width()) as usize + x_offset as usize..];
+                let out_row = &mut sub_band.coefficients[((y_offset + y as u32)
+                    * sub_band.rect.width())
+                    as usize
+                    + x_offset as usize..];
 
                 for (input, output) in in_row.iter().zip(out_row.iter_mut()) {
                     *output = *input as f32;
@@ -266,7 +268,7 @@ fn process_sub_band(
 }
 
 fn dequantization_factor(
-    subband_type: SubBandType,
+    sub_band_type: SubBandType,
     resolution: u16,
     component_info: &ComponentInfo,
 ) -> Option<f32> {
@@ -274,10 +276,10 @@ fn dequantization_factor(
         return None;
     }
 
-    let (exponent, mantissa) = component_info.exponent_mantissa(subband_type, resolution);
+    let (exponent, mantissa) = component_info.exponent_mantissa(sub_band_type, resolution);
 
     let r_b = {
-        let log_gain = match subband_type {
+        let log_gain = match sub_band_type {
             SubBandType::LowLow => 0,
             SubBandType::LowHigh => 1,
             SubBandType::HighLow => 1,
@@ -431,7 +433,7 @@ fn parse_packet<'a>(
         if !zero_length {
             if resolution == 0 {
                 parse_sub_band(
-                    &mut component_data.first_ll_subband,
+                    &mut component_data.first_ll_sub_band,
                     0,
                     &progression_data,
                     &mut reader,
@@ -474,7 +476,7 @@ fn parse_packet<'a>(
 
         for (sub_band_idx, code_block_idx, length) in data_entries {
             let sub_band = if resolution == 0 {
-                &mut component_data.first_ll_subband
+                &mut component_data.first_ll_sub_band
             } else {
                 &mut component_data.decompositions[resolution as usize - 1].sub_bands[sub_band_idx]
             };
@@ -635,7 +637,7 @@ fn build_component_data(
 
     for (component_idx, component_info) in tile.component_info.iter().enumerate() {
         // TODO: IMprove this
-        let mut ll_subband = None;
+        let mut ll_sub_band = None;
         let mut decompositions = vec![];
 
         for resolution in 0..component_info
@@ -666,7 +668,7 @@ fn build_component_data(
                 // );
                 let precincts = build_precincts(&tile_instance, rect, header)?;
 
-                ll_subband = Some(SubBand {
+                ll_sub_band = Some(SubBand {
                     sub_band_type: SubBandType::LowLow,
                     rect,
                     precincts,
@@ -707,7 +709,7 @@ fn build_component_data(
 
         component_data.push(ComponentData {
             decompositions,
-            first_ll_subband: ll_subband.unwrap(),
+            first_ll_sub_band: ll_sub_band.unwrap(),
         })
     }
 

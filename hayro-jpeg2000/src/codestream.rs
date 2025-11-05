@@ -377,7 +377,7 @@ impl ComponentInfo {
 
     pub(crate) fn exponent_mantissa(
         &self,
-        subband_type: SubBandType,
+        sub_band_type: SubBandType,
         resolution: u16,
     ) -> (u16, u16) {
         let n_ll = self
@@ -385,7 +385,7 @@ impl ComponentInfo {
             .parameters
             .num_decomposition_levels;
 
-        let sb_index = match subband_type {
+        let sb_index = match sub_band_type {
             // TODO: Shouldn't be reached.
             SubBandType::LowLow => u16::MAX,
             SubBandType::HighLow => 0,
