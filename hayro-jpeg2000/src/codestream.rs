@@ -338,7 +338,8 @@ impl SizeData {
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct ComponentSizeInfo {
     pub(crate) precision: u8,
-    pub(crate) is_signed: bool,
+    // TODO: What is this field for?
+    pub(crate) _is_signed: bool,
     pub(crate) horizontal_resolution: u8,
     pub(crate) vertical_resolution: u8,
 }
@@ -569,7 +570,7 @@ fn size_marker_inner(reader: &mut Reader) -> Option<SizeData> {
 
         components.push(ComponentSizeInfo {
             precision,
-            is_signed,
+            _is_signed: is_signed,
             horizontal_resolution: x_rsiz,
             vertical_resolution: y_rsiz,
         });
@@ -783,7 +784,8 @@ fn quantization_parameters(
     })
 }
 
-fn skip_code(marker_code: u8) -> bool {
+// TODO: Use this
+fn _skip_code(marker_code: u8) -> bool {
     // All markers with the marker code between 0xFF30 and 0xFF3F have no marker
     // segment parameters. They shall be skipped by the decoder.
     (0x30..=0x3F).contains(&marker_code)
@@ -807,6 +809,7 @@ impl ReaderExt for Reader<'_> {
     }
 }
 
+#[allow(unused)]
 /// Marker codes (Table A.2).
 pub(crate) mod markers {
     /// Start of codestream - 'SOC'.

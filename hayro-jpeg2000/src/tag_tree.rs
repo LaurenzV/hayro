@@ -65,17 +65,6 @@ impl TagNode {
     fn top_left_height(&self) -> u32 {
         u32::min(1 << (self.level - 1), self.height)
     }
-
-    fn is_dummy(&self) -> bool {
-        self.width == 0 || self.height == 0
-    }
-
-    fn real_children(&self) -> usize {
-        self.children
-            .iter()
-            .map(|c| if !c.is_dummy() { 1 } else { 0 })
-            .sum()
-    }
 }
 
 impl TagNode {
@@ -235,6 +224,19 @@ impl TagTree {
 mod tests {
     use super::*;
     use hayro_common::bit::BitWriter;
+
+    impl TagNode {
+        fn is_dummy(&self) -> bool {
+            self.width == 0 || self.height == 0
+        }
+
+        fn real_children(&self) -> usize {
+            self.children
+                .iter()
+                .map(|c| if !c.is_dummy() { 1 } else { 0 })
+                .sum()
+        }
+    }
 
     /// The example from B.10.2, in its extended form as shown in the
     /// "JPEG2000 Standard for Image compression" book.

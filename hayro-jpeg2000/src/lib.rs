@@ -1,13 +1,10 @@
-// TODO: Remove
-#![allow(warnings)]
-
 use crate::bitmap::Bitmap;
 use crate::boxes::{
     CHANNEL_DEFINITION, COLOUR_SPECIFICATION, CONTIGUOUS_CODESTREAM, FILE_TYPE, IMAGE_HEADER,
     JP2_HEADER, JP2_SIGNATURE, read_box, tag_to_string,
 };
 use hayro_common::byte::Reader;
-use log::{debug, trace};
+use log::debug;
 
 mod arithmetic_decoder;
 pub mod bitmap;

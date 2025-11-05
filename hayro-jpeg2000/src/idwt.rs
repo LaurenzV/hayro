@@ -274,7 +274,7 @@ fn irreversible_filter_97i(scanline: &mut [f32], start: usize, end: usize) {
 
     // Step 2.
     for i in (start / 2 - 2)..(end / 2 + 2) {
-        scanline[2 * i + 1] *= (1.0 / KAPPA);
+        scanline[2 * i + 1] *= 1.0 / KAPPA;
     }
 
     // Step 3.

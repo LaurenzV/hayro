@@ -584,15 +584,6 @@ impl PositionIterator {
             height,
         }
     }
-
-    fn reset(&mut self) {
-        self.cur_row = 0;
-        self.position = Position::default();
-    }
-
-    fn has_4_columns(&self) -> bool {
-        self.height - self.cur_row >= 4
-    }
 }
 
 impl Iterator for PositionIterator {

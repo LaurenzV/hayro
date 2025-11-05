@@ -185,12 +185,6 @@ pub(crate) struct ArithmeticDecoderContext {
     pub(crate) mps: u32,
 }
 
-impl ArithmeticDecoderContext {
-    pub(crate) fn new(index: u32, mps: u32) -> Self {
-        Self { index, mps }
-    }
-}
-
 #[derive(Debug, Clone, Copy)]
 struct QeData {
     qe: u32,

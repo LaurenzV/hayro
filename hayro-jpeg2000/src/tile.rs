@@ -67,10 +67,9 @@ impl<'a> Tile<'a> {
     }
 
     pub(crate) fn tile_parts(&self) -> impl Iterator<Item = TilePart<'_>> {
-        self.tile_part_infos.iter().map(|t| TilePart {
-            data: t.data,
-            tile: self,
-        })
+        self.tile_part_infos
+            .iter()
+            .map(|t| TilePart { data: t.data })
     }
 }
 
@@ -82,7 +81,6 @@ pub(crate) struct TilePartInfo<'a> {
 #[derive(Clone, Debug)]
 pub(crate) struct TilePart<'a> {
     pub(crate) data: &'a [u8],
-    pub(crate) tile: &'a Tile<'a>,
 }
 
 pub(crate) struct TileInstance<'a> {
@@ -107,10 +105,6 @@ impl<'a> TileInstance<'a> {
             .parameters
             .precinct_exponents[self.resolution as usize]
             .1
-    }
-
-    pub(crate) fn resolution_transformed_rect(&self) -> IntRect {
-        self.resolution_transformed_rect
     }
 
     pub(crate) fn sub_band_rect(
@@ -422,13 +416,9 @@ fn read_tile_part<'a>(
     Ok(())
 }
 
-struct TilePartHeader {
+pub(crate) struct TilePartHeader {
     tile_index: u16,
     tile_part_length: u32,
-    // This can only be `u8` in theory, but we use u16 so we can handle the
-    // `openjpeg-lossless-rgba-u8-prog0-tile-part-index-overflow` test case.
-    tile_part_index: u16,
-    num_tile_parts: u8,
 }
 
 /// SOT marker (A.4.2).
@@ -438,14 +428,14 @@ pub(crate) fn sot_marker(reader: &mut Reader) -> Option<TilePartHeader> {
 
     let tile_index = reader.read_u16()?;
     let tile_part_length = reader.read_u32()?;
-    let tile_part_index = reader.read_byte()? as u16;
-    let num_tile_parts = reader.read_byte()?;
+
+    // We infer those ourselves.
+    let _tile_part_index = reader.read_byte()? as u16;
+    let _num_tile_parts = reader.read_byte()?;
 
     Some(TilePartHeader {
         tile_index,
         tile_part_length,
-        tile_part_index,
-        num_tile_parts,
     })
 }
 
@@ -462,7 +452,7 @@ mod tests {
     fn test_jpeg2000_standard_example_b4() {
         let component_size_info_0 = ComponentSizeInfo {
             precision: 8,
-            is_signed: false,
+            _is_signed: false,
             horizontal_resolution: 1,
             vertical_resolution: 1,
         };
@@ -494,7 +484,7 @@ mod tests {
 
         let component_size_info_1 = ComponentSizeInfo {
             precision: 8,
-            is_signed: false,
+            _is_signed: false,
             horizontal_resolution: 2,
             vertical_resolution: 2,
         };

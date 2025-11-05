@@ -49,7 +49,6 @@ pub(crate) struct SubBand<'a> {
 
 #[derive(Clone)]
 pub(crate) struct Precinct<'a> {
-    area: IntRect,
     code_blocks: Vec<CodeBlock<'a>>,
     code_inclusion_tree: TagTree,
     zero_bitplane_tree: TagTree,
@@ -74,7 +73,7 @@ pub(crate) fn process_tiles(
 ) -> Result<Vec<ChannelData>, &'static str> {
     let mut channels = vec![];
 
-    for (idx, info) in header.component_infos.iter().enumerate() {
+    for info in &header.component_infos {
         channels.push(ChannelData {
             container: vec![
                 0.0;
@@ -440,7 +439,6 @@ fn parse_packet<'a>(
         let packet_data = reader.tail();
 
         let mut data_reader = Reader::new(packet_data);
-        let mut total_length = 0;
 
         if header
             .global_coding_style
@@ -463,7 +461,6 @@ fn parse_packet<'a>(
             let layer = &mut code_block.layer_data[progression_data.layer_num as usize];
 
             *layer = data_reader.read_bytes(length as usize)?;
-            total_length += length as usize;
         }
 
         data = data_reader.tail()?;
@@ -777,7 +774,6 @@ fn build_precincts(
             let zero_bitplane_tree = TagTree::new(code_blocks_x, code_blocks_y);
 
             precincts.push(Precinct {
-                area: precinct_rect,
                 code_blocks: blocks,
                 code_inclusion_tree,
                 zero_bitplane_tree,
