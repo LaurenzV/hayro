@@ -39,14 +39,22 @@ pub(crate) fn apply(
         };
     }
 
+    let mut temp_buf = vec![];
+
     let mut output = filter_2d(
         IDWTInput::from_sub_band(ll_subband),
         &decompositions[0],
         transform,
+        &mut temp_buf,
     );
 
     for decomposition in decompositions.iter().skip(1) {
-        output = filter_2d(IDWTInput::from_output(&output), &decomposition, transform);
+        output = filter_2d(
+            IDWTInput::from_output(&output),
+            &decomposition,
+            transform,
+            &mut temp_buf,
+        );
     }
 
     let mut trimmed_coefficients = Vec::with_capacity(output.coefficients.len());
@@ -103,11 +111,12 @@ fn filter_2d(
     input: IDWTInput,
     decomposition: &Decomposition,
     transform: WaveletTransform,
+    temp_buf: &mut Vec<f32>,
 ) -> IDWTOutput {
     let mut coefficients = interleave_samples(input, decomposition);
 
-    filter_horizontal(&mut coefficients, decomposition.rect, &transform);
-    filter_vertical(&mut coefficients, decomposition.rect, &transform);
+    filter_horizontal(&mut coefficients, temp_buf, decomposition.rect, &transform);
+    filter_vertical(&mut coefficients, temp_buf, decomposition.rect, &transform);
 
     IDWTOutput {
         coefficients,
@@ -162,10 +171,12 @@ fn interleave_samples(input: IDWTInput, decomposition: &Decomposition) -> Vec<f3
 }
 
 /// The HOR_SR procedure from F.3.4.
-fn filter_horizontal(scan_line: &mut [f32], rect: IntRect, transform: &WaveletTransform) {
-    // Add a padding of 8 to account for the _1d_extr procedure.
-    let mut buf = vec![0.0; rect.width() as usize + 10];
-
+fn filter_horizontal(
+    scanline: &mut [f32],
+    temp_buf: &mut Vec<f32>,
+    rect: IntRect,
+    transform: &WaveletTransform,
+) {
     // There's some subtlety going on here. The extension procedure defined in
     // the spec is based on the start and end values i0 and i1 which are
     // dependent on the rectangle of the subband we are currently processing.
@@ -181,53 +192,54 @@ fn filter_horizontal(scan_line: &mut [f32], rect: IntRect, transform: &WaveletTr
     let shift = PADDING_SHIFT + if !rect.x0.is_multiple_of(2) { 1 } else { 0 };
 
     for v in 0..rect.height() {
-        buf.clear();
+        temp_buf.clear();
         // Add left padding for 1D_EXTR procedure.
-        buf.extend(iter::repeat_n(0.0, shift));
+        temp_buf.extend(iter::repeat_n(0.0, shift));
 
         let start_idx = rect.width() as usize * v as usize;
 
         // Extract row into buffer.
-        buf.extend_from_slice(&scan_line[start_idx..][..rect.width() as usize]);
+        temp_buf.extend_from_slice(&scanline[start_idx..][..rect.width() as usize]);
 
         // Add right padding for 1D_EXTR procedure.
-        buf.extend(iter::repeat_n(0.0, shift));
+        temp_buf.extend(iter::repeat_n(0.0, shift));
 
-        filter_single_row(&mut buf, shift, shift + rect.width() as usize, transform);
+        filter_single_row(temp_buf, shift, shift + rect.width() as usize, transform);
 
         // Put values back into original array.
-        scan_line[start_idx..][..rect.width() as usize]
-            .copy_from_slice(&buf[shift..][..rect.width() as usize]);
+        scanline[start_idx..][..rect.width() as usize]
+            .copy_from_slice(&temp_buf[shift..][..rect.width() as usize]);
     }
 }
 
 /// The VER_SR procedure from F.3.5.
-fn filter_vertical(a: &mut [f32], rect: IntRect, transform: &WaveletTransform) {
-    // Add a padding of 8 to account for the 1D_EXTR procedure.
-    // TODO: Reuse buffer.
-    let mut buf = vec![0.0; rect.height() as usize + 10];
-
+fn filter_vertical(
+    a: &mut [f32],
+    temp_buf: &mut Vec<f32>,
+    rect: IntRect,
+    transform: &WaveletTransform,
+) {
     // See the comment in `filter_horizontal`.
     let shift = PADDING_SHIFT + if !rect.y0.is_multiple_of(2) { 1 } else { 0 };
 
     for u in 0..rect.width() {
-        buf.clear();
+        temp_buf.clear();
         // Add left padding for 1D_EXTR procedure.
-        buf.extend(iter::repeat_n(0.0, shift));
+        temp_buf.extend(iter::repeat_n(0.0, shift));
 
         // Extract column into buffer.
         for y in 0..rect.height() {
-            buf.push(a[(u + rect.width() * y) as usize]);
+            temp_buf.push(a[(u + rect.width() * y) as usize]);
         }
 
         // Add right padding for 1D_EXTR procedure.
-        buf.extend(iter::repeat_n(0.0, shift));
+        temp_buf.extend(iter::repeat_n(0.0, shift));
 
-        filter_single_row(&mut buf, shift, shift + rect.height() as usize, transform);
+        filter_single_row(temp_buf, shift, shift + rect.height() as usize, transform);
 
         // Put values back into original array.
         for (idx, y) in (0..rect.height()).enumerate() {
-            a[(u + rect.width() * y) as usize] = buf[shift + idx]
+            a[(u + rect.width() * y) as usize] = temp_buf[shift + idx]
         }
     }
 }
