@@ -17,10 +17,10 @@ jobs:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@cargo-hack
-      - run: RUSTFLAGS="-D warnings" cargo clippy --workspace --exclude hayro-demo --exclude hayro-jpeg2000 --tests --examples
+      - run: RUSTFLAGS="-D warnings" cargo clippy --workspace --exclude hayro-demo --tests --examples
       - run: cargo fmt --check --all
-      - run: RUSTFLAGS="-D warnings" cargo doc --workspace --exclude hayro-demo --exclude hayro-jpeg2000 --no-deps
-      - run: RUSTFLAGS="-D warnings" cargo hack check --each-feature --workspace --exclude hayro-demo --exclude hayro-jpeg2000
+      - run: RUSTFLAGS="-D warnings" cargo doc --workspace --exclude hayro-demo --no-deps
+      - run: RUSTFLAGS="-D warnings" cargo hack check --each-feature --workspace --exclude hayro-demo
         
   load_tests:
     name: Run CI tests
