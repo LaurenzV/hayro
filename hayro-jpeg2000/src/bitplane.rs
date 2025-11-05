@@ -24,6 +24,12 @@ pub(crate) fn decode(
         return Ok(());
     }
 
+    if num_bitplanes > 32 {
+        // If we want to adjust this, we need to change how `ComponentBits`
+        // works.
+        return Err("bitplanes with more than 32 bits are not supported");
+    }
+
     ctx.reset(code_block, sub_band_type);
     let mut layer_buffer = std::mem::take(&mut ctx.layer_buffer).unwrap_or(vec![]);
     layer_buffer.clear();
@@ -233,7 +239,7 @@ impl BitplaneDecodeContext {
         self.has_zero_coding[position.index(self.width)] != 0
     }
 
-    fn push_magnitude_bit(&mut self, position: &Position, bit: u16) {
+    fn push_magnitude_bit(&mut self, position: &Position, bit: u32) {
         self.magnitude_array[position.index(self.width)].push_bit(bit)
     }
 
@@ -342,7 +348,7 @@ fn cleanup_pass(ctx: &mut BitplaneDecodeContext, decoder: &mut impl BitDecoder) 
                 decoder.read_bit(ctx.arithmetic_decoder_context(ctx_label))
             };
 
-            ctx.push_magnitude_bit(&cur_pos, bit as u16);
+            ctx.push_magnitude_bit(&cur_pos, bit);
 
             if bit == 1 {
                 decode_sign_bit(&cur_pos, ctx, decoder);
@@ -374,7 +380,7 @@ fn significance_propagation_pass(
         if !ctx.is_significant(&cur_pos) && ctx.neighborhood_significance_states(&cur_pos) != 0 {
             let ctx_label = context_label_zero_coding(&cur_pos, ctx);
             let bit = decoder.read_bit(ctx.arithmetic_decoder_context(ctx_label));
-            ctx.push_magnitude_bit(&cur_pos, bit as u16);
+            ctx.push_magnitude_bit(&cur_pos, bit);
             ctx.set_zero_coded(&cur_pos);
 
             // "If the value of this bit is 1 then the significance
@@ -408,7 +414,7 @@ fn magnitude_refinement_pass(
         if ctx.is_significant(&cur_pos) && !ctx.is_zero_coded(&cur_pos) {
             let ctx_label = context_label_magnitude_refinement_coding(&cur_pos, ctx);
             let bit = decoder.read_bit(ctx.arithmetic_decoder_context(ctx_label));
-            ctx.push_magnitude_bit(&cur_pos, bit as u16);
+            ctx.push_magnitude_bit(&cur_pos, bit);
             ctx.set_magnitude_refined(&cur_pos);
         }
     }
@@ -528,20 +534,20 @@ fn context_label_magnitude_refinement_coding(pos: &Position, ctx: &BitplaneDecod
 
 #[derive(Default, Copy, Clone, Debug)]
 struct ComponentBits {
-    inner: u16,
+    inner: u32,
     count: u8,
 }
 
 impl ComponentBits {
-    fn push_bit(&mut self, bit: u16) {
-        assert!(self.count < 16);
+    fn push_bit(&mut self, bit: u32) {
+        assert!(self.count < 32);
         assert!(bit < 2);
 
         self.inner = (self.inner << 1) | bit;
         self.count += 1;
     }
 
-    fn get(&self) -> u16 {
+    fn get(&self) -> u32 {
         self.inner
     }
 }
