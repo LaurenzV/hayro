@@ -56,11 +56,13 @@ impl TagNode {
         }
     }
 
-    fn x_split(&self) -> u32 {
+    /// The width of the top-left child.
+    fn top_left_width(&self) -> u32 {
         u32::min(1 << (self.level - 1), self.width)
     }
 
-    fn y_split(&self) -> u32 {
+    /// The height of the top-left child.
+    fn top_left_height(&self) -> u32 {
         u32::min(1 << (self.level - 1), self.height)
     }
 
@@ -89,8 +91,8 @@ impl TagNode {
 
         // Determine the width and height of the top-left child node. Based
         // on this, we can infer the dimensions of all other child nodes.
-        let top_left_width = tag.x_split();
-        let top_left_height = tag.y_split();
+        let top_left_width = tag.top_left_width();
+        let top_left_height = tag.top_left_height();
 
         let mut push = |node: TagNode| {
             tag.children.push(node);
@@ -161,8 +163,8 @@ impl TagNode {
             return Some(self.value);
         }
 
-        let top_left_width = self.x_split();
-        let top_left_height = self.y_split();
+        let top_left_width = self.top_left_width();
+        let top_left_height = self.top_left_height();
 
         let left = x < top_left_width;
         let top = y < top_left_height;
