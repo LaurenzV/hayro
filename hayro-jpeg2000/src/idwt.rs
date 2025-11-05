@@ -42,19 +42,11 @@ pub(crate) fn apply(
     let mut output = filter_2d(
         IDWTInput::from_sub_band(ll_subband),
         &decompositions[0],
-        decompositions[0].sub_bands[0].ll_rect,
         transform,
     );
 
     for decomposition in decompositions.iter().skip(1) {
-        let ll_rect = decomposition.sub_bands[0].ll_rect;
-
-        output = filter_2d(
-            IDWTInput::from_output(&output),
-            &decomposition,
-            ll_rect,
-            transform,
-        );
+        output = filter_2d(IDWTInput::from_output(&output), &decomposition, transform);
     }
 
     let mut trimmed_coefficients = Vec::with_capacity(output.coefficients.len());
@@ -110,26 +102,29 @@ fn filter_2d(
     // The LL subband.
     input: IDWTInput,
     decomposition: &Decomposition,
-    rect: IntRect,
     transform: WaveletTransform,
 ) -> IDWTOutput {
-    let mut coefficients = interleave_samples(input, decomposition, rect);
+    let mut coefficients = interleave_samples(input, decomposition);
 
-    filter_horizontal(&mut coefficients, rect, &transform);
-    filter_vertical(&mut coefficients, rect, &transform);
+    filter_horizontal(&mut coefficients, decomposition.rect, &transform);
+    filter_vertical(&mut coefficients, decomposition.rect, &transform);
 
-    IDWTOutput { coefficients, rect }
+    IDWTOutput {
+        coefficients,
+        rect: decomposition.rect,
+    }
 }
 
 /// The 2D_INTERLEAVE procedure described in F.3.3.
-fn interleave_samples(input: IDWTInput, decomposition: &Decomposition, rect: IntRect) -> Vec<f32> {
-    let mut coefficients = vec![0.0; (rect.width() * rect.height()) as usize];
+fn interleave_samples(input: IDWTInput, decomposition: &Decomposition) -> Vec<f32> {
+    let mut coefficients =
+        vec![0.0; (decomposition.rect.width() * decomposition.rect.height()) as usize];
     let IntRect {
         x0: u0,
         x1: u1,
         y0: v0,
         y1: v1,
-    } = rect;
+    } = decomposition.rect;
 
     for subband in [
         input,
@@ -156,7 +151,8 @@ fn interleave_samples(input: IDWTInput, decomposition: &Decomposition, rect: Int
                     SubBandType::HighHigh => (2 * u_b + 1, 2 * v_b + 1),
                 };
 
-                coefficients[((y - v0) * rect.width() + (x - u0)) as usize] = subband.coefficients
+                coefficients[((y - v0) * decomposition.rect.width() + (x - u0)) as usize] = subband
+                    .coefficients
                     [((v_b - v_min) * subband.rect.width() + (u_b - u_min)) as usize];
             }
         }
