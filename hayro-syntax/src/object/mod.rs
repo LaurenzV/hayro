@@ -211,7 +211,7 @@ impl<'a, T: Readable<'a>> FromBytes<'a> for T {
 }
 
 /// An identifier for a PDF object.
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct ObjectIdentifier {
     pub(crate) obj_num: i32,
     pub(crate) gen_num: i32,

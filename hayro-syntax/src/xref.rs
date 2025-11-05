@@ -319,16 +319,37 @@ impl XRef {
             Inner::Dummy => unimplemented!(),
             Inner::Some(r) => {
                 let locked = r.map.read().unwrap();
-                let mut iter = locked
+                let mut elements = locked
                     .xref_map
-                    .keys()
-                    .cloned()
-                    .collect::<Vec<_>>()
-                    .into_iter();
+                    .iter()
+                    .map(|(id, e)| {
+                        let offset = match e {
+                            EntryType::Normal(o) => *o,
+                            // TODO: Maybe sort by offset of the stream itself.
+                            EntryType::ObjStream(_, _) => usize::MAX,
+                        };
+
+                        (*id, offset)
+                    })
+                    .collect::<Vec<_>>();
+
+                // Try to yield in the order the objects appeared in the
+                // PDF.
+                elements.sort_by(|e1, e2| e1.1.cmp(&e2.1));
+
+                let mut iter = elements.into_iter();
 
                 iter::from_fn(move || {
-                    iter.next()
-                        .and_then(|k| self.get_with(k, &ReaderContext::new(self, false)))
+                    while let Some(next) = iter.next() {
+                        if let Some(obj) = self.get_with(next.0, &ReaderContext::new(self, false)) {
+                            return Some(obj);
+                        } else {
+                            // Skip invalid objects.
+                            continue;
+                        }
+                    }
+
+                    None
                 })
             }
         }

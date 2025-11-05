@@ -43,18 +43,44 @@ pub struct Pages<'a> {
 impl<'a> Pages<'a> {
     /// Create a new `Pages` object.
     pub(crate) fn new(
-        pages_dict: Dict<'a>,
+        pages_dict: &Dict<'a>,
         ctx: &ReaderContext<'a>,
         xref: &'a XRef,
     ) -> Option<Pages<'a>> {
         let mut pages = vec![];
         let pages_ctx = PagesContext::new();
         resolve_pages(
-            pages_dict,
+            &pages_dict,
             &mut pages,
             pages_ctx,
             Resources::new(Dict::empty(), None, ctx),
         )?;
+
+        Some(Self { pages, xref })
+    }
+
+    /// Create a new `Pages` object by bruteforce-searching.
+    ///
+    /// Of course this could result in the order of pages being messed up, but
+    /// this is still better than nothing.
+    pub(crate) fn new_brute_force(ctx: &ReaderContext<'a>, xref: &'a XRef) -> Option<Pages<'a>> {
+        let mut pages = vec![];
+
+        for object in xref.objects() {
+            if let Some(dict) = object.into_dict()
+                && let Some(page) = Page::new(
+                    &dict,
+                    &PagesContext::new(),
+                    Resources::new(Dict::empty(), None, ctx),
+                )
+            {
+                pages.push(page);
+            }
+        }
+
+        if pages.is_empty() {
+            return None;
+        }
 
         Some(Self { pages, xref })
     }
@@ -74,7 +100,7 @@ impl<'a> Deref for Pages<'a> {
 }
 
 fn resolve_pages<'a>(
-    pages_dict: Dict<'a>,
+    pages_dict: &Dict<'a>,
     entries: &mut Vec<Page<'a>>,
     mut ctx: PagesContext,
     resources: Resources<'a>,
@@ -100,10 +126,16 @@ fn resolve_pages<'a>(
 
     for dict in kids.iter::<Dict>() {
         match dict.get::<Name>(TYPE).as_deref() {
-            Some(PAGES) => resolve_pages(dict, entries, ctx.clone(), resources.clone())?,
+            Some(PAGES) => {
+                resolve_pages(&dict, entries, ctx.clone(), resources.clone());
+            }
             // Let's be lenient and assume it's a `Page` in case it's `None` or something else
             // (see corpus test case 0083781).
-            _ => entries.push(Page::new(dict, &ctx, resources.clone())),
+            _ => {
+                if let Some(page) = Page::new(&dict, &ctx, resources.clone()) {
+                    entries.push(page);
+                }
+            }
         }
     }
 
@@ -135,7 +167,11 @@ pub struct Page<'a> {
 }
 
 impl<'a> Page<'a> {
-    fn new(dict: Dict<'a>, ctx: &PagesContext, resources: Resources<'a>) -> Page<'a> {
+    fn new(dict: &Dict<'a>, ctx: &PagesContext, resources: Resources<'a>) -> Option<Page<'a>> {
+        if !dict.contains_key(CONTENTS) {
+            return None;
+        }
+
         let media_box = dict.get::<Rect>(MEDIA_BOX).or(ctx.media_box).unwrap_or(A4);
 
         let crop_box = dict
@@ -155,15 +191,15 @@ impl<'a> Page<'a> {
         let resources =
             Resources::from_parent(dict.get::<Dict>(RESOURCES).unwrap_or_default(), resources);
 
-        Self {
-            inner: dict,
+        Some(Self {
+            inner: dict.clone(),
             media_box,
             crop_box,
             rotation,
             page_streams: OnceLock::new(),
             resources,
             ctx,
-        }
+        })
     }
 
     fn operations_impl(&self) -> Option<UntypedIter<'_>> {
@@ -507,7 +543,8 @@ pub(crate) mod cached {
             let ctx = ReaderContext::new(xref_reference, false);
             let pages = xref_reference
                 .get_with(xref.trailer_data().pages_ref, &ctx)
-                .and_then(|p| Pages::new(p, &ctx, xref_reference))?;
+                .and_then(|p| Pages::new(&p, &ctx, xref_reference))
+                .or_else(|| Pages::new_brute_force(&ctx, xref_reference))?;
 
             Some(Self { pages, _xref: xref })
         }
