@@ -134,8 +134,8 @@ fn fallback_xref_map_inner<'a>(
             let check = |dict: &Dict| -> bool { dict.contains_key(PAGES) };
 
             match root_id {
-                MaybeRef::Ref(r) => {
-                    if let Some(EntryType::Normal(offset)) = xref_map.get(&r.into()) {
+                MaybeRef::Ref(r) => match xref_map.get(&r.into()) {
+                    Some(EntryType::Normal(offset)) => {
                         let mut reader = Reader::new(&data.as_ref().as_ref()[*offset..]);
 
                         if let Some(obj) =
@@ -145,7 +145,26 @@ fn fallback_xref_map_inner<'a>(
                             trailer_dict = Some(dict);
                         }
                     }
-                }
+                    Some(EntryType::ObjStream(obj_num, idx)) => {
+                        if let Some(EntryType::Normal(offset)) =
+                            xref_map.get(&ObjectIdentifier::new(*obj_num as i32, 0))
+                        {
+                            let mut reader = Reader::new(&data.as_ref().as_ref()[*offset..]);
+
+                            if let Some(stream) =
+                                reader.read_with_context::<IndirectObject<Stream>>(&dummy_ctx)
+                                && let Some(data) = stream.clone().get().decoded().ok()
+                                && let Some(object_stream) =
+                                    ObjectStream::new(stream.get(), &data, &dummy_ctx)
+                                && let Some(obj) = object_stream.get::<Dict>(*idx)
+                                && check(&obj)
+                            {
+                                trailer_dict = Some(dict);
+                            }
+                        }
+                    }
+                    _ => {}
+                },
                 MaybeRef::NotRef(d) => {
                     if check(&d) {
                         trailer_dict = Some(dict);
