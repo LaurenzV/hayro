@@ -128,6 +128,7 @@ pub struct BitWriter<'a> {
 
 impl<'a> BitWriter<'a> {
     /// Create a new bit writer. Only bit sizes of 1, 2, 4, 8, and 16 are supported.
+    #[inline]
     pub fn new(data: &'a mut [u8], bit_size: u8) -> Option<Self> {
         if !matches!(bit_size, 1 | 2 | 4 | 8 | 16) {
             return None;
@@ -141,6 +142,7 @@ impl<'a> BitWriter<'a> {
     }
 
     /// Split off the already-written parts and return a new bit writer for the tail.
+    #[inline]
     pub fn split_off(self) -> (&'a [u8], BitWriter<'a>) {
         // Assumes that we are currently aligned to a byte boundary!
         let (left, right) = self.data.split_at_mut(self.cur_pos / 8);
@@ -155,6 +157,7 @@ impl<'a> BitWriter<'a> {
     }
 
     /// Align the writer to the next byte boundary.
+    #[inline]
     pub fn align(&mut self) {
         let bit_pos = self.bit_pos();
 
@@ -164,11 +167,13 @@ impl<'a> BitWriter<'a> {
     }
 
     /// Return the number of written bits.
+    #[inline]
     pub fn cur_pos(&self) -> usize {
         self.cur_pos
     }
 
     /// Return the whole underlying buffer.
+    #[inline]
     pub fn get_data(&self) -> &[u8] {
         self.data
     }
@@ -182,6 +187,7 @@ impl<'a> BitWriter<'a> {
     }
 
     /// Write the given number into the buffer.
+    #[inline]
     pub fn write(&mut self, val: u16) -> Option<()> {
         let byte_pos = self.byte_pos();
         let bit_size = self.bit_size;
@@ -214,6 +220,7 @@ impl<'a> BitWriter<'a> {
     }
 
     /// Write multiple numbers at once.
+    #[inline]
     pub fn write_bits(&mut self, bits: impl IntoIterator<Item = u16>) -> Option<()> {
         for bit in bits {
             self.write(bit)?;

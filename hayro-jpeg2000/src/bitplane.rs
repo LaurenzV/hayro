@@ -247,6 +247,7 @@ impl CodeBlockDecodeContext {
         self.magnitude_array[position.index(self.width)].push_bit(bit)
     }
 
+    #[inline]
     fn sign_checked(&self, x: i64, y: i64) -> u8 {
         if x < 0 || y < 0 || x >= self.width as i64 || y >= self.height as i64 {
             // OOB values should just return 0.
@@ -256,6 +257,7 @@ impl CodeBlockDecodeContext {
         }
     }
 
+    #[inline]
     fn significance_state_checked(&self, x: i64, y: i64) -> u8 {
         if x < 0 || y < 0 || x >= self.width as i64 || y >= self.height as i64 {
             // OOB values should just return 0.
@@ -265,16 +267,19 @@ impl CodeBlockDecodeContext {
         }
     }
 
+    #[inline]
     fn horizontal_significance_states(&self, pos: &Position) -> u8 {
         self.significance_state_checked(pos.x as i64 - 1, pos.y as i64)
             + self.significance_state_checked(pos.x as i64 + 1, pos.y as i64)
     }
 
+    #[inline]
     fn vertical_significance_states(&self, pos: &Position) -> u8 {
         self.significance_state_checked(pos.x as i64, pos.y as i64 - 1)
             + self.significance_state_checked(pos.x as i64, pos.y as i64 + 1)
     }
 
+    #[inline(always)]
     fn diagonal_significance_states(&self, pos: &Position) -> u8 {
         self.significance_state_checked(pos.x as i64 - 1, pos.y as i64 - 1)
             + self.significance_state_checked(pos.x as i64 + 1, pos.y as i64 - 1)
@@ -282,6 +287,7 @@ impl CodeBlockDecodeContext {
             + self.significance_state_checked(pos.x as i64 + 1, pos.y as i64 + 1)
     }
 
+    #[inline]
     fn neighborhood_significance_states(&self, pos: &Position) -> u8 {
         self.horizontal_significance_states(pos)
             + self.vertical_significance_states(pos)
@@ -427,13 +433,16 @@ fn magnitude_refinement_pass(
 }
 
 /// Decode a sign bit (Section D.3.2).
+#[inline(always)]
 fn decode_sign_bit(
     pos: &Position,
     ctx: &mut CodeBlockDecodeContext,
     decoder: &mut impl BitDecoder,
 ) {
     /// Based on Table D.2.
+    #[inline(always)]
     fn context_label_sign_coding(pos: &Position, ctx: &CodeBlockDecodeContext) -> (u8, u8) {
+        #[inline(always)]
         fn neighbor_contribution(ctx: &CodeBlockDecodeContext, x: i64, y: i64) -> i32 {
             let sigma = ctx.significance_state_checked(x, y);
 
@@ -470,6 +479,7 @@ fn decode_sign_bit(
 }
 
 /// Return the context label for zero coding (Section D.3.1).
+#[inline(always)]
 fn context_label_zero_coding(pos: &Position, ctx: &CodeBlockDecodeContext) -> u8 {
     let mut horizontal = ctx.horizontal_significance_states(pos);
     let mut vertical = ctx.vertical_significance_states(pos);
