@@ -68,11 +68,6 @@ pub(crate) struct CodeBlock<'a> {
     pub(crate) coefficients: Vec<i16>,
 }
 
-#[derive(Clone)]
-struct Segment {
-    number_of_coding_passes: u32,
-}
-
 pub(crate) fn process_tiles(
     tiles: &[Tile],
     header: &Header,
@@ -160,7 +155,6 @@ fn process_tile<'a>(
     // allocations.
     // TODO: Reuse across different tiles.
     let mut b_ctx = BitplaneDecodeContext::new();
-    let mut layer_buffer = vec![];
 
     for (component_data, component_info) in
         component_data.iter_mut().zip(tile.component_info.iter())
@@ -170,18 +164,11 @@ fn process_tile<'a>(
             0,
             component_info,
             &mut b_ctx,
-            &mut layer_buffer,
         )?;
 
         for (resolution, decomposition) in component_data.decompositions.iter_mut().enumerate() {
             for sub_band in &mut decomposition.sub_bands {
-                process_sub_band(
-                    sub_band,
-                    resolution as u16 + 1,
-                    component_info,
-                    &mut b_ctx,
-                    &mut layer_buffer,
-                )?;
+                process_sub_band(sub_band, resolution as u16 + 1, component_info, &mut b_ctx)?;
             }
         }
 
@@ -205,7 +192,6 @@ fn process_sub_band(
     resolution: u16,
     component_info: &ComponentInfo,
     b_ctx: &mut BitplaneDecodeContext,
-    layer_buffer: &mut Vec<u8>,
 ) -> Result<(), &'static str> {
     let dequantization_step =
         dequantization_factor(sub_band.sub_band_type, resolution, component_info);
@@ -864,6 +850,8 @@ pub(crate) trait BitReaderExt {
 }
 
 impl BitReaderExt for BitReader<'_> {
+    // Like the normal `read_bits` method, but accounts for stuffing bits
+    // in addition.
     fn read_packet_header_bits(&mut self, bit_size: u8) -> Option<u32> {
         let mut bit = 0;
 
@@ -876,9 +864,9 @@ impl BitReaderExt for BitReader<'_> {
     }
 
     fn read_stuff_bit_if_necessary(&mut self) -> Option<()> {
-        // B.10.1: If the value of the byte is 0xFF, the next byte includes an extra zero bit
+        // B.10.1: "If the value of the byte is 0xFF, the next byte includes an extra zero bit
         // stuffed into the MSB.
-        // Check if the next bit is at a new byte boundary.
+        // Check if the next bit is at a new byte boundary."
         if self.bit_pos() == 0 && self.byte_pos() > 0 {
             let last_byte = self.data[self.byte_pos() - 1];
 
