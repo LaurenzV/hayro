@@ -748,7 +748,7 @@ mod tests {
         let bit_reader = BitReader::new(&data);
         let mut decoder = DummyBitDecoder(bit_reader);
 
-        let mut code_block = CodeBlock {
+        let code_block = CodeBlock {
             rect: IntRect::from_xywh(0, 0, 4, 4),
             x_idx: 0,
             y_idx: 0,
@@ -762,7 +762,7 @@ mod tests {
         let mut ctx = CodeBlockDecodeContext::new();
         ctx.reset(&code_block, SubBandType::LowLow);
 
-        decode_inner(&mut code_block, 3, &mut decoder, &mut ctx);
+        decode_inner(&code_block, 3, &mut decoder, &mut ctx);
 
         let coefficients = ctx.coefficients();
 
@@ -777,7 +777,7 @@ mod tests {
     fn bitplane_decoding_2() {
         let data = vec![0x01, 0x8f, 0x0d, 0xc8, 0x75, 0x5d];
 
-        let mut code_block = CodeBlock {
+        let code_block = CodeBlock {
             rect: IntRect::from_xywh(0, 0, 1, 5),
             x_idx: 0,
             y_idx: 0,
@@ -791,7 +791,7 @@ mod tests {
         let mut ctx = CodeBlockDecodeContext::new();
 
         decode(
-            &mut code_block,
+            &code_block,
             SubBandType::LowLow,
             6,
             &CodeBlockStyle::default(),
@@ -809,7 +809,7 @@ mod tests {
     fn bitplane_decoding_3() {
         let data = vec![0x0F, 0xB1, 0x76];
 
-        let mut code_block = CodeBlock {
+        let code_block = CodeBlock {
             rect: IntRect::from_xywh(0, 0, 1, 4),
             x_idx: 0,
             y_idx: 0,
@@ -823,7 +823,7 @@ mod tests {
         let mut ctx = CodeBlockDecodeContext::new();
 
         decode(
-            &mut code_block,
+            &code_block,
             SubBandType::LowHigh,
             3,
             &CodeBlockStyle::default(),
@@ -857,7 +857,7 @@ mod tests {
             30, 233,
         ];
 
-        let mut code_block = CodeBlock {
+        let code_block = CodeBlock {
             rect: IntRect::from_xywh(0, 0, 32, 32),
             x_idx: 0,
             y_idx: 0,
@@ -871,7 +871,7 @@ mod tests {
         let mut ctx = CodeBlockDecodeContext::new();
 
         decode(
-            &mut code_block,
+            &code_block,
             SubBandType::HighLow,
             5,
             &CodeBlockStyle::default(),
