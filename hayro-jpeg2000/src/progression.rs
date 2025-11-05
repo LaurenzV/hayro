@@ -48,7 +48,6 @@ pub(crate) fn build_layer_resolution_component_position_sequence(
 
     for layer in 0..input.layers {
         for resolution in 0..input.max_resolutions {
-            let resolution = resolution;
             let tile_instances = tile_instances_for_resolution(input, resolution);
 
             for (component_idx, tile_instance_opt) in tile_instances.into_iter().enumerate() {
@@ -82,7 +81,6 @@ pub(crate) fn build_resolution_layer_component_position_sequence(
     let mut sequence = Vec::new();
 
     for resolution in 0..input.max_resolutions {
-        let resolution = resolution;
         let tile_instances = tile_instances_for_resolution(input, resolution);
 
         for layer in 0..input.layers {

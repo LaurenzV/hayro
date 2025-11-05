@@ -50,7 +50,7 @@ pub(crate) fn apply(
     for decomposition in decompositions.iter().skip(1) {
         output = filter_2d(
             IDWTInput::from_output(&output),
-            &decomposition,
+            decomposition,
             transform,
             &mut temp_buf,
         );

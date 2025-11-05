@@ -199,7 +199,7 @@ fn process_sub_band(
         for codeblock in &mut precinct.code_blocks {
             let num_bitplanes = {
                 let (exponent, _) =
-                    component_info.exponent_mantissa(sub_band.sub_band_type, resolution as u16);
+                    component_info.exponent_mantissa(sub_band.sub_band_type, resolution);
                 // Equation (E-2)
                 component_info.quantization_info.guard_bits as u16 + exponent - 1
             };

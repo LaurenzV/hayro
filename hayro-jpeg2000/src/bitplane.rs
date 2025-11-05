@@ -31,7 +31,7 @@ pub(crate) fn decode(
     }
 
     ctx.reset(code_block, sub_band_type);
-    let mut layer_buffer = std::mem::take(&mut ctx.layer_buffer).unwrap_or(vec![]);
+    let mut layer_buffer = std::mem::take(&mut ctx.layer_buffer).unwrap_or_default();
     layer_buffer.clear();
 
     if style.selective_arithmetic_coding_bypass
@@ -636,7 +636,7 @@ impl BitDecoder for ArithmeticDecoder<'_> {
 #[cfg(test)]
 mod tests {
     use super::{BitDecoder, BitplaneDecodeContext, PositionIterator, decode, decode_inner};
-    use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
+    use crate::arithmetic_decoder::ArithmeticDecoderContext;
     use crate::codestream::CodeBlockStyle;
     use crate::packet::{CodeBlock, SubBandType};
     use crate::tile::IntRect;
@@ -645,7 +645,7 @@ mod tests {
     struct DummyBitDecoder<'a>(BitReader<'a>);
 
     impl BitDecoder for DummyBitDecoder<'_> {
-        fn read_bit(&mut self, context: &mut ArithmeticDecoderContext) -> u32 {
+        fn read_bit(&mut self, _: &mut ArithmeticDecoderContext) -> u32 {
             self.0.read(1).unwrap()
         }
     }
@@ -661,10 +661,10 @@ mod tests {
         let width = 5;
         let height = 10;
 
-        let mut iter = PositionIterator::new(width, height);
+        let iter = PositionIterator::new(width, height);
         let mut produced = Vec::new();
 
-        while let Some(position) = iter.next() {
+        for position in iter {
             produced.push((position.x, position.y));
         }
 
@@ -750,8 +750,6 @@ mod tests {
     fn bitplane_decoding_2() {
         let data = vec![0x01, 0x8f, 0x0d, 0xc8, 0x75, 0x5d];
 
-        let bit_reader = BitReader::new(&data);
-
         let mut code_block = CodeBlock {
             rect: IntRect::from_xywh(0, 0, 1, 5),
             x_idx: 0,
@@ -780,8 +778,6 @@ mod tests {
     #[test]
     fn bitplane_decoding_3() {
         let data = vec![0x0F, 0xB1, 0x76];
-
-        let bit_reader = BitReader::new(&data);
 
         let mut code_block = CodeBlock {
             rect: IntRect::from_xywh(0, 0, 1, 4),
@@ -827,8 +823,6 @@ mod tests {
             57, 197, 153, 196, 178, 254, 161, 28, 72, 103, 42, 31, 255, 56, 2, 18, 126, 95, 98, 19,
             30, 233,
         ];
-
-        let bit_reader = BitReader::new(&data);
 
         let mut code_block = CodeBlock {
             rect: IntRect::from_xywh(0, 0, 32, 32),

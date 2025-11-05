@@ -103,8 +103,8 @@ fn convert_jp2(path: &Path) -> Result<PathBuf, String> {
         let num_samples = channels.iter().map(|c| c.len()).min().unwrap_or(0);
 
         for sample_idx in 0..num_samples {
-            for channel_idx in 0..num_channels {
-                interleaved.push(channels[channel_idx][sample_idx]);
+            for channel in &channels {
+                interleaved.push(channel[sample_idx]);
             }
         }
 

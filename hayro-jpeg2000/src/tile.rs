@@ -477,7 +477,7 @@ mod tests {
         };
 
         let component_info_0 = ComponentInfo {
-            size_info: component_size_info_0.clone(),
+            size_info: component_size_info_0,
             coding_style_parameters: dummy_component_coding_style.clone(),
             quantization_info: dummy_quantization_info.clone(),
         };
@@ -490,7 +490,7 @@ mod tests {
         };
 
         let component_info_1 = ComponentInfo {
-            size_info: component_size_info_1.clone(),
+            size_info: component_size_info_1,
             coding_style_parameters: dummy_component_coding_style.clone(),
             quantization_info: dummy_quantization_info.clone(),
         };
@@ -513,9 +513,6 @@ mod tests {
         assert_eq!(size_data.num_x_tiles(), 4);
         assert_eq!(size_data.num_y_tiles(), 4);
         assert_eq!(size_data.num_tiles(), 16);
-
-        let component_0 = &size_data.component_sizes[0];
-        let component_1 = &size_data.component_sizes[1];
 
         let tile_0_0 = Tile::new(0, &size_data);
         let coords_0_0 = component_info_0.tile_component_rect(tile_0_0.rect);

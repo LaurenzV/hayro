@@ -187,8 +187,8 @@ fn bitmap_to_dynamic_image(bitmap: Bitmap) -> DynamicImage {
         let num_samples = channels.iter().map(|c| c.len()).min().unwrap();
 
         for sample_idx in 0..num_samples {
-            for channel_idx in 0..num_channels {
-                interleaved.push(channels[channel_idx][sample_idx]);
+            for channel in &channels {
+                interleaved.push(channel[sample_idx]);
             }
         }
 
