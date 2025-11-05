@@ -49,7 +49,7 @@ impl TagNode {
             level,
             value: 0,
             initialized: false,
-            children: vec![],
+            children: Vec::with_capacity(4),
         }
     }
 
