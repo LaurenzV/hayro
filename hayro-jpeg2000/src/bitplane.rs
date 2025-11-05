@@ -22,7 +22,7 @@ pub(crate) fn decode(
     sub_band_type: SubBandType,
     num_bitplanes: u16,
     style: &CodeBlockStyle,
-    ctx: &mut BitplaneDecodeContext,
+    ctx: &mut CodeBlockDecodeContext,
 ) -> Result<(), &'static str> {
     ctx.reset(code_block, sub_band_type);
 
@@ -67,7 +67,7 @@ fn decode_inner(
     code_block: &CodeBlock,
     num_bitplanes: u16,
     decoder: &mut impl BitDecoder,
-    ctx: &mut BitplaneDecodeContext,
+    ctx: &mut CodeBlockDecodeContext,
 ) -> Option<()> {
     for coding_pass in 0..code_block.number_of_coding_passes {
         enum PassType {
@@ -110,7 +110,7 @@ fn decode_inner(
     Some(())
 }
 
-pub(crate) struct BitplaneDecodeContext {
+pub(crate) struct CodeBlockDecodeContext {
     /// The signs of each coefficient.
     signs: Vec<u8>,
     /// The magnitude of each coefficient that is successively built as we advance through the
@@ -139,7 +139,7 @@ pub(crate) struct BitplaneDecodeContext {
     layer_buffer: Option<Vec<u8>>,
 }
 
-impl BitplaneDecodeContext {
+impl CodeBlockDecodeContext {
     pub(crate) fn new() -> Self {
         Self {
             signs: vec![],
@@ -291,7 +291,7 @@ impl BitplaneDecodeContext {
 
 /// Perform the cleanup pass, specified in D.3.4.
 /// See also the flow chart in Figure 7.3 in the JPEG2000 book.
-fn cleanup_pass(ctx: &mut BitplaneDecodeContext, decoder: &mut impl BitDecoder) -> Option<()> {
+fn cleanup_pass(ctx: &mut CodeBlockDecodeContext, decoder: &mut impl BitDecoder) -> Option<()> {
     let mut position_iterator = PositionIterator::new(ctx.width, ctx.height);
 
     loop {
@@ -368,7 +368,7 @@ fn cleanup_pass(ctx: &mut BitplaneDecodeContext, decoder: &mut impl BitDecoder) 
 ///
 /// See also the flow chart in Figure 7.4 in the JPEG2000 book.
 fn significance_propagation_pass(
-    ctx: &mut BitplaneDecodeContext,
+    ctx: &mut CodeBlockDecodeContext,
     decoder: &mut impl BitDecoder,
 ) -> Option<()> {
     let mut position_iterator = PositionIterator::new(ctx.width, ctx.height);
@@ -405,7 +405,7 @@ fn significance_propagation_pass(
 ///
 /// See also the flow chart in Figure 7.5 in the JPEG2000 book.
 fn magnitude_refinement_pass(
-    ctx: &mut BitplaneDecodeContext,
+    ctx: &mut CodeBlockDecodeContext,
     decoder: &mut impl BitDecoder,
 ) -> Option<()> {
     let mut position_iterator = PositionIterator::new(ctx.width, ctx.height);
@@ -427,10 +427,14 @@ fn magnitude_refinement_pass(
 }
 
 /// Decode a sign bit (Section D.3.2).
-fn decode_sign_bit(pos: &Position, ctx: &mut BitplaneDecodeContext, decoder: &mut impl BitDecoder) {
+fn decode_sign_bit(
+    pos: &Position,
+    ctx: &mut CodeBlockDecodeContext,
+    decoder: &mut impl BitDecoder,
+) {
     /// Based on Table D.2.
-    fn context_label_sign_coding(pos: &Position, ctx: &BitplaneDecodeContext) -> (u8, u8) {
-        fn neighbor_contribution(ctx: &BitplaneDecodeContext, x: i64, y: i64) -> i32 {
+    fn context_label_sign_coding(pos: &Position, ctx: &CodeBlockDecodeContext) -> (u8, u8) {
+        fn neighbor_contribution(ctx: &CodeBlockDecodeContext, x: i64, y: i64) -> i32 {
             let sigma = ctx.significance_state_checked(x, y);
 
             let multiplied = if ctx.sign_checked(x, y) == 0 { 1 } else { -1 };
@@ -466,7 +470,7 @@ fn decode_sign_bit(pos: &Position, ctx: &mut BitplaneDecodeContext, decoder: &mu
 }
 
 /// Return the context label for zero coding (Section D.3.1).
-fn context_label_zero_coding(pos: &Position, ctx: &BitplaneDecodeContext) -> u8 {
+fn context_label_zero_coding(pos: &Position, ctx: &CodeBlockDecodeContext) -> u8 {
     let mut horizontal = ctx.horizontal_significance_states(pos);
     let mut vertical = ctx.vertical_significance_states(pos);
     let diagonal = ctx.diagonal_significance_states(pos);
@@ -524,7 +528,7 @@ fn context_label_zero_coding(pos: &Position, ctx: &BitplaneDecodeContext) -> u8 
 }
 
 /// Return the context label for magnitude refinement coding (Table D.4).
-fn context_label_magnitude_refinement_coding(pos: &Position, ctx: &BitplaneDecodeContext) -> u8 {
+fn context_label_magnitude_refinement_coding(pos: &Position, ctx: &CodeBlockDecodeContext) -> u8 {
     if ctx.is_magnitude_refined(pos) {
         16
     } else {
@@ -639,14 +643,14 @@ impl BitDecoder for ArithmeticDecoder<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::{BitDecoder, BitplaneDecodeContext, PositionIterator, decode, decode_inner};
+    use super::{BitDecoder, CodeBlockDecodeContext, PositionIterator, decode, decode_inner};
     use crate::arithmetic_decoder::ArithmeticDecoderContext;
     use crate::codestream::CodeBlockStyle;
     use crate::packet::{CodeBlock, SubBandType};
     use crate::tile::IntRect;
     use hayro_common::bit::{BitReader, BitWriter};
 
-    impl BitplaneDecodeContext {
+    impl CodeBlockDecodeContext {
         fn coefficients(&self) -> Vec<i32> {
             let mut coefficients = vec![];
 
@@ -755,7 +759,7 @@ mod tests {
             l_block: 0,
         };
 
-        let mut ctx = BitplaneDecodeContext::new();
+        let mut ctx = CodeBlockDecodeContext::new();
         ctx.reset(&code_block, SubBandType::LowLow);
 
         decode_inner(&mut code_block, 3, &mut decoder, &mut ctx);
@@ -784,7 +788,7 @@ mod tests {
             l_block: 0,
         };
 
-        let mut ctx = BitplaneDecodeContext::new();
+        let mut ctx = CodeBlockDecodeContext::new();
 
         decode(
             &mut code_block,
@@ -816,7 +820,7 @@ mod tests {
             l_block: 0,
         };
 
-        let mut ctx = BitplaneDecodeContext::new();
+        let mut ctx = CodeBlockDecodeContext::new();
 
         decode(
             &mut code_block,
@@ -864,7 +868,7 @@ mod tests {
             l_block: 0,
         };
 
-        let mut ctx = BitplaneDecodeContext::new();
+        let mut ctx = CodeBlockDecodeContext::new();
 
         decode(
             &mut code_block,

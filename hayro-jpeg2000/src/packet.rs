@@ -1,5 +1,5 @@
 use crate::bitmap::ChannelData;
-use crate::bitplane::BitplaneDecodeContext;
+use crate::bitplane::CodeBlockDecodeContext;
 use crate::codestream::markers::{EPH, SOP};
 use crate::codestream::{
     ComponentInfo, Header, MultipleComponentTransform, ProgressionOrder, QuantizationStyle,
@@ -152,7 +152,7 @@ fn process_tile<'a>(
     // Create the context once and then reuse it so that we can reuse the
     // allocations.
     // TODO: Reuse across different tiles.
-    let mut b_ctx = BitplaneDecodeContext::new();
+    let mut c_ctx = CodeBlockDecodeContext::new();
 
     for (component_data, component_info) in
         component_data.iter_mut().zip(tile.component_info.iter())
@@ -161,12 +161,12 @@ fn process_tile<'a>(
             &mut component_data.first_ll_sub_band,
             0,
             component_info,
-            &mut b_ctx,
+            &mut c_ctx,
         )?;
 
         for (resolution, decomposition) in component_data.decompositions.iter_mut().enumerate() {
             for sub_band in &mut decomposition.sub_bands {
-                process_sub_band(sub_band, resolution as u16 + 1, component_info, &mut b_ctx)?;
+                process_sub_band(sub_band, resolution as u16 + 1, component_info, &mut c_ctx)?;
             }
         }
 
@@ -189,7 +189,7 @@ fn process_sub_band(
     sub_band: &mut SubBand,
     resolution: u16,
     component_info: &ComponentInfo,
-    b_ctx: &mut BitplaneDecodeContext,
+    b_ctx: &mut CodeBlockDecodeContext,
 ) -> Result<(), &'static str> {
     let dequantization_step =
         dequantization_factor(sub_band.sub_band_type, resolution, component_info);
