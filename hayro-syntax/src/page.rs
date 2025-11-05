@@ -50,7 +50,7 @@ impl<'a> Pages<'a> {
         let mut pages = vec![];
         let pages_ctx = PagesContext::new();
         resolve_pages(
-            &pages_dict,
+            pages_dict,
             &mut pages,
             pages_ctx,
             Resources::new(Dict::empty(), None, ctx),

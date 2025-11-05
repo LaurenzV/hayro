@@ -340,7 +340,7 @@ impl XRef {
                 let mut iter = elements.into_iter();
 
                 iter::from_fn(move || {
-                    while let Some(next) = iter.next() {
+                    for next in iter.by_ref() {
                         if let Some(obj) = self.get_with(next.0, &ReaderContext::new(self, false)) {
                             return Some(obj);
                         } else {
