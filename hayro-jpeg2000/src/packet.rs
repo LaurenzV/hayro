@@ -153,7 +153,7 @@ fn process_tile<'a>(
         .ok_or("failed to parse packet for tile")?;
     }
 
-    let mut samples = vec![];
+    let mut idw_output = vec![];
 
     // Create the context once and then reuse it so that we can reuse the
     // allocations.
@@ -184,10 +184,9 @@ fn process_tile<'a>(
             }
         }
 
-        let component_samples = idwt::apply(
+        let idwt_output = idwt::apply(
             &component_data.first_ll_subband,
             &component_data.decompositions,
-            tile.rect,
             component_info
                 .coding_style_parameters
                 .parameters
@@ -196,10 +195,10 @@ fn process_tile<'a>(
 
         // eprintln!("{:?}", component_samples.iter().map(|n| *n as i32).collect::<Vec<_>>());
 
-        samples.push(component_samples);
+        idw_output.push(idwt_output);
     }
 
-    Ok(samples)
+    Ok(idw_output)
 }
 
 fn process_sub_band(
@@ -297,14 +296,14 @@ fn save_samples<'a>(
     tile: &'a Tile<'a>,
     header: &Header,
     channels: &mut [ChannelData],
-    samples: &mut [IDWTOutput],
+    idwt_outputs: &mut [IDWTOutput],
 ) -> Option<()> {
     if header.global_coding_style.mct == MultipleComponentTransform::Used {
-        if samples.len() < 3 {
+        if idwt_outputs.len() < 3 {
             return None;
         }
 
-        let (s, _) = samples.split_at_mut(3);
+        let (s, _) = idwt_outputs.split_at_mut(3);
         let [s0, s1, s2] = s else { return None };
         let s0 = &mut s0.coefficients;
         let s1 = &mut s1.coefficients;
@@ -351,26 +350,42 @@ fn save_samples<'a>(
         }
     }
 
-    for ((samples, component_info), channel_data) in samples
+    for ((idwt_output, component_info), channel_data) in idwt_outputs
         .iter_mut()
         .zip(header.component_infos.iter())
         .zip(channels.iter_mut())
     {
-        for sample in samples.coefficients.iter_mut() {
+        for sample in idwt_output.coefficients.iter_mut() {
             *sample += (1 << (component_info.size_info.precision - 1)) as f32;
         }
 
-        let tile_x_offset = tile.rect.x0;
-        let tile_y_offset = tile.rect.y0;
+        // The rect of the IDWT output corresponds to the rect of the highest
+        // decomposition level of the tile, which is usually not 1:1 aligned
+        // with the actual tile rectangle. We also need to account for the
+        // offset of the reference grid.
 
-        for y in tile_y_offset..(tile_y_offset + tile.rect.height()) {
-            let output = &mut channel_data.container
-                [(y * header.size_data.reference_grid_width + tile_x_offset) as usize..]
-                [..tile.rect.width() as usize];
-            let input = &samples.coefficients[((y - tile_y_offset) * tile.rect.width()) as usize..]
-                [..tile.rect.width() as usize];
+        let skip_x = tile.rect.x0 - idwt_output.rect.x0;
+        let skip_y = tile.rect.y0 - idwt_output.rect.y0;
+        let take_x = tile.rect.width();
+        let take_y = tile.rect.height();
 
-            output.copy_from_slice(input);
+        let input_row_iter = idwt_output
+            .coefficients
+            .chunks_exact(idwt_output.rect.width() as usize)
+            .skip(skip_y as usize)
+            .take(take_y as usize);
+
+        let output_row_iter = channel_data
+            .container
+            .chunks_exact_mut(header.size_data.reference_grid_width as usize)
+            .skip(tile.rect.y0 as usize)
+            .take(take_y as usize);
+
+        for (input_row, output_row) in input_row_iter.zip(output_row_iter) {
+            let input_row = &input_row[skip_x as usize..][..take_x as usize];
+            let output_row = &mut output_row[tile.rect.x0 as usize..][..take_x as usize];
+
+            output_row.copy_from_slice(input_row);
         }
     }
 

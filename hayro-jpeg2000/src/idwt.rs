@@ -29,7 +29,6 @@ pub(crate) fn apply(
     ll_subband: &SubBand,
     // All decomposition level that make up the tile.
     decompositions: &[Decomposition],
-    tile_rect: IntRect,
     transform: WaveletTransform,
 ) -> IDWTOutput {
     if decompositions.is_empty() {
@@ -57,26 +56,7 @@ pub(crate) fn apply(
         );
     }
 
-    let mut trimmed_coefficients = Vec::with_capacity(output.coefficients.len());
-
-    let skip_y = tile_rect.y0 - output.rect.y0;
-    let take_y = tile_rect.height();
-    let skip_x = tile_rect.x0 - output.rect.x0;
-    let take_x = tile_rect.width();
-
-    for row in output
-        .coefficients
-        .chunks_exact(output.rect.width() as usize)
-        .skip(skip_y as usize)
-        .take(take_y as usize)
-    {
-        trimmed_coefficients.extend(&row[skip_x as usize..][..take_x as usize])
-    }
-
-    IDWTOutput {
-        coefficients: trimmed_coefficients,
-        rect: tile_rect,
-    }
+    output
 }
 
 struct IDWTInput<'a> {
@@ -107,7 +87,7 @@ impl<'a> IDWTInput<'a> {
 
 /// The 2D_INTERLEAVE procedure described in F.3.3.
 fn filter_2d(
-    // The LL subband.
+    // The LL sub band.
     input: IDWTInput,
     decomposition: &Decomposition,
     transform: WaveletTransform,
