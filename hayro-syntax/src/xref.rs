@@ -324,9 +324,16 @@ impl XRef {
                     .iter()
                     .map(|(id, e)| {
                         let offset = match e {
-                            EntryType::Normal(o) => *o,
-                            // TODO: Maybe sort by offset of the stream itself.
-                            EntryType::ObjStream(_, _) => usize::MAX,
+                            EntryType::Normal(o) => (*o, 0),
+                            EntryType::ObjStream(id, index) => {
+                                if let Some(EntryType::Normal(offset)) =
+                                    locked.xref_map.get(&ObjectIdentifier::new(*id as i32, 0))
+                                {
+                                    (*offset, *index)
+                                } else {
+                                    (usize::MAX, 0)
+                                }
+                            }
                         };
 
                         (*id, offset)
