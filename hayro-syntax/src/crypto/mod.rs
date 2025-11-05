@@ -283,8 +283,12 @@ impl DecryptorData {
             }
         }
 
-        let stm_f = *mappings.get(dict.get::<Name>(STM_F)?.as_str())?;
-        let str_f = *mappings.get(dict.get::<Name>(STR_F)?.as_str())?;
+        let stm_f = *mappings
+            .get(dict.get::<Name>(STM_F)?.as_str())
+            .unwrap_or(&CryptDictionary::identity(default_length));
+        let str_f = *mappings
+            .get(dict.get::<Name>(STR_F)?.as_str())
+            .unwrap_or(&CryptDictionary::identity(default_length));
 
         Some(Self {
             stream_filter: stm_f,
@@ -320,6 +324,13 @@ impl CryptDictionary {
             cfm,
             _length: length,
         })
+    }
+
+    fn identity(default_length: u16) -> CryptDictionary {
+        Self {
+            cfm: DecryptorTag::None,
+            _length: default_length,
+        }
     }
 }
 
