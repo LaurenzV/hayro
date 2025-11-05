@@ -10,6 +10,9 @@ use crate::packet::BitReaderExt;
 use hayro_common::bit::BitReader;
 use log::warn;
 
+// TODO: Can we change the architecture so that we don't need to reallocate
+// for each new tag tree but instead reuse existing allocations?
+
 #[derive(Debug, PartialEq, Eq, Clone, Default)]
 pub(crate) struct TagNode {
     /// The width of the area covered by the node.
