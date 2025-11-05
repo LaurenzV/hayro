@@ -64,7 +64,6 @@ pub(crate) struct CodeBlock<'a> {
     pub(crate) missing_bit_planes: u8,
     pub(crate) number_of_coding_passes: u32,
     pub(crate) l_block: u32,
-    pub(crate) coefficients: Vec<i16>,
 }
 
 pub(crate) fn process_tiles(
@@ -215,23 +214,33 @@ fn process_sub_band(
                 b_ctx,
             )?;
 
-            // Copy the coefficients into the sub-band.
+            // Turn the signs and magnitudes into singular coefficients and
+            // copy them into the sub-band.
 
             let x_offset = codeblock.rect.x0 - sub_band.rect.x0;
             let y_offset = codeblock.rect.y0 - sub_band.rect.y0;
 
-            for (y, in_row) in codeblock
-                .coefficients
-                .chunks_exact(codeblock.rect.width() as usize)
-                .enumerate()
-            {
+            let sign_iter = b_ctx.signs().chunks_exact(codeblock.rect.width() as usize);
+            let magnitude_iter = b_ctx
+                .magnitudes()
+                .chunks_exact(codeblock.rect.width() as usize);
+
+            for (y, (signs, magnitudes)) in sign_iter.zip(magnitude_iter).enumerate() {
                 let out_row = &mut sub_band.coefficients[((y_offset + y as u32)
                     * sub_band.rect.width())
                     as usize
                     + x_offset as usize..];
 
-                for (input, output) in in_row.iter().zip(out_row.iter_mut()) {
-                    *output = *input as f32;
+                for ((output, sign), magnitude) in out_row
+                    .iter_mut()
+                    .zip(signs.iter().copied())
+                    .zip(magnitudes.iter().copied())
+                {
+                    *output = magnitude.get() as f32;
+
+                    if sign != 0 {
+                        *output = -*output;
+                    }
 
                     if let Some(q) = dequantization_step {
                         *output *= q;
@@ -827,7 +836,6 @@ fn build_precinct_code_blocks(
                 missing_bit_planes: 0,
                 l_block: 3,
                 number_of_coding_passes: 0,
-                coefficients: vec![],
             });
 
             x += code_block_width;
