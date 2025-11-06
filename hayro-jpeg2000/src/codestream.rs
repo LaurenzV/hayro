@@ -23,7 +23,7 @@ pub(crate) fn read(stream: &[u8]) -> Result<(Header, Vec<ChannelData>), &'static
 #[derive(Debug)]
 pub(crate) struct Header {
     pub(crate) size_data: SizeData,
-    pub(crate) global_coding_style: GlobalCodingStyleInfo,
+    pub(crate) global_coding_style: CodingStyleDefault,
     pub(crate) component_infos: Vec<ComponentInfo>,
 }
 
@@ -103,6 +103,122 @@ fn read_header(reader: &mut Reader) -> Result<Header, &'static str> {
         global_coding_style: cod.clone(),
         component_infos,
     })
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ComponentInfo {
+    pub(crate) size_info: ComponentSizeInfo,
+    pub(crate) coding_style_parameters: CodingStyleComponent,
+    pub(crate) quantization_info: QuantizationInfo,
+}
+
+impl ComponentInfo {
+    /// Return the coordinates of the rectangle scaled by the horizontal and vertical
+    /// resolution of the component.
+    pub(crate) fn tile_component_rect(&self, tile_rect: IntRect) -> IntRect {
+        if self.size_info.horizontal_resolution == 1 && self.size_info.vertical_resolution == 1 {
+            tile_rect
+        } else {
+            // As described in B-12.
+            let t_x0 = tile_rect
+                .x0
+                .div_ceil(self.size_info.horizontal_resolution as u32);
+            let t_y0 = tile_rect
+                .y0
+                .div_ceil(self.size_info.vertical_resolution as u32);
+            let t_x1 = tile_rect
+                .x1
+                .div_ceil(self.size_info.horizontal_resolution as u32);
+            let t_y1 = tile_rect
+                .y1
+                .div_ceil(self.size_info.vertical_resolution as u32);
+
+            IntRect::from_ltrb(t_x0, t_y0, t_x1, t_y1)
+        }
+    }
+
+    pub(crate) fn exponent_mantissa(
+        &self,
+        sub_band_type: SubBandType,
+        resolution: u16,
+    ) -> (u16, u16) {
+        let n_ll = self
+            .coding_style_parameters
+            .parameters
+            .num_decomposition_levels;
+
+        let sb_index = match sub_band_type {
+            // TODO: Shouldn't be reached.
+            SubBandType::LowLow => u16::MAX,
+            SubBandType::HighLow => 0,
+            SubBandType::LowHigh => 1,
+            SubBandType::HighHigh => 2,
+        };
+
+        let step_sizes = &self.quantization_info.step_sizes;
+        match self.quantization_info.quantization_style {
+            QuantizationStyle::NoQuantization | QuantizationStyle::ScalarExpounded => {
+                let entry = if resolution == 0 {
+                    step_sizes[0]
+                } else {
+                    step_sizes[(1 + (resolution - 1) * 3 + sb_index) as usize]
+                };
+
+                (entry.exponent, entry.mantissa)
+            }
+            QuantizationStyle::ScalarDerived => {
+                let e_0 = step_sizes[0].exponent;
+                let mantissa = step_sizes[0].mantissa;
+                let n_b = if resolution == 0 {
+                    n_ll
+                } else {
+                    n_ll + 1 - resolution
+                };
+
+                (e_0 - n_ll + n_b, mantissa)
+            }
+        }
+    }
+
+    pub(crate) fn tile_instance<'a>(
+        &'a self,
+        tile: &Tile<'_>,
+        resolution: u16,
+    ) -> TileInstance<'a> {
+        // See formula B-14.
+        let r = resolution;
+        let n_l = self
+            .coding_style_parameters
+            .parameters
+            .num_decomposition_levels;
+        let tile_component_rect = self.tile_component_rect(tile.rect);
+
+        let tx0 = tile_component_rect
+            .x0
+            .div_ceil(2u32.pow(n_l as u32 - r as u32));
+        let ty0 = tile_component_rect
+            .y0
+            .div_ceil(2u32.pow(n_l as u32 - r as u32));
+        let tx1 = tile_component_rect
+            .x1
+            .div_ceil(2u32.pow(n_l as u32 - r as u32));
+        let ty1 = tile_component_rect
+            .y1
+            .div_ceil(2u32.pow(n_l as u32 - r as u32));
+
+        let resolution_transformed_rect = IntRect::from_ltrb(tx0, ty0, tx1, ty1);
+
+        TileInstance {
+            resolution,
+            component_info: self,
+            tile_component_rect,
+            resolution_transformed_rect,
+        }
+    }
+
+    pub(crate) fn wavelet_transform(&self) -> WaveletTransform {
+        self.coding_style_parameters.parameters.transformation
+    }
 }
 
 /// Progression order (Table A.16).
@@ -229,18 +345,6 @@ impl QuantizationStyle {
     }
 }
 
-/// Common coding style parameters (A.6.1 and A.6.2).
-#[derive(Clone, Debug)]
-pub(crate) struct CodingStyleParameters {
-    pub(crate) num_decomposition_levels: u16,
-    pub(crate) num_resolution_levels: u16,
-    pub(crate) code_block_width: u8,
-    pub(crate) code_block_height: u8,
-    pub(crate) code_block_style: CodeBlockStyle,
-    pub(crate) transformation: WaveletTransform,
-    pub(crate) precinct_exponents: Vec<(u8, u8)>,
-}
-
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct StepSize {
     pub(crate) mantissa: u16,
@@ -255,21 +359,33 @@ pub(crate) struct QuantizationInfo {
     pub(crate) step_sizes: Vec<StepSize>,
 }
 
-/// Default values for coding style (A.6.1).
+/// Default values for coding style, from the COD marker (A.6.1).
 #[derive(Debug, Clone)]
-pub(crate) struct GlobalCodingStyleInfo {
+pub(crate) struct CodingStyleDefault {
     pub(crate) progression_order: ProgressionOrder,
     pub(crate) num_layers: u16,
     pub(crate) mct: MultipleComponentTransform,
     // This is the default used for all components, if not overridden by COC.
-    pub(crate) component_parameters: ComponentCodingStyle,
+    pub(crate) component_parameters: CodingStyleComponent,
 }
 
-/// Values of coding style for each component (A.6.2).
+/// Values of coding style for each component, from the COC marker (A.6.2).
 #[derive(Clone, Debug)]
-pub(crate) struct ComponentCodingStyle {
+pub(crate) struct CodingStyleComponent {
     pub(crate) flags: CodingStyleFlags,
     pub(crate) parameters: CodingStyleParameters,
+}
+
+/// Shared parameters between the COC and COD marker (A.6.1 and A.6.2).
+#[derive(Clone, Debug)]
+pub(crate) struct CodingStyleParameters {
+    pub(crate) num_decomposition_levels: u16,
+    pub(crate) num_resolution_levels: u16,
+    pub(crate) code_block_width: u8,
+    pub(crate) code_block_height: u8,
+    pub(crate) code_block_style: CodeBlockStyle,
+    pub(crate) transformation: WaveletTransform,
+    pub(crate) precinct_exponents: Vec<(u8, u8)>,
 }
 
 #[derive(Debug)]
@@ -343,122 +459,6 @@ pub(crate) struct ComponentSizeInfo {
     pub(crate) _is_signed: bool,
     pub(crate) horizontal_resolution: u8,
     pub(crate) vertical_resolution: u8,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct ComponentInfo {
-    pub(crate) size_info: ComponentSizeInfo,
-    pub(crate) coding_style_parameters: ComponentCodingStyle,
-    pub(crate) quantization_info: QuantizationInfo,
-}
-
-impl ComponentInfo {
-    /// Return the coordinates of the rectangle scaled by the horizontal and vertical
-    /// resolution of the component.
-    pub(crate) fn tile_component_rect(&self, tile_rect: IntRect) -> IntRect {
-        if self.size_info.horizontal_resolution == 1 && self.size_info.vertical_resolution == 1 {
-            tile_rect
-        } else {
-            // As described in B-12.
-            let t_x0 = tile_rect
-                .x0
-                .div_ceil(self.size_info.horizontal_resolution as u32);
-            let t_y0 = tile_rect
-                .y0
-                .div_ceil(self.size_info.vertical_resolution as u32);
-            let t_x1 = tile_rect
-                .x1
-                .div_ceil(self.size_info.horizontal_resolution as u32);
-            let t_y1 = tile_rect
-                .y1
-                .div_ceil(self.size_info.vertical_resolution as u32);
-
-            IntRect::from_ltrb(t_x0, t_y0, t_x1, t_y1)
-        }
-    }
-
-    pub(crate) fn exponent_mantissa(
-        &self,
-        sub_band_type: SubBandType,
-        resolution: u16,
-    ) -> (u16, u16) {
-        let n_ll = self
-            .coding_style_parameters
-            .parameters
-            .num_decomposition_levels;
-
-        let sb_index = match sub_band_type {
-            // TODO: Shouldn't be reached.
-            SubBandType::LowLow => u16::MAX,
-            SubBandType::HighLow => 0,
-            SubBandType::LowHigh => 1,
-            SubBandType::HighHigh => 2,
-        };
-
-        let step_sizes = &self.quantization_info.step_sizes;
-        match self.quantization_info.quantization_style {
-            QuantizationStyle::NoQuantization | QuantizationStyle::ScalarExpounded => {
-                let entry = if resolution == 0 {
-                    step_sizes[0]
-                } else {
-                    step_sizes[(1 + (resolution - 1) * 3 + sb_index) as usize]
-                };
-
-                (entry.exponent, entry.mantissa)
-            }
-            QuantizationStyle::ScalarDerived => {
-                let e_0 = step_sizes[0].exponent;
-                let mantissa = step_sizes[0].mantissa;
-                let n_b = if resolution == 0 {
-                    n_ll
-                } else {
-                    n_ll + 1 - resolution
-                };
-
-                (e_0 - n_ll + n_b, mantissa)
-            }
-        }
-    }
-
-    pub(crate) fn tile_instance<'a>(
-        &'a self,
-        tile: &Tile<'_>,
-        resolution: u16,
-    ) -> TileInstance<'a> {
-        // See formula B-14.
-        let r = resolution;
-        let n_l = self
-            .coding_style_parameters
-            .parameters
-            .num_decomposition_levels;
-        let tile_component_rect = self.tile_component_rect(tile.rect);
-
-        let tx0 = tile_component_rect
-            .x0
-            .div_ceil(2u32.pow(n_l as u32 - r as u32));
-        let ty0 = tile_component_rect
-            .y0
-            .div_ceil(2u32.pow(n_l as u32 - r as u32));
-        let tx1 = tile_component_rect
-            .x1
-            .div_ceil(2u32.pow(n_l as u32 - r as u32));
-        let ty1 = tile_component_rect
-            .y1
-            .div_ceil(2u32.pow(n_l as u32 - r as u32));
-
-        let resolution_transformed_rect = IntRect::from_ltrb(tx0, ty0, tx1, ty1);
-
-        TileInstance {
-            resolution,
-            component_info: self,
-            tile_component_rect,
-            resolution_transformed_rect,
-        }
-    }
-
-    pub(crate) fn wavelet_transform(&self) -> WaveletTransform {
-        self.coding_style_parameters.parameters.transformation
-    }
 }
 
 impl SizeData {
@@ -652,7 +652,7 @@ pub(crate) fn skip_marker_segment(reader: &mut Reader) -> Option<()> {
 }
 
 /// COD marker (A.6.1).
-pub(crate) fn cod_marker(reader: &mut Reader) -> Option<GlobalCodingStyleInfo> {
+pub(crate) fn cod_marker(reader: &mut Reader) -> Option<CodingStyleDefault> {
     // Length.
     let _ = reader.read_u16()?;
 
@@ -664,11 +664,11 @@ pub(crate) fn cod_marker(reader: &mut Reader) -> Option<GlobalCodingStyleInfo> {
 
     let coding_style_parameters = coding_style_parameters(reader, &coding_style_flags)?;
 
-    Some(GlobalCodingStyleInfo {
+    Some(CodingStyleDefault {
         progression_order,
         num_layers,
         mct,
-        component_parameters: ComponentCodingStyle {
+        component_parameters: CodingStyleComponent {
             flags: coding_style_flags,
             parameters: coding_style_parameters,
         },
@@ -676,7 +676,7 @@ pub(crate) fn cod_marker(reader: &mut Reader) -> Option<GlobalCodingStyleInfo> {
 }
 
 /// COC marker (A.6.2).
-pub(crate) fn coc_marker(reader: &mut Reader, csiz: u16) -> Option<(u16, ComponentCodingStyle)> {
+pub(crate) fn coc_marker(reader: &mut Reader, csiz: u16) -> Option<(u16, CodingStyleComponent)> {
     // Length.
     let _ = reader.read_u16()?;
 
@@ -690,7 +690,7 @@ pub(crate) fn coc_marker(reader: &mut Reader, csiz: u16) -> Option<(u16, Compone
     // Read SPcoc - coding style parameters (same structure as SPcod from COD)
     let parameters = coding_style_parameters(reader, &coding_style)?;
 
-    let coc = ComponentCodingStyle {
+    let coc = CodingStyleComponent {
         flags: coding_style,
         parameters,
     };
