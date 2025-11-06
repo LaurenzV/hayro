@@ -14,6 +14,7 @@ mod codestream;
 pub(crate) mod idwt;
 mod packet;
 mod progression;
+pub(crate) mod rect;
 mod tag_tree;
 mod tile;
 

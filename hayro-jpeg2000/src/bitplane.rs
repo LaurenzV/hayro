@@ -657,7 +657,7 @@ mod tests {
     use crate::arithmetic_decoder::ArithmeticDecoderContext;
     use crate::codestream::CodeBlockStyle;
     use crate::packet::{CodeBlock, SubBandType};
-    use crate::tile::IntRect;
+    use crate::rect::IntRect;
     use hayro_common::bit::{BitReader, BitWriter};
 
     impl CodeBlockDecodeContext {

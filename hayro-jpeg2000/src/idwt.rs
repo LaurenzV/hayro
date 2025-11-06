@@ -2,7 +2,7 @@
 
 use crate::codestream::WaveletTransform;
 use crate::packet::{Decomposition, SubBand, SubBandType};
-use crate::tile::IntRect;
+use crate::rect::IntRect;
 use std::iter;
 
 /// The amount of padding to apply to a single scanline to make filtering at

@@ -5,7 +5,8 @@
 //! determines in which order the data appears in the codestream.
 
 use crate::codestream::ComponentInfo;
-use crate::tile::{IntRect, Tile, TileInstance};
+use crate::rect::IntRect;
+use crate::tile::{Tile, TileInstance};
 
 #[derive(Default, Copy, Clone, Debug)]
 pub(crate) struct ProgressionData {

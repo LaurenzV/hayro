@@ -1,6 +1,7 @@
 use crate::bitmap::ChannelData;
 use crate::packet::{SubBandType, process_tiles};
-use crate::tile::{IntRect, Tile, TileInstance, read_tiles};
+use crate::rect::IntRect;
+use crate::tile::{Tile, TileInstance, read_tiles};
 use hayro_common::byte::Reader;
 
 pub(crate) fn read(stream: &[u8]) -> Result<(Header, Vec<ChannelData>), &'static str> {

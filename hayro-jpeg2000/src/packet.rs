@@ -13,8 +13,9 @@ use crate::progression::{
     build_resolution_layer_component_position_sequence,
     build_resolution_position_component_layer_sequence,
 };
+use crate::rect::IntRect;
 use crate::tag_tree::TagTree;
-use crate::tile::{IntRect, Tile, TileInstance, TilePart};
+use crate::tile::{Tile, TileInstance, TilePart};
 use crate::{bitplane, idwt};
 use hayro_common::bit::BitReader;
 use hayro_common::byte::Reader;
