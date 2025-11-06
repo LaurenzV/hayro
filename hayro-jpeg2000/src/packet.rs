@@ -2,8 +2,7 @@ use crate::bitmap::ChannelData;
 use crate::bitplane::CodeBlockDecodeContext;
 use crate::codestream::markers::{EPH, SOP};
 use crate::codestream::{
-    ComponentInfo, Header, MultipleComponentTransform, ProgressionOrder, QuantizationStyle,
-    ReaderExt, WaveletTransform,
+    ComponentInfo, Header, ProgressionOrder, QuantizationStyle, ReaderExt, WaveletTransform,
 };
 use crate::idwt::IDWTOutput;
 use crate::progression::{
@@ -287,7 +286,7 @@ fn save_samples<'a>(
     channels: &mut [ChannelData],
     idwt_outputs: &mut [IDWTOutput],
 ) -> Option<()> {
-    if header.global_coding_style.mct == MultipleComponentTransform::Used {
+    if header.global_coding_style.mct {
         if idwt_outputs.len() < 3 {
             return None;
         }

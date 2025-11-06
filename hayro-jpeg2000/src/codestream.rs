@@ -244,23 +244,6 @@ impl ProgressionOrder {
     }
 }
 
-/// Multiple component transformation type (Table A.17).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum MultipleComponentTransform {
-    None,
-    Used,
-}
-
-impl MultipleComponentTransform {
-    fn from_u8(value: u8) -> Result<Self, &'static str> {
-        match value {
-            0 => Ok(MultipleComponentTransform::None),
-            1 => Ok(MultipleComponentTransform::Used),
-            _ => Err("invalid MCT value"),
-        }
-    }
-}
-
 /// Wavelet transformation type (Table A.20).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum WaveletTransform {
@@ -364,7 +347,7 @@ pub(crate) struct QuantizationInfo {
 pub(crate) struct CodingStyleDefault {
     pub(crate) progression_order: ProgressionOrder,
     pub(crate) num_layers: u16,
-    pub(crate) mct: MultipleComponentTransform,
+    pub(crate) mct: bool,
     // This is the default used for all components, if not overridden by COC.
     pub(crate) component_parameters: CodingStyleComponent,
 }
@@ -660,7 +643,7 @@ pub(crate) fn cod_marker(reader: &mut Reader) -> Option<CodingStyleDefault> {
     let progression_order = ProgressionOrder::from_u8(reader.read_byte()?).ok()?;
 
     let num_layers = reader.read_u16()?;
-    let mct = MultipleComponentTransform::from_u8(reader.read_byte()?).ok()?;
+    let mct = reader.read_byte()? == 1;
 
     let coding_style_parameters = coding_style_parameters(reader, &coding_style_flags)?;
 

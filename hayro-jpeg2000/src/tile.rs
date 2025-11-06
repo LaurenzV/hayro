@@ -372,7 +372,7 @@ fn sot_marker(reader: &mut Reader) -> Option<TilePartHeader> {
 mod tests {
     use super::*;
     use crate::codestream::{
-        CodeBlockStyle, CodingStyleFlags, CodingStyleParameters, ComponentCodingStyle,
+        CodeBlockStyle, CodingStyleComponent, CodingStyleFlags, CodingStyleParameters,
         ComponentSizeInfo, QuantizationInfo, QuantizationStyle, WaveletTransform,
     };
 
@@ -386,7 +386,7 @@ mod tests {
             vertical_resolution: 1,
         };
 
-        let dummy_component_coding_style = ComponentCodingStyle {
+        let dummy_component_coding_style = CodingStyleComponent {
             flags: CodingStyleFlags::default(),
             parameters: CodingStyleParameters {
                 num_decomposition_levels: 0,
