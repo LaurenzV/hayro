@@ -5,7 +5,7 @@ use hayro_common::byte::Reader;
 
 #[derive(Clone, Debug)]
 pub(crate) struct Tile<'a> {
-    tile_part_infos: Vec<TilePartInfo<'a>>,
+    pub(crate) tile_parts: Vec<TilePart<'a>>,
     pub(crate) component_info: Vec<ComponentInfo>,
     pub(crate) rect: IntRect,
 }
@@ -15,27 +15,60 @@ impl<'a> Tile<'a> {
         let raw_coords = size_data.tile_coords(idx);
 
         Tile {
-            tile_part_infos: vec![],
+            tile_parts: vec![],
             component_info: vec![],
             rect: raw_coords,
         }
     }
-
-    pub(crate) fn tile_parts(&self) -> impl Iterator<Item = TilePart<'_>> {
-        self.tile_part_infos
-            .iter()
-            .map(|t| TilePart { data: t.data })
-    }
-}
-
-#[derive(Clone, Debug)]
-pub(crate) struct TilePartInfo<'a> {
-    pub(crate) data: &'a [u8],
 }
 
 #[derive(Clone, Debug)]
 pub(crate) struct TilePart<'a> {
     pub(crate) data: &'a [u8],
+}
+
+pub(crate) fn read_tiles<'a>(
+    reader: &mut Reader<'a>,
+    main_header: &'a Header,
+) -> Result<Vec<Tile<'a>>, &'static str> {
+    let parsed_tile_parts = {
+        let mut buf = vec![];
+        read_tile_part(reader, main_header, &mut buf)?;
+
+        while reader.peek_marker() == Some(markers::SOT) {
+            read_tile_part(reader, main_header, &mut buf)?;
+        }
+
+        if reader.read_marker()? != markers::EOC {
+            return Err("invalid marker: expected EOC marker");
+        }
+
+        buf.sort_by(|t1, t2| {
+            (t1.tile_index, t1.tile_part_index).cmp(&(t2.tile_index, t2.tile_part_index))
+        });
+
+        buf
+    };
+
+    let mut tiles = (0..main_header.size_data.num_tiles() as usize)
+        .map(|idx| Tile::new(idx as u32, &main_header.size_data))
+        .collect::<Vec<_>>();
+
+    for tile_part in parsed_tile_parts {
+        let cur_tile = tiles
+            .get_mut(tile_part.tile_index as usize)
+            .ok_or("tile part had invalid tile index")?;
+
+        if tile_part.tile_part_index == 0 {
+            cur_tile.component_info = tile_part.component_infos.clone();
+        }
+
+        cur_tile.tile_parts.push(TilePart {
+            data: tile_part.data,
+        });
+    }
+
+    Ok(tiles)
 }
 
 pub(crate) struct TileInstance<'a> {
@@ -168,50 +201,6 @@ impl<'a> TileInstance<'a> {
 
         2u32.pow(ycb as u32)
     }
-}
-
-pub(crate) fn read_tiles<'a>(
-    reader: &mut Reader<'a>,
-    main_header: &'a Header,
-) -> Result<Vec<Tile<'a>>, &'static str> {
-    let parsed_tile_parts = {
-        let mut buf = vec![];
-        read_tile_part(reader, main_header, &mut buf)?;
-
-        while reader.peek_marker() == Some(markers::SOT) {
-            read_tile_part(reader, main_header, &mut buf)?;
-        }
-
-        if reader.read_marker()? != markers::EOC {
-            return Err("invalid marker: expected EOC marker");
-        }
-
-        buf.sort_by(|t1, t2| {
-            (t1.tile_index, t1.tile_part_index).cmp(&(t2.tile_index, t2.tile_part_index))
-        });
-
-        buf
-    };
-
-    let mut tiles = (0..main_header.size_data.num_tiles() as usize)
-        .map(|idx| Tile::new(idx as u32, &main_header.size_data))
-        .collect::<Vec<_>>();
-
-    for tile_part in parsed_tile_parts {
-        let cur_tile = tiles
-            .get_mut(tile_part.tile_index as usize)
-            .ok_or("tile part had invalid tile index")?;
-
-        if tile_part.tile_part_index == 0 {
-            cur_tile.component_info = tile_part.component_infos.clone();
-        }
-
-        cur_tile.tile_part_infos.push(TilePartInfo {
-            data: tile_part.data,
-        });
-    }
-
-    Ok(tiles)
 }
 
 struct ParsedTilePart<'a> {
@@ -371,13 +360,13 @@ fn read_tile_part<'a>(
     Ok(())
 }
 
-pub(crate) struct TilePartHeader {
+struct TilePartHeader {
     tile_index: u16,
     tile_part_length: u32,
 }
 
 /// SOT marker (A.4.2).
-pub(crate) fn sot_marker(reader: &mut Reader) -> Option<TilePartHeader> {
+fn sot_marker(reader: &mut Reader) -> Option<TilePartHeader> {
     // Length.
     let _ = reader.read_u16()?;
 

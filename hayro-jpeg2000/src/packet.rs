@@ -138,7 +138,7 @@ fn process_tile<'a>(
 ) -> Result<Vec<IDWTOutput>, &'static str> {
     let mut component_data = build_component_data(tile, header)?;
 
-    for tile_part in tile.tile_parts() {
+    for tile_part in &tile.tile_parts {
         parse_packet(
             &tile_part,
             header,
