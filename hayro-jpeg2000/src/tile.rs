@@ -294,25 +294,10 @@ fn read_tile_part<'a>(
                 qcd_components[component_index as usize] = Some(qcc);
             }
             markers::EOC => break,
-            markers::RGN => {
-                tile_part_reader.read_marker()?;
-                let length = tile_part_reader
-                    .read_u16()
-                    .ok_or("failed to read RGN marker length")?;
-                let payload = length
-                    .checked_sub(2)
-                    .ok_or("RGN marker length shorter than header")?
-                    as usize;
-                tile_part_reader
-                    .skip_bytes(payload)
-                    .ok_or("failed to skip RGN payload")?;
-            }
-            markers::PLT => {
-                tile_part_reader.read_marker()?;
-                skip_marker_segment(&mut tile_part_reader).ok_or("failed to skip PLT marker")?;
-            }
             _ => {
-                return Err("unsupported tile-part marker encountered");
+                tile_part_reader.read_marker()?;
+                skip_marker_segment(&mut tile_part_reader)
+                    .ok_or("failed to skip a marker during tile part parsing")?;
             }
         }
     }
