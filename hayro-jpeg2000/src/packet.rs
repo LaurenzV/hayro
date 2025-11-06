@@ -14,7 +14,7 @@ use crate::progression::{
 };
 use crate::rect::IntRect;
 use crate::tag_tree::TagTree;
-use crate::tile::{Tile, TileInstance, TilePart};
+use crate::tile::{Tile, TileInstance};
 use crate::{bitplane, idwt};
 use hayro_common::bit::BitReader;
 use hayro_common::byte::Reader;
@@ -155,7 +155,7 @@ fn process_tile<'a>(
     let mut c_ctx = CodeBlockDecodeContext::new();
 
     for (component_data, component_info) in
-        component_data.iter_mut().zip(tile.component_info.iter())
+        component_data.iter_mut().zip(tile.component_infos.iter())
     {
         process_sub_band(
             &mut component_data.first_ll_sub_band,
@@ -173,10 +173,7 @@ fn process_tile<'a>(
         let idwt_output = idwt::apply(
             &component_data.first_ll_sub_band,
             &component_data.decompositions,
-            component_info
-                .coding_style_parameters
-                .parameters
-                .transformation,
+            component_info.coding_style.parameters.transformation,
         );
 
         idw_output.push(idwt_output);
@@ -207,10 +204,7 @@ fn process_sub_band(
                 codeblock,
                 sub_band.sub_band_type,
                 num_bitplanes,
-                &component_info
-                    .coding_style_parameters
-                    .parameters
-                    .code_block_style,
+                &component_info.coding_style.parameters.code_block_style,
                 b_ctx,
             )?;
 
@@ -381,12 +375,12 @@ fn save_samples<'a>(
 }
 
 fn parse_packet<'a>(
-    tile: &TilePart<'a>,
+    tile_part_data: &'a [u8],
     header: &Header,
     component_data: &mut [ComponentData<'a>],
     mut progression_iterator: impl Iterator<Item = ProgressionData>,
 ) -> Option<()> {
-    let mut data = tile.data;
+    let mut data = tile_part_data;
 
     while !data.is_empty() {
         if header
@@ -619,21 +613,17 @@ fn build_component_data(
 ) -> Result<Vec<ComponentData<'static>>, &'static str> {
     let mut component_data = vec![];
 
-    for (component_idx, component_info) in tile.component_info.iter().enumerate() {
+    for (component_idx, component_info) in tile.component_infos.iter().enumerate() {
         // TODO: IMprove this
         let mut ll_sub_band = None;
         let mut decompositions = vec![];
 
-        for resolution in 0..component_info
-            .coding_style_parameters
-            .parameters
-            .num_resolution_levels
-        {
+        for resolution in 0..component_info.coding_style.parameters.num_resolution_levels {
             let tile_instance = component_info.tile_instance(tile, resolution);
 
             if resolution == 0 {
                 let decomposition_level = component_info
-                    .coding_style_parameters
+                    .coding_style
                     .parameters
                     .num_decomposition_levels;
                 let rect = tile_instance.sub_band_rect(SubBandType::LowLow, decomposition_level);
@@ -660,7 +650,7 @@ fn build_component_data(
                 })
             } else {
                 let decomposition_level = component_info
-                    .coding_style_parameters
+                    .coding_style
                     .parameters
                     .num_decomposition_levels
                     - (resolution - 1);

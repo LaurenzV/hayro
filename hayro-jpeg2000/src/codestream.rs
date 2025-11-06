@@ -1,7 +1,7 @@
 use crate::bitmap::ChannelData;
 use crate::packet::{SubBandType, process_tiles};
 use crate::rect::IntRect;
-use crate::tile::{Tile, TileInstance, read_tiles};
+use crate::tile::{Tile, TileInstance, parse};
 use hayro_common::byte::Reader;
 
 pub(crate) fn read(stream: &[u8]) -> Result<(Header, Vec<ChannelData>), &'static str> {
@@ -13,7 +13,7 @@ pub(crate) fn read(stream: &[u8]) -> Result<(Header, Vec<ChannelData>), &'static
     }
 
     let header = read_header(&mut reader)?;
-    let tiles = read_tiles(&mut reader, &header)?;
+    let tiles = parse(&mut reader, &header)?;
 
     let channels = process_tiles(&tiles, &header)?;
 
@@ -91,7 +91,7 @@ fn read_header(reader: &mut Reader) -> Result<Header, &'static str> {
         .enumerate()
         .map(|(idx, csi)| ComponentInfo {
             size_info: *csi,
-            coding_style_parameters: cod_components[idx]
+            coding_style: cod_components[idx]
                 .clone()
                 .unwrap_or(cod.component_parameters.clone()),
             quantization_info: qcd_components[idx].clone().unwrap_or(qcd.clone()),
@@ -108,7 +108,7 @@ fn read_header(reader: &mut Reader) -> Result<Header, &'static str> {
 #[derive(Debug, Clone)]
 pub(crate) struct ComponentInfo {
     pub(crate) size_info: ComponentSizeInfo,
-    pub(crate) coding_style_parameters: CodingStyleComponent,
+    pub(crate) coding_style: CodingStyleComponent,
     pub(crate) quantization_info: QuantizationInfo,
 }
 
@@ -142,10 +142,7 @@ impl ComponentInfo {
         sub_band_type: SubBandType,
         resolution: u16,
     ) -> (u16, u16) {
-        let n_ll = self
-            .coding_style_parameters
-            .parameters
-            .num_decomposition_levels;
+        let n_ll = self.coding_style.parameters.num_decomposition_levels;
 
         let sb_index = match sub_band_type {
             // TODO: Shouldn't be reached.
@@ -187,10 +184,7 @@ impl ComponentInfo {
     ) -> TileInstance<'a> {
         // See formula B-14.
         let r = resolution;
-        let n_l = self
-            .coding_style_parameters
-            .parameters
-            .num_decomposition_levels;
+        let n_l = self.coding_style.parameters.num_decomposition_levels;
         let tile_component_rect = self.tile_component_rect(tile.rect);
 
         let tx0 = tile_component_rect
@@ -217,7 +211,7 @@ impl ComponentInfo {
     }
 
     pub(crate) fn wavelet_transform(&self) -> WaveletTransform {
-        self.coding_style_parameters.parameters.transformation
+        self.coding_style.parameters.transformation
     }
 }
 
@@ -334,7 +328,7 @@ pub(crate) struct StepSize {
     pub(crate) exponent: u16,
 }
 
-/// Common quantization parameters (A.6.4 and A.6.5).
+/// Quantization properties, from the QCD and QCC markers (A.6.4 and A.6.5).
 #[derive(Clone, Debug)]
 pub(crate) struct QuantizationInfo {
     pub(crate) quantization_style: QuantizationStyle,
@@ -395,34 +389,6 @@ pub(crate) struct SizeData {
 }
 
 impl SizeData {
-    /// Return the raw coordinates of the tile with the given index.
-    pub(crate) fn tile_coords(&self, idx: u32) -> IntRect {
-        let x_coord = self.tile_x_coord(idx);
-        let y_coord = self.tile_y_coord(idx);
-
-        // See B-7, B-8, B-9 and B-10.
-        let x0 = u32::max(
-            self.tile_x_offset + x_coord * self.tile_width,
-            self.image_area_x_offset,
-        );
-        let y0 = u32::max(
-            self.tile_y_offset + y_coord * self.tile_height,
-            self.image_area_y_offset,
-        );
-
-        // Note that `x1` and `y1` are exclusive.
-        let x1 = u32::min(
-            self.tile_x_offset + (x_coord + 1) * self.tile_width,
-            self.reference_grid_width,
-        );
-        let y1 = u32::min(
-            self.tile_y_offset + (y_coord + 1) * self.tile_height,
-            self.reference_grid_height,
-        );
-
-        IntRect::from_ltrb(x0, y0, x1, y1)
-    }
-
     pub(crate) fn tile_x_coord(&self, idx: u32) -> u32 {
         // See B-6.
         idx % self.num_x_tiles()

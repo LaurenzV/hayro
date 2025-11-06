@@ -30,7 +30,7 @@ impl<'a> IteratorInput<'a> {
     ) -> Self {
         let max_resolutions = component_infos
             .iter()
-            .map(|c| c.coding_style_parameters.parameters.num_resolution_levels)
+            .map(|c| c.coding_style.parameters.num_resolution_levels)
             .max()
             .unwrap_or(0);
 
@@ -125,7 +125,7 @@ pub(crate) fn build_resolution_position_component_layer_sequence(
                     let Some(tile_instance) = tile_instance_opt else {
                         continue;
                     };
-                    let component_info = &input.tile.component_info[component_idx];
+                    let component_info = &input.tile.component_infos[component_idx];
 
                     if let Some(precinct) =
                         find_precinct_index(tile_instance, component_info, tile_rect, x, y)
@@ -155,11 +155,9 @@ pub(crate) fn build_position_component_resolution_layer_sequence(
 
     for y in tile_rect.y0..tile_rect.y1 {
         for x in tile_rect.x0..tile_rect.x1 {
-            for (component_idx, component_info) in input.tile.component_info.iter().enumerate() {
-                let num_resolution_levels = component_info
-                    .coding_style_parameters
-                    .parameters
-                    .num_resolution_levels;
+            for (component_idx, component_info) in input.tile.component_infos.iter().enumerate() {
+                let num_resolution_levels =
+                    component_info.coding_style.parameters.num_resolution_levels;
 
                 for resolution in 0..num_resolution_levels {
                     let tile_instance = component_info.tile_instance(input.tile, resolution);
@@ -190,11 +188,8 @@ pub(crate) fn build_component_position_resolution_layer_sequence(
     let mut sequence = Vec::new();
     let tile_rect = input.tile.rect;
 
-    for (component_idx, component_info) in input.tile.component_info.iter().enumerate() {
-        let num_resolution_levels = component_info
-            .coding_style_parameters
-            .parameters
-            .num_resolution_levels;
+    for (component_idx, component_info) in input.tile.component_infos.iter().enumerate() {
+        let num_resolution_levels = component_info.coding_style.parameters.num_resolution_levels;
 
         for y in tile_rect.y0..tile_rect.y1 {
             for x in tile_rect.x0..tile_rect.x1 {
@@ -227,15 +222,10 @@ fn tile_instances_for_resolution<'a>(
 ) -> Vec<Option<TileInstance<'a>>> {
     input
         .tile
-        .component_info
+        .component_infos
         .iter()
         .map(|component_info| {
-            if resolution
-                < component_info
-                    .coding_style_parameters
-                    .parameters
-                    .num_resolution_levels
-            {
+            if resolution < component_info.coding_style.parameters.num_resolution_levels {
                 Some(component_info.tile_instance(input.tile, resolution))
             } else {
                 None
@@ -256,7 +246,7 @@ fn find_precinct_index(
     }
 
     let num_decomposition_levels = component_info
-        .coding_style_parameters
+        .coding_style
         .parameters
         .num_decomposition_levels as u32;
     let resolution = tile_instance.resolution as u32;
