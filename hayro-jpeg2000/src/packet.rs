@@ -23,12 +23,34 @@ use log::trace;
 pub(crate) struct Decomposition<'a> {
     /// In the order low-high, high-low and high-high.
     pub(crate) sub_bands: [SubBand<'a>; 3],
+    /// The rectangle of the decomposition.
     pub(crate) rect: IntRect,
 }
 
-struct ComponentData<'a> {
+/// All decompositions for a single tile.
+struct TileDecompositions<'a> {
     first_ll_sub_band: SubBand<'a>,
     decompositions: Vec<Decomposition<'a>>,
+}
+
+impl<'a> TileDecompositions<'a> {
+    fn for_each_sub_band<T>(
+        &mut self,
+        resolution: u16,
+        mut func: impl FnMut(&mut SubBand<'a>) -> Option<T>,
+    ) -> Option<()> {
+        if resolution == 0 {
+            func(&mut self.first_ll_sub_band)?;
+        } else {
+            let decomposition = &mut self.decompositions[resolution as usize - 1];
+
+            for sub_band in &mut decomposition.sub_bands {
+                func(sub_band)?;
+            }
+        }
+
+        Some(())
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -135,14 +157,16 @@ fn process_tile<'a>(
     header: &Header,
     mut progression_iterator: impl Iterator<Item = ProgressionData>,
 ) -> Result<Vec<IDWTOutput>, &'static str> {
+    let mut buf = vec![];
     let mut component_data = build_component_data(tile, header)?;
 
     for tile_part in &tile.tile_parts {
-        parse_packet(
+        get_code_block_data(
             tile_part,
             header,
             &mut component_data,
             &mut progression_iterator,
+            &mut buf,
         )
         .ok_or("failed to parse packet for tile")?;
     }
@@ -374,15 +398,20 @@ fn save_samples<'a>(
     Some(())
 }
 
-fn parse_packet<'a>(
+/// Decode the tile part and insert the data of the given layer(s) for each
+/// code block.
+fn get_code_block_data<'a>(
     tile_part_data: &'a [u8],
     header: &Header,
-    component_data: &mut [ComponentData<'a>],
+    component_data: &mut [TileDecompositions<'a>],
     mut progression_iterator: impl Iterator<Item = ProgressionData>,
+    code_block_len_buf: &mut Vec<u32>,
 ) -> Option<()> {
     let mut data = tile_part_data;
 
     while !data.is_empty() {
+        code_block_len_buf.clear();
+
         if header
             .global_coding_style
             .component_parameters
@@ -403,7 +432,6 @@ fn parse_packet<'a>(
         let resolution = progression_data.resolution;
         let zero_length = reader.read_packet_header_bits(1)? == 0;
 
-        let mut data_entries = vec![];
         let component_data = &mut component_data[progression_data.component as usize];
 
         // B.10.3 Zero length packet
@@ -411,27 +439,9 @@ fn parse_packet<'a>(
         // (empty packet). The value 0 indicates a zero length; no code-blocks are included in this
         // case. The value 1 indicates a non-zero length."
         if !zero_length {
-            if resolution == 0 {
-                parse_sub_band(
-                    &mut component_data.first_ll_sub_band,
-                    0,
-                    &progression_data,
-                    &mut reader,
-                    &mut data_entries,
-                )?;
-            } else {
-                let decomposition = &mut component_data.decompositions[resolution as usize - 1];
-
-                for (sub_band_idx, sub_band) in decomposition.sub_bands.iter_mut().enumerate() {
-                    parse_sub_band(
-                        sub_band,
-                        sub_band_idx,
-                        &progression_data,
-                        &mut reader,
-                        &mut data_entries,
-                    )?;
-                }
-            }
+            component_data.for_each_sub_band(resolution, |sub_band| {
+                get_code_block_lengths(sub_band, &progression_data, &mut reader, code_block_len_buf)
+            })?;
         }
 
         // TODO: What to do with the note below B.10.3?
@@ -453,17 +463,20 @@ fn parse_packet<'a>(
             return None;
         }
 
-        for (sub_band_idx, code_block_idx, length) in data_entries {
-            let sub_band = if resolution == 0 {
-                &mut component_data.first_ll_sub_band
-            } else {
-                &mut component_data.decompositions[resolution as usize - 1].sub_bands[sub_band_idx]
-            };
-            let precinct = &mut sub_band.precincts[progression_data.precinct as usize];
-            let code_block = &mut precinct.code_blocks[code_block_idx];
-            let layer = &mut code_block.layer_data[progression_data.layer_num as usize];
+        if !zero_length {
+            let mut entries = code_block_len_buf.iter().copied();
 
-            *layer = data_reader.read_bytes(length as usize)?;
+            component_data.for_each_sub_band(resolution, |sub_band| {
+                let precinct = &mut sub_band.precincts[progression_data.precinct as usize];
+
+                for code_block in &mut precinct.code_blocks {
+                    let length = entries.next()?;
+
+                    let layer = &mut code_block.layer_data[progression_data.layer_num as usize];
+                    *layer = data_reader.read_bytes(length as usize)?;
+                }
+                Some(())
+            })?;
         }
 
         data = data_reader.tail()?;
@@ -472,16 +485,16 @@ fn parse_packet<'a>(
     Some(())
 }
 
-fn parse_sub_band(
+/// Get the lengths of the data for each codeblock stored in the tile part.
+fn get_code_block_lengths(
     sub_band: &mut SubBand,
-    sub_band_idx: usize,
     progression_data: &ProgressionData,
     reader: &mut BitReader,
-    data_entries: &mut Vec<(usize, usize, u32)>,
+    code_block_lengths: &mut Vec<u32>,
 ) -> Option<()> {
     let precinct = &mut sub_band.precincts[progression_data.precinct as usize];
 
-    for (code_block_idx, code_block) in precinct.code_blocks.iter_mut().enumerate() {
+    for code_block in &mut precinct.code_blocks {
         // B.10.4 Code-block inclusion
         let is_included = if code_block.has_been_included {
             // "For code-blocks that have been included in a previous packet,
@@ -513,6 +526,7 @@ fn parse_sub_band(
         trace!("code-block inclusion: {}", is_included);
 
         if !is_included {
+            code_block_lengths.push(0);
             continue;
         }
 
@@ -599,7 +613,7 @@ fn parse_sub_band(
         code_block.l_block += k;
         let length_bits = code_block.l_block + added_coding_passes.ilog2();
         let length = reader.read_packet_header_bits(length_bits as u8)?;
-        data_entries.push((sub_band_idx, code_block_idx, length));
+        code_block_lengths.push(length);
 
         trace!("length(0) {}", length);
     }
@@ -610,7 +624,7 @@ fn parse_sub_band(
 fn build_component_data(
     tile: &Tile,
     header: &Header,
-) -> Result<Vec<ComponentData<'static>>, &'static str> {
+) -> Result<Vec<TileDecompositions<'static>>, &'static str> {
     let mut component_data = vec![];
 
     for (component_idx, component_tile) in tile.component_tiles().enumerate() {
@@ -677,7 +691,7 @@ fn build_component_data(
             }
         }
 
-        component_data.push(ComponentData {
+        component_data.push(TileDecompositions {
             decompositions,
             first_ll_sub_band: ll_sub_band.unwrap(),
         })
