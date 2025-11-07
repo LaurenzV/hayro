@@ -70,6 +70,13 @@ impl<'a> Tile<'a> {
             num_layers: header.global_coding_style.num_layers,
         }
     }
+
+    /// Return an iterator over the component tiles.
+    pub(crate) fn component_tiles(&self) -> impl Iterator<Item = ComponentTile<'_>> {
+        self.component_infos
+            .iter()
+            .map(|i| ComponentTile::new(self, i))
+    }
 }
 
 /// Create the tiles and parse their constituent tile parts.
@@ -218,9 +225,14 @@ fn parse_tile_part<'a>(
     Ok(())
 }
 
+/// A tile, instantiated to a specific component.
+#[derive(Debug, Copy, Clone)]
 pub(crate) struct ComponentTile<'a> {
+    /// The underlying tile.
     pub(crate) tile: &'a Tile<'a>,
+    /// The information of the component of the tile.
     pub(crate) component_info: &'a ComponentInfo,
+    /// The rectangle of the component tile.
     pub(crate) rect: IntRect,
 }
 
@@ -256,37 +268,6 @@ impl<'a> ComponentTile<'a> {
             rect,
         }
     }
-}
-
-pub(crate) struct TileInstance<'a> {
-    pub(crate) resolution: u16,
-    pub(crate) component_info: &'a ComponentInfo,
-    pub(crate) tile_component_rect: IntRect,
-    pub(crate) resolution_transformed_rect: IntRect,
-}
-
-impl<'a> TileInstance<'a> {
-    /// The exponent for determining the horizontal size of a precinct.
-    ///
-    /// `PPx` in the specification.
-    pub(crate) fn precinct_exponent_x(&self) -> u8 {
-        self.component_info
-            .coding_style
-            .parameters
-            .precinct_exponents[self.resolution as usize]
-            .0
-    }
-
-    /// The exponent for determining the vertical size of a precinct.
-    ///
-    /// `PPx` in the specification.
-    pub(crate) fn precinct_exponent_y(&self) -> u8 {
-        self.component_info
-            .coding_style
-            .parameters
-            .precinct_exponents[self.resolution as usize]
-            .1
-    }
 
     pub(crate) fn sub_band_rect(
         &self,
@@ -311,23 +292,22 @@ impl<'a> TileInstance<'a> {
         let denominator = 2u32.pow(decomposition_level as u32);
 
         let tbx_0 = self
-            .tile_component_rect
+            .rect
             .x0
             .saturating_sub(numerator_x)
             .div_ceil(denominator);
         let tbx_1 = self
-            .tile_component_rect
+            .rect
             .x1
             .saturating_sub(numerator_x)
             .div_ceil(denominator);
-
         let tby_0 = self
-            .tile_component_rect
+            .rect
             .y0
             .saturating_sub(numerator_y)
             .div_ceil(denominator);
         let tby_1 = self
-            .tile_component_rect
+            .rect
             .y1
             .saturating_sub(numerator_y)
             .div_ceil(denominator);
@@ -335,9 +315,99 @@ impl<'a> TileInstance<'a> {
         IntRect::from_ltrb(tbx_0, tby_0, tbx_1, tby_1)
     }
 
+    pub(crate) fn resolution_tiles(&self) -> impl IntoIterator<Item = ResolutionTile<'_>> {
+        (0..self
+            .component_info
+            .coding_style
+            .parameters
+            .num_resolution_levels)
+            .map(|r| ResolutionTile::new(*self, r))
+    }
+}
+
+/// A tile instantiated to a specific resolution of a component tile.
+pub(crate) struct ResolutionTile<'a> {
+    /// The resolution of the tile.
+    pub(crate) resolution: u16,
+    /// The underlying component tile.
+    pub(crate) component_tile: ComponentTile<'a>,
+    /// The rectangle of the resolution tile.
+    pub(crate) rect: IntRect,
+}
+
+impl<'a> ResolutionTile<'a> {
+    pub(crate) fn new(component_tile: ComponentTile, resolution: u16) -> ResolutionTile {
+        assert!(
+            component_tile
+                .component_info
+                .coding_style
+                .parameters
+                .num_resolution_levels
+                > resolution
+        );
+
+        let rect = {
+            // See formula B-14.
+            let n_l = component_tile
+                .component_info
+                .coding_style
+                .parameters
+                .num_decomposition_levels;
+
+            let tx0 = component_tile
+                .rect
+                .x0
+                .div_ceil(2u32.pow(n_l as u32 - resolution as u32));
+            let ty0 = component_tile
+                .rect
+                .y0
+                .div_ceil(2u32.pow(n_l as u32 - resolution as u32));
+            let tx1 = component_tile
+                .rect
+                .x1
+                .div_ceil(2u32.pow(n_l as u32 - resolution as u32));
+            let ty1 = component_tile
+                .rect
+                .y1
+                .div_ceil(2u32.pow(n_l as u32 - resolution as u32));
+
+            IntRect::from_ltrb(tx0, ty0, tx1, ty1)
+        };
+
+        ResolutionTile {
+            resolution,
+            component_tile,
+            rect,
+        }
+    }
+
+    /// The exponent for determining the horizontal size of a precinct.
+    ///
+    /// `PPx` in the specification.
+    pub(crate) fn precinct_exponent_x(&self) -> u8 {
+        self.component_tile
+            .component_info
+            .coding_style
+            .parameters
+            .precinct_exponents[self.resolution as usize]
+            .0
+    }
+
+    /// The exponent for determining the vertical size of a precinct.
+    ///
+    /// `PPx` in the specification.
+    pub(crate) fn precinct_exponent_y(&self) -> u8 {
+        self.component_tile
+            .component_info
+            .coding_style
+            .parameters
+            .precinct_exponents[self.resolution as usize]
+            .1
+    }
+
     pub(crate) fn num_precincts_x(&self) -> u32 {
         // See B-16.
-        let IntRect { x0, x1, .. } = self.resolution_transformed_rect;
+        let IntRect { x0, x1, .. } = self.rect;
 
         if x0 == x1 {
             0
@@ -349,7 +419,7 @@ impl<'a> TileInstance<'a> {
 
     pub(crate) fn num_precincts_y(&self) -> u32 {
         // See B-16.
-        let IntRect { y0, y1, .. } = self.resolution_transformed_rect;
+        let IntRect { y0, y1, .. } = self.rect;
 
         if y0 == y1 {
             0
@@ -365,7 +435,12 @@ impl<'a> TileInstance<'a> {
 
     pub(crate) fn code_block_width(&self) -> u32 {
         // See B-17.
-        let xcb = self.component_info.coding_style.parameters.code_block_width;
+        let xcb = self
+            .component_tile
+            .component_info
+            .coding_style
+            .parameters
+            .code_block_width;
 
         let xcb = if self.resolution > 0 {
             u8::min(xcb, self.precinct_exponent_x() - 1)
@@ -379,6 +454,7 @@ impl<'a> TileInstance<'a> {
     pub(crate) fn code_block_height(&self) -> u32 {
         // See B-18.
         let ycb = self
+            .component_tile
             .component_info
             .coding_style
             .parameters

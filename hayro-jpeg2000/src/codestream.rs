@@ -1,7 +1,6 @@
 use crate::bitmap::ChannelData;
 use crate::packet::{SubBandType, process_tiles};
-use crate::rect::IntRect;
-use crate::tile::{ComponentTile, Tile, TileInstance, parse};
+use crate::tile::parse;
 use hayro_common::byte::Reader;
 
 pub(crate) fn read(stream: &[u8]) -> Result<(Header, Vec<ChannelData>), &'static str> {
@@ -150,42 +149,6 @@ impl ComponentInfo {
 
                 (e_0 - n_ll + n_b, mantissa)
             }
-        }
-    }
-
-    pub(crate) fn tile_instance<'a>(
-        &'a self,
-        tile: &Tile<'_>,
-        resolution: u16,
-    ) -> TileInstance<'a> {
-        // See formula B-14.
-        let r = resolution;
-        let n_l = self.coding_style.parameters.num_decomposition_levels;
-        let tile_component_rect = {
-            let component_tile = ComponentTile::new(tile, &self);
-            component_tile.rect
-        };
-
-        let tx0 = tile_component_rect
-            .x0
-            .div_ceil(2u32.pow(n_l as u32 - r as u32));
-        let ty0 = tile_component_rect
-            .y0
-            .div_ceil(2u32.pow(n_l as u32 - r as u32));
-        let tx1 = tile_component_rect
-            .x1
-            .div_ceil(2u32.pow(n_l as u32 - r as u32));
-        let ty1 = tile_component_rect
-            .y1
-            .div_ceil(2u32.pow(n_l as u32 - r as u32));
-
-        let resolution_transformed_rect = IntRect::from_ltrb(tx0, ty0, tx1, ty1);
-
-        TileInstance {
-            resolution,
-            component_info: self,
-            tile_component_rect,
-            resolution_transformed_rect,
         }
     }
 

@@ -5,8 +5,7 @@
 //! determines in which order the data appears in the codestream.
 
 use crate::codestream::ComponentInfo;
-use crate::rect::IntRect;
-use crate::tile::{Tile, TileInstance};
+use crate::tile::{ResolutionTile, Tile};
 
 #[derive(Default, Copy, Clone, Debug)]
 pub(crate) struct ProgressionData {
@@ -122,14 +121,11 @@ pub(crate) fn build_resolution_position_component_layer_sequence(
         for y in tile_rect.y0..tile_rect.y1 {
             for x in tile_rect.x0..tile_rect.x1 {
                 for (component_idx, tile_instance_opt) in tile_instances.iter().enumerate() {
-                    let Some(tile_instance) = tile_instance_opt else {
+                    let Some(resolution_tile) = tile_instance_opt else {
                         continue;
                     };
-                    let component_info = &input.tile.component_infos[component_idx];
 
-                    if let Some(precinct) =
-                        find_precinct_index(tile_instance, component_info, tile_rect, x, y)
-                    {
+                    if let Some(precinct) = find_precinct_index(resolution_tile, x, y) {
                         for layer in 0..input.layers {
                             sequence.push(ProgressionData {
                                 layer_num: layer,
@@ -155,20 +151,13 @@ pub(crate) fn build_position_component_resolution_layer_sequence(
 
     for y in tile_rect.y0..tile_rect.y1 {
         for x in tile_rect.x0..tile_rect.x1 {
-            for (component_idx, component_info) in input.tile.component_infos.iter().enumerate() {
-                let num_resolution_levels =
-                    component_info.coding_style.parameters.num_resolution_levels;
-
-                for resolution in 0..num_resolution_levels {
-                    let tile_instance = component_info.tile_instance(input.tile, resolution);
-
-                    if let Some(precinct) =
-                        find_precinct_index(&tile_instance, component_info, tile_rect, x, y)
-                    {
+            for (component_idx, component_tile) in input.tile.component_tiles().enumerate() {
+                for resolution_tile in component_tile.resolution_tiles() {
+                    if let Some(precinct) = find_precinct_index(&resolution_tile, x, y) {
                         for layer in 0..input.layers {
                             sequence.push(ProgressionData {
                                 layer_num: layer,
-                                resolution,
+                                resolution: resolution_tile.resolution,
                                 component: component_idx as u8,
                                 precinct,
                             });
@@ -188,17 +177,19 @@ pub(crate) fn build_component_position_resolution_layer_sequence(
     let mut sequence = Vec::new();
     let tile_rect = input.tile.rect;
 
-    for (component_idx, component_info) in input.tile.component_infos.iter().enumerate() {
-        let num_resolution_levels = component_info.coding_style.parameters.num_resolution_levels;
+    for (component_idx, component_tile) in input.tile.component_tiles().enumerate() {
+        let num_resolution_levels = component_tile
+            .component_info
+            .coding_style
+            .parameters
+            .num_resolution_levels;
 
         for y in tile_rect.y0..tile_rect.y1 {
             for x in tile_rect.x0..tile_rect.x1 {
                 for resolution in 0..num_resolution_levels {
-                    let tile_instance = component_info.tile_instance(input.tile, resolution);
+                    let resolution_tile = ResolutionTile::new(component_tile, resolution);
 
-                    if let Some(precinct) =
-                        find_precinct_index(&tile_instance, component_info, tile_rect, x, y)
-                    {
+                    if let Some(precinct) = find_precinct_index(&resolution_tile, x, y) {
                         for layer in 0..input.layers {
                             sequence.push(ProgressionData {
                                 layer_num: layer,
@@ -219,14 +210,19 @@ pub(crate) fn build_component_position_resolution_layer_sequence(
 fn tile_instances_for_resolution<'a>(
     input: &'a IteratorInput<'a>,
     resolution: u16,
-) -> Vec<Option<TileInstance<'a>>> {
+) -> Vec<Option<ResolutionTile<'a>>> {
     input
         .tile
-        .component_infos
-        .iter()
-        .map(|component_info| {
-            if resolution < component_info.coding_style.parameters.num_resolution_levels {
-                Some(component_info.tile_instance(input.tile, resolution))
+        .component_tiles()
+        .map(|component_tile| {
+            if resolution
+                < component_tile
+                    .component_info
+                    .coding_style
+                    .parameters
+                    .num_resolution_levels
+            {
+                Some(ResolutionTile::new(component_tile, resolution))
             } else {
                 None
             }
@@ -234,22 +230,19 @@ fn tile_instances_for_resolution<'a>(
         .collect()
 }
 
-fn find_precinct_index(
-    tile_instance: &TileInstance,
-    component_info: &ComponentInfo,
-    tile_rect: IntRect,
-    x: u32,
-    y: u32,
-) -> Option<u32> {
-    if tile_instance.num_precincts() == 0 {
+fn find_precinct_index(resolution_tile: &ResolutionTile, x: u32, y: u32) -> Option<u32> {
+    if resolution_tile.num_precincts() == 0 {
         return None;
     }
+
+    let component_info = resolution_tile.component_tile.component_info;
+    let tile_rect = resolution_tile.component_tile.tile.rect;
 
     let num_decomposition_levels = component_info
         .coding_style
         .parameters
         .num_decomposition_levels as u32;
-    let resolution = tile_instance.resolution as u32;
+    let resolution = resolution_tile.resolution as u32;
     if resolution > num_decomposition_levels {
         return None;
     }
@@ -263,8 +256,8 @@ fn find_precinct_index(
     let base_shift = num_decomposition_levels.checked_sub(resolution)?;
     let resolution_scale = 1u64 << base_shift;
 
-    let y_stride_shift = tile_instance.precinct_exponent_y() as u32 + base_shift;
-    let x_stride_shift = tile_instance.precinct_exponent_x() as u32 + base_shift;
+    let y_stride_shift = resolution_tile.precinct_exponent_y() as u32 + base_shift;
+    let x_stride_shift = resolution_tile.precinct_exponent_x() as u32 + base_shift;
     let y_stride_factor = 1u64 << y_stride_shift;
     let x_stride_factor = 1u64 << x_stride_shift;
 
@@ -278,8 +271,8 @@ fn find_precinct_index(
     let x_val = x as u64;
     let ty0 = tile_rect.y0 as u64;
     let tx0 = tile_rect.x0 as u64;
-    let try0 = tile_instance.resolution_transformed_rect.y0 as u64;
-    let trx0 = tile_instance.resolution_transformed_rect.x0 as u64;
+    let try0 = resolution_tile.rect.y0 as u64;
+    let trx0 = resolution_tile.rect.x0 as u64;
 
     let cond1 = y_val.is_multiple_of(y_stride);
     let cond2 = y_val == ty0 && !(try0 * resolution_scale).is_multiple_of(y_stride);
@@ -299,8 +292,8 @@ fn find_precinct_index(
         return None;
     }
 
-    let precinct_x_scale = 1u64 << (tile_instance.precinct_exponent_x() as u32);
-    let precinct_y_scale = 1u64 << (tile_instance.precinct_exponent_y() as u32);
+    let precinct_x_scale = 1u64 << (resolution_tile.precinct_exponent_x() as u32);
+    let precinct_y_scale = 1u64 << (resolution_tile.precinct_exponent_y() as u32);
 
     let p1 = x_val.div_ceil(horizontal_denom) / precinct_x_scale;
     let p2 = trx0 / precinct_x_scale;
@@ -310,13 +303,13 @@ fn find_precinct_index(
     let p5 = try0 / precinct_y_scale;
     let diff_y = p4.checked_sub(p5)?;
 
-    let precincts_wide = tile_instance.num_precincts_x() as u64;
+    let precincts_wide = resolution_tile.num_precincts_x() as u64;
     if precincts_wide == 0 {
         return None;
     }
 
     let precinct = diff_x + precincts_wide * diff_y;
-    if precinct >= tile_instance.num_precincts() as u64 {
+    if precinct >= resolution_tile.num_precincts() as u64 {
         return None;
     }
 

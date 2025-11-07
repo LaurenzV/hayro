@@ -14,7 +14,7 @@ use crate::progression::{
 };
 use crate::rect::IntRect;
 use crate::tag_tree::TagTree;
-use crate::tile::{Tile, TileInstance};
+use crate::tile::{ResolutionTile, Tile};
 use crate::{bitplane, idwt};
 use hayro_common::bit::BitReader;
 use hayro_common::byte::Reader;
@@ -613,20 +613,21 @@ fn build_component_data(
 ) -> Result<Vec<ComponentData<'static>>, &'static str> {
     let mut component_data = vec![];
 
-    for (component_idx, component_info) in tile.component_infos.iter().enumerate() {
+    for (component_idx, component_tile) in tile.component_tiles().enumerate() {
         // TODO: IMprove this
         let mut ll_sub_band = None;
         let mut decompositions = vec![];
 
-        for resolution in 0..component_info.coding_style.parameters.num_resolution_levels {
-            let tile_instance = component_info.tile_instance(tile, resolution);
+        for resolution_tile in component_tile.resolution_tiles() {
+            let resolution = resolution_tile.resolution;
 
             if resolution == 0 {
-                let decomposition_level = component_info
+                let decomposition_level = component_tile
+                    .component_info
                     .coding_style
                     .parameters
                     .num_decomposition_levels;
-                let rect = tile_instance.sub_band_rect(SubBandType::LowLow, decomposition_level);
+                let rect = component_tile.sub_band_rect(SubBandType::LowLow, decomposition_level);
 
                 trace!("making nLL for component {}", component_idx);
                 trace!(
@@ -635,12 +636,12 @@ fn build_component_data(
                     rect.y0,
                     rect.width(),
                     rect.height(),
-                    tile_instance.resolution_transformed_rect.x0,
-                    tile_instance.resolution_transformed_rect.y0,
-                    tile_instance.resolution_transformed_rect.width(),
-                    tile_instance.resolution_transformed_rect.height(),
+                    resolution_tile.rect.x0,
+                    resolution_tile.rect.y0,
+                    resolution_tile.rect.width(),
+                    resolution_tile.rect.height(),
                 );
-                let precincts = build_precincts(&tile_instance, rect, header)?;
+                let precincts = build_precincts(&resolution_tile, rect, header)?;
 
                 ll_sub_band = Some(SubBand {
                     sub_band_type: SubBandType::LowLow,
@@ -649,16 +650,17 @@ fn build_component_data(
                     coefficients: vec![0.0; (rect.width() * rect.height()) as usize],
                 })
             } else {
-                let decomposition_level = component_info
+                let decomposition_level = component_tile
+                    .component_info
                     .coding_style
                     .parameters
                     .num_decomposition_levels
                     - (resolution - 1);
 
                 let build_sub_band = |sub_band_type: SubBandType| {
-                    let rect = tile_instance.sub_band_rect(sub_band_type, decomposition_level);
+                    let rect = component_tile.sub_band_rect(sub_band_type, decomposition_level);
 
-                    let precincts = build_precincts(&tile_instance, rect, header)?;
+                    let precincts = build_precincts(&resolution_tile, rect, header)?;
 
                     Ok(SubBand {
                         sub_band_type,
@@ -674,7 +676,7 @@ fn build_component_data(
                         build_sub_band(SubBandType::LowHigh)?,
                         build_sub_band(SubBandType::HighHigh)?,
                     ],
-                    rect: tile_instance.resolution_transformed_rect,
+                    rect: resolution_tile.rect,
                 };
 
                 decompositions.push(decomposition);
@@ -691,24 +693,24 @@ fn build_component_data(
 }
 
 fn build_precincts(
-    tile_instance: &TileInstance,
+    resolution_tile: &ResolutionTile,
     sub_band_rect: IntRect,
     header: &Header,
 ) -> Result<Vec<Precinct<'static>>, &'static str> {
     let mut precincts = vec![];
 
-    let num_precincts_y = tile_instance.num_precincts_y();
-    let num_precincts_x = tile_instance.num_precincts_x();
+    let num_precincts_y = resolution_tile.num_precincts_y();
+    let num_precincts_x = resolution_tile.num_precincts_x();
 
-    let mut ppx = tile_instance.precinct_exponent_x();
-    let mut ppy = tile_instance.precinct_exponent_y();
+    let mut ppx = resolution_tile.precinct_exponent_x();
+    let mut ppy = resolution_tile.precinct_exponent_y();
 
-    let mut y_start = (tile_instance.resolution_transformed_rect.y0 / (1 << ppy)) * (1 << ppy);
-    let mut x_start = (tile_instance.resolution_transformed_rect.x0 / (1 << ppx)) * (1 << ppx);
+    let mut y_start = (resolution_tile.rect.y0 / (1 << ppy)) * (1 << ppy);
+    let mut x_start = (resolution_tile.rect.x0 / (1 << ppx)) * (1 << ppx);
 
     // TODO: I don't really understand where the specification mentions this is necessary. Just
     // copied this from Serenity.
-    if tile_instance.resolution > 0 {
+    if resolution_tile.resolution > 0 {
         ppx -= 1;
         ppy -= 1;
 
@@ -726,8 +728,8 @@ fn build_precincts(
         for _x in 0..num_precincts_x {
             let precinct_rect = IntRect::from_xywh(x0, y0, ppx_pow2, ppy_pow2);
 
-            let cb_width = tile_instance.code_block_width();
-            let cb_height = tile_instance.code_block_height();
+            let cb_width = resolution_tile.code_block_width();
+            let cb_height = resolution_tile.code_block_height();
 
             let cb_x0 = (u32::max(precinct_rect.x0, sub_band_rect.x0) / cb_width) * cb_width;
             let cb_y0 = (u32::max(precinct_rect.y0, sub_band_rect.y0) / cb_height) * cb_height;
@@ -763,7 +765,7 @@ fn build_precincts(
             let blocks = build_precinct_code_blocks(
                 code_block_area,
                 sub_band_rect,
-                tile_instance,
+                resolution_tile,
                 code_blocks_x,
                 code_blocks_y,
                 header.global_coding_style.num_layers,
@@ -790,7 +792,7 @@ fn build_precincts(
 fn build_precinct_code_blocks(
     code_block_area: IntRect,
     sub_band_rect: IntRect,
-    tile_instance: &TileInstance,
+    tile_instance: &ResolutionTile,
     code_blocks_x: u32,
     code_blocks_y: u32,
     num_layers: u16,
