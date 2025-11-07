@@ -622,51 +622,45 @@ fn build_component_data(
             let resolution = resolution_tile.resolution;
 
             if resolution == 0 {
-                let decomposition_level = component_tile
-                    .component_info
-                    .coding_style
-                    .parameters
-                    .num_decomposition_levels;
-                let rect = component_tile.sub_band_rect(SubBandType::LowLow, decomposition_level);
+                let sub_band_rect = resolution_tile.sub_band_rect(SubBandType::LowLow);
 
                 trace!("making nLL for component {}", component_idx);
                 trace!(
                     "Sub-band rect: [{},{} {}x{}], ll rect [{},{} {}x{}]",
-                    rect.x0,
-                    rect.y0,
-                    rect.width(),
-                    rect.height(),
+                    sub_band_rect.x0,
+                    sub_band_rect.y0,
+                    sub_band_rect.width(),
+                    sub_band_rect.height(),
                     resolution_tile.rect.x0,
                     resolution_tile.rect.y0,
                     resolution_tile.rect.width(),
                     resolution_tile.rect.height(),
                 );
-                let precincts = build_precincts(&resolution_tile, rect, header)?;
+                let precincts = build_precincts(&resolution_tile, sub_band_rect, header)?;
 
                 ll_sub_band = Some(SubBand {
                     sub_band_type: SubBandType::LowLow,
-                    rect,
+                    rect: sub_band_rect,
                     precincts,
-                    coefficients: vec![0.0; (rect.width() * rect.height()) as usize],
+                    coefficients: vec![
+                        0.0;
+                        (sub_band_rect.width() * sub_band_rect.height()) as usize
+                    ],
                 })
             } else {
-                let decomposition_level = component_tile
-                    .component_info
-                    .coding_style
-                    .parameters
-                    .num_decomposition_levels
-                    - (resolution - 1);
-
                 let build_sub_band = |sub_band_type: SubBandType| {
-                    let rect = component_tile.sub_band_rect(sub_band_type, decomposition_level);
+                    let sub_band_rect = resolution_tile.sub_band_rect(sub_band_type);
 
-                    let precincts = build_precincts(&resolution_tile, rect, header)?;
+                    let precincts = build_precincts(&resolution_tile, sub_band_rect, header)?;
 
                     Ok(SubBand {
                         sub_band_type,
-                        rect,
+                        rect: sub_band_rect,
                         precincts: precincts.clone(),
-                        coefficients: vec![0.0; (rect.width() * rect.height()) as usize],
+                        coefficients: vec![
+                            0.0;
+                            (sub_band_rect.width() * sub_band_rect.height()) as usize
+                        ],
                     })
                 };
 

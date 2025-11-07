@@ -269,52 +269,6 @@ impl<'a> ComponentTile<'a> {
         }
     }
 
-    pub(crate) fn sub_band_rect(
-        &self,
-        sub_band_type: SubBandType,
-        decomposition_level: u16,
-    ) -> IntRect {
-        // Formula B-15.
-
-        let xo_b = if matches!(sub_band_type, SubBandType::HighLow | SubBandType::HighHigh) {
-            1
-        } else {
-            0
-        };
-        let yo_b = if matches!(sub_band_type, SubBandType::LowHigh | SubBandType::HighHigh) {
-            1
-        } else {
-            0
-        };
-
-        let numerator_x = 2u32.pow(decomposition_level as u32 - 1) * xo_b;
-        let numerator_y = 2u32.pow(decomposition_level as u32 - 1) * yo_b;
-        let denominator = 2u32.pow(decomposition_level as u32);
-
-        let tbx_0 = self
-            .rect
-            .x0
-            .saturating_sub(numerator_x)
-            .div_ceil(denominator);
-        let tbx_1 = self
-            .rect
-            .x1
-            .saturating_sub(numerator_x)
-            .div_ceil(denominator);
-        let tby_0 = self
-            .rect
-            .y0
-            .saturating_sub(numerator_y)
-            .div_ceil(denominator);
-        let tby_1 = self
-            .rect
-            .y1
-            .saturating_sub(numerator_y)
-            .div_ceil(denominator);
-
-        IntRect::from_ltrb(tbx_0, tby_0, tbx_1, tby_1)
-    }
-
     pub(crate) fn resolution_tiles(&self) -> impl IntoIterator<Item = ResolutionTile<'_>> {
         (0..self
             .component_info
@@ -329,6 +283,8 @@ impl<'a> ComponentTile<'a> {
 pub(crate) struct ResolutionTile<'a> {
     /// The resolution of the tile.
     pub(crate) resolution: u16,
+    /// The decomposition level of the tile.
+    pub(crate) decomposition_level: u16,
     /// The underlying component tile.
     pub(crate) component_tile: ComponentTile<'a>,
     /// The rectangle of the resolution tile.
@@ -374,11 +330,84 @@ impl<'a> ResolutionTile<'a> {
             IntRect::from_ltrb(tx0, ty0, tx1, ty1)
         };
 
+        // Decomposition level and resolution level are inversely related
+        // to each other. In addition to that, there is always one more
+        // resolution than decomposition levels (resolution level 0 only
+        // include the LL subband of the N_L decomposition, resolution level
+        // 1 includes the HL, LH and HH subbands of the N_L decomposition.
+        let decomposition_level = {
+            if resolution == 0 {
+                component_tile
+                    .component_info
+                    .coding_style
+                    .parameters
+                    .num_decomposition_levels
+            } else {
+                component_tile
+                    .component_info
+                    .coding_style
+                    .parameters
+                    .num_decomposition_levels
+                    - (resolution - 1)
+            }
+        };
+
         ResolutionTile {
             resolution,
+            decomposition_level,
             component_tile,
             rect,
         }
+    }
+
+    pub(crate) fn sub_band_rect(&self, sub_band_type: SubBandType) -> IntRect {
+        if self.resolution == 0 {
+            assert_eq!(sub_band_type, SubBandType::LowLow);
+        }
+
+        // Formula B-15.
+
+        let xo_b = if matches!(sub_band_type, SubBandType::HighLow | SubBandType::HighHigh) {
+            1
+        } else {
+            0
+        };
+        let yo_b = if matches!(sub_band_type, SubBandType::LowHigh | SubBandType::HighHigh) {
+            1
+        } else {
+            0
+        };
+
+        let numerator_x = 2u32.pow(self.decomposition_level as u32 - 1) * xo_b;
+        let numerator_y = 2u32.pow(self.decomposition_level as u32 - 1) * yo_b;
+        let denominator = 2u32.pow(self.decomposition_level as u32);
+
+        let tbx_0 = self
+            .component_tile
+            .rect
+            .x0
+            .saturating_sub(numerator_x)
+            .div_ceil(denominator);
+        let tbx_1 = self
+            .component_tile
+            .rect
+            .x1
+            .saturating_sub(numerator_x)
+            .div_ceil(denominator);
+        let tby_0 = self
+            .component_tile
+            .rect
+            .y0
+            .saturating_sub(numerator_y)
+            .div_ceil(denominator);
+        let tby_1 = self
+            .component_tile
+            .rect
+            .y1
+            .saturating_sub(numerator_y)
+            .div_ceil(denominator);
+
+        IntRect::from_ltrb(tbx_0, tby_0, tbx_1, tby_1)
     }
 
     /// The exponent for determining the horizontal size of a precinct.
