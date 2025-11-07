@@ -37,6 +37,7 @@ pub(crate) fn decode(data: &[u8], header: &Header) -> Result<Vec<ChannelData>, &
     }
 
     let mut tile_ctx = TileDecodeContext::new(header, &tiles[0]);
+    let mut storage = DecompositionStorage::default();
 
     for tile in tiles.iter() {
         trace!(
@@ -53,23 +54,53 @@ pub(crate) fn decode(data: &[u8], header: &Header) -> Result<Vec<ChannelData>, &
         match tile.progression_order {
             ProgressionOrder::LayerResolutionComponentPosition => {
                 let iterator = build_layer_resolution_component_position_sequence(&iter_input);
-                decode_tile(tile, header, iterator.into_iter(), &mut tile_ctx)?
+                decode_tile(
+                    tile,
+                    header,
+                    iterator.into_iter(),
+                    &mut tile_ctx,
+                    &mut storage,
+                )?
             }
             ProgressionOrder::ResolutionLayerComponentPosition => {
                 let iterator = build_resolution_layer_component_position_sequence(&iter_input);
-                decode_tile(tile, header, iterator.into_iter(), &mut tile_ctx)?
+                decode_tile(
+                    tile,
+                    header,
+                    iterator.into_iter(),
+                    &mut tile_ctx,
+                    &mut storage,
+                )?
             }
             ProgressionOrder::ResolutionPositionComponentLayer => {
                 let iterator = build_resolution_position_component_layer_sequence(&iter_input);
-                decode_tile(tile, header, iterator.into_iter(), &mut tile_ctx)?
+                decode_tile(
+                    tile,
+                    header,
+                    iterator.into_iter(),
+                    &mut tile_ctx,
+                    &mut storage,
+                )?
             }
             ProgressionOrder::PositionComponentResolutionLayer => {
                 let iterator = build_position_component_resolution_layer_sequence(&iter_input);
-                decode_tile(tile, header, iterator.into_iter(), &mut tile_ctx)?
+                decode_tile(
+                    tile,
+                    header,
+                    iterator.into_iter(),
+                    &mut tile_ctx,
+                    &mut storage,
+                )?
             }
             ProgressionOrder::ComponentPositionResolutionLayer => {
                 let iterator = build_component_position_resolution_layer_sequence(&iter_input);
-                decode_tile(tile, header, iterator.into_iter(), &mut tile_ctx)?
+                decode_tile(
+                    tile,
+                    header,
+                    iterator.into_iter(),
+                    &mut tile_ctx,
+                    &mut storage,
+                )?
             }
         };
     }
@@ -82,21 +113,23 @@ fn decode_tile<'a>(
     header: &Header,
     progression_iterator: impl Iterator<Item = ProgressionData>,
     tile_ctx: &mut TileDecodeContext<'a>,
+    storage: &mut DecompositionStorage<'a>,
 ) -> Result<(), &'static str> {
     tile_ctx.reset(tile);
+    storage.reset();
 
     // This is the method that orchestrates all steps.
 
     // First, we build the decompositions, including their sub-bands, precincts
     // and code blocks.
-    build_tile_decompositions(tile, tile_ctx)?;
+    build_decompositions(tile, tile_ctx, storage)?;
     // Next, we parse the layer data for each code block.
-    get_code_block_data(tile, progression_iterator, tile_ctx)?;
+    get_code_block_data(tile, progression_iterator, tile_ctx, storage)?;
     // We then decode the bitplanes of each code block, yielding the
     // (possibly dequantized) coefficients of each code block.
-    decode_bitplanes(tile, tile_ctx)?;
+    decode_bitplanes(tile, tile_ctx, storage)?;
     // Next, we apply the inverse discrete wavelet transform.
-    apply_idwt(tile, tile_ctx)?;
+    apply_idwt(tile, tile_ctx, storage)?;
     // If applicable, we apply the multi-component transform.
     apply_mct(tile_ctx);
     // Finally, we store the raw samples for the tile area in the correct
@@ -107,34 +140,66 @@ fn decode_tile<'a>(
 }
 
 /// All decompositions for a single tile.
+#[derive(Clone)]
 struct TileDecompositions {
-    first_ll_sub_band: SubBand,
-    decompositions: Vec<Decomposition>,
+    first_ll_sub_band: usize,
+    decompositions: Range<usize>,
 }
 
 impl TileDecompositions {
-    fn for_each_sub_band<T>(
-        &mut self,
-        resolution: u16,
-        mut func: impl FnMut(&mut SubBand) -> Option<T>,
-    ) -> Option<()> {
-        if resolution == 0 {
-            func(&mut self.first_ll_sub_band)?;
+    fn sub_band_iter(&self, resolution: u16, decompositions: &[Decomposition]) -> SubBandIter {
+        let indices = if resolution == 0 {
+            [
+                self.first_ll_sub_band,
+                self.first_ll_sub_band,
+                self.first_ll_sub_band,
+            ]
         } else {
-            let decomposition = &mut self.decompositions[resolution as usize - 1];
+            decompositions[self.decompositions.clone()][resolution as usize - 1].sub_bands
+        };
 
-            for sub_band in &mut decomposition.sub_bands {
-                func(sub_band)?;
-            }
+        SubBandIter {
+            next_idx: 0,
+            indices,
+            resolution,
         }
+    }
+}
 
-        Some(())
+#[derive(Clone)]
+struct SubBandIter {
+    resolution: u16,
+    next_idx: usize,
+    indices: [usize; 3],
+}
+
+impl Iterator for SubBandIter {
+    type Item = usize;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let value = if self.resolution == 0 {
+            if self.next_idx > 0 {
+                None
+            } else {
+                Some(self.indices[0])
+            }
+        } else {
+            if self.next_idx >= self.indices.len() {
+                None
+            } else {
+                Some(self.indices[self.next_idx])
+            }
+        };
+
+        self.next_idx += 1;
+
+        value
     }
 }
 
 pub(crate) struct Decomposition {
     /// In the order low-high, high-low and high-high.
-    pub(crate) sub_bands: [SubBand; 3],
+    pub(crate) sub_bands: [usize; 3],
     /// The rectangle of the decomposition.
     pub(crate) rect: IntRect,
 }
@@ -143,7 +208,8 @@ pub(crate) struct Decomposition {
 pub(crate) struct SubBand {
     pub(crate) sub_band_type: SubBandType,
     pub(crate) rect: IntRect,
-    pub(crate) precincts: Vec<Precinct>,
+    pub(crate) precincts: Range<usize>,
+    // TODO: Store in allocation storage.
     pub(crate) coefficients: Vec<f32>,
 }
 
@@ -157,7 +223,7 @@ pub(crate) enum SubBandType {
 
 #[derive(Clone)]
 pub(crate) struct Precinct {
-    code_blocks: Vec<CodeBlock>,
+    code_blocks: Range<usize>,
     code_inclusion_tree: TagTree,
     zero_bitplane_tree: TagTree,
 }
@@ -167,33 +233,54 @@ pub(crate) struct CodeBlock {
     pub(crate) rect: IntRect,
     pub(crate) x_idx: u32,
     pub(crate) y_idx: u32,
-    pub(crate) layer_range: Range<usize>,
+    pub(crate) layers: Range<usize>,
     pub(crate) has_been_included: bool,
     pub(crate) missing_bit_planes: u8,
     pub(crate) number_of_coding_passes: u32,
     pub(crate) l_block: u32,
 }
 
+/// A buffer so that we can reuse allocations for layers/code blocks/etc.
+/// across different tiles.
+#[derive(Default)]
+struct DecompositionStorage<'a> {
+    layers: Vec<&'a [u8]>,
+    code_blocks: Vec<CodeBlock>,
+    precincts: Vec<Precinct>,
+    coefficients: Vec<f32>,
+    sub_bands: Vec<SubBand>,
+    decompositions: Vec<Decomposition>,
+    tile_decompositions: Vec<TileDecompositions>,
+}
+
+impl DecompositionStorage<'_> {
+    fn reset(&mut self) {
+        self.layers.clear();
+        self.code_blocks.clear();
+        self.coefficients.clear();
+        self.precincts.clear();
+        self.sub_bands.clear();
+        self.decompositions.clear();
+        self.tile_decompositions.clear();
+    }
+}
+
 /// A reusable context used during the decoding of a single tile.
 ///
 /// Some of the fields are temporary in nature and reset after moving on to the
 /// next tile, some contain global state.
-struct TileDecodeContext<'a> {
+pub(crate) struct TileDecodeContext<'a> {
     /// The tile that we are currently decoding.
-    tile: &'a Tile<'a>,
-    /// The decompositions of each component of the tile we are currently
-    /// processing.
-    decompositions: Vec<TileDecompositions>,
+    pub(crate) tile: &'a Tile<'a>,
     /// The outputs of the IDWT operations of each component of the tile
     /// we are currently processing.
-    idwt_outputs: Vec<IDWTOutput>,
+    pub(crate) idwt_outputs: Vec<IDWTOutput>,
     /// A reusable context for decoding code blocks.
-    code_block_decode_context: CodeBlockDecodeContext,
+    pub(crate) code_block_decode_context: CodeBlockDecodeContext,
     /// A reusable temporary buffer used to store the lengths of codeblocks.
-    code_block_len_buf: Vec<u32>,
+    pub(crate) code_block_len_buf: Vec<u32>,
     /// The raw, decoded samples for each channel.
-    channel_data: Vec<ChannelData>,
-    layer_data: Vec<&'a [u8]>,
+    pub(crate) channel_data: Vec<ChannelData>,
 }
 
 impl<'a> TileDecodeContext<'a> {
@@ -216,11 +303,9 @@ impl<'a> TileDecodeContext<'a> {
 
         Self {
             tile: initial_tile,
-            decompositions: vec![],
             idwt_outputs: vec![],
             code_block_decode_context: Default::default(),
             code_block_len_buf: vec![],
-            layer_data: vec![],
             channel_data,
         }
     }
@@ -228,22 +313,23 @@ impl<'a> TileDecodeContext<'a> {
     fn reset(&mut self, tile: &'a Tile<'a>) {
         self.tile = tile;
         self.code_block_len_buf.clear();
-        self.decompositions.clear();
         self.idwt_outputs.clear();
-        self.layer_data.clear();
-        // Code-block decode context will be resetted before being used.
+        // Code-block decode context will be resetted before being used, can't
+        // do it here because we need data for a code block.
         // Channel data should not be resetted because it's global
     }
 }
 
-fn build_tile_decompositions(
+fn build_decompositions(
     tile: &Tile,
     tile_ctx: &mut TileDecodeContext,
+    storage: &mut DecompositionStorage,
 ) -> Result<(), &'static str> {
     for (component_idx, component_tile) in tile.component_tiles().enumerate() {
         // TODO: IMprove this
         let mut ll_sub_band = None;
-        let mut decompositions = vec![];
+
+        let start = storage.decompositions.len();
 
         for resolution_tile in component_tile.resolution_tiles() {
             let resolution = resolution_tile.resolution;
@@ -263,7 +349,8 @@ fn build_tile_decompositions(
                     resolution_tile.rect.width(),
                     resolution_tile.rect.height(),
                 );
-                let precincts = build_precincts(&resolution_tile, sub_band_rect, tile_ctx)?;
+                let precincts =
+                    build_precincts(&resolution_tile, sub_band_rect, tile_ctx, storage)?;
 
                 ll_sub_band = Some(SubBand {
                     sub_band_type: SubBandType::LowLow,
@@ -275,38 +362,48 @@ fn build_tile_decompositions(
                     ],
                 })
             } else {
-                let mut build_sub_band = |sub_band_type: SubBandType| {
-                    let sub_band_rect = resolution_tile.sub_band_rect(sub_band_type);
+                let mut build_sub_band =
+                    |sub_band_type: SubBandType, storage: &mut DecompositionStorage| {
+                        let sub_band_rect = resolution_tile.sub_band_rect(sub_band_type);
 
-                    let precincts = build_precincts(&resolution_tile, sub_band_rect, tile_ctx)?;
+                        let precincts =
+                            build_precincts(&resolution_tile, sub_band_rect, tile_ctx, storage)?;
 
-                    Ok(SubBand {
-                        sub_band_type,
-                        rect: sub_band_rect,
-                        precincts: precincts.clone(),
-                        coefficients: vec![
-                            0.0;
-                            (sub_band_rect.width() * sub_band_rect.height()) as usize
-                        ],
-                    })
-                };
+                        let idx = storage.sub_bands.len();
+                        storage.sub_bands.push(SubBand {
+                            sub_band_type,
+                            rect: sub_band_rect,
+                            precincts: precincts.clone(),
+                            coefficients: vec![
+                                0.0;
+                                (sub_band_rect.width() * sub_band_rect.height())
+                                    as usize
+                            ],
+                        });
+
+                        Ok(idx)
+                    };
 
                 let decomposition = Decomposition {
                     sub_bands: [
-                        build_sub_band(SubBandType::HighLow)?,
-                        build_sub_band(SubBandType::LowHigh)?,
-                        build_sub_band(SubBandType::HighHigh)?,
+                        build_sub_band(SubBandType::HighLow, storage)?,
+                        build_sub_band(SubBandType::LowHigh, storage)?,
+                        build_sub_band(SubBandType::HighHigh, storage)?,
                     ],
                     rect: resolution_tile.rect,
                 };
 
-                decompositions.push(decomposition);
+                storage.decompositions.push(decomposition);
             }
         }
 
-        tile_ctx.decompositions.push(TileDecompositions {
-            decompositions,
-            first_ll_sub_band: ll_sub_band.unwrap(),
+        let end = storage.decompositions.len();
+        let first_ll_sub_band = storage.sub_bands.len();
+        storage.sub_bands.push(ll_sub_band.unwrap());
+
+        storage.tile_decompositions.push(TileDecompositions {
+            decompositions: start..end.clone(),
+            first_ll_sub_band,
         });
     }
 
@@ -317,9 +414,8 @@ fn build_precincts(
     resolution_tile: &ResolutionTile,
     sub_band_rect: IntRect,
     tile_ctx: &mut TileDecodeContext,
-) -> Result<Vec<Precinct>, &'static str> {
-    let mut precincts = vec![];
-
+    storage: &mut DecompositionStorage,
+) -> Result<Range<usize>, &'static str> {
     let num_precincts_y = resolution_tile.num_precincts_y();
     let num_precincts_x = resolution_tile.num_precincts_x();
 
@@ -341,6 +437,8 @@ fn build_precincts(
 
     let ppx_pow2 = 1 << ppx;
     let ppy_pow2 = 1 << ppy;
+
+    let start = storage.precincts.len();
 
     let mut y0 = y_start;
     for _y in 0..num_precincts_y {
@@ -390,12 +488,13 @@ fn build_precincts(
                 code_blocks_x,
                 code_blocks_y,
                 tile_ctx,
+                storage,
             );
 
             let code_inclusion_tree = TagTree::new(code_blocks_x, code_blocks_y);
             let zero_bitplane_tree = TagTree::new(code_blocks_x, code_blocks_y);
 
-            precincts.push(Precinct {
+            storage.precincts.push(Precinct {
                 code_blocks: blocks,
                 code_inclusion_tree,
                 zero_bitplane_tree,
@@ -407,7 +506,9 @@ fn build_precincts(
         y0 += ppy_pow2;
     }
 
-    Ok(precincts)
+    let end = storage.precincts.len();
+
+    Ok(start..end)
 }
 
 fn build_code_blocks(
@@ -417,13 +518,14 @@ fn build_code_blocks(
     code_blocks_x: u32,
     code_blocks_y: u32,
     tile_ctx: &mut TileDecodeContext,
-) -> Vec<CodeBlock> {
-    let mut blocks = vec![];
-
+    storage: &mut DecompositionStorage,
+) -> Range<usize> {
     let mut y = code_block_area.y0;
 
     let code_block_width = tile_instance.code_block_width();
     let code_block_height = tile_instance.code_block_height();
+
+    let start = storage.code_blocks.len();
 
     for y_idx in 0..code_blocks_y {
         let mut x = code_block_area.x0;
@@ -440,13 +542,13 @@ fn build_code_blocks(
                 area.height(),
             );
 
-            let start = tile_ctx.layer_data.len();
-            tile_ctx
-                .layer_data
+            let start = storage.layers.len();
+            storage
+                .layers
                 .extend(iter::repeat_n(&[][..], tile_ctx.tile.num_layers as usize));
-            let end = tile_ctx.layer_data.len();
+            let end = storage.layers.len();
 
-            blocks.push(CodeBlock {
+            storage.code_blocks.push(CodeBlock {
                 x_idx,
                 y_idx,
                 rect: area,
@@ -454,7 +556,7 @@ fn build_code_blocks(
                 missing_bit_planes: 0,
                 l_block: 3,
                 number_of_coding_passes: 0,
-                layer_range: start..end,
+                layers: start..end,
             });
 
             x += code_block_width;
@@ -463,16 +565,19 @@ fn build_code_blocks(
         y += code_block_height;
     }
 
-    blocks
+    let end = storage.code_blocks.len();
+
+    start..end
 }
 
 fn get_code_block_data<'a>(
     tile: &'a Tile<'a>,
     mut progression_iterator: impl Iterator<Item = ProgressionData>,
     tile_ctx: &mut TileDecodeContext<'a>,
+    storage: &mut DecompositionStorage<'a>,
 ) -> Result<(), &'static str> {
     for tile_part in &tile.tile_parts {
-        get_code_block_data_inner(tile_part, &mut progression_iterator, tile_ctx)
+        get_code_block_data_inner(tile_part, &mut progression_iterator, tile_ctx, storage)
             .ok_or("failed to parse packet for tile")?;
     }
 
@@ -483,6 +588,7 @@ fn get_code_block_data_inner<'a>(
     tile_part_data: &'a [u8],
     mut progression_iterator: impl Iterator<Item = ProgressionData>,
     tile_ctx: &mut TileDecodeContext<'a>,
+    storage: &mut DecompositionStorage<'a>,
 ) -> Option<()> {
     let mut data = tile_part_data;
 
@@ -492,7 +598,9 @@ fn get_code_block_data_inner<'a>(
         let progression_data = progression_iterator.next()?;
         let resolution = progression_data.resolution;
         let component_info = &tile_ctx.tile.component_infos[progression_data.component as usize];
-        let component_data = &mut tile_ctx.decompositions[progression_data.component as usize];
+        let tile_decompositions =
+            &mut storage.tile_decompositions[progression_data.component as usize];
+        let sub_band_iter = tile_decompositions.sub_band_iter(resolution, &storage.decompositions);
 
         if component_info.coding_style.flags.may_use_sop_markers() {
             let mut reader = Reader::new(data);
@@ -511,14 +619,15 @@ fn get_code_block_data_inner<'a>(
         // (empty packet). The value 0 indicates a zero length; no code-blocks are included in this
         // case. The value 1 indicates a non-zero length."
         if !zero_length {
-            component_data.for_each_sub_band(resolution, |sub_band| {
+            for sub_band in sub_band_iter.clone() {
                 get_code_block_lengths(
                     sub_band,
                     &progression_data,
                     &mut reader,
                     &mut tile_ctx.code_block_len_buf,
-                )
-            })?;
+                    storage,
+                )?;
+            }
         }
 
         // TODO: What to do with the note below B.10.3?
@@ -539,18 +648,20 @@ fn get_code_block_data_inner<'a>(
         if !zero_length {
             let mut entries = tile_ctx.code_block_len_buf.iter().copied();
 
-            component_data.for_each_sub_band(resolution, |sub_band| {
-                let precinct = &mut sub_band.precincts[progression_data.precinct as usize];
+            for sub_band in sub_band_iter {
+                let sub_band = &mut storage.sub_bands[sub_band];
+                let precinct = &mut storage.precincts[sub_band.precincts.clone()]
+                    [progression_data.precinct as usize];
+                let code_blocks = &mut storage.code_blocks[precinct.code_blocks.clone()];
 
-                for code_block in &mut precinct.code_blocks {
+                for code_block in code_blocks {
                     let length = entries.next()?;
 
-                    let layer = &mut tile_ctx.layer_data[code_block.layer_range.start..]
+                    let layer = &mut storage.layers[code_block.layers.clone()]
                         [progression_data.layer_num as usize];
                     *layer = data_reader.read_bytes(length as usize)?;
                 }
-                Some(())
-            })?;
+            }
         }
 
         data = data_reader.tail()?;
@@ -560,14 +671,17 @@ fn get_code_block_data_inner<'a>(
 }
 
 fn get_code_block_lengths(
-    sub_band: &mut SubBand,
+    sub_band_dx: usize,
     progression_data: &ProgressionData,
     reader: &mut BitReader,
     code_block_lengths: &mut Vec<u32>,
+    storage: &mut DecompositionStorage,
 ) -> Option<()> {
-    let precinct = &mut sub_band.precincts[progression_data.precinct as usize];
+    let precincts = &mut storage.precincts[storage.sub_bands[sub_band_dx].precincts.clone()];
+    let precinct = &mut precincts[progression_data.precinct as usize];
+    let code_blocks = &mut storage.code_blocks[precinct.code_blocks.clone()];
 
-    for code_block in &mut precinct.code_blocks {
+    for code_block in code_blocks {
         // B.10.4 Code-block inclusion
         let is_included = if code_block.has_been_included {
             // "For code-blocks that have been included in a previous packet,
@@ -697,28 +811,20 @@ fn get_code_block_lengths(
 fn decode_bitplanes<'a>(
     tile: &'a Tile<'a>,
     tile_ctx: &mut TileDecodeContext<'a>,
+    storage: &mut DecompositionStorage,
 ) -> Result<(), &'static str> {
-    for (decompositions, component_info) in tile_ctx
-        .decompositions
-        .iter_mut()
-        .zip(tile.component_infos.iter())
-    {
-        decode_sub_band_bitplanes(
-            &mut decompositions.first_ll_sub_band,
-            0,
-            component_info,
-            &mut tile_ctx.code_block_decode_context,
-            &tile_ctx.layer_data,
-        )?;
+    for (tile_decompositions_idx, component_info) in tile.component_infos.iter().enumerate() {
+        for resolution in 0..component_info.num_resolution_levels() {
+            let tile_composition = &storage.tile_decompositions[tile_decompositions_idx];
+            let sub_band_iter = tile_composition.sub_band_iter(resolution, &storage.decompositions);
 
-        for (resolution, decomposition) in decompositions.decompositions.iter_mut().enumerate() {
-            for sub_band in &mut decomposition.sub_bands {
+            for sub_band_idx in sub_band_iter {
                 decode_sub_band_bitplanes(
-                    sub_band,
-                    resolution as u16 + 1,
+                    sub_band_idx,
+                    resolution,
                     component_info,
                     &mut tile_ctx.code_block_decode_context,
-                    &tile_ctx.layer_data,
+                    storage,
                 )?;
             }
         }
@@ -728,12 +834,14 @@ fn decode_bitplanes<'a>(
 }
 
 fn decode_sub_band_bitplanes(
-    sub_band: &mut SubBand,
+    sub_band_idx: usize,
     resolution: u16,
     component_info: &ComponentInfo,
     b_ctx: &mut CodeBlockDecodeContext,
-    layer_data: &[&[u8]],
+    storage: &mut DecompositionStorage,
 ) -> Result<(), &'static str> {
+    let sub_band = &mut storage.sub_bands[sub_band_idx];
+
     let dequantization_step = {
         if component_info.quantization_info.quantization_style == QuantizationStyle::NoQuantization
         {
@@ -759,8 +867,16 @@ fn decode_sub_band_bitplanes(
         }
     };
 
-    for precinct in &mut sub_band.precincts {
-        for codeblock in &mut precinct.code_blocks {
+    for precinct in sub_band
+        .precincts
+        .clone()
+        .map(|idx| &storage.precincts[idx])
+    {
+        for code_block in precinct
+            .code_blocks
+            .clone()
+            .map(|idx| &storage.code_blocks[idx])
+        {
             let num_bitplanes = {
                 let (exponent, _) =
                     component_info.exponent_mantissa(sub_band.sub_band_type, resolution);
@@ -769,24 +885,26 @@ fn decode_sub_band_bitplanes(
             };
 
             bitplane::decode(
-                codeblock,
+                code_block,
                 sub_band.sub_band_type,
                 num_bitplanes,
                 &component_info.coding_style.parameters.code_block_style,
                 b_ctx,
-                layer_data,
+                storage.layers[code_block.layers.start..code_block.layers.end]
+                    .iter()
+                    .copied(),
             )?;
 
             // Turn the signs and magnitudes into singular coefficients and
             // copy them into the sub-band.
 
-            let x_offset = codeblock.rect.x0 - sub_band.rect.x0;
-            let y_offset = codeblock.rect.y0 - sub_band.rect.y0;
+            let x_offset = code_block.rect.x0 - sub_band.rect.x0;
+            let y_offset = code_block.rect.y0 - sub_band.rect.y0;
 
-            let sign_iter = b_ctx.signs().chunks_exact(codeblock.rect.width() as usize);
+            let sign_iter = b_ctx.signs().chunks_exact(code_block.rect.width() as usize);
             let magnitude_iter = b_ctx
                 .magnitudes()
-                .chunks_exact(codeblock.rect.width() as usize);
+                .chunks_exact(code_block.rect.width() as usize);
 
             for (y, (signs, magnitudes)) in sign_iter.zip(magnitude_iter).enumerate() {
                 let out_row = &mut sub_band.coefficients[((y_offset + y as u32)
@@ -819,15 +937,19 @@ fn decode_sub_band_bitplanes(
 fn apply_idwt<'a>(
     tile: &'a Tile<'a>,
     tile_ctx: &mut TileDecodeContext<'a>,
+    storage: &mut DecompositionStorage,
 ) -> Result<(), &'static str> {
-    for (decompositions, component_info) in tile_ctx
-        .decompositions
-        .iter_mut()
+    for (decompositions, component_info) in storage
+        .tile_decompositions
+        .iter()
         .zip(tile.component_infos.iter())
     {
+        let ll_sub_band = &storage.sub_bands[decompositions.first_ll_sub_band];
+        let sub_bands = &storage.decompositions[decompositions.decompositions.clone()];
         let idwt_output = idwt::apply(
-            &decompositions.first_ll_sub_band,
-            &decompositions.decompositions,
+            ll_sub_band,
+            sub_bands,
+            &storage.sub_bands,
             component_info.coding_style.parameters.transformation,
         );
 

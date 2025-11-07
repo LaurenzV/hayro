@@ -29,6 +29,7 @@ pub(crate) fn apply(
     ll_sub_band: &SubBand,
     // All decomposition level that make up the tile.
     decompositions: &[Decomposition],
+    sub_bands: &[SubBand],
     transform: WaveletTransform,
 ) -> IDWTOutput {
     if decompositions.is_empty() {
@@ -45,6 +46,7 @@ pub(crate) fn apply(
         &decompositions[0],
         transform,
         &mut temp_buf,
+        sub_bands,
     );
 
     for decomposition in decompositions.iter().skip(1) {
@@ -53,6 +55,7 @@ pub(crate) fn apply(
             decomposition,
             transform,
             &mut temp_buf,
+            sub_bands,
         );
     }
 
@@ -92,8 +95,9 @@ fn filter_2d(
     decomposition: &Decomposition,
     transform: WaveletTransform,
     temp_buf: &mut Vec<f32>,
+    sub_bands: &[SubBand],
 ) -> IDWTOutput {
-    let mut coefficients = interleave_samples(input, decomposition);
+    let mut coefficients = interleave_samples(input, decomposition, sub_bands);
 
     filter_horizontal(&mut coefficients, temp_buf, decomposition.rect, &transform);
     filter_vertical(&mut coefficients, temp_buf, decomposition.rect, &transform);
@@ -105,7 +109,11 @@ fn filter_2d(
 }
 
 /// The 2D_INTERLEAVE procedure described in F.3.3.
-fn interleave_samples(input: IDWTInput, decomposition: &Decomposition) -> Vec<f32> {
+fn interleave_samples(
+    input: IDWTInput,
+    decomposition: &Decomposition,
+    sub_bands: &[SubBand],
+) -> Vec<f32> {
     let mut coefficients =
         vec![0.0; (decomposition.rect.width() * decomposition.rect.height()) as usize];
     let IntRect {
@@ -117,9 +125,9 @@ fn interleave_samples(input: IDWTInput, decomposition: &Decomposition) -> Vec<f3
 
     for sub_band in [
         input,
-        IDWTInput::from_sub_band(&decomposition.sub_bands[0]),
-        IDWTInput::from_sub_band(&decomposition.sub_bands[1]),
-        IDWTInput::from_sub_band(&decomposition.sub_bands[2]),
+        IDWTInput::from_sub_band(&sub_bands[decomposition.sub_bands[0]]),
+        IDWTInput::from_sub_band(&sub_bands[decomposition.sub_bands[1]]),
+        IDWTInput::from_sub_band(&sub_bands[decomposition.sub_bands[2]]),
     ] {
         let (u_min, u_max) = match sub_band.sub_band_type {
             SubBandType::LowLow | SubBandType::LowHigh => (u0.div_ceil(2), u1.div_ceil(2)),

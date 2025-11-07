@@ -155,6 +155,10 @@ impl ComponentInfo {
     pub(crate) fn wavelet_transform(&self) -> WaveletTransform {
         self.coding_style.parameters.transformation
     }
+
+    pub(crate) fn num_resolution_levels(&self) -> u16 {
+        self.coding_style.parameters.num_resolution_levels
+    }
 }
 
 /// Progression order (Table A.16).

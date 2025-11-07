@@ -17,13 +17,13 @@ use crate::decode::{CodeBlock, SubBandType};
 ///
 /// The result will be stored in the form of a vector of signs and magnitudes
 /// in the bitplane decoder context.
-pub(crate) fn decode(
+pub(crate) fn decode<'a>(
     code_block: &CodeBlock,
     sub_band_type: SubBandType,
     num_bitplanes: u16,
     style: &CodeBlockStyle,
     ctx: &mut CodeBlockDecodeContext,
-    layer_data: &[&[u8]],
+    layers: impl IntoIterator<Item = &'a [u8]>,
 ) -> Result<(), &'static str> {
     ctx.reset(code_block, sub_band_type);
 
@@ -50,8 +50,8 @@ pub(crate) fn decode(
         return Err("unsupported code-block style features encountered during decoding");
     }
 
-    for data in &layer_data[code_block.layer_range.start..code_block.layer_range.end] {
-        layer_buffer.extend(*data);
+    for data in layers {
+        layer_buffer.extend(data);
     }
 
     let mut decoder = ArithmeticDecoder::new(&layer_buffer);
@@ -765,7 +765,7 @@ mod tests {
             rect: IntRect::from_xywh(0, 0, 4, 4),
             x_idx: 0,
             y_idx: 0,
-            layer_range: 0..data.len(),
+            layers: 0..data.len(),
             has_been_included: false,
             missing_bit_planes: 0,
             number_of_coding_passes: 7,
@@ -794,7 +794,7 @@ mod tests {
             rect: IntRect::from_xywh(0, 0, 1, 5),
             x_idx: 0,
             y_idx: 0,
-            layer_range: 0..1,
+            layers: 0..1,
             has_been_included: false,
             missing_bit_planes: 0,
             number_of_coding_passes: 16,
@@ -809,7 +809,7 @@ mod tests {
             6,
             &CodeBlockStyle::default(),
             &mut ctx,
-            &[&data],
+            [&data[..]],
         )
         .unwrap();
 
@@ -827,7 +827,7 @@ mod tests {
             rect: IntRect::from_xywh(0, 0, 1, 4),
             x_idx: 0,
             y_idx: 0,
-            layer_range: 0..1,
+            layers: 0..1,
             has_been_included: false,
             missing_bit_planes: 0,
             number_of_coding_passes: 7,
@@ -842,7 +842,7 @@ mod tests {
             3,
             &CodeBlockStyle::default(),
             &mut ctx,
-            &[&data],
+            [&data[..]],
         )
         .unwrap();
 
@@ -876,7 +876,7 @@ mod tests {
             rect: IntRect::from_xywh(0, 0, 32, 32),
             x_idx: 0,
             y_idx: 0,
-            layer_range: 0..1,
+            layers: 0..1,
             has_been_included: false,
             missing_bit_planes: 5,
             number_of_coding_passes: 13,
@@ -891,7 +891,7 @@ mod tests {
             5,
             &CodeBlockStyle::default(),
             &mut ctx,
-            &[&data],
+            [&data[..]],
         )
         .unwrap();
 
