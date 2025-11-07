@@ -32,9 +32,10 @@ pub(crate) fn decode(data: &[u8], header: &Header) -> Result<Vec<ChannelData>, &
 
     let mut tile_ctx = TileDecodeContext::new(header);
 
-    for (tile_idx, tile) in tiles.iter().enumerate() {
+    for tile in tiles.iter() {
         trace!(
-            "tile {tile_idx} rect [{},{} {}x{}]",
+            "tile {} rect [{},{} {}x{}]",
+            tile.idx,
             tile.rect.x0,
             tile.rect.y0,
             tile.rect.width(),

@@ -11,6 +11,7 @@ use log::warn;
 /// A single tile in the image.
 #[derive(Clone, Debug)]
 pub(crate) struct Tile<'a> {
+    pub(crate) idx: u32,
     /// The concatenated tile parts that contain all the information for all
     /// constituent codeblocks.
     pub(crate) tile_parts: Vec<&'a [u8]>,
@@ -58,6 +59,7 @@ impl<'a> Tile<'a> {
         };
 
         Tile {
+            idx,
             // Will be filled once we start parsing.
             tile_parts: vec![],
             rect,
