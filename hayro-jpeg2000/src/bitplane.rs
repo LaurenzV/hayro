@@ -11,7 +11,7 @@
 
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use crate::codestream::CodeBlockStyle;
-use crate::packet::{CodeBlock, SubBandType};
+use crate::decode::{CodeBlock, SubBandType};
 
 /// Decode the layers of the given code block into coefficients.
 ///
@@ -658,7 +658,7 @@ mod tests {
     use super::{BitDecoder, CodeBlockDecodeContext, PositionIterator, decode, decode_inner};
     use crate::arithmetic_decoder::ArithmeticDecoderContext;
     use crate::codestream::CodeBlockStyle;
-    use crate::packet::{CodeBlock, SubBandType};
+    use crate::decode::{CodeBlock, SubBandType};
     use crate::rect::IntRect;
     use hayro_common::bit::{BitReader, BitWriter};
 

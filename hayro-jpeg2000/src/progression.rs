@@ -7,6 +7,8 @@
 use crate::codestream::ComponentInfo;
 use crate::tile::{ResolutionTile, Tile};
 
+// TODO: Refactor this whole module.
+
 #[derive(Default, Copy, Clone, Debug)]
 pub(crate) struct ProgressionData {
     pub(crate) layer_num: u16,

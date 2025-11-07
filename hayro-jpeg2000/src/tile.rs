@@ -3,7 +3,7 @@
 use crate::codestream::{
     ComponentInfo, Header, ProgressionOrder, ReaderExt, markers, skip_marker_segment,
 };
-use crate::packet::SubBandType;
+use crate::decode::SubBandType;
 use crate::rect::IntRect;
 use hayro_common::byte::Reader;
 use log::warn;

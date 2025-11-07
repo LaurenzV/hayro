@@ -1,6 +1,5 @@
 use crate::bitmap::ChannelData;
-use crate::packet::{SubBandType, process_tiles};
-use crate::tile::parse;
+use crate::decode::{SubBandType, decode};
 use hayro_common::byte::Reader;
 
 pub(crate) fn read(stream: &[u8]) -> Result<(Header, Vec<ChannelData>), &'static str> {
@@ -12,11 +11,12 @@ pub(crate) fn read(stream: &[u8]) -> Result<(Header, Vec<ChannelData>), &'static
     }
 
     let header = read_header(&mut reader)?;
-    let tiles = parse(&mut reader, &header)?;
+    let code_stream_data = reader
+        .tail()
+        .ok_or("code stream data is missing from image")?;
+    let decoded = decode(code_stream_data, &header)?;
 
-    let channels = process_tiles(&tiles, &header)?;
-
-    Ok((header, channels))
+    Ok((header, decoded))
 }
 
 #[derive(Debug)]

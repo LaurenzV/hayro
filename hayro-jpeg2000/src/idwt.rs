@@ -1,7 +1,7 @@
 //! Performing the inverse discrete wavelet transform, as specified in Annex F.
 
 use crate::codestream::WaveletTransform;
-use crate::packet::{Decomposition, SubBand, SubBandType};
+use crate::decode::{Decomposition, SubBand, SubBandType};
 use crate::rect::IntRect;
 use std::iter;
 
