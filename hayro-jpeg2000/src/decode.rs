@@ -30,7 +30,11 @@ pub(crate) fn decode(data: &[u8], header: &Header) -> Result<Vec<ChannelData>, &
     let mut reader = Reader::new(data);
     let tiles = tile::parse(&mut reader, header)?;
 
-    let mut tile_ctx = TileDecodeContext::new(header);
+    if tiles.is_empty() {
+        return Err("the image doesn't contain any tiles");
+    }
+
+    let mut tile_ctx = TileDecodeContext::new(header, &tiles[0]);
 
     for tile in tiles.iter() {
         trace!(
@@ -42,11 +46,7 @@ pub(crate) fn decode(data: &[u8], header: &Header) -> Result<Vec<ChannelData>, &
             tile.rect.height(),
         );
 
-        let iter_input = IteratorInput::new(
-            tile,
-            &header.component_infos,
-            header.global_coding_style.num_layers,
-        );
+        let iter_input = IteratorInput::new(tile);
 
         match header.global_coding_style.progression_order {
             ProgressionOrder::LayerResolutionComponentPosition => {
@@ -81,7 +81,7 @@ fn decode_tile<'a>(
     progression_iterator: impl Iterator<Item = ProgressionData>,
     tile_ctx: &mut TileDecodeContext<'a>,
 ) -> Result<(), &'static str> {
-    tile_ctx.reset();
+    tile_ctx.reset(tile);
 
     // This is the method that orchestrates all steps.
 
@@ -177,6 +177,8 @@ pub(crate) struct CodeBlock<'a> {
 /// Some of the fields are temporary in nature and reset after moving on to the
 /// next tile, some contain global state.
 struct TileDecodeContext<'a> {
+    /// The tile that we are currently decoding.
+    tile: &'a Tile<'a>,
     /// The decompositions of each component of the tile we are currently
     /// processing.
     decompositions: Vec<TileDecompositions<'a>>,
@@ -191,8 +193,8 @@ struct TileDecodeContext<'a> {
     channel_data: Vec<ChannelData>,
 }
 
-impl TileDecodeContext<'_> {
-    fn new(header: &Header) -> Self {
+impl<'a> TileDecodeContext<'a> {
+    fn new(header: &Header, initial_tile: &'a Tile<'a>) -> Self {
         let mut channel_data = vec![];
 
         for info in &header.component_infos {
@@ -210,6 +212,7 @@ impl TileDecodeContext<'_> {
         }
 
         Self {
+            tile: initial_tile,
             decompositions: vec![],
             idwt_outputs: vec![],
             code_block_decode_context: Default::default(),
@@ -218,7 +221,8 @@ impl TileDecodeContext<'_> {
         }
     }
 
-    fn reset(&mut self) {
+    fn reset(&mut self, tile: &'a Tile<'a>) {
+        self.tile = tile;
         self.code_block_len_buf.clear();
         self.decompositions.clear();
         self.idwt_outputs.clear();
@@ -830,7 +834,7 @@ fn apply_idwt<'a>(
 }
 
 fn apply_mct<'a>(header: &Header, tile_ctx: &mut TileDecodeContext<'a>) {
-    if header.global_coding_style.mct {
+    if tile_ctx.tile.mct {
         if tile_ctx.idwt_outputs.len() < 3 {
             warn!(
                 "tried to apply MCT to image with {} components",

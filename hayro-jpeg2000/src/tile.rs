@@ -18,6 +18,7 @@ pub(crate) struct Tile<'a> {
     /// Parameters for each component. In most cases, those are directly
     /// inherited from the main header. But in some cases, individual tiles
     /// might override them.
+    // TODO: Don't store size_info
     pub(crate) component_infos: Vec<ComponentInfo>,
     /// The rectangle making up the area of the tile. `x1` and `y1` are
     /// exclusive.

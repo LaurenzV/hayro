@@ -4,7 +4,6 @@
 //! (layer_num, resolution, component, precinct) in a specific order that
 //! determines in which order the data appears in the codestream.
 
-use crate::codestream::ComponentInfo;
 use crate::tile::{ResolutionTile, Tile};
 
 // TODO: Refactor this whole module.
@@ -24,19 +23,16 @@ pub(crate) struct IteratorInput<'a> {
 }
 
 impl<'a> IteratorInput<'a> {
-    pub(crate) fn new(
-        tile: &'a Tile<'a>,
-        component_infos: &'a [ComponentInfo],
-        layers: u16,
-    ) -> Self {
-        let max_resolutions = component_infos
+    pub(crate) fn new(tile: &'a Tile<'a>) -> Self {
+        let max_resolutions = tile
+            .component_infos
             .iter()
             .map(|c| c.coding_style.parameters.num_resolution_levels)
             .max()
             .unwrap_or(0);
 
         Self {
-            layers,
+            layers: tile.num_layers,
             tile,
             max_resolutions,
         }
