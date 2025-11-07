@@ -18,7 +18,7 @@ use crate::tile::{ResolutionTile, Tile};
 use crate::{bitplane, idwt};
 use hayro_common::bit::BitReader;
 use hayro_common::byte::Reader;
-use log::trace;
+use log::{trace, warn};
 
 pub(crate) struct Decomposition<'a> {
     /// In the order low-high, high-low and high-high.
@@ -88,30 +88,29 @@ pub(crate) struct CodeBlock<'a> {
     pub(crate) l_block: u32,
 }
 
+/// A reusable context used during the decoding of a single tile.
+struct TileDecodeContext<'a> {
+    /// The decompositions of each component of the tile we are currently
+    /// processing.
+    decompositions: Vec<TileDecompositions<'a>>,
+    /// The outputs of the IDWT operations of each component of the tile
+    /// we are currently processing.
+    idwt_outputs: Vec<IDWTOutput>,
+    /// A reusable context for decoding code blocks.
+    code_block_decode_context: CodeBlockDecodeContext,
+    /// A reusable temporary buffer used to store the lengths of codeblocks.
+    code_block_len_buf: Vec<u32>,
+    /// The raw, decoded samples for each channel.
+    channel_data: Vec<ChannelData>,
+}
+
 pub(crate) fn process_tiles(
     tiles: &[Tile],
     header: &Header,
 ) -> Result<Vec<ChannelData>, &'static str> {
-    let mut channels = vec![];
-
-    for info in &header.component_infos {
-        channels.push(ChannelData {
-            container: vec![
-                0.0;
-                (header.size_data.reference_grid_width * header.size_data.reference_grid_height)
-                    as usize
-            ],
-            // Will be set later on.
-            is_alpha: false,
-            bit_depth: info.size_info.precision,
-        })
-    }
-
-    let mut tile_ctx = TileDecodeContext::default();
+    let mut tile_ctx = TileDecodeContext::new(header);
 
     for (tile_idx, tile) in tiles.iter().enumerate() {
-        tile_ctx.reset();
-
         trace!(
             "tile {tile_idx} rect [{},{} {}x{}]",
             tile.rect.x0,
@@ -148,51 +147,92 @@ pub(crate) fn process_tiles(
                 process_tile(tile, header, iterator.into_iter(), &mut tile_ctx)?
             }
         };
-
-        save_samples(tile, header, &mut channels, &mut tile_ctx.idwt_output)
-            .ok_or("failed to save decoded samples into channels")?;
     }
 
-    Ok(channels)
+    Ok(tile_ctx.channel_data)
 }
 
-/// A reusable context used during the decoding of a single tile.
-#[derive(Default)]
-struct TileDecodeContext<'a> {
-    /// The decompositions of each component of the tile we are currently
-    /// processing.
-    decompositions: Vec<TileDecompositions<'a>>,
-    /// The outputs of the IDWT operations of each component of the tile
-    /// we are currently processing.
-    idwt_output: Vec<IDWTOutput>,
-    /// A reusable context for decoding code blocks.
-    code_block_decode_context: CodeBlockDecodeContext,
-    /// A reusable temporary buffer used to store the lengths of codeblocks.
-    code_block_len_buf: Vec<u32>,
+impl TileDecodeContext<'_> {
+    fn new(header: &Header) -> Self {
+        let mut channel_data = vec![];
+
+        for info in &header.component_infos {
+            channel_data.push(ChannelData {
+                container: vec![
+                    0.0;
+                    (header.size_data.reference_grid_width * header.size_data.reference_grid_height)
+                        as usize
+                ],
+                // Will be set later on, because that data only exists in the
+                // metadata of the JP2 file, not the actual code stream.
+                is_alpha: false,
+                bit_depth: info.size_info.precision,
+            })
+        }
+
+        Self {
+            decompositions: vec![],
+            idwt_outputs: vec![],
+            code_block_decode_context: Default::default(),
+            code_block_len_buf: vec![],
+            channel_data,
+        }
+    }
 }
 
 impl TileDecodeContext<'_> {
     fn reset(&mut self) {
         self.code_block_len_buf.clear();
         self.decompositions.clear();
-        self.idwt_output.clear();
+        self.idwt_outputs.clear();
         // Code-block decode context will be resetted before being used.
+        // Channel data should not be resetted because it's global
     }
 }
 
 fn process_tile<'a>(
     tile: &'a Tile<'a>,
     header: &Header,
-    mut progression_iterator: impl Iterator<Item = ProgressionData>,
+    progression_iterator: impl Iterator<Item = ProgressionData>,
     tile_ctx: &mut TileDecodeContext<'a>,
 ) -> Result<(), &'static str> {
-    build_tile_decompositions(tile, header, tile_ctx)?;
+    tile_ctx.reset();
 
-    for tile_part in &tile.tile_parts {
-        get_code_block_data(tile_part, header, &mut progression_iterator, tile_ctx)
-            .ok_or("failed to parse packet for tile")?;
+    build_tile_decompositions(tile, header, tile_ctx)?;
+    get_code_block_data(tile, header, progression_iterator, tile_ctx)?;
+    decode_bitplanes(tile, tile_ctx)?;
+    apply_idwt(tile, tile_ctx)?;
+    apply_mct(header, tile_ctx);
+    store(tile, header, tile_ctx);
+
+    Ok(())
+}
+
+fn apply_idwt<'a>(
+    tile: &'a Tile<'a>,
+    tile_ctx: &mut TileDecodeContext<'a>,
+) -> Result<(), &'static str> {
+    for (decompositions, component_info) in tile_ctx
+        .decompositions
+        .iter_mut()
+        .zip(tile.component_infos.iter())
+    {
+        let idwt_output = idwt::apply(
+            &decompositions.first_ll_sub_band,
+            &decompositions.decompositions,
+            component_info.coding_style.parameters.transformation,
+        );
+
+        tile_ctx.idwt_outputs.push(idwt_output);
     }
 
+    Ok(())
+}
+
+fn decode_bitplanes<'a>(
+    tile: &'a Tile<'a>,
+    tile_ctx: &mut TileDecodeContext<'a>,
+) -> Result<(), &'static str> {
     for (decompositions, component_info) in tile_ctx
         .decompositions
         .iter_mut()
@@ -215,14 +255,6 @@ fn process_tile<'a>(
                 )?;
             }
         }
-
-        let idwt_output = idwt::apply(
-            &decompositions.first_ll_sub_band,
-            &decompositions.decompositions,
-            component_info.coding_style.parameters.transformation,
-        );
-
-        tile_ctx.idwt_output.push(idwt_output);
     }
 
     Ok(())
@@ -320,19 +352,19 @@ fn dequantization_factor(
     Some(delta_b)
 }
 
-fn save_samples<'a>(
-    tile: &'a Tile<'a>,
-    header: &Header,
-    channels: &mut [ChannelData],
-    idwt_outputs: &mut [IDWTOutput],
-) -> Option<()> {
+fn apply_mct<'a>(header: &Header, tile_ctx: &mut TileDecodeContext<'a>) {
     if header.global_coding_style.mct {
-        if idwt_outputs.len() < 3 {
-            return None;
+        if tile_ctx.idwt_outputs.len() < 3 {
+            warn!(
+                "tried to apply MCT to image with {} components",
+                tile_ctx.idwt_outputs.len()
+            );
+
+            return;
         }
 
-        let (s, _) = idwt_outputs.split_at_mut(3);
-        let [s0, s1, s2] = s else { return None };
+        let (s, _) = tile_ctx.idwt_outputs.split_at_mut(3);
+        let [s0, s1, s2] = s else { unreachable!() };
         let s0 = &mut s0.coefficients;
         let s1 = &mut s1.coefficients;
         let s2 = &mut s2.coefficients;
@@ -343,13 +375,15 @@ fn save_samples<'a>(
             || header.component_infos[1].wavelet_transform()
                 != header.component_infos[2].wavelet_transform()
         {
-            return None;
+            warn!("tried to apply MCT to image with different wavelet transforms per component");
+            return;
         }
 
         let len = s0.len();
 
         if len != s1.len() || s1.len() != s2.len() {
-            return None;
+            warn!("tried to apply MCT to image with different number of samples per component");
+            return;
         }
 
         match transform {
@@ -377,11 +411,14 @@ fn save_samples<'a>(
             }
         }
     }
+}
 
-    for ((idwt_output, component_info), channel_data) in idwt_outputs
+fn store<'a>(tile: &'a Tile<'a>, header: &Header, tile_ctx: &mut TileDecodeContext<'a>) {
+    for ((idwt_output, component_info), channel_data) in tile_ctx
+        .idwt_outputs
         .iter_mut()
         .zip(header.component_infos.iter())
-        .zip(channels.iter_mut())
+        .zip(tile_ctx.channel_data.iter_mut())
     {
         for sample in idwt_output.coefficients.iter_mut() {
             *sample += (1 << (component_info.size_info.precision - 1)) as f32;
@@ -416,13 +453,25 @@ fn save_samples<'a>(
             output_row.copy_from_slice(input_row);
         }
     }
-
-    Some(())
 }
 
-/// Decode the tile part and insert the data of the given layer(s) for each
-/// code block.
+/// Decode the tile parts of the tile and insert the data of the given layer(s)
+/// for each code block.
 fn get_code_block_data<'a>(
+    tile: &'a Tile<'a>,
+    header: &Header,
+    mut progression_iterator: impl Iterator<Item = ProgressionData>,
+    tile_ctx: &mut TileDecodeContext<'a>,
+) -> Result<(), &'static str> {
+    for tile_part in &tile.tile_parts {
+        get_code_block_data_inner(*tile_part, header, &mut progression_iterator, tile_ctx)
+            .ok_or("failed to parse packet for tile")?;
+    }
+
+    Ok(())
+}
+
+fn get_code_block_data_inner<'a>(
     tile_part_data: &'a [u8],
     header: &Header,
     mut progression_iterator: impl Iterator<Item = ProgressionData>,
