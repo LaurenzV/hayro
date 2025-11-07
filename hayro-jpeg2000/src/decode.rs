@@ -25,6 +25,8 @@ use crate::{bitplane, idwt, tile};
 use hayro_common::bit::BitReader;
 use hayro_common::byte::Reader;
 use log::{trace, warn};
+use std::iter;
+use std::ops::Range;
 
 pub(crate) fn decode(data: &[u8], header: &Header) -> Result<Vec<ChannelData>, &'static str> {
     let mut reader = Reader::new(data);
@@ -105,16 +107,16 @@ fn decode_tile<'a>(
 }
 
 /// All decompositions for a single tile.
-struct TileDecompositions<'a> {
-    first_ll_sub_band: SubBand<'a>,
-    decompositions: Vec<Decomposition<'a>>,
+struct TileDecompositions {
+    first_ll_sub_band: SubBand,
+    decompositions: Vec<Decomposition>,
 }
 
-impl<'a> TileDecompositions<'a> {
+impl TileDecompositions {
     fn for_each_sub_band<T>(
         &mut self,
         resolution: u16,
-        mut func: impl FnMut(&mut SubBand<'a>) -> Option<T>,
+        mut func: impl FnMut(&mut SubBand) -> Option<T>,
     ) -> Option<()> {
         if resolution == 0 {
             func(&mut self.first_ll_sub_band)?;
@@ -130,18 +132,18 @@ impl<'a> TileDecompositions<'a> {
     }
 }
 
-pub(crate) struct Decomposition<'a> {
+pub(crate) struct Decomposition {
     /// In the order low-high, high-low and high-high.
-    pub(crate) sub_bands: [SubBand<'a>; 3],
+    pub(crate) sub_bands: [SubBand; 3],
     /// The rectangle of the decomposition.
     pub(crate) rect: IntRect,
 }
 
 #[derive(Clone)]
-pub(crate) struct SubBand<'a> {
+pub(crate) struct SubBand {
     pub(crate) sub_band_type: SubBandType,
     pub(crate) rect: IntRect,
-    pub(crate) precincts: Vec<Precinct<'a>>,
+    pub(crate) precincts: Vec<Precinct>,
     pub(crate) coefficients: Vec<f32>,
 }
 
@@ -154,18 +156,18 @@ pub(crate) enum SubBandType {
 }
 
 #[derive(Clone)]
-pub(crate) struct Precinct<'a> {
-    code_blocks: Vec<CodeBlock<'a>>,
+pub(crate) struct Precinct {
+    code_blocks: Vec<CodeBlock>,
     code_inclusion_tree: TagTree,
     zero_bitplane_tree: TagTree,
 }
 
 #[derive(Clone)]
-pub(crate) struct CodeBlock<'a> {
+pub(crate) struct CodeBlock {
     pub(crate) rect: IntRect,
     pub(crate) x_idx: u32,
     pub(crate) y_idx: u32,
-    pub(crate) layer_data: Vec<&'a [u8]>,
+    pub(crate) layer_range: Range<usize>,
     pub(crate) has_been_included: bool,
     pub(crate) missing_bit_planes: u8,
     pub(crate) number_of_coding_passes: u32,
@@ -181,7 +183,7 @@ struct TileDecodeContext<'a> {
     tile: &'a Tile<'a>,
     /// The decompositions of each component of the tile we are currently
     /// processing.
-    decompositions: Vec<TileDecompositions<'a>>,
+    decompositions: Vec<TileDecompositions>,
     /// The outputs of the IDWT operations of each component of the tile
     /// we are currently processing.
     idwt_outputs: Vec<IDWTOutput>,
@@ -191,6 +193,7 @@ struct TileDecodeContext<'a> {
     code_block_len_buf: Vec<u32>,
     /// The raw, decoded samples for each channel.
     channel_data: Vec<ChannelData>,
+    layer_data: Vec<&'a [u8]>,
 }
 
 impl<'a> TileDecodeContext<'a> {
@@ -217,6 +220,7 @@ impl<'a> TileDecodeContext<'a> {
             idwt_outputs: vec![],
             code_block_decode_context: Default::default(),
             code_block_len_buf: vec![],
+            layer_data: vec![],
             channel_data,
         }
     }
@@ -226,6 +230,7 @@ impl<'a> TileDecodeContext<'a> {
         self.code_block_len_buf.clear();
         self.decompositions.clear();
         self.idwt_outputs.clear();
+        self.layer_data.clear();
         // Code-block decode context will be resetted before being used.
         // Channel data should not be resetted because it's global
     }
@@ -270,7 +275,7 @@ fn build_tile_decompositions(
                     ],
                 })
             } else {
-                let build_sub_band = |sub_band_type: SubBandType| {
+                let mut build_sub_band = |sub_band_type: SubBandType| {
                     let sub_band_rect = resolution_tile.sub_band_rect(sub_band_type);
 
                     let precincts = build_precincts(&resolution_tile, sub_band_rect, tile_ctx)?;
@@ -311,8 +316,8 @@ fn build_tile_decompositions(
 fn build_precincts(
     resolution_tile: &ResolutionTile,
     sub_band_rect: IntRect,
-    tile_ctx: &TileDecodeContext,
-) -> Result<Vec<Precinct<'static>>, &'static str> {
+    tile_ctx: &mut TileDecodeContext,
+) -> Result<Vec<Precinct>, &'static str> {
     let mut precincts = vec![];
 
     let num_precincts_y = resolution_tile.num_precincts_y();
@@ -384,7 +389,7 @@ fn build_precincts(
                 resolution_tile,
                 code_blocks_x,
                 code_blocks_y,
-                tile_ctx.tile.num_layers,
+                tile_ctx,
             );
 
             let code_inclusion_tree = TagTree::new(code_blocks_x, code_blocks_y);
@@ -411,8 +416,8 @@ fn build_code_blocks(
     tile_instance: &ResolutionTile,
     code_blocks_x: u32,
     code_blocks_y: u32,
-    num_layers: u16,
-) -> Vec<CodeBlock<'static>> {
+    tile_ctx: &mut TileDecodeContext,
+) -> Vec<CodeBlock> {
     let mut blocks = vec![];
 
     let mut y = code_block_area.y0;
@@ -435,15 +440,21 @@ fn build_code_blocks(
                 area.height(),
             );
 
+            let start = tile_ctx.layer_data.len();
+            tile_ctx
+                .layer_data
+                .extend(iter::repeat_n(&[][..], tile_ctx.tile.num_layers as usize));
+            let end = tile_ctx.layer_data.len();
+
             blocks.push(CodeBlock {
                 x_idx,
                 y_idx,
                 rect: area,
-                layer_data: vec![&[]; num_layers as usize],
                 has_been_included: false,
                 missing_bit_planes: 0,
                 l_block: 3,
                 number_of_coding_passes: 0,
+                layer_range: start..end,
             });
 
             x += code_block_width;
@@ -534,7 +545,8 @@ fn get_code_block_data_inner<'a>(
                 for code_block in &mut precinct.code_blocks {
                     let length = entries.next()?;
 
-                    let layer = &mut code_block.layer_data[progression_data.layer_num as usize];
+                    let layer = &mut tile_ctx.layer_data[code_block.layer_range.start..]
+                        [progression_data.layer_num as usize];
                     *layer = data_reader.read_bytes(length as usize)?;
                 }
                 Some(())
@@ -696,6 +708,7 @@ fn decode_bitplanes<'a>(
             0,
             component_info,
             &mut tile_ctx.code_block_decode_context,
+            &tile_ctx.layer_data,
         )?;
 
         for (resolution, decomposition) in decompositions.decompositions.iter_mut().enumerate() {
@@ -705,6 +718,7 @@ fn decode_bitplanes<'a>(
                     resolution as u16 + 1,
                     component_info,
                     &mut tile_ctx.code_block_decode_context,
+                    &tile_ctx.layer_data,
                 )?;
             }
         }
@@ -718,6 +732,7 @@ fn decode_sub_band_bitplanes(
     resolution: u16,
     component_info: &ComponentInfo,
     b_ctx: &mut CodeBlockDecodeContext,
+    layer_data: &[&[u8]],
 ) -> Result<(), &'static str> {
     let dequantization_step = {
         if component_info.quantization_info.quantization_style == QuantizationStyle::NoQuantization
@@ -759,6 +774,7 @@ fn decode_sub_band_bitplanes(
                 num_bitplanes,
                 &component_info.coding_style.parameters.code_block_style,
                 b_ctx,
+                layer_data,
             )?;
 
             // Turn the signs and magnitudes into singular coefficients and
