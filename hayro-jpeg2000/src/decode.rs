@@ -472,7 +472,7 @@ fn get_code_block_data<'a>(
     tile_ctx: &mut TileDecodeContext<'a>,
 ) -> Result<(), &'static str> {
     for tile_part in &tile.tile_parts {
-        get_code_block_data_inner(*tile_part, &mut progression_iterator, tile_ctx)
+        get_code_block_data_inner(tile_part, &mut progression_iterator, tile_ctx)
             .ok_or("failed to parse packet for tile")?;
     }
 
@@ -837,7 +837,7 @@ fn apply_idwt<'a>(
     Ok(())
 }
 
-fn apply_mct<'a>(tile_ctx: &mut TileDecodeContext<'a>) {
+fn apply_mct(tile_ctx: &mut TileDecodeContext) {
     if tile_ctx.tile.mct {
         if tile_ctx.idwt_outputs.len() < 3 {
             warn!(
