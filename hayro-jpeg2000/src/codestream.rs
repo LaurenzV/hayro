@@ -1,7 +1,7 @@
 use crate::bitmap::ChannelData;
 use crate::packet::{SubBandType, process_tiles};
 use crate::rect::IntRect;
-use crate::tile::{Tile, TileInstance, parse};
+use crate::tile::{ComponentTile, Tile, TileInstance, parse};
 use hayro_common::byte::Reader;
 
 pub(crate) fn read(stream: &[u8]) -> Result<(Header, Vec<ChannelData>), &'static str> {
@@ -113,30 +113,6 @@ pub(crate) struct ComponentInfo {
 }
 
 impl ComponentInfo {
-    /// Return the coordinates of the rectangle scaled by the horizontal and vertical
-    /// resolution of the component.
-    pub(crate) fn tile_component_rect(&self, tile_rect: IntRect) -> IntRect {
-        if self.size_info.horizontal_resolution == 1 && self.size_info.vertical_resolution == 1 {
-            tile_rect
-        } else {
-            // As described in B-12.
-            let t_x0 = tile_rect
-                .x0
-                .div_ceil(self.size_info.horizontal_resolution as u32);
-            let t_y0 = tile_rect
-                .y0
-                .div_ceil(self.size_info.vertical_resolution as u32);
-            let t_x1 = tile_rect
-                .x1
-                .div_ceil(self.size_info.horizontal_resolution as u32);
-            let t_y1 = tile_rect
-                .y1
-                .div_ceil(self.size_info.vertical_resolution as u32);
-
-            IntRect::from_ltrb(t_x0, t_y0, t_x1, t_y1)
-        }
-    }
-
     pub(crate) fn exponent_mantissa(
         &self,
         sub_band_type: SubBandType,
@@ -185,7 +161,10 @@ impl ComponentInfo {
         // See formula B-14.
         let r = resolution;
         let n_l = self.coding_style.parameters.num_decomposition_levels;
-        let tile_component_rect = self.tile_component_rect(tile.rect);
+        let tile_component_rect = {
+            let component_tile = ComponentTile::new(tile, &self);
+            component_tile.rect
+        };
 
         let tx0 = tile_component_rect
             .x0
@@ -517,6 +496,12 @@ fn size_marker_inner(reader: &mut Reader) -> Option<SizeData> {
 
         let precision = (ssiz & 0x7F) + 1;
         let is_signed = (ssiz & 0x80) != 0;
+
+        if x_rsiz != 1 || y_rsiz != 1 {
+            // Those are probably very rare. Let's wait until we have a test case
+            // before attempting to implement it.
+            return None;
+        }
 
         components.push(ComponentSizeInfo {
             precision,

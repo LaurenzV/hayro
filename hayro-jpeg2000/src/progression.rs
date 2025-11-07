@@ -263,8 +263,8 @@ fn find_precinct_index(
     let base_shift = num_decomposition_levels.checked_sub(resolution)?;
     let resolution_scale = 1u64 << base_shift;
 
-    let y_stride_shift = tile_instance.ppy() as u32 + base_shift;
-    let x_stride_shift = tile_instance.ppx() as u32 + base_shift;
+    let y_stride_shift = tile_instance.precinct_exponent_y() as u32 + base_shift;
+    let x_stride_shift = tile_instance.precinct_exponent_x() as u32 + base_shift;
     let y_stride_factor = 1u64 << y_stride_shift;
     let x_stride_factor = 1u64 << x_stride_shift;
 
@@ -299,8 +299,8 @@ fn find_precinct_index(
         return None;
     }
 
-    let precinct_x_scale = 1u64 << (tile_instance.ppx() as u32);
-    let precinct_y_scale = 1u64 << (tile_instance.ppy() as u32);
+    let precinct_x_scale = 1u64 << (tile_instance.precinct_exponent_x() as u32);
+    let precinct_y_scale = 1u64 << (tile_instance.precinct_exponent_y() as u32);
 
     let p1 = x_val.div_ceil(horizontal_denom) / precinct_x_scale;
     let p2 = trx0 / precinct_x_scale;

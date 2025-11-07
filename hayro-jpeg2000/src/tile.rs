@@ -218,6 +218,46 @@ fn parse_tile_part<'a>(
     Ok(())
 }
 
+pub(crate) struct ComponentTile<'a> {
+    pub(crate) tile: &'a Tile<'a>,
+    pub(crate) component_info: &'a ComponentInfo,
+    pub(crate) rect: IntRect,
+}
+
+impl<'a> ComponentTile<'a> {
+    pub(crate) fn new(tile: &'a Tile<'a>, component_info: &'a ComponentInfo) -> Self {
+        let tile_rect = tile.rect;
+
+        let rect = if component_info.size_info.horizontal_resolution == 1
+            && component_info.size_info.vertical_resolution == 1
+        {
+            tile_rect
+        } else {
+            // As described in B-12.
+            let t_x0 = tile_rect
+                .x0
+                .div_ceil(component_info.size_info.horizontal_resolution as u32);
+            let t_y0 = tile_rect
+                .y0
+                .div_ceil(component_info.size_info.vertical_resolution as u32);
+            let t_x1 = tile_rect
+                .x1
+                .div_ceil(component_info.size_info.horizontal_resolution as u32);
+            let t_y1 = tile_rect
+                .y1
+                .div_ceil(component_info.size_info.vertical_resolution as u32);
+
+            IntRect::from_ltrb(t_x0, t_y0, t_x1, t_y1)
+        };
+
+        ComponentTile {
+            tile,
+            component_info,
+            rect,
+        }
+    }
+}
+
 pub(crate) struct TileInstance<'a> {
     pub(crate) resolution: u16,
     pub(crate) component_info: &'a ComponentInfo,
@@ -226,7 +266,10 @@ pub(crate) struct TileInstance<'a> {
 }
 
 impl<'a> TileInstance<'a> {
-    pub(crate) fn ppx(&self) -> u8 {
+    /// The exponent for determining the horizontal size of a precinct.
+    ///
+    /// `PPx` in the specification.
+    pub(crate) fn precinct_exponent_x(&self) -> u8 {
         self.component_info
             .coding_style
             .parameters
@@ -234,7 +277,10 @@ impl<'a> TileInstance<'a> {
             .0
     }
 
-    pub(crate) fn ppy(&self) -> u8 {
+    /// The exponent for determining the vertical size of a precinct.
+    ///
+    /// `PPx` in the specification.
+    pub(crate) fn precinct_exponent_y(&self) -> u8 {
         self.component_info
             .coding_style
             .parameters
@@ -296,7 +342,8 @@ impl<'a> TileInstance<'a> {
         if x0 == x1 {
             0
         } else {
-            x1.div_ceil(2u32.pow(self.ppx() as u32)) - x0 / 2u32.pow(self.ppx() as u32)
+            x1.div_ceil(2u32.pow(self.precinct_exponent_x() as u32))
+                - x0 / 2u32.pow(self.precinct_exponent_x() as u32)
         }
     }
 
@@ -307,7 +354,8 @@ impl<'a> TileInstance<'a> {
         if y0 == y1 {
             0
         } else {
-            y1.div_ceil(2u32.pow(self.ppy() as u32)) - y0 / 2u32.pow(self.ppy() as u32)
+            y1.div_ceil(2u32.pow(self.precinct_exponent_y() as u32))
+                - y0 / 2u32.pow(self.precinct_exponent_y() as u32)
         }
     }
 
@@ -320,9 +368,9 @@ impl<'a> TileInstance<'a> {
         let xcb = self.component_info.coding_style.parameters.code_block_width;
 
         let xcb = if self.resolution > 0 {
-            u8::min(xcb, self.ppx() - 1)
+            u8::min(xcb, self.precinct_exponent_x() - 1)
         } else {
-            u8::min(xcb, self.ppx())
+            u8::min(xcb, self.precinct_exponent_x())
         };
 
         2u32.pow(xcb as u32)
@@ -337,9 +385,9 @@ impl<'a> TileInstance<'a> {
             .code_block_height;
 
         let ycb = if self.resolution > 0 {
-            u8::min(ycb, self.ppy() - 1)
+            u8::min(ycb, self.precinct_exponent_y() - 1)
         } else {
-            u8::min(ycb, self.ppy())
+            u8::min(ycb, self.precinct_exponent_y())
         };
 
         2u32.pow(ycb as u32)
@@ -469,7 +517,7 @@ mod tests {
         };
 
         let tile_0_0 = Tile::new(0, &header);
-        let coords_0_0 = component_info_0.tile_component_rect(tile_0_0.rect);
+        let coords_0_0 = ComponentTile::new(&tile_0_0, &component_info_0).rect;
         assert_eq!(coords_0_0.x0, 152);
         assert_eq!(coords_0_0.y0, 234);
         assert_eq!(coords_0_0.x1, 396);
@@ -478,7 +526,7 @@ mod tests {
         assert_eq!(coords_0_0.height(), 63);
 
         let tile_1_0 = Tile::new(1, &header);
-        let coords_1_0 = component_info_0.tile_component_rect(tile_1_0.rect);
+        let coords_1_0 = ComponentTile::new(&tile_1_0, &component_info_0).rect;
         assert_eq!(coords_1_0.x0, 396);
         assert_eq!(coords_1_0.y0, 234);
         assert_eq!(coords_1_0.x1, 792);
@@ -487,7 +535,7 @@ mod tests {
         assert_eq!(coords_1_0.height(), 63);
 
         let tile_0_1 = Tile::new(4, &header);
-        let coords_0_1 = component_info_0.tile_component_rect(tile_0_1.rect);
+        let coords_0_1 = ComponentTile::new(&tile_0_1, &component_info_0).rect;
         assert_eq!(coords_0_1.x0, 152);
         assert_eq!(coords_0_1.y0, 297);
         assert_eq!(coords_0_1.x1, 396);
@@ -496,7 +544,7 @@ mod tests {
         assert_eq!(coords_0_1.height(), 297);
 
         let tile_1_1 = Tile::new(5, &header);
-        let coords_1_1 = component_info_0.tile_component_rect(tile_1_1.rect);
+        let coords_1_1 = ComponentTile::new(&tile_1_1, &component_info_0).rect;
         assert_eq!(coords_1_1.x0, 396);
         assert_eq!(coords_1_1.y0, 297);
         assert_eq!(coords_1_1.x1, 792);
@@ -505,7 +553,7 @@ mod tests {
         assert_eq!(coords_1_1.height(), 297);
 
         let tile_3_3 = Tile::new(15, &header);
-        let coords_3_3 = component_info_0.tile_component_rect(tile_3_3.rect);
+        let coords_3_3 = ComponentTile::new(&tile_3_3, &component_info_0).rect;
         assert_eq!(coords_3_3.x0, 1188);
         assert_eq!(coords_3_3.y0, 891);
         assert_eq!(coords_3_3.x1, 1432);
@@ -513,7 +561,7 @@ mod tests {
         assert_eq!(coords_3_3.width(), 244);
         assert_eq!(coords_3_3.height(), 63);
 
-        let tile_0_0_comp1 = component_info_1.tile_component_rect(tile_0_0.rect);
+        let tile_0_0_comp1 = ComponentTile::new(&tile_0_0, &component_info_1).rect;
         assert_eq!(tile_0_0_comp1.x0, 76);
         assert_eq!(tile_0_0_comp1.y0, 117);
         assert_eq!(tile_0_0_comp1.x1, 198);
@@ -521,7 +569,7 @@ mod tests {
         assert_eq!(tile_0_0_comp1.width(), 122);
         assert_eq!(tile_0_0_comp1.height(), 32);
 
-        let tile_1_0_comp1 = component_info_1.tile_component_rect(tile_1_0.rect);
+        let tile_1_0_comp1 = ComponentTile::new(&tile_1_0, &component_info_1).rect;
         assert_eq!(tile_1_0_comp1.x0, 198);
         assert_eq!(tile_1_0_comp1.y0, 117);
         assert_eq!(tile_1_0_comp1.x1, 396);
@@ -529,7 +577,7 @@ mod tests {
         assert_eq!(tile_1_0_comp1.width(), 198);
         assert_eq!(tile_1_0_comp1.height(), 32);
 
-        let tile_0_1_comp1 = component_info_1.tile_component_rect(tile_0_1.rect);
+        let tile_0_1_comp1 = ComponentTile::new(&tile_0_1, &component_info_1).rect;
         assert_eq!(tile_0_1_comp1.x0, 76);
         assert_eq!(tile_0_1_comp1.y0, 149);
         assert_eq!(tile_0_1_comp1.x1, 198);
@@ -537,7 +585,7 @@ mod tests {
         assert_eq!(tile_0_1_comp1.width(), 122);
         assert_eq!(tile_0_1_comp1.height(), 148);
 
-        let tile_1_1_comp1 = component_info_1.tile_component_rect(tile_1_1.rect);
+        let tile_1_1_comp1 = ComponentTile::new(&tile_1_1, &component_info_1).rect;
         assert_eq!(tile_1_1_comp1.x0, 198);
         assert_eq!(tile_1_1_comp1.y0, 149);
         assert_eq!(tile_1_1_comp1.x1, 396);
@@ -546,7 +594,7 @@ mod tests {
         assert_eq!(tile_1_1_comp1.height(), 148);
 
         let tile_2_1 = Tile::new(6, &header);
-        let tile_2_1_comp1 = component_info_1.tile_component_rect(tile_2_1.rect);
+        let tile_2_1_comp1 = ComponentTile::new(&tile_2_1, &component_info_1).rect;
         assert_eq!(tile_2_1_comp1.x0, 396);
         assert_eq!(tile_2_1_comp1.y0, 149);
         assert_eq!(tile_2_1_comp1.x1, 594);

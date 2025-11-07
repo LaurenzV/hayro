@@ -700,8 +700,8 @@ fn build_precincts(
     let num_precincts_y = tile_instance.num_precincts_y();
     let num_precincts_x = tile_instance.num_precincts_x();
 
-    let mut ppx = tile_instance.ppx();
-    let mut ppy = tile_instance.ppy();
+    let mut ppx = tile_instance.precinct_exponent_x();
+    let mut ppy = tile_instance.precinct_exponent_y();
 
     let mut y_start = (tile_instance.resolution_transformed_rect.y0 / (1 << ppy)) * (1 << ppy);
     let mut x_start = (tile_instance.resolution_transformed_rect.x0 / (1 << ppx)) * (1 << ppx);
