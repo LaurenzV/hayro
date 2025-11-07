@@ -48,7 +48,7 @@ pub(crate) fn decode(data: &[u8], header: &Header) -> Result<Vec<ChannelData>, &
 
         let iter_input = IteratorInput::new(tile);
 
-        match header.global_coding_style.progression_order {
+        match tile.progression_order {
             ProgressionOrder::LayerResolutionComponentPosition => {
                 let iterator = build_layer_resolution_component_position_sequence(&iter_input);
                 decode_tile(tile, header, iterator.into_iter(), &mut tile_ctx)?
@@ -87,16 +87,16 @@ fn decode_tile<'a>(
 
     // First, we build the decompositions, including their sub-bands, precincts
     // and code blocks.
-    build_tile_decompositions(tile, header, tile_ctx)?;
+    build_tile_decompositions(tile, tile_ctx)?;
     // Next, we parse the layer data for each code block.
-    get_code_block_data(tile, header, progression_iterator, tile_ctx)?;
+    get_code_block_data(tile, progression_iterator, tile_ctx)?;
     // We then decode the bitplanes of each code block, yielding the
     // (possibly dequantized) coefficients of each code block.
     decode_bitplanes(tile, tile_ctx)?;
     // Next, we apply the inverse discrete wavelet transform.
     apply_idwt(tile, tile_ctx)?;
     // If applicable, we apply the multi-component transform.
-    apply_mct(header, tile_ctx);
+    apply_mct(tile_ctx);
     // Finally, we store the raw samples for the tile area in the correct
     // location.
     store(tile, header, tile_ctx);
@@ -197,7 +197,7 @@ impl<'a> TileDecodeContext<'a> {
     fn new(header: &Header, initial_tile: &'a Tile<'a>) -> Self {
         let mut channel_data = vec![];
 
-        for info in &header.component_infos {
+        for info in &initial_tile.component_infos {
             channel_data.push(ChannelData {
                 container: vec![
                     0.0;
@@ -233,7 +233,6 @@ impl<'a> TileDecodeContext<'a> {
 
 fn build_tile_decompositions(
     tile: &Tile,
-    header: &Header,
     tile_ctx: &mut TileDecodeContext,
 ) -> Result<(), &'static str> {
     for (component_idx, component_tile) in tile.component_tiles().enumerate() {
@@ -259,7 +258,7 @@ fn build_tile_decompositions(
                     resolution_tile.rect.width(),
                     resolution_tile.rect.height(),
                 );
-                let precincts = build_precincts(&resolution_tile, sub_band_rect, header)?;
+                let precincts = build_precincts(&resolution_tile, sub_band_rect, tile_ctx)?;
 
                 ll_sub_band = Some(SubBand {
                     sub_band_type: SubBandType::LowLow,
@@ -274,7 +273,7 @@ fn build_tile_decompositions(
                 let build_sub_band = |sub_band_type: SubBandType| {
                     let sub_band_rect = resolution_tile.sub_band_rect(sub_band_type);
 
-                    let precincts = build_precincts(&resolution_tile, sub_band_rect, header)?;
+                    let precincts = build_precincts(&resolution_tile, sub_band_rect, tile_ctx)?;
 
                     Ok(SubBand {
                         sub_band_type,
@@ -312,7 +311,7 @@ fn build_tile_decompositions(
 fn build_precincts(
     resolution_tile: &ResolutionTile,
     sub_band_rect: IntRect,
-    header: &Header,
+    tile_ctx: &TileDecodeContext,
 ) -> Result<Vec<Precinct<'static>>, &'static str> {
     let mut precincts = vec![];
 
@@ -385,7 +384,7 @@ fn build_precincts(
                 resolution_tile,
                 code_blocks_x,
                 code_blocks_y,
-                header.global_coding_style.num_layers,
+                tile_ctx.tile.num_layers,
             );
 
             let code_inclusion_tree = TagTree::new(code_blocks_x, code_blocks_y);
@@ -458,12 +457,11 @@ fn build_code_blocks(
 
 fn get_code_block_data<'a>(
     tile: &'a Tile<'a>,
-    header: &Header,
     mut progression_iterator: impl Iterator<Item = ProgressionData>,
     tile_ctx: &mut TileDecodeContext<'a>,
 ) -> Result<(), &'static str> {
     for tile_part in &tile.tile_parts {
-        get_code_block_data_inner(*tile_part, header, &mut progression_iterator, tile_ctx)
+        get_code_block_data_inner(*tile_part, &mut progression_iterator, tile_ctx)
             .ok_or("failed to parse packet for tile")?;
     }
 
@@ -472,7 +470,6 @@ fn get_code_block_data<'a>(
 
 fn get_code_block_data_inner<'a>(
     tile_part_data: &'a [u8],
-    header: &Header,
     mut progression_iterator: impl Iterator<Item = ProgressionData>,
     tile_ctx: &mut TileDecodeContext<'a>,
 ) -> Option<()> {
@@ -481,12 +478,12 @@ fn get_code_block_data_inner<'a>(
     while !data.is_empty() {
         tile_ctx.code_block_len_buf.clear();
 
-        if header
-            .global_coding_style
-            .component_parameters
-            .flags
-            .may_use_sop_markers()
-        {
+        let progression_data = progression_iterator.next()?;
+        let resolution = progression_data.resolution;
+        let component_info = &tile_ctx.tile.component_infos[progression_data.component as usize];
+        let component_data = &mut tile_ctx.decompositions[progression_data.component as usize];
+
+        if component_info.coding_style.flags.may_use_sop_markers() {
             let mut reader = Reader::new(data);
             if reader.peek_marker() == Some(SOP) {
                 reader.read_marker().ok()?;
@@ -496,12 +493,7 @@ fn get_code_block_data_inner<'a>(
         }
 
         let mut reader = BitReader::new(data);
-
-        let progression_data = progression_iterator.next()?;
-        let resolution = progression_data.resolution;
         let zero_length = reader.read_packet_header_bits(1)? == 0;
-
-        let component_data = &mut tile_ctx.decompositions[progression_data.component as usize];
 
         // B.10.3 Zero length packet
         // "The first bit in the packet header denotes whether the packet has a length of zero
@@ -527,11 +519,7 @@ fn get_code_block_data_inner<'a>(
 
         let mut data_reader = Reader::new(packet_data);
 
-        if header
-            .global_coding_style
-            .component_parameters
-            .flags
-            .uses_eph_marker()
+        if component_info.coding_style.flags.uses_eph_marker()
             && data_reader.read_marker().ok()? != EPH
         {
             return None;
@@ -833,7 +821,7 @@ fn apply_idwt<'a>(
     Ok(())
 }
 
-fn apply_mct<'a>(header: &Header, tile_ctx: &mut TileDecodeContext<'a>) {
+fn apply_mct<'a>(tile_ctx: &mut TileDecodeContext<'a>) {
     if tile_ctx.tile.mct {
         if tile_ctx.idwt_outputs.len() < 3 {
             warn!(
@@ -850,11 +838,11 @@ fn apply_mct<'a>(header: &Header, tile_ctx: &mut TileDecodeContext<'a>) {
         let s1 = &mut s1.coefficients;
         let s2 = &mut s2.coefficients;
 
-        let transform = header.component_infos[0].wavelet_transform();
+        let transform = tile_ctx.tile.component_infos[0].wavelet_transform();
 
-        if transform != header.component_infos[1].wavelet_transform()
-            || header.component_infos[1].wavelet_transform()
-                != header.component_infos[2].wavelet_transform()
+        if transform != tile_ctx.tile.component_infos[1].wavelet_transform()
+            || tile_ctx.tile.component_infos[1].wavelet_transform()
+                != tile_ctx.tile.component_infos[2].wavelet_transform()
         {
             warn!("tried to apply MCT to image with different wavelet transforms per component");
             return;
@@ -898,7 +886,7 @@ fn store<'a>(tile: &'a Tile<'a>, header: &Header, tile_ctx: &mut TileDecodeConte
     for ((idwt_output, component_info), channel_data) in tile_ctx
         .idwt_outputs
         .iter_mut()
-        .zip(header.component_infos.iter())
+        .zip(tile.component_infos.iter())
         .zip(tile_ctx.channel_data.iter_mut())
     {
         for sample in idwt_output.coefficients.iter_mut() {

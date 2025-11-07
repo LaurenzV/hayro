@@ -133,7 +133,7 @@ fn parse_tile_part<'a>(
     let start = reader.offset();
 
     let tile = &mut tiles[tile_part_header.tile_index as usize];
-    let num_components = main_header.component_infos.len();
+    let num_components = tile.component_infos.len();
 
     loop {
         match reader
