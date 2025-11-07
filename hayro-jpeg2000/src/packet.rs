@@ -107,7 +107,11 @@ pub(crate) fn process_tiles(
         })
     }
 
+    let mut tile_ctx = TileDecodeContext::default();
+
     for (tile_idx, tile) in tiles.iter().enumerate() {
+        tile_ctx.reset();
+
         trace!(
             "tile {tile_idx} rect [{},{} {}x{}]",
             tile.rect.x0,
@@ -122,88 +126,106 @@ pub(crate) fn process_tiles(
             header.global_coding_style.num_layers,
         );
 
-        let mut samples = match header.global_coding_style.progression_order {
+        match header.global_coding_style.progression_order {
             ProgressionOrder::LayerResolutionComponentPosition => {
                 let iterator = build_layer_resolution_component_position_sequence(&iter_input);
-                process_tile(tile, header, iterator.into_iter())?
+                process_tile(tile, header, iterator.into_iter(), &mut tile_ctx)?
             }
             ProgressionOrder::ResolutionLayerComponentPosition => {
                 let iterator = build_resolution_layer_component_position_sequence(&iter_input);
-                process_tile(tile, header, iterator.into_iter())?
+                process_tile(tile, header, iterator.into_iter(), &mut tile_ctx)?
             }
             ProgressionOrder::ResolutionPositionComponentLayer => {
                 let iterator = build_resolution_position_component_layer_sequence(&iter_input);
-                process_tile(tile, header, iterator.into_iter())?
+                process_tile(tile, header, iterator.into_iter(), &mut tile_ctx)?
             }
             ProgressionOrder::PositionComponentResolutionLayer => {
                 let iterator = build_position_component_resolution_layer_sequence(&iter_input);
-                process_tile(tile, header, iterator.into_iter())?
+                process_tile(tile, header, iterator.into_iter(), &mut tile_ctx)?
             }
             ProgressionOrder::ComponentPositionResolutionLayer => {
                 let iterator = build_component_position_resolution_layer_sequence(&iter_input);
-                process_tile(tile, header, iterator.into_iter())?
+                process_tile(tile, header, iterator.into_iter(), &mut tile_ctx)?
             }
         };
 
-        save_samples(tile, header, &mut channels, &mut samples)
+        save_samples(tile, header, &mut channels, &mut tile_ctx.idwt_output)
             .ok_or("failed to save decoded samples into channels")?;
     }
 
     Ok(channels)
 }
 
+/// A reusable context used during the decoding of a single tile.
+#[derive(Default)]
+struct TileDecodeContext<'a> {
+    /// The decompositions of each component of the tile we are currently
+    /// processing.
+    decompositions: Vec<TileDecompositions<'a>>,
+    /// The outputs of the IDWT operations of each component of the tile
+    /// we are currently processing.
+    idwt_output: Vec<IDWTOutput>,
+    /// A reusable context for decoding code blocks.
+    code_block_decode_context: CodeBlockDecodeContext,
+    /// A reusable temporary buffer used to store the lengths of codeblocks.
+    code_block_len_buf: Vec<u32>,
+}
+
+impl TileDecodeContext<'_> {
+    fn reset(&mut self) {
+        self.code_block_len_buf.clear();
+        self.decompositions.clear();
+        self.idwt_output.clear();
+        // Code-block decode context will be resetted before being used.
+    }
+}
+
 fn process_tile<'a>(
     tile: &'a Tile<'a>,
     header: &Header,
     mut progression_iterator: impl Iterator<Item = ProgressionData>,
-) -> Result<Vec<IDWTOutput>, &'static str> {
-    let mut buf = vec![];
-    let mut component_data = build_component_data(tile, header)?;
+    tile_ctx: &mut TileDecodeContext<'a>,
+) -> Result<(), &'static str> {
+    build_tile_decompositions(tile, header, tile_ctx)?;
 
     for tile_part in &tile.tile_parts {
-        get_code_block_data(
-            tile_part,
-            header,
-            &mut component_data,
-            &mut progression_iterator,
-            &mut buf,
-        )
-        .ok_or("failed to parse packet for tile")?;
+        get_code_block_data(tile_part, header, &mut progression_iterator, tile_ctx)
+            .ok_or("failed to parse packet for tile")?;
     }
 
-    let mut idw_output = vec![];
-
-    // Create the context once and then reuse it so that we can reuse the
-    // allocations.
-    // TODO: Reuse across different tiles.
-    let mut c_ctx = CodeBlockDecodeContext::new();
-
-    for (component_data, component_info) in
-        component_data.iter_mut().zip(tile.component_infos.iter())
+    for (decompositions, component_info) in tile_ctx
+        .decompositions
+        .iter_mut()
+        .zip(tile.component_infos.iter())
     {
         process_sub_band(
-            &mut component_data.first_ll_sub_band,
+            &mut decompositions.first_ll_sub_band,
             0,
             component_info,
-            &mut c_ctx,
+            &mut tile_ctx.code_block_decode_context,
         )?;
 
-        for (resolution, decomposition) in component_data.decompositions.iter_mut().enumerate() {
+        for (resolution, decomposition) in decompositions.decompositions.iter_mut().enumerate() {
             for sub_band in &mut decomposition.sub_bands {
-                process_sub_band(sub_band, resolution as u16 + 1, component_info, &mut c_ctx)?;
+                process_sub_band(
+                    sub_band,
+                    resolution as u16 + 1,
+                    component_info,
+                    &mut tile_ctx.code_block_decode_context,
+                )?;
             }
         }
 
         let idwt_output = idwt::apply(
-            &component_data.first_ll_sub_band,
-            &component_data.decompositions,
+            &decompositions.first_ll_sub_band,
+            &decompositions.decompositions,
             component_info.coding_style.parameters.transformation,
         );
 
-        idw_output.push(idwt_output);
+        tile_ctx.idwt_output.push(idwt_output);
     }
 
-    Ok(idw_output)
+    Ok(())
 }
 
 fn process_sub_band(
@@ -403,14 +425,13 @@ fn save_samples<'a>(
 fn get_code_block_data<'a>(
     tile_part_data: &'a [u8],
     header: &Header,
-    component_data: &mut [TileDecompositions<'a>],
     mut progression_iterator: impl Iterator<Item = ProgressionData>,
-    code_block_len_buf: &mut Vec<u32>,
+    tile_ctx: &mut TileDecodeContext<'a>,
 ) -> Option<()> {
     let mut data = tile_part_data;
 
     while !data.is_empty() {
-        code_block_len_buf.clear();
+        tile_ctx.code_block_len_buf.clear();
 
         if header
             .global_coding_style
@@ -432,7 +453,7 @@ fn get_code_block_data<'a>(
         let resolution = progression_data.resolution;
         let zero_length = reader.read_packet_header_bits(1)? == 0;
 
-        let component_data = &mut component_data[progression_data.component as usize];
+        let component_data = &mut tile_ctx.decompositions[progression_data.component as usize];
 
         // B.10.3 Zero length packet
         // "The first bit in the packet header denotes whether the packet has a length of zero
@@ -440,7 +461,12 @@ fn get_code_block_data<'a>(
         // case. The value 1 indicates a non-zero length."
         if !zero_length {
             component_data.for_each_sub_band(resolution, |sub_band| {
-                get_code_block_lengths(sub_band, &progression_data, &mut reader, code_block_len_buf)
+                get_code_block_lengths(
+                    sub_band,
+                    &progression_data,
+                    &mut reader,
+                    &mut tile_ctx.code_block_len_buf,
+                )
             })?;
         }
 
@@ -464,7 +490,7 @@ fn get_code_block_data<'a>(
         }
 
         if !zero_length {
-            let mut entries = code_block_len_buf.iter().copied();
+            let mut entries = tile_ctx.code_block_len_buf.iter().copied();
 
             component_data.for_each_sub_band(resolution, |sub_band| {
                 let precinct = &mut sub_band.precincts[progression_data.precinct as usize];
@@ -621,12 +647,11 @@ fn get_code_block_lengths(
     Some(())
 }
 
-fn build_component_data(
+fn build_tile_decompositions(
     tile: &Tile,
     header: &Header,
-) -> Result<Vec<TileDecompositions<'static>>, &'static str> {
-    let mut component_data = vec![];
-
+    tile_ctx: &mut TileDecodeContext,
+) -> Result<(), &'static str> {
     for (component_idx, component_tile) in tile.component_tiles().enumerate() {
         // TODO: IMprove this
         let mut ll_sub_band = None;
@@ -691,13 +716,13 @@ fn build_component_data(
             }
         }
 
-        component_data.push(TileDecompositions {
+        tile_ctx.decompositions.push(TileDecompositions {
             decompositions,
             first_ll_sub_band: ll_sub_band.unwrap(),
-        })
+        });
     }
 
-    Ok(component_data)
+    Ok(())
 }
 
 fn build_precincts(

@@ -139,8 +139,8 @@ pub(crate) struct CodeBlockDecodeContext {
     layer_buffer: Option<Vec<u8>>,
 }
 
-impl CodeBlockDecodeContext {
-    pub(crate) fn new() -> Self {
+impl Default for CodeBlockDecodeContext {
+    fn default() -> Self {
         Self {
             signs: vec![],
             magnitude_array: vec![],
@@ -153,6 +153,36 @@ impl CodeBlockDecodeContext {
             contexts: [ArithmeticDecoderContext::default(); 19],
             layer_buffer: Some(vec![]),
         }
+    }
+}
+
+impl CodeBlockDecodeContext {
+    /// Completely reset context so that it can be reused for a new code-block.
+    pub(crate) fn reset(&mut self, code_block: &CodeBlock, sub_band_type: SubBandType) {
+        let (width, height) = (code_block.rect.width(), code_block.rect.height());
+
+        for arr in [
+            &mut self.signs,
+            &mut self.significance_states,
+            &mut self.first_magnitude_refinement,
+            &mut self.has_zero_coding,
+        ] {
+            arr.clear();
+            arr.resize(width as usize * height as usize, 0);
+        }
+
+        self.magnitude_array.clear();
+        self.magnitude_array
+            .resize(width as usize * height as usize, ComponentBits::default());
+
+        for mag in &mut self.magnitude_array {
+            mag.count = code_block.missing_bit_planes;
+        }
+
+        self.width = width;
+        self.height = height;
+        self.sub_band_type = sub_band_type;
+        self.reset_contexts();
     }
 
     pub(crate) fn signs(&self) -> &[u8] {
@@ -181,34 +211,6 @@ impl CodeBlockDecodeContext {
         self.contexts[0].index = 4;
         self.contexts[17].index = 3;
         self.contexts[18].index = 46;
-    }
-
-    /// Completely reset context so that it can be reused for a new code-block.
-    fn reset(&mut self, code_block: &CodeBlock, sub_band_type: SubBandType) {
-        let (width, height) = (code_block.rect.width(), code_block.rect.height());
-
-        for arr in [
-            &mut self.signs,
-            &mut self.significance_states,
-            &mut self.first_magnitude_refinement,
-            &mut self.has_zero_coding,
-        ] {
-            arr.clear();
-            arr.resize(width as usize * height as usize, 0);
-        }
-
-        self.magnitude_array.clear();
-        self.magnitude_array
-            .resize(width as usize * height as usize, ComponentBits::default());
-
-        for mag in &mut self.magnitude_array {
-            mag.count = code_block.missing_bit_planes;
-        }
-
-        self.width = width;
-        self.height = height;
-        self.sub_band_type = sub_band_type;
-        self.reset_contexts();
     }
 
     fn reset_for_next_bitplane(&mut self) {
@@ -769,7 +771,7 @@ mod tests {
             l_block: 0,
         };
 
-        let mut ctx = CodeBlockDecodeContext::new();
+        let mut ctx = CodeBlockDecodeContext::default();
         ctx.reset(&code_block, SubBandType::LowLow);
 
         decode_inner(&code_block, 3, &mut decoder, &mut ctx);
@@ -798,7 +800,7 @@ mod tests {
             l_block: 0,
         };
 
-        let mut ctx = CodeBlockDecodeContext::new();
+        let mut ctx = CodeBlockDecodeContext::default();
 
         decode(
             &code_block,
@@ -830,7 +832,7 @@ mod tests {
             l_block: 0,
         };
 
-        let mut ctx = CodeBlockDecodeContext::new();
+        let mut ctx = CodeBlockDecodeContext::default();
 
         decode(
             &code_block,
@@ -878,7 +880,7 @@ mod tests {
             l_block: 0,
         };
 
-        let mut ctx = CodeBlockDecodeContext::new();
+        let mut ctx = CodeBlockDecodeContext::default();
 
         decode(
             &code_block,
