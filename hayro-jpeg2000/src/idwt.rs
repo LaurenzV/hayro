@@ -252,6 +252,9 @@ fn filter_single_row(scanline: &mut [f32], start: usize, end: usize, transform: 
 
 /// The 1D FILTER 5-3R procedure from F.3.8.1.
 fn reversible_filter_53r(scanline: &mut [f32], start: usize, end: usize) {
+    // Hint the compiler that we won't go OOB to emit bound checks.
+    let scanline = &mut scanline[..2 * (end / 2 + 1)];
+
     // Equation (F-5).
     for n in start / 2..(end / 2) + 1 {
         let base_idx = 2 * n;
@@ -274,6 +277,9 @@ fn irreversible_filter_97i(scanline: &mut [f32], start: usize, end: usize) {
     const GAMMA: f32 = 0.882_911_1;
     const DELTA: f32 = 0.443_506_87;
     const KAPPA: f32 = 1.230_174_1;
+
+    // Hint the compiler that we won't go OOB to emit bound checks.
+    let scanline = &mut scanline[..2 * (end / 2 + 2)];
 
     // Step 1.
     for i in (start / 2 - 1)..(end / 2 + 2) {
