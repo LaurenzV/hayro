@@ -361,6 +361,7 @@ impl<'a> ResolutionTile<'a> {
     }
 
     pub(crate) fn sub_band_rect(&self, sub_band_type: SubBandType) -> IntRect {
+        // This is the only permissible sub-band type for the given resolution.
         if self.resolution == 0 {
             assert_eq!(sub_band_type, SubBandType::LowLow);
         }
