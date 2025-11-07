@@ -85,7 +85,7 @@ pub(crate) fn parse<'a>(
     main_header: &'a Header,
 ) -> Result<Vec<Tile<'a>>, &'static str> {
     let mut tiles = (0..main_header.size_data.num_tiles() as usize)
-        .map(|idx| Tile::new(idx as u32, &main_header))
+        .map(|idx| Tile::new(idx as u32, main_header))
         .collect::<Vec<_>>();
 
     parse_tile_part(reader, main_header, &mut tiles, true)?;
@@ -121,11 +121,10 @@ fn parse_tile_part<'a>(
         reader.tail().map(|d| d.len()).unwrap_or(0)
     } else {
         // Subtract 12 to account for the marker length.
-        let length = (tile_part_header.tile_part_length as usize)
-            .checked_sub(12)
-            .ok_or("tile-part length shorter than header")?;
 
-        length
+        (tile_part_header.tile_part_length as usize)
+            .checked_sub(12)
+            .ok_or("tile-part length shorter than header")?
     };
 
     let start = reader.offset();

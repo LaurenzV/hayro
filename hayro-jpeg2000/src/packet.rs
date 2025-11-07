@@ -139,7 +139,7 @@ fn process_tile<'a>(
 
     for tile_part in &tile.tile_parts {
         parse_packet(
-            &tile_part,
+            tile_part,
             header,
             &mut component_data,
             &mut progression_iterator,
