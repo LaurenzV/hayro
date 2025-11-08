@@ -84,7 +84,7 @@ fn read_header(reader: &mut Reader) -> Result<Header, &'static str> {
     let cod = cod.ok_or("missing COD marker")?;
     let qcd = qcd.ok_or("missing QCD marker")?;
 
-    let component_infos = size_data
+    let component_infos: Vec<ComponentInfo> = size_data
         .component_sizes
         .iter()
         .enumerate()
@@ -96,6 +96,18 @@ fn read_header(reader: &mut Reader) -> Result<Header, &'static str> {
             quantization_info: qcd_components[idx].clone().unwrap_or(qcd.clone()),
         })
         .collect();
+
+    for ci in &component_infos {
+        if ci.coding_style.parameters.code_block_style.selective_arithmetic_coding_bypass
+            || ci.coding_style.parameters.code_block_style.segmentation_symbols
+            || ci.coding_style.parameters.code_block_style.vertically_causal_context
+            || ci.coding_style.parameters.code_block_style.predictable_termination
+            || ci.coding_style.parameters.code_block_style.termination_on_each_pass
+            || ci.coding_style.parameters.code_block_style.reset_context_probabilities
+        {
+            return Err("unsupported code-block style features encountered during decoding");
+        }
+    }
 
     Ok(Header {
         size_data,
