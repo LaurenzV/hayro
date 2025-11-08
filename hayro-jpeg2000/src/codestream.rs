@@ -75,6 +75,10 @@ fn read_header(reader: &mut Reader) -> Result<Header, &'static str> {
                 reader.read_marker()?;
                 com_marker(reader).ok_or("failed to read COM marker")?;
             }
+            markers::CRG => {
+                reader.read_marker()?;
+                skip_marker_segment(reader);
+            }
             _ => {
                 return Err("unsupported marker encountered in main header");
             }
