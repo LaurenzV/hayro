@@ -575,8 +575,14 @@ fn get_code_block_data<'a>(
     storage: &mut DecompositionStorage<'a>,
 ) -> Result<(), &'static str> {
     for tile_part in &tile.tile_parts {
-        get_code_block_data_inner(tile_part, &mut progression_iterator, tile_ctx, storage)
-            .ok_or("failed to parse packet for tile")?;
+        if get_code_block_data_inner(tile_part, &mut progression_iterator, tile_ctx, storage)
+            .is_none()
+        {
+            warn!(
+                "failed to fully process a tile part in tile {}, decoded image might be corrupted",
+                tile.idx
+            );
+        }
     }
 
     Ok(())

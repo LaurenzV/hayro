@@ -4,7 +4,7 @@ use crate::boxes::{
     JP2_HEADER, JP2_SIGNATURE, read_box, tag_to_string,
 };
 use hayro_common::byte::Reader;
-use log::debug;
+use log::{debug, warn};
 
 mod arithmetic_decoder;
 pub mod bitmap;
@@ -267,7 +267,11 @@ fn read_jp2_file(data: &[u8]) -> Result<Bitmap, &'static str> {
 
     // Read boxes until we find the JP2 Header box
     while !reader.at_end() {
-        let current_box = read_box(&mut reader).ok_or("failed to read JP2 box")?;
+        let Some(current_box) = read_box(&mut reader) else {
+            warn!("failed to read a JP2 box, aborting");
+
+            break;
+        };
 
         if current_box.box_type == JP2_HEADER {
             // Parse the JP2 Header box (superbox)
