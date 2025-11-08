@@ -182,7 +182,17 @@ impl ImageMetadata {
 }
 
 pub fn read(data: &[u8]) -> Result<Bitmap, &'static str> {
-    read_jp2_file(data).or_else(|_| read_jp2_codestream(data))
+    // JP2 signature box: 00 00 00 0C 6A 50 20 20
+    const JP2_MAGIC: &[u8] = b"\x00\x00\x00\x0C\x6A\x50\x20\x20";
+    // Codestream signature: FF 4F FF 51 (SOC + SIZ markers)
+    const CODESTREAM_MAGIC: &[u8] = b"\xFF\x4F\xFF\x51";
+    if data.starts_with(JP2_MAGIC) {
+        read_jp2_file(data)
+    }   else if data.starts_with(CODESTREAM_MAGIC) {
+        read_jp2_codestream(data)
+    }   else {
+        return Err("invalid JP2 file");
+    }
 }
 
 fn read_jp2_codestream(data: &[u8]) -> Result<Bitmap, &'static str> {
