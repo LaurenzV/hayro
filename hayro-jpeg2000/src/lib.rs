@@ -188,9 +188,9 @@ pub fn read(data: &[u8]) -> Result<Bitmap, &'static str> {
     const CODESTREAM_MAGIC: &[u8] = b"\xFF\x4F\xFF\x51";
     if data.starts_with(JP2_MAGIC) {
         read_jp2_file(data)
-    }   else if data.starts_with(CODESTREAM_MAGIC) {
+    } else if data.starts_with(CODESTREAM_MAGIC) {
         read_jp2_codestream(data)
-    }   else {
+    } else {
         return Err("invalid JP2 file");
     }
 }
