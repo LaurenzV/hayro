@@ -466,10 +466,6 @@ fn size_marker(reader: &mut Reader) -> Result<SizeData, &'static str> {
                 "unsupported component precision: only components up to 8 bits are handled",
             );
         }
-
-        // if comp.vertical_resolution != 1 || comp.horizontal_resolution != 1 {
-        //     return Err("unsupported component resolution: only unit resolutions are handled");
-        // }
     }
 
     Ok(size_data)
