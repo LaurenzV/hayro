@@ -788,7 +788,7 @@ mod tests {
     // First packet from example in Section J.10.4.
     #[test]
     fn bitplane_decoding_2() {
-        let data = vec![0x01, 0x8f, 0x0d, 0xc8, 0x75, 0x5d];
+        let data = [0x01, 0x8f, 0x0d, 0xc8, 0x75, 0x5d];
 
         let code_block = CodeBlock {
             rect: IntRect::from_xywh(0, 0, 1, 5),
@@ -821,7 +821,7 @@ mod tests {
     // Second packet from example in Section J.10.4.
     #[test]
     fn bitplane_decoding_3() {
-        let data = vec![0x0F, 0xB1, 0x76];
+        let data = [0x0F, 0xB1, 0x76];
 
         let code_block = CodeBlock {
             rect: IntRect::from_xywh(0, 0, 1, 4),

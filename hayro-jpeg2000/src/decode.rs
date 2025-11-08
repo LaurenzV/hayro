@@ -183,12 +183,10 @@ impl Iterator for SubBandIter {
             } else {
                 Some(self.indices[0])
             }
+        } else if self.next_idx >= self.indices.len() {
+            None
         } else {
-            if self.next_idx >= self.indices.len() {
-                None
-            } else {
-                Some(self.indices[self.next_idx])
-            }
+            Some(self.indices[self.next_idx])
         };
 
         self.next_idx += 1;
@@ -402,7 +400,7 @@ fn build_decompositions(
         storage.sub_bands.push(ll_sub_band.unwrap());
 
         storage.tile_decompositions.push(TileDecompositions {
-            decompositions: start..end.clone(),
+            decompositions: start..end,
             first_ll_sub_band,
         });
     }
