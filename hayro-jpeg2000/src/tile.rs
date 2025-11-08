@@ -252,7 +252,13 @@ fn parse_tile_part<'a>(
         }
     }
 
-    let remaining_bytes = data_len - (reader.offset() - start);
+    let remaining_bytes = if let Some(len) = data_len.checked_sub(reader.offset() - start) {
+        len
+    } else {
+        warn!("didn't find sufficient data in tile part");
+
+        return Ok(());
+    };
 
     tile.tile_parts.push(
         reader
