@@ -191,7 +191,7 @@ pub fn read(data: &[u8]) -> Result<Bitmap, &'static str> {
     } else if data.starts_with(CODESTREAM_MAGIC) {
         read_jp2_codestream(data)
     } else {
-        return Err("invalid JP2 file");
+        Err("invalid JP2 file")
     }
 }
 
