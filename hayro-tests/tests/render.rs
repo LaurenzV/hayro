@@ -1212,3 +1212,4 @@ use crate::run_render_test;
 #[test] fn corpus_0917011() { run_render_test("corpus_0917011", "downloads/corpus/0917011.pdf", None); }
 #[test] fn corpus_0031730() { run_render_test("corpus_0031730", "downloads/corpus/0031730.pdf", Some("..=0")); }
 #[test] fn corpus_0210666() { run_render_test("corpus_0210666", "downloads/corpus/0210666.pdf", None); }
+#[test] fn corpus_0344421() { run_render_test("corpus_0344421", "downloads/corpus/0344421.pdf", Some("7..=7")); }

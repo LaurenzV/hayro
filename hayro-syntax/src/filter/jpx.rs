@@ -16,7 +16,7 @@ impl ImageColorSpace {
 pub(crate) fn decode(data: &[u8], params: &ImageDecodeParams) -> Option<FilterResult> {
     use crate::object::stream::ImageColorSpace;
 
-    let mut bitmap = hayro_jpeg2000::read(data).ok()?;
+    let mut bitmap = hayro_jpeg2000::read(data).unwrap();
 
     let width = bitmap.metadata.width;
     let height = bitmap.metadata.height;

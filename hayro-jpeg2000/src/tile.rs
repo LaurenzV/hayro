@@ -97,9 +97,10 @@ pub(crate) fn parse<'a>(
         parse_tile_part(reader, main_header, &mut tiles, false)?;
     }
 
-    if reader.read_marker()? != markers::EOC {
-        return Err("expected EOC marker when parsing tiles");
-    }
+    // TODO: Add this for strict mode.
+    // if reader.read_marker()? != markers::EOC {
+    //     return Err("expected EOC marker when parsing tiles");
+    // }
 
     Ok(tiles)
 }
@@ -136,10 +137,16 @@ fn parse_tile_part<'a>(
     let num_components = tile.component_infos.len();
 
     loop {
-        match reader
-            .peek_marker()
-            .ok_or("failed to peek tile-part marker")?
-        {
+        let Some(marker) = reader.peek_marker() else {
+            warn!(
+                "expected marker in tile-part, but didn't find one. tile \
+            part will be ignored."
+            );
+
+            return Ok(());
+        };
+
+        match marker {
             markers::SOD => {
                 reader.read_marker()?;
                 break;
