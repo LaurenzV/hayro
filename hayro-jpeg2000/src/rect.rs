@@ -1,4 +1,4 @@
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct IntRect {
     pub(crate) x0: u32,
     pub(crate) y0: u32,

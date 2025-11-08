@@ -20,7 +20,7 @@ use crate::progression::{
 };
 use crate::rect::IntRect;
 use crate::tag_tree::TagTree;
-use crate::tile::{ResolutionTile, Tile};
+use crate::tile::{ComponentTile, ResolutionTile, Tile};
 use crate::{bitplane, idwt, tile};
 use hayro_common::bit::BitReader;
 use hayro_common::byte::Reader;
@@ -1029,33 +1029,74 @@ fn store<'a>(tile: &'a Tile<'a>, header: &Header, tile_ctx: &mut TileDecodeConte
             *sample += (1 << (component_info.size_info.precision - 1)) as f32;
         }
 
-        // The rect of the IDWT output corresponds to the rect of the highest
-        // decomposition level of the tile, which is usually not 1:1 aligned
-        // with the actual tile rectangle. We also need to account for the
-        // offset of the reference grid.
+        let component_tile = ComponentTile::new(tile, component_info);
 
-        let skip_x = tile.rect.x0 - idwt_output.rect.x0;
-        let skip_y = tile.rect.y0 - idwt_output.rect.y0;
-        let take_x = tile.rect.width();
-        let take_y = tile.rect.height();
+        assert_eq!(idwt_output.rect, component_tile.rect);
 
-        let input_row_iter = idwt_output
-            .coefficients
-            .chunks_exact(idwt_output.rect.width() as usize)
-            .skip(skip_y as usize)
-            .take(take_y as usize);
+        let (scale_x, scale_y) = (
+            component_info.size_info.horizontal_resolution,
+            component_info.size_info.vertical_resolution,
+        );
 
-        let output_row_iter = channel_data
-            .container
-            .chunks_exact_mut(header.size_data.reference_grid_width as usize)
-            .skip(tile.rect.y0 as usize)
-            .take(take_y as usize);
+        if scale_x == 1 && scale_y == 1 {
+            // If no sub-sampling, use a fast path where we copy rows of coefficients
+            // at once.
 
-        for (input_row, output_row) in input_row_iter.zip(output_row_iter) {
-            let input_row = &input_row[skip_x as usize..][..take_x as usize];
-            let output_row = &mut output_row[tile.rect.x0 as usize..][..take_x as usize];
+            // The rect of the IDWT output corresponds to the rect of the highest
+            // decomposition level of the tile, which is usually not 1:1 aligned
+            // with the actual tile rectangle. We also need to account for the
+            // offset of the reference grid.
+            let skip_x = component_tile.rect.x0 - idwt_output.rect.x0;
+            let skip_y = component_tile.rect.y0 - idwt_output.rect.y0;
+            let take_x = component_tile.rect.width();
+            let take_y = component_tile.rect.height();
 
-            output_row.copy_from_slice(input_row);
+            let input_row_iter = idwt_output
+                .coefficients
+                .chunks_exact(idwt_output.rect.width() as usize)
+                .skip(skip_y as usize)
+                .take(take_y as usize);
+
+            let output_row_iter = channel_data
+                .container
+                .chunks_exact_mut(header.size_data.reference_grid_width as usize)
+                .skip(tile.rect.y0 as usize)
+                .take(take_y as usize);
+
+            for (input_row, output_row) in input_row_iter.zip(output_row_iter) {
+                let input_row = &input_row[skip_x as usize..][..take_x as usize];
+                let output_row = &mut output_row[tile.rect.x0 as usize..][..take_x as usize];
+
+                output_row.copy_from_slice(input_row);
+            }
+        } else {
+            // Currently, we can assume that the reference grid offset is 0
+            // (we have a check for that when parsing size data) for simplicity.
+
+            // Otherwise, copy sample by sample.
+            for y in component_tile.rect.y0..component_tile.rect.y1 {
+                let relative_y = (y - component_tile.rect.y0) as usize;
+                let reference_grid_y = scale_y as u32 * y;
+
+                for x in component_tile.rect.x0..component_tile.rect.x1 {
+                    let relative_x = (x - component_tile.rect.x0) as usize;
+                    let reference_grid_x = scale_x as u32 * x;
+
+                    let sample = idwt_output.coefficients
+                        [relative_y * component_tile.rect.width() as usize + relative_x];
+
+                    for x_offset in 0..scale_x as u32 {
+                        for y_offset in 0..scale_y as u32 {
+                            let y_position = (reference_grid_y + y_offset) as usize;
+                            let x_position = (reference_grid_x + x_offset) as usize;
+
+                            channel_data.container[y_position
+                                * header.size_data.reference_grid_width as usize
+                                + x_position] = sample;
+                        }
+                    }
+                }
+            }
         }
     }
 }

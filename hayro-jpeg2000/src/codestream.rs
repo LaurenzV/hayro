@@ -467,9 +467,9 @@ fn size_marker(reader: &mut Reader) -> Result<SizeData, &'static str> {
             );
         }
 
-        if comp.vertical_resolution != 1 || comp.horizontal_resolution != 1 {
-            return Err("unsupported component resolution: only unit resolutions are handled");
-        }
+        // if comp.vertical_resolution != 1 || comp.horizontal_resolution != 1 {
+        //     return Err("unsupported component resolution: only unit resolutions are handled");
+        // }
     }
 
     Ok(size_data)
@@ -500,7 +500,7 @@ fn size_marker_inner(reader: &mut Reader) -> Option<SizeData> {
         let precision = (ssiz & 0x7F) + 1;
         let is_signed = (ssiz & 0x80) != 0;
 
-        if x_rsiz != 1 || y_rsiz != 1 {
+        if (x_rsiz != 1 || y_rsiz != 1) && (x_osiz != 0 || y_osiz != 0) {
             // Those are probably very rare. Let's wait until we have a test case
             // before attempting to implement it.
             return None;
