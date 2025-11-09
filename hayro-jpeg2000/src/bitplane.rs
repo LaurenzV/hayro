@@ -42,10 +42,7 @@ pub(crate) fn decode<'a>(
     let mut layer_buffer = std::mem::take(&mut ctx.layer_buffer).unwrap_or_default();
     layer_buffer.clear();
 
-    if style.selective_arithmetic_coding_bypass
-        || style.predictable_termination
-        || style.termination_on_each_pass
-    {
+    if style.selective_arithmetic_coding_bypass || style.predictable_termination {
         return Err("unsupported code-block style features encountered during decoding");
     }
 
@@ -77,9 +74,19 @@ fn decode_inner(
         }
     }
 
-    let mut decoder = ArithmeticDecoder::new(&combined_layers);
+    let mut decoder = if style.termination_on_each_pass {
+        ArithmeticDecoder::new(&combined_layers[..segment_ranges[1]])
+    } else {
+        ArithmeticDecoder::new(&combined_layers)
+    };
 
     for coding_pass in 0..code_block.number_of_coding_passes {
+        if coding_pass > 0 && style.termination_on_each_pass {
+            let data = &combined_layers
+                [segment_ranges[coding_pass as usize]..segment_ranges[coding_pass as usize + 1]];
+            decoder = ArithmeticDecoder::new(data);
+        }
+
         enum PassType {
             Cleanup,
             SignificancePropagation,

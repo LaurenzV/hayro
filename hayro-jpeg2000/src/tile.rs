@@ -234,11 +234,6 @@ fn parse_tile_part<'a>(
                 .parameters
                 .code_block_style
                 .predictable_termination
-            || ci
-                .coding_style
-                .parameters
-                .code_block_style
-                .termination_on_each_pass
         {
             return Err("unsupported code-block style features encountered during decoding");
         }

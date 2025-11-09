@@ -807,15 +807,15 @@ fn get_code_block_lengths(
 
         code_block.l_block += k;
 
-        let num_segments = if !component_info
+        let (num_segments, coding_passes_per_segment) = if !component_info
             .coding_style
             .parameters
             .code_block_style
             .termination_on_each_pass
         {
-            1
+            (1, added_coding_passes)
         } else {
-            added_coding_passes
+            (added_coding_passes, 1)
         };
 
         let start = storage.segments.len();
@@ -833,7 +833,7 @@ fn get_code_block_lengths(
                 // zero, the value of Lblock is incremented by k. While Lblock can only increase,
                 // the number of bits used to signal the length of the code-block contribution can
                 // increase or decrease depending on the number of coding passes included."
-                let length_bits = code_block.l_block + added_coding_passes.ilog2();
+                let length_bits = code_block.l_block + coding_passes_per_segment.ilog2();
                 reader.read_packet_header_bits(length_bits as u8)
             }?;
 
