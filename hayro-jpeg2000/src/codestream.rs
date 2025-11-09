@@ -123,11 +123,6 @@ fn read_header(reader: &mut Reader) -> Result<Header, &'static str> {
                 .parameters
                 .code_block_style
                 .termination_on_each_pass
-            || ci
-                .coding_style
-                .parameters
-                .code_block_style
-                .reset_context_probabilities
         {
             return Err("unsupported code-block style features encountered during decoding");
         }

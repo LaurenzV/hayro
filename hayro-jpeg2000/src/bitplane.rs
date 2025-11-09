@@ -45,7 +45,6 @@ pub(crate) fn decode<'a>(
         || style.vertically_causal_context
         || style.predictable_termination
         || style.termination_on_each_pass
-        || style.reset_context_probabilities
     {
         return Err("unsupported code-block style features encountered during decoding");
     }
@@ -56,7 +55,7 @@ pub(crate) fn decode<'a>(
 
     let mut decoder = ArithmeticDecoder::new(&layer_buffer);
 
-    decode_inner(code_block, num_bitplanes, &mut decoder, ctx)
+    decode_inner(code_block, style, num_bitplanes, &mut decoder, ctx)
         .ok_or("failed to decode code-block arithmetic data")?;
 
     ctx.layer_buffer = Some(layer_buffer);
@@ -66,6 +65,7 @@ pub(crate) fn decode<'a>(
 
 fn decode_inner(
     code_block: &CodeBlock,
+    style: &CodeBlockStyle,
     num_bitplanes: u16,
     decoder: &mut impl BitDecoder,
     ctx: &mut CodeBlockDecodeContext,
@@ -97,6 +97,10 @@ fn decode_inner(
             PassType::MagnitudeRefinement => {
                 magnitude_refinement_pass(ctx, decoder);
             }
+        }
+
+        if style.reset_context_probabilities {
+            ctx.reset_contexts();
         }
     }
 
