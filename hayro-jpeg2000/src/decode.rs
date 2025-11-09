@@ -627,7 +627,7 @@ fn get_code_block_data_inner<'a>(
         }
 
         let mut reader = BitReader::new(data);
-        let zero_length = reader.read_packet_header_bits(1)? == 0;
+        let zero_length = reader.read_bits_with_stuffing(1)? == 0;
 
         // B.10.3 Zero length packet
         // "The first bit in the packet header denotes whether the packet has a length of zero
@@ -706,7 +706,7 @@ fn get_code_block_lengths(
             // a single bit is used to represent the information, where a 1
             // means that the code-block is included in this layer and a 0 means
             // that it is not."
-            reader.read_packet_header_bits(1)? == 1
+            reader.read_bits_with_stuffing(1)? == 1
         } else {
             // "For code-blocks that have not been previously included in any packet,
             // this information is signalled with a separate tag tree code for each precinct
@@ -769,27 +769,27 @@ fn get_code_block_lengths(
         // "The number of coding passes included in this packet from each code-block is
         // identified in the packet header using the codewords shown in Table B.4. This
         // table provides for the possibility of signalling up to 164 coding passes.
-        let added_coding_passes = if reader.peak_packet_header_bits(9) == Some(0x1ff) {
-            reader.read_packet_header_bits(9)?;
-            reader.read_packet_header_bits(7)? + 37
-        } else if reader.peak_packet_header_bits(4) == Some(0x0f) {
-            reader.read_packet_header_bits(4)?;
+        let added_coding_passes = if reader.peak_bits_with_stuffing(9) == Some(0x1ff) {
+            reader.read_bits_with_stuffing(9)?;
+            reader.read_bits_with_stuffing(7)? + 37
+        } else if reader.peak_bits_with_stuffing(4) == Some(0x0f) {
+            reader.read_bits_with_stuffing(4)?;
             // TODO: Validate that sequence is not 1111 1
-            reader.read_packet_header_bits(5)? + 6
-        } else if reader.peak_packet_header_bits(4) == Some(0b1110) {
-            reader.read_packet_header_bits(4)?;
+            reader.read_bits_with_stuffing(5)? + 6
+        } else if reader.peak_bits_with_stuffing(4) == Some(0b1110) {
+            reader.read_bits_with_stuffing(4)?;
             5
-        } else if reader.peak_packet_header_bits(4) == Some(0b1101) {
-            reader.read_packet_header_bits(4)?;
+        } else if reader.peak_bits_with_stuffing(4) == Some(0b1101) {
+            reader.read_bits_with_stuffing(4)?;
             4
-        } else if reader.peak_packet_header_bits(4) == Some(0b1100) {
-            reader.read_packet_header_bits(4)?;
+        } else if reader.peak_bits_with_stuffing(4) == Some(0b1100) {
+            reader.read_bits_with_stuffing(4)?;
             3
-        } else if reader.peak_packet_header_bits(2) == Some(0b10) {
-            reader.read_packet_header_bits(2)?;
+        } else if reader.peak_bits_with_stuffing(2) == Some(0b10) {
+            reader.read_bits_with_stuffing(2)?;
             2
-        } else if reader.peak_packet_header_bits(1) == Some(0) {
-            reader.read_packet_header_bits(1)?;
+        } else if reader.peak_bits_with_stuffing(1) == Some(0) {
+            reader.read_bits_with_stuffing(1)?;
             1
         } else {
             return None;
@@ -801,7 +801,7 @@ fn get_code_block_lengths(
 
         let mut k = 0;
 
-        while reader.read_packet_header_bits(1)? == 1 {
+        while reader.read_bits_with_stuffing(1)? == 1 {
             k += 1;
         }
 
@@ -834,7 +834,7 @@ fn get_code_block_lengths(
                 // the number of bits used to signal the length of the code-block contribution can
                 // increase or decrease depending on the number of coding passes included."
                 let length_bits = code_block.l_block + coding_passes_per_segment.ilog2();
-                reader.read_packet_header_bits(length_bits as u8)
+                reader.read_bits_with_stuffing(length_bits as u8)
             }?;
 
             storage.segments.push(Segment {
@@ -1149,15 +1149,15 @@ fn store<'a>(tile: &'a Tile<'a>, header: &Header, tile_ctx: &mut TileDecodeConte
 }
 
 pub(crate) trait BitReaderExt {
-    fn read_packet_header_bits(&mut self, bit_size: u8) -> Option<u32>;
+    fn read_bits_with_stuffing(&mut self, bit_size: u8) -> Option<u32>;
     fn read_stuff_bit_if_necessary(&mut self) -> Option<()>;
-    fn peak_packet_header_bits(&mut self, bit_size: u8) -> Option<u32>;
+    fn peak_bits_with_stuffing(&mut self, bit_size: u8) -> Option<u32>;
 }
 
 impl BitReaderExt for BitReader<'_> {
     // Like the normal `read_bits` method, but accounts for stuffing bits
     // in addition.
-    fn read_packet_header_bits(&mut self, bit_size: u8) -> Option<u32> {
+    fn read_bits_with_stuffing(&mut self, bit_size: u8) -> Option<u32> {
         let mut bit = 0;
 
         for _ in 0..bit_size {
@@ -1187,7 +1187,7 @@ impl BitReaderExt for BitReader<'_> {
         Some(())
     }
 
-    fn peak_packet_header_bits(&mut self, bit_size: u8) -> Option<u32> {
-        self.clone().read_packet_header_bits(bit_size)
+    fn peak_bits_with_stuffing(&mut self, bit_size: u8) -> Option<u32> {
+        self.clone().read_bits_with_stuffing(bit_size)
     }
 }

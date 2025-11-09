@@ -133,7 +133,7 @@ impl TagNode {
                 // highest level) is larger than the current value and a 1 bit
                 // means that the minimum (or the value in the case of the
                 // highest level) is equal to the current value."
-                match reader.read_packet_header_bits(1)? {
+                match reader.read_bits_with_stuffing(1)? {
                     0 => val += 1,
                     1 => {
                         self.initialized = true;
