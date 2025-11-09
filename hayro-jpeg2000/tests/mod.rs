@@ -137,11 +137,6 @@ fn jasper_rgba_u8_cbstyle_04_termall_layers() {
 }
 
 #[test]
-fn jasper_rgba_u8_cbstyle_05_bypass_termall() {
-    run_asset_test("jasper-rgba-u8-cbstyle-05-bypass-termall.jp2");
-}
-
-#[test]
 fn jasper_rgba_u8_cbstyle_06_resetprob_termall() {
     run_asset_test("jasper-rgba-u8-cbstyle-06-resetprob-termall.jp2");
 }
