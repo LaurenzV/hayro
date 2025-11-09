@@ -936,9 +936,7 @@ fn decode_sub_band_bitplanes(
                 num_bitplanes,
                 &component_info.coding_style.parameters.code_block_style,
                 b_ctx,
-                storage.layers[code_block.layers.start..code_block.layers.end]
-                    .iter()
-                    .flat_map(|l| l.segments.clone()),
+                &storage.layers[code_block.layers.start..code_block.layers.end],
                 &storage.segments,
             )?;
 

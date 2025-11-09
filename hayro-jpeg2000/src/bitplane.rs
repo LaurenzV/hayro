@@ -11,9 +11,8 @@
 
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use crate::codestream::CodeBlockStyle;
-use crate::decode::{CodeBlock, Segment, SubBandType};
+use crate::decode::{CodeBlock, Layer, Segment, SubBandType};
 use log::warn;
-use std::ops::Range;
 
 /// Decode the layers of the given code block into coefficients.
 ///
@@ -25,8 +24,8 @@ pub(crate) fn decode<'a>(
     num_bitplanes: u16,
     style: &CodeBlockStyle,
     ctx: &mut CodeBlockDecodeContext,
-    segment_indices: impl IntoIterator<Item = Range<usize>>,
-    segments: &[Segment],
+    layers: &[Layer],
+    all_segments: &[Segment],
 ) -> Result<(), &'static str> {
     ctx.reset(code_block, sub_band_type, style);
 
@@ -50,17 +49,7 @@ pub(crate) fn decode<'a>(
         return Err("unsupported code-block style features encountered during decoding");
     }
 
-    // Concatenate all segments of all layers of the codeblock.
-    for segments_range in segment_indices {
-        let segments = &segments[segments_range.clone()];
-        for segment in segments {
-            layer_buffer.extend(segment.data);
-        }
-    }
-
-    let mut decoder = ArithmeticDecoder::new(&layer_buffer);
-
-    decode_inner(code_block, style, num_bitplanes, &mut decoder, ctx)
+    decode_inner(code_block, style, num_bitplanes, layers, all_segments, ctx)
         .ok_or("failed to decode code-block arithmetic data")?;
 
     ctx.layer_buffer = Some(layer_buffer);
@@ -72,9 +61,24 @@ fn decode_inner(
     code_block: &CodeBlock,
     style: &CodeBlockStyle,
     num_bitplanes: u16,
-    decoder: &mut impl BitDecoder,
+    layers: &[Layer],
+    all_segments: &[Segment],
     ctx: &mut CodeBlockDecodeContext,
 ) -> Option<()> {
+    let mut combined_layers = vec![];
+    let mut segment_ranges = vec![0];
+
+    for layer in layers {
+        if let Some(range) = layer.segments.clone() {
+            for segment in &all_segments[range.clone()] {
+                combined_layers.extend(segment.data);
+                segment_ranges.push(combined_layers.len());
+            }
+        }
+    }
+
+    let mut decoder = ArithmeticDecoder::new(&combined_layers);
+
     for coding_pass in 0..code_block.number_of_coding_passes {
         enum PassType {
             Cleanup,
@@ -93,7 +97,7 @@ fn decode_inner(
 
         match pass {
             PassType::Cleanup => {
-                cleanup_pass(ctx, decoder);
+                cleanup_pass(ctx, &mut decoder);
 
                 if style.segmentation_symbols {
                     let b0 = decoder.read_bit(ctx.arithmetic_decoder_context(18));
@@ -110,10 +114,10 @@ fn decode_inner(
                 ctx.reset_for_next_bitplane();
             }
             PassType::SignificancePropagation => {
-                significance_propagation_pass(ctx, decoder);
+                significance_propagation_pass(ctx, &mut decoder);
             }
             PassType::MagnitudeRefinement => {
-                magnitude_refinement_pass(ctx, decoder);
+                magnitude_refinement_pass(ctx, &mut decoder);
             }
         }
 
@@ -714,12 +718,9 @@ impl BitDecoder for ArithmeticDecoder<'_> {
 #[cfg(test)]
 mod tests {
     use super::{BitDecoder, CodeBlockDecodeContext, PositionIterator, decode, decode_inner};
-    use crate::arithmetic_decoder::ArithmeticDecoderContext;
     use crate::codestream::CodeBlockStyle;
-    use crate::decode::{CodeBlock, Segment, SubBandType};
+    use crate::decode::{CodeBlock, Layer, Segment, SubBandType};
     use crate::rect::IntRect;
-    use hayro_common::bit::{BitReader, BitWriter};
-    use std::iter;
 
     impl CodeBlockDecodeContext {
         fn coefficients(&self) -> Vec<i32> {
@@ -736,14 +737,6 @@ mod tests {
             }
 
             coefficients
-        }
-    }
-
-    struct DummyBitDecoder<'a>(BitReader<'a>);
-
-    impl BitDecoder for DummyBitDecoder<'_> {
-        fn read_bit(&mut self, _: &mut ArithmeticDecoderContext) -> u32 {
-            self.0.read(1).unwrap()
         }
     }
 
@@ -785,70 +778,6 @@ mod tests {
         assert_eq!(produced.as_slice(), &expected);
     }
 
-    /// Example 7.3.2 in the JPEG2000 book.
-    #[test]
-    fn bitplane_decoding_1() {
-        let data = {
-            let mut buf = vec![0; 8];
-            let mut writer = BitWriter::new(&mut buf, 1).unwrap();
-
-            // CUP bitplane 2.
-            writer.write_bits([
-                1, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
-            ]);
-
-            // SPP bitplane 1.
-            writer.write_bits([1, 0, 1, 1, 0, 0, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 1, 0]);
-
-            // MRP bitplane 1.
-            writer.write_bits([0, 1, 1, 0]);
-
-            // No CUP for bitplane 1.
-
-            // SPP for bitplane 0.
-            writer.write_bits([0, 0, 1, 0, 0, 0, 1, 0]);
-
-            // MRP for bitplane 0.
-            writer.write_bits([1, 1, 0, 1, 0, 0, 0, 1, 1, 0]);
-
-            // No CUP for bitplane 0.
-
-            buf
-        };
-
-        let bit_reader = BitReader::new(&data);
-        let mut decoder = DummyBitDecoder(bit_reader);
-
-        let code_block = CodeBlock {
-            rect: IntRect::from_xywh(0, 0, 4, 4),
-            x_idx: 0,
-            y_idx: 0,
-            layers: 0..data.len(),
-            has_been_included: false,
-            missing_bit_planes: 0,
-            number_of_coding_passes: 7,
-            l_block: 0,
-        };
-
-        let mut ctx = CodeBlockDecodeContext::default();
-        ctx.reset(&code_block, SubBandType::LowLow, &CodeBlockStyle::default());
-
-        decode_inner(
-            &code_block,
-            &CodeBlockStyle::default(),
-            3,
-            &mut decoder,
-            &mut ctx,
-        );
-
-        let coefficients = ctx.coefficients();
-
-        assert_eq!(
-            coefficients,
-            vec![3, 0, 0, 5, -3, 7, 2, 1, -4, -1, -2, 3, 0, 6, 0, 2]
-        );
-    }
-
     // First packet from example in Section J.10.4.
     #[test]
     fn bitplane_decoding_2() {
@@ -873,7 +802,9 @@ mod tests {
             6,
             &CodeBlockStyle::default(),
             &mut ctx,
-            iter::once(0..1),
+            &[Layer {
+                segments: Some(0..1),
+            }],
             &[Segment {
                 length: data.len() as u32,
                 data: &data,
@@ -910,7 +841,9 @@ mod tests {
             3,
             &CodeBlockStyle::default(),
             &mut ctx,
-            iter::once(0..1),
+            &[Layer {
+                segments: Some(0..1),
+            }],
             &[Segment {
                 length: data.len() as u32,
                 data: &data,
@@ -963,7 +896,9 @@ mod tests {
             5,
             &CodeBlockStyle::default(),
             &mut ctx,
-            iter::once(0..1),
+            &[Layer {
+                segments: Some(0..1),
+            }],
             &[Segment {
                 length: data.len() as u32,
                 data: &data,
