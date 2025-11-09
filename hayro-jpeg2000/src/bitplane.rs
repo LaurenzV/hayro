@@ -18,7 +18,7 @@ use log::warn;
 ///
 /// The result will be stored in the form of a vector of signs and magnitudes
 /// in the bitplane decoder context.
-pub(crate) fn decode<'a>(
+pub(crate) fn decode(
     code_block: &CodeBlock,
     sub_band_type: SubBandType,
     num_bitplanes: u16,
