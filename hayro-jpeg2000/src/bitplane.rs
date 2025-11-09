@@ -42,7 +42,7 @@ pub(crate) fn decode(
     let mut layer_buffer = std::mem::take(&mut ctx.layer_buffer).unwrap_or_default();
     layer_buffer.clear();
 
-    if style.selective_arithmetic_coding_bypass || style.predictable_termination {
+    if style.selective_arithmetic_coding_bypass {
         return Err("unsupported code-block style features encountered during decoding");
     }
 

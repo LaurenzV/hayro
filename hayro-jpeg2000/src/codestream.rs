@@ -103,11 +103,6 @@ fn read_header(reader: &mut Reader) -> Result<Header, &'static str> {
             .parameters
             .code_block_style
             .selective_arithmetic_coding_bypass
-            || ci
-                .coding_style
-                .parameters
-                .code_block_style
-                .predictable_termination
         {
             return Err("unsupported code-block style features encountered during decoding");
         }
@@ -248,7 +243,7 @@ pub(crate) struct CodeBlockStyle {
     pub(crate) reset_context_probabilities: bool,
     pub(crate) termination_on_each_pass: bool,
     pub(crate) vertically_causal_context: bool,
-    pub(crate) predictable_termination: bool,
+    pub(crate) _predictable_termination: bool,
     pub(crate) segmentation_symbols: bool,
 }
 
@@ -259,7 +254,7 @@ impl CodeBlockStyle {
             reset_context_probabilities: (value & 0x02) != 0,
             termination_on_each_pass: (value & 0x04) != 0,
             vertically_causal_context: (value & 0x08) != 0,
-            predictable_termination: (value & 0x10) != 0,
+            _predictable_termination: (value & 0x10) != 0,
             segmentation_symbols: (value & 0x20) != 0,
         }
     }
