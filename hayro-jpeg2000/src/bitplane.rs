@@ -724,7 +724,7 @@ impl BitDecoder for ArithmeticDecoder<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::{BitDecoder, CodeBlockDecodeContext, PositionIterator, decode, decode_inner};
+    use super::{CodeBlockDecodeContext, PositionIterator, decode};
     use crate::codestream::CodeBlockStyle;
     use crate::decode::{CodeBlock, Layer, Segment, SubBandType};
     use crate::rect::IntRect;
