@@ -1,0 +1,16 @@
+# just a 0x0 image with no actual JPX image
+0012155
+0423872
+0647565
+
+# just broken image, no pdf viewer can display it
+0023296
+0070058
+0300856
+0508631
+0204509
+0397817
+0517921
+0526399
+0681753
+0833402
