@@ -238,11 +238,22 @@ pub(crate) struct CodeBlock {
     pub(crate) l_block: u32,
 }
 
+pub(crate) struct Segment<'a> {
+    pub(crate) length: u32,
+    pub(crate) data: &'a [u8],
+}
+
+#[derive(Clone)]
+pub(crate) struct Layer {
+    pub(crate) segments: Option<Range<usize>>,
+}
+
 /// A buffer so that we can reuse allocations for layers/code blocks/etc.
 /// across different tiles.
 #[derive(Default)]
 struct DecompositionStorage<'a> {
-    layers: Vec<&'a [u8]>,
+    segments: Vec<Segment<'a>>,
+    layers: Vec<Layer>,
     code_blocks: Vec<CodeBlock>,
     precincts: Vec<Precinct>,
     coefficients: Vec<f32>,
@@ -253,6 +264,7 @@ struct DecompositionStorage<'a> {
 
 impl DecompositionStorage<'_> {
     fn reset(&mut self) {
+        self.segments.clear();
         self.layers.clear();
         self.code_blocks.clear();
         self.coefficients.clear();
@@ -275,8 +287,6 @@ pub(crate) struct TileDecodeContext<'a> {
     pub(crate) idwt_outputs: Vec<IDWTOutput>,
     /// A reusable context for decoding code blocks.
     pub(crate) code_block_decode_context: CodeBlockDecodeContext,
-    /// A reusable temporary buffer used to store the lengths of codeblocks.
-    pub(crate) code_block_len_buf: Vec<u32>,
     /// The raw, decoded samples for each channel.
     pub(crate) channel_data: Vec<ChannelData>,
 }
@@ -303,14 +313,12 @@ impl<'a> TileDecodeContext<'a> {
             tile: initial_tile,
             idwt_outputs: vec![],
             code_block_decode_context: Default::default(),
-            code_block_len_buf: vec![],
             channel_data,
         }
     }
 
     fn reset(&mut self, tile: &'a Tile<'a>) {
         self.tile = tile;
-        self.code_block_len_buf.clear();
         self.idwt_outputs.clear();
         // Code-block decode context will be resetted before being used, can't
         // do it here because we need data for a code block.
@@ -541,9 +549,14 @@ fn build_code_blocks(
             );
 
             let start = storage.layers.len();
-            storage
-                .layers
-                .extend(iter::repeat_n(&[][..], tile_ctx.tile.num_layers as usize));
+            storage.layers.extend(iter::repeat_n(
+                Layer {
+                    // This will be updated once we actually read the
+                    // layer segments.
+                    segments: None,
+                },
+                tile_ctx.tile.num_layers as usize,
+            ));
             let end = storage.layers.len();
 
             storage.code_blocks.push(CodeBlock {
@@ -597,8 +610,6 @@ fn get_code_block_data_inner<'a>(
     let mut data = tile_part_data;
 
     while !data.is_empty() {
-        tile_ctx.code_block_len_buf.clear();
-
         let progression_data = progression_iterator.next()?;
         let resolution = progression_data.resolution;
         let component_info = &tile_ctx.tile.component_infos[progression_data.component as usize];
@@ -628,8 +639,8 @@ fn get_code_block_data_inner<'a>(
                     sub_band,
                     &progression_data,
                     &mut reader,
-                    &mut tile_ctx.code_block_len_buf,
                     storage,
+                    component_info,
                 )?;
             }
         }
@@ -650,8 +661,6 @@ fn get_code_block_data_inner<'a>(
         }
 
         if !zero_length {
-            let mut entries = tile_ctx.code_block_len_buf.iter().copied();
-
             for sub_band in sub_band_iter {
                 let sub_band = &mut storage.sub_bands[sub_band];
                 let precinct = &mut storage.precincts[sub_band.precincts.clone()]
@@ -659,11 +668,16 @@ fn get_code_block_data_inner<'a>(
                 let code_blocks = &mut storage.code_blocks[precinct.code_blocks.clone()];
 
                 for code_block in code_blocks {
-                    let length = entries.next()?;
-
                     let layer = &mut storage.layers[code_block.layers.clone()]
                         [progression_data.layer_num as usize];
-                    *layer = data_reader.read_bytes(length as usize)?;
+
+                    if let Some(segments) = layer.segments.clone() {
+                        let segments = &mut storage.segments[segments.clone()];
+
+                        for segment in segments {
+                            segment.data = data_reader.read_bytes(segment.length as usize)?
+                        }
+                    }
                 }
             }
         }
@@ -678,8 +692,8 @@ fn get_code_block_lengths(
     sub_band_dx: usize,
     progression_data: &ProgressionData,
     reader: &mut BitReader,
-    code_block_lengths: &mut Vec<u32>,
     storage: &mut DecompositionStorage,
+    component_info: &ComponentInfo,
 ) -> Option<()> {
     let precincts = &mut storage.precincts[storage.sub_bands[sub_band_dx].precincts.clone()];
     let precinct = &mut precincts[progression_data.precinct as usize];
@@ -717,9 +731,11 @@ fn get_code_block_lengths(
         trace!("code-block inclusion: {}", is_included);
 
         if !is_included {
-            code_block_lengths.push(0);
             continue;
         }
+
+        let layer =
+            &mut storage.layers[code_block.layers.clone()][progression_data.layer_num as usize];
 
         let included_first_time = is_included && !code_block.has_been_included;
 
@@ -783,18 +799,6 @@ fn get_code_block_lengths(
 
         trace!("number of coding passes: {}", added_coding_passes);
 
-        // B.10.7.1 Single codeword segment
-        // "A codeword segment is the number of bytes contributed to a packet by a
-        // code-block. The length of a codeword segment is represented by a binary number of length:
-        // bits = Lblock + floor(log_2(coding passes added))
-        // where Lblock is a code-block state variable. A separate Lblock is used for each
-        // code-block in the precinct. The value of Lblock is initially set to three. The
-        // number of bytes contributed by each code-block is preceded by signalling bits
-        // that increase the value of Lblock, as needed. A signalling bit of zero indicates
-        // the current value of Lblock is sufficient. If there are k ones followed by a
-        // zero, the value of Lblock is incremented by k. While Lblock can only increase,
-        // the number of bits used to signal the length of the code-block contribution can
-        // increase or decrease depending on the number of coding passes included."
         let mut k = 0;
 
         while reader.read_packet_header_bits(1)? == 1 {
@@ -802,11 +806,49 @@ fn get_code_block_lengths(
         }
 
         code_block.l_block += k;
-        let length_bits = code_block.l_block + added_coding_passes.ilog2();
-        let length = reader.read_packet_header_bits(length_bits as u8)?;
-        code_block_lengths.push(length);
 
-        trace!("length(0) {}", length);
+        let num_segments = if !component_info
+            .coding_style
+            .parameters
+            .code_block_style
+            .termination_on_each_pass
+        {
+            1
+        } else {
+            added_coding_passes
+        };
+
+        let start = storage.segments.len();
+
+        for i in 0..num_segments {
+            let length = {
+                // "A codeword segment is the number of bytes contributed to a packet by a
+                // code-block. The length of a codeword segment is represented by a binary number of length:
+                // bits = Lblock + floor(log_2(coding passes added))
+                // where Lblock is a code-block state variable. A separate Lblock is used for each
+                // code-block in the precinct. The value of Lblock is initially set to three. The
+                // number of bytes contributed by each code-block is preceded by signalling bits
+                // that increase the value of Lblock, as needed. A signalling bit of zero indicates
+                // the current value of Lblock is sufficient. If there are k ones followed by a
+                // zero, the value of Lblock is incremented by k. While Lblock can only increase,
+                // the number of bits used to signal the length of the code-block contribution can
+                // increase or decrease depending on the number of coding passes included."
+                let length_bits = code_block.l_block + added_coding_passes.ilog2();
+                reader.read_packet_header_bits(length_bits as u8)
+            }?;
+
+            storage.segments.push(Segment {
+                length,
+                // Will be set later.
+                data: &[],
+            });
+
+            trace!("length({i}) {}", length);
+        }
+
+        let end = storage.segments.len();
+
+        layer.segments = Some(start..end);
     }
 
     Some(())
@@ -896,7 +938,8 @@ fn decode_sub_band_bitplanes(
                 b_ctx,
                 storage.layers[code_block.layers.start..code_block.layers.end]
                     .iter()
-                    .copied(),
+                    .flat_map(|l| l.segments.clone()),
+                &storage.segments,
             )?;
 
             // Turn the signs and magnitudes into singular coefficients and

@@ -11,8 +11,9 @@
 
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use crate::codestream::CodeBlockStyle;
-use crate::decode::{CodeBlock, SubBandType};
+use crate::decode::{CodeBlock, Segment, SubBandType};
 use log::warn;
+use std::ops::Range;
 
 /// Decode the layers of the given code block into coefficients.
 ///
@@ -24,7 +25,8 @@ pub(crate) fn decode<'a>(
     num_bitplanes: u16,
     style: &CodeBlockStyle,
     ctx: &mut CodeBlockDecodeContext,
-    layers: impl IntoIterator<Item = &'a [u8]>,
+    segment_indices: impl IntoIterator<Item = Range<usize>>,
+    segments: &[Segment],
 ) -> Result<(), &'static str> {
     ctx.reset(code_block, sub_band_type, style);
 
@@ -48,8 +50,12 @@ pub(crate) fn decode<'a>(
         return Err("unsupported code-block style features encountered during decoding");
     }
 
-    for data in layers {
-        layer_buffer.extend(data);
+    // Concatenate all segments of all layers of the codeblock.
+    for segments_range in segment_indices {
+        let segments = &segments[segments_range.clone()];
+        for segment in segments {
+            layer_buffer.extend(segment.data);
+        }
     }
 
     let mut decoder = ArithmeticDecoder::new(&layer_buffer);
@@ -710,9 +716,10 @@ mod tests {
     use super::{BitDecoder, CodeBlockDecodeContext, PositionIterator, decode, decode_inner};
     use crate::arithmetic_decoder::ArithmeticDecoderContext;
     use crate::codestream::CodeBlockStyle;
-    use crate::decode::{CodeBlock, SubBandType};
+    use crate::decode::{CodeBlock, Segment, SubBandType};
     use crate::rect::IntRect;
     use hayro_common::bit::{BitReader, BitWriter};
+    use std::iter;
 
     impl CodeBlockDecodeContext {
         fn coefficients(&self) -> Vec<i32> {
@@ -866,7 +873,11 @@ mod tests {
             6,
             &CodeBlockStyle::default(),
             &mut ctx,
-            [&data[..]],
+            iter::once(0..1),
+            &[Segment {
+                length: data.len() as u32,
+                data: &data,
+            }],
         )
         .unwrap();
 
@@ -899,7 +910,11 @@ mod tests {
             3,
             &CodeBlockStyle::default(),
             &mut ctx,
-            [&data[..]],
+            iter::once(0..1),
+            &[Segment {
+                length: data.len() as u32,
+                data: &data,
+            }],
         )
         .unwrap();
 
@@ -948,7 +963,11 @@ mod tests {
             5,
             &CodeBlockStyle::default(),
             &mut ctx,
-            [&data[..]],
+            iter::once(0..1),
+            &[Segment {
+                length: data.len() as u32,
+                data: &data,
+            }],
         )
         .unwrap();
 
