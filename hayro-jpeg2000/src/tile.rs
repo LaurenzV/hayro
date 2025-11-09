@@ -233,11 +233,6 @@ fn parse_tile_part<'a>(
                 .coding_style
                 .parameters
                 .code_block_style
-                .vertically_causal_context
-            || ci
-                .coding_style
-                .parameters
-                .code_block_style
                 .predictable_termination
             || ci
                 .coding_style

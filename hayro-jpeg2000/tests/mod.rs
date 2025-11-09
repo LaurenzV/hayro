@@ -127,6 +127,11 @@ fn jasper_rgba_u8_cbstyle_02_resetprob() {
 }
 
 #[test]
+fn jasper_rgba_u8_cbstyle_08_vcausal() {
+    run_asset_test("jasper-rgba-u8-cbstyle-08-vcausal.jp2");
+}
+
+#[test]
 fn jasper_rgba_u8_cbstyle_32_segsym() {
     run_asset_test("jasper-rgba-u8-cbstyle-32-segsym.jp2");
 }

@@ -26,7 +26,7 @@ pub(crate) fn decode<'a>(
     ctx: &mut CodeBlockDecodeContext,
     layers: impl IntoIterator<Item = &'a [u8]>,
 ) -> Result<(), &'static str> {
-    ctx.reset(code_block, sub_band_type);
+    ctx.reset(code_block, sub_band_type, style);
 
     if code_block.number_of_coding_passes == 0 {
         return Ok(());
@@ -42,7 +42,6 @@ pub(crate) fn decode<'a>(
     layer_buffer.clear();
 
     if style.selective_arithmetic_coding_bypass
-        || style.vertically_causal_context
         || style.predictable_termination
         || style.termination_on_each_pass
     {
@@ -147,6 +146,8 @@ pub(crate) struct CodeBlockDecodeContext {
     width: u32,
     /// The height of the code-block we are processing.
     height: u32,
+    /// Whether the vertical causal flag is enabled.
+    vertically_causal: bool,
     /// The type of sub-band the current code block belongs to.
     sub_band_type: SubBandType,
     /// The arithmetic decoder contexts for each context label.
@@ -167,6 +168,7 @@ impl Default for CodeBlockDecodeContext {
             has_zero_coding: vec![],
             width: 0,
             height: 0,
+            vertically_causal: false,
             sub_band_type: SubBandType::LowLow,
             contexts: [ArithmeticDecoderContext::default(); 19],
             layer_buffer: Some(vec![]),
@@ -176,7 +178,12 @@ impl Default for CodeBlockDecodeContext {
 
 impl CodeBlockDecodeContext {
     /// Completely reset context so that it can be reused for a new code-block.
-    pub(crate) fn reset(&mut self, code_block: &CodeBlock, sub_band_type: SubBandType) {
+    pub(crate) fn reset(
+        &mut self,
+        code_block: &CodeBlock,
+        sub_band_type: SubBandType,
+        code_block_style: &CodeBlockStyle,
+    ) {
         let (width, height) = (code_block.rect.width(), code_block.rect.height());
 
         for arr in [
@@ -200,6 +207,7 @@ impl CodeBlockDecodeContext {
         self.width = width;
         self.height = height;
         self.sub_band_type = sub_band_type;
+        self.vertically_causal = code_block_style.vertically_causal_context;
         self.reset_contexts();
     }
 
@@ -288,6 +296,11 @@ impl CodeBlockDecodeContext {
     }
 
     #[inline]
+    fn neighbor_in_next_stripe(&self, pos: &Position, neighbor_y: u32) -> bool {
+        neighbor_y < self.height && (neighbor_y >> 2) > (pos.y >> 2)
+    }
+
+    #[inline]
     fn horizontal_significance_states(&self, pos: &Position) -> u8 {
         self.significance_state_checked(pos.x as i64 - 1, pos.y as i64)
             + self.significance_state_checked(pos.x as i64 + 1, pos.y as i64)
@@ -295,16 +308,32 @@ impl CodeBlockDecodeContext {
 
     #[inline]
     fn vertical_significance_states(&self, pos: &Position) -> u8 {
+        let suppress_lower = self.vertically_causal && self.neighbor_in_next_stripe(pos, pos.y + 1);
+
         self.significance_state_checked(pos.x as i64, pos.y as i64 - 1)
-            + self.significance_state_checked(pos.x as i64, pos.y as i64 + 1)
+            + if suppress_lower {
+                0
+            } else {
+                self.significance_state_checked(pos.x as i64, pos.y as i64 + 1)
+            }
     }
 
     #[inline(always)]
     fn diagonal_significance_states(&self, pos: &Position) -> u8 {
+        let suppress_lower = self.vertically_causal && self.neighbor_in_next_stripe(pos, pos.y + 1);
+
         self.significance_state_checked(pos.x as i64 - 1, pos.y as i64 - 1)
             + self.significance_state_checked(pos.x as i64 + 1, pos.y as i64 - 1)
-            + self.significance_state_checked(pos.x as i64 - 1, pos.y as i64 + 1)
-            + self.significance_state_checked(pos.x as i64 + 1, pos.y as i64 + 1)
+            + if suppress_lower {
+                0
+            } else {
+                self.significance_state_checked(pos.x as i64 - 1, pos.y as i64 + 1)
+            }
+            + if suppress_lower {
+                0
+            } else {
+                self.significance_state_checked(pos.x as i64 + 1, pos.y as i64 + 1)
+            }
     }
 
     #[inline]
@@ -474,8 +503,13 @@ fn decode_sign_bit(
         let h = (neighbor_contribution(ctx, pos.x as i64 - 1, pos.y as i64)
             + neighbor_contribution(ctx, pos.x as i64 + 1, pos.y as i64))
         .clamp(-1, 1);
+        let suppress_lower = ctx.vertically_causal && ctx.neighbor_in_next_stripe(pos, pos.y + 1);
         let v = (neighbor_contribution(ctx, pos.x as i64, pos.y as i64 - 1)
-            + neighbor_contribution(ctx, pos.x as i64, pos.y as i64 + 1))
+            + if suppress_lower {
+                0
+            } else {
+                neighbor_contribution(ctx, pos.x as i64, pos.y as i64 + 1)
+            })
         .clamp(-1, 1);
 
         match (h, v) {
@@ -790,7 +824,7 @@ mod tests {
         };
 
         let mut ctx = CodeBlockDecodeContext::default();
-        ctx.reset(&code_block, SubBandType::LowLow);
+        ctx.reset(&code_block, SubBandType::LowLow, &CodeBlockStyle::default());
 
         decode_inner(
             &code_block,
