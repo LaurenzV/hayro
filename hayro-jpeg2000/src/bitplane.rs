@@ -779,7 +779,13 @@ mod tests {
         let mut ctx = CodeBlockDecodeContext::default();
         ctx.reset(&code_block, SubBandType::LowLow);
 
-        decode_inner(&code_block, 3, &mut decoder, &mut ctx);
+        decode_inner(
+            &code_block,
+            &CodeBlockStyle::default(),
+            3,
+            &mut decoder,
+            &mut ctx,
+        );
 
         let coefficients = ctx.coefficients();
 
