@@ -12,6 +12,7 @@
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use crate::codestream::CodeBlockStyle;
 use crate::decode::{CodeBlock, SubBandType};
+use log::warn;
 
 /// Decode the layers of the given code block into coefficients.
 ///
@@ -41,7 +42,6 @@ pub(crate) fn decode<'a>(
     layer_buffer.clear();
 
     if style.selective_arithmetic_coding_bypass
-        || style.segmentation_symbols
         || style.vertically_causal_context
         || style.predictable_termination
         || style.termination_on_each_pass
@@ -89,6 +89,19 @@ fn decode_inner(
         match pass {
             PassType::Cleanup => {
                 cleanup_pass(ctx, decoder);
+
+                if style.segmentation_symbols {
+                    let b0 = decoder.read_bit(ctx.arithmetic_decoder_context(18));
+                    let b1 = decoder.read_bit(ctx.arithmetic_decoder_context(18));
+                    let b2 = decoder.read_bit(ctx.arithmetic_decoder_context(18));
+                    let b3 = decoder.read_bit(ctx.arithmetic_decoder_context(18));
+
+                    if b0 != 1 || b1 != 0 || b2 != 1 || b3 != 0 {
+                        warn!("encountered invalid segmentation symbol");
+                        return None;
+                    }
+                }
+
                 ctx.reset_for_next_bitplane();
             }
             PassType::SignificancePropagation => {

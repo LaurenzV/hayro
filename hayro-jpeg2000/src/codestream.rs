@@ -107,11 +107,6 @@ fn read_header(reader: &mut Reader) -> Result<Header, &'static str> {
                 .coding_style
                 .parameters
                 .code_block_style
-                .segmentation_symbols
-            || ci
-                .coding_style
-                .parameters
-                .code_block_style
                 .vertically_causal_context
             || ci
                 .coding_style

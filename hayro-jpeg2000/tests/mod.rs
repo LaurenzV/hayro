@@ -126,6 +126,11 @@ fn jasper_rgba_u8_cbstyle_02_resetprob() {
     run_asset_test("jasper-rgba-u8-cbstyle-02-resetprob.jp2");
 }
 
+#[test]
+fn jasper_rgba_u8_cbstyle_32_segsym() {
+    run_asset_test("jasper-rgba-u8-cbstyle-32-segsym.jp2");
+}
+
 fn run_asset_test(file_name: &str) {
     let asset_path = ASSETS_PATH.join(file_name);
     let data = fs::read(&asset_path).expect("failed to read asset");
