@@ -217,7 +217,6 @@ issue9650
 issue9291
 
 # optional content groups
-issue269_1
 issue269_2
 
 # missing letters
@@ -261,6 +260,5 @@ issue4648
 issue17289
 
 # unsupported JPX image
-issue13051
 issue11004
 issue19326

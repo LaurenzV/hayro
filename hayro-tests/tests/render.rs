@@ -813,6 +813,8 @@ use crate::run_render_test;
 #[test] fn pdfjs_standard_fonts_no_system_fonts() { run_render_test("pdfjs_standard_fonts_no_system_fonts", "downloads/pdfjs/standard_fonts_no_system_fonts.pdf", None); }
 #[test] fn pdfjs_type4psfunc() { run_render_test("pdfjs_type4psfunc", "downloads/pdfjs/type4psfunc.pdf", None); }
 #[test] fn pdfjs_zerowidthline() { run_render_test("pdfjs_zerowidthline", "downloads/pdfjs/zerowidthline.pdf", None); }
+#[test] fn pdfjs_issue13051() { run_render_test("pdfjs_issue13051", "downloads/pdfjs/issue13051.pdf", None); }
+#[test] fn pdfjs_issue269_1() { run_render_test("pdfjs_issue269_1", "downloads/pdfjs/issue269_1.pdf", None); }
 #[test] fn pdfbox_31() { run_render_test("pdfbox_31", "downloads/pdfbox/31.pdf", Some("..=0")); }
 #[test] fn pdfbox_142() { run_render_test("pdfbox_142", "downloads/pdfbox/142.pdf", None); }
 #[test] fn pdfbox_163() { run_render_test("pdfbox_163", "downloads/pdfbox/163.pdf", None); }
