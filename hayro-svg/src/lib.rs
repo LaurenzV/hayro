@@ -257,21 +257,19 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
         match image {
             Image::Stencil(s) => {
                 s.with_stencil(|s, paint| {
-                    transform = transform
-                        * Affine::scale_non_uniform(
-                            s.scale_factors.0 as f64,
-                            s.scale_factors.1 as f64,
-                        );
+                    transform *= Affine::scale_non_uniform(
+                        s.scale_factors.0 as f64,
+                        s.scale_factors.1 as f64,
+                    );
                     Self::draw_stencil_image(self, s, transform, paint);
                 });
             }
             Image::Raster(r) => {
                 r.with_rgba(|rgb, alpha| {
-                    transform = transform
-                        * Affine::scale_non_uniform(
-                            rgb.scale_factors.0 as f64,
-                            rgb.scale_factors.1 as f64,
-                        );
+                    transform *= Affine::scale_non_uniform(
+                        rgb.scale_factors.0 as f64,
+                        rgb.scale_factors.1 as f64,
+                    );
                     Self::draw_rgba_image(self, rgb, transform, alpha);
                 });
             }

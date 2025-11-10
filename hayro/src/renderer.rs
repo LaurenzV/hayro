@@ -536,11 +536,10 @@ impl<'a> Device<'a> for Renderer {
         match image {
             hayro_interpret::Image::Stencil(s) => {
                 s.with_stencil(|stencil, paint| {
-                    transform = transform
-                        * Affine::scale_non_uniform(
-                            stencil.scale_factors.0 as f64,
-                            stencil.scale_factors.1 as f64,
-                        );
+                    transform *= Affine::scale_non_uniform(
+                        stencil.scale_factors.0 as f64,
+                        stencil.scale_factors.1 as f64,
+                    );
 
                     match paint {
                         Paint::Color(c) => {
@@ -635,11 +634,10 @@ impl<'a> Device<'a> for Renderer {
             }
             hayro_interpret::Image::Raster(r) => {
                 r.with_rgba(|rgb, alpha| {
-                    transform = transform
-                        * Affine::scale_non_uniform(
-                            rgb.scale_factors.0 as f64,
-                            rgb.scale_factors.1 as f64,
-                        );
+                    transform *= Affine::scale_non_uniform(
+                        rgb.scale_factors.0 as f64,
+                        rgb.scale_factors.1 as f64,
+                    );
                     self.ctx.set_transform(transform);
                     self.with_blend(|r| {
                         r.draw_image(rgb, alpha);
