@@ -235,6 +235,10 @@ pub struct ImageData {
     pub color_space: ImageColorSpace,
     /// The bits per component of the image.
     pub bits_per_component: u8,
+    /// The width of the image.
+    pub width: u32,
+    /// The height of the image.
+    pub height: u32,
 }
 
 /// The result of applying a filter.

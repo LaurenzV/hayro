@@ -224,3 +224,8 @@ fn mask_bc() {
 fn pdfjs_issue11279() {
     run_svg_test("pdfjs_issue11279", "downloads/pdfjs/issue11279.pdf", None);
 }
+
+#[test]
+fn pdfjs_issue9650() {
+    run_svg_test("pdfjs_issue9650", "downloads/pdfjs/issue9650.pdf", None);
+}

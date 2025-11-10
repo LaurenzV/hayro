@@ -96,6 +96,14 @@ pub struct RgbData {
     pub height: u32,
     /// Whether the image should be interpolated.
     pub interpolate: bool,
+    /// Additional scaling factors to apply to the image.
+    ///
+    /// In 99.99% of the cases, those factors will just be 1.0, and you can
+    /// ignore them. However, in very rare cases where the image in the PDF
+    /// was invalid, an additional scaling needs to be applied before
+    /// drawing the image as a correction procedure. The first number
+    /// indicates the x scaling factor, the second number the y scaling factor.
+    pub scale_factors: (f32, f32),
 }
 
 /// A structure holding 1-channel luma data.
@@ -109,6 +117,14 @@ pub struct LumaData {
     pub height: u32,
     /// Whether the image should be interpolated.
     pub interpolate: bool,
+    /// Additional scaling factors to apply to the image.
+    ///
+    /// In 99.99% of the cases, those factors will just be 1.0, and you can
+    /// ignore them. However, in very rare cases where the image in the PDF
+    /// was invalid, an additional scaling needs to be applied before
+    /// drawing the image as a correction procedure. The first number
+    /// indicates the x scaling factor, the second number the y scaling factor.
+    pub scale_factors: (f32, f32),
 }
 
 /// A type of paint.

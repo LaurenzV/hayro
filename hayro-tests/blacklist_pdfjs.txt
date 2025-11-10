@@ -210,9 +210,6 @@ issue 12841
 issue8169
 issue15492
 
-# image has different resolution than indicated in dictionary
-issue9650
-
 # text should be bold but isnt
 issue9291
 

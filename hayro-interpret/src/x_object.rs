@@ -333,6 +333,19 @@ impl DecodedImageXObject {
             .map_err(|_| InterpreterWarning::ImageDecodeFailure)
             .ok()?;
 
+        let (mut scale_x, mut scale_y) = (1.0, 1.0);
+
+        let (width, mut height) = decoded
+            .image_data
+            .as_ref()
+            .map(|d| {
+                scale_x = obj.width as f32 / d.width as f32;
+                scale_y = obj.height as f32 / d.height as f32;
+
+                (d.width, d.height)
+            })
+            .unwrap_or((obj.width, obj.height));
+
         let color_space = color_space
             .or_else(|| {
                 decoded
@@ -366,7 +379,7 @@ impl DecodedImageXObject {
 
         if !matches!(bits_per_component, 1 | 2 | 4 | 8 | 16) {
             bits_per_component = ((decoded.data.len() as u64 * 8)
-                / (obj.width as u64 * obj.height as u64 * color_space.num_components() as u64))
+                / (width as u64 * height as u64 * color_space.num_components() as u64))
                 as u8;
         }
 
@@ -377,9 +390,6 @@ impl DecodedImageXObject {
             .or_else(|| dict.get::<Array>(DECODE))
             .map(|a| a.iter::<(f32, f32)>().collect::<SmallVec<_>>())
             .unwrap_or(color_space.default_decode_arr(bits_per_component as f32));
-
-        let width = obj.width;
-        let mut height = obj.height;
 
         let mut luma_data = None;
 
@@ -413,6 +423,7 @@ impl DecodedImageXObject {
                 width,
                 height,
                 interpolate: obj.interpolate,
+                scale_factors: (scale_x, scale_y),
             });
 
             return Some(Self {
@@ -441,6 +452,7 @@ impl DecodedImageXObject {
                 width,
                 height,
                 interpolate: obj.interpolate,
+                scale_factors: (scale_x, scale_y),
             })
         } else {
             let components = get_components(
@@ -459,8 +471,14 @@ impl DecodedImageXObject {
 
             fix_image_length(&mut f32_data, width, &mut height, 0.0, &color_space)?;
 
-            let mut rgb_data =
-                get_rgb_data(&f32_data, width, height, &color_space, obj.interpolate);
+            let mut rgb_data = get_rgb_data(
+                &f32_data,
+                width,
+                height,
+                (scale_x, scale_y),
+                &color_space,
+                obj.interpolate,
+            );
 
             if let Some(transfer_function) = &obj.transfer_function
                 && let Some(rgb_data) = &mut rgb_data
@@ -509,6 +527,7 @@ impl DecodedImageXObject {
                         width,
                         height,
                         interpolate: obj.interpolate,
+                        scale_factors: (scale_x, scale_y),
                     })
                 } else {
                     None
@@ -563,6 +582,7 @@ impl DecodedImageXObject {
                     width,
                     height,
                     interpolate: obj.interpolate,
+                    scale_factors: (scale_x, scale_y),
                 })
             } else {
                 None
@@ -580,6 +600,7 @@ fn get_rgb_data(
     decoded: &[f32],
     width: u32,
     height: u32,
+    scale_factors: (f32, f32),
     cs: &ColorSpace,
     interpolate: bool,
 ) -> Option<RgbData> {
@@ -596,6 +617,7 @@ fn get_rgb_data(
         width,
         height,
         interpolate,
+        scale_factors,
     })
 }
 

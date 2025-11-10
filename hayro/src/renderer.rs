@@ -88,6 +88,7 @@ impl Renderer {
                 width: alpha_data.width,
                 height: alpha_data.height,
                 interpolate: alpha_data.interpolate,
+                scale_factors: alpha_data.scale_factors,
             };
             renderer.ctx.set_transform(transform);
             // Note that there is a circle between `draw_image` and `draw_image_with_alpha_mask`,
@@ -528,13 +529,19 @@ impl Renderer {
 }
 
 impl<'a> Device<'a> for Renderer {
-    fn draw_image(&mut self, image: hayro_interpret::Image<'a, '_>, transform: Affine) {
+    fn draw_image(&mut self, image: hayro_interpret::Image<'a, '_>, mut transform: Affine) {
         self.ctx.set_paint_transform(Affine::IDENTITY);
         self.ctx.set_aliasing_threshold(Some(1));
 
         match image {
             hayro_interpret::Image::Stencil(s) => {
                 s.with_stencil(|stencil, paint| {
+                    transform = transform
+                        * Affine::scale_non_uniform(
+                            stencil.scale_factors.0 as f64,
+                            stencil.scale_factors.1 as f64,
+                        );
+
                     match paint {
                         Paint::Color(c) => {
                             let color = c.to_rgba().to_rgba8();
@@ -566,6 +573,7 @@ impl<'a> Device<'a> for Renderer {
                                 width: stencil.width,
                                 height: stencil.height,
                                 interpolate: stencil.interpolate,
+                                scale_factors: stencil.scale_factors,
                             };
                             self.draw_image(rgb_data, Some(stencil));
 
@@ -588,6 +596,7 @@ impl<'a> Device<'a> for Renderer {
                                     width: stencil.width,
                                     height: stencil.height,
                                     interpolate: stencil.interpolate,
+                                    scale_factors: stencil.scale_factors,
                                 };
                                 let mut sub_renderer = Renderer::new(
                                     width,
@@ -626,6 +635,11 @@ impl<'a> Device<'a> for Renderer {
             }
             hayro_interpret::Image::Raster(r) => {
                 r.with_rgba(|rgb, alpha| {
+                    transform = transform
+                        * Affine::scale_non_uniform(
+                            rgb.scale_factors.0 as f64,
+                            rgb.scale_factors.1 as f64,
+                        );
                     self.ctx.set_transform(transform);
                     self.with_blend(|r| {
                         r.draw_image(rgb, alpha);
