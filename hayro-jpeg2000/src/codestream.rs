@@ -435,12 +435,6 @@ fn size_marker(reader: &mut Reader) -> Result<SizeData, &'static str> {
         if comp.precision == 0 || comp.vertical_resolution == 0 || comp.horizontal_resolution == 0 {
             return Err("invalid component metadata");
         }
-
-        if comp.precision > 8 {
-            return Err(
-                "unsupported component precision: only components up to 8 bits are handled",
-            );
-        }
     }
 
     Ok(size_data)

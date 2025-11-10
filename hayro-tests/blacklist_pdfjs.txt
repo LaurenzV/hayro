@@ -261,4 +261,3 @@ issue17289
 
 # unsupported JPX image
 issue11004
-issue19326
