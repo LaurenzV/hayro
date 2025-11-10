@@ -164,7 +164,9 @@ fn parse_tile_part<'a>(
                     tile.progression_order = cod.progression_order;
 
                     for component in &mut tile.component_infos {
-                        component.coding_style = cod.component_parameters.clone();
+                        component.coding_style.flags.raw |= cod.component_parameters.flags.raw;
+                        component.coding_style.parameters =
+                            cod.component_parameters.clone().parameters;
                     }
                 } else {
                     warn!("encountered unexpected COD marker in tile-part header");

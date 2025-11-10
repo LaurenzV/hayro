@@ -92,6 +92,11 @@ fn read_header(reader: &mut Reader) -> Result<Header, &'static str> {
             size_info: *csi,
             coding_style: cod_components[idx]
                 .clone()
+                .map(|mut c| {
+                    c.flags.raw |= cod.component_parameters.flags.raw;
+
+                    c
+                })
                 .unwrap_or(cod.component_parameters.clone()),
             quantization_info: qcd_components[idx].clone().unwrap_or(qcd.clone()),
         })
@@ -215,7 +220,7 @@ impl WaveletTransform {
 /// Coding style flags (Table A.13).
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct CodingStyleFlags {
-    raw: u8,
+    pub(crate) raw: u8,
 }
 
 impl CodingStyleFlags {
