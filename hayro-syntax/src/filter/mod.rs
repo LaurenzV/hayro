@@ -96,9 +96,9 @@ impl Filter {
             Filter::LzwDecode => lzw_flate::lzw::decode(data, params)
                 .map(FilterResult::from_data)
                 .ok_or(DecodeFailure::StreamDecode),
-            Filter::DctDecode => dct::decode(data, params, image_params)
-                .map(FilterResult::from_data)
-                .ok_or(DecodeFailure::ImageDecode),
+            Filter::DctDecode => {
+                dct::decode(data, params, image_params).ok_or(DecodeFailure::ImageDecode)
+            }
             Filter::FlateDecode => lzw_flate::flate::decode(data, params)
                 .map(FilterResult::from_data)
                 .ok_or(DecodeFailure::StreamDecode),

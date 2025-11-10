@@ -73,7 +73,7 @@ pub(crate) fn decode(data: &[u8], params: &ImageDecodeParams) -> Option<FilterRe
         data: buf,
         image_data: Some(ImageData {
             alpha,
-            color_space: cs,
+            color_space: Some(cs),
             bits_per_component: bpc,
             width,
             height,

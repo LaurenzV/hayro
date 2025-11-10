@@ -352,16 +352,18 @@ impl DecodedImageXObject {
                     .image_data
                     .as_ref()
                     .map(|i| i.color_space)
-                    .map(|c| match c {
-                        hayro_syntax::object::stream::ImageColorSpace::Gray => {
-                            ColorSpace::device_gray()
-                        }
-                        hayro_syntax::object::stream::ImageColorSpace::Rgb => {
-                            ColorSpace::device_rgb()
-                        }
-                        hayro_syntax::object::stream::ImageColorSpace::Cmyk => {
-                            ColorSpace::device_cmyk()
-                        }
+                    .and_then(|c| {
+                        c.map(|c| match c {
+                            hayro_syntax::object::stream::ImageColorSpace::Gray => {
+                                ColorSpace::device_gray()
+                            }
+                            hayro_syntax::object::stream::ImageColorSpace::Rgb => {
+                                ColorSpace::device_rgb()
+                            }
+                            hayro_syntax::object::stream::ImageColorSpace::Cmyk => {
+                                ColorSpace::device_cmyk()
+                            }
+                        })
                     })
             })
             .unwrap_or(ColorSpace::device_gray());

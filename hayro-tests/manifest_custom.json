@@ -1075,5 +1075,9 @@
   {
     "id": "catalog-in-objstm-aes",
     "file": "pdfs/custom/catalog-in-objstm-aes.pdf"
+  },
+  {
+    "id": "issue494",
+    "link": true
   }
 ]
