@@ -241,7 +241,8 @@ pub(crate) struct CodeBlock {
 
 pub(crate) struct Segment<'a> {
     pub(crate) idx: u32,
-    pub(crate) length: u32,
+    pub(crate) coding_pases: u32,
+    pub(crate) data_length: u32,
     pub(crate) data: &'a [u8],
 }
 
@@ -678,7 +679,7 @@ fn get_code_block_data_inner<'a>(
                         let segments = &mut storage.segments[segments.clone()];
 
                         for segment in segments {
-                            segment.data = data_reader.read_bytes(segment.length as usize)?
+                            segment.data = data_reader.read_bytes(segment.data_length as usize)?
                         }
                     }
                 }
@@ -847,7 +848,8 @@ fn get_code_block_lengths(
 
             storage.segments.push(Segment {
                 idx: segment,
-                length,
+                data_length: length,
+                coding_pases: coding_passes_for_segment,
                 // Will be set later.
                 data: &[],
             });

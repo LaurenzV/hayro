@@ -61,14 +61,25 @@ fn decode_inner(
     let mut combined_layers = vec![];
     let mut segment_ranges = vec![0];
 
+    let mut last_segment_idx = 0;
+
     for layer in layers {
         if let Some(range) = layer.segments.clone() {
-            for segment in &all_segments[range.clone()] {
+            let layer_segments = &all_segments[range.clone()];
+            for segment in layer_segments {
+                if segment.idx != last_segment_idx {
+                    assert_eq!(segment.idx, last_segment_idx + 1);
+
+                    segment_ranges.push(combined_layers.len());
+                    last_segment_idx += 1;
+                }
+
                 combined_layers.extend(segment.data);
-                segment_ranges.push(combined_layers.len());
             }
         }
     }
+
+    segment_ranges.push(combined_layers.len());
 
     let mut decoder = if style.termination_on_each_pass {
         ArithmeticDecoder::new(&combined_layers[..segment_ranges[1]])
@@ -811,7 +822,9 @@ mod tests {
             }],
             &[Segment {
                 idx: 0,
-                length: data.len() as u32,
+                // Dummy value.
+                coding_pases: 0,
+                data_length: data.len() as u32,
                 data: &data,
             }],
         )
@@ -852,7 +865,9 @@ mod tests {
             }],
             &[Segment {
                 idx: 0,
-                length: data.len() as u32,
+                // Dummy value.
+                coding_pases: 0,
+                data_length: data.len() as u32,
                 data: &data,
             }],
         )
@@ -909,7 +924,9 @@ mod tests {
             }],
             &[Segment {
                 idx: 0,
-                length: data.len() as u32,
+                // Dummy value.
+                coding_pases: 0,
+                data_length: data.len() as u32,
                 data: &data,
             }],
         )
