@@ -295,7 +295,7 @@ mod tests {
 
         for _ in 0..expected_output.len() {
             for _ in 0..8 {
-                let next = decoder.decode(&mut ctx) as u16;
+                let next = decoder.decode(&mut ctx);
                 writer.write(next);
             }
         }

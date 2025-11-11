@@ -99,7 +99,7 @@ fn scale(
 
     for bytes in data.chunks_exact(num_components as usize * width as usize) {
         for byte in bytes {
-            let scaled = byte.round().min(max) as u16;
+            let scaled = byte.round().min(max) as u32;
             writer.write(scaled)?;
         }
 

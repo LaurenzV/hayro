@@ -184,10 +184,10 @@ impl<'a> BitWriter<'a> {
 
     /// Write the given number into the buffer.
     #[inline]
-    pub fn write(&mut self, val: impl Into<u32>) -> Option<()> {
+    pub fn write(&mut self, val: u32) -> Option<()> {
         let bit_size = self.bit_size as usize;
         let mut bits_left = bit_size;
-        let value = val.into() & bit_mask(self.bit_size);
+        let value = val & bit_mask(self.bit_size);
 
         while bits_left > 0 {
             let already_advanced = bit_size - bits_left;
@@ -215,11 +215,7 @@ impl<'a> BitWriter<'a> {
 
     /// Write multiple numbers at once.
     #[inline]
-    pub fn write_bits<I>(&mut self, bits: I) -> Option<()>
-    where
-        I: IntoIterator,
-        I::Item: Into<u32>,
-    {
+    pub fn write_bits(&mut self, bits: impl IntoIterator<Item = u32>) -> Option<()> {
         for bit in bits {
             let value: u32 = bit.into();
             self.write(value)?;
@@ -328,9 +324,15 @@ mod tests {
     fn bit_writer_16() {
         let mut buf = vec![0u8; 6];
         let mut writer = BitWriter::new(&mut buf, 16).unwrap();
-        writer.write(u16::from_be_bytes([0x01, 0x02])).unwrap();
-        writer.write(u16::from_be_bytes([0x03, 0x04])).unwrap();
-        writer.write(u16::from_be_bytes([0x05, 0x06])).unwrap();
+        writer
+            .write(u16::from_be_bytes([0x01, 0x02]) as u32)
+            .unwrap();
+        writer
+            .write(u16::from_be_bytes([0x03, 0x04]) as u32)
+            .unwrap();
+        writer
+            .write(u16::from_be_bytes([0x05, 0x06]) as u32)
+            .unwrap();
 
         assert_eq!(buf, [0x01, 0x02, 0x03, 0x04, 0x05, 0x06]);
     }
@@ -358,9 +360,9 @@ mod tests {
     fn bit_writer_8() {
         let mut buf = vec![0u8; 3];
         let mut writer = BitWriter::new(&mut buf, 8).unwrap();
-        writer.write(0x01u8).unwrap();
-        writer.write(0x02u8).unwrap();
-        writer.write(0x03u8).unwrap();
+        writer.write(0x01).unwrap();
+        writer.write(0x02).unwrap();
+        writer.write(0x03).unwrap();
 
         assert_eq!(buf, [0x01, 0x02, 0x03]);
     }
@@ -378,12 +380,12 @@ mod tests {
     fn bit_writer_4() {
         let mut buf = vec![0u8; 3];
         let mut writer = BitWriter::new(&mut buf, 4).unwrap();
-        writer.write(0b1001u8).unwrap();
-        writer.write(0b1000u8).unwrap();
-        writer.write(0b0001u8).unwrap();
-        writer.write(0b1111u8).unwrap();
-        writer.write(0b1010u8).unwrap();
-        writer.write(0b1001u8).unwrap();
+        writer.write(0b1001).unwrap();
+        writer.write(0b1000).unwrap();
+        writer.write(0b0001).unwrap();
+        writer.write(0b1111).unwrap();
+        writer.write(0b1010).unwrap();
+        writer.write(0b1001).unwrap();
 
         assert_eq!(buf, [0b10011000, 0b00011111, 0b10101001]);
     }
@@ -404,14 +406,14 @@ mod tests {
     fn bit_writer_2() {
         let mut buf = vec![0u8; 2];
         let mut writer = BitWriter::new(&mut buf, 2).unwrap();
-        writer.write(0b10u8).unwrap();
-        writer.write(0b01u8).unwrap();
-        writer.write(0b10u8).unwrap();
-        writer.write(0b00u8).unwrap();
-        writer.write(0b00u8).unwrap();
-        writer.write(0b01u8).unwrap();
-        writer.write(0b00u8).unwrap();
-        writer.write(0b00u8).unwrap();
+        writer.write(0b10).unwrap();
+        writer.write(0b01).unwrap();
+        writer.write(0b10).unwrap();
+        writer.write(0b00).unwrap();
+        writer.write(0b00).unwrap();
+        writer.write(0b01).unwrap();
+        writer.write(0b00).unwrap();
+        writer.write(0b00).unwrap();
 
         assert_eq!(buf, [0b10011000, 0b00010000]);
     }
@@ -434,23 +436,23 @@ mod tests {
     fn bit_writer_1() {
         let mut buf = vec![0u8; 2];
         let mut writer = BitWriter::new(&mut buf, 1).unwrap();
-        writer.write(0b1u8).unwrap();
-        writer.write(0b0u8).unwrap();
-        writer.write(0b0u8).unwrap();
-        writer.write(0b1u8).unwrap();
-        writer.write(0b1u8).unwrap();
-        writer.write(0b0u8).unwrap();
-        writer.write(0b0u8).unwrap();
-        writer.write(0b0u8).unwrap();
+        writer.write(0b1).unwrap();
+        writer.write(0b0).unwrap();
+        writer.write(0b0).unwrap();
+        writer.write(0b1).unwrap();
+        writer.write(0b1).unwrap();
+        writer.write(0b0).unwrap();
+        writer.write(0b0).unwrap();
+        writer.write(0b0).unwrap();
 
-        writer.write(0b0u8).unwrap();
-        writer.write(0b0u8).unwrap();
-        writer.write(0b0u8).unwrap();
-        writer.write(0b1u8).unwrap();
-        writer.write(0b0u8).unwrap();
-        writer.write(0b0u8).unwrap();
-        writer.write(0b0u8).unwrap();
-        writer.write(0b0u8).unwrap();
+        writer.write(0b0).unwrap();
+        writer.write(0b0).unwrap();
+        writer.write(0b0).unwrap();
+        writer.write(0b1).unwrap();
+        writer.write(0b0).unwrap();
+        writer.write(0b0).unwrap();
+        writer.write(0b0).unwrap();
+        writer.write(0b0).unwrap();
 
         assert_eq!(buf, [0b10011000, 0b00010000]);
     }

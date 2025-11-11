@@ -815,7 +815,7 @@ fn apply_predictor(data: Vec<u8>, params: &PredictorParams) -> Option<Vec<u8>> {
                             let mut reader = BitReader::new(in_data);
 
                             while let Some(data) = reader.read(bit_size) {
-                                writer.write(data as u16);
+                                writer.write(data);
                             }
                         }
                     }
@@ -867,7 +867,7 @@ fn apply<'a, T: Predictor>(
             // bit size, so it wouldn't be triggered for bits per component < 16. So we mask out
             // the bytes manually, which is equivalent to a wrapping add.
             writer.write(
-                T::predict(cur_row, prev_row, prev_col, top_left) & bit_mask(bit_size) as u16,
+                T::predict(cur_row, prev_row, prev_col, top_left) as u32 & bit_mask(bit_size),
             );
         }
 
