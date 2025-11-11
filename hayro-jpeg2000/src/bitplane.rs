@@ -120,17 +120,17 @@ fn decode_inner(
                     true
                 } else {
                     // Only for cleanup pass.
-                    start_coding_pass % 3 == 0
+                    start_coding_pass.is_multiple_of(3)
                 }
             } else {
                 true
             };
 
             if use_arithmetic {
-                let mut decoder = ArithmeticDecoder::new(&data);
+                let mut decoder = ArithmeticDecoder::new(data);
                 handle_coding_passes(start_coding_pass, end_coding_pass, style, ctx, &mut decoder)?;
             } else {
-                let mut decoder = BypassDecoder::new(&data);
+                let mut decoder = BypassDecoder::new(data);
                 handle_coding_passes(start_coding_pass, end_coding_pass, style, ctx, &mut decoder)?;
             }
         }
