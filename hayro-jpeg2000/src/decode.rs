@@ -302,7 +302,7 @@ impl<'a> TileDecodeContext<'a> {
             channel_data.push(ChannelData {
                 container: vec![
                     0.0;
-                    (header.size_data.reference_grid_width * header.size_data.reference_grid_height)
+                    (header.size_data.image_width() * header.size_data.image_height())
                         as usize
                 ],
                 // Will be set later on, because that data only exists in the
@@ -1140,26 +1140,29 @@ fn store<'a>(tile: &'a Tile<'a>, header: &Header, tile_ctx: &mut TileDecodeConte
             // decomposition level of the tile, which is usually not 1:1 aligned
             // with the actual tile rectangle. We also need to account for the
             // offset of the reference grid.
-            let skip_x = component_tile.rect.x0 - idwt_output.rect.x0;
-            let skip_y = component_tile.rect.y0 - idwt_output.rect.y0;
-            let take_x = component_tile.rect.width();
-            let take_y = component_tile.rect.height();
+            let (image_x_offset, image_y_offset) = (
+                header.size_data.image_area_x_offset,
+                header.size_data.image_area_y_offset,
+            );
+
+            let skip_x = image_x_offset.checked_sub(idwt_output.rect.x0).unwrap_or(0);
+            let skip_y = image_y_offset.checked_sub(idwt_output.rect.y0).unwrap_or(0);
 
             let input_row_iter = idwt_output
                 .coefficients
                 .chunks_exact(idwt_output.rect.width() as usize)
-                .skip(skip_y as usize)
-                .take(take_y as usize);
+                .skip(skip_y as usize);
 
             let output_row_iter = channel_data
                 .container
-                .chunks_exact_mut(header.size_data.reference_grid_width as usize)
-                .skip(tile.rect.y0 as usize)
-                .take(take_y as usize);
+                .chunks_exact_mut(header.size_data.image_width() as usize)
+                .skip(tile.rect.y0.checked_sub(image_y_offset).unwrap_or(0) as usize);
 
             for (input_row, output_row) in input_row_iter.zip(output_row_iter) {
-                let input_row = &input_row[skip_x as usize..][..take_x as usize];
-                let output_row = &mut output_row[tile.rect.x0 as usize..][..take_x as usize];
+                let input_row = &input_row[skip_x as usize..];
+                let output_row = &mut output_row
+                    [tile.rect.x0.checked_sub(image_x_offset).unwrap_or(0) as usize..]
+                    [..input_row.len()];
 
                 output_row.copy_from_slice(input_row);
             }
