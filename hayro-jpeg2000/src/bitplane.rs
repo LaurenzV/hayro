@@ -42,10 +42,6 @@ pub(crate) fn decode(
     let mut layer_buffer = std::mem::take(&mut ctx.layer_buffer).unwrap_or_default();
     layer_buffer.clear();
 
-    if style.selective_arithmetic_coding_bypass {
-        return Err("unsupported code-block style features encountered during decoding");
-    }
-
     decode_inner(code_block, style, num_bitplanes, layers, all_segments, ctx)
         .ok_or("failed to decode code-block arithmetic data")?;
 
@@ -813,6 +809,7 @@ mod tests {
                 segments: Some(0..1),
             }],
             &[Segment {
+                idx: 0,
                 length: data.len() as u32,
                 data: &data,
             }],
@@ -852,6 +849,7 @@ mod tests {
                 segments: Some(0..1),
             }],
             &[Segment {
+                idx: 0,
                 length: data.len() as u32,
                 data: &data,
             }],
@@ -907,6 +905,7 @@ mod tests {
                 segments: Some(0..1),
             }],
             &[Segment {
+                idx: 0,
                 length: data.len() as u32,
                 data: &data,
             }],

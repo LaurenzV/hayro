@@ -225,17 +225,6 @@ fn parse_tile_part<'a>(
         }
     }
 
-    for ci in &tile.component_infos {
-        if ci
-            .coding_style
-            .parameters
-            .code_block_style
-            .selective_arithmetic_coding_bypass
-        {
-            return Err("unsupported code-block style features encountered during decoding");
-        }
-    }
-
     let remaining_bytes = if let Some(len) = data_len.checked_sub(reader.offset() - start) {
         len
     } else {

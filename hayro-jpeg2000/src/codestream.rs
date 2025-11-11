@@ -106,17 +106,6 @@ fn read_header(reader: &mut Reader) -> Result<Header, &'static str> {
         })
         .collect();
 
-    for ci in &component_infos {
-        if ci
-            .coding_style
-            .parameters
-            .code_block_style
-            .selective_arithmetic_coding_bypass
-        {
-            return Err("unsupported code-block style features encountered during decoding");
-        }
-    }
-
     Ok(Header {
         size_data,
         global_coding_style: cod.clone(),
@@ -178,6 +167,10 @@ impl ComponentInfo {
 
     pub(crate) fn num_resolution_levels(&self) -> u16 {
         self.coding_style.parameters.num_resolution_levels
+    }
+
+    pub(crate) fn code_block_style(&self) -> CodeBlockStyle {
+        self.coding_style.parameters.code_block_style
     }
 }
 

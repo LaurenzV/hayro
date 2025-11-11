@@ -239,6 +239,7 @@ pub(crate) struct CodeBlock {
 }
 
 pub(crate) struct Segment<'a> {
+    pub(crate) idx: u32,
     pub(crate) length: u32,
     pub(crate) data: &'a [u8],
 }
@@ -795,8 +796,6 @@ fn get_code_block_lengths(
             return None;
         };
 
-        code_block.number_of_coding_passes += added_coding_passes;
-
         trace!("number of coding passes: {}", added_coding_passes);
 
         let mut k = 0;
@@ -807,21 +806,28 @@ fn get_code_block_lengths(
 
         code_block.l_block += k;
 
-        let (num_segments, coding_passes_per_segment) = if !component_info
-            .coding_style
-            .parameters
-            .code_block_style
-            .termination_on_each_pass
-        {
-            (1, added_coding_passes)
-        } else {
-            (added_coding_passes, 1)
+        let previous_layers_passes = code_block.number_of_coding_passes;
+        let cumulative_passes = previous_layers_passes + added_coding_passes;
+
+        let get_segment = |code_block_idx: u32| {
+            if component_info.code_block_style().termination_on_each_pass {
+                code_block_idx
+            } else if component_info
+                .code_block_style()
+                .selective_arithmetic_coding_bypass
+            {
+                segment_idx_for_bypass(code_block_idx)
+            } else {
+                progression_data.layer_num as u32
+            }
         };
 
         let start = storage.segments.len();
 
-        for i in 0..num_segments {
+        let mut push_segment = |segment: u32, coding_passes_for_segment: u32| {
             let length = {
+                assert!(coding_passes_for_segment > 0);
+
                 // "A codeword segment is the number of bytes contributed to a packet by a
                 // code-block. The length of a codeword segment is represented by a binary number of length:
                 // bits = Lblock + floor(log_2(coding passes added))
@@ -833,25 +839,59 @@ fn get_code_block_lengths(
                 // zero, the value of Lblock is incremented by k. While Lblock can only increase,
                 // the number of bits used to signal the length of the code-block contribution can
                 // increase or decrease depending on the number of coding passes included."
-                let length_bits = code_block.l_block + coding_passes_per_segment.ilog2();
+                let length_bits = code_block.l_block + coding_passes_for_segment.ilog2();
                 reader.read_bits_with_stuffing(length_bits as u8)
             }?;
 
             storage.segments.push(Segment {
+                idx: segment,
                 length,
                 // Will be set later.
                 data: &[],
             });
 
-            trace!("length({i}) {}", length);
+            Some(())
+        };
+
+        let mut last_segment = get_segment(previous_layers_passes);
+        let mut coding_passes_for_segment = 0;
+
+        for coding_pass in previous_layers_passes..cumulative_passes {
+            let segment = get_segment(coding_pass);
+
+            if segment != last_segment {
+                push_segment(last_segment, coding_passes_for_segment);
+                last_segment = segment;
+                coding_passes_for_segment = 1;
+            } else {
+                coding_passes_for_segment += 1;
+            }
+        }
+
+        // Flush the final segment if applicable.
+        if coding_passes_for_segment > 0 {
+            push_segment(last_segment, coding_passes_for_segment);
         }
 
         let end = storage.segments.len();
-
         layer.segments = Some(start..end);
+        code_block.number_of_coding_passes += added_coding_passes;
     }
 
     Some(())
+}
+
+fn segment_idx_for_bypass(code_block_idx: u32) -> u32 {
+    if code_block_idx < 10 {
+        0
+    } else {
+        1 + (2 * ((code_block_idx - 10) / 3))
+            + (if ((code_block_idx - 10) % 3) == 2 {
+                1
+            } else {
+                0
+            })
+    }
 }
 
 fn decode_bitplanes<'a>(
