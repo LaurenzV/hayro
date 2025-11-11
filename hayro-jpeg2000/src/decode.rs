@@ -236,6 +236,7 @@ pub(crate) struct CodeBlock {
     pub(crate) missing_bit_planes: u8,
     pub(crate) number_of_coding_passes: u32,
     pub(crate) l_block: u32,
+    pub(crate) non_empty_layer_count: u32,
 }
 
 pub(crate) struct Segment<'a> {
@@ -569,6 +570,7 @@ fn build_code_blocks(
                 l_block: 3,
                 number_of_coding_passes: 0,
                 layers: start..end,
+                non_empty_layer_count: 0,
             });
 
             x += code_block_width;
@@ -818,7 +820,7 @@ fn get_code_block_lengths(
             {
                 segment_idx_for_bypass(code_block_idx)
             } else {
-                progression_data.layer_num as u32
+                code_block.non_empty_layer_count
             }
         };
 
@@ -878,6 +880,7 @@ fn get_code_block_lengths(
         let end = storage.segments.len();
         layer.segments = Some(start..end);
         code_block.number_of_coding_passes += added_coding_passes;
+        code_block.non_empty_layer_count += 1;
     }
 
     Some(())

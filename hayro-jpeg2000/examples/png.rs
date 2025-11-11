@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 fn main() {
     if let Ok(()) = log::set_logger(&LOGGER) {
-        log::set_max_level(log::LevelFilter::Warn);
+        log::set_max_level(log::LevelFilter::Trace);
     }
 
     let target = env::args()
@@ -178,7 +178,7 @@ struct SimpleLogger;
 
 impl log::Log for SimpleLogger {
     fn enabled(&self, metadata: &log::Metadata) -> bool {
-        metadata.level() <= log::LevelFilter::Warn
+        metadata.level() <= log::LevelFilter::Trace
     }
 
     fn log(&self, record: &log::Record) {

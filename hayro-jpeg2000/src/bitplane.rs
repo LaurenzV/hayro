@@ -795,6 +795,7 @@ mod tests {
             missing_bit_planes: 0,
             number_of_coding_passes: 16,
             l_block: 0,
+            non_empty_layer_count: 1,
         };
 
         let mut ctx = CodeBlockDecodeContext::default();
@@ -835,6 +836,7 @@ mod tests {
             missing_bit_planes: 0,
             number_of_coding_passes: 7,
             l_block: 0,
+            non_empty_layer_count: 1,
         };
 
         let mut ctx = CodeBlockDecodeContext::default();
@@ -891,6 +893,7 @@ mod tests {
             missing_bit_planes: 5,
             number_of_coding_passes: 13,
             l_block: 0,
+            non_empty_layer_count: 1,
         };
 
         let mut ctx = CodeBlockDecodeContext::default();
