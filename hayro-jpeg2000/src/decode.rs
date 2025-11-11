@@ -850,6 +850,8 @@ fn get_code_block_lengths(
                 data: &[],
             });
 
+            trace!("length({segment}) {}", length);
+
             Some(())
         };
 
