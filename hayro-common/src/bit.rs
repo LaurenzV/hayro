@@ -127,10 +127,10 @@ pub struct BitWriter<'a> {
 }
 
 impl<'a> BitWriter<'a> {
-    /// Create a new bit writer. Only bit sizes of 1, 2, 4, 8, and 16 are supported.
+    /// Create a new bit writer for a fixed bit size between 1 and 32 (inclusive).
     #[inline]
     pub fn new(data: &'a mut [u8], bit_size: u8) -> Option<Self> {
-        if !matches!(bit_size, 1 | 2 | 4 | 8 | 16) {
+        if !(1..=32).contains(&bit_size) {
             return None;
         }
 
@@ -178,52 +178,51 @@ impl<'a> BitWriter<'a> {
         self.data
     }
 
-    fn byte_pos(&self) -> usize {
-        self.cur_pos / 8
-    }
-
     fn bit_pos(&self) -> usize {
         self.cur_pos % 8
     }
 
     /// Write the given number into the buffer.
     #[inline]
-    pub fn write(&mut self, val: u16) -> Option<()> {
-        let byte_pos = self.byte_pos();
-        let bit_size = self.bit_size;
+    pub fn write(&mut self, val: impl Into<u32>) -> Option<()> {
+        let bit_size = self.bit_size as usize;
+        let mut bits_left = bit_size;
+        let value = val.into() & bit_mask(self.bit_size);
 
-        match bit_size {
-            1 | 2 | 4 => {
-                let bit_pos = self.bit_pos();
+        while bits_left > 0 {
+            let already_advanced = bit_size - bits_left;
+            let absolute_pos = self.cur_pos + already_advanced;
+            let byte_pos = absolute_pos / 8;
+            let bit_pos = absolute_pos % 8;
+            let bits_in_byte = (8 - bit_pos).min(bits_left);
+            let shift = bits_left - bits_in_byte;
+            let chunk_mask = bit_mask(bits_in_byte as u8);
+            let chunk = ((value >> shift) & chunk_mask) as u8;
 
-                let base = self.data.get(byte_pos)?;
-                let shift = 8 - self.bit_size as usize - bit_pos;
-                let item = ((val & bit_mask(self.bit_size) as u16) as u8) << shift;
+            let shift_in_byte = 8 - bits_in_byte - bit_pos;
+            let byte = self.data.get_mut(byte_pos)?;
+            let byte_mask = (chunk_mask as u8) << shift_in_byte;
 
-                *(self.data.get_mut(byte_pos)?) = *base | item;
-                self.cur_pos += bit_size as usize;
-            }
-            8 => {
-                *(self.data.get_mut(byte_pos)?) = val as u8;
-                self.cur_pos += 8;
-            }
-            16 => {
-                self.data
-                    .get_mut(byte_pos..(byte_pos + 2))?
-                    .copy_from_slice(&val.to_be_bytes());
-                self.cur_pos += 16;
-            }
-            _ => unreachable!(),
+            *byte = (*byte & !byte_mask) | ((chunk << shift_in_byte) & byte_mask);
+
+            bits_left -= bits_in_byte;
         }
+
+        self.cur_pos += bit_size;
 
         Some(())
     }
 
     /// Write multiple numbers at once.
     #[inline]
-    pub fn write_bits(&mut self, bits: impl IntoIterator<Item = u16>) -> Option<()> {
+    pub fn write_bits<I>(&mut self, bits: I) -> Option<()>
+    where
+        I: IntoIterator,
+        I::Item: Into<u32>,
+    {
         for bit in bits {
-            self.write(bit)?;
+            let value: u32 = bit.into();
+            self.write(value)?;
         }
 
         Some(())
@@ -359,9 +358,9 @@ mod tests {
     fn bit_writer_8() {
         let mut buf = vec![0u8; 3];
         let mut writer = BitWriter::new(&mut buf, 8).unwrap();
-        writer.write(0x01).unwrap();
-        writer.write(0x02).unwrap();
-        writer.write(0x03).unwrap();
+        writer.write(0x01u8).unwrap();
+        writer.write(0x02u8).unwrap();
+        writer.write(0x03u8).unwrap();
 
         assert_eq!(buf, [0x01, 0x02, 0x03]);
     }
@@ -379,12 +378,12 @@ mod tests {
     fn bit_writer_4() {
         let mut buf = vec![0u8; 3];
         let mut writer = BitWriter::new(&mut buf, 4).unwrap();
-        writer.write(0b1001).unwrap();
-        writer.write(0b1000).unwrap();
-        writer.write(0b0001).unwrap();
-        writer.write(0b1111).unwrap();
-        writer.write(0b1010).unwrap();
-        writer.write(0b1001).unwrap();
+        writer.write(0b1001u8).unwrap();
+        writer.write(0b1000u8).unwrap();
+        writer.write(0b0001u8).unwrap();
+        writer.write(0b1111u8).unwrap();
+        writer.write(0b1010u8).unwrap();
+        writer.write(0b1001u8).unwrap();
 
         assert_eq!(buf, [0b10011000, 0b00011111, 0b10101001]);
     }
@@ -405,14 +404,14 @@ mod tests {
     fn bit_writer_2() {
         let mut buf = vec![0u8; 2];
         let mut writer = BitWriter::new(&mut buf, 2).unwrap();
-        writer.write(0b10).unwrap();
-        writer.write(0b01).unwrap();
-        writer.write(0b10).unwrap();
-        writer.write(0b00).unwrap();
-        writer.write(0b00).unwrap();
-        writer.write(0b01).unwrap();
-        writer.write(0b00).unwrap();
-        writer.write(0b00).unwrap();
+        writer.write(0b10u8).unwrap();
+        writer.write(0b01u8).unwrap();
+        writer.write(0b10u8).unwrap();
+        writer.write(0b00u8).unwrap();
+        writer.write(0b00u8).unwrap();
+        writer.write(0b01u8).unwrap();
+        writer.write(0b00u8).unwrap();
+        writer.write(0b00u8).unwrap();
 
         assert_eq!(buf, [0b10011000, 0b00010000]);
     }
@@ -435,23 +434,23 @@ mod tests {
     fn bit_writer_1() {
         let mut buf = vec![0u8; 2];
         let mut writer = BitWriter::new(&mut buf, 1).unwrap();
-        writer.write(0b1).unwrap();
-        writer.write(0b0).unwrap();
-        writer.write(0b0).unwrap();
-        writer.write(0b1).unwrap();
-        writer.write(0b1).unwrap();
-        writer.write(0b0).unwrap();
-        writer.write(0b0).unwrap();
-        writer.write(0b0).unwrap();
+        writer.write(0b1u8).unwrap();
+        writer.write(0b0u8).unwrap();
+        writer.write(0b0u8).unwrap();
+        writer.write(0b1u8).unwrap();
+        writer.write(0b1u8).unwrap();
+        writer.write(0b0u8).unwrap();
+        writer.write(0b0u8).unwrap();
+        writer.write(0b0u8).unwrap();
 
-        writer.write(0b0).unwrap();
-        writer.write(0b0).unwrap();
-        writer.write(0b0).unwrap();
-        writer.write(0b1).unwrap();
-        writer.write(0b0).unwrap();
-        writer.write(0b0).unwrap();
-        writer.write(0b0).unwrap();
-        writer.write(0b0).unwrap();
+        writer.write(0b0u8).unwrap();
+        writer.write(0b0u8).unwrap();
+        writer.write(0b0u8).unwrap();
+        writer.write(0b1u8).unwrap();
+        writer.write(0b0u8).unwrap();
+        writer.write(0b0u8).unwrap();
+        writer.write(0b0u8).unwrap();
+        writer.write(0b0u8).unwrap();
 
         assert_eq!(buf, [0b10011000, 0b00010000]);
     }
@@ -521,5 +520,70 @@ mod tests {
         assert_eq!(reader.read(1).unwrap(), 0b1);
         assert_eq!(reader.read(2).unwrap(), 0b11);
         assert_eq!(reader.read(7).unwrap(), 0b0101001);
+    }
+
+    #[test]
+    fn bit_writer_rejects_invalid_sizes() {
+        let mut buf = [0u8; 4];
+        assert!(BitWriter::new(&mut buf, 0).is_none());
+        assert!(BitWriter::new(&mut buf, 33).is_none());
+    }
+
+    #[test]
+    fn bit_writer_round_trip_all_bit_sizes() {
+        for bit_size in 1u8..=32 {
+            let mask = bit_mask(bit_size);
+            let sample_count = if bit_size > 16 { 4 } else { 6 };
+            let values: Vec<u32> = (0..sample_count)
+                .map(|i| {
+                    let seed = 0x9E37u32.wrapping_mul(i as u32 + 1) ^ (bit_size as u32 * 0x45);
+                    seed & mask
+                })
+                .collect();
+
+            let total_bits = bit_size as usize * values.len();
+            let mut buf = vec![0u8; (total_bits + 7) / 8];
+            let mut writer = BitWriter::new(&mut buf, bit_size).unwrap();
+
+            for value in &values {
+                writer.write(*value).unwrap();
+            }
+
+            let mut reader = BitReader::new(&buf);
+            for expected in &values {
+                assert_eq!(
+                    reader.read(bit_size).unwrap(),
+                    *expected,
+                    "round-trip failed for bit size {bit_size}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn bit_writer_round_trip_12_and_25_bits() {
+        for &bit_size in &[12u8, 25u8] {
+            let mask = bit_mask(bit_size);
+            let values: Vec<u32> = (0..5)
+                .map(|i| ((0xABCDEu32.wrapping_mul(i + 1)) ^ (bit_size as u32)) & mask)
+                .collect();
+
+            let total_bits = bit_size as usize * values.len();
+            let mut buf = vec![0u8; (total_bits + 7) / 8];
+            let mut writer = BitWriter::new(&mut buf, bit_size).unwrap();
+
+            for value in &values {
+                writer.write(*value).unwrap();
+            }
+
+            let mut reader = BitReader::new(&buf);
+            for expected in &values {
+                assert_eq!(
+                    reader.read(bit_size).unwrap(),
+                    *expected,
+                    "round-trip failed for bit size {bit_size}"
+                );
+            }
+        }
     }
 }

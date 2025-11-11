@@ -67,7 +67,7 @@ pub(crate) fn decode(data: &[u8], params: &ImageDecodeParams) -> Option<FilterRe
         sycc_to_rgb(&mut buf, bit_depth);
     }
 
-    let buf = scale(buf.as_slice(), bpc, cs.num_components(), width, height)?;
+    let buf = scale(buf.as_slice(), bpc, cs.num_components(), width, height).unwrap();
 
     Some(FilterResult {
         data: buf,
@@ -88,7 +88,12 @@ fn scale(
     width: u32,
     height: u32,
 ) -> Option<Vec<u8>> {
-    let mut input = vec![0; ((width + 1) * num_components as u32 * height) as usize];
+    let mut input = vec![
+        0;
+        (width as u64 * num_components as u64 * bit_per_component as u64).div_ceil(8)
+            as usize
+            * height as usize
+    ];
     let mut writer = BitWriter::new(&mut input, bit_per_component)?;
     let max = ((1 << bit_per_component) - 1) as f32;
 
