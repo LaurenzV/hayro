@@ -180,10 +180,13 @@ fn parse_tile_part<'a>(
                         .ok_or("failed to read COC marker")?;
 
                 if first {
-                    tile.component_infos
+                    let old = tile
+                        .component_infos
                         .get_mut(component_index as usize)
-                        .ok_or("invalid component index in tile-part header")?
-                        .coding_style = coc;
+                        .ok_or("invalid component index in tile-part header")?;
+
+                    old.coding_style.parameters = coc.parameters;
+                    old.coding_style.flags.raw |= coc.flags.raw;
                 } else {
                     warn!("encountered unexpected COC marker in tile-part header");
                 }

@@ -284,6 +284,7 @@ use crate::run_render_test;
 #[test] fn openjpeg_Cevennes1() { run_render_test("openjpeg_Cevennes1", "downloads/custom/openjpeg_Cevennes1.pdf", None); }
 #[test] fn openjpeg_Cevennes2() { run_render_test("openjpeg_Cevennes2", "downloads/custom/openjpeg_Cevennes2.pdf", None); }
 #[test] fn openjpeg_Rome() { run_render_test("openjpeg_Rome", "downloads/custom/openjpeg_Rome.pdf", None); }
+#[test] fn openjpeg_Bretagne2_2() { run_render_test("openjpeg_Bretagne2_2", "downloads/custom/openjpeg_Bretagne2_2.pdf", None); }
 #[test] fn issue494() { run_render_test("issue494", "downloads/custom/issue494.pdf", None); }
 #[test] fn pdfjs_20130226130259() { run_render_test("pdfjs_20130226130259", "downloads/pdfjs/20130226130259.pdf", Some("0..=0")); }
 #[test] fn pdfjs_ContentStreamNoCycleType3insideType3() { run_render_test("pdfjs_ContentStreamNoCycleType3insideType3", "downloads/pdfjs/ContentStreamNoCycleType3insideType3.pdf", None); }

@@ -1113,6 +1113,9 @@ fn apply_mct(tile_ctx: &mut TileDecodeContext) {
 }
 
 fn store<'a>(tile: &'a Tile<'a>, header: &Header, tile_ctx: &mut TileDecodeContext<'a>) {
+    let width = header.size_data.tile_width;
+    let height = header.size_data.tile_height;
+
     for ((idwt_output, component_info), channel_data) in tile_ctx
         .idwt_outputs
         .iter_mut()
@@ -1181,14 +1184,15 @@ fn store<'a>(tile: &'a Tile<'a>, header: &Header, tile_ctx: &mut TileDecodeConte
                     let sample = idwt_output.coefficients
                         [relative_y * component_tile.rect.width() as usize + relative_x];
 
-                    for x_offset in 0..scale_x as u32 {
-                        for y_offset in 0..scale_y as u32 {
-                            let y_position = (reference_grid_y + y_offset) as usize;
-                            let x_position = (reference_grid_x + x_offset) as usize;
+                    for x_position in
+                        reference_grid_x..u32::min(reference_grid_x + scale_x as u32, width)
+                    {
+                        for y_position in
+                            reference_grid_y..u32::min(reference_grid_y + scale_y as u32, height)
+                        {
+                            let pos = y_position as usize * width as usize + x_position as usize;
 
-                            channel_data.container[y_position
-                                * header.size_data.reference_grid_width as usize
-                                + x_position] = sample;
+                            channel_data.container[pos] = sample;
                         }
                     }
                 }
