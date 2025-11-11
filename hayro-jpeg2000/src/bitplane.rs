@@ -118,7 +118,7 @@ fn decode_inner(
             let use_arithmetic = if style.selective_arithmetic_coding_bypass {
                 if start_coding_pass <= 9 {
                     true
-                }   else {
+                } else {
                     // Only for cleanup pass.
                     start_coding_pass % 3 == 0
                 }
