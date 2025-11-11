@@ -1,10 +1,15 @@
 use hayro_jpeg2000::bitmap::Bitmap;
 use hayro_jpeg2000::read;
 use image::{DynamicImage, ImageBuffer, ImageFormat, Rgba, RgbaImage};
+use indicatif::{ProgressBar, ProgressStyle};
+use rayon::prelude::*;
+use std::any::Any;
 use std::cmp::max;
 use std::fs;
+use std::panic::{AssertUnwindSafe, PanicHookInfo, catch_unwind};
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
+use std::time::{Duration, Instant};
 
 const REPLACE: Option<&str> = option_env!("REPLACE");
 
@@ -21,153 +26,168 @@ static DIFFS_PATH: LazyLock<PathBuf> = LazyLock::new(|| {
     path
 });
 
-#[test]
-fn kakadu_lossless_gray_u8_prog1_layers1_res6() {
-    run_asset_test("kakadu-lossless-gray-u8-prog1-layers1-res6.jp2");
+struct TestReport {
+    name: String,
+    duration: Duration,
+    outcome: Result<(), String>,
 }
 
-#[test]
-fn kakadu_lossless_gray_alpha_u8_prog1_layers1_res6() {
-    run_asset_test("kakadu-lossless-gray-alpha-u8-prog1-layers1-res6.jp2");
+fn main() {
+    let _panic_hook_guard = PanicHookGuard::install();
+    if !run_harness() {
+        std::process::exit(1);
+    }
 }
 
-#[test]
-fn kakadu_lossless_rgb_u8_prog1_layers1_res6_mct() {
-    run_asset_test("kakadu-lossless-rgb-u8-prog1-layers1-res6-mct.jp2");
+fn run_harness() -> bool {
+    let asset_files = match collect_asset_files() {
+        Ok(files) => files,
+        Err(err) => {
+            eprintln!("Failed to read asset directory: {err}");
+            return false;
+        }
+    };
+
+    if asset_files.is_empty() {
+        eprintln!("No .jp2 assets were found in {}", ASSETS_PATH.display());
+        return false;
+    }
+
+    let progress_bar = ProgressBar::new(asset_files.len() as u64);
+    progress_bar.set_style(
+        ProgressStyle::with_template(
+            "{spinner} {pos}/{len} [{elapsed_precise}] [{wide_bar}] {msg}",
+        )
+        .unwrap()
+        .progress_chars("=>-"),
+    );
+
+    let reports: Vec<TestReport> = asset_files
+        .par_iter()
+        .map(|asset| {
+            let name = asset.file_name().unwrap().to_string_lossy().to_string();
+            progress_bar.set_message(name.clone());
+            let start = Instant::now();
+            let outcome = catch_unwind(AssertUnwindSafe(|| run_asset_test(asset))).unwrap_or_else(
+                |payload| {
+                    let panic_msg = describe_panic(payload.as_ref());
+                    Err(format!("panic: {panic_msg}"))
+                },
+            );
+            progress_bar.inc(1);
+            TestReport {
+                name,
+                duration: start.elapsed(),
+                outcome,
+            }
+        })
+        .collect();
+
+    progress_bar.finish_with_message("asset tests complete");
+
+    println!("\nDetailed results:");
+    for report in &reports {
+        match &report.outcome {
+            Ok(_) => println!("[PASS] {:<60} ({:.2?})", report.name, report.duration),
+            Err(err) => {
+                println!("[FAIL] {:<60} ({:.2?})", report.name, report.duration);
+                println!("       {err}");
+            }
+        }
+    }
+
+    let failures: Vec<_> = reports
+        .iter()
+        .filter_map(|report| report.outcome.as_ref().err().map(|err| (&report.name, err)))
+        .collect();
+
+    if failures.is_empty() {
+        true
+    } else {
+        println!(
+            "\n{} of {} asset tests failed:",
+            failures.len(),
+            reports.len()
+        );
+
+        for (name, err) in failures {
+            println!(" - {name}: {err}");
+        }
+
+        false
+    }
 }
 
-#[test]
-fn kakadu_lossless_rgba_u8_prog1_layers1_res6_mct() {
-    run_asset_test("kakadu-lossless-rgba-u8-prog1-layers1-res6-mct.jp2");
+fn describe_panic(payload: &(dyn Any + Send)) -> String {
+    if let Some(msg) = payload.downcast_ref::<String>() {
+        msg.clone()
+    } else if let Some(msg) = payload.downcast_ref::<&'static str>() {
+        (*msg).to_owned()
+    } else {
+        "unknown panic payload".to_owned()
+    }
 }
 
-#[test]
-fn openjpeg_lossless_rgba_u8_tlm() {
-    run_asset_test("openjpeg-lossless-rgba-u8-TLM.jp2");
+struct PanicHookGuard(Option<Box<dyn Fn(&PanicHookInfo) + Sync + Send + 'static>>);
+
+impl PanicHookGuard {
+    fn install() -> Self {
+        let previous = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|_| {
+            // Swallow default panic output; harness reports failures explicitly.
+        }));
+        Self(Some(previous))
+    }
 }
 
-#[test]
-fn openjpeg_lossless_rgn() {
-    run_asset_test("openjpeg-lossless-RGN.jp2");
+impl Drop for PanicHookGuard {
+    fn drop(&mut self) {
+        if let Some(previous) = self.0.take() {
+            std::panic::set_hook(previous);
+        }
+    }
 }
 
-#[test]
-fn openjpeg_lossless_rgba_u8_prog0_tile4x2_cblk4x16_tp3_layers3_res2() {
-    run_asset_test("openjpeg-lossless-rgba-u8-prog0-tile4x2-cblk4x16-tp3-layers3-res2.jp2");
+fn collect_asset_files() -> Result<Vec<PathBuf>, String> {
+    let mut files = vec![];
+    let dir = fs::read_dir(&*ASSETS_PATH).map_err(|err| {
+        format!(
+            "failed to read assets directory {}: {err}",
+            ASSETS_PATH.display()
+        )
+    })?;
+
+    for entry in dir {
+        let entry = entry.map_err(|err| format!("failed to read asset entry: {err}"))?;
+        let path = entry.path();
+        if path.is_file()
+            && path
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .map(|ext| ext.eq_ignore_ascii_case("jp2"))
+                .unwrap_or(false)
+        {
+            files.push(path);
+        }
+    }
+
+    files.sort();
+    Ok(files)
 }
 
-#[test]
-fn openjpeg_lossless_rgba_u8_prog1_tile4x2_cblk4x16_tp3_layers3_res2() {
-    run_asset_test("openjpeg-lossless-rgba-u8-prog1-tile4x2-cblk4x16-tp3-layers3-res2.jp2");
-}
+fn run_asset_test(asset_path: &Path) -> Result<(), String> {
+    let file_name = asset_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| format!("asset path is not valid UTF-8: {}", asset_path.display()))?
+        .to_string();
 
-#[test]
-fn openjpeg_lossless_rgba_u8_prog2_tile4x2_cblk4x16_tp3_layers3_res2() {
-    run_asset_test("openjpeg-lossless-rgba-u8-prog2-tile4x2-cblk4x16-tp3-layers3-res2.jp2");
-}
-
-#[test]
-fn openjpeg_lossless_rgba_u8_prog2_tile4x3_cblk4x16_tp3_layers3_res2() {
-    run_asset_test("openjpeg-lossless-rgba-u8-prog3-tile4x2-cblk4x16-tp3-layers3-res2.jp2");
-}
-
-#[test]
-fn openjpeg_lossless_rgba_u8_prog2_tile4x4_cblk4x16_tp3_layers3_res2() {
-    run_asset_test("openjpeg-lossless-rgba-u8-prog4-tile4x2-cblk4x16-tp3-layers3-res2.jp2");
-}
-
-#[test]
-fn openjpeg_lossless_rgba_u8_prog0_tile_part_index_overflow() {
-    run_asset_test("openjpeg-lossless-rgba-u8-prog0-tile-part-index-overflow.jp2");
-}
-
-#[test]
-fn openjpeg_lossless_rgba_u8_prog0_sop() {
-    run_asset_test("openjpeg-lossless-rgba-u8-prog0-SOP.jp2");
-}
-
-#[test]
-fn openjpeg_lossless_rgba_u8_prog0_eph() {
-    run_asset_test("openjpeg-lossless-rgba-u8-prog0-EPH.jp2");
-}
-
-#[test]
-fn openjpeg_lossless_rgba_u8_prog0_eph_sop() {
-    run_asset_test("openjpeg-lossless-rgba-u8-prog0-EPH-SOP.jp2");
-}
-
-#[test]
-fn openjpeg_lossless_rgba_u8_prog0_eph_empty_packets() {
-    run_asset_test("openjpeg-lossless-rgba-u8-prog0-EPH-empty-packets.jp2");
-}
-
-#[test]
-fn openjpeg_lossless_rgba_u8_plt() {
-    run_asset_test("openjpeg-lossless-rgba-u8-PLT.jp2");
-}
-
-#[test]
-fn jasper_tile4x2_res5() {
-    run_asset_test("jasper-tile4x2-res5.jp2");
-}
-
-#[test]
-fn openjpeg_lossless_rgba_u4() {
-    run_asset_test("openjpeg-lossless-rgba-u4.jp2");
-}
-
-#[test]
-fn openjpeg_lossy_quantization_scalar_derived() {
-    run_asset_test("openjpeg-lossy-quantization-scalar-derived.jp2");
-}
-
-#[test]
-fn jasper_rgba_u8_cbstyle_02_resetprob() {
-    run_asset_test("jasper-rgba-u8-cbstyle-02-resetprob.jp2");
-}
-
-#[test]
-fn jasper_rgba_u8_cbstyle_04_termall() {
-    run_asset_test("jasper-rgba-u8-cbstyle-04-termall.jp2");
-}
-
-#[test]
-fn jasper_rgba_u8_cbstyle_04_termall_layers() {
-    run_asset_test("jasper-rgba-u8-cbstyle-04-termall-layers.jp2");
-}
-
-#[test]
-fn jasper_rgba_u8_cbstyle_06_resetprob_termall() {
-    run_asset_test("jasper-rgba-u8-cbstyle-06-resetprob-termall.jp2");
-}
-
-#[test]
-fn jasper_rgba_u8_cbstyle_36_termall_segsym() {
-    run_asset_test("jasper-rgba-u8-cbstyle-36-termall-segsym.jp2");
-}
-
-#[test]
-fn jasper_rgba_u8_cbstyle_08_vcausal() {
-    run_asset_test("jasper-rgba-u8-cbstyle-08-vcausal.jp2");
-}
-
-#[test]
-fn jasper_rgba_u8_cbstyle_16_pterm() {
-    run_asset_test("jasper-rgba-u8-cbstyle-16-pterm.jp2");
-}
-
-#[test]
-fn jasper_rgba_u8_cbstyle_32_segsym() {
-    run_asset_test("jasper-rgba-u8-cbstyle-32-segsym.jp2");
-}
-
-fn run_asset_test(file_name: &str) {
-    let asset_path = ASSETS_PATH.join(file_name);
-    let data = fs::read(&asset_path).expect("failed to read asset");
-    let bitmap = read(&data).expect("failed to decode jp2 file");
+    let data =
+        fs::read(asset_path).map_err(|err| format!("failed to read {}: {err}", file_name))?;
+    let bitmap = read(&data).map_err(|err| format!("failed to decode {}: {err:?}", file_name))?;
 
     let rgba = bitmap_to_dynamic_image(bitmap).into_rgba8();
-    let reference_name = Path::new(file_name)
+    let reference_name = Path::new(&file_name)
         .with_extension("png")
         .file_name()
         .unwrap()
@@ -176,36 +196,43 @@ fn run_asset_test(file_name: &str) {
     let snapshot_path = SNAPSHOTS_PATH.join(&reference_name);
     let diff_path = DIFFS_PATH.join(&reference_name);
 
-    fs::create_dir_all(&*SNAPSHOTS_PATH).expect("failed to create snapshots directory");
+    fs::create_dir_all(&*SNAPSHOTS_PATH)
+        .map_err(|err| format!("failed to create snapshots directory: {err}"))?;
 
     if !snapshot_path.exists() {
         rgba.save_with_format(&snapshot_path, ImageFormat::Png)
-            .expect("failed to save snapshot");
-        panic!("new reference image was created for {}", file_name);
+            .map_err(|err| format!("failed to save snapshot for {}: {err}", file_name))?;
+        return Err(format!("new reference image was created for {}", file_name));
     }
 
     let expected = image::open(&snapshot_path)
-        .expect("failed to load snapshot")
+        .map_err(|err| format!("failed to load snapshot for {}: {err}", file_name))?
         .into_rgba8();
     let (diff_image, pixel_diff) = get_diff(&expected, &rgba);
 
     if pixel_diff > 0 {
         diff_image
             .save_with_format(&diff_path, ImageFormat::Png)
-            .expect("failed to save diff");
+            .map_err(|err| format!("failed to save diff for {}: {err}", file_name))?;
 
         if REPLACE.is_some() {
             rgba.save_with_format(&snapshot_path, ImageFormat::Png)
-                .expect("failed to replace snapshot");
-            panic!("snapshot was replaced for {}", file_name);
+                .map_err(|err| format!("failed to replace snapshot for {}: {err}", file_name))?;
+            return Err(format!("snapshot was replaced for {}", file_name));
         }
 
-        panic!("pixel diff {} detected for {}", pixel_diff, file_name);
+        return Err(format!(
+            "pixel diff {} detected for {}",
+            pixel_diff, file_name
+        ));
     }
 
     if diff_path.exists() {
-        let _ = fs::remove_file(diff_path);
+        fs::remove_file(&diff_path)
+            .map_err(|err| format!("failed to remove diff for {}: {err}", file_name))?;
     }
+
+    Ok(())
 }
 
 fn bitmap_to_dynamic_image(bitmap: Bitmap) -> DynamicImage {
