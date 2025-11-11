@@ -60,8 +60,10 @@ fn decode_inner(
 ) -> Option<()> {
     let mut combined_layers = vec![];
     let mut segment_ranges = vec![0];
+    let mut segment_coding_passes = vec![0];
 
     let mut last_segment_idx = 0;
+    let mut coding_passes = 0;
 
     for layer in layers {
         if let Some(range) = layer.segments.clone() {
@@ -71,29 +73,75 @@ fn decode_inner(
                     assert_eq!(segment.idx, last_segment_idx + 1);
 
                     segment_ranges.push(combined_layers.len());
+                    segment_coding_passes.push(coding_passes);
                     last_segment_idx += 1;
                 }
 
                 combined_layers.extend(segment.data);
+                coding_passes += segment.coding_pases;
             }
         }
     }
 
+    assert_eq!(coding_passes, code_block.number_of_coding_passes);
+
     segment_ranges.push(combined_layers.len());
+    segment_coding_passes.push(coding_passes);
 
-    let mut decoder = if style.termination_on_each_pass {
-        ArithmeticDecoder::new(&combined_layers[..segment_ranges[1]])
+    let mut coding_pass = 0;
+    let mut start_segment = 0;
+    let mut end_segment = segment_coding_passes.len();
+
+    let is_normal_mode =
+        !style.selective_arithmetic_coding_bypass && !style.termination_on_each_pass;
+
+    if is_normal_mode {
+        // Only one termination per code block, so we can just decode the
+        // whole range in one single pass.
+        let mut decoder = ArithmeticDecoder::new(&combined_layers);
+        handle_coding_passes(
+            0,
+            code_block.number_of_coding_passes,
+            style,
+            ctx,
+            &mut decoder,
+        )?;
     } else {
-        ArithmeticDecoder::new(&combined_layers)
-    };
+        // Otherwise, each segment introduces a termination. For selective
+        // arithmetic coding bypass, each segment only covers one coding pass
+        // and a termination is introduced every time. Otherwise, for only
+        // arithmetic coding bypass, terminations are introduced based on the
+        // exact index of the covered coding passes (see Table D.9).
+        for segment in 0..segment_coding_passes.len() - 1 {
+            let start_coding_pass = segment_coding_passes[segment];
+            let end_coding_pass = segment_coding_passes[segment + 1];
 
-    for coding_pass in 0..code_block.number_of_coding_passes {
-        if coding_pass > 0 && style.termination_on_each_pass {
-            let data = &combined_layers
-                [segment_ranges[coding_pass as usize]..segment_ranges[coding_pass as usize + 1]];
-            decoder = ArithmeticDecoder::new(data);
+            let data = &combined_layers[segment_ranges[start_coding_pass as usize]
+                ..segment_ranges[end_coding_pass as usize]];
+            let mut decoder = ArithmeticDecoder::new(&data);
+            handle_coding_passes(start_coding_pass, end_coding_pass, style, ctx, &mut decoder)?;
         }
+    }
 
+    // Extend all coefficients with zero bits until we have the required number
+    // of bits.
+    for el in &mut ctx.magnitude_array {
+        while (el.count as u16) < num_bitplanes {
+            el.push_bit(0);
+        }
+    }
+
+    Some(())
+}
+
+fn handle_coding_passes(
+    start: u32,
+    end: u32,
+    style: &CodeBlockStyle,
+    ctx: &mut CodeBlockDecodeContext,
+    decoder: &mut impl BitDecoder,
+) -> Option<()> {
+    for coding_pass in start..end {
         enum PassType {
             Cleanup,
             SignificancePropagation,
@@ -111,7 +159,7 @@ fn decode_inner(
 
         match pass {
             PassType::Cleanup => {
-                cleanup_pass(ctx, &mut decoder);
+                cleanup_pass(ctx, decoder);
 
                 if style.segmentation_symbols {
                     let b0 = decoder.read_bit(ctx.arithmetic_decoder_context(18));
@@ -128,23 +176,15 @@ fn decode_inner(
                 ctx.reset_for_next_bitplane();
             }
             PassType::SignificancePropagation => {
-                significance_propagation_pass(ctx, &mut decoder);
+                significance_propagation_pass(ctx, decoder);
             }
             PassType::MagnitudeRefinement => {
-                magnitude_refinement_pass(ctx, &mut decoder);
+                magnitude_refinement_pass(ctx, decoder);
             }
         }
 
         if style.reset_context_probabilities {
             ctx.reset_contexts();
-        }
-    }
-
-    // Extend all coefficients with zero bits until we have the required number
-    // of bits.
-    for el in &mut ctx.magnitude_array {
-        while (el.count as u16) < num_bitplanes {
-            el.push_bit(0);
         }
     }
 
@@ -823,7 +863,7 @@ mod tests {
             &[Segment {
                 idx: 0,
                 // Dummy value.
-                coding_pases: 0,
+                coding_pases: 16,
                 data_length: data.len() as u32,
                 data: &data,
             }],
@@ -866,7 +906,7 @@ mod tests {
             &[Segment {
                 idx: 0,
                 // Dummy value.
-                coding_pases: 0,
+                coding_pases: 7,
                 data_length: data.len() as u32,
                 data: &data,
             }],
@@ -925,7 +965,7 @@ mod tests {
             &[Segment {
                 idx: 0,
                 // Dummy value.
-                coding_pases: 0,
+                coding_pases: 13,
                 data_length: data.len() as u32,
                 data: &data,
             }],
