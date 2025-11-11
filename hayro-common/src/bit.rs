@@ -217,7 +217,7 @@ impl<'a> BitWriter<'a> {
     #[inline]
     pub fn write_bits(&mut self, bits: impl IntoIterator<Item = u32>) -> Option<()> {
         for bit in bits {
-            let value: u32 = bit.into();
+            let value: u32 = bit;
             self.write(value)?;
         }
 
@@ -544,7 +544,7 @@ mod tests {
                 .collect();
 
             let total_bits = bit_size as usize * values.len();
-            let mut buf = vec![0u8; (total_bits + 7) / 8];
+            let mut buf = vec![0u8; total_bits.div_ceil(8)];
             let mut writer = BitWriter::new(&mut buf, bit_size).unwrap();
 
             for value in &values {
@@ -571,7 +571,7 @@ mod tests {
                 .collect();
 
             let total_bits = bit_size as usize * values.len();
-            let mut buf = vec![0u8; (total_bits + 7) / 8];
+            let mut buf = vec![0u8; total_bits.div_ceil(8)];
             let mut writer = BitWriter::new(&mut buf, bit_size).unwrap();
 
             for value in &values {
