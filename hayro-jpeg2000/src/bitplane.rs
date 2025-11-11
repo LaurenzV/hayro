@@ -11,7 +11,8 @@
 
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use crate::codestream::CodeBlockStyle;
-use crate::decode::{CodeBlock, Layer, Segment, SubBandType};
+use crate::decode::{BitReaderExt, CodeBlock, Layer, Segment, SubBandType};
+use hayro_common::bit::BitReader;
 use log::warn;
 
 /// Decode the layers of the given code block into coefficients.
@@ -88,10 +89,6 @@ fn decode_inner(
     segment_ranges.push(combined_layers.len());
     segment_coding_passes.push(coding_passes);
 
-    let mut coding_pass = 0;
-    let mut start_segment = 0;
-    let mut end_segment = segment_coding_passes.len();
-
     let is_normal_mode =
         !style.selective_arithmetic_coding_bypass && !style.termination_on_each_pass;
 
@@ -116,10 +113,21 @@ fn decode_inner(
             let start_coding_pass = segment_coding_passes[segment];
             let end_coding_pass = segment_coding_passes[segment + 1];
 
-            let data = &combined_layers[segment_ranges[start_coding_pass as usize]
-                ..segment_ranges[end_coding_pass as usize]];
-            let mut decoder = ArithmeticDecoder::new(&data);
-            handle_coding_passes(start_coding_pass, end_coding_pass, style, ctx, &mut decoder)?;
+            let data = &combined_layers[segment_ranges[segment]..segment_ranges[segment + 1]];
+
+            let use_arithmetic = if style.selective_arithmetic_coding_bypass {
+                if segment == 0 { true } else { segment % 2 == 0 }
+            } else {
+                true
+            };
+
+            if use_arithmetic {
+                let mut decoder = ArithmeticDecoder::new(&data);
+                handle_coding_passes(start_coding_pass, end_coding_pass, style, ctx, &mut decoder)?;
+            } else {
+                let mut decoder = BypassDecoder::new(&data);
+                handle_coding_passes(start_coding_pass, end_coding_pass, style, ctx, &mut decoder)?;
+            }
         }
     }
 
@@ -547,10 +555,10 @@ fn magnitude_refinement_pass(
 
 /// Decode a sign bit (Section D.3.2).
 #[inline(always)]
-fn decode_sign_bit(
+fn decode_sign_bit<T: BitDecoder>(
     pos: &Position,
     ctx: &mut CodeBlockDecodeContext,
-    decoder: &mut impl BitDecoder,
+    decoder: &mut T,
 ) {
     /// Based on Table D.2.
     #[inline(always)]
@@ -592,7 +600,11 @@ fn decode_sign_bit(
 
     let (ctx_label, xor_bit) = context_label_sign_coding(pos, ctx);
     let ad_ctx = ctx.arithmetic_decoder_context(ctx_label);
-    let sign_bit = decoder.read_bit(ad_ctx) ^ xor_bit as u32;
+    let sign_bit = if T::IS_BYPASS {
+        decoder.read_bit(ad_ctx)
+    } else {
+        decoder.read_bit(ad_ctx) ^ xor_bit as u32
+    };
     ctx.set_sign(pos, sign_bit as u8);
 }
 
@@ -760,12 +772,35 @@ impl Iterator for PositionIterator {
 
 // We use a trait so that we can mock the arithmetic decoder for tests.
 trait BitDecoder {
+    const IS_BYPASS: bool;
+
     fn read_bit(&mut self, context: &mut ArithmeticDecoderContext) -> u32;
 }
 
 impl BitDecoder for ArithmeticDecoder<'_> {
+    const IS_BYPASS: bool = false;
+
     fn read_bit(&mut self, context: &mut ArithmeticDecoderContext) -> u32 {
         Self::read_bit(self, context)
+    }
+}
+
+struct BypassDecoder<'a>(BitReader<'a>);
+
+impl<'a> BypassDecoder<'a> {
+    fn new(data: &'a [u8]) -> Self {
+        Self(BitReader::new(data))
+    }
+}
+
+impl BitDecoder for BypassDecoder<'_> {
+    const IS_BYPASS: bool = true;
+
+    fn read_bit(&mut self, _: &mut ArithmeticDecoderContext) -> u32 {
+        self.0.read_bits_with_stuffing(1).unwrap_or_else(|| {
+            warn!("exceeded buffer in by-pass decoder");
+            1
+        })
     }
 }
 
