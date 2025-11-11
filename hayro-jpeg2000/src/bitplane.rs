@@ -902,7 +902,6 @@ mod tests {
             }],
             &[Segment {
                 idx: 0,
-                // Dummy value.
                 coding_pases: 16,
                 data_length: data.len() as u32,
                 data: &data,
@@ -945,7 +944,6 @@ mod tests {
             }],
             &[Segment {
                 idx: 0,
-                // Dummy value.
                 coding_pases: 7,
                 data_length: data.len() as u32,
                 data: &data,
@@ -1004,7 +1002,6 @@ mod tests {
             }],
             &[Segment {
                 idx: 0,
-                // Dummy value.
                 coding_pases: 13,
                 data_length: data.len() as u32,
                 data: &data,
