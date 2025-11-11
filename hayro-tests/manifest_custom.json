@@ -1077,6 +1077,90 @@
     "file": "pdfs/custom/catalog-in-objstm-aes.pdf"
   },
   {
+    "id": "openjpeg_Bretagne1_0",
+    "link": true
+  },
+  {
+    "id": "openjpeg_Bretagne1_1",
+    "link": true
+  },
+  {
+    "id": "openjpeg_Bretagne1_2",
+    "link": true
+  },
+  {
+    "id": "openjpeg_Bretagne2_0",
+    "link": true
+  },
+  {
+    "id": "openjpeg_Bretagne2_1",
+    "link": true
+  },
+  {
+    "id": "openjpeg_Bretagne2_3",
+    "link": true
+  },
+  {
+    "id": "openjpeg_Bretagne2_4",
+    "link": true
+  },
+  {
+    "id": "openjpeg_Bretagne2_bypass",
+    "link": true
+  },
+  {
+    "id": "openjpeg_Bretagne2_bypass_pterm",
+    "link": true
+  },
+  {
+    "id": "openjpeg_Bretagne2_bypass_termall",
+    "link": true
+  },
+  {
+    "id": "openjpeg_Bretagne2_bypass_termall_pterm",
+    "link": true
+  },
+  {
+    "id": "openjpeg_Bretagne2_bypass_vsc_reset_termall_pterm_segsym",
+    "link": true
+  },
+  {
+    "id": "openjpeg_Bretagne2_pterm",
+    "link": true
+  },
+  {
+    "id": "openjpeg_Bretagne2_reset",
+    "link": true
+  },
+  {
+    "id": "openjpeg_Bretagne2_segsym",
+    "link": true
+  },
+  {
+    "id": "openjpeg_Bretagne2_termall",
+    "link": true
+  },
+  {
+    "id": "openjpeg_Bretagne2_termall_pterm",
+    "link": true
+  },
+  {
+    "id": "openjpeg_Bretagne2_vsc",
+    "link": true
+  },
+  {
+    "id": "openjpeg_Cevennes1",
+    "link": true
+  },
+  {
+    "id": "openjpeg_Cevennes2",
+    "link": true
+  },
+  {
+    "id": "openjpeg_Rome",
+    "link": true
+  },
+  {
     "id": "issue494",
     "link": true
   }
