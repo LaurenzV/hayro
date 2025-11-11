@@ -128,6 +128,7 @@ fn describe_panic(payload: &(dyn Any + Send)) -> String {
     }
 }
 
+#[allow(clippy::type_complexity)]
 struct PanicHookGuard(Option<Box<dyn Fn(&PanicHookInfo) + Sync + Send + 'static>>);
 
 impl PanicHookGuard {
