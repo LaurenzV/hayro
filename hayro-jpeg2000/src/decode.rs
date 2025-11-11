@@ -1145,8 +1145,8 @@ fn store<'a>(tile: &'a Tile<'a>, header: &Header, tile_ctx: &mut TileDecodeConte
                 header.size_data.image_area_y_offset,
             );
 
-            let skip_x = image_x_offset.checked_sub(idwt_output.rect.x0).unwrap_or(0);
-            let skip_y = image_y_offset.checked_sub(idwt_output.rect.y0).unwrap_or(0);
+            let skip_x = image_x_offset.saturating_sub(idwt_output.rect.x0);
+            let skip_y = image_y_offset.saturating_sub(idwt_output.rect.y0);
 
             let input_row_iter = idwt_output
                 .coefficients
@@ -1156,13 +1156,12 @@ fn store<'a>(tile: &'a Tile<'a>, header: &Header, tile_ctx: &mut TileDecodeConte
             let output_row_iter = channel_data
                 .container
                 .chunks_exact_mut(header.size_data.image_width() as usize)
-                .skip(tile.rect.y0.checked_sub(image_y_offset).unwrap_or(0) as usize);
+                .skip(tile.rect.y0.saturating_sub(image_y_offset) as usize);
 
             for (input_row, output_row) in input_row_iter.zip(output_row_iter) {
                 let input_row = &input_row[skip_x as usize..];
                 let output_row = &mut output_row
-                    [tile.rect.x0.checked_sub(image_x_offset).unwrap_or(0) as usize..]
-                    [..input_row.len()];
+                    [tile.rect.x0.saturating_sub(image_x_offset) as usize..][..input_row.len()];
 
                 output_row.copy_from_slice(input_row);
             }
