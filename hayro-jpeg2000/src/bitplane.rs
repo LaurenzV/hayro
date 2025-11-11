@@ -116,7 +116,12 @@ fn decode_inner(
             let data = &combined_layers[segment_ranges[segment]..segment_ranges[segment + 1]];
 
             let use_arithmetic = if style.selective_arithmetic_coding_bypass {
-                if segment == 0 { true } else { segment % 2 == 0 }
+                if start_coding_pass <= 9 {
+                    true
+                }   else {
+                    // Only for cleanup pass.
+                    start_coding_pass % 3 == 0
+                }
             } else {
                 true
             };
