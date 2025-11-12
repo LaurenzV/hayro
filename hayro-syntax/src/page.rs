@@ -519,7 +519,6 @@ pub(crate) mod cached {
     use crate::page::Pages;
     use crate::reader::ReaderContext;
     use crate::xref::XRef;
-    use std::ops::Deref;
     use std::sync::Arc;
 
     pub(crate) struct CachedPages {
@@ -538,7 +537,7 @@ pub(crate) mod cached {
             //     duration.
             // - The internal 'static lifetime is not leaked because its rewritten
             //   to the self-lifetime in `pages()`.
-            let xref_reference: &'static XRef = unsafe { std::mem::transmute(xref.deref()) };
+            let xref_reference: &'static XRef = unsafe { &*Arc::as_ptr(&xref) };
 
             let ctx = ReaderContext::new(xref_reference, false);
             let pages = xref_reference
