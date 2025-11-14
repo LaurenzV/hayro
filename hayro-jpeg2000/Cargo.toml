@@ -13,7 +13,7 @@ log = { workspace = true }
 
 [dev-dependencies]
 image = { version = "0.25.8", default-features = false, features = ["png"] }
-moxcms = { version = "0.7.9" }
+moxcms = { version = "0.7.9", default-features = false }
 indicatif = { version = "0.17", features = ["rayon"] }
 rayon = "1.10"
 
