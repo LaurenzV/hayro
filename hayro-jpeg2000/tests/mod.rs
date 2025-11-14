@@ -2,6 +2,7 @@ use hayro_jpeg2000::bitmap::Bitmap;
 use hayro_jpeg2000::read;
 use image::{DynamicImage, ImageBuffer, ImageFormat, Rgba, RgbaImage};
 use indicatif::{ProgressBar, ProgressStyle};
+use moxcms::{ColorProfile, Layout, TransformOptions};
 use rayon::prelude::*;
 use std::any::Any;
 use std::cmp::max;
@@ -165,7 +166,7 @@ fn collect_asset_files() -> Result<Vec<PathBuf>, String> {
             && path
                 .extension()
                 .and_then(|ext| ext.to_str())
-                .map(|ext| ext.eq_ignore_ascii_case("jp2"))
+                .map(|ext| ext.eq_ignore_ascii_case("jp2") || ext.eq_ignore_ascii_case("jpf"))
                 .unwrap_or(false)
         {
             files.push(path);
@@ -275,6 +276,29 @@ fn bitmap_to_dynamic_image(bitmap: Bitmap) -> DynamicImage {
         }
         (4, true) => {
             DynamicImage::ImageRgba8(ImageBuffer::from_raw(width, height, interleaved).unwrap())
+        }
+        (4, false) => {
+            let src_profile = ColorProfile::new_from_slice(include_bytes!(
+                "../assets/CGATS001Compat-v2-micro.icc"
+            ))
+            .unwrap();
+            let dest_profile = ColorProfile::new_srgb();
+
+            let src_layout = Layout::Rgba;
+            let transform = src_profile
+                .create_transform_8bit(
+                    src_layout,
+                    &dest_profile,
+                    Layout::Rgb,
+                    TransformOptions::default(),
+                )
+                .unwrap();
+
+            let mut dest = vec![0; (width * height * 3) as usize];
+
+            transform.transform(&interleaved, &mut dest).unwrap();
+
+            DynamicImage::ImageRgb8(ImageBuffer::from_raw(width, height, dest).unwrap())
         }
         _ => unimplemented!(),
     }
