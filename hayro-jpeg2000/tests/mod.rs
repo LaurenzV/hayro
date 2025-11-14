@@ -213,7 +213,7 @@ fn run_asset_test(asset_path: &Path) -> Result<(), String> {
 
     if pixel_diff > 0 {
         let diff_path = DIFFS_PATH.join(&reference_name);
-        
+
         diff_image
             .save_with_format(&diff_path, ImageFormat::Png)
             .map_err(|err| format!("failed to save diff for {}: {err}", file_name))?;
