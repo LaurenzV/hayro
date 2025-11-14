@@ -196,7 +196,6 @@ fn run_asset_test(asset_path: &Path) -> Result<(), String> {
         .to_owned();
 
     let snapshot_path = SNAPSHOTS_PATH.join(&reference_name);
-    let diff_path = DIFFS_PATH.join(&reference_name);
 
     fs::create_dir_all(&*SNAPSHOTS_PATH)
         .map_err(|err| format!("failed to create snapshots directory: {err}"))?;
@@ -213,6 +212,8 @@ fn run_asset_test(asset_path: &Path) -> Result<(), String> {
     let (diff_image, pixel_diff) = get_diff(&expected, &rgba);
 
     if pixel_diff > 0 {
+        let diff_path = DIFFS_PATH.join(&reference_name);
+        
         diff_image
             .save_with_format(&diff_path, ImageFormat::Png)
             .map_err(|err| format!("failed to save diff for {}: {err}", file_name))?;
@@ -227,11 +228,6 @@ fn run_asset_test(asset_path: &Path) -> Result<(), String> {
             "pixel diff {} detected for {}",
             pixel_diff, file_name
         ));
-    }
-
-    if diff_path.exists() {
-        fs::remove_file(&diff_path)
-            .map_err(|err| format!("failed to remove diff for {}: {err}", file_name))?;
     }
 
     Ok(())
