@@ -34,10 +34,12 @@ pub(crate) fn decode(
         return Ok(());
     }
 
-    if num_bitplanes > 32 {
+    if num_bitplanes as u32 > BITPLANE_BIT_SIZE {
         // If we want to adjust this, we need to change how `ComponentBits`
         // works.
-        return Err("bitplanes with more than 32 bits are not supported");
+        return Err("number of bitplanes is too high");
+    } else if 1 + (code_block.number_of_coding_passes - 1).div_ceil(3) > BITPLANE_BIT_SIZE {
+        return Err("code block has too many coding passes");
     }
 
     let mut layer_buffer = std::mem::take(&mut ctx.layer_buffer).unwrap_or_default();
@@ -691,9 +693,11 @@ pub(crate) struct ComponentBits {
     count: u8,
 }
 
+pub(crate) const BITPLANE_BIT_SIZE: u32 = size_of::<u32>() as u32 * 8;
+
 impl ComponentBits {
     fn push_bit(&mut self, bit: u32) {
-        assert!(self.count < 32);
+        assert!((self.count as u32) < BITPLANE_BIT_SIZE);
         assert!(bit < 2);
 
         self.inner = (self.inner << 1) | bit;
