@@ -142,7 +142,7 @@ impl ComponentInfo {
                 let entry = if resolution == 0 {
                     step_sizes[0]
                 } else {
-                    step_sizes[(1 + (resolution - 1) * 3 + sb_index) as usize]
+                    step_sizes[1 + (resolution as usize - 1) * 3 + sb_index as usize]
                 };
 
                 (entry.exponent, entry.mantissa)
@@ -500,8 +500,8 @@ fn coding_style_parameters(
 ) -> Option<CodingStyleParameters> {
     let num_decomposition_levels = reader.read_byte()? as u16;
     let num_resolution_levels = num_decomposition_levels.checked_add(1)?;
-    let code_block_width = reader.read_byte()? + 2;
-    let code_block_height = reader.read_byte()? + 2;
+    let code_block_width = reader.read_byte()?.checked_add(2)?;
+    let code_block_height = reader.read_byte()?.checked_add(2)?;
     let code_block_style = CodeBlockStyle::from_u8(reader.read_byte()?);
     let transformation = WaveletTransform::from_u8(reader.read_byte()?).ok()?;
 
@@ -611,7 +611,7 @@ pub(crate) fn qcd_marker(reader: &mut Reader) -> Option<QuantizationInfo> {
     let quantization_style = QuantizationStyle::from_u8(sqcd_val & 0x1F).ok()?;
     let guard_bits = (sqcd_val >> 5) & 0x07;
 
-    let remaining_bytes = (length - 3) as usize;
+    let remaining_bytes = length.checked_sub(3)? as usize;
 
     let mut parameters = quantization_parameters(reader, quantization_style, remaining_bytes)?;
     parameters.guard_bits = guard_bits;
@@ -634,7 +634,10 @@ pub(crate) fn qcc_marker(reader: &mut Reader, csiz: u16) -> Option<(u16, Quantiz
     let guard_bits = (sqcc_val >> 5) & 0x07;
 
     let component_index_size = if csiz < 257 { 1 } else { 2 };
-    let remaining_bytes = (length - 2 - component_index_size - 1) as usize;
+    let remaining_bytes = (length
+        .checked_sub(2)?
+        .checked_sub(component_index_size)?
+        .checked_sub(1)?) as usize;
 
     let mut parameters = quantization_parameters(reader, quantization_style, remaining_bytes)?;
     parameters.guard_bits = guard_bits;
