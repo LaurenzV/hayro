@@ -330,22 +330,14 @@ impl<'a> ResolutionTile<'a> {
                 .parameters
                 .num_decomposition_levels;
 
-            let tx0 = component_tile
-                .rect
-                .x0
-                .div_ceil(2u32.pow(n_l as u32 - resolution as u32));
-            let ty0 = component_tile
-                .rect
-                .y0
-                .div_ceil(2u32.pow(n_l as u32 - resolution as u32));
-            let tx1 = component_tile
-                .rect
-                .x1
-                .div_ceil(2u32.pow(n_l as u32 - resolution as u32));
-            let ty1 = component_tile
-                .rect
-                .y1
-                .div_ceil(2u32.pow(n_l as u32 - resolution as u32));
+            let tx0 = (component_tile.rect.x0 as u64)
+                .div_ceil(2u64.pow(n_l as u32 - resolution as u32)) as u32;
+            let ty0 = (component_tile.rect.y0 as u64)
+                .div_ceil(2u64.pow(n_l as u32 - resolution as u32)) as u32;
+            let tx1 = (component_tile.rect.x1 as u64)
+                .div_ceil(2u64.pow(n_l as u32 - resolution as u32)) as u32;
+            let ty1 = (component_tile.rect.y1 as u64)
+                .div_ceil(2u64.pow(n_l as u32 - resolution as u32)) as u32;
 
             IntRect::from_ltrb(tx0, ty0, tx1, ty1)
         };
@@ -399,34 +391,22 @@ impl<'a> ResolutionTile<'a> {
             0
         };
 
-        let numerator_x = 2u32.pow(self.decomposition_level as u32 - 1) * xo_b;
-        let numerator_y = 2u32.pow(self.decomposition_level as u32 - 1) * yo_b;
-        let denominator = 2u32.pow(self.decomposition_level as u32);
+        let numerator_x = 2u64.pow(self.decomposition_level as u32 - 1) * xo_b as u64;
+        let numerator_y = 2u64.pow(self.decomposition_level as u32 - 1) * yo_b as u64;
+        let denominator = 2u64.pow(self.decomposition_level as u32);
 
-        let tbx_0 = self
-            .component_tile
-            .rect
-            .x0
+        let tbx_0 = (self.component_tile.rect.x0 as u64)
             .saturating_sub(numerator_x)
-            .div_ceil(denominator);
-        let tbx_1 = self
-            .component_tile
-            .rect
-            .x1
+            .div_ceil(denominator) as u32;
+        let tbx_1 = (self.component_tile.rect.x1 as u64)
             .saturating_sub(numerator_x)
-            .div_ceil(denominator);
-        let tby_0 = self
-            .component_tile
-            .rect
-            .y0
+            .div_ceil(denominator) as u32;
+        let tby_0 = (self.component_tile.rect.y0 as u64)
             .saturating_sub(numerator_y)
-            .div_ceil(denominator);
-        let tby_1 = self
-            .component_tile
-            .rect
-            .y1
+            .div_ceil(denominator) as u32;
+        let tby_1 = (self.component_tile.rect.y1 as u64)
             .saturating_sub(numerator_y)
-            .div_ceil(denominator);
+            .div_ceil(denominator) as u32;
 
         IntRect::from_ltrb(tbx_0, tby_0, tbx_1, tby_1)
     }

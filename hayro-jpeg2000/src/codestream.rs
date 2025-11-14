@@ -106,11 +106,39 @@ fn read_header(reader: &mut Reader) -> Result<Header, &'static str> {
         })
         .collect();
 
-    Ok(Header {
+    let header = Header {
         size_data,
         global_coding_style: cod.clone(),
         component_infos,
-    })
+    };
+
+    validate(&header)?;
+
+    Ok(header)
+}
+
+fn validate(header: &Header) -> Result<(), &'static str> {
+    for info in &header.component_infos {
+        let max_resolution_idx = info.coding_style.parameters.num_resolution_levels - 1;
+        let quantization_style = info.quantization_info.quantization_style;
+        let num_precinct_exponents = info.quantization_info.step_sizes.len();
+
+        if num_precinct_exponents == 0 {
+            return Err("missing exponents for precinct sizes");
+        } else if matches!(
+            quantization_style,
+            QuantizationStyle::NoQuantization | QuantizationStyle::ScalarExpounded
+        ) {
+            // See the accesses in the `exponent_mantissa` method. The largest
+            // access is 1 + (max_resolution_idx - 1) * 3 + 2.
+
+            if 1 + (max_resolution_idx as usize - 1) * 3 + 2 >= num_precinct_exponents {
+                return Err("not enough exponents were provided in header");
+            }
+        }
+    }
+
+    Ok(())
 }
 
 #[derive(Debug, Clone)]
@@ -498,7 +526,7 @@ fn coding_style_parameters(
     reader: &mut Reader,
     coding_style: &CodingStyleFlags,
 ) -> Option<CodingStyleParameters> {
-    let num_decomposition_levels = reader.read_byte()? as u16;
+    let num_decomposition_levels = (reader.read_byte()? as u16).min(32);
     let num_resolution_levels = num_decomposition_levels.checked_add(1)?;
     let code_block_width = reader.read_byte()?.checked_add(2)?;
     let code_block_height = reader.read_byte()?.checked_add(2)?;
