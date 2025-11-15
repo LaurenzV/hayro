@@ -308,7 +308,7 @@ fn read_jp2_file(data: &[u8]) -> Result<Bitmap, &'static str> {
                     }
                 }
             }
-            
+
             if image_metadata.width == 0 || image_metadata.height == 0 {
                 return Err("image has invalid dimensions");
             }
