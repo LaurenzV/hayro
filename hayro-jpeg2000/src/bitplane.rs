@@ -1005,7 +1005,7 @@ mod tests {
         decode(
             &code_block,
             SubBandType::HighLow,
-            5,
+            10,
             &CodeBlockStyle::default(),
             &mut ctx,
             &[Layer {
