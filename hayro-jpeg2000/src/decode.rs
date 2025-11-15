@@ -866,7 +866,7 @@ fn get_code_block_lengths(
             let segment = get_segment(coding_pass);
 
             if segment != last_segment {
-                push_segment(last_segment, coding_passes_for_segment);
+                push_segment(last_segment, coding_passes_for_segment)?;
                 last_segment = segment;
                 coding_passes_for_segment = 1;
             } else {
@@ -876,7 +876,7 @@ fn get_code_block_lengths(
 
         // Flush the final segment if applicable.
         if coding_passes_for_segment > 0 {
-            push_segment(last_segment, coding_passes_for_segment);
+            push_segment(last_segment, coding_passes_for_segment)?;
         }
 
         let end = storage.segments.len();

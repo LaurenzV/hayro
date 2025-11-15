@@ -297,6 +297,12 @@ fn issue507() {
 }
 
 #[test]
+fn issue513() {
+    let file = include_bytes!("../pdfs/load/issue513.pdf");
+    load(file);
+}
+
+#[test]
 fn issue515() {
     let file = include_bytes!("../pdfs/load/issue515.pdf");
     load(file);
