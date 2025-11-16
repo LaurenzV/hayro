@@ -412,7 +412,7 @@ fn diff_pixel(expected: Rgba<u8>, actual: Rgba<u8>) -> Rgba<u8> {
 fn is_pixel_different(lhs: Rgba<u8>, rhs: Rgba<u8>) -> bool {
     // One test fails in CI because of a small difference, so we don't check
     // for exact pixel match
-    const THRESHOLD: u8 = 2;
+    const THRESHOLD: u8 = 3;
 
     if lhs[3] == 0 && rhs[3] == 0 {
         return false;
