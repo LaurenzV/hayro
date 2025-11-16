@@ -203,7 +203,7 @@ impl ImageMetadata {
                 let enumerated = reader.read_u32()?;
                 ColourSpecificationMethod::Enumerated(EnumeratedColourspace::from_raw(enumerated))
             }
-            2 => {
+            2 | 3 => {
                 let profile_data = reader.tail()?.to_vec();
                 ColourSpecificationMethod::IccProfile(profile_data)
             }
