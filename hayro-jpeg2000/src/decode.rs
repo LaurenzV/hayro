@@ -325,7 +325,7 @@ impl<'a> TileDecodeContext<'a> {
         self.idwt_outputs.clear();
         // Code-block decode context will be resetted before being used, can't
         // do it here because we need data for a code block.
-        // Channel data should not be resetted because it's global
+        // Channel data should not be resetted because it's global.
     }
 }
 

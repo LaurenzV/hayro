@@ -315,6 +315,12 @@ fn issue515() {
 }
 
 #[test]
+fn issue520() {
+    let file = include_bytes!("../pdfs/load/issue520.pdf");
+    load(file);
+}
+
+#[test]
 fn page_tree_cycle() {
     let file = include_bytes!("../pdfs/load/page_tree_cycle.pdf");
     load(file);

@@ -321,8 +321,13 @@ fn read_jp2_file(data: &[u8]) -> Result<Bitmap, &'static str> {
         }
     }
 
-    let (_, mut channels) = channels?;
-    let metadata = metadata?;
+    let (header, mut channels) = channels?;
+    let mut metadata = metadata?;
+
+    // In case header and codestream have inconsistent size metadata, use the
+    // one from the codestream.
+    metadata.width = header.size_data.image_width();
+    metadata.height = header.size_data.image_height();
 
     for (idx, channel) in channels.iter_mut().enumerate() {
         channel.is_alpha = metadata
