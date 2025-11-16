@@ -188,7 +188,7 @@ fn run_asset_test(asset_path: &Path) -> Result<(), String> {
         fs::read(asset_path).map_err(|err| format!("failed to read {}: {err}", file_name))?;
     let bitmap = read(&data).map_err(|err| format!("failed to decode {}: {err:?}", file_name))?;
 
-    let rgba = bitmap_to_dynamic_image(bitmap).into_rgba8();
+    let rgba = to_dynamic_image(bitmap)?.into_rgba8();
     let reference_name = Path::new(&file_name)
         .with_extension("png")
         .file_name()
@@ -233,14 +233,13 @@ fn run_asset_test(asset_path: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn bitmap_to_dynamic_image(bitmap: Bitmap) -> DynamicImage {
-    let Bitmap { channels, metadata } = bitmap;
-    let (width, height) = (metadata.width, metadata.height);
+fn to_dynamic_image(bitmap: Bitmap) -> Result<DynamicImage, String> {
+    let (width, height) = (bitmap.metadata.width, bitmap.metadata.height);
+    let has_alpha = bitmap.channels.iter().any(|c| c.is_alpha);
+    let mut num_channels = bitmap.channels.len();
 
-    let has_alpha = channels.iter().any(|c| c.is_alpha);
-    let num_channels = channels.len();
-
-    let channels = channels
+    let channels = bitmap
+        .channels
         .into_iter()
         .map(|c| c.into_8bit())
         .collect::<Vec<_>>();
@@ -248,8 +247,8 @@ fn bitmap_to_dynamic_image(bitmap: Bitmap) -> DynamicImage {
     let interleaved = if num_channels == 1 {
         channels[0].clone()
     } else {
-        let mut interleaved = vec![];
-        let num_samples = channels.iter().map(|c| c.len()).min().unwrap();
+        let mut interleaved = Vec::new();
+        let num_samples = channels.iter().map(|c| c.len()).min().unwrap_or(0);
 
         for sample_idx in 0..num_samples {
             for channel in &channels {
@@ -260,24 +259,28 @@ fn bitmap_to_dynamic_image(bitmap: Bitmap) -> DynamicImage {
         interleaved
     };
 
-    match (num_channels, has_alpha) {
-        (1, false) => {
-            DynamicImage::ImageLuma8(ImageBuffer::from_raw(width, height, interleaved).unwrap())
-        }
-        (2, true) => {
-            DynamicImage::ImageLumaA8(ImageBuffer::from_raw(width, height, interleaved).unwrap())
-        }
-        (3, false) => {
-            DynamicImage::ImageRgb8(ImageBuffer::from_raw(width, height, interleaved).unwrap())
-        }
-        (4, true) => {
-            DynamicImage::ImageRgba8(ImageBuffer::from_raw(width, height, interleaved).unwrap())
-        }
+    let image = match (num_channels, has_alpha) {
+        (1, false) => DynamicImage::ImageLuma8(
+            ImageBuffer::from_raw(width, height, interleaved)
+                .ok_or_else(|| "failed to build grayscale buffer".to_string())?,
+        ),
+        (2, true) => DynamicImage::ImageLumaA8(
+            ImageBuffer::from_raw(width, height, interleaved)
+                .ok_or_else(|| "failed to build grayscale-alpha buffer".to_string())?,
+        ),
+        (3, false) => DynamicImage::ImageRgb8(
+            ImageBuffer::from_raw(width, height, interleaved)
+                .ok_or_else(|| "failed to build rgb buffer".to_string())?,
+        ),
+        (4, true) => DynamicImage::ImageRgba8(
+            ImageBuffer::from_raw(width, height, interleaved)
+                .ok_or_else(|| "failed to build rgba buffer".to_string())?,
+        ),
         (4, false) => {
             let src_profile = ColorProfile::new_from_slice(include_bytes!(
                 "../assets/CGATS001Compat-v2-micro.icc"
             ))
-            .unwrap();
+                .unwrap();
             let dest_profile = ColorProfile::new_srgb();
 
             let src_layout = Layout::Rgba;
@@ -294,10 +297,15 @@ fn bitmap_to_dynamic_image(bitmap: Bitmap) -> DynamicImage {
 
             transform.transform(&interleaved, &mut dest).unwrap();
 
-            DynamicImage::ImageRgb8(ImageBuffer::from_raw(width, height, dest).unwrap())
+            DynamicImage::ImageRgb8(
+                ImageBuffer::from_raw(width, height, dest)
+                    .ok_or_else(|| "failed to build rgb buffer".to_string())?,
+            )
         }
-        _ => unimplemented!(),
-    }
+        _ => return Err("unsupported channel configuration".to_string()),
+    };
+
+    Ok(image)
 }
 
 fn get_diff(expected_image: &RgbaImage, actual_image: &RgbaImage) -> (RgbaImage, u32) {

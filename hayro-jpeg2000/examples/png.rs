@@ -5,6 +5,7 @@ use std::env;
 use std::fs;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
+use hayro_jpeg2000::bitmap::Bitmap;
 
 fn main() {
     if let Ok(()) = log::set_logger(&LOGGER) {
@@ -85,10 +86,27 @@ fn convert_jp2(path: &Path) -> Result<PathBuf, String> {
     let data = fs::read(path).map_err(|err| format!("read error: {err}"))?;
 
     let bitmap = read(&data).map_err(|err| format!("decode error: {err}"))?;
+    let dynamic = to_dynamic_image(bitmap)?;
 
+    let stem = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .ok_or_else(|| "invalid file name".to_string())?;
+
+    let hayro_name = format!("{stem}_hayro.png");
+    let output_path = path.with_file_name(hayro_name);
+
+    dynamic
+        .save(&output_path)
+        .map_err(|err| format!("write error: {err}"))?;
+
+    Ok(output_path)
+}
+
+fn to_dynamic_image(bitmap: Bitmap) -> Result<DynamicImage, String> {
     let (width, height) = (bitmap.metadata.width, bitmap.metadata.height);
     let has_alpha = bitmap.channels.iter().any(|c| c.is_alpha);
-    let num_channels = bitmap.channels.len();
+    let mut num_channels = bitmap.channels.len();
 
     let channels = bitmap
         .channels
@@ -111,7 +129,7 @@ fn convert_jp2(path: &Path) -> Result<PathBuf, String> {
         interleaved
     };
 
-    let dynamic = match (num_channels, has_alpha) {
+    let image = match (num_channels, has_alpha) {
         (1, false) => DynamicImage::ImageLuma8(
             ImageBuffer::from_raw(width, height, interleaved)
                 .ok_or_else(|| "failed to build grayscale buffer".to_string())?,
@@ -132,7 +150,7 @@ fn convert_jp2(path: &Path) -> Result<PathBuf, String> {
             let src_profile = ColorProfile::new_from_slice(include_bytes!(
                 "../assets/CGATS001Compat-v2-micro.icc"
             ))
-            .unwrap();
+                .unwrap();
             let dest_profile = ColorProfile::new_srgb();
 
             let src_layout = Layout::Rgba;
@@ -156,20 +174,8 @@ fn convert_jp2(path: &Path) -> Result<PathBuf, String> {
         }
         _ => return Err("unsupported channel configuration".to_string()),
     };
-
-    let stem = path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .ok_or_else(|| "invalid file name".to_string())?;
-
-    let hayro_name = format!("{stem}_hayro.png");
-    let output_path = path.with_file_name(hayro_name);
-
-    dynamic
-        .save(&output_path)
-        .map_err(|err| format!("write error: {err}"))?;
-
-    Ok(output_path)
+    
+    Ok(image)
 }
 
 static LOGGER: SimpleLogger = SimpleLogger;
