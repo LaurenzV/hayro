@@ -109,6 +109,7 @@ fn filter_2d(
 }
 
 /// The 2D_INTERLEAVE procedure described in F.3.3.
+#[inline(never)]
 fn interleave_samples(
     input: IDWTInput,
     decomposition: &Decomposition,
@@ -116,12 +117,6 @@ fn interleave_samples(
 ) -> Vec<f32> {
     let mut coefficients =
         vec![0.0; (decomposition.rect.width() * decomposition.rect.height()) as usize];
-    let IntRect {
-        x0: u0,
-        x1: u1,
-        y0: v0,
-        y1: v1,
-    } = decomposition.rect;
 
     for sub_band in [
         input,
@@ -129,33 +124,74 @@ fn interleave_samples(
         IDWTInput::from_sub_band(&sub_bands[decomposition.sub_bands[1]]),
         IDWTInput::from_sub_band(&sub_bands[decomposition.sub_bands[2]]),
     ] {
-        let (u_min, u_max) = match sub_band.sub_band_type {
-            SubBandType::LowLow | SubBandType::LowHigh => (u0.div_ceil(2), u1.div_ceil(2)),
-            SubBandType::HighLow | SubBandType::HighHigh => (u0 / 2, u1 / 2),
-        };
-
-        let (v_min, v_max) = match sub_band.sub_band_type {
-            SubBandType::LowLow | SubBandType::HighLow => (v0.div_ceil(2), v1.div_ceil(2)),
-            SubBandType::LowHigh | SubBandType::HighHigh => (v0 / 2, v1 / 2),
-        };
-
-        for v_b in v_min..v_max {
-            for u_b in u_min..u_max {
-                let (x, y) = match sub_band.sub_band_type {
-                    SubBandType::LowLow => (2 * u_b, 2 * v_b),
-                    SubBandType::LowHigh => (2 * u_b, 2 * v_b + 1),
-                    SubBandType::HighLow => (2 * u_b + 1, 2 * v_b),
-                    SubBandType::HighHigh => (2 * u_b + 1, 2 * v_b + 1),
-                };
-
-                coefficients[((y - v0) * decomposition.rect.width() + (x - u0)) as usize] =
-                    sub_band.coefficients
-                        [((v_b - v_min) * sub_band.rect.width() + (u_b - u_min)) as usize];
-            }
+        match sub_band.sub_band_type {
+            SubBandType::LowLow => interleave_for_sub_band(
+                &mut coefficients,
+                &sub_band,
+                decomposition.rect,
+                |u_b, v_b| (2 * u_b, 2 * v_b),
+            ),
+            SubBandType::LowHigh => interleave_for_sub_band(
+                &mut coefficients,
+                &sub_band,
+                decomposition.rect,
+                |u_b, v_b| (2 * u_b, 2 * v_b + 1),
+            ),
+            SubBandType::HighLow => interleave_for_sub_band(
+                &mut coefficients,
+                &sub_band,
+                decomposition.rect,
+                |u_b, v_b| (2 * u_b + 1, 2 * v_b),
+            ),
+            SubBandType::HighHigh => interleave_for_sub_band(
+                &mut coefficients,
+                &sub_band,
+                decomposition.rect,
+                |u_b, v_b| (2 * u_b + 1, 2 * v_b + 1),
+            ),
         }
     }
 
     coefficients
+}
+
+#[inline(always)]
+fn interleave_for_sub_band(
+    coefficients: &mut [f32],
+    sub_band: &IDWTInput,
+    rect: IntRect,
+    mut get_pos: impl FnMut(u32, u32) -> (u32, u32),
+) {
+    let IntRect {
+        x0: u0,
+        x1: u1,
+        y0: v0,
+        y1: v1,
+    } = rect;
+
+    let (u_min, u_max) = match sub_band.sub_band_type {
+        SubBandType::LowLow | SubBandType::LowHigh => (u0.div_ceil(2), u1.div_ceil(2)),
+        SubBandType::HighLow | SubBandType::HighHigh => (u0 / 2, u1 / 2),
+    };
+
+    let (v_min, v_max) = match sub_band.sub_band_type {
+        SubBandType::LowLow | SubBandType::HighLow => (v0.div_ceil(2), v1.div_ceil(2)),
+        SubBandType::LowHigh | SubBandType::HighHigh => (v0 / 2, v1 / 2),
+    };
+
+    for v_b in v_min..v_max {
+        for u_b in u_min..u_max {
+            let (x, y) = get_pos(u_b, v_b);
+
+            coefficients[((y - v0) * rect.width() + (x - u0)) as usize] = sub_band.coefficients
+                [((v_b - v_min) * sub_band.rect.width() + (u_b - u_min)) as usize];
+
+            // unsafe {
+            //     *coefficients.get_unchecked_mut(((y - v0) * rect.width() + (x - u0)) as usize) =
+            //         *sub_band.coefficients.get_unchecked(((v_b - v_min) * sub_band.rect.width() + (u_b - u_min)) as usize);
+            // }
+        }
+    }
 }
 
 /// The HOR_SR procedure from F.3.4.
