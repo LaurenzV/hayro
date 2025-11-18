@@ -236,7 +236,12 @@ fn interleave_samples(
 fn filter_horizontal(samples: &mut InterleavedSamples, rect: IntRect, transform: WaveletTransform) {
     let total_width = rect.width() as usize + samples.padding.left + samples.padding.right;
 
-    for scanline in samples.coefficients.chunks_exact_mut(total_width) {
+    for scanline in samples
+        .coefficients
+        .chunks_exact_mut(total_width)
+        .skip(samples.padding.top)
+        .take(rect.height() as usize)
+    {
         filter_single_row(
             scanline,
             samples.padding.left,
