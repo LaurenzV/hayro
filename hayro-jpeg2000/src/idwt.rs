@@ -162,7 +162,7 @@ fn interleave_samples(
     let total_height = decomposition.rect.height() as usize + new_padding.top + new_padding.bottom;
 
     let mut interleaved = InterleavedSamples {
-        coefficients: vec![0.0; total_width * total_height as usize],
+        coefficients: vec![0.0; total_width * total_height],
         padding: new_padding,
     };
 
