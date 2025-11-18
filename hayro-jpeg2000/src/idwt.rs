@@ -64,7 +64,6 @@ pub(crate) fn apply(
 
 struct IDWTInput<'a> {
     coefficients: &'a [f32],
-    rect: IntRect,
     sub_band_type: SubBandType,
 }
 
@@ -72,7 +71,6 @@ impl<'a> IDWTInput<'a> {
     fn from_sub_band(sub_band: &'a SubBand) -> IDWTInput<'a> {
         IDWTInput {
             coefficients: &sub_band.coefficients,
-            rect: sub_band.rect,
             sub_band_type: sub_band.sub_band_type,
         }
     }
@@ -80,7 +78,6 @@ impl<'a> IDWTInput<'a> {
     fn from_output(idwt_output: &'a IDWTOutput) -> IDWTInput<'a> {
         IDWTInput {
             coefficients: &idwt_output.coefficients,
-            rect: idwt_output.rect,
             // The output from a previous iteration turns into the LL sub band
             // for the next iteration.
             sub_band_type: SubBandType::LowLow,
@@ -189,15 +186,12 @@ fn interleave_for_sub_band(
     // Hint compiler to drop bounds checks.
     let sub_band_coefficients = &sub_band.coefficients[..(num_v * num_u) as usize];
 
-    let (start_x, start_y) = get_pos(u_min, v_min);
-    let (mut x, mut y) = (start_x, start_y);
+    let (start_x, mut y) = get_pos(u_min, v_min);
 
     for v_b in 0..num_v {
-        x = start_x;
-
         // Hint compiler to drop bounds checks.
-        let coefficient_row = &mut coefficients[((y - v0) * rect.width() + (x - u0)) as usize..]
-            [..(num_u - 1) as usize * 2 + 1];
+        let coefficient_row = &mut coefficients
+            [((y - v0) * rect.width() + (start_x - u0)) as usize..][..(num_u - 1) as usize * 2 + 1];
 
         for u_b in 0..num_u {
             coefficient_row[u_b as usize * 2] = sub_band_coefficients[(v_b * num_u + u_b) as usize];
