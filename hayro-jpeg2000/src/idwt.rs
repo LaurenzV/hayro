@@ -106,7 +106,6 @@ fn filter_2d(
 }
 
 /// The 2D_INTERLEAVE procedure described in F.3.3.
-#[inline(never)]
 fn interleave_samples(
     input: IDWTInput,
     decomposition: &Decomposition,
@@ -148,25 +147,27 @@ fn interleave_samples(
         // Hint compiler to drop bounds checks.
         let sub_band_coefficients = &sub_band.coefficients[..(num_v * num_u) as usize];
 
-        let (start_x, mut y) = match sub_band.sub_band_type {
+        let (start_x, start_y) = match sub_band.sub_band_type {
             SubBandType::LowLow => (2 * u_min, 2 * v_min),
             SubBandType::LowHigh => (2 * u_min, 2 * v_min + 1),
             SubBandType::HighLow => (2 * u_min + 1, 2 * v_min),
             SubBandType::HighHigh => (2 * u_min + 1, 2 * v_min + 1),
         };
 
-        for v_b in 0..num_v {
+        let coefficient_rows = coefficients
+            .chunks_exact_mut(decomposition.rect.width() as usize)
+            .skip((start_y - v0) as usize)
+            .step_by(2);
+
+        for (v_b, coefficient_row) in coefficient_rows.enumerate() {
             // Hint compiler to drop bounds checks.
-            let coefficient_row = &mut coefficients
-                [((y - v0) * decomposition.rect.width() + (start_x - u0)) as usize..]
-                [..(num_u - 1) as usize * 2 + 1];
+            let coefficient_row =
+                &mut coefficient_row[(start_x - u0) as usize..][..(num_u - 1) as usize * 2 + 1];
 
             for u_b in 0..num_u {
                 coefficient_row[u_b as usize * 2] =
-                    sub_band_coefficients[(v_b * num_u + u_b) as usize];
+                    sub_band_coefficients[v_b * num_u as usize + u_b as usize];
             }
-
-            y += 2;
         }
     }
 
