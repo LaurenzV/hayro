@@ -1085,6 +1085,8 @@ fn apply_mct(tile_ctx: &mut TileDecodeContext) {
             return;
         }
 
+        // TODO: We are also applying MCT to the padding here, which is not
+        // necessary, but makes the code simpler.
         match transform {
             WaveletTransform::Irreversible97 => {
                 for ((y0, y1), y2) in s0.iter_mut().zip(s1.iter_mut()).zip(s2.iter_mut()) {
@@ -1153,8 +1155,10 @@ fn store<'a>(tile: &'a Tile<'a>, header: &Header, tile_ctx: &mut TileDecodeConte
 
             let input_row_iter = idwt_output
                 .coefficients
-                .chunks_exact(idwt_output.rect.width() as usize)
-                .skip(skip_y as usize);
+                .chunks_exact(idwt_output.total_width() as usize)
+                .map(|s| &s[idwt_output.padding.left..][..idwt_output.rect.width() as usize])
+                .skip(skip_y as usize + idwt_output.padding.top)
+                .take(idwt_output.rect.height() as usize);
 
             let output_row_iter = channel_data
                 .container
@@ -1173,30 +1177,31 @@ fn store<'a>(tile: &'a Tile<'a>, header: &Header, tile_ctx: &mut TileDecodeConte
             // (we have a check for that when parsing size data) for simplicity.
 
             // Otherwise, copy sample by sample.
-            for y in component_tile.rect.y0..component_tile.rect.y1 {
-                let relative_y = (y - component_tile.rect.y0) as usize;
-                let reference_grid_y = scale_y as u32 * y;
-
-                for x in component_tile.rect.x0..component_tile.rect.x1 {
-                    let relative_x = (x - component_tile.rect.x0) as usize;
-                    let reference_grid_x = scale_x as u32 * x;
-
-                    let sample = idwt_output.coefficients
-                        [relative_y * component_tile.rect.width() as usize + relative_x];
-
-                    for x_position in
-                        reference_grid_x..u32::min(reference_grid_x + scale_x as u32, width)
-                    {
-                        for y_position in
-                            reference_grid_y..u32::min(reference_grid_y + scale_y as u32, height)
-                        {
-                            let pos = y_position as usize * width as usize + x_position as usize;
-
-                            channel_data.container[pos] = sample;
-                        }
-                    }
-                }
-            }
+            // for y in component_tile.rect.y0..component_tile.rect.y1 {
+            //     let relative_y = (y - component_tile.rect.y0) as usize;
+            //     let reference_grid_y = scale_y as u32 * y;
+            //
+            //     for x in component_tile.rect.x0..component_tile.rect.x1 {
+            //         let relative_x = (x - component_tile.rect.x0) as usize;
+            //         let reference_grid_x = scale_x as u32 * x;
+            //
+            //         let sample = idwt_output.coefficients
+            //             [relative_y * component_tile.rect.width() as usize + relative_x];
+            //
+            //         for x_position in
+            //             reference_grid_x..u32::min(reference_grid_x + scale_x as u32, width)
+            //         {
+            //             for y_position in
+            //                 reference_grid_y..u32::min(reference_grid_y + scale_y as u32, height)
+            //             {
+            //                 let pos = y_position as usize * width as usize + x_position as usize;
+            //
+            //                 channel_data.container[pos] = sample;
+            //             }
+            //         }
+            //     }
+            // }
+            unimplemented!()
         }
     }
 }

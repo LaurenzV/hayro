@@ -3,18 +3,42 @@
 use crate::codestream::WaveletTransform;
 use crate::decode::{Decomposition, SubBand, SubBandType};
 use crate::rect::IntRect;
-use std::iter;
+
+#[derive(Default, Copy, Clone)]
+pub(crate) struct Padding {
+    pub(crate) left: usize,
+    pub(crate) top: usize,
+    pub(crate) right: usize,
+    pub(crate) bottom: usize,
+}
+
+impl Padding {
+    fn new(left: usize, top: usize, right: usize, bottom: usize) -> Self {
+        Self {
+            left,
+            top,
+            right,
+            bottom,
+        }
+    }
+}
 
 /// The output from performing the IDWT operation.
 pub(crate) struct IDWTOutput {
-    /// The raw, transformed coefficients.
     pub(crate) coefficients: Vec<f32>,
+    pub(crate) padding: Padding,
     /// The rect that the samples belong to. This will be equivalent
     /// to the rectangle that forms the smallest decomposition level. It does
     /// not have to be equivalent to the original size of the tile, as the
     /// sub-bands that form a tile aren't necessarily aligned to it. Therefore,
     /// the samples need to be trimmed to the tile rectangle afterward.
     pub(crate) rect: IntRect,
+}
+
+impl IDWTOutput {
+    pub(crate) fn total_width(&self) -> u32 {
+        self.padding.left as u32 + self.rect.width() + self.padding.right as u32
+    }
 }
 
 /// Apply the inverse discrete wavelet transform (see Annex F). The output
@@ -31,6 +55,7 @@ pub(crate) fn apply(
     if decompositions.is_empty() {
         return IDWTOutput {
             coefficients: ll_sub_band.clone().coefficients,
+            padding: Padding::default(),
             rect: ll_sub_band.rect,
         };
     }
@@ -60,6 +85,7 @@ pub(crate) fn apply(
 
 struct IDWTInput<'a> {
     coefficients: &'a [f32],
+    padding: Padding,
     sub_band_type: SubBandType,
 }
 
@@ -67,6 +93,7 @@ impl<'a> IDWTInput<'a> {
     fn from_sub_band(sub_band: &'a SubBand) -> IDWTInput<'a> {
         IDWTInput {
             coefficients: &sub_band.coefficients,
+            padding: Padding::default(),
             sub_band_type: sub_band.sub_band_type,
         }
     }
@@ -74,6 +101,7 @@ impl<'a> IDWTInput<'a> {
     fn from_output(idwt_output: &'a IDWTOutput) -> IDWTInput<'a> {
         IDWTInput {
             coefficients: &idwt_output.coefficients,
+            padding: idwt_output.padding,
             // The output from a previous iteration turns into the LL sub band
             // for the next iteration.
             sub_band_type: SubBandType::LowLow,
@@ -90,17 +118,28 @@ fn filter_2d(
     temp_buf: &mut Vec<f32>,
     sub_bands: &[SubBand],
 ) -> IDWTOutput {
-    let mut coefficients = interleave_samples(input, decomposition, sub_bands);
+    let mut interleaved_samples = interleave_samples(input, decomposition, sub_bands, transform);
 
     if decomposition.rect.width() > 0 && decomposition.rect.height() > 0 {
-        filter_horizontal(&mut coefficients, temp_buf, decomposition.rect, transform);
-        filter_vertical(&mut coefficients, temp_buf, decomposition.rect, transform);
+        filter_horizontal(&mut interleaved_samples, decomposition.rect, transform);
+        filter_vertical(
+            &mut interleaved_samples,
+            temp_buf,
+            decomposition.rect,
+            transform,
+        );
     }
 
     IDWTOutput {
-        coefficients,
+        coefficients: interleaved_samples.coefficients,
         rect: decomposition.rect,
+        padding: interleaved_samples.padding,
     }
+}
+
+pub(crate) struct InterleavedSamples {
+    pub(crate) coefficients: Vec<f32>,
+    pub(crate) padding: Padding,
 }
 
 /// The 2D_INTERLEAVE procedure described in F.3.3.
@@ -108,9 +147,24 @@ fn interleave_samples(
     input: IDWTInput,
     decomposition: &Decomposition,
     sub_bands: &[SubBand],
-) -> Vec<f32> {
-    let mut coefficients =
-        vec![0.0; (decomposition.rect.width() * decomposition.rect.height()) as usize];
+    transform: WaveletTransform,
+) -> InterleavedSamples {
+    let new_padding = {
+        let left_padding = left_extension(transform, decomposition.rect.x0 as usize) + 1;
+        let top_padding = left_extension(transform, decomposition.rect.y0 as usize) + 1;
+        let right_padding = right_extension(transform, decomposition.rect.x1 as usize);
+        let bottom_padding = right_extension(transform, decomposition.rect.y1 as usize);
+
+        Padding::new(left_padding, top_padding, right_padding, bottom_padding)
+    };
+
+    let total_width = decomposition.rect.width() as usize + new_padding.left + new_padding.right;
+    let total_height = decomposition.rect.height() as usize + new_padding.top + new_padding.bottom;
+
+    let mut interleaved = InterleavedSamples {
+        coefficients: vec![0.0; total_width * total_height as usize],
+        padding: new_padding,
+    };
 
     let IntRect {
         x0: u0,
@@ -119,18 +173,18 @@ fn interleave_samples(
         y1: v1,
     } = decomposition.rect;
 
-    for sub_band in [
+    for idwt_input in [
         input,
         IDWTInput::from_sub_band(&sub_bands[decomposition.sub_bands[0]]),
         IDWTInput::from_sub_band(&sub_bands[decomposition.sub_bands[1]]),
         IDWTInput::from_sub_band(&sub_bands[decomposition.sub_bands[2]]),
     ] {
-        let (u_min, u_max) = match sub_band.sub_band_type {
+        let (u_min, u_max) = match idwt_input.sub_band_type {
             SubBandType::LowLow | SubBandType::LowHigh => (u0.div_ceil(2), u1.div_ceil(2)),
             SubBandType::HighLow | SubBandType::HighHigh => (u0 / 2, u1 / 2),
         };
 
-        let (v_min, v_max) = match sub_band.sub_band_type {
+        let (v_min, v_max) = match idwt_input.sub_band_type {
             SubBandType::LowLow | SubBandType::HighLow => (v0.div_ceil(2), v1.div_ceil(2)),
             SubBandType::LowHigh | SubBandType::HighHigh => (v0 / 2, v1 / 2),
         };
@@ -138,122 +192,88 @@ fn interleave_samples(
         let num_v = v_max - v_min;
         let num_u = u_max - u_min;
 
+        let input_left_padding = idwt_input.padding.left;
+        let input_right_padding = idwt_input.padding.right;
+        let input_total_width = num_u + input_left_padding as u32 + input_right_padding as u32;
+
         if num_u == 0 || num_v == 0 {
             continue;
         }
 
-        // Hint compiler to drop bounds checks.
-        let sub_band_coefficients = &sub_band.coefficients[..(num_v * num_u) as usize];
-
-        let (start_x, start_y) = match sub_band.sub_band_type {
+        let (start_x, start_y) = match idwt_input.sub_band_type {
             SubBandType::LowLow => (2 * u_min, 2 * v_min),
             SubBandType::LowHigh => (2 * u_min, 2 * v_min + 1),
             SubBandType::HighLow => (2 * u_min + 1, 2 * v_min),
             SubBandType::HighHigh => (2 * u_min + 1, 2 * v_min + 1),
         };
 
-        let coefficient_rows = coefficients
-            .chunks_exact_mut(decomposition.rect.width() as usize)
-            .skip((start_y - v0) as usize)
+        let coefficient_rows = interleaved
+            .coefficients
+            .chunks_exact_mut(total_width)
+            .map(|s| &mut s[new_padding.left..][..decomposition.rect.width() as usize])
+            .skip((start_y - v0) as usize + new_padding.top)
             .step_by(2);
 
-        for (v_b, coefficient_row) in coefficient_rows.enumerate() {
+        for (v_b, coefficient_row) in coefficient_rows.enumerate().take(num_v as usize) {
             // Hint compiler to drop bounds checks.
             let coefficient_row =
                 &mut coefficient_row[(start_x - u0) as usize..][..(num_u - 1) as usize * 2 + 1];
 
             for u_b in 0..num_u {
-                coefficient_row[u_b as usize * 2] =
-                    sub_band_coefficients[v_b * num_u as usize + u_b as usize];
+                coefficient_row[u_b as usize * 2] = idwt_input.coefficients[(v_b
+                    + idwt_input.padding.top)
+                    * input_total_width as usize
+                    + u_b as usize
+                    + input_left_padding];
             }
         }
     }
 
-    coefficients
+    interleaved
 }
 
 /// The HOR_SR procedure from F.3.4.
-fn filter_horizontal(
-    scanline: &mut [f32],
-    temp_buf: &mut Vec<f32>,
-    rect: IntRect,
-    transform: WaveletTransform,
-) {
-    // There's some subtlety going on here. The extension procedure defined in
-    // the spec is based on the start and end values i0 and i1 which are
-    // dependent on the rectangle of the sub-band we are currently processing.
-    // The problem is that if we use the values as is, if we for example had the
-    // i0/i1 values larger than 1000, we would have to allocate a buffer of
-    // length at least 1000, even though the width/height of the rectangle is
-    // much less. Looking at the equations more closely, it becomes apparent
-    // that the real value of i0/i1 is not relevant, and the behavior of
-    // subsequent operations only really depends on whether val % 2 == 0 or
-    // not. Therefore, we shift the values of i0 and i1 such that the property
-    // still remains the same, but the values themselves are much smaller.
+fn filter_horizontal(samples: &mut InterleavedSamples, rect: IntRect, transform: WaveletTransform) {
+    let total_width = rect.width() as usize + samples.padding.left + samples.padding.right;
 
-    let left_padding = left_extension(transform, rect.x0 as usize) + 1;
-    let right_padding = right_extension(transform, rect.x1 as usize);
-
-    for v in 0..rect.height() {
-        temp_buf.clear();
-        // Add left padding for 1D_EXTR procedure.
-        temp_buf.extend(iter::repeat_n(0.0, left_padding));
-
-        let start_idx = rect.width() as usize * v as usize;
-
-        // Extract row into buffer.
-        temp_buf.extend_from_slice(&scanline[start_idx..][..rect.width() as usize]);
-
-        // Add right padding for 1D_EXTR procedure.
-        temp_buf.extend(iter::repeat_n(0.0, right_padding));
-
+    for scanline in samples.coefficients.chunks_exact_mut(total_width) {
         filter_single_row(
-            temp_buf,
-            left_padding,
-            left_padding + rect.width() as usize,
+            scanline,
+            samples.padding.left,
+            samples.padding.left + rect.width() as usize,
             transform,
         );
-
-        // Put values back into original array.
-        scanline[start_idx..][..rect.width() as usize]
-            .copy_from_slice(&temp_buf[left_padding..][..rect.width() as usize]);
     }
 }
 
 /// The VER_SR procedure from F.3.5.
 fn filter_vertical(
-    a: &mut [f32],
+    samples: &mut InterleavedSamples,
     temp_buf: &mut Vec<f32>,
     rect: IntRect,
     transform: WaveletTransform,
 ) {
-    // See the comment in `filter_horizontal`.
-    let left_padding = left_extension(transform, rect.y0 as usize) + 1;
-    let right_padding = right_extension(transform, rect.y1 as usize);
+    let total_width = rect.width() as usize + samples.padding.left + samples.padding.right;
+    let total_height = rect.height() as usize + samples.padding.top + samples.padding.bottom;
 
-    for u in 0..rect.width() {
+    for u in samples.padding.left..(rect.width() as usize + samples.padding.left) {
         temp_buf.clear();
-        // Add left padding for 1D_EXTR procedure.
-        temp_buf.extend(iter::repeat_n(0.0, left_padding));
 
         // Extract column into buffer.
-        for y in 0..rect.height() {
-            temp_buf.push(a[(u + rect.width() * y) as usize]);
+        for y in 0..total_height {
+            temp_buf.push(samples.coefficients[u + total_width * y]);
         }
-
-        // Add right padding for 1D_EXTR procedure.
-        temp_buf.extend(iter::repeat_n(0.0, right_padding));
 
         filter_single_row(
             temp_buf,
-            left_padding,
-            left_padding + rect.height() as usize,
+            samples.padding.top,
+            samples.padding.top + rect.height() as usize,
             transform,
         );
 
         // Put values back into original array.
-        for (idx, y) in (0..rect.height()).enumerate() {
-            a[(u + rect.width() * y) as usize] = temp_buf[left_padding + idx]
+        for y in 0..total_height {
+            samples.coefficients[u + total_width * y] = temp_buf[y]
         }
     }
 }
