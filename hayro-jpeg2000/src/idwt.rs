@@ -182,6 +182,10 @@ fn interleave_for_sub_band(
     let num_v = v_max - v_min;
     let num_u = u_max - u_min;
 
+    if num_u == 0 || num_v == 0 {
+        return;
+    }
+
     // Hint compiler to drop bounds checks.
     let sub_band_coefficients = &sub_band.coefficients[..(num_v * num_u) as usize];
 
@@ -191,16 +195,12 @@ fn interleave_for_sub_band(
     for v_b in 0..num_v {
         x = start_x;
 
+        // Hint compiler to drop bounds checks.
+        let coefficient_row = &mut coefficients[((y - v0) * rect.width() + (x - u0)) as usize..]
+            [..(num_u - 1) as usize * 2 + 1];
+
         for u_b in 0..num_u {
-            coefficients[((y - v0) * rect.width() + (x - u0)) as usize] =
-                sub_band_coefficients[(v_b * num_u + u_b) as usize];
-
-            x += 2;
-
-            // unsafe {
-            //     *coefficients.get_unchecked_mut(((y - v0) * rect.width() + (x - u0)) as usize) =
-            //         *sub_band.coefficients.get_unchecked(((v_b - v_min) * sub_band.rect.width() + (u_b - u_min)) as usize);
-            // }
+            coefficient_row[u_b as usize * 2] = sub_band_coefficients[(v_b * num_u + u_b) as usize];
         }
 
         y += 2;
