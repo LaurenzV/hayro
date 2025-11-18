@@ -179,12 +179,17 @@ fn interleave_for_sub_band(
         SubBandType::LowHigh | SubBandType::HighHigh => (v0 / 2, v1 / 2),
     };
 
-    for v_b in v_min..v_max {
-        for u_b in u_min..u_max {
-            let (x, y) = get_pos(u_b, v_b);
+    let num_v = v_max - v_min;
+    let num_u = u_max - u_min;
 
-            coefficients[((y - v0) * rect.width() + (x - u0)) as usize] = sub_band.coefficients
-                [((v_b - v_min) * sub_band.rect.width() + (u_b - u_min)) as usize];
+    let sub_band_coefficients = &sub_band.coefficients[..(num_v * num_u) as usize];
+
+    for v_b in 0..num_v {
+        for u_b in 0..num_u {
+            let (x, y) = get_pos(u_b + u_min, v_b + v_min);
+
+            coefficients[((y - v0) * rect.width() + (x - u0)) as usize] =
+                sub_band_coefficients[(v_b * num_u + u_b) as usize];
 
             // unsafe {
             //     *coefficients.get_unchecked_mut(((y - v0) * rect.width() + (x - u0)) as usize) =
