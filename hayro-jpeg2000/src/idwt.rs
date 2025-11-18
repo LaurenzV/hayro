@@ -277,8 +277,8 @@ fn filter_vertical(
         );
 
         // Put values back into original array.
-        for y in 0..total_height {
-            samples.coefficients[u + total_width * y] = temp_buf[y]
+        for (y, item) in temp_buf.iter().enumerate().take(total_height) {
+            samples.coefficients[u + total_width * y] = *item;
         }
     }
 }
