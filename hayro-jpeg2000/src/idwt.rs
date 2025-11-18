@@ -5,10 +5,6 @@ use crate::decode::{Decomposition, SubBand, SubBandType};
 use crate::rect::IntRect;
 use std::iter;
 
-/// The amount of padding to apply to a single scanline to make filtering at
-/// the boundary possible.
-const PADDING_SHIFT: usize = 4;
-
 /// The output from performing the IDWT operation.
 pub(crate) struct IDWTOutput {
     /// The raw, transformed coefficients.
@@ -96,8 +92,10 @@ fn filter_2d(
 ) -> IDWTOutput {
     let mut coefficients = interleave_samples(input, decomposition, sub_bands);
 
-    filter_horizontal(&mut coefficients, temp_buf, decomposition.rect, &transform);
-    filter_vertical(&mut coefficients, temp_buf, decomposition.rect, &transform);
+    if decomposition.rect.width() > 0 && decomposition.rect.height() > 0 {
+        filter_horizontal(&mut coefficients, temp_buf, decomposition.rect, transform);
+        filter_vertical(&mut coefficients, temp_buf, decomposition.rect, transform);
+    }
 
     IDWTOutput {
         coefficients,
@@ -179,7 +177,7 @@ fn filter_horizontal(
     scanline: &mut [f32],
     temp_buf: &mut Vec<f32>,
     rect: IntRect,
-    transform: &WaveletTransform,
+    transform: WaveletTransform,
 ) {
     // There's some subtlety going on here. The extension procedure defined in
     // the spec is based on the start and end values i0 and i1 which are
@@ -193,12 +191,13 @@ fn filter_horizontal(
     // not. Therefore, we shift the values of i0 and i1 such that the property
     // still remains the same, but the values themselves are much smaller.
 
-    let shift = PADDING_SHIFT + if !rect.x0.is_multiple_of(2) { 1 } else { 0 };
+    let left_padding = left_extension(transform, rect.x0 as usize) + 1;
+    let right_padding = right_extension(transform, rect.x1 as usize);
 
     for v in 0..rect.height() {
         temp_buf.clear();
         // Add left padding for 1D_EXTR procedure.
-        temp_buf.extend(iter::repeat_n(0.0, shift));
+        temp_buf.extend(iter::repeat_n(0.0, left_padding));
 
         let start_idx = rect.width() as usize * v as usize;
 
@@ -206,13 +205,18 @@ fn filter_horizontal(
         temp_buf.extend_from_slice(&scanline[start_idx..][..rect.width() as usize]);
 
         // Add right padding for 1D_EXTR procedure.
-        temp_buf.extend(iter::repeat_n(0.0, shift));
+        temp_buf.extend(iter::repeat_n(0.0, right_padding));
 
-        filter_single_row(temp_buf, shift, shift + rect.width() as usize, transform);
+        filter_single_row(
+            temp_buf,
+            left_padding,
+            left_padding + rect.width() as usize,
+            transform,
+        );
 
         // Put values back into original array.
         scanline[start_idx..][..rect.width() as usize]
-            .copy_from_slice(&temp_buf[shift..][..rect.width() as usize]);
+            .copy_from_slice(&temp_buf[left_padding..][..rect.width() as usize]);
     }
 }
 
@@ -221,15 +225,16 @@ fn filter_vertical(
     a: &mut [f32],
     temp_buf: &mut Vec<f32>,
     rect: IntRect,
-    transform: &WaveletTransform,
+    transform: WaveletTransform,
 ) {
     // See the comment in `filter_horizontal`.
-    let shift = PADDING_SHIFT + if !rect.y0.is_multiple_of(2) { 1 } else { 0 };
+    let left_padding = left_extension(transform, rect.y0 as usize) + 1;
+    let right_padding = right_extension(transform, rect.y1 as usize);
 
     for u in 0..rect.width() {
         temp_buf.clear();
         // Add left padding for 1D_EXTR procedure.
-        temp_buf.extend(iter::repeat_n(0.0, shift));
+        temp_buf.extend(iter::repeat_n(0.0, left_padding));
 
         // Extract column into buffer.
         for y in 0..rect.height() {
@@ -237,19 +242,24 @@ fn filter_vertical(
         }
 
         // Add right padding for 1D_EXTR procedure.
-        temp_buf.extend(iter::repeat_n(0.0, shift));
+        temp_buf.extend(iter::repeat_n(0.0, right_padding));
 
-        filter_single_row(temp_buf, shift, shift + rect.height() as usize, transform);
+        filter_single_row(
+            temp_buf,
+            left_padding,
+            left_padding + rect.height() as usize,
+            transform,
+        );
 
         // Put values back into original array.
         for (idx, y) in (0..rect.height()).enumerate() {
-            a[(u + rect.width() * y) as usize] = temp_buf[shift + idx]
+            a[(u + rect.width() * y) as usize] = temp_buf[left_padding + idx]
         }
     }
 }
 
 /// The 1D_SR procedure from F.3.6.
-fn filter_single_row(scanline: &mut [f32], start: usize, end: usize, transform: &WaveletTransform) {
+fn filter_single_row(scanline: &mut [f32], start: usize, end: usize, transform: WaveletTransform) {
     if start == end - 1 {
         if !start.is_multiple_of(2) {
             scanline[start] /= 2.0;
@@ -329,40 +339,9 @@ fn irreversible_filter_97i(scanline: &mut [f32], start: usize, end: usize) {
 }
 
 /// The 1D_EXTR procedure, defined in F.3.7.
-fn extend_signal(scanline: &mut [f32], start: usize, end: usize, transform: &WaveletTransform) {
-    let i_left = match transform {
-        WaveletTransform::Reversible53 => {
-            if start.is_multiple_of(2) {
-                1
-            } else {
-                2
-            }
-        }
-        WaveletTransform::Irreversible97 => {
-            if start.is_multiple_of(2) {
-                3
-            } else {
-                4
-            }
-        }
-    };
-
-    let i_right = match transform {
-        WaveletTransform::Reversible53 => {
-            if end.is_multiple_of(2) {
-                2
-            } else {
-                1
-            }
-        }
-        WaveletTransform::Irreversible97 => {
-            if end.is_multiple_of(2) {
-                4
-            } else {
-                3
-            }
-        }
-    };
+fn extend_signal(scanline: &mut [f32], start: usize, end: usize, transform: WaveletTransform) {
+    let i_left = left_extension(transform, start);
+    let i_right = right_extension(transform, end);
 
     for i in (start - i_left)..start {
         scanline[i] = scanline[periodic_symmetric_extension(i, start, end)];
@@ -370,6 +349,46 @@ fn extend_signal(scanline: &mut [f32], start: usize, end: usize, transform: &Wav
 
     for i in end..(end + i_right) {
         scanline[i] = scanline[periodic_symmetric_extension(i, start, end)];
+    }
+}
+
+fn left_extension(transform: WaveletTransform, start: usize) -> usize {
+    // Table F.2.
+    match transform {
+        WaveletTransform::Reversible53 => {
+            if start.is_multiple_of(2) {
+                1
+            } else {
+                2
+            }
+        }
+        WaveletTransform::Irreversible97 => {
+            if start.is_multiple_of(2) {
+                3
+            } else {
+                4
+            }
+        }
+    }
+}
+
+fn right_extension(transform: WaveletTransform, end: usize) -> usize {
+    // Table F.3.
+    match transform {
+        WaveletTransform::Reversible53 => {
+            if end.is_multiple_of(2) {
+                2
+            } else {
+                1
+            }
+        }
+        WaveletTransform::Irreversible97 => {
+            if end.is_multiple_of(2) {
+                4
+            } else {
+                3
+            }
+        }
     }
 }
 
@@ -401,7 +420,7 @@ mod tests {
     #[test]
     fn extend_1d() {
         let mut data = [0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 0.0, 0.0];
-        super::extend_signal(&mut data, 3, 9, &WaveletTransform::Reversible53);
+        super::extend_signal(&mut data, 3, 9, WaveletTransform::Reversible53);
 
         assert_eq!(
             data,
