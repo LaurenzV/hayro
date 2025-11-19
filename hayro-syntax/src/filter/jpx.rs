@@ -89,28 +89,38 @@ fn scale(
     width: u32,
     height: u32,
 ) -> Option<Vec<u8>> {
-    let mut input = vec![
-        0;
-        (width as u64 * num_components as u64 * bit_per_component as u64).div_ceil(8)
-            as usize
-            * height as usize
-    ];
-    let mut writer = BitWriter::new(&mut input, bit_per_component)?;
-    let max = ((1 << bit_per_component) - 1) as f32;
+    if bit_per_component == 8 {
+        Some(data.iter().map(|v| v.round() as u8).collect())
+    } else if bit_per_component == 16 {
+        Some(
+            data.iter()
+                .flat_map(|v| (v.round() as u16).to_be_bytes())
+                .collect(),
+        )
+    } else {
+        let mut input = vec![
+            0;
+            (width as u64 * num_components as u64 * bit_per_component as u64).div_ceil(8)
+                as usize
+                * height as usize
+        ];
+        let mut writer = BitWriter::new(&mut input, bit_per_component)?;
+        let max = ((1 << bit_per_component) - 1) as f32;
 
-    for bytes in data.chunks_exact(num_components as usize * width as usize) {
-        for byte in bytes {
-            let scaled = byte.round().min(max) as u32;
-            writer.write(scaled)?;
+        for bytes in data.chunks_exact(num_components as usize * width as usize) {
+            for byte in bytes {
+                let scaled = byte.round().min(max) as u32;
+                writer.write(scaled)?;
+            }
+
+            writer.align();
         }
 
-        writer.align();
+        let final_pos = writer.cur_pos();
+        input.truncate(final_pos);
+
+        Some(input)
     }
-
-    let final_pos = writer.cur_pos();
-    input.truncate(final_pos);
-
-    Some(input)
 }
 
 fn sycc_to_rgb(data: &mut [f32], bit_depth: u8) {
