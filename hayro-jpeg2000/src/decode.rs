@@ -136,19 +136,24 @@ fn decode_tile<'a>(
     // We then decode the bitplanes of each code block, yielding the
     // (possibly dequantized) coefficients of each code block.
     decode_bitplanes(tile, tile_ctx, storage)?;
-    // Next, we apply the inverse discrete wavelet transform.
-    apply_idwt(tile, tile_ctx, storage)?;
-    // Finally, we store the raw samples for the tile area in the correct
-    // location. Note that in case we have MCT, we are not applying it yet.
-    // It will be applied in the very end once all tiles have been processed.
-    // The reason we do this is that applying MCT requires access to the
-    // data from _all_ components. If we didn't defer this until the end
-    // we would have to collect the IDWT outputs of all components before
-    // applying it. By not applying MCT here, we can get away with doing
-    // IDWT and store on a per-component basis. Thus, we only need to
-    // store one IDWT output at a time, allowing for better reuse of
-    // allocations.
-    store(tile, header, tile_ctx);
+
+    // Unlike before, we interleave the apply_idwt and store stages
+    // for each component tile so we can reuse allocations better.
+    for (idx, component_info) in header.component_infos.iter().enumerate() {
+        // Next, we apply the inverse discrete wavelet transform.
+        apply_idwt(tile_ctx, storage, component_info, idx)?;
+        // Finally, we store the raw samples for the tile area in the correct
+        // location. Note that in case we have MCT, we are not applying it yet.
+        // It will be applied in the very end once all tiles have been processed.
+        // The reason we do this is that applying MCT requires access to the
+        // data from _all_ components. If we didn't defer this until the end
+        // we would have to collect the IDWT outputs of all components before
+        // applying it. By not applying MCT here, we can get away with doing
+        // IDWT and store on a per-component basis. Thus, we only need to
+        // store one IDWT output at a time, allowing for better reuse of
+        // allocations.
+        store(tile, header, tile_ctx, component_info, idx);
+    }
 
     Ok(())
 }
@@ -299,9 +304,8 @@ impl DecompositionStorage<'_> {
 pub(crate) struct TileDecodeContext<'a> {
     /// The tile that we are currently decoding.
     pub(crate) tile: &'a Tile<'a>,
-    /// The outputs of the IDWT operations of each component of the tile
-    /// we are currently processing.
-    pub(crate) idwt_outputs: Vec<IDWTOutput>,
+    /// A reusable buffer for the IDWT output.
+    pub(crate) idwt_output: IDWTOutput,
     /// A scratch buffer used during IDWT.
     pub(crate) idwt_scratch_buffer: Vec<f32>,
     /// A reusable context for decoding code blocks.
@@ -315,7 +319,6 @@ pub(crate) struct TileDecodeContext<'a> {
 impl<'a> TileDecodeContext<'a> {
     fn new(header: &Header, initial_tile: &'a Tile<'a>) -> Self {
         let mut channel_data = vec![];
-        let mut idwt_outputs = vec![];
 
         for info in &initial_tile.component_infos {
             channel_data.push(ChannelData {
@@ -329,13 +332,12 @@ impl<'a> TileDecodeContext<'a> {
                 is_alpha: false,
                 bit_depth: info.size_info.precision,
             });
-            idwt_outputs.push(IDWTOutput::dummy());
         }
 
         Self {
             tile: initial_tile,
             idwt_scratch_buffer: vec![],
-            idwt_outputs,
+            idwt_output: IDWTOutput::dummy(),
             code_block_decode_context: Default::default(),
             bit_plane_decode_buffers: Default::default(),
             channel_data,
@@ -1051,29 +1053,24 @@ fn decode_sub_band_bitplanes(
 }
 
 fn apply_idwt<'a>(
-    tile: &'a Tile<'a>,
     tile_ctx: &mut TileDecodeContext<'a>,
-    storage: &mut DecompositionStorage,
+    storage: &DecompositionStorage,
+    component_info: &ComponentInfo,
+    component_idx: usize,
 ) -> Result<(), &'static str> {
-    for (idx, (decompositions, component_info)) in storage
-        .tile_decompositions
-        .iter()
-        .zip(tile.component_infos.iter())
-        .enumerate()
-    {
-        let ll_sub_band = &storage.sub_bands[decompositions.first_ll_sub_band];
-        let sub_bands = &storage.decompositions[decompositions.decompositions.clone()];
+    let decompositions = &storage.tile_decompositions[component_idx];
 
-        idwt::apply(
-            ll_sub_band,
-            sub_bands,
-            &storage.sub_bands,
-            &mut tile_ctx.idwt_scratch_buffer,
-            &mut tile_ctx.idwt_outputs[idx],
-            component_info.coding_style.parameters.transformation,
-        );
-    }
+    let ll_sub_band = &storage.sub_bands[decompositions.first_ll_sub_band];
+    let sub_bands = &storage.decompositions[decompositions.decompositions.clone()];
 
+    idwt::apply(
+        ll_sub_band,
+        sub_bands,
+        &storage.sub_bands,
+        &mut tile_ctx.idwt_scratch_buffer,
+        &mut tile_ctx.idwt_output,
+        component_info.coding_style.parameters.transformation,
+    );
     Ok(())
 }
 
@@ -1091,7 +1088,7 @@ fn apply_mct(tile_ctx: &mut TileDecodeContext) {
     if tile_ctx.channel_data.len() < 3 {
         warn!(
             "tried to apply MCT to image with {} components",
-            tile_ctx.idwt_outputs.len()
+            tile_ctx.channel_data.len()
         );
 
         return;
@@ -1146,96 +1143,99 @@ fn apply_mct(tile_ctx: &mut TileDecodeContext) {
     }
 }
 
-fn store<'a>(tile: &'a Tile<'a>, header: &Header, tile_ctx: &mut TileDecodeContext<'a>) {
+fn store<'a>(
+    tile: &'a Tile<'a>,
+    header: &Header,
+    tile_ctx: &mut TileDecodeContext<'a>,
+    component_info: &ComponentInfo,
+    component_idx: usize,
+) {
     let width = header.size_data.tile_width;
     let height = header.size_data.tile_height;
 
-    for ((idwt_output, component_info), channel_data) in tile_ctx
-        .idwt_outputs
-        .iter_mut()
-        .zip(tile.component_infos.iter())
-        .zip(tile_ctx.channel_data.iter_mut())
-    {
-        let component_tile = ComponentTile::new(tile, component_info);
+    let channel_data = &mut tile_ctx.channel_data[component_idx];
+    let idwt_output = &mut tile_ctx.idwt_output;
 
-        // If we have MCT, the sign shift needs to be applied after the
-        // transform. We take care of that in the main decode method.
-        if !tile.mct {
-            for sample in idwt_output.coefficients.iter_mut() {
-                *sample += (1 << (component_info.size_info.precision - 1)) as f32;
-            }
+    let component_tile = ComponentTile::new(tile, component_info);
+
+    // If we have MCT, the sign shift needs to be applied after the
+    // transform. We take care of that in the main decode method.
+    // Otherwise, we might as well just apply it now.
+    if !tile.mct {
+        for sample in idwt_output.coefficients.iter_mut() {
+            *sample += (1 << (component_info.size_info.precision - 1)) as f32;
         }
+    }
 
-        assert_eq!(idwt_output.rect, component_tile.rect);
+    assert_eq!(idwt_output.rect, component_tile.rect);
 
-        let (scale_x, scale_y) = (
-            component_info.size_info.horizontal_resolution,
-            component_info.size_info.vertical_resolution,
+    let (scale_x, scale_y) = (
+        component_info.size_info.horizontal_resolution,
+        component_info.size_info.vertical_resolution,
+    );
+
+    if scale_x == 1 && scale_y == 1 {
+        // If no sub-sampling, use a fast path where we copy rows of coefficients
+        // at once.
+
+        // The rect of the IDWT output corresponds to the rect of the highest
+        // decomposition level of the tile, which is usually not 1:1 aligned
+        // with the actual tile rectangle. We also need to account for the
+        // offset of the reference grid.
+        let (image_x_offset, image_y_offset) = (
+            header.size_data.image_area_x_offset,
+            header.size_data.image_area_y_offset,
         );
 
-        if scale_x == 1 && scale_y == 1 {
-            // If no sub-sampling, use a fast path where we copy rows of coefficients
-            // at once.
+        let skip_x = image_x_offset.saturating_sub(idwt_output.rect.x0);
+        let skip_y = image_y_offset.saturating_sub(idwt_output.rect.y0);
 
-            // The rect of the IDWT output corresponds to the rect of the highest
-            // decomposition level of the tile, which is usually not 1:1 aligned
-            // with the actual tile rectangle. We also need to account for the
-            // offset of the reference grid.
-            let (image_x_offset, image_y_offset) = (
-                header.size_data.image_area_x_offset,
-                header.size_data.image_area_y_offset,
-            );
+        let input_row_iter = idwt_output
+            .coefficients
+            .chunks_exact(idwt_output.total_width() as usize)
+            .map(|s| &s[idwt_output.padding.left..][..idwt_output.rect.width() as usize])
+            .skip(skip_y as usize + idwt_output.padding.top)
+            .take(idwt_output.rect.height() as usize);
 
-            let skip_x = image_x_offset.saturating_sub(idwt_output.rect.x0);
-            let skip_y = image_y_offset.saturating_sub(idwt_output.rect.y0);
+        let output_row_iter = channel_data
+            .container
+            .chunks_exact_mut(header.size_data.image_width() as usize)
+            .skip(tile.rect.y0.saturating_sub(image_y_offset) as usize);
 
-            let input_row_iter = idwt_output
-                .coefficients
-                .chunks_exact(idwt_output.total_width() as usize)
-                .map(|s| &s[idwt_output.padding.left..][..idwt_output.rect.width() as usize])
-                .skip(skip_y as usize + idwt_output.padding.top)
-                .take(idwt_output.rect.height() as usize);
+        for (input_row, output_row) in input_row_iter.zip(output_row_iter) {
+            let input_row = &input_row[skip_x as usize..];
+            let output_row = &mut output_row
+                [tile.rect.x0.saturating_sub(image_x_offset) as usize..][..input_row.len()];
 
-            let output_row_iter = channel_data
-                .container
-                .chunks_exact_mut(header.size_data.image_width() as usize)
-                .skip(tile.rect.y0.saturating_sub(image_y_offset) as usize);
+            output_row.copy_from_slice(input_row);
+        }
+    } else {
+        // Currently, we can assume that the reference grid offset is 0
+        // (we have a check for that when parsing size data) for simplicity.
 
-            for (input_row, output_row) in input_row_iter.zip(output_row_iter) {
-                let input_row = &input_row[skip_x as usize..];
-                let output_row = &mut output_row
-                    [tile.rect.x0.saturating_sub(image_x_offset) as usize..][..input_row.len()];
+        // Otherwise, copy sample by sample.
+        for y in component_tile.rect.y0..component_tile.rect.y1 {
+            let relative_y = (y - component_tile.rect.y0) as usize;
+            let reference_grid_y = scale_y as u32 * y;
 
-                output_row.copy_from_slice(input_row);
-            }
-        } else {
-            // Currently, we can assume that the reference grid offset is 0
-            // (we have a check for that when parsing size data) for simplicity.
+            for x in component_tile.rect.x0..component_tile.rect.x1 {
+                let relative_x = (x - component_tile.rect.x0) as usize;
+                let reference_grid_x = scale_x as u32 * x;
 
-            // Otherwise, copy sample by sample.
-            for y in component_tile.rect.y0..component_tile.rect.y1 {
-                let relative_y = (y - component_tile.rect.y0) as usize;
-                let reference_grid_y = scale_y as u32 * y;
+                let sample = idwt_output.coefficients[(relative_y + idwt_output.padding.top)
+                    * idwt_output.total_width() as usize
+                    + relative_x
+                    + idwt_output.padding.left];
 
-                for x in component_tile.rect.x0..component_tile.rect.x1 {
-                    let relative_x = (x - component_tile.rect.x0) as usize;
-                    let reference_grid_x = scale_x as u32 * x;
-
-                    let sample = idwt_output.coefficients[(relative_y + idwt_output.padding.top)
-                        * idwt_output.total_width() as usize
-                        + relative_x
-                        + idwt_output.padding.left];
-
-                    for x_position in
-                        reference_grid_x..u32::min(reference_grid_x + scale_x as u32, width)
+                for x_position in
+                    reference_grid_x..u32::min(reference_grid_x + scale_x as u32, width)
+                {
+                    for y_position in
+                        reference_grid_y..u32::min(reference_grid_y + scale_y as u32, height)
                     {
-                        for y_position in
-                            reference_grid_y..u32::min(reference_grid_y + scale_y as u32, height)
-                        {
-                            let pos = y_position as usize * width as usize + x_position as usize;
+                        let pos = y_position as usize * width as usize + x_position as usize;
 
-                            channel_data.container[pos] = sample;
-                        }
+                        channel_data.container[pos] = sample;
                     }
                 }
             }
