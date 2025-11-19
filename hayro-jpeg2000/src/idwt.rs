@@ -152,8 +152,12 @@ fn interleave_samples(
     let new_padding = {
         let left_padding = left_extension(transform, decomposition.rect.x0 as usize) + 1;
         let top_padding = left_extension(transform, decomposition.rect.y0 as usize) + 1;
-        let right_padding = right_extension(transform, decomposition.rect.x1 as usize);
+        let mut right_padding = right_extension(transform, decomposition.rect.x1 as usize);
         let bottom_padding = right_extension(transform, decomposition.rect.y1 as usize);
+
+        let current_width = left_padding + decomposition.rect.width() as usize + right_padding;
+        let target_width = current_width.next_multiple_of(8);
+        right_padding += target_width - current_width;
 
         Padding::new(left_padding, top_padding, right_padding, bottom_padding)
     };
