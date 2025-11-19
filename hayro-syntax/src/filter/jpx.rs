@@ -196,8 +196,8 @@ fn sycc_to_rgb(components: &mut [ChannelData], bit_depth: u8) {
         .zip(cb.container.iter_mut())
         .zip(cr.container.iter_mut())
     {
-        *cb = *cb - offset;
-        *cr = *cr - offset;
+        *cb -= offset;
+        *cr -= offset;
 
         let r = *y + 1.402_f32 * *cr;
         let g = *y - 0.344136_f32 * *cb - 0.714136_f32 * *cr;
