@@ -249,6 +249,7 @@ fn filter_horizontal(samples: &mut InterleavedSamples, rect: IntRect, transform:
 }
 
 /// The VER_SR procedure from F.3.5.
+#[allow(dead_code)]
 fn filter_vertical(
     samples: &mut InterleavedSamples,
     temp_buf: &mut Vec<f32>,
