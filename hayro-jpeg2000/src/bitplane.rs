@@ -25,6 +25,9 @@ impl BitPlaneDecodeBuffers {
     fn reset(&mut self) {
         self.combined_layers.clear();
         self.segment_ranges.clear();
+
+        // The design of these two buffers is that the ranges are stored
+        // as [idx, idx + 1), so we need to store the first 0 when resetting.
         self.segment_ranges.push(0);
         self.segment_coding_passes.clear();
         self.segment_coding_passes.push(0);
