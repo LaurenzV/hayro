@@ -98,7 +98,12 @@ pub(crate) fn apply(
             MAX_PADDING + decomposition.rect.width() as usize + MAX_PADDING + SIMD_WIDTH;
         let total_height = MAX_PADDING + decomposition.rect.height() as usize + MAX_PADDING;
 
-        total_width * total_height
+        let min = total_width * total_height;
+        // Different sub-bands can have shifts by one, so add even more padding
+        // for the maximum case.
+        let max = (total_width + 1) * (total_height + 1);
+
+        (min, max)
     };
 
     if decompositions.is_empty() {
@@ -114,15 +119,19 @@ pub(crate) fn apply(
 
     // The coefficient array will always be the one that holds the coefficients
     // from the highest decomposition. Therefore, reserve as much.
-    let last_decomposition_buffer_size = estimate_buffer_size(decompositions.last().unwrap());
-    coefficients.reserve(last_decomposition_buffer_size);
+    let (s_min, s_max) = estimate_buffer_size(decompositions.last().unwrap());
+    if coefficients.capacity() < s_min {
+        coefficients.reserve_exact(s_max - coefficients.capacity());
+    }
 
     if decompositions.len() > 1 {
         // Due to the above, the intermediate buffer will never need more than
         // the second-highest decomposition.
-        let second_last_decomposition_buffer_size =
-            estimate_buffer_size(&decompositions[decompositions.len() - 2]);
-        scratch.reserve(second_last_decomposition_buffer_size);
+        let (s_min, s_max) = estimate_buffer_size(&decompositions[decompositions.len() - 2]);
+
+        if scratch.capacity() < s_min {
+            scratch.reserve_exact(s_max - scratch.capacity());
+        }
     }
 
     // Determine which buffer we should use first, such that the `coefficients`
