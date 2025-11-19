@@ -28,9 +28,13 @@ impl Padding {
 
 /// The output from performing the IDWT operation.
 pub(crate) struct IDWTOutput {
+    /// The raw coefficients of the IDWT output. It consists of a
+    /// The total number of coefficients can be calculated using the
+    /// padding on each side as well as the rectangle.
     pub(crate) coefficients: Vec<f32>,
+    /// The size of the padding applied to each side.
     pub(crate) padding: Padding,
-    /// The rect that the samples belong to. This will be equivalent
+    /// The rect that the coefficients belong to. This will be equivalent
     /// to the rectangle that forms the smallest decomposition level. It does
     /// not have to be equivalent to the original size of the tile, as the
     /// sub-bands that form a tile aren't necessarily aligned to it. Therefore,
@@ -52,11 +56,14 @@ pub(crate) fn apply(
     ll_sub_band: &SubBand,
     // All decomposition level that make up the tile.
     decompositions: &[Decomposition],
+    // The buffer containing all sub-bands, used for resolving the sub-bands
+    // of each decomposition level.
     sub_bands: &[SubBand],
     transform: WaveletTransform,
 ) -> IDWTOutput {
     if decompositions.is_empty() {
         return IDWTOutput {
+            // TODO: Maybe we can get rid of the clone?
             coefficients: ll_sub_band.clone().coefficients,
             padding: Padding::default(),
             rect: ll_sub_band.rect,
@@ -108,14 +115,16 @@ impl<'a> IDWTInput<'a> {
     }
 }
 
-/// The 2D_INTERLEAVE procedure described in F.3.3.
+/// The 2D_SR procedure illustrated in Figure F.6.
 fn filter_2d(
-    // The LL sub band.
+    // The LL sub band of the given decomposition level.
     input: IDWTInput,
     decomposition: &Decomposition,
     transform: WaveletTransform,
     sub_bands: &[SubBand],
 ) -> IDWTOutput {
+    // First interleave all of the sub-bands into a single buffer. We also
+    // apply a padding so that we can transparently deal with border values.
     let mut interleaved_samples = interleave_samples(input, decomposition, sub_bands, transform);
 
     if decomposition.rect.width() > 0 && decomposition.rect.height() > 0 {
@@ -143,11 +152,36 @@ fn interleave_samples(
     transform: WaveletTransform,
 ) -> InterleavedSamples {
     let new_padding = {
+        // The reason why we need + 1 for the left and top padding is very
+        // subtle. In general, the methods return how many indices to the
+        // left of the border can possibly be accessed. This is dependent
+        // on the wavelet transform but also whether the start index (indicated
+        // by the rect of the decomposition) is even or odd.
+        //
+        // For example, let's say we are using the 5-3 transform and our index
+        // is even. According to the table, we need a padding of one to the left.
+        // This makes sense, because our `base_idx` in 5-3 is (start / 2) * 2.
+        // And the lowest access is `base_idx - 1`. So, for example, if start is
+        // 2, then:
+        // base_idx = (2 / 2) * 2 = 2,
+        // and our lowest access is 1, so a padding of 1 is sufficient.
+        // However, if we were to add only a padding of 1, our previously even
+        // index now becomes uneven (3), and the previous math doesn't work
+        // anymore since the evenness changed. Now, if we rerun the calculation:
+        // base_idx = (3 / 2) * 2 = 2,
+        // and our lowest access is therefore 1 again, which represents a delta
+        // of 2 instead of the previously calculated 1.
+        // Therefore, we always need to add a padding of 1 to the top and
+        // left to prevent OOB accesses.
         let left_padding = left_extension(transform, decomposition.rect.x0 as usize) + 1;
         let top_padding = left_extension(transform, decomposition.rect.y0 as usize) + 1;
         let mut right_padding = right_extension(transform, decomposition.rect.x1 as usize);
         let bottom_padding = right_extension(transform, decomposition.rect.y1 as usize);
 
+        // For vertical filtering, we use SIMD to process multiple columns at
+        // the same time. Therefore, we add additional padding to the
+        // right such that we can always iterate in chunks of our SIMD width
+        // without having to deal with any remainder.
         let current_width = left_padding + decomposition.rect.width() as usize + right_padding;
         let target_width = current_width.next_multiple_of(SIMD_WIDTH);
         right_padding += target_width - current_width;
@@ -159,6 +193,8 @@ fn interleave_samples(
     let total_height = decomposition.rect.height() as usize + new_padding.top + new_padding.bottom;
 
     let mut interleaved = InterleavedSamples {
+        // TODO: Reuse allocations? So far it hasn't shown up in performance
+        // profiles.
         coefficients: vec![0.0; total_width * total_height],
         padding: new_padding,
     };
@@ -170,6 +206,8 @@ fn interleave_samples(
         y1: v1,
     } = decomposition.rect;
 
+    // Perform the actual interleaving of sub-bands, taking the padding into
+    // account.
     for idwt_input in [
         input,
         IDWTInput::from_sub_band(&sub_bands[decomposition.sub_bands[0]]),
