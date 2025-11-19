@@ -127,7 +127,7 @@ pub(crate) fn apply(
 
     // Determine which buffer we should use first, such that the `coefficients`
     // array will always hold the final values.
-    let mut use_scratch = decompositions.len() % 2 == 0;
+    let mut use_scratch = decompositions.len().is_multiple_of(2);
 
     let mut temp_output = filter_2d(
         IDWTInput::from_sub_band(ll_sub_band),
