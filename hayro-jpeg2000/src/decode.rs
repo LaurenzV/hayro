@@ -234,14 +234,14 @@ pub(crate) struct CodeBlock {
     pub(crate) layers: Range<usize>,
     pub(crate) has_been_included: bool,
     pub(crate) missing_bit_planes: u8,
-    pub(crate) number_of_coding_passes: u32,
+    pub(crate) number_of_coding_passes: u8,
     pub(crate) l_block: u32,
-    pub(crate) non_empty_layer_count: u32,
+    pub(crate) non_empty_layer_count: u8,
 }
 
 pub(crate) struct Segment<'a> {
-    pub(crate) idx: u32,
-    pub(crate) coding_pases: u32,
+    pub(crate) idx: u8,
+    pub(crate) coding_pases: u8,
     pub(crate) data_length: u32,
     pub(crate) data: &'a [u8],
 }
@@ -800,7 +800,7 @@ fn get_code_block_lengths(
             1
         } else {
             return None;
-        };
+        } as u8;
 
         trace!("number of coding passes: {}", added_coding_passes);
 
@@ -815,7 +815,7 @@ fn get_code_block_lengths(
         let previous_layers_passes = code_block.number_of_coding_passes;
         let cumulative_passes = previous_layers_passes + added_coding_passes;
 
-        let get_segment = |code_block_idx: u32| {
+        let get_segment = |code_block_idx: u8| {
             if component_info.code_block_style().termination_on_each_pass {
                 code_block_idx
             } else if component_info
@@ -830,7 +830,7 @@ fn get_code_block_lengths(
 
         let start = storage.segments.len();
 
-        let mut push_segment = |segment: u32, coding_passes_for_segment: u32| {
+        let mut push_segment = |segment: u8, coding_passes_for_segment: u8| {
             let length = {
                 assert!(coding_passes_for_segment > 0);
 
@@ -891,7 +891,7 @@ fn get_code_block_lengths(
     Some(())
 }
 
-fn segment_idx_for_bypass(code_block_idx: u32) -> u32 {
+fn segment_idx_for_bypass(code_block_idx: u8) -> u8 {
     if code_block_idx < 10 {
         0
     } else {
@@ -977,7 +977,8 @@ fn decode_sub_band_bitplanes(
                 let (exponent, _) =
                     component_info.exponent_mantissa(sub_band.sub_band_type, resolution);
                 // Equation (E-2)
-                component_info.quantization_info.guard_bits as u16 + exponent - 1
+                u8::try_from(component_info.quantization_info.guard_bits as u16 + exponent - 1)
+                    .map_err(|_| "number of bitplanes is too large")?
             };
 
             bitplane::decode(

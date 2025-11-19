@@ -22,7 +22,7 @@ use log::warn;
 pub(crate) fn decode(
     code_block: &CodeBlock,
     sub_band_type: SubBandType,
-    num_bitplanes: u16,
+    num_bitplanes: u8,
     style: &CodeBlockStyle,
     ctx: &mut CodeBlockDecodeContext,
     layers: &[Layer],
@@ -35,10 +35,8 @@ pub(crate) fn decode(
     }
 
     // Validate the number of bitplanes.
-    if code_block.missing_bit_planes as u32
-        + 1
-        + (code_block.number_of_coding_passes - 1).div_ceil(3)
-        > num_bitplanes as u32
+    if code_block.missing_bit_planes + 1 + (code_block.number_of_coding_passes - 1).div_ceil(3)
+        > num_bitplanes
     {
         return Err("mismatch between indicated number of bitplanes and actual ones");
     }
@@ -63,7 +61,7 @@ pub(crate) fn decode(
 fn decode_inner(
     code_block: &CodeBlock,
     style: &CodeBlockStyle,
-    num_bitplanes: u16,
+    num_bitplanes: u8,
     layers: &[Layer],
     all_segments: &[Segment],
     ctx: &mut CodeBlockDecodeContext,
@@ -148,7 +146,7 @@ fn decode_inner(
     // Extend all coefficients with zero bits until we have the required number
     // of bits.
     for el in &mut ctx.magnitude_array {
-        while (el.count as u16) < num_bitplanes {
+        while el.count < num_bitplanes {
             el.push_bit(0);
         }
     }
@@ -157,8 +155,8 @@ fn decode_inner(
 }
 
 fn handle_coding_passes(
-    start: u32,
-    end: u32,
+    start: u8,
+    end: u8,
     style: &CodeBlockStyle,
     ctx: &mut CodeBlockDecodeContext,
     decoder: &mut impl BitDecoder,
