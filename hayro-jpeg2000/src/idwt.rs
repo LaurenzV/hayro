@@ -28,9 +28,7 @@ impl Padding {
 
 /// The output from performing the IDWT operation.
 pub(crate) struct IDWTOutput {
-    /// The raw coefficients of the IDWT output. It consists of a
-    /// The total number of coefficients can be calculated using the
-    /// padding on each side as well as the rectangle.
+    // The buffer that will hold the final coefficients.
     pub(crate) coefficients: Vec<f32>,
     /// The size of the padding applied to each side.
     pub(crate) padding: Padding,
@@ -43,9 +41,24 @@ pub(crate) struct IDWTOutput {
 }
 
 impl IDWTOutput {
+    pub(crate) fn dummy() -> Self {
+        Self {
+            coefficients: vec![],
+            padding: Default::default(),
+            rect: IntRect::from_ltrb(0, 0, u32::MAX, u32::MAX),
+        }
+    }
+}
+
+impl IDWTOutput {
     pub(crate) fn total_width(&self) -> u32 {
         self.padding.left as u32 + self.rect.width() + self.padding.right as u32
     }
+}
+
+struct IDWTTempOutput {
+    pub(crate) padding: Padding,
+    pub(crate) rect: IntRect,
 }
 
 /// Apply the inverse discrete wavelet transform (see Annex F). The output
@@ -59,34 +72,95 @@ pub(crate) fn apply(
     // The buffer containing all sub-bands, used for resolving the sub-bands
     // of each decomposition level.
     sub_bands: &[SubBand],
+    scratch_buffer: &mut Vec<f32>,
+    output: &mut IDWTOutput,
     transform: WaveletTransform,
-) -> IDWTOutput {
+) {
+    // To explain a bit why we have this scratch buffer and another coefficient
+    // buffer: During IDWT, we need to continuously interleave the 4 sub-bands
+    // into a new buffer, which is then either returned or used as the input
+    // for the next decomposition, etc. It would be very inefficient if we
+    // kept allocating new buffers each time. Therefore, we try to reuse them,
+    // not only for all decompositions of a single tile, but all decompositions
+    // of _all_ tiles.
+    // Due to the fact that the output from the previous iteration might be
+    // used as the input of the next, we need two separate buffers, which
+    // are continuously swapped.
+    let (scratch, coefficients) = (scratch_buffer, &mut output.coefficients);
+
+    let estimate_buffer_size = |decomposition: &Decomposition| {
+        // The maximum padding size (determined by
+        // `left_extension`/`right_extension`) is 4 + 1 = 5.
+        const MAX_PADDING: usize = 5;
+        // For the width, we also need to account for additional padding on the
+        // right side added for SIMD (see `interleave_samples`).
+        let total_width =
+            MAX_PADDING + decomposition.rect.width() as usize + MAX_PADDING + SIMD_WIDTH;
+        let total_height = MAX_PADDING + decomposition.rect.height() as usize + MAX_PADDING;
+
+        total_width * total_height
+    };
+
     if decompositions.is_empty() {
-        return IDWTOutput {
-            // TODO: Maybe we can get rid of the clone?
-            coefficients: ll_sub_band.clone().coefficients,
-            padding: Padding::default(),
-            rect: ll_sub_band.rect,
-        };
+        // Single decomposition, just copy the coefficients from the sub-band.
+        coefficients.clear();
+        coefficients.extend_from_slice(&ll_sub_band.coefficients);
+
+        output.padding = Padding::default();
+        output.rect = ll_sub_band.rect;
+
+        return;
     }
 
-    let mut output = filter_2d(
+    // The coefficient array will always be the one that holds the coefficients
+    // from the highest decomposition. Therefore, reserve as much.
+    let last_decomposition_buffer_size = estimate_buffer_size(decompositions.last().unwrap());
+    coefficients.reserve(last_decomposition_buffer_size);
+
+    if decompositions.len() > 1 {
+        // Due to the above, the intermediate buffer will never need more than
+        // the second-highest decomposition.
+        let second_last_decomposition_buffer_size =
+            estimate_buffer_size(&decompositions[decompositions.len() - 2]);
+        scratch.reserve(second_last_decomposition_buffer_size);
+    }
+
+    // Determine which buffer we should use first, such that the `coefficients`
+    // array will always hold the final values.
+    let mut use_scratch = decompositions.len() % 2 == 0;
+
+    let mut temp_output = filter_2d(
         IDWTInput::from_sub_band(ll_sub_band),
+        if use_scratch { scratch } else { coefficients },
         &decompositions[0],
         transform,
         sub_bands,
     );
 
     for decomposition in decompositions.iter().skip(1) {
-        output = filter_2d(
-            IDWTInput::from_output(&output),
-            decomposition,
-            transform,
-            sub_bands,
-        );
+        use_scratch = !use_scratch;
+
+        temp_output = if use_scratch {
+            filter_2d(
+                IDWTInput::from_output(&temp_output, coefficients),
+                scratch,
+                decomposition,
+                transform,
+                sub_bands,
+            )
+        } else {
+            filter_2d(
+                IDWTInput::from_output(&temp_output, scratch),
+                coefficients,
+                decomposition,
+                transform,
+                sub_bands,
+            )
+        };
     }
 
-    output
+    output.rect = temp_output.rect;
+    output.padding = temp_output.padding;
 }
 
 struct IDWTInput<'a> {
@@ -104,9 +178,9 @@ impl<'a> IDWTInput<'a> {
         }
     }
 
-    fn from_output(idwt_output: &'a IDWTOutput) -> IDWTInput<'a> {
+    fn from_output(idwt_output: &'a IDWTTempOutput, coefficients: &'a [f32]) -> IDWTInput<'a> {
         IDWTInput {
-            coefficients: &idwt_output.coefficients,
+            coefficients,
             padding: idwt_output.padding,
             // The output from a previous iteration turns into the LL sub band
             // for the next iteration.
@@ -119,29 +193,24 @@ impl<'a> IDWTInput<'a> {
 fn filter_2d(
     // The LL sub band of the given decomposition level.
     input: IDWTInput,
+    coefficients: &mut Vec<f32>,
     decomposition: &Decomposition,
     transform: WaveletTransform,
     sub_bands: &[SubBand],
-) -> IDWTOutput {
+) -> IDWTTempOutput {
     // First interleave all of the sub-bands into a single buffer. We also
     // apply a padding so that we can transparently deal with border values.
-    let mut interleaved_samples = interleave_samples(input, decomposition, sub_bands, transform);
+    let padding = interleave_samples(input, decomposition, sub_bands, coefficients, transform);
 
     if decomposition.rect.width() > 0 && decomposition.rect.height() > 0 {
-        filter_horizontal(&mut interleaved_samples, decomposition.rect, transform);
-        simd::filter_vertical_simd(&mut interleaved_samples, decomposition.rect, transform);
+        filter_horizontal(coefficients, padding, decomposition.rect, transform);
+        simd::filter_vertical_simd(coefficients, padding, decomposition.rect, transform);
     }
 
-    IDWTOutput {
-        coefficients: interleaved_samples.coefficients,
+    IDWTTempOutput {
         rect: decomposition.rect,
-        padding: interleaved_samples.padding,
+        padding,
     }
-}
-
-pub(crate) struct InterleavedSamples {
-    pub(crate) coefficients: Vec<f32>,
-    pub(crate) padding: Padding,
 }
 
 /// The 2D_INTERLEAVE procedure described in F.3.3.
@@ -149,8 +218,9 @@ fn interleave_samples(
     input: IDWTInput,
     decomposition: &Decomposition,
     sub_bands: &[SubBand],
+    coefficients: &mut Vec<f32>,
     transform: WaveletTransform,
-) -> InterleavedSamples {
+) -> Padding {
     let new_padding = {
         // The reason why we need + 1 for the left and top padding is very
         // subtle. In general, the methods return how many indices to the
@@ -192,12 +262,16 @@ fn interleave_samples(
     let total_width = decomposition.rect.width() as usize + new_padding.left + new_padding.right;
     let total_height = decomposition.rect.height() as usize + new_padding.top + new_padding.bottom;
 
-    let mut interleaved = InterleavedSamples {
-        // TODO: Reuse allocations? So far it hasn't shown up in performance
-        // profiles.
-        coefficients: vec![0.0; total_width * total_height],
-        padding: new_padding,
-    };
+    // Just a sanity check. We should have allocated enough upfront before
+    // starting the IDWT.
+    assert!(coefficients.capacity() >= total_width * total_height);
+
+    // The cleaner way would be to first clear and then resize, so that we
+    // have a clean buffer with just zeroes. However, this is actually not
+    // necessary, because when interleaving and generating the border values
+    // we will replace all the data anyway, so we can save the cost of
+    // the clear operation.
+    coefficients.resize(total_width * total_height, 0.0);
 
     let IntRect {
         x0: u0,
@@ -242,8 +316,7 @@ fn interleave_samples(
             SubBandType::HighHigh => (2 * u_min + 1, 2 * v_min + 1),
         };
 
-        let coefficient_rows = interleaved
-            .coefficients
+        let coefficient_rows = coefficients
             .chunks_exact_mut(total_width)
             .map(|s| &mut s[new_padding.left..][..decomposition.rect.width() as usize])
             .skip((start_y - v0) as usize + new_padding.top)
@@ -264,23 +337,27 @@ fn interleave_samples(
         }
     }
 
-    interleaved
+    new_padding
 }
 
 /// The HOR_SR procedure from F.3.4.
-fn filter_horizontal(samples: &mut InterleavedSamples, rect: IntRect, transform: WaveletTransform) {
-    let total_width = rect.width() as usize + samples.padding.left + samples.padding.right;
+fn filter_horizontal(
+    coefficients: &mut [f32],
+    padding: Padding,
+    rect: IntRect,
+    transform: WaveletTransform,
+) {
+    let total_width = rect.width() as usize + padding.left + padding.right;
 
-    for scanline in samples
-        .coefficients
+    for scanline in coefficients
         .chunks_exact_mut(total_width)
-        .skip(samples.padding.top)
+        .skip(padding.top)
         .take(rect.height() as usize)
     {
         filter_single_row(
             scanline,
-            samples.padding.left,
-            samples.padding.left + rect.width() as usize,
+            padding.left,
+            padding.left + rect.width() as usize,
             transform,
         );
     }
@@ -289,32 +366,33 @@ fn filter_horizontal(samples: &mut InterleavedSamples, rect: IntRect, transform:
 /// The VER_SR procedure from F.3.5.
 #[allow(dead_code)]
 fn filter_vertical(
-    samples: &mut InterleavedSamples,
+    coefficients: &mut [f32],
+    padding: Padding,
     temp_buf: &mut Vec<f32>,
     rect: IntRect,
     transform: WaveletTransform,
 ) {
-    let total_width = rect.width() as usize + samples.padding.left + samples.padding.right;
-    let total_height = rect.height() as usize + samples.padding.top + samples.padding.bottom;
+    let total_width = rect.width() as usize + padding.left + padding.right;
+    let total_height = rect.height() as usize + padding.top + padding.bottom;
 
-    for u in samples.padding.left..(rect.width() as usize + samples.padding.left) {
+    for u in padding.left..(rect.width() as usize + padding.left) {
         temp_buf.clear();
 
         // Extract column into buffer.
         for y in 0..total_height {
-            temp_buf.push(samples.coefficients[u + total_width * y]);
+            temp_buf.push(coefficients[u + total_width * y]);
         }
 
         filter_single_row(
             temp_buf,
-            samples.padding.top,
-            samples.padding.top + rect.height() as usize,
+            padding.top,
+            padding.top + rect.height() as usize,
             transform,
         );
 
         // Put values back into original array.
         for (y, item) in temp_buf.iter().enumerate().take(total_height) {
-            samples.coefficients[u + total_width * y] = *item;
+            coefficients[u + total_width * y] = *item;
         }
     }
 }
@@ -462,9 +540,7 @@ fn periodic_symmetric_extension(idx: usize, start: usize, end: usize) -> usize {
 
 mod simd {
     use crate::codestream::WaveletTransform;
-    use crate::idwt::{
-        InterleavedSamples, left_extension, periodic_symmetric_extension, right_extension,
-    };
+    use crate::idwt::{Padding, left_extension, periodic_symmetric_extension, right_extension};
     use crate::rect::IntRect;
     use fearless_simd::*;
 
@@ -472,28 +548,30 @@ mod simd {
     type F32<S> = f32x8<S>;
 
     pub(super) fn filter_vertical_simd(
-        samples: &mut InterleavedSamples,
+        coefficients: &mut [f32],
+        padding: Padding,
         rect: IntRect,
         transform: WaveletTransform,
     ) {
         let level = Level::new();
-        dispatch!(level, simd => filter_vertical_simd_impl(simd, samples, rect, transform));
+        dispatch!(level, simd => filter_vertical_simd_impl(simd, coefficients, padding, rect, transform));
     }
 
     /// The VER_SR procedure from F.3.5.
     #[inline(always)]
     fn filter_vertical_simd_impl<S: Simd>(
         simd: S,
-        samples: &mut InterleavedSamples,
+        coefficients: &mut [f32],
+        padding: Padding,
         rect: IntRect,
         transform: WaveletTransform,
     ) {
-        let total_width = rect.width() as usize + samples.padding.left + samples.padding.right;
+        let total_width = rect.width() as usize + padding.left + padding.right;
         filter_rows_simd(
             simd,
-            &mut samples.coefficients,
-            samples.padding.top,
-            samples.padding.top + rect.height() as usize,
+            coefficients,
+            padding.top,
+            padding.top + rect.height() as usize,
             total_width,
             transform,
         );

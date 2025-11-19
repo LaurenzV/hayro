@@ -115,7 +115,7 @@ fn decode_tile<'a>(
     tile_ctx: &mut TileDecodeContext<'a>,
     storage: &mut DecompositionStorage<'a>,
 ) -> Result<(), &'static str> {
-    tile_ctx.reset(tile);
+    tile_ctx.set_tile(tile);
     storage.reset();
 
     // This is the method that orchestrates all steps.
@@ -288,6 +288,8 @@ pub(crate) struct TileDecodeContext<'a> {
     /// The outputs of the IDWT operations of each component of the tile
     /// we are currently processing.
     pub(crate) idwt_outputs: Vec<IDWTOutput>,
+    /// A scratch buffer used during IDWT.
+    pub(crate) idwt_scratch_buffer: Vec<f32>,
     /// A reusable context for decoding code blocks.
     pub(crate) code_block_decode_context: CodeBlockDecodeContext,
     /// The raw, decoded samples for each channel.
@@ -297,6 +299,7 @@ pub(crate) struct TileDecodeContext<'a> {
 impl<'a> TileDecodeContext<'a> {
     fn new(header: &Header, initial_tile: &'a Tile<'a>) -> Self {
         let mut channel_data = vec![];
+        let mut idwt_outputs = vec![];
 
         for info in &initial_tile.component_infos {
             channel_data.push(ChannelData {
@@ -309,23 +312,23 @@ impl<'a> TileDecodeContext<'a> {
                 // metadata of the JP2 file, not the actual code stream.
                 is_alpha: false,
                 bit_depth: info.size_info.precision,
-            })
+            });
+            idwt_outputs.push(IDWTOutput::dummy());
         }
 
         Self {
             tile: initial_tile,
-            idwt_outputs: vec![],
+            idwt_scratch_buffer: vec![],
+            idwt_outputs,
             code_block_decode_context: Default::default(),
             channel_data,
         }
     }
 
-    fn reset(&mut self, tile: &'a Tile<'a>) {
+    fn set_tile(&mut self, tile: &'a Tile<'a>) {
+        // This is all that is needed when advancing to a new tile.
+        // The other fields will be resetted in due course as needed.
         self.tile = tile;
-        self.idwt_outputs.clear();
-        // Code-block decode context will be resetted before being used, can't
-        // do it here because we need data for a code block.
-        // Channel data should not be resetted because it's global.
     }
 }
 
@@ -1031,21 +1034,23 @@ fn apply_idwt<'a>(
     tile_ctx: &mut TileDecodeContext<'a>,
     storage: &mut DecompositionStorage,
 ) -> Result<(), &'static str> {
-    for (decompositions, component_info) in storage
+    for (idx, (decompositions, component_info)) in storage
         .tile_decompositions
         .iter()
         .zip(tile.component_infos.iter())
+        .enumerate()
     {
         let ll_sub_band = &storage.sub_bands[decompositions.first_ll_sub_band];
         let sub_bands = &storage.decompositions[decompositions.decompositions.clone()];
-        let idwt_output = idwt::apply(
+
+        idwt::apply(
             ll_sub_band,
             sub_bands,
             &storage.sub_bands,
+            &mut tile_ctx.idwt_scratch_buffer,
+            &mut tile_ctx.idwt_outputs[idx],
             component_info.coding_style.parameters.transformation,
         );
-
-        tile_ctx.idwt_outputs.push(idwt_output);
     }
 
     Ok(())
