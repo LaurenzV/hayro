@@ -105,6 +105,14 @@ pub(crate) fn decode(data: &[u8], header: &Header) -> Result<Vec<ChannelData>, &
         };
     }
 
+    // Note that this assumes that either all tiles have MCT or none of them.
+    // In theory, only some could have it... But hopefully no such cursed
+    // images exist!
+    if tile_ctx.tile.mct {
+        apply_mct(&mut tile_ctx);
+        apply_sign_shift(&mut tile_ctx, &header.component_infos);
+    }
+
     Ok(tile_ctx.channel_data)
 }
 
@@ -130,10 +138,15 @@ fn decode_tile<'a>(
     decode_bitplanes(tile, tile_ctx, storage)?;
     // Next, we apply the inverse discrete wavelet transform.
     apply_idwt(tile, tile_ctx, storage)?;
-    // If applicable, we apply the multi-component transform.
-    apply_mct(tile_ctx);
     // Finally, we store the raw samples for the tile area in the correct
-    // location.
+    // location. Note that in case we have MCT, we are not applying it yet.
+    // It will be applied in the very end once all tiles have been processed.
+    // The reason we do this is that applying MCT requires access to the
+    // data from _all_ components. If we didn't defer this until the end
+    // we would have to collect the IDWT outputs of all components before
+    // applying it. By not applying MCT here, we can get away with doing
+    // IDWT and store on a per-component basis. Thus, we only need to
+    // store one IDWT per-time, allowing for better reuse of allocations.
     store(tile, header, tile_ctx);
 
     Ok(())
@@ -1063,64 +1076,70 @@ fn apply_idwt<'a>(
     Ok(())
 }
 
+fn apply_sign_shift(tile_ctx: &mut TileDecodeContext, component_infos: &[ComponentInfo]) {
+    for (channel_data, component_info) in
+        tile_ctx.channel_data.iter_mut().zip(component_infos.iter())
+    {
+        for sample in &mut channel_data.container {
+            *sample += (1 << (component_info.size_info.precision - 1)) as f32;
+        }
+    }
+}
+
 fn apply_mct(tile_ctx: &mut TileDecodeContext) {
-    if tile_ctx.tile.mct {
-        if tile_ctx.idwt_outputs.len() < 3 {
-            warn!(
-                "tried to apply MCT to image with {} components",
-                tile_ctx.idwt_outputs.len()
-            );
+    if tile_ctx.channel_data.len() < 3 {
+        warn!(
+            "tried to apply MCT to image with {} components",
+            tile_ctx.idwt_outputs.len()
+        );
 
-            return;
-        }
+        return;
+    }
 
-        let (s, _) = tile_ctx.idwt_outputs.split_at_mut(3);
-        let [s0, s1, s2] = s else { unreachable!() };
-        let s0 = &mut s0.coefficients;
-        let s1 = &mut s1.coefficients;
-        let s2 = &mut s2.coefficients;
+    let (s, _) = tile_ctx.channel_data.split_at_mut(3);
+    let [s0, s1, s2] = s else { unreachable!() };
+    let s0 = &mut s0.container;
+    let s1 = &mut s1.container;
+    let s2 = &mut s2.container;
 
-        let transform = tile_ctx.tile.component_infos[0].wavelet_transform();
+    let transform = tile_ctx.tile.component_infos[0].wavelet_transform();
 
-        if transform != tile_ctx.tile.component_infos[1].wavelet_transform()
-            || tile_ctx.tile.component_infos[1].wavelet_transform()
-                != tile_ctx.tile.component_infos[2].wavelet_transform()
-        {
-            warn!("tried to apply MCT to image with different wavelet transforms per component");
-            return;
-        }
+    if transform != tile_ctx.tile.component_infos[1].wavelet_transform()
+        || tile_ctx.tile.component_infos[1].wavelet_transform()
+            != tile_ctx.tile.component_infos[2].wavelet_transform()
+    {
+        warn!("tried to apply MCT to image with different wavelet transforms per component");
+        return;
+    }
 
-        let len = s0.len();
+    let len = s0.len();
 
-        if len != s1.len() || s1.len() != s2.len() {
-            warn!("tried to apply MCT to image with different number of samples per component");
-            return;
-        }
+    if len != s1.len() || s1.len() != s2.len() {
+        warn!("tried to apply MCT to image with different number of samples per component");
+        return;
+    }
 
-        // TODO: We are also applying MCT to the padding here, which is not
-        // necessary, but makes the code simpler.
-        match transform {
-            WaveletTransform::Irreversible97 => {
-                for ((y0, y1), y2) in s0.iter_mut().zip(s1.iter_mut()).zip(s2.iter_mut()) {
-                    let i0 = *y0 + 1.402 * *y2;
-                    let i1 = *y0 - 0.34413 * *y1 - 0.71414 * *y2;
-                    let i2 = *y0 + 1.772 * *y1;
+    match transform {
+        WaveletTransform::Irreversible97 => {
+            for ((y0, y1), y2) in s0.iter_mut().zip(s1.iter_mut()).zip(s2.iter_mut()) {
+                let i0 = *y0 + 1.402 * *y2;
+                let i1 = *y0 - 0.34413 * *y1 - 0.71414 * *y2;
+                let i2 = *y0 + 1.772 * *y1;
 
-                    *y0 = i0;
-                    *y1 = i1;
-                    *y2 = i2;
-                }
+                *y0 = i0;
+                *y1 = i1;
+                *y2 = i2;
             }
-            WaveletTransform::Reversible53 => {
-                for ((y0, y1), y2) in s0.iter_mut().zip(s1.iter_mut()).zip(s2.iter_mut()) {
-                    let i1 = *y0 - ((*y2 + *y1) / 4.0).floor();
-                    let i0 = *y2 + i1;
-                    let i2 = *y1 + i1;
+        }
+        WaveletTransform::Reversible53 => {
+            for ((y0, y1), y2) in s0.iter_mut().zip(s1.iter_mut()).zip(s2.iter_mut()) {
+                let i1 = *y0 - ((*y2 + *y1) / 4.0).floor();
+                let i0 = *y2 + i1;
+                let i2 = *y1 + i1;
 
-                    *y0 = i0;
-                    *y1 = i1;
-                    *y2 = i2;
-                }
+                *y0 = i0;
+                *y1 = i1;
+                *y2 = i2;
             }
         }
     }
@@ -1136,11 +1155,15 @@ fn store<'a>(tile: &'a Tile<'a>, header: &Header, tile_ctx: &mut TileDecodeConte
         .zip(tile.component_infos.iter())
         .zip(tile_ctx.channel_data.iter_mut())
     {
-        for sample in idwt_output.coefficients.iter_mut() {
-            *sample += (1 << (component_info.size_info.precision - 1)) as f32;
-        }
-
         let component_tile = ComponentTile::new(tile, component_info);
+
+        // If we have MCT, the sign shift needs to be applied after the
+        // transform. We take care of that in the main decode method.
+        if !tile.mct {
+            for sample in idwt_output.coefficients.iter_mut() {
+                *sample += (1 << (component_info.size_info.precision - 1)) as f32;
+            }
+        }
 
         assert_eq!(idwt_output.rect, component_tile.rect);
 
