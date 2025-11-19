@@ -146,7 +146,8 @@ fn decode_tile<'a>(
     // we would have to collect the IDWT outputs of all components before
     // applying it. By not applying MCT here, we can get away with doing
     // IDWT and store on a per-component basis. Thus, we only need to
-    // store one IDWT per-time, allowing for better reuse of allocations.
+    // store one IDWT output at a time, allowing for better reuse of
+    // allocations.
     store(tile, header, tile_ctx);
 
     Ok(())
