@@ -4,6 +4,9 @@ use crate::codestream::WaveletTransform;
 use crate::decode::{Decomposition, SubBand, SubBandType};
 use crate::rect::IntRect;
 
+// Keep in sync with the type `F32` in the `simd` module!
+const SIMD_WIDTH: usize = 16;
+
 #[derive(Default, Copy, Clone)]
 pub(crate) struct Padding {
     pub(crate) left: usize,
@@ -146,7 +149,7 @@ fn interleave_samples(
         let bottom_padding = right_extension(transform, decomposition.rect.y1 as usize);
 
         let current_width = left_padding + decomposition.rect.width() as usize + right_padding;
-        let target_width = current_width.next_multiple_of(8);
+        let target_width = current_width.next_multiple_of(SIMD_WIDTH);
         right_padding += target_width - current_width;
 
         Padding::new(left_padding, top_padding, right_padding, bottom_padding)
@@ -426,6 +429,9 @@ mod simd {
     use crate::rect::IntRect;
     use fearless_simd::*;
 
+    const SIMD_WIDTH: usize = super::SIMD_WIDTH;
+    type F32<S> = f32x16<S>;
+
     pub(super) fn filter_vertical_simd(
         samples: &mut InterleavedSamples,
         rect: IntRect,
@@ -464,13 +470,16 @@ mod simd {
         stride: usize,
         transform: WaveletTransform,
     ) {
-        for base_column in (0..stride).step_by(8) {
+        for base_column in (0..stride).step_by(SIMD_WIDTH) {
             if start == end - 1 {
                 if !start.is_multiple_of(2) {
-                    let mut loaded =
-                        f32x8::from_slice(simd, &scanline[(start * stride) + base_column..][..8]);
+                    let mut loaded = F32::from_slice(
+                        simd,
+                        &scanline[(start * stride) + base_column..][..SIMD_WIDTH],
+                    );
                     loaded /= 2.0;
-                    scanline[(start * stride) + base_column..][..8].copy_from_slice(&loaded.val);
+                    scanline[(start * stride) + base_column..][..SIMD_WIDTH]
+                        .copy_from_slice(&loaded.val);
                 }
 
                 continue;
@@ -505,14 +514,16 @@ mod simd {
 
         for i in (start - i_left)..start {
             let idx = periodic_symmetric_extension(i, start, end);
-            let loaded = f32x8::from_slice(simd, &scanline[idx * stride + base_column..][..8]);
-            scanline[i * stride + base_column..][..8].copy_from_slice(&loaded.val);
+            let loaded =
+                F32::from_slice(simd, &scanline[idx * stride + base_column..][..SIMD_WIDTH]);
+            scanline[i * stride + base_column..][..SIMD_WIDTH].copy_from_slice(&loaded.val);
         }
 
         for i in end..(end + i_right) {
             let idx = periodic_symmetric_extension(i, start, end);
-            let loaded = f32x8::from_slice(simd, &scanline[idx * stride + base_column..][..8]);
-            scanline[i * stride + base_column..][..8].copy_from_slice(&loaded.val);
+            let loaded =
+                F32::from_slice(simd, &scanline[idx * stride + base_column..][..SIMD_WIDTH]);
+            scanline[i * stride + base_column..][..SIMD_WIDTH].copy_from_slice(&loaded.val);
         }
     }
 
@@ -530,26 +541,26 @@ mod simd {
         for n in start / 2..(end / 2) + 1 {
             let base_idx = 2 * n * stride + base_column;
 
-            let mut s1 = f32x8::from_slice(simd, &scanline[base_idx..][..8]);
-            let s2 = f32x8::from_slice(simd, &scanline[base_idx - stride..][..8]);
-            let s3 = f32x8::from_slice(simd, &scanline[base_idx + stride..][..8]);
+            let mut s1 = F32::from_slice(simd, &scanline[base_idx..][..SIMD_WIDTH]);
+            let s2 = F32::from_slice(simd, &scanline[base_idx - stride..][..SIMD_WIDTH]);
+            let s3 = F32::from_slice(simd, &scanline[base_idx + stride..][..SIMD_WIDTH]);
 
             s1 -= ((s2 + s3 + 2.0) / 4.0).floor();
 
-            scanline[base_idx..][..8].copy_from_slice(&s1.val);
+            scanline[base_idx..][..SIMD_WIDTH].copy_from_slice(&s1.val);
         }
 
         // Equation (F-6).
         for n in start / 2..(end / 2) {
             let base_idx = (2 * n + 1) * stride + base_column;
 
-            let mut s1 = f32x8::from_slice(simd, &scanline[base_idx..][..8]);
-            let s2 = f32x8::from_slice(simd, &scanline[base_idx - stride..][..8]);
-            let s3 = f32x8::from_slice(simd, &scanline[base_idx + stride..][..8]);
+            let mut s1 = F32::from_slice(simd, &scanline[base_idx..][..SIMD_WIDTH]);
+            let s2 = F32::from_slice(simd, &scanline[base_idx - stride..][..SIMD_WIDTH]);
+            let s3 = F32::from_slice(simd, &scanline[base_idx + stride..][..SIMD_WIDTH]);
 
             s1 += ((s2 + s3) / 2.0).floor();
 
-            scanline[base_idx..][..8].copy_from_slice(&s1.val);
+            scanline[base_idx..][..SIMD_WIDTH].copy_from_slice(&s1.val);
         }
     }
 
@@ -569,75 +580,75 @@ mod simd {
         const DELTA: f32 = 0.443_506_87;
         const KAPPA: f32 = 1.230_174_1;
 
-        let alpha = f32x8::splat(simd, ALPHA);
-        let beta = f32x8::splat(simd, BETA);
-        let gamma = f32x8::splat(simd, GAMMA);
-        let delta = f32x8::splat(simd, DELTA);
-        let kappa = f32x8::splat(simd, KAPPA);
-        let inv_kappa = f32x8::splat(simd, 1.0 / KAPPA);
+        let alpha = F32::splat(simd, ALPHA);
+        let beta = F32::splat(simd, BETA);
+        let gamma = F32::splat(simd, GAMMA);
+        let delta = F32::splat(simd, DELTA);
+        let kappa = F32::splat(simd, KAPPA);
+        let inv_kappa = F32::splat(simd, 1.0 / KAPPA);
 
         // Step 1.
         for i in (start / 2 - 1)..(end / 2 + 2) {
             let base_idx = (2 * i) * stride + base_column;
-            let mut vals = f32x8::from_slice(simd, &scanline[base_idx..][..8]);
+            let mut vals = F32::from_slice(simd, &scanline[base_idx..][..SIMD_WIDTH]);
             vals *= kappa;
-            scanline[base_idx..][..8].copy_from_slice(&vals.val);
+            scanline[base_idx..][..SIMD_WIDTH].copy_from_slice(&vals.val);
         }
 
         // Step 2.
         for i in (start / 2 - 2)..(end / 2 + 2) {
             let base_idx = (2 * i + 1) * stride + base_column;
-            let mut vals = f32x8::from_slice(simd, &scanline[base_idx..][..8]);
+            let mut vals = F32::from_slice(simd, &scanline[base_idx..][..SIMD_WIDTH]);
             vals *= inv_kappa;
-            scanline[base_idx..][..8].copy_from_slice(&vals.val);
+            scanline[base_idx..][..SIMD_WIDTH].copy_from_slice(&vals.val);
         }
 
         // Step 3.
         for i in (start / 2 - 1)..(end / 2 + 2) {
             let base_idx = (2 * i) * stride + base_column;
 
-            let mut s1 = f32x8::from_slice(simd, &scanline[base_idx..][..8]);
-            let s2 = f32x8::from_slice(simd, &scanline[base_idx - stride..][..8]);
-            let s3 = f32x8::from_slice(simd, &scanline[base_idx + stride..][..8]);
+            let mut s1 = F32::from_slice(simd, &scanline[base_idx..][..SIMD_WIDTH]);
+            let s2 = F32::from_slice(simd, &scanline[base_idx - stride..][..SIMD_WIDTH]);
+            let s3 = F32::from_slice(simd, &scanline[base_idx + stride..][..SIMD_WIDTH]);
 
             s1 -= delta * (s2 + s3);
-            scanline[base_idx..][..8].copy_from_slice(&s1.val);
+            scanline[base_idx..][..SIMD_WIDTH].copy_from_slice(&s1.val);
         }
 
         // Step 4.
         for i in (start / 2 - 1)..(end / 2 + 1) {
             let base_idx = (2 * i + 1) * stride + base_column;
 
-            let mut s1 = f32x8::from_slice(simd, &scanline[base_idx..][..8]);
-            let s2 = f32x8::from_slice(simd, &scanline[base_idx - stride..][..8]);
-            let s3 = f32x8::from_slice(simd, &scanline[base_idx + stride..][..8]);
+            let mut s1 = F32::from_slice(simd, &scanline[base_idx..][..SIMD_WIDTH]);
+            let s2 = F32::from_slice(simd, &scanline[base_idx - stride..][..SIMD_WIDTH]);
+            let s3 = F32::from_slice(simd, &scanline[base_idx + stride..][..SIMD_WIDTH]);
 
             s1 -= gamma * (s2 + s3);
-            scanline[base_idx..][..8].copy_from_slice(&s1.val);
+            scanline[base_idx..][..SIMD_WIDTH].copy_from_slice(&s1.val);
         }
 
         // Step 5.
         for i in (start / 2)..(end / 2 + 1) {
             let base_idx = (2 * i) * stride + base_column;
 
-            let mut s1 = f32x8::from_slice(simd, &scanline[base_idx..][..8]);
-            let s2 = f32x8::from_slice(simd, &scanline[base_idx - stride..][..8]);
-            let s3 = f32x8::from_slice(simd, &scanline[base_idx + stride..][..8]);
+            let mut s1 = F32::from_slice(simd, &scanline[base_idx..][..SIMD_WIDTH]);
+            let s2 = F32::from_slice(simd, &scanline[base_idx - stride..][..SIMD_WIDTH]);
+            let s3 = F32::from_slice(simd, &scanline[base_idx + stride..][..SIMD_WIDTH]);
 
             s1 -= beta * (s2 + s3);
-            scanline[base_idx..][..8].copy_from_slice(&s1.val);
+            scanline[base_idx..][..SIMD_WIDTH].copy_from_slice(&s1.val);
         }
 
         // Step 6.
         for i in (start / 2)..(end / 2) {
             let base_idx = (2 * i + 1) * stride + base_column;
 
-            let mut s1 = f32x8::from_slice(simd, &scanline[base_idx..][..8]);
-            let s2 = f32x8::from_slice(simd, &scanline[base_idx - stride..][..8]);
-            let s3 = f32x8::from_slice(simd, &scanline[base_idx + stride..][..8]);
+            let mut s1 = F32::from_slice(simd, &scanline[base_idx..][..SIMD_WIDTH]);
+            let s2 = F32::from_slice(simd, &scanline[base_idx - stride..][..SIMD_WIDTH]);
+            let s3 = F32::from_slice(simd, &scanline[base_idx + stride..][..SIMD_WIDTH]);
 
             s1 -= alpha * (s2 + s3);
-            scanline[base_idx..][..8].copy_from_slice(&s1.val);
+            scanline[base_idx..][..SIMD_WIDTH].copy_from_slice(&s1.val);
         }
     }
 }
