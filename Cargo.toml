@@ -52,3 +52,9 @@ zune-jpeg = { version = "0.5.3" }
 vello_cpu = { git = "https://github.com/linebender/vello", rev = "9ae9a530", default-features = false, features = ["std", "png"] }
 fast_image_resize = { version = "5", default-features = false }
 fearless_simd = "0.3.0"
+
+# Makes it easier to debug with a profiler
+[profile.instrument]
+inherits = "release"
+debug = true
+strip = "none"
