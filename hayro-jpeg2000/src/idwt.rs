@@ -5,7 +5,7 @@ use crate::decode::{Decomposition, SubBand, SubBandType};
 use crate::rect::IntRect;
 
 // Keep in sync with the type `F32` in the `simd` module!
-const SIMD_WIDTH: usize = 16;
+const SIMD_WIDTH: usize = 8;
 
 #[derive(Default, Copy, Clone)]
 pub(crate) struct Padding {
@@ -430,7 +430,7 @@ mod simd {
     use fearless_simd::*;
 
     const SIMD_WIDTH: usize = super::SIMD_WIDTH;
-    type F32<S> = f32x16<S>;
+    type F32<S> = f32x8<S>;
 
     pub(super) fn filter_vertical_simd(
         samples: &mut InterleavedSamples,
