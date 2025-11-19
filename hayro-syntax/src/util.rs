@@ -31,7 +31,7 @@ pub trait FloatExt: Sized + Sub<f32, Output = f32> + Copy {
 
 impl FloatExt for f32 {
     fn is_nearly_zero_within_tolerance(&self, tolerance: f32) -> bool {
-        debug_assert!(tolerance >= 0.0, "tolerance must be positive");
+        debug_assert!(tolerance >= 0.0, "tolerance must be non-negative");
 
         self.abs() <= tolerance
     }

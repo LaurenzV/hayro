@@ -73,7 +73,7 @@ pub trait Float32Ext: Sized + Sub<f32, Output = f32> + Copy + PartialOrd<f32> {
 
 impl Float32Ext for f32 {
     fn is_nearly_zero_within_tolerance(&self, tolerance: f32) -> bool {
-        debug_assert!(tolerance >= 0.0, "tolerance must be positive");
+        debug_assert!(tolerance >= 0.0, "tolerance must be non-negative");
 
         self.abs() <= tolerance
     }
@@ -107,7 +107,7 @@ pub trait Float64Ext: Sized + Sub<f64, Output = f64> + Copy + PartialOrd<f64> {
 
 impl Float64Ext for f64 {
     fn is_nearly_zero_within_tolerance(&self, tolerance: f64) -> bool {
-        debug_assert!(tolerance >= 0.0, "tolerance must be positive");
+        debug_assert!(tolerance >= 0.0, "tolerance must be non-negative");
 
         self.abs() <= tolerance
     }
