@@ -1,6 +1,7 @@
 use crate::filter::FilterResult;
 use crate::object::stream::{ImageColorSpace, ImageData, ImageDecodeParams};
 use hayro_common::bit::BitWriter;
+use hayro_jpeg2000::bitmap::ChannelData;
 use hayro_jpeg2000::{ColourSpecificationMethod, EnumeratedColourspace};
 
 impl ImageColorSpace {
@@ -48,12 +49,6 @@ pub(crate) fn decode(data: &[u8], params: &ImageDecodeParams) -> Option<FilterRe
     let mut buf = vec![0.0; max_len * components.len()];
     let mut buf_iter = buf.iter_mut();
 
-    for sample in 0..max_len {
-        for channel in components.iter() {
-            *buf_iter.next().unwrap() = channel.container[sample];
-        }
-    }
-
     if matches!(
         bitmap
             .metadata
@@ -65,7 +60,13 @@ pub(crate) fn decode(data: &[u8], params: &ImageDecodeParams) -> Option<FilterRe
         ))
     ) {
         let bit_depth = components.first().map(|c| c.bit_depth).unwrap_or(bpc);
-        sycc_to_rgb(&mut buf, bit_depth);
+        sycc_to_rgb(components, bit_depth);
+    }
+
+    for sample in 0..max_len {
+        for channel in components.iter() {
+            *buf_iter.next().unwrap() = channel.container[sample];
+        }
     }
 
     let buf = scale(buf.as_slice(), bpc, cs.num_components(), width, height).unwrap();
@@ -123,25 +124,30 @@ fn scale(
     }
 }
 
-fn sycc_to_rgb(data: &mut [f32], bit_depth: u8) {
+fn sycc_to_rgb(components: &mut [ChannelData], bit_depth: u8) {
     let offset = (1u32 << (bit_depth as u32 - 1)) as f32;
     let max_value = ((1u32 << bit_depth as u32) - 1) as f32;
 
-    for pixel in data.chunks_exact_mut(3) {
-        let y = pixel[0];
-        let cb = pixel[1] - offset;
-        let cr = pixel[2] - offset;
+    let [y, cb, cr] = components else {
+        unreachable!();
+    };
 
-        let mut r = y + 1.402_f32 * cr;
-        let mut g = y - 0.344136_f32 * cb - 0.714136_f32 * cr;
-        let mut b = y + 1.772_f32 * cb;
+    for ((y, cb), cr) in y
+        .container
+        .iter_mut()
+        .zip(cb.container.iter_mut())
+        .zip(cr.container.iter_mut())
+    {
+        *cb = *cb - offset;
+        *cr = *cr - offset;
 
-        r = r.clamp(0.0, max_value);
-        g = g.clamp(0.0, max_value);
-        b = b.clamp(0.0, max_value);
+        let r = *y + 1.402_f32 * *cr;
+        let g = *y - 0.344136_f32 * *cb - 0.714136_f32 * *cr;
+        let b = *y + 1.772_f32 * *cb;
 
-        pixel[0] = r;
-        pixel[1] = g;
-        pixel[2] = b;
+        // min + max is better than clamp in terms of performance.
+        *y = r.min(max_value).max(0.0);
+        *cb = g.min(max_value).max(0.0);
+        *cr = b.min(max_value).max(0.0);
     }
 }
