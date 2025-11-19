@@ -40,16 +40,17 @@ pub(crate) fn decode(data: &[u8], params: &ImageDecodeParams) -> Option<FilterRe
         None
     };
 
-    let mut buf = vec![];
     let max_len = components
         .iter()
         .map(|n| n.container.len())
         .max()
         .unwrap_or(0);
+    let mut buf = vec![0.0; max_len * components.len()];
+    let mut buf_iter = buf.iter_mut();
 
     for sample in 0..max_len {
         for channel in components.iter() {
-            buf.push(channel.container[sample]);
+            *buf_iter.next().unwrap() = channel.container[sample];
         }
     }
 
