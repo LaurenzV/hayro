@@ -41,13 +41,7 @@ pub(crate) fn decode(data: &[u8], params: &ImageDecodeParams) -> Option<FilterRe
         None
     };
 
-    let max_len = components
-        .iter()
-        .map(|n| n.container.len())
-        .max()
-        .unwrap_or(0);
-    let mut buf = vec![0.0; max_len * components.len()];
-    let mut buf_iter = buf.iter_mut();
+    let bit_depth = components.first().map(|c| c.bit_depth).unwrap_or(bpc);
 
     if matches!(
         bitmap
@@ -59,20 +53,84 @@ pub(crate) fn decode(data: &[u8], params: &ImageDecodeParams) -> Option<FilterRe
             EnumeratedColourspace::Sycc
         ))
     ) {
-        let bit_depth = components.first().map(|c| c.bit_depth).unwrap_or(bpc);
         sycc_to_rgb(components, bit_depth);
     }
 
-    for sample in 0..max_len {
-        for channel in components.iter() {
-            *buf_iter.next().unwrap() = channel.container[sample];
-        }
-    }
+    let max_len = components
+        .iter()
+        .map(|n| n.container.len())
+        .max()
+        .unwrap_or(0);
 
-    let buf = scale(buf.as_slice(), bpc, cs.num_components(), width, height).unwrap();
+    let u8_buf: Vec<u8> = if bit_depth == 8 && matches!(components.len(), 1 | 3 | 4) {
+        // Fast path for the common case.
+
+        match components.len() {
+            1 => components[0]
+                .container
+                .iter()
+                .map(|v| v.round() as u8)
+                .collect(),
+            3 => {
+                let b = components.pop().unwrap();
+                let g = components.pop().unwrap();
+                let r = components.pop().unwrap();
+
+                let r = &r.container[..max_len];
+                let g = &g.container[..max_len];
+                let b = &b.container[..max_len];
+
+                let mut data = Vec::with_capacity(max_len * 3);
+
+                for i in 0..max_len {
+                    data.push(r[i].round() as u8);
+                    data.push(g[i].round() as u8);
+                    data.push(b[i].round() as u8);
+                }
+
+                data
+            }
+            4 => {
+                let k = components.pop().unwrap();
+                let y = components.pop().unwrap();
+                let m = components.pop().unwrap();
+                let c = components.pop().unwrap();
+
+                let c = &c.container[..max_len];
+                let m = &m.container[..max_len];
+                let y = &y.container[..max_len];
+                let k = &k.container[..max_len];
+
+                let mut data = Vec::with_capacity(max_len * 4);
+
+                for i in 0..max_len {
+                    data.push(c[i].round() as u8);
+                    data.push(m[i].round() as u8);
+                    data.push(y[i].round() as u8);
+                    data.push(k[i].round() as u8);
+                }
+
+                data
+            }
+            _ => unreachable!(),
+        }
+    } else {
+        // First interleave the channels into a contiguous buffer.
+        let mut buf = vec![0.0; max_len * components.len()];
+        let mut buf_iter = buf.iter_mut();
+
+        for sample in 0..max_len {
+            for channel in components.iter() {
+                *buf_iter.next().unwrap() = channel.container[sample];
+            }
+        }
+
+        // Scale to the bit depth
+        scale(buf.as_slice(), bpc, cs.num_components(), width, height).unwrap()
+    };
 
     Some(FilterResult {
-        data: buf,
+        data: u8_buf,
         image_data: Some(ImageData {
             alpha,
             color_space: Some(cs),
