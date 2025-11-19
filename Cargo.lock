@@ -355,6 +355,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "fearless_simd"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8fb2907d1f08b2b316b9223ced5b0e89d87028ba8deae9764741dba8ff7f3903"
+dependencies = [
+ "bytemuck",
+]
+
+[[package]]
 name = "flate2"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -504,6 +513,7 @@ dependencies = [
 name = "hayro-jpeg2000"
 version = "0.1.0"
 dependencies = [
+ "fearless_simd 0.3.0",
  "hayro-common",
  "image 0.25.8",
  "indicatif",
@@ -1457,7 +1467,7 @@ version = "0.0.1"
 source = "git+https://github.com/linebender/vello?rev=9ae9a530#9ae9a5303bf3043cb3631159bbaedebd26077252"
 dependencies = [
  "bytemuck",
- "fearless_simd",
+ "fearless_simd 0.2.0",
  "log",
  "peniko",
  "png 0.17.16",
