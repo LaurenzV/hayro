@@ -5,7 +5,7 @@
 //! component channels.
 
 use crate::bitmap::ChannelData;
-use crate::bitplane::CodeBlockDecodeContext;
+use crate::bitplane::{BitPlaneDecodeBuffers, CodeBlockDecodeContext};
 use crate::codestream::markers::{EPH, SOP};
 use crate::codestream::{
     ComponentInfo, Header, ProgressionOrder, QuantizationStyle, ReaderExt, WaveletTransform,
@@ -292,6 +292,8 @@ pub(crate) struct TileDecodeContext<'a> {
     pub(crate) idwt_scratch_buffer: Vec<f32>,
     /// A reusable context for decoding code blocks.
     pub(crate) code_block_decode_context: CodeBlockDecodeContext,
+    /// Reusable buffers for decoding bitplanes.
+    pub(crate) bit_plane_decode_buffers: BitPlaneDecodeBuffers,
     /// The raw, decoded samples for each channel.
     pub(crate) channel_data: Vec<ChannelData>,
 }
@@ -321,6 +323,7 @@ impl<'a> TileDecodeContext<'a> {
             idwt_scratch_buffer: vec![],
             idwt_outputs,
             code_block_decode_context: Default::default(),
+            bit_plane_decode_buffers: Default::default(),
             channel_data,
         }
     }
@@ -920,6 +923,7 @@ fn decode_bitplanes<'a>(
                     resolution,
                     component_info,
                     &mut tile_ctx.code_block_decode_context,
+                    &mut tile_ctx.bit_plane_decode_buffers,
                     storage,
                 )?;
             }
@@ -934,6 +938,7 @@ fn decode_sub_band_bitplanes(
     resolution: u16,
     component_info: &ComponentInfo,
     b_ctx: &mut CodeBlockDecodeContext,
+    bp_buffers: &mut BitPlaneDecodeBuffers,
     storage: &mut DecompositionStorage,
 ) -> Result<(), &'static str> {
     let sub_band = &mut storage.sub_bands[sub_band_idx];
@@ -987,6 +992,7 @@ fn decode_sub_band_bitplanes(
                 num_bitplanes,
                 &component_info.coding_style.parameters.code_block_style,
                 b_ctx,
+                bp_buffers,
                 &storage.layers[code_block.layers.start..code_block.layers.end],
                 &storage.segments,
             )?;

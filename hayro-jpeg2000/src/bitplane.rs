@@ -15,6 +15,22 @@ use crate::decode::{BitReaderExt, CodeBlock, Layer, Segment, SubBandType};
 use hayro_common::bit::BitReader;
 use log::warn;
 
+#[derive(Default)]
+pub(crate) struct BitPlaneDecodeBuffers {
+    combined_layers: Vec<u8>,
+    segment_ranges: Vec<usize>,
+    segment_coding_passes: Vec<u8>,
+}
+impl BitPlaneDecodeBuffers {
+    fn reset(&mut self) {
+        self.combined_layers.clear();
+        self.segment_ranges.clear();
+        self.segment_ranges.push(0);
+        self.segment_coding_passes.clear();
+        self.segment_coding_passes.push(0);
+    }
+}
+
 /// Decode the layers of the given code block into coefficients.
 ///
 /// The result will be stored in the form of a vector of signs and magnitudes
@@ -25,6 +41,7 @@ pub(crate) fn decode(
     num_bitplanes: u8,
     style: &CodeBlockStyle,
     ctx: &mut CodeBlockDecodeContext,
+    bp_buffers: &mut BitPlaneDecodeBuffers,
     layers: &[Layer],
     all_segments: &[Segment],
 ) -> Result<(), &'static str> {
@@ -47,13 +64,16 @@ pub(crate) fn decode(
         return Err("number of bitplanes is too high");
     }
 
-    let mut layer_buffer = std::mem::take(&mut ctx.layer_buffer).unwrap_or_default();
-    layer_buffer.clear();
-
-    decode_inner(code_block, style, num_bitplanes, layers, all_segments, ctx)
-        .ok_or("failed to decode code-block arithmetic data")?;
-
-    ctx.layer_buffer = Some(layer_buffer);
+    decode_inner(
+        code_block,
+        style,
+        num_bitplanes,
+        layers,
+        all_segments,
+        ctx,
+        bp_buffers,
+    )
+    .ok_or("failed to decode code-block arithmetic data")?;
 
     Ok(())
 }
@@ -65,10 +85,9 @@ fn decode_inner(
     layers: &[Layer],
     all_segments: &[Segment],
     ctx: &mut CodeBlockDecodeContext,
+    bp_buffers: &mut BitPlaneDecodeBuffers,
 ) -> Option<()> {
-    let mut combined_layers = vec![];
-    let mut segment_ranges = vec![0];
-    let mut segment_coding_passes = vec![0];
+    bp_buffers.reset();
 
     let mut last_segment_idx = 0;
     let mut coding_passes = 0;
@@ -80,12 +99,14 @@ fn decode_inner(
                 if segment.idx != last_segment_idx {
                     assert_eq!(segment.idx, last_segment_idx + 1);
 
-                    segment_ranges.push(combined_layers.len());
-                    segment_coding_passes.push(coding_passes);
+                    bp_buffers
+                        .segment_ranges
+                        .push(bp_buffers.combined_layers.len());
+                    bp_buffers.segment_coding_passes.push(coding_passes);
                     last_segment_idx += 1;
                 }
 
-                combined_layers.extend(segment.data);
+                bp_buffers.combined_layers.extend(segment.data);
                 coding_passes += segment.coding_pases;
             }
         }
@@ -93,8 +114,10 @@ fn decode_inner(
 
     assert_eq!(coding_passes, code_block.number_of_coding_passes);
 
-    segment_ranges.push(combined_layers.len());
-    segment_coding_passes.push(coding_passes);
+    bp_buffers
+        .segment_ranges
+        .push(bp_buffers.combined_layers.len());
+    bp_buffers.segment_coding_passes.push(coding_passes);
 
     let is_normal_mode =
         !style.selective_arithmetic_coding_bypass && !style.termination_on_each_pass;
@@ -102,7 +125,7 @@ fn decode_inner(
     if is_normal_mode {
         // Only one termination per code block, so we can just decode the
         // whole range in one single pass.
-        let mut decoder = ArithmeticDecoder::new(&combined_layers);
+        let mut decoder = ArithmeticDecoder::new(&bp_buffers.combined_layers);
         handle_coding_passes(
             0,
             code_block.number_of_coding_passes,
@@ -116,11 +139,12 @@ fn decode_inner(
         // and a termination is introduced every time. Otherwise, for only
         // arithmetic coding bypass, terminations are introduced based on the
         // exact index of the covered coding passes (see Table D.9).
-        for segment in 0..segment_coding_passes.len() - 1 {
-            let start_coding_pass = segment_coding_passes[segment];
-            let end_coding_pass = segment_coding_passes[segment + 1];
+        for segment in 0..bp_buffers.segment_coding_passes.len() - 1 {
+            let start_coding_pass = bp_buffers.segment_coding_passes[segment];
+            let end_coding_pass = bp_buffers.segment_coding_passes[segment + 1];
 
-            let data = &combined_layers[segment_ranges[segment]..segment_ranges[segment + 1]];
+            let data = &bp_buffers.combined_layers
+                [bp_buffers.segment_ranges[segment]..bp_buffers.segment_ranges[segment + 1]];
 
             let use_arithmetic = if style.selective_arithmetic_coding_bypass {
                 if start_coding_pass <= 9 {
@@ -236,10 +260,6 @@ pub(crate) struct CodeBlockDecodeContext {
     sub_band_type: SubBandType,
     /// The arithmetic decoder contexts for each context label.
     contexts: [ArithmeticDecoderContext; 19],
-    /// A buffer used for concatenating the data of layers for a single codeblock.
-    /// The allocation will be taken out at the beginning of a decode operation
-    /// (leaving `None` in place) and be put back after decoding.
-    layer_buffer: Option<Vec<u8>>,
 }
 
 impl Default for CodeBlockDecodeContext {
@@ -255,7 +275,6 @@ impl Default for CodeBlockDecodeContext {
             vertically_causal: false,
             sub_band_type: SubBandType::LowLow,
             contexts: [ArithmeticDecoderContext::default(); 19],
-            layer_buffer: Some(vec![]),
         }
     }
 }
@@ -820,7 +839,7 @@ impl BitDecoder for BypassDecoder<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::{CodeBlockDecodeContext, PositionIterator, decode};
+    use super::{BitPlaneDecodeBuffers, CodeBlockDecodeContext, PositionIterator, decode};
     use crate::codestream::CodeBlockStyle;
     use crate::decode::{CodeBlock, Layer, Segment, SubBandType};
     use crate::rect::IntRect;
@@ -899,6 +918,7 @@ mod tests {
         };
 
         let mut ctx = CodeBlockDecodeContext::default();
+        let mut bp_buffers = BitPlaneDecodeBuffers::default();
 
         decode(
             &code_block,
@@ -906,6 +926,7 @@ mod tests {
             6,
             &CodeBlockStyle::default(),
             &mut ctx,
+            &mut bp_buffers,
             &[Layer {
                 segments: Some(0..1),
             }],
@@ -941,6 +962,7 @@ mod tests {
         };
 
         let mut ctx = CodeBlockDecodeContext::default();
+        let mut bp_buffers = BitPlaneDecodeBuffers::default();
 
         decode(
             &code_block,
@@ -948,6 +970,7 @@ mod tests {
             3,
             &CodeBlockStyle::default(),
             &mut ctx,
+            &mut bp_buffers,
             &[Layer {
                 segments: Some(0..1),
             }],
@@ -999,6 +1022,7 @@ mod tests {
         };
 
         let mut ctx = CodeBlockDecodeContext::default();
+        let mut bp_buffers = BitPlaneDecodeBuffers::default();
 
         decode(
             &code_block,
@@ -1006,6 +1030,7 @@ mod tests {
             10,
             &CodeBlockStyle::default(),
             &mut ctx,
+            &mut bp_buffers,
             &[Layer {
                 segments: Some(0..1),
             }],
