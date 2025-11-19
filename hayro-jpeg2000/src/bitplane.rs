@@ -35,6 +35,7 @@ impl BitPlaneDecodeBuffers {
 ///
 /// The result will be stored in the form of a vector of signs and magnitudes
 /// in the bitplane decoder context.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn decode(
     code_block: &CodeBlock,
     sub_band_type: SubBandType,
