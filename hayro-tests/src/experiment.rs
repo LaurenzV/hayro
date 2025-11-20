@@ -1,5 +1,5 @@
 use hayro::Pdf;
-use memchr::memmem::Finder;
+use hayro_syntax::Filter;
 use rayon::prelude::*;
 use std::collections::HashSet;
 use std::env;
@@ -15,10 +15,10 @@ static IGNORE_LIST: LazyLock<HashSet<String>> = LazyLock::new(|| {
     })
 });
 
-fn load_corpus_ignore_list() -> std::io::Result<HashSet<String>> {
+fn load_list(name: &str) -> std::io::Result<HashSet<String>> {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("assets")
-        .join("corpus_ignore_list.txt");
+        .join(format!("{}.txt", name));
     let data = fs::read_to_string(&path)?;
 
     let mut set = HashSet::new();
@@ -40,6 +40,14 @@ fn load_corpus_ignore_list() -> std::io::Result<HashSet<String>> {
     Ok(set)
 }
 
+fn load_corpus_ignore_list() -> std::io::Result<HashSet<String>> {
+    load_list("corpus_ignore_list")
+}
+
+fn load_jpx_list() -> std::io::Result<HashSet<String>> {
+    load_list("jpx_images")
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
 
@@ -49,53 +57,70 @@ fn main() {
     }
 
     let folder = &args[1];
+    check_jpx_images(folder);
+}
 
+fn load_pdf_paths(folder: &str, mut custom_condition: impl FnMut(&str) -> bool) -> Vec<PathBuf> {
     let mut pdf_paths: Vec<PathBuf> = WalkDir::new(folder)
         .into_iter()
         .map(|entry| entry.unwrap())
         .filter(|entry| entry.file_type().is_file())
         .map(|entry| entry.path().to_path_buf())
         .filter(|path| {
+            let name = path.file_stem().unwrap().to_string_lossy().to_string();
+
             path.extension()
                 .unwrap_or_default()
                 .eq_ignore_ascii_case("pdf")
+                && !IGNORE_LIST.contains(&name)
+                && custom_condition(&name)
         })
         .collect();
 
     pdf_paths.sort();
 
-    println!("Found {} PDF files", pdf_paths.len());
+    pdf_paths
+}
+
+fn check_jpx_images(folder: &str) {
+    let jpx_list = load_jpx_list().unwrap();
+    let paths = load_pdf_paths(folder, |name| jpx_list.contains(&name.to_string()));
+
+    println!("Found {} PDF files with JPX images", paths.len());
 
     let count = AtomicU32::new(0);
 
-    pdf_paths.par_iter().for_each(|path| {
+    paths.par_iter().for_each(|path| {
         let name = path.file_stem().unwrap().to_str().unwrap().to_string();
-        if IGNORE_LIST.contains(name.as_str()) {
-            return;
-        }
-
         let data = Arc::new(fs::read(path).unwrap());
 
         match Pdf::new(data.clone()) {
-            Ok(_) => {}
-            Err(_) => {
-                let html_finder = Finder::new("html");
-                let script_finder = Finder::new("<script");
-                let reason = if html_finder.find(data.as_slice()).is_some()
-                    || script_finder.find(data.as_slice()).is_some()
-                {
-                    "html".to_string()
-                } else {
-                    "other".to_string()
-                };
-                println!("{} - {}", name, reason);
+            Ok(pdf) => {
+                for object in pdf.objects() {
+                    if let Some(stream) = object.into_stream() {
+                        if stream.filters().first() == Some(&Filter::JpxDecode) {
+                            let raw_data = stream.raw_data();
+
+                            match hayro_jpeg2000::read(raw_data.as_ref()) {
+                                Ok(_) => {
+                                    // println!("ok!")
+                                }
+                                Err(e) => {
+                                    eprintln!("{}", name);
+                                    eprintln!("{}", e);
+                                }
+                            }
+                        }
+                    }
+                }
             }
+            Err(_) => unimplemented!(),
         }
 
         let count = count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 
-        if count.is_multiple_of(10000) {
-            println!("Processed {} PDFs", count);
+        if count.is_multiple_of(100) {
+            eprintln!("Processed {} PDFs", count);
         }
     });
 }
