@@ -581,6 +581,10 @@ fn parse_cmap_name(cmap: &mut CMap, lexer: &mut CMapLexer) -> Option<()> {
 }
 
 pub fn parse_cmap(input: &str) -> Option<CMap> {
+    if !input.is_ascii() {
+        return None;
+    }
+
     let mut cmap = CMap::new();
     let mut lexer = CMapLexer::new(input);
 
