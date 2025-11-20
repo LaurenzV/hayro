@@ -84,7 +84,7 @@ fn load_pdf_paths(folder: &str, mut custom_condition: impl FnMut(&str) -> bool) 
 
 fn check_jpx_images(folder: &str) {
     let jpx_list = load_jpx_list().unwrap();
-    let paths = load_pdf_paths(folder, |name| jpx_list.contains(&name.to_string()));
+    let paths = load_pdf_paths(folder, |name| jpx_list.contains(name));
 
     println!("Found {} PDF files with JPX images", paths.len());
 
@@ -97,18 +97,18 @@ fn check_jpx_images(folder: &str) {
         match Pdf::new(data.clone()) {
             Ok(pdf) => {
                 for object in pdf.objects() {
-                    if let Some(stream) = object.into_stream() {
-                        if stream.filters().first() == Some(&Filter::JpxDecode) {
-                            let raw_data = stream.raw_data();
+                    if let Some(stream) = object.into_stream()
+                        && stream.filters().first() == Some(&Filter::JpxDecode)
+                    {
+                        let raw_data = stream.raw_data();
 
-                            match hayro_jpeg2000::read(raw_data.as_ref()) {
-                                Ok(_) => {
-                                    // println!("ok!")
-                                }
-                                Err(e) => {
-                                    eprintln!("{}", name);
-                                    eprintln!("{}", e);
-                                }
+                        match hayro_jpeg2000::read(raw_data.as_ref()) {
+                            Ok(_) => {
+                                // println!("ok!")
+                            }
+                            Err(e) => {
+                                eprintln!("{}", name);
+                                eprintln!("{}", e);
                             }
                         }
                     }
