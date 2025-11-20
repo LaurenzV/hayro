@@ -347,7 +347,7 @@ impl CodeBlockDecodeContext {
     }
 
     fn reset_for_next_bitplane(&mut self) {
-        self.has_zero_coding = vec![0; self.has_zero_coding.len()];
+        self.has_zero_coding.fill(0);
     }
 
     fn significance_state(&self, position: &Position) -> u8 {
