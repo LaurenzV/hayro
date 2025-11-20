@@ -226,8 +226,7 @@ pub(crate) struct SubBand {
     pub(crate) sub_band_type: SubBandType,
     pub(crate) rect: IntRect,
     pub(crate) precincts: Range<usize>,
-    // TODO: Store in allocation storage.
-    pub(crate) coefficients: Vec<f32>,
+    pub(crate) coefficients: Range<usize>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -290,7 +289,9 @@ impl DecompositionStorage<'_> {
         self.segments.clear();
         self.layers.clear();
         self.code_blocks.clear();
-        self.coefficients.clear();
+        // No need to clear the coefficients, as they will be resized
+        // and then overridden.
+        // self.coefficients.clear();
         self.precincts.clear();
         self.sub_bands.clear();
         self.decompositions.clear();
@@ -358,6 +359,16 @@ fn build_decompositions(
     tile_ctx: &mut TileDecodeContext,
     storage: &mut DecompositionStorage,
 ) -> Result<(), &'static str> {
+    let mut total_coefficients = 0;
+
+    for component_tile in tile.component_tiles() {
+        total_coefficients +=
+            component_tile.rect.width() as usize * component_tile.rect.height() as usize;
+    }
+
+    storage.coefficients.resize(total_coefficients, 0.0);
+    let mut coefficient_counter = 0;
+
     for (component_idx, component_tile) in tile.component_tiles().enumerate() {
         // TODO: IMprove this
         let mut ll_sub_band = None;
@@ -385,14 +396,15 @@ fn build_decompositions(
                 let precincts =
                     build_precincts(&resolution_tile, sub_band_rect, tile_ctx, storage)?;
 
+                let added_coefficients = (sub_band_rect.width() * sub_band_rect.height()) as usize;
+                let coefficients = coefficient_counter..(coefficient_counter + added_coefficients);
+                coefficient_counter += added_coefficients;
+
                 ll_sub_band = Some(SubBand {
                     sub_band_type: SubBandType::LowLow,
                     rect: sub_band_rect,
                     precincts,
-                    coefficients: vec![
-                        0.0;
-                        (sub_band_rect.width() * sub_band_rect.height()) as usize
-                    ],
+                    coefficients,
                 })
             } else {
                 let mut build_sub_band =
@@ -402,16 +414,18 @@ fn build_decompositions(
                         let precincts =
                             build_precincts(&resolution_tile, sub_band_rect, tile_ctx, storage)?;
 
+                        let added_coefficients =
+                            (sub_band_rect.width() * sub_band_rect.height()) as usize;
+                        let coefficients =
+                            coefficient_counter..(coefficient_counter + added_coefficients);
+                        coefficient_counter += added_coefficients;
+
                         let idx = storage.sub_bands.len();
                         storage.sub_bands.push(SubBand {
                             sub_band_type,
                             rect: sub_band_rect,
                             precincts: precincts.clone(),
-                            coefficients: vec![
-                                0.0;
-                                (sub_band_rect.width() * sub_band_rect.height())
-                                    as usize
-                            ],
+                            coefficients,
                         });
 
                         Ok(idx)
@@ -439,6 +453,8 @@ fn build_decompositions(
             first_ll_sub_band,
         });
     }
+
+    assert_eq!(coefficient_counter, storage.coefficients.len());
 
     Ok(())
 }
@@ -1031,7 +1047,8 @@ fn decode_sub_band_bitplanes(
                 .chunks_exact(code_block.rect.width() as usize);
 
             for (y, (signs, magnitudes)) in sign_iter.zip(magnitude_iter).enumerate() {
-                let out_row = &mut sub_band.coefficients[((y_offset + y as u32)
+                let out_row = &mut storage.coefficients[sub_band.coefficients.clone()][((y_offset
+                    + y as u32)
                     * sub_band.rect.width())
                     as usize
                     + x_offset as usize..];
@@ -1076,6 +1093,7 @@ fn apply_idwt<'a>(
         &mut tile_ctx.idwt_scratch_buffer,
         &mut tile_ctx.idwt_output,
         component_info.coding_style.parameters.transformation,
+        &storage.coefficients,
     );
     Ok(())
 }

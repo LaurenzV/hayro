@@ -75,6 +75,7 @@ pub(crate) fn apply(
     scratch_buffer: &mut Vec<f32>,
     output: &mut IDWTOutput,
     transform: WaveletTransform,
+    sub_bands_coefficients: &[f32],
 ) {
     // To explain a bit why we have this scratch buffer and another coefficient
     // buffer: During IDWT, we need to continuously interleave the 4 sub-bands
@@ -109,7 +110,7 @@ pub(crate) fn apply(
     if decompositions.is_empty() {
         // Single decomposition, just copy the coefficients from the sub-band.
         coefficients.clear();
-        coefficients.extend_from_slice(&ll_sub_band.coefficients);
+        coefficients.extend_from_slice(&sub_bands_coefficients[ll_sub_band.coefficients.clone()]);
 
         output.padding = Padding::default();
         output.rect = ll_sub_band.rect;
@@ -139,11 +140,12 @@ pub(crate) fn apply(
     let mut use_scratch = decompositions.len().is_multiple_of(2);
 
     let mut temp_output = filter_2d(
-        IDWTInput::from_sub_band(ll_sub_band),
+        IDWTInput::from_sub_band(ll_sub_band, sub_bands_coefficients),
         if use_scratch { scratch } else { coefficients },
         &decompositions[0],
         transform,
         sub_bands,
+        sub_bands_coefficients,
     );
 
     for decomposition in decompositions.iter().skip(1) {
@@ -156,6 +158,7 @@ pub(crate) fn apply(
                 decomposition,
                 transform,
                 sub_bands,
+                sub_bands_coefficients,
             )
         } else {
             filter_2d(
@@ -164,6 +167,7 @@ pub(crate) fn apply(
                 decomposition,
                 transform,
                 sub_bands,
+                sub_bands_coefficients,
             )
         };
     }
@@ -179,9 +183,9 @@ struct IDWTInput<'a> {
 }
 
 impl<'a> IDWTInput<'a> {
-    fn from_sub_band(sub_band: &'a SubBand) -> IDWTInput<'a> {
+    fn from_sub_band(sub_band: &'a SubBand, sub_band_coefficients: &'a [f32]) -> IDWTInput<'a> {
         IDWTInput {
-            coefficients: &sub_band.coefficients,
+            coefficients: &sub_band_coefficients[sub_band.coefficients.clone()],
             padding: Padding::default(),
             sub_band_type: sub_band.sub_band_type,
         }
@@ -206,10 +210,18 @@ fn filter_2d(
     decomposition: &Decomposition,
     transform: WaveletTransform,
     sub_bands: &[SubBand],
+    sub_band_coefficients: &[f32],
 ) -> IDWTTempOutput {
     // First interleave all of the sub-bands into a single buffer. We also
     // apply a padding so that we can transparently deal with border values.
-    let padding = interleave_samples(input, decomposition, sub_bands, coefficients, transform);
+    let padding = interleave_samples(
+        input,
+        decomposition,
+        sub_bands,
+        coefficients,
+        transform,
+        sub_band_coefficients,
+    );
 
     if decomposition.rect.width() > 0 && decomposition.rect.height() > 0 {
         filter_horizontal(coefficients, padding, decomposition.rect, transform);
@@ -229,6 +241,7 @@ fn interleave_samples(
     sub_bands: &[SubBand],
     coefficients: &mut Vec<f32>,
     transform: WaveletTransform,
+    sub_bands_coefficients: &[f32],
 ) -> Padding {
     let new_padding = {
         // The reason why we need + 1 for the left and top padding is very
@@ -293,9 +306,18 @@ fn interleave_samples(
     // account.
     for idwt_input in [
         input,
-        IDWTInput::from_sub_band(&sub_bands[decomposition.sub_bands[0]]),
-        IDWTInput::from_sub_band(&sub_bands[decomposition.sub_bands[1]]),
-        IDWTInput::from_sub_band(&sub_bands[decomposition.sub_bands[2]]),
+        IDWTInput::from_sub_band(
+            &sub_bands[decomposition.sub_bands[0]],
+            sub_bands_coefficients,
+        ),
+        IDWTInput::from_sub_band(
+            &sub_bands[decomposition.sub_bands[1]],
+            sub_bands_coefficients,
+        ),
+        IDWTInput::from_sub_band(
+            &sub_bands[decomposition.sub_bands[2]],
+            sub_bands_coefficients,
+        ),
     ] {
         let (u_min, u_max) = match idwt_input.sub_band_type {
             SubBandType::LowLow | SubBandType::LowHigh => (u0.div_ceil(2), u1.div_ceil(2)),
