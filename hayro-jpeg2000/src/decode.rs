@@ -19,7 +19,7 @@ use crate::progression::{
     build_resolution_position_component_layer_sequence,
 };
 use crate::rect::IntRect;
-use crate::tag_tree::TagTree;
+use crate::tag_tree::{TagNode, TagTree};
 use crate::tile::{ComponentTile, ResolutionTile, Tile};
 use crate::{bitplane, idwt, tile};
 use hayro_common::bit::BitReader;
@@ -282,6 +282,7 @@ struct DecompositionStorage<'a> {
     sub_bands: Vec<SubBand>,
     decompositions: Vec<Decomposition>,
     tile_decompositions: Vec<TileDecompositions>,
+    tag_tree_nodes: Vec<TagNode>,
 }
 
 impl DecompositionStorage<'_> {
@@ -294,6 +295,7 @@ impl DecompositionStorage<'_> {
         self.sub_bands.clear();
         self.decompositions.clear();
         self.tile_decompositions.clear();
+        self.tag_tree_nodes.clear();
     }
 }
 
@@ -522,8 +524,10 @@ fn build_precincts(
                 storage,
             );
 
-            let code_inclusion_tree = TagTree::new(code_blocks_x, code_blocks_y);
-            let zero_bitplane_tree = TagTree::new(code_blocks_x, code_blocks_y);
+            let code_inclusion_tree =
+                TagTree::new(code_blocks_x, code_blocks_y, &mut storage.tag_tree_nodes);
+            let zero_bitplane_tree =
+                TagTree::new(code_blocks_x, code_blocks_y, &mut storage.tag_tree_nodes);
 
             storage.precincts.push(Precinct {
                 code_blocks: blocks,
@@ -751,6 +755,7 @@ fn get_code_block_lengths(
                 code_block.y_idx,
                 reader,
                 progression_data.layer_num as u32 + 1,
+                &mut storage.tag_tree_nodes,
             )? <= progression_data.layer_num as u32
         };
 
@@ -782,6 +787,7 @@ fn get_code_block_lengths(
                 code_block.y_idx,
                 reader,
                 u32::MAX,
+                &mut storage.tag_tree_nodes,
             )? as u8;
             trace!(
                 "zero bit-plane information: {}",

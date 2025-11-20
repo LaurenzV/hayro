@@ -10,9 +10,6 @@ use crate::decode::BitReaderExt;
 use hayro_common::bit::BitReader;
 use log::warn;
 
-// TODO: Can we change the architecture so that we don't need to reallocate
-// for each new tag tree but instead reuse existing allocations?
-
 #[derive(Debug, PartialEq, Eq, Clone, Default)]
 pub(crate) struct TagNode {
     /// The width of the area covered by the node.
@@ -40,8 +37,9 @@ pub(crate) struct TagNode {
     /// a leaf node, otherwise the level is > 0. The root node has the highest
     /// level.
     level: u16,
-    /// The children of the node, some of which might be dummy nodes.
-    children: Vec<TagNode>,
+    /// The indices of the children of the node, some of which might be dummy
+    /// nodes (indicated by the fact that the index is usize::MAX).
+    children: [usize; 4],
 }
 
 impl TagNode {
@@ -52,7 +50,7 @@ impl TagNode {
             level,
             value: 0,
             initialized: false,
-            children: Vec::with_capacity(4),
+            children: [usize::MAX, usize::MAX, usize::MAX, usize::MAX],
         }
     }
 
@@ -68,7 +66,7 @@ impl TagNode {
 }
 
 impl TagNode {
-    fn build(width: u32, height: u32, level: u16) -> Self {
+    fn build(width: u32, height: u32, level: u16, nodes: &mut Vec<TagNode>) -> Self {
         let mut tag = TagNode::new(width, height, level);
 
         if level == 0 {
@@ -83,117 +81,143 @@ impl TagNode {
         let top_left_width = tag.top_left_width();
         let top_left_height = tag.top_left_height();
 
-        let mut push = |node: TagNode| {
-            tag.children.push(node);
+        let mut push = |node: TagNode, child_idx: usize, nodes: &mut Vec<TagNode>| {
+            // If this is not the case, the child doesn't actually exist.
+            if node.width > 0 && node.height > 0 {
+                let node_idx = nodes.len();
+                nodes.push(node);
+                tag.children[child_idx] = node_idx;
+            }
         };
 
         // We always push four children, but some nodes might in reality have
         // fewer than that. In this case, the resulting node will simply have
         // a width or height of 0 and we can recognize that it technically
         // doesn't exist.
-        push(TagNode::build(top_left_width, top_left_height, level - 1));
-        push(TagNode::build(
-            width - top_left_width,
-            top_left_height,
-            level - 1,
-        ));
-        push(TagNode::build(
-            top_left_width,
-            height - top_left_height,
-            level - 1,
-        ));
-        push(TagNode::build(
+        let n1 = TagNode::build(top_left_width, top_left_height, level - 1, nodes);
+        push(n1, 0, nodes);
+
+        let n2 = TagNode::build(width - top_left_width, top_left_height, level - 1, nodes);
+        push(n2, 1, nodes);
+
+        let n3 = TagNode::build(top_left_width, height - top_left_height, level - 1, nodes);
+        push(n3, 2, nodes);
+
+        let n4 = TagNode::build(
             width - top_left_width,
             height - top_left_height,
             level - 1,
-        ));
+            nodes,
+        );
+        push(n4, 3, nodes);
 
         tag
     }
+}
 
-    fn read(
-        &mut self,
-        x: u32,
-        y: u32,
-        reader: &mut BitReader,
-        parent_val: u32,
-        max_val: u32,
-    ) -> Option<u32> {
-        if !self.initialized {
-            let mut val = u32::max(parent_val, self.value);
+fn read_tag_node(
+    node_idx: usize,
+    x: u32,
+    y: u32,
+    reader: &mut BitReader,
+    parent_val: u32,
+    max_val: u32,
+    nodes: &mut [TagNode],
+) -> Option<u32> {
+    let node = &mut nodes[node_idx];
 
-            loop {
-                if val >= max_val {
+    if !node.initialized {
+        let mut val = u32::max(parent_val, node.value);
+
+        loop {
+            if val >= max_val {
+                break;
+            }
+
+            // "Each node has an associated current value, which is
+            // initialized to zero (the minimum). A 0 bit in the tag tree
+            // means that the minimum (or the value in the case of the
+            // highest level) is larger than the current value and a 1 bit
+            // means that the minimum (or the value in the case of the
+            // highest level) is equal to the current value."
+            match reader.read_bits_with_stuffing(1)? {
+                0 => val += 1,
+                1 => {
+                    node.initialized = true;
                     break;
                 }
-
-                // "Each node has an associated current value, which is
-                // initialized to zero (the minimum). A 0 bit in the tag tree
-                // means that the minimum (or the value in the case of the
-                // highest level) is larger than the current value and a 1 bit
-                // means that the minimum (or the value in the case of the
-                // highest level) is equal to the current value."
-                match reader.read_bits_with_stuffing(1)? {
-                    0 => val += 1,
-                    1 => {
-                        self.initialized = true;
-                        break;
-                    }
-                    _ => unreachable!(),
-                }
+                _ => unreachable!(),
             }
-
-            self.value = val;
         }
 
-        // Abort early if we already reached the leaf node or the minimum
-        // value of all children is too large.
-        if self.value >= max_val || self.level == 0 {
-            return Some(self.value);
-        }
+        node.value = val;
+    }
 
-        let top_left_width = self.top_left_width();
-        let top_left_height = self.top_left_height();
+    // Abort early if we already reached the leaf node or the minimum
+    // value of all children is too large.
+    if node.value >= max_val || node.level == 0 {
+        return Some(node.value);
+    }
 
-        let left = x < top_left_width;
-        let top = y < top_left_height;
+    let top_left_width = node.top_left_width();
+    let top_left_height = node.top_left_height();
 
-        match (left, top) {
-            (true, true) => self.children[0].read(x, y, reader, self.value, max_val),
-            (false, true) => {
-                self.children[1].read(x - top_left_width, y, reader, self.value, max_val)
-            }
-            (true, false) => {
-                self.children[2].read(x, y - top_left_height, reader, self.value, max_val)
-            }
-            (false, false) => self.children[3].read(
-                x - top_left_width,
-                y - top_left_height,
-                reader,
-                self.value,
-                max_val,
-            ),
-        }
+    let left = x < top_left_width;
+    let top = y < top_left_height;
+
+    match (left, top) {
+        (true, true) => read_tag_node(node.children[0], x, y, reader, node.value, max_val, nodes),
+        (false, true) => read_tag_node(
+            node.children[1],
+            x - top_left_width,
+            y,
+            reader,
+            node.value,
+            max_val,
+            nodes,
+        ),
+        (true, false) => read_tag_node(
+            node.children[2],
+            x,
+            y - top_left_height,
+            reader,
+            node.value,
+            max_val,
+            nodes,
+        ),
+        (false, false) => read_tag_node(
+            node.children[3],
+            x - top_left_width,
+            y - top_left_height,
+            reader,
+            node.value,
+            max_val,
+            nodes,
+        ),
     }
 }
 
-#[derive(Clone)]
+#[derive(Copy, Clone)]
 pub(crate) struct TagTree {
-    root: TagNode,
+    root: usize,
     width: u32,
     height: u32,
 }
 
 impl TagTree {
-    pub(crate) fn new(width: u32, height: u32) -> Self {
+    pub(crate) fn new(width: u32, height: u32, nodes: &mut Vec<TagNode>) -> Self {
         // Calculate how many levels the tree has in total.
         let level = u32::max(
             width.next_power_of_two().ilog2(),
             height.next_power_of_two().ilog2(),
         );
 
+        let node = TagNode::build(width, height, level as u16, nodes);
+        let idx = nodes.len();
+        nodes.push(node);
+
         Self {
-            root: TagNode::build(width, height, level as u16),
+            root: idx,
             width,
             height,
         }
@@ -205,6 +229,7 @@ impl TagTree {
         y: u32,
         reader: &mut BitReader,
         max_val: u32,
+        nodes: &mut [TagNode],
     ) -> Option<u32> {
         if x >= self.width || y >= self.height {
             warn!(
@@ -216,7 +241,7 @@ impl TagTree {
             return None;
         }
 
-        self.root.read(x, y, reader, 0, max_val)
+        read_tag_node(self.root, x, y, reader, 0, max_val, nodes)
     }
 }
 
@@ -226,14 +251,10 @@ mod tests {
     use hayro_common::bit::BitWriter;
 
     impl TagNode {
-        fn is_dummy(&self) -> bool {
-            self.width == 0 || self.height == 0
-        }
-
         fn real_children(&self) -> usize {
             self.children
                 .iter()
-                .map(|c| if !c.is_dummy() { 1 } else { 0 })
+                .map(|c| if *c != usize::MAX { 1 } else { 0 })
                 .sum()
         }
     }
@@ -242,17 +263,36 @@ mod tests {
     /// "JPEG2000 Standard for Image compression" book.
     #[test]
     fn tag_tree_1() {
-        let mut tree = TagTree::new(6, 3);
+        let mut nodes = vec![];
+        let mut tree = TagTree::new(6, 3, &mut nodes);
 
-        assert_eq!(tree.root.real_children(), 2);
-        assert_eq!(tree.root.children[0].real_children(), 4);
-        assert_eq!(tree.root.children[0].children[0].real_children(), 4);
-        assert_eq!(tree.root.children[0].children[1].real_children(), 4);
-        assert_eq!(tree.root.children[0].children[2].real_children(), 2);
-        assert_eq!(tree.root.children[0].children[3].real_children(), 2);
-        assert_eq!(tree.root.children[1].real_children(), 2);
-        assert_eq!(tree.root.children[1].children[0].real_children(), 4);
-        assert_eq!(tree.root.children[1].children[2].real_children(), 2);
+        assert_eq!(nodes[tree.root].real_children(), 2);
+        assert_eq!(nodes[nodes[tree.root].children[0]].real_children(), 4);
+        assert_eq!(
+            nodes[nodes[nodes[tree.root].children[0]].children[0]].real_children(),
+            4
+        );
+        assert_eq!(
+            nodes[nodes[nodes[tree.root].children[0]].children[1]].real_children(),
+            4
+        );
+        assert_eq!(
+            nodes[nodes[nodes[tree.root].children[0]].children[2]].real_children(),
+            2
+        );
+        assert_eq!(
+            nodes[nodes[nodes[tree.root].children[0]].children[3]].real_children(),
+            2
+        );
+        assert_eq!(nodes[nodes[tree.root].children[1]].real_children(), 2);
+        assert_eq!(
+            nodes[nodes[nodes[tree.root].children[1]].children[0]].real_children(),
+            4
+        );
+        assert_eq!(
+            nodes[nodes[nodes[tree.root].children[1]].children[2]].real_children(),
+            2
+        );
 
         let mut buf = vec![0; 3];
 
@@ -267,17 +307,33 @@ mod tests {
 
         let mut reader = BitReader::new(&buf);
 
-        assert_eq!(tree.read(0, 0, &mut reader, u32::MAX).unwrap(), 1);
-        assert_eq!(tree.read(1, 0, &mut reader, u32::MAX).unwrap(), 3);
-        assert_eq!(tree.read(2, 0, &mut reader, u32::MAX).unwrap(), 2);
-        assert_eq!(tree.read(3, 0, &mut reader, u32::MAX).unwrap(), 3);
-        assert_eq!(tree.read(4, 0, &mut reader, u32::MAX).unwrap(), 2);
+        assert_eq!(
+            tree.read(0, 0, &mut reader, u32::MAX, &mut nodes).unwrap(),
+            1
+        );
+        assert_eq!(
+            tree.read(1, 0, &mut reader, u32::MAX, &mut nodes).unwrap(),
+            3
+        );
+        assert_eq!(
+            tree.read(2, 0, &mut reader, u32::MAX, &mut nodes).unwrap(),
+            2
+        );
+        assert_eq!(
+            tree.read(3, 0, &mut reader, u32::MAX, &mut nodes).unwrap(),
+            3
+        );
+        assert_eq!(
+            tree.read(4, 0, &mut reader, u32::MAX, &mut nodes).unwrap(),
+            2
+        );
     }
 
     /// Inclusion tag tree from Table B.5.
     #[test]
     fn tag_tree_2() {
-        let mut tree = TagTree::new(3, 2);
+        let mut nodes = vec![];
+        let mut tree = TagTree::new(3, 2, &mut nodes);
 
         let mut buf = vec![0; 1];
 
@@ -298,11 +354,35 @@ mod tests {
 
         let next_layer = 1;
 
-        assert_eq!(tree.read(0, 0, &mut reader, next_layer).unwrap(), 0);
-        assert_eq!(tree.read(1, 0, &mut reader, next_layer).unwrap(), 0);
-        assert_eq!(tree.read(2, 0, &mut reader, next_layer).unwrap(), 1);
-        assert_eq!(tree.read(0, 1, &mut reader, next_layer).unwrap(), 1);
-        assert_eq!(tree.read(1, 1, &mut reader, next_layer).unwrap(), 1);
-        assert_eq!(tree.read(2, 1, &mut reader, next_layer).unwrap(), 1);
+        assert_eq!(
+            tree.read(0, 0, &mut reader, next_layer, &mut nodes)
+                .unwrap(),
+            0
+        );
+        assert_eq!(
+            tree.read(1, 0, &mut reader, next_layer, &mut nodes)
+                .unwrap(),
+            0
+        );
+        assert_eq!(
+            tree.read(2, 0, &mut reader, next_layer, &mut nodes)
+                .unwrap(),
+            1
+        );
+        assert_eq!(
+            tree.read(0, 1, &mut reader, next_layer, &mut nodes)
+                .unwrap(),
+            1
+        );
+        assert_eq!(
+            tree.read(1, 1, &mut reader, next_layer, &mut nodes)
+                .unwrap(),
+            1
+        );
+        assert_eq!(
+            tree.read(2, 1, &mut reader, next_layer, &mut nodes)
+                .unwrap(),
+            1
+        );
     }
 }
