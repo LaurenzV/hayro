@@ -250,6 +250,19 @@ const HAS_MAGNITUDE_REFINEMENT_SHIFT: u16 = 13;
 const HAS_ZERO_CODING_SHIFT: u16 = 12;
 const BITPLANE_COUNT_MASK: u16 = (1 << 12) - 1;
 
+/// From MSB to LSB:
+/// Bit 1 represents the significance state of each coefficient. Will be
+/// set to one as soon as the first non-zero bit for that coefficient is
+/// encountered.
+/// Bit 2 stores the sign of each coefficient
+/// Bit 3 stores whether the coefficient has previously had (at least one)
+/// magnitude refinement pass.
+/// Bit 4 stores whether the given coefficient belongs to a zero coding pass
+/// applied as part of sign propagation in the current bitplane. This
+/// value will be reset every time we advance to a new bitplane.
+/// 
+/// The tail bits are used to store how many bitplanes the coefficient currently
+/// holds.
 #[derive(Default, Copy, Clone)]
 pub(crate) struct CoefficientState(u16);
 
@@ -315,16 +328,7 @@ impl CoefficientState {
 }
 
 pub(crate) struct CodeBlockDecodeContext {
-    /// A vector of bit-packed fields for each coefficient in the codeblock.
-    ///
-    /// The upper four bits store, from MSB to LSB, the significance state,
-    /// the sign bit, whether a magnitude refinement pass has already been
-    /// applied, and whether the coefficient belongs to a zero-coding pass
-    /// applied as part of sign propagation in the current bitplane. These
-    /// values will be reset every time we advance to a new bitplane.
-    /// The remaining lower bits store how many bitplanes are currently stored
-    /// in the magnitude array. Since we use `u32`, 32 bits are possible at
-    /// most, which easily fits in the 12 lower bits of the structure.
+    /// A vector of bit-packed fields for each coefficient in the code-block.
     coefficient_states: Vec<CoefficientState>,
     /// The magnitude of each coefficient that is successively built as we advance through the
     /// bitplanes.
