@@ -179,7 +179,7 @@ fn decode_inner(
         .zip(ctx.coefficient_states.iter().copied())
     {
         let count = coefficient_state.num_bitplanes();
-        *magnitude = *magnitude << (num_bitplanes - count);
+        *magnitude <<= num_bitplanes - count;
     }
 
     Some(())
@@ -472,12 +472,11 @@ impl CodeBlockDecodeContext {
         if x < 0 || y < 0 || x >= self.width as i64 || y >= self.height as i64 {
             // OOB values should just return 0.
             0
+        } else if self.coefficient_states[x as usize + y as usize * self.width as usize].has_sign()
+        {
+            1
         } else {
-            if self.coefficient_states[x as usize + y as usize * self.width as usize].has_sign() {
-                1
-            } else {
-                0
-            }
+            0
         }
     }
 
