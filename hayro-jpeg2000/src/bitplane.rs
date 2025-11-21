@@ -368,19 +368,18 @@ impl CodeBlockDecodeContext {
         code_block_style: &CodeBlockStyle,
     ) {
         let (width, height) = (code_block.rect.width(), code_block.rect.height());
+        let num_coefficients = width as usize * height as usize;
 
         self.magnitude_array.clear();
-        self.magnitude_array
-            .resize(width as usize * height as usize, 0);
+        self.magnitude_array.resize(num_coefficients, 0);
 
         self.coefficient_states.clear();
-        self.coefficient_states
-            .resize_with(width as usize * height as usize, || {
-                let mut state = CoefficientState::default();
-                state.set_magnitude_bits(code_block.missing_bit_planes);
+        self.coefficient_states.resize_with(num_coefficients, || {
+            let mut state = CoefficientState::default();
+            state.set_magnitude_bits(code_block.missing_bit_planes);
 
-                state
-            });
+            state
+        });
 
         self.width = width;
         self.height = height;
@@ -542,13 +541,7 @@ impl CodeBlockDecodeContext {
 /// Perform the cleanup pass, specified in D.3.4.
 /// See also the flow chart in Figure 7.3 in the JPEG2000 book.
 fn cleanup_pass(ctx: &mut CodeBlockDecodeContext, decoder: &mut impl BitDecoder) -> Option<()> {
-    let mut position_iterator = PositionIterator::new(ctx.width, ctx.height);
-
-    loop {
-        let Some(mut cur_pos) = position_iterator.next() else {
-            break;
-        };
-
+    for_each_position(ctx.width, ctx.height, |cur_pos| {
         if !ctx.is_significant(&cur_pos) && !ctx.is_zero_coded(&cur_pos) {
             let use_rl = cur_pos.y % 4 == 0
                 && (ctx.height - cur_pos.y) >= 4
@@ -574,11 +567,11 @@ fn cleanup_pass(ctx: &mut CodeBlockDecodeContext, decoder: &mut impl BitDecoder)
                     ctx.push_magnitude_bit(&cur_pos, 0);
 
                     for _ in 0..3 {
-                        cur_pos = position_iterator.next()?;
+                        cur_pos.y += 1;
                         ctx.push_magnitude_bit(&cur_pos, 0);
                     }
 
-                    continue;
+                    return;
                 } else {
                     // "Otherwise, if the symbol 1 is returned, then at least
                     // one of the four contiguous coefficients in the column is
@@ -592,7 +585,7 @@ fn cleanup_pass(ctx: &mut CodeBlockDecodeContext, decoder: &mut impl BitDecoder)
 
                     for _ in 0..num_zeroes {
                         ctx.push_magnitude_bit(&cur_pos, 0);
-                        cur_pos = position_iterator.next()?;
+                        cur_pos.y += 1;
                     }
 
                     1
@@ -609,7 +602,7 @@ fn cleanup_pass(ctx: &mut CodeBlockDecodeContext, decoder: &mut impl BitDecoder)
                 ctx.set_significant(&cur_pos);
             }
         }
-    }
+    });
 
     Some(())
 }
@@ -621,13 +614,7 @@ fn significance_propagation_pass(
     ctx: &mut CodeBlockDecodeContext,
     decoder: &mut impl BitDecoder,
 ) -> Option<()> {
-    let mut position_iterator = PositionIterator::new(ctx.width, ctx.height);
-
-    loop {
-        let Some(cur_pos) = position_iterator.next() else {
-            break;
-        };
-
+    for_each_position(ctx.width, ctx.height, |cur_pos| {
         // "The significance propagation pass only includes bits of coefficients
         // that were insignificant (the significance state has yet to be set)
         // and have a non-zero context."
@@ -646,7 +633,7 @@ fn significance_propagation_pass(
                 ctx.set_significant(&cur_pos);
             }
         }
-    }
+    });
 
     Some(())
 }
@@ -658,22 +645,37 @@ fn magnitude_refinement_pass(
     ctx: &mut CodeBlockDecodeContext,
     decoder: &mut impl BitDecoder,
 ) -> Option<()> {
-    let mut position_iterator = PositionIterator::new(ctx.width, ctx.height);
-
-    loop {
-        let Some(cur_pos) = position_iterator.next() else {
-            break;
-        };
-
+    for_each_position(ctx.width, ctx.height, |cur_pos| {
         if ctx.is_significant(&cur_pos) && !ctx.is_zero_coded(&cur_pos) {
             let ctx_label = context_label_magnitude_refinement_coding(&cur_pos, ctx);
             let bit = decoder.read_bit(ctx.arithmetic_decoder_context(ctx_label));
             ctx.push_magnitude_bit(&cur_pos, bit);
             ctx.set_magnitude_refined(&cur_pos);
         }
-    }
+    });
 
     Some(())
+}
+
+fn for_each_position(width: u32, height: u32, mut action: impl FnMut(&mut Position)) {
+    // "Each bit-plane of a code-block is scanned in a particular order.
+    // Starting at the top left, the first four coefficients of the
+    // first column are scanned, followed by the first four coefficients of
+    // the second column and so on, until the right side of the code-block
+    // is reached. The scan then returns to the left of the code-block and
+    // the second set of four coefficients in each column is scanned. The
+    // process is continued to the bottom of the code-block. If the
+    // code-block height is not divisible by 4, the last set of coefficients
+    // scanned in each column will contain fewer than 4 members."
+    for base_row in (0..height).step_by(4) {
+        for x in 0..width {
+            let mut cur_pos = Position::new(x, base_row);
+            while cur_pos.y < (base_row + 4).min(height) {
+                action(&mut cur_pos);
+                cur_pos.y += 1;
+            }
+        }
+    }
 }
 
 /// Decode a sign bit (Section D.3.2).
@@ -819,60 +821,6 @@ impl Position {
     }
 }
 
-struct PositionIterator {
-    cur_row: u32,
-    position: Position,
-    width: u32,
-    height: u32,
-}
-
-impl PositionIterator {
-    fn new(width: u32, height: u32) -> Self {
-        Self {
-            cur_row: 0,
-            position: Position::default(),
-            width,
-            height,
-        }
-    }
-}
-
-impl Iterator for PositionIterator {
-    type Item = Position;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        // "Each bit-plane of a code-block is scanned in a particular order.
-        // Starting at the top left, the first four coefficients of the
-        // first column are scanned, followed by the first four coefficients of
-        // the second column and so on, until the right side of the code-block
-        // is reached. The scan then returns to the left of the code-block and
-        // the second set of four coefficients in each column is scanned. The
-        // process is continued to the bottom of the code-block. If the
-        // code-block height is not divisible by 4, the last set of coefficients
-        // scanned in each column will contain fewer than 4 members."
-
-        if self.position.y >= self.height || self.position.y == self.cur_row + 4 {
-            self.position.x += 1;
-            self.position.y = self.cur_row;
-        }
-
-        if self.position.x >= self.width {
-            self.position.x = 0;
-            self.cur_row += 4;
-            self.position.y = self.cur_row;
-        }
-
-        if self.position.y >= self.height {
-            return None;
-        }
-
-        let pos = self.position;
-        self.position.y += 1;
-
-        Some(pos)
-    }
-}
-
 // We use a trait so that we can mock the arithmetic decoder for tests.
 trait BitDecoder {
     const IS_BYPASS: bool;
@@ -909,7 +857,7 @@ impl BitDecoder for BypassDecoder<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::{BitPlaneDecodeBuffers, CodeBlockDecodeContext, PositionIterator, decode};
+    use super::{BitPlaneDecodeBuffers, CodeBlockDecodeContext, decode};
     use crate::codestream::CodeBlockStyle;
     use crate::decode::{CodeBlock, Layer, Segment, SubBandType};
     use crate::rect::IntRect;
@@ -930,44 +878,6 @@ mod tests {
 
             coefficients
         }
-    }
-
-    macro_rules! pt {
-        ($x:expr, $y:expr) => {
-            ($x as u32, $y as u32)
-        };
-    }
-
-    #[test]
-    fn position_iterator() {
-        let width = 5;
-        let height = 10;
-
-        let iter = PositionIterator::new(width, height);
-        let mut produced = Vec::new();
-
-        for position in iter {
-            produced.push((position.x, position.y));
-        }
-
-        #[rustfmt::skip]
-        let expected = [
-            pt!(0, 0), pt!(0, 1), pt!(0, 2), pt!(0, 3),
-            pt!(1, 0), pt!(1, 1), pt!(1, 2), pt!(1, 3),
-            pt!(2, 0), pt!(2, 1), pt!(2, 2), pt!(2, 3),
-            pt!(3, 0), pt!(3, 1), pt!(3, 2), pt!(3, 3),
-            pt!(4, 0), pt!(4, 1), pt!(4, 2), pt!(4, 3),
-            pt!(0, 4), pt!(0, 5), pt!(0, 6), pt!(0, 7),
-            pt!(1, 4), pt!(1, 5), pt!(1, 6), pt!(1, 7),
-            pt!(2, 4), pt!(2, 5), pt!(2, 6), pt!(2, 7),
-            pt!(3, 4), pt!(3, 5), pt!(3, 6), pt!(3, 7),
-            pt!(4, 4), pt!(4, 5), pt!(4, 6), pt!(4, 7),
-            pt!(0, 8), pt!(0, 9), pt!(1, 8), pt!(1, 9),
-            pt!(2, 8), pt!(2, 9), pt!(3, 8), pt!(3, 9),
-            pt!(4, 8), pt!(4, 9)
-        ];
-
-        assert_eq!(produced.as_slice(), &expected);
     }
 
     // First packet from example in Section J.10.4.
