@@ -173,10 +173,12 @@ fn decode_inner(
 
     // Extend all coefficients with zero bits until we have the required number
     // of bits.
-    for el in &mut ctx.magnitude_array {
-        while el.count < num_bitplanes {
-            el.push_bit(0);
-        }
+    for (magnitude, count) in ctx
+        .magnitude_array
+        .iter_mut()
+        .zip(ctx.magnitude_bit_counts.iter().copied())
+    {
+        *magnitude = *magnitude << (num_bitplanes - count);
     }
 
     Some(())
@@ -239,12 +241,15 @@ fn handle_coding_passes(
     Some(())
 }
 
+pub(crate) const BITPLANE_BIT_SIZE: u32 = size_of::<u32>() as u32 * 8;
+
 pub(crate) struct CodeBlockDecodeContext {
     /// The signs of each coefficient.
     signs: Vec<u8>,
     /// The magnitude of each coefficient that is successively built as we advance through the
     /// bitplanes.
-    magnitude_array: Vec<ComponentBits>,
+    magnitude_array: Vec<u32>,
+    magnitude_bit_counts: Vec<u8>,
     /// The significance state of each coefficient. Will be set to one as soon as the
     /// first non-zero bit for that coefficient is encountered.
     significance_states: Vec<u8>,
@@ -273,6 +278,7 @@ impl Default for CodeBlockDecodeContext {
             magnitude_array: vec![],
             significance_states: vec![],
             first_magnitude_refinement: vec![],
+            magnitude_bit_counts: vec![],
             has_zero_coding: vec![],
             width: 0,
             height: 0,
@@ -305,11 +311,13 @@ impl CodeBlockDecodeContext {
 
         self.magnitude_array.clear();
         self.magnitude_array
-            .resize(width as usize * height as usize, ComponentBits::default());
+            .resize(width as usize * height as usize, 0);
 
-        for mag in &mut self.magnitude_array {
-            mag.count = code_block.missing_bit_planes;
-        }
+        self.magnitude_bit_counts.clear();
+        self.magnitude_bit_counts.resize(
+            width as usize * height as usize,
+            code_block.missing_bit_planes,
+        );
 
         self.width = width;
         self.height = height;
@@ -322,7 +330,7 @@ impl CodeBlockDecodeContext {
         &self.signs
     }
 
-    pub(crate) fn magnitudes(&self) -> &[ComponentBits] {
+    pub(crate) fn magnitudes(&self) -> &[u32] {
         &self.magnitude_array
     }
 
@@ -379,7 +387,14 @@ impl CodeBlockDecodeContext {
     }
 
     fn push_magnitude_bit(&mut self, position: &Position, bit: u32) {
-        self.magnitude_array[position.index(self.width)].push_bit(bit)
+        let idx = position.index(self.width);
+        let count = &mut self.magnitude_bit_counts[idx];
+        let magnitude = &mut self.magnitude_array[idx];
+
+        debug_assert!((*count as u32) < BITPLANE_BIT_SIZE);
+
+        *magnitude = (*magnitude << 1) | bit;
+        *count += 1;
     }
 
     #[inline]
@@ -716,28 +731,6 @@ fn context_label_magnitude_refinement_coding(pos: &Position, ctx: &CodeBlockDeco
 }
 
 #[derive(Default, Copy, Clone, Debug)]
-pub(crate) struct ComponentBits {
-    inner: u32,
-    count: u8,
-}
-
-pub(crate) const BITPLANE_BIT_SIZE: u32 = size_of::<u32>() as u32 * 8;
-
-impl ComponentBits {
-    fn push_bit(&mut self, bit: u32) {
-        assert!((self.count as u32) < BITPLANE_BIT_SIZE);
-        assert!(bit < 2);
-
-        self.inner = (self.inner << 1) | bit;
-        self.count += 1;
-    }
-
-    pub(crate) fn get(&self) -> u32 {
-        self.inner
-    }
-}
-
-#[derive(Default, Copy, Clone, Debug)]
 struct Position {
     x: u32,
     y: u32,
@@ -853,7 +846,7 @@ mod tests {
             let mut coefficients = vec![];
 
             for (c, sign) in self.magnitudes().iter().zip(self.signs.iter()) {
-                let mut res = c.get() as i32;
+                let mut res = *c as i32;
 
                 if *sign != 0 {
                     res = -res;

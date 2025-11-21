@@ -1058,7 +1058,7 @@ fn decode_sub_band_bitplanes(
                     .zip(signs.iter().copied())
                     .zip(magnitudes.iter().copied())
                 {
-                    *output = magnitude.get() as f32;
+                    *output = magnitude as f32;
 
                     if sign != 0 {
                         *output = -*output;
