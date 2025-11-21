@@ -541,68 +541,76 @@ impl CodeBlockDecodeContext {
 /// Perform the cleanup pass, specified in D.3.4.
 /// See also the flow chart in Figure 7.3 in the JPEG2000 book.
 fn cleanup_pass(ctx: &mut CodeBlockDecodeContext, decoder: &mut impl BitDecoder) -> Option<()> {
-    for_each_position(ctx.width, ctx.height, |cur_pos| {
-        if !ctx.is_significant(&cur_pos) && !ctx.is_zero_coded(&cur_pos) {
-            let use_rl = cur_pos.y % 4 == 0
-                && (ctx.height - cur_pos.y) >= 4
-                && ctx.neighborhood_significance_states(&cur_pos) == 0
-                && ctx.neighborhood_significance_states(&Position::new(cur_pos.x, cur_pos.y + 1))
-                    == 0
-                && ctx.neighborhood_significance_states(&Position::new(cur_pos.x, cur_pos.y + 2))
-                    == 0
-                && ctx.neighborhood_significance_states(&Position::new(cur_pos.x, cur_pos.y + 3))
-                    == 0;
+    for_each_position(
+        ctx.width,
+        ctx.height,
+        #[inline(always)]
+        |cur_pos| {
+            if !ctx.is_significant(cur_pos) && !ctx.is_zero_coded(cur_pos) {
+                let use_rl = cur_pos.y % 4 == 0
+                    && (ctx.height - cur_pos.y) >= 4
+                    && ctx.neighborhood_significance_states(cur_pos) == 0
+                    && ctx
+                        .neighborhood_significance_states(&Position::new(cur_pos.x, cur_pos.y + 1))
+                        == 0
+                    && ctx
+                        .neighborhood_significance_states(&Position::new(cur_pos.x, cur_pos.y + 2))
+                        == 0
+                    && ctx
+                        .neighborhood_significance_states(&Position::new(cur_pos.x, cur_pos.y + 3))
+                        == 0;
 
-            let bit = if use_rl {
-                // "If the four contiguous coefficients in the column being scanned are all decoded
-                // in the cleanup pass and the context label for all is 0 (including context
-                // coefficients from previous magnitude, significance and cleanup passes), then the
-                // unique run-length context is given to the arithmetic decoder along with the bit
-                // stream."
-                let bit = decoder.read_bit(ctx.arithmetic_decoder_context(17));
+                let bit = if use_rl {
+                    // "If the four contiguous coefficients in the column being scanned are all decoded
+                    // in the cleanup pass and the context label for all is 0 (including context
+                    // coefficients from previous magnitude, significance and cleanup passes), then the
+                    // unique run-length context is given to the arithmetic decoder along with the bit
+                    // stream."
+                    let bit = decoder.read_bit(ctx.arithmetic_decoder_context(17));
 
-                if bit == 0 {
-                    // "If the symbol 0 is returned, then all four contiguous coefficients in
-                    // the column remain insignificant and are set to zero."
-                    ctx.push_magnitude_bit(&cur_pos, 0);
+                    if bit == 0 {
+                        // "If the symbol 0 is returned, then all four contiguous coefficients in
+                        // the column remain insignificant and are set to zero."
+                        ctx.push_magnitude_bit(cur_pos, 0);
 
-                    for _ in 0..3 {
-                        cur_pos.y += 1;
-                        ctx.push_magnitude_bit(&cur_pos, 0);
+                        for _ in 0..3 {
+                            cur_pos.y += 1;
+                            ctx.push_magnitude_bit(cur_pos, 0);
+                        }
+
+                        return;
+                    } else {
+                        // "Otherwise, if the symbol 1 is returned, then at least
+                        // one of the four contiguous coefficients in the column is
+                        // significant. The next two bits, returned with the
+                        // UNIFORM context (index 46 in Table C.2), denote which
+                        // coefficient from the top of the column down is the first
+                        // to be found significant."
+                        let mut num_zeroes = decoder.read_bit(ctx.arithmetic_decoder_context(18));
+                        num_zeroes = (num_zeroes << 1)
+                            | decoder.read_bit(ctx.arithmetic_decoder_context(18));
+
+                        for _ in 0..num_zeroes {
+                            ctx.push_magnitude_bit(cur_pos, 0);
+                            cur_pos.y += 1;
+                        }
+
+                        1
                     }
-
-                    return;
                 } else {
-                    // "Otherwise, if the symbol 1 is returned, then at least
-                    // one of the four contiguous coefficients in the column is
-                    // significant. The next two bits, returned with the
-                    // UNIFORM context (index 46 in Table C.2), denote which
-                    // coefficient from the top of the column down is the first
-                    // to be found significant."
-                    let mut num_zeroes = decoder.read_bit(ctx.arithmetic_decoder_context(18));
-                    num_zeroes =
-                        (num_zeroes << 1) | decoder.read_bit(ctx.arithmetic_decoder_context(18));
+                    let ctx_label = context_label_zero_coding(cur_pos, ctx);
+                    decoder.read_bit(ctx.arithmetic_decoder_context(ctx_label))
+                };
 
-                    for _ in 0..num_zeroes {
-                        ctx.push_magnitude_bit(&cur_pos, 0);
-                        cur_pos.y += 1;
-                    }
+                ctx.push_magnitude_bit(cur_pos, bit);
 
-                    1
+                if bit == 1 {
+                    decode_sign_bit(cur_pos, ctx, decoder);
+                    ctx.set_significant(cur_pos);
                 }
-            } else {
-                let ctx_label = context_label_zero_coding(&cur_pos, ctx);
-                decoder.read_bit(ctx.arithmetic_decoder_context(ctx_label))
-            };
-
-            ctx.push_magnitude_bit(&cur_pos, bit);
-
-            if bit == 1 {
-                decode_sign_bit(&cur_pos, ctx, decoder);
-                ctx.set_significant(&cur_pos);
             }
-        }
-    });
+        },
+    );
 
     Some(())
 }
@@ -614,26 +622,31 @@ fn significance_propagation_pass(
     ctx: &mut CodeBlockDecodeContext,
     decoder: &mut impl BitDecoder,
 ) -> Option<()> {
-    for_each_position(ctx.width, ctx.height, |cur_pos| {
-        // "The significance propagation pass only includes bits of coefficients
-        // that were insignificant (the significance state has yet to be set)
-        // and have a non-zero context."
-        if !ctx.is_significant(&cur_pos) && ctx.neighborhood_significance_states(&cur_pos) != 0 {
-            let ctx_label = context_label_zero_coding(&cur_pos, ctx);
-            let bit = decoder.read_bit(ctx.arithmetic_decoder_context(ctx_label));
-            ctx.push_magnitude_bit(&cur_pos, bit);
-            ctx.set_zero_coded(&cur_pos);
+    for_each_position(
+        ctx.width,
+        ctx.height,
+        #[inline(always)]
+        |cur_pos| {
+            // "The significance propagation pass only includes bits of coefficients
+            // that were insignificant (the significance state has yet to be set)
+            // and have a non-zero context."
+            if !ctx.is_significant(cur_pos) && ctx.neighborhood_significance_states(cur_pos) != 0 {
+                let ctx_label = context_label_zero_coding(cur_pos, ctx);
+                let bit = decoder.read_bit(ctx.arithmetic_decoder_context(ctx_label));
+                ctx.push_magnitude_bit(cur_pos, bit);
+                ctx.set_zero_coded(cur_pos);
 
-            // "If the value of this bit is 1 then the significance
-            // state is set to 1 and the immediate next bit to be decoded is
-            // the sign bit for the coefficient. Otherwise, the significance
-            // state remains 0."
-            if bit == 1 {
-                decode_sign_bit(&cur_pos, ctx, decoder);
-                ctx.set_significant(&cur_pos);
+                // "If the value of this bit is 1 then the significance
+                // state is set to 1 and the immediate next bit to be decoded is
+                // the sign bit for the coefficient. Otherwise, the significance
+                // state remains 0."
+                if bit == 1 {
+                    decode_sign_bit(cur_pos, ctx, decoder);
+                    ctx.set_significant(cur_pos);
+                }
             }
-        }
-    });
+        },
+    );
 
     Some(())
 }
@@ -645,14 +658,19 @@ fn magnitude_refinement_pass(
     ctx: &mut CodeBlockDecodeContext,
     decoder: &mut impl BitDecoder,
 ) -> Option<()> {
-    for_each_position(ctx.width, ctx.height, |cur_pos| {
-        if ctx.is_significant(&cur_pos) && !ctx.is_zero_coded(&cur_pos) {
-            let ctx_label = context_label_magnitude_refinement_coding(&cur_pos, ctx);
-            let bit = decoder.read_bit(ctx.arithmetic_decoder_context(ctx_label));
-            ctx.push_magnitude_bit(&cur_pos, bit);
-            ctx.set_magnitude_refined(&cur_pos);
-        }
-    });
+    for_each_position(
+        ctx.width,
+        ctx.height,
+        #[inline(always)]
+        |cur_pos| {
+            if ctx.is_significant(cur_pos) && !ctx.is_zero_coded(cur_pos) {
+                let ctx_label = context_label_magnitude_refinement_coding(cur_pos, ctx);
+                let bit = decoder.read_bit(ctx.arithmetic_decoder_context(ctx_label));
+                ctx.push_magnitude_bit(cur_pos, bit);
+                ctx.set_magnitude_refined(cur_pos);
+            }
+        },
+    );
 
     Some(())
 }
