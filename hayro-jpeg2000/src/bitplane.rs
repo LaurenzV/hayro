@@ -260,7 +260,7 @@ const BITPLANE_COUNT_MASK: u16 = (1 << 12) - 1;
 /// Bit 4 stores whether the given coefficient belongs to a zero coding pass
 /// applied as part of sign propagation in the current bitplane. This
 /// value will be reset every time we advance to a new bitplane.
-/// 
+///
 /// The tail bits are used to store how many bitplanes the coefficient currently
 /// holds.
 #[derive(Default, Copy, Clone)]
