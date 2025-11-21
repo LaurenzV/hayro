@@ -1041,26 +1041,30 @@ fn decode_sub_band_bitplanes(
             let x_offset = code_block.rect.x0 - sub_band.rect.x0;
             let y_offset = code_block.rect.y0 - sub_band.rect.y0;
 
-            let sign_iter = b_ctx.signs().chunks_exact(code_block.rect.width() as usize);
+            let coefficient_states = b_ctx
+                .coefficient_states()
+                .chunks_exact(code_block.rect.width() as usize);
             let magnitude_iter = b_ctx
                 .magnitudes()
                 .chunks_exact(code_block.rect.width() as usize);
 
-            for (y, (signs, magnitudes)) in sign_iter.zip(magnitude_iter).enumerate() {
+            for (y, (coefficient_states, magnitudes)) in
+                coefficient_states.zip(magnitude_iter).enumerate()
+            {
                 let out_row = &mut storage.coefficients[sub_band.coefficients.clone()][((y_offset
                     + y as u32)
                     * sub_band.rect.width())
                     as usize
                     + x_offset as usize..];
 
-                for ((output, sign), magnitude) in out_row
+                for ((output, coefficient_state), magnitude) in out_row
                     .iter_mut()
-                    .zip(signs.iter().copied())
+                    .zip(coefficient_states.iter())
                     .zip(magnitudes.iter().copied())
                 {
                     *output = magnitude as f32;
 
-                    if sign != 0 {
+                    if coefficient_state.has_sign() {
                         *output = -*output;
                     }
 

@@ -173,11 +173,12 @@ fn decode_inner(
 
     // Extend all coefficients with zero bits until we have the required number
     // of bits.
-    for (magnitude, count) in ctx
+    for (magnitude, coefficient_state) in ctx
         .magnitude_array
         .iter_mut()
-        .zip(ctx.magnitude_bit_counts.iter().copied())
+        .zip(ctx.coefficient_states.iter().copied())
     {
+        let count = coefficient_state.num_bitplanes();
         *magnitude = *magnitude << (num_bitplanes - count);
     }
 
@@ -243,22 +244,91 @@ fn handle_coding_passes(
 
 pub(crate) const BITPLANE_BIT_SIZE: u32 = size_of::<u32>() as u32 * 8;
 
+const SIGNIFICANCE_SHIFT: u16 = 15;
+const SIGN_SHIFT: u16 = 14;
+const HAS_MAGNITUDE_REFINEMENT_SHIFT: u16 = 13;
+const HAS_ZERO_CODING_SHIFT: u16 = 12;
+const BITPLANE_COUNT_MASK: u16 = (1 << 12) - 1;
+
+#[derive(Default, Copy, Clone)]
+pub(crate) struct CoefficientState(u16);
+
+impl CoefficientState {
+    #[inline(always)]
+    fn set_bit(&mut self, shift: u16, value: u8) {
+        debug_assert!(value < 2);
+
+        self.0 &= !(1u16 << shift);
+        self.0 |= (value as u16) << shift;
+    }
+
+    #[inline(always)]
+    fn set_sign(&mut self, sign: u8) {
+        self.set_bit(SIGN_SHIFT, sign & 1);
+    }
+
+    #[inline(always)]
+    fn set_significant(&mut self) {
+        self.set_bit(SIGNIFICANCE_SHIFT, 1);
+    }
+
+    #[inline(always)]
+    fn set_zero_coded(&mut self, value: u8) {
+        self.set_bit(HAS_ZERO_CODING_SHIFT, value & 1);
+    }
+
+    #[inline(always)]
+    fn set_magnitude_refined(&mut self) {
+        self.set_bit(HAS_MAGNITUDE_REFINEMENT_SHIFT, 1);
+    }
+
+    #[inline(always)]
+    fn is_significant(&self) -> bool {
+        (self.0 >> SIGNIFICANCE_SHIFT) & 1 == 1
+    }
+
+    #[inline(always)]
+    fn is_magnitude_refined(&self) -> bool {
+        (self.0 >> HAS_MAGNITUDE_REFINEMENT_SHIFT) & 1 == 1
+    }
+
+    #[inline(always)]
+    fn is_zero_coded(&self) -> bool {
+        (self.0 >> HAS_ZERO_CODING_SHIFT) & 1 == 1
+    }
+
+    #[inline(always)]
+    pub(crate) fn has_sign(&self) -> bool {
+        (self.0 >> SIGN_SHIFT) & 1 == 1
+    }
+
+    #[inline(always)]
+    fn num_bitplanes(&self) -> u8 {
+        (self.0 & BITPLANE_COUNT_MASK) as u8
+    }
+
+    #[inline(always)]
+    fn set_magnitude_bits(&mut self, count: u8) {
+        debug_assert!((count as u32) <= BITPLANE_BIT_SIZE);
+        self.0 = (self.0 & !BITPLANE_COUNT_MASK) | ((count as u16) & BITPLANE_COUNT_MASK);
+    }
+}
+
 pub(crate) struct CodeBlockDecodeContext {
-    /// The signs of each coefficient.
-    signs: Vec<u8>,
+    /// A vector of bit-packed fields for each coefficient in the codeblock.
+    ///
+    /// The upper four bits store, from MSB to LSB, the significance state,
+    /// the sign bit, whether a magnitude refinement pass has already been
+    /// applied, and whether the coefficient belongs to a zero-coding pass
+    /// applied as part of sign propagation in the current bitplane. These
+    /// values will be reset every time we advance to a new bitplane.
+    /// The remaining lower bits store how many bitplanes are currently stored
+    /// in the magnitude array. Since we use `u32`, 32 bits are possible at
+    /// most, which easily fits in the 12 lower bits of the structure.
+    coefficient_states: Vec<CoefficientState>,
     /// The magnitude of each coefficient that is successively built as we advance through the
     /// bitplanes.
     magnitude_array: Vec<u32>,
-    magnitude_bit_counts: Vec<u8>,
-    /// The significance state of each coefficient. Will be set to one as soon as the
-    /// first non-zero bit for that coefficient is encountered.
-    significance_states: Vec<u8>,
-    /// Whether the coefficient has previously had (at least one) magnitude refinement pass.
-    first_magnitude_refinement: Vec<u8>,
-    /// Whether the given coefficient belongs to a zero coding pass applied as part of sign
-    /// propagation in the current bitplane. These values will be reset every time we advance to a
-    /// new bitplane.
-    has_zero_coding: Vec<u8>,
     /// The width of the code-block we are processing.
     width: u32,
     /// The height of the code-block we are processing.
@@ -274,12 +344,8 @@ pub(crate) struct CodeBlockDecodeContext {
 impl Default for CodeBlockDecodeContext {
     fn default() -> Self {
         Self {
-            signs: vec![],
+            coefficient_states: vec![],
             magnitude_array: vec![],
-            significance_states: vec![],
-            first_magnitude_refinement: vec![],
-            magnitude_bit_counts: vec![],
-            has_zero_coding: vec![],
             width: 0,
             height: 0,
             vertically_causal: false,
@@ -299,25 +365,18 @@ impl CodeBlockDecodeContext {
     ) {
         let (width, height) = (code_block.rect.width(), code_block.rect.height());
 
-        for arr in [
-            &mut self.signs,
-            &mut self.significance_states,
-            &mut self.first_magnitude_refinement,
-            &mut self.has_zero_coding,
-        ] {
-            arr.clear();
-            arr.resize(width as usize * height as usize, 0);
-        }
-
         self.magnitude_array.clear();
         self.magnitude_array
             .resize(width as usize * height as usize, 0);
 
-        self.magnitude_bit_counts.clear();
-        self.magnitude_bit_counts.resize(
-            width as usize * height as usize,
-            code_block.missing_bit_planes,
-        );
+        self.coefficient_states.clear();
+        self.coefficient_states
+            .resize_with(width as usize * height as usize, || {
+                let mut state = CoefficientState::default();
+                state.set_magnitude_bits(code_block.missing_bit_planes);
+
+                state
+            });
 
         self.width = width;
         self.height = height;
@@ -326,8 +385,8 @@ impl CodeBlockDecodeContext {
         self.reset_contexts();
     }
 
-    pub(crate) fn signs(&self) -> &[u8] {
-        &self.signs
+    pub(crate) fn coefficient_states(&self) -> &[CoefficientState] {
+        &self.coefficient_states
     }
 
     pub(crate) fn magnitudes(&self) -> &[u32] {
@@ -335,7 +394,8 @@ impl CodeBlockDecodeContext {
     }
 
     fn set_sign(&mut self, pos: &Position, sign: u8) {
-        self.signs[pos.index(self.width)] = sign;
+        // Using `or` is okay here because we only set the sign once.
+        self.coefficient_states[pos.index(self.width)].set_sign(sign);
     }
 
     fn arithmetic_decoder_context(&mut self, ctx_label: u8) -> &mut ArithmeticDecoderContext {
@@ -355,46 +415,52 @@ impl CodeBlockDecodeContext {
     }
 
     fn reset_for_next_bitplane(&mut self) {
-        self.has_zero_coding.fill(0);
+        for el in &mut self.coefficient_states {
+            el.set_zero_coded(0);
+        }
     }
 
     fn significance_state(&self, position: &Position) -> u8 {
-        self.significance_states[position.index(self.width)]
+        if self.coefficient_states[position.index(self.width)].is_significant() {
+            1
+        } else {
+            0
+        }
     }
 
     fn is_significant(&self, position: &Position) -> bool {
-        self.significance_states[position.index(self.width)] != 0
+        self.significance_state(position) != 0
     }
 
     fn set_significant(&mut self, position: &Position) {
-        self.significance_states[position.index(self.width)] = 1;
+        self.coefficient_states[position.index(self.width)].set_significant();
     }
 
     fn set_zero_coded(&mut self, position: &Position) {
-        self.has_zero_coding[position.index(self.width)] = 1;
+        self.coefficient_states[position.index(self.width)].set_zero_coded(1);
     }
 
     fn set_magnitude_refined(&mut self, position: &Position) {
-        self.first_magnitude_refinement[position.index(self.width)] = 1;
+        self.coefficient_states[position.index(self.width)].set_magnitude_refined();
     }
 
     fn is_magnitude_refined(&self, position: &Position) -> bool {
-        self.first_magnitude_refinement[position.index(self.width)] != 0
+        self.coefficient_states[position.index(self.width)].is_magnitude_refined()
     }
 
     fn is_zero_coded(&self, position: &Position) -> bool {
-        self.has_zero_coding[position.index(self.width)] != 0
+        self.coefficient_states[position.index(self.width)].is_zero_coded()
     }
 
     fn push_magnitude_bit(&mut self, position: &Position, bit: u32) {
         let idx = position.index(self.width);
-        let count = &mut self.magnitude_bit_counts[idx];
+        let count = self.coefficient_states[idx].num_bitplanes();
         let magnitude = &mut self.magnitude_array[idx];
 
-        debug_assert!((*count as u32) < BITPLANE_BIT_SIZE);
+        debug_assert!((count as u32) < BITPLANE_BIT_SIZE);
 
         *magnitude = (*magnitude << 1) | bit;
-        *count += 1;
+        self.coefficient_states[idx].set_magnitude_bits(count + 1)
     }
 
     #[inline]
@@ -403,7 +469,11 @@ impl CodeBlockDecodeContext {
             // OOB values should just return 0.
             0
         } else {
-            self.signs[x as usize + y as usize * self.width as usize]
+            if self.coefficient_states[x as usize + y as usize * self.width as usize].has_sign() {
+                1
+            } else {
+                0
+            }
         }
     }
 
@@ -845,10 +915,10 @@ mod tests {
         fn coefficients(&self) -> Vec<i32> {
             let mut coefficients = vec![];
 
-            for (c, sign) in self.magnitudes().iter().zip(self.signs.iter()) {
+            for (c, state) in self.magnitudes().iter().zip(self.coefficient_states.iter()) {
                 let mut res = *c as i32;
 
-                if *sign != 0 {
+                if state.has_sign() {
                     res = -res;
                 }
 
