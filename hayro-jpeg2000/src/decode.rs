@@ -1041,15 +1041,10 @@ fn decode_sub_band_bitplanes(
             let x_offset = code_block.rect.x0 - sub_band.rect.x0;
             let y_offset = code_block.rect.y0 - sub_band.rect.y0;
 
-            let coefficient_states = b_ctx
-                .coefficient_states()
-                .chunks_exact(code_block.rect.width() as usize);
-            let magnitude_iter = b_ctx
-                .magnitudes()
-                .chunks_exact(code_block.rect.width() as usize);
-
-            for (y, (coefficient_states, magnitudes)) in
-                coefficient_states.zip(magnitude_iter).enumerate()
+            for (y, magnitudes) in b_ctx
+                .coefficients()
+                .chunks_exact(code_block.rect.width() as usize)
+                .enumerate()
             {
                 let out_row = &mut storage.coefficients[sub_band.coefficients.clone()][((y_offset
                     + y as u32)
@@ -1057,16 +1052,8 @@ fn decode_sub_band_bitplanes(
                     as usize
                     + x_offset as usize..];
 
-                for ((output, coefficient_state), magnitude) in out_row
-                    .iter_mut()
-                    .zip(coefficient_states.iter())
-                    .zip(magnitudes.iter().copied())
-                {
-                    *output = magnitude as f32;
-
-                    if coefficient_state.has_sign() {
-                        *output = -*output;
-                    }
+                for (output, coefficient) in out_row.iter_mut().zip(magnitudes.iter().copied()) {
+                    *output = coefficient.get() as f32;
 
                     if let Some(q) = dequantization_step {
                         *output *= q;

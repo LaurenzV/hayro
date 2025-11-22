@@ -173,13 +173,15 @@ fn decode_inner(
 
     // Extend all coefficients with zero bits until we have the required number
     // of bits.
-    for (magnitude, coefficient_state) in ctx
-        .magnitude_array
+    for (coefficient, coefficient_state) in ctx
+        .coefficients
         .iter_mut()
         .zip(ctx.coefficient_states.iter().copied())
     {
         let count = coefficient_state.num_bitplanes();
-        *magnitude <<= num_bitplanes - count;
+        for _ in 0..(num_bitplanes - count) {
+            coefficient.push_bit(0);
+        }
     }
 
     Some(())
@@ -242,10 +244,11 @@ fn handle_coding_passes(
     Some(())
 }
 
-pub(crate) const BITPLANE_BIT_SIZE: u32 = size_of::<u32>() as u32 * 8;
+// We only allow 31 bit planes because we need one bit for the sign
+// (so basically an i32).
+pub(crate) const BITPLANE_BIT_SIZE: u32 = size_of::<u32>() as u32 * 8 - 1;
 
 const SIGNIFICANCE_SHIFT: u16 = 15;
-const SIGN_SHIFT: u16 = 14;
 const HAS_MAGNITUDE_REFINEMENT_SHIFT: u16 = 13;
 const HAS_ZERO_CODING_SHIFT: u16 = 12;
 const BITPLANE_COUNT_MASK: u16 = (1 << 12) - 1;
@@ -273,11 +276,6 @@ impl CoefficientState {
 
         self.0 &= !(1u16 << shift);
         self.0 |= (value as u16) << shift;
-    }
-
-    #[inline(always)]
-    fn set_sign(&mut self, sign: u8) {
-        self.set_bit(SIGN_SHIFT, sign & 1);
     }
 
     #[inline(always)]
@@ -311,11 +309,6 @@ impl CoefficientState {
     }
 
     #[inline(always)]
-    pub(crate) fn has_sign(&self) -> bool {
-        (self.0 >> SIGN_SHIFT) & 1 == 1
-    }
-
-    #[inline(always)]
     fn num_bitplanes(&self) -> u8 {
         (self.0 & BITPLANE_COUNT_MASK) as u8
     }
@@ -327,12 +320,40 @@ impl CoefficientState {
     }
 }
 
+#[derive(Copy, Clone, Debug, Default)]
+pub(crate) struct Coefficient(u32);
+
+impl Coefficient {
+    pub(crate) fn get(&self) -> i32 {
+        let mut magnitude = (self.0 & !0x80000000) as i32;
+
+        if self.has_sign() {
+            magnitude = -magnitude;
+        }
+
+        magnitude
+    }
+
+    fn set_sign(&mut self, sign: u8) {
+        self.0 |= (sign as u32) << 31;
+    }
+
+    fn has_sign(&self) -> bool {
+        self.0 & 0x80000000 != 0
+    }
+
+    fn push_bit(&mut self, bit: u32) {
+        let sign = self.0 & 0x80000000;
+        self.0 = sign | ((self.0 << 1) | bit);
+    }
+}
+
 pub(crate) struct CodeBlockDecodeContext {
     /// A vector of bit-packed fields for each coefficient in the code-block.
     coefficient_states: Vec<CoefficientState>,
-    /// The magnitude of each coefficient that is successively built as we advance through the
-    /// bitplanes.
-    magnitude_array: Vec<u32>,
+    /// The magnitude and signs each coefficient that is successively built
+    /// as we advance through the bitplanes.
+    coefficients: Vec<Coefficient>,
     /// The width of the code-block we are processing.
     width: u32,
     /// The height of the code-block we are processing.
@@ -349,7 +370,7 @@ impl Default for CodeBlockDecodeContext {
     fn default() -> Self {
         Self {
             coefficient_states: vec![],
-            magnitude_array: vec![],
+            coefficients: vec![],
             width: 0,
             height: 0,
             vertically_causal: false,
@@ -370,8 +391,9 @@ impl CodeBlockDecodeContext {
         let (width, height) = (code_block.rect.width(), code_block.rect.height());
         let num_coefficients = width as usize * height as usize;
 
-        self.magnitude_array.clear();
-        self.magnitude_array.resize(num_coefficients, 0);
+        self.coefficients.clear();
+        self.coefficients
+            .resize(num_coefficients, Coefficient::default());
 
         self.coefficient_states.clear();
         self.coefficient_states.resize_with(num_coefficients, || {
@@ -388,17 +410,13 @@ impl CodeBlockDecodeContext {
         self.reset_contexts();
     }
 
-    pub(crate) fn coefficient_states(&self) -> &[CoefficientState] {
-        &self.coefficient_states
-    }
-
-    pub(crate) fn magnitudes(&self) -> &[u32] {
-        &self.magnitude_array
+    pub(crate) fn coefficients(&self) -> &[Coefficient] {
+        &self.coefficients
     }
 
     fn set_sign(&mut self, pos: &Position, sign: u8) {
         // Using `or` is okay here because we only set the sign once.
-        self.coefficient_states[pos.index(self.width)].set_sign(sign);
+        self.coefficients[pos.index(self.width)].set_sign(sign);
     }
 
     fn arithmetic_decoder_context(&mut self, ctx_label: u8) -> &mut ArithmeticDecoderContext {
@@ -458,12 +476,11 @@ impl CodeBlockDecodeContext {
     fn push_magnitude_bit(&mut self, position: &Position, bit: u32) {
         let idx = position.index(self.width);
         let count = self.coefficient_states[idx].num_bitplanes();
-        let magnitude = &mut self.magnitude_array[idx];
 
         debug_assert!((count as u32) < BITPLANE_BIT_SIZE);
 
-        *magnitude = (*magnitude << 1) | bit;
-        self.coefficient_states[idx].set_magnitude_bits(count + 1)
+        self.coefficients[idx].push_bit(bit);
+        self.coefficient_states[idx].set_magnitude_bits(count + 1);
     }
 
     #[inline]
@@ -471,8 +488,7 @@ impl CodeBlockDecodeContext {
         if x < 0 || y < 0 || x >= self.width as i64 || y >= self.height as i64 {
             // OOB values should just return 0.
             0
-        } else if self.coefficient_states[x as usize + y as usize * self.width as usize].has_sign()
-        {
+        } else if self.coefficients[x as usize + y as usize * self.width as usize].has_sign() {
             1
         } else {
             0
@@ -881,20 +897,8 @@ mod tests {
     use crate::rect::IntRect;
 
     impl CodeBlockDecodeContext {
-        fn coefficients(&self) -> Vec<i32> {
-            let mut coefficients = vec![];
-
-            for (c, state) in self.magnitudes().iter().zip(self.coefficient_states.iter()) {
-                let mut res = *c as i32;
-
-                if state.has_sign() {
-                    res = -res;
-                }
-
-                coefficients.push(res);
-            }
-
-            coefficients
+        fn coefficients_resolved(&self) -> Vec<i32> {
+            self.coefficients().iter().map(|c| c.get()).collect()
         }
     }
 
@@ -937,7 +941,7 @@ mod tests {
         )
         .unwrap();
 
-        let coefficients = ctx.coefficients();
+        let coefficients = ctx.coefficients_resolved();
 
         assert_eq!(coefficients, vec![-26, -22, -30, -32, -19]);
     }
@@ -981,7 +985,7 @@ mod tests {
         )
         .unwrap();
 
-        let coefficients = ctx.coefficients();
+        let coefficients = ctx.coefficients_resolved();
 
         assert_eq!(coefficients, vec![1, 5, 1, 0]);
     }
@@ -1041,7 +1045,7 @@ mod tests {
         )
         .unwrap();
 
-        let coefficients = ctx.coefficients();
+        let coefficients = ctx.coefficients_resolved();
 
         let expected = vec![
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, 0, -2, 0, -1, 0, 1, 1, -1, 0, 0,
