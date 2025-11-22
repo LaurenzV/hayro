@@ -27,7 +27,7 @@ use hayro_common::byte::Reader;
 use log::{trace, warn};
 use std::iter;
 use std::ops::Range;
-use fearless_simd::{dispatch, f32x8, Level, Simd, SimdBase};
+use fearless_simd::{dispatch, f32x8, Level, Simd, SimdBase, SimdFloat};
 
 pub(crate) fn decode(data: &[u8], header: &Header) -> Result<Vec<ChannelData>, &'static str> {
     let mut reader = Reader::new(data);
@@ -1149,9 +1149,9 @@ fn apply_mct<S: Simd>(simd: S, tile_ctx: &mut TileDecodeContext) {
                 let y_1 = f32x8::from_slice(simd, y1);
                 let y_2 = f32x8::from_slice(simd, y2);
 
-                let i0 = y_0 + 1.402 * y_2;
-                let i1 = y_0 - 0.34413 * y_1 - 0.71414 * y_2;
-                let i2 = y_0 + 1.772 * y_1;
+                let i0 = y_2.madd(1.402, y_0);
+                let i1 = y_2.madd(-0.71414, y_1.madd(-0.34413, y_0));
+                let i2 = y_1.madd(1.772, y_0);
                 
                 y0.copy_from_slice(&i0.val);
                 y1.copy_from_slice(&i1.val);
@@ -1167,7 +1167,7 @@ fn apply_mct<S: Simd>(simd: S, tile_ctx: &mut TileDecodeContext) {
                 let y_1 = f32x8::from_slice(simd, y1);
                 let y_2 = f32x8::from_slice(simd, y2);
 
-                let i1 = y_0 - ((y_2 + y_1) / 4.0).floor();
+                let i1 = y_0 - ((y_2 + y_1) * 0.25).floor();
                 let i0 = y_2 + i1;
                 let i2 = y_1 + i1;
                 
