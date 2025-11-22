@@ -22,12 +22,12 @@ use crate::rect::IntRect;
 use crate::tag_tree::{TagNode, TagTree};
 use crate::tile::{ComponentTile, ResolutionTile, Tile};
 use crate::{bitplane, idwt, tile};
+use fearless_simd::{Level, Simd, SimdBase, SimdFloat, dispatch, f32x8};
 use hayro_common::bit::BitReader;
 use hayro_common::byte::Reader;
 use log::{trace, warn};
 use std::iter;
 use std::ops::Range;
-use fearless_simd::{dispatch, f32x8, Level, Simd, SimdBase, SimdFloat};
 
 pub(crate) fn decode(data: &[u8], header: &Header) -> Result<Vec<ChannelData>, &'static str> {
     let mut reader = Reader::new(data);
@@ -1133,7 +1133,7 @@ fn apply_mct<S: Simd>(simd: S, tile_ctx: &mut TileDecodeContext) {
         warn!("tried to apply MCT to image with different number of samples per component");
         return;
     }
-    
+
     let new_len = len.next_multiple_of(8);
     s0.resize(new_len, 0.0);
     s1.resize(new_len, 0.0);
@@ -1144,7 +1144,8 @@ fn apply_mct<S: Simd>(simd: S, tile_ctx: &mut TileDecodeContext) {
             for ((y0, y1), y2) in s0
                 .chunks_exact_mut(8)
                 .zip(s1.chunks_exact_mut(8))
-                .zip(s2.chunks_exact_mut(8)) {
+                .zip(s2.chunks_exact_mut(8))
+            {
                 let y_0 = f32x8::from_slice(simd, y0);
                 let y_1 = f32x8::from_slice(simd, y1);
                 let y_2 = f32x8::from_slice(simd, y2);
@@ -1152,7 +1153,7 @@ fn apply_mct<S: Simd>(simd: S, tile_ctx: &mut TileDecodeContext) {
                 let i0 = y_2.madd(1.402, y_0);
                 let i1 = y_2.madd(-0.71414, y_1.madd(-0.34413, y_0));
                 let i2 = y_1.madd(1.772, y_0);
-                
+
                 y0.copy_from_slice(&i0.val);
                 y1.copy_from_slice(&i1.val);
                 y2.copy_from_slice(&i2.val);
@@ -1162,7 +1163,8 @@ fn apply_mct<S: Simd>(simd: S, tile_ctx: &mut TileDecodeContext) {
             for ((y0, y1), y2) in s0
                 .chunks_exact_mut(8)
                 .zip(s1.chunks_exact_mut(8))
-                .zip(s2.chunks_exact_mut(8)) {
+                .zip(s2.chunks_exact_mut(8))
+            {
                 let y_0 = f32x8::from_slice(simd, y0);
                 let y_1 = f32x8::from_slice(simd, y1);
                 let y_2 = f32x8::from_slice(simd, y2);
@@ -1170,14 +1172,14 @@ fn apply_mct<S: Simd>(simd: S, tile_ctx: &mut TileDecodeContext) {
                 let i1 = y_0 - ((y_2 + y_1) * 0.25).floor();
                 let i0 = y_2 + i1;
                 let i2 = y_1 + i1;
-                
+
                 y0.copy_from_slice(&i0.val);
                 y1.copy_from_slice(&i1.val);
                 y2.copy_from_slice(&i2.val);
             }
         }
     }
-    
+
     s0.truncate(len);
     s1.truncate(len);
     s2.truncate(len);
