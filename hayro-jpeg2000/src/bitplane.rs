@@ -244,38 +244,36 @@ fn handle_coding_passes(
     Some(())
 }
 
-// We only allow 31 bit planes because we need one bit for the sign
-// (so basically an i32).
+// We only allow 31 bit planes because we need one bit for the sign.
 pub(crate) const BITPLANE_BIT_SIZE: u32 = size_of::<u32>() as u32 * 8 - 1;
 
-const SIGNIFICANCE_SHIFT: u16 = 15;
-const HAS_MAGNITUDE_REFINEMENT_SHIFT: u16 = 13;
-const HAS_ZERO_CODING_SHIFT: u16 = 12;
-const BITPLANE_COUNT_MASK: u16 = (1 << 12) - 1;
+const SIGNIFICANCE_SHIFT: u8 = 7;
+const HAS_MAGNITUDE_REFINEMENT_SHIFT: u8 = 6;
+const HAS_ZERO_CODING_SHIFT: u8 = 5;
+const BITPLANE_COUNT_MASK: u8 = (1 << 5) - 1;
 
 /// From MSB to LSB:
 /// Bit 1 represents the significance state of each coefficient. Will be
 /// set to one as soon as the first non-zero bit for that coefficient is
 /// encountered.
-/// Bit 2 stores the sign of each coefficient
-/// Bit 3 stores whether the coefficient has previously had (at least one)
+/// Bit 2 stores whether the coefficient has previously had (at least one)
 /// magnitude refinement pass.
-/// Bit 4 stores whether the given coefficient belongs to a zero coding pass
+/// Bit 3 stores whether the given coefficient belongs to a zero coding pass
 /// applied as part of sign propagation in the current bitplane. This
 /// value will be reset every time we advance to a new bitplane.
-///
-/// The tail bits are used to store how many bitplanes the coefficient currently
-/// holds.
+/// Bits 4-8 store the current number of bitplanes for the given coefficient.
+/// Five bits are enough to store 0-31, which works out nicely because our
+/// maximum number of bitplanes also is 31.
 #[derive(Default, Copy, Clone)]
-pub(crate) struct CoefficientState(u16);
+pub(crate) struct CoefficientState(u8);
 
 impl CoefficientState {
     #[inline(always)]
-    fn set_bit(&mut self, shift: u16, value: u8) {
+    fn set_bit(&mut self, shift: u8, value: u8) {
         debug_assert!(value < 2);
 
-        self.0 &= !(1u16 << shift);
-        self.0 |= (value as u16) << shift;
+        self.0 &= !(1u8 << shift);
+        self.0 |= value << shift;
     }
 
     #[inline(always)]
@@ -310,13 +308,13 @@ impl CoefficientState {
 
     #[inline(always)]
     fn num_bitplanes(&self) -> u8 {
-        (self.0 & BITPLANE_COUNT_MASK) as u8
+        self.0 & BITPLANE_COUNT_MASK
     }
 
     #[inline(always)]
     fn set_magnitude_bits(&mut self, count: u8) {
         debug_assert!((count as u32) <= BITPLANE_BIT_SIZE);
-        self.0 = (self.0 & !BITPLANE_COUNT_MASK) | ((count as u16) & BITPLANE_COUNT_MASK);
+        self.0 = (self.0 & !BITPLANE_COUNT_MASK) | (count & BITPLANE_COUNT_MASK);
     }
 }
 
