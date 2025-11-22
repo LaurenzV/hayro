@@ -308,7 +308,7 @@ impl CoefficientState {
 
     #[inline(always)]
     fn num_bitplanes(&self) -> u8 {
-        (self.0 & BITPLANE_COUNT_MASK) as u8
+        self.0 & BITPLANE_COUNT_MASK
     }
 
     #[inline(always)]
