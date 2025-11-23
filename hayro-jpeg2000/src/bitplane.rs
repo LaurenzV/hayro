@@ -856,7 +856,7 @@ fn decode_sign_bit<T: BitDecoder>(
         // is positive, negative, or insignificant. We need two bits for this.
         // 00 represents insignificant, 01 positive and 10 negative. 11
         // is an invalid combination.
-        let signs = (top_sign << 6) | (left_sign << 4) | (right_sign << 2) | (bottom_sign << 0);
+        let signs = (top_sign << 6) | (left_sign << 4) | (right_sign << 2) | bottom_sign;
         let negative_significances = significances & signs;
         let positive_significances = significances & !signs;
         let merged_significances = (negative_significances << 1) | positive_significances;
@@ -891,7 +891,7 @@ fn context_label_magnitude_refinement_coding(pos: Position, ctx: &CodeBlockDecod
     // If magnitude refined, then 16.
     let m1 = ctx.magnitude_refinement(pos) * 16;
     // Else: If at least one neighbor is significant then 15, else 14.
-    let m2 = 14 + 1 * ctx.neighborhood_significance_states(pos).min(1);
+    let m2 = 14 + ctx.neighborhood_significance_states(pos).min(1);
 
     u8::max(m1, m2)
 }
