@@ -720,7 +720,6 @@ fn significance_propagation_pass(
     ctx: &mut CodeBlockDecodeContext,
     decoder: &mut impl BitDecoder,
 ) -> Option<()> {
-    eprintln!("{}, {}", ctx.width, ctx.height);
     for_each_position(
         ctx.width,
         ctx.height,
