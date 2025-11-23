@@ -357,7 +357,7 @@ const COEFFICIENTS_PADDING: u32 = 1;
 /// The order from MSB to LSB is as follows:
 ///
 /// top-left, top, top-right, left, bottom-left, right, bottom-right, bottom.
-/// 
+///
 /// See the `context_label_sign_coding` method for why we aren't simply using
 /// row-major order.
 #[derive(Default, Copy, Clone)]
@@ -571,9 +571,7 @@ impl CodeBlockDecodeContext {
 
     #[inline]
     fn sign(&self, position: Position) -> u8 {
-        if self.coefficients[position.index(self.padded_width)]
-            .has_sign()
-        {
+        if self.coefficients[position.index(self.padded_width)].has_sign() {
             1
         } else {
             0
@@ -846,7 +844,11 @@ fn decode_sign_bit<T: BitDecoder>(
         let left_sign = ctx.sign(pos.left());
         let right_sign = ctx.sign(pos.right());
         let top_sign = ctx.sign(pos.top());
-        let bottom_sign = if suppress_lower { 0 } else { ctx.sign(pos.bottom()) };
+        let bottom_sign = if suppress_lower {
+            0
+        } else {
+            ctx.sign(pos.bottom())
+        };
 
         // Due to the specific layout of `NeighborSignificances`, direct neighbors
         // and diagonals are interleaved. Therefore, we create a new bit-packed
@@ -858,7 +860,7 @@ fn decode_sign_bit<T: BitDecoder>(
         let negative_significances = significances & signs;
         let positive_significances = significances & !signs;
         let merged_significances = (negative_significances << 1) | positive_significances;
-        
+
         SIGN_CONTEXT_LOOKUP[merged_significances as usize]
     }
 
