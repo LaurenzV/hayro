@@ -356,6 +356,8 @@ pub(crate) struct CodeBlockDecodeContext {
     coefficients: Vec<Coefficient>,
     /// The width of the code-block we are processing.
     width: u32,
+    /// The width of the code-block we are processing, with padding.
+    padded_width: u32,
     /// The height of the code-block we are processing.
     height: u32,
     /// Whether the vertical causal flag is enabled.
@@ -372,6 +374,7 @@ impl Default for CodeBlockDecodeContext {
             coefficient_states: vec![],
             coefficients: vec![],
             width: 0,
+            padded_width: 0,
             height: 0,
             vertically_causal: false,
             sub_band_type: SubBandType::LowLow,
@@ -389,8 +392,9 @@ impl CodeBlockDecodeContext {
         code_block_style: &CodeBlockStyle,
     ) {
         let (width, height) = (code_block.rect.width(), code_block.rect.height());
-        let num_coefficients = (width+ COEFFICIENTS_PADDING * 2) as usize
-            * (height + COEFFICIENTS_PADDING * 2) as usize;
+        let padded_width = width + COEFFICIENTS_PADDING * 2;
+        let padded_height = height + COEFFICIENTS_PADDING * 2;
+        let num_coefficients = padded_width as usize * padded_height as usize;
 
         self.coefficients.clear();
         self.coefficients
@@ -405,6 +409,7 @@ impl CodeBlockDecodeContext {
         });
 
         self.width = width;
+        self.padded_width = padded_width;
         self.height = height;
         self.sub_band_type = sub_band_type;
         self.vertically_causal = code_block_style.vertically_causal_context;
@@ -413,15 +418,15 @@ impl CodeBlockDecodeContext {
 
     pub(crate) fn coefficient_rows(&self) -> impl Iterator<Item = &[Coefficient]> {
         self.coefficients
-            .chunks_exact(self.width as usize + 2 * COEFFICIENTS_PADDING as usize)
+            .chunks_exact(self.padded_width as usize)
             .map(|row| &row[COEFFICIENTS_PADDING as usize..][..self.width as usize])
             .skip(COEFFICIENTS_PADDING as usize)
             .take(self.height as usize)
     }
 
-    fn set_sign(&mut self, pos: &Position, sign: u8) {
+    fn set_sign(&mut self, pos: Position, sign: u8) {
         // Using `or` is okay here because we only set the sign once.
-        self.coefficients[pos.index(self.width)].set_sign(sign);
+        self.coefficients[pos.index(self.padded_width)].set_sign(sign);
     }
 
     fn arithmetic_decoder_context(&mut self, ctx_label: u8) -> &mut ArithmeticDecoderContext {
@@ -446,40 +451,40 @@ impl CodeBlockDecodeContext {
         }
     }
 
-    fn significance_state(&self, position: &Position) -> u8 {
-        if self.coefficient_states[position.index(self.width)].is_significant() {
+    fn significance_state(&self, position: Position) -> u8 {
+        if self.coefficient_states[position.index(self.padded_width)].is_significant() {
             1
         } else {
             0
         }
     }
 
-    fn is_significant(&self, position: &Position) -> bool {
+    fn is_significant(&self, position: Position) -> bool {
         self.significance_state(position) != 0
     }
 
-    fn set_significant(&mut self, position: &Position) {
-        self.coefficient_states[position.index(self.width)].set_significant();
+    fn set_significant(&mut self, position: Position) {
+        self.coefficient_states[position.index(self.padded_width)].set_significant();
     }
 
-    fn set_zero_coded(&mut self, position: &Position) {
-        self.coefficient_states[position.index(self.width)].set_zero_coded(1);
+    fn set_zero_coded(&mut self, position: Position) {
+        self.coefficient_states[position.index(self.padded_width)].set_zero_coded(1);
     }
 
-    fn set_magnitude_refined(&mut self, position: &Position) {
-        self.coefficient_states[position.index(self.width)].set_magnitude_refined();
+    fn set_magnitude_refined(&mut self, position: Position) {
+        self.coefficient_states[position.index(self.padded_width)].set_magnitude_refined();
     }
 
-    fn is_magnitude_refined(&self, position: &Position) -> bool {
-        self.coefficient_states[position.index(self.width)].is_magnitude_refined()
+    fn is_magnitude_refined(&self, position: Position) -> bool {
+        self.coefficient_states[position.index(self.padded_width)].is_magnitude_refined()
     }
 
-    fn is_zero_coded(&self, position: &Position) -> bool {
-        self.coefficient_states[position.index(self.width)].is_zero_coded()
+    fn is_zero_coded(&self, position: Position) -> bool {
+        self.coefficient_states[position.index(self.padded_width)].is_zero_coded()
     }
 
-    fn push_magnitude_bit(&mut self, position: &Position, bit: u32) {
-        let idx = position.index(self.width);
+    fn push_magnitude_bit(&mut self, position: Position, bit: u32) {
+        let idx = position.index(self.padded_width);
         let count = self.coefficient_states[idx].num_bitplanes();
 
         debug_assert!((count as u32) < BITPLANE_BIT_SIZE);
@@ -489,13 +494,9 @@ impl CodeBlockDecodeContext {
     }
 
     #[inline]
-    fn sign_checked(&self, x: i64, y: i64) -> u8 {
-        if x < 0 || y < 0 || x >= self.width as i64 || y >= self.height as i64 {
-            // OOB values should just return 0.
-            0
-        } else if self.coefficients[x as usize
-            + COEFFICIENTS_PADDING as usize
-            + (y as usize + 1) * (self.width as usize + COEFFICIENTS_PADDING as usize * 2)]
+    fn sign(&self, position: Position) -> u8 {
+        if self.coefficients[position.index_x as usize
+            + position.index_y as usize * (self.width as usize + COEFFICIENTS_PADDING as usize * 2)]
             .has_sign()
         {
             1
@@ -505,58 +506,49 @@ impl CodeBlockDecodeContext {
     }
 
     #[inline]
-    fn significance_state_checked(&self, x: i64, y: i64) -> u8 {
-        if x < 0 || y < 0 || x >= self.width as i64 || y >= self.height as i64 {
-            // OOB values should just return 0.
-            0
-        } else {
-            self.significance_state(&Position::new(x as u32, y as u32))
-        }
+    fn neighbor_in_next_stripe(&self, pos: Position, neighbor_y: u32) -> bool {
+        neighbor_y < self.height && (neighbor_y >> 2) > (pos.real_y() >> 2)
     }
 
     #[inline]
-    fn neighbor_in_next_stripe(&self, pos: &Position, neighbor_y: u32) -> bool {
-        neighbor_y < self.height && (neighbor_y >> 2) > (pos.y >> 2)
+    fn horizontal_significance_states(&self, pos: Position) -> u8 {
+        self.significance_state(pos.left()) + self.significance_state(pos.right())
     }
 
     #[inline]
-    fn horizontal_significance_states(&self, pos: &Position) -> u8 {
-        self.significance_state_checked(pos.x as i64 - 1, pos.y as i64)
-            + self.significance_state_checked(pos.x as i64 + 1, pos.y as i64)
-    }
+    fn vertical_significance_states(&self, pos: Position) -> u8 {
+        let suppress_lower =
+            self.vertically_causal && self.neighbor_in_next_stripe(pos, pos.real_y() + 1);
 
-    #[inline]
-    fn vertical_significance_states(&self, pos: &Position) -> u8 {
-        let suppress_lower = self.vertically_causal && self.neighbor_in_next_stripe(pos, pos.y + 1);
-
-        self.significance_state_checked(pos.x as i64, pos.y as i64 - 1)
+        self.significance_state(pos.top())
             + if suppress_lower {
                 0
             } else {
-                self.significance_state_checked(pos.x as i64, pos.y as i64 + 1)
+                self.significance_state(pos.bottom())
             }
     }
 
     #[inline(always)]
-    fn diagonal_significance_states(&self, pos: &Position) -> u8 {
-        let suppress_lower = self.vertically_causal && self.neighbor_in_next_stripe(pos, pos.y + 1);
+    fn diagonal_significance_states(&self, pos: Position) -> u8 {
+        let suppress_lower =
+            self.vertically_causal && self.neighbor_in_next_stripe(pos, pos.real_y() + 1);
 
-        self.significance_state_checked(pos.x as i64 - 1, pos.y as i64 - 1)
-            + self.significance_state_checked(pos.x as i64 + 1, pos.y as i64 - 1)
+        self.significance_state(pos.top_left())
+            + self.significance_state(pos.top_right())
             + if suppress_lower {
                 0
             } else {
-                self.significance_state_checked(pos.x as i64 - 1, pos.y as i64 + 1)
+                self.significance_state(pos.bottom_left())
             }
             + if suppress_lower {
                 0
             } else {
-                self.significance_state_checked(pos.x as i64 + 1, pos.y as i64 + 1)
+                self.significance_state(pos.bottom_right())
             }
     }
 
     #[inline]
-    fn neighborhood_significance_states(&self, pos: &Position) -> u8 {
+    fn neighborhood_significance_states(&self, pos: Position) -> u8 {
         self.horizontal_significance_states(pos)
             + self.vertical_significance_states(pos)
             + self.diagonal_significance_states(pos)
@@ -571,19 +563,22 @@ fn cleanup_pass(ctx: &mut CodeBlockDecodeContext, decoder: &mut impl BitDecoder)
         ctx.height,
         #[inline(always)]
         |cur_pos| {
-            if !ctx.is_significant(cur_pos) && !ctx.is_zero_coded(cur_pos) {
-                let use_rl = cur_pos.y % 4 == 0
-                    && (ctx.height - cur_pos.y) >= 4
-                    && ctx.neighborhood_significance_states(cur_pos) == 0
-                    && ctx
-                        .neighborhood_significance_states(&Position::new(cur_pos.x, cur_pos.y + 1))
-                        == 0
-                    && ctx
-                        .neighborhood_significance_states(&Position::new(cur_pos.x, cur_pos.y + 2))
-                        == 0
-                    && ctx
-                        .neighborhood_significance_states(&Position::new(cur_pos.x, cur_pos.y + 3))
-                        == 0;
+            if !ctx.is_significant(*cur_pos) && !ctx.is_zero_coded(*cur_pos) {
+                let use_rl = cur_pos.real_y() % 4 == 0
+                    && (ctx.height - cur_pos.real_y()) >= 4
+                    && ctx.neighborhood_significance_states(*cur_pos) == 0
+                    && ctx.neighborhood_significance_states(Position::new_index(
+                        cur_pos.index_x,
+                        cur_pos.index_y + 1,
+                    )) == 0
+                    && ctx.neighborhood_significance_states(Position::new_index(
+                        cur_pos.index_x,
+                        cur_pos.index_y + 2,
+                    )) == 0
+                    && ctx.neighborhood_significance_states(Position::new_index(
+                        cur_pos.index_x,
+                        cur_pos.index_y + 3,
+                    )) == 0;
 
                 let bit = if use_rl {
                     // "If the four contiguous coefficients in the column being scanned are all decoded
@@ -596,11 +591,11 @@ fn cleanup_pass(ctx: &mut CodeBlockDecodeContext, decoder: &mut impl BitDecoder)
                     if bit == 0 {
                         // "If the symbol 0 is returned, then all four contiguous coefficients in
                         // the column remain insignificant and are set to zero."
-                        ctx.push_magnitude_bit(cur_pos, 0);
+                        ctx.push_magnitude_bit(*cur_pos, 0);
 
                         for _ in 0..3 {
-                            cur_pos.y += 1;
-                            ctx.push_magnitude_bit(cur_pos, 0);
+                            cur_pos.index_y += 1;
+                            ctx.push_magnitude_bit(*cur_pos, 0);
                         }
 
                         return;
@@ -616,22 +611,22 @@ fn cleanup_pass(ctx: &mut CodeBlockDecodeContext, decoder: &mut impl BitDecoder)
                             | decoder.read_bit(ctx.arithmetic_decoder_context(18));
 
                         for _ in 0..num_zeroes {
-                            ctx.push_magnitude_bit(cur_pos, 0);
-                            cur_pos.y += 1;
+                            ctx.push_magnitude_bit(*cur_pos, 0);
+                            cur_pos.index_y += 1;
                         }
 
                         1
                     }
                 } else {
-                    let ctx_label = context_label_zero_coding(cur_pos, ctx);
+                    let ctx_label = context_label_zero_coding(*cur_pos, ctx);
                     decoder.read_bit(ctx.arithmetic_decoder_context(ctx_label))
                 };
 
-                ctx.push_magnitude_bit(cur_pos, bit);
+                ctx.push_magnitude_bit(*cur_pos, bit);
 
                 if bit == 1 {
-                    decode_sign_bit(cur_pos, ctx, decoder);
-                    ctx.set_significant(cur_pos);
+                    decode_sign_bit(*cur_pos, ctx, decoder);
+                    ctx.set_significant(*cur_pos);
                 }
             }
         },
@@ -655,19 +650,20 @@ fn significance_propagation_pass(
             // "The significance propagation pass only includes bits of coefficients
             // that were insignificant (the significance state has yet to be set)
             // and have a non-zero context."
-            if !ctx.is_significant(cur_pos) && ctx.neighborhood_significance_states(cur_pos) != 0 {
-                let ctx_label = context_label_zero_coding(cur_pos, ctx);
+            if !ctx.is_significant(*cur_pos) && ctx.neighborhood_significance_states(*cur_pos) != 0
+            {
+                let ctx_label = context_label_zero_coding(*cur_pos, ctx);
                 let bit = decoder.read_bit(ctx.arithmetic_decoder_context(ctx_label));
-                ctx.push_magnitude_bit(cur_pos, bit);
-                ctx.set_zero_coded(cur_pos);
+                ctx.push_magnitude_bit(*cur_pos, bit);
+                ctx.set_zero_coded(*cur_pos);
 
                 // "If the value of this bit is 1 then the significance
                 // state is set to 1 and the immediate next bit to be decoded is
                 // the sign bit for the coefficient. Otherwise, the significance
                 // state remains 0."
                 if bit == 1 {
-                    decode_sign_bit(cur_pos, ctx, decoder);
-                    ctx.set_significant(cur_pos);
+                    decode_sign_bit(*cur_pos, ctx, decoder);
+                    ctx.set_significant(*cur_pos);
                 }
             }
         },
@@ -688,11 +684,11 @@ fn magnitude_refinement_pass(
         ctx.height,
         #[inline(always)]
         |cur_pos| {
-            if ctx.is_significant(cur_pos) && !ctx.is_zero_coded(cur_pos) {
-                let ctx_label = context_label_magnitude_refinement_coding(cur_pos, ctx);
+            if ctx.is_significant(*cur_pos) && !ctx.is_zero_coded(*cur_pos) {
+                let ctx_label = context_label_magnitude_refinement_coding(*cur_pos, ctx);
                 let bit = decoder.read_bit(ctx.arithmetic_decoder_context(ctx_label));
-                ctx.push_magnitude_bit(cur_pos, bit);
-                ctx.set_magnitude_refined(cur_pos);
+                ctx.push_magnitude_bit(*cur_pos, bit);
+                ctx.set_magnitude_refined(*cur_pos);
             }
         },
     );
@@ -713,9 +709,9 @@ fn for_each_position(width: u32, height: u32, mut action: impl FnMut(&mut Positi
     for base_row in (0..height).step_by(4) {
         for x in 0..width {
             let mut cur_pos = Position::new(x, base_row);
-            while cur_pos.y < (base_row + 4).min(height) {
+            while cur_pos.real_y() < (base_row + 4).min(height) {
                 action(&mut cur_pos);
-                cur_pos.y += 1;
+                cur_pos.index_y += 1;
             }
         }
     }
@@ -724,31 +720,31 @@ fn for_each_position(width: u32, height: u32, mut action: impl FnMut(&mut Positi
 /// Decode a sign bit (Section D.3.2).
 #[inline(always)]
 fn decode_sign_bit<T: BitDecoder>(
-    pos: &Position,
+    pos: Position,
     ctx: &mut CodeBlockDecodeContext,
     decoder: &mut T,
 ) {
     /// Based on Table D.2.
     #[inline(always)]
-    fn context_label_sign_coding(pos: &Position, ctx: &CodeBlockDecodeContext) -> (u8, u8) {
+    fn context_label_sign_coding(pos: Position, ctx: &CodeBlockDecodeContext) -> (u8, u8) {
         #[inline(always)]
-        fn neighbor_contribution(ctx: &CodeBlockDecodeContext, x: i64, y: i64) -> i32 {
-            let sigma = ctx.significance_state_checked(x, y);
+        fn neighbor_contribution(ctx: &CodeBlockDecodeContext, pos: Position) -> i32 {
+            let sigma = ctx.significance_state(pos);
 
-            let multiplied = if ctx.sign_checked(x, y) == 0 { 1 } else { -1 };
+            let multiplied = if ctx.sign(pos) == 0 { 1 } else { -1 };
 
             multiplied * sigma as i32
         }
 
-        let h = (neighbor_contribution(ctx, pos.x as i64 - 1, pos.y as i64)
-            + neighbor_contribution(ctx, pos.x as i64 + 1, pos.y as i64))
-        .clamp(-1, 1);
-        let suppress_lower = ctx.vertically_causal && ctx.neighbor_in_next_stripe(pos, pos.y + 1);
-        let v = (neighbor_contribution(ctx, pos.x as i64, pos.y as i64 - 1)
+        let h = (neighbor_contribution(ctx, pos.left()) + neighbor_contribution(ctx, pos.right()))
+            .clamp(-1, 1);
+        let suppress_lower =
+            ctx.vertically_causal && ctx.neighbor_in_next_stripe(pos, pos.real_y() + 1);
+        let v = (neighbor_contribution(ctx, pos.top())
             + if suppress_lower {
                 0
             } else {
-                neighbor_contribution(ctx, pos.x as i64, pos.y as i64 + 1)
+                neighbor_contribution(ctx, pos.bottom())
             })
         .clamp(-1, 1);
 
@@ -778,7 +774,7 @@ fn decode_sign_bit<T: BitDecoder>(
 
 /// Return the context label for zero coding (Section D.3.1).
 #[inline(always)]
-fn context_label_zero_coding(pos: &Position, ctx: &CodeBlockDecodeContext) -> u8 {
+fn context_label_zero_coding(pos: Position, ctx: &CodeBlockDecodeContext) -> u8 {
     let mut horizontal = ctx.horizontal_significance_states(pos);
     let mut vertical = ctx.vertical_significance_states(pos);
     let diagonal = ctx.diagonal_significance_states(pos);
@@ -836,7 +832,7 @@ fn context_label_zero_coding(pos: &Position, ctx: &CodeBlockDecodeContext) -> u8
 }
 
 /// Return the context label for magnitude refinement coding (Table D.4).
-fn context_label_magnitude_refinement_coding(pos: &Position, ctx: &CodeBlockDecodeContext) -> u8 {
+fn context_label_magnitude_refinement_coding(pos: Position, ctx: &CodeBlockDecodeContext) -> u8 {
     if ctx.is_magnitude_refined(pos) {
         16
     } else {
@@ -850,19 +846,67 @@ fn context_label_magnitude_refinement_coding(pos: &Position, ctx: &CodeBlockDeco
 
 #[derive(Default, Copy, Clone, Debug)]
 struct Position {
-    x: u32,
-    y: u32,
+    index_x: u32,
+    index_y: u32,
 }
 
 impl Position {
     fn new(x: u32, y: u32) -> Position {
-        Self { x, y }
+        Self {
+            index_x: x + 1,
+            index_y: y + 1,
+        }
     }
 
-    fn index(&self, width: u32) -> usize {
-        self.x as usize
-            + COEFFICIENTS_PADDING as usize
-            + (self.y + 1) as usize * (width as usize + COEFFICIENTS_PADDING as usize * 2)
+    fn new_index(x: u32, y: u32) -> Position {
+        Self {
+            index_x: x,
+            index_y: y,
+        }
+    }
+
+    fn left(&self) -> Position {
+        Self::new_index(self.index_x - 1, self.index_y)
+    }
+
+    fn right(&self) -> Position {
+        Self::new_index(self.index_x + 1, self.index_y)
+    }
+
+    fn top(&self) -> Position {
+        Self::new_index(self.index_x, self.index_y - 1)
+    }
+
+    fn bottom(&self) -> Position {
+        Self::new_index(self.index_x, self.index_y + 1)
+    }
+
+    fn top_left(&self) -> Position {
+        Self::new_index(self.index_x - 1, self.index_y - 1)
+    }
+
+    fn top_right(&self) -> Position {
+        Self::new_index(self.index_x + 1, self.index_y - 1)
+    }
+
+    fn bottom_left(&self) -> Position {
+        Self::new_index(self.index_x - 1, self.index_y + 1)
+    }
+
+    fn bottom_right(&self) -> Position {
+        Self::new_index(self.index_x + 1, self.index_y + 1)
+    }
+
+    fn real_x(&self) -> u32 {
+        self.index_x - 1
+    }
+
+    fn real_y(&self) -> u32 {
+        self.index_y - 1
+    }
+
+    fn index(&self, padded_width: u32) -> usize {
+        self.index_x as usize + self.index_y as usize * padded_width as usize
     }
 }
 
