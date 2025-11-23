@@ -896,7 +896,7 @@ impl Position {
     fn bottom_right(&self) -> Position {
         Self::new_index(self.index_x + 1, self.index_y + 1)
     }
-    
+
     fn real_y(&self) -> u32 {
         self.index_y - 1
     }
