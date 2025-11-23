@@ -346,7 +346,7 @@ impl Coefficient {
     }
 }
 
-const COEFFICIENTS_PADDING: usize = 1;
+const COEFFICIENTS_PADDING: u32 = 1;
 
 pub(crate) struct CodeBlockDecodeContext {
     /// A vector of bit-packed fields for each coefficient in the code-block.
@@ -389,8 +389,8 @@ impl CodeBlockDecodeContext {
         code_block_style: &CodeBlockStyle,
     ) {
         let (width, height) = (code_block.rect.width(), code_block.rect.height());
-        let num_coefficients = (width as usize + COEFFICIENTS_PADDING * 2)
-            * (height as usize + COEFFICIENTS_PADDING * 2);
+        let num_coefficients = (width+ COEFFICIENTS_PADDING * 2) as usize
+            * (height + COEFFICIENTS_PADDING * 2) as usize;
 
         self.coefficients.clear();
         self.coefficients
@@ -413,9 +413,9 @@ impl CodeBlockDecodeContext {
 
     pub(crate) fn coefficient_rows(&self) -> impl Iterator<Item = &[Coefficient]> {
         self.coefficients
-            .chunks_exact(self.width as usize + 2 * COEFFICIENTS_PADDING)
-            .map(|row| &row[COEFFICIENTS_PADDING..][..self.width as usize])
-            .skip(COEFFICIENTS_PADDING)
+            .chunks_exact(self.width as usize + 2 * COEFFICIENTS_PADDING as usize)
+            .map(|row| &row[COEFFICIENTS_PADDING as usize..][..self.width as usize])
+            .skip(COEFFICIENTS_PADDING as usize)
             .take(self.height as usize)
     }
 
@@ -494,8 +494,8 @@ impl CodeBlockDecodeContext {
             // OOB values should just return 0.
             0
         } else if self.coefficients[x as usize
-            + COEFFICIENTS_PADDING
-            + (y as usize + 1) * (self.width as usize + COEFFICIENTS_PADDING * 2)]
+            + COEFFICIENTS_PADDING as usize
+            + (y as usize + 1) * (self.width as usize + COEFFICIENTS_PADDING as usize * 2)]
             .has_sign()
         {
             1
@@ -861,8 +861,8 @@ impl Position {
 
     fn index(&self, width: u32) -> usize {
         self.x as usize
-            + COEFFICIENTS_PADDING
-            + (self.y + 1) as usize * (width as usize + COEFFICIENTS_PADDING * 2)
+            + COEFFICIENTS_PADDING as usize
+            + (self.y + 1) as usize * (width as usize + COEFFICIENTS_PADDING as usize * 2)
     }
 }
 
