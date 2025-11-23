@@ -302,8 +302,8 @@ impl CoefficientState {
     }
 
     #[inline(always)]
-    fn is_magnitude_refined(&self) -> bool {
-        (self.0 >> HAS_MAGNITUDE_REFINEMENT_SHIFT) & 1 == 1
+    fn magnitude_refinement(&self) -> u8 {
+        (self.0 >> HAS_MAGNITUDE_REFINEMENT_SHIFT) & 1
     }
 
     #[inline(always)]
@@ -551,8 +551,8 @@ impl CodeBlockDecodeContext {
         self.coefficient_states[position.index(self.padded_width)].set_magnitude_refined();
     }
 
-    fn is_magnitude_refined(&self, position: Position) -> bool {
-        self.coefficient_states[position.index(self.padded_width)].is_magnitude_refined()
+    fn magnitude_refinement(&self, position: Position) -> u8 {
+        self.coefficient_states[position.index(self.padded_width)].magnitude_refinement()
     }
 
     fn is_zero_coded(&self, position: Position) -> bool {
@@ -1027,12 +1027,12 @@ fn context_label_zero_coding(pos: Position, ctx: &CodeBlockDecodeContext) -> u8 
 
 /// Return the context label for magnitude refinement coding (Table D.4).
 fn context_label_magnitude_refinement_coding(pos: Position, ctx: &CodeBlockDecodeContext) -> u8 {
-    if ctx.is_magnitude_refined(pos) {
-        16
-    } else {
-        // If >= 1 then 15 else 14, branchless.
-        14 + 1 * ctx.neighborhood_significance_states(pos).min(1)
-    }
+    // If magnitude refined, then 16.
+    let m1 = ctx.magnitude_refinement(pos) * 16;
+    // Else, if >= 1 then 15, else 14.
+    let m2 = 14 + 1 * ctx.neighborhood_significance_states(pos).min(1);
+    
+    u8::max(m1, m2)
 }
 
 #[derive(Default, Copy, Clone, Debug)]
