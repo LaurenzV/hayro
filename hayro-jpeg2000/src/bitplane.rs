@@ -890,7 +890,7 @@ fn context_label_zero_coding(pos: Position, ctx: &CodeBlockDecodeContext) -> u8 
 fn context_label_magnitude_refinement_coding(pos: Position, ctx: &CodeBlockDecodeContext) -> u8 {
     // If magnitude refined, then 16.
     let m1 = ctx.magnitude_refinement(pos) * 16;
-    // Else, if >= 1 then 15, else 14.
+    // Else: If at least one neighbor is significant then 15, else 14.
     let m2 = 14 + 1 * ctx.neighborhood_significance_states(pos).min(1);
 
     u8::max(m1, m2)
