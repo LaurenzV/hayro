@@ -293,7 +293,12 @@ impl CoefficientState {
 
     #[inline(always)]
     fn is_significant(&self) -> bool {
-        (self.0 >> SIGNIFICANCE_SHIFT) & 1 == 1
+        self.significance() == 1
+    }
+
+    #[inline(always)]
+    fn significance(&self) -> u8 {
+        (self.0 >> SIGNIFICANCE_SHIFT) & 1
     }
 
     #[inline(always)]
@@ -348,9 +353,71 @@ impl Coefficient {
 
 const COEFFICIENTS_PADDING: u32 = 1;
 
+/// Store the significances of each neighbor for a specific coefficient.
+/// Each bit is used for one neighbor, starting from the top-left and
+/// going over all neighbors in row-major order.
+#[derive(Default, Copy, Clone)]
+struct NeighborSignificances(u8);
+
+impl NeighborSignificances {
+    fn set_top_left(&mut self) {
+        self.0 |= 1 << 7;
+    }
+
+    fn set_top(&mut self) {
+        self.0 |= 1 << 6;
+    }
+
+    fn set_top_right(&mut self) {
+        self.0 |= 1 << 5;
+    }
+
+    fn set_left(&mut self) {
+        self.0 |= 1 << 4;
+    }
+
+    fn set_right(&mut self) {
+        self.0 |= 1 << 3;
+    }
+
+    fn set_bottom_left(&mut self) {
+        self.0 |= 1 << 2;
+    }
+
+    fn set_bottom(&mut self) {
+        self.0 |= 1 << 1;
+    }
+
+    fn set_bottom_right(&mut self) {
+        self.0 |= 1;
+    }
+
+    fn horizontal(&self) -> u8 {
+        (self.0 & 0b00011000).count_ones() as u8
+    }
+
+    fn top(&self) -> u8 {
+        (self.0 & 0b01000000).count_ones() as u8
+    }
+
+    fn vertical(&self) -> u8 {
+        (self.0 & 0b01000010).count_ones() as u8
+    }
+
+    fn diagonal(&self) -> u8 {
+        (self.0 & 0b10100101).count_ones() as u8
+    }
+
+    fn diagonal_top(&self) -> u8 {
+        (self.0 & 0b10100000).count_ones() as u8
+    }
+}
+
 pub(crate) struct CodeBlockDecodeContext {
     /// A vector of bit-packed fields for each coefficient in the code-block.
     coefficient_states: Vec<CoefficientState>,
+    /// The neighbor significances for each coefficient.
+    neighbor_significances: Vec<NeighborSignificances>,
     /// The magnitude and signs each coefficient that is successively built
     /// as we advance through the bitplanes.
     coefficients: Vec<Coefficient>,
@@ -373,6 +440,7 @@ impl Default for CodeBlockDecodeContext {
         Self {
             coefficient_states: vec![],
             coefficients: vec![],
+            neighbor_significances: vec![],
             width: 0,
             padded_width: 0,
             height: 0,
@@ -399,6 +467,10 @@ impl CodeBlockDecodeContext {
         self.coefficients.clear();
         self.coefficients
             .resize(num_coefficients, Coefficient::default());
+
+        self.neighbor_significances.clear();
+        self.neighbor_significances
+            .resize(num_coefficients, NeighborSignificances::default());
 
         self.coefficient_states.clear();
         self.coefficient_states.resize_with(num_coefficients, || {
@@ -452,19 +524,35 @@ impl CodeBlockDecodeContext {
     }
 
     fn significance_state(&self, position: Position) -> u8 {
-        if self.coefficient_states[position.index(self.padded_width)].is_significant() {
-            1
-        } else {
-            0
-        }
+        self.coefficient_states[position.index(self.padded_width)].significance()
     }
 
     fn is_significant(&self, position: Position) -> bool {
-        self.significance_state(position) != 0
+        self.coefficient_states[position.index(self.padded_width)].is_significant()
     }
 
     fn set_significant(&mut self, position: Position) {
-        self.coefficient_states[position.index(self.padded_width)].set_significant();
+        let idx = position.index(self.padded_width);
+        let is_significant = self.coefficient_states[idx].is_significant();
+
+        if !is_significant {
+            self.coefficient_states[idx].set_significant();
+
+            // Update all neighbors so they know this coefficient is significant
+            // now.
+            self.neighbor_significances[position.top_left().index(self.padded_width)]
+                .set_bottom_right();
+            self.neighbor_significances[position.top().index(self.padded_width)].set_bottom();
+            self.neighbor_significances[position.top_right().index(self.padded_width)]
+                .set_bottom_left();
+            self.neighbor_significances[position.left().index(self.padded_width)].set_right();
+            self.neighbor_significances[position.right().index(self.padded_width)].set_left();
+            self.neighbor_significances[position.bottom_left().index(self.padded_width)]
+                .set_top_right();
+            self.neighbor_significances[position.bottom().index(self.padded_width)].set_top();
+            self.neighbor_significances[position.bottom_right().index(self.padded_width)]
+                .set_top_left();
+        }
     }
 
     fn set_zero_coded(&mut self, position: Position) {
@@ -512,39 +600,29 @@ impl CodeBlockDecodeContext {
 
     #[inline]
     fn horizontal_significance_states(&self, pos: Position) -> u8 {
-        self.significance_state(pos.left()) + self.significance_state(pos.right())
+        self.neighbor_significances[pos.index(self.padded_width)].horizontal()
     }
 
     #[inline]
     fn vertical_significance_states(&self, pos: Position) -> u8 {
-        let suppress_lower =
-            self.vertically_causal && self.neighbor_in_next_stripe(pos, pos.real_y() + 1);
+        let neighbors = &self.neighbor_significances[pos.index(self.padded_width)];
 
-        self.significance_state(pos.top())
-            + if suppress_lower {
-                0
-            } else {
-                self.significance_state(pos.bottom())
-            }
+        if self.vertically_causal && self.neighbor_in_next_stripe(pos, pos.real_y() + 1) {
+            neighbors.top()
+        } else {
+            neighbors.vertical()
+        }
     }
 
     #[inline(always)]
     fn diagonal_significance_states(&self, pos: Position) -> u8 {
-        let suppress_lower =
-            self.vertically_causal && self.neighbor_in_next_stripe(pos, pos.real_y() + 1);
+        let neighbors = &self.neighbor_significances[pos.index(self.padded_width)];
 
-        self.significance_state(pos.top_left())
-            + self.significance_state(pos.top_right())
-            + if suppress_lower {
-                0
-            } else {
-                self.significance_state(pos.bottom_left())
-            }
-            + if suppress_lower {
-                0
-            } else {
-                self.significance_state(pos.bottom_right())
-            }
+        if self.vertically_causal && self.neighbor_in_next_stripe(pos, pos.real_y() + 1) {
+            neighbors.diagonal_top()
+        } else {
+            neighbors.diagonal()
+        }
     }
 
     #[inline]
@@ -642,6 +720,7 @@ fn significance_propagation_pass(
     ctx: &mut CodeBlockDecodeContext,
     decoder: &mut impl BitDecoder,
 ) -> Option<()> {
+    eprintln!("{}, {}", ctx.width, ctx.height);
     for_each_position(
         ctx.width,
         ctx.height,
