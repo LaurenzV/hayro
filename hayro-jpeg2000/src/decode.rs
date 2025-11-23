@@ -1042,11 +1042,7 @@ fn decode_sub_band_bitplanes(
             let x_offset = code_block.rect.x0 - sub_band.rect.x0;
             let y_offset = code_block.rect.y0 - sub_band.rect.y0;
 
-            for (y, magnitudes) in b_ctx
-                .coefficients()
-                .chunks_exact(code_block.rect.width() as usize)
-                .enumerate()
-            {
+            for (y, magnitudes) in b_ctx.coefficient_rows().enumerate() {
                 let out_row = &mut storage.coefficients[sub_band.coefficients.clone()][((y_offset
                     + y as u32)
                     * sub_band.rect.width())

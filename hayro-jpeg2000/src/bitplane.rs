@@ -408,8 +408,8 @@ impl CodeBlockDecodeContext {
         self.reset_contexts();
     }
 
-    pub(crate) fn coefficients(&self) -> &[Coefficient] {
-        &self.coefficients
+    pub(crate) fn coefficient_rows(&self) -> impl Iterator<Item = &[Coefficient]> {
+        self.coefficients.chunks_exact(self.width as usize)
     }
 
     fn set_sign(&mut self, pos: &Position, sign: u8) {
@@ -896,7 +896,9 @@ mod tests {
 
     impl CodeBlockDecodeContext {
         fn coefficients_resolved(&self) -> Vec<i32> {
-            self.coefficients().iter().map(|c| c.get()).collect()
+            self.coefficient_rows()
+                .flat_map(|c| c.iter().map(|i| i.get()).collect::<Vec<_>>())
+                .collect()
         }
     }
 
