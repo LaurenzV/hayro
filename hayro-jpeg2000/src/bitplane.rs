@@ -356,7 +356,10 @@ const COEFFICIENTS_PADDING: u32 = 1;
 /// Store the significances of each neighbor for a specific coefficient.
 /// The order from MSB to LSB is as follows:
 ///
-/// top-left, top, top-right, left, bottom-left, right, bottom-right, bottom
+/// top-left, top, top-right, left, bottom-left, right, bottom-right, bottom.
+/// 
+/// See the `context_label_sign_coding` method for why we aren't simply using
+/// row-major order.
 #[derive(Default, Copy, Clone)]
 struct NeighborSignificances(u8);
 
@@ -512,10 +515,6 @@ impl CodeBlockDecodeContext {
         }
     }
 
-    fn significance_state(&self, position: Position) -> u8 {
-        self.coefficient_states[position.index(self.padded_width)].significance()
-    }
-
     fn is_significant(&self, position: Position) -> bool {
         self.coefficient_states[position.index(self.padded_width)].is_significant()
     }
@@ -572,8 +571,7 @@ impl CodeBlockDecodeContext {
 
     #[inline]
     fn sign(&self, position: Position) -> u8 {
-        if self.coefficients[position.index_x as usize
-            + position.index_y as usize * (self.width as usize + COEFFICIENTS_PADDING as usize * 2)]
+        if self.coefficients[position.index(self.padded_width)]
             .has_sign()
         {
             1
@@ -761,6 +759,38 @@ fn for_each_position(width: u32, height: u32, mut action: impl FnMut(&mut Positi
     }
 }
 
+/// See `context_label_sign_coding`. This table contains all context labels
+/// for each combination of the bit-packed field. (255, 255) represent
+/// impossible combinations.
+const SIGN_CONTEXT_LOOKUP: [(u8, u8); 256] = [
+    (9,0), (10,0), (10,1), (0,0), (12,0), (13,0), (11,0), (0,0), (12,1), (11,1),
+        (13,1), (0,0), (0,0), (0,0), (0,0), (0,0), (12,0), (13,0), (11,0), (0,0),
+        (12,0), (13,0), (11,0), (0,0), (9,0), (10,0), (10,1), (0,0), (0,0), (0,0),
+        (0,0), (0,0), (12,1), (11,1), (13,1), (0,0), (9,0), (10,0), (10,1), (0,0),
+        (12,1), (11,1), (13,1), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0),
+        (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0),
+        (0,0), (0,0), (0,0), (0,0), (10,0), (10,0), (9,0), (0,0), (13,0), (13,0),
+        (12,0), (0,0), (11,1), (11,1), (12,1), (0,0), (0,0), (0,0), (0,0), (0,0),
+        (13,0), (13,0), (12,0), (0,0), (13,0), (13,0), (12,0), (0,0), (10,0), (10,0),
+        (9,0), (0,0), (0,0), (0,0), (0,0), (0,0), (11,1), (11,1), (12,1), (0,0),
+        (10,0), (10,0), (9,0), (0,0), (11,1), (11,1), (12,1), (0,0), (0,0), (0,0),
+        (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0),
+        (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (10,1), (9,0),
+        (10,1), (0,0), (11,0), (12,0), (11,0), (0,0), (13,1), (12,1), (13,1), (0,0),
+        (0,0), (0,0), (0,0), (0,0), (11,0), (12,0), (11,0), (0,0), (11,0), (12,0),
+        (11,0), (0,0), (10,1), (9,0), (10,1), (0,0), (0,0), (0,0), (0,0), (0,0),
+        (13,1), (12,1), (13,1), (0,0), (10,1), (9,0), (10,1), (0,0), (13,1), (12,1),
+        (13,1), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0),
+        (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0),
+        (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0),
+        (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0),
+        (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0),
+        (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0),
+        (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0),
+        (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0),
+        (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)
+];
+
 /// Decode a sign bit (Section D.3.2).
 #[inline(always)]
 fn decode_sign_bit<T: BitDecoder>(
@@ -771,39 +801,36 @@ fn decode_sign_bit<T: BitDecoder>(
     /// Based on Table D.2.
     #[inline(always)]
     fn context_label_sign_coding(pos: Position, ctx: &CodeBlockDecodeContext) -> (u8, u8) {
-        #[inline(always)]
-        fn neighbor_contribution(ctx: &CodeBlockDecodeContext, pos: Position) -> i32 {
-            let sigma = ctx.significance_state(pos);
-
-            let multiplied = if ctx.sign(pos) == 0 { 1 } else { -1 };
-
-            multiplied * sigma as i32
-        }
-
-        let h = (neighbor_contribution(ctx, pos.left()) + neighbor_contribution(ctx, pos.right()))
-            .clamp(-1, 1);
+        // A lot of subtleties going on here, all in the interest of achieving
+        // the best performance. Fundamentally, we need to determine the
+        // significances as well as signs of the four neighbors (i.e. not
+        // including the diagonal neighbors) and based on what the sum of signs
+        // is, we assign a context label.
         let suppress_lower =
             ctx.vertically_causal && ctx.neighbor_in_next_stripe(pos, pos.real_y() + 1);
-        let v = (neighbor_contribution(ctx, pos.top())
-            + if suppress_lower {
-                0
-            } else {
-                neighbor_contribution(ctx, pos.bottom())
-            })
-        .clamp(-1, 1);
+        // First, let's get all neighbor significances and mask out the diagonals.
+        let significances = ctx.neighborhood_significance_states(pos) & 0b0101_0101;
 
-        match (h, v) {
-            (1, 1) => (13, 0),
-            (1, 0) => (12, 0),
-            (1, -1) => (11, 0),
-            (0, 1) => (10, 0),
-            (0, 0) => (9, 0),
-            (0, -1) => (10, 1),
-            (-1, 1) => (11, 1),
-            (-1, 0) => (12, 1),
-            (-1, -1) => (13, 1),
-            _ => unreachable!(),
-        }
+        // Get all the signs.
+        let left_sign = ctx.sign(pos.left());
+        let right_sign = ctx.sign(pos.right());
+        let top_sign = ctx.sign(pos.top());
+        let bottom_sign = if suppress_lower { 0 } else { ctx.sign(pos.bottom()) };
+
+        // Due to the specific layout of `NeighborSignificances`, direct neighbors
+        // and diagonals are interleaved. Therefore, we create a new bit-packed
+        // representation that indicates whether the top/left/right/bottom sign
+        // is positive, negative, or insignificant. We need two bits for this.
+        // 00 represents insignificant, 01 positive and 10 negative. 11
+        // is an invalid combination.
+        let signs = (top_sign << 6) | (left_sign << 4) | (right_sign << 2) | (bottom_sign << 0);
+        let negative_significances = significances & signs;
+        let positive_significances = significances & !signs;
+        let merged_significances = (negative_significances << 1) | positive_significances;
+
+        // Not sure why, but exhaustive match seems to be very slow here, unlike
+        // for `context_label_zero_coding`. So we use a LUT instead.
+        SIGN_CONTEXT_LOOKUP[merged_significances as usize]
     }
 
     let (ctx_label, xor_bit) = context_label_sign_coding(pos, ctx);
