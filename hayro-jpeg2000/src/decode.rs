@@ -985,7 +985,7 @@ fn decode_sub_band_bitplanes(
     let dequantization_step = {
         if component_info.quantization_info.quantization_style == QuantizationStyle::NoQuantization
         {
-            None
+            1.0
         } else {
             let (exponent, mantissa) =
                 component_info.exponent_mantissa(sub_band.sub_band_type, resolution);
@@ -1003,7 +1003,7 @@ fn decode_sub_band_bitplanes(
             let delta_b = 2.0f32.powf(r_b as f32 - exponent as f32)
                 * (1.0 + (mantissa as f32) / (2u32.pow(11) as f32));
 
-            Some(delta_b)
+            delta_b
         }
     };
 
@@ -1042,20 +1042,18 @@ fn decode_sub_band_bitplanes(
             let x_offset = code_block.rect.x0 - sub_band.rect.x0;
             let y_offset = code_block.rect.y0 - sub_band.rect.y0;
 
-            for (y, magnitudes) in b_ctx.coefficient_rows().enumerate() {
-                let out_row = &mut storage.coefficients[sub_band.coefficients.clone()][((y_offset
-                    + y as u32)
-                    * sub_band.rect.width())
-                    as usize
-                    + x_offset as usize..];
+            let base_store = &mut storage.coefficients[sub_band.coefficients.clone()];
+            let mut base_idx = (y_offset * sub_band.rect.width()) as usize + x_offset as usize;
+
+            for magnitudes in b_ctx.coefficient_rows() {
+                let out_row = &mut base_store[base_idx..];
 
                 for (output, coefficient) in out_row.iter_mut().zip(magnitudes.iter().copied()) {
                     *output = coefficient.get() as f32;
-
-                    if let Some(q) = dequantization_step {
-                        *output *= q;
-                    }
+                    *output *= dequantization_step;
                 }
+
+                base_idx += sub_band.rect.width() as usize;
             }
         }
     }

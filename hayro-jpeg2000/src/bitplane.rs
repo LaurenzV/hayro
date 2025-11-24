@@ -327,10 +327,8 @@ pub(crate) struct Coefficient(u32);
 impl Coefficient {
     pub(crate) fn get(&self) -> i32 {
         let mut magnitude = (self.0 & !0x80000000) as i32;
-
-        if self.has_sign() {
-            magnitude = -magnitude;
-        }
+        // Map sign (0 for positive, 1 for negative) to 1, -1.
+        magnitude *= 1 - 2 * (self.sign() as i32);
 
         magnitude
     }
@@ -341,6 +339,10 @@ impl Coefficient {
 
     fn has_sign(&self) -> bool {
         self.0 & 0x80000000 != 0
+    }
+
+    fn sign(&self) -> u32 {
+        (self.0 >> 31) & 1
     }
 
     fn push_bit(&mut self, bit: u32) {
