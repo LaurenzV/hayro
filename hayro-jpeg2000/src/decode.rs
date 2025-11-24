@@ -1000,10 +1000,9 @@ fn decode_sub_band_bitplanes(
 
                 component_info.size_info.precision as u16 + log_gain
             };
-            let delta_b = 2.0f32.powf(r_b as f32 - exponent as f32)
-                * (1.0 + (mantissa as f32) / (2u32.pow(11) as f32));
 
-            delta_b
+            2.0f32.powf(r_b as f32 - exponent as f32)
+                * (1.0 + (mantissa as f32) / (2u32.pow(11) as f32))
         }
     };
 
