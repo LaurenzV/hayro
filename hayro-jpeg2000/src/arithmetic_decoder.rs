@@ -92,11 +92,9 @@ impl<'a> ArithmeticDecoder<'a> {
 
     /// The LPS_EXCHANGE procedure from C.3.2.
     #[inline(always)]
-    fn exchange_lps(&mut self, context: &mut ArithmeticDecoderContext) -> u32 {
+    fn exchange_lps(&mut self, context: &mut ArithmeticDecoderContext, qe_entry: &QeData) -> u32 {
         let d;
-
-        let qe_entry = &QE_TABLE[context.index as usize];
-
+        
         if self.a < qe_entry.qe {
             self.a = qe_entry.qe;
             d = context.mps;
@@ -128,7 +126,7 @@ impl<'a> ArithmeticDecoder<'a> {
 
         if (self.c >> 16) < self.a {
             if self.a & 0x8000 == 0 {
-                d = self.exchange_mps(context);
+                d = self.exchange_mps(context, qe_entry);
                 self.renormalize();
             } else {
                 d = context.mps;
@@ -136,7 +134,7 @@ impl<'a> ArithmeticDecoder<'a> {
         } else {
             self.c -= self.a << 16;
 
-            d = self.exchange_lps(context);
+            d = self.exchange_lps(context, qe_entry);
             self.renormalize();
         }
 
@@ -145,11 +143,9 @@ impl<'a> ArithmeticDecoder<'a> {
 
     /// The MPS_EXCHANGE procedure from C.3.2.
     #[inline(always)]
-    fn exchange_mps(&mut self, context: &mut ArithmeticDecoderContext) -> u32 {
+    fn exchange_mps(&mut self, context: &mut ArithmeticDecoderContext, qe_entry: &QeData) -> u32 {
         let d;
-
-        let qe_entry = &QE_TABLE[context.index as usize];
-
+        
         if self.a < qe_entry.qe {
             d = 1 - context.mps;
 
