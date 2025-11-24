@@ -1045,10 +1045,10 @@ fn decode_sub_band_bitplanes(
             let base_store = &mut storage.coefficients[sub_band.coefficients.clone()];
             let mut base_idx = (y_offset * sub_band.rect.width()) as usize + x_offset as usize;
 
-            for magnitudes in b_ctx.coefficient_rows() {
+            for coefficients in b_ctx.coefficient_rows() {
                 let out_row = &mut base_store[base_idx..];
 
-                for (output, coefficient) in out_row.iter_mut().zip(magnitudes.iter().copied()) {
+                for (output, coefficient) in out_row.iter_mut().zip(coefficients.iter().copied()) {
                     *output = coefficient.get() as f32;
                     *output *= dequantization_step;
                 }
