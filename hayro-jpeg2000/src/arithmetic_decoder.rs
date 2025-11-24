@@ -94,7 +94,7 @@ impl<'a> ArithmeticDecoder<'a> {
     #[inline(always)]
     fn exchange_lps(&mut self, context: &mut ArithmeticDecoderContext, qe_entry: &QeData) -> u32 {
         let d;
-        
+
         if self.a < qe_entry.qe {
             self.a = qe_entry.qe;
             d = context.mps;
@@ -145,7 +145,7 @@ impl<'a> ArithmeticDecoder<'a> {
     #[inline(always)]
     fn exchange_mps(&mut self, context: &mut ArithmeticDecoderContext, qe_entry: &QeData) -> u32 {
         let d;
-        
+
         if self.a < qe_entry.qe {
             d = 1 - context.mps;
 
