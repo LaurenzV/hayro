@@ -215,7 +215,7 @@ impl<'a> CMapLexer<'a> {
         if remaining.starts_with('%') {
             // Skip to end of line
             while self.position < self.input.len() {
-                let ch = self.input.chars().nth(self.position).unwrap();
+                let ch = self.input.as_bytes()[self.position] as char;
                 self.position += 1;
                 if ch == '\n' || ch == '\r' {
                     break;
@@ -263,7 +263,7 @@ impl<'a> CMapLexer<'a> {
 
     fn skip_whitespace(&mut self) {
         while self.position < self.input.len() {
-            let ch = self.input.chars().nth(self.position).unwrap();
+            let ch = self.input.as_bytes()[self.position] as char;
             if ch.is_whitespace() {
                 self.position += 1;
             } else {
@@ -284,7 +284,7 @@ impl<'a> CMapLexer<'a> {
         let mut hex_string = String::new();
 
         while self.position < self.input.len() {
-            let ch = self.input.chars().nth(self.position).unwrap();
+            let ch = self.input.as_bytes()[self.position] as char;
             if ch == '>' {
                 self.position += 1;
                 break;
@@ -318,7 +318,7 @@ impl<'a> CMapLexer<'a> {
         let mut paren_depth = 1;
 
         while self.position < self.input.len() && paren_depth > 0 {
-            let ch = self.input.chars().nth(self.position).unwrap();
+            let ch = self.input.as_bytes()[self.position] as char;
             match ch {
                 '(' => {
                     paren_depth += 1;
@@ -334,7 +334,7 @@ impl<'a> CMapLexer<'a> {
                     // Handle escape sequences
                     self.position += 1;
                     if self.position < self.input.len() {
-                        let escaped = self.input.chars().nth(self.position).unwrap();
+                        let escaped = self.input.as_bytes()[self.position] as char;
                         string.push('\\');
                         string.push(escaped);
                     }
@@ -357,7 +357,7 @@ impl<'a> CMapLexer<'a> {
         let mut name = String::new();
 
         while self.position < self.input.len() {
-            let ch = self.input.chars().nth(self.position).unwrap();
+            let ch = self.input.as_bytes()[self.position] as char;
             if ch.is_whitespace() || "[]<>(){}/%".contains(ch) {
                 break;
             }
@@ -372,7 +372,7 @@ impl<'a> CMapLexer<'a> {
         let mut token = String::new();
 
         while self.position < self.input.len() {
-            let ch = self.input.chars().nth(self.position).unwrap();
+            let ch = self.input.as_bytes()[self.position] as char;
             if ch.is_whitespace() || "[]<>(){}/%".contains(ch) {
                 break;
             }
