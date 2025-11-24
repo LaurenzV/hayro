@@ -973,6 +973,7 @@ trait BitDecoder {
 impl BitDecoder for ArithmeticDecoder<'_> {
     const IS_BYPASS: bool = false;
 
+    #[inline(always)]
     fn read_bit(&mut self, context: &mut ArithmeticDecoderContext) -> u32 {
         Self::read_bit(self, context)
     }

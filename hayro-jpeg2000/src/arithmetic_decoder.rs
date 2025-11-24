@@ -33,6 +33,7 @@ impl<'a> ArithmeticDecoder<'a> {
     }
 
     /// Read the next bit using the given context label.
+    #[inline(always)]
     pub(crate) fn read_bit(&mut self, context: &mut ArithmeticDecoderContext) -> u32 {
         self.decode(context)
     }
@@ -52,6 +53,7 @@ impl<'a> ArithmeticDecoder<'a> {
     /// The BYTEIN procedure from C.3.4.
     ///
     /// We use the version from Annex G from https://www.itu.int/rec/T-REC-T.88-201808-I.
+    #[inline(always)]
     fn read_byte(&mut self) {
         if self.current_byte() == 0xff {
             let b1 = self.next_byte();
@@ -71,6 +73,7 @@ impl<'a> ArithmeticDecoder<'a> {
     }
 
     /// The RENORMD procedure from C.3.3.
+    #[inline(always)]
     fn renormalize(&mut self) {
         loop {
             if self.shift_count == 0 {
@@ -88,6 +91,7 @@ impl<'a> ArithmeticDecoder<'a> {
     }
 
     /// The LPS_EXCHANGE procedure from C.3.2.
+    #[inline(always)]
     fn exchange_lps(&mut self, context: &mut ArithmeticDecoderContext) -> u32 {
         let d;
 
@@ -114,6 +118,7 @@ impl<'a> ArithmeticDecoder<'a> {
     /// The DECODE procedure from C.3.2.
     ///
     /// We use the version from Annex G from https://www.itu.int/rec/T-REC-T.88-201808-I.
+    #[inline(always)]
     fn decode(&mut self, context: &mut ArithmeticDecoderContext) -> u32 {
         let qe_entry = &QE_TABLE[context.index as usize];
 
@@ -143,6 +148,7 @@ impl<'a> ArithmeticDecoder<'a> {
     }
 
     /// The MPS_EXCHANGE procedure from C.3.2.
+    #[inline(always)]
     fn exchange_mps(&mut self, context: &mut ArithmeticDecoderContext) -> u32 {
         let d;
 
@@ -164,6 +170,7 @@ impl<'a> ArithmeticDecoder<'a> {
         d
     }
 
+    #[inline(always)]
     fn current_byte(&self) -> u8 {
         self.data
             .get(self.base_pointer as usize)
@@ -176,6 +183,7 @@ impl<'a> ArithmeticDecoder<'a> {
             .unwrap_or(0xFF)
     }
 
+    #[inline(always)]
     fn next_byte(&self) -> u8 {
         self.data
             .get((self.base_pointer + 1) as usize)
