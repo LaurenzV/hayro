@@ -178,10 +178,8 @@ fn decode_inner(
         .iter_mut()
         .zip(ctx.coefficient_states.iter().copied())
     {
-        let count = coefficient_state.num_bitplanes();
-        for _ in 0..(num_bitplanes - count) {
-            coefficient.push_bit(0);
-        }
+        let count = num_bitplanes - coefficient_state.num_bitplanes();
+        coefficient.push_zeroes(count);
     }
 
     Some(())
@@ -348,6 +346,11 @@ impl Coefficient {
     fn push_bit(&mut self, bit: u32) {
         let sign = self.0 & 0x80000000;
         self.0 = sign | ((self.0 << 1) | bit);
+    }
+
+    fn push_zeroes(&mut self, num: u8) {
+        let sign = self.0 & 0x80000000;
+        self.0 = sign | self.0 << num;
     }
 }
 
