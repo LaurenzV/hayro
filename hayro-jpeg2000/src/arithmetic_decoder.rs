@@ -134,11 +134,7 @@ impl<'a> ArithmeticDecoder<'a> {
                 d = context.mps;
             }
         } else {
-            let mut c_high = self.c >> 16;
-            let c_low = self.c & 0xffff;
-            c_high -= self.a;
-
-            self.c = (c_high << 16) | c_low;
+            self.c -= self.a << 16;
 
             d = self.exchange_lps(context);
             self.renormalize();
