@@ -9,7 +9,7 @@ use std::iter;
 
 // TODO: Refactor this whole module.
 
-#[derive(Default, Copy, Clone, Debug)]
+#[derive(Default, Copy, Clone, Debug, PartialEq)]
 pub(crate) struct ProgressionData {
     pub(crate) layer_num: u16,
     pub(crate) resolution: u16,
@@ -168,35 +168,33 @@ pub(crate) fn resolution_layer_component_position_progression(
 pub(crate) fn build_resolution_position_component_layer_sequence(
     input: &IteratorInput<'_>,
 ) -> Vec<ProgressionData> {
-    let mut sequence = Vec::new();
-    let tile_rect = input.tile.rect;
-
+    let mut sequence_b = Vec::new();
+    let num_components = input.tile.component_infos.len();
+    let component_tiles = input.component_tiles();
+    
     for resolution in 0..input.max_resolutions {
-        let tile_instances = tile_instances_for_resolution(input, resolution);
-
-        for y in tile_rect.y0..tile_rect.y1 {
-            for x in tile_rect.x0..tile_rect.x1 {
-                for (component_idx, tile_instance_opt) in tile_instances.iter().enumerate() {
-                    let Some(resolution_tile) = tile_instance_opt else {
-                        continue;
-                    };
-
-                    if let Some(precinct) = find_precinct_index(resolution_tile, x, y) {
-                        for layer in 0..input.layers {
-                            sequence.push(ProgressionData {
-                                layer_num: layer,
-                                resolution,
-                                component: component_idx as u8,
-                                precinct,
-                            });
-                        }
-                    }
+        // Currently, we are assuming that each component resolution tile
+        // has the same number of precincts and that they have the same
+        // resolution. TODO: Add debug assertion.
+        let component_tile = component_tiles[0];
+        let resolution_tile = ResolutionTile::new(component_tile, resolution);
+        let num_precincts = resolution_tile.num_precincts();
+        
+        for precinct in 0..num_precincts {
+            for component_idx in 0..num_components {
+                for layer in 0..input.layers {
+                    sequence_b.push(ProgressionData {
+                        layer_num: layer,
+                        resolution,
+                        component: component_idx as u8,
+                        precinct,
+                    });
                 }
             }
         }
     }
-
-    sequence
+    
+    sequence_b
 }
 
 pub(crate) fn build_position_component_resolution_layer_sequence(
@@ -261,29 +259,6 @@ pub(crate) fn build_component_position_resolution_layer_sequence(
     }
 
     sequence
-}
-
-fn tile_instances_for_resolution<'a>(
-    input: &'a IteratorInput<'a>,
-    resolution: u16,
-) -> Vec<Option<ResolutionTile<'a>>> {
-    input
-        .tile
-        .component_tiles()
-        .map(|component_tile| {
-            if resolution
-                < component_tile
-                    .component_info
-                    .coding_style
-                    .parameters
-                    .num_resolution_levels
-            {
-                Some(ResolutionTile::new(component_tile, resolution))
-            } else {
-                None
-            }
-        })
-        .collect()
 }
 
 fn find_precinct_index(resolution_tile: &ResolutionTile, x: u32, y: u32) -> Option<u32> {
