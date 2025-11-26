@@ -158,17 +158,17 @@ fn parse_tile_part<'a>(
                 let cod =
                     crate::codestream::cod_marker(reader).ok_or("failed to read COD marker")?;
 
-                if first {
-                    tile.mct = cod.mct;
-                    tile.num_layers = cod.num_layers;
-                    tile.progression_order = cod.progression_order;
+                tile.mct = cod.mct;
+                tile.num_layers = cod.num_layers;
+                tile.progression_order = cod.progression_order;
 
-                    for component in &mut tile.component_infos {
-                        component.coding_style.flags.raw |= cod.component_parameters.flags.raw;
-                        component.coding_style.parameters =
-                            cod.component_parameters.clone().parameters;
-                    }
-                } else {
+                for component in &mut tile.component_infos {
+                    component.coding_style.flags.raw |= cod.component_parameters.flags.raw;
+                    component.coding_style.parameters =
+                        cod.component_parameters.clone().parameters;
+                }
+
+                if !first {
                     warn!("encountered unexpected COD marker in tile-part header");
                 }
             }
@@ -179,15 +179,15 @@ fn parse_tile_part<'a>(
                     crate::codestream::coc_marker(reader, num_components as u16)
                         .ok_or("failed to read COC marker")?;
 
-                if first {
-                    let old = tile
-                        .component_infos
-                        .get_mut(component_index as usize)
-                        .ok_or("invalid component index in tile-part header")?;
+                let old = tile
+                    .component_infos
+                    .get_mut(component_index as usize)
+                    .ok_or("invalid component index in tile-part header")?;
 
-                    old.coding_style.parameters = coc.parameters;
-                    old.coding_style.flags.raw |= coc.flags.raw;
-                } else {
+                old.coding_style.parameters = coc.parameters;
+                old.coding_style.flags.raw |= coc.flags.raw;
+                
+                if !first {
                     warn!("encountered unexpected COC marker in tile-part header");
                 }
             }
@@ -196,11 +196,11 @@ fn parse_tile_part<'a>(
                 let qcd =
                     crate::codestream::qcd_marker(reader).ok_or("failed to read QCD marker")?;
 
-                if first {
-                    for component_info in &mut tile.component_infos {
-                        component_info.quantization_info = qcd.clone();
-                    }
-                } else {
+                for component_info in &mut tile.component_infos {
+                    component_info.quantization_info = qcd.clone();
+                }
+                
+                if !first {
                     warn!("encountered unexpected QCD marker in tile-part header");
                 }
             }
@@ -210,12 +210,12 @@ fn parse_tile_part<'a>(
                     crate::codestream::qcc_marker(reader, num_components as u16)
                         .ok_or("failed to read QCC marker")?;
 
-                if first {
-                    tile.component_infos
-                        .get_mut(component_index as usize)
-                        .ok_or("invalid component index in tile-part header")?
-                        .quantization_info = qcc.clone();
-                } else {
+                tile.component_infos
+                    .get_mut(component_index as usize)
+                    .ok_or("invalid component index in tile-part header")?
+                    .quantization_info = qcc.clone();
+
+                if !first {
                     warn!("encountered unexpected QCC marker in tile-part header");
                 }
             }
