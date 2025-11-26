@@ -1170,14 +1170,22 @@
   },
   {
     "id": "openjpeg_X_4_2K_24_185_CBR_WB_000",
-    "link": "true"
+    "link": true
   },
   {
     "id": "openjpeg_X_5_2K_24_235_CBR_STEM24_000",
-    "link": "true"
+    "link": true
   },
   {
     "id": "openjpeg_X_6_2K_24_FULL_CBR_CIRCLE_000",
-    "link": "true"
+    "link": true
+  },
+  {
+    "id": "serenity_26033_1",
+     "link": true     
+  },
+  {
+    "id": "serenity_26033_2",
+     "link": true     
   }
 ]

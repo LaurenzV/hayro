@@ -289,6 +289,8 @@ use crate::run_render_test;
 #[test] fn openjpeg_X_4_2K_24_185_CBR_WB_000() { run_render_test("openjpeg_X_4_2K_24_185_CBR_WB_000", "downloads/custom/openjpeg_X_4_2K_24_185_CBR_WB_000.pdf", None); }
 #[test] fn openjpeg_X_5_2K_24_235_CBR_STEM24_000() { run_render_test("openjpeg_X_5_2K_24_235_CBR_STEM24_000", "downloads/custom/openjpeg_X_5_2K_24_235_CBR_STEM24_000.pdf", None); }
 #[test] fn openjpeg_X_6_2K_24_FULL_CBR_CIRCLE_000() { run_render_test("openjpeg_X_6_2K_24_FULL_CBR_CIRCLE_000", "downloads/custom/openjpeg_X_6_2K_24_FULL_CBR_CIRCLE_000.pdf", None); }
+#[test] fn serenity_26033_1() { run_render_test("serenity_26033_1", "downloads/custom/serenity_26033_1.pdf", None); }
+#[test] fn serenity_26033_2() { run_render_test("serenity_26033_2", "downloads/custom/serenity_26033_2.pdf", None); }
 #[test] fn pdfjs_20130226130259() { run_render_test("pdfjs_20130226130259", "downloads/pdfjs/20130226130259.pdf", Some("0..=0")); }
 #[test] fn pdfjs_ContentStreamNoCycleType3insideType3() { run_render_test("pdfjs_ContentStreamNoCycleType3insideType3", "downloads/pdfjs/ContentStreamNoCycleType3insideType3.pdf", None); }
 #[test] fn pdfjs_High_Pressure_Measurement_WP_001287() { run_render_test("pdfjs_High_Pressure_Measurement_WP_001287", "downloads/pdfjs/High-Pressure-Measurement-WP-001287.pdf", Some("2..=2")); }
