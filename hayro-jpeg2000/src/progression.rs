@@ -4,8 +4,8 @@
 //! (layer_num, resolution, component, precinct) in a specific order that
 //! determines in which order the data appears in the codestream.
 
-use std::iter;
 use crate::tile::{ComponentTile, ResolutionTile, Tile};
+use std::iter;
 
 // TODO: Refactor this whole module.
 
@@ -45,23 +45,23 @@ pub(crate) fn layer_resolution_component_position_progression(
     input: &IteratorInput<'_>,
 ) -> impl Iterator<Item = ProgressionData> {
     let num_components = input.tile.component_infos.len();
-    
+
     let mut layer = 0;
     let mut resolution = 0;
     let mut component_idx = 0;
     let component_tile = ComponentTile::new(input.tile, &input.tile.component_infos[component_idx]);
     let mut resolution_tile = ResolutionTile::new(component_tile, resolution);
     let mut precinct = 0;
-    
+
     iter::from_fn(move || {
         if precinct == resolution_tile.num_precincts() {
             loop {
                 precinct = 0;
                 component_idx += 1;
-                
+
                 if component_idx == num_components {
                     component_idx = 0;
-                    
+
                     resolution += 1;
 
                     if resolution == input.max_resolutions {
@@ -71,30 +71,30 @@ pub(crate) fn layer_resolution_component_position_progression(
                         if layer == input.layers {
                             return None;
                         }
-                        
                     }
                 }
 
-                let component_tile = ComponentTile::new(input.tile, &input.tile.component_infos[component_idx]);
+                let component_tile =
+                    ComponentTile::new(input.tile, &input.tile.component_infos[component_idx]);
                 resolution_tile = ResolutionTile::new(component_tile, resolution);
-                
+
                 // Only yield if the resolution tile has precincts, otherwise
                 // we need to keep advancing.
                 if resolution_tile.num_precincts() != 0 {
                     break;
-                } 
+                }
             }
         }
-        
+
         let data = ProgressionData {
             layer_num: layer,
             resolution,
             component: component_idx as u8,
             precinct,
         };
-        
+
         precinct += 1;
-        
+
         Some(data)
     })
 }
@@ -121,7 +121,7 @@ pub(crate) fn resolution_layer_component_position_progression(
                 if component_idx == num_components {
                     component_idx = 0;
                     layer += 1;
-                    
+
                     if layer == input.layers {
                         layer = 0;
                         resolution += 1;
@@ -129,13 +129,13 @@ pub(crate) fn resolution_layer_component_position_progression(
                         if resolution == input.max_resolutions {
                             return None;
                         }
-
                     }
                 }
 
-                let component_tile = ComponentTile::new(input.tile, &input.tile.component_infos[component_idx]);
+                let component_tile =
+                    ComponentTile::new(input.tile, &input.tile.component_infos[component_idx]);
                 resolution_tile = ResolutionTile::new(component_tile, resolution);
-                
+
                 // Only yield if the resolution tile has precincts, otherwise
                 // we need to keep advancing.
                 if resolution_tile.num_precincts() != 0 {
@@ -196,7 +196,7 @@ pub(crate) fn build_position_component_resolution_layer_sequence(
 ) -> Vec<ProgressionData> {
     let mut sequence = Vec::new();
     let tile_rect = input.tile.rect;
-    
+
     for y in tile_rect.y0..tile_rect.y1 {
         for x in tile_rect.x0..tile_rect.x1 {
             for (component_idx, component_tile) in input.tile.component_tiles().enumerate() {
