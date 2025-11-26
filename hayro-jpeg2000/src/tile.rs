@@ -164,8 +164,7 @@ fn parse_tile_part<'a>(
 
                 for component in &mut tile.component_infos {
                     component.coding_style.flags.raw |= cod.component_parameters.flags.raw;
-                    component.coding_style.parameters =
-                        cod.component_parameters.clone().parameters;
+                    component.coding_style.parameters = cod.component_parameters.clone().parameters;
                 }
 
                 if !first {
@@ -186,7 +185,7 @@ fn parse_tile_part<'a>(
 
                 old.coding_style.parameters = coc.parameters;
                 old.coding_style.flags.raw |= coc.flags.raw;
-                
+
                 if !first {
                     warn!("encountered unexpected COC marker in tile-part header");
                 }
@@ -199,7 +198,7 @@ fn parse_tile_part<'a>(
                 for component_info in &mut tile.component_infos {
                     component_info.quantization_info = qcd.clone();
                 }
-                
+
                 if !first {
                     warn!("encountered unexpected QCD marker in tile-part header");
                 }
