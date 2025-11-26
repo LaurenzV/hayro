@@ -288,7 +288,7 @@ impl<'a> ComponentTile<'a> {
         }
     }
 
-    pub(crate) fn resolution_tiles(&self) -> impl IntoIterator<Item = ResolutionTile<'_>> {
+    pub(crate) fn resolution_tiles(&self) -> impl Iterator<Item = ResolutionTile<'_>> {
         (0..self
             .component_info
             .coding_style
@@ -489,17 +489,17 @@ impl<'a> ResolutionTile<'a> {
         let ppx_pow2 = 1 << ppx;
         let ppy_pow2 = 1 << ppy;
 
-        (0..num_precincts_y)
-            .map(move |y| y * ppy_pow2 + y_start)
-            .flat_map(move |y0| {
-                (0..num_precincts_x)
-                    .map(move |x| x * ppx_pow2 + x_start)
-                    .map(move |x0| PrecinctData {
-                        rect: IntRect::from_xywh(x0, y0, ppx_pow2, ppy_pow2),
-                        _x: x0,
-                        _y: y0,
-                    })
+        (0..num_precincts_y).flat_map(move |y| {
+            let y0 = y * ppy_pow2 + y_start;
+
+            (0..num_precincts_x).map(move |x| {
+                let x0 = x * ppx_pow2 + x_start;
+                PrecinctData {
+                    rect: IntRect::from_xywh(x0, y0, ppx_pow2, ppy_pow2),
+                    idx: num_precincts_x * y + x,
+                }
             })
+        })
     }
 
     pub(crate) fn code_block_width(&self) -> u32 {

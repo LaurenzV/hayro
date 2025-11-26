@@ -38,10 +38,12 @@ impl<'a> IteratorInput<'a> {
             max_resolutions,
         }
     }
-    
+
     fn component_tiles(&'a self) -> Vec<ComponentTile<'a>> {
-        self.tile.component_infos
-            .iter().map(|c| ComponentTile::new(self.tile, c))
+        self.tile
+            .component_infos
+            .iter()
+            .map(|c| ComponentTile::new(self.tile, c))
             .collect::<Vec<_>>()
     }
 }
@@ -51,7 +53,7 @@ pub(crate) fn layer_resolution_component_position_progression(
     input: &IteratorInput<'_>,
 ) -> impl Iterator<Item = ProgressionData> {
     let num_components = input.tile.component_infos.len();
-    
+
     let component_tiles = input.component_tiles();
 
     let mut layer = 0;
@@ -167,11 +169,11 @@ pub(crate) fn resolution_layer_component_position_progression(
 
 pub(crate) fn build_resolution_position_component_layer_sequence(
     input: &IteratorInput<'_>,
-) -> Vec<ProgressionData> {
+) -> impl Iterator<Item = ProgressionData> {
     let mut sequence_b = Vec::new();
     let num_components = input.tile.component_infos.len();
     let component_tiles = input.component_tiles();
-    
+
     for resolution in 0..input.max_resolutions {
         // Currently, we are assuming that each component resolution tile
         // has the same number of precincts and that they have the same
@@ -179,7 +181,7 @@ pub(crate) fn build_resolution_position_component_layer_sequence(
         let component_tile = component_tiles[0];
         let resolution_tile = ResolutionTile::new(component_tile, resolution);
         let num_precincts = resolution_tile.num_precincts();
-        
+
         for precinct in 0..num_precincts {
             for component_idx in 0..num_components {
                 for layer in 0..input.layers {
@@ -193,36 +195,47 @@ pub(crate) fn build_resolution_position_component_layer_sequence(
             }
         }
     }
-    
-    sequence_b
+
+    sequence_b.into_iter()
 }
 
 pub(crate) fn build_position_component_resolution_layer_sequence(
     input: &IteratorInput<'_>,
-) -> Vec<ProgressionData> {
-    let mut sequence = Vec::new();
-    let tile_rect = input.tile.rect;
+) -> impl Iterator<Item = ProgressionData> {
+    // Note that the order of fields here is important!
+    #[derive(PartialEq, Eq, PartialOrd, Ord)]
+    struct PrecinctStore {
+        precinct_y: u32,
+        precinct_x: u32,
+        component_idx: u8,
+        resolution: u16,
+        precinct_idx: u32,
+    }
 
-    for y in tile_rect.y0..tile_rect.y1 {
-        for x in tile_rect.x0..tile_rect.x1 {
-            for (component_idx, component_tile) in input.tile.component_tiles().enumerate() {
-                for resolution_tile in component_tile.resolution_tiles() {
-                    if let Some(precinct) = find_precinct_index(&resolution_tile, x, y) {
-                        for layer in 0..input.layers {
-                            sequence.push(ProgressionData {
-                                layer_num: layer,
-                                resolution: resolution_tile.resolution,
-                                component: component_idx as u8,
-                                precinct,
-                            });
-                        }
-                    }
-                }
-            }
+    let mut elements = vec![];
+
+    for (component_idx, component) in input.tile.component_tiles().enumerate() {
+        for (resolution, resolution_tile) in component.resolution_tiles().enumerate() {
+            elements.extend(resolution_tile.precincts().map(|d| PrecinctStore {
+                precinct_y: d.rect.y0,
+                precinct_x: d.rect.x0,
+                component_idx: component_idx as u8,
+                resolution: resolution as u16,
+                precinct_idx: d.idx,
+            }))
         }
     }
 
-    sequence
+    elements.sort();
+
+    elements.into_iter().flat_map(|e| {
+        (0..input.layers).map(move |layer| ProgressionData {
+            layer_num: layer,
+            resolution: e.resolution,
+            component: e.component_idx,
+            precinct: e.precinct_idx,
+        })
+    })
 }
 
 pub(crate) fn build_component_position_resolution_layer_sequence(

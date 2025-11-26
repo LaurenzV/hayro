@@ -247,8 +247,7 @@ pub(crate) struct Precinct {
 
 pub(crate) struct PrecinctData {
     pub(crate) rect: IntRect,
-    pub(crate) _x: u32,
-    pub(crate) _y: u32,
+    pub(crate) idx: u32,
 }
 
 #[derive(Clone)]
