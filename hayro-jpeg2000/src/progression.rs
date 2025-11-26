@@ -58,9 +58,10 @@ pub(crate) fn layer_resolution_component_position_progression(
             loop {
                 precinct = 0;
                 component_idx += 1;
-
+                
                 if component_idx == num_components {
                     component_idx = 0;
+                    
                     resolution += 1;
 
                     if resolution == input.max_resolutions {
@@ -70,6 +71,7 @@ pub(crate) fn layer_resolution_component_position_progression(
                         if layer == input.layers {
                             return None;
                         }
+                        
                     }
                 }
 
@@ -97,38 +99,62 @@ pub(crate) fn layer_resolution_component_position_progression(
     })
 }
 
-pub(crate) fn build_resolution_layer_component_position_sequence(
+/// B.12.1.2 Resolution level-layer-component-position progression.
+pub(crate) fn resolution_layer_component_position_progression(
     input: &IteratorInput<'_>,
-) -> Vec<ProgressionData> {
-    let mut sequence = Vec::new();
-    
-    for resolution in 0..input.max_resolutions {
-        let tile_instances = tile_instances_for_resolution(input, resolution);
+) -> impl Iterator<Item = ProgressionData> {
+    let num_components = input.tile.component_infos.len();
 
-        for layer in 0..input.layers {
-            for (component_idx, tile_instance_opt) in tile_instances.iter().enumerate() {
-                let Some(tile_instance) = tile_instance_opt else {
-                    continue;
-                };
+    let mut layer = 0;
+    let mut resolution = 0;
+    let mut component_idx = 0;
+    let component_tile = ComponentTile::new(input.tile, &input.tile.component_infos[component_idx]);
+    let mut resolution_tile = ResolutionTile::new(component_tile, resolution);
+    let mut precinct = 0;
 
-                let precinct_count = tile_instance.num_precincts();
-                if precinct_count == 0 {
-                    continue;
+    iter::from_fn(move || {
+        if precinct == resolution_tile.num_precincts() {
+            loop {
+                precinct = 0;
+                component_idx += 1;
+
+                if component_idx == num_components {
+                    component_idx = 0;
+                    layer += 1;
+                    
+                    if layer == input.layers {
+                        layer = 0;
+                        resolution += 1;
+
+                        if resolution == input.max_resolutions {
+                            return None;
+                        }
+
+                    }
                 }
 
-                for precinct in 0..precinct_count {
-                    sequence.push(ProgressionData {
-                        layer_num: layer,
-                        resolution,
-                        component: component_idx as u8,
-                        precinct,
-                    });
+                let component_tile = ComponentTile::new(input.tile, &input.tile.component_infos[component_idx]);
+                resolution_tile = ResolutionTile::new(component_tile, resolution);
+                
+                // Only yield if the resolution tile has precincts, otherwise
+                // we need to keep advancing.
+                if resolution_tile.num_precincts() != 0 {
+                    break;
                 }
             }
         }
-    }
 
-    sequence
+        let data = ProgressionData {
+            layer_num: layer,
+            resolution,
+            component: component_idx as u8,
+            precinct,
+        };
+
+        precinct += 1;
+
+        Some(data)
+    })
 }
 
 pub(crate) fn build_resolution_position_component_layer_sequence(

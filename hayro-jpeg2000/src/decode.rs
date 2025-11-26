@@ -15,7 +15,7 @@ use crate::progression::{
     IteratorInput, ProgressionData, build_component_position_resolution_layer_sequence,
     layer_resolution_component_position_progression,
     build_position_component_resolution_layer_sequence,
-    build_resolution_layer_component_position_sequence,
+    resolution_layer_component_position_progression,
     build_resolution_position_component_layer_sequence,
 };
 use crate::rect::IntRect;
@@ -64,7 +64,7 @@ pub(crate) fn decode(data: &[u8], header: &Header) -> Result<Vec<ChannelData>, &
                 )?
             }
             ProgressionOrder::ResolutionLayerComponentPosition => {
-                let iterator = build_resolution_layer_component_position_sequence(&iter_input);
+                let iterator = resolution_layer_component_position_progression(&iter_input);
                 decode_tile(
                     tile,
                     header,
