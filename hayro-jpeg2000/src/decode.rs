@@ -245,6 +245,12 @@ pub(crate) struct Precinct {
     zero_bitplane_tree: TagTree,
 }
 
+pub(crate) struct PrecinctData {
+    pub(crate) rect: IntRect,
+    pub(crate) _x: u32,
+    pub(crate) _y: u32,
+}
+
 #[derive(Clone)]
 pub(crate) struct CodeBlock {
     pub(crate) rect: IntRect,
@@ -466,96 +472,65 @@ fn build_precincts(
     tile_ctx: &mut TileDecodeContext,
     storage: &mut DecompositionStorage,
 ) -> Result<Range<usize>, &'static str> {
-    let num_precincts_y = resolution_tile.num_precincts_y();
-    let num_precincts_x = resolution_tile.num_precincts_x();
-
-    let mut ppx = resolution_tile.precinct_exponent_x();
-    let mut ppy = resolution_tile.precinct_exponent_y();
-
-    let mut y_start = (resolution_tile.rect.y0 / (1 << ppy)) * (1 << ppy);
-    let mut x_start = (resolution_tile.rect.x0 / (1 << ppx)) * (1 << ppx);
-
-    // TODO: I don't really understand where the specification mentions this
-    // is necessary. I just copied this from the Serenity decoder.
-    if resolution_tile.resolution > 0 {
-        ppx -= 1;
-        ppy -= 1;
-
-        x_start /= 2;
-        y_start /= 2;
-    }
-
-    let ppx_pow2 = 1 << ppx;
-    let ppy_pow2 = 1 << ppy;
-
     let start = storage.precincts.len();
 
-    let mut y0 = y_start;
-    for _y in 0..num_precincts_y {
-        let mut x0 = x_start;
+    for precinct_data in resolution_tile.precincts() {
+        let precinct_rect = precinct_data.rect;
 
-        for _x in 0..num_precincts_x {
-            let precinct_rect = IntRect::from_xywh(x0, y0, ppx_pow2, ppy_pow2);
+        let cb_width = resolution_tile.code_block_width();
+        let cb_height = resolution_tile.code_block_height();
 
-            let cb_width = resolution_tile.code_block_width();
-            let cb_height = resolution_tile.code_block_height();
+        let cb_x0 = (u32::max(precinct_rect.x0, sub_band_rect.x0) / cb_width) * cb_width;
+        let cb_y0 = (u32::max(precinct_rect.y0, sub_band_rect.y0) / cb_height) * cb_height;
 
-            let cb_x0 = (u32::max(precinct_rect.x0, sub_band_rect.x0) / cb_width) * cb_width;
-            let cb_y0 = (u32::max(precinct_rect.y0, sub_band_rect.y0) / cb_height) * cb_height;
+        let code_block_area = IntRect::from_ltrb(
+            cb_x0,
+            cb_y0,
+            u32::min(precinct_rect.x1, sub_band_rect.x1),
+            u32::min(precinct_rect.y1, sub_band_rect.y1),
+        );
 
-            let code_block_area = IntRect::from_ltrb(
-                cb_x0,
-                cb_y0,
-                u32::min(precinct_rect.x1, sub_band_rect.x1),
-                u32::min(precinct_rect.y1, sub_band_rect.y1),
-            );
+        let code_blocks_x = if sub_band_rect.width() == 0 {
+            0
+        } else {
+            code_block_area.width().div_ceil(cb_width)
+        };
+        let code_blocks_y = if sub_band_rect.height() == 0 {
+            0
+        } else {
+            code_block_area.height().div_ceil(cb_height)
+        };
 
-            let code_blocks_x = if sub_band_rect.width() == 0 {
-                0
-            } else {
-                code_block_area.width().div_ceil(cb_width)
-            };
-            let code_blocks_y = if sub_band_rect.height() == 0 {
-                0
-            } else {
-                code_block_area.height().div_ceil(cb_height)
-            };
+        trace!(
+            "Precinct rect: [{},{} {}x{}], num_code_blocks_wide: {}, num_code_blocks_high: {}",
+            precinct_rect.x0,
+            precinct_rect.y0,
+            precinct_rect.width(),
+            precinct_rect.height(),
+            code_blocks_x,
+            code_blocks_y
+        );
 
-            trace!(
-                "Precinct rect: [{},{} {}x{}], num_code_blocks_wide: {}, num_code_blocks_high: {}",
-                precinct_rect.x0,
-                precinct_rect.y0,
-                precinct_rect.width(),
-                precinct_rect.height(),
-                code_blocks_x,
-                code_blocks_y
-            );
+        let blocks = build_code_blocks(
+            code_block_area,
+            sub_band_rect,
+            resolution_tile,
+            code_blocks_x,
+            code_blocks_y,
+            tile_ctx,
+            storage,
+        );
 
-            let blocks = build_code_blocks(
-                code_block_area,
-                sub_band_rect,
-                resolution_tile,
-                code_blocks_x,
-                code_blocks_y,
-                tile_ctx,
-                storage,
-            );
+        let code_inclusion_tree =
+            TagTree::new(code_blocks_x, code_blocks_y, &mut storage.tag_tree_nodes);
+        let zero_bitplane_tree =
+            TagTree::new(code_blocks_x, code_blocks_y, &mut storage.tag_tree_nodes);
 
-            let code_inclusion_tree =
-                TagTree::new(code_blocks_x, code_blocks_y, &mut storage.tag_tree_nodes);
-            let zero_bitplane_tree =
-                TagTree::new(code_blocks_x, code_blocks_y, &mut storage.tag_tree_nodes);
-
-            storage.precincts.push(Precinct {
-                code_blocks: blocks,
-                code_inclusion_tree,
-                zero_bitplane_tree,
-            });
-
-            x0 += ppx_pow2;
-        }
-
-        y0 += ppy_pow2;
+        storage.precincts.push(Precinct {
+            code_blocks: blocks,
+            code_inclusion_tree,
+            zero_bitplane_tree,
+        });
     }
 
     let end = storage.precincts.len();

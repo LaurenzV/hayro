@@ -3,7 +3,7 @@
 use crate::codestream::{
     ComponentInfo, Header, ProgressionOrder, ReaderExt, markers, skip_marker_segment,
 };
-use crate::decode::SubBandType;
+use crate::decode::{PrecinctData, SubBandType};
 use crate::rect::IntRect;
 use hayro_common::byte::Reader;
 use log::warn;
@@ -410,6 +410,8 @@ impl<'a> ResolutionTile<'a> {
         IntRect::from_ltrb(tbx_0, tby_0, tbx_1, tby_1)
     }
 
+    // TODO: Make methods private
+
     /// The exponent for determining the horizontal size of a precinct.
     ///
     /// `PPx` in the specification.
@@ -460,6 +462,44 @@ impl<'a> ResolutionTile<'a> {
 
     pub(crate) fn num_precincts(&self) -> u32 {
         self.num_precincts_x() * self.num_precincts_y()
+    }
+
+    /// Return an iterator over the data of the precincts in this resolution
+    /// tile.
+    pub(crate) fn precincts(&self) -> impl Iterator<Item = PrecinctData> {
+        let num_precincts_y = self.num_precincts_y();
+        let num_precincts_x = self.num_precincts_x();
+
+        let mut ppx = self.precinct_exponent_x();
+        let mut ppy = self.precinct_exponent_y();
+
+        let mut y_start = (self.rect.y0 / (1 << ppy)) * (1 << ppy);
+        let mut x_start = (self.rect.x0 / (1 << ppx)) * (1 << ppx);
+
+        // TODO: I don't really understand where the specification mentions this
+        // is necessary. I just copied this from the Serenity decoder.
+        if self.resolution > 0 {
+            ppx -= 1;
+            ppy -= 1;
+
+            x_start /= 2;
+            y_start /= 2;
+        }
+
+        let ppx_pow2 = 1 << ppx;
+        let ppy_pow2 = 1 << ppy;
+
+        (0..num_precincts_y)
+            .map(move |y| y * ppy_pow2 + y_start)
+            .flat_map(move |y0| {
+                (0..num_precincts_x)
+                    .map(move |x| x * ppx_pow2 + x_start)
+                    .map(move |x0| PrecinctData {
+                        rect: IntRect::from_xywh(x0, y0, ppx_pow2, ppy_pow2),
+                        _x: x0,
+                        _y: y0,
+                    })
+            })
     }
 
     pub(crate) fn code_block_width(&self) -> u32 {
