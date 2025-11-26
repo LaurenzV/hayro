@@ -38,6 +38,12 @@ impl<'a> IteratorInput<'a> {
             max_resolutions,
         }
     }
+    
+    fn component_tiles(&'a self) -> Vec<ComponentTile<'a>> {
+        self.tile.component_infos
+            .iter().map(|c| ComponentTile::new(self.tile, c))
+            .collect::<Vec<_>>()
+    }
 }
 
 /// B.12.1.1 Layer-resolution level-component-position progression.
@@ -45,12 +51,13 @@ pub(crate) fn layer_resolution_component_position_progression(
     input: &IteratorInput<'_>,
 ) -> impl Iterator<Item = ProgressionData> {
     let num_components = input.tile.component_infos.len();
+    
+    let component_tiles = input.component_tiles();
 
     let mut layer = 0;
     let mut resolution = 0;
     let mut component_idx = 0;
-    let component_tile = ComponentTile::new(input.tile, &input.tile.component_infos[component_idx]);
-    let mut resolution_tile = ResolutionTile::new(component_tile, resolution);
+    let mut resolution_tile = ResolutionTile::new(component_tiles[0], resolution);
     let mut precinct = 0;
 
     iter::from_fn(move || {
@@ -74,9 +81,7 @@ pub(crate) fn layer_resolution_component_position_progression(
                     }
                 }
 
-                let component_tile =
-                    ComponentTile::new(input.tile, &input.tile.component_infos[component_idx]);
-                resolution_tile = ResolutionTile::new(component_tile, resolution);
+                resolution_tile = ResolutionTile::new(component_tiles[component_idx], resolution);
 
                 // Only yield if the resolution tile has precincts, otherwise
                 // we need to keep advancing.
@@ -105,11 +110,12 @@ pub(crate) fn resolution_layer_component_position_progression(
 ) -> impl Iterator<Item = ProgressionData> {
     let num_components = input.tile.component_infos.len();
 
+    let component_tiles = input.component_tiles();
+
     let mut layer = 0;
     let mut resolution = 0;
     let mut component_idx = 0;
-    let component_tile = ComponentTile::new(input.tile, &input.tile.component_infos[component_idx]);
-    let mut resolution_tile = ResolutionTile::new(component_tile, resolution);
+    let mut resolution_tile = ResolutionTile::new(component_tiles[component_idx], resolution);
     let mut precinct = 0;
 
     iter::from_fn(move || {
@@ -136,9 +142,7 @@ pub(crate) fn resolution_layer_component_position_progression(
                     }
                 }
 
-                let component_tile =
-                    ComponentTile::new(input.tile, &input.tile.component_infos[component_idx]);
-                resolution_tile = ResolutionTile::new(component_tile, resolution);
+                resolution_tile = ResolutionTile::new(component_tiles[component_idx], resolution);
 
                 // Only yield if the resolution tile has precincts, otherwise
                 // we need to keep advancing.
