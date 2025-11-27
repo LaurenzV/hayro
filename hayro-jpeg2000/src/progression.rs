@@ -171,7 +171,14 @@ pub(crate) fn resolution_layer_component_position_progression(
     })
 }
 
-pub(crate) fn build_resolution_position_component_layer_sequence(
+// The formula for the remaining three progressions looks very intimidating.
+// But really, all they boil down to is that we need to determine all precinct
+// indices for each component/resolution combination and sort them by ascending
+// y/x coordinate on the reference grid. Other than that, they can be treated
+// exactly the same, except that the sort order precedence of the fields change.
+
+/// B.12.1.3 Resolution level-position-component-layer progression.
+pub(crate) fn resolution_position_component_layer_progression(
     input: &IteratorInput<'_>,
 ) -> impl Iterator<Item = ProgressionData> {
     // Note that the order of fields here is important!
@@ -210,7 +217,8 @@ pub(crate) fn build_resolution_position_component_layer_sequence(
     })
 }
 
-pub(crate) fn build_position_component_resolution_layer_sequence(
+/// B.12.1.4 Position-component-resolution level-layer progression.
+pub(crate) fn position_component_resolution_layer_progression(
     input: &IteratorInput<'_>,
 ) -> impl Iterator<Item = ProgressionData> {
     // Note that the order of fields here is important!
@@ -249,7 +257,8 @@ pub(crate) fn build_position_component_resolution_layer_sequence(
     })
 }
 
-pub(crate) fn build_component_position_resolution_layer_sequence(
+/// B.12.1.5 Component-position-resolution level-layer progression.
+pub(crate) fn component_position_resolution_layer_progression(
     input: &IteratorInput<'_>,
 ) -> Vec<ProgressionData> {
     // Note that the order of fields here is important!

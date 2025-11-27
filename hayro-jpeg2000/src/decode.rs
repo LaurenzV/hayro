@@ -12,9 +12,9 @@ use crate::codestream::{
 };
 use crate::idwt::IDWTOutput;
 use crate::progression::{
-    IteratorInput, ProgressionData, build_component_position_resolution_layer_sequence,
-    build_position_component_resolution_layer_sequence,
-    build_resolution_position_component_layer_sequence,
+    IteratorInput, ProgressionData, component_position_resolution_layer_progression,
+    position_component_resolution_layer_progression,
+    resolution_position_component_layer_progression,
     layer_resolution_component_position_progression,
     resolution_layer_component_position_progression,
 };
@@ -74,7 +74,7 @@ pub(crate) fn decode(data: &[u8], header: &Header) -> Result<Vec<ChannelData>, &
                 )?
             }
             ProgressionOrder::ResolutionPositionComponentLayer => {
-                let iterator = build_resolution_position_component_layer_sequence(&iter_input);
+                let iterator = resolution_position_component_layer_progression(&iter_input);
                 decode_tile(
                     tile,
                     header,
@@ -84,7 +84,7 @@ pub(crate) fn decode(data: &[u8], header: &Header) -> Result<Vec<ChannelData>, &
                 )?
             }
             ProgressionOrder::PositionComponentResolutionLayer => {
-                let iterator = build_position_component_resolution_layer_sequence(&iter_input);
+                let iterator = position_component_resolution_layer_progression(&iter_input);
                 decode_tile(
                     tile,
                     header,
@@ -94,7 +94,7 @@ pub(crate) fn decode(data: &[u8], header: &Header) -> Result<Vec<ChannelData>, &
                 )?
             }
             ProgressionOrder::ComponentPositionResolutionLayer => {
-                let iterator = build_component_position_resolution_layer_sequence(&iter_input);
+                let iterator = component_position_resolution_layer_progression(&iter_input);
                 decode_tile(
                     tile,
                     header,
