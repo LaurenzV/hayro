@@ -4,6 +4,7 @@ use image::{DynamicImage, ImageBuffer, ImageFormat, Rgba, RgbaImage};
 use indicatif::{ProgressBar, ProgressStyle};
 use moxcms::{ColorProfile, Layout, TransformOptions};
 use rayon::prelude::*;
+use serde::Deserialize;
 use std::any::Any;
 use std::cmp::max;
 use std::fs;
@@ -17,8 +18,10 @@ const REPLACE: Option<&str> = option_env!("REPLACE");
 static WORKSPACE_PATH: LazyLock<PathBuf> =
     LazyLock::new(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(""));
 
-static ASSETS_PATH: LazyLock<PathBuf> = LazyLock::new(|| WORKSPACE_PATH.join("assets"));
 static SNAPSHOTS_PATH: LazyLock<PathBuf> = LazyLock::new(|| WORKSPACE_PATH.join("snapshots"));
+static TEST_INPUTS_PATH: LazyLock<PathBuf> = LazyLock::new(|| WORKSPACE_PATH.join("test-inputs"));
+
+const INPUT_MANIFESTS: &[(&str, &str)] = &[("serenity", "manifest_serenity.json")];
 
 static DIFFS_PATH: LazyLock<PathBuf> = LazyLock::new(|| {
     let path = WORKSPACE_PATH.join("diffs");
@@ -50,7 +53,7 @@ fn run_harness() -> bool {
     };
 
     if asset_files.is_empty() {
-        eprintln!("No .jp2 assets were found in {}", ASSETS_PATH.display());
+        eprintln!("No test inputs were found. Run `python sync_inputs.py` to download them.");
         return false;
     }
 
@@ -66,7 +69,7 @@ fn run_harness() -> bool {
     let reports: Vec<TestReport> = asset_files
         .par_iter()
         .map(|asset| {
-            let name = asset.display().to_string();
+            let name = asset.display_name.clone();
             progress_bar.set_message(name.clone());
             let start = Instant::now();
             let outcome = catch_unwind(AssertUnwindSafe(|| run_asset_test(asset))).unwrap_or_else(
@@ -150,49 +153,99 @@ impl Drop for PanicHookGuard {
     }
 }
 
-fn collect_asset_files() -> Result<Vec<PathBuf>, String> {
-    fn visit(dir: &Path, base: &Path, files: &mut Vec<PathBuf>) -> Result<(), String> {
-        let dir_entries = fs::read_dir(dir).map_err(|err| {
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum ManifestItem {
+    Simple(String),
+    Detailed {
+        id: String,
+        #[serde(default = "default_render")]
+        render: bool,
+    },
+}
+
+struct AssetEntry {
+    relative_path: PathBuf,
+    display_name: String,
+    render: bool,
+}
+
+impl AssetEntry {
+    fn new(namespace: &str, id: String, render: bool) -> Self {
+        let relative_path = Path::new(namespace).join(&id);
+        let display_name = relative_path.display().to_string();
+        Self {
+            relative_path,
+            display_name,
+            render,
+        }
+    }
+}
+
+impl ManifestItem {
+    fn into_asset(self, namespace: &str) -> AssetEntry {
+        match self {
+            ManifestItem::Simple(id) => AssetEntry::new(namespace, id, true),
+            ManifestItem::Detailed { id, render } => AssetEntry::new(namespace, id, render),
+        }
+    }
+}
+
+fn default_render() -> bool {
+    true
+}
+
+fn collect_asset_files() -> Result<Vec<AssetEntry>, String> {
+    let mut files = vec![];
+
+    for (namespace, manifest_rel_path) in INPUT_MANIFESTS {
+        let manifest_path = WORKSPACE_PATH.join(manifest_rel_path);
+        let content = fs::read_to_string(&manifest_path)
+            .map_err(|err| format!("failed to read manifest {}: {err}", manifest_path.display()))?;
+        let entries: Vec<ManifestItem> = serde_json::from_str(&content).map_err(|err| {
             format!(
-                "failed to read assets directory {}: {err}",
-                dir.display()
+                "failed to parse manifest {}: {err}",
+                manifest_path.display()
             )
         })?;
 
-        for entry in dir_entries {
-            let entry = entry.map_err(|err| format!("failed to read asset entry: {err}"))?;
-            let path = entry.path();
-            if path.is_dir() {
-                visit(&path, base, files)?;
-            } else if is_jpeg2000(&path) {
-                let relative = path
-                    .strip_prefix(base)
-                    .map_err(|err| format!("failed to relativize asset path: {err}"))?
-                    .to_path_buf();
-                files.push(relative);
+        for entry in entries {
+            let asset_entry = entry.into_asset(namespace);
+            let absolute_path = TEST_INPUTS_PATH.join(&asset_entry.relative_path);
+            if !absolute_path.exists() {
+                return Err(format!(
+                    "missing test input {} (expected at {})",
+                    asset_entry.display_name,
+                    absolute_path.display()
+                ));
             }
+            files.push(asset_entry);
         }
-
-        Ok(())
     }
 
-    let mut files = vec![];
-    visit(&ASSETS_PATH, &ASSETS_PATH, &mut files)?;
-    files.sort();
+    files.sort_by(|a, b| a.display_name.cmp(&b.display_name));
     Ok(files)
 }
 
-fn run_asset_test(asset_relative_path: &Path) -> Result<(), String> {
-    let asset_name = asset_relative_path.display().to_string();
-    let asset_path = ASSETS_PATH.join(asset_relative_path);
+fn run_asset_test(asset: &AssetEntry) -> Result<(), String> {
+    let asset_path = TEST_INPUTS_PATH.join(&asset.relative_path);
+    let asset_name = &asset.display_name;
 
-    let data = fs::read(&asset_path)
-        .map_err(|err| format!("failed to read {}: {err}", asset_name))?;
+    let data =
+        fs::read(&asset_path).map_err(|err| format!("failed to read {}: {err}", asset_name))?;
+    let bitmap_result = read(&data);
+
+    if !asset.render {
+        // Crash-only test: just execute the decoder to ensure it handles the file.
+        let _ = bitmap_result;
+        return Ok(());
+    }
+
     let bitmap =
-        read(&data).map_err(|err| format!("failed to decode {}: {err:?}", asset_name))?;
+        bitmap_result.map_err(|err| format!("failed to decode {}: {err:?}", asset_name))?;
 
     let rgba = bitmap_to_dynamic_image(bitmap).into_rgba8();
-    let reference_path = asset_relative_path.with_extension("png");
+    let reference_path = asset.relative_path.with_extension("png");
     let snapshot_path = SNAPSHOTS_PATH.join(&reference_path);
 
     if let Some(parent) = snapshot_path.parent() {
@@ -239,15 +292,6 @@ fn run_asset_test(asset_relative_path: &Path) -> Result<(), String> {
     }
 
     Ok(())
-}
-
-fn is_jpeg2000(path: &Path) -> bool {
-    path.is_file()
-        && path
-            .extension()
-            .and_then(|ext| ext.to_str())
-            .map(|ext| ext.eq_ignore_ascii_case("jp2") || ext.eq_ignore_ascii_case("jpf"))
-            .unwrap_or(false)
 }
 
 fn bitmap_to_dynamic_image(bitmap: Bitmap) -> DynamicImage {
