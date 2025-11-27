@@ -1166,9 +1166,6 @@ fn store<'a>(
     component_info: &ComponentInfo,
     component_idx: usize,
 ) {
-    let width = header.size_data.tile_width;
-    let height = header.size_data.tile_height;
-
     let channel_data = &mut tile_ctx.channel_data[component_idx];
     let idwt_output = &mut tile_ctx.idwt_output;
 
@@ -1226,6 +1223,8 @@ fn store<'a>(
             output_row.copy_from_slice(input_row);
         }
     } else {
+        let image_width = header.size_data.image_width();
+        let image_height = header.size_data.image_height();
         // Currently, we can assume that the reference grid offset is 0
         // (we have a check for that when parsing size data) for simplicity.
 
@@ -1244,12 +1243,12 @@ fn store<'a>(
                     + idwt_output.padding.left];
 
                 for x_position in
-                    reference_grid_x..u32::min(reference_grid_x + scale_x as u32, width)
+                    reference_grid_x..u32::min(reference_grid_x + scale_x as u32, image_width)
                 {
                     for y_position in
-                        reference_grid_y..u32::min(reference_grid_y + scale_y as u32, height)
+                        reference_grid_y..u32::min(reference_grid_y + scale_y as u32, image_height)
                     {
-                        let pos = y_position as usize * width as usize + x_position as usize;
+                        let pos = y_position as usize * image_width as usize + x_position as usize;
 
                         channel_data.container[pos] = sample;
                     }
