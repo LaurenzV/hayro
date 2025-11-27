@@ -113,6 +113,10 @@ pub(crate) fn resolution_layer_component_position_progression(
     let mut precinct = 0;
 
     iter::from_fn(move || {
+        if resolution == input.max_resolutions {
+            return None;
+        }
+
         if precinct == resolution_tile.num_precincts() {
             loop {
                 precinct = 0;
