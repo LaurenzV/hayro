@@ -231,10 +231,19 @@ fn parse_tile_part<'a>(
                 reader.read_marker()?;
                 ppt_header = Some(ppt_marker(reader).ok_or("failed to read PPT marker")?);
             }
-            _ => {
+            markers::PLT => {
+                // Can be inferred ourselves.
                 reader.read_marker()?;
                 skip_marker_segment(reader)
                     .ok_or("failed to skip a marker during tile part parsing")?;
+            }
+            markers::COM => {
+                reader.read_marker()?;
+                skip_marker_segment(reader)
+                    .ok_or("failed to skip a marker during tile part parsing")?;
+            }
+            _ => {
+                return Err("unsupported marker encountered");
             }
         }
     }
