@@ -61,7 +61,9 @@ pub(crate) fn decode(
     };
 
     if total_bitplanes().ok_or("invalid number of bitplanes")? > num_bitplanes {
-        return Err("mismatch between indicated number of bitplanes and actual ones");
+        // See corpus test case 0938098. Don't error out, but just return
+        // `Ok`.
+        return Ok(());
     }
 
     ctx.reset(code_block, sub_band_type, style);
@@ -447,7 +449,7 @@ impl Default for CodeBlockDecodeContext {
             coefficients: vec![],
             neighbor_significances: vec![],
             width: 0,
-            padded_width: 0,
+            padded_width: COEFFICIENTS_PADDING * 2,
             height: 0,
             vertically_causal: false,
             sub_band_type: SubBandType::LowLow,
