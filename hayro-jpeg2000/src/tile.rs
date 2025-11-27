@@ -476,8 +476,9 @@ impl<'a> ResolutionTile<'a> {
         let mut y_start = (self.rect.y0 / (1 << ppy)) * (1 << ppy);
         let mut x_start = (self.rect.x0 / (1 << ppx)) * (1 << ppx);
 
-        // TODO: I don't really understand where the specification mentions this
-        // is necessary. I just copied this from the Serenity decoder.
+        // It is unclear why this is necessary, but it is. The spec only 
+        // mentions that ppx/ppy must be decreased when calculating codeblock
+        // dimensions, but not that it's necessary for precincts as well.
         if self.resolution > 0 {
             ppx -= 1;
             ppy -= 1;
@@ -495,6 +496,32 @@ impl<'a> ResolutionTile<'a> {
             (0..num_precincts_x).map(move |x| {
                 let x0 = x * ppx_pow2 + x_start;
                 PrecinctData {
+                    // Map back to reference grid coordinates. See the formula
+                    // described in B.12.1.3.
+                    r_x: self
+                        .component_tile
+                        .component_info
+                        .size_info
+                        .horizontal_resolution as u32
+                        * x0
+                        * (1 << (self.precinct_exponent_x() as u16
+                            + self
+                                .component_tile
+                                .component_info
+                                .num_decomposition_levels()
+                            - self.resolution)),
+                    r_y: self
+                        .component_tile
+                        .component_info
+                        .size_info
+                        .vertical_resolution as u32
+                        * y0
+                        * (1 << (self.precinct_exponent_y() as u16
+                            + self
+                                .component_tile
+                                .component_info
+                                .num_decomposition_levels()
+                            - self.resolution)),
                     rect: IntRect::from_xywh(x0, y0, ppx_pow2, ppy_pow2),
                     idx: num_precincts_x * y + x,
                 }

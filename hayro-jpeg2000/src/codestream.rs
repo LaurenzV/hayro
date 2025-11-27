@@ -197,6 +197,10 @@ impl ComponentInfo {
         self.coding_style.parameters.num_resolution_levels
     }
 
+    pub(crate) fn num_decomposition_levels(&self) -> u16 {
+        self.coding_style.parameters.num_decomposition_levels
+    }
+
     pub(crate) fn code_block_style(&self) -> CodeBlockStyle {
         self.coding_style.parameters.code_block_style
     }

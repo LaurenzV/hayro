@@ -271,7 +271,49 @@ pub(crate) fn build_component_position_resolution_layer_sequence(
         }
     }
 
-    sequence
+    let new = {
+        // Note that the order of fields here is important!
+        #[derive(PartialEq, Eq, PartialOrd, Ord)]
+        struct PrecinctStore {
+            component_idx: u8,
+            precinct_y: u32,
+            precinct_x: u32,
+            resolution: u16,
+            precinct_idx: u32,
+        }
+
+        let mut elements = vec![];
+
+        for (component_idx, component) in input.tile.component_tiles().enumerate() {
+            for (resolution, resolution_tile) in component.resolution_tiles().enumerate() {
+                elements.extend(resolution_tile.precincts().map(|d| PrecinctStore {
+                    precinct_y: d.r_y,
+                    precinct_x: d.r_x,
+                    component_idx: component_idx as u8,
+                    resolution: resolution as u16,
+                    precinct_idx: d.idx,
+                }))
+            }
+        }
+
+        elements.sort();
+
+        elements
+            .into_iter()
+            .flat_map(|e| {
+                (0..input.layers).map(move |layer| ProgressionData {
+                    layer_num: layer,
+                    resolution: e.resolution,
+                    component: e.component_idx,
+                    precinct: e.precinct_idx,
+                })
+            })
+            .collect()
+    };
+
+    assert_eq!(sequence, new);
+
+    new
 }
 
 fn find_precinct_index(resolution_tile: &ResolutionTile, x: u32, y: u32) -> Option<u32> {

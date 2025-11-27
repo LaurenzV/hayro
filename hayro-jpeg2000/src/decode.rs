@@ -246,7 +246,14 @@ pub(crate) struct Precinct {
 }
 
 pub(crate) struct PrecinctData {
+    /// The x coordinate mapped back to the reference grid.
+    pub(crate) r_x: u32,
+    /// The y coordinate mapped back to the reference grid.
+    pub(crate) r_y: u32,
+    /// The actual rectangle of the precinct (in the sub-band coordinate
+    /// system).
     pub(crate) rect: IntRect,
+    /// The index of the precinct in the sub-band.
     pub(crate) idx: u32,
 }
 
