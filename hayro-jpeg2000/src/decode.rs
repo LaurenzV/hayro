@@ -1187,6 +1187,11 @@ fn store<'a>(
         component_info.size_info.vertical_resolution,
     );
 
+    let (image_x_offset, image_y_offset) = (
+        header.size_data.image_area_x_offset,
+        header.size_data.image_area_y_offset,
+    );
+
     if scale_x == 1 && scale_y == 1 {
         // If no sub-sampling, use a fast path where we copy rows of coefficients
         // at once.
@@ -1195,10 +1200,6 @@ fn store<'a>(
         // decomposition level of the tile, which is usually not 1:1 aligned
         // with the actual tile rectangle. We also need to account for the
         // offset of the reference grid.
-        let (image_x_offset, image_y_offset) = (
-            header.size_data.image_area_x_offset,
-            header.size_data.image_area_y_offset,
-        );
 
         let skip_x = image_x_offset.saturating_sub(idwt_output.rect.x0);
         let skip_y = image_y_offset.saturating_sub(idwt_output.rect.y0);
@@ -1225,8 +1226,9 @@ fn store<'a>(
     } else {
         let image_width = header.size_data.image_width();
         let image_height = header.size_data.image_height();
-        // Currently, we can assume that the reference grid offset is 0
-        // (we have a check for that when parsing size data) for simplicity.
+
+        let x_offset = header.size_data.image_area_x_offset;
+        let y_offset = header.size_data.image_area_y_offset;
 
         // Otherwise, copy sample by sample.
         for y in component_tile.rect.y0..component_tile.rect.y1 {
@@ -1242,13 +1244,14 @@ fn store<'a>(
                     + relative_x
                     + idwt_output.padding.left];
 
-                for x_position in
-                    reference_grid_x..u32::min(reference_grid_x + scale_x as u32, image_width)
+                for x_position in u32::max(reference_grid_x, x_offset)
+                    ..u32::min(reference_grid_x + scale_x as u32, image_width + x_offset)
                 {
-                    for y_position in
-                        reference_grid_y..u32::min(reference_grid_y + scale_y as u32, image_height)
+                    for y_position in u32::max(reference_grid_y, y_offset)
+                        ..u32::min(reference_grid_y + scale_y as u32, image_height + y_offset)
                     {
-                        let pos = y_position as usize * image_width as usize + x_position as usize;
+                        let pos = (y_position - y_offset) as usize * image_width as usize
+                            + (x_position - x_offset) as usize;
 
                         channel_data.container[pos] = sample;
                     }

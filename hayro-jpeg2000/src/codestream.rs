@@ -499,12 +499,6 @@ fn size_marker_inner(reader: &mut Reader) -> Option<SizeData> {
         let precision = (ssiz & 0x7F) + 1;
         let is_signed = (ssiz & 0x80) != 0;
 
-        if (x_rsiz != 1 || y_rsiz != 1) && (x_osiz != 0 || y_osiz != 0) {
-            // Those are probably very rare. Let's wait until we have a test case
-            // before attempting to implement it.
-            return None;
-        }
-
         components.push(ComponentSizeInfo {
             precision,
             _is_signed: is_signed,
