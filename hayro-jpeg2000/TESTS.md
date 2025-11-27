@@ -3,7 +3,7 @@ Test inputs are not committed to git. Instead, they are downloaded on demand fro
 - A plain string is treated as the file id and the test is expected to render and match a snapshot.
 - A JSON object with an `id` and `render: false` marks a load-only test; the decoder must run without panicking, but no snapshot is checked.
 
-The manifests live next to the crate (currently only `manifest_serenity.json`). Files are stored locally under `test-inputs/<namespace>/<id>` and ignored by git.
+The manifests live next to the crate (currently `manifest_serenity.json` and `manifest_openjpeg.json`). Files are stored locally under `test-inputs/<namespace>/<id>` and ignored by git.
 
 ### Synchronizing inputs
 

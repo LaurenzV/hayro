@@ -10,6 +10,7 @@ TEST_INPUTS_DIR = SCRIPT_DIR / "test-inputs"
 REMOTE_BASE = "https://hayro-assets.dev/jpeg2000"
 MANIFESTS = [
     ("serenity", SCRIPT_DIR / "manifest_serenity.json"),
+    ("openjpeg", SCRIPT_DIR / "manifest_openjpeg.json"),
 ]
 
 

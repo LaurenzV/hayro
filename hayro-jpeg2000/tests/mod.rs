@@ -21,7 +21,10 @@ static WORKSPACE_PATH: LazyLock<PathBuf> =
 static SNAPSHOTS_PATH: LazyLock<PathBuf> = LazyLock::new(|| WORKSPACE_PATH.join("snapshots"));
 static TEST_INPUTS_PATH: LazyLock<PathBuf> = LazyLock::new(|| WORKSPACE_PATH.join("test-inputs"));
 
-const INPUT_MANIFESTS: &[(&str, &str)] = &[("serenity", "manifest_serenity.json")];
+const INPUT_MANIFESTS: &[(&str, &str)] = &[
+    ("serenity", "manifest_serenity.json"),
+    ("openjpeg", "manifest_openjpeg.json"),
+];
 
 static DIFFS_PATH: LazyLock<PathBuf> = LazyLock::new(|| {
     let path = WORKSPACE_PATH.join("diffs");
@@ -53,7 +56,7 @@ fn run_harness() -> bool {
     };
 
     if asset_files.is_empty() {
-        eprintln!("No test inputs were found. Run `python sync_inputs.py` to download them.");
+        eprintln!("No test inputs were found. Run `python sync.py` to download them.");
         return false;
     }
 
