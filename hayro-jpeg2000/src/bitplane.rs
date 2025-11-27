@@ -49,17 +49,21 @@ pub(crate) fn decode(
     layers: &[Layer],
     all_segments: &[Segment],
 ) -> Result<(), &'static str> {
+    // Validate the number of bitplanes.
+    if code_block
+        .missing_bit_planes
+        .saturating_add(1)
+        .saturating_add(code_block.number_of_coding_passes.saturating_sub(1))
+        .div_ceil(3)
+        > num_bitplanes
+    {
+        return Err("mismatch between indicated number of bitplanes and actual ones");
+    }
+
     ctx.reset(code_block, sub_band_type, style);
 
     if code_block.number_of_coding_passes == 0 {
         return Ok(());
-    }
-
-    // Validate the number of bitplanes.
-    if code_block.missing_bit_planes + 1 + (code_block.number_of_coding_passes - 1).div_ceil(3)
-        > num_bitplanes
-    {
-        return Err("mismatch between indicated number of bitplanes and actual ones");
     }
 
     if num_bitplanes as u32 > BITPLANE_BIT_SIZE {
