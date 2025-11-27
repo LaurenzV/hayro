@@ -86,5 +86,7 @@
   "tnsot_zero_missing_eoc.jp2",
   "basn6a08.jp2",
   "basn4a08.jp2",
-  "huge-tile-size.jp2"
+  "huge-tile-size.jp2",
+  "issue653-zero-unknownbox.jp2",
+  "issue818.jp2"
 ]
