@@ -584,7 +584,9 @@ struct TilePartHeader {
 /// PPT marker (A.7.5).
 fn ppt_marker<'a>(reader: &mut Reader<'a>) -> Option<&'a [u8]> {
     let length = reader.read_u16()?.checked_sub(2)?;
-    reader.read_bytes(length as usize)
+    let header_len = length.checked_sub(1)?;
+    let _sequence_idx = reader.read_byte()?;
+    reader.read_bytes(header_len as usize)
 }
 
 /// SOT marker (A.4.2).

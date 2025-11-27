@@ -635,9 +635,20 @@ fn get_code_block_data_inner<'a>(
     tile_ctx: &mut TileDecodeContext<'a>,
     storage: &mut DecompositionStorage<'a>,
 ) -> Option<()> {
-    let mut data = tile_part.packet_body;
+    // If there was a PPT marker in the header, `tile_part.packet_headers`
+    // will be some. In that case, that fields contains all headers of all
+    // packets, while `tile_part.packet_body` only contains the packet data.
+    // Otherwise, `tile_part.packet_body` contains packet headers and data
+    // in an interleaved fashion.
 
-    while !data.is_empty() {
+    let (mut packet_body_reader, mut header_or_all_data) =
+        if let Some(packet_headers) = tile_part.packet_headers {
+            (Some(Reader::new(tile_part.packet_body)), packet_headers)
+        } else {
+            (None, tile_part.packet_body)
+        };
+
+    while !header_or_all_data.is_empty() {
         let progression_data = progression_iterator.next()?;
         let resolution = progression_data.resolution;
         let component_info = &tile_ctx.tile.component_infos[progression_data.component as usize];
@@ -646,15 +657,15 @@ fn get_code_block_data_inner<'a>(
         let sub_band_iter = tile_decompositions.sub_band_iter(resolution, &storage.decompositions);
 
         if component_info.coding_style.flags.may_use_sop_markers() {
-            let mut reader = Reader::new(data);
+            let mut reader = Reader::new(header_or_all_data);
             if reader.peek_marker() == Some(SOP) {
                 reader.read_marker().ok()?;
                 reader.skip_bytes(4)?;
-                data = reader.tail()?;
+                header_or_all_data = reader.tail()?;
             }
         }
 
-        let mut reader = BitReader::new(data);
+        let mut reader = BitReader::new(header_or_all_data);
         let zero_length = reader.read_bits_with_stuffing(1)? == 0;
 
         // B.10.3 Zero length packet
@@ -674,43 +685,51 @@ fn get_code_block_data_inner<'a>(
         }
 
         // TODO: What to do with the note below B.10.3?
-        // TODO: Support multiple codeword segments (10.7.2)
 
         reader.read_stuff_bit_if_necessary()?;
         reader.align();
-        let packet_data = reader.tail();
 
-        let mut data_reader = Reader::new(packet_data);
+        let read_packet_body = |reader: &mut Reader<'a>| {
+            if component_info.coding_style.flags.uses_eph_marker()
+                && reader.read_marker().ok()? != EPH
+            {
+                return None;
+            }
 
-        if component_info.coding_style.flags.uses_eph_marker()
-            && data_reader.read_marker().ok()? != EPH
-        {
-            return None;
-        }
+            if !zero_length {
+                for sub_band in sub_band_iter {
+                    let sub_band = &mut storage.sub_bands[sub_band];
+                    let precinct = &mut storage.precincts[sub_band.precincts.clone()]
+                        [progression_data.precinct as usize];
+                    let code_blocks = &mut storage.code_blocks[precinct.code_blocks.clone()];
 
-        if !zero_length {
-            for sub_band in sub_band_iter {
-                let sub_band = &mut storage.sub_bands[sub_band];
-                let precinct = &mut storage.precincts[sub_band.precincts.clone()]
-                    [progression_data.precinct as usize];
-                let code_blocks = &mut storage.code_blocks[precinct.code_blocks.clone()];
+                    for code_block in code_blocks {
+                        let layer = &mut storage.layers[code_block.layers.clone()]
+                            [progression_data.layer_num as usize];
 
-                for code_block in code_blocks {
-                    let layer = &mut storage.layers[code_block.layers.clone()]
-                        [progression_data.layer_num as usize];
+                        if let Some(segments) = layer.segments.clone() {
+                            let segments = &mut storage.segments[segments.clone()];
 
-                    if let Some(segments) = layer.segments.clone() {
-                        let segments = &mut storage.segments[segments.clone()];
-
-                        for segment in segments {
-                            segment.data = data_reader.read_bytes(segment.data_length as usize)?
+                            for segment in segments {
+                                segment.data = reader.read_bytes(segment.data_length as usize)?
+                            }
                         }
                     }
                 }
             }
-        }
 
-        data = data_reader.tail()?;
+            Some(())
+        };
+
+        if let Some(body_reader) = &mut packet_body_reader {
+            read_packet_body(body_reader)?;
+            header_or_all_data = reader.tail();
+        } else {
+            let packet_data = reader.tail();
+            let mut data_reader = Reader::new(packet_data);
+            read_packet_body(&mut data_reader)?;
+            header_or_all_data = data_reader.tail()?;
+        }
     }
 
     Some(())
