@@ -235,12 +235,12 @@ fn parse_tile_part<'a>(
                 // Can be inferred ourselves.
                 reader.read_marker()?;
                 skip_marker_segment(reader)
-                    .ok_or("failed to skip a marker during tile part parsing")?;
+                    .ok_or("failed to skip PLT marker during tile part parsing")?;
             }
             markers::COM => {
                 reader.read_marker()?;
                 skip_marker_segment(reader)
-                    .ok_or("failed to skip a marker during tile part parsing")?;
+                    .ok_or("failed to skip COM marker during tile part parsing")?;
             }
             _ => {
                 return Err("unsupported marker encountered");
