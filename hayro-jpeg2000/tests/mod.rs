@@ -66,7 +66,7 @@ fn run_harness() -> bool {
     let reports: Vec<TestReport> = asset_files
         .par_iter()
         .map(|asset| {
-            let name = asset.file_name().unwrap().to_string_lossy().to_string();
+            let name = asset.display().to_string();
             progress_bar.set_message(name.clone());
             let start = Instant::now();
             let outcome = catch_unwind(AssertUnwindSafe(|| run_asset_test(asset))).unwrap_or_else(
@@ -151,86 +151,103 @@ impl Drop for PanicHookGuard {
 }
 
 fn collect_asset_files() -> Result<Vec<PathBuf>, String> {
-    let mut files = vec![];
-    let dir = fs::read_dir(&*ASSETS_PATH).map_err(|err| {
-        format!(
-            "failed to read assets directory {}: {err}",
-            ASSETS_PATH.display()
-        )
-    })?;
+    fn visit(dir: &Path, base: &Path, files: &mut Vec<PathBuf>) -> Result<(), String> {
+        let dir_entries = fs::read_dir(dir).map_err(|err| {
+            format!(
+                "failed to read assets directory {}: {err}",
+                dir.display()
+            )
+        })?;
 
-    for entry in dir {
-        let entry = entry.map_err(|err| format!("failed to read asset entry: {err}"))?;
-        let path = entry.path();
-        if path.is_file()
-            && path
-                .extension()
-                .and_then(|ext| ext.to_str())
-                .map(|ext| ext.eq_ignore_ascii_case("jp2") || ext.eq_ignore_ascii_case("jpf"))
-                .unwrap_or(false)
-        {
-            files.push(path);
+        for entry in dir_entries {
+            let entry = entry.map_err(|err| format!("failed to read asset entry: {err}"))?;
+            let path = entry.path();
+            if path.is_dir() {
+                visit(&path, base, files)?;
+            } else if is_jpeg2000(&path) {
+                let relative = path
+                    .strip_prefix(base)
+                    .map_err(|err| format!("failed to relativize asset path: {err}"))?
+                    .to_path_buf();
+                files.push(relative);
+            }
         }
+
+        Ok(())
     }
 
+    let mut files = vec![];
+    visit(&ASSETS_PATH, &ASSETS_PATH, &mut files)?;
     files.sort();
     Ok(files)
 }
 
-fn run_asset_test(asset_path: &Path) -> Result<(), String> {
-    let file_name = asset_path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .ok_or_else(|| format!("asset path is not valid UTF-8: {}", asset_path.display()))?
-        .to_string();
+fn run_asset_test(asset_relative_path: &Path) -> Result<(), String> {
+    let asset_name = asset_relative_path.display().to_string();
+    let asset_path = ASSETS_PATH.join(asset_relative_path);
 
-    let data =
-        fs::read(asset_path).map_err(|err| format!("failed to read {}: {err}", file_name))?;
-    let bitmap = read(&data).map_err(|err| format!("failed to decode {}: {err:?}", file_name))?;
+    let data = fs::read(&asset_path)
+        .map_err(|err| format!("failed to read {}: {err}", asset_name))?;
+    let bitmap =
+        read(&data).map_err(|err| format!("failed to decode {}: {err:?}", asset_name))?;
 
     let rgba = bitmap_to_dynamic_image(bitmap).into_rgba8();
-    let reference_name = Path::new(&file_name)
-        .with_extension("png")
-        .file_name()
-        .unwrap()
-        .to_owned();
+    let reference_path = asset_relative_path.with_extension("png");
+    let snapshot_path = SNAPSHOTS_PATH.join(&reference_path);
 
-    let snapshot_path = SNAPSHOTS_PATH.join(&reference_name);
-
-    fs::create_dir_all(&*SNAPSHOTS_PATH)
-        .map_err(|err| format!("failed to create snapshots directory: {err}"))?;
+    if let Some(parent) = snapshot_path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|err| format!("failed to create snapshot directory: {err}"))?;
+    }
 
     if !snapshot_path.exists() {
         rgba.save_with_format(&snapshot_path, ImageFormat::Png)
-            .map_err(|err| format!("failed to save snapshot for {}: {err}", file_name))?;
-        return Err(format!("new reference image was created for {}", file_name));
+            .map_err(|err| format!("failed to save snapshot for {}: {err}", asset_name))?;
+        return Err(format!(
+            "new reference image was created for {}",
+            asset_name
+        ));
     }
 
     let expected = image::open(&snapshot_path)
-        .map_err(|err| format!("failed to load snapshot for {}: {err}", file_name))?
+        .map_err(|err| format!("failed to load snapshot for {}: {err}", asset_name))?
         .into_rgba8();
     let (diff_image, pixel_diff) = get_diff(&expected, &rgba);
 
     if pixel_diff > 0 {
-        let diff_path = DIFFS_PATH.join(&reference_name);
+        let diff_path = DIFFS_PATH.join(&reference_path);
+
+        if let Some(parent) = diff_path.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|err| format!("failed to create diff directory: {err}"))?;
+        }
 
         diff_image
             .save_with_format(&diff_path, ImageFormat::Png)
-            .map_err(|err| format!("failed to save diff for {}: {err}", file_name))?;
+            .map_err(|err| format!("failed to save diff for {}: {err}", asset_name))?;
 
         if REPLACE.is_some() {
             rgba.save_with_format(&snapshot_path, ImageFormat::Png)
-                .map_err(|err| format!("failed to replace snapshot for {}: {err}", file_name))?;
-            return Err(format!("snapshot was replaced for {}", file_name));
+                .map_err(|err| format!("failed to replace snapshot for {}: {err}", asset_name))?;
+            return Err(format!("snapshot was replaced for {}", asset_name));
         }
 
         return Err(format!(
             "pixel diff {} detected for {}",
-            pixel_diff, file_name
+            pixel_diff, asset_name
         ));
     }
 
     Ok(())
+}
+
+fn is_jpeg2000(path: &Path) -> bool {
+    path.is_file()
+        && path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .map(|ext| ext.eq_ignore_ascii_case("jp2") || ext.eq_ignore_ascii_case("jpf"))
+            .unwrap_or(false)
 }
 
 fn bitmap_to_dynamic_image(bitmap: Bitmap) -> DynamicImage {
