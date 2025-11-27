@@ -61,8 +61,8 @@ pub(crate) fn decode(
     };
 
     if total_bitplanes().ok_or("invalid number of bitplanes")? > num_bitplanes {
-        // See corpus test case 0938098. Don't error out, but just return
-        // `Ok`.
+        // See corpus test case 0938098. Number of missing bitplanes is larger
+        // than `num_bitplanes`. Don't error out, but just return `Ok`.
         return Ok(());
     }
 
