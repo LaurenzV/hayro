@@ -503,7 +503,7 @@ impl<'a> ResolutionTile<'a> {
                         .component_info
                         .size_info
                         .horizontal_resolution as u32
-                        * x0
+                        * x
                         * (1 << (self.precinct_exponent_x() as u16
                             + self
                                 .component_tile
@@ -515,7 +515,7 @@ impl<'a> ResolutionTile<'a> {
                         .component_info
                         .size_info
                         .vertical_resolution as u32
-                        * y0
+                        * y
                         * (1 << (self.precinct_exponent_y() as u16
                             + self
                                 .component_tile
