@@ -247,8 +247,6 @@ fn parse_tile_part<'a>(
 /// A tile, instantiated to a specific component.
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct ComponentTile<'a> {
-    /// The underlying tile.
-    pub(crate) tile: &'a Tile<'a>,
     /// The information of the component of the tile.
     pub(crate) component_info: &'a ComponentInfo,
     /// The rectangle of the component tile.
@@ -282,7 +280,6 @@ impl<'a> ComponentTile<'a> {
         };
 
         ComponentTile {
-            tile,
             component_info,
             rect,
         }
