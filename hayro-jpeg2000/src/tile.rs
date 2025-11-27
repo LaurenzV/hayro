@@ -14,7 +14,7 @@ pub(crate) struct Tile<'a> {
     pub(crate) idx: u32,
     /// The concatenated tile parts that contain all the information for all
     /// constituent codeblocks.
-    pub(crate) tile_parts: Vec<&'a [u8]>,
+    pub(crate) tile_parts: Vec<TilePart<'a>>,
     /// Parameters for each component. In most cases, those are directly
     /// inherited from the main header. But in some cases, individual tiles
     /// might override them.
@@ -26,6 +26,12 @@ pub(crate) struct Tile<'a> {
     pub(crate) progression_order: ProgressionOrder,
     pub(crate) num_layers: u16,
     pub(crate) mct: bool,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct TilePart<'a> {
+    pub(crate) packet_headers: Option<&'a [u8]>,
+    pub(crate) packet_body: &'a [u8],
 }
 
 impl<'a> Tile<'a> {
@@ -136,6 +142,8 @@ fn parse_tile_part<'a>(
     let tile = &mut tiles[tile_part_header.tile_index as usize];
     let num_components = tile.component_infos.len();
 
+    let mut ppt_header = None;
+
     loop {
         let Some(marker) = reader.peek_marker() else {
             warn!(
@@ -219,6 +227,10 @@ fn parse_tile_part<'a>(
                 }
             }
             markers::EOC => break,
+            markers::PPT => {
+                reader.read_marker()?;
+                ppt_header = Some(ppt_marker(reader).ok_or("failed to read PPT marker")?);
+            }
             _ => {
                 reader.read_marker()?;
                 skip_marker_segment(reader)
@@ -235,11 +247,12 @@ fn parse_tile_part<'a>(
         return Ok(());
     };
 
-    tile.tile_parts.push(
-        reader
+    tile.tile_parts.push(TilePart {
+        packet_headers: ppt_header,
+        packet_body: reader
             .read_bytes(remaining_bytes)
             .ok_or("failed to get tile part data")?,
-    );
+    });
 
     Ok(())
 }
@@ -566,6 +579,12 @@ impl<'a> ResolutionTile<'a> {
 struct TilePartHeader {
     tile_index: u16,
     tile_part_length: u32,
+}
+
+/// PPT marker (A.7.5).
+fn ppt_marker<'a>(reader: &mut Reader<'a>) -> Option<&'a [u8]> {
+    let length = reader.read_u16()?.checked_sub(2)?;
+    reader.read_bytes(length as usize)
 }
 
 /// SOT marker (A.4.2).

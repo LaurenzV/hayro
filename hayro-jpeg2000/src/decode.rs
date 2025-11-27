@@ -20,7 +20,7 @@ use crate::progression::{
 };
 use crate::rect::IntRect;
 use crate::tag_tree::{TagNode, TagTree};
-use crate::tile::{ComponentTile, ResolutionTile, Tile};
+use crate::tile::{ComponentTile, ResolutionTile, Tile, TilePart};
 use crate::{bitplane, idwt, tile};
 use fearless_simd::{Level, Simd, SimdBase, SimdFloat, dispatch, f32x8};
 use hayro_common::bit::BitReader;
@@ -630,12 +630,12 @@ fn get_code_block_data<'a>(
 }
 
 fn get_code_block_data_inner<'a>(
-    tile_part_data: &'a [u8],
+    tile_part: &TilePart<'a>,
     mut progression_iterator: impl Iterator<Item = ProgressionData>,
     tile_ctx: &mut TileDecodeContext<'a>,
     storage: &mut DecompositionStorage<'a>,
 ) -> Option<()> {
-    let mut data = tile_part_data;
+    let mut data = tile_part.packet_body;
 
     while !data.is_empty() {
         let progression_data = progression_iterator.next()?;
