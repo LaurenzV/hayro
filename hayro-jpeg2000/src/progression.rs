@@ -196,8 +196,8 @@ pub(crate) fn resolution_position_component_layer_progression(
     for (component_idx, component) in input.tile.component_tiles().enumerate() {
         for (resolution, resolution_tile) in component.resolution_tiles().enumerate() {
             elements.extend(resolution_tile.precincts().map(|d| PrecinctStore {
-                precinct_y: d.rect.y0,
-                precinct_x: d.rect.x0,
+                precinct_y: d.r_y,
+                precinct_x: d.r_x,
                 component_idx: component_idx as u8,
                 resolution: resolution as u16,
                 precinct_idx: d.idx,
