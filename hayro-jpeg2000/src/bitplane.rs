@@ -50,15 +50,13 @@ pub(crate) fn decode(
     all_segments: &[Segment],
 ) -> Result<(), &'static str> {
     let total_bitplanes = || {
-        Some(
-            code_block.missing_bit_planes.checked_add(1)?.checked_add(
-                // 0 coding passes are valid (and checked below), so just use saturating
-                // here.
-                code_block
-                    .number_of_coding_passes
-                    .saturating_sub(1)
-                    .div_ceil(3),
-            )?,
+        code_block.missing_bit_planes.checked_add(1)?.checked_add(
+            // 0 coding passes are valid (and checked below), so just use saturating
+            // here.
+            code_block
+                .number_of_coding_passes
+                .saturating_sub(1)
+                .div_ceil(3),
         )
     };
 
