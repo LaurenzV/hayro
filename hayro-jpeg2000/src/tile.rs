@@ -476,7 +476,7 @@ impl<'a> ResolutionTile<'a> {
         let mut y_start = (self.rect.y0 / (1 << ppy)) * (1 << ppy);
         let mut x_start = (self.rect.x0 / (1 << ppx)) * (1 << ppx);
 
-        // It is unclear why this is necessary, but it is. The spec only 
+        // It is unclear why this is necessary, but it is. The spec only
         // mentions that ppx/ppy must be decreased when calculating codeblock
         // dimensions, but not that it's necessary for precincts as well.
         if self.resolution > 0 {

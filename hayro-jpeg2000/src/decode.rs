@@ -13,10 +13,10 @@ use crate::codestream::{
 use crate::idwt::IDWTOutput;
 use crate::progression::{
     IteratorInput, ProgressionData, component_position_resolution_layer_progression,
-    position_component_resolution_layer_progression,
-    resolution_position_component_layer_progression,
     layer_resolution_component_position_progression,
+    position_component_resolution_layer_progression,
     resolution_layer_component_position_progression,
+    resolution_position_component_layer_progression,
 };
 use crate::rect::IntRect;
 use crate::tag_tree::{TagNode, TagTree};
