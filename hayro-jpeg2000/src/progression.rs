@@ -4,11 +4,9 @@
 //! (layer_num, resolution, component, precinct) in a specific order that
 //! determines in which order the data appears in the codestream.
 
-use std::cmp::Ordering;
 use crate::tile::{ComponentTile, ResolutionTile, Tile};
+use std::cmp::Ordering;
 use std::iter;
-
-// TODO: Refactor this whole module.
 
 #[derive(Default, Copy, Clone, Debug, PartialEq)]
 pub(crate) struct ProgressionData {
@@ -235,39 +233,13 @@ pub(crate) fn resolution_position_component_layer_progression(
 pub(crate) fn position_component_resolution_layer_progression(
     input: &IteratorInput<'_>,
 ) -> impl Iterator<Item = ProgressionData> {
-    // Note that the order of fields here is important!
-    #[derive(PartialEq, Eq, PartialOrd, Ord)]
-    struct PrecinctStore {
-        precinct_y: u32,
-        precinct_x: u32,
-        component_idx: u8,
-        resolution: u16,
-        precinct_idx: u32,
-    }
-
-    let mut elements = vec![];
-
-    for (component_idx, component) in input.tile.component_tiles().enumerate() {
-        for (resolution, resolution_tile) in component.resolution_tiles().enumerate() {
-            elements.extend(resolution_tile.precincts().map(|d| PrecinctStore {
-                precinct_y: d.rect.y0,
-                precinct_x: d.rect.x0,
-                component_idx: component_idx as u8,
-                resolution: resolution as u16,
-                precinct_idx: d.idx,
-            }))
-        }
-    }
-
-    elements.sort();
-
-    elements.into_iter().flat_map(|e| {
-        (0..input.layers).map(move |layer| ProgressionData {
-            layer_num: layer,
-            resolution: e.resolution,
-            component: e.component_idx,
-            precinct: e.precinct_idx,
-        })
+    position_progression_common(input, |p, s| {
+        p.precinct_y
+            .cmp(&s.precinct_y)
+            .then_with(|| p.precinct_x.cmp(&s.precinct_x))
+            .then_with(|| p.component_idx.cmp(&s.component_idx))
+            .then_with(|| p.resolution.cmp(&s.resolution))
+            .then_with(|| p.precinct_idx.cmp(&s.precinct_idx))
     })
 }
 
@@ -276,7 +248,8 @@ pub(crate) fn component_position_resolution_layer_progression(
     input: &IteratorInput<'_>,
 ) -> impl Iterator<Item = ProgressionData> {
     position_progression_common(input, |p, s| {
-        p.component_idx.cmp(&s.component_idx)
+        p.component_idx
+            .cmp(&s.component_idx)
             .then_with(|| p.precinct_y.cmp(&s.precinct_y))
             .then_with(|| p.precinct_x.cmp(&s.precinct_x))
             .then_with(|| p.resolution.cmp(&s.resolution))
