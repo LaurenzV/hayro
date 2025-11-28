@@ -52,7 +52,9 @@ fn read_header(reader: &mut Reader) -> Result<Header, &'static str> {
                 reader.read_marker()?;
                 let (component_index, coc) =
                     coc_marker(reader, num_components).ok_or("failed to read COC marker")?;
-                cod_components[component_index as usize] = Some(coc);
+                *cod_components
+                    .get_mut(component_index as usize)
+                    .ok_or("invalid COC marker")? = Some(coc);
             }
             markers::QCD => {
                 reader.read_marker()?;
@@ -62,7 +64,9 @@ fn read_header(reader: &mut Reader) -> Result<Header, &'static str> {
                 reader.read_marker()?;
                 let (component_index, qcc) =
                     qcc_marker(reader, num_components).ok_or("failed to read QCC marker")?;
-                qcd_components[component_index as usize] = Some(qcc);
+                *qcd_components
+                    .get_mut(component_index as usize)
+                    .ok_or("invalid COC marker")? = Some(qcc);
             }
             markers::RGN => {
                 reader.read_marker()?;
