@@ -411,8 +411,15 @@ impl<'a> ResolutionTile<'a> {
             0
         };
 
-        let numerator_x = 2u64.pow(self.decomposition_level as u32 - 1) * xo_b as u64;
-        let numerator_y = 2u64.pow(self.decomposition_level as u32 - 1) * yo_b as u64;
+        let mut numerator_x = 0;
+        let mut numerator_y = 0;
+
+        // If decomposition level is 0, xo_b and yo_b are 0 as well.
+        if self.decomposition_level > 0 {
+            numerator_x = 2u64.pow(self.decomposition_level as u32 - 1) * xo_b as u64;
+            numerator_y = 2u64.pow(self.decomposition_level as u32 - 1) * yo_b as u64;
+        }
+
         let denominator = 2u64.pow(self.decomposition_level as u32);
 
         let tbx_0 = (self.component_tile.rect.x0 as u64)

@@ -137,8 +137,14 @@ fn validate(header: &Header) -> Result<(), &'static str> {
             // See the accesses in the `exponent_mantissa` method. The largest
             // access is 1 + (max_resolution_idx - 1) * 3 + 2.
 
-            if 1 + (max_resolution_idx as usize - 1) * 3 + 2 >= num_precinct_exponents {
-                return Err("not enough exponents were provided in header");
+            if max_resolution_idx == 0 {
+                if num_precinct_exponents == 0 {
+                    return Err("not enough exponents were provided in header");
+                }
+            } else {
+                if 1 + (max_resolution_idx as usize - 1) * 3 + 2 >= num_precinct_exponents {
+                    return Err("not enough exponents were provided in header");
+                }
             }
         }
     }
