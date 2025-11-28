@@ -3,6 +3,7 @@ use crate::boxes::{
     CHANNEL_DEFINITION, COLOUR_SPECIFICATION, COMPONENT_MAPPING, CONTIGUOUS_CODESTREAM, FILE_TYPE,
     IMAGE_HEADER, JP2_HEADER, JP2_SIGNATURE, PALETTE, read_box, tag_to_string,
 };
+use crate::icc::ICCMetadata;
 use hayro_common::byte::Reader;
 use log::{debug, warn};
 
@@ -12,6 +13,7 @@ pub(crate) mod bitplane;
 pub mod boxes;
 mod codestream;
 mod decode;
+mod icc;
 pub(crate) mod idwt;
 mod progression;
 pub(crate) mod rect;
@@ -57,6 +59,23 @@ pub enum ColourSpecificationMethod {
     IccProfile(Vec<u8>),
     /// Reserved or unsupported method; stores raw value for debugging.
     Unknown(u8),
+}
+
+impl ColourSpecificationMethod {
+    pub fn expected_number_of_channels(&self) -> Option<u8> {
+        match self {
+            ColourSpecificationMethod::Enumerated(e) => e.expected_number_of_channels(),
+            ColourSpecificationMethod::IccProfile(i) => {
+                Some(
+                    ICCMetadata::from_data(i)
+                        .map(|d| d.color_space.num_components())
+                        // Let's just assume RGB.
+                        .unwrap_or(3),
+                )
+            }
+            ColourSpecificationMethod::Unknown(_) => None,
+        }
+    }
 }
 
 /// Enumerated colourspace identifiers defined by ISO/IEC 15444-1 Table L.10
@@ -112,6 +131,35 @@ impl EnumeratedColourspace {
             25 => EnumeratedColourspace::ScRgb,
             26 => EnumeratedColourspace::ScRgbGray,
             v => EnumeratedColourspace::Reserved(v),
+        }
+    }
+
+    /// Returns the number of colour channels this enumerated space expects without accounting
+    /// for extra alpha channels.
+    pub fn expected_number_of_channels(&self) -> Option<u8> {
+        match self {
+            EnumeratedColourspace::BiLevel1 => Some(1),
+            EnumeratedColourspace::YCbCr1 => Some(3),
+            EnumeratedColourspace::YCbCr2 => Some(3),
+            EnumeratedColourspace::YCbCr3 => Some(3),
+            EnumeratedColourspace::PhotoYcc => Some(3),
+            EnumeratedColourspace::Cmy => Some(3),
+            EnumeratedColourspace::Cmyk => Some(4),
+            EnumeratedColourspace::Ycck => Some(4),
+            EnumeratedColourspace::CieLab => Some(3),
+            EnumeratedColourspace::BiLevel2 => Some(1),
+            EnumeratedColourspace::Srgb => Some(3),
+            EnumeratedColourspace::Greyscale => Some(1),
+            EnumeratedColourspace::Sycc => Some(3),
+            EnumeratedColourspace::CieJab => Some(3),
+            EnumeratedColourspace::EsRgb => Some(3),
+            EnumeratedColourspace::RommRgb => Some(3),
+            EnumeratedColourspace::YPbPr112560 => Some(3),
+            EnumeratedColourspace::YPbPr125050 => Some(3),
+            EnumeratedColourspace::EsYcc => Some(3),
+            EnumeratedColourspace::ScRgb => Some(3),
+            EnumeratedColourspace::ScRgbGray => Some(1),
+            EnumeratedColourspace::Reserved(_) => None,
         }
     }
 }
@@ -502,7 +550,19 @@ fn read_jp2_codestream(data: &[u8]) -> Result<Bitmap, &'static str> {
         height: header.size_data.image_height(),
         width: header.size_data.image_width(),
         has_intellectual_property: 0,
-        colour_specification: None,
+        colour_specification: {
+            let method = if channels.len() < 3 {
+                EnumeratedColourspace::Greyscale
+            } else {
+                EnumeratedColourspace::Srgb
+            };
+
+            Some(ColourSpecification {
+                method: ColourSpecificationMethod::Enumerated(method),
+                precedence: 0,
+                approximation: 0,
+            })
+        },
         channel_definitions: vec![],
         palette: None,
         component_mapping: None,

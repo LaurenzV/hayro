@@ -158,8 +158,18 @@ fn to_dynamic_image(bitmap: Bitmap) -> Result<DynamicImage, String> {
     }
 
     let (width, height) = (bitmap.metadata.width, bitmap.metadata.height);
-    let has_alpha = bitmap.channels.iter().any(|c| c.is_alpha);
+    let mut has_alpha = bitmap.channels.iter().any(|c| c.is_alpha);
     let num_channels = bitmap.channels.len();
+
+    if let Some(expected_channels) = bitmap
+        .metadata
+        .colour_specification
+        .as_ref()
+        .and_then(|c| c.method.expected_number_of_channels())
+        && (expected_channels as usize) < num_channels
+    {
+        has_alpha = true;
+    }
 
     let channels = bitmap
         .channels
