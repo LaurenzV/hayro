@@ -269,6 +269,7 @@ fn parse_tile_part<'a>(
 /// A tile, instantiated to a specific component.
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct ComponentTile<'a> {
+    pub(crate) tile: &'a Tile<'a>,
     /// The information of the component of the tile.
     pub(crate) component_info: &'a ComponentInfo,
     /// The rectangle of the component tile.
@@ -302,6 +303,7 @@ impl<'a> ComponentTile<'a> {
         };
 
         ComponentTile {
+            tile,
             component_info,
             rect,
         }
@@ -509,42 +511,64 @@ impl<'a> ResolutionTile<'a> {
         let ppx_pow2 = 1 << ppx;
         let ppy_pow2 = 1 << ppy;
 
+        let precinct_x_step = self
+            .component_tile
+            .component_info
+            .size_info
+            .horizontal_resolution as u32
+            * (1 << (self.precinct_exponent_x() as u16
+                + self
+                    .component_tile
+                    .component_info
+                    .num_decomposition_levels()
+                - self.resolution));
+
+        let precinct_y_step = self
+            .component_tile
+            .component_info
+            .size_info
+            .vertical_resolution as u32
+            * (1 << (self.precinct_exponent_y() as u16
+                + self
+                    .component_tile
+                    .component_info
+                    .num_decomposition_levels()
+                - self.resolution));
+
+        // These variables are used to map the start coordinates of each
+        // precinct _on the reference grid_. Remember that the first
+        // precinct in each row/column is at the start position of the tile
+        // which might not be a multiple of precinct exponent, but all subsequent
+        // precincts are at a multiple of the exponent.
+        let r_x = self.component_tile.tile.rect.x0;
+        let mut r_y = self.component_tile.tile.rect.y0;
+
         (0..num_precincts_y).flat_map(move |y| {
             let y0 = y * ppy_pow2 + y_start;
+            let mut r_x = r_x;
 
-            (0..num_precincts_x).map(move |x| {
+            let res = (0..num_precincts_x).map(move |x| {
                 let x0 = x * ppx_pow2 + x_start;
-                PrecinctData {
-                    // Map back to reference grid coordinates. See the formula
-                    // described in B.12.1.3.
-                    r_x: self
-                        .component_tile
-                        .component_info
-                        .size_info
-                        .horizontal_resolution as u32
-                        * x
-                        * (1 << (self.precinct_exponent_x() as u16
-                            + self
-                                .component_tile
-                                .component_info
-                                .num_decomposition_levels()
-                            - self.resolution)),
-                    r_y: self
-                        .component_tile
-                        .component_info
-                        .size_info
-                        .vertical_resolution as u32
-                        * y
-                        * (1 << (self.precinct_exponent_y() as u16
-                            + self
-                                .component_tile
-                                .component_info
-                                .num_decomposition_levels()
-                            - self.resolution)),
+
+                let data = PrecinctData {
+                    r_x,
+                    r_y,
                     rect: IntRect::from_xywh(x0, y0, ppx_pow2, ppy_pow2),
                     idx: num_precincts_x * y + x,
-                }
-            })
+                };
+
+                // If r_x is already aligned, we simply step by `precinct_x_step`.
+                // Otherwise (can only be the case for precincts in the first
+                // row or column), align to the next multiple.
+                r_x = (r_x + 1).next_multiple_of(precinct_x_step);
+
+                data
+            });
+
+            // Same as for r_x.
+            r_y = (r_y + 1).next_multiple_of(precinct_y_step);
+
+            res
         })
     }
 
