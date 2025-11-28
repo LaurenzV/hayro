@@ -97,6 +97,7 @@ pub(crate) fn decode(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn decode_inner(
     code_block: &CodeBlock,
     style: &CodeBlockStyle,
