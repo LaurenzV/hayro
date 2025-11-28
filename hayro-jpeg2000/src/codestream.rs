@@ -1,4 +1,5 @@
 use crate::bitmap::ChannelData;
+use crate::bitplane::BITPLANE_BIT_SIZE;
 use crate::decode::{SubBandType, decode};
 use hayro_common::byte::Reader;
 
@@ -506,6 +507,11 @@ fn size_marker_inner(reader: &mut Reader) -> Option<SizeData> {
 
         let precision = (ssiz & 0x7F) + 1;
         let is_signed = (ssiz & 0x80) != 0;
+
+        // In theory up to 38 is allowed, but we don't support more than that.
+        if precision as u32 > BITPLANE_BIT_SIZE {
+            return None;
+        }
 
         components.push(ComponentSizeInfo {
             precision,

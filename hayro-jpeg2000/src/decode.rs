@@ -1088,7 +1088,7 @@ fn apply_sign_shift(tile_ctx: &mut TileDecodeContext, component_infos: &[Compone
         tile_ctx.channel_data.iter_mut().zip(component_infos.iter())
     {
         for sample in &mut channel_data.container {
-            *sample += (1 << (component_info.size_info.precision - 1)) as f32;
+            *sample += (1u32 << (component_info.size_info.precision - 1)) as f32;
         }
     }
 }
