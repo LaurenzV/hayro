@@ -42,46 +42,51 @@ impl BitPlaneDecodeBuffers {
 pub(crate) fn decode(
     code_block: &CodeBlock,
     sub_band_type: SubBandType,
-    num_bitplanes: u8,
+    mut num_bitplanes: u8,
     style: &CodeBlockStyle,
     ctx: &mut CodeBlockDecodeContext,
     bp_buffers: &mut BitPlaneDecodeBuffers,
     layers: &[Layer],
     all_segments: &[Segment],
 ) -> Result<(), &'static str> {
-    let total_bitplanes = || {
-        code_block.missing_bit_planes.checked_add(1)?.checked_add(
-            // 0 coding passes are valid (and checked below), so just use saturating
-            // here.
-            code_block
-                .number_of_coding_passes
-                .saturating_sub(1)
-                .div_ceil(3),
-        )
-    };
-
     ctx.reset(code_block, sub_band_type, style);
-
-    if total_bitplanes().ok_or("invalid number of bitplanes")? > num_bitplanes {
-        // See corpus test case 0938098. Number of missing bitplanes is larger
-        // than `num_bitplanes`. Don't error out, but just return `Ok`.
-        return Ok(());
-    }
 
     if code_block.number_of_coding_passes == 0 {
         return Ok(());
     }
 
-    if num_bitplanes as u32 > BITPLANE_BIT_SIZE {
-        // If we want to adjust this, we need to change how `ComponentBits`
-        // works.
-        return Err("number of bitplanes is too high");
+    // "The maximum number of bit-planes available for the representation of
+    // coefficients in any sub-band, b, is given by Mb as defined in Equation
+    // (E-2). In general however, the number of actual bit-planes for which
+    // coding passes are generated is Mb – P, where the number of missing most
+    // significant bit-planes, P, may vary from code-block to code-block."
+
+    // See issue 399. If this subtraction fails the file is in theory invalid,
+    // but we still try to be lenient.
+    num_bitplanes = num_bitplanes.saturating_sub(code_block.missing_bit_planes);
+
+    if num_bitplanes == 0 {
+        return Ok(());
+    }
+
+    let max_coding_passes = if num_bitplanes == 1 {
+        1
+    } else {
+        1 + 3 * (num_bitplanes - 1)
+    };
+
+    if max_coding_passes < code_block.number_of_coding_passes {
+        warn!(
+            "codeblock contains too many coding passes, will be truncated from {} to {}",
+            code_block.number_of_coding_passes, max_coding_passes
+        );
     }
 
     decode_inner(
         code_block,
         style,
         num_bitplanes,
+        max_coding_passes,
         layers,
         all_segments,
         ctx,
@@ -96,6 +101,7 @@ fn decode_inner(
     code_block: &CodeBlock,
     style: &CodeBlockStyle,
     num_bitplanes: u8,
+    max_coding_passes: u8,
     layers: &[Layer],
     all_segments: &[Segment],
     ctx: &mut CodeBlockDecodeContext,
@@ -142,7 +148,7 @@ fn decode_inner(
         let mut decoder = ArithmeticDecoder::new(&bp_buffers.combined_layers);
         handle_coding_passes(
             0,
-            code_block.number_of_coding_passes,
+            code_block.number_of_coding_passes.min(max_coding_passes),
             style,
             ctx,
             &mut decoder,
@@ -155,7 +161,8 @@ fn decode_inner(
         // exact index of the covered coding passes (see Table D.9).
         for segment in 0..bp_buffers.segment_coding_passes.len() - 1 {
             let start_coding_pass = bp_buffers.segment_coding_passes[segment];
-            let end_coding_pass = bp_buffers.segment_coding_passes[segment + 1];
+            let end_coding_pass =
+                bp_buffers.segment_coding_passes[segment + 1].min(max_coding_passes);
 
             let data = &bp_buffers.combined_layers
                 [bp_buffers.segment_ranges[segment]..bp_buffers.segment_ranges[segment + 1]];
@@ -480,14 +487,8 @@ impl CodeBlockDecodeContext {
             .resize(num_coefficients, NeighborSignificances::default());
 
         self.coefficient_states.clear();
-        self.coefficient_states.resize_with(num_coefficients, || {
-            let mut state = CoefficientState::default();
-            // We haven't validated `missing_bit_planes` when calling reset, so
-            // we need to guard against the assertion in `set_magnitude_bits`.
-            state.set_magnitude_bits(code_block.missing_bit_planes.min(BITPLANE_BIT_SIZE as u8));
-
-            state
-        });
+        self.coefficient_states
+            .resize(num_coefficients, CoefficientState::default());
 
         self.width = width;
         self.padded_width = padded_width;
