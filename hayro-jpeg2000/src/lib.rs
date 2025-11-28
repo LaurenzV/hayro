@@ -403,12 +403,20 @@ fn resolve_component_channels(
     channels: Vec<ChannelData>,
     metadata: &ImageMetadata,
 ) -> Result<Vec<ChannelData>, &'static str> {
-    let Some(mapping) = &metadata.component_mapping else {
-        if metadata.palette.is_some() {
-            return Err("palette present without component mapping");
+    let mapping = if let Some(mapping) = metadata.component_mapping.clone() {
+        mapping
+    } else {
+        if let Some(palette) = metadata.palette.as_ref() {
+            // In theory, a cmap is required if we have pclr, but we intead assume
+            // that all channels are mapped via the palette in case not.
+            (0..palette.columns.len())
+                .map(|i| ComponentMappingEntry {
+                    component_index: 0,
+                    mapping_type: ComponentMappingType::Palette { column: i as u8 },
+                }).collect::<Vec<_>>()
+        }   else {
+            return Ok(channels);
         }
-
-        return Ok(channels);
     };
 
     let mut resolved = Vec::with_capacity(mapping.len());
@@ -529,63 +537,67 @@ fn read_jp2_file(data: &[u8], settings: &DecodeSettings) -> Result<Bitmap, &'sta
             break;
         };
 
-        if current_box.box_type == JP2_HEADER {
-            // Parse the JP2 Header box (superbox)
-            let mut image_metadata = ImageMetadata {
-                height: 0,
-                width: 0,
-                has_intellectual_property: 0,
-                colour_specification: None,
-                channel_definitions: Vec::new(),
-                palette: None,
-                component_mapping: None,
-            };
+        match current_box.box_type {
+            JP2_HEADER => {
+                // Parse the JP2 Header box (superbox)
+                let mut image_metadata = ImageMetadata {
+                    height: 0,
+                    width: 0,
+                    has_intellectual_property: 0,
+                    colour_specification: None,
+                    channel_definitions: Vec::new(),
+                    palette: None,
+                    component_mapping: None,
+                };
 
-            let mut jp2h_reader = Reader::new(current_box.data);
+                let mut jp2h_reader = Reader::new(current_box.data);
 
-            // Read child boxes within JP2 Header box
-            while !jp2h_reader.at_end() {
-                let child_box = read_box(&mut jp2h_reader).ok_or("failed to read JP2 box")?;
+                // Read child boxes within JP2 Header box
+                while !jp2h_reader.at_end() {
+                    let child_box = read_box(&mut jp2h_reader).ok_or("failed to read JP2 box")?;
 
-                match child_box.box_type {
-                    IMAGE_HEADER => {
-                        image_metadata.parse_ihdr(child_box.data)?;
-                    }
-                    CHANNEL_DEFINITION => {
-                        image_metadata
-                            .parse_cdef(child_box.data)
-                            .ok_or("failed to parse channel definition")?;
-                    }
-                    COLOUR_SPECIFICATION => {
-                        image_metadata
-                            .parse_colr(child_box.data)
-                            .ok_or("failed to parse colour")?;
-                    }
-                    PALETTE => {
-                        image_metadata
-                            .parse_pclr(child_box.data)
-                            .map_err(|_| "failed to parse palette")?;
-                    }
-                    COMPONENT_MAPPING => {
-                        image_metadata
-                            .parse_cmap(child_box.data)
-                            .map_err(|_| "failed to parse component mapping")?;
-                    }
-                    _ => {
-                        debug!("ignoring box {}", tag_to_string(child_box.box_type));
+                    match child_box.box_type {
+                        IMAGE_HEADER => {
+                            image_metadata.parse_ihdr(child_box.data)?;
+                        }
+                        CHANNEL_DEFINITION => {
+                            image_metadata
+                                .parse_cdef(child_box.data)
+                                .ok_or("failed to parse channel definition")?;
+                        }
+                        COLOUR_SPECIFICATION => {
+                            image_metadata
+                                .parse_colr(child_box.data)
+                                .ok_or("failed to parse colour")?;
+                        }
+                        PALETTE => {
+                            image_metadata
+                                .parse_pclr(child_box.data)
+                                .map_err(|_| "failed to parse palette")?;
+                        }
+                        COMPONENT_MAPPING => {
+                            image_metadata
+                                .parse_cmap(child_box.data)
+                                .map_err(|_| "failed to parse component mapping")?;
+                        }
+                        _ => {
+                            debug!("ignoring box {}", tag_to_string(child_box.box_type));
+                        }
                     }
                 }
-            }
 
-            if image_metadata.width == 0 || image_metadata.height == 0 {
-                return Err("image has invalid dimensions");
-            }
+                if image_metadata.width == 0 || image_metadata.height == 0 {
+                    return Err("image has invalid dimensions");
+                }
 
-            metadata = Ok(image_metadata);
-        } else if current_box.box_type == CONTIGUOUS_CODESTREAM {
-            channels = Ok(codestream::read(current_box.data)?);
-        } else {
-            debug!("ignoring outer box {}", tag_to_string(current_box.box_type));
+                metadata = Ok(image_metadata);
+            }
+            CONTIGUOUS_CODESTREAM => {
+                channels = Ok(codestream::read(current_box.data)?);
+            }
+            _ => {
+                warn!("ignoring outer box {}", tag_to_string(current_box.box_type));
+            }
         }
     }
 
