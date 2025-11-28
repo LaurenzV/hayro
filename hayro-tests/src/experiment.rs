@@ -1,4 +1,5 @@
 use hayro::Pdf;
+use hayro_jpeg2000::DecodeSettings;
 use hayro_syntax::Filter;
 use rayon::prelude::*;
 use std::collections::HashSet;
@@ -102,7 +103,7 @@ fn check_jpx_images(folder: &str) {
                     {
                         let raw_data = stream.raw_data();
 
-                        match hayro_jpeg2000::read(raw_data.as_ref()) {
+                        match hayro_jpeg2000::read(raw_data.as_ref(), &DecodeSettings::default()) {
                             Ok(_) => {
                                 // println!("ok!")
                             }

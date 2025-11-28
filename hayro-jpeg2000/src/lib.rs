@@ -1,7 +1,7 @@
-use crate::bitmap::Bitmap;
+use crate::bitmap::{Bitmap, ChannelData};
 use crate::boxes::{
-    CHANNEL_DEFINITION, COLOUR_SPECIFICATION, CONTIGUOUS_CODESTREAM, FILE_TYPE, IMAGE_HEADER,
-    JP2_HEADER, JP2_SIGNATURE, read_box, tag_to_string,
+    CHANNEL_DEFINITION, COLOUR_SPECIFICATION, COMPONENT_MAPPING, CONTIGUOUS_CODESTREAM, FILE_TYPE,
+    IMAGE_HEADER, JP2_HEADER, JP2_SIGNATURE, PALETTE, read_box, tag_to_string,
 };
 use hayro_common::byte::Reader;
 use log::{debug, warn};
@@ -31,6 +31,10 @@ pub struct ImageMetadata {
     pub colour_specification: Option<ColourSpecification>,
     /// Channel definitions specified by the Channel Definition box (cdef).
     pub channel_definitions: Vec<ChannelDefinition>,
+    /// Palette definitions from the Palette box (pclr).
+    pub palette: Option<Palette>,
+    /// Component mappings defined by the Component Mapping box (cmap).
+    pub component_mapping: Option<Vec<ComponentMappingEntry>>,
 }
 
 /// Parsed contents of a Colour Specification box as defined in ISO/IEC 15444-1.
@@ -158,6 +162,44 @@ impl ChannelAssociation {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct Palette {
+    pub entries: Vec<Vec<i64>>,
+    pub columns: Vec<PaletteColumn>,
+}
+
+impl Palette {
+    fn value(&self, entry: usize, column: usize) -> Option<i64> {
+        self.entries
+            .get(entry)
+            .and_then(|row| row.get(column))
+            .copied()
+    }
+
+    fn num_entries(&self) -> usize {
+        self.entries.len()
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct PaletteColumn {
+    pub bit_depth: u8,
+    pub is_signed: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct ComponentMappingEntry {
+    pub component_index: u16,
+    pub mapping_type: ComponentMappingType,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ComponentMappingType {
+    Direct,
+    Palette { column: u8 },
+    Reserved(u8),
+}
+
 impl ImageMetadata {
     /// Parse Image Header box (ihdr) data.
     fn parse_ihdr(&mut self, data: &[u8]) -> Result<(), &'static str> {
@@ -255,15 +297,190 @@ impl ImageMetadata {
 
         Some(())
     }
+
+    /// Parse Palette box (pclr) data.
+    fn parse_pclr(&mut self, data: &[u8]) -> Result<(), &'static str> {
+        if data.len() < 3 {
+            return Err("palette box too short");
+        }
+
+        let mut reader = Reader::new(data);
+        let num_entries = reader
+            .read_u16()
+            .ok_or("failed to read palette entry count")? as usize;
+        let num_components = reader
+            .read_byte()
+            .ok_or("failed to read palette component count")? as usize;
+
+        if num_entries == 0 || num_components == 0 {
+            return Err("palette must contain entries and components");
+        }
+
+        let mut columns = Vec::with_capacity(num_components);
+        for _ in 0..num_components {
+            let descriptor = reader
+                .read_byte()
+                .ok_or("failed to read palette column descriptor")?;
+            let bit_depth = (descriptor & 0x7F)
+                .checked_add(1)
+                .ok_or("invalid palette bit depth")?;
+            columns.push(PaletteColumn {
+                bit_depth,
+                is_signed: (descriptor & 0x80) != 0,
+            });
+        }
+
+        let mut entries = Vec::with_capacity(num_entries);
+        for _ in 0..num_entries {
+            let mut row = Vec::with_capacity(num_components);
+            for column in &columns {
+                let num_bytes = (column.bit_depth as usize).div_ceil(8).max(1);
+                let raw_bytes = reader
+                    .read_bytes(num_bytes)
+                    .ok_or("failed to read palette entry values")?;
+                let mut raw_value = 0u64;
+                for &byte in raw_bytes {
+                    raw_value = (raw_value << 8) | byte as u64;
+                }
+
+                let value = if column.is_signed {
+                    let shift = 64 - column.bit_depth as u32;
+                    (raw_value << shift) as i64 >> shift
+                } else {
+                    raw_value as i64
+                };
+
+                row.push(value);
+            }
+
+            entries.push(row);
+        }
+
+        self.palette = Some(Palette { entries, columns });
+        Ok(())
+    }
+
+    /// Parse Component Mapping box (cmap) data.
+    fn parse_cmap(&mut self, data: &[u8]) -> Result<(), &'static str> {
+        if !data.len().is_multiple_of(4) {
+            return Err("component mapping box has invalid length");
+        }
+
+        let mut reader = Reader::new(data);
+        let mut entries = Vec::with_capacity(data.len() / 4);
+
+        while !reader.at_end() {
+            let component_index = reader
+                .read_u16()
+                .ok_or("failed to read component index from cmap box")?;
+            let mapping_type = reader
+                .read_byte()
+                .ok_or("failed to read mapping type from cmap box")?;
+            let palette_column = reader
+                .read_byte()
+                .ok_or("failed to read palette column from cmap box")?;
+
+            let mapping_type = match mapping_type {
+                0 => ComponentMappingType::Direct,
+                1 => ComponentMappingType::Palette {
+                    column: palette_column,
+                },
+                other => ComponentMappingType::Reserved(other),
+            };
+
+            entries.push(ComponentMappingEntry {
+                component_index,
+                mapping_type,
+            });
+        }
+
+        self.component_mapping = Some(entries);
+        Ok(())
+    }
 }
 
-pub fn read(data: &[u8]) -> Result<Bitmap, &'static str> {
+fn resolve_component_channels(
+    channels: Vec<ChannelData>,
+    metadata: &ImageMetadata,
+) -> Result<Vec<ChannelData>, &'static str> {
+    let Some(mapping) = &metadata.component_mapping else {
+        if metadata.palette.is_some() {
+            return Err("palette present without component mapping");
+        }
+
+        return Ok(channels);
+    };
+
+    let mut resolved = Vec::with_capacity(mapping.len());
+
+    for entry in mapping {
+        let component_idx = entry.component_index as usize;
+        let component = channels
+            .get(component_idx)
+            .ok_or("component mapping references invalid component")?;
+
+        match entry.mapping_type {
+            ComponentMappingType::Direct => resolved.push(component.clone()),
+            ComponentMappingType::Palette { column } => {
+                let palette = metadata
+                    .palette
+                    .as_ref()
+                    .ok_or("component mapping requires palette box")?;
+                let column_idx = column as usize;
+                let column_info = palette
+                    .columns
+                    .get(column_idx)
+                    .ok_or("component mapping references missing palette column")?;
+
+                let mut mapped = Vec::with_capacity(component.container.len());
+                for &sample in &component.container {
+                    let index = sample.round() as i64;
+                    if index < 0 || (index as usize) >= palette.num_entries() {
+                        return Err("palette index out of range");
+                    }
+
+                    let value = palette
+                        .value(index as usize, column_idx)
+                        .ok_or("palette entry missing value")?;
+                    mapped.push(value as f32);
+                }
+
+                resolved.push(ChannelData {
+                    container: mapped,
+                    bit_depth: column_info.bit_depth,
+                    is_alpha: false,
+                });
+            }
+            ComponentMappingType::Reserved(_) => {
+                return Err("unsupported component mapping type");
+            }
+        }
+    }
+
+    Ok(resolved)
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct DecodeSettings {
+    /// Whether palette indices should be resolved.
+    pub resolve_palette_indices: bool,
+}
+
+impl Default for DecodeSettings {
+    fn default() -> Self {
+        Self {
+            resolve_palette_indices: true,
+        }
+    }
+}
+
+pub fn read(data: &[u8], settings: &DecodeSettings) -> Result<Bitmap, &'static str> {
     // JP2 signature box: 00 00 00 0C 6A 50 20 20
     const JP2_MAGIC: &[u8] = b"\x00\x00\x00\x0C\x6A\x50\x20\x20";
     // Codestream signature: FF 4F FF 51 (SOC + SIZ markers)
     const CODESTREAM_MAGIC: &[u8] = b"\xFF\x4F\xFF\x51";
     if data.starts_with(JP2_MAGIC) {
-        read_jp2_file(data)
+        read_jp2_file(data, settings)
     } else if data.starts_with(CODESTREAM_MAGIC) {
         read_jp2_codestream(data)
     } else {
@@ -280,12 +497,14 @@ fn read_jp2_codestream(data: &[u8]) -> Result<Bitmap, &'static str> {
         has_intellectual_property: 0,
         colour_specification: None,
         channel_definitions: vec![],
+        palette: None,
+        component_mapping: None,
     };
 
     Ok(Bitmap { channels, metadata })
 }
 
-fn read_jp2_file(data: &[u8]) -> Result<Bitmap, &'static str> {
+fn read_jp2_file(data: &[u8], settings: &DecodeSettings) -> Result<Bitmap, &'static str> {
     let mut reader = Reader::new(data);
     let signature_box = read_box(&mut reader).ok_or("failed to read signature box")?;
 
@@ -318,6 +537,8 @@ fn read_jp2_file(data: &[u8]) -> Result<Bitmap, &'static str> {
                 has_intellectual_property: 0,
                 colour_specification: None,
                 channel_definitions: Vec::new(),
+                palette: None,
+                component_mapping: None,
             };
 
             let mut jp2h_reader = Reader::new(current_box.data);
@@ -339,6 +560,16 @@ fn read_jp2_file(data: &[u8]) -> Result<Bitmap, &'static str> {
                         image_metadata
                             .parse_colr(child_box.data)
                             .ok_or("failed to parse colour")?;
+                    }
+                    PALETTE => {
+                        image_metadata
+                            .parse_pclr(child_box.data)
+                            .map_err(|_| "failed to parse palette")?;
+                    }
+                    COMPONENT_MAPPING => {
+                        image_metadata
+                            .parse_cmap(child_box.data)
+                            .map_err(|_| "failed to parse component mapping")?;
                     }
                     _ => {
                         debug!("ignoring box {}", tag_to_string(child_box.box_type));
@@ -365,6 +596,10 @@ fn read_jp2_file(data: &[u8]) -> Result<Bitmap, &'static str> {
     // one from the codestream.
     metadata.width = header.size_data.image_width();
     metadata.height = header.size_data.image_height();
+
+    if settings.resolve_palette_indices {
+        channels = resolve_component_channels(channels, &metadata)?;
+    }
 
     for (idx, channel) in channels.iter_mut().enumerate() {
         channel.is_alpha = metadata

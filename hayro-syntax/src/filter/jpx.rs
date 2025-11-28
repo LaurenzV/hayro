@@ -2,7 +2,7 @@ use crate::filter::FilterResult;
 use crate::object::stream::{ImageColorSpace, ImageData, ImageDecodeParams};
 use hayro_common::bit::BitWriter;
 use hayro_jpeg2000::bitmap::ChannelData;
-use hayro_jpeg2000::{ColourSpecificationMethod, EnumeratedColourspace};
+use hayro_jpeg2000::{ColourSpecificationMethod, DecodeSettings, EnumeratedColourspace};
 
 impl ImageColorSpace {
     fn num_components(&self) -> u8 {
@@ -17,7 +17,11 @@ impl ImageColorSpace {
 pub(crate) fn decode(data: &[u8], params: &ImageDecodeParams) -> Option<FilterResult> {
     use crate::object::stream::ImageColorSpace;
 
-    let mut bitmap = hayro_jpeg2000::read(data).ok()?;
+    let settings = DecodeSettings {
+        resolve_palette_indices: false,
+    };
+
+    let mut bitmap = hayro_jpeg2000::read(data, &settings).ok()?;
 
     let width = bitmap.metadata.width;
     let height = bitmap.metadata.height;

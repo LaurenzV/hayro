@@ -38,5 +38,7 @@
   "openjpeg-lossless-rgba-u8-prog2-tile4x2-cblk4x16-tp3-layers3-res2.jp2",
   "openjpeg-lossless-rgba-u8-prog3-tile4x2-cblk4x16-tp3-layers3-res2.jp2",
   "openjpeg-lossless-rgba-u8-prog4-tile4x2-cblk4x16-tp3-layers3-res2.jp2",
-  "openjpeg-lossy-quantization-scalar-derived.jp2"
+  "openjpeg-lossy-quantization-scalar-derived.jp2",
+  "indexed-small.jp2",
+  "openjpeg-lossless-indexed-u8-rgb-u8.jp2"
 ]
