@@ -232,10 +232,10 @@ pub(crate) struct SubBand {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum SubBandType {
-    LowLow,
-    LowHigh,
-    HighLow,
-    HighHigh,
+    LowLow = 0,
+    HighLow = 1,
+    LowHigh = 2,
+    HighHigh = 3,
 }
 
 #[derive(Clone)]
@@ -424,6 +424,19 @@ fn build_decompositions(
                     |sub_band_type: SubBandType, storage: &mut DecompositionStorage| {
                         let sub_band_rect = resolution_tile.sub_band_rect(sub_band_type);
 
+                        trace!("r {resolution} making sub-band {} for component {component_idx}", sub_band_type as u8);
+                        trace!(
+                            "Sub-band rect: [{},{} {}x{}], ll rect [{},{} {}x{}]",
+                            sub_band_rect.x0,
+                            sub_band_rect.y0,
+                            sub_band_rect.width(),
+                            sub_band_rect.height(),
+                            resolution_tile.rect.x0,
+                            resolution_tile.rect.y0,
+                            resolution_tile.rect.width(),
+                            resolution_tile.rect.height(),
+                        );
+                        
                         let precincts =
                             build_precincts(&resolution_tile, sub_band_rect, tile_ctx, storage)?;
 
