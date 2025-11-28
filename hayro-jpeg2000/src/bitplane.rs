@@ -60,13 +60,13 @@ pub(crate) fn decode(
         )
     };
 
+    ctx.reset(code_block, sub_band_type, style);
+
     if total_bitplanes().ok_or("invalid number of bitplanes")? > num_bitplanes {
         // See corpus test case 0938098. Number of missing bitplanes is larger
         // than `num_bitplanes`. Don't error out, but just return `Ok`.
         return Ok(());
     }
-
-    ctx.reset(code_block, sub_band_type, style);
 
     if code_block.number_of_coding_passes == 0 {
         return Ok(());
@@ -482,7 +482,9 @@ impl CodeBlockDecodeContext {
         self.coefficient_states.clear();
         self.coefficient_states.resize_with(num_coefficients, || {
             let mut state = CoefficientState::default();
-            state.set_magnitude_bits(code_block.missing_bit_planes);
+            // We haven't validated `missing_bit_planes` when calling reset, so
+            // we need to guard against the assertion in `set_magnitude_bits`.
+            state.set_magnitude_bits(code_block.missing_bit_planes.min(BITPLANE_BIT_SIZE as u8));
 
             state
         });
