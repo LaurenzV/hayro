@@ -405,18 +405,17 @@ fn resolve_component_channels(
 ) -> Result<Vec<ChannelData>, &'static str> {
     let mapping = if let Some(mapping) = metadata.component_mapping.clone() {
         mapping
+    } else if let Some(palette) = metadata.palette.as_ref() {
+        // In theory, a cmap is required if we have pclr, but we intead assume
+        // that all channels are mapped via the palette in case not.
+        (0..palette.columns.len())
+            .map(|i| ComponentMappingEntry {
+                component_index: 0,
+                mapping_type: ComponentMappingType::Palette { column: i as u8 },
+            })
+            .collect::<Vec<_>>()
     } else {
-        if let Some(palette) = metadata.palette.as_ref() {
-            // In theory, a cmap is required if we have pclr, but we intead assume
-            // that all channels are mapped via the palette in case not.
-            (0..palette.columns.len())
-                .map(|i| ComponentMappingEntry {
-                    component_index: 0,
-                    mapping_type: ComponentMappingType::Palette { column: i as u8 },
-                }).collect::<Vec<_>>()
-        }   else {
-            return Ok(channels);
-        }
+        return Ok(channels);
     };
 
     let mut resolved = Vec::with_capacity(mapping.len());
