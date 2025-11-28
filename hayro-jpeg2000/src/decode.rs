@@ -340,8 +340,7 @@ impl<'a> TileDecodeContext<'a> {
             channel_data.push(ChannelData {
                 container: vec![
                     0.0;
-                    (header.size_data.image_width() * header.size_data.image_height())
-                        as usize
+                    header.size_data.image_width() as usize * header.size_data.image_height() as usize
                 ],
                 // Will be set later on, because that data only exists in the
                 // metadata of the JP2 file, not the actual code stream.
