@@ -510,7 +510,7 @@ fn size_marker_inner(reader: &mut Reader) -> Option<SizeData> {
     let xto_siz = reader.read_u32()?;
     let yto_siz = reader.read_u32()?;
     let csiz = reader.read_u16()?;
-    
+
     if csiz == 0 {
         return None;
     }
@@ -536,24 +536,24 @@ fn size_marker_inner(reader: &mut Reader) -> Option<SizeData> {
             vertical_resolution: y_rsiz,
         });
     }
-    
+
     // In case all components are sub-sampled at the same level, we
     // don't want to render them at the original resolution but instead
     // reduce their dimension so that we can assume a resolution of 1 for
     // all components. This makes the images much smaller.
-    
+
     let mut x_shrink_factor = 1;
     let mut y_shrink_factor = 1;
-    
+
     let hr = components[0].horizontal_resolution;
     let vr = components[0].vertical_resolution;
     let mut same_resolution = true;
-    
+
     for component in &components[1..] {
         same_resolution &= component.horizontal_resolution == hr;
         same_resolution &= component.vertical_resolution == vr;
     }
-    
+
     if same_resolution {
         x_shrink_factor = hr as u32;
         y_shrink_factor = vr as u32;

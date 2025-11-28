@@ -1261,12 +1261,18 @@ fn store<'a>(
     } else {
         let image_width = header.size_data.image_width();
         let image_height = header.size_data.image_height();
-        
+
         let x_shrink_factor = header.size_data.x_shrink_factor;
         let y_shrink_factor = header.size_data.y_shrink_factor;
 
-        let x_offset = header.size_data.image_area_x_offset.div_ceil(x_shrink_factor);
-        let y_offset = header.size_data.image_area_y_offset.div_ceil(y_shrink_factor);
+        let x_offset = header
+            .size_data
+            .image_area_x_offset
+            .div_ceil(x_shrink_factor);
+        let y_offset = header
+            .size_data
+            .image_area_y_offset
+            .div_ceil(y_shrink_factor);
 
         // Otherwise, copy sample by sample.
         for y in component_tile.rect.y0..component_tile.rect.y1 {
