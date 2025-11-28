@@ -114,7 +114,7 @@ fn to_dynamic_image(bitmap: Bitmap) -> Result<DynamicImage, String> {
         height: u32,
         input_data: &[u8],
     ) -> Result<DynamicImage, String> {
-        let src_profile = ColorProfile::new_from_slice(&icc)
+        let src_profile = ColorProfile::new_from_slice(icc)
             .map_err(|_| "failed to read ICC profile".to_string())?;
         let dest_profile = ColorProfile::new_srgb();
 
