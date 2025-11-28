@@ -386,6 +386,10 @@ pub(crate) struct SizeData {
     pub(crate) tile_y_offset: u32,
     /// Component information (SSiz/XRSiz/YRSiz).
     pub(crate) component_sizes: Vec<ComponentSizeInfo>,
+    /// Shrink factor in the x direction. See the comment in the parsing method.
+    pub(crate) x_shrink_factor: u32,
+    /// Shrink factor in the y direction. See the comment in the parsing method.
+    pub(crate) y_shrink_factor: u32,
 }
 
 impl SizeData {
@@ -430,12 +434,12 @@ impl SizeData {
 
     /// Return the overall width of the image.
     pub(crate) fn image_width(&self) -> u32 {
-        self.reference_grid_width - self.image_area_x_offset
+        (self.reference_grid_width - self.image_area_x_offset).div_ceil(self.x_shrink_factor)
     }
 
     /// Return the overall height of the image.
     pub(crate) fn image_height(&self) -> u32 {
-        self.reference_grid_height - self.image_area_y_offset
+        (self.reference_grid_height - self.image_area_y_offset).div_ceil(self.y_shrink_factor)
     }
 }
 
@@ -506,6 +510,10 @@ fn size_marker_inner(reader: &mut Reader) -> Option<SizeData> {
     let xto_siz = reader.read_u32()?;
     let yto_siz = reader.read_u32()?;
     let csiz = reader.read_u16()?;
+    
+    if csiz == 0 {
+        return None;
+    }
 
     let mut components = Vec::with_capacity(csiz as usize);
     for _ in 0..csiz {
@@ -528,6 +536,28 @@ fn size_marker_inner(reader: &mut Reader) -> Option<SizeData> {
             vertical_resolution: y_rsiz,
         });
     }
+    
+    // In case all components are sub-sampled at the same level, we
+    // don't want to render them at the original resolution but instead
+    // reduce their dimension so that we can assume a resolution of 1 for
+    // all components. This makes the images much smaller.
+    
+    let mut x_shrink_factor = 1;
+    let mut y_shrink_factor = 1;
+    
+    let hr = components[0].horizontal_resolution;
+    let vr = components[0].vertical_resolution;
+    let mut same_resolution = true;
+    
+    for component in &components[1..] {
+        same_resolution &= component.horizontal_resolution == hr;
+        same_resolution &= component.vertical_resolution == vr;
+    }
+    
+    if same_resolution {
+        x_shrink_factor = hr as u32;
+        y_shrink_factor = vr as u32;
+    }
 
     Some(SizeData {
         reference_grid_width: xsiz,
@@ -539,6 +569,8 @@ fn size_marker_inner(reader: &mut Reader) -> Option<SizeData> {
         tile_x_offset: xto_siz,
         tile_y_offset: yto_siz,
         component_sizes: components,
+        x_shrink_factor,
+        y_shrink_factor,
     })
 }
 

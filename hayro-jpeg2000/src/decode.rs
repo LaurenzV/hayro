@@ -1261,18 +1261,25 @@ fn store<'a>(
     } else {
         let image_width = header.size_data.image_width();
         let image_height = header.size_data.image_height();
+        
+        let x_shrink_factor = header.size_data.x_shrink_factor;
+        let y_shrink_factor = header.size_data.y_shrink_factor;
 
-        let x_offset = header.size_data.image_area_x_offset;
-        let y_offset = header.size_data.image_area_y_offset;
+        let x_offset = header.size_data.image_area_x_offset.div_ceil(x_shrink_factor);
+        let y_offset = header.size_data.image_area_y_offset.div_ceil(y_shrink_factor);
 
         // Otherwise, copy sample by sample.
         for y in component_tile.rect.y0..component_tile.rect.y1 {
             let relative_y = (y - component_tile.rect.y0) as usize;
-            let reference_grid_y = scale_y as u32 * y;
+            // Note that the shrink factor is always either 1 or `scale_y`, so
+            // the result will be, too.
+            let reference_grid_y = (scale_y as u32) / y_shrink_factor * y;
 
             for x in component_tile.rect.x0..component_tile.rect.x1 {
                 let relative_x = (x - component_tile.rect.x0) as usize;
-                let reference_grid_x = scale_x as u32 * x;
+                // Note that the shrink factor is always either 1 or `scale_x`, so
+                // the result will be, too.
+                let reference_grid_x = (scale_x as u32) / x_shrink_factor * x;
 
                 let sample = idwt_output.coefficients[(relative_y + idwt_output.padding.top)
                     * idwt_output.total_width() as usize

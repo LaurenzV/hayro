@@ -714,6 +714,8 @@ mod tests {
             tile_x_offset: 0,
             tile_y_offset: 0,
             component_sizes: vec![component_size_info_0, component_size_info_1],
+            x_shrink_factor: 1,
+            y_shrink_factor: 1,
         };
 
         assert_eq!(size_data.image_width(), 1280);
