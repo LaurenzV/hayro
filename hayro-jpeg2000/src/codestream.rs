@@ -141,10 +141,8 @@ fn validate(header: &Header) -> Result<(), &'static str> {
                 if num_precinct_exponents == 0 {
                     return Err("not enough exponents were provided in header");
                 }
-            } else {
-                if 1 + (max_resolution_idx as usize - 1) * 3 + 2 >= num_precinct_exponents {
-                    return Err("not enough exponents were provided in header");
-                }
+            } else if 1 + (max_resolution_idx as usize - 1) * 3 + 2 >= num_precinct_exponents {
+                return Err("not enough exponents were provided in header");
             }
         }
     }
