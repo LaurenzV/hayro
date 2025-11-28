@@ -1,11 +1,13 @@
 use hayro_jpeg2000::bitmap::Bitmap;
-use hayro_jpeg2000::{ColourSpecificationMethod, read};
+use hayro_jpeg2000::{ColourSpecificationMethod, EnumeratedColourspace, read};
 use image::{DynamicImage, ImageBuffer};
 use moxcms::{ColorProfile, Layout, TransformOptions};
 use std::env;
 use std::fs;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
+
+const ROMM_PROFILE: &[u8] = include_bytes!("../assets/ISO22028-2_ROMM-RGB.icc");
 
 fn main() {
     if let Ok(()) = log::set_logger(&LOGGER) {
@@ -179,16 +181,35 @@ fn to_dynamic_image(bitmap: Bitmap) -> Result<DynamicImage, String> {
         interleaved
     };
 
-    if let Some(spec) = bitmap.metadata.colour_specification {
-        if let ColourSpecificationMethod::IccProfile(icc) = spec.method {
-            return from_icc(
-                &icc,
-                num_channels as u8,
-                has_alpha,
-                width,
-                height,
-                &interleaved,
-            );
+    if let Some(spec) = &bitmap.metadata.colour_specification {
+        match &spec.method {
+            ColourSpecificationMethod::IccProfile(icc) => {
+                let res = from_icc(
+                    icc.as_slice(),
+                    num_channels as u8,
+                    has_alpha,
+                    width,
+                    height,
+                    &interleaved,
+                );
+
+                if let Ok(res) = res {
+                    return Ok(res);
+                }
+            }
+            ColourSpecificationMethod::Enumerated(colourspace) => {
+                if matches!(*colourspace, EnumeratedColourspace::RommRgb) {
+                    return from_icc(
+                        ROMM_PROFILE,
+                        num_channels as u8,
+                        has_alpha,
+                        width,
+                        height,
+                        &interleaved,
+                    );
+                }
+            }
+            _ => {}
         }
     }
 

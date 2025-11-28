@@ -55,21 +55,58 @@ pub enum ColourSpecificationMethod {
     Unknown(u8),
 }
 
-/// Enumerated colourspace identifiers defined by ISO/IEC 15444-1 Table L.10.
+/// Enumerated colourspace identifiers defined by ISO/IEC 15444-1 Table L.10
+/// and Table M.25.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EnumeratedColourspace {
+    BiLevel1,
+    YCbCr1,
+    YCbCr2,
+    YCbCr3,
+    PhotoYcc,
+    Cmy,
+    Cmyk,
+    Ycck,
+    CieLab,
+    BiLevel2,
     Srgb,
     Greyscale,
     Sycc,
+    CieJab,
+    EsRgb,
+    RommRgb,
+    YPbPr112560,
+    YPbPr125050,
+    EsYcc,
+    ScRgb,
+    ScRgbGray,
     Reserved(u32),
 }
 
 impl EnumeratedColourspace {
     fn from_raw(value: u32) -> Self {
         match value {
+            0 => EnumeratedColourspace::BiLevel1,
+            1 => EnumeratedColourspace::YCbCr1,
+            3 => EnumeratedColourspace::YCbCr2,
+            4 => EnumeratedColourspace::YCbCr3,
+            9 => EnumeratedColourspace::PhotoYcc,
+            11 => EnumeratedColourspace::Cmy,
+            12 => EnumeratedColourspace::Cmyk,
+            13 => EnumeratedColourspace::Ycck,
+            14 => EnumeratedColourspace::CieLab,
+            15 => EnumeratedColourspace::BiLevel2,
             16 => EnumeratedColourspace::Srgb,
             17 => EnumeratedColourspace::Greyscale,
             18 => EnumeratedColourspace::Sycc,
+            19 => EnumeratedColourspace::CieJab,
+            20 => EnumeratedColourspace::EsRgb,
+            21 => EnumeratedColourspace::RommRgb,
+            22 => EnumeratedColourspace::YPbPr112560,
+            23 => EnumeratedColourspace::YPbPr125050,
+            24 => EnumeratedColourspace::EsYcc,
+            25 => EnumeratedColourspace::ScRgb,
+            26 => EnumeratedColourspace::ScRgbGray,
             v => EnumeratedColourspace::Reserved(v),
         }
     }
