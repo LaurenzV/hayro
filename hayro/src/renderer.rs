@@ -562,6 +562,7 @@ impl<'a> Device<'a> for Renderer {
                                     Some(convert_blend_mode(self.cur_blend_mode)),
                                     Some(alpha as f32 / 255.0),
                                     None,
+                                    None
                                 );
                             }
                             let old_rule = *self.ctx.fill_rule();
@@ -615,6 +616,7 @@ impl<'a> Device<'a> for Renderer {
                                 Some(convert_blend_mode(self.cur_blend_mode)),
                                 None,
                                 Some(Mask::new_luminance(&mask_pix)),
+                                None
                             );
                             self.ctx.set_transform(transform);
 
@@ -674,6 +676,7 @@ impl<'a> Device<'a> for Renderer {
                     .or_insert_with(|| draw_soft_mask(&m, settings, width, height))
                     .clone()
             }),
+            None
         );
     }
 
@@ -696,7 +699,11 @@ impl<'a> Device<'a> for Renderer {
                 .or_insert_with(|| draw_soft_mask(&m, settings, width, height))
                 .clone()
         });
-        self.ctx.set_mask(self.cur_mask.clone());
+        if let Some(mask) = self.cur_mask.clone() {
+        self.ctx.set_mask(mask);
+        }   else {
+            self.ctx.reset_mask();
+        }
     }
 
     fn draw_path(
@@ -807,7 +814,7 @@ fn draw_soft_mask(
         renderer
             .ctx
             .fill_rect(&Rect::new(0.0, 0.0, width as f64, height as f64));
-        renderer.ctx.push_layer(None, None, None, None);
+        renderer.ctx.push_layer(None, None, None, None, None);
     }
 
     mask.interpret(&mut renderer);
