@@ -668,13 +668,13 @@ fn get_code_block_data_inner<'a>(
             &mut storage.tile_decompositions[progression_data.component as usize];
         let sub_band_iter = tile_decompositions.sub_band_iter(resolution, &storage.decompositions);
 
-        let mut header_reader = tile_part.header();
+        let header_reader = tile_part.header();
 
-        if component_info.coding_style.flags.may_use_sop_markers() {
-            if header_reader.peek_marker() == Some(SOP) {
-                header_reader.read_marker().ok()?;
-                header_reader.skip_bytes(4)?;
-            }
+        if component_info.coding_style.flags.may_use_sop_markers()
+            && header_reader.peek_marker() == Some(SOP)
+        {
+            header_reader.read_marker().ok()?;
+            header_reader.skip_bytes(4)?;
         }
 
         let zero_length = header_reader.read_bits_with_stuffing(1)? == 0;
@@ -688,7 +688,7 @@ fn get_code_block_data_inner<'a>(
                 get_code_block_lengths(
                     sub_band,
                     &progression_data,
-                    &mut header_reader,
+                    header_reader,
                     storage,
                     component_info,
                 )?;
