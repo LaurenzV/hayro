@@ -1,3 +1,4 @@
+
 use crate::bitmap::{Bitmap, ChannelData};
 use crate::boxes::{
     CHANNEL_DEFINITION, COLOUR_SPECIFICATION, COMPONENT_MAPPING, CONTIGUOUS_CODESTREAM, FILE_TYPE,
