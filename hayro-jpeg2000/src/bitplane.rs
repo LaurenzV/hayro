@@ -1028,7 +1028,7 @@ impl BitDecoder for BypassDecoder<'_> {
     const IS_BYPASS: bool = true;
 
     fn read_bit(&mut self, _: &mut ArithmeticDecoderContext) -> Option<u32> {
-        self.0.read_bits_with_stuffing(1).or_else(|| {
+        self.0.read_bits_with_stuffing(1).or({
             if !self.1 {
                 // Just pad with ones. Not sure if zeroes would be better here,
                 // but since the arithmetic decoder is also padded with 0xFF
