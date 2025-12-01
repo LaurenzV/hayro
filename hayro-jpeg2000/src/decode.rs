@@ -22,8 +22,6 @@ use crate::rect::IntRect;
 use crate::tag_tree::{TagNode, TagTree};
 use crate::tile::{ComponentTile, ResolutionTile, Tile, TilePart};
 use crate::{bitplane, idwt, tile};
-#[cfg(feature = "simd")]
-use fearless_simd::{Level, Simd, SimdBase, SimdFloat, dispatch, f32x8};
 use hayro_common::bit::BitReader;
 use hayro_common::byte::Reader;
 use log::{trace, warn};
@@ -1374,6 +1372,7 @@ mod simd {
 #[cfg(feature = "simd")]
 mod simd {
     use super::*;
+    use fearless_simd::*;
 
     pub(super) fn apply_mct(
         transform: WaveletTransform,
