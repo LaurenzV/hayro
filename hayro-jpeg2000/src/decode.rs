@@ -630,8 +630,13 @@ fn get_code_block_data<'a>(
     storage: &mut DecompositionStorage<'a>,
 ) -> Result<(), &'static str> {
     for tile_part in &tile.tile_parts {
-        if get_code_block_data_inner(tile_part.clone(), &mut progression_iterator, tile_ctx, storage)
-            .is_none()
+        if get_code_block_data_inner(
+            tile_part.clone(),
+            &mut progression_iterator,
+            tile_ctx,
+            storage,
+        )
+        .is_none()
         {
             warn!(
                 "failed to fully process a tile part in tile {}, decoded image might be corrupted",
@@ -662,7 +667,7 @@ fn get_code_block_data_inner<'a>(
         let tile_decompositions =
             &mut storage.tile_decompositions[progression_data.component as usize];
         let sub_band_iter = tile_decompositions.sub_band_iter(resolution, &storage.decompositions);
-        
+
         let mut header_reader = tile_part.header();
 
         if component_info.coding_style.flags.may_use_sop_markers() {
@@ -671,7 +676,7 @@ fn get_code_block_data_inner<'a>(
                 header_reader.skip_bytes(4)?;
             }
         }
-        
+
         let zero_length = header_reader.read_bits_with_stuffing(1)? == 0;
 
         // B.10.3 Zero length packet
