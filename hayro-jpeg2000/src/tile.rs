@@ -1,10 +1,10 @@
 //! Creating tiles and parsing their constituent tile parts.
 
-use crate::reader::BitReader;
 use crate::codestream::{
     ComponentInfo, Header, ProgressionOrder, ReaderExt, markers, skip_marker_segment,
 };
 use crate::decode::{PrecinctData, SubBandType};
+use crate::reader::BitReader;
 use crate::rect::IntRect;
 use log::warn;
 

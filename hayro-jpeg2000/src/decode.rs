@@ -4,7 +4,6 @@
 //! stages in such a way that a given codestream is decoded into its
 //! component channels.
 
-use crate::reader::BitReader;
 use crate::bitmap::ChannelData;
 use crate::bitplane::{BitPlaneDecodeBuffers, CodeBlockDecodeContext};
 use crate::codestream::markers::{EPH, SOP};
@@ -19,6 +18,7 @@ use crate::progression::{
     resolution_layer_component_position_progression,
     resolution_position_component_layer_progression,
 };
+use crate::reader::BitReader;
 use crate::rect::IntRect;
 use crate::tag_tree::{TagNode, TagTree};
 use crate::tile::{ComponentTile, ResolutionTile, Tile, TilePart};

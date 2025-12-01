@@ -10,9 +10,9 @@
 //! "JPEG2000 Standard for Image Compression" book instead of the specification.
 
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
-use crate::reader::BitReader;
 use crate::codestream::CodeBlockStyle;
 use crate::decode::{CodeBlock, Layer, Segment, SubBandType};
+use crate::reader::BitReader;
 use log::warn;
 
 #[derive(Default)]

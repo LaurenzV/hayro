@@ -1,7 +1,7 @@
 use crate::bitmap::ChannelData;
 use crate::bitplane::BITPLANE_BIT_SIZE;
-use crate::reader::BitReader;
 use crate::decode::{SubBandType, decode};
+use crate::reader::BitReader;
 
 pub(crate) fn read(stream: &[u8]) -> Result<(Header, Vec<ChannelData>), &'static str> {
     let mut reader = BitReader::new(stream);

@@ -1,16 +1,15 @@
 #![forbid(unsafe_code)]
 
 use crate::bitmap::{Bitmap, ChannelData};
-use crate::reader::BitReader;
 use crate::boxes::{
     CHANNEL_DEFINITION, COLOUR_SPECIFICATION, COMPONENT_MAPPING, CONTIGUOUS_CODESTREAM, FILE_TYPE,
     IMAGE_HEADER, JP2_HEADER, JP2_SIGNATURE, PALETTE, read_box, tag_to_string,
 };
 use crate::icc::ICCMetadata;
+use crate::reader::BitReader;
 use log::{debug, warn};
 
 mod arithmetic_decoder;
-pub(crate) mod reader;
 pub mod bitmap;
 pub(crate) mod bitplane;
 pub mod boxes;
@@ -19,6 +18,7 @@ mod decode;
 mod icc;
 pub(crate) mod idwt;
 mod progression;
+pub(crate) mod reader;
 pub(crate) mod rect;
 mod tag_tree;
 mod tile;
