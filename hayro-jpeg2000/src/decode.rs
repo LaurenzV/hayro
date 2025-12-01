@@ -698,39 +698,36 @@ fn get_code_block_data_inner<'a>(
         // TODO: What to do with the note below B.10.3?
         header_reader.align();
 
-        let read_packet_body = |reader: &mut BitReader<'a>| {
-            if component_info.coding_style.flags.uses_eph_marker()
-                && reader.read_marker().ok()? != EPH
-            {
-                return None;
-            }
+        // Now read the packet body.
+        let body_reader = tile_part.body();
 
-            if !zero_length {
-                for sub_band in sub_band_iter {
-                    let sub_band = &mut storage.sub_bands[sub_band];
-                    let precinct = &mut storage.precincts[sub_band.precincts.clone()]
-                        [progression_data.precinct as usize];
-                    let code_blocks = &mut storage.code_blocks[precinct.code_blocks.clone()];
+        if component_info.coding_style.flags.uses_eph_marker()
+            && body_reader.read_marker().ok()? != EPH
+        {
+            return None;
+        }
 
-                    for code_block in code_blocks {
-                        let layer = &mut storage.layers[code_block.layers.clone()]
-                            [progression_data.layer_num as usize];
+        if !zero_length {
+            for sub_band in sub_band_iter {
+                let sub_band = &mut storage.sub_bands[sub_band];
+                let precinct = &mut storage.precincts[sub_band.precincts.clone()]
+                    [progression_data.precinct as usize];
+                let code_blocks = &mut storage.code_blocks[precinct.code_blocks.clone()];
 
-                        if let Some(segments) = layer.segments.clone() {
-                            let segments = &mut storage.segments[segments.clone()];
+                for code_block in code_blocks {
+                    let layer = &mut storage.layers[code_block.layers.clone()]
+                        [progression_data.layer_num as usize];
 
-                            for segment in segments {
-                                segment.data = reader.read_bytes(segment.data_length as usize)?
-                            }
+                    if let Some(segments) = layer.segments.clone() {
+                        let segments = &mut storage.segments[segments.clone()];
+
+                        for segment in segments {
+                            segment.data = body_reader.read_bytes(segment.data_length as usize)?
                         }
                     }
                 }
             }
-
-            Some(())
-        };
-
-        read_packet_body(tile_part.body())?;
+        }
     }
 
     Some(())
