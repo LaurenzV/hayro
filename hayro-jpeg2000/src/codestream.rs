@@ -1,7 +1,7 @@
 use crate::bitmap::ChannelData;
 use crate::bitplane::BITPLANE_BIT_SIZE;
+use crate::byte::Reader;
 use crate::decode::{SubBandType, decode};
-use hayro_common::byte::Reader;
 
 pub(crate) fn read(stream: &[u8]) -> Result<(Header, Vec<ChannelData>), &'static str> {
     let mut reader = Reader::new(stream);

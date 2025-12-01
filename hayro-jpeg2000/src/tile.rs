@@ -1,11 +1,11 @@
 //! Creating tiles and parsing their constituent tile parts.
 
+use crate::byte::Reader;
 use crate::codestream::{
     ComponentInfo, Header, ProgressionOrder, ReaderExt, markers, skip_marker_segment,
 };
 use crate::decode::{PrecinctData, SubBandType};
 use crate::rect::IntRect;
-use hayro_common::byte::Reader;
 use log::warn;
 
 /// A single tile in the image.

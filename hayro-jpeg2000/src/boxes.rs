@@ -1,4 +1,4 @@
-use hayro_common::byte::Reader;
+use crate::byte::Reader;
 
 /// JP2 signature box - 'jP\040\040'.
 pub const JP2_SIGNATURE: u32 = 0x6A502020;
@@ -39,16 +39,16 @@ pub const UUID_LIST: u32 = 0x756C7374;
 /// URL box - 'url\x20'.
 pub const URL: u32 = 0x75726C20;
 
-pub struct Jp2Box<'a> {
-    pub data: &'a [u8],
-    pub box_type: u32,
+pub(crate) struct Jp2Box<'a> {
+    pub(crate) data: &'a [u8],
+    pub(crate) box_type: u32,
 }
 
 /// Converts a box tag to its string representation.
 ///
 /// Box tags are stored as 4-byte ASCII codes in big-endian format.
 /// For example, 0x66747970 represents "ftyp".
-pub fn tag_to_string(tag: u32) -> String {
+pub(crate) fn tag_to_string(tag: u32) -> String {
     let bytes = [
         ((tag >> 24) & 0xFF) as u8,
         ((tag >> 16) & 0xFF) as u8,
@@ -58,7 +58,7 @@ pub fn tag_to_string(tag: u32) -> String {
     String::from_utf8_lossy(&bytes).to_string()
 }
 
-pub fn read_box<'a>(reader: &mut Reader<'a>) -> Option<Jp2Box<'a>> {
+pub(crate) fn read_box<'a>(reader: &mut Reader<'a>) -> Option<Jp2Box<'a>> {
     let l_box = reader.read_u32()?;
     let t_box = reader.read_u32()?;
 

@@ -534,7 +534,6 @@ name = "hayro-jpeg2000"
 version = "0.1.0"
 dependencies = [
  "fearless_simd",
- "hayro-common",
  "image 0.25.8",
  "indicatif",
  "log",

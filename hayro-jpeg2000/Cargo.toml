@@ -8,7 +8,6 @@ readme.workspace = true
 license.workspace = true
 
 [dependencies]
-hayro-common = { workspace = true }
 log = { workspace = true }
 fearless_simd = { workspace = true, optional = true }
 

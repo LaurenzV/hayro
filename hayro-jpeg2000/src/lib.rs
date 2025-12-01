@@ -3,14 +3,16 @@ use crate::boxes::{
     CHANNEL_DEFINITION, COLOUR_SPECIFICATION, COMPONENT_MAPPING, CONTIGUOUS_CODESTREAM, FILE_TYPE,
     IMAGE_HEADER, JP2_HEADER, JP2_SIGNATURE, PALETTE, read_box, tag_to_string,
 };
+use crate::byte::Reader;
 use crate::icc::ICCMetadata;
-use hayro_common::byte::Reader;
 use log::{debug, warn};
 
 mod arithmetic_decoder;
+pub(crate) mod bit;
 pub mod bitmap;
 pub(crate) mod bitplane;
 pub mod boxes;
+pub(crate) mod byte;
 mod codestream;
 mod decode;
 mod icc;
