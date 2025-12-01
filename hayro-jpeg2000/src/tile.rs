@@ -290,7 +290,6 @@ fn parse_tile_part<'a>(
         .ok_or("failed to get tile part data")?;
     
     let tile_part = if let Some(ppt_header) = ppt_header {
-        panic!();
         TilePart::Separated(SeparatedTilePart {
             header: BitReader::new(ppt_header),
             body: BitReader::new(final_data),

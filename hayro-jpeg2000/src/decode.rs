@@ -630,7 +630,7 @@ fn get_code_block_data<'a>(
     storage: &mut DecompositionStorage<'a>,
 ) -> Result<(), &'static str> {
     for tile_part in &tile.tile_parts {
-        if get_code_block_data_inner(tile_part, &mut progression_iterator, tile_ctx, storage)
+        if get_code_block_data_inner(tile_part.clone(), &mut progression_iterator, tile_ctx, storage)
             .is_none()
         {
             warn!(
@@ -644,7 +644,7 @@ fn get_code_block_data<'a>(
 }
 
 fn get_code_block_data_inner<'a>(
-    tile_part: &TilePart<'a>,
+    mut tile_part: TilePart<'a>,
     mut progression_iterator: impl Iterator<Item = ProgressionData>,
     tile_ctx: &mut TileDecodeContext<'a>,
     storage: &mut DecompositionStorage<'a>,
@@ -655,33 +655,24 @@ fn get_code_block_data_inner<'a>(
     // Otherwise, `tile_part.packet_body` contains packet headers and data
     // in an interleaved fashion.
 
-    let mut header_or_all_data =
-        match tile_part {
-            TilePart::Merged(t) => {
-                t.data.tail()?
-            }
-            TilePart::Separated(_) => unreachable!(),
-        };
-
-    while !header_or_all_data.is_empty() {
+    while !tile_part.header().at_end() {
         let progression_data = progression_iterator.next()?;
         let resolution = progression_data.resolution;
         let component_info = &tile_ctx.tile.component_infos[progression_data.component as usize];
         let tile_decompositions =
             &mut storage.tile_decompositions[progression_data.component as usize];
         let sub_band_iter = tile_decompositions.sub_band_iter(resolution, &storage.decompositions);
+        
+        let mut header_reader = tile_part.header();
 
         if component_info.coding_style.flags.may_use_sop_markers() {
-            let mut reader = BitReader::new(header_or_all_data);
-            if reader.peek_marker() == Some(SOP) {
-                reader.read_marker().ok()?;
-                reader.skip_bytes(4)?;
-                header_or_all_data = reader.tail()?;
+            if header_reader.peek_marker() == Some(SOP) {
+                header_reader.read_marker().ok()?;
+                header_reader.skip_bytes(4)?;
             }
         }
-
-        let mut reader = BitReader::new(header_or_all_data);
-        let zero_length = reader.read_bits_with_stuffing(1)? == 0;
+        
+        let zero_length = header_reader.read_bits_with_stuffing(1)? == 0;
 
         // B.10.3 Zero length packet
         // "The first bit in the packet header denotes whether the packet has a length of zero
@@ -692,7 +683,7 @@ fn get_code_block_data_inner<'a>(
                 get_code_block_lengths(
                     sub_band,
                     &progression_data,
-                    &mut reader,
+                    &mut header_reader,
                     storage,
                     component_info,
                 )?;
@@ -700,7 +691,7 @@ fn get_code_block_data_inner<'a>(
         }
 
         // TODO: What to do with the note below B.10.3?
-        reader.align();
+        header_reader.align();
 
         let read_packet_body = |reader: &mut BitReader<'a>| {
             if component_info.coding_style.flags.uses_eph_marker()
@@ -734,8 +725,7 @@ fn get_code_block_data_inner<'a>(
             Some(())
         };
 
-        read_packet_body(&mut reader)?;
-        header_or_all_data = reader.tail()?;
+        read_packet_body(tile_part.body())?;
     }
 
     Some(())
