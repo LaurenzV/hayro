@@ -13,7 +13,6 @@ use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use crate::codestream::CodeBlockStyle;
 use crate::decode::{CodeBlock, Layer, Segment, SubBandType};
 use crate::reader::BitReader;
-use log::warn;
 
 #[derive(Default)]
 pub(crate) struct BitPlaneDecodeBuffers {
@@ -48,6 +47,7 @@ pub(crate) fn decode(
     bp_buffers: &mut BitPlaneDecodeBuffers,
     layers: &[Layer],
     all_segments: &[Segment],
+    strict: bool,
 ) -> Result<(), &'static str> {
     ctx.reset(code_block, sub_band_type, style);
 
@@ -75,11 +75,8 @@ pub(crate) fn decode(
         1 + 3 * (num_bitplanes - 1)
     };
 
-    if max_coding_passes < code_block.number_of_coding_passes {
-        warn!(
-            "codeblock contains too many coding passes, will be truncated from {} to {}",
-            code_block.number_of_coding_passes, max_coding_passes
-        );
+    if max_coding_passes < code_block.number_of_coding_passes && strict {
+        return Err("codeblock contains too many coding passes");
     }
 
     decode_inner(
@@ -91,8 +88,9 @@ pub(crate) fn decode(
         all_segments,
         ctx,
         bp_buffers,
+        strict,
     )
-    .ok_or("failed to decode code-block arithmetic data")?;
+    .ok_or("failed to decode code-block")?;
 
     Ok(())
 }
@@ -107,6 +105,7 @@ fn decode_inner(
     all_segments: &[Segment],
     ctx: &mut CodeBlockDecodeContext,
     bp_buffers: &mut BitPlaneDecodeBuffers,
+    strict: bool,
 ) -> Option<()> {
     bp_buffers.reset();
 
@@ -153,6 +152,7 @@ fn decode_inner(
             style,
             ctx,
             &mut decoder,
+            strict,
         )?;
     } else {
         // Otherwise, each segment introduces a termination. For selective
@@ -181,10 +181,24 @@ fn decode_inner(
 
             if use_arithmetic {
                 let mut decoder = ArithmeticDecoder::new(data);
-                handle_coding_passes(start_coding_pass, end_coding_pass, style, ctx, &mut decoder)?;
+                handle_coding_passes(
+                    start_coding_pass,
+                    end_coding_pass,
+                    style,
+                    ctx,
+                    &mut decoder,
+                    strict,
+                )?;
             } else {
-                let mut decoder = BypassDecoder::new(data);
-                handle_coding_passes(start_coding_pass, end_coding_pass, style, ctx, &mut decoder)?;
+                let mut decoder = BypassDecoder::new(data, strict);
+                handle_coding_passes(
+                    start_coding_pass,
+                    end_coding_pass,
+                    style,
+                    ctx,
+                    &mut decoder,
+                    strict,
+                )?;
             }
         }
     }
@@ -209,6 +223,7 @@ fn handle_coding_passes(
     style: &CodeBlockStyle,
     ctx: &mut CodeBlockDecodeContext,
     decoder: &mut impl BitDecoder,
+    strict: bool,
 ) -> Option<()> {
     for coding_pass in start..end {
         enum PassType {
@@ -228,16 +243,15 @@ fn handle_coding_passes(
 
         match pass {
             PassType::Cleanup => {
-                cleanup_pass(ctx, decoder);
+                cleanup_pass(ctx, decoder)?;
 
                 if style.segmentation_symbols {
-                    let b0 = decoder.read_bit(ctx.arithmetic_decoder_context(18));
-                    let b1 = decoder.read_bit(ctx.arithmetic_decoder_context(18));
-                    let b2 = decoder.read_bit(ctx.arithmetic_decoder_context(18));
-                    let b3 = decoder.read_bit(ctx.arithmetic_decoder_context(18));
+                    let b0 = decoder.read_bit(ctx.arithmetic_decoder_context(18))?;
+                    let b1 = decoder.read_bit(ctx.arithmetic_decoder_context(18))?;
+                    let b2 = decoder.read_bit(ctx.arithmetic_decoder_context(18))?;
+                    let b3 = decoder.read_bit(ctx.arithmetic_decoder_context(18))?;
 
-                    if b0 != 1 || b1 != 0 || b2 != 1 || b3 != 0 {
-                        warn!("encountered invalid segmentation symbol");
+                    if (b0 != 1 || b1 != 0 || b2 != 1 || b3 != 0) && strict {
                         return None;
                     }
                 }
@@ -245,10 +259,10 @@ fn handle_coding_passes(
                 ctx.reset_for_next_bitplane();
             }
             PassType::SignificancePropagation => {
-                significance_propagation_pass(ctx, decoder);
+                significance_propagation_pass(ctx, decoder)?;
             }
             PassType::MagnitudeRefinement => {
-                magnitude_refinement_pass(ctx, decoder);
+                magnitude_refinement_pass(ctx, decoder)?;
             }
         }
 
@@ -645,7 +659,7 @@ fn cleanup_pass(ctx: &mut CodeBlockDecodeContext, decoder: &mut impl BitDecoder)
                     // coefficients from previous magnitude, significance and cleanup passes), then the
                     // unique run-length context is given to the arithmetic decoder along with the bit
                     // stream."
-                    let bit = decoder.read_bit(ctx.arithmetic_decoder_context(17));
+                    let bit = decoder.read_bit(ctx.arithmetic_decoder_context(17))?;
 
                     if bit == 0 {
                         // "If the symbol 0 is returned, then all four contiguous coefficients in
@@ -657,7 +671,7 @@ fn cleanup_pass(ctx: &mut CodeBlockDecodeContext, decoder: &mut impl BitDecoder)
                             ctx.push_magnitude_bit(*cur_pos, 0);
                         }
 
-                        return;
+                        return Some(());
                     } else {
                         // "Otherwise, if the symbol 1 is returned, then at least
                         // one of the four contiguous coefficients in the column is
@@ -665,9 +679,10 @@ fn cleanup_pass(ctx: &mut CodeBlockDecodeContext, decoder: &mut impl BitDecoder)
                         // UNIFORM context (index 46 in Table C.2), denote which
                         // coefficient from the top of the column down is the first
                         // to be found significant."
-                        let mut num_zeroes = decoder.read_bit(ctx.arithmetic_decoder_context(18));
+                        let mut num_zeroes =
+                            decoder.read_bit(ctx.arithmetic_decoder_context(18))?;
                         num_zeroes = (num_zeroes << 1)
-                            | decoder.read_bit(ctx.arithmetic_decoder_context(18));
+                            | decoder.read_bit(ctx.arithmetic_decoder_context(18))?;
 
                         for _ in 0..num_zeroes {
                             ctx.push_magnitude_bit(*cur_pos, 0);
@@ -678,7 +693,7 @@ fn cleanup_pass(ctx: &mut CodeBlockDecodeContext, decoder: &mut impl BitDecoder)
                     }
                 } else {
                     let ctx_label = context_label_zero_coding(*cur_pos, ctx);
-                    decoder.read_bit(ctx.arithmetic_decoder_context(ctx_label))
+                    decoder.read_bit(ctx.arithmetic_decoder_context(ctx_label))?
                 };
 
                 ctx.push_magnitude_bit(*cur_pos, bit);
@@ -688,10 +703,10 @@ fn cleanup_pass(ctx: &mut CodeBlockDecodeContext, decoder: &mut impl BitDecoder)
                     ctx.set_significant(*cur_pos);
                 }
             }
-        },
-    );
 
-    Some(())
+            Some(())
+        },
+    )
 }
 
 /// Perform the significance propagation pass (Section D.3.1).
@@ -712,7 +727,7 @@ fn significance_propagation_pass(
             if !ctx.is_significant(*cur_pos) && ctx.neighborhood_significance_states(*cur_pos) != 0
             {
                 let ctx_label = context_label_zero_coding(*cur_pos, ctx);
-                let bit = decoder.read_bit(ctx.arithmetic_decoder_context(ctx_label));
+                let bit = decoder.read_bit(ctx.arithmetic_decoder_context(ctx_label))?;
                 ctx.push_magnitude_bit(*cur_pos, bit);
                 ctx.set_zero_coded(*cur_pos);
 
@@ -721,14 +736,14 @@ fn significance_propagation_pass(
                 // the sign bit for the coefficient. Otherwise, the significance
                 // state remains 0."
                 if bit == 1 {
-                    decode_sign_bit(*cur_pos, ctx, decoder);
+                    decode_sign_bit(*cur_pos, ctx, decoder)?;
                     ctx.set_significant(*cur_pos);
                 }
             }
-        },
-    );
 
-    Some(())
+            Some(())
+        },
+    )
 }
 
 /// Perform the magnitude refinement pass, specified in Section D.3.3.
@@ -745,17 +760,21 @@ fn magnitude_refinement_pass(
         |cur_pos| {
             if ctx.is_significant(*cur_pos) && !ctx.is_zero_coded(*cur_pos) {
                 let ctx_label = context_label_magnitude_refinement_coding(*cur_pos, ctx);
-                let bit = decoder.read_bit(ctx.arithmetic_decoder_context(ctx_label));
+                let bit = decoder.read_bit(ctx.arithmetic_decoder_context(ctx_label))?;
                 ctx.push_magnitude_bit(*cur_pos, bit);
                 ctx.set_magnitude_refined(*cur_pos);
             }
-        },
-    );
 
-    Some(())
+            Some(())
+        },
+    )
 }
 
-fn for_each_position(width: u32, height: u32, mut action: impl FnMut(&mut Position)) {
+fn for_each_position(
+    width: u32,
+    height: u32,
+    mut action: impl FnMut(&mut Position) -> Option<()>,
+) -> Option<()> {
     // "Each bit-plane of a code-block is scanned in a particular order.
     // Starting at the top left, the first four coefficients of the
     // first column are scanned, followed by the first four coefficients of
@@ -769,11 +788,13 @@ fn for_each_position(width: u32, height: u32, mut action: impl FnMut(&mut Positi
         for x in 0..width {
             let mut cur_pos = Position::new(x, base_row);
             while cur_pos.real_y() < (base_row + 4).min(height) {
-                action(&mut cur_pos);
+                action(&mut cur_pos)?;
                 cur_pos.index_y += 1;
             }
         }
     }
+
+    Some(())
 }
 
 /// See `context_label_sign_coding`. This table contains all context labels
@@ -845,7 +866,7 @@ fn decode_sign_bit<T: BitDecoder>(
     pos: Position,
     ctx: &mut CodeBlockDecodeContext,
     decoder: &mut T,
-) {
+) -> Option<()> {
     /// Based on Table D.2.
     #[inline(always)]
     fn context_label_sign_coding(pos: Position, ctx: &CodeBlockDecodeContext) -> (u8, u8) {
@@ -886,11 +907,13 @@ fn decode_sign_bit<T: BitDecoder>(
     let (ctx_label, xor_bit) = context_label_sign_coding(pos, ctx);
     let ad_ctx = ctx.arithmetic_decoder_context(ctx_label);
     let sign_bit = if T::IS_BYPASS {
-        decoder.read_bit(ad_ctx)
+        decoder.read_bit(ad_ctx)?
     } else {
-        decoder.read_bit(ad_ctx) ^ xor_bit as u32
+        decoder.read_bit(ad_ctx)? ^ xor_bit as u32
     };
     ctx.set_sign(pos, sign_bit as u8);
+
+    Some(())
 }
 
 /// Return the context label for zero coding (Section D.3.1).
@@ -981,33 +1004,39 @@ impl Position {
 trait BitDecoder {
     const IS_BYPASS: bool;
 
-    fn read_bit(&mut self, context: &mut ArithmeticDecoderContext) -> u32;
+    fn read_bit(&mut self, context: &mut ArithmeticDecoderContext) -> Option<u32>;
 }
 
 impl BitDecoder for ArithmeticDecoder<'_> {
     const IS_BYPASS: bool = false;
 
     #[inline(always)]
-    fn read_bit(&mut self, context: &mut ArithmeticDecoderContext) -> u32 {
-        Self::read_bit(self, context)
+    fn read_bit(&mut self, context: &mut ArithmeticDecoderContext) -> Option<u32> {
+        Some(Self::read_bit(self, context))
     }
 }
 
-struct BypassDecoder<'a>(BitReader<'a>);
+struct BypassDecoder<'a>(BitReader<'a>, bool);
 
 impl<'a> BypassDecoder<'a> {
-    fn new(data: &'a [u8]) -> Self {
-        Self(BitReader::new(data))
+    fn new(data: &'a [u8], strict: bool) -> Self {
+        Self(BitReader::new(data), strict)
     }
 }
 
 impl BitDecoder for BypassDecoder<'_> {
     const IS_BYPASS: bool = true;
 
-    fn read_bit(&mut self, _: &mut ArithmeticDecoderContext) -> u32 {
-        self.0.read_bits_with_stuffing(1).unwrap_or_else(|| {
-            warn!("exceeded buffer in by-pass decoder");
-            1
+    fn read_bit(&mut self, _: &mut ArithmeticDecoderContext) -> Option<u32> {
+        self.0.read_bits_with_stuffing(1).or_else(|| {
+            if !self.1 {
+                // Just pad with ones. Not sure if zeroes would be better here,
+                // but since the arithmetic decoder is also padded with 0xFF
+                // maybe 1 is the better choice?
+                Some(1)
+            } else {
+                None
+            }
         })
     }
 }
@@ -1063,6 +1092,7 @@ mod tests {
                 data_length: data.len() as u32,
                 data: &data,
             }],
+            true,
         )
         .unwrap();
 
@@ -1107,6 +1137,7 @@ mod tests {
                 data_length: data.len() as u32,
                 data: &data,
             }],
+            true,
         )
         .unwrap();
 
@@ -1167,6 +1198,7 @@ mod tests {
                 data_length: data.len() as u32,
                 data: &data,
             }],
+            true,
         )
         .unwrap();
 

@@ -87,8 +87,12 @@ fn collect_inputs(target: &Path) -> Vec<PathBuf> {
 fn convert_jp2(path: &Path) -> Result<PathBuf, String> {
     let data = fs::read(path).map_err(|err| format!("read error: {err}"))?;
 
-    let bitmap =
-        read(&data, &DecodeSettings::default()).map_err(|err| format!("decode error: {err}"))?;
+    let settings = DecodeSettings {
+        resolve_palette_indices: true,
+        strict: true,
+    };
+
+    let bitmap = read(&data, &settings).map_err(|err| format!("decode error: {err}"))?;
     let dynamic = to_dynamic_image(bitmap)?;
 
     let stem = path

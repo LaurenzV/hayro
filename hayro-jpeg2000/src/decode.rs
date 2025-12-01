@@ -134,7 +134,7 @@ fn decode_tile<'a>(
     get_code_block_data(tile, progression_iterator, tile_ctx, header, storage)?;
     // We then decode the bitplanes of each code block, yielding the
     // (possibly dequantized) coefficients of each code block.
-    decode_bitplanes(tile, tile_ctx, storage)?;
+    decode_bitplanes(tile, tile_ctx, storage, header)?;
 
     // Unlike before, we interleave the apply_idwt and store stages
     // for each component tile so we can reuse allocations better.
@@ -947,6 +947,7 @@ fn decode_bitplanes<'a>(
     tile: &'a Tile<'a>,
     tile_ctx: &mut TileDecodeContext<'a>,
     storage: &mut DecompositionStorage,
+    header: &Header,
 ) -> Result<(), &'static str> {
     for (tile_decompositions_idx, component_info) in tile.component_infos.iter().enumerate() {
         for resolution in 0..component_info.num_resolution_levels() {
@@ -961,6 +962,7 @@ fn decode_bitplanes<'a>(
                     &mut tile_ctx.code_block_decode_context,
                     &mut tile_ctx.bit_plane_decode_buffers,
                     storage,
+                    header,
                 )?;
             }
         }
@@ -976,6 +978,7 @@ fn decode_sub_band_bitplanes(
     b_ctx: &mut CodeBlockDecodeContext,
     bp_buffers: &mut BitPlaneDecodeBuffers,
     storage: &mut DecompositionStorage,
+    header: &Header,
 ) -> Result<(), &'static str> {
     let sub_band = &mut storage.sub_bands[sub_band_idx];
 
@@ -1030,6 +1033,7 @@ fn decode_sub_band_bitplanes(
                 bp_buffers,
                 &storage.layers[code_block.layers.start..code_block.layers.end],
                 &storage.segments,
+                header.strict,
             )?;
 
             // Turn the signs and magnitudes into singular coefficients and
@@ -1096,7 +1100,7 @@ fn apply_mct(tile_ctx: &mut TileDecodeContext, header: &Header) -> Result<(), &'
             Err("tried to apply MCT to image with less than 3 components")
         } else {
             Ok(())
-        }
+        };
     }
 
     let (s, _) = tile_ctx.channel_data.split_at_mut(3);
