@@ -658,7 +658,7 @@ fn get_code_block_data_inner<'a>(
     let (mut packet_body_reader, mut header_or_all_data) =
         match tile_part {
             TilePart::Merged(t) => {
-                (None, t.data.tail()?)
+                (None::<BitReader>, t.data.tail()?)
             }
             TilePart::Separated(_) => unreachable!(),
         };
@@ -735,8 +735,7 @@ fn get_code_block_data_inner<'a>(
         };
 
         if let Some(body_reader) = &mut packet_body_reader {
-            read_packet_body(body_reader)?;
-            header_or_all_data = reader.tail()?;
+            unreachable!()
         } else {
             let packet_data = reader.tail()?;
             let mut data_reader = BitReader::new(packet_data);
