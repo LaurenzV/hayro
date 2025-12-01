@@ -656,10 +656,11 @@ fn get_code_block_data_inner<'a>(
     // in an interleaved fashion.
 
     let (mut packet_body_reader, mut header_or_all_data) =
-        if let Some(packet_headers) = tile_part.packet_headers {
-            (Some(BitReader::new(tile_part.packet_body)), packet_headers)
-        } else {
-            (None, tile_part.packet_body)
+        match tile_part {
+            TilePart::Merged(t) => {
+                (None, t.data.tail()?)
+            }
+            TilePart::Separated(_) => unreachable!(),
         };
 
     while !header_or_all_data.is_empty() {

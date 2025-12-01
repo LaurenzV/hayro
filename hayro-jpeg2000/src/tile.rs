@@ -28,10 +28,39 @@ pub(crate) struct Tile<'a> {
     pub(crate) mct: bool,
 }
 
+/// A tile part where packet headers and packet data are interleaved.
 #[derive(Clone, Debug)]
-pub(crate) struct TilePart<'a> {
-    pub(crate) packet_headers: Option<&'a [u8]>,
-    pub(crate) packet_body: &'a [u8],
+pub(crate) struct MergedTilePart<'a> {
+    pub(crate) data: BitReader<'a>
+}
+
+/// A tile part where packet headers and packet data are separated.
+#[derive(Clone, Debug)]
+pub(crate) struct SeparatedTilePart<'a> {
+    pub(crate) header: BitReader<'a>,
+    pub(crate) body: BitReader<'a>,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) enum TilePart<'a> {
+    Merged(MergedTilePart<'a>),
+    Separated(SeparatedTilePart<'a>)
+}
+
+impl<'a> TilePart<'a> {
+    pub(crate) fn header(&mut self) -> &mut BitReader<'a> {
+        match self {
+            TilePart::Merged(m) => &mut m.data,
+            TilePart::Separated(s) => &mut s.header
+        }
+    }
+    
+    pub(crate) fn body(&mut self) -> &mut BitReader<'a> {
+        match self {
+            TilePart::Merged(m) => &mut m.data,
+            TilePart::Separated(s) => &mut s.body
+        }
+    }
 }
 
 impl<'a> Tile<'a> {
@@ -255,13 +284,24 @@ fn parse_tile_part<'a>(
 
         return Ok(());
     };
+    
+    let final_data = reader
+        .read_bytes(remaining_bytes)
+        .ok_or("failed to get tile part data")?;
+    
+    let tile_part = if let Some(ppt_header) = ppt_header {
+        panic!();
+        TilePart::Separated(SeparatedTilePart {
+            header: BitReader::new(ppt_header),
+            body: BitReader::new(final_data),
+        })
+    }   else {
+        TilePart::Merged(MergedTilePart {
+            data: BitReader::new(final_data),
+        })
+    };
 
-    tile.tile_parts.push(TilePart {
-        packet_headers: ppt_header,
-        packet_body: reader
-            .read_bytes(remaining_bytes)
-            .ok_or("failed to get tile part data")?,
-    });
+    tile.tile_parts.push(tile_part);
 
     Ok(())
 }
