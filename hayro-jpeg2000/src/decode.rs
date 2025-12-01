@@ -655,10 +655,10 @@ fn get_code_block_data_inner<'a>(
     // Otherwise, `tile_part.packet_body` contains packet headers and data
     // in an interleaved fashion.
 
-    let (mut packet_body_reader, mut header_or_all_data) =
+    let mut header_or_all_data =
         match tile_part {
             TilePart::Merged(t) => {
-                (None::<BitReader>, t.data.tail()?)
+                t.data.tail()?
             }
             TilePart::Separated(_) => unreachable!(),
         };
@@ -734,14 +734,10 @@ fn get_code_block_data_inner<'a>(
             Some(())
         };
 
-        if let Some(body_reader) = &mut packet_body_reader {
-            unreachable!()
-        } else {
-            let packet_data = reader.tail()?;
-            let mut data_reader = BitReader::new(packet_data);
-            read_packet_body(&mut data_reader)?;
-            header_or_all_data = data_reader.tail()?;
-        }
+        let packet_data = reader.tail()?;
+        let mut data_reader = BitReader::new(packet_data);
+        read_packet_body(&mut data_reader)?;
+        header_or_all_data = data_reader.tail()?;
     }
 
     Some(())
