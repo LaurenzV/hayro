@@ -734,10 +734,8 @@ fn get_code_block_data_inner<'a>(
             Some(())
         };
 
-        let packet_data = reader.tail()?;
-        let mut data_reader = BitReader::new(packet_data);
-        read_packet_body(&mut data_reader)?;
-        header_or_all_data = data_reader.tail()?;
+        read_packet_body(&mut reader)?;
+        header_or_all_data = reader.tail()?;
     }
 
     Some(())
