@@ -1,4 +1,4 @@
-//! A small and compact bit reader.
+//! Combined byte and bit reader utilities.
 
 use std::fmt::Debug;
 
@@ -23,6 +23,86 @@ impl<'a> BitReader<'a> {
         }
     }
 
+    #[inline]
+    pub(crate) fn at_end(&self) -> bool {
+        self.byte_pos() >= self.data.len()
+    }
+
+    #[inline]
+    pub(crate) fn jump_to_end(&mut self) {
+        self.cur_pos = self.data.len() * 8;
+    }
+
+    #[inline]
+    pub(crate) fn tail(&self) -> Option<&'a [u8]> {
+        self.data.get(self.byte_pos()..)
+    }
+
+    #[inline]
+    pub(crate) fn offset(&self) -> usize {
+        self.byte_pos()
+    }
+
+    #[inline]
+    pub(crate) fn read_bytes(&mut self, len: usize) -> Option<&'a [u8]> {
+        debug_assert_eq!(self.bit_pos(), 0);
+
+        let bytes = self.peek_bytes(len)?;
+        self.cur_pos += len * 8;
+
+        Some(bytes)
+    }
+
+    #[inline]
+    pub(crate) fn read_byte(&mut self) -> Option<u8> {
+        debug_assert_eq!(self.bit_pos(), 0);
+
+        let byte = self.peek_byte()?;
+        self.cur_pos += 8;
+
+        Some(byte)
+    }
+
+    #[inline]
+    pub(crate) fn skip_bytes(&mut self, len: usize) -> Option<()> {
+        self.read_bytes(len).map(|_| ())
+    }
+
+    #[inline]
+    pub(crate) fn peek_bytes(&self, len: usize) -> Option<&'a [u8]> {
+        let start = self.byte_pos();
+        let end = start.checked_add(len)?;
+        self.data.get(start..end)
+    }
+
+    #[inline]
+    pub(crate) fn peek_byte(&self) -> Option<u8> {
+        self.data.get(self.byte_pos()).copied()
+    }
+
+    #[inline]
+    pub(crate) fn read_u16(&mut self) -> Option<u16> {
+        let bytes = self.read_bytes(2)?;
+
+        Some(u16::from_be_bytes([bytes[0], bytes[1]]))
+    }
+
+    #[inline]
+    pub(crate) fn read_u32(&mut self) -> Option<u32> {
+        let bytes = self.read_bytes(4)?;
+
+        Some(u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
+    }
+
+    #[inline]
+    pub(crate) fn read_u64(&mut self) -> Option<u64> {
+        let bytes = self.read_bytes(8)?;
+
+        Some(u64::from_be_bytes([
+            bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
+        ]))
+    }
+
     #[inline(always)]
     pub(crate) fn read_bit(&mut self) -> Option<u32> {
         let byte_pos = self.byte_pos();
@@ -40,11 +120,6 @@ impl<'a> BitReader<'a> {
     #[inline]
     pub(crate) fn bit_pos(&self) -> usize {
         self.cur_pos % 8
-    }
-
-    #[inline]
-    pub(crate) fn tail(&self) -> &'a [u8] {
-        &self.data[self.byte_pos()..]
     }
 
     /// Like the normal `read_bits` method, but accounts for stuffing bits

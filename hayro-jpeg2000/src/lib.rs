@@ -1,20 +1,19 @@
 #![forbid(unsafe_code)]
 
 use crate::bitmap::{Bitmap, ChannelData};
+use crate::reader::BitReader;
 use crate::boxes::{
     CHANNEL_DEFINITION, COLOUR_SPECIFICATION, COMPONENT_MAPPING, CONTIGUOUS_CODESTREAM, FILE_TYPE,
     IMAGE_HEADER, JP2_HEADER, JP2_SIGNATURE, PALETTE, read_box, tag_to_string,
 };
-use crate::byte_reader::Reader;
 use crate::icc::ICCMetadata;
 use log::{debug, warn};
 
 mod arithmetic_decoder;
-pub(crate) mod bit_reader;
+pub(crate) mod reader;
 pub mod bitmap;
 pub(crate) mod bitplane;
 pub mod boxes;
-pub(crate) mod byte_reader;
 mod codestream;
 mod decode;
 mod icc;
@@ -259,7 +258,7 @@ impl ImageMetadata {
             return Err("image header box too short");
         }
 
-        let mut reader = Reader::new(data);
+        let mut reader = BitReader::new(data);
 
         self.height = reader
             .read_u32()
@@ -297,7 +296,7 @@ impl ImageMetadata {
             return None;
         }
 
-        let mut reader = Reader::new(data);
+        let mut reader = BitReader::new(data);
         let count = reader.read_u16()? as usize;
         let mut definitions = Vec::with_capacity(count);
 
@@ -323,7 +322,7 @@ impl ImageMetadata {
             return None;
         }
 
-        let mut reader = Reader::new(data);
+        let mut reader = BitReader::new(data);
 
         let meth = reader.read_byte()?;
         let prec = reader.read_byte()?;
@@ -356,7 +355,7 @@ impl ImageMetadata {
             return Err("palette box too short");
         }
 
-        let mut reader = Reader::new(data);
+        let mut reader = BitReader::new(data);
         let num_entries = reader
             .read_u16()
             .ok_or("failed to read palette entry count")? as usize;
@@ -418,7 +417,7 @@ impl ImageMetadata {
             return Err("component mapping box has invalid length");
         }
 
-        let mut reader = Reader::new(data);
+        let mut reader = BitReader::new(data);
         let mut entries = Vec::with_capacity(data.len() / 4);
 
         while !reader.at_end() {
@@ -576,7 +575,7 @@ fn read_jp2_codestream(data: &[u8]) -> Result<Bitmap, &'static str> {
 }
 
 fn read_jp2_file(data: &[u8], settings: &DecodeSettings) -> Result<Bitmap, &'static str> {
-    let mut reader = Reader::new(data);
+    let mut reader = BitReader::new(data);
     let signature_box = read_box(&mut reader).ok_or("failed to read signature box")?;
 
     if signature_box.box_type != JP2_SIGNATURE {
@@ -613,7 +612,7 @@ fn read_jp2_file(data: &[u8], settings: &DecodeSettings) -> Result<Bitmap, &'sta
                     component_mapping: None,
                 };
 
-                let mut jp2h_reader = Reader::new(current_box.data);
+                let mut jp2h_reader = BitReader::new(current_box.data);
 
                 // Read child boxes within JP2 Header box
                 while !jp2h_reader.at_end() {

@@ -1,6 +1,6 @@
 //! Creating tiles and parsing their constituent tile parts.
 
-use crate::byte_reader::Reader;
+use crate::reader::BitReader;
 use crate::codestream::{
     ComponentInfo, Header, ProgressionOrder, ReaderExt, markers, skip_marker_segment,
 };
@@ -90,7 +90,7 @@ impl<'a> Tile<'a> {
 
 /// Create the tiles and parse their constituent tile parts.
 pub(crate) fn parse<'a>(
-    reader: &mut Reader<'a>,
+    reader: &mut BitReader<'a>,
     main_header: &'a Header,
 ) -> Result<Vec<Tile<'a>>, &'static str> {
     let mut tiles = (0..main_header.size_data.num_tiles() as usize)
@@ -112,7 +112,7 @@ pub(crate) fn parse<'a>(
 }
 
 fn parse_tile_part<'a>(
-    reader: &mut Reader<'a>,
+    reader: &mut BitReader<'a>,
     main_header: &Header,
     tiles: &mut [Tile<'a>],
     first: bool,
@@ -622,7 +622,7 @@ struct TilePartHeader {
 }
 
 /// PPT marker (A.7.5).
-fn ppt_marker<'a>(reader: &mut Reader<'a>) -> Option<&'a [u8]> {
+fn ppt_marker<'a>(reader: &mut BitReader<'a>) -> Option<&'a [u8]> {
     let length = reader.read_u16()?.checked_sub(2)?;
     let header_len = length.checked_sub(1)?;
     let _sequence_idx = reader.read_byte()?;
@@ -630,7 +630,7 @@ fn ppt_marker<'a>(reader: &mut Reader<'a>) -> Option<&'a [u8]> {
 }
 
 /// SOT marker (A.4.2).
-fn sot_marker(reader: &mut Reader) -> Option<TilePartHeader> {
+fn sot_marker(reader: &mut BitReader) -> Option<TilePartHeader> {
     // Length.
     let _ = reader.read_u16()?;
 

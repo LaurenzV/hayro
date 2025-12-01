@@ -1,4 +1,4 @@
-use crate::byte_reader::Reader;
+use crate::reader::BitReader;
 
 /// JP2 signature box - 'jP\040\040'.
 pub const JP2_SIGNATURE: u32 = 0x6A502020;
@@ -58,7 +58,7 @@ pub(crate) fn tag_to_string(tag: u32) -> String {
     String::from_utf8_lossy(&bytes).to_string()
 }
 
-pub(crate) fn read_box<'a>(reader: &mut Reader<'a>) -> Option<Jp2Box<'a>> {
+pub(crate) fn read_box<'a>(reader: &mut BitReader<'a>) -> Option<Jp2Box<'a>> {
     let l_box = reader.read_u32()?;
     let t_box = reader.read_u32()?;
 

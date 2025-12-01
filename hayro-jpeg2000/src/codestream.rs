@@ -1,10 +1,10 @@
 use crate::bitmap::ChannelData;
 use crate::bitplane::BITPLANE_BIT_SIZE;
-use crate::byte_reader::Reader;
+use crate::reader::BitReader;
 use crate::decode::{SubBandType, decode};
 
 pub(crate) fn read(stream: &[u8]) -> Result<(Header, Vec<ChannelData>), &'static str> {
-    let mut reader = Reader::new(stream);
+    let mut reader = BitReader::new(stream);
 
     let marker = reader.read_marker()?;
     if marker != markers::SOC {
@@ -27,7 +27,7 @@ pub(crate) struct Header {
     pub(crate) component_infos: Vec<ComponentInfo>,
 }
 
-fn read_header(reader: &mut Reader) -> Result<Header, &'static str> {
+fn read_header(reader: &mut BitReader) -> Result<Header, &'static str> {
     if reader.read_marker()? != markers::SIZ {
         return Err("expected SIZ marker after SOC");
     }
@@ -444,7 +444,7 @@ impl SizeData {
 }
 
 /// SIZ marker (A.5.1).
-fn size_marker(reader: &mut Reader) -> Result<SizeData, &'static str> {
+fn size_marker(reader: &mut BitReader) -> Result<SizeData, &'static str> {
     let size_data = size_marker_inner(reader).ok_or("failed to read SIZ marker")?;
 
     if size_data.tile_width == 0
@@ -495,7 +495,7 @@ fn size_marker(reader: &mut Reader) -> Result<SizeData, &'static str> {
     Ok(size_data)
 }
 
-fn size_marker_inner(reader: &mut Reader) -> Option<SizeData> {
+fn size_marker_inner(reader: &mut BitReader) -> Option<SizeData> {
     // Length.
     let _ = reader.read_u16()?;
     // Decoder capabilities.
@@ -575,7 +575,7 @@ fn size_marker_inner(reader: &mut Reader) -> Option<SizeData> {
 }
 
 fn coding_style_parameters(
-    reader: &mut Reader,
+    reader: &mut BitReader,
     coding_style: &CodingStyleFlags,
 ) -> Option<CodingStyleParameters> {
     let num_decomposition_levels = (reader.read_byte()? as u16).min(32);
@@ -614,21 +614,21 @@ fn coding_style_parameters(
 }
 
 /// COM Marker (A.9.2).
-fn com_marker(reader: &mut Reader) -> Option<()> {
+fn com_marker(reader: &mut BitReader) -> Option<()> {
     skip_marker_segment(reader)
 }
 
 /// TLM marker (A.7.1).
-fn tlm_marker(reader: &mut Reader) -> Option<()> {
+fn tlm_marker(reader: &mut BitReader) -> Option<()> {
     skip_marker_segment(reader)
 }
 
 /// RGN marker (A.6.3).
-fn rgn_marker(reader: &mut Reader) -> Option<()> {
+fn rgn_marker(reader: &mut BitReader) -> Option<()> {
     skip_marker_segment(reader)
 }
 
-pub(crate) fn skip_marker_segment(reader: &mut Reader) -> Option<()> {
+pub(crate) fn skip_marker_segment(reader: &mut BitReader) -> Option<()> {
     let length = reader.read_u16()?.checked_sub(2)?;
     reader.skip_bytes(length as usize)?;
 
@@ -636,7 +636,7 @@ pub(crate) fn skip_marker_segment(reader: &mut Reader) -> Option<()> {
 }
 
 /// COD marker (A.6.1).
-pub(crate) fn cod_marker(reader: &mut Reader) -> Option<CodingStyleDefault> {
+pub(crate) fn cod_marker(reader: &mut BitReader) -> Option<CodingStyleDefault> {
     // Length.
     let _ = reader.read_u16()?;
 
@@ -660,7 +660,7 @@ pub(crate) fn cod_marker(reader: &mut Reader) -> Option<CodingStyleDefault> {
 }
 
 /// COC marker (A.6.2).
-pub(crate) fn coc_marker(reader: &mut Reader, csiz: u16) -> Option<(u16, CodingStyleComponent)> {
+pub(crate) fn coc_marker(reader: &mut BitReader, csiz: u16) -> Option<(u16, CodingStyleComponent)> {
     // Length.
     let _ = reader.read_u16()?;
 
@@ -683,7 +683,7 @@ pub(crate) fn coc_marker(reader: &mut Reader, csiz: u16) -> Option<(u16, CodingS
 }
 
 /// QCD marker (A.6.4).
-pub(crate) fn qcd_marker(reader: &mut Reader) -> Option<QuantizationInfo> {
+pub(crate) fn qcd_marker(reader: &mut BitReader) -> Option<QuantizationInfo> {
     // Length.
     let length = reader.read_u16()?;
 
@@ -700,7 +700,7 @@ pub(crate) fn qcd_marker(reader: &mut Reader) -> Option<QuantizationInfo> {
 }
 
 /// QCC marker (A.6.5).
-pub(crate) fn qcc_marker(reader: &mut Reader, csiz: u16) -> Option<(u16, QuantizationInfo)> {
+pub(crate) fn qcc_marker(reader: &mut BitReader, csiz: u16) -> Option<(u16, QuantizationInfo)> {
     let length = reader.read_u16()?;
 
     let component_index = if csiz < 257 {
@@ -726,7 +726,7 @@ pub(crate) fn qcc_marker(reader: &mut Reader, csiz: u16) -> Option<(u16, Quantiz
 }
 
 fn quantization_parameters(
-    reader: &mut Reader,
+    reader: &mut BitReader,
     quantization_style: QuantizationStyle,
     remaining_bytes: usize,
 ) -> Option<QuantizationInfo> {
@@ -786,7 +786,7 @@ pub(crate) trait ReaderExt: Clone {
     }
 }
 
-impl ReaderExt for Reader<'_> {
+impl ReaderExt for BitReader<'_> {
     fn read_marker(&mut self) -> Result<u8, &'static str> {
         if self.peek_byte().ok_or("invalid marker")? != 0xFF {
             return Err("invalid marker");

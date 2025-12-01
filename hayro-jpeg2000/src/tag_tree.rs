@@ -6,7 +6,7 @@
 //! have a value of 3 or higher. The root node therefore stores the smallest
 //! values across all children.
 
-use crate::bit_reader::BitReader;
+use crate::reader::BitReader;
 use log::warn;
 
 #[derive(Debug, PartialEq, Eq, Clone, Default)]

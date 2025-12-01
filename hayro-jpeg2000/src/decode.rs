@@ -4,7 +4,7 @@
 //! stages in such a way that a given codestream is decoded into its
 //! component channels.
 
-use crate::bit_reader::BitReader;
+use crate::reader::BitReader;
 use crate::bitmap::ChannelData;
 use crate::bitplane::{BitPlaneDecodeBuffers, CodeBlockDecodeContext};
 use crate::codestream::markers::{EPH, SOP};
@@ -22,13 +22,13 @@ use crate::progression::{
 use crate::rect::IntRect;
 use crate::tag_tree::{TagNode, TagTree};
 use crate::tile::{ComponentTile, ResolutionTile, Tile, TilePart};
-use crate::{bitplane, byte_reader::Reader, idwt, tile};
+use crate::{bitplane, idwt, tile};
 use log::{trace, warn};
 use std::iter;
 use std::ops::Range;
 
 pub(crate) fn decode(data: &[u8], header: &Header) -> Result<Vec<ChannelData>, &'static str> {
-    let mut reader = Reader::new(data);
+    let mut reader = BitReader::new(data);
     let tiles = tile::parse(&mut reader, header)?;
 
     if tiles.is_empty() {
@@ -657,7 +657,7 @@ fn get_code_block_data_inner<'a>(
 
     let (mut packet_body_reader, mut header_or_all_data) =
         if let Some(packet_headers) = tile_part.packet_headers {
-            (Some(Reader::new(tile_part.packet_body)), packet_headers)
+            (Some(BitReader::new(tile_part.packet_body)), packet_headers)
         } else {
             (None, tile_part.packet_body)
         };
@@ -671,7 +671,7 @@ fn get_code_block_data_inner<'a>(
         let sub_band_iter = tile_decompositions.sub_band_iter(resolution, &storage.decompositions);
 
         if component_info.coding_style.flags.may_use_sop_markers() {
-            let mut reader = Reader::new(header_or_all_data);
+            let mut reader = BitReader::new(header_or_all_data);
             if reader.peek_marker() == Some(SOP) {
                 reader.read_marker().ok()?;
                 reader.skip_bytes(4)?;
@@ -703,7 +703,7 @@ fn get_code_block_data_inner<'a>(
         reader.read_stuff_bit_if_necessary()?;
         reader.align();
 
-        let read_packet_body = |reader: &mut Reader<'a>| {
+        let read_packet_body = |reader: &mut BitReader<'a>| {
             if component_info.coding_style.flags.uses_eph_marker()
                 && reader.read_marker().ok()? != EPH
             {
@@ -737,10 +737,10 @@ fn get_code_block_data_inner<'a>(
 
         if let Some(body_reader) = &mut packet_body_reader {
             read_packet_body(body_reader)?;
-            header_or_all_data = reader.tail();
+            header_or_all_data = reader.tail()?;
         } else {
-            let packet_data = reader.tail();
-            let mut data_reader = Reader::new(packet_data);
+            let packet_data = reader.tail()?;
+            let mut data_reader = BitReader::new(packet_data);
             read_packet_body(&mut data_reader)?;
             header_or_all_data = data_reader.tail()?;
         }
