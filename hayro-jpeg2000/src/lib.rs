@@ -3,16 +3,16 @@ use crate::boxes::{
     CHANNEL_DEFINITION, COLOUR_SPECIFICATION, COMPONENT_MAPPING, CONTIGUOUS_CODESTREAM, FILE_TYPE,
     IMAGE_HEADER, JP2_HEADER, JP2_SIGNATURE, PALETTE, read_box, tag_to_string,
 };
-use crate::byte::Reader;
+use crate::byte_reader::Reader;
 use crate::icc::ICCMetadata;
 use log::{debug, warn};
 
 mod arithmetic_decoder;
-pub(crate) mod bit;
+pub(crate) mod bit_reader;
 pub mod bitmap;
 pub(crate) mod bitplane;
 pub mod boxes;
-pub(crate) mod byte;
+pub(crate) mod byte_reader;
 mod codestream;
 mod decode;
 mod icc;

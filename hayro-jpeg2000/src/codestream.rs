@@ -1,6 +1,6 @@
 use crate::bitmap::ChannelData;
 use crate::bitplane::BITPLANE_BIT_SIZE;
-use crate::byte::Reader;
+use crate::byte_reader::Reader;
 use crate::decode::{SubBandType, decode};
 
 pub(crate) fn read(stream: &[u8]) -> Result<(Header, Vec<ChannelData>), &'static str> {

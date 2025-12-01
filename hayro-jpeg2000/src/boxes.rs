@@ -1,4 +1,4 @@
-use crate::byte::Reader;
+use crate::byte_reader::Reader;
 
 /// JP2 signature box - 'jP\040\040'.
 pub const JP2_SIGNATURE: u32 = 0x6A502020;

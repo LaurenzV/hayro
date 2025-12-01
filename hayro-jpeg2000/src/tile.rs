@@ -1,6 +1,6 @@
 //! Creating tiles and parsing their constituent tile parts.
 
-use crate::byte::Reader;
+use crate::byte_reader::Reader;
 use crate::codestream::{
     ComponentInfo, Header, ProgressionOrder, ReaderExt, markers, skip_marker_segment,
 };
