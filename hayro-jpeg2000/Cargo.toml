@@ -10,7 +10,11 @@ license.workspace = true
 [dependencies]
 hayro-common = { workspace = true }
 log = { workspace = true }
-fearless_simd = { workspace = true }
+fearless_simd = { workspace = true, optional = true }
+
+[features]
+default = ["simd"]
+simd = ["fearless_simd"]
 
 [dev-dependencies]
 image = { version = "0.25.8", default-features = false, features = ["png"] }

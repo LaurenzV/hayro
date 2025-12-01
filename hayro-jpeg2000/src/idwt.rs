@@ -4,7 +4,7 @@ use crate::codestream::WaveletTransform;
 use crate::decode::{Decomposition, SubBand, SubBandType};
 use crate::rect::IntRect;
 
-// Keep in sync with the type `F32` in the `simd` module!
+// Keep in sync with the type `F32` in the `simd` modules!
 const SIMD_WIDTH: usize = 8;
 
 #[derive(Default, Copy, Clone)]
@@ -394,40 +394,6 @@ fn filter_horizontal(
     }
 }
 
-/// The VER_SR procedure from F.3.5.
-#[allow(dead_code)]
-fn filter_vertical(
-    coefficients: &mut [f32],
-    padding: Padding,
-    temp_buf: &mut Vec<f32>,
-    rect: IntRect,
-    transform: WaveletTransform,
-) {
-    let total_width = rect.width() as usize + padding.left + padding.right;
-    let total_height = rect.height() as usize + padding.top + padding.bottom;
-
-    for u in padding.left..(rect.width() as usize + padding.left) {
-        temp_buf.clear();
-
-        // Extract column into buffer.
-        for y in 0..total_height {
-            temp_buf.push(coefficients[u + total_width * y]);
-        }
-
-        filter_single_row(
-            temp_buf,
-            padding.top,
-            padding.top + rect.height() as usize,
-            transform,
-        );
-
-        // Put values back into original array.
-        for (y, item) in temp_buf.iter().enumerate().take(total_height) {
-            coefficients[u + total_width * y] = *item;
-        }
-    }
-}
-
 /// The 1D_SR procedure from F.3.6.
 fn filter_single_row(scanline: &mut [f32], start: usize, end: usize, transform: WaveletTransform) {
     if start == end - 1 {
@@ -569,6 +535,7 @@ fn periodic_symmetric_extension(idx: usize, start: usize, end: usize) -> usize {
     (start as i32 + offset.min(span - offset)) as usize
 }
 
+#[cfg(feature = "simd")]
 mod simd {
     use crate::codestream::WaveletTransform;
     use crate::idwt::{Padding, left_extension, periodic_symmetric_extension, right_extension};
@@ -813,6 +780,194 @@ mod simd {
 
                 s1 -= alpha * (s2 + s3);
                 scanline[base_idx..][..SIMD_WIDTH].copy_from_slice(&s1.val);
+            }
+        }
+    }
+}
+
+#[cfg(not(feature = "simd"))]
+mod simd {
+    use crate::codestream::WaveletTransform;
+    use crate::idwt::{Padding, left_extension, periodic_symmetric_extension, right_extension};
+    use crate::rect::IntRect;
+
+    const SIMD_WIDTH: usize = super::SIMD_WIDTH;
+
+    pub(super) fn filter_vertical_simd(
+        coefficients: &mut [f32],
+        padding: Padding,
+        rect: IntRect,
+        transform: WaveletTransform,
+    ) {
+        filter_vertical_simd_impl(coefficients, padding, rect, transform);
+    }
+
+    fn filter_vertical_simd_impl(
+        coefficients: &mut [f32],
+        padding: Padding,
+        rect: IntRect,
+        transform: WaveletTransform,
+    ) {
+        let total_width = rect.width() as usize + padding.left + padding.right;
+        filter_rows_simd(
+            coefficients,
+            padding.top,
+            padding.top + rect.height() as usize,
+            total_width,
+            transform,
+        );
+    }
+
+    fn filter_rows_simd(
+        scanline: &mut [f32],
+        start: usize,
+        end: usize,
+        stride: usize,
+        transform: WaveletTransform,
+    ) {
+        if start == end - 1 {
+            if !start.is_multiple_of(2) {
+                let row_offset = start * stride;
+                for_each_lane(row_offset, stride, |idx| {
+                    scanline[idx] /= 2.0;
+                });
+            }
+
+            return;
+        }
+
+        extend_signal_simd(scanline, start, end, stride, transform);
+
+        match transform {
+            WaveletTransform::Reversible53 => {
+                reversible_filter_53r_simd(scanline, start, end, stride);
+            }
+            WaveletTransform::Irreversible97 => {
+                irreversible_filter_97i_simd(scanline, start, end, stride);
+            }
+        }
+    }
+
+    fn extend_signal_simd(
+        scanline: &mut [f32],
+        start: usize,
+        end: usize,
+        stride: usize,
+        transform: WaveletTransform,
+    ) {
+        let i_left = left_extension(transform, start);
+        let i_right = right_extension(transform, end);
+
+        for i in (start - i_left)..start {
+            let src = periodic_symmetric_extension(i, start, end);
+            copy_row(scanline, src, i, stride);
+        }
+
+        for i in end..(end + i_right) {
+            let src = periodic_symmetric_extension(i, start, end);
+            copy_row(scanline, src, i, stride);
+        }
+    }
+
+    fn copy_row(scanline: &mut [f32], src_row: usize, dst_row: usize, stride: usize) {
+        if src_row == dst_row {
+            return;
+        }
+
+        let src_offset = src_row * stride;
+        let dst_offset = dst_row * stride;
+
+        for_each_lane(dst_offset, stride, |dst_idx| {
+            let src_idx = src_offset + (dst_idx - dst_offset);
+            scanline[dst_idx] = scanline[src_idx];
+        });
+    }
+
+    fn reversible_filter_53r_simd(scanline: &mut [f32], start: usize, end: usize, stride: usize) {
+        for n in start / 2..(end / 2) + 1 {
+            let row_offset = 2 * n * stride;
+            for_each_lane(row_offset, stride, |idx| {
+                let s1 = scanline[idx];
+                let s2 = scanline[idx - stride];
+                let s3 = scanline[idx + stride];
+                scanline[idx] = s1 - ((s2 + s3 + 2.0) / 4.0).floor();
+            });
+        }
+
+        for n in start / 2..(end / 2) {
+            let row_offset = (2 * n + 1) * stride;
+            for_each_lane(row_offset, stride, |idx| {
+                let s1 = scanline[idx];
+                let s2 = scanline[idx - stride];
+                let s3 = scanline[idx + stride];
+                scanline[idx] = s1 + ((s2 + s3) / 2.0).floor();
+            });
+        }
+    }
+
+    fn irreversible_filter_97i_simd(scanline: &mut [f32], start: usize, end: usize, stride: usize) {
+        const ALPHA: f32 = -1.586_134_3;
+        const BETA: f32 = -0.052_980_117;
+        const GAMMA: f32 = 0.882_911_1;
+        const DELTA: f32 = 0.443_506_87;
+        const KAPPA: f32 = 1.230_174_1;
+        const INV_KAPPA: f32 = 1.0 / KAPPA;
+
+        for i in (start / 2 - 1)..(end / 2 + 2) {
+            let row_offset = (2 * i) * stride;
+            for_each_lane(row_offset, stride, |idx| {
+                scanline[idx] *= KAPPA;
+            });
+        }
+
+        for i in (start / 2 - 2)..(end / 2 + 2) {
+            let row_offset = (2 * i + 1) * stride;
+            for_each_lane(row_offset, stride, |idx| {
+                scanline[idx] *= INV_KAPPA;
+            });
+        }
+
+        for i in (start / 2 - 1)..(end / 2 + 2) {
+            let row_offset = (2 * i) * stride;
+            for_each_lane(row_offset, stride, |idx| {
+                let s2 = scanline[idx - stride];
+                let s3 = scanline[idx + stride];
+                scanline[idx] -= DELTA * (s2 + s3);
+            });
+        }
+
+        for i in (start / 2 - 1)..(end / 2 + 1) {
+            let row_offset = (2 * i + 1) * stride;
+            for_each_lane(row_offset, stride, |idx| {
+                let s2 = scanline[idx - stride];
+                let s3 = scanline[idx + stride];
+                scanline[idx] -= GAMMA * (s2 + s3);
+            });
+        }
+
+        for i in (start / 2)..(end / 2 + 1) {
+            let row_offset = (2 * i) * stride;
+            for_each_lane(row_offset, stride, |idx| {
+                let s2 = scanline[idx - stride];
+                let s3 = scanline[idx + stride];
+                scanline[idx] -= BETA * (s2 + s3);
+            });
+        }
+
+        for i in (start / 2)..(end / 2) {
+            let row_offset = (2 * i + 1) * stride;
+            for_each_lane(row_offset, stride, |idx| {
+                let s2 = scanline[idx - stride];
+                let s3 = scanline[idx + stride];
+                scanline[idx] -= ALPHA * (s2 + s3);
+            });
+        }
+    }
+
+    fn for_each_lane(row_offset: usize, stride: usize, mut func: impl FnMut(usize)) {
+        for base_column in (0..stride).step_by(SIMD_WIDTH) {
+            for lane in 0..SIMD_WIDTH {
+                func(row_offset + base_column + lane);
             }
         }
     }

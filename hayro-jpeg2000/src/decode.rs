@@ -22,6 +22,7 @@ use crate::rect::IntRect;
 use crate::tag_tree::{TagNode, TagTree};
 use crate::tile::{ComponentTile, ResolutionTile, Tile, TilePart};
 use crate::{bitplane, idwt, tile};
+#[cfg(feature = "simd")]
 use fearless_simd::{Level, Simd, SimdBase, SimdFloat, dispatch, f32x8};
 use hayro_common::bit::BitReader;
 use hayro_common::byte::Reader;
@@ -110,7 +111,7 @@ pub(crate) fn decode(data: &[u8], header: &Header) -> Result<Vec<ChannelData>, &
     // In theory, only some could have it... But hopefully no such cursed
     // images exist!
     if tile_ctx.tile.mct {
-        dispatch!(Level::new(), simd => apply_mct(simd, &mut tile_ctx));
+        apply_mct(&mut tile_ctx);
         apply_sign_shift(&mut tile_ctx, &header.component_infos);
     }
 
@@ -1109,8 +1110,7 @@ fn apply_sign_shift(tile_ctx: &mut TileDecodeContext, component_infos: &[Compone
     }
 }
 
-#[inline(always)]
-fn apply_mct<S: Simd>(simd: S, tile_ctx: &mut TileDecodeContext) {
+fn apply_mct(tile_ctx: &mut TileDecodeContext) {
     if tile_ctx.channel_data.len() < 3 {
         warn!(
             "tried to apply MCT to image with {} components",
@@ -1148,46 +1148,7 @@ fn apply_mct<S: Simd>(simd: S, tile_ctx: &mut TileDecodeContext) {
     s1.resize(new_len, 0.0);
     s2.resize(new_len, 0.0);
 
-    match transform {
-        WaveletTransform::Irreversible97 => {
-            for ((y0, y1), y2) in s0
-                .chunks_exact_mut(8)
-                .zip(s1.chunks_exact_mut(8))
-                .zip(s2.chunks_exact_mut(8))
-            {
-                let y_0 = f32x8::from_slice(simd, y0);
-                let y_1 = f32x8::from_slice(simd, y1);
-                let y_2 = f32x8::from_slice(simd, y2);
-
-                let i0 = y_2.madd(1.402, y_0);
-                let i1 = y_2.madd(-0.71414, y_1.madd(-0.34413, y_0));
-                let i2 = y_1.madd(1.772, y_0);
-
-                y0.copy_from_slice(&i0.val);
-                y1.copy_from_slice(&i1.val);
-                y2.copy_from_slice(&i2.val);
-            }
-        }
-        WaveletTransform::Reversible53 => {
-            for ((y0, y1), y2) in s0
-                .chunks_exact_mut(8)
-                .zip(s1.chunks_exact_mut(8))
-                .zip(s2.chunks_exact_mut(8))
-            {
-                let y_0 = f32x8::from_slice(simd, y0);
-                let y_1 = f32x8::from_slice(simd, y1);
-                let y_2 = f32x8::from_slice(simd, y2);
-
-                let i1 = y_0 - ((y_2 + y_1) * 0.25).floor();
-                let i0 = y_2 + i1;
-                let i2 = y_1 + i1;
-
-                y0.copy_from_slice(&i0.val);
-                y1.copy_from_slice(&i1.val);
-                y2.copy_from_slice(&i2.val);
-            }
-        }
-    }
+    simd::apply_mct(transform, s0, s1, s2);
 
     s0.truncate(len);
     s1.truncate(len);
@@ -1350,5 +1311,126 @@ impl BitReaderExt for BitReader<'_> {
 
     fn peak_bits_with_stuffing(&mut self, bit_size: u8) -> Option<u32> {
         self.clone().read_bits_with_stuffing(bit_size)
+    }
+}
+
+#[cfg(not(feature = "simd"))]
+mod simd {
+    use super::*;
+
+    pub(super) fn apply_mct(
+        transform: WaveletTransform,
+        s0: &mut [f32],
+        s1: &mut [f32],
+        s2: &mut [f32],
+    ) {
+        match transform {
+            WaveletTransform::Irreversible97 => {
+                for ((y0, y1), y2) in s0
+                    .chunks_exact_mut(8)
+                    .zip(s1.chunks_exact_mut(8))
+                    .zip(s2.chunks_exact_mut(8))
+                {
+                    for lane in 0..8 {
+                        let y_0 = y0[lane];
+                        let y_1 = y1[lane];
+                        let y_2 = y2[lane];
+
+                        let i0 = y_2.mul_add(1.402, y_0);
+                        let i1 = y_2.mul_add(-0.71414, y_1.mul_add(-0.34413, y_0));
+                        let i2 = y_1.mul_add(1.772, y_0);
+
+                        y0[lane] = i0;
+                        y1[lane] = i1;
+                        y2[lane] = i2;
+                    }
+                }
+            }
+            WaveletTransform::Reversible53 => {
+                for ((y0, y1), y2) in s0
+                    .chunks_exact_mut(8)
+                    .zip(s1.chunks_exact_mut(8))
+                    .zip(s2.chunks_exact_mut(8))
+                {
+                    for lane in 0..8 {
+                        let y_0 = y0[lane];
+                        let y_1 = y1[lane];
+                        let y_2 = y2[lane];
+
+                        let i1 = y_0 - ((y_2 + y_1) * 0.25).floor();
+                        let i0 = y_2 + i1;
+                        let i2 = y_1 + i1;
+
+                        y0[lane] = i0;
+                        y1[lane] = i1;
+                        y2[lane] = i2;
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[cfg(feature = "simd")]
+mod simd {
+    use super::*;
+
+    pub(super) fn apply_mct(
+        transform: WaveletTransform,
+        s0: &mut [f32],
+        s1: &mut [f32],
+        s2: &mut [f32],
+    ) {
+        dispatch!(Level::new(), simd => apply_mct_simd(simd, transform, s0, s1, s2));
+    }
+
+    #[inline(always)]
+    fn apply_mct_simd<S: Simd>(
+        simd: S,
+        transform: WaveletTransform,
+        s0: &mut [f32],
+        s1: &mut [f32],
+        s2: &mut [f32],
+    ) {
+        match transform {
+            WaveletTransform::Irreversible97 => {
+                for ((y0, y1), y2) in s0
+                    .chunks_exact_mut(8)
+                    .zip(s1.chunks_exact_mut(8))
+                    .zip(s2.chunks_exact_mut(8))
+                {
+                    let y_0 = f32x8::from_slice(simd, y0);
+                    let y_1 = f32x8::from_slice(simd, y1);
+                    let y_2 = f32x8::from_slice(simd, y2);
+
+                    let i0 = y_2.madd(1.402, y_0);
+                    let i1 = y_2.madd(-0.71414, y_1.madd(-0.34413, y_0));
+                    let i2 = y_1.madd(1.772, y_0);
+
+                    y0.copy_from_slice(&i0.val);
+                    y1.copy_from_slice(&i1.val);
+                    y2.copy_from_slice(&i2.val);
+                }
+            }
+            WaveletTransform::Reversible53 => {
+                for ((y0, y1), y2) in s0
+                    .chunks_exact_mut(8)
+                    .zip(s1.chunks_exact_mut(8))
+                    .zip(s2.chunks_exact_mut(8))
+                {
+                    let y_0 = f32x8::from_slice(simd, y0);
+                    let y_1 = f32x8::from_slice(simd, y1);
+                    let y_2 = f32x8::from_slice(simd, y2);
+
+                    let i1 = y_0 - ((y_2 + y_1) * 0.25).floor();
+                    let i0 = y_2 + i1;
+                    let i2 = y_1 + i1;
+
+                    y0.copy_from_slice(&i0.val);
+                    y1.copy_from_slice(&i1.val);
+                    y2.copy_from_slice(&i2.val);
+                }
+            }
+        }
     }
 }
