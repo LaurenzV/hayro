@@ -1,3 +1,4 @@
+#[forbid(unsafe_code)]
 
 use crate::bitmap::{Bitmap, ChannelData};
 use crate::boxes::{
