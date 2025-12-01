@@ -7,7 +7,6 @@
 //! values across all children.
 
 use crate::reader::BitReader;
-use log::warn;
 
 #[derive(Debug, PartialEq, Eq, Clone, Default)]
 pub(crate) struct TagNode {
@@ -230,15 +229,7 @@ impl TagTree {
         max_val: u32,
         nodes: &mut [TagNode],
     ) -> Option<u32> {
-        if x >= self.width || y >= self.height {
-            warn!(
-                "attempted to read invalid index x: {x}, y: {y} in tag\
-            tree with dimensions {}x{}",
-                self.width, self.height
-            );
-
-            return None;
-        }
+        debug_assert!(x < self.width && y < self.height);
 
         read_tag_node(self.root, x, y, reader, 0, max_val, nodes)
     }

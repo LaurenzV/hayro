@@ -1,9 +1,13 @@
+use crate::DecodeSettings;
 use crate::bitmap::ChannelData;
 use crate::bitplane::BITPLANE_BIT_SIZE;
 use crate::decode::{SubBandType, decode};
 use crate::reader::BitReader;
 
-pub(crate) fn read(stream: &[u8]) -> Result<(Header, Vec<ChannelData>), &'static str> {
+pub(crate) fn read(
+    stream: &[u8],
+    settings: &DecodeSettings,
+) -> Result<(Header, Vec<ChannelData>), &'static str> {
     let mut reader = BitReader::new(stream);
 
     let marker = reader.read_marker()?;
@@ -11,7 +15,7 @@ pub(crate) fn read(stream: &[u8]) -> Result<(Header, Vec<ChannelData>), &'static
         return Err("invalid marker: expected SOC marker");
     }
 
-    let header = read_header(&mut reader)?;
+    let header = read_header(&mut reader, settings)?;
     let code_stream_data = reader
         .tail()
         .ok_or("code stream data is missing from image")?;
@@ -25,9 +29,11 @@ pub(crate) struct Header {
     pub(crate) size_data: SizeData,
     pub(crate) global_coding_style: CodingStyleDefault,
     pub(crate) component_infos: Vec<ComponentInfo>,
+    /// Whether strict mode is enabled for decoding.
+    pub(crate) strict: bool,
 }
 
-fn read_header(reader: &mut BitReader) -> Result<Header, &'static str> {
+fn read_header(reader: &mut BitReader, settings: &DecodeSettings) -> Result<Header, &'static str> {
     if reader.read_marker()? != markers::SIZ {
         return Err("expected SIZ marker after SOC");
     }
@@ -115,6 +121,7 @@ fn read_header(reader: &mut BitReader) -> Result<Header, &'static str> {
         size_data,
         global_coding_style: cod.clone(),
         component_infos,
+        strict: settings.strict,
     };
 
     validate(&header)?;

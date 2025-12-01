@@ -19,6 +19,7 @@ pub(crate) fn decode(data: &[u8], params: &ImageDecodeParams) -> Option<FilterRe
 
     let settings = DecodeSettings {
         resolve_palette_indices: false,
+        strict: false,
     };
 
     let mut bitmap = hayro_jpeg2000::read(data, &settings).ok()?;

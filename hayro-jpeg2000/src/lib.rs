@@ -522,12 +522,18 @@ fn resolve_component_channels(
 pub struct DecodeSettings {
     /// Whether palette indices should be resolved.
     pub resolve_palette_indices: bool,
+    /// Whether strict mode should be enabled when decoding.
+    ///
+    /// It is recommended to leave this flag disabled, unless you have a
+    /// specific reason not to.
+    pub strict: bool,
 }
 
 impl Default for DecodeSettings {
     fn default() -> Self {
         Self {
             resolve_palette_indices: true,
+            strict: false,
         }
     }
 }
@@ -540,14 +546,14 @@ pub fn read(data: &[u8], settings: &DecodeSettings) -> Result<Bitmap, &'static s
     if data.starts_with(JP2_MAGIC) {
         read_jp2_file(data, settings)
     } else if data.starts_with(CODESTREAM_MAGIC) {
-        read_jp2_codestream(data)
+        read_jp2_codestream(data, settings)
     } else {
         Err("invalid JP2 file")
     }
 }
 
-fn read_jp2_codestream(data: &[u8]) -> Result<Bitmap, &'static str> {
-    let (header, channels) = codestream::read(data)?;
+fn read_jp2_codestream(data: &[u8], settings: &DecodeSettings) -> Result<Bitmap, &'static str> {
+    let (header, channels) = codestream::read(data, settings)?;
 
     let metadata = ImageMetadata {
         height: header.size_data.image_height(),
@@ -594,7 +600,9 @@ fn read_jp2_file(data: &[u8], settings: &DecodeSettings) -> Result<Bitmap, &'sta
     // Read boxes until we find the JP2 Header box
     while !reader.at_end() {
         let Some(current_box) = read_box(&mut reader) else {
-            warn!("failed to read a JP2 box, aborting");
+            if settings.strict {
+                return Err("failed to read a JP2 box");
+            }
 
             break;
         };
@@ -655,7 +663,7 @@ fn read_jp2_file(data: &[u8], settings: &DecodeSettings) -> Result<Bitmap, &'sta
                 metadata = Ok(image_metadata);
             }
             CONTIGUOUS_CODESTREAM => {
-                channels = Ok(codestream::read(current_box.data)?);
+                channels = Ok(codestream::read(current_box.data, settings)?);
             }
             _ => {
                 warn!("ignoring outer box {}", tag_to_string(current_box.box_type));

@@ -23,7 +23,7 @@ use crate::rect::IntRect;
 use crate::tag_tree::{TagNode, TagTree};
 use crate::tile::{ComponentTile, ResolutionTile, Tile, TilePart};
 use crate::{bitplane, idwt, tile};
-use log::{trace, warn};
+use log::trace;
 use std::iter;
 use std::ops::Range;
 
@@ -108,7 +108,7 @@ pub(crate) fn decode(data: &[u8], header: &Header) -> Result<Vec<ChannelData>, &
     // In theory, only some could have it... But hopefully no such cursed
     // images exist!
     if tile_ctx.tile.mct {
-        apply_mct(&mut tile_ctx);
+        apply_mct(&mut tile_ctx, header)?;
         apply_sign_shift(&mut tile_ctx, &header.component_infos);
     }
 
@@ -131,7 +131,7 @@ fn decode_tile<'a>(
     // and code blocks.
     build_decompositions(tile, tile_ctx, storage)?;
     // Next, we parse the layer data for each code block.
-    get_code_block_data(tile, progression_iterator, tile_ctx, storage)?;
+    get_code_block_data(tile, progression_iterator, tile_ctx, header, storage)?;
     // We then decode the bitplanes of each code block, yielding the
     // (possibly dequantized) coefficients of each code block.
     decode_bitplanes(tile, tile_ctx, storage)?;
@@ -627,6 +627,7 @@ fn get_code_block_data<'a>(
     tile: &'a Tile<'a>,
     mut progression_iterator: impl Iterator<Item = ProgressionData>,
     tile_ctx: &mut TileDecodeContext<'a>,
+    header: &Header,
     storage: &mut DecompositionStorage<'a>,
 ) -> Result<(), &'static str> {
     for tile_part in &tile.tile_parts {
@@ -637,11 +638,9 @@ fn get_code_block_data<'a>(
             storage,
         )
         .is_none()
+            && header.strict
         {
-            warn!(
-                "failed to fully process a tile part in tile {}, decoded image might be corrupted",
-                tile.idx
-            );
+            return Err("failed to fully process a tile part in tile");
         }
     }
 
@@ -1091,14 +1090,13 @@ fn apply_sign_shift(tile_ctx: &mut TileDecodeContext, component_infos: &[Compone
     }
 }
 
-fn apply_mct(tile_ctx: &mut TileDecodeContext) {
+fn apply_mct(tile_ctx: &mut TileDecodeContext, header: &Header) -> Result<(), &'static str> {
     if tile_ctx.channel_data.len() < 3 {
-        warn!(
-            "tried to apply MCT to image with {} components",
-            tile_ctx.channel_data.len()
-        );
-
-        return;
+        return if header.strict {
+            Err("tried to apply MCT to image with less than 3 components")
+        } else {
+            Ok(())
+        }
     }
 
     let (s, _) = tile_ctx.channel_data.split_at_mut(3);
@@ -1113,15 +1111,13 @@ fn apply_mct(tile_ctx: &mut TileDecodeContext) {
         || tile_ctx.tile.component_infos[1].wavelet_transform()
             != tile_ctx.tile.component_infos[2].wavelet_transform()
     {
-        warn!("tried to apply MCT to image with different wavelet transforms per component");
-        return;
+        return Err("tried to apply MCT to image with different wavelet transforms per component");
     }
 
     let len = s0.len();
 
     if len != s1.len() || s1.len() != s2.len() {
-        warn!("tried to apply MCT to image with different number of samples per component");
-        return;
+        return Err("tried to apply MCT to image with different number of samples per component");
     }
 
     let new_len = len.next_multiple_of(8);
@@ -1134,6 +1130,8 @@ fn apply_mct(tile_ctx: &mut TileDecodeContext) {
     s0.truncate(len);
     s1.truncate(len);
     s2.truncate(len);
+
+    Ok(())
 }
 
 fn store<'a>(

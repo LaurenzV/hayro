@@ -6,7 +6,6 @@ use crate::codestream::{
 use crate::decode::{PrecinctData, SubBandType};
 use crate::reader::BitReader;
 use crate::rect::IntRect;
-use log::warn;
 
 /// A single tile in the image.
 #[derive(Clone, Debug)]
@@ -126,16 +125,15 @@ pub(crate) fn parse<'a>(
         .map(|idx| Tile::new(idx as u32, main_header))
         .collect::<Vec<_>>();
 
-    parse_tile_part(reader, main_header, &mut tiles, true)?;
+    parse_tile_part(reader, main_header, &mut tiles)?;
 
     while reader.peek_marker() == Some(markers::SOT) {
-        parse_tile_part(reader, main_header, &mut tiles, false)?;
+        parse_tile_part(reader, main_header, &mut tiles)?;
     }
 
-    // TODO: Add this for strict mode.
-    // if reader.read_marker()? != markers::EOC {
-    //     return Err("expected EOC marker when parsing tiles");
-    // }
+    if main_header.strict && reader.read_marker()? != markers::EOC {
+        return Err("expected EOC marker when parsing tiles");
+    }
 
     Ok(tiles)
 }
@@ -144,7 +142,6 @@ fn parse_tile_part<'a>(
     reader: &mut BitReader<'a>,
     main_header: &Header,
     tiles: &mut [Tile<'a>],
-    first: bool,
 ) -> Result<(), &'static str> {
     if reader.read_marker()? != markers::SOT {
         return Err("expected SOT marker at tile-part start");
@@ -175,12 +172,11 @@ fn parse_tile_part<'a>(
 
     loop {
         let Some(marker) = reader.peek_marker() else {
-            warn!(
-                "expected marker in tile-part, but didn't find one. tile \
-            part will be ignored."
-            );
-
-            return Ok(());
+            if main_header.strict {
+                return Err("failed to parse tile part");
+            } else {
+                return Ok(());
+            }
         };
 
         match marker {
@@ -203,10 +199,6 @@ fn parse_tile_part<'a>(
                     component.coding_style.flags.raw |= cod.component_parameters.flags.raw;
                     component.coding_style.parameters = cod.component_parameters.clone().parameters;
                 }
-
-                if !first {
-                    warn!("encountered unexpected COD marker in tile-part header");
-                }
             }
             markers::COC => {
                 reader.read_marker()?;
@@ -222,10 +214,6 @@ fn parse_tile_part<'a>(
 
                 old.coding_style.parameters = coc.parameters;
                 old.coding_style.flags.raw |= coc.flags.raw;
-
-                if !first {
-                    warn!("encountered unexpected COC marker in tile-part header");
-                }
             }
             markers::QCD => {
                 reader.read_marker()?;
@@ -234,10 +222,6 @@ fn parse_tile_part<'a>(
 
                 for component_info in &mut tile.component_infos {
                     component_info.quantization_info = qcd.clone();
-                }
-
-                if !first {
-                    warn!("encountered unexpected QCD marker in tile-part header");
                 }
             }
             markers::QCC => {
@@ -250,10 +234,6 @@ fn parse_tile_part<'a>(
                     .get_mut(component_index as usize)
                     .ok_or("invalid component index in tile-part header")?
                     .quantization_info = qcc.clone();
-
-                if !first {
-                    warn!("encountered unexpected QCC marker in tile-part header");
-                }
             }
             markers::EOC => break,
             markers::PPT => {
@@ -280,9 +260,11 @@ fn parse_tile_part<'a>(
     let remaining_bytes = if let Some(len) = data_len.checked_sub(reader.offset() - start) {
         len
     } else {
-        warn!("didn't find sufficient data in tile part");
-
-        return Ok(());
+        return if main_header.strict {
+            Err("didn't find sufficient data in tile part")
+        } else {
+            Ok(())
+        };
     };
 
     let final_data = reader
@@ -785,6 +767,7 @@ mod tests {
                 },
             },
             component_infos: vec![],
+            strict: false,
         };
 
         let tile_0_0 = Tile::new(0, &header);
