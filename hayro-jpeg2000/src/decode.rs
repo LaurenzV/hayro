@@ -699,8 +699,6 @@ fn get_code_block_data_inner<'a>(
         }
 
         // TODO: What to do with the note below B.10.3?
-
-        reader.read_stuff_bit_if_necessary()?;
         reader.align();
 
         let read_packet_body = |reader: &mut BitReader<'a>| {

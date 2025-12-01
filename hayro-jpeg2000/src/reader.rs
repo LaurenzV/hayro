@@ -129,28 +129,30 @@ impl<'a> BitReader<'a> {
         let mut bit = 0;
 
         for _ in 0..bit_size {
-            self.read_stuff_bit_if_necessary()?;
+            let needs_stuff_bit = self.needs_to_read_stuff_bit();
+
             bit = (bit << 1) | self.read_bit()?;
+
+            if needs_stuff_bit {
+                self.read_stuff_bit()?;
+            }
         }
 
         Some(bit)
     }
 
-    #[inline]
-    pub(crate) fn read_stuff_bit_if_necessary(&mut self) -> Option<()> {
+    pub(crate) fn needs_to_read_stuff_bit(&mut self) -> bool {
         // B.10.1: "If the value of the byte is 0xFF, the next byte includes an extra zero bit
-        // stuffed into the MSB.
-        // Check if the next bit is at a new byte boundary."
-        if self.bit_pos() == 0 && self.byte_pos() > 0 {
-            let last_byte = self.data[self.byte_pos() - 1];
+        // stuffed into the MSB."
+        self.bit_pos() == 7 && self.data[self.byte_pos()] == 0xff
+    }
 
-            if last_byte == 0xff {
-                let stuff_bit = self.read_bit()?;
+    #[inline]
+    pub(crate) fn read_stuff_bit(&mut self) -> Option<()> {
+        let stuff_bit = self.read_bit()?;
 
-                if stuff_bit != 0 {
-                    return None;
-                }
-            }
+        if stuff_bit != 0 {
+            return None;
         }
 
         Some(())
