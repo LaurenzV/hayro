@@ -63,7 +63,12 @@ pub(crate) fn decode(
 
     // See issue 399. If this subtraction fails the file is in theory invalid,
     // but we still try to be lenient.
-    num_bitplanes = num_bitplanes.saturating_sub(code_block.missing_bit_planes);
+    num_bitplanes = if strict {
+        num_bitplanes.checked_sub(code_block.missing_bit_planes)
+            .ok_or("number of missing bit planes was too hgh")?
+    }   else {
+        num_bitplanes.saturating_sub(code_block.missing_bit_planes)
+    };
 
     if num_bitplanes == 0 {
         return Ok(());
