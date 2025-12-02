@@ -63,7 +63,7 @@ fn build_decompositions(
                 );
 
                 let precincts =
-                    build_precincts(&resolution_tile, sub_band_rect, tile_ctx, storage)?;
+                    build_precincts(resolution_tile, sub_band_rect, tile_ctx, storage)?;
 
                 let added_coefficients = (sub_band_rect.width() * sub_band_rect.height()) as usize;
                 let coefficients = coefficient_counter..(coefficient_counter + added_coefficients);
