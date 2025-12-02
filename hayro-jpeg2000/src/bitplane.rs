@@ -14,26 +14,6 @@ use crate::codestream::CodeBlockStyle;
 use crate::decode::{CodeBlock, DecompositionStorage, SubBandType, TileDecodeContext};
 use crate::reader::BitReader;
 
-#[derive(Default)]
-pub(crate) struct BitPlaneDecodeBuffers {
-    combined_layers: Vec<u8>,
-    segment_ranges: Vec<usize>,
-    segment_coding_passes: Vec<u8>,
-}
-
-impl BitPlaneDecodeBuffers {
-    fn reset(&mut self) {
-        self.combined_layers.clear();
-        self.segment_ranges.clear();
-        self.segment_coding_passes.clear();
-
-        // The design of these two buffers is that the ranges are stored
-        // as [idx, idx + 1), so we need to store the first 0 when resetting.
-        self.segment_ranges.push(0);
-        self.segment_coding_passes.push(0);
-    }
-}
-
 /// Decode the layers of the given code block into coefficients.
 ///
 /// The result will be stored in the form of a vector of signs and magnitudes
@@ -47,10 +27,22 @@ pub(crate) fn decode(
     storage: &DecompositionStorage,
     strict: bool,
 ) -> Result<(), &'static str> {
-    tile_ctx.bit_plane_decode_context.reset(code_block, sub_band_type, style, total_bitplanes, strict)?;
+    tile_ctx.bit_plane_decode_context.reset(
+        code_block,
+        sub_band_type,
+        style,
+        total_bitplanes,
+        strict,
+    )?;
     tile_ctx.bit_plane_decode_buffers.reset();
 
-    decode_inner(code_block, storage, &mut tile_ctx.bit_plane_decode_context, &mut tile_ctx.bit_plane_decode_buffers).ok_or("failed to decode code-block")?;
+    decode_inner(
+        code_block,
+        storage,
+        &mut tile_ctx.bit_plane_decode_context,
+        &mut tile_ctx.bit_plane_decode_buffers,
+    )
+    .ok_or("failed to decode code-block")?;
 
     Ok(())
 }
@@ -379,6 +371,26 @@ impl NeighborSignificances {
     }
 }
 
+#[derive(Default)]
+pub(crate) struct BitPlaneDecodeBuffers {
+    combined_layers: Vec<u8>,
+    segment_ranges: Vec<usize>,
+    segment_coding_passes: Vec<u8>,
+}
+
+impl BitPlaneDecodeBuffers {
+    fn reset(&mut self) {
+        self.combined_layers.clear();
+        self.segment_ranges.clear();
+        self.segment_coding_passes.clear();
+
+        // The design of these two buffers is that the ranges are stored
+        // as [idx, idx + 1), so we need to store the first 0 when resetting.
+        self.segment_ranges.push(0);
+        self.segment_coding_passes.push(0);
+    }
+}
+
 pub(crate) struct BitPlaneDecodeContext {
     /// A vector of bit-packed fields for each coefficient in the code-block.
     coefficient_states: Vec<CoefficientState>,
@@ -585,17 +597,16 @@ impl BitPlaneDecodeContext {
     }
 
     #[inline]
-    fn neighbor_in_next_stripe(&self, pos: Position, neighbor_y: u32) -> bool {
-        neighbor_y < self.height && (neighbor_y >> 2) > (pos.real_y() >> 2)
+    fn neighbor_in_next_stripe(&self, pos: Position) -> bool {
+        let neighbor = pos.bottom();
+        neighbor.real_y() < self.height && (neighbor.real_y() >> 2) > (pos.real_y() >> 2)
     }
 
     #[inline]
     fn neighborhood_significance_states(&self, pos: Position) -> u8 {
         let neighbors = &self.neighbor_significances[pos.index(self.padded_width)];
 
-        if self.style.vertically_causal_context
-            && self.neighbor_in_next_stripe(pos, pos.real_y() + 1)
-        {
+        if self.style.vertically_causal_context && self.neighbor_in_next_stripe(pos) {
             neighbors.all_without_bottom()
         } else {
             neighbors.all()
@@ -604,6 +615,7 @@ impl BitPlaneDecodeContext {
 }
 
 /// Perform the cleanup pass, specified in D.3.4.
+///
 /// See also the flow chart in Figure 7.3 in the JPEG2000 book.
 fn cleanup_pass(ctx: &mut BitPlaneDecodeContext, decoder: &mut impl BitDecoder) -> Option<()> {
     for_each_position(
@@ -864,8 +876,7 @@ fn decode_sign_bit<T: BitDecoder>(
         // significances as well as signs of the four neighbors (i.e. not
         // including the diagonal neighbors) and based on what the sum of signs
         // is, we assign a context label.
-        let suppress_lower = ctx.style.vertically_causal_context
-            && ctx.neighbor_in_next_stripe(pos, pos.real_y() + 1);
+
         // First, let's get all neighbor significances and mask out the diagonals.
         let significances = ctx.neighborhood_significance_states(pos) & 0b0101_0101;
 
@@ -873,7 +884,8 @@ fn decode_sign_bit<T: BitDecoder>(
         let left_sign = ctx.sign(pos.left());
         let right_sign = ctx.sign(pos.right());
         let top_sign = ctx.sign(pos.top());
-        let bottom_sign = if suppress_lower {
+        let bottom_sign = if ctx.style.vertically_causal_context && ctx.neighbor_in_next_stripe(pos)
+        {
             0
         } else {
             ctx.sign(pos.bottom())
@@ -1025,10 +1037,9 @@ impl BitDecoder for BypassDecoder<'_> {
 
     fn read_bit(&mut self, _: &mut ArithmeticDecoderContext) -> Option<u32> {
         self.0.read_bits_with_stuffing(1).or({
-            
             if !self.1 {
-                // If not in strict mode, just pad with ones. Not sure if 
-                // zeroes would be better here, but since the arithmetic decoder 
+                // If not in strict mode, just pad with ones. Not sure if
+                // zeroes would be better here, but since the arithmetic decoder
                 // is also padded with 0xFF maybe 1 is the better choice?
                 Some(1)
             } else {

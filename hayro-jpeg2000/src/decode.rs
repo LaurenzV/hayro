@@ -1004,8 +1004,7 @@ fn decode_sub_band_bitplanes(
     };
 
     let num_bitplanes = {
-        let (exponent, _) =
-            component_info.exponent_mantissa(sub_band.sub_band_type, resolution);
+        let (exponent, _) = component_info.exponent_mantissa(sub_band.sub_band_type, resolution);
         // Equation (E-2)
         u8::try_from(component_info.quantization_info.guard_bits as u16 + exponent - 1)
             .map_err(|_| "number of bitplanes is too large")?
