@@ -284,11 +284,11 @@ pub(crate) struct Layer {
 /// across different tiles.
 #[derive(Default)]
 pub(crate) struct DecompositionStorage<'a> {
-    segments: Vec<Segment<'a>>,
-    layers: Vec<Layer>,
-    code_blocks: Vec<CodeBlock>,
-    precincts: Vec<Precinct>,
-    tag_tree_nodes: Vec<TagNode>,
+    pub(crate) segments: Vec<Segment<'a>>,
+    pub(crate) layers: Vec<Layer>,
+    pub(crate) code_blocks: Vec<CodeBlock>,
+    pub(crate) precincts: Vec<Precinct>,
+    pub(crate) tag_tree_nodes: Vec<TagNode>,
     pub(crate) coefficients: Vec<f32>,
     pub(crate) sub_bands: Vec<SubBand>,
     pub(crate) decompositions: Vec<Decomposition>,
@@ -979,7 +979,7 @@ fn decode_sub_band_bitplanes(
     storage: &mut DecompositionStorage,
     header: &Header,
 ) -> Result<(), &'static str> {
-    let sub_band = &mut storage.sub_bands[sub_band_idx];
+    let sub_band = &storage.sub_bands[sub_band_idx];
 
     let dequantization_step = {
         if component_info.quantization_info.quantization_style == QuantizationStyle::NoQuantization
@@ -1030,8 +1030,7 @@ fn decode_sub_band_bitplanes(
                 &component_info.coding_style.parameters.code_block_style,
                 b_ctx,
                 bp_buffers,
-                &storage.layers[code_block.layers.start..code_block.layers.end],
-                &storage.segments,
+                &storage,
                 header.strict,
             )?;
 
