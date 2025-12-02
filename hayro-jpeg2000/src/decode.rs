@@ -5,7 +5,7 @@
 //! component channels.
 
 use crate::bitmap::ChannelData;
-use crate::bitplane::{BitPlaneDecodeBuffers, CodeBlockDecodeContext};
+use crate::bitplane::{BitPlaneDecodeBuffers, BitPlaneDecodeContext};
 use crate::codestream::markers::{EPH, SOP};
 use crate::codestream::{
     ComponentInfo, Header, ProgressionOrder, QuantizationStyle, ReaderExt, WaveletTransform,
@@ -323,7 +323,7 @@ pub(crate) struct TileDecodeContext<'a> {
     /// A scratch buffer used during IDWT.
     pub(crate) idwt_scratch_buffer: Vec<f32>,
     /// A reusable context for decoding code blocks.
-    pub(crate) code_block_decode_context: CodeBlockDecodeContext,
+    pub(crate) bit_plane_decode_context: BitPlaneDecodeContext,
     /// Reusable buffers for decoding bitplanes.
     pub(crate) bit_plane_decode_buffers: BitPlaneDecodeBuffers,
     /// The raw, decoded samples for each channel.
@@ -352,7 +352,7 @@ impl<'a> TileDecodeContext<'a> {
             tile: initial_tile,
             idwt_scratch_buffer: vec![],
             idwt_output: IDWTOutput::dummy(),
-            code_block_decode_context: Default::default(),
+            bit_plane_decode_context: Default::default(),
             bit_plane_decode_buffers: Default::default(),
             channel_data,
         }
@@ -958,8 +958,7 @@ fn decode_bitplanes<'a>(
                     sub_band_idx,
                     resolution,
                     component_info,
-                    &mut tile_ctx.code_block_decode_context,
-                    &mut tile_ctx.bit_plane_decode_buffers,
+                    tile_ctx,
                     storage,
                     header,
                 )?;
@@ -974,8 +973,7 @@ fn decode_sub_band_bitplanes(
     sub_band_idx: usize,
     resolution: u16,
     component_info: &ComponentInfo,
-    b_ctx: &mut CodeBlockDecodeContext,
-    bp_buffers: &mut BitPlaneDecodeBuffers,
+    tile_ctx: &mut TileDecodeContext,
     storage: &mut DecompositionStorage,
     header: &Header,
 ) -> Result<(), &'static str> {
@@ -1005,6 +1003,14 @@ fn decode_sub_band_bitplanes(
         }
     };
 
+    let num_bitplanes = {
+        let (exponent, _) =
+            component_info.exponent_mantissa(sub_band.sub_band_type, resolution);
+        // Equation (E-2)
+        u8::try_from(component_info.quantization_info.guard_bits as u16 + exponent - 1)
+            .map_err(|_| "number of bitplanes is too large")?
+    };
+
     for precinct in sub_band
         .precincts
         .clone()
@@ -1015,21 +1021,12 @@ fn decode_sub_band_bitplanes(
             .clone()
             .map(|idx| &storage.code_blocks[idx])
         {
-            let num_bitplanes = {
-                let (exponent, _) =
-                    component_info.exponent_mantissa(sub_band.sub_band_type, resolution);
-                // Equation (E-2)
-                u8::try_from(component_info.quantization_info.guard_bits as u16 + exponent - 1)
-                    .map_err(|_| "number of bitplanes is too large")?
-            };
-
             bitplane::decode(
                 code_block,
                 sub_band.sub_band_type,
                 num_bitplanes,
                 &component_info.coding_style.parameters.code_block_style,
-                b_ctx,
-                bp_buffers,
+                tile_ctx,
                 storage,
                 header.strict,
             )?;
@@ -1043,7 +1040,7 @@ fn decode_sub_band_bitplanes(
             let base_store = &mut storage.coefficients[sub_band.coefficients.clone()];
             let mut base_idx = (y_offset * sub_band.rect.width()) as usize + x_offset as usize;
 
-            for coefficients in b_ctx.coefficient_rows() {
+            for coefficients in tile_ctx.bit_plane_decode_context.coefficient_rows() {
                 let out_row = &mut base_store[base_idx..];
 
                 for (output, coefficient) in out_row.iter_mut().zip(coefficients.iter().copied()) {

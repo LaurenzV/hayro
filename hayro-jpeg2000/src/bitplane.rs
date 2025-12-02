@@ -11,7 +11,7 @@
 
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use crate::codestream::CodeBlockStyle;
-use crate::decode::{CodeBlock, DecompositionStorage, SubBandType};
+use crate::decode::{CodeBlock, DecompositionStorage, SubBandType, TileDecodeContext};
 use crate::reader::BitReader;
 
 #[derive(Default)]
@@ -37,29 +37,27 @@ impl BitPlaneDecodeBuffers {
 ///
 /// The result will be stored in the form of a vector of signs and magnitudes
 /// in the bitplane decoder context.
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn decode(
     code_block: &CodeBlock,
     sub_band_type: SubBandType,
     total_bitplanes: u8,
     style: &CodeBlockStyle,
-    ctx: &mut CodeBlockDecodeContext,
-    bp_buffers: &mut BitPlaneDecodeBuffers,
+    tile_ctx: &mut TileDecodeContext,
     storage: &DecompositionStorage,
     strict: bool,
 ) -> Result<(), &'static str> {
-    ctx.reset(code_block, sub_band_type, style, total_bitplanes, strict)?;
+    tile_ctx.bit_plane_decode_context.reset(code_block, sub_band_type, style, total_bitplanes, strict)?;
+    tile_ctx.bit_plane_decode_buffers.reset();
 
-    decode_inner(code_block, storage, ctx, bp_buffers).ok_or("failed to decode code-block")?;
+    decode_inner(code_block, storage, &mut tile_ctx.bit_plane_decode_context, &mut tile_ctx.bit_plane_decode_buffers).ok_or("failed to decode code-block")?;
 
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
 fn decode_inner(
     code_block: &CodeBlock,
     storage: &DecompositionStorage,
-    ctx: &mut CodeBlockDecodeContext,
+    ctx: &mut BitPlaneDecodeContext,
     bp_buffers: &mut BitPlaneDecodeBuffers,
 ) -> Option<()> {
     bp_buffers.reset();
@@ -161,7 +159,7 @@ fn decode_inner(
 fn handle_coding_passes(
     start: u8,
     end: u8,
-    ctx: &mut CodeBlockDecodeContext,
+    ctx: &mut BitPlaneDecodeContext,
     decoder: &mut impl BitDecoder,
 ) -> Option<()> {
     for coding_pass in start..end {
@@ -381,7 +379,7 @@ impl NeighborSignificances {
     }
 }
 
-pub(crate) struct CodeBlockDecodeContext {
+pub(crate) struct BitPlaneDecodeContext {
     /// A vector of bit-packed fields for each coefficient in the code-block.
     coefficient_states: Vec<CoefficientState>,
     /// The neighbor significances for each coefficient.
@@ -409,7 +407,7 @@ pub(crate) struct CodeBlockDecodeContext {
     contexts: [ArithmeticDecoderContext; 19],
 }
 
-impl Default for CodeBlockDecodeContext {
+impl Default for BitPlaneDecodeContext {
     fn default() -> Self {
         Self {
             coefficient_states: vec![],
@@ -428,7 +426,7 @@ impl Default for CodeBlockDecodeContext {
     }
 }
 
-impl CodeBlockDecodeContext {
+impl BitPlaneDecodeContext {
     /// Completely reset context so that it can be reused for a new code-block.
     pub(crate) fn reset(
         &mut self,
@@ -610,7 +608,7 @@ impl CodeBlockDecodeContext {
 
 /// Perform the cleanup pass, specified in D.3.4.
 /// See also the flow chart in Figure 7.3 in the JPEG2000 book.
-fn cleanup_pass(ctx: &mut CodeBlockDecodeContext, decoder: &mut impl BitDecoder) -> Option<()> {
+fn cleanup_pass(ctx: &mut BitPlaneDecodeContext, decoder: &mut impl BitDecoder) -> Option<()> {
     for_each_position(
         ctx.width,
         ctx.height,
@@ -693,7 +691,7 @@ fn cleanup_pass(ctx: &mut CodeBlockDecodeContext, decoder: &mut impl BitDecoder)
 ///
 /// See also the flow chart in Figure 7.4 in the JPEG2000 book.
 fn significance_propagation_pass(
-    ctx: &mut CodeBlockDecodeContext,
+    ctx: &mut BitPlaneDecodeContext,
     decoder: &mut impl BitDecoder,
 ) -> Option<()> {
     for_each_position(
@@ -730,7 +728,7 @@ fn significance_propagation_pass(
 ///
 /// See also the flow chart in Figure 7.5 in the JPEG2000 book.
 fn magnitude_refinement_pass(
-    ctx: &mut CodeBlockDecodeContext,
+    ctx: &mut BitPlaneDecodeContext,
     decoder: &mut impl BitDecoder,
 ) -> Option<()> {
     for_each_position(
@@ -844,12 +842,12 @@ const ZERO_CTX_HH_LOOKUP: [u8; 256] = [
 #[inline(always)]
 fn decode_sign_bit<T: BitDecoder>(
     pos: Position,
-    ctx: &mut CodeBlockDecodeContext,
+    ctx: &mut BitPlaneDecodeContext,
     decoder: &mut T,
 ) -> Option<()> {
     /// Based on Table D.2.
     #[inline(always)]
-    fn context_label_sign_coding(pos: Position, ctx: &CodeBlockDecodeContext) -> (u8, u8) {
+    fn context_label_sign_coding(pos: Position, ctx: &BitPlaneDecodeContext) -> (u8, u8) {
         // A lot of subtleties going on here, all in the interest of achieving
         // the best performance. Fundamentally, we need to determine the
         // significances as well as signs of the four neighbors (i.e. not
@@ -898,7 +896,7 @@ fn decode_sign_bit<T: BitDecoder>(
 
 /// Return the context label for zero coding (Section D.3.1).
 #[inline(always)]
-fn context_label_zero_coding(pos: Position, ctx: &CodeBlockDecodeContext) -> u8 {
+fn context_label_zero_coding(pos: Position, ctx: &BitPlaneDecodeContext) -> u8 {
     let neighbors = ctx.neighborhood_significance_states(pos);
 
     match ctx.sub_band_type {
@@ -909,7 +907,7 @@ fn context_label_zero_coding(pos: Position, ctx: &CodeBlockDecodeContext) -> u8 
 }
 
 /// Return the context label for magnitude refinement coding (Table D.4).
-fn context_label_magnitude_refinement_coding(pos: Position, ctx: &CodeBlockDecodeContext) -> u8 {
+fn context_label_magnitude_refinement_coding(pos: Position, ctx: &BitPlaneDecodeContext) -> u8 {
     // If magnitude refined, then 16.
     let m1 = ctx.magnitude_refinement(pos) * 16;
     // Else: If at least one neighbor is significant then 15, else 14.
