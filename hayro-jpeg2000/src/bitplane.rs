@@ -24,11 +24,11 @@ impl BitPlaneDecodeBuffers {
     fn reset(&mut self) {
         self.combined_layers.clear();
         self.segment_ranges.clear();
+        self.segment_coding_passes.clear();
 
         // The design of these two buffers is that the ranges are stored
         // as [idx, idx + 1), so we need to store the first 0 when resetting.
         self.segment_ranges.push(0);
-        self.segment_coding_passes.clear();
         self.segment_coding_passes.push(0);
     }
 }
@@ -63,9 +63,10 @@ pub(crate) fn decode(
     // See issue 399. If this subtraction fails the file is in theory invalid,
     // but we still try to be lenient.
     num_bitplanes = if strict {
-        num_bitplanes.checked_sub(code_block.missing_bit_planes)
+        num_bitplanes
+            .checked_sub(code_block.missing_bit_planes)
             .ok_or("number of missing bit planes was too hgh")?
-    }   else {
+    } else {
         num_bitplanes.saturating_sub(code_block.missing_bit_planes)
     };
 
@@ -85,7 +86,6 @@ pub(crate) fn decode(
 
     decode_inner(
         code_block,
-        style,
         num_bitplanes,
         max_coding_passes,
         storage,
@@ -101,7 +101,6 @@ pub(crate) fn decode(
 #[allow(clippy::too_many_arguments)]
 fn decode_inner(
     code_block: &CodeBlock,
-    style: &CodeBlockStyle,
     num_bitplanes: u8,
     max_coding_passes: u8,
     storage: &DecompositionStorage,
@@ -142,7 +141,7 @@ fn decode_inner(
     bp_buffers.segment_coding_passes.push(coding_passes);
 
     let is_normal_mode =
-        !style.selective_arithmetic_coding_bypass && !style.termination_on_each_pass;
+        !ctx.style.selective_arithmetic_coding_bypass && !ctx.style.termination_on_each_pass;
 
     if is_normal_mode {
         // Only one termination per code block, so we can just decode the
@@ -151,7 +150,6 @@ fn decode_inner(
         handle_coding_passes(
             0,
             code_block.number_of_coding_passes.min(max_coding_passes),
-            style,
             ctx,
             &mut decoder,
             strict,
@@ -170,7 +168,7 @@ fn decode_inner(
             let data = &bp_buffers.combined_layers
                 [bp_buffers.segment_ranges[segment]..bp_buffers.segment_ranges[segment + 1]];
 
-            let use_arithmetic = if style.selective_arithmetic_coding_bypass {
+            let use_arithmetic = if ctx.style.selective_arithmetic_coding_bypass {
                 if start_coding_pass <= 9 {
                     true
                 } else {
@@ -186,7 +184,6 @@ fn decode_inner(
                 handle_coding_passes(
                     start_coding_pass,
                     end_coding_pass,
-                    style,
                     ctx,
                     &mut decoder,
                     strict,
@@ -196,7 +193,6 @@ fn decode_inner(
                 handle_coding_passes(
                     start_coding_pass,
                     end_coding_pass,
-                    style,
                     ctx,
                     &mut decoder,
                     strict,
@@ -222,7 +218,6 @@ fn decode_inner(
 fn handle_coding_passes(
     start: u8,
     end: u8,
-    style: &CodeBlockStyle,
     ctx: &mut CodeBlockDecodeContext,
     decoder: &mut impl BitDecoder,
     strict: bool,
@@ -247,7 +242,7 @@ fn handle_coding_passes(
             PassType::Cleanup => {
                 cleanup_pass(ctx, decoder)?;
 
-                if style.segmentation_symbols {
+                if ctx.style.segmentation_symbols {
                     let b0 = decoder.read_bit(ctx.arithmetic_decoder_context(18))?;
                     let b1 = decoder.read_bit(ctx.arithmetic_decoder_context(18))?;
                     let b2 = decoder.read_bit(ctx.arithmetic_decoder_context(18))?;
@@ -268,7 +263,7 @@ fn handle_coding_passes(
             }
         }
 
-        if style.reset_context_probabilities {
+        if ctx.style.reset_context_probabilities {
             ctx.reset_contexts();
         }
     }
@@ -458,8 +453,8 @@ pub(crate) struct CodeBlockDecodeContext {
     padded_width: u32,
     /// The height of the code-block we are processing.
     height: u32,
-    /// Whether the vertical causal flag is enabled.
-    vertically_causal: bool,
+    /// The code-block style for the current code-block.
+    style: CodeBlockStyle,
     /// The type of sub-band the current code block belongs to.
     sub_band_type: SubBandType,
     /// The arithmetic decoder contexts for each context label.
@@ -475,7 +470,7 @@ impl Default for CodeBlockDecodeContext {
             width: 0,
             padded_width: COEFFICIENTS_PADDING * 2,
             height: 0,
-            vertically_causal: false,
+            style: CodeBlockStyle::default(),
             sub_band_type: SubBandType::LowLow,
             contexts: [ArithmeticDecoderContext::default(); 19],
         }
@@ -511,7 +506,7 @@ impl CodeBlockDecodeContext {
         self.padded_width = padded_width;
         self.height = height;
         self.sub_band_type = sub_band_type;
-        self.vertically_causal = code_block_style.vertically_causal_context;
+        self.style = *code_block_style;
         self.reset_contexts();
     }
 
@@ -622,7 +617,9 @@ impl CodeBlockDecodeContext {
     fn neighborhood_significance_states(&self, pos: Position) -> u8 {
         let neighbors = &self.neighbor_significances[pos.index(self.padded_width)];
 
-        if self.vertically_causal && self.neighbor_in_next_stripe(pos, pos.real_y() + 1) {
+        if self.style.vertically_causal_context
+            && self.neighbor_in_next_stripe(pos, pos.real_y() + 1)
+        {
             neighbors.all_without_bottom()
         } else {
             neighbors.all()
@@ -877,8 +874,8 @@ fn decode_sign_bit<T: BitDecoder>(
         // significances as well as signs of the four neighbors (i.e. not
         // including the diagonal neighbors) and based on what the sum of signs
         // is, we assign a context label.
-        let suppress_lower =
-            ctx.vertically_causal && ctx.neighbor_in_next_stripe(pos, pos.real_y() + 1);
+        let suppress_lower = ctx.style.vertically_causal_context
+            && ctx.neighbor_in_next_stripe(pos, pos.real_y() + 1);
         // First, let's get all neighbor significances and mask out the diagonals.
         let significances = ctx.neighborhood_significance_states(pos) & 0b0101_0101;
 
