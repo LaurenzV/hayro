@@ -215,13 +215,13 @@ fn filter_2d(
     transform: WaveletTransform,
     storage: &DecompositionStorage,
 ) -> IDWTTempOutput {
-    // First interleave all of the sub-bands into a single buffer. We also
+    // First interleave all sub-bands into a single buffer. We also
     // apply a padding so that we can transparently deal with border values.
     let padding = interleave_samples(input, decomposition, coefficients, transform, storage);
 
     if decomposition.rect.width() > 0 && decomposition.rect.height() > 0 {
         filter_horizontal(coefficients, padding, decomposition.rect, transform);
-        simd::filter_vertical_simd(coefficients, padding, decomposition.rect, transform);
+        simd::filter_vertical(coefficients, padding, decomposition.rect, transform);
     }
 
     IDWTTempOutput {
@@ -531,19 +531,19 @@ mod simd {
     const SIMD_WIDTH: usize = super::SIMD_WIDTH;
     type F32<S> = f32x8<S>;
 
-    pub(super) fn filter_vertical_simd(
+    /// The VER_SR procedure from F.3.5.
+    pub(super) fn filter_vertical(
         coefficients: &mut [f32],
         padding: Padding,
         rect: IntRect,
         transform: WaveletTransform,
     ) {
         let level = Level::new();
-        dispatch!(level, simd => filter_vertical_simd_impl(simd, coefficients, padding, rect, transform));
+        dispatch!(level, simd => filter_vertical_impl(simd, coefficients, padding, rect, transform));
     }
 
-    /// The VER_SR procedure from F.3.5.
     #[inline(always)]
-    fn filter_vertical_simd_impl<S: Simd>(
+    fn filter_vertical_impl<S: Simd>(
         simd: S,
         coefficients: &mut [f32],
         padding: Padding,
@@ -551,7 +551,7 @@ mod simd {
         transform: WaveletTransform,
     ) {
         let total_width = rect.width() as usize + padding.left + padding.right;
-        filter_rows_simd(
+        filter_rows(
             simd,
             coefficients,
             padding.top,
@@ -561,9 +561,9 @@ mod simd {
         );
     }
 
-    /// The 1D_SR procedure from F.3.6.
+    /// The 1D_SR procedure from F.3.6, but using SIMD.
     #[inline(always)]
-    fn filter_rows_simd<S: Simd>(
+    fn filter_rows<S: Simd>(
         simd: S,
         scanline: &mut [f32],
         start: usize,
@@ -587,21 +587,21 @@ mod simd {
             return;
         }
 
-        extend_signal_simd(simd, scanline, start, end, stride, transform);
+        extend_signal(simd, scanline, start, end, stride, transform);
 
         match transform {
             WaveletTransform::Reversible53 => {
-                reversible_filter_53r_simd(simd, scanline, start, end, stride);
+                reversible_filter_53r(simd, scanline, start, end, stride);
             }
             WaveletTransform::Irreversible97 => {
-                irreversible_filter_97i_simd(simd, scanline, start, end, stride);
+                irreversible_filter_97i(simd, scanline, start, end, stride);
             }
         }
     }
 
     /// The 1D_EXTR procedure, defined in F.3.7.
     #[inline(always)]
-    fn extend_signal_simd<S: Simd>(
+    fn extend_signal<S: Simd>(
         simd: S,
         scanline: &mut [f32],
         start: usize,
@@ -633,7 +633,7 @@ mod simd {
 
     /// The 1D FILTER 5-3R procedure from F.3.8.1.
     #[inline(always)]
-    fn reversible_filter_53r_simd<S: Simd>(
+    fn reversible_filter_53r<S: Simd>(
         simd: S,
         scanline: &mut [f32],
         start: usize,
@@ -671,9 +671,9 @@ mod simd {
         }
     }
 
-    /// The 1D Filter 9-7I procedure from F.3.8.2 executed with SIMD.
+    /// The 1D Filter 9-7I procedure from F.3.8.2.
     #[inline(always)]
-    fn irreversible_filter_97i_simd<S: Simd>(
+    fn irreversible_filter_97i<S: Simd>(
         simd: S,
         scanline: &mut [f32],
         start: usize,
@@ -779,23 +779,23 @@ mod simd {
 
     const SIMD_WIDTH: usize = super::SIMD_WIDTH;
 
-    pub(super) fn filter_vertical_simd(
+    pub(super) fn filter_vertical(
         coefficients: &mut [f32],
         padding: Padding,
         rect: IntRect,
         transform: WaveletTransform,
     ) {
-        filter_vertical_simd_impl(coefficients, padding, rect, transform);
+        filter_vertical_impl(coefficients, padding, rect, transform);
     }
 
-    fn filter_vertical_simd_impl(
+    fn filter_vertical_impl(
         coefficients: &mut [f32],
         padding: Padding,
         rect: IntRect,
         transform: WaveletTransform,
     ) {
         let total_width = rect.width() as usize + padding.left + padding.right;
-        filter_rows_simd(
+        filter_rows(
             coefficients,
             padding.top,
             padding.top + rect.height() as usize,
@@ -804,7 +804,7 @@ mod simd {
         );
     }
 
-    fn filter_rows_simd(
+    fn filter_rows(
         scanline: &mut [f32],
         start: usize,
         end: usize,
@@ -822,19 +822,19 @@ mod simd {
             return;
         }
 
-        extend_signal_simd(scanline, start, end, stride, transform);
+        extend_signal(scanline, start, end, stride, transform);
 
         match transform {
             WaveletTransform::Reversible53 => {
-                reversible_filter_53r_simd(scanline, start, end, stride);
+                reversible_filter_53r(scanline, start, end, stride);
             }
             WaveletTransform::Irreversible97 => {
-                irreversible_filter_97i_simd(scanline, start, end, stride);
+                irreversible_filter_97i(scanline, start, end, stride);
             }
         }
     }
 
-    fn extend_signal_simd(
+    fn extend_signal(
         scanline: &mut [f32],
         start: usize,
         end: usize,
@@ -869,7 +869,7 @@ mod simd {
         });
     }
 
-    fn reversible_filter_53r_simd(scanline: &mut [f32], start: usize, end: usize, stride: usize) {
+    fn reversible_filter_53r(scanline: &mut [f32], start: usize, end: usize, stride: usize) {
         for n in start / 2..(end / 2) + 1 {
             let row_offset = 2 * n * stride;
             for_each_lane(row_offset, stride, |idx| {
@@ -891,7 +891,7 @@ mod simd {
         }
     }
 
-    fn irreversible_filter_97i_simd(scanline: &mut [f32], start: usize, end: usize, stride: usize) {
+    fn irreversible_filter_97i(scanline: &mut [f32], start: usize, end: usize, stride: usize) {
         const ALPHA: f32 = -1.586_134_3;
         const BETA: f32 = -0.052_980_117;
         const GAMMA: f32 = 0.882_911_1;
@@ -950,6 +950,7 @@ mod simd {
         }
     }
 
+    #[inline(always)]
     fn for_each_lane(row_offset: usize, stride: usize, mut func: impl FnMut(usize)) {
         for base_column in (0..stride).step_by(SIMD_WIDTH) {
             for lane in 0..SIMD_WIDTH {
