@@ -41,59 +41,16 @@ impl BitPlaneDecodeBuffers {
 pub(crate) fn decode(
     code_block: &CodeBlock,
     sub_band_type: SubBandType,
-    mut num_bitplanes: u8,
+    total_bitplanes: u8,
     style: &CodeBlockStyle,
     ctx: &mut CodeBlockDecodeContext,
     bp_buffers: &mut BitPlaneDecodeBuffers,
     storage: &DecompositionStorage,
     strict: bool,
 ) -> Result<(), &'static str> {
-    ctx.reset(code_block, sub_band_type, style);
+    ctx.reset(code_block, sub_band_type, style, total_bitplanes, strict)?;
 
-    if code_block.number_of_coding_passes == 0 {
-        return Ok(());
-    }
-
-    // "The maximum number of bit-planes available for the representation of
-    // coefficients in any sub-band, b, is given by Mb as defined in Equation
-    // (E-2). In general however, the number of actual bit-planes for which
-    // coding passes are generated is Mb – P, where the number of missing most
-    // significant bit-planes, P, may vary from code-block to code-block."
-
-    // See issue 399. If this subtraction fails the file is in theory invalid,
-    // but we still try to be lenient.
-    num_bitplanes = if strict {
-        num_bitplanes
-            .checked_sub(code_block.missing_bit_planes)
-            .ok_or("number of missing bit planes was too hgh")?
-    } else {
-        num_bitplanes.saturating_sub(code_block.missing_bit_planes)
-    };
-
-    if num_bitplanes == 0 {
-        return Ok(());
-    }
-
-    let max_coding_passes = if num_bitplanes == 1 {
-        1
-    } else {
-        1 + 3 * (num_bitplanes - 1)
-    };
-
-    if max_coding_passes < code_block.number_of_coding_passes && strict {
-        return Err("codeblock contains too many coding passes");
-    }
-
-    decode_inner(
-        code_block,
-        num_bitplanes,
-        max_coding_passes,
-        storage,
-        ctx,
-        bp_buffers,
-        strict,
-    )
-    .ok_or("failed to decode code-block")?;
+    decode_inner(code_block, storage, ctx, bp_buffers).ok_or("failed to decode code-block")?;
 
     Ok(())
 }
@@ -101,12 +58,9 @@ pub(crate) fn decode(
 #[allow(clippy::too_many_arguments)]
 fn decode_inner(
     code_block: &CodeBlock,
-    num_bitplanes: u8,
-    max_coding_passes: u8,
     storage: &DecompositionStorage,
     ctx: &mut CodeBlockDecodeContext,
     bp_buffers: &mut BitPlaneDecodeBuffers,
-    strict: bool,
 ) -> Option<()> {
     bp_buffers.reset();
 
@@ -149,10 +103,11 @@ fn decode_inner(
         let mut decoder = ArithmeticDecoder::new(&bp_buffers.combined_layers);
         handle_coding_passes(
             0,
-            code_block.number_of_coding_passes.min(max_coding_passes),
+            code_block
+                .number_of_coding_passes
+                .min(ctx.max_coding_passes),
             ctx,
             &mut decoder,
-            strict,
         )?;
     } else {
         // Otherwise, each segment introduces a termination. For selective
@@ -163,7 +118,7 @@ fn decode_inner(
         for segment in 0..bp_buffers.segment_coding_passes.len() - 1 {
             let start_coding_pass = bp_buffers.segment_coding_passes[segment];
             let end_coding_pass =
-                bp_buffers.segment_coding_passes[segment + 1].min(max_coding_passes);
+                bp_buffers.segment_coding_passes[segment + 1].min(ctx.max_coding_passes);
 
             let data = &bp_buffers.combined_layers
                 [bp_buffers.segment_ranges[segment]..bp_buffers.segment_ranges[segment + 1]];
@@ -181,22 +136,10 @@ fn decode_inner(
 
             if use_arithmetic {
                 let mut decoder = ArithmeticDecoder::new(data);
-                handle_coding_passes(
-                    start_coding_pass,
-                    end_coding_pass,
-                    ctx,
-                    &mut decoder,
-                    strict,
-                )?;
+                handle_coding_passes(start_coding_pass, end_coding_pass, ctx, &mut decoder)?;
             } else {
-                let mut decoder = BypassDecoder::new(data, strict);
-                handle_coding_passes(
-                    start_coding_pass,
-                    end_coding_pass,
-                    ctx,
-                    &mut decoder,
-                    strict,
-                )?;
+                let mut decoder = BypassDecoder::new(data, ctx.strict);
+                handle_coding_passes(start_coding_pass, end_coding_pass, ctx, &mut decoder)?;
             }
         }
     }
@@ -208,7 +151,7 @@ fn decode_inner(
         .iter_mut()
         .zip(ctx.coefficient_states.iter().copied())
     {
-        let count = num_bitplanes - coefficient_state.num_bitplanes();
+        let count = ctx.bitplanes - coefficient_state.num_bitplanes();
         coefficient.push_zeroes(count);
     }
 
@@ -220,7 +163,6 @@ fn handle_coding_passes(
     end: u8,
     ctx: &mut CodeBlockDecodeContext,
     decoder: &mut impl BitDecoder,
-    strict: bool,
 ) -> Option<()> {
     for coding_pass in start..end {
         enum PassType {
@@ -248,7 +190,7 @@ fn handle_coding_passes(
                     let b2 = decoder.read_bit(ctx.arithmetic_decoder_context(18))?;
                     let b3 = decoder.read_bit(ctx.arithmetic_decoder_context(18))?;
 
-                    if (b0 != 1 || b1 != 0 || b2 != 1 || b3 != 0) && strict {
+                    if (b0 != 1 || b1 != 0 || b2 != 1 || b3 != 0) && ctx.strict {
                         return None;
                     }
                 }
@@ -455,6 +397,12 @@ pub(crate) struct CodeBlockDecodeContext {
     height: u32,
     /// The code-block style for the current code-block.
     style: CodeBlockStyle,
+    /// The number of bitplanes (minus implicitly missing bitplanes) to decode.
+    bitplanes: u8,
+    /// Whether strict mode is enabled.
+    strict: bool,
+    /// The maximum number of coding passes to process.
+    max_coding_passes: u8,
     /// The type of sub-band the current code block belongs to.
     sub_band_type: SubBandType,
     /// The arithmetic decoder contexts for each context label.
@@ -471,6 +419,9 @@ impl Default for CodeBlockDecodeContext {
             padded_width: COEFFICIENTS_PADDING * 2,
             height: 0,
             style: CodeBlockStyle::default(),
+            bitplanes: 0,
+            max_coding_passes: 0,
+            strict: false,
             sub_band_type: SubBandType::LowLow,
             contexts: [ArithmeticDecoderContext::default(); 19],
         }
@@ -484,7 +435,9 @@ impl CodeBlockDecodeContext {
         code_block: &CodeBlock,
         sub_band_type: SubBandType,
         code_block_style: &CodeBlockStyle,
-    ) {
+        total_bitplanes: u8,
+        strict: bool,
+    ) -> Result<(), &'static str> {
         let (width, height) = (code_block.rect.width(), code_block.rect.height());
         let padded_width = width + COEFFICIENTS_PADDING * 2;
         let padded_height = height + COEFFICIENTS_PADDING * 2;
@@ -508,6 +461,34 @@ impl CodeBlockDecodeContext {
         self.sub_band_type = sub_band_type;
         self.style = *code_block_style;
         self.reset_contexts();
+
+        // "The maximum number of bit-planes available for the representation of
+        // coefficients in any sub-band, b, is given by Mb as defined in Equation
+        // (E-2). In general however, the number of actual bit-planes for which
+        // coding passes are generated is Mb – P, where the number of missing most
+        // significant bit-planes, P, may vary from code-block to code-block."
+
+        // See issue 399. If this subtraction fails the file is in theory invalid,
+        // but we still try to be lenient.
+        self.bitplanes = if strict {
+            total_bitplanes
+                .checked_sub(code_block.missing_bit_planes)
+                .ok_or("number of missing bit planes was too hgh")?
+        } else {
+            total_bitplanes.saturating_sub(code_block.missing_bit_planes)
+        };
+
+        self.max_coding_passes = if self.bitplanes == 0 {
+            0
+        } else {
+            1 + 3 * (self.bitplanes - 1)
+        };
+
+        if self.max_coding_passes < code_block.number_of_coding_passes && strict {
+            return Err("codeblock contains too many coding passes");
+        }
+
+        Ok(())
     }
 
     pub(crate) fn coefficient_rows(&self) -> impl Iterator<Item = &[Coefficient]> {
