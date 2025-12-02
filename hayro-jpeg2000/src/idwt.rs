@@ -143,7 +143,7 @@ pub(crate) fn apply(
     let mut use_scratch = decompositions.len().is_multiple_of(2);
 
     let mut temp_output = filter_2d(
-        IDWTInput::from_sub_band(ll_sub_band, &storage),
+        IDWTInput::from_sub_band(ll_sub_band, storage),
         if use_scratch {
             scratch_buf
         } else {
@@ -151,7 +151,7 @@ pub(crate) fn apply(
         },
         &decompositions[0],
         transform,
-        &storage,
+        storage,
     );
 
     for decomposition in decompositions.iter().skip(1) {
@@ -159,11 +159,11 @@ pub(crate) fn apply(
 
         temp_output = if use_scratch {
             filter_2d(
-                IDWTInput::from_output(&temp_output, &mut output.coefficients),
+                IDWTInput::from_output(&temp_output, &output.coefficients),
                 scratch_buf,
                 decomposition,
                 transform,
-                &storage,
+                storage,
             )
         } else {
             filter_2d(
@@ -171,7 +171,7 @@ pub(crate) fn apply(
                 &mut output.coefficients,
                 decomposition,
                 transform,
-                &storage,
+                storage,
             )
         };
     }

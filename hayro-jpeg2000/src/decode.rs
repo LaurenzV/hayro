@@ -1030,7 +1030,7 @@ fn decode_sub_band_bitplanes(
                 &component_info.coding_style.parameters.code_block_style,
                 b_ctx,
                 bp_buffers,
-                &storage,
+                storage,
                 header.strict,
             )?;
 
