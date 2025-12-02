@@ -820,7 +820,6 @@ fn get_code_block_lengths(
             reader.read_bits_with_stuffing(7)? + 37
         } else if reader.peak_bits_with_stuffing(4) == Some(0x0f) {
             reader.read_bits_with_stuffing(4)?;
-            // TODO: Validate that sequence is not 1111 1
             reader.read_bits_with_stuffing(5)? + 6
         } else if reader.peak_bits_with_stuffing(4) == Some(0b1110) {
             reader.read_bits_with_stuffing(4)?;
