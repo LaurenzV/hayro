@@ -1,12 +1,15 @@
 //! Building and setting up data structures for decoding a JPEG2000 codestream.
 
-use std::iter;
-use std::ops::Range;
-use log::trace;
-use crate::decode::{CodeBlock, Decomposition, DecompositionStorage, Layer, Precinct, SubBand, SubBandType, TileDecodeContext, TileDecompositions};
+use crate::decode::{
+    CodeBlock, Decomposition, DecompositionStorage, Layer, Precinct, SubBand, SubBandType,
+    TileDecodeContext, TileDecompositions,
+};
 use crate::rect::IntRect;
 use crate::tag_tree::TagTree;
 use crate::tile::{ResolutionTile, Tile};
+use log::trace;
+use std::iter;
+use std::ops::Range;
 
 /// Build and allocate all necessary structures to process the code-blocks
 /// for a specific tile. Also parses the segments for each code-block.
@@ -34,17 +37,20 @@ fn build_decompositions(
     let mut coefficient_counter = 0;
 
     for (component_idx, component_tile) in tile.component_tiles().enumerate() {
-        let start = storage.decompositions.len();
+        let d_start = storage.decompositions.len();
         let mut resolution_tiles = component_tile.resolution_tiles();
-        
-        let ll_sub_band = {
-            // Resolution 0 always is the LL sub-band.
-            let resolution_tile = resolution_tiles.next().unwrap();
-            let sub_band_type = SubBandType::LowLow;
-            let sub_band_rect = resolution_tile.sub_band_rect(sub_band_type);
 
-            trace!("making nLL for component {}", component_idx);
-            trace!(
+        let mut build_sub_band =
+            |sub_band_type: SubBandType,
+             resolution_tile: &ResolutionTile,
+             storage: &mut DecompositionStorage| {
+                let sub_band_rect = resolution_tile.sub_band_rect(sub_band_type);
+
+                trace!(
+                    "r {} making sub-band {} for component {component_idx}",
+                    resolution_tile.resolution, sub_band_type as u8
+                );
+                trace!(
                     "Sub-band rect: [{},{} {}x{}], ll rect [{},{} {}x{}]",
                     sub_band_rect.x0,
                     sub_band_rect.y0,
@@ -55,72 +61,35 @@ fn build_decompositions(
                     resolution_tile.rect.width(),
                     resolution_tile.rect.height(),
                 );
-            let precincts =
-                build_precincts(&resolution_tile, sub_band_rect, tile_ctx, storage)?;
 
-            let added_coefficients = (sub_band_rect.width() * sub_band_rect.height()) as usize;
-            let coefficients = coefficient_counter..(coefficient_counter + added_coefficients);
-            coefficient_counter += added_coefficients;
+                let precincts =
+                    build_precincts(&resolution_tile, sub_band_rect, tile_ctx, storage)?;
 
-            SubBand {
-                sub_band_type,
-                rect: sub_band_rect,
-                precincts,
-                coefficients,
-            }
-        };
-        
-        let first_ll_sub_band = storage.sub_bands.len();
-        storage.sub_bands.push(ll_sub_band);
-        
+                let added_coefficients = (sub_band_rect.width() * sub_band_rect.height()) as usize;
+                let coefficients = coefficient_counter..(coefficient_counter + added_coefficients);
+                coefficient_counter += added_coefficients;
+
+                let idx = storage.sub_bands.len();
+                storage.sub_bands.push(SubBand {
+                    sub_band_type,
+                    rect: sub_band_rect,
+                    precincts: precincts.clone(),
+                    coefficients,
+                });
+
+                Ok(idx)
+            };
+
+        // Resolution 0 always is the LL sub-band.
+        let ll_resolution_tile = resolution_tiles.next().unwrap();
+        let first_ll_sub_band = build_sub_band(SubBandType::LowLow, &ll_resolution_tile, storage)?;
+
         for resolution_tile in resolution_tiles {
-            let resolution = resolution_tile.resolution;
-            
-            let mut build_sub_band =
-                |sub_band_type: SubBandType, storage: &mut DecompositionStorage| {
-                    let sub_band_rect = resolution_tile.sub_band_rect(sub_band_type);
-
-                    trace!(
-                            "r {resolution} making sub-band {} for component {component_idx}",
-                            sub_band_type as u8
-                        );
-                    trace!(
-                            "Sub-band rect: [{},{} {}x{}], ll rect [{},{} {}x{}]",
-                            sub_band_rect.x0,
-                            sub_band_rect.y0,
-                            sub_band_rect.width(),
-                            sub_band_rect.height(),
-                            resolution_tile.rect.x0,
-                            resolution_tile.rect.y0,
-                            resolution_tile.rect.width(),
-                            resolution_tile.rect.height(),
-                        );
-
-                    let precincts =
-                        build_precincts(&resolution_tile, sub_band_rect, tile_ctx, storage)?;
-
-                    let added_coefficients =
-                        (sub_band_rect.width() * sub_band_rect.height()) as usize;
-                    let coefficients =
-                        coefficient_counter..(coefficient_counter + added_coefficients);
-                    coefficient_counter += added_coefficients;
-
-                    let idx = storage.sub_bands.len();
-                    storage.sub_bands.push(SubBand {
-                        sub_band_type,
-                        rect: sub_band_rect,
-                        precincts: precincts.clone(),
-                        coefficients,
-                    });
-
-                    Ok(idx)
-                };
-
             let decomposition = Decomposition {
                 sub_bands: [
-                    build_sub_band(SubBandType::HighLow, storage)?,
-                    build_sub_band(SubBandType::LowHigh, storage)?,
-                    build_sub_band(SubBandType::HighHigh, storage)?,
+                    build_sub_band(SubBandType::HighLow, &resolution_tile, storage)?,
+                    build_sub_band(SubBandType::LowHigh, &resolution_tile, storage)?,
+                    build_sub_band(SubBandType::HighHigh, &resolution_tile, storage)?,
                 ],
                 rect: resolution_tile.rect,
             };
@@ -128,10 +97,10 @@ fn build_decompositions(
             storage.decompositions.push(decomposition);
         }
 
-        let end = storage.decompositions.len();
+        let d_end = storage.decompositions.len();
 
         storage.tile_decompositions.push(TileDecompositions {
-            decompositions: start..end,
+            decompositions: d_start..d_end,
             first_ll_sub_band,
         });
     }

@@ -13,6 +13,7 @@ mod arithmetic_decoder;
 pub mod bitmap;
 pub(crate) mod bitplane;
 pub mod boxes;
+mod build;
 mod codestream;
 mod decode;
 mod icc;
@@ -22,7 +23,6 @@ pub(crate) mod reader;
 pub(crate) mod rect;
 mod tag_tree;
 mod tile;
-mod build;
 
 /// Image metadata extracted from JP2 Header box.
 #[derive(Debug, Clone)]

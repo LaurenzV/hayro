@@ -164,7 +164,11 @@ pub(crate) struct TileDecompositions {
 }
 
 impl TileDecompositions {
-    pub(crate) fn sub_band_iter(&self, resolution: u16, decompositions: &[Decomposition]) -> SubBandIter {
+    pub(crate) fn sub_band_iter(
+        &self,
+        resolution: u16,
+        decompositions: &[Decomposition],
+    ) -> SubBandIter {
         let indices = if resolution == 0 {
             [
                 self.first_ll_sub_band,
@@ -364,7 +368,6 @@ impl<'a> TileDecodeContext<'a> {
     }
 }
 
-
 fn get_code_block_data<'a>(
     tile: &'a Tile<'a>,
     mut progression_iterator: impl Iterator<Item = ProgressionData>,
@@ -379,7 +382,7 @@ fn get_code_block_data<'a>(
             tile_ctx,
             storage,
         )
-            .is_none()
+        .is_none()
             && header.strict
         {
             return Err("failed to fully process a tile part in tile");
@@ -800,12 +803,7 @@ fn segment_idx_for_bypass(pass_idx: u8) -> u8 {
     if pass_idx < 10 {
         0
     } else {
-        1 + (2 * ((pass_idx - 10) / 3))
-            + (if ((pass_idx - 10) % 3) == 2 {
-            1
-        } else {
-            0
-        })
+        1 + (2 * ((pass_idx - 10) / 3)) + (if ((pass_idx - 10) % 3) == 2 { 1 } else { 0 })
     }
 }
 
