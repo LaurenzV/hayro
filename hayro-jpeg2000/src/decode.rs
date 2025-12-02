@@ -21,10 +21,9 @@ use crate::progression::{
 use crate::reader::BitReader;
 use crate::rect::IntRect;
 use crate::tag_tree::{TagNode, TagTree};
-use crate::tile::{ComponentTile, ResolutionTile, Tile, TilePart};
-use crate::{bitplane, idwt, tile};
+use crate::tile::{ComponentTile, Tile, TilePart};
+use crate::{bitplane, build, idwt, tile};
 use log::trace;
-use std::iter;
 use std::ops::Range;
 
 pub(crate) fn decode(data: &[u8], header: &Header) -> Result<Vec<ChannelData>, &'static str> {
@@ -129,7 +128,7 @@ fn decode_tile<'a>(
 
     // First, we build the decompositions, including their sub-bands, precincts
     // and code blocks.
-    build_decompositions(tile, tile_ctx, storage)?;
+    build::build(tile, tile_ctx, storage)?;
     // Next, we parse the layer data for each code block.
     get_code_block_data(tile, progression_iterator, tile_ctx, header, storage)?;
     // We then decode the bitplanes of each code block, yielding the
@@ -165,7 +164,7 @@ pub(crate) struct TileDecompositions {
 }
 
 impl TileDecompositions {
-    fn sub_band_iter(&self, resolution: u16, decompositions: &[Decomposition]) -> SubBandIter {
+    pub(crate) fn sub_band_iter(&self, resolution: u16, decompositions: &[Decomposition]) -> SubBandIter {
         let indices = if resolution == 0 {
             [
                 self.first_ll_sub_band,
@@ -185,7 +184,7 @@ impl TileDecompositions {
 }
 
 #[derive(Clone)]
-struct SubBandIter {
+pub(crate) struct SubBandIter {
     resolution: u16,
     next_idx: usize,
     indices: [usize; 3],
@@ -238,9 +237,9 @@ pub(crate) enum SubBandType {
 
 #[derive(Clone)]
 pub(crate) struct Precinct {
-    code_blocks: Range<usize>,
-    code_inclusion_tree: TagTree,
-    zero_bitplane_tree: TagTree,
+    pub(crate) code_blocks: Range<usize>,
+    pub(crate) code_inclusion_tree: TagTree,
+    pub(crate) zero_bitplane_tree: TagTree,
 }
 
 pub(crate) struct PrecinctData {
@@ -365,263 +364,6 @@ impl<'a> TileDecodeContext<'a> {
     }
 }
 
-fn build_decompositions(
-    tile: &Tile,
-    tile_ctx: &mut TileDecodeContext,
-    storage: &mut DecompositionStorage,
-) -> Result<(), &'static str> {
-    let mut total_coefficients = 0;
-
-    for component_tile in tile.component_tiles() {
-        total_coefficients +=
-            component_tile.rect.width() as usize * component_tile.rect.height() as usize;
-    }
-
-    storage.coefficients.resize(total_coefficients, 0.0);
-    let mut coefficient_counter = 0;
-
-    for (component_idx, component_tile) in tile.component_tiles().enumerate() {
-        // TODO: IMprove this
-        let mut ll_sub_band = None;
-
-        let start = storage.decompositions.len();
-
-        for resolution_tile in component_tile.resolution_tiles() {
-            let resolution = resolution_tile.resolution;
-
-            if resolution == 0 {
-                let sub_band_rect = resolution_tile.sub_band_rect(SubBandType::LowLow);
-
-                trace!("making nLL for component {}", component_idx);
-                trace!(
-                    "Sub-band rect: [{},{} {}x{}], ll rect [{},{} {}x{}]",
-                    sub_band_rect.x0,
-                    sub_band_rect.y0,
-                    sub_band_rect.width(),
-                    sub_band_rect.height(),
-                    resolution_tile.rect.x0,
-                    resolution_tile.rect.y0,
-                    resolution_tile.rect.width(),
-                    resolution_tile.rect.height(),
-                );
-                let precincts =
-                    build_precincts(&resolution_tile, sub_band_rect, tile_ctx, storage)?;
-
-                let added_coefficients = (sub_band_rect.width() * sub_band_rect.height()) as usize;
-                let coefficients = coefficient_counter..(coefficient_counter + added_coefficients);
-                coefficient_counter += added_coefficients;
-
-                ll_sub_band = Some(SubBand {
-                    sub_band_type: SubBandType::LowLow,
-                    rect: sub_band_rect,
-                    precincts,
-                    coefficients,
-                })
-            } else {
-                let mut build_sub_band =
-                    |sub_band_type: SubBandType, storage: &mut DecompositionStorage| {
-                        let sub_band_rect = resolution_tile.sub_band_rect(sub_band_type);
-
-                        trace!(
-                            "r {resolution} making sub-band {} for component {component_idx}",
-                            sub_band_type as u8
-                        );
-                        trace!(
-                            "Sub-band rect: [{},{} {}x{}], ll rect [{},{} {}x{}]",
-                            sub_band_rect.x0,
-                            sub_band_rect.y0,
-                            sub_band_rect.width(),
-                            sub_band_rect.height(),
-                            resolution_tile.rect.x0,
-                            resolution_tile.rect.y0,
-                            resolution_tile.rect.width(),
-                            resolution_tile.rect.height(),
-                        );
-
-                        let precincts =
-                            build_precincts(&resolution_tile, sub_band_rect, tile_ctx, storage)?;
-
-                        let added_coefficients =
-                            (sub_band_rect.width() * sub_band_rect.height()) as usize;
-                        let coefficients =
-                            coefficient_counter..(coefficient_counter + added_coefficients);
-                        coefficient_counter += added_coefficients;
-
-                        let idx = storage.sub_bands.len();
-                        storage.sub_bands.push(SubBand {
-                            sub_band_type,
-                            rect: sub_band_rect,
-                            precincts: precincts.clone(),
-                            coefficients,
-                        });
-
-                        Ok(idx)
-                    };
-
-                let decomposition = Decomposition {
-                    sub_bands: [
-                        build_sub_band(SubBandType::HighLow, storage)?,
-                        build_sub_band(SubBandType::LowHigh, storage)?,
-                        build_sub_band(SubBandType::HighHigh, storage)?,
-                    ],
-                    rect: resolution_tile.rect,
-                };
-
-                storage.decompositions.push(decomposition);
-            }
-        }
-
-        let end = storage.decompositions.len();
-        let first_ll_sub_band = storage.sub_bands.len();
-        storage.sub_bands.push(ll_sub_band.unwrap());
-
-        storage.tile_decompositions.push(TileDecompositions {
-            decompositions: start..end,
-            first_ll_sub_band,
-        });
-    }
-
-    assert_eq!(coefficient_counter, storage.coefficients.len());
-
-    Ok(())
-}
-
-fn build_precincts(
-    resolution_tile: &ResolutionTile,
-    sub_band_rect: IntRect,
-    tile_ctx: &mut TileDecodeContext,
-    storage: &mut DecompositionStorage,
-) -> Result<Range<usize>, &'static str> {
-    let start = storage.precincts.len();
-
-    for precinct_data in resolution_tile.precincts() {
-        let precinct_rect = precinct_data.rect;
-
-        let cb_width = resolution_tile.code_block_width();
-        let cb_height = resolution_tile.code_block_height();
-
-        let cb_x0 = (u32::max(precinct_rect.x0, sub_band_rect.x0) / cb_width) * cb_width;
-        let cb_y0 = (u32::max(precinct_rect.y0, sub_band_rect.y0) / cb_height) * cb_height;
-
-        let code_block_area = IntRect::from_ltrb(
-            cb_x0,
-            cb_y0,
-            u32::min(precinct_rect.x1, sub_band_rect.x1),
-            u32::min(precinct_rect.y1, sub_band_rect.y1),
-        );
-
-        let code_blocks_x = if sub_band_rect.width() == 0 {
-            0
-        } else {
-            code_block_area.width().div_ceil(cb_width)
-        };
-        let code_blocks_y = if sub_band_rect.height() == 0 {
-            0
-        } else {
-            code_block_area.height().div_ceil(cb_height)
-        };
-
-        trace!(
-            "Precinct rect: [{},{} {}x{}], num_code_blocks_wide: {}, num_code_blocks_high: {}",
-            precinct_rect.x0,
-            precinct_rect.y0,
-            precinct_rect.width(),
-            precinct_rect.height(),
-            code_blocks_x,
-            code_blocks_y
-        );
-
-        let blocks = build_code_blocks(
-            code_block_area,
-            sub_band_rect,
-            resolution_tile,
-            code_blocks_x,
-            code_blocks_y,
-            tile_ctx,
-            storage,
-        );
-
-        let code_inclusion_tree =
-            TagTree::new(code_blocks_x, code_blocks_y, &mut storage.tag_tree_nodes);
-        let zero_bitplane_tree =
-            TagTree::new(code_blocks_x, code_blocks_y, &mut storage.tag_tree_nodes);
-
-        storage.precincts.push(Precinct {
-            code_blocks: blocks,
-            code_inclusion_tree,
-            zero_bitplane_tree,
-        });
-    }
-
-    let end = storage.precincts.len();
-
-    Ok(start..end)
-}
-
-fn build_code_blocks(
-    code_block_area: IntRect,
-    sub_band_rect: IntRect,
-    tile_instance: &ResolutionTile,
-    code_blocks_x: u32,
-    code_blocks_y: u32,
-    tile_ctx: &mut TileDecodeContext,
-    storage: &mut DecompositionStorage,
-) -> Range<usize> {
-    let mut y = code_block_area.y0;
-
-    let code_block_width = tile_instance.code_block_width();
-    let code_block_height = tile_instance.code_block_height();
-
-    let start = storage.code_blocks.len();
-
-    for y_idx in 0..code_blocks_y {
-        let mut x = code_block_area.x0;
-
-        for x_idx in 0..code_blocks_x {
-            let area = IntRect::from_xywh(x, y, code_block_width, code_block_height)
-                .intersect(sub_band_rect);
-
-            trace!(
-                "Codeblock rect: [{},{} {}x{}]",
-                area.x0,
-                area.y0,
-                area.width(),
-                area.height(),
-            );
-
-            let start = storage.layers.len();
-            storage.layers.extend(iter::repeat_n(
-                Layer {
-                    // This will be updated once we actually read the
-                    // layer segments.
-                    segments: None,
-                },
-                tile_ctx.tile.num_layers as usize,
-            ));
-            let end = storage.layers.len();
-
-            storage.code_blocks.push(CodeBlock {
-                x_idx,
-                y_idx,
-                rect: area,
-                has_been_included: false,
-                missing_bit_planes: 0,
-                l_block: 3,
-                number_of_coding_passes: 0,
-                layers: start..end,
-                non_empty_layer_count: 0,
-            });
-
-            x += code_block_width;
-        }
-
-        y += code_block_height;
-    }
-
-    let end = storage.code_blocks.len();
-
-    start..end
-}
 
 fn get_code_block_data<'a>(
     tile: &'a Tile<'a>,
@@ -637,7 +379,7 @@ fn get_code_block_data<'a>(
             tile_ctx,
             storage,
         )
-        .is_none()
+            .is_none()
             && header.strict
         {
             return Err("failed to fully process a tile part in tile");
@@ -929,19 +671,6 @@ fn get_code_block_lengths(
     Some(())
 }
 
-fn segment_idx_for_bypass(code_block_idx: u8) -> u8 {
-    if code_block_idx < 10 {
-        0
-    } else {
-        1 + (2 * ((code_block_idx - 10) / 3))
-            + (if ((code_block_idx - 10) % 3) == 2 {
-                1
-            } else {
-                0
-            })
-    }
-}
-
 fn decode_bitplanes<'a>(
     tile: &'a Tile<'a>,
     tile_ctx: &mut TileDecodeContext<'a>,
@@ -1062,6 +791,21 @@ fn apply_sign_shift(tile_ctx: &mut TileDecodeContext, component_infos: &[Compone
         for sample in &mut channel_data.container {
             *sample += (1u32 << (component_info.size_info.precision - 1)) as f32;
         }
+    }
+}
+
+/// Calculate the segment index for the given pass in arithmetic decoder
+/// bypass (see section D.6, Table D.9).
+fn segment_idx_for_bypass(pass_idx: u8) -> u8 {
+    if pass_idx < 10 {
+        0
+    } else {
+        1 + (2 * ((pass_idx - 10) / 3))
+            + (if ((pass_idx - 10) % 3) == 2 {
+            1
+        } else {
+            0
+        })
     }
 }
 

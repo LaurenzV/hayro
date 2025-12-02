@@ -22,6 +22,7 @@ pub(crate) mod reader;
 pub(crate) mod rect;
 mod tag_tree;
 mod tile;
+mod build;
 
 /// Image metadata extracted from JP2 Header box.
 #[derive(Debug, Clone)]
