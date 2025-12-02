@@ -175,7 +175,7 @@ fn parse_tile_part<'a>(
                 Err("failed to parse tile part")
             } else {
                 Ok(())
-            }
+            };
         };
 
         match marker {
@@ -457,7 +457,7 @@ impl<'a> ResolutionTile<'a> {
 
         IntRect::from_ltrb(tbx_0, tby_0, tbx_1, tby_1)
     }
-    
+
     /// The exponent for determining the horizontal size of a precinct.
     ///
     /// `PPx` in the specification.

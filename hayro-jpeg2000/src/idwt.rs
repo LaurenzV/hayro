@@ -1,7 +1,7 @@
 //! Performing the inverse discrete wavelet transform, as specified in Annex F.
 
 use crate::codestream::WaveletTransform;
-use crate::decode::{Decomposition, SubBand, SubBandType};
+use crate::decode::{Decomposition, DecompositionStorage, SubBand, SubBandType, TileDecodeContext};
 use crate::rect::IntRect;
 
 // Keep in sync with the type `F32` in the `simd` modules!
@@ -28,7 +28,7 @@ impl Padding {
 
 /// The output from performing the IDWT operation.
 pub(crate) struct IDWTOutput {
-    // The buffer that will hold the final coefficients.
+    /// The buffer that will hold the final coefficients.
     pub(crate) coefficients: Vec<f32>,
     /// The size of the padding applied to each side.
     pub(crate) padding: Padding,
@@ -51,32 +51,31 @@ impl IDWTOutput {
 }
 
 impl IDWTOutput {
+    /// The total width of the output, including padding.
     pub(crate) fn total_width(&self) -> u32 {
         self.padding.left as u32 + self.rect.width() + self.padding.right as u32
     }
 }
 
 struct IDWTTempOutput {
-    pub(crate) padding: Padding,
-    pub(crate) rect: IntRect,
+    padding: Padding,
+    rect: IntRect,
 }
 
 /// Apply the inverse discrete wavelet transform (see Annex F). The output
 /// will be transformed samples covering the rectangle of the smallest
 /// decomposition level.
 pub(crate) fn apply(
-    // The LL sub-band for resolution level 0.
-    ll_sub_band: &SubBand,
-    // All decomposition level that make up the tile.
-    decompositions: &[Decomposition],
-    // The buffer containing all sub-bands, used for resolving the sub-bands
-    // of each decomposition level.
-    sub_bands: &[SubBand],
-    scratch_buffer: &mut Vec<f32>,
-    output: &mut IDWTOutput,
+    storage: &DecompositionStorage,
+    tile_ctx: &mut TileDecodeContext,
+    component_idx: usize,
     transform: WaveletTransform,
-    sub_bands_coefficients: &[f32],
 ) {
+    let tile_decompositions = &storage.tile_decompositions[component_idx];
+
+    let decompositions = &storage.decompositions[tile_decompositions.decompositions.clone()];
+    let ll_sub_band = &storage.sub_bands[tile_decompositions.first_ll_sub_band];
+
     // To explain a bit why we have this scratch buffer and another coefficient
     // buffer: During IDWT, we need to continuously interleave the 4 sub-bands
     // into a new buffer, which is then either returned or used as the input
@@ -87,7 +86,7 @@ pub(crate) fn apply(
     // Due to the fact that the output from the previous iteration might be
     // used as the input of the next, we need two separate buffers, which
     // are continuously swapped.
-    let (scratch, coefficients) = (scratch_buffer, &mut output.coefficients);
+    let (scratch_buf, output) = (&mut tile_ctx.idwt_scratch_buffer, &mut tile_ctx.idwt_output);
 
     let estimate_buffer_size = |decomposition: &Decomposition| {
         // The maximum padding size (determined by
@@ -109,8 +108,10 @@ pub(crate) fn apply(
 
     if decompositions.is_empty() {
         // Single decomposition, just copy the coefficients from the sub-band.
-        coefficients.clear();
-        coefficients.extend_from_slice(&sub_bands_coefficients[ll_sub_band.coefficients.clone()]);
+        output.coefficients.clear();
+        output
+            .coefficients
+            .extend_from_slice(&storage.coefficients[ll_sub_band.coefficients.clone()]);
 
         output.padding = Padding::default();
         output.rect = ll_sub_band.rect;
@@ -121,8 +122,10 @@ pub(crate) fn apply(
     // The coefficient array will always be the one that holds the coefficients
     // from the highest decomposition. Therefore, reserve as much.
     let (s_min, s_max) = estimate_buffer_size(decompositions.last().unwrap());
-    if coefficients.capacity() < s_min {
-        coefficients.reserve_exact(s_max - coefficients.capacity());
+    if output.coefficients.capacity() < s_min {
+        output
+            .coefficients
+            .reserve_exact(s_max - output.coefficients.capacity());
     }
 
     if decompositions.len() > 1 {
@@ -130,8 +133,8 @@ pub(crate) fn apply(
         // the second-highest decomposition.
         let (s_min, s_max) = estimate_buffer_size(&decompositions[decompositions.len() - 2]);
 
-        if scratch.capacity() < s_min {
-            scratch.reserve_exact(s_max - scratch.capacity());
+        if scratch_buf.capacity() < s_min {
+            scratch_buf.reserve_exact(s_max - scratch_buf.capacity());
         }
     }
 
@@ -140,12 +143,16 @@ pub(crate) fn apply(
     let mut use_scratch = decompositions.len().is_multiple_of(2);
 
     let mut temp_output = filter_2d(
-        IDWTInput::from_sub_band(ll_sub_band, sub_bands_coefficients),
-        if use_scratch { scratch } else { coefficients },
+        IDWTInput::from_sub_band(ll_sub_band, &storage.coefficients),
+        if use_scratch {
+            scratch_buf
+        } else {
+            &mut output.coefficients
+        },
         &decompositions[0],
         transform,
-        sub_bands,
-        sub_bands_coefficients,
+        &storage.sub_bands,
+        &storage.coefficients,
     );
 
     for decomposition in decompositions.iter().skip(1) {
@@ -153,21 +160,21 @@ pub(crate) fn apply(
 
         temp_output = if use_scratch {
             filter_2d(
-                IDWTInput::from_output(&temp_output, coefficients),
-                scratch,
+                IDWTInput::from_output(&temp_output, &mut output.coefficients),
+                scratch_buf,
                 decomposition,
                 transform,
-                sub_bands,
-                sub_bands_coefficients,
+                &storage.sub_bands,
+                &storage.coefficients,
             )
         } else {
             filter_2d(
-                IDWTInput::from_output(&temp_output, scratch),
-                coefficients,
+                IDWTInput::from_output(&temp_output, scratch_buf),
+                &mut output.coefficients,
                 decomposition,
                 transform,
-                sub_bands,
-                sub_bands_coefficients,
+                &storage.sub_bands,
+                &storage.coefficients,
             )
         };
     }

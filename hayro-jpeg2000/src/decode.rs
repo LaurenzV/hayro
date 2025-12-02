@@ -140,7 +140,7 @@ fn decode_tile<'a>(
     // for each component tile so we can reuse allocations better.
     for (idx, component_info) in header.component_infos.iter().enumerate() {
         // Next, we apply the inverse discrete wavelet transform.
-        apply_idwt(tile_ctx, storage, component_info, idx)?;
+        idwt::apply(storage, tile_ctx, idx, component_info.wavelet_transform());
         // Finally, we store the raw samples for the tile area in the correct
         // location. Note that in case we have MCT, we are not applying it yet.
         // It will be applied in the very end once all tiles have been processed.
@@ -159,9 +159,9 @@ fn decode_tile<'a>(
 
 /// All decompositions for a single tile.
 #[derive(Clone)]
-struct TileDecompositions {
-    first_ll_sub_band: usize,
-    decompositions: Range<usize>,
+pub(crate) struct TileDecompositions {
+    pub(crate) first_ll_sub_band: usize,
+    pub(crate) decompositions: Range<usize>,
 }
 
 impl TileDecompositions {
@@ -283,16 +283,16 @@ pub(crate) struct Layer {
 /// A buffer so that we can reuse allocations for layers/code blocks/etc.
 /// across different tiles.
 #[derive(Default)]
-struct DecompositionStorage<'a> {
+pub(crate) struct DecompositionStorage<'a> {
     segments: Vec<Segment<'a>>,
     layers: Vec<Layer>,
     code_blocks: Vec<CodeBlock>,
     precincts: Vec<Precinct>,
-    coefficients: Vec<f32>,
-    sub_bands: Vec<SubBand>,
-    decompositions: Vec<Decomposition>,
-    tile_decompositions: Vec<TileDecompositions>,
     tag_tree_nodes: Vec<TagNode>,
+    pub(crate) coefficients: Vec<f32>,
+    pub(crate) sub_bands: Vec<SubBand>,
+    pub(crate) decompositions: Vec<Decomposition>,
+    pub(crate) tile_decompositions: Vec<TileDecompositions>,
 }
 
 impl DecompositionStorage<'_> {
@@ -1058,29 +1058,6 @@ fn decode_sub_band_bitplanes(
         }
     }
 
-    Ok(())
-}
-
-fn apply_idwt<'a>(
-    tile_ctx: &mut TileDecodeContext<'a>,
-    storage: &DecompositionStorage,
-    component_info: &ComponentInfo,
-    component_idx: usize,
-) -> Result<(), &'static str> {
-    let decompositions = &storage.tile_decompositions[component_idx];
-
-    let ll_sub_band = &storage.sub_bands[decompositions.first_ll_sub_band];
-    let sub_bands = &storage.decompositions[decompositions.decompositions.clone()];
-
-    idwt::apply(
-        ll_sub_band,
-        sub_bands,
-        &storage.sub_bands,
-        &mut tile_ctx.idwt_scratch_buffer,
-        &mut tile_ctx.idwt_output,
-        component_info.coding_style.parameters.transformation,
-        &storage.coefficients,
-    );
     Ok(())
 }
 
