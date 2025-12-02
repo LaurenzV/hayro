@@ -124,25 +124,28 @@ fn build_precincts(
         let cb_width = resolution_tile.code_block_width();
         let cb_height = resolution_tile.code_block_height();
 
+        // See Figure B.9. Conceptually, the area of code-blocks is aligned
+        // to the width/height of a code block.
         let cb_x0 = (u32::max(precinct_rect.x0, sub_band_rect.x0) / cb_width) * cb_width;
         let cb_y0 = (u32::max(precinct_rect.y0, sub_band_rect.y0) / cb_height) * cb_height;
+        let cb_x1 = (u32::min(precinct_rect.x1, sub_band_rect.x1).div_ceil(cb_width)) * cb_width;
+        let cb_y1 = (u32::min(precinct_rect.y1, sub_band_rect.y1).div_ceil(cb_height)) * cb_height;
 
-        let code_block_area = IntRect::from_ltrb(
-            cb_x0,
-            cb_y0,
-            u32::min(precinct_rect.x1, sub_band_rect.x1),
-            u32::min(precinct_rect.y1, sub_band_rect.y1),
-        );
+        let code_block_area = IntRect::from_ltrb(cb_x0, cb_y0, cb_x1, cb_y1);
 
+        // If the sub-band is empty, there are no code-blocks, but due to our
+        // flooring/ceiling above, we would get 1 code-block in each direction.
+        // Because of this, we need to special-case this.
         let code_blocks_x = if sub_band_rect.width() == 0 {
             0
         } else {
-            code_block_area.width().div_ceil(cb_width)
+            code_block_area.width() / cb_width
         };
+
         let code_blocks_y = if sub_band_rect.height() == 0 {
             0
         } else {
-            code_block_area.height().div_ceil(cb_height)
+            code_block_area.height() / cb_height
         };
 
         trace!(
@@ -202,6 +205,10 @@ fn build_code_blocks(
         let mut x = code_block_area.x0;
 
         for x_idx in 0..code_blocks_x {
+            // "Code-blocks in the partition may extend beyond the boundaries of
+            // the sub-band coefficients. When this happens, only the
+            // coefficients lying within the sub-band are coded using the method
+            // described in Annex D."
             let area = IntRect::from_xywh(x, y, code_block_width, code_block_height)
                 .intersect(sub_band_rect);
 
