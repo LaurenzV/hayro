@@ -1,4 +1,4 @@
-//! Building and setting up data structures for decoding a JPEG2000 codestream.
+//! Building and setting up decompositions, sub-bands, precincts and code-blocks.
 
 use crate::decode::{
     CodeBlock, Decomposition, DecompositionStorage, Layer, Precinct, SubBand, SubBandType,
