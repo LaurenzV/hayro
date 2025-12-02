@@ -20,6 +20,7 @@ pub(crate) struct BitPlaneDecodeBuffers {
     segment_ranges: Vec<usize>,
     segment_coding_passes: Vec<u8>,
 }
+
 impl BitPlaneDecodeBuffers {
     fn reset(&mut self) {
         self.combined_layers.clear();
@@ -65,6 +66,8 @@ fn decode_inner(
     let mut last_segment_idx = 0;
     let mut coding_passes = 0;
 
+    // Build a list so that we can associate coding passes with their segments
+    // and data more easily.
     for layer in &storage.layers[code_block.layers.start..code_block.layers.end] {
         if let Some(range) = layer.segments.clone() {
             let layer_segments = &storage.segments[range.clone()];
@@ -97,7 +100,7 @@ fn decode_inner(
 
     if is_normal_mode {
         // Only one termination per code block, so we can just decode the
-        // whole range in one single pass.
+        // whole range in one single go, processing all coding passes at once.
         let mut decoder = ArithmeticDecoder::new(&bp_buffers.combined_layers);
         handle_coding_passes(
             0,
@@ -108,8 +111,8 @@ fn decode_inner(
             &mut decoder,
         )?;
     } else {
-        // Otherwise, each segment introduces a termination. For selective
-        // arithmetic coding bypass, each segment only covers one coding pass
+        // Otherwise, each segment introduces a termination. For "termination on
+        // each pass", each segment only covers one coding pass
         // and a termination is introduced every time. Otherwise, for only
         // arithmetic coding bypass, terminations are introduced based on the
         // exact index of the covered coding passes (see Table D.9).
@@ -306,10 +309,6 @@ impl Coefficient {
         self.0 |= (sign as u32) << 31;
     }
 
-    fn has_sign(&self) -> bool {
-        self.0 & 0x80000000 != 0
-    }
-
     fn sign(&self) -> u32 {
         (self.0 >> 31) & 1
     }
@@ -374,6 +373,7 @@ impl NeighborSignificances {
         self.0
     }
 
+    // Needed for vertically causal context.
     fn all_without_bottom(&self) -> u8 {
         self.0 & 0b11110100
     }
@@ -384,7 +384,7 @@ pub(crate) struct BitPlaneDecodeContext {
     coefficient_states: Vec<CoefficientState>,
     /// The neighbor significances for each coefficient.
     neighbor_significances: Vec<NeighborSignificances>,
-    /// The magnitude and signs each coefficient that is successively built
+    /// The magnitude and signs of each coefficient that is successively built
     /// as we advance through the bitplanes.
     coefficients: Vec<Coefficient>,
     /// The width of the code-block we are processing.
@@ -492,13 +492,13 @@ impl BitPlaneDecodeContext {
     pub(crate) fn coefficient_rows(&self) -> impl Iterator<Item = &[Coefficient]> {
         self.coefficients
             .chunks_exact(self.padded_width as usize)
+            // Exclude the padding that we added.
             .map(|row| &row[COEFFICIENTS_PADDING as usize..][..self.width as usize])
             .skip(COEFFICIENTS_PADDING as usize)
             .take(self.height as usize)
     }
 
     fn set_sign(&mut self, pos: Position, sign: u8) {
-        // Using `or` is okay here because we only set the sign once.
         self.coefficients[pos.index(self.padded_width)].set_sign(sign);
     }
 
@@ -518,6 +518,7 @@ impl BitPlaneDecodeContext {
         self.contexts[18].index = 46;
     }
 
+    /// Reset state that is transient for each bitplane that is decoded.
     fn reset_for_next_bitplane(&mut self) {
         for el in &mut self.coefficient_states {
             el.set_zero_coded(0);
@@ -580,11 +581,7 @@ impl BitPlaneDecodeContext {
 
     #[inline]
     fn sign(&self, position: Position) -> u8 {
-        if self.coefficients[position.index(self.padded_width)].has_sign() {
-            1
-        } else {
-            0
-        }
+        self.coefficients[position.index(self.padded_width)].sign() as u8
     }
 
     #[inline]
@@ -776,21 +773,35 @@ fn for_each_position(
 }
 
 /// See `context_label_sign_coding`. This table contains all context labels
-/// for each combination of the bit-packed field. (255, 255) represent
+/// for each combination of the bit-packed field. (0, 0) represent
 /// impossible combinations.
 #[rustfmt::skip]
 const SIGN_CONTEXT_LOOKUP: [(u8, u8); 256] = [
-    (9,0), (10,0), (10,1), (0,0), (12,0), (13,0), (11,0), (0,0), (12,1), (11,1), (13,1), (0,0), (0,0), (0,0), (0,0), (0,0), (12,0), (13,0), (11,0), (0,0), (12,0), (13,0), (11,0), (0,0), (9,0),
-    (10,0), (10,1), (0,0), (0,0), (0,0), (0,0), (0,0), (12,1), (11,1), (13,1), (0,0), (9,0), (10,0), (10,1), (0,0), (12,1), (11,1), (13,1), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0),
-    (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (10,0), (10,0), (9,0), (0,0), (13,0), (13,0), (12,0), (0,0), (11,1), (11,1), (12,1),
-    (0,0), (0,0), (0,0), (0,0), (0,0), (13,0), (13,0), (12,0), (0,0), (13,0), (13,0), (12,0), (0,0), (10,0), (10,0), (9,0), (0,0), (0,0), (0,0), (0,0), (0,0), (11,1), (11,1), (12,1), (0,0),
-    (10,0), (10,0), (9,0), (0,0), (11,1), (11,1), (12,1), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0),
-    (0,0), (0,0), (0,0), (10,1), (9,0), (10,1), (0,0), (11,0), (12,0), (11,0), (0,0), (13,1), (12,1), (13,1), (0,0), (0,0), (0,0), (0,0), (0,0), (11,0), (12,0), (11,0), (0,0), (11,0), (12,0),
-    (11,0), (0,0), (10,1), (9,0), (10,1), (0,0), (0,0), (0,0), (0,0), (0,0), (13,1), (12,1), (13,1), (0,0), (10,1), (9,0), (10,1), (0,0), (13,1), (12,1), (13,1), (0,0), (0,0), (0,0), (0,0),
-    (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0),
-    (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0),
-    (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0),
-    (0,0), (0,0), (0,0), (0,0), (0,0), (0,0),
+    (9,0), (10,0), (10,1), (0,0), (12,0), (13,0), (11,0), (0,0), (12,1), (11,1), 
+    (13,1), (0,0), (0,0), (0,0), (0,0), (0,0), (12,0), (13,0), (11,0), (0,0), 
+    (12,0), (13,0), (11,0), (0,0), (9,0), (10,0), (10,1), (0,0), (0,0), (0,0), 
+    (0,0), (0,0), (12,1), (11,1), (13,1), (0,0), (9,0), (10,0), (10,1), (0,0), 
+    (12,1), (11,1), (13,1), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0),
+    (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0),
+    (0,0), (0,0), (0,0), (10,0), (10,0), (9,0), (0,0), (13,0), (13,0), (12,0), 
+    (0,0), (11,1), (11,1), (12,1), (0,0), (0,0), (0,0), (0,0), (0,0), (13,0), 
+    (13,0), (12,0), (0,0), (13,0), (13,0), (12,0), (0,0), (10,0), (10,0), (9,0), 
+    (0,0), (0,0), (0,0), (0,0), (0,0), (11,1), (11,1), (12,1), (0,0), (10,0), 
+    (10,0), (9,0), (0,0), (11,1), (11,1), (12,1), (0,0), (0,0), (0,0), (0,0), 
+    (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), 
+    (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (10,1), (9,0), (10,1), (0,0), 
+    (11,0), (12,0), (11,0), (0,0), (13,1), (12,1), (13,1), (0,0), (0,0), (0,0), 
+    (0,0), (0,0), (11,0), (12,0), (11,0), (0,0), (11,0), (12,0), (11,0), (0,0), 
+    (10,1), (9,0), (10,1), (0,0), (0,0), (0,0), (0,0), (0,0), (13,1), (12,1), 
+    (13,1), (0,0), (10,1), (9,0), (10,1), (0,0), (13,1), (12,1), (13,1), (0,0),
+    (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), 
+    (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), 
+    (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), 
+    (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), 
+    (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), 
+    (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), 
+    (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), 
+    (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0),
 ];
 
 #[rustfmt::skip]
@@ -879,6 +890,7 @@ fn decode_sign_bit<T: BitDecoder>(
         let positive_significances = significances & !signs;
         let merged_significances = (negative_significances << 1) | positive_significances;
 
+        // Now we can just perform one single lookup!
         SIGN_CONTEXT_LOOKUP[merged_significances as usize]
     }
 
@@ -899,6 +911,9 @@ fn decode_sign_bit<T: BitDecoder>(
 fn context_label_zero_coding(pos: Position, ctx: &BitPlaneDecodeContext) -> u8 {
     let neighbors = ctx.neighborhood_significance_states(pos);
 
+    // Once again, the neighbors field is bit-packed, so we can just generate
+    // a table for all u8 values and assign the correct context based on the
+    // exact value of that field.
     match ctx.sub_band_type {
         SubBandType::LowLow | SubBandType::LowHigh => ZERO_CTX_LL_LH_LOOKUP[neighbors as usize],
         SubBandType::HighLow => ZERO_CTX_HL_LOOKUP[neighbors as usize],
@@ -918,6 +933,9 @@ fn context_label_magnitude_refinement_coding(pos: Position, ctx: &BitPlaneDecode
 
 #[derive(Default, Copy, Clone, Debug)]
 struct Position {
+    // Since we use a padding scheme for bitplane decoding (so that we don't need
+    // to special-case the neighbors of border values), these x and y values
+    // are always COEFFICIENTS_PADDING more than the actual x and y index.
     index_x: u32,
     index_y: u32,
 }
@@ -925,8 +943,8 @@ struct Position {
 impl Position {
     fn new(x: u32, y: u32) -> Position {
         Self {
-            index_x: x + 1,
-            index_y: y + 1,
+            index_x: x + COEFFICIENTS_PADDING,
+            index_y: y + COEFFICIENTS_PADDING,
         }
     }
 
@@ -1007,12 +1025,14 @@ impl BitDecoder for BypassDecoder<'_> {
 
     fn read_bit(&mut self, _: &mut ArithmeticDecoderContext) -> Option<u32> {
         self.0.read_bits_with_stuffing(1).or({
+            
             if !self.1 {
-                // Just pad with ones. Not sure if zeroes would be better here,
-                // but since the arithmetic decoder is also padded with 0xFF
-                // maybe 1 is the better choice?
+                // If not in strict mode, just pad with ones. Not sure if 
+                // zeroes would be better here, but since the arithmetic decoder 
+                // is also padded with 0xFF maybe 1 is the better choice?
                 Some(1)
             } else {
+                // We have too little data, return `None`.
                 None
             }
         })
