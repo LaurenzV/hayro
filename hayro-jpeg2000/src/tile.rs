@@ -10,6 +10,7 @@ use crate::rect::IntRect;
 /// A single tile in the image.
 #[derive(Clone, Debug)]
 pub(crate) struct Tile<'a> {
+    /// The index of the tile, in row-major order.
     pub(crate) idx: u32,
     /// The concatenated tile parts that contain all the information for all
     /// constituent codeblocks.
@@ -17,7 +18,6 @@ pub(crate) struct Tile<'a> {
     /// Parameters for each component. In most cases, those are directly
     /// inherited from the main header. But in some cases, individual tiles
     /// might override them.
-    // TODO: Don't store size_info
     pub(crate) component_infos: Vec<ComponentInfo>,
     /// The rectangle making up the area of the tile. `x1` and `y1` are
     /// exclusive.
@@ -108,7 +108,6 @@ impl<'a> Tile<'a> {
         }
     }
 
-    /// Return an iterator over the component tiles.
     pub(crate) fn component_tiles(&self) -> impl Iterator<Item = ComponentTile<'_>> {
         self.component_infos
             .iter()
@@ -172,10 +171,10 @@ fn parse_tile_part<'a>(
 
     loop {
         let Some(marker) = reader.peek_marker() else {
-            if main_header.strict {
-                return Err("failed to parse tile part");
+            return if main_header.strict {
+                Err("failed to parse tile part")
             } else {
-                return Ok(());
+                Ok(())
             }
         };
 
@@ -267,18 +266,18 @@ fn parse_tile_part<'a>(
         };
     };
 
-    let final_data = reader
+    let data = reader
         .read_bytes(remaining_bytes)
         .ok_or("failed to get tile part data")?;
 
     let tile_part = if let Some(ppt_header) = ppt_header {
         TilePart::Separated(SeparatedTilePart {
             header: BitReader::new(ppt_header),
-            body: BitReader::new(final_data),
+            body: BitReader::new(data),
         })
     } else {
         TilePart::Merged(MergedTilePart {
-            data: BitReader::new(final_data),
+            data: BitReader::new(data),
         })
     };
 
@@ -458,13 +457,11 @@ impl<'a> ResolutionTile<'a> {
 
         IntRect::from_ltrb(tbx_0, tby_0, tbx_1, tby_1)
     }
-
-    // TODO: Make methods private
-
+    
     /// The exponent for determining the horizontal size of a precinct.
     ///
     /// `PPx` in the specification.
-    pub(crate) fn precinct_exponent_x(&self) -> u8 {
+    fn precinct_exponent_x(&self) -> u8 {
         self.component_tile
             .component_info
             .coding_style
@@ -476,7 +473,7 @@ impl<'a> ResolutionTile<'a> {
     /// The exponent for determining the vertical size of a precinct.
     ///
     /// `PPx` in the specification.
-    pub(crate) fn precinct_exponent_y(&self) -> u8 {
+    fn precinct_exponent_y(&self) -> u8 {
         self.component_tile
             .component_info
             .coding_style
@@ -485,7 +482,7 @@ impl<'a> ResolutionTile<'a> {
             .1
     }
 
-    pub(crate) fn num_precincts_x(&self) -> u32 {
+    fn num_precincts_x(&self) -> u32 {
         // See B-16.
         let IntRect { x0, x1, .. } = self.rect;
 
@@ -497,7 +494,7 @@ impl<'a> ResolutionTile<'a> {
         }
     }
 
-    pub(crate) fn num_precincts_y(&self) -> u32 {
+    fn num_precincts_y(&self) -> u32 {
         // See B-16.
         let IntRect { y0, y1, .. } = self.rect;
 
