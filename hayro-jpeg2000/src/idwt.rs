@@ -143,7 +143,7 @@ pub(crate) fn apply(
     let mut use_scratch = decompositions.len().is_multiple_of(2);
 
     let mut temp_output = filter_2d(
-        IDWTInput::from_sub_band(ll_sub_band, &storage.coefficients),
+        IDWTInput::from_sub_band(ll_sub_band, &storage),
         if use_scratch {
             scratch_buf
         } else {
@@ -151,8 +151,7 @@ pub(crate) fn apply(
         },
         &decompositions[0],
         transform,
-        &storage.sub_bands,
-        &storage.coefficients,
+        &storage,
     );
 
     for decomposition in decompositions.iter().skip(1) {
@@ -164,8 +163,7 @@ pub(crate) fn apply(
                 scratch_buf,
                 decomposition,
                 transform,
-                &storage.sub_bands,
-                &storage.coefficients,
+                &storage,
             )
         } else {
             filter_2d(
@@ -173,8 +171,7 @@ pub(crate) fn apply(
                 &mut output.coefficients,
                 decomposition,
                 transform,
-                &storage.sub_bands,
-                &storage.coefficients,
+                &storage,
             )
         };
     }
@@ -190,9 +187,9 @@ struct IDWTInput<'a> {
 }
 
 impl<'a> IDWTInput<'a> {
-    fn from_sub_band(sub_band: &'a SubBand, sub_band_coefficients: &'a [f32]) -> IDWTInput<'a> {
+    fn from_sub_band(sub_band: &'a SubBand, storage: &'a DecompositionStorage) -> IDWTInput<'a> {
         IDWTInput {
-            coefficients: &sub_band_coefficients[sub_band.coefficients.clone()],
+            coefficients: &storage.coefficients[sub_band.coefficients.clone()],
             padding: Padding::default(),
             sub_band_type: sub_band.sub_band_type,
         }
@@ -216,19 +213,11 @@ fn filter_2d(
     coefficients: &mut Vec<f32>,
     decomposition: &Decomposition,
     transform: WaveletTransform,
-    sub_bands: &[SubBand],
-    sub_band_coefficients: &[f32],
+    storage: &DecompositionStorage,
 ) -> IDWTTempOutput {
     // First interleave all of the sub-bands into a single buffer. We also
     // apply a padding so that we can transparently deal with border values.
-    let padding = interleave_samples(
-        input,
-        decomposition,
-        sub_bands,
-        coefficients,
-        transform,
-        sub_band_coefficients,
-    );
+    let padding = interleave_samples(input, decomposition, coefficients, transform, storage);
 
     if decomposition.rect.width() > 0 && decomposition.rect.height() > 0 {
         filter_horizontal(coefficients, padding, decomposition.rect, transform);
@@ -245,10 +234,9 @@ fn filter_2d(
 fn interleave_samples(
     input: IDWTInput,
     decomposition: &Decomposition,
-    sub_bands: &[SubBand],
     coefficients: &mut Vec<f32>,
     transform: WaveletTransform,
-    sub_bands_coefficients: &[f32],
+    storage: &DecompositionStorage,
 ) -> Padding {
     let new_padding = {
         // The reason why we need + 1 for the left and top padding is very
@@ -313,18 +301,9 @@ fn interleave_samples(
     // account.
     for idwt_input in [
         input,
-        IDWTInput::from_sub_band(
-            &sub_bands[decomposition.sub_bands[0]],
-            sub_bands_coefficients,
-        ),
-        IDWTInput::from_sub_band(
-            &sub_bands[decomposition.sub_bands[1]],
-            sub_bands_coefficients,
-        ),
-        IDWTInput::from_sub_band(
-            &sub_bands[decomposition.sub_bands[2]],
-            sub_bands_coefficients,
-        ),
+        IDWTInput::from_sub_band(&storage.sub_bands[decomposition.sub_bands[0]], storage),
+        IDWTInput::from_sub_band(&storage.sub_bands[decomposition.sub_bands[1]], storage),
+        IDWTInput::from_sub_band(&storage.sub_bands[decomposition.sub_bands[2]], storage),
     ] {
         let (u_min, u_max) = match idwt_input.sub_band_type {
             SubBandType::LowLow | SubBandType::LowHigh => (u0.div_ceil(2), u1.div_ceil(2)),
