@@ -1087,5 +1087,9 @@
   {
     "id": "serenity_26033_2",
      "link": true     
+  },
+  {
+    "id": "issue_typst_7269",
+    "link": "true"
   }
 ]

@@ -229,3 +229,12 @@ fn pdfjs_issue11279() {
 fn pdfjs_issue9650() {
     run_svg_test("pdfjs_issue9650", "downloads/pdfjs/issue9650.pdf", None);
 }
+
+#[test]
+fn issue_typst_7269() {
+    run_svg_test(
+        "issue_typst_7269",
+        "downloads/custom/issue_typst_7269.pdf",
+        None,
+    );
+}

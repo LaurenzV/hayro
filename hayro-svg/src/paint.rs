@@ -51,16 +51,16 @@ impl<'a> SvgRenderer<'a> {
                 let id = match p.as_ref() {
                     Pattern::Shading(s) => {
                         let bbox = (path_transform * path).bounding_box();
-                        let shading_id = {
-                            let cache_key = hash128(&(
-                                s.cache_key(),
-                                bbox.x0.to_bits(),
-                                bbox.x1.to_bits(),
-                                bbox.y0.to_bits(),
-                                bbox.y1.to_bits(),
-                            ));
+                        let shading_key = hash128(&(
+                            s.cache_key(),
+                            bbox.x0.to_bits(),
+                            bbox.x1.to_bits(),
+                            bbox.y0.to_bits(),
+                            bbox.y1.to_bits(),
+                        ));
 
-                            self.shadings.insert_with(cache_key, || CachedShading {
+                        let shading_id = {
+                            self.shadings.insert_with(shading_key, || CachedShading {
                                 pattern: s.clone(),
                                 bbox,
                             })
@@ -75,15 +75,15 @@ impl<'a> SvgRenderer<'a> {
 
                         let inverse_transform = path_transform.inverse();
 
-                        self.shading_patterns.insert_with(
-                            (s.clone(), inverse_transform).cache_key(),
-                            || CachedShadingPattern {
+                        let pattern_key = (shading_key, inverse_transform).cache_key();
+
+                        self.shading_patterns
+                            .insert_with(pattern_key, || CachedShadingPattern {
                                 transform: inverse_transform,
                                 bbox,
                                 clip_path,
                                 shading: shading_id,
-                            },
-                        )
+                            })
                     }
                     Pattern::Tiling(t) => {
                         let inverse_transform = path_transform.inverse();

@@ -87,3 +87,9 @@ impl CacheKey for Affine {
         ])
     }
 }
+
+impl CacheKey for u128 {
+    fn cache_key(&self) -> u128 {
+        hash128(self)
+    }
+}
