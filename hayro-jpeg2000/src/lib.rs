@@ -270,11 +270,17 @@ fn resolve_color_space(
             }
         }
         jp2::colr::ColorSpace::Icc(icc) => {
-            let metadata = ICCMetadata::from_data(&icc).ok_or("invalid ICC metadata")?;
-
-            ColorSpace::Icc {
-                profile: icc.clone(),
-                num_components: metadata.color_space.num_components(),
+            if let Some(metadata) = ICCMetadata::from_data(&icc) {
+                ColorSpace::Icc {
+                    profile: icc.clone(),
+                    num_components: metadata.color_space.num_components() ,
+                }
+            }   else {
+                // See OPENJPEG test orb-blue10-lin-jp2.jp2. They seem to
+                // assume RGB in this case (even though the image has 4 
+                // components with no opacity channel, they assume RGBA instead
+                // of CMYK).
+                ColorSpace::RGB
             }
         }
     };
