@@ -4,7 +4,6 @@
 
 use crate::reader::BitReader;
 
-
 /// JP2 signature box - 'jP\040\040'.
 pub const JP2_SIGNATURE: u32 = 0x6A502020;
 /// File Type box - 'ftyp'.
