@@ -70,6 +70,6 @@ impl PaletteBox {
 }
 
 #[derive(Debug, Clone, Copy)]
-struct PaletteColumn {
+pub(crate) struct PaletteColumn {
     pub(crate) bit_depth: u8,
 }

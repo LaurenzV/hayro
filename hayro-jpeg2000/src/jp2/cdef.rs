@@ -1,4 +1,4 @@
-//! The channel definition box (colr), defined in I.5.3.6.
+//! The channel definition box (cdef), defined in I.5.3.6.
 
 use crate::jp2::ImageBoxes;
 use crate::reader::BitReader;
@@ -8,13 +8,17 @@ pub(crate) fn parse(boxes: &mut ImageBoxes, data: &[u8]) -> Option<()> {
     let count = reader.read_u16()? as usize;
     let mut definitions = Vec::with_capacity(count);
 
+    if count == 0 {
+        return None;
+    }
+
     for _ in 0..count {
         let channel_index = reader.read_u16()?;
         let channel_type = reader.read_u16()?;
         let association = reader.read_u16()?;
 
         definitions.push(ChannelDefinition {
-            channel_index,
+            _channel_index: channel_index,
             channel_type: ChannelType::from_raw(channel_type)?,
             association: ChannelAssociation::from_raw(association)?,
         });
@@ -34,7 +38,7 @@ pub(crate) struct ChannelDefinitionBox {
 
 #[derive(Debug, Clone)]
 pub(crate) struct ChannelDefinition {
-    pub(crate) channel_index: u16,
+    pub(crate) _channel_index: u16,
     pub(crate) channel_type: ChannelType,
     pub(crate) association: ChannelAssociation,
 }
