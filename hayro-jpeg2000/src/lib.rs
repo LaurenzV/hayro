@@ -268,7 +268,7 @@ fn resolve_color_space(
             }
         }
         jp2::colr::ColorSpace::Icc(icc) => {
-            if let Some(metadata) = ICCMetadata::from_data(&icc) {
+            if let Some(metadata) = ICCMetadata::from_data(icc) {
                 ColorSpace::Icc {
                     profile: icc.clone(),
                     num_components: metadata.color_space.num_components(),

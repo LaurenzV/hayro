@@ -15,7 +15,7 @@ impl ImageColorSpace {
 
 pub(crate) fn decode(data: &[u8], params: &ImageDecodeParams) -> Option<FilterResult> {
     use crate::object::stream::ImageColorSpace;
-    
+
     let settings = DecodeSettings {
         resolve_palette_indices: false,
         strict: false,
