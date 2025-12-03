@@ -1,10 +1,12 @@
-use hayro_jpeg2000::{Bitmap, DecodeSettings, read};
+use hayro_jpeg2000::{Bitmap, ColorSpace, DecodeSettings, read};
 use image::{DynamicImage, ImageBuffer};
 use moxcms::{ColorProfile, Layout, TransformOptions};
 use std::env;
 use std::fs;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
+
+const CMYK_PROFILE: &[u8] = include_bytes!("../assets/CGATS001Compat-v2-micro.icc");
 
 fn main() {
     if let Ok(()) = log::set_logger(&LOGGER) {
@@ -159,38 +161,67 @@ fn to_dynamic_image(bitmap: Bitmap) -> Result<DynamicImage, String> {
         Ok(image)
     }
 
-    let (width, height) = (bitmap.width, bitmap.height);
-    let has_alpha = bitmap.has_alpha;
+    fn convert(bitmap: Bitmap, cs: ColorSpace) -> Result<DynamicImage, String> {
+        let (width, height) = (bitmap.width, bitmap.height);
+        let has_alpha = bitmap.has_alpha;
 
-    let image = match (bitmap.color_space, has_alpha) {
-        (hayro_jpeg2000::ColorSpace::Gray, false) => DynamicImage::ImageLuma8(
-            ImageBuffer::from_raw(width, height, bitmap.data)
-                .ok_or_else(|| "failed to build grayscale buffer".to_string())?,
-        ),
-        (hayro_jpeg2000::ColorSpace::Gray, true) => DynamicImage::ImageLumaA8(
-            ImageBuffer::from_raw(width, height, bitmap.data)
-                .ok_or_else(|| "failed to build grayscale-alpha buffer".to_string())?,
-        ),
-        (hayro_jpeg2000::ColorSpace::RGB, false) => DynamicImage::ImageRgb8(
-            ImageBuffer::from_raw(width, height, bitmap.data)
-                .ok_or_else(|| "failed to build rgb buffer".to_string())?,
-        ),
-        (hayro_jpeg2000::ColorSpace::RGB, true) => DynamicImage::ImageRgba8(
-            ImageBuffer::from_raw(width, height, bitmap.data)
-                .ok_or_else(|| "failed to build rgba buffer".to_string())?,
-        ),
-        (hayro_jpeg2000::ColorSpace::CMYK, false) => from_icc(
-            include_bytes!("../assets/CGATS001Compat-v2-micro.icc"),
-            4 as u8,
-            has_alpha,
-            width,
-            height,
-            &bitmap.data,
-        )?,
-        _ => return Err("unsupported channel configuration".to_string()),
-    };
+        let image = match (cs, has_alpha) {
+            (hayro_jpeg2000::ColorSpace::Gray, false) => DynamicImage::ImageLuma8(
+                ImageBuffer::from_raw(width, height, bitmap.data)
+                    .ok_or_else(|| "failed to build grayscale buffer".to_string())?,
+            ),
+            (hayro_jpeg2000::ColorSpace::Gray, true) => DynamicImage::ImageLumaA8(
+                ImageBuffer::from_raw(width, height, bitmap.data)
+                    .ok_or_else(|| "failed to build grayscale-alpha buffer".to_string())?,
+            ),
+            (hayro_jpeg2000::ColorSpace::RGB, false) => DynamicImage::ImageRgb8(
+                ImageBuffer::from_raw(width, height, bitmap.data)
+                    .ok_or_else(|| "failed to build rgb buffer".to_string())?,
+            ),
+            (hayro_jpeg2000::ColorSpace::RGB, true) => DynamicImage::ImageRgba8(
+                ImageBuffer::from_raw(width, height, bitmap.data)
+                    .ok_or_else(|| "failed to build rgba buffer".to_string())?,
+            ),
+            (hayro_jpeg2000::ColorSpace::CMYK, false) => {
+                from_icc(CMYK_PROFILE, 4, has_alpha, width, height, &bitmap.data)?
+            }
+            (hayro_jpeg2000::ColorSpace::CMYK, true) => {
+                return Err("CMYK with alpha is not supported".to_string());
+            }
+            (
+                hayro_jpeg2000::ColorSpace::Icc {
+                    profile,
+                    mut num_components,
+                },
+                has_alpha,
+            ) => {
+                if has_alpha {
+                    num_components += 1;
+                }
 
-    Ok(image)
+                from_icc(
+                    &profile,
+                    num_components,
+                    has_alpha,
+                    width,
+                    height,
+                    &bitmap.data,
+                )
+                .or_else(|e| match num_components {
+                    1 => convert(bitmap, ColorSpace::Gray),
+                    3 => convert(bitmap, ColorSpace::RGB),
+                    4 => convert(bitmap, ColorSpace::CMYK),
+                    _ => Err(e),
+                })?
+            }
+        };
+
+        Ok(image)
+    }
+
+    let cs = bitmap.color_space.clone();
+
+    convert(bitmap, cs)
 }
 
 static LOGGER: SimpleLogger = SimpleLogger;

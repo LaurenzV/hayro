@@ -253,6 +253,8 @@ fn resolve_color_space(
                         num_components: 3,
                     }
                 }
+                // TODO: Actually implement this.
+                EnumeratedColorspace::EsRgb => ColorSpace::RGB,
                 EnumeratedColorspace::Greyscale => ColorSpace::Gray,
                 EnumeratedColorspace::Sycc => {
                     sycc_to_rgb(&mut image.decoded.components, bit_depth)

@@ -405,7 +405,6 @@ fn to_dynamic_image(bitmap: Bitmap) -> Result<DynamicImage, String> {
                     _ => Err(e),
                 })?
             }
-            _ => return Err("unsupported channel configuration".to_string()),
         };
 
         Ok(image)
