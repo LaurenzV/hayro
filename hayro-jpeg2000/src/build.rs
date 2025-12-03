@@ -1,9 +1,6 @@
 //! Building and setting up decompositions, sub-bands, precincts and code-blocks.
 
-use crate::decode::{
-    CodeBlock, Decomposition, DecompositionStorage, Layer, Precinct, SubBand, SubBandType,
-    TileDecodeContext, TileDecompositions,
-};
+use crate::decode::{DecompositionStorage, TileDecodeContext, TileDecompositions};
 use crate::rect::IntRect;
 use crate::tag_tree::TagTree;
 use crate::tile::{ResolutionTile, Tile};
@@ -251,4 +248,71 @@ fn build_code_blocks(
     let end = storage.code_blocks.len();
 
     start..end
+}
+
+pub(crate) struct Decomposition {
+    /// In the order low-high, high-low and high-high.
+    pub(crate) sub_bands: [usize; 3],
+    /// The rectangle of the decomposition.
+    pub(crate) rect: IntRect,
+}
+
+#[derive(Clone)]
+pub(crate) struct SubBand {
+    pub(crate) sub_band_type: SubBandType,
+    pub(crate) rect: IntRect,
+    pub(crate) precincts: Range<usize>,
+    pub(crate) coefficients: Range<usize>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SubBandType {
+    LowLow = 0,
+    HighLow = 1,
+    LowHigh = 2,
+    HighHigh = 3,
+}
+
+#[derive(Clone)]
+pub(crate) struct Precinct {
+    pub(crate) code_blocks: Range<usize>,
+    pub(crate) code_inclusion_tree: TagTree,
+    pub(crate) zero_bitplane_tree: TagTree,
+}
+
+pub(crate) struct PrecinctData {
+    /// The x coordinate mapped back to the reference grid.
+    pub(crate) r_x: u32,
+    /// The y coordinate mapped back to the reference grid.
+    pub(crate) r_y: u32,
+    /// The actual rectangle of the precinct (in the sub-band coordinate
+    /// system).
+    pub(crate) rect: IntRect,
+    /// The index of the precinct in the sub-band.
+    pub(crate) idx: u32,
+}
+
+#[derive(Clone)]
+pub(crate) struct CodeBlock {
+    pub(crate) rect: IntRect,
+    pub(crate) x_idx: u32,
+    pub(crate) y_idx: u32,
+    pub(crate) layers: Range<usize>,
+    pub(crate) has_been_included: bool,
+    pub(crate) missing_bit_planes: u8,
+    pub(crate) number_of_coding_passes: u8,
+    pub(crate) l_block: u32,
+    pub(crate) non_empty_layer_count: u8,
+}
+
+pub(crate) struct Segment<'a> {
+    pub(crate) idx: u8,
+    pub(crate) coding_pases: u8,
+    pub(crate) data_length: u32,
+    pub(crate) data: &'a [u8],
+}
+
+#[derive(Clone)]
+pub(crate) struct Layer {
+    pub(crate) segments: Option<Range<usize>>,
 }

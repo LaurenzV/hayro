@@ -1,7 +1,8 @@
 //! Performing the inverse discrete wavelet transform, as specified in Annex F.
 
+use crate::build::{Decomposition, SubBand, SubBandType};
 use crate::codestream::WaveletTransform;
-use crate::decode::{Decomposition, DecompositionStorage, SubBand, SubBandType, TileDecodeContext};
+use crate::decode::{DecompositionStorage, TileDecodeContext};
 use crate::rect::IntRect;
 
 // Keep in sync with the type `F32` in the `simd` modules!

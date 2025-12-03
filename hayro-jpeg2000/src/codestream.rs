@@ -1,7 +1,8 @@
 use crate::DecodeSettings;
 use crate::bitmap::ChannelData;
 use crate::bitplane::BITPLANE_BIT_SIZE;
-use crate::decode::{SubBandType, decode};
+use crate::build::SubBandType;
+use crate::decode::decode;
 use crate::reader::BitReader;
 
 pub(crate) fn read(

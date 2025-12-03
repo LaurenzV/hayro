@@ -1,8 +1,9 @@
 //! Parsing of layers and their segments, as specified in Annex B.
 
+use crate::build::Segment;
 use crate::codestream::markers::{EPH, SOP};
 use crate::codestream::{ComponentInfo, Header, ReaderExt};
-use crate::decode::{DecompositionStorage, Segment, TileDecodeContext};
+use crate::decode::{DecompositionStorage, TileDecodeContext};
 use crate::progression::ProgressionData;
 use crate::reader::BitReader;
 use crate::tile::{Tile, TilePart};

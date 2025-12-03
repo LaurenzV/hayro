@@ -1,11 +1,12 @@
 //! Decoding JPEG2000 code streams.
 //!
-//! This is the "core" module of the crate that orchestrages all
+//! This is the "core" module of the crate that orchestrates all
 //! stages in such a way that a given codestream is decoded into its
 //! component channels.
 
 use crate::bitmap::ChannelData;
 use crate::bitplane::{BitPlaneDecodeBuffers, BitPlaneDecodeContext};
+use crate::build::{CodeBlock, Decomposition, Layer, Precinct, Segment, SubBand, SubBandType};
 use crate::codestream::{ComponentInfo, Header, ProgressionOrder, QuantizationStyle};
 use crate::idwt::IDWTOutput;
 use crate::progression::{
@@ -16,8 +17,7 @@ use crate::progression::{
     resolution_position_component_layer_progression,
 };
 use crate::reader::BitReader;
-use crate::rect::IntRect;
-use crate::tag_tree::{TagNode, TagTree};
+use crate::tag_tree::TagNode;
 use crate::tile::{ComponentTile, Tile};
 use crate::{bitplane, build, idwt, mct, segment, tile};
 use log::trace;
@@ -104,7 +104,7 @@ fn decode_tile<'a>(
     segment::parse(tile, progression_iterator, tile_ctx, header, storage)?;
     // We then decode the bitplanes of each code block, yielding the
     // (possibly dequantized) coefficients of each code block.
-    decode_tiles(tile, tile_ctx, storage, header)?;
+    decode_component_tile_bit_planes(tile, tile_ctx, storage, header)?;
 
     // Unlike before, we interleave the apply_idwt and store stages
     // for each component tile so we can reuse allocations better.
@@ -185,73 +185,6 @@ impl Iterator for SubBandIter {
 
         value
     }
-}
-
-pub(crate) struct Decomposition {
-    /// In the order low-high, high-low and high-high.
-    pub(crate) sub_bands: [usize; 3],
-    /// The rectangle of the decomposition.
-    pub(crate) rect: IntRect,
-}
-
-#[derive(Clone)]
-pub(crate) struct SubBand {
-    pub(crate) sub_band_type: SubBandType,
-    pub(crate) rect: IntRect,
-    pub(crate) precincts: Range<usize>,
-    pub(crate) coefficients: Range<usize>,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum SubBandType {
-    LowLow = 0,
-    HighLow = 1,
-    LowHigh = 2,
-    HighHigh = 3,
-}
-
-#[derive(Clone)]
-pub(crate) struct Precinct {
-    pub(crate) code_blocks: Range<usize>,
-    pub(crate) code_inclusion_tree: TagTree,
-    pub(crate) zero_bitplane_tree: TagTree,
-}
-
-pub(crate) struct PrecinctData {
-    /// The x coordinate mapped back to the reference grid.
-    pub(crate) r_x: u32,
-    /// The y coordinate mapped back to the reference grid.
-    pub(crate) r_y: u32,
-    /// The actual rectangle of the precinct (in the sub-band coordinate
-    /// system).
-    pub(crate) rect: IntRect,
-    /// The index of the precinct in the sub-band.
-    pub(crate) idx: u32,
-}
-
-#[derive(Clone)]
-pub(crate) struct CodeBlock {
-    pub(crate) rect: IntRect,
-    pub(crate) x_idx: u32,
-    pub(crate) y_idx: u32,
-    pub(crate) layers: Range<usize>,
-    pub(crate) has_been_included: bool,
-    pub(crate) missing_bit_planes: u8,
-    pub(crate) number_of_coding_passes: u8,
-    pub(crate) l_block: u32,
-    pub(crate) non_empty_layer_count: u8,
-}
-
-pub(crate) struct Segment<'a> {
-    pub(crate) idx: u8,
-    pub(crate) coding_pases: u8,
-    pub(crate) data_length: u32,
-    pub(crate) data: &'a [u8],
-}
-
-#[derive(Clone)]
-pub(crate) struct Layer {
-    pub(crate) segments: Option<Range<usize>>,
 }
 
 /// A buffer so that we can reuse allocations for layers/code blocks/etc.
@@ -339,7 +272,7 @@ impl<'a> TileDecodeContext<'a> {
     }
 }
 
-fn decode_tiles<'a>(
+fn decode_component_tile_bit_planes<'a>(
     tile: &'a Tile<'a>,
     tile_ctx: &mut TileDecodeContext<'a>,
     storage: &mut DecompositionStorage,
@@ -475,7 +408,7 @@ fn store<'a>(
     let component_tile = ComponentTile::new(tile, component_info);
 
     // If we have MCT, the sign shift needs to be applied after the
-    // transform. We take care of that in the main decode method.
+    // MCT transform. We take care of that in the main decode method.
     // Otherwise, we might as well just apply it now.
     if !tile.mct {
         for sample in idwt_output.coefficients.iter_mut() {
