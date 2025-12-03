@@ -51,12 +51,14 @@ impl<'a> TilePart<'a> {
         match self {
             TilePart::Merged(m) => &mut m.data,
             TilePart::Separated(s) => {
-                if s.headers[s.active_header_reader].at_end() && s.headers.len() - 1 > s.active_header_reader {
+                if s.headers[s.active_header_reader].at_end()
+                    && s.headers.len() - 1 > s.active_header_reader
+                {
                     s.active_header_reader += 1;
                 }
-                
+
                 &mut s.headers[s.active_header_reader]
-            },
+            }
         }
     }
 
@@ -274,7 +276,7 @@ fn parse_tile_part<'a>(
             Ok(())
         };
     };
-    
+
     ppt_headers.sort_by(|p1, p2| p1.sequence_idx.cmp(&p2.sequence_idx));
 
     let data = reader
@@ -653,7 +655,7 @@ struct TilePartHeader {
 
 struct PptMarkerData<'a> {
     data: &'a [u8],
-    sequence_idx: u8
+    sequence_idx: u8,
 }
 
 /// PPT marker (A.7.5).
