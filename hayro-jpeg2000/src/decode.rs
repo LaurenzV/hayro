@@ -30,7 +30,7 @@ pub(crate) fn decode(data: &[u8], header: &Header) -> Result<Vec<ChannelData>, &
     if tiles.is_empty() {
         return Err("the image doesn't contain any tiles");
     }
-    
+
     let mut tile_ctx = TileDecodeContext::new(header, &tiles[0]);
     let mut storage = DecompositionStorage::default();
 
@@ -45,14 +45,25 @@ pub(crate) fn decode(data: &[u8], header: &Header) -> Result<Vec<ChannelData>, &
         );
 
         let iter_input = IteratorInput::new(tile);
-        
-        let progression_iterator: Box<dyn Iterator<Item = ProgressionData>> = match tile.progression_order {
-            ProgressionOrder::LayerResolutionComponentPosition => Box::new(layer_resolution_component_position_progression(&iter_input)),
-            ProgressionOrder::ResolutionLayerComponentPosition => Box::new(resolution_layer_component_position_progression(&iter_input)),
-            ProgressionOrder::ResolutionPositionComponentLayer => Box::new(resolution_position_component_layer_progression(&iter_input)),
-            ProgressionOrder::PositionComponentResolutionLayer => Box::new(position_component_resolution_layer_progression(&iter_input)),
-            ProgressionOrder::ComponentPositionResolutionLayer => Box::new(component_position_resolution_layer_progression(&iter_input))
-        };
+
+        let progression_iterator: Box<dyn Iterator<Item = ProgressionData>> =
+            match tile.progression_order {
+                ProgressionOrder::LayerResolutionComponentPosition => {
+                    Box::new(layer_resolution_component_position_progression(&iter_input))
+                }
+                ProgressionOrder::ResolutionLayerComponentPosition => {
+                    Box::new(resolution_layer_component_position_progression(&iter_input))
+                }
+                ProgressionOrder::ResolutionPositionComponentLayer => {
+                    Box::new(resolution_position_component_layer_progression(&iter_input))
+                }
+                ProgressionOrder::PositionComponentResolutionLayer => {
+                    Box::new(position_component_resolution_layer_progression(&iter_input))
+                }
+                ProgressionOrder::ComponentPositionResolutionLayer => {
+                    Box::new(component_position_resolution_layer_progression(&iter_input))
+                }
+            };
 
         decode_tile(
             tile,
