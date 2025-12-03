@@ -47,14 +47,16 @@ fn parse_inner<'a>(
             &mut storage.tile_decompositions[progression_data.component as usize];
         let sub_band_iter = tile_decompositions.sub_band_iter(resolution, &storage.decompositions);
 
-        let header_reader = tile_part.header();
+        let body_reader = tile_part.body();
 
         if component_info.coding_style.flags.may_use_sop_markers()
-            && header_reader.peek_marker() == Some(SOP)
+            && body_reader.peek_marker() == Some(SOP)
         {
-            header_reader.read_marker().ok()?;
-            header_reader.skip_bytes(4)?;
+            body_reader.read_marker().ok()?;
+            body_reader.skip_bytes(4)?;
         }
+
+        let header_reader = tile_part.header();
 
         let zero_length = header_reader.read_bits_with_stuffing(1)? == 0;
 
@@ -76,14 +78,14 @@ fn parse_inner<'a>(
 
         header_reader.align();
 
-        // Now read the packet body.
-        let body_reader = tile_part.body();
-
         if component_info.coding_style.flags.uses_eph_marker()
-            && body_reader.read_marker().ok()? != EPH
+            && header_reader.read_marker().ok()? != EPH
         {
             return None;
         }
+
+        // Now read the packet body.
+        let body_reader = tile_part.body();
 
         if !zero_length {
             for sub_band in sub_band_iter {
