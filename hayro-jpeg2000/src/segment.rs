@@ -10,7 +10,7 @@ use log::trace;
 
 pub(crate) fn parse<'a>(
     tile: &'a Tile<'a>,
-    mut progression_iterator: impl Iterator<Item = ProgressionData>,
+    mut progression_iterator: Box<dyn Iterator<Item = ProgressionData> + '_>,
     tile_ctx: &mut TileDecodeContext<'a>,
     header: &Header,
     storage: &mut DecompositionStorage<'a>,
@@ -34,7 +34,7 @@ pub(crate) fn parse<'a>(
 
 fn parse_inner<'a>(
     mut tile_part: TilePart<'a>,
-    mut progression_iterator: impl Iterator<Item = ProgressionData>,
+    progression_iterator: &mut dyn Iterator<Item = ProgressionData>,
     tile_ctx: &mut TileDecodeContext<'a>,
     storage: &mut DecompositionStorage<'a>,
 ) -> Option<()> {

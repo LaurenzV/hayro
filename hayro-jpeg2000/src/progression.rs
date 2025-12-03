@@ -48,9 +48,9 @@ impl<'a> IteratorInput<'a> {
 }
 
 /// B.12.1.1 Layer-resolution level-component-position progression.
-pub(crate) fn layer_resolution_component_position_progression(
-    input: &IteratorInput<'_>,
-) -> impl Iterator<Item = ProgressionData> {
+pub(crate) fn layer_resolution_component_position_progression<'a>(
+    input: &'a IteratorInput<'a>,
+) -> impl Iterator<Item = ProgressionData> + 'a {
     let num_components = input.tile.component_infos.len();
 
     let component_tiles = input.component_tiles();
@@ -110,9 +110,9 @@ pub(crate) fn layer_resolution_component_position_progression(
 }
 
 /// B.12.1.2 Resolution level-layer-component-position progression.
-pub(crate) fn resolution_layer_component_position_progression(
-    input: &IteratorInput<'_>,
-) -> impl Iterator<Item = ProgressionData> {
+pub(crate) fn resolution_layer_component_position_progression<'a>(
+    input: &'a IteratorInput<'a>,
+) -> impl Iterator<Item = ProgressionData> + 'a {
     let num_components = input.tile.component_infos.len();
 
     let component_tiles = input.component_tiles();
@@ -185,10 +185,10 @@ struct PrecinctStore {
     precinct_idx: u32,
 }
 
-fn position_progression_common(
-    input: &IteratorInput,
+fn position_progression_common<'a>(
+    input: &'a IteratorInput<'a>,
     sort: impl FnMut(&PrecinctStore, &PrecinctStore) -> Ordering,
-) -> impl Iterator<Item = ProgressionData> {
+) -> impl Iterator<Item = ProgressionData> + 'a {
     let mut elements = vec![];
 
     for (component_idx, component) in input.tile.component_tiles().enumerate() {
@@ -216,9 +216,9 @@ fn position_progression_common(
 }
 
 /// B.12.1.3 Resolution level-position-component-layer progression.
-pub(crate) fn resolution_position_component_layer_progression(
-    input: &IteratorInput<'_>,
-) -> impl Iterator<Item = ProgressionData> {
+pub(crate) fn resolution_position_component_layer_progression<'a>(
+    input: &'a IteratorInput<'a>,
+) -> impl Iterator<Item = ProgressionData> + 'a {
     position_progression_common(input, |p, s| {
         p.resolution
             .cmp(&s.resolution)
@@ -230,9 +230,9 @@ pub(crate) fn resolution_position_component_layer_progression(
 }
 
 /// B.12.1.4 Position-component-resolution level-layer progression.
-pub(crate) fn position_component_resolution_layer_progression(
-    input: &IteratorInput<'_>,
-) -> impl Iterator<Item = ProgressionData> {
+pub(crate) fn position_component_resolution_layer_progression<'a>(
+    input: &'a IteratorInput<'a>,
+) -> impl Iterator<Item = ProgressionData> + 'a {
     position_progression_common(input, |p, s| {
         p.precinct_y
             .cmp(&s.precinct_y)
@@ -244,9 +244,9 @@ pub(crate) fn position_component_resolution_layer_progression(
 }
 
 /// B.12.1.5 Component-position-resolution level-layer progression.
-pub(crate) fn component_position_resolution_layer_progression(
-    input: &IteratorInput<'_>,
-) -> impl Iterator<Item = ProgressionData> {
+pub(crate) fn component_position_resolution_layer_progression<'a>(
+    input: &'a IteratorInput<'a>,
+) -> impl Iterator<Item = ProgressionData> + 'a {
     position_progression_common(input, |p, s| {
         p.component_idx
             .cmp(&s.component_idx)
