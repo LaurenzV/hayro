@@ -22,6 +22,7 @@ mod mct;
 mod progression;
 pub(crate) mod reader;
 pub(crate) mod rect;
+mod segment;
 mod tag_tree;
 mod tile;
 
