@@ -90,14 +90,14 @@ pub fn read(data: &[u8], settings: &DecodeSettings) -> Result<Bitmap, &'static s
     // chanel is the last component.
     let mut has_alpha = false;
 
-    // Note that this is only valid if all images have the same bit depth.
-    let bit_depth = decoded_image.decoded.components[0].bit_depth;
-
     if let Some(cdef) = &decoded_image.boxes.channel_definition {
         let last = cdef.channel_definitions.last().unwrap();
 
         has_alpha = last.channel_type == ChannelType::Opacity;
     }
+
+    // Note that this is only valid if all images have the same bit depth.
+    let bit_depth = decoded_image.decoded.components[0].bit_depth;
 
     let mut color_space = resolve_color_space(&mut decoded_image, bit_depth)?;
 

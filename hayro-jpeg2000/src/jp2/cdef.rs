@@ -18,10 +18,19 @@ pub(crate) fn parse(boxes: &mut ImageBoxes, data: &[u8]) -> Option<()> {
         let association = reader.read_u16()?;
 
         definitions.push(ChannelDefinition {
-            _channel_index: channel_index,
+            channel_index,
             channel_type: ChannelType::from_raw(channel_type)?,
             _association: ChannelAssociation::from_raw(association)?,
         });
+    }
+    
+    definitions.sort_by(|a, b| a.channel_index.cmp(&b.channel_index));
+    
+    // Ensure channel indices increases in steps of 1, starting from 0.
+    for (idx, def) in definitions.iter().enumerate() {
+        if def.channel_index as usize != idx {
+            return None;
+        }
     }
 
     boxes.channel_definition = Some(ChannelDefinitionBox {
@@ -38,7 +47,7 @@ pub(crate) struct ChannelDefinitionBox {
 
 #[derive(Debug, Clone)]
 pub(crate) struct ChannelDefinition {
-    pub(crate) _channel_index: u16,
+    pub(crate) channel_index: u16,
     pub(crate) channel_type: ChannelType,
     pub(crate) _association: ChannelAssociation,
 }
