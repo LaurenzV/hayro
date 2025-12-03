@@ -18,6 +18,7 @@ mod codestream;
 mod decode;
 mod icc;
 pub(crate) mod idwt;
+mod mct;
 mod progression;
 pub(crate) mod reader;
 pub(crate) mod rect;
