@@ -104,7 +104,7 @@ pub fn read(data: &[u8], settings: &DecodeSettings) -> Result<Bitmap, &'static s
         for def in &cdef.channel_definitions[..cdef.channel_definitions.len() - 1] {
             if def.channel_type == ChannelType::Opacity
             {
-                return Err("unsupported JP image");
+                return Err("intermediate opacity channels are not supported");
             }
         }
 
@@ -125,7 +125,13 @@ pub fn read(data: &[u8], settings: &DecodeSettings) -> Result<Bitmap, &'static s
     if decoded_image.decoded.components.len()
         != (color_space.num_channels() + if has_alpha { 1 } else { 0 }) as usize
     {
-        return Err("unsupported JP image");
+        if !settings.strict && decoded_image.decoded.components.len() == color_space.num_channels() as usize + 1 && !has_alpha {
+            // See OPENJPEG test case orb-blue10-lin-j2k. Assume that we have an
+            // alpha channel in this case.
+            has_alpha = true;
+        }   else {
+            return Err("image has too many channels");
+        }
     }
 
     Ok(Bitmap {
