@@ -511,12 +511,9 @@ fn size_marker_inner(reader: &mut BitReader) -> Option<SizeData> {
         let y_rsiz = reader.read_byte()?;
 
         let precision = (ssiz & 0x7F) + 1;
-        let is_signed = (ssiz & 0x80) != 0;
-
-        if is_signed {
-            // We don't support signed images yet.
-            return None;
-        }
+        // No idea how to process signed images, but as far as I can tell
+        // openjpeg and others just accept it as is, so let's do the same.
+        let _is_signed = (ssiz & 0x80) != 0;
 
         // In theory up to 38 is allowed, but we don't support more than that.
         if precision as u32 > BITPLANE_BIT_SIZE {
