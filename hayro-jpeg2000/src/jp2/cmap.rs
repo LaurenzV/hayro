@@ -8,12 +8,9 @@ pub(crate) fn parse(boxes: &mut ImageBoxes, data: &[u8]) -> Option<()> {
     let mut entries = Vec::with_capacity(data.len() / 4);
 
     while !reader.at_end() {
-        let component_index = reader
-            .read_u16()?;
-        let mapping_type = reader
-            .read_byte()?;
-        let palette_column = reader
-            .read_byte()?;
+        let component_index = reader.read_u16()?;
+        let mapping_type = reader.read_byte()?;
+        let palette_column = reader.read_byte()?;
 
         let mapping_type = match mapping_type {
             0 => ComponentMappingType::Direct,
@@ -29,16 +26,14 @@ pub(crate) fn parse(boxes: &mut ImageBoxes, data: &[u8]) -> Option<()> {
         });
     }
 
-    boxes.component_mapping = Some(ComponentMappingBox {
-        entries,
-    });
-    
+    boxes.component_mapping = Some(ComponentMappingBox { entries });
+
     Some(())
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct ComponentMappingBox {
-    pub(crate) entries: Vec<ComponentMappingEntry>
+    pub(crate) entries: Vec<ComponentMappingEntry>,
 }
 
 #[derive(Debug, Clone)]

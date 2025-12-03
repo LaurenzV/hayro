@@ -23,13 +23,13 @@ pub(crate) fn parse(boxes: &mut ImageBoxes, data: &[u8]) -> Option<()> {
     boxes.channel_definition = Some(ChannelDefinitionBox {
         channel_definitions: definitions,
     });
-    
+
     Some(())
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct ChannelDefinitionBox {
-    pub(crate) channel_definitions: Vec<ChannelDefinition>
+    pub(crate) channel_definitions: Vec<ChannelDefinition>,
 }
 
 #[derive(Debug, Clone)]
@@ -51,7 +51,7 @@ impl ChannelType {
             0 => Some(ChannelType::Colour),
             1 => Some(ChannelType::Opacity),
             // We don't support the others.
-            _ => None
+            _ => None,
         }
     }
 }

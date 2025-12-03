@@ -5,5 +5,3 @@ pub struct Bitmap {
     pub channels: Vec<ChannelData>,
     pub metadata: ImageMetadata,
 }
-
-

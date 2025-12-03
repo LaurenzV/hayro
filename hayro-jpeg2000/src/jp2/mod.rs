@@ -4,10 +4,10 @@ use crate::jp2::colr::ColorSpecificationBox;
 use crate::reader::BitReader;
 
 mod r#box;
-mod colr;
-mod icc;
 mod cdef;
 mod cmap;
+mod colr;
+mod icc;
 
 #[derive(Debug, Clone)]
 pub(crate) struct ImageBoxes {

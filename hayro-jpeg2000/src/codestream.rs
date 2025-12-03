@@ -10,7 +10,7 @@ pub(crate) struct DecodeResult {
     /// The header of the code-stream.
     header: Header,
     /// The decoded components.
-    components: Vec<ComponentData>
+    components: Vec<ComponentData>,
 }
 
 #[derive(Debug, Clone)]
@@ -19,10 +19,7 @@ pub(crate) struct ComponentData {
     pub(crate) bit_depth: u8,
 }
 
-pub(crate) fn read(
-    stream: &[u8],
-    settings: &DecodeSettings,
-) -> Result<DecodeResult, &'static str> {
+pub(crate) fn read(stream: &[u8], settings: &DecodeSettings) -> Result<DecodeResult, &'static str> {
     let mut reader = BitReader::new(stream);
 
     let marker = reader.read_marker()?;
@@ -38,7 +35,7 @@ pub(crate) fn read(
 
     Ok(DecodeResult {
         header,
-        components: decoded
+        components: decoded,
     })
 }
 
@@ -191,8 +188,10 @@ impl ComponentInfo {
         let n_ll = self.coding_style.parameters.num_decomposition_levels;
 
         let sb_index = match sub_band_type {
-            SubBandType::LowLow => panic!("function should not be called with\
-            LL sub-band"),
+            SubBandType::LowLow => panic!(
+                "function should not be called with\
+            LL sub-band"
+            ),
             SubBandType::HighLow => 0,
             SubBandType::LowHigh => 1,
             SubBandType::HighHigh => 2,
@@ -546,7 +545,7 @@ fn size_marker_inner(reader: &mut BitReader) -> Option<SizeData> {
 
         let precision = (ssiz & 0x7F) + 1;
         let is_signed = (ssiz & 0x80) != 0;
-        
+
         if is_signed {
             // We don't support signed images yet.
             return None;

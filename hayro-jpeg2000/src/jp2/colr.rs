@@ -1,7 +1,7 @@
 //! The color specification box (colr), defined in I.5.3.3.
 
-use crate::jp2::icc::ICCMetadata;
 use crate::jp2::ImageBoxes;
+use crate::jp2::icc::ICCMetadata;
 use crate::reader::BitReader;
 
 pub(crate) fn parse(boxes: &mut ImageBoxes, data: &[u8]) -> Option<()> {
@@ -28,10 +28,8 @@ pub(crate) fn parse(boxes: &mut ImageBoxes, data: &[u8]) -> Option<()> {
         _ => return None,
     };
 
-    boxes.color_specification = Some(ColorSpecificationBox {
-        method,
-    });
-    
+    boxes.color_specification = Some(ColorSpecificationBox { method });
+
     Some(())
 }
 

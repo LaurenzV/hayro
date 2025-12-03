@@ -15,6 +15,7 @@ mod build;
 mod codestream;
 mod decode;
 pub(crate) mod idwt;
+mod jp2;
 mod mct;
 mod progression;
 pub(crate) mod reader;
@@ -22,7 +23,6 @@ pub(crate) mod rect;
 mod segment;
 mod tag_tree;
 mod tile;
-mod jp2;
 
 fn resolve_component_channels(
     channels: Vec<ChannelData>,

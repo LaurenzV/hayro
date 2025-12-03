@@ -6,7 +6,9 @@
 
 use crate::bitplane::{BitPlaneDecodeBuffers, BitPlaneDecodeContext};
 use crate::build::{CodeBlock, Decomposition, Layer, Precinct, Segment, SubBand, SubBandType};
-use crate::codestream::{ComponentData, ComponentInfo, Header, ProgressionOrder, QuantizationStyle};
+use crate::codestream::{
+    ComponentData, ComponentInfo, Header, ProgressionOrder, QuantizationStyle,
+};
 use crate::idwt::IDWTOutput;
 use crate::progression::{
     IteratorInput, ProgressionData, component_position_resolution_layer_progression,
