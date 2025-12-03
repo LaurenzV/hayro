@@ -1,70 +1,22 @@
+use crate::jp2::colr::ColorSpecificationBox;
 use crate::reader::BitReader;
 
 mod r#box;
 mod colr;
 mod icc;
+mod cdef;
 
 /// Image metadata extracted from JP2 Header box.
 #[derive(Debug, Clone)]
 pub struct ImageMetadata {
-    /// Image area height in reference grid points.
-    pub height: u32,
-    /// Image area width in reference grid points.
-    pub width: u32,
     /// Colour specification information from the Colour Specification box.
-    pub colour_specification: Option<ColourSpecification>,
+    pub color_specification: Option<ColorSpecificationBox>,
     /// Channel definitions specified by the Channel Definition box (cdef).
     pub channel_definitions: Vec<ChannelDefinition>,
     /// Palette definitions from the Palette box (pclr).
     pub palette: Option<Palette>,
     /// Component mappings defined by the Component Mapping box (cmap).
     pub component_mapping: Option<Vec<ComponentMappingEntry>>,
-}
-
-/// Association between codestream components/channels and their semantic role.
-#[derive(Debug, Clone)]
-pub struct ChannelDefinition {
-    pub channel_index: u16,
-    pub channel_type: ChannelType,
-    pub association: ChannelAssociation,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ChannelType {
-    Colour,
-    Opacity,
-    PremultipliedOpacity,
-    Reserved(u16),
-    Unspecified,
-}
-
-impl ChannelType {
-    fn from_raw(value: u16) -> Self {
-        match value {
-            0 => ChannelType::Colour,
-            1 => ChannelType::Opacity,
-            2 => ChannelType::PremultipliedOpacity,
-            u16::MAX => ChannelType::Unspecified,
-            v => ChannelType::Reserved(v),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ChannelAssociation {
-    WholeImage,
-    Colour(u16),
-    Unspecified,
-}
-
-impl ChannelAssociation {
-    fn from_raw(value: u16) -> Self {
-        match value {
-            0 => ChannelAssociation::WholeImage,
-            u16::MAX => ChannelAssociation::Unspecified,
-            v => ChannelAssociation::Colour(v),
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -106,44 +58,6 @@ pub enum ComponentMappingType {
 }
 
 impl ImageMetadata {
-    /// Parse Image Header box (ihdr) data.
-    fn parse_ihdr(&mut self, data: &[u8]) -> Result<(), &'static str> {
-        if data.len() < 14 {
-            return Err("image header box too short");
-        }
-
-        let mut reader = BitReader::new(data);
-
-        self.height = reader
-            .read_u32()
-            .ok_or("failed to read image height from header")?;
-        self.width = reader
-            .read_u32()
-            .ok_or("failed to read image width from header")?;
-        let _num_components = reader
-            .read_u16()
-            .ok_or("failed to read component count from header")?;
-        let bits_per_component = reader
-            .read_byte()
-            .ok_or("failed to read bits per component from header")?;
-
-        if bits_per_component == 255 {
-            return Err("extended bits-per-component header unsupported");
-        }
-
-        let _compression_type = reader
-            .read_byte()
-            .ok_or("failed to read compression type from header")?;
-        let _colorspace_unknown = reader
-            .read_byte()
-            .ok_or("failed to read colourspace flag from header")?;
-        let _has_intellectual_property = reader
-            .read_byte()
-            .ok_or("failed to read intellectual property flag from header")?;
-
-        Ok(())
-    }
-
     /// Parse Channel Definition box (cdef) data.
     fn parse_cdef(&mut self, data: &[u8]) -> Option<()> {
         if data.len() < 2 {
