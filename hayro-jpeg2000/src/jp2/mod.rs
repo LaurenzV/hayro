@@ -4,7 +4,7 @@ use crate::DecodeSettings;
 use crate::j2c::DecodedCodestream;
 use crate::jp2::r#box::{FILE_TYPE, JP2_SIGNATURE};
 use crate::jp2::cdef::ChannelDefinitionBox;
-use crate::jp2::cmap::ComponentMappingBox;
+use crate::jp2::cmap::{ComponentMappingBox, ComponentMappingEntry, ComponentMappingType};
 use crate::jp2::colr::ColorSpecificationBox;
 use crate::jp2::pclr::PaletteBox;
 use crate::reader::BitReader;
@@ -110,9 +110,27 @@ pub(crate) fn decode(data: &[u8], settings: &DecodeSettings) -> Result<DecodedIm
             }
         }
     }
+    
+    let (mut image_boxes, decoded_codestream) = (image_boxes?, decoded_codestream?);
+
+    if let Some(palette) = image_boxes.palette.as_ref() && image_boxes.component_mapping.is_none() {
+        // In theory, a cmap is required if we have pclr, but since there are
+        // some files that don't seem to do so, we assume
+        // that all channels are mapped via the palette in case not.
+        let mappings = (0..palette.columns.len())
+            .map(|i| ComponentMappingEntry {
+                component_index: 0,
+                mapping_type: ComponentMappingType::Palette { column: i as u8 },
+            })
+            .collect::<Vec<_>>();
+        
+        image_boxes.component_mapping = Some(ComponentMappingBox {
+            entries: mappings,
+        })
+    }
 
     Ok(DecodedImage {
-        decoded: decoded_codestream?,
-        boxes: image_boxes?,
+        decoded: decoded_codestream,
+        boxes: image_boxes,
     })
 }

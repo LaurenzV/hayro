@@ -51,13 +51,13 @@ pub(crate) fn parse(boxes: &mut ImageBoxes, data: &[u8]) -> Option<()> {
 
 #[derive(Debug, Clone)]
 pub(crate) struct PaletteBox {
-    entries: Vec<Vec<u64>>,
-    columns: Vec<PaletteColumn>,
+    pub(crate) entries: Vec<Vec<u64>>,
+    pub(crate) columns: Vec<PaletteColumn>,
 }
 
 impl PaletteBox {
     #[inline(always)]
-    fn map(&self, entry: usize, column: usize) -> Option<u64> {
+    pub(crate) fn map(&self, entry: usize, column: usize) -> Option<u64> {
         self.entries
             .get(entry)
             .and_then(|row| row.get(column))
@@ -71,5 +71,5 @@ impl PaletteBox {
 
 #[derive(Debug, Clone, Copy)]
 struct PaletteColumn {
-    bit_depth: u8,
+    pub(crate) bit_depth: u8,
 }
