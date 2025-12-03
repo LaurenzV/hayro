@@ -377,7 +377,28 @@ fn to_dynamic_image(bitmap: Bitmap) -> Result<DynamicImage, String> {
                 from_icc(CMYK_PROFILE, 4, has_alpha, width, height, &bitmap.data)?
             }
             (hayro_jpeg2000::ColorSpace::CMYK, true) => {
-                return Err("CMYK with alpha is not supported".to_string());
+                // moxcms doesn't support CMYK interleaved with alpha, so we
+                // need to split it.
+                let mut cmyk = vec![];
+                let mut alpha = vec![];
+
+                for sample in bitmap.data.chunks_exact(5) {
+                    cmyk.extend_from_slice(&sample[..4]);
+                    alpha.push(sample[4]);
+                }
+
+                let rgb = from_icc(CMYK_PROFILE, 4, false, width, height, &cmyk)?;
+                let interleaved = rgb
+                    .as_bytes()
+                    .chunks_exact(3)
+                    .zip(alpha)
+                    .flat_map(|(rgb, alpha)| [rgb[0], rgb[1], rgb[2], alpha])
+                    .collect::<Vec<_>>();
+
+                DynamicImage::ImageRgba8(
+                    ImageBuffer::from_raw(width, height, interleaved)
+                        .ok_or_else(|| "failed to build rgba buffer".to_string())?,
+                )
             }
             (
                 hayro_jpeg2000::ColorSpace::Icc {
