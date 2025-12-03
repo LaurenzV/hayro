@@ -116,11 +116,14 @@ pub fn read(data: &[u8], settings: &DecodeSettings) -> Result<Bitmap, &'static s
     if decoded_image.decoded.components.len()
         != (color_space.num_channels() + if has_alpha { 1 } else { 0 }) as usize
     {
-        if !settings.strict && decoded_image.decoded.components.len() == color_space.num_channels() as usize + 1 && !has_alpha {
+        if !settings.strict
+            && decoded_image.decoded.components.len() == color_space.num_channels() as usize + 1
+            && !has_alpha
+        {
             // See OPENJPEG test case orb-blue10-lin-j2k. Assume that we have an
             // alpha channel in this case.
             has_alpha = true;
-        }   else {
+        } else {
             return Err("image has too many channels");
         }
     }
@@ -264,24 +267,22 @@ fn resolve_color_space(
             if let Some(metadata) = ICCMetadata::from_data(&icc) {
                 ColorSpace::Icc {
                     profile: icc.clone(),
-                    num_components: metadata.color_space.num_components() ,
+                    num_components: metadata.color_space.num_components(),
                 }
-            }   else {
+            } else {
                 // See OPENJPEG test orb-blue10-lin-jp2.jp2. They seem to
-                // assume RGB in this case (even though the image has 4 
+                // assume RGB in this case (even though the image has 4
                 // components with no opacity channel, they assume RGBA instead
                 // of CMYK).
                 ColorSpace::RGB
             }
         }
-        jp2::colr::ColorSpace::Unknown => {
-            match image.decoded.components.len() {
-                1 => ColorSpace::Gray,
-                3 => ColorSpace::RGB,
-                4 => ColorSpace::CMYK,
-                _ => return Err("JP2 image has unsupported color space"),
-            }
-        }
+        jp2::colr::ColorSpace::Unknown => match image.decoded.components.len() {
+            1 => ColorSpace::Gray,
+            3 => ColorSpace::RGB,
+            4 => ColorSpace::CMYK,
+            _ => return Err("JP2 image has unsupported color space"),
+        },
     };
 
     Ok(cs)

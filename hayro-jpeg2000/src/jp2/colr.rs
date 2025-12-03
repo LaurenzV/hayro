@@ -39,7 +39,7 @@ pub(crate) struct ColorSpecificationBox {
 pub(crate) enum ColorSpace {
     Enumerated(EnumeratedColorspace),
     Icc(Vec<u8>),
-    Unknown
+    Unknown,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

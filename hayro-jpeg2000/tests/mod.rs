@@ -1,4 +1,4 @@
-use hayro_jpeg2000::{Bitmap, DecodeSettings, read};
+use hayro_jpeg2000::{Bitmap, ColorSpace, DecodeSettings, read};
 use image::{DynamicImage, ImageBuffer, ImageFormat, Rgba, RgbaImage};
 use indicatif::{ProgressBar, ProgressStyle};
 use moxcms::{ColorProfile, Layout, TransformOptions};
@@ -12,7 +12,6 @@ use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
-const ROMM_PROFILE: &[u8] = include_bytes!("../assets/ISO22028-2_ROMM-RGB.icc");
 const CMYK_PROFILE: &[u8] = include_bytes!("../assets/CGATS001Compat-v2-micro.icc");
 
 const REPLACE: Option<&str> = option_env!("REPLACE");
@@ -353,55 +352,68 @@ fn to_dynamic_image(bitmap: Bitmap) -> Result<DynamicImage, String> {
         Ok(image)
     }
 
-    let (width, height) = (bitmap.width, bitmap.height);
-    let has_alpha = bitmap.has_alpha;
+    fn convert(bitmap: Bitmap, cs: ColorSpace) -> Result<DynamicImage, String> {
+        let (width, height) = (bitmap.width, bitmap.height);
+        let has_alpha = bitmap.has_alpha;
 
-    let image = match (bitmap.color_space, has_alpha) {
-        (hayro_jpeg2000::ColorSpace::Gray, false) => DynamicImage::ImageLuma8(
-            ImageBuffer::from_raw(width, height, bitmap.data)
-                .ok_or_else(|| "failed to build grayscale buffer".to_string())?,
-        ),
-        (hayro_jpeg2000::ColorSpace::Gray, true) => DynamicImage::ImageLumaA8(
-            ImageBuffer::from_raw(width, height, bitmap.data)
-                .ok_or_else(|| "failed to build grayscale-alpha buffer".to_string())?,
-        ),
-        (hayro_jpeg2000::ColorSpace::RGB, false) => DynamicImage::ImageRgb8(
-            ImageBuffer::from_raw(width, height, bitmap.data)
-                .ok_or_else(|| "failed to build rgb buffer".to_string())?,
-        ),
-        (hayro_jpeg2000::ColorSpace::RGB, true) => DynamicImage::ImageRgba8(
-            ImageBuffer::from_raw(width, height, bitmap.data)
-                .ok_or_else(|| "failed to build rgba buffer".to_string())?,
-        ),
-        (hayro_jpeg2000::ColorSpace::CMYK, false) => from_icc(
-            include_bytes!("../assets/CGATS001Compat-v2-micro.icc"),
-            4,
-            has_alpha,
-            width,
-            height,
-            &bitmap.data,
-        )?,
-        (hayro_jpeg2000::ColorSpace::CMYK, true) => {
-            return Err("CMYK with alpha is not supported".to_string());
-        }
-        (hayro_jpeg2000::ColorSpace::Icc { profile, mut num_components}, has_alpha) => {
-            if has_alpha {
-                num_components += 1;
+        let image = match (cs, has_alpha) {
+            (hayro_jpeg2000::ColorSpace::Gray, false) => DynamicImage::ImageLuma8(
+                ImageBuffer::from_raw(width, height, bitmap.data)
+                    .ok_or_else(|| "failed to build grayscale buffer".to_string())?,
+            ),
+            (hayro_jpeg2000::ColorSpace::Gray, true) => DynamicImage::ImageLumaA8(
+                ImageBuffer::from_raw(width, height, bitmap.data)
+                    .ok_or_else(|| "failed to build grayscale-alpha buffer".to_string())?,
+            ),
+            (hayro_jpeg2000::ColorSpace::RGB, false) => DynamicImage::ImageRgb8(
+                ImageBuffer::from_raw(width, height, bitmap.data)
+                    .ok_or_else(|| "failed to build rgb buffer".to_string())?,
+            ),
+            (hayro_jpeg2000::ColorSpace::RGB, true) => DynamicImage::ImageRgba8(
+                ImageBuffer::from_raw(width, height, bitmap.data)
+                    .ok_or_else(|| "failed to build rgba buffer".to_string())?,
+            ),
+            (hayro_jpeg2000::ColorSpace::CMYK, false) => {
+                from_icc(CMYK_PROFILE, 4, has_alpha, width, height, &bitmap.data)?
             }
-            
-            from_icc(
-                &profile,
-                num_components,
+            (hayro_jpeg2000::ColorSpace::CMYK, true) => {
+                return Err("CMYK with alpha is not supported".to_string());
+            }
+            (
+                hayro_jpeg2000::ColorSpace::Icc {
+                    profile,
+                    mut num_components,
+                },
                 has_alpha,
-                width,
-                height,
-                &bitmap.data,
-            )?
-        },
-        _ => return Err("unsupported channel configuration".to_string()),
-    };
+            ) => {
+                if has_alpha {
+                    num_components += 1;
+                }
 
-    Ok(image)
+                from_icc(
+                    &profile,
+                    num_components,
+                    has_alpha,
+                    width,
+                    height,
+                    &bitmap.data,
+                )
+                .or_else(|e| match num_components {
+                    1 => convert(bitmap, ColorSpace::Gray),
+                    3 => convert(bitmap, ColorSpace::RGB),
+                    4 => convert(bitmap, ColorSpace::CMYK),
+                    _ => Err(e),
+                })?
+            }
+            _ => return Err("unsupported channel configuration".to_string()),
+        };
+
+        Ok(image)
+    }
+
+    let cs = bitmap.color_space.clone();
+
+    convert(bitmap, cs)
 }
 
 fn get_diff(expected_image: &RgbaImage, actual_image: &RgbaImage) -> (RgbaImage, u32) {
