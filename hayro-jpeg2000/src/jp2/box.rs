@@ -1,8 +1,9 @@
+//! Parsing a JP2 box, as specified in I.4.
+
 #![allow(dead_code)]
 
 use crate::reader::BitReader;
 
-///! Parsing a JP2 box, as specified in I.4.
 
 /// JP2 signature box - 'jP\040\040'.
 pub const JP2_SIGNATURE: u32 = 0x6A502020;
