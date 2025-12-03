@@ -136,9 +136,9 @@ pub fn read(data: &[u8], settings: &DecodeSettings) -> Result<Bitmap, &'static s
 fn interleave_and_convert(image: DecodedImage) -> Vec<u8> {
     let mut components = image.decoded.components;
     let num_components = components.len();
-    
+
     let mut all_same_bit_depth = Some(components[0].bit_depth);
-    
+
     for component in components.iter().skip(1) {
         if Some(component.bit_depth) != all_same_bit_depth {
             all_same_bit_depth = None;
@@ -226,7 +226,11 @@ fn interleave_and_convert(image: DecodedImage) -> Vec<u8> {
 
         for sample in 0..max_len {
             for channel in components.iter() {
-                buf.push(((channel.container[sample] / ((1 << channel.bit_depth) - 1) as f32) * mul_factor).round() as u8)
+                buf.push(
+                    ((channel.container[sample] / ((1 << channel.bit_depth) - 1) as f32)
+                        * mul_factor)
+                        .round() as u8,
+                )
             }
         }
 
