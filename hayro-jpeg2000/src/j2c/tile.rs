@@ -245,6 +245,13 @@ fn parse_tile_part<'a>(
                 skip_marker_segment(reader)
                     .ok_or("failed to skip COM marker during tile part parsing")?;
             }
+            (0x30..=0x3F) => {
+                // "All markers with the marker code between 0xFF30 and 0xFF3F
+                // have no marker segment parameters. They shall be skipped by
+                // the decoder."
+                reader.read_marker()?;
+                // skip_marker_segment(reader);
+            }
             _ => {
                 return Err("unsupported marker encountered");
             }
