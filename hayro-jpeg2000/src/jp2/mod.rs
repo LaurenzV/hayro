@@ -1,3 +1,4 @@
+use crate::jp2::cdef::{ChannelDefinition, ChannelDefinitionBox};
 use crate::jp2::colr::ColorSpecificationBox;
 use crate::reader::BitReader;
 
@@ -6,17 +7,14 @@ mod colr;
 mod icc;
 mod cdef;
 
-/// Image metadata extracted from JP2 Header box.
 #[derive(Debug, Clone)]
-pub struct ImageMetadata {
-    /// Colour specification information from the Colour Specification box.
-    pub color_specification: Option<ColorSpecificationBox>,
-    /// Channel definitions specified by the Channel Definition box (cdef).
-    pub channel_definitions: Vec<ChannelDefinition>,
+pub(crate) struct ImageBoxes {
+    pub(crate) color_specification: Option<ColorSpecificationBox>,
+    pub(crate) channel_definition: Option<ChannelDefinitionBox>,
     /// Palette definitions from the Palette box (pclr).
-    pub palette: Option<Palette>,
+    pub(crate) palette: Option<Palette>,
     /// Component mappings defined by the Component Mapping box (cmap).
-    pub component_mapping: Option<Vec<ComponentMappingEntry>>,
+    pub(crate) component_mapping: Option<Vec<ComponentMappingEntry>>,
 }
 
 #[derive(Debug, Clone)]
@@ -57,35 +55,7 @@ pub enum ComponentMappingType {
     Reserved(u8),
 }
 
-impl ImageMetadata {
-    /// Parse Channel Definition box (cdef) data.
-    fn parse_cdef(&mut self, data: &[u8]) -> Option<()> {
-        if data.len() < 2 {
-            return None;
-        }
-
-        let mut reader = BitReader::new(data);
-        let count = reader.read_u16()? as usize;
-        let mut definitions = Vec::with_capacity(count);
-
-        for _ in 0..count {
-            let channel_index = reader.read_u16()?;
-            let channel_type = reader.read_u16()?;
-            let association = reader.read_u16()?;
-
-            definitions.push(ChannelDefinition {
-                channel_index,
-                channel_type: ChannelType::from_raw(channel_type),
-                association: ChannelAssociation::from_raw(association),
-            });
-        }
-
-        self.channel_definitions = definitions;
-        Some(())
-    }
-
-    
-
+impl ImageBoxes {
     /// Parse Palette box (pclr) data.
     fn parse_pclr(&mut self, data: &[u8]) -> Result<(), &'static str> {
         if data.len() < 3 {

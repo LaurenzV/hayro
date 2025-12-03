@@ -1,13 +1,9 @@
 //! The channel definition box (colr), defined in I.5.3.6.
 
-use crate::jp2::{ChannelAssociation, ChannelDefinition, ChannelType, ImageMetadata};
+use crate::jp2::ImageBoxes;
 use crate::reader::BitReader;
 
-pub(crate) fn parse(metadata: &mut ImageMetadata, data: &[u8]) -> Option<()> {
-    if data.len() < 2 {
-        return None;
-    }
-
+pub(crate) fn parse(metadata: &mut ImageBoxes, data: &[u8]) -> Option<()> {
     let mut reader = BitReader::new(data);
     let count = reader.read_u16()? as usize;
     let mut definitions = Vec::with_capacity(count);
@@ -19,54 +15,60 @@ pub(crate) fn parse(metadata: &mut ImageMetadata, data: &[u8]) -> Option<()> {
 
         definitions.push(ChannelDefinition {
             channel_index,
-            channel_type: ChannelType::from_raw(channel_type),
-            association: ChannelAssociation::from_raw(association),
+            channel_type: ChannelType::from_raw(channel_type)?,
+            association: ChannelAssociation::from_raw(association)?,
         });
     }
 
-    self.channel_definitions = definitions;
+    metadata.channel_definition = Some(ChannelDefinitionBox {
+        channel_definitions: definitions,
+    });
+    
     Some(())
 }
 
-/// Association between codestream components/channels and their semantic role.
 #[derive(Debug, Clone)]
-pub struct ChannelDefinition {
-    pub channel_index: u16,
-    pub channel_type: ChannelType,
-    pub association: ChannelAssociation,
+pub(crate) struct ChannelDefinitionBox {
+    pub(crate) channel_definitions: Vec<ChannelDefinition>
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ChannelDefinition {
+    pub(crate) channel_index: u16,
+    pub(crate) channel_type: ChannelType,
+    pub(crate) association: ChannelAssociation,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ChannelType {
+pub(crate) enum ChannelType {
     Colour,
     Opacity,
 }
 
 impl ChannelType {
-    fn from_raw(value: u16) -> Self {
+    fn from_raw(value: u16) -> Option<Self> {
         match value {
-            0 => ChannelType::Colour,
-            1 => ChannelType::Opacity,
-            2 => ChannelType::PremultipliedOpacity,
-            u16::MAX => ChannelType::Unspecified,
-            v => ChannelType::Reserved(v),
+            0 => Some(ChannelType::Colour),
+            1 => Some(ChannelType::Opacity),
+            // We don't support the others.
+            _ => None
         }
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ChannelAssociation {
+pub(crate) enum ChannelAssociation {
     WholeImage,
     Colour(u16),
-    Unspecified,
 }
 
 impl ChannelAssociation {
-    fn from_raw(value: u16) -> Self {
+    fn from_raw(value: u16) -> Option<Self> {
         match value {
-            0 => ChannelAssociation::WholeImage,
-            u16::MAX => ChannelAssociation::Unspecified,
-            v => ChannelAssociation::Colour(v),
+            0 => Some(ChannelAssociation::WholeImage),
+            // Unspecified.
+            u16::MAX => None,
+            v => Some(ChannelAssociation::Colour(v)),
         }
     }
 }
