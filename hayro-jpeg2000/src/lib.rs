@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 
 use crate::j2c::ComponentData;
-use crate::jp2::cdef::ChannelType;
+use crate::jp2::cdef::{ChannelAssociation, ChannelType};
 use crate::jp2::cmap::ComponentMappingType;
 use crate::jp2::colr::EnumeratedColorspace;
 use crate::jp2::icc::ICCMetadata;
@@ -92,8 +92,25 @@ pub fn read(data: &[u8], settings: &DecodeSettings) -> Result<Bitmap, &'static s
 
     if let Some(cdef) = &decoded_image.boxes.channel_definition {
         let last = cdef.channel_definitions.last().unwrap();
-
         has_alpha = last.channel_type == ChannelType::Opacity;
+
+        // Sort by the channel association. Note that this will only work if
+        // each component is referenced only once.
+        let mut components = decoded_image
+            .decoded
+            .components
+            .into_iter()
+            .zip(
+                cdef.channel_definitions
+                    .iter()
+                    .map(|c| match c._association {
+                        ChannelAssociation::WholeImage => u16::MAX,
+                        ChannelAssociation::Colour(c) => c,
+                    }),
+            )
+            .collect::<Vec<_>>();
+        components.sort_by(|c1, c2| c1.1.cmp(&c2.1));
+        decoded_image.decoded.components = components.into_iter().map(|c| c.0).collect();
     }
 
     // Note that this is only valid if all images have the same bit depth.

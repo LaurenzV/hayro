@@ -23,9 +23,9 @@ pub(crate) fn parse(boxes: &mut ImageBoxes, data: &[u8]) -> Option<()> {
             _association: ChannelAssociation::from_raw(association)?,
         });
     }
-    
+
     definitions.sort_by(|a, b| a.channel_index.cmp(&b.channel_index));
-    
+
     // Ensure channel indices increases in steps of 1, starting from 0.
     for (idx, def) in definitions.iter().enumerate() {
         if def.channel_index as usize != idx {
