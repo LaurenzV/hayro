@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::reader::BitReader;
 
 ///! Parsing a JP2 box, as specified in I.4.

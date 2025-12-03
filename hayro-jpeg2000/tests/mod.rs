@@ -1,5 +1,4 @@
-use hayro_jpeg2000::bitmap::Bitmap;
-use hayro_jpeg2000::{ColourSpecificationMethod, DecodeSettings, EnumeratedColourspace, read};
+use hayro_jpeg2000::{Bitmap, DecodeSettings, read};
 use image::{DynamicImage, ImageBuffer, ImageFormat, Rgba, RgbaImage};
 use indicatif::{ProgressBar, ProgressStyle};
 use moxcms::{ColorProfile, Layout, TransformOptions};
@@ -250,7 +249,7 @@ fn run_asset_test(asset: &AssetEntry) -> Result<(), String> {
     let bitmap =
         bitmap_result.map_err(|err| format!("failed to decode {}: {err:?}", asset_name))?;
 
-    let rgba = bitmap_to_dynamic_image(bitmap)
+    let rgba = to_dynamic_image(bitmap)
         .map_err(|err| format!("failed to rasterize {}: {err}", asset_name))?
         .into_rgba8();
     let reference_path = asset.relative_path.with_extension("png");
@@ -302,14 +301,14 @@ fn run_asset_test(asset: &AssetEntry) -> Result<(), String> {
     Ok(())
 }
 
-fn bitmap_to_dynamic_image(bitmap: Bitmap) -> Result<DynamicImage, String> {
+fn to_dynamic_image(bitmap: Bitmap) -> Result<DynamicImage, String> {
     fn from_icc(
         icc: &[u8],
         num_channels: u8,
         has_alpha: bool,
         width: u32,
         height: u32,
-        data: &[u8],
+        input_data: &[u8],
     ) -> Result<DynamicImage, String> {
         let src_profile = ColorProfile::new_from_slice(icc)
             .map_err(|_| "failed to read ICC profile".to_string())?;
@@ -320,34 +319,33 @@ fn bitmap_to_dynamic_image(bitmap: Bitmap) -> Result<DynamicImage, String> {
             2 => Layout::GrayAlpha,
             3 => Layout::Rgb,
             4 => Layout::Rgba,
-            _ => return Err("unsupported source layout".to_string()),
+            5 => Layout::Inks5,
+            _ => unimplemented!(),
         };
 
-        let dest_layout = if has_alpha { Layout::Rgba } else { Layout::Rgb };
         let out_channels = if has_alpha { 4 } else { 3 };
 
         let transform = src_profile
             .create_transform_8bit(
                 src_layout,
                 &dest_profile,
-                dest_layout,
+                if has_alpha { Layout::Rgba } else { Layout::Rgb },
                 TransformOptions::default(),
             )
-            .map_err(|_| "failed to create colour transform".to_string())?;
+            .unwrap();
 
-        let mut dest = vec![0; (width * height * out_channels) as usize];
-        transform
-            .transform(data, &mut dest)
-            .map_err(|_| "failed to run colour transform".to_string())?;
+        let mut transformed = vec![0; (width * height * out_channels) as usize];
+
+        transform.transform(input_data, &mut transformed).unwrap();
 
         let image = if has_alpha {
             DynamicImage::ImageRgba8(
-                ImageBuffer::from_raw(width, height, dest)
+                ImageBuffer::from_raw(width, height, transformed)
                     .ok_or_else(|| "failed to build rgba buffer".to_string())?,
             )
         } else {
             DynamicImage::ImageRgb8(
-                ImageBuffer::from_raw(width, height, dest)
+                ImageBuffer::from_raw(width, height, transformed)
                     .ok_or_else(|| "failed to build rgb buffer".to_string())?,
             )
         };
@@ -355,100 +353,34 @@ fn bitmap_to_dynamic_image(bitmap: Bitmap) -> Result<DynamicImage, String> {
         Ok(image)
     }
 
-    let Bitmap { channels, metadata } = bitmap;
-    let (width, height) = (metadata.width, metadata.height);
+    let (width, height) = (bitmap.width, bitmap.height);
+    let has_alpha = bitmap.has_alpha;
 
-    let mut has_alpha = channels.iter().any(|c| c.is_alpha);
-    let num_channels = channels.len();
-
-    if let Some(expected_channels) = metadata
-        .colour_specification
-        .as_ref()
-        .and_then(|c| c.method.expected_number_of_channels())
-        && (expected_channels as usize) < num_channels
-    {
-        has_alpha = true;
-    }
-
-    let channels = channels
-        .into_iter()
-        .map(|c| c.into_8bit())
-        .collect::<Vec<_>>();
-
-    let interleaved = if num_channels == 1 {
-        channels[0].clone()
-    } else {
-        let mut interleaved = vec![];
-        let num_samples = channels.iter().map(|c| c.len()).min().unwrap();
-
-        for sample_idx in 0..num_samples {
-            for channel in &channels {
-                interleaved.push(channel[sample_idx]);
-            }
-        }
-
-        interleaved
-    };
-
-    if let Some(spec) = &metadata.colour_specification {
-        match &spec.method {
-            ColourSpecificationMethod::IccProfile(icc) => {
-                let res = from_icc(
-                    icc.as_slice(),
-                    num_channels as u8,
-                    has_alpha,
-                    width,
-                    height,
-                    &interleaved,
-                );
-
-                if let Ok(res) = res {
-                    return Ok(res);
-                }
-            }
-            ColourSpecificationMethod::Enumerated(space) => {
-                if matches!(*space, EnumeratedColourspace::RommRgb) {
-                    return from_icc(
-                        ROMM_PROFILE,
-                        num_channels as u8,
-                        has_alpha,
-                        width,
-                        height,
-                        &interleaved,
-                    );
-                }
-            }
-            _ => {}
-        }
-    }
-
-    let image = match (num_channels, has_alpha) {
-        (1, false) => DynamicImage::ImageLuma8(
-            ImageBuffer::from_raw(width, height, interleaved)
+    let image = match (bitmap.color_space, has_alpha) {
+        (hayro_jpeg2000::ColorSpace::Gray, false) => DynamicImage::ImageLuma8(
+            ImageBuffer::from_raw(width, height, bitmap.data)
                 .ok_or_else(|| "failed to build grayscale buffer".to_string())?,
         ),
-        (2, true) => DynamicImage::ImageLumaA8(
-            ImageBuffer::from_raw(width, height, interleaved)
+        (hayro_jpeg2000::ColorSpace::Gray, true) => DynamicImage::ImageLumaA8(
+            ImageBuffer::from_raw(width, height, bitmap.data)
                 .ok_or_else(|| "failed to build grayscale-alpha buffer".to_string())?,
         ),
-        (3, false) => DynamicImage::ImageRgb8(
-            ImageBuffer::from_raw(width, height, interleaved)
+        (hayro_jpeg2000::ColorSpace::RGB, false) => DynamicImage::ImageRgb8(
+            ImageBuffer::from_raw(width, height, bitmap.data)
                 .ok_or_else(|| "failed to build rgb buffer".to_string())?,
         ),
-        (4, true) => DynamicImage::ImageRgba8(
-            ImageBuffer::from_raw(width, height, interleaved)
+        (hayro_jpeg2000::ColorSpace::RGB, true) => DynamicImage::ImageRgba8(
+            ImageBuffer::from_raw(width, height, bitmap.data)
                 .ok_or_else(|| "failed to build rgba buffer".to_string())?,
         ),
-        (4, false) => {
-            return from_icc(
-                CMYK_PROFILE,
-                num_channels as u8,
-                has_alpha,
-                width,
-                height,
-                &interleaved,
-            );
-        }
+        (hayro_jpeg2000::ColorSpace::CMYK, false) => from_icc(
+            include_bytes!("../assets/CGATS001Compat-v2-micro.icc"),
+            4 as u8,
+            has_alpha,
+            width,
+            height,
+            &bitmap.data,
+        )?,
         _ => return Err("unsupported channel configuration".to_string()),
     };
 

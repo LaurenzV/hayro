@@ -157,10 +157,8 @@ impl ComponentInfo {
         let n_ll = self.coding_style.parameters.num_decomposition_levels;
 
         let sb_index = match sub_band_type {
-            SubBandType::LowLow => panic!(
-                "function should not be called with\
-            LL sub-band"
-            ),
+            // TODO: Shouldn't be reached.
+            SubBandType::LowLow => u16::MAX,
             SubBandType::HighLow => 0,
             SubBandType::LowHigh => 1,
             SubBandType::HighHigh => 2,

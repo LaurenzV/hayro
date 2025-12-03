@@ -63,10 +63,6 @@ impl PaletteBox {
             .and_then(|row| row.get(column))
             .copied()
     }
-
-    fn num_entries(&self) -> usize {
-        self.entries.len()
-    }
 }
 
 #[derive(Debug, Clone, Copy)]

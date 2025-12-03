@@ -1,11 +1,11 @@
 #![forbid(unsafe_code)]
 
 use crate::j2c::ComponentData;
-use crate::jp2::{DecodedImage, ImageBoxes};
 use crate::jp2::cdef::{ChannelAssociation, ChannelType};
 use crate::jp2::cmap::ComponentMappingType;
 use crate::jp2::colr::EnumeratedColorspace;
 use crate::jp2::icc::ICCMetadata;
+use crate::jp2::{DecodedImage, ImageBoxes};
 
 mod j2c;
 mod jp2;
@@ -43,17 +43,25 @@ pub enum ColorSpace {
 }
 
 impl ColorSpace {
-    pub fn num_components(&self) -> u8 {
+    pub fn num_channels(&self) -> u8 {
         match self {
             ColorSpace::Gray => 1,
             ColorSpace::RGB => 3,
             ColorSpace::CMYK => 4,
-            ColorSpace::Icc { num_components, .. } => *num_components
+            ColorSpace::Icc { num_components, .. } => *num_components,
         }
     }
 }
 
-pub fn read(data: &[u8], settings: &DecodeSettings) -> Result<(), &'static str> {
+pub struct Bitmap {
+    pub color_space: ColorSpace,
+    pub data: Vec<u8>,
+    pub has_alpha: bool,
+    pub width: u32,
+    pub height: u32,
+}
+
+pub fn read(data: &[u8], settings: &DecodeSettings) -> Result<Bitmap, &'static str> {
     // JP2 signature box: 00 00 00 0C 6A 50 20 20
     const JP2_MAGIC: &[u8] = b"\x00\x00\x00\x0C\x6A\x50\x20\x20";
     // Codestream signature: FF 4F FF 51 (SOC + SIZ markers)
@@ -67,6 +75,9 @@ pub fn read(data: &[u8], settings: &DecodeSettings) -> Result<(), &'static str> 
         return Err("invalid JP2 file");
     };
 
+    let width = decoded_image.decoded.width;
+    let height = decoded_image.decoded.height;
+
     // Resolve palette indices.
     if settings.resolve_palette_indices {
         decoded_image.decoded.components =
@@ -77,9 +88,9 @@ pub fn read(data: &[u8], settings: &DecodeSettings) -> Result<(), &'static str> 
     // Check that we only have at most one alpha channel, and that the alpha
     // chanel is the last component.
     let mut has_alpha = false;
-    
+
     let bit_depth = decoded_image.decoded.components[0].bit_depth;
-    
+
     // Validate that all channels have the same bit-depth.
     for component in &decoded_image.decoded.components {
         if component.bit_depth != bit_depth {
@@ -110,28 +121,136 @@ pub fn read(data: &[u8], settings: &DecodeSettings) -> Result<(), &'static str> 
 
         has_alpha = last.channel_type == ChannelType::Opacity;
     }
-    
+
     let mut color_space = resolve_color_space(&mut decoded_image, bit_depth)?;
-    
+
     // If we didn't resolve palette indices, we need to assume grayscale image.
     if !settings.resolve_palette_indices {
         has_alpha = false;
         color_space = ColorSpace::Gray;
     }
-    
+
     // Validate the number of channels.
-    if decoded_image.decoded.components.len() != (color_space.num_components() + if has_alpha { 1} else { 0 }) as usize {
+    if decoded_image.decoded.components.len()
+        != (color_space.num_channels() + if has_alpha { 1 } else { 0 }) as usize
+    {
         return Err("unsupported JP image");
     }
 
-    unimplemented!()
+    Ok(Bitmap {
+        color_space,
+        has_alpha,
+        data: interleave_and_convert(decoded_image, bit_depth),
+        width,
+        height,
+    })
+}
+
+fn interleave_and_convert(image: DecodedImage, bit_depth: u8) -> Vec<u8> {
+    let mut components = image.decoded.components;
+    let num_components = components.len();
+
+    let max_len = components[0].container.len();
+
+    if bit_depth == 8 && num_components <= 4 {
+        // Fast path for the common case.
+        match num_components {
+            // Gray-scale.
+            1 => components[0]
+                .container
+                .iter()
+                .map(|v| v.round() as u8)
+                .collect(),
+            // Gray-scale with alpha.
+            2 => {
+                let c1 = components.pop().unwrap();
+                let c0 = components.pop().unwrap();
+
+                let c0 = &c0.container[..max_len];
+                let c1 = &c1.container[..max_len];
+
+                let mut data = Vec::with_capacity(max_len * 2);
+
+                for i in 0..max_len {
+                    data.push(c0[i].round() as u8);
+                    data.push(c1[i].round() as u8);
+                }
+
+                data
+            }
+            // RGB
+            3 => {
+                let c2 = components.pop().unwrap();
+                let c1 = components.pop().unwrap();
+                let c0 = components.pop().unwrap();
+
+                let c0 = &c0.container[..max_len];
+                let c1 = &c1.container[..max_len];
+                let c2 = &c2.container[..max_len];
+
+                let mut data = Vec::with_capacity(max_len * 3);
+
+                for i in 0..max_len {
+                    data.push(c0[i].round() as u8);
+                    data.push(c1[i].round() as u8);
+                    data.push(c2[i].round() as u8);
+                }
+
+                data
+            }
+            // RGBA or CMYK.
+            4 => {
+                let c3 = components.pop().unwrap();
+                let c2 = components.pop().unwrap();
+                let c1 = components.pop().unwrap();
+                let c0 = components.pop().unwrap();
+
+                let c0 = &c0.container[..max_len];
+                let c1 = &c1.container[..max_len];
+                let c2 = &c2.container[..max_len];
+                let c3 = &c3.container[..max_len];
+
+                let mut data = Vec::with_capacity(max_len * 4);
+
+                for i in 0..max_len {
+                    data.push(c0[i].round() as u8);
+                    data.push(c1[i].round() as u8);
+                    data.push(c2[i].round() as u8);
+                    data.push(c3[i].round() as u8);
+                }
+
+                data
+            }
+            _ => unreachable!(),
+        }
+    } else {
+        // Slow path that also requires us to scale to 8 bit.
+        let mut buf = Vec::with_capacity(max_len * components.len());
+
+        let div_factor = ((1 << bit_depth) - 1) as f32;
+        let mul_factor = ((1 << 8) - 1) as f32;
+
+        for sample in 0..max_len {
+            for channel in components.iter() {
+                buf.push(((channel.container[sample] / div_factor) * mul_factor).round() as u8)
+            }
+        }
+
+        buf
+    }
 }
 
 fn resolve_color_space(
     image: &mut DecodedImage,
     bit_depth: u8,
 ) -> Result<ColorSpace, &'static str> {
-    let cs = match &image.boxes.color_specification.as_ref().unwrap().color_space {
+    let cs = match &image
+        .boxes
+        .color_specification
+        .as_ref()
+        .unwrap()
+        .color_space
+    {
         jp2::colr::ColorSpace::Enumerated(e) => {
             match e {
                 EnumeratedColorspace::Cmyk => ColorSpace::CMYK,
@@ -145,9 +264,7 @@ fn resolve_color_space(
                 }
                 EnumeratedColorspace::Greyscale => ColorSpace::Gray,
                 EnumeratedColorspace::Sycc => {
-                    sycc_to_rgb(
-                        &mut image.decoded.components, bit_depth
-                    )
+                    sycc_to_rgb(&mut image.decoded.components, bit_depth)
                         .ok_or("failed to convert image from sycc to RGB")?;
 
                     ColorSpace::RGB
@@ -156,8 +273,7 @@ fn resolve_color_space(
             }
         }
         jp2::colr::ColorSpace::Icc(icc) => {
-            let metadata = ICCMetadata::from_data(&icc)
-                .ok_or("invalid ICC metadata")?;
+            let metadata = ICCMetadata::from_data(&icc).ok_or("invalid ICC metadata")?;
 
             ColorSpace::Icc {
                 profile: icc.clone(),
@@ -165,7 +281,7 @@ fn resolve_color_space(
             }
         }
     };
-    
+
     Ok(cs)
 }
 
@@ -213,7 +329,7 @@ fn resolve_palette_indices(
 fn sycc_to_rgb(components: &mut [ComponentData], bit_depth: u8) -> Option<()> {
     let offset = (1u32 << (bit_depth as u32 - 1)) as f32;
     let max_value = ((1u32 << bit_depth as u32) - 1) as f32;
-    
+
     let (head, _) = components.split_at_mut_checked(3)?;
 
     let [y, cb, cr] = head else {
@@ -238,6 +354,6 @@ fn sycc_to_rgb(components: &mut [ComponentData], bit_depth: u8) -> Option<()> {
         *cb = g.min(max_value).max(0.0);
         *cr = b.min(max_value).max(0.0);
     }
-    
+
     Some(())
 }

@@ -1,7 +1,6 @@
 //! The color specification box (colr), defined in I.5.3.3.
 
 use crate::jp2::ImageBoxes;
-use crate::jp2::icc::ICCMetadata;
 use crate::reader::BitReader;
 
 pub(crate) fn parse(boxes: &mut ImageBoxes, data: &[u8]) -> Option<()> {
@@ -44,24 +43,6 @@ pub(crate) struct ColorSpecificationBox {
 pub(crate) enum ColorSpace {
     Enumerated(EnumeratedColorspace),
     Icc(Vec<u8>),
-}
-
-impl ColorSpace {
-    pub(crate) fn expected_number_of_channels(&self) -> u8 {
-        match self {
-            ColorSpace::Enumerated(e) => e.expected_number_of_channels(),
-            ColorSpace::Icc(i) => {
-                ICCMetadata::from_data(i)
-                    .map(|d| d.color_space.num_components())
-                    // Let's just assume RGB. There is one OpenJPEG test
-                    // case that decodes differently than OpenJPEG does
-                    // if we don't do that (OpenJPEG interprets the image
-                    // as RGB + alpha, while if we just look at the channel
-                    // count we would infer CMYK instead.
-                    .unwrap_or(3)
-            }
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -114,34 +95,6 @@ impl EnumeratedColorspace {
             25 => Some(EnumeratedColorspace::ScRgb),
             26 => Some(EnumeratedColorspace::ScRgbGray),
             _ => None,
-        }
-    }
-
-    /// Returns the number of colour channels this enumerated space expects without accounting
-    /// for extra alpha channels.
-    pub fn expected_number_of_channels(&self) -> u8 {
-        match self {
-            EnumeratedColorspace::BiLevel1 => 1,
-            EnumeratedColorspace::YCbCr1 => 3,
-            EnumeratedColorspace::YCbCr2 => 3,
-            EnumeratedColorspace::YCbCr3 => 3,
-            EnumeratedColorspace::PhotoYcc => 3,
-            EnumeratedColorspace::Cmy => 3,
-            EnumeratedColorspace::Cmyk => 4,
-            EnumeratedColorspace::Ycck => 4,
-            EnumeratedColorspace::CieLab => 3,
-            EnumeratedColorspace::BiLevel2 => 1,
-            EnumeratedColorspace::Srgb => 3,
-            EnumeratedColorspace::Greyscale => 1,
-            EnumeratedColorspace::Sycc => 3,
-            EnumeratedColorspace::CieJab => 3,
-            EnumeratedColorspace::EsRgb => 3,
-            EnumeratedColorspace::RommRgb => 3,
-            EnumeratedColorspace::YPbPr112560 => 3,
-            EnumeratedColorspace::YPbPr125050 => 3,
-            EnumeratedColorspace::EsYcc => 3,
-            EnumeratedColorspace::ScRgb => 3,
-            EnumeratedColorspace::ScRgbGray => 1,
         }
     }
 }
