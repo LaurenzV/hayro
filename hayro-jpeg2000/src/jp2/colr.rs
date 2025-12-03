@@ -28,14 +28,16 @@ pub(crate) fn parse(boxes: &mut ImageBoxes, data: &[u8]) -> Option<()> {
         _ => return None,
     };
 
-    boxes.color_specification = Some(ColorSpecificationBox { method });
+    boxes.color_specification = Some(ColorSpecificationBox {
+        color_space: method,
+    });
 
     Some(())
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct ColorSpecificationBox {
-    pub(crate) method: ColorSpace,
+    pub(crate) color_space: ColorSpace,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

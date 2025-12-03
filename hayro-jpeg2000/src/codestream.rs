@@ -6,11 +6,13 @@ use crate::build::SubBandType;
 use crate::decode::decode;
 use crate::reader::BitReader;
 
-pub(crate) struct DecodeResult {
-    /// The header of the code-stream.
-    header: Header,
+pub(crate) struct DecodedCodestream {
     /// The decoded components.
-    components: Vec<ComponentData>,
+    pub(crate) components: Vec<ComponentData>,
+    /// The width of the image.
+    pub(crate) width: u32,
+    /// The height of the image.
+    pub(crate) height: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -19,7 +21,10 @@ pub(crate) struct ComponentData {
     pub(crate) bit_depth: u8,
 }
 
-pub(crate) fn read(stream: &[u8], settings: &DecodeSettings) -> Result<DecodeResult, &'static str> {
+pub(crate) fn read(
+    stream: &[u8],
+    settings: &DecodeSettings,
+) -> Result<DecodedCodestream, &'static str> {
     let mut reader = BitReader::new(stream);
 
     let marker = reader.read_marker()?;
@@ -33,8 +38,9 @@ pub(crate) fn read(stream: &[u8], settings: &DecodeSettings) -> Result<DecodeRes
         .ok_or("code stream data is missing from image")?;
     let decoded = decode(code_stream_data, &header)?;
 
-    Ok(DecodeResult {
-        header,
+    Ok(DecodedCodestream {
+        width: header.size_data.image_width(),
+        height: header.size_data.image_height(),
         components: decoded,
     })
 }

@@ -1,107 +1,118 @@
-use crate::jp2::cdef::{ChannelDefinition, ChannelDefinitionBox};
+//! Reading a JP2 file, defined in Annex I.
+
+use crate::codestream::DecodedCodestream;
+use crate::jp2::r#box::{FILE_TYPE, JP2_SIGNATURE};
+use crate::jp2::cdef::ChannelDefinitionBox;
 use crate::jp2::cmap::ComponentMappingBox;
 use crate::jp2::colr::ColorSpecificationBox;
+use crate::jp2::pclr::PaletteBox;
 use crate::reader::BitReader;
+use crate::{DecodeSettings, codestream};
+use log::{debug, warn};
 
-mod r#box;
-mod cdef;
-mod cmap;
-mod colr;
-mod icc;
+pub(crate) mod r#box;
+pub(crate) mod cdef;
+pub(crate) mod cmap;
+pub(crate) mod colr;
+pub(crate) mod icc;
+pub(crate) mod pclr;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub(crate) struct ImageBoxes {
     pub(crate) color_specification: Option<ColorSpecificationBox>,
     pub(crate) channel_definition: Option<ChannelDefinitionBox>,
-    pub(crate) palette: Option<Palette>,
+    pub(crate) palette: Option<PaletteBox>,
     pub(crate) component_mapping: Option<ComponentMappingBox>,
 }
 
-#[derive(Debug, Clone)]
-pub struct Palette {
-    pub entries: Vec<Vec<i64>>,
-    pub columns: Vec<PaletteColumn>,
+pub(crate) struct DecodedImage {
+    /// The raw decoded JPEG2000 codestream.
+    pub(crate) decoded: DecodedCodestream,
+    /// The JP2 boxes of the image. In the case of a raw codestream, we
+    /// will synthesize the necessary boxes.
+    pub(crate) boxes: ImageBoxes,
 }
 
-impl Palette {
-    fn value(&self, entry: usize, column: usize) -> Option<i64> {
-        self.entries
-            .get(entry)
-            .and_then(|row| row.get(column))
-            .copied()
+pub(crate) fn read(data: &[u8], settings: &DecodeSettings) -> Result<DecodedImage, &'static str> {
+    let mut reader = BitReader::new(data);
+    let signature_box = r#box::read(&mut reader).ok_or("failed to read signature box")?;
+
+    if signature_box.box_type != JP2_SIGNATURE {
+        return Err("invalid JP2 signature");
     }
 
-    fn num_entries(&self) -> usize {
-        self.entries.len()
+    let file_type_box = r#box::read(&mut reader).ok_or("failed to read file type box")?;
+
+    if file_type_box.box_type != FILE_TYPE {
+        return Err("invalid JP2 file type");
     }
-}
 
-#[derive(Debug, Clone, Copy)]
-pub struct PaletteColumn {
-    pub bit_depth: u8,
-    pub is_signed: bool,
-}
+    let mut image_boxes = Err("failed to read metadata");
+    let mut decoded_codestream = Err("failed to decode image");
 
-impl ImageBoxes {
-    /// Parse Palette box (pclr) data.
-    fn parse_pclr(&mut self, data: &[u8]) -> Result<(), &'static str> {
-        if data.len() < 3 {
-            return Err("palette box too short");
-        }
-
-        let mut reader = BitReader::new(data);
-        let num_entries = reader
-            .read_u16()
-            .ok_or("failed to read palette entry count")? as usize;
-        let num_components = reader
-            .read_byte()
-            .ok_or("failed to read palette component count")? as usize;
-
-        if num_entries == 0 || num_components == 0 {
-            return Err("palette must contain entries and components");
-        }
-
-        let mut columns = Vec::with_capacity(num_components);
-        for _ in 0..num_components {
-            let descriptor = reader
-                .read_byte()
-                .ok_or("failed to read palette column descriptor")?;
-            let bit_depth = (descriptor & 0x7F)
-                .checked_add(1)
-                .ok_or("invalid palette bit depth")?;
-            columns.push(PaletteColumn {
-                bit_depth,
-                is_signed: (descriptor & 0x80) != 0,
-            });
-        }
-
-        let mut entries = Vec::with_capacity(num_entries);
-        for _ in 0..num_entries {
-            let mut row = Vec::with_capacity(num_components);
-            for column in &columns {
-                let num_bytes = (column.bit_depth as usize).div_ceil(8).max(1);
-                let raw_bytes = reader
-                    .read_bytes(num_bytes)
-                    .ok_or("failed to read palette entry values")?;
-                let mut raw_value = 0u64;
-                for &byte in raw_bytes {
-                    raw_value = (raw_value << 8) | byte as u64;
-                }
-
-                let value = if column.is_signed {
-                    let shift = 64 - column.bit_depth as u32;
-                    (raw_value << shift) as i64 >> shift
-                } else {
-                    raw_value as i64
-                };
-
-                row.push(value);
+    // Read boxes until we find the JP2 Header box
+    while !reader.at_end() {
+        let Some(current_box) = r#box::read(&mut reader) else {
+            if settings.strict {
+                return Err("failed to read a JP2 box");
             }
 
-            entries.push(row);
-        }
+            break;
+        };
 
-        self.palette = Some(Palette { entries, columns });
-        Ok(())
+        match current_box.box_type {
+            r#box::JP2_HEADER => {
+                let mut boxes = ImageBoxes::default();
+
+                let mut jp2h_reader = BitReader::new(current_box.data);
+
+                // Read child boxes within JP2 Header box
+                while !jp2h_reader.at_end() {
+                    let child_box =
+                        r#box::read(&mut jp2h_reader).ok_or("failed to read JP2 box")?;
+
+                    match child_box.box_type {
+                        r#box::CHANNEL_DEFINITION => {
+                            cdef::parse(&mut boxes, child_box.data)
+                                .ok_or("failed to parse cdef box")?;
+                        }
+                        r#box::COLOUR_SPECIFICATION => {
+                            colr::parse(&mut boxes, child_box.data)
+                                .ok_or("failed to parse colr box")?;
+                        }
+                        r#box::PALETTE => {
+                            pclr::parse(&mut boxes, child_box.data)
+                                .ok_or("failed to parse pclr box")?;
+                        }
+                        r#box::COMPONENT_MAPPING => {
+                            cmap::parse(&mut boxes, child_box.data)
+                                .ok_or("failed to parse cmap box")?;
+                        }
+                        _ => {
+                            debug!(
+                                "ignoring header box {}",
+                                r#box::tag_to_string(child_box.box_type)
+                            );
+                        }
+                    }
+                }
+
+                image_boxes = Ok(boxes);
+            }
+            r#box::CONTIGUOUS_CODESTREAM => {
+                decoded_codestream = Ok(codestream::read(current_box.data, settings)?);
+            }
+            _ => {
+                warn!(
+                    "ignoring outer box {}",
+                    r#box::tag_to_string(current_box.box_type)
+                );
+            }
+        }
     }
+
+    Ok(DecodedImage {
+        decoded: decoded_codestream?,
+        boxes: image_boxes?,
+    })
 }
