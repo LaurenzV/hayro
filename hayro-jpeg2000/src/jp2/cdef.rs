@@ -20,7 +20,7 @@ pub(crate) fn parse(boxes: &mut ImageBoxes, data: &[u8]) -> Option<()> {
         definitions.push(ChannelDefinition {
             _channel_index: channel_index,
             channel_type: ChannelType::from_raw(channel_type)?,
-            association: ChannelAssociation::from_raw(association)?,
+            _association: ChannelAssociation::from_raw(association)?,
         });
     }
 
@@ -40,7 +40,7 @@ pub(crate) struct ChannelDefinitionBox {
 pub(crate) struct ChannelDefinition {
     pub(crate) _channel_index: u16,
     pub(crate) channel_type: ChannelType,
-    pub(crate) association: ChannelAssociation,
+    pub(crate) _association: ChannelAssociation,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

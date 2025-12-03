@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 
 use crate::j2c::ComponentData;
-use crate::jp2::cdef::{ChannelAssociation, ChannelType};
+use crate::jp2::cdef::ChannelType;
 use crate::jp2::cmap::ComponentMappingType;
 use crate::jp2::colr::EnumeratedColorspace;
 use crate::jp2::icc::ICCMetadata;
@@ -103,21 +103,12 @@ pub fn read(data: &[u8], settings: &DecodeSettings) -> Result<Bitmap, &'static s
         // one definition.
         for def in &cdef.channel_definitions[..cdef.channel_definitions.len() - 1] {
             if def.channel_type == ChannelType::Opacity
-                || def.association == ChannelAssociation::WholeImage
             {
                 return Err("unsupported JP image");
             }
         }
 
         let last = cdef.channel_definitions.last().unwrap();
-
-        if (last.channel_type == ChannelType::Colour
-            && matches!(last.association, ChannelAssociation::Colour(_)))
-            || (last.channel_type == ChannelType::Opacity
-                && matches!(last.association, ChannelAssociation::Colour(_)))
-        {
-            return Err("unsupported JP image");
-        }
 
         has_alpha = last.channel_type == ChannelType::Opacity;
     }
