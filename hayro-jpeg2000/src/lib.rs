@@ -90,14 +90,8 @@ pub fn read(data: &[u8], settings: &DecodeSettings) -> Result<Bitmap, &'static s
     // chanel is the last component.
     let mut has_alpha = false;
 
+    // Note that this is only valid if all images have the same bit depth.
     let bit_depth = decoded_image.decoded.components[0].bit_depth;
-
-    // Validate that all channels have the same bit-depth.
-    for component in &decoded_image.decoded.components {
-        if component.bit_depth != bit_depth {
-            return Err("images with varying bit depths per channel are not supported.");
-        }
-    }
 
     if let Some(cdef) = &decoded_image.boxes.channel_definition {
         let last = cdef.channel_definitions.last().unwrap();
@@ -133,19 +127,27 @@ pub fn read(data: &[u8], settings: &DecodeSettings) -> Result<Bitmap, &'static s
         color_space,
         has_alpha,
         original_bit_depth: bit_depth,
-        data: interleave_and_convert(decoded_image, bit_depth),
+        data: interleave_and_convert(decoded_image),
         width,
         height,
     })
 }
 
-fn interleave_and_convert(image: DecodedImage, bit_depth: u8) -> Vec<u8> {
+fn interleave_and_convert(image: DecodedImage) -> Vec<u8> {
     let mut components = image.decoded.components;
     let num_components = components.len();
+    
+    let mut all_same_bit_depth = Some(components[0].bit_depth);
+    
+    for component in components.iter().skip(1) {
+        if Some(component.bit_depth) != all_same_bit_depth {
+            all_same_bit_depth = None;
+        }
+    }
 
     let max_len = components[0].container.len();
 
-    if bit_depth == 8 && num_components <= 4 {
+    if all_same_bit_depth == Some(8) && num_components <= 4 {
         // Fast path for the common case.
         match num_components {
             // Gray-scale.
@@ -220,12 +222,11 @@ fn interleave_and_convert(image: DecodedImage, bit_depth: u8) -> Vec<u8> {
         // Slow path that also requires us to scale to 8 bit.
         let mut buf = Vec::with_capacity(max_len * components.len());
 
-        let div_factor = ((1 << bit_depth) - 1) as f32;
         let mul_factor = ((1 << 8) - 1) as f32;
 
         for sample in 0..max_len {
             for channel in components.iter() {
-                buf.push(((channel.container[sample] / div_factor) * mul_factor).round() as u8)
+                buf.push(((channel.container[sample] / ((1 << channel.bit_depth) - 1) as f32) * mul_factor).round() as u8)
             }
         }
 

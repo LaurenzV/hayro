@@ -88,7 +88,7 @@ fn convert_jp2(path: &Path) -> Result<PathBuf, String> {
 
     let settings = DecodeSettings {
         resolve_palette_indices: true,
-        strict: true,
+        strict: false,
     };
 
     let bitmap = read(&data, &settings).map_err(|err| format!("decode error: {err}"))?;
