@@ -375,12 +375,29 @@ fn to_dynamic_image(bitmap: Bitmap) -> Result<DynamicImage, String> {
         ),
         (hayro_jpeg2000::ColorSpace::CMYK, false) => from_icc(
             include_bytes!("../assets/CGATS001Compat-v2-micro.icc"),
-            4 as u8,
+            4,
             has_alpha,
             width,
             height,
             &bitmap.data,
         )?,
+        (hayro_jpeg2000::ColorSpace::CMYK, true) => {
+            return Err("CMYK with alpha is not supported".to_string());
+        }
+        (hayro_jpeg2000::ColorSpace::Icc { profile, mut num_components}, has_alpha) => {
+            if has_alpha {
+                num_components += 1;
+            }
+            
+            from_icc(
+                &profile,
+                num_components,
+                has_alpha,
+                width,
+                height,
+                &bitmap.data,
+            )?
+        },
         _ => return Err("unsupported channel configuration".to_string()),
     };
 
