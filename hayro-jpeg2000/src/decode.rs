@@ -105,7 +105,7 @@ pub(crate) fn decode(data: &[u8], header: &Header) -> Result<Vec<ChannelData>, &
     // In theory, only some could have it... But hopefully no such cursed
     // images exist!
     if tile_ctx.tile.mct {
-        mct::apply(&mut tile_ctx, header)?;
+        mct::apply_inverse(&mut tile_ctx, header)?;
         apply_sign_shift(&mut tile_ctx, &header.component_infos);
     }
 

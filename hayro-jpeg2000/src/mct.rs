@@ -1,7 +1,14 @@
+//! The irreversible multi-component transformation, as specified in
+//! Annex G.2 and G.3.
+
 use crate::codestream::Header;
 use crate::decode::TileDecodeContext;
 
-pub(crate) fn apply(tile_ctx: &mut TileDecodeContext, header: &Header) -> Result<(), &'static str> {
+/// Apply the inverse multi-component transform, as specified in G.2 and G.3.
+pub(crate) fn apply_inverse(
+    tile_ctx: &mut TileDecodeContext,
+    header: &Header,
+) -> Result<(), &'static str> {
     if tile_ctx.channel_data.len() < 3 {
         return if header.strict {
             Err("tried to apply MCT to image with less than 3 components")
@@ -125,6 +132,7 @@ mod simd {
         s2: &mut [f32],
     ) {
         match transform {
+            // Irreversible MCT, specified in G.3.
             WaveletTransform::Irreversible97 => {
                 for ((y0, y1), y2) in s0
                     .chunks_exact_mut(8)
@@ -144,6 +152,7 @@ mod simd {
                     y2.copy_from_slice(&i2.val);
                 }
             }
+            // Reversible MCT, specified in G.2.
             WaveletTransform::Reversible53 => {
                 for ((y0, y1), y2) in s0
                     .chunks_exact_mut(8)
