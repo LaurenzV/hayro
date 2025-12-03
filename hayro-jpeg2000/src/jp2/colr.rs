@@ -4,6 +4,17 @@ use crate::jp2::ImageBoxes;
 use crate::reader::BitReader;
 
 pub(crate) fn parse(boxes: &mut ImageBoxes, data: &[u8]) -> Option<()> {
+    if boxes.color_specification.is_some() {
+        // "A JP2 file may contain multiple Colour Specification boxes, but
+        // must contain at least one, specifying different methods
+        // for achieving "equivalent" results. A conforming JP2 reader shall
+        // ignore all Colour Specification boxes after the first.
+        // However, readers conforming to other standards may use those boxes as
+        // defined in those other standards."
+
+        return Some(());
+    }
+
     let mut reader = BitReader::new(data);
 
     let meth = reader.read_byte()?;
