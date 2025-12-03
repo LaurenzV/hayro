@@ -1,9 +1,11 @@
 #![forbid(unsafe_code)]
 
 use crate::j2c::ComponentData;
-use crate::jp2::ImageBoxes;
+use crate::jp2::{DecodedImage, ImageBoxes};
 use crate::jp2::cdef::{ChannelAssociation, ChannelType};
 use crate::jp2::cmap::ComponentMappingType;
+use crate::jp2::colr::EnumeratedColorspace;
+use crate::jp2::icc::ICCMetadata;
 
 mod j2c;
 mod jp2;
@@ -36,8 +38,19 @@ pub enum ColorSpace {
     CMYK,
     Icc {
         profile: Vec<u8>,
-        num_components: usize,
+        num_components: u8,
     },
+}
+
+impl ColorSpace {
+    pub fn num_components(&self) -> u8 {
+        match self {
+            ColorSpace::Gray => 1,
+            ColorSpace::RGB => 3,
+            ColorSpace::CMYK => 4,
+            ColorSpace::Icc { num_components, .. } => *num_components
+        }
+    }
 }
 
 pub fn read(data: &[u8], settings: &DecodeSettings) -> Result<(), &'static str> {
@@ -64,8 +77,17 @@ pub fn read(data: &[u8], settings: &DecodeSettings) -> Result<(), &'static str> 
     // Check that we only have at most one alpha channel, and that the alpha
     // chanel is the last component.
     let mut has_alpha = false;
+    
+    let bit_depth = decoded_image.decoded.components[0].bit_depth;
+    
+    // Validate that all channels have the same bit-depth.
+    for component in &decoded_image.decoded.components {
+        if component.bit_depth != bit_depth {
+            return Err("images with varying bit depths per channel are not supported.");
+        }
+    }
 
-    if let Some(cdef) = decoded_image.boxes.channel_definition {
+    if let Some(cdef) = &decoded_image.boxes.channel_definition {
         // Note that in the `parse` method we validated that there is at least
         // one definition.
         for def in &cdef.channel_definitions[..cdef.channel_definitions.len() - 1] {
@@ -88,8 +110,63 @@ pub fn read(data: &[u8], settings: &DecodeSettings) -> Result<(), &'static str> 
 
         has_alpha = last.channel_type == ChannelType::Opacity;
     }
+    
+    let mut color_space = resolve_color_space(&mut decoded_image, bit_depth)?;
+    
+    // If we didn't resolve palette indices, we need to assume grayscale image.
+    if !settings.resolve_palette_indices {
+        has_alpha = false;
+        color_space = ColorSpace::Gray;
+    }
+    
+    // Validate the number of channels.
+    if decoded_image.decoded.components.len() != (color_space.num_components() + if has_alpha { 1} else { 0 }) as usize {
+        return Err("unsupported JP image");
+    }
 
     unimplemented!()
+}
+
+fn resolve_color_space(
+    image: &mut DecodedImage,
+    bit_depth: u8,
+) -> Result<ColorSpace, &'static str> {
+    let cs = match &image.boxes.color_specification.as_ref().unwrap().color_space {
+        jp2::colr::ColorSpace::Enumerated(e) => {
+            match e {
+                EnumeratedColorspace::Cmyk => ColorSpace::CMYK,
+                EnumeratedColorspace::Srgb => ColorSpace::RGB,
+                EnumeratedColorspace::RommRgb => {
+                    // Use an ICC profile to process the RommRGB color space.
+                    ColorSpace::Icc {
+                        profile: include_bytes!("../assets/ISO22028-2_ROMM-RGB.icc").to_vec(),
+                        num_components: 3,
+                    }
+                }
+                EnumeratedColorspace::Greyscale => ColorSpace::Gray,
+                EnumeratedColorspace::Sycc => {
+                    sycc_to_rgb(
+                        &mut image.decoded.components, bit_depth
+                    )
+                        .ok_or("failed to convert image from sycc to RGB")?;
+
+                    ColorSpace::RGB
+                }
+                _ => return Err("unsupported JP2 image"),
+            }
+        }
+        jp2::colr::ColorSpace::Icc(icc) => {
+            let metadata = ICCMetadata::from_data(&icc)
+                .ok_or("invalid ICC metadata")?;
+
+            ColorSpace::Icc {
+                profile: icc.clone(),
+                num_components: metadata.color_space.num_components(),
+            }
+        }
+    };
+    
+    Ok(cs)
 }
 
 fn resolve_palette_indices(
@@ -131,4 +208,36 @@ fn resolve_palette_indices(
     }
 
     Some(resolved)
+}
+
+fn sycc_to_rgb(components: &mut [ComponentData], bit_depth: u8) -> Option<()> {
+    let offset = (1u32 << (bit_depth as u32 - 1)) as f32;
+    let max_value = ((1u32 << bit_depth as u32) - 1) as f32;
+    
+    let (head, _) = components.split_at_mut_checked(3)?;
+
+    let [y, cb, cr] = head else {
+        unreachable!();
+    };
+
+    for ((y, cb), cr) in y
+        .container
+        .iter_mut()
+        .zip(cb.container.iter_mut())
+        .zip(cr.container.iter_mut())
+    {
+        *cb -= offset;
+        *cr -= offset;
+
+        let r = *y + 1.402_f32 * *cr;
+        let g = *y - 0.344136_f32 * *cb - 0.714136_f32 * *cr;
+        let b = *y + 1.772_f32 * *cb;
+
+        // min + max is better than clamp in terms of performance.
+        *y = r.min(max_value).max(0.0);
+        *cb = g.min(max_value).max(0.0);
+        *cr = b.min(max_value).max(0.0);
+    }
+    
+    Some(())
 }
