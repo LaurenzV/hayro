@@ -99,7 +99,7 @@ pub fn read(data: &[u8], settings: &DecodeSettings) -> Result<Bitmap, &'static s
     const CODESTREAM_MAGIC: &[u8] = b"\xFF\x4F\xFF\x51";
 
     let decoded_image = if data.starts_with(JP2_MAGIC) {
-        jp2::read(data, settings)
+        jp2::decode(data, settings)
     } else if data.starts_with(CODESTREAM_MAGIC) {
         j2c::decode(data, settings)
     } else {

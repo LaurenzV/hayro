@@ -33,7 +33,7 @@ pub(crate) struct DecodedImage {
     pub(crate) boxes: ImageBoxes,
 }
 
-pub(crate) fn read(data: &[u8], settings: &DecodeSettings) -> Result<DecodedImage, &'static str> {
+pub(crate) fn decode(data: &[u8], settings: &DecodeSettings) -> Result<DecodedImage, &'static str> {
     let mut reader = BitReader::new(data);
     let signature_box = r#box::read(&mut reader).ok_or("failed to read signature box")?;
 
