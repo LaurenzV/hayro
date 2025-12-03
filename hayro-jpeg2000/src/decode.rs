@@ -6,8 +6,7 @@
 
 use crate::bitmap::ChannelData;
 use crate::bitplane::{BitPlaneDecodeBuffers, BitPlaneDecodeContext};
-use crate::codestream::markers::{EPH, SOP};
-use crate::codestream::{ComponentInfo, Header, ProgressionOrder, QuantizationStyle, ReaderExt};
+use crate::codestream::{ComponentInfo, Header, ProgressionOrder, QuantizationStyle};
 use crate::idwt::IDWTOutput;
 use crate::progression::{
     IteratorInput, ProgressionData, component_position_resolution_layer_progression,
@@ -19,7 +18,7 @@ use crate::progression::{
 use crate::reader::BitReader;
 use crate::rect::IntRect;
 use crate::tag_tree::{TagNode, TagTree};
-use crate::tile::{ComponentTile, Tile, TilePart};
+use crate::tile::{ComponentTile, Tile};
 use crate::{bitplane, build, idwt, mct, segment, tile};
 use log::trace;
 use std::ops::Range;
