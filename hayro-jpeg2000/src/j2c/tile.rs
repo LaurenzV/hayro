@@ -35,7 +35,8 @@ pub(crate) struct MergedTilePart<'a> {
 /// A tile part where packet headers and packet data are separated.
 #[derive(Clone, Debug)]
 pub(crate) struct SeparatedTilePart<'a> {
-    pub(crate) header: BitReader<'a>,
+    pub(crate) headers: Vec<BitReader<'a>>,
+    pub(crate) active_header_reader: usize,
     pub(crate) body: BitReader<'a>,
 }
 
@@ -49,7 +50,13 @@ impl<'a> TilePart<'a> {
     pub(crate) fn header(&mut self) -> &mut BitReader<'a> {
         match self {
             TilePart::Merged(m) => &mut m.data,
-            TilePart::Separated(s) => &mut s.header,
+            TilePart::Separated(s) => {
+                if s.headers[s.active_header_reader].at_end() && s.headers.len() - 1 > s.active_header_reader {
+                    s.active_header_reader += 1;
+                }
+                
+                &mut s.headers[s.active_header_reader]
+            },
         }
     }
 
@@ -166,7 +173,7 @@ fn parse_tile_part<'a>(
     let tile = &mut tiles[tile_part_header.tile_index as usize];
     let num_components = tile.component_infos.len();
 
-    let mut ppt_header = None;
+    let mut ppt_headers = vec![];
 
     loop {
         let Some(marker) = reader.peek_marker() else {
@@ -232,7 +239,7 @@ fn parse_tile_part<'a>(
             markers::EOC => break,
             markers::PPT => {
                 reader.read_marker()?;
-                ppt_header = Some(ppt_marker(reader).ok_or("failed to read PPT marker")?);
+                ppt_headers.push(ppt_marker(reader).ok_or("failed to read PPT marker")?);
             }
             markers::PLT => {
                 // Can be inferred ourselves.
@@ -267,14 +274,17 @@ fn parse_tile_part<'a>(
             Ok(())
         };
     };
+    
+    ppt_headers.sort_by(|p1, p2| p1.sequence_idx.cmp(&p2.sequence_idx));
 
     let data = reader
         .read_bytes(remaining_bytes)
         .ok_or("failed to get tile part data")?;
 
-    let tile_part = if let Some(ppt_header) = ppt_header {
+    let tile_part = if !ppt_headers.is_empty() {
         TilePart::Separated(SeparatedTilePart {
-            header: BitReader::new(ppt_header),
+            headers: ppt_headers.iter().map(|i| BitReader::new(i.data)).collect(),
+            active_header_reader: 0,
             body: BitReader::new(data),
         })
     } else {
@@ -641,12 +651,20 @@ struct TilePartHeader {
     tile_part_length: u32,
 }
 
+struct PptMarkerData<'a> {
+    data: &'a [u8],
+    sequence_idx: u8
+}
+
 /// PPT marker (A.7.5).
-fn ppt_marker<'a>(reader: &mut BitReader<'a>) -> Option<&'a [u8]> {
+fn ppt_marker<'a>(reader: &mut BitReader<'a>) -> Option<PptMarkerData<'a>> {
     let length = reader.read_u16()?.checked_sub(2)?;
     let header_len = length.checked_sub(1)?;
-    let _sequence_idx = reader.read_byte()?;
-    reader.read_bytes(header_len as usize)
+    let sequence_idx = reader.read_byte()?;
+    Some(PptMarkerData {
+        data: reader.read_bytes(header_len as usize)?,
+        sequence_idx,
+    })
 }
 
 /// SOT marker (A.4.2).
