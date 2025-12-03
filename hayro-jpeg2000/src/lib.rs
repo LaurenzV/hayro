@@ -59,6 +59,7 @@ pub struct Bitmap {
     pub has_alpha: bool,
     pub width: u32,
     pub height: u32,
+    pub original_bit_depth: u8,
 }
 
 pub fn read(data: &[u8], settings: &DecodeSettings) -> Result<Bitmap, &'static str> {
@@ -107,7 +108,7 @@ pub fn read(data: &[u8], settings: &DecodeSettings) -> Result<Bitmap, &'static s
     let mut color_space = resolve_color_space(&mut decoded_image, bit_depth)?;
 
     // If we didn't resolve palette indices, we need to assume grayscale image.
-    if !settings.resolve_palette_indices {
+    if !settings.resolve_palette_indices && decoded_image.boxes.palette.is_some() {
         has_alpha = false;
         color_space = ColorSpace::Gray;
     }
@@ -131,6 +132,7 @@ pub fn read(data: &[u8], settings: &DecodeSettings) -> Result<Bitmap, &'static s
     Ok(Bitmap {
         color_space,
         has_alpha,
+        original_bit_depth: bit_depth,
         data: interleave_and_convert(decoded_image, bit_depth),
         width,
         height,
