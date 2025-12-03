@@ -4,7 +4,7 @@
 //! (layer_num, resolution, component, precinct) in a specific order that
 //! determines in which order the data appears in the codestream.
 
-use crate::tile::{ComponentTile, ResolutionTile, Tile};
+use super::tile::{ComponentTile, ResolutionTile, Tile};
 use std::cmp::Ordering;
 use std::iter;
 

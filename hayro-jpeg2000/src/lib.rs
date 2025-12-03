@@ -1,20 +1,8 @@
 #![forbid(unsafe_code)]
 
-mod arithmetic_decoder;
-pub(crate) mod bitplane;
-mod build;
-mod codestream;
-mod decode;
-pub(crate) mod idwt;
 mod j2c;
 mod jp2;
-mod mct;
-mod progression;
 pub(crate) mod reader;
-pub(crate) mod rect;
-mod segment;
-mod tag_tree;
-mod tile;
 
 fn resolve_component_channels(
     channels: Vec<ChannelData>,
@@ -113,7 +101,7 @@ pub fn read(data: &[u8], settings: &DecodeSettings) -> Result<Bitmap, &'static s
     let decoded_image = if data.starts_with(JP2_MAGIC) {
         jp2::read(data, settings)
     } else if data.starts_with(CODESTREAM_MAGIC) {
-        j2c::read(data, settings)
+        j2c::decode(data, settings)
     } else {
         Err("invalid JP2 file")
     }?;

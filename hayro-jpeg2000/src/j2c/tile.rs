@@ -1,11 +1,10 @@
 //! Creating tiles and parsing their constituent tile parts.
 
-use crate::build::{PrecinctData, SubBandType};
-use crate::codestream::{
-    ComponentInfo, Header, ProgressionOrder, ReaderExt, markers, skip_marker_segment,
-};
+use super::build::{PrecinctData, SubBandType};
+use super::codestream::{ComponentInfo, Header, ProgressionOrder, markers, skip_marker_segment};
+use super::rect::IntRect;
+use crate::j2c::codestream;
 use crate::reader::BitReader;
-use crate::rect::IntRect;
 
 /// A single tile in the image.
 #[derive(Clone, Debug)]
@@ -187,8 +186,7 @@ fn parse_tile_part<'a>(
             // tile-part header, if they appear at all.
             markers::COD => {
                 reader.read_marker()?;
-                let cod =
-                    crate::codestream::cod_marker(reader).ok_or("failed to read COD marker")?;
+                let cod = codestream::cod_marker(reader).ok_or("failed to read COD marker")?;
 
                 tile.mct = cod.mct;
                 tile.num_layers = cod.num_layers;
@@ -202,9 +200,8 @@ fn parse_tile_part<'a>(
             markers::COC => {
                 reader.read_marker()?;
 
-                let (component_index, coc) =
-                    crate::codestream::coc_marker(reader, num_components as u16)
-                        .ok_or("failed to read COC marker")?;
+                let (component_index, coc) = codestream::coc_marker(reader, num_components as u16)
+                    .ok_or("failed to read COC marker")?;
 
                 let old = tile
                     .component_infos
@@ -216,8 +213,7 @@ fn parse_tile_part<'a>(
             }
             markers::QCD => {
                 reader.read_marker()?;
-                let qcd =
-                    crate::codestream::qcd_marker(reader).ok_or("failed to read QCD marker")?;
+                let qcd = codestream::qcd_marker(reader).ok_or("failed to read QCD marker")?;
 
                 for component_info in &mut tile.component_infos {
                     component_info.quantization_info = qcd.clone();
@@ -225,9 +221,8 @@ fn parse_tile_part<'a>(
             }
             markers::QCC => {
                 reader.read_marker()?;
-                let (component_index, qcc) =
-                    crate::codestream::qcc_marker(reader, num_components as u16)
-                        .ok_or("failed to read QCC marker")?;
+                let (component_index, qcc) = codestream::qcc_marker(reader, num_components as u16)
+                    .ok_or("failed to read QCC marker")?;
 
                 tile.component_infos
                     .get_mut(component_index as usize)
@@ -668,7 +663,7 @@ fn sot_marker(reader: &mut BitReader) -> Option<TilePartHeader> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::codestream::{
+    use crate::j2c::codestream::{
         CodeBlockStyle, CodingStyleComponent, CodingStyleDefault, CodingStyleFlags,
         CodingStyleParameters, ComponentSizeInfo, QuantizationInfo, QuantizationStyle, SizeData,
         WaveletTransform,

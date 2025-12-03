@@ -1,9 +1,9 @@
 //! Building and setting up decompositions, sub-bands, precincts and code-blocks.
 
-use crate::decode::{DecompositionStorage, TileDecodeContext, TileDecompositions};
-use crate::rect::IntRect;
-use crate::tag_tree::TagTree;
-use crate::tile::{ResolutionTile, Tile};
+use super::decode::{DecompositionStorage, TileDecodeContext, TileDecompositions};
+use super::rect::IntRect;
+use super::tag_tree::TagTree;
+use super::tile::{ResolutionTile, Tile};
 use log::trace;
 use std::iter;
 use std::ops::Range;

@@ -1,49 +1,9 @@
 //! Read and decode a JPEG2000 codestream, as described in Annex A.
 
-use crate::DecodeSettings;
-use crate::bitplane::BITPLANE_BIT_SIZE;
-use crate::build::SubBandType;
-use crate::decode::decode;
+use super::DecodeSettings;
+use super::bitplane::BITPLANE_BIT_SIZE;
+use super::build::SubBandType;
 use crate::reader::BitReader;
-
-pub(crate) struct DecodedCodestream {
-    /// The decoded components.
-    pub(crate) components: Vec<ComponentData>,
-    /// The width of the image.
-    pub(crate) width: u32,
-    /// The height of the image.
-    pub(crate) height: u32,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct ComponentData {
-    pub(crate) container: Vec<f32>,
-    pub(crate) bit_depth: u8,
-}
-
-pub(crate) fn read(
-    stream: &[u8],
-    settings: &DecodeSettings,
-) -> Result<DecodedCodestream, &'static str> {
-    let mut reader = BitReader::new(stream);
-
-    let marker = reader.read_marker()?;
-    if marker != markers::SOC {
-        return Err("invalid marker: expected SOC marker");
-    }
-
-    let header = read_header(&mut reader, settings)?;
-    let code_stream_data = reader
-        .tail()
-        .ok_or("code stream data is missing from image")?;
-    let decoded = decode(code_stream_data, &header)?;
-
-    Ok(DecodedCodestream {
-        width: header.size_data.image_width(),
-        height: header.size_data.image_height(),
-        components: decoded,
-    })
-}
 
 #[derive(Debug)]
 pub(crate) struct Header {
@@ -54,7 +14,10 @@ pub(crate) struct Header {
     pub(crate) strict: bool,
 }
 
-fn read_header(reader: &mut BitReader, settings: &DecodeSettings) -> Result<Header, &'static str> {
+pub(crate) fn read_header(
+    reader: &mut BitReader,
+    settings: &DecodeSettings,
+) -> Result<Header, &'static str> {
     if reader.read_marker()? != markers::SIZ {
         return Err("expected SIZ marker after SOC");
     }
@@ -801,24 +764,6 @@ fn quantization_parameters(
         guard_bits: 0,
         step_sizes,
     })
-}
-
-pub(crate) trait ReaderExt: Clone {
-    fn read_marker(&mut self) -> Result<u8, &'static str>;
-    fn peek_marker(&mut self) -> Option<u8> {
-        self.clone().read_marker().ok()
-    }
-}
-
-impl ReaderExt for BitReader<'_> {
-    fn read_marker(&mut self) -> Result<u8, &'static str> {
-        if self.peek_byte().ok_or("invalid marker")? != 0xFF {
-            return Err("invalid marker");
-        }
-
-        self.read_byte().unwrap();
-        self.read_byte().ok_or("invalid marker")
-    }
 }
 
 #[allow(unused)]

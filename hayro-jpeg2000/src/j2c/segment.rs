@@ -1,12 +1,12 @@
 //! Parsing of layers and their segments, as specified in Annex B.
 
-use crate::build::Segment;
-use crate::codestream::markers::{EPH, SOP};
-use crate::codestream::{ComponentInfo, Header, ReaderExt};
-use crate::decode::{DecompositionStorage, TileDecodeContext};
-use crate::progression::ProgressionData;
+use super::build::Segment;
+use super::codestream::markers::{EPH, SOP};
+use super::codestream::{ComponentInfo, Header};
+use super::decode::{DecompositionStorage, TileDecodeContext};
+use super::progression::ProgressionData;
+use super::tile::{Tile, TilePart};
 use crate::reader::BitReader;
-use crate::tile::{Tile, TilePart};
 use log::trace;
 
 pub(crate) fn parse<'a>(

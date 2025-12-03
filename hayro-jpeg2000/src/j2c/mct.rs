@@ -1,8 +1,8 @@
 //! The irreversible multi-component transformation, as specified in
 //! Annex G.2 and G.3.
 
-use crate::codestream::Header;
-use crate::decode::TileDecodeContext;
+use super::codestream::Header;
+use super::decode::TileDecodeContext;
 
 /// Apply the inverse multi-component transform, as specified in G.2 and G.3.
 pub(crate) fn apply_inverse(
@@ -54,7 +54,7 @@ pub(crate) fn apply_inverse(
 
 #[cfg(not(feature = "simd"))]
 mod simd {
-    use crate::codestream::WaveletTransform;
+    use crate::j2c::codestream::WaveletTransform;
 
     pub(super) fn apply_inner(
         transform: WaveletTransform,
@@ -111,7 +111,7 @@ mod simd {
 
 #[cfg(feature = "simd")]
 mod simd {
-    use crate::codestream::WaveletTransform;
+    use crate::j2c::codestream::WaveletTransform;
     use fearless_simd::*;
 
     pub(super) fn apply_inner(

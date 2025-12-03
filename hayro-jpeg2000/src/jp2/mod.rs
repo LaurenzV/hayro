@@ -1,13 +1,13 @@
 //! Reading a JP2 file, defined in Annex I.
 
-use crate::codestream::DecodedCodestream;
+use crate::DecodeSettings;
+use crate::j2c::DecodedCodestream;
 use crate::jp2::r#box::{FILE_TYPE, JP2_SIGNATURE};
 use crate::jp2::cdef::ChannelDefinitionBox;
 use crate::jp2::cmap::ComponentMappingBox;
 use crate::jp2::colr::ColorSpecificationBox;
 use crate::jp2::pclr::PaletteBox;
 use crate::reader::BitReader;
-use crate::{DecodeSettings, codestream};
 use log::{debug, warn};
 
 pub(crate) mod r#box;
@@ -100,7 +100,7 @@ pub(crate) fn read(data: &[u8], settings: &DecodeSettings) -> Result<DecodedImag
                 image_boxes = Ok(boxes);
             }
             r#box::CONTIGUOUS_CODESTREAM => {
-                decoded_codestream = Ok(codestream::read(current_box.data, settings)?);
+                decoded_codestream = Ok(crate::j2c::read(current_box.data, settings)?);
             }
             _ => {
                 warn!(

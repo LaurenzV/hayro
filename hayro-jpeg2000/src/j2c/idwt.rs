@@ -1,9 +1,9 @@
 //! Performing the inverse discrete wavelet transform, as specified in Annex F.
 
-use crate::build::{Decomposition, SubBand, SubBandType};
-use crate::codestream::WaveletTransform;
-use crate::decode::{DecompositionStorage, TileDecodeContext};
-use crate::rect::IntRect;
+use super::build::{Decomposition, SubBand, SubBandType};
+use super::codestream::WaveletTransform;
+use super::decode::{DecompositionStorage, TileDecodeContext};
+use super::rect::IntRect;
 
 // Keep in sync with the type `F32` in the `simd` modules!
 const SIMD_WIDTH: usize = 8;
@@ -524,9 +524,11 @@ fn periodic_symmetric_extension(idx: usize, start: usize, end: usize) -> usize {
 
 #[cfg(feature = "simd")]
 mod simd {
-    use crate::codestream::WaveletTransform;
-    use crate::idwt::{Padding, left_extension, periodic_symmetric_extension, right_extension};
-    use crate::rect::IntRect;
+    use crate::j2c::codestream::WaveletTransform;
+    use crate::j2c::idwt::{
+        Padding, left_extension, periodic_symmetric_extension, right_extension,
+    };
+    use crate::j2c::rect::IntRect;
     use fearless_simd::*;
 
     const SIMD_WIDTH: usize = super::SIMD_WIDTH;
@@ -774,9 +776,11 @@ mod simd {
 
 #[cfg(not(feature = "simd"))]
 mod simd {
-    use crate::codestream::WaveletTransform;
-    use crate::idwt::{Padding, left_extension, periodic_symmetric_extension, right_extension};
-    use crate::rect::IntRect;
+    use crate::j2c::codestream::WaveletTransform;
+    use crate::j2c::idwt::{
+        Padding, left_extension, periodic_symmetric_extension, right_extension,
+    };
+    use crate::j2c::rect::IntRect;
 
     const SIMD_WIDTH: usize = super::SIMD_WIDTH;
 
@@ -963,7 +967,7 @@ mod simd {
 
 #[cfg(test)]
 mod tests {
-    use crate::codestream::WaveletTransform;
+    use crate::j2c::codestream::WaveletTransform;
 
     #[test]
     fn pse() {

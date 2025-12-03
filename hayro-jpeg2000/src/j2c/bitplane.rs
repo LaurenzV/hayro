@@ -9,10 +9,10 @@
 //! Some of the references are taken from the
 //! "JPEG2000 Standard for Image Compression" book instead of the specification.
 
-use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
-use crate::build::{CodeBlock, SubBandType};
-use crate::codestream::CodeBlockStyle;
-use crate::decode::{DecompositionStorage, TileDecodeContext};
+use super::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
+use super::build::{CodeBlock, SubBandType};
+use super::codestream::CodeBlockStyle;
+use super::decode::{DecompositionStorage, TileDecodeContext};
 use crate::reader::BitReader;
 
 /// Decode the layers of the given code block into coefficients.

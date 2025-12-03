@@ -162,4 +162,19 @@ impl<'a> BitReader<'a> {
     pub(crate) fn peak_bits_with_stuffing(&mut self, bit_size: u8) -> Option<u32> {
         self.clone().read_bits_with_stuffing(bit_size)
     }
+
+    #[inline]
+    pub(crate) fn read_marker(&mut self) -> Result<u8, &'static str> {
+        if self.peek_byte().ok_or("invalid marker")? != 0xFF {
+            return Err("invalid marker");
+        }
+
+        self.read_byte().unwrap();
+        self.read_byte().ok_or("invalid marker")
+    }
+
+    #[inline]
+    pub(crate) fn peek_marker(&mut self) -> Option<u8> {
+        self.clone().read_marker().ok()
+    }
 }

@@ -4,23 +4,21 @@
 //! stages in such a way that a given codestream is decoded into its
 //! component channels.
 
-use crate::bitplane::{BitPlaneDecodeBuffers, BitPlaneDecodeContext};
-use crate::build::{CodeBlock, Decomposition, Layer, Precinct, Segment, SubBand, SubBandType};
-use crate::codestream::{
-    ComponentData, ComponentInfo, Header, ProgressionOrder, QuantizationStyle,
-};
-use crate::idwt::IDWTOutput;
-use crate::progression::{
+use super::bitplane::{BitPlaneDecodeBuffers, BitPlaneDecodeContext};
+use super::build::{CodeBlock, Decomposition, Layer, Precinct, Segment, SubBand, SubBandType};
+use super::codestream::{ComponentInfo, Header, ProgressionOrder, QuantizationStyle};
+use super::idwt::IDWTOutput;
+use super::progression::{
     IteratorInput, ProgressionData, component_position_resolution_layer_progression,
     layer_resolution_component_position_progression,
     position_component_resolution_layer_progression,
     resolution_layer_component_position_progression,
     resolution_position_component_layer_progression,
 };
+use super::tag_tree::TagNode;
+use super::tile::{ComponentTile, Tile};
+use super::{ComponentData, bitplane, build, idwt, mct, segment, tile};
 use crate::reader::BitReader;
-use crate::tag_tree::TagNode;
-use crate::tile::{ComponentTile, Tile};
-use crate::{bitplane, build, idwt, mct, segment, tile};
 use log::trace;
 use std::ops::Range;
 
