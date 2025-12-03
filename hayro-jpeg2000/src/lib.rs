@@ -99,15 +99,6 @@ pub fn read(data: &[u8], settings: &DecodeSettings) -> Result<Bitmap, &'static s
     }
 
     if let Some(cdef) = &decoded_image.boxes.channel_definition {
-        // Note that in the `parse` method we validated that there is at least
-        // one definition.
-        for def in &cdef.channel_definitions[..cdef.channel_definitions.len() - 1] {
-            if def.channel_type == ChannelType::Opacity
-            {
-                return Err("intermediate opacity channels are not supported");
-            }
-        }
-
         let last = cdef.channel_definitions.last().unwrap();
 
         has_alpha = last.channel_type == ChannelType::Opacity;
