@@ -283,6 +283,14 @@ fn resolve_color_space(
                 ColorSpace::RGB
             }
         }
+        jp2::colr::ColorSpace::Unknown => {
+            match image.decoded.components.len() {
+                1 => ColorSpace::Gray,
+                3 => ColorSpace::RGB,
+                4 => ColorSpace::CMYK,
+                _ => return Err("JP2 image has unsupported color space"),
+            }
+        }
     };
 
     Ok(cs)

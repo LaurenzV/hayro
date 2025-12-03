@@ -4,10 +4,6 @@ use crate::jp2::ImageBoxes;
 use crate::reader::BitReader;
 
 pub(crate) fn parse(boxes: &mut ImageBoxes, data: &[u8]) -> Option<()> {
-    if data.len() < 3 {
-        return None;
-    }
-
     let mut reader = BitReader::new(data);
 
     let meth = reader.read_byte()?;
@@ -24,7 +20,7 @@ pub(crate) fn parse(boxes: &mut ImageBoxes, data: &[u8]) -> Option<()> {
             let profile_data = reader.tail()?.to_vec();
             ColorSpace::Icc(profile_data)
         }
-        _ => return None,
+        _ => ColorSpace::Unknown,
     };
 
     boxes.color_specification = Some(ColorSpecificationBox {
@@ -43,6 +39,7 @@ pub(crate) struct ColorSpecificationBox {
 pub(crate) enum ColorSpace {
     Enumerated(EnumeratedColorspace),
     Icc(Vec<u8>),
+    Unknown
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
