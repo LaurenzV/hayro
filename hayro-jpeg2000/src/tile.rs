@@ -679,7 +679,6 @@ mod tests {
     fn test_jpeg2000_standard_example_b4() {
         let component_size_info_0 = ComponentSizeInfo {
             precision: 8,
-            _is_signed: false,
             horizontal_resolution: 1,
             vertical_resolution: 1,
         };
@@ -711,7 +710,6 @@ mod tests {
 
         let component_size_info_1 = ComponentSizeInfo {
             precision: 8,
-            _is_signed: false,
             horizontal_resolution: 2,
             vertical_resolution: 2,
         };

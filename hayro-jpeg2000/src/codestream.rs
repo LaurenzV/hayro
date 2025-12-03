@@ -1,14 +1,28 @@
+//! Read and decode a JPEG2000 codestream, as described in Annex A.
+
 use crate::DecodeSettings;
-use crate::bitmap::ChannelData;
 use crate::bitplane::BITPLANE_BIT_SIZE;
 use crate::build::SubBandType;
 use crate::decode::decode;
 use crate::reader::BitReader;
 
+pub(crate) struct DecodeResult {
+    /// The header of the code-stream.
+    header: Header,
+    /// The decoded components.
+    components: Vec<ComponentData>
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ComponentData {
+    pub(crate) container: Vec<f32>,
+    pub(crate) bit_depth: u8,
+}
+
 pub(crate) fn read(
     stream: &[u8],
     settings: &DecodeSettings,
-) -> Result<(Header, Vec<ChannelData>), &'static str> {
+) -> Result<DecodeResult, &'static str> {
     let mut reader = BitReader::new(stream);
 
     let marker = reader.read_marker()?;
@@ -22,7 +36,10 @@ pub(crate) fn read(
         .ok_or("code stream data is missing from image")?;
     let decoded = decode(code_stream_data, &header)?;
 
-    Ok((header, decoded))
+    Ok(DecodeResult {
+        header,
+        components: decoded
+    })
 }
 
 #[derive(Debug)]
@@ -174,8 +191,8 @@ impl ComponentInfo {
         let n_ll = self.coding_style.parameters.num_decomposition_levels;
 
         let sb_index = match sub_band_type {
-            // TODO: Shouldn't be reached.
-            SubBandType::LowLow => u16::MAX,
+            SubBandType::LowLow => panic!("function should not be called with\
+            LL sub-band"),
             SubBandType::HighLow => 0,
             SubBandType::LowHigh => 1,
             SubBandType::HighHigh => 2,
@@ -294,7 +311,6 @@ pub(crate) struct CodeBlockStyle {
     pub(crate) reset_context_probabilities: bool,
     pub(crate) termination_on_each_pass: bool,
     pub(crate) vertically_causal_context: bool,
-    pub(crate) _predictable_termination: bool,
     pub(crate) segmentation_symbols: bool,
 }
 
@@ -305,7 +321,8 @@ impl CodeBlockStyle {
             reset_context_probabilities: (value & 0x02) != 0,
             termination_on_each_pass: (value & 0x04) != 0,
             vertically_causal_context: (value & 0x08) != 0,
-            _predictable_termination: (value & 0x10) != 0,
+            // The predictable termination flag is only informative and
+            // can therefore be ignored.
             segmentation_symbols: (value & 0x20) != 0,
         }
     }
@@ -416,8 +433,6 @@ impl SizeData {
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct ComponentSizeInfo {
     pub(crate) precision: u8,
-    // TODO: What is this field for?
-    pub(crate) _is_signed: bool,
     pub(crate) horizontal_resolution: u8,
     pub(crate) vertical_resolution: u8,
 }
@@ -531,6 +546,11 @@ fn size_marker_inner(reader: &mut BitReader) -> Option<SizeData> {
 
         let precision = (ssiz & 0x7F) + 1;
         let is_signed = (ssiz & 0x80) != 0;
+        
+        if is_signed {
+            // We don't support signed images yet.
+            return None;
+        }
 
         // In theory up to 38 is allowed, but we don't support more than that.
         if precision as u32 > BITPLANE_BIT_SIZE {
@@ -539,7 +559,6 @@ fn size_marker_inner(reader: &mut BitReader) -> Option<SizeData> {
 
         components.push(ComponentSizeInfo {
             precision,
-            _is_signed: is_signed,
             horizontal_resolution: x_rsiz,
             vertical_resolution: y_rsiz,
         });
@@ -679,7 +698,6 @@ pub(crate) fn coc_marker(reader: &mut BitReader, csiz: u16) -> Option<(u16, Codi
     };
     let coding_style = CodingStyleFlags::from_u8(reader.read_byte()?);
 
-    // Read SPcoc - coding style parameters (same structure as SPcod from COD)
     let parameters = coding_style_parameters(reader, &coding_style)?;
 
     let coc = CodingStyleComponent {
@@ -722,10 +740,10 @@ pub(crate) fn qcc_marker(reader: &mut BitReader, csiz: u16) -> Option<(u16, Quan
     let guard_bits = (sqcc_val >> 5) & 0x07;
 
     let component_index_size = if csiz < 257 { 1 } else { 2 };
-    let remaining_bytes = (length
+    let remaining_bytes = length
         .checked_sub(2)?
         .checked_sub(component_index_size)?
-        .checked_sub(1)?) as usize;
+        .checked_sub(1)? as usize;
 
     let mut parameters = quantization_parameters(reader, quantization_style, remaining_bytes)?;
     parameters.guard_bits = guard_bits;
@@ -775,16 +793,9 @@ fn quantization_parameters(
 
     Some(QuantizationInfo {
         quantization_style,
-        guard_bits: 0, // Will be set by caller.
+        guard_bits: 0,
         step_sizes,
     })
-}
-
-// TODO: Use this
-fn _skip_code(marker_code: u8) -> bool {
-    // All markers with the marker code between 0xFF30 and 0xFF3F have no marker
-    // segment parameters. They shall be skipped by the decoder.
-    (0x30..=0x3F).contains(&marker_code)
 }
 
 pub(crate) trait ReaderExt: Clone {

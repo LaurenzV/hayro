@@ -4,10 +4,9 @@
 //! stages in such a way that a given codestream is decoded into its
 //! component channels.
 
-use crate::bitmap::ChannelData;
 use crate::bitplane::{BitPlaneDecodeBuffers, BitPlaneDecodeContext};
 use crate::build::{CodeBlock, Decomposition, Layer, Precinct, Segment, SubBand, SubBandType};
-use crate::codestream::{ComponentInfo, Header, ProgressionOrder, QuantizationStyle};
+use crate::codestream::{ComponentData, ComponentInfo, Header, ProgressionOrder, QuantizationStyle};
 use crate::idwt::IDWTOutput;
 use crate::progression::{
     IteratorInput, ProgressionData, component_position_resolution_layer_progression,
@@ -23,7 +22,7 @@ use crate::{bitplane, build, idwt, mct, segment, tile};
 use log::trace;
 use std::ops::Range;
 
-pub(crate) fn decode(data: &[u8], header: &Header) -> Result<Vec<ChannelData>, &'static str> {
+pub(crate) fn decode(data: &[u8], header: &Header) -> Result<Vec<ComponentData>, &'static str> {
     let mut reader = BitReader::new(data);
     let tiles = tile::parse(&mut reader, header)?;
 
@@ -234,7 +233,7 @@ pub(crate) struct TileDecodeContext<'a> {
     /// Reusable buffers for decoding bitplanes.
     pub(crate) bit_plane_decode_buffers: BitPlaneDecodeBuffers,
     /// The raw, decoded samples for each channel.
-    pub(crate) channel_data: Vec<ChannelData>,
+    pub(crate) channel_data: Vec<ComponentData>,
 }
 
 impl<'a> TileDecodeContext<'a> {
@@ -242,15 +241,12 @@ impl<'a> TileDecodeContext<'a> {
         let mut channel_data = vec![];
 
         for info in &initial_tile.component_infos {
-            channel_data.push(ChannelData {
+            channel_data.push(ComponentData {
                 container: vec![
                     0.0;
                     header.size_data.image_width() as usize
                         * header.size_data.image_height() as usize
                 ],
-                // Will be set later on, because that data only exists in the
-                // metadata of the JP2 file, not the actual code stream.
-                is_alpha: false,
                 bit_depth: info.size_info.precision,
             });
         }
