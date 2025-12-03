@@ -3,7 +3,7 @@
 use crate::jp2::ImageBoxes;
 use crate::reader::BitReader;
 
-pub(crate) fn parse(metadata: &mut ImageBoxes, data: &[u8]) -> Option<()> {
+pub(crate) fn parse(boxes: &mut ImageBoxes, data: &[u8]) -> Option<()> {
     let mut reader = BitReader::new(data);
     let count = reader.read_u16()? as usize;
     let mut definitions = Vec::with_capacity(count);
@@ -20,7 +20,7 @@ pub(crate) fn parse(metadata: &mut ImageBoxes, data: &[u8]) -> Option<()> {
         });
     }
 
-    metadata.channel_definition = Some(ChannelDefinitionBox {
+    boxes.channel_definition = Some(ChannelDefinitionBox {
         channel_definitions: definitions,
     });
     

@@ -1,4 +1,5 @@
 use crate::jp2::cdef::{ChannelDefinition, ChannelDefinitionBox};
+use crate::jp2::cmap::ComponentMappingBox;
 use crate::jp2::colr::ColorSpecificationBox;
 use crate::reader::BitReader;
 
@@ -6,15 +7,14 @@ mod r#box;
 mod colr;
 mod icc;
 mod cdef;
+mod cmap;
 
 #[derive(Debug, Clone)]
 pub(crate) struct ImageBoxes {
     pub(crate) color_specification: Option<ColorSpecificationBox>,
     pub(crate) channel_definition: Option<ChannelDefinitionBox>,
-    /// Palette definitions from the Palette box (pclr).
     pub(crate) palette: Option<Palette>,
-    /// Component mappings defined by the Component Mapping box (cmap).
-    pub(crate) component_mapping: Option<Vec<ComponentMappingEntry>>,
+    pub(crate) component_mapping: Option<ComponentMappingBox>,
 }
 
 #[derive(Debug, Clone)]
@@ -40,19 +40,6 @@ impl Palette {
 pub struct PaletteColumn {
     pub bit_depth: u8,
     pub is_signed: bool,
-}
-
-#[derive(Debug, Clone)]
-pub struct ComponentMappingEntry {
-    pub component_index: u16,
-    pub mapping_type: ComponentMappingType,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ComponentMappingType {
-    Direct,
-    Palette { column: u8 },
-    Reserved(u8),
 }
 
 impl ImageBoxes {
@@ -115,44 +102,6 @@ impl ImageBoxes {
         }
 
         self.palette = Some(Palette { entries, columns });
-        Ok(())
-    }
-
-    /// Parse Component Mapping box (cmap) data.
-    fn parse_cmap(&mut self, data: &[u8]) -> Result<(), &'static str> {
-        if !data.len().is_multiple_of(4) {
-            return Err("component mapping box has invalid length");
-        }
-
-        let mut reader = BitReader::new(data);
-        let mut entries = Vec::with_capacity(data.len() / 4);
-
-        while !reader.at_end() {
-            let component_index = reader
-                .read_u16()
-                .ok_or("failed to read component index from cmap box")?;
-            let mapping_type = reader
-                .read_byte()
-                .ok_or("failed to read mapping type from cmap box")?;
-            let palette_column = reader
-                .read_byte()
-                .ok_or("failed to read palette column from cmap box")?;
-
-            let mapping_type = match mapping_type {
-                0 => ComponentMappingType::Direct,
-                1 => ComponentMappingType::Palette {
-                    column: palette_column,
-                },
-                other => ComponentMappingType::Reserved(other),
-            };
-
-            entries.push(ComponentMappingEntry {
-                component_index,
-                mapping_type,
-            });
-        }
-
-        self.component_mapping = Some(entries);
         Ok(())
     }
 }

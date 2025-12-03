@@ -4,7 +4,7 @@ use crate::jp2::icc::ICCMetadata;
 use crate::jp2::ImageBoxes;
 use crate::reader::BitReader;
 
-pub(crate) fn parse(metadata: &mut ImageBoxes, data: &[u8]) -> Option<()> {
+pub(crate) fn parse(boxes: &mut ImageBoxes, data: &[u8]) -> Option<()> {
     if data.len() < 3 {
         return None;
     }
@@ -28,7 +28,7 @@ pub(crate) fn parse(metadata: &mut ImageBoxes, data: &[u8]) -> Option<()> {
         _ => return None,
     };
 
-    metadata.color_specification = Some(ColorSpecificationBox {
+    boxes.color_specification = Some(ColorSpecificationBox {
         method,
     });
     
