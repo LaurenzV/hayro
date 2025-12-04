@@ -550,37 +550,49 @@ impl<'a> ResolutionTile<'a> {
         let ppx_pow2 = 1 << ppx;
         let ppy_pow2 = 1 << ppy;
 
+        let nl_minus_r = self
+            .component_tile
+            .component_info
+            .num_decomposition_levels()
+            - self.resolution;
+
+        let x_stride = 1 << (self.precinct_exponent_x() as u16 + nl_minus_r);
+        let y_stride = 1 << (self.precinct_exponent_y() as u16 + nl_minus_r);
+
         let precinct_x_step = self
             .component_tile
             .component_info
             .size_info
             .horizontal_resolution as u32
-            * (1 << (self.precinct_exponent_x() as u16
-                + self
-                    .component_tile
-                    .component_info
-                    .num_decomposition_levels()
-                - self.resolution));
+            * x_stride;
 
         let precinct_y_step = self
             .component_tile
             .component_info
             .size_info
             .vertical_resolution as u32
-            * (1 << (self.precinct_exponent_y() as u16
-                + self
-                    .component_tile
-                    .component_info
-                    .num_decomposition_levels()
-                - self.resolution));
+            * y_stride;
 
         // These variables are used to map the start coordinates of each
         // precinct _on the reference grid_. Remember that the first
         // precinct in each row/column is at the start position of the tile
         // which might not be a multiple of precinct exponent, but all subsequent
         // precincts are at a multiple of the exponent.
-        let r_x = self.component_tile.tile.rect.x0;
+        let mut r_x = self.component_tile.tile.rect.x0;
         let mut r_y = self.component_tile.tile.rect.y0;
+
+        // The second part of the condition in the formula in B.12.1.3. If it
+        // is divisible, then we can't take the x/y position of the tile
+        // as the start of the precinct, but instead have to advance to the
+        // next multiple.
+        if (r_x % precinct_x_step != 0) && self.rect.x0 * (1 << nl_minus_r) % precinct_x_step == 0 {
+            r_x = r_x.next_multiple_of(precinct_x_step);
+        }
+
+        // Same as above.
+        if (r_y % precinct_y_step != 0) && self.rect.y0 * (1 << nl_minus_r) % precinct_y_step == 0 {
+            r_y = r_y.next_multiple_of(precinct_y_step);
+        }
 
         (0..num_precincts_y).flat_map(move |y| {
             let y0 = y * ppy_pow2 + y_start;
