@@ -10,8 +10,20 @@ pub(crate) struct Header {
     pub(crate) size_data: SizeData,
     pub(crate) global_coding_style: CodingStyleDefault,
     pub(crate) component_infos: Vec<ComponentInfo>,
+    pub(crate) ppm_packets: Vec<PpmPacket>,
     /// Whether strict mode is enabled for decoding.
     pub(crate) strict: bool,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct PpmMarkerData {
+    pub(crate) sequence_idx: u8,
+    pub(crate) packets: Vec<PpmPacket>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct PpmPacket {
+    pub(crate) data: Vec<u8>,
 }
 
 pub(crate) fn read_header(
@@ -30,6 +42,7 @@ pub(crate) fn read_header(
     let num_components = size_data.component_sizes.len() as u16;
     let mut cod_components = vec![None; num_components as usize];
     let mut qcd_components = vec![None; num_components as usize];
+    let mut ppm_markers = vec![];
 
     loop {
         match reader.peek_marker().ok_or("failed to read marker")? {
@@ -70,6 +83,10 @@ pub(crate) fn read_header(
                 reader.read_marker()?;
                 com_marker(reader).ok_or("failed to read COM marker")?;
             }
+            markers::PPM => {
+                reader.read_marker()?;
+                ppm_markers.push(ppm_marker(reader).ok_or("failed to read PPM marker")?);
+            }
             markers::CRG => {
                 reader.read_marker()?;
                 skip_marker_segment(reader);
@@ -108,10 +125,17 @@ pub(crate) fn read_header(
         })
         .collect();
 
+    ppm_markers.sort_by(|p0, p1| p0.sequence_idx.cmp(&p1.sequence_idx));
+
     let header = Header {
         size_data,
         global_coding_style: cod.clone(),
         component_infos,
+        ppm_packets: ppm_markers
+            .into_iter()
+            .flat_map(|i| i.packets)
+            .filter_map(|p| if p.data.is_empty() { None } else { Some(p) })
+            .collect(),
         strict: settings.strict,
     };
 
@@ -618,6 +642,37 @@ fn com_marker(reader: &mut BitReader) -> Option<()> {
 /// TLM marker (A.7.1).
 fn tlm_marker(reader: &mut BitReader) -> Option<()> {
     skip_marker_segment(reader)
+}
+
+/// PPM marker (A.7.4).
+fn ppm_marker(reader: &mut BitReader) -> Option<PpmMarkerData> {
+    let segment_len = reader.read_u16()?.checked_sub(2)? as usize;
+    let sequence_idx = reader.read_byte()?;
+    let mut remaining = segment_len.checked_sub(1)?;
+    let mut packets = vec![];
+
+    while remaining > 0 {
+        if remaining < 2 {
+            return None;
+        }
+
+        let packet_len = reader.read_u16()? as usize;
+        remaining = remaining.checked_sub(2)?;
+
+        if packet_len > remaining {
+            return None;
+        }
+
+        let data = reader.read_bytes(packet_len)?.to_vec();
+        remaining -= packet_len;
+
+        packets.push(PpmPacket { data });
+    }
+
+    Some(PpmMarkerData {
+        sequence_idx,
+        packets,
+    })
 }
 
 /// RGN marker (A.6.3).

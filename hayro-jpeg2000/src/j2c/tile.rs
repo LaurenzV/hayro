@@ -132,10 +132,14 @@ pub(crate) fn parse<'a>(
         .map(|idx| Tile::new(idx as u32, main_header))
         .collect::<Vec<_>>();
 
-    parse_tile_part(reader, main_header, &mut tiles)?;
+    let mut tile_part_idx = 0;
+
+    parse_tile_part(reader, main_header, &mut tiles, tile_part_idx)?;
+    tile_part_idx += 1;
 
     while reader.peek_marker() == Some(markers::SOT) {
-        parse_tile_part(reader, main_header, &mut tiles)?;
+        parse_tile_part(reader, main_header, &mut tiles, tile_part_idx)?;
+        tile_part_idx += 1;
     }
 
     if main_header.strict && reader.read_marker()? != markers::EOC {
@@ -147,8 +151,9 @@ pub(crate) fn parse<'a>(
 
 fn parse_tile_part<'a>(
     reader: &mut BitReader<'a>,
-    main_header: &Header,
+    main_header: &'a Header,
     tiles: &mut [Tile<'a>],
+    tile_part_idx: usize,
 ) -> Result<(), &'static str> {
     if reader.read_marker()? != markers::SOT {
         return Err("expected SOT marker at tile-part start");
@@ -240,6 +245,10 @@ fn parse_tile_part<'a>(
             }
             markers::EOC => break,
             markers::PPT => {
+                if !main_header.ppm_packets.is_empty() {
+                    return Err("PPT marker shouldn't exist if main header hat PPM marker");
+                }
+
                 reader.read_marker()?;
                 ppt_headers.push(ppt_marker(reader).ok_or("failed to read PPT marker")?);
             }
@@ -278,14 +287,19 @@ fn parse_tile_part<'a>(
     };
 
     ppt_headers.sort_by(|p1, p2| p1.sequence_idx.cmp(&p2.sequence_idx));
+    let mut headers: Vec<_> = ppt_headers.iter().map(|i| BitReader::new(i.data)).collect();
+
+    if let Some(ppm_marker) = main_header.ppm_packets.get(tile_part_idx) {
+        headers.push(BitReader::new(&ppm_marker.data))
+    }
 
     let data = reader
         .read_bytes(remaining_bytes)
         .ok_or("failed to get tile part data")?;
 
-    let tile_part = if !ppt_headers.is_empty() {
+    let tile_part = if !headers.is_empty() {
         TilePart::Separated(SeparatedTilePart {
-            headers: ppt_headers.iter().map(|i| BitReader::new(i.data)).collect(),
+            headers,
             active_header_reader: 0,
             body: BitReader::new(data),
         })
@@ -800,6 +814,7 @@ mod tests {
                 },
             },
             component_infos: vec![],
+            ppm_packets: vec![],
             strict: false,
         };
 
