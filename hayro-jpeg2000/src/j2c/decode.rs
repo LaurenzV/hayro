@@ -48,19 +48,19 @@ pub(crate) fn decode(data: &[u8], header: &Header) -> Result<Vec<ComponentData>,
         let progression_iterator: Box<dyn Iterator<Item = ProgressionData>> =
             match tile.progression_order {
                 ProgressionOrder::LayerResolutionComponentPosition => {
-                    Box::new(layer_resolution_component_position_progression(&iter_input))
+                    Box::new(layer_resolution_component_position_progression(iter_input))
                 }
                 ProgressionOrder::ResolutionLayerComponentPosition => {
-                    Box::new(resolution_layer_component_position_progression(&iter_input))
+                    Box::new(resolution_layer_component_position_progression(iter_input))
                 }
                 ProgressionOrder::ResolutionPositionComponentLayer => {
-                    Box::new(resolution_position_component_layer_progression(&iter_input))
+                    Box::new(resolution_position_component_layer_progression(iter_input))
                 }
                 ProgressionOrder::PositionComponentResolutionLayer => {
-                    Box::new(position_component_resolution_layer_progression(&iter_input))
+                    Box::new(position_component_resolution_layer_progression(iter_input))
                 }
                 ProgressionOrder::ComponentPositionResolutionLayer => {
-                    Box::new(component_position_resolution_layer_progression(&iter_input))
+                    Box::new(component_position_resolution_layer_progression(iter_input))
                 }
             };
 
