@@ -585,12 +585,12 @@ impl<'a> ResolutionTile<'a> {
         // is divisible, then we can't take the x/y position of the tile
         // as the start of the precinct, but instead have to advance to the
         // next multiple.
-        if (r_x % precinct_x_step != 0) && self.rect.x0 * (1 << nl_minus_r) % precinct_x_step == 0 {
+        if !r_x.is_multiple_of(precinct_x_step) && (self.rect.x0 * (1 << nl_minus_r)).is_multiple_of(precinct_x_step) {
             r_x = r_x.next_multiple_of(precinct_x_step);
         }
 
         // Same as above.
-        if (r_y % precinct_y_step != 0) && self.rect.y0 * (1 << nl_minus_r) % precinct_y_step == 0 {
+        if !r_y.is_multiple_of(precinct_y_step) && (self.rect.y0 * (1 << nl_minus_r)).is_multiple_of(precinct_y_step) {
             r_y = r_y.next_multiple_of(precinct_y_step);
         }
 
