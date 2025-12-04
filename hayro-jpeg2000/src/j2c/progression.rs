@@ -212,7 +212,7 @@ pub(crate) fn resolution_layer_component_position_progression<'a>(
         let data = ProgressionData {
             layer_num: layer,
             resolution,
-            component: component_idx as u8,
+            component: component_idx,
             precinct,
         };
 
