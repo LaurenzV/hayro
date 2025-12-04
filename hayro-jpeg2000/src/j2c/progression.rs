@@ -48,16 +48,16 @@ impl<'a> IteratorInput<'a> {
             .unwrap_or(0);
         let max_layer = tile.num_layers;
         let max_component = tile.component_infos.len() as u8;
-        
+
         // Make sure we don't exceed what's actually possible
         resolutions.1 = resolutions.1.min(max_resolution);
         layers.1 = layers.1.min(max_layer);
         components.1 = components.1.min(max_component);
-        
+
         assert!(resolutions.1 > resolutions.0);
         assert!(layers.1 > layers.0);
         assert!(components.1 > components.0);
-        
+
         Self {
             layers,
             tile,
@@ -65,27 +65,27 @@ impl<'a> IteratorInput<'a> {
             components,
         }
     }
-    
+
     fn min_layer(&self) -> u16 {
         self.layers.0
     }
-    
+
     fn max_layer(&self) -> u16 {
         self.layers.1
     }
-    
+
     fn min_resolution(&self) -> u16 {
         self.resolutions.0
     }
-    
+
     fn max_resolution(&self) -> u16 {
         self.resolutions.1
     }
-    
+
     fn min_comp(&self) -> u8 {
         self.components.0
     }
-    
+
     fn max_comp(&self) -> u8 {
         self.components.1
     }
@@ -108,7 +108,7 @@ pub(crate) fn layer_resolution_component_position_progression<'a>(
     let mut layer = input.min_layer();
     let mut resolution = input.min_resolution();
     let mut component_idx = input.min_comp();
-    
+
     let mut resolution_tile = ResolutionTile::new(component_tiles[0], resolution);
     let mut precinct = 0;
 
@@ -137,7 +137,8 @@ pub(crate) fn layer_resolution_component_position_progression<'a>(
                     }
                 }
 
-                resolution_tile = ResolutionTile::new(component_tiles[component_idx as usize], resolution);
+                resolution_tile =
+                    ResolutionTile::new(component_tiles[component_idx as usize], resolution);
 
                 // Only yield if the resolution tile has precincts, otherwise
                 // we need to keep advancing.
@@ -169,7 +170,8 @@ pub(crate) fn resolution_layer_component_position_progression<'a>(
     let mut layer = 0;
     let mut resolution = 0;
     let mut component_idx = 0;
-    let mut resolution_tile = ResolutionTile::new(component_tiles[component_idx as usize], resolution);
+    let mut resolution_tile =
+        ResolutionTile::new(component_tiles[component_idx as usize], resolution);
     let mut precinct = 0;
 
     iter::from_fn(move || {
@@ -196,7 +198,8 @@ pub(crate) fn resolution_layer_component_position_progression<'a>(
                     }
                 }
 
-                resolution_tile = ResolutionTile::new(component_tiles[component_idx as usize], resolution);
+                resolution_tile =
+                    ResolutionTile::new(component_tiles[component_idx as usize], resolution);
 
                 // Only yield if the resolution tile has precincts, otherwise
                 // we need to keep advancing.
@@ -240,8 +243,19 @@ fn position_progression_common<'a>(
 ) -> impl Iterator<Item = ProgressionData> + 'a {
     let mut elements = vec![];
 
-    for (component_idx, component) in input.tile.component_tiles().enumerate().skip(input.min_comp() as usize).take(input.max_comp() as usize - input.min_comp() as usize) {
-        for (resolution, resolution_tile) in component.resolution_tiles().enumerate().skip(input.min_resolution() as usize).take(input.max_resolution() as usize - input.min_resolution() as usize) {
+    for (component_idx, component) in input
+        .tile
+        .component_tiles()
+        .enumerate()
+        .skip(input.min_comp() as usize)
+        .take(input.max_comp() as usize - input.min_comp() as usize)
+    {
+        for (resolution, resolution_tile) in component
+            .resolution_tiles()
+            .enumerate()
+            .skip(input.min_resolution() as usize)
+            .take(input.max_resolution() as usize - input.min_resolution() as usize)
+        {
             elements.extend(resolution_tile.precincts().map(|d| PrecinctStore {
                 precinct_y: d.r_y,
                 precinct_x: d.r_x,
