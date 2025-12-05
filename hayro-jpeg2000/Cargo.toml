@@ -4,7 +4,7 @@ version = "0.1.0"
 authors.workspace = true
 edition.workspace = true
 repository.workspace = true
-readme.workspace = true
+readme = "README.md"
 license.workspace = true
 
 [dependencies]

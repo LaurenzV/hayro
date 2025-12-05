@@ -5,7 +5,7 @@ Test inputs are not committed to git. Instead, they are downloaded on demand fro
 
 The manifests live next to the crate (currently `manifest_serenity.json` and `manifest_openjpeg.json`). Files are stored locally under `test-inputs/<namespace>/<id>` and ignored by git.
 
-### Synchronizing inputs
+## Synchronizing inputs
 
 Run the helper script whenever you need to populate or refresh the inputs:
 
@@ -20,13 +20,13 @@ Use `--force` to redownload files even if a cached copy exists. The script downl
 Snapshots are stored under `snapshots/` and also ignored by git. To seed them, first ensure the decoder is built from a known-good revision, then run the harness once:
 
 ```bash
-REPLACE=1 cargo test
+REPLACE=1 cargo test --release
 ```
 
 This renders every manifest entry, writes the PNG snapshots, and logs any failures. After the baseline exists, run the suite normally to verify changes:
 
 ```bash
-cargo test
+cargo test  --release
 ```
 
 If the decoder output changes intentionally, rerun with `REPLACE=1` to update the affected snapshots and then rerun without `REPLACE` to confirm everything passes.
