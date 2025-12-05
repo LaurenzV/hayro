@@ -336,7 +336,7 @@ mod tests {
         let data = b"<< /Length 10 >> stream\nabcdefghij\nendstream";
         let mut r = Reader::new(data);
         let stream = r
-            .read_with_context::<Stream>(&ReaderContext::dummy())
+            .read_with_context::<Stream<'_>>(&ReaderContext::dummy())
             .unwrap();
 
         assert_eq!(stream.data, b"abcdefghij");

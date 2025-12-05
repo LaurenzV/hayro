@@ -104,7 +104,7 @@ mod tests {
         // Ensure that all slots in the first 8 segments are actually in use,
         // i.e. we didn't overallocate.
         for s in 0..8 {
-            assert!(e.0[s].get().unwrap().iter().all(|s| s.get().is_some()))
+            assert!(e.0[s].get().unwrap().iter().all(|s| s.get().is_some()));
         }
     }
 }

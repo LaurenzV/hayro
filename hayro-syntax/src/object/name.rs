@@ -168,7 +168,7 @@ mod tests {
     fn name_1() {
         assert_eq!(
             Reader::new("/".as_bytes())
-                .read_without_context::<Name>()
+                .read_without_context::<Name<'_>>()
                 .unwrap()
                 .deref(),
             b""
@@ -179,7 +179,7 @@ mod tests {
     fn name_2() {
         assert!(
             Reader::new("dfg".as_bytes())
-                .read_without_context::<Name>()
+                .read_without_context::<Name<'_>>()
                 .is_none()
         );
     }
@@ -188,7 +188,7 @@ mod tests {
     fn name_3() {
         assert!(
             Reader::new("/AB#FG".as_bytes())
-                .read_without_context::<Name>()
+                .read_without_context::<Name<'_>>()
                 .is_none()
         );
     }
@@ -197,7 +197,7 @@ mod tests {
     fn name_4() {
         assert_eq!(
             Reader::new("/Name1".as_bytes())
-                .read_without_context::<Name>()
+                .read_without_context::<Name<'_>>()
                 .unwrap()
                 .deref(),
             b"Name1"
@@ -208,7 +208,7 @@ mod tests {
     fn name_5() {
         assert_eq!(
             Reader::new("/ASomewhatLongerName".as_bytes())
-                .read_without_context::<Name>()
+                .read_without_context::<Name<'_>>()
                 .unwrap()
                 .deref(),
             b"ASomewhatLongerName"
@@ -219,7 +219,7 @@ mod tests {
     fn name_6() {
         assert_eq!(
             Reader::new("/A;Name_With-Various***Characters?".as_bytes())
-                .read_without_context::<Name>()
+                .read_without_context::<Name<'_>>()
                 .unwrap()
                 .deref(),
             b"A;Name_With-Various***Characters?"
@@ -230,7 +230,7 @@ mod tests {
     fn name_7() {
         assert_eq!(
             Reader::new("/1.2".as_bytes())
-                .read_without_context::<Name>()
+                .read_without_context::<Name<'_>>()
                 .unwrap()
                 .deref(),
             b"1.2"
@@ -241,7 +241,7 @@ mod tests {
     fn name_8() {
         assert_eq!(
             Reader::new("/$$".as_bytes())
-                .read_without_context::<Name>()
+                .read_without_context::<Name<'_>>()
                 .unwrap()
                 .deref(),
             b"$$"
@@ -252,7 +252,7 @@ mod tests {
     fn name_9() {
         assert_eq!(
             Reader::new("/@pattern".as_bytes())
-                .read_without_context::<Name>()
+                .read_without_context::<Name<'_>>()
                 .unwrap()
                 .deref(),
             b"@pattern"
@@ -263,7 +263,7 @@ mod tests {
     fn name_10() {
         assert_eq!(
             Reader::new("/.notdef".as_bytes())
-                .read_without_context::<Name>()
+                .read_without_context::<Name<'_>>()
                 .unwrap()
                 .deref(),
             b".notdef"
@@ -274,7 +274,7 @@ mod tests {
     fn name_11() {
         assert_eq!(
             Reader::new("/lime#20Green".as_bytes())
-                .read_without_context::<Name>()
+                .read_without_context::<Name<'_>>()
                 .unwrap()
                 .deref(),
             b"lime Green"
@@ -285,7 +285,7 @@ mod tests {
     fn name_12() {
         assert_eq!(
             Reader::new("/paired#28#29parentheses".as_bytes())
-                .read_without_context::<Name>()
+                .read_without_context::<Name<'_>>()
                 .unwrap()
                 .deref(),
             b"paired()parentheses"
@@ -296,7 +296,7 @@ mod tests {
     fn name_13() {
         assert_eq!(
             Reader::new("/The_Key_of_F#23_Minor".as_bytes())
-                .read_without_context::<Name>()
+                .read_without_context::<Name<'_>>()
                 .unwrap()
                 .deref(),
             b"The_Key_of_F#_Minor"
@@ -307,7 +307,7 @@ mod tests {
     fn name_14() {
         assert_eq!(
             Reader::new("/A#42".as_bytes())
-                .read_without_context::<Name>()
+                .read_without_context::<Name<'_>>()
                 .unwrap()
                 .deref(),
             b"AB"
@@ -318,7 +318,7 @@ mod tests {
     fn name_15() {
         assert_eq!(
             Reader::new("/A#3b".as_bytes())
-                .read_without_context::<Name>()
+                .read_without_context::<Name<'_>>()
                 .unwrap()
                 .deref(),
             b"A;"
@@ -329,7 +329,7 @@ mod tests {
     fn name_16() {
         assert_eq!(
             Reader::new("/A#3B".as_bytes())
-                .read_without_context::<Name>()
+                .read_without_context::<Name<'_>>()
                 .unwrap()
                 .deref(),
             b"A;"
@@ -340,7 +340,7 @@ mod tests {
     fn name_17() {
         assert_eq!(
             Reader::new("/k1  ".as_bytes())
-                .read_without_context::<Name>()
+                .read_without_context::<Name<'_>>()
                 .unwrap()
                 .deref(),
             b"k1"

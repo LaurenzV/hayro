@@ -289,37 +289,37 @@ mod tests {
 
     fn object_impl(data: &[u8]) -> Option<Object<'_>> {
         let mut r = Reader::new(data);
-        r.read_with_context::<Object>(&ReaderContext::dummy())
+        r.read_with_context::<Object<'_>>(&ReaderContext::dummy())
     }
 
     #[test]
     fn null() {
-        assert!(matches!(object_impl(b"null").unwrap(), Object::Null(_)))
+        assert!(matches!(object_impl(b"null").unwrap(), Object::Null(_)));
     }
 
     #[test]
     fn bool() {
-        assert!(matches!(object_impl(b"true").unwrap(), Object::Boolean(_)))
+        assert!(matches!(object_impl(b"true").unwrap(), Object::Boolean(_)));
     }
 
     #[test]
     fn number() {
-        assert!(matches!(object_impl(b"34.5").unwrap(), Object::Number(_)))
+        assert!(matches!(object_impl(b"34.5").unwrap(), Object::Number(_)));
     }
 
     #[test]
     fn string_1() {
-        assert!(matches!(object_impl(b"(Hi)").unwrap(), Object::String(_)))
+        assert!(matches!(object_impl(b"(Hi)").unwrap(), Object::String(_)));
     }
 
     #[test]
     fn string_2() {
-        assert!(matches!(object_impl(b"<34>").unwrap(), Object::String(_)))
+        assert!(matches!(object_impl(b"<34>").unwrap(), Object::String(_)));
     }
 
     #[test]
     fn name() {
-        assert!(matches!(object_impl(b"/Name").unwrap(), Object::Name(_)))
+        assert!(matches!(object_impl(b"/Name").unwrap(), Object::Name(_)));
     }
 
     #[test]
@@ -327,12 +327,12 @@ mod tests {
         assert!(matches!(
             object_impl(b"<</Entry 45>>").unwrap(),
             Object::Dict(_)
-        ))
+        ));
     }
 
     #[test]
     fn array() {
-        assert!(matches!(object_impl(b"[45]").unwrap(), Object::Array(_)))
+        assert!(matches!(object_impl(b"[45]").unwrap(), Object::Array(_)));
     }
 
     #[test]
@@ -340,6 +340,6 @@ mod tests {
         assert!(matches!(
             object_impl(b"<< /Length 3 >> stream\nabc\nendstream").unwrap(),
             Object::Stream(_)
-        ))
+        ));
     }
 }

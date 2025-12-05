@@ -314,7 +314,7 @@ mod tests {
     fn array_impl(data: &[u8]) -> Option<Vec<Object<'_>>> {
         Reader::new(data)
             .read_with_context::<Array<'_>>(&ReaderContext::new(XRef::dummy(), false))
-            .map(|a| a.iter::<Object>().collect::<Vec<_>>())
+            .map(|a| a.iter::<Object<'_>>().collect::<Vec<_>>())
     }
 
     fn array_ref_impl(data: &[u8]) -> Option<Vec<MaybeRef<Object<'_>>>> {

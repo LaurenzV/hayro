@@ -920,7 +920,7 @@ mod tests {
     use crate::reader::{ReaderContext, ReaderExt};
 
     fn dict_impl(data: &[u8]) -> Option<Dict<'_>> {
-        Reader::new(data).read_with_context::<Dict>(&ReaderContext::dummy())
+        Reader::new(data).read_with_context::<Dict<'_>>(&ReaderContext::dummy())
     }
 
     #[test]
@@ -973,18 +973,18 @@ mod tests {
 >>";
 
         let dict = Reader::new(data.as_bytes())
-            .read_with_context::<Dict>(&ReaderContext::dummy())
+            .read_with_context::<Dict<'_>>(&ReaderContext::dummy())
             .unwrap();
         assert_eq!(dict.len(), 6);
-        assert!(dict.get::<Name>(Name::new(b"Type")).is_some());
-        assert!(dict.get::<Name>(Name::new(b"Subtype")).is_some());
+        assert!(dict.get::<Name<'_>>(Name::new(b"Type")).is_some());
+        assert!(dict.get::<Name<'_>>(Name::new(b"Subtype")).is_some());
         assert!(dict.get::<Number>(Name::new(b"Version")).is_some());
         assert!(dict.get::<i32>(Name::new(b"IntegerItem")).is_some());
         assert!(
-            dict.get::<string::String>(Name::new(b"StringItem"))
+            dict.get::<string::String<'_>>(Name::new(b"StringItem"))
                 .is_some()
         );
-        assert!(dict.get::<Dict>(Name::new(b"Subdictionary")).is_some());
+        assert!(dict.get::<Dict<'_>>(Name::new(b"Subdictionary")).is_some());
     }
 
     #[test]
@@ -1008,7 +1008,7 @@ mod tests {
         let dict_data = b"/W 17 /H 17 /CS /RGB /BPC 8 /F [ /A85 /LZW ] ID ";
 
         let dict = Reader::new(&dict_data[..])
-            .read_with_context::<InlineImageDict>(&ReaderContext::dummy())
+            .read_with_context::<InlineImageDict<'_>>(&ReaderContext::dummy())
             .unwrap();
 
         assert_eq!(dict.get_dict().len(), 5);
@@ -1039,7 +1039,7 @@ mod tests {
         assert!(dict.contains_key(EXT_G_STATE));
         assert!(dict.contains_key(COLORSPACE));
 
-        let Some(dict) = dict.get::<Dict>(EXT_G_STATE) else {
+        let Some(dict) = dict.get::<Dict<'_>>(EXT_G_STATE) else {
             panic!("failed to parse ext g state");
         };
 

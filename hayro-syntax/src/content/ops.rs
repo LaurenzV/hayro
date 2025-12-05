@@ -102,7 +102,7 @@ mod tests {
         ];
 
         let elements = TypedIter::new(input).collect::<Vec<_>>();
-        assert_eq!(elements, expected,)
+        assert_eq!(elements, expected,);
     }
 
     #[test]
@@ -126,7 +126,7 @@ f
         ];
 
         let elements = TypedIter::new(input).collect::<Vec<_>>();
-        assert_eq!(elements, expected,)
+        assert_eq!(elements, expected,);
     }
 
     #[test]
