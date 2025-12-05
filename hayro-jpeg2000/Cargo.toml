@@ -1,6 +1,7 @@
 [package]
 name = "hayro-jpeg2000"
 version = "0.1.0"
+description = "A memory-safe, pure-Rust JPEG 2000 decoder."
 authors.workspace = true
 edition.workspace = true
 repository.workspace = true
