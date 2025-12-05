@@ -22,3 +22,6 @@ embed-fonts = ["hayro-interpret/embed-fonts"]
 
 [dev-dependencies]
 log = { workspace = true }
+
+[lints]
+workspace = true

@@ -26,7 +26,7 @@ impl<'a> SvgRenderer<'a> {
                 if !self.masks.contains(cache_key) {
                     self.with_dummy(|r| {
                         mask.interpret(r);
-                    })
+                    });
                 }
 
                 self.masks

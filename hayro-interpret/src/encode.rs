@@ -262,7 +262,7 @@ impl EncodedShadingType {
         color_space: &ColorSpace,
     ) -> Option<AlphaColor> {
         match self {
-            EncodedShadingType::FunctionBased { domain, function } => {
+            Self::FunctionBased { domain, function } => {
                 if !domain.contains(pos) {
                     Some(bg_color)
                 } else {
@@ -271,7 +271,7 @@ impl EncodedShadingType {
                     Some(color_space.to_rgba(&out, 1.0, false))
                 }
             }
-            EncodedShadingType::RadialAxial {
+            Self::RadialAxial {
                 function,
                 params,
                 domain,
@@ -310,7 +310,7 @@ impl EncodedShadingType {
 
                 Some(color_space.to_rgba(&val, 1.0, false))
             }
-            EncodedShadingType::Sampled { samples, function } => {
+            Self::Sampled { samples, function } => {
                 let sample_point = (pos.x as u16, pos.y as u16);
 
                 if let Some(color) = samples.get(&sample_point) {
@@ -324,7 +324,7 @@ impl EncodedShadingType {
                     Some(bg_color)
                 }
             }
-            EncodedShadingType::Dummy => Some(AlphaColor::TRANSPARENT),
+            Self::Dummy => Some(AlphaColor::TRANSPARENT),
         }
     }
 }

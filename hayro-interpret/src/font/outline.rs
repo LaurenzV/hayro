@@ -11,11 +11,11 @@ use std::rc::Rc;
 pub(crate) struct OutlinePath(BezPath);
 
 impl OutlinePath {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self(BezPath::new())
     }
 
-    pub fn take(self) -> BezPath {
+    pub(crate) fn take(self) -> BezPath {
         self.0
     }
 }
@@ -95,9 +95,9 @@ pub(crate) enum OutlineFont {
 impl CacheKey for OutlineFont {
     fn cache_key(&self) -> u128 {
         match self {
-            OutlineFont::Type1(f) => f.cache_key(),
-            OutlineFont::TrueType(t) => t.cache_key(),
-            OutlineFont::Type0(t0) => t0.cache_key(),
+            Self::Type1(f) => f.cache_key(),
+            Self::TrueType(t) => t.cache_key(),
+            Self::Type0(t0) => t0.cache_key(),
         }
     }
 }
@@ -105,17 +105,17 @@ impl CacheKey for OutlineFont {
 impl OutlineFont {
     pub(crate) fn outline_glyph(&self, glyph: GlyphId) -> BezPath {
         match self {
-            OutlineFont::Type1(t) => t.outline_glyph(glyph),
-            OutlineFont::TrueType(t) => t.outline_glyph(glyph),
-            OutlineFont::Type0(t) => t.outline_glyph(glyph),
+            Self::Type1(t) => t.outline_glyph(glyph),
+            Self::TrueType(t) => t.outline_glyph(glyph),
+            Self::Type0(t) => t.outline_glyph(glyph),
         }
     }
 
     pub(crate) fn char_code_to_unicode(&self, char_code: u32) -> Option<char> {
         match self {
-            OutlineFont::Type1(t) => t.char_code_to_unicode(char_code),
-            OutlineFont::TrueType(t) => t.char_code_to_unicode(char_code),
-            OutlineFont::Type0(t) => t.char_code_to_unicode(char_code),
+            Self::Type1(t) => t.char_code_to_unicode(char_code),
+            Self::TrueType(t) => t.char_code_to_unicode(char_code),
+            Self::Type0(t) => t.char_code_to_unicode(char_code),
         }
     }
 }

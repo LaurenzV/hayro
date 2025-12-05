@@ -270,11 +270,11 @@ pub(crate) fn handle_gs_single<'a>(
         "LW" => context.get_mut().graphics_state.stroke_props.line_width = dict.get::<f32>(key)?,
         "LC" => {
             context.get_mut().graphics_state.stroke_props.line_cap =
-                convert_line_cap(LineCap(dict.get::<Number>(key)?))
+                convert_line_cap(LineCap(dict.get::<Number>(key)?));
         }
         "LJ" => {
             context.get_mut().graphics_state.stroke_props.line_join =
-                convert_line_join(LineJoin(dict.get::<Number>(key)?))
+                convert_line_join(LineJoin(dict.get::<Number>(key)?));
         }
         "ML" => context.get_mut().graphics_state.stroke_props.miter_limit = dict.get::<f32>(key)?,
         "CA" => context.get_mut().graphics_state.stroke_alpha = dict.get::<f32>(key)?,

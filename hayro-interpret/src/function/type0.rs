@@ -122,7 +122,7 @@ impl Type0 {
                 interpolate(
                     *x,
                     0.0,
-                    (2u32.pow(self.bits_per_sample as u32) - 1) as f32,
+                    (2_u32.pow(self.bits_per_sample as u32) - 1) as f32,
                     decode.0,
                     decode.1,
                 )
@@ -200,7 +200,7 @@ impl Interpolator {
                         self.in_next[step] as f32,
                         val1[i] as f32,
                         val2[i] as f32,
-                    )
+                    );
                 }
 
                 Some(out)
@@ -223,7 +223,7 @@ impl Interpolator {
                     self.in_next[step] as f32,
                     val1[i],
                     val2[i],
-                )
+                );
             }
 
             Some(out)

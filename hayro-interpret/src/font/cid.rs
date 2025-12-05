@@ -163,7 +163,7 @@ impl CacheKey for Type0Font {
 enum FontType {
     /// Type2 CID font.
     TrueType(OpenTypeFontBlob),
-    /// Type0 CID font, backed by CFF font program (either via CIDFontType0C or OpenType).
+    /// Type0 CID font, backed by CFF font program (either via `CIDFontType0C` or OpenType).
     Cff(CffFontBlob),
 }
 
@@ -218,7 +218,7 @@ impl CidToGIdMap {
     fn new(dict: &Dict) -> Option<Self> {
         if let Some(name) = dict.get::<Name>(CID_TO_GID_MAP) {
             if name.deref() == IDENTITY {
-                Some(CidToGIdMap::Identity)
+                Some(Self::Identity)
             } else {
                 None
             }
@@ -232,7 +232,7 @@ impl CidToGIdMap {
                 map.insert(cid as u16, GlyphId::new(gid as u32));
             }
 
-            Some(CidToGIdMap::Mapped(map))
+            Some(Self::Mapped(map))
         } else {
             None
         }
@@ -240,8 +240,8 @@ impl CidToGIdMap {
 
     fn map(&self, code: u16) -> GlyphId {
         match self {
-            CidToGIdMap::Identity => GlyphId::new(code as u32),
-            CidToGIdMap::Mapped(map) => map.get(&code).copied().unwrap_or(GlyphId::NOTDEF),
+            Self::Identity => GlyphId::new(code as u32),
+            Self::Mapped(map) => map.get(&code).copied().unwrap_or(GlyphId::NOTDEF),
         }
     }
 }

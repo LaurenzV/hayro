@@ -69,7 +69,7 @@ pub(crate) fn fill_path_impl<'a>(
             (bbox.height() as f32).is_nearly_zero(),
         ) {
             (false, false) => {
-                device.draw_path(path, base_transform, &paint, &PathDrawMode::Fill(fill_rule))
+                device.draw_path(path, base_transform, &paint, &PathDrawMode::Fill(fill_rule));
             }
             _ => {
                 let mut path = BezPath::new();

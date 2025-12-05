@@ -141,7 +141,7 @@ struct StandardKind {
 }
 
 impl StandardKind {
-    fn new(dict: &Dict, resolver: &FontResolverFn) -> Option<StandardKind> {
+    fn new(dict: &Dict, resolver: &FontResolverFn) -> Option<Self> {
         Self::new_with_standard(dict, select_standard_font(dict)?, false, resolver)
     }
 

@@ -37,7 +37,7 @@ pub(crate) struct TrueTypeFont {
 }
 
 impl TrueTypeFont {
-    pub(crate) fn new(dict: &Dict) -> Option<TrueTypeFont> {
+    pub(crate) fn new(dict: &Dict) -> Option<Self> {
         let descriptor = dict.get::<Dict>(FONT_DESC).unwrap_or_default();
 
         let font_flags = descriptor.get::<u32>(FLAGS).and_then(FontFlags::from_bits);
@@ -137,7 +137,7 @@ impl TrueTypeFont {
                                 .and_then(|n| n.chars().next())
                                 .and_then(|c| subtable.map_codepoint(c))
                                 .filter(|g| *g != GlyphId::NOTDEF)
-                        })
+                        });
                     }
                 }
 
@@ -151,7 +151,7 @@ impl TrueTypeFont {
                                 .or_else(|| mac_roman::get_inverse(lookup))
                                 .and_then(|c| subtable.map_codepoint(c))
                                 .filter(|g| *g != GlyphId::NOTDEF)
-                        })
+                        });
                     }
                 }
             }
@@ -169,10 +169,10 @@ impl TrueTypeFont {
                     && matches!(record.encoding_id(), 0 | 1)
                 {
                     if let Ok(subtable) = record.subtable(cmap.offset_data()) {
-                        for offset in [0x0000u32, 0xF000, 0xF100, 0xF200] {
+                        for offset in [0x0000_u32, 0xF000, 0xF100, 0xF200] {
                             glyph = glyph
                                 .or_else(|| subtable.map_codepoint(code as u32 + offset))
-                                .filter(|g| *g != GlyphId::NOTDEF)
+                                .filter(|g| *g != GlyphId::NOTDEF);
                         }
                     }
                 } else if matches!(
@@ -183,7 +183,7 @@ impl TrueTypeFont {
                 {
                     glyph = glyph
                         .or_else(|| subtable.map_codepoint(code))
-                        .filter(|g| *g != GlyphId::NOTDEF)
+                        .filter(|g| *g != GlyphId::NOTDEF);
                 }
             }
         }

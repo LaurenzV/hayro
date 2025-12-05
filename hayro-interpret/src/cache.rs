@@ -17,11 +17,11 @@ impl Default for Cache {
 }
 
 impl Cache {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self(Arc::new(Mutex::new(HashMap::new())))
     }
 
-    pub fn get_or_insert_with<T: Clone + Send + Sync + 'static>(
+    pub(crate) fn get_or_insert_with<T: Clone + Send + Sync + 'static>(
         &self,
         id: ObjectIdentifier,
         f: impl FnOnce() -> Option<T>,

@@ -37,7 +37,7 @@ pub struct Function(Arc<FunctionType>);
 
 impl Function {
     /// Create a new function.
-    pub fn new(obj: &Object) -> Option<Function> {
+    pub fn new(obj: &Object) -> Option<Self> {
         let (dict, stream) = dict_or_stream(obj)?;
 
         let function_type = match dict.get::<u8>(FUNCTION_TYPE)? {
@@ -101,6 +101,6 @@ impl Clamper {
 
 /// Linearly interpolate the value `x`, assuming that it lies within the range `x_min` and `x_max`,
 /// to the range `y_min` and `y_max`.
-pub fn interpolate(x: f32, x_min: f32, x_max: f32, y_min: f32, y_max: f32) -> f32 {
+pub(crate) fn interpolate(x: f32, x_min: f32, x_max: f32, y_min: f32, y_max: f32) -> f32 {
     y_min + (x - x_min) * (y_max - y_min) / (x_max - x_min)
 }

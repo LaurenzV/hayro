@@ -21,3 +21,6 @@ log = { workspace = true }
 default = ["embed-fonts"]
 embed-fonts = ["hayro-interpret/embed-fonts"]
 
+[lints]
+workspace = true
+

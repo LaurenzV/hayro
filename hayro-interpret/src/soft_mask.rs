@@ -98,7 +98,7 @@ impl<'a> SoftMask<'a> {
         dict: &Dict<'a>,
         context: &Context<'a>,
         parent_resources: Resources<'a>,
-    ) -> Option<SoftMask<'a>> {
+    ) -> Option<Self> {
         // TODO: With this setup, if there is a luminosity mask and alpha mask pointing to the
         // same xobject, the ID will be the same.
         let obj_id = dict.get_ref(G)?.into();

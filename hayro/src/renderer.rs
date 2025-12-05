@@ -77,7 +77,7 @@ impl Renderer {
                     rgb_data.width as f64 / alpha_data.width as f64,
                     rgb_data.height as f64 / alpha_data.height as f64,
                 );
-            let mut renderer = Renderer::new(
+            let mut renderer = Self::new(
                 self.ctx.width(),
                 self.ctx.height(),
                 derive_settings(self.ctx.render_settings()),
@@ -196,7 +196,7 @@ impl Renderer {
             *chunk = AlphaColor::from_rgba8(chunk[0], chunk[1], chunk[2], chunk[3])
                 .premultiply()
                 .to_rgba8()
-                .to_u8_array()
+                .to_u8_array();
         }
 
         // The problem is that by default, when applying a bilinear or bicubic scaling, we will
@@ -238,11 +238,11 @@ impl Renderer {
     }
 
     // TODO: Remove this method once vello_cpu supports inline blends.
-    fn with_blend(&mut self, op: impl FnOnce(&mut Renderer)) {
+    fn with_blend(&mut self, op: impl FnOnce(&mut Self)) {
         let push = self.cur_blend_mode != BlendMode::default();
         if push {
             self.ctx
-                .push_blend_layer(convert_blend_mode(self.cur_blend_mode))
+                .push_blend_layer(convert_blend_mode(self.cur_blend_mode));
         }
 
         op(self);
@@ -358,7 +358,7 @@ impl Renderer {
                         let pix_width = x_step.abs().round() as u16;
                         let pix_height = y_step.abs().round() as u16;
 
-                        let mut renderer = Renderer {
+                        let mut renderer = Self {
                             ctx: RenderContext::new_with(
                                 pix_width,
                                 pix_height,
@@ -598,7 +598,7 @@ impl<'a> Device<'a> for Renderer {
                                     interpolate: stencil.interpolate,
                                     scale_factors: stencil.scale_factors,
                                 };
-                                let mut sub_renderer = Renderer::new(
+                                let mut sub_renderer = Self::new(
                                     width,
                                     height,
                                     derive_settings(self.ctx.render_settings()),
@@ -643,7 +643,7 @@ impl<'a> Device<'a> for Renderer {
                     self.ctx.set_transform(transform);
                     self.with_blend(|r| {
                         r.draw_image(rgb, alpha);
-                    })
+                    });
                 });
             }
         }
@@ -788,12 +788,7 @@ fn render_shading_texture(
     )
 }
 
-fn draw_soft_mask(
-    mask: &SoftMask,
-    settings: vello_cpu::RenderSettings,
-    width: u16,
-    height: u16,
-) -> Mask {
+fn draw_soft_mask(mask: &SoftMask, settings: RenderSettings, width: u16, height: u16) -> Mask {
     let mut renderer = Renderer {
         ctx: RenderContext::new_with(width, height, derive_settings(&settings)),
         inside_pattern: false,

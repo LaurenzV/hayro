@@ -152,7 +152,7 @@ impl<'a> Type3<'a> {
 
         // Technically not valid, but also support by Adobe Acrobat. See PDFBOX-5294.
         if let Some(procs_resources) = program.dict().get::<Dict>(RESOURCES) {
-            resources = Resources::from_parent(procs_resources, resources)
+            resources = Resources::from_parent(procs_resources, resources);
         }
 
         if is_shape_glyph {
@@ -178,7 +178,7 @@ struct Type3ShapeGlyphDevice<'a, 'b, T: Device<'a>> {
 }
 
 impl<'a, 'b, T: Device<'a>> Type3ShapeGlyphDevice<'a, 'b, T> {
-    pub fn new(device: &'b mut T, paint: Paint<'a>) -> Self {
+    pub(crate) fn new(device: &'b mut T, paint: Paint<'a>) -> Self {
         Self {
             inner: device,
             paint,
@@ -198,11 +198,11 @@ impl<'a, T: Device<'a>> Device<'a> for Type3ShapeGlyphDevice<'a, '_, T> {
         draw_mode: &PathDrawMode,
     ) {
         self.inner
-            .draw_path(path, transform, &self.paint, draw_mode)
+            .draw_path(path, transform, &self.paint, draw_mode);
     }
 
     fn push_clip_path(&mut self, clip_path: &ClipPath) {
-        self.inner.push_clip_path(clip_path)
+        self.inner.push_clip_path(clip_path);
     }
 
     fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask>, _: BlendMode) {}
@@ -220,7 +220,7 @@ impl<'a, T: Device<'a>> Device<'a> for Type3ShapeGlyphDevice<'a, '_, T> {
     }
 
     fn pop_clip_path(&mut self) {
-        self.inner.pop_clip_path()
+        self.inner.pop_clip_path();
     }
 
     fn pop_transparency_group(&mut self) {}
@@ -228,7 +228,7 @@ impl<'a, T: Device<'a>> Device<'a> for Type3ShapeGlyphDevice<'a, '_, T> {
     fn draw_image(&mut self, image: Image<'a, '_>, transform: Affine) {
         if let Image::Stencil(mut s) = image {
             s.paint = self.paint.clone();
-            self.inner.draw_image(Image::Stencil(s), transform)
+            self.inner.draw_image(Image::Stencil(s), transform);
         }
     }
 

@@ -35,8 +35,8 @@ impl ShadingFunction {
     /// Evaluate the shading function.
     pub fn eval(&self, input: &Values) -> Option<Values> {
         match self {
-            ShadingFunction::Single(s) => s.eval(input.clone()),
-            ShadingFunction::Multiple(m) => {
+            Self::Single(s) => s.eval(input.clone()),
+            Self::Multiple(m) => {
                 // 1-in, 1-out function for each color component.
 
                 let mut out = smallvec![];
@@ -422,7 +422,7 @@ impl CoonsPatch {
 
     /// Approximate the patch by triangles.
     pub fn to_triangles(&self, buffer: &mut Vec<Triangle>) {
-        generate_patch_triangles(|p| self.map_coordinate(p), |p| self.interpolate(p), buffer)
+        generate_patch_triangles(|p| self.map_coordinate(p), |p| self.interpolate(p), buffer);
     }
 
     /// Get the interpolated colors of the point from the patch.
@@ -451,7 +451,7 @@ impl CoonsPatch {
 }
 
 impl TensorProductPatch {
-    /// Evaluate Bernstein polynomial B_i(t) for tensor-product patches.
+    /// Evaluate Bernstein polynomial `B_i(t)` for tensor-product patches.
     fn bernstein(i: usize, t: f64) -> f64 {
         match i {
             0 => (1.0 - t).powi(3),
@@ -506,7 +506,7 @@ impl TensorProductPatch {
 
     /// Approximate the tensor product patch mesh by triangles.
     pub fn to_triangles(&self, buffer: &mut Vec<Triangle>) {
-        generate_patch_triangles(|p| self.map_coordinate(p), |p| self.interpolate(p), buffer)
+        generate_patch_triangles(|p| self.map_coordinate(p), |p| self.interpolate(p), buffer);
     }
 
     /// Get the interpolated colors of the point from the patch.
@@ -603,8 +603,8 @@ struct InterpolationHelpers {
 
 impl InterpolationHelpers {
     fn new(bp_coord: u8, bp_comp: u8, x_min: f32, x_max: f32, y_min: f32, y_max: f32) -> Self {
-        let coord_max = 2.0f32.powi(bp_coord as i32) - 1.0;
-        let comp_max = 2.0f32.powi(bp_comp as i32) - 1.0;
+        let coord_max = 2.0_f32.powi(bp_coord as i32) - 1.0;
+        let comp_max = 2.0_f32.powi(bp_comp as i32) - 1.0;
         Self {
             bp_coord,
             bp_comp,

@@ -142,7 +142,7 @@ pub(crate) fn hash128<T: Hash + ?Sized>(value: &T) -> u128 {
 /// Extension methods for rectangles.
 pub trait RectExt {
     /// Convert the rectangle to a `kurbo` rectangle.
-    fn to_kurbo(&self) -> kurbo::Rect;
+    fn to_kurbo(&self) -> Rect;
 }
 
 impl RectExt for hayro_syntax::object::Rect {
@@ -157,19 +157,19 @@ pub trait PageExt {
     /// Return the initial transform that should be applied when rendering. This accounts for a
     /// number of factors, such as the mismatch between PDF's y-up and most renderers' y-down
     /// coordinate system, the rotation of the page and the offset of the crop box.
-    fn initial_transform(&self, invert_y: bool) -> kurbo::Affine;
+    fn initial_transform(&self, invert_y: bool) -> Affine;
 }
 
 impl PageExt for Page<'_> {
-    fn initial_transform(&self, invert_y: bool) -> kurbo::Affine {
+    fn initial_transform(&self, invert_y: bool) -> Affine {
         let crop_box = self.intersected_crop_box();
         let (_, base_height) = self.base_dimensions();
         let (width, height) = self.render_dimensions();
 
         let horizontal_t =
-            Affine::rotate(90.0f64.to_radians()) * Affine::translate((0.0, -width as f64));
+            Affine::rotate(90.0_f64.to_radians()) * Affine::translate((0.0, -width as f64));
         let flipped_horizontal_t =
-            Affine::translate((0.0, height as f64)) * Affine::rotate(-90.0f64.to_radians());
+            Affine::translate((0.0, height as f64)) * Affine::rotate(-90.0_f64.to_radians());
 
         let rotation_transform = match self.rotation() {
             Rotation::None => Affine::IDENTITY,

@@ -711,7 +711,7 @@ fn decode(
         interpolate(
             n,
             0.0,
-            2.0f32.powi(bits_per_component as i32) - 1.0,
+            2.0_f32.powi(bits_per_component as i32) - 1.0,
             d_min,
             d_max,
         )

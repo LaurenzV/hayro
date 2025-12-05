@@ -8,8 +8,8 @@ pub(crate) struct OcgState {
 }
 
 impl OcgState {
-    fn dummy() -> OcgState {
-        OcgState {
+    fn dummy() -> Self {
+        Self {
             inactive_ocgs: Default::default(),
             visibility_stack: vec![],
         }
@@ -101,9 +101,9 @@ enum BaseState {
 impl BaseState {
     fn from_name(name: &[u8]) -> Option<Self> {
         match name {
-            b"ON" => Some(BaseState::On),
-            b"OFF" => Some(BaseState::Off),
-            b"Unchanged" => Some(BaseState::Unchanged),
+            b"ON" => Some(Self::On),
+            b"OFF" => Some(Self::Off),
+            b"Unchanged" => Some(Self::Unchanged),
             _ => None,
         }
     }

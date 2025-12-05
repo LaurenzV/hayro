@@ -143,7 +143,7 @@ impl<'a> SvgRenderer<'a> {
     pub(crate) fn write_stroke_properties(&mut self, stroke_props: &StrokeProps) {
         if !stroke_props.line_width.is_nearly_equal(1.0) {
             self.xml
-                .write_attribute("stroke-width", &stroke_props.line_width)
+                .write_attribute("stroke-width", &stroke_props.line_width);
         }
 
         match stroke_props.line_cap {
@@ -181,7 +181,7 @@ impl<'a> SvgRenderer<'a> {
         }
     }
 
-    fn with_group(&mut self, func: impl FnOnce(&mut SvgRenderer<'a>)) {
+    fn with_group(&mut self, func: impl FnOnce(&mut Self)) {
         let push_group = self.cur_mask.is_some() || self.cur_blend_mode != BlendMode::Normal;
 
         if push_group {
@@ -214,7 +214,7 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
     ) {
         self.with_group(|r| {
             Self::draw_path(r, path, transform, paint, draw_mode);
-        })
+        });
     }
 
     fn push_clip_path(&mut self, clip_path: &ClipPath) {
@@ -249,7 +249,7 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
     ) {
         self.with_group(|r| {
             Self::draw_glyph(r, glyph, transform, glyph_transform, paint, draw_mode);
-        })
+        });
     }
 
     fn draw_image(&mut self, image: Image<'a, '_>, mut transform: Affine) {

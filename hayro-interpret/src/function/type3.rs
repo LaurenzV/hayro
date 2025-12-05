@@ -25,7 +25,7 @@ impl Type3 {
         let domain = *clamper.domain.first()?;
         let mut bounds = vec![domain.0 - 0.0001];
         if let Some(a) = dict.get::<Array>(BOUNDS) {
-            bounds.extend(a.iter::<f32>())
+            bounds.extend(a.iter::<f32>());
         }
         // Add a small delta so that the interval is considered to be closed on the right.
         bounds.push(domain.1 + 0.0001);

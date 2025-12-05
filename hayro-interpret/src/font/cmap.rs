@@ -14,7 +14,7 @@ pub(crate) struct CMap {
 
 impl CMap {
     pub(crate) fn new() -> Self {
-        CMap {
+        Self {
             codespace_ranges: [Vec::new(), Vec::new(), Vec::new(), Vec::new()],
             map: HashMap::new(),
             name: String::new(),
@@ -23,7 +23,7 @@ impl CMap {
     }
 
     pub(crate) fn identity_h() -> Self {
-        let mut cmap = CMap::new();
+        let mut cmap = Self::new();
 
         cmap.name = "Identity-H".to_string();
         cmap.vertical = false;
@@ -32,7 +32,7 @@ impl CMap {
     }
 
     pub(crate) fn identity_v() -> Self {
-        let mut cmap = CMap::new();
+        let mut cmap = Self::new();
 
         cmap.name = "Identity-V".to_string();
         cmap.vertical = true;
@@ -119,8 +119,8 @@ impl CMap {
         self.map.insert(src, dst);
     }
 
-    pub fn read_code(&self, bytes: &[u8], offset: usize) -> (u32, usize) {
-        let mut c = 0u32;
+    pub(crate) fn read_code(&self, bytes: &[u8], offset: usize) -> (u32, usize) {
+        let mut c = 0_u32;
 
         for n in 0..4.min(bytes.len() - offset) {
             if offset + n >= bytes.len() {
@@ -150,7 +150,7 @@ fn bf_string_char(str: &str) -> u32 {
 }
 
 fn str_to_int(s: &str) -> u32 {
-    let mut a = 0u32;
+    let mut a = 0_u32;
     for ch in s.chars() {
         // Since we created these strings from bytes using char::from(byte),
         // we can safely cast back to get the original byte value
@@ -580,7 +580,7 @@ fn parse_cmap_name(cmap: &mut CMap, lexer: &mut CMapLexer) -> Option<()> {
     }
 }
 
-pub fn parse_cmap(input: &str) -> Option<CMap> {
+pub(super) fn parse_cmap(input: &str) -> Option<CMap> {
     if !input.is_ascii() {
         return None;
     }

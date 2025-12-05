@@ -65,65 +65,63 @@ impl StandardFont {
         }
 
         if name == "sfthyphen" {
-            name = "hyphen"
+            name = "hyphen";
         }
 
         match self {
-            StandardFont::Helvetica => metrics::HELVETICA.get(name).copied(),
-            StandardFont::HelveticaBold => metrics::HELVETICA_BOLD.get(name).copied(),
-            StandardFont::HelveticaOblique => metrics::HELVETICA_OBLIQUE.get(name).copied(),
-            StandardFont::HelveticaBoldOblique => {
-                metrics::HELVETICA_BOLD_OBLIQUE.get(name).copied()
-            }
-            StandardFont::Courier => metrics::COURIER.get(name).copied(),
-            StandardFont::CourierBold => metrics::COURIER_BOLD.get(name).copied(),
-            StandardFont::CourierOblique => metrics::COURIER_OBLIQUE.get(name).copied(),
-            StandardFont::CourierBoldOblique => metrics::COURIER_BOLD_OBLIQUE.get(name).copied(),
-            StandardFont::TimesRoman => metrics::TIMES_ROMAN.get(name).copied(),
-            StandardFont::TimesBold => metrics::TIMES_BOLD.get(name).copied(),
-            StandardFont::TimesItalic => metrics::TIMES_ITALIC.get(name).copied(),
-            StandardFont::TimesBoldItalic => metrics::TIMES_BOLD_ITALIC.get(name).copied(),
-            StandardFont::ZapfDingBats => metrics::ZAPF_DING_BATS.get(name).copied(),
-            StandardFont::Symbol => metrics::SYMBOL.get(name).copied(),
+            Self::Helvetica => metrics::HELVETICA.get(name).copied(),
+            Self::HelveticaBold => metrics::HELVETICA_BOLD.get(name).copied(),
+            Self::HelveticaOblique => metrics::HELVETICA_OBLIQUE.get(name).copied(),
+            Self::HelveticaBoldOblique => metrics::HELVETICA_BOLD_OBLIQUE.get(name).copied(),
+            Self::Courier => metrics::COURIER.get(name).copied(),
+            Self::CourierBold => metrics::COURIER_BOLD.get(name).copied(),
+            Self::CourierOblique => metrics::COURIER_OBLIQUE.get(name).copied(),
+            Self::CourierBoldOblique => metrics::COURIER_BOLD_OBLIQUE.get(name).copied(),
+            Self::TimesRoman => metrics::TIMES_ROMAN.get(name).copied(),
+            Self::TimesBold => metrics::TIMES_BOLD.get(name).copied(),
+            Self::TimesItalic => metrics::TIMES_ITALIC.get(name).copied(),
+            Self::TimesBoldItalic => metrics::TIMES_BOLD_ITALIC.get(name).copied(),
+            Self::ZapfDingBats => metrics::ZAPF_DING_BATS.get(name).copied(),
+            Self::Symbol => metrics::SYMBOL.get(name).copied(),
         }
     }
 
     pub(crate) fn as_str(&self) -> &'static str {
         match self {
-            StandardFont::Helvetica => "Helvetica",
-            StandardFont::HelveticaBold => "Helvetica Bold",
-            StandardFont::HelveticaOblique => "Helvetica Oblique",
-            StandardFont::HelveticaBoldOblique => "Helvetica Bold Oblique",
-            StandardFont::Courier => "Courier",
-            StandardFont::CourierBold => "Courier Bold",
-            StandardFont::CourierOblique => "Courier Oblique",
-            StandardFont::CourierBoldOblique => "Courier Bold Oblique",
-            StandardFont::TimesRoman => "Times Roman",
-            StandardFont::TimesBold => "Times Bold",
-            StandardFont::TimesItalic => "Times Italic",
-            StandardFont::TimesBoldItalic => "Times Bold Italic",
-            StandardFont::ZapfDingBats => "Zapf Dingbats",
-            StandardFont::Symbol => "Symbol",
+            Self::Helvetica => "Helvetica",
+            Self::HelveticaBold => "Helvetica Bold",
+            Self::HelveticaOblique => "Helvetica Oblique",
+            Self::HelveticaBoldOblique => "Helvetica Bold Oblique",
+            Self::Courier => "Courier",
+            Self::CourierBold => "Courier Bold",
+            Self::CourierOblique => "Courier Oblique",
+            Self::CourierBoldOblique => "Courier Bold Oblique",
+            Self::TimesRoman => "Times Roman",
+            Self::TimesBold => "Times Bold",
+            Self::TimesItalic => "Times Italic",
+            Self::TimesBoldItalic => "Times Bold Italic",
+            Self::ZapfDingBats => "Zapf Dingbats",
+            Self::Symbol => "Symbol",
         }
     }
 
     /// Return the postscrit name of the font.
     pub fn postscript_name(&self) -> &'static str {
         match self {
-            StandardFont::Helvetica => "Helvetica",
-            StandardFont::HelveticaBold => "Helvetica-Bold",
-            StandardFont::HelveticaOblique => "Helvetica-Oblique",
-            StandardFont::HelveticaBoldOblique => "Helvetica-BoldOblique",
-            StandardFont::Courier => "Courier",
-            StandardFont::CourierBold => "Courier-Bold",
-            StandardFont::CourierOblique => "Courier-Oblique",
-            StandardFont::CourierBoldOblique => "Courier-BoldOblique",
-            StandardFont::TimesRoman => "Times-Roman",
-            StandardFont::TimesBold => "Times-Bold",
-            StandardFont::TimesItalic => "Times-Italic",
-            StandardFont::TimesBoldItalic => "Times-BoldItalic",
-            StandardFont::ZapfDingBats => "ZapfDingbats",
-            StandardFont::Symbol => "Symbol",
+            Self::Helvetica => "Helvetica",
+            Self::HelveticaBold => "Helvetica-Bold",
+            Self::HelveticaOblique => "Helvetica-Oblique",
+            Self::HelveticaBoldOblique => "Helvetica-BoldOblique",
+            Self::Courier => "Courier",
+            Self::CourierBold => "Courier-Bold",
+            Self::CourierOblique => "Courier-Oblique",
+            Self::CourierBoldOblique => "Courier-BoldOblique",
+            Self::TimesRoman => "Times-Roman",
+            Self::TimesBold => "Times-Bold",
+            Self::TimesItalic => "Times-Italic",
+            Self::TimesBoldItalic => "Times-BoldItalic",
+            Self::ZapfDingBats => "ZapfDingbats",
+            Self::Symbol => "Symbol",
         }
     }
 
@@ -140,30 +138,24 @@ impl StandardFont {
         use std::sync::Arc;
 
         let data = match self {
-            StandardFont::Helvetica => &include_bytes!("../../assets/FoxitSans.pfb")[..],
-            StandardFont::HelveticaBold => &include_bytes!("../../assets/FoxitSansBold.pfb")[..],
-            StandardFont::HelveticaOblique => {
-                &include_bytes!("../../assets/FoxitSansItalic.pfb")[..]
-            }
-            StandardFont::HelveticaBoldOblique => {
+            Self::Helvetica => &include_bytes!("../../assets/FoxitSans.pfb")[..],
+            Self::HelveticaBold => &include_bytes!("../../assets/FoxitSansBold.pfb")[..],
+            Self::HelveticaOblique => &include_bytes!("../../assets/FoxitSansItalic.pfb")[..],
+            Self::HelveticaBoldOblique => {
                 &include_bytes!("../../assets/FoxitSansBoldItalic.pfb")[..]
             }
-            StandardFont::Courier => &include_bytes!("../../assets/FoxitFixed.pfb")[..],
-            StandardFont::CourierBold => &include_bytes!("../../assets/FoxitFixedBold.pfb")[..],
-            StandardFont::CourierOblique => {
-                &include_bytes!("../../assets/FoxitFixedItalic.pfb")[..]
-            }
-            StandardFont::CourierBoldOblique => {
+            Self::Courier => &include_bytes!("../../assets/FoxitFixed.pfb")[..],
+            Self::CourierBold => &include_bytes!("../../assets/FoxitFixedBold.pfb")[..],
+            Self::CourierOblique => &include_bytes!("../../assets/FoxitFixedItalic.pfb")[..],
+            Self::CourierBoldOblique => {
                 &include_bytes!("../../assets/FoxitFixedBoldItalic.pfb")[..]
             }
-            StandardFont::TimesRoman => &include_bytes!("../../assets/FoxitSerif.pfb")[..],
-            StandardFont::TimesBold => &include_bytes!("../../assets/FoxitSerifBold.pfb")[..],
-            StandardFont::TimesItalic => &include_bytes!("../../assets/FoxitSerifItalic.pfb")[..],
-            StandardFont::TimesBoldItalic => {
-                &include_bytes!("../../assets/FoxitSerifBoldItalic.pfb")[..]
-            }
-            StandardFont::ZapfDingBats => &include_bytes!("../../assets/FoxitDingbats.pfb")[..],
-            StandardFont::Symbol => {
+            Self::TimesRoman => &include_bytes!("../../assets/FoxitSerif.pfb")[..],
+            Self::TimesBold => &include_bytes!("../../assets/FoxitSerifBold.pfb")[..],
+            Self::TimesItalic => &include_bytes!("../../assets/FoxitSerifItalic.pfb")[..],
+            Self::TimesBoldItalic => &include_bytes!("../../assets/FoxitSerifBoldItalic.pfb")[..],
+            Self::ZapfDingBats => &include_bytes!("../../assets/FoxitDingbats.pfb")[..],
+            Self::Symbol => {
                 include_bytes!("../../assets/FoxitSymbol.pfb")
             }
         };
@@ -312,8 +304,8 @@ impl StandardFontBlob {
         }
 
         match self {
-            StandardFontBlob::Cff(blob) => blob.outline_glyph(glyph),
-            StandardFontBlob::Otf(blob, _) => blob.outline_glyph(glyph),
+            Self::Cff(blob) => blob.outline_glyph(glyph),
+            Self::Otf(blob, _) => blob.outline_glyph(glyph),
         }
     }
 }

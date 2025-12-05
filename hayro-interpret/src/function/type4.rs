@@ -56,22 +56,22 @@ enum Argument {
 
 impl Default for Argument {
     fn default() -> Self {
-        Argument::Float(0.0)
+        Self::Float(0.0)
     }
 }
 
 impl Argument {
     fn as_bool(&self) -> bool {
         match self {
-            Argument::Float(f) => *f != 0.0,
-            Argument::Bool(b) => *b,
+            Self::Float(f) => *f != 0.0,
+            Self::Bool(b) => *b,
         }
     }
 
     fn as_f32(&self) -> f32 {
         match self {
-            Argument::Float(f) => *f,
-            Argument::Bool(b) => {
+            Self::Float(f) => *f,
+            Self::Bool(b) => {
                 if *b {
                     1.0
                 } else {
@@ -446,7 +446,7 @@ fn parse_procedure_inner(r: &mut Reader) -> Option<Vec<PostScriptOp>> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum PostScriptOp {
+pub(super) enum PostScriptOp {
     Number(Number),
     Abs,
     Add,
@@ -582,7 +582,7 @@ mod tests {
                 PostScriptOp::Exch,
                 PostScriptOp::Roll,
             ]
-        )
+        );
     }
 
     #[test]
@@ -599,7 +599,7 @@ mod tests {
                     vec![PostScriptOp::Number(Number::from_i32(1))]
                 )
             ]
-        )
+        );
     }
 
     fn op_impl(prog: &str, out: &[f32]) {

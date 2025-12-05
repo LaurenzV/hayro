@@ -57,7 +57,7 @@ impl RasterImage<'_> {
         if let Some(decoded) = decoded
             && let Some(rgb) = decoded.rgb_data
         {
-            func(rgb, decoded.luma_data)
+            func(rgb, decoded.luma_data);
         }
     }
 }
@@ -224,13 +224,13 @@ pub enum BlendMode {
     Darken,
     /// Lighten blend mode.
     Lighten,
-    /// ColorDodge blend mode.
+    /// `ColorDodge` blend mode.
     ColorDodge,
-    /// ColorBurn blend mode.
+    /// `ColorBurn` blend mode.
     ColorBurn,
-    /// HardLight blend mode.
+    /// `HardLight` blend mode.
     HardLight,
-    /// SoftLight blend mode.
+    /// `SoftLight` blend mode.
     SoftLight,
     /// Difference blend mode.
     Difference,

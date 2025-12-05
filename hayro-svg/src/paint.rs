@@ -93,7 +93,7 @@ impl<'a> SvgRenderer<'a> {
                         if !self.tiling_patterns.contains(cache_key) {
                             self.with_dummy(|r| {
                                 t.interpret(r, Affine::IDENTITY, false);
-                            })
+                            });
                         }
 
                         self.tiling_patterns
@@ -243,7 +243,7 @@ fn render_shading_texture(
     let (x_advance, y_advance) =
         x_y_advances(&(Affine::scale(INV_SCALE as f64) * shading_pattern.base_transform));
 
-    let mut buf = vec![0u8; width as usize * height as usize * 4];
+    let mut buf = vec![0_u8; width as usize * height as usize * 4];
     let mut start_point = shading_pattern.base_transform
         * Affine::translate((0.5, 0.5))
         * Point::new(bbox.x0, bbox.y0);

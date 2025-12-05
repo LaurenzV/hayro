@@ -102,7 +102,7 @@ impl ColorSpaceType {
         Self::new_inner(object, cache)
     }
 
-    fn new_inner(object: Object, cache: &Cache) -> Option<ColorSpaceType> {
+    fn new_inner(object: Object, cache: &Cache) -> Option<Self> {
         if let Some(name) = object.clone().into_name() {
             return Self::new_from_name(name.clone());
         } else if let Some(color_array) = object.clone().into_array() {
@@ -124,19 +124,19 @@ impl ColorSpaceType {
                                     // let the user pass the native color type and don't make this optimization
                                     // if it's not sRGB.
                                     if icc.is_srgb() {
-                                        ColorSpaceType::DeviceRgb
+                                        Self::DeviceRgb
                                     } else {
-                                        ColorSpaceType::ICCBased(icc)
+                                        Self::ICCBased(icc)
                                     }
                                 })
                                 .or_else(|| {
                                     dict.get::<Object>(ALTERNATE)
-                                        .and_then(|o| ColorSpaceType::new(o, cache))
+                                        .and_then(|o| Self::new(o, cache))
                                 })
                                 .or_else(|| match dict.get::<u8>(N) {
-                                    Some(1) => Some(ColorSpaceType::DeviceGray),
-                                    Some(3) => Some(ColorSpaceType::DeviceRgb),
-                                    Some(4) => Some(ColorSpaceType::DeviceCmyk),
+                                    Some(1) => Some(Self::DeviceGray),
+                                    Some(3) => Some(Self::DeviceRgb),
+                                    Some(4) => Some(Self::DeviceCmyk),
                                     _ => None,
                                 })
                         } else {
@@ -144,33 +144,30 @@ impl ColorSpaceType {
                         }
                     });
                 }
-                CALCMYK => return Some(ColorSpaceType::DeviceCmyk),
+                CALCMYK => return Some(Self::DeviceCmyk),
                 CALGRAY => {
                     let cal_dict = iter.next::<Dict>()?;
-                    return Some(ColorSpaceType::CalGray(CalGray::new(&cal_dict)?));
+                    return Some(Self::CalGray(CalGray::new(&cal_dict)?));
                 }
                 CALRGB => {
                     let cal_dict = iter.next::<Dict>()?;
-                    return Some(ColorSpaceType::CalRgb(CalRgb::new(&cal_dict)?));
+                    return Some(Self::CalRgb(CalRgb::new(&cal_dict)?));
                 }
-                DEVICE_RGB | RGB => return Some(ColorSpaceType::DeviceRgb),
-                DEVICE_GRAY | G => return Some(ColorSpaceType::DeviceGray),
-                DEVICE_CMYK | CMYK => return Some(ColorSpaceType::DeviceCmyk),
+                DEVICE_RGB | RGB => return Some(Self::DeviceRgb),
+                DEVICE_GRAY | G => return Some(Self::DeviceGray),
+                DEVICE_CMYK | CMYK => return Some(Self::DeviceCmyk),
                 LAB => {
                     let lab_dict = iter.next::<Dict>()?;
-                    return Some(ColorSpaceType::Lab(Lab::new(&lab_dict)?));
+                    return Some(Self::Lab(Lab::new(&lab_dict)?));
                 }
                 INDEXED | I => {
-                    return Some(ColorSpaceType::Indexed(Indexed::new(&color_array, cache)?));
+                    return Some(Self::Indexed(Indexed::new(&color_array, cache)?));
                 }
                 SEPARATION => {
-                    return Some(ColorSpaceType::Separation(Separation::new(
-                        &color_array,
-                        cache,
-                    )?));
+                    return Some(Self::Separation(Separation::new(&color_array, cache)?));
                 }
                 DEVICE_N => {
-                    return Some(ColorSpaceType::DeviceN(DeviceN::new(&color_array, cache)?));
+                    return Some(Self::DeviceN(DeviceN::new(&color_array, cache)?));
                 }
                 PATTERN => {
                     let _ = iter.next::<Name>();
@@ -178,7 +175,7 @@ impl ColorSpaceType {
                         .next::<Object>()
                         .and_then(|o| ColorSpace::new(o, cache))
                         .unwrap_or(ColorSpace::device_rgb());
-                    return Some(ColorSpaceType::Pattern(cs));
+                    return Some(Self::Pattern(cs));
                 }
                 _ => {
                     warn!("unsupported color space: {}", name.as_str());
@@ -192,11 +189,11 @@ impl ColorSpaceType {
 
     fn new_from_name(name: Name) -> Option<Self> {
         match name.deref() {
-            DEVICE_RGB | RGB => Some(ColorSpaceType::DeviceRgb),
-            DEVICE_GRAY | G => Some(ColorSpaceType::DeviceGray),
-            DEVICE_CMYK | CMYK => Some(ColorSpaceType::DeviceCmyk),
-            CALCMYK => Some(ColorSpaceType::DeviceCmyk),
-            PATTERN => Some(ColorSpaceType::Pattern(ColorSpace::device_rgb())),
+            DEVICE_RGB | RGB => Some(Self::DeviceRgb),
+            DEVICE_GRAY | G => Some(Self::DeviceGray),
+            DEVICE_CMYK | CMYK => Some(Self::DeviceCmyk),
+            CALCMYK => Some(Self::DeviceCmyk),
+            PATTERN => Some(Self::Pattern(ColorSpace::device_rgb())),
             _ => None,
         }
     }
@@ -208,36 +205,36 @@ pub struct ColorSpace(Arc<ColorSpaceType>);
 
 impl ColorSpace {
     /// Create a new color space from the given object.
-    pub(crate) fn new(object: Object, cache: &Cache) -> Option<ColorSpace> {
+    pub(crate) fn new(object: Object, cache: &Cache) -> Option<Self> {
         Some(Self(Arc::new(ColorSpaceType::new(object, cache)?)))
     }
 
     /// Create a new color space from the name.
-    pub(crate) fn new_from_name(name: Name) -> Option<ColorSpace> {
+    pub(crate) fn new_from_name(name: Name) -> Option<Self> {
         ColorSpaceType::new_from_name(name).map(|c| Self(Arc::new(c)))
     }
 
     /// Return the device gray color space.
-    pub(crate) fn device_gray() -> ColorSpace {
+    pub(crate) fn device_gray() -> Self {
         Self(Arc::new(ColorSpaceType::DeviceGray))
     }
 
     /// Return the device RGB color space.
-    pub(crate) fn device_rgb() -> ColorSpace {
+    pub(crate) fn device_rgb() -> Self {
         Self(Arc::new(ColorSpaceType::DeviceRgb))
     }
 
     /// Return the device CMYK color space.
-    pub(crate) fn device_cmyk() -> ColorSpace {
+    pub(crate) fn device_cmyk() -> Self {
         Self(Arc::new(ColorSpaceType::DeviceCmyk))
     }
 
     /// Return the pattern color space.
-    pub(crate) fn pattern() -> ColorSpace {
-        Self(Arc::new(ColorSpaceType::Pattern(ColorSpace::device_gray())))
+    pub(crate) fn pattern() -> Self {
+        Self(Arc::new(ColorSpaceType::Pattern(Self::device_gray())))
     }
 
-    pub(crate) fn pattern_cs(&self) -> Option<ColorSpace> {
+    pub(crate) fn pattern_cs(&self) -> Option<Self> {
         match self.0.as_ref() {
             ColorSpaceType::Pattern(cs) => Some(cs.clone()),
             _ => None,
@@ -268,7 +265,7 @@ impl ColorSpace {
                 (l.range[0], l.range[1]),
                 (l.range[2], l.range[3]),
             ],
-            ColorSpaceType::Indexed(_) => smallvec![(0.0, 2.0f32.powf(n) - 1.0)],
+            ColorSpaceType::Indexed(_) => smallvec![(0.0, 2.0_f32.powf(n) - 1.0)],
             ColorSpaceType::Separation(_) => smallvec![(0.0, 1.0)],
             ColorSpaceType::DeviceN(d) => smallvec![(0.0, 1.0); d.num_components as usize],
             // Not a valid image color space.
@@ -437,7 +434,7 @@ impl ToRgb for CalGray {
             let a = input;
             let ag = a.powf(g);
             let l = yw * ag;
-            let val = (0.0f32.max(295.8 * l.powf(0.333_333_34) - 40.8) + 0.5) as u8;
+            let val = (0.0_f32.max(295.8 * l.powf(0.333_333_34) - 40.8) + 0.5) as u8;
 
             output.copy_from_slice(&[val, val, val]);
         }
@@ -493,7 +490,7 @@ impl CalRgb {
     const D65_WHITEPOINT: [f32; 3] = [0.95047, 1.0, 1.08883];
 
     fn decode_l_constant() -> f32 {
-        ((8.0f32 + 16.0) / 116.0).powi(3) / 8.0
+        ((8.0_f32 + 16.0) / 116.0).powi(3) / 8.0
     }
 
     fn srgb_transfer_function(color: f32) -> f32 {
@@ -614,7 +611,7 @@ impl ToRgb for CalRgb {
                 (Self::srgb_transfer_function(srgb_xyz[0]) * 255.0 + 0.5) as u8,
                 (Self::srgb_transfer_function(srgb_xyz[1]) * 255.0 + 0.5) as u8,
                 (Self::srgb_transfer_function(srgb_xyz[2]) * 255.0 + 0.5) as u8,
-            ])
+            ]);
         }
 
         Some(())
@@ -689,7 +686,7 @@ impl ToRgb for Lab {
 
             let conv = |v: f32| (v.max(0.0).sqrt() * 255.0).clamp(0.0, 255.0) as u8;
 
-            output.copy_from_slice(&[conv(r), conv(g), conv(b)])
+            output.copy_from_slice(&[conv(r), conv(g), conv(b)]);
         }
 
         Some(())
@@ -726,7 +723,7 @@ impl Indexed {
                 let mut temp = vec![];
 
                 for _ in 0..num_components {
-                    temp.push(byte_iter.next()? as f32 / 255.0)
+                    temp.push(byte_iter.next()? as f32 / 255.0);
                 }
 
                 vals.push(temp);

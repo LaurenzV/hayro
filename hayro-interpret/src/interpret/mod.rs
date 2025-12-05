@@ -45,10 +45,10 @@ pub struct InterpreterSettings {
     ///   in its environment.
     /// - The PDF specification requires a list of 14 fonts that should always be available to a
     ///   PDF processor. These include:
-    ///   - Times New Roman (Normal, Bold, Italic, BoldItalic)
-    ///   - Courier (Normal, Bold, Italic, BoldItalic)
-    ///   - Helvetica (Normal, Bold, Italic, BoldItalic)
-    ///   - ZapfDingBats
+    ///   - Times New Roman (Normal, Bold, Italic, `BoldItalic`)
+    ///   - Courier (Normal, Bold, Italic, `BoldItalic`)
+    ///   - Helvetica (Normal, Bold, Italic, `BoldItalic`)
+    ///   - `ZapfDingBats`
     ///   - Symbol
     ///
     /// Because of this, if any of the above situations occurs, this callback will be called, which
@@ -112,7 +112,7 @@ pub fn interpret_page<'a>(
     device: &mut impl Device<'a>,
 ) {
     let resources = page.resources();
-    interpret(page.typed_operations(), resources, context, device)
+    interpret(page.typed_operations(), resources, context, device);
 }
 
 /// Interpret the instructions from `ops` and render them into the device.
@@ -236,7 +236,7 @@ pub fn interpret<'a, 'b>(
 
                     *(context.last_point_mut()) = p3;
 
-                    context.path_mut().curve_to(p1, p2, p3)
+                    context.path_mut().curve_to(p1, p2, p3);
                 }
             }
             TypedInstruction::CubicStartTo(c) => {
@@ -247,7 +247,7 @@ pub fn interpret<'a, 'b>(
 
                     *(context.last_point_mut()) = p3;
 
-                    context.path_mut().curve_to(p1, p2, p3)
+                    context.path_mut().curve_to(p1, p2, p3);
                 }
             }
             TypedInstruction::CubicEndTo(c) => {
@@ -257,7 +257,7 @@ pub fn interpret<'a, 'b>(
 
                     *(context.last_point_mut()) = p3;
 
-                    context.path_mut().curve_to(p2, p3, p3)
+                    context.path_mut().curve_to(p2, p3, p3);
                 }
             }
             TypedInstruction::ClosePath(_) => {
@@ -451,21 +451,21 @@ pub fn interpret<'a, 'b>(
                 context.get_mut().text_state.leading = tl.0.as_f32();
             }
             TypedInstruction::CharacterSpacing(c) => {
-                context.get_mut().text_state.char_space = c.0.as_f32()
+                context.get_mut().text_state.char_space = c.0.as_f32();
             }
             TypedInstruction::WordSpacing(w) => {
                 context.get_mut().text_state.word_space = w.0.as_f32();
             }
             TypedInstruction::NextLine(n) => {
                 let (tx, ty) = (n.0.as_f64(), n.1.as_f64());
-                text::next_line(context, tx, ty)
+                text::next_line(context, tx, ty);
             }
             TypedInstruction::NextLineUsingLeading(_) => {
                 text::next_line(context, 0.0, -context.get().text_state.leading as f64);
             }
             TypedInstruction::NextLineAndShowText(n) => {
                 text::next_line(context, 0.0, -context.get().text_state.leading as f64);
-                text::show_text_string(context, device, resources, n.0)
+                text::show_text_string(context, device, resources, n.0);
             }
             TypedInstruction::TextRenderingMode(r) => {
                 let mode = match r.0.as_i64() {
@@ -489,7 +489,7 @@ pub fn interpret<'a, 'b>(
             TypedInstruction::NextLineAndSetLeading(n) => {
                 let (tx, ty) = (n.0.as_f64(), n.1.as_f64());
                 context.get_mut().text_state.leading = -ty as f32;
-                text::next_line(context, tx, ty)
+                text::next_line(context, tx, ty);
             }
             TypedInstruction::ShapeGlyph(_) => {}
             TypedInstruction::XObject(x) => {
@@ -571,7 +571,7 @@ pub fn interpret<'a, 'b>(
                 context.get_mut().text_state.word_space = t.0.as_f32();
                 context.get_mut().text_state.char_space = t.1.as_f32();
                 text::next_line(context, 0.0, -context.get().text_state.leading as f64);
-                text::show_text_string(context, device, resources, t.2)
+                text::show_text_string(context, device, resources, t.2);
             }
             _ => {
                 warn!("failed to read an operator");
