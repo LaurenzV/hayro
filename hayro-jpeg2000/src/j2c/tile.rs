@@ -290,7 +290,7 @@ fn parse_tile_part<'a>(
     let mut headers: Vec<_> = ppt_headers.iter().map(|i| BitReader::new(i.data)).collect();
 
     if let Some(ppm_marker) = main_header.ppm_packets.get(tile_part_idx) {
-        headers.push(BitReader::new(&ppm_marker.data))
+        headers.push(BitReader::new(ppm_marker.data))
     }
 
     let data = reader
