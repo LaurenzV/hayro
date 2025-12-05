@@ -21,7 +21,7 @@ pub(crate) struct Type0 {
 
 impl Type0 {
     /// Create a new type 0 function.
-    pub(crate) fn new(stream: &Stream) -> Option<Self> {
+    pub(crate) fn new(stream: &Stream<'_>) -> Option<Self> {
         let dict = stream.dict();
         let bits_per_sample = dict.get::<u8>(BITS_PER_SAMPLE)?;
 
@@ -40,7 +40,10 @@ impl Type0 {
             return None;
         }
 
-        let sizes = dict.get::<Array>(SIZE)?.iter::<u32>().collect::<IntVec>();
+        let sizes = dict
+            .get::<Array<'_>>(SIZE)?
+            .iter::<u32>()
+            .collect::<IntVec>();
 
         let encode = dict
             .get::<TupleVec>(ENCODE)

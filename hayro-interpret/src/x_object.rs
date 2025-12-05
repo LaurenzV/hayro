@@ -37,7 +37,7 @@ impl<'a> XObject<'a> {
         transfer_function: Option<ActiveTransferFunction>,
     ) -> Option<Self> {
         let dict = stream.dict();
-        match dict.get::<Name>(SUBTYPE)?.deref() {
+        match dict.get::<Name<'_>>(SUBTYPE)?.deref() {
             IMAGE => Some(Self::ImageXObject(ImageXObject::new(
                 stream,
                 |_| None,
@@ -66,14 +66,14 @@ impl<'a> FormXObject<'a> {
         let dict = stream.dict();
 
         let decoded = stream.decoded().ok()?;
-        let resources = dict.get::<Dict>(RESOURCES).unwrap_or_default();
+        let resources = dict.get::<Dict<'_>>(RESOURCES).unwrap_or_default();
 
         let matrix = Affine::new(
             dict.get::<[f64; 6]>(MATRIX)
                 .unwrap_or([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]),
         );
         let bbox = dict.get::<[f32; 4]>(BBOX)?;
-        let is_transparency_group = dict.get::<Dict>(GROUP).is_some();
+        let is_transparency_group = dict.get::<Dict<'_>>(GROUP).is_some();
 
         Some(Self {
             decoded,
@@ -234,7 +234,7 @@ pub(crate) struct ImageXObject<'a> {
 impl<'a> ImageXObject<'a> {
     pub(crate) fn new(
         stream: &Stream<'a>,
-        resolve_cs: impl FnOnce(&Name) -> Option<ColorSpace>,
+        resolve_cs: impl FnOnce(&Name<'_>) -> Option<ColorSpace>,
         warning_sink: &WarningSinkFn,
         cache: &Cache,
         force_luma: bool,
@@ -250,8 +250,8 @@ impl<'a> ImageXObject<'a> {
             Some(ColorSpace::device_gray())
         } else {
             let cs_obj = dict
-                .get::<Object>(CS)
-                .or_else(|| dict.get::<Object>(COLORSPACE));
+                .get::<Object<'_>>(CS)
+                .or_else(|| dict.get::<Object<'_>>(COLORSPACE));
 
             cs_obj
                 .clone()
@@ -310,7 +310,7 @@ pub(crate) struct DecodedImageXObject {
 }
 
 impl DecodedImageXObject {
-    fn new(obj: &ImageXObject) -> Option<Self> {
+    fn new(obj: &ImageXObject<'_>) -> Option<Self> {
         let dict = obj.stream.dict();
 
         let dict_bpc = dict
@@ -388,8 +388,8 @@ impl DecodedImageXObject {
         let is_luma = obj.is_image_mask || obj.force_luma;
 
         let decode_arr = dict
-            .get::<Array>(D)
-            .or_else(|| dict.get::<Array>(DECODE))
+            .get::<Array<'_>>(D)
+            .or_else(|| dict.get::<Array<'_>>(DECODE))
             .map(|a| a.iter::<(f32, f32)>().collect::<SmallVec<_>>())
             .unwrap_or(color_space.default_decode_arr(bits_per_component as f32));
 
@@ -534,10 +534,10 @@ impl DecodedImageXObject {
                 } else {
                     None
                 }
-            } else if let Some(s_mask) = dict.get::<Stream>(SMASK) {
+            } else if let Some(s_mask) = dict.get::<Stream<'_>>(SMASK) {
                 ImageXObject::new(&s_mask, |_| None, &obj.warning_sink, &obj.cache, true, None)
                     .and_then(|s| s.decoded_object().and_then(|d| d.luma_data))
-            } else if let Some(mask) = dict.get::<Stream>(MASK) {
+            } else if let Some(mask) = dict.get::<Stream<'_>>(MASK) {
                 if let Some(obj) =
                     ImageXObject::new(&mask, |_| None, &obj.warning_sink, &obj.cache, true, None)
                 {

@@ -265,7 +265,7 @@ pub fn interpret<'a, 'b>(
             }
             TypedInstruction::SetGraphicsState(gs) => {
                 if let Some(gs) = resources
-                    .get_ext_g_state::<Dict>(gs.0.clone(), Box::new(|_| None), Box::new(Some))
+                    .get_ext_g_state::<Dict<'_>>(gs.0.clone(), Box::new(|_| None), Box::new(Some))
                     .warn_none(&format!("failed to get extgstate {}", gs.0.as_str()))
                 {
                     handle_gs(&gs, context, resources);
@@ -436,7 +436,7 @@ pub fn interpret<'a, 'b>(
                 text::show_text_string(context, device, resources, s.0);
             }
             TypedInstruction::ShowTexts(s) => {
-                for obj in s.0.iter::<Object>() {
+                for obj in s.0.iter::<Object<'_>>() {
                     if let Some(adjustment) = obj.clone().into_f32() {
                         context.get_mut().text_state.apply_adjustment(adjustment);
                     } else if let Some(text) = obj.into_string() {

@@ -18,7 +18,7 @@ pub(crate) struct Type4 {
 
 impl Type4 {
     /// Create a new type 4 function.
-    pub(crate) fn new(stream: &Stream) -> Option<Self> {
+    pub(crate) fn new(stream: &Stream<'_>) -> Option<Self> {
         let dict = stream.dict().clone();
         let clamper = Clamper::new(&dict)?;
 
@@ -420,7 +420,7 @@ fn parse_procedure(data: &[u8]) -> Option<Vec<PostScriptOp>> {
     parse_procedure_inner(&mut r)
 }
 
-fn parse_procedure_inner(r: &mut Reader) -> Option<Vec<PostScriptOp>> {
+fn parse_procedure_inner(r: &mut Reader<'_>) -> Option<Vec<PostScriptOp>> {
     let mut stack = ParseStack::new();
 
     let mut ops = vec![];
@@ -493,12 +493,12 @@ pub(super) enum PostScriptOp {
 }
 
 impl PostScriptOp {
-    fn from_reader(r: &mut Reader, stack: &mut ParseStack) -> Option<Self> {
+    fn from_reader(r: &mut Reader<'_>, stack: &mut ParseStack) -> Option<Self> {
         let op = if let Some(n) = r.read::<Number>(&ReaderContext::dummy()) {
             // TODO: Support radix numbers
             Self::Number(n)
         } else {
-            let op = r.read::<content::Operator>(&ReaderContext::dummy())?;
+            let op = r.read::<content::Operator<'_>>(&ReaderContext::dummy())?;
             match op.as_ref() {
                 b"abs" => Self::Abs,
                 b"add" => Self::Add,
@@ -561,7 +561,7 @@ impl PostScriptOp {
 #[cfg(test)]
 mod tests {
     use crate::function::type4::{PostScriptOp, Type4, parse_procedure};
-    use crate::function::{Clamper, Function, FunctionType, Values};
+    use crate::function::{Clamper, Function, FunctionType, TupleVec, Values};
     use std::f32::consts::LN_10;
     use std::sync::Arc;
 
@@ -609,7 +609,7 @@ mod tests {
         let type4 = Type4 {
             program: procedure,
             clamper: Clamper {
-                domain: Default::default(),
+                domain: TupleVec::default(),
                 range: None,
             },
         };

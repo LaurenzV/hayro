@@ -33,10 +33,10 @@ impl Renderer {
         Self {
             ctx: RenderContext::new_with(width, height, settings),
             inside_pattern: false,
-            soft_mask_cache: Default::default(),
+            soft_mask_cache: HashMap::default(),
             glyph_cache: Some(HashMap::new()),
             cur_mask: None,
-            cur_blend_mode: Default::default(),
+            cur_blend_mode: BlendMode::default(),
             in_type3_glyph: false,
         }
     }
@@ -281,7 +281,7 @@ impl Renderer {
     }
 
     #[must_use]
-    fn set_paint(&mut self, paint: &Paint, path: &BezPath, is_stroke: bool) -> Option<BezPath> {
+    fn set_paint(&mut self, paint: &Paint<'_>, path: &BezPath, is_stroke: bool) -> Option<BezPath> {
         let mut paint_transform = Affine::IDENTITY;
         let mut clip_path = None;
 
@@ -366,9 +366,9 @@ impl Renderer {
                             ),
                             cur_mask: None,
                             inside_pattern: true,
-                            soft_mask_cache: Default::default(),
+                            soft_mask_cache: HashMap::default(),
                             glyph_cache: Some(HashMap::new()),
-                            cur_blend_mode: Default::default(),
+                            cur_blend_mode: BlendMode::default(),
                             in_type3_glyph: false,
                         };
                         let mut initial_transform = Affine::scale_non_uniform(xs as f64, ys as f64)
@@ -418,7 +418,7 @@ impl Renderer {
         &mut self,
         path: &BezPath,
         transform: Affine,
-        paint: &Paint,
+        paint: &Paint<'_>,
         stroke_props: &StrokeProps,
         is_text: bool,
     ) {
@@ -437,7 +437,13 @@ impl Renderer {
         }
     }
 
-    fn fill_path(&mut self, path: &BezPath, transform: Affine, paint: &Paint, fill_rule: FillRule) {
+    fn fill_path(
+        &mut self,
+        path: &BezPath,
+        transform: Affine,
+        paint: &Paint<'_>,
+        fill_rule: FillRule,
+    ) {
         self.ctx.set_fill_rule(convert_fill_rule(fill_rule));
         self.ctx.set_transform(transform);
 
@@ -658,7 +664,7 @@ impl<'a> Device<'a> for Renderer {
     fn push_transparency_group(
         &mut self,
         opacity: f32,
-        mask: Option<SoftMask>,
+        mask: Option<SoftMask<'_>>,
         blend_mode: BlendMode,
     ) {
         let settings = *self.ctx.render_settings();
@@ -688,7 +694,7 @@ impl<'a> Device<'a> for Renderer {
         self.ctx.pop_layer();
     }
 
-    fn set_soft_mask(&mut self, mask: Option<SoftMask>) {
+    fn set_soft_mask(&mut self, mask: Option<SoftMask<'_>>) {
         let settings = *self.ctx.render_settings();
         self.cur_mask = mask.map(|m| {
             let width = self.ctx.width();
@@ -788,14 +794,14 @@ fn render_shading_texture(
     )
 }
 
-fn draw_soft_mask(mask: &SoftMask, settings: RenderSettings, width: u16, height: u16) -> Mask {
+fn draw_soft_mask(mask: &SoftMask<'_>, settings: RenderSettings, width: u16, height: u16) -> Mask {
     let mut renderer = Renderer {
         ctx: RenderContext::new_with(width, height, derive_settings(&settings)),
         inside_pattern: false,
         cur_mask: None,
-        soft_mask_cache: Default::default(),
+        soft_mask_cache: HashMap::default(),
         glyph_cache: Some(HashMap::new()),
-        cur_blend_mode: Default::default(),
+        cur_blend_mode: BlendMode::default(),
         in_type3_glyph: false,
     };
 

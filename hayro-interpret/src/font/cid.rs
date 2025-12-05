@@ -30,13 +30,16 @@ pub(crate) struct Type0Font {
 }
 
 impl Type0Font {
-    pub(crate) fn new(dict: &Dict) -> Option<Self> {
-        let cmap = read_encoding(&dict.get::<Object>(ENCODING)?)?;
+    pub(crate) fn new(dict: &Dict<'_>) -> Option<Self> {
+        let cmap = read_encoding(&dict.get::<Object<'_>>(ENCODING)?)?;
 
         let horizontal = !cmap.is_vertical();
 
-        let descendant_font = dict.get::<Array>(DESCENDANT_FONTS)?.iter::<Dict>().next()?;
-        let font_descriptor = descendant_font.get::<Dict>(FONT_DESC)?;
+        let descendant_font = dict
+            .get::<Array<'_>>(DESCENDANT_FONTS)?
+            .iter::<Dict<'_>>()
+            .next()?;
+        let font_descriptor = descendant_font.get::<Dict<'_>>(FONT_DESC)?;
         let font_type = FontType::new(&font_descriptor)?;
 
         let default_width = descendant_font.get::<f32>(DW).unwrap_or(1000.0);
@@ -46,11 +49,11 @@ impl Type0Font {
             .unwrap_or((880.0, -1000.0));
 
         let widths = descendant_font
-            .get::<Array>(W)
+            .get::<Array<'_>>(W)
             .and_then(|a| read_widths(&a))
             .unwrap_or_default();
         let widths2 = descendant_font
-            .get::<Array>(W2)
+            .get::<Array<'_>>(W2)
             .and_then(|a| read_widths2(&a))
             .unwrap_or_default();
         let cid_to_gid_map = CidToGIdMap::new(&descendant_font).unwrap_or_default();
@@ -168,20 +171,20 @@ enum FontType {
 }
 
 impl FontType {
-    fn new(descriptor: &Dict) -> Option<Self> {
+    fn new(descriptor: &Dict<'_>) -> Option<Self> {
         // Apparently there are some PDFs that have the wrong subtype,
         // so we just brute-force trying to parse the correct type to give
         // some leeway.
 
-        if let Some(stream) = descriptor.get::<Stream>(FONT_FILE2) {
+        if let Some(stream) = descriptor.get::<Stream<'_>>(FONT_FILE2) {
             let decoded = stream.decoded().ok()?;
             let data = Arc::new(decoded.to_vec());
 
             return Some(Self::TrueType(OpenTypeFontBlob::new(data, 0)?));
-        } else if let Some(stream) = descriptor.get::<Stream>(FONT_FILE3) {
+        } else if let Some(stream) = descriptor.get::<Stream<'_>>(FONT_FILE3) {
             let decoded = stream.decoded().ok()?;
 
-            return match stream.dict().get::<Name>(SUBTYPE)?.deref() {
+            return match stream.dict().get::<Name<'_>>(SUBTYPE)?.deref() {
                 CID_FONT_TYPE0C => {
                     let data = Arc::new(decoded.to_vec());
 
@@ -215,14 +218,14 @@ enum CidToGIdMap {
 }
 
 impl CidToGIdMap {
-    fn new(dict: &Dict) -> Option<Self> {
-        if let Some(name) = dict.get::<Name>(CID_TO_GID_MAP) {
+    fn new(dict: &Dict<'_>) -> Option<Self> {
+        if let Some(name) = dict.get::<Name<'_>>(CID_TO_GID_MAP) {
             if name.deref() == IDENTITY {
                 Some(Self::Identity)
             } else {
                 None
             }
-        } else if let Some(stream) = dict.get::<Stream>(CID_TO_GID_MAP) {
+        } else if let Some(stream) = dict.get::<Stream<'_>>(CID_TO_GID_MAP) {
             let decoded = stream.decoded().ok()?;
             let mut map = HashMap::new();
 
@@ -246,12 +249,12 @@ impl CidToGIdMap {
     }
 }
 
-fn read_widths(arr: &Array) -> Option<HashMap<u32, f32>> {
+fn read_widths(arr: &Array<'_>) -> Option<HashMap<u32, f32>> {
     let mut map = HashMap::new();
     let mut iter = arr.flex_iter();
 
     loop {
-        if let Some((mut first, range)) = iter.next::<(u32, Array)>() {
+        if let Some((mut first, range)) = iter.next::<(u32, Array<'_>)>() {
             for width in range.iter::<f32>() {
                 map.insert(first, width);
                 first = first.checked_add(1)?;
@@ -268,12 +271,12 @@ fn read_widths(arr: &Array) -> Option<HashMap<u32, f32>> {
     Some(map)
 }
 
-fn read_widths2(arr: &Array) -> Option<HashMap<u32, [f32; 3]>> {
+fn read_widths2(arr: &Array<'_>) -> Option<HashMap<u32, [f32; 3]>> {
     let mut map = HashMap::new();
     let mut iter = arr.flex_iter();
 
     loop {
-        if let Some((mut first, range)) = iter.next::<(u32, Array)>() {
+        if let Some((mut first, range)) = iter.next::<(u32, Array<'_>)>() {
             let mut iter = range.iter::<f32>();
 
             while let Some(w) = iter.next() {
@@ -294,7 +297,7 @@ fn read_widths2(arr: &Array) -> Option<HashMap<u32, [f32; 3]>> {
     Some(map)
 }
 
-fn read_encoding(object: &Object) -> Option<CMap> {
+fn read_encoding(object: &Object<'_>) -> Option<CMap> {
     match object {
         Object::Name(n) => match n.deref() {
             IDENTITY_H => Some(CMap::identity_h()),

@@ -98,20 +98,20 @@ pub(crate) enum ColorSpaceType {
 }
 
 impl ColorSpaceType {
-    fn new(object: Object, cache: &Cache) -> Option<Self> {
+    fn new(object: Object<'_>, cache: &Cache) -> Option<Self> {
         Self::new_inner(object, cache)
     }
 
-    fn new_inner(object: Object, cache: &Cache) -> Option<Self> {
+    fn new_inner(object: Object<'_>, cache: &Cache) -> Option<Self> {
         if let Some(name) = object.clone().into_name() {
             return Self::new_from_name(name.clone());
         } else if let Some(color_array) = object.clone().into_array() {
             let mut iter = color_array.clone().flex_iter();
-            let name = iter.next::<Name>()?;
+            let name = iter.next::<Name<'_>>()?;
 
             match name.deref() {
                 ICC_BASED => {
-                    let icc_stream = iter.next::<Stream>()?;
+                    let icc_stream = iter.next::<Stream<'_>>()?;
                     let dict = icc_stream.dict();
                     let num_components = dict.get::<usize>(N)?;
 
@@ -130,7 +130,7 @@ impl ColorSpaceType {
                                     }
                                 })
                                 .or_else(|| {
-                                    dict.get::<Object>(ALTERNATE)
+                                    dict.get::<Object<'_>>(ALTERNATE)
                                         .and_then(|o| Self::new(o, cache))
                                 })
                                 .or_else(|| match dict.get::<u8>(N) {
@@ -146,18 +146,18 @@ impl ColorSpaceType {
                 }
                 CALCMYK => return Some(Self::DeviceCmyk),
                 CALGRAY => {
-                    let cal_dict = iter.next::<Dict>()?;
+                    let cal_dict = iter.next::<Dict<'_>>()?;
                     return Some(Self::CalGray(CalGray::new(&cal_dict)?));
                 }
                 CALRGB => {
-                    let cal_dict = iter.next::<Dict>()?;
+                    let cal_dict = iter.next::<Dict<'_>>()?;
                     return Some(Self::CalRgb(CalRgb::new(&cal_dict)?));
                 }
                 DEVICE_RGB | RGB => return Some(Self::DeviceRgb),
                 DEVICE_GRAY | G => return Some(Self::DeviceGray),
                 DEVICE_CMYK | CMYK => return Some(Self::DeviceCmyk),
                 LAB => {
-                    let lab_dict = iter.next::<Dict>()?;
+                    let lab_dict = iter.next::<Dict<'_>>()?;
                     return Some(Self::Lab(Lab::new(&lab_dict)?));
                 }
                 INDEXED | I => {
@@ -170,9 +170,9 @@ impl ColorSpaceType {
                     return Some(Self::DeviceN(DeviceN::new(&color_array, cache)?));
                 }
                 PATTERN => {
-                    let _ = iter.next::<Name>();
+                    let _ = iter.next::<Name<'_>>();
                     let cs = iter
-                        .next::<Object>()
+                        .next::<Object<'_>>()
                         .and_then(|o| ColorSpace::new(o, cache))
                         .unwrap_or(ColorSpace::device_rgb());
                     return Some(Self::Pattern(cs));
@@ -187,7 +187,7 @@ impl ColorSpaceType {
         None
     }
 
-    fn new_from_name(name: Name) -> Option<Self> {
+    fn new_from_name(name: Name<'_>) -> Option<Self> {
         match name.deref() {
             DEVICE_RGB | RGB => Some(Self::DeviceRgb),
             DEVICE_GRAY | G => Some(Self::DeviceGray),
@@ -205,12 +205,12 @@ pub struct ColorSpace(Arc<ColorSpaceType>);
 
 impl ColorSpace {
     /// Create a new color space from the given object.
-    pub(crate) fn new(object: Object, cache: &Cache) -> Option<Self> {
+    pub(crate) fn new(object: Object<'_>, cache: &Cache) -> Option<Self> {
         Some(Self(Arc::new(ColorSpaceType::new(object, cache)?)))
     }
 
     /// Create a new color space from the name.
-    pub(crate) fn new_from_name(name: Name) -> Option<Self> {
+    pub(crate) fn new_from_name(name: Name<'_>) -> Option<Self> {
         ColorSpaceType::new_from_name(name).map(|c| Self(Arc::new(c)))
     }
 
@@ -405,7 +405,7 @@ pub(crate) struct CalGray {
 
 // See <https://github.com/mozilla/pdf.js/blob/06f44916c8936b92f464d337fe3a0a6b2b78d5b4/src/core/colorspace.js#L752>
 impl CalGray {
-    fn new(dict: &Dict) -> Option<Self> {
+    fn new(dict: &Dict<'_>) -> Option<Self> {
         let white_point = dict.get::<[f32; 3]>(WHITE_POINT).unwrap_or([1.0, 1.0, 1.0]);
         let black_point = dict.get::<[f32; 3]>(BLACK_POINT).unwrap_or([0.0, 0.0, 0.0]);
         let gamma = dict.get::<f32>(GAMMA).unwrap_or(1.0);
@@ -456,7 +456,7 @@ pub(crate) struct CalRgb {
 // which should be good enough (and by viewing the `calrgb.pdf` test file in different viewers you will
 // see that in many cases each viewer does whatever it wants, even Acrobat), so this is good enough for us.
 impl CalRgb {
-    fn new(dict: &Dict) -> Option<Self> {
+    fn new(dict: &Dict<'_>) -> Option<Self> {
         let white_point = dict.get::<[f32; 3]>(WHITE_POINT).unwrap_or([1.0, 1.0, 1.0]);
         let black_point = dict.get::<[f32; 3]>(BLACK_POINT).unwrap_or([0.0, 0.0, 0.0]);
         let matrix = dict
@@ -626,7 +626,7 @@ pub(crate) struct Lab {
 }
 
 impl Lab {
-    fn new(dict: &Dict) -> Option<Self> {
+    fn new(dict: &Dict<'_>) -> Option<Self> {
         let white_point = dict.get::<[f32; 3]>(WHITE_POINT).unwrap_or([1.0, 1.0, 1.0]);
         let black_point = dict.get::<[f32; 3]>(BLACK_POINT).unwrap_or([0.0, 0.0, 0.0]);
         let range = dict
@@ -701,18 +701,18 @@ pub(crate) struct Indexed {
 }
 
 impl Indexed {
-    fn new(array: &Array, cache: &Cache) -> Option<Self> {
+    fn new(array: &Array<'_>, cache: &Cache) -> Option<Self> {
         let mut iter = array.flex_iter();
         // Skip name
-        let _ = iter.next::<Name>()?;
-        let base_color_space = ColorSpace::new(iter.next::<Object>()?, cache)?;
+        let _ = iter.next::<Name<'_>>()?;
+        let base_color_space = ColorSpace::new(iter.next::<Object<'_>>()?, cache)?;
         let hival = iter.next::<u8>()?;
 
         let values = {
             let data = iter
-                .next::<Stream>()
+                .next::<Stream<'_>>()
                 .and_then(|s| s.decoded().ok())
-                .or_else(|| iter.next::<object::String>().map(|s| s.get().to_vec()))?;
+                .or_else(|| iter.next::<object::String<'_>>().map(|s| s.get().to_vec()))?;
 
             let num_components = base_color_space.num_components();
 
@@ -764,13 +764,13 @@ pub(crate) struct Separation {
 }
 
 impl Separation {
-    fn new(array: &Array, cache: &Cache) -> Option<Self> {
+    fn new(array: &Array<'_>, cache: &Cache) -> Option<Self> {
         let mut iter = array.flex_iter();
         // Skip `/Separation`
-        let _ = iter.next::<Name>()?;
-        let name = iter.next::<Name>()?;
-        let alternate_space = ColorSpace::new(iter.next::<Object>()?, cache)?;
-        let tint_transform = Function::new(&iter.next::<Object>()?)?;
+        let _ = iter.next::<Name<'_>>()?;
+        let name = iter.next::<Name<'_>>()?;
+        let alternate_space = ColorSpace::new(iter.next::<Object<'_>>()?, cache)?;
+        let tint_transform = Function::new(&iter.next::<Object<'_>>()?)?;
 
         if matches!(name.as_str(), "All" | "None") {
             warn!("Separation color spaces with `All` or `None` as name are not supported yet");
@@ -805,14 +805,15 @@ pub(crate) struct DeviceN {
 }
 
 impl DeviceN {
-    fn new(array: &Array, cache: &Cache) -> Option<Self> {
+    fn new(array: &Array<'_>, cache: &Cache) -> Option<Self> {
         let mut iter = array.flex_iter();
         // Skip `/DeviceN`
-        let _ = iter.next::<Name>()?;
+        let _ = iter.next::<Name<'_>>()?;
         // Skip `Name`.
-        let num_components = u8::try_from(iter.next::<Array>()?.iter::<Name>().count()).ok()?;
-        let alternate_space = ColorSpace::new(iter.next::<Object>()?, cache)?;
-        let tint_transform = Function::new(&iter.next::<Object>()?)?;
+        let num_components =
+            u8::try_from(iter.next::<Array<'_>>()?.iter::<Name<'_>>().count()).ok()?;
+        let alternate_space = ColorSpace::new(iter.next::<Object<'_>>()?, cache)?;
+        let tint_transform = Function::new(&iter.next::<Object<'_>>()?)?;
 
         if num_components == 0 {
             return None;

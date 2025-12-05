@@ -20,7 +20,7 @@ use std::sync::Arc;
 pub(crate) struct Type1Font(u128, Kind, Option<CMap>);
 
 impl Type1Font {
-    pub(crate) fn new(dict: &Dict, resolver: &FontResolverFn) -> Option<Self> {
+    pub(crate) fn new(dict: &Dict<'_>, resolver: &FontResolverFn) -> Option<Self> {
         let cache_key = dict.cache_key();
 
         let to_unicode = read_to_unicode(dict);
@@ -141,17 +141,17 @@ struct StandardKind {
 }
 
 impl StandardKind {
-    fn new(dict: &Dict, resolver: &FontResolverFn) -> Option<Self> {
+    fn new(dict: &Dict<'_>, resolver: &FontResolverFn) -> Option<Self> {
         Self::new_with_standard(dict, select_standard_font(dict)?, false, resolver)
     }
 
     fn new_with_standard(
-        dict: &Dict,
+        dict: &Dict<'_>,
         base_font: StandardFont,
         fallback: bool,
         resolver: &FontResolverFn,
     ) -> Option<Self> {
-        let descriptor = dict.get::<Dict>(FONT_DESC).unwrap_or_default();
+        let descriptor = dict.get::<Dict<'_>>(FONT_DESC).unwrap_or_default();
         let widths = read_widths(dict, &descriptor);
 
         let (encoding, encoding_map) = read_encoding(dict);
@@ -232,14 +232,14 @@ impl StandardKind {
     }
 }
 
-fn is_cff(dict: &Dict) -> bool {
-    dict.get::<Dict>(FONT_DESC)
+fn is_cff(dict: &Dict<'_>) -> bool {
+    dict.get::<Dict<'_>>(FONT_DESC)
         .map(|dict| dict.contains_key(FONT_FILE3))
         .unwrap_or(false)
 }
 
-fn is_type1(dict: &Dict) -> bool {
-    dict.get::<Dict>(FONT_DESC)
+fn is_type1(dict: &Dict<'_>) -> bool {
+    dict.get::<Dict<'_>>(FONT_DESC)
         .map(|dict| dict.contains_key(FONT_FILE))
         .unwrap_or(false)
 }
@@ -254,9 +254,9 @@ struct Type1Kind {
 }
 
 impl Type1Kind {
-    fn new(dict: &Dict) -> Option<Self> {
-        let descriptor = dict.get::<Dict>(FONT_DESC)?;
-        let data = descriptor.get::<Stream>(FONT_FILE)?;
+    fn new(dict: &Dict<'_>) -> Option<Self> {
+        let descriptor = dict.get::<Dict<'_>>(FONT_DESC)?;
+        let data = descriptor.get::<Stream<'_>>(FONT_FILE)?;
         let font = Type1FontBlob::new(Arc::new(data.decoded().ok()?.to_vec()))?;
 
         let (encoding, encodings) = read_encoding(dict);
@@ -329,9 +329,9 @@ struct CffKind {
 }
 
 impl CffKind {
-    fn new(dict: &Dict) -> Option<Self> {
-        let descriptor = dict.get::<Dict>(FONT_DESC)?;
-        let data = descriptor.get::<Stream>(FONT_FILE3)?;
+    fn new(dict: &Dict<'_>) -> Option<Self> {
+        let descriptor = dict.get::<Dict<'_>>(FONT_DESC)?;
+        let data = descriptor.get::<Stream<'_>>(FONT_FILE3)?;
         let font = CffFontBlob::new(Arc::new(data.decoded().ok()?.to_vec()))?;
 
         let (encoding, encodings) = read_encoding(dict);

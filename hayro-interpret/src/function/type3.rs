@@ -16,15 +16,15 @@ pub(crate) struct Type3 {
 
 impl Type3 {
     /// Create a new type 3 function.
-    pub(crate) fn new(dict: &Dict) -> Option<Self> {
+    pub(crate) fn new(dict: &Dict<'_>) -> Option<Self> {
         let clamper = Clamper::new(dict)?;
 
         let functions = dict
-            .get::<Array>(FUNCTIONS)
-            .and_then(|d| d.iter::<Object>().map(|o| Function::new(&o)).collect())?;
+            .get::<Array<'_>>(FUNCTIONS)
+            .and_then(|d| d.iter::<Object<'_>>().map(|o| Function::new(&o)).collect())?;
         let domain = *clamper.domain.first()?;
         let mut bounds = vec![domain.0 - 0.0001];
-        if let Some(a) = dict.get::<Array>(BOUNDS) {
+        if let Some(a) = dict.get::<Array<'_>>(BOUNDS) {
             bounds.extend(a.iter::<f32>());
         }
         // Add a small delta so that the interval is considered to be closed on the right.

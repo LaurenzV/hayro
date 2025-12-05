@@ -15,7 +15,7 @@ pub(crate) struct Type2 {
 
 impl Type2 {
     /// Create a new type 2 function.
-    pub(crate) fn new(dict: &Dict) -> Option<Self> {
+    pub(crate) fn new(dict: &Dict<'_>) -> Option<Self> {
         let c0 = dict.get::<Values>(C0).unwrap_or(smallvec![0.0]);
         let c1 = dict.get::<Values>(C1).unwrap_or(smallvec![1.0]);
         let clamper = Clamper::new(dict)?;

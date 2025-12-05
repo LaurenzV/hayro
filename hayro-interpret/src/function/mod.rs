@@ -37,7 +37,7 @@ pub struct Function(Arc<FunctionType>);
 
 impl Function {
     /// Create a new function.
-    pub fn new(obj: &Object) -> Option<Self> {
+    pub fn new(obj: &Object<'_>) -> Option<Self> {
         let (dict, stream) = dict_or_stream(obj)?;
 
         let function_type = match dict.get::<u8>(FUNCTION_TYPE)? {
@@ -69,7 +69,7 @@ struct Clamper {
 }
 
 impl Clamper {
-    fn new(dict: &Dict) -> Option<Self> {
+    fn new(dict: &Dict<'_>) -> Option<Self> {
         let domain = dict.get::<TupleVec>(DOMAIN)?;
         let range = dict.get::<TupleVec>(RANGE);
 

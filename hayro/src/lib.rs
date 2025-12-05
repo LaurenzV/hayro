@@ -87,7 +87,7 @@ impl Default for RenderSettings {
 
 /// Render the page with the given settings to a pixmap.
 pub fn render(
-    page: &Page,
+    page: &Page<'_>,
     interpreter_settings: &InterpreterSettings,
     render_settings: &RenderSettings,
 ) -> Pixmap {

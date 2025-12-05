@@ -102,17 +102,17 @@ impl<'a> SoftMask<'a> {
         // TODO: With this setup, if there is a luminosity mask and alpha mask pointing to the
         // same xobject, the ID will be the same.
         let obj_id = dict.get_ref(G)?.into();
-        let group_stream = dict.get::<Stream>(G)?;
+        let group_stream = dict.get::<Stream<'_>>(G)?;
         let group = FormXObject::new(&group_stream)?;
         let cs = ColorSpace::new(
-            group.dict.get::<Dict>(GROUP)?.get::<Object>(CS)?,
+            group.dict.get::<Dict<'_>>(GROUP)?.get::<Object<'_>>(CS)?,
             &context.object_cache,
         )?;
         let transfer_function = dict
-            .get::<Object>(TR)
+            .get::<Object<'_>>(TR)
             .and_then(|o| Function::new(&o))
             .map(TransferFunction);
-        let (mask_type, background) = match dict.get::<Name>(S)?.deref() {
+        let (mask_type, background) = match dict.get::<Name<'_>>(S)?.deref() {
             LUMINOSITY => {
                 let color = dict
                     .get::<ColorComponents>(BC)

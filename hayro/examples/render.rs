@@ -43,11 +43,11 @@ fn main() {
 static LOGGER: SimpleLogger = SimpleLogger;
 struct SimpleLogger;
 impl log::Log for SimpleLogger {
-    fn enabled(&self, metadata: &log::Metadata) -> bool {
+    fn enabled(&self, metadata: &log::Metadata<'_>) -> bool {
         metadata.level() <= log::LevelFilter::Warn
     }
 
-    fn log(&self, record: &log::Record) {
+    fn log(&self, record: &log::Record<'_>) {
         if self.enabled(record.metadata()) {
             let target = if !record.target().is_empty() {
                 record.target()

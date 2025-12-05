@@ -12,7 +12,7 @@ pub(crate) fn show_text_string<'a>(
     ctx: &mut Context<'a>,
     device: &mut impl Device<'a>,
     resources: &Resources<'a>,
-    text: object::String,
+    text: object::String<'_>,
 ) {
     let Some(font) = ctx.get().text_state.font.clone() else {
         warn!("tried to show text without active font");
@@ -41,7 +41,7 @@ pub(crate) fn show_text_string<'a>(
     }
 }
 
-pub(crate) fn next_line(ctx: &mut Context, tx: f64, ty: f64) {
+pub(crate) fn next_line(ctx: &mut Context<'_>, tx: f64, ty: f64) {
     let new_matrix = ctx.get_mut().text_state.text_line_matrix * Affine::translate((tx, ty));
     ctx.get_mut().text_state.text_line_matrix = new_matrix;
     ctx.get_mut().text_state.text_matrix = new_matrix;
@@ -150,7 +150,7 @@ pub(crate) fn show_glyph<'a>(
     }
 }
 
-pub(crate) fn clip_glyph(context: &mut Context, glyph: &Glyph, transform: Affine) {
+pub(crate) fn clip_glyph(context: &mut Context<'_>, glyph: &Glyph<'_>, transform: Affine) {
     match glyph {
         Glyph::Outline(o) => {
             let outline = transform * o.outline();

@@ -57,7 +57,7 @@ impl<'a> State<'a> {
     pub(crate) fn new(initial_transform: Affine) -> Self {
         Self {
             ctm: initial_transform,
-            ..Default::default()
+            ..Self::default()
         }
     }
 
@@ -189,7 +189,7 @@ impl Default for TextState<'_> {
             font: None,
             // Not in the specification, but we just define it so we don't need to use an option.
             font_size: 1.0,
-            render_mode: Default::default(),
+            render_mode: TextRenderingMode::default(),
             text_matrix: Affine::IDENTITY,
             text_line_matrix: Affine::IDENTITY,
             rise: 0.0,
@@ -261,7 +261,7 @@ pub(crate) fn handle_gs<'a>(
 
 pub(crate) fn handle_gs_single<'a>(
     dict: &Dict<'a>,
-    key: Name,
+    key: Name<'_>,
     context: &mut Context<'a>,
     parent_resources: &Resources<'a>,
 ) -> Option<()> {
@@ -280,9 +280,12 @@ pub(crate) fn handle_gs_single<'a>(
         "CA" => context.get_mut().graphics_state.stroke_alpha = dict.get::<f32>(key)?,
         "ca" => context.get_mut().graphics_state.non_stroke_alpha = dict.get::<f32>(key)?,
         "TR" | "TR2" => {
-            let function = match dict.get::<Object>(TR2).or_else(|| dict.get::<Object>(TR))? {
+            let function = match dict
+                .get::<Object<'_>>(TR2)
+                .or_else(|| dict.get::<Object<'_>>(TR))?
+            {
                 Object::Array(array) => {
-                    let mut iter = array.iter::<Object>();
+                    let mut iter = array.iter::<Object<'_>>();
                     let functions = [
                         Function::new(&iter.next()?)?,
                         Function::new(&iter.next()?)?,
@@ -300,25 +303,25 @@ pub(crate) fn handle_gs_single<'a>(
             context.get_mut().graphics_state.transfer_function = function;
         }
         "SMask" => {
-            if let Some(name) = dict.get::<Name>(SMASK) {
+            if let Some(name) = dict.get::<Name<'_>>(SMASK) {
                 if name.deref() == b"None" {
                     context.get_mut().graphics_state.soft_mask = None;
                 }
             } else {
                 context.get_mut().graphics_state.soft_mask = dict
-                    .get::<Dict>(SMASK)
+                    .get::<Dict<'_>>(SMASK)
                     .and_then(|d| SoftMask::new(&d, context, parent_resources.clone()));
             }
         }
         "BM" => {
-            if let Some(name) = dict.get::<Name>(key.clone()) {
+            if let Some(name) = dict.get::<Name<'_>>(key.clone()) {
                 if let Some(bm) = convert_blend_mode(name.as_str()) {
                     context.get_mut().graphics_state.blend_mode = bm;
 
                     return Some(());
                 }
-            } else if let Some(arr) = dict.get::<Array>(key) {
-                for name in arr.iter::<Name>() {
+            } else if let Some(arr) = dict.get::<Array<'_>>(key) {
+                for name in arr.iter::<Name<'_>>() {
                     if let Some(bm) = convert_blend_mode(name.as_str()) {
                         context.get_mut().graphics_state.blend_mode = bm;
 

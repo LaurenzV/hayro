@@ -36,7 +36,7 @@ pub(crate) mod paint;
 mod path;
 
 /// Convert the given page into an SVG string.
-pub fn convert(page: &Page, interpreter_settings: &InterpreterSettings) -> String {
+pub fn convert(page: &Page<'_>, interpreter_settings: &InterpreterSettings) -> String {
     let mut state = Context::new(
         page.initial_transform(true),
         Rect::new(
@@ -298,7 +298,7 @@ impl<'a> SvgRenderer<'a> {
             tiling_patterns: Deduplicator::new('t'),
             cur_mask: None,
             dimensions: page.render_dimensions(),
-            cur_blend_mode: Default::default(),
+            cur_blend_mode: BlendMode::default(),
         }
     }
 

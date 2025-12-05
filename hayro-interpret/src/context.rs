@@ -57,7 +57,7 @@ impl<'a> Context<'a> {
     ) -> Self {
         let ocg_state = {
             let root_ref = xref.root_id();
-            xref.get::<Dict>(root_ref)
+            xref.get::<Dict<'_>>(root_ref)
                 .map(|catalog| OcgState::from_catalog(&catalog))
                 .unwrap_or_default()
         };
@@ -227,7 +227,11 @@ impl<'a> Context<'a> {
         self.get_mut().ctm *= transform;
     }
 
-    pub(crate) fn get_font(&mut self, resources: &Resources<'a>, name: Name) -> Option<Font<'a>> {
+    pub(crate) fn get_font(
+        &mut self,
+        resources: &Resources<'a>,
+        name: Name<'_>,
+    ) -> Option<Font<'a>> {
         resources.get_font(
             name,
             Box::new(|ref_| {
@@ -235,7 +239,7 @@ impl<'a> Context<'a> {
                     .entry(ref_)
                     .or_insert_with(|| {
                         resources
-                            .resolve_ref::<Dict>(ref_)
+                            .resolve_ref::<Dict<'_>>(ref_)
                             .and_then(|o| Font::new(&o, &self.settings.font_resolver))
                     })
                     .clone()
@@ -246,15 +250,15 @@ impl<'a> Context<'a> {
 
     pub(crate) fn get_color_space(
         &mut self,
-        resources: &Resources,
-        name: Name,
+        resources: &Resources<'_>,
+        name: Name<'_>,
     ) -> Option<ColorSpace> {
         resources.get_color_space(
             name,
             Box::new(|ref_| {
                 self.object_cache.get_or_insert_with(ref_.into(), || {
                     resources
-                        .resolve_ref::<Object>(ref_)
+                        .resolve_ref::<Object<'_>>(ref_)
                         .map(|o| ColorSpace::new(o, &self.object_cache))
                 })
             }),

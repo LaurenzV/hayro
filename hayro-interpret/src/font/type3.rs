@@ -43,10 +43,10 @@ impl<'a> Type3<'a> {
 
         let char_procs = {
             let mut procs = HashMap::new();
-            let dict = dict.get::<Dict>(CHAR_PROCS).unwrap_or_default();
+            let dict = dict.get::<Dict<'_>>(CHAR_PROCS).unwrap_or_default();
 
             for name in dict.keys() {
-                if let Some(prog) = dict.get::<Stream>(name.clone()) {
+                if let Some(prog) = dict.get::<Stream<'_>>(name.clone()) {
                     procs.insert(name.as_str().to_string(), prog.clone());
                 }
             }
@@ -151,7 +151,7 @@ impl<'a> Type3<'a> {
         );
 
         // Technically not valid, but also support by Adobe Acrobat. See PDFBOX-5294.
-        if let Some(procs_resources) = program.dict().get::<Dict>(RESOURCES) {
+        if let Some(procs_resources) = program.dict().get::<Dict<'_>>(RESOURCES) {
             resources = Resources::from_parent(procs_resources, resources);
         }
 
@@ -188,13 +188,13 @@ impl<'a, 'b, T: Device<'a>> Type3ShapeGlyphDevice<'a, 'b, T> {
 
 // Only filling, stroking of paths and stencil masks are allowed.
 impl<'a, T: Device<'a>> Device<'a> for Type3ShapeGlyphDevice<'a, '_, T> {
-    fn set_soft_mask(&mut self, _: Option<SoftMask>) {}
+    fn set_soft_mask(&mut self, _: Option<SoftMask<'_>>) {}
 
     fn draw_path(
         &mut self,
         path: &BezPath,
         transform: Affine,
-        _: &Paint,
+        _: &Paint<'_>,
         draw_mode: &PathDrawMode,
     ) {
         self.inner
@@ -205,7 +205,7 @@ impl<'a, T: Device<'a>> Device<'a> for Type3ShapeGlyphDevice<'a, '_, T> {
         self.inner.push_clip_path(clip_path);
     }
 
-    fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask>, _: BlendMode) {}
+    fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask<'_>>, _: BlendMode) {}
 
     fn draw_glyph(
         &mut self,

@@ -122,7 +122,7 @@ pub struct Shading {
 }
 
 impl Shading {
-    pub(crate) fn new(dict: &Dict, stream: Option<&Stream>, cache: &Cache) -> Option<Self> {
+    pub(crate) fn new(dict: &Dict<'_>, stream: Option<&Stream<'_>>, cache: &Cache) -> Option<Self> {
         let cache_key = dict.cache_key();
 
         let shading_num = dict.get::<u8>(SHADING_TYPE)?;
@@ -182,7 +182,10 @@ impl Shading {
                 let bp_comp = dict.get::<u8>(BITS_PER_COMPONENT)?;
                 let bpf = dict.get::<u8>(BITS_PER_FLAG)?;
                 let function = read_function(dict, &color_space);
-                let decode = dict.get::<Array>(DECODE)?.iter::<f32>().collect::<Vec<_>>();
+                let decode = dict
+                    .get::<Array<'_>>(DECODE)?
+                    .iter::<f32>()
+                    .collect::<Vec<_>>();
 
                 let triangles = read_free_form_triangles(
                     stream_data.as_ref(),
@@ -204,7 +207,10 @@ impl Shading {
                 let bp_coord = dict.get::<u8>(BITS_PER_COORDINATE)?;
                 let bp_comp = dict.get::<u8>(BITS_PER_COMPONENT)?;
                 let function = read_function(dict, &color_space);
-                let decode = dict.get::<Array>(DECODE)?.iter::<f32>().collect::<Vec<_>>();
+                let decode = dict
+                    .get::<Array<'_>>(DECODE)?
+                    .iter::<f32>()
+                    .collect::<Vec<_>>();
                 let vertices_per_row = dict.get::<u32>(VERTICES_PER_ROW)?;
 
                 let triangles = read_lattice_triangles(
@@ -228,7 +234,10 @@ impl Shading {
                 let bp_comp = dict.get::<u8>(BITS_PER_COMPONENT)?;
                 let bpf = dict.get::<u8>(BITS_PER_FLAG)?;
                 let function = read_function(dict, &color_space);
-                let decode = dict.get::<Array>(DECODE)?.iter::<f32>().collect::<Vec<_>>();
+                let decode = dict
+                    .get::<Array<'_>>(DECODE)?
+                    .iter::<f32>()
+                    .collect::<Vec<_>>();
 
                 let patches = read_coons_patch_mesh(
                     stream_data.as_ref(),
@@ -248,7 +257,10 @@ impl Shading {
                 let bp_comp = dict.get::<u8>(BITS_PER_COMPONENT)?;
                 let bpf = dict.get::<u8>(BITS_PER_FLAG)?;
                 let function = read_function(dict, &color_space);
-                let decode = dict.get::<Array>(DECODE)?.iter::<f32>().collect::<Vec<_>>();
+                let decode = dict
+                    .get::<Array<'_>>(DECODE)?
+                    .iter::<f32>()
+                    .collect::<Vec<_>>();
 
                 let patches = read_tensor_product_patch_mesh(
                     stream_data.as_ref(),
@@ -266,7 +278,7 @@ impl Shading {
 
         let bbox = dict.get::<Rect>(BBOX).map(|r| r.to_kurbo());
         let background = dict
-            .get::<Array>(BACKGROUND)
+            .get::<Array<'_>>(BACKGROUND)
             .map(|a| a.iter::<f32>().collect::<SmallVec<_>>());
 
         Some(Self {
@@ -548,7 +560,7 @@ fn read_free_form_triangles(
     let mut reader = BitReader::new(data);
     let helpers = InterpolationHelpers::new(bp_cord, bp_comp, x_min, x_max, y_min, y_max);
 
-    let read_single = |reader: &mut BitReader| -> Option<TriangleVertex> {
+    let read_single = |reader: &mut BitReader<'_>| -> Option<TriangleVertex> {
         helpers.read_triangle_vertex(reader, bpf, has_function, decode)
     };
 
@@ -625,7 +637,7 @@ impl InterpolationHelpers {
         interpolate(n as f32, 0.0, self.comp_max, d_min, d_max)
     }
 
-    fn read_point(&self, reader: &mut BitReader) -> Option<Point> {
+    fn read_point(&self, reader: &mut BitReader<'_>) -> Option<Point> {
         let x = self.interpolate_coord(reader.read(self.bp_coord)?, self.x_min, self.x_max);
         let y = self.interpolate_coord(reader.read(self.bp_coord)?, self.y_min, self.y_max);
         Some(Point::new(x as f64, y as f64))
@@ -633,7 +645,7 @@ impl InterpolationHelpers {
 
     fn read_colors(
         &self,
-        reader: &mut BitReader,
+        reader: &mut BitReader<'_>,
         has_function: bool,
         decode: &[f32],
     ) -> Option<ColorComponents> {
@@ -659,7 +671,7 @@ impl InterpolationHelpers {
 
     fn read_triangle_vertex(
         &self,
-        reader: &mut BitReader,
+        reader: &mut BitReader<'_>,
         bpf: u8,
         has_function: bool,
         decode: &[f32],
@@ -782,7 +794,7 @@ fn read_lattice_triangles(
     let mut reader = BitReader::new(data);
     let helpers = InterpolationHelpers::new(bp_cord, bp_comp, x_min, x_max, y_min, y_max);
 
-    let read_single = |reader: &mut BitReader| -> Option<TriangleVertex> {
+    let read_single = |reader: &mut BitReader<'_>| -> Option<TriangleVertex> {
         let point = helpers.read_point(reader)?;
         let colors = helpers.read_colors(reader, has_function, decode)?;
         reader.align();
@@ -875,7 +887,7 @@ where
     let mut reader = BitReader::new(data);
     let helpers = InterpolationHelpers::new(bp_coord, bp_comp, x_min, x_max, y_min, y_max);
 
-    let read_colors = |reader: &mut BitReader| -> Option<ColorComponents> {
+    let read_colors = |reader: &mut BitReader<'_>| -> Option<ColorComponents> {
         helpers.read_colors(reader, has_function, decode)
     };
 
@@ -998,9 +1010,12 @@ fn read_tensor_product_patch_mesh(
     )
 }
 
-fn read_function(dict: &Dict, color_space: &ColorSpace) -> Option<ShadingFunction> {
-    if let Some(arr) = dict.get::<Array>(FUNCTION) {
-        let arr: Option<SmallVec<_>> = arr.iter::<Object>().map(|o| Function::new(&o)).collect();
+fn read_function(dict: &Dict<'_>, color_space: &ColorSpace) -> Option<ShadingFunction> {
+    if let Some(arr) = dict.get::<Array<'_>>(FUNCTION) {
+        let arr: Option<SmallVec<_>> = arr
+            .iter::<Object<'_>>()
+            .map(|o| Function::new(&o))
+            .collect();
         let arr = arr?;
 
         if arr.len() != color_space.num_components() as usize {
@@ -1010,7 +1025,7 @@ fn read_function(dict: &Dict, color_space: &ColorSpace) -> Option<ShadingFunctio
         }
 
         Some(ShadingFunction::Multiple(arr))
-    } else if let Some(obj) = dict.get::<Object>(FUNCTION) {
+    } else if let Some(obj) = dict.get::<Object<'_>>(FUNCTION) {
         Some(ShadingFunction::Single(Function::new(&obj)?))
     } else {
         None

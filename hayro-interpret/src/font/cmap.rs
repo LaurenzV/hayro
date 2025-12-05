@@ -392,7 +392,7 @@ impl<'a> CMapLexer<'a> {
     }
 }
 
-fn parse_bf_char(cmap: &mut CMap, lexer: &mut CMapLexer) -> Option<()> {
+fn parse_bf_char(cmap: &mut CMap, lexer: &mut CMapLexer<'_>) -> Option<()> {
     loop {
         let obj = lexer.get_obj();
         match obj {
@@ -423,7 +423,7 @@ fn parse_bf_char(cmap: &mut CMap, lexer: &mut CMapLexer) -> Option<()> {
     Some(())
 }
 
-fn parse_bf_range(cmap: &mut CMap, lexer: &mut CMapLexer) -> Option<()> {
+fn parse_bf_range(cmap: &mut CMap, lexer: &mut CMapLexer<'_>) -> Option<()> {
     loop {
         let obj = lexer.get_obj();
         match obj {
@@ -488,7 +488,7 @@ fn parse_bf_range(cmap: &mut CMap, lexer: &mut CMapLexer) -> Option<()> {
     Some(())
 }
 
-fn parse_cid_char(cmap: &mut CMap, lexer: &mut CMapLexer) -> Option<()> {
+fn parse_cid_char(cmap: &mut CMap, lexer: &mut CMapLexer<'_>) -> Option<()> {
     loop {
         let obj = lexer.get_obj();
         match obj {
@@ -507,7 +507,7 @@ fn parse_cid_char(cmap: &mut CMap, lexer: &mut CMapLexer) -> Option<()> {
     Some(())
 }
 
-fn parse_cid_range(cmap: &mut CMap, lexer: &mut CMapLexer) -> Option<()> {
+fn parse_cid_range(cmap: &mut CMap, lexer: &mut CMapLexer<'_>) -> Option<()> {
     loop {
         let obj = lexer.get_obj();
         match obj {
@@ -532,7 +532,7 @@ fn parse_cid_range(cmap: &mut CMap, lexer: &mut CMapLexer) -> Option<()> {
     Some(())
 }
 
-fn parse_codespace_range(cmap: &mut CMap, lexer: &mut CMapLexer) -> Option<()> {
+fn parse_codespace_range(cmap: &mut CMap, lexer: &mut CMapLexer<'_>) -> Option<()> {
     loop {
         let obj = lexer.get_obj();
         match obj {
@@ -560,7 +560,7 @@ fn parse_codespace_range(cmap: &mut CMap, lexer: &mut CMapLexer) -> Option<()> {
     Some(())
 }
 
-fn parse_wmode(cmap: &mut CMap, lexer: &mut CMapLexer) -> Option<()> {
+fn parse_wmode(cmap: &mut CMap, lexer: &mut CMapLexer<'_>) -> Option<()> {
     let obj = lexer.get_obj();
     if let Some(val) = expect_int(&obj) {
         cmap.vertical = val != 0;
@@ -569,7 +569,7 @@ fn parse_wmode(cmap: &mut CMap, lexer: &mut CMapLexer) -> Option<()> {
     Some(())
 }
 
-fn parse_cmap_name(cmap: &mut CMap, lexer: &mut CMapLexer) -> Option<()> {
+fn parse_cmap_name(cmap: &mut CMap, lexer: &mut CMapLexer<'_>) -> Option<()> {
     let obj = lexer.get_obj();
     match obj {
         Token::Name(name) => {
