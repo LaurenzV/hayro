@@ -61,8 +61,8 @@ pub(crate) enum ChannelType {
 impl ChannelType {
     fn from_raw(value: u16) -> Option<Self> {
         match value {
-            0 => Some(ChannelType::Colour),
-            1 => Some(ChannelType::Opacity),
+            0 => Some(Self::Colour),
+            1 => Some(Self::Opacity),
             // We don't support the others.
             _ => None,
         }
@@ -78,10 +78,10 @@ pub(crate) enum ChannelAssociation {
 impl ChannelAssociation {
     fn from_raw(value: u16) -> Option<Self> {
         match value {
-            0 => Some(ChannelAssociation::WholeImage),
+            0 => Some(Self::WholeImage),
             // Unspecified.
             u16::MAX => None,
-            v => Some(ChannelAssociation::Colour(v)),
+            v => Some(Self::Colour(v)),
         }
     }
 }

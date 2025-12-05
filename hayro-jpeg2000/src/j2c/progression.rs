@@ -1,7 +1,7 @@
 //! Progression iterators, defined in Section B.12.
 //!
 //! A progression iterator essentially yields tuples of
-//! (layer_num, resolution, component, precinct) in a specific order that
+//! (`layer_num`, resolution, component, precinct) in a specific order that
 //! determines in which order the data appears in the codestream.
 
 use super::tile::{ComponentTile, ResolutionTile, Tile};
@@ -262,7 +262,7 @@ fn position_progression_common<'a>(
                 component_idx: component_idx as u8,
                 resolution: resolution as u16,
                 precinct_idx: d.idx,
-            }))
+            }));
         }
     }
 

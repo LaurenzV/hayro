@@ -6,8 +6,8 @@ use super::decode::TileDecodeContext;
 
 /// Apply the inverse multi-component transform, as specified in G.2 and G.3.
 pub(crate) fn apply_inverse(
-    tile_ctx: &mut TileDecodeContext,
-    header: &Header,
+    tile_ctx: &mut TileDecodeContext<'_>,
+    header: &Header<'_>,
 ) -> Result<(), &'static str> {
     if tile_ctx.channel_data.len() < 3 {
         return if header.strict {

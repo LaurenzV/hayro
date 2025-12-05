@@ -33,7 +33,7 @@ pub(crate) fn parse(boxes: &mut ImageBoxes, data: &[u8]) -> Option<()> {
         for column in &columns {
             let num_bytes = (column.bit_depth as usize).div_ceil(8).max(1);
             let raw_bytes = reader.read_bytes(num_bytes)?;
-            let mut raw_value = 0u64;
+            let mut raw_value = 0_u64;
             for &byte in raw_bytes {
                 raw_value = (raw_value << 8) | byte as u64;
             }

@@ -71,7 +71,7 @@ impl<'a> TilePart<'a> {
 }
 
 impl<'a> Tile<'a> {
-    fn new(idx: u32, header: &Header) -> Tile<'a> {
+    fn new(idx: u32, header: &Header<'_>) -> Self {
         let rect = {
             let size_data = &header.size_data;
 
@@ -126,7 +126,7 @@ impl<'a> Tile<'a> {
 /// Create the tiles and parse their constituent tile parts.
 pub(crate) fn parse<'a>(
     reader: &mut BitReader<'a>,
-    main_header: &'a Header,
+    main_header: &'a Header<'a>,
 ) -> Result<Vec<Tile<'a>>, &'static str> {
     let mut tiles = (0..main_header.size_data.num_tiles() as usize)
         .map(|idx| Tile::new(idx as u32, main_header))
@@ -151,7 +151,7 @@ pub(crate) fn parse<'a>(
 
 fn parse_tile_part<'a>(
     reader: &mut BitReader<'a>,
-    main_header: &'a Header,
+    main_header: &'a Header<'a>,
     tiles: &mut [Tile<'a>],
     tile_part_idx: usize,
 ) -> Result<(), &'static str> {
@@ -290,7 +290,7 @@ fn parse_tile_part<'a>(
     let mut headers: Vec<_> = ppt_headers.iter().map(|i| BitReader::new(i.data)).collect();
 
     if let Some(ppm_marker) = main_header.ppm_packets.get(tile_part_idx) {
-        headers.push(BitReader::new(ppm_marker.data))
+        headers.push(BitReader::new(ppm_marker.data));
     }
 
     let data = reader
@@ -380,7 +380,7 @@ pub(crate) struct ResolutionTile<'a> {
 }
 
 impl<'a> ResolutionTile<'a> {
-    pub(crate) fn new(component_tile: ComponentTile, resolution: u16) -> ResolutionTile {
+    pub(crate) fn new(component_tile: ComponentTile<'a>, resolution: u16) -> Self {
         assert!(
             component_tile
                 .component_info
@@ -399,13 +399,13 @@ impl<'a> ResolutionTile<'a> {
                 .num_decomposition_levels;
 
             let tx0 = (component_tile.rect.x0 as u64)
-                .div_ceil(2u64.pow(n_l as u32 - resolution as u32)) as u32;
+                .div_ceil(2_u64.pow(n_l as u32 - resolution as u32)) as u32;
             let ty0 = (component_tile.rect.y0 as u64)
-                .div_ceil(2u64.pow(n_l as u32 - resolution as u32)) as u32;
+                .div_ceil(2_u64.pow(n_l as u32 - resolution as u32)) as u32;
             let tx1 = (component_tile.rect.x1 as u64)
-                .div_ceil(2u64.pow(n_l as u32 - resolution as u32)) as u32;
+                .div_ceil(2_u64.pow(n_l as u32 - resolution as u32)) as u32;
             let ty1 = (component_tile.rect.y1 as u64)
-                .div_ceil(2u64.pow(n_l as u32 - resolution as u32)) as u32;
+                .div_ceil(2_u64.pow(n_l as u32 - resolution as u32)) as u32;
 
             IntRect::from_ltrb(tx0, ty0, tx1, ty1)
         };
@@ -464,11 +464,11 @@ impl<'a> ResolutionTile<'a> {
 
         // If decomposition level is 0, xo_b and yo_b are 0 as well.
         if self.decomposition_level > 0 {
-            numerator_x = 2u64.pow(self.decomposition_level as u32 - 1) * xo_b as u64;
-            numerator_y = 2u64.pow(self.decomposition_level as u32 - 1) * yo_b as u64;
+            numerator_x = 2_u64.pow(self.decomposition_level as u32 - 1) * xo_b as u64;
+            numerator_y = 2_u64.pow(self.decomposition_level as u32 - 1) * yo_b as u64;
         }
 
-        let denominator = 2u64.pow(self.decomposition_level as u32);
+        let denominator = 2_u64.pow(self.decomposition_level as u32);
 
         let tbx_0 = (self.component_tile.rect.x0 as u64)
             .saturating_sub(numerator_x)
@@ -517,8 +517,8 @@ impl<'a> ResolutionTile<'a> {
         if x0 == x1 {
             0
         } else {
-            x1.div_ceil(2u32.pow(self.precinct_exponent_x() as u32))
-                - x0 / 2u32.pow(self.precinct_exponent_x() as u32)
+            x1.div_ceil(2_u32.pow(self.precinct_exponent_x() as u32))
+                - x0 / 2_u32.pow(self.precinct_exponent_x() as u32)
         }
     }
 
@@ -529,8 +529,8 @@ impl<'a> ResolutionTile<'a> {
         if y0 == y1 {
             0
         } else {
-            y1.div_ceil(2u32.pow(self.precinct_exponent_y() as u32))
-                - y0 / 2u32.pow(self.precinct_exponent_y() as u32)
+            y1.div_ceil(2_u32.pow(self.precinct_exponent_y() as u32))
+                - y0 / 2_u32.pow(self.precinct_exponent_y() as u32)
         }
     }
 
@@ -656,7 +656,7 @@ impl<'a> ResolutionTile<'a> {
             u8::min(xcb, self.precinct_exponent_x())
         };
 
-        2u32.pow(xcb as u32)
+        2_u32.pow(xcb as u32)
     }
 
     pub(crate) fn code_block_height(&self) -> u32 {
@@ -674,7 +674,7 @@ impl<'a> ResolutionTile<'a> {
             u8::min(ycb, self.precinct_exponent_y())
         };
 
-        2u32.pow(ycb as u32)
+        2_u32.pow(ycb as u32)
     }
 }
 
@@ -700,7 +700,7 @@ fn ppt_marker<'a>(reader: &mut BitReader<'a>) -> Option<PptMarkerData<'a>> {
 }
 
 /// SOT marker (A.4.2).
-fn sot_marker(reader: &mut BitReader) -> Option<TilePartHeader> {
+fn sot_marker(reader: &mut BitReader<'_>) -> Option<TilePartHeader> {
     // Length.
     let _ = reader.read_u16()?;
 

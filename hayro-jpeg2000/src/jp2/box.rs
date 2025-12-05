@@ -1,47 +1,50 @@
 //! Parsing a JP2 box, as specified in I.4.
 
-#![allow(dead_code)]
+#![allow(
+    dead_code,
+    reason = "JP2 box constants exist for completeness but not all are referenced yet"
+)]
 
 use crate::reader::BitReader;
 
 /// JP2 signature box - 'jP\040\040'.
-pub const JP2_SIGNATURE: u32 = 0x6A502020;
+pub(crate) const JP2_SIGNATURE: u32 = 0x6A502020;
 /// File Type box - 'ftyp'.
-pub const FILE_TYPE: u32 = 0x66747970;
+pub(crate) const FILE_TYPE: u32 = 0x66747970;
 /// JP2 Header box - 'jp2h'.
-pub const JP2_HEADER: u32 = 0x6A703268;
+pub(crate) const JP2_HEADER: u32 = 0x6A703268;
 /// Image Header box - 'ihdr'.
-pub const IMAGE_HEADER: u32 = 0x69686472;
+pub(crate) const IMAGE_HEADER: u32 = 0x69686472;
 /// Bits Per Component box - 'bpcc'.
-pub const BITS_PER_COMPONENT: u32 = 0x62706363;
+pub(crate) const BITS_PER_COMPONENT: u32 = 0x62706363;
 /// Colour Specification box - 'colr'.
-pub const COLOUR_SPECIFICATION: u32 = 0x636F6C72;
+pub(crate) const COLOUR_SPECIFICATION: u32 = 0x636F6C72;
 /// Palette box - 'pclr'.
-pub const PALETTE: u32 = 0x70636C72;
+pub(crate) const PALETTE: u32 = 0x70636C72;
 /// Component Mapping box - 'cmap'.
-pub const COMPONENT_MAPPING: u32 = 0x636D6170;
+pub(crate) const COMPONENT_MAPPING: u32 = 0x636D6170;
 /// Channel Definition box - 'cdef'.
-pub const CHANNEL_DEFINITION: u32 = 0x63646566;
+pub(crate) const CHANNEL_DEFINITION: u32 = 0x63646566;
 /// Resolution box - 'res\x20'.
-pub const RESOLUTION: u32 = 0x72657320;
+pub(crate) const RESOLUTION: u32 = 0x72657320;
 /// Capture Resolution box - 'resc'.
-pub const CAPTURE_RESOLUTION: u32 = 0x72657363;
+pub(crate) const CAPTURE_RESOLUTION: u32 = 0x72657363;
 /// Default Display Resolution box - 'resd'.
-pub const DISPLAY_RESOLUTION: u32 = 0x72657364;
+pub(crate) const DISPLAY_RESOLUTION: u32 = 0x72657364;
 /// Contiguous Codestream box - 'jp2c'.
-pub const CONTIGUOUS_CODESTREAM: u32 = 0x6A703263;
+pub(crate) const CONTIGUOUS_CODESTREAM: u32 = 0x6A703263;
 /// Intellectual Property box - 'jp2i'.
-pub const INTELLECTUAL_PROPERTY: u32 = 0x6A703269;
+pub(crate) const INTELLECTUAL_PROPERTY: u32 = 0x6A703269;
 /// XML box - 'xml\x20'.
-pub const XML: u32 = 0x786D6C20;
+pub(crate) const XML: u32 = 0x786D6C20;
 /// UUID box - 'uuid'.
-pub const UUID: u32 = 0x75756964;
+pub(crate) const UUID: u32 = 0x75756964;
 /// UUID Info box - 'uinf'.
-pub const UUID_INFO: u32 = 0x75696E66;
+pub(crate) const UUID_INFO: u32 = 0x75696E66;
 /// UUID List box - 'ulst'.
-pub const UUID_LIST: u32 = 0x756C7374;
+pub(crate) const UUID_LIST: u32 = 0x756C7374;
 /// URL box - 'url\x20'.
-pub const URL: u32 = 0x75726C20;
+pub(crate) const URL: u32 = 0x75726C20;
 
 pub(crate) struct Jp2Box<'a> {
     pub(crate) data: &'a [u8],

@@ -36,7 +36,7 @@ pub(crate) struct TagNode {
     /// level.
     level: u16,
     /// The indices of the children of the node, some of which might be dummy
-    /// nodes (indicated by the fact that the index is usize::MAX).
+    /// nodes (indicated by the fact that the index is `usize::MAX`).
     children: [usize; 4],
 }
 
@@ -64,8 +64,8 @@ impl TagNode {
 }
 
 impl TagNode {
-    fn build(width: u32, height: u32, level: u16, nodes: &mut Vec<TagNode>) -> Self {
-        let mut tag = TagNode::new(width, height, level);
+    fn build(width: u32, height: u32, level: u16, nodes: &mut Vec<Self>) -> Self {
+        let mut tag = Self::new(width, height, level);
 
         if level == 0 {
             // We reached the leaf node.
@@ -79,7 +79,7 @@ impl TagNode {
         let top_left_width = tag.top_left_width();
         let top_left_height = tag.top_left_height();
 
-        let mut push = |node: TagNode, child_idx: usize, nodes: &mut Vec<TagNode>| {
+        let mut push = |node: Self, child_idx: usize, nodes: &mut Vec<Self>| {
             // If this is not the case, the child doesn't actually exist.
             if node.width > 0 && node.height > 0 {
                 let node_idx = nodes.len();
@@ -92,16 +92,16 @@ impl TagNode {
         // fewer than that. In this case, the resulting node will simply have
         // a width or height of 0 and we can recognize that it technically
         // doesn't exist.
-        let n1 = TagNode::build(top_left_width, top_left_height, level - 1, nodes);
+        let n1 = Self::build(top_left_width, top_left_height, level - 1, nodes);
         push(n1, 0, nodes);
 
-        let n2 = TagNode::build(width - top_left_width, top_left_height, level - 1, nodes);
+        let n2 = Self::build(width - top_left_width, top_left_height, level - 1, nodes);
         push(n2, 1, nodes);
 
-        let n3 = TagNode::build(top_left_width, height - top_left_height, level - 1, nodes);
+        let n3 = Self::build(top_left_width, height - top_left_height, level - 1, nodes);
         push(n3, 2, nodes);
 
-        let n4 = TagNode::build(
+        let n4 = Self::build(
             width - top_left_width,
             height - top_left_height,
             level - 1,
@@ -117,7 +117,7 @@ fn read_tag_node(
     node_idx: usize,
     x: u32,
     y: u32,
-    reader: &mut BitReader,
+    reader: &mut BitReader<'_>,
     parent_val: u32,
     max_val: u32,
     nodes: &mut [TagNode],
@@ -225,7 +225,7 @@ impl TagTree {
         &mut self,
         x: u32,
         y: u32,
-        reader: &mut BitReader,
+        reader: &mut BitReader<'_>,
         max_val: u32,
         nodes: &mut [TagNode],
     ) -> Option<u32> {

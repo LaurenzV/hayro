@@ -11,17 +11,17 @@ use std::ops::Range;
 /// Build and allocate all necessary structures to process the code-blocks
 /// for a specific tile. Also parses the segments for each code-block.
 pub(crate) fn build(
-    tile: &Tile,
-    tile_ctx: &mut TileDecodeContext,
-    storage: &mut DecompositionStorage,
+    tile: &Tile<'_>,
+    tile_ctx: &mut TileDecodeContext<'_>,
+    storage: &mut DecompositionStorage<'_>,
 ) -> Result<(), &'static str> {
     build_decompositions(tile, tile_ctx, storage)
 }
 
 fn build_decompositions(
-    tile: &Tile,
-    tile_ctx: &mut TileDecodeContext,
-    storage: &mut DecompositionStorage,
+    tile: &Tile<'_>,
+    tile_ctx: &mut TileDecodeContext<'_>,
+    storage: &mut DecompositionStorage<'_>,
 ) -> Result<(), &'static str> {
     let mut total_coefficients = 0;
 
@@ -39,8 +39,8 @@ fn build_decompositions(
 
         let mut build_sub_band =
             |sub_band_type: SubBandType,
-             resolution_tile: &ResolutionTile,
-             storage: &mut DecompositionStorage| {
+             resolution_tile: &ResolutionTile<'_>,
+             storage: &mut DecompositionStorage<'_>| {
                 let sub_band_rect = resolution_tile.sub_band_rect(sub_band_type);
 
                 trace!(
@@ -107,10 +107,10 @@ fn build_decompositions(
 }
 
 fn build_precincts(
-    resolution_tile: &ResolutionTile,
+    resolution_tile: &ResolutionTile<'_>,
     sub_band_rect: IntRect,
-    tile_ctx: &mut TileDecodeContext,
-    storage: &mut DecompositionStorage,
+    tile_ctx: &mut TileDecodeContext<'_>,
+    storage: &mut DecompositionStorage<'_>,
 ) -> Result<Range<usize>, &'static str> {
     let start = storage.precincts.len();
 
@@ -184,11 +184,11 @@ fn build_precincts(
 fn build_code_blocks(
     code_block_area: IntRect,
     sub_band_rect: IntRect,
-    tile_instance: &ResolutionTile,
+    tile_instance: &ResolutionTile<'_>,
     code_blocks_x: u32,
     code_blocks_y: u32,
-    tile_ctx: &mut TileDecodeContext,
-    storage: &mut DecompositionStorage,
+    tile_ctx: &mut TileDecodeContext<'_>,
+    storage: &mut DecompositionStorage<'_>,
 ) -> Range<usize> {
     let mut y = code_block_area.y0;
 

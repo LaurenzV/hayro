@@ -126,7 +126,7 @@ pub(crate) fn decode(data: &[u8], settings: &DecodeSettings) -> Result<DecodedIm
             })
             .collect::<Vec<_>>();
 
-        image_boxes.component_mapping = Some(ComponentMappingBox { entries: mappings })
+        image_boxes.component_mapping = Some(ComponentMappingBox { entries: mappings });
     }
 
     Ok(DecodedImage {

@@ -22,7 +22,7 @@ use crate::reader::BitReader;
 use log::trace;
 use std::ops::Range;
 
-pub(crate) fn decode(data: &[u8], header: &Header) -> Result<Vec<ComponentData>, &'static str> {
+pub(crate) fn decode(data: &[u8], header: &Header<'_>) -> Result<Vec<ComponentData>, &'static str> {
     let mut reader = BitReader::new(data);
     let tiles = tile::parse(&mut reader, header)?;
 
@@ -70,7 +70,7 @@ pub(crate) fn decode(data: &[u8], header: &Header) -> Result<Vec<ComponentData>,
             progression_iterator,
             &mut tile_ctx,
             &mut storage,
-        )?
+        )?;
     }
 
     // Note that this assumes that either all tiles have MCT or none of them.
@@ -86,7 +86,7 @@ pub(crate) fn decode(data: &[u8], header: &Header) -> Result<Vec<ComponentData>,
 
 fn decode_tile<'a>(
     tile: &'a Tile<'a>,
-    header: &Header,
+    header: &Header<'_>,
     progression_iterator: Box<dyn Iterator<Item = ProgressionData> + '_>,
     tile_ctx: &mut TileDecodeContext<'a>,
     storage: &mut DecompositionStorage<'a>,
@@ -237,7 +237,7 @@ pub(crate) struct TileDecodeContext<'a> {
 }
 
 impl<'a> TileDecodeContext<'a> {
-    fn new(header: &Header, initial_tile: &'a Tile<'a>) -> Self {
+    fn new(header: &Header<'_>, initial_tile: &'a Tile<'a>) -> Self {
         let mut channel_data = vec![];
 
         for info in &initial_tile.component_infos {
@@ -255,8 +255,8 @@ impl<'a> TileDecodeContext<'a> {
             tile: initial_tile,
             idwt_scratch_buffer: vec![],
             idwt_output: IDWTOutput::dummy(),
-            bit_plane_decode_context: Default::default(),
-            bit_plane_decode_buffers: Default::default(),
+            bit_plane_decode_context: BitPlaneDecodeContext::default(),
+            bit_plane_decode_buffers: BitPlaneDecodeBuffers::default(),
             channel_data,
         }
     }
@@ -271,8 +271,8 @@ impl<'a> TileDecodeContext<'a> {
 fn decode_component_tile_bit_planes<'a>(
     tile: &'a Tile<'a>,
     tile_ctx: &mut TileDecodeContext<'a>,
-    storage: &mut DecompositionStorage,
-    header: &Header,
+    storage: &mut DecompositionStorage<'a>,
+    header: &Header<'_>,
 ) -> Result<(), &'static str> {
     for (tile_decompositions_idx, component_info) in tile.component_infos.iter().enumerate() {
         for resolution in 0..component_info.num_resolution_levels() {
@@ -299,9 +299,9 @@ fn decode_sub_band_bitplanes(
     sub_band_idx: usize,
     resolution: u16,
     component_info: &ComponentInfo,
-    tile_ctx: &mut TileDecodeContext,
-    storage: &mut DecompositionStorage,
-    header: &Header,
+    tile_ctx: &mut TileDecodeContext<'_>,
+    storage: &mut DecompositionStorage<'_>,
+    header: &Header<'_>,
 ) -> Result<(), &'static str> {
     let sub_band = &storage.sub_bands[sub_band_idx];
 
@@ -324,8 +324,8 @@ fn decode_sub_band_bitplanes(
                 component_info.size_info.precision as u16 + log_gain
             };
 
-            2.0f32.powf(r_b as f32 - exponent as f32)
-                * (1.0 + (mantissa as f32) / (2u32.pow(11) as f32))
+            2.0_f32.powf(r_b as f32 - exponent as f32)
+                * (1.0 + (mantissa as f32) / (2_u32.pow(11) as f32))
         }
     };
 
@@ -381,19 +381,19 @@ fn decode_sub_band_bitplanes(
     Ok(())
 }
 
-fn apply_sign_shift(tile_ctx: &mut TileDecodeContext, component_infos: &[ComponentInfo]) {
+fn apply_sign_shift(tile_ctx: &mut TileDecodeContext<'_>, component_infos: &[ComponentInfo]) {
     for (channel_data, component_info) in
         tile_ctx.channel_data.iter_mut().zip(component_infos.iter())
     {
         for sample in &mut channel_data.container {
-            *sample += (1u32 << (component_info.size_info.precision - 1)) as f32;
+            *sample += (1_u32 << (component_info.size_info.precision - 1)) as f32;
         }
     }
 }
 
 fn store<'a>(
     tile: &'a Tile<'a>,
-    header: &Header,
+    header: &Header<'_>,
     tile_ctx: &mut TileDecodeContext<'a>,
     component_info: &ComponentInfo,
     component_idx: usize,

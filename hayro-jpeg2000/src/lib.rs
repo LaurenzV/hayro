@@ -35,7 +35,7 @@ which shows you the main steps needed to convert a JPEG2000 image into PNG for e
 
 # Testing
 The decoder has been tested against 20.000+ images scraped from random PDFs
-on the internet and also passes a large part of the OpenJPEG test suite. So you
+on the internet and also passes a large part of the `OpenJPEG` test suite. So you
 can expect the crate to perform decently in terms of decoding correctness.
 
 # Performance
@@ -45,7 +45,7 @@ are some more important optimizations that have not been implemented yet, so
 there is definitely still room for improvement (and I am planning on implementing
 them eventually).
 
-Overall, you should expect this crate to have worse performance than OpenJPEG,
+Overall, you should expect this crate to have worse performance than `OpenJPEG`,
 but the difference gap should not be too large.
 
 # Safety
@@ -124,10 +124,10 @@ impl ColorSpace {
     /// Return the number of expected channels for the color space.
     pub fn num_channels(&self) -> u8 {
         match self {
-            ColorSpace::Gray => 1,
-            ColorSpace::RGB => 3,
-            ColorSpace::CMYK => 4,
-            ColorSpace::Icc {
+            Self::Gray => 1,
+            Self::RGB => 3,
+            Self::CMYK => 4,
+            Self::Icc {
                 num_channels: num_components,
                 ..
             } => *num_components,
@@ -346,7 +346,7 @@ fn interleave_and_convert(image: DecodedImage) -> Vec<u8> {
                     ((channel.container[sample] / ((1 << channel.bit_depth) - 1) as f32)
                         * mul_factor)
                         .round() as u8,
-                )
+                );
             }
         }
 
@@ -455,8 +455,8 @@ fn resolve_palette_indices(
 }
 
 fn sycc_to_rgb(components: &mut [ComponentData], bit_depth: u8) -> Option<()> {
-    let offset = (1u32 << (bit_depth as u32 - 1)) as f32;
-    let max_value = ((1u32 << bit_depth as u32) - 1) as f32;
+    let offset = (1_u32 << (bit_depth as u32 - 1)) as f32;
+    let max_value = ((1_u32 << bit_depth as u32) - 1) as f32;
 
     let (head, _) = components.split_at_mut_checked(3)?;
 

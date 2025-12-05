@@ -30,11 +30,11 @@ impl IntRect {
         self.y1 - self.y0
     }
 
-    pub(crate) fn intersect(&self, other: IntRect) -> IntRect {
+    pub(crate) fn intersect(&self, other: Self) -> Self {
         if self.x1 < other.x0 || other.x1 < self.x0 || self.y1 < other.y0 || other.y1 < self.y0 {
-            IntRect::from_xywh(0, 0, 0, 0)
+            Self::from_xywh(0, 0, 0, 0)
         } else {
-            IntRect::from_ltrb(
+            Self::from_ltrb(
                 u32::max(self.x0, other.x0),
                 u32::max(self.y0, other.y0),
                 u32::min(self.x1, other.x1),

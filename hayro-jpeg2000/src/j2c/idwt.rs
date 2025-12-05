@@ -45,7 +45,7 @@ impl IDWTOutput {
     pub(crate) fn dummy() -> Self {
         Self {
             coefficients: vec![],
-            padding: Default::default(),
+            padding: Padding::default(),
             rect: IntRect::from_ltrb(0, 0, u32::MAX, u32::MAX),
         }
     }
@@ -67,8 +67,8 @@ struct IDWTTempOutput {
 /// will be transformed samples covering the rectangle of the smallest
 /// decomposition level.
 pub(crate) fn apply(
-    storage: &DecompositionStorage,
-    tile_ctx: &mut TileDecodeContext,
+    storage: &DecompositionStorage<'_>,
+    tile_ctx: &mut TileDecodeContext<'_>,
     component_idx: usize,
     transform: WaveletTransform,
 ) {
@@ -188,7 +188,7 @@ struct IDWTInput<'a> {
 }
 
 impl<'a> IDWTInput<'a> {
-    fn from_sub_band(sub_band: &'a SubBand, storage: &'a DecompositionStorage) -> IDWTInput<'a> {
+    fn from_sub_band(sub_band: &'a SubBand, storage: &'a DecompositionStorage<'_>) -> Self {
         IDWTInput {
             coefficients: &storage.coefficients[sub_band.coefficients.clone()],
             padding: Padding::default(),
@@ -196,7 +196,7 @@ impl<'a> IDWTInput<'a> {
         }
     }
 
-    fn from_output(idwt_output: &'a IDWTTempOutput, coefficients: &'a [f32]) -> IDWTInput<'a> {
+    fn from_output(idwt_output: &'a IDWTTempOutput, coefficients: &'a [f32]) -> Self {
         IDWTInput {
             coefficients,
             padding: idwt_output.padding,
@@ -207,14 +207,14 @@ impl<'a> IDWTInput<'a> {
     }
 }
 
-/// The 2D_SR procedure illustrated in Figure F.6.
+/// The `2D_SR` procedure illustrated in Figure F.6.
 fn filter_2d(
     // The LL sub band of the given decomposition level.
-    input: IDWTInput,
+    input: IDWTInput<'_>,
     coefficients: &mut Vec<f32>,
     decomposition: &Decomposition,
     transform: WaveletTransform,
-    storage: &DecompositionStorage,
+    storage: &DecompositionStorage<'_>,
 ) -> IDWTTempOutput {
     // First interleave all sub-bands into a single buffer. We also
     // apply a padding so that we can transparently deal with border values.
@@ -231,13 +231,13 @@ fn filter_2d(
     }
 }
 
-/// The 2D_INTERLEAVE procedure described in F.3.3.
+/// The `2D_INTERLEAVE` procedure described in F.3.3.
 fn interleave_samples(
-    input: IDWTInput,
+    input: IDWTInput<'_>,
     decomposition: &Decomposition,
     coefficients: &mut Vec<f32>,
     transform: WaveletTransform,
-    storage: &DecompositionStorage,
+    storage: &DecompositionStorage<'_>,
 ) -> Padding {
     let new_padding = {
         // The reason why we need + 1 for the left and top padding is very
@@ -358,7 +358,7 @@ fn interleave_samples(
     new_padding
 }
 
-/// The HOR_SR procedure from F.3.4.
+/// The `HOR_SR` procedure from F.3.4.
 fn filter_horizontal(
     coefficients: &mut [f32],
     padding: Padding,
@@ -381,7 +381,7 @@ fn filter_horizontal(
     }
 }
 
-/// The 1D_SR procedure from F.3.6.
+/// The `1D_SR` procedure from F.3.6.
 fn filter_single_row(scanline: &mut [f32], start: usize, end: usize, transform: WaveletTransform) {
     if start == end - 1 {
         if !start.is_multiple_of(2) {
@@ -461,7 +461,7 @@ fn irreversible_filter_97i(scanline: &mut [f32], start: usize, end: usize) {
     }
 }
 
-/// The 1D_EXTR procedure, defined in F.3.7.
+/// The `1D_EXTR` procedure, defined in F.3.7.
 fn extend_signal(scanline: &mut [f32], start: usize, end: usize, transform: WaveletTransform) {
     let i_left = left_extension(transform, start);
     let i_right = right_extension(transform, end);
@@ -534,7 +534,7 @@ mod simd {
     const SIMD_WIDTH: usize = super::SIMD_WIDTH;
     type F32<S> = f32x8<S>;
 
-    /// The VER_SR procedure from F.3.5.
+    /// The `VER_SR` procedure from F.3.5.
     pub(super) fn filter_vertical(
         coefficients: &mut [f32],
         padding: Padding,
@@ -564,7 +564,7 @@ mod simd {
         );
     }
 
-    /// The 1D_SR procedure from F.3.6, but using SIMD.
+    /// The `1D_SR` procedure from F.3.6, but using SIMD.
     #[inline(always)]
     fn filter_rows<S: Simd>(
         simd: S,
@@ -602,7 +602,7 @@ mod simd {
         }
     }
 
-    /// The 1D_EXTR procedure, defined in F.3.7.
+    /// The `1D_EXTR` procedure, defined in F.3.7.
     #[inline(always)]
     fn extend_signal<S: Simd>(
         simd: S,

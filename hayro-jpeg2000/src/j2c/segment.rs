@@ -13,7 +13,7 @@ pub(crate) fn parse<'a>(
     tile: &'a Tile<'a>,
     mut progression_iterator: Box<dyn Iterator<Item = ProgressionData> + '_>,
     tile_ctx: &mut TileDecodeContext<'a>,
-    header: &Header,
+    header: &Header<'_>,
     storage: &mut DecompositionStorage<'a>,
 ) -> Result<(), &'static str> {
     for tile_part in &tile.tile_parts {
@@ -102,7 +102,7 @@ fn parse_inner<'a>(
                         let segments = &mut storage.segments[segments.clone()];
 
                         for segment in segments {
-                            segment.data = body_reader.read_bytes(segment.data_length as usize)?
+                            segment.data = body_reader.read_bytes(segment.data_length as usize)?;
                         }
                     }
                 }
@@ -116,8 +116,8 @@ fn parse_inner<'a>(
 fn resolve_segments(
     sub_band_dx: usize,
     progression_data: &ProgressionData,
-    reader: &mut BitReader,
-    storage: &mut DecompositionStorage,
+    reader: &mut BitReader<'_>,
+    storage: &mut DecompositionStorage<'_>,
     component_info: &ComponentInfo,
 ) -> Option<()> {
     let precincts = &mut storage.precincts[storage.sub_bands[sub_band_dx].precincts.clone()];

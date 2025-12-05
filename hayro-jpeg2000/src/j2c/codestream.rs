@@ -144,7 +144,7 @@ pub(crate) fn read_header<'a>(
     Ok(header)
 }
 
-fn validate(header: &Header) -> Result<(), &'static str> {
+fn validate(header: &Header<'_>) -> Result<(), &'static str> {
     for info in &header.component_infos {
         let max_resolution_idx = info.coding_style.parameters.num_resolution_levels - 1;
         let quantization_style = info.quantization_info.quantization_style;
@@ -250,11 +250,11 @@ pub(crate) enum ProgressionOrder {
 impl ProgressionOrder {
     fn from_u8(value: u8) -> Result<Self, &'static str> {
         match value {
-            0 => Ok(ProgressionOrder::LayerResolutionComponentPosition),
-            1 => Ok(ProgressionOrder::ResolutionLayerComponentPosition),
-            2 => Ok(ProgressionOrder::ResolutionPositionComponentLayer),
-            3 => Ok(ProgressionOrder::PositionComponentResolutionLayer),
-            4 => Ok(ProgressionOrder::ComponentPositionResolutionLayer),
+            0 => Ok(Self::LayerResolutionComponentPosition),
+            1 => Ok(Self::ResolutionLayerComponentPosition),
+            2 => Ok(Self::ResolutionPositionComponentLayer),
+            3 => Ok(Self::PositionComponentResolutionLayer),
+            4 => Ok(Self::ComponentPositionResolutionLayer),
             _ => Err("invalid progression order"),
         }
     }
@@ -270,8 +270,8 @@ pub(crate) enum WaveletTransform {
 impl WaveletTransform {
     fn from_u8(value: u8) -> Result<Self, &'static str> {
         match value {
-            0 => Ok(WaveletTransform::Irreversible97),
-            1 => Ok(WaveletTransform::Reversible53),
+            0 => Ok(Self::Irreversible97),
+            1 => Ok(Self::Reversible53),
             _ => Err("invalid transformation type"),
         }
     }
@@ -285,7 +285,7 @@ pub(crate) struct CodingStyleFlags {
 
 impl CodingStyleFlags {
     fn from_u8(value: u8) -> Self {
-        CodingStyleFlags { raw: value }
+        Self { raw: value }
     }
 
     pub(crate) fn has_precincts(&self) -> bool {
@@ -313,7 +313,7 @@ pub(crate) struct CodeBlockStyle {
 
 impl CodeBlockStyle {
     fn from_u8(value: u8) -> Self {
-        CodeBlockStyle {
+        Self {
             selective_arithmetic_coding_bypass: (value & 0x01) != 0,
             reset_context_probabilities: (value & 0x02) != 0,
             termination_on_each_pass: (value & 0x04) != 0,
@@ -336,9 +336,9 @@ pub(crate) enum QuantizationStyle {
 impl QuantizationStyle {
     fn from_u8(value: u8) -> Result<Self, &'static str> {
         match value & 0x1F {
-            0 => Ok(QuantizationStyle::NoQuantization),
-            1 => Ok(QuantizationStyle::ScalarDerived),
-            2 => Ok(QuantizationStyle::ScalarExpounded),
+            0 => Ok(Self::NoQuantization),
+            1 => Ok(Self::ScalarDerived),
+            2 => Ok(Self::ScalarExpounded),
             _ => Err("invalid quantization style"),
         }
     }
@@ -394,17 +394,17 @@ pub(crate) struct SizeData {
     /// Height of the reference grid (Ysiz).
     pub(crate) reference_grid_height: u32,
     /// Horizontal offset from the origin of the reference grid to the
-    /// left side of the image area (XOsiz).
+    /// left side of the image area (`XOsiz`).
     pub(crate) image_area_x_offset: u32,
-    /// Vertical offset from the origin of the reference grid to the top side of the image area (YOsiz).
+    /// Vertical offset from the origin of the reference grid to the top side of the image area (`YOsiz`).
     pub(crate) image_area_y_offset: u32,
-    /// Width of one reference tile with respect to the reference grid (XTSiz).
+    /// Width of one reference tile with respect to the reference grid (`XTSiz`).
     pub(crate) tile_width: u32,
-    /// Height of one reference tile with respect to the reference grid (YTSiz).
+    /// Height of one reference tile with respect to the reference grid (`YTSiz`).
     pub(crate) tile_height: u32,
-    /// Horizontal offset from the origin of the reference grid to the left side of the first tile (XTOSiz).
+    /// Horizontal offset from the origin of the reference grid to the left side of the first tile (`XTOSiz`).
     pub(crate) tile_x_offset: u32,
-    /// Vertical offset from the origin of the reference grid to the top side of the first tile (YTOSiz).
+    /// Vertical offset from the origin of the reference grid to the top side of the first tile (`YTOSiz`).
     pub(crate) tile_y_offset: u32,
     /// Component information (SSiz/XRSiz/YRSiz).
     pub(crate) component_sizes: Vec<ComponentSizeInfo>,
@@ -464,7 +464,7 @@ impl SizeData {
 }
 
 /// SIZ marker (A.5.1).
-fn size_marker(reader: &mut BitReader) -> Result<SizeData, &'static str> {
+fn size_marker(reader: &mut BitReader<'_>) -> Result<SizeData, &'static str> {
     let size_data = size_marker_inner(reader).ok_or("failed to read SIZ marker")?;
 
     if size_data.tile_width == 0
@@ -515,7 +515,7 @@ fn size_marker(reader: &mut BitReader) -> Result<SizeData, &'static str> {
     Ok(size_data)
 }
 
-fn size_marker_inner(reader: &mut BitReader) -> Option<SizeData> {
+fn size_marker_inner(reader: &mut BitReader<'_>) -> Option<SizeData> {
     // Length.
     let _ = reader.read_u16()?;
     // Decoder capabilities.
@@ -596,7 +596,7 @@ fn size_marker_inner(reader: &mut BitReader) -> Option<SizeData> {
 }
 
 fn coding_style_parameters(
-    reader: &mut BitReader,
+    reader: &mut BitReader<'_>,
     coding_style: &CodingStyleFlags,
 ) -> Option<CodingStyleParameters> {
     let num_decomposition_levels = (reader.read_byte()? as u16).min(32);
@@ -635,12 +635,12 @@ fn coding_style_parameters(
 }
 
 /// COM Marker (A.9.2).
-fn com_marker(reader: &mut BitReader) -> Option<()> {
+fn com_marker(reader: &mut BitReader<'_>) -> Option<()> {
     skip_marker_segment(reader)
 }
 
 /// TLM marker (A.7.1).
-fn tlm_marker(reader: &mut BitReader) -> Option<()> {
+fn tlm_marker(reader: &mut BitReader<'_>) -> Option<()> {
     skip_marker_segment(reader)
 }
 
@@ -669,11 +669,11 @@ fn ppm_marker<'a>(reader: &mut BitReader<'a>) -> Option<PpmMarkerData<'a>> {
 }
 
 /// RGN marker (A.6.3).
-fn rgn_marker(reader: &mut BitReader) -> Option<()> {
+fn rgn_marker(reader: &mut BitReader<'_>) -> Option<()> {
     skip_marker_segment(reader)
 }
 
-pub(crate) fn skip_marker_segment(reader: &mut BitReader) -> Option<()> {
+pub(crate) fn skip_marker_segment(reader: &mut BitReader<'_>) -> Option<()> {
     let length = reader.read_u16()?.checked_sub(2)?;
     reader.skip_bytes(length as usize)?;
 
@@ -681,7 +681,7 @@ pub(crate) fn skip_marker_segment(reader: &mut BitReader) -> Option<()> {
 }
 
 /// COD marker (A.6.1).
-pub(crate) fn cod_marker(reader: &mut BitReader) -> Option<CodingStyleDefault> {
+pub(crate) fn cod_marker(reader: &mut BitReader<'_>) -> Option<CodingStyleDefault> {
     // Length.
     let _ = reader.read_u16()?;
 
@@ -705,7 +705,10 @@ pub(crate) fn cod_marker(reader: &mut BitReader) -> Option<CodingStyleDefault> {
 }
 
 /// COC marker (A.6.2).
-pub(crate) fn coc_marker(reader: &mut BitReader, csiz: u16) -> Option<(u16, CodingStyleComponent)> {
+pub(crate) fn coc_marker(
+    reader: &mut BitReader<'_>,
+    csiz: u16,
+) -> Option<(u16, CodingStyleComponent)> {
     // Length.
     let _ = reader.read_u16()?;
 
@@ -727,7 +730,7 @@ pub(crate) fn coc_marker(reader: &mut BitReader, csiz: u16) -> Option<(u16, Codi
 }
 
 /// QCD marker (A.6.4).
-pub(crate) fn qcd_marker(reader: &mut BitReader) -> Option<QuantizationInfo> {
+pub(crate) fn qcd_marker(reader: &mut BitReader<'_>) -> Option<QuantizationInfo> {
     // Length.
     let length = reader.read_u16()?;
 
@@ -744,7 +747,7 @@ pub(crate) fn qcd_marker(reader: &mut BitReader) -> Option<QuantizationInfo> {
 }
 
 /// QCC marker (A.6.5).
-pub(crate) fn qcc_marker(reader: &mut BitReader, csiz: u16) -> Option<(u16, QuantizationInfo)> {
+pub(crate) fn qcc_marker(reader: &mut BitReader<'_>, csiz: u16) -> Option<(u16, QuantizationInfo)> {
     let length = reader.read_u16()?;
 
     let component_index = if csiz < 257 {
@@ -770,7 +773,7 @@ pub(crate) fn qcc_marker(reader: &mut BitReader, csiz: u16) -> Option<(u16, Quan
 }
 
 fn quantization_parameters(
-    reader: &mut BitReader,
+    reader: &mut BitReader<'_>,
     quantization_style: QuantizationStyle,
     remaining_bytes: usize,
 ) -> Option<QuantizationInfo> {
@@ -816,7 +819,10 @@ fn quantization_parameters(
     })
 }
 
-#[allow(unused)]
+#[allow(
+    unused,
+    reason = "Not all marker codes are used in every decoding path yet"
+)]
 /// Marker codes (Table A.2).
 pub(crate) mod markers {
     /// Start of codestream - 'SOC'.

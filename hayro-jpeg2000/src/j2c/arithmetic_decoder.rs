@@ -40,7 +40,7 @@ impl<'a> ArithmeticDecoder<'a> {
 
     /// The INITDEC procedure from C.3.5.
     ///
-    /// We use the version from Annex G in https://www.itu.int/rec/T-REC-T.88-201808-I.
+    /// We use the version from Annex G in <https://www.itu.int/rec/T-REC-T.88-201808-I>.
     fn initialize(&mut self) {
         self.c = ((self.current_byte() as u32) ^ 0xff) << 16;
         self.read_byte();
@@ -52,7 +52,7 @@ impl<'a> ArithmeticDecoder<'a> {
 
     /// The BYTEIN procedure from C.3.4.
     ///
-    /// We use the version from Annex G from https://www.itu.int/rec/T-REC-T.88-201808-I.
+    /// We use the version from Annex G from <https://www.itu.int/rec/T-REC-T.88-201808-I>.
     #[inline(always)]
     fn read_byte(&mut self) {
         if self.current_byte() == 0xff {
@@ -90,7 +90,7 @@ impl<'a> ArithmeticDecoder<'a> {
         }
     }
 
-    /// The LPS_EXCHANGE procedure from C.3.2.
+    /// The `LPS_EXCHANGE` procedure from C.3.2.
     #[inline(always)]
     fn exchange_lps(&mut self, context: &mut ArithmeticDecoderContext, qe_entry: &QeData) -> u32 {
         let d;
@@ -115,7 +115,7 @@ impl<'a> ArithmeticDecoder<'a> {
 
     /// The DECODE procedure from C.3.2.
     ///
-    /// We use the version from Annex G from https://www.itu.int/rec/T-REC-T.88-201808-I.
+    /// We use the version from Annex G from <https://www.itu.int/rec/T-REC-T.88-201808-I>.
     #[inline(always)]
     fn decode(&mut self, context: &mut ArithmeticDecoderContext) -> u32 {
         let qe_entry = &QE_TABLE[context.index as usize];
@@ -141,7 +141,7 @@ impl<'a> ArithmeticDecoder<'a> {
         d
     }
 
-    /// The MPS_EXCHANGE procedure from C.3.2.
+    /// The `MPS_EXCHANGE` procedure from C.3.2.
     #[inline(always)]
     fn exchange_mps(&mut self, context: &mut ArithmeticDecoderContext, qe_entry: &QeData) -> u32 {
         let d;

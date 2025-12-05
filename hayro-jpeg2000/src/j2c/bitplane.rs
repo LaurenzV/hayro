@@ -24,8 +24,8 @@ pub(crate) fn decode(
     sub_band_type: SubBandType,
     total_bitplanes: u8,
     style: &CodeBlockStyle,
-    tile_ctx: &mut TileDecodeContext,
-    storage: &DecompositionStorage,
+    tile_ctx: &mut TileDecodeContext<'_>,
+    storage: &DecompositionStorage<'_>,
     strict: bool,
 ) -> Result<(), &'static str> {
     tile_ctx.bit_plane_decode_context.reset(
@@ -50,7 +50,7 @@ pub(crate) fn decode(
 
 fn decode_inner(
     code_block: &CodeBlock,
-    storage: &DecompositionStorage,
+    storage: &DecompositionStorage<'_>,
     ctx: &mut BitPlaneDecodeContext,
     bp_buffers: &mut BitPlaneDecodeBuffers,
 ) -> Option<()> {
@@ -235,7 +235,7 @@ impl CoefficientState {
     fn set_bit(&mut self, shift: u8, value: u8) {
         debug_assert!(value < 2);
 
-        self.0 &= !(1u8 << shift);
+        self.0 &= !(1_u8 << shift);
         self.0 |= value << shift;
     }
 
@@ -954,49 +954,49 @@ struct Position {
 }
 
 impl Position {
-    fn new(x: u32, y: u32) -> Position {
+    fn new(x: u32, y: u32) -> Self {
         Self {
             index_x: x + COEFFICIENTS_PADDING,
             index_y: y + COEFFICIENTS_PADDING,
         }
     }
 
-    fn new_index(x: u32, y: u32) -> Position {
+    fn new_index(x: u32, y: u32) -> Self {
         Self {
             index_x: x,
             index_y: y,
         }
     }
 
-    fn left(&self) -> Position {
+    fn left(&self) -> Self {
         Self::new_index(self.index_x - 1, self.index_y)
     }
 
-    fn right(&self) -> Position {
+    fn right(&self) -> Self {
         Self::new_index(self.index_x + 1, self.index_y)
     }
 
-    fn top(&self) -> Position {
+    fn top(&self) -> Self {
         Self::new_index(self.index_x, self.index_y - 1)
     }
 
-    fn bottom(&self) -> Position {
+    fn bottom(&self) -> Self {
         Self::new_index(self.index_x, self.index_y + 1)
     }
 
-    fn top_left(&self) -> Position {
+    fn top_left(&self) -> Self {
         Self::new_index(self.index_x - 1, self.index_y - 1)
     }
 
-    fn top_right(&self) -> Position {
+    fn top_right(&self) -> Self {
         Self::new_index(self.index_x + 1, self.index_y - 1)
     }
 
-    fn bottom_left(&self) -> Position {
+    fn bottom_left(&self) -> Self {
         Self::new_index(self.index_x - 1, self.index_y + 1)
     }
 
-    fn bottom_right(&self) -> Position {
+    fn bottom_right(&self) -> Self {
         Self::new_index(self.index_x + 1, self.index_y + 1)
     }
 
