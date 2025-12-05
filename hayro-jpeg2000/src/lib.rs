@@ -17,18 +17,16 @@ color space, which can then be processed further according to your needs.
 ```rust,no_run
 use hayro_jpeg2000::{decode, DecodeSettings};
 
-fn main() {
-    let data = std::fs::read("image.jp2").expect("read JP2 file");
-    let bitmap = decode(&data, &DecodeSettings::default()).expect("decode image");
+let data = std::fs::read("image.jp2").unwrap();
+let bitmap = decode(&data, &DecodeSettings::default()).unwrap();
 
-    println!(
-        "decoded {}x{} image in {:?} with alpha={}",
-        bitmap.width,
-        bitmap.height,
-        bitmap.color_space,
-        bitmap.has_alpha,
-    );
-}
+println!(
+    "decoded {}x{} image in {:?} with alpha={}",
+    bitmap.width,
+    bitmap.height,
+    bitmap.color_space,
+    bitmap.has_alpha,
+);
 ```
 
 If you want to see a more comprehensive example, please take a look
