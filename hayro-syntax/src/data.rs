@@ -33,7 +33,7 @@ impl Debug for Data {
 
 impl Data {
     /// Create a new `Data` structure.
-    pub fn new(data: PdfData) -> Self {
+    pub(crate) fn new(data: PdfData) -> Self {
         Self {
             data,
             decoded: SegmentList::new(),
@@ -47,7 +47,7 @@ impl Data {
     }
 
     /// Get access to the data of a decoded object stream.
-    pub(crate) fn get_with(&self, id: ObjectIdentifier, ctx: &ReaderContext) -> Option<&[u8]> {
+    pub(crate) fn get_with(&self, id: ObjectIdentifier, ctx: &ReaderContext<'_>) -> Option<&[u8]> {
         if let Some(&idx) = self.map.lock().unwrap().get(&id) {
             self.decoded.get(idx)?.as_deref()
         } else {
@@ -60,7 +60,7 @@ impl Data {
             };
             self.decoded
                 .get_or_init(idx, || {
-                    let stream = ctx.xref.get_with::<Stream>(id, ctx)?;
+                    let stream = ctx.xref.get_with::<Stream<'_>>(id, ctx)?;
                     stream.decoded().ok()
                 })
                 .as_deref()

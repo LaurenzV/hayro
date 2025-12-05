@@ -19,7 +19,7 @@ impl<T> OptionLog for Option<T> {
 const SCALAR_NEARLY_ZERO: f32 = 1.0 / (1 << 12) as f32;
 
 /// A number of useful methods for f32 numbers.
-pub trait FloatExt: Sized + Sub<f32, Output = f32> + Copy {
+pub(crate) trait FloatExt: Sized + Sub<f32, Output = f32> + Copy {
     /// Whether the number is approximately 0.
     fn is_nearly_zero(&self) -> bool {
         self.is_nearly_zero_within_tolerance(SCALAR_NEARLY_ZERO)
@@ -51,25 +51,25 @@ impl FloatExt for f32 {
 pub(crate) struct SegmentList<T, const C: usize>([OnceLock<Box<[OnceLock<T>]>>; C]);
 
 impl<T, const C: usize> SegmentList<T, C> {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self(std::array::from_fn(|_| OnceLock::new()))
     }
 
-    pub fn get(&self, i: usize) -> Option<&T> {
+    pub(crate) fn get(&self, i: usize) -> Option<&T> {
         let (s, k) = self.locate(i);
         let segment = self.0[s as usize].get()?;
         segment.get(k)?.get()
     }
 
     #[track_caller]
-    pub fn get_or_init(&self, i: usize, f: impl FnOnce() -> T) -> &T {
+    pub(crate) fn get_or_init(&self, i: usize, f: impl FnOnce() -> T) -> &T {
         let (s, k) = self.locate(i);
         let segment = self
             .0
             .get(s as usize)
             .expect("segment list is out of capacity")
             .get_or_init(|| {
-                (0..2usize.pow(s))
+                (0..2_usize.pow(s))
                     .map(|_| OnceLock::new())
                     .collect::<Vec<_>>()
                     .into_boxed_slice()

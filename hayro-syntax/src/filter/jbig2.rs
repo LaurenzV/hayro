@@ -27,8 +27,8 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::LazyLock;
 
-pub(crate) fn decode(data: &[u8], params: Dict) -> Option<Vec<u8>> {
-    let globals = params.get::<Stream>(JBIG2_GLOBALS);
+pub(crate) fn decode(data: &[u8], params: Dict<'_>) -> Option<Vec<u8>> {
+    let globals = params.get::<Stream<'_>>(JBIG2_GLOBALS);
 
     let mut chunks = Vec::new();
 
@@ -895,7 +895,7 @@ fn decode_bitmap_template0(
     const OLD_PIXEL_MASK: u32 = 0x7bf7; // 01111 0111111 0111
 
     for i in 0..height {
-        let row = Rc::new(RefCell::new(vec![0u8; width]));
+        let row = Rc::new(RefCell::new(vec![0_u8; width]));
         bitmap.push(row.clone());
         let row1 = if i < 1 {
             row.clone()
@@ -1001,10 +1001,10 @@ fn decode_bitmap(
     let mut template_x: Vec<i8> = vec![0; template_length];
     let mut template_y: Vec<i8> = vec![0; template_length];
     let mut changing_template_entries = Vec::new();
-    let mut reuse_mask = 0u32;
-    let mut min_x = 0i32;
-    let mut max_x = 0i32;
-    let mut min_y = 0i32;
+    let mut reuse_mask = 0_u32;
+    let mut min_x = 0_i32;
+    let mut max_x = 0_i32;
+    let mut min_y = 0_i32;
 
     for k in 0..template_length {
         template_x[k] = template[k].x as i8;
@@ -1039,7 +1039,7 @@ fn decode_bitmap(
         .collect();
     let changing_template_bit: Vec<u16> = changing_template_entries
         .iter()
-        .map(|&k| 1u16 << (template_length - 1 - k))
+        .map(|&k| 1_u16 << (template_length - 1 - k))
         .collect();
 
     // Get the safe bounding box edges from the width, height, minX, maxX, minY
@@ -1049,13 +1049,13 @@ fn decode_bitmap(
 
     let pseudo_pixel_context = REUSED_CONTEXTS[template_index];
     let mut bitmap = Vec::with_capacity(height);
-    let mut row = Rc::new(RefCell::new(vec![0u8; width]));
+    let mut row = Rc::new(RefCell::new(vec![0_u8; width]));
 
     let decoder = &mut decoding_context.decoder;
     let contexts = decoding_context.context_cache.get_contexts("GB");
 
-    let mut ltp = 0u8;
-    let mut context_label = 0u32;
+    let mut ltp = 0_u8;
+    let mut context_label = 0_u32;
 
     for i in 0..height {
         if prediction {
@@ -1137,8 +1137,8 @@ fn decode_refinement(
     }
     let coding_template_length = coding_template.len();
 
-    let mut coding_template_x = vec![0i32; coding_template_length];
-    let mut coding_template_y = vec![0i32; coding_template_length];
+    let mut coding_template_x = vec![0_i32; coding_template_length];
+    let mut coding_template_y = vec![0_i32; coding_template_length];
     for k in 0..coding_template_length {
         coding_template_x[k] = coding_template[k][0];
         coding_template_y[k] = coding_template[k][1];
@@ -1151,8 +1151,8 @@ fn decode_refinement(
     }
     let reference_template_length = reference_template.len();
 
-    let mut reference_template_x = vec![0i32; reference_template_length];
-    let mut reference_template_y = vec![0i32; reference_template_length];
+    let mut reference_template_x = vec![0_i32; reference_template_length];
+    let mut reference_template_y = vec![0_i32; reference_template_length];
     for k in 0..reference_template_length {
         reference_template_x[k] = reference_template[k][0];
         reference_template_y[k] = reference_template[k][1];
@@ -1167,7 +1167,7 @@ fn decode_refinement(
     let decoder = &mut decoding_context.decoder;
     let contexts = decoding_context.context_cache.get_contexts("GR");
 
-    let mut ltp = 0u8;
+    let mut ltp = 0_u8;
 
     for i in 0..height {
         if prediction {
@@ -1178,11 +1178,11 @@ fn decode_refinement(
             }
         }
 
-        let row = Rc::new(RefCell::new(vec![0u8; width]));
+        let row = Rc::new(RefCell::new(vec![0_u8; width]));
         bitmap.push(row.clone());
 
         for j in 0..width {
-            let mut context_label = 0u32;
+            let mut context_label = 0_u32;
 
             for k in 0..coding_template_length {
                 let i0 = i as i32 + coding_template_y[k];
@@ -1230,7 +1230,7 @@ fn decode_symbol_dictionary(
     refinement_template_index: usize,
     refinement_at: &[TemplatePixel],
     decoding_context: &mut DecodingContext,
-    huffman_input: Option<&Reader>,
+    huffman_input: Option<&Reader<'_>>,
 ) -> Result<Vec<Bitmap>, Jbig2Error> {
     if huffman && refinement {
         return Err(Jbig2Error::new(
@@ -1239,7 +1239,7 @@ fn decode_symbol_dictionary(
     }
 
     let mut new_symbols = Vec::new();
-    let mut current_height = 0i32;
+    let mut current_height = 0_i32;
     let mut symbol_code_length = log2(symbols.len() + number_of_new_symbols);
 
     let table_b1 = if huffman {
@@ -1273,8 +1273,8 @@ fn decode_symbol_dictionary(
         };
         current_height += delta_height;
 
-        let mut current_width = 0i32;
-        let mut total_width = 0i32;
+        let mut current_width = 0_i32;
+        let mut total_width = 0_i32;
         let first_symbol = if huffman { symbol_widths.len() } else { 0 };
 
         loop {
@@ -1501,7 +1501,7 @@ fn decode_text_region(
     refinement_at: &[TemplatePixel],
     decoding_context: &mut DecodingContext,
     log_strip_size: usize,
-    huffman_input: Option<&Reader>,
+    huffman_input: Option<&Reader<'_>>,
 ) -> Result<Bitmap, Jbig2Error> {
     if huffman && refinement {
         return Err(Jbig2Error::new("refinement with Huffman is not supported"));
@@ -1510,7 +1510,7 @@ fn decode_text_region(
     // Prepare bitmap
     let mut bitmap = Vec::new();
     for _ in 0..height {
-        let mut row = vec![0u8; width];
+        let mut row = vec![0_u8; width];
         if default_pixel_value != 0 {
             row.fill(default_pixel_value);
         }
@@ -1529,7 +1529,7 @@ fn decode_text_region(
             .ok_or_else(|| Jbig2Error::new("Failed to decode initial stripT"))?
     };
 
-    let mut first_s = 0i32;
+    let mut first_s = 0_i32;
     let mut i = 0;
 
     while i < number_of_symbol_instances {
@@ -1840,7 +1840,7 @@ fn decode_halftone_region(
     // Prepare bitmap
     let mut region_bitmap: Vec<Vec<u8>> = Vec::with_capacity(region_height);
     for _ in 0..region_height {
-        let mut row = vec![0u8; region_width];
+        let mut row = vec![0_u8; region_width];
         if default_pixel_value != 0 {
             row.fill(default_pixel_value);
         }
@@ -1911,8 +1911,8 @@ fn decode_halftone_region(
     // 6.6.5.2 Rendering the patterns
     for mg in 0..grid_height {
         for ng in 0..grid_width {
-            let mut bit = 0u8;
-            let mut pattern_index = 0usize;
+            let mut bit = 0_u8;
+            let mut pattern_index = 0_usize;
 
             // Gray decoding - extract pattern index from bit planes
             for j in (0..bits_per_value).rev() {
@@ -2062,7 +2062,7 @@ fn read_segment_header(data: &[u8], start: usize) -> Result<SegmentHeader, Jbig2
 
             // Searching for the segment end
             let search_pattern_length = 6;
-            let mut search_pattern = vec![0u8; search_pattern_length];
+            let mut search_pattern = vec![0_u8; search_pattern_length];
             if !generic_region_mmr {
                 search_pattern[0] = 0xff;
                 search_pattern[1] = 0xac;
@@ -2442,7 +2442,7 @@ impl<'a> Reader<'a> {
     }
 
     fn read_bits(&self, num_bits: usize) -> Result<u32, Jbig2Error> {
-        let mut result = 0u32;
+        let mut result = 0_u32;
         for i in (0..num_bits).rev() {
             result |= (self.read_bit()? as u32) << i;
         }
@@ -2569,11 +2569,11 @@ impl HuffmanTreeNode {
         let bit = ((line.prefix_code >> shift) & 1) as usize;
         if shift <= 0 {
             // Create a leaf node
-            self.children[bit] = Some(Box::new(HuffmanTreeNode::new_leaf(line)));
+            self.children[bit] = Some(Box::new(Self::new_leaf(line)));
         } else {
             // Create an intermediate node and continue recursively
             if self.children[bit].is_none() {
-                self.children[bit] = Some(Box::new(HuffmanTreeNode::new_node()));
+                self.children[bit] = Some(Box::new(Self::new_node()));
             }
             self.children[bit]
                 .as_mut()
@@ -2582,7 +2582,7 @@ impl HuffmanTreeNode {
         }
     }
 
-    fn decode_node(&self, reader: &Reader) -> Result<Option<i32>, Jbig2Error> {
+    fn decode_node(&self, reader: &Reader<'_>) -> Result<Option<i32>, Jbig2Error> {
         if self.is_leaf {
             if self.is_oob {
                 return Ok(None);
@@ -2653,7 +2653,7 @@ impl HuffmanTable {
         Self { root_node }
     }
 
-    fn decode(&self, reader: &Reader) -> Result<Option<i32>, Jbig2Error> {
+    fn decode(&self, reader: &Reader<'_>) -> Result<Option<i32>, Jbig2Error> {
         self.root_node.decode_node(reader)
     }
 
@@ -2667,18 +2667,18 @@ impl HuffmanTable {
 
     fn assign_prefix_codes(lines: &mut [HuffmanLine]) {
         // Annex B.3 Assigning the prefix codes
-        let mut prefix_length_max = 0usize;
+        let mut prefix_length_max = 0_usize;
         for line in lines.iter() {
             prefix_length_max = prefix_length_max.max(line.prefix_length);
         }
 
-        let mut histogram = vec![0u32; prefix_length_max + 1];
+        let mut histogram = vec![0_u32; prefix_length_max + 1];
         for line in lines.iter() {
             histogram[line.prefix_length] += 1;
         }
 
-        let mut current_length = 1usize;
-        let mut first_code = 0u32;
+        let mut current_length = 1_usize;
+        let mut first_code = 0_u32;
         histogram[0] = 0;
 
         while current_length <= prefix_length_max {
@@ -2882,7 +2882,7 @@ impl SimpleSegmentVisitor {
     fn on_page_information(&mut self, info: PageInfo) {
         self.current_page_info = Some(info.clone());
         let row_size = (info.width + 7) >> 3;
-        let mut buffer = vec![0u8; (row_size * info.height) as usize];
+        let mut buffer = vec![0_u8; (row_size * info.height) as usize];
 
         // Fill with 0xFF if default pixel value is set
         if info.default_pixel_value != 0 {
@@ -2915,7 +2915,7 @@ impl SimpleSegmentVisitor {
             page_info.combination_operator
         };
 
-        let mask0 = 128u8 >> (region_info.x & 7);
+        let mask0 = 128_u8 >> (region_info.x & 7);
         let mut offset0 = (region_info.y * row_size as u32 + (region_info.x >> 3)) as usize;
 
         match combination_operator {
@@ -3041,7 +3041,7 @@ impl SimpleSegmentVisitor {
         )?;
 
         if let Some(entry) = symbols.get_mut(&current_segment) {
-            entry.extend(new_symbols)
+            entry.extend(new_symbols);
         } else {
             symbols.insert(current_segment, new_symbols);
         }
@@ -3247,7 +3247,7 @@ impl SimpleSegmentVisitor {
         region: &TextRegion,
         referred_segments: &[u32],
         number_of_symbols: usize,
-        huffman_reader: Option<&Reader>,
+        huffman_reader: Option<&Reader<'_>>,
     ) -> Result<TextRegionHuffmanTables, Jbig2Error> {
         // 7.4.3.1.6 Text region segment Huffman table selection
         let mut custom_index = 0;
@@ -3397,7 +3397,7 @@ struct HalftoneRegion {
 }
 
 fn decode_mmr_bitmap(
-    reader: &Reader,
+    reader: &Reader<'_>,
     width: usize,
     height: usize,
     end_of_block: bool,
@@ -3421,8 +3421,8 @@ fn decode_mmr_bitmap(
     for _ in 0..height {
         let row = Rc::new(RefCell::new(vec![]));
         bitmap.push(row.clone());
-        let mut shift = -1i32;
-        let mut current_byte = 0u8;
+        let mut shift = -1_i32;
+        let mut current_byte = 0_u8;
 
         for _ in 0..width {
             if shift < 0 {
@@ -3459,7 +3459,7 @@ fn decode_mmr_bitmap(
 }
 
 fn read_uncompressed_bitmap(
-    reader: &Reader,
+    reader: &Reader<'_>,
     width: usize,
     height: usize,
 ) -> Result<Bitmap, Jbig2Error> {
@@ -3596,7 +3596,7 @@ fn process_segment(
             let huffman = (text_region_segment_flags & 1) != 0;
             let refinement = (text_region_segment_flags & 2) != 0;
             let log_strip_size = ((text_region_segment_flags >> 2) & 3) as usize;
-            let strip_size = 1u32 << log_strip_size;
+            let strip_size = 1_u32 << log_strip_size;
             let reference_corner = ((text_region_segment_flags >> 4) & 3) as u8;
             let transposed = (text_region_segment_flags & 64) != 0;
             let combination_operator = ((text_region_segment_flags >> 7) & 3) as u8;
@@ -3612,13 +3612,13 @@ fn process_segment(
             let refinement_template = ((text_region_segment_flags >> 15) & 1) as usize;
 
             // Extract Huffman selectors from textRegionHuffmanFlags if Huffman is used
-            let mut huffman_fs = 0u8;
-            let mut huffman_ds = 0u8;
-            let mut huffman_dt = 0u8;
-            let mut huffman_refinement_dw = 0u8;
-            let mut huffman_refinement_dh = 0u8;
-            let mut huffman_refinement_dx = 0u8;
-            let mut huffman_refinement_dy = 0u8;
+            let mut huffman_fs = 0_u8;
+            let mut huffman_ds = 0_u8;
+            let mut huffman_dt = 0_u8;
+            let mut huffman_refinement_dw = 0_u8;
+            let mut huffman_refinement_dh = 0_u8;
+            let mut huffman_refinement_dx = 0_u8;
+            let mut huffman_refinement_dy = 0_u8;
             let mut huffman_refinement_size_selector = false;
 
             if huffman {
@@ -3889,7 +3889,7 @@ fn process_segments(
 }
 
 fn decode_symbol_id_huffman_table(
-    reader: &Reader,
+    reader: &Reader<'_>,
     number_of_symbols: usize,
 ) -> Result<HuffmanTable, Jbig2Error> {
     // 7.4.3.1.7 Symbol ID Huffman table decoding

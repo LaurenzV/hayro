@@ -447,7 +447,7 @@ pub enum TypedInstruction<'a> {
 }
 
 impl<'a> TypedInstruction<'a> {
-    pub(crate) fn dispatch(instruction: &Instruction<'a>) -> Option<TypedInstruction<'a>> {
+    pub(crate) fn dispatch(instruction: &Instruction<'a>) -> Option<Self> {
         let op_name = instruction.operator.as_ref();
         Some(match op_name {
             b"BX" => BeginCompatibility::from_stack(&instruction.operands)?.into(),

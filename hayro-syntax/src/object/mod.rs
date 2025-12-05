@@ -44,7 +44,7 @@ pub enum Object<'a> {
     /// A number object.
     Number(Number),
     /// A string object.
-    String(string::String<'a>),
+    String(String<'a>),
     /// A name object.
     Name(Name<'a>),
     /// A dict object.
@@ -92,7 +92,7 @@ impl<'a> Object<'a> {
 
     /// Try casting the object to a string.
     #[inline(always)]
-    pub fn into_string(self) -> Option<string::String<'a>> {
+    pub fn into_string(self) -> Option<String<'a>> {
         self.cast()
     }
 
@@ -150,9 +150,9 @@ impl Skippable for Object<'_> {
             b'<' => match r.peek_bytes(2)? {
                 // A stream can never appear in a dict/array, so it should never be skipped.
                 b"<<" => Dict::skip(r, is_content_stream),
-                _ => string::String::skip(r, is_content_stream),
+                _ => String::skip(r, is_content_stream),
             },
-            b'(' => string::String::skip(r, is_content_stream),
+            b'(' => String::skip(r, is_content_stream),
             b'.' | b'+' | b'-' | b'0'..=b'9' => Number::skip(r, is_content_stream),
             b'[' => Array::skip(r, is_content_stream),
             // See test case operator-in-TJ-array-0: Be lenient and skip content operators in
@@ -182,9 +182,9 @@ impl<'a> Readable<'a> for Object<'a> {
                         Object::Dict(dict)
                     }
                 }
-                _ => Self::String(string::String::read(r, ctx)?),
+                _ => Self::String(String::read(r, ctx)?),
             },
-            b'(' => Self::String(string::String::read(r, ctx)?),
+            b'(' => Self::String(String::read(r, ctx)?),
             b'.' | b'+' | b'-' | b'0'..=b'9' => Self::Number(Number::read(r, ctx)?),
             b'[' => Self::Array(Array::read(r, ctx)?),
             // See the comment in `skip`.
@@ -225,14 +225,14 @@ impl ObjectIdentifier {
 }
 
 impl Readable<'_> for ObjectIdentifier {
-    fn read(r: &mut Reader<'_>, _: &ReaderContext) -> Option<Self> {
+    fn read(r: &mut Reader<'_>, _: &ReaderContext<'_>) -> Option<Self> {
         let obj_num = r.read_without_context::<i32>()?;
         r.skip_white_spaces_and_comments();
         let gen_num = r.read_without_context::<i32>()?;
         r.skip_white_spaces_and_comments();
         r.forward_tag(b"obj")?;
 
-        Some(ObjectIdentifier { obj_num, gen_num })
+        Some(Self { obj_num, gen_num })
     }
 }
 
@@ -253,10 +253,10 @@ impl Skippable for ObjectIdentifier {
 /// If the object is a stream, it will return its dictionary as well as the stream
 /// itself.
 pub fn dict_or_stream<'a>(obj: &Object<'a>) -> Option<(Dict<'a>, Option<Stream<'a>>)> {
-    if let Some(stream) = obj.clone().cast::<Stream>() {
+    if let Some(stream) = obj.clone().cast::<Stream<'a>>() {
         Some((stream.dict().clone(), Some(stream)))
     } else {
-        obj.clone().cast::<Dict>().map(|dict| (dict, None))
+        obj.clone().cast::<Dict<'a>>().map(|dict| (dict, None))
     }
 }
 

@@ -60,7 +60,7 @@ pub(crate) fn calculate(data: &[u8]) -> [u8; 32] {
 
     let bit_len = data.len() as u64 * 8;
     let padded_len = (data.len() + 9).div_ceil(64) * 64;
-    let mut padded = vec![0u8; padded_len];
+    let mut padded = vec![0_u8; padded_len];
 
     padded[..data.len()].copy_from_slice(data);
     padded[data.len()] = 0x80;
@@ -69,7 +69,7 @@ pub(crate) fn calculate(data: &[u8]) -> [u8; 32] {
     padded[padded_len - 8..].copy_from_slice(&len_bytes);
 
     for chunk in padded.chunks_exact(64) {
-        let mut w = [0u32; 64];
+        let mut w = [0_u32; 64];
 
         for (i, word_bytes) in chunk.chunks_exact(4).enumerate() {
             w[i] = u32::from_be_bytes([word_bytes[0], word_bytes[1], word_bytes[2], word_bytes[3]]);
@@ -112,7 +112,7 @@ pub(crate) fn calculate(data: &[u8]) -> [u8; 32] {
         h[7] = h[7].wrapping_add(h_var);
     }
 
-    let mut result = [0u8; 32];
+    let mut result = [0_u8; 32];
     for (i, &hash_word) in h.iter().enumerate() {
         let bytes = hash_word.to_be_bytes();
         result[i * 4..(i + 1) * 4].copy_from_slice(&bytes);

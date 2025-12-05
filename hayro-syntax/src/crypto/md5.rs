@@ -18,7 +18,12 @@ const CONSTANTS: [u32; 64] = [
 ];
 
 pub(crate) fn calculate(data: &[u8]) -> [u8; 16] {
-    let mut state = [0x67452301u32, 0xefcdab89u32, 0x98badcfeu32, 0x10325476u32];
+    let mut state = [
+        0x67452301_u32,
+        0xefcdab89_u32,
+        0x98badcfe_u32,
+        0x10325476_u32,
+    ];
 
     let original_len = data.len();
     let mut message = data.to_vec();
@@ -77,7 +82,7 @@ pub(crate) fn calculate(data: &[u8]) -> [u8; 16] {
         }
     }
 
-    let mut result = [0u8; 16];
+    let mut result = [0_u8; 16];
     for (i, &word) in state.iter().enumerate() {
         result[i * 4..(i + 1) * 4].copy_from_slice(&word.to_le_bytes());
     }

@@ -24,7 +24,7 @@ pub struct Name<'a>(Cow<'a>);
 
 impl<'a> Hash for Name<'a> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.deref().hash(state)
+        self.deref().hash(state);
     }
 }
 
@@ -49,8 +49,8 @@ impl Ord for Name<'_> {
     }
 }
 
-impl<'a> AsRef<Name<'a>> for Name<'a> {
-    fn as_ref(&self) -> &Name<'a> {
+impl<'a> AsRef<Self> for Name<'a> {
+    fn as_ref(&self) -> &Self {
         self
     }
 }
@@ -68,7 +68,7 @@ impl Deref for Name<'_> {
 
 impl<'a> Name<'a> {
     /// Create a new name from a sequence of bytes.
-    pub fn new(data: &'a [u8]) -> Name<'a> {
+    pub fn new(data: &'a [u8]) -> Self {
         fn convert_hex(c: u8) -> u8 {
             match c {
                 b'A'..=b'F' => c - b'A' + 10,
@@ -102,7 +102,7 @@ impl<'a> Name<'a> {
     }
 
     /// Create a new name from an unescaped bytes string.
-    pub(crate) const fn from_unescaped(data: &'a [u8]) -> Name<'a> {
+    pub(crate) const fn from_unescaped(data: &'a [u8]) -> Self {
         Self(Cow::Borrowed(data))
     }
 
@@ -121,7 +121,7 @@ impl Skippable for Name<'_> {
 }
 
 impl<'a> Readable<'a> for Name<'a> {
-    fn read(r: &mut Reader<'a>, _: &ReaderContext) -> Option<Self> {
+    fn read(r: &mut Reader<'a>, _: &ReaderContext<'_>) -> Option<Self> {
         let data = {
             let start = r.offset();
             skip_name_like(r, true)?;
@@ -136,7 +136,7 @@ impl<'a> Readable<'a> for Name<'a> {
 
 // This method is shared by `Name` and the parser for content stream operators (which behave like
 // names, except that they aren't preceded by a solidus.
-pub(crate) fn skip_name_like(r: &mut Reader, solidus: bool) -> Option<()> {
+pub(crate) fn skip_name_like(r: &mut Reader<'_>, solidus: bool) -> Option<()> {
     if solidus {
         r.forward_tag(b"/")?;
     }

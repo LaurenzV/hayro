@@ -10,7 +10,7 @@ pub(crate) mod flate {
     use log::warn;
     use std::io::Read;
 
-    pub(crate) fn decode(data: &[u8], params: Dict) -> Option<Vec<u8>> {
+    pub(crate) fn decode(data: &[u8], params: Dict<'_>) -> Option<Vec<u8>> {
         let decoded = zlib_stream(data)
             .or_else(|| deflate_stream(data))
             .or_else(|| {
@@ -330,7 +330,7 @@ pub(crate) mod flate {
                 let num_code_len_codes = self.get_bits(4)? as usize + 4;
 
                 // Build code length code table
-                let mut code_len_code_lengths = vec![0u8; 19];
+                let mut code_len_code_lengths = vec![0_u8; 19];
                 for i in 0..num_code_len_codes {
                     code_len_code_lengths[CODE_LEN_CODE_MAP[i] as usize] = self.get_bits(3)? as u8;
                 }
@@ -339,7 +339,7 @@ pub(crate) mod flate {
 
                 // Read code lengths
                 let total_codes = num_lit_codes + num_dist_codes;
-                let mut code_lengths = vec![0u8; total_codes];
+                let mut code_lengths = vec![0_u8; total_codes];
                 let mut i = 0;
 
                 while i < total_codes {
@@ -412,14 +412,14 @@ pub(crate) mod flate {
 
             // Build the table
             let size = 1 << max_len;
-            let mut codes = vec![0u32; size];
+            let mut codes = vec![0_u32; size];
 
-            let mut code = 0u32;
+            let mut code = 0_u32;
             for len in 1..=max_len {
                 for (val, &length) in lengths.iter().enumerate() {
                     if length == len {
                         // Bit-reverse the code
-                        let mut code2 = 0u32;
+                        let mut code2 = 0_u32;
                         let mut t = code;
                         for _ in 0..len {
                             code2 = (code2 << 1) | (t & 1);
@@ -550,7 +550,7 @@ pub(crate) mod lzw {
     use log::warn;
 
     /// Decode a LZW-encoded stream.
-    pub(crate) fn decode(data: &[u8], params: Dict) -> Option<Vec<u8>> {
+    pub(crate) fn decode(data: &[u8], params: Dict<'_>) -> Option<Vec<u8>> {
         let params = PredictorParams::from_params(&params);
 
         let decoded = decode_impl(data, params.early_change)?;
@@ -719,7 +719,7 @@ impl Default for PredictorParams {
 }
 
 impl PredictorParams {
-    fn from_params(dict: &Dict) -> Self {
+    fn from_params(dict: &Dict<'_>) -> Self {
         Self {
             predictor: dict.get(PREDICTOR).unwrap_or(1),
             colors: dict.get(COLORS).unwrap_or(1),

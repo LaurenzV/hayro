@@ -12,7 +12,7 @@ pub(crate) fn decode(data: &[u8]) -> Option<Vec<u8>> {
     Some(decoded)
 }
 
-fn decode_inner(reader: &mut Reader, decoded: &mut Vec<u8>) -> Option<()> {
+fn decode_inner(reader: &mut Reader<'_>, decoded: &mut Vec<u8>) -> Option<()> {
     loop {
         let length = reader.read_byte()?;
 
@@ -21,7 +21,7 @@ fn decode_inner(reader: &mut Reader, decoded: &mut Vec<u8>) -> Option<()> {
             0..=127 => decoded.extend(reader.read_bytes(length as usize + 1)?),
             _ => {
                 let length = 257 - length as usize;
-                decoded.extend([reader.read_byte()?].repeat(length))
+                decoded.extend([reader.read_byte()?].repeat(length));
             }
         }
     }

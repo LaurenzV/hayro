@@ -8,7 +8,7 @@ use zune_jpeg::zune_core::options::DecoderOptions;
 
 pub(crate) fn decode(
     data: &[u8],
-    params: Dict,
+    params: Dict<'_>,
     image_params: &ImageDecodeParams,
 ) -> Option<FilterResult> {
     let reader = Cursor::new(data);

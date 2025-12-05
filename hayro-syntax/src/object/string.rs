@@ -340,8 +340,8 @@ impl Skippable for String<'_> {
 impl<'a> Readable<'a> for String<'a> {
     fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
         let inner = match r.peek_byte()? {
-            b'<' => InnerString::Hex(r.read::<HexString>(ctx)?),
-            b'(' => InnerString::Literal(r.read::<LiteralString>(ctx)?),
+            b'<' => InnerString::Hex(r.read::<HexString<'_>>(ctx)?),
+            b'(' => InnerString::Literal(r.read::<LiteralString<'_>>(ctx)?),
             _ => return None,
         };
 

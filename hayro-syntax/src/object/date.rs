@@ -23,12 +23,12 @@ pub struct DateTime {
 }
 
 impl DateTime {
-    pub(crate) fn from_bytes(bytes: &[u8]) -> Option<DateTime> {
+    pub(crate) fn from_bytes(bytes: &[u8]) -> Option<Self> {
         let mut reader = Reader::new(bytes);
 
         reader.forward_tag(b"D:")?;
 
-        let read_num = |reader: &mut Reader, bytes: u8, min: u16, max: u16| -> Option<u16> {
+        let read_num = |reader: &mut Reader<'_>, bytes: u8, min: u16, max: u16| -> Option<u16> {
             if matches!(reader.peek_byte()?, b'-' | b'+' | b'Z') {
                 return None;
             }
@@ -80,7 +80,7 @@ impl DateTime {
             (0, 0)
         };
 
-        Some(DateTime {
+        Some(Self {
             year,
             month,
             day,

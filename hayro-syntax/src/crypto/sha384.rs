@@ -14,7 +14,7 @@ pub(crate) fn calculate(data: &[u8]) -> [u8; 48] {
 
     super::sha512::calculate_with_initial_values(data, &mut h);
 
-    let mut result = [0u8; 48];
+    let mut result = [0_u8; 48];
     for (i, &hash_word) in h.iter().take(6).enumerate() {
         let bytes = hash_word.to_be_bytes();
         result[i * 8..(i + 1) * 8].copy_from_slice(&bytes);

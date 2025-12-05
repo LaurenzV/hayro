@@ -52,7 +52,7 @@ enum DecryptorTag {
 }
 
 impl DecryptorTag {
-    fn from_name(name: &Name) -> Option<Self> {
+    fn from_name(name: &Name<'_>) -> Option<Self> {
         match name.as_str() {
             "None" | "Identity" => Some(Self::None),
             "V2" => Some(Self::Rc4),
@@ -84,9 +84,9 @@ impl Decryptor {
         target: DecryptionTarget,
     ) -> Option<Vec<u8>> {
         match self {
-            Decryptor::None => Some(data.to_vec()),
-            Decryptor::Rc4 { key } => decrypt_rc4(key, data, id),
-            Decryptor::Aes128 { key, dict } | Decryptor::Aes256 { key, dict } => {
+            Self::None => Some(data.to_vec()),
+            Self::Rc4 { key } => decrypt_rc4(key, data, id),
+            Self::Aes128 { key, dict } | Self::Aes256 { key, dict } => {
                 let crypt_dict = match target {
                     DecryptionTarget::String => dict.string_filter,
                     DecryptionTarget::Stream => dict.stream_filter,
@@ -103,8 +103,8 @@ impl Decryptor {
     }
 }
 
-pub(crate) fn get(dict: &Dict, id: &[u8]) -> Result<Decryptor, DecryptionError> {
-    let filter = dict.get::<Name>(FILTER).ok_or(InvalidEncryption)?;
+pub(crate) fn get(dict: &Dict<'_>, id: &[u8]) -> Result<Decryptor, DecryptionError> {
+    let filter = dict.get::<Name<'_>>(FILTER).ok_or(InvalidEncryption)?;
 
     if filter.deref() != b"Standard" {
         return Err(DecryptionError::UnsupportedAlgorithm);
@@ -139,8 +139,8 @@ pub(crate) fn get(dict: &Dict, id: &[u8]) -> Result<Decryptor, DecryptionError> 
 
     let byte_length = length / 8;
 
-    let owner_string = dict.get::<object::String>(O).ok_or(InvalidEncryption)?;
-    let user_string = dict.get::<object::String>(U).ok_or(InvalidEncryption)?;
+    let owner_string = dict.get::<object::String<'_>>(O).ok_or(InvalidEncryption)?;
+    let user_string = dict.get::<object::String<'_>>(U).ok_or(InvalidEncryption)?;
     let permissions = {
         let raw = dict.get::<i64>(P).ok_or(InvalidEncryption)?;
 
@@ -169,7 +169,7 @@ pub(crate) fn get(dict: &Dict, id: &[u8]) -> Result<Decryptor, DecryptionError> 
 
     // See pdf.js issue 19484.
     if encryption_v == 4 && decryption_key.len() < 16 {
-        decryption_key.resize(16, 0)
+        decryption_key.resize(16, 0);
     }
 
     match algorithm {
@@ -248,7 +248,7 @@ fn decrypt_rc_aes(
     // "sAlT", which corresponds to the hexadecimal values 0x73, 0x41, 0x6C, 0x54. (This addition is done
     // for backward compatibility and is not intended to provide additional security.)
     if aes {
-        key.extend(b"sAlT")
+        key.extend(b"sAlT");
     }
 
     // c) Initialise the MD5 hash function and pass the result of step (b) as input
@@ -270,12 +270,12 @@ pub(crate) struct DecryptorData {
 }
 
 impl DecryptorData {
-    fn from_dict(dict: &Dict, default_length: u16) -> Option<Self> {
+    fn from_dict(dict: &Dict<'_>, default_length: u16) -> Option<Self> {
         let mut mappings = HashMap::new();
 
-        if let Some(dict) = dict.get::<Dict>(CF) {
+        if let Some(dict) = dict.get::<Dict<'_>>(CF) {
             for key in dict.keys() {
-                if let Some(dict) = dict.get::<Dict>(key.clone())
+                if let Some(dict) = dict.get::<Dict<'_>>(key.clone())
                     && let Some(crypt_dict) = CryptDictionary::from_dict(&dict, default_length)
                 {
                     mappings.insert(key.as_str().to_string(), crypt_dict);
@@ -284,10 +284,10 @@ impl DecryptorData {
         }
 
         let stm_f = *mappings
-            .get(dict.get::<Name>(STM_F)?.as_str())
+            .get(dict.get::<Name<'_>>(STM_F)?.as_str())
             .unwrap_or(&CryptDictionary::identity(default_length));
         let str_f = *mappings
-            .get(dict.get::<Name>(STR_F)?.as_str())
+            .get(dict.get::<Name<'_>>(STR_F)?.as_str())
             .unwrap_or(&CryptDictionary::identity(default_length));
 
         Some(Self {
@@ -304,8 +304,8 @@ struct CryptDictionary {
 }
 
 impl CryptDictionary {
-    fn from_dict(dict: &Dict, default_length: u16) -> Option<Self> {
-        let cfm = DecryptorTag::from_name(&dict.get::<Name>(CFM)?)?;
+    fn from_dict(dict: &Dict<'_>, default_length: u16) -> Option<Self> {
+        let cfm = DecryptorTag::from_name(&dict.get::<Name<'_>>(CFM)?)?;
         // The standard security handler expresses the Length entry in bytes (e.g., 32 means a
         // length of 256 bits) and public-key security handlers express it as is (e.g., 256 means a
         // length of 256 bits).
@@ -320,13 +320,13 @@ impl CryptDictionary {
             length = 32;
         }
 
-        Some(CryptDictionary {
+        Some(Self {
             cfm,
             _length: length,
         })
     }
 
-    fn identity(default_length: u16) -> CryptDictionary {
+    fn identity(default_length: u16) -> Self {
         Self {
             cfm: DecryptorTag::None,
             _length: default_length,
@@ -432,7 +432,7 @@ fn compute_hash_rev56(
     }
 
     // The first 32 bytes of the final K are the output of the algorithm.
-    let mut result = [0u8; 32];
+    let mut result = [0_u8; 32];
     result.copy_from_slice(&k[..32]);
     Ok(result)
 }
@@ -442,7 +442,7 @@ fn decryption_key_rev1234(
     encrypt_metadata: bool,
     revision: u8,
     byte_length: u16,
-    owner_string: &object::String,
+    owner_string: &object::String<'_>,
     permissions: u32,
     id: &[u8],
 ) -> Result<Vec<u8>, DecryptionError> {
@@ -469,7 +469,7 @@ fn decryption_key_rev1234(
     // f) (Security handlers of revision 4 or greater) If document metadata
     // is not being encrypted, pass 4 bytes with the value 0xFFFFFFFF to the MD5 hash function.
     if !encrypt_metadata && revision >= 4 {
-        md5_input.extend(&[0xff, 0xff, 0xff, 0xff])
+        md5_input.extend(&[0xff, 0xff, 0xff, 0xff]);
     }
 
     // g) Finish the hash.
@@ -494,13 +494,13 @@ fn authenticate_user_password_rev234(
     revision: u8,
     decryption_key: &[u8],
     id: &[u8],
-    user_string: &object::String,
+    user_string: &object::String<'_>,
 ) -> Result<(), DecryptionError> {
     // a) Perform all but the last step of Algorithm 4 (revision 2) or Algorithm 5 (revision 3 + 4).
     let result = match revision {
         2 => user_password_rev2(decryption_key),
         3 | 4 => user_password_rev34(decryption_key, id),
-        _ => return Err(DecryptionError::InvalidEncryption),
+        _ => return Err(InvalidEncryption),
     };
 
     // b) If the result of step (a) is equal to the value of the encryption dictionary's
@@ -573,10 +573,10 @@ fn user_password_rev34(decryption_key: &[u8], id: &[u8]) -> Vec<u8> {
 
 /// Algorithm 2.A: Retrieving the file encryption key from an encrypted document in order to decrypt it (revision 6 and later)
 fn decryption_key_rev56(
-    dict: &Dict,
+    dict: &Dict<'_>,
     revision: u8,
-    owner_string: &object::String,
-    user_string: &object::String,
+    owner_string: &object::String<'_>,
+    user_string: &object::String<'_>,
 ) -> Result<Vec<u8>, DecryptionError> {
     // a) The UTF-8 password string shall be generated from Unicode input by processing the input string with
     // the SASLprep (Internet RFC 4013) profile of stringprep (Internet RFC 3454) using the Normalize and BiDi
@@ -613,15 +613,15 @@ fn decryption_key_rev56(
             compute_hash_rev56(PASSWORD, owner_key_salt, Some(trimmed_us), revision)?;
 
         let oe_string = dict
-            .get::<object::String>(OE)
-            .ok_or(DecryptionError::InvalidEncryption)?;
+            .get::<object::String<'_>>(OE)
+            .ok_or(InvalidEncryption)?;
 
         if oe_string.get().len() != 32 {
-            return Err(DecryptionError::InvalidEncryption);
+            return Err(InvalidEncryption);
         }
 
         let cipher = AES256Cipher::new(&intermediate_owner_key).ok_or(InvalidEncryption)?;
-        let zero_iv = [0u8; 16];
+        let zero_iv = [0_u8; 16];
 
         Ok(cipher.decrypt_cbc(&oe_string.get(), &zero_iv, false))
     } else if compute_hash_rev56(PASSWORD, user_validation_salt, None, revision)? == user_hash {
@@ -631,14 +631,16 @@ fn decryption_key_rev56(
         // initialization vector of zero. The 32-byte result is the file encryption key.
         let intermediate_key = compute_hash_rev56(PASSWORD, user_key_salt, None, revision)?;
 
-        let ue_string = dict.get::<object::String>(UE).ok_or(InvalidEncryption)?;
+        let ue_string = dict
+            .get::<object::String<'_>>(UE)
+            .ok_or(InvalidEncryption)?;
 
         if ue_string.get().len() != 32 {
             return Err(InvalidEncryption);
         }
 
         let cipher = AES256Cipher::new(&intermediate_key).ok_or(InvalidEncryption)?;
-        let zero_iv = [0u8; 16];
+        let zero_iv = [0_u8; 16];
 
         Ok(cipher.decrypt_cbc(&ue_string.get(), &zero_iv, false))
     } else {

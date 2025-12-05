@@ -174,7 +174,7 @@ impl<const KEY_SIZE: usize, const ROUNDS: usize> AESCipher<KEY_SIZE, ROUNDS> {
             return None;
         }
 
-        let mut round_keys = [[0u8; 16]; ROUNDS];
+        let mut round_keys = [[0_u8; 16]; ROUNDS];
 
         match KEY_SIZE {
             16 => Self::expand_key_128(&mut round_keys, key),
@@ -182,14 +182,14 @@ impl<const KEY_SIZE: usize, const ROUNDS: usize> AESCipher<KEY_SIZE, ROUNDS> {
             _ => return None,
         }
 
-        Some(AESCipher { round_keys })
+        Some(Self { round_keys })
     }
 
     fn expand_key_128(round_keys: &mut [[u8; 16]; ROUNDS], key: &[u8]) {
         round_keys[0].copy_from_slice(&key[..16]);
 
         (1..ROUNDS).for_each(|i| {
-            let mut temp = [0u8; 4];
+            let mut temp = [0_u8; 4];
             temp.copy_from_slice(&round_keys[i - 1][12..16]);
 
             temp.rotate_left(1);
@@ -213,7 +213,7 @@ impl<const KEY_SIZE: usize, const ROUNDS: usize> AESCipher<KEY_SIZE, ROUNDS> {
         round_keys[1].copy_from_slice(&key[16..32]);
 
         (2..ROUNDS).for_each(|i| {
-            let mut temp = [0u8; 4];
+            let mut temp = [0_u8; 4];
 
             if i % 2 == 0 {
                 temp.copy_from_slice(&round_keys[i - 1][12..16]);
@@ -284,13 +284,13 @@ impl<const KEY_SIZE: usize, const ROUNDS: usize> AESCipher<KEY_SIZE, ROUNDS> {
         let mut padded_data = data.to_vec();
         let pad_len = 16 - (data.len() % 16);
         if pad_len == 0 {
-            padded_data.extend(vec![16u8; 16]);
+            padded_data.extend(vec![16_u8; 16]);
         } else {
             padded_data.extend(vec![pad_len as u8; pad_len]);
         }
 
         for chunk in padded_data.chunks(16) {
-            let mut block = [0u8; 16];
+            let mut block = [0_u8; 16];
             block.copy_from_slice(chunk);
 
             for i in 0..16 {
@@ -310,12 +310,12 @@ impl<const KEY_SIZE: usize, const ROUNDS: usize> AESCipher<KEY_SIZE, ROUNDS> {
         let mut prev_block = *iv;
 
         for chunk in data.chunks_exact(16) {
-            let mut block = [0u8; 16];
+            let mut block = [0_u8; 16];
             block.copy_from_slice(chunk);
 
             let decrypted = self.decrypt_block(&block);
 
-            let mut plain_block = [0u8; 16];
+            let mut plain_block = [0_u8; 16];
             for i in 0..16 {
                 plain_block[i] = decrypted[i] ^ prev_block[i];
             }
@@ -712,9 +712,9 @@ mod tests {
 
     #[test]
     fn test_invalid_key_lengths() {
-        assert!(AES128Cipher::new(&[0u8; 15]).is_none());
-        assert!(AES128Cipher::new(&[0u8; 17]).is_none());
-        assert!(AES256Cipher::new(&[0u8; 31]).is_none());
-        assert!(AES256Cipher::new(&[0u8; 33]).is_none());
+        assert!(AES128Cipher::new(&[0_u8; 15]).is_none());
+        assert!(AES128Cipher::new(&[0_u8; 17]).is_none());
+        assert!(AES256Cipher::new(&[0_u8; 31]).is_none());
+        assert!(AES256Cipher::new(&[0_u8; 33]).is_none());
     }
 }

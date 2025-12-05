@@ -21,22 +21,22 @@ pub struct Rect {
 
 impl Rect {
     /// The empty rectangle at the origin.
-    pub const ZERO: Rect = Rect::new(0., 0., 0., 0.);
+    pub const ZERO: Self = Self::new(0., 0., 0., 0.);
 
     /// A new rectangle from minimum and maximum coordinates.
     #[inline(always)]
-    pub const fn new(x0: f64, y0: f64, x1: f64, y1: f64) -> Rect {
-        Rect { x0, y0, x1, y1 }
+    pub const fn new(x0: f64, y0: f64, x1: f64, y1: f64) -> Self {
+        Self { x0, y0, x1, y1 }
     }
 
     /// The intersection of two rectangles.
     #[inline]
-    pub fn intersect(&self, other: Rect) -> Rect {
+    pub fn intersect(&self, other: Self) -> Self {
         let x0 = self.x0.max(other.x0);
         let y0 = self.y0.max(other.y0);
         let x1 = self.x1.min(other.x1);
         let y1 = self.y1.min(other.y1);
-        Rect::new(x0, y0, x1.max(x0), y1.max(y0))
+        Self::new(x0, y0, x1.max(x0), y1.max(y0))
     }
 
     /// The width of the rectangle.
@@ -54,12 +54,12 @@ impl Rect {
 
 impl<'a> Readable<'a> for Rect {
     fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
-        let arr = r.read::<Array>(ctx)?;
+        let arr = r.read::<Array<'_>>(ctx)?;
         from_arr(&arr)
     }
 }
 
-fn from_arr(array: &Array) -> Option<Rect> {
+fn from_arr(array: &Array<'_>) -> Option<Rect> {
     let mut iter = array.iter::<f32>();
     let x0 = iter.next()? as f64;
     let y0 = iter.next()? as f64;

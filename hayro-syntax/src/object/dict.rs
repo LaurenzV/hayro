@@ -33,10 +33,10 @@ impl PartialEq for Dict<'_> {
 
 impl<'a> Dict<'a> {
     /// Create a new empty dictionary.
-    pub fn empty() -> Dict<'a> {
+    pub fn empty() -> Self {
         let repr = Repr {
             data: &[],
-            offsets: Default::default(),
+            offsets: HashMap::default(),
             ctx: ReaderContext::new(XRef::dummy(), false),
         };
 
@@ -67,11 +67,8 @@ impl<'a> Dict<'a> {
 
     /// Returns the entry of a key as a specific object, or try to resolve it in case it's
     /// an object reference.
-    #[allow(
-        private_bounds,
-        reason = "users shouldn't be able to implement `ObjectLike` for custom objects."
-    )]
-    pub fn get<'b, T>(&self, key: impl Deref<Target = [u8]>) -> Option<T>
+    #[allow(private_bounds)]
+    pub fn get<T>(&self, key: impl Deref<Target = [u8]>) -> Option<T>
     where
         T: ObjectLike<'a>,
     {
@@ -130,7 +127,7 @@ impl Debug for Dict<'_> {
             r.jump(*val);
             debug_struct.field(
                 &format!("{:?}", key.as_str()),
-                &r.read_with_context::<MaybeRef<Object>>(&ReaderContext::dummy())
+                &r.read_with_context::<MaybeRef<Object<'_>>>(&ReaderContext::dummy())
                     .unwrap(),
             );
         }
@@ -148,18 +145,18 @@ impl Skippable for Dict<'_> {
             if let Some(()) = r.forward_tag(b">>") {
                 break Some(());
             } else {
-                let Some(_) = r.skip::<Name>(is_content_stream) else {
+                let Some(_) = r.skip::<Name<'_>>(is_content_stream) else {
                     // In case there is garbage in-between, be lenient and just try to skip it.
-                    r.skip::<Object>(is_content_stream)?;
+                    r.skip::<Object<'_>>(is_content_stream)?;
                     continue;
                 };
 
                 r.skip_white_spaces_and_comments();
 
                 if is_content_stream {
-                    r.skip::<Object>(is_content_stream)?;
+                    r.skip::<Object<'_>>(is_content_stream)?;
                 } else {
-                    r.skip::<MaybeRef<Object>>(is_content_stream)?;
+                    r.skip::<MaybeRef<Object<'_>>>(is_content_stream)?;
                 }
             }
         }
@@ -199,12 +196,12 @@ fn read_inner<'a>(
 
                 break &dict_data[..end_offset];
             } else {
-                let Some(name) = r.read_without_context::<Name>() else {
+                let Some(name) = r.read_without_context::<Name<'_>>() else {
                     if start_tag.is_some() {
                         // In case there is garbage in-between, be lenient and just try to skip it.
                         // But only do this if we are parsing a proper dictionary as opposed to an
                         // inline dictionary.
-                        r.read::<Object>(ctx)?;
+                        r.read::<Object<'_>>(ctx)?;
                         continue;
                     } else {
                         return None;
@@ -223,9 +220,9 @@ fn read_inner<'a>(
                 offsets.insert(name, offset);
 
                 if ctx.in_content_stream {
-                    r.skip::<Object>(ctx.in_content_stream)?;
+                    r.skip::<Object<'_>>(ctx.in_content_stream)?;
                 } else {
-                    r.skip::<MaybeRef<Object>>(ctx.in_content_stream)?;
+                    r.skip::<MaybeRef<Object<'_>>>(ctx.in_content_stream)?;
                 }
             }
         }
@@ -260,7 +257,7 @@ impl<'a> Readable<'a> for InlineImageDict<'a> {
     }
 }
 
-/// A collection of possible keys in a PDF dictionary. Copied and adapted from PDFBox.
+/// A collection of possible keys in a PDF dictionary. Copied and adapted from `PDFBox`.
 #[allow(missing_docs)]
 pub mod keys {
     macro_rules! key {

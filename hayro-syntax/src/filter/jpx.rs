@@ -6,9 +6,9 @@ use hayro_jpeg2000::{ColorSpace, DecodeSettings};
 impl ImageColorSpace {
     fn num_components(&self) -> u8 {
         match self {
-            ImageColorSpace::Gray => 1,
-            ImageColorSpace::Rgb => 3,
-            ImageColorSpace::Cmyk => 4,
+            Self::Gray => 1,
+            Self::Rgb => 3,
+            Self::Cmyk => 4,
         }
     }
 }

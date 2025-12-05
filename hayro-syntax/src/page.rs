@@ -46,7 +46,7 @@ impl<'a> Pages<'a> {
         pages_dict: &Dict<'a>,
         ctx: &ReaderContext<'a>,
         xref: &'a XRef,
-    ) -> Option<Pages<'a>> {
+    ) -> Option<Self> {
         let mut pages = vec![];
         let pages_ctx = PagesContext::new();
         resolve_pages(
@@ -63,7 +63,7 @@ impl<'a> Pages<'a> {
     ///
     /// Of course this could result in the order of pages being messed up, but
     /// this is still better than nothing.
-    pub(crate) fn new_brute_force(ctx: &ReaderContext<'a>, xref: &'a XRef) -> Option<Pages<'a>> {
+    pub(crate) fn new_brute_force(ctx: &ReaderContext<'a>, xref: &'a XRef) -> Option<Self> {
         let mut pages = vec![];
 
         for object in xref.objects() {
@@ -118,14 +118,14 @@ fn resolve_pages<'a>(
     }
 
     let resources = Resources::from_parent(
-        pages_dict.get::<Dict>(RESOURCES).unwrap_or_default(),
+        pages_dict.get::<Dict<'_>>(RESOURCES).unwrap_or_default(),
         resources.clone(),
     );
 
     let kids = pages_dict.get::<Array<'a>>(KIDS)?;
 
-    for dict in kids.iter::<Dict>() {
-        match dict.get::<Name>(TYPE).as_deref() {
+    for dict in kids.iter::<Dict<'_>>() {
+        match dict.get::<Name<'_>>(TYPE).as_deref() {
             Some(PAGES) => {
                 resolve_pages(&dict, entries, ctx.clone(), resources.clone());
             }
@@ -167,7 +167,7 @@ pub struct Page<'a> {
 }
 
 impl<'a> Page<'a> {
-    fn new(dict: &Dict<'a>, ctx: &PagesContext, resources: Resources<'a>) -> Option<Page<'a>> {
+    fn new(dict: &Dict<'a>, ctx: &PagesContext, resources: Resources<'a>) -> Option<Self> {
         if !dict.contains_key(CONTENTS) {
             return None;
         }
@@ -188,8 +188,10 @@ impl<'a> Page<'a> {
         };
 
         let ctx = resources.ctx.clone();
-        let resources =
-            Resources::from_parent(dict.get::<Dict>(RESOURCES).unwrap_or_default(), resources);
+        let resources = Resources::from_parent(
+            dict.get::<Dict<'_>>(RESOURCES).unwrap_or_default(),
+            resources,
+        );
 
         Some(Self {
             inner: dict.clone(),
@@ -211,24 +213,24 @@ impl<'a> Page<'a> {
 
     /// Return the decoded content stream of the page.
     pub fn page_stream(&self) -> Option<&[u8]> {
-        let convert_single = |s: Stream| {
+        let convert_single = |s: Stream<'_>| {
             let data = s.decoded().ok()?;
             Some(data.to_vec())
         };
 
         self.page_streams
             .get_or_init(|| {
-                if let Some(stream) = self.inner.get::<Stream>(CONTENTS) {
+                if let Some(stream) = self.inner.get::<Stream<'_>>(CONTENTS) {
                     convert_single(stream)
-                } else if let Some(array) = self.inner.get::<Array>(CONTENTS) {
-                    let streams = array.iter::<Stream>().flat_map(convert_single);
+                } else if let Some(array) = self.inner.get::<Array<'_>>(CONTENTS) {
+                    let streams = array.iter::<Stream<'_>>().flat_map(convert_single);
 
                     let mut collected = vec![];
 
                     for stream in streams {
                         collected.extend(stream);
                         // Streams must have at least one whitespace in-between.
-                        collected.push(b' ')
+                        collected.push(b' ');
                     }
 
                     Some(collected)
@@ -344,25 +346,21 @@ pub struct Resources<'a> {
 
 impl<'a> Resources<'a> {
     /// Create a new `Resources` object from a dictionary with a parent.
-    pub fn from_parent(resources: Dict<'a>, parent: Resources<'a>) -> Resources<'a> {
+    pub fn from_parent(resources: Dict<'a>, parent: Self) -> Self {
         let ctx = parent.ctx.clone();
 
         Self::new(resources, Some(parent), &ctx)
     }
 
     /// Create a new `Resources` object.
-    pub(crate) fn new(
-        resources: Dict<'a>,
-        parent: Option<Resources<'a>>,
-        ctx: &ReaderContext<'a>,
-    ) -> Resources<'a> {
-        let ext_g_states = resources.get::<Dict>(EXT_G_STATE).unwrap_or_default();
-        let fonts = resources.get::<Dict>(FONT).unwrap_or_default();
-        let color_spaces = resources.get::<Dict>(COLORSPACE).unwrap_or_default();
-        let x_objects = resources.get::<Dict>(XOBJECT).unwrap_or_default();
-        let patterns = resources.get::<Dict>(PATTERN).unwrap_or_default();
-        let shadings = resources.get::<Dict>(SHADING).unwrap_or_default();
-        let properties = resources.get::<Dict>(PROPERTIES).unwrap_or_default();
+    pub(crate) fn new(resources: Dict<'a>, parent: Option<Self>, ctx: &ReaderContext<'a>) -> Self {
+        let ext_g_states = resources.get::<Dict<'_>>(EXT_G_STATE).unwrap_or_default();
+        let fonts = resources.get::<Dict<'_>>(FONT).unwrap_or_default();
+        let color_spaces = resources.get::<Dict<'_>>(COLORSPACE).unwrap_or_default();
+        let x_objects = resources.get::<Dict<'_>>(XOBJECT).unwrap_or_default();
+        let patterns = resources.get::<Dict<'_>>(PATTERN).unwrap_or_default();
+        let shadings = resources.get::<Dict<'_>>(SHADING).unwrap_or_default();
+        let properties = resources.get::<Dict<'_>>(PROPERTIES).unwrap_or_default();
 
         let parent = parent.map(Box::new);
 
@@ -387,7 +385,7 @@ impl<'a> Resources<'a> {
 
     fn get_resource<T: ObjectLike<'a>, U>(
         &self,
-        name: Name,
+        name: Name<'_>,
         dict: &Dict<'a>,
         mut cache: impl FnMut(ObjRef) -> Option<U>,
         mut resolve: impl FnMut(T) -> Option<U>,
@@ -406,7 +404,7 @@ impl<'a> Resources<'a> {
     }
 
     /// Get the parent in the resource, chain, if available.
-    pub fn parent(&self) -> Option<&Resources<'a>> {
+    pub fn parent(&self) -> Option<&Self> {
         self.parent.as_deref()
     }
 
@@ -415,11 +413,11 @@ impl<'a> Resources<'a> {
     /// Get an external graphics state by name.
     pub fn get_ext_g_state<U>(
         &self,
-        name: Name,
+        name: Name<'_>,
         mut cache: Box<dyn FnMut(ObjRef) -> Option<U> + '_>,
         mut resolve: Box<dyn FnMut(Dict<'a>) -> Option<U> + '_>,
     ) -> Option<U> {
-        self.get_resource::<Dict, U>(name.clone(), &self.ext_g_states, &mut cache, &mut resolve)
+        self.get_resource::<Dict<'_>, U>(name.clone(), &self.ext_g_states, &mut cache, &mut resolve)
             .or_else(|| {
                 self.parent
                     .as_ref()
@@ -430,26 +428,31 @@ impl<'a> Resources<'a> {
     /// Get a color space by name.
     pub fn get_color_space<U>(
         &self,
-        name: Name,
+        name: Name<'_>,
         mut cache: Box<dyn FnMut(ObjRef) -> Option<U> + '_>,
         mut resolve: Box<dyn FnMut(Object<'a>) -> Option<U> + '_>,
     ) -> Option<U> {
-        self.get_resource::<Object, U>(name.clone(), &self.color_spaces, &mut cache, &mut resolve)
-            .or_else(|| {
-                self.parent
-                    .as_ref()
-                    .and_then(|p| p.get_color_space::<U>(name, cache, resolve))
-            })
+        self.get_resource::<Object<'_>, U>(
+            name.clone(),
+            &self.color_spaces,
+            &mut cache,
+            &mut resolve,
+        )
+        .or_else(|| {
+            self.parent
+                .as_ref()
+                .and_then(|p| p.get_color_space::<U>(name, cache, resolve))
+        })
     }
 
     /// Get a font by name.
     pub fn get_font<U>(
         &self,
-        name: Name,
+        name: Name<'_>,
         mut cache: Box<dyn FnMut(ObjRef) -> Option<U> + '_>,
         mut resolve: Box<dyn FnMut(Dict<'a>) -> Option<U> + '_>,
     ) -> Option<U> {
-        self.get_resource::<Dict, U>(name.clone(), &self.fonts, &mut cache, &mut resolve)
+        self.get_resource::<Dict<'_>, U>(name.clone(), &self.fonts, &mut cache, &mut resolve)
             .or_else(|| {
                 self.parent
                     .as_ref()
@@ -460,11 +463,11 @@ impl<'a> Resources<'a> {
     /// Get a pattern by name.
     pub fn get_pattern<U>(
         &self,
-        name: Name,
+        name: Name<'_>,
         mut cache: Box<dyn FnMut(ObjRef) -> Option<U> + '_>,
         mut resolve: Box<dyn FnMut(Object<'a>) -> Option<U> + '_>,
     ) -> Option<U> {
-        self.get_resource::<Object, U>(name.clone(), &self.patterns, &mut cache, &mut resolve)
+        self.get_resource::<Object<'_>, U>(name.clone(), &self.patterns, &mut cache, &mut resolve)
             .or_else(|| {
                 self.parent
                     .as_ref()
@@ -475,11 +478,11 @@ impl<'a> Resources<'a> {
     /// Get an x object by name.
     pub fn get_x_object<U>(
         &self,
-        name: Name,
+        name: Name<'_>,
         mut cache: Box<dyn FnMut(ObjRef) -> Option<U> + '_>,
         mut resolve: Box<dyn FnMut(Stream<'a>) -> Option<U> + '_>,
     ) -> Option<U> {
-        self.get_resource::<Stream, U>(name.clone(), &self.x_objects, &mut cache, &mut resolve)
+        self.get_resource::<Stream<'_>, U>(name.clone(), &self.x_objects, &mut cache, &mut resolve)
             .or_else(|| {
                 self.parent
                     .as_ref()
@@ -490,11 +493,11 @@ impl<'a> Resources<'a> {
     /// Get a shading by name.
     pub fn get_shading<U>(
         &self,
-        name: Name,
+        name: Name<'_>,
         mut cache: Box<dyn FnMut(ObjRef) -> Option<U> + '_>,
         mut resolve: Box<dyn FnMut(Object<'a>) -> Option<U> + '_>,
     ) -> Option<U> {
-        self.get_resource::<Object, U>(name.clone(), &self.shadings, &mut cache, &mut resolve)
+        self.get_resource::<Object<'_>, U>(name.clone(), &self.shadings, &mut cache, &mut resolve)
             .or_else(|| {
                 self.parent
                     .as_ref()

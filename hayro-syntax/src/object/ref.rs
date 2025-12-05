@@ -27,7 +27,7 @@ impl ObjRef {
 
 impl From<ObjRef> for ObjectIdentifier {
     fn from(value: ObjRef) -> Self {
-        ObjectIdentifier::new(value.obj_number, value.gen_number)
+        Self::new(value.obj_number, value.gen_number)
     }
 }
 
@@ -44,7 +44,7 @@ impl Skippable for ObjRef {
 }
 
 impl Readable<'_> for ObjRef {
-    fn read(r: &mut Reader<'_>, _: &ReaderContext) -> Option<Self> {
+    fn read(r: &mut Reader<'_>, _: &ReaderContext<'_>) -> Option<Self> {
         let obj_ref = r.read_without_context::<i32>()?;
         r.skip_white_spaces();
         let gen_num = r.read_without_context::<i32>()?;
@@ -68,8 +68,8 @@ impl<T> MaybeRef<T> {
     /// If the object is an object reference, return it.
     pub fn as_obj_ref(&self) -> Option<ObjRef> {
         match self {
-            MaybeRef::Ref(r) => Some(*r),
-            MaybeRef::NotRef(_) => None,
+            Self::Ref(r) => Some(*r),
+            Self::NotRef(_) => None,
         }
     }
 }
@@ -82,8 +82,8 @@ where
     /// Resolve the `MaybeRef` object with the given xref table.
     pub(crate) fn resolve(self, ctx: &ReaderContext<'a>) -> Option<T> {
         match self {
-            MaybeRef::Ref(r) => ctx.xref.get_with::<T>(r.into(), ctx),
-            MaybeRef::NotRef(t) => Some(t),
+            Self::Ref(r) => ctx.xref.get_with::<T>(r.into(), ctx),
+            Self::NotRef(t) => Some(t),
         }
     }
 }
@@ -105,8 +105,8 @@ where
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            MaybeRef::Ref(r) => write!(f, "{r:?}"),
-            MaybeRef::NotRef(nr) => write!(f, "{nr:?}"),
+            Self::Ref(r) => write!(f, "{r:?}"),
+            Self::NotRef(nr) => write!(f, "{nr:?}"),
         }
     }
 }

@@ -12,16 +12,16 @@ pub struct Null;
 object!(Null, Null);
 
 impl Skippable for Null {
-    fn skip(r: &mut Reader, _: bool) -> Option<()> {
+    fn skip(r: &mut Reader<'_>, _: bool) -> Option<()> {
         r.forward_tag(b"null")
     }
 }
 
 impl Readable<'_> for Null {
-    fn read(r: &mut Reader, ctx: &ReaderContext) -> Option<Self> {
+    fn read(r: &mut Reader<'_>, ctx: &ReaderContext<'_>) -> Option<Self> {
         Self::skip(r, ctx.in_content_stream)?;
 
-        Some(Null)
+        Some(Self)
     }
 }
 

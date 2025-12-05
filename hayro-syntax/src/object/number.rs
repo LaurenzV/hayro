@@ -14,9 +14,9 @@ pub struct Number(pub(crate) InternalNumber);
 
 impl Number {
     /// The number zero.
-    pub const ZERO: Number = Number::from_i32(0);
+    pub const ZERO: Self = Self::from_i32(0);
     /// The number one.
-    pub const ONE: Number = Number::from_i32(1);
+    pub const ONE: Self = Self::from_i32(1);
 
     /// Returns the number as a f64.
     pub fn as_f64(&self) -> f64 {
@@ -86,12 +86,12 @@ impl Skippable for Number {
 }
 
 impl Readable<'_> for Number {
-    fn read(r: &mut Reader<'_>, ctx: &ReaderContext) -> Option<Self> {
+    fn read(r: &mut Reader<'_>, ctx: &ReaderContext<'_>) -> Option<Self> {
         // TODO: This function is probably the biggest bottleneck in content parsing, so
         // worth optimizing (i.e. reading the number directly from the bytes instead
         // of first parsing it to a number).
 
-        let mut data = r.skip::<Number>(ctx.in_content_stream)?;
+        let mut data = r.skip::<Self>(ctx.in_content_stream)?;
         // Some weird PDFs have trailing minus in the fraction of number, try to strip those.
         if let Some(idx) = data[1..].iter().position(|b| *b == b'-') {
             data = &data[..idx.saturating_sub(1)];
@@ -101,9 +101,9 @@ impl Readable<'_> for Number {
         let num = f64::from_str(std::str::from_utf8(data).ok()?).ok()?;
 
         if num.fract() == 0.0 {
-            Some(Number(InternalNumber::Integer(num as i64)))
+            Some(Self(InternalNumber::Integer(num as i64)))
         } else {
-            Some(Number(InternalNumber::Real(num)))
+            Some(Self(InternalNumber::Real(num)))
         }
     }
 }
@@ -169,9 +169,9 @@ impl Skippable for f32 {
 }
 
 impl Readable<'_> for f32 {
-    fn read(r: &mut Reader, _: &ReaderContext) -> Option<Self> {
+    fn read(r: &mut Reader<'_>, _: &ReaderContext<'_>) -> Option<Self> {
         r.read_without_context::<Number>()
-            .map(|n| n.as_f64() as f32)
+            .map(|n| n.as_f64() as Self)
     }
 }
 
@@ -180,7 +180,7 @@ impl TryFrom<Object<'_>> for f32 {
 
     fn try_from(value: Object<'_>) -> Result<Self, Self::Error> {
         match value {
-            Object::Number(n) => Ok(n.as_f64() as f32),
+            Object::Number(n) => Ok(n.as_f64() as Self),
             _ => Err(()),
         }
     }
@@ -195,7 +195,7 @@ impl Skippable for f64 {
 }
 
 impl Readable<'_> for f64 {
-    fn read(r: &mut Reader, _: &ReaderContext) -> Option<Self> {
+    fn read(r: &mut Reader<'_>, _: &ReaderContext<'_>) -> Option<Self> {
         r.read_without_context::<Number>().map(|n| n.as_f64())
     }
 }

@@ -9,14 +9,14 @@ pub(crate) struct Rc4 {
 
 impl Rc4 {
     pub(crate) fn new(key: &[u8]) -> Self {
-        let mut s = [0u8; 256];
+        let mut s = [0_u8; 256];
         let key_length = key.len();
 
         for (i, s) in s.iter_mut().enumerate() {
             *s = i as u8;
         }
 
-        let mut j = 0u8;
+        let mut j = 0_u8;
         for i in 0..256 {
             let tmp = s[i];
             j = j.wrapping_add(tmp).wrapping_add(key[i % key_length]);
@@ -24,12 +24,12 @@ impl Rc4 {
             s[j as usize] = tmp;
         }
 
-        Rc4 { a: 0, b: 0, s }
+        Self { a: 0, b: 0, s }
     }
 
     pub(crate) fn decrypt(&mut self, data: &[u8]) -> Vec<u8> {
         let n = data.len();
-        let mut output = vec![0u8; n];
+        let mut output = vec![0_u8; n];
 
         for i in 0..n {
             self.a = self.a.wrapping_add(1);

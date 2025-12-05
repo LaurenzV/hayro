@@ -48,23 +48,26 @@ impl<'a> Stream<'a> {
         let mut collected_params = SmallVec::new();
 
         if let Some(filter) = dict
-            .get::<Name>(F)
-            .or_else(|| dict.get::<Name>(FILTER))
+            .get::<Name<'_>>(F)
+            .or_else(|| dict.get::<Name<'_>>(FILTER))
             .and_then(|n| Filter::from_name(n))
         {
             let params = dict
-                .get::<Dict>(DP)
-                .or_else(|| dict.get::<Dict>(DECODE_PARMS))
+                .get::<Dict<'_>>(DP)
+                .or_else(|| dict.get::<Dict<'_>>(DECODE_PARMS))
                 .unwrap_or_default();
 
             collected_filters.push(filter);
             collected_params.push(params);
-        } else if let Some(filters) = dict.get::<Array>(F).or_else(|| dict.get::<Array>(FILTER)) {
-            let filters = filters.iter::<Name>().map(|n| Filter::from_name(n));
+        } else if let Some(filters) = dict
+            .get::<Array<'_>>(F)
+            .or_else(|| dict.get::<Array<'_>>(FILTER))
+        {
+            let filters = filters.iter::<Name<'_>>().map(|n| Filter::from_name(n));
             let mut params = dict
-                .get::<Array>(DP)
-                .or_else(|| dict.get::<Array>(DECODE_PARMS))
-                .map(|a| a.iter::<Object>());
+                .get::<Array<'_>>(DP)
+                .or_else(|| dict.get::<Array<'_>>(DECODE_PARMS))
+                .map(|a| a.iter::<Object<'_>>());
 
             for filter in filters {
                 let params = params
@@ -97,7 +100,7 @@ impl<'a> Stream<'a> {
         if ctx.xref.needs_decryption(ctx)
             && self
                 .dict
-                .get::<object::String>(TYPE)
+                .get::<object::String<'_>>(TYPE)
                 .map(|t| t.get().as_ref() != b"XRef")
                 .unwrap_or(true)
         {
@@ -183,7 +186,7 @@ impl Skippable for Stream<'_> {
 
 impl<'a> Readable<'a> for Stream<'a> {
     fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
-        let dict = r.read_with_context::<Dict>(ctx)?;
+        let dict = r.read_with_context::<Dict<'_>>(ctx)?;
 
         if dict.contains_key(F) {
             warn!("encountered stream referencing external file, which is unsupported");

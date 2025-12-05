@@ -75,7 +75,7 @@ impl Skippable for Operator<'_> {
 }
 
 impl<'a> Readable<'a> for Operator<'a> {
-    fn read(r: &mut Reader<'a>, _: &ReaderContext) -> Option<Self> {
+    fn read(r: &mut Reader<'a>, _: &ReaderContext<'_>) -> Option<Self> {
         let data = {
             let start = r.offset();
             skip_name_like(r, false)?;
@@ -102,7 +102,7 @@ pub struct UntypedIter<'a> {
 
 impl<'a> UntypedIter<'a> {
     /// Create a new untyped iterator.
-    pub fn new(data: &'a [u8]) -> UntypedIter<'a> {
+    pub fn new(data: &'a [u8]) -> Self {
         Self {
             reader: Reader::new(data),
             stack: Stack::new(),
@@ -110,7 +110,7 @@ impl<'a> UntypedIter<'a> {
     }
 
     /// Create a new empty untyped iterator.
-    pub fn empty() -> UntypedIter<'a> {
+    pub fn empty() -> Self {
         Self {
             reader: Reader::new(&[]),
             stack: Stack::new(),
@@ -133,9 +133,9 @@ impl<'a> Iterator for UntypedIter<'a> {
                 b'/' | b'.' | b'+' | b'-' | b'0'..=b'9' | b'[' | b'<' | b'('
             ) {
                 self.stack
-                    .push(self.reader.read_without_context::<Object>()?);
+                    .push(self.reader.read_without_context::<Object<'_>>()?);
             } else {
-                let operator = match self.reader.read_without_context::<Operator>() {
+                let operator = match self.reader.read_without_context::<Operator<'_>>() {
                     Some(o) => o,
                     None => {
                         warn!("failed to read operator in content stream");
@@ -148,7 +148,7 @@ impl<'a> Iterator for UntypedIter<'a> {
                 // Inline images need special casing...
                 if operator.as_ref() == b"BI" {
                     // The ID operator will already be consumed by this.
-                    let inline_dict = self.reader.read_without_context::<InlineImageDict>()?;
+                    let inline_dict = self.reader.read_without_context::<InlineImageDict<'_>>()?;
                     let dict = inline_dict.get_dict().clone();
 
                     // One whitespace after "ID".
@@ -231,7 +231,10 @@ impl<'a> Iterator for UntypedIter<'a> {
                                     // is indeed the end of data.
                                     let mut cloned = find_reader.clone();
                                     cloned.read_bytes(2)?;
-                                    if cloned.read_without_context::<InlineImageDict>().is_some() {
+                                    if cloned
+                                        .read_without_context::<InlineImageDict<'_>>()
+                                        .is_some()
+                                    {
                                         break;
                                     }
                                 }
@@ -273,13 +276,13 @@ pub struct TypedIter<'a> {
 
 impl<'a> TypedIter<'a> {
     /// Create a new typed iterator.
-    pub fn new(data: &'a [u8]) -> TypedIter<'a> {
+    pub fn new(data: &'a [u8]) -> Self {
         Self {
             untyped: UntypedIter::new(data),
         }
     }
 
-    pub(crate) fn from_untyped(untyped: UntypedIter<'a>) -> TypedIter<'a> {
+    pub(crate) fn from_untyped(untyped: UntypedIter<'a>) -> Self {
         Self { untyped }
     }
 }

@@ -128,17 +128,17 @@ pub enum PdfVersion {
 }
 
 impl PdfVersion {
-    pub(crate) fn from_bytes(bytes: &[u8]) -> Option<PdfVersion> {
+    pub(crate) fn from_bytes(bytes: &[u8]) -> Option<Self> {
         match bytes.get(..3)? {
-            b"1.0" => Some(PdfVersion::Pdf10),
-            b"1.1" => Some(PdfVersion::Pdf11),
-            b"1.2" => Some(PdfVersion::Pdf12),
-            b"1.3" => Some(PdfVersion::Pdf13),
-            b"1.4" => Some(PdfVersion::Pdf14),
-            b"1.5" => Some(PdfVersion::Pdf15),
-            b"1.6" => Some(PdfVersion::Pdf16),
-            b"1.7" => Some(PdfVersion::Pdf17),
-            b"2.0" => Some(PdfVersion::Pdf20),
+            b"1.0" => Some(Self::Pdf10),
+            b"1.1" => Some(Self::Pdf11),
+            b"1.2" => Some(Self::Pdf12),
+            b"1.3" => Some(Self::Pdf13),
+            b"1.4" => Some(Self::Pdf14),
+            b"1.5" => Some(Self::Pdf15),
+            b"1.6" => Some(Self::Pdf16),
+            b"1.7" => Some(Self::Pdf17),
+            b"2.0" => Some(Self::Pdf20),
             _ => None,
         }
     }

@@ -26,7 +26,7 @@ use crate::object::dict::keys::{
 use crate::reader::Reader;
 use log::warn;
 
-pub(crate) fn decode(data: &[u8], params: Dict) -> Option<Vec<u8>> {
+pub(crate) fn decode(data: &[u8], params: Dict<'_>) -> Option<Vec<u8>> {
     let dp = CCITTFaxDecoderOptions::default();
 
     let params = CCITTFaxDecoderOptions {

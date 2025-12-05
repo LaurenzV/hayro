@@ -15,6 +15,9 @@ zune-jpeg = { workspace = true }
 flate2 = { workspace = true }
 hayro-jpeg2000 = { workspace = true }
 
+[lints]
+workspace = true
+
 [dev-dependencies]
 sha2 = "0.10"
 md5 = "0.8"

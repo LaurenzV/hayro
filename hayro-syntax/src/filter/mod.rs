@@ -44,31 +44,31 @@ pub enum Filter {
 impl Filter {
     fn debug_name(&self) -> &'static str {
         match self {
-            Filter::AsciiHexDecode => "ascii_hex",
-            Filter::Ascii85Decode => "ascii_85",
-            Filter::LzwDecode => "lzw",
-            Filter::FlateDecode => "flate",
-            Filter::RunLengthDecode => "run-length",
-            Filter::CcittFaxDecode => "ccit_fax",
-            Filter::Jbig2Decode => "jbig2",
-            Filter::DctDecode => "dct",
-            Filter::JpxDecode => "jpx",
-            Filter::Crypt => "crypt",
+            Self::AsciiHexDecode => "ascii_hex",
+            Self::Ascii85Decode => "ascii_85",
+            Self::LzwDecode => "lzw",
+            Self::FlateDecode => "flate",
+            Self::RunLengthDecode => "run-length",
+            Self::CcittFaxDecode => "ccit_fax",
+            Self::Jbig2Decode => "jbig2",
+            Self::DctDecode => "dct",
+            Self::JpxDecode => "jpx",
+            Self::Crypt => "crypt",
         }
     }
 
-    pub(crate) fn from_name(name: Name) -> Option<Self> {
+    pub(crate) fn from_name(name: Name<'_>) -> Option<Self> {
         match name.deref() {
-            ASCII_HEX_DECODE | ASCII_HEX_DECODE_ABBREVIATION => Some(Filter::AsciiHexDecode),
-            ASCII85_DECODE | ASCII85_DECODE_ABBREVIATION => Some(Filter::Ascii85Decode),
-            LZW_DECODE | LZW_DECODE_ABBREVIATION => Some(Filter::LzwDecode),
-            FLATE_DECODE | FLATE_DECODE_ABBREVIATION => Some(Filter::FlateDecode),
-            RUN_LENGTH_DECODE | RUN_LENGTH_DECODE_ABBREVIATION => Some(Filter::RunLengthDecode),
-            CCITTFAX_DECODE | CCITTFAX_DECODE_ABBREVIATION => Some(Filter::CcittFaxDecode),
-            JBIG2_DECODE => Some(Filter::Jbig2Decode),
-            DCT_DECODE | DCT_DECODE_ABBREVIATION => Some(Filter::DctDecode),
-            JPX_DECODE => Some(Filter::JpxDecode),
-            CRYPT => Some(Filter::Crypt),
+            ASCII_HEX_DECODE | ASCII_HEX_DECODE_ABBREVIATION => Some(Self::AsciiHexDecode),
+            ASCII85_DECODE | ASCII85_DECODE_ABBREVIATION => Some(Self::Ascii85Decode),
+            LZW_DECODE | LZW_DECODE_ABBREVIATION => Some(Self::LzwDecode),
+            FLATE_DECODE | FLATE_DECODE_ABBREVIATION => Some(Self::FlateDecode),
+            RUN_LENGTH_DECODE | RUN_LENGTH_DECODE_ABBREVIATION => Some(Self::RunLengthDecode),
+            CCITTFAX_DECODE | CCITTFAX_DECODE_ABBREVIATION => Some(Self::CcittFaxDecode),
+            JBIG2_DECODE => Some(Self::Jbig2Decode),
+            DCT_DECODE | DCT_DECODE_ABBREVIATION => Some(Self::DctDecode),
+            JPX_DECODE => Some(Self::JpxDecode),
+            CRYPT => Some(Self::Crypt),
             _ => {
                 warn!("unknown filter: {}", name.as_str());
 
@@ -80,35 +80,35 @@ impl Filter {
     pub(crate) fn apply(
         &self,
         data: &[u8],
-        params: Dict,
+        params: Dict<'_>,
         image_params: &ImageDecodeParams,
     ) -> Result<FilterResult, DecodeFailure> {
         let res = match self {
-            Filter::AsciiHexDecode => ascii_hex::decode(data)
+            Self::AsciiHexDecode => ascii_hex::decode(data)
                 .map(FilterResult::from_data)
                 .ok_or(DecodeFailure::StreamDecode),
-            Filter::Ascii85Decode => ascii_85::decode(data)
+            Self::Ascii85Decode => ascii_85::decode(data)
                 .map(FilterResult::from_data)
                 .ok_or(DecodeFailure::StreamDecode),
-            Filter::RunLengthDecode => run_length::decode(data)
+            Self::RunLengthDecode => run_length::decode(data)
                 .map(FilterResult::from_data)
                 .ok_or(DecodeFailure::StreamDecode),
-            Filter::LzwDecode => lzw_flate::lzw::decode(data, params)
+            Self::LzwDecode => lzw_flate::lzw::decode(data, params)
                 .map(FilterResult::from_data)
                 .ok_or(DecodeFailure::StreamDecode),
-            Filter::DctDecode => {
+            Self::DctDecode => {
                 dct::decode(data, params, image_params).ok_or(DecodeFailure::ImageDecode)
             }
-            Filter::FlateDecode => lzw_flate::flate::decode(data, params)
+            Self::FlateDecode => lzw_flate::flate::decode(data, params)
                 .map(FilterResult::from_data)
                 .ok_or(DecodeFailure::StreamDecode),
-            Filter::CcittFaxDecode => ccitt::decode(data, params)
+            Self::CcittFaxDecode => ccitt::decode(data, params)
                 .map(FilterResult::from_data)
                 .ok_or(DecodeFailure::ImageDecode),
-            Filter::Jbig2Decode => Ok(FilterResult::from_data(
+            Self::Jbig2Decode => Ok(FilterResult::from_data(
                 jbig2::decode(data, params).ok_or(DecodeFailure::ImageDecode)?,
             )),
-            Filter::JpxDecode => jpx::decode(data, image_params).ok_or(DecodeFailure::ImageDecode),
+            Self::JpxDecode => jpx::decode(data, image_params).ok_or(DecodeFailure::ImageDecode),
             _ => Err(DecodeFailure::StreamDecode),
         };
 
