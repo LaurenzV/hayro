@@ -52,7 +52,7 @@ use vello_cpu::color::AlphaColor;
 use vello_cpu::color::Srgb;
 use vello_cpu::color::palette::css::TRANSPARENT;
 use vello_cpu::color::palette::css::WHITE;
-use vello_cpu::{Level, RenderMode};
+use vello_cpu::{Level, Pixmap, RenderMode};
 
 mod renderer;
 
