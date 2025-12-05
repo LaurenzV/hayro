@@ -6,30 +6,30 @@ use super::build::SubBandType;
 use crate::reader::BitReader;
 
 #[derive(Debug)]
-pub(crate) struct Header {
+pub(crate) struct Header<'a> {
     pub(crate) size_data: SizeData,
     pub(crate) global_coding_style: CodingStyleDefault,
     pub(crate) component_infos: Vec<ComponentInfo>,
-    pub(crate) ppm_packets: Vec<PpmPacket>,
+    pub(crate) ppm_packets: Vec<PpmPacket<'a>>,
     /// Whether strict mode is enabled for decoding.
     pub(crate) strict: bool,
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct PpmMarkerData {
+pub(crate) struct PpmMarkerData<'a> {
     pub(crate) sequence_idx: u8,
-    pub(crate) packets: Vec<PpmPacket>,
+    pub(crate) packets: Vec<PpmPacket<'a>>,
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct PpmPacket {
-    pub(crate) data: Vec<u8>,
+pub(crate) struct PpmPacket<'a> {
+    pub(crate) data: &'a [u8],
 }
 
-pub(crate) fn read_header(
-    reader: &mut BitReader,
+pub(crate) fn read_header<'a>(
+    reader: &mut BitReader<'a>,
     settings: &DecodeSettings,
-) -> Result<Header, &'static str> {
+) -> Result<Header<'a>, &'static str> {
     if reader.read_marker()? != markers::SIZ {
         return Err("expected SIZ marker after SOC");
     }
@@ -645,26 +645,19 @@ fn tlm_marker(reader: &mut BitReader) -> Option<()> {
 }
 
 /// PPM marker (A.7.4).
-fn ppm_marker(reader: &mut BitReader) -> Option<PpmMarkerData> {
+fn ppm_marker<'a>(reader: &mut BitReader<'a>) -> Option<PpmMarkerData<'a>> {
     let segment_len = reader.read_u16()?.checked_sub(2)? as usize;
-    let sequence_idx = reader.read_byte()?;
-    let mut remaining = segment_len.checked_sub(1)?;
+    let ppm_data = reader.read_bytes(segment_len)?;
     let mut packets = vec![];
 
-    while remaining > 0 {
-        if remaining < 2 {
-            return None;
-        }
+    let mut reader = BitReader::new(ppm_data);
+    let sequence_idx = reader.read_byte()?;
 
+    // TODO: Handle case where next packet doesn't have nppm parameter.
+
+    while !reader.at_end() {
         let packet_len = reader.read_u16()? as usize;
-        remaining = remaining.checked_sub(2)?;
-
-        if packet_len > remaining {
-            return None;
-        }
-
-        let data = reader.read_bytes(packet_len)?.to_vec();
-        remaining -= packet_len;
+        let data = reader.read_bytes(packet_len)?;
 
         packets.push(PpmPacket { data });
     }
