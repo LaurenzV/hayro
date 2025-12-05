@@ -91,26 +91,26 @@ fn convert(path: &Path) -> Result<DynamicImage, String> {
         // Make a case distinction based on the color space and whether we have
         // an alpha channel.
         let image = match (cs, has_alpha) {
-            (hayro_jpeg2000::ColorSpace::Gray, false) => DynamicImage::ImageLuma8(
+            (ColorSpace::Gray, false) => DynamicImage::ImageLuma8(
                 ImageBuffer::from_raw(width, height, bitmap.data)
                     .ok_or_else(|| "failed to build grayscale buffer".to_string())?,
             ),
-            (hayro_jpeg2000::ColorSpace::Gray, true) => DynamicImage::ImageLumaA8(
+            (ColorSpace::Gray, true) => DynamicImage::ImageLumaA8(
                 ImageBuffer::from_raw(width, height, bitmap.data)
                     .ok_or_else(|| "failed to build grayscale-alpha buffer".to_string())?,
             ),
-            (hayro_jpeg2000::ColorSpace::RGB, false) => DynamicImage::ImageRgb8(
+            (ColorSpace::RGB, false) => DynamicImage::ImageRgb8(
                 ImageBuffer::from_raw(width, height, bitmap.data)
                     .ok_or_else(|| "failed to build rgb buffer".to_string())?,
             ),
-            (hayro_jpeg2000::ColorSpace::RGB, true) => DynamicImage::ImageRgba8(
+            (ColorSpace::RGB, true) => DynamicImage::ImageRgba8(
                 ImageBuffer::from_raw(width, height, bitmap.data)
                     .ok_or_else(|| "failed to build rgba buffer".to_string())?,
             ),
-            (hayro_jpeg2000::ColorSpace::CMYK, false) => {
+            (ColorSpace::CMYK, false) => {
                 from_icc(CMYK_PROFILE, 4, has_alpha, width, height, &bitmap.data)?
             }
-            (hayro_jpeg2000::ColorSpace::CMYK, true) => {
+            (ColorSpace::CMYK, true) => {
                 // moxcms doesn't support CMYK interleaved with alpha, so we
                 // need to split it.
                 let mut cmyk = vec![];
@@ -135,7 +135,7 @@ fn convert(path: &Path) -> Result<DynamicImage, String> {
                 )
             }
             (
-                hayro_jpeg2000::ColorSpace::Icc {
+                ColorSpace::Icc {
                     profile,
                     num_channels: mut num_components,
                 },
@@ -177,11 +177,11 @@ static LOGGER: SimpleLogger = SimpleLogger;
 struct SimpleLogger;
 
 impl log::Log for SimpleLogger {
-    fn enabled(&self, metadata: &log::Metadata) -> bool {
+    fn enabled(&self, metadata: &log::Metadata<'_>) -> bool {
         metadata.level() <= log::LevelFilter::Warn
     }
 
-    fn log(&self, record: &log::Record) {
+    fn log(&self, record: &log::Record<'_>) {
         eprintln!("{}", record.args());
     }
 

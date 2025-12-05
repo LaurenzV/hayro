@@ -1,3 +1,5 @@
+#![allow(missing_docs)]
+
 use hayro_jpeg2000::{Bitmap, ColorSpace, DecodeSettings, decode};
 use image::{DynamicImage, ImageBuffer, ImageFormat, Rgba, RgbaImage};
 use indicatif::{ProgressBar, ProgressStyle};
@@ -137,7 +139,7 @@ fn describe_panic(payload: &(dyn Any + Send)) -> String {
 }
 
 #[allow(clippy::type_complexity)]
-struct PanicHookGuard(Option<Box<dyn Fn(&PanicHookInfo) + Sync + Send + 'static>>);
+struct PanicHookGuard(Option<Box<dyn Fn(&PanicHookInfo<'_>) + Sync + Send + 'static>>);
 
 impl PanicHookGuard {
     fn install() -> Self {
@@ -189,8 +191,8 @@ impl AssetEntry {
 impl ManifestItem {
     fn into_asset(self, namespace: &str) -> AssetEntry {
         match self {
-            ManifestItem::Simple(id) => AssetEntry::new(namespace, id, true),
-            ManifestItem::Detailed { id, render } => AssetEntry::new(namespace, id, render),
+            Self::Simple(id) => AssetEntry::new(namespace, id, true),
+            Self::Detailed { id, render } => AssetEntry::new(namespace, id, render),
         }
     }
 }
@@ -357,26 +359,26 @@ fn to_dynamic_image(bitmap: Bitmap) -> Result<DynamicImage, String> {
         let has_alpha = bitmap.has_alpha;
 
         let image = match (cs, has_alpha) {
-            (hayro_jpeg2000::ColorSpace::Gray, false) => DynamicImage::ImageLuma8(
+            (ColorSpace::Gray, false) => DynamicImage::ImageLuma8(
                 ImageBuffer::from_raw(width, height, bitmap.data)
                     .ok_or_else(|| "failed to build grayscale buffer".to_string())?,
             ),
-            (hayro_jpeg2000::ColorSpace::Gray, true) => DynamicImage::ImageLumaA8(
+            (ColorSpace::Gray, true) => DynamicImage::ImageLumaA8(
                 ImageBuffer::from_raw(width, height, bitmap.data)
                     .ok_or_else(|| "failed to build grayscale-alpha buffer".to_string())?,
             ),
-            (hayro_jpeg2000::ColorSpace::RGB, false) => DynamicImage::ImageRgb8(
+            (ColorSpace::RGB, false) => DynamicImage::ImageRgb8(
                 ImageBuffer::from_raw(width, height, bitmap.data)
                     .ok_or_else(|| "failed to build rgb buffer".to_string())?,
             ),
-            (hayro_jpeg2000::ColorSpace::RGB, true) => DynamicImage::ImageRgba8(
+            (ColorSpace::RGB, true) => DynamicImage::ImageRgba8(
                 ImageBuffer::from_raw(width, height, bitmap.data)
                     .ok_or_else(|| "failed to build rgba buffer".to_string())?,
             ),
-            (hayro_jpeg2000::ColorSpace::CMYK, false) => {
+            (ColorSpace::CMYK, false) => {
                 from_icc(CMYK_PROFILE, 4, has_alpha, width, height, &bitmap.data)?
             }
-            (hayro_jpeg2000::ColorSpace::CMYK, true) => {
+            (ColorSpace::CMYK, true) => {
                 // moxcms doesn't support CMYK interleaved with alpha, so we
                 // need to split it.
                 let mut cmyk = vec![];
@@ -401,7 +403,7 @@ fn to_dynamic_image(bitmap: Bitmap) -> Result<DynamicImage, String> {
                 )
             }
             (
-                hayro_jpeg2000::ColorSpace::Icc {
+                ColorSpace::Icc {
                     profile,
                     num_channels: mut num_components,
                 },

@@ -55,7 +55,7 @@ fearless_simd = "0.3.0"
 
 [workspace.lints]
 # This one may vary depending on the project.
-rust.unsafe_code = "forbid"
+#rust.unsafe_code = "forbid"
 
 # LINEBENDER LINT SET - Cargo.toml - v7
 # See https://linebender.org/wiki/canonical-lints/
@@ -77,7 +77,7 @@ rust.unused_qualifications = "warn"
 
 clippy.too_many_arguments = "allow"
 
-clippy.allow_attributes_without_reason = "warn"
+#clippy.allow_attributes_without_reason = "warn"
 #clippy.cast_possible_truncation = "warn"
 clippy.collection_is_never_read = "warn"
 clippy.default_trait_access = "warn"

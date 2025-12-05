@@ -801,13 +801,13 @@ mod tests {
                 num_layers: 0,
                 mct: false,
                 component_parameters: CodingStyleComponent {
-                    flags: Default::default(),
+                    flags: CodingStyleFlags::default(),
                     parameters: CodingStyleParameters {
                         num_decomposition_levels: 0,
                         num_resolution_levels: 0,
                         code_block_width: 0,
                         code_block_height: 0,
-                        code_block_style: Default::default(),
+                        code_block_style: CodeBlockStyle::default(),
                         transformation: WaveletTransform::Irreversible97,
                         precinct_exponents: vec![],
                     },
