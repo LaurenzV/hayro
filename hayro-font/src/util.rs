@@ -1,4 +1,4 @@
-/// Just like TryFrom<N>, but for numeric types not supported by the Rust's std.
+/// Just like `TryFrom`<N>, but for numeric types not supported by the Rust's std.
 pub(crate) trait TryNumFrom<T>: Sized {
     /// Casts between numeric types.
     fn try_num_from(_: T) -> Option<Self>;
@@ -7,21 +7,21 @@ pub(crate) trait TryNumFrom<T>: Sized {
 impl TryNumFrom<f32> for u8 {
     #[inline]
     fn try_num_from(v: f32) -> Option<Self> {
-        i32::try_num_from(v).and_then(|v| u8::try_from(v).ok())
+        i32::try_num_from(v).and_then(|v| Self::try_from(v).ok())
     }
 }
 
 impl TryNumFrom<f32> for i16 {
     #[inline]
     fn try_num_from(v: f32) -> Option<Self> {
-        i32::try_num_from(v).and_then(|v| i16::try_from(v).ok())
+        i32::try_num_from(v).and_then(|v| Self::try_from(v).ok())
     }
 }
 
 impl TryNumFrom<f32> for u16 {
     #[inline]
     fn try_num_from(v: f32) -> Option<Self> {
-        i32::try_num_from(v).and_then(|v| u16::try_from(v).ok())
+        i32::try_num_from(v).and_then(|v| Self::try_from(v).ok())
     }
 }
 
@@ -41,7 +41,7 @@ impl TryNumFrom<f32> for i32 {
         // `MAX+1` (a power of two) when we cast it.
         const MAX_P1: f32 = i32::MAX as f32;
         if v >= MIN && v < MAX_P1 {
-            Some(v as i32)
+            Some(v as Self)
         } else {
             None
         }

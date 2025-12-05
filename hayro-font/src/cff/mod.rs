@@ -258,7 +258,7 @@ impl<'a> Table<'a> {
 
     /// Returns the CID corresponding to a glyph ID.
     ///
-    /// Returns `None` if this is not a CIDFont.
+    /// Returns `None` if this is not a `CIDFont`.
     pub fn glyph_cid(&self, glyph_id: GlyphId) -> Option<u16> {
         match self.kind {
             FontKind::SID(_) => None,
@@ -466,8 +466,8 @@ fn parse_font_dict(data: &[u8]) -> Option<Range<usize>> {
 }
 
 /// In CID fonts, to get local subroutines we have to:
-///   1. Find Font DICT index via FDSelect by GID.
-///   2. Get Font DICT data from FDArray using this index.
+///   1. Find Font DICT index via `FDSelect` by GID.
+///   2. Get Font DICT data from `FDArray` using this index.
 ///   3. Get a Private DICT offset from a Font DICT.
 ///   4. Get a local subroutine offset from Private DICT.
 ///   5. Parse a local subroutine at offset.
@@ -686,7 +686,7 @@ fn _parse_char_string(
                     let dx = p.stack.pop();
 
                     if ctx.width.is_none() && !p.stack.is_empty() {
-                        ctx.width = Some(p.stack.pop())
+                        ctx.width = Some(p.stack.pop());
                     }
 
                     ctx.has_seac = true;

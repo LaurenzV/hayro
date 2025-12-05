@@ -1,5 +1,5 @@
 /*!
-A crate for converting PDF pages into either XObjects or a new page via [`pdf-writer`](https://docs.rs/pdf-writer/).
+A crate for converting PDF pages into either `XObjects` or a new page via [`pdf-writer`](https://docs.rs/pdf-writer/).
 
 This is an internal crate and not meant for external use. Therefore, it's not very
 well-documented.
@@ -61,7 +61,7 @@ pub fn extract<'a>(
     let mut global_chunk = Chunk::new();
 
     for chunk in &ctx.chunks {
-        global_chunk.extend(chunk)
+        global_chunk.extend(chunk);
     }
 
     Ok(ExtractionResult {
@@ -75,7 +75,7 @@ pub fn extract<'a>(
 /// object you want to extract the page.
 #[derive(Copy, Clone, Debug)]
 pub enum ExtractionQueryType {
-    /// Extract the page as an XObject.
+    /// Extract the page as an `XObject`.
     XObject,
     /// Extract the page as a new page.
     Page,
@@ -97,7 +97,7 @@ impl ExtractionQuery {
         }
     }
 
-    /// Create a new XObject extraction query with the given page index.
+    /// Create a new `XObject` extraction query with the given page index.
     pub fn new_xobject(page_index: usize) -> Self {
         Self {
             query_type: ExtractionQueryType::XObject,
@@ -282,7 +282,7 @@ pub fn extract_pages_as_xobject_to_pdf(hayro_pdf: &Pdf, page_indices: &[usize]) 
 }
 
 fn write_page(
-    page: &hayro_syntax::page::Page,
+    page: &Page,
     page_ref: Ref,
     page_idx: usize,
     ctx: &mut ExtractionContext,
@@ -323,7 +323,7 @@ fn write_page(
     let raw_dict = page.raw();
 
     if let Some(group) = raw_dict.get_raw::<Object>(GROUP) {
-        group.write_direct(pdf_page.insert(pdf_writer::Name(GROUP)), ctx);
+        group.write_direct(pdf_page.insert(Name(GROUP)), ctx);
     }
 
     serialize_resources(page.resources(), ctx, &mut pdf_page);
@@ -336,7 +336,7 @@ fn write_page(
 }
 
 fn write_xobject(
-    page: &hayro_syntax::page::Page,
+    page: &Page,
     xobj_ref: Ref,
     ctx: &mut ExtractionContext,
 ) -> Result<(), ExtractionError> {
@@ -348,7 +348,7 @@ fn write_xobject(
     let bbox = page.crop_box();
     let initial_transform = page.initial_transform(false);
 
-    x_object.bbox(pdf_writer::Rect::new(
+    x_object.bbox(Rect::new(
         bbox.x0 as f32,
         bbox.y0 as f32,
         bbox.x1 as f32,
@@ -455,7 +455,7 @@ pub(crate) fn deflate_encode(data: &[u8]) -> Vec<u8> {
     e.finish().unwrap()
 }
 
-fn convert_rect(hy_rect: &hayro_syntax::object::Rect) -> pdf_writer::Rect {
+fn convert_rect(hy_rect: &hayro_syntax::object::Rect) -> Rect {
     Rect::new(
         hy_rect.x0 as f32,
         hy_rect.y0 as f32,
@@ -485,19 +485,19 @@ trait PageExt {
     /// Return the initial transform that should be applied when rendering. This accounts for a
     /// number of factors, such as the mismatch between PDF's y-up and most renderers' y-down
     /// coordinate system, the rotation of the page and the offset of the crop box.
-    fn initial_transform(&self, invert_y: bool) -> kurbo::Affine;
+    fn initial_transform(&self, invert_y: bool) -> Affine;
 }
 
 impl PageExt for Page<'_> {
-    fn initial_transform(&self, invert_y: bool) -> kurbo::Affine {
+    fn initial_transform(&self, invert_y: bool) -> Affine {
         let crop_box = self.intersected_crop_box();
         let (_, base_height) = self.base_dimensions();
         let (width, height) = self.render_dimensions();
 
         let horizontal_t =
-            Affine::rotate(90.0f64.to_radians()) * Affine::translate((0.0, -width as f64));
+            Affine::rotate(90.0_f64.to_radians()) * Affine::translate((0.0, -width as f64));
         let flipped_horizontal_t =
-            Affine::translate((0.0, height as f64)) * Affine::rotate(-90.0f64.to_radians());
+            Affine::translate((0.0, height as f64)) * Affine::rotate(-90.0_f64.to_radians());
 
         let rotation_transform = match self.rotation() {
             Rotation::None => Affine::IDENTITY,

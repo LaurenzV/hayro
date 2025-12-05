@@ -391,7 +391,7 @@ impl CharStringParser<'_> {
             self.x = x2 + self.stack.pop();
             self.y = y2;
             if self.stack.len() == 1 {
-                self.y += self.stack.pop()
+                self.y += self.stack.pop();
             }
             self.builder.curve_to(x1, y1, x2, y2, self.x, self.y);
         }

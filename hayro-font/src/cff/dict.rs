@@ -186,7 +186,7 @@ pub(crate) fn parse_number(b0: u8, s: &mut Stream) -> Option<f64> {
 }
 
 fn parse_float(s: &mut Stream) -> Option<f64> {
-    let mut data = [0u8; FLOAT_STACK_LEN];
+    let mut data = [0_u8; FLOAT_STACK_LEN];
     let mut idx = 0;
 
     loop {

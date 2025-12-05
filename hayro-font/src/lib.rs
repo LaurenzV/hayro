@@ -29,21 +29,21 @@ pub struct GlyphId(pub u16);
 
 /// A trait for glyph outline construction.
 pub trait OutlineBuilder {
-    /// Appends a MoveTo segment.
+    /// Appends a `MoveTo` segment.
     ///
     /// Start of a contour.
     fn move_to(&mut self, x: f32, y: f32);
 
-    /// Appends a LineTo segment.
+    /// Appends a `LineTo` segment.
     fn line_to(&mut self, x: f32, y: f32);
 
-    /// Appends a QuadTo segment.
+    /// Appends a `QuadTo` segment.
     fn quad_to(&mut self, x1: f32, y1: f32, x: f32, y: f32);
 
-    /// Appends a CurveTo segment.
+    /// Appends a `CurveTo` segment.
     fn curve_to(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x: f32, y: f32);
 
-    /// Appends a ClosePath segment.
+    /// Appends a `ClosePath` segment.
     ///
     /// End of a contour.
     fn close(&mut self);
@@ -111,7 +111,7 @@ pub struct RectF {
 impl RectF {
     #[inline]
     fn new() -> Self {
-        RectF {
+        Self {
             x_min: f32::MAX,
             y_min: f32::MAX,
             x_max: f32::MIN,

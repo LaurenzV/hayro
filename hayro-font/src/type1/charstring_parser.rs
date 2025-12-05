@@ -14,7 +14,7 @@ pub(crate) struct CharStringParser<'a> {
 
 impl CharStringParser<'_> {
     #[inline]
-    pub fn parse_move_to(&mut self) -> Result<(), OutlineError> {
+    pub(super) fn parse_move_to(&mut self) -> Result<(), OutlineError> {
         if self.is_flexing {
             return Ok(());
         }
@@ -28,7 +28,7 @@ impl CharStringParser<'_> {
     }
 
     #[inline]
-    pub fn parse_horizontal_move_to(&mut self) -> Result<(), OutlineError> {
+    pub(super) fn parse_horizontal_move_to(&mut self) -> Result<(), OutlineError> {
         if self.is_flexing {
             self.stack.push(0.0)?;
             return Ok(());
@@ -42,7 +42,7 @@ impl CharStringParser<'_> {
     }
 
     #[inline]
-    pub fn parse_vertical_move_to(&mut self) -> Result<(), OutlineError> {
+    pub(super) fn parse_vertical_move_to(&mut self) -> Result<(), OutlineError> {
         if self.is_flexing {
             self.stack.push(0.0)?;
             self.stack.exch();
@@ -57,7 +57,7 @@ impl CharStringParser<'_> {
     }
 
     #[inline]
-    pub fn parse_line_to(&mut self) -> Result<(), OutlineError> {
+    pub(super) fn parse_line_to(&mut self) -> Result<(), OutlineError> {
         let mut i = 0;
         while i < self.stack.len() {
             self.x += self.stack.at(i);
@@ -71,7 +71,7 @@ impl CharStringParser<'_> {
     }
 
     #[inline]
-    pub fn parse_horizontal_line_to(&mut self) -> Result<(), OutlineError> {
+    pub(super) fn parse_horizontal_line_to(&mut self) -> Result<(), OutlineError> {
         let mut i = 0;
         while i < self.stack.len() {
             self.x += self.stack.at(i);
@@ -92,7 +92,7 @@ impl CharStringParser<'_> {
     }
 
     #[inline]
-    pub fn parse_vertical_line_to(&mut self) -> Result<(), OutlineError> {
+    pub(super) fn parse_vertical_line_to(&mut self) -> Result<(), OutlineError> {
         let mut i = 0;
         while i < self.stack.len() {
             self.y += self.stack.at(i);
@@ -113,7 +113,7 @@ impl CharStringParser<'_> {
     }
 
     #[inline]
-    pub fn parse_curve_to(&mut self) -> Result<(), OutlineError> {
+    pub(super) fn parse_curve_to(&mut self) -> Result<(), OutlineError> {
         let mut i = 0;
         while i < self.stack.len() {
             let x1 = self.x + self.stack.at(i);
@@ -132,7 +132,7 @@ impl CharStringParser<'_> {
     }
 
     #[inline]
-    pub fn parse_hv_curve_to(&mut self) -> Result<(), OutlineError> {
+    pub(super) fn parse_hv_curve_to(&mut self) -> Result<(), OutlineError> {
         if self.stack.len() < 4 {
             return Err(OutlineError::InvalidArgumentsStackLength);
         }
@@ -168,7 +168,7 @@ impl CharStringParser<'_> {
             self.x = x2 + self.stack.pop();
             self.y = y2;
             if self.stack.len() == 1 {
-                self.y += self.stack.pop()
+                self.y += self.stack.pop();
             }
             self.builder.curve_to(x1, y1, x2, y2, self.x, self.y);
         }
@@ -178,7 +178,7 @@ impl CharStringParser<'_> {
     }
 
     #[inline]
-    pub fn parse_vh_curve_to(&mut self) -> Result<(), OutlineError> {
+    pub(super) fn parse_vh_curve_to(&mut self) -> Result<(), OutlineError> {
         if self.stack.len() < 4 {
             return Err(OutlineError::InvalidArgumentsStackLength);
         }
@@ -225,7 +225,7 @@ impl CharStringParser<'_> {
 
     // Copied from fonttools.
     #[inline]
-    pub fn parse_flex(&mut self) -> Result<(), OutlineError> {
+    pub(super) fn parse_flex(&mut self) -> Result<(), OutlineError> {
         let final_y = self.stack.pop();
         let final_x = self.stack.pop();
         let _ = self.stack.pop(); // Ignored
@@ -269,21 +269,21 @@ impl CharStringParser<'_> {
     }
 
     #[inline]
-    pub fn parse_close_path(&mut self) -> Result<(), OutlineError> {
+    pub(super) fn parse_close_path(&mut self) -> Result<(), OutlineError> {
         self.builder.close();
 
         Ok(())
     }
 
     #[inline]
-    pub fn parse_int1(&mut self, op: u8) -> Result<(), OutlineError> {
+    pub(super) fn parse_int1(&mut self, op: u8) -> Result<(), OutlineError> {
         let n = i16::from(op) - 139;
         self.stack.push(f32::from(n))?;
         Ok(())
     }
 
     #[inline]
-    pub fn parse_int2(&mut self, op: u8, s: &mut Stream) -> Result<(), OutlineError> {
+    pub(super) fn parse_int2(&mut self, op: u8, s: &mut Stream) -> Result<(), OutlineError> {
         let b1 = s.read_byte().ok_or(OutlineError::ReadOutOfBounds)?;
         let n = (i16::from(op) - 247) * 256 + i16::from(b1) + 108;
         debug_assert!((108..=1131).contains(&n));
@@ -292,7 +292,7 @@ impl CharStringParser<'_> {
     }
 
     #[inline]
-    pub fn parse_int3(&mut self, op: u8, s: &mut Stream) -> Result<(), OutlineError> {
+    pub(super) fn parse_int3(&mut self, op: u8, s: &mut Stream) -> Result<(), OutlineError> {
         let b1 = s.read_byte().ok_or(OutlineError::ReadOutOfBounds)?;
         let n = -(i16::from(op) - 251) * 256 - i16::from(b1) - 108;
         debug_assert!((-1131..=-108).contains(&n));
@@ -301,7 +301,7 @@ impl CharStringParser<'_> {
     }
 
     #[inline]
-    pub fn parse_int4(&mut self, s: &mut Stream) -> Result<(), OutlineError> {
+    pub(super) fn parse_int4(&mut self, s: &mut Stream) -> Result<(), OutlineError> {
         let b = s.read_bytes(4).ok_or(OutlineError::ReadOutOfBounds)?;
         let num = i32::from_be_bytes([b[0], b[1], b[2], b[3]]);
 

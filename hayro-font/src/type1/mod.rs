@@ -518,7 +518,7 @@ impl<'a> Stream<'a> {
     }
 
     fn read_font_matrix(&mut self) -> Option<[f32; 6]> {
-        let mut entries = [0.0f32; 6];
+        let mut entries = [0.0_f32; 6];
         let mut idx = 0;
 
         // Skip '[';
@@ -652,7 +652,7 @@ fn decrypt_charstring(data: &[u8], len_iv: i64, use_decryption: bool) -> Option<
     }
 
     for byte in cb {
-        decrypted.push(decrypt_byte(byte, &mut r, use_decryption))
+        decrypted.push(decrypt_byte(byte, &mut r, use_decryption));
     }
 
     Some(decrypted)
@@ -690,8 +690,8 @@ pub(crate) enum EncodingType {
 impl EncodingType {
     pub(crate) fn encode(&self, code: u8) -> Option<&str> {
         match self {
-            EncodingType::Standard => STANDARD.get(&code).copied(),
-            EncodingType::Custom(c) => c.get(&code).map(|s| s.as_str()),
+            Self::Standard => STANDARD.get(&code).copied(),
+            Self::Custom(c) => c.get(&code).map(|s| s.as_str()),
         }
     }
 }

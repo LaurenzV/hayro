@@ -50,7 +50,7 @@ impl FromData for i8 {
 
     #[inline]
     fn parse(data: &[u8]) -> Option<Self> {
-        data.first().copied().map(|n| n as i8)
+        data.first().copied().map(|n| n as Self)
     }
 }
 
@@ -59,7 +59,7 @@ impl FromData for u16 {
 
     #[inline]
     fn parse(data: &[u8]) -> Option<Self> {
-        data.try_into().ok().map(u16::from_be_bytes)
+        data.try_into().ok().map(Self::from_be_bytes)
     }
 }
 
@@ -68,7 +68,7 @@ impl FromData for i16 {
 
     #[inline]
     fn parse(data: &[u8]) -> Option<Self> {
-        data.try_into().ok().map(i16::from_be_bytes)
+        data.try_into().ok().map(Self::from_be_bytes)
     }
 }
 
@@ -77,7 +77,7 @@ impl FromData for u32 {
 
     #[inline]
     fn parse(data: &[u8]) -> Option<Self> {
-        data.try_into().ok().map(u32::from_be_bytes)
+        data.try_into().ok().map(Self::from_be_bytes)
     }
 }
 
@@ -86,7 +86,7 @@ impl FromData for i32 {
 
     #[inline]
     fn parse(data: &[u8]) -> Option<Self> {
-        data.try_into().ok().map(i32::from_be_bytes)
+        data.try_into().ok().map(Self::from_be_bytes)
     }
 }
 
@@ -95,7 +95,7 @@ impl FromData for u64 {
 
     #[inline]
     fn parse(data: &[u8]) -> Option<Self> {
-        data.try_into().ok().map(u64::from_be_bytes)
+        data.try_into().ok().map(Self::from_be_bytes)
     }
 }
 
@@ -113,7 +113,7 @@ impl FromData for U24 {
     #[inline]
     fn parse(data: &[u8]) -> Option<Self> {
         let data: [u8; 3] = data.try_into().ok()?;
-        Some(U24(u32::from_be_bytes([0, data[0], data[1], data[2]])))
+        Some(Self(u32::from_be_bytes([0, data[0], data[1], data[2]])))
     }
 }
 
@@ -127,7 +127,7 @@ impl FromData for Fixed {
     #[inline]
     fn parse(data: &[u8]) -> Option<Self> {
         // TODO: is it safe to cast?
-        i32::parse(data).map(|n| Fixed(n as f32 / 65536.0))
+        i32::parse(data).map(|n| Self(n as f32 / 65536.0))
     }
 }
 
@@ -146,7 +146,7 @@ impl NumFrom<u32> for usize {
     fn num_from(v: u32) -> Self {
         #[cfg(any(target_pointer_width = "32", target_pointer_width = "64"))]
         {
-            v as usize
+            v as Self
         }
 
         // compilation error on 16 bit targets
@@ -158,7 +158,7 @@ impl NumFrom<char> for usize {
     fn num_from(v: char) -> Self {
         #[cfg(any(target_pointer_width = "32", target_pointer_width = "64"))]
         {
-            v as usize
+            v as Self
         }
 
         // compilation error on 16 bit targets
@@ -538,7 +538,7 @@ impl FromData for Offset24 {
 
     #[inline]
     fn parse(data: &[u8]) -> Option<Self> {
-        U24::parse(data).map(|n| Offset24(n.0))
+        U24::parse(data).map(|n| Self(n.0))
     }
 }
 

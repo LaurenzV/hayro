@@ -36,7 +36,7 @@ impl FromData for Format1Range {
     #[inline]
     fn parse(data: &[u8]) -> Option<Self> {
         let mut s = Stream::new(data);
-        Some(Format1Range {
+        Some(Self {
             first: s.read::<u8>()?,
             left: s.read::<u8>()?,
         })
@@ -55,7 +55,7 @@ impl FromData for Supplement {
     #[inline]
     fn parse(data: &[u8]) -> Option<Self> {
         let mut s = Stream::new(data);
-        Some(Supplement {
+        Some(Self {
             code: s.read::<u8>()?,
             name: s.read::<StringId>()?,
         })

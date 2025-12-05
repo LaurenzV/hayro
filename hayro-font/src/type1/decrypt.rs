@@ -24,7 +24,7 @@ pub(crate) fn decrypt(data: &[u8], use_decryption: bool) -> Option<Vec<u8>> {
         return None;
     };
 
-    let mut b = [0u8; 4];
+    let mut b = [0_u8; 4];
     b[0] = b00;
 
     for byte in b.iter_mut().skip(1) {

@@ -33,7 +33,7 @@ pub(crate) trait WriteDirect {
     fn write_direct(&self, obj: Obj, _: &mut ExtractionContext);
 }
 
-impl WriteDirect for hayro_syntax::object::ObjRef {
+impl WriteDirect for object::ObjRef {
     fn write_direct(&self, obj: Obj, ctx: &mut ExtractionContext) {
         // Check whether the object is actually valid/exists. Otherwise, we need to write a null
         // object instead. If we don't, we might end up with dangling object references that
@@ -53,7 +53,7 @@ impl WriteDirect for hayro_syntax::object::ObjRef {
     }
 }
 
-impl WriteDirect for hayro_syntax::object::Number {
+impl WriteDirect for Number {
     fn write_direct(&self, obj: Obj, _: &mut ExtractionContext) {
         let float_num = self.as_f64();
 
@@ -71,7 +71,7 @@ impl WriteDirect for bool {
     }
 }
 
-impl WriteDirect for hayro_syntax::object::Null {
+impl WriteDirect for Null {
     fn write_direct(&self, obj: Obj, _: &mut ExtractionContext) {
         obj.primitive(pdf_writer::Null);
     }
@@ -79,17 +79,17 @@ impl WriteDirect for hayro_syntax::object::Null {
 
 impl WriteDirect for object::String<'_> {
     fn write_direct(&self, obj: Obj, _: &mut ExtractionContext) {
-        obj.primitive(pdf_writer::Str(self.get().as_ref()))
+        obj.primitive(pdf_writer::Str(self.get().as_ref()));
     }
 }
 
-impl WriteDirect for hayro_syntax::object::Name<'_> {
+impl WriteDirect for object::Name<'_> {
     fn write_direct(&self, obj: Obj, _: &mut ExtractionContext) {
         obj.primitive(pdf_writer::Name(self.deref()));
     }
 }
 
-impl WriteDirect for hayro_syntax::object::Array<'_> {
+impl WriteDirect for object::Array<'_> {
     fn write_direct(&self, obj: Obj, ctx: &mut ExtractionContext) {
         let mut arr = obj.array();
         for item in self.raw_iter() {
@@ -102,8 +102,8 @@ impl WriteDirect for hayro_syntax::object::Array<'_> {
 impl<T: WriteDirect> WriteDirect for MaybeRef<T> {
     fn write_direct(&self, obj: Obj, ctx: &mut ExtractionContext) {
         match self {
-            MaybeRef::Ref(r) => r.write_direct(obj, ctx),
-            MaybeRef::NotRef(o) => o.write_direct(obj, ctx),
+            Self::Ref(r) => r.write_direct(obj, ctx),
+            Self::NotRef(o) => o.write_direct(obj, ctx),
         }
     }
 }
@@ -125,7 +125,7 @@ fn write_dict(
     }
 }
 
-impl WriteDirect for hayro_syntax::object::Dict<'_> {
+impl WriteDirect for object::Dict<'_> {
     fn write_direct(&self, obj: Obj, ctx: &mut ExtractionContext) {
         let mut dict = obj.dict();
 
