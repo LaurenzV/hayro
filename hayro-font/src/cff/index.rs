@@ -46,13 +46,13 @@ fn parse_index_impl<'a>(count: u32, s: &mut Stream<'a>) -> Option<Index<'a>> {
 }
 
 #[inline]
-pub(crate) fn skip_index<T: IndexSize>(s: &mut Stream) -> Option<()> {
+pub(crate) fn skip_index<T: IndexSize>(s: &mut Stream<'_>) -> Option<()> {
     let count = s.read::<T>()?;
     skip_index_impl(count.to_u32(), s)
 }
 
 #[inline(never)]
-fn skip_index_impl(count: u32, s: &mut Stream) -> Option<()> {
+fn skip_index_impl(count: u32, s: &mut Stream<'_>) -> Option<()> {
     if count == 0 || count == u32::MAX {
         return Some(());
     }

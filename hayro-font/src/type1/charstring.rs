@@ -58,10 +58,10 @@ pub(crate) fn parse_char_string(
 }
 
 fn _parse_char_string(
-    ctx: &mut CharStringParserContext,
+    ctx: &mut CharStringParserContext<'_>,
     char_string: &[u8],
     depth: u8,
-    p: &mut CharStringParser,
+    p: &mut CharStringParser<'_>,
 ) -> Result<(), OutlineError> {
     macro_rules! trace_op {
         ($name:literal) => {

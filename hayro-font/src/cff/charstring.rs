@@ -588,7 +588,7 @@ impl CharStringParser<'_> {
     }
 
     #[inline]
-    pub(crate) fn parse_int2(&mut self, op: u8, s: &mut Stream) -> Result<(), OutlineError> {
+    pub(crate) fn parse_int2(&mut self, op: u8, s: &mut Stream<'_>) -> Result<(), OutlineError> {
         let b1 = s.read::<u8>().ok_or(OutlineError::ReadOutOfBounds)?;
         let n = (i16::from(op) - 247) * 256 + i16::from(b1) + 108;
         debug_assert!((108..=1131).contains(&n));
@@ -597,7 +597,7 @@ impl CharStringParser<'_> {
     }
 
     #[inline]
-    pub(crate) fn parse_int3(&mut self, op: u8, s: &mut Stream) -> Result<(), OutlineError> {
+    pub(crate) fn parse_int3(&mut self, op: u8, s: &mut Stream<'_>) -> Result<(), OutlineError> {
         let b1 = s.read::<u8>().ok_or(OutlineError::ReadOutOfBounds)?;
         let n = -(i16::from(op) - 251) * 256 - i16::from(b1) - 108;
         debug_assert!((-1131..=-108).contains(&n));
@@ -606,7 +606,7 @@ impl CharStringParser<'_> {
     }
 
     #[inline]
-    pub(crate) fn parse_fixed(&mut self, s: &mut Stream) -> Result<(), OutlineError> {
+    pub(crate) fn parse_fixed(&mut self, s: &mut Stream<'_>) -> Result<(), OutlineError> {
         let n = s.read::<Fixed>().ok_or(OutlineError::ReadOutOfBounds)?;
         self.stack.push(n.0)?;
         Ok(())

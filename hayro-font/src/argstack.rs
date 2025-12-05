@@ -69,7 +69,7 @@ impl<'a> ArgumentsStack<'a> {
 }
 
 impl core::fmt::Debug for ArgumentsStack<'_> {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_list().entries(&self.data[..self.len]).finish()
     }
 }

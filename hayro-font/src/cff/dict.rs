@@ -156,7 +156,7 @@ pub(crate) fn is_dict_one_byte_op(b: u8) -> bool {
 }
 
 // Adobe Technical Note #5177, Table 3 Operand Encoding
-pub(crate) fn parse_number(b0: u8, s: &mut Stream) -> Option<f64> {
+pub(crate) fn parse_number(b0: u8, s: &mut Stream<'_>) -> Option<f64> {
     match b0 {
         28 => {
             let n = i32::from(s.read::<i16>()?);
@@ -185,7 +185,7 @@ pub(crate) fn parse_number(b0: u8, s: &mut Stream) -> Option<f64> {
     }
 }
 
-fn parse_float(s: &mut Stream) -> Option<f64> {
+fn parse_float(s: &mut Stream<'_>) -> Option<f64> {
     let mut data = [0_u8; FLOAT_STACK_LEN];
     let mut idx = 0;
 
@@ -253,7 +253,7 @@ fn parse_float_nibble(nibble: u8, mut idx: usize, data: &mut [u8]) -> Option<usi
 }
 
 // Just like `parse_number`, but doesn't actually parses the data.
-pub(crate) fn skip_number(b0: u8, s: &mut Stream) -> Option<()> {
+pub(crate) fn skip_number(b0: u8, s: &mut Stream<'_>) -> Option<()> {
     match b0 {
         28 => s.skip::<u16>(),
         29 => s.skip::<u32>(),

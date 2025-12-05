@@ -220,7 +220,7 @@ impl<'a, T: FromData> LazyArray16<'a, T> {
 }
 
 impl<'a, T: FromData + core::fmt::Debug + Copy> core::fmt::Debug for LazyArray16<'a, T> {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_list().entries(*self).finish()
     }
 }
@@ -330,7 +330,7 @@ impl<'a, T: FromSlice<'a>> LazyOffsetArray16<'a, T> {
 }
 
 impl<'a, T: FromSlice<'a> + core::fmt::Debug + Copy> core::fmt::Debug for LazyOffsetArray16<'a, T> {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_list().entries(*self).finish()
     }
 }

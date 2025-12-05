@@ -30,17 +30,17 @@ static IGNORE_KEYS: LazyLock<HashSet<&'static [u8]>> = LazyLock::new(|| {
 });
 
 pub(crate) trait WriteDirect {
-    fn write_direct(&self, obj: Obj, _: &mut ExtractionContext);
+    fn write_direct(&self, obj: Obj<'_>, _: &mut ExtractionContext<'_>);
 }
 
 impl WriteDirect for object::ObjRef {
-    fn write_direct(&self, obj: Obj, ctx: &mut ExtractionContext) {
+    fn write_direct(&self, obj: Obj<'_>, ctx: &mut ExtractionContext<'_>) {
         // Check whether the object is actually valid/exists. Otherwise, we need to write a null
         // object instead. If we don't, we might end up with dangling object references that
         // don't actually exist in the PDF chunk, which will lead to a panic in krilla when renumbering.
         let valid = *ctx.valid_ref_cache.entry(*self).or_insert_with(|| {
             let id = ObjectIdentifier::new(self.obj_number, self.gen_number);
-            ctx.pdf.xref().get::<Object>(id).is_some()
+            ctx.pdf.xref().get::<Object<'_>>(id).is_some()
         });
 
         if valid {
@@ -54,7 +54,7 @@ impl WriteDirect for object::ObjRef {
 }
 
 impl WriteDirect for Number {
-    fn write_direct(&self, obj: Obj, _: &mut ExtractionContext) {
+    fn write_direct(&self, obj: Obj<'_>, _: &mut ExtractionContext<'_>) {
         let float_num = self.as_f64();
 
         if float_num.fract() == 0.0 {
@@ -66,31 +66,31 @@ impl WriteDirect for Number {
 }
 
 impl WriteDirect for bool {
-    fn write_direct(&self, obj: Obj, _: &mut ExtractionContext) {
+    fn write_direct(&self, obj: Obj<'_>, _: &mut ExtractionContext<'_>) {
         obj.primitive(self);
     }
 }
 
 impl WriteDirect for Null {
-    fn write_direct(&self, obj: Obj, _: &mut ExtractionContext) {
+    fn write_direct(&self, obj: Obj<'_>, _: &mut ExtractionContext<'_>) {
         obj.primitive(pdf_writer::Null);
     }
 }
 
 impl WriteDirect for object::String<'_> {
-    fn write_direct(&self, obj: Obj, _: &mut ExtractionContext) {
+    fn write_direct(&self, obj: Obj<'_>, _: &mut ExtractionContext<'_>) {
         obj.primitive(pdf_writer::Str(self.get().as_ref()));
     }
 }
 
 impl WriteDirect for object::Name<'_> {
-    fn write_direct(&self, obj: Obj, _: &mut ExtractionContext) {
+    fn write_direct(&self, obj: Obj<'_>, _: &mut ExtractionContext<'_>) {
         obj.primitive(pdf_writer::Name(self.deref()));
     }
 }
 
 impl WriteDirect for object::Array<'_> {
-    fn write_direct(&self, obj: Obj, ctx: &mut ExtractionContext) {
+    fn write_direct(&self, obj: Obj<'_>, ctx: &mut ExtractionContext<'_>) {
         let mut arr = obj.array();
         for item in self.raw_iter() {
             let obj = arr.push();
@@ -100,7 +100,7 @@ impl WriteDirect for object::Array<'_> {
 }
 
 impl<T: WriteDirect> WriteDirect for MaybeRef<T> {
-    fn write_direct(&self, obj: Obj, ctx: &mut ExtractionContext) {
+    fn write_direct(&self, obj: Obj<'_>, ctx: &mut ExtractionContext<'_>) {
         match self {
             Self::Ref(r) => r.write_direct(obj, ctx),
             Self::NotRef(o) => o.write_direct(obj, ctx),
@@ -109,9 +109,9 @@ impl<T: WriteDirect> WriteDirect for MaybeRef<T> {
 }
 
 fn write_dict(
-    hayro_dict: &dict::Dict,
-    pdf_dict: &mut Dict,
-    ctx: &mut ExtractionContext,
+    hayro_dict: &dict::Dict<'_>,
+    pdf_dict: &mut Dict<'_>,
+    ctx: &mut ExtractionContext<'_>,
     is_stream: bool,
 ) {
     for (name, val) in hayro_dict.entries() {
@@ -126,7 +126,7 @@ fn write_dict(
 }
 
 impl WriteDirect for object::Dict<'_> {
-    fn write_direct(&self, obj: Obj, ctx: &mut ExtractionContext) {
+    fn write_direct(&self, obj: Obj<'_>, ctx: &mut ExtractionContext<'_>) {
         let mut dict = obj.dict();
 
         write_dict(self, &mut dict, ctx, false);
@@ -134,7 +134,7 @@ impl WriteDirect for object::Dict<'_> {
 }
 
 impl WriteDirect for Object<'_> {
-    fn write_direct(&self, obj: Obj, ctx: &mut ExtractionContext) {
+    fn write_direct(&self, obj: Obj<'_>, ctx: &mut ExtractionContext<'_>) {
         match self {
             Object::Null(n) => n.write_direct(obj, ctx),
             Object::Boolean(b) => b.write_direct(obj, ctx),
@@ -149,13 +149,13 @@ impl WriteDirect for Object<'_> {
 }
 
 pub(crate) trait WriteIndirect {
-    fn write_indirect(&self, chunk: &mut Chunk, id: Ref, ctx: &mut ExtractionContext);
+    fn write_indirect(&self, chunk: &mut Chunk, id: Ref, ctx: &mut ExtractionContext<'_>);
 }
 
 macro_rules! write_indirect {
     ($name:ty) => {
         impl WriteIndirect for $name {
-            fn write_indirect(&self, chunk: &mut Chunk, id: Ref, ctx: &mut ExtractionContext) {
+            fn write_indirect(&self, chunk: &mut Chunk, id: Ref, ctx: &mut ExtractionContext<'_>) {
                 self.write_direct(chunk.indirect(id), ctx);
             }
         }
@@ -171,7 +171,7 @@ write_indirect!(dict::Dict<'_>);
 write_indirect!(array::Array<'_>);
 
 impl WriteIndirect for Stream<'_> {
-    fn write_indirect(&self, chunk: &mut Chunk, id: Ref, ctx: &mut ExtractionContext) {
+    fn write_indirect(&self, chunk: &mut Chunk, id: Ref, ctx: &mut ExtractionContext<'_>) {
         // TODO: Handle `Crypt` filter
         let data = self.raw_data();
         let mut obj = chunk.stream(id, &data);
@@ -180,7 +180,7 @@ impl WriteIndirect for Stream<'_> {
 }
 
 impl WriteIndirect for Object<'_> {
-    fn write_indirect(&self, chunk: &mut Chunk, id: Ref, ctx: &mut ExtractionContext) {
+    fn write_indirect(&self, chunk: &mut Chunk, id: Ref, ctx: &mut ExtractionContext<'_>) {
         match self {
             Object::Null(n) => n.write_indirect(chunk, id, ctx),
             Object::Boolean(b) => b.write_indirect(chunk, id, ctx),

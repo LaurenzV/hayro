@@ -97,7 +97,7 @@ impl Encoding<'_> {
         }
     }
 
-    pub(crate) fn code_to_gid(&self, charset: &Charset, code: u8) -> Option<GlyphId> {
+    pub(crate) fn code_to_gid(&self, charset: &Charset<'_>, code: u8) -> Option<GlyphId> {
         if !self.supplemental.is_empty()
             && let Some(ref s) = self.supplemental.into_iter().find(|s| s.code == code)
         {

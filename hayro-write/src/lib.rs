@@ -169,7 +169,7 @@ impl<'a> ExtractionContext<'a> {
     }
 }
 
-fn write_dependencies(pdf: &Pdf, ctx: &mut ExtractionContext) {
+fn write_dependencies(pdf: &Pdf, ctx: &mut ExtractionContext<'_>) {
     while let Some(ref_) = ctx.to_visit_refs.pop() {
         // Don't visit objects twice!
         if ctx.visited_objects.contains(&ref_) {
@@ -177,7 +177,7 @@ fn write_dependencies(pdf: &Pdf, ctx: &mut ExtractionContext) {
         }
 
         let mut chunk = Chunk::new();
-        if let Some(object) = pdf.xref().get::<Object>(ref_.into()) {
+        if let Some(object) = pdf.xref().get::<Object<'_>>(ref_.into()) {
             let new_ref = ctx.map_ref(ref_);
             object.write_indirect(&mut chunk, new_ref, ctx);
             ctx.chunks.push(chunk);
@@ -282,10 +282,10 @@ pub fn extract_pages_as_xobject_to_pdf(hayro_pdf: &Pdf, page_indices: &[usize]) 
 }
 
 fn write_page(
-    page: &Page,
+    page: &Page<'_>,
     page_ref: Ref,
     page_idx: usize,
-    ctx: &mut ExtractionContext,
+    ctx: &mut ExtractionContext<'_>,
 ) -> Result<(), ExtractionError> {
     let mut chunk = Chunk::new();
     // Note: We can cache content stream references, but _not_ the page references themselves.
@@ -322,7 +322,7 @@ fn write_page(
 
     let raw_dict = page.raw();
 
-    if let Some(group) = raw_dict.get_raw::<Object>(GROUP) {
+    if let Some(group) = raw_dict.get_raw::<Object<'_>>(GROUP) {
         group.write_direct(pdf_page.insert(Name(GROUP)), ctx);
     }
 
@@ -336,9 +336,9 @@ fn write_page(
 }
 
 fn write_xobject(
-    page: &Page,
+    page: &Page<'_>,
     xobj_ref: Ref,
-    ctx: &mut ExtractionContext,
+    ctx: &mut ExtractionContext<'_>,
 ) -> Result<(), ExtractionError> {
     let mut chunk = Chunk::new();
     let encoded_stream = deflate_encode(page.page_stream().unwrap_or(b""));
@@ -374,8 +374,8 @@ fn write_xobject(
 }
 
 fn serialize_resources(
-    resources: &Resources,
-    ctx: &mut ExtractionContext,
+    resources: &Resources<'_>,
+    ctx: &mut ExtractionContext<'_>,
     writer: &mut impl ResourcesExt,
 ) {
     let ext_g_states = collect_resources(resources, |r| r.ext_g_states.clone());
