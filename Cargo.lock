@@ -483,6 +483,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "hayro-ccitt"
+version = "0.1.0"
+
+[[package]]
 name = "hayro-common"
 version = "0.1.0"
 dependencies = [
