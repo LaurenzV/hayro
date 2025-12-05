@@ -1,4 +1,4 @@
-use hayro_jpeg2000::{Bitmap, ColorSpace, DecodeSettings, read};
+use hayro_jpeg2000::{Bitmap, ColorSpace, DecodeSettings, decode};
 use image::{DynamicImage, ImageBuffer};
 use moxcms::{ColorProfile, Layout, TransformOptions};
 use std::env;
@@ -91,7 +91,7 @@ fn convert_jp2(path: &Path) -> Result<PathBuf, String> {
         strict: true,
     };
 
-    let bitmap = read(&data, &settings).map_err(|err| format!("decode error: {err}"))?;
+    let bitmap = decode(&data, &settings).map_err(|err| format!("decode error: {err}"))?;
     let dynamic = to_dynamic_image(bitmap)?;
 
     let stem = path
@@ -212,7 +212,7 @@ fn to_dynamic_image(bitmap: Bitmap) -> Result<DynamicImage, String> {
             (
                 hayro_jpeg2000::ColorSpace::Icc {
                     profile,
-                    mut num_components,
+                    num_channels: mut num_components,
                 },
                 has_alpha,
             ) => {

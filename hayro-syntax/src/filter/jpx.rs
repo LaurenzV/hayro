@@ -21,7 +21,7 @@ pub(crate) fn decode(data: &[u8], params: &ImageDecodeParams) -> Option<FilterRe
         strict: false,
     };
 
-    let bitmap = hayro_jpeg2000::read(data, &settings).ok()?;
+    let bitmap = hayro_jpeg2000::decode(data, &settings).ok()?;
 
     let width = bitmap.width;
     let height = bitmap.height;
@@ -30,7 +30,10 @@ pub(crate) fn decode(data: &[u8], params: &ImageDecodeParams) -> Option<FilterRe
         ColorSpace::Gray => ImageColorSpace::Gray,
         ColorSpace::RGB => ImageColorSpace::Rgb,
         ColorSpace::CMYK => ImageColorSpace::Cmyk,
-        ColorSpace::Icc { num_components, .. } => match num_components {
+        ColorSpace::Icc {
+            num_channels: num_components,
+            ..
+        } => match num_components {
             1 => ImageColorSpace::Gray,
             3 => ImageColorSpace::Rgb,
             4 => ImageColorSpace::Cmyk,

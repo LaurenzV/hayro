@@ -1,4 +1,4 @@
-use hayro_jpeg2000::{Bitmap, ColorSpace, DecodeSettings, read};
+use hayro_jpeg2000::{Bitmap, ColorSpace, DecodeSettings, decode};
 use image::{DynamicImage, ImageBuffer, ImageFormat, Rgba, RgbaImage};
 use indicatif::{ProgressBar, ProgressStyle};
 use moxcms::{ColorProfile, Layout, TransformOptions};
@@ -237,7 +237,7 @@ fn run_asset_test(asset: &AssetEntry) -> Result<(), String> {
 
     let data =
         fs::read(&asset_path).map_err(|err| format!("failed to read {}: {err}", asset_name))?;
-    let bitmap_result = read(&data, &DecodeSettings::default());
+    let bitmap_result = decode(&data, &DecodeSettings::default());
 
     if !asset.render {
         // Crash-only test: just execute the decoder to ensure it handles the file.
@@ -403,7 +403,7 @@ fn to_dynamic_image(bitmap: Bitmap) -> Result<DynamicImage, String> {
             (
                 hayro_jpeg2000::ColorSpace::Icc {
                     profile,
-                    mut num_components,
+                    num_channels: mut num_components,
                 },
                 has_alpha,
             ) => {
