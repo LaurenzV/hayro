@@ -1,9 +1,11 @@
+//! This example shows you how you can convert a JPEG2000 image into PNG using
+//! the `image` crate.
+
 use hayro_jpeg2000::{Bitmap, ColorSpace, DecodeSettings, decode};
 use image::{DynamicImage, ImageBuffer};
 use moxcms::{ColorProfile, Layout, TransformOptions};
 use std::env;
 use std::fs;
-use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
 
 const CMYK_PROFILE: &[u8] = include_bytes!("../assets/CGATS001Compat-v2-micro.icc");
@@ -18,98 +20,18 @@ fn main() {
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("test.jp2"));
 
-    let mut inputs = collect_inputs(&target);
-    if inputs.is_empty() {
-        eprintln!("No JP2 files found at {}", target.to_string_lossy());
-        return;
-    }
-
-    inputs.sort();
-
-    for path in inputs {
-        let result = catch_unwind(AssertUnwindSafe(|| convert_jp2(&path)));
-
-        match result {
-            Ok(conversion) => match conversion {
-                Ok(_output_path) => {
-                    // println!("  Wrote {}", output_path.to_string_lossy());
-                }
-                Err(err) => {
-                    eprintln!("  Failed: {}", err);
-                }
-            },
-            Err(_) => {
-                eprintln!("  Failed: decoder panicked");
-            }
-        }
-    }
+    let image = convert(&target).unwrap();
+    image.save("out.png").unwrap();
 }
 
-fn collect_inputs(target: &Path) -> Vec<PathBuf> {
-    if target.is_file() {
-        if target
-            .extension()
-            .map(|ext| ext.eq_ignore_ascii_case("jp2"))
-            .unwrap_or(false)
-        {
-            vec![target.to_path_buf()]
-        } else {
-            Vec::new()
-        }
-    } else if target.is_dir() {
-        match fs::read_dir(target) {
-            Ok(entries) => entries
-                .filter_map(|entry| entry.ok())
-                .map(|entry| entry.path())
-                .filter(|path| {
-                    path.is_file()
-                        && path
-                            .extension()
-                            .map(|ext| ext.eq_ignore_ascii_case("jp2"))
-                            .unwrap_or(false)
-                })
-                .collect(),
-            Err(err) => {
-                eprintln!(
-                    "Failed to read directory {}: {}",
-                    target.to_string_lossy(),
-                    err
-                );
-                Vec::new()
-            }
-        }
-    } else {
-        Vec::new()
-    }
-}
+fn convert(path: &Path) -> Result<DynamicImage, String> {
+    let data = fs::read(path).unwrap();
 
-fn convert_jp2(path: &Path) -> Result<PathBuf, String> {
-    let data = fs::read(path).map_err(|err| format!("read error: {err}"))?;
-
-    let settings = DecodeSettings {
-        resolve_palette_indices: true,
-        strict: true,
-    };
-
+    // The default decode settings should work for most cases.
+    let settings = DecodeSettings::default();
+    // Create the bitmap.
     let bitmap = decode(&data, &settings).map_err(|err| format!("decode error: {err}"))?;
-    let dynamic = to_dynamic_image(bitmap)?;
 
-    let stem = path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .ok_or_else(|| "invalid file name".to_string())?;
-
-    let hayro_name = format!("{stem}_hayro.png");
-    let output_path = path.with_file_name(hayro_name);
-
-    dynamic
-        .save(&output_path)
-        .map_err(|err| format!("write error: {err}"))?;
-
-    Ok(output_path)
-}
-
-fn to_dynamic_image(bitmap: Bitmap) -> Result<DynamicImage, String> {
     fn from_icc(
         icc: &[u8],
         num_channels: u8,
@@ -118,6 +40,8 @@ fn to_dynamic_image(bitmap: Bitmap) -> Result<DynamicImage, String> {
         height: u32,
         input_data: &[u8],
     ) -> Result<DynamicImage, String> {
+        // In case we have an ICC profile, simply apply it to convert to RGBA
+        // and then create the dynamic image as usual.
         let src_profile = ColorProfile::new_from_slice(icc)
             .map_err(|_| "failed to read ICC profile".to_string())?;
         let dest_profile = ColorProfile::new_srgb();
@@ -127,7 +51,6 @@ fn to_dynamic_image(bitmap: Bitmap) -> Result<DynamicImage, String> {
             2 => Layout::GrayAlpha,
             3 => Layout::Rgb,
             4 => Layout::Rgba,
-            5 => Layout::Inks5,
             _ => unimplemented!(),
         };
 
@@ -165,6 +88,8 @@ fn to_dynamic_image(bitmap: Bitmap) -> Result<DynamicImage, String> {
         let (width, height) = (bitmap.width, bitmap.height);
         let has_alpha = bitmap.has_alpha;
 
+        // Make a case distinction based on the color space and whether we have
+        // an alpha channel.
         let image = match (cs, has_alpha) {
             (hayro_jpeg2000::ColorSpace::Gray, false) => DynamicImage::ImageLuma8(
                 ImageBuffer::from_raw(width, height, bitmap.data)
@@ -228,6 +153,8 @@ fn to_dynamic_image(bitmap: Bitmap) -> Result<DynamicImage, String> {
                     height,
                     &bitmap.data,
                 )
+                // In case the ICC profile was invalid or failed for some
+                // other reason, retry by guessing the color space.
                 .or_else(|e| match num_components {
                     1 => convert(bitmap, ColorSpace::Gray),
                     3 => convert(bitmap, ColorSpace::RGB),
