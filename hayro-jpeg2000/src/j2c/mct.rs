@@ -55,6 +55,7 @@ pub(crate) fn apply_inverse(
 #[cfg(not(feature = "simd"))]
 mod simd {
     use crate::j2c::codestream::WaveletTransform;
+    use crate::util::mul_add;
 
     pub(super) fn apply_inner(
         transform: WaveletTransform,
@@ -74,9 +75,9 @@ mod simd {
                         let y_1 = y1[lane];
                         let y_2 = y2[lane];
 
-                        let i0 = y_2.mul_add(1.402, y_0);
-                        let i1 = y_2.mul_add(-0.71414, y_1.mul_add(-0.34413, y_0));
-                        let i2 = y_1.mul_add(1.772, y_0);
+                        let i0 = mul_add(y_2, 1.402, y_0);
+                        let i1 = mul_add(y_2, -0.71414, mul_add(y_1, -0.34413, y_0));
+                        let i2 = mul_add(y_1, 1.772, y_0);
 
                         y0[lane] = i0;
                         y1[lane] = i1;
