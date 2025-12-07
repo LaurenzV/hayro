@@ -1,4 +1,4 @@
-#[cfg_attr(feature = "simd", allow(unused_variables))]
+#[cfg_attr(feature = "simd", allow(dead_code))]
 #[inline(always)]
 pub(crate) fn mul_add(a: f32, b: f32, c: f32) -> f32 {
     #[cfg(any(
