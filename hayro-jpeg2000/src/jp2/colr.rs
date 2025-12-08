@@ -25,7 +25,7 @@ pub(crate) fn parse(boxes: &mut ImageBoxes, data: &[u8]) -> Option<()> {
     let method = match meth {
         1 => {
             let enumerated = reader.read_u32()?;
-            ColorSpace::Enumerated(EnumeratedColorspace::from_raw(enumerated)?)
+            ColorSpace::Enumerated(EnumeratedColorspace::from_raw(enumerated, &mut reader)?)
         }
         2 => {
             let profile_data = reader.tail()?.to_vec();
@@ -63,7 +63,7 @@ pub(crate) enum EnumeratedColorspace {
     Cmy,
     Cmyk,
     Ycck,
-    CieLab,
+    CieLab(CieLab),
     BiLevel2,
     Srgb,
     Greyscale,
@@ -78,8 +78,18 @@ pub(crate) enum EnumeratedColorspace {
     ScRgbGray,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct CieLab {
+    pub(crate) rl: Option<u32>,
+    pub(crate) ol: Option<u32>,
+    pub(crate) ra: Option<u32>,
+    pub(crate) oa: Option<u32>,
+    pub(crate) rb: Option<u32>,
+    pub(crate) ob: Option<u32>,
+}
+
 impl EnumeratedColorspace {
-    fn from_raw(value: u32) -> Option<Self> {
+    fn from_raw(value: u32, reader: &mut BitReader) -> Option<Self> {
         match value {
             0 => Some(Self::BiLevel1),
             1 => Some(Self::YCbCr1),
@@ -89,7 +99,26 @@ impl EnumeratedColorspace {
             11 => Some(Self::Cmy),
             12 => Some(Self::Cmyk),
             13 => Some(Self::Ycck),
-            14 => Some(Self::CieLab),
+            14 => {
+                // M.11.7.4.1 EP field format for the CIELab colourspace
+                let rl = reader.read_u32();
+                let ol = reader.read_u32();
+                let ra = reader.read_u32();
+                let oa = reader.read_u32();
+                let rb = reader.read_u32();
+                let ob = reader.read_u32();
+                // Not supported for now.
+                let _il = reader.read_u32();
+                
+                Some(Self::CieLab(CieLab {
+                    rl,
+                    ol,
+                    ra,
+                    oa,
+                    rb,
+                    ob,
+                }))
+            },
             15 => Some(Self::BiLevel2),
             16 => Some(Self::Srgb),
             17 => Some(Self::Greyscale),
