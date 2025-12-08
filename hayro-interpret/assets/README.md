@@ -11,3 +11,5 @@ Copyright 2014 PDFium Authors. All rights reserved.
 
 Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 ```
+
+The LAB.icc profile was generated with LCMS2.

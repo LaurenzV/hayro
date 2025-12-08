@@ -10,7 +10,10 @@ use hayro_syntax::object::Object;
 use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::*;
 use log::warn;
-use moxcms::{ColorProfile, DataColorSpace, Layout, Transform8BitExecutor, TransformOptions};
+use moxcms::{
+    ColorProfile, DataColorSpace, Layout, Transform8BitExecutor, TransformF32BitExecutor,
+    TransformOptions, Xyzd,
+};
 use smallvec::{SmallVec, ToSmallVec, smallvec};
 use std::fmt::{Debug, Formatter};
 use std::ops::Deref;
@@ -620,76 +623,59 @@ impl ToRgb for CalRgb {
 
 #[derive(Debug, Clone)]
 pub(crate) struct Lab {
-    white_point: [f32; 3],
-    _black_point: [f32; 3],
     range: [f32; 4],
+    profile: ICCProfile,
 }
 
 impl Lab {
     fn new(dict: &Dict<'_>) -> Option<Self> {
         let white_point = dict.get::<[f32; 3]>(WHITE_POINT).unwrap_or([1.0, 1.0, 1.0]);
-        let black_point = dict.get::<[f32; 3]>(BLACK_POINT).unwrap_or([0.0, 0.0, 0.0]);
+        // Not sure how this should be used.
+        let _black_point = dict.get::<[f32; 3]>(BLACK_POINT).unwrap_or([0.0, 0.0, 0.0]);
         let range = dict
             .get::<[f32; 4]>(RANGE)
             .unwrap_or([-100.0, 100.0, -100.0, 100.0]);
 
-        Some(Self {
-            white_point,
-            _black_point: black_point,
-            range,
-        })
-    }
+        let mut profile = ColorProfile::new_from_slice(include_bytes!("../assets/LAB.icc")).ok()?;
+        profile.white_point = Xyzd::new(
+            white_point[0] as f64,
+            white_point[1] as f64,
+            white_point[2] as f64,
+        );
 
-    fn fn_g(x: f32) -> f32 {
-        if x >= 6.0 / 29.0 {
-            x.powi(3)
-        } else {
-            (108.0 / 841.0) * (x - 4.0 / 29.0)
-        }
+        let profile = ICCProfile::new_from_src_profile(
+            profile, false,
+            // This flag is only used to scale the values to [0.0, 1.0], but
+            // we already take care of this in the `convert_f32` method.
+            // Therefore, leave this as false, even though this is a LAB profile.
+            false, 3,
+        )?;
+
+        Some(Self { range, profile })
     }
 }
 
 impl ToRgb for Lab {
     fn convert_f32(&self, input: &[f32], output: &mut [u8], manual_scale: bool) -> Option<()> {
-        for (input, output) in input.chunks_exact(3).zip(output.chunks_exact_mut(3)) {
-            let (mut l, mut a, mut b) = (input[0], input[1], input[2]);
+        if !manual_scale {
+            // moxcms expects values between 0.0 and 1.0, so we need to undo
+            // the scaling.
 
-            // If we used an indexed color space, the values will be between 0.0 and 1.0,
-            // so we need to manually scale them.
-            if manual_scale {
-                l *= 100.0;
-                a = self.range[0] + a * (self.range[1] - self.range[0]);
-                b = self.range[2] + b * (self.range[3] - self.range[2]);
-            }
+            let input = input
+                .chunks_exact(3)
+                .flat_map(|i| {
+                    let l = i[0] / 100.0;
+                    let a = (i[1] + 128.0) / 255.0;
+                    let b = (i[2] + 128.0) / 255.0;
 
-            let m = (l + 16.0) / 116.0;
-            let l = m + a / 500.0;
-            let n = m - b / 200.0;
+                    [l, a, b]
+                })
+                .collect::<Vec<_>>();
 
-            let x = self.white_point[0] * Self::fn_g(l);
-            let y = self.white_point[1] * Self::fn_g(m);
-            let z = self.white_point[2] * Self::fn_g(n);
-
-            let (r, g, b) = if self.white_point[2] < 1.0 {
-                (
-                    x * 3.1339 + y * -1.617 + z * -0.4906,
-                    x * -0.9785 + y * 1.916 + z * 0.0333,
-                    x * 0.072 + y * -0.229 + z * 1.4057,
-                )
-            } else {
-                (
-                    x * 3.2406 + y * -1.5372 + z * -0.4986,
-                    x * -0.9689 + y * 1.8758 + z * 0.0415,
-                    x * 0.0557 + y * -0.204 + z * 1.057,
-                )
-            };
-
-            let conv = |v: f32| (v.max(0.0).sqrt() * 255.0).clamp(0.0, 255.0) as u8;
-
-            output.copy_from_slice(&[conv(r), conv(g), conv(b)]);
+            self.profile.convert_f32(&input, output, manual_scale)
+        } else {
+            self.profile.convert_f32(input, output, manual_scale)
         }
-
-        Some(())
     }
 }
 
@@ -842,7 +828,8 @@ impl ToRgb for DeviceN {
 }
 
 struct ICCColorRepr {
-    transform: Box<Transform8BitExecutor>,
+    transform_u8: Box<Transform8BitExecutor>,
+    transform_f32: Box<TransformF32BitExecutor>,
     number_components: usize,
     is_srgb: bool,
     is_lab: bool,
@@ -867,16 +854,17 @@ impl ICCProfile {
             .get(52..56)
             .map(|device_model| device_model == SRGB_MARKER)
             .unwrap_or(false);
+        let is_lab = src_profile.color_space == DataColorSpace::Lab;
 
-        Self::new_from_src_profile(src_profile, is_srgb, number_components)
+        Self::new_from_src_profile(src_profile, is_srgb, is_lab, number_components)
     }
 
     fn new_from_src_profile(
         src_profile: ColorProfile,
         is_srgb: bool,
+        is_lab: bool,
         number_components: usize,
     ) -> Option<Self> {
-        let is_lab = src_profile.color_space == DataColorSpace::Lab;
         let dest_profile = ColorProfile::new_srgb();
 
         let src_layout = match number_components {
@@ -890,7 +878,7 @@ impl ICCProfile {
             }
         };
 
-        let transform = src_profile
+        let u8_transform = src_profile
             .create_transform_8bit(
                 src_layout,
                 &dest_profile,
@@ -899,8 +887,18 @@ impl ICCProfile {
             )
             .ok()?;
 
+        let f32_transform = src_profile
+            .create_transform_f32(
+                src_layout,
+                &dest_profile,
+                Layout::Rgb,
+                TransformOptions::default(),
+            )
+            .ok()?;
+
         Some(Self(Arc::new(ICCColorRepr {
-            transform,
+            transform_u8: u8_transform,
+            transform_f32: f32_transform,
             number_components,
             is_srgb,
             is_lab,
@@ -918,9 +916,11 @@ impl ICCProfile {
 
 impl ToRgb for ICCProfile {
     fn convert_f32(&self, input: &[f32], output: &mut [u8], _: bool) -> Option<()> {
-        let converted = if self.is_lab() {
+        let mut temp = vec![0.0f32; output.len()];
+
+        if self.is_lab() {
             // moxcms expects normalized values.
-            input
+            let scaled = input
                 .chunks_exact(3)
                 .flat_map(|i| {
                     [
@@ -929,12 +929,17 @@ impl ToRgb for ICCProfile {
                         (i[2] + 128.0) * (1.0 / 255.0),
                     ]
                 })
-                .map(f32_to_u8)
-                .collect::<Vec<_>>()
+                .collect::<Vec<_>>();
+            self.0.transform_f32.transform(&scaled, &mut temp).ok()?;
         } else {
-            input.iter().copied().map(f32_to_u8).collect::<Vec<_>>()
+            self.0.transform_f32.transform(input, &mut temp).ok()?;
         };
-        self.convert_u8(converted.as_slice(), output)
+
+        for (input, output) in temp.iter().zip(output.iter_mut()) {
+            *output = (input * 255.0 + 0.5) as u8;
+        }
+
+        Some(())
     }
 
     fn supports_u8(&self) -> bool {
@@ -945,7 +950,7 @@ impl ToRgb for ICCProfile {
         if self.is_srgb() {
             output.copy_from_slice(input);
         } else {
-            self.0.transform.transform(input, output).ok()?;
+            self.0.transform_u8.transform(input, output).ok()?;
         }
 
         Some(())

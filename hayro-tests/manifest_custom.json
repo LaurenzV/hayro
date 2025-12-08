@@ -1091,5 +1091,9 @@
   {
     "id": "issue_typst_7269",
     "link": "true"
+  },
+  {
+    "id": "image_lab_2",
+    "file": "pdfs/custom/image_lab_2.pdf"
   }
 ]
