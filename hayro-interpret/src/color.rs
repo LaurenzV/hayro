@@ -845,6 +845,7 @@ struct ICCColorRepr {
     transform: Box<Transform8BitExecutor>,
     number_components: usize,
     is_srgb: bool,
+    is_lab: bool,
 }
 
 #[derive(Clone)]
@@ -861,9 +862,11 @@ impl ICCProfile {
         let src_profile = ColorProfile::new_from_slice(profile).ok()?;
 
         // Temporary workaround as 3 PDFs don't render correctly without this.
-        if src_profile.color_space == DataColorSpace::Lab {
-            return None;
-        }
+        // if src_profile.color_space == DataColorSpace::Lab {
+        //     return None;
+        // }
+
+        let is_lab = src_profile.color_space == DataColorSpace::Lab;
 
         let dest_profile = ColorProfile::new_srgb();
 
@@ -897,17 +900,37 @@ impl ICCProfile {
             transform,
             number_components,
             is_srgb,
+            is_lab,
         })))
     }
 
     fn is_srgb(&self) -> bool {
         self.0.is_srgb
     }
+
+    fn is_lab(&self) -> bool {
+        self.0.is_lab
+    }
 }
 
 impl ToRgb for ICCProfile {
     fn convert_f32(&self, input: &[f32], output: &mut [u8], _: bool) -> Option<()> {
-        let converted = input.iter().copied().map(f32_to_u8).collect::<Vec<_>>();
+        let converted = if self.is_lab() {
+            // moxcms expects normalized values.
+            input
+                .chunks_exact(3)
+                .flat_map(|i| {
+                    [
+                        i[0] * (1.0 / 100.0),
+                        (i[1] + 128.0) * (1.0 / 255.0),
+                        (i[2] + 128.0) * (1.0 / 255.0),
+                    ]
+                })
+                .map(f32_to_u8)
+                .collect::<Vec<_>>()
+        } else {
+            input.iter().copied().map(f32_to_u8).collect::<Vec<_>>()
+        };
         self.convert_u8(converted.as_slice(), output)
     }
 
