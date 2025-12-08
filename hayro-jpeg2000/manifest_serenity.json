@@ -42,5 +42,7 @@
   "indexed-small.jp2",
   "openjpeg-lossless-indexed-u8-rgb-u8.jp2",
   "kakadu-lossless-cmyka-u8-prog1-layers1-res6.jp2",
-  "openjpeg-lossless-bgra-u8.jp2"
+  "openjpeg-lossless-bgra-u8.jp2",
+  "kakadu-lossless-lab-alpha-u8-prog1-layers1-res6.jp2",
+  "kakadu-lossless-lab-u8-prog1-layers1-res6.jp2"
 ]

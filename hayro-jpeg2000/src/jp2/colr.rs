@@ -89,7 +89,7 @@ pub(crate) struct CieLab {
 }
 
 impl EnumeratedColorspace {
-    fn from_raw(value: u32, reader: &mut BitReader) -> Option<Self> {
+    fn from_raw(value: u32, reader: &mut BitReader<'_>) -> Option<Self> {
         match value {
             0 => Some(Self::BiLevel1),
             1 => Some(Self::YCbCr1),
