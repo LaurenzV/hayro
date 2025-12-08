@@ -481,7 +481,7 @@ fn cielab_to_rgb(components: &mut [ComponentData], bit_depth: u8, lab: &CieLab) 
     let ra = lab.ra.unwrap_or(170);
     let rb = lab.ra.unwrap_or(200);
     let ol = lab.ol.unwrap_or(0);
-    let oa = lab.oa.unwrap_or(1 << bit_depth - 1);
+    let oa = lab.oa.unwrap_or(1 << (bit_depth - 1));
     let ob = lab
         .ob
         .unwrap_or((1 << (bit_depth - 2)) + (1 << (bit_depth - 3)));
@@ -494,7 +494,7 @@ fn cielab_to_rgb(components: &mut [ComponentData], bit_depth: u8, lab: &CieLab) 
     let min_b = -((rb * ob) as f32) / ((1 << prec2) - 1) as f32;
     let max_b = min_b + rb as f32;
 
-    let bit_max = (1u32 << bit_depth) - 1;
+    let bit_max = (1_u32 << bit_depth) - 1;
 
     // Note that we are not doing the actual conversion with the ICC profile yet,
     // just decoding the raw LAB values.
@@ -510,7 +510,7 @@ fn cielab_to_rgb(components: &mut [ComponentData], bit_depth: u8, lab: &CieLab) 
         *b = min_b + *b * (max_b - min_b) / ((1 << prec2) - 1) as f32;
 
         // Make sure we are in the range [0.0, 2ˆbit_depth - 1].
-        *l = *l * (bit_max as f32 / 100.0);
+        *l *= bit_max as f32 / 100.0;
         *a = (*a + 128.0) * bit_max as f32 / 255.0;
         *b = (*b + 128.0) * bit_max as f32 / 255.0;
     }
