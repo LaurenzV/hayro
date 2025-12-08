@@ -860,6 +860,22 @@ impl Debug for ICCProfile {
 impl ICCProfile {
     fn new(profile: &[u8], number_components: usize) -> Option<Self> {
         let src_profile = ColorProfile::new_from_slice(profile).ok()?;
+
+        const SRGB_MARKER: &[u8] = b"sRGB";
+
+        let is_srgb = profile
+            .get(52..56)
+            .map(|device_model| device_model == SRGB_MARKER)
+            .unwrap_or(false);
+
+        Self::new_from_src_profile(src_profile, is_srgb, number_components)
+    }
+
+    fn new_from_src_profile(
+        src_profile: ColorProfile,
+        is_srgb: bool,
+        number_components: usize,
+    ) -> Option<Self> {
         let is_lab = src_profile.color_space == DataColorSpace::Lab;
         let dest_profile = ColorProfile::new_srgb();
 
@@ -882,12 +898,6 @@ impl ICCProfile {
                 TransformOptions::default(),
             )
             .ok()?;
-
-        const SRGB_MARKER: &[u8] = b"sRGB";
-        let is_srgb = profile
-            .get(52..56)
-            .map(|device_model| device_model == SRGB_MARKER)
-            .unwrap_or(false);
 
         Some(Self(Arc::new(ICCColorRepr {
             transform,
