@@ -817,7 +817,7 @@ dependencies = [
 [[package]]
 name = "moxcms"
 version = "0.7.11"
-source = "git+https://github.com/LaurenzV/moxcms?rev=1207fb2#1207fb26f1d5dec84f7069028107870630068d0a"
+source = "git+https://github.com/awxkee/moxcms?rev=ce70195#ce70195bb0f4a911671eea2695f9298d3e77ebe7"
 dependencies = [
  "num-traits",
  "pxfm",
