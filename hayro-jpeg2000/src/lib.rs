@@ -387,13 +387,9 @@ fn resolve_color_space(
                     ColorSpace::RGB
                 }
                 EnumeratedColorspace::CieLab(cielab) => {
-                    cielab_to_rgb(
-                        &mut image.decoded.components, 
-                        bit_depth,
-                        cielab
-                    )
+                    cielab_to_rgb(&mut image.decoded.components, bit_depth, cielab)
                         .ok_or("failed to convert image from LAB to RGB")?;
-                    
+
                     ColorSpace::Icc {
                         profile: include_bytes!("../assets/LAB.icc").to_vec(),
                         num_channels: 3,
@@ -469,21 +465,16 @@ fn resolve_palette_indices(
 }
 
 fn cielab_to_rgb(components: &mut [ComponentData], bit_depth: u8, lab: &CieLab) -> Option<()> {
-    // We only support bit depth 8 currently.
-    if bit_depth != 8 {
-        return None;
-    }
-    
     let (head, _) = components.split_at_mut_checked(3)?;
 
     let [l, a, b] = head else {
         unreachable!();
     };
-    
+
     let prec0 = l.bit_depth;
     let prec1 = a.bit_depth;
     let prec2 = b.bit_depth;
-    
+
     // Table M.29bis – Default Offset Values and Encoding of Offsets for the CIELab Colourspace.
     // Signed values aren't handled.
     let rl = lab.rl.unwrap_or(100);
@@ -491,7 +482,9 @@ fn cielab_to_rgb(components: &mut [ComponentData], bit_depth: u8, lab: &CieLab) 
     let rb = lab.ra.unwrap_or(200);
     let ol = lab.ol.unwrap_or(0);
     let oa = lab.oa.unwrap_or(1 << bit_depth - 1);
-    let ob = lab.ob.unwrap_or((1 << (bit_depth - 2)) + (1 << (bit_depth - 3)));
+    let ob = lab
+        .ob
+        .unwrap_or((1 << (bit_depth - 2)) + (1 << (bit_depth - 3)));
 
     // Copied from OpenJPEG.
     let min_l = -((rl * ol) as f32) / ((1 << prec0) - 1) as f32;
@@ -500,6 +493,8 @@ fn cielab_to_rgb(components: &mut [ComponentData], bit_depth: u8, lab: &CieLab) 
     let max_a = min_a + ra as f32;
     let min_b = -((rb * ob) as f32) / ((1 << prec2) - 1) as f32;
     let max_b = min_b + rb as f32;
+
+    let bit_max = (1u32 << bit_depth) - 1;
 
     // Note that we are not doing the actual conversion with the ICC profile yet,
     // just decoding the raw LAB values.
@@ -513,13 +508,13 @@ fn cielab_to_rgb(components: &mut [ComponentData], bit_depth: u8, lab: &CieLab) 
         *l = min_l + *l * (max_l - min_l) / ((1 << prec0) - 1) as f32;
         *a = min_a + *a * (max_a - min_a) / ((1 << prec1) - 1) as f32;
         *b = min_b + *b * (max_b - min_b) / ((1 << prec2) - 1) as f32;
-        
-        // Make sure we are in the range [0.0, 255.0].
-        *l = *l * (255.0 / 100.0);
-        *a = *a + 128.0;
-        *b = *b + 128.0;
+
+        // Make sure we are in the range [0.0, 2ˆbit_depth - 1].
+        *l = *l * (bit_max as f32 / 100.0);
+        *a = (*a + 128.0) * bit_max as f32 / 255.0;
+        *b = (*b + 128.0) * bit_max as f32 / 255.0;
     }
-    
+
     Some(())
 }
 

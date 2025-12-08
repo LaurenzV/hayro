@@ -109,7 +109,7 @@ impl EnumeratedColorspace {
                 let ob = reader.read_u32();
                 // Not supported for now.
                 let _il = reader.read_u32();
-                
+
                 Some(Self::CieLab(CieLab {
                     rl,
                     ol,
@@ -118,7 +118,7 @@ impl EnumeratedColorspace {
                     rb,
                     ob,
                 }))
-            },
+            }
             15 => Some(Self::BiLevel2),
             16 => Some(Self::Srgb),
             17 => Some(Self::Greyscale),
