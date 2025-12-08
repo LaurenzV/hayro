@@ -860,14 +860,7 @@ impl Debug for ICCProfile {
 impl ICCProfile {
     fn new(profile: &[u8], number_components: usize) -> Option<Self> {
         let src_profile = ColorProfile::new_from_slice(profile).ok()?;
-
-        // Temporary workaround as 3 PDFs don't render correctly without this.
-        // if src_profile.color_space == DataColorSpace::Lab {
-        //     return None;
-        // }
-
         let is_lab = src_profile.color_space == DataColorSpace::Lab;
-
         let dest_profile = ColorProfile::new_srgb();
 
         let src_layout = match number_components {
