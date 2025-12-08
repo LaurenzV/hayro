@@ -916,7 +916,7 @@ impl ICCProfile {
 
 impl ToRgb for ICCProfile {
     fn convert_f32(&self, input: &[f32], output: &mut [u8], _: bool) -> Option<()> {
-        let mut temp = vec![0.0f32; output.len()];
+        let mut temp = vec![0.0_f32; output.len()];
 
         if self.is_lab() {
             // moxcms expects normalized values.
