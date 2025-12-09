@@ -74,29 +74,30 @@ fn convert_inner(image: &Image<'_>, buf: &mut [u8]) -> Option<()> {
         let src_profile = ColorProfile::new_from_slice(icc).ok()?;
         let dest_profile = ColorProfile::new_srgb();
 
-        let src_layout = match num_channels {
-            1 => Layout::Gray,
-            2 => Layout::GrayAlpha,
-            3 => Layout::Rgb,
-            4 => Layout::Rgba,
-            5 => Layout::Inks5,
-            _ => unimplemented!(),
+        let (src_layout, dest_layout, out_channels) = match (num_channels, has_alpha) {
+            (1, false) => (Layout::Gray, Layout::Gray, 1),
+            (1, true) => (Layout::GrayAlpha, Layout::GrayAlpha, 2),
+            (3, false) => (Layout::Rgb, Layout::Rgb, 3),
+            (3, true) => (Layout::Rgba, Layout::Rgba, 3),
+            // CMYK will be converted to RGB.
+            (4, false) => (Layout::Rgba, Layout::Rgb, 3),
+            _ => {
+                unimplemented!()
+            },
         };
-
-        let out_channels = if has_alpha { 4 } else { 3 };
-
+        
         let transform = src_profile
             .create_transform_8bit(
                 src_layout,
                 &dest_profile,
-                if has_alpha { Layout::Rgba } else { Layout::Rgb },
+                dest_layout,
                 TransformOptions::default(),
             )
             .ok()?;
 
         let mut transformed = vec![0; (width * height * out_channels) as usize];
 
-        transform.transform(input_data, &mut transformed).ok()?;
+        transform.transform(input_data, &mut transformed).unwrap();
 
         Some(transformed)
     }
@@ -139,26 +140,23 @@ fn convert_inner(image: &Image<'_>, buf: &mut [u8]) -> Option<()> {
                     alpha.push(sample[4]);
                 }
 
-                let rgb = from_icc(CMYK_PROFILE, 4, false, width, height, &decoded)?;
-                for pixel in rgb
-                    .chunks_exact(3)
-                    .zip(alpha)
-                    .map(|(rgb, alpha)| [rgb[0], rgb[1], rgb[2], alpha])
+                let rgb = from_icc(CMYK_PROFILE, 4, false, width, height, &cmyk)?;
+                for (out, pixel) in buf.chunks_exact_mut(4)
+                    .zip(rgb
+                        .chunks_exact(3)
+                        .zip(alpha)
+                        .map(|(rgb, alpha)| [rgb[0], rgb[1], rgb[2], alpha]))
                 {
-                    buf.copy_from_slice(&pixel);
+                    out.copy_from_slice(&pixel);
                 }
             }
             (
                 ColorSpace::Icc {
                     profile,
-                    num_channels: mut num_components,
+                    num_channels: num_components,
                 },
                 has_alpha,
             ) => {
-                if has_alpha {
-                    num_components += 1;
-                }
-
                 let decoded = image.decode().ok()?;
 
                 let transformed =

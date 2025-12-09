@@ -1,9 +1,8 @@
 #![allow(missing_docs)]
 
-use hayro_jpeg2000::{ColorSpace, DecodeSettings, Image};
+use hayro_jpeg2000::{DecodeSettings, Image};
 use image::{ColorType, DynamicImage, ImageBuffer, ImageDecoder, ImageFormat, Rgba, RgbaImage};
 use indicatif::{ProgressBar, ProgressStyle};
-use moxcms::{ColorProfile, Layout, TransformOptions};
 use rayon::prelude::*;
 use serde::Deserialize;
 use std::any::Any;
@@ -13,8 +12,6 @@ use std::panic::{AssertUnwindSafe, PanicHookInfo, catch_unwind};
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 use std::time::{Duration, Instant};
-
-const CMYK_PROFILE: &[u8] = include_bytes!("../assets/CGATS001Compat-v2-micro.icc");
 
 const REPLACE: Option<&str> = option_env!("REPLACE");
 
