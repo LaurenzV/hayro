@@ -138,6 +138,40 @@ impl<'a> Image<'a> {
     pub fn decode(self) -> Result<Bitmap, &'static str> {
         let settings = &self.settings;
         let num_components = self.header.component_infos.len();
+
+        // Check that we only have at most one alpha channel, and that the alpha
+        // chanel is the last component.
+        let mut has_alpha = false;
+
+        if let Some(cdef) = &self.boxes.channel_definition {
+            let last = cdef.channel_definitions.last().unwrap();
+            has_alpha = last.channel_type == ChannelType::Opacity; 
+        }
+
+        let mut color_space = get_color_space(&self.boxes, num_components)?;
+        
+        // If we didn't resolve palette indices, we need to assume grayscale image.
+        if !settings.resolve_palette_indices && self.boxes.palette.is_some() {
+            has_alpha = false;
+            color_space = ColorSpace::Gray;
+        }
+
+        // Validate the number of channels.
+        if self.boxes.palette.is_none() && self.header.component_infos.len()
+            != (color_space.num_channels() + if has_alpha { 1 } else { 0 }) as usize
+        {
+            if !settings.strict
+                && self.header.component_infos.len() == color_space.num_channels() as usize + 1
+                && !has_alpha
+            {
+                // See OPENJPEG test case orb-blue10-lin-j2k. Assume that we have an
+                // alpha channel in this case.
+                has_alpha = true;
+            } else {
+                return Err("image has too many channels");
+            }
+        }
+        
         let mut decoded_image =
             j2c::decode(self.codestream, &self.header).map(move |data| DecodedImage {
                 decoded: DecodedCodestream {
@@ -158,14 +192,7 @@ impl<'a> Image<'a> {
                     .ok_or("failed to resolve palette indices")?;
         }
 
-        // Check that we only have at most one alpha channel, and that the alpha
-        // chanel is the last component.
-        let mut has_alpha = false;
-
         if let Some(cdef) = &decoded_image.boxes.channel_definition {
-            let last = cdef.channel_definitions.last().unwrap();
-            has_alpha = last.channel_type == ChannelType::Opacity;
-
             // Sort by the channel association. Note that this will only work if
             // each component is referenced only once.
             let mut components = decoded_image
@@ -187,32 +214,7 @@ impl<'a> Image<'a> {
 
         // Note that this is only valid if all images have the same bit depth.
         let bit_depth = decoded_image.decoded.components[0].bit_depth;
-
-        let mut color_space = get_color_space(&decoded_image.boxes, num_components)?;
-
-        // If we didn't resolve palette indices, we need to assume grayscale image.
-        if !settings.resolve_palette_indices && decoded_image.boxes.palette.is_some() {
-            has_alpha = false;
-            color_space = ColorSpace::Gray;
-        }
-
         convert_color_space(&mut decoded_image, bit_depth)?;
-
-        // Validate the number of channels.
-        if decoded_image.decoded.components.len()
-            != (color_space.num_channels() + if has_alpha { 1 } else { 0 }) as usize
-        {
-            if !settings.strict
-                && decoded_image.decoded.components.len() == color_space.num_channels() as usize + 1
-                && !has_alpha
-            {
-                // See OPENJPEG test case orb-blue10-lin-j2k. Assume that we have an
-                // alpha channel in this case.
-                has_alpha = true;
-            } else {
-                return Err("image has too many channels");
-            }
-        }
 
         Ok(Bitmap {
             color_space,
