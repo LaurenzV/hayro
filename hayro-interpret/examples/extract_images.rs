@@ -85,7 +85,7 @@ impl Device<'_> for ImageExtractor {
                         ImageBuffer::from_raw(stencil.width, stencil.height, stencil.data.clone())
                             .unwrap(),
                     ));
-                });
+                }, None);
             }
             Image::Raster(r) => {
                 // The alpha and RGB channels are provided separately.
@@ -123,7 +123,7 @@ impl Device<'_> for ImageExtractor {
                     };
 
                     self.0.push(image);
-                });
+                }, None);
             }
         }
     }
