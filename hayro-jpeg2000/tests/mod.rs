@@ -248,7 +248,7 @@ fn run_asset_test(asset: &AssetEntry) -> Result<(), String> {
     let color_type = image.color_type();
     let width = image.width();
     let height = image.height();
-    let mut buf = vec![0u8; image.total_bytes() as usize];
+    let mut buf = vec![0_u8; image.total_bytes() as usize];
     image.read_image(&mut buf).unwrap();
 
     let rgba = match color_type {
