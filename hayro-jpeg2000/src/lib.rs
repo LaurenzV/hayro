@@ -355,7 +355,7 @@ fn interleave_and_convert(image: DecodedImage, buf: &mut [u8]) {
                 for (output, input) in
                     output_iter.zip(components[0].container.iter().map(|v| v.round() as u8))
                 {
-                    *output = input
+                    *output = input;
                 }
             }
             // Gray-scale with alpha.
@@ -417,7 +417,7 @@ fn interleave_and_convert(image: DecodedImage, buf: &mut [u8]) {
                 *output_iter.next().unwrap() = ((channel.container[sample]
                     / ((1 << channel.bit_depth) - 1) as f32)
                     * mul_factor)
-                    .round() as u8
+                    .round() as u8;
             }
         }
     }
