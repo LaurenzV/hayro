@@ -103,7 +103,8 @@ fn check_jpx_images(folder: &str) {
                     {
                         let raw_data = stream.raw_data();
 
-                        match hayro_jpeg2000::decode(raw_data.as_ref(), &DecodeSettings::default())
+                        match hayro_jpeg2000::Image::new(&raw_data, &DecodeSettings::default())
+                            .and_then(|image| image.decode())
                         {
                             Ok(_) => {
                                 // println!("ok!")

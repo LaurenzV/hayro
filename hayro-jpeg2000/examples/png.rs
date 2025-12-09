@@ -1,7 +1,7 @@
 //! This example shows you how you can convert a JPEG2000 image into PNG using
 //! the `image` crate.
 
-use hayro_jpeg2000::{Bitmap, ColorSpace, DecodeSettings, decode};
+use hayro_jpeg2000::{Bitmap, ColorSpace, DecodeSettings, Image};
 use image::{DynamicImage, ImageBuffer};
 use moxcms::{ColorProfile, Layout, TransformOptions};
 use std::env;
@@ -30,7 +30,9 @@ fn convert(path: &Path) -> Result<DynamicImage, String> {
     // The default decode settings should work for most cases.
     let settings = DecodeSettings::default();
     // Create the bitmap.
-    let bitmap = decode(&data, &settings).map_err(|err| format!("decode error: {err}"))?;
+    let bitmap = Image::new(&data, &settings)
+        .and_then(|i| i.decode())
+        .map_err(|err| format!("decode error: {err}"))?;
 
     fn from_icc(
         icc: &[u8],

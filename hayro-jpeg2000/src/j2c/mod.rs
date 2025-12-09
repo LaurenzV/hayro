@@ -11,11 +11,19 @@ mod segment;
 mod tag_tree;
 mod tile;
 
+use super::jp2::ImageBoxes;
 use super::jp2::colr::{ColorSpace, ColorSpecificationBox, EnumeratedColorspace};
-use super::jp2::{DecodedImage, ImageBoxes};
-use crate::DecodeSettings;
 use crate::j2c::codestream::markers;
 use crate::reader::BitReader;
+use crate::{DecodeSettings, Image};
+
+pub(crate) use codestream::Header;
+pub(crate) use decode::decode;
+
+pub(crate) struct ParsedCodestream<'a> {
+    pub(crate) header: Header<'a>,
+    pub(crate) data: &'a [u8],
+}
 
 pub(crate) struct DecodedCodestream {
     /// The decoded components.
@@ -32,13 +40,17 @@ pub(crate) struct ComponentData {
     pub(crate) bit_depth: u8,
 }
 
-pub(crate) fn decode(data: &[u8], settings: &DecodeSettings) -> Result<DecodedImage, &'static str> {
-    let decoded_codestream = read(data, settings)?;
+pub(crate) fn parse<'a>(
+    stream: &'a [u8],
+    settings: &DecodeSettings,
+) -> Result<Image<'a>, &'static str> {
+    let parsed_code_stream = parse_raw(stream, settings)?;
+    let header = &parsed_code_stream.header;
     let mut boxes = ImageBoxes::default();
 
     // If we are just decoding a raw codestream, we assume greyscale or
     // RGB.
-    let cs = if decoded_codestream.components.len() < 3 {
+    let cs = if header.component_infos.len() < 3 {
         ColorSpace::Enumerated(EnumeratedColorspace::Greyscale)
     } else {
         ColorSpace::Enumerated(EnumeratedColorspace::Srgb)
@@ -46,16 +58,18 @@ pub(crate) fn decode(data: &[u8], settings: &DecodeSettings) -> Result<DecodedIm
 
     boxes.color_specification = Some(ColorSpecificationBox { color_space: cs });
 
-    Ok(DecodedImage {
-        decoded: decoded_codestream,
+    Ok(Image {
+        codestream: parsed_code_stream.data,
+        header: parsed_code_stream.header,
         boxes,
+        settings: settings.clone(),
     })
 }
 
-pub(crate) fn read(
-    stream: &[u8],
+pub(crate) fn parse_raw<'a>(
+    stream: &'a [u8],
     settings: &DecodeSettings,
-) -> Result<DecodedCodestream, &'static str> {
+) -> Result<ParsedCodestream<'a>, &'static str> {
     let mut reader = BitReader::new(stream);
 
     let marker = reader.read_marker()?;
@@ -67,11 +81,9 @@ pub(crate) fn read(
     let code_stream_data = reader
         .tail()
         .ok_or("code stream data is missing from image")?;
-    let decoded = decode::decode(code_stream_data, &header)?;
 
-    Ok(DecodedCodestream {
-        width: header.size_data.image_width(),
-        height: header.size_data.image_height(),
-        components: decoded,
+    Ok(ParsedCodestream {
+        header,
+        data: code_stream_data,
     })
 }

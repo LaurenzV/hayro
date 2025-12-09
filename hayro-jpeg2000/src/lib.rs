@@ -15,10 +15,11 @@ color space, which can then be processed further according to your needs.
 
 # Example
 ```rust,no_run
-use hayro_jpeg2000::{decode, DecodeSettings};
+use hayro_jpeg2000::{Image, DecodeSettings};
 
 let data = std::fs::read("image.jp2").unwrap();
-let bitmap = decode(&data, &DecodeSettings::default()).unwrap();
+let image = Image::new(&data, &DecodeSettings::default()).unwrap();
+let bitmap = image.decode().unwrap();
 
 println!(
     "decoded {}x{} image in {:?} with alpha={}",
@@ -60,7 +61,7 @@ via a crate-level attribute.
 #![forbid(unsafe_code)]
 #![forbid(missing_docs)]
 
-use crate::j2c::ComponentData;
+use crate::j2c::{ComponentData, DecodedCodestream, Header};
 use crate::jp2::cdef::{ChannelAssociation, ChannelType};
 use crate::jp2::cmap::ComponentMappingType;
 use crate::jp2::colr::{CieLab, EnumeratedColorspace};
@@ -100,6 +101,124 @@ impl Default for DecodeSettings {
             resolve_palette_indices: true,
             strict: false,
         }
+    }
+}
+
+/// A JPEG2000 image or codestream.
+pub struct Image<'a> {
+    /// The codestream containing the data to decode.
+    pub(crate) codestream: &'a [u8],
+    /// The header of the J2C codestream.
+    pub(crate) header: Header<'a>,
+    /// The JP2 boxes of the image. In the case of a raw codestream, we
+    /// will synthesize the necessary boxes.
+    pub(crate) boxes: ImageBoxes,
+    /// Settings that should be applied during decoding.
+    pub(crate) settings: DecodeSettings,
+}
+
+impl<'a> Image<'a> {
+    /// Try to create a new JPEG2000 image from the given data.
+    pub fn new(data: &'a [u8], settings: &DecodeSettings) -> Result<Image<'a>, &'static str> {
+        // JP2 signature box: 00 00 00 0C 6A 50 20 20
+        const JP2_MAGIC: &[u8] = b"\x00\x00\x00\x0C\x6A\x50\x20\x20";
+        // Codestream signature: FF 4F FF 51 (SOC + SIZ markers)
+        const CODESTREAM_MAGIC: &[u8] = b"\xFF\x4F\xFF\x51";
+
+        if data.starts_with(JP2_MAGIC) {
+            jp2::parse(data, settings)
+        } else if data.starts_with(CODESTREAM_MAGIC) {
+            j2c::parse(data, settings)
+        } else {
+            Err("invalid JPEG2000 file")
+        }
+    }
+
+    /// Decode the image into a bitmap image.
+    pub fn decode(self) -> Result<Bitmap, &'static str> {
+        let settings = &self.settings;
+        let mut decoded_image =
+            j2c::decode(self.codestream, &self.header).map(|data| DecodedImage {
+                decoded: DecodedCodestream {
+                    components: data,
+                    width: self.header.size_data.image_width(),
+                    height: self.header.size_data.image_height(),
+                },
+                boxes: self.boxes,
+            })?;
+
+        let width = decoded_image.decoded.width;
+        let height = decoded_image.decoded.height;
+
+        // Resolve palette indices.
+        if settings.resolve_palette_indices {
+            decoded_image.decoded.components =
+                resolve_palette_indices(decoded_image.decoded.components, &decoded_image.boxes)
+                    .ok_or("failed to resolve palette indices")?;
+        }
+
+        // Check that we only have at most one alpha channel, and that the alpha
+        // chanel is the last component.
+        let mut has_alpha = false;
+
+        if let Some(cdef) = &decoded_image.boxes.channel_definition {
+            let last = cdef.channel_definitions.last().unwrap();
+            has_alpha = last.channel_type == ChannelType::Opacity;
+
+            // Sort by the channel association. Note that this will only work if
+            // each component is referenced only once.
+            let mut components = decoded_image
+                .decoded
+                .components
+                .into_iter()
+                .zip(
+                    cdef.channel_definitions
+                        .iter()
+                        .map(|c| match c._association {
+                            ChannelAssociation::WholeImage => u16::MAX,
+                            ChannelAssociation::Colour(c) => c,
+                        }),
+                )
+                .collect::<Vec<_>>();
+            components.sort_by(|c1, c2| c1.1.cmp(&c2.1));
+            decoded_image.decoded.components = components.into_iter().map(|c| c.0).collect();
+        }
+
+        // Note that this is only valid if all images have the same bit depth.
+        let bit_depth = decoded_image.decoded.components[0].bit_depth;
+
+        let mut color_space = resolve_color_space(&mut decoded_image, bit_depth)?;
+
+        // If we didn't resolve palette indices, we need to assume grayscale image.
+        if !settings.resolve_palette_indices && decoded_image.boxes.palette.is_some() {
+            has_alpha = false;
+            color_space = ColorSpace::Gray;
+        }
+
+        // Validate the number of channels.
+        if decoded_image.decoded.components.len()
+            != (color_space.num_channels() + if has_alpha { 1 } else { 0 }) as usize
+        {
+            if !settings.strict
+                && decoded_image.decoded.components.len() == color_space.num_channels() as usize + 1
+                && !has_alpha
+            {
+                // See OPENJPEG test case orb-blue10-lin-j2k. Assume that we have an
+                // alpha channel in this case.
+                has_alpha = true;
+            } else {
+                return Err("image has too many channels");
+            }
+        }
+
+        Ok(Bitmap {
+            color_space,
+            has_alpha,
+            original_bit_depth: bit_depth,
+            data: interleave_and_convert(decoded_image),
+            width,
+            height,
+        })
     }
 }
 
@@ -158,96 +277,6 @@ pub struct Bitmap {
     /// The original bit depth of the image. You usually don't need to do anything
     /// with this parameter, it just exists for informational purposes.
     pub original_bit_depth: u8,
-}
-
-/// Decode a JPEG2000 codestream (or a codestream wrapped in a JP2 file) into
-/// a bitmap.
-pub fn decode(data: &[u8], settings: &DecodeSettings) -> Result<Bitmap, &'static str> {
-    // JP2 signature box: 00 00 00 0C 6A 50 20 20
-    const JP2_MAGIC: &[u8] = b"\x00\x00\x00\x0C\x6A\x50\x20\x20";
-    // Codestream signature: FF 4F FF 51 (SOC + SIZ markers)
-    const CODESTREAM_MAGIC: &[u8] = b"\xFF\x4F\xFF\x51";
-
-    let mut decoded_image = if data.starts_with(JP2_MAGIC) {
-        jp2::decode(data, settings)?
-    } else if data.starts_with(CODESTREAM_MAGIC) {
-        j2c::decode(data, settings)?
-    } else {
-        return Err("invalid JP2 file");
-    };
-
-    let width = decoded_image.decoded.width;
-    let height = decoded_image.decoded.height;
-
-    // Resolve palette indices.
-    if settings.resolve_palette_indices {
-        decoded_image.decoded.components =
-            resolve_palette_indices(decoded_image.decoded.components, &decoded_image.boxes)
-                .ok_or("failed to resolve palette indices")?;
-    }
-
-    // Check that we only have at most one alpha channel, and that the alpha
-    // chanel is the last component.
-    let mut has_alpha = false;
-
-    if let Some(cdef) = &decoded_image.boxes.channel_definition {
-        let last = cdef.channel_definitions.last().unwrap();
-        has_alpha = last.channel_type == ChannelType::Opacity;
-
-        // Sort by the channel association. Note that this will only work if
-        // each component is referenced only once.
-        let mut components = decoded_image
-            .decoded
-            .components
-            .into_iter()
-            .zip(
-                cdef.channel_definitions
-                    .iter()
-                    .map(|c| match c._association {
-                        ChannelAssociation::WholeImage => u16::MAX,
-                        ChannelAssociation::Colour(c) => c,
-                    }),
-            )
-            .collect::<Vec<_>>();
-        components.sort_by(|c1, c2| c1.1.cmp(&c2.1));
-        decoded_image.decoded.components = components.into_iter().map(|c| c.0).collect();
-    }
-
-    // Note that this is only valid if all images have the same bit depth.
-    let bit_depth = decoded_image.decoded.components[0].bit_depth;
-
-    let mut color_space = resolve_color_space(&mut decoded_image, bit_depth)?;
-
-    // If we didn't resolve palette indices, we need to assume grayscale image.
-    if !settings.resolve_palette_indices && decoded_image.boxes.palette.is_some() {
-        has_alpha = false;
-        color_space = ColorSpace::Gray;
-    }
-
-    // Validate the number of channels.
-    if decoded_image.decoded.components.len()
-        != (color_space.num_channels() + if has_alpha { 1 } else { 0 }) as usize
-    {
-        if !settings.strict
-            && decoded_image.decoded.components.len() == color_space.num_channels() as usize + 1
-            && !has_alpha
-        {
-            // See OPENJPEG test case orb-blue10-lin-j2k. Assume that we have an
-            // alpha channel in this case.
-            has_alpha = true;
-        } else {
-            return Err("image has too many channels");
-        }
-    }
-
-    Ok(Bitmap {
-        color_space,
-        has_alpha,
-        original_bit_depth: bit_depth,
-        data: interleave_and_convert(decoded_image),
-        width,
-        height,
-    })
 }
 
 fn interleave_and_convert(image: DecodedImage) -> Vec<u8> {

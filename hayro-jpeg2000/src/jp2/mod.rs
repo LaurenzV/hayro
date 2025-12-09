@@ -1,6 +1,5 @@
 //! Reading a JP2 file, defined in Annex I.
 
-use crate::DecodeSettings;
 use crate::j2c::DecodedCodestream;
 use crate::jp2::r#box::{FILE_TYPE, JP2_SIGNATURE};
 use crate::jp2::cdef::ChannelDefinitionBox;
@@ -8,6 +7,7 @@ use crate::jp2::cmap::{ComponentMappingBox, ComponentMappingEntry, ComponentMapp
 use crate::jp2::colr::ColorSpecificationBox;
 use crate::jp2::pclr::PaletteBox;
 use crate::reader::BitReader;
+use crate::{DecodeSettings, Image};
 use log::{debug, warn};
 
 pub(crate) mod r#box;
@@ -33,7 +33,10 @@ pub(crate) struct DecodedImage {
     pub(crate) boxes: ImageBoxes,
 }
 
-pub(crate) fn decode(data: &[u8], settings: &DecodeSettings) -> Result<DecodedImage, &'static str> {
+pub(crate) fn parse<'a>(
+    data: &'a [u8],
+    settings: &DecodeSettings,
+) -> Result<Image<'a>, &'static str> {
     let mut reader = BitReader::new(data);
     let signature_box = r#box::read(&mut reader).ok_or("failed to read signature box")?;
 
@@ -48,7 +51,7 @@ pub(crate) fn decode(data: &[u8], settings: &DecodeSettings) -> Result<DecodedIm
     }
 
     let mut image_boxes = Err("failed to read metadata");
-    let mut decoded_codestream = Err("failed to decode image");
+    let mut parsed_codestream = Err("failed to parse codestream");
 
     // Read boxes until we find the JP2 Header box
     while !reader.at_end() {
@@ -100,7 +103,7 @@ pub(crate) fn decode(data: &[u8], settings: &DecodeSettings) -> Result<DecodedIm
                 image_boxes = Ok(boxes);
             }
             r#box::CONTIGUOUS_CODESTREAM => {
-                decoded_codestream = Ok(crate::j2c::read(current_box.data, settings)?);
+                parsed_codestream = Ok(crate::j2c::parse_raw(current_box.data, settings)?);
             }
             _ => {
                 warn!(
@@ -111,7 +114,7 @@ pub(crate) fn decode(data: &[u8], settings: &DecodeSettings) -> Result<DecodedIm
         }
     }
 
-    let (mut image_boxes, decoded_codestream) = (image_boxes?, decoded_codestream?);
+    let (mut image_boxes, parsed_codestream) = (image_boxes?, parsed_codestream?);
 
     if let Some(palette) = image_boxes.palette.as_ref()
         && image_boxes.component_mapping.is_none()
@@ -129,8 +132,10 @@ pub(crate) fn decode(data: &[u8], settings: &DecodeSettings) -> Result<DecodedIm
         image_boxes.component_mapping = Some(ComponentMappingBox { entries: mappings });
     }
 
-    Ok(DecodedImage {
-        decoded: decoded_codestream,
+    Ok(Image {
+        codestream: parsed_codestream.data,
+        header: parsed_codestream.header,
         boxes: image_boxes,
+        settings: settings.clone(),
     })
 }

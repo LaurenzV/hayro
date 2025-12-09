@@ -21,7 +21,8 @@ pub(crate) fn decode(data: &[u8], params: &ImageDecodeParams) -> Option<FilterRe
         strict: false,
     };
 
-    let bitmap = hayro_jpeg2000::decode(data, &settings).ok()?;
+    let image = hayro_jpeg2000::Image::new(data, &settings).ok()?;
+    let bitmap = image.decode().ok()?;
 
     let width = bitmap.width;
     let height = bitmap.height;
