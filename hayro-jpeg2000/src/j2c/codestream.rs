@@ -11,6 +11,8 @@ pub(crate) struct Header<'a> {
     pub(crate) global_coding_style: CodingStyleDefault,
     pub(crate) component_infos: Vec<ComponentInfo>,
     pub(crate) ppm_packets: Vec<PpmPacket<'a>>,
+    pub(crate) num_resolution_levels: u16,
+    pub(crate) max_resolution_level: u16,
     /// Whether strict mode is enabled for decoding.
     pub(crate) strict: bool,
 }
@@ -34,7 +36,7 @@ pub(crate) fn read_header<'a>(
         return Err("expected SIZ marker after SOC");
     }
 
-    let size_data = size_marker(reader)?;
+    let mut size_data = size_marker(reader)?;
 
     let mut cod = None;
     let mut qcd = None;
@@ -124,6 +126,16 @@ pub(crate) fn read_header<'a>(
             quantization_info: qcd_components[idx].clone().unwrap_or(qcd.clone()),
         })
         .collect();
+    
+    // We assume that every component has the same number of resolution levels.
+    let num_resolution_levels = component_infos.iter().map(|c| c.num_resolution_levels())
+        .min().unwrap();
+    let max_resolution_level= settings.max_resolution.min(num_resolution_levels - 1);
+    
+    // If the user defined a maximum resolution level that is lower than the
+    // maximum available one, the final image needs to be shrinked further.
+    size_data.x_shrink_factor *= 1 << ((num_resolution_levels - 1) - max_resolution_level);
+    size_data.y_shrink_factor *= 1 << ((num_resolution_levels - 1) - max_resolution_level);
 
     ppm_markers.sort_by(|p0, p1| p0.sequence_idx.cmp(&p1.sequence_idx));
 
@@ -136,6 +148,8 @@ pub(crate) fn read_header<'a>(
             .flat_map(|i| i.packets)
             .filter_map(|p| if p.data.is_empty() { None } else { Some(p) })
             .collect(),
+        num_resolution_levels,
+        max_resolution_level,
         strict: settings.strict,
     };
 
