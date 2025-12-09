@@ -97,7 +97,7 @@ fn convert_inner(image: &Image<'_>, buf: &mut [u8]) -> Option<()> {
 
         let mut transformed = vec![0; (width * height * out_channels) as usize];
 
-        transform.transform(input_data, &mut transformed).unwrap();
+        transform.transform(input_data, &mut transformed).ok()?;
 
         Some(transformed)
     }
