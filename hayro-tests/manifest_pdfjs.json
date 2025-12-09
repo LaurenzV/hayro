@@ -558,7 +558,7 @@
   "issue16782",
   "issue16839",
   {
-    "id": "issue16843-text",
+    "id": "issue16843",
     "last_page": 0
   },
   {
@@ -633,7 +633,7 @@
     "last_page": 0
   },
   "issue18816",
-  "issue18823-default",
+  "issue18823",
   "issue18894",
   {
     "id": "issue18941",
@@ -666,7 +666,7 @@
   "issue19611",
   "issue19633",
   "issue19802",
-  "issue19848-eq",
+  "issue19848",
   {
     "id": "issue19971",
     "last_page": 0
@@ -680,7 +680,7 @@
     "last_page": 0
   },
   {
-    "id": "issue2017-eq",
+    "id": "issue2017",
     "last_page": 0
   },
   "issue2074",
@@ -689,7 +689,7 @@
     "first_page": 0,
     "last_page": 0
   },
-  "issue2099-1",
+  "issue2099",
   "issue2139",
   "issue215",
   "issue2176",
@@ -733,7 +733,7 @@
     "last_page": 0
   },
   {
-    "id": "issue2884_reduced",
+    "id": "issue2884",
     "last_page": 0
   },
   "issue2931",
@@ -785,7 +785,7 @@
     "last_page": 0
   },
   "issue3438",
-  "issue3458.pdf",
+  "issue3458",
   {
     "id": "issue3566",
     "last_page": 0
@@ -801,7 +801,7 @@
     "first_page": 0,
     "last_page": 1
   },
-  "issue3694_reduced",
+  "issue3694",
   "issue3879",
   {
     "id": "issue3885",
@@ -831,7 +831,7 @@
   "issue4304",
   "issue4379",
   "issue4398",
-  "issue4402_reduced",
+  "issue4402",
   "issue4436",
   {
     "id": "issue4573",
@@ -880,13 +880,13 @@
   "issue5334",
   "issue5421",
   "issue5470",
-  "issue5475.pdf",
-  "issue5481.pdf",
+  "issue5475",
+  "issue5481",
   "issue5501",
   "issue5540",
-  "issue5549.pdf",
+  "issue5549",
   {
-    "id": "issue5564_reduced",
+    "id": "issue5564",
     "first_page": 0,
     "last_page": 0
   },
@@ -906,7 +906,7 @@
   "issue5804",
   "issue5874",
   {
-    "id": "issue5909_original",
+    "id": "issue5909",
     "last_page": 1
   },
   {
@@ -947,11 +947,11 @@
     "id": "issue6289",
     "last_page": 0
   },
-  "issue6296.pdf",
-  "issue6298.pdf",
-  "issue6305-part-1",
+  "issue6296",
+  "issue6298",
+  "issue6305",
   "issue6336",
-  "issue6342-eq",
+  "issue6342",
   {
     "id": "issue6360",
     "first_page": 0,
@@ -962,7 +962,7 @@
     "first_page": 0,
     "last_page": 0
   },
-  "issue6387-canvas",
+  "issue6387",
   "issue6413",
   "issue6541",
   {
