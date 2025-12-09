@@ -40,6 +40,10 @@ pub struct ImageDecodeParams {
     pub bpc: Option<u8>,
     /// The components per channel of the image, if that information is available.
     pub num_components: Option<u8>,
+    /// A target resolution for the image. Note that this is only a hint so that
+    /// in case it's possible, a version of the image will be extracted that
+    /// is as close as possible to the hinted dimension.
+    pub target_dimension: Option<(u32, u32)>,
 }
 
 impl<'a> Stream<'a> {

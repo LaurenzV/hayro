@@ -290,8 +290,19 @@ impl<'a> ImageXObject<'a> {
         })
     }
 
-    pub(crate) fn decoded_object(&self) -> Option<DecodedImageXObject> {
-        DecodedImageXObject::new(self)
+    pub(crate) fn decoded_object(
+        &self,
+        target_dimension: Option<(u32, u32)>,
+    ) -> Option<DecodedImageXObject> {
+        DecodedImageXObject::new(self, target_dimension)
+    }
+
+    pub(crate) fn width(&self) -> u32 {
+        self.width
+    }
+
+    pub(crate) fn height(&self) -> u32 {
+        self.height
     }
 
     fn has_alpha(&self) -> bool {
@@ -310,7 +321,7 @@ pub(crate) struct DecodedImageXObject {
 }
 
 impl DecodedImageXObject {
-    fn new(obj: &ImageXObject<'_>) -> Option<Self> {
+    fn new(obj: &ImageXObject<'_>, target_dimension: Option<(u32, u32)>) -> Option<Self> {
         let dict = obj.stream.dict();
 
         let dict_bpc = dict
@@ -325,6 +336,7 @@ impl DecodedImageXObject {
             is_indexed,
             bpc: dict_bpc,
             num_components: color_space.as_ref().map(|c| c.num_components()),
+            target_dimension,
         };
 
         let mut decoded = obj
@@ -536,12 +548,13 @@ impl DecodedImageXObject {
                 }
             } else if let Some(s_mask) = dict.get::<Stream<'_>>(SMASK) {
                 ImageXObject::new(&s_mask, |_| None, &obj.warning_sink, &obj.cache, true, None)
-                    .and_then(|s| s.decoded_object().and_then(|d| d.luma_data))
+                    .and_then(|s| s.decoded_object(target_dimension).and_then(|d| d.luma_data))
             } else if let Some(mask) = dict.get::<Stream<'_>>(MASK) {
                 if let Some(obj) =
                     ImageXObject::new(&mask, |_| None, &obj.warning_sink, &obj.cache, true, None)
                 {
-                    obj.decoded_object().and_then(|d| d.luma_data)
+                    obj.decoded_object(target_dimension)
+                        .and_then(|d| d.luma_data)
                 } else {
                     None
                 }

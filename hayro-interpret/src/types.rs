@@ -29,14 +29,36 @@ pub struct StencilImage<'a, 'b> {
 
 impl<'a, 'b> StencilImage<'a, 'b> {
     /// Perform some operation with the stencil data of the image.
-    pub fn with_stencil(&self, func: impl FnOnce(LumaData, &Paint<'a>)) {
+    ///
+    /// The second argument allows you to give the image decoder a hint for
+    /// what resolution of the image you want to have. Note that this does not
+    /// mean that the resulting image will have that dimension. Instead, it allows
+    /// the image decoder to extract a lower-resolution version of the image in
+    /// certain cases.
+    pub fn with_stencil(
+        &self,
+        func: impl FnOnce(LumaData, &Paint<'a>),
+        target_dimension: Option<(u32, u32)>,
+    ) {
         if let Some(luma) = self
             .image_xobject
-            .decoded_object()
+            .decoded_object(target_dimension)
             .and_then(|d| d.luma_data)
         {
             func(luma, &self.paint);
         }
+    }
+
+    // These are hidden since clients are supposed to call get the
+    // width/height from `LumaData` instead.
+    #[doc(hidden)]
+    pub fn width(&self) -> u32 {
+        self.image_xobject.width()
+    }
+
+    #[doc(hidden)]
+    pub fn height(&self) -> u32 {
+        self.image_xobject.height()
     }
 }
 
@@ -51,14 +73,36 @@ pub struct RasterImage<'a>(pub(crate) ImageXObject<'a>);
 
 impl RasterImage<'_> {
     /// Perform some operation with the RGB and alpha channel of the image.
-    pub fn with_rgba(&self, func: impl FnOnce(RgbData, Option<LumaData>)) {
-        let decoded = self.0.decoded_object();
+    ///
+    /// The second argument allows you to give the image decoder a hint for
+    /// what resolution of the image you want to have. Note that this does not
+    /// mean that the resulting image will have that dimension. Instead, it allows
+    /// the image decoder to extract a lower-resolution version of the image in
+    /// certain cases.
+    pub fn with_rgba(
+        &self,
+        func: impl FnOnce(RgbData, Option<LumaData>),
+        target_dimension: Option<(u32, u32)>,
+    ) {
+        let decoded = self.0.decoded_object(target_dimension);
 
         if let Some(decoded) = decoded
             && let Some(rgb) = decoded.rgb_data
         {
             func(rgb, decoded.luma_data);
         }
+    }
+
+    // These are hidden since clients are supposed to call get the
+    // width/height from `LumaData` instead.
+    #[doc(hidden)]
+    pub fn width(&self) -> u32 {
+        self.0.width()
+    }
+
+    #[doc(hidden)]
+    pub fn height(&self) -> u32 {
+        self.0.height()
     }
 }
 
@@ -74,6 +118,28 @@ pub enum Image<'a, 'b> {
     Stencil(StencilImage<'a, 'b>),
     /// A normal raster image.
     Raster(RasterImage<'b>),
+}
+
+impl Image<'_, '_> {
+    // These are hidden since clients are supposed to call get the
+    // width/height from `LumaData/RgbData` instead.
+    #[doc(hidden)]
+    pub fn width(&self) -> u32 {
+        match self {
+            Image::Stencil(s) => s.width(),
+            Image::Raster(r) => r.width(),
+        }
+    }
+
+    // These are hidden since clients are supposed to call get the
+    // width/height from `LumaData/RgbData` instead.
+    #[doc(hidden)]
+    pub fn height(&self) -> u32 {
+        match self {
+            Image::Stencil(s) => s.height(),
+            Image::Raster(r) => r.height(),
+        }
+    }
 }
 
 impl CacheKey for Image<'_, '_> {
@@ -98,11 +164,16 @@ pub struct RgbData {
     pub interpolate: bool,
     /// Additional scaling factors to apply to the image.
     ///
-    /// In 99.99% of the cases, those factors will just be 1.0, and you can
-    /// ignore them. However, in very rare cases where the image in the PDF
-    /// was invalid, an additional scaling needs to be applied before
-    /// drawing the image as a correction procedure. The first number
-    /// indicates the x scaling factor, the second number the y scaling factor.
+    /// In most cases, those factors will just be 1.0, and you can
+    /// ignore them. There are two situations in which they will not be equal
+    /// to 1:
+    /// 1) The PDF provided wrong metadata about the width/height of the image,
+    /// which needs to be corrected
+    /// 2) A lower resolution of the image was requested, in which case it needs
+    /// to be scaled up so that it still covers the same area.
+    ///
+    /// The first number indicates the x scaling factor, the second number the
+    /// y scaling factor.
     pub scale_factors: (f32, f32),
 }
 
@@ -119,11 +190,16 @@ pub struct LumaData {
     pub interpolate: bool,
     /// Additional scaling factors to apply to the image.
     ///
-    /// In 99.99% of the cases, those factors will just be 1.0, and you can
-    /// ignore them. However, in very rare cases where the image in the PDF
-    /// was invalid, an additional scaling needs to be applied before
-    /// drawing the image as a correction procedure. The first number
-    /// indicates the x scaling factor, the second number the y scaling factor.
+    /// In most cases, those factors will just be 1.0, and you can
+    /// ignore them. There are two situations in which they will not be equal
+    /// to 1:
+    /// 1) The PDF provided wrong metadata about the width/height of the image,
+    /// which needs to be corrected
+    /// 2) A lower resolution of the image was requested, in which case it needs
+    /// to be scaled up so that it still covers the same area.
+    ///
+    /// The first number indicates the x scaling factor, the second number the
+    /// y scaling factor.
     pub scale_factors: (f32, f32),
 }
 
