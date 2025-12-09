@@ -129,7 +129,7 @@ pub(crate) fn read_header<'a>(
     // We assume that every component has the same number of resolution levels.
     let min_num_resolution_levels = component_infos.iter().map(|c| c.num_resolution_levels())
         .min().unwrap();
-    let skipped_resolution_levels= settings.skipped_resolution_levels.min(min_num_resolution_levels);
+    let skipped_resolution_levels= settings.skipped_resolution_levels.min(min_num_resolution_levels - 1);
     
     // If the user defined a maximum resolution level that is lower than the
     // maximum available one, the final image needs to be shrinked further.
