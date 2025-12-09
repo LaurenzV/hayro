@@ -548,11 +548,6 @@ impl<'a> Device<'a> for Renderer {
             .length()
             .ceil() as u32;
 
-        eprintln!(
-            "target_width: {}, target_height: {}",
-            target_width, target_height
-        );
-
         match image {
             hayro_interpret::Image::Stencil(s) => {
                 s.with_stencil(
