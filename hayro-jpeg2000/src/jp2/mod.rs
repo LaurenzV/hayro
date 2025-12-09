@@ -136,6 +136,6 @@ pub(crate) fn parse<'a>(
         codestream: parsed_codestream.data,
         header: parsed_codestream.header,
         boxes: image_boxes,
-        settings: settings.clone(),
+        settings: *settings,
     })
 }
