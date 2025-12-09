@@ -16,7 +16,7 @@ use super::progression::{
     resolution_position_component_layer_progression,
 };
 use super::tag_tree::TagNode;
-use super::tile::{ComponentTile, Tile};
+use super::tile::{ComponentTile, ResolutionTile, Tile};
 use super::{ComponentData, bitplane, build, idwt, mct, segment, tile};
 use crate::reader::BitReader;
 use log::trace;
@@ -402,6 +402,7 @@ fn store<'a>(
     let idwt_output = &mut tile_ctx.idwt_output;
 
     let component_tile = ComponentTile::new(tile, component_info);
+    let resolution_tile = ResolutionTile::new(component_tile, component_info.num_resolution_levels() - 1 - header.skipped_resolution_levels);
 
     // If we have MCT, the sign shift needs to be applied after the
     // MCT transform. We take care of that in the main decode method.
@@ -444,12 +445,12 @@ fn store<'a>(
         let output_row_iter = channel_data
             .container
             .chunks_exact_mut(header.size_data.image_width() as usize)
-            .skip(tile.rect.y0.saturating_sub(image_y_offset) as usize);
+            .skip(resolution_tile.rect.y0.saturating_sub(image_y_offset) as usize);
 
         for (input_row, output_row) in input_row_iter.zip(output_row_iter) {
             let input_row = &input_row[skip_x as usize..];
             let output_row = &mut output_row
-                [tile.rect.x0.saturating_sub(image_x_offset) as usize..][..input_row.len()];
+                [resolution_tile.rect.x0.saturating_sub(image_x_offset) as usize..][..input_row.len()];
 
             output_row.copy_from_slice(input_row);
         }
