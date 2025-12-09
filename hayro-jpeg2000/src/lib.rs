@@ -115,6 +115,10 @@ pub struct Image<'a> {
     pub(crate) boxes: ImageBoxes,
     /// Settings that should be applied during decoding.
     pub(crate) settings: DecodeSettings,
+    /// Whether the image has an alpha channel.
+    pub(crate) has_alpha: bool,
+    /// The color space of the image.
+    pub(crate) color_space: ColorSpace,
 }
 
 impl<'a> Image<'a> {
@@ -134,44 +138,19 @@ impl<'a> Image<'a> {
         }
     }
 
+    /// Whether the image has an alpha channel.
+    pub fn has_alpha(&self) -> bool {
+        self.has_alpha
+    }
+
+    /// The color space of the image.
+    pub fn color_space(&self) -> ColorSpace {
+        self.color_space
+    }
+
     /// Decode the image into a bitmap image.
     pub fn decode(self) -> Result<Bitmap, &'static str> {
         let settings = &self.settings;
-        let num_components = self.header.component_infos.len();
-
-        // Check that we only have at most one alpha channel, and that the alpha
-        // chanel is the last component.
-        let mut has_alpha = false;
-
-        if let Some(cdef) = &self.boxes.channel_definition {
-            let last = cdef.channel_definitions.last().unwrap();
-            has_alpha = last.channel_type == ChannelType::Opacity; 
-        }
-
-        let mut color_space = get_color_space(&self.boxes, num_components)?;
-        
-        // If we didn't resolve palette indices, we need to assume grayscale image.
-        if !settings.resolve_palette_indices && self.boxes.palette.is_some() {
-            has_alpha = false;
-            color_space = ColorSpace::Gray;
-        }
-
-        // Validate the number of channels.
-        if self.boxes.palette.is_none() && self.header.component_infos.len()
-            != (color_space.num_channels() + if has_alpha { 1 } else { 0 }) as usize
-        {
-            if !settings.strict
-                && self.header.component_infos.len() == color_space.num_channels() as usize + 1
-                && !has_alpha
-            {
-                // See OPENJPEG test case orb-blue10-lin-j2k. Assume that we have an
-                // alpha channel in this case.
-                has_alpha = true;
-            } else {
-                return Err("image has too many channels");
-            }
-        }
-        
         let mut decoded_image =
             j2c::decode(self.codestream, &self.header).map(move |data| DecodedImage {
                 decoded: DecodedCodestream {
@@ -217,14 +196,56 @@ impl<'a> Image<'a> {
         convert_color_space(&mut decoded_image, bit_depth)?;
 
         Ok(Bitmap {
-            color_space,
-            has_alpha,
+            color_space: self.color_space,
+            has_alpha: self.has_alpha,
             original_bit_depth: bit_depth,
             data: interleave_and_convert(decoded_image),
             width,
             height,
         })
     }
+}
+
+pub(crate) fn resolve_alpha_and_color_space(
+    boxes: &ImageBoxes,
+    header: &Header<'_>,
+    settings: &DecodeSettings,
+) -> Result<(ColorSpace, bool), &'static str> {
+    let num_components = header.component_infos.len();
+
+    let mut has_alpha = false;
+
+    if let Some(cdef) = &boxes.channel_definition {
+        let last = cdef.channel_definitions.last().unwrap();
+        has_alpha = last.channel_type == ChannelType::Opacity;
+    }
+
+    let mut color_space = get_color_space(&boxes, num_components)?;
+
+    // If we didn't resolve palette indices, we need to assume grayscale image.
+    if !settings.resolve_palette_indices && boxes.palette.is_some() {
+        has_alpha = false;
+        color_space = ColorSpace::Gray;
+    }
+
+    // Validate the number of channels.
+    if boxes.palette.is_none()
+        && header.component_infos.len()
+            != (color_space.num_channels() + if has_alpha { 1 } else { 0 }) as usize
+    {
+        if !settings.strict
+            && header.component_infos.len() == color_space.num_channels() as usize + 1
+            && !has_alpha
+        {
+            // See OPENJPEG test case orb-blue10-lin-j2k. Assume that we have an
+            // alpha channel in this case.
+            has_alpha = true;
+        } else {
+            return Err("image has too many channels");
+        }
+    }
+
+    Ok((color_space, has_alpha))
 }
 
 /// The color space of the image.

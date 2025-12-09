@@ -7,7 +7,7 @@ use crate::jp2::cmap::{ComponentMappingBox, ComponentMappingEntry, ComponentMapp
 use crate::jp2::colr::ColorSpecificationBox;
 use crate::jp2::pclr::PaletteBox;
 use crate::reader::BitReader;
-use crate::{DecodeSettings, Image};
+use crate::{DecodeSettings, Image, resolve_alpha_and_color_space};
 use log::{debug, warn};
 
 pub(crate) mod r#box;
@@ -132,10 +132,15 @@ pub(crate) fn parse<'a>(
         image_boxes.component_mapping = Some(ComponentMappingBox { entries: mappings });
     }
 
+    let (color_space, has_alpha) =
+        resolve_alpha_and_color_space(&image_boxes, &parsed_codestream.header, settings)?;
+
     Ok(Image {
         codestream: parsed_codestream.data,
         header: parsed_codestream.header,
         boxes: image_boxes,
         settings: *settings,
+        color_space,
+        has_alpha,
     })
 }

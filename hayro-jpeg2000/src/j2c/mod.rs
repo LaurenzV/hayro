@@ -15,7 +15,7 @@ use super::jp2::ImageBoxes;
 use super::jp2::colr::{ColorSpace, ColorSpecificationBox, EnumeratedColorspace};
 use crate::j2c::codestream::markers;
 use crate::reader::BitReader;
-use crate::{DecodeSettings, Image};
+use crate::{DecodeSettings, Image, resolve_alpha_and_color_space};
 
 pub(crate) use codestream::Header;
 pub(crate) use decode::decode;
@@ -44,8 +44,8 @@ pub(crate) fn parse<'a>(
     stream: &'a [u8],
     settings: &DecodeSettings,
 ) -> Result<Image<'a>, &'static str> {
-    let parsed_code_stream = parse_raw(stream, settings)?;
-    let header = &parsed_code_stream.header;
+    let parsed_codestream = parse_raw(stream, settings)?;
+    let header = &parsed_codestream.header;
     let mut boxes = ImageBoxes::default();
 
     // If we are just decoding a raw codestream, we assume greyscale or
@@ -58,11 +58,16 @@ pub(crate) fn parse<'a>(
 
     boxes.color_specification = Some(ColorSpecificationBox { color_space: cs });
 
+    let (color_space, has_alpha) =
+        resolve_alpha_and_color_space(&boxes, &parsed_codestream.header, settings)?;
+
     Ok(Image {
-        codestream: parsed_code_stream.data,
-        header: parsed_code_stream.header,
+        codestream: parsed_codestream.data,
+        header: parsed_codestream.header,
         boxes,
         settings: *settings,
+        color_space,
+        has_alpha,
     })
 }
 
