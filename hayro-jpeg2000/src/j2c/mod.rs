@@ -28,10 +28,6 @@ pub(crate) struct ParsedCodestream<'a> {
 pub(crate) struct DecodedCodestream {
     /// The decoded components.
     pub(crate) components: Vec<ComponentData>,
-    /// The width of the image.
-    pub(crate) width: u32,
-    /// The height of the image.
-    pub(crate) height: u32,
 }
 
 #[derive(Debug, Clone)]

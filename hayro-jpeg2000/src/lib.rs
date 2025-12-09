@@ -19,15 +19,16 @@ use hayro_jpeg2000::{Image, DecodeSettings};
 
 let data = std::fs::read("image.jp2").unwrap();
 let image = Image::new(&data, &DecodeSettings::default()).unwrap();
-let bitmap = image.decode().unwrap();
 
 println!(
-    "decoded {}x{} image in {:?} with alpha={}",
-    bitmap.width,
-    bitmap.height,
-    bitmap.color_space,
-    bitmap.has_alpha,
+    "{}x{} image in {:?} with alpha={}",
+    image.width(),
+    image.height(),
+    image.color_space(),
+    image.has_alpha(),
 );
+
+let bitmap = image.decode().unwrap();
 ```
 
 If you want to see a more comprehensive example, please take a look
@@ -148,21 +149,51 @@ impl<'a> Image<'a> {
         &self.color_space
     }
 
-    /// Decode the image into a bitmap image.
-    pub fn decode(self) -> Result<Bitmap, &'static str> {
+    /// The width of the image.
+    pub fn width(&self) -> u32 {
+        self.header.size_data.image_width()
+    }
+
+    /// The height of the image.
+    pub fn height(&self) -> u32 {
+        self.header.size_data.image_height()
+    }
+
+    /// The number of bytes to reserve for the buffer of the image.
+    pub fn buffer_size(&self) -> usize {
+        self.width() as usize
+            * self.height() as usize
+            * (self.color_space.num_channels() as usize + if self.has_alpha { 1 } else { 0 })
+    }
+
+    /// The original bit depth of the image. You usually don't need to do anything
+    /// with this parameter, it just exists for informational purposes.
+    pub fn original_bit_depth(&self) -> u8 {
+        // Note that this only works if all components have the same precision.
+        self.header.component_infos[0].size_info.precision
+    }
+
+    /// Decode the image.
+    pub fn decode(self) -> Result<Vec<u8>, &'static str> {
+        let mut buf = vec![0; self.buffer_size()];
+        self.decode_into(&mut buf)?;
+
+        Ok(buf)
+    }
+
+    /// Decode the image into the given buffer. The buffer must have the correct
+    /// size.
+    pub fn decode_into(self, buf: &mut [u8]) -> Result<(), &'static str> {
+        if buf.len() != self.buffer_size() {
+            return Err("buffer doesn't have the correct length");
+        }
+
         let settings = &self.settings;
         let mut decoded_image =
             j2c::decode(self.codestream, &self.header).map(move |data| DecodedImage {
-                decoded: DecodedCodestream {
-                    components: data,
-                    width: self.header.size_data.image_width(),
-                    height: self.header.size_data.image_height(),
-                },
+                decoded: DecodedCodestream { components: data },
                 boxes: self.boxes,
             })?;
-
-        let width = decoded_image.decoded.width;
-        let height = decoded_image.decoded.height;
 
         // Resolve palette indices.
         if settings.resolve_palette_indices {
@@ -195,14 +226,9 @@ impl<'a> Image<'a> {
         let bit_depth = decoded_image.decoded.components[0].bit_depth;
         convert_color_space(&mut decoded_image, bit_depth)?;
 
-        Ok(Bitmap {
-            color_space: self.color_space,
-            has_alpha: self.has_alpha,
-            original_bit_depth: bit_depth,
-            data: interleave_and_convert(decoded_image),
-            width,
-            height,
-        })
+        interleave_and_convert(decoded_image, buf);
+
+        Ok(())
     }
 }
 
@@ -305,7 +331,7 @@ pub struct Bitmap {
     pub original_bit_depth: u8,
 }
 
-fn interleave_and_convert(image: DecodedImage) -> Vec<u8> {
+fn interleave_and_convert(image: DecodedImage, buf: &mut [u8]) {
     let mut components = image.decoded.components;
     let num_components = components.len();
 
@@ -319,15 +345,19 @@ fn interleave_and_convert(image: DecodedImage) -> Vec<u8> {
 
     let max_len = components[0].container.len();
 
+    let mut output_iter = buf.iter_mut();
+
     if all_same_bit_depth == Some(8) && num_components <= 4 {
         // Fast path for the common case.
         match num_components {
             // Gray-scale.
-            1 => components[0]
-                .container
-                .iter()
-                .map(|v| v.round() as u8)
-                .collect(),
+            1 => {
+                for (output, input) in
+                    output_iter.zip(components[0].container.iter().map(|v| v.round() as u8))
+                {
+                    *output = input
+                }
+            }
             // Gray-scale with alpha.
             2 => {
                 let c1 = components.pop().unwrap();
@@ -336,14 +366,10 @@ fn interleave_and_convert(image: DecodedImage) -> Vec<u8> {
                 let c0 = &c0.container[..max_len];
                 let c1 = &c1.container[..max_len];
 
-                let mut data = Vec::with_capacity(max_len * 2);
-
                 for i in 0..max_len {
-                    data.push(c0[i].round() as u8);
-                    data.push(c1[i].round() as u8);
+                    *output_iter.next().unwrap() = c0[i].round() as u8;
+                    *output_iter.next().unwrap() = c1[i].round() as u8;
                 }
-
-                data
             }
             // RGB
             3 => {
@@ -355,15 +381,11 @@ fn interleave_and_convert(image: DecodedImage) -> Vec<u8> {
                 let c1 = &c1.container[..max_len];
                 let c2 = &c2.container[..max_len];
 
-                let mut data = Vec::with_capacity(max_len * 3);
-
                 for i in 0..max_len {
-                    data.push(c0[i].round() as u8);
-                    data.push(c1[i].round() as u8);
-                    data.push(c2[i].round() as u8);
+                    *output_iter.next().unwrap() = c0[i].round() as u8;
+                    *output_iter.next().unwrap() = c1[i].round() as u8;
+                    *output_iter.next().unwrap() = c2[i].round() as u8;
                 }
-
-                data
             }
             // RGBA or CMYK.
             4 => {
@@ -377,36 +399,27 @@ fn interleave_and_convert(image: DecodedImage) -> Vec<u8> {
                 let c2 = &c2.container[..max_len];
                 let c3 = &c3.container[..max_len];
 
-                let mut data = Vec::with_capacity(max_len * 4);
-
                 for i in 0..max_len {
-                    data.push(c0[i].round() as u8);
-                    data.push(c1[i].round() as u8);
-                    data.push(c2[i].round() as u8);
-                    data.push(c3[i].round() as u8);
+                    *output_iter.next().unwrap() = c0[i].round() as u8;
+                    *output_iter.next().unwrap() = c1[i].round() as u8;
+                    *output_iter.next().unwrap() = c2[i].round() as u8;
+                    *output_iter.next().unwrap() = c3[i].round() as u8;
                 }
-
-                data
             }
             _ => unreachable!(),
         }
     } else {
         // Slow path that also requires us to scale to 8 bit.
-        let mut buf = Vec::with_capacity(max_len * components.len());
-
         let mul_factor = ((1 << 8) - 1) as f32;
 
         for sample in 0..max_len {
             for channel in components.iter() {
-                buf.push(
-                    ((channel.container[sample] / ((1 << channel.bit_depth) - 1) as f32)
-                        * mul_factor)
-                        .round() as u8,
-                );
+                *output_iter.next().unwrap() = ((channel.container[sample]
+                    / ((1 << channel.bit_depth) - 1) as f32)
+                    * mul_factor)
+                    .round() as u8
             }
         }
-
-        buf
     }
 }
 

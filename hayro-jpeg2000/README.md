@@ -25,15 +25,16 @@ use hayro_jpeg2000::{Image, DecodeSettings};
 
 let data = std::fs::read("image.jp2").unwrap();
 let image = Image::new(&data, &DecodeSettings::default()).unwrap();
-let bitmap = image.decode().unwrap();
 
 println!(
-    "decoded {}x{} image in {:?} with alpha={}",
-    bitmap.width,
-    bitmap.height,
-    bitmap.color_space,
-    bitmap.has_alpha,
+    "{}x{} image in {:?} with alpha={}",
+    image.width,
+    image.height,
+    image.color_space,
+    image.has_alpha,
 );
+
+let bitmap = image.decode().unwrap();
 ```
 
 If you want to see a more comprehensive example, please take a look

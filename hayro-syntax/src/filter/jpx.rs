@@ -22,12 +22,11 @@ pub(crate) fn decode(data: &[u8], params: &ImageDecodeParams) -> Option<FilterRe
     };
 
     let image = hayro_jpeg2000::Image::new(data, &settings).ok()?;
-    let bitmap = image.decode().ok()?;
 
-    let width = bitmap.width;
-    let height = bitmap.height;
-    let bpc = params.bpc.unwrap_or(bitmap.original_bit_depth);
-    let cs = match bitmap.color_space {
+    let width = image.width();
+    let height = image.height();
+    let bpc = params.bpc.unwrap_or(image.original_bit_depth());
+    let cs = match image.color_space() {
         ColorSpace::Gray => ImageColorSpace::Gray,
         ColorSpace::RGB => ImageColorSpace::Rgb,
         ColorSpace::CMYK => ImageColorSpace::Cmyk,
@@ -41,18 +40,20 @@ pub(crate) fn decode(data: &[u8], params: &ImageDecodeParams) -> Option<FilterRe
             _ => return None,
         },
     };
+    let has_alpha = image.has_alpha();
+    let bitmap = image.decode().ok()?;
 
-    let (mut data, mut alpha) = if !bitmap.has_alpha {
-        (bitmap.data, None)
+    let (mut data, mut alpha) = if !has_alpha {
+        (bitmap, None)
     } else {
         // Extract the alpha channel.
         let total_channels = cs.num_components() + 1;
         let mut color_channels = Vec::with_capacity(
-            (bitmap.data.len() / total_channels as usize) * cs.num_components() as usize,
+            (bitmap.len() / total_channels as usize) * cs.num_components() as usize,
         );
-        let mut alpha_channel = Vec::with_capacity(bitmap.data.len() / total_channels as usize);
+        let mut alpha_channel = Vec::with_capacity(bitmap.len() / total_channels as usize);
 
-        for sample in bitmap.data.chunks_exact(total_channels as usize) {
+        for sample in bitmap.chunks_exact(total_channels as usize) {
             let (alpha, color) = sample.split_last()?;
             alpha_channel.push(*alpha);
             color_channels.extend_from_slice(color);

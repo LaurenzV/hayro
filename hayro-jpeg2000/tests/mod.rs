@@ -1,6 +1,6 @@
 #![allow(missing_docs)]
 
-use hayro_jpeg2000::{Bitmap, ColorSpace, DecodeSettings, Image};
+use hayro_jpeg2000::{ColorSpace, DecodeSettings, Image};
 use image::{DynamicImage, ImageBuffer, ImageFormat, Rgba, RgbaImage};
 use indicatif::{ProgressBar, ProgressStyle};
 use moxcms::{ColorProfile, Layout, TransformOptions};
@@ -239,19 +239,25 @@ fn run_asset_test(asset: &AssetEntry) -> Result<(), String> {
 
     let data =
         fs::read(&asset_path).map_err(|err| format!("failed to read {}: {err}", asset_name))?;
-    let bitmap_result =
-        Image::new(&data, &DecodeSettings::default()).and_then(|image| image.decode());
+    let image = Image::new(&data, &DecodeSettings::default());
 
     if !asset.render {
         // Crash-only test: just execute the decoder to ensure it handles the file.
-        let _ = bitmap_result;
+        let _ = image.and_then(|i| i.decode());
         return Ok(());
     }
+
+    let image = image.map_err(|err| format!("failed to parse image {}: {err}", asset_name))?;
+    let width = image.width();
+    let height = image.height();
+    let color_space = image.color_space().clone();
+    let has_alpha = image.has_alpha();
+    let bitmap_result = image.decode();
 
     let bitmap =
         bitmap_result.map_err(|err| format!("failed to decode {}: {err:?}", asset_name))?;
 
-    let rgba = to_dynamic_image(bitmap)
+    let rgba = to_dynamic_image(bitmap, width, height, has_alpha, color_space)
         .map_err(|err| format!("failed to rasterize {}: {err}", asset_name))?
         .into_rgba8();
     let reference_path = asset.relative_path.with_extension("png");
@@ -303,7 +309,13 @@ fn run_asset_test(asset: &AssetEntry) -> Result<(), String> {
     Ok(())
 }
 
-fn to_dynamic_image(bitmap: Bitmap) -> Result<DynamicImage, String> {
+fn to_dynamic_image(
+    data: Vec<u8>,
+    width: u32,
+    height: u32,
+    has_alpha: bool,
+    color_space: ColorSpace,
+) -> Result<DynamicImage, String> {
     fn from_icc(
         icc: &[u8],
         num_channels: u8,
@@ -355,29 +367,32 @@ fn to_dynamic_image(bitmap: Bitmap) -> Result<DynamicImage, String> {
         Ok(image)
     }
 
-    fn convert(bitmap: Bitmap, cs: ColorSpace) -> Result<DynamicImage, String> {
-        let (width, height) = (bitmap.width, bitmap.height);
-        let has_alpha = bitmap.has_alpha;
-
+    fn convert(
+        data: Vec<u8>,
+        width: u32,
+        height: u32,
+        has_alpha: bool,
+        cs: ColorSpace,
+    ) -> Result<DynamicImage, String> {
         let image = match (cs, has_alpha) {
             (ColorSpace::Gray, false) => DynamicImage::ImageLuma8(
-                ImageBuffer::from_raw(width, height, bitmap.data)
+                ImageBuffer::from_raw(width, height, data)
                     .ok_or_else(|| "failed to build grayscale buffer".to_string())?,
             ),
             (ColorSpace::Gray, true) => DynamicImage::ImageLumaA8(
-                ImageBuffer::from_raw(width, height, bitmap.data)
+                ImageBuffer::from_raw(width, height, data)
                     .ok_or_else(|| "failed to build grayscale-alpha buffer".to_string())?,
             ),
             (ColorSpace::RGB, false) => DynamicImage::ImageRgb8(
-                ImageBuffer::from_raw(width, height, bitmap.data)
+                ImageBuffer::from_raw(width, height, data)
                     .ok_or_else(|| "failed to build rgb buffer".to_string())?,
             ),
             (ColorSpace::RGB, true) => DynamicImage::ImageRgba8(
-                ImageBuffer::from_raw(width, height, bitmap.data)
+                ImageBuffer::from_raw(width, height, data)
                     .ok_or_else(|| "failed to build rgba buffer".to_string())?,
             ),
             (ColorSpace::CMYK, false) => {
-                from_icc(CMYK_PROFILE, 4, has_alpha, width, height, &bitmap.data)?
+                from_icc(CMYK_PROFILE, 4, has_alpha, width, height, &data)?
             }
             (ColorSpace::CMYK, true) => {
                 // moxcms doesn't support CMYK interleaved with alpha, so we
@@ -385,7 +400,7 @@ fn to_dynamic_image(bitmap: Bitmap) -> Result<DynamicImage, String> {
                 let mut cmyk = vec![];
                 let mut alpha = vec![];
 
-                for sample in bitmap.data.chunks_exact(5) {
+                for sample in data.chunks_exact(5) {
                     cmyk.extend_from_slice(&sample[..4]);
                     alpha.push(sample[4]);
                 }
@@ -414,29 +429,23 @@ fn to_dynamic_image(bitmap: Bitmap) -> Result<DynamicImage, String> {
                     num_components += 1;
                 }
 
-                from_icc(
-                    &profile,
-                    num_components,
-                    has_alpha,
-                    width,
-                    height,
-                    &bitmap.data,
-                )
-                .or_else(|e| match num_components {
-                    1 => convert(bitmap, ColorSpace::Gray),
-                    3 => convert(bitmap, ColorSpace::RGB),
-                    4 => convert(bitmap, ColorSpace::CMYK),
-                    _ => Err(e),
-                })?
+                from_icc(&profile, num_components, has_alpha, width, height, &data).or_else(
+                    |e| match num_components {
+                        1 => convert(data, width, height, has_alpha, ColorSpace::Gray),
+                        3 => convert(data, width, height, has_alpha, ColorSpace::RGB),
+                        4 => convert(data, width, height, has_alpha, ColorSpace::CMYK),
+                        _ => Err(e),
+                    },
+                )?
             }
         };
 
         Ok(image)
     }
 
-    let cs = bitmap.color_space.clone();
+    let cs = color_space.clone();
 
-    convert(bitmap, cs)
+    convert(data, width, height, has_alpha, cs)
 }
 
 fn get_diff(expected_image: &RgbaImage, actual_image: &RgbaImage) -> (RgbaImage, u32) {
