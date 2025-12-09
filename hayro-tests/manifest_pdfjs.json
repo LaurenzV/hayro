@@ -17,8 +17,7 @@
     "last_page": 0
   },
   "alphatrans",
-  "arabiccidtruetype-pdf",
-  "arabiccidtruetype-text",
+  "arabiccidtruetype",
   "bigboundingbox",
   "boundingBox_invalid",
   {
@@ -61,7 +60,7 @@
     "last_page": 0
   },
   "bug1123803",
-  "bug1130815-eq",
+  "bug1130815",
   "bug1132849",
   {
     "id": "bug1140761",
@@ -84,7 +83,6 @@
   },
   "bug1200096",
   "bug1245391",
-  "bug1245391-text",
   "bug1252420",
   {
     "id": "bug1260585",
@@ -104,13 +102,13 @@
     "last_page": 1
   },
   "bug1473809",
-  "bug1513120-text",
+  "bug1513120",
   "bug1529502",
   "bug1539074",
   "bug1539074_1",
   "bug1627427",
-  "bug1650302_reduced",
-  "bug1703683_page2_reduced",
+  "bug1650302",
+  "bug1703683",
   "bug1743245",
   {
     "id": "bug1749563",
@@ -126,7 +124,7 @@
   "bug1795263",
   "bug1799927",
   "bug1820909",
-  "bug1826783-display",
+  "bug1826783",
   {
     "id": "bug1898802",
     "last_page": 0
@@ -190,7 +188,7 @@
   },
   "bug893730",
   "bug894572",
-  "bug898853.pdf",
+  "bug898853",
   "bug900822",
   {
     "id": "bug903856",
@@ -261,7 +259,7 @@
   "ichiji",
   "images_1bit_grayscale",
   {
-    "id": "intelisa-eq",
+    "id": "intelisa",
     "last_page": 99
   },
   "isssue18194",
@@ -351,7 +349,7 @@
   },
   "issue1169",
   "issue11697",
-  "issue1171.pdf",
+  "issue1171",
   "issue11718",
   {
     "id": "issue11794",
@@ -364,7 +362,7 @@
   },
   "issue11931",
   "issue12010",
-  "issue12120_reduced",
+  "issue12120",
   "issue12213",
   "issue12213.1",
   {
@@ -413,7 +411,7 @@
     "id": "issue12752",
     "last_page": 0
   },
-  "issue12798_page1_reduced",
+  "issue12798",
   "issue12810",
   "issue12823",
   "issue1309",
@@ -430,15 +428,15 @@
   "issue13211",
   "issue13242",
   "issue13316",
-  "issue13325_reduced",
+  "issue13325",
   "issue13372",
   {
     "id": "issue13433",
     "last_page": 0
   },
-  "issue13447-eq",
+  "issue13447",
   "issue1350",
-  "issue13561_reduced",
+  "issue13561",
   "issue13610",
   "issue13626",
   {
@@ -451,7 +449,7 @@
     "first_page": 2
   },
   "issue13851",
-  "issue13931-default",
+  "issue13931",
   "issue13971",
   {
     "id": "issue13999",
@@ -464,7 +462,7 @@
   },
   "issue14165",
   {
-    "id": "issue1419.pdf",
+    "id": "issue1419",
     "first_page": 1,
     "last_page": 1
   },
