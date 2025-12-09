@@ -69,6 +69,7 @@ use crate::jp2::colr::{CieLab, EnumeratedColorspace};
 use crate::jp2::icc::ICCMetadata;
 use crate::jp2::{DecodedImage, ImageBoxes};
 
+#[cfg(feature = "image")]
 mod image;
 mod j2c;
 mod jp2;
