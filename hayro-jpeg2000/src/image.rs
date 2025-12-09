@@ -52,7 +52,7 @@ impl ImageDecoder for Image<'_> {
             ColorType::Rgba8 => 4,
             _ => unreachable!(),
         };
-        
+
         base * factor as u64
     }
 }
@@ -78,14 +78,14 @@ fn convert_inner(image: &Image<'_>, buf: &mut [u8]) -> Option<()> {
             (1, false) => (Layout::Gray, Layout::Gray, 1),
             (1, true) => (Layout::GrayAlpha, Layout::GrayAlpha, 2),
             (3, false) => (Layout::Rgb, Layout::Rgb, 3),
-            (3, true) => (Layout::Rgba, Layout::Rgba, 3),
+            (3, true) => (Layout::Rgba, Layout::Rgba, 4),
             // CMYK will be converted to RGB.
             (4, false) => (Layout::Rgba, Layout::Rgb, 3),
             _ => {
                 unimplemented!()
-            },
+            }
         };
-        
+
         let transform = src_profile
             .create_transform_8bit(
                 src_layout,
@@ -141,12 +141,11 @@ fn convert_inner(image: &Image<'_>, buf: &mut [u8]) -> Option<()> {
                 }
 
                 let rgb = from_icc(CMYK_PROFILE, 4, false, width, height, &cmyk)?;
-                for (out, pixel) in buf.chunks_exact_mut(4)
-                    .zip(rgb
-                        .chunks_exact(3)
+                for (out, pixel) in buf.chunks_exact_mut(4).zip(
+                    rgb.chunks_exact(3)
                         .zip(alpha)
-                        .map(|(rgb, alpha)| [rgb[0], rgb[1], rgb[2], alpha]))
-                {
+                        .map(|(rgb, alpha)| [rgb[0], rgb[1], rgb[2], alpha]),
+                ) {
                     out.copy_from_slice(&pixel);
                 }
             }
