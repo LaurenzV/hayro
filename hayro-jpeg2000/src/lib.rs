@@ -137,8 +137,9 @@ impl<'a> Image<'a> {
     /// Decode the image into a bitmap image.
     pub fn decode(self) -> Result<Bitmap, &'static str> {
         let settings = &self.settings;
+        let num_components = self.header.component_infos.len();
         let mut decoded_image =
-            j2c::decode(self.codestream, &self.header).map(|data| DecodedImage {
+            j2c::decode(self.codestream, &self.header).map(move |data| DecodedImage {
                 decoded: DecodedCodestream {
                     components: data,
                     width: self.header.size_data.image_width(),
@@ -187,13 +188,15 @@ impl<'a> Image<'a> {
         // Note that this is only valid if all images have the same bit depth.
         let bit_depth = decoded_image.decoded.components[0].bit_depth;
 
-        let mut color_space = resolve_color_space(&mut decoded_image, bit_depth)?;
+        let mut color_space = get_color_space(&decoded_image.boxes, num_components)?;
 
         // If we didn't resolve palette indices, we need to assume grayscale image.
         if !settings.resolve_palette_indices && decoded_image.boxes.palette.is_some() {
             has_alpha = false;
             color_space = ColorSpace::Gray;
         }
+
+        convert_color_space(&mut decoded_image, bit_depth)?;
 
         // Validate the number of channels.
         if decoded_image.decoded.components.len()
@@ -384,17 +387,32 @@ fn interleave_and_convert(image: DecodedImage) -> Vec<u8> {
     }
 }
 
-fn resolve_color_space(
-    image: &mut DecodedImage,
-    bit_depth: u8,
-) -> Result<ColorSpace, &'static str> {
-    let cs = match &image
+fn convert_color_space(image: &mut DecodedImage, bit_depth: u8) -> Result<(), &'static str> {
+    if let jp2::colr::ColorSpace::Enumerated(e) = &image
         .boxes
         .color_specification
         .as_ref()
         .unwrap()
         .color_space
     {
+        match e {
+            EnumeratedColorspace::Sycc => {
+                sycc_to_rgb(&mut image.decoded.components, bit_depth)
+                    .ok_or("failed to convert image from sycc to RGB")?;
+            }
+            EnumeratedColorspace::CieLab(cielab) => {
+                cielab_to_rgb(&mut image.decoded.components, bit_depth, cielab)
+                    .ok_or("failed to convert image from LAB to RGB")?;
+            }
+            _ => {}
+        }
+    }
+
+    Ok(())
+}
+
+fn get_color_space(boxes: &ImageBoxes, num_components: usize) -> Result<ColorSpace, &'static str> {
+    let cs = match &boxes.color_specification.as_ref().unwrap().color_space {
         jp2::colr::ColorSpace::Enumerated(e) => {
             match e {
                 EnumeratedColorspace::Cmyk => ColorSpace::CMYK,
@@ -406,24 +424,13 @@ fn resolve_color_space(
                         num_channels: 3,
                     }
                 }
-                // TODO: Actually implement this.
                 EnumeratedColorspace::EsRgb => ColorSpace::RGB,
                 EnumeratedColorspace::Greyscale => ColorSpace::Gray,
-                EnumeratedColorspace::Sycc => {
-                    sycc_to_rgb(&mut image.decoded.components, bit_depth)
-                        .ok_or("failed to convert image from sycc to RGB")?;
-
-                    ColorSpace::RGB
-                }
-                EnumeratedColorspace::CieLab(cielab) => {
-                    cielab_to_rgb(&mut image.decoded.components, bit_depth, cielab)
-                        .ok_or("failed to convert image from LAB to RGB")?;
-
-                    ColorSpace::Icc {
-                        profile: include_bytes!("../assets/LAB.icc").to_vec(),
-                        num_channels: 3,
-                    }
-                }
+                EnumeratedColorspace::Sycc => ColorSpace::RGB,
+                EnumeratedColorspace::CieLab(_) => ColorSpace::Icc {
+                    profile: include_bytes!("../assets/LAB.icc").to_vec(),
+                    num_channels: 3,
+                },
                 _ => return Err("unsupported JP2 image"),
             }
         }
@@ -441,7 +448,7 @@ fn resolve_color_space(
                 ColorSpace::RGB
             }
         }
-        jp2::colr::ColorSpace::Unknown => match image.decoded.components.len() {
+        jp2::colr::ColorSpace::Unknown => match num_components {
             1 => ColorSpace::Gray,
             3 => ColorSpace::RGB,
             4 => ColorSpace::CMYK,
