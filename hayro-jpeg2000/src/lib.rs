@@ -174,7 +174,7 @@ impl<'a> Image<'a> {
     }
 
     /// Decode the image.
-    pub fn decode(self) -> Result<Vec<u8>, &'static str> {
+    pub fn decode(&self) -> Result<Vec<u8>, &'static str> {
         let mut buf = vec![0; self.buffer_size()];
         self.decode_into(&mut buf)?;
 
@@ -183,7 +183,7 @@ impl<'a> Image<'a> {
 
     /// Decode the image into the given buffer. The buffer must have the correct
     /// size.
-    pub fn decode_into(self, buf: &mut [u8]) -> Result<(), &'static str> {
+    pub fn decode_into(&self, buf: &mut [u8]) -> Result<(), &'static str> {
         if buf.len() != self.buffer_size() {
             return Err("buffer doesn't have the correct length");
         }
@@ -192,7 +192,7 @@ impl<'a> Image<'a> {
         let mut decoded_image =
             j2c::decode(self.codestream, &self.header).map(move |data| DecodedImage {
                 decoded: DecodedCodestream { components: data },
-                boxes: self.boxes,
+                boxes: self.boxes.clone(),
             })?;
 
         // Resolve palette indices.
