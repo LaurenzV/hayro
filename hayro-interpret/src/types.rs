@@ -168,9 +168,9 @@ pub struct RgbData {
     /// ignore them. There are two situations in which they will not be equal
     /// to 1:
     /// 1) The PDF provided wrong metadata about the width/height of the image,
-    /// which needs to be corrected
+    ///    which needs to be corrected
     /// 2) A lower resolution of the image was requested, in which case it needs
-    /// to be scaled up so that it still covers the same area.
+    ///    to be scaled up so that it still covers the same area.
     ///
     /// The first number indicates the x scaling factor, the second number the
     /// y scaling factor.
@@ -194,9 +194,9 @@ pub struct LumaData {
     /// ignore them. There are two situations in which they will not be equal
     /// to 1:
     /// 1) The PDF provided wrong metadata about the width/height of the image,
-    /// which needs to be corrected
+    ///    which needs to be corrected
     /// 2) A lower resolution of the image was requested, in which case it needs
-    /// to be scaled up so that it still covers the same area.
+    ///    to be scaled up so that it still covers the same area.
     ///
     /// The first number indicates the x scaling factor, the second number the
     /// y scaling factor.
