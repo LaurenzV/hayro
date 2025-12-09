@@ -144,8 +144,8 @@ impl<'a> Image<'a> {
     }
 
     /// The color space of the image.
-    pub fn color_space(&self) -> ColorSpace {
-        self.color_space
+    pub fn color_space(&self) -> &ColorSpace {
+        &self.color_space
     }
 
     /// Decode the image into a bitmap image.
@@ -220,7 +220,7 @@ pub(crate) fn resolve_alpha_and_color_space(
         has_alpha = last.channel_type == ChannelType::Opacity;
     }
 
-    let mut color_space = get_color_space(&boxes, num_components)?;
+    let mut color_space = get_color_space(boxes, num_components)?;
 
     // If we didn't resolve palette indices, we need to assume grayscale image.
     if !settings.resolve_palette_indices && boxes.palette.is_some() {
