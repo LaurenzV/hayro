@@ -19,7 +19,7 @@ pub(crate) fn decode(data: &[u8], params: &ImageDecodeParams) -> Option<FilterRe
     let settings = DecodeSettings {
         resolve_palette_indices: false,
         strict: false,
-        max_resolution: u16::MAX,
+        skipped_resolution_levels: 0,
     };
 
     let image = hayro_jpeg2000::Image::new(data, &settings).ok()?;

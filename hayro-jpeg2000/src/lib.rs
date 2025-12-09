@@ -97,7 +97,7 @@ pub struct DecodeSettings {
     /// specific reason not to.
     pub strict: bool,
     /// The maximum resolution level that should be decoded.
-    pub max_resolution: u16,
+    pub skipped_resolution_levels: u16,
 }
 
 impl Default for DecodeSettings {
@@ -105,7 +105,7 @@ impl Default for DecodeSettings {
         Self {
             resolve_palette_indices: true,
             strict: false,
-            max_resolution: u16::MAX,
+            skipped_resolution_levels: 0,
         }
     }
 }

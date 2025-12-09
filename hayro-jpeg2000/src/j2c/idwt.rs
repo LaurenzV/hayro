@@ -1,5 +1,6 @@
 //! Performing the inverse discrete wavelet transform, as specified in Annex F.
 
+use crate::j2c::Header;
 use super::build::{Decomposition, SubBand, SubBandType};
 use super::codestream::WaveletTransform;
 use super::decode::{DecompositionStorage, TileDecodeContext};
@@ -70,11 +71,13 @@ pub(crate) fn apply(
     storage: &DecompositionStorage<'_>,
     tile_ctx: &mut TileDecodeContext<'_>,
     component_idx: usize,
+    header: &Header,
     transform: WaveletTransform,
 ) {
     let tile_decompositions = &storage.tile_decompositions[component_idx];
 
-    let decompositions = &storage.decompositions[tile_decompositions.decompositions.clone()];
+    let mut decompositions = &storage.decompositions[tile_decompositions.decompositions.clone()];
+    decompositions = &decompositions[..decompositions.len().saturating_sub(header.skipped_resolution_levels as usize)];
     let ll_sub_band = &storage.sub_bands[tile_decompositions.first_ll_sub_band];
 
     // To explain a bit why we have this scratch buffer and another coefficient

@@ -815,8 +815,7 @@ mod tests {
             },
             component_infos: vec![],
             ppm_packets: vec![],
-            num_resolution_levels: 0,
-            max_resolution_level: 0,
+            skipped_resolution_levels: 0,
             strict: false,
         };
 

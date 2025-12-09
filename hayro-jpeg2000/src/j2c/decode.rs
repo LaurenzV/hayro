@@ -109,7 +109,7 @@ fn decode_tile<'a>(
     // for each component tile so we can reuse allocations better.
     for (idx, component_info) in header.component_infos.iter().enumerate() {
         // Next, we apply the inverse discrete wavelet transform.
-        idwt::apply(storage, tile_ctx, idx, component_info.wavelet_transform());
+        idwt::apply(storage, tile_ctx, idx, header, component_info.wavelet_transform());
         // Finally, we store the raw samples for the tile area in the correct
         // location. Note that in case we have MCT, we are not applying it yet.
         // It will be applied in the very end once all tiles have been processed.
@@ -411,8 +411,6 @@ fn store<'a>(
             *sample += (1 << (component_info.size_info.precision - 1)) as f32;
         }
     }
-
-    assert_eq!(idwt_output.rect, component_tile.rect);
 
     let (scale_x, scale_y) = (
         component_info.size_info.horizontal_resolution,
