@@ -69,6 +69,7 @@ use crate::jp2::colr::{CieLab, EnumeratedColorspace};
 use crate::jp2::icc::ICCMetadata;
 use crate::jp2::{DecodedImage, ImageBoxes};
 
+mod image;
 mod j2c;
 mod jp2;
 pub(crate) mod reader;
@@ -159,13 +160,6 @@ impl<'a> Image<'a> {
         self.header.size_data.image_height()
     }
 
-    /// The number of bytes to reserve for the buffer of the image.
-    pub fn buffer_size(&self) -> usize {
-        self.width() as usize
-            * self.height() as usize
-            * (self.color_space.num_channels() as usize + if self.has_alpha { 1 } else { 0 })
-    }
-
     /// The original bit depth of the image. You usually don't need to do anything
     /// with this parameter, it just exists for informational purposes.
     pub fn original_bit_depth(&self) -> u8 {
@@ -175,7 +169,10 @@ impl<'a> Image<'a> {
 
     /// Decode the image.
     pub fn decode(&self) -> Result<Vec<u8>, &'static str> {
-        let mut buf = vec![0; self.buffer_size()];
+        let buffer_size = self.width() as usize
+            * self.height() as usize
+            * (self.color_space.num_channels() as usize + if self.has_alpha { 1 } else { 0 });
+        let mut buf = vec![0; buffer_size];
         self.decode_into(&mut buf)?;
 
         Ok(buf)
@@ -183,11 +180,7 @@ impl<'a> Image<'a> {
 
     /// Decode the image into the given buffer. The buffer must have the correct
     /// size.
-    pub fn decode_into(&self, buf: &mut [u8]) -> Result<(), &'static str> {
-        if buf.len() != self.buffer_size() {
-            return Err("buffer doesn't have the correct length");
-        }
-
+    pub(crate) fn decode_into(&self, buf: &mut [u8]) -> Result<(), &'static str> {
         let settings = &self.settings;
         let mut decoded_image =
             j2c::decode(self.codestream, &self.header).map(move |data| DecodedImage {

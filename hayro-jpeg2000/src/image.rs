@@ -1,0 +1,184 @@
+use crate::{ColorSpace, Image};
+use ::image::error::{DecodingError, ImageFormatHint};
+use ::image::{ColorType, ImageDecoder, ImageError, ImageResult};
+use moxcms::{ColorProfile, Layout, TransformOptions};
+
+const CMYK_PROFILE: &[u8] = include_bytes!("../assets/CGATS001Compat-v2-micro.icc");
+
+impl ImageDecoder for Image<'_> {
+    fn dimensions(&self) -> (u32, u32) {
+        (self.width(), self.height())
+    }
+
+    fn color_type(&self) -> ColorType {
+        let channel_count = self.color_space.num_channels();
+        let has_alpha = self.has_alpha;
+
+        match (channel_count, has_alpha) {
+            (1, false) => ColorType::L8,
+            (1, true) => ColorType::La8,
+            (3, false) => ColorType::Rgb8,
+            (3, true) => ColorType::Rgba8,
+            // We convert CMYK to RGB.
+            (4, false) => ColorType::Rgb8,
+            (4, true) => ColorType::Rgba8,
+            _ => unreachable!(),
+        }
+    }
+
+    fn read_image(self, buf: &mut [u8]) -> ImageResult<()>
+    where
+        Self: Sized,
+    {
+        convert_inner(&self, buf).ok_or(ImageError::Decoding(DecodingError::new(
+            ImageFormatHint::Name("JPEG2000".to_string()),
+            "failed to decode image",
+        )))
+    }
+
+    fn read_image_boxed(self: Box<Self>, buf: &mut [u8]) -> ImageResult<()> {
+        convert_inner(&self, buf).ok_or(ImageError::Decoding(DecodingError::new(
+            ImageFormatHint::Name("JPEG2000".to_string()),
+            "failed to decode image",
+        )))
+    }
+
+    fn total_bytes(&self) -> u64 {
+        let base = self.width() as u64 * self.height() as u64;
+        let factor = match self.color_type() {
+            ColorType::L8 => 1,
+            ColorType::La8 => 2,
+            ColorType::Rgb8 => 3,
+            ColorType::Rgba8 => 4,
+            _ => unreachable!(),
+        };
+        
+        base * factor as u64
+    }
+}
+
+fn convert_inner(image: &Image<'_>, buf: &mut [u8]) -> Option<()> {
+    let width = image.width();
+    let height = image.height();
+    let color_space = image.color_space().clone();
+    let has_alpha = image.has_alpha();
+
+    fn from_icc(
+        icc: &[u8],
+        num_channels: u8,
+        has_alpha: bool,
+        width: u32,
+        height: u32,
+        input_data: &[u8],
+    ) -> Option<Vec<u8>> {
+        let src_profile = ColorProfile::new_from_slice(icc).ok()?;
+        let dest_profile = ColorProfile::new_srgb();
+
+        let src_layout = match num_channels {
+            1 => Layout::Gray,
+            2 => Layout::GrayAlpha,
+            3 => Layout::Rgb,
+            4 => Layout::Rgba,
+            5 => Layout::Inks5,
+            _ => unimplemented!(),
+        };
+
+        let out_channels = if has_alpha { 4 } else { 3 };
+
+        let transform = src_profile
+            .create_transform_8bit(
+                src_layout,
+                &dest_profile,
+                if has_alpha { Layout::Rgba } else { Layout::Rgb },
+                TransformOptions::default(),
+            )
+            .ok()?;
+
+        let mut transformed = vec![0; (width * height * out_channels) as usize];
+
+        transform.transform(input_data, &mut transformed).ok()?;
+
+        Some(transformed)
+    }
+
+    fn process(
+        image: &Image<'_>,
+        buf: &mut [u8],
+        width: u32,
+        height: u32,
+        has_alpha: bool,
+        cs: ColorSpace,
+    ) -> Option<()> {
+        match (cs, has_alpha) {
+            (ColorSpace::Gray, false) => {
+                image.decode_into(buf).ok()?;
+            }
+            (ColorSpace::Gray, true) => {
+                image.decode_into(buf).ok()?;
+            }
+            (ColorSpace::RGB, false) => {
+                image.decode_into(buf).ok()?;
+            }
+            (ColorSpace::RGB, true) => {
+                image.decode_into(buf).ok()?;
+            }
+            (ColorSpace::CMYK, false) => {
+                let decoded = image.decode().ok()?;
+                let transformed = from_icc(CMYK_PROFILE, 4, has_alpha, width, height, &decoded)?;
+                buf.copy_from_slice(&transformed);
+            }
+            (ColorSpace::CMYK, true) => {
+                // moxcms doesn't support CMYK interleaved with alpha, so we
+                // need to split it.
+                let decoded = image.decode().ok()?;
+                let mut cmyk = vec![];
+                let mut alpha = vec![];
+
+                for sample in decoded.chunks_exact(5) {
+                    cmyk.extend_from_slice(&sample[..4]);
+                    alpha.push(sample[4]);
+                }
+
+                let rgb = from_icc(CMYK_PROFILE, 4, false, width, height, &decoded)?;
+                for pixel in rgb
+                    .chunks_exact(3)
+                    .zip(alpha)
+                    .map(|(rgb, alpha)| [rgb[0], rgb[1], rgb[2], alpha])
+                {
+                    buf.copy_from_slice(&pixel);
+                }
+            }
+            (
+                ColorSpace::Icc {
+                    profile,
+                    num_channels: mut num_components,
+                },
+                has_alpha,
+            ) => {
+                if has_alpha {
+                    num_components += 1;
+                }
+
+                let decoded = image.decode().ok()?;
+
+                let transformed =
+                    from_icc(&profile, num_components, has_alpha, width, height, &decoded);
+
+                if let Some(transformed) = transformed {
+                    buf.copy_from_slice(&transformed);
+                } else {
+                    match num_components {
+                        1 => process(image, buf, width, height, has_alpha, ColorSpace::Gray)?,
+                        3 => process(image, buf, width, height, has_alpha, ColorSpace::RGB)?,
+                        4 => process(image, buf, width, height, has_alpha, ColorSpace::CMYK)?,
+                        _ => return None,
+                    }
+                };
+            }
+        };
+
+        Some(())
+    }
+
+    process(image, buf, width, height, has_alpha, color_space)
+}

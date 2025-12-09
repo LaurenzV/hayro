@@ -11,17 +11,21 @@ license.workspace = true
 [dependencies]
 log = { workspace = true }
 fearless_simd = { workspace = true, optional = true }
+image = { workspace = true, default-features = false, optional = true }
+moxcms = { workspace = true, optional = true }
 
 [features]
-default = ["simd"]
+default = ["simd", "image"]
+# Enable SIMD via `fearless_simd`.
 simd = ["fearless_simd"]
+# Integration with the `image` crate.
+image = ["dep:image", "dep:moxcms"]
 
 [lints]
 workspace = true
 
 [dev-dependencies]
-image = { version = "0.25.8", default-features = false, features = ["png"] }
-moxcms = { workspace = true }
+image = { workspace = true, default-features = false, features = ["png"] }
 indicatif = { version = "0.17", features = ["rayon"] }
 rayon = "1.10"
 serde = { version = "1", features = ["derive"] }
