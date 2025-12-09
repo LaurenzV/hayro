@@ -383,7 +383,7 @@ use crate::run_render_test;
 #[test] fn pdfjs_franz() { run_render_test("pdfjs_franz", "downloads/pdfjs/franz.pdf", None); }
 #[test] fn pdfjs_franz_2() { run_render_test("pdfjs_franz_2", "downloads/pdfjs/franz_2.pdf", None); }
 #[test] fn pdfjs_freeculture() { run_render_test("pdfjs_freeculture", "downloads/pdfjs/freeculture.pdf", Some("..=4")); }
-#[test] fn pdfjs_geothermal_pdf() { run_render_test("pdfjs_geothermal_pdf", "downloads/pdfjs/geothermal.pdf.pdf", Some("..=4")); }
+#[test] fn pdfjs_geothermal() { run_render_test("pdfjs_geothermal", "downloads/pdfjs/geothermal.pdf", Some("..=4")); }
 #[test] fn pdfjs_german_umlaut() { run_render_test("pdfjs_german_umlaut", "downloads/pdfjs/german-umlaut.pdf", None); }
 #[test] fn pdfjs_gesamt() { run_render_test("pdfjs_gesamt", "downloads/pdfjs/gesamt.pdf", Some("..=0")); }
 #[test] fn pdfjs_glyph_accent() { run_render_test("pdfjs_glyph_accent", "downloads/pdfjs/glyph_accent.pdf", None); }
@@ -590,7 +590,7 @@ use crate::run_render_test;
 #[test] fn pdfjs_issue2139() { run_render_test("pdfjs_issue2139", "downloads/pdfjs/issue2139.pdf", None); }
 #[test] fn pdfjs_issue215() { run_render_test("pdfjs_issue215", "downloads/pdfjs/issue215.pdf", None); }
 #[test] fn pdfjs_issue2176() { run_render_test("pdfjs_issue2176", "downloads/pdfjs/issue2176.pdf", None); }
-#[test] fn pdfjs_issue2177_eq() { run_render_test("pdfjs_issue2177_eq", "downloads/pdfjs/issue2177-eq.pdf", None); }
+#[test] fn pdfjs_issue2177() { run_render_test("pdfjs_issue2177", "downloads/pdfjs/issue2177.pdf", None); }
 #[test] fn pdfjs_issue2386() { run_render_test("pdfjs_issue2386", "downloads/pdfjs/issue2386.pdf", Some("..=1")); }
 #[test] fn pdfjs_issue2391_2() { run_render_test("pdfjs_issue2391_2", "downloads/pdfjs/issue2391-2.pdf", None); }
 #[test] fn pdfjs_issue2442() { run_render_test("pdfjs_issue2442", "downloads/pdfjs/issue2442.pdf", Some("..=0")); }
