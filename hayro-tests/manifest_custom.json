@@ -1095,5 +1095,9 @@
   {
     "id": "image_lab_2",
     "file": "pdfs/custom/image_lab_2.pdf"
+  },
+  {
+    "id": "separation_none",
+    "file": "pdfs/custom/separation_none.pdf"
   }
 ]

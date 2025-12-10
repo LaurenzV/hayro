@@ -397,6 +397,13 @@ impl ToRgb for ColorSpace {
             ColorSpaceType::DeviceN(i) => i.convert_u8(input, output),
         }
     }
+
+    fn is_none_separation(&self) -> bool {
+        match self.0.as_ref() {
+            ColorSpaceType::Separation(s) => s.is_none_separation(),
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -747,6 +754,7 @@ impl ToRgb for Indexed {
 pub(crate) struct Separation {
     alternate_space: ColorSpace,
     tint_transform: Function,
+    is_none_separation: bool,
 }
 
 impl Separation {
@@ -757,14 +765,15 @@ impl Separation {
         let name = iter.next::<Name<'_>>()?;
         let alternate_space = ColorSpace::new(iter.next::<Object<'_>>()?, cache)?;
         let tint_transform = Function::new(&iter.next::<Object<'_>>()?)?;
-
-        if matches!(name.as_str(), "All" | "None") {
-            warn!("Separation color spaces with `All` or `None` as name are not supported yet");
+        let is_none_separation = name.as_str() == "None";
+        if matches!(name.as_str(), "All") {
+            warn!("Separation color spaces with `All` as name are not supported yet");
         }
 
         Some(Self {
             alternate_space,
             tint_transform,
+            is_none_separation,
         })
     }
 }
@@ -780,6 +789,10 @@ impl ToRgb for Separation {
             })
             .collect::<Vec<_>>();
         self.alternate_space.convert_f32(&evaluated, output, false)
+    }
+
+    fn is_none_separation(&self) -> bool {
+        self.is_none_separation
     }
 }
 
@@ -998,14 +1011,26 @@ pub(crate) trait ToRgb {
     fn convert_u8(&self, _: &[u8], _: &mut [u8]) -> Option<()> {
         unimplemented!();
     }
+    fn is_none_separation(&self) -> bool {
+        false
+    }
     fn to_alpha_color(
         &self,
         input: &[f32],
-        opacity: f32,
+        mut opacity: f32,
         manual_scale: bool,
     ) -> Option<AlphaColor> {
         let mut output = [0; 3];
         self.convert_f32(input, &mut output, manual_scale)?;
+
+        // For separation color spaces:
+        // "The special colourant name None shall not produce any visible output.
+        // Painting operations in a Separation space with this colourant name
+        // shall have no effect on the current page."
+        if self.is_none_separation() {
+            opacity = 0.0;
+        }
+
         Some(AlphaColor::from_rgba8(
             output[0],
             output[1],

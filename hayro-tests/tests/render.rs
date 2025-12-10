@@ -268,6 +268,7 @@ use crate::run_render_test;
 #[test] fn serenity_26033_2() { run_render_test("serenity_26033_2", "downloads/custom/serenity_26033_2.pdf", None); }
 #[test] fn issue_typst_7269() { run_render_test("issue_typst_7269", "downloads/custom/issue_typst_7269.pdf", None); }
 #[test] fn image_lab_2() { run_render_test("image_lab_2", "pdfs/custom/image_lab_2.pdf", None); }
+#[test] fn separation_none() { run_render_test("separation_none", "pdfs/custom/separation_none.pdf", None); }
 #[test] fn pdfjs_20130226130259() { run_render_test("pdfjs_20130226130259", "downloads/pdfjs/20130226130259.pdf", Some("0..=0")); }
 #[test] fn pdfjs_ContentStreamNoCycleType3insideType3() { run_render_test("pdfjs_ContentStreamNoCycleType3insideType3", "downloads/pdfjs/ContentStreamNoCycleType3insideType3.pdf", None); }
 #[test] fn pdfjs_High_Pressure_Measurement_WP_001287() { run_render_test("pdfjs_High_Pressure_Measurement_WP_001287", "downloads/pdfjs/High-Pressure-Measurement-WP-001287.pdf", Some("2..=2")); }
