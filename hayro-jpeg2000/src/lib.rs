@@ -445,8 +445,12 @@ fn convert_color_space(image: &mut DecodedImage, bit_depth: u8) -> Result<(), &'
 }
 
 fn get_color_space(boxes: &ImageBoxes, num_components: usize) -> Result<ColorSpace, &'static str> {
-    let cs = match &boxes.color_specification.as_ref()
-        .ok_or("image doesn't have color space definition")?.color_space {
+    let cs = match &boxes
+        .color_specification
+        .as_ref()
+        .ok_or("image doesn't have color space definition")?
+        .color_space
+    {
         jp2::colr::ColorSpace::Enumerated(e) => {
             match e {
                 EnumeratedColorspace::Cmyk => ColorSpace::CMYK,
