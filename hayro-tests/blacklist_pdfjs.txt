@@ -238,8 +238,6 @@ extgstate
 
 # ballon type3 emojis which is decoded time and time again
 issue10717
-#big jpx image, can be reduced during decoding
-bug1901253
 # jbig/jpx image + a lot of resizing, takes 6 secs
 issue18896
 # very large ccitt fax image, resizing takes long as well as
@@ -249,9 +247,3 @@ issue6741
 issue8076
 # likely missing caching of shading function
 bug1721218_reduced
-# yet again lots of decoding/encoding for greyscale image
-issue6365
-# JPX images taking lots of time to decode, some time spent in get_components/etc.
-issue4648
-# Another big JPX image, can probably be resized at decoding time.
-issue17289
