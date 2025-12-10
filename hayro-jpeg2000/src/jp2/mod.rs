@@ -88,10 +88,11 @@ pub(crate) fn parse<'a>(
                                 .ok_or("failed to parse colr box")?;
                         }
                         r#box::PALETTE => {
-                            if pclr::parse(&mut boxes, child_box.data).is_none() && settings.strict {
+                            if pclr::parse(&mut boxes, child_box.data).is_none() && settings.strict
+                            {
                                 return Err("failed to parse pclr box");
                             }
-                            
+
                             // If we have a palettized image, decoding at a
                             // lower resolution will corrupt it, so we can't do
                             // it in this case.
