@@ -410,8 +410,8 @@ impl DecodedImageXObject {
         let rgb_data = if is_luma {
             let components = get_components(
                 &decoded.data,
-                obj.width,
-                obj.height,
+                width,
+                height,
                 &color_space,
                 bits_per_component,
             )?;
@@ -471,17 +471,14 @@ impl DecodedImageXObject {
         } else {
             let components = get_components(
                 &decoded.data,
-                obj.width,
-                obj.height,
+                width,
+                height,
                 &color_space,
                 bits_per_component,
             )?;
 
             let mut f32_data =
                 { decode(&components, &color_space, bits_per_component, &decode_arr)? };
-
-            let width = obj.width;
-            let mut height = obj.height;
 
             fix_image_length(&mut f32_data, width, &mut height, 0.0, &color_space)?;
 
@@ -524,9 +521,6 @@ impl DecodedImageXObject {
             rgb_data
         };
 
-        let width = obj.width;
-        let mut height = obj.height;
-
         if !is_luma {
             let dict = obj.stream.dict();
 
@@ -560,14 +554,11 @@ impl DecodedImageXObject {
                 }
             } else if let Some(color_key_mask) = dict.get::<SmallVec<[u16; 4]>>(MASK) {
                 let mut mask_data = vec![];
-
-                let width = obj.width;
-                let mut height = obj.height;
-
+                
                 let components = get_components(
                     &decoded.data,
-                    obj.width,
-                    obj.height,
+                    width,
+                    height,
                     &color_space,
                     bits_per_component,
                 )?;
