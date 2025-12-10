@@ -76,8 +76,12 @@ pub(crate) fn parse<'a>(
 
                     match child_box.box_type {
                         r#box::CHANNEL_DEFINITION => {
-                            cdef::parse(&mut boxes, child_box.data)
-                                .ok_or("failed to parse cdef box")?;
+                            if cdef::parse(&mut boxes, child_box.data).is_none() && settings.strict
+                            {
+                                return Err("failed to parse cdef box");
+                            }
+                            // If not strict decoding, just assume default
+                            // configuration.
                         }
                         r#box::COLOUR_SPECIFICATION => {
                             colr::parse(&mut boxes, child_box.data)
