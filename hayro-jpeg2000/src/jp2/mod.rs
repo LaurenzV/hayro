@@ -8,7 +8,7 @@ use crate::jp2::colr::ColorSpecificationBox;
 use crate::jp2::pclr::PaletteBox;
 use crate::reader::BitReader;
 use crate::{DecodeSettings, Image, resolve_alpha_and_color_space};
-use log::{debug, warn};
+use log::debug;
 
 pub(crate) mod r#box;
 pub(crate) mod cdef;
