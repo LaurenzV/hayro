@@ -1,9 +1,13 @@
 Test inputs are not committed to git. Instead, they are downloaded on demand from https://hayro-assets.dev under the `jpeg2000` namespace. Each namespace has a manifest file that describes every entry and optional metadata:
 
-- A plain string is treated as the file id and the test is expected to render and match a snapshot.
-- A JSON object with an `id` and `render: false` marks a load-only test; the decoder must run without panicking, but no snapshot is checked.
+- A plain string uses the same value for the test id and the file path, and the test is expected to render and match a snapshot.
+- A JSON object uses the following fields:
+  - `id`: human-readable test id (typically the filename without the extension).
+  - `path`: the actual filename to download and decode.
+  - `render` (optional, default `true`): set to `false` for crash-only coverage without snapshot checks.
+  - `strict` / `resolve_palette_indices` (optional): override the default decode settings for the test.
 
-The manifests live next to the crate (currently `manifest_serenity.json` and `manifest_openjpeg.json`). Files are stored locally under `test-inputs/<namespace>/<id>` and ignored by git.
+The manifests live next to the crate (currently `manifest_serenity.json`, `manifest_openjpeg.json`, and `manifest_custom.json`). Files are stored locally under `test-inputs/<namespace>/<path>` and ignored by git.
 
 ## Synchronizing inputs
 

@@ -111,15 +111,18 @@
   "p1_06.j2k",
   "g4_colr.j2c",
   {
-    "id": "4241ac039aba57e6a9c948d519d94216_asan_heap-oob_14650f2_7469_602.jp2",
+    "id": "4241ac039aba57e6a9c948d519d94216_asan_heap-oob_14650f2_7469_602",
+    "path": "4241ac039aba57e6a9c948d519d94216_asan_heap-oob_14650f2_7469_602.jp2",
     "render": false
   },
   {
-    "id": "dwt_interleave_h.gsr105.jp2",
+    "id": "dwt_interleave_h.gsr105",
+    "path": "dwt_interleave_h.gsr105.jp2",
     "render": false
   },
   {
-    "id": "mem-b2b86b74-2753.jp2",
+    "id": "mem-b2b86b74-2753",
+    "path": "mem-b2b86b74-2753.jp2",
     "render": false
   },
   "file2.jp2",
@@ -130,5 +133,10 @@
   "g2_colr.j2c",
   "p1_05.j2k",
   "issue559-eci-090-CIELab.jp2",
-  "issue559-eci-091-CIELab.jp2"
+  "issue559-eci-091-CIELab.jp2",
+  {
+    "id": "file9_no_palette",
+    "path": "file9.jp2",
+    "resolve_palette_indices": false
+  }
 ]

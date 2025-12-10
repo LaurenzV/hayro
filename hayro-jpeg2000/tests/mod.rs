@@ -24,6 +24,7 @@ static TEST_INPUTS_PATH: LazyLock<PathBuf> = LazyLock::new(|| WORKSPACE_PATH.joi
 const INPUT_MANIFESTS: &[(&str, &str)] = &[
     ("serenity", "manifest_serenity.json"),
     ("openjpeg", "manifest_openjpeg.json"),
+    ("custom", "manifest_custom.json"),
 ];
 
 static DIFFS_PATH: LazyLock<PathBuf> = LazyLock::new(|| {
@@ -160,36 +161,72 @@ impl Drop for PanicHookGuard {
 #[serde(untagged)]
 enum ManifestItem {
     Simple(String),
-    Detailed {
-        id: String,
-        #[serde(default = "default_render")]
-        render: bool,
-    },
+    Detailed(ManifestEntry),
+}
+
+#[derive(Deserialize)]
+struct ManifestEntry {
+    /// Human-readable test name (used for display and snapshots).
+    id: String,
+    /// Path to the actual asset file under the namespace.
+    path: String,
+    #[serde(default = "default_render")]
+    render: bool,
+    #[serde(default)]
+    strict: Option<bool>,
+    #[serde(default)]
+    resolve_palette_indices: Option<bool>,
 }
 
 struct AssetEntry {
-    relative_path: PathBuf,
+    input_relative_path: PathBuf,
+    snapshot_stem: PathBuf,
     display_name: String,
     render: bool,
+    decode_settings: DecodeSettings,
 }
 
 impl AssetEntry {
-    fn new(namespace: &str, id: String, render: bool) -> Self {
-        let relative_path = Path::new(namespace).join(&id);
-        let display_name = relative_path.display().to_string();
+    fn new(
+        namespace: &str,
+        id: String,
+        path: String,
+        render: bool,
+        decode_settings: DecodeSettings,
+    ) -> Self {
+        let display_name = format!("{namespace}/{id}");
+        let input_relative_path = Path::new(namespace).join(path);
+        let snapshot_stem = Path::new(namespace).join(id);
         Self {
-            relative_path,
+            input_relative_path,
+            snapshot_stem,
             display_name,
             render,
+            decode_settings,
         }
     }
 }
 
 impl ManifestItem {
     fn into_asset(self, namespace: &str) -> AssetEntry {
+        let default_settings = DecodeSettings::default();
         match self {
-            Self::Simple(id) => AssetEntry::new(namespace, id, true),
-            Self::Detailed { id, render } => AssetEntry::new(namespace, id, render),
+            Self::Simple(id) => AssetEntry::new(namespace, id.clone(), id, true, default_settings),
+            Self::Detailed(entry) => {
+                let decode_settings = DecodeSettings {
+                    resolve_palette_indices: entry
+                        .resolve_palette_indices
+                        .unwrap_or(default_settings.resolve_palette_indices),
+                    strict: entry.strict.unwrap_or(default_settings.strict),
+                };
+                AssetEntry::new(
+                    namespace,
+                    entry.id,
+                    entry.path,
+                    entry.render,
+                    decode_settings,
+                )
+            }
         }
     }
 }
@@ -214,7 +251,7 @@ fn collect_asset_files() -> Result<Vec<AssetEntry>, String> {
 
         for entry in entries {
             let asset_entry = entry.into_asset(namespace);
-            let absolute_path = TEST_INPUTS_PATH.join(&asset_entry.relative_path);
+            let absolute_path = TEST_INPUTS_PATH.join(&asset_entry.input_relative_path);
             if !absolute_path.exists() {
                 return Err(format!(
                     "missing test input {} (expected at {})",
@@ -231,12 +268,12 @@ fn collect_asset_files() -> Result<Vec<AssetEntry>, String> {
 }
 
 fn run_asset_test(asset: &AssetEntry) -> Result<(), String> {
-    let asset_path = TEST_INPUTS_PATH.join(&asset.relative_path);
+    let asset_path = TEST_INPUTS_PATH.join(&asset.input_relative_path);
     let asset_name = &asset.display_name;
 
     let data =
         fs::read(&asset_path).map_err(|err| format!("failed to read {}: {err}", asset_name))?;
-    let image = Image::new(&data, &DecodeSettings::default());
+    let image = Image::new(&data, &asset.decode_settings);
 
     if !asset.render {
         // Crash-only test: just execute the decoder to ensure it handles the file.
@@ -268,7 +305,7 @@ fn run_asset_test(asset: &AssetEntry) -> Result<(), String> {
     }
     .into_rgba8();
 
-    let reference_path = asset.relative_path.with_extension("png");
+    let reference_path = asset.snapshot_stem.with_extension("png");
     let snapshot_path = SNAPSHOTS_PATH.join(&reference_path);
 
     if let Some(parent) = snapshot_path.parent() {

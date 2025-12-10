@@ -11,6 +11,7 @@ REMOTE_BASE = "https://hayro-assets.dev/jpeg2000"
 MANIFESTS = [
     ("serenity", SCRIPT_DIR / "manifest_serenity.json"),
     ("openjpeg", SCRIPT_DIR / "manifest_openjpeg.json"),
+    ("custom", SCRIPT_DIR / "manifest_custom.json"),
 ]
 
 
@@ -21,24 +22,26 @@ def load_manifest(path: Path) -> list[dict]:
     entries: list[dict] = []
     for item in raw_entries:
         if isinstance(item, str):
-            entries.append({"id": item, "render": True})
-        else:
-            entry = dict(item)
-            entry.setdefault("render", True)
-            entries.append(entry)
+            entries.append({"id": item, "path": item, "render": True})
+            continue
+
+        entry = dict(item)
+        entry.setdefault("render", True)
+        entry.setdefault("path", entry.get("id"))
+        entries.append(entry)
     return entries
 
 
-def download_file(namespace: str, entry_id: str, *, force: bool) -> tuple[bool, str]:
+def download_file(namespace: str, asset_path: str, *, force: bool) -> tuple[bool, str]:
     target_dir = TEST_INPUTS_DIR / namespace
     target_dir.mkdir(parents=True, exist_ok=True)
-    destination = target_dir / entry_id
+    destination = target_dir / asset_path
     was_cached = destination.exists()
 
     if was_cached and not force:
         return True, "cached"
 
-    url = f"{REMOTE_BASE}/{namespace}/{entry_id}"
+    url = f"{REMOTE_BASE}/{namespace}/{asset_path}"
     request = Request(url, headers={"User-Agent": "hayro-jpeg2000-sync/1.0"})
     try:
         with urlopen(request, timeout=60) as response:
@@ -68,9 +71,9 @@ def main() -> None:
         entries = load_manifest(manifest_path)
         for entry in entries:
             total += 1
-            entry_id = entry["id"]
-            label = f"{namespace}/{entry_id}"
-            success, status = download_file(namespace, entry_id, force=args.force)
+            asset_path = entry["path"]
+            label = f"{namespace}/{asset_path}"
+            success, status = download_file(namespace, asset_path, force=args.force)
             print(f"[{status}] {label}")
             if not success:
                 failures.append((label, status))
