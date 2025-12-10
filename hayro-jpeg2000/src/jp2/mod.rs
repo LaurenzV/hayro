@@ -109,8 +109,7 @@ pub(crate) fn parse<'a>(
             r#box::CONTIGUOUS_CODESTREAM => {
                 parsed_codestream = Ok(crate::j2c::parse_raw(current_box.data, &settings)?);
             }
-            _ => {
-            }
+            _ => {}
         }
     }
 
