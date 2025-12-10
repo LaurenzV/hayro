@@ -46,8 +46,8 @@ issue19326_main_thread_fetch
 js-buttons
 protected-stamp-editor-save-print
 issue17215-annotations
-# monster jp2 image
 issue19517
+
 # very large ccitt image
 issue17190_1
 
