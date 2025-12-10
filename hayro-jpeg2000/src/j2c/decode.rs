@@ -281,7 +281,8 @@ fn decode_component_tile_bit_planes<'a>(
     header: &Header<'_>,
 ) -> Result<(), &'static str> {
     for (tile_decompositions_idx, component_info) in tile.component_infos.iter().enumerate() {
-        for resolution in 0..component_info.num_resolution_levels() {
+        // Only decode the resolution levels we actually care about.
+        for resolution in 0..component_info.num_resolution_levels() - header.skipped_resolution_levels {
             let tile_composition = &storage.tile_decompositions[tile_decompositions_idx];
             let sub_band_iter = tile_composition.sub_band_iter(resolution, &storage.decompositions);
 
