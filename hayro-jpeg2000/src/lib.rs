@@ -136,7 +136,7 @@ impl<'a> Image<'a> {
         const CODESTREAM_MAGIC: &[u8] = b"\xFF\x4F\xFF\x51";
 
         if data.starts_with(JP2_MAGIC) {
-            jp2::parse(data, settings)
+            jp2::parse(data, *settings)
         } else if data.starts_with(CODESTREAM_MAGIC) {
             j2c::parse(data, settings)
         } else {

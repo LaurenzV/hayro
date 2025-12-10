@@ -35,7 +35,7 @@ pub(crate) struct DecodedImage {
 
 pub(crate) fn parse<'a>(
     data: &'a [u8],
-    settings: &DecodeSettings,
+    mut settings: DecodeSettings,
 ) -> Result<Image<'a>, &'static str> {
     let mut reader = BitReader::new(data);
     let signature_box = r#box::read(&mut reader).ok_or("failed to read signature box")?;
@@ -86,6 +86,10 @@ pub(crate) fn parse<'a>(
                         r#box::PALETTE => {
                             pclr::parse(&mut boxes, child_box.data)
                                 .ok_or("failed to parse pclr box")?;
+                            // If we have a palettized image, decoding at a
+                            // lower resolution will corrupt it, so we can't do
+                            // it in this case.
+                            settings.target_resolution = None;
                         }
                         r#box::COMPONENT_MAPPING => {
                             cmap::parse(&mut boxes, child_box.data)
@@ -103,7 +107,7 @@ pub(crate) fn parse<'a>(
                 image_boxes = Ok(boxes);
             }
             r#box::CONTIGUOUS_CODESTREAM => {
-                parsed_codestream = Ok(crate::j2c::parse_raw(current_box.data, settings)?);
+                parsed_codestream = Ok(crate::j2c::parse_raw(current_box.data, &settings)?);
             }
             _ => {
                 warn!(
@@ -133,13 +137,13 @@ pub(crate) fn parse<'a>(
     }
 
     let (color_space, has_alpha) =
-        resolve_alpha_and_color_space(&image_boxes, &parsed_codestream.header, settings)?;
+        resolve_alpha_and_color_space(&image_boxes, &parsed_codestream.header, &settings)?;
 
     Ok(Image {
         codestream: parsed_codestream.data,
         header: parsed_codestream.header,
         boxes: image_boxes,
-        settings: *settings,
+        settings,
         color_space,
         has_alpha,
     })
