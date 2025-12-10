@@ -109,7 +109,13 @@ fn decode_tile<'a>(
     // for each component tile so we can reuse allocations better.
     for (idx, component_info) in header.component_infos.iter().enumerate() {
         // Next, we apply the inverse discrete wavelet transform.
-        idwt::apply(storage, tile_ctx, idx, header, component_info.wavelet_transform());
+        idwt::apply(
+            storage,
+            tile_ctx,
+            idx,
+            header,
+            component_info.wavelet_transform(),
+        );
         // Finally, we store the raw samples for the tile area in the correct
         // location. Note that in case we have MCT, we are not applying it yet.
         // It will be applied in the very end once all tiles have been processed.
@@ -402,7 +408,10 @@ fn store<'a>(
     let idwt_output = &mut tile_ctx.idwt_output;
 
     let component_tile = ComponentTile::new(tile, component_info);
-    let resolution_tile = ResolutionTile::new(component_tile, component_info.num_resolution_levels() - 1 - header.skipped_resolution_levels);
+    let resolution_tile = ResolutionTile::new(
+        component_tile,
+        component_info.num_resolution_levels() - 1 - header.skipped_resolution_levels,
+    );
 
     // If we have MCT, the sign shift needs to be applied after the
     // MCT transform. We take care of that in the main decode method.
@@ -450,7 +459,8 @@ fn store<'a>(
         for (input_row, output_row) in input_row_iter.zip(output_row_iter) {
             let input_row = &input_row[skip_x as usize..];
             let output_row = &mut output_row
-                [resolution_tile.rect.x0.saturating_sub(image_x_offset) as usize..][..input_row.len()];
+                [resolution_tile.rect.x0.saturating_sub(image_x_offset) as usize..]
+                [..input_row.len()];
 
             output_row.copy_from_slice(input_row);
         }

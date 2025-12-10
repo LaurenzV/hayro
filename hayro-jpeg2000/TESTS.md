@@ -3,9 +3,10 @@ Test inputs are not committed to git. Instead, they are downloaded on demand fro
 - A plain string uses the same value for the test id and the file path, and the test is expected to render and match a snapshot.
 - A JSON object uses the following fields:
   - `id`: human-readable test id (typically the filename without the extension).
-  - `path`: the actual filename to download and decode.
+  - `path` (or `file`): the actual filename to download and decode.
   - `render` (optional, default `true`): set to `false` for crash-only coverage without snapshot checks.
   - `strict` / `resolve_palette_indices` (optional): override the default decode settings for the test.
+  - `target_resolution` (optional): a `[width, height]` hint for decoding at a reduced resolution.
 
 The manifests live next to the crate (currently `manifest_serenity.json`, `manifest_openjpeg.json`, and `manifest_custom.json`). Files are stored locally under `test-inputs/<namespace>/<path>` and ignored by git.
 

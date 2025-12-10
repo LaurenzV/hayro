@@ -138,5 +138,40 @@
     "id": "file9_no_palette",
     "path": "file9.jp2",
     "resolve_palette_indices": false
+  },
+  {
+    "id": "Bretagne2_res1",
+    "path": "Bretagne2_0.j2k",
+    "target_resolution": [1900, 1900]
+  },
+  {
+    "id": "Bretagne2_res2",
+    "path": "Bretagne2_0.j2k",
+    "target_resolution": [900, 900]
+  },
+  {
+    "id": "Bretagne2_res3",
+    "path": "Bretagne2_0.j2k",
+    "target_resolution": [450, 450]
+  },
+  {
+    "id": "Bretagne2_res4",
+    "path": "Bretagne2_0.j2k",
+    "target_resolution": [225, 225]
+  },
+  {
+    "id": "Bretagne2_res5",
+    "path": "Bretagne2_0.j2k",
+    "target_resolution": [120, 120]
+  },
+  {
+    "id": "Bretagne2_res6",
+    "path": "Bretagne2_0.j2k",
+    "target_resolution": [60, 60]
+  },
+  {
+    "id": "zoo1_res2",
+    "path": "zoo1.jp2",
+    "target_resolution": [1200, 1200]
   }
 ]

@@ -27,7 +27,7 @@ def load_manifest(path: Path) -> list[dict]:
 
         entry = dict(item)
         entry.setdefault("render", True)
-        entry.setdefault("path", entry.get("id"))
+        entry.setdefault("path", entry.get("path") or entry.get("file") or entry.get("id"))
         entries.append(entry)
     return entries
 

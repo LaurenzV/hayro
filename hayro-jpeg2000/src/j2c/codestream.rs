@@ -125,12 +125,26 @@ pub(crate) fn read_header<'a>(
             quantization_info: qcd_components[idx].clone().unwrap_or(qcd.clone()),
         })
         .collect();
-    
-    // We assume that every component has the same number of resolution levels.
-    let min_num_resolution_levels = component_infos.iter().map(|c| c.num_resolution_levels())
-        .min().unwrap();
-    let skipped_resolution_levels= settings.skipped_resolution_levels.min(min_num_resolution_levels - 1);
-    
+
+    // Components can have different number of resolution levels. In that case, we
+    // can only skip as many resolution levels as the component with the smallest
+    // number of resolution levels.
+    let min_num_resolution_levels = component_infos
+        .iter()
+        .map(|c| c.num_resolution_levels())
+        .min()
+        .unwrap();
+    let skipped_resolution_levels =
+        if let Some((target_width, target_height)) = settings.target_resolution {
+            let width_log = (size_data.image_width() / target_width).ilog2();
+            let height_log = (size_data.image_height() / target_height).ilog2();
+
+            width_log.min(height_log) as u16
+        } else {
+            0
+        }
+        .min(min_num_resolution_levels - 1);
+
     // If the user defined a maximum resolution level that is lower than the
     // maximum available one, the final image needs to be shrinked further.
     size_data.x_shrink_factor *= 1 << skipped_resolution_levels;

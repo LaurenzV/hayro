@@ -169,6 +169,7 @@ struct ManifestEntry {
     /// Human-readable test name (used for display and snapshots).
     id: String,
     /// Path to the actual asset file under the namespace.
+    #[serde(default, alias = "file")]
     path: String,
     #[serde(default = "default_render")]
     render: bool,
@@ -176,6 +177,8 @@ struct ManifestEntry {
     strict: Option<bool>,
     #[serde(default)]
     resolve_palette_indices: Option<bool>,
+    #[serde(default)]
+    target_resolution: Option<(u32, u32)>,
 }
 
 struct AssetEntry {
@@ -218,6 +221,9 @@ impl ManifestItem {
                         .resolve_palette_indices
                         .unwrap_or(default_settings.resolve_palette_indices),
                     strict: entry.strict.unwrap_or(default_settings.strict),
+                    target_resolution: entry
+                        .target_resolution
+                        .or(default_settings.target_resolution),
                 };
                 AssetEntry::new(
                     namespace,

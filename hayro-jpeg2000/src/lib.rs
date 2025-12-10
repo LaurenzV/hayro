@@ -96,8 +96,8 @@ pub struct DecodeSettings {
     /// It is recommended to leave this flag disabled, unless you have a
     /// specific reason not to.
     pub strict: bool,
-    /// The maximum resolution level that should be decoded.
-    pub skipped_resolution_levels: u16,
+    /// A hint for the target resolution that the image should be decoded at.
+    pub target_resolution: Option<(u32, u32)>,
 }
 
 impl Default for DecodeSettings {
@@ -105,7 +105,7 @@ impl Default for DecodeSettings {
         Self {
             resolve_palette_indices: true,
             strict: false,
-            skipped_resolution_levels: 0,
+            target_resolution: None,
         }
     }
 }

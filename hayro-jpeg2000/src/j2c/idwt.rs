@@ -1,10 +1,10 @@
 //! Performing the inverse discrete wavelet transform, as specified in Annex F.
 
-use crate::j2c::Header;
 use super::build::{Decomposition, SubBand, SubBandType};
 use super::codestream::WaveletTransform;
 use super::decode::{DecompositionStorage, TileDecodeContext};
 use super::rect::IntRect;
+use crate::j2c::Header;
 
 // Keep in sync with the type `F32` in the `simd` modules!
 const SIMD_WIDTH: usize = 8;
@@ -77,7 +77,9 @@ pub(crate) fn apply(
     let tile_decompositions = &storage.tile_decompositions[component_idx];
 
     let mut decompositions = &storage.decompositions[tile_decompositions.decompositions.clone()];
-    decompositions = &decompositions[..decompositions.len().saturating_sub(header.skipped_resolution_levels as usize)];
+    decompositions = &decompositions[..decompositions
+        .len()
+        .saturating_sub(header.skipped_resolution_levels as usize)];
     let ll_sub_band = &storage.sub_bands[tile_decompositions.first_ll_sub_band];
 
     // To explain a bit why we have this scratch buffer and another coefficient
