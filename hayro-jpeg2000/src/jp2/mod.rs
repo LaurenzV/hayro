@@ -110,10 +110,6 @@ pub(crate) fn parse<'a>(
                 parsed_codestream = Ok(crate::j2c::parse_raw(current_box.data, &settings)?);
             }
             _ => {
-                warn!(
-                    "ignoring outer box {}",
-                    r#box::tag_to_string(current_box.box_type)
-                );
             }
         }
     }
