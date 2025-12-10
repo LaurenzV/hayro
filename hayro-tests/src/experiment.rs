@@ -104,8 +104,11 @@ fn check_jpx_images(folder: &str) {
                     {
                         let raw_data = stream.raw_data();
 
-                        let mut settings = DecodeSettings::default();
-                        settings.target_resolution = Some((2000, 2000));
+                        let settings = DecodeSettings {
+                            resolve_palette_indices: false,
+                            strict: false,
+                            target_resolution: Some((2000, 2000)),
+                        };
 
                         let decoded = catch_unwind(|| {
                             hayro_jpeg2000::Image::new(&raw_data, &settings)
