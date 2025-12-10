@@ -251,20 +251,35 @@ pub(crate) fn resolve_alpha_and_color_space(
         color_space = ColorSpace::Gray;
     }
 
+    let actual_num_components = header.component_infos.len();
+
     // Validate the number of channels.
     if boxes.palette.is_none()
-        && header.component_infos.len()
+        && actual_num_components
             != (color_space.num_channels() + if has_alpha { 1 } else { 0 }) as usize
     {
         if !settings.strict
-            && header.component_infos.len() == color_space.num_channels() as usize + 1
+            && actual_num_components == color_space.num_channels() as usize + 1
             && !has_alpha
         {
             // See OPENJPEG test case orb-blue10-lin-j2k. Assume that we have an
             // alpha channel in this case.
             has_alpha = true;
         } else {
-            return Err("image has too many channels");
+            // Color space is invalid, attempt to repair.
+            if actual_num_components == 1 || actual_num_components == 2 {
+                color_space = ColorSpace::Gray;
+            } else if actual_num_components == 3 {
+                color_space = ColorSpace::RGB;
+            } else if actual_num_components == 4 {
+                if has_alpha {
+                    color_space = ColorSpace::RGB;
+                } else {
+                    color_space = ColorSpace::CMYK;
+                }
+            } else {
+                return Err("image has too many channels");
+            }
         }
     }
 
