@@ -23,7 +23,7 @@ pub(crate) fn decode(data: &[u8], params: &ImageDecodeParams) -> Option<FilterRe
         target_resolution: params.target_dimension,
     };
 
-    let image = hayro_jpeg2000::Image::new(data, &settings).unwrap();
+    let image = hayro_jpeg2000::Image::new(data, &settings).ok()?;
 
     let width = image.width();
     let height = image.height();
