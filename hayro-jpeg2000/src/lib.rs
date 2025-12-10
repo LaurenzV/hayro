@@ -442,12 +442,11 @@ fn interleave_and_convert(image: DecodedImage, buf: &mut [u8]) {
 }
 
 fn convert_color_space(image: &mut DecodedImage, bit_depth: u8) -> Result<(), &'static str> {
-    if let jp2::colr::ColorSpace::Enumerated(e) = &image
+    if let Some(jp2::colr::ColorSpace::Enumerated(e)) = &image
         .boxes
         .color_specification
         .as_ref()
-        .unwrap()
-        .color_space
+        .map(|i| &i.color_space)
     {
         match e {
             EnumeratedColorspace::Sycc => {
@@ -466,11 +465,11 @@ fn convert_color_space(image: &mut DecodedImage, bit_depth: u8) -> Result<(), &'
 }
 
 fn get_color_space(boxes: &ImageBoxes, num_components: usize) -> Result<ColorSpace, &'static str> {
-    let cs = match &boxes
+    let cs = match boxes
         .color_specification
         .as_ref()
-        .ok_or("image doesn't have color space definition")?
-        .color_space
+        .map(|c| &c.color_space)
+        .unwrap_or(&jp2::colr::ColorSpace::Unknown)
     {
         jp2::colr::ColorSpace::Enumerated(e) => {
             match e {
