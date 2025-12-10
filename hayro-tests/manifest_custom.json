@@ -1099,5 +1099,9 @@
   {
     "id": "separation_none",
     "file": "pdfs/custom/separation_none.pdf"
+  },
+  {
+    "id": "devicen_none",
+    "file": "pdfs/custom/devicen_none.pdf"
   }
 ]

@@ -398,9 +398,10 @@ impl ToRgb for ColorSpace {
         }
     }
 
-    fn is_none_separation(&self) -> bool {
+    fn is_none(&self) -> bool {
         match self.0.as_ref() {
-            ColorSpaceType::Separation(s) => s.is_none_separation(),
+            ColorSpaceType::Separation(s) => s.is_none(),
+            ColorSpaceType::DeviceN(d) => d.is_none(),
             _ => false,
         }
     }
@@ -765,10 +766,9 @@ impl Separation {
         let name = iter.next::<Name<'_>>()?;
         let alternate_space = ColorSpace::new(iter.next::<Object<'_>>()?, cache)?;
         let tint_transform = Function::new(&iter.next::<Object<'_>>()?)?;
+        // Either I did something wrong, or no other viewers properly handles
+        // `All`, so let's just ignore it as well.
         let is_none_separation = name.as_str() == "None";
-        if matches!(name.as_str(), "All") {
-            warn!("Separation color spaces with `All` as name are not supported yet");
-        }
 
         Some(Self {
             alternate_space,
@@ -791,7 +791,7 @@ impl ToRgb for Separation {
         self.alternate_space.convert_f32(&evaluated, output, false)
     }
 
-    fn is_none_separation(&self) -> bool {
+    fn is_none(&self) -> bool {
         self.is_none_separation
     }
 }
@@ -801,6 +801,7 @@ pub(crate) struct DeviceN {
     alternate_space: ColorSpace,
     num_components: u8,
     tint_transform: Function,
+    is_none: bool,
 }
 
 impl DeviceN {
@@ -809,8 +810,12 @@ impl DeviceN {
         // Skip `/DeviceN`
         let _ = iter.next::<Name<'_>>()?;
         // Skip `Name`.
-        let num_components =
-            u8::try_from(iter.next::<Array<'_>>()?.iter::<Name<'_>>().count()).ok()?;
+        let names = iter
+            .next::<Array<'_>>()?
+            .iter::<Name<'_>>()
+            .collect::<Vec<_>>();
+        let num_components = u8::try_from(names.len()).ok()?;
+        let all_none = names.iter().all(|n| n.as_str() == "None");
         let alternate_space = ColorSpace::new(iter.next::<Object<'_>>()?, cache)?;
         let tint_transform = Function::new(&iter.next::<Object<'_>>()?)?;
 
@@ -822,6 +827,7 @@ impl DeviceN {
             alternate_space,
             num_components,
             tint_transform,
+            is_none: all_none,
         })
     }
 }
@@ -837,6 +843,10 @@ impl ToRgb for DeviceN {
             })
             .collect::<Vec<_>>();
         self.alternate_space.convert_f32(&evaluated, output, false)
+    }
+
+    fn is_none(&self) -> bool {
+        self.is_none
     }
 }
 
@@ -1011,7 +1021,7 @@ pub(crate) trait ToRgb {
     fn convert_u8(&self, _: &[u8], _: &mut [u8]) -> Option<()> {
         unimplemented!();
     }
-    fn is_none_separation(&self) -> bool {
+    fn is_none(&self) -> bool {
         false
     }
     fn to_alpha_color(
@@ -1027,7 +1037,7 @@ pub(crate) trait ToRgb {
         // "The special colourant name None shall not produce any visible output.
         // Painting operations in a Separation space with this colourant name
         // shall have no effect on the current page."
-        if self.is_none_separation() {
+        if self.is_none() {
             opacity = 0.0;
         }
 
