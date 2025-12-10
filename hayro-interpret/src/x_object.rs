@@ -366,18 +366,10 @@ impl DecodedImageXObject {
                     .map(|i| i.color_space)
                     .and_then(|c| {
                         c.and_then(|c| match c {
-                            ImageColorSpace::Gray => {
-                                Some(ColorSpace::device_gray())
-                            }
-                            ImageColorSpace::Rgb => {
-                                Some(ColorSpace::device_rgb())
-                            }
-                            ImageColorSpace::Cmyk => {
-                                Some(ColorSpace::device_cmyk())
-                            }
-                            ImageColorSpace::Unknown(_) => {
-                                None
-                            }
+                            ImageColorSpace::Gray => Some(ColorSpace::device_gray()),
+                            ImageColorSpace::Rgb => Some(ColorSpace::device_rgb()),
+                            ImageColorSpace::Cmyk => Some(ColorSpace::device_cmyk()),
+                            ImageColorSpace::Unknown(_) => None,
                         })
                     })
             })

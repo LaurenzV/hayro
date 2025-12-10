@@ -172,7 +172,7 @@ fn convert_inner(image: &Image<'_>, buf: &mut [u8]) -> Option<()> {
                     }
                 };
             }
-            (ColorSpace::Unknown { .. }, _) => return None
+            (ColorSpace::Unknown { .. }, _) => return None,
         };
 
         Some(())

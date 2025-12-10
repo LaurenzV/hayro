@@ -283,7 +283,7 @@ pub enum ColorSpace {
     /// An unknown color space.
     Unknown {
         /// The number of channels of the color space.
-        num_channels: u8
+        num_channels: u8,
     },
     /// An image based on an ICC profile.
     Icc {
@@ -497,7 +497,7 @@ fn get_color_space(boxes: &ImageBoxes, num_components: usize) -> Result<ColorSpa
             3 => ColorSpace::RGB,
             4 => ColorSpace::CMYK,
             _ => ColorSpace::Unknown {
-                num_channels: num_components as u8
+                num_channels: num_components as u8,
             },
         },
     };
