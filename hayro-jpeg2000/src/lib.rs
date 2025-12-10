@@ -280,6 +280,11 @@ pub enum ColorSpace {
     RGB,
     /// A CMYK image.
     CMYK,
+    /// An unknown color space.
+    Unknown {
+        /// The number of channels of the color space.
+        num_channels: u8
+    },
     /// An image based on an ICC profile.
     Icc {
         /// The raw data of the ICC profile.
@@ -296,6 +301,7 @@ impl ColorSpace {
             Self::Gray => 1,
             Self::RGB => 3,
             Self::CMYK => 4,
+            Self::Unknown { num_channels } => *num_channels,
             Self::Icc {
                 num_channels: num_components,
                 ..
@@ -490,7 +496,9 @@ fn get_color_space(boxes: &ImageBoxes, num_components: usize) -> Result<ColorSpa
             1 => ColorSpace::Gray,
             3 => ColorSpace::RGB,
             4 => ColorSpace::CMYK,
-            _ => return Err("JP2 image has unsupported color space"),
+            _ => ColorSpace::Unknown {
+                num_channels: num_components as u8
+            },
         },
     };
 

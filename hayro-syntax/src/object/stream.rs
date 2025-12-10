@@ -232,6 +232,8 @@ pub enum ImageColorSpace {
     Rgb,
     /// CMYK color space.
     Cmyk,
+    /// An unknown color space.
+    Unknown(u8)
 }
 
 /// Additional data that is extracted from some image streams.

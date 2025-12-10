@@ -16,7 +16,7 @@ use hayro_syntax::object::Name;
 use hayro_syntax::object::Object;
 use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::*;
-use hayro_syntax::object::stream::ImageDecodeParams;
+use hayro_syntax::object::stream::{ImageColorSpace, ImageDecodeParams};
 use hayro_syntax::page::Resources;
 use kurbo::{Affine, Rect, Shape};
 use log::warn;
@@ -365,15 +365,18 @@ impl DecodedImageXObject {
                     .as_ref()
                     .map(|i| i.color_space)
                     .and_then(|c| {
-                        c.map(|c| match c {
-                            hayro_syntax::object::stream::ImageColorSpace::Gray => {
-                                ColorSpace::device_gray()
+                        c.and_then(|c| match c {
+                            ImageColorSpace::Gray => {
+                                Some(ColorSpace::device_gray())
                             }
-                            hayro_syntax::object::stream::ImageColorSpace::Rgb => {
-                                ColorSpace::device_rgb()
+                            ImageColorSpace::Rgb => {
+                                Some(ColorSpace::device_rgb())
                             }
-                            hayro_syntax::object::stream::ImageColorSpace::Cmyk => {
-                                ColorSpace::device_cmyk()
+                            ImageColorSpace::Cmyk => {
+                                Some(ColorSpace::device_cmyk())
+                            }
+                            ImageColorSpace::Unknown(_) => {
+                                None
                             }
                         })
                     })
