@@ -554,7 +554,7 @@ impl DecodedImageXObject {
                 }
             } else if let Some(color_key_mask) = dict.get::<SmallVec<[u16; 4]>>(MASK) {
                 let mut mask_data = vec![];
-                
+
                 let components = get_components(
                     &decoded.data,
                     width,
