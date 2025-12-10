@@ -173,5 +173,20 @@
     "id": "zoo1_res2",
     "path": "zoo1.jp2",
     "target_resolution": [1200, 1200]
+  },
+  {
+    "id": "zoo1_res3",
+    "path": "zoo1.jp2",
+    "target_resolution": [600, 600]
+  },
+  {
+    "id": "zoo1_res4",
+    "path": "zoo1.jp2",
+    "target_resolution": [300, 300]
+  },
+  {
+    "id": "p0_08_res1",
+    "path": "p0_08.j2k",
+    "target_resolution": [220, 200]
   }
 ]

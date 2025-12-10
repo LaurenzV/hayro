@@ -147,8 +147,8 @@ pub(crate) fn read_header<'a>(
 
     // If the user defined a maximum resolution level that is lower than the
     // maximum available one, the final image needs to be shrinked further.
-    size_data.x_shrink_factor *= 1 << skipped_resolution_levels;
-    size_data.y_shrink_factor *= 1 << skipped_resolution_levels;
+    size_data.x_resolution_shrink_factor *= 1 << skipped_resolution_levels;
+    size_data.y_resolution_shrink_factor *= 1 << skipped_resolution_levels;
 
     ppm_markers.sort_by(|p0, p1| p0.sequence_idx.cmp(&p1.sequence_idx));
 
@@ -438,6 +438,8 @@ pub(crate) struct SizeData {
     pub(crate) x_shrink_factor: u32,
     /// Shrink factor in the y direction. See the comment in the parsing method.
     pub(crate) y_shrink_factor: u32,
+    pub(crate) x_resolution_shrink_factor: u32,
+    pub(crate) y_resolution_shrink_factor: u32,
 }
 
 impl SizeData {
@@ -480,12 +482,14 @@ impl SizeData {
 
     /// Return the overall width of the image.
     pub(crate) fn image_width(&self) -> u32 {
-        (self.reference_grid_width - self.image_area_x_offset).div_ceil(self.x_shrink_factor)
+        (self.reference_grid_width - self.image_area_x_offset)
+            .div_ceil(self.x_shrink_factor * self.x_resolution_shrink_factor)
     }
 
     /// Return the overall height of the image.
     pub(crate) fn image_height(&self) -> u32 {
-        (self.reference_grid_height - self.image_area_y_offset).div_ceil(self.y_shrink_factor)
+        (self.reference_grid_height - self.image_area_y_offset)
+            .div_ceil(self.y_shrink_factor * self.y_resolution_shrink_factor)
     }
 }
 
@@ -618,6 +622,8 @@ fn size_marker_inner(reader: &mut BitReader<'_>) -> Option<SizeData> {
         component_sizes: components,
         x_shrink_factor,
         y_shrink_factor,
+        x_resolution_shrink_factor: 1,
+        y_resolution_shrink_factor: 1,
     })
 }
 

@@ -481,17 +481,13 @@ fn store<'a>(
             .div_ceil(y_shrink_factor);
 
         // Otherwise, copy sample by sample.
-        for y in component_tile.rect.y0..component_tile.rect.y1 {
+        for y in resolution_tile.rect.y0..resolution_tile.rect.y1 {
             let relative_y = (y - component_tile.rect.y0) as usize;
-            // Note that the shrink factor is always either 1 or `scale_y`, so
-            // the result will be, too.
-            let reference_grid_y = (scale_y as u32) / y_shrink_factor * y;
+            let reference_grid_y = (scale_y as u32 * y) / y_shrink_factor;
 
-            for x in component_tile.rect.x0..component_tile.rect.x1 {
+            for x in resolution_tile.rect.x0..resolution_tile.rect.x1 {
                 let relative_x = (x - component_tile.rect.x0) as usize;
-                // Note that the shrink factor is always either 1 or `scale_x`, so
-                // the result will be, too.
-                let reference_grid_x = (scale_x as u32) / x_shrink_factor * x;
+                let reference_grid_x = (scale_x as u32 * x) / x_shrink_factor;
 
                 let sample = idwt_output.coefficients[(relative_y + idwt_output.padding.top)
                     * idwt_output.total_width() as usize

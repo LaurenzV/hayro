@@ -71,7 +71,7 @@ pub(crate) fn apply(
     storage: &DecompositionStorage<'_>,
     tile_ctx: &mut TileDecodeContext<'_>,
     component_idx: usize,
-    header: &Header,
+    header: &Header<'_>,
     transform: WaveletTransform,
 ) {
     let tile_decompositions = &storage.tile_decompositions[component_idx];
