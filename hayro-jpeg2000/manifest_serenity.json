@@ -49,5 +49,10 @@
     "id": "indexed-small_res1",
     "path": "indexed-small.jp2",
     "target_resolution": [1, 1]
+  },
+  {
+    "id": "large_target_resolution",
+    "path": "jasper-tile4x2-res5.jp2",
+    "target_resolution": [1000, 1000]
   }
 ]
