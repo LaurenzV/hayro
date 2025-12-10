@@ -77,6 +77,7 @@ pub(crate) fn apply(
     let tile_decompositions = &storage.tile_decompositions[component_idx];
 
     let mut decompositions = &storage.decompositions[tile_decompositions.decompositions.clone()];
+    // If we requested a lower resolution level, we can skip some decompositions.
     decompositions = &decompositions[..decompositions
         .len()
         .saturating_sub(header.skipped_resolution_levels as usize)];
