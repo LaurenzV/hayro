@@ -6,6 +6,7 @@ use crate::font::true_type::{read_encoding, read_widths};
 use crate::font::{Encoding, Glyph, Type3Glyph, UNITS_PER_EM, read_to_unicode};
 use crate::interpret::state::TextState;
 use crate::soft_mask::SoftMask;
+use crate::util::RectExt;
 use crate::{BlendMode, interpret};
 use crate::{CacheKey, ClipPath, GlyphDrawMode, PathDrawMode};
 use crate::{Image, Paint};
@@ -13,7 +14,7 @@ use hayro_syntax::content::TypedIter;
 use hayro_syntax::content::ops::TypedInstruction;
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Stream;
-use hayro_syntax::object::dict::keys::{CHAR_PROCS, FONT_MATRIX, RESOURCES};
+use hayro_syntax::object::dict::keys::{CHAR_PROCS, FONT_BBOX, FONT_MATRIX, RESOURCES};
 use hayro_syntax::page::Resources;
 use kurbo::{Affine, BezPath, Rect};
 use skrifa::GlyphId;
@@ -27,6 +28,7 @@ pub(crate) struct Type3<'a> {
     dict: Dict<'a>,
     char_procs: HashMap<String, Stream<'a>>,
     glyph_simulator: GlyphSimulator,
+    font_bbox: Rect,
     matrix: Affine,
     to_unicode: Option<CMap>,
 }
@@ -35,6 +37,10 @@ impl<'a> Type3<'a> {
     pub(crate) fn new(dict: &Dict<'a>) -> Self {
         let (encoding, encodings) = read_encoding(dict);
         let widths = read_widths(dict, dict);
+        let font_bbox = dict
+            .get::<hayro_syntax::object::Rect>(FONT_BBOX)
+            .unwrap_or(hayro_syntax::object::Rect::ZERO)
+            .to_kurbo();
 
         let matrix = Affine::new(
             dict.get::<[f64; 6]>(FONT_MATRIX)
@@ -59,6 +65,7 @@ impl<'a> Type3<'a> {
         Self {
             glyph_simulator: GlyphSimulator::new(),
             encoding,
+            font_bbox,
             char_procs,
             widths,
             encodings,
@@ -110,16 +117,6 @@ impl<'a> Type3<'a> {
         // (though the graphics state itself should be preserved).
         state.text_state = TextState::default();
 
-        let mut context = Context::new_with(
-            state.ctm,
-            // TODO: Get a proper bbox.
-            Rect::new(0.0, 0.0, 1.0, 1.0),
-            glyph.cache.clone(),
-            glyph.xref,
-            glyph.settings.clone(),
-            state,
-        );
-
         let name = self.glyph_simulator.glyph_to_string(glyph.glyph_id)?;
         let program = self.char_procs.get(&name)?;
         let decoded = program.decoded().ok()?;
@@ -144,6 +141,15 @@ impl<'a> Type3<'a> {
 
             is_shape_glyph
         };
+
+        let mut context = Context::new_with(
+            state.ctm,
+            self.font_bbox,
+            glyph.cache.clone(),
+            glyph.xref,
+            glyph.settings.clone(),
+            state,
+        );
 
         let mut resources = Resources::from_parent(
             self.dict.get(RESOURCES).unwrap_or_default(),

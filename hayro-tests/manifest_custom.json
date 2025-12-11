@@ -1111,5 +1111,9 @@
   {
     "id": "animated-distributions",
     "file": "pdfs/custom/animated-distributions.pdf"
+  },
+  {
+    "id": "mask_in_type3_glyph",
+    "file": "pdfs/custom/mask_in_type3_glyph.pdf"
   }
 ]
