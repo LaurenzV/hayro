@@ -378,10 +378,7 @@ impl<'a> Resources<'a> {
     }
 
     fn get_resource<T: ObjectLike<'a>>(&self, name: Name<'_>, dict: &Dict<'a>) -> Option<T> {
-        match dict.get::<T>(name.deref())? {
-            MaybeRef::Ref(ref_) => self.ctx.xref.get_with::<T>(ref_.into(), &self.ctx),
-            MaybeRef::NotRef(i) => Some(i),
-        }
+        dict.get::<T>(name.deref())
     }
 
     /// Get the parent in the resource, chain, if available.
