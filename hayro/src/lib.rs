@@ -48,9 +48,6 @@ use kurbo::{Affine, Rect, Shape};
 use std::ops::RangeInclusive;
 pub use vello_cpu;
 
-use hayro_interpret::hayro_syntax::content::ops::XObject;
-use hayro_interpret::hayro_syntax::object::dict::keys::{ANNOTS, N};
-use hayro_interpret::hayro_syntax::object::{Array, Dict, Object};
 use vello_cpu::color::AlphaColor;
 use vello_cpu::color::Srgb;
 use vello_cpu::color::palette::css::TRANSPARENT;
