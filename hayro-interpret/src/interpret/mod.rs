@@ -142,7 +142,7 @@ pub fn interpret_page<'a>(
                 };
 
                 let annot_rect = rect.to_kurbo();
-                // 12.5.5. Appearence streams
+                // 12.5.5. Appearance streams
                 // "The algorithm outlined in this subclause shall be used
                 // to map from the coordinate system of the appearance XObject."
 
