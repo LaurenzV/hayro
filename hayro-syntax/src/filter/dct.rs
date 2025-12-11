@@ -4,6 +4,7 @@ use crate::object::stream::{FilterResult, ImageColorSpace, ImageData, ImageDecod
 use std::io::Cursor;
 use std::num::NonZeroU32;
 use zune_jpeg::zune_core::colorspace::ColorSpace;
+use zune_jpeg::zune_core::colorspace::ColorSpace::CMYK;
 use zune_jpeg::zune_core::options::DecoderOptions;
 
 pub(crate) fn decode(
@@ -21,13 +22,14 @@ pub(crate) fn decode(
     let jpeg_data = extract_jpeg_data(data)?;
 
     let color_transform = params.get::<u8>(COLOR_TRANSFORM);
+    let input_color_space = decoder.input_colorspace().unwrap();
 
     let mut out_colorspace = if let Some(num_components) = image_params.num_components
         && !matches!(num_components, 1 | 3 | 4)
     {
         ColorSpace::MultiBand(NonZeroU32::new(num_components as u32)?)
     } else {
-        match decoder.input_colorspace().unwrap() {
+        match input_color_space {
             ColorSpace::YCbCr => {
                 if jpeg_data.app14.is_none()
                     && jpeg_data.components.first()?.id == b'R'
@@ -52,23 +54,13 @@ pub(crate) fn decode(
         }
     };
 
-    decoder.set_options(DecoderOptions::default().jpeg_set_out_colorspace(out_colorspace));
-    let mut decoded = decoder.decode().ok().or_else(|| {
-        let reader = Cursor::new(data);
-        let mut decoder = zune_jpeg::JpegDecoder::new_with_options(reader, options);
-        decoder.decode_headers().ok()?;
-        // It's possible that the APP14 marker is set, so that zune_jpeg will set the input colorspace
-        // to a different one. So try decoding again with the different color space. This is probably
-        // not the proper way to solve this, but it solves a test case.
-        if matches!(out_colorspace, ColorSpace::YCCK | ColorSpace::CMYK) {
-            out_colorspace = ColorSpace::RGB;
-        } else {
-            out_colorspace = ColorSpace::CMYK;
-        }
+    // In case image had APP14 marker, we might have to override the colorspace.
+    if input_color_space == CMYK && decoder.info().unwrap().components == 3 {
+        out_colorspace = ColorSpace::RGB;
+    }
 
-        decoder.set_options(DecoderOptions::default().jpeg_set_out_colorspace(out_colorspace));
-        decoder.decode().ok()
-    })?;
+    decoder.set_options(DecoderOptions::default().jpeg_set_out_colorspace(out_colorspace));
+    let mut decoded = decoder.decode().ok()?;
 
     if out_colorspace == ColorSpace::YCCK {
         // See <https://github.com/mozilla/pdf.js/blob/69595a29192b7704733404a42a2ebb537601117b/src/core/jpg.js#L1331>
@@ -155,7 +147,7 @@ fn extract_jpeg_data(jpeg_bytes: &[u8]) -> Option<JpegData> {
 
         let length = u16::from_be_bytes([jpeg_bytes[pos + 2], jpeg_bytes[pos + 3]]) as usize;
 
-        // Extract APP14 segment
+        // Extract APP14 segment.
         if marker == 0xEE && pos + 2 + length <= jpeg_bytes.len() {
             let app14_data = &jpeg_bytes[pos + 4..pos + 2 + length];
             if app14_data.len() >= 12 && &app14_data[0..5] == b"Adobe" {
