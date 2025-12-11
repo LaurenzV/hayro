@@ -202,9 +202,6 @@ issue12295
 # wrong text
 issue11768
 
-# corrupt jpeg image
-issue8169
-
 # text should be bold but isnt
 issue9291
 
