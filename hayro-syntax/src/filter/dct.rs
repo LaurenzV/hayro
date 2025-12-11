@@ -48,7 +48,7 @@ pub(crate) fn decode(
             ColorSpace::RGB | ColorSpace::RGBA => ColorSpace::RGB,
             ColorSpace::Luma | ColorSpace::LumaA => ColorSpace::Luma,
             // TODO: Find test case with color transform on cmyk
-            ColorSpace::CMYK => ColorSpace::CMYK,
+            CMYK => CMYK,
             ColorSpace::YCCK => ColorSpace::YCCK,
             _ => ColorSpace::RGB,
         }
@@ -79,7 +79,7 @@ pub(crate) fn decode(
         color_space: match out_colorspace {
             ColorSpace::RGB | ColorSpace::YCbCr => Some(ImageColorSpace::Rgb),
             ColorSpace::Luma => Some(ImageColorSpace::Gray),
-            ColorSpace::YCCK | ColorSpace::CMYK => Some(ImageColorSpace::Cmyk),
+            ColorSpace::YCCK | CMYK => Some(ImageColorSpace::Cmyk),
             ColorSpace::MultiBand(_) => None,
             _ => None,
         },
