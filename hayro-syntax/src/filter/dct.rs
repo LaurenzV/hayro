@@ -18,7 +18,7 @@ pub(crate) fn decode(
         .set_max_height(u16::MAX as usize);
     let mut decoder = zune_jpeg::JpegDecoder::new_with_options(reader, options);
     decoder.decode_headers().ok()?;
-    
+
     let color_transform = params.get::<u8>(COLOR_TRANSFORM);
     let input_color_space = decoder.input_colorspace().unwrap();
 
