@@ -203,7 +203,6 @@ issue12295
 issue11768
 
 # corrupt jpeg image
-issue12841
 issue8169
 issue15492
 
