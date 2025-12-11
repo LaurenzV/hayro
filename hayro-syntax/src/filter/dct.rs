@@ -117,73 +117,62 @@ struct JpegData {
 }
 
 fn extract_jpeg_data(jpeg_bytes: &[u8]) -> Option<JpegData> {
-    if jpeg_bytes.len() < 4 || jpeg_bytes[0..2] != [0xFF, 0xD8] {
-        return None;
-    }
-
-    let mut pos = 2;
+    let mut data = jpeg_bytes.strip_prefix(&[0xFF, 0xD8])?;
     let mut app14 = None;
     let mut components = Vec::new();
 
-    while pos + 3 < jpeg_bytes.len() {
-        if jpeg_bytes[pos] != 0xFF {
-            return None;
-        }
+    while let [0xFF, marker, rest @ ..] = data {
+        let marker = *marker;
 
-        let marker = jpeg_bytes[pos + 1];
-
+        // Skip padding bytes.
         if marker == 0xFF {
-            pos += 1;
+            data = rest;
             continue;
         }
 
-        if (0xD0..=0xD7).contains(&marker) || marker == 0x01 || marker == 0xDA {
+        // Stop at restart markers, TEM, or SOS.
+        if matches!(marker, 0xD0..=0xD7 | 0x01 | 0xDA) {
             break;
         }
 
-        if pos + 3 >= jpeg_bytes.len() {
+        let [len_hi, len_lo, rest @ ..] = rest else {
             break;
-        }
+        };
+        let length = u16::from_be_bytes([*len_hi, *len_lo]) as usize;
+        let segment = rest.get(..length.saturating_sub(2))?;
 
-        let length = u16::from_be_bytes([jpeg_bytes[pos + 2], jpeg_bytes[pos + 3]]) as usize;
-
-        // Extract APP14 segment.
-        if marker == 0xEE && pos + 2 + length <= jpeg_bytes.len() {
-            let app14_data = &jpeg_bytes[pos + 4..pos + 2 + length];
-            if app14_data.len() >= 12 && &app14_data[0..5] == b"Adobe" {
+        // Extract APP14 (Adobe) segment.
+        if marker == 0xEE {
+            if let Some(adobe_data) = segment.strip_prefix(b"Adobe")
+                && let [v0, v1, f0_0, f0_1, f1_0, f1_1, color_transform, ..] = adobe_data
+            {
                 app14 = Some(App14Segment {
-                    _version: u16::from_be_bytes([app14_data[5], app14_data[6]]),
-                    _flags0: u16::from_be_bytes([app14_data[7], app14_data[8]]),
-                    _flags1: u16::from_be_bytes([app14_data[9], app14_data[10]]),
-                    _color_transform: app14_data[11],
+                    _version: u16::from_be_bytes([*v0, *v1]),
+                    _flags0: u16::from_be_bytes([*f0_0, *f0_1]),
+                    _flags1: u16::from_be_bytes([*f1_0, *f1_1]),
+                    _color_transform: *color_transform,
                 });
             }
         }
 
-        // Extract SOF (Start of Frame) components
-        if (0xC0..=0xCF).contains(&marker)
-            && marker != 0xC4
-            && marker != 0xC8
-            && marker != 0xCC
-            && pos + 10 <= jpeg_bytes.len()
-        {
-            let num_components = jpeg_bytes[pos + 9] as usize;
-
-            for i in 0..num_components {
-                let comp_pos = pos + 10 + i * 3;
-                if comp_pos + 2 < jpeg_bytes.len() {
-                    let sampling = jpeg_bytes[comp_pos + 1];
+        // Extract SOF (Start of Frame) components.
+        if matches!(marker, 0xC0..=0xC3 | 0xC5..=0xC7 | 0xC9..=0xCB | 0xCD..=0xCF) {
+            if let [_, _, _, _, _, num_components, comp_data @ ..] = segment {
+                for chunk in comp_data.chunks_exact(3).take(*num_components as usize) {
+                    let [id, sampling, quant_table] = chunk else {
+                        unreachable!()
+                    };
                     components.push(JpegComponent {
-                        id: jpeg_bytes[comp_pos],
+                        id: *id,
                         _h_sampling: (sampling >> 4) & 0x0F,
                         _v_sampling: sampling & 0x0F,
-                        _quantization_table: jpeg_bytes[comp_pos + 2],
+                        _quantization_table: *quant_table,
                     });
                 }
             }
         }
 
-        pos += 2 + length;
+        data = rest.get(length.saturating_sub(2)..)?;
     }
 
     Some(JpegData { app14, components })
