@@ -44,6 +44,10 @@ pub struct ImageDecodeParams {
     /// in case it's possible, a version of the image will be extracted that
     /// is as close as possible to the hinted dimension.
     pub target_dimension: Option<(u32, u32)>,
+    /// The width of the image as indicated by the image dictionary.
+    pub width: u32,
+    /// The height of the image as indicated by the image dictionary.
+    pub height: u32,
 }
 
 impl<'a> Stream<'a> {

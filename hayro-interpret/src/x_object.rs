@@ -337,6 +337,8 @@ impl DecodedImageXObject {
             bpc: dict_bpc,
             num_components: color_space.as_ref().map(|c| c.num_components()),
             target_dimension,
+            width: obj.width,
+            height: obj.height,
         };
 
         let mut decoded = obj

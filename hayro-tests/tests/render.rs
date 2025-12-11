@@ -831,6 +831,7 @@ use crate::run_render_test;
 #[test] fn pdfjs_issue4648() { run_render_test("pdfjs_issue4648", "downloads/pdfjs/issue4648.pdf", Some("..=7")); }
 #[test] fn pdfjs_issue6365() { run_render_test("pdfjs_issue6365", "downloads/pdfjs/issue6365.pdf", Some("..=4")); }
 #[test] fn pdfjs_issue17289() { run_render_test("pdfjs_issue17289", "downloads/pdfjs/issue17289.pdf", None); }
+#[test] fn pdfjs_issue10880() { run_render_test("pdfjs_issue10880", "downloads/pdfjs/issue10880.pdf", None); }
 #[test] fn pdfbox_31() { run_render_test("pdfbox_31", "downloads/pdfbox/31.pdf", Some("..=0")); }
 #[test] fn pdfbox_142() { run_render_test("pdfbox_142", "downloads/pdfbox/142.pdf", None); }
 #[test] fn pdfbox_163() { run_render_test("pdfbox_163", "downloads/pdfbox/163.pdf", None); }

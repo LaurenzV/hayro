@@ -74,6 +74,22 @@ pub(crate) fn decode(
         }
     }
 
+    let mut width = decoder.dimensions().unwrap().0 as u32;
+    let mut height = decoder.dimensions().unwrap().1 as u32;
+
+    let expected_len = out_colorspace.num_components()
+        * image_params.width as usize
+        * image_params.height as usize;
+
+    // If actual image is larger than expected, truncate data and treat the
+    // PDF metadata as authoritative. If actual image is smaller than the PDF
+    // metadata, treat the JPEG metadata as authoritative.
+    if expected_len < decoded.len() {
+        decoded.truncate(expected_len);
+        width = image_params.width;
+        height = image_params.height;
+    }
+
     let image_data = ImageData {
         alpha: None,
         color_space: match out_colorspace {
@@ -84,8 +100,8 @@ pub(crate) fn decode(
             _ => None,
         },
         bits_per_component: 8,
-        width: decoder.dimensions().unwrap().0 as u32,
-        height: decoder.dimensions().unwrap().1 as u32,
+        width,
+        height,
     };
 
     Some(FilterResult {
