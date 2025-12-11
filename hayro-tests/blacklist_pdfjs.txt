@@ -204,7 +204,6 @@ issue11768
 
 # corrupt jpeg image
 issue8169
-issue15492
 
 # text should be bold but isnt
 issue9291
