@@ -134,8 +134,8 @@ impl CacheKey for ObjRef {
 impl<T: CacheKey> CacheKey for MaybeRef<T> {
     fn cache_key(&self) -> u128 {
         match self {
-            MaybeRef::Ref(r) => r.cache_key(),
-            MaybeRef::NotRef(o) => o.cache_key(),
+            Self::Ref(r) => r.cache_key(),
+            Self::NotRef(o) => o.cache_key(),
         }
     }
 }
