@@ -1103,5 +1103,13 @@
   {
     "id": "devicen_none",
     "file": "pdfs/custom/devicen_none.pdf"
+  },
+  {
+    "id": "andler-optimal-lot-size",
+    "file": "pdfs/custom/andler-optimal-lot-size.pdf"
+  },
+  {
+    "id": "animated-distributions",
+    "file": "pdfs/custom/animated-distributions.pdf"
   }
 ]

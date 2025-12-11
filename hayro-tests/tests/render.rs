@@ -270,6 +270,8 @@ use crate::run_render_test;
 #[test] fn image_lab_2() { run_render_test("image_lab_2", "pdfs/custom/image_lab_2.pdf", None); }
 #[test] fn separation_none() { run_render_test("separation_none", "pdfs/custom/separation_none.pdf", None); }
 #[test] fn devicen_none() { run_render_test("devicen_none", "pdfs/custom/devicen_none.pdf", None); }
+#[test] fn andler_optimal_lot_size() { run_render_test("andler_optimal_lot_size", "pdfs/custom/andler-optimal-lot-size.pdf", None); }
+#[test] fn animated_distributions() { run_render_test("animated_distributions", "pdfs/custom/animated-distributions.pdf", None); }
 #[test] fn pdfjs_20130226130259() { run_render_test("pdfjs_20130226130259", "downloads/pdfjs/20130226130259.pdf", Some("0..=0")); }
 #[test] fn pdfjs_ContentStreamNoCycleType3insideType3() { run_render_test("pdfjs_ContentStreamNoCycleType3insideType3", "downloads/pdfjs/ContentStreamNoCycleType3insideType3.pdf", None); }
 #[test] fn pdfjs_High_Pressure_Measurement_WP_001287() { run_render_test("pdfjs_High_Pressure_Measurement_WP_001287", "downloads/pdfjs/High-Pressure-Measurement-WP-001287.pdf", Some("2..=2")); }

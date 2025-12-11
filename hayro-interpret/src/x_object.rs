@@ -54,8 +54,8 @@ impl<'a> XObject<'a> {
 
 pub(crate) struct FormXObject<'a> {
     pub(crate) decoded: Vec<u8>,
-    matrix: Affine,
-    bbox: [f32; 4],
+    pub(crate) matrix: Affine,
+    pub(crate) bbox: [f32; 4],
     is_transparency_group: bool,
     pub(crate) dict: Dict<'a>,
     resources: Dict<'a>,

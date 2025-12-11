@@ -11,11 +11,13 @@ use crate::interpret::state::handle_gs;
 use crate::interpret::text::TextRenderingMode;
 use crate::pattern::{Pattern, ShadingPattern};
 use crate::shading::Shading;
-use crate::util::OptionLog;
-use crate::x_object::{ImageXObject, XObject, draw_image_xobject, draw_xobject};
+use crate::util::{OptionLog, RectExt};
+use crate::x_object::{
+    FormXObject, ImageXObject, XObject, draw_form_xobject, draw_image_xobject, draw_xobject,
+};
 use hayro_syntax::content::ops::TypedInstruction;
-use hayro_syntax::object::dict::keys::OC;
-use hayro_syntax::object::{Object, dict_or_stream};
+use hayro_syntax::object::dict::keys::{ANNOTS, AP, F, FLAGS, N, OC, RECT};
+use hayro_syntax::object::{Array, Dict, Object, Rect, Stream, dict_or_stream};
 use hayro_syntax::page::{Page, Resources};
 use kurbo::{Affine, Point, Shape};
 use log::warn;
@@ -73,10 +75,14 @@ pub struct InterpreterSettings {
     /// If you don't want having to deal with this, you can just enable the `embed-fonts` feature
     /// and use the default implementation of the callback.
     pub font_resolver: FontResolverFn,
-
     /// In certain cases, `hayro` will emit a warning in case an issue was encountered while interpreting
     /// the PDF file. Providing a callback allows you to catch those warnings and handle them, if desired.
     pub warning_sink: WarningSinkFn,
+    /// Whether annotations should be rendered as well.
+    ///
+    /// Note that this feature is currently not fully implemented yet, so some
+    /// annotations might be missing.
+    pub render_annotations: bool,
 }
 
 impl Default for InterpreterSettings {
@@ -90,6 +96,7 @@ impl Default for InterpreterSettings {
                 FontQuery::Fallback(f) => Some(f.pick_standard_font().get_font_data()),
             }),
             warning_sink: Arc::new(|_| {}),
+            render_annotations: true,
         }
     }
 }
@@ -113,6 +120,77 @@ pub fn interpret_page<'a>(
 ) {
     let resources = page.resources();
     interpret(page.typed_operations(), resources, context, device);
+
+    if context.settings.render_annotations {
+        if let Some(annot_arr) = page.raw().get::<Array>(ANNOTS) {
+            for annot in annot_arr.iter::<Dict>() {
+                let flags = annot.get::<u32>(F).unwrap_or(0);
+
+                // Annotation should be hidden.
+                if flags & 2 != 0 {
+                    continue;
+                }
+
+                if let Some(apx) = annot
+                    .get::<Dict>(AP)
+                    .and_then(|ap| ap.get::<Stream>(N))
+                    .and_then(|o| FormXObject::new(&o))
+                {
+                    let Some(rect) = annot.get::<Rect>(RECT) else {
+                        continue;
+                    };
+
+                    let annot_rect = rect.to_kurbo();
+                    // 12.5.5. Appearence streams
+                    // "The algorithm outlined in this subclause shall be used
+                    // to map from the coordinate system of the appearance XObject."
+
+                    // 1) The appearance’s bounding box (specified by its BBox entry)
+                    // shall be transformed, using Matrix, to produce a
+                    // quadrilateral with arbitrary orientation. The transformed
+                    // appearance box is the smallest upright rectangle that
+                    // encompasses this quadrilateral.
+                    let transformed_rect = (apx.matrix
+                        * kurbo::Rect::new(
+                            apx.bbox[0] as f64,
+                            apx.bbox[1] as f64,
+                            apx.bbox[2] as f64,
+                            apx.bbox[3] as f64,
+                        )
+                        .to_path(0.1))
+                    .bounding_box();
+
+                    // 2) A matrix A shall be computed that scales and translates
+                    // the transformed appearance box to align with the edges
+                    // of the annotation’s rectangle (specified by the Rect entry).
+                    // A maps the lower-left corner (the corner with the smallest
+                    // x and y coordinates) and the upper-right corner (the
+                    // corner with the greatest x and y coordinates) of the
+                    // transformed appearance box to the corresponding corners
+                    // of the annotation’s rectangle.
+                    let affine = Affine::new([
+                        annot_rect.width() / transformed_rect.width(),
+                        0.0,
+                        0.0,
+                        annot_rect.height() / transformed_rect.height(),
+                        annot_rect.x0 - transformed_rect.x0,
+                        annot_rect.y0 - transformed_rect.y0,
+                    ]);
+
+                    // 3) Matrix shall be concatenated with A to form a matrix
+                    // AA that maps from the appearance’s coordinate system to
+                    // the annotation’s rectangle in default user space.
+                    context.save_state();
+                    context.pre_concat_affine(affine);
+                    context.push_root_transform();
+
+                    draw_form_xobject(&resources, &apx, context, device);
+                    context.pop_root_transform();
+                    context.restore_state(device);
+                }
+            }
+        }
+    }
 }
 
 /// Interpret the instructions from `ops` and render them into the device.
