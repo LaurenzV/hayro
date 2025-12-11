@@ -142,33 +142,32 @@ fn extract_jpeg_data(jpeg_bytes: &[u8]) -> Option<JpegData> {
         let segment = rest.get(..length.saturating_sub(2))?;
 
         // Extract APP14 (Adobe) segment.
-        if marker == 0xEE {
-            if let Some(adobe_data) = segment.strip_prefix(b"Adobe")
-                && let [v0, v1, f0_0, f0_1, f1_0, f1_1, color_transform, ..] = adobe_data
-            {
-                app14 = Some(App14Segment {
-                    _version: u16::from_be_bytes([*v0, *v1]),
-                    _flags0: u16::from_be_bytes([*f0_0, *f0_1]),
-                    _flags1: u16::from_be_bytes([*f1_0, *f1_1]),
-                    _color_transform: *color_transform,
-                });
-            }
+        if marker == 0xEE
+            && let Some(adobe_data) = segment.strip_prefix(b"Adobe")
+            && let [v0, v1, f0_0, f0_1, f1_0, f1_1, color_transform, ..] = adobe_data
+        {
+            app14 = Some(App14Segment {
+                _version: u16::from_be_bytes([*v0, *v1]),
+                _flags0: u16::from_be_bytes([*f0_0, *f0_1]),
+                _flags1: u16::from_be_bytes([*f1_0, *f1_1]),
+                _color_transform: *color_transform,
+            });
         }
 
         // Extract SOF (Start of Frame) components.
-        if matches!(marker, 0xC0..=0xC3 | 0xC5..=0xC7 | 0xC9..=0xCB | 0xCD..=0xCF) {
-            if let [_, _, _, _, _, num_components, comp_data @ ..] = segment {
-                for chunk in comp_data.chunks_exact(3).take(*num_components as usize) {
-                    let [id, sampling, quant_table] = chunk else {
-                        unreachable!()
-                    };
-                    components.push(JpegComponent {
-                        id: *id,
-                        _h_sampling: (sampling >> 4) & 0x0F,
-                        _v_sampling: sampling & 0x0F,
-                        _quantization_table: *quant_table,
-                    });
-                }
+        if matches!(marker, 0xC0..=0xC3 | 0xC5..=0xC7 | 0xC9..=0xCB | 0xCD..=0xCF)
+            && let [_, _, _, _, _, num_components, comp_data @ ..] = segment
+        {
+            for chunk in comp_data.chunks_exact(3).take(*num_components as usize) {
+                let [id, sampling, quant_table] = chunk else {
+                    unreachable!()
+                };
+                components.push(JpegComponent {
+                    id: *id,
+                    _h_sampling: (sampling >> 4) & 0x0F,
+                    _v_sampling: sampling & 0x0F,
+                    _quantization_table: *quant_table,
+                });
             }
         }
 
