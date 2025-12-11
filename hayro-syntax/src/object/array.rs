@@ -47,6 +47,11 @@ impl<'a> Array<'a> {
     pub fn flex_iter(&self) -> FlexArrayIter<'a> {
         FlexArrayIter::new(self.data, &self.ctx)
     }
+
+    /// Return the raw data of the array.
+    pub fn data(&self) -> &'a [u8] {
+        self.data
+    }
 }
 
 impl Debug for Array<'_> {

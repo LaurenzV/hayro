@@ -1,5 +1,7 @@
 use crate::util::hash128;
-use hayro_syntax::object::{Dict, ObjectIdentifier, Stream};
+use hayro_syntax::object::{
+    Array, Dict, MaybeRef, Name, Null, ObjRef, Object, ObjectIdentifier, Stream,
+};
 use kurbo::Affine;
 use std::any::Any;
 use std::collections::HashMap;
@@ -71,6 +73,72 @@ impl CacheKey for Dict<'_> {
 impl CacheKey for Stream<'_> {
     fn cache_key(&self) -> u128 {
         self.dict().cache_key()
+    }
+}
+
+impl CacheKey for Null {
+    fn cache_key(&self) -> u128 {
+        hash128(self)
+    }
+}
+
+impl CacheKey for bool {
+    fn cache_key(&self) -> u128 {
+        hash128(self)
+    }
+}
+
+impl CacheKey for hayro_syntax::object::Number {
+    fn cache_key(&self) -> u128 {
+        hash128(&self.as_f64().to_bits())
+    }
+}
+
+impl CacheKey for hayro_syntax::object::String<'_> {
+    fn cache_key(&self) -> u128 {
+        hash128(self.get().as_ref())
+    }
+}
+
+impl CacheKey for Name<'_> {
+    fn cache_key(&self) -> u128 {
+        hash128(self)
+    }
+}
+
+impl CacheKey for Array<'_> {
+    fn cache_key(&self) -> u128 {
+        hash128(self.data())
+    }
+}
+
+impl CacheKey for Object<'_> {
+    fn cache_key(&self) -> u128 {
+        match self {
+            Object::Null(n) => n.cache_key(),
+            Object::Boolean(b) => b.cache_key(),
+            Object::Number(n) => n.cache_key(),
+            Object::String(s) => s.cache_key(),
+            Object::Name(n) => n.cache_key(),
+            Object::Dict(d) => d.cache_key(),
+            Object::Array(a) => a.cache_key(),
+            Object::Stream(s) => s.cache_key(),
+        }
+    }
+}
+
+impl CacheKey for ObjRef {
+    fn cache_key(&self) -> u128 {
+        hash128(self)
+    }
+}
+
+impl<T: CacheKey> CacheKey for MaybeRef<T> {
+    fn cache_key(&self) -> u128 {
+        match self {
+            MaybeRef::Ref(r) => r.cache_key(),
+            MaybeRef::NotRef(o) => o.cache_key(),
+        }
     }
 }
 
