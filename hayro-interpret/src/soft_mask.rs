@@ -79,7 +79,6 @@ impl Debug for SoftMask<'_> {
     }
 }
 
-
 impl PartialEq for SoftMask<'_> {
     fn eq(&self, other: &Self) -> bool {
         self.0.obj_id == other.0.obj_id
