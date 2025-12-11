@@ -7,7 +7,6 @@ use crate::object::Name;
 use crate::object::Rect;
 use crate::object::Stream;
 use crate::object::dict::keys::*;
-use crate::object::{MaybeRef, ObjRef};
 use crate::object::{Object, ObjectLike};
 use crate::reader::ReaderContext;
 use crate::util::FloatExt;
