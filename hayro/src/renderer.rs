@@ -2,7 +2,6 @@ use crate::derive_settings;
 use fast_image_resize::{PixelType, ResizeAlg, ResizeOptions, Resizer, images::Image as FirImage};
 use hayro_interpret::encode::EncodedShadingPattern;
 use hayro_interpret::font::Glyph;
-use hayro_interpret::hayro_syntax::object::ObjectIdentifier;
 use hayro_interpret::pattern::Pattern;
 use hayro_interpret::{
     BlendMode, CacheKey, ClipPath, Device, FillRule, GlyphDrawMode, LumaData, MaskType, Paint,
@@ -21,7 +20,7 @@ use vello_cpu::{
 pub(crate) struct Renderer {
     pub(crate) ctx: RenderContext,
     pub(crate) inside_pattern: bool,
-    pub(crate) soft_mask_cache: HashMap<ObjectIdentifier, Mask>,
+    pub(crate) soft_mask_cache: HashMap<u128, Mask>,
     pub(crate) glyph_cache: Option<HashMap<u128, BezPath>>,
     pub(crate) cur_mask: Option<Mask>,
     pub(crate) cur_blend_mode: BlendMode,
@@ -700,7 +699,7 @@ impl<'a> Device<'a> for Renderer {
                 let height = self.ctx.height();
 
                 self.soft_mask_cache
-                    .entry(m.id())
+                    .entry(m.cache_key())
                     .or_insert_with(|| draw_soft_mask(&m, settings, width, height))
                     .clone()
             }),
@@ -723,7 +722,7 @@ impl<'a> Device<'a> for Renderer {
             let height = self.ctx.height();
 
             self.soft_mask_cache
-                .entry(m.id())
+                .entry(m.cache_key())
                 .or_insert_with(|| draw_soft_mask(&m, settings, width, height))
                 .clone()
         });
