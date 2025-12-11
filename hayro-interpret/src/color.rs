@@ -1,6 +1,6 @@
 //! PDF colors and color spaces.
 
-use crate::cache::Cache;
+use crate::cache::{Cache, CacheKey};
 use crate::function::Function;
 use hayro_syntax::object;
 use hayro_syntax::object::Array;
@@ -118,7 +118,7 @@ impl ColorSpaceType {
                     let dict = icc_stream.dict();
                     let num_components = dict.get::<usize>(N)?;
 
-                    return cache.get_or_insert_with(icc_stream.obj_id(), || {
+                    return cache.get_or_insert_with(icc_stream.cache_key(), || {
                         if let Some(decoded) = icc_stream.decoded().ok().as_ref() {
                             ICCProfile::new(decoded, num_components)
                                 .map(|icc| {

@@ -15,7 +15,7 @@ use crate::util::OptionLog;
 use crate::x_object::{ImageXObject, XObject, draw_image_xobject, draw_xobject};
 use hayro_syntax::content::ops::TypedInstruction;
 use hayro_syntax::object::dict::keys::OC;
-use hayro_syntax::object::{Dict, Object, dict_or_stream};
+use hayro_syntax::object::{Object, dict_or_stream};
 use hayro_syntax::page::{Page, Resources};
 use kurbo::{Affine, Point, Shape};
 use log::warn;
@@ -265,7 +265,7 @@ pub fn interpret<'a, 'b>(
             }
             TypedInstruction::SetGraphicsState(gs) => {
                 if let Some(gs) = resources
-                    .get_ext_g_state::<Dict<'_>>(gs.0.clone(), Box::new(|_| None), Box::new(Some))
+                    .get_ext_g_state(gs.0.clone())
                     .warn_none(&format!("failed to get extgstate {}", gs.0.as_str()))
                 {
                     handle_gs(&gs, context, resources);
@@ -351,22 +351,18 @@ pub fn interpret<'a, 'b>(
                 context.get_mut().graphics_state.non_stroke_color =
                     n.0.into_iter().map(|n| n.as_f32()).collect();
                 context.get_mut().graphics_state.non_stroke_pattern = n.1.and_then(|name| {
-                    resources.get_pattern(
-                        name,
-                        Box::new(|_| None),
-                        Box::new(|d| Pattern::new(d, context, resources)),
-                    )
+                    resources
+                        .get_pattern(name)
+                        .and_then(|d| Pattern::new(d, context, resources))
                 });
             }
             TypedInstruction::StrokeColorNamed(n) => {
                 context.get_mut().graphics_state.stroke_color =
                     n.0.into_iter().map(|n| n.as_f32()).collect();
                 context.get_mut().graphics_state.stroke_pattern = n.1.and_then(|name| {
-                    resources.get_pattern(
-                        name,
-                        Box::new(|_| None),
-                        Box::new(|d| Pattern::new(d, context, resources)),
-                    )
+                    resources
+                        .get_pattern(name)
+                        .and_then(|d| Pattern::new(d, context, resources))
                 });
             }
             TypedInstruction::BeginMarkedContentWithProperties(bdc) => {
@@ -495,18 +491,14 @@ pub fn interpret<'a, 'b>(
             TypedInstruction::XObject(x) => {
                 let cache = context.object_cache.clone();
                 let transfer_function = context.get().graphics_state.transfer_function.clone();
-                if let Some(x_object) = resources.get_x_object(
-                    x.0,
-                    Box::new(|_| None),
-                    Box::new(|s| {
-                        XObject::new(
-                            &s,
-                            &context.settings.warning_sink,
-                            &cache,
-                            transfer_function.clone(),
-                        )
-                    }),
-                ) {
+                if let Some(x_object) = resources.get_x_object(x.0).and_then(|s| {
+                    XObject::new(
+                        &s,
+                        &context.settings.warning_sink,
+                        &cache,
+                        transfer_function.clone(),
+                    )
+                }) {
                     draw_xobject(&x_object, resources, context, device);
                 }
             }
@@ -534,7 +526,7 @@ pub fn interpret<'a, 'b>(
                 }
 
                 if let Some(sp) = resources
-                    .get_shading(s.0, Box::new(|_| None), Box::new(Some))
+                    .get_shading(s.0)
                     .and_then(|o| dict_or_stream(&o))
                     .and_then(|s| Shading::new(&s.0, s.1.as_ref(), &context.object_cache))
                     .map(|s| {

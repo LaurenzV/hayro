@@ -1,4 +1,4 @@
-use crate::cache::Cache;
+use crate::cache::{Cache, CacheKey};
 use crate::color::ColorSpace;
 use crate::convert::convert_transform;
 use crate::font::Font;
@@ -9,8 +9,6 @@ use crate::{ClipPath, Device, FillRule, InterpreterSettings, StrokeProps};
 use hayro_syntax::content::ops::Transform;
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Name;
-use hayro_syntax::object::ObjRef;
-use hayro_syntax::object::Object;
 use hayro_syntax::page::Resources;
 use hayro_syntax::xref::XRef;
 use kurbo::{Affine, BezPath, PathEl, Point, Rect, Shape};
@@ -24,7 +22,7 @@ pub struct Context<'a> {
     sub_path_start: Point,
     last_point: Point,
     clip: Option<FillRule>,
-    font_cache: HashMap<ObjRef, Option<Font<'a>>>,
+    font_cache: HashMap<u128, Option<Font<'a>>>,
     root_transforms: Vec<Affine>,
     bbox: Vec<Rect>,
     pub(crate) settings: InterpreterSettings,
@@ -232,20 +230,12 @@ impl<'a> Context<'a> {
         resources: &Resources<'a>,
         name: Name<'_>,
     ) -> Option<Font<'a>> {
-        resources.get_font(
-            name,
-            Box::new(|ref_| {
-                self.font_cache
-                    .entry(ref_)
-                    .or_insert_with(|| {
-                        resources
-                            .resolve_ref::<Dict<'_>>(ref_)
-                            .and_then(|o| Font::new(&o, &self.settings.font_resolver))
-                    })
-                    .clone()
-            }),
-            Box::new(|c| Font::new(&c, &self.settings.font_resolver)),
-        )
+        let font_dict = resources.get_font(name)?;
+        let cache_key = font_dict.cache_key();
+        self.font_cache
+            .entry(cache_key)
+            .or_insert_with(|| Font::new(&font_dict, &self.settings.font_resolver))
+            .clone()
     }
 
     pub(crate) fn get_color_space(
@@ -253,17 +243,11 @@ impl<'a> Context<'a> {
         resources: &Resources<'_>,
         name: Name<'_>,
     ) -> Option<ColorSpace> {
-        resources.get_color_space(
-            name,
-            Box::new(|ref_| {
-                self.object_cache.get_or_insert_with(ref_.into(), || {
-                    resources
-                        .resolve_ref::<Object<'_>>(ref_)
-                        .map(|o| ColorSpace::new(o, &self.object_cache))
-                })
-            }),
-            Box::new(|c| Some(ColorSpace::new(c, &self.object_cache))),
-        )?
+        let cs_object = resources.get_color_space(name)?;
+        self.object_cache
+            .get_or_insert_with(cs_object.cache_key(), || {
+                ColorSpace::new(cs_object.clone(), &self.object_cache)
+            })
     }
 
     pub(crate) fn stroke_props(&self) -> StrokeProps {
