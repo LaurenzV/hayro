@@ -339,9 +339,8 @@ const MODE_CODES: [(u8, u8, u8); 9] = [
 // =============================================================================
 
 // White codes: 64 terminating + 27 makeup + 13 common = 104 codes
-// Max code length is 12 bits, so at most ~104 internal nodes needed
-const WHITE_STATES: [State; 128] = {
-    let mut states: [State; 128] = [State::new(); 128];
+const WHITE_STATES: [State; 104] = {
+    let mut states: [State; 104] = [State::new(); 104];
     let mut num_states: usize = 1;
 
     // Insert WHITE_TERMINATING
@@ -372,9 +371,8 @@ const WHITE_STATES: [State; 128] = {
 };
 
 // Black codes: 64 terminating + 27 makeup + 13 common = 104 codes
-// Max code length is 13 bits
-const BLACK_STATES: [State; 128] = {
-    let mut states: [State; 128] = [State::new(); 128];
+const BLACK_STATES: [State; 104] = {
+    let mut states: [State; 104] = [State::new(); 104];
     let mut num_states: usize = 1;
 
     // Insert BLACK_TERMINATING
@@ -405,8 +403,8 @@ const BLACK_STATES: [State; 128] = {
 };
 
 // Mode codes: 9 codes, max 7 bits
-const MODE_STATES: [State; 16] = {
-    let mut states: [State; 16] = [State::new(); 16];
+const MODE_STATES: [State; 9] = {
+    let mut states: [State; 9] = [State::new(); 9];
     let mut num_states: usize = 1;
 
     let mut i = 0;
