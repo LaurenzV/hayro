@@ -38,14 +38,6 @@ pub fn decode(
         match mode {
             Mode::Pass => unimplemented!(),
             Mode::Horizontal => {
-                let h = reader.read_bits(3)?;
-                
-                if h != 0b001 {
-                    error!("invalid code word for horizontal mode");
-                    
-                    return None;
-                }
-                
                 let a0a1 = reader.decode_run(ctx.is_white)? as usize;
                 ctx.push_pixels(a0a1);
                 ctx.is_white = !ctx.is_white;
@@ -54,8 +46,8 @@ pub fn decode(
                 ctx.is_white = !ctx.is_white;
                 
                 ctx.a0 += a0a1 + a1a2;
-                
-                unimplemented!()
+
+                ctx.check_eol();
             },
             Mode::Vertical(i) => {
                 let a1 = if i > 0 {
@@ -121,13 +113,46 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
             coding_line: vec![0],
             decoder,
             a0: 0,
-            a1: max_idx,
-            a2: max_idx,
             b1: max_idx,
             b2: max_idx,
             max_idx,
             is_white: true,
             settings
+        }
+    }
+    
+    fn find_b1(&mut self) {
+        self.b1 = self.a0;
+        let target_color = self.coding_line[self.a0] ^ 1;
+        
+        let mut has_changed = false;
+        let mut last_color =  self.reference_line[self.b1];
+        
+        while self.b1 < self.max_idx {
+            let current_color = self.reference_line[self.b1];
+            has_changed |= current_color != last_color;
+            
+            if has_changed && current_color == target_color {
+                break;
+            }
+            
+            last_color = current_color;
+            self.b1 += 1;
+        }
+    }
+    
+    fn find_b2(&mut self) {
+        self.b2 = self.b1;
+        
+        let target_color = self.reference_line[self.b1] ^ 1;
+        
+        while self.b2 < self.max_idx {
+            let current_color = self.reference_line[self.b2];
+            if current_color != target_color {
+                break;
+            }
+            
+            self.b2 += 1;
         }
     }
 
@@ -168,8 +193,8 @@ impl PrintDecoder {
 }
 
 impl Decoder for PrintDecoder {
-    fn push_pixels(&mut self, count: usize, black: bool) {
-        let symbol = if black { "x" } else { "o" };
+    fn push_pixels(&mut self, count: usize, white: bool) {
+        let symbol = if white { "o" } else { "x" };
         for _ in 0..count {
             self.line.push_str(symbol);
         }
