@@ -1,8 +1,3 @@
-//! CCITT Huffman decoding using state machines.
-//!
-//! Each state machine is a trie where each node has two transitions (bit 0 and bit 1).
-//! Terminal nodes return the decoded run length.
-
 use crate::bit::BitReader;
 use log::warn;
 
@@ -24,7 +19,6 @@ pub(crate) enum Mode {
 // - 0x0000-0x3FFF: next state index
 // - 0x8000 | value: decoded run length (value & 0x1FFF)
 // - 0xFFFF: invalid/unused
-
 const VALUE_FLAG: u16 = 0x8000;
 const VALUE_MASK: u16 = 0x1FFF;
 const INVALID: u16 = 0xFFFF;
@@ -384,17 +378,19 @@ impl BitReader<'_> {
 
             if transition == INVALID {
                 warn!("CCITT: invalid {name} code sequence");
+                
                 return None;
             } else if transition >= VALUE_FLAG {
                 let len = transition & VALUE_MASK;
-                total = total.saturating_add(len);
-                
+                total = total.checked_add(len)?;
+
                 // For decoding black/white runs, less than 64 means we have
                 // a terminating code. For mode decoding, all values are less
                 // than 64 anyway.
                 if len < 64 {
                     return Some(total);
                 }
+                
                 state = 0;
             } else {
                 state = transition as usize;

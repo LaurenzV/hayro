@@ -59,7 +59,7 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
         let val = if black { 1 } else { 0 };
         self.coding_line.extend(iter::repeat_n(val, count as usize))
     }
-    
+
     fn next_line(&mut self) {
         core::mem::swap(&mut self.reference_line, &mut self.coding_line);
         self.coding_line.truncate(1);
