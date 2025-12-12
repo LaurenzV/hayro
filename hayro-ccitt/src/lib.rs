@@ -11,7 +11,7 @@ pub struct DecodeSettings {
 
 pub trait Decoder {
     fn push_pixels(&mut self, count: u16, black: bool);
-    fn end_of_line(&mut self);
+    fn next_line(&mut self);
 }
 
 struct DecoderContext<'a, T: Decoder> {
@@ -43,7 +43,7 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
             // "The reference line for the first coding line in a
             // page is an imaginary white line."
             reference_line: vec![0; total_len],
-            coding_line: vec![0; total_len],
+            coding_line: vec![0],
             decoder,
             a0: 0,
             a1: total_len,
@@ -57,5 +57,11 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
         self.decoder.push_pixels(count, black);
         let val = if black { 1 } else { 0 };
         self.coding_line.extend(iter::repeat_n(val, count as usize))
+    }
+    
+    fn next_line(&mut self) {
+        core::mem::swap(&mut self.reference_line, &mut self.coding_line);
+        self.coding_line.truncate(1);
+        self.decoder.next_line();
     }
 }
