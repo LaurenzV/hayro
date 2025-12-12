@@ -37,7 +37,6 @@ impl<'a> BitReader<'a> {
         self.byte_pos()
     }
 
-
     #[inline(always)]
     pub(crate) fn read_bit(&mut self) -> Option<u32> {
         let byte_pos = self.byte_pos();
