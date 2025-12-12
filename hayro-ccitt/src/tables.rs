@@ -52,8 +52,8 @@ impl State {
 
 /// Insert a single code into the state machine.
 /// Returns the new number of states.
-const fn insert_code(
-    states: &mut [State; 512],
+const fn insert_code<const N: usize>(
+    states: &mut [State; N],
     num_states: usize,
     run_length: u16,
     code_length: u8,
@@ -104,77 +104,13 @@ const fn insert_code(
     num_states
 }
 
-/// Build white code state machine at compile time.
-const fn build_white_states() -> [State; 512] {
-    let mut states: [State; 512] = [State::new(); 512];
-    let mut num_states: usize = 1;
-
-    // Insert WHITE_TERMINATING
-    let mut i = 0;
-    while i < WHITE_TERMINATING.len() {
-        let (run_length, code_length, code) = WHITE_TERMINATING[i];
-        num_states = insert_code(&mut states, num_states, run_length, code_length, code);
-        i += 1;
-    }
-
-    // Insert WHITE_MAKEUP
-    i = 0;
-    while i < WHITE_MAKEUP.len() {
-        let (run_length, code_length, code) = WHITE_MAKEUP[i];
-        num_states = insert_code(&mut states, num_states, run_length, code_length, code);
-        i += 1;
-    }
-
-    // Insert COMMON_MAKEUP
-    i = 0;
-    while i < COMMON_MAKEUP.len() {
-        let (run_length, code_length, code) = COMMON_MAKEUP[i];
-        num_states = insert_code(&mut states, num_states, run_length, code_length, code);
-        i += 1;
-    }
-
-    states
-}
-
-/// Build black code state machine at compile time.
-const fn build_black_states() -> [State; 512] {
-    let mut states: [State; 512] = [State::new(); 512];
-    let mut num_states: usize = 1;
-
-    // Insert BLACK_TERMINATING
-    let mut i = 0;
-    while i < BLACK_TERMINATING.len() {
-        let (run_length, code_length, code) = BLACK_TERMINATING[i];
-        num_states = insert_code(&mut states, num_states, run_length, code_length, code);
-        i += 1;
-    }
-
-    // Insert BLACK_MAKEUP
-    i = 0;
-    while i < BLACK_MAKEUP.len() {
-        let (run_length, code_length, code) = BLACK_MAKEUP[i];
-        num_states = insert_code(&mut states, num_states, run_length, code_length, code);
-        i += 1;
-    }
-
-    // Insert COMMON_MAKEUP
-    i = 0;
-    while i < COMMON_MAKEUP.len() {
-        let (run_length, code_length, code) = COMMON_MAKEUP[i];
-        num_states = insert_code(&mut states, num_states, run_length, code_length, code);
-        i += 1;
-    }
-
-    states
-}
-
 // =============================================================================
 // CODE TABLES
 // =============================================================================
 
 // Format: (run_length, code_length, code)
 
-const WHITE_TERMINATING: &[(u16, u8, u16)] = &[
+const WHITE_TERMINATING: [(u16, u8, u16); 64] = [
     (0, 8, 0b00110101),
     (1, 6, 0b000111),
     (2, 4, 0b0111),
@@ -241,7 +177,7 @@ const WHITE_TERMINATING: &[(u16, u8, u16)] = &[
     (63, 8, 0b00110100),
 ];
 
-const WHITE_MAKEUP: &[(u16, u8, u16)] = &[
+const WHITE_MAKEUP: [(u16, u8, u16); 27] = [
     (64, 5, 0b11011),
     (128, 5, 0b10010),
     (192, 6, 0b010111),
@@ -271,7 +207,7 @@ const WHITE_MAKEUP: &[(u16, u8, u16)] = &[
     (1728, 9, 0b010011011),
 ];
 
-const BLACK_TERMINATING: &[(u16, u8, u16)] = &[
+const BLACK_TERMINATING: [(u16, u8, u16); 64] = [
     (0, 10, 0b0000110111),
     (1, 3, 0b010),
     (2, 2, 0b11),
@@ -338,7 +274,7 @@ const BLACK_TERMINATING: &[(u16, u8, u16)] = &[
     (63, 12, 0b000001100111),
 ];
 
-const BLACK_MAKEUP: &[(u16, u8, u16)] = &[
+const BLACK_MAKEUP: [(u16, u8, u16); 27] = [
     (64, 10, 0b0000001111),
     (128, 12, 0b000011001000),
     (192, 12, 0b000011001001),
@@ -368,7 +304,7 @@ const BLACK_MAKEUP: &[(u16, u8, u16)] = &[
     (1728, 13, 0b0000001100101),
 ];
 
-const COMMON_MAKEUP: &[(u16, u8, u16)] = &[
+const COMMON_MAKEUP: [(u16, u8, u16); 13] = [
     (1792, 11, 0b00000001000),
     (1856, 11, 0b00000001100),
     (1920, 11, 0b00000001101),
@@ -385,7 +321,7 @@ const COMMON_MAKEUP: &[(u16, u8, u16)] = &[
 ];
 
 // Mode codes for 2D encoding
-const MODE_CODES: &[(u8, u8, u8)] = &[
+const MODE_CODES: [(u8, u8, u8); 9] = [
     // (mode_id, code_length, code)
     (0, 4, 0b0001),    // Pass
     (1, 3, 0b001),     // Horizontal
@@ -402,11 +338,73 @@ const MODE_CODES: &[(u8, u8, u8)] = &[
 // CONST STATE MACHINES
 // =============================================================================
 
-const WHITE_STATES: [State; 512] = build_white_states();
+// White codes: 64 terminating + 27 makeup + 13 common = 104 codes
+// Max code length is 12 bits, so at most ~104 internal nodes needed
+const WHITE_STATES: [State; 128] = {
+    let mut states: [State; 128] = [State::new(); 128];
+    let mut num_states: usize = 1;
 
-const BLACK_STATES: [State; 512] = build_black_states();
+    // Insert WHITE_TERMINATING
+    let mut i = 0;
+    while i < WHITE_TERMINATING.len() {
+        let (run_length, code_length, code) = WHITE_TERMINATING[i];
+        num_states = insert_code(&mut states, num_states, run_length, code_length, code);
+        i += 1;
+    }
 
-// Mode state machine is simpler - build it inline
+    // Insert WHITE_MAKEUP
+    i = 0;
+    while i < WHITE_MAKEUP.len() {
+        let (run_length, code_length, code) = WHITE_MAKEUP[i];
+        num_states = insert_code(&mut states, num_states, run_length, code_length, code);
+        i += 1;
+    }
+
+    // Insert COMMON_MAKEUP
+    i = 0;
+    while i < COMMON_MAKEUP.len() {
+        let (run_length, code_length, code) = COMMON_MAKEUP[i];
+        num_states = insert_code(&mut states, num_states, run_length, code_length, code);
+        i += 1;
+    }
+
+    states
+};
+
+// Black codes: 64 terminating + 27 makeup + 13 common = 104 codes
+// Max code length is 13 bits
+const BLACK_STATES: [State; 128] = {
+    let mut states: [State; 128] = [State::new(); 128];
+    let mut num_states: usize = 1;
+
+    // Insert BLACK_TERMINATING
+    let mut i = 0;
+    while i < BLACK_TERMINATING.len() {
+        let (run_length, code_length, code) = BLACK_TERMINATING[i];
+        num_states = insert_code(&mut states, num_states, run_length, code_length, code);
+        i += 1;
+    }
+
+    // Insert BLACK_MAKEUP
+    i = 0;
+    while i < BLACK_MAKEUP.len() {
+        let (run_length, code_length, code) = BLACK_MAKEUP[i];
+        num_states = insert_code(&mut states, num_states, run_length, code_length, code);
+        i += 1;
+    }
+
+    // Insert COMMON_MAKEUP
+    i = 0;
+    while i < COMMON_MAKEUP.len() {
+        let (run_length, code_length, code) = COMMON_MAKEUP[i];
+        num_states = insert_code(&mut states, num_states, run_length, code_length, code);
+        i += 1;
+    }
+
+    states
+};
+
+// Mode codes: 9 codes, max 7 bits
 const MODE_STATES: [State; 16] = {
     let mut states: [State; 16] = [State::new(); 16];
     let mut num_states: usize = 1;
@@ -416,7 +414,7 @@ const MODE_STATES: [State; 16] = {
         let (mode_id, code_length, code) = MODE_CODES[i];
         let mut current_state: usize = 0;
 
-        let mut j = 0;
+        let mut j: u8 = 0;
         while j < code_length {
             let bit = (code >> (code_length - 1 - j)) & 1;
             let is_last = j == code_length - 1;
