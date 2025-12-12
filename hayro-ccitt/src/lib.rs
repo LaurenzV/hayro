@@ -122,7 +122,8 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
     }
     
     fn find_b1(&mut self) {
-        self.b1 = self.a0 + 1;
+        self.b1 = self.a0;
+        
         let target_color = self.coding_line[self.a0] ^ 1;
         
         let mut has_changed = false;
@@ -142,7 +143,7 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
     }
 
     fn find_b2(&mut self) {
-        self.b2 = self.b1 + 1;
+        self.b2 = self.b1;
         let b1_color = self.reference_line[self.b1];
 
         while self.b2 < self.max_idx {
@@ -168,8 +169,13 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
             core::mem::swap(&mut self.reference_line, &mut self.coding_line);
             self.coding_line.truncate(1);
             self.is_white = true;
+            self.find_b1();
+            self.find_b2();
             
             self.decoder.next_line();
+        }   else {
+            self.find_b1();
+            self.find_b2();
         }
     }
     
