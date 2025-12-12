@@ -6,13 +6,8 @@ use log::warn;
 pub(crate) enum Mode {
     Pass,
     Horizontal,
-    Vertical0,
-    VerticalR1,
-    VerticalR2,
-    VerticalR3,
-    VerticalL1,
-    VerticalL2,
-    VerticalL3,
+    /// Vertical mode with offset from b1 (-3 to +3).
+    Vertical(i8),
 }
 
 // State machine encoding:
@@ -411,13 +406,13 @@ impl BitReader<'_> {
         Some(match mode_id {
             0 => Mode::Pass,
             1 => Mode::Horizontal,
-            2 => Mode::Vertical0,
-            3 => Mode::VerticalR1,
-            4 => Mode::VerticalR2,
-            5 => Mode::VerticalR3,
-            6 => Mode::VerticalL1,
-            7 => Mode::VerticalL2,
-            8 => Mode::VerticalL3,
+            2 => Mode::Vertical(0),
+            3 => Mode::Vertical(1),
+            4 => Mode::Vertical(2),
+            5 => Mode::Vertical(3),
+            6 => Mode::Vertical(-1),
+            7 => Mode::Vertical(-2),
+            8 => Mode::Vertical(-3),
             _ => {
                 warn!("CCITT: invalid mode id {mode_id}");
                 return None;
@@ -553,10 +548,10 @@ mod tests {
 
     #[test]
     fn test_mode_codes() {
-        // Vertical_0: code = 1 (1 bit)
+        // Vertical(0): code = 1 (1 bit)
         let data = [0b1000_0000];
         let mut reader = BitReader::new(&data);
-        assert_eq!(reader.decode_mode(), Some(Mode::Vertical0));
+        assert_eq!(reader.decode_mode(), Some(Mode::Vertical(0)));
 
         // Horizontal: code = 001 (3 bits)
         let data = [0b001_00000];
@@ -568,35 +563,35 @@ mod tests {
         let mut reader = BitReader::new(&data);
         assert_eq!(reader.decode_mode(), Some(Mode::Pass));
 
-        // Vertical_R1: code = 011 (3 bits)
+        // Vertical(1): code = 011 (3 bits)
         let data = [0b011_00000];
         let mut reader = BitReader::new(&data);
-        assert_eq!(reader.decode_mode(), Some(Mode::VerticalR1));
+        assert_eq!(reader.decode_mode(), Some(Mode::Vertical(1)));
 
-        // Vertical_L1: code = 010 (3 bits)
+        // Vertical(-1): code = 010 (3 bits)
         let data = [0b010_00000];
         let mut reader = BitReader::new(&data);
-        assert_eq!(reader.decode_mode(), Some(Mode::VerticalL1));
+        assert_eq!(reader.decode_mode(), Some(Mode::Vertical(-1)));
 
-        // Vertical_R2: code = 000011 (6 bits)
+        // Vertical(2): code = 000011 (6 bits)
         let data = [0b000011_00];
         let mut reader = BitReader::new(&data);
-        assert_eq!(reader.decode_mode(), Some(Mode::VerticalR2));
+        assert_eq!(reader.decode_mode(), Some(Mode::Vertical(2)));
 
-        // Vertical_L2: code = 000010 (6 bits)
+        // Vertical(-2): code = 000010 (6 bits)
         let data = [0b000010_00];
         let mut reader = BitReader::new(&data);
-        assert_eq!(reader.decode_mode(), Some(Mode::VerticalL2));
+        assert_eq!(reader.decode_mode(), Some(Mode::Vertical(-2)));
 
-        // Vertical_R3: code = 0000011 (7 bits)
+        // Vertical(3): code = 0000011 (7 bits)
         let data = [0b0000011_0];
         let mut reader = BitReader::new(&data);
-        assert_eq!(reader.decode_mode(), Some(Mode::VerticalR3));
+        assert_eq!(reader.decode_mode(), Some(Mode::Vertical(3)));
 
-        // Vertical_L3: code = 0000010 (7 bits)
+        // Vertical(-3): code = 0000010 (7 bits)
         let data = [0b0000010_0];
         let mut reader = BitReader::new(&data);
-        assert_eq!(reader.decode_mode(), Some(Mode::VerticalL3));
+        assert_eq!(reader.decode_mode(), Some(Mode::Vertical(-3)));
     }
 
     // =========================================================================
