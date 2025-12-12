@@ -2,7 +2,8 @@ use std::iter;
 use crate::bit::BitReader;
 
 mod bit;
-pub mod tables;
+mod decode;
+mod tables;
 
 #[derive(Copy, Clone, Debug)]
 pub struct DecodeSettings {
