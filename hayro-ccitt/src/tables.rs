@@ -380,7 +380,7 @@ impl BitReader<'_> {
                 warn!("CCITT: invalid {name} code sequence");
                 
                 return None;
-            } else if transition >= VALUE_FLAG {
+            } else if transition & VALUE_FLAG != 0 {
                 let len = transition & VALUE_MASK;
                 total = total.checked_add(len)?;
 
