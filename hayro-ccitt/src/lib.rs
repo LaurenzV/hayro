@@ -1,4 +1,5 @@
 use std::iter;
+use crate::bit::BitReader;
 
 mod bit;
 pub mod tables;
@@ -17,10 +18,18 @@ pub trait Decoder {
 }
 
 pub fn decode(
+    data: &[u8],
     decoder: &mut impl Decoder,
     settings: &DecodeSettings,
 ) -> Option<()> {
-    let mut ctx = DecoderContext::new(decoder, settings.columns);
+    let mut decoder = PrintDecoder::new();
+    let mut ctx = DecoderContext::new(&mut decoder, settings.columns);
+    let mut reader = BitReader::new(data);
+    
+    loop {
+        let mode = reader.decode_mode()?;
+        eprintln!("hi");
+    }
     
     Some(())
 } 
@@ -74,5 +83,30 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
         core::mem::swap(&mut self.reference_line, &mut self.coding_line);
         self.coding_line.truncate(1);
         self.decoder.next_line();
+    }
+}
+
+/// A decoder that prints the image to stdout.
+pub struct PrintDecoder {
+    line: String,
+}
+
+impl PrintDecoder {
+    pub fn new() -> Self {
+        Self { line: String::new() }
+    }
+}
+
+impl Decoder for PrintDecoder {
+    fn push_pixels(&mut self, count: u16, black: bool) {
+        let symbol = if black { "█" } else { " " };
+        for _ in 0..count {
+            self.line.push_str(symbol);
+        }
+    }
+
+    fn next_line(&mut self) {
+        println!("{}", self.line);
+        self.line.clear();
     }
 }

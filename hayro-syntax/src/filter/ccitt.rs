@@ -25,6 +25,7 @@ use crate::object::dict::keys::{
 };
 use crate::reader::Reader;
 use log::warn;
+use hayro_ccitt::{DecodeSettings, Decoder};
 
 pub(crate) fn decode(data: &[u8], params: Dict<'_>) -> Option<Vec<u8>> {
     let dp = CCITTFaxDecoderOptions::default();
@@ -1177,6 +1178,33 @@ impl<'a> CCITTFaxDecoder<'a> {
         let rows = options.rows;
         let eoblock = options.eoblock;
         let black = options.black_is_1;
+        
+        if k < 0 {
+            let settings = DecodeSettings {
+                strict: true,
+                columns: options.columns as u32,
+                rows: options.rows as u32,
+                eoblock,
+            };
+            
+            struct DummyDecoder;
+            
+            impl Decoder for DummyDecoder {
+                fn push_pixels(&mut self, count: u16, black: bool) {
+                   todo!()
+                }
+
+                fn next_line(&mut self) {
+                    todo!()
+                }
+            }
+            
+            hayro_ccitt::decode(
+                source.data,
+                &mut DummyDecoder,
+                &settings,
+            );
+        }
 
         let ref_line = vec![0; columns + 2];
         let mut coding_line = vec![0; columns + 1];

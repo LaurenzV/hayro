@@ -572,6 +572,7 @@ dependencies = [
  "aes",
  "cbc",
  "flate2",
+ "hayro-ccitt",
  "hayro-common",
  "hayro-jpeg2000",
  "log",

@@ -13,6 +13,8 @@ smallvec = { workspace = true }
 hayro-common = { workspace = true }
 zune-jpeg = { workspace = true }
 flate2 = { workspace = true }
+
+hayro-ccitt = { workspace = true }
 hayro-jpeg2000 = { workspace = true, features = ["simd"] }
 
 [lints]
