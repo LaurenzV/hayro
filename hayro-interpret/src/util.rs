@@ -4,8 +4,6 @@ use hayro_syntax::page::{Page, Rotation};
 use kurbo::{Affine, Rect};
 use log::warn;
 use siphasher::sip128::{Hasher128, SipHasher13};
-use skrifa::GlyphId;
-use skrifa::raw::tables::cmap::CmapSubtable;
 use std::hash::Hash;
 use std::ops::Sub;
 
@@ -21,25 +19,6 @@ impl<T> OptionLog for Option<T> {
 
             None
         })
-    }
-}
-
-pub(crate) trait CodeMapExt {
-    fn map_codepoint(&self, code: impl Into<u32>) -> Option<GlyphId>;
-}
-
-impl CodeMapExt for CmapSubtable<'_> {
-    fn map_codepoint(&self, code: impl Into<u32>) -> Option<GlyphId> {
-        match self {
-            CmapSubtable::Format0(f) => f.map_codepoint(code),
-            CmapSubtable::Format4(f) => f.map_codepoint(code),
-            CmapSubtable::Format6(f) => f.map_codepoint(code),
-            CmapSubtable::Format12(f) => f.map_codepoint(code),
-            _ => {
-                warn!("unsupported cmap table");
-                None
-            }
-        }
     }
 }
 
