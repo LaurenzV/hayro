@@ -363,7 +363,7 @@ const MODE_STATES: [State; 9] = {
 };
 
 impl BitReader<'_> {
-    pub(crate) fn decode_white_run(&mut self) -> Option<u16> {
+    fn decode_run(&mut self, states: &[State], name: &str) -> Option<u16> {
         let mut total: u16 = 0;
         let mut state: usize = 0;
 
@@ -371,118 +371,62 @@ impl BitReader<'_> {
             let bit = match self.read_bit() {
                 Some(b) => b,
                 None => {
-                    warn!("CCITT: unexpected EOF while decoding white run");
+                    warn!("CCITT: unexpected EOF while decoding {name}");
                     return None;
                 }
             };
 
             let transition = if bit == 0 {
-                WHITE_STATES[state].on_0
+                states[state].on_0
             } else {
-                WHITE_STATES[state].on_1
+                states[state].on_1
             };
 
             if transition == INVALID {
-                warn!("CCITT: invalid white code sequence");
+                warn!("CCITT: invalid {name} code sequence");
                 return None;
             } else if transition >= VALUE_FLAG {
                 let len = transition & VALUE_MASK;
                 total = total.saturating_add(len);
+                
+                // For decoding black/white runs, less than 64 means we have
+                // a terminating code. For mode decoding, all values are less
+                // than 64 anyway.
                 if len < 64 {
-                    // Terminal code - we're done
                     return Some(total);
                 }
-                // Makeup code - reset state and continue reading
                 state = 0;
             } else {
-                // Continue to next state
                 state = transition as usize;
             }
         }
+    }
+
+    pub(crate) fn decode_white_run(&mut self) -> Option<u16> {
+        self.decode_run(&WHITE_STATES, "white run")
     }
 
     pub(crate) fn decode_black_run(&mut self) -> Option<u16> {
-        let mut total: u16 = 0;
-        let mut state: usize = 0;
-
-        loop {
-            let bit = match self.read_bit() {
-                Some(b) => b,
-                None => {
-                    warn!("CCITT: unexpected EOF while decoding black run");
-                    return None;
-                }
-            };
-
-            let transition = if bit == 0 {
-                BLACK_STATES[state].on_0
-            } else {
-                BLACK_STATES[state].on_1
-            };
-
-            if transition == INVALID {
-                warn!("CCITT: invalid black code sequence");
-                return None;
-            } else if transition >= VALUE_FLAG {
-                let len = transition & VALUE_MASK;
-                total = total.saturating_add(len);
-                if len < 64 {
-                    // Terminal code - we're done
-                    return Some(total);
-                }
-                // Makeup code - reset state and continue reading
-                state = 0;
-            } else {
-                // Continue to next state
-                state = transition as usize;
-            }
-        }
+        self.decode_run(&BLACK_STATES, "black run")
     }
 
     pub(crate) fn decode_mode(&mut self) -> Option<Mode> {
-        let mut state: usize = 0;
-
-        loop {
-            let bit = match self.read_bit() {
-                Some(b) => b,
-                None => {
-                    warn!("CCITT: unexpected EOF while decoding mode");
-                    return None;
-                }
-            };
-
-            let transition = if bit == 0 {
-                MODE_STATES[state].on_0
-            } else {
-                MODE_STATES[state].on_1
-            };
-
-            if transition == INVALID {
-                warn!("CCITT: invalid mode code sequence");
+        let mode_id = self.decode_run(&MODE_STATES, "mode")?;
+        Some(match mode_id {
+            0 => Mode::Pass,
+            1 => Mode::Horizontal,
+            2 => Mode::Vertical0,
+            3 => Mode::VerticalR1,
+            4 => Mode::VerticalR2,
+            5 => Mode::VerticalR3,
+            6 => Mode::VerticalL1,
+            7 => Mode::VerticalL2,
+            8 => Mode::VerticalL3,
+            _ => {
+                warn!("CCITT: invalid mode id {mode_id}");
                 return None;
             }
-
-            if transition >= VALUE_FLAG {
-                let mode_id = transition & VALUE_MASK;
-                return Some(match mode_id {
-                    0 => Mode::Pass,
-                    1 => Mode::Horizontal,
-                    2 => Mode::Vertical0,
-                    3 => Mode::VerticalR1,
-                    4 => Mode::VerticalR2,
-                    5 => Mode::VerticalR3,
-                    6 => Mode::VerticalL1,
-                    7 => Mode::VerticalL2,
-                    8 => Mode::VerticalL3,
-                    _ => {
-                        warn!("CCITT: invalid mode id {}", mode_id);
-                        return None;
-                    }
-                });
-            }
-
-            state = transition as usize;
-        }
+        })
     }
 }
 
