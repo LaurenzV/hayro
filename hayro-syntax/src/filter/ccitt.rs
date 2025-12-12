@@ -42,20 +42,50 @@ pub(crate) fn decode(data: &[u8], params: Dict<'_>) -> Option<Vec<u8>> {
         black_is_1: params.get::<bool>(BLACK_IS_1).unwrap_or(dp.black_is_1),
     };
 
-    let mut reader = Reader::new(data);
-    let mut decoder = CCITTFaxDecoder::new(&mut reader, params);
-    let mut out = vec![];
-
-    loop {
-        let byte = decoder.read_next_char();
-        if byte == -1 {
-            break;
-        }
-
-        out.push(byte as u8);
+    if params.k >= 0 || params.end_of_line || params.encoded_byte_align || params.black_is_1 {
+        unimplemented!();
     }
 
-    Some(out)
+    let settings = DecodeSettings {
+        strict: true,
+        columns: params.columns as u32,
+        rows: params.rows as u32,
+        end_of_block: params.eoblock,
+        end_of_line: params.end_of_line,
+    };
+
+    struct Decoder;
+
+    impl Decoder for Decoder {
+        fn push_pixels(&mut self, count: usize, black: bool) {
+            todo!()
+        }
+
+        fn next_line(&mut self) {
+            todo!()
+        }
+    }
+
+    hayro_ccitt::decode(
+        data,
+        &mut Decoder,
+        &settings,
+    );
+
+    // let mut reader = Reader::new(data);
+    // let mut decoder = CCITTFaxDecoder::new(&mut reader, params);
+    // let mut out = vec![];
+    // 
+    // loop {
+    //     let byte = decoder.read_next_char();
+    //     if byte == -1 {
+    //         break;
+    //     }
+    // 
+    //     out.push(byte as u8);
+    // }
+    // 
+    // Some(out)
 }
 
 const CCITT_EOL: i32 = -2;
@@ -1178,6 +1208,10 @@ impl<'a> CCITTFaxDecoder<'a> {
         let rows = options.rows;
         let eoblock = options.eoblock;
         let black = options.black_is_1;
+        
+        if options.k >= 0 || options.end_of_line || options.encoded_byte_align || options.black_is_1 {
+            unimplemented!();
+        }
         
         if k < 0 {
             let settings = DecodeSettings {
