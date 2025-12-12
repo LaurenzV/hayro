@@ -41,7 +41,7 @@ phf = { version = "0.13.1" }
 moxcms = { git = "https://github.com/awxkee/moxcms", rev = "ce70195", default-features = false }
 rustc-hash = { version = "2" }
 siphasher = "1"
-skrifa = { version = "0.37.0" }
+skrifa = { version = "0.39.0" }
 smallvec = { version = "1" }
 yoke = { version = "0.8" }
 pdf-writer = "0.14.0"
