@@ -58,26 +58,26 @@ pub fn decode(
                 unimplemented!()
             },
             Mode::Vertical(i) => {
-                ctx.a1 = if i > 0 {
+                let a1 = if i > 0 {
                     ctx.b1.checked_add(i as usize)?
                 }   else {
                     ctx.b1.checked_sub((-i) as usize)?
                 };
                 
-                if ctx.a1 > ctx.max_idx {
+                if a1 > ctx.max_idx {
                     error!("a1 was too large");
                     
                     return None;
                 }
                 
-                if ctx.a1 < ctx.a0 {
+                if a1 < ctx.a0 {
                     error!("a1 has an invalid position.");
                     
                     return None;
                 }
                 
-                ctx.push_pixels(ctx.a1 - ctx.a0);
-                ctx.a0 = ctx.a1;
+                ctx.push_pixels(a1 - ctx.a0);
+                ctx.a0 = a1;
                 ctx.is_white = !ctx.is_white;
                 
                 ctx.check_eol();
@@ -97,10 +97,6 @@ struct DecoderContext<'a, T: Decoder> {
     decoder: &'a mut T,
     /// "The reference or starting changing element on the coding line."
     a0: usize,
-    /// "The next changing element to the right of a0, on the coding line."
-    a1: usize,
-    /// "The next changing element to the right of a1, on the coding line."
-    a2: usize,
     /// "The first changing element on the reference line to the right of a0 and
     /// of opposite color to a0."
     b1: usize,
