@@ -399,15 +399,15 @@ const MODE_CODES: &[(u8, u8, u8)] = &[
 ];
 
 // =============================================================================
-// STATIC STATE MACHINES
+// CONST STATE MACHINES
 // =============================================================================
 
-static WHITE_STATES: [State; 512] = build_white_states();
+const WHITE_STATES: [State; 512] = build_white_states();
 
-static BLACK_STATES: [State; 512] = build_black_states();
+const BLACK_STATES: [State; 512] = build_black_states();
 
 // Mode state machine is simpler - build it inline
-static MODE_STATES: [State; 16] = {
+const MODE_STATES: [State; 16] = {
     let mut states: [State; 16] = [State::new(); 16];
     let mut num_states: usize = 1;
 
