@@ -1,6 +1,7 @@
 use std::iter;
 
 mod bit;
+pub mod tables;
 
 pub struct DecodeSettings {
     pub strict: bool,
@@ -35,7 +36,7 @@ struct DecoderContext<'a, T: Decoder> {
 }
 
 impl<'a, T: Decoder> DecoderContext<'a, T> {
-    fn new(decoder: &mut T, columns: u32) -> DecoderContext<'a, T> {
+    fn new(decoder: &'a mut T, columns: u32) -> DecoderContext<'a, T> {
         // +1 so that we can emulate the imaginary first white element.
         let total_len = columns as usize + 1;
 
