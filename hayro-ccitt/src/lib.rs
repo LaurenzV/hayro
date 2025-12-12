@@ -122,11 +122,11 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
     }
     
     fn find_b1(&mut self) {
-        self.b1 = self.a0;
+        self.b1 = self.a0 + 1;
         let target_color = self.coding_line[self.a0] ^ 1;
         
         let mut has_changed = false;
-        let mut last_color =  self.reference_line[self.b1];
+        let mut last_color =  self.reference_line[self.a0];
         
         while self.b1 < self.max_idx {
             let current_color = self.reference_line[self.b1];
@@ -140,18 +140,15 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
             self.b1 += 1;
         }
     }
-    
+
     fn find_b2(&mut self) {
-        self.b2 = self.b1;
-        
-        let target_color = self.reference_line[self.b1] ^ 1;
-        
+        self.b2 = self.b1 + 1;
+        let b1_color = self.reference_line[self.b1];
+
         while self.b2 < self.max_idx {
-            let current_color = self.reference_line[self.b2];
-            if current_color != target_color {
+            if self.reference_line[self.b2] != b1_color {
                 break;
             }
-            
             self.b2 += 1;
         }
     }
