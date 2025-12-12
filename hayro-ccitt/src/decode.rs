@@ -3,7 +3,7 @@ use crate::tables::{Mode, State, BLACK_STATES, MODE_STATES, WHITE_STATES, INVALI
 use log::warn;
 
 impl BitReader<'_> {
-    fn decode_run(&mut self, states: &[State], name: &str) -> Option<u16> {
+    fn decode_run_inner(&mut self, states: &[State], name: &str) -> Option<u16> {
         let mut total: u16 = 0;
         let mut state: usize = 0;
 
@@ -45,15 +45,23 @@ impl BitReader<'_> {
     }
 
     pub(crate) fn decode_white_run(&mut self) -> Option<u16> {
-        self.decode_run(&WHITE_STATES, "white run")
+        self.decode_run_inner(&WHITE_STATES, "white run")
     }
 
     pub(crate) fn decode_black_run(&mut self) -> Option<u16> {
-        self.decode_run(&BLACK_STATES, "black run")
+        self.decode_run_inner(&BLACK_STATES, "black run")
+    }
+
+    pub(crate) fn decode_run(&mut self, is_white: bool) -> Option<u16> {
+        if is_white {
+            self.decode_white_run()
+        }   else {
+            self.decode_black_run()
+        }
     }
 
     pub(crate) fn decode_mode(&mut self) -> Option<Mode> {
-        let mode_id = self.decode_run(&MODE_STATES, "mode")?;
+        let mode_id = self.decode_run_inner(&MODE_STATES, "mode")?;
         Some(match mode_id {
             0 => Mode::Pass,
             1 => Mode::Horizontal,

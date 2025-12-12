@@ -1184,13 +1184,14 @@ impl<'a> CCITTFaxDecoder<'a> {
                 strict: true,
                 columns: options.columns as u32,
                 rows: options.rows as u32,
-                eoblock,
+                end_of_block: options.eoblock,
+                end_of_line: options.end_of_line,
             };
             
             struct DummyDecoder;
             
             impl Decoder for DummyDecoder {
-                fn push_pixels(&mut self, count: u16, black: bool) {
+                fn push_pixels(&mut self, count: usize, black: bool) {
                    todo!()
                 }
 
