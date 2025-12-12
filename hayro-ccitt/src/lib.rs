@@ -56,19 +56,7 @@ pub fn decode(
                     ctx.b1.checked_sub((-i) as usize)?
                 };
                 
-                if a1 > ctx.max_idx {
-                    error!("a1 was too large");
-                    
-                    return None;
-                }
-                
-                if a1 < ctx.a0 {
-                    error!("a1 has an invalid position.");
-                    
-                    return None;
-                }
-                
-                ctx.push_pixels(a1 - ctx.a0);
+                ctx.push_pixels((a1 - 1) - ctx.a0);
                 ctx.a0 = a1;
                 ctx.is_white = !ctx.is_white;
                 
@@ -103,18 +91,19 @@ struct DecoderContext<'a, T: Decoder> {
 
 impl<'a, T: Decoder> DecoderContext<'a, T> {
     fn new(decoder: &'a mut T, settings: &'a DecodeSettings) -> DecoderContext<'a, T> {
+        let max_idx = settings.columns as usize;
         // +1 so that we can emulate the imaginary first white element.
-        let max_idx = settings.columns as usize + 1;
+        let len = max_idx + 1;
 
         Self {
             // "The reference line for the first coding line in a
             // page is an imaginary white line."
-            reference_line: vec![0; max_idx],
+            reference_line: vec![0; len],
             coding_line: vec![0],
             decoder,
             a0: 0,
-            b1: max_idx,
-            b2: max_idx,
+            b1: len,
+            b2: len,
             max_idx,
             is_white: true,
             settings
@@ -122,21 +111,25 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
     }
     
     fn find_b1(&mut self) {
-        self.b1 = self.a0;
+        self.b1 = self.a0 + 1;
         
-        let target_color = self.coding_line[self.a0] ^ 1;
+        if self.b1 >= self.max_idx {
+            return;
+        }
+        
+        let target_color = self.cur_color() ^ 1;
         
         let mut has_changed = false;
-        let mut last_color =  self.reference_line[self.a0];
+        let mut last_color =  self.cur_color();
         
-        while self.b1 < self.max_idx {
+        while self.b1 <= self.max_idx {
             let current_color = self.reference_line[self.b1];
             has_changed |= current_color != last_color;
             
             if has_changed && current_color == target_color {
                 break;
             }
-            
+
             last_color = current_color;
             self.b1 += 1;
         }
@@ -144,9 +137,14 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
 
     fn find_b2(&mut self) {
         self.b2 = self.b1;
+
+        if self.b2 >= self.max_idx {
+            return;
+        }
+        
         let b1_color = self.reference_line[self.b1];
 
-        while self.b2 < self.max_idx {
+        while self.b2 <= self.max_idx {
             if self.reference_line[self.b2] != b1_color {
                 break;
             }
@@ -156,16 +154,24 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
 
     fn push_pixels(&mut self, count: usize) {
         self.decoder.push_pixels(count, self.is_white);
-        let val = if self.is_white { 0 } else { 1 };
-        self.coding_line.extend(iter::repeat_n(val, count))
+        self.coding_line.extend(iter::repeat_n(self.cur_color(), count))
+    }
+    
+    fn cur_color(&self) -> u8 {
+        if self.is_white {
+            0
+        }   else {
+            1
+        }
     }
     
     fn next_iteration(&mut self) {}
 
     fn check_eol(&mut self) {
-        if self.a0 == self.max_idx {
+        if self.a0 >= self.max_idx {
             // Go to next line.
             self.a0 = 0;
+            assert_eq!(self.reference_line.len(), self.coding_line.len());
             core::mem::swap(&mut self.reference_line, &mut self.coding_line);
             self.coding_line.truncate(1);
             self.is_white = true;
