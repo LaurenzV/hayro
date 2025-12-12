@@ -45,8 +45,6 @@ pub fn decode(
                 ctx.push_pixels(a1a2);
                 ctx.is_white = !ctx.is_white;
                 
-                ctx.a0 += a0a1 + a1a2;
-
                 ctx.check_eol();
             },
             Mode::Vertical(i) => {
@@ -56,8 +54,7 @@ pub fn decode(
                     ctx.b1.checked_sub((-i) as usize)?
                 };
                 
-                ctx.push_pixels((a1 - 1) - ctx.a0);
-                ctx.a0 = a1;
+                ctx.push_pixels(a1 - ctx.a0());
                 ctx.is_white = !ctx.is_white;
                 
                 ctx.check_eol();
@@ -75,8 +72,6 @@ struct DecoderContext<'a, T: Decoder> {
     coding_line: Vec<u8>,
     /// The decoder sink.
     decoder: &'a mut T,
-    /// "The reference or starting changing element on the coding line."
-    a0: usize,
     /// "The first changing element on the reference line to the right of a0 and
     /// of opposite color to a0."
     b1: usize,
@@ -92,41 +87,36 @@ struct DecoderContext<'a, T: Decoder> {
 impl<'a, T: Decoder> DecoderContext<'a, T> {
     fn new(decoder: &'a mut T, settings: &'a DecodeSettings) -> DecoderContext<'a, T> {
         let max_idx = settings.columns as usize;
-        // +1 so that we can emulate the imaginary first white element.
         let len = max_idx + 1;
 
         Self {
             // "The reference line for the first coding line in a
             // page is an imaginary white line."
             reference_line: vec![0; len],
-            coding_line: vec![0],
+            coding_line: vec![],
             decoder,
-            a0: 0,
-            b1: len,
-            b2: len,
+            b1: max_idx,
+            b2: max_idx,
             max_idx,
             is_white: true,
             settings
         }
     }
     
+    fn a0(&self) -> usize {
+        self.coding_line.len()
+    }
+    
     fn find_b1(&mut self) {
-        self.b1 = self.a0 + 1;
-        
-        if self.b1 >= self.max_idx {
-            return;
-        }
-        
+        self.b1 = (self.a0() + 1).min(self.max_idx);
         let target_color = self.cur_color() ^ 1;
         
-        let mut has_changed = false;
-        let mut last_color =  self.cur_color();
+        let mut last_color =  self.reference_line[self.b1 - 1];
         
-        while self.b1 <= self.max_idx {
+        while self.b1 < self.max_idx {
             let current_color = self.reference_line[self.b1];
-            has_changed |= current_color != last_color;
             
-            if has_changed && current_color == target_color {
+            if current_color != last_color && current_color == target_color {
                 break;
             }
 
@@ -137,17 +127,14 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
 
     fn find_b2(&mut self) {
         self.b2 = self.b1;
-
-        if self.b2 >= self.max_idx {
-            return;
-        }
         
         let b1_color = self.reference_line[self.b1];
 
-        while self.b2 <= self.max_idx {
+        while self.b2 < self.max_idx {
             if self.reference_line[self.b2] != b1_color {
                 break;
             }
+            
             self.b2 += 1;
         }
     }
@@ -164,16 +151,14 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
             1
         }
     }
-    
-    fn next_iteration(&mut self) {}
 
     fn check_eol(&mut self) {
-        if self.a0 >= self.max_idx {
+        if self.a0() >= self.max_idx {
             // Go to next line.
-            self.a0 = 0;
-            assert_eq!(self.reference_line.len(), self.coding_line.len());
             core::mem::swap(&mut self.reference_line, &mut self.coding_line);
-            self.coding_line.truncate(1);
+            self.reference_line.resize(self.max_idx + 1, 0);
+            self.coding_line.clear();
+            
             self.is_white = true;
             self.find_b1();
             self.find_b2();
@@ -183,10 +168,6 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
             self.find_b1();
             self.find_b2();
         }
-    }
-    
-    fn is_eol(&self) -> bool {
-        self.a0 == self.max_idx
     }
 }
 
