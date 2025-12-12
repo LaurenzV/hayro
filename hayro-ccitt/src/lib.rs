@@ -1,7 +1,7 @@
 use std::iter;
 use log::{error, warn};
 use crate::bit::BitReader;
-use crate::tables::Mode;
+use crate::tables::{Mode, EOFB};
 
 mod bit;
 mod decode;
@@ -31,9 +31,17 @@ pub fn decode(
     let mut reader = BitReader::new(data);
     
     loop {
-        let mode = reader.decode_mode()?;
+        if settings.end_of_block {
+            if reader.clone().read_bits(24) == Some(EOFB) {
+                break;
+            }
+        }   else {
+            if ctx.decoded_rows == settings.rows {
+                break;
+            }
+        }
         
-        // eprintln!("{:?}", mode);
+        let mode = reader.decode_mode()?;
         
         match mode {
             Mode::Pass => {
@@ -84,6 +92,8 @@ struct DecoderContext<'a, T: Decoder> {
     max_idx: usize,
     /// Whether the next run to be decoded is white.
     is_white: bool,
+    
+    decoded_rows: u32,
     settings: &'a DecodeSettings,
 }
 
@@ -102,6 +112,7 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
             b2: max_idx,
             max_idx,
             is_white: true,
+            decoded_rows: 0,
             settings
         }
     }
@@ -167,6 +178,7 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
             self.reference_line.resize(self.max_idx + 1, 0);
             self.coding_line.clear();
             self.is_white = true;
+            self.decoded_rows += 1;
             self.decoder.next_line();
             
             self.start_run();
