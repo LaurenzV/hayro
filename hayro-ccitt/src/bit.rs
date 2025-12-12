@@ -49,7 +49,7 @@ impl<'a> BitReader<'a> {
     #[inline(always)]
     pub(crate) fn read_bits(&mut self, num_bits: usize) -> Option<u32> {
         let mut result = 0_u32;
-        
+
         for i in (0..num_bits).rev() {
             result |= (self.read_bit()?) << i;
         }

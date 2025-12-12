@@ -1,5 +1,7 @@
 use crate::bit::BitReader;
-use crate::tables::{Mode, State, BLACK_STATES, MODE_STATES, WHITE_STATES, INVALID, VALUE_FLAG, VALUE_MASK};
+use crate::tables::{
+    BLACK_STATES, INVALID, MODE_STATES, Mode, State, VALUE_FLAG, VALUE_MASK, WHITE_STATES,
+};
 use log::warn;
 
 impl BitReader<'_> {
@@ -55,7 +57,7 @@ impl BitReader<'_> {
     pub(crate) fn decode_run(&mut self, is_white: bool) -> Option<u16> {
         if is_white {
             self.decode_white_run()
-        }   else {
+        } else {
             self.decode_black_run()
         }
     }

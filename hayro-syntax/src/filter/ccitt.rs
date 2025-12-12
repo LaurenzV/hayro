@@ -24,8 +24,8 @@ use crate::object::dict::keys::{
     BLACK_IS_1, COLUMNS, ENCODED_BYTE_ALIGN, END_OF_BLOCK, END_OF_LINE, K, ROWS,
 };
 use crate::reader::Reader;
-use log::warn;
 use hayro_ccitt::{DecodeSettings, Decoder};
+use log::warn;
 
 pub(crate) fn decode(data: &[u8], params: Dict<'_>) -> Option<Vec<u8>> {
     let dp = CCITTFaxDecoderOptions::default();
@@ -43,49 +43,90 @@ pub(crate) fn decode(data: &[u8], params: Dict<'_>) -> Option<Vec<u8>> {
     };
 
     if params.k >= 0 || params.end_of_line || params.encoded_byte_align || params.black_is_1 {
-        unimplemented!();
-    }
+        // Fallback for unsupported parameters
+        let mut reader = Reader::new(data);
+        let mut decoder = CCITTFaxDecoder::new(&mut reader, params);
+        let mut out = vec![];
 
-    let settings = DecodeSettings {
-        strict: true,
-        columns: params.columns as u32,
-        rows: params.rows as u32,
-        end_of_block: params.eoblock,
-        end_of_line: params.end_of_line,
-    };
+        loop {
+            let byte = decoder.read_next_char();
+            if byte == -1 {
+                break;
+            }
 
-    struct Decoder;
-
-    impl Decoder for Decoder {
-        fn push_pixels(&mut self, count: usize, black: bool) {
-            todo!()
+            out.push(byte as u8);
         }
 
-        fn next_line(&mut self) {
-            todo!()
+        Some(out)
+    } else {
+        let settings = DecodeSettings {
+            strict: false,
+            columns: params.columns as u32,
+            rows: params.rows as u32,
+            end_of_block: params.eoblock,
+            end_of_line: params.end_of_line,
+        };
+
+        struct BitDecoder {
+            output: Vec<u8>,
+            current_byte: u8,
+            bit_pos: u8,
         }
+
+        impl BitDecoder {
+            fn new() -> Self {
+                Self {
+                    output: Vec::new(),
+                    current_byte: 0,
+                    bit_pos: 0,
+                }
+            }
+
+            fn push_bit(&mut self, bit: bool) {
+                if bit {
+                    self.current_byte |= 1 << (7 - self.bit_pos);
+                }
+
+                self.bit_pos += 1;
+                if self.bit_pos == 8 {
+                    self.output.push(self.current_byte);
+                    self.current_byte = 0;
+                    self.bit_pos = 0;
+                }
+            }
+
+            fn align_to_byte(&mut self) {
+                if self.bit_pos > 0 {
+                    self.output.push(self.current_byte);
+                    self.current_byte = 0;
+                    self.bit_pos = 0;
+                }
+            }
+        }
+
+        impl Decoder for BitDecoder {
+            fn push_pixels(&mut self, count: usize, white: bool) {
+                // white = 1, black = 0 in the output
+                let bit = white;
+                for _ in 0..count {
+                    self.push_bit(bit);
+                }
+            }
+
+            fn next_line(&mut self) {
+                self.align_to_byte();
+            }
+        }
+
+        let mut decoder = BitDecoder::new();
+
+        hayro_ccitt::decode(data, &mut decoder, &settings);
+
+        // Ensure final line is aligned
+        decoder.align_to_byte();
+
+        Some(decoder.output)
     }
-
-    hayro_ccitt::decode(
-        data,
-        &mut Decoder,
-        &settings,
-    );
-
-    // let mut reader = Reader::new(data);
-    // let mut decoder = CCITTFaxDecoder::new(&mut reader, params);
-    // let mut out = vec![];
-    // 
-    // loop {
-    //     let byte = decoder.read_next_char();
-    //     if byte == -1 {
-    //         break;
-    //     }
-    // 
-    //     out.push(byte as u8);
-    // }
-    // 
-    // Some(out)
 }
 
 const CCITT_EOL: i32 = -2;
@@ -1208,38 +1249,6 @@ impl<'a> CCITTFaxDecoder<'a> {
         let rows = options.rows;
         let eoblock = options.eoblock;
         let black = options.black_is_1;
-        
-        if options.k >= 0 || options.end_of_line || options.encoded_byte_align || options.black_is_1 {
-            unimplemented!();
-        }
-        
-        if k < 0 {
-            let settings = DecodeSettings {
-                strict: true,
-                columns: options.columns as u32,
-                rows: options.rows as u32,
-                end_of_block: options.eoblock,
-                end_of_line: options.end_of_line,
-            };
-            
-            struct DummyDecoder;
-            
-            impl Decoder for DummyDecoder {
-                fn push_pixels(&mut self, count: usize, black: bool) {
-                   todo!()
-                }
-
-                fn next_line(&mut self) {
-                    todo!()
-                }
-            }
-            
-            hayro_ccitt::decode(
-                source.data,
-                &mut DummyDecoder,
-                &settings,
-            );
-        }
 
         let ref_line = vec![0; columns + 2];
         let mut coding_line = vec![0; columns + 1];
