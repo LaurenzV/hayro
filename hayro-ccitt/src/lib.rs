@@ -33,10 +33,13 @@ pub fn decode(
     loop {
         let mode = reader.decode_mode()?;
         
-        eprintln!("{:?}", mode);
+        // eprintln!("{:?}", mode);
         
         match mode {
-            Mode::Pass => unimplemented!(),
+            Mode::Pass => {
+                ctx.push_pixels(ctx.b2 - ctx.a0());
+                ctx.start_run();
+            },
             Mode::Horizontal => {
                 let a0a1 = reader.decode_run(ctx.is_white)? as usize;
                 ctx.push_pixels(a0a1);
@@ -151,6 +154,11 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
             1
         }
     }
+    
+    fn start_run(&mut self) {
+        self.find_b1();
+        self.find_b2();
+    }
 
     fn check_eol(&mut self) {
         if self.a0() >= self.max_idx {
@@ -158,15 +166,12 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
             core::mem::swap(&mut self.reference_line, &mut self.coding_line);
             self.reference_line.resize(self.max_idx + 1, 0);
             self.coding_line.clear();
-            
             self.is_white = true;
-            self.find_b1();
-            self.find_b2();
-            
             self.decoder.next_line();
+            
+            self.start_run();
         }   else {
-            self.find_b1();
-            self.find_b2();
+            self.start_run()
         }
     }
 }
@@ -184,7 +189,7 @@ impl PrintDecoder {
 
 impl Decoder for PrintDecoder {
     fn push_pixels(&mut self, count: usize, white: bool) {
-        let symbol = if white { "o" } else { "x" };
+        let symbol = if white { " " } else { "x" };
         for _ in 0..count {
             self.line.push_str(symbol);
         }
