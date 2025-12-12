@@ -4,23 +4,11 @@
 //! Terminal nodes return the decoded run length.
 
 use crate::bit::BitReader;
-
-/// Result of decoding a run length code.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum RunLengthResult {
-    /// Successfully decoded a run length.
-    Ok(u16),
-    /// End of line marker.
-    Eol,
-    /// Unexpected end of data.
-    UnexpectedEof,
-    /// Invalid code sequence.
-    InvalidCode,
-}
+use log::warn;
 
 /// Result of decoding a 2D mode code.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ModeResult {
+pub(crate) enum Mode {
     Pass,
     Horizontal,
     Vertical0,
@@ -30,17 +18,13 @@ pub(crate) enum ModeResult {
     VerticalL1,
     VerticalL2,
     VerticalL3,
-    UnexpectedEof,
-    InvalidCode,
 }
 
 // State machine encoding:
 // - 0x0000-0x3FFF: next state index
-// - 0x4000: EOL marker
 // - 0x8000 | value: decoded run length (value & 0x1FFF)
 // - 0xFFFF: invalid/unused
 
-const EOL_MARKER: u16 = 0x4000;
 const VALUE_FLAG: u16 = 0x8000;
 const VALUE_MASK: u16 = 0x1FFF;
 const INVALID: u16 = 0xFFFF;
@@ -91,11 +75,7 @@ const fn insert_code(
 
         if is_last {
             // Terminal state - store the result
-            let result = if run_length == 0xFFFF {
-                EOL_MARKER
-            } else {
-                VALUE_FLAG | (run_length & VALUE_MASK)
-            };
+            let result = VALUE_FLAG | (run_length & VALUE_MASK);
 
             if bit == 0 {
                 states[current_state].on_0 = result;
@@ -193,7 +173,6 @@ const fn build_black_states() -> [State; 512] {
 // =============================================================================
 
 // Format: (run_length, code_length, code)
-// 0xFFFF as run_length indicates EOL
 
 const WHITE_TERMINATING: &[(u16, u8, u16)] = &[
     (0, 8, 0b00110101),
@@ -290,7 +269,6 @@ const WHITE_MAKEUP: &[(u16, u8, u16)] = &[
     (1600, 9, 0b010011010),
     (1664, 6, 0b011000),
     (1728, 9, 0b010011011),
-    (0xFFFF, 12, 0b000000000001), // EOL
 ];
 
 const BLACK_TERMINATING: &[(u16, u8, u16)] = &[
@@ -388,7 +366,6 @@ const BLACK_MAKEUP: &[(u16, u8, u16)] = &[
     (1600, 13, 0b0000001011011),
     (1664, 13, 0b0000001100100),
     (1728, 13, 0b0000001100101),
-    (0xFFFF, 12, 0b000000000001), // EOL
 ];
 
 const COMMON_MAKEUP: &[(u16, u8, u16)] = &[
@@ -488,14 +465,18 @@ static MODE_STATES: [State; 16] = {
 impl BitReader<'_> {
     /// Decode a complete white run length.
     /// Handles makeup codes by accumulating until a terminating code is found.
-    pub(crate) fn decode_white_run(&mut self) -> RunLengthResult {
+    /// Returns `None` on EOF or invalid code (logs warning).
+    pub(crate) fn decode_white_run(&mut self) -> Option<u16> {
         let mut total: u16 = 0;
         let mut state: usize = 0;
 
         loop {
             let bit = match self.read_bit() {
                 Some(b) => b,
-                None => return RunLengthResult::UnexpectedEof,
+                None => {
+                    warn!("CCITT: unexpected EOF while decoding white run");
+                    return None;
+                }
             };
 
             let transition = if bit == 0 {
@@ -505,15 +486,14 @@ impl BitReader<'_> {
             };
 
             if transition == INVALID {
-                return RunLengthResult::InvalidCode;
-            } else if transition == EOL_MARKER {
-                return RunLengthResult::Eol;
+                warn!("CCITT: invalid white code sequence");
+                return None;
             } else if transition >= VALUE_FLAG {
                 let len = transition & VALUE_MASK;
                 total = total.saturating_add(len);
                 if len < 64 {
                     // Terminal code - we're done
-                    return RunLengthResult::Ok(total);
+                    return Some(total);
                 }
                 // Makeup code - reset state and continue reading
                 state = 0;
@@ -526,14 +506,18 @@ impl BitReader<'_> {
 
     /// Decode a complete black run length.
     /// Handles makeup codes by accumulating until a terminating code is found.
-    pub(crate) fn decode_black_run(&mut self) -> RunLengthResult {
+    /// Returns `None` on EOF or invalid code (logs warning).
+    pub(crate) fn decode_black_run(&mut self) -> Option<u16> {
         let mut total: u16 = 0;
         let mut state: usize = 0;
 
         loop {
             let bit = match self.read_bit() {
                 Some(b) => b,
-                None => return RunLengthResult::UnexpectedEof,
+                None => {
+                    warn!("CCITT: unexpected EOF while decoding black run");
+                    return None;
+                }
             };
 
             let transition = if bit == 0 {
@@ -543,15 +527,14 @@ impl BitReader<'_> {
             };
 
             if transition == INVALID {
-                return RunLengthResult::InvalidCode;
-            } else if transition == EOL_MARKER {
-                return RunLengthResult::Eol;
+                warn!("CCITT: invalid black code sequence");
+                return None;
             } else if transition >= VALUE_FLAG {
                 let len = transition & VALUE_MASK;
                 total = total.saturating_add(len);
                 if len < 64 {
                     // Terminal code - we're done
-                    return RunLengthResult::Ok(total);
+                    return Some(total);
                 }
                 // Makeup code - reset state and continue reading
                 state = 0;
@@ -563,13 +546,17 @@ impl BitReader<'_> {
     }
 
     /// Decode a 2D mode code.
-    pub(crate) fn decode_mode(&mut self) -> ModeResult {
+    /// Returns `None` on EOF or invalid code (logs warning).
+    pub(crate) fn decode_mode(&mut self) -> Option<Mode> {
         let mut state: usize = 0;
 
         loop {
             let bit = match self.read_bit() {
                 Some(b) => b,
-                None => return ModeResult::UnexpectedEof,
+                None => {
+                    warn!("CCITT: unexpected EOF while decoding mode");
+                    return None;
+                }
             };
 
             let transition = if bit == 0 {
@@ -579,23 +566,27 @@ impl BitReader<'_> {
             };
 
             if transition == INVALID {
-                return ModeResult::InvalidCode;
+                warn!("CCITT: invalid mode code sequence");
+                return None;
             }
 
             if transition >= VALUE_FLAG {
                 let mode_id = transition & VALUE_MASK;
-                return match mode_id {
-                    0 => ModeResult::Pass,
-                    1 => ModeResult::Horizontal,
-                    2 => ModeResult::Vertical0,
-                    3 => ModeResult::VerticalR1,
-                    4 => ModeResult::VerticalR2,
-                    5 => ModeResult::VerticalR3,
-                    6 => ModeResult::VerticalL1,
-                    7 => ModeResult::VerticalL2,
-                    8 => ModeResult::VerticalL3,
-                    _ => ModeResult::InvalidCode,
-                };
+                return Some(match mode_id {
+                    0 => Mode::Pass,
+                    1 => Mode::Horizontal,
+                    2 => Mode::Vertical0,
+                    3 => Mode::VerticalR1,
+                    4 => Mode::VerticalR2,
+                    5 => Mode::VerticalR3,
+                    6 => Mode::VerticalL1,
+                    7 => Mode::VerticalL2,
+                    8 => Mode::VerticalL3,
+                    _ => {
+                        warn!("CCITT: invalid mode id {}", mode_id);
+                        return None;
+                    }
+                });
             }
 
             state = transition as usize;
@@ -616,17 +607,17 @@ mod tests {
         // Test white run length 2: code = 0111 (4 bits)
         let data = [0b0111_0000];
         let mut reader = BitReader::new(&data);
-        assert_eq!(reader.decode_white_run(), RunLengthResult::Ok(2));
+        assert_eq!(reader.decode_white_run(), Some(2));
 
         // Test white run length 0: code = 00110101 (8 bits)
         let data = [0b00110101];
         let mut reader = BitReader::new(&data);
-        assert_eq!(reader.decode_white_run(), RunLengthResult::Ok(0));
+        assert_eq!(reader.decode_white_run(), Some(0));
 
         // Test white run length 63: code = 00110100 (8 bits)
         let data = [0b00110100];
         let mut reader = BitReader::new(&data);
-        assert_eq!(reader.decode_white_run(), RunLengthResult::Ok(63));
+        assert_eq!(reader.decode_white_run(), Some(63));
     }
 
     // =========================================================================
@@ -638,17 +629,17 @@ mod tests {
         // Test black run length 2: code = 11 (2 bits)
         let data = [0b1100_0000];
         let mut reader = BitReader::new(&data);
-        assert_eq!(reader.decode_black_run(), RunLengthResult::Ok(2));
+        assert_eq!(reader.decode_black_run(), Some(2));
 
         // Test black run length 1: code = 010 (3 bits)
         let data = [0b010_00000];
         let mut reader = BitReader::new(&data);
-        assert_eq!(reader.decode_black_run(), RunLengthResult::Ok(1));
+        assert_eq!(reader.decode_black_run(), Some(1));
 
         // Test black run length 0: code = 0000110111 (10 bits)
         let data = [0b00001101, 0b11_000000];
         let mut reader = BitReader::new(&data);
-        assert_eq!(reader.decode_black_run(), RunLengthResult::Ok(0));
+        assert_eq!(reader.decode_black_run(), Some(0));
     }
 
     // =========================================================================
@@ -661,13 +652,13 @@ mod tests {
         // Makeup 64 = 11011 (5 bits), Terminal 0 = 00110101 (8 bits)
         let data = [0b11011_001, 0b10101_000];
         let mut reader = BitReader::new(&data);
-        assert_eq!(reader.decode_white_run(), RunLengthResult::Ok(64));
+        assert_eq!(reader.decode_white_run(), Some(64));
 
         // Test white run length 128 + 5 = 133
         // Makeup 128 = 10010 (5 bits), Terminal 5 = 1100 (4 bits)
         let data = [0b10010_110, 0b0_0000000];
         let mut reader = BitReader::new(&data);
-        assert_eq!(reader.decode_white_run(), RunLengthResult::Ok(133));
+        assert_eq!(reader.decode_white_run(), Some(133));
     }
 
     // =========================================================================
@@ -680,7 +671,7 @@ mod tests {
         // Makeup 64 = 0000001111 (10 bits), Terminal 2 = 11 (2 bits)
         let data = [0b00000011, 0b11_11_0000];
         let mut reader = BitReader::new(&data);
-        assert_eq!(reader.decode_black_run(), RunLengthResult::Ok(66));
+        assert_eq!(reader.decode_black_run(), Some(66));
     }
 
     // =========================================================================
@@ -694,14 +685,14 @@ mod tests {
         // Bits: 11011_11011_00110101
         let data = [0b11011_110, 0b11_001101, 0b01_000000];
         let mut reader = BitReader::new(&data);
-        assert_eq!(reader.decode_white_run(), RunLengthResult::Ok(128));
+        assert_eq!(reader.decode_white_run(), Some(128));
 
         // Test white run length 64 + 128 + 10 = 202
         // Makeup 64 = 11011 (5 bits), Makeup 128 = 10010 (5 bits), Terminal 10 = 00111 (5 bits)
         // Bits: 11011_10010_00111
         let data = [0b11011_100, 0b10_00111_0];
         let mut reader = BitReader::new(&data);
-        assert_eq!(reader.decode_white_run(), RunLengthResult::Ok(202));
+        assert_eq!(reader.decode_white_run(), Some(202));
     }
 
     #[test]
@@ -711,7 +702,7 @@ mod tests {
         // Bits: 11011_11011_11011_000111
         let data = [0b11011_110, 0b11_11011_0, 0b00111_000];
         let mut reader = BitReader::new(&data);
-        assert_eq!(reader.decode_white_run(), RunLengthResult::Ok(193));
+        assert_eq!(reader.decode_white_run(), Some(193));
     }
 
     #[test]
@@ -721,7 +712,7 @@ mod tests {
         // Bits: 0000001111_0000001111_010
         let data = [0b00000011, 0b11_000000, 0b1111_010_0];
         let mut reader = BitReader::new(&data);
-        assert_eq!(reader.decode_black_run(), RunLengthResult::Ok(129));
+        assert_eq!(reader.decode_black_run(), Some(129));
     }
 
     // =========================================================================
@@ -733,47 +724,47 @@ mod tests {
         // Vertical_0: code = 1 (1 bit)
         let data = [0b1000_0000];
         let mut reader = BitReader::new(&data);
-        assert_eq!(reader.decode_mode(), ModeResult::Vertical0);
+        assert_eq!(reader.decode_mode(), Some(Mode::Vertical0));
 
         // Horizontal: code = 001 (3 bits)
         let data = [0b001_00000];
         let mut reader = BitReader::new(&data);
-        assert_eq!(reader.decode_mode(), ModeResult::Horizontal);
+        assert_eq!(reader.decode_mode(), Some(Mode::Horizontal));
 
         // Pass: code = 0001 (4 bits)
         let data = [0b0001_0000];
         let mut reader = BitReader::new(&data);
-        assert_eq!(reader.decode_mode(), ModeResult::Pass);
+        assert_eq!(reader.decode_mode(), Some(Mode::Pass));
 
         // Vertical_R1: code = 011 (3 bits)
         let data = [0b011_00000];
         let mut reader = BitReader::new(&data);
-        assert_eq!(reader.decode_mode(), ModeResult::VerticalR1);
+        assert_eq!(reader.decode_mode(), Some(Mode::VerticalR1));
 
         // Vertical_L1: code = 010 (3 bits)
         let data = [0b010_00000];
         let mut reader = BitReader::new(&data);
-        assert_eq!(reader.decode_mode(), ModeResult::VerticalL1);
+        assert_eq!(reader.decode_mode(), Some(Mode::VerticalL1));
 
         // Vertical_R2: code = 000011 (6 bits)
         let data = [0b000011_00];
         let mut reader = BitReader::new(&data);
-        assert_eq!(reader.decode_mode(), ModeResult::VerticalR2);
+        assert_eq!(reader.decode_mode(), Some(Mode::VerticalR2));
 
         // Vertical_L2: code = 000010 (6 bits)
         let data = [0b000010_00];
         let mut reader = BitReader::new(&data);
-        assert_eq!(reader.decode_mode(), ModeResult::VerticalL2);
+        assert_eq!(reader.decode_mode(), Some(Mode::VerticalL2));
 
         // Vertical_R3: code = 0000011 (7 bits)
         let data = [0b0000011_0];
         let mut reader = BitReader::new(&data);
-        assert_eq!(reader.decode_mode(), ModeResult::VerticalR3);
+        assert_eq!(reader.decode_mode(), Some(Mode::VerticalR3));
 
         // Vertical_L3: code = 0000010 (7 bits)
         let data = [0b0000010_0];
         let mut reader = BitReader::new(&data);
-        assert_eq!(reader.decode_mode(), ModeResult::VerticalL3);
+        assert_eq!(reader.decode_mode(), Some(Mode::VerticalL3));
     }
 
     // =========================================================================
@@ -785,23 +776,12 @@ mod tests {
         // Empty data
         let data = [];
         let mut reader = BitReader::new(&data);
-        assert_eq!(reader.decode_white_run(), RunLengthResult::UnexpectedEof);
-
-        // Partial code (only 2 bits of an 8-bit code)
-        let data = [0b00_000000];
-        let mut reader = BitReader::new(&data);
-        // This will read some bits but eventually hit EOF
-        // (depends on the specific path through the state machine)
-    }
-
-    #[test]
-    fn test_eol_detection() {
-        // EOL = 000000000001 (12 bits)
-        let data = [0b00000000, 0b0001_0000];
-        let mut reader = BitReader::new(&data);
-        assert_eq!(reader.decode_white_run(), RunLengthResult::Eol);
+        assert_eq!(reader.decode_white_run(), None);
 
         let mut reader = BitReader::new(&data);
-        assert_eq!(reader.decode_black_run(), RunLengthResult::Eol);
+        assert_eq!(reader.decode_black_run(), None);
+
+        let mut reader = BitReader::new(&data);
+        assert_eq!(reader.decode_mode(), None);
     }
 }
