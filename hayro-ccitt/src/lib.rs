@@ -3,6 +3,7 @@ use std::iter;
 mod bit;
 pub mod tables;
 
+#[derive(Copy, Clone, Debug)]
 pub struct DecodeSettings {
     pub strict: bool,
     pub columns: u32,
@@ -14,6 +15,15 @@ pub trait Decoder {
     fn push_pixels(&mut self, count: u16, black: bool);
     fn next_line(&mut self);
 }
+
+pub fn decode(
+    decoder: &mut impl Decoder,
+    settings: &DecodeSettings,
+) -> Option<()> {
+    let mut ctx = DecoderContext::new(decoder, settings.columns);
+    
+    Some(())
+} 
 
 struct DecoderContext<'a, T: Decoder> {
     /// The previous line.
