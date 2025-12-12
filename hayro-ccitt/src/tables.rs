@@ -29,8 +29,6 @@ const VALUE_FLAG: u16 = 0x8000;
 const VALUE_MASK: u16 = 0x1FFF;
 const INVALID: u16 = 0xFFFF;
 
-/// A state in the decoding state machine.
-/// Each state has two transitions: one for bit 0 and one for bit 1.
 #[derive(Clone, Copy)]
 struct State {
     on_0: u16,
@@ -50,12 +48,11 @@ impl State {
 /// Returns the new number of states.
 const fn insert_code<const N: usize>(
     states: &mut [State; N],
-    num_states: usize,
+    mut num_states: usize,
     run_length: u16,
     code_length: u8,
     code: u16,
 ) -> usize {
-    let mut num_states = num_states;
     let mut current_state: usize = 0;
     let mut i: u8 = 0;
 
@@ -315,9 +312,8 @@ const COMMON_MAKEUP: [(u16, u8, u16); 13] = [
     (2560, 12, 0b000000011111),
 ];
 
-// Mode codes for 2D encoding
-const MODE_CODES: [(u8, u8, u8); 9] = [
-    // (mode_id, code_length, code)
+/// Table 4/T.6 - Mode codes for 2D encoding.
+const MODE_CODES: [(u16, u8, u16); 9] = [
     (0, 4, 0b0001),    // Pass
     (1, 3, 0b001),     // Horizontal
     (2, 1, 0b1),       // Vertical_0
@@ -401,44 +397,7 @@ const MODE_STATES: [State; 9] = {
     let mut i = 0;
     while i < MODE_CODES.len() {
         let (mode_id, code_length, code) = MODE_CODES[i];
-        let mut current_state: usize = 0;
-
-        let mut j: u8 = 0;
-        while j < code_length {
-            let bit = (code >> (code_length - 1 - j)) & 1;
-            let is_last = j == code_length - 1;
-
-            if is_last {
-                // Store mode_id with terminal flag
-                let result = VALUE_FLAG | (mode_id as u16);
-                if bit == 0 {
-                    states[current_state].on_0 = result;
-                } else {
-                    states[current_state].on_1 = result;
-                }
-            } else {
-                let next = if bit == 0 {
-                    states[current_state].on_0
-                } else {
-                    states[current_state].on_1
-                };
-
-                if next == INVALID || next >= VALUE_FLAG {
-                    let new_state = num_states;
-                    num_states += 1;
-
-                    if bit == 0 {
-                        states[current_state].on_0 = new_state as u16;
-                    } else {
-                        states[current_state].on_1 = new_state as u16;
-                    }
-                    current_state = new_state;
-                } else {
-                    current_state = next as usize;
-                }
-            }
-            j += 1;
-        }
+        num_states = insert_code(&mut states, num_states, mode_id, code_length, code);
         i += 1;
     }
 
