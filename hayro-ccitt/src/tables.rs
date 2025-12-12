@@ -46,10 +46,6 @@ impl State {
     }
 }
 
-// =============================================================================
-// STATE MACHINE GENERATION (compile-time)
-// =============================================================================
-
 /// Insert a single code into the state machine.
 /// Returns the new number of states.
 const fn insert_code<const N: usize>(
@@ -104,12 +100,7 @@ const fn insert_code<const N: usize>(
     num_states
 }
 
-// =============================================================================
-// CODE TABLES
-// =============================================================================
-
-// Format: (run_length, code_length, code)
-
+/// Table 2/T.6 - White terminating codes.
 const WHITE_TERMINATING: [(u16, u8, u16); 64] = [
     (0, 8, 0b00110101),
     (1, 6, 0b000111),
@@ -177,6 +168,7 @@ const WHITE_TERMINATING: [(u16, u8, u16); 64] = [
     (63, 8, 0b00110100),
 ];
 
+/// Table 3/T.6 - White make-up codes.
 const WHITE_MAKEUP: [(u16, u8, u16); 27] = [
     (64, 5, 0b11011),
     (128, 5, 0b10010),
@@ -207,6 +199,7 @@ const WHITE_MAKEUP: [(u16, u8, u16); 27] = [
     (1728, 9, 0b010011011),
 ];
 
+/// Table 2/T.6 - Black terminating codes.
 const BLACK_TERMINATING: [(u16, u8, u16); 64] = [
     (0, 10, 0b0000110111),
     (1, 3, 0b010),
@@ -274,6 +267,7 @@ const BLACK_TERMINATING: [(u16, u8, u16); 64] = [
     (63, 12, 0b000001100111),
 ];
 
+/// Table 3/T.6 - Black make-up codes.
 const BLACK_MAKEUP: [(u16, u8, u16); 27] = [
     (64, 10, 0b0000001111),
     (128, 12, 0b000011001000),
@@ -304,6 +298,7 @@ const BLACK_MAKEUP: [(u16, u8, u16); 27] = [
     (1728, 13, 0b0000001100101),
 ];
 
+/// Table 3/T.6 - Common make-up codes.
 const COMMON_MAKEUP: [(u16, u8, u16); 13] = [
     (1792, 11, 0b00000001000),
     (1856, 11, 0b00000001100),
@@ -333,10 +328,6 @@ const MODE_CODES: [(u8, u8, u8); 9] = [
     (7, 6, 0b000010),  // Vertical_L2
     (8, 7, 0b0000010), // Vertical_L3
 ];
-
-// =============================================================================
-// CONST STATE MACHINES
-// =============================================================================
 
 // White codes: 64 terminating + 27 makeup + 13 common = 104 codes
 const WHITE_STATES: [State; 104] = {
@@ -454,14 +445,7 @@ const MODE_STATES: [State; 9] = {
     states
 };
 
-// =============================================================================
-// DECODING FUNCTIONS (impl on BitReader)
-// =============================================================================
-
 impl BitReader<'_> {
-    /// Decode a complete white run length.
-    /// Handles makeup codes by accumulating until a terminating code is found.
-    /// Returns `None` on EOF or invalid code (logs warning).
     pub(crate) fn decode_white_run(&mut self) -> Option<u16> {
         let mut total: u16 = 0;
         let mut state: usize = 0;
@@ -500,9 +484,6 @@ impl BitReader<'_> {
         }
     }
 
-    /// Decode a complete black run length.
-    /// Handles makeup codes by accumulating until a terminating code is found.
-    /// Returns `None` on EOF or invalid code (logs warning).
     pub(crate) fn decode_black_run(&mut self) -> Option<u16> {
         let mut total: u16 = 0;
         let mut state: usize = 0;
@@ -541,8 +522,6 @@ impl BitReader<'_> {
         }
     }
 
-    /// Decode a 2D mode code.
-    /// Returns `None` on EOF or invalid code (logs warning).
     pub(crate) fn decode_mode(&mut self) -> Option<Mode> {
         let mut state: usize = 0;
 
