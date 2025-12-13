@@ -10,13 +10,7 @@ impl BitReader<'_> {
         let mut state: usize = 0;
 
         loop {
-            let bit = match self.read_bit() {
-                Some(b) => b,
-                None => {
-                    warn!("CCITT: unexpected EOF while decoding {name}");
-                    return None;
-                }
-            };
+            let bit = self.read_bit()?;
 
             let transition = if bit == 0 {
                 states[state].on_0

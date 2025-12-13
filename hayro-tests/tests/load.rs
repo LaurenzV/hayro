@@ -21,6 +21,12 @@ fn issue50() {
 }
 
 #[test]
+fn issue52() {
+    let file = include_bytes!("../pdfs/load/issue52.pdf");
+    load(file);
+}
+
+#[test]
 fn issue54() {
     let file = include_bytes!("../pdfs/load/issue54.pdf");
     load(file);
@@ -89,6 +95,12 @@ fn issue153() {
 #[test]
 fn issue154() {
     let file = include_bytes!("../pdfs/load/issue154.pdf");
+    load(file);
+}
+
+#[test]
+fn issue156() {
+    let file = include_bytes!("../pdfs/load/issue156.pdf");
     load(file);
 }
 

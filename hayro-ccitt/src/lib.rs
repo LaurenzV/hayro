@@ -70,7 +70,9 @@ pub fn decode(data: &[u8], decoder: &mut impl Decoder, settings: &DecodeSettings
                     ctx.b1.checked_sub((-i) as usize)?
                 };
 
-                ctx.push_pixels(a1 - ctx.a0().unwrap_or(0));
+                let a0 = ctx.a0().unwrap_or(0);
+
+                ctx.push_pixels(a1.checked_sub(a0)?);
                 ctx.is_white = !ctx.is_white;
 
                 ctx.check_eol(&mut reader);
