@@ -13,6 +13,7 @@ pub struct DecodeSettings {
     pub rows: u32,
     pub end_of_block: bool,
     pub end_of_line: bool,
+    pub rows_are_byte_aligned: bool,
 }
 
 pub trait Decoder {
@@ -57,7 +58,7 @@ pub fn decode(data: &[u8], decoder: &mut impl Decoder, settings: &DecodeSettings
                 ctx.push_pixels(a1a2);
                 ctx.is_white = !ctx.is_white;
 
-                ctx.check_eol();
+                ctx.check_eol(&mut reader);
             }
             // 2.2.3.2 Vertical mode.
             Mode::Vertical(i) => {
@@ -70,7 +71,7 @@ pub fn decode(data: &[u8], decoder: &mut impl Decoder, settings: &DecodeSettings
                 ctx.push_pixels(a1 - ctx.a0().unwrap_or(0));
                 ctx.is_white = !ctx.is_white;
 
-                ctx.check_eol();
+                ctx.check_eol(&mut reader);
             }
         }
     }
@@ -96,10 +97,11 @@ struct DecoderContext<'a, T: Decoder> {
     is_white: bool,
     /// How many rows have been decoded so far.
     decoded_rows: u32,
+    settings: &'a DecodeSettings,
 }
 
 impl<'a, T: Decoder> DecoderContext<'a, T> {
-    fn new(decoder: &'a mut T, settings: &DecodeSettings) -> DecoderContext<'a, T> {
+    fn new(decoder: &'a mut T, settings: &'a DecodeSettings) -> DecoderContext<'a, T> {
         // We add a padding of one on the right so that when any of the pointers
         // has reached the maximum index (which is exactly settings.column), we
         // don't get an OOB access when accessing the field in `find_b1`/`find_b2`.
@@ -117,6 +119,7 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
             max_idx,
             is_white: true,
             decoded_rows: 0,
+            settings
         }
     }
 
@@ -189,7 +192,7 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
         self.find_b2();
     }
 
-    fn check_eol(&mut self) {
+    fn check_eol(&mut self, reader: &mut BitReader) {
         if self.a0().unwrap_or(0) >= self.max_idx {
             // Go to next line.
             core::mem::swap(&mut self.reference_line, &mut self.coding_line);
@@ -198,6 +201,10 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
             self.is_white = true;
             self.decoded_rows += 1;
             self.decoder.next_line();
+            
+            if self.settings.rows_are_byte_aligned {
+                reader.align();
+            }
         }
 
         self.start_run();

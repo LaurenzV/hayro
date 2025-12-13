@@ -40,6 +40,15 @@ impl<'a> BitReader<'a> {
     }
 
     #[inline]
+    pub fn align(&mut self) {
+        let bit_pos = self.bit_pos();
+
+        if !bit_pos.is_multiple_of(8) {
+            self.cur_pos += 8 - bit_pos;
+        }
+    }
+    
+    #[inline]
     pub(crate) fn byte_pos(&self) -> usize {
         self.cur_pos / 8
     }
