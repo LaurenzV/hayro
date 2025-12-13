@@ -52,7 +52,7 @@ pub fn decode(data: &[u8], decoder: &mut impl Decoder, settings: &DecodeSettings
                 let a0a1 = reader.decode_run(ctx.is_white)? as usize;
                 ctx.push_pixels(a0a1);
                 ctx.is_white = !ctx.is_white;
-                
+
                 let a1a2 = reader.decode_run(ctx.is_white)? as usize;
                 ctx.push_pixels(a1a2);
                 ctx.is_white = !ctx.is_white;
@@ -66,7 +66,7 @@ pub fn decode(data: &[u8], decoder: &mut impl Decoder, settings: &DecodeSettings
                 } else {
                     ctx.b1.checked_sub((-i) as usize)?
                 };
-                
+
                 ctx.push_pixels(a1 - ctx.a0().unwrap_or(0));
                 ctx.is_white = !ctx.is_white;
 
@@ -127,7 +127,7 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
             // index -1. This is a bit of an edge case, and we therefore require
             // callers of this method to handle the case themselves.
             None
-        }   else {
+        } else {
             // Otherwise, the index just point to the next element to be decoded.
             Some(self.coding_line.len())
         }
@@ -142,7 +142,7 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
         // imaginary white element on the left.
         let (start, mut last_color) = if let Some(a0) = self.a0() {
             (a0 + 1, self.reference_line[a0])
-        }   else {
+        } else {
             (0, 0)
         };
 
@@ -177,8 +177,7 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
     fn push_pixels(&mut self, count: usize) {
         self.decoder.push_pixels(count, self.is_white);
         let cur_color = self.cur_color();
-        self.coding_line
-            .extend(iter::repeat_n(cur_color, count))
+        self.coding_line.extend(iter::repeat_n(cur_color, count))
     }
 
     fn cur_color(&self) -> u8 {
