@@ -42,7 +42,7 @@ pub(crate) fn decode(data: &[u8], params: Dict<'_>) -> Option<Vec<u8>> {
         black_is_1: params.get::<bool>(BLACK_IS_1).unwrap_or(dp.black_is_1),
     };
 
-    if params.k >= 0 || params.end_of_line || params.black_is_1 {
+    if params.k >= 0 || params.end_of_line{
         // Fallback for unsupported parameters
         let mut reader = Reader::new(data);
         let mut decoder = CCITTFaxDecoder::new(&mut reader, params);
@@ -59,6 +59,10 @@ pub(crate) fn decode(data: &[u8], params: Dict<'_>) -> Option<Vec<u8>> {
 
         Some(out)
     } else {
+        // if params.black_is_1 {
+        //     panic!();
+        // }
+        
         let settings = DecodeSettings {
             strict: false,
             columns: params.columns as u32,
@@ -72,18 +76,24 @@ pub(crate) fn decode(data: &[u8], params: Dict<'_>) -> Option<Vec<u8>> {
             output: Vec<u8>,
             current_byte: u8,
             bit_pos: u8,
+            invert: bool
         }
 
         impl BitDecoder {
-            fn new() -> Self {
+            fn new(invert: bool) -> Self {
                 Self {
                     output: Vec::new(),
                     current_byte: 0,
                     bit_pos: 0,
+                    invert,
                 }
             }
 
-            fn push_bit(&mut self, bit: bool) {
+            fn push_bit(&mut self, mut bit: bool) {
+                if self.invert {
+                    bit = !bit;
+                }
+                
                 if bit {
                     self.current_byte |= 1 << (7 - self.bit_pos);
                 }
@@ -119,7 +129,7 @@ pub(crate) fn decode(data: &[u8], params: Dict<'_>) -> Option<Vec<u8>> {
             }
         }
 
-        let mut decoder = BitDecoder::new();
+        let mut decoder = BitDecoder::new(params.black_is_1);
 
         hayro_ccitt::decode(data, &mut decoder, &settings);
 
