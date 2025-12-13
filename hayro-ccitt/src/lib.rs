@@ -26,10 +26,13 @@ pub fn decode(data: &[u8], decoder: &mut impl Decoder, settings: &DecodeSettings
 
     loop {
         if settings.end_of_block {
-            if reader.clone().read_bits(24) == Some(EOFB) {
+            // In this case, bit stream is terminated by an explicit marker.
+            if reader.peak_bits(24) == Some(EOFB) {
                 break;
             }
         } else {
+            // Otherwise, the length needs to be inferred from the number of
+            // expected rows.
             if ctx.decoded_rows == settings.rows {
                 break;
             }
@@ -38,20 +41,24 @@ pub fn decode(data: &[u8], decoder: &mut impl Decoder, settings: &DecodeSettings
         let mode = reader.decode_mode()?;
 
         match mode {
+            // 2.2.3.1 Pass mode.
             Mode::Pass => {
                 ctx.push_pixels(ctx.b2 - ctx.a0());
                 ctx.start_run();
             }
+            // 2.2.3.3 Horizontal mode.
             Mode::Horizontal => {
                 let a0a1 = reader.decode_run(ctx.is_white)? as usize;
                 ctx.push_pixels(a0a1);
                 ctx.is_white = !ctx.is_white;
+                
                 let a1a2 = reader.decode_run(ctx.is_white)? as usize;
                 ctx.push_pixels(a1a2);
                 ctx.is_white = !ctx.is_white;
 
                 ctx.check_eol();
             }
+            // 2.2.3.2 Vertical mode.
             Mode::Vertical(i) => {
                 let a1 = if i >= 0 {
                     ctx.b1.checked_add(i as usize)?

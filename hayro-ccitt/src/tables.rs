@@ -1,11 +1,7 @@
-//! CCITT Huffman code tables and state machine generation.
-
-/// Result of decoding a 2D mode code.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Mode {
     Pass,
     Horizontal,
-    /// Vertical mode with offset from b1 (-3 to +3).
     Vertical(i8),
 }
 
@@ -314,7 +310,6 @@ const MODE_CODES: [(u16, u8, u16); 9] = [
     (8, 7, 0b0000010), // Vertical_L3
 ];
 
-/// Insert all codes from a slice into the state machine.
 const fn insert_codes<const N: usize, const M: usize>(
     states: &mut [State; N],
     mut num_states: usize,
@@ -329,7 +324,6 @@ const fn insert_codes<const N: usize, const M: usize>(
     num_states
 }
 
-/// Build run-length state machine from terminating, makeup, and common codes.
 const fn build_run_states<const N: usize, const T: usize, const M: usize>(
     terminating: &[(u16, u8, u16); T],
     makeup: &[(u16, u8, u16); M],

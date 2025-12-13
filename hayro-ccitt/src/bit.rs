@@ -33,6 +33,11 @@ impl<'a> BitReader<'a> {
 
         Some(result)
     }
+    
+    #[inline(always)]
+    pub(crate) fn peak_bits(&mut self, num_bits: usize) -> Option<u32> {
+        self.clone().read_bits(num_bits)
+    }
 
     #[inline]
     pub(crate) fn byte_pos(&self) -> usize {

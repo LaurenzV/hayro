@@ -34,7 +34,7 @@ impl BitReader<'_> {
 
                 // For decoding black/white runs, less than 64 means we have
                 // a terminating code. For mode decoding, all values are less
-                // than 64 anyway.
+                // than 64 anyway, so this condition can be used for all methods.
                 if len < 64 {
                     return Some(total);
                 }
