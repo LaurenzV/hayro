@@ -159,7 +159,7 @@ fn decode_group4<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitReader
         match mode {
             // 2.2.3.1 Pass mode.
             Mode::Pass => {
-                ctx.push_pixels(ctx.b2 - ctx.a0().unwrap_or(0));
+                ctx.push_pixels(ctx.b2() - ctx.a0().unwrap_or(0));
                 ctx.start_run();
                 // No color change happens in pass mode.
             }
@@ -177,10 +177,11 @@ fn decode_group4<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitReader
             }
             // 2.2.3.2 Vertical mode.
             Mode::Vertical(i) => {
+                let b1 = ctx.b1();
                 let a1 = if i >= 0 {
-                    ctx.b1.checked_add(i as usize)?
+                    b1.checked_add(i as usize)?
                 } else {
-                    ctx.b1.checked_sub((-i) as usize)?
+                    b1.checked_sub((-i) as usize)?
                 };
 
                 let a0 = ctx.a0().unwrap_or(0);
@@ -201,7 +202,7 @@ struct DecoderContext<'a, T: Decoder> {
     ref_changes: Vec<ColorChange>,
     /// Current search position in ref_changes (optimization: only increases).
     ref_pos: usize,
-    /// Index in ref_changes where b1 was found (for computing b2).
+    /// Index in ref_changes where b1 was found.
     b1_idx: usize,
     /// Color changes in the coding line (current line being decoded).
     coding_changes: Vec<ColorChange>,
@@ -211,11 +212,6 @@ struct DecoderContext<'a, T: Decoder> {
     decoder: &'a mut T,
     /// Packs bits into bytes.
     packer: BitPacker,
-    /// "The first changing element on the reference line to the right of a0 and
-    /// of opposite color to a0."
-    b1: usize,
-    /// "The next changing element to the right of b1, on the reference line."
-    b2: usize,
     /// The maximum permissible index for all variables.
     max_idx: usize,
     /// Whether the next run to be decoded is white.
@@ -245,8 +241,6 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
             coding_line_len: 0,
             decoder,
             packer: BitPacker::new(),
-            b1: max_idx,
-            b2: max_idx,
             max_idx,
             is_white: true,
             decoded_rows: 0,
@@ -268,13 +262,27 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
         }
     }
 
-    fn find_b1(&mut self) {
+    /// "The first changing element on the reference line to the right of a0 and
+    /// of opposite color to a0."
+    fn b1(&self) -> usize {
+        self.ref_changes
+            .get(self.b1_idx)
+            .map_or(self.max_idx, |c| c.idx)
+    }
+
+    /// "The next changing element to the right of b1, on the reference line."
+    fn b2(&self) -> usize {
+        self.ref_changes
+            .get(self.b1_idx + 1)
+            .map_or(self.max_idx, |c| c.idx)
+    }
+
+    fn update_b1(&mut self) {
         // b1 refers to an element of the opposite color.
         let target_color = self.cur_color() ^ 1;
         // b1 must be strictly greater than a0.
         let min_idx = self.a0().map_or(0, |a| a + 1);
 
-        self.b1 = self.max_idx;
         self.b1_idx = self.ref_changes.len();
 
         // Start from ref_pos (optimization: b1 can only increase, so skip past entries)
@@ -288,20 +296,9 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
             }
 
             if change.color == target_color {
-                self.b1 = change.idx;
                 self.b1_idx = i;
                 break;
             }
-        }
-    }
-
-    fn find_b2(&mut self) {
-        // b2 is simply the next entry after b1 in ref_changes.
-        let next_idx = self.b1_idx + 1;
-        if next_idx < self.ref_changes.len() {
-            self.b2 = self.ref_changes[next_idx].idx;
-        } else {
-            self.b2 = self.max_idx;
         }
     }
 
@@ -357,8 +354,7 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
     }
 
     fn start_run(&mut self) {
-        self.find_b1();
-        self.find_b2();
+        self.update_b1();
     }
 
     fn check_eol(&mut self, reader: &mut BitReader) -> Option<()> {
