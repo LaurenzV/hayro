@@ -66,7 +66,7 @@ impl CMap {
     }
 
     fn map_cid_range(&mut self, low: u32, high: u32, dst_low: u32) -> Option<()> {
-        if high - low > MAX_MAP_RANGE {
+        if high.checked_sub(low)? > MAX_MAP_RANGE {
             return None;
         }
 
@@ -82,7 +82,7 @@ impl CMap {
     }
 
     fn map_bf_range(&mut self, low: u32, high: u32, dst_low: u32) -> Option<()> {
-        if high - low > MAX_MAP_RANGE {
+        if high.checked_sub(low)? > MAX_MAP_RANGE {
             return None;
         }
 
@@ -99,7 +99,7 @@ impl CMap {
     }
 
     fn map_bf_range_to_array(&mut self, low: u32, high: u32, array: Vec<u32>) -> Option<()> {
-        if high - low > MAX_MAP_RANGE {
+        if high.checked_sub(low)? > MAX_MAP_RANGE {
             return None;
         }
 
