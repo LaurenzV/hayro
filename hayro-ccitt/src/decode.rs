@@ -77,6 +77,7 @@ impl BitReader<'_> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unusual_byte_groupings)]
 mod tests {
     use super::*;
 
