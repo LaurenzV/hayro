@@ -45,6 +45,7 @@ pub fn decode(data: &[u8], decoder: &mut impl Decoder, settings: &DecodeSettings
             Mode::Pass => {
                 ctx.push_pixels(ctx.b2 - ctx.a0());
                 ctx.start_run();
+                // No color change happens in pass mode.
             }
             // 2.2.3.3 Horizontal mode.
             Mode::Horizontal => {
