@@ -54,6 +54,13 @@ fn decode_group3_1d<T: Decoder>(
     ctx: &mut DecoderContext<T>,
     reader: &mut BitReader,
 ) -> Option<usize> {
+    loop {
+        if ctx.settings.end_of_line {
+            reader.read_eol()?;
+        }
+        
+        
+    }
     unimplemented!();
 }
 

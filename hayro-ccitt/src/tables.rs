@@ -13,6 +13,7 @@ pub(crate) const VALUE_FLAG: u16 = 0x8000;
 pub(crate) const VALUE_MASK: u16 = 0x1FFF;
 pub(crate) const INVALID: u16 = 0xFFFF;
 pub(crate) const EOFB: u32 = 0x1001;
+pub(crate) const EOL: u32 = 0x1;
 
 #[derive(Clone, Copy)]
 pub(crate) struct State {
