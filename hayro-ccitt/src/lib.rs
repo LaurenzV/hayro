@@ -34,8 +34,60 @@ pub struct DecodeSettings {
 }
 
 pub trait Decoder {
-    fn push_pixels(&mut self, count: usize, white: bool);
+    /// Push a single packed byte. Each bit represents a pixel (1=white, 0=black).
+    fn push_byte(&mut self, byte: u8);
+    /// Push multiple copies of the same byte value (for efficient runs of same-color pixels).
+    fn push_bytes(&mut self, byte: u8, count: usize);
+    /// Called when a line is complete (after byte alignment).
     fn next_line(&mut self);
+}
+
+/// Accumulates individual bits into a byte buffer (MSB-first).
+#[derive(Default)]
+struct BitPacker {
+    /// Accumulated bits (MSB-first).
+    buffer: u8,
+    /// Number of bits currently in the buffer (0-7).
+    count: u8,
+}
+
+impl BitPacker {
+    fn new() -> Self {
+        Self::default()
+    }
+
+    /// Push a single bit. Returns `Some(byte)` if the buffer is now full.
+    fn push_bit(&mut self, white: bool) -> Option<u8> {
+        let bit = if white { 1 } else { 0 };
+        self.buffer = (self.buffer << 1) | bit;
+        self.count += 1;
+
+        if self.count == 8 {
+            let byte = self.buffer;
+            self.buffer = 0;
+            self.count = 0;
+            Some(byte)
+        } else {
+            None
+        }
+    }
+
+    /// Returns true if there are pending bits in the buffer.
+    fn has_pending(&self) -> bool {
+        self.count > 0
+    }
+
+    /// Flush any partial byte with zero padding. Returns `Some(byte)` if there were pending bits.
+    fn flush(&mut self) -> Option<u8> {
+        if self.count > 0 {
+            let padded = self.buffer << (8 - self.count);
+            self.buffer = 0;
+            self.count = 0;
+            Some(padded)
+        } else {
+            None
+        }
+    }
 }
 
 pub fn decode(data: &[u8], decoder: &mut impl Decoder, settings: &DecodeSettings) -> Option<usize> {
@@ -144,6 +196,8 @@ struct DecoderContext<'a, T: Decoder> {
     coding_line: Vec<u8>,
     /// The decoder sink.
     decoder: &'a mut T,
+    /// Packs bits into bytes.
+    packer: BitPacker,
     /// "The first changing element on the reference line to the right of a0 and
     /// of opposite color to a0."
     b1: usize,
@@ -172,6 +226,7 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
             reference_line: vec![0; len],
             coding_line: vec![],
             decoder,
+            packer: BitPacker::new(),
             b1: max_idx,
             b2: max_idx,
             max_idx,
@@ -236,9 +291,35 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
     }
 
     fn push_pixels(&mut self, count: usize) {
-        self.decoder.push_pixels(count, self.is_white);
+        let white = self.is_white;
+        let byte_val: u8 = if white { 0xFF } else { 0x00 };
+        let mut remaining = count;
+
+        // Fill partial byte buffer to boundary.
+        while self.packer.has_pending() && remaining > 0 {
+            if let Some(byte) = self.packer.push_bit(white) {
+                self.decoder.push_byte(byte);
+            }
+            remaining -= 1;
+        }
+
+        // Push full bytes.
+        let full_bytes = remaining / 8;
+        if full_bytes > 0 {
+            self.decoder.push_bytes(byte_val, full_bytes);
+            remaining %= 8;
+        }
+
+        // Push remaining bits into buffer.
+        for _ in 0..remaining {
+            if let Some(byte) = self.packer.push_bit(white) {
+                self.decoder.push_byte(byte);
+            }
+        }
+
+        // Also push the pixels to the coding line.
         let cur_color = self.cur_color();
-        self.coding_line.extend(iter::repeat_n(cur_color, count))
+        self.coding_line.extend(iter::repeat_n(cur_color, count));
     }
 
     fn cur_color(&self) -> u8 {
@@ -258,6 +339,11 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
                 warn!("coding line has wrong size");
 
                 return None;
+            }
+
+            // Flush any partial byte with zero padding before finishing the line.
+            if let Some(byte) = self.packer.flush() {
+                self.decoder.push_byte(byte);
             }
 
             core::mem::swap(&mut self.reference_line, &mut self.coding_line);

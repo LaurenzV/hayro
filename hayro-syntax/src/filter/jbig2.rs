@@ -3414,22 +3414,38 @@ fn decode_mmr_bitmap(
     struct BitmapDecoder {
         bitmap: Vec<Vec<u8>>,
         current_row: Vec<u8>,
+        width: usize,
     }
 
     impl BitmapDecoder {
-        fn new() -> Self {
+        fn new(width: usize) -> Self {
             Self {
                 bitmap: Vec::new(),
                 current_row: Vec::new(),
+                width,
+            }
+        }
+
+        fn unpack_byte(&mut self, byte: u8) {
+            let inverted = !byte;
+            for i in (0..8).rev() {
+                if self.current_row.len() < self.width {
+                    self.current_row.push((inverted >> i) & 1);
+                }
             }
         }
     }
 
     impl Decoder for BitmapDecoder {
-        fn push_pixels(&mut self, count: usize, white: bool) {
-            // JBIG2 uses black_is_1, so black pixels are 1 and white pixels are 0
-            let pixel = if white { 0 } else { 1 };
-            self.current_row.extend(std::iter::repeat_n(pixel, count));
+        fn push_byte(&mut self, byte: u8) {
+            self.unpack_byte(byte);
+        }
+
+        fn push_bytes(&mut self, byte: u8, count: usize) {
+            let pixel = if byte == 0xFF { 0 } else { 1 };
+            let pixels_to_add = (count * 8).min(self.width.saturating_sub(self.current_row.len()));
+            self.current_row
+                .extend(std::iter::repeat_n(pixel, pixels_to_add));
         }
 
         fn next_line(&mut self) {
@@ -3440,7 +3456,7 @@ fn decode_mmr_bitmap(
     let mut borrowed = reader.0.borrow_mut();
     let data = &borrowed.data[borrowed.position..borrowed.end];
 
-    let mut decoder = BitmapDecoder::new();
+    let mut decoder = BitmapDecoder::new(width);
     let bytes_consumed = hayro_ccitt::decode(data, &mut decoder, &settings)
         .ok_or_else(|| Jbig2Error::new("MMR decoding failed"))?;
 

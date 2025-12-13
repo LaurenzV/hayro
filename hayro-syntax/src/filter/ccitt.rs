@@ -75,63 +75,38 @@ pub(crate) fn decode(data: &[u8], params: Dict<'_>) -> Option<Vec<u8>> {
             },
         };
 
-        struct BitDecoder {
+        struct ByteDecoder {
             output: Vec<u8>,
-            current_byte: u8,
-            bit_pos: u8,
             invert: bool,
         }
 
-        impl BitDecoder {
+        impl ByteDecoder {
             fn new(invert: bool) -> Self {
                 Self {
                     output: Vec::new(),
-                    current_byte: 0,
-                    bit_pos: 0,
                     invert,
                 }
             }
-
-            fn push_bit(&mut self, mut bit: bool) {
-                if self.invert {
-                    bit = !bit;
-                }
-
-                if bit {
-                    self.current_byte |= 1 << (7 - self.bit_pos);
-                }
-
-                self.bit_pos += 1;
-                if self.bit_pos == 8 {
-                    self.output.push(self.current_byte);
-                    self.current_byte = 0;
-                    self.bit_pos = 0;
-                }
-            }
-
-            fn align_to_byte(&mut self) {
-                if self.bit_pos > 0 {
-                    self.output.push(self.current_byte);
-                    self.current_byte = 0;
-                    self.bit_pos = 0;
-                }
-            }
         }
 
-        impl Decoder for BitDecoder {
-            fn push_pixels(&mut self, count: usize, white: bool) {
-                let bit = white;
-                for _ in 0..count {
-                    self.push_bit(bit);
-                }
+        impl Decoder for ByteDecoder {
+            fn push_byte(&mut self, byte: u8) {
+                let byte = if self.invert { !byte } else { byte };
+                self.output.push(byte);
+            }
+
+            fn push_bytes(&mut self, byte: u8, count: usize) {
+                let byte = if self.invert { !byte } else { byte };
+                self.output.extend(std::iter::repeat_n(byte, count));
             }
 
             fn next_line(&mut self) {
-                self.align_to_byte();
+                // Nothing to do here, as hayro-ccitt will already align to
+                // byte-boundary after each row.
             }
         }
 
-        let mut decoder = BitDecoder::new(params.black_is_1);
+        let mut decoder = ByteDecoder::new(params.black_is_1);
         hayro_ccitt::decode(data, &mut decoder, &settings);
 
         Some(decoder.output)
