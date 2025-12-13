@@ -1,6 +1,5 @@
 use crate::bit::BitReader;
 use crate::tables::{EOFB, Mode};
-use log::{error, warn};
 use std::iter;
 
 mod bit;
@@ -22,7 +21,6 @@ pub trait Decoder {
 }
 
 pub fn decode(data: &[u8], decoder: &mut impl Decoder, settings: &DecodeSettings) -> Option<()> {
-    // let mut decoder = PrintDecoder::new();
     let mut ctx = DecoderContext::new(decoder, settings);
     let mut reader = BitReader::new(data);
 
@@ -55,12 +53,12 @@ pub fn decode(data: &[u8], decoder: &mut impl Decoder, settings: &DecodeSettings
                 ctx.check_eol();
             }
             Mode::Vertical(i) => {
-                let a1 = if i > 0 {
+                let a1 = if i >= 0 {
                     ctx.b1.checked_add(i as usize)?
                 } else {
                     ctx.b1.checked_sub((-i) as usize)?
                 };
-
+                
                 ctx.push_pixels(a1 - ctx.a0());
                 ctx.is_white = !ctx.is_white;
 
@@ -118,10 +116,18 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
     }
 
     fn find_b1(&mut self) {
-        self.b1 = self.a0();
+        let a0 = self.a0();
         let target_color = self.cur_color() ^ 1;
 
-        let mut last_color = self.reference_line[self.b1];
+        // b1 must be "to the right of a0". At line start (a0=0), a0 is at imaginary
+        // position -1, so we can match at 0. Otherwise, we must start after a0.
+        let (start, mut last_color) = if a0 == 0 {
+            (0, 0) // Imaginary white before line start
+        } else {
+            (a0 + 1, self.reference_line[a0])
+        };
+
+        self.b1 = start;
 
         while self.b1 < self.max_idx {
             let current_color = self.reference_line[self.b1];
