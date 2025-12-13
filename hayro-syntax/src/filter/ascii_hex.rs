@@ -32,7 +32,7 @@ pub(crate) fn decode(data: &[u8]) -> Option<Vec<u8>> {
     let trimmed = &data[0..end];
 
     if needs_cleaning {
-        let mut cleaned = trimmed
+        let cleaned = trimmed
             .iter()
             .flat_map(|c| {
                 if c.is_ascii_hexdigit() {
@@ -42,10 +42,6 @@ pub(crate) fn decode(data: &[u8]) -> Option<Vec<u8>> {
                 }
             })
             .collect::<Vec<_>>();
-
-        if cleaned.len() % 2 != 0 {
-            cleaned.push(b'0');
-        }
 
         decode_hex_string(&cleaned).ok()
     } else {
@@ -57,7 +53,8 @@ pub(crate) fn decode(data: &[u8]) -> Option<Vec<u8>> {
 
 pub(crate) fn decode_hex_string(str: &[u8]) -> Result<Vec<u8>, ()> {
     str.chunks(2)
-        .map(|pair| Ok(val(pair[0])? << 4 | val(pair[1])?))
+        // In case length is not a multiple of 2, pad with 0.
+        .map(|pair| Ok(val(pair[0])? << 4 | val(*pair.get(1).unwrap_or(&b'0'))?))
         .collect()
 }
 
