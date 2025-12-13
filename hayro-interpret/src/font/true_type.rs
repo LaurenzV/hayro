@@ -42,7 +42,7 @@ impl TrueTypeFont {
 
         let font_flags = descriptor.get::<u32>(FLAGS).and_then(FontFlags::from_bits);
 
-        let widths = read_widths(dict, &descriptor);
+        let widths = read_widths(dict, &descriptor)?;
         let (encoding, differences) = read_encoding(dict);
         let base_font = descriptor
             .get::<Stream<'_>>(FONT_FILE2)
@@ -224,7 +224,7 @@ impl TrueTypeFont {
     }
 }
 
-pub(crate) fn read_widths(dict: &Dict<'_>, descriptor: &Dict<'_>) -> Vec<f32> {
+pub(crate) fn read_widths(dict: &Dict<'_>, descriptor: &Dict<'_>) -> Option<Vec<f32>> {
     let mut widths = Vec::new();
 
     let first_char = dict.get::<usize>(FIRST_CHAR);
@@ -233,7 +233,7 @@ pub(crate) fn read_widths(dict: &Dict<'_>, descriptor: &Dict<'_>) -> Vec<f32> {
     let missing_width = descriptor.get::<f32>(MISSING_WIDTH).unwrap_or(0.0);
 
     if let (Some(fc), Some(lc), Some(w)) = (first_char, last_char, widths_arr) {
-        let iter = w.iter::<f32>().take(lc - fc + 1);
+        let iter = w.iter::<f32>().take(lc.checked_sub(fc)?.checked_add(1)?);
 
         for _ in 0..fc {
             widths.push(missing_width);
@@ -248,7 +248,7 @@ pub(crate) fn read_widths(dict: &Dict<'_>, descriptor: &Dict<'_>) -> Vec<f32> {
         }
     }
 
-    widths
+    Some(widths)
 }
 
 fn glyph_num_string(s: &str) -> Option<u32> {

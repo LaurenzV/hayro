@@ -152,7 +152,7 @@ impl StandardKind {
         resolver: &FontResolverFn,
     ) -> Option<Self> {
         let descriptor = dict.get::<Dict<'_>>(FONT_DESC).unwrap_or_default();
-        let widths = read_widths(dict, &descriptor);
+        let widths = read_widths(dict, &descriptor)?;
 
         let (encoding, encoding_map) = read_encoding(dict);
         let (blob, index) = resolver(&FontQuery::Standard(base_font))?;
@@ -260,7 +260,7 @@ impl Type1Kind {
         let font = Type1FontBlob::new(Arc::new(data.decoded().ok()?.to_vec()))?;
 
         let (encoding, encodings) = read_encoding(dict);
-        let widths = read_widths(dict, &descriptor);
+        let widths = read_widths(dict, &descriptor)?;
 
         let glyph_simulator = GlyphSimulator::new();
 
@@ -335,7 +335,7 @@ impl CffKind {
         let font = CffFontBlob::new(Arc::new(data.decoded().ok()?.to_vec()))?;
 
         let (encoding, encodings) = read_encoding(dict);
-        let widths = read_widths(dict, &descriptor);
+        let widths = read_widths(dict, &descriptor)?;
 
         Some(Self {
             font,

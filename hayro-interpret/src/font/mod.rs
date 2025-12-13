@@ -190,7 +190,7 @@ impl<'a> Font<'a> {
                         .map(FontType::Type1)
                 })?,
             TYPE0 => FontType::Type0(Rc::new(Type0Font::new(dict)?)),
-            TYPE3 => FontType::Type3(Rc::new(Type3::new(dict))),
+            TYPE3 => FontType::Type3(Rc::new(Type3::new(dict)?)),
             f => {
                 warn!(
                     "unimplemented font type {:?}",

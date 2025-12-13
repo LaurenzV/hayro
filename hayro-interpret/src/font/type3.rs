@@ -34,9 +34,9 @@ pub(crate) struct Type3<'a> {
 }
 
 impl<'a> Type3<'a> {
-    pub(crate) fn new(dict: &Dict<'a>) -> Self {
+    pub(crate) fn new(dict: &Dict<'a>) -> Option<Self> {
         let (encoding, encodings) = read_encoding(dict);
-        let widths = read_widths(dict, dict);
+        let widths = read_widths(dict, dict)?;
         let font_bbox = dict
             .get::<hayro_syntax::object::Rect>(FONT_BBOX)
             .unwrap_or(hayro_syntax::object::Rect::ZERO)
@@ -62,7 +62,7 @@ impl<'a> Type3<'a> {
 
         let to_unicode = read_to_unicode(dict);
 
-        Self {
+        Some(Self {
             glyph_simulator: GlyphSimulator::new(),
             encoding,
             font_bbox,
@@ -72,7 +72,7 @@ impl<'a> Type3<'a> {
             matrix,
             dict: dict.clone(),
             to_unicode,
-        }
+        })
     }
 
     pub(crate) fn map_code(&self, code: u8) -> GlyphId {
