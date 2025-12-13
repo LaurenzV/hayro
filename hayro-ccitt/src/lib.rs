@@ -1,7 +1,6 @@
 use crate::bit::BitReader;
 use crate::tables::{EOFB, Mode};
 use std::iter;
-use log::warn;
 
 mod bit;
 mod decode;
@@ -54,35 +53,27 @@ pub fn decode(data: &[u8], decoder: &mut impl Decoder, settings: &DecodeSettings
     Some(reader.byte_pos())
 }
 
-fn decode_group3_1d<T: Decoder>(
-    ctx: &mut DecoderContext<T>,
-    reader: &mut BitReader,
-) -> Option<()> {
+fn decode_group3_1d<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitReader) -> Option<()> {
+    // It seems like PDF producers are a bit sloppy with the `end_of_line` flag,
+    // so we just always try to read one.
     let _ = reader.read_eol_if_available();
-    
-    if ctx.settings.rows_are_byte_aligned {
-        warn!("group3 images with byte alignment are not implemented yet");
-        
-        return None;
-    }
-    
+
     loop {
         while ctx.a0().unwrap_or(0) < ctx.max_idx {
             let run_length = reader.decode_run(ctx.is_white)? as usize;
-            eprintln!("{:?}", run_length);
             ctx.push_pixels(run_length);
             ctx.is_white = !ctx.is_white;
         }
 
+        ctx.check_eol(reader);
+
         let num_eol = reader.read_eol_if_available();
-        
+
         if num_eol == 6 {
             break;
         }
-        
-        ctx.check_eol(reader);
     }
-    
+
     Some(())
 }
 

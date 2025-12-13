@@ -1,6 +1,6 @@
 use crate::bit::BitReader;
 use crate::tables::{
-    BLACK_STATES, INVALID, MODE_STATES, Mode, State, VALUE_FLAG, VALUE_MASK, WHITE_STATES,
+    BLACK_STATES, EOL, INVALID, MODE_STATES, Mode, State, VALUE_FLAG, VALUE_MASK, WHITE_STATES,
 };
 use log::warn;
 
@@ -74,14 +74,14 @@ impl BitReader<'_> {
             }
         })
     }
-    
+
     pub(crate) fn read_eol_if_available(&mut self) -> usize {
         let mut count = 0;
-        while self.peak_bits(12) == Some(1) {
+        while self.peak_bits(12) == Some(EOL) {
             count += 1;
             self.read_bits(12).unwrap();
         }
-        
+
         count
     }
 }
