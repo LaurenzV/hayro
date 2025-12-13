@@ -89,7 +89,10 @@ pub(crate) fn decode(data: &[u8], params: Dict<'_>) -> Option<Vec<u8>> {
                 self.output.extend(std::iter::repeat_n(byte, count));
             }
 
-            fn next_line(&mut self) {}
+            fn next_line(&mut self) {
+                // Nothing to do here, as hayro-ccitt will already align to
+                // byte-boundary after each row.
+            }
         }
 
         let mut decoder = ByteDecoder { output: Vec::new() };
