@@ -3409,6 +3409,7 @@ fn decode_mmr_bitmap(
         end_of_line: false,
         rows_are_byte_aligned: false,
         encoding: EncodingMode::Group4,
+        invert_black: true,
     };
 
     struct BitmapDecoder {
@@ -3426,11 +3427,11 @@ fn decode_mmr_bitmap(
             }
         }
 
+        /// Unpack a byte into individual pixels (each bit becomes a 0 or 1).
         fn unpack_byte(&mut self, byte: u8) {
-            let inverted = !byte;
             for i in (0..8).rev() {
                 if self.current_row.len() < self.width {
-                    self.current_row.push((inverted >> i) & 1);
+                    self.current_row.push((byte >> i) & 1);
                 }
             }
         }
@@ -3442,7 +3443,8 @@ fn decode_mmr_bitmap(
         }
 
         fn push_bytes(&mut self, byte: u8, count: usize) {
-            let pixel = if byte == 0xFF { 0 } else { 1 };
+            // All bits in a uniform byte have the same value.
+            let pixel = if byte == 0xFF { 1 } else { 0 };
             let pixels_to_add = (count * 8).min(self.width.saturating_sub(self.current_row.len()));
             self.current_row
                 .extend(std::iter::repeat_n(pixel, pixels_to_add));

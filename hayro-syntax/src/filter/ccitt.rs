@@ -73,40 +73,26 @@ pub(crate) fn decode(data: &[u8], params: Dict<'_>) -> Option<Vec<u8>> {
             } else {
                 EncodingMode::Group3_2D { k: params.k as u32 }
             },
+            invert_black: params.black_is_1,
         };
 
         struct ByteDecoder {
             output: Vec<u8>,
-            invert: bool,
-        }
-
-        impl ByteDecoder {
-            fn new(invert: bool) -> Self {
-                Self {
-                    output: Vec::new(),
-                    invert,
-                }
-            }
         }
 
         impl Decoder for ByteDecoder {
             fn push_byte(&mut self, byte: u8) {
-                let byte = if self.invert { !byte } else { byte };
                 self.output.push(byte);
             }
 
             fn push_bytes(&mut self, byte: u8, count: usize) {
-                let byte = if self.invert { !byte } else { byte };
                 self.output.extend(std::iter::repeat_n(byte, count));
             }
 
-            fn next_line(&mut self) {
-                // Nothing to do here, as hayro-ccitt will already align to
-                // byte-boundary after each row.
-            }
+            fn next_line(&mut self) {}
         }
 
-        let mut decoder = ByteDecoder::new(params.black_is_1);
+        let mut decoder = ByteDecoder { output: Vec::new() };
         hayro_ccitt::decode(data, &mut decoder, &settings);
 
         Some(decoder.output)

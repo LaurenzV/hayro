@@ -31,6 +31,7 @@ pub struct DecodeSettings {
     pub end_of_line: bool,
     pub rows_are_byte_aligned: bool,
     pub encoding: EncodingMode,
+    pub invert_black: bool,
 }
 
 pub trait Decoder {
@@ -210,6 +211,8 @@ struct DecoderContext<'a, T: Decoder> {
     /// How many rows have been decoded so far.
     decoded_rows: u32,
     settings: &'a DecodeSettings,
+    /// Precomputed mask for inverting output bytes (0x00 or 0xFF).
+    invert_mask: u8,
 }
 
 impl<'a, T: Decoder> DecoderContext<'a, T> {
@@ -233,6 +236,7 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
             is_white: true,
             decoded_rows: 0,
             settings,
+            invert_mask: if settings.invert_black { 0xFF } else { 0x00 },
         }
     }
 
@@ -292,13 +296,13 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
 
     fn push_pixels(&mut self, count: usize) {
         let white = self.is_white;
-        let byte_val: u8 = if white { 0xFF } else { 0x00 };
+        let byte_val: u8 = if white { 0xFF } else { 0x00 } ^ self.invert_mask;
         let mut remaining = count;
 
         // Fill partial byte buffer to boundary.
         while self.packer.has_pending() && remaining > 0 {
             if let Some(byte) = self.packer.push_bit(white) {
-                self.decoder.push_byte(byte);
+                self.decoder.push_byte(byte ^ self.invert_mask);
             }
             remaining -= 1;
         }
@@ -313,7 +317,7 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
         // Push remaining bits into buffer.
         for _ in 0..remaining {
             if let Some(byte) = self.packer.push_bit(white) {
-                self.decoder.push_byte(byte);
+                self.decoder.push_byte(byte ^ self.invert_mask);
             }
         }
 
@@ -343,7 +347,7 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
 
             // Flush any partial byte with zero padding before finishing the line.
             if let Some(byte) = self.packer.flush() {
-                self.decoder.push_byte(byte);
+                self.decoder.push_byte(byte ^ self.invert_mask);
             }
 
             core::mem::swap(&mut self.reference_line, &mut self.coding_line);
