@@ -199,6 +199,10 @@ fn decode_group4<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitReader
 struct DecoderContext<'a, T: Decoder> {
     /// Color changes in the reference line (previous line).
     ref_changes: Vec<ColorChange>,
+    /// Current search position in ref_changes (optimization: only increases).
+    ref_pos: usize,
+    /// Index in ref_changes where b1 was found (for computing b2).
+    b1_idx: usize,
     /// Color changes in the coding line (current line being decoded).
     coding_changes: Vec<ColorChange>,
     /// Current length of the coding line in pixels.
@@ -235,6 +239,8 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
                 idx: max_idx,
                 color: 0,
             }],
+            ref_pos: 0,
+            b1_idx: 0,
             coding_changes: Vec::new(),
             coding_line_len: 0,
             decoder,
@@ -269,22 +275,33 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
         let min_idx = self.a0().map_or(0, |a| a + 1);
 
         self.b1 = self.max_idx;
-        for change in &self.ref_changes {
-            if change.idx >= min_idx && change.color == target_color {
+        self.b1_idx = self.ref_changes.len();
+
+        // Start from ref_pos (optimization: b1 can only increase, so skip past entries)
+        for i in self.ref_pos..self.ref_changes.len() {
+            let change = &self.ref_changes[i];
+
+            // Skip entries that are behind our current position
+            if change.idx < min_idx {
+                self.ref_pos = i + 1;
+                continue;
+            }
+
+            if change.color == target_color {
                 self.b1 = change.idx;
+                self.b1_idx = i;
                 break;
             }
         }
     }
 
     fn find_b2(&mut self) {
-        // b2 is the next color change after b1.
-        self.b2 = self.max_idx;
-        for change in &self.ref_changes {
-            if change.idx > self.b1 {
-                self.b2 = change.idx;
-                break;
-            }
+        // b2 is simply the next entry after b1 in ref_changes.
+        let next_idx = self.b1_idx + 1;
+        if next_idx < self.ref_changes.len() {
+            self.b2 = self.ref_changes[next_idx].idx;
+        } else {
+            self.b2 = self.max_idx;
         }
     }
 
@@ -363,6 +380,7 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
             core::mem::swap(&mut self.ref_changes, &mut self.coding_changes);
             self.coding_changes.clear();
             self.coding_line_len = 0;
+            self.ref_pos = 0;
             self.is_white = true;
             self.decoded_rows += 1;
             self.decoder.next_line();
