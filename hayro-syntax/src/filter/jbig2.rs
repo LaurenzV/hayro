@@ -3428,8 +3428,7 @@ fn decode_mmr_bitmap(
         fn push_pixels(&mut self, count: usize, white: bool) {
             // JBIG2 uses black_is_1, so black pixels are 1 and white pixels are 0
             let pixel = if white { 0 } else { 1 };
-            self.current_row
-                .extend(std::iter::repeat(pixel).take(count));
+            self.current_row.extend(std::iter::repeat_n(pixel, count));
         }
 
         fn next_line(&mut self) {

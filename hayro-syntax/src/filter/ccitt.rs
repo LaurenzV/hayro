@@ -126,7 +126,7 @@ pub(crate) fn decode(data: &[u8], params: Dict<'_>) -> Option<Vec<u8>> {
 
         let mut decoder = BitDecoder::new(params.black_is_1);
         hayro_ccitt::decode(data, &mut decoder, &settings);
-        
+
         Some(decoder.output)
     }
 }
