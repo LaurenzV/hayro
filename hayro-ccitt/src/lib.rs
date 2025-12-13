@@ -1,6 +1,7 @@
 use crate::bit::BitReader;
 use crate::tables::{EOFB, Mode};
 use std::iter;
+use log::warn;
 
 mod bit;
 mod decode;
@@ -65,7 +66,7 @@ fn decode_group3_1d<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitRea
             ctx.is_white = !ctx.is_white;
         }
 
-        ctx.check_eol(reader);
+        ctx.check_eol(reader)?;
 
         let num_eol = reader.read_eol_if_available();
 
@@ -113,7 +114,7 @@ fn decode_group4<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitReader
                 ctx.push_pixels(a1a2);
                 ctx.is_white = !ctx.is_white;
 
-                ctx.check_eol(reader);
+                ctx.check_eol(reader)?;
             }
             // 2.2.3.2 Vertical mode.
             Mode::Vertical(i) => {
@@ -128,7 +129,7 @@ fn decode_group4<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitReader
                 ctx.push_pixels(a1.checked_sub(a0)?);
                 ctx.is_white = !ctx.is_white;
 
-                ctx.check_eol(reader);
+                ctx.check_eol(reader)?;
             }
         }
     }
@@ -249,9 +250,16 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
         self.find_b2();
     }
 
-    fn check_eol(&mut self, reader: &mut BitReader) {
+    fn check_eol(&mut self, reader: &mut BitReader) -> Option<()> {
         if self.a0().unwrap_or(0) >= self.max_idx {
             // Go to next line.
+            
+            if self.coding_line.len() != self.settings.columns as usize {
+                warn!("coding line has wrong size");
+                
+                return None;
+            }
+            
             core::mem::swap(&mut self.reference_line, &mut self.coding_line);
             self.reference_line.resize(self.max_idx + 1, 0);
             self.coding_line.clear();
@@ -265,5 +273,7 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
         }
 
         self.start_run();
+        
+        Some(())
     }
 }
