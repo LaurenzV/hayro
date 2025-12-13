@@ -3410,7 +3410,6 @@ fn decode_mmr_bitmap(
         rows_are_byte_aligned: false,
     };
 
-    /// A decoder that outputs a bitmap as Vec<Vec<u8>> with black_is_1 semantics.
     struct BitmapDecoder {
         bitmap: Vec<Vec<u8>>,
         current_row: Vec<u8>,
