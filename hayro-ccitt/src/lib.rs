@@ -43,7 +43,7 @@ pub fn decode(data: &[u8], decoder: &mut impl Decoder, settings: &DecodeSettings
         match mode {
             // 2.2.3.1 Pass mode.
             Mode::Pass => {
-                ctx.push_pixels(ctx.b2 - ctx.a0_plus_1());
+                ctx.push_pixels(ctx.b2 - ctx.a0().unwrap_or(0));
                 ctx.start_run();
                 // No color change happens in pass mode.
             }
@@ -67,7 +67,7 @@ pub fn decode(data: &[u8], decoder: &mut impl Decoder, settings: &DecodeSettings
                     ctx.b1.checked_sub((-i) as usize)?
                 };
                 
-                ctx.push_pixels(a1 - ctx.a0_plus_1());
+                ctx.push_pixels(a1 - ctx.a0().unwrap_or(0));
                 ctx.is_white = !ctx.is_white;
 
                 ctx.check_eol();
@@ -94,13 +94,12 @@ struct DecoderContext<'a, T: Decoder> {
     max_idx: usize,
     /// Whether the next run to be decoded is white.
     is_white: bool,
-
+    /// How many rows have been decoded so far.
     decoded_rows: u32,
-    settings: &'a DecodeSettings,
 }
 
 impl<'a, T: Decoder> DecoderContext<'a, T> {
-    fn new(decoder: &'a mut T, settings: &'a DecodeSettings) -> DecoderContext<'a, T> {
+    fn new(decoder: &'a mut T, settings: &DecodeSettings) -> DecoderContext<'a, T> {
         // We add a padding of one on the right so that when any of the pointers
         // has reached the maximum index (which is exactly settings.column), we
         // don't get an OOB access when accessing the field in `find_b1`/`find_b2`.
@@ -118,32 +117,33 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
             max_idx,
             is_white: true,
             decoded_rows: 0,
-            settings,
         }
     }
 
     /// `a0` refers to the first changing element on the current line.
-    /// Note however that the value is offset by 1: In the beginning, this method
-    /// will return 0 since we haven't coded anything yet. However, conceptually
-    /// the value should actually be -1, as according to the specification:
-    /// 
-    /// "At the start of the line a0 is set to an imaginary white changing element
-    /// situated just before the first element on the line."
-    fn a0_plus_1(&self) -> usize {
-        self.coding_line.len()
+    fn a0(&self) -> Option<usize> {
+        if self.coding_line.is_empty() {
+            // If we haven't coded anything yet, a0 conceptually points at the
+            // index -1. This is a bit of an edge case, and we therefore require
+            // callers of this method to handle the case themselves.
+            None
+        }   else {
+            // Otherwise, the index just point to the next element to be decoded.
+            Some(self.coding_line.len())
+        }
     }
 
     fn find_b1(&mut self) {
         // b1 refers to an element of the opposite color.
         let target_color = self.cur_color() ^ 1;
-        let a0_plus_1 = self.a0_plus_1();
 
-        // b1 must be "to the right of a0". At line start (a0=0), a0 is at imaginary
-        // position -1, so we can match at 0. Otherwise, we must start after a0.
-        let (start, mut last_color) = if a0_plus_1 == 0 {
-            (0, 0) // Imaginary white before line start
-        } else {
-            (a0_plus_1 + 1, self.reference_line[a0_plus_1])
+        // If we have an a0, b1 must start at the RIGHT of that element. Otherwise,
+        // it starts from the first possible index (0), and the last color is the
+        // imaginary white element on the left.
+        let (start, mut last_color) = if let Some(a0) = self.a0() {
+            (a0 + 1, self.reference_line[a0])
+        }   else {
+            (0, 0)
         };
 
         self.b1 = start;
@@ -191,7 +191,7 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
     }
 
     fn check_eol(&mut self) {
-        if self.a0_plus_1() >= self.max_idx {
+        if self.a0().unwrap_or(0) >= self.max_idx {
             // Go to next line.
             core::mem::swap(&mut self.reference_line, &mut self.coding_line);
             self.reference_line.resize(self.max_idx + 1, 0);
