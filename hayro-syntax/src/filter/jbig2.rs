@@ -16,11 +16,10 @@
 #![allow(clippy::needless_range_loop)]
 #![allow(clippy::too_many_arguments)]
 
-use crate::filter::ccitt::{CCITTFaxDecoder, CCITTFaxDecoderOptions};
 use crate::object::Dict;
 use crate::object::Stream;
 use crate::object::dict::keys::JBIG2_GLOBALS;
-use hayro_common::byte::Reader as CrateReader;
+use hayro_ccitt::{DecodeSettings, Decoder};
 use log::warn;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -3402,60 +3401,60 @@ fn decode_mmr_bitmap(
     height: usize,
     end_of_block: bool,
 ) -> Result<Bitmap, Jbig2Error> {
-    let params = CCITTFaxDecoderOptions {
-        k: -1,
-        columns: width,
-        rows: height,
-        black_is_1: true,
-        eoblock: end_of_block,
-        ..Default::default()
+    let settings = DecodeSettings {
+        strict: false,
+        columns: width as u32,
+        rows: height as u32,
+        end_of_block,
+        end_of_line: false,
+        rows_are_byte_aligned: false,
     };
 
+    /// A decoder that outputs a bitmap as Vec<Vec<u8>> with black_is_1 semantics.
+    struct BitmapDecoder {
+        bitmap: Vec<Vec<u8>>,
+        current_row: Vec<u8>,
+    }
+
+    impl BitmapDecoder {
+        fn new() -> Self {
+            Self {
+                bitmap: Vec::new(),
+                current_row: Vec::new(),
+            }
+        }
+    }
+
+    impl Decoder for BitmapDecoder {
+        fn push_pixels(&mut self, count: usize, white: bool) {
+            // JBIG2 uses black_is_1, so black pixels are 1 and white pixels are 0
+            let pixel = if white { 0 } else { 1 };
+            self.current_row
+                .extend(std::iter::repeat(pixel).take(count));
+        }
+
+        fn next_line(&mut self) {
+            self.bitmap.push(std::mem::take(&mut self.current_row));
+        }
+    }
+
     let mut borrowed = reader.0.borrow_mut();
+    let data = &borrowed.data[borrowed.position..borrowed.end];
 
-    let mut reader = CrateReader::new_with(&borrowed.data[borrowed.position..borrowed.end], 0);
-    let mut decoder = CCITTFaxDecoder::new(&mut reader, params);
-    let mut bitmap = Vec::with_capacity(height);
-    let mut eof = false;
+    let mut decoder = BitmapDecoder::new();
+    let bytes_consumed = hayro_ccitt::decode(data, &mut decoder, &settings)
+        .ok_or_else(|| Jbig2Error::new("MMR decoding failed"))?;
 
-    for _ in 0..height {
-        let row = Rc::new(RefCell::new(vec![]));
-        bitmap.push(row.clone());
-        let mut shift = -1_i32;
-        let mut current_byte = 0_u8;
-
-        for _ in 0..width {
-            if shift < 0 {
-                let byte = decoder.read_next_char();
-                if byte == -1 {
-                    // Set the rest of the bits to zero.
-                    current_byte = 0;
-                    eof = true;
-                    shift = 7;
-                } else {
-                    current_byte = byte as u8;
-                    shift = 7;
-                }
-            }
-            let bit = (current_byte >> shift) & 1;
-            row.borrow_mut().push(bit);
-            shift -= 1;
-        }
+    // Handle any remaining pixels in the last row
+    if !decoder.current_row.is_empty() {
+        decoder
+            .bitmap
+            .push(std::mem::take(&mut decoder.current_row));
     }
 
-    if end_of_block && !eof {
-        // Read until EOFB has been consumed.
-        let look_for_eof_limit = 5;
-        for _ in 0..look_for_eof_limit {
-            if decoder.read_next_char() == -1 {
-                break;
-            }
-        }
-    }
+    borrowed.position += bytes_consumed;
 
-    borrowed.position += decoder.source().offset();
-
-    Ok(bitmap.into_iter().map(|i| i.borrow().clone()).collect())
+    Ok(decoder.bitmap)
 }
 
 fn read_uncompressed_bitmap(

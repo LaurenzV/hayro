@@ -21,7 +21,7 @@ pub trait Decoder {
     fn next_line(&mut self);
 }
 
-pub fn decode(data: &[u8], decoder: &mut impl Decoder, settings: &DecodeSettings) -> Option<()> {
+pub fn decode(data: &[u8], decoder: &mut impl Decoder, settings: &DecodeSettings) -> Option<usize> {
     let mut ctx = DecoderContext::new(decoder, settings);
     let mut reader = BitReader::new(data);
 
@@ -29,6 +29,8 @@ pub fn decode(data: &[u8], decoder: &mut impl Decoder, settings: &DecodeSettings
         if settings.end_of_block {
             // In this case, bit stream is terminated by an explicit marker.
             if reader.peak_bits(24) == Some(EOFB) {
+                // Consume the EOFB marker
+                reader.read_bits(24);
                 break;
             }
         } else {
@@ -76,7 +78,8 @@ pub fn decode(data: &[u8], decoder: &mut impl Decoder, settings: &DecodeSettings
         }
     }
 
-    Some(())
+    // Return the number of bytes consumed (rounded up to include partial byte)
+    Some((reader.cur_pos() + 7) / 8)
 }
 
 struct DecoderContext<'a, T: Decoder> {
@@ -119,7 +122,7 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
             max_idx,
             is_white: true,
             decoded_rows: 0,
-            settings
+            settings,
         }
     }
 
@@ -201,7 +204,7 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
             self.is_white = true;
             self.decoded_rows += 1;
             self.decoder.next_line();
-            
+
             if self.settings.rows_are_byte_aligned {
                 reader.align();
             }

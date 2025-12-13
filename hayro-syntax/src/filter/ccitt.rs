@@ -42,7 +42,7 @@ pub(crate) fn decode(data: &[u8], params: Dict<'_>) -> Option<Vec<u8>> {
         black_is_1: params.get::<bool>(BLACK_IS_1).unwrap_or(dp.black_is_1),
     };
 
-    if params.k >= 0 || params.end_of_line{
+    if params.k >= 0 || params.end_of_line {
         // Fallback for unsupported parameters
         let mut reader = Reader::new(data);
         let mut decoder = CCITTFaxDecoder::new(&mut reader, params);
@@ -62,7 +62,7 @@ pub(crate) fn decode(data: &[u8], params: Dict<'_>) -> Option<Vec<u8>> {
         // if params.black_is_1 {
         //     panic!();
         // }
-        
+
         let settings = DecodeSettings {
             strict: false,
             columns: params.columns as u32,
@@ -76,7 +76,7 @@ pub(crate) fn decode(data: &[u8], params: Dict<'_>) -> Option<Vec<u8>> {
             output: Vec<u8>,
             current_byte: u8,
             bit_pos: u8,
-            invert: bool
+            invert: bool,
         }
 
         impl BitDecoder {
@@ -93,7 +93,7 @@ pub(crate) fn decode(data: &[u8], params: Dict<'_>) -> Option<Vec<u8>> {
                 if self.invert {
                     bit = !bit;
                 }
-                
+
                 if bit {
                     self.current_byte |= 1 << (7 - self.bit_pos);
                 }
@@ -130,10 +130,7 @@ pub(crate) fn decode(data: &[u8], params: Dict<'_>) -> Option<Vec<u8>> {
         }
 
         let mut decoder = BitDecoder::new(params.black_is_1);
-
         hayro_ccitt::decode(data, &mut decoder, &settings);
-
-        // Ensure final line is aligned
         decoder.align_to_byte();
 
         Some(decoder.output)
@@ -1954,10 +1951,6 @@ impl<'a> CCITTFaxDecoder<'a> {
         // self.counter += 1;
 
         c
-    }
-
-    pub(crate) fn source(&self) -> &Reader<'_> {
-        self.source
     }
 }
 

@@ -47,7 +47,7 @@ impl<'a> BitReader<'a> {
             self.cur_pos += 8 - bit_pos;
         }
     }
-    
+
     #[inline]
     pub(crate) fn byte_pos(&self) -> usize {
         self.cur_pos / 8
@@ -56,5 +56,11 @@ impl<'a> BitReader<'a> {
     #[inline]
     pub(crate) fn bit_pos(&self) -> usize {
         self.cur_pos % 8
+    }
+
+    /// Returns the current bit position in the stream.
+    #[inline]
+    pub(crate) fn cur_pos(&self) -> usize {
+        self.cur_pos
     }
 }
