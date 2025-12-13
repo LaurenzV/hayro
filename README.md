@@ -13,11 +13,13 @@ But, this crate is still in a very development stage, and there are many issues 
 
 ## Crates
 While the main goal of `hayro` is rendering PDF files, the `hayro` project actually encompasses a number of different crates which can in theory used independently. These include:
-- [`hayro-syntax`](hayro-syntax): A crate for low-level reading and parsing of PDF files.
-- [`hayro-interpret`](hayro-interpret): A crate for interpreting PDF pages and rendering them into an abstract `Device` implementation.
-- [`hayro`](hayro): A crate for rendering PDF files into bitmaps.
-- [`hayro-svg`](hayro-svg): A crate for converting PDF pages into SVG files.
-- [`hayro-font`](hayro-font): A crate for parsing Type1 and CFF fonts.
+- [`hayro-syntax`](hayro-syntax): Low-level parsing and reading of PDF files.
+- [`hayro-interpret`](hayro-interpret): A PDF interpreter emitting commands into an abstract `Device`.
+- [`hayro`](hayro): Rendering PDF pages into bitmaps.
+- [`hayro-svg`](hayro-svg): Converting PDF pages into SVG images.
+- [`hayro-jpeg2000`](hayro-jpeg2000): A JPEG2000 image decoder.
+- [`hayro-ccitt`](hayro-ccitt): A decoder for group 3 and group 4 CCITT-encoded images.
+- [`hayro-font`](hayro-font): A parser for Type1 and CFF fonts.
 
 ## Demo
 A demo tool can be found at https://laurenzv.github.io/hayro/. Please note that this is not intended to be a PDF viewer application: It misses many important features like zooming, selecting text and important optimizations for improving the user experience. It's really just meant as a quick way to test the rendering capabilities of `hayro`.
