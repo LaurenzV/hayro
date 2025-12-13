@@ -62,12 +62,18 @@ impl<'a> ArithmeticDecoder<'a> {
                 self.shift_count = 8;
             } else {
                 self.base_pointer += 1;
-                self.c = self.c + 0xfe00 - ((self.current_byte() as u32) << 9);
+                self.c = self
+                    .c
+                    .wrapping_add(0xfe00)
+                    .wrapping_sub((self.current_byte() as u32) << 9);
                 self.shift_count = 7;
             }
         } else {
             self.base_pointer += 1;
-            self.c = self.c + 0xff00 - ((self.current_byte() as u32) << 8);
+            self.c = self
+                .c
+                .wrapping_add(0xff00)
+                .wrapping_sub((self.current_byte() as u32) << 8);
             self.shift_count = 8;
         }
     }
