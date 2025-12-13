@@ -24,7 +24,7 @@ use crate::object::dict::keys::{
     BLACK_IS_1, COLUMNS, ENCODED_BYTE_ALIGN, END_OF_BLOCK, END_OF_LINE, K, ROWS,
 };
 use crate::reader::Reader;
-use hayro_ccitt::{DecodeSettings, Decoder};
+use hayro_ccitt::{DecodeSettings, Decoder, EncodingMode};
 use log::warn;
 
 pub(crate) fn decode(data: &[u8], params: Dict<'_>) -> Option<Vec<u8>> {
@@ -66,6 +66,13 @@ pub(crate) fn decode(data: &[u8], params: Dict<'_>) -> Option<Vec<u8>> {
             end_of_block: params.eoblock,
             end_of_line: params.end_of_line,
             rows_are_byte_aligned: params.encoded_byte_align,
+            encoding: if params.k < 0 {
+                EncodingMode::Group4
+            } else if params.k == 0 {
+                EncodingMode::Group3_1D
+            } else {
+                EncodingMode::Group3_2D { k: params.k as u32 }
+            },
         };
 
         struct BitDecoder {

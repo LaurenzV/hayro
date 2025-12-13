@@ -19,7 +19,7 @@
 use crate::object::Dict;
 use crate::object::Stream;
 use crate::object::dict::keys::JBIG2_GLOBALS;
-use hayro_ccitt::{DecodeSettings, Decoder};
+use hayro_ccitt::{DecodeSettings, Decoder, EncodingMode};
 use log::warn;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -3408,6 +3408,7 @@ fn decode_mmr_bitmap(
         end_of_block,
         end_of_line: false,
         rows_are_byte_aligned: false,
+        encoding: EncodingMode::Group4,
     };
 
     struct BitmapDecoder {

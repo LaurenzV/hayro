@@ -6,6 +6,21 @@ mod bit;
 mod decode;
 mod tables;
 
+/// The encoding mode for CCITT fax decoding.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum EncodingMode {
+    /// Group 4 (MMR) - Pure 2D encoding, no EOL codes.
+    /// PDF K < 0.
+    Group4,
+    /// Group 3 1D (MH) - Pure 1D encoding with EOL codes.
+    /// PDF K = 0.
+    Group3_1D,
+    /// Group 3 2D (MR) - Mixed 1D/2D encoding with EOL + tag bits.
+    /// PDF K > 0. The value indicates that after each 1D reference line,
+    /// at most K-1 lines may be 2D encoded.
+    Group3_2D { k: u32 },
+}
+
 #[derive(Copy, Clone, Debug)]
 pub struct DecodeSettings {
     pub strict: bool,
@@ -14,6 +29,7 @@ pub struct DecodeSettings {
     pub end_of_block: bool,
     pub end_of_line: bool,
     pub rows_are_byte_aligned: bool,
+    pub encoding: EncodingMode,
 }
 
 pub trait Decoder {
@@ -25,8 +41,25 @@ pub fn decode(data: &[u8], decoder: &mut impl Decoder, settings: &DecodeSettings
     let mut ctx = DecoderContext::new(decoder, settings);
     let mut reader = BitReader::new(data);
 
+    match settings.encoding {
+        EncodingMode::Group4 => decode_group4(&mut ctx, &mut reader),
+        EncodingMode::Group3_1D => decode_group3_1d(&mut ctx, &mut reader),
+        EncodingMode::Group3_2D { .. } => {
+            unimplemented!();
+        }
+    }
+}
+
+fn decode_group3_1d<T: Decoder>(
+    ctx: &mut DecoderContext<T>,
+    reader: &mut BitReader,
+) -> Option<usize> {
+    unimplemented!();
+}
+
+fn decode_group4<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitReader) -> Option<usize> {
     loop {
-        if settings.end_of_block {
+        if ctx.settings.end_of_block {
             // In this case, bit stream is terminated by an explicit marker.
             if reader.peak_bits(24) == Some(EOFB) {
                 // Consume the EOFB marker
@@ -36,7 +69,7 @@ pub fn decode(data: &[u8], decoder: &mut impl Decoder, settings: &DecodeSettings
         } else {
             // Otherwise, the length needs to be inferred from the number of
             // expected rows.
-            if ctx.decoded_rows == settings.rows {
+            if ctx.decoded_rows == ctx.settings.rows {
                 break;
             }
         }
@@ -60,7 +93,7 @@ pub fn decode(data: &[u8], decoder: &mut impl Decoder, settings: &DecodeSettings
                 ctx.push_pixels(a1a2);
                 ctx.is_white = !ctx.is_white;
 
-                ctx.check_eol(&mut reader);
+                ctx.check_eol(reader);
             }
             // 2.2.3.2 Vertical mode.
             Mode::Vertical(i) => {
@@ -75,7 +108,7 @@ pub fn decode(data: &[u8], decoder: &mut impl Decoder, settings: &DecodeSettings
                 ctx.push_pixels(a1.checked_sub(a0)?);
                 ctx.is_white = !ctx.is_white;
 
-                ctx.check_eol(&mut reader);
+                ctx.check_eol(reader);
             }
         }
     }
