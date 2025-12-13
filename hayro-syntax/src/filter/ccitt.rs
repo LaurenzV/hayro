@@ -42,7 +42,7 @@ pub(crate) fn decode(data: &[u8], params: Dict<'_>) -> Option<Vec<u8>> {
         black_is_1: params.get::<bool>(BLACK_IS_1).unwrap_or(dp.black_is_1),
     };
 
-    if params.k >= 0 || params.end_of_line {
+    if false {
         // Fallback for unsupported parameters
         let mut reader = Reader::new(data);
         let mut decoder = CCITTFaxDecoder::new(&mut reader, params);

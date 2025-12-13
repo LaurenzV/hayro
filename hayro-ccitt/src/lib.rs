@@ -1,6 +1,7 @@
 use crate::bit::BitReader;
 use crate::tables::{EOFB, Mode};
 use std::iter;
+use log::warn;
 
 mod bit;
 mod decode;
@@ -42,29 +43,50 @@ pub fn decode(data: &[u8], decoder: &mut impl Decoder, settings: &DecodeSettings
     let mut reader = BitReader::new(data);
 
     match settings.encoding {
-        EncodingMode::Group4 => decode_group4(&mut ctx, &mut reader),
-        EncodingMode::Group3_1D => decode_group3_1d(&mut ctx, &mut reader),
+        EncodingMode::Group4 => decode_group4(&mut ctx, &mut reader)?,
+        EncodingMode::Group3_1D => decode_group3_1d(&mut ctx, &mut reader)?,
         EncodingMode::Group3_2D { .. } => {
             unimplemented!();
         }
     }
+
+    reader.align();
+    Some(reader.byte_pos())
 }
 
 fn decode_group3_1d<T: Decoder>(
     ctx: &mut DecoderContext<T>,
     reader: &mut BitReader,
-) -> Option<usize> {
+) -> Option<()> {
+    let _ = reader.read_eol_if_available();
+    
+    if ctx.settings.rows_are_byte_aligned {
+        warn!("group3 images with byte alignment are not implemented yet");
+        
+        return None;
+    }
+    
     loop {
-        if ctx.settings.end_of_line {
-            reader.read_eol()?;
+        while ctx.a0().unwrap_or(0) < ctx.max_idx {
+            let run_length = reader.decode_run(ctx.is_white)? as usize;
+            eprintln!("{:?}", run_length);
+            ctx.push_pixels(run_length);
+            ctx.is_white = !ctx.is_white;
+        }
+
+        let num_eol = reader.read_eol_if_available();
+        
+        if num_eol == 6 {
+            break;
         }
         
-        
+        ctx.check_eol(reader);
     }
-    unimplemented!();
+    
+    Some(())
 }
 
-fn decode_group4<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitReader) -> Option<usize> {
+fn decode_group4<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitReader) -> Option<()> {
     loop {
         if ctx.settings.end_of_block {
             // In this case, bit stream is terminated by an explicit marker.
@@ -120,10 +142,7 @@ fn decode_group4<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitReader
         }
     }
 
-    reader.align();
-
-    // Return the number of bytes consumed.
-    Some(reader.byte_pos())
+    Some(())
 }
 
 struct DecoderContext<'a, T: Decoder> {

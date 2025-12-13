@@ -75,14 +75,14 @@ impl BitReader<'_> {
         })
     }
     
-    pub(crate) fn read_eol(&mut self) -> Option<()> {
-        if self.read_bits(12) != Some(1) {
-            warn!("missing EOL in data");
-            
-            return None;
+    pub(crate) fn read_eol_if_available(&mut self) -> usize {
+        let mut count = 0;
+        while self.peak_bits(12) == Some(1) {
+            count += 1;
+            self.read_bits(12).unwrap();
         }
         
-        Some(())
+        count
     }
 }
 
