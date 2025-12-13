@@ -43,7 +43,7 @@ pub fn decode(data: &[u8], decoder: &mut impl Decoder, settings: &DecodeSettings
         match mode {
             // 2.2.3.1 Pass mode.
             Mode::Pass => {
-                ctx.push_pixels(ctx.b2 - ctx.a0());
+                ctx.push_pixels(ctx.b2 - ctx.a0_plus_1());
                 ctx.start_run();
                 // No color change happens in pass mode.
             }
@@ -67,7 +67,7 @@ pub fn decode(data: &[u8], decoder: &mut impl Decoder, settings: &DecodeSettings
                     ctx.b1.checked_sub((-i) as usize)?
                 };
                 
-                ctx.push_pixels(a1 - ctx.a0());
+                ctx.push_pixels(a1 - ctx.a0_plus_1());
                 ctx.is_white = !ctx.is_white;
 
                 ctx.check_eol();
@@ -101,6 +101,9 @@ struct DecoderContext<'a, T: Decoder> {
 
 impl<'a, T: Decoder> DecoderContext<'a, T> {
     fn new(decoder: &'a mut T, settings: &'a DecodeSettings) -> DecoderContext<'a, T> {
+        // We add a padding of one on the right so that when any of the pointers
+        // has reached the maximum index (which is exactly settings.column), we
+        // don't get an OOB access when accessing the field in `find_b1`/`find_b2`.
         let max_idx = settings.columns as usize;
         let len = max_idx + 1;
 
@@ -119,20 +122,28 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
         }
     }
 
-    fn a0(&self) -> usize {
+    /// `a0` refers to the first changing element on the current line.
+    /// Note however that the value is offset by 1: In the beginning, this method
+    /// will return 0 since we haven't coded anything yet. However, conceptually
+    /// the value should actually be -1, as according to the specification:
+    /// 
+    /// "At the start of the line a0 is set to an imaginary white changing element
+    /// situated just before the first element on the line."
+    fn a0_plus_1(&self) -> usize {
         self.coding_line.len()
     }
 
     fn find_b1(&mut self) {
-        let a0 = self.a0();
+        // b1 refers to an element of the opposite color.
         let target_color = self.cur_color() ^ 1;
+        let a0_plus_1 = self.a0_plus_1();
 
         // b1 must be "to the right of a0". At line start (a0=0), a0 is at imaginary
         // position -1, so we can match at 0. Otherwise, we must start after a0.
-        let (start, mut last_color) = if a0 == 0 {
+        let (start, mut last_color) = if a0_plus_1 == 0 {
             (0, 0) // Imaginary white before line start
         } else {
-            (a0 + 1, self.reference_line[a0])
+            (a0_plus_1 + 1, self.reference_line[a0_plus_1])
         };
 
         self.b1 = start;
@@ -165,8 +176,9 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
 
     fn push_pixels(&mut self, count: usize) {
         self.decoder.push_pixels(count, self.is_white);
+        let cur_color = self.cur_color();
         self.coding_line
-            .extend(iter::repeat_n(self.cur_color(), count))
+            .extend(iter::repeat_n(cur_color, count))
     }
 
     fn cur_color(&self) -> u8 {
@@ -179,7 +191,7 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
     }
 
     fn check_eol(&mut self) {
-        if self.a0() >= self.max_idx {
+        if self.a0_plus_1() >= self.max_idx {
             // Go to next line.
             core::mem::swap(&mut self.reference_line, &mut self.coding_line);
             self.reference_line.resize(self.max_idx + 1, 0);
@@ -187,11 +199,9 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
             self.is_white = true;
             self.decoded_rows += 1;
             self.decoder.next_line();
-
-            self.start_run();
-        } else {
-            self.start_run()
         }
+
+        self.start_run();
     }
 }
 
