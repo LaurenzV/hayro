@@ -1,5 +1,3 @@
-//! Combined byte and bit reader utilities.
-
 use std::fmt::Debug;
 
 #[derive(Debug, Clone)]
@@ -56,11 +54,5 @@ impl<'a> BitReader<'a> {
     #[inline]
     pub(crate) fn bit_pos(&self) -> usize {
         self.cur_pos % 8
-    }
-
-    /// Returns the current bit position in the stream.
-    #[inline]
-    pub(crate) fn cur_pos(&self) -> usize {
-        self.cur_pos
     }
 }

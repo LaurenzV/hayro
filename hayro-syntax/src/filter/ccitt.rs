@@ -59,10 +59,6 @@ pub(crate) fn decode(data: &[u8], params: Dict<'_>) -> Option<Vec<u8>> {
 
         Some(out)
     } else {
-        // if params.black_is_1 {
-        //     panic!();
-        // }
-
         let settings = DecodeSettings {
             strict: false,
             columns: params.columns as u32,
@@ -117,7 +113,6 @@ pub(crate) fn decode(data: &[u8], params: Dict<'_>) -> Option<Vec<u8>> {
 
         impl Decoder for BitDecoder {
             fn push_pixels(&mut self, count: usize, white: bool) {
-                // white = 1, black = 0 in the output
                 let bit = white;
                 for _ in 0..count {
                     self.push_bit(bit);
@@ -131,8 +126,7 @@ pub(crate) fn decode(data: &[u8], params: Dict<'_>) -> Option<Vec<u8>> {
 
         let mut decoder = BitDecoder::new(params.black_is_1);
         hayro_ccitt::decode(data, &mut decoder, &settings);
-        decoder.align_to_byte();
-
+        
         Some(decoder.output)
     }
 }

@@ -80,8 +80,10 @@ pub fn decode(data: &[u8], decoder: &mut impl Decoder, settings: &DecodeSettings
         }
     }
 
-    // Return the number of bytes consumed (rounded up to include partial byte)
-    Some((reader.cur_pos() + 7) / 8)
+    reader.align();
+
+    // Return the number of bytes consumed.
+    Some(reader.byte_pos())
 }
 
 struct DecoderContext<'a, T: Decoder> {
@@ -213,32 +215,5 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
         }
 
         self.start_run();
-    }
-}
-
-/// A decoder that prints the image to stdout.
-pub struct PrintDecoder {
-    line: String,
-}
-
-impl PrintDecoder {
-    pub fn new() -> Self {
-        Self {
-            line: String::new(),
-        }
-    }
-}
-
-impl Decoder for PrintDecoder {
-    fn push_pixels(&mut self, count: usize, white: bool) {
-        let symbol = if white { " " } else { "x" };
-        for _ in 0..count {
-            self.line.push_str(symbol);
-        }
-    }
-
-    fn next_line(&mut self) {
-        println!("{}", self.line);
-        self.line.clear();
     }
 }
