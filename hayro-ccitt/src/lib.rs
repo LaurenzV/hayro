@@ -1,7 +1,7 @@
 use crate::bit::BitReader;
 use crate::tables::{EOFB, Mode};
-use std::iter;
 use log::warn;
+use std::iter;
 
 mod bit;
 mod decode;
@@ -253,13 +253,13 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
     fn check_eol(&mut self, reader: &mut BitReader) -> Option<()> {
         if self.a0().unwrap_or(0) >= self.max_idx {
             // Go to next line.
-            
+
             if self.coding_line.len() != self.settings.columns as usize {
                 warn!("coding line has wrong size");
-                
+
                 return None;
             }
-            
+
             core::mem::swap(&mut self.reference_line, &mut self.coding_line);
             self.reference_line.resize(self.max_idx + 1, 0);
             self.coding_line.clear();
@@ -273,7 +273,7 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
         }
 
         self.start_run();
-        
+
         Some(())
     }
 }
