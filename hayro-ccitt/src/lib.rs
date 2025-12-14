@@ -113,16 +113,11 @@ fn decode_group3_1d<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitRea
     let _ = reader.read_eol_if_available();
 
     loop {
-        while ctx.a0().unwrap_or(0) < ctx.max_idx {
-            let run_length = reader.decode_run(ctx.is_white)? as usize;
-            ctx.push_pixels(run_length);
-            ctx.is_white = !ctx.is_white;
-        }
-
-        ctx.check_eol(reader)?;
-
+        decode_1d_line(ctx, reader)?;
+        ctx.next_line(reader)?;
         let num_eol = reader.read_eol_if_available();
 
+        // RTC.
         if num_eol == 6 {
             break;
         }
@@ -154,7 +149,7 @@ fn decode_group4<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitReader
             // 2.2.3.1 Pass mode.
             Mode::Pass => {
                 ctx.push_pixels(ctx.b2 - ctx.a0().unwrap_or(0));
-                ctx.start_run();
+                ctx.update_b();
                 // No color change happens in pass mode.
             }
             // 2.2.3.3 Horizontal mode.
@@ -167,7 +162,7 @@ fn decode_group4<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitReader
                 ctx.push_pixels(a1a2);
                 ctx.is_white = !ctx.is_white;
 
-                ctx.check_eol(reader)?;
+                ctx.next_line(reader)?;
             }
             // 2.2.3.2 Vertical mode.
             Mode::Vertical(i) => {
@@ -182,9 +177,19 @@ fn decode_group4<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitReader
                 ctx.push_pixels(a1.checked_sub(a0)?);
                 ctx.is_white = !ctx.is_white;
 
-                ctx.check_eol(reader)?;
+                ctx.next_line(reader)?;
             }
         }
+    }
+
+    Some(())
+}
+
+fn decode_1d_line<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitReader) -> Option<()> {
+    while ctx.a0().unwrap_or(0) < ctx.max_idx {
+        let run_length = reader.decode_run(ctx.is_white)? as usize;
+        ctx.push_pixels(run_length);
+        ctx.is_white = !ctx.is_white;
     }
 
     Some(())
@@ -330,12 +335,12 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
         if self.is_white { 0 } else { 1 }
     }
 
-    fn start_run(&mut self) {
+    fn update_b(&mut self) {
         self.find_b1();
         self.find_b2();
     }
 
-    fn check_eol(&mut self, reader: &mut BitReader) -> Option<()> {
+    fn next_line(&mut self, reader: &mut BitReader) -> Option<()> {
         if self.a0().unwrap_or(0) >= self.max_idx {
             // Go to next line.
 
@@ -362,7 +367,7 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
             }
         }
 
-        self.start_run();
+        self.update_b();
 
         Some(())
     }
