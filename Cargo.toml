@@ -40,7 +40,7 @@ resvg = { version = "0.45.1" }
 flate2 = { version = "1", default-features = false, features = ["zlib-rs"] }
 once_cell = { version = "1" }
 phf = { version = "0.13.1" }
-moxcms = { git = "https://github.com/awxkee/moxcms", rev = "ce70195", default-features = false }
+moxcms = { version = "0.7.11" }
 rustc-hash = { version = "2" }
 siphasher = "1"
 skrifa = { version = "0.39.0" }
@@ -50,9 +50,7 @@ pdf-writer = "0.14.0"
 sitro = { git = "https://github.com/LaurenzV/sitro", rev="fb804b3" }
 xmlwriter = { version = "0.1" }
 base64 = { version = "0.22" }
-# zune_jpeg 0.5.6 has a bug where nearly all images decode incorrectly, so lock
-# to 0.5.5. until this is fixed.
-zune-jpeg = { version = "=0.5.5" }
+zune-jpeg = { version = "0.5" }
 vello_cpu = { git = "https://github.com/linebender/vello", rev = "56820883", default-features = false, features = ["std", "png"] }
 fast_image_resize = { version = "5", default-features = false }
 fearless_simd = "0.3.0"

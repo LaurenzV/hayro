@@ -526,7 +526,7 @@ dependencies = [
  "image 0.25.9",
  "kurbo 0.12.0",
  "log",
- "moxcms 0.7.11",
+ "moxcms",
  "phf",
  "rustc-hash",
  "siphasher",
@@ -543,7 +543,7 @@ dependencies = [
  "image 0.25.9",
  "indicatif",
  "log",
- "moxcms 0.7.11",
+ "moxcms",
  "rayon",
  "serde",
  "serde_json",
@@ -636,7 +636,7 @@ checksum = "e6506c6c10786659413faa717ceebcb8f70731c0a60cbae39795fdf114519c1a"
 dependencies = [
  "bytemuck",
  "byteorder-lite",
- "moxcms 0.7.10",
+ "moxcms",
  "num-traits",
  "png 0.18.0",
 ]
@@ -812,18 +812,9 @@ dependencies = [
 
 [[package]]
 name = "moxcms"
-version = "0.7.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "80986bbbcf925ebd3be54c26613d861255284584501595cf418320c078945608"
-dependencies = [
- "num-traits",
- "pxfm",
-]
-
-[[package]]
-name = "moxcms"
 version = "0.7.11"
-source = "git+https://github.com/awxkee/moxcms?rev=ce70195#ce70195bb0f4a911671eea2695f9298d3e77ebe7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ac9557c559cd6fc9867e122e20d2cbefc9ca29d80d027a8e39310920ed2f0a97"
 dependencies = [
  "num-traits",
  "pxfm",
