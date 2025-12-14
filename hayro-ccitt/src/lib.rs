@@ -128,22 +128,22 @@ fn decode_group3_1d<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitRea
 
 fn decode_group3_2d<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitReader, k: u32) -> Option<()> {
     // Note that this method is only called with k > 0.
-    let mut cur_k = k;
+    let mut cur_k = 0;
     // It seems like PDF producers are a bit sloppy with the `end_of_line` flag,
     // so we just always try to read one.
     let _ = reader.read_eol_if_available(true)?;
 
     loop {
-        if cur_k == k {
+        if cur_k == 0 {
             decode_1d_line(ctx, reader)?;
         }   else {
             decode_2d_line(ctx, reader)?;
         }
         
-        cur_k -= 1;
+        cur_k += 1;
         
-        if cur_k == 0 {
-            cur_k = k;
+        if cur_k == k + 1 {
+            cur_k = 0;
         }
         
         ctx.next_line(reader)?;
