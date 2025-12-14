@@ -25,4 +25,11 @@ While the main goal of `hayro` is rendering PDF files, the `hayro` project actua
 A demo tool can be found at https://laurenzv.github.io/hayro/. Please note that this is not intended to be a PDF viewer application: It misses many important features like zooming, selecting text and important optimizations for improving the user experience. It's really just meant as a quick way to test the rendering capabilities of `hayro`.
 
 ## License
-All crates in this repository are available under the Apache 2.0 license.
+Licensed under either of
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
+- MIT license ([LICENSE-MIT](LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
+
+at your option. 
+
+This applies to all crates in the workspace.
