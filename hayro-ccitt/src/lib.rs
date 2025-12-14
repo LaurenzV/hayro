@@ -1,44 +1,70 @@
+//! A decoder for CCITT fax-encoded images.
+//!
+//! This crate implements the CCITT Group 3 and Group 4 fax compression algorithms
+//! as defined in ITU-T Recommendations T.4 and T.6. These encodings are commonly
+//! used for bi-level (black and white) images in PDF documents and fax transmissions.
+//!
+//! The main entry point is the [`decode`] function, which takes encoded data and
+//! decoding settings, and outputs the decoded pixels through a [`Decoder`] trait.
+//!
+//! # Safety
+//! Unsafe code is forbidden via a crate-level attribute.
+
 use crate::bit::BitReader;
-use crate::tables::{EOFB, Mode};
+use crate::states::{EOFB, Mode};
 use log::warn;
 
 mod bit;
 mod decode;
-mod tables;
+mod states;
 
 /// The encoding mode for CCITT fax decoding.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum EncodingMode {
-    /// Group 4 (MMR) - Pure 2D encoding, no EOL codes.
-    /// PDF K < 0.
+    /// Group 4 (MMR).
     Group4,
-    /// Group 3 1D (MH) - Pure 1D encoding with EOL codes.
-    /// PDF K = 0.
+    /// Group 3 1D (MH).
     Group3_1D,
-    /// Group 3 2D (MR) - Mixed 1D/2D encoding with EOL + tag bits.
-    /// PDF K > 0. The value indicates that after each 1D reference line,
-    /// at most K-1 lines may be 2D encoded.
+    /// Group 3 2D (MR).
     Group3_2D { k: u32 },
 }
 
+/// Settings to apply during decoding.
 #[derive(Copy, Clone, Debug)]
 pub struct DecodeSettings {
-    pub strict: bool,
+    /// How many columns the image has (i.e. its width).
     pub columns: u32,
+    /// How many rows the image has (i.e. its height).
+    ///
+    /// In case `end_of_block` has been set to true, this value will be ignored
+    /// and decoding happens untilt he end-of-block marker has been reached.
     pub rows: u32,
+    /// Whether the stream contains an end-of-block marker.
     pub end_of_block: bool,
+    /// Whether the stream contains end-of-line markers.
     pub end_of_line: bool,
+    /// Whether the data in the stream for each row is aligned to the byte
+    /// boundary.
     pub rows_are_byte_aligned: bool,
+    /// The encoding mode used by the image.
     pub encoding: EncodingMode,
+    /// Whether black and white should be inverted.
     pub invert_black: bool,
 }
 
+/// A decoder for CCITT images.
 pub trait Decoder {
-    /// Push a single packed byte. Each bit represents a pixel (1=white, 0=black).
+    /// Push a single packed byte containing the data for 8 pixels.
+    /// Each bit represents one pixel (1 for white and 0 for black).
     fn push_byte(&mut self, byte: u8);
-    /// Push multiple copies of the same byte value (for efficient runs of same-color pixels).
+    /// Push multiple columns of same-color pixels. The `byte` value will either
+    /// be 0xFF if all pixels are white or 0x00 if all pixels are black.
+    ///
+    /// The `count` parameter indicates how many such bytes such be pushed.
+    /// For example, if that method is called with `byte = 0xFF` and
+    /// `count = 10`, we have 80 white pixels in total.
     fn push_bytes(&mut self, byte: u8, count: usize);
-    /// Called when a line is complete (after byte alignment).
+    /// Called when a row has been completed.
     fn next_line(&mut self);
 }
 
@@ -49,10 +75,10 @@ struct ColorChange {
     color: u8,
 }
 
-/// Accumulates individual bits into a byte buffer (MSB-first).
+/// Accumulates individual bits into a byte buffer.
 #[derive(Default)]
 struct BitPacker {
-    /// Accumulated bits (MSB-first).
+    /// Accumulated bits.
     buffer: u8,
     /// Number of bits currently in the buffer (0-7).
     count: u8,
@@ -97,6 +123,10 @@ impl BitPacker {
     }
 }
 
+/// Decode the given image using the provided settings and the decoder.
+///
+/// If decoding was successful, the number of bytes that have been read in total
+/// is returned.
 pub fn decode(data: &[u8], decoder: &mut impl Decoder, settings: &DecodeSettings) -> Option<usize> {
     let mut ctx = DecoderContext::new(decoder, settings);
     let mut reader = BitReader::new(data);
@@ -250,16 +280,18 @@ struct DecoderContext<'a, T: Decoder> {
     coding_line_len: usize,
     /// The decoder sink.
     decoder: &'a mut T,
-    /// Packs bits into bytes.
+    /// The current byte we are writing.
     packer: BitPacker,
-    /// The maximum permissible index for all variables.
+    /// The maximum permissible index for all "pointer" variables (i.e. a0, b1 and b2).
     max_idx: usize,
     /// Whether the next run to be decoded is white.
     is_white: bool,
     /// How many rows have been decoded so far.
     decoded_rows: u32,
+    /// The settings to apply during decoding.
     settings: &'a DecodeSettings,
-    /// Precomputed mask for inverting output bytes (0x00 or 0xFF).
+    /// Precomputed mask for inverting output bytes if the `invert_black` option
+    /// has been set to `true`.
     invert_mask: u8,
 }
 
@@ -276,6 +308,7 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
             decoder,
             packer: BitPacker::new(),
             max_idx,
+            // Each run starts with a white color.
             is_white: true,
             decoded_rows: 0,
             settings,
@@ -311,6 +344,7 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
             .map_or(self.max_idx, |c| c.idx)
     }
 
+    /// Compute the new position of b1 (and implicitly b2).
     #[inline(always)]
     fn update_b(&mut self) {
         // b1 refers to an element of the opposite color.

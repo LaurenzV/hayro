@@ -1,5 +1,5 @@
 use crate::bit::BitReader;
-use crate::tables::{
+use crate::states::{
     BLACK_STATES, EOL, INVALID, MODE_STATES, Mode, State, VALUE_FLAG, VALUE_MASK, WHITE_STATES,
 };
 use log::warn;

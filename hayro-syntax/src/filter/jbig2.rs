@@ -3402,7 +3402,6 @@ fn decode_mmr_bitmap(
     end_of_block: bool,
 ) -> Result<Bitmap, Jbig2Error> {
     let settings = DecodeSettings {
-        strict: false,
         columns: width as u32,
         rows: height as u32,
         end_of_block,

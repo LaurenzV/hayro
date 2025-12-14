@@ -8,7 +8,6 @@ pub(crate) fn decode(data: &[u8], params: Dict<'_>) -> Option<Vec<u8>> {
     let k = params.get::<i32>(K).unwrap_or(0);
 
     let settings = DecodeSettings {
-        strict: false,
         columns: params.get::<usize>(COLUMNS).unwrap_or(1728) as u32,
         rows: params.get::<usize>(ROWS).unwrap_or(0) as u32,
         end_of_block: params.get::<bool>(END_OF_BLOCK).unwrap_or(true),

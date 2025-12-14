@@ -53,7 +53,7 @@ const fn insert_code<const N: usize>(
         };
 
         if is_last {
-            // Terminal state - store the result
+            // Terminal state - store the result.
             let result = VALUE_FLAG | (run_length & VALUE_MASK);
 
             if bit == 0 {
@@ -62,7 +62,7 @@ const fn insert_code<const N: usize>(
                 states[current_state].on_1 = result;
             }
         } else if next == INVALID || next >= VALUE_FLAG {
-            // Need to create a new state
+            // Create a new state.
             let new_state = num_states;
             num_states += 1;
 
@@ -73,7 +73,7 @@ const fn insert_code<const N: usize>(
             }
             current_state = new_state;
         } else {
-            // Follow existing transition
+            // Follow existing transition.
             current_state = next as usize;
         }
 

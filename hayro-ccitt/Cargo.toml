@@ -1,7 +1,7 @@
 [package]
 name = "hayro-ccitt"
 version = "0.1.0"
-description = "A placeholder CCITT decoder crate for future experimentation."
+description = "A decoder for group 3 and group 4 CCITT images."
 authors.workspace = true
 edition.workspace = true
 repository.workspace = true
