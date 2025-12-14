@@ -318,7 +318,7 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
         // b1 must be strictly greater than a0.
         let min_idx = self.a0().map_or(0, |a| a + 1);
 
-        self.b1_idx = self.ref_changes.len();
+        self.b1_idx = self.max_idx;
 
         for i in self.ref_pos..self.ref_changes.len() {
             let change = &self.ref_changes[i];
@@ -368,8 +368,8 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
 
         // Track the color change:
         // - At start of line (no previous changes): only add if color differs from
-        //   imaginary white (0), i.e., only add if black
-        // - Mid-line: only add if color differs from previous
+        //   imaginary white (0), i.e., only add if black.
+        // - Mid-line: only add if color differs from previous.
         if count > 0 {
             let color = self.cur_color();
             let is_change = self
