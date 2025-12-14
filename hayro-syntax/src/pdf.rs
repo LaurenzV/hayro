@@ -34,11 +34,21 @@ impl Pdf {
     ///
     /// Returns `Err` if it was unable to read it.
     pub fn new(data: PdfData) -> Result<Self, LoadPdfError> {
+        Self::new_with_password(data, "")
+    }
+
+    /// Try to read the given PDF file with a password.
+    ///
+    /// Returns `Err` if it was unable to read it or if the password is incorrect.
+    pub fn new_with_password(data: PdfData, password: &str) -> Result<Self, LoadPdfError> {
+        let password = password.as_bytes();
         let version = find_version(data.as_ref().as_ref()).unwrap_or(PdfVersion::Pdf10);
-        let xref = match root_xref(data.clone()) {
+        let xref = match root_xref(data.clone(), password) {
             Ok(x) => x,
             Err(e) => match e {
-                XRefError::Unknown => fallback(data.clone()).ok_or(LoadPdfError::Invalid)?,
+                XRefError::Unknown => {
+                    fallback(data.clone(), password).ok_or(LoadPdfError::Invalid)?
+                }
                 XRefError::Encryption(e) => return Err(LoadPdfError::Decryption(e)),
             },
         };
