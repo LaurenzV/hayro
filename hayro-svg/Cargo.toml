@@ -5,7 +5,7 @@ description = "Converting PDF pages into SVG files."
 authors = { workspace = true }
 edition = { workspace = true }
 repository = { workspace = true }
-readme = { workspace = true }
+readme = "README.md"
 license = { workspace = true }
 
 [dependencies]

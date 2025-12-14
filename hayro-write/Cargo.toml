@@ -4,6 +4,7 @@ version = "0.3.0"
 description = "A crate for rewriting pages of a PDF file."
 authors = { workspace = true }
 edition = { workspace = true }
+readme = "README.md"
 repository = { workspace = true }
 license = { workspace = true }
 

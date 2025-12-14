@@ -4,6 +4,13 @@ A crate for converting PDF pages to SVG files.
 This is the pendant to [`hayro`](https://crates.io/crates/hayro), but allows you to export to
 SVG instead of bitmap images. See the description of that crate for more information on the
 supported features and limitations.
+
+## Safety
+This crate forbids unsafe code via a crate-level attribute.
+
+## Cargo features
+This crate has one optional feature:
+- `embed-fonts`: See the description of [`hayro-interpret`](https://docs.rs/hayro-interpret/latest/hayro_interpret/#cargo-features) for more information.
 */
 
 #![forbid(unsafe_code)]
