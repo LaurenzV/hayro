@@ -55,3 +55,4 @@ pub use hayro_syntax::Pdf;
 pub use interpret::*;
 pub use soft_mask::*;
 pub use types::*;
+pub use util::{PageExt, RectExt};
