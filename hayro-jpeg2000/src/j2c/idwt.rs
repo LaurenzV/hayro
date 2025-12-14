@@ -414,13 +414,13 @@ fn reversible_filter_53r(scanline: &mut [f32], start: usize, end: usize) {
     for n in start / 2..(end / 2) + 1 {
         let base_idx = 2 * n;
         scanline[base_idx] -=
-            ((scanline[base_idx - 1] + scanline[base_idx + 1] + 2.0) / 4.0).floor();
+            ((scanline[base_idx - 1] + scanline[base_idx + 1] + 2.0) * 0.25).floor();
     }
 
     // Equation (F-6).
     for n in start / 2..(end / 2) {
         let base_idx = 2 * n + 1;
-        scanline[base_idx] += ((scanline[base_idx - 1] + scanline[base_idx + 1]) / 2.0).floor();
+        scanline[base_idx] += ((scanline[base_idx - 1] + scanline[base_idx + 1]) * 0.5).floor();
     }
 }
 
@@ -432,6 +432,7 @@ fn irreversible_filter_97i(scanline: &mut [f32], start: usize, end: usize) {
     const GAMMA: f32 = 0.882_911_1;
     const DELTA: f32 = 0.443_506_87;
     const KAPPA: f32 = 1.230_174_1;
+    const INV_KAPPA: f32 = 1.0 / KAPPA;
 
     // Hint the compiler that we won't go OOB to emit bound checks.
     let scanline = &mut scanline[..2 * (end / 2 + 2)];
@@ -443,7 +444,7 @@ fn irreversible_filter_97i(scanline: &mut [f32], start: usize, end: usize) {
 
     // Step 2.
     for i in (start / 2 - 2)..(end / 2 + 2) {
-        scanline[2 * i + 1] *= 1.0 / KAPPA;
+        scanline[2 * i + 1] *= INV_KAPPA;
     }
 
     // Step 3.
@@ -658,7 +659,7 @@ mod simd {
                 let s2 = F32::from_slice(simd, &scanline[base_idx - stride..][..SIMD_WIDTH]);
                 let s3 = F32::from_slice(simd, &scanline[base_idx + stride..][..SIMD_WIDTH]);
 
-                s1 -= ((s2 + s3 + 2.0) / 4.0).floor();
+                s1 -= ((s2 + s3 + 2.0) * 0.25).floor();
 
                 scanline[base_idx..][..SIMD_WIDTH].copy_from_slice(&s1.val);
             }
@@ -673,7 +674,7 @@ mod simd {
                 let s2 = F32::from_slice(simd, &scanline[base_idx - stride..][..SIMD_WIDTH]);
                 let s3 = F32::from_slice(simd, &scanline[base_idx + stride..][..SIMD_WIDTH]);
 
-                s1 += ((s2 + s3) / 2.0).floor();
+                s1 += ((s2 + s3) * 0.5).floor();
 
                 scanline[base_idx..][..SIMD_WIDTH].copy_from_slice(&s1.val);
             }
@@ -695,12 +696,14 @@ mod simd {
         const DELTA: f32 = 0.443_506_87;
         const KAPPA: f32 = 1.230_174_1;
 
+        const INV_KAPPA: f32 = 1.0 / KAPPA;
+
         let alpha = F32::splat(simd, ALPHA);
         let beta = F32::splat(simd, BETA);
         let gamma = F32::splat(simd, GAMMA);
         let delta = F32::splat(simd, DELTA);
         let kappa = F32::splat(simd, KAPPA);
-        let inv_kappa = F32::splat(simd, 1.0 / KAPPA);
+        let inv_kappa = F32::splat(simd, INV_KAPPA);
 
         // Step 1.
         for i in (start / 2 - 1)..(end / 2 + 2) {
@@ -887,7 +890,7 @@ mod simd {
                 let s1 = scanline[idx];
                 let s2 = scanline[idx - stride];
                 let s3 = scanline[idx + stride];
-                scanline[idx] = s1 - ((s2 + s3 + 2.0) / 4.0).floor();
+                scanline[idx] = s1 - ((s2 + s3 + 2.0) * 0.25).floor();
             });
         }
 
@@ -897,7 +900,7 @@ mod simd {
                 let s1 = scanline[idx];
                 let s2 = scanline[idx - stride];
                 let s3 = scanline[idx + stride];
-                scanline[idx] = s1 + ((s2 + s3) / 2.0).floor();
+                scanline[idx] = s1 + ((s2 + s3) * 0.5).floor();
             });
         }
     }
