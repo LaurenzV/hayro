@@ -80,7 +80,7 @@ impl BitReader<'_> {
         while self.peak_bits(12) == Some(EOL) {
             count += 1;
             self.read_bits(12).unwrap();
-            
+
             // We don't validate the tag bit, just skip it.
             if read_tag {
                 let _ = self.read_bit()?;

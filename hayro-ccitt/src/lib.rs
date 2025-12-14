@@ -98,9 +98,7 @@ pub fn decode(data: &[u8], decoder: &mut impl Decoder, settings: &DecodeSettings
     match settings.encoding {
         EncodingMode::Group4 => decode_group4(&mut ctx, &mut reader)?,
         EncodingMode::Group3_1D => decode_group3_1d(&mut ctx, &mut reader)?,
-        EncodingMode::Group3_2D { k } => {
-            decode_group3_2d(&mut ctx, &mut reader, k)?
-        }
+        EncodingMode::Group3_2D { .. } => decode_group3_2d(&mut ctx, &mut reader)?,
     }
 
     reader.align();
@@ -117,7 +115,7 @@ fn decode_group3_1d<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitRea
         ctx.next_line(reader)?;
         let num_eol = reader.read_eol_if_available(false)?;
 
-        // RTC.
+        // RTC (Return To Control).
         if num_eol == 6 {
             break;
         }
@@ -126,30 +124,24 @@ fn decode_group3_1d<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitRea
     Some(())
 }
 
-fn decode_group3_2d<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitReader, k: u32) -> Option<()> {
-    // Note that this method is only called with k > 0.
-    let mut cur_k = 0;
+fn decode_group3_2d<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitReader) -> Option<()> {
     // It seems like PDF producers are a bit sloppy with the `end_of_line` flag,
     // so we just always try to read one.
-    let _ = reader.read_eol_if_available(true)?;
+    let _ = reader.read_eol_if_available(false)?;
 
     loop {
-        if cur_k == 0 {
+        let tag_bit = reader.read_bit()?;
+
+        if tag_bit == 1 {
             decode_1d_line(ctx, reader)?;
-        }   else {
+        } else {
             decode_2d_line(ctx, reader)?;
         }
-        
-        cur_k += 1;
-        
-        if cur_k == k + 1 {
-            cur_k = 0;
-        }
-        
-        ctx.next_line(reader)?;
-        let num_eol = reader.read_eol_if_available(true)?;
 
-        // RTC.
+        ctx.next_line(reader)?;
+        let num_eol = reader.read_eol_if_available(false)?;
+
+        // RTC (Return To Control).
         if num_eol == 6 {
             break;
         }
@@ -157,7 +149,6 @@ fn decode_group3_2d<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitRea
 
     Some(())
 }
-
 
 fn decode_group4<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitReader) -> Option<()> {
     loop {
