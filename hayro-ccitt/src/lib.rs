@@ -1,7 +1,6 @@
 use crate::bit::BitReader;
 use crate::tables::{EOFB, Mode};
 use log::warn;
-use std::iter;
 
 mod bit;
 mod decode;
@@ -41,6 +40,13 @@ pub trait Decoder {
     fn push_bytes(&mut self, byte: u8, count: usize);
     /// Called when a line is complete (after byte alignment).
     fn next_line(&mut self);
+}
+
+/// Represents a color change at a specific index in a line.
+#[derive(Clone, Copy)]
+struct ColorChange {
+    idx: usize,
+    color: u8,
 }
 
 /// Accumulates individual bits into a byte buffer (MSB-first).
@@ -191,7 +197,7 @@ fn decode_2d_line<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitReade
         match mode {
             // 2.2.3.1 Pass mode.
             Mode::Pass => {
-                ctx.push_pixels(ctx.b2 - ctx.a0().unwrap_or(0));
+                ctx.push_pixels(ctx.b2() - ctx.a0().unwrap_or(0));
                 ctx.update_b();
                 // No color change happens in pass mode.
             }
@@ -209,10 +215,11 @@ fn decode_2d_line<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitReade
             }
             // 2.2.3.2 Vertical mode.
             Mode::Vertical(i) => {
+                let b1 = ctx.b1();
                 let a1 = if i >= 0 {
-                    ctx.b1.checked_add(i as usize)?
+                    b1.checked_add(i as usize)?
                 } else {
-                    ctx.b1.checked_sub((-i) as usize)?
+                    b1.checked_sub((-i) as usize)?
                 };
 
                 let a0 = ctx.a0().unwrap_or(0);
@@ -229,19 +236,20 @@ fn decode_2d_line<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitReade
 }
 
 struct DecoderContext<'a, T: Decoder> {
-    /// The previous line.
-    reference_line: Vec<u8>,
-    /// The line we are currently decoding.
-    coding_line: Vec<u8>,
+    /// Color changes in the reference line (previous line).
+    ref_changes: Vec<ColorChange>,
+    /// The minimum index we need to start from when searching for b1.
+    ref_pos: usize,
+    /// The current index of b1.
+    b1_idx: usize,
+    /// Color changes in the coding line (current line being decoded).
+    coding_changes: Vec<ColorChange>,
+    /// Current length of the coding line in pixels.
+    coding_line_len: usize,
     /// The decoder sink.
     decoder: &'a mut T,
     /// Packs bits into bytes.
     packer: BitPacker,
-    /// "The first changing element on the reference line to the right of a0 and
-    /// of opposite color to a0."
-    b1: usize,
-    /// "The next changing element to the right of b1, on the reference line."
-    b2: usize,
     /// The maximum permissible index for all variables.
     max_idx: usize,
     /// Whether the next run to be decoded is white.
@@ -255,21 +263,16 @@ struct DecoderContext<'a, T: Decoder> {
 
 impl<'a, T: Decoder> DecoderContext<'a, T> {
     fn new(decoder: &'a mut T, settings: &'a DecodeSettings) -> DecoderContext<'a, T> {
-        // We add a padding of one on the right so that when any of the pointers
-        // has reached the maximum index (which is exactly settings.column), we
-        // don't get an OOB access when accessing the field in `find_b1`/`find_b2`.
         let max_idx = settings.columns as usize;
-        let len = max_idx + 1;
 
         Self {
-            // "The reference line for the first coding line in a
-            // page is an imaginary white line."
-            reference_line: vec![0; len],
-            coding_line: vec![],
+            ref_changes: vec![],
+            ref_pos: 0,
+            b1_idx: 0,
+            coding_changes: Vec::new(),
+            coding_line_len: 0,
             decoder,
             packer: BitPacker::new(),
-            b1: max_idx,
-            b2: max_idx,
             max_idx,
             is_white: true,
             decoded_rows: 0,
@@ -280,63 +283,60 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
 
     /// `a0` refers to the first changing element on the current line.
     fn a0(&self) -> Option<usize> {
-        if self.coding_line.is_empty() {
+        if self.coding_line_len == 0 {
             // If we haven't coded anything yet, a0 conceptually points at the
             // index -1. This is a bit of an edge case, and we therefore require
             // callers of this method to handle the case themselves.
             None
         } else {
-            // Otherwise, the index just point to the next element to be decoded.
-            // For invalid files, it's possible that there are more elements than
-            // there should be, so clamp to the maximum index.
-            Some(self.coding_line.len().min(self.max_idx))
+            // Otherwise, the index points to the next element to be decoded.
+            Some(self.coding_line_len)
         }
     }
 
-    fn find_b1(&mut self) {
+    /// "The first changing element on the reference line to the right of a0 and
+    /// of opposite color to a0."
+    fn b1(&self) -> usize {
+        self.ref_changes
+            .get(self.b1_idx)
+            .map_or(self.max_idx, |c| c.idx)
+    }
+
+    /// "The next changing element to the right of b1, on the reference line."
+    fn b2(&self) -> usize {
+        self.ref_changes
+            .get(self.b1_idx + 1)
+            .map_or(self.max_idx, |c| c.idx)
+    }
+
+    #[inline]
+    fn update_b(&mut self) {
         // b1 refers to an element of the opposite color.
         let target_color = self.cur_color() ^ 1;
+        // b1 must be strictly greater than a0.
+        let min_idx = self.a0().map_or(0, |a| a + 1);
 
-        // If we have an a0, b1 must start at the RIGHT of that element. Otherwise,
-        // it starts from the first possible index (0), and the last color is the
-        // imaginary white element on the left.
-        let (start, mut last_color) = if let Some(a0) = self.a0() {
-            (a0 + 1, self.reference_line[a0])
-        } else {
-            (0, 0)
-        };
+        self.b1_idx = self.ref_changes.len();
 
-        // Make sure `b1` is never more than the maximum index, otherwise
-        // we might get OOB when calling `find_b2`.
-        self.b1 = start.min(self.max_idx);
+        for i in self.ref_pos..self.ref_changes.len() {
+            let change = &self.ref_changes[i];
 
-        while self.b1 < self.max_idx {
-            let current_color = self.reference_line[self.b1];
-
-            if current_color != last_color && current_color == target_color {
-                break;
+            if change.idx < min_idx {
+                self.ref_pos = i + 1;
+                continue;
             }
 
-            last_color = current_color;
-            self.b1 += 1;
-        }
-    }
-
-    fn find_b2(&mut self) {
-        self.b2 = self.b1;
-
-        let b1_color = self.reference_line[self.b1];
-
-        while self.b2 < self.max_idx {
-            if self.reference_line[self.b2] != b1_color {
+            if change.color == target_color {
+                self.b1_idx = i;
                 break;
             }
-
-            self.b2 += 1;
         }
     }
 
     fn push_pixels(&mut self, count: usize) {
+        // Clamp how many pixels we push so that we don't exceed the column
+        // count for malformed files.
+        let count = count.min(self.max_idx.saturating_sub(self.coding_line_len));
         let white = self.is_white;
         let byte_val: u8 = if white { 0xFF } else { 0x00 } ^ self.invert_mask;
         let mut remaining = count;
@@ -363,18 +363,28 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
             }
         }
 
-        // Also push the pixels to the coding line.
-        let cur_color = self.cur_color();
-        self.coding_line.extend(iter::repeat_n(cur_color, count));
+        // Track the color change:
+        // - At start of line (no previous changes): only add if color differs from
+        //   imaginary white (0), i.e., only add if black
+        // - Mid-line: only add if color differs from previous
+        if count > 0 {
+            let color = self.cur_color();
+            let is_change = self
+                .coding_changes
+                .last()
+                .map_or(color != 0, |last| last.color != color);
+            if is_change {
+                self.coding_changes.push(ColorChange {
+                    idx: self.coding_line_len,
+                    color,
+                });
+            }
+            self.coding_line_len += count;
+        }
     }
 
     fn cur_color(&self) -> u8 {
         if self.is_white { 0 } else { 1 }
-    }
-
-    fn update_b(&mut self) {
-        self.find_b1();
-        self.find_b2();
     }
 
     fn at_eol(&self) -> bool {
@@ -384,7 +394,7 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
     fn next_line(&mut self, reader: &mut BitReader) -> Option<()> {
         // Go to next line.
 
-        if self.coding_line.len() != self.settings.columns as usize {
+        if self.coding_line_len != self.settings.columns as usize {
             warn!("coding line has wrong size");
 
             return None;
@@ -395,9 +405,12 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
             self.decoder.push_byte(byte ^ self.invert_mask);
         }
 
-        core::mem::swap(&mut self.reference_line, &mut self.coding_line);
-        self.reference_line.resize(self.max_idx + 1, 0);
-        self.coding_line.clear();
+        // Swap coding_changes into ref_changes for the next line.
+        core::mem::swap(&mut self.ref_changes, &mut self.coding_changes);
+        self.coding_changes.clear();
+        self.coding_line_len = 0;
+        self.ref_pos = 0;
+        self.b1_idx = 0;
         self.is_white = true;
         self.decoded_rows += 1;
         self.decoder.next_line();
