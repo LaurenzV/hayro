@@ -2,6 +2,7 @@
 name = "hayro-common"
 version = "0.1.0"
 description = "A crate containing utility methods/structs for all hayro crates."
+authors = { workspace = true }
 edition = { workspace = true }
 repository = { workspace = true }
 license = { workspace = true }

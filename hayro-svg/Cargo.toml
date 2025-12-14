@@ -2,11 +2,11 @@
 name = "hayro-svg"
 version = "0.2.0"
 description = "Converting PDF pages into SVG files."
-authors.workspace = true
-edition.workspace = true
-repository.workspace = true
-readme.workspace = true
-license.workspace = true
+authors = { workspace = true }
+edition = { workspace = true }
+repository = { workspace = true }
+readme = { workspace = true }
+license = { workspace = true }
 
 [dependencies]
 hayro-interpret = { workspace = true }

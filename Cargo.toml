@@ -18,7 +18,7 @@ authors = ["Laurenz Stampfl <laurenz.stampfl@gmail.com>"]
 edition = "2024"
 repository = "https://github.com/LaurenzV/hayro"
 readme = "README.md"
-license = "Apache-2.0"
+license = "Apache-2.0 OR MIT"
 
 [workspace.dependencies]
 hayro = { path = "hayro", version = "0.4.0", default-features = false }
