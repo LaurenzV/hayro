@@ -10,6 +10,9 @@
 //! # Safety
 //! Unsafe code is forbidden via a crate-level attribute.
 
+#![forbid(unsafe_code)]
+#![forbid(missing_docs)]
+
 use crate::bit::BitReader;
 use crate::states::{EOFB, Mode};
 use log::warn;
@@ -26,7 +29,10 @@ pub enum EncodingMode {
     /// Group 3 1D (MH).
     Group3_1D,
     /// Group 3 2D (MR).
-    Group3_2D { k: u32 },
+    Group3_2D {
+        /// The K parameter.
+        k: u32,
+    },
 }
 
 /// Settings to apply during decoding.
@@ -141,7 +147,10 @@ pub fn decode(data: &[u8], decoder: &mut impl Decoder, settings: &DecodeSettings
     Some(reader.byte_pos())
 }
 
-fn decode_group3_1d<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitReader) -> Option<()> {
+fn decode_group3_1d<T: Decoder>(
+    ctx: &mut DecoderContext<'_, T>,
+    reader: &mut BitReader<'_>,
+) -> Option<()> {
     // It seems like PDF producers are a bit sloppy with the `end_of_line` flag,
     // so we just always try to read one.
     let _ = reader.read_eol_if_available();
@@ -160,7 +169,10 @@ fn decode_group3_1d<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitRea
     Some(())
 }
 
-fn decode_group3_2d<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitReader) -> Option<()> {
+fn decode_group3_2d<T: Decoder>(
+    ctx: &mut DecoderContext<'_, T>,
+    reader: &mut BitReader<'_>,
+) -> Option<()> {
     // It seems like PDF producers are a bit sloppy with the `end_of_line` flag,
     // so we just always try to read one.
     let _ = reader.read_eol_if_available();
@@ -186,7 +198,10 @@ fn decode_group3_2d<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitRea
     Some(())
 }
 
-fn decode_group4<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitReader) -> Option<()> {
+fn decode_group4<T: Decoder>(
+    ctx: &mut DecoderContext<'_, T>,
+    reader: &mut BitReader<'_>,
+) -> Option<()> {
     loop {
         if ctx.settings.end_of_block {
             // In this case, bit stream is terminated by an explicit marker.
@@ -211,7 +226,10 @@ fn decode_group4<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitReader
 }
 
 #[inline(always)]
-fn decode_1d_line<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitReader) -> Option<()> {
+fn decode_1d_line<T: Decoder>(
+    ctx: &mut DecoderContext<'_, T>,
+    reader: &mut BitReader<'_>,
+) -> Option<()> {
     while !ctx.at_eol() {
         let run_length = reader.decode_run(ctx.is_white)? as usize;
         ctx.push_pixels(run_length);
@@ -222,7 +240,10 @@ fn decode_1d_line<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitReade
 }
 
 #[inline(always)]
-fn decode_2d_line<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitReader) -> Option<()> {
+fn decode_2d_line<T: Decoder>(
+    ctx: &mut DecoderContext<'_, T>,
+    reader: &mut BitReader<'_>,
+) -> Option<()> {
     while !ctx.at_eol() {
         let mode = reader.decode_mode()?;
 
@@ -296,7 +317,7 @@ struct DecoderContext<'a, T: Decoder> {
 }
 
 impl<'a, T: Decoder> DecoderContext<'a, T> {
-    fn new(decoder: &'a mut T, settings: &'a DecodeSettings) -> DecoderContext<'a, T> {
+    fn new(decoder: &'a mut T, settings: &'a DecodeSettings) -> Self {
         let max_idx = settings.columns as usize;
 
         Self {
@@ -429,7 +450,7 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
     }
 
     #[inline(always)]
-    fn next_line(&mut self, reader: &mut BitReader) -> Option<()> {
+    fn next_line(&mut self, reader: &mut BitReader<'_>) -> Option<()> {
         // Go to next line.
 
         if self.coding_line_len != self.settings.columns as usize {
