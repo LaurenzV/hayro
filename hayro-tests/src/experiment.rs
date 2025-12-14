@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use hayro::Pdf;
 use hayro_jpeg2000::DecodeSettings;
 use hayro_syntax::Filter;
@@ -154,35 +156,28 @@ fn check_ccitt_images(folder: &str) {
         let name = path.file_stem().unwrap().to_str().unwrap().to_string();
         let data = Arc::new(fs::read(path).unwrap());
 
-        match Pdf::new(data.clone()) {
-            Ok(pdf) => {
-                for object in pdf.objects() {
-                    if let Some(stream) = object.into_stream()
-                        && stream
-                            .filters()
-                            .iter()
-                            .any(|f| *f == Filter::CcittFaxDecode)
-                    {
-                        let decoded =
-                            catch_unwind(std::panic::AssertUnwindSafe(|| stream.decoded()));
+        if let Ok(pdf) = Pdf::new(data.clone()) {
+            for object in pdf.objects() {
+                if let Some(stream) = object.into_stream()
+                    && stream.filters().contains(&Filter::CcittFaxDecode)
+                {
+                    let decoded = catch_unwind(std::panic::AssertUnwindSafe(|| stream.decoded()));
 
-                        match decoded {
-                            Ok(Ok(_)) => {
-                                ccitt_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                            }
-                            Ok(Err(e)) => {
-                                eprintln!("{}", name);
-                                eprintln!("CCITT decode error: {:?}", e);
-                            }
-                            Err(_) => {
-                                eprintln!("{}", name);
-                                eprintln!("panic while decoding CCITT image");
-                            }
+                    match decoded {
+                        Ok(Ok(_)) => {
+                            ccitt_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        }
+                        Ok(Err(e)) => {
+                            eprintln!("{}", name);
+                            eprintln!("CCITT decode error: {:?}", e);
+                        }
+                        Err(_) => {
+                            eprintln!("{}", name);
+                            eprintln!("panic while decoding CCITT image");
                         }
                     }
                 }
             }
-            Err(_) => {}
         }
 
         let count = pdf_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
