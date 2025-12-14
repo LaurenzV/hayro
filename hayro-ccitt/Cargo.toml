@@ -8,9 +8,6 @@ repository.workspace = true
 readme = "README.md"
 license.workspace = true
 
-[dependencies]
-log = "0.4"
-
 [features]
 default = []
 

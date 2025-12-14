@@ -2,11 +2,10 @@ use crate::bit::BitReader;
 use crate::states::{
     BLACK_STATES, EOL, INVALID, MODE_STATES, Mode, State, VALUE_FLAG, VALUE_MASK, WHITE_STATES,
 };
-use log::warn;
 
 impl BitReader<'_> {
     #[inline(always)]
-    fn decode_run_inner(&mut self, states: &[State], name: &str) -> Option<u16> {
+    fn decode_run_inner(&mut self, states: &[State]) -> Option<u16> {
         let mut total: u16 = 0;
         let mut state: usize = 0;
 
@@ -20,8 +19,6 @@ impl BitReader<'_> {
             };
 
             if transition == INVALID {
-                warn!("CCITT: invalid {name} code sequence");
-
                 return None;
             } else if transition & VALUE_FLAG != 0 {
                 let len = transition & VALUE_MASK;
@@ -43,12 +40,12 @@ impl BitReader<'_> {
 
     #[inline(always)]
     pub(crate) fn decode_white_run(&mut self) -> Option<u16> {
-        self.decode_run_inner(&WHITE_STATES, "white run")
+        self.decode_run_inner(&WHITE_STATES)
     }
 
     #[inline(always)]
     pub(crate) fn decode_black_run(&mut self) -> Option<u16> {
-        self.decode_run_inner(&BLACK_STATES, "black run")
+        self.decode_run_inner(&BLACK_STATES)
     }
 
     #[inline(always)]
@@ -62,7 +59,7 @@ impl BitReader<'_> {
 
     #[inline(always)]
     pub(crate) fn decode_mode(&mut self) -> Option<Mode> {
-        let mode_id = self.decode_run_inner(&MODE_STATES, "mode")?;
+        let mode_id = self.decode_run_inner(&MODE_STATES)?;
         Some(match mode_id {
             0 => Mode::Pass,
             1 => Mode::Horizontal,
@@ -73,10 +70,7 @@ impl BitReader<'_> {
             6 => Mode::Vertical(-1),
             7 => Mode::Vertical(-2),
             8 => Mode::Vertical(-3),
-            _ => {
-                warn!("CCITT: invalid mode id {mode_id}");
-                return None;
-            }
+            _ => return None,
         })
     }
 

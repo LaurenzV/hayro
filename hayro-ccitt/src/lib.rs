@@ -15,7 +15,6 @@
 
 use crate::bit::BitReader;
 use crate::states::{EOFB, Mode};
-use log::warn;
 
 mod bit;
 mod decode;
@@ -454,8 +453,6 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
         // Go to next line.
 
         if self.coding_line_len != self.settings.columns as usize {
-            warn!("coding line has wrong size");
-
             return None;
         }
 

@@ -1,5 +1,8 @@
 # hayro-ccitt
 
+[![Crates.io](https://img.shields.io/crates/v/hayro-ccitt.svg)](https://crates.io/crates/hayro-ccitt)
+[![Documentation](https://docs.rs/hayro-ccitt/badge.svg)](https://docs.rs/hayro-ccitt)
+
 <!-- cargo-rdme start -->
 
 A decoder for CCITT fax-encoded images.
