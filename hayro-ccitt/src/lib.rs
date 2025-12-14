@@ -108,12 +108,12 @@ pub fn decode(data: &[u8], decoder: &mut impl Decoder, settings: &DecodeSettings
 fn decode_group3_1d<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitReader) -> Option<()> {
     // It seems like PDF producers are a bit sloppy with the `end_of_line` flag,
     // so we just always try to read one.
-    let _ = reader.read_eol_if_available(false)?;
+    let _ = reader.read_eol_if_available();
 
     loop {
         decode_1d_line(ctx, reader)?;
         ctx.next_line(reader)?;
-        let num_eol = reader.read_eol_if_available(false)?;
+        let num_eol = reader.read_eol_if_available();
 
         // RTC (Return To Control).
         if num_eol == 6 {
@@ -127,7 +127,7 @@ fn decode_group3_1d<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitRea
 fn decode_group3_2d<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitReader) -> Option<()> {
     // It seems like PDF producers are a bit sloppy with the `end_of_line` flag,
     // so we just always try to read one.
-    let _ = reader.read_eol_if_available(false)?;
+    let _ = reader.read_eol_if_available();
 
     loop {
         let tag_bit = reader.read_bit()?;
@@ -139,7 +139,7 @@ fn decode_group3_2d<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitRea
         }
 
         ctx.next_line(reader)?;
-        let num_eol = reader.read_eol_if_available(false)?;
+        let num_eol = reader.read_eol_if_available();
 
         // RTC (Return To Control).
         if num_eol == 6 {
