@@ -143,6 +143,25 @@ fn decode_group4<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitReader
             }
         }
 
+        decode_2d_line(ctx, reader)?;
+        ctx.next_line(reader)?;
+    }
+
+    Some(())
+}
+
+fn decode_1d_line<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitReader) -> Option<()> {
+    while !ctx.at_eol() {
+        let run_length = reader.decode_run(ctx.is_white)? as usize;
+        ctx.push_pixels(run_length);
+        ctx.is_white = !ctx.is_white;
+    }
+
+    Some(())
+}
+
+fn decode_2d_line<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitReader) -> Option<()> {
+    while !ctx.at_eol() {
         let mode = reader.decode_mode()?;
 
         match mode {
@@ -162,11 +181,7 @@ fn decode_group4<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitReader
                 ctx.push_pixels(a1a2);
                 ctx.is_white = !ctx.is_white;
 
-                if ctx.at_eol() {
-                    ctx.next_line(reader)?;
-                }   else {
-                    ctx.update_b();
-                }
+                ctx.update_b();
             }
             // 2.2.3.2 Vertical mode.
             Mode::Vertical(i) => {
@@ -181,23 +196,9 @@ fn decode_group4<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitReader
                 ctx.push_pixels(a1.checked_sub(a0)?);
                 ctx.is_white = !ctx.is_white;
 
-                if ctx.at_eol() {
-                    ctx.next_line(reader)?;
-                }   else {
-                    ctx.update_b();
-                }
+                ctx.update_b();
             }
         }
-    }
-
-    Some(())
-}
-
-fn decode_1d_line<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitReader) -> Option<()> {
-    while ctx.a0().unwrap_or(0) < ctx.max_idx {
-        let run_length = reader.decode_run(ctx.is_white)? as usize;
-        ctx.push_pixels(run_length);
-        ctx.is_white = !ctx.is_white;
     }
 
     Some(())
@@ -262,7 +263,9 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
             None
         } else {
             // Otherwise, the index just point to the next element to be decoded.
-            Some(self.coding_line.len())
+            // For invalid files, it's possible that there are more elements than
+            // there should be, so clamp to the maximum index.
+            Some(self.coding_line.len().min(self.max_idx))
         }
     }
 
@@ -279,7 +282,9 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
             (0, 0)
         };
 
-        self.b1 = start;
+        // Make sure `b1` is never more than the maximum index, otherwise
+        // we might get OOB when calling `find_b2`.
+        self.b1 = start.min(self.max_idx);
 
         while self.b1 < self.max_idx {
             let current_color = self.reference_line[self.b1];
@@ -347,9 +352,9 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
         self.find_b1();
         self.find_b2();
     }
-    
+
     fn at_eol(&self) -> bool {
-        self.a0().unwrap_or(0) >= self.max_idx
+        self.a0().unwrap_or(0) == self.max_idx
     }
 
     fn next_line(&mut self, reader: &mut BitReader) -> Option<()> {
