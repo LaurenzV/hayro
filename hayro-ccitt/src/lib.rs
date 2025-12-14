@@ -162,7 +162,11 @@ fn decode_group4<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitReader
                 ctx.push_pixels(a1a2);
                 ctx.is_white = !ctx.is_white;
 
-                ctx.next_line(reader)?;
+                if ctx.at_eol() {
+                    ctx.next_line(reader)?;
+                }   else {
+                    ctx.update_b();
+                }
             }
             // 2.2.3.2 Vertical mode.
             Mode::Vertical(i) => {
@@ -177,7 +181,11 @@ fn decode_group4<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitReader
                 ctx.push_pixels(a1.checked_sub(a0)?);
                 ctx.is_white = !ctx.is_white;
 
-                ctx.next_line(reader)?;
+                if ctx.at_eol() {
+                    ctx.next_line(reader)?;
+                }   else {
+                    ctx.update_b();
+                }
             }
         }
     }
@@ -339,32 +347,34 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
         self.find_b1();
         self.find_b2();
     }
+    
+    fn at_eol(&self) -> bool {
+        self.a0().unwrap_or(0) >= self.max_idx
+    }
 
     fn next_line(&mut self, reader: &mut BitReader) -> Option<()> {
-        if self.a0().unwrap_or(0) >= self.max_idx {
-            // Go to next line.
+        // Go to next line.
 
-            if self.coding_line.len() != self.settings.columns as usize {
-                warn!("coding line has wrong size");
+        if self.coding_line.len() != self.settings.columns as usize {
+            warn!("coding line has wrong size");
 
-                return None;
-            }
+            return None;
+        }
 
-            // Flush any partial byte with zero padding before finishing the line.
-            if let Some(byte) = self.packer.flush() {
-                self.decoder.push_byte(byte ^ self.invert_mask);
-            }
+        // Flush any partial byte with zero padding before finishing the line.
+        if let Some(byte) = self.packer.flush() {
+            self.decoder.push_byte(byte ^ self.invert_mask);
+        }
 
-            core::mem::swap(&mut self.reference_line, &mut self.coding_line);
-            self.reference_line.resize(self.max_idx + 1, 0);
-            self.coding_line.clear();
-            self.is_white = true;
-            self.decoded_rows += 1;
-            self.decoder.next_line();
+        core::mem::swap(&mut self.reference_line, &mut self.coding_line);
+        self.reference_line.resize(self.max_idx + 1, 0);
+        self.coding_line.clear();
+        self.is_white = true;
+        self.decoded_rows += 1;
+        self.decoder.next_line();
 
-            if self.settings.rows_are_byte_aligned {
-                reader.align();
-            }
+        if self.settings.rows_are_byte_aligned {
+            reader.align();
         }
 
         self.update_b();
