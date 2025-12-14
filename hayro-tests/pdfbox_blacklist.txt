@@ -11,9 +11,6 @@
 # https://issues.apache.org/jira/secure/attachment/12633464/texample-rgb-triangle.pdf
 1968
 
-# CCIT-encoded, failed to parse stream
-457
-
 # japanese text withnon-embedded font
 509
 

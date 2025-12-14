@@ -182,7 +182,7 @@ fn check_ccitt_images(folder: &str) {
 
         let count = pdf_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 
-        if count.is_multiple_of(1000) {
+        if count.is_multiple_of(20000) {
             let images = ccitt_count.load(std::sync::atomic::Ordering::Relaxed);
             eprintln!("Processed {} PDFs, {} CCITT images decoded", count, images);
         }

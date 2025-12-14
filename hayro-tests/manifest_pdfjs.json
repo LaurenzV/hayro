@@ -1144,5 +1144,8 @@
   },
   "issue12841",
   "issue15492",
-  "issue8169"
+  "issue8169",
+  "ccitt_EndOfBlock_false",
+  "issue6741",
+  "issue8076"
 ]

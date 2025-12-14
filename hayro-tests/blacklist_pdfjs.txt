@@ -15,7 +15,6 @@ issue13748
 issue13751
 
 # Look into it
-ccitt_EndOfBlock_false
 jbig2_huffman_2
 ShowText-ShadingPattern
 Type3WordSpacing
@@ -48,7 +47,7 @@ protected-stamp-editor-save-print
 issue17215-annotations
 issue19517
 
-# very large ccitt image
+# very large image
 issue17190_1
 
 # tiling with negative step
@@ -232,10 +231,5 @@ extgstate
 issue10717
 # jbig/jpx image + a lot of resizing, takes 6 secs
 issue18896
-# very large ccitt fax image, resizing takes long as well as
-# decoding and encoding the components
-issue6741
-# basically the same as above
-issue8076
 # likely missing caching of shading function
 bug1721218_reduced

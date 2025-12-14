@@ -837,6 +837,9 @@ use crate::run_render_test;
 #[test] fn pdfjs_issue12841() { run_render_test("pdfjs_issue12841", "downloads/pdfjs/issue12841.pdf", None); }
 #[test] fn pdfjs_issue15492() { run_render_test("pdfjs_issue15492", "downloads/pdfjs/issue15492.pdf", None); }
 #[test] fn pdfjs_issue8169() { run_render_test("pdfjs_issue8169", "downloads/pdfjs/issue8169.pdf", None); }
+#[test] fn pdfjs_ccitt_EndOfBlock_false() { run_render_test("pdfjs_ccitt_EndOfBlock_false", "downloads/pdfjs/ccitt_EndOfBlock_false.pdf", None); }
+#[test] fn pdfjs_issue6741() { run_render_test("pdfjs_issue6741", "downloads/pdfjs/issue6741.pdf", None); }
+#[test] fn pdfjs_issue8076() { run_render_test("pdfjs_issue8076", "downloads/pdfjs/issue8076.pdf", None); }
 #[test] fn pdfbox_31() { run_render_test("pdfbox_31", "downloads/pdfbox/31.pdf", Some("..=0")); }
 #[test] fn pdfbox_142() { run_render_test("pdfbox_142", "downloads/pdfbox/142.pdf", None); }
 #[test] fn pdfbox_163() { run_render_test("pdfbox_163", "downloads/pdfbox/163.pdf", None); }
@@ -1216,6 +1219,7 @@ use crate::run_render_test;
 #[test] fn pdfbox_5992_2() { run_render_test("pdfbox_5992_2", "downloads/pdfbox/5992_2.pdf", None); }
 #[test] fn pdfbox_6008() { run_render_test("pdfbox_6008", "downloads/pdfbox/6008.pdf", None); }
 #[test] fn pdfbox_6024() { run_render_test("pdfbox_6024", "downloads/pdfbox/6024.pdf", None); }
+#[test] fn pdfbox_457() { run_render_test("pdfbox_457", "downloads/pdfbox/457.pdf", None); }
 #[test] fn corpus_0000120() { run_render_test("corpus_0000120", "downloads/corpus/0000120.pdf", None); }
 #[test] fn corpus_0000325() { run_render_test("corpus_0000325", "downloads/corpus/0000325.pdf", None); }
 #[test] fn corpus_0002771() { run_render_test("corpus_0002771", "downloads/corpus/0002771.pdf", None); }
