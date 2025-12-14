@@ -5,6 +5,7 @@ use crate::tables::{
 use log::warn;
 
 impl BitReader<'_> {
+    #[inline(always)]
     fn decode_run_inner(&mut self, states: &[State], name: &str) -> Option<u16> {
         let mut total: u16 = 0;
         let mut state: usize = 0;
@@ -40,14 +41,17 @@ impl BitReader<'_> {
         }
     }
 
+    #[inline(always)]
     pub(crate) fn decode_white_run(&mut self) -> Option<u16> {
         self.decode_run_inner(&WHITE_STATES, "white run")
     }
 
+    #[inline(always)]
     pub(crate) fn decode_black_run(&mut self) -> Option<u16> {
         self.decode_run_inner(&BLACK_STATES, "black run")
     }
 
+    #[inline(always)]
     pub(crate) fn decode_run(&mut self, is_white: bool) -> Option<u16> {
         if is_white {
             self.decode_white_run()
@@ -56,6 +60,7 @@ impl BitReader<'_> {
         }
     }
 
+    #[inline(always)]
     pub(crate) fn decode_mode(&mut self) -> Option<Mode> {
         let mode_id = self.decode_run_inner(&MODE_STATES, "mode")?;
         Some(match mode_id {
@@ -75,6 +80,7 @@ impl BitReader<'_> {
         })
     }
 
+    #[inline(always)]
     pub(crate) fn read_eol_if_available(&mut self) -> usize {
         let mut count = 0;
         while self.peak_bits(12) == Some(EOL) {

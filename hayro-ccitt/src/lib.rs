@@ -180,6 +180,7 @@ fn decode_group4<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitReader
     Some(())
 }
 
+#[inline(always)]
 fn decode_1d_line<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitReader) -> Option<()> {
     while !ctx.at_eol() {
         let run_length = reader.decode_run(ctx.is_white)? as usize;
@@ -190,6 +191,7 @@ fn decode_1d_line<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitReade
     Some(())
 }
 
+#[inline(always)]
 fn decode_2d_line<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitReader) -> Option<()> {
     while !ctx.at_eol() {
         let mode = reader.decode_mode()?;
@@ -309,7 +311,7 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
             .map_or(self.max_idx, |c| c.idx)
     }
 
-    #[inline]
+    #[inline(always)]
     fn update_b(&mut self) {
         // b1 refers to an element of the opposite color.
         let target_color = self.cur_color() ^ 1;
@@ -333,6 +335,7 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
         }
     }
 
+    #[inline(always)]
     fn push_pixels(&mut self, count: usize) {
         // Clamp how many pixels we push so that we don't exceed the column
         // count for malformed files.
@@ -391,6 +394,7 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
         self.a0().unwrap_or(0) == self.max_idx
     }
 
+    #[inline(always)]
     fn next_line(&mut self, reader: &mut BitReader) -> Option<()> {
         // Go to next line.
 
