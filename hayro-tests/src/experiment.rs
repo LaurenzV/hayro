@@ -147,7 +147,8 @@ fn check_ccitt_images(folder: &str) {
 
     println!("Found {} PDF files", paths.len());
 
-    let count = AtomicU32::new(0);
+    let pdf_count = AtomicU32::new(0);
+    let ccitt_count = AtomicU32::new(0);
 
     paths.par_iter().for_each(|path| {
         let name = path.file_stem().unwrap().to_str().unwrap().to_string();
@@ -165,7 +166,7 @@ fn check_ccitt_images(folder: &str) {
 
                         match decoded {
                             Ok(Ok(_)) => {
-                                // Success
+                                ccitt_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                             }
                             Ok(Err(e)) => {
                                 eprintln!("{}", name);
@@ -182,10 +183,11 @@ fn check_ccitt_images(folder: &str) {
             Err(_) => {}
         }
 
-        let count = count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let count = pdf_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 
         if count.is_multiple_of(1000) {
-            eprintln!("Processed {} PDFs", count);
+            let images = ccitt_count.load(std::sync::atomic::Ordering::Relaxed);
+            eprintln!("Processed {} PDFs, {} CCITT images decoded", count, images);
         }
     });
 }
