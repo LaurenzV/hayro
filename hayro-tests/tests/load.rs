@@ -393,14 +393,44 @@ fn issue675() {
 }
 
 #[test]
+fn issue677() {
+    let file = include_bytes!("../pdfs/load/issue677.pdf");
+    load(file);
+}
+
+#[test]
+fn issue678() {
+    let file = include_bytes!("../pdfs/load/issue678.pdf");
+    load(file);
+}
+
+#[test]
+fn issue679() {
+    let file = include_bytes!("../pdfs/load/issue679.pdf");
+    load(file);
+}
+
+#[test]
 fn issue680() {
     let file = include_bytes!("../pdfs/load/issue680.pdf");
     load(file);
 }
 
 #[test]
+fn issue681() {
+    let file = include_bytes!("../pdfs/load/issue681.pdf");
+    load(file);
+}
+
+#[test]
 fn issue682() {
     let file = include_bytes!("../pdfs/load/issue682.pdf");
+    load(file);
+}
+
+#[test]
+fn issue683() {
+    let file = include_bytes!("../pdfs/load/issue683.pdf");
     load(file);
 }
 
