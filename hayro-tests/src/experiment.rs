@@ -158,11 +158,13 @@ fn check_ccitt_images(folder: &str) {
             Ok(pdf) => {
                 for object in pdf.objects() {
                     if let Some(stream) = object.into_stream()
-                        && stream.filters().iter().any(|f| *f == Filter::CcittFaxDecode)
+                        && stream
+                            .filters()
+                            .iter()
+                            .any(|f| *f == Filter::CcittFaxDecode)
                     {
-                        let decoded = catch_unwind(std::panic::AssertUnwindSafe(|| {
-                            stream.decoded()
-                        }));
+                        let decoded =
+                            catch_unwind(std::panic::AssertUnwindSafe(|| stream.decoded()));
 
                         match decoded {
                             Ok(Ok(_)) => {
