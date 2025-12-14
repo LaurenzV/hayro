@@ -98,8 +98,8 @@ pub fn decode(data: &[u8], decoder: &mut impl Decoder, settings: &DecodeSettings
     match settings.encoding {
         EncodingMode::Group4 => decode_group4(&mut ctx, &mut reader)?,
         EncodingMode::Group3_1D => decode_group3_1d(&mut ctx, &mut reader)?,
-        EncodingMode::Group3_2D { .. } => {
-            unimplemented!();
+        EncodingMode::Group3_2D { k } => {
+            decode_group3_2d(&mut ctx, &mut reader, k)?
         }
     }
 
@@ -110,12 +110,12 @@ pub fn decode(data: &[u8], decoder: &mut impl Decoder, settings: &DecodeSettings
 fn decode_group3_1d<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitReader) -> Option<()> {
     // It seems like PDF producers are a bit sloppy with the `end_of_line` flag,
     // so we just always try to read one.
-    let _ = reader.read_eol_if_available();
+    let _ = reader.read_eol_if_available(false)?;
 
     loop {
         decode_1d_line(ctx, reader)?;
         ctx.next_line(reader)?;
-        let num_eol = reader.read_eol_if_available();
+        let num_eol = reader.read_eol_if_available(false)?;
 
         // RTC.
         if num_eol == 6 {
@@ -125,6 +125,39 @@ fn decode_group3_1d<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitRea
 
     Some(())
 }
+
+fn decode_group3_2d<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitReader, k: u32) -> Option<()> {
+    // Note that this method is only called with k > 0.
+    let mut cur_k = k;
+    // It seems like PDF producers are a bit sloppy with the `end_of_line` flag,
+    // so we just always try to read one.
+    let _ = reader.read_eol_if_available(true)?;
+
+    loop {
+        if cur_k == k {
+            decode_1d_line(ctx, reader)?;
+        }   else {
+            decode_2d_line(ctx, reader)?;
+        }
+        
+        cur_k -= 1;
+        
+        if cur_k == 0 {
+            cur_k = k;
+        }
+        
+        ctx.next_line(reader)?;
+        let num_eol = reader.read_eol_if_available(true)?;
+
+        // RTC.
+        if num_eol == 6 {
+            break;
+        }
+    }
+
+    Some(())
+}
+
 
 fn decode_group4<T: Decoder>(ctx: &mut DecoderContext<T>, reader: &mut BitReader) -> Option<()> {
     loop {

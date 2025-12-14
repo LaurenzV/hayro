@@ -75,14 +75,19 @@ impl BitReader<'_> {
         })
     }
 
-    pub(crate) fn read_eol_if_available(&mut self) -> usize {
+    pub(crate) fn read_eol_if_available(&mut self, read_tag: bool) -> Option<usize> {
         let mut count = 0;
         while self.peak_bits(12) == Some(EOL) {
             count += 1;
             self.read_bits(12).unwrap();
+            
+            // We don't validate the tag bit, just skip it.
+            if read_tag {
+                let _ = self.read_bit()?;
+            }
         }
 
-        count
+        Some(count)
     }
 }
 

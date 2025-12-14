@@ -42,64 +42,46 @@ pub(crate) fn decode(data: &[u8], params: Dict<'_>) -> Option<Vec<u8>> {
         black_is_1: params.get::<bool>(BLACK_IS_1).unwrap_or(dp.black_is_1),
     };
 
-    if params.k > 0 {
-        // Fallback for unsupported parameters
-        let mut reader = Reader::new(data);
-        let mut decoder = CCITTFaxDecoder::new(&mut reader, params);
-        let mut out = vec![];
+    let settings = DecodeSettings {
+        strict: false,
+        columns: params.columns as u32,
+        rows: params.rows as u32,
+        end_of_block: params.eoblock,
+        end_of_line: params.end_of_line,
+        rows_are_byte_aligned: params.encoded_byte_align,
+        encoding: if params.k < 0 {
+            EncodingMode::Group4
+        } else if params.k == 0 {
+            EncodingMode::Group3_1D
+        } else {
+            EncodingMode::Group3_2D { k: params.k as u32 }
+        },
+        invert_black: params.black_is_1,
+    };
 
-        loop {
-            let byte = decoder.read_next_char();
-            if byte == -1 {
-                break;
-            }
-
-            out.push(byte as u8);
-        }
-
-        Some(out)
-    } else {
-        let settings = DecodeSettings {
-            strict: false,
-            columns: params.columns as u32,
-            rows: params.rows as u32,
-            end_of_block: params.eoblock,
-            end_of_line: params.end_of_line,
-            rows_are_byte_aligned: params.encoded_byte_align,
-            encoding: if params.k < 0 {
-                EncodingMode::Group4
-            } else if params.k == 0 {
-                EncodingMode::Group3_1D
-            } else {
-                EncodingMode::Group3_2D { k: params.k as u32 }
-            },
-            invert_black: params.black_is_1,
-        };
-
-        struct ByteDecoder {
-            output: Vec<u8>,
-        }
-
-        impl Decoder for ByteDecoder {
-            fn push_byte(&mut self, byte: u8) {
-                self.output.push(byte);
-            }
-
-            fn push_bytes(&mut self, byte: u8, count: usize) {
-                self.output.extend(std::iter::repeat_n(byte, count));
-            }
-
-            fn next_line(&mut self) {
-                // Nothing to do here, as hayro-ccitt will already align to
-                // byte-boundary after each row.
-            }
-        }
-
-        let mut decoder = ByteDecoder { output: Vec::new() };
-        hayro_ccitt::decode(data, &mut decoder, &settings);
-
-        Some(decoder.output)
+    struct ByteDecoder {
+        output: Vec<u8>,
     }
+
+    impl Decoder for ByteDecoder {
+        fn push_byte(&mut self, byte: u8) {
+            self.output.push(byte);
+        }
+
+        fn push_bytes(&mut self, byte: u8, count: usize) {
+            self.output.extend(std::iter::repeat_n(byte, count));
+        }
+
+        fn next_line(&mut self) {
+            // Nothing to do here, as hayro-ccitt will already align to
+            // byte-boundary after each row.
+        }
+    }
+
+    let mut decoder = ByteDecoder { output: Vec::new() };
+    hayro_ccitt::decode(data, &mut decoder, &settings);
+
+    Some(decoder.output)
 }
 
 const CCITT_EOL: i32 = -2;
