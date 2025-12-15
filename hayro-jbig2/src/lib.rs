@@ -24,6 +24,7 @@ This crate forbids unsafe code via a crate-level attribute.
 
 pub(crate) mod file;
 pub(crate) mod reader;
+pub(crate) mod segment;
 
 /// Temporary debug function to test file parsing.
 pub fn debug_parse_file(data: &[u8]) {
