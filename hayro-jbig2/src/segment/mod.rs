@@ -4,6 +4,7 @@
 //! the segment types used in JBIG2.
 
 pub(crate) mod generic_region;
+pub(crate) mod page_info;
 pub(crate) mod region;
 
 use crate::reader::Reader;

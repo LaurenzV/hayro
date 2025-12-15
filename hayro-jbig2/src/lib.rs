@@ -31,6 +31,7 @@ pub fn debug_parse_file(data: &[u8]) {
     use file::{FileOrganization, parse_file};
     use reader::Reader;
     use segment::generic_region::parse_generic_region_header;
+    use segment::page_info::parse_page_information;
     use segment::SegmentType;
 
     match parse_file(data) {
@@ -62,41 +63,63 @@ pub fn debug_parse_file(data: &[u8]) {
                     seg.header.referred_to_segments,
                 );
 
-                // Parse and print generic region header data
-                if matches!(
-                    seg.header.segment_type,
-                    SegmentType::IntermediateGenericRegion
-                        | SegmentType::ImmediateGenericRegion
-                        | SegmentType::ImmediateLosslessGenericRegion
-                ) {
-                    let mut reader = Reader::new(seg.data);
-                    match parse_generic_region_header(&mut reader) {
-                        Ok(header) => {
-                            println!(
-                                "    Region: {}x{} at ({}, {}), combo={:?}",
-                                header.region_info.width,
-                                header.region_info.height,
-                                header.region_info.x_location,
-                                header.region_info.y_location,
-                                header.region_info.combination_operator,
-                            );
-                            println!(
-                                "    Flags: MMR={}, GBTEMPLATE={}, TPGDON={}, EXTTEMPLATE={}",
-                                header.mmr, header.gb_template, header.tpgdon, header.ext_template,
-                            );
-                            if !header.adaptive_template_pixels.is_empty() {
-                                let at_str: Vec<String> = header
-                                    .adaptive_template_pixels
-                                    .iter()
-                                    .map(|p| format!("({}, {})", p.x, p.y))
-                                    .collect();
-                                println!("    AT pixels: {}", at_str.join(", "));
+                // Parse and print segment-specific data
+                let mut reader = Reader::new(seg.data);
+                match seg.header.segment_type {
+                    SegmentType::PageInformation => {
+                        match parse_page_information(&mut reader) {
+                            Ok(info) => {
+                                println!(
+                                    "    Page: {}x{}, default_pixel={}, combo={:?}",
+                                    info.width,
+                                    info.height,
+                                    info.flags.default_pixel,
+                                    info.flags.default_combination_operator,
+                                );
+                                if info.striping.is_striped {
+                                    println!(
+                                        "    Striped: max_stripe_size={}",
+                                        info.striping.max_stripe_size
+                                    );
+                                }
+                            }
+                            Err(e) => {
+                                println!("    Error parsing page information: {e}");
                             }
                         }
-                        Err(e) => {
-                            println!("    Error parsing generic region header: {e}");
+                    }
+                    SegmentType::IntermediateGenericRegion
+                    | SegmentType::ImmediateGenericRegion
+                    | SegmentType::ImmediateLosslessGenericRegion => {
+                        match parse_generic_region_header(&mut reader) {
+                            Ok(header) => {
+                                println!(
+                                    "    Region: {}x{} at ({}, {}), combo={:?}",
+                                    header.region_info.width,
+                                    header.region_info.height,
+                                    header.region_info.x_location,
+                                    header.region_info.y_location,
+                                    header.region_info.combination_operator,
+                                );
+                                println!(
+                                    "    Flags: MMR={}, GBTEMPLATE={}, TPGDON={}, EXTTEMPLATE={}",
+                                    header.mmr, header.gb_template, header.tpgdon, header.ext_template,
+                                );
+                                if !header.adaptive_template_pixels.is_empty() {
+                                    let at_str: Vec<String> = header
+                                        .adaptive_template_pixels
+                                        .iter()
+                                        .map(|p| format!("({}, {})", p.x, p.y))
+                                        .collect();
+                                    println!("    AT pixels: {}", at_str.join(", "));
+                                }
+                            }
+                            Err(e) => {
+                                println!("    Error parsing generic region header: {e}");
+                            }
                         }
                     }
+                    _ => {}
                 }
             }
         }
