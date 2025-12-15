@@ -5,102 +5,109 @@
 
 use crate::reader::Reader;
 
-/// Segment types as defined in Table 2.
+/// "The segment type is a number between 0 and 63, inclusive. Not all values
+/// are allowed." (7.3)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SegmentType {
-    /// Symbol dictionary segment (type 0).
+    /// Symbol dictionary – see 7.4.2. (type 0)
     SymbolDictionary,
-    /// Intermediate text region segment (type 4).
+    /// Intermediate text region – see 7.4.3. (type 4)
     IntermediateTextRegion,
-    /// Immediate text region segment (type 6).
+    /// Immediate text region – see 7.4.3. (type 6)
     ImmediateTextRegion,
-    /// Immediate lossless text region segment (type 7).
+    /// Immediate lossless text region – see 7.4.3. (type 7)
     ImmediateLosslessTextRegion,
-    /// Pattern dictionary segment (type 16).
+    /// Pattern dictionary – see 7.4.4. (type 16)
     PatternDictionary,
-    /// Intermediate halftone region segment (type 20).
+    /// Intermediate halftone region – see 7.4.5. (type 20)
     IntermediateHalftoneRegion,
-    /// Immediate halftone region segment (type 22).
+    /// Immediate halftone region – see 7.4.5. (type 22)
     ImmediateHalftoneRegion,
-    /// Immediate lossless halftone region segment (type 23).
+    /// Immediate lossless halftone region – see 7.4.5. (type 23)
     ImmediateLosslessHalftoneRegion,
-    /// Intermediate generic region segment (type 36).
+    /// Intermediate generic region – see 7.4.6. (type 36)
     IntermediateGenericRegion,
-    /// Immediate generic region segment (type 38).
+    /// Immediate generic region – see 7.4.6. (type 38)
     ImmediateGenericRegion,
-    /// Immediate lossless generic region segment (type 39).
+    /// Immediate lossless generic region – see 7.4.6. (type 39)
     ImmediateLosslessGenericRegion,
-    /// Intermediate generic refinement region segment (type 40).
+    /// Intermediate generic refinement region – see 7.4.7. (type 40)
     IntermediateGenericRefinementRegion,
-    /// Immediate generic refinement region segment (type 42).
+    /// Immediate generic refinement region – see 7.4.7. (type 42)
     ImmediateGenericRefinementRegion,
-    /// Immediate lossless generic refinement region segment (type 43).
+    /// Immediate lossless generic refinement region – see 7.4.7. (type 43)
     ImmediateLosslessGenericRefinementRegion,
-    /// Page information segment (type 48).
+    /// Page information – see 7.4.8. (type 48)
     PageInformation,
-    /// End of page segment (type 49).
+    /// End of page – see 7.4.9. (type 49)
     EndOfPage,
-    /// End of stripe segment (type 50).
+    /// End of stripe – see 7.4.10. (type 50)
     EndOfStripe,
-    /// End of file segment (type 51).
+    /// End of file – see 7.4.11. (type 51)
     EndOfFile,
-    /// Profiles segment (type 52).
+    /// Profiles – see 7.4.12. (type 52)
     Profiles,
-    /// Tables segment (type 53).
+    /// Tables – see 7.4.13. (type 53)
     Tables,
-    /// Colour palette segment (type 54).
+    /// Colour palette – see 7.4.16. (type 54)
     ColourPalette,
-    /// Extension segment (type 62).
-    Extension,
-    /// Unknown or reserved segment type.
-    Unknown(u8),
 }
 
 impl SegmentType {
-    fn from_type_value(value: u8) -> Self {
+    /// "All other segment types are reserved and must not be used." (7.3)
+    fn from_type_value(value: u8) -> Result<Self, &'static str> {
         match value {
-            0 => Self::SymbolDictionary,
-            4 => Self::IntermediateTextRegion,
-            6 => Self::ImmediateTextRegion,
-            7 => Self::ImmediateLosslessTextRegion,
-            16 => Self::PatternDictionary,
-            20 => Self::IntermediateHalftoneRegion,
-            22 => Self::ImmediateHalftoneRegion,
-            23 => Self::ImmediateLosslessHalftoneRegion,
-            36 => Self::IntermediateGenericRegion,
-            38 => Self::ImmediateGenericRegion,
-            39 => Self::ImmediateLosslessGenericRegion,
-            40 => Self::IntermediateGenericRefinementRegion,
-            42 => Self::ImmediateGenericRefinementRegion,
-            43 => Self::ImmediateLosslessGenericRefinementRegion,
-            48 => Self::PageInformation,
-            49 => Self::EndOfPage,
-            50 => Self::EndOfStripe,
-            51 => Self::EndOfFile,
-            52 => Self::Profiles,
-            53 => Self::Tables,
-            54 => Self::ColourPalette,
-            62 => Self::Extension,
-            _ => Self::Unknown(value),
+            0 => Ok(Self::SymbolDictionary),
+            4 => Ok(Self::IntermediateTextRegion),
+            6 => Ok(Self::ImmediateTextRegion),
+            7 => Ok(Self::ImmediateLosslessTextRegion),
+            16 => Ok(Self::PatternDictionary),
+            20 => Ok(Self::IntermediateHalftoneRegion),
+            22 => Ok(Self::ImmediateHalftoneRegion),
+            23 => Ok(Self::ImmediateLosslessHalftoneRegion),
+            36 => Ok(Self::IntermediateGenericRegion),
+            38 => Ok(Self::ImmediateGenericRegion),
+            39 => Ok(Self::ImmediateLosslessGenericRegion),
+            40 => Ok(Self::IntermediateGenericRefinementRegion),
+            42 => Ok(Self::ImmediateGenericRefinementRegion),
+            43 => Ok(Self::ImmediateLosslessGenericRefinementRegion),
+            48 => Ok(Self::PageInformation),
+            49 => Ok(Self::EndOfPage),
+            50 => Ok(Self::EndOfStripe),
+            51 => Ok(Self::EndOfFile),
+            52 => Ok(Self::Profiles),
+            53 => Ok(Self::Tables),
+            54 => Ok(Self::ColourPalette),
+            _ => Err("unknown or reserved segment type"),
         }
     }
 }
 
-/// A parsed segment header.
+/// A parsed segment header (7.2.1).
 #[derive(Debug, Clone)]
 pub(crate) struct SegmentHeader {
-    /// The segment number.
+    /// "This four-byte field contains the segment's segment number. The valid
+    /// range of segment numbers is 0 through 4294967295 (0xFFFFFFFF) inclusive."
+    /// (7.2.2)
     pub segment_number: u32,
-    /// The segment type.
+    /// "Bits 0-5: Segment type. See 7.3." (7.2.3)
     pub segment_type: SegmentType,
-    /// Whether this segment's data should be retained after decoding.
+    /// "Bit 7: Deferred non-retain. If this bit is 1, this segment is flagged
+    /// as retained only by itself and its attached extension segments." (7.2.3)
     pub retain_flag: bool,
-    /// The page this segment is associated with (0 means not associated with any page).
+    /// "This field encodes the number of the page to which this segment belongs.
+    /// The first page must be numbered '1'. This field may contain a value of
+    /// zero; this value indicates that this segment is not associated with any
+    /// page." (7.2.6)
     pub page_association: u32,
-    /// The segment numbers this segment refers to.
+    /// "This field contains the segment numbers of the segments that this segment
+    /// refers to, if any." (7.2.5)
     pub referred_to_segments: Vec<u32>,
-    /// The length of the segment data. `None` means unknown length (only valid
-    /// for immediate lossless generic region in sequential organization).
+    /// "This 4-byte field contains the length of the segment's segment data part,
+    /// in bytes." (7.2.7)
+    ///
+    /// `None` means unknown length, which is only valid for immediate generic
+    /// region segments in sequential organization.
     pub data_length: Option<u32>,
 }
 
@@ -113,32 +120,59 @@ pub(crate) struct Segment<'a> {
     pub data: &'a [u8],
 }
 
-/// Parse a segment header (Section 7.2).
+/// Parse a segment header (7.2).
 pub(crate) fn parse_segment_header(reader: &mut Reader<'_>) -> Result<SegmentHeader, &'static str> {
     // 7.2.2: Segment number
+    // "This four-byte field contains the segment's segment number. The valid
+    // range of segment numbers is 0 through 4294967295 (0xFFFFFFFF) inclusive.
+    // As mentioned before, it is possible for there to be gaps in the segment
+    // numbering."
     let segment_number = reader.read_u32().ok_or("unexpected end of data")?;
 
     // 7.2.3: Segment header flags
+    // "This is a 1-byte field."
     let flags = reader.read_byte().ok_or("unexpected end of data")?;
 
-    // Bits 0-5: Segment type
-    let segment_type = SegmentType::from_type_value(flags & 0x3F);
+    // "Bits 0-5: Segment type. See 7.3."
+    let segment_type = SegmentType::from_type_value(flags & 0x3F)?;
 
-    // Bit 6: Page association size flag (0 = 1 byte, 1 = 4 bytes)
+    // "Bit 6: Page association field size. See 7.2.6."
     let page_association_long = flags & 0x40 != 0;
 
-    // Bit 7: Deferred non-retain flag
+    // "Bit 7: Deferred non-retain. If this bit is 1, this segment is flagged as
+    // retained only by itself and its attached extension segments."
     let retain_flag = flags & 0x80 == 0;
 
     // 7.2.4: Referred-to segment count and retention flags
+    // "This field contains one or more bytes indicating how many other segments
+    // are referred to by this segment, and which segments contain data that is
+    // needed after this segment."
+    //
+    // "The three most significant bits of the first byte in this field determine
+    // the length of the field. If the value of this three-bit subfield is between
+    // 0 and 4, then the field is one byte long. If the value of this three-bit
+    // subfield is 7, then the field is at least five bytes long. This three-bit
+    // subfield must not contain values of 5 and 6."
     let count_and_retention = reader.read_byte().ok_or("unexpected end of data")?;
     let short_count = (count_and_retention >> 5) & 0x07;
 
+    if short_count == 5 || short_count == 6 {
+        return Err("invalid referred-to segment count (values 5 and 6 are reserved)");
+    }
+
     let referred_to_count = if short_count < 7 {
+        // Short form: "Bits 5-7: Count of referred-to segments. This field may
+        // take on values between zero and four."
         short_count as u32
     } else {
-        // Long form: next 4 bytes contain the count.
-        // First, read 3 more bytes to complete the 4-byte count field.
+        // Long form: "In the case where the field is in the long format (at least
+        // five bytes long), it is composed of an initial four-byte field, followed
+        // by a succession of one-byte fields."
+        //
+        // "Bits 0-28: Count of referred-to segments. This specifies the number of
+        // segments that this segment refers to."
+        // "Bits 29-31: Indication of long-form format. This field must contain the
+        // value 7."
         let b1 = count_and_retention & 0x1F;
         let b2 = reader.read_byte().ok_or("unexpected end of data")?;
         let b3 = reader.read_byte().ok_or("unexpected end of data")?;
@@ -146,10 +180,26 @@ pub(crate) fn parse_segment_header(reader: &mut Reader<'_>) -> Result<SegmentHea
         u32::from_be_bytes([b1, b2, b3, b4])
     };
 
+    // Skip retention flag bytes in long form.
+    // "The first one-byte field following the initial four-byte field is formatted
+    // as follows: Bit 0: Retain bit for this segment. Bit 1-7: Retain bits for
+    // referred-to segments."
+    if short_count == 7 {
+        // Number of retention bytes: ceil((referred_to_count + 1) / 8)
+        let retention_bytes = (referred_to_count as usize + 1 + 7) / 8;
+        reader
+            .skip_bytes(retention_bytes)
+            .ok_or("unexpected end of data")?;
+    }
+
     // 7.2.5: Referred-to segment numbers
-    let segment_number_size = if segment_number <= 255 {
+    // "When the current segment's number is 256 or less, then each referred-to
+    // segment number is one byte long. Otherwise, when the current segment's
+    // number is 65536 or less, each referred-to segment number is two bytes long.
+    // Otherwise, each referred-to segment number is four bytes long."
+    let segment_number_size = if segment_number <= 256 {
         1
-    } else if segment_number <= 65535 {
+    } else if segment_number <= 65536 {
         2
     } else {
         4
@@ -167,6 +217,9 @@ pub(crate) fn parse_segment_header(reader: &mut Reader<'_>) -> Result<SegmentHea
     }
 
     // 7.2.6: Segment page association
+    // "This field is one byte long if this segment's page association field size
+    // flag bit is 0, and is four bytes long if this segment's page association
+    // field size flag bit is 1."
     let page_association = if page_association_long {
         reader.read_u32().ok_or("unexpected end of data")?
     } else {
@@ -174,9 +227,16 @@ pub(crate) fn parse_segment_header(reader: &mut Reader<'_>) -> Result<SegmentHea
     };
 
     // 7.2.7: Segment data length
+    // "This 4-byte field contains the length of the segment's segment data part,
+    // in bytes."
+    //
+    // "If the segment's type is 'Immediate generic region', then the length field
+    // may contain the value 0xFFFFFFFF. This value is intended to mean that the
+    // length of the segment's data part is unknown at the time that the segment
+    // header is written."
     let data_length_raw = reader.read_u32().ok_or("unexpected end of data")?;
     let data_length = if data_length_raw == 0xFFFFFFFF {
-        None // Unknown length
+        None
     } else {
         Some(data_length_raw)
     };
@@ -192,19 +252,23 @@ pub(crate) fn parse_segment_header(reader: &mut Reader<'_>) -> Result<SegmentHea
 }
 
 /// Parse a complete segment (header + data) in sequential organization.
-///
-/// "The segment data length field shall contain 0xFFFFFFFF only for a segment
-/// of type 39 (immediate lossless generic region segment) in a file coded with
-/// sequential organization." (7.2.7)
 pub(crate) fn parse_segment<'a>(reader: &mut Reader<'a>) -> Result<Segment<'a>, &'static str> {
     let header = parse_segment_header(reader)?;
 
     let data = if let Some(len) = header.data_length {
         reader.read_bytes(len as usize).ok_or("unexpected end of data")?
     } else {
-        // "The segment data length field shall contain 0xFFFFFFFF only for a
-        // segment of type 39 (immediate lossless generic region segment) in
-        // a file coded with sequential organization." (7.2.7)
+        // "If the segment's type is 'Immediate generic region', then the length
+        // field may contain the value 0xFFFFFFFF. This value is intended to mean
+        // that the length of the segment's data part is unknown at the time that
+        // the segment header is written." (7.2.7)
+        //
+        // "In this case, the true length of the segment's data part shall be
+        // determined through examination of the data: if the segment uses
+        // template-based arithmetic coding, then the segment's data part ends
+        // with the two-byte sequence 0xFF 0xAC followed by a four-byte row count.
+        // If the segment uses MMR coding, then the segment's data part ends with
+        // the two-byte sequence 0x00 0x00 followed by a four-byte row count."
         return Err("unknown segment data length not yet supported");
     };
 
@@ -212,9 +276,6 @@ pub(crate) fn parse_segment<'a>(reader: &mut Reader<'a>) -> Result<Segment<'a>, 
 }
 
 /// Read segment data for a previously parsed header.
-///
-/// "Random-access organization shall not be used for files containing segments
-/// with unknown data lengths." (D.2)
 pub(crate) fn read_segment_data<'a>(
     reader: &mut Reader<'a>,
     header: SegmentHeader,
@@ -222,8 +283,112 @@ pub(crate) fn read_segment_data<'a>(
     let data = if let Some(len) = header.data_length {
         reader.read_bytes(len as usize).ok_or("unexpected end of data")?
     } else {
+        // "Given a list of segment headers in the random-access organization
+        // (see Figure D.2), a decoder can build a map of the data associated
+        // with each segment. This allows it to perform random access." (7.2.7 NOTE)
+        //
+        // Unknown length is not supported in random-access mode.
         return Err("unknown segment data length not supported in random-access mode");
     };
 
     Ok(Segment { header, data })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_segment_header_example_1() {
+        // 7.2.8 Segment header example, EXAMPLE 1:
+        // "A segment header consisting of the sequence of bytes:
+        // 0x00 0x00 0x00 0x20 0x86 0x6B 0x02 0x1E 0x05 0x04"
+        //
+        // Plus 4 bytes for data length (not shown in example).
+        let data = [
+            0x00, 0x00, 0x00, 0x20, // Segment number = 32
+            0x86, // Flags: type 6, page assoc 1 byte, deferred non-retain
+            0x6B, // Refers to 3 segments, retention flags
+            0x02, 0x1E, 0x05, // Referred segments: 2, 30, 5
+            0x04, // Page association = 4
+            0x00, 0x00, 0x00, 0x10, // Data length = 16 (added for complete header)
+        ];
+
+        let mut reader = Reader::new(&data);
+        let header = parse_segment_header(&mut reader).unwrap();
+
+        // "0x00 0x00 0x00 0x20: This segment's number is 0x00000020, or 32 decimal."
+        assert_eq!(header.segment_number, 32);
+
+        // "0x86: This segment's type is 6. Its page association field is one byte
+        // long. It is retained by only its attached extension segments."
+        assert_eq!(header.segment_type, SegmentType::ImmediateTextRegion);
+        assert!(!header.retain_flag);
+
+        // "0x6B: This segment refers to three other segments. It is referred to by
+        // some other segment. This is the last reference to the second of the three
+        // segments that it refers to."
+        // "0x02 0x1E 0x05: The three segments that it refers to are numbers 2, 30, and 5."
+        assert_eq!(header.referred_to_segments, vec![2, 30, 5]);
+
+        // "0x04: This segment is associated with page number 4."
+        assert_eq!(header.page_association, 4);
+
+        assert_eq!(header.data_length, Some(16));
+    }
+
+    #[test]
+    fn test_segment_header_example_2() {
+        // 7.2.8 Segment header example, EXAMPLE 2:
+        // "A segment header consisting of the sequence of bytes, in hexadecimal:
+        // 00 00 02 34 40 E0 00 00 09 02 FD 01 00 00 02 00
+        // 1E 00 05 02 00 02 01 02 02 02 03 02 04 00 00 04
+        // 01"
+        //
+        // Plus 4 bytes for data length (not shown in example).
+        #[rustfmt::skip]
+        let data = [
+            0x00, 0x00, 0x02, 0x34, // Segment number = 564
+            0x40,                   // Flags: type 0, page assoc 4 bytes
+            0xE0, 0x00, 0x00, 0x09, // Long form: refers to 9 segments
+            0x02, 0xFD,             // Retention flags (2 bytes)
+            0x01, 0x00,             // Referred segment 256
+            0x00, 0x02,             // Referred segment 2
+            0x00, 0x1E,             // Referred segment 30
+            0x00, 0x05,             // Referred segment 5
+            0x02, 0x00,             // Referred segment 512
+            0x02, 0x01,             // Referred segment 513
+            0x02, 0x02,             // Referred segment 514
+            0x02, 0x03,             // Referred segment 515
+            0x02, 0x04,             // Referred segment 516
+            0x00, 0x00, 0x04, 0x01, // Page association = 1025
+            0x00, 0x00, 0x00, 0x20, // Data length = 32 (added for complete header)
+        ];
+
+        let mut reader = Reader::new(&data);
+        let header = parse_segment_header(&mut reader).unwrap();
+
+        // "00 00 02 34: This segment's number is 0x00000234, or 564 decimal."
+        assert_eq!(header.segment_number, 564);
+
+        // "40: This segment's type is 0. Its page association field is four bytes long."
+        assert_eq!(header.segment_type, SegmentType::SymbolDictionary);
+        assert!(header.retain_flag);
+
+        // "E0 00 00 09: This segment's referred-to segment count field is in the long
+        // format. This segment refers to nine other segments."
+        // "01 00 ... 02 04: The nine segments that it refers to are each identified by
+        // two bytes, since this segment's number is between 256 and 65535. The segments
+        // that it refers to are, in decimal, numbers 256, 2, 30, 5, 512, 513, 514, 515,
+        // and 516."
+        assert_eq!(
+            header.referred_to_segments,
+            vec![256, 2, 30, 5, 512, 513, 514, 515, 516]
+        );
+
+        // "00 00 04 01: This segment is associated with page number 1025."
+        assert_eq!(header.page_association, 1025);
+
+        assert_eq!(header.data_length, Some(32));
+    }
 }
