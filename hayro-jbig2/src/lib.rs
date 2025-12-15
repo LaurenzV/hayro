@@ -20,7 +20,49 @@ This crate forbids unsafe code via a crate-level attribute.
 */
 
 #![forbid(unsafe_code)]
-#![forbid(missing_docs)]
+#![allow(missing_docs)]
+
+pub(crate) mod file;
+
+/// Temporary debug function to test file parsing.
+pub fn debug_parse_file(data: &[u8]) {
+    use file::{FileOrganization, parse_file};
+
+    match parse_file(data) {
+        Ok(f) => {
+            println!("=== File Header ===");
+            println!(
+                "Organization: {:?}",
+                match f.header.organization {
+                    FileOrganization::Sequential => "Sequential",
+                    FileOrganization::RandomAccess => "Random-access",
+                }
+            );
+            println!("Number of pages: {:?}", f.header.number_of_pages);
+            println!(
+                "Uses extended templates: {}",
+                f.header.uses_extended_templates
+            );
+            println!("Contains coloured regions: {}", f.header.contains_coloured_regions);
+            println!();
+
+            println!("=== Segments ({} total) ===", f.segments.len());
+            for (i, segment) in f.segments.iter().enumerate() {
+                println!(
+                    "[{i}] Segment #{}: type={:?}, page={}, data_len={}, referred_to={:?}",
+                    segment.header.segment_number,
+                    segment.header.segment_type,
+                    segment.header.page_association,
+                    segment.data.len(),
+                    segment.header.referred_to_segments,
+                );
+            }
+        }
+        Err(e) => {
+            eprintln!("Error parsing JBIG2 file: {e}");
+        }
+    }
+}
 
 /// A decoded JBIG2 image.
 #[derive(Debug, Clone)]
