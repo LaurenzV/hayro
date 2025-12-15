@@ -727,11 +727,11 @@ pub(crate) fn cod_marker(reader: &mut BitReader<'_>) -> Option<CodingStyleDefaul
     let progression_order = ProgressionOrder::from_u8(reader.read_byte()?).ok()?;
 
     let num_layers = reader.read_u16()?;
-    
+
     if num_layers == 0 {
         return None;
     }
-    
+
     let mct = reader.read_byte()? == 1;
 
     let coding_style_parameters = coding_style_parameters(reader, &coding_style_flags)?;

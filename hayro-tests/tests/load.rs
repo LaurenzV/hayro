@@ -446,7 +446,6 @@ fn issue684() {
     load(file);
 }
 
-
 #[test]
 fn issue705() {
     let file = include_bytes!("../pdfs/load/issue705.pdf");
