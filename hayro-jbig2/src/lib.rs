@@ -29,6 +29,9 @@ pub(crate) mod segment;
 /// Temporary debug function to test file parsing.
 pub fn debug_parse_file(data: &[u8]) {
     use file::{FileOrganization, parse_file};
+    use reader::Reader;
+    use segment::generic_region::parse_generic_region_header;
+    use segment::SegmentType;
 
     match parse_file(data) {
         Ok(f) => {
@@ -49,15 +52,52 @@ pub fn debug_parse_file(data: &[u8]) {
             println!();
 
             println!("=== Segments ({} total) ===", f.segments.len());
-            for (i, segment) in f.segments.iter().enumerate() {
+            for (i, seg) in f.segments.iter().enumerate() {
                 println!(
                     "[{i}] Segment #{}: type={:?}, page={}, data_len={}, referred_to={:?}",
-                    segment.header.segment_number,
-                    segment.header.segment_type,
-                    segment.header.page_association,
-                    segment.data.len(),
-                    segment.header.referred_to_segments,
+                    seg.header.segment_number,
+                    seg.header.segment_type,
+                    seg.header.page_association,
+                    seg.data.len(),
+                    seg.header.referred_to_segments,
                 );
+
+                // Parse and print generic region header data
+                if matches!(
+                    seg.header.segment_type,
+                    SegmentType::IntermediateGenericRegion
+                        | SegmentType::ImmediateGenericRegion
+                        | SegmentType::ImmediateLosslessGenericRegion
+                ) {
+                    let mut reader = Reader::new(seg.data);
+                    match parse_generic_region_header(&mut reader) {
+                        Ok(header) => {
+                            println!(
+                                "    Region: {}x{} at ({}, {}), combo={:?}",
+                                header.region_info.width,
+                                header.region_info.height,
+                                header.region_info.x_location,
+                                header.region_info.y_location,
+                                header.region_info.combination_operator,
+                            );
+                            println!(
+                                "    Flags: MMR={}, GBTEMPLATE={}, TPGDON={}, EXTTEMPLATE={}",
+                                header.mmr, header.gb_template, header.tpgdon, header.ext_template,
+                            );
+                            if !header.adaptive_template_pixels.is_empty() {
+                                let at_str: Vec<String> = header
+                                    .adaptive_template_pixels
+                                    .iter()
+                                    .map(|p| format!("({}, {})", p.x, p.y))
+                                    .collect();
+                                println!("    AT pixels: {}", at_str.join(", "));
+                            }
+                        }
+                        Err(e) => {
+                            println!("    Error parsing generic region header: {e}");
+                        }
+                    }
+                }
             }
         }
         Err(e) => {
