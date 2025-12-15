@@ -263,12 +263,19 @@ pub(crate) fn parse_segment_data<'a>(
     let data = if let Some(len) = header.data_length {
         reader.read_bytes(len as usize).ok_or("unexpected end of data")?
     } else {
-        // "In this case, the true length of the segment's data part shall be
-        // determined through examination of the data: if the segment uses
-        // template-based arithmetic coding, then the segment's data part ends
-        // with the two-byte sequence 0xFF 0xAC followed by a four-byte row count.
-        // If the segment uses MMR coding, then the segment's data part ends with
-        // the two-byte sequence 0x00 0x00 followed by a four-byte row count."
+        // TODO: Handle unknown segment data length (7.4.6.4).
+        //
+        // "In order for the decoder to correctly decode the segment, it needs to
+        // read the four-byte row count field, which is stored in the last four
+        // bytes of the segment's data part. These four bytes can be detected
+        // without knowing the length of the data part in advance: if MMR is 1,
+        // they are preceded by the two-byte sequence 0x00 0x00; if MMR is 0, they
+        // are preceded by the two-byte sequence 0xFF 0xAC."
+        //
+        // "NOTE – The sequence 0x00 0x00 cannot occur within MMR-encoded data;
+        // the sequence 0xFF 0xAC can occur only at the end of arithmetically-coded
+        // data. Thus, those sequences cannot occur by chance in the data that is
+        // decoded to generate the contents of the generic region."
         return Err("unknown segment data length not yet supported");
     };
 
