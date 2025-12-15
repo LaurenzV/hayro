@@ -4,7 +4,9 @@
 //! and random-access organization formats.
 
 use crate::reader::Reader;
-use crate::segment::{parse_segment_header, Segment, SegmentType};
+use crate::segment::{
+    parse_segment, parse_segment_header, read_segment_data, Segment, SegmentType,
+};
 
 /// "There are two standalone file organizations possible for a JBIG2 bitstream."
 /// (Annex D)
@@ -140,24 +142,16 @@ fn parse_segments_sequential<'a>(reader: &mut Reader<'a>) -> Result<Vec<Segment<
     let mut segments = Vec::new();
 
     loop {
-        if reader.remaining() == 0 {
+        if reader.at_end() {
             break;
         }
 
-        let header = parse_segment_header(reader)?;
+        let segment = parse_segment(reader)?;
 
-        // Check for end of file segment.
-        let is_eof = matches!(header.segment_type, SegmentType::EndOfFile);
-
-        let data = if let Some(len) = header.data_length {
-            reader.read_bytes(len as usize).ok_or("unexpected end of data")?
-        } else {
-            // Unknown length - need to scan for end marker.
-            // This is only valid for immediate lossless generic region.
-            return Err("unknown segment data length not yet supported");
-        };
-
-        segments.push(Segment { header, data });
+        // "If a file contains an end of file segment, it must be the last segment."
+        // (7.4.11)
+        let is_eof = matches!(segment.header.segment_type, SegmentType::EndOfFile);
+        segments.push(segment);
 
         if is_eof {
             break;
@@ -180,7 +174,14 @@ fn parse_segments_random_access<'a>(
     let mut headers = Vec::new();
 
     loop {
+        if reader.at_end() {
+            break;
+        }
+
         let header = parse_segment_header(reader)?;
+
+        // "If a file contains an end of file segment, it must be the last segment."
+        // (7.4.11)
         let is_eof = matches!(header.segment_type, SegmentType::EndOfFile);
         headers.push(header);
 
@@ -193,13 +194,7 @@ fn parse_segments_random_access<'a>(
     let mut segments = Vec::with_capacity(headers.len());
 
     for header in headers {
-        let data = if let Some(len) = header.data_length {
-            reader.read_bytes(len as usize).ok_or("unexpected end of data")?
-        } else {
-            return Err("unknown segment data length not supported in random-access mode");
-        };
-
-        segments.push(Segment { header, data });
+        segments.push(read_segment_data(reader, header)?);
     }
 
     Ok(segments)

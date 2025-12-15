@@ -190,3 +190,40 @@ pub(crate) fn parse_segment_header(reader: &mut Reader<'_>) -> Result<SegmentHea
         data_length,
     })
 }
+
+/// Parse a complete segment (header + data) in sequential organization.
+///
+/// "The segment data length field shall contain 0xFFFFFFFF only for a segment
+/// of type 39 (immediate lossless generic region segment) in a file coded with
+/// sequential organization." (7.2.7)
+pub(crate) fn parse_segment<'a>(reader: &mut Reader<'a>) -> Result<Segment<'a>, &'static str> {
+    let header = parse_segment_header(reader)?;
+
+    let data = if let Some(len) = header.data_length {
+        reader.read_bytes(len as usize).ok_or("unexpected end of data")?
+    } else {
+        // "The segment data length field shall contain 0xFFFFFFFF only for a
+        // segment of type 39 (immediate lossless generic region segment) in
+        // a file coded with sequential organization." (7.2.7)
+        return Err("unknown segment data length not yet supported");
+    };
+
+    Ok(Segment { header, data })
+}
+
+/// Read segment data for a previously parsed header.
+///
+/// "Random-access organization shall not be used for files containing segments
+/// with unknown data lengths." (D.2)
+pub(crate) fn read_segment_data<'a>(
+    reader: &mut Reader<'a>,
+    header: SegmentHeader,
+) -> Result<Segment<'a>, &'static str> {
+    let data = if let Some(len) = header.data_length {
+        reader.read_bytes(len as usize).ok_or("unexpected end of data")?
+    } else {
+        return Err("unknown segment data length not supported in random-access mode");
+    };
+
+    Ok(Segment { header, data })
+}
