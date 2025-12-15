@@ -173,11 +173,8 @@ pub(crate) fn parse_segment_header(reader: &mut Reader<'_>) -> Result<SegmentHea
         // segments that this segment refers to."
         // "Bits 29-31: Indication of long-form format. This field must contain the
         // value 7."
-        let b1 = count_and_retention & 0x1F;
-        let b2 = reader.read_byte().ok_or("unexpected end of data")?;
-        let b3 = reader.read_byte().ok_or("unexpected end of data")?;
-        let b4 = reader.read_byte().ok_or("unexpected end of data")?;
-        u32::from_be_bytes([b1, b2, b3, b4])
+        let rest = reader.read_bytes(3).ok_or("unexpected end of data")?;
+        u32::from_be_bytes([count_and_retention & 0x1F, rest[0], rest[1], rest[2]])
     };
 
     // Skip retention flag bytes in long form.
@@ -197,21 +194,14 @@ pub(crate) fn parse_segment_header(reader: &mut Reader<'_>) -> Result<SegmentHea
     // segment number is one byte long. Otherwise, when the current segment's
     // number is 65536 or less, each referred-to segment number is two bytes long.
     // Otherwise, each referred-to segment number is four bytes long."
-    let segment_number_size = if segment_number <= 256 {
-        1
-    } else if segment_number <= 65536 {
-        2
-    } else {
-        4
-    };
-
     let mut referred_to_segments = Vec::with_capacity(referred_to_count as usize);
     for _ in 0..referred_to_count {
-        let referred = match segment_number_size {
-            1 => reader.read_byte().ok_or("unexpected end of data")? as u32,
-            2 => reader.read_u16().ok_or("unexpected end of data")? as u32,
-            4 => reader.read_u32().ok_or("unexpected end of data")?,
-            _ => unreachable!(),
+        let referred = if segment_number <= 256 {
+            reader.read_byte().ok_or("unexpected end of data")? as u32
+        } else if segment_number <= 65536 {
+            reader.read_u16().ok_or("unexpected end of data")? as u32
+        } else {
+            reader.read_u32().ok_or("unexpected end of data")?
         };
         referred_to_segments.push(referred);
     }
