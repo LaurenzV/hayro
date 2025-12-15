@@ -1,14 +1,15 @@
 [workspace]
 resolver = "2"
 members = [
-    "hayro-interpret", 
-    "hayro", 
-    "hayro-syntax", 
-    "hayro-demo", 
-    "hayro-tests", 
-    "hayro-write", 
+    "hayro-interpret",
+    "hayro",
+    "hayro-syntax",
+    "hayro-demo",
+    "hayro-tests",
+    "hayro-write",
     "hayro-svg",
     "hayro-jpeg2000",
+    "hayro-jbig2",
     "hayro-common",
     "hayro-ccitt"
 ]
@@ -27,6 +28,7 @@ hayro-ccitt = { path = "hayro-ccitt", version = "0.1.0", default-features = fals
 hayro-font = { path = "hayro-font", version = "0.3.0", default-features = false }
 hayro-interpret = { path = "hayro-interpret", version = "0.4.0", default-features = false }
 hayro-jpeg2000 = { path = "hayro-jpeg2000", default-features = false }
+hayro-jbig2 = { path = "hayro-jbig2", default-features = false }
 hayro-syntax = { path = "hayro-syntax", version = "0.4.0", default-features = false }
 hayro-svg = { path = "hayro-svg", version = "0.2.0", default-features = false }
 hayro-write = { path = "hayro-write", version = "0.3.0", default-features = false }

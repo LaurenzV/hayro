@@ -1,0 +1,27 @@
+[package]
+name = "hayro-jbig2"
+version = "0.1.0"
+description = "A memory-safe, pure-Rust JBIG2 decoder."
+authors = { workspace = true }
+edition = { workspace = true }
+repository = { workspace = true }
+license = { workspace = true }
+readme = "README.md"
+
+[dependencies]
+log = { workspace = true }
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+image = { workspace = true, default-features = false, features = ["png"] }
+indicatif = { version = "0.17", features = ["rayon"] }
+rayon = "1.10"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[[test]]
+name = "asset_suite"
+path = "tests/mod.rs"
+harness = false

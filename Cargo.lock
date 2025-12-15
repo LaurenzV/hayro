@@ -536,6 +536,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "hayro-jbig2"
+version = "0.1.0"
+dependencies = [
+ "image 0.25.9",
+ "indicatif",
+ "log",
+ "rayon",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "hayro-jpeg2000"
 version = "0.1.1"
 dependencies = [
