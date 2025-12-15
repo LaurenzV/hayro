@@ -3,6 +3,8 @@
 //! This module handles parsing of standalone JBIG2 files in both sequential
 //! and random-access organization formats.
 
+use crate::reader::Reader;
+
 /// "There are two standalone file organizations possible for a JBIG2 bitstream."
 /// (Annex D)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -173,13 +175,13 @@ pub(crate) fn parse_file(data: &[u8]) -> Result<File<'_>, &'static str> {
 
 fn parse_file_header(reader: &mut Reader<'_>) -> Result<FileHeader, &'static str> {
     // D.4.1: ID string
-    let id = reader.read_bytes(8)?;
+    let id = reader.read_bytes(8).ok_or("unexpected end of data")?;
     if id != FILE_HEADER_ID {
         return Err("invalid JBIG2 file header ID string");
     }
 
     // D.4.2: File header flags
-    let flags = reader.read_u8()?;
+    let flags = reader.read_byte().ok_or("unexpected end of data")?;
 
     // "Bit 0: File organization type. If this bit is 0, the file uses the
     // random-access organization. If this bit is 1, the file uses the
@@ -215,7 +217,7 @@ fn parse_file_header(reader: &mut Reader<'_>) -> Result<FileHeader, &'static str
     let number_of_pages = if unknown_page_count {
         None
     } else {
-        Some(reader.read_u32_be()?)
+        Some(reader.read_u32().ok_or("unexpected end of data")?)
     };
 
     Ok(FileHeader {
@@ -255,7 +257,7 @@ fn parse_segments_sequential<'a>(reader: &mut Reader<'a>) -> Result<Vec<Segment<
         let is_eof = matches!(header.segment_type, SegmentType::EndOfFile);
 
         let data = if let Some(len) = header.data_length {
-            reader.read_bytes(len as usize)?
+            reader.read_bytes(len as usize).ok_or("unexpected end of data")?
         } else {
             // Unknown length - need to scan for end marker.
             // This is only valid for immediate lossless generic region.
@@ -299,7 +301,7 @@ fn parse_segments_random_access<'a>(
 
     for header in headers {
         let data = if let Some(len) = header.data_length {
-            reader.read_bytes(len as usize)?
+            reader.read_bytes(len as usize).ok_or("unexpected end of data")?
         } else {
             return Err("unknown segment data length not supported in random-access mode");
         };
@@ -313,10 +315,10 @@ fn parse_segments_random_access<'a>(
 /// Parse a segment header (Section 7.2).
 fn parse_segment_header(reader: &mut Reader<'_>) -> Result<SegmentHeader, &'static str> {
     // 7.2.2: Segment number
-    let segment_number = reader.read_u32_be()?;
+    let segment_number = reader.read_u32().ok_or("unexpected end of data")?;
 
     // 7.2.3: Segment header flags
-    let flags = reader.read_u8()?;
+    let flags = reader.read_byte().ok_or("unexpected end of data")?;
 
     // Bits 0-5: Segment type
     let segment_type = SegmentType::from_type_value(flags & 0x3F);
@@ -328,7 +330,7 @@ fn parse_segment_header(reader: &mut Reader<'_>) -> Result<SegmentHeader, &'stat
     let retain_flag = flags & 0x80 == 0;
 
     // 7.2.4: Referred-to segment count and retention flags
-    let count_and_retention = reader.read_u8()?;
+    let count_and_retention = reader.read_byte().ok_or("unexpected end of data")?;
     let short_count = (count_and_retention >> 5) & 0x07;
 
     let referred_to_count = if short_count < 7 {
@@ -337,9 +339,9 @@ fn parse_segment_header(reader: &mut Reader<'_>) -> Result<SegmentHeader, &'stat
         // Long form: next 4 bytes contain the count.
         // First, read 3 more bytes to complete the 4-byte count field.
         let b1 = count_and_retention & 0x1F;
-        let b2 = reader.read_u8()?;
-        let b3 = reader.read_u8()?;
-        let b4 = reader.read_u8()?;
+        let b2 = reader.read_byte().ok_or("unexpected end of data")?;
+        let b3 = reader.read_byte().ok_or("unexpected end of data")?;
+        let b4 = reader.read_byte().ok_or("unexpected end of data")?;
         u32::from_be_bytes([b1, b2, b3, b4])
     };
 
@@ -355,9 +357,9 @@ fn parse_segment_header(reader: &mut Reader<'_>) -> Result<SegmentHeader, &'stat
     let mut referred_to_segments = Vec::with_capacity(referred_to_count as usize);
     for _ in 0..referred_to_count {
         let referred = match segment_number_size {
-            1 => reader.read_u8()? as u32,
-            2 => reader.read_u16_be()? as u32,
-            4 => reader.read_u32_be()?,
+            1 => reader.read_byte().ok_or("unexpected end of data")? as u32,
+            2 => reader.read_u16().ok_or("unexpected end of data")? as u32,
+            4 => reader.read_u32().ok_or("unexpected end of data")?,
             _ => unreachable!(),
         };
         referred_to_segments.push(referred);
@@ -365,13 +367,13 @@ fn parse_segment_header(reader: &mut Reader<'_>) -> Result<SegmentHeader, &'stat
 
     // 7.2.6: Segment page association
     let page_association = if page_association_long {
-        reader.read_u32_be()?
+        reader.read_u32().ok_or("unexpected end of data")?
     } else {
-        reader.read_u8()? as u32
+        reader.read_byte().ok_or("unexpected end of data")? as u32
     };
 
     // 7.2.7: Segment data length
-    let data_length_raw = reader.read_u32_be()?;
+    let data_length_raw = reader.read_u32().ok_or("unexpected end of data")?;
     let data_length = if data_length_raw == 0xFFFFFFFF {
         None // Unknown length
     } else {
@@ -386,61 +388,4 @@ fn parse_segment_header(reader: &mut Reader<'_>) -> Result<SegmentHeader, &'stat
         referred_to_segments,
         data_length,
     })
-}
-
-/// A simple byte reader.
-struct Reader<'a> {
-    data: &'a [u8],
-    pos: usize,
-}
-
-impl<'a> Reader<'a> {
-    fn new(data: &'a [u8]) -> Self {
-        Self { data, pos: 0 }
-    }
-
-    fn remaining(&self) -> usize {
-        self.data.len() - self.pos
-    }
-
-    fn read_u8(&mut self) -> Result<u8, &'static str> {
-        if self.pos >= self.data.len() {
-            return Err("unexpected end of data");
-        }
-        let value = self.data[self.pos];
-        self.pos += 1;
-        Ok(value)
-    }
-
-    fn read_u16_be(&mut self) -> Result<u16, &'static str> {
-        if self.pos + 2 > self.data.len() {
-            return Err("unexpected end of data");
-        }
-        let value = u16::from_be_bytes([self.data[self.pos], self.data[self.pos + 1]]);
-        self.pos += 2;
-        Ok(value)
-    }
-
-    fn read_u32_be(&mut self) -> Result<u32, &'static str> {
-        if self.pos + 4 > self.data.len() {
-            return Err("unexpected end of data");
-        }
-        let value = u32::from_be_bytes([
-            self.data[self.pos],
-            self.data[self.pos + 1],
-            self.data[self.pos + 2],
-            self.data[self.pos + 3],
-        ]);
-        self.pos += 4;
-        Ok(value)
-    }
-
-    fn read_bytes(&mut self, len: usize) -> Result<&'a [u8], &'static str> {
-        if self.pos + len > self.data.len() {
-            return Err("unexpected end of data");
-        }
-        let slice = &self.data[self.pos..self.pos + len];
-        self.pos += len;
-        Ok(slice)
-    }
 }
