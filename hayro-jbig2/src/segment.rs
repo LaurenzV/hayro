@@ -241,18 +241,25 @@ pub(crate) fn parse_segment_header(reader: &mut Reader<'_>) -> Result<SegmentHea
     })
 }
 
-/// Parse a complete segment (header + data) in sequential organization.
+/// Parse a complete segment (header + data).
 pub(crate) fn parse_segment<'a>(reader: &mut Reader<'a>) -> Result<Segment<'a>, &'static str> {
     let header = parse_segment_header(reader)?;
+    parse_segment_data(reader, header)
+}
 
+/// Parse segment data for a previously parsed header.
+///
+/// "If the segment's type is 'Immediate generic region', then the length field
+/// may contain the value 0xFFFFFFFF. This value is intended to mean that the
+/// length of the segment's data part is unknown at the time that the segment
+/// header is written." (7.2.7)
+pub(crate) fn parse_segment_data<'a>(
+    reader: &mut Reader<'a>,
+    header: SegmentHeader,
+) -> Result<Segment<'a>, &'static str> {
     let data = if let Some(len) = header.data_length {
         reader.read_bytes(len as usize).ok_or("unexpected end of data")?
     } else {
-        // "If the segment's type is 'Immediate generic region', then the length
-        // field may contain the value 0xFFFFFFFF. This value is intended to mean
-        // that the length of the segment's data part is unknown at the time that
-        // the segment header is written." (7.2.7)
-        //
         // "In this case, the true length of the segment's data part shall be
         // determined through examination of the data: if the segment uses
         // template-based arithmetic coding, then the segment's data part ends
@@ -260,25 +267,6 @@ pub(crate) fn parse_segment<'a>(reader: &mut Reader<'a>) -> Result<Segment<'a>, 
         // If the segment uses MMR coding, then the segment's data part ends with
         // the two-byte sequence 0x00 0x00 followed by a four-byte row count."
         return Err("unknown segment data length not yet supported");
-    };
-
-    Ok(Segment { header, data })
-}
-
-/// Read segment data for a previously parsed header.
-pub(crate) fn read_segment_data<'a>(
-    reader: &mut Reader<'a>,
-    header: SegmentHeader,
-) -> Result<Segment<'a>, &'static str> {
-    let data = if let Some(len) = header.data_length {
-        reader.read_bytes(len as usize).ok_or("unexpected end of data")?
-    } else {
-        // "Given a list of segment headers in the random-access organization
-        // (see Figure D.2), a decoder can build a map of the data associated
-        // with each segment. This allows it to perform random access." (7.2.7 NOTE)
-        //
-        // Unknown length is not supported in random-access mode.
-        return Err("unknown segment data length not supported in random-access mode");
     };
 
     Ok(Segment { header, data })

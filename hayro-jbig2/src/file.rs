@@ -5,7 +5,7 @@
 
 use crate::reader::Reader;
 use crate::segment::{
-    parse_segment, parse_segment_header, read_segment_data, Segment, SegmentType,
+    parse_segment, parse_segment_data, parse_segment_header, Segment, SegmentType,
 };
 
 /// "There are two standalone file organizations possible for a JBIG2 bitstream."
@@ -194,7 +194,7 @@ fn parse_segments_random_access<'a>(
     let mut segments = Vec::with_capacity(headers.len());
 
     for header in headers {
-        segments.push(read_segment_data(reader, header)?);
+        segments.push(parse_segment_data(reader, header)?);
     }
 
     Ok(segments)
