@@ -33,7 +33,8 @@ const PASSWORD_PADDING: [u8; 32] = [
 pub enum DecryptionError {
     /// The ID entry is missing in the PDF.
     MissingIDEntry,
-    /// The PDF is password-protected (currently not supported).
+    /// The PDF is password-protected and no password (or a wrong one) was
+    /// provided.
     PasswordProtected,
     /// The PDF has invalid encryption.
     InvalidEncryption,
