@@ -249,6 +249,7 @@ impl XRef {
             has_ocgs: false,
             metadata: Arc::new(Metadata::default()),
             trailer_data,
+            password: password.to_vec(),
         })));
 
         // We read the trailer twice, once to determine the encryption used and then a second
@@ -439,11 +440,8 @@ impl XRef {
 
         let mut locked = r.map.try_write().unwrap();
         assert!(!locked.repaired);
-
-        // Note: repair() is called after the XRef was already successfully created,
-        // so we pass an empty password. Password-protected documents would have
-        // already been decrypted during initial loading.
-        let (xref_map, _) = fallback_xref_map(r.data.get(), b"");
+        
+        let (xref_map, _) = fallback_xref_map(r.data.get(), &r.password);
         locked.xref_map = xref_map;
         locked.repaired = true;
     }
@@ -650,6 +648,7 @@ struct SomeRepr {
     metadata: Arc<Metadata>,
     decryptor: Arc<Decryptor>,
     has_ocgs: bool,
+    password: Vec<u8>,
     trailer_data: TrailerData,
 }
 
