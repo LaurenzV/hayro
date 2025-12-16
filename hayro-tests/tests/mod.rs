@@ -160,10 +160,14 @@ fn parse_range(range_str: &str) -> Option<RangeInclusive<usize>> {
 }
 
 fn load_pdf(path: &str) -> Pdf {
+    load_pdf_with_password(path, "")
+}
+
+fn load_pdf_with_password(path: &str, password: &str) -> Pdf {
     let path = WORKSPACE_PATH.join(path);
     let content = std::fs::read(&path).unwrap();
     let data = Arc::new(content);
-    Pdf::new(data).unwrap()
+    Pdf::new_with_password(data, password).unwrap()
 }
 
 fn interpreter_settings() -> InterpreterSettings {
@@ -177,7 +181,16 @@ fn interpreter_settings() -> InterpreterSettings {
 }
 
 pub fn run_render_test(name: &str, file_path: &str, range_str: Option<&str>) {
-    let pdf = load_pdf(file_path);
+    run_render_test_with_password(name, file_path, range_str, "")
+}
+
+pub fn run_render_test_with_password(
+    name: &str,
+    file_path: &str,
+    range_str: Option<&str>,
+    password: &str,
+) {
+    let pdf = load_pdf_with_password(file_path, password);
 
     let settings = interpreter_settings();
 

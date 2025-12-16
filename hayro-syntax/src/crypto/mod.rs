@@ -452,6 +452,7 @@ fn decryption_key_rev1234(
 ) -> Result<Vec<u8>, DecryptionError> {
     let mut md5_input = vec![];
 
+    // TODO: Convert to PDFDocEncoding.
     // a) Pad or truncate password to 32 bytes using PASSWORD_PADDING.
     let mut padded_password = [0_u8; 32];
     let copy_len = password.len().min(32);
@@ -591,6 +592,7 @@ fn decryption_key_rev56(
     // a) The UTF-8 password string shall be generated from Unicode input by processing the input string with
     // the SASLprep (Internet RFC 4013) profile of stringprep (Internet RFC 3454) using the Normalize and BiDi
     // options, and then converting to a UTF-8 representation.
+    // TODO: Do the above.
     // b) Truncate the UTF-8 representation to 127 bytes if it is longer than 127 bytes.
     let password = &password[..password.len().min(127)];
 

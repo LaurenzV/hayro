@@ -1,4 +1,4 @@
-use crate::run_render_test;
+use crate::{run_render_test, run_render_test_with_password};
 
 #[test] fn InlineAbbreviations() { run_render_test("InlineAbbreviations", "pdfs/custom/InlineAbbreviations.pdf", None); }
 #[test] fn OverlappingGlyphClipping() { run_render_test("OverlappingGlyphClipping", "pdfs/custom/OverlappingGlyphClipping.pdf", None); }
@@ -274,6 +274,12 @@ use crate::run_render_test;
 #[test] fn animated_distributions() { run_render_test("animated_distributions", "pdfs/custom/animated-distributions.pdf", None); }
 #[test] fn mask_in_type3_glyph() { run_render_test("mask_in_type3_glyph", "pdfs/custom/mask_in_type3_glyph.pdf", None); }
 #[test] fn issue629() { run_render_test("issue629", "pdfs/custom/issue629.pdf", None); }
+#[test] fn password_encrypted_aes_256() { run_render_test_with_password("password_encrypted_aes_256", "pdfs/custom/password_encrypted_aes_256.pdf", None, "testpw"); }
+#[test] fn password_encrypted_aes_128() { run_render_test_with_password("password_encrypted_aes_128", "pdfs/custom/password_encrypted_aes_128.pdf", None, "testpw"); }
+#[test] fn password_encrypted_rc4_40() { run_render_test_with_password("password_encrypted_rc4_40", "pdfs/custom/password_encrypted_rc4_40.pdf", None, "testpw"); }
+#[test] fn password_encrypted_rc4_128() { run_render_test_with_password("password_encrypted_rc4_128", "pdfs/custom/password_encrypted_rc4_128.pdf", None, "testpw"); }
+#[test] fn password_1() { run_render_test_with_password("password_1", "pdfs/custom/password_1.pdf", None, "supersecret"); }
+#[test] fn password_2() { run_render_test_with_password("password_2", "pdfs/custom/password_2.pdf", None, "samplefiles"); }
 #[test] fn pdfjs_20130226130259() { run_render_test("pdfjs_20130226130259", "downloads/pdfjs/20130226130259.pdf", Some("0..=0")); }
 #[test] fn pdfjs_ContentStreamNoCycleType3insideType3() { run_render_test("pdfjs_ContentStreamNoCycleType3insideType3", "downloads/pdfjs/ContentStreamNoCycleType3insideType3.pdf", None); }
 #[test] fn pdfjs_High_Pressure_Measurement_WP_001287() { run_render_test("pdfjs_High_Pressure_Measurement_WP_001287", "downloads/pdfjs/High-Pressure-Measurement-WP-001287.pdf", Some("2..=2")); }

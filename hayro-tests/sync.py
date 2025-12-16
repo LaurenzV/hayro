@@ -107,7 +107,11 @@ def build_test(entry: dict, kind: str) -> str:
             relative = file_path.replace("pdfs/", "")
             file_path = f"pdfs/{kind}/{relative}"
 
-    return f'#[test] fn {func_name}() {{ run_render_test("{func_name}", "{file_path}", {length}); }}'
+    password = entry.get("password")
+    if password:
+        return f'#[test] fn {func_name}() {{ run_render_test_with_password("{func_name}", "{file_path}", {length}, "{password}"); }}'
+    else:
+        return f'#[test] fn {func_name}() {{ run_render_test("{func_name}", "{file_path}", {length}); }}'
 
 
 def collect_entries() -> tuple[list[tuple[dict, str, bool]], int, int]:
@@ -133,7 +137,7 @@ def collect_entries() -> tuple[list[tuple[dict, str, bool]], int, int]:
 
 
 def write_tests(rust_functions: list[str]) -> None:
-    header = "use crate::run_render_test;\n\n"
+    header = "use crate::{run_render_test, run_render_test_with_password};\n\n"
     content = header + "\n".join(rust_functions)
     OUTPUT_FILE.write_text(content)
 
