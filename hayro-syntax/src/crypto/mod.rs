@@ -453,7 +453,7 @@ fn decryption_key_rev1234(
     let mut md5_input = vec![];
 
     // a) Pad or truncate password to 32 bytes using PASSWORD_PADDING.
-    let mut padded_password = [0u8; 32];
+    let mut padded_password = [0_u8; 32];
     let copy_len = password.len().min(32);
     padded_password[..copy_len].copy_from_slice(&password[..copy_len]);
     if copy_len < 32 {
