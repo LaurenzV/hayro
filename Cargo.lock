@@ -1527,7 +1527,7 @@ dependencies = [
 [[package]]
 name = "vello_common"
 version = "0.0.4"
-source = "git+https://github.com/linebender/vello?rev=56820883#568208835d0bdb01d9880953631efd5da4d15582"
+source = "git+https://github.com/linebender/vello?rev=4ea47b4#4ea47b47c3e04a68b20422c9a12b2b98c735f547"
 dependencies = [
  "bytemuck",
  "fearless_simd",
@@ -1542,7 +1542,7 @@ dependencies = [
 [[package]]
 name = "vello_cpu"
 version = "0.0.4"
-source = "git+https://github.com/linebender/vello?rev=56820883#568208835d0bdb01d9880953631efd5da4d15582"
+source = "git+https://github.com/linebender/vello?rev=4ea47b4#4ea47b47c3e04a68b20422c9a12b2b98c735f547"
 dependencies = [
  "bytemuck",
  "hashbrown",
