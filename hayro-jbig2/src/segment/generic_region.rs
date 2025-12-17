@@ -293,10 +293,10 @@ fn decode_generic_region_arith(
 
     let mut decoder = ArithmeticDecoder::new(data);
 
-    // Create context array. Size depends on template:
-    // - Template 0: 16-bit context (65536 contexts)
-    // - Template 1: 13-bit context (8192 contexts)
-    // - Template 2, 3: 10-bit context (1024 contexts)
+    // Create context array. Size depends on template (6.2.5.3):
+    // - Template 0: 16 pixels → 16-bit context (65536 contexts)
+    // - Template 1: 13 pixels → 13-bit context (8192 contexts)
+    // - Template 2, 3: 10 pixels → 10-bit context (1024 contexts)
     let num_context_bits = match header.gb_template {
         0 => 16,
         1 => 13,
