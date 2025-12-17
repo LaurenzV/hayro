@@ -129,21 +129,15 @@ pub(crate) fn decode_generic_refinement_region(
     // bitmap size, location, and external combination operator must be equal to
     // that other segment's region bitmap size, location, and external combination
     // operator."
-    if header.region_info.width != reference.width
-        || header.region_info.height != reference.height
+    if header.region_info.width != reference.width || header.region_info.height != reference.height
     {
         return Err("refinement region dimensions must match reference");
     }
 
     let encoded_data = reader.tail().ok_or("unexpected end of data")?;
 
-    let bitmap = decode_refinement_bitmap(
-        &header,
-        encoded_data,
-        reference,
-        reference_dx,
-        reference_dy,
-    )?;
+    let bitmap =
+        decode_refinement_bitmap(&header, encoded_data, reference, reference_dx, reference_dy)?;
 
     Ok(DecodedRegion {
         bitmap,
@@ -189,10 +183,8 @@ fn decode_refinement_bitmap(
             // Context for SLTP depends on template (Figures 14, 15).
             // The SLTP context has only the center reference pixel (0,0) set.
             let sltp_context: u32 = match header.gr_template {
-                // Template 0: bit 4 is reference (0,0)
-                GrTemplate::Template0 => 0b10000,
-                // Template 1: bit 3 is reference (0,0)
-                GrTemplate::Template1 => 0b1000,
+                GrTemplate::Template0 => 0b0000000010000,
+                GrTemplate::Template1 => 0b0000001000,
             };
             let sltp = decoder.decode(&mut contexts[sltp_context as usize]);
             // "Let SLTP be the value of this bit. Set: LTP = LTP XOR SLTP"
@@ -225,11 +217,8 @@ fn decode_refinement_bitmap(
                 //    - a 3 × 3 pixel array in the reference bitmap (Figure 16),
                 //      centred at the location corresponding to the current pixel,
                 //      contains pixels all of the same value." (6.3.5.6)
-                let tpgrpix = header.tpgron && check_tpgr_condition(
-                    reference,
-                    x as i32 - reference_dx,
-                    y as i32 - reference_dy,
-                );
+                let tpgrpix = header.tpgron
+                    && is_tpgr(reference, x as i32 - reference_dx, y as i32 - reference_dy);
 
                 if tpgrpix {
                     // "ii) If TPGRPIX is 1 then implicitly decode the current pixel
@@ -268,7 +257,7 @@ fn decode_refinement_bitmap(
 ///
 /// Returns true if all 9 pixels in the 3×3 region centered at (ref_x, ref_y)
 /// in the reference bitmap have the same value.
-fn check_tpgr_condition(reference: &Bitmap, ref_x: i32, ref_y: i32) -> bool {
+fn is_tpgr(reference: &Bitmap, ref_x: i32, ref_y: i32) -> bool {
     // Get the center pixel value.
     let center = get_ref_pixel(reference, ref_x, ref_y);
 
@@ -341,24 +330,18 @@ fn gather_refinement_context(
 
             let mut context = 0u32;
 
-            // Pixels from bitmap being decoded (left group in Figure 12).
-            // Row y-1: RA1 at nominally (-1,-1), then (0,-1), (1,-1)
             context = (context << 1) | get_decode_pixel(bitmap, x + at1.x as i32, y + at1.y as i32);
             context = (context << 1) | get_decode_pixel(bitmap, x, y - 1);
             context = (context << 1) | get_decode_pixel(bitmap, x + 1, y - 1);
-            // Row y: pixel at (-1, 0)
             context = (context << 1) | get_decode_pixel(bitmap, x - 1, y);
 
-            // Pixels from reference bitmap (right group in Figure 12).
-            // Row ref_y-1: (-1,-1), (0,-1), (1,-1)
-            context = (context << 1) | get_ref_pixel_u32(reference, ref_x - 1, ref_y - 1);
+            context = (context << 1)
+                | get_ref_pixel_u32(reference, ref_x + at2.x as i32, ref_y + at2.y as i32);
             context = (context << 1) | get_ref_pixel_u32(reference, ref_x, ref_y - 1);
             context = (context << 1) | get_ref_pixel_u32(reference, ref_x + 1, ref_y - 1);
-            // Row ref_y: RA2 at nominally (-1,0), (0,0), (1,0)
-            context = (context << 1) | get_ref_pixel_u32(reference, ref_x + at2.x as i32, ref_y + at2.y as i32);
+            context = (context << 1) | get_ref_pixel_u32(reference, ref_x - 1, ref_y);
             context = (context << 1) | get_ref_pixel_u32(reference, ref_x, ref_y);
             context = (context << 1) | get_ref_pixel_u32(reference, ref_x + 1, ref_y);
-            // Row ref_y+1: (-1,+1), (0,+1), (1,+1)
             context = (context << 1) | get_ref_pixel_u32(reference, ref_x - 1, ref_y + 1);
             context = (context << 1) | get_ref_pixel_u32(reference, ref_x, ref_y + 1);
             context = (context << 1) | get_ref_pixel_u32(reference, ref_x + 1, ref_y + 1);
@@ -366,27 +349,17 @@ fn gather_refinement_context(
             context
         }
         GrTemplate::Template1 => {
-            // Figure 13: 10-pixel template (no AT pixels).
-            // Left group (bitmap being decoded): 3 pixels
-            // Right group (reference bitmap): 7 pixels
             let mut context = 0u32;
 
-            // Pixels from bitmap being decoded (left group in Figure 13).
-            // Row y-1: (0,-1), (1,-1)
+            context = (context << 1) | get_decode_pixel(bitmap, x - 1, y - 1);
             context = (context << 1) | get_decode_pixel(bitmap, x, y - 1);
             context = (context << 1) | get_decode_pixel(bitmap, x + 1, y - 1);
-            // Row y: (-1, 0)
             context = (context << 1) | get_decode_pixel(bitmap, x - 1, y);
 
-            // Pixels from reference bitmap (right group in Figure 13).
-            // Row ref_y-1: (-1,-1), (0,-1)
-            context = (context << 1) | get_ref_pixel_u32(reference, ref_x - 1, ref_y - 1);
             context = (context << 1) | get_ref_pixel_u32(reference, ref_x, ref_y - 1);
-            // Row ref_y: (-1,0), (0,0), (1,0)
             context = (context << 1) | get_ref_pixel_u32(reference, ref_x - 1, ref_y);
             context = (context << 1) | get_ref_pixel_u32(reference, ref_x, ref_y);
             context = (context << 1) | get_ref_pixel_u32(reference, ref_x + 1, ref_y);
-            // Row ref_y+1: (0,+1), (1,+1)
             context = (context << 1) | get_ref_pixel_u32(reference, ref_x, ref_y + 1);
             context = (context << 1) | get_ref_pixel_u32(reference, ref_x + 1, ref_y + 1);
 
