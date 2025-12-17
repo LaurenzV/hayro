@@ -11,8 +11,13 @@ readme = "README.md"
 [dependencies]
 hayro-ccitt = { path = "../hayro-ccitt" }
 
-[lints]
-workspace = true
+# TODO: Remove when crate is done
+[lints.clippy]
+all = "allow"
+
+[lints.rust]
+dead_code = "allow"
+unreachable_pub = "allow"
 
 [dev-dependencies]
 image = { workspace = true, default-features = false, features = ["png"] }
