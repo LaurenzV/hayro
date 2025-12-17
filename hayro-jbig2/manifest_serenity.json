@@ -20,7 +20,7 @@
   { "id": "bitmap-initially-unknown-size.jbig2", "ignore": true },
   "bitmap-mmr.jbig2",
   { "id": "bitmap-p32-eof.jbig2", "ignore": true },
-  { "id": "bitmap-randomaccess.jbig2", "ignore": true },
+  "bitmap-randomaccess.jbig2",
   { "id": "bitmap-refine-customat-tpgron.jbig2", "ignore": true },
   { "id": "bitmap-refine-customat.jbig2", "ignore": true },
   { "id": "bitmap-refine-lossless.jbig2", "ignore": true },
@@ -85,6 +85,6 @@
   "bitmap-tpgdon.jbig2",
   { "id": "bitmap-trailing-7fff-stripped-harder-refine.jbig2", "ignore": true },
   { "id": "bitmap-trailing-7fff-stripped-harder.jbig2", "ignore": true },
-  { "id": "bitmap-trailing-7fff-stripped.jbig2", "ignore": true },
+  "bitmap-trailing-7fff-stripped.jbig2",
   "bitmap.jbig2"
 ]
