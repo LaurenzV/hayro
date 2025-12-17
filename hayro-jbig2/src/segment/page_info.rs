@@ -1,6 +1,5 @@
 //! Page information segment parsing (7.4.8).
 
-use crate::bitmap::Bitmap;
 use crate::reader::Reader;
 use crate::segment::region::CombinationOperator;
 

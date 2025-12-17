@@ -27,13 +27,12 @@ mod file;
 mod reader;
 mod segment;
 
+use bitmap::Bitmap;
 use file::parse_file;
 use reader::Reader;
 use segment::SegmentType;
-use segment::generic_region::decode_immediate_lossless_generic_region;
-use segment::page_info::{DecodeContext, get_ctx};
-use crate::bitmap::Bitmap;
-use crate::segment::page_info::{parse_page_information, PageInformation};
+use segment::generic_region::decode_generic_region;
+use segment::page_info::{parse_page_information, PageInformation};
 
 /// A decoded JBIG2 image.
 #[derive(Debug, Clone)]
@@ -78,7 +77,7 @@ pub fn decode(data: &[u8]) -> Result<Image, &'static str> {
             // "Page information – see 7.4.8." (type 48)
             SegmentType::PageInformation =>  ctx = Ok(get_ctx(&mut reader)?),
             SegmentType::ImmediateLosslessGenericRegion => {
-                decode_immediate_lossless_generic_region(ctx.as_mut()?, &mut reader)?;
+                decode_generic_region(ctx.as_mut().map_err(|e| *e)?, &mut reader)?;
             }
 
             // End of page - we're done with this page.

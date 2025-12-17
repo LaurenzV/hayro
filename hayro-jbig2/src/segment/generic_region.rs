@@ -137,17 +137,17 @@ fn parse_adaptive_template_pixels(
     Ok(pixels)
 }
 
-// ============================================================================
-// 6.2 Generic region decoding procedure
-// ============================================================================
-
-/// Decode an immediate lossless generic region and combine it into the page bitmap.
+/// Generic region decoding procedure (6.2).
+///
+/// "This decoding procedure is used to decode a rectangular array of 0 or 1
+/// values, which are coded one pixel at a time (i.e., it is used to decode a
+/// bitmap using simple, generic, coding)." (6.2.1)
 ///
 /// "The data parts of all three of the generic region segment types
 /// ('intermediate generic region', 'immediate generic region' and 'immediate
 /// lossless generic region') are coded identically, but are acted upon
 /// differently, see 8.2." (7.4.6)
-pub(crate) fn decode_immediate_lossless_generic_region(
+pub(crate) fn decode_generic_region(
     ctx: &mut DecodeContext,
     reader: &mut Reader<'_>,
 ) -> Result<(), &'static str> {
