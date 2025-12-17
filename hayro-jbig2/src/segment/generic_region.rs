@@ -348,7 +348,7 @@ fn decode_generic_region_ad(
         // "b) If TPGDON is 1, then decode a bit using the arithmetic entropy
         // coder" (6.2.5.7)
         if header.tpgdon {
-            let sltp_context = gather_tpgd_context(&bitmap, y, header);
+            let sltp_context = gather_context(&bitmap, 0, y, header);
             let sltp = decoder.decode(&mut contexts[sltp_context as usize]);
             // "Let SLTP be the value of this bit. Set: LTP = LTP XOR SLTP" (6.2.5.7)
             ltp = ltp != (sltp != 0);
@@ -376,21 +376,6 @@ fn decode_generic_region_ad(
     }
 
     Ok(bitmap)
-}
-
-/// Gather context bits for TPGD (typical prediction) (6.2.5.5).
-///
-/// "If typical prediction for generic direct coding is enabled (TPGDON is 1),
-/// then before the first pixel of each row is decoded, a value indicating that
-/// a row is typical shall be decoded." (6.2.5.5)
-fn gather_tpgd_context(bitmap: &Bitmap, y: u32, header: &GenericRegionHeader) -> u32 {
-    // The SLTP context uses a special fixed template depending on GBTEMPLATE.
-    // See Figures 8-11 in the spec.
-    //
-    // For simplicity, we use the same context gathering as regular pixels,
-    // but evaluated at position (0, y) - the first pixel of the row.
-    // The spec shows specific bit patterns in Figures 8-11.
-    gather_context(bitmap, 0, y, header)
 }
 
 /// Gather context bits for a pixel at (x, y) (6.2.5.3, 6.2.5.4).
@@ -436,7 +421,13 @@ fn get_pixel(bitmap: &Bitmap, x: i32, y: i32) -> u32 {
 }
 
 /// Gather context for Template 0 (Figure 3a, 16 pixels).
-fn gather_context_template0_no_ext(bitmap: &Bitmap, x: u32, y: u32, at: &[AdaptiveTemplatePixel]) -> u32 {
+fn gather_context_template0_no_ext(
+    bitmap: &Bitmap,
+    x: u32,
+    y: u32,
+    at: &[AdaptiveTemplatePixel],
+) -> u32 {
+    
     let x = x as i32;
     let y = y as i32;
 
@@ -447,19 +438,19 @@ fn gather_context_template0_no_ext(bitmap: &Bitmap, x: u32, y: u32, at: &[Adapti
 
     let mut context = 0u32;
 
-    context = (context << 1) | get_pixel(bitmap, x + at4.0, y + at4.1); 
-    context = (context << 1) | get_pixel(bitmap, x - 1, y - 2); 
-    context = (context << 1) | get_pixel(bitmap, x, y - 2); 
-    context = (context << 1) | get_pixel(bitmap, x + 1, y - 2); 
-    context = (context << 1) | get_pixel(bitmap, x + at3.0, y + at3.1); 
+    context = (context << 1) | get_pixel(bitmap, x + at4.0, y + at4.1);
+    context = (context << 1) | get_pixel(bitmap, x - 1, y - 2);
+    context = (context << 1) | get_pixel(bitmap, x, y - 2);
+    context = (context << 1) | get_pixel(bitmap, x + 1, y - 2);
+    context = (context << 1) | get_pixel(bitmap, x + at3.0, y + at3.1);
 
-    context = (context << 1) | get_pixel(bitmap, x + at2.0, y + at2.1); 
-    context = (context << 1) | get_pixel(bitmap, x - 2, y - 1); 
-    context = (context << 1) | get_pixel(bitmap, x - 1, y - 1); 
-    context = (context << 1) | get_pixel(bitmap, x, y - 1); 
-    context = (context << 1) | get_pixel(bitmap, x + 1, y - 1); 
-    context = (context << 1) | get_pixel(bitmap, x + 2, y - 1); 
-    context = (context << 1) | get_pixel(bitmap, x + at1.0, y + at1.1); 
+    context = (context << 1) | get_pixel(bitmap, x + at2.0, y + at2.1);
+    context = (context << 1) | get_pixel(bitmap, x - 2, y - 1);
+    context = (context << 1) | get_pixel(bitmap, x - 1, y - 1);
+    context = (context << 1) | get_pixel(bitmap, x, y - 1);
+    context = (context << 1) | get_pixel(bitmap, x + 1, y - 1);
+    context = (context << 1) | get_pixel(bitmap, x + 2, y - 1);
+    context = (context << 1) | get_pixel(bitmap, x + at1.0, y + at1.1);
 
     context = (context << 1) | get_pixel(bitmap, x - 4, y);
     context = (context << 1) | get_pixel(bitmap, x - 3, y);
