@@ -150,6 +150,7 @@ fn parse_adaptive_template_pixels(
 
     let mut pixels = Vec::with_capacity(num_pixels);
 
+    // TODO: Validate the range of pixels (see 6.2.5.4).
     for _ in 0..num_pixels {
         let x = reader.read_byte().ok_or("unexpected end of data")? as i8;
         let y = reader.read_byte().ok_or("unexpected end of data")? as i8;
@@ -429,12 +430,11 @@ fn gather_context_template0(
     let x = x as i32;
     let y = y as i32;
 
-    // Get AT pixel positions (use header values or defaults)
-    // Note: These default positions match the nominal template positions
-    let at1 = if !at.is_empty() { (at[0].x as i32, at[0].y as i32) } else { (3, -1) };
-    let at2 = if at.len() > 1 { (at[1].x as i32, at[1].y as i32) } else { (-3, -1) };
-    let at3 = if at.len() > 2 { (at[2].x as i32, at[2].y as i32) } else { (2, -2) };
-    let at4 = if at.len() > 3 { (at[3].x as i32, at[3].y as i32) } else { (-2, -2) };
+    // AT pixel positions from the segment header
+    let at1 = (at[0].x as i32, at[0].y as i32);
+    let at2 = (at[1].x as i32, at[1].y as i32);
+    let at3 = (at[2].x as i32, at[2].y as i32);
+    let at4 = (at[3].x as i32, at[3].y as i32);
 
     let mut context = 0u32;
 
@@ -480,8 +480,8 @@ fn gather_context_template1(
     let x = x as i32;
     let y = y as i32;
 
-    // AT pixel position (default from Table 5: (3, -1))
-    let at1 = if !at.is_empty() { (at[0].x as i32, at[0].y as i32) } else { (3, -1) };
+    // AT pixel position from the segment header
+    let at1 = (at[0].x as i32, at[0].y as i32);
 
     let mut context = 0u32;
 
@@ -524,8 +524,8 @@ fn gather_context_template2(
     let x = x as i32;
     let y = y as i32;
 
-    // AT pixel position (default from Table 5: (2, -1))
-    let at1 = if !at.is_empty() { (at[0].x as i32, at[0].y as i32) } else { (2, -1) };
+    // AT pixel position from the segment header
+    let at1 = (at[0].x as i32, at[0].y as i32);
 
     let mut context = 0u32;
 
@@ -564,8 +564,8 @@ fn gather_context_template3(
     let x = x as i32;
     let y = y as i32;
 
-    // AT pixel position (default from Table 5: (2, -1))
-    let at1 = if !at.is_empty() { (at[0].x as i32, at[0].y as i32) } else { (2, -1) };
+    // AT pixel position from the segment header
+    let at1 = (at[0].x as i32, at[0].y as i32);
 
     let mut context = 0u32;
 
