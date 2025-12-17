@@ -150,10 +150,18 @@ fn parse_adaptive_template_pixels(
 
     let mut pixels = Vec::with_capacity(num_pixels);
 
-    // TODO: Validate the range of pixels (see 6.2.5.4).
     for _ in 0..num_pixels {
         let x = reader.read_byte().ok_or("unexpected end of data")? as i8;
         let y = reader.read_byte().ok_or("unexpected end of data")? as i8;
+
+        // Validate AT pixel location (6.2.5.4, Figure 7).
+        // AT pixels must reference already-decoded pixels:
+        // - y must be <= 0 (current row or above)
+        // - if y == 0, x must be < 0 (strictly to the left of current pixel)
+        if y > 0 || (y == 0 && x >= 0) {
+            return Err("AT pixel location out of valid range");
+        }
+
         pixels.push(AdaptiveTemplatePixel { x, y });
     }
 
@@ -400,7 +408,9 @@ fn gather_context(bitmap: &Bitmap, x: u32, y: u32, header: &GenericRegionHeader)
 /// (6.2.5.2)
 #[inline]
 fn get_pixel(bitmap: &Bitmap, x: i32, y: i32) -> u32 {
-    if x < 0 || y < 0 || x >= bitmap.width as i32 || y >= bitmap.height as i32 {
+    // Note: y >= bitmap.height is not checked because all template positions
+    // have y <= 0 relative to the current pixel (6.2.5.4, Figure 7).
+    if x < 0 || y < 0 || x >= bitmap.width as i32 {
         0
     } else {
         if bitmap.get_pixel(x as u32, y as u32) { 1 } else { 0 }
