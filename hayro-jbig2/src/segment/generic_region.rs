@@ -144,7 +144,13 @@ fn parse_adaptive_template_pixels(
     // in Figure 51."
 
     let num_pixels = match gb_template {
-        GbTemplate::Template0 => if ext_template { 12 } else { 4 },
+        GbTemplate::Template0 => {
+            if ext_template {
+                12
+            } else {
+                4
+            }
+        }
         GbTemplate::Template1 | GbTemplate::Template2 | GbTemplate::Template3 => 1,
     };
 
@@ -393,10 +399,18 @@ fn gather_tpgd_context(bitmap: &Bitmap, y: u32, header: &GenericRegionHeader) ->
 /// by the template (including AT pixels) at its current location." (6.2.5.7)
 fn gather_context(bitmap: &Bitmap, x: u32, y: u32, header: &GenericRegionHeader) -> u32 {
     match header.gb_template {
-        GbTemplate::Template0 => gather_context_template0(bitmap, x, y, &header.adaptive_template_pixels),
-        GbTemplate::Template1 => gather_context_template1(bitmap, x, y, &header.adaptive_template_pixels),
-        GbTemplate::Template2 => gather_context_template2(bitmap, x, y, &header.adaptive_template_pixels),
-        GbTemplate::Template3 => gather_context_template3(bitmap, x, y, &header.adaptive_template_pixels),
+        GbTemplate::Template0 => {
+            gather_context_template0(bitmap, x, y, &header.adaptive_template_pixels)
+        }
+        GbTemplate::Template1 => {
+            gather_context_template1(bitmap, x, y, &header.adaptive_template_pixels)
+        }
+        GbTemplate::Template2 => {
+            gather_context_template2(bitmap, x, y, &header.adaptive_template_pixels)
+        }
+        GbTemplate::Template3 => {
+            gather_context_template3(bitmap, x, y, &header.adaptive_template_pixels)
+        }
     }
 }
 
@@ -413,7 +427,11 @@ fn get_pixel(bitmap: &Bitmap, x: i32, y: i32) -> u32 {
     if x < 0 || y < 0 || x >= bitmap.width as i32 {
         0
     } else {
-        if bitmap.get_pixel(x as u32, y as u32) { 1 } else { 0 }
+        if bitmap.get_pixel(x as u32, y as u32) {
+            1
+        } else {
+            0
+        }
     }
 }
 
@@ -431,12 +449,7 @@ fn get_pixel(bitmap: &Bitmap, x: i32, y: i32) -> u32 {
 /// - A2 replaces bit 10 (nominal position: (-3, -1))
 /// - A3 replaces bit 11 (nominal position: (2, -2))
 /// - A4 replaces bit 15 (nominal position: (-2, -2))
-fn gather_context_template0(
-    bitmap: &Bitmap,
-    x: u32,
-    y: u32,
-    at: &[AdaptiveTemplatePixel],
-) -> u32 {
+fn gather_context_template0(bitmap: &Bitmap, x: u32, y: u32, at: &[AdaptiveTemplatePixel]) -> u32 {
     let x = x as i32;
     let y = y as i32;
 
@@ -450,25 +463,25 @@ fn gather_context_template0(
 
     // Row y-2 (5 pixels): bits 15-11 from left to right
     context = (context << 1) | get_pixel(bitmap, x + at4.0, y + at4.1); // bit 15: A4
-    context = (context << 1) | get_pixel(bitmap, x - 1, y - 2);         // bit 14
-    context = (context << 1) | get_pixel(bitmap, x, y - 2);             // bit 13
-    context = (context << 1) | get_pixel(bitmap, x + 1, y - 2);         // bit 12
+    context = (context << 1) | get_pixel(bitmap, x - 1, y - 2); // bit 14
+    context = (context << 1) | get_pixel(bitmap, x, y - 2); // bit 13
+    context = (context << 1) | get_pixel(bitmap, x + 1, y - 2); // bit 12
     context = (context << 1) | get_pixel(bitmap, x + at3.0, y + at3.1); // bit 11: A3
 
     // Row y-1 (7 pixels): bits 10-4 from left to right
     context = (context << 1) | get_pixel(bitmap, x + at2.0, y + at2.1); // bit 10: A2
-    context = (context << 1) | get_pixel(bitmap, x - 2, y - 1);         // bit 9
-    context = (context << 1) | get_pixel(bitmap, x - 1, y - 1);         // bit 8
-    context = (context << 1) | get_pixel(bitmap, x, y - 1);             // bit 7
-    context = (context << 1) | get_pixel(bitmap, x + 1, y - 1);         // bit 6
-    context = (context << 1) | get_pixel(bitmap, x + 2, y - 1);         // bit 5
+    context = (context << 1) | get_pixel(bitmap, x - 2, y - 1); // bit 9
+    context = (context << 1) | get_pixel(bitmap, x - 1, y - 1); // bit 8
+    context = (context << 1) | get_pixel(bitmap, x, y - 1); // bit 7
+    context = (context << 1) | get_pixel(bitmap, x + 1, y - 1); // bit 6
+    context = (context << 1) | get_pixel(bitmap, x + 2, y - 1); // bit 5
     context = (context << 1) | get_pixel(bitmap, x + at1.0, y + at1.1); // bit 4: A1
 
     // Row y (4 pixels, before current pixel): bits 3-0 from left to right
-    context = (context << 1) | get_pixel(bitmap, x - 4, y);             // bit 3
-    context = (context << 1) | get_pixel(bitmap, x - 3, y);             // bit 2
-    context = (context << 1) | get_pixel(bitmap, x - 2, y);             // bit 1
-    context = (context << 1) | get_pixel(bitmap, x - 1, y);             // bit 0
+    context = (context << 1) | get_pixel(bitmap, x - 4, y); // bit 3
+    context = (context << 1) | get_pixel(bitmap, x - 3, y); // bit 2
+    context = (context << 1) | get_pixel(bitmap, x - 2, y); // bit 1
+    context = (context << 1) | get_pixel(bitmap, x - 1, y); // bit 0
 
     context
 }
@@ -481,12 +494,7 @@ fn gather_context_template0(
 ///     X   X   X   X   X   A1  <- row y-1
 ///         X   X   X   ○       <- row y
 /// ```
-fn gather_context_template1(
-    bitmap: &Bitmap,
-    x: u32,
-    y: u32,
-    at: &[AdaptiveTemplatePixel],
-) -> u32 {
+fn gather_context_template1(bitmap: &Bitmap, x: u32, y: u32, at: &[AdaptiveTemplatePixel]) -> u32 {
     let x = x as i32;
     let y = y as i32;
 
@@ -525,12 +533,7 @@ fn gather_context_template1(
 ///     X   X   X   X   A1  <- row y-1
 ///         X   X   ○       <- row y
 /// ```
-fn gather_context_template2(
-    bitmap: &Bitmap,
-    x: u32,
-    y: u32,
-    at: &[AdaptiveTemplatePixel],
-) -> u32 {
+fn gather_context_template2(bitmap: &Bitmap, x: u32, y: u32, at: &[AdaptiveTemplatePixel]) -> u32 {
     let x = x as i32;
     let y = y as i32;
 
@@ -540,9 +543,9 @@ fn gather_context_template2(
     let mut context = 0u32;
 
     // Row y-2 (3 pixels)
+    context = (context << 1) | get_pixel(bitmap, x - 1, y - 2);
     context = (context << 1) | get_pixel(bitmap, x, y - 2);
     context = (context << 1) | get_pixel(bitmap, x + 1, y - 2);
-    context = (context << 1) | get_pixel(bitmap, x + 2, y - 2);
 
     // Row y-1 (5 pixels)
     context = (context << 1) | get_pixel(bitmap, x - 2, y - 1);
@@ -565,12 +568,7 @@ fn gather_context_template2(
 ///     X   X   X   X   X   A1  <- row y-1
 ///         X   X   X   X   ○   <- row y
 /// ```
-fn gather_context_template3(
-    bitmap: &Bitmap,
-    x: u32,
-    y: u32,
-    at: &[AdaptiveTemplatePixel],
-) -> u32 {
+fn gather_context_template3(bitmap: &Bitmap, x: u32, y: u32, at: &[AdaptiveTemplatePixel]) -> u32 {
     let x = x as i32;
     let y = y as i32;
 
@@ -580,11 +578,11 @@ fn gather_context_template3(
     let mut context = 0u32;
 
     // Row y-1 (6 pixels)
-    context = (context << 1) | get_pixel(bitmap, x - 4, y - 1);
     context = (context << 1) | get_pixel(bitmap, x - 3, y - 1);
     context = (context << 1) | get_pixel(bitmap, x - 2, y - 1);
     context = (context << 1) | get_pixel(bitmap, x - 1, y - 1);
     context = (context << 1) | get_pixel(bitmap, x, y - 1);
+    context = (context << 1) | get_pixel(bitmap, x + 1, y - 1);
     context = (context << 1) | get_pixel(bitmap, x + at1.0, y + at1.1); // A1
 
     // Row y (4 pixels)
