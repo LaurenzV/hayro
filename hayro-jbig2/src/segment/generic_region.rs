@@ -5,8 +5,8 @@
 //! lossless generic region') are coded identically, but are acted upon
 //! differently, see 8.2." (7.4.6)
 
-use crate::bitmap::Bitmap;
 use crate::DecodeContext;
+use crate::bitmap::Bitmap;
 use crate::reader::Reader;
 use crate::segment::region::{RegionSegmentInfo, parse_region_segment_info};
 
@@ -230,8 +230,7 @@ fn decode_generic_region_mmr(
         invert_black: true,
     };
 
-    hayro_ccitt::decode(data, &mut decoder, &settings)
-        .ok_or("MMR decoding failed")?;
+    hayro_ccitt::decode(data, &mut decoder, &settings).ok_or("MMR decoding failed")?;
 
     Ok(bitmap)
 }
