@@ -102,6 +102,7 @@ fn print_segment_debug(index: usize, seg: &segment::Segment<'_>) -> Result<(), &
         | SegmentType::ImmediateGenericRegion
         | SegmentType::ImmediateLosslessGenericRegion => {
             let header = parse_generic_region_header(&mut reader)?;
+            eprintln!("{:?}", header);
         }
         _ => {}
     }
