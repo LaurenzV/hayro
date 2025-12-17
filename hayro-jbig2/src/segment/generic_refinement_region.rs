@@ -124,14 +124,11 @@ pub(crate) fn decode_generic_refinement_region(
 ) -> Result<DecodedRegion, &'static str> {
     let header = parse_generic_refinement_region_header(reader)?;
 
-    // Validate reference bitmap dimensions match (7.4.7.5 step 1).
-    // "If it does refer to another region segment, then this segment's region
-    // bitmap size, location, and external combination operator must be equal to
-    // that other segment's region bitmap size, location, and external combination
-    // operator."
-    if header.region_info.width != reference.width || header.region_info.height != reference.height
-    {
-        return Err("refinement region dimensions must match reference");
+    // Validate that the region fits within the reference bitmap.
+    // When referring to another segment, dimensions must match exactly (7.4.7.5).
+    // When using the page bitmap as reference, the region must fit within the page.
+    if header.region_info.width > reference.width || header.region_info.height > reference.height {
+        return Err("refinement region dimensions exceed reference");
     }
 
     let encoded_data = reader.tail().ok_or("unexpected end of data")?;

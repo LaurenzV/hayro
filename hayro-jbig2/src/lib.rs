@@ -91,38 +91,73 @@ pub fn decode(data: &[u8]) -> Result<Image, &'static str> {
                 let region = decode_generic_region(&mut reader)?;
                 ctx.store_region(seg.header.segment_number, region);
             }
+            SegmentType::IntermediateGenericRefinementRegion => {
+                let ctx = ctx.as_mut().map_err(|e| *e)?;
+
+                // Same logic as immediate refinement, but store result instead of combining.
+                let region = if let Some(&referred_segment_number) =
+                    seg.header.referred_to_segments.first()
+                {
+                    let reference = ctx
+                        .get_referred_segment(referred_segment_number)
+                        .ok_or("referred segment not found")?;
+                    decode_generic_refinement_region(&mut reader, &reference.bitmap, 0, 0)?
+                } else {
+                    // Region info format: width (4), height (4), x_location (4), y_location (4), flags (1)
+                    let region_info_data = reader.peek_bytes(17).ok_or("unexpected end of data")?;
+                    let x_location =
+                        u32::from_be_bytes(region_info_data[8..12].try_into().unwrap()) as i32;
+                    let y_location =
+                        u32::from_be_bytes(region_info_data[12..16].try_into().unwrap()) as i32;
+                    decode_generic_refinement_region(
+                        &mut reader,
+                        &ctx.page_bitmap,
+                        -x_location,
+                        -y_location,
+                    )?
+                };
+
+                ctx.store_region(seg.header.segment_number, region);
+            }
             SegmentType::ImmediateGenericRefinementRegion
             | SegmentType::ImmediateLosslessGenericRefinementRegion => {
                 let ctx = ctx.as_mut().map_err(|e| *e)?;
 
                 // "3) Determine the buffer associated with the region segment that
                 // this segment refers to." (7.4.7.5)
-                //
-                // For now, we only support refinement regions that refer to another
-                // segment (not using the page bitmap as reference).
-                let referred_segment_number = seg
-                    .header
-                    .referred_to_segments
-                    .first()
-                    .ok_or("refinement region must refer to a segment")?;
+                let region = if let Some(&referred_segment_number) =
+                    seg.header.referred_to_segments.first()
+                {
+                    // Use the referred segment's bitmap as reference.
+                    let reference = ctx
+                        .get_referred_segment(referred_segment_number)
+                        .ok_or("referred segment not found")?;
 
-                let reference = ctx
-                    .get_referred_segment(*referred_segment_number)
-                    .ok_or("referred segment not found")?;
+                    // "The X offset of the reference bitmap with respect to the bitmap
+                    // being decoded." (Table 6, GRREFERENCEDX/GRREFERENCEDY)
+                    //
+                    // When dimensions match, the offset is 0.
+                    decode_generic_refinement_region(&mut reader, &reference.bitmap, 0, 0)?
+                } else {
+                    // "2) If there are no referred-to segments, then use the page
+                    // bitmap as the reference buffer." (7.4.7.5)
+                    //
+                    // The region's location on the page determines the reference offset.
+                    // We need to peek at the region info to get the location.
+                    // Region info format: width (4), height (4), x_location (4), y_location (4), flags (1)
+                    let region_info_data = reader.peek_bytes(17).ok_or("unexpected end of data")?;
+                    let x_location =
+                        u32::from_be_bytes(region_info_data[8..12].try_into().unwrap()) as i32;
+                    let y_location =
+                        u32::from_be_bytes(region_info_data[12..16].try_into().unwrap()) as i32;
 
-                // "The X offset of the reference bitmap with respect to the bitmap
-                // being decoded." (Table 6, GRREFERENCEDX/GRREFERENCEDY)
-                //
-                // When dimensions match, the offset is 0.
-                let reference_dx = 0;
-                let reference_dy = 0;
-
-                let region = decode_generic_refinement_region(
-                    &mut reader,
-                    &reference.bitmap,
-                    reference_dx,
-                    reference_dy,
-                )?;
+                    decode_generic_refinement_region(
+                        &mut reader,
+                        &ctx.page_bitmap,
+                        -x_location,
+                        -y_location,
+                    )?
+                };
 
                 // Combine with page bitmap for immediate regions.
                 ctx.page_bitmap.combine(
