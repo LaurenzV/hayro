@@ -213,7 +213,7 @@ pub(crate) fn parse_segment_header(reader: &mut Reader<'_>) -> Result<SegmentHea
         if referred >= segment_number {
             return Err("segment referred to segment with larger segment number");
         }
-        
+
         referred_to_segments.push(referred);
     }
 
