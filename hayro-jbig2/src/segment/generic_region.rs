@@ -6,6 +6,7 @@
 //! differently, see 8.2." (7.4.6)
 
 use crate::bitmap::Bitmap;
+use crate::DecodeContext;
 use crate::reader::Reader;
 use crate::segment::region::{RegionSegmentInfo, parse_region_segment_info};
 
@@ -140,8 +141,44 @@ fn parse_adaptive_template_pixels(
 // 6.2 Generic region decoding procedure
 // ============================================================================
 
+/// Decode an immediate lossless generic region and combine it into the page bitmap.
+///
+/// "The data parts of all three of the generic region segment types
+/// ('intermediate generic region', 'immediate generic region' and 'immediate
+/// lossless generic region') are coded identically, but are acted upon
+/// differently, see 8.2." (7.4.6)
+pub(crate) fn decode_immediate_lossless_generic_region(
+    ctx: &mut DecodeContext,
+    reader: &mut Reader<'_>,
+) -> Result<(), &'static str> {
+    let header = parse_generic_region_header(reader)?;
+
+    // Get the remaining data after the header for decoding.
+    let encoded_data = reader.tail().ok_or("unexpected end of data")?;
+
+    // Decode the region.
+    let region = if header.mmr {
+        // "6.2.6 Decoding using MMR coding"
+        decode_generic_region_mmr(&header, encoded_data)?
+    } else {
+        // Arithmetic coding not yet implemented.
+        return Err("arithmetic coding not yet implemented");
+    };
+
+    // "These operators describe how the segment's bitmap is to be combined
+    // with the page bitmap." (7.4.1.5)
+    ctx.page_bitmap.combine(
+        &region,
+        header.region_info.x_location,
+        header.region_info.y_location,
+        header.region_info.combination_operator,
+    );
+
+    Ok(())
+}
+
 /// Decode a generic region using MMR coding (6.2.6).
-pub(crate) fn decode_generic_region_mmr(
+fn decode_generic_region_mmr(
     header: &GenericRegionHeader,
     data: &[u8],
 ) -> Result<Bitmap, &'static str> {

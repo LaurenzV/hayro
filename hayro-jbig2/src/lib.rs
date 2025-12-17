@@ -27,12 +27,13 @@ mod file;
 mod reader;
 mod segment;
 
-use bitmap::Bitmap;
 use file::parse_file;
 use reader::Reader;
 use segment::SegmentType;
-use segment::generic_region::{decode_generic_region_mmr, parse_generic_region_header};
-use segment::page_info::parse_page_information;
+use segment::generic_region::decode_immediate_lossless_generic_region;
+use segment::page_info::{DecodeContext, get_ctx};
+use crate::bitmap::Bitmap;
+use crate::segment::page_info::{parse_page_information, PageInformation};
 
 /// A decoded JBIG2 image.
 #[derive(Debug, Clone)]
@@ -67,57 +68,17 @@ impl Image {
 pub fn decode(data: &[u8]) -> Result<Image, &'static str> {
     let file = parse_file(data)?;
 
-    let mut page_bitmap: Option<Bitmap> = None;
+    let mut ctx: Result<DecodeContext, &'static str> = Err("attempted to decode\
+    region before page information appeared");
 
     for seg in &file.segments {
         let mut reader = Reader::new(seg.data);
 
         match seg.header.segment_type {
             // "Page information – see 7.4.8." (type 48)
-            SegmentType::PageInformation => {
-                let page_info = parse_page_information(&mut reader)?;
-
-                // "Bit 2: Page default pixel value. This bit contains the initial
-                // value for every pixel in the page, before any region segments
-                // are decoded or drawn." (7.4.8.5)
-                let mut bitmap = Bitmap::new(page_info.width, page_info.height);
-                if page_info.flags.default_pixel != 0 {
-                    // Fill with 1s (black) if default pixel is 1.
-                    for byte in &mut bitmap.data {
-                        *byte = 0xFF;
-                    }
-                }
-                page_bitmap = Some(bitmap);
-            }
-
-            // "Immediate lossless generic region – see 7.4.6." (type 39)
+            SegmentType::PageInformation =>  ctx = Ok(get_ctx(&mut reader)?),
             SegmentType::ImmediateLosslessGenericRegion => {
-                let page = page_bitmap.as_mut().ok_or(
-                    "generic region segment appeared before page information",
-                )?;
-
-                let header = parse_generic_region_header(&mut reader)?;
-
-                // Get the remaining data after the header for decoding.
-                let encoded_data = reader.tail().ok_or("unexpected end of data")?;
-
-                // Decode the region.
-                let region = if header.mmr {
-                    // "6.2.6 Decoding using MMR coding"
-                    decode_generic_region_mmr(&header, encoded_data)?
-                } else {
-                    // Arithmetic coding not yet implemented.
-                    return Err("arithmetic coding not yet implemented");
-                };
-
-                // "These operators describe how the segment's bitmap is to be
-                // combined with the page bitmap." (7.4.1.5)
-                page.combine(
-                    &region,
-                    header.region_info.x_location,
-                    header.region_info.y_location,
-                    header.region_info.combination_operator,
-                );
+                decode_immediate_lossless_generic_region(ctx.as_mut()?, &mut reader)?;
             }
 
             // End of page - we're done with this page.
@@ -130,11 +91,46 @@ pub fn decode(data: &[u8]) -> Result<Image, &'static str> {
         }
     }
 
-    let bitmap = page_bitmap.ok_or("no page information segment found")?;
+    let ctx = ctx?;
 
     Ok(Image {
-        width: bitmap.width,
-        height: bitmap.height,
-        data: bitmap.data,
+        width: ctx.page_bitmap.width,
+        height: ctx.page_bitmap.height,
+        data: ctx.page_bitmap.data,
+    })
+}
+
+/// Decoding context for a JBIG2 page.
+///
+/// This holds the page information and the page bitmap that regions are
+/// decoded into.
+pub(crate) struct DecodeContext {
+    /// The parsed page information.
+    pub page_info: PageInformation,
+    /// The page bitmap that regions are combined into.
+    pub page_bitmap: Bitmap,
+}
+
+/// Create a decode context from page information segment data.
+///
+/// This parses the page information and creates the initial page bitmap
+/// with the default pixel value.
+pub(crate) fn get_ctx(reader: &mut Reader<'_>) -> Result<DecodeContext, &'static str> {
+    let page_info = parse_page_information(reader)?;
+
+    // "Bit 2: Page default pixel value. This bit contains the initial value
+    // for every pixel in the page, before any region segments are decoded
+    // or drawn." (7.4.8.5)
+    let mut page_bitmap = Bitmap::new(page_info.width, page_info.height);
+    if page_info.flags.default_pixel != 0 {
+        // Fill with 1s (black) if default pixel is 1.
+        for byte in &mut page_bitmap.data {
+            *byte = 0xFF;
+        }
+    }
+
+    Ok(DecodeContext {
+        page_info,
+        page_bitmap,
     })
 }
