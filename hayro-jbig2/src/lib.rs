@@ -29,7 +29,7 @@ mod reader;
 mod segment;
 
 use bitmap::Bitmap;
-use file::parse_file;
+use file::{File, parse_file};
 use reader::Reader;
 use segment::SegmentType;
 use segment::generic_region::decode_generic_region;
@@ -61,6 +61,8 @@ pub struct Image {
 pub fn decode(data: &[u8]) -> Result<Image, &'static str> {
     let file = parse_file(data)?;
 
+    let height_from_stripes = scan_for_stripe_height(&file);
+
     let mut ctx: Result<DecodeContext, &'static str> = Err("attempted to decode\
     region before page information appeared");
 
@@ -69,8 +71,10 @@ pub fn decode(data: &[u8]) -> Result<Image, &'static str> {
 
         match seg.header.segment_type {
             // "Page information – see 7.4.8." (type 48)
-            SegmentType::PageInformation => ctx = Ok(get_ctx(&mut reader)?),
-            SegmentType::ImmediateLosslessGenericRegion => {
+            SegmentType::PageInformation => {
+                ctx = Ok(get_ctx(&mut reader, height_from_stripes)?);
+            }
+            SegmentType::ImmediateGenericRegion | SegmentType::ImmediateLosslessGenericRegion => {
                 decode_generic_region(ctx.as_mut().map_err(|e| *e)?, &mut reader)?;
             }
 
@@ -93,6 +97,23 @@ pub fn decode(data: &[u8]) -> Result<Image, &'static str> {
     })
 }
 
+/// Pre-scan segments to find the page height from EndOfStripe segments (7.4.10).
+///
+/// Returns the maximum Y coordinate + 1 from all EndOfStripe segments, or None
+/// if no EndOfStripe segments are found.
+fn scan_for_stripe_height(file: &File) -> Option<u32> {
+    let mut max_y: Option<u32> = None;
+
+    for seg in &file.segments {
+        if seg.header.segment_type == SegmentType::EndOfStripe {
+            let height = u32::from_be_bytes(seg.data.try_into().ok()?).checked_add(1)?;
+            max_y = Some(max_y.map_or(height, |m| m.max(height)));
+        }
+    }
+
+    max_y
+}
+
 /// Decoding context for a JBIG2 page.
 ///
 /// This holds the page information and the page bitmap that regions are
@@ -108,13 +129,28 @@ pub(crate) struct DecodeContext {
 ///
 /// This parses the page information and creates the initial page bitmap
 /// with the default pixel value.
-pub(crate) fn get_ctx(reader: &mut Reader<'_>) -> Result<DecodeContext, &'static str> {
+///
+/// If the page height is unknown (0xFFFFFFFF), `height_from_stripes` is used
+/// instead. This value should be obtained by pre-scanning EndOfStripe segments.
+pub(crate) fn get_ctx(
+    reader: &mut Reader<'_>,
+    height_from_stripes: Option<u32>,
+) -> Result<DecodeContext, &'static str> {
     let page_info = parse_page_information(reader)?;
+
+    // "A page's bitmap height may be declared in its page information segment
+    // to be unknown (by specifying a height of 0xFFFFFFFF). In this case, the
+    // page must be striped." (7.4.8.2)
+    let height = if page_info.height == 0xFFFF_FFFF {
+        height_from_stripes.ok_or("page height is missing")?
+    } else {
+        page_info.height
+    };
 
     // "Bit 2: Page default pixel value. This bit contains the initial value
     // for every pixel in the page, before any region segments are decoded
     // or drawn." (7.4.8.5)
-    let mut page_bitmap = Bitmap::new(page_info.width, page_info.height);
+    let mut page_bitmap = Bitmap::new(page_info.width, height);
     if page_info.flags.default_pixel != 0 {
         // Fill with true (black) if default pixel is 1.
         for pixel in &mut page_bitmap.data {

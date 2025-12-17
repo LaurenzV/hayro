@@ -117,13 +117,6 @@ pub(crate) fn parse_page_information(
         max_stripe_size: striping_raw & 0x7FFF,
     };
 
-    // TODO: Support pages with unknown height.
-    // "If the page's bitmap height is unknown (indicated by a page bitmap height
-    // of 0xFFFFFFFF) then the 'page is striped' bit must be 1." (7.4.8.6)
-    if height == 0xFFFFFFFF {
-        return Err("pages with unknown height not yet supported");
-    }
-
     Ok(PageInformation {
         width,
         height,
