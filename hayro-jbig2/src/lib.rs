@@ -32,7 +32,7 @@ use bitmap::{Bitmap, DecodedRegion};
 use file::{File, parse_file};
 use reader::Reader;
 use segment::SegmentType;
-use segment::generic_refinement_region::parse_generic_refinement_region_header;
+use segment::generic_refinement_region::decode_generic_refinement_region;
 use segment::generic_region::decode_generic_region;
 use segment::page_info::{PageInformation, parse_page_information};
 
@@ -61,7 +61,6 @@ pub struct Image {
 /// ```
 pub fn decode(data: &[u8]) -> Result<Image, &'static str> {
     let file = parse_file(data)?;
-    eprintln!("{:?}", file);
 
     let height_from_stripes = scan_for_stripe_height(&file);
 
@@ -94,8 +93,44 @@ pub fn decode(data: &[u8]) -> Result<Image, &'static str> {
             }
             SegmentType::ImmediateGenericRefinementRegion
             | SegmentType::ImmediateLosslessGenericRefinementRegion => {
-                let _header = parse_generic_refinement_region_header(&mut reader)?;
-                return Err("generic refinement region decoding not yet implemented");
+                let ctx = ctx.as_mut().map_err(|e| *e)?;
+
+                // "3) Determine the buffer associated with the region segment that
+                // this segment refers to." (7.4.7.5)
+                //
+                // For now, we only support refinement regions that refer to another
+                // segment (not using the page bitmap as reference).
+                let referred_segment_number = seg
+                    .header
+                    .referred_to_segments
+                    .first()
+                    .ok_or("refinement region must refer to a segment")?;
+
+                let reference = ctx
+                    .get_referred_segment(*referred_segment_number)
+                    .ok_or("referred segment not found")?;
+
+                // "The X offset of the reference bitmap with respect to the bitmap
+                // being decoded." (Table 6, GRREFERENCEDX/GRREFERENCEDY)
+                //
+                // When dimensions match, the offset is 0.
+                let reference_dx = 0;
+                let reference_dy = 0;
+
+                let region = decode_generic_refinement_region(
+                    &mut reader,
+                    &reference.bitmap,
+                    reference_dx,
+                    reference_dy,
+                )?;
+
+                // Combine with page bitmap for immediate regions.
+                ctx.page_bitmap.combine(
+                    &region.bitmap,
+                    region.x_location,
+                    region.y_location,
+                    region.combination_operator,
+                );
             }
             SegmentType::EndOfPage | SegmentType::EndOfFile => {
                 break;
