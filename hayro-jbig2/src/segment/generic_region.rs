@@ -6,6 +6,7 @@
 //! differently, see 8.2." (7.4.6)
 
 use crate::DecodeContext;
+use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use crate::bitmap::Bitmap;
 use crate::reader::Reader;
 use crate::segment::region::{RegionSegmentInfo, parse_region_segment_info};
@@ -152,7 +153,6 @@ pub(crate) fn decode_generic_region(
     reader: &mut Reader<'_>,
 ) -> Result<(), &'static str> {
     let header = parse_generic_region_header(reader)?;
-    eprintln!("{:?}", header);
 
     // Get the remaining data after the header for decoding.
     let encoded_data = reader.tail().ok_or("unexpected end of data")?;
@@ -162,8 +162,8 @@ pub(crate) fn decode_generic_region(
         // "6.2.6 Decoding using MMR coding"
         decode_generic_region_mmr(&header, encoded_data)?
     } else {
-        // Arithmetic coding not yet implemented.
-        return Err("arithmetic coding not yet implemented");
+        // "6.2.5 Decoding using a template and arithmetic coding"
+        decode_generic_region_arith(&header, encoded_data)?
     };
 
     // "These operators describe how the segment's bitmap is to be combined
@@ -275,4 +275,294 @@ impl hayro_ccitt::Decoder for BitmapDecoder<'_> {
         self.x = 0;
         self.y += 1;
     }
+}
+
+/// Decode a generic region using arithmetic coding (6.2.5).
+///
+/// "If MMR is 0 the generic region decoding procedure is based on arithmetic
+/// coding with a template to determine the coding state." (6.2.5.1)
+fn decode_generic_region_arith(
+    header: &GenericRegionHeader,
+    data: &[u8],
+) -> Result<Bitmap, &'static str> {
+    let width = header.region_info.width;
+    let height = header.region_info.height;
+
+    // "2) Create a bitmap GBREG of width GBW and height GBH pixels." (6.2.5.7)
+    let mut bitmap = Bitmap::new(width, height);
+
+    let mut decoder = ArithmeticDecoder::new(data);
+
+    // Create context array. Size depends on template:
+    // - Template 0: 16-bit context (65536 contexts)
+    // - Template 1: 13-bit context (8192 contexts)
+    // - Template 2, 3: 10-bit context (1024 contexts)
+    let num_context_bits = match header.gb_template {
+        0 => 16,
+        1 => 13,
+        2 | 3 => 10,
+        _ => return Err("invalid GBTEMPLATE value"),
+    };
+    let mut contexts = vec![ArithmeticDecoderContext::default(); 1 << num_context_bits];
+
+    // "1) Set: LTP = 0" (6.2.5.7)
+    let mut ltp = false;
+
+    // "3) Decode each row as follows:" (6.2.5.7)
+    for y in 0..height {
+        // "b) If TPGDON is 1, then decode a bit using the arithmetic entropy
+        // coder" (6.2.5.7)
+        if header.tpgdon {
+            let sltp_context = gather_tpgd_context(&bitmap, y, header);
+            let sltp = decoder.decode(&mut contexts[sltp_context as usize]);
+            // "Let SLTP be the value of this bit. Set: LTP = LTP XOR SLTP" (6.2.5.7)
+            ltp = ltp != (sltp != 0);
+        }
+
+        // "c) If LTP = 1 then set every pixel of the current row of GBREG equal
+        // to the corresponding pixel of the row immediately above." (6.2.5.7)
+        if ltp {
+            for x in 0..width {
+                if y > 0 {
+                    let above = bitmap.get_pixel(x, y - 1);
+                    bitmap.set_pixel(x, y, above);
+                }
+                // If y == 0, pixels remain 0 (default)
+            }
+        } else {
+            // "d) If LTP = 0 then, from left to right, decode each pixel of the
+            // current row of GBREG." (6.2.5.7)
+            for x in 0..width {
+                let context_bits = gather_context(&bitmap, x, y, header);
+                let pixel = decoder.decode(&mut contexts[context_bits as usize]);
+                bitmap.set_pixel(x, y, pixel != 0);
+            }
+        }
+    }
+
+    Ok(bitmap)
+}
+
+/// Gather context bits for TPGD (typical prediction) (6.2.5.5).
+///
+/// "If typical prediction for generic direct coding is enabled (TPGDON is 1),
+/// then before the first pixel of each row is decoded, a value indicating that
+/// a row is typical shall be decoded." (6.2.5.5)
+fn gather_tpgd_context(bitmap: &Bitmap, y: u32, header: &GenericRegionHeader) -> u32 {
+    // The SLTP context uses a special fixed template depending on GBTEMPLATE.
+    // See Figures 8-11 in the spec.
+    //
+    // For simplicity, we use the same context gathering as regular pixels,
+    // but evaluated at position (0, y) - the first pixel of the row.
+    // The spec shows specific bit patterns in Figures 8-11.
+    gather_context(bitmap, 0, y, header)
+}
+
+/// Gather context bits for a pixel at (x, y) (6.2.5.3, 6.2.5.4).
+///
+/// "Form an integer CONTEXT by gathering the values of the image pixels overlaid
+/// by the template (including AT pixels) at its current location." (6.2.5.7)
+fn gather_context(bitmap: &Bitmap, x: u32, y: u32, header: &GenericRegionHeader) -> u32 {
+    match header.gb_template {
+        0 => gather_context_template0(bitmap, x, y, &header.adaptive_template_pixels),
+        1 => gather_context_template1(bitmap, x, y, &header.adaptive_template_pixels),
+        2 => gather_context_template2(bitmap, x, y, &header.adaptive_template_pixels),
+        3 => gather_context_template3(bitmap, x, y, &header.adaptive_template_pixels),
+        _ => 0,
+    }
+}
+
+/// Get a pixel value, returning 0 for out-of-bounds coordinates.
+///
+/// "Near the edges of the bitmap, these neighbour references might not lie in
+/// the actual bitmap. The rule to satisfy out-of-bounds references shall be:
+/// All pixels lying outside the bounds of the actual bitmap have the value 0."
+/// (6.2.5.2)
+#[inline]
+fn get_pixel(bitmap: &Bitmap, x: i32, y: i32) -> u32 {
+    if x < 0 || y < 0 || x >= bitmap.width as i32 || y >= bitmap.height as i32 {
+        0
+    } else {
+        if bitmap.get_pixel(x as u32, y as u32) { 1 } else { 0 }
+    }
+}
+
+/// Gather context for Template 0 (Figure 3a, 16 pixels).
+///
+/// Template 0 layout (EXTTEMPLATE = 0), with bit positions shown:
+/// ```text
+///        [15] [14] [13] [12] [11]        <- row y-2
+///   [10]  [9]  [8]  [7]  [6]  [5]  [4]   <- row y-1
+///         [3]  [2]  [1]  [0]   ○         <- row y (○ = current pixel)
+/// ```
+///
+/// AT pixels replace specific bit positions:
+/// - A1 replaces bit 4 (nominal position: (3, -1))
+/// - A2 replaces bit 10 (nominal position: (-3, -1))
+/// - A3 replaces bit 11 (nominal position: (2, -2))
+/// - A4 replaces bit 15 (nominal position: (-2, -2))
+fn gather_context_template0(
+    bitmap: &Bitmap,
+    x: u32,
+    y: u32,
+    at: &[AdaptiveTemplatePixel],
+) -> u32 {
+    let x = x as i32;
+    let y = y as i32;
+
+    // Get AT pixel positions (use header values or defaults)
+    // Note: These default positions match the nominal template positions
+    let at1 = if !at.is_empty() { (at[0].x as i32, at[0].y as i32) } else { (3, -1) };
+    let at2 = if at.len() > 1 { (at[1].x as i32, at[1].y as i32) } else { (-3, -1) };
+    let at3 = if at.len() > 2 { (at[2].x as i32, at[2].y as i32) } else { (2, -2) };
+    let at4 = if at.len() > 3 { (at[3].x as i32, at[3].y as i32) } else { (-2, -2) };
+
+    let mut context = 0u32;
+
+    // Row y-2 (5 pixels): bits 15-11 from left to right
+    context = (context << 1) | get_pixel(bitmap, x + at4.0, y + at4.1); // bit 15: A4
+    context = (context << 1) | get_pixel(bitmap, x - 1, y - 2);         // bit 14
+    context = (context << 1) | get_pixel(bitmap, x, y - 2);             // bit 13
+    context = (context << 1) | get_pixel(bitmap, x + 1, y - 2);         // bit 12
+    context = (context << 1) | get_pixel(bitmap, x + at3.0, y + at3.1); // bit 11: A3
+
+    // Row y-1 (7 pixels): bits 10-4 from left to right
+    context = (context << 1) | get_pixel(bitmap, x + at2.0, y + at2.1); // bit 10: A2
+    context = (context << 1) | get_pixel(bitmap, x - 2, y - 1);         // bit 9
+    context = (context << 1) | get_pixel(bitmap, x - 1, y - 1);         // bit 8
+    context = (context << 1) | get_pixel(bitmap, x, y - 1);             // bit 7
+    context = (context << 1) | get_pixel(bitmap, x + 1, y - 1);         // bit 6
+    context = (context << 1) | get_pixel(bitmap, x + 2, y - 1);         // bit 5
+    context = (context << 1) | get_pixel(bitmap, x + at1.0, y + at1.1); // bit 4: A1
+
+    // Row y (4 pixels, before current pixel): bits 3-0 from left to right
+    context = (context << 1) | get_pixel(bitmap, x - 4, y);             // bit 3
+    context = (context << 1) | get_pixel(bitmap, x - 3, y);             // bit 2
+    context = (context << 1) | get_pixel(bitmap, x - 2, y);             // bit 1
+    context = (context << 1) | get_pixel(bitmap, x - 1, y);             // bit 0
+
+    context
+}
+
+/// Gather context for Template 1 (Figure 4, 13 pixels).
+///
+/// Template 1 layout:
+/// ```text
+///         X   X   X   X       <- row y-2
+///     X   X   X   X   X   A1  <- row y-1
+///         X   X   X   ○       <- row y
+/// ```
+fn gather_context_template1(
+    bitmap: &Bitmap,
+    x: u32,
+    y: u32,
+    at: &[AdaptiveTemplatePixel],
+) -> u32 {
+    let x = x as i32;
+    let y = y as i32;
+
+    // AT pixel position (default from Table 5: (3, -1))
+    let at1 = if !at.is_empty() { (at[0].x as i32, at[0].y as i32) } else { (3, -1) };
+
+    let mut context = 0u32;
+
+    // Row y-2 (4 pixels)
+    context = (context << 1) | get_pixel(bitmap, x - 1, y - 2);
+    context = (context << 1) | get_pixel(bitmap, x, y - 2);
+    context = (context << 1) | get_pixel(bitmap, x + 1, y - 2);
+    context = (context << 1) | get_pixel(bitmap, x + 2, y - 2);
+
+    // Row y-1 (6 pixels)
+    context = (context << 1) | get_pixel(bitmap, x - 2, y - 1);
+    context = (context << 1) | get_pixel(bitmap, x - 1, y - 1);
+    context = (context << 1) | get_pixel(bitmap, x, y - 1);
+    context = (context << 1) | get_pixel(bitmap, x + 1, y - 1);
+    context = (context << 1) | get_pixel(bitmap, x + 2, y - 1);
+    context = (context << 1) | get_pixel(bitmap, x + at1.0, y + at1.1); // A1
+
+    // Row y (3 pixels)
+    context = (context << 1) | get_pixel(bitmap, x - 3, y);
+    context = (context << 1) | get_pixel(bitmap, x - 2, y);
+    context = (context << 1) | get_pixel(bitmap, x - 1, y);
+
+    context
+}
+
+/// Gather context for Template 2 (Figure 5, 10 pixels).
+///
+/// Template 2 layout:
+/// ```text
+///         X   X   X       <- row y-2
+///     X   X   X   X   A1  <- row y-1
+///         X   X   ○       <- row y
+/// ```
+fn gather_context_template2(
+    bitmap: &Bitmap,
+    x: u32,
+    y: u32,
+    at: &[AdaptiveTemplatePixel],
+) -> u32 {
+    let x = x as i32;
+    let y = y as i32;
+
+    // AT pixel position (default from Table 5: (2, -1))
+    let at1 = if !at.is_empty() { (at[0].x as i32, at[0].y as i32) } else { (2, -1) };
+
+    let mut context = 0u32;
+
+    // Row y-2 (3 pixels)
+    context = (context << 1) | get_pixel(bitmap, x, y - 2);
+    context = (context << 1) | get_pixel(bitmap, x + 1, y - 2);
+    context = (context << 1) | get_pixel(bitmap, x + 2, y - 2);
+
+    // Row y-1 (5 pixels)
+    context = (context << 1) | get_pixel(bitmap, x - 2, y - 1);
+    context = (context << 1) | get_pixel(bitmap, x - 1, y - 1);
+    context = (context << 1) | get_pixel(bitmap, x, y - 1);
+    context = (context << 1) | get_pixel(bitmap, x + 1, y - 1);
+    context = (context << 1) | get_pixel(bitmap, x + at1.0, y + at1.1); // A1
+
+    // Row y (2 pixels)
+    context = (context << 1) | get_pixel(bitmap, x - 2, y);
+    context = (context << 1) | get_pixel(bitmap, x - 1, y);
+
+    context
+}
+
+/// Gather context for Template 3 (Figure 6, 10 pixels).
+///
+/// Template 3 layout:
+/// ```text
+///     X   X   X   X   X   A1  <- row y-1
+///         X   X   X   X   ○   <- row y
+/// ```
+fn gather_context_template3(
+    bitmap: &Bitmap,
+    x: u32,
+    y: u32,
+    at: &[AdaptiveTemplatePixel],
+) -> u32 {
+    let x = x as i32;
+    let y = y as i32;
+
+    // AT pixel position (default from Table 5: (2, -1))
+    let at1 = if !at.is_empty() { (at[0].x as i32, at[0].y as i32) } else { (2, -1) };
+
+    let mut context = 0u32;
+
+    // Row y-1 (6 pixels)
+    context = (context << 1) | get_pixel(bitmap, x - 4, y - 1);
+    context = (context << 1) | get_pixel(bitmap, x - 3, y - 1);
+    context = (context << 1) | get_pixel(bitmap, x - 2, y - 1);
+    context = (context << 1) | get_pixel(bitmap, x - 1, y - 1);
+    context = (context << 1) | get_pixel(bitmap, x, y - 1);
+    context = (context << 1) | get_pixel(bitmap, x + at1.0, y + at1.1); // A1
+
+    // Row y (4 pixels)
+    context = (context << 1) | get_pixel(bitmap, x - 4, y);
+    context = (context << 1) | get_pixel(bitmap, x - 3, y);
+    context = (context << 1) | get_pixel(bitmap, x - 2, y);
+    context = (context << 1) | get_pixel(bitmap, x - 1, y);
+
+    context
 }

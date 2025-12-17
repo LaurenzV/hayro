@@ -86,5 +86,5 @@
   { "id": "bitmap-trailing-7fff-stripped-harder-refine.jbig2", "ignore": true },
   { "id": "bitmap-trailing-7fff-stripped-harder.jbig2", "ignore": true },
   { "id": "bitmap-trailing-7fff-stripped.jbig2", "ignore": true },
-  { "id": "bitmap.jbig2", "ignore": true }
+  "bitmap.jbig2"
 ]
