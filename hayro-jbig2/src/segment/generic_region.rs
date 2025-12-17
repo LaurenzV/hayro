@@ -1,9 +1,4 @@
 //! Generic region segment parsing and decoding (7.4.6, 6.2).
-//!
-//! "The data parts of all three of the generic region segment types
-//! ('intermediate generic region', 'immediate generic region' and 'immediate
-//! lossless generic region') are coded identically, but are acted upon
-//! differently, see 8.2." (7.4.6)
 
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use crate::bitmap::{Bitmap, DecodedRegion};
@@ -11,9 +6,6 @@ use crate::reader::Reader;
 use crate::segment::region::{RegionSegmentInfo, parse_region_segment_info};
 
 /// Template used for arithmetic coding (7.4.6.2, 6.2.5.3).
-///
-/// "Bits 1-2: GBTEMPLATE. This field specifies the template used for
-/// template-based arithmetic coding."
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum GbTemplate {
     /// Template 0: 16 pixels (6.2.5.3, Figure 3)
@@ -27,8 +19,6 @@ pub(crate) enum GbTemplate {
 }
 
 /// Adaptive template pixel position.
-///
-/// "The AT coordinate X and Y fields are signed values." (7.4.6.3)
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct AdaptiveTemplatePixel {
     pub x: i8,

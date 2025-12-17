@@ -32,6 +32,7 @@ use bitmap::{Bitmap, DecodedRegion};
 use file::{File, parse_file};
 use reader::Reader;
 use segment::SegmentType;
+use segment::generic_refinement_region::parse_generic_refinement_region_header;
 use segment::generic_region::decode_generic_region;
 use segment::page_info::{PageInformation, parse_page_information};
 
@@ -60,6 +61,7 @@ pub struct Image {
 /// ```
 pub fn decode(data: &[u8]) -> Result<Image, &'static str> {
     let file = parse_file(data)?;
+    eprintln!("{:?}", file);
 
     let height_from_stripes = scan_for_stripe_height(&file);
 
@@ -89,6 +91,11 @@ pub fn decode(data: &[u8]) -> Result<Image, &'static str> {
                 let ctx = ctx.as_mut().map_err(|e| *e)?;
                 let region = decode_generic_region(&mut reader)?;
                 ctx.store_region(seg.header.segment_number, region);
+            }
+            SegmentType::ImmediateGenericRefinementRegion
+            | SegmentType::ImmediateLosslessGenericRefinementRegion => {
+                let _header = parse_generic_refinement_region_header(&mut reader)?;
+                return Err("generic refinement region decoding not yet implemented");
             }
             SegmentType::EndOfPage | SegmentType::EndOfFile => {
                 break;

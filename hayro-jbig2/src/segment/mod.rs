@@ -3,6 +3,7 @@
 //! This module handles parsing of individual segment headers and defines
 //! the segment types used in JBIG2.
 
+pub(crate) mod generic_refinement_region;
 pub(crate) mod generic_region;
 pub(crate) mod page_info;
 pub(crate) mod region;
