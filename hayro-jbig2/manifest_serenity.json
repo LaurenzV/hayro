@@ -3,11 +3,11 @@
   { "id": "bitmap-composite-and-xnor-halftone.jbig2", "ignore": true },
   { "id": "bitmap-composite-and-xnor-refine.jbig2", "ignore": true },
   { "id": "bitmap-composite-and-xnor-text.jbig2", "ignore": true },
-  { "id": "bitmap-composite-and-xnor.jbig2", "ignore": true },
+  "bitmap-composite-and-xnor.jbig2",
   { "id": "bitmap-composite-or-xor-replace-halftone.jbig2", "ignore": true },
   { "id": "bitmap-composite-or-xor-replace-refine.jbig2", "ignore": true },
   { "id": "bitmap-composite-or-xor-replace-text.jbig2", "ignore": true },
-  { "id": "bitmap-composite-or-xor-replace.jbig2", "ignore": true },
+  "bitmap-composite-or-xor-replace.jbig2",
   { "id": "bitmap-customat-tpgdon.jbig2", "ignore": true },
   { "id": "bitmap-customat.jbig2", "ignore": true },
   { "id": "bitmap-halftone-10bpp-mmr.jbig2", "ignore": true },
@@ -84,7 +84,7 @@
   "bitmap-template3.jbig2",
   "bitmap-tpgdon.jbig2",
   { "id": "bitmap-trailing-7fff-stripped-harder-refine.jbig2", "ignore": true },
-  { "id": "bitmap-trailing-7fff-stripped-harder.jbig2", "ignore": true },
+  "bitmap-trailing-7fff-stripped-harder.jbig2",
   "bitmap-trailing-7fff-stripped.jbig2",
   "bitmap.jbig2"
 ]

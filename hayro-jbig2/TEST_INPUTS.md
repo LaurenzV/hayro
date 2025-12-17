@@ -2,46 +2,6 @@
 
 Based on actual segment analysis of test files, ordered from simplest to hardest.
 
-## 1. Generic Region Only (Simplest)
-**Segments:** `PageInfo, ImmLossGen, EOP`
-
-```
-bitmap.jbig2
-bitmap-mmr.jbig2
-bitmap-randomaccess.jbig2              (+ EOF)
-bitmap-template1.jbig2
-bitmap-template2.jbig2
-bitmap-template3.jbig2
-bitmap-customat.jbig2
-bitmap-customat-tpgdon.jbig2
-bitmap-template1-customat.jbig2
-bitmap-template1-customat-tpgdon.jbig2
-bitmap-template2-customat.jbig2
-bitmap-template2-customat-tpgdon.jbig2
-bitmap-template3-customat.jbig2
-bitmap-template3-customat-tpgdon.jbig2
-bitmap-trailing-7fff-stripped.jbig2
-```
-
-**Why first:** Core arithmetic decoding. All use `ImmLossGen` (Immediate Lossless Generic Region). The difference is in the generic region *flags* (template, TPGDON, custom AT) - not visible at segment level.
-
----
-
-## 2. Multiple Generic Regions
-**Segments:** `PageInfo, ImmLossGen, ImmLossGen, ImmLossGen, EOP`
-
-```
-bitmap-tpgdon.jbig2
-bitmap-template1-tpgdon.jbig2
-bitmap-template2-tpgdon.jbig2
-bitmap-template3-tpgdon.jbig2
-bitmap-trailing-7fff-stripped-harder.jbig2
-```
-
-**Why:** Same decoder, just multiple regions composed onto page.
-
----
-
 ## 3. Stripes
 **Segments:** `PageInfo, ImmLossGen, EOS, ..., EOP`
 
@@ -54,18 +14,6 @@ bitmap-stripe-initially-unknown-height.jbig2
 ```
 
 **Why:** Adds EndOfStripe handling, otherwise same generic region decoder.
-
----
-
-## 4. Composite Operations (Generic)
-**Segments:** `PageInfo, ImmLossGen, ImmLossGen, ..., EOP`
-
-```
-bitmap-composite-and-xnor.jbig2
-bitmap-composite-or-xor-replace.jbig2
-```
-
-**Why:** Multiple generic regions with different combination operators (OR, AND, XOR, REPLACE).
 
 ---
 
