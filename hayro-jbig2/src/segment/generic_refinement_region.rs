@@ -6,7 +6,7 @@
 //! process." (6.3.1)
 
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
-use crate::bitmap::{Bitmap, DecodedRegion};
+use crate::bitmap::DecodedRegion;
 use crate::reader::Reader;
 use crate::segment::region::{RegionSegmentInfo, parse_region_segment_info};
 
@@ -118,9 +118,7 @@ fn parse_refinement_adaptive_template_pixels(
 /// decoded, and this similarity is used to increase compression." (6.3.1)
 pub(crate) fn decode_generic_refinement_region(
     reader: &mut Reader<'_>,
-    reference: &Bitmap,
-    reference_dx: i32,
-    reference_dy: i32,
+    reference: &DecodedRegion,
 ) -> Result<DecodedRegion, &'static str> {
     let header = parse_generic_refinement_region_header(reader)?;
 
@@ -131,17 +129,17 @@ pub(crate) fn decode_generic_refinement_region(
         return Err("refinement region dimensions exceed reference");
     }
 
+    // "The X offset of the reference bitmap with respect to the bitmap
+    // being decoded." (Table 6, GRREFERENCEDX/GRREFERENCEDY)
+    //
+    // The offset is computed from the difference in location between the
+    // reference and the region being decoded.
+    let reference_dx = reference.x_location as i32 - header.region_info.x_location as i32;
+    let reference_dy = reference.y_location as i32 - header.region_info.y_location as i32;
+
     let encoded_data = reader.tail().ok_or("unexpected end of data")?;
 
-    let bitmap =
-        decode_refinement_bitmap(&header, encoded_data, reference, reference_dx, reference_dy)?;
-
-    Ok(DecodedRegion {
-        bitmap,
-        x_location: header.region_info.x_location,
-        y_location: header.region_info.y_location,
-        combination_operator: header.region_info.combination_operator,
-    })
+    decode_refinement_bitmap(&header, encoded_data, reference, reference_dx, reference_dy)
 }
 
 /// Decode the refinement bitmap (6.3.5.6).
@@ -150,15 +148,22 @@ pub(crate) fn decode_generic_refinement_region(
 fn decode_refinement_bitmap(
     header: &GenericRefinementRegionHeader,
     data: &[u8],
-    reference: &Bitmap,
+    reference: &DecodedRegion,
     reference_dx: i32,
     reference_dy: i32,
-) -> Result<Bitmap, &'static str> {
+) -> Result<DecodedRegion, &'static str> {
     let width = header.region_info.width;
     let height = header.region_info.height;
 
     // "2) Create a bitmap GRREG of width GRW and height GRH pixels." (6.3.5.6)
-    let mut bitmap = Bitmap::new(width, height);
+    let mut region = DecodedRegion {
+        width,
+        height,
+        data: vec![false; (width * height) as usize],
+        x_location: header.region_info.x_location,
+        y_location: header.region_info.y_location,
+        combination_operator: header.region_info.combination_operator,
+    };
 
     let mut decoder = ArithmeticDecoder::new(data);
 
@@ -193,7 +198,7 @@ fn decode_refinement_bitmap(
         if !ltp {
             for x in 0..width {
                 let context = gather_refinement_context(
-                    &bitmap,
+                    &region,
                     reference,
                     x,
                     y,
@@ -202,7 +207,7 @@ fn decode_refinement_bitmap(
                     header,
                 );
                 let pixel = decoder.decode(&mut contexts[context as usize]);
-                bitmap.set_pixel(x, y, pixel != 0);
+                region.set_pixel(x, y, pixel != 0);
             }
         } else {
             // "d) If LTP = 1 then, from left to right, implicitly decode certain
@@ -226,13 +231,13 @@ fn decode_refinement_bitmap(
                     // pixels in the 3 × 3 array." (6.3.5.6)
                     let ref_x = x as i32 - reference_dx;
                     let ref_y = y as i32 - reference_dy;
-                    let tpgrval = get_ref_pixel(reference, ref_x, ref_y);
-                    bitmap.set_pixel(x, y, tpgrval);
+                    let tpgrval = get_pixel(reference, ref_x, ref_y);
+                    region.set_pixel(x, y, tpgrval);
                 } else {
                     // "iii) Otherwise, explicitly decode the current pixel using the
                     // methodology of steps 3 c) i) through 3 c) iii) above." (6.3.5.6)
                     let context = gather_refinement_context(
-                        &bitmap,
+                        &region,
                         reference,
                         x,
                         y,
@@ -241,27 +246,27 @@ fn decode_refinement_bitmap(
                         header,
                     );
                     let pixel = decoder.decode(&mut contexts[context as usize]);
-                    bitmap.set_pixel(x, y, pixel != 0);
+                    region.set_pixel(x, y, pixel != 0);
                 }
             }
         }
     }
 
-    Ok(bitmap)
+    Ok(region)
 }
 
 /// Check the TPGR condition (Figure 16).
 ///
 /// Returns true if all 9 pixels in the 3×3 region centered at (ref_x, ref_y)
 /// in the reference bitmap have the same value.
-fn is_tpgr(reference: &Bitmap, ref_x: i32, ref_y: i32) -> bool {
+fn is_tpgr(reference: &DecodedRegion, ref_x: i32, ref_y: i32) -> bool {
     // Get the center pixel value.
-    let center = get_ref_pixel(reference, ref_x, ref_y);
+    let center = get_pixel(reference, ref_x, ref_y);
 
     // Check all 9 pixels in the 3×3 region (Figure 16).
     for dy in -1..=1 {
         for dx in -1..=1 {
-            if get_ref_pixel(reference, ref_x + dx, ref_y + dy) != center {
+            if get_pixel(reference, ref_x + dx, ref_y + dy) != center {
                 return false;
             }
         }
@@ -270,30 +275,18 @@ fn is_tpgr(reference: &Bitmap, ref_x: i32, ref_y: i32) -> bool {
     true
 }
 
-/// Get a pixel from the reference bitmap, returning false for out-of-bounds.
+/// Get a pixel from a region, returning false for out-of-bounds.
 ///
 /// "Near the edges of the bitmap, these neighbour references might not lie in
 /// the actual bitmap. The rule to satisfy out-of-bounds references shall be:
 /// All pixels lying outside the bounds of the actual bitmap or the reference
 /// bitmap have the value 0." (6.3.5.2)
 #[inline]
-fn get_ref_pixel(bitmap: &Bitmap, x: i32, y: i32) -> bool {
-    if x < 0 || y < 0 || x >= bitmap.width as i32 || y >= bitmap.height as i32 {
+fn get_pixel(region: &DecodedRegion, x: i32, y: i32) -> bool {
+    if x < 0 || y < 0 || x >= region.width as i32 || y >= region.height as i32 {
         false
     } else {
-        bitmap.get_pixel(x as u32, y as u32)
-    }
-}
-
-/// Get a pixel from the bitmap being decoded, returning 0 for out-of-bounds.
-#[inline]
-fn get_decode_pixel(bitmap: &Bitmap, x: i32, y: i32) -> u32 {
-    if x < 0 || y < 0 || x >= bitmap.width as i32 || y >= bitmap.height as i32 {
-        0
-    } else if bitmap.get_pixel(x as u32, y as u32) {
-        1
-    } else {
-        0
+        region.get_pixel(x as u32, y as u32)
     }
 }
 
@@ -302,8 +295,8 @@ fn get_decode_pixel(bitmap: &Bitmap, x: i32, y: i32) -> u32 {
 /// "The values of the pixels in the template shall be combined to form a
 /// context." (6.3.5.3)
 fn gather_refinement_context(
-    bitmap: &Bitmap,
-    reference: &Bitmap,
+    region: &DecodedRegion,
+    reference: &DecodedRegion,
     x: u32,
     y: u32,
     reference_dx: i32,
@@ -327,46 +320,46 @@ fn gather_refinement_context(
 
             let mut context = 0u32;
 
-            context = (context << 1) | get_decode_pixel(bitmap, x + at1.x as i32, y + at1.y as i32);
-            context = (context << 1) | get_decode_pixel(bitmap, x, y - 1);
-            context = (context << 1) | get_decode_pixel(bitmap, x + 1, y - 1);
-            context = (context << 1) | get_decode_pixel(bitmap, x - 1, y);
+            context = (context << 1) | get_pixel_u32(region, x + at1.x as i32, y + at1.y as i32);
+            context = (context << 1) | get_pixel_u32(region, x, y - 1);
+            context = (context << 1) | get_pixel_u32(region, x + 1, y - 1);
+            context = (context << 1) | get_pixel_u32(region, x - 1, y);
 
             context = (context << 1)
-                | get_ref_pixel_u32(reference, ref_x + at2.x as i32, ref_y + at2.y as i32);
-            context = (context << 1) | get_ref_pixel_u32(reference, ref_x, ref_y - 1);
-            context = (context << 1) | get_ref_pixel_u32(reference, ref_x + 1, ref_y - 1);
-            context = (context << 1) | get_ref_pixel_u32(reference, ref_x - 1, ref_y);
-            context = (context << 1) | get_ref_pixel_u32(reference, ref_x, ref_y);
-            context = (context << 1) | get_ref_pixel_u32(reference, ref_x + 1, ref_y);
-            context = (context << 1) | get_ref_pixel_u32(reference, ref_x - 1, ref_y + 1);
-            context = (context << 1) | get_ref_pixel_u32(reference, ref_x, ref_y + 1);
-            context = (context << 1) | get_ref_pixel_u32(reference, ref_x + 1, ref_y + 1);
+                | get_pixel_u32(reference, ref_x + at2.x as i32, ref_y + at2.y as i32);
+            context = (context << 1) | get_pixel_u32(reference, ref_x, ref_y - 1);
+            context = (context << 1) | get_pixel_u32(reference, ref_x + 1, ref_y - 1);
+            context = (context << 1) | get_pixel_u32(reference, ref_x - 1, ref_y);
+            context = (context << 1) | get_pixel_u32(reference, ref_x, ref_y);
+            context = (context << 1) | get_pixel_u32(reference, ref_x + 1, ref_y);
+            context = (context << 1) | get_pixel_u32(reference, ref_x - 1, ref_y + 1);
+            context = (context << 1) | get_pixel_u32(reference, ref_x, ref_y + 1);
+            context = (context << 1) | get_pixel_u32(reference, ref_x + 1, ref_y + 1);
 
             context
         }
         GrTemplate::Template1 => {
             let mut context = 0u32;
 
-            context = (context << 1) | get_decode_pixel(bitmap, x - 1, y - 1);
-            context = (context << 1) | get_decode_pixel(bitmap, x, y - 1);
-            context = (context << 1) | get_decode_pixel(bitmap, x + 1, y - 1);
-            context = (context << 1) | get_decode_pixel(bitmap, x - 1, y);
+            context = (context << 1) | get_pixel_u32(region, x - 1, y - 1);
+            context = (context << 1) | get_pixel_u32(region, x, y - 1);
+            context = (context << 1) | get_pixel_u32(region, x + 1, y - 1);
+            context = (context << 1) | get_pixel_u32(region, x - 1, y);
 
-            context = (context << 1) | get_ref_pixel_u32(reference, ref_x, ref_y - 1);
-            context = (context << 1) | get_ref_pixel_u32(reference, ref_x - 1, ref_y);
-            context = (context << 1) | get_ref_pixel_u32(reference, ref_x, ref_y);
-            context = (context << 1) | get_ref_pixel_u32(reference, ref_x + 1, ref_y);
-            context = (context << 1) | get_ref_pixel_u32(reference, ref_x, ref_y + 1);
-            context = (context << 1) | get_ref_pixel_u32(reference, ref_x + 1, ref_y + 1);
+            context = (context << 1) | get_pixel_u32(reference, ref_x, ref_y - 1);
+            context = (context << 1) | get_pixel_u32(reference, ref_x - 1, ref_y);
+            context = (context << 1) | get_pixel_u32(reference, ref_x, ref_y);
+            context = (context << 1) | get_pixel_u32(reference, ref_x + 1, ref_y);
+            context = (context << 1) | get_pixel_u32(reference, ref_x, ref_y + 1);
+            context = (context << 1) | get_pixel_u32(reference, ref_x + 1, ref_y + 1);
 
             context
         }
     }
 }
 
-/// Get a pixel from the reference bitmap as u32, returning 0 for out-of-bounds.
+/// Get a pixel as u32, returning 0 for out-of-bounds.
 #[inline]
-fn get_ref_pixel_u32(bitmap: &Bitmap, x: i32, y: i32) -> u32 {
-    if get_ref_pixel(bitmap, x, y) { 1 } else { 0 }
+fn get_pixel_u32(region: &DecodedRegion, x: i32, y: i32) -> u32 {
+    u32::from(get_pixel(region, x, y))
 }

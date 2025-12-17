@@ -1,7 +1,7 @@
 //! Generic region segment parsing and decoding (7.4.6, 6.2).
 
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
-use crate::bitmap::{Bitmap, DecodedRegion};
+use crate::bitmap::DecodedRegion;
 use crate::reader::Reader;
 use crate::segment::region::{RegionSegmentInfo, parse_region_segment_info};
 
@@ -184,27 +184,20 @@ pub(crate) fn decode_generic_region(
     let encoded_data = reader.tail().ok_or("unexpected end of data")?;
 
     // Decode the region.
-    let bitmap = if header.mmr {
+    if header.mmr {
         // "6.2.6 Decoding using MMR coding"
-        decode_generic_region_mmr(&header, encoded_data)?
+        decode_generic_region_mmr(&header, encoded_data)
     } else {
         // "6.2.5 Decoding using a template and arithmetic coding"
-        decode_generic_region_ad(&header, encoded_data)?
-    };
-
-    Ok(DecodedRegion {
-        bitmap,
-        x_location: header.region_info.x_location,
-        y_location: header.region_info.y_location,
-        combination_operator: header.region_info.combination_operator,
-    })
+        decode_generic_region_ad(&header, encoded_data)
+    }
 }
 
 /// Decode a generic region using MMR coding (6.2.6).
 fn decode_generic_region_mmr(
     header: &GenericRegionHeader,
     data: &[u8],
-) -> Result<Bitmap, &'static str> {
+) -> Result<DecodedRegion, &'static str> {
     // "If MMR is 1, the generic region decoding procedure is identical to an
     // MMR (Modified Modified READ) decoder described in Recommendation ITU-T
     // T.6 (G4)." (6.2.6)
@@ -216,10 +209,17 @@ fn decode_generic_region_mmr(
     let height = header.region_info.height;
 
     // "2) Create a bitmap GBREG of width GBW and height GBH pixels." (6.2.5.7)
-    let mut bitmap = Bitmap::new(width, height);
+    let mut region = DecodedRegion {
+        width,
+        height,
+        data: vec![false; (width * height) as usize],
+        x_location: header.region_info.x_location,
+        y_location: header.region_info.y_location,
+        combination_operator: header.region_info.combination_operator,
+    };
 
     // Create a decoder that writes into our bitmap.
-    let mut decoder = BitmapDecoder::new(&mut bitmap);
+    let mut decoder = BitmapDecoder::new(&mut region);
 
     // "An invocation of the generic region decoding procedure with MMR equal to
     // 1 shall consume an integral number of bytes, beginning and ending on a
@@ -255,19 +255,19 @@ fn decode_generic_region_mmr(
 
     hayro_ccitt::decode(data, &mut decoder, &settings).ok_or("MMR decoding failed")?;
 
-    Ok(bitmap)
+    Ok(region)
 }
 
-/// A decoder sink that writes decoded pixels into a Bitmap.
+/// A decoder sink that writes decoded pixels into a DecodedRegion.
 struct BitmapDecoder<'a> {
-    bitmap: &'a mut Bitmap,
+    region: &'a mut DecodedRegion,
     x: u32,
     y: u32,
 }
 
 impl<'a> BitmapDecoder<'a> {
-    fn new(bitmap: &'a mut Bitmap) -> Self {
-        Self { bitmap, x: 0, y: 0 }
+    fn new(region: &'a mut DecodedRegion) -> Self {
+        Self { region, x: 0, y: 0 }
     }
 }
 
@@ -276,11 +276,11 @@ impl hayro_ccitt::Decoder for BitmapDecoder<'_> {
     fn push_byte(&mut self, byte: u8) {
         // Write 8 pixels from the byte (MSB first).
         for i in 0..8 {
-            if self.x >= self.bitmap.width {
+            if self.x >= self.region.width {
                 break;
             }
             let bit = (byte >> (7 - i)) & 1;
-            self.bitmap.set_pixel(self.x, self.y, bit != 0);
+            self.region.set_pixel(self.x, self.y, bit != 0);
             self.x += 1;
         }
     }
@@ -306,12 +306,19 @@ impl hayro_ccitt::Decoder for BitmapDecoder<'_> {
 fn decode_generic_region_ad(
     header: &GenericRegionHeader,
     data: &[u8],
-) -> Result<Bitmap, &'static str> {
+) -> Result<DecodedRegion, &'static str> {
     let width = header.region_info.width;
     let height = header.region_info.height;
 
     // "2) Create a bitmap GBREG of width GBW and height GBH pixels." (6.2.5.7)
-    let mut bitmap = Bitmap::new(width, height);
+    let mut region = DecodedRegion {
+        width,
+        height,
+        data: vec![false; (width * height) as usize],
+        x_location: header.region_info.x_location,
+        y_location: header.region_info.y_location,
+        combination_operator: header.region_info.combination_operator,
+    };
 
     let mut decoder = ArithmeticDecoder::new(data);
 
@@ -351,8 +358,8 @@ fn decode_generic_region_ad(
         if ltp {
             for x in 0..width {
                 if y > 0 {
-                    let above = bitmap.get_pixel(x, y - 1);
-                    bitmap.set_pixel(x, y, above);
+                    let above = region.get_pixel(x, y - 1);
+                    region.set_pixel(x, y, above);
                 }
                 // If y == 0, pixels remain 0 (default)
             }
@@ -360,33 +367,33 @@ fn decode_generic_region_ad(
             // "d) If LTP = 0 then, from left to right, decode each pixel of the
             // current row of GBREG." (6.2.5.7)
             for x in 0..width {
-                let context_bits = gather_context(&bitmap, x, y, header);
+                let context_bits = gather_context(&region, x, y, header);
                 let pixel = decoder.decode(&mut contexts[context_bits as usize]);
-                bitmap.set_pixel(x, y, pixel != 0);
+                region.set_pixel(x, y, pixel != 0);
             }
         }
     }
 
-    Ok(bitmap)
+    Ok(region)
 }
 
 /// Gather context bits for a pixel at (x, y) (6.2.5.3, 6.2.5.4).
 ///
 /// "Form an integer CONTEXT by gathering the values of the image pixels overlaid
 /// by the template (including AT pixels) at its current location." (6.2.5.7)
-fn gather_context(bitmap: &Bitmap, x: u32, y: u32, header: &GenericRegionHeader) -> u32 {
+fn gather_context(region: &DecodedRegion, x: u32, y: u32, header: &GenericRegionHeader) -> u32 {
     match header.gb_template {
         GbTemplate::Template0 => {
-            gather_context_template0_no_ext(bitmap, x, y, &header.adaptive_template_pixels)
+            gather_context_template0_no_ext(region, x, y, &header.adaptive_template_pixels)
         }
         GbTemplate::Template1 => {
-            gather_context_template1(bitmap, x, y, &header.adaptive_template_pixels)
+            gather_context_template1(region, x, y, &header.adaptive_template_pixels)
         }
         GbTemplate::Template2 => {
-            gather_context_template2(bitmap, x, y, &header.adaptive_template_pixels)
+            gather_context_template2(region, x, y, &header.adaptive_template_pixels)
         }
         GbTemplate::Template3 => {
-            gather_context_template3(bitmap, x, y, &header.adaptive_template_pixels)
+            gather_context_template3(region, x, y, &header.adaptive_template_pixels)
         }
     }
 }
@@ -398,23 +405,21 @@ fn gather_context(bitmap: &Bitmap, x: u32, y: u32, header: &GenericRegionHeader)
 /// All pixels lying outside the bounds of the actual bitmap have the value 0."
 /// (6.2.5.2)
 #[inline]
-fn get_pixel(bitmap: &Bitmap, x: i32, y: i32) -> u32 {
-    // Note: y >= bitmap.height is not checked because all template positions
+fn get_pixel(region: &DecodedRegion, x: i32, y: i32) -> u32 {
+    // Note: y >= region.height is not checked because all template positions
     // have y <= 0 relative to the current pixel (6.2.5.4, Figure 7).
-    if x < 0 || y < 0 || x >= bitmap.width as i32 {
+    if x < 0 || y < 0 || x >= region.width as i32 {
         0
+    } else if region.get_pixel(x as u32, y as u32) {
+        1
     } else {
-        if bitmap.get_pixel(x as u32, y as u32) {
-            1
-        } else {
-            0
-        }
+        0
     }
 }
 
 /// Gather context for Template 0 (Figure 3a, 16 pixels).
 fn gather_context_template0_no_ext(
-    bitmap: &Bitmap,
+    region: &DecodedRegion,
     x: u32,
     y: u32,
     at: &[AdaptiveTemplatePixel],
@@ -429,30 +434,35 @@ fn gather_context_template0_no_ext(
 
     let mut context = 0u32;
 
-    context = (context << 1) | get_pixel(bitmap, x + at4.0, y + at4.1);
-    context = (context << 1) | get_pixel(bitmap, x - 1, y - 2);
-    context = (context << 1) | get_pixel(bitmap, x, y - 2);
-    context = (context << 1) | get_pixel(bitmap, x + 1, y - 2);
-    context = (context << 1) | get_pixel(bitmap, x + at3.0, y + at3.1);
+    context = (context << 1) | get_pixel(region, x + at4.0, y + at4.1);
+    context = (context << 1) | get_pixel(region, x - 1, y - 2);
+    context = (context << 1) | get_pixel(region, x, y - 2);
+    context = (context << 1) | get_pixel(region, x + 1, y - 2);
+    context = (context << 1) | get_pixel(region, x + at3.0, y + at3.1);
 
-    context = (context << 1) | get_pixel(bitmap, x + at2.0, y + at2.1);
-    context = (context << 1) | get_pixel(bitmap, x - 2, y - 1);
-    context = (context << 1) | get_pixel(bitmap, x - 1, y - 1);
-    context = (context << 1) | get_pixel(bitmap, x, y - 1);
-    context = (context << 1) | get_pixel(bitmap, x + 1, y - 1);
-    context = (context << 1) | get_pixel(bitmap, x + 2, y - 1);
-    context = (context << 1) | get_pixel(bitmap, x + at1.0, y + at1.1);
+    context = (context << 1) | get_pixel(region, x + at2.0, y + at2.1);
+    context = (context << 1) | get_pixel(region, x - 2, y - 1);
+    context = (context << 1) | get_pixel(region, x - 1, y - 1);
+    context = (context << 1) | get_pixel(region, x, y - 1);
+    context = (context << 1) | get_pixel(region, x + 1, y - 1);
+    context = (context << 1) | get_pixel(region, x + 2, y - 1);
+    context = (context << 1) | get_pixel(region, x + at1.0, y + at1.1);
 
-    context = (context << 1) | get_pixel(bitmap, x - 4, y);
-    context = (context << 1) | get_pixel(bitmap, x - 3, y);
-    context = (context << 1) | get_pixel(bitmap, x - 2, y);
-    context = (context << 1) | get_pixel(bitmap, x - 1, y);
+    context = (context << 1) | get_pixel(region, x - 4, y);
+    context = (context << 1) | get_pixel(region, x - 3, y);
+    context = (context << 1) | get_pixel(region, x - 2, y);
+    context = (context << 1) | get_pixel(region, x - 1, y);
 
     context
 }
 
 /// Gather context for Template 1 (Figure 4).
-fn gather_context_template1(bitmap: &Bitmap, x: u32, y: u32, at: &[AdaptiveTemplatePixel]) -> u32 {
+fn gather_context_template1(
+    region: &DecodedRegion,
+    x: u32,
+    y: u32,
+    at: &[AdaptiveTemplatePixel],
+) -> u32 {
     let x = x as i32;
     let y = y as i32;
 
@@ -460,27 +470,32 @@ fn gather_context_template1(bitmap: &Bitmap, x: u32, y: u32, at: &[AdaptiveTempl
 
     let mut context = 0u32;
 
-    context = (context << 1) | get_pixel(bitmap, x - 1, y - 2);
-    context = (context << 1) | get_pixel(bitmap, x, y - 2);
-    context = (context << 1) | get_pixel(bitmap, x + 1, y - 2);
-    context = (context << 1) | get_pixel(bitmap, x + 2, y - 2);
+    context = (context << 1) | get_pixel(region, x - 1, y - 2);
+    context = (context << 1) | get_pixel(region, x, y - 2);
+    context = (context << 1) | get_pixel(region, x + 1, y - 2);
+    context = (context << 1) | get_pixel(region, x + 2, y - 2);
 
-    context = (context << 1) | get_pixel(bitmap, x - 2, y - 1);
-    context = (context << 1) | get_pixel(bitmap, x - 1, y - 1);
-    context = (context << 1) | get_pixel(bitmap, x, y - 1);
-    context = (context << 1) | get_pixel(bitmap, x + 1, y - 1);
-    context = (context << 1) | get_pixel(bitmap, x + 2, y - 1);
-    context = (context << 1) | get_pixel(bitmap, x + at1.0, y + at1.1);
+    context = (context << 1) | get_pixel(region, x - 2, y - 1);
+    context = (context << 1) | get_pixel(region, x - 1, y - 1);
+    context = (context << 1) | get_pixel(region, x, y - 1);
+    context = (context << 1) | get_pixel(region, x + 1, y - 1);
+    context = (context << 1) | get_pixel(region, x + 2, y - 1);
+    context = (context << 1) | get_pixel(region, x + at1.0, y + at1.1);
 
-    context = (context << 1) | get_pixel(bitmap, x - 3, y);
-    context = (context << 1) | get_pixel(bitmap, x - 2, y);
-    context = (context << 1) | get_pixel(bitmap, x - 1, y);
+    context = (context << 1) | get_pixel(region, x - 3, y);
+    context = (context << 1) | get_pixel(region, x - 2, y);
+    context = (context << 1) | get_pixel(region, x - 1, y);
 
     context
 }
 
 /// Gather context for Template 2 (Figure 5).
-fn gather_context_template2(bitmap: &Bitmap, x: u32, y: u32, at: &[AdaptiveTemplatePixel]) -> u32 {
+fn gather_context_template2(
+    region: &DecodedRegion,
+    x: u32,
+    y: u32,
+    at: &[AdaptiveTemplatePixel],
+) -> u32 {
     let x = x as i32;
     let y = y as i32;
 
@@ -488,24 +503,29 @@ fn gather_context_template2(bitmap: &Bitmap, x: u32, y: u32, at: &[AdaptiveTempl
 
     let mut context = 0u32;
 
-    context = (context << 1) | get_pixel(bitmap, x - 1, y - 2);
-    context = (context << 1) | get_pixel(bitmap, x, y - 2);
-    context = (context << 1) | get_pixel(bitmap, x + 1, y - 2);
+    context = (context << 1) | get_pixel(region, x - 1, y - 2);
+    context = (context << 1) | get_pixel(region, x, y - 2);
+    context = (context << 1) | get_pixel(region, x + 1, y - 2);
 
-    context = (context << 1) | get_pixel(bitmap, x - 2, y - 1);
-    context = (context << 1) | get_pixel(bitmap, x - 1, y - 1);
-    context = (context << 1) | get_pixel(bitmap, x, y - 1);
-    context = (context << 1) | get_pixel(bitmap, x + 1, y - 1);
-    context = (context << 1) | get_pixel(bitmap, x + at1.0, y + at1.1);
+    context = (context << 1) | get_pixel(region, x - 2, y - 1);
+    context = (context << 1) | get_pixel(region, x - 1, y - 1);
+    context = (context << 1) | get_pixel(region, x, y - 1);
+    context = (context << 1) | get_pixel(region, x + 1, y - 1);
+    context = (context << 1) | get_pixel(region, x + at1.0, y + at1.1);
 
-    context = (context << 1) | get_pixel(bitmap, x - 2, y);
-    context = (context << 1) | get_pixel(bitmap, x - 1, y);
+    context = (context << 1) | get_pixel(region, x - 2, y);
+    context = (context << 1) | get_pixel(region, x - 1, y);
 
     context
 }
 
 /// Gather context for Template 3 (Figure 6).
-fn gather_context_template3(bitmap: &Bitmap, x: u32, y: u32, at: &[AdaptiveTemplatePixel]) -> u32 {
+fn gather_context_template3(
+    region: &DecodedRegion,
+    x: u32,
+    y: u32,
+    at: &[AdaptiveTemplatePixel],
+) -> u32 {
     let x = x as i32;
     let y = y as i32;
 
@@ -513,17 +533,17 @@ fn gather_context_template3(bitmap: &Bitmap, x: u32, y: u32, at: &[AdaptiveTempl
 
     let mut context = 0u32;
 
-    context = (context << 1) | get_pixel(bitmap, x - 3, y - 1);
-    context = (context << 1) | get_pixel(bitmap, x - 2, y - 1);
-    context = (context << 1) | get_pixel(bitmap, x - 1, y - 1);
-    context = (context << 1) | get_pixel(bitmap, x, y - 1);
-    context = (context << 1) | get_pixel(bitmap, x + 1, y - 1);
-    context = (context << 1) | get_pixel(bitmap, x + at1.0, y + at1.1);
+    context = (context << 1) | get_pixel(region, x - 3, y - 1);
+    context = (context << 1) | get_pixel(region, x - 2, y - 1);
+    context = (context << 1) | get_pixel(region, x - 1, y - 1);
+    context = (context << 1) | get_pixel(region, x, y - 1);
+    context = (context << 1) | get_pixel(region, x + 1, y - 1);
+    context = (context << 1) | get_pixel(region, x + at1.0, y + at1.1);
 
-    context = (context << 1) | get_pixel(bitmap, x - 4, y);
-    context = (context << 1) | get_pixel(bitmap, x - 3, y);
-    context = (context << 1) | get_pixel(bitmap, x - 2, y);
-    context = (context << 1) | get_pixel(bitmap, x - 1, y);
+    context = (context << 1) | get_pixel(region, x - 4, y);
+    context = (context << 1) | get_pixel(region, x - 3, y);
+    context = (context << 1) | get_pixel(region, x - 2, y);
+    context = (context << 1) | get_pixel(region, x - 1, y);
 
     context
 }

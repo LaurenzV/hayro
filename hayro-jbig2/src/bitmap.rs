@@ -9,17 +9,19 @@ use crate::segment::region::CombinationOperator;
 
 /// A decoded bitmap region with position and combination information.
 ///
-/// This wraps a `Bitmap` with the location and operator needed to composite it
-/// onto the page or to serve as a reference for refinement regions.
+/// Pixels are stored as booleans where `true` means black, `false` means white.
 ///
-/// "The data parts of all three of the generic region segment types
-/// ('intermediate generic region', 'immediate generic region' and 'immediate
-/// lossless generic region') are coded identically, but are acted upon
-/// differently, see 8.2." (7.4.6)
+/// "Pixels decoded by the MMR decoder having the value 'black' shall be treated
+/// as having the value 1. Pixels decoded by the MMR decoder having the value
+/// 'white' shall be treated as having the value 0." (6.2.6)
 #[derive(Debug, Clone)]
 pub(crate) struct DecodedRegion {
-    /// The decoded bitmap.
-    pub bitmap: Bitmap,
+    /// Width in pixels.
+    pub width: u32,
+    /// Height in pixels.
+    pub height: u32,
+    /// Pixel data, one bool per pixel, row-major order.
+    pub data: Vec<bool>,
     /// "This four-byte field gives the horizontal offset in pixels of the bitmap
     /// encoded in this segment relative to the page bitmap." (7.4.1.3)
     pub x_location: u32,
@@ -30,31 +32,19 @@ pub(crate) struct DecodedRegion {
     pub combination_operator: CombinationOperator,
 }
 
-/// A decoded bitmap region.
-///
-/// Pixels are stored as booleans where `true` means black, `false` means white.
-///
-/// "Pixels decoded by the MMR decoder having the value 'black' shall be treated
-/// as having the value 1. Pixels decoded by the MMR decoder having the value
-/// 'white' shall be treated as having the value 0." (6.2.6)
-#[derive(Debug, Clone)]
-pub(crate) struct Bitmap {
-    /// Width in pixels.
-    pub width: u32,
-    /// Height in pixels.
-    pub height: u32,
-    /// Pixel data, one bool per pixel, row-major order.
-    pub data: Vec<bool>,
-}
-
-impl Bitmap {
+impl DecodedRegion {
     /// Create a new bitmap filled with `false` (white pixels).
+    ///
+    /// The bitmap is positioned at (0, 0) with the Replace operator.
     pub fn new(width: u32, height: u32) -> Self {
         let data = vec![false; (width * height) as usize];
         Self {
             width,
             height,
             data,
+            x_location: 0,
+            y_location: 0,
+            combination_operator: CombinationOperator::Replace,
         }
     }
 
@@ -76,26 +66,20 @@ impl Bitmap {
         self.data[(y * self.width + x) as usize] = value;
     }
 
-    /// Combine another bitmap into this one at the given location using the
-    /// specified combination operator.
+    /// Combine another region into this one using the other region's location
+    /// and combination operator.
     ///
     /// "These operators describe how the segment's bitmap is to be combined with
     /// the page bitmap." (7.4.1.5)
-    pub fn combine(
-        &mut self,
-        other: &Bitmap,
-        x_location: u32,
-        y_location: u32,
-        operator: CombinationOperator,
-    ) {
+    pub fn combine(&mut self, other: &DecodedRegion) {
         for y in 0..other.height {
-            let dest_y = y_location + y;
+            let dest_y = other.y_location + y;
             if dest_y >= self.height {
                 break;
             }
 
             for x in 0..other.width {
-                let dest_x = x_location + x;
+                let dest_x = other.x_location + x;
                 if dest_x >= self.width {
                     break;
                 }
@@ -103,7 +87,7 @@ impl Bitmap {
                 let src_pixel = other.get_pixel(x, y);
                 let dst_pixel = self.get_pixel(dest_x, dest_y);
 
-                let result = match operator {
+                let result = match other.combination_operator {
                     // "0 OR"
                     CombinationOperator::Or => dst_pixel | src_pixel,
                     // "1 AND"
