@@ -34,7 +34,7 @@ pub(crate) enum XRefError {
 }
 
 /// Parse the "root" xref from the PDF.
-pub(crate) fn root_xref(data: PdfData) -> Result<XRef, XRefError> {
+pub(crate) fn root_xref(data: PdfData, password: &[u8]) -> Result<XRef, XRefError> {
     let mut xref_map = FxHashMap::default();
     let xref_pos = find_last_xref_pos(data.as_ref().as_ref()).ok_or(XRefError::Unknown)?;
     let trailer = populate_xref_impl(data.as_ref().as_ref(), xref_pos, &mut xref_map)
@@ -45,18 +45,19 @@ pub(crate) fn root_xref(data: PdfData) -> Result<XRef, XRefError> {
         xref_map,
         XRefInput::TrailerDictData(trailer),
         false,
+        password,
     )
 }
 
 /// Try to manually parse the PDF to build an xref table and trailer dictionary.
-pub(crate) fn fallback(data: PdfData) -> Option<XRef> {
+pub(crate) fn fallback(data: PdfData, password: &[u8]) -> Option<XRef> {
     warn!("xref table was invalid, trying to manually build xref table");
-    let (xref_map, xref_input) = fallback_xref_map(&data);
+    let (xref_map, xref_input) = fallback_xref_map(&data, password);
 
     if let Some(xref_input) = xref_input {
         warn!("rebuild xref table with {} entries", xref_map.len());
 
-        XRef::new(data.clone(), xref_map, xref_input, true).ok()
+        XRef::new(data.clone(), xref_map, xref_input, true, password).ok()
     } else {
         warn!("couldn't find trailer dictionary, failed to rebuild xref table");
 
@@ -64,14 +65,15 @@ pub(crate) fn fallback(data: PdfData) -> Option<XRef> {
     }
 }
 
-fn fallback_xref_map(data: &PdfData) -> (XrefMap, Option<XRefInput<'_>>) {
-    fallback_xref_map_inner(data, ReaderContext::dummy(), true)
+fn fallback_xref_map<'a>(data: &'a PdfData, password: &[u8]) -> (XrefMap, Option<XRefInput<'a>>) {
+    fallback_xref_map_inner(data, ReaderContext::dummy(), true, password)
 }
 
 fn fallback_xref_map_inner<'a>(
     data: &'a PdfData,
     mut dummy_ctx: ReaderContext<'a>,
     recurse: bool,
+    password: &[u8],
 ) -> (XrefMap, Option<XRefInput<'a>>) {
     let mut xref_map = FxHashMap::default();
     let mut trailer_dicts = vec![];
@@ -201,9 +203,10 @@ fn fallback_xref_map_inner<'a>(
             xref_map.clone(),
             XRefInput::TrailerDictData(trailer_dict.as_ref().map(|d| d.data()).unwrap()),
             true,
+            password,
         ) {
             let ctx = ReaderContext::new(&xref, false);
-            let (patched_map, _) = fallback_xref_map_inner(data, ctx, false);
+            let (patched_map, _) = fallback_xref_map_inner(data, ctx, false, password);
             xref_map = patched_map;
         }
     }
@@ -232,6 +235,7 @@ impl XRef {
         xref_map: XrefMap,
         input: XRefInput<'_>,
         repaired: bool,
+        password: &[u8],
     ) -> Result<Self, XRefError> {
         // This is a bit hacky, but the problem is we can't read the resolved trailer dictionary
         // before we actually created the xref struct. So we first create it using dummy data
@@ -245,6 +249,7 @@ impl XRef {
             has_ocgs: false,
             metadata: Arc::new(Metadata::default()),
             trailer_data,
+            password: password.to_vec(),
         })));
 
         // We read the trailer twice, once to determine the encryption used and then a second
@@ -260,7 +265,7 @@ impl XRef {
                         .read_with_context::<Dict<'_>>(&ReaderContext::new(&xref, false))
                         .ok_or(XRefError::Unknown)?;
 
-                    get_decryptor(&trailer_dict)?
+                    get_decryptor(&trailer_dict, password)?
                 }
                 XRefInput::RootRef(_) => Decryptor::None,
             }
@@ -436,7 +441,7 @@ impl XRef {
         let mut locked = r.map.try_write().unwrap();
         assert!(!locked.repaired);
 
-        let (xref_map, _) = fallback_xref_map(r.data.get());
+        let (xref_map, _) = fallback_xref_map(r.data.get(), &r.password);
         locked.xref_map = xref_map;
         locked.repaired = true;
     }
@@ -643,6 +648,7 @@ struct SomeRepr {
     metadata: Arc<Metadata>,
     decryptor: Arc<Decryptor>,
     has_ocgs: bool,
+    password: Vec<u8>,
     trailer_data: TrailerData,
 }
 
@@ -957,7 +963,7 @@ fn read_xref_table_trailer<'a>(
     reader.read_with_context::<Dict<'_>>(ctx)
 }
 
-fn get_decryptor(trailer_dict: &Dict<'_>) -> Result<Decryptor, XRefError> {
+fn get_decryptor(trailer_dict: &Dict<'_>, password: &[u8]) -> Result<Decryptor, XRefError> {
     if let Some(encryption_dict) = trailer_dict.get::<Dict<'_>>(ENCRYPT) {
         let id = if let Some(id) = trailer_dict
             .get::<Array<'_>>(ID)
@@ -969,7 +975,7 @@ fn get_decryptor(trailer_dict: &Dict<'_>) -> Result<Decryptor, XRefError> {
             vec![]
         };
 
-        get(&encryption_dict, &id).map_err(XRefError::Encryption)
+        get(&encryption_dict, &id, password).map_err(XRefError::Encryption)
     } else {
         Ok(Decryptor::None)
     }
