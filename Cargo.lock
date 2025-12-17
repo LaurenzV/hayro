@@ -539,9 +539,9 @@ dependencies = [
 name = "hayro-jbig2"
 version = "0.1.0"
 dependencies = [
+ "hayro-ccitt",
  "image 0.25.9",
  "indicatif",
- "log",
  "rayon",
  "serde",
  "serde_json",

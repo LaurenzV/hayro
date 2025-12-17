@@ -1,10 +1,11 @@
-//! Generic region segment parsing (7.4.6).
+//! Generic region segment parsing and decoding (7.4.6, 6.2).
 //!
 //! "The data parts of all three of the generic region segment types
 //! ('intermediate generic region', 'immediate generic region' and 'immediate
 //! lossless generic region') are coded identically, but are acted upon
 //! differently, see 8.2." (7.4.6)
 
+use crate::bitmap::Bitmap;
 use crate::reader::Reader;
 use crate::segment::region::{RegionSegmentInfo, parse_region_segment_info};
 
@@ -133,4 +134,118 @@ fn parse_adaptive_template_pixels(
     }
 
     Ok(pixels)
+}
+
+// ============================================================================
+// 6.2 Generic region decoding procedure
+// ============================================================================
+
+/// Decode a generic region using MMR coding (6.2.6).
+pub(crate) fn decode_generic_region_mmr(
+    header: &GenericRegionHeader,
+    data: &[u8],
+) -> Result<Bitmap, &'static str> {
+    // "If MMR is 1, the generic region decoding procedure is identical to an
+    // MMR (Modified Modified READ) decoder described in Recommendation ITU-T
+    // T.6 (G4)." (6.2.6)
+    if !header.mmr {
+        return Err("decode_generic_region_mmr called with MMR=0");
+    }
+
+    let width = header.region_info.width;
+    let height = header.region_info.height;
+
+    // "2) Create a bitmap GBREG of width GBW and height GBH pixels." (6.2.5.7)
+    let mut bitmap = Bitmap::new(width, height);
+
+    // Create a decoder that writes into our bitmap.
+    let mut decoder = BitmapDecoder::new(&mut bitmap);
+
+    // "An invocation of the generic region decoding procedure with MMR equal to
+    // 1 shall consume an integral number of bytes, beginning and ending on a
+    // byte boundary. This may involve skipping over some bits in the last byte
+    // read." (6.2.6)
+    //
+    // "If the number of bytes contained in the encoded bitmap is known in
+    // advance, then it is permissible for the data stream not to contain an
+    // EOFB (000000000001000000000001) at the end of the MMR-encoded data."
+    // (6.2.6)
+    let settings = hayro_ccitt::DecodeSettings {
+        columns: width,
+        rows: height,
+        // "If the number of bytes contained in the encoded bitmap is known in
+        // advance, then it is permissible for the data stream not to contain
+        // an EOFB" (6.2.6)
+        //
+        // We know the byte count from the segment data length, so EOFB is
+        // optional. We set end_of_block to false to decode based on row count.
+        end_of_block: false,
+        end_of_line: false,
+        rows_are_byte_aligned: false,
+        encoding: hayro_ccitt::EncodingMode::Group4,
+        // "Pixels decoded by the MMR decoder having the value 'black' shall be
+        // treated as having the value 1. Pixels decoded by the MMR decoder
+        // having the value 'white' shall be treated as having the value 0."
+        // (6.2.6)
+        //
+        // hayro-ccitt uses 1 for white, 0 for black by default, so we need to
+        // invert to match JBIG2 convention.
+        invert_black: true,
+    };
+
+    hayro_ccitt::decode(data, &mut decoder, &settings)
+        .ok_or("MMR decoding failed")?;
+
+    Ok(bitmap)
+}
+
+/// A decoder sink that writes decoded pixels into a Bitmap.
+struct BitmapDecoder<'a> {
+    bitmap: &'a mut Bitmap,
+    x: u32,
+    y: u32,
+}
+
+impl<'a> BitmapDecoder<'a> {
+    fn new(bitmap: &'a mut Bitmap) -> Self {
+        Self { bitmap, x: 0, y: 0 }
+    }
+}
+
+impl hayro_ccitt::Decoder for BitmapDecoder<'_> {
+    /// "Push a single packed byte containing the data for 8 pixels."
+    fn push_byte(&mut self, byte: u8) {
+        // Write 8 pixels from the byte.
+        let stride = self.bitmap.stride();
+        let byte_idx = self.y as usize * stride + (self.x as usize / 8);
+
+        if self.x % 8 == 0 && self.x + 8 <= self.bitmap.width {
+            // Fast path: byte-aligned write within bounds.
+            self.bitmap.data[byte_idx] = byte;
+            self.x += 8;
+        } else {
+            // Slow path: write bit by bit.
+            for i in 0..8 {
+                if self.x >= self.bitmap.width {
+                    break;
+                }
+                let bit = (byte >> (7 - i)) & 1;
+                self.bitmap.set_pixel(self.x, self.y, bit);
+                self.x += 1;
+            }
+        }
+    }
+
+    /// "Push multiple columns of same-color pixels."
+    fn push_bytes(&mut self, byte: u8, count: usize) {
+        for _ in 0..count {
+            self.push_byte(byte);
+        }
+    }
+
+    /// "Called when a row has been completed."
+    fn next_line(&mut self) {
+        self.x = 0;
+        self.y += 1;
+    }
 }

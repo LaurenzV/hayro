@@ -22,99 +22,17 @@ This crate forbids unsafe code via a crate-level attribute.
 #![forbid(unsafe_code)]
 #![allow(missing_docs)]
 
-pub(crate) mod file;
-pub(crate) mod reader;
-pub(crate) mod segment;
+mod bitmap;
+mod file;
+mod reader;
+mod segment;
 
-/// Temporary debug function to test file parsing.
-pub fn debug_parse_file(data: &[u8]) {
-    use file::parse_file;
-
-    match parse_file(data) {
-        Ok(f) => {
-            print_header_debug(&f.header);
-            println!();
-
-            println!("=== Segments ({} total) ===", f.segments.len());
-            for (i, seg) in f.segments.iter().enumerate() {
-                print_segment_debug(i, seg);
-            }
-        }
-        Err(e) => {
-            eprintln!("Error parsing JBIG2 file: {e}");
-        }
-    }
-}
-
-/// Print debug information for the file header.
-fn print_header_debug(header: &file::FileHeader) {
-    use file::FileOrganization;
-
-    println!("=== File Header ===");
-    println!(
-        "Organization: {:?}",
-        match header.organization {
-            FileOrganization::Sequential => "Sequential",
-            FileOrganization::RandomAccess => "Random-access",
-        }
-    );
-    println!("Number of pages: {:?}", header.number_of_pages);
-    println!(
-        "Uses extended templates: {}",
-        header.uses_extended_templates
-    );
-    println!(
-        "Contains coloured regions: {}",
-        header.contains_coloured_regions
-    );
-}
-
-/// Print debug information for a single segment.
-fn print_segment_debug(index: usize, seg: &segment::Segment<'_>) -> Result<(), &'static str> {
-    use reader::Reader;
-    use segment::SegmentType;
-    use segment::generic_region::parse_generic_region_header;
-    use segment::page_info::parse_page_information;
-
-    println!(
-        "[{index}] Segment #{}: type={:?}, page={}, data_len={}, referred_to={:?}",
-        seg.header.segment_number,
-        seg.header.segment_type,
-        seg.header.page_association,
-        seg.data.len(),
-        seg.header.referred_to_segments,
-    );
-
-    let mut ctx = Err("region segment appeared before page information.");
-
-    // Parse and print segment-specific data
-    let mut reader = Reader::new(seg.data);
-    match seg.header.segment_type {
-        SegmentType::PageInformation => {
-            let page_info = parse_page_information(&mut reader)?;
-            ctx = Ok(DecoderContext {
-                width: page_info.width,
-                height: page_info.height,
-                data: vec![0; page_info.width as usize * page_info.height as usize],
-            });
-        }
-        SegmentType::IntermediateGenericRegion
-        | SegmentType::ImmediateGenericRegion
-        | SegmentType::ImmediateLosslessGenericRegion => {
-            let header = parse_generic_region_header(&mut reader)?;
-            eprintln!("{:?}", header);
-        }
-        _ => {}
-    }
-
-    Ok(())
-}
-
-pub(crate) struct DecoderContext {
-    pub(crate) width: u32,
-    pub(crate) height: u32,
-    pub(crate) data: Vec<u8>,
-}
+use bitmap::Bitmap;
+use file::parse_file;
+use reader::Reader;
+use segment::SegmentType;
+use segment::generic_region::{decode_generic_region_mmr, parse_generic_region_header};
+use segment::page_info::parse_page_information;
 
 /// A decoded JBIG2 image.
 #[derive(Debug, Clone)]
@@ -133,4 +51,90 @@ impl Image {
     pub fn stride(&self) -> usize {
         (self.width as usize + 7) / 8
     }
+}
+
+/// Decode a JBIG2 image from the given data.
+///
+/// This function parses and decodes a standalone JBIG2 file, returning the
+/// decoded bitmap image.
+///
+/// # Example
+/// ```rust,no_run
+/// let data = std::fs::read("image.jb2").unwrap();
+/// let image = hayro_jbig2::decode(&data).unwrap();
+/// println!("{}x{} image", image.width, image.height);
+/// ```
+pub fn decode(data: &[u8]) -> Result<Image, &'static str> {
+    let file = parse_file(data)?;
+
+    let mut page_bitmap: Option<Bitmap> = None;
+
+    for seg in &file.segments {
+        let mut reader = Reader::new(seg.data);
+
+        match seg.header.segment_type {
+            // "Page information – see 7.4.8." (type 48)
+            SegmentType::PageInformation => {
+                let page_info = parse_page_information(&mut reader)?;
+
+                // "Bit 2: Page default pixel value. This bit contains the initial
+                // value for every pixel in the page, before any region segments
+                // are decoded or drawn." (7.4.8.5)
+                let mut bitmap = Bitmap::new(page_info.width, page_info.height);
+                if page_info.flags.default_pixel != 0 {
+                    // Fill with 1s (black) if default pixel is 1.
+                    for byte in &mut bitmap.data {
+                        *byte = 0xFF;
+                    }
+                }
+                page_bitmap = Some(bitmap);
+            }
+
+            // "Immediate lossless generic region – see 7.4.6." (type 39)
+            SegmentType::ImmediateLosslessGenericRegion => {
+                let page = page_bitmap.as_mut().ok_or(
+                    "generic region segment appeared before page information",
+                )?;
+
+                let header = parse_generic_region_header(&mut reader)?;
+
+                // Get the remaining data after the header for decoding.
+                let encoded_data = reader.tail().ok_or("unexpected end of data")?;
+
+                // Decode the region.
+                let region = if header.mmr {
+                    // "6.2.6 Decoding using MMR coding"
+                    decode_generic_region_mmr(&header, encoded_data)?
+                } else {
+                    // Arithmetic coding not yet implemented.
+                    return Err("arithmetic coding not yet implemented");
+                };
+
+                // "These operators describe how the segment's bitmap is to be
+                // combined with the page bitmap." (7.4.1.5)
+                page.combine(
+                    &region,
+                    header.region_info.x_location,
+                    header.region_info.y_location,
+                    header.region_info.combination_operator,
+                );
+            }
+
+            // End of page - we're done with this page.
+            SegmentType::EndOfPage | SegmentType::EndOfFile => {
+                break;
+            }
+
+            // Other segment types not yet implemented.
+            _ => {}
+        }
+    }
+
+    let bitmap = page_bitmap.ok_or("no page information segment found")?;
+
+    Ok(Image {
+        width: bitmap.width,
+        height: bitmap.height,
+        data: bitmap.data,
+    })
 }
