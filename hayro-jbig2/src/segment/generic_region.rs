@@ -5,9 +5,8 @@
 //! lossless generic region') are coded identically, but are acted upon
 //! differently, see 8.2." (7.4.6)
 
-use crate::DecodeContext;
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
-use crate::bitmap::Bitmap;
+use crate::bitmap::{Bitmap, DecodedRegion};
 use crate::reader::Reader;
 use crate::segment::region::{RegionSegmentInfo, parse_region_segment_info};
 
@@ -184,17 +183,18 @@ fn parse_adaptive_template_pixels(
 /// ('intermediate generic region', 'immediate generic region' and 'immediate
 /// lossless generic region') are coded identically, but are acted upon
 /// differently, see 8.2." (7.4.6)
+///
+/// Returns the decoded region with its location and combination operator.
 pub(crate) fn decode_generic_region(
-    ctx: &mut DecodeContext,
     reader: &mut Reader<'_>,
-) -> Result<(), &'static str> {
+) -> Result<DecodedRegion, &'static str> {
     let header = parse_generic_region_header(reader)?;
 
     // Get the remaining data after the header for decoding.
     let encoded_data = reader.tail().ok_or("unexpected end of data")?;
 
     // Decode the region.
-    let region = if header.mmr {
+    let bitmap = if header.mmr {
         // "6.2.6 Decoding using MMR coding"
         decode_generic_region_mmr(&header, encoded_data)?
     } else {
@@ -202,16 +202,12 @@ pub(crate) fn decode_generic_region(
         decode_generic_region_ad(&header, encoded_data)?
     };
 
-    // "These operators describe how the segment's bitmap is to be combined
-    // with the page bitmap." (7.4.1.5)
-    ctx.page_bitmap.combine(
-        &region,
-        header.region_info.x_location,
-        header.region_info.y_location,
-        header.region_info.combination_operator,
-    );
-
-    Ok(())
+    Ok(DecodedRegion {
+        bitmap,
+        x_location: header.region_info.x_location,
+        y_location: header.region_info.y_location,
+        combination_operator: header.region_info.combination_operator,
+    })
 }
 
 /// Decode a generic region using MMR coding (6.2.6).

@@ -7,6 +7,29 @@
 
 use crate::segment::region::CombinationOperator;
 
+/// A decoded bitmap region with position and combination information.
+///
+/// This wraps a `Bitmap` with the location and operator needed to composite it
+/// onto the page or to serve as a reference for refinement regions.
+///
+/// "The data parts of all three of the generic region segment types
+/// ('intermediate generic region', 'immediate generic region' and 'immediate
+/// lossless generic region') are coded identically, but are acted upon
+/// differently, see 8.2." (7.4.6)
+#[derive(Debug, Clone)]
+pub(crate) struct DecodedRegion {
+    /// The decoded bitmap.
+    pub bitmap: Bitmap,
+    /// "This four-byte field gives the horizontal offset in pixels of the bitmap
+    /// encoded in this segment relative to the page bitmap." (7.4.1.3)
+    pub x_location: u32,
+    /// "This four-byte field gives the vertical offset in pixels of the bitmap
+    /// encoded in this segment relative to the page bitmap." (7.4.1.4)
+    pub y_location: u32,
+    /// "Bits 0-2: External combination operator." (7.4.1.5)
+    pub combination_operator: CombinationOperator,
+}
+
 /// A decoded bitmap region.
 ///
 /// Pixels are stored as booleans where `true` means black, `false` means white.

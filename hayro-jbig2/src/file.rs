@@ -63,7 +63,11 @@ pub(crate) fn parse_file(data: &[u8]) -> Result<File<'_>, &'static str> {
     let mut reader = Reader::new(data);
 
     let header = parse_file_header(&mut reader)?;
-    let segments = parse_segments(&mut reader, header.organization)?;
+    let mut segments = parse_segments(&mut reader, header.organization)?;
+
+    // Technically shouldn't be necessary because the spec mandates that segments
+    // are in sorted order, but just to be safe.
+    segments.sort_by_key(|seg| seg.header.segment_number);
 
     Ok(File { header, segments })
 }

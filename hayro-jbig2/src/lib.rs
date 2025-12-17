@@ -28,7 +28,7 @@ mod file;
 mod reader;
 mod segment;
 
-use bitmap::Bitmap;
+use bitmap::{Bitmap, DecodedRegion};
 use file::{File, parse_file};
 use reader::Reader;
 use segment::SegmentType;
@@ -75,14 +75,24 @@ pub fn decode(data: &[u8]) -> Result<Image, &'static str> {
                 ctx = Ok(get_ctx(&mut reader, height_from_stripes)?);
             }
             SegmentType::ImmediateGenericRegion | SegmentType::ImmediateLosslessGenericRegion => {
-                decode_generic_region(ctx.as_mut().map_err(|e| *e)?, &mut reader)?;
-            }
+                let ctx = ctx.as_mut().map_err(|e| *e)?;
+                let region = decode_generic_region(&mut reader)?;
 
-            // End of page - we're done with this page.
+                ctx.page_bitmap.combine(
+                    &region.bitmap,
+                    region.x_location,
+                    region.y_location,
+                    region.combination_operator,
+                );
+            }
+            SegmentType::IntermediateGenericRegion => {
+                let ctx = ctx.as_mut().map_err(|e| *e)?;
+                let region = decode_generic_region(&mut reader)?;
+                ctx.store_region(seg.header.segment_number, region);
+            }
             SegmentType::EndOfPage | SegmentType::EndOfFile => {
                 break;
             }
-
             // Other segment types not yet implemented.
             _ => {}
         }
@@ -123,6 +133,25 @@ pub(crate) struct DecodeContext {
     pub page_info: PageInformation,
     /// The page bitmap that regions are combined into.
     pub page_bitmap: Bitmap,
+    /// Decoded intermediate regions, stored as (segment_number, region) pairs.
+    pub referred_segments: Vec<(u32, DecodedRegion)>,
+}
+
+impl DecodeContext {
+    /// Store a decoded region for later reference.
+    fn store_region(&mut self, segment_number: u32, region: DecodedRegion) {
+        self.referred_segments.push((segment_number, region));
+    }
+
+    /// Look up a referred segment by number using binary search.
+    pub fn get_referred_segment(&self, segment_number: u32) -> Option<&DecodedRegion> {
+        self.referred_segments
+            // We iterate over the segments in order (which themselves are sorted),
+            // so here we can just do a binary search.
+            .binary_search_by_key(&segment_number, |(num, _)| *num)
+            .ok()
+            .map(|idx| &self.referred_segments[idx].1)
+    }
 }
 
 /// Create a decode context from page information segment data.
@@ -158,5 +187,6 @@ pub(crate) fn get_ctx(
     Ok(DecodeContext {
         page_info,
         page_bitmap,
+        referred_segments: Vec::new(),
     })
 }
