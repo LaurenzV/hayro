@@ -63,14 +63,8 @@ pub fn decode(data: &[u8]) -> Result<Image, &'static str> {
 
     let mut ctx: Result<DecodeContext, &'static str> = Err("attempted to decode\
     region before page information appeared");
-    
-    eprintln!("{:?}", file.segments);
 
     for seg in &file.segments {
-        if seg.header.segment_number == 2 || seg.header.segment_number == 3 {
-            continue;
-        }
-        
         let mut reader = Reader::new(seg.data);
 
         match seg.header.segment_type {

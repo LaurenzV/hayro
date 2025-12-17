@@ -349,7 +349,13 @@ fn decode_generic_region_ad(
         // "b) If TPGDON is 1, then decode a bit using the arithmetic entropy
         // coder" (6.2.5.7)
         if header.tpgdon {
-            let sltp_context = gather_context(&bitmap, 0, y, header);
+            // See Figure 8 - 11.
+            let sltp_context: u32 = match header.gb_template {
+                GbTemplate::Template0 => 0b1001101100100101,
+                GbTemplate::Template1 => 0b0011110010101,
+                GbTemplate::Template2 => 0b0011100101,
+                GbTemplate::Template3 => 0b0110010101,
+            };
             let sltp = decoder.decode(&mut contexts[sltp_context as usize]);
             // "Let SLTP be the value of this bit. Set: LTP = LTP XOR SLTP" (6.2.5.7)
             ltp = ltp != (sltp != 0);
