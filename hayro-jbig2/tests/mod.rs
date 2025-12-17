@@ -112,7 +112,7 @@ fn run_test(case: &TestCase) -> TestResult {
     };
 
     let start = Instant::now();
-    match hayro_jbig2::decode(&data, None) {
+    match hayro_jbig2::decode(&data) {
         Ok(_image) => TestResult::Pass(start.elapsed()),
         Err(e) => TestResult::Fail(e.to_string()),
     }
