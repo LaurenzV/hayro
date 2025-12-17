@@ -5,7 +5,7 @@
 
 use crate::reader::Reader;
 use crate::segment::{
-    parse_segment, parse_segment_data, parse_segment_header, Segment, SegmentType,
+    Segment, SegmentType, parse_segment, parse_segment_data, parse_segment_header,
 };
 
 /// "There are two standalone file organizations possible for a JBIG2 bitstream."
@@ -138,7 +138,9 @@ fn parse_segments<'a>(
 /// "In this organization, the file structure looks like Figure D.1. A file header
 /// is followed by a sequence of segments. The two parts of each segment are stored
 /// together: first the segment header then the segment data." (D.1)
-fn parse_segments_sequential<'a>(reader: &mut Reader<'a>) -> Result<Vec<Segment<'a>>, &'static str> {
+fn parse_segments_sequential<'a>(
+    reader: &mut Reader<'a>,
+) -> Result<Vec<Segment<'a>>, &'static str> {
     let mut segments = Vec::new();
 
     loop {

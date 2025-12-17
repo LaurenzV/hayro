@@ -6,7 +6,7 @@
 //! differently, see 8.2." (7.4.6)
 
 use crate::reader::Reader;
-use crate::segment::region::{parse_region_segment_info, RegionSegmentInfo};
+use crate::segment::region::{RegionSegmentInfo, parse_region_segment_info};
 
 /// Adaptive template pixel position.
 ///

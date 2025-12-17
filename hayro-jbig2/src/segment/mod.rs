@@ -262,7 +262,9 @@ pub(crate) fn parse_segment_data<'a>(
     header: SegmentHeader,
 ) -> Result<Segment<'a>, &'static str> {
     let data = if let Some(len) = header.data_length {
-        reader.read_bytes(len as usize).ok_or("unexpected end of data")?
+        reader
+            .read_bytes(len as usize)
+            .ok_or("unexpected end of data")?
     } else {
         // TODO: Handle unknown segment data length (7.4.6.4).
         //

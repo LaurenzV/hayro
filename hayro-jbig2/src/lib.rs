@@ -59,16 +59,22 @@ fn print_header_debug(header: &file::FileHeader) {
         }
     );
     println!("Number of pages: {:?}", header.number_of_pages);
-    println!("Uses extended templates: {}", header.uses_extended_templates);
-    println!("Contains coloured regions: {}", header.contains_coloured_regions);
+    println!(
+        "Uses extended templates: {}",
+        header.uses_extended_templates
+    );
+    println!(
+        "Contains coloured regions: {}",
+        header.contains_coloured_regions
+    );
 }
 
 /// Print debug information for a single segment.
-fn print_segment_debug(index: usize, seg: &segment::Segment<'_>) {
+fn print_segment_debug(index: usize, seg: &segment::Segment<'_>) -> Result<(), &'static str> {
     use reader::Reader;
+    use segment::SegmentType;
     use segment::generic_region::parse_generic_region_header;
     use segment::page_info::parse_page_information;
-    use segment::SegmentType;
 
     println!(
         "[{index}] Segment #{}: type={:?}, page={}, data_len={}, referred_to={:?}",
@@ -79,62 +85,34 @@ fn print_segment_debug(index: usize, seg: &segment::Segment<'_>) {
         seg.header.referred_to_segments,
     );
 
+    let mut ctx = Err("region segment appeared before page information.");
+
     // Parse and print segment-specific data
     let mut reader = Reader::new(seg.data);
     match seg.header.segment_type {
-        SegmentType::PageInformation => match parse_page_information(&mut reader) {
-            Ok(info) => {
-                println!(
-                    "    Page: {}x{}, default_pixel={}, combo={:?}",
-                    info.width,
-                    info.height,
-                    info.flags.default_pixel,
-                    info.flags.default_combination_operator,
-                );
-                if info.striping.is_striped {
-                    println!(
-                        "    Striped: max_stripe_size={}",
-                        info.striping.max_stripe_size
-                    );
-                }
-            }
-            Err(e) => {
-                println!("    Error parsing page information: {e}");
-            }
-        },
+        SegmentType::PageInformation => {
+            let page_info = parse_page_information(&mut reader)?;
+            ctx = Ok(DecoderContext {
+                width: page_info.width,
+                height: page_info.height,
+                data: vec![0; page_info.width as usize * page_info.height as usize],
+            });
+        }
         SegmentType::IntermediateGenericRegion
         | SegmentType::ImmediateGenericRegion
         | SegmentType::ImmediateLosslessGenericRegion => {
-            match parse_generic_region_header(&mut reader) {
-                Ok(header) => {
-                    println!(
-                        "    Region: {}x{} at ({}, {}), combo={:?}",
-                        header.region_info.width,
-                        header.region_info.height,
-                        header.region_info.x_location,
-                        header.region_info.y_location,
-                        header.region_info.combination_operator,
-                    );
-                    println!(
-                        "    Flags: MMR={}, GBTEMPLATE={}, TPGDON={}, EXTTEMPLATE={}",
-                        header.mmr, header.gb_template, header.tpgdon, header.ext_template,
-                    );
-                    if !header.adaptive_template_pixels.is_empty() {
-                        let at_str: Vec<String> = header
-                            .adaptive_template_pixels
-                            .iter()
-                            .map(|p| format!("({}, {})", p.x, p.y))
-                            .collect();
-                        println!("    AT pixels: {}", at_str.join(", "));
-                    }
-                }
-                Err(e) => {
-                    println!("    Error parsing generic region header: {e}");
-                }
-            }
+            let header = parse_generic_region_header(&mut reader)?;
         }
         _ => {}
     }
+
+    Ok(())
+}
+
+pub(crate) struct DecoderContext {
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+    pub(crate) data: Vec<u8>,
 }
 
 /// A decoded JBIG2 image.
@@ -154,16 +132,4 @@ impl Image {
     pub fn stride(&self) -> usize {
         (self.width as usize + 7) / 8
     }
-}
-
-/// Decode a JBIG2 image.
-///
-/// # Arguments
-/// * `data` - The JBIG2 data to decode.
-///
-/// # Returns
-/// The decoded image, or an error message if decoding failed.
-pub fn decode(data: &[u8]) -> Result<Image, &'static str> {
-    let _ = data;
-    Err("JBIG2 decoding not yet implemented")
 }
