@@ -11,6 +11,22 @@ use crate::bitmap::Bitmap;
 use crate::reader::Reader;
 use crate::segment::region::{RegionSegmentInfo, parse_region_segment_info};
 
+/// Template used for arithmetic coding (7.4.6.2, 6.2.5.3).
+///
+/// "Bits 1-2: GBTEMPLATE. This field specifies the template used for
+/// template-based arithmetic coding."
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum GbTemplate {
+    /// Template 0: 16 pixels (6.2.5.3, Figure 3)
+    Template0 = 0,
+    /// Template 1: 13 pixels (6.2.5.3, Figure 4)
+    Template1 = 1,
+    /// Template 2: 10 pixels (6.2.5.3, Figure 5)
+    Template2 = 2,
+    /// Template 3: 10 pixels (6.2.5.3, Figure 6)
+    Template3 = 3,
+}
+
 /// Adaptive template pixel position.
 ///
 /// "The AT coordinate X and Y fields are signed values." (7.4.6.3)
@@ -30,7 +46,7 @@ pub(crate) struct GenericRegionHeader {
     /// "Bits 1-2: GBTEMPLATE. This field specifies the template used for
     /// template-based arithmetic coding. If MMR is 1 then this field must
     /// contain the value zero." (7.4.6.2)
-    pub gb_template: u8,
+    pub gb_template: GbTemplate,
     /// "Bit 3: TPGDON. This field specifies whether typical prediction for
     /// generic direct coding is used." (7.4.6.2)
     pub tpgdon: bool,
@@ -67,7 +83,13 @@ pub(crate) fn parse_generic_region_header(
     // "Bits 1-2: GBTEMPLATE. This field specifies the template used for
     // template-based arithmetic coding. If MMR is 1 then this field must
     // contain the value zero."
-    let gb_template = (flags >> 1) & 0x03;
+    let gb_template = match (flags >> 1) & 0x03 {
+        0 => GbTemplate::Template0,
+        1 => GbTemplate::Template1,
+        2 => GbTemplate::Template2,
+        3 => GbTemplate::Template3,
+        _ => unreachable!(), // Only 2 bits, so 0-3 are the only possibilities
+    };
 
     // "Bit 3: TPGDON. This field specifies whether typical prediction for
     // generic direct coding is used."
@@ -83,7 +105,7 @@ pub(crate) fn parse_generic_region_header(
     }
 
     // Validate MMR + GBTEMPLATE constraint
-    if mmr && gb_template != 0 {
+    if mmr && gb_template != GbTemplate::Template0 {
         return Err("GBTEMPLATE must be 0 when MMR is 1");
     }
 
@@ -108,7 +130,7 @@ pub(crate) fn parse_generic_region_header(
 /// Parse adaptive template pixel positions (7.4.6.3).
 fn parse_adaptive_template_pixels(
     reader: &mut Reader<'_>,
-    gb_template: u8,
+    gb_template: GbTemplate,
     ext_template: bool,
 ) -> Result<Vec<AdaptiveTemplatePixel>, &'static str> {
     // "If GBTEMPLATE is 0 and EXTTEMPLATE is 0, it is an eight-byte field,
@@ -121,10 +143,9 @@ fn parse_adaptive_template_pixels(
     // "If GBTEMPLATE is 1, 2 or 3, it is a two-byte field formatted as shown
     // in Figure 51."
 
-    let num_pixels = if gb_template == 0 {
-        if ext_template { 12 } else { 4 }
-    } else {
-        1
+    let num_pixels = match gb_template {
+        GbTemplate::Template0 => if ext_template { 12 } else { 4 },
+        GbTemplate::Template1 | GbTemplate::Template2 | GbTemplate::Template3 => 1,
     };
 
     let mut pixels = Vec::with_capacity(num_pixels);
@@ -298,10 +319,9 @@ fn decode_generic_region_arith(
     // - Template 1: 13 pixels → 13-bit context (8192 contexts)
     // - Template 2, 3: 10 pixels → 10-bit context (1024 contexts)
     let num_context_bits = match header.gb_template {
-        0 => 16,
-        1 => 13,
-        2 | 3 => 10,
-        _ => return Err("invalid GBTEMPLATE value"),
+        GbTemplate::Template0 => 16,
+        GbTemplate::Template1 => 13,
+        GbTemplate::Template2 | GbTemplate::Template3 => 10,
     };
     let mut contexts = vec![ArithmeticDecoderContext::default(); 1 << num_context_bits];
 
@@ -364,11 +384,10 @@ fn gather_tpgd_context(bitmap: &Bitmap, y: u32, header: &GenericRegionHeader) ->
 /// by the template (including AT pixels) at its current location." (6.2.5.7)
 fn gather_context(bitmap: &Bitmap, x: u32, y: u32, header: &GenericRegionHeader) -> u32 {
     match header.gb_template {
-        0 => gather_context_template0(bitmap, x, y, &header.adaptive_template_pixels),
-        1 => gather_context_template1(bitmap, x, y, &header.adaptive_template_pixels),
-        2 => gather_context_template2(bitmap, x, y, &header.adaptive_template_pixels),
-        3 => gather_context_template3(bitmap, x, y, &header.adaptive_template_pixels),
-        _ => 0,
+        GbTemplate::Template0 => gather_context_template0(bitmap, x, y, &header.adaptive_template_pixels),
+        GbTemplate::Template1 => gather_context_template1(bitmap, x, y, &header.adaptive_template_pixels),
+        GbTemplate::Template2 => gather_context_template2(bitmap, x, y, &header.adaptive_template_pixels),
+        GbTemplate::Template3 => gather_context_template3(bitmap, x, y, &header.adaptive_template_pixels),
     }
 }
 
