@@ -193,7 +193,7 @@ pub(crate) fn decode_generic_region(
         decode_generic_region_mmr(&header, encoded_data)?
     } else {
         // "6.2.5 Decoding using a template and arithmetic coding"
-        decode_generic_region_arith(&header, encoded_data)?
+        decode_generic_region_ad(&header, encoded_data)?
     };
 
     // "These operators describe how the segment's bitmap is to be combined
@@ -311,7 +311,7 @@ impl hayro_ccitt::Decoder for BitmapDecoder<'_> {
 ///
 /// "If MMR is 0 the generic region decoding procedure is based on arithmetic
 /// coding with a template to determine the coding state." (6.2.5.1)
-fn decode_generic_region_arith(
+fn decode_generic_region_ad(
     header: &GenericRegionHeader,
     data: &[u8],
 ) -> Result<Bitmap, &'static str> {
