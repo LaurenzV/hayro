@@ -427,7 +427,6 @@ fn gather_context_template0_no_ext(
     y: u32,
     at: &[AdaptiveTemplatePixel],
 ) -> u32 {
-    
     let x = x as i32;
     let y = y as i32;
 
