@@ -171,8 +171,12 @@ fn decode_refinement_bitmap(
 
     let mut decoder = ArithmeticDecoder::new(data);
 
-    // Context size is 13 bits for both templates (up to 8192 contexts).
-    let mut contexts = vec![ArithmeticDecoderContext::default(); 1 << 13];
+    // Create context array. Size depends on template (6.3.5.2)
+    let num_context_bits = match header.gr_template {
+        GrTemplate::Template0 => 13,
+        GrTemplate::Template1 => 10,
+    };
+    let mut contexts = vec![ArithmeticDecoderContext::default(); 1 << num_context_bits];
 
     // "1) Set LTP = 0." (6.3.5.6)
     let mut ltp = false;
