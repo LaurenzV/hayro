@@ -129,9 +129,6 @@ pub(crate) struct DecodeContext {
 ///
 /// This parses the page information and creates the initial page bitmap
 /// with the default pixel value.
-///
-/// If the page height is unknown (0xFFFFFFFF), `height_from_stripes` is used
-/// instead. This value should be obtained by pre-scanning EndOfStripe segments.
 pub(crate) fn get_ctx(
     reader: &mut Reader<'_>,
     height_from_stripes: Option<u32>,
