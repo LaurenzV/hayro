@@ -9,10 +9,6 @@ A memory-safe, pure-Rust JBIG2 decoder.
 ISO/IEC 14492). JBIG2 is a bi-level image compression standard commonly used
 in PDF documents for compressing scanned text documents.
 
-## Status
-
-This crate is currently under development.
-
 ## Safety
 
 This crate forbids unsafe code via a crate-level attribute.
