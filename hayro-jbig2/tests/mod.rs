@@ -2,10 +2,10 @@
 //!
 //! Run `python sync.py` to download test assets before running tests.
 
+use std::any::Any;
 use std::cmp::max;
 use std::fs;
 use std::panic::{AssertUnwindSafe, PanicHookInfo, catch_unwind};
-use std::any::Any;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 use std::time::{Duration, Instant};
@@ -337,27 +337,24 @@ fn run_asset_test(asset: &AssetEntry) -> Result<(), String> {
     Ok(())
 }
 
-/// Convert a JBIG2 1-bit packed bitmap to an RGBA image.
+/// Convert a JBIG2 bitmap to an RGBA image.
 ///
-/// In JBIG2, 1 = black, 0 = white. We convert to grayscale where:
-/// - 0 (white in JBIG2) -> 255 (white in image)
-/// - 1 (black in JBIG2) -> 0 (black in image)
+/// In JBIG2, true = black, false = white. We convert to grayscale where:
+/// - false (white in JBIG2) -> 255 (white in image)
+/// - true (black in JBIG2) -> 0 (black in image)
 fn bitmap_to_rgba(image: &hayro_jbig2::Image) -> RgbaImage {
     let width = image.width;
     let height = image.height;
-    let stride = image.stride();
 
     let mut rgba = RgbaImage::new(width, height);
 
     for y in 0..height {
         for x in 0..width {
-            let byte_idx = y as usize * stride + (x as usize / 8);
-            let bit_idx = 7 - (x % 8);
-            let bit = (image.data[byte_idx] >> bit_idx) & 1;
+            let pixel = image.data[(y * width + x) as usize];
 
-            // JBIG2: 1 = black, 0 = white
+            // JBIG2: true = black, false = white
             // Image: 0 = black, 255 = white
-            let luma = if bit == 1 { 0 } else { 255 };
+            let luma = if pixel { 0 } else { 255 };
             rgba.put_pixel(x, y, Rgba([luma, luma, luma, 255]));
         }
     }

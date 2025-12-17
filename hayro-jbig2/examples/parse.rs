@@ -13,18 +13,15 @@ fn main() {
 
     println!("Decoded: {}x{} image", image.width, image.height);
 
-    // Convert to grayscale image (1-bit packed -> 8-bit grayscale).
-    // In JBIG2: 1 = black, 0 = white.
+    // Convert to grayscale image.
+    // In JBIG2: true = black, false = white.
     let mut gray = GrayImage::new(image.width, image.height);
-    let stride = image.stride();
 
     for y in 0..image.height {
         for x in 0..image.width {
-            let byte_idx = y as usize * stride + (x as usize / 8);
-            let bit_idx = 7 - (x as usize % 8);
-            let pixel = (image.data[byte_idx] >> bit_idx) & 1;
-            // 1 = black (0), 0 = white (255)
-            let luma = if pixel == 1 { 0 } else { 255 };
+            let pixel = image.data[(y * image.width + x) as usize];
+            // true = black (0), false = white (255)
+            let luma = if pixel { 0 } else { 255 };
             gray.put_pixel(x, y, Luma([luma]));
         }
     }

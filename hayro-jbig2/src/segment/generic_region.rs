@@ -251,24 +251,14 @@ impl<'a> BitmapDecoder<'a> {
 impl hayro_ccitt::Decoder for BitmapDecoder<'_> {
     /// "Push a single packed byte containing the data for 8 pixels."
     fn push_byte(&mut self, byte: u8) {
-        // Write 8 pixels from the byte.
-        let stride = self.bitmap.stride();
-        let byte_idx = self.y as usize * stride + (self.x as usize / 8);
-
-        if self.x % 8 == 0 && self.x + 8 <= self.bitmap.width {
-            // Fast path: byte-aligned write within bounds.
-            self.bitmap.data[byte_idx] = byte;
-            self.x += 8;
-        } else {
-            // Slow path: write bit by bit.
-            for i in 0..8 {
-                if self.x >= self.bitmap.width {
-                    break;
-                }
-                let bit = (byte >> (7 - i)) & 1;
-                self.bitmap.set_pixel(self.x, self.y, bit);
-                self.x += 1;
+        // Write 8 pixels from the byte (MSB first).
+        for i in 0..8 {
+            if self.x >= self.bitmap.width {
+                break;
             }
+            let bit = (byte >> (7 - i)) & 1;
+            self.bitmap.set_pixel(self.x, self.y, bit != 0);
+            self.x += 1;
         }
     }
 

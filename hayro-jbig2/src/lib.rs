@@ -41,16 +41,9 @@ pub struct Image {
     pub width: u32,
     /// The height of the image in pixels.
     pub height: u32,
-    /// The raw pixel data (1 bit per pixel, packed into bytes).
-    /// Each row is byte-aligned.
-    pub data: Vec<u8>,
-}
-
-impl Image {
-    /// Returns the stride (number of bytes per row) of the image.
-    pub fn stride(&self) -> usize {
-        (self.width as usize + 7) / 8
-    }
+    /// The raw pixel data, one bool per pixel, row-major order.
+    /// `true` means black, `false` means white.
+    pub data: Vec<bool>,
 }
 
 /// Decode a JBIG2 image from the given data.
@@ -122,9 +115,9 @@ pub(crate) fn get_ctx(reader: &mut Reader<'_>) -> Result<DecodeContext, &'static
     // or drawn." (7.4.8.5)
     let mut page_bitmap = Bitmap::new(page_info.width, page_info.height);
     if page_info.flags.default_pixel != 0 {
-        // Fill with 1s (black) if default pixel is 1.
-        for byte in &mut page_bitmap.data {
-            *byte = 0xFF;
+        // Fill with true (black) if default pixel is 1.
+        for pixel in &mut page_bitmap.data {
+            *pixel = true;
         }
     }
 

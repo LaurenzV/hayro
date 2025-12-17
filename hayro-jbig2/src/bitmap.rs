@@ -9,8 +9,7 @@ use crate::segment::region::CombinationOperator;
 
 /// A decoded bitmap region.
 ///
-/// Pixels are stored as 1 bit per pixel, packed into bytes, with each row
-/// byte-aligned. A pixel value of 1 means black, 0 means white.
+/// Pixels are stored as booleans where `true` means black, `false` means white.
 ///
 /// "Pixels decoded by the MMR decoder having the value 'black' shall be treated
 /// as having the value 1. Pixels decoded by the MMR decoder having the value
@@ -21,15 +20,14 @@ pub(crate) struct Bitmap {
     pub width: u32,
     /// Height in pixels.
     pub height: u32,
-    /// Pixel data, 1 bit per pixel, packed into bytes, rows byte-aligned.
-    pub data: Vec<u8>,
+    /// Pixel data, one bool per pixel, row-major order.
+    pub data: Vec<bool>,
 }
 
 impl Bitmap {
-    /// Create a new bitmap filled with zeros (white pixels).
+    /// Create a new bitmap filled with `false` (white pixels).
     pub fn new(width: u32, height: u32) -> Self {
-        let stride = Self::compute_stride(width);
-        let data = vec![0u8; stride * height as usize];
+        let data = vec![false; (width * height) as usize];
         Self {
             width,
             height,
@@ -37,44 +35,22 @@ impl Bitmap {
         }
     }
 
-    /// Compute the stride (bytes per row) for a given width.
+    /// Get a pixel value at (x, y).
     #[inline]
-    pub fn compute_stride(width: u32) -> usize {
-        (width as usize + 7) / 8
-    }
-
-    /// Returns the stride (number of bytes per row).
-    #[inline]
-    pub fn stride(&self) -> usize {
-        Self::compute_stride(self.width)
-    }
-
-    /// Get a pixel value at (x, y). Returns 0 or 1.
-    #[inline]
-    pub fn get_pixel(&self, x: u32, y: u32) -> u8 {
+    pub fn get_pixel(&self, x: u32, y: u32) -> bool {
         if x >= self.width || y >= self.height {
-            return 0;
+            return false;
         }
-        let stride = self.stride();
-        let byte_idx = y as usize * stride + (x as usize / 8);
-        let bit_idx = 7 - (x as usize % 8);
-        (self.data[byte_idx] >> bit_idx) & 1
+        self.data[(y * self.width + x) as usize]
     }
 
-    /// Set a pixel value at (x, y). Value should be 0 or 1.
+    /// Set a pixel value at (x, y).
     #[inline]
-    pub fn set_pixel(&mut self, x: u32, y: u32, value: u8) {
+    pub fn set_pixel(&mut self, x: u32, y: u32, value: bool) {
         if x >= self.width || y >= self.height {
             return;
         }
-        let stride = self.stride();
-        let byte_idx = y as usize * stride + (x as usize / 8);
-        let bit_idx = 7 - (x as usize % 8);
-        if value != 0 {
-            self.data[byte_idx] |= 1 << bit_idx;
-        } else {
-            self.data[byte_idx] &= !(1 << bit_idx);
-        }
+        self.data[(y * self.width + x) as usize] = value;
     }
 
     /// Combine another bitmap into this one at the given location using the
@@ -112,7 +88,7 @@ impl Bitmap {
                     // "2 XOR"
                     CombinationOperator::Xor => dst_pixel ^ src_pixel,
                     // "3 XNOR"
-                    CombinationOperator::Xnor => !(dst_pixel ^ src_pixel) & 1,
+                    CombinationOperator::Xnor => !(dst_pixel ^ src_pixel),
                     // "4 REPLACE"
                     CombinationOperator::Replace => src_pixel,
                 };
