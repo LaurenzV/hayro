@@ -147,7 +147,6 @@ fn parse_adaptive_template_pixels(
         GbTemplate::Template0 => {
             if ext_template {
                 return Err("template 0 with 12 adaptive pixels is not supported yet");
-                12
             } else {
                 4
             }
