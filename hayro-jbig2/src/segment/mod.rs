@@ -207,6 +207,13 @@ pub(crate) fn parse_segment_header(reader: &mut Reader<'_>) -> Result<SegmentHea
         } else {
             reader.read_u32().ok_or("unexpected end of data")?
         };
+
+        // If a segment refers to other segments, it must refer to only segments
+        // with lower segment numbers.
+        if referred >= segment_number {
+            return Err("segment referred to segment with larger segment number");
+        }
+        
         referred_to_segments.push(referred);
     }
 
