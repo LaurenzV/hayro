@@ -22,6 +22,7 @@ This crate forbids unsafe code via a crate-level attribute.
 #![forbid(unsafe_code)]
 #![allow(missing_docs)]
 
+mod arithmetic_decoder;
 mod bitmap;
 mod file;
 mod reader;

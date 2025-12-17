@@ -152,6 +152,7 @@ pub(crate) fn decode_generic_region(
     reader: &mut Reader<'_>,
 ) -> Result<(), &'static str> {
     let header = parse_generic_region_header(reader)?;
+    eprintln!("{:?}", header);
 
     // Get the remaining data after the header for decoding.
     let encoded_data = reader.tail().ok_or("unexpected end of data")?;
