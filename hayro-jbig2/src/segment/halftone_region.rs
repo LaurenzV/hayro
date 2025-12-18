@@ -2,7 +2,8 @@
 
 use crate::bitmap::DecodedRegion;
 use crate::reader::Reader;
-use crate::segment::gray_scale::{GrayScaleParams, GsTemplate, decode_gray_scale_image};
+use crate::segment::generic_region::GbTemplate;
+use crate::segment::gray_scale::{GrayScaleParams, decode_gray_scale_image};
 use crate::segment::pattern_dictionary::PatternDictionary;
 use crate::segment::region::{CombinationOperator, RegionSegmentInfo, parse_region_segment_info};
 
@@ -33,13 +34,13 @@ impl HTemplate {
         }
     }
 
-    /// Convert to GsTemplate for gray-scale image decoding.
-    fn to_gs_template(self) -> GsTemplate {
+    /// Convert to GbTemplate for gray-scale image decoding.
+    fn to_gb_template(self) -> GbTemplate {
         match self {
-            HTemplate::Template0 => GsTemplate::Template0,
-            HTemplate::Template1 => GsTemplate::Template1,
-            HTemplate::Template2 => GsTemplate::Template2,
-            HTemplate::Template3 => GsTemplate::Template3,
+            HTemplate::Template0 => GbTemplate::Template0,
+            HTemplate::Template1 => GbTemplate::Template1,
+            HTemplate::Template2 => GbTemplate::Template2,
+            HTemplate::Template3 => GbTemplate::Template3,
         }
     }
 }
@@ -255,7 +256,7 @@ pub(crate) fn decode_halftone_region(
         bits_per_pixel: hbpp,
         width: hgw,
         height: hgh,
-        template: header.flags.htemplate.to_gs_template(),
+        template: header.flags.htemplate.to_gb_template(),
         skip_mask: if header.flags.henableskip { hskip.as_deref() } else { None },
     };
     let gi = decode_gray_scale_image(encoded_data, &gs_params)?;
