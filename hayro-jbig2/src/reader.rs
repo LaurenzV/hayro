@@ -93,6 +93,13 @@ impl<'a> Reader<'a> {
         Some(u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
     }
 
+    #[inline]
+    pub(crate) fn read_i32(&mut self) -> Option<i32> {
+        let bytes = self.read_bytes(4)?;
+
+        Some(i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
+    }
+
     #[inline(always)]
     pub(crate) fn read_bit(&mut self) -> Option<u32> {
         let byte_pos = self.byte_pos();
