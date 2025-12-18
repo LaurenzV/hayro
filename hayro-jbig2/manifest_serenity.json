@@ -10,7 +10,7 @@
   "bitmap-composite-or-xor-replace.jbig2",
   "bitmap-customat-tpgdon.jbig2",
   "bitmap-customat.jbig2",
-  { "id": "bitmap-halftone-10bpp-mmr.jbig2", "ignore": true },
+  "bitmap-halftone-10bpp-mmr.jbig2",
   "bitmap-halftone-10bpp.jbig2",
   "bitmap-halftone-refine.jbig2",
   "bitmap-halftone-template1.jbig2",

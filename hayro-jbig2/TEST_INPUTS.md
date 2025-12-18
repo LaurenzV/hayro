@@ -1,36 +1,5 @@
 # Test Input Implementation Order
 
-Based on actual segment analysis of test files, ordered from simplest to hardest.
-
-## 6. Halftone Regions
-**Segments:** `PageInfo, PatDict, ImmLossHalf/ImmHalf, EOP`
-
-```
-bitmap-halftone.jbig2
-bitmap-halftone-template1.jbig2
-bitmap-halftone-template2.jbig2
-bitmap-halftone-template3.jbig2
-bitmap-halftone-10bpp.jbig2
-bitmap-halftone-10bpp-mmr.jbig2
-bitmap-halftone-refine.jbig2                        (PatDict, IntHalf, ImmRefine)
-```
-
-**Why:** Requires PatternDictionary + grayscale index decoding. Can be done in parallel with symbols.
-
----
-
-## 7. Composite + Refinement/Halftone
-**Segments:** Mixed with compositing
-
-```
-bitmap-composite-and-xnor-refine.jbig2
-bitmap-composite-or-xor-replace-refine.jbig2
-bitmap-composite-and-xnor-halftone.jbig2
-bitmap-composite-or-xor-replace-halftone.jbig2
-```
-
----
-
 ## 8. Symbol Dictionary + Text Region (Basic)
 **Segments:** `PageInfo, SymDict, ImmLossText/ImmText, EOP`
 

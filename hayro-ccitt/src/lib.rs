@@ -44,7 +44,10 @@ pub struct DecodeSettings {
     /// In case `end_of_block` has been set to true, this value will be ignored
     /// and decoding happens untilt he end-of-block marker has been reached.
     pub rows: u32,
-    /// Whether the stream contains an end-of-block marker.
+    /// Whether the stream _MAY_ contain an end-of-block marker
+    /// (It doesn't have to. In that case this is set to `true` but there are
+    /// no end-of-block markers, hayro-ccitt will still use the value of `rows`
+    /// to determine when to stop decoding).
     pub end_of_block: bool,
     /// Whether the stream contains end-of-line markers.
     pub end_of_line: bool,
@@ -202,19 +205,13 @@ fn decode_group4<T: Decoder>(
     reader: &mut BitReader<'_>,
 ) -> Option<()> {
     loop {
-        if ctx.settings.end_of_block {
-            // In this case, bit stream is terminated by an explicit marker.
-            if reader.peak_bits(24) == Some(EOFB) {
-                // Consume the EOFB marker
-                reader.read_bits(24);
-                break;
-            }
-        } else {
-            // Otherwise, the length needs to be inferred from the number of
-            // expected rows.
-            if ctx.decoded_rows == ctx.settings.rows {
-                break;
-            }
+        if ctx.settings.end_of_block && reader.peak_bits(24) == Some(EOFB) {
+            reader.read_bits(24);
+            break;
+        }
+
+        if ctx.decoded_rows == ctx.settings.rows {
+            break;
         }
 
         decode_2d_line(ctx, reader)?;

@@ -7,10 +7,23 @@ use hayro_ccitt::{DecodeSettings, Decoder, EncodingMode};
 pub(crate) fn decode(data: &[u8], params: Dict<'_>) -> Option<Vec<u8>> {
     let k = params.get::<i32>(K).unwrap_or(0);
 
+    let mut rows = params.get::<usize>(ROWS).unwrap_or(0) as u32;
+    let end_of_block = params.get::<bool>(END_OF_BLOCK).unwrap_or(true);
+
+    // hayro-ccitt's `end_of_block` defines whether the image MAY have an EOFB
+    // block, but it will still use the `rows` attribute to check if decoding should
+    // be stopped.  In PDF, it means whether it WILL have an EOFB, and the `rows`
+    // attribute will be 0 then. Because of this, we set `rows` to max, so that
+    // `hayro-ccitt` keeps decoding untilt he EOFB has been found, instead of
+    // decoding 0 rows..
+    if end_of_block {
+        rows = u32::MAX;
+    }
+
     let settings = DecodeSettings {
         columns: params.get::<usize>(COLUMNS).unwrap_or(1728) as u32,
-        rows: params.get::<usize>(ROWS).unwrap_or(0) as u32,
-        end_of_block: params.get::<bool>(END_OF_BLOCK).unwrap_or(true),
+        rows,
+        end_of_block,
         end_of_line: params.get::<bool>(END_OF_LINE).unwrap_or(false),
         rows_are_byte_aligned: params.get::<bool>(ENCODED_BYTE_ALIGN).unwrap_or(false),
         encoding: if k < 0 {

@@ -257,11 +257,9 @@ pub(crate) fn decode_bitmap_mmr(
         rows: height,
         // "If the number of bytes contained in the encoded bitmap is known in
         // advance, then it is permissible for the data stream not to contain
-        // an EOFB" (6.2.6)
+        // an EOFB" (but it _can_) (6.2.6)
         //
-        // We know the byte count from the segment data length, so EOFB is
-        // optional. We set end_of_block to false to decode based on row count.
-        end_of_block: false,
+        end_of_block: true,
         end_of_line: false,
         rows_are_byte_aligned: false,
         encoding: hayro_ccitt::EncodingMode::Group4,
