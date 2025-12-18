@@ -52,43 +52,88 @@ pub(crate) fn decode_gray_scale_image(
     data: &[u8],
     params: &GrayScaleParams<'_>,
 ) -> Result<Vec<u32>, &'static str> {
+    if params.use_mmr {
+        decode_mmr(data, params)
+    } else {
+        decode_arith(data, params)
+    }
+}
+
+/// Decode gray-scale image using MMR encoding.
+fn decode_mmr(data: &[u8], params: &GrayScaleParams<'_>) -> Result<Vec<u32>, &'static str> {
     let width = params.width;
     let height = params.height;
     let bits_per_pixel = params.bits_per_pixel;
     let size = (width * height) as usize;
 
-    if params.use_mmr {
-        let mut offset = 0;
-        decode_bitplanes(bits_per_pixel, size, |_| {
-            let mut bitplane = DecodedRegion::new(width, height);
-            offset += decode_bitmap_mmr(&mut bitplane, &data[offset..])?;
-            Ok(bitplane.data)
-        })
-    } else {
-        let at_pixels = build_at_pixels(params.template);
-        let gb_template = params.template.to_gb_template();
-        let num_context_bits = match gb_template {
-            GbTemplate::Template0 => 16,
-            GbTemplate::Template1 => 13,
-            GbTemplate::Template2 | GbTemplate::Template3 => 10,
-        };
+    let mut offset = 0;
+    decode_bitplanes(bits_per_pixel, size, |_| {
+        let mut bitplane = DecodedRegion::new(width, height);
+        offset += decode_bitmap_mmr(&mut bitplane, &data[offset..])?;
+        Ok(bitplane.data)
+    })
+}
 
-        // All bitplanes share the same arithmetic decoder and context statistics.
-        let mut decoder = ArithmeticDecoder::new(data);
-        let mut contexts = vec![ArithmeticDecoderContext::default(); 1 << num_context_bits];
+/// Decode gray-scale image using arithmetic encoding.
+fn decode_arith(data: &[u8], params: &GrayScaleParams<'_>) -> Result<Vec<u32>, &'static str> {
+    let width = params.width;
+    let height = params.height;
+    let bits_per_pixel = params.bits_per_pixel;
+    let size = (width * height) as usize;
+    let skip_mask = params.skip_mask;
 
-        decode_bitplanes(bits_per_pixel, size, |_| {
-            decode_bitplane_arith(
-                &mut decoder,
-                &mut contexts,
-                width,
-                height,
-                gb_template,
-                &at_pixels,
-                params.skip_mask,
-            )
-        })
-    }
+    let gb_template = params.template.to_gb_template();
+
+    // Build adaptive template pixels for gray-scale image decoding (Table C.4).
+    // GBATX1 = 3 if GSTEMPLATE ≤ 1; 2 if GSTEMPLATE ≥ 2
+    // GBATY1 = -1, GBATX2 = -3, GBATY2 = -1, GBATX3 = 2, GBATY3 = -2, GBATX4 = -2, GBATY4 = -2
+    let at_pixels: Vec<AdaptiveTemplatePixel> = match params.template {
+        GsTemplate::Template0 => vec![
+            AdaptiveTemplatePixel { x: 3, y: -1 },
+            AdaptiveTemplatePixel { x: -3, y: -1 },
+            AdaptiveTemplatePixel { x: 2, y: -2 },
+            AdaptiveTemplatePixel { x: -2, y: -2 },
+        ],
+        GsTemplate::Template1 => vec![AdaptiveTemplatePixel { x: 3, y: -1 }],
+        GsTemplate::Template2 | GsTemplate::Template3 => {
+            vec![AdaptiveTemplatePixel { x: 2, y: -1 }]
+        }
+    };
+    let num_context_bits = match gb_template {
+        GbTemplate::Template0 => 16,
+        GbTemplate::Template1 => 13,
+        GbTemplate::Template2 | GbTemplate::Template3 => 10,
+    };
+
+    // All bitplanes share the same arithmetic decoder and context statistics.
+    let mut decoder = ArithmeticDecoder::new(data);
+    let mut contexts = vec![ArithmeticDecoderContext::default(); 1 << num_context_bits];
+
+    decode_bitplanes(bits_per_pixel, size, |_| {
+        // Decode a single bitplane using arithmetic coding.
+        // Implements the generic region decoding procedure with Table C.4 parameters:
+        // TPGDON = 0, USESKIP = GSUSESKIP, SKIP = GSKIP.
+        let mut bitplane = DecodedRegion::new(width, height);
+
+        for y in 0..height {
+            for x in 0..width {
+                // USESKIP/SKIP (Table C.4): skip if mask indicates this pixel should be skipped.
+                if let Some(mask) = skip_mask {
+                    let idx = (y * width + x) as usize;
+                    if mask[idx] {
+                        continue; // Leave as 0
+                    }
+                }
+
+                let context = gather_context_with_at(&bitplane, x, y, gb_template, &at_pixels);
+                let pixel = decoder.decode(&mut contexts[context as usize]);
+
+                bitplane.set_pixel(x, y, pixel != 0);
+            }
+        }
+
+        Ok(bitplane.data)
+    })
 }
 
 /// Decode bitplanes and compute gray values (C.5).
@@ -140,64 +185,3 @@ where
     Ok(values)
 }
 
-/// Decode a single bitplane using arithmetic coding.
-///
-/// Implements the generic region decoding procedure with Table C.4 parameters:
-/// TPGDON = 0, USESKIP = GSUSESKIP, SKIP = GSKIP.
-fn decode_bitplane_arith(
-    decoder: &mut ArithmeticDecoder<'_>,
-    contexts: &mut [ArithmeticDecoderContext],
-    width: u32,
-    height: u32,
-    gb_template: GbTemplate,
-    at_pixels: &[AdaptiveTemplatePixel],
-    skip_mask: Option<&[bool]>,
-) -> Result<Vec<bool>, &'static str> {
-    let mut bitplane = DecodedRegion::new(width, height);
-
-    // TPGDON = 0: no typical prediction, decode every pixel.
-    for y in 0..height {
-        for x in 0..width {
-            // USESKIP/SKIP (Table C.4): skip if mask indicates this pixel should be skipped.
-            if let Some(mask) = skip_mask {
-                let idx = (y * width + x) as usize;
-                if mask[idx] {
-                    continue; // Leave as 0
-                }
-            }
-
-            let context = gather_context_with_at(&bitplane, x, y, gb_template, at_pixels);
-            let pixel = decoder.decode(&mut contexts[context as usize]);
-
-            bitplane.set_pixel(x, y, pixel != 0);
-        }
-    }
-
-    Ok(bitplane.data)
-}
-
-/// Build adaptive template pixels for gray-scale image decoding (Table C.4).
-///
-/// GBATX1 = 3 if GSTEMPLATE ≤ 1; 2 if GSTEMPLATE ≥ 2
-/// GBATY1 = -1
-/// GBATX2 = -3, GBATY2 = -1
-/// GBATX3 = 2, GBATY3 = -2
-/// GBATX4 = -2, GBATY4 = -2
-fn build_at_pixels(template: GsTemplate) -> Vec<AdaptiveTemplatePixel> {
-    match template {
-        GsTemplate::Template0 => {
-            vec![
-                AdaptiveTemplatePixel { x: 3, y: -1 },
-                AdaptiveTemplatePixel { x: -3, y: -1 },
-                AdaptiveTemplatePixel { x: 2, y: -2 },
-                AdaptiveTemplatePixel { x: -2, y: -2 },
-            ]
-        }
-        GsTemplate::Template1 => {
-            vec![AdaptiveTemplatePixel { x: 3, y: -1 }]
-        }
-        GsTemplate::Template2 | GsTemplate::Template3 => {
-            vec![AdaptiveTemplatePixel { x: 2, y: -1 }]
-        }
-    }
-}
