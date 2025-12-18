@@ -236,7 +236,7 @@ pub(crate) fn decode_halftone_region(
     } else {
         None
     };
-
+    
     // "3) Set HBPP to ⌈log₂(HNUMPATS)⌉." (6.6.5)
     let hbpp = if hnumpats <= 1 {
         1
@@ -311,8 +311,8 @@ fn compute_hskip(
             // "i) Set:
             //    x = (HGX + m_g × HRY + n_g × HRX) >>_A 8
             //    y = (HGY + m_g × HRX − n_g × HRY) >>_A 8" (6.6.5.1)
-            let x = arithmetic_shift_right(hgx + (m_g as i32) * hry + (n_g as i32) * hrx, 8);
-            let y = arithmetic_shift_right(hgy + (m_g as i32) * hrx - (n_g as i32) * hry, 8);
+            let x = (hgx + (m_g as i32) * hry + (n_g as i32) * hrx) >> 8;
+            let y = (hgy + (m_g as i32) * hrx - (n_g as i32) * hry) >> 8;
 
             // "ii) If ((x + HPW ≤ 0) OR (x ≥ HBW) OR (y + HPH ≤ 0) OR (y ≥ HBH))
             // then set: HSKIP[n_g, m_g] = 1" (6.6.5.1)
@@ -357,8 +357,8 @@ fn render_patterns(
             // "i) Set:
             //    x = (HGX + m_g × HRY + n_g × HRX) >>_A 8
             //    y = (HGY + m_g × HRX − n_g × HRY) >>_A 8" (6.6.5.2)
-            let x = arithmetic_shift_right(hgx + (m_g as i32) * hry + (n_g as i32) * hrx, 8);
-            let y = arithmetic_shift_right(hgy + (m_g as i32) * hrx - (n_g as i32) * hry, 8);
+            let x = (hgx + (m_g as i32) * hry + (n_g as i32) * hrx) >> 8;
+            let y = (hgy + (m_g as i32) * hrx - (n_g as i32) * hry) >> 8;
 
             // "ii) Draw the pattern HPATS[GI[n_g, m_g]] into HTREG such that its
             // upper left pixel is at location (x, y) in HTREG." (6.6.5.2)
@@ -424,10 +424,3 @@ fn draw_pattern(
     }
 }
 
-/// Arithmetic right shift (sign-extending).
-///
-/// ">>_A" in the spec means arithmetic shift, which preserves the sign bit.
-#[inline]
-fn arithmetic_shift_right(value: i32, shift: u32) -> i32 {
-    value >> shift
-}
