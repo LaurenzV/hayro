@@ -35,7 +35,7 @@ pub(crate) fn decode_gray_scale_image(
     if params.use_mmr {
         decode_mmr(data, params)
     } else {
-        decode_arith(data, params)
+        decode_ae(data, params)
     }
 }
 
@@ -55,7 +55,7 @@ fn decode_mmr(data: &[u8], params: &GrayScaleParams<'_>) -> Result<Vec<u32>, &'s
 }
 
 /// Decode gray-scale image using arithmetic encoding.
-fn decode_arith(data: &[u8], params: &GrayScaleParams<'_>) -> Result<Vec<u32>, &'static str> {
+fn decode_ae(data: &[u8], params: &GrayScaleParams<'_>) -> Result<Vec<u32>, &'static str> {
     let width = params.width;
     let height = params.height;
     let bits_per_pixel = params.bits_per_pixel;
@@ -64,9 +64,7 @@ fn decode_arith(data: &[u8], params: &GrayScaleParams<'_>) -> Result<Vec<u32>, &
 
     let template = params.template;
 
-    // Build adaptive template pixels for gray-scale image decoding (Table C.4).
-    // GBATX1 = 3 if GSTEMPLATE ≤ 1; 2 if GSTEMPLATE ≥ 2
-    // GBATY1 = -1, GBATX2 = -3, GBATY2 = -1, GBATX3 = 2, GBATY3 = -2, GBATX4 = -2, GBATY4 = -2
+    // Adaptive template pixels for gray-scale image decoding (Table C.4).
     let at_pixels: Vec<AdaptiveTemplatePixel> = match template {
         GbTemplate::Template0 => vec![
             AdaptiveTemplatePixel { x: 3, y: -1 },
@@ -123,6 +121,10 @@ fn decode_bitplanes<F>(
 where
     F: FnMut(u32) -> Result<Vec<bool>, &'static str>,
 {
+    if bits_per_pixel == 0 {
+        return Err("bits per pixel must be at least 1");
+    }
+    
     let mut values = vec![0u32; size];
 
     // "1) Decode GSPLANES[GSBPP – 1]" (C.5)
@@ -137,7 +139,7 @@ where
 
     // "2) Set J = GSBPP – 2." (C.5)
     // "3) While J ≥ 0:" (C.5)
-    for j in (0..bits_per_pixel.saturating_sub(1)).rev() {
+    for j in (0..bits_per_pixel - 1).rev() {
         // "a) Decode GSPLANES[J]" (C.5)
         let mut plane = decode_next(j)?;
 
