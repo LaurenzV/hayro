@@ -415,4 +415,3 @@ fn draw_pattern(
         }
     }
 }
-
