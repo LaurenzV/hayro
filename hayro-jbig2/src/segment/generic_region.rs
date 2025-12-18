@@ -198,28 +198,38 @@ fn decode_generic_region_mmr(
     header: &GenericRegionHeader,
     data: &[u8],
 ) -> Result<DecodedRegion, &'static str> {
-    // "If MMR is 1, the generic region decoding procedure is identical to an
-    // MMR (Modified Modified READ) decoder described in Recommendation ITU-T
-    // T.6 (G4)." (6.2.6)
     if !header.mmr {
         return Err("decode_generic_region_mmr called with MMR=0");
     }
 
-    let width = header.region_info.width;
-    let height = header.region_info.height;
-
-    // "2) Create a bitmap GBREG of width GBW and height GBH pixels." (6.2.5.7)
     let mut region = DecodedRegion {
-        width,
-        height,
-        data: vec![false; (width * height) as usize],
+        width: header.region_info.width,
+        height: header.region_info.height,
+        data: vec![false; (header.region_info.width * header.region_info.height) as usize],
         x_location: header.region_info.x_location,
         y_location: header.region_info.y_location,
         combination_operator: header.region_info.combination_operator,
     };
 
-    // Create a decoder that writes into our bitmap.
-    let mut decoder = BitmapDecoder::new(&mut region);
+    decode_bitmap_mmr(&mut region, data)?;
+    Ok(region)
+}
+
+/// Decode a bitmap using MMR coding (6.2.6).
+///
+/// "If MMR is 1, the generic region decoding procedure is identical to an
+/// MMR (Modified Modified READ) decoder described in Recommendation ITU-T
+/// T.6 (G4)." (6.2.6)
+///
+/// The region must already have width, height, and data allocated.
+pub(crate) fn decode_bitmap_mmr(
+    region: &mut DecodedRegion,
+    data: &[u8],
+) -> Result<(), &'static str> {
+    let width = region.width;
+    let height = region.height;
+
+    let mut decoder = BitmapDecoder::new(region);
 
     // "An invocation of the generic region decoding procedure with MMR equal to
     // 1 shall consume an integral number of bytes, beginning and ending on a
@@ -254,8 +264,7 @@ fn decode_generic_region_mmr(
     };
 
     hayro_ccitt::decode(data, &mut decoder, &settings).ok_or("MMR decoding failed")?;
-
-    Ok(region)
+    Ok(())
 }
 
 /// A decoder sink that writes decoded pixels into a DecodedRegion.
@@ -307,18 +316,40 @@ fn decode_generic_region_ad(
     header: &GenericRegionHeader,
     data: &[u8],
 ) -> Result<DecodedRegion, &'static str> {
-    let width = header.region_info.width;
-    let height = header.region_info.height;
-
-    // "2) Create a bitmap GBREG of width GBW and height GBH pixels." (6.2.5.7)
     let mut region = DecodedRegion {
-        width,
-        height,
-        data: vec![false; (width * height) as usize],
+        width: header.region_info.width,
+        height: header.region_info.height,
+        data: vec![false; (header.region_info.width * header.region_info.height) as usize],
         x_location: header.region_info.x_location,
         y_location: header.region_info.y_location,
         combination_operator: header.region_info.combination_operator,
     };
+
+    decode_bitmap_arith(
+        &mut region,
+        data,
+        header.gb_template,
+        header.tpgdon,
+        &header.adaptive_template_pixels,
+    )?;
+    Ok(region)
+}
+
+/// Decode a bitmap using arithmetic coding (6.2.5).
+///
+/// "If MMR is 0 the generic region decoding procedure is based on arithmetic
+/// coding with a template to determine the coding state." (6.2.5.1)
+///
+/// The region must already have width, height, and data allocated.
+pub(crate) fn decode_bitmap_arith(
+    region: &mut DecodedRegion,
+    data: &[u8],
+    gb_template: GbTemplate,
+    tpgdon: bool,
+    adaptive_template_pixels: &[AdaptiveTemplatePixel],
+) -> Result<(), &'static str> {
+    let width = region.width;
+    let height = region.height;
 
     let mut decoder = ArithmeticDecoder::new(data);
 
@@ -326,7 +357,7 @@ fn decode_generic_region_ad(
     // - Template 0: 16 pixels → 16-bit context (65536 contexts)
     // - Template 1: 13 pixels → 13-bit context (8192 contexts)
     // - Template 2, 3: 10 pixels → 10-bit context (1024 contexts)
-    let num_context_bits = match header.gb_template {
+    let num_context_bits = match gb_template {
         GbTemplate::Template0 => 16,
         GbTemplate::Template1 => 13,
         GbTemplate::Template2 | GbTemplate::Template3 => 10,
@@ -340,9 +371,9 @@ fn decode_generic_region_ad(
     for y in 0..height {
         // "b) If TPGDON is 1, then decode a bit using the arithmetic entropy
         // coder" (6.2.5.7)
-        if header.tpgdon {
+        if tpgdon {
             // See Figure 8 - 11.
-            let sltp_context: u32 = match header.gb_template {
+            let sltp_context: u32 = match gb_template {
                 GbTemplate::Template0 => 0b1001101100100101,
                 GbTemplate::Template1 => 0b0011110010101,
                 GbTemplate::Template2 => 0b0011100101,
@@ -367,34 +398,35 @@ fn decode_generic_region_ad(
             // "d) If LTP = 0 then, from left to right, decode each pixel of the
             // current row of GBREG." (6.2.5.7)
             for x in 0..width {
-                let context_bits = gather_context(&region, x, y, header);
+                let context_bits =
+                    gather_context_with_at(region, x, y, gb_template, adaptive_template_pixels);
                 let pixel = decoder.decode(&mut contexts[context_bits as usize]);
                 region.set_pixel(x, y, pixel != 0);
             }
         }
     }
 
-    Ok(region)
+    Ok(())
 }
 
 /// Gather context bits for a pixel at (x, y) (6.2.5.3, 6.2.5.4).
 ///
 /// "Form an integer CONTEXT by gathering the values of the image pixels overlaid
 /// by the template (including AT pixels) at its current location." (6.2.5.7)
-fn gather_context(region: &DecodedRegion, x: u32, y: u32, header: &GenericRegionHeader) -> u32 {
-    match header.gb_template {
+pub(crate) fn gather_context_with_at(
+    region: &DecodedRegion,
+    x: u32,
+    y: u32,
+    gb_template: GbTemplate,
+    adaptive_template_pixels: &[AdaptiveTemplatePixel],
+) -> u32 {
+    match gb_template {
         GbTemplate::Template0 => {
-            gather_context_template0_no_ext(region, x, y, &header.adaptive_template_pixels)
+            gather_context_template0_no_ext(region, x, y, adaptive_template_pixels)
         }
-        GbTemplate::Template1 => {
-            gather_context_template1(region, x, y, &header.adaptive_template_pixels)
-        }
-        GbTemplate::Template2 => {
-            gather_context_template2(region, x, y, &header.adaptive_template_pixels)
-        }
-        GbTemplate::Template3 => {
-            gather_context_template3(region, x, y, &header.adaptive_template_pixels)
-        }
+        GbTemplate::Template1 => gather_context_template1(region, x, y, adaptive_template_pixels),
+        GbTemplate::Template2 => gather_context_template2(region, x, y, adaptive_template_pixels),
+        GbTemplate::Template3 => gather_context_template3(region, x, y, adaptive_template_pixels),
     }
 }
 
