@@ -41,7 +41,7 @@ pub(crate) struct GrayScaleParams<'a> {
     /// The height of the gray-scale image (GSH).
     pub height: u32,
     /// The template used to code the gray-scale bitplanes (GSTEMPLATE).
-    /// Unused if use_mmr is true.
+    /// Unused if `use_mmr` is true.
     pub template: GsTemplate,
     /// A mask indicating which values should be skipped (GSKIP).
     /// Width × height pixels. Unused if use_skip is false.
