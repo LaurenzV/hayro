@@ -2,42 +2,6 @@
 
 Based on actual segment analysis of test files, ordered from simplest to hardest.
 
-## 3. Stripes
-**Segments:** `PageInfo, ImmLossGen, EOS, ..., EOP`
-
-```
-bitmap-stripe.jbig2
-bitmap-stripe-single.jbig2
-bitmap-stripe-single-no-end-of-stripe.jbig2
-bitmap-stripe-last-implicit.jbig2
-bitmap-stripe-initially-unknown-height.jbig2
-```
-
-**Why:** Adds EndOfStripe handling, otherwise same generic region decoder.
-
----
-
-## 5. Refinement Regions
-**Segments:** `PageInfo, IntGen, ImmRefine, EOP` or `PageInfo, ImmGen, ImmRefine, EOP`
-
-```
-bitmap-refine.jbig2
-bitmap-refine-customat.jbig2
-bitmap-refine-customat-tpgron.jbig2
-bitmap-refine-lossless.jbig2
-bitmap-refine-template1.jbig2
-bitmap-refine-tpgron.jbig2
-bitmap-refine-template1-tpgron.jbig2
-bitmap-refine-page.jbig2
-bitmap-refine-page-subrect.jbig2
-bitmap-refine-refine.jbig2                          (IntGen, IntRefine, ImmRefine)
-bitmap-trailing-7fff-stripped-harder-refine.jbig2
-```
-
-**Why:** New context model using reference bitmap. Requires generic region first.
-
----
-
 ## 6. Halftone Regions
 **Segments:** `PageInfo, PatDict, ImmLossHalf/ImmHalf, EOP`
 
