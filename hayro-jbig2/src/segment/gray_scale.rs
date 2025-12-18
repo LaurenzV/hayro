@@ -75,8 +75,7 @@ fn decode_gray_scale_mmr(
 
     // "1) Decode GSPLANES[GSBPP – 1]" (C.5)
     let mut bitplane = DecodedRegion::new(width, height);
-    decode_bitmap_mmr(&mut bitplane, &data[offset..])?;
-    offset += estimate_mmr_size(&data[offset..]);
+    offset += decode_bitmap_mmr(&mut bitplane, &data[offset..])?;
     bitplanes.push(bitplane);
 
     // "2) Set J = GSBPP – 2." (C.5)
@@ -84,8 +83,7 @@ fn decode_gray_scale_mmr(
     for _ in (0..bits_per_pixel.saturating_sub(1)).rev() {
         // "a) Decode GSPLANES[J]" (C.5)
         let mut bitplane = DecodedRegion::new(width, height);
-        decode_bitmap_mmr(&mut bitplane, &data[offset..])?;
-        offset += estimate_mmr_size(&data[offset..]);
+        offset += decode_bitmap_mmr(&mut bitplane, &data[offset..])?;
 
         // "b) GSPLANES[J][x, y] = GSPLANES[J + 1][x, y] XOR GSPLANES[J][x, y]" (C.5)
         let prev_plane = bitplanes.last().unwrap();
@@ -260,14 +258,3 @@ fn compute_gray_values(
     Ok(values)
 }
 
-/// Estimate MMR data size for one bitplane by looking for EOFB marker.
-fn estimate_mmr_size(data: &[u8]) -> usize {
-    for i in 0..data.len().saturating_sub(3) {
-        if data[i] == 0x00 && data[i + 1] == 0x00 {
-            let end = (i + 4).min(data.len());
-            return end;
-        }
-    }
-
-    data.len()
-}

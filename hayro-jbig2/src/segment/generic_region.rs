@@ -211,7 +211,7 @@ fn decode_generic_region_mmr(
         combination_operator: header.region_info.combination_operator,
     };
 
-    decode_bitmap_mmr(&mut region, data)?;
+    let _ = decode_bitmap_mmr(&mut region, data)?;
     Ok(region)
 }
 
@@ -222,10 +222,11 @@ fn decode_generic_region_mmr(
 /// T.6 (G4)." (6.2.6)
 ///
 /// The region must already have width, height, and data allocated.
+/// Returns the number of bytes consumed from the input data.
 pub(crate) fn decode_bitmap_mmr(
     region: &mut DecodedRegion,
     data: &[u8],
-) -> Result<(), &'static str> {
+) -> Result<usize, &'static str> {
     let width = region.width;
     let height = region.height;
 
@@ -263,8 +264,7 @@ pub(crate) fn decode_bitmap_mmr(
         invert_black: true,
     };
 
-    hayro_ccitt::decode(data, &mut decoder, &settings).ok_or("MMR decoding failed")?;
-    Ok(())
+    hayro_ccitt::decode(data, &mut decoder, &settings).ok_or("MMR decoding failed")
 }
 
 /// A decoder sink that writes decoded pixels into a DecodedRegion.

@@ -179,7 +179,7 @@ pub(crate) fn decode_pattern_dictionary(
     // as described in 6.2. Set the parameters to this decoding procedure as
     // shown in Table 27." (6.7.5)
     if header.flags.hdmmr {
-        decode_bitmap_mmr(&mut collective_bitmap, encoded_data)?;
+        let _ = decode_bitmap_mmr(&mut collective_bitmap, encoded_data)?;
     } else {
         // Build AT pixels according to Table 27.
         let at_pixels = build_pattern_at_pixels(header.flags.hdtemplate, hdpw);
