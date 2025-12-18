@@ -34,6 +34,7 @@ use reader::Reader;
 use segment::SegmentType;
 use segment::generic_refinement_region::decode_generic_refinement_region;
 use segment::generic_region::decode_generic_region;
+use segment::halftone_region::decode_halftone_region;
 use segment::page_info::{PageInformation, parse_page_information};
 use segment::pattern_dictionary::{PatternDictionary, decode_pattern_dictionary};
 
@@ -90,6 +91,32 @@ pub fn decode(data: &[u8]) -> Result<Image, &'static str> {
                 let ctx = ctx.as_mut().map_err(|e| *e)?;
                 let dictionary = decode_pattern_dictionary(&mut reader)?;
                 ctx.store_pattern_dictionary(seg.header.segment_number, dictionary);
+            }
+            SegmentType::ImmediateHalftoneRegion | SegmentType::ImmediateLosslessHalftoneRegion => {
+                let ctx = ctx.as_mut().map_err(|e| *e)?;
+                
+                let pattern_dict = seg
+                    .header
+                    .referred_to_segments
+                    .first()
+                    .and_then(|&num| ctx.get_pattern_dictionary(num))
+                    .ok_or("halftone region requires a pattern dictionary")?;
+
+                let region = decode_halftone_region(&mut reader, pattern_dict)?;
+                ctx.page_bitmap.combine(&region);
+            }
+            SegmentType::IntermediateHalftoneRegion => {
+                let ctx = ctx.as_mut().map_err(|e| *e)?;
+
+                let pattern_dict = seg
+                    .header
+                    .referred_to_segments
+                    .first()
+                    .and_then(|&num| ctx.get_pattern_dictionary(num))
+                    .ok_or("halftone region requires a pattern dictionary")?;
+
+                let region = decode_halftone_region(&mut reader, pattern_dict)?;
+                ctx.store_region(seg.header.segment_number, region);
             }
             SegmentType::IntermediateGenericRefinementRegion => {
                 let ctx = ctx.as_mut().map_err(|e| *e)?;
