@@ -94,7 +94,7 @@ pub fn decode(data: &[u8]) -> Result<Image, &'static str> {
             }
             SegmentType::ImmediateHalftoneRegion | SegmentType::ImmediateLosslessHalftoneRegion => {
                 let ctx = ctx.as_mut().map_err(|e| *e)?;
-                
+
                 let pattern_dict = seg
                     .header
                     .referred_to_segments
