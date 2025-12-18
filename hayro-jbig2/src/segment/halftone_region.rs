@@ -255,11 +255,7 @@ pub(crate) fn decode_halftone_region(
         width: hgw,
         height: hgh,
         template: header.flags.htemplate.to_gb_template(),
-        skip_mask: if header.flags.henableskip {
-            hskip.as_deref()
-        } else {
-            None
-        },
+        skip_mask: hskip.as_deref(),
     };
     let gi = decode_gray_scale_image(encoded_data, &gs_params)?;
 
@@ -276,7 +272,7 @@ pub(crate) fn decode_halftone_region(
         hry,
         pattern_dict,
         header.flags.hcombop,
-    );
+    )?;
 
     Ok(htreg)
 }
@@ -327,8 +323,6 @@ fn compute_hskip(
 }
 
 /// Render patterns into HTREG (6.6.5.2).
-///
-/// "Draw the patterns into HTREG using the following procedure:"
 fn render_patterns(
     htreg: &mut DecodedRegion,
     gi: &[u32],
@@ -340,7 +334,7 @@ fn render_patterns(
     hry: i32,
     pattern_dict: &PatternDictionary,
     hcombop: CombinationOperator,
-) {
+) -> Result<(), &'static str> {
     let hpw = pattern_dict.pattern_width;
     let hph = pattern_dict.pattern_height;
     let hbw = htreg.width;
@@ -362,17 +356,17 @@ fn render_patterns(
             // upper left pixel is at location (x, y) in HTREG." (6.6.5.2)
             let pattern_index = gi[(m_g * hgw + n_g) as usize] as usize;
 
-            // Bounds check pattern index.
-            if pattern_index >= pattern_dict.patterns.len() {
-                continue;
-            }
-
-            let pattern = &pattern_dict.patterns[pattern_index];
+            let pattern = pattern_dict
+                .patterns
+                .get(pattern_index)
+                .ok_or("gray-scale value exceeds pattern count")?;
 
             // Draw pattern at (x, y) using HCOMBOP.
             draw_pattern(htreg, pattern, x, y, hpw, hph, hbw, hbh, hcombop);
         }
     }
+
+    Ok(())
 }
 
 /// Draw a pattern into the halftone region at the specified location.
