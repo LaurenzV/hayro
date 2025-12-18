@@ -79,15 +79,10 @@ fn decode_arith(data: &[u8], params: &GrayScaleParams<'_>) -> Result<Vec<u32>, &
             vec![AdaptiveTemplatePixel { x: 2, y: -1 }]
         }
     };
-    let num_context_bits = match template {
-        GbTemplate::Template0 => 16,
-        GbTemplate::Template1 => 13,
-        GbTemplate::Template2 | GbTemplate::Template3 => 10,
-    };
 
     // All bitplanes share the same arithmetic decoder and context statistics.
     let mut decoder = ArithmeticDecoder::new(data);
-    let mut contexts = vec![ArithmeticDecoderContext::default(); 1 << num_context_bits];
+    let mut contexts = vec![ArithmeticDecoderContext::default(); 1 << template.context_bits()];
 
     decode_bitplanes(bits_per_pixel, size, |_| {
         // Decode a single bitplane using arithmetic coding.
@@ -164,4 +159,3 @@ where
 
     Ok(values)
 }
-

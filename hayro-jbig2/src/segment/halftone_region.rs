@@ -257,7 +257,11 @@ pub(crate) fn decode_halftone_region(
         width: hgw,
         height: hgh,
         template: header.flags.htemplate.to_gb_template(),
-        skip_mask: if header.flags.henableskip { hskip.as_deref() } else { None },
+        skip_mask: if header.flags.henableskip {
+            hskip.as_deref()
+        } else {
+            None
+        },
     };
     let gi = decode_gray_scale_image(encoded_data, &gs_params)?;
 

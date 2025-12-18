@@ -18,6 +18,17 @@ pub(crate) enum GbTemplate {
     Template3 = 3,
 }
 
+impl GbTemplate {
+    /// Number of context bits for this template (6.2.5.3).
+    pub(crate) fn context_bits(self) -> usize {
+        match self {
+            GbTemplate::Template0 => 16,
+            GbTemplate::Template1 => 13,
+            GbTemplate::Template2 | GbTemplate::Template3 => 10,
+        }
+    }
+}
+
 /// Adaptive template pixel position.
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct AdaptiveTemplatePixel {
@@ -353,16 +364,7 @@ pub(crate) fn decode_bitmap_arith(
 
     let mut decoder = ArithmeticDecoder::new(data);
 
-    // Create context array. Size depends on template (6.2.5.3):
-    // - Template 0: 16 pixels → 16-bit context (65536 contexts)
-    // - Template 1: 13 pixels → 13-bit context (8192 contexts)
-    // - Template 2, 3: 10 pixels → 10-bit context (1024 contexts)
-    let num_context_bits = match gb_template {
-        GbTemplate::Template0 => 16,
-        GbTemplate::Template1 => 13,
-        GbTemplate::Template2 | GbTemplate::Template3 => 10,
-    };
-    let mut contexts = vec![ArithmeticDecoderContext::default(); 1 << num_context_bits];
+    let mut contexts = vec![ArithmeticDecoderContext::default(); 1 << gb_template.context_bits()];
 
     // "1) Set: LTP = 0" (6.2.5.7)
     let mut ltp = false;
