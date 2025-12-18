@@ -238,13 +238,11 @@ pub(crate) fn decode_halftone_region(
     };
     
     // "3) Set HBPP to ⌈log₂(HNUMPATS)⌉." (6.6.5)
-    let hbpp = if hnumpats <= 1 {
-        1
-    } else {
-        32 - (hnumpats - 1).leading_zeros()
-    };
+    let hbpp = hnumpats
+        .saturating_sub(1)
+        .checked_ilog2()
+        .map_or(1, |n| n + 1);
 
-    // Get remaining data for decoding.
     let encoded_data = reader.tail().ok_or("unexpected end of data")?;
 
     // "4) Decode an image GI of size HGW by HGH with HBPP bits per pixel using
