@@ -213,16 +213,9 @@ pub(crate) fn decode_pattern_dictionary(
 }
 
 /// Build adaptive template pixels for pattern dictionary decoding (Table 27).
-///
-/// "GBATX1 = -HDPW, GBATY1 = 0" (only for Template 0)
-/// For Templates 1-3, footnote b says these have no value, so we use defaults.
 fn build_pattern_at_pixels(hdtemplate: HdTemplate, hdpw: u32) -> Vec<AdaptiveTemplatePixel> {
     match hdtemplate {
         HdTemplate::Template0 => {
-            // Table 27: GBATX1 = -HDPW, GBATY1 = 0
-            //           GBATX2 = -3, GBATY2 = -1
-            //           GBATX3 = 2, GBATY3 = -2
-            //           GBATX4 = -2, GBATY4 = -2
             vec![
                 AdaptiveTemplatePixel {
                     x: -(hdpw as i8),
@@ -233,11 +226,12 @@ fn build_pattern_at_pixels(hdtemplate: HdTemplate, hdpw: u32) -> Vec<AdaptiveTem
                 AdaptiveTemplatePixel { x: -2, y: -2 },
             ]
         }
-        // For templates 1-3, Table 27 footnote b says AT pixels have no value
-        // when HDTEMPLATE ≠ 0, so we use the default positions from Table 5.
-        HdTemplate::Template1 => vec![AdaptiveTemplatePixel { x: 3, y: -1 }],
-        HdTemplate::Template2 => vec![AdaptiveTemplatePixel { x: 2, y: -1 }],
-        HdTemplate::Template3 => vec![AdaptiveTemplatePixel { x: 2, y: -1 }],
+        HdTemplate::Template1 | HdTemplate::Template2 | HdTemplate::Template3 => {
+            vec![AdaptiveTemplatePixel {
+                x: -(hdpw as i8),
+                y: 0,
+            }]
+        }
     }
 }
 
