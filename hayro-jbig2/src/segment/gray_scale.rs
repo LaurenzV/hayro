@@ -32,8 +32,6 @@ impl GsTemplate {
 pub(crate) struct GrayScaleParams<'a> {
     /// Whether MMR encoding is used (GSMMR).
     pub use_mmr: bool,
-    /// Whether skipping of gray-scale values may occur (GSUSESKIP).
-    pub use_skip: bool,
     /// The number of bits per gray-scale value (GSBPP).
     pub bits_per_pixel: u32,
     /// The width of the gray-scale image (GSW).
@@ -41,10 +39,9 @@ pub(crate) struct GrayScaleParams<'a> {
     /// The height of the gray-scale image (GSH).
     pub height: u32,
     /// The template used to code the gray-scale bitplanes (GSTEMPLATE).
-    /// Unused if `use_mmr` is true.
     pub template: GsTemplate,
     /// A mask indicating which values should be skipped (GSKIP).
-    /// Width × height pixels. Unused if use_skip is false.
+    /// Width × height pixels. None if skipping is disabled (GSUSESKIP = 0).
     pub skip_mask: Option<&'a [bool]>,
 }
 
@@ -137,7 +134,6 @@ fn decode_gray_scale_arith(
         height,
         gb_template,
         &at_pixels,
-        params.use_skip,
         params.skip_mask,
     )?;
     bitplanes.push(bitplane);
@@ -153,7 +149,6 @@ fn decode_gray_scale_arith(
             height,
             gb_template,
             &at_pixels,
-            params.use_skip,
             params.skip_mask,
         )?;
 
@@ -181,7 +176,6 @@ fn decode_bitplane_arith(
     height: u32,
     gb_template: GbTemplate,
     at_pixels: &[AdaptiveTemplatePixel],
-    use_skip: bool,
     skip_mask: Option<&[bool]>,
 ) -> Result<DecodedRegion, &'static str> {
     let mut bitplane = DecodedRegion::new(width, height);
@@ -189,14 +183,11 @@ fn decode_bitplane_arith(
     // TPGDON = 0: no typical prediction, decode every pixel.
     for y in 0..height {
         for x in 0..width {
-            let idx = (y * width + x) as usize;
-
-            // USESKIP = GSUSESKIP, SKIP = GSKIP (Table C.4)
-            if use_skip {
-                if let Some(mask) = skip_mask {
-                    if mask[idx] {
-                        continue; // Leave as 0
-                    }
+            // USESKIP/SKIP (Table C.4): skip if mask indicates this pixel should be skipped.
+            if let Some(mask) = skip_mask {
+                let idx = (y * width + x) as usize;
+                if mask[idx] {
+                    continue; // Leave as 0
                 }
             }
 

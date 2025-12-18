@@ -252,12 +252,11 @@ pub(crate) fn decode_halftone_region(
     // "The parameters to this decoding procedure are shown in Table 23." (6.6.5)
     let gs_params = GrayScaleParams {
         use_mmr: header.flags.hmmr,
-        use_skip: header.flags.henableskip,
         bits_per_pixel: hbpp,
         width: hgw,
         height: hgh,
         template: header.flags.htemplate.to_gs_template(),
-        skip_mask: hskip.as_deref(),
+        skip_mask: if header.flags.henableskip { hskip.as_deref() } else { None },
     };
     let gi = decode_gray_scale_image(encoded_data, &gs_params)?;
 
