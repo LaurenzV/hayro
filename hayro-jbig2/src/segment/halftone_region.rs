@@ -236,7 +236,7 @@ pub(crate) fn decode_halftone_region(
     } else {
         None
     };
-    
+
     // "3) Set HBPP to ⌈log₂(HNUMPATS)⌉." (6.6.5)
     let hbpp = hnumpats
         .saturating_sub(1)

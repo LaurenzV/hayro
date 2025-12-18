@@ -124,7 +124,7 @@ where
     if bits_per_pixel == 0 {
         return Err("bits per pixel must be at least 1");
     }
-    
+
     let mut values = vec![0u32; size];
 
     // "1) Decode GSPLANES[GSBPP – 1]" (C.5)
