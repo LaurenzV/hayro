@@ -52,115 +52,92 @@ pub(crate) fn decode_gray_scale_image(
     data: &[u8],
     params: &GrayScaleParams<'_>,
 ) -> Result<Vec<u32>, &'static str> {
+    let width = params.width;
+    let height = params.height;
+    let bits_per_pixel = params.bits_per_pixel;
+    let size = (width * height) as usize;
+
     if params.use_mmr {
-        decode_gray_scale_mmr(data, params)
+        let mut offset = 0;
+        decode_bitplanes(bits_per_pixel, size, |_| {
+            let mut bitplane = DecodedRegion::new(width, height);
+            offset += decode_bitmap_mmr(&mut bitplane, &data[offset..])?;
+            Ok(bitplane.data)
+        })
     } else {
-        decode_gray_scale_arith(data, params)
+        let at_pixels = build_at_pixels(params.template);
+        let gb_template = params.template.to_gb_template();
+        let num_context_bits = match gb_template {
+            GbTemplate::Template0 => 16,
+            GbTemplate::Template1 => 13,
+            GbTemplate::Template2 | GbTemplate::Template3 => 10,
+        };
+
+        // All bitplanes share the same arithmetic decoder and context statistics.
+        let mut decoder = ArithmeticDecoder::new(data);
+        let mut contexts = vec![ArithmeticDecoderContext::default(); 1 << num_context_bits];
+
+        decode_bitplanes(bits_per_pixel, size, |_| {
+            decode_bitplane_arith(
+                &mut decoder,
+                &mut contexts,
+                width,
+                height,
+                gb_template,
+                &at_pixels,
+                params.skip_mask,
+            )
+        })
     }
 }
 
-/// Decode gray-scale image using MMR encoding.
-fn decode_gray_scale_mmr(
-    data: &[u8],
-    params: &GrayScaleParams<'_>,
-) -> Result<Vec<u32>, &'static str> {
-    let width = params.width;
-    let height = params.height;
-    let bits_per_pixel = params.bits_per_pixel;
-
-    // GSPLANES: Array of bitplanes (Table C.3)
-    let mut bitplanes: Vec<DecodedRegion> = Vec::with_capacity(bits_per_pixel as usize);
-
-    let mut offset = 0;
+/// Decode bitplanes and compute gray values (C.5).
+///
+/// The closure `decode_next` is called for each bitplane, receiving the bitplane
+/// index (GSBPP-1 down to 0) and returning the decoded bitplane data.
+fn decode_bitplanes<F>(
+    bits_per_pixel: u32,
+    size: usize,
+    mut decode_next: F,
+) -> Result<Vec<u32>, &'static str>
+where
+    F: FnMut(u32) -> Result<Vec<bool>, &'static str>,
+{
+    let mut values = vec![0u32; size];
 
     // "1) Decode GSPLANES[GSBPP – 1]" (C.5)
-    let mut bitplane = DecodedRegion::new(width, height);
-    offset += decode_bitmap_mmr(&mut bitplane, &data[offset..])?;
-    bitplanes.push(bitplane);
+    let mut prev_plane = decode_next(bits_per_pixel - 1)?;
+
+    // The first (MSB) bitplane contributes directly to the gray values.
+    for (i, &bit) in prev_plane.iter().enumerate() {
+        if bit {
+            values[i] |= 1 << (bits_per_pixel - 1);
+        }
+    }
 
     // "2) Set J = GSBPP – 2." (C.5)
     // "3) While J ≥ 0:" (C.5)
-    for _ in (0..bits_per_pixel.saturating_sub(1)).rev() {
+    for j in (0..bits_per_pixel.saturating_sub(1)).rev() {
         // "a) Decode GSPLANES[J]" (C.5)
-        let mut bitplane = DecodedRegion::new(width, height);
-        offset += decode_bitmap_mmr(&mut bitplane, &data[offset..])?;
+        let mut plane = decode_next(j)?;
 
         // "b) GSPLANES[J][x, y] = GSPLANES[J + 1][x, y] XOR GSPLANES[J][x, y]" (C.5)
-        let prev_plane = bitplanes.last().unwrap();
-        for i in 0..bitplane.data.len() {
-            bitplane.data[i] = prev_plane.data[i] ^ bitplane.data[i];
+        for i in 0..size {
+            plane[i] ^= prev_plane[i];
         }
 
-        bitplanes.push(bitplane);
-    }
-
-    // "4) GSVALS[x, y] = Σ(J=0 to GSBPP-1) GSPLANES[J][x, y] × 2^J" (C.5)
-    compute_gray_values(&bitplanes, width, height, bits_per_pixel)
-}
-
-/// Decode gray-scale image using arithmetic encoding.
-fn decode_gray_scale_arith(
-    data: &[u8],
-    params: &GrayScaleParams<'_>,
-) -> Result<Vec<u32>, &'static str> {
-    let width = params.width;
-    let height = params.height;
-    let bits_per_pixel = params.bits_per_pixel;
-
-    // Build AT pixels according to Table C.4.
-    let at_pixels = build_at_pixels(params.template);
-    let gb_template = params.template.to_gb_template();
-
-    let num_context_bits = match gb_template {
-        GbTemplate::Template0 => 16,
-        GbTemplate::Template1 => 13,
-        GbTemplate::Template2 | GbTemplate::Template3 => 10,
-    };
-
-    // GSPLANES: Array of bitplanes (Table C.3)
-    let mut bitplanes: Vec<DecodedRegion> = Vec::with_capacity(bits_per_pixel as usize);
-
-    // All bitplanes share the same arithmetic decoder and context statistics.
-    let mut decoder = ArithmeticDecoder::new(data);
-    let mut contexts = vec![ArithmeticDecoderContext::default(); 1 << num_context_bits];
-
-    // "1) Decode GSPLANES[GSBPP – 1]" (C.5)
-    let bitplane = decode_bitplane_arith(
-        &mut decoder,
-        &mut contexts,
-        width,
-        height,
-        gb_template,
-        &at_pixels,
-        params.skip_mask,
-    )?;
-    bitplanes.push(bitplane);
-
-    // "2) Set J = GSBPP – 2." (C.5)
-    // "3) While J ≥ 0:" (C.5)
-    for _ in (0..bits_per_pixel.saturating_sub(1)).rev() {
-        // "a) Decode GSPLANES[J]" (C.5)
-        let mut bitplane = decode_bitplane_arith(
-            &mut decoder,
-            &mut contexts,
-            width,
-            height,
-            gb_template,
-            &at_pixels,
-            params.skip_mask,
-        )?;
-
-        // "b) GSPLANES[J][x, y] = GSPLANES[J + 1][x, y] XOR GSPLANES[J][x, y]" (C.5)
-        let prev_plane = bitplanes.last().unwrap();
-        for i in 0..bitplane.data.len() {
-            bitplane.data[i] = prev_plane.data[i] ^ bitplane.data[i];
+        // Accumulate into gray values.
+        // "4) GSVALS[x, y] = Σ(J=0 to GSBPP-1) GSPLANES[J][x, y] × 2^J" (C.5)
+        for (i, &bit) in plane.iter().enumerate() {
+            if bit {
+                values[i] |= 1 << j;
+            }
         }
 
-        bitplanes.push(bitplane);
+        prev_plane = plane;
     }
 
-    // "4) GSVALS[x, y] = Σ(J=0 to GSBPP-1) GSPLANES[J][x, y] × 2^J" (C.5)
-    compute_gray_values(&bitplanes, width, height, bits_per_pixel)
+    Ok(values)
 }
 
 /// Decode a single bitplane using arithmetic coding.
@@ -175,7 +152,7 @@ fn decode_bitplane_arith(
     gb_template: GbTemplate,
     at_pixels: &[AdaptiveTemplatePixel],
     skip_mask: Option<&[bool]>,
-) -> Result<DecodedRegion, &'static str> {
+) -> Result<Vec<bool>, &'static str> {
     let mut bitplane = DecodedRegion::new(width, height);
 
     // TPGDON = 0: no typical prediction, decode every pixel.
@@ -196,7 +173,7 @@ fn decode_bitplane_arith(
         }
     }
 
-    Ok(bitplane)
+    Ok(bitplane.data)
 }
 
 /// Build adaptive template pixels for gray-scale image decoding (Table C.4).
@@ -224,37 +201,3 @@ fn build_at_pixels(template: GsTemplate) -> Vec<AdaptiveTemplatePixel> {
         }
     }
 }
-
-/// Compute gray values from bitplanes (C.5 step 4).
-///
-/// GSVALS[x, y] = Σ(J=0 to GSBPP-1) GSPLANES[J][x, y] × 2^J
-fn compute_gray_values(
-    bitplanes: &[DecodedRegion],
-    width: u32,
-    height: u32,
-    bits_per_pixel: u32,
-) -> Result<Vec<u32>, &'static str> {
-    let size = (width * height) as usize;
-    let mut values = vec![0u32; size];
-
-    // bitplanes[0] is GSPLANES[GSBPP-1] (MSB, decoded first)
-    // bitplanes[GSBPP-1] is GSPLANES[0] (LSB, decoded last)
-    // After XOR, each bitplane contains the actual binary value for that bit position.
-
-    for i in 0..size {
-        let mut value = 0u32;
-
-        for (plane_idx, plane) in bitplanes.iter().enumerate() {
-            let bit_position = bits_per_pixel - 1 - plane_idx as u32;
-
-            if plane.data[i] {
-                value |= 1u32 << bit_position;
-            }
-        }
-
-        values[i] = value;
-    }
-
-    Ok(values)
-}
-
