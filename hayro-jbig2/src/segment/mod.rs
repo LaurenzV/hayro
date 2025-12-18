@@ -5,6 +5,7 @@
 
 pub(crate) mod generic_refinement_region;
 pub(crate) mod generic_region;
+pub(crate) mod gray_scale;
 pub(crate) mod halftone_region;
 pub(crate) mod page_info;
 pub(crate) mod pattern_dictionary;

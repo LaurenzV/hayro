@@ -2,9 +2,7 @@
 
 use crate::bitmap::DecodedRegion;
 use crate::reader::Reader;
-use crate::segment::generic_region::{
-    AdaptiveTemplatePixel, GbTemplate, decode_bitmap_mmr, gather_context_with_at,
-};
+use crate::segment::gray_scale::{GrayScaleParams, GsTemplate, decode_gray_scale_image};
 use crate::segment::pattern_dictionary::PatternDictionary;
 use crate::segment::region::{CombinationOperator, RegionSegmentInfo, parse_region_segment_info};
 
@@ -35,13 +33,13 @@ impl HTemplate {
         }
     }
 
-    /// Convert to GbTemplate for generic region decoding.
-    fn to_gb_template(self) -> GbTemplate {
+    /// Convert to GsTemplate for gray-scale image decoding.
+    fn to_gs_template(self) -> GsTemplate {
         match self {
-            HTemplate::Template0 => GbTemplate::Template0,
-            HTemplate::Template1 => GbTemplate::Template1,
-            HTemplate::Template2 => GbTemplate::Template2,
-            HTemplate::Template3 => GbTemplate::Template3,
+            HTemplate::Template0 => GsTemplate::Template0,
+            HTemplate::Template1 => GsTemplate::Template1,
+            HTemplate::Template2 => GsTemplate::Template2,
+            HTemplate::Template3 => GsTemplate::Template3,
         }
     }
 }
@@ -250,16 +248,18 @@ pub(crate) fn decode_halftone_region(
 
     // "4) Decode an image GI of size HGW by HGH with HBPP bits per pixel using
     // the gray-scale image decoding procedure as described in Annex C." (6.6.5)
-    let gi = decode_gray_scale_image(
-        encoded_data,
-        hgw,
-        hgh,
-        hbpp,
-        header.flags.hmmr,
-        header.flags.henableskip,
-        hskip.as_ref(),
-        header.flags.htemplate,
-    )?;
+    //
+    // "The parameters to this decoding procedure are shown in Table 23." (6.6.5)
+    let gs_params = GrayScaleParams {
+        use_mmr: header.flags.hmmr,
+        use_skip: header.flags.henableskip,
+        bits_per_pixel: hbpp,
+        width: hgw,
+        height: hgh,
+        template: header.flags.htemplate.to_gs_template(),
+        skip_mask: hskip.as_deref(),
+    };
+    let gi = decode_gray_scale_image(encoded_data, &gs_params)?;
 
     // "5) Place sequentially the patterns corresponding to the values in GI into
     // HTREG by the procedure described in 6.6.5.2." (6.6.5)
@@ -322,311 +322,6 @@ fn compute_hskip(
     }
 
     hskip
-}
-
-/// Decode the gray-scale image GI (Annex C / Table 23).
-///
-/// "Decode an image GI of size HGW by HGH with HBPP bits per pixel."
-///
-/// The gray-scale image is decoded by bit-plane coding. Each bit-plane is
-/// decoded as a generic region bitmap. For arithmetic coding, all bitplanes
-/// share the same decoder and context statistics (section C.4).
-fn decode_gray_scale_image(
-    data: &[u8],
-    hgw: u32,
-    hgh: u32,
-    hbpp: u32,
-    hmmr: bool,
-    henableskip: bool,
-    hskip: Option<&Vec<bool>>,
-    htemplate: HTemplate,
-) -> Result<Vec<u32>, &'static str> {
-    use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
-
-    // GI is an HGW × HGH array of HBPP-bit values.
-    let mut gi = vec![0u32; (hgw * hgh) as usize];
-
-    if hmmr {
-        // MMR decoding - each bitplane is decoded separately.
-        let mut offset = 0;
-
-        for bit_index in (0..hbpp).rev() {
-            let mut bitplane = DecodedRegion {
-                width: hgw,
-                height: hgh,
-                data: vec![false; (hgw * hgh) as usize],
-                x_location: 0,
-                y_location: 0,
-                combination_operator: CombinationOperator::Replace,
-            };
-
-            decode_bitmap_mmr(&mut bitplane, &data[offset..])?;
-
-            // Estimate where this bitplane ends for the next one.
-            offset += estimate_mmr_size(&data[offset..], hgw, hgh);
-
-            // Combine this bitplane into GI.
-            let bit_value = 1u32 << bit_index;
-            for i in 0..bitplane.data.len() {
-                if bitplane.data[i] {
-                    gi[i] |= bit_value;
-                }
-            }
-        }
-    } else {
-        // Arithmetic decoding - all bitplanes share the same decoder and contexts.
-        // "3) For j = GSBPP - 1 down to 0, do:" (Annex C)
-        let mut decoder = ArithmeticDecoder::new(data);
-
-        let gb_template = htemplate.to_gb_template();
-        let num_context_bits = match gb_template {
-            GbTemplate::Template0 => 16,
-            GbTemplate::Template1 => 13,
-            GbTemplate::Template2 | GbTemplate::Template3 => 10,
-        };
-        let mut contexts = vec![ArithmeticDecoderContext::default(); 1 << num_context_bits];
-
-        let at_pixels = build_halftone_at_pixels(htemplate);
-
-        // We need to track the current bitplane as we decode, since context
-        // is gathered from pixels already decoded in this bitplane.
-        // Use DecodedRegion so we can reuse gather_context_with_at from generic_region.
-        let mut bitplanes: Vec<DecodedRegion> = Vec::with_capacity(hbpp as usize);
-
-        // Decode HBPP bit-planes, from most significant to least significant.
-        // All bitplanes share the same arithmetic decoder and context statistics (C.4).
-        for plane_num in (0..hbpp).rev() {
-            let mut bitplane = DecodedRegion::new(hgw, hgh);
-
-            // Decode each pixel in the bitplane.
-            // "a) For all values of x, y in the bitmap:" (Annex C)
-            for y in 0..hgh {
-                for x in 0..hgw {
-                    let idx = (y * hgw + x) as usize;
-
-                    // "If GSKIP[y][x] = 1, set GSPLANE_j[y][x] = 0" (Annex C)
-                    if henableskip {
-                        if let Some(skip) = hskip {
-                            if skip[idx] {
-                                continue; // Leave as 0
-                            }
-                        }
-                    }
-
-                    // Gather context from previously decoded pixels in this bitplane.
-                    // Use the same function as generic_region to ensure correctness.
-                    let context = gather_context_with_at(&bitplane, x, y, gb_template, &at_pixels);
-                    let pixel = decoder.decode(&mut contexts[context as usize]);
-
-                    bitplane.set_pixel(x, y, pixel != 0);
-                }
-            }
-
-            bitplanes.push(bitplane);
-        }
-
-        // Combine bitplanes into gi using Gray code to binary conversion.
-        // "i) If j is GSBPP - 1, set GSVALS[y][x][j] = GSPLANE_j[y][x]
-        //  ii) Otherwise, set GSVALS[y][x][j] = GSVALS[y][x][j+1] XOR GSPLANE_j[y][x]"
-        // (Annex C.5)
-        //
-        // bitplanes[0] is GSPLANE_{HBPP-1} (MSB, decoded first)
-        // bitplanes[1] is GSPLANE_{HBPP-2}
-        // ...
-        // bitplanes[HBPP-1] is GSPLANE_0 (LSB, decoded last)
-        //
-        // For each pixel, we build GSVALS bit by bit from MSB to LSB.
-        for i in 0..gi.len() {
-            let mut value = 0u32;
-            let mut prev_bit = false;
-
-            for (plane_idx, bitplane) in bitplanes.iter().enumerate() {
-                let bit_index = hbpp - 1 - plane_idx as u32;
-                let plane_bit = bitplane.data[i];
-
-                // Gray code to binary: current bit = prev_bit XOR plane_bit
-                // For MSB (first iteration), prev_bit is 0, so result is just plane_bit
-                let binary_bit = prev_bit ^ plane_bit;
-
-                if binary_bit {
-                    value |= 1u32 << bit_index;
-                }
-
-                prev_bit = binary_bit;
-            }
-
-            gi[i] = value;
-        }
-    }
-
-    Ok(gi)
-}
-
-/// Gather context from a bitplane stored as a flat slice.
-///
-/// This must match the bit ordering used in generic_region.rs which builds
-/// context MSB-first using `(context << 1) | pixel`.
-fn gather_context_from_slice(
-    bitplane: &[bool],
-    width: u32,
-    height: u32,
-    x: u32,
-    y: u32,
-    gb_template: GbTemplate,
-    at_pixels: &[AdaptiveTemplatePixel],
-) -> u32 {
-    // Helper to get a pixel from the slice, returning 0 for out-of-bounds.
-    let get_pixel = |px: i32, py: i32| -> u32 {
-        if px < 0 || py < 0 || px >= width as i32 || py >= height as i32 {
-            return 0;
-        }
-        if bitplane[(py as u32 * width + px as u32) as usize] {
-            1
-        } else {
-            0
-        }
-    };
-
-    let x = x as i32;
-    let y = y as i32;
-
-    // Build context using same order as generic_region.rs (MSB-first with << 1).
-    match gb_template {
-        GbTemplate::Template0 => {
-            // Template 0: 16 context bits (Figure 3a)
-            let at1 = (at_pixels[0].x as i32, at_pixels[0].y as i32);
-            let at2 = (at_pixels[1].x as i32, at_pixels[1].y as i32);
-            let at3 = (at_pixels[2].x as i32, at_pixels[2].y as i32);
-            let at4 = (at_pixels[3].x as i32, at_pixels[3].y as i32);
-
-            let mut context = 0u32;
-
-            context = (context << 1) | get_pixel(x + at4.0, y + at4.1);
-            context = (context << 1) | get_pixel(x - 1, y - 2);
-            context = (context << 1) | get_pixel(x, y - 2);
-            context = (context << 1) | get_pixel(x + 1, y - 2);
-            context = (context << 1) | get_pixel(x + at3.0, y + at3.1);
-
-            context = (context << 1) | get_pixel(x + at2.0, y + at2.1);
-            context = (context << 1) | get_pixel(x - 2, y - 1);
-            context = (context << 1) | get_pixel(x - 1, y - 1);
-            context = (context << 1) | get_pixel(x, y - 1);
-            context = (context << 1) | get_pixel(x + 1, y - 1);
-            context = (context << 1) | get_pixel(x + 2, y - 1);
-            context = (context << 1) | get_pixel(x + at1.0, y + at1.1);
-
-            context = (context << 1) | get_pixel(x - 4, y);
-            context = (context << 1) | get_pixel(x - 3, y);
-            context = (context << 1) | get_pixel(x - 2, y);
-            context = (context << 1) | get_pixel(x - 1, y);
-
-            context
-        }
-        GbTemplate::Template1 => {
-            // Template 1: 13 context bits (Figure 4)
-            let at1 = (at_pixels[0].x as i32, at_pixels[0].y as i32);
-
-            let mut context = 0u32;
-
-            context = (context << 1) | get_pixel(x - 1, y - 2);
-            context = (context << 1) | get_pixel(x, y - 2);
-            context = (context << 1) | get_pixel(x + 1, y - 2);
-            context = (context << 1) | get_pixel(x + 2, y - 2);
-
-            context = (context << 1) | get_pixel(x - 2, y - 1);
-            context = (context << 1) | get_pixel(x - 1, y - 1);
-            context = (context << 1) | get_pixel(x, y - 1);
-            context = (context << 1) | get_pixel(x + 1, y - 1);
-            context = (context << 1) | get_pixel(x + 2, y - 1);
-            context = (context << 1) | get_pixel(x + at1.0, y + at1.1);
-
-            context = (context << 1) | get_pixel(x - 3, y);
-            context = (context << 1) | get_pixel(x - 2, y);
-            context = (context << 1) | get_pixel(x - 1, y);
-
-            context
-        }
-        GbTemplate::Template2 => {
-            // Template 2: 10 context bits (Figure 5)
-            let at1 = (at_pixels[0].x as i32, at_pixels[0].y as i32);
-
-            let mut context = 0u32;
-
-            context = (context << 1) | get_pixel(x - 1, y - 2);
-            context = (context << 1) | get_pixel(x, y - 2);
-            context = (context << 1) | get_pixel(x + 1, y - 2);
-
-            context = (context << 1) | get_pixel(x - 2, y - 1);
-            context = (context << 1) | get_pixel(x - 1, y - 1);
-            context = (context << 1) | get_pixel(x, y - 1);
-            context = (context << 1) | get_pixel(x + 1, y - 1);
-            context = (context << 1) | get_pixel(x + at1.0, y + at1.1);
-
-            context = (context << 1) | get_pixel(x - 2, y);
-            context = (context << 1) | get_pixel(x - 1, y);
-
-            context
-        }
-        GbTemplate::Template3 => {
-            // Template 3: 10 context bits (Figure 6)
-            // Matches generic_region.rs gather_context_template3
-            let at1 = (at_pixels[0].x as i32, at_pixels[0].y as i32);
-
-            let mut context = 0u32;
-
-            context = (context << 1) | get_pixel(x - 3, y - 1);
-            context = (context << 1) | get_pixel(x - 2, y - 1);
-            context = (context << 1) | get_pixel(x - 1, y - 1);
-            context = (context << 1) | get_pixel(x, y - 1);
-            context = (context << 1) | get_pixel(x + 1, y - 1);
-            context = (context << 1) | get_pixel(x + at1.0, y + at1.1);
-
-            context = (context << 1) | get_pixel(x - 4, y);
-            context = (context << 1) | get_pixel(x - 3, y);
-            context = (context << 1) | get_pixel(x - 2, y);
-            context = (context << 1) | get_pixel(x - 1, y);
-
-            context
-        }
-    }
-}
-
-/// Estimate MMR data size for one bitplane (rough approximation).
-fn estimate_mmr_size(data: &[u8], _width: u32, _height: u32) -> usize {
-    // Look for EOFB marker: 000000000001 000000000001 (24 bits = 0x001001)
-    // This is a simplification. In practice, we'd need proper byte tracking.
-    // For now, return a reasonable estimate or consume all remaining data.
-
-    // Actually, for halftone with MMR, each bitplane typically has its own EOFB.
-    // Let's look for the pattern 0x00 0x10 0x01 or similar byte sequences.
-
-    // Simple heuristic: scan for 0x00 0x00 sequence followed by more zeros.
-    for i in 0..data.len().saturating_sub(3) {
-        if data[i] == 0x00 && data[i + 1] == 0x00 {
-            // Potential EOFB area - return position after some padding.
-            let end = (i + 4).min(data.len());
-            return end;
-        }
-    }
-
-    data.len()
-}
-
-/// Build AT pixels for halftone decoding.
-///
-/// For halftone, we use default AT positions since there's no explicit AT field.
-fn build_halftone_at_pixels(htemplate: HTemplate) -> Vec<AdaptiveTemplatePixel> {
-    match htemplate {
-        HTemplate::Template0 => vec![
-            AdaptiveTemplatePixel { x: 3, y: -1 },
-            AdaptiveTemplatePixel { x: -3, y: -1 },
-            AdaptiveTemplatePixel { x: 2, y: -2 },
-            AdaptiveTemplatePixel { x: -2, y: -2 },
-        ],
-        HTemplate::Template1 => vec![AdaptiveTemplatePixel { x: 3, y: -1 }],
-        HTemplate::Template2 => vec![AdaptiveTemplatePixel { x: 2, y: -1 }],
-        HTemplate::Template3 => vec![AdaptiveTemplatePixel { x: 2, y: -1 }],
-    }
 }
 
 /// Render patterns into HTREG (6.6.5.2).
