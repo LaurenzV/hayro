@@ -1,9 +1,4 @@
 //! Generic refinement region segment parsing and decoding (7.4.7, 6.3).
-//!
-//! "This decoding procedure is used to decode a rectangular array of 0 or 1
-//! values, which are coded one pixel at a time. There is a reference bitmap
-//! known to the decoding procedure, and this is used as part of the decoding
-//! process." (6.3.1)
 
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use crate::bitmap::DecodedRegion;
