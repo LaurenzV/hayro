@@ -822,8 +822,8 @@ fn read_lattice_triangles(
 
     let mut triangles = vec![];
 
-    for i in 0..(lattices.len() - 1) {
-        for j in 0..(vertices_per_row as usize - 1) {
+    for i in 0..lattices.len().saturating_sub(1) {
+        for j in 0..(vertices_per_row as usize).saturating_sub(1) {
             triangles.push(Triangle::new(
                 lattices[i][j].clone(),
                 lattices[i + 1][j].clone(),
