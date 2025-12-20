@@ -10,6 +10,7 @@ pub(crate) mod halftone_region;
 pub(crate) mod page_info;
 pub(crate) mod pattern_dictionary;
 pub(crate) mod region;
+pub(crate) mod symbol_dictionary;
 
 use crate::reader::Reader;
 

@@ -37,6 +37,7 @@ use segment::generic_region::decode_generic_region;
 use segment::halftone_region::decode_halftone_region;
 use segment::page_info::{PageInformation, parse_page_information};
 use segment::pattern_dictionary::{PatternDictionary, decode_pattern_dictionary};
+use segment::symbol_dictionary::parse_symbol_dictionary;
 
 /// A decoded JBIG2 image.
 #[derive(Debug, Clone)]
@@ -91,6 +92,10 @@ pub fn decode(data: &[u8]) -> Result<Image, &'static str> {
                 let ctx = ctx.as_mut().map_err(|e| *e)?;
                 let dictionary = decode_pattern_dictionary(&mut reader)?;
                 ctx.store_pattern_dictionary(seg.header.segment_number, dictionary);
+            }
+            SegmentType::SymbolDictionary => {
+                let dictionary = parse_symbol_dictionary(&mut reader)?;
+                eprintln!("parsed symbol dictionary: {:?}", dictionary.header);
             }
             SegmentType::ImmediateHalftoneRegion | SegmentType::ImmediateLosslessHalftoneRegion => {
                 let ctx = ctx.as_mut().map_err(|e| *e)?;
