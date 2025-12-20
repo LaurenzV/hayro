@@ -1,5 +1,5 @@
 use console_error_panic_hook;
-use hayro::{FontQuery, InterpreterSettings, Pdf, RenderSettings};
+use hayro::{InterpreterSettings, Pdf, RenderSettings};
 use js_sys;
 use std::sync::Arc;
 use vello_cpu::color::palette::css::WHITE;
@@ -102,29 +102,8 @@ impl PdfViewer {
             .get(self.current_page)
             .ok_or("Page out of bounds")?;
 
-        if self.current_page >= self.total_pages {
-            return Err(JsValue::from_str("Page out of bounds"));
-        }
-
-        // TODO: Fetch fonts lazily
-        let interpreter_settings = InterpreterSettings {
-            font_resolver: Arc::new(|query| match query {
-                FontQuery::Standard(s) => Some(s.get_font_data()),
-                FontQuery::Fallback(f) => Some(f.pick_standard_font().get_font_data()),
-            }),
-            ..Default::default()
-        };
-
-        // Get the page's natural size at 1:1 scale
-        let render_settings_base = RenderSettings {
-            x_scale: 1.0,
-            y_scale: 1.0,
-            bg_color: WHITE,
-            ..Default::default()
-        };
-        let base_pixmap = hayro::render(page, &interpreter_settings, &render_settings_base);
-        let base_width = base_pixmap.width() as f32;
-        let base_height = base_pixmap.height() as f32;
+        let interpreter_settings = InterpreterSettings::default();
+        let (base_width, base_height) = page.render_dimensions();
 
         // Calculate scale to fit in viewport (accounting for device pixel ratio)
         let target_width = viewport_width * device_pixel_ratio;
