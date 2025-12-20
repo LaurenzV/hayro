@@ -193,6 +193,10 @@ pub(crate) fn parse_symbol_dictionary_header(
 
     // "Bit 0: SDHUFF"
     let sdhuff = flags_word & 0x0001 != 0;
+    
+    if sdhuff {
+        return Err("huffman decoding is not supported yet");
+    }
 
     // "Bit 1: SDREFAGG"
     let sdrefagg = flags_word & 0x0002 != 0;
@@ -222,6 +226,10 @@ pub(crate) fn parse_symbol_dictionary_header(
 
     // "Bit 9: Bitmap coding context retained"
     let bitmap_context_retained = flags_word & 0x0200 != 0;
+
+    if bitmap_context_used || bitmap_context_retained {
+        return Err("bitmap_context_used and bitmap_context_retained flags are not supported yet");
+    }
 
     // "Bits 10-11: SDTEMPLATE"
     let sdtemplate = match (flags_word >> 10) & 0x03 {
