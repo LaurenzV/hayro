@@ -6,7 +6,6 @@
 
 ```
 bitmap-symbol-context-reuse.jbig2
-bitmap-symbol-symbolrefineseveral.jbig2
 ```
 
 ---
@@ -53,7 +52,6 @@ annex-h.jbig2                                       (3 pages with SymDict, Text,
 
 ```
 bitmap-initially-unknown-size.jbig2                 (unknown segment data length - needs end marker scanning)
-bitmap-p32-eof.jbig2                                (unknown segment type)
 ```
 
 ---

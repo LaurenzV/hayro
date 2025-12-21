@@ -244,6 +244,60 @@ pub(crate) fn parse_text_region_header(
     })
 }
 
+/// Parameters for text region decoding.
+///
+/// This can be constructed from a `TextRegionHeader` or with explicit values
+/// (e.g., for Table 17 aggregated symbol decoding).
+pub(crate) struct TextRegionParams<'a> {
+    /// SBW: Region width.
+    pub sbw: u32,
+    /// SBH: Region height.
+    pub sbh: u32,
+    /// SBNUMINSTANCES: Number of symbol instances.
+    pub sbnuminstances: u32,
+    /// SBSTRIPS: Strip size.
+    pub sbstrips: u32,
+    /// SBDEFPIXEL: Default pixel value.
+    pub sbdefpixel: bool,
+    /// SBCOMBOP: Combination operator.
+    pub sbcombop: CombinationOperator,
+    /// TRANSPOSED: Transposed flag.
+    pub transposed: bool,
+    /// REFCORNER: Reference corner.
+    pub refcorner: ReferenceCorner,
+    /// SBDSOFFSET: S offset.
+    pub sbdsoffset: i32,
+    /// SBRTEMPLATE: Refinement template.
+    pub sbrtemplate: GrTemplate,
+    /// SBRATXn/SBRATYn: Refinement AT pixels.
+    pub refinement_at_pixels: &'a [RefinementAdaptiveTemplatePixel],
+}
+
+impl<'a> TextRegionParams<'a> {
+    /// Create parameters from a parsed text region header.
+    pub fn from_header(header: &'a TextRegionHeader) -> Self {
+        let sbrtemplate = if header.flags.sbrtemplate == 0 {
+            GrTemplate::Template0
+        } else {
+            GrTemplate::Template1
+        };
+
+        Self {
+            sbw: header.region_info.width,
+            sbh: header.region_info.height,
+            sbnuminstances: header.num_instances,
+            sbstrips: 1u32 << header.flags.log_sb_strips,
+            sbdefpixel: header.flags.default_pixel,
+            sbcombop: header.flags.combination_operator,
+            transposed: header.flags.transposed,
+            refcorner: header.flags.reference_corner,
+            sbdsoffset: header.flags.ds_offset as i32,
+            sbrtemplate,
+            refinement_at_pixels: &header.refinement_at_pixels,
+        }
+    }
+}
+
 /// Decode a text region segment (6.4).
 ///
 /// "This decoding procedure is used to decode a bitmap by decoding a number of
@@ -256,21 +310,30 @@ pub(crate) fn decode_text_region(
 ) -> Result<DecodedRegion, &'static str> {
     let header = parse_text_region_header(reader)?;
     let data = reader.tail().ok_or("unexpected end of data")?;
+    let mut decoder = ArithmeticDecoder::new(data);
+    let params = TextRegionParams::from_header(&header);
 
-    if header.flags.sbrefine {
-        decode_text_region_refine(data, &header, symbols)
+    let mut sbreg = if header.flags.sbrefine {
+        decode_text_region_refine(&mut decoder, symbols, &params)?
     } else {
-        decode_text_region_direct(data, &header, symbols)
-    }
+        decode_text_region_direct(&mut decoder, symbols, &params)?
+    };
+
+    // Set location info from header
+    sbreg.x_location = header.region_info.x_location;
+    sbreg.y_location = header.region_info.y_location;
+    sbreg.combination_operator = header.region_info.combination_operator;
+
+    Ok(sbreg)
 }
 
 /// Decode text region without refinement (SBREFINE=0).
 fn decode_text_region_direct(
-    data: &[u8],
-    header: &TextRegionHeader,
+    decoder: &mut ArithmeticDecoder<'_>,
     symbols: &[&DecodedRegion],
+    params: &TextRegionParams<'_>,
 ) -> Result<DecodedRegion, &'static str> {
-    decode_text_region_with(data, header, symbols, |_decoder, id_i, _symbols| {
+    decode_text_region_with(decoder, symbols, params, |_decoder, id_i, _symbols| {
         // "If SBREFINE is 0, then set R_I to 0." (6.4.11)
         // "If R_I is 0 then set the symbol instance bitmap IB_I to SBSYMS[ID_I]."
         Ok(SymbolBitmap::Reference(id_i))
@@ -278,10 +341,13 @@ fn decode_text_region_direct(
 }
 
 /// Decode text region with refinement (SBREFINE=1).
-fn decode_text_region_refine(
-    data: &[u8],
-    header: &TextRegionHeader,
+///
+/// This is also used for aggregated symbol decoding (REFAGGNINST > 1)
+/// per Table 17, which always uses SBREFINE=1.
+pub(crate) fn decode_text_region_refine(
+    decoder: &mut ArithmeticDecoder<'_>,
     symbols: &[&DecodedRegion],
+    params: &TextRegionParams<'_>,
 ) -> Result<DecodedRegion, &'static str> {
     // Additional decoders for refinement (6.4.11)
     let mut iari = IntegerDecoder::new(); // R_I decoder
@@ -291,18 +357,13 @@ fn decode_text_region_refine(
     let mut iardy = IntegerDecoder::new(); // RDY_I decoder
 
     // Refinement contexts
-    let gr_template = if header.flags.sbrtemplate == 0 {
-        GrTemplate::Template0
-    } else {
-        GrTemplate::Template1
-    };
-    let num_gr_contexts = match gr_template {
+    let num_gr_contexts = match params.sbrtemplate {
         GrTemplate::Template0 => 1 << 13,
         GrTemplate::Template1 => 1 << 10,
     };
     let mut gr_contexts = vec![ArithmeticDecoderContext::default(); num_gr_contexts];
 
-    decode_text_region_with(data, header, symbols, |decoder, id_i, syms| {
+    decode_text_region_with(decoder, symbols, params, |decoder, id_i, syms| {
         // "If SBREFINE is 1, then decode R_I as follows:
         //  If SBHUFF is 0, decode one bit using the IARI integer arithmetic
         //  decoding procedure and set R_I to the value of that bit." (6.4.11)
@@ -372,8 +433,8 @@ fn decode_text_region_refine(
                 ibo_i,
                 grreferencedx,
                 grreferencedy,
-                gr_template,
-                &header.refinement_at_pixels,
+                params.sbrtemplate,
+                params.refinement_at_pixels,
                 false, // TPGRON = 0
             )?;
 
@@ -394,9 +455,9 @@ enum SymbolBitmap {
 ///
 /// Takes a closure that determines each symbol instance bitmap.
 fn decode_text_region_with<F>(
-    data: &[u8],
-    header: &TextRegionHeader,
+    decoder: &mut ArithmeticDecoder<'_>,
     symbols: &[&DecodedRegion],
+    params: &TextRegionParams<'_>,
     mut get_symbol_bitmap: F,
 ) -> Result<DecodedRegion, &'static str>
 where
@@ -406,15 +467,15 @@ where
         &[&DecodedRegion],
     ) -> Result<SymbolBitmap, &'static str>,
 {
-    let sbw = header.region_info.width;
-    let sbh = header.region_info.height;
-    let sbnuminstances = header.num_instances;
-    let sbstrips = 1u32 << header.flags.log_sb_strips;
-    let sbdefpixel = header.flags.default_pixel;
-    let transposed = header.flags.transposed;
-    let refcorner = header.flags.reference_corner;
-    let sbdsoffset = header.flags.ds_offset as i32;
-    let sbcombop = header.flags.combination_operator;
+    let sbw = params.sbw;
+    let sbh = params.sbh;
+    let sbnuminstances = params.sbnuminstances;
+    let sbstrips = params.sbstrips;
+    let sbdefpixel = params.sbdefpixel;
+    let transposed = params.transposed;
+    let refcorner = params.refcorner;
+    let sbdsoffset = params.sbdsoffset;
+    let sbcombop = params.sbcombop;
 
     // Calculate SBSYMCODELEN = ceil(log2(SBNUMSYMS))
     // "SBSYMCODELEN: Integer, 6 N, The length of the symbol codes used in IAID.d)"
@@ -424,9 +485,7 @@ where
     }
     let sbsymcodelen = 32 - (sbnumsyms - 1).leading_zeros();
 
-    // Initialize arithmetic decoder and integer decoders
-    let mut decoder = ArithmeticDecoder::new(data);
-
+    // Initialize integer decoders
     let mut iadt = IntegerDecoder::new(); // Strip delta T
     let mut iafs = IntegerDecoder::new(); // First symbol S coordinate
     let mut iads = IntegerDecoder::new(); // Subsequent symbol S coordinate
@@ -436,9 +495,6 @@ where
     // "1) Fill a bitmap SBREG, of the size given by SBW and SBH, with the
     // SBDEFPIXEL value." (6.4.5)
     let mut sbreg = DecodedRegion::new(sbw, sbh);
-    sbreg.x_location = header.region_info.x_location;
-    sbreg.y_location = header.region_info.y_location;
-    sbreg.combination_operator = header.region_info.combination_operator;
 
     if sbdefpixel {
         for pixel in &mut sbreg.data {
@@ -449,7 +505,7 @@ where
     // "2) Decode the initial STRIPT value as described in 6.4.6. Negate the
     // decoded value and assign this negated value to the variable STRIPT.
     // Assign the value 0 to FIRSTS. Assign the value 0 to NINSTANCES." (6.4.5)
-    let initial_stript = decode_strip_delta_t(&mut decoder, &mut iadt, sbstrips)?;
+    let initial_stript = decode_strip_delta_t(decoder, &mut iadt, sbstrips)?;
     let mut stript: i32 = -initial_stript;
     let mut firsts: i32 = 0;
     let mut ninstances: u32 = 0;
@@ -463,14 +519,14 @@ where
 
         // "b) Decode the strip's delta T value as described in 6.4.6. Let DT be
         // the decoded value. Set: STRIPT = STRIPT + DT" (6.4.5)
-        let dt = decode_strip_delta_t(&mut decoder, &mut iadt, sbstrips)?;
+        let dt = decode_strip_delta_t(decoder, &mut iadt, sbstrips)?;
         stript += dt;
 
         // "c) Decode each symbol instance in the strip as follows:" (6.4.5)
         let mut first_symbol_in_strip = true;
         let mut curs: i32 = 0;
 
-        while ninstances < sbnuminstances {
+        loop {
             // "i) If the current symbol instance is the first symbol instance in
             // the strip, then decode the first symbol instance's S coordinate as
             // described in 6.4.7. Let DFS be the decoded value. Set:
@@ -478,7 +534,7 @@ where
             //     CURS = FIRSTS" (6.4.5)
             if first_symbol_in_strip {
                 let dfs = iafs
-                    .decode(&mut decoder)
+                    .decode(decoder)
                     .ok_or("unexpected OOB decoding first S coordinate")?;
                 firsts += dfs;
                 curs = firsts;
@@ -490,7 +546,7 @@ where
                 // is OOB then the last symbol instance of the strip has been decoded;
                 // proceed to step 3 d). Otherwise, let IDS be the decoded value. Set:
                 //     CURS = CURS + IDS + SBDSOFFSET" (6.4.5)
-                match iads.decode(&mut decoder) {
+                match iads.decode(decoder) {
                     Some(ids) => {
                         curs = curs + ids + sbdsoffset;
                     }
@@ -501,19 +557,25 @@ where
                 }
             }
 
+            // Check if we've decoded all instances before processing more.
+            // We still need to read the OOB marker to properly terminate the strip.
+            if ninstances >= sbnuminstances {
+                continue;
+            }
+
             // "iii) Decode the symbol instance's T coordinate as described in 6.4.9.
             // Let CURT be the decoded value. Set: T_I = STRIPT + CURT" (6.4.5)
-            let curt = decode_symbol_t_coordinate(&mut decoder, &mut iait, sbstrips)?;
+            let curt = decode_symbol_t_coordinate(decoder, &mut iait, sbstrips)?;
             let t_i = stript + curt;
 
             // "iv) Decode the symbol instance's symbol ID as described in 6.4.10.
             // Let ID_I be the decoded value." (6.4.5)
-            let id_i = iaid.decode(&mut decoder) as usize;
+            let id_i = iaid.decode(decoder) as usize;
 
             // "v) Determine the symbol instance's bitmap IB_I as described in 6.4.11.
             // The width and height of this bitmap shall be denoted as W_I and H_I
             // respectively." (6.4.5)
-            let symbol_bitmap = get_symbol_bitmap(&mut decoder, id_i, symbols)?;
+            let symbol_bitmap = get_symbol_bitmap(decoder, id_i, symbols)?;
             let (ib_i, w_i, h_i): (&DecodedRegion, i32, i32) = match &symbol_bitmap {
                 SymbolBitmap::Reference(idx) => {
                     let sym = symbols.get(*idx).ok_or("symbol ID out of range")?;

@@ -12,9 +12,9 @@ use crate::reader::Reader;
 use crate::segment::generic_refinement_region::{
     GrTemplate, RefinementAdaptiveTemplatePixel, decode_refinement_bitmap_with,
 };
-use crate::segment::region::CombinationOperator;
-use crate::segment::text_region::{ReferenceCorner, TextRegionParams, decode_aggregated_symbol};
 use crate::segment::generic_region::{AdaptiveTemplatePixel, GbTemplate, gather_context_with_at};
+use crate::segment::region::CombinationOperator;
+use crate::segment::text_region::{ReferenceCorner, TextRegionParams, decode_text_region_refine};
 
 /// Huffman table selection for symbol dictionary height differences (SDHUFFDH).
 ///
@@ -726,7 +726,6 @@ fn decode_multi_refinement_symbol(
         sbh: hcheight,
         sbnuminstances: refaggninst as u32,
         sbstrips: 1,
-        sbnumsyms: sbsyms.len() as u32,
         sbdefpixel: false,
         sbcombop: CombinationOperator::Or,
         transposed: false,
@@ -736,7 +735,8 @@ fn decode_multi_refinement_symbol(
         refinement_at_pixels: &header.refinement_at_pixels,
     };
 
-    decode_aggregated_symbol(decoder, &sbsyms, &params)
+    // SBREFINE = 1 per Table 17, so we always use refinement decoding
+    decode_text_region_refine(decoder, &sbsyms, &params)
 }
 
 /// Decode a bitmap when REFAGGNINST = 1 (6.5.8.2.2).
