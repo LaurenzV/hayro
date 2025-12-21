@@ -8,8 +8,12 @@ repository = { workspace = true }
 license = { workspace = true }
 readme = "README.md"
 
+[features]
+debug-symbols = ["png"]
+
 [dependencies]
 hayro-ccitt = { path = "../hayro-ccitt" }
+png = { version = "0.17", optional = true }
 
 # TODO: Remove when crate is done
 [lints.clippy]

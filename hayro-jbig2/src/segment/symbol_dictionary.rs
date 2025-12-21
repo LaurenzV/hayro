@@ -1,12 +1,14 @@
-//! Symbol dictionary segment parsing (7.4.2).
+//! Symbol dictionary segment parsing and decoding (7.4.2, 6.5).
 //!
-//! This module handles parsing of symbol dictionary segment headers.
+//! This module handles parsing and decoding of symbol dictionary segments.
 //! Symbol dictionaries store collections of symbol bitmaps that can be
 //! referenced by text region segments.
 
+use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext, IntegerDecoder};
+use crate::bitmap::DecodedRegion;
 use crate::reader::Reader;
 use crate::segment::generic_refinement_region::RefinementAdaptiveTemplatePixel;
-use crate::segment::generic_region::{AdaptiveTemplatePixel, GbTemplate};
+use crate::segment::generic_region::{AdaptiveTemplatePixel, GbTemplate, gather_context_with_at};
 
 /// Huffman table selection for symbol dictionary height differences (SDHUFFDH).
 ///
@@ -193,10 +195,6 @@ pub(crate) fn parse_symbol_dictionary_header(
 
     // "Bit 0: SDHUFF"
     let sdhuff = flags_word & 0x0001 != 0;
-    
-    if sdhuff {
-        return Err("huffman decoding is not supported yet");
-    }
 
     // "Bit 1: SDREFAGG"
     let sdrefagg = flags_word & 0x0002 != 0;
@@ -226,10 +224,6 @@ pub(crate) fn parse_symbol_dictionary_header(
 
     // "Bit 9: Bitmap coding context retained"
     let bitmap_context_retained = flags_word & 0x0200 != 0;
-
-    if bitmap_context_used || bitmap_context_retained {
-        return Err("bitmap_context_used and bitmap_context_retained flags are not supported yet");
-    }
 
     // "Bits 10-11: SDTEMPLATE"
     let sdtemplate = match (flags_word >> 10) & 0x03 {
@@ -354,37 +348,330 @@ fn parse_symbol_dictionary_refinement_at_flags(
     Ok(pixels)
 }
 
-/// A parsed symbol dictionary segment.
+/// A decoded symbol dictionary segment.
 ///
 /// "A symbol dictionary segment is decoded according to the following steps:
 /// 1) Interpret its header, as described in 7.4.2.1.
 /// 2) Decode (or retrieve the results of decoding) any referred-to symbol
-///    dictionary segments and tables segments.
-/// ..." (7.4.2.2)
-///
-/// NOTE: Currently only header parsing is implemented. Symbol decoding will
-/// be added later.
+///    dictionary segments and tables segments" 
 #[derive(Debug, Clone)]
 pub(crate) struct SymbolDictionary {
     /// The parsed segment header.
     pub header: SymbolDictionaryHeader,
-    // TODO: Add decoded symbols when decoding is implemented:
-    // pub symbols: Vec<DecodedRegion>,
+    /// The exported symbols (SDEXSYMS).
+    /// "The symbols exported by this symbol dictionary. Contains SDNUMEXSYMS
+    /// symbols." (Table 14)
+    pub exported_symbols: Vec<DecodedRegion>,
 }
 
-/// Parse a symbol dictionary segment (7.4.2).
+/// Decode a symbol dictionary segment (7.4.2, 6.5).
 ///
-/// "A symbol dictionary segment is decoded according to the following steps:
-/// 1) Interpret its header, as described in 7.4.2.1." (7.4.2.2)
+/// `input_symbols` are references to symbols from referred-to symbol dictionaries
+/// (SDINSYMS). Symbols are only cloned if they need to be re-exported.
+pub(crate) fn decode_symbol_dictionary(
+    reader: &mut Reader<'_>,
+    input_symbols: &[&DecodedRegion],
+) -> Result<SymbolDictionary, &'static str> {
+    let header = parse_symbol_dictionary_header(reader)?;
+
+    // Check for unsupported flags
+    if header.flags.sdhuff {
+        return Err("SDHUFF=1 (Huffman coding) is not supported");
+    }
+    if header.flags.sdrefagg {
+        return Err("SDREFAGG=1 (refinement/aggregate coding) is not supported");
+    }
+
+    let encoded_data = reader.tail().ok_or("unexpected end of data")?;
+
+    // "6) Invoke the symbol dictionary decoding procedure described in 6.5"
+    let exported_symbols = decode_symbols(encoded_data, &header, input_symbols)?;
+
+    Ok(SymbolDictionary {
+        header,
+        exported_symbols,
+    })
+}
+
+/// Parse a symbol dictionary segment header only (7.4.2.1).
 ///
-/// NOTE: Currently only parses the header. Full decoding will be added later.
+/// Use this when you only need the header without decoding.
 pub(crate) fn parse_symbol_dictionary(
     reader: &mut Reader<'_>,
 ) -> Result<SymbolDictionary, &'static str> {
     let header = parse_symbol_dictionary_header(reader)?;
 
-    // TODO: Implement symbol decoding procedure (6.5)
-    // For now, just return the parsed header.
+    // Just return with empty symbols - header-only parsing
+    Ok(SymbolDictionary {
+        header,
+        exported_symbols: Vec::new(),
+    })
+}
 
-    Ok(SymbolDictionary { header })
+/// Symbol dictionary decoding procedure (6.5).
+///
+/// "This decoding procedure is used to decode a set of symbols; these symbols
+/// can then be used by text region decoding procedures, or in some cases by
+/// other symbol dictionary decoding procedures." (6.5.1)
+fn decode_symbols(
+    data: &[u8],
+    header: &SymbolDictionaryHeader,
+    input_symbols: &[&DecodedRegion],
+) -> Result<Vec<DecodedRegion>, &'static str> {
+    let num_input_symbols = input_symbols.len() as u32;
+    let num_new_symbols = header.num_new_symbols;
+
+    // "1) Create an array SDNEWSYMS of bitmaps, having SDNUMNEWSYMS entries."
+    let mut new_symbols: Vec<DecodedRegion> = Vec::with_capacity(num_new_symbols as usize);
+
+    // Initialize arithmetic decoder and integer decoders.
+    let mut arith_decoder = ArithmeticDecoder::new(data);
+    let mut iadh = IntegerDecoder::new();
+    let mut iadw = IntegerDecoder::new();
+    let mut iaex = IntegerDecoder::new();
+
+    let template = header.flags.sdtemplate;
+    let num_contexts = 1 << template.context_bits();
+    let mut gb_contexts = vec![ArithmeticDecoderContext::default(); num_contexts];
+
+    // "3) Set: HCHEIGHT = 0, NSYMSDECODED = 0"
+    let mut hcheight: i32 = 0;
+    let mut nsymsdecoded: u32 = 0;
+
+    // "4) Decode each height class as follows:"
+    while nsymsdecoded < num_new_symbols {
+        // "a) If NSYMSDECODED = SDNUMNEWSYMS then all the symbols in the
+        // dictionary have been decoded; proceed to step 5)."
+        // (This is checked by the while condition)
+
+        // "b) Decode the height class delta height as described in 6.5.6.
+        // Let HCDH be the decoded value."
+        let hcdh = iadh
+            .decode(&mut arith_decoder)
+            .ok_or("unexpected OOB decoding height class delta")?;
+
+        // "Set: HCHEIGHT = HCHEIGHT + HCDH"
+        hcheight = hcheight.checked_add(hcdh).ok_or("height overflow")?;
+
+        if hcheight < 0 {
+            return Err("negative height class height");
+        }
+
+        // "SYMWIDTH = 0, TOTWIDTH = 0, HCFIRSTSYM = NSYMSDECODED"
+        let mut symwidth: i32 = 0;
+        let _hcfirstsym = nsymsdecoded;
+
+        // "c) Decode each symbol within the height class as follows:"
+        loop {
+            // "i) Decode the delta width for the symbol as described in 6.5.7."
+            let dw = match iadw.decode(&mut arith_decoder) {
+                Some(v) => v,
+                None => {
+                    // "If the result of this decoding is OOB then all the symbols
+                    // in this height class have been decoded; proceed to step 4 d)."
+                    break;
+                }
+            };
+
+            // "Set: SYMWIDTH = SYMWIDTH + DW"
+            symwidth = symwidth.checked_add(dw).ok_or("symbol width overflow")?;
+
+            if symwidth < 0 {
+                return Err("negative symbol width");
+            }
+
+            // "ii) If SDHUFF is 0 or SDREFAGG is 1, then decode the symbol's bitmap
+            // as described in 6.5.8."
+            // (We only support SDHUFF=0 and SDREFAGG=0, so we always use direct bitmap coding)
+            let symbol = decode_symbol_bitmap(
+                &mut arith_decoder,
+                &mut gb_contexts,
+                header,
+                symwidth as u32,
+                hcheight as u32,
+            )?;
+
+            // Debug: save symbol as PNG
+            #[cfg(feature = "debug-symbols")]
+            {
+                let filename = format!("symbol_{:03}.png", nsymsdecoded);
+                if let Err(e) = save_symbol_as_png(&symbol, &filename) {
+                    eprintln!("Failed to save {}: {}", filename, e);
+                }
+                eprintln!("Saved symbol {} ({}x{})", nsymsdecoded, symbol.width, symbol.height);
+            }
+
+            // "Set: SDNEWSYMS[NSYMSDECODED] = B_S"
+            new_symbols.push(symbol);
+
+            // "iv) Set: NSYMSDECODED = NSYMSDECODED + 1"
+            nsymsdecoded += 1;
+
+            // Don't break early - let the loop continue to decode the OOB
+            // that terminates this height class. The outer while loop will
+            // exit when nsymsdecoded >= num_new_symbols after the OOB is read.
+        }
+
+        // Check if we've decoded all symbols after the height class ends
+        if nsymsdecoded >= num_new_symbols {
+            break;
+        }
+    }
+
+    // "5) Determine which symbol bitmaps are exported from this symbol dictionary,
+    // as described in 6.5.10."
+    let exported = decode_exported_symbols(
+        &mut arith_decoder,
+        &mut iaex,
+        num_input_symbols,
+        header.num_exported_symbols,
+        input_symbols,
+        &new_symbols,
+    )?;
+
+    Ok(exported)
+}
+
+/// Decode a symbol bitmap using direct bitmap coding (6.5.8.1, Table 16).
+///
+/// "If SDREFAGG is 0, then decode the symbol's bitmap using a generic region
+/// decoding procedure as described in 6.2. Set the parameters to this decoding
+/// procedure as shown in Table 16."
+fn decode_symbol_bitmap(
+    decoder: &mut ArithmeticDecoder<'_>,
+    contexts: &mut [ArithmeticDecoderContext],
+    header: &SymbolDictionaryHeader,
+    width: u32,
+    height: u32,
+) -> Result<DecodedRegion, &'static str> {
+    // Table 16 parameters:
+    // MMR = 0, GBW = SYMWIDTH, GBH = HCHEIGHT, GBTEMPLATE = SDTEMPLATE
+    // TPGDON = 0, USESKIP = 0
+    // GBAT = SDAT (adaptive template pixels from header)
+
+    let mut region = DecodedRegion::new(width, height);
+    let template = header.flags.sdtemplate;
+
+    // Decode each pixel using generic region decoding (6.2.5)
+    // with TPGDON = 0 (no typical prediction)
+    for y in 0..height {
+        for x in 0..width {
+            let context = gather_context_with_at(
+                &region,
+                x,
+                y,
+                template,
+                &header.adaptive_template_pixels,
+            );
+            let pixel = decoder.decode(&mut contexts[context as usize]);
+            region.set_pixel(x, y, pixel != 0);
+        }
+    }
+
+    Ok(region)
+}
+
+/// Determine exported symbols (6.5.10).
+///
+/// "The symbols that may be exported from a given dictionary include any of the
+/// symbols that are input to the dictionary, plus any of the symbols defined in
+/// the dictionary." (6.5.10)
+fn decode_exported_symbols(
+    decoder: &mut ArithmeticDecoder<'_>,
+    iaex: &mut IntegerDecoder,
+    num_input_symbols: u32,
+    num_exported: u32,
+    input_symbols: &[&DecodedRegion],
+    new_symbols: &[DecodedRegion],
+) -> Result<Vec<DecodedRegion>, &'static str> {
+    let num_new_symbols = new_symbols.len() as u32;
+    let total_symbols = num_input_symbols + num_new_symbols;
+
+    // "1) Set: EXINDEX = 0, CUREXFLAG = 0"
+    let mut exindex: u32 = 0;
+    let mut curexflag: bool = false;
+
+    // EXFLAGS array - one bit per symbol indicating if exported
+    let mut exflags = vec![false; total_symbols as usize];
+
+    // "5) Repeat steps 2) through 4) until EXINDEX = SDNUMINSYMS + SDNUMNEWSYMS"
+    while exindex < total_symbols {
+        // "2) Decode a value using Table B.1 if SDHUFF is 1, or the IAEX integer
+        // arithmetic decoding procedure if SDHUFF is 0. Let EXRUNLENGTH be the
+        // decoded value."
+        let exrunlength = iaex
+            .decode(decoder)
+            .ok_or("unexpected OOB decoding export flags")?;
+
+        if exrunlength < 0 {
+            return Err("negative export run length");
+        }
+
+        let exrunlength = exrunlength as u32;
+
+        // "3) Set EXFLAGS[EXINDEX] through EXFLAGS[EXINDEX + EXRUNLENGTH - 1]
+        // to CUREXFLAG."
+        for i in 0..exrunlength {
+            let idx = (exindex + i) as usize;
+            if idx < exflags.len() {
+                exflags[idx] = curexflag;
+            }
+        }
+
+        // "4) Set: EXINDEX = EXINDEX + EXRUNLENGTH, CUREXFLAG = NOT(CUREXFLAG)"
+        exindex += exrunlength;
+        curexflag = !curexflag;
+    }
+
+    // "8) For each value of I from 0 to SDNUMINSYMS + SDNUMNEWSYMS - 1, if
+    // EXFLAGS[I] = 1 then perform the following steps:"
+    let mut exported = Vec::with_capacity(num_exported as usize);
+
+    for (i, &is_exported) in exflags.iter().enumerate() {
+        if is_exported {
+            let symbol = if (i as u32) < num_input_symbols {
+                // "a) If I < SDNUMINSYMS then set: SDEXSYMS[J] = SDINSYMS[I]"
+                input_symbols[i].clone()
+            } else {
+                // "b) If I >= SDNUMINSYMS then set:
+                // SDEXSYMS[J] = SDNEWSYMS[I - SDNUMINSYMS]"
+                let new_idx = i - num_input_symbols as usize;
+                new_symbols[new_idx].clone()
+            };
+            exported.push(symbol);
+        }
+    }
+
+    if exported.len() != num_exported as usize {
+        return Err("exported symbol count mismatch");
+    }
+
+    Ok(exported)
+}
+
+/// Save a symbol bitmap as a PNG file (debug helper).
+#[cfg(feature = "debug-symbols")]
+fn save_symbol_as_png(symbol: &DecodedRegion, filename: &str) -> Result<(), String> {
+    use std::fs::File;
+    use std::io::BufWriter;
+
+    let file = File::create(filename).map_err(|e| e.to_string())?;
+    let w = BufWriter::new(file);
+
+    let mut encoder = png::Encoder::new(w, symbol.width, symbol.height);
+    encoder.set_color(png::ColorType::Grayscale);
+    encoder.set_depth(png::BitDepth::Eight);
+
+    let mut writer = encoder.write_header().map_err(|e| e.to_string())?;
+
+    // Convert bool pixels to grayscale bytes (true=black=0, false=white=255)
+    let pixels: Vec<u8> = symbol
+        .data
+        .iter()
+        .map(|&b| if b { 0u8 } else { 255u8 })
+        .collect();
+
+    writer.write_image_data(&pixels).map_err(|e| e.to_string())?;
+
+    Ok(())
 }

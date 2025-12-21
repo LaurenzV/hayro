@@ -37,7 +37,7 @@ use segment::generic_region::decode_generic_region;
 use segment::halftone_region::decode_halftone_region;
 use segment::page_info::{PageInformation, parse_page_information};
 use segment::pattern_dictionary::{PatternDictionary, decode_pattern_dictionary};
-use segment::symbol_dictionary::parse_symbol_dictionary;
+use segment::symbol_dictionary::{SymbolDictionary, decode_symbol_dictionary};
 
 /// A decoded JBIG2 image.
 #[derive(Debug, Clone)]
@@ -94,8 +94,21 @@ pub fn decode(data: &[u8]) -> Result<Image, &'static str> {
                 ctx.store_pattern_dictionary(seg.header.segment_number, dictionary);
             }
             SegmentType::SymbolDictionary => {
-                let dictionary = parse_symbol_dictionary(&mut reader)?;
-                eprintln!("parsed symbol dictionary: {:?}", dictionary.header);
+                let ctx = ctx.as_mut().map_err(|e| *e)?;
+
+                // "1) Concatenate all the input symbol dictionaries to form SDINSYMS."
+                // (6.5.5, step 1)
+                // Collect references to avoid cloning; symbols are only cloned if re-exported.
+                let input_symbols: Vec<&DecodedRegion> = seg
+                    .header
+                    .referred_to_segments
+                    .iter()
+                    .filter_map(|&num| ctx.get_symbol_dictionary(num))
+                    .flat_map(|dict| dict.exported_symbols.iter())
+                    .collect();
+
+                let dictionary = decode_symbol_dictionary(&mut reader, &input_symbols)?;
+                ctx.store_symbol_dictionary(seg.header.segment_number, dictionary);
             }
             SegmentType::ImmediateHalftoneRegion | SegmentType::ImmediateLosslessHalftoneRegion => {
                 let ctx = ctx.as_mut().map_err(|e| *e)?;
@@ -203,6 +216,8 @@ pub(crate) struct DecodeContext {
     pub referred_segments: Vec<(u32, DecodedRegion)>,
     /// Decoded pattern dictionaries, stored as (segment_number, dictionary) pairs.
     pub pattern_dictionaries: Vec<(u32, PatternDictionary)>,
+    /// Decoded symbol dictionaries, stored as (segment_number, dictionary) pairs.
+    pub symbol_dictionaries: Vec<(u32, SymbolDictionary)>,
 }
 
 impl DecodeContext {
@@ -232,6 +247,19 @@ impl DecodeContext {
             .binary_search_by_key(&segment_number, |(num, _)| *num)
             .ok()
             .map(|idx| &self.pattern_dictionaries[idx].1)
+    }
+
+    /// Store a decoded symbol dictionary for later reference.
+    fn store_symbol_dictionary(&mut self, segment_number: u32, dictionary: SymbolDictionary) {
+        self.symbol_dictionaries.push((segment_number, dictionary));
+    }
+
+    /// Look up a symbol dictionary by segment number using binary search.
+    fn get_symbol_dictionary(&self, segment_number: u32) -> Option<&SymbolDictionary> {
+        self.symbol_dictionaries
+            .binary_search_by_key(&segment_number, |(num, _)| *num)
+            .ok()
+            .map(|idx| &self.symbol_dictionaries[idx].1)
     }
 }
 
@@ -270,5 +298,6 @@ pub(crate) fn get_ctx(
         page_bitmap,
         referred_segments: Vec::new(),
         pattern_dictionaries: Vec::new(),
+        symbol_dictionaries: Vec::new(),
     })
 }
