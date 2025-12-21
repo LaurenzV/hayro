@@ -435,7 +435,7 @@ fn decode_symbols(
     let mut gb_contexts = vec![ArithmeticDecoderContext::default(); num_contexts];
 
     // "3) Set: HCHEIGHT = 0, NSYMSDECODED = 0"
-    let mut hcheight: i32 = 0;
+    let mut hcheight: u32 = 0;
     let mut nsymsdecoded: u32 = 0;
 
     // "4) Decode each height class as follows:"
@@ -451,15 +451,13 @@ fn decode_symbols(
             .ok_or("unexpected OOB decoding height class delta")?;
 
         // "Set: HCHEIGHT = HCHEIGHT + HCDH"
-        hcheight = hcheight.checked_add(hcdh).ok_or("height overflow")?;
-
-        if hcheight < 0 {
-            return Err("negative height class height");
-        }
+        // HCDH can be negative, but the result must be non-negative.
+        hcheight = hcheight
+            .checked_add_signed(hcdh)
+            .ok_or("invalid height class height")?;
 
         // "SYMWIDTH = 0, TOTWIDTH = 0, HCFIRSTSYM = NSYMSDECODED"
-        let mut symwidth: i32 = 0;
-        let _hcfirstsym = nsymsdecoded;
+        let mut symwidth: u32 = 0;
 
         // "c) Decode each symbol within the height class as follows:"
         loop {
@@ -474,11 +472,10 @@ fn decode_symbols(
             };
 
             // "Set: SYMWIDTH = SYMWIDTH + DW"
-            symwidth = symwidth.checked_add(dw).ok_or("symbol width overflow")?;
-
-            if symwidth < 0 {
-                return Err("negative symbol width");
-            }
+            // DW can be negative, but the result must be non-negative.
+            symwidth = symwidth
+                .checked_add_signed(dw)
+                .ok_or("invalid symbol width")?;
 
             // "ii) If SDHUFF is 0 or SDREFAGG is 1, then decode the symbol's bitmap
             // as described in 6.5.8."
@@ -487,8 +484,8 @@ fn decode_symbols(
                 &mut arith_decoder,
                 &mut gb_contexts,
                 header,
-                symwidth as u32,
-                hcheight as u32,
+                symwidth,
+                hcheight,
             )?;
 
             // Debug: save symbol as PNG
