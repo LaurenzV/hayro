@@ -382,7 +382,12 @@ impl IntegerDecoder {
     }
 
     /// Decode n bits and update PREV for each.
-    fn decode_n_bits(&mut self, decoder: &mut ArithmeticDecoder<'_>, prev: &mut u32, n: usize) -> u32 {
+    fn decode_n_bits(
+        &mut self,
+        decoder: &mut ArithmeticDecoder<'_>,
+        prev: &mut u32,
+        n: usize,
+    ) -> u32 {
         let mut value = 0u32;
         for _ in 0..n {
             let bit = self.decode_bit(decoder, prev);

@@ -353,7 +353,7 @@ fn parse_symbol_dictionary_refinement_at_flags(
 /// "A symbol dictionary segment is decoded according to the following steps:
 /// 1) Interpret its header, as described in 7.4.2.1.
 /// 2) Decode (or retrieve the results of decoding) any referred-to symbol
-///    dictionary segments and tables segments" 
+///    dictionary segments and tables segments"
 #[derive(Debug, Clone)]
 pub(crate) struct SymbolDictionary {
     /// The parsed segment header.
@@ -533,13 +533,8 @@ fn decode_symbol_bitmap(
     // with TPGDON = 0 (no typical prediction)
     for y in 0..height {
         for x in 0..width {
-            let context = gather_context_with_at(
-                &region,
-                x,
-                y,
-                template,
-                &header.adaptive_template_pixels,
-            );
+            let context =
+                gather_context_with_at(&region, x, y, template, &header.adaptive_template_pixels);
             let pixel = decoder.decode(&mut contexts[context as usize]);
             region.set_pixel(x, y, pixel != 0);
         }
