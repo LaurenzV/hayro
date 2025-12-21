@@ -147,19 +147,6 @@ fn decode_refinement_bitmap(
     reference_dx: i32,
     reference_dy: i32,
 ) -> Result<DecodedRegion, &'static str> {
-    let width = header.region_info.width;
-    let height = header.region_info.height;
-
-    // "2) Create a bitmap GRREG of width GRW and height GRH pixels." (6.3.5.6)
-    let mut region = DecodedRegion {
-        width,
-        height,
-        data: vec![false; (width * height) as usize],
-        x_location: header.region_info.x_location,
-        y_location: header.region_info.y_location,
-        combination_operator: header.region_info.combination_operator,
-    };
-
     let mut decoder = ArithmeticDecoder::new(data);
 
     // Create context array. Size depends on template (6.3.5.2)
@@ -169,6 +156,45 @@ fn decode_refinement_bitmap(
     };
     let mut contexts = vec![ArithmeticDecoderContext::default(); 1 << num_context_bits];
 
+    let mut region = DecodedRegion::new(header.region_info.width, header.region_info.height);
+    region.x_location = header.region_info.x_location;
+    region.y_location = header.region_info.y_location;
+    region.combination_operator = header.region_info.combination_operator;
+
+    decode_refinement_bitmap_with(
+        &mut decoder,
+        &mut contexts,
+        &mut region,
+        reference,
+        reference_dx,
+        reference_dy,
+        header.gr_template,
+        &header.adaptive_template_pixels,
+        header.tpgron,
+    )?;
+
+    Ok(region)
+}
+
+/// Decode a refinement bitmap with provided decoder and contexts.
+///
+/// This is the core refinement decoding loop (6.3.5.6). It allows sharing
+/// decoder and context state across multiple refinements (e.g., in symbol
+/// dictionary decoding per Table 18).
+pub(crate) fn decode_refinement_bitmap_with(
+    decoder: &mut ArithmeticDecoder<'_>,
+    contexts: &mut [ArithmeticDecoderContext],
+    region: &mut DecodedRegion,
+    reference: &DecodedRegion,
+    reference_dx: i32,
+    reference_dy: i32,
+    gr_template: GrTemplate,
+    adaptive_template_pixels: &[RefinementAdaptiveTemplatePixel],
+    tpgron: bool,
+) -> Result<(), &'static str> {
+    let width = region.width;
+    let height = region.height;
+
     // "1) Set LTP = 0." (6.3.5.6)
     let mut ltp = false;
 
@@ -176,69 +202,50 @@ fn decode_refinement_bitmap(
     for y in 0..height {
         // "b) If TPGRON is 1, then decode a bit using the arithmetic entropy
         // coder" (6.3.5.6)
-        if header.tpgron {
-            // Context for SLTP depends on template (Figures 14, 15).
-            // The SLTP context has only the center reference pixel (0,0) set.
-            let sltp_context: u32 = match header.gr_template {
+        if tpgron {
+            let sltp_context: u32 = match gr_template {
                 GrTemplate::Template0 => 0b0000000010000,
                 GrTemplate::Template1 => 0b0000001000,
             };
             let sltp = decoder.decode(&mut contexts[sltp_context as usize]);
-            // "Let SLTP be the value of this bit. Set: LTP = LTP XOR SLTP"
             ltp = ltp != (sltp != 0);
         }
 
-        // "c) If LTP = 0 then, from left to right, explicitly decode all pixels
-        // of the current row of GRREG." (6.3.5.6)
         if !ltp {
             for x in 0..width {
                 let context = gather_refinement_context(
-                    &region,
+                    region,
                     reference,
                     x,
                     y,
                     reference_dx,
                     reference_dy,
-                    header,
+                    gr_template,
+                    adaptive_template_pixels,
                 );
                 let pixel = decoder.decode(&mut contexts[context as usize]);
                 region.set_pixel(x, y, pixel != 0);
             }
         } else {
-            // "d) If LTP = 1 then, from left to right, implicitly decode certain
-            // pixels of the current row of GRREG, and explicitly decode the rest."
-            // (6.3.5.6)
             for x in 0..width {
-                // "i) Set TPGRPIX equal to 1 if:
-                //    - TPGRON is 1 AND;
-                //    - a 3 × 3 pixel array in the reference bitmap (Figure 16),
-                //      centred at the location corresponding to the current pixel,
-                //      contains pixels all of the same value." (6.3.5.6)
-                let tpgrpix = header.tpgron
-                    && is_tpgr(reference, x as i32 - reference_dx, y as i32 - reference_dy);
+                let tpgrpix =
+                    tpgron && is_tpgr(reference, x as i32 - reference_dx, y as i32 - reference_dy);
 
                 if tpgrpix {
-                    // "ii) If TPGRPIX is 1 then implicitly decode the current pixel
-                    // by setting it equal to its predicted value (TPGRVAL)." (6.3.5.6)
-                    //
-                    // "When TPGRPIX is set to 1, set TPGRVAL equal to the current pixel
-                    // predicted value, which is the common value of the nine adjacent
-                    // pixels in the 3 × 3 array." (6.3.5.6)
                     let ref_x = x as i32 - reference_dx;
                     let ref_y = y as i32 - reference_dy;
                     let tpgrval = get_pixel(reference, ref_x, ref_y);
                     region.set_pixel(x, y, tpgrval);
                 } else {
-                    // "iii) Otherwise, explicitly decode the current pixel using the
-                    // methodology of steps 3 c) i) through 3 c) iii) above." (6.3.5.6)
                     let context = gather_refinement_context(
-                        &region,
+                        region,
                         reference,
                         x,
                         y,
                         reference_dx,
                         reference_dy,
-                        header,
+                        gr_template,
+                        adaptive_template_pixels,
                     );
                     let pixel = decoder.decode(&mut contexts[context as usize]);
                     region.set_pixel(x, y, pixel != 0);
@@ -247,7 +254,7 @@ fn decode_refinement_bitmap(
         }
     }
 
-    Ok(region)
+    Ok(())
 }
 
 /// Check the TPGR condition (Figure 16).
@@ -296,7 +303,8 @@ fn gather_refinement_context(
     y: u32,
     reference_dx: i32,
     reference_dy: i32,
-    header: &GenericRefinementRegionHeader,
+    gr_template: GrTemplate,
+    adaptive_template_pixels: &[RefinementAdaptiveTemplatePixel],
 ) -> u32 {
     let x = x as i32;
     let y = y as i32;
@@ -305,13 +313,13 @@ fn gather_refinement_context(
     let ref_x = x - reference_dx;
     let ref_y = y - reference_dy;
 
-    match header.gr_template {
+    match gr_template {
         GrTemplate::Template0 => {
             // Figure 12: 13-pixel template with 2 AT pixels.
             // Left group (bitmap being decoded): 4 pixels (including RA1)
             // Right group (reference bitmap): 9 pixels (including RA2)
-            let at1 = &header.adaptive_template_pixels[0]; // RA1 for decoded bitmap
-            let at2 = &header.adaptive_template_pixels[1]; // RA2 for reference bitmap
+            let at1 = adaptive_template_pixels[0];
+            let at2 = adaptive_template_pixels[1];
 
             let mut context = 0u32;
 
