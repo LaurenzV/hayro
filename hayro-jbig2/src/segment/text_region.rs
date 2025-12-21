@@ -288,8 +288,6 @@ fn decode_text_region_data(
     // Initialize arithmetic decoder and integer decoders
     let mut decoder = ArithmeticDecoder::new(data);
 
-    // "Each arithmetic integer decoding procedure requires 512 bytes of storage
-    // for its context memory." (A.2)
     let mut iadt = IntegerDecoder::new(); // Strip delta T
     let mut iafs = IntegerDecoder::new(); // First symbol S coordinate
     let mut iads = IntegerDecoder::new(); // Subsequent symbol S coordinate
@@ -321,7 +319,7 @@ fn decode_text_region_data(
     while ninstances < sbnuminstances {
         // "a) If NINSTANCES is equal to SBNUMINSTANCES then there are no more
         // strips to decode, and the process of decoding the text region is
-        // complete; proceed to step 4)." (6.4.5)
+        // complete; proceed to step 5)." (6.4.5)
         // (checked by while condition)
 
         // "b) Decode the strip's delta T value as described in 6.4.6. Let DT be
@@ -333,7 +331,7 @@ fn decode_text_region_data(
         let mut first_symbol_in_strip = true;
         let mut curs: i32 = 0;
 
-        loop {
+        while ninstances < sbnuminstances {
             // "i) If the current symbol instance is the first symbol instance in
             // the strip, then decode the first symbol instance's S coordinate as
             // described in 6.4.7. Let DFS be the decoded value. Set:
@@ -378,10 +376,7 @@ fn decode_text_region_data(
             // respectively." (6.4.5)
             // For SBREFINE=0: "If R_I is 0 then set the symbol instance bitmap IB_I
             // to SBSYMS[ID_I]." (6.4.11)
-            if id_i >= symbols.len() {
-                return Err("symbol ID out of range");
-            }
-            let ib_i = symbols[id_i];
+            let ib_i = symbols.get(id_i).ok_or("symbol ID out of range")?;
             let w_i = ib_i.width as i32;
             let h_i = ib_i.height as i32;
 
@@ -435,11 +430,6 @@ fn decode_text_region_data(
 
             // "xii) Set: NINSTANCES = NINSTANCES + 1" (6.4.5)
             ninstances += 1;
-
-            // Check if we've decoded all instances
-            if ninstances >= sbnuminstances {
-                break;
-            }
         }
     }
 

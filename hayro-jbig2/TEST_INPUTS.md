@@ -4,15 +4,6 @@
 **Segments:** `PageInfo, SymDict, ImmLossText/ImmText, EOP`
 
 ```
-bitmap-symbol.jbig2
-bitmap-symbol-textbottomleft.jbig2
-bitmap-symbol-textbottomright.jbig2
-bitmap-symbol-texttopright.jbig2
-bitmap-symbol-texttranspose.jbig2
-bitmap-symbol-textbottomlefttranspose.jbig2
-bitmap-symbol-textbottomrighttranspose.jbig2
-bitmap-symbol-texttoprighttranspose.jbig2
-bitmap-symbol-negative-sbdsoffset.jbig2
 bitmap-symbol-textrefine.jbig2
 bitmap-symbol-textrefine-customat.jbig2
 bitmap-symbol-textrefine-negative-delta-width.jbig2
@@ -22,23 +13,11 @@ bitmap-symbol-textrefine-negative-delta-width.jbig2
 
 ---
 
-## 9. Symbol + Composite
-**Segments:** `PageInfo, SymDict, ImmLossText, ImmLossText, ..., EOP`
-
-```
-bitmap-composite-and-xnor-text.jbig2
-bitmap-composite-or-xor-replace-text.jbig2
-bitmap-symbol-textcomposite.jbig2
-```
-
----
-
 ## 10. Multiple Symbol Dictionaries
 **Segments:** `PageInfo, SymDict, SymDict, ..., ImmText, EOP`
 
 ```
 bitmap-symbol-context-reuse.jbig2
-bitmap-symbol-manyrefs.jbig2
 bitmap-symbol-symbolrefineone.jbig2
 bitmap-symbol-symbolrefineone-customat.jbig2
 bitmap-symbol-symbolrefineone-template1.jbig2
