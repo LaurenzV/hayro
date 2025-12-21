@@ -542,7 +542,6 @@ dependencies = [
  "hayro-ccitt",
  "image 0.25.9",
  "indicatif",
- "png 0.17.16",
  "rayon",
  "serde",
  "serde_json",

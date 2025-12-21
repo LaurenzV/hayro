@@ -487,16 +487,6 @@ fn decode_symbols(
                 hcheight,
             )?;
 
-            // Debug: save symbol as PNG
-            #[cfg(feature = "debug-symbols")]
-            {
-                let filename = format!("symbol_{:03}.png", nsymsdecoded);
-                if let Err(e) = save_symbol_as_png(&symbol, &filename) {
-                    eprintln!("Failed to save {}: {}", filename, e);
-                }
-                eprintln!("Saved symbol {} ({}x{})", nsymsdecoded, symbol.width, symbol.height);
-            }
-
             // "Set: SDNEWSYMS[NSYMSDECODED] = B_S"
             new_symbols.push(symbol);
 
@@ -634,31 +624,4 @@ fn decode_exported_symbols(
     }
 
     Ok(exported)
-}
-
-/// Save a symbol bitmap as a PNG file (debug helper).
-#[cfg(feature = "debug-symbols")]
-fn save_symbol_as_png(symbol: &DecodedRegion, filename: &str) -> Result<(), String> {
-    use std::fs::File;
-    use std::io::BufWriter;
-
-    let file = File::create(filename).map_err(|e| e.to_string())?;
-    let w = BufWriter::new(file);
-
-    let mut encoder = png::Encoder::new(w, symbol.width, symbol.height);
-    encoder.set_color(png::ColorType::Grayscale);
-    encoder.set_depth(png::BitDepth::Eight);
-
-    let mut writer = encoder.write_header().map_err(|e| e.to_string())?;
-
-    // Convert bool pixels to grayscale bytes (true=black=0, false=white=255)
-    let pixels: Vec<u8> = symbol
-        .data
-        .iter()
-        .map(|&b| if b { 0u8 } else { 255u8 })
-        .collect();
-
-    writer.write_image_data(&pixels).map_err(|e| e.to_string())?;
-
-    Ok(())
 }
