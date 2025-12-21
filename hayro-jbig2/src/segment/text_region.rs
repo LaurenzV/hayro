@@ -557,12 +557,6 @@ where
                 }
             }
 
-            // Check if we've decoded all instances before processing more.
-            // We still need to read the OOB marker to properly terminate the strip.
-            if ninstances >= sbnuminstances {
-                continue;
-            }
-
             // "iii) Decode the symbol instance's T coordinate as described in 6.4.9.
             // Let CURT be the decoded value. Set: T_I = STRIPT + CURT" (6.4.5)
             let curt = decode_symbol_t_coordinate(decoder, &mut iait, sbstrips)?;
