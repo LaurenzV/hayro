@@ -479,7 +479,6 @@ fn decode_symbols(
 
             // "ii) If SDHUFF is 0 or SDREFAGG is 1, then decode the symbol's bitmap
             // as described in 6.5.8."
-            // (We only support SDHUFF=0 and SDREFAGG=0, so we always use direct bitmap coding)
             let symbol = decode_symbol_bitmap(
                 &mut arith_decoder,
                 &mut gb_contexts,
@@ -503,15 +502,6 @@ fn decode_symbols(
 
             // "iv) Set: NSYMSDECODED = NSYMSDECODED + 1"
             nsymsdecoded += 1;
-
-            // Don't break early - let the loop continue to decode the OOB
-            // that terminates this height class. The outer while loop will
-            // exit when nsymsdecoded >= num_new_symbols after the OOB is read.
-        }
-
-        // Check if we've decoded all symbols after the height class ends
-        if nsymsdecoded >= num_new_symbols {
-            break;
         }
     }
 
