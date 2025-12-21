@@ -1,28 +1,12 @@
 # Test Input Implementation Order
 
-## 8. Symbol Dictionary + Text Region (Basic)
-**Segments:** `PageInfo, SymDict, ImmLossText/ImmText, EOP`
-
-```
-bitmap-symbol-textrefine.jbig2
-bitmap-symbol-textrefine-customat.jbig2
-bitmap-symbol-textrefine-negative-delta-width.jbig2
-```
-
-**Why:** Major milestone - symbol dictionary + text region placement.
-
----
 
 ## 10. Multiple Symbol Dictionaries
 **Segments:** `PageInfo, SymDict, SymDict, ..., ImmText, EOP`
 
 ```
 bitmap-symbol-context-reuse.jbig2
-bitmap-symbol-symbolrefineone.jbig2
-bitmap-symbol-symbolrefineone-customat.jbig2
-bitmap-symbol-symbolrefineone-template1.jbig2
 bitmap-symbol-symbolrefineseveral.jbig2
-bitmap-symbol-refine.jbig2                          (SymDict, IntText, ImmRefine)
 ```
 
 ---
