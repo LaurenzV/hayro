@@ -61,6 +61,8 @@ pub(crate) enum SegmentType {
     Tables,
     /// Colour palette – see 7.4.16. (type 54)
     ColourPalette,
+    /// Extension - see 7.4.14. (type 62)
+    Extension
 }
 
 impl SegmentType {
@@ -88,6 +90,7 @@ impl SegmentType {
             52 => Ok(Self::Profiles),
             53 => Ok(Self::Tables),
             54 => Ok(Self::ColourPalette),
+            62 => Ok(Self::Extension),
             _ => Err("unknown or reserved segment type"),
         }
     }

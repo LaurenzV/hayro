@@ -19,7 +19,7 @@
   "bitmap-halftone.jbig2",
   { "id": "bitmap-initially-unknown-size.jbig2", "ignore": true },
   "bitmap-mmr.jbig2",
-  { "id": "bitmap-p32-eof.jbig2", "ignore": true },
+  "bitmap-p32-eof.jbig2",
   "bitmap-randomaccess.jbig2",
   "bitmap-refine-customat-tpgron.jbig2",
   "bitmap-refine-customat.jbig2",
