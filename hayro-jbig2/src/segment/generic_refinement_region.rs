@@ -149,7 +149,6 @@ fn decode_refinement_bitmap(
 ) -> Result<DecodedRegion, &'static str> {
     let mut decoder = ArithmeticDecoder::new(data);
 
-    // Create context array. Size depends on template (6.3.5.2)
     let num_context_bits = match header.gr_template {
         GrTemplate::Template0 => 13,
         GrTemplate::Template1 => 10,
