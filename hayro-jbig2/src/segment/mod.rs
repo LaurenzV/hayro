@@ -11,6 +11,7 @@ pub(crate) mod page_info;
 pub(crate) mod pattern_dictionary;
 pub(crate) mod region;
 pub(crate) mod symbol_dictionary;
+pub(crate) mod text_region;
 
 use crate::reader::Reader;
 
