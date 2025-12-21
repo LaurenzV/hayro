@@ -12,6 +12,8 @@ use crate::reader::Reader;
 use crate::segment::generic_refinement_region::{
     GrTemplate, RefinementAdaptiveTemplatePixel, decode_refinement_bitmap_with,
 };
+use crate::segment::region::CombinationOperator;
+use crate::segment::text_region::{ReferenceCorner, TextRegionParams, decode_aggregated_symbol};
 use crate::segment::generic_region::{AdaptiveTemplatePixel, GbTemplate, gather_context_with_at};
 
 /// Huffman table selection for symbol dictionary height differences (SDHUFFDH).
@@ -643,25 +645,98 @@ fn decode_refinement_aggregate_symbol(
         .decode(decoder)
         .ok_or("unexpected OOB decoding REFAGGNINST")?;
 
-    if refaggninst != 1 {
-        return Err("REFAGGNINST > 1 is not supported yet");
+    if refaggninst == 1 {
+        // "3) If REFAGGNINST is equal to one, then decode the bitmap as described
+        // in 6.5.8.2.2." (6.5.8.2)
+        decode_single_refinement_symbol(
+            decoder,
+            gr_contexts,
+            iaid,
+            iardx,
+            iardy,
+            header,
+            input_symbols,
+            new_symbols,
+            symwidth,
+            hcheight,
+            gr_template,
+        )
+    } else {
+        // "2) If REFAGGNINST is greater than one, then decode the bitmap using a
+        // text region decoding procedure as described in 6.4. Set the parameters
+        // to this decoding procedure as shown in Table 17." (6.5.8.2)
+        decode_multi_refinement_symbol(
+            decoder,
+            header,
+            input_symbols,
+            new_symbols,
+            symwidth,
+            hcheight,
+            refaggninst,
+            gr_template,
+        )
+    }
+}
+
+/// Decode a bitmap when REFAGGNINST > 1 (6.5.8.2, Table 17).
+///
+/// "If there is more than one symbol in the aggregation, then the bitmap is
+/// decoded using a text region decoding procedure as described in 6.4." (6.5.8.2)
+#[allow(clippy::too_many_arguments)]
+fn decode_multi_refinement_symbol(
+    decoder: &mut ArithmeticDecoder<'_>,
+    header: &SymbolDictionaryHeader,
+    input_symbols: &[&DecodedRegion],
+    new_symbols: &[DecodedRegion],
+    symwidth: u32,
+    hcheight: u32,
+    refaggninst: i32,
+    gr_template: GrTemplate,
+) -> Result<DecodedRegion, &'static str> {
+    // Build the combined symbol array SBSYMS as per 6.5.8.2.4:
+    // "Set SBSYMS to an array of SDNUMINSYMS + NSYMSDECODED symbols, formed by
+    // concatenating the array SDINSYMS and the first NSYMSDECODED entries of
+    // the array SDNEWSYMS."
+    let num_input = input_symbols.len();
+    let num_new = new_symbols.len();
+    let mut sbsyms: Vec<&DecodedRegion> = Vec::with_capacity(num_input + num_new);
+    sbsyms.extend(input_symbols.iter().copied());
+    for symbol in new_symbols {
+        sbsyms.push(symbol);
     }
 
-    // "3) If REFAGGNINST is equal to one, then decode the bitmap as described
-    // in 6.5.8.2.2." (6.5.8.2)
-    decode_single_refinement_symbol(
-        decoder,
-        gr_contexts,
-        iaid,
-        iardx,
-        iardy,
-        header,
-        input_symbols,
-        new_symbols,
-        symwidth,
-        hcheight,
-        gr_template,
-    )
+    // Table 17 parameters:
+    // SBHUFF = SDHUFF (always 0 for our case since we don't support Huffman)
+    // SBREFINE = 1
+    // SBW = SYMWIDTH
+    // SBH = HCHEIGHT
+    // SBNUMINSTANCES = REFAGGNINST
+    // SBSTRIPS = 1
+    // SBNUMSYMS = SDNUMINSYMS + NSYMSDECODED
+    // SBDEFPIXEL = 0
+    // SBCOMBOP = OR
+    // TRANSPOSED = 0
+    // REFCORNER = TOPLEFT
+    // SBDSOFFSET = 0
+    // SBRTEMPLATE = SDRTEMPLATE
+    // SBRATXn = SDRATXn, SBRATYn = SDRATYn
+
+    let params = TextRegionParams {
+        sbw: symwidth,
+        sbh: hcheight,
+        sbnuminstances: refaggninst as u32,
+        sbstrips: 1,
+        sbnumsyms: sbsyms.len() as u32,
+        sbdefpixel: false,
+        sbcombop: CombinationOperator::Or,
+        transposed: false,
+        refcorner: ReferenceCorner::TopLeft,
+        sbdsoffset: 0,
+        sbrtemplate: gr_template,
+        refinement_at_pixels: &header.refinement_at_pixels,
+    };
+
+    decode_aggregated_symbol(decoder, &sbsyms, &params)
 }
 
 /// Decode a bitmap when REFAGGNINST = 1 (6.5.8.2.2).
