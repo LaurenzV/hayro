@@ -4,10 +4,14 @@
 //! Symbol dictionaries store collections of symbol bitmaps that can be
 //! referenced by text region segments.
 
-use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext, IntegerDecoder};
+use crate::arithmetic_decoder::{
+    ArithmeticDecoder, ArithmeticDecoderContext, IntegerDecoder, SymbolIdDecoder,
+};
 use crate::bitmap::DecodedRegion;
 use crate::reader::Reader;
-use crate::segment::generic_refinement_region::RefinementAdaptiveTemplatePixel;
+use crate::segment::generic_refinement_region::{
+    GrTemplate, RefinementAdaptiveTemplatePixel, decode_refinement_bitmap_with,
+};
 use crate::segment::generic_region::{AdaptiveTemplatePixel, GbTemplate, gather_context_with_at};
 
 /// Huffman table selection for symbol dictionary height differences (SDHUFFDH).
@@ -378,9 +382,6 @@ pub(crate) fn decode_symbol_dictionary(
     if header.flags.sdhuff {
         return Err("SDHUFF=1 (Huffman coding) is not supported");
     }
-    if header.flags.sdrefagg {
-        return Err("SDREFAGG=1 (refinement/aggregate coding) is not supported");
-    }
 
     let encoded_data = reader.tail().ok_or("unexpected end of data")?;
 
@@ -403,6 +404,105 @@ fn decode_symbols(
     header: &SymbolDictionaryHeader,
     input_symbols: &[&DecodedRegion],
 ) -> Result<Vec<DecodedRegion>, &'static str> {
+    if header.flags.sdrefagg {
+        decode_symbols_refagg(data, header, input_symbols)
+    } else {
+        decode_symbols_direct(data, header, input_symbols)
+    }
+}
+
+/// Decode symbols using direct bitmap coding (SDREFAGG=0).
+fn decode_symbols_direct(
+    data: &[u8],
+    header: &SymbolDictionaryHeader,
+    input_symbols: &[&DecodedRegion],
+) -> Result<Vec<DecodedRegion>, &'static str> {
+    let template = header.flags.sdtemplate;
+    let num_contexts = 1 << template.context_bits();
+    let mut gb_contexts = vec![ArithmeticDecoderContext::default(); num_contexts];
+
+    decode_symbols_with(
+        data,
+        header,
+        input_symbols,
+        |decoder, symwidth, hcheight, _| {
+            decode_symbol_bitmap(decoder, &mut gb_contexts, header, symwidth, hcheight)
+        },
+    )
+}
+
+/// Decode symbols using refinement/aggregate coding (SDREFAGG=1).
+fn decode_symbols_refagg(
+    data: &[u8],
+    header: &SymbolDictionaryHeader,
+    input_symbols: &[&DecodedRegion],
+) -> Result<Vec<DecodedRegion>, &'static str> {
+    // Additional decoders for refinement (6.5.8.2)
+    let mut iaai = IntegerDecoder::new(); // REFAGGNINST decoder
+    let mut iardx = IntegerDecoder::new(); // RDX decoder
+    let mut iardy = IntegerDecoder::new(); // RDY decoder
+
+    // "SBSYMCODELEN: ceil(log2(SDNUMINSYMS + SDNUMNEWSYMS))" (6.5.8.2.3)
+    let num_input_symbols = input_symbols.len() as u32;
+    let total_symbols = num_input_symbols + header.num_new_symbols;
+    let sbsymcodelen = if total_symbols <= 1 {
+        1
+    } else {
+        32 - (total_symbols - 1).leading_zeros()
+    };
+    let mut iaid = SymbolIdDecoder::new(sbsymcodelen);
+
+    // Refinement contexts
+    let gr_template = match header.flags.sdrtemplate {
+        SdRTemplate::Template0 => GrTemplate::Template0,
+        SdRTemplate::Template1 => GrTemplate::Template1,
+    };
+    let num_gr_contexts = match gr_template {
+        GrTemplate::Template0 => 1 << 13,
+        GrTemplate::Template1 => 1 << 10,
+    };
+    let mut gr_contexts = vec![ArithmeticDecoderContext::default(); num_gr_contexts];
+
+    decode_symbols_with(
+        data,
+        header,
+        input_symbols,
+        |decoder, symwidth, hcheight, new_symbols| {
+            decode_refinement_aggregate_symbol(
+                decoder,
+                &mut gr_contexts,
+                &mut iaai,
+                &mut iaid,
+                &mut iardx,
+                &mut iardy,
+                header,
+                input_symbols,
+                new_symbols,
+                symwidth,
+                hcheight,
+                gr_template,
+            )
+        },
+    )
+}
+
+/// Core symbol decoding loop (6.5).
+///
+/// Takes a closure that decodes each individual symbol bitmap.
+fn decode_symbols_with<F>(
+    data: &[u8],
+    header: &SymbolDictionaryHeader,
+    input_symbols: &[&DecodedRegion],
+    mut decode_symbol: F,
+) -> Result<Vec<DecodedRegion>, &'static str>
+where
+    F: FnMut(
+        &mut ArithmeticDecoder<'_>,
+        u32,
+        u32,
+        &[DecodedRegion],
+    ) -> Result<DecodedRegion, &'static str>,
+{
     let num_input_symbols = input_symbols.len() as u32;
     let num_new_symbols = header.num_new_symbols;
 
@@ -414,10 +514,6 @@ fn decode_symbols(
     let mut iadh = IntegerDecoder::new();
     let mut iadw = IntegerDecoder::new();
     let mut iaex = IntegerDecoder::new();
-
-    let template = header.flags.sdtemplate;
-    let num_contexts = 1 << template.context_bits();
-    let mut gb_contexts = vec![ArithmeticDecoderContext::default(); num_contexts];
 
     // "3) Set: HCHEIGHT = 0, NSYMSDECODED = 0"
     let mut hcheight: u32 = 0;
@@ -464,13 +560,7 @@ fn decode_symbols(
 
             // "ii) If SDHUFF is 0 or SDREFAGG is 1, then decode the symbol's bitmap
             // as described in 6.5.8."
-            let symbol = decode_symbol_bitmap(
-                &mut arith_decoder,
-                &mut gb_contexts,
-                header,
-                symwidth,
-                hcheight,
-            )?;
+            let symbol = decode_symbol(&mut arith_decoder, symwidth, hcheight, &new_symbols)?;
 
             // "Set: SDNEWSYMS[NSYMSDECODED] = B_S"
             new_symbols.push(symbol);
@@ -524,6 +614,134 @@ fn decode_symbol_bitmap(
             region.set_pixel(x, y, pixel != 0);
         }
     }
+
+    Ok(region)
+}
+
+/// Decode a symbol bitmap using refinement/aggregate coding (6.5.8.2).
+///
+/// "If SDREFAGG is 1, then the symbol's bitmap is coded by refinement and
+/// aggregation of other, previously-defined, symbols." (6.5.8.2)
+#[allow(clippy::too_many_arguments)]
+fn decode_refinement_aggregate_symbol(
+    decoder: &mut ArithmeticDecoder<'_>,
+    gr_contexts: &mut [ArithmeticDecoderContext],
+    iaai: &mut IntegerDecoder,
+    iaid: &mut SymbolIdDecoder,
+    iardx: &mut IntegerDecoder,
+    iardy: &mut IntegerDecoder,
+    header: &SymbolDictionaryHeader,
+    input_symbols: &[&DecodedRegion],
+    new_symbols: &[DecodedRegion],
+    symwidth: u32,
+    hcheight: u32,
+    gr_template: GrTemplate,
+) -> Result<DecodedRegion, &'static str> {
+    // "1) Decode the number of symbol instances contained in the aggregation,
+    // as specified in 6.5.8.2.1. Let REFAGGNINST be the value decoded." (6.5.8.2)
+    let refaggninst = iaai
+        .decode(decoder)
+        .ok_or("unexpected OOB decoding REFAGGNINST")?;
+
+    if refaggninst != 1 {
+        return Err("REFAGGNINST > 1 is not supported yet");
+    }
+
+    // "3) If REFAGGNINST is equal to one, then decode the bitmap as described
+    // in 6.5.8.2.2." (6.5.8.2)
+    decode_single_refinement_symbol(
+        decoder,
+        gr_contexts,
+        iaid,
+        iardx,
+        iardy,
+        header,
+        input_symbols,
+        new_symbols,
+        symwidth,
+        hcheight,
+        gr_template,
+    )
+}
+
+/// Decode a bitmap when REFAGGNINST = 1 (6.5.8.2.2).
+///
+/// "If a symbol's bitmap is coded by refinement/aggregate coding, and there is
+/// only one symbol in the aggregation, then the bitmap is decoded as follows."
+/// (6.5.8.2.2)
+#[allow(clippy::too_many_arguments)]
+fn decode_single_refinement_symbol(
+    decoder: &mut ArithmeticDecoder<'_>,
+    gr_contexts: &mut [ArithmeticDecoderContext],
+    iaid: &mut SymbolIdDecoder,
+    iardx: &mut IntegerDecoder,
+    iardy: &mut IntegerDecoder,
+    header: &SymbolDictionaryHeader,
+    input_symbols: &[&DecodedRegion],
+    new_symbols: &[DecodedRegion],
+    symwidth: u32,
+    hcheight: u32,
+    gr_template: GrTemplate,
+) -> Result<DecodedRegion, &'static str> {
+    // "2) Decode a symbol ID as described in 6.4.10, using the values of
+    // SBSYMCODES and SBSYMCODELEN described in 6.5.8.2.3. Let ID_I be the
+    // value decoded." (6.5.8.2.2)
+    let id_i = iaid.decode(decoder) as usize;
+
+    // "3) Decode the instance refinement X offset as described in 6.4.11.3.
+    // [...] Let RDX_I be the value decoded." (6.5.8.2.2)
+    let rdx_i = iardx
+        .decode(decoder)
+        .ok_or("unexpected OOB decoding RDX_I")?;
+
+    // "4) Decode the instance refinement Y offset as described in 6.4.11.4.
+    // [...] Let RDY_I be the value decoded." (6.5.8.2.2)
+    let rdy_i = iardy
+        .decode(decoder)
+        .ok_or("unexpected OOB decoding RDY_I")?;
+
+    // "6) Let IBO_I be SBSYMS[ID_I], where SBSYMS is as shown in 6.5.8.2.4."
+    // (6.5.8.2.2)
+    //
+    // "Set SBSYMS to an array of SDNUMINSYMS + NSYMSDECODED symbols, formed by
+    // concatenating the array SDINSYMS and the first NSYMSDECODED entries of
+    // the array SDNEWSYMS." (6.5.8.2.4)
+    let num_input = input_symbols.len();
+    let reference = if id_i < num_input {
+        input_symbols[id_i]
+    } else {
+        let new_idx = id_i - num_input;
+        new_symbols
+            .get(new_idx)
+            .ok_or("refinement symbol ID out of range")?
+    };
+
+    // "The symbol's bitmap is the result of applying the generic refinement
+    // region decoding procedure described in 6.3. Set the parameters to this
+    // decoding procedure as shown in Table 18." (6.5.8.2.2)
+    //
+    // Table 18 parameters:
+    // GRW = SYMWIDTH, GRH = HCHEIGHT
+    // GRTEMPLATE = SDRTEMPLATE
+    // GRREFERENCE = IBO_I
+    // GRREFERENCEDX = RDX_I
+    // GRREFERENCEDY = RDY_I
+    // TPGRON = 0
+    // GRATX1 = SDRATX1, GRATY1 = SDRATY1, etc.
+
+    let mut region = DecodedRegion::new(symwidth, hcheight);
+
+    decode_refinement_bitmap_with(
+        decoder,
+        gr_contexts,
+        &mut region,
+        reference,
+        rdx_i,
+        rdy_i,
+        gr_template,
+        &header.refinement_at_pixels,
+        false, // TPGRON = 0
+    )?;
 
     Ok(region)
 }
