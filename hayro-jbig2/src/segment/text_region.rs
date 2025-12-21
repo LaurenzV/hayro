@@ -1,10 +1,12 @@
-//! Text region segment parsing (7.4.3).
+//! Text region segment parsing and decoding (7.4.3, 6.4).
 //!
 //! "The data parts of all three of the text region segment types ('intermediate
 //! text region', 'immediate text region' and 'immediate lossless text region')
 //! are coded identically, but are acted upon differently, see 8.2. The syntax
 //! of these segment types' data parts is specified here." (7.4.3)
 
+use crate::arithmetic_decoder::{ArithmeticDecoder, IntegerDecoder, SymbolIdDecoder};
+use crate::bitmap::DecodedRegion;
 use crate::reader::Reader;
 use crate::segment::generic_refinement_region::RefinementAdaptiveTemplatePixel;
 use crate::segment::region::{CombinationOperator, RegionSegmentInfo, parse_region_segment_info};
@@ -217,6 +219,11 @@ pub(crate) fn parse_text_region_header(
         return Err("SBHUFF=1 (Huffman coding) is not supported for text regions");
     }
 
+    // Check for unsupported refinement coding
+    if flags.sbrefine {
+        return Err("SBREFINE=1 (refinement coding) is not supported for text regions");
+    }
+
     // "Text region segment refinement AT flags – see 7.4.3.1.3."
     // "This field is only present if SBREFINE is 1 and SBRTEMPLATE is 0."
     let refinement_at_pixels = if flags.sbrefine && flags.sbrtemplate == 0 {
@@ -236,4 +243,326 @@ pub(crate) fn parse_text_region_header(
         refinement_at_pixels,
         num_instances,
     })
+}
+
+/// Decode a text region segment (6.4).
+///
+/// "This decoding procedure is used to decode a bitmap by decoding a number of
+/// symbol instances. A symbol instance contains a location and a symbol ID, and
+/// possibly a refinement bitmap. These symbol instances are combined to form
+/// the decoded bitmap." (6.4.1)
+pub(crate) fn decode_text_region(
+    reader: &mut Reader<'_>,
+    symbols: &[&DecodedRegion],
+) -> Result<DecodedRegion, &'static str> {
+    let header = parse_text_region_header(reader)?;
+    let encoded_data = reader.tail().ok_or("unexpected end of data")?;
+
+    decode_text_region_data(encoded_data, &header, symbols)
+}
+
+/// Text region decoding procedure (6.4.5).
+fn decode_text_region_data(
+    data: &[u8],
+    header: &TextRegionHeader,
+    symbols: &[&DecodedRegion],
+) -> Result<DecodedRegion, &'static str> {
+    let sbw = header.region_info.width;
+    let sbh = header.region_info.height;
+    let sbnuminstances = header.num_instances;
+    let sbstrips = 1u32 << header.flags.log_sb_strips;
+    let sbdefpixel = header.flags.default_pixel;
+    let transposed = header.flags.transposed;
+    let refcorner = header.flags.reference_corner;
+    let sbdsoffset = header.flags.ds_offset as i32;
+    let sbcombop = header.flags.combination_operator;
+
+    // Calculate SBSYMCODELEN = ceil(log2(SBNUMSYMS))
+    // "SBSYMCODELEN: Integer, 6 N, The length of the symbol codes used in IAID.d)"
+    let sbnumsyms = symbols.len() as u32;
+    if sbnumsyms == 0 {
+        return Err("text region has no symbols");
+    }
+    let sbsymcodelen = 32 - (sbnumsyms - 1).leading_zeros();
+
+    // Initialize arithmetic decoder and integer decoders
+    let mut decoder = ArithmeticDecoder::new(data);
+
+    // "Each arithmetic integer decoding procedure requires 512 bytes of storage
+    // for its context memory." (A.2)
+    let mut iadt = IntegerDecoder::new(); // Strip delta T
+    let mut iafs = IntegerDecoder::new(); // First symbol S coordinate
+    let mut iads = IntegerDecoder::new(); // Subsequent symbol S coordinate
+    let mut iait = IntegerDecoder::new(); // Symbol T coordinate
+    let mut iaid = SymbolIdDecoder::new(sbsymcodelen);
+
+    // "1) Fill a bitmap SBREG, of the size given by SBW and SBH, with the
+    // SBDEFPIXEL value." (6.4.5)
+    let mut sbreg = DecodedRegion::new(sbw, sbh);
+    sbreg.x_location = header.region_info.x_location;
+    sbreg.y_location = header.region_info.y_location;
+    sbreg.combination_operator = header.region_info.combination_operator;
+
+    if sbdefpixel {
+        for pixel in &mut sbreg.data {
+            *pixel = true;
+        }
+    }
+
+    // "2) Decode the initial STRIPT value as described in 6.4.6. Negate the
+    // decoded value and assign this negated value to the variable STRIPT.
+    // Assign the value 0 to FIRSTS. Assign the value 0 to NINSTANCES." (6.4.5)
+    let initial_stript = decode_strip_delta_t(&mut decoder, &mut iadt, sbstrips)?;
+    let mut stript: i32 = -initial_stript;
+    let mut firsts: i32 = 0;
+    let mut ninstances: u32 = 0;
+
+    // "4) Decode each strip as follows:" (6.4.5)
+    while ninstances < sbnuminstances {
+        // "a) If NINSTANCES is equal to SBNUMINSTANCES then there are no more
+        // strips to decode, and the process of decoding the text region is
+        // complete; proceed to step 4)." (6.4.5)
+        // (checked by while condition)
+
+        // "b) Decode the strip's delta T value as described in 6.4.6. Let DT be
+        // the decoded value. Set: STRIPT = STRIPT + DT" (6.4.5)
+        let dt = decode_strip_delta_t(&mut decoder, &mut iadt, sbstrips)?;
+        stript += dt;
+
+        // "c) Decode each symbol instance in the strip as follows:" (6.4.5)
+        let mut first_symbol_in_strip = true;
+        let mut curs: i32 = 0;
+
+        loop {
+            // "i) If the current symbol instance is the first symbol instance in
+            // the strip, then decode the first symbol instance's S coordinate as
+            // described in 6.4.7. Let DFS be the decoded value. Set:
+            //     FIRSTS = FIRSTS + DFS
+            //     CURS = FIRSTS" (6.4.5)
+            if first_symbol_in_strip {
+                let dfs = iafs
+                    .decode(&mut decoder)
+                    .ok_or("unexpected OOB decoding first S coordinate")?;
+                firsts += dfs;
+                curs = firsts;
+                first_symbol_in_strip = false;
+            } else {
+                // "ii) Otherwise, if the current symbol instance is not the first
+                // symbol instance in the strip, decode the symbol instance's S
+                // coordinate as described in 6.4.8. If the result of this decoding
+                // is OOB then the last symbol instance of the strip has been decoded;
+                // proceed to step 3 d). Otherwise, let IDS be the decoded value. Set:
+                //     CURS = CURS + IDS + SBDSOFFSET" (6.4.5)
+                match iads.decode(&mut decoder) {
+                    Some(ids) => {
+                        curs = curs + ids + sbdsoffset;
+                    }
+                    None => {
+                        // OOB - end of strip
+                        break;
+                    }
+                }
+            }
+
+            // "iii) Decode the symbol instance's T coordinate as described in 6.4.9.
+            // Let CURT be the decoded value. Set: T_I = STRIPT + CURT" (6.4.5)
+            let curt = decode_symbol_t_coordinate(&mut decoder, &mut iait, sbstrips)?;
+            let t_i = stript + curt;
+
+            // "iv) Decode the symbol instance's symbol ID as described in 6.4.10.
+            // Let ID_I be the decoded value." (6.4.5)
+            let id_i = iaid.decode(&mut decoder) as usize;
+
+            // "v) Determine the symbol instance's bitmap IB_I as described in 6.4.11.
+            // The width and height of this bitmap shall be denoted as W_I and H_I
+            // respectively." (6.4.5)
+            // For SBREFINE=0: "If R_I is 0 then set the symbol instance bitmap IB_I
+            // to SBSYMS[ID_I]." (6.4.11)
+            if id_i >= symbols.len() {
+                return Err("symbol ID out of range");
+            }
+            let ib_i = symbols[id_i];
+            let w_i = ib_i.width as i32;
+            let h_i = ib_i.height as i32;
+
+            // "vi) Update CURS as follows:" (6.4.5)
+            // - If TRANSPOSED is 0, and REFCORNER is TOPRIGHT or BOTTOMRIGHT, set:
+            //     CURS = CURS + W_I - 1
+            // - If TRANSPOSED is 1, and REFCORNER is BOTTOMLEFT or BOTTOMRIGHT, set:
+            //     CURS = CURS + H_I - 1
+            // - Otherwise, do not change CURS in this step.
+            if !transposed
+                && (refcorner == ReferenceCorner::TopRight
+                    || refcorner == ReferenceCorner::BottomRight)
+            {
+                curs += w_i - 1;
+            } else if transposed
+                && (refcorner == ReferenceCorner::BottomLeft
+                    || refcorner == ReferenceCorner::BottomRight)
+            {
+                curs += h_i - 1;
+            }
+
+            // "vii) Set: S_I = CURS" (6.4.5)
+            let s_i = curs;
+
+            // "viii) Determine the location of the symbol instance bitmap with
+            // respect to SBREG as follows:" (6.4.5)
+            let (x, y) = compute_symbol_location(s_i, t_i, w_i, h_i, transposed, refcorner);
+
+            // "x) Draw IB_I into SBREG. Combine each pixel of IB_I with the current
+            // value of the corresponding pixel in SBREG, using the combination
+            // operator specified by SBCOMBOP. Write the results of each combination
+            // into that pixel in SBREG." (6.4.5)
+            draw_symbol(&mut sbreg, ib_i, x, y, sbcombop);
+
+            // "xi) Update CURS as follows:" (6.4.5)
+            // - If TRANSPOSED is 0, and REFCORNER is TOPLEFT or BOTTOMLEFT, set:
+            //     CURS = CURS + W_I - 1
+            // - If TRANSPOSED is 1, and REFCORNER is TOPLEFT or TOPRIGHT, set:
+            //     CURS = CURS + H_I - 1
+            // - Otherwise, do not change CURS in this step.
+            if !transposed
+                && (refcorner == ReferenceCorner::TopLeft
+                    || refcorner == ReferenceCorner::BottomLeft)
+            {
+                curs += w_i - 1;
+            } else if transposed
+                && (refcorner == ReferenceCorner::TopLeft || refcorner == ReferenceCorner::TopRight)
+            {
+                curs += h_i - 1;
+            }
+
+            // "xii) Set: NINSTANCES = NINSTANCES + 1" (6.4.5)
+            ninstances += 1;
+
+            // Check if we've decoded all instances
+            if ninstances >= sbnuminstances {
+                break;
+            }
+        }
+    }
+
+    // "5) After all the strips have been decoded, the current contents of SBREG
+    // are the results that shall be obtained by every decoder" (6.4.5)
+    Ok(sbreg)
+}
+
+/// Decode strip delta T (6.4.6).
+///
+/// "If SBHUFF is 0, decode a value using the IADT integer arithmetic decoding
+/// procedure (see Annex A) and multiply the resulting value by SBSTRIPS." (6.4.6)
+fn decode_strip_delta_t(
+    decoder: &mut ArithmeticDecoder<'_>,
+    iadt: &mut IntegerDecoder,
+    sbstrips: u32,
+) -> Result<i32, &'static str> {
+    let value = iadt
+        .decode(decoder)
+        .ok_or("unexpected OOB decoding strip delta T")?;
+    Ok(value * sbstrips as i32)
+}
+
+/// Decode symbol instance T coordinate (6.4.9).
+///
+/// "If SBSTRIPS = 1, then the value decoded is always zero." (6.4.9)
+/// "If SBHUFF is 0, decode a value using the IAIT integer arithmetic decoding
+/// procedure (see Annex A)." (6.4.9)
+fn decode_symbol_t_coordinate(
+    decoder: &mut ArithmeticDecoder<'_>,
+    iait: &mut IntegerDecoder,
+    sbstrips: u32,
+) -> Result<i32, &'static str> {
+    if sbstrips == 1 {
+        // "NOTE – If SBSTRIPS = 1, then no bits are consumed, and the IAIT
+        // integer arithmetic decoding procedure is never invoked." (6.4.9)
+        Ok(0)
+    } else {
+        let value = iait
+            .decode(decoder)
+            .ok_or("unexpected OOB decoding symbol T coordinate")?;
+        Ok(value)
+    }
+}
+
+/// Compute the location of a symbol instance bitmap (6.4.5 step viii).
+///
+/// Returns (x, y) coordinates where the symbol should be placed.
+fn compute_symbol_location(
+    s_i: i32,
+    t_i: i32,
+    w_i: i32,
+    h_i: i32,
+    transposed: bool,
+    refcorner: ReferenceCorner,
+) -> (i32, i32) {
+    if !transposed {
+        // "If TRANSPOSED is 0, then:"
+        match refcorner {
+            // "If REFCORNER is TOPLEFT then the top left pixel of the symbol
+            // instance bitmap IB_I shall be placed at SBREG[S_I, T_I]."
+            ReferenceCorner::TopLeft => (s_i, t_i),
+            // "If REFCORNER is TOPRIGHT then the top right pixel of the symbol
+            // instance bitmap IB_I shall be placed at SBREG[S_I, T_I]."
+            ReferenceCorner::TopRight => (s_i - w_i + 1, t_i),
+            // "If REFCORNER is BOTTOMLEFT then the bottom left pixel of the symbol
+            // instance bitmap IB_I shall be placed at SBREG[S_I, T_I]."
+            ReferenceCorner::BottomLeft => (s_i, t_i - h_i + 1),
+            // "If REFCORNER is BOTTOMRIGHT then the bottom right pixel of the symbol
+            // instance bitmap IB_I shall be placed at SBREG[S_I, T_I]."
+            ReferenceCorner::BottomRight => (s_i - w_i + 1, t_i - h_i + 1),
+        }
+    } else {
+        // "If TRANSPOSED is 1, then:"
+        match refcorner {
+            // "If REFCORNER is TOPLEFT then the top left pixel of the symbol
+            // instance bitmap IB_I shall be placed at SBREG[T_I, S_I]."
+            ReferenceCorner::TopLeft => (t_i, s_i),
+            // "If REFCORNER is TOPRIGHT then the top right pixel of the symbol
+            // instance bitmap IB_I shall be placed at SBREG[T_I, S_I]."
+            ReferenceCorner::TopRight => (t_i - w_i + 1, s_i),
+            // "If REFCORNER is BOTTOMLEFT then the bottom left pixel of the symbol
+            // instance bitmap IB_I shall be placed at SBREG[T_I, S_I]."
+            ReferenceCorner::BottomLeft => (t_i, s_i - h_i + 1),
+            // "If REFCORNER is BOTTOMRIGHT then the bottom right pixel of the symbol
+            // instance bitmap IB_I shall be placed at SBREG[T_I, S_I]."
+            ReferenceCorner::BottomRight => (t_i - w_i + 1, s_i - h_i + 1),
+        }
+    }
+}
+
+/// Draw a symbol bitmap into the region using the specified combination operator.
+fn draw_symbol(
+    sbreg: &mut DecodedRegion,
+    symbol: &DecodedRegion,
+    x: i32,
+    y: i32,
+    combop: CombinationOperator,
+) {
+    for sy in 0..symbol.height {
+        let dest_y = y + sy as i32;
+        if dest_y < 0 || dest_y >= sbreg.height as i32 {
+            continue;
+        }
+
+        for sx in 0..symbol.width {
+            let dest_x = x + sx as i32;
+            if dest_x < 0 || dest_x >= sbreg.width as i32 {
+                continue;
+            }
+
+            let src_pixel = symbol.get_pixel(sx, sy);
+            let dst_pixel = sbreg.get_pixel(dest_x as u32, dest_y as u32);
+
+            let result = match combop {
+                CombinationOperator::Or => dst_pixel | src_pixel,
+                CombinationOperator::And => dst_pixel & src_pixel,
+                CombinationOperator::Xor => dst_pixel ^ src_pixel,
+                CombinationOperator::Xnor => !(dst_pixel ^ src_pixel),
+                CombinationOperator::Replace => src_pixel,
+            };
+
+            sbreg.set_pixel(dest_x as u32, dest_y as u32, result);
+        }
+    }
 }
