@@ -393,21 +393,6 @@ pub(crate) fn decode_symbol_dictionary(
     })
 }
 
-/// Parse a symbol dictionary segment header only (7.4.2.1).
-///
-/// Use this when you only need the header without decoding.
-pub(crate) fn parse_symbol_dictionary(
-    reader: &mut Reader<'_>,
-) -> Result<SymbolDictionary, &'static str> {
-    let header = parse_symbol_dictionary_header(reader)?;
-
-    // Just return with empty symbols - header-only parsing
-    Ok(SymbolDictionary {
-        header,
-        exported_symbols: Vec::new(),
-    })
-}
-
 /// Symbol dictionary decoding procedure (6.5).
 ///
 /// "This decoding procedure is used to decode a set of symbols; these symbols
