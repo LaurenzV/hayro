@@ -62,7 +62,7 @@ pub(crate) enum SegmentType {
     /// Colour palette – see 7.4.16. (type 54)
     ColourPalette,
     /// Extension - see 7.4.14. (type 62)
-    Extension
+    Extension,
 }
 
 impl SegmentType {
