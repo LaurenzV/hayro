@@ -325,26 +325,15 @@ impl HuffmanTable {
 
         // Step 5: Read lower range line (-∞ to HTLOW-1).
         // Only PREFLEN is read; RANGELEN is implicitly 32.
-        let lower_preflen = reader.read_bits(htps)? as u8;
-        if lower_preflen > 0 {
-            // Lower range line: value = (HTLOW - 1) - HTOFFSET
-            lines.push(TableLine::lower(htlow - 1, lower_preflen, 32));
-        }
+        lines.push(TableLine::lower(htlow - 1, reader.read_bits(htps)? as u8, 32));
 
         // Step 6: Read upper range line (currangelow to +∞).
         // Only PREFLEN is read; RANGELEN is implicitly 32.
-        let upper_preflen = reader.read_bits(htps)? as u8;
-        if upper_preflen > 0 {
-            // Upper range line starts where we left off.
-            lines.push(TableLine::upper(currangelow, upper_preflen, 32));
-        }
+        lines.push(TableLine::upper(currangelow, reader.read_bits(htps)? as u8, 32));
 
         // Step 7: If HTOOB, read OOB line.
         if htoob {
-            let oob_preflen = reader.read_bits(htps)? as u8;
-            if oob_preflen > 0 {
-                lines.push(TableLine::oob(oob_preflen));
-            }
+            lines.push(TableLine::oob(reader.read_bits(htps)? as u8));
         }
 
         Ok(Self::build(&lines))
