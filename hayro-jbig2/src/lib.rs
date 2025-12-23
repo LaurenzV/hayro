@@ -25,6 +25,7 @@ This crate forbids unsafe code via a crate-level attribute.
 mod arithmetic_decoder;
 mod bitmap;
 mod file;
+mod huffman_table;
 mod reader;
 mod segment;
 
