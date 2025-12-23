@@ -181,6 +181,7 @@ impl HuffmanTable {
             if line.preflen == 0 {
                 continue;
             }
+            
             Self::insert_code(
                 &mut root,
                 codes[i],
@@ -208,6 +209,7 @@ impl HuffmanTable {
         if preflen == 0 {
             // We've consumed all bits, this should be a leaf.
             *node = HuffmanNode::new_leaf(range_low, range_len, is_lower, is_oob);
+            
             return;
         }
 
@@ -316,8 +318,9 @@ impl HuffmanTable {
 
             // Advance to next range.
             // Range covers currangelow to currangelow + 2^rangelen - 1.
-            let range_size = 1i64 << rangelen;
-            currangelow = ((currangelow as i64) + range_size) as i32;
+            let range_size = 1i64.checked_shl(rangelen as u32).ok_or("range size overflow")?;
+            let next = (currangelow as i64).checked_add(range_size).ok_or("currangelow overflow")?;
+            currangelow = i32::try_from(next).map_err(|_| "currangelow out of i32 range")?;
         }
 
         // Step 5: Read lower range line (-∞ to HTLOW-1).
