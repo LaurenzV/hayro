@@ -221,13 +221,10 @@ impl HuffmanTable {
         match node {
             HuffmanNode::Intermediate { zero, one } => {
                 let child = if bit == 0 { zero } else { one };
-
-                if child.is_none() {
-                    *child = Some(Box::new(HuffmanNode::new_internal()));
-                }
+                let child = child.get_or_insert_with(|| Box::new(HuffmanNode::new_internal()));
 
                 Self::insert_code(
-                    child.as_mut().unwrap(),
+                    child,
                     remaining_code,
                     preflen - 1,
                     range_low,
