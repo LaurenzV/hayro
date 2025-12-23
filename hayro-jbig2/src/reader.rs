@@ -113,7 +113,9 @@ impl<'a> Reader<'a> {
     pub(crate) fn read_bits(&mut self, count: u8) -> Result<u32, &'static str> {
         let mut value = 0u32;
         for _ in 0..count {
-            let bit = self.read_bit().ok_or("unexpected end of data reading bits")?;
+            let bit = self
+                .read_bit()
+                .ok_or("unexpected end of data reading bits")?;
             value = (value << 1) | bit;
         }
         Ok(value)

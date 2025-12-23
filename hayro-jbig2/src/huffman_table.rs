@@ -1,7 +1,7 @@
 //! Huffman table decoding for JBIG2.
 //!
 //! This module implements the standard Huffman tables defined in Annex B of
-//! ITU-T T.88 (ISO/IEC 14492). 
+//! ITU-T T.88 (ISO/IEC 14492).
 
 use std::sync::LazyLock;
 
@@ -181,7 +181,7 @@ impl HuffmanTable {
             if line.preflen == 0 {
                 continue;
             }
-            
+
             Self::insert_code(
                 &mut root,
                 codes[i],
@@ -209,7 +209,7 @@ impl HuffmanTable {
         if preflen == 0 {
             // We've consumed all bits, this should be a leaf.
             *node = HuffmanNode::new_leaf(range_low, range_len, is_lower, is_oob);
-            
+
             return;
         }
 
@@ -252,12 +252,11 @@ impl HuffmanTable {
         loop {
             match node {
                 HuffmanNode::Intermediate { zero, one } => {
-                    let bit = reader.read_bit().ok_or("unexpected end of data in huffman decode")?;
+                    let bit = reader
+                        .read_bit()
+                        .ok_or("unexpected end of data in huffman decode")?;
                     let child = if bit == 0 { zero } else { one };
-                    node = child
-                        .as_ref()
-                        .ok_or("invalid huffman code")?
-                        .as_ref();
+                    node = child.as_ref().ok_or("invalid huffman code")?.as_ref();
                 }
                 HuffmanNode::Leaf(leaf) => {
                     if leaf.is_oob {
@@ -290,7 +289,9 @@ impl HuffmanTable {
     /// 7) If HTOOB=1, read OOB line (PREFLEN only)
     pub fn read_custom(reader: &mut Reader<'_>) -> Result<Self, &'static str> {
         // Step 1: Read code table flags.
-        let flags = reader.read_byte().ok_or("unexpected end of data reading huffman flags")?;
+        let flags = reader
+            .read_byte()
+            .ok_or("unexpected end of data reading huffman flags")?;
 
         // "Bit 0 is HTOOB for this code table."
         let htoob = (flags & 1) != 0;
@@ -300,10 +301,14 @@ impl HuffmanTable {
         let htrs = ((flags >> 4) & 7) + 1;
 
         // Step 2: Read HTLOW (lowest value in table).
-        let htlow = reader.read_i32().ok_or("unexpected end of data reading HTLOW")?;
+        let htlow = reader
+            .read_i32()
+            .ok_or("unexpected end of data reading HTLOW")?;
 
         // Step 3: Read HTHIGH (highest value in table).
-        let hthigh = reader.read_i32().ok_or("unexpected end of data reading HTHIGH")?;
+        let hthigh = reader
+            .read_i32()
+            .ok_or("unexpected end of data reading HTHIGH")?;
 
         // Step 4: Read table lines covering HTLOW to HTHIGH.
         // "Continue reading table lines... until CURRANGELOW > HTHIGH."
@@ -318,18 +323,30 @@ impl HuffmanTable {
 
             // Advance to next range.
             // Range covers currangelow to currangelow + 2^rangelen - 1.
-            let range_size = 1i64.checked_shl(rangelen as u32).ok_or("range size overflow")?;
-            let next = (currangelow as i64).checked_add(range_size).ok_or("currangelow overflow")?;
+            let range_size = 1i64
+                .checked_shl(rangelen as u32)
+                .ok_or("range size overflow")?;
+            let next = (currangelow as i64)
+                .checked_add(range_size)
+                .ok_or("currangelow overflow")?;
             currangelow = i32::try_from(next).map_err(|_| "currangelow out of i32 range")?;
         }
 
         // Step 5: Read lower range line (-∞ to HTLOW-1).
         // Only PREFLEN is read; RANGELEN is implicitly 32.
-        lines.push(TableLine::lower(htlow - 1, reader.read_bits(htps)? as u8, 32));
+        lines.push(TableLine::lower(
+            htlow - 1,
+            reader.read_bits(htps)? as u8,
+            32,
+        ));
 
         // Step 6: Read upper range line (currangelow to +∞).
         // Only PREFLEN is read; RANGELEN is implicitly 32.
-        lines.push(TableLine::upper(currangelow, reader.read_bits(htps)? as u8, 32));
+        lines.push(TableLine::upper(
+            currangelow,
+            reader.read_bits(htps)? as u8,
+            32,
+        ));
 
         // Step 7: If HTOOB, read OOB line.
         if htoob {
@@ -340,13 +357,12 @@ impl HuffmanTable {
     }
 }
 
-
 /// Table B.1 – Standard Huffman table A (HTOOB = 0)
 pub static TABLE_A: LazyLock<HuffmanTable> = LazyLock::new(|| {
     HuffmanTable::build(&[
-        TableLine::new(0, 1, 4),       // 0...15
-        TableLine::new(16, 2, 8),      // 16...271
-        TableLine::new(272, 3, 16),    // 272...65807
+        TableLine::new(0, 1, 4),        // 0...15
+        TableLine::new(16, 2, 8),       // 16...271
+        TableLine::new(272, 3, 16),     // 272...65807
         TableLine::upper(65808, 3, 32), // 65808...∞
     ])
 });
@@ -354,40 +370,40 @@ pub static TABLE_A: LazyLock<HuffmanTable> = LazyLock::new(|| {
 /// Table B.2 – Standard Huffman table B (HTOOB = 1)
 pub static TABLE_B: LazyLock<HuffmanTable> = LazyLock::new(|| {
     HuffmanTable::build(&[
-        TableLine::new(0, 1, 0),      // 0
-        TableLine::new(1, 2, 0),      // 1
-        TableLine::new(2, 3, 0),      // 2
-        TableLine::new(3, 4, 3),      // 3...10
-        TableLine::new(11, 5, 6),     // 11...74
-        TableLine::upper(75, 6, 32),  // 75...∞
-        TableLine::oob(6),            // OOB
+        TableLine::new(0, 1, 0),     // 0
+        TableLine::new(1, 2, 0),     // 1
+        TableLine::new(2, 3, 0),     // 2
+        TableLine::new(3, 4, 3),     // 3...10
+        TableLine::new(11, 5, 6),    // 11...74
+        TableLine::upper(75, 6, 32), // 75...∞
+        TableLine::oob(6),           // OOB
     ])
 });
 
 /// Table B.3 – Standard Huffman table C (HTOOB = 1)
 pub static TABLE_C: LazyLock<HuffmanTable> = LazyLock::new(|| {
     HuffmanTable::build(&[
-        TableLine::new(-256, 8, 8),   // -256...-1
-        TableLine::new(0, 1, 0),      // 0
-        TableLine::new(1, 2, 0),      // 1
-        TableLine::new(2, 3, 0),      // 2
-        TableLine::new(3, 4, 3),      // 3...10
-        TableLine::new(11, 5, 6),     // 11...74
+        TableLine::new(-256, 8, 8),    // -256...-1
+        TableLine::new(0, 1, 0),       // 0
+        TableLine::new(1, 2, 0),       // 1
+        TableLine::new(2, 3, 0),       // 2
+        TableLine::new(3, 4, 3),       // 3...10
+        TableLine::new(11, 5, 6),      // 11...74
         TableLine::lower(-257, 8, 32), // -∞...-257
-        TableLine::upper(75, 7, 32),  // 75...∞
-        TableLine::oob(6),            // OOB
+        TableLine::upper(75, 7, 32),   // 75...∞
+        TableLine::oob(6),             // OOB
     ])
 });
 
 /// Table B.4 – Standard Huffman table D (HTOOB = 0)
 pub static TABLE_D: LazyLock<HuffmanTable> = LazyLock::new(|| {
     HuffmanTable::build(&[
-        TableLine::new(1, 1, 0),      // 1
-        TableLine::new(2, 2, 0),      // 2
-        TableLine::new(3, 3, 0),      // 3
-        TableLine::new(4, 4, 3),      // 4...11
-        TableLine::new(12, 5, 6),     // 12...75
-        TableLine::upper(76, 5, 32),  // 76...∞
+        TableLine::new(1, 1, 0),     // 1
+        TableLine::new(2, 2, 0),     // 2
+        TableLine::new(3, 3, 0),     // 3
+        TableLine::new(4, 4, 3),     // 4...11
+        TableLine::new(12, 5, 6),    // 12...75
+        TableLine::upper(76, 5, 32), // 76...∞
     ])
 });
 
@@ -531,87 +547,87 @@ pub static TABLE_J: LazyLock<HuffmanTable> = LazyLock::new(|| {
 /// Table B.11 – Standard Huffman table K (HTOOB = 0)
 pub static TABLE_K: LazyLock<HuffmanTable> = LazyLock::new(|| {
     HuffmanTable::build(&[
-        TableLine::new(1, 1, 0),       // 1
-        TableLine::new(2, 2, 1),       // 2...3
-        TableLine::new(4, 4, 0),       // 4
-        TableLine::new(5, 4, 1),       // 5...6
-        TableLine::new(7, 5, 1),       // 7...8
-        TableLine::new(9, 5, 2),       // 9...12
-        TableLine::new(13, 6, 2),      // 13...16
-        TableLine::new(17, 7, 2),      // 17...20
-        TableLine::new(21, 7, 3),      // 21...28
-        TableLine::new(29, 7, 4),      // 29...44
-        TableLine::new(45, 7, 5),      // 45...76
-        TableLine::new(77, 7, 6),      // 77...140
-        TableLine::upper(141, 7, 32),  // 141...∞
+        TableLine::new(1, 1, 0),      // 1
+        TableLine::new(2, 2, 1),      // 2...3
+        TableLine::new(4, 4, 0),      // 4
+        TableLine::new(5, 4, 1),      // 5...6
+        TableLine::new(7, 5, 1),      // 7...8
+        TableLine::new(9, 5, 2),      // 9...12
+        TableLine::new(13, 6, 2),     // 13...16
+        TableLine::new(17, 7, 2),     // 17...20
+        TableLine::new(21, 7, 3),     // 21...28
+        TableLine::new(29, 7, 4),     // 29...44
+        TableLine::new(45, 7, 5),     // 45...76
+        TableLine::new(77, 7, 6),     // 77...140
+        TableLine::upper(141, 7, 32), // 141...∞
     ])
 });
 
 /// Table B.12 – Standard Huffman table L (HTOOB = 0)
 pub static TABLE_L: LazyLock<HuffmanTable> = LazyLock::new(|| {
     HuffmanTable::build(&[
-        TableLine::new(1, 1, 0),       // 1
-        TableLine::new(2, 2, 0),       // 2
-        TableLine::new(3, 3, 1),       // 3...4
-        TableLine::new(5, 5, 0),       // 5
-        TableLine::new(6, 5, 1),       // 6...7
-        TableLine::new(8, 6, 1),       // 8...9
-        TableLine::new(10, 7, 0),      // 10
-        TableLine::new(11, 7, 1),      // 11...12
-        TableLine::new(13, 7, 2),      // 13...16
-        TableLine::new(17, 7, 3),      // 17...24
-        TableLine::new(25, 7, 4),      // 25...40
-        TableLine::new(41, 8, 5),      // 41...72
-        TableLine::upper(73, 8, 32),   // 73...∞
+        TableLine::new(1, 1, 0),     // 1
+        TableLine::new(2, 2, 0),     // 2
+        TableLine::new(3, 3, 1),     // 3...4
+        TableLine::new(5, 5, 0),     // 5
+        TableLine::new(6, 5, 1),     // 6...7
+        TableLine::new(8, 6, 1),     // 8...9
+        TableLine::new(10, 7, 0),    // 10
+        TableLine::new(11, 7, 1),    // 11...12
+        TableLine::new(13, 7, 2),    // 13...16
+        TableLine::new(17, 7, 3),    // 17...24
+        TableLine::new(25, 7, 4),    // 25...40
+        TableLine::new(41, 8, 5),    // 41...72
+        TableLine::upper(73, 8, 32), // 73...∞
     ])
 });
 
 /// Table B.13 – Standard Huffman table M (HTOOB = 0)
 pub static TABLE_M: LazyLock<HuffmanTable> = LazyLock::new(|| {
     HuffmanTable::build(&[
-        TableLine::new(1, 1, 0),       // 1
-        TableLine::new(2, 3, 0),       // 2
-        TableLine::new(3, 4, 0),       // 3
-        TableLine::new(4, 5, 0),       // 4
-        TableLine::new(5, 4, 1),       // 5...6
-        TableLine::new(7, 3, 3),       // 7...14
-        TableLine::new(15, 6, 1),      // 15...16
-        TableLine::new(17, 6, 2),      // 17...20
-        TableLine::new(21, 6, 3),      // 21...28
-        TableLine::new(29, 6, 4),      // 29...44
-        TableLine::new(45, 6, 5),      // 45...76
-        TableLine::new(77, 7, 6),      // 77...140
-        TableLine::upper(141, 7, 32),  // 141...∞
+        TableLine::new(1, 1, 0),      // 1
+        TableLine::new(2, 3, 0),      // 2
+        TableLine::new(3, 4, 0),      // 3
+        TableLine::new(4, 5, 0),      // 4
+        TableLine::new(5, 4, 1),      // 5...6
+        TableLine::new(7, 3, 3),      // 7...14
+        TableLine::new(15, 6, 1),     // 15...16
+        TableLine::new(17, 6, 2),     // 17...20
+        TableLine::new(21, 6, 3),     // 21...28
+        TableLine::new(29, 6, 4),     // 29...44
+        TableLine::new(45, 6, 5),     // 45...76
+        TableLine::new(77, 7, 6),     // 77...140
+        TableLine::upper(141, 7, 32), // 141...∞
     ])
 });
 
 /// Table B.14 – Standard Huffman table N (HTOOB = 0)
 pub static TABLE_N: LazyLock<HuffmanTable> = LazyLock::new(|| {
     HuffmanTable::build(&[
-        TableLine::new(-2, 3, 0),      // -2
-        TableLine::new(-1, 3, 0),      // -1
-        TableLine::new(0, 1, 0),       // 0
-        TableLine::new(1, 3, 0),       // 1
-        TableLine::new(2, 3, 0),       // 2
+        TableLine::new(-2, 3, 0), // -2
+        TableLine::new(-1, 3, 0), // -1
+        TableLine::new(0, 1, 0),  // 0
+        TableLine::new(1, 3, 0),  // 1
+        TableLine::new(2, 3, 0),  // 2
     ])
 });
 
 /// Table B.15 – Standard Huffman table O (HTOOB = 0)
 pub static TABLE_O: LazyLock<HuffmanTable> = LazyLock::new(|| {
     HuffmanTable::build(&[
-        TableLine::new(-24, 7, 4),     // -24...-9
-        TableLine::new(-8, 6, 2),      // -8...-5
-        TableLine::new(-4, 5, 1),      // -4...-3
-        TableLine::new(-2, 4, 0),      // -2
-        TableLine::new(-1, 3, 0),      // -1
-        TableLine::new(0, 1, 0),       // 0
-        TableLine::new(1, 3, 0),       // 1
-        TableLine::new(2, 4, 0),       // 2
-        TableLine::new(3, 5, 1),       // 3...4
-        TableLine::new(5, 6, 2),       // 5...8
-        TableLine::new(9, 7, 4),       // 9...24
-        TableLine::lower(-25, 7, 32),  // -∞...-25
-        TableLine::upper(25, 7, 32),   // 25...∞
+        TableLine::new(-24, 7, 4),    // -24...-9
+        TableLine::new(-8, 6, 2),     // -8...-5
+        TableLine::new(-4, 5, 1),     // -4...-3
+        TableLine::new(-2, 4, 0),     // -2
+        TableLine::new(-1, 3, 0),     // -1
+        TableLine::new(0, 1, 0),      // 0
+        TableLine::new(1, 3, 0),      // 1
+        TableLine::new(2, 4, 0),      // 2
+        TableLine::new(3, 5, 1),      // 3...4
+        TableLine::new(5, 6, 2),      // 5...8
+        TableLine::new(9, 7, 4),      // 9...24
+        TableLine::lower(-25, 7, 32), // -∞...-25
+        TableLine::upper(25, 7, 32),  // 25...∞
     ])
 });
 
@@ -647,13 +663,29 @@ mod tests {
         decode_all(&table, &[0b0_0111_000], &[HuffmanResult::Value(7)]);
 
         // 16...271: prefix=10, rangelen=8
-        decode_all(&table, &[0b10_000000, 0b00_000000], &[HuffmanResult::Value(16)]);
-        decode_all(&table, &[0b10_111111, 0b11_000000], &[HuffmanResult::Value(271)]);
+        decode_all(
+            &table,
+            &[0b10_000000, 0b00_000000],
+            &[HuffmanResult::Value(16)],
+        );
+        decode_all(
+            &table,
+            &[0b10_111111, 0b11_000000],
+            &[HuffmanResult::Value(271)],
+        );
 
         // 272...65807: prefix=110, rangelen=16
-        decode_all(&table, &[0b110_00000, 0b00000000, 0b0_0000000], &[HuffmanResult::Value(272)]);
+        decode_all(
+            &table,
+            &[0b110_00000, 0b00000000, 0b0_0000000],
+            &[HuffmanResult::Value(272)],
+        );
 
         // 65808...∞: prefix=111, rangelen=32
-        decode_all(&table, &[0b111_00000, 0x00, 0x00, 0x00, 0b00000_000], &[HuffmanResult::Value(65808)]);
+        decode_all(
+            &table,
+            &[0b111_00000, 0x00, 0x00, 0x00, 0b00000_000],
+            &[HuffmanResult::Value(65808)],
+        );
     }
 }
