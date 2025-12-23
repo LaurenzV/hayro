@@ -8,11 +8,16 @@ use crate::arithmetic_decoder::{
     ArithmeticDecoder, ArithmeticDecoderContext, IntegerDecoder, SymbolIdDecoder,
 };
 use crate::bitmap::DecodedRegion;
+use crate::huffman_table::{
+    HuffmanResult, HuffmanTable, TABLE_A, TABLE_B, TABLE_C, TABLE_D, TABLE_E,
+};
 use crate::reader::Reader;
 use crate::segment::generic_refinement_region::{
     GrTemplate, RefinementAdaptiveTemplatePixel, decode_refinement_bitmap_with,
 };
-use crate::segment::generic_region::{AdaptiveTemplatePixel, GbTemplate, gather_context_with_at};
+use crate::segment::generic_region::{
+    AdaptiveTemplatePixel, GbTemplate, decode_bitmap_mmr, gather_context_with_at,
+};
 use crate::segment::region::CombinationOperator;
 use crate::segment::text_region::{ReferenceCorner, TextRegionParams, decode_text_region_refine};
 
@@ -374,21 +379,18 @@ pub(crate) struct SymbolDictionary {
 ///
 /// `input_symbols` are references to symbols from referred-to symbol dictionaries
 /// (SDINSYMS). Symbols are only cloned if they need to be re-exported.
+///
+/// `referred_tables` contains Huffman tables from referred table segments (type 53).
+/// These are used when SDHUFF=1 and the Huffman flags specify user-supplied tables.
 pub(crate) fn decode_symbol_dictionary(
     reader: &mut Reader<'_>,
     input_symbols: &[&DecodedRegion],
+    referred_tables: &[&HuffmanTable],
 ) -> Result<SymbolDictionary, &'static str> {
     let header = parse_symbol_dictionary_header(reader)?;
 
-    // Check for unsupported flags
-    if header.flags.sdhuff {
-        return Err("SDHUFF=1 (Huffman coding) is not supported");
-    }
-
-    let encoded_data = reader.tail().ok_or("unexpected end of data")?;
-
     // "6) Invoke the symbol dictionary decoding procedure described in 6.5"
-    let exported_symbols = decode_symbols(encoded_data, &header, input_symbols)?;
+    let exported_symbols = decode_symbols(reader, &header, input_symbols, referred_tables)?;
 
     Ok(SymbolDictionary {
         header,
@@ -402,15 +404,350 @@ pub(crate) fn decode_symbol_dictionary(
 /// can then be used by text region decoding procedures, or in some cases by
 /// other symbol dictionary decoding procedures." (6.5.1)
 fn decode_symbols(
-    data: &[u8],
+    reader: &mut Reader<'_>,
     header: &SymbolDictionaryHeader,
     input_symbols: &[&DecodedRegion],
+    referred_tables: &[&HuffmanTable],
 ) -> Result<Vec<DecodedRegion>, &'static str> {
-    if header.flags.sdrefagg {
-        decode_symbols_refagg(data, header, input_symbols)
+    if header.flags.sdhuff {
+        // "If SDHUFF is 1, then the segment uses the Huffman encoding variant."
+        decode_symbols_huffman(reader, header, input_symbols, referred_tables)
     } else {
-        decode_symbols_direct(data, header, input_symbols)
+        // "If SDHUFF is 0, then the segment uses the arithmetic encoding variant."
+        let data = reader.tail().ok_or("unexpected end of data")?;
+        if header.flags.sdrefagg {
+            decode_symbols_refagg(data, header, input_symbols)
+        } else {
+            decode_symbols_direct(data, header, input_symbols)
+        }
     }
+}
+
+/// Decode symbols using Huffman coding (SDHUFF=1).
+///
+/// "If SDHUFF is 1, then the segment uses the Huffman encoding variant." (7.4.2.1.1)
+fn decode_symbols_huffman(
+    reader: &mut Reader<'_>,
+    header: &SymbolDictionaryHeader,
+    input_symbols: &[&DecodedRegion],
+    referred_tables: &[&HuffmanTable],
+) -> Result<Vec<DecodedRegion>, &'static str> {
+    // "These user-supplied Huffman decoding tables may be supplied either as a
+    // Tables segment, which is referred to by the symbol dictionary segment, or
+    // they may be included directly in the symbol dictionary segment, immediately
+    // following the symbol dictionary segment header." (7.4.2.1.6)
+    let custom_count = [
+        header.flags.sdhuffdh == SdHuffDh::UserSupplied,
+        header.flags.sdhuffdw == SdHuffDw::UserSupplied,
+        header.flags.sdhuffbmsize == SdHuffBmSize::UserSupplied,
+        header.flags.sdhuffagginst == SdHuffAggInst::UserSupplied,
+    ]
+    .into_iter()
+    .filter(|x| *x)
+    .count();
+
+    if referred_tables.len() < custom_count {
+        return Err("not enough referred huffman tables for symbol dictionary");
+    }
+
+    let mut custom_idx = 0;
+    let mut get_custom = || -> Result<&HuffmanTable, &'static str> {
+        let table = referred_tables[custom_idx];
+        custom_idx += 1;
+
+        Ok(table)
+    };
+
+    // Select Huffman tables based on flags (7.4.2.1.6)
+    // "The order of the tables that appear is in the natural order determined
+    // by 7.4.2.1.1." (7.4.2.1.6)
+    let sdhuffdh: &HuffmanTable = match header.flags.sdhuffdh {
+        SdHuffDh::TableB4 => &TABLE_D,
+        SdHuffDh::TableB5 => &TABLE_E,
+        SdHuffDh::UserSupplied => get_custom()?,
+    };
+
+    let sdhuffdw: &HuffmanTable = match header.flags.sdhuffdw {
+        SdHuffDw::TableB2 => &TABLE_B,
+        SdHuffDw::TableB3 => &TABLE_C,
+        SdHuffDw::UserSupplied => get_custom()?,
+    };
+
+    let sdhuffbmsize: &HuffmanTable = match header.flags.sdhuffbmsize {
+        SdHuffBmSize::TableB1 => &TABLE_A,
+        SdHuffBmSize::UserSupplied => get_custom()?,
+    };
+
+    let _sdhuffagginst: &HuffmanTable = match header.flags.sdhuffagginst {
+        SdHuffAggInst::TableB1 => &TABLE_A,
+        SdHuffAggInst::UserSupplied => get_custom()?,
+    };
+
+    let num_input_symbols = input_symbols.len() as u32;
+    let num_new_symbols = header.num_new_symbols;
+
+    // "1) Create an array SDNEWSYMS of bitmaps, having SDNUMNEWSYMS entries."
+    let mut new_symbols: Vec<DecodedRegion> = Vec::with_capacity(num_new_symbols as usize);
+
+    // "2) If SDHUFF is 1 and SDREFAGG is 0, create an array SDNEWSYMWIDTHS of
+    // integers, having SDNUMNEWSYMS entries."
+    let mut new_sym_widths: Vec<u32> = Vec::with_capacity(num_new_symbols as usize);
+
+    // "3) Set: HCHEIGHT = 0, NSYMSDECODED = 0"
+    let mut hcheight: u32 = 0;
+    let mut nsymsdecoded: u32 = 0;
+
+    // "4) Decode each height class as follows:"
+    while nsymsdecoded < num_new_symbols {
+        // "b) Decode the height class delta height as described in 6.5.6.
+        // Let HCDH be the decoded value."
+        // "If SDHUFF is 1, decode a value using the Huffman table specified by
+        // SDHUFFDH." (6.5.6)
+        let hcdh = match sdhuffdh.decode(reader)? {
+            HuffmanResult::Value(v) => v,
+            HuffmanResult::OutOfBand => return Err("unexpected OOB decoding height class delta"),
+        };
+
+        // "Set: HCHEIGHT = HCHEIGHT + HCDH"
+        hcheight = hcheight
+            .checked_add_signed(hcdh)
+            .ok_or("invalid height class height")?;
+
+        // "SYMWIDTH = 0, TOTWIDTH = 0, HCFIRSTSYM = NSYMSDECODED"
+        let mut symwidth: u32 = 0;
+        let mut totwidth: u32 = 0;
+        let hcfirstsym = nsymsdecoded;
+
+        // "c) Decode each symbol within the height class as follows:"
+        loop {
+            // "i) Decode the delta width for the symbol as described in 6.5.7."
+            // "If SDHUFF is 1, decode a value using the Huffman table specified by
+            // SDHUFFDW." (6.5.7)
+            let dw = match sdhuffdw.decode(reader)? {
+                HuffmanResult::Value(v) => v,
+                HuffmanResult::OutOfBand => {
+                    // "If the result of this decoding is OOB then all the symbols
+                    // in this height class have been decoded; proceed to step 4 d)."
+                    break;
+                }
+            };
+
+            // "Set: SYMWIDTH = SYMWIDTH + DW, TOTWIDTH = TOTWIDTH + SYMWIDTH"
+            symwidth = symwidth
+                .checked_add_signed(dw)
+                .ok_or("invalid symbol width")?;
+            totwidth = totwidth.checked_add(symwidth).ok_or("totwidth overflow")?;
+
+            if header.flags.sdrefagg {
+                // "ii) If SDHUFF is 0 or SDREFAGG is 1, then decode the symbol's bitmap
+                // as described in 6.5.8."
+                // TODO: Implement refinement/aggregate with Huffman
+                return Err("SDHUFF=1 with SDREFAGG=1 not yet supported");
+            } else {
+                // "iii) If SDHUFF is 1 and SDREFAGG is 0, then set:
+                // SDNEWSYMWIDTHS[NSYMSDECODED] = SYMWIDTH"
+                new_sym_widths.push(symwidth);
+            }
+
+            // "iv) Set: NSYMSDECODED = NSYMSDECODED + 1"
+            nsymsdecoded += 1;
+        }
+
+        // "d) If SDHUFF is 1 and SDREFAGG is 0, then decode the height class collective
+        // bitmap as described in 6.5.9."
+        if !header.flags.sdrefagg {
+            decode_height_class_collective_bitmap(
+                reader,
+                sdhuffbmsize,
+                &mut new_symbols,
+                &new_sym_widths,
+                hcfirstsym,
+                nsymsdecoded,
+                totwidth,
+                hcheight,
+            )?;
+        }
+    }
+
+    // "5) Determine which symbol bitmaps are exported from this symbol dictionary,
+    // as described in 6.5.10."
+    // "If SDHUFF is 1, decode a value using Table B.1." (6.5.10)
+    let exported = decode_exported_symbols_with(
+        num_input_symbols,
+        header.num_exported_symbols,
+        input_symbols,
+        &new_symbols,
+        || match TABLE_A.decode(reader)? {
+            HuffmanResult::Value(v) => Ok(v),
+            HuffmanResult::OutOfBand => Err("unexpected OOB decoding export flags"),
+        },
+    )?;
+
+    Ok(exported)
+}
+
+/// Decode a height class collective bitmap (6.5.9).
+///
+/// "This field is only present if SDHUFF = 1 and SDREFAGG = 0." (6.5.9)
+#[allow(clippy::too_many_arguments)]
+fn decode_height_class_collective_bitmap(
+    reader: &mut Reader<'_>,
+    sdhuffbmsize: &HuffmanTable,
+    new_symbols: &mut Vec<DecodedRegion>,
+    new_sym_widths: &[u32],
+    hcfirstsym: u32,
+    nsymsdecoded: u32,
+    totwidth: u32,
+    hcheight: u32,
+) -> Result<(), &'static str> {
+    // "1) Read the size in bytes using the SDHUFFBMSIZE Huffman table.
+    // Let BMSIZE be the value decoded."
+    let bmsize = match sdhuffbmsize.decode(reader)? {
+        HuffmanResult::Value(v) => v as u32,
+        HuffmanResult::OutOfBand => return Err("unexpected OOB decoding BMSIZE"),
+    };
+
+    // "2) Skip over any bits remaining in the last byte read."
+    reader.align();
+
+    // Decode the collective bitmap
+    let collective_bitmap = if bmsize == 0 {
+        // "3) If BMSIZE is zero, then the bitmap is stored uncompressed, and the
+        // actual size in bytes is: HCHEIGHT × ⌈TOTWIDTH / 8⌉"
+        let row_bytes = totwidth.div_ceil(8);
+
+        let mut bitmap = DecodedRegion::new(totwidth, hcheight);
+        for y in 0..hcheight {
+            for byte_x in 0..row_bytes {
+                let byte = reader.read_byte().ok_or("unexpected end of data")?;
+                for bit in 0..8 {
+                    let x = byte_x * 8 + bit;
+                    if x < totwidth {
+                        let pixel = (byte >> (7 - bit)) & 1 != 0;
+                        bitmap.set_pixel(x, y, pixel);
+                    }
+                }
+            }
+        }
+        bitmap
+    } else {
+        // "4) Otherwise, decode the bitmap using a generic bitmap decoding procedure
+        // as described in 6.2. Set the parameters to this decoding procedure as
+        // shown in Table 19." (MMR = 1)
+        let bitmap_data = reader
+            .read_bytes(bmsize as usize)
+            .ok_or("unexpected end of data")?;
+
+        let mut bitmap = DecodedRegion::new(totwidth, hcheight);
+        decode_bitmap_mmr(&mut bitmap, bitmap_data)?;
+        bitmap
+    };
+
+    // "Break up the bitmap B_HC as follows to obtain the symbols
+    // SDNEWSYMS[HCFIRSTSYM] through SDNEWSYMS[NSYMSDECODED − 1]." (6.5.5, step 4d)
+    //
+    // "B_HC contains the NSYMSDECODED − HCFIRSTSYM symbols concatenated left-to-right,
+    // with no intervening gaps."
+    let mut x_offset: u32 = 0;
+    for i in hcfirstsym..nsymsdecoded {
+        let sym_width = new_sym_widths[i as usize];
+        let mut symbol = DecodedRegion::new(sym_width, hcheight);
+
+        // Copy pixels from collective bitmap to individual symbol
+        for y in 0..hcheight {
+            for x in 0..sym_width {
+                let pixel = collective_bitmap.get_pixel(x_offset + x, y);
+                symbol.set_pixel(x, y, pixel);
+            }
+        }
+
+        new_symbols.push(symbol);
+        x_offset += sym_width;
+    }
+
+    Ok(())
+}
+
+/// Determine exported symbols (6.5.10).
+///
+/// "The symbols that may be exported from a given dictionary include any of the
+/// symbols that are input to the dictionary, plus any of the symbols defined in
+/// the dictionary." (6.5.10)
+///
+/// The `decode_value` closure decodes the run length value:
+/// - For Huffman coding (SDHUFF=1): uses Table B.1
+/// - For arithmetic coding (SDHUFF=0): uses the IAEX integer decoder
+fn decode_exported_symbols_with<F>(
+    num_input_symbols: u32,
+    num_exported: u32,
+    input_symbols: &[&DecodedRegion],
+    new_symbols: &[DecodedRegion],
+    mut decode_value: F,
+) -> Result<Vec<DecodedRegion>, &'static str>
+where
+    F: FnMut() -> Result<i32, &'static str>,
+{
+    let num_new_symbols = new_symbols.len() as u32;
+    let total_symbols = num_input_symbols + num_new_symbols;
+
+    // "1) Set: EXINDEX = 0, CUREXFLAG = 0"
+    let mut exindex: u32 = 0;
+    let mut curexflag: bool = false;
+
+    // EXFLAGS array - one bit per symbol indicating if exported
+    let mut exflags = vec![false; total_symbols as usize];
+
+    // "5) Repeat steps 2) through 4) until EXINDEX = SDNUMINSYMS + SDNUMNEWSYMS"
+    while exindex < total_symbols {
+        // "2) Decode a value using Table B.1 if SDHUFF is 1, or the IAEX integer
+        // arithmetic decoding procedure if SDHUFF is 0. Let EXRUNLENGTH be the
+        // decoded value."
+        let exrunlength = decode_value()?;
+
+        if exrunlength < 0 {
+            return Err("negative export run length");
+        }
+
+        let exrunlength = exrunlength as u32;
+
+        // "3) Set EXFLAGS[EXINDEX] through EXFLAGS[EXINDEX + EXRUNLENGTH - 1]
+        // to CUREXFLAG."
+        for i in 0..exrunlength {
+            let idx = (exindex + i) as usize;
+            if idx < exflags.len() {
+                exflags[idx] = curexflag;
+            }
+        }
+
+        // "4) Set: EXINDEX = EXINDEX + EXRUNLENGTH, CUREXFLAG = NOT(CUREXFLAG)"
+        exindex += exrunlength;
+        curexflag = !curexflag;
+    }
+
+    // "8) For each value of I from 0 to SDNUMINSYMS + SDNUMNEWSYMS - 1, if
+    // EXFLAGS[I] = 1 then perform the following steps:"
+    let mut exported = Vec::with_capacity(num_exported as usize);
+
+    for (i, &is_exported) in exflags.iter().enumerate() {
+        if is_exported {
+            let symbol = if (i as u32) < num_input_symbols {
+                // "a) If I < SDNUMINSYMS then set: SDEXSYMS[J] = SDINSYMS[I]"
+                input_symbols[i].clone()
+            } else {
+                // "b) If I >= SDNUMINSYMS then set:
+                // SDEXSYMS[J] = SDNEWSYMS[I - SDNUMINSYMS]"
+                let new_idx = i - num_input_symbols as usize;
+                new_symbols[new_idx].clone()
+            };
+            exported.push(symbol);
+        }
+    }
+
+    if exported.len() != num_exported as usize {
+        return Err("exported symbol count mismatch");
+    }
+
+    Ok(exported)
 }
 
 /// Decode symbols using direct bitmap coding (SDREFAGG=0).
@@ -574,13 +911,15 @@ where
 
     // "5) Determine which symbol bitmaps are exported from this symbol dictionary,
     // as described in 6.5.10."
-    let exported = decode_exported_symbols(
-        &mut arith_decoder,
-        &mut iaex,
+    let exported = decode_exported_symbols_with(
         num_input_symbols,
         header.num_exported_symbols,
         input_symbols,
         &new_symbols,
+        || {
+            iaex.decode(&mut arith_decoder)
+                .ok_or("unexpected OOB decoding export flags")
+        },
     )?;
 
     Ok(exported)
@@ -819,82 +1158,4 @@ fn decode_single_refinement_symbol(
     )?;
 
     Ok(region)
-}
-
-/// Determine exported symbols (6.5.10).
-///
-/// "The symbols that may be exported from a given dictionary include any of the
-/// symbols that are input to the dictionary, plus any of the symbols defined in
-/// the dictionary." (6.5.10)
-fn decode_exported_symbols(
-    decoder: &mut ArithmeticDecoder<'_>,
-    iaex: &mut IntegerDecoder,
-    num_input_symbols: u32,
-    num_exported: u32,
-    input_symbols: &[&DecodedRegion],
-    new_symbols: &[DecodedRegion],
-) -> Result<Vec<DecodedRegion>, &'static str> {
-    let num_new_symbols = new_symbols.len() as u32;
-    let total_symbols = num_input_symbols + num_new_symbols;
-
-    // "1) Set: EXINDEX = 0, CUREXFLAG = 0"
-    let mut exindex: u32 = 0;
-    let mut curexflag: bool = false;
-
-    // EXFLAGS array - one bit per symbol indicating if exported
-    let mut exflags = vec![false; total_symbols as usize];
-
-    // "5) Repeat steps 2) through 4) until EXINDEX = SDNUMINSYMS + SDNUMNEWSYMS"
-    while exindex < total_symbols {
-        // "2) Decode a value using Table B.1 if SDHUFF is 1, or the IAEX integer
-        // arithmetic decoding procedure if SDHUFF is 0. Let EXRUNLENGTH be the
-        // decoded value."
-        let exrunlength = iaex
-            .decode(decoder)
-            .ok_or("unexpected OOB decoding export flags")?;
-
-        if exrunlength < 0 {
-            return Err("negative export run length");
-        }
-
-        let exrunlength = exrunlength as u32;
-
-        // "3) Set EXFLAGS[EXINDEX] through EXFLAGS[EXINDEX + EXRUNLENGTH - 1]
-        // to CUREXFLAG."
-        for i in 0..exrunlength {
-            let idx = (exindex + i) as usize;
-            if idx < exflags.len() {
-                exflags[idx] = curexflag;
-            }
-        }
-
-        // "4) Set: EXINDEX = EXINDEX + EXRUNLENGTH, CUREXFLAG = NOT(CUREXFLAG)"
-        exindex += exrunlength;
-        curexflag = !curexflag;
-    }
-
-    // "8) For each value of I from 0 to SDNUMINSYMS + SDNUMNEWSYMS - 1, if
-    // EXFLAGS[I] = 1 then perform the following steps:"
-    let mut exported = Vec::with_capacity(num_exported as usize);
-
-    for (i, &is_exported) in exflags.iter().enumerate() {
-        if is_exported {
-            let symbol = if (i as u32) < num_input_symbols {
-                // "a) If I < SDNUMINSYMS then set: SDEXSYMS[J] = SDINSYMS[I]"
-                input_symbols[i].clone()
-            } else {
-                // "b) If I >= SDNUMINSYMS then set:
-                // SDEXSYMS[J] = SDNEWSYMS[I - SDNUMINSYMS]"
-                let new_idx = i - num_input_symbols as usize;
-                new_symbols[new_idx].clone()
-            };
-            exported.push(symbol);
-        }
-    }
-
-    if exported.len() != num_exported as usize {
-        return Err("exported symbol count mismatch");
-    }
-
-    Ok(exported)
 }

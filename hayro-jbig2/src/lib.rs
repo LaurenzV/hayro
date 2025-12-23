@@ -31,6 +31,7 @@ mod segment;
 
 use bitmap::DecodedRegion;
 use file::{File, parse_file};
+use huffman_table::HuffmanTable;
 use reader::Reader;
 use segment::SegmentType;
 use segment::generic_refinement_region::decode_generic_refinement_region;
@@ -109,7 +110,16 @@ pub fn decode(data: &[u8]) -> Result<Image, &'static str> {
                     .flat_map(|dict| dict.exported_symbols.iter())
                     .collect();
 
-                let dictionary = decode_symbol_dictionary(&mut reader, &input_symbols)?;
+                // Collect Huffman tables from referred table segments.
+                let referred_tables: Vec<&HuffmanTable> = seg
+                    .header
+                    .referred_to_segments
+                    .iter()
+                    .filter_map(|&num| ctx.get_huffman_table(num))
+                    .collect();
+
+                let dictionary =
+                    decode_symbol_dictionary(&mut reader, &input_symbols, &referred_tables)?;
                 ctx.store_symbol_dictionary(seg.header.segment_number, dictionary);
             }
             SegmentType::ImmediateTextRegion | SegmentType::ImmediateLosslessTextRegion => {
@@ -124,7 +134,17 @@ pub fn decode(data: &[u8]) -> Result<Image, &'static str> {
                     .flat_map(|dict| dict.exported_symbols.iter())
                     .collect();
 
-                let region = decode_text_region(&mut reader, &symbols)?;
+                // Collect Huffman tables from referred table segments.
+                // "These user-supplied Huffman decoding tables may be supplied either
+                // as a Tables segment..." (7.4.3.1.6)
+                let referred_tables: Vec<&HuffmanTable> = seg
+                    .header
+                    .referred_to_segments
+                    .iter()
+                    .filter_map(|&num| ctx.get_huffman_table(num))
+                    .collect();
+
+                let region = decode_text_region(&mut reader, &symbols, &referred_tables)?;
                 ctx.page_bitmap.combine(&region);
             }
             SegmentType::IntermediateTextRegion => {
@@ -139,7 +159,15 @@ pub fn decode(data: &[u8]) -> Result<Image, &'static str> {
                     .flat_map(|dict| dict.exported_symbols.iter())
                     .collect();
 
-                let region = decode_text_region(&mut reader, &symbols)?;
+                // Collect Huffman tables from referred table segments.
+                let referred_tables: Vec<&HuffmanTable> = seg
+                    .header
+                    .referred_to_segments
+                    .iter()
+                    .filter_map(|&num| ctx.get_huffman_table(num))
+                    .collect();
+
+                let region = decode_text_region(&mut reader, &symbols, &referred_tables)?;
                 ctx.store_region(seg.header.segment_number, region);
             }
             SegmentType::ImmediateHalftoneRegion | SegmentType::ImmediateLosslessHalftoneRegion => {
@@ -201,6 +229,14 @@ pub fn decode(data: &[u8]) -> Result<Image, &'static str> {
                 let region = decode_generic_refinement_region(&mut reader, reference)?;
                 ctx.page_bitmap.combine(&region);
             }
+            SegmentType::Tables => {
+                // "Tables – see 7.4.13." (type 53)
+                // "This segment contains data which defines one or more user-supplied
+                // Huffman coding tables." (7.4.13)
+                let ctx = ctx.as_mut().map_err(|e| *e)?;
+                let table = HuffmanTable::read_custom(&mut reader)?;
+                ctx.store_huffman_table(seg.header.segment_number, table);
+            }
             SegmentType::EndOfPage | SegmentType::EndOfFile => {
                 break;
             }
@@ -250,6 +286,9 @@ pub(crate) struct DecodeContext {
     pub pattern_dictionaries: Vec<(u32, PatternDictionary)>,
     /// Decoded symbol dictionaries, stored as (segment_number, dictionary) pairs.
     pub symbol_dictionaries: Vec<(u32, SymbolDictionary)>,
+    /// Decoded Huffman tables, stored as (segment_number, table) pairs.
+    /// "Tables – see 7.4.13." (type 53)
+    pub huffman_tables: Vec<(u32, HuffmanTable)>,
 }
 
 impl DecodeContext {
@@ -293,6 +332,19 @@ impl DecodeContext {
             .ok()
             .map(|idx| &self.symbol_dictionaries[idx].1)
     }
+
+    /// Store a decoded Huffman table for later reference.
+    fn store_huffman_table(&mut self, segment_number: u32, table: HuffmanTable) {
+        self.huffman_tables.push((segment_number, table));
+    }
+
+    /// Look up a Huffman table by segment number using binary search.
+    fn get_huffman_table(&self, segment_number: u32) -> Option<&HuffmanTable> {
+        self.huffman_tables
+            .binary_search_by_key(&segment_number, |(num, _)| *num)
+            .ok()
+            .map(|idx| &self.huffman_tables[idx].1)
+    }
 }
 
 /// Create a decode context from page information segment data.
@@ -331,5 +383,6 @@ pub(crate) fn get_ctx(
         referred_segments: Vec::new(),
         pattern_dictionaries: Vec::new(),
         symbol_dictionaries: Vec::new(),
+        huffman_tables: Vec::new(),
     })
 }

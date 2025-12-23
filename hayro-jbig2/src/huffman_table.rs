@@ -69,24 +69,24 @@ pub struct HuffmanTable {
 }
 
 /// A table line definition used to build the Huffman tree.
-struct TableLine {
+pub(crate) struct TableLine {
     /// The base value for computing the decoded value.
     /// For normal/upper lines: value = range_low + htoffset
     /// For lower lines: value = range_low - htoffset
-    range_low: i32,
+    pub(crate) range_low: i32,
     /// Prefix code length (PREFLEN).
-    preflen: u8,
+    pub(crate) preflen: u8,
     /// Number of additional bits (RANGELEN).
-    range_len: u8,
+    pub(crate) range_len: u8,
     /// True if this is a lower range line (uses subtraction).
-    is_lower: bool,
+    pub(crate) is_lower: bool,
     /// True if this is the OOB marker.
-    is_oob: bool,
+    pub(crate) is_oob: bool,
 }
 
 impl TableLine {
     /// Create a normal table line.
-    const fn new(range_low: i32, preflen: u8, range_len: u8) -> Self {
+    pub(crate) const fn new(range_low: i32, preflen: u8, range_len: u8) -> Self {
         Self {
             range_low,
             preflen,
@@ -134,7 +134,7 @@ impl HuffmanTable {
     /// Build a Huffman table from table line definitions.
     ///
     /// This implements the algorithm from B.3 "Assigning the prefix codes".
-    fn build(lines: &[TableLine]) -> Self {
+    pub(crate) fn build(lines: &[TableLine]) -> Self {
         let ntemp = lines.len();
 
         // Step 1: "Build a histogram in the array LENCOUNT counting the number of times
