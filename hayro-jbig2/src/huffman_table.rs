@@ -136,53 +136,60 @@ impl TableLine {
 impl HuffmanTable {
     /// Build a Huffman table from table line definitions.
     ///
-    /// This implements the algorithm from B.3 "Assigning the prefix codes":
-    /// 1) Build LENCOUNT histogram counting occurrences of each prefix length
-    /// 2) Find LENMAX, the largest prefix length with LENCOUNT > 0
-    /// 3) Compute FIRSTCODE for each length using the recurrence:
-    ///    FIRSTCODE[CURLEN] = (FIRSTCODE[CURLEN-1] + LENCOUNT[CURLEN-1]) × 2
-    /// 4) Assign codes to each table line and insert into tree
+    /// This implements the algorithm from B.3 "Assigning the prefix codes".
     fn build(lines: &[TableLine]) -> Self {
-        // Step 1: Build LENCOUNT histogram.
-        // "LENCOUNT[I] is the number of times that the value I occurs in the array PREFLEN."
+        let ntemp = lines.len();
+
+        // Step 1: "Build a histogram in the array LENCOUNT counting the number of times
+        // each prefix length value occurs in PREFLEN: LENCOUNT[I] is the number of times
+        // that the value I occurs in the array PREFLEN."
         let lenmax = lines.iter().map(|l| l.preflen).max().unwrap_or(0) as usize;
         let mut lencount = vec![0u32; lenmax + 1];
         for line in lines {
-            if line.preflen > 0 {
-                lencount[line.preflen as usize] += 1;
-            }
+            lencount[line.preflen as usize] += 1;
         }
 
-        // Step 2: "Let LENMAX be the largest value for which LENCOUNT[LENMAX] > 0."
-        // Already computed above.
-
-        // Step 3: Compute FIRSTCODE for each length.
-        // "FIRSTCODE[CURLEN] = (FIRSTCODE[CURLEN − 1] + LENCOUNT[CURLEN − 1]) × 2"
+        // Step 2: "Let LENMAX be the largest value for which LENCOUNT[LENMAX] > 0. Set:
+        // CURLEN = 1, FIRSTCODE[0] = 0, LENCOUNT[0] = 0"
         let mut firstcode = vec![0u32; lenmax + 1];
-        // "CURLEN = 1, FIRSTCODE[0] = 0, LENCOUNT[0] = 0"
-        firstcode[0] = 0;
-        for curlen in 1..=lenmax {
+        let mut codes = vec![0u32; ntemp];
+        lencount[0] = 0;
+
+        // Step 3: "While CURLEN ≤ LENMAX, perform the following operations:"
+        let mut curlen = 1;
+        while curlen <= lenmax {
+            // a) "Set: FIRSTCODE[CURLEN] = (FIRSTCODE[CURLEN − 1] + LENCOUNT[CURLEN − 1]) × 2
+            //         CURCODE = FIRSTCODE[CURLEN]
+            //         CURTEMP = 0"
             firstcode[curlen] = (firstcode[curlen - 1] + lencount[curlen - 1]) * 2;
+            let mut curcode = firstcode[curlen];
+
+            // b) "While CURTEMP < NTEMP, perform the following operations:"
+            for curtemp in 0..ntemp {
+                // i) "If PREFLEN[CURTEMP] = CURLEN, then set:
+                //        CODES[CURTEMP] = CURCODE
+                //        CURCODE = CURCODE + 1"
+                if lines[curtemp].preflen as usize == curlen {
+                    codes[curtemp] = curcode;
+                    curcode += 1;
+                }
+                // ii) "Set CURTEMP = CURTEMP + 1" (implicit in for loop)
+            }
+
+            // c) "Set CURLEN = CURLEN + 1"
+            curlen += 1;
         }
 
-        // Step 4: Assign codes and build tree.
-        // "CURCODE = FIRSTCODE[CURLEN]" then assign CODES[CURTEMP] = CURCODE, CURCODE += 1
-        let mut curcode = firstcode.clone();
+        // Build tree from assigned codes.
+        // "Note that the PREFLEN value 0 indicates that the table line is never used."
         let mut root = HuffmanNode::new_internal();
-
-        for line in lines {
+        for (i, line) in lines.iter().enumerate() {
             if line.preflen == 0 {
-                // "Note that the PREFLEN value 0 indicates that the table line is never used."
                 continue;
             }
-
-            let code = curcode[line.preflen as usize];
-            curcode[line.preflen as usize] += 1;
-
-            // Insert this code into the tree.
             Self::insert_code(
                 &mut root,
-                code,
+                codes[i],
                 line.preflen,
                 line.range_low,
                 line.range_len,
