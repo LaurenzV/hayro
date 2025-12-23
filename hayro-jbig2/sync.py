@@ -10,10 +10,6 @@ TEST_INPUTS_DIR = SCRIPT_DIR / "test-inputs"
 REMOTE_BASE = "https://hayro-assets.dev/jbig2"
 MANIFESTS = [
     ("serenity", SCRIPT_DIR / "manifest_serenity.json"),
-    # power_jbig2 uses local symlinks, no download needed
-]
-
-LOCAL_MANIFESTS = [
     ("power_jbig2", SCRIPT_DIR / "manifest_power_jbig2.json"),
 ]
 
@@ -80,20 +76,6 @@ def main() -> None:
             print(f"[{status}] {label}")
             if not success:
                 failures.append((label, status))
-
-    # Check local manifests (files should exist via symlinks or direct copy)
-    for namespace, manifest_path in LOCAL_MANIFESTS:
-        entries = load_manifest(manifest_path)
-        for entry in entries:
-            total += 1
-            asset_path = entry["path"]
-            label = f"{namespace}/{asset_path}"
-            target = TEST_INPUTS_DIR / namespace / asset_path
-            if target.exists():
-                print(f"[local] {label}")
-            else:
-                print(f"[missing] {label}")
-                failures.append((label, "file not found"))
 
     if failures:
         print("\nFailed downloads:")
