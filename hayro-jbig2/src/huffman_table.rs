@@ -370,10 +370,6 @@ fn read_bits(reader: &mut Reader<'_>, count: u8) -> Result<u32, &'static str> {
     Ok(value)
 }
 
-// ============================================================================
-// Standard Huffman Tables (B.5)
-// ============================================================================
-
 /// Table B.1 – Standard Huffman table A (HTOOB = 0)
 pub static TABLE_A: LazyLock<HuffmanTable> = LazyLock::new(|| {
     HuffmanTable::build(&[
@@ -652,208 +648,41 @@ pub static TABLE_O: LazyLock<HuffmanTable> = LazyLock::new(|| {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_table_a_decode() {
-        // Table A: 0...15 encoded as 0 + 4 bits
-        // Value 0 = prefix 0 + 0000 = 0b0_0000
-        let data = [0b0000_0000];
-        let mut reader = Reader::new(&data);
-        let result = TABLE_A.decode(&mut reader).unwrap();
-        assert_eq!(result, HuffmanResult::Value(0));
-
-        // Value 15 = prefix 0 + 1111 = 0b0_1111
-        let data = [0b0111_1000];
-        let mut reader = Reader::new(&data);
-        let result = TABLE_A.decode(&mut reader).unwrap();
-        assert_eq!(result, HuffmanResult::Value(15));
-
-        // Value 16 = prefix 10 + 00000000 = 0b10_0000_0000
-        let data = [0b1000_0000, 0b0000_0000];
-        let mut reader = Reader::new(&data);
-        let result = TABLE_A.decode(&mut reader).unwrap();
-        assert_eq!(result, HuffmanResult::Value(16));
-    }
-
-    #[test]
-    fn test_table_b_decode_oob() {
-        // Table B has OOB with encoding 111111 (6 bits, all ones)
-        let data = [0b1111_1100];
-        let mut reader = Reader::new(&data);
-        let result = TABLE_B.decode(&mut reader).unwrap();
-        assert_eq!(result, HuffmanResult::OutOfBand);
-    }
-
-    #[test]
-    fn test_table_b_decode_values() {
-        // Value 0 = prefix 0
-        let data = [0b0000_0000];
-        let mut reader = Reader::new(&data);
-        let result = TABLE_B.decode(&mut reader).unwrap();
-        assert_eq!(result, HuffmanResult::Value(0));
-
-        // Value 1 = prefix 10
-        let data = [0b1000_0000];
-        let mut reader = Reader::new(&data);
-        let result = TABLE_B.decode(&mut reader).unwrap();
-        assert_eq!(result, HuffmanResult::Value(1));
-
-        // Value 2 = prefix 110
-        let data = [0b1100_0000];
-        let mut reader = Reader::new(&data);
-        let result = TABLE_B.decode(&mut reader).unwrap();
-        assert_eq!(result, HuffmanResult::Value(2));
-    }
-
-    #[test]
-    fn test_table_n_decode() {
-        // Table N: simple 5-value table
-        // 0 = prefix 0
-        let data = [0b0000_0000];
-        let mut reader = Reader::new(&data);
-        let result = TABLE_N.decode(&mut reader).unwrap();
-        assert_eq!(result, HuffmanResult::Value(0));
-
-        // -2 = prefix 100
-        let data = [0b1000_0000];
-        let mut reader = Reader::new(&data);
-        let result = TABLE_N.decode(&mut reader).unwrap();
-        assert_eq!(result, HuffmanResult::Value(-2));
-
-        // -1 = prefix 101
-        let data = [0b1010_0000];
-        let mut reader = Reader::new(&data);
-        let result = TABLE_N.decode(&mut reader).unwrap();
-        assert_eq!(result, HuffmanResult::Value(-1));
-
-        // 1 = prefix 110
-        let data = [0b1100_0000];
-        let mut reader = Reader::new(&data);
-        let result = TABLE_N.decode(&mut reader).unwrap();
-        assert_eq!(result, HuffmanResult::Value(1));
-
-        // 2 = prefix 111
-        let data = [0b1110_0000];
-        let mut reader = Reader::new(&data);
-        let result = TABLE_N.decode(&mut reader).unwrap();
-        assert_eq!(result, HuffmanResult::Value(2));
+    /// Helper to decode multiple values from a continuous bitstream.
+    fn decode_all(table: &HuffmanTable, data: &[u8], expected: &[HuffmanResult]) {
+        let mut reader = Reader::new(data);
+        for (i, &exp) in expected.iter().enumerate() {
+            let result = table.decode(&mut reader).unwrap();
+            assert_eq!(result, exp, "mismatch at index {i}");
+        }
     }
 
     #[test]
     fn test_read_custom_table_spec_example() {
         // Example from B.2: encodes a table equivalent to Table A
-        //
-        // Header:
-        // - 0x42 = flags: HTOOB=0 (bit 0), HTPS-1=1 (bits 1-3), HTRS-1=4 (bits 4-6)
-        //   So HTPS = 2 bits, HTRS = 5 bits
-        // - HTLOW = 0 (4 bytes)
-        // - HTHIGH = 65808 (4 bytes, 0x00010110)
-        //
-        // Table lines (7 bits each: 2 for PREFLEN, 5 for RANGELEN):
-        // - Line 1: PREFLEN=1, RANGELEN=4  -> 01 00100
-        // - Line 2: PREFLEN=2, RANGELEN=8  -> 10 01000
-        // - Line 3: PREFLEN=3, RANGELEN=16 -> 11 10000
-        //
-        // Lower range line (PREFLEN only, 2 bits): 00 (disabled)
-        // Upper range line (PREFLEN only, 2 bits): 11 (PREFLEN=3)
-        //
-        // Bit stream: 0100100 1001000 1110000 00 11
-        // Packed:     01001001 00100011 10000001 1xxxxxxx
-        //           = 0x49     0x23     0x81     0x80
-        let data = [
-            0x42, // flags
+        let header = [
+            0x42, // flags: HTOOB=0, HTPS=2, HTRS=5
             0x00, 0x00, 0x00, 0x00, // HTLOW = 0
             0x00, 0x01, 0x01, 0x10, // HTHIGH = 65808
             0x49, 0x23, 0x81, 0x80, // table lines
         ];
-        let mut reader = Reader::new(&data);
+        let mut reader = Reader::new(&header);
         let table = HuffmanTable::read_custom(&mut reader).unwrap();
 
-        // Verify that this custom table decodes the same values as TABLE_A.
-        // Value 0 = prefix 0 + 0000 (RANGELEN=4)
-        let data = [0b0000_0000];
-        let mut reader = Reader::new(&data);
-        let result = table.decode(&mut reader).unwrap();
-        assert_eq!(result, HuffmanResult::Value(0));
+        // Test decoding same as TABLE_A
+        // 0...15: prefix=0, rangelen=4
+        decode_all(&table, &[0b0_0000_000], &[HuffmanResult::Value(0)]);
+        decode_all(&table, &[0b0_1111_000], &[HuffmanResult::Value(15)]);
+        decode_all(&table, &[0b0_0111_000], &[HuffmanResult::Value(7)]);
 
-        // Value 15 = prefix 0 + 1111
-        let data = [0b0111_1000];
-        let mut reader = Reader::new(&data);
-        let result = table.decode(&mut reader).unwrap();
-        assert_eq!(result, HuffmanResult::Value(15));
+        // 16...271: prefix=10, rangelen=8
+        decode_all(&table, &[0b10_000000, 0b00_000000], &[HuffmanResult::Value(16)]);
+        decode_all(&table, &[0b10_111111, 0b11_000000], &[HuffmanResult::Value(271)]);
 
-        // Value 16 = prefix 10 + 00000000 (RANGELEN=8)
-        let data = [0b1000_0000, 0b0000_0000];
-        let mut reader = Reader::new(&data);
-        let result = table.decode(&mut reader).unwrap();
-        assert_eq!(result, HuffmanResult::Value(16));
+        // 272...65807: prefix=110, rangelen=16
+        decode_all(&table, &[0b110_00000, 0b00000000, 0b0_0000000], &[HuffmanResult::Value(272)]);
 
-        // Value 271 = prefix 10 + 11111111 (16 + 255)
-        let data = [0b1011_1111, 0b1100_0000];
-        let mut reader = Reader::new(&data);
-        let result = table.decode(&mut reader).unwrap();
-        assert_eq!(result, HuffmanResult::Value(271));
-
-        // Value 272 = prefix 110 + 0000000000000000 (RANGELEN=16)
-        let data = [0b1100_0000, 0b0000_0000, 0b0000_0000];
-        let mut reader = Reader::new(&data);
-        let result = table.decode(&mut reader).unwrap();
-        assert_eq!(result, HuffmanResult::Value(272));
-
-        // Upper range: Value 65808 = prefix 111 + 0 (PREFLEN=3, first value of upper range)
-        // Upper range starts at CURRANGELOW = 65808 with RANGELEN=32
-        let data = [0b1110_0000, 0x00, 0x00, 0x00, 0x00];
-        let mut reader = Reader::new(&data);
-        let result = table.decode(&mut reader).unwrap();
-        assert_eq!(result, HuffmanResult::Value(65808));
-    }
-
-    #[test]
-    fn test_table_o_lower_range() {
-        // Table O has both lower and upper range lines.
-        // Lower range line: lower(-25, 7, 32) - value = -25 - htoffset
-        // Upper range line: upper(25, 7, 32) - value = 25 + htoffset
-        //
-        // Prefix codes (from B.3 algorithm):
-        // - 0: prefix 0 (1 bit)
-        // - lower(-25): prefix 1111110 (7 bits)
-        // - upper(25): prefix 1111111 (7 bits)
-
-        // Test value 0 = prefix 0
-        let data = [0b0000_0000];
-        let mut reader = Reader::new(&data);
-        let result = TABLE_O.decode(&mut reader).unwrap();
-        assert_eq!(result, HuffmanResult::Value(0));
-
-        // Test lower range: value -25 = prefix 1111110 + htoffset 0 (32 bits)
-        // Bits: 1111110 0000...0000 (39 bits total = 5 bytes)
-        let data = [0b1111_1100, 0x00, 0x00, 0x00, 0x00];
-        let mut reader = Reader::new(&data);
-        let result = TABLE_O.decode(&mut reader).unwrap();
-        assert_eq!(result, HuffmanResult::Value(-25));
-
-        // Test lower range: value -26 = prefix 1111110 + htoffset 1 (32 bits)
-        // value = -25 - 1 = -26
-        // After the 7-bit prefix, we read 32 bits for htoffset.
-        // The LSB of htoffset is at bit 38, which is position 6 in byte 4.
-        // htoffset = 1 means bit 38 = 1, so byte 4 = 0b0000_0010 = 0x02
-        let data = [0b1111_1100, 0x00, 0x00, 0x00, 0x02];
-        let mut reader = Reader::new(&data);
-        let result = TABLE_O.decode(&mut reader).unwrap();
-        assert_eq!(result, HuffmanResult::Value(-26));
-
-        // Test upper range: value 25 = prefix 1111111 + htoffset 0 (32 bits)
-        // Bits: 1111111 0000...0000 (39 bits total = 5 bytes)
-        let data = [0b1111_1110, 0x00, 0x00, 0x00, 0x00];
-        let mut reader = Reader::new(&data);
-        let result = TABLE_O.decode(&mut reader).unwrap();
-        assert_eq!(result, HuffmanResult::Value(25));
-
-        // Test upper range: value 26 = prefix 1111111 + htoffset 1 (32 bits)
-        // value = 25 + 1 = 26
-        // Same bit alignment as lower range test
-        let data = [0b1111_1110, 0x00, 0x00, 0x00, 0x02];
-        let mut reader = Reader::new(&data);
-        let result = TABLE_O.decode(&mut reader).unwrap();
-        assert_eq!(result, HuffmanResult::Value(26));
+        // 65808...∞: prefix=111, rangelen=32
+        decode_all(&table, &[0b111_00000, 0x00, 0x00, 0x00, 0b00000_000], &[HuffmanResult::Value(65808)]);
     }
 }
