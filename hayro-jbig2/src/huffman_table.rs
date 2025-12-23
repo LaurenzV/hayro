@@ -42,7 +42,7 @@ enum HuffmanNode {
 }
 
 impl HuffmanNode {
-    fn new_internal() -> Self {
+    fn new_intermediate() -> Self {
         Self::Intermediate {
             zero: None,
             one: None,
@@ -86,7 +86,6 @@ struct TableLine {
 
 impl TableLine {
     /// Create a normal table line.
-    /// Value is computed as: range_low + htoffset
     const fn new(range_low: i32, preflen: u8, range_len: u8) -> Self {
         Self {
             range_low,
@@ -98,7 +97,6 @@ impl TableLine {
     }
 
     /// Create a lower range line (-∞...range_high).
-    /// Value is computed as: range_high - htoffset
     const fn lower(range_high: i32, preflen: u8, range_len: u8) -> Self {
         Self {
             range_low: range_high,
@@ -110,7 +108,6 @@ impl TableLine {
     }
 
     /// Create an upper range line (range_low...+∞).
-    /// Value is computed as: range_low + htoffset
     const fn upper(range_low: i32, preflen: u8, range_len: u8) -> Self {
         Self {
             range_low,
@@ -179,7 +176,7 @@ impl HuffmanTable {
 
         // Build tree from assigned codes.
         // "Note that the PREFLEN value 0 indicates that the table line is never used."
-        let mut root = HuffmanNode::new_internal();
+        let mut root = HuffmanNode::new_intermediate();
         for (i, line) in lines.iter().enumerate() {
             if line.preflen == 0 {
                 continue;
@@ -221,7 +218,7 @@ impl HuffmanTable {
         match node {
             HuffmanNode::Intermediate { zero, one } => {
                 let child = if bit == 0 { zero } else { one };
-                let child = child.get_or_insert_with(|| Box::new(HuffmanNode::new_internal()));
+                let child = child.get_or_insert_with(|| Box::new(HuffmanNode::new_intermediate()));
 
                 Self::insert_code(
                     child,
