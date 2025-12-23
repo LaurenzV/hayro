@@ -250,7 +250,6 @@ impl HuffmanTable {
     pub fn decode(&self, reader: &mut Reader<'_>) -> Result<HuffmanResult, &'static str> {
         let mut node = &self.root;
 
-        // Traverse the tree until we reach a leaf.
         loop {
             match node {
                 HuffmanNode::Intermediate { zero, one } => {
@@ -262,15 +261,12 @@ impl HuffmanTable {
                         .as_ref();
                 }
                 HuffmanNode::Leaf(leaf) => {
-                    // Check for OOB.
                     if leaf.is_oob {
                         return Ok(HuffmanResult::OutOfBand);
                     }
 
-                    // Read additional bits (HTOFFSET).
                     let htoffset = reader.read_bits(leaf.range_len)? as i32;
 
-                    // Compute final value.
                     let value = if leaf.is_lower {
                         leaf.range_low - htoffset
                     } else {
