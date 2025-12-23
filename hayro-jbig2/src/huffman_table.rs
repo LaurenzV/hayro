@@ -32,8 +32,8 @@ struct LeafData {
 /// A node in the Huffman tree.
 #[derive(Debug, Clone)]
 enum HuffmanNode {
-    /// Internal node with two children (0 and 1 branches).
-    Internal {
+    /// Intermediate node with two children (0 and 1 branches).
+    Intermediate {
         zero: Option<Box<HuffmanNode>>,
         one: Option<Box<HuffmanNode>>,
     },
@@ -43,7 +43,7 @@ enum HuffmanNode {
 
 impl HuffmanNode {
     fn new_internal() -> Self {
-        Self::Internal {
+        Self::Intermediate {
             zero: None,
             one: None,
         }
@@ -156,8 +156,7 @@ impl HuffmanTable {
         lencount[0] = 0;
 
         // Step 3: "While CURLEN ≤ LENMAX, perform the following operations:"
-        let mut curlen = 1;
-        while curlen <= lenmax {
+        for curlen in 1..=lenmax {
             // a) "Set: FIRSTCODE[CURLEN] = (FIRSTCODE[CURLEN − 1] + LENCOUNT[CURLEN − 1]) × 2
             //         CURCODE = FIRSTCODE[CURLEN]
             //         CURTEMP = 0"
@@ -175,9 +174,7 @@ impl HuffmanTable {
                 }
                 // ii) "Set CURTEMP = CURTEMP + 1" (implicit in for loop)
             }
-
-            // c) "Set CURLEN = CURLEN + 1"
-            curlen += 1;
+            // c) "Set CURLEN = CURLEN + 1" (implicit in for loop)
         }
 
         // Build tree from assigned codes.
@@ -222,7 +219,7 @@ impl HuffmanTable {
         let remaining_code = code & ((1 << (preflen - 1)) - 1);
 
         match node {
-            HuffmanNode::Internal { zero, one } => {
+            HuffmanNode::Intermediate { zero, one } => {
                 let child = if bit == 0 { zero } else { one };
 
                 if child.is_none() {
@@ -259,7 +256,7 @@ impl HuffmanTable {
         // Traverse the tree until we reach a leaf.
         loop {
             match node {
-                HuffmanNode::Internal { zero, one } => {
+                HuffmanNode::Intermediate { zero, one } => {
                     let bit = reader.read_bit().ok_or("unexpected end of data in huffman decode")?;
                     let child = if bit == 0 { zero } else { one };
                     node = child
@@ -274,13 +271,7 @@ impl HuffmanTable {
                     }
 
                     // Read additional bits (HTOFFSET).
-                    let mut htoffset: i32 = 0;
-                    for _ in 0..leaf.range_len {
-                        let bit = reader
-                            .read_bit()
-                            .ok_or("unexpected end of data reading range bits")?;
-                        htoffset = (htoffset << 1) | (bit as i32);
-                    }
+                    let htoffset = reader.read_bits(leaf.range_len)? as i32;
 
                     // Compute final value.
                     let value = if leaf.is_lower {
