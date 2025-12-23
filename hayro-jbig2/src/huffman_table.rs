@@ -158,7 +158,7 @@ impl HuffmanTable {
 
         // Step 3: Compute FIRSTCODE for each length.
         // "FIRSTCODE[CURLEN] = (FIRSTCODE[CURLEN − 1] + LENCOUNT[CURLEN − 1]) × 2"
-        let mut firstcode = vec![0u32; lenmax + 2];
+        let mut firstcode = vec![0u32; lenmax + 1];
         // "CURLEN = 1, FIRSTCODE[0] = 0, LENCOUNT[0] = 0"
         firstcode[0] = 0;
         for curlen in 1..=lenmax {
