@@ -30,7 +30,10 @@ static DIFFS_PATH: LazyLock<PathBuf> = LazyLock::new(|| {
     path
 });
 
-const INPUT_MANIFESTS: &[(&str, &str)] = &[("serenity", "manifest_serenity.json")];
+const INPUT_MANIFESTS: &[(&str, &str)] = &[
+    ("serenity", "manifest_serenity.json"),
+    ("power_jbig2", "manifest_power_jbig2.json"),
+];
 
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
