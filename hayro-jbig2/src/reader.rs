@@ -109,6 +109,16 @@ impl<'a> Reader<'a> {
         Some((byte >> shift) & 1)
     }
 
+    #[inline(always)]
+    pub(crate) fn read_bits(&mut self, count: u8) -> Result<u32, &'static str> {
+        let mut value = 0u32;
+        for _ in 0..count {
+            let bit = self.read_bit().ok_or("unexpected end of data reading bits")?;
+            value = (value << 1) | bit;
+        }
+        Ok(value)
+    }
+
     #[inline]
     pub(crate) fn byte_pos(&self) -> usize {
         self.cur_pos / 8

@@ -321,8 +321,8 @@ impl HuffmanTable {
         let mut currangelow = htlow;
 
         while currangelow < hthigh {
-            let preflen = read_bits(reader, htps)? as u8;
-            let rangelen = read_bits(reader, htrs)? as u8;
+            let preflen = reader.read_bits(htps)? as u8;
+            let rangelen = reader.read_bits(htrs)? as u8;
 
             lines.push(TableLine::new(currangelow, preflen, rangelen));
 
@@ -334,7 +334,7 @@ impl HuffmanTable {
 
         // Step 5: Read lower range line (-∞ to HTLOW-1).
         // Only PREFLEN is read; RANGELEN is implicitly 32.
-        let lower_preflen = read_bits(reader, htps)? as u8;
+        let lower_preflen = reader.read_bits(htps)? as u8;
         if lower_preflen > 0 {
             // Lower range line: value = (HTLOW - 1) - HTOFFSET
             lines.push(TableLine::lower(htlow - 1, lower_preflen, 32));
@@ -342,7 +342,7 @@ impl HuffmanTable {
 
         // Step 6: Read upper range line (currangelow to +∞).
         // Only PREFLEN is read; RANGELEN is implicitly 32.
-        let upper_preflen = read_bits(reader, htps)? as u8;
+        let upper_preflen = reader.read_bits(htps)? as u8;
         if upper_preflen > 0 {
             // Upper range line starts where we left off.
             lines.push(TableLine::upper(currangelow, upper_preflen, 32));
@@ -350,7 +350,7 @@ impl HuffmanTable {
 
         // Step 7: If HTOOB, read OOB line.
         if htoob {
-            let oob_preflen = read_bits(reader, htps)? as u8;
+            let oob_preflen = reader.read_bits(htps)? as u8;
             if oob_preflen > 0 {
                 lines.push(TableLine::oob(oob_preflen));
             }
@@ -360,15 +360,6 @@ impl HuffmanTable {
     }
 }
 
-/// Read `count` bits from the reader as a u32.
-fn read_bits(reader: &mut Reader<'_>, count: u8) -> Result<u32, &'static str> {
-    let mut value = 0u32;
-    for _ in 0..count {
-        let bit = reader.read_bit().ok_or("unexpected end of data reading bits")?;
-        value = (value << 1) | bit;
-    }
-    Ok(value)
-}
 
 /// Table B.1 – Standard Huffman table A (HTOOB = 0)
 pub static TABLE_A: LazyLock<HuffmanTable> = LazyLock::new(|| {
