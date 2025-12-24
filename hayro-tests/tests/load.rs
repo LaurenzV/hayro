@@ -4,7 +4,6 @@ use hayro::render_pdf;
 use hayro_syntax::metadata::Metadata;
 use hayro_syntax::object::DateTime;
 use std::sync::Arc;
-use image::ImageDecoder;
 use hayro_jpeg2000::{DecodeSettings, Image};
 
 fn load_pdf(file: &[u8]) {
