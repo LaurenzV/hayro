@@ -21,6 +21,7 @@ use super::{ComponentData, bitplane, build, idwt, mct, segment, tile};
 use crate::reader::BitReader;
 use log::trace;
 use std::ops::Range;
+use crate::j2c::segment::MAX_BITPLANE_COUNT;
 
 pub(crate) fn decode(data: &[u8], header: &Header<'_>) -> Result<Vec<ComponentData>, &'static str> {
     let mut reader = BitReader::new(data);
@@ -344,8 +345,16 @@ fn decode_sub_band_bitplanes(
     let num_bitplanes = {
         let (exponent, _) = component_info.exponent_mantissa(sub_band.sub_band_type, resolution);
         // Equation (E-2)
-        u8::try_from(component_info.quantization_info.guard_bits as u16 + exponent - 1)
-            .map_err(|_| "number of bitplanes is too large")?
+        let num_bitplanes = (component_info.quantization_info.guard_bits as u16)
+            .checked_add(exponent)
+            .and_then(|x| x.checked_sub(1))
+            .ok_or("invalid number of bitplanes")?;
+        
+        if num_bitplanes > MAX_BITPLANE_COUNT as u16 {
+            return Err("number of bitplanes is too large");
+        }
+        
+        num_bitplanes as u8
     };
 
     for precinct in sub_band

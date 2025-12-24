@@ -9,6 +9,9 @@ use super::tile::{Tile, TilePart};
 use crate::reader::BitReader;
 use log::trace;
 
+pub(crate) const MAX_BITPLANE_COUNT: u8 = 32;
+
+
 pub(crate) fn parse<'a>(
     tile: &'a Tile<'a>,
     mut progression_iterator: Box<dyn Iterator<Item = ProgressionData> + '_>,
@@ -121,7 +124,6 @@ fn resolve_segments(
     component_info: &ComponentInfo,
 ) -> Option<()> {
     // We don't support more than 32-bit precision.
-    const MAX_BITPLANE_COUNT: u8 = 32;
     const MAX_CODING_PASSES: u8 = 1 + 3 * (MAX_BITPLANE_COUNT - 1);
 
     let precincts = &mut storage.precincts[storage.sub_bands[sub_band_dx].precincts.clone()];
