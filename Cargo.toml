@@ -13,6 +13,7 @@ members = [
     "hayro-common",
     "hayro-ccitt"
 ]
+exclude = ["hayro-tests/fuzz"]
 
 [workspace.package]
 authors = ["Laurenz Stampfl <laurenz.stampfl@gmail.com>"]
