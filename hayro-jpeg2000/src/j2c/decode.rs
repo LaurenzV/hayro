@@ -18,10 +18,10 @@ use super::progression::{
 use super::tag_tree::TagNode;
 use super::tile::{ComponentTile, ResolutionTile, Tile};
 use super::{ComponentData, bitplane, build, idwt, mct, segment, tile};
+use crate::j2c::segment::MAX_BITPLANE_COUNT;
 use crate::reader::BitReader;
 use log::trace;
 use std::ops::Range;
-use crate::j2c::segment::MAX_BITPLANE_COUNT;
 
 pub(crate) fn decode(data: &[u8], header: &Header<'_>) -> Result<Vec<ComponentData>, &'static str> {
     let mut reader = BitReader::new(data);
@@ -349,11 +349,11 @@ fn decode_sub_band_bitplanes(
             .checked_add(exponent)
             .and_then(|x| x.checked_sub(1))
             .ok_or("invalid number of bitplanes")?;
-        
+
         if num_bitplanes > MAX_BITPLANE_COUNT as u16 {
             return Err("number of bitplanes is too large");
         }
-        
+
         num_bitplanes as u8
     };
 

@@ -11,7 +11,6 @@ use log::trace;
 
 pub(crate) const MAX_BITPLANE_COUNT: u8 = 32;
 
-
 pub(crate) fn parse<'a>(
     tile: &'a Tile<'a>,
     mut progression_iterator: Box<dyn Iterator<Item = ProgressionData> + '_>,
