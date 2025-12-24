@@ -142,7 +142,7 @@ pub(crate) struct TileDecompositions {
 impl TileDecompositions {
     pub(crate) fn sub_band_iter(
         &self,
-        resolution: u16,
+        resolution: u8,
         decompositions: &[Decomposition],
     ) -> SubBandIter {
         let indices = if resolution == 0 {
@@ -165,7 +165,7 @@ impl TileDecompositions {
 
 #[derive(Clone)]
 pub(crate) struct SubBandIter {
-    resolution: u16,
+    resolution: u8,
     next_idx: usize,
     indices: [usize; 3],
 }
@@ -306,7 +306,7 @@ fn decode_component_tile_bit_planes<'a>(
 
 fn decode_sub_band_bitplanes(
     sub_band_idx: usize,
-    resolution: u16,
+    resolution: u8,
     component_info: &ComponentInfo,
     tile_ctx: &mut TileDecodeContext<'_>,
     storage: &mut DecompositionStorage<'_>,

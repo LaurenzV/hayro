@@ -22,7 +22,7 @@ pub(crate) struct Tile<'a> {
     /// exclusive.
     pub(crate) rect: IntRect,
     pub(crate) progression_order: ProgressionOrder,
-    pub(crate) num_layers: u16,
+    pub(crate) num_layers: u8,
     pub(crate) mct: bool,
 }
 
@@ -370,9 +370,9 @@ impl<'a> ComponentTile<'a> {
 /// A tile instantiated to a specific resolution of a component tile.
 pub(crate) struct ResolutionTile<'a> {
     /// The resolution of the tile.
-    pub(crate) resolution: u16,
+    pub(crate) resolution: u8,
     /// The decomposition level of the tile.
-    pub(crate) decomposition_level: u16,
+    pub(crate) decomposition_level: u8,
     /// The underlying component tile.
     pub(crate) component_tile: ComponentTile<'a>,
     /// The rectangle of the resolution tile.
@@ -380,7 +380,7 @@ pub(crate) struct ResolutionTile<'a> {
 }
 
 impl<'a> ResolutionTile<'a> {
-    pub(crate) fn new(component_tile: ComponentTile<'a>, resolution: u16) -> Self {
+    pub(crate) fn new(component_tile: ComponentTile<'a>, resolution: u8) -> Self {
         assert!(
             component_tile
                 .component_info
@@ -570,8 +570,8 @@ impl<'a> ResolutionTile<'a> {
             .num_decomposition_levels()
             - self.resolution;
 
-        let x_stride = 1 << (self.precinct_exponent_x() as u16 + nl_minus_r);
-        let y_stride = 1 << (self.precinct_exponent_y() as u16 + nl_minus_r);
+        let x_stride = 1 << (self.precinct_exponent_x() + nl_minus_r);
+        let y_stride = 1 << (self.precinct_exponent_y() + nl_minus_r);
 
         let precinct_x_step = self
             .component_tile

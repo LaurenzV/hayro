@@ -10,16 +10,16 @@ use std::iter;
 
 #[derive(Default, Copy, Clone, Debug, PartialEq, Hash, Eq)]
 pub(crate) struct ProgressionData {
-    pub(crate) layer_num: u16,
-    pub(crate) resolution: u16,
+    pub(crate) layer_num: u8,
+    pub(crate) resolution: u8,
     pub(crate) component: u8,
     pub(crate) precinct: u32,
 }
 
 pub(crate) struct IteratorInput<'a> {
-    layers: (u16, u16),
+    layers: (u8, u8),
     tile: &'a Tile<'a>,
-    resolutions: (u16, u16),
+    resolutions: (u8, u8),
     components: (u8, u8),
 }
 
@@ -28,16 +28,16 @@ impl<'a> IteratorInput<'a> {
         Self::new_with_custom_bounds(
             tile,
             // Will be clamped automatically.
-            (0, u16::MAX),
-            (0, u16::MAX),
+            (0, u8::MAX),
+            (0, u8::MAX),
             (0, u8::MAX),
         )
     }
 
     pub(crate) fn new_with_custom_bounds(
         tile: &'a Tile<'a>,
-        mut resolutions: (u16, u16),
-        mut layers: (u16, u16),
+        mut resolutions: (u8, u8),
+        mut layers: (u8, u8),
         mut components: (u8, u8),
     ) -> Self {
         let max_resolution = tile
@@ -66,19 +66,19 @@ impl<'a> IteratorInput<'a> {
         }
     }
 
-    fn min_layer(&self) -> u16 {
+    fn min_layer(&self) -> u8 {
         self.layers.0
     }
 
-    fn max_layer(&self) -> u16 {
+    fn max_layer(&self) -> u8 {
         self.layers.1
     }
 
-    fn min_resolution(&self) -> u16 {
+    fn min_resolution(&self) -> u8 {
         self.resolutions.0
     }
 
-    fn max_resolution(&self) -> u16 {
+    fn max_resolution(&self) -> u8 {
         self.resolutions.1
     }
 
@@ -241,7 +241,7 @@ pub(crate) fn resolution_layer_component_position_progression<'a>(
 
 // Note that the order of fields here is important!
 struct PrecinctStore {
-    resolution: u16,
+    resolution: u8,
     precinct_y: u32,
     precinct_x: u32,
     component_idx: u8,
@@ -271,7 +271,7 @@ fn position_progression_common<'a>(
                 precinct_y: d.r_y,
                 precinct_x: d.r_x,
                 component_idx: component_idx as u8,
-                resolution: resolution as u16,
+                resolution: resolution as u8,
                 precinct_idx: d.idx,
             }));
         }

@@ -5,13 +5,16 @@ use super::bitplane::BITPLANE_BIT_SIZE;
 use super::build::SubBandType;
 use crate::reader::BitReader;
 
+const MAX_LAYER_COUNT: u8 = 32;
+const MAX_RESOLUTION_COUNT: u8 = 32;
+
 #[derive(Debug)]
 pub(crate) struct Header<'a> {
     pub(crate) size_data: SizeData,
     pub(crate) global_coding_style: CodingStyleDefault,
     pub(crate) component_infos: Vec<ComponentInfo>,
     pub(crate) ppm_packets: Vec<PpmPacket<'a>>,
-    pub(crate) skipped_resolution_levels: u16,
+    pub(crate) skipped_resolution_levels: u8,
     /// Whether strict mode is enabled for decoding.
     pub(crate) strict: bool,
 }
@@ -143,7 +146,7 @@ pub(crate) fn read_header<'a>(
                 .checked_ilog2()
                 .unwrap_or(0);
 
-            width_log.min(height_log) as u16
+            width_log.min(height_log) as u8
         } else {
             0
         }
@@ -213,7 +216,7 @@ impl ComponentInfo {
     pub(crate) fn exponent_mantissa(
         &self,
         sub_band_type: SubBandType,
-        resolution: u16,
+        resolution: u8,
     ) -> (u16, u16) {
         let n_ll = self.coding_style.parameters.num_decomposition_levels;
 
@@ -240,12 +243,12 @@ impl ComponentInfo {
                 let e_0 = step_sizes[0].exponent;
                 let mantissa = step_sizes[0].mantissa;
                 let n_b = if resolution == 0 {
-                    n_ll
+                    n_ll as u16
                 } else {
-                    n_ll + 1 - resolution
+                    n_ll as u16 + 1 - resolution as u16
                 };
 
-                (e_0 - n_ll + n_b, mantissa)
+                (e_0 - n_ll as u16 + n_b, mantissa)
             }
         }
     }
@@ -254,11 +257,11 @@ impl ComponentInfo {
         self.coding_style.parameters.transformation
     }
 
-    pub(crate) fn num_resolution_levels(&self) -> u16 {
+    pub(crate) fn num_resolution_levels(&self) -> u8 {
         self.coding_style.parameters.num_resolution_levels
     }
 
-    pub(crate) fn num_decomposition_levels(&self) -> u16 {
+    pub(crate) fn num_decomposition_levels(&self) -> u8 {
         self.coding_style.parameters.num_decomposition_levels
     }
 
@@ -392,7 +395,7 @@ pub(crate) struct QuantizationInfo {
 #[derive(Debug, Clone)]
 pub(crate) struct CodingStyleDefault {
     pub(crate) progression_order: ProgressionOrder,
-    pub(crate) num_layers: u16,
+    pub(crate) num_layers: u8,
     pub(crate) mct: bool,
     // This is the default used for all components, if not overridden by COC.
     pub(crate) component_parameters: CodingStyleComponent,
@@ -408,8 +411,8 @@ pub(crate) struct CodingStyleComponent {
 /// Shared parameters between the COC and COD marker (A.6.1 and A.6.2).
 #[derive(Clone, Debug)]
 pub(crate) struct CodingStyleParameters {
-    pub(crate) num_decomposition_levels: u16,
-    pub(crate) num_resolution_levels: u16,
+    pub(crate) num_decomposition_levels: u8,
+    pub(crate) num_resolution_levels: u8,
     pub(crate) code_block_width: u8,
     pub(crate) code_block_height: u8,
     pub(crate) code_block_style: CodeBlockStyle,
@@ -641,7 +644,12 @@ fn coding_style_parameters(
     reader: &mut BitReader<'_>,
     coding_style: &CodingStyleFlags,
 ) -> Option<CodingStyleParameters> {
-    let num_decomposition_levels = (reader.read_byte()? as u16).min(32);
+    let num_decomposition_levels = reader.read_byte()?;
+
+    if num_decomposition_levels > MAX_RESOLUTION_COUNT {
+        return None;
+    }
+
     let num_resolution_levels = num_decomposition_levels.checked_add(1)?;
     let code_block_width = reader.read_byte()?.checked_add(2)?;
     let code_block_height = reader.read_byte()?.checked_add(2)?;
@@ -732,7 +740,8 @@ pub(crate) fn cod_marker(reader: &mut BitReader<'_>) -> Option<CodingStyleDefaul
 
     let num_layers = reader.read_u16()?;
 
-    if num_layers == 0 {
+    // We don't support more than 32-bit (and thus 32 layers).
+    if num_layers == 0 || num_layers > MAX_LAYER_COUNT as u16 {
         return None;
     }
 
@@ -742,7 +751,7 @@ pub(crate) fn cod_marker(reader: &mut BitReader<'_>) -> Option<CodingStyleDefaul
 
     Some(CodingStyleDefault {
         progression_order,
-        num_layers,
+        num_layers: num_layers as u8,
         mct,
         component_parameters: CodingStyleComponent {
             flags: coding_style_flags,
