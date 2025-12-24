@@ -127,7 +127,11 @@ pub(crate) fn layer_resolution_component_position_progression<'a>(
 
                     resolution += 1;
 
-                    if resolution == input.max_resolution() {
+                    if resolution == input.max_resolution()
+                        // It's possible that the different component tiles have different resolution levels
+                        // (input.max_resolution_level stores the maximum across all component tiles), so
+                        // take the minimum of both.
+                        .min(component_tiles[component_idx as usize].component_info.num_resolution_levels()) {
                         resolution = input.min_resolution();
                         layer += 1;
 
