@@ -1,8 +1,8 @@
 #![no_main]
 
-use libfuzzer_sys::fuzz_target;
-use hayro_jpeg2000::{Image, DecodeSettings};
+use hayro_jpeg2000::{DecodeSettings, Image};
 use image::ImageDecoder;
+use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|data: &[u8]| {
     let settings = DecodeSettings::default();
