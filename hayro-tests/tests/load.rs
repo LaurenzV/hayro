@@ -1,10 +1,10 @@
 use hayro::InterpreterSettings;
 use hayro::Pdf;
 use hayro::render_pdf;
+use hayro_jpeg2000::{DecodeSettings, Image};
 use hayro_syntax::metadata::Metadata;
 use hayro_syntax::object::DateTime;
 use std::sync::Arc;
-use hayro_jpeg2000::{DecodeSettings, Image};
 
 fn load_pdf(file: &[u8]) {
     let data = Arc::new(file.to_vec());
@@ -17,7 +17,7 @@ fn load_pdf(file: &[u8]) {
 
 fn load_jpeg2000(file: &[u8]) {
     use image::ImageDecoder;
-    
+
     let settings = DecodeSettings::default();
     if let Ok(image) = Image::new(file, &settings) {
         let mut buf = vec![0_u8; image.total_bytes() as usize];
