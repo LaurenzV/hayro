@@ -1,0 +1,29 @@
+[package]
+name = "hayro-fuzz"
+version = "0.0.0"
+authors.workspace = true
+edition.workspace = true
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+hayro-jbig2 = { workspace = true }
+hayro-jpeg2000 = { workspace = true, features = ["image"] }
+image = { workspace = true, default-features = false }
+
+[[bin]]
+name = "fuzz_jbig2"
+path = "fuzz_targets/fuzz_jbig2.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_jpeg2000"
+path = "fuzz_targets/fuzz_jpeg2000.rs"
+test = false
+doc = false
+bench = false

@@ -1,0 +1,6 @@
+Run fuzzer:
+
+cargo +nightly fuzz run fuzz_jpeg2000 --fuzz-dir . -- -print_final_stats=1 -timeout=1
+
+Reduce test case:
+cargo +nightly fuzz tmin -O --fuzz-dir . fuzz_jpeg2000 artifacts/fuzz_jpeg2000/crash-{} -r 1000000 
