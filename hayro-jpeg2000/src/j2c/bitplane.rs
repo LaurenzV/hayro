@@ -313,7 +313,7 @@ impl Coefficient {
 
     fn push_zeroes(&mut self, num: u8) {
         let sign = self.0 & 0x80000000;
-        self.0 = sign | self.0 << num;
+        self.0 = sign | self.0.unbounded_shl(num as u32);
     }
 }
 
