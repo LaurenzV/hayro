@@ -53,15 +53,18 @@ pub(crate) fn decode(data: &[u8], header: &Header<'_>) -> Result<Vec<ComponentDa
                 ProgressionOrder::ResolutionLayerComponentPosition => {
                     Box::new(resolution_layer_component_position_progression(iter_input))
                 }
-                ProgressionOrder::ResolutionPositionComponentLayer => {
-                    Box::new(resolution_position_component_layer_progression(iter_input))
-                }
-                ProgressionOrder::PositionComponentResolutionLayer => {
-                    Box::new(position_component_resolution_layer_progression(iter_input))
-                }
-                ProgressionOrder::ComponentPositionResolutionLayer => {
-                    Box::new(component_position_resolution_layer_progression(iter_input))
-                }
+                ProgressionOrder::ResolutionPositionComponentLayer => Box::new(
+                    resolution_position_component_layer_progression(iter_input)
+                        .ok_or("failed to build progression iterator")?,
+                ),
+                ProgressionOrder::PositionComponentResolutionLayer => Box::new(
+                    position_component_resolution_layer_progression(iter_input)
+                        .ok_or("failed to build progression iterator")?,
+                ),
+                ProgressionOrder::ComponentPositionResolutionLayer => Box::new(
+                    component_position_resolution_layer_progression(iter_input)
+                        .ok_or("failed to build progression iterator")?,
+                ),
             };
 
         decode_tile(

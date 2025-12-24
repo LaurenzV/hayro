@@ -534,13 +534,13 @@ impl<'a> ResolutionTile<'a> {
         }
     }
 
-    pub(crate) fn num_precincts(&self) -> u32 {
-        self.num_precincts_x() * self.num_precincts_y()
+    pub(crate) fn num_precincts(&self) -> u64 {
+        self.num_precincts_x() as u64 * self.num_precincts_y() as u64
     }
 
     /// Return an iterator over the data of the precincts in this resolution
     /// tile.
-    pub(crate) fn precincts(&self) -> impl Iterator<Item = PrecinctData> {
+    pub(crate) fn precincts(&self) -> Option<impl Iterator<Item = PrecinctData>> {
         let num_precincts_y = self.num_precincts_y();
         let num_precincts_x = self.num_precincts_x();
 
@@ -561,8 +561,8 @@ impl<'a> ResolutionTile<'a> {
             y_start /= 2;
         }
 
-        let ppx_pow2 = 1 << ppx;
-        let ppy_pow2 = 1 << ppy;
+        let ppx_pow2 = 1u32 << ppx;
+        let ppy_pow2 = 1u32 << ppy;
 
         let nl_minus_r = self
             .component_tile
@@ -570,22 +570,24 @@ impl<'a> ResolutionTile<'a> {
             .num_decomposition_levels()
             - self.resolution;
 
-        let x_stride = 1 << (self.precinct_exponent_x() + nl_minus_r);
-        let y_stride = 1 << (self.precinct_exponent_y() + nl_minus_r);
+        let x_stride =
+            1u32.checked_shl(self.precinct_exponent_x().checked_add(nl_minus_r)? as u32)?;
+        let y_stride =
+            1u32.checked_shl(self.precinct_exponent_y().checked_add(nl_minus_r)? as u32)?;
 
-        let precinct_x_step = self
+        let precinct_x_step = (self
             .component_tile
             .component_info
             .size_info
-            .horizontal_resolution as u32
-            * x_stride;
+            .horizontal_resolution as u32)
+            .checked_mul(x_stride)?;
 
-        let precinct_y_step = self
+        let precinct_y_step = (self
             .component_tile
             .component_info
             .size_info
-            .vertical_resolution as u32
-            * y_stride;
+            .vertical_resolution as u32)
+            .checked_mul(y_stride)?;
 
         // These variables are used to map the start coordinates of each
         // precinct _on the reference grid_. Remember that the first
@@ -602,17 +604,17 @@ impl<'a> ResolutionTile<'a> {
         if !r_x.is_multiple_of(precinct_x_step)
             && (self.rect.x0 * (1 << nl_minus_r)).is_multiple_of(precinct_x_step)
         {
-            r_x = r_x.next_multiple_of(precinct_x_step);
+            r_x = r_x.checked_next_multiple_of(precinct_x_step)?;
         }
 
         // Same as above.
         if !r_y.is_multiple_of(precinct_y_step)
             && (self.rect.y0 * (1 << nl_minus_r)).is_multiple_of(precinct_y_step)
         {
-            r_y = r_y.next_multiple_of(precinct_y_step);
+            r_y = r_y.checked_next_multiple_of(precinct_y_step)?;
         }
 
-        (0..num_precincts_y).flat_map(move |y| {
+        let iter = (0..num_precincts_y).flat_map(move |y| {
             let y0 = y * ppy_pow2 + y_start;
             let mut r_x = r_x;
 
@@ -623,7 +625,7 @@ impl<'a> ResolutionTile<'a> {
                     r_x,
                     r_y,
                     rect: IntRect::from_xywh(x0, y0, ppx_pow2, ppy_pow2),
-                    idx: num_precincts_x * y + x,
+                    idx: num_precincts_x as u64 * y as u64 + x as u64,
                 };
 
                 // If r_x is already aligned, we simply step by `precinct_x_step`.
@@ -638,7 +640,9 @@ impl<'a> ResolutionTile<'a> {
             r_y = (r_y + 1).next_multiple_of(precinct_y_step);
 
             res
-        })
+        });
+
+        Some(iter)
     }
 
     pub(crate) fn code_block_width(&self) -> u32 {

@@ -114,7 +114,10 @@ fn build_precincts(
 ) -> Result<Range<usize>, &'static str> {
     let start = storage.precincts.len();
 
-    for precinct_data in resolution_tile.precincts() {
+    for precinct_data in resolution_tile
+        .precincts()
+        .ok_or("failed to build precincts")?
+    {
         let precinct_rect = precinct_data.rect;
 
         let cb_width = resolution_tile.code_block_width();
@@ -289,7 +292,7 @@ pub(crate) struct PrecinctData {
     /// system).
     pub(crate) rect: IntRect,
     /// The index of the precinct in the sub-band.
-    pub(crate) idx: u32,
+    pub(crate) idx: u64,
 }
 
 #[derive(Clone)]

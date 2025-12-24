@@ -7,6 +7,7 @@ use crate::reader::BitReader;
 
 const MAX_LAYER_COUNT: u8 = 32;
 const MAX_RESOLUTION_COUNT: u8 = 32;
+const MAX_PRECINCT_EXPONENT: u8 = 31;
 
 #[derive(Debug)]
 pub(crate) struct Header<'a> {
@@ -664,6 +665,11 @@ fn coding_style_parameters(
             let precinct_size = reader.read_byte()?;
             let width_exp = precinct_size & 0xF;
             let height_exp = precinct_size >> 4;
+
+            if width_exp > MAX_PRECINCT_EXPONENT || height_exp > MAX_PRECINCT_EXPONENT {
+                return None;
+            }
+
             precinct_exponents.push((width_exp, height_exp));
         }
     } else {
