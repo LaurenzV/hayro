@@ -22,7 +22,8 @@ impl ImageDecoder for Image<'_> {
             // We convert CMYK to RGB.
             (4, false) => ColorType::Rgb8,
             (4, true) => ColorType::Rgba8,
-            _ => unreachable!(),
+            // We have to return something...
+            _ => ColorType::Rgb8,
         }
     }
 

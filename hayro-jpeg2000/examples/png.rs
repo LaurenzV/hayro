@@ -33,7 +33,9 @@ fn convert(path: &Path) -> Result<DynamicImage, String> {
     let width = image.width();
     let height = image.height();
     let mut buf = vec![0_u8; image.total_bytes() as usize];
-    image.read_image(&mut buf).unwrap();
+    // This can fail in case `color_type` returns a dummy color type due to
+    // not being supported.
+    image.read_image(&mut buf).map_err(|e| e.to_string())?;
 
     let rgba = match color_type {
         ColorType::L8 => {
