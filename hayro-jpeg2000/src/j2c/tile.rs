@@ -561,8 +561,8 @@ impl<'a> ResolutionTile<'a> {
             y_start /= 2;
         }
 
-        let ppx_pow2 = 1u32 << ppx;
-        let ppy_pow2 = 1u32 << ppy;
+        let ppx_pow2 =1_u32 << ppx;
+        let ppy_pow2 =1_u32 << ppy;
 
         let nl_minus_r = self
             .component_tile
@@ -571,9 +571,9 @@ impl<'a> ResolutionTile<'a> {
             - self.resolution;
 
         let x_stride =
-            1u32.checked_shl(self.precinct_exponent_x().checked_add(nl_minus_r)? as u32)?;
+           1_u32.checked_shl(self.precinct_exponent_x().checked_add(nl_minus_r)? as u32)?;
         let y_stride =
-            1u32.checked_shl(self.precinct_exponent_y().checked_add(nl_minus_r)? as u32)?;
+           1_u32.checked_shl(self.precinct_exponent_y().checked_add(nl_minus_r)? as u32)?;
 
         let precinct_x_step = (self
             .component_tile
