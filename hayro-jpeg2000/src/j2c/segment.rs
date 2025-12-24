@@ -120,6 +120,10 @@ fn resolve_segments(
     storage: &mut DecompositionStorage<'_>,
     component_info: &ComponentInfo,
 ) -> Option<()> {
+    // We don't support more than 32-bit precision.
+    const MAX_BITPLANE_COUNT: u8 = 32;
+    const MAX_CODING_PASSES: u8 =  1 + 3 * (MAX_BITPLANE_COUNT - 1);
+    
     let precincts = &mut storage.precincts[storage.sub_bands[sub_band_dx].precincts.clone()];
     let precinct = &mut precincts[progression_data.precinct as usize];
     let code_blocks = &mut storage.code_blocks[precinct.code_blocks.clone()];
@@ -233,6 +237,10 @@ fn resolve_segments(
 
         let previous_layers_passes = code_block.number_of_coding_passes;
         let cumulative_passes = previous_layers_passes + added_coding_passes;
+        
+        if cumulative_passes > MAX_CODING_PASSES {
+            return None;
+        }
 
         let get_segment_idx = |pass_idx: u8| {
             if component_info.code_block_style().termination_on_each_pass {
