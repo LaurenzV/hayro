@@ -113,7 +113,7 @@ pub(crate) fn layer_resolution_component_position_progression<'a>(
     let mut precinct = 0;
 
     iter::from_fn(move || {
-        if resolution == input.max_resolution() {
+        if layer == input.max_layer() || resolution == input.max_resolution() {
             return None;
         }
 
@@ -186,7 +186,7 @@ pub(crate) fn resolution_layer_component_position_progression<'a>(
     let mut precinct = 0;
 
     iter::from_fn(move || {
-        if resolution == input.max_resolution() {
+        if layer == input.max_layer() || resolution == input.max_resolution() {
             return None;
         }
 
