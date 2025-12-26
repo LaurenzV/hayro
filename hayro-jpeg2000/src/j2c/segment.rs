@@ -7,7 +7,7 @@ use super::decode::{DecompositionStorage, TileDecodeContext};
 use super::progression::ProgressionData;
 use super::tile::{Tile, TilePart};
 use crate::reader::BitReader;
-use log::trace;
+use log::{trace, warn};
 
 pub(crate) const MAX_BITPLANE_COUNT: u8 = 32;
 
@@ -125,8 +125,14 @@ fn resolve_segments(
     // We don't support more than 32-bit precision.
     const MAX_CODING_PASSES: u8 = 1 + 3 * (MAX_BITPLANE_COUNT - 1);
 
-    let precincts = &mut storage.precincts[storage.sub_bands[sub_band_dx].precincts.clone()];
-    let precinct = &mut precincts[progression_data.precinct as usize];
+    let sub_band = &storage.sub_bands[sub_band_dx];
+    let precincts = &mut storage.precincts[sub_band.precincts.clone()];
+    let Some(precinct) = precincts.get_mut(progression_data.precinct as usize) else {
+        // An invalid file could trigger this code path.
+        warn!("progression data yielded invalid precinct index");
+
+        return None;
+    };
     let code_blocks = &mut storage.code_blocks[precinct.code_blocks.clone()];
 
     for code_block in code_blocks {

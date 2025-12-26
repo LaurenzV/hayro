@@ -530,6 +530,12 @@ fn pow2_overflow() {
 }
 
 #[test]
+fn invalid_precinct_index() {
+    let file = include_bytes!("../pdfs/load/invalid_precinct_index.jp2");
+    load_jpeg2000(file);
+}
+
+#[test]
 fn metadata_in_object_stream() {
     // Normally, in an encrypted PDF file strings need to be encrypted when they are not
     // in a stream. Therefore, we need to ensure that no encryption is applied when the object
