@@ -129,10 +129,10 @@ pub(crate) fn apply(
     // The coefficient array will always be the one that holds the coefficients
     // from the highest decomposition. Therefore, reserve as much.
     let (s_min, s_max) = estimate_buffer_size(decompositions.last().unwrap());
-    if output.coefficients.capacity() < s_min {
+    if output.coefficients.len() < s_min {
         output
             .coefficients
-            .reserve_exact(s_max - output.coefficients.capacity());
+            .reserve_exact(s_max - output.coefficients.len());
     }
 
     if decompositions.len() > 1 {
@@ -140,8 +140,8 @@ pub(crate) fn apply(
         // the second-highest decomposition.
         let (s_min, s_max) = estimate_buffer_size(&decompositions[decompositions.len() - 2]);
 
-        if scratch_buf.capacity() < s_min {
-            scratch_buf.reserve_exact(s_max - scratch_buf.capacity());
+        if scratch_buf.len() < s_min {
+            scratch_buf.reserve_exact(s_max - scratch_buf.len());
         }
     }
 
