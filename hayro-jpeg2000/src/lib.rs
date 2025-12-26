@@ -583,11 +583,11 @@ fn cielab_to_rgb(components: &mut [ComponentData], bit_depth: u8, lab: &CieLab) 
         .unwrap_or((1 << (bit_depth - 2)) + (1 << (bit_depth - 3)));
 
     // Copied from OpenJPEG.
-    let min_l = -((rl * ol) as f32) / ((1 << prec0) - 1) as f32;
+    let min_l = -(rl as f32 * ol as f32) / ((1 << prec0) - 1) as f32;
     let max_l = min_l + rl as f32;
-    let min_a = -((ra * oa) as f32) / ((1 << prec1) - 1) as f32;
+    let min_a = -(ra as f32 * oa as f32) / ((1 << prec1) - 1) as f32;
     let max_a = min_a + ra as f32;
-    let min_b = -((rb * ob) as f32) / ((1 << prec2) - 1) as f32;
+    let min_b = -(rb as f32 * ob as f32) / ((1 << prec2) - 1) as f32;
     let max_b = min_b + rb as f32;
 
     let bit_max = (1_u32 << bit_depth) - 1;
