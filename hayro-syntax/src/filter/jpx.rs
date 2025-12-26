@@ -92,7 +92,7 @@ fn scale(
     height: u32,
 ) -> Option<Vec<u8>> {
     let div_factor = ((1 << 8) - 1) as f32;
-    let mul_factor = ((1 << bit_per_component) - 1) as f32;
+    let mul_factor = ((1_u32 << bit_per_component) - 1) as f32;
 
     let mut input = vec![
         0;

@@ -433,7 +433,7 @@ fn store<'a>(
     // Otherwise, we might as well just apply it now.
     if !tile.mct {
         for sample in idwt_output.coefficients.iter_mut() {
-            *sample += (1 << (component_info.size_info.precision - 1)) as f32;
+            *sample += (1_u32 << (component_info.size_info.precision - 1)) as f32;
         }
     }
 

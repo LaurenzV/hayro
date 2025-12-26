@@ -433,7 +433,7 @@ fn interleave_and_convert(image: DecodedImage, buf: &mut [u8]) {
         for sample in 0..max_len {
             for channel in components.iter() {
                 *output_iter.next().unwrap() = ((channel.container[sample]
-                    / ((1 << channel.bit_depth) - 1) as f32)
+                    / ((1_u32 << channel.bit_depth) - 1) as f32)
                     * mul_factor)
                     .round() as u8;
             }
