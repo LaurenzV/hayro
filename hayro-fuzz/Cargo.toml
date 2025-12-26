@@ -10,6 +10,7 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
+hayro-ccitt = { workspace = true }
 hayro-jbig2 = { workspace = true }
 hayro-jpeg2000 = { workspace = true, features = ["image"] }
 image = { workspace = true, default-features = false }
@@ -24,6 +25,13 @@ bench = false
 [[bin]]
 name = "fuzz_jpeg2000"
 path = "fuzz_targets/fuzz_jpeg2000.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_ccitt"
+path = "fuzz_targets/fuzz_ccitt.rs"
 test = false
 doc = false
 bench = false

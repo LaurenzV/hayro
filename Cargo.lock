@@ -555,6 +555,7 @@ dependencies = [
 name = "hayro-fuzz"
 version = "0.0.0"
 dependencies = [
+ "hayro-ccitt",
  "hayro-jbig2",
  "hayro-jpeg2000",
  "image 0.25.9",
