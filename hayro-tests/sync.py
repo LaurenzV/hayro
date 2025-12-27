@@ -1,5 +1,14 @@
+# /// script
+# dependencies = [
+#   "requests",
+#   "rich",
+# ]
+# ///
+
+
 import json
 from pathlib import Path
+
 import requests
 from rich.console import Console, Group
 from rich.live import Live
@@ -169,15 +178,28 @@ def main() -> None:
     try:
         if total_downloads:
             progress = Progress(
-                BarColumn(bar_width=None, style="cyan", complete_style="green", finished_style="green"),
-                TextColumn("{task.completed}/{task.total}", justify="right", style="bold"),
+                BarColumn(
+                    bar_width=None,
+                    style="cyan",
+                    complete_style="green",
+                    finished_style="green",
+                ),
+                TextColumn(
+                    "{task.completed}/{task.total}", justify="right", style="bold"
+                ),
                 console=CONSOLE,
                 expand=True,
             )
             task_id = progress.add_task("", total=total_downloads)
             if cached_count:
                 progress.update(task_id, completed=cached_count)
-            live = Live(Group(Text("Downloading PDF files...", style="bold"), progress, label_text), console=CONSOLE, refresh_per_second=12)
+            live = Live(
+                Group(
+                    Text("Downloading PDF files...", style="bold"), progress, label_text
+                ),
+                console=CONSOLE,
+                refresh_per_second=12,
+            )
             live.start()
 
         for entry, kind, is_cached in plan:
