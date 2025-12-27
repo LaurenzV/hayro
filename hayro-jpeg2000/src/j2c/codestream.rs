@@ -233,7 +233,7 @@ impl ComponentInfo {
         match self.quantization_info.quantization_style {
             QuantizationStyle::NoQuantization | QuantizationStyle::ScalarExpounded => {
                 let entry = if resolution == 0 {
-                    step_sizes.get(0)
+                    step_sizes.first()
                 } else {
                     step_sizes.get(1 + (resolution as usize - 1) * 3 + sb_index as usize)
                 };
@@ -244,7 +244,7 @@ impl ComponentInfo {
             }
             QuantizationStyle::ScalarDerived => {
                 let (e_0, mantissa) = step_sizes
-                    .get(0)
+                    .first()
                     .map(|s| (s.exponent, s.mantissa))
                     .ok_or("missing exponent step size")?;
                 let n_b = if resolution == 0 {
