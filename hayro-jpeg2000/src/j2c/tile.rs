@@ -554,8 +554,8 @@ impl<'a> ResolutionTile<'a> {
         // mentions that ppx/ppy must be decreased when calculating codeblock
         // dimensions, but not that it's necessary for precincts as well.
         if self.resolution > 0 {
-            ppx -= 1;
-            ppy -= 1;
+            ppx = ppx.checked_sub(1)?;
+            ppy = ppy.checked_sub(1)?;
 
             x_start /= 2;
             y_start /= 2;
