@@ -243,7 +243,7 @@ fn resolve_segments(
         code_block.l_block += k;
 
         let previous_layers_passes = code_block.number_of_coding_passes;
-        let cumulative_passes = previous_layers_passes + added_coding_passes;
+        let cumulative_passes = previous_layers_passes.checked_add(added_coding_passes)?;
 
         if cumulative_passes > MAX_CODING_PASSES {
             return None;
