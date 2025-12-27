@@ -548,6 +548,12 @@ fn idwt_capacity() {
 }
 
 #[test]
+fn gray_scale_no_alpha_with_2_channels() {
+    let file = include_bytes!("../pdfs/load/gray_scale_no_alpha_with_2_channels.jp2");
+    load_jpeg2000(file);
+}
+
+#[test]
 fn metadata_in_object_stream() {
     // Normally, in an encrypted PDF file strings need to be encrypted when they are not
     // in a stream. Therefore, we need to ensure that no encryption is applied when the object

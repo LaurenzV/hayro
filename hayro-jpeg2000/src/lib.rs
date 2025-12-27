@@ -267,7 +267,7 @@ pub(crate) fn resolve_alpha_and_color_space(
             has_alpha = true;
         } else {
             // Color space is invalid, attempt to repair.
-            if actual_num_components == 1 || actual_num_components == 2 {
+            if actual_num_components == 1 || (actual_num_components == 2 && has_alpha) {
                 color_space = ColorSpace::Gray;
             } else if actual_num_components == 3 {
                 color_space = ColorSpace::RGB;
