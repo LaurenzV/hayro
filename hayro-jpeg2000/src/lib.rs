@@ -579,6 +579,11 @@ fn cielab_to_rgb(components: &mut [ComponentData], bit_depth: u8, lab: &CieLab) 
     let prec1 = a.bit_depth;
     let prec2 = b.bit_depth;
 
+    // Prevent underflows/divisions by zero further below.
+    if prec0 < 4 || prec1 < 4 || prec2 < 4 {
+        return None;
+    }
+
     // Table M.29bis – Default Offset Values and Encoding of Offsets for the CIELab Colourspace.
     // Signed values aren't handled.
     let rl = lab.rl.unwrap_or(100);
