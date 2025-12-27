@@ -532,8 +532,8 @@ fn size_marker(reader: &mut BitReader<'_>) -> Result<SizeData, &'static str> {
     // Also, the tile size plus the tile offset shall be greater than the image area offset.
     // This ensures that the first tile (tile 0) will contain at least one reference grid point
     // from the image area (B-4).
-    if size_data.tile_x_offset + size_data.tile_width <= size_data.image_area_x_offset
-        || size_data.tile_y_offset + size_data.tile_height <= size_data.image_area_y_offset
+    if size_data.tile_x_offset.checked_add(size_data.tile_width).ok_or("tile offsets are too large")? <= size_data.image_area_x_offset
+        || size_data.tile_y_offset.checked_add(size_data.tile_height).ok_or("tile offsets are too large")? <= size_data.image_area_y_offset
     {
         return Err("tile offsets are invalid");
     }
