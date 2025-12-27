@@ -78,8 +78,16 @@ impl<'a> IteratorInput<'a> {
         self.resolutions.0
     }
 
-    fn max_resolution(&self) -> u8 {
+    fn total_max_resolution(&self) -> u8 {
         self.resolutions.1
+    }
+
+    fn max_resolution(&self, component_idx: u8) -> u8 {
+        self.total_max_resolution()
+            // It's possible that the different component tiles have different resolution levels
+            // (self.resolutions.1 stores the maximum across all component tiles), so
+            // take the minimum of both.
+            .min(self.tile.component_infos[component_idx as usize].num_resolution_levels())
     }
 
     fn min_comp(&self) -> u8 {
@@ -113,7 +121,7 @@ pub(crate) fn layer_resolution_component_position_progression<'a>(
     let mut precinct = 0;
 
     iter::from_fn(move || {
-        if layer == input.max_layer() || resolution == input.max_resolution() {
+        if layer == input.max_layer() || resolution == input.total_max_resolution() {
             return None;
         }
 
@@ -127,18 +135,7 @@ pub(crate) fn layer_resolution_component_position_progression<'a>(
 
                     resolution += 1;
 
-                    if resolution
-                        == input
-                            .max_resolution()
-                            // It's possible that the different component tiles have different resolution levels
-                            // (input.max_resolution_level stores the maximum across all component tiles), so
-                            // take the minimum of both.
-                            .min(
-                                component_tiles[component_idx as usize]
-                                    .component_info
-                                    .num_resolution_levels(),
-                            )
-                    {
+                    if resolution == input.max_resolution(component_idx) {
                         resolution = input.min_resolution();
                         layer += 1;
 
@@ -186,7 +183,7 @@ pub(crate) fn resolution_layer_component_position_progression<'a>(
     let mut precinct = 0;
 
     iter::from_fn(move || {
-        if layer == input.max_layer() || resolution == input.max_resolution() {
+        if layer == input.max_layer() || resolution == input.total_max_resolution() {
             return None;
         }
 
@@ -203,10 +200,16 @@ pub(crate) fn resolution_layer_component_position_progression<'a>(
                         layer = 0;
                         resolution += 1;
 
-                        if resolution == input.max_resolution() {
+                        if resolution == input.total_max_resolution() {
                             return None;
                         }
                     }
+                }
+
+                // If the given resolution level doesn't exist for the current
+                // component, continue.
+                if resolution >= input.max_resolution(component_idx) {
+                    continue;
                 }
 
                 resolution_tile =
@@ -265,7 +268,7 @@ fn position_progression_common<'a>(
             .resolution_tiles()
             .enumerate()
             .skip(input.min_resolution() as usize)
-            .take(input.max_resolution() as usize - input.min_resolution() as usize)
+            .take(input.total_max_resolution() as usize - input.min_resolution() as usize)
         {
             elements.extend(resolution_tile.precincts()?.map(|d| PrecinctStore {
                 precinct_y: d.r_y,
