@@ -27,7 +27,9 @@ def load_manifest(path: Path) -> list[dict]:
 
         entry = dict(item)
         entry.setdefault("render", True)
-        entry.setdefault("path", entry.get("path") or entry.get("file") or entry.get("id"))
+        entry.setdefault(
+            "path", entry.get("path") or entry.get("file") or entry.get("id")
+        )
         entries.append(entry)
     return entries
 
@@ -60,7 +62,9 @@ def download_file(namespace: str, asset_path: str, *, force: bool) -> tuple[bool
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Download jpeg2000 test inputs")
-    parser.add_argument("--force", action="store_true", help="redownload files even if cached")
+    parser.add_argument(
+        "--force", action="store_true", help="redownload files even if cached"
+    )
     args = parser.parse_args()
 
     TEST_INPUTS_DIR.mkdir(exist_ok=True)

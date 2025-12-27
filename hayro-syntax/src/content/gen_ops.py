@@ -1,5 +1,6 @@
 from enum import Enum
 
+
 class Type(Enum):
     Number = "Number"
     String = "String"
@@ -9,6 +10,7 @@ class Type(Enum):
     Stream = "Stream"
     VecNum = "SmallVec<[Number; OPERANDS_THRESHOLD]>"
     Name = "Name"
+
 
 ops = {
     "Compatibility operators": [
@@ -67,12 +69,8 @@ ops = {
         ("K", "StrokeColorCmyk", [Type.Number] * 4),
         ("k", "NonStrokeColorCmyk", [Type.Number] * 4),
     ],
-    "Shading operator": [
-        ("sh", "Shading", [Type.Name])
-    ],
-    "XObject operator": [
-        ("Do", "XObject", [Type.Name])
-    ],
+    "Shading operator": [("sh", "Shading", [Type.Name])],
+    "XObject operator": [("Do", "XObject", [Type.Name])],
     "Inline-image operators": [
         ("BI", "InlineImage", [Type.Stream]),
         # We do not emit ID and EI in the parser.
@@ -101,7 +99,7 @@ ops = {
     "Text-showing operators": [
         ("Tj", "ShowText", [Type.String]),
         ("'", "NextLineAndShowText", [Type.String]),
-        ("\"", "ShowTextWithParameters", [Type.Number, Type.Number, Type.String]),
+        ('"', "ShowTextWithParameters", [Type.Number, Type.Number, Type.String]),
         ("TJ", "ShowTexts", [Type.Array]),
     ],
     "Type 3 font operators": [
@@ -119,6 +117,7 @@ ops = {
     ],
 }
 
+
 def rust_type(t: Type) -> str:
     return {
         Type.Number: "Number",
@@ -131,8 +130,18 @@ def rust_type(t: Type) -> str:
         Type.VecNum: "SmallVec<[Number; OPERANDS_THRESHOLD]>",
     }[t]
 
+
 def lifetime_if_needed(types):
-    return "<'a>" if any(t in [Type.String, Type.Array, Type.Object, Type.Name, Type.Stream, Type.Dict] for t in types) else ""
+    return (
+        "<'a>"
+        if any(
+            t
+            in [Type.String, Type.Array, Type.Object, Type.Name, Type.Stream, Type.Dict]
+            for t in types
+        )
+        else ""
+    )
+
 
 def gen_struct(name, code, types):
     lifetime = lifetime_if_needed(types)
@@ -154,14 +163,20 @@ def gen_struct(name, code, types):
     struct.append(f'op{macro_suffix}!({name}{lifetime}, "{escaped_code}");')
     return "\n".join(struct)
 
+
 def gen_enum_variant(name, types):
-    has_lifetime = (type(types) is bool and types) or any(t in [Type.String, Type.Array, Type.Object, Type.Name, Type.Stream] for t in types)
+    has_lifetime = (type(types) is bool and types) or any(
+        t in [Type.String, Type.Array, Type.Object, Type.Name, Type.Stream]
+        for t in types
+    )
     inner_type = f"{name}<'a>" if has_lifetime else name
     return f"{name}({inner_type})"
+
 
 def gen_dispatch_match(code, name, types):
     escaped_code = code.replace('"', '\\"')
     return f'b"{escaped_code}" => {name}::from_stack(&instruction.operands)?.into(),'
+
 
 # Generate all code pieces
 structs = []
@@ -179,22 +194,23 @@ for category in ops.values():
 struct_block = "\n\n".join(structs)
 
 enum_block = (
-        "#[derive(Debug, PartialEq, Clone)]\n"
-        "pub enum TypedInstruction<'a> {\n"
-        + "    " + ",\n    ".join(enum_variants) + ",\n"
-                                                   "    Fallback(Operator<'a>),\n}"
+    "#[derive(Debug, PartialEq, Clone)]\n"
+    "pub enum TypedInstruction<'a> {\n" + "    " + ",\n    ".join(enum_variants) + ",\n"
+    "    Fallback(Operator<'a>),\n}"
 )
 
 dispatch_block = (
-        "impl<'a> TypedInstruction<'a> {\n"
-        "    pub(crate) fn dispatch(instruction: &Instruction<'a>) -> Option<TypedInstruction<'a>> {\n"
-        "        let op_name = instruction.operator.as_ref();\n"
-        "        Some(match op_name {\n"
-        + "            " + "\n            ".join(dispatch_arms) + "\n"
-                                                                  "            _ => return Self::Fallback(instruction.operator.clone()).into(),\n"
-                                                                  "        })\n"
-                                                                  "    }\n"
-                                                                  "}"
+    "impl<'a> TypedInstruction<'a> {\n"
+    "    pub(crate) fn dispatch(instruction: &Instruction<'a>) -> Option<TypedInstruction<'a>> {\n"
+    "        let op_name = instruction.operator.as_ref();\n"
+    "        Some(match op_name {\n"
+    + "            "
+    + "\n            ".join(dispatch_arms)
+    + "\n"
+    "            _ => return Self::Fallback(instruction.operator.clone()).into(),\n"
+    "        })\n"
+    "    }\n"
+    "}"
 )
 
 gen_notice = "// THIS FILE IS AUTO-GENERATED, DO NOT EDIT MANUALLY"
@@ -202,5 +218,5 @@ imports = "use crate::content::Operator;"
 
 joined = "\n\n".join([gen_notice, imports, struct_block, enum_block, dispatch_block])
 
-with open("ops_generated.rs", 'w') as f:
+with open("ops_generated.rs", "w") as f:
     f.write(joined)
