@@ -324,7 +324,7 @@ fn decode_sub_band_bitplanes(
             1.0
         } else {
             let (exponent, mantissa) =
-                component_info.exponent_mantissa(sub_band.sub_band_type, resolution);
+                component_info.exponent_mantissa(sub_band.sub_band_type, resolution)?;
 
             let r_b = {
                 let log_gain = match sub_band.sub_band_type {
@@ -343,7 +343,7 @@ fn decode_sub_band_bitplanes(
     };
 
     let num_bitplanes = {
-        let (exponent, _) = component_info.exponent_mantissa(sub_band.sub_band_type, resolution);
+        let (exponent, _) = component_info.exponent_mantissa(sub_band.sub_band_type, resolution)?;
         // Equation (E-2)
         let num_bitplanes = (component_info.quantization_info.guard_bits as u16)
             .checked_add(exponent)

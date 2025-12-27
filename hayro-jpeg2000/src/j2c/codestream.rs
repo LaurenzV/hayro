@@ -218,7 +218,7 @@ impl ComponentInfo {
         &self,
         sub_band_type: SubBandType,
         resolution: u8,
-    ) -> (u16, u16) {
+    ) -> Result<(u16, u16), &'static str> {
         let n_ll = self.coding_style.parameters.num_decomposition_levels;
 
         let sb_index = match sub_band_type {
@@ -238,7 +238,7 @@ impl ComponentInfo {
                     step_sizes[1 + (resolution as usize - 1) * 3 + sb_index as usize]
                 };
 
-                (entry.exponent, entry.mantissa)
+                Ok((entry.exponent, entry.mantissa))
             }
             QuantizationStyle::ScalarDerived => {
                 let e_0 = step_sizes[0].exponent;
@@ -249,7 +249,12 @@ impl ComponentInfo {
                     n_ll as u16 + 1 - resolution as u16
                 };
 
-                (e_0 - n_ll as u16 + n_b, mantissa)
+                let exponent = e_0
+                    .checked_sub(n_ll as u16)
+                    .and_then(|e| e.checked_add(n_b))
+                    .ok_or("invalid quantization exponents")?;
+
+                Ok((exponent, mantissa))
             }
         }
     }
