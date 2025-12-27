@@ -572,6 +572,12 @@ fn progression_iterator_overflow_2() {
 }
 
 #[test]
+fn palette_num_components() {
+    let file = include_bytes!("../pdfs/load/palette_num_components.jp2");
+    load_jpeg2000(file);
+}
+
+#[test]
 fn metadata_in_object_stream() {
     // Normally, in an encrypted PDF file strings need to be encrypted when they are not
     // in a stream. Therefore, we need to ensure that no encryption is applied when the object

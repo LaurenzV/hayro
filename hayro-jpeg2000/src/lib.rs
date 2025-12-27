@@ -234,7 +234,13 @@ pub(crate) fn resolve_alpha_and_color_space(
     header: &Header<'_>,
     settings: &DecodeSettings,
 ) -> Result<(ColorSpace, bool), &'static str> {
-    let num_components = header.component_infos.len();
+    let mut num_components = header.component_infos.len();
+    
+    // Override number of components with what is actually in the palette box
+    // in case we resolve them.
+    if settings.resolve_palette_indices && let Some(palette_box) = &boxes.palette {
+        num_components = palette_box.columns.len();
+    }
 
     let mut has_alpha = false;
 
