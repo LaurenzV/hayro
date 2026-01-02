@@ -1,4 +1,4 @@
-use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
+use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 
 /// Integer arithmetic decoder (Annex A.2).
 ///
@@ -11,14 +11,14 @@ use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 pub(crate) struct IntegerDecoder {
     /// "Each arithmetic integer decoding procedure requires 512 bytes of storage
     /// for its context memory." (A.2)
-    contexts: Vec<ArithmeticDecoderContext>,
+    contexts: Vec<Context>,
 }
 
 impl IntegerDecoder {
     /// Create a new integer decoder with fresh contexts.
     pub(crate) fn new() -> Self {
         Self {
-            contexts: vec![ArithmeticDecoderContext::default(); 512],
+            contexts: vec![Context::default(); 512],
         }
     }
 

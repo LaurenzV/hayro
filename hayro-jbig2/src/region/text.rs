@@ -9,7 +9,7 @@ use super::generic_refinement::{
     GrTemplate, RefinementAdaptiveTemplatePixel, decode_refinement_bitmap_with,
 };
 use super::{CombinationOperator, RegionSegmentInfo, parse_region_segment_info};
-use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
+use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::DecodedRegion;
 use crate::huffman_table::{
     HuffmanTable, TABLE_A, TABLE_F, TABLE_G, TABLE_H, TABLE_I, TABLE_J, TABLE_K, TABLE_L, TABLE_M,
@@ -26,7 +26,7 @@ use crate::reader::Reader;
 /// part of the context." (A.3)
 pub(crate) struct SymbolIdDecoder {
     /// "The number of contexts required is 2^SBSYMCODELEN" (A.3)
-    contexts: Vec<ArithmeticDecoderContext>,
+    contexts: Vec<Context>,
     /// "The length is equal to SBSYMCODELEN." (A.3)
     code_len: u32,
 }
@@ -39,7 +39,7 @@ impl SymbolIdDecoder {
     pub(crate) fn new(code_len: u32) -> Self {
         let num_contexts = 1_usize << code_len;
         Self {
-            contexts: vec![ArithmeticDecoderContext::default(); num_contexts],
+            contexts: vec![Context::default(); num_contexts],
             code_len,
         }
     }
@@ -599,7 +599,7 @@ pub(crate) fn decode_text_region_refine(
         GrTemplate::Template0 => 1 << 13,
         GrTemplate::Template1 => 1 << 10,
     };
-    let mut gr_contexts = vec![ArithmeticDecoderContext::default(); num_gr_contexts];
+    let mut gr_contexts = vec![Context::default(); num_gr_contexts];
 
     decode_text_region_with(
         decoder,
@@ -1232,7 +1232,7 @@ fn decode_text_region_huffman(
                         GrTemplate::Template1 => 10,
                     };
                     let mut contexts =
-                        vec![ArithmeticDecoderContext::default(); 1 << num_context_bits];
+                        vec![Context::default(); 1 << num_context_bits];
 
                     decode_refinement_bitmap_with(
                         &mut decoder,

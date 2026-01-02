@@ -1,6 +1,6 @@
 //! Gray-scale image decoding procedure (Annex C).
 
-use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
+use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::DecodedRegion;
 use crate::region::generic::{
     AdaptiveTemplatePixel, GbTemplate, decode_bitmap_mmr, gather_context_with_at,
@@ -80,7 +80,7 @@ fn decode_ae(data: &[u8], params: &GrayScaleParams<'_>) -> Result<Vec<u32>, &'st
 
     // All bitplanes share the same arithmetic decoder and context statistics.
     let mut decoder = ArithmeticDecoder::new(data);
-    let mut contexts = vec![ArithmeticDecoderContext::default(); 1 << template.context_bits()];
+    let mut contexts = vec![Context::default(); 1 << template.context_bits()];
 
     decode_bitplanes(bits_per_pixel, size, |_| {
         // Decode a single bitplane using arithmetic coding.

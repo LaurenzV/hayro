@@ -1,7 +1,7 @@
 //! Generic refinement region segment parsing and decoding (7.4.7, 6.3).
 
 use super::{RegionSegmentInfo, parse_region_segment_info};
-use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
+use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::DecodedRegion;
 use crate::reader::Reader;
 
@@ -153,7 +153,7 @@ fn decode_refinement_bitmap(
         GrTemplate::Template0 => 13,
         GrTemplate::Template1 => 10,
     };
-    let mut contexts = vec![ArithmeticDecoderContext::default(); 1 << num_context_bits];
+    let mut contexts = vec![Context::default(); 1 << num_context_bits];
 
     let width = header.region_info.width;
     let height = header.region_info.height;
@@ -190,7 +190,7 @@ fn decode_refinement_bitmap(
 /// dictionary decoding per Table 18).
 pub(crate) fn decode_refinement_bitmap_with(
     decoder: &mut ArithmeticDecoder<'_>,
-    contexts: &mut [ArithmeticDecoderContext],
+    contexts: &mut [Context],
     region: &mut DecodedRegion,
     reference: &DecodedRegion,
     reference_dx: i32,

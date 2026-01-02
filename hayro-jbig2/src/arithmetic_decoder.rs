@@ -31,13 +31,13 @@ impl<'a> ArithmeticDecoder<'a> {
 
     /// Read the next bit using the given context.
     #[inline(always)]
-    pub(crate) fn decode(&mut self, context: &mut ArithmeticDecoderContext) -> u32 {
+    pub(crate) fn decode(&mut self, context: &mut Context) -> u32 {
         self.decode_internal(context)
     }
 
     /// The DECODE procedure (E.3.2, Figure G.2).
     #[inline(always)]
-    fn decode_internal(&mut self, context: &mut ArithmeticDecoderContext) -> u32 {
+    fn decode_internal(&mut self, context: &mut Context) -> u32 {
         let qe_entry = &QE_TABLE[context.state_index as usize];
 
         // Figure G.2: "A = A - Qe(I(CX))"
@@ -138,7 +138,7 @@ impl<'a> ArithmeticDecoder<'a> {
 
     /// The `LPS_EXCHANGE` procedure (E.3.2, Figure E.17).
     #[inline(always)]
-    fn exchange_lps(&mut self, context: &mut ArithmeticDecoderContext, qe_entry: &QeData) -> u32 {
+    fn exchange_lps(&mut self, context: &mut Context, qe_entry: &QeData) -> u32 {
         // `D`
         let decoded_bit;
 
@@ -168,7 +168,7 @@ impl<'a> ArithmeticDecoder<'a> {
 
     /// The `MPS_EXCHANGE` procedure (E.3.2, Figure E.16).
     #[inline(always)]
-    fn exchange_mps(&mut self, context: &mut ArithmeticDecoderContext, qe_entry: &QeData) -> u32 {
+    fn exchange_mps(&mut self, context: &mut Context, qe_entry: &QeData) -> u32 {
         // D
         let decoded_bit;
 
@@ -211,9 +211,9 @@ impl<'a> ArithmeticDecoder<'a> {
     }
 }
 
-/// Arithmetic decoder context.
+/// Context for the arithmetic decoder.
 #[derive(Copy, Clone, Debug, Default)]
-pub(crate) struct ArithmeticDecoderContext {
+pub(crate) struct Context {
     /// `I(CX)` - Index into the probability estimation state machine.
     pub(crate) state_index: u32,
     /// `MPS(CX)` - The sense of MPS for context CX.

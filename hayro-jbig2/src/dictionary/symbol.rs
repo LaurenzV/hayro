@@ -4,7 +4,7 @@
 //! Symbol dictionaries store collections of symbol bitmaps that can be
 //! referenced by text region segments.
 
-use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
+use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::DecodedRegion;
 use crate::huffman_table::{HuffmanTable, TABLE_A, TABLE_B, TABLE_C, TABLE_D, TABLE_E};
 use crate::integer_decoder::IntegerDecoder;
@@ -745,7 +745,7 @@ fn decode_symbols_direct(
 ) -> Result<Vec<DecodedRegion>, &'static str> {
     let template = header.flags.sdtemplate;
     let num_contexts = 1 << template.context_bits();
-    let mut gb_contexts = vec![ArithmeticDecoderContext::default(); num_contexts];
+    let mut gb_contexts = vec![Context::default(); num_contexts];
 
     decode_symbols_with(
         data,
@@ -784,7 +784,7 @@ fn decode_symbols_refagg(
         GrTemplate::Template0 => 1 << 13,
         GrTemplate::Template1 => 1 << 10,
     };
-    let mut gr_contexts = vec![ArithmeticDecoderContext::default(); num_gr_contexts];
+    let mut gr_contexts = vec![Context::default(); num_gr_contexts];
 
     let mut text_region_contexts = TextRegionContexts::new(sbsymcodelen);
 
@@ -910,7 +910,7 @@ where
 /// procedure as shown in Table 16."
 fn decode_symbol_bitmap(
     decoder: &mut ArithmeticDecoder<'_>,
-    contexts: &mut [ArithmeticDecoderContext],
+    contexts: &mut [Context],
     header: &SymbolDictionaryHeader,
     width: u32,
     height: u32,
@@ -944,7 +944,7 @@ fn decode_symbol_bitmap(
 #[allow(clippy::too_many_arguments)]
 fn decode_refinement_aggregate_symbol(
     decoder: &mut ArithmeticDecoder<'_>,
-    gr_contexts: &mut [ArithmeticDecoderContext],
+    gr_contexts: &mut [Context],
     iaai: &mut IntegerDecoder,
     text_region_contexts: &mut TextRegionContexts,
     header: &SymbolDictionaryHeader,
@@ -1001,7 +1001,7 @@ fn decode_refinement_aggregate_symbol(
 #[allow(clippy::too_many_arguments)]
 fn decode_multi_refinement_symbol(
     decoder: &mut ArithmeticDecoder<'_>,
-    gr_contexts: &mut [ArithmeticDecoderContext],
+    gr_contexts: &mut [Context],
     text_region_contexts: &mut TextRegionContexts,
     header: &SymbolDictionaryHeader,
     input_symbols: &[&DecodedRegion],
@@ -1121,7 +1121,7 @@ fn decode_multi_refinement_symbol(
 #[allow(clippy::too_many_arguments)]
 fn decode_single_refinement_symbol(
     decoder: &mut ArithmeticDecoder<'_>,
-    gr_contexts: &mut [ArithmeticDecoderContext],
+    gr_contexts: &mut [Context],
     text_region_contexts: &mut TextRegionContexts,
     header: &SymbolDictionaryHeader,
     input_symbols: &[&DecodedRegion],

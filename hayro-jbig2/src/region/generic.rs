@@ -1,7 +1,7 @@
 //! Generic region segment parsing and decoding (7.4.6, 6.2).
 
 use super::{RegionSegmentInfo, parse_region_segment_info};
-use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
+use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::DecodedRegion;
 use crate::reader::Reader;
 
@@ -384,7 +384,7 @@ pub(crate) fn decode_bitmap_arith(
 
     let mut decoder = ArithmeticDecoder::new(data);
 
-    let mut contexts = vec![ArithmeticDecoderContext::default(); 1 << gb_template.context_bits()];
+    let mut contexts = vec![Context::default(); 1 << gb_template.context_bits()];
 
     // "1) Set: LTP = 0" (6.2.5.7)
     let mut ltp = false;
