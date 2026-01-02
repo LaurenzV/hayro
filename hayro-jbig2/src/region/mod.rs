@@ -1,5 +1,10 @@
 //! Region segment information field parsing (7.4.1).
 
+pub(crate) mod generic;
+pub(crate) mod generic_refinement;
+pub(crate) mod halftone;
+pub(crate) mod text;
+
 use crate::reader::Reader;
 
 /// "These operators describe how the segment's bitmap is to be combined with

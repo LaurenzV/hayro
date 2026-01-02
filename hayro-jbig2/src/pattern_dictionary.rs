@@ -1,7 +1,7 @@
 //! Pattern dictionary segment parsing and decoding (7.4.4, 6.7).
 
 use crate::bitmap::DecodedRegion;
-use crate::generic_region::{
+use crate::region::generic::{
     AdaptiveTemplatePixel, GbTemplate, decode_bitmap_arith, decode_bitmap_mmr,
 };
 use crate::reader::Reader;

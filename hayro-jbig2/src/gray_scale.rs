@@ -2,7 +2,7 @@
 
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use crate::bitmap::DecodedRegion;
-use crate::generic_region::{
+use crate::region::generic::{
     AdaptiveTemplatePixel, GbTemplate, decode_bitmap_mmr, gather_context_with_at,
 };
 

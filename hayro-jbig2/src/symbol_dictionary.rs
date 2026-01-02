@@ -6,20 +6,20 @@
 
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext, IntegerDecoder};
 use crate::bitmap::DecodedRegion;
-use crate::generic_refinement_region::{
-    GrTemplate, RefinementAdaptiveTemplatePixel, decode_refinement_bitmap_with,
-};
-use crate::generic_region::{
-    AdaptiveTemplatePixel, GbTemplate, decode_bitmap_mmr, gather_context_with_at,
-};
 use crate::huffman_table::{
     HuffmanResult, HuffmanTable, TABLE_A, TABLE_B, TABLE_C, TABLE_D, TABLE_E,
 };
 use crate::reader::Reader;
-use crate::region::CombinationOperator;
-use crate::text_region::{
+use crate::region::generic::{
+    AdaptiveTemplatePixel, GbTemplate, decode_bitmap_mmr, gather_context_with_at,
+};
+use crate::region::generic_refinement::{
+    GrTemplate, RefinementAdaptiveTemplatePixel, decode_refinement_bitmap_with,
+};
+use crate::region::text::{
     ReferenceCorner, SymbolBitmap, TextRegionContexts, TextRegionParams, decode_text_region_with,
 };
+use crate::region::CombinationOperator;
 
 /// Huffman table selection for symbol dictionary height differences (SDHUFFDH).
 ///

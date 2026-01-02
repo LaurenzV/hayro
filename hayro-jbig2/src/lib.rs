@@ -25,10 +25,7 @@ This crate forbids unsafe code via a crate-level attribute.
 mod arithmetic_decoder;
 mod bitmap;
 mod file;
-mod generic_refinement_region;
-mod generic_region;
 mod gray_scale;
-mod halftone_region;
 mod huffman_table;
 mod page_info;
 mod pattern_dictionary;
@@ -36,21 +33,20 @@ mod reader;
 mod region;
 mod segment;
 mod symbol_dictionary;
-mod text_region;
 
 use crate::file::parse_segments_sequential;
 use bitmap::DecodedRegion;
 use file::parse_file;
-use generic_refinement_region::decode_generic_refinement_region;
-use generic_region::decode_generic_region;
-use halftone_region::decode_halftone_region;
 use huffman_table::HuffmanTable;
 use page_info::{PageInformation, parse_page_information};
 use pattern_dictionary::{PatternDictionary, decode_pattern_dictionary};
 use reader::Reader;
+use region::generic::decode_generic_region;
+use region::generic_refinement::decode_generic_refinement_region;
+use region::halftone::decode_halftone_region;
+use region::text::decode_text_region;
 use segment::SegmentType;
 use symbol_dictionary::{SymbolDictionary, decode_symbol_dictionary};
-use text_region::decode_text_region;
 
 /// A decoded JBIG2 image.
 #[derive(Debug, Clone)]
