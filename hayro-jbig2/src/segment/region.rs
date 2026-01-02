@@ -58,7 +58,7 @@ pub(crate) struct RegionSegmentInfo {
     pub combination_operator: CombinationOperator,
     /// "Bit 3: Colour extension flag (COLEXTFLAG). This field specifies whether
     /// the region segment is extended to represent coloured bitmap." (7.4.1.5)
-    pub colour_extension: bool,
+    pub _colour_extension: bool,
 }
 
 /// Parse the region segment information field (7.4.1).
@@ -94,6 +94,6 @@ pub(crate) fn parse_region_segment_info(
         x_location,
         y_location,
         combination_operator,
-        colour_extension,
+        _colour_extension: colour_extension,
     })
 }

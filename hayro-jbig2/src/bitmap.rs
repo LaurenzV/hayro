@@ -36,7 +36,7 @@ impl DecodedRegion {
     /// Create a new bitmap filled with `false` (white pixels).
     ///
     /// The bitmap is positioned at (0, 0) with the Replace operator.
-    pub fn new(width: u32, height: u32) -> Self {
+    pub(crate) fn new(width: u32, height: u32) -> Self {
         let data = vec![false; (width * height) as usize];
         Self {
             width,
@@ -50,7 +50,7 @@ impl DecodedRegion {
 
     /// Get a pixel value at (x, y).
     #[inline]
-    pub fn get_pixel(&self, x: u32, y: u32) -> bool {
+    pub(crate) fn get_pixel(&self, x: u32, y: u32) -> bool {
         if x >= self.width || y >= self.height {
             return false;
         }
@@ -59,7 +59,7 @@ impl DecodedRegion {
 
     /// Set a pixel value at (x, y).
     #[inline]
-    pub fn set_pixel(&mut self, x: u32, y: u32, value: bool) {
+    pub(crate) fn set_pixel(&mut self, x: u32, y: u32, value: bool) {
         if x >= self.width || y >= self.height {
             return;
         }
@@ -71,7 +71,7 @@ impl DecodedRegion {
     ///
     /// "These operators describe how the segment's bitmap is to be combined with
     /// the page bitmap." (7.4.1.5)
-    pub fn combine(&mut self, other: &DecodedRegion) {
+    pub(crate) fn combine(&mut self, other: &DecodedRegion) {
         for y in 0..other.height {
             let dest_y = other.y_location + y;
             if dest_y >= self.height {

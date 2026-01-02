@@ -148,11 +148,11 @@ pub(crate) struct SymbolDictionaryFlags {
 
     /// "Bit 8: Bitmap coding context used. If SDHUFF is 1 and SDREFAGG is 0 then
     /// this field must contain the value 0." (7.4.2.1.1)
-    pub bitmap_context_used: bool,
+    pub _bitmap_context_used: bool,
 
     /// "Bit 9: Bitmap coding context retained. If SDHUFF is 1 and SDREFAGG is 0
     /// then this field must contain the value 0." (7.4.2.1.1)
-    pub bitmap_context_retained: bool,
+    pub _bitmap_context_retained: bool,
 
     /// "Bits 10-11: SDTEMPLATE. This field controls the template used to decode
     /// symbol bitmaps if SDHUFF is 0. If SDHUFF is 1, this field must contain
@@ -259,8 +259,8 @@ pub(crate) fn parse_symbol_dictionary_header(
         sdhuffdw,
         sdhuffbmsize,
         sdhuffagginst,
-        bitmap_context_used,
-        bitmap_context_retained,
+        _bitmap_context_used: bitmap_context_used,
+        _bitmap_context_retained: bitmap_context_retained,
         sdtemplate,
         sdrtemplate,
     };
@@ -367,8 +367,6 @@ fn parse_symbol_dictionary_refinement_at_flags(
 ///    dictionary segments and tables segments"
 #[derive(Debug, Clone)]
 pub(crate) struct SymbolDictionary {
-    /// The parsed segment header.
-    pub header: SymbolDictionaryHeader,
     /// The exported symbols (SDEXSYMS).
     /// "The symbols exported by this symbol dictionary. Contains SDNUMEXSYMS
     /// symbols." (Table 14)
@@ -392,10 +390,7 @@ pub(crate) fn decode_symbol_dictionary(
     // "6) Invoke the symbol dictionary decoding procedure described in 6.5"
     let exported_symbols = decode_symbols(reader, &header, input_symbols, referred_tables)?;
 
-    Ok(SymbolDictionary {
-        header,
-        exported_symbols,
-    })
+    Ok(SymbolDictionary { exported_symbols })
 }
 
 /// Symbol dictionary decoding procedure (6.5).

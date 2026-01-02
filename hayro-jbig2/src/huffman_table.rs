@@ -9,7 +9,7 @@ use crate::reader::Reader;
 
 /// Result of decoding a Huffman code.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum HuffmanResult {
+pub(crate) enum HuffmanResult {
     /// A decoded integer value.
     Value(i32),
     /// Out-of-band marker (only possible when HTOOB=1).
@@ -64,7 +64,7 @@ impl HuffmanNode {
 /// The table is represented as a binary tree where each path from root to
 /// leaf corresponds to a prefix code.
 #[derive(Debug, Clone)]
-pub struct HuffmanTable {
+pub(crate) struct HuffmanTable {
     root: HuffmanNode,
 }
 
@@ -246,7 +246,7 @@ impl HuffmanTable {
     /// 3) If OOB line: return OOB
     /// 4) If lower range line: return RANGELOW - HTOFFSET (we use range_high as the base)
     /// 5) Otherwise: return RANGELOW + HTOFFSET
-    pub fn decode(&self, reader: &mut Reader<'_>) -> Result<HuffmanResult, &'static str> {
+    pub(crate) fn decode(&self, reader: &mut Reader<'_>) -> Result<HuffmanResult, &'static str> {
         let mut node = &self.root;
 
         loop {
@@ -287,7 +287,7 @@ impl HuffmanTable {
     /// 5) Read lower range line (PREFLEN only, RANGELEN=32 implied)
     /// 6) Read upper range line (PREFLEN only, RANGELEN=32 implied)
     /// 7) If HTOOB=1, read OOB line (PREFLEN only)
-    pub fn read_custom(reader: &mut Reader<'_>) -> Result<Self, &'static str> {
+    pub(crate) fn read_custom(reader: &mut Reader<'_>) -> Result<Self, &'static str> {
         // Step 1: Read code table flags.
         let flags = reader
             .read_byte()
@@ -358,7 +358,7 @@ impl HuffmanTable {
 }
 
 /// Table B.1 – Standard Huffman table A (HTOOB = 0)
-pub static TABLE_A: LazyLock<HuffmanTable> = LazyLock::new(|| {
+pub(crate) static TABLE_A: LazyLock<HuffmanTable> = LazyLock::new(|| {
     HuffmanTable::build(&[
         TableLine::new(0, 1, 4),        // 0...15
         TableLine::new(16, 2, 8),       // 16...271
@@ -368,7 +368,7 @@ pub static TABLE_A: LazyLock<HuffmanTable> = LazyLock::new(|| {
 });
 
 /// Table B.2 – Standard Huffman table B (HTOOB = 1)
-pub static TABLE_B: LazyLock<HuffmanTable> = LazyLock::new(|| {
+pub(crate) static TABLE_B: LazyLock<HuffmanTable> = LazyLock::new(|| {
     HuffmanTable::build(&[
         TableLine::new(0, 1, 0),     // 0
         TableLine::new(1, 2, 0),     // 1
@@ -381,7 +381,7 @@ pub static TABLE_B: LazyLock<HuffmanTable> = LazyLock::new(|| {
 });
 
 /// Table B.3 – Standard Huffman table C (HTOOB = 1)
-pub static TABLE_C: LazyLock<HuffmanTable> = LazyLock::new(|| {
+pub(crate) static TABLE_C: LazyLock<HuffmanTable> = LazyLock::new(|| {
     HuffmanTable::build(&[
         TableLine::new(-256, 8, 8),    // -256...-1
         TableLine::new(0, 1, 0),       // 0
@@ -396,7 +396,7 @@ pub static TABLE_C: LazyLock<HuffmanTable> = LazyLock::new(|| {
 });
 
 /// Table B.4 – Standard Huffman table D (HTOOB = 0)
-pub static TABLE_D: LazyLock<HuffmanTable> = LazyLock::new(|| {
+pub(crate) static TABLE_D: LazyLock<HuffmanTable> = LazyLock::new(|| {
     HuffmanTable::build(&[
         TableLine::new(1, 1, 0),     // 1
         TableLine::new(2, 2, 0),     // 2
@@ -408,7 +408,7 @@ pub static TABLE_D: LazyLock<HuffmanTable> = LazyLock::new(|| {
 });
 
 /// Table B.5 – Standard Huffman table E (HTOOB = 0)
-pub static TABLE_E: LazyLock<HuffmanTable> = LazyLock::new(|| {
+pub(crate) static TABLE_E: LazyLock<HuffmanTable> = LazyLock::new(|| {
     HuffmanTable::build(&[
         TableLine::new(-255, 7, 8),    // -255...0
         TableLine::new(1, 1, 0),       // 1
@@ -422,7 +422,7 @@ pub static TABLE_E: LazyLock<HuffmanTable> = LazyLock::new(|| {
 });
 
 /// Table B.6 – Standard Huffman table F (HTOOB = 0)
-pub static TABLE_F: LazyLock<HuffmanTable> = LazyLock::new(|| {
+pub(crate) static TABLE_F: LazyLock<HuffmanTable> = LazyLock::new(|| {
     HuffmanTable::build(&[
         TableLine::new(-2048, 5, 10),   // -2048...-1025
         TableLine::new(-1024, 4, 9),    // -1024...-513
@@ -442,7 +442,7 @@ pub static TABLE_F: LazyLock<HuffmanTable> = LazyLock::new(|| {
 });
 
 /// Table B.7 – Standard Huffman table G (HTOOB = 0)
-pub static TABLE_G: LazyLock<HuffmanTable> = LazyLock::new(|| {
+pub(crate) static TABLE_G: LazyLock<HuffmanTable> = LazyLock::new(|| {
     HuffmanTable::build(&[
         TableLine::new(-1024, 4, 9),    // -1024...-513
         TableLine::new(-512, 3, 8),     // -512...-257
@@ -463,7 +463,7 @@ pub static TABLE_G: LazyLock<HuffmanTable> = LazyLock::new(|| {
 });
 
 /// Table B.8 – Standard Huffman table H (HTOOB = 1)
-pub static TABLE_H: LazyLock<HuffmanTable> = LazyLock::new(|| {
+pub(crate) static TABLE_H: LazyLock<HuffmanTable> = LazyLock::new(|| {
     HuffmanTable::build(&[
         TableLine::new(-15, 8, 3),     // -15...-8
         TableLine::new(-7, 9, 1),      // -7...-6
@@ -490,7 +490,7 @@ pub static TABLE_H: LazyLock<HuffmanTable> = LazyLock::new(|| {
 });
 
 /// Table B.9 – Standard Huffman table I (HTOOB = 1)
-pub static TABLE_I: LazyLock<HuffmanTable> = LazyLock::new(|| {
+pub(crate) static TABLE_I: LazyLock<HuffmanTable> = LazyLock::new(|| {
     HuffmanTable::build(&[
         TableLine::new(-31, 8, 4),     // -31...-16
         TableLine::new(-15, 9, 2),     // -15...-12
@@ -518,7 +518,7 @@ pub static TABLE_I: LazyLock<HuffmanTable> = LazyLock::new(|| {
 });
 
 /// Table B.10 – Standard Huffman table J (HTOOB = 1)
-pub static TABLE_J: LazyLock<HuffmanTable> = LazyLock::new(|| {
+pub(crate) static TABLE_J: LazyLock<HuffmanTable> = LazyLock::new(|| {
     HuffmanTable::build(&[
         TableLine::new(-21, 7, 4),     // -21...-6
         TableLine::new(-5, 8, 0),      // -5
@@ -545,7 +545,7 @@ pub static TABLE_J: LazyLock<HuffmanTable> = LazyLock::new(|| {
 });
 
 /// Table B.11 – Standard Huffman table K (HTOOB = 0)
-pub static TABLE_K: LazyLock<HuffmanTable> = LazyLock::new(|| {
+pub(crate) static TABLE_K: LazyLock<HuffmanTable> = LazyLock::new(|| {
     HuffmanTable::build(&[
         TableLine::new(1, 1, 0),      // 1
         TableLine::new(2, 2, 1),      // 2...3
@@ -564,7 +564,7 @@ pub static TABLE_K: LazyLock<HuffmanTable> = LazyLock::new(|| {
 });
 
 /// Table B.12 – Standard Huffman table L (HTOOB = 0)
-pub static TABLE_L: LazyLock<HuffmanTable> = LazyLock::new(|| {
+pub(crate) static TABLE_L: LazyLock<HuffmanTable> = LazyLock::new(|| {
     HuffmanTable::build(&[
         TableLine::new(1, 1, 0),     // 1
         TableLine::new(2, 2, 0),     // 2
@@ -583,7 +583,7 @@ pub static TABLE_L: LazyLock<HuffmanTable> = LazyLock::new(|| {
 });
 
 /// Table B.13 – Standard Huffman table M (HTOOB = 0)
-pub static TABLE_M: LazyLock<HuffmanTable> = LazyLock::new(|| {
+pub(crate) static TABLE_M: LazyLock<HuffmanTable> = LazyLock::new(|| {
     HuffmanTable::build(&[
         TableLine::new(1, 1, 0),      // 1
         TableLine::new(2, 3, 0),      // 2
@@ -602,7 +602,7 @@ pub static TABLE_M: LazyLock<HuffmanTable> = LazyLock::new(|| {
 });
 
 /// Table B.14 – Standard Huffman table N (HTOOB = 0)
-pub static TABLE_N: LazyLock<HuffmanTable> = LazyLock::new(|| {
+pub(crate) static TABLE_N: LazyLock<HuffmanTable> = LazyLock::new(|| {
     HuffmanTable::build(&[
         TableLine::new(-2, 3, 0), // -2
         TableLine::new(-1, 3, 0), // -1
@@ -613,7 +613,7 @@ pub static TABLE_N: LazyLock<HuffmanTable> = LazyLock::new(|| {
 });
 
 /// Table B.15 – Standard Huffman table O (HTOOB = 0)
-pub static TABLE_O: LazyLock<HuffmanTable> = LazyLock::new(|| {
+pub(crate) static TABLE_O: LazyLock<HuffmanTable> = LazyLock::new(|| {
     HuffmanTable::build(&[
         TableLine::new(-24, 7, 4),    // -24...-9
         TableLine::new(-8, 6, 2),     // -8...-5

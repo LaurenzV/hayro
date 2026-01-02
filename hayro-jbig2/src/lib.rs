@@ -271,18 +271,18 @@ fn decode_with_segments(segments: &[segment::Segment<'_>]) -> Result<Image, &'st
 /// decoded into.
 pub(crate) struct DecodeContext {
     /// The parsed page information.
-    pub page_info: PageInformation,
+    pub(crate) _page_info: PageInformation,
     /// The page bitmap that regions are combined into.
-    pub page_bitmap: DecodedRegion,
+    pub(crate) page_bitmap: DecodedRegion,
     /// Decoded intermediate regions, stored as (segment_number, region) pairs.
-    pub referred_segments: Vec<(u32, DecodedRegion)>,
+    pub(crate) referred_segments: Vec<(u32, DecodedRegion)>,
     /// Decoded pattern dictionaries, stored as (segment_number, dictionary) pairs.
-    pub pattern_dictionaries: Vec<(u32, PatternDictionary)>,
+    pub(crate) pattern_dictionaries: Vec<(u32, PatternDictionary)>,
     /// Decoded symbol dictionaries, stored as (segment_number, dictionary) pairs.
-    pub symbol_dictionaries: Vec<(u32, SymbolDictionary)>,
+    pub(crate) symbol_dictionaries: Vec<(u32, SymbolDictionary)>,
     /// Decoded Huffman tables, stored as (segment_number, table) pairs.
     /// "Tables – see 7.4.13." (type 53)
-    pub huffman_tables: Vec<(u32, HuffmanTable)>,
+    pub(crate) huffman_tables: Vec<(u32, HuffmanTable)>,
 }
 
 impl DecodeContext {
@@ -370,7 +370,7 @@ pub(crate) fn get_ctx(
     }
 
     Ok(DecodeContext {
-        page_info,
+        _page_info: page_info,
         page_bitmap,
         referred_segments: Vec::new(),
         pattern_dictionaries: Vec::new(),

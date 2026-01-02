@@ -35,7 +35,7 @@ pub(crate) struct TextRegionContexts {
 
 impl TextRegionContexts {
     /// Create new text region contexts with the given symbol code length.
-    pub fn new(sbsymcodelen: u32) -> Self {
+    pub(crate) fn new(sbsymcodelen: u32) -> Self {
         Self {
             iadt: IntegerDecoder::new(),
             iafs: IntegerDecoder::new(),
@@ -426,7 +426,7 @@ pub(crate) struct TextRegionParams<'a> {
 
 impl<'a> TextRegionParams<'a> {
     /// Create parameters from a parsed text region header.
-    pub fn from_header(header: &'a TextRegionHeader) -> Self {
+    pub(crate) fn from_header(header: &'a TextRegionHeader) -> Self {
         let sbrtemplate = if header.flags.sbrtemplate == 0 {
             GrTemplate::Template0
         } else {

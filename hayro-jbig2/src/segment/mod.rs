@@ -107,12 +107,12 @@ pub(crate) struct SegmentHeader {
     pub segment_type: SegmentType,
     /// "Bit 7: Deferred non-retain. If this bit is 1, this segment is flagged
     /// as retained only by itself and its attached extension segments." (7.2.3)
-    pub retain_flag: bool,
+    pub _retain_flag: bool,
     /// "This field encodes the number of the page to which this segment belongs.
     /// The first page must be numbered '1'. This field may contain a value of
     /// zero; this value indicates that this segment is not associated with any
     /// page." (7.2.6)
-    pub page_association: u32,
+    pub _page_association: u32,
     /// "This field contains the segment numbers of the segments that this segment
     /// refers to, if any." (7.2.5)
     pub referred_to_segments: Vec<u32>,
@@ -254,8 +254,8 @@ pub(crate) fn parse_segment_header(reader: &mut Reader<'_>) -> Result<SegmentHea
     Ok(SegmentHeader {
         segment_number,
         segment_type,
-        retain_flag,
-        page_association,
+        _retain_flag: retain_flag,
+        _page_association: page_association,
         referred_to_segments,
         data_length,
     })
@@ -353,7 +353,7 @@ mod tests {
         // "0x86: This segment's type is 6. Its page association field is one byte
         // long. It is retained by only its attached extension segments."
         assert_eq!(header.segment_type, SegmentType::ImmediateTextRegion);
-        assert!(!header.retain_flag);
+        assert!(!header._retain_flag);
 
         // "0x6B: This segment refers to three other segments. It is referred to by
         // some other segment. This is the last reference to the second of the three
@@ -362,7 +362,7 @@ mod tests {
         assert_eq!(header.referred_to_segments, vec![2, 30, 5]);
 
         // "0x04: This segment is associated with page number 4."
-        assert_eq!(header.page_association, 4);
+        assert_eq!(header._page_association, 4);
 
         assert_eq!(header.data_length, Some(16));
     }
@@ -403,7 +403,7 @@ mod tests {
 
         // "40: This segment's type is 0. Its page association field is four bytes long."
         assert_eq!(header.segment_type, SegmentType::SymbolDictionary);
-        assert!(header.retain_flag);
+        assert!(header._retain_flag);
 
         // "E0 00 00 09: This segment's referred-to segment count field is in the long
         // format. This segment refers to nine other segments."
@@ -417,7 +417,7 @@ mod tests {
         );
 
         // "00 00 04 01: This segment is associated with page number 1025."
-        assert_eq!(header.page_association, 1025);
+        assert_eq!(header._page_association, 1025);
 
         assert_eq!(header.data_length, Some(32));
     }

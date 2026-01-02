@@ -52,7 +52,7 @@ pub(crate) struct GenericRegionHeader {
     pub tpgdon: bool,
     /// "Bit 4: EXTTEMPLATE. This field specifies whether extended reference
     /// template is used." (7.4.6.2)
-    pub ext_template: bool,
+    pub _ext_template: bool,
     /// Adaptive template pixels (7.4.6.3).
     ///
     /// "This field is only present if MMR is 0."
@@ -122,7 +122,7 @@ pub(crate) fn parse_generic_region_header(
         mmr,
         gb_template,
         tpgdon,
-        ext_template,
+        _ext_template: ext_template,
         adaptive_template_pixels,
     })
 }

@@ -32,24 +32,24 @@ pub(crate) enum FileOrganization {
 #[derive(Debug, Clone)]
 pub(crate) struct FileHeader {
     /// The file organization type.
-    pub organization: FileOrganization,
+    pub(crate) organization: FileOrganization,
     /// The number of pages in the file, if known.
-    pub number_of_pages: Option<u32>,
+    pub(crate) _number_of_pages: Option<u32>,
     /// "If this bit is 0, no generic region segments uses the templates with
     /// 12 AT pixels. If the file contains one or more generic region segments
     /// using such templates, this bit must be 1." (D.4.2, Bit 2)
-    pub uses_extended_templates: bool,
+    pub(crate) _uses_extended_templates: bool,
     /// "If this bit is 0, no region segment is extended to be coloured. If the
     /// file contains one or more coloured region segments, this bit must be 1."
     /// (D.4.2, Bit 3)
-    pub contains_coloured_regions: bool,
+    pub(crate) _contains_coloured_regions: bool,
 }
 
 /// A parsed JBIG2 file.
 #[derive(Debug)]
 pub(crate) struct File<'a> {
     /// The file header.
-    pub header: FileHeader,
+    pub _header: FileHeader,
     /// The segments in the file.
     pub segments: Vec<Segment<'a>>,
 }
@@ -69,7 +69,10 @@ pub(crate) fn parse_file(data: &[u8]) -> Result<File<'_>, &'static str> {
     // are in sorted order, but just to be safe.
     segments.sort_by_key(|seg| seg.header.segment_number);
 
-    Ok(File { header, segments })
+    Ok(File {
+        _header: header,
+        segments,
+    })
 }
 
 fn parse_file_header(reader: &mut Reader<'_>) -> Result<FileHeader, &'static str> {
@@ -121,9 +124,9 @@ fn parse_file_header(reader: &mut Reader<'_>) -> Result<FileHeader, &'static str
 
     Ok(FileHeader {
         organization,
-        number_of_pages,
-        uses_extended_templates,
-        contains_coloured_regions,
+        _number_of_pages: number_of_pages,
+        _uses_extended_templates: uses_extended_templates,
+        _contains_coloured_regions: contains_coloured_regions,
     })
 }
 

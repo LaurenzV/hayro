@@ -17,21 +17,22 @@ pub(crate) struct PageInformation {
     /// value is unknown, then this field must contain 0x00000000." (7.4.8.3)
     ///
     /// `None` means unknown resolution.
-    pub x_resolution: Option<u32>,
+    pub _x_resolution: Option<u32>,
     /// "This is a four-byte value containing the resolution of the original page
     /// medium, measured in pixels/metre in the vertical direction. If this value
     /// is unknown, then this field must contain 0x00000000." (7.4.8.4)
     ///
     /// `None` means unknown resolution.
-    pub y_resolution: Option<u32>,
+    pub _y_resolution: Option<u32>,
     /// Page segment flags (7.4.8.5).
     pub flags: PageFlags,
     /// Page striping information (7.4.8.6).
-    pub striping: PageStriping,
+    pub _striping: PageStriping,
 }
 
 /// Page segment flags (7.4.8.5, Figure 56).
 #[derive(Debug, Clone)]
+#[allow(unused)]
 pub(crate) struct PageFlags {
     /// "Bit 0: Page is eventually lossless. If this bit is 0, then the file does
     /// not contain a lossless representation of the original (pre-coding) page.
@@ -70,14 +71,14 @@ pub(crate) struct PageStriping {
     ///
     /// "If the page's bitmap height is unknown (indicated by a page bitmap height
     /// of 0xFFFFFFFF) then the 'page is striped' bit must be 1." (7.4.8.6)
-    pub is_striped: bool,
+    pub _is_striped: bool,
     /// "Bits 0-14: Maximum stripe size." (7.4.8.6)
     ///
     /// "The maximum size of each stripe (the distance between an end of stripe
     /// segment's end row and the end row of the previous end of stripe segment,
     /// or 0 in the case of the first end of stripe segment) must be no more than
     /// the page's maximum stripe size." (7.4.8.6)
-    pub max_stripe_size: u16,
+    pub _max_stripe_size: u16,
 }
 
 /// Parse a page information segment (7.4.8).
@@ -113,17 +114,17 @@ pub(crate) fn parse_page_information(
     // 7.4.8.6: Page striping information
     let striping_raw = reader.read_u16().ok_or("unexpected end of data")?;
     let striping = PageStriping {
-        is_striped: striping_raw & 0x8000 != 0,
-        max_stripe_size: striping_raw & 0x7FFF,
+        _is_striped: striping_raw & 0x8000 != 0,
+        _max_stripe_size: striping_raw & 0x7FFF,
     };
 
     Ok(PageInformation {
         width,
         height,
-        x_resolution,
-        y_resolution,
+        _x_resolution: x_resolution,
+        _y_resolution: y_resolution,
         flags,
-        striping,
+        _striping: striping,
     })
 }
 

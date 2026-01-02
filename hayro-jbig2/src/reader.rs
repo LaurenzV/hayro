@@ -28,11 +28,6 @@ impl<'a> Reader<'a> {
     }
 
     #[inline]
-    pub(crate) fn remaining(&self) -> usize {
-        self.data.len().saturating_sub(self.byte_pos())
-    }
-
-    #[inline]
     pub(crate) fn tail(&self) -> Option<&'a [u8]> {
         self.data.get(self.byte_pos()..)
     }
