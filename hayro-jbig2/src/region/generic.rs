@@ -1,9 +1,9 @@
 //! Generic region segment parsing and decoding (7.4.6, 6.2).
 
+use super::{RegionSegmentInfo, parse_region_segment_info};
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use crate::bitmap::DecodedRegion;
 use crate::reader::Reader;
-use super::{RegionSegmentInfo, parse_region_segment_info};
 
 /// Template used for arithmetic coding (7.4.6.2, 6.2.5.3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -1,10 +1,10 @@
 //! Halftone region segment parsing and decoding (7.4.5, 6.6).
 
-use crate::bitmap::DecodedRegion;
 use super::generic::GbTemplate;
 use super::{CombinationOperator, RegionSegmentInfo, parse_region_segment_info};
-use crate::gray_scale::{GrayScaleParams, decode_gray_scale_image};
+use crate::bitmap::DecodedRegion;
 use crate::dictionary::pattern::PatternDictionary;
+use crate::gray_scale::{GrayScaleParams, decode_gray_scale_image};
 use crate::reader::Reader;
 
 /// Template used for halftone arithmetic coding (7.4.5.1.1).

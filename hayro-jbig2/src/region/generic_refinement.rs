@@ -1,9 +1,9 @@
 //! Generic refinement region segment parsing and decoding (7.4.7, 6.3).
 
+use super::{RegionSegmentInfo, parse_region_segment_info};
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use crate::bitmap::DecodedRegion;
 use crate::reader::Reader;
-use super::{RegionSegmentInfo, parse_region_segment_info};
 
 /// Adaptive template pixel position for refinement regions.
 ///
