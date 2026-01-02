@@ -28,6 +28,7 @@ mod dictionary;
 mod file;
 mod gray_scale;
 mod huffman_table;
+mod integer_decoder;
 mod page_info;
 mod reader;
 mod region;

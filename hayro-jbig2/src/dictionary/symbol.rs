@@ -4,11 +4,12 @@
 //! Symbol dictionaries store collections of symbol bitmaps that can be
 //! referenced by text region segments.
 
-use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext, IntegerDecoder};
+use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use crate::bitmap::DecodedRegion;
 use crate::huffman_table::{
     HuffmanResult, HuffmanTable, TABLE_A, TABLE_B, TABLE_C, TABLE_D, TABLE_E,
 };
+use crate::integer_decoder::IntegerDecoder;
 use crate::reader::Reader;
 use crate::region::CombinationOperator;
 use crate::region::generic::{

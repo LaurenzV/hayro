@@ -5,9 +5,78 @@
 //! are coded identically, but are acted upon differently, see 8.2. The syntax
 //! of these segment types' data parts is specified here." (7.4.3)
 
-use crate::arithmetic_decoder::{
-    ArithmeticDecoder, ArithmeticDecoderContext, IntegerDecoder, SymbolIdDecoder,
+use super::generic_refinement::{
+    GrTemplate, RefinementAdaptiveTemplatePixel, decode_refinement_bitmap_with,
 };
+use super::{CombinationOperator, RegionSegmentInfo, parse_region_segment_info};
+use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
+use crate::bitmap::DecodedRegion;
+use crate::huffman_table::{
+    HuffmanResult, HuffmanTable, TABLE_A, TABLE_F, TABLE_G, TABLE_H, TABLE_I, TABLE_J, TABLE_K,
+    TABLE_L, TABLE_M, TABLE_N, TABLE_O, TableLine,
+};
+use crate::integer_decoder::IntegerDecoder;
+use crate::reader::Reader;
+
+/// IAID decoder for symbol IDs (A.3).
+///
+/// "This decoding procedure is different from all the other integer arithmetic
+/// decoding procedures. It uses fixed-length representations of the values being
+/// decoded, and does not limit the number of previously-decoded bits used as
+/// part of the context." (A.3)
+pub(crate) struct SymbolIdDecoder {
+    /// "The number of contexts required is 2^SBSYMCODELEN" (A.3)
+    contexts: Vec<ArithmeticDecoderContext>,
+    /// "The length is equal to SBSYMCODELEN." (A.3)
+    code_len: u32,
+}
+
+impl SymbolIdDecoder {
+    /// Create a new symbol ID decoder for the given code length.
+    ///
+    /// "The number of contexts required is 2^SBSYMCODELEN, which is less than
+    /// twice the maximum symbol ID." (A.3)
+    pub(crate) fn new(code_len: u32) -> Self {
+        let num_contexts = 1_usize << code_len;
+        Self {
+            contexts: vec![ArithmeticDecoderContext::default(); num_contexts],
+            code_len,
+        }
+    }
+
+    /// Decode a symbol ID.
+    ///
+    /// "The procedure for decoding an integer using the IAID decoding procedure
+    /// is as follows:" (A.3)
+    pub(crate) fn decode(&mut self, decoder: &mut ArithmeticDecoder<'_>) -> u32 {
+        // "1) Set: PREV = 1" (A.3)
+        let mut prev = 1_u32;
+
+        // "2) Decode SBSYMCODELEN bits as follows:" (A.3)
+        for _ in 0..self.code_len {
+            // "a) Decode a bit with CX equal to 'IAID + PREV' where '+' represents
+            // concatenation, and the rightmost SBSYMCODELEN + 1 bits of PREV are
+            // used." (A.3)
+            let ctx_mask = (1_u32 << (self.code_len + 1)) - 1;
+            let ctx_idx = (prev & ctx_mask) as usize;
+            let d = decoder.decode(&mut self.contexts[ctx_idx]);
+
+            // "b) After each bit is decoded, set: PREV = (PREV << 1) OR D
+            // where D represents the value of the just-decoded bit." (A.3)
+            prev = (prev << 1) | d;
+        }
+
+        // "3) After SBSYMCODELEN bits have been decoded, set:
+        //     PREV = PREV - 2^SBSYMCODELEN
+        // This step has the effect of clearing the topmost (leading 1) bit of
+        // PREV before returning it." (A.3)
+        prev -= 1 << self.code_len;
+
+        // "4) The contents of PREV are the result of this invocation of the IAID
+        // decoding procedure." (A.3)
+        prev
+    }
+}
 
 /// Shared integer decoder contexts for text region decoding.
 pub(crate) struct TextRegionContexts {
@@ -50,16 +119,6 @@ impl TextRegionContexts {
         }
     }
 }
-use super::generic_refinement::{
-    GrTemplate, RefinementAdaptiveTemplatePixel, decode_refinement_bitmap_with,
-};
-use super::{CombinationOperator, RegionSegmentInfo, parse_region_segment_info};
-use crate::bitmap::DecodedRegion;
-use crate::huffman_table::{
-    HuffmanResult, HuffmanTable, TABLE_A, TABLE_F, TABLE_G, TABLE_H, TABLE_I, TABLE_J, TABLE_K,
-    TABLE_L, TABLE_M, TABLE_N, TABLE_O, TableLine,
-};
-use crate::reader::Reader;
 
 /// Reference corner for symbol placement (REFCORNER).
 ///
