@@ -1,16 +1,16 @@
 //! The arithmetic decoder (Annex E).
 
-/// The arithmetic decoder state (E.3).
+/// The arithmetic decoder state.
 pub(crate) struct ArithmeticDecoder<'a> {
     /// The underlying encoded data.
     data: &'a [u8],
-    /// "C - Chigh and Clow can be thought of as one 32-bit C-register" (E.3.1)
+    /// C - The `c_high` and `c_low` registers.
     code_register: u32,
-    /// "A - The probability interval register" (E.3.1)
+    /// A - The probability interval register.
     interval: u32,
-    /// "BP - A pointer to the compressed data"
+    /// BP - A pointer to the compressed data.
     byte_offset: u32,
-    /// "CT - The count of available bits in the current byte"
+    /// CT - The count of available bits in the current byte.
     bits_available: u32,
 }
 
@@ -35,123 +35,7 @@ impl<'a> ArithmeticDecoder<'a> {
         self.decode_internal(context)
     }
 
-    /// The INITDEC procedure (E.3.5, Figure G.1).
-    ///
-    /// "The INITDEC procedure is used to start the arithmetic decoder."
-    fn initialize(&mut self) {
-        // Figure G.1: "C = (B XOR 0xFF) << 16"
-        self.code_register = ((self.current_byte() as u32) ^ 0xff) << 16;
-
-        // Figure G.1: "BYTEIN"
-        self.read_byte();
-
-        // Figure G.1: "C = C << 7; CT = CT - 7; A = 0x8000"
-        self.code_register <<= 7;
-        self.bits_available -= 7;
-        self.interval = 0x8000;
-    }
-
-    /// The BYTEIN procedure (E.3.4, Figure G.3).
-    ///
-    /// "The BYTEIN procedure called from RENORMD is illustrated in Figure E.19.
-    /// This procedure reads in one byte of data, compensating for any stuff bits
-    /// following the 0xFF byte in the process." (E.3.4)
-    #[inline(always)]
-    fn read_byte(&mut self) {
-        // Figure G.3: "B = 0xFF?"
-        if self.current_byte() == 0xff {
-            // B1 - The next byte after current
-            let next_byte = self.next_byte();
-
-            // Figure G.3: "B1 > 0x8F?"
-            // "If B1 exceeds 0x8F, then B1 must be one of the marker codes."
-            if next_byte > 0x8f {
-                // Figure G.3: "CT = 8" (marker found, don't advance)
-                self.bits_available = 8;
-            } else {
-                // Figure G.3: "BP = BP + 1; C = C + 0xFE00 - (B << 9); CT = 7"
-                self.byte_offset += 1;
-                self.code_register = self
-                    .code_register
-                    .wrapping_add(0xfe00)
-                    .wrapping_sub((self.current_byte() as u32) << 9);
-                self.bits_available = 7;
-            }
-        } else {
-            // Figure G.3: "BP = BP + 1; C = C + 0xFF00 - (B << 8); CT = 8"
-            self.byte_offset += 1;
-            self.code_register = self
-                .code_register
-                .wrapping_add(0xff00)
-                .wrapping_sub((self.current_byte() as u32) << 8);
-            self.bits_available = 8;
-        }
-    }
-
-    /// The RENORMD procedure (E.3.3, Figure E.18).
-    ///
-    /// "The RENORMD procedure for the decoder renormalization is illustrated in
-    /// Figure E.18. A counter keeps track of the number of compressed bits in
-    /// the Clow section of the C-register. When CT is zero, a new byte is
-    /// inserted into Clow in the BYTEIN procedure." (E.3.3)
-    #[inline(always)]
-    fn renormalize(&mut self) {
-        // Figure E.18: "Repeat ... Until A AND 0x8000 = 0?"
-        loop {
-            // Figure E.18: "CT = 0?" -> "BYTEIN"
-            if self.bits_available == 0 {
-                self.read_byte();
-            }
-
-            // Figure E.18: "A = A << 1; C = C << 1; CT = CT - 1"
-            self.interval <<= 1;
-            self.code_register <<= 1;
-            self.bits_available -= 1;
-
-            // Figure E.18: "A AND 0x8000 = 0?" (exit when bit 15 is set)
-            if self.interval & 0x8000 != 0 {
-                break;
-            }
-        }
-    }
-
-    /// The `LPS_EXCHANGE` procedure (E.3.2, Figure E.17).
-    ///
-    /// "For the LPS path of the decoder the conditional exchange procedure is
-    /// given the `LPS_EXCHANGE` procedure shown in Figure E.17." (E.3.2)
-    #[inline(always)]
-    fn exchange_lps(&mut self, context: &mut ArithmeticDecoderContext, qe_entry: &QeData) -> u32 {
-        // D - The decoded binary decision
-        let decoded_bit;
-
-        // Figure E.17: "A < Qe(I(CX))?"
-        if self.interval < qe_entry.probability {
-            // Figure E.17 (Yes branch): "A = Qe(I(CX)); D = MPS(CX); I(CX) = NMPS(I(CX))"
-            self.interval = qe_entry.probability;
-            decoded_bit = context.mps;
-            context.state_index = qe_entry.next_index_on_mps;
-        } else {
-            // Figure E.17 (No branch): "A = Qe(I(CX)); D = 1 - MPS(CX)"
-            self.interval = qe_entry.probability;
-            decoded_bit = 1 - context.mps;
-
-            // Figure E.17: "SWITCH(I(CX)) = 1?" -> "MPS(CX) = 1 - MPS(CX)"
-            if qe_entry.switch_mps_sense {
-                context.mps = 1 - context.mps;
-            }
-
-            // Figure E.17: "I(CX) = NLPS(I(CX))"
-            context.state_index = qe_entry.next_index_on_lps;
-        }
-
-        decoded_bit
-    }
-
     /// The DECODE procedure (E.3.2, Figure G.2).
-    ///
-    /// "The decoder decodes one binary decision at a time. After decoding the
-    /// decision, the decoder subtracts any amount from the code string that the
-    /// encoder added." (E.3.2)
     #[inline(always)]
     fn decode_internal(&mut self, context: &mut ArithmeticDecoderContext) -> u32 {
         let qe_entry = &QE_TABLE[context.state_index as usize];
@@ -159,7 +43,7 @@ impl<'a> ArithmeticDecoder<'a> {
         // Figure G.2: "A = A - Qe(I(CX))"
         self.interval -= qe_entry.probability;
 
-        // D - The decoded binary decision
+        // D - The decoded binary decision.
         let decoded_bit;
 
         // Figure G.2: "Chigh < A?"
@@ -184,29 +68,125 @@ impl<'a> ArithmeticDecoder<'a> {
         decoded_bit
     }
 
+    /// The INITDEC procedure (E.3.5, Figure G.1).
+    fn initialize(&mut self) {
+        // Figure G.1: "C = (B XOR 0xFF) << 16"
+        self.code_register = ((self.current_byte() as u32) ^ 0xff) << 16;
+
+        // Figure G.1: "BYTEIN"
+        self.read_byte();
+
+        // Figure G.1: "C = C << 7; CT = CT - 7; A = 0x8000"
+        self.code_register <<= 7;
+        self.bits_available -= 7;
+        self.interval = 0x8000;
+    }
+
+    /// The BYTEIN procedure (E.3.4, Figure G.3).
+    #[inline(always)]
+    fn read_byte(&mut self) {
+        // Figure G.3: "B = 0xFF?"
+        if self.current_byte() == 0xff {
+            // B1
+            let next_byte = self.next_byte();
+
+            // Figure G.3: "B1 > 0x8F?"
+            if next_byte > 0x8f {
+                // Figure G.3: "CT = 8"
+                self.bits_available = 8;
+            } else {
+                // Figure G.3: "BP = BP + 1; C = C + 0xFE00 - (B << 9); CT = 7"
+                self.byte_offset += 1;
+                self.code_register = self
+                    .code_register
+                    .wrapping_add(0xfe00)
+                    .wrapping_sub((self.current_byte() as u32) << 9);
+                self.bits_available = 7;
+            }
+        } else {
+            // Figure G.3: "BP = BP + 1; C = C + 0xFF00 - (B << 8); CT = 8"
+            self.byte_offset += 1;
+            self.code_register = self
+                .code_register
+                .wrapping_add(0xff00)
+                .wrapping_sub((self.current_byte() as u32) << 8);
+            self.bits_available = 8;
+        }
+    }
+
+    /// The RENORMD procedure (E.3.3, Figure E.18).
+    #[inline(always)]
+    fn renormalize(&mut self) {
+        loop {
+            // Figure E.18: "CT = 0?"
+            if self.bits_available == 0 {
+                // Figure E.18: "BYTEIN"
+                self.read_byte();
+            }
+
+            // Figure E.18: "A = A << 1; C = C << 1; CT = CT - 1"
+            self.interval <<= 1;
+            self.code_register <<= 1;
+            self.bits_available -= 1;
+
+            // Figure E.18: "A AND 0x8000 = 0?"
+            if self.interval & 0x8000 != 0 {
+                break;
+            }
+        }
+    }
+
+    /// The `LPS_EXCHANGE` procedure (E.3.2, Figure E.17).
+    #[inline(always)]
+    fn exchange_lps(&mut self, context: &mut ArithmeticDecoderContext, qe_entry: &QeData) -> u32 {
+        // D
+        let decoded_bit;
+
+        // Figure E.17: "A < Qe(I(CX))?"
+        if self.interval < qe_entry.probability {
+            // Figure E.17: "A = Qe(I(CX)); D = MPS(CX); I(CX) = NMPS(I(CX))"
+            self.interval = qe_entry.probability;
+            decoded_bit = context.mps;
+            context.state_index = qe_entry.next_index_on_mps;
+        } else {
+            // Figure E.17: "A = Qe(I(CX)); D = 1 - MPS(CX)"
+            self.interval = qe_entry.probability;
+            decoded_bit = 1 - context.mps;
+
+            // Figure E.17: "SWITCH(I(CX)) = 1?"
+            if qe_entry.switch_mps_sense {
+                // Figure E.17: "MPS(CX) = 1 - MPS(CX)"
+                context.mps = 1 - context.mps;
+            }
+
+            // Figure E.17: "I(CX) = NLPS(I(CX))"
+            context.state_index = qe_entry.next_index_on_lps;
+        }
+
+        decoded_bit
+    }
+
     /// The `MPS_EXCHANGE` procedure (E.3.2, Figure E.16).
-    ///
-    /// "For the MPS path the conditional exchange procedure is shown in
-    /// Figure E.16." (E.3.2)
     #[inline(always)]
     fn exchange_mps(&mut self, context: &mut ArithmeticDecoderContext, qe_entry: &QeData) -> u32 {
-        // D - The decoded binary decision
+        // D
         let decoded_bit;
 
         // Figure E.16: "A < Qe(I(CX))?"
         if self.interval < qe_entry.probability {
-            // Figure E.16 (Yes branch): "D = 1 - MPS(CX)"
+            // Figure E.16: "D = 1 - MPS(CX)"
             decoded_bit = 1 - context.mps;
 
-            // Figure E.16: "SWITCH(I(CX)) = 1?" -> "MPS(CX) = 1 - MPS(CX)"
+            // Figure E.16: "SWITCH(I(CX)) = 1?"
             if qe_entry.switch_mps_sense {
+                // "MPS(CX) = 1 - MPS(CX)"
                 context.mps = 1 - context.mps;
             }
 
             // Figure E.16: "I(CX) = NLPS(I(CX))"
             context.state_index = qe_entry.next_index_on_lps;
         } else {
-            // Figure E.16 (No branch): "D = MPS(CX); I(CX) = NMPS(I(CX))"
+            // Figure E.16: "D = MPS(CX); I(CX) = NMPS(I(CX))"
             decoded_bit = context.mps;
             context.state_index = qe_entry.next_index_on_mps;
         }
