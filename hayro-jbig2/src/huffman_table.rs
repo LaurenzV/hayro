@@ -34,8 +34,8 @@ struct LeafData {
 enum HuffmanNode {
     /// Intermediate node with two children (0 and 1 branches).
     Intermediate {
-        zero: Option<Box<HuffmanNode>>,
-        one: Option<Box<HuffmanNode>>,
+        zero: Option<Box<Self>>,
+        one: Option<Box<Self>>,
     },
     /// Leaf node containing the decoded value information.
     Leaf(LeafData),
@@ -71,8 +71,8 @@ pub(crate) struct HuffmanTable {
 /// A table line definition used to build the Huffman tree.
 pub(crate) struct TableLine {
     /// The base value for computing the decoded value.
-    /// For normal/upper lines: value = range_low + htoffset
-    /// For lower lines: value = range_low - htoffset
+    /// For normal/upper lines: value = `range_low` + htoffset
+    /// For lower lines: value = `range_low` - htoffset
     pub(crate) range_low: i32,
     /// Prefix code length (PREFLEN).
     pub(crate) preflen: u8,
@@ -96,7 +96,7 @@ impl TableLine {
         }
     }
 
-    /// Create a lower range line (-∞...range_high).
+    /// Create a lower range line (-∞...`range_high`).
     const fn lower(range_high: i32, preflen: u8, range_len: u8) -> Self {
         Self {
             range_low: range_high,
@@ -107,7 +107,7 @@ impl TableLine {
         }
     }
 
-    /// Create an upper range line (range_low...+∞).
+    /// Create an upper range line (`range_low`...+∞).
     const fn upper(range_low: i32, preflen: u8, range_len: u8) -> Self {
         Self {
             range_low,
@@ -141,15 +141,15 @@ impl HuffmanTable {
         // each prefix length value occurs in PREFLEN: LENCOUNT[I] is the number of times
         // that the value I occurs in the array PREFLEN."
         let lenmax = lines.iter().map(|l| l.preflen).max().unwrap_or(0) as usize;
-        let mut lencount = vec![0u32; lenmax + 1];
+        let mut lencount = vec![0_u32; lenmax + 1];
         for line in lines {
             lencount[line.preflen as usize] += 1;
         }
 
         // Step 2: "Let LENMAX be the largest value for which LENCOUNT[LENMAX] > 0. Set:
         // CURLEN = 1, FIRSTCODE[0] = 0, LENCOUNT[0] = 0"
-        let mut firstcode = vec![0u32; lenmax + 1];
-        let mut codes = vec![0u32; ntemp];
+        let mut firstcode = vec![0_u32; lenmax + 1];
+        let mut codes = vec![0_u32; ntemp];
         lencount[0] = 0;
 
         // Step 3: "While CURLEN ≤ LENMAX, perform the following operations:"
@@ -244,7 +244,7 @@ impl HuffmanTable {
     /// 1) Read bits until matching a code
     /// 2) Read RANGELEN bits as HTOFFSET
     /// 3) If OOB line: return OOB
-    /// 4) If lower range line: return RANGELOW - HTOFFSET (we use range_high as the base)
+    /// 4) If lower range line: return RANGELOW - HTOFFSET (we use `range_high` as the base)
     /// 5) Otherwise: return RANGELOW + HTOFFSET
     pub(crate) fn decode(&self, reader: &mut Reader<'_>) -> Result<HuffmanResult, &'static str> {
         let mut node = &self.root;
@@ -323,7 +323,7 @@ impl HuffmanTable {
 
             // Advance to next range.
             // Range covers currangelow to currangelow + 2^rangelen - 1.
-            let range_size = 1i64
+            let range_size = 1_i64
                 .checked_shl(rangelen as u32)
                 .ok_or("range size overflow")?;
             let next = (currangelow as i64)

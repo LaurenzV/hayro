@@ -437,7 +437,7 @@ impl<'a> TextRegionParams<'a> {
             sbw: header.region_info.width,
             sbh: header.region_info.height,
             sbnuminstances: header.num_instances,
-            sbstrips: 1u32 << header.flags.log_sb_strips,
+            sbstrips: 1_u32 << header.flags.log_sb_strips,
             sbdefpixel: header.flags.default_pixel,
             sbcombop: header.flags.combination_operator,
             transposed: header.flags.transposed,
@@ -603,9 +603,9 @@ pub(crate) fn decode_text_region_refine(
 
 /// Result of determining a symbol instance bitmap.
 pub(crate) enum SymbolBitmap {
-    /// Use the symbol at this index directly (R_I = 0).
+    /// Use the symbol at this index directly (`R_I` = 0).
     Reference(usize),
-    /// Use this refined bitmap (R_I = 1).
+    /// Use this refined bitmap (`R_I` = 1).
     Owned(DecodedRegion),
 }
 
@@ -1023,7 +1023,7 @@ fn decode_text_region_huffman(
         return Err("not enough referred huffman tables");
     }
 
-    let tables = select_huffman_tables(huffman_flags, &referred_tables)?;
+    let tables = select_huffman_tables(huffman_flags, referred_tables)?;
 
     let sbnumsyms = symbols.len() as u32;
     let sbsymcodes = decode_symbol_id_huffman_table(reader, sbnumsyms)?;
@@ -1052,7 +1052,7 @@ fn decode_text_region_huffman(
     // "2) Decode the initial STRIPT value as described in 6.4.6." (6.4.5)
     // "If SBHUFF is 1, decode a value using the Huffman table specified by
     // SBHUFFDT and multiply the resulting value by SBSTRIPS." (6.4.6)
-    let initial_stript = decode_huffman_value(&tables.sbhuffdt, reader)? * sbstrips as i32;
+    let initial_stript = decode_huffman_value(tables.sbhuffdt, reader)? * sbstrips as i32;
     let mut stript: i32 = -initial_stript;
     let mut firsts: i32 = 0;
     let mut ninstances: u32 = 0;
@@ -1060,7 +1060,7 @@ fn decode_text_region_huffman(
     // "4) Decode each strip as follows:" (6.4.5)
     while ninstances < sbnuminstances {
         // "b) Decode the strip's delta T value as described in 6.4.6."
-        let dt = decode_huffman_value(&tables.sbhuffdt, reader)? * sbstrips as i32;
+        let dt = decode_huffman_value(tables.sbhuffdt, reader)? * sbstrips as i32;
         stript += dt;
 
         // "c) Decode each symbol instance in the strip"
@@ -1072,7 +1072,7 @@ fn decode_text_region_huffman(
                 // "i) First symbol instance's S coordinate (6.4.7)
                 // If SBHUFF is 1, decode a value using the Huffman table
                 // specified by SBHUFFFS." (6.4.7)
-                let dfs = decode_huffman_value(&tables.sbhufffs, reader)?;
+                let dfs = decode_huffman_value(tables.sbhufffs, reader)?;
                 firsts += dfs;
                 curs = firsts;
                 first_symbol_in_strip = false;
@@ -1138,21 +1138,21 @@ fn decode_text_region_huffman(
                     let ho_i = ibo_i.height;
 
                     // "1) Decode the symbol instance refinement delta width"
-                    let rdw_i = decode_huffman_value(&tables.sbhuffrdw, reader)?;
+                    let rdw_i = decode_huffman_value(tables.sbhuffrdw, reader)?;
 
                     // "2) Decode the symbol instance refinement delta height"
-                    let rdh_i = decode_huffman_value(&tables.sbhuffrdh, reader)?;
+                    let rdh_i = decode_huffman_value(tables.sbhuffrdh, reader)?;
 
                     // "3) Decode the symbol instance refinement X offset"
-                    let rdx_i = decode_huffman_value(&tables.sbhuffrdx, reader)?;
+                    let rdx_i = decode_huffman_value(tables.sbhuffrdx, reader)?;
 
                     // "4) Decode the symbol instance refinement Y offset"
-                    let rdy_i = decode_huffman_value(&tables.sbhuffrdy, reader)?;
+                    let rdy_i = decode_huffman_value(tables.sbhuffrdy, reader)?;
 
                     // "5) If SBHUFF is 1, then:
                     // a) Decode the symbol instance refinement bitmap data size
                     // b) Skip over any bits remaining in the last byte read"
-                    let rsize = decode_huffman_value(&tables.sbhuffrsize, reader)? as u32;
+                    let rsize = decode_huffman_value(tables.sbhuffrsize, reader)? as u32;
                     reader.align();
 
                     // "6) Decode the refinement bitmap"

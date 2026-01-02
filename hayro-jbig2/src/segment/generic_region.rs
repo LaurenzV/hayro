@@ -22,9 +22,9 @@ impl GbTemplate {
     /// Number of context bits for this template (6.2.5.3).
     pub(crate) fn context_bits(self) -> usize {
         match self {
-            GbTemplate::Template0 => 16,
-            GbTemplate::Template1 => 13,
-            GbTemplate::Template2 | GbTemplate::Template3 => 10,
+            Self::Template0 => 16,
+            Self::Template1 => 13,
+            Self::Template2 | Self::Template3 => 10,
         }
     }
 }
@@ -298,7 +298,7 @@ pub(crate) fn decode_bitmap_mmr(
     hayro_ccitt::decode(data, &mut decoder, &settings).ok_or("MMR decoding failed")
 }
 
-/// A decoder sink that writes decoded pixels into a DecodedRegion.
+/// A decoder sink that writes decoded pixels into a `DecodedRegion`.
 struct BitmapDecoder<'a> {
     region: &'a mut DecodedRegion,
     x: u32,
@@ -486,7 +486,7 @@ fn gather_context_template0_no_ext(
     let at3 = (at[2].x as i32, at[2].y as i32);
     let at4 = (at[3].x as i32, at[3].y as i32);
 
-    let mut context = 0u32;
+    let mut context = 0_u32;
 
     context = (context << 1) | get_pixel(region, x + at4.0, y + at4.1);
     context = (context << 1) | get_pixel(region, x - 1, y - 2);
@@ -522,7 +522,7 @@ fn gather_context_template1(
 
     let at1 = (at[0].x as i32, at[0].y as i32);
 
-    let mut context = 0u32;
+    let mut context = 0_u32;
 
     context = (context << 1) | get_pixel(region, x - 1, y - 2);
     context = (context << 1) | get_pixel(region, x, y - 2);
@@ -555,7 +555,7 @@ fn gather_context_template2(
 
     let at1 = (at[0].x as i32, at[0].y as i32);
 
-    let mut context = 0u32;
+    let mut context = 0_u32;
 
     context = (context << 1) | get_pixel(region, x - 1, y - 2);
     context = (context << 1) | get_pixel(region, x, y - 2);
@@ -585,7 +585,7 @@ fn gather_context_template3(
 
     let at1 = (at[0].x as i32, at[0].y as i32);
 
-    let mut context = 0u32;
+    let mut context = 0_u32;
 
     context = (context << 1) | get_pixel(region, x - 3, y - 1);
     context = (context << 1) | get_pixel(region, x - 2, y - 1);

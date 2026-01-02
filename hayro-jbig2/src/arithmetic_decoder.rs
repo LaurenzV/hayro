@@ -126,10 +126,10 @@ impl<'a> ArithmeticDecoder<'a> {
         }
     }
 
-    /// The LPS_EXCHANGE procedure (E.3.2, Figure E.17).
+    /// The `LPS_EXCHANGE` procedure (E.3.2, Figure E.17).
     ///
     /// "For the LPS path of the decoder the conditional exchange procedure is
-    /// given the LPS_EXCHANGE procedure shown in Figure E.17." (E.3.2)
+    /// given the `LPS_EXCHANGE` procedure shown in Figure E.17." (E.3.2)
     #[inline(always)]
     fn exchange_lps(&mut self, context: &mut ArithmeticDecoderContext, qe_entry: &QeData) -> u32 {
         let d;
@@ -193,7 +193,7 @@ impl<'a> ArithmeticDecoder<'a> {
         d
     }
 
-    /// The MPS_EXCHANGE procedure (E.3.2, Figure E.16).
+    /// The `MPS_EXCHANGE` procedure (E.3.2, Figure E.16).
     ///
     /// "For the MPS path the conditional exchange procedure is shown in
     /// Figure E.16." (E.3.2)
@@ -254,7 +254,7 @@ pub(crate) struct ArithmeticDecoderContext {
 /// Qe value table entry (Table E.1).
 #[derive(Debug, Clone, Copy)]
 struct QeData {
-    /// "Qe_Value" - The probability estimate
+    /// "`Qe_Value`" - The probability estimate
     qe: u32,
     /// "NMPS" - Next index if MPS is coded
     nmps: u32,
@@ -388,7 +388,7 @@ impl IntegerDecoder {
         prev: &mut u32,
         n: usize,
     ) -> u32 {
-        let mut value = 0u32;
+        let mut value = 0_u32;
         for _ in 0..n {
             let bit = self.decode_bit(decoder, prev);
             value = (value << 1) | bit;
@@ -416,7 +416,7 @@ impl SymbolIdDecoder {
     /// "The number of contexts required is 2^SBSYMCODELEN, which is less than
     /// twice the maximum symbol ID." (A.3)
     pub(crate) fn new(code_len: u32) -> Self {
-        let num_contexts = 1usize << code_len;
+        let num_contexts = 1_usize << code_len;
         Self {
             contexts: vec![ArithmeticDecoderContext::default(); num_contexts],
             code_len,
@@ -429,14 +429,14 @@ impl SymbolIdDecoder {
     /// is as follows:" (A.3)
     pub(crate) fn decode(&mut self, decoder: &mut ArithmeticDecoder<'_>) -> u32 {
         // "1) Set: PREV = 1" (A.3)
-        let mut prev = 1u32;
+        let mut prev = 1_u32;
 
         // "2) Decode SBSYMCODELEN bits as follows:" (A.3)
         for _ in 0..self.code_len {
             // "a) Decode a bit with CX equal to 'IAID + PREV' where '+' represents
             // concatenation, and the rightmost SBSYMCODELEN + 1 bits of PREV are
             // used." (A.3)
-            let ctx_mask = (1u32 << (self.code_len + 1)) - 1;
+            let ctx_mask = (1_u32 << (self.code_len + 1)) - 1;
             let ctx_idx = (prev & ctx_mask) as usize;
             let d = decoder.decode(&mut self.contexts[ctx_idx]);
 

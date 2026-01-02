@@ -71,7 +71,7 @@ impl DecodedRegion {
     ///
     /// "These operators describe how the segment's bitmap is to be combined with
     /// the page bitmap." (7.4.1.5)
-    pub(crate) fn combine(&mut self, other: &DecodedRegion) {
+    pub(crate) fn combine(&mut self, other: &Self) {
         for y in 0..other.height {
             let dest_y = other.y_location + y;
             if dest_y >= self.height {

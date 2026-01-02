@@ -31,13 +31,13 @@ impl HdTemplate {
         }
     }
 
-    /// Convert to GbTemplate for generic region decoding.
+    /// Convert to `GbTemplate` for generic region decoding.
     fn to_gb_template(self) -> GbTemplate {
         match self {
-            HdTemplate::Template0 => GbTemplate::Template0,
-            HdTemplate::Template1 => GbTemplate::Template1,
-            HdTemplate::Template2 => GbTemplate::Template2,
-            HdTemplate::Template3 => GbTemplate::Template3,
+            Self::Template0 => GbTemplate::Template0,
+            Self::Template1 => GbTemplate::Template1,
+            Self::Template2 => GbTemplate::Template2,
+            Self::Template3 => GbTemplate::Template3,
         }
     }
 }
@@ -237,8 +237,8 @@ fn build_pattern_at_pixels(hdtemplate: HdTemplate, hdpw: u32) -> Vec<AdaptiveTem
 
 /// Extract a pattern from the collective bitmap.
 ///
-/// "Let the subimage of B_HDC consisting of HPH rows and columns HDPW × GRAY
-/// through HDPW × (GRAY + 1) − 1 be denoted B_P." (6.7.5)
+/// "Let the subimage of `B_HDC` consisting of HPH rows and columns HDPW × GRAY
+/// through HDPW × (GRAY + 1) − 1 be denoted `B_P`." (6.7.5)
 fn extract_pattern(
     collective: &DecodedRegion,
     start_x: u32,

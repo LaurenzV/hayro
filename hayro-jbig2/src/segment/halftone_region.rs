@@ -34,13 +34,13 @@ impl HTemplate {
         }
     }
 
-    /// Convert to GbTemplate for gray-scale image decoding.
+    /// Convert to `GbTemplate` for gray-scale image decoding.
     fn to_gb_template(self) -> GbTemplate {
         match self {
-            HTemplate::Template0 => GbTemplate::Template0,
-            HTemplate::Template1 => GbTemplate::Template1,
-            HTemplate::Template2 => GbTemplate::Template2,
-            HTemplate::Template3 => GbTemplate::Template3,
+            Self::Template0 => GbTemplate::Template0,
+            Self::Template1 => GbTemplate::Template1,
+            Self::Template2 => GbTemplate::Template2,
+            Self::Template3 => GbTemplate::Template3,
         }
     }
 }

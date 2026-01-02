@@ -287,7 +287,7 @@ pub(crate) fn decode_refinement_bitmap_with(
 
 /// Check the TPGR condition (Figure 16).
 ///
-/// Returns true if all 9 pixels in the 3×3 region centered at (ref_x, ref_y)
+/// Returns true if all 9 pixels in the 3×3 region centered at (`ref_x`, `ref_y`)
 /// in the reference bitmap have the same value.
 fn is_tpgr(reference: &DecodedRegion, ref_x: i32, ref_y: i32) -> bool {
     // Get the center pixel value.
@@ -349,7 +349,7 @@ fn gather_refinement_context(
             let at1 = adaptive_template_pixels[0]; // RA1 for decoded bitmap
             let at2 = adaptive_template_pixels[1]; // RA2 for reference bitmap
 
-            let mut context = 0u32;
+            let mut context = 0_u32;
 
             context = (context << 1) | get_pixel_u32(region, x + at1.x as i32, y + at1.y as i32);
             context = (context << 1) | get_pixel_u32(region, x, y - 1);
@@ -370,7 +370,7 @@ fn gather_refinement_context(
             context
         }
         GrTemplate::Template1 => {
-            let mut context = 0u32;
+            let mut context = 0_u32;
 
             context = (context << 1) | get_pixel_u32(region, x - 1, y - 1);
             context = (context << 1) | get_pixel_u32(region, x, y - 1);

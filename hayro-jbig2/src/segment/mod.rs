@@ -196,7 +196,7 @@ pub(crate) fn parse_segment_header(reader: &mut Reader<'_>) -> Result<SegmentHea
     // referred-to segments."
     if short_count == 7 {
         // Number of retention bytes: ceil((referred_to_count + 1) / 8)
-        let retention_bytes = (referred_to_count as usize + 1 + 7) / 8;
+        let retention_bytes = (referred_to_count as usize + 1).div_ceil(8);
         reader
             .skip_bytes(retention_bytes)
             .ok_or("unexpected end of data")?;

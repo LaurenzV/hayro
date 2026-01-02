@@ -274,13 +274,13 @@ pub(crate) struct DecodeContext {
     pub(crate) _page_info: PageInformation,
     /// The page bitmap that regions are combined into.
     pub(crate) page_bitmap: DecodedRegion,
-    /// Decoded intermediate regions, stored as (segment_number, region) pairs.
+    /// Decoded intermediate regions, stored as (`segment_number`, region) pairs.
     pub(crate) referred_segments: Vec<(u32, DecodedRegion)>,
-    /// Decoded pattern dictionaries, stored as (segment_number, dictionary) pairs.
+    /// Decoded pattern dictionaries, stored as (`segment_number`, dictionary) pairs.
     pub(crate) pattern_dictionaries: Vec<(u32, PatternDictionary)>,
-    /// Decoded symbol dictionaries, stored as (segment_number, dictionary) pairs.
+    /// Decoded symbol dictionaries, stored as (`segment_number`, dictionary) pairs.
     pub(crate) symbol_dictionaries: Vec<(u32, SymbolDictionary)>,
-    /// Decoded Huffman tables, stored as (segment_number, table) pairs.
+    /// Decoded Huffman tables, stored as (`segment_number`, table) pairs.
     /// "Tables – see 7.4.13." (type 53)
     pub(crate) huffman_tables: Vec<(u32, HuffmanTable)>,
 }
