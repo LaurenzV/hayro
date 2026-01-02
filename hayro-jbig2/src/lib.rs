@@ -111,11 +111,13 @@ fn decode_with_segments(segments: &[segment::Segment<'_>]) -> Result<Image, &'st
                 // Already processed above, skip.
             }
             SegmentType::ImmediateGenericRegion | SegmentType::ImmediateLosslessGenericRegion => {
-                let region = decode_generic_region(&mut reader)?;
+                let had_unknown_length = seg.header.data_length.is_none();
+                let region = decode_generic_region(&mut reader, had_unknown_length)?;
                 ctx.page_bitmap.combine(&region);
             }
             SegmentType::IntermediateGenericRegion => {
-                let region = decode_generic_region(&mut reader)?;
+                // Intermediate segments cannot have unknown length.
+                let region = decode_generic_region(&mut reader, false)?;
                 ctx.store_region(seg.header.segment_number, region);
             }
             SegmentType::PatternDictionary => {

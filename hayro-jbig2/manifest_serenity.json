@@ -23,7 +23,7 @@
   "bitmap-halftone-template2.jbig2",
   "bitmap-halftone-template3.jbig2",
   "bitmap-halftone.jbig2",
-  { "id": "bitmap-initially-unknown-size.jbig2", "ignore": true },
+  "bitmap-initially-unknown-size.jbig2",
   "bitmap-mmr.jbig2",
   "bitmap-p32-eof.jbig2",
   "bitmap-randomaccess.jbig2",

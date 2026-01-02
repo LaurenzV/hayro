@@ -119,8 +119,8 @@ pub(crate) struct SegmentHeader {
     /// "This 4-byte field contains the length of the segment's segment data part,
     /// in bytes." (7.2.7)
     ///
-    /// `None` means unknown length, which is only valid for immediate generic
-    /// region segments in sequential organization.
+    /// `None` means the length was unknown (0xFFFFFFFF), which is only valid for
+    /// immediate generic region segments in sequential organization.
     pub data_length: Option<u32>,
 }
 
@@ -282,23 +282,46 @@ pub(crate) fn parse_segment_data<'a>(
             .read_bytes(len as usize)
             .ok_or("unexpected end of data")?
     } else {
-        // TODO: Handle unknown segment data length (7.4.6.4).
-        //
         // "In order for the decoder to correctly decode the segment, it needs to
         // read the four-byte row count field, which is stored in the last four
         // bytes of the segment's data part. These four bytes can be detected
         // without knowing the length of the data part in advance: if MMR is 1,
         // they are preceded by the two-byte sequence 0x00 0x00; if MMR is 0, they
-        // are preceded by the two-byte sequence 0xFF 0xAC."
-        //
-        // "NOTE – The sequence 0x00 0x00 cannot occur within MMR-encoded data;
-        // the sequence 0xFF 0xAC can occur only at the end of arithmetically-coded
-        // data. Thus, those sequences cannot occur by chance in the data that is
-        // decoded to generate the contents of the generic region."
-        return Err("unknown segment data length not yet supported");
+        // are preceded by the two-byte sequence 0xFF 0xAC." (7.4.6.4)
+        let len = scan_for_immediate_generic_region_size(reader)?;
+        reader.read_bytes(len).ok_or("unexpected end of data")?
     };
 
     Ok(Segment { header, data })
+}
+
+/// Scan for the end of an immediate generic region segment with unknown length.
+///
+/// "The form of encoding used by the segment may be determined by examining
+/// the eighteenth byte of its segment data part, and the end sequences can
+/// occur anywhere after that eighteenth byte." (7.2.7)
+fn scan_for_immediate_generic_region_size(reader: &Reader<'_>) -> Result<usize, &'static str> {
+    let mut scan = reader.clone();
+    let start_offset = scan.offset();
+
+    scan.skip_bytes(17).ok_or("unexpected end of data")?;
+    let flags = scan.read_byte().ok_or("unexpected end of data")?;
+    let uses_mmr = (flags & 1) != 0;
+
+    // "if MMR is 1, they are preceded by the two-byte sequence 0x00 0x00;
+    // if MMR is 0, they are preceded by the two-byte sequence 0xFF 0xAC."
+    let end_marker: [u8; 2] = if uses_mmr { [0x00, 0x00] } else { [0xFF, 0xAC] };
+
+    // Search for the end marker. The marker is followed by a 4-byte row count.
+    while let Some(bytes) = scan.peek_bytes(6) {
+        if bytes[..2] == end_marker {
+            // Found the marker. Total size is current offset + 2 (marker) + 4 (row count) - start.
+            return Ok(scan.offset() - start_offset + 2 + 4);
+        }
+        scan.skip_bytes(1).ok_or("unexpected end of data")?;
+    }
+
+    Err("could not find end marker in unknown length generic region")
 }
 
 #[cfg(test)]

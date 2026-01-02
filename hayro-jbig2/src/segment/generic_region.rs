@@ -185,14 +185,38 @@ fn parse_adaptive_template_pixels(
 /// lossless generic region') are coded identically, but are acted upon
 /// differently, see 8.2." (7.4.6)
 ///
+/// If `had_unknown_length` is true, the segment data ends with a row count
+/// field that should be used instead of the height from the region info.
+///
 /// Returns the decoded region with its location and combination operator.
 pub(crate) fn decode_generic_region(
     reader: &mut Reader<'_>,
+    had_unknown_length: bool,
 ) -> Result<DecodedRegion, &'static str> {
-    let header = parse_generic_region_header(reader)?;
+    let mut header = parse_generic_region_header(reader)?;
 
     // Get the remaining data after the header for decoding.
-    let encoded_data = reader.tail().ok_or("unexpected end of data")?;
+    let mut encoded_data = reader.tail().ok_or("unexpected end of data")?;
+
+    // "As a special case, as noted in 7.2.7, an immediate generic region segment
+    // may have an unknown length. In this case, it also indicates the height of
+    // the generic region (i.e. the number of rows that have been decoded in this
+    // segment; it must be no greater than the region segment bitmap height value
+    // in the segment's region segment information field." (7.4.6.4)
+    if had_unknown_length {
+        if encoded_data.len() < 4 {
+            return Err("segment data too short for row count");
+        }
+        let row_count_bytes = &encoded_data[encoded_data.len() - 4..];
+        let row_count = u32::from_be_bytes(row_count_bytes.try_into().unwrap());
+
+        if row_count > header.region_info.height {
+            return Err("row count exceeds region height");
+        }
+
+        header.region_info.height = row_count;
+        encoded_data = &encoded_data[..encoded_data.len() - 4];
+    }
 
     // Decode the region.
     if header.mmr {
