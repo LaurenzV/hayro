@@ -204,9 +204,7 @@ pub(crate) fn decode_generic_region(
     // segment; it must be no greater than the region segment bitmap height value
     // in the segment's region segment information field." (7.4.6.4)
     if had_unknown_length {
-        if encoded_data.len() < 4 {
-            return Err("segment data too short for row count");
-        }
+        // Length has already been validated during segment parsing.
         let row_count_bytes = &encoded_data[encoded_data.len() - 4..];
         let row_count = u32::from_be_bytes(row_count_bytes.try_into().unwrap());
 
