@@ -13,7 +13,7 @@ const K: [u32; 64] = [
 
 #[inline]
 const fn rotr(x: u32, n: u32) -> u32 {
-    (x >> n) | (x << (32 - n))
+    x.rotate_right(n)
 }
 
 #[inline]

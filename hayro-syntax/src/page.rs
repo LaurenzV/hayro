@@ -325,7 +325,7 @@ impl<'a> Page<'a> {
 /// A structure keeping track of the resources of a page.
 #[derive(Clone, Debug)]
 pub struct Resources<'a> {
-    parent: Option<Box<Resources<'a>>>,
+    parent: Option<Box<Self>>,
     ctx: ReaderContext<'a>,
     /// The raw dictionary of external graphics states.
     pub ext_g_states: Dict<'a>,

@@ -85,7 +85,7 @@ pub(super) const K: [u64; 80] = [
 
 #[inline]
 const fn rotr(x: u64, n: u32) -> u64 {
-    (x >> n) | (x << (64 - n))
+    x.rotate_right(n)
 }
 
 #[inline]
