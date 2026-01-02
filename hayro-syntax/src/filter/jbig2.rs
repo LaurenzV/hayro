@@ -5,7 +5,7 @@ use hayro_common::bit::BitWriter;
 
 /// Decode JBIG2 data from a PDF stream.
 ///
-/// The `params` dictionary may contain a JBIG2Globals entry pointing to
+/// The `params` dictionary may contain a `JBIG2Globals` entry pointing to
 /// a stream with shared symbol dictionaries.
 pub(crate) fn decode(data: &[u8], params: Dict<'_>) -> Option<Vec<u8>> {
     let globals = params
@@ -15,7 +15,7 @@ pub(crate) fn decode(data: &[u8], params: Dict<'_>) -> Option<Vec<u8>> {
     let image = hayro_jbig2::decode_embedded(data, globals.as_deref()).ok()?;
 
     let row_bytes = (image.width as usize).div_ceil(8);
-    let mut packed = vec![0u8; row_bytes * image.height as usize];
+    let mut packed = vec![0_u8; row_bytes * image.height as usize];
 
     let mut writer = BitWriter::new(&mut packed, 1)?;
 
