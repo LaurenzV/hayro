@@ -4,13 +4,13 @@
 pub(crate) struct ArithmeticDecoder<'a> {
     /// The underlying encoded data.
     data: &'a [u8],
-    /// C - The `c_high` and `c_low` registers.
+    /// `C` - The `c_high` and `c_low` registers.
     code_register: u32,
-    /// A - The probability interval register.
+    /// `A` - The probability interval register.
     interval: u32,
-    /// BP - A pointer to the compressed data.
+    /// `BP` - A pointer to the compressed data.
     byte_offset: u32,
-    /// CT - The count of available bits in the current byte.
+    /// `CT` - The count of available bits in the current byte.
     bits_available: u32,
 }
 
@@ -43,7 +43,7 @@ impl<'a> ArithmeticDecoder<'a> {
         // Figure G.2: "A = A - Qe(I(CX))"
         self.interval -= qe_entry.probability;
 
-        // D - The decoded binary decision.
+        // `D` - The decoded binary decision.
         let decoded_bit;
 
         // Figure G.2: "Chigh < A?"
@@ -87,7 +87,7 @@ impl<'a> ArithmeticDecoder<'a> {
     fn read_byte(&mut self) {
         // Figure G.3: "B = 0xFF?"
         if self.current_byte() == 0xff {
-            // B1
+            // `B1`
             let next_byte = self.next_byte();
 
             // Figure G.3: "B1 > 0x8F?"
@@ -139,7 +139,7 @@ impl<'a> ArithmeticDecoder<'a> {
     /// The `LPS_EXCHANGE` procedure (E.3.2, Figure E.17).
     #[inline(always)]
     fn exchange_lps(&mut self, context: &mut ArithmeticDecoderContext, qe_entry: &QeData) -> u32 {
-        // D
+        // `D`
         let decoded_bit;
 
         // Figure E.17: "A < Qe(I(CX))?"
@@ -211,28 +211,25 @@ impl<'a> ArithmeticDecoder<'a> {
     }
 }
 
-/// Arithmetic decoder context (E.2.4).
-///
-/// "Each context has associated with it an index, I(CX), which identifies a
-/// particular probability estimate and its associated MPS value." (E.2.4)
+/// Arithmetic decoder context.
 #[derive(Copy, Clone, Debug, Default)]
 pub(crate) struct ArithmeticDecoderContext {
-    /// "I(CX) - Index into the probability estimation state machine"
+    /// `I(CX)` - Index into the probability estimation state machine.
     pub(crate) state_index: u32,
-    /// "MPS(CX) - The sense of MPS for context CX"
+    /// `MPS(CX)` - The sense of MPS for context CX.
     pub(crate) mps: u32,
 }
 
 /// Qe value table entry (Table E.1).
 #[derive(Debug, Clone, Copy)]
 struct QeData {
-    /// "Qe - The probability estimate value"
+    /// `Qe` - The probability estimate value.
     probability: u32,
-    /// "NMPS - Next state index if MPS is coded"
+    /// `NMPS` - Next state index if MPS is coded.
     next_index_on_mps: u32,
-    /// "NLPS - Next state index if LPS is coded"
+    /// `NLPS` - Next state index if LPS is coded.
     next_index_on_lps: u32,
-    /// "SWITCH - Whether to flip the MPS sense"
+    /// `SWITCH` - Whether to flip the MPS sense.
     switch_mps_sense: bool,
 }
 
