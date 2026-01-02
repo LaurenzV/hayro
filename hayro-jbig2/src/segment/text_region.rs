@@ -8,6 +8,48 @@
 use crate::arithmetic_decoder::{
     ArithmeticDecoder, ArithmeticDecoderContext, IntegerDecoder, SymbolIdDecoder,
 };
+
+/// Shared integer decoder contexts for text region decoding.
+pub(crate) struct TextRegionContexts {
+    /// IADT: Strip delta T decoder (6.4.6)
+    pub iadt: IntegerDecoder,
+    /// IAFS: First symbol S coordinate decoder (6.4.7)
+    pub iafs: IntegerDecoder,
+    /// IADS: Subsequent symbol S coordinate decoder (6.4.8)
+    pub iads: IntegerDecoder,
+    /// IAIT: Symbol instance T coordinate decoder (6.4.9)
+    pub iait: IntegerDecoder,
+    /// IAID: Symbol ID decoder (6.4.10)
+    pub iaid: SymbolIdDecoder,
+    /// IARI: Refinement image indicator decoder (6.4.11)
+    pub iari: IntegerDecoder,
+    /// IARDW: Refinement delta width decoder (6.4.11.1)
+    pub iardw: IntegerDecoder,
+    /// IARDH: Refinement delta height decoder (6.4.11.2)
+    pub iardh: IntegerDecoder,
+    /// IARDX: Refinement X offset decoder (6.4.11.3)
+    pub iardx: IntegerDecoder,
+    /// IARDY: Refinement Y offset decoder (6.4.11.4)
+    pub iardy: IntegerDecoder,
+}
+
+impl TextRegionContexts {
+    /// Create new text region contexts with the given symbol code length.
+    pub fn new(sbsymcodelen: u32) -> Self {
+        Self {
+            iadt: IntegerDecoder::new(),
+            iafs: IntegerDecoder::new(),
+            iads: IntegerDecoder::new(),
+            iait: IntegerDecoder::new(),
+            iaid: SymbolIdDecoder::new(sbsymcodelen),
+            iari: IntegerDecoder::new(),
+            iardw: IntegerDecoder::new(),
+            iardh: IntegerDecoder::new(),
+            iardx: IntegerDecoder::new(),
+            iardy: IntegerDecoder::new(),
+        }
+    }
+}
 use crate::bitmap::DecodedRegion;
 use crate::huffman_table::{
     HuffmanResult, HuffmanTable, TABLE_A, TABLE_F, TABLE_G, TABLE_H, TABLE_I, TABLE_J, TABLE_K,
@@ -456,11 +498,24 @@ fn decode_text_region_direct(
     symbols: &[&DecodedRegion],
     params: &TextRegionParams<'_>,
 ) -> Result<DecodedRegion, &'static str> {
-    decode_text_region_with(decoder, symbols, params, |_decoder, id_i, _symbols| {
-        // "If SBREFINE is 0, then set R_I to 0." (6.4.11)
-        // "If R_I is 0 then set the symbol instance bitmap IB_I to SBSYMS[ID_I]."
-        Ok(SymbolBitmap::Reference(id_i))
-    })
+    let sbnumsyms = symbols.len() as u32;
+    if sbnumsyms == 0 {
+        return Err("text region has no symbols");
+    }
+    let sbsymcodelen = 32 - (sbnumsyms - 1).leading_zeros();
+    let mut contexts = TextRegionContexts::new(sbsymcodelen);
+
+    decode_text_region_with(
+        decoder,
+        symbols,
+        params,
+        &mut contexts,
+        |_decoder, id_i, _symbols, _contexts| {
+            // "If SBREFINE is 0, then set R_I to 0." (6.4.11)
+            // "If R_I is 0 then set the symbol instance bitmap IB_I to SBSYMS[ID_I]."
+            Ok(SymbolBitmap::Reference(id_i))
+        },
+    )
 }
 
 /// Decode text region with refinement (SBREFINE=1).
@@ -472,102 +527,82 @@ pub(crate) fn decode_text_region_refine(
     symbols: &[&DecodedRegion],
     params: &TextRegionParams<'_>,
 ) -> Result<DecodedRegion, &'static str> {
-    // Additional decoders for refinement (6.4.11)
-    let mut iari = IntegerDecoder::new(); // R_I decoder
-    let mut iardw = IntegerDecoder::new(); // RDW_I decoder
-    let mut iardh = IntegerDecoder::new(); // RDH_I decoder
-    let mut iardx = IntegerDecoder::new(); // RDX_I decoder
-    let mut iardy = IntegerDecoder::new(); // RDY_I decoder
+    // Create fresh contexts (for normal text region segments)
+    let sbnumsyms = symbols.len() as u32;
+    if sbnumsyms == 0 {
+        return Err("text region has no symbols");
+    }
+    let sbsymcodelen = 32 - (sbnumsyms - 1).leading_zeros();
+    let mut contexts = TextRegionContexts::new(sbsymcodelen);
 
-    // Refinement contexts
+    // Create refinement contexts
     let num_gr_contexts = match params.sbrtemplate {
         GrTemplate::Template0 => 1 << 13,
         GrTemplate::Template1 => 1 << 10,
     };
     let mut gr_contexts = vec![ArithmeticDecoderContext::default(); num_gr_contexts];
 
-    decode_text_region_with(decoder, symbols, params, |decoder, id_i, syms| {
-        // "If SBREFINE is 1, then decode R_I as follows:
-        //  If SBHUFF is 0, decode one bit using the IARI integer arithmetic
-        //  decoding procedure and set R_I to the value of that bit." (6.4.11)
-        let r_i = iari.decode(decoder).ok_or("unexpected OOB decoding R_I")?;
-
-        if r_i == 0 {
-            // "If R_I is 0 then set the symbol instance bitmap IB_I to SBSYMS[ID_I]."
-            Ok(SymbolBitmap::Reference(id_i))
-        } else {
-            // "If R_I is 1 then determine the symbol instance bitmap as follows:"
-            // (6.4.11)
-            let ibo_i = syms.get(id_i).ok_or("symbol ID out of range")?;
-            let wo_i = ibo_i.width;
-            let ho_i = ibo_i.height;
-
-            // "1) Decode the symbol instance refinement delta width as described
-            // in 6.4.11.1. Let RDW_I be the value decoded." (6.4.11)
-            let rdw_i = iardw
+    decode_text_region_with(
+        decoder,
+        symbols,
+        params,
+        &mut contexts,
+        |decoder, id_i, symbols, contexts| {
+            // Decode R_I (refinement indicator)
+            let r_i = contexts
+                .iari
                 .decode(decoder)
-                .ok_or("unexpected OOB decoding RDW_I")?;
+                .ok_or("unexpected OOB decoding R_I")?;
 
-            // "2) Decode the symbol instance refinement delta height as described
-            // in 6.4.11.2. Let RDH_I be the value decoded." (6.4.11)
-            let rdh_i = iardh
-                .decode(decoder)
-                .ok_or("unexpected OOB decoding RDH_I")?;
+            if r_i == 0 {
+                Ok(SymbolBitmap::Reference(id_i))
+            } else {
+                let ibo_i = symbols.get(id_i).ok_or("symbol ID out of range")?;
+                let wo_i = ibo_i.width;
+                let ho_i = ibo_i.height;
 
-            // "3) Decode the symbol instance refinement X offset as described in
-            // 6.4.11.3. Let RDX_I be the value decoded." (6.4.11)
-            let rdx_i = iardx
-                .decode(decoder)
-                .ok_or("unexpected OOB decoding RDX_I")?;
+                let rdw_i = contexts
+                    .iardw
+                    .decode(decoder)
+                    .ok_or("unexpected OOB decoding RDW_I")?;
+                let rdh_i = contexts
+                    .iardh
+                    .decode(decoder)
+                    .ok_or("unexpected OOB decoding RDH_I")?;
+                let rdx_i = contexts
+                    .iardx
+                    .decode(decoder)
+                    .ok_or("unexpected OOB decoding RDX_I")?;
+                let rdy_i = contexts
+                    .iardy
+                    .decode(decoder)
+                    .ok_or("unexpected OOB decoding RDY_I")?;
 
-            // "4) Decode the symbol instance refinement Y offset as described in
-            // 6.4.11.4. Let RDY_I be the value decoded." (6.4.11)
-            let rdy_i = iardy
-                .decode(decoder)
-                .ok_or("unexpected OOB decoding RDY_I")?;
+                let grw = (wo_i as i32 + rdw_i) as u32;
+                let grh = (ho_i as i32 + rdh_i) as u32;
+                let grreferencedx = rdw_i.div_euclid(2) + rdx_i;
+                let grreferencedy = rdh_i.div_euclid(2) + rdy_i;
 
-            // "6) Let IBO_I be SBSYMS[ID_I]. Let WO_I be the width of IBO_I and
-            // HO_I be the height of IBO_I. The symbol instance bitmap IB_I is the
-            // result of applying the generic refinement region decoding procedure
-            // described in 6.3. Set the parameters to this decoding procedure as
-            // shown in Table 12." (6.4.11)
-            //
-            // Table 12 parameters:
-            // GRW = WO_I + RDW_I
-            // GRH = HO_I + RDH_I
-            // GRTEMPLATE = SBRTEMPLATE
-            // GRREFERENCE = IBO_I
-            // GRREFERENCEDX = floor(RDW_I/2) + RDX_I
-            // GRREFERENCEDY = floor(RDH_I/2) + RDY_I
-            // TPGRON = 0
-            // GRATXn = SBRATXn, GRATYn = SBRATYn
-
-            let grw = (wo_i as i32 + rdw_i) as u32;
-            let grh = (ho_i as i32 + rdh_i) as u32;
-            let grreferencedx = rdw_i.div_euclid(2) + rdx_i;
-            let grreferencedy = rdh_i.div_euclid(2) + rdy_i;
-
-            let mut refined = DecodedRegion::new(grw, grh);
-
-            decode_refinement_bitmap_with(
-                decoder,
-                &mut gr_contexts,
-                &mut refined,
-                ibo_i,
-                grreferencedx,
-                grreferencedy,
-                params.sbrtemplate,
-                params.refinement_at_pixels,
-                false, // TPGRON = 0
-            )?;
-
-            Ok(SymbolBitmap::Owned(refined))
-        }
-    })
+                let mut refined = DecodedRegion::new(grw, grh);
+                decode_refinement_bitmap_with(
+                    decoder,
+                    &mut gr_contexts,
+                    &mut refined,
+                    ibo_i,
+                    grreferencedx,
+                    grreferencedy,
+                    params.sbrtemplate,
+                    params.refinement_at_pixels,
+                    false,
+                )?;
+                Ok(SymbolBitmap::Owned(refined))
+            }
+        },
+    )
 }
 
 /// Result of determining a symbol instance bitmap.
-enum SymbolBitmap {
+pub(crate) enum SymbolBitmap {
     /// Use the symbol at this index directly (R_I = 0).
     Reference(usize),
     /// Use this refined bitmap (R_I = 1).
@@ -577,10 +612,11 @@ enum SymbolBitmap {
 /// Core text region decoding loop (6.4.5).
 ///
 /// Takes a closure that determines each symbol instance bitmap.
-fn decode_text_region_with<F>(
+pub(crate) fn decode_text_region_with<F>(
     decoder: &mut ArithmeticDecoder<'_>,
     symbols: &[&DecodedRegion],
     params: &TextRegionParams<'_>,
+    contexts: &mut TextRegionContexts,
     mut get_symbol_bitmap: F,
 ) -> Result<DecodedRegion, &'static str>
 where
@@ -588,6 +624,7 @@ where
         &mut ArithmeticDecoder<'_>,
         usize,
         &[&DecodedRegion],
+        &mut TextRegionContexts,
     ) -> Result<SymbolBitmap, &'static str>,
 {
     let sbw = params.sbw;
@@ -599,21 +636,6 @@ where
     let refcorner = params.refcorner;
     let sbdsoffset = params.sbdsoffset;
     let sbcombop = params.sbcombop;
-
-    // Calculate SBSYMCODELEN = ceil(log2(SBNUMSYMS))
-    // "SBSYMCODELEN: Integer, 6 N, The length of the symbol codes used in IAID.d)"
-    let sbnumsyms = symbols.len() as u32;
-    if sbnumsyms == 0 {
-        return Err("text region has no symbols");
-    }
-    let sbsymcodelen = 32 - (sbnumsyms - 1).leading_zeros();
-
-    // Initialize integer decoders
-    let mut iadt = IntegerDecoder::new(); // Strip delta T
-    let mut iafs = IntegerDecoder::new(); // First symbol S coordinate
-    let mut iads = IntegerDecoder::new(); // Subsequent symbol S coordinate
-    let mut iait = IntegerDecoder::new(); // Symbol T coordinate
-    let mut iaid = SymbolIdDecoder::new(sbsymcodelen);
 
     // "1) Fill a bitmap SBREG, of the size given by SBW and SBH, with the
     // SBDEFPIXEL value." (6.4.5)
@@ -628,7 +650,7 @@ where
     // "2) Decode the initial STRIPT value as described in 6.4.6. Negate the
     // decoded value and assign this negated value to the variable STRIPT.
     // Assign the value 0 to FIRSTS. Assign the value 0 to NINSTANCES." (6.4.5)
-    let initial_stript = decode_strip_delta_t(decoder, &mut iadt, sbstrips)?;
+    let initial_stript = decode_strip_delta_t(decoder, &mut contexts.iadt, sbstrips)?;
     let mut stript: i32 = -initial_stript;
     let mut firsts: i32 = 0;
     let mut ninstances: u32 = 0;
@@ -642,7 +664,7 @@ where
 
         // "b) Decode the strip's delta T value as described in 6.4.6. Let DT be
         // the decoded value. Set: STRIPT = STRIPT + DT" (6.4.5)
-        let dt = decode_strip_delta_t(decoder, &mut iadt, sbstrips)?;
+        let dt = decode_strip_delta_t(decoder, &mut contexts.iadt, sbstrips)?;
         stript += dt;
 
         // "c) Decode each symbol instance in the strip as follows:" (6.4.5)
@@ -656,7 +678,8 @@ where
             //     FIRSTS = FIRSTS + DFS
             //     CURS = FIRSTS" (6.4.5)
             if first_symbol_in_strip {
-                let dfs = iafs
+                let dfs = contexts
+                    .iafs
                     .decode(decoder)
                     .ok_or("unexpected OOB decoding first S coordinate")?;
                 firsts += dfs;
@@ -669,7 +692,7 @@ where
                 // is OOB then the last symbol instance of the strip has been decoded;
                 // proceed to step 3 d). Otherwise, let IDS be the decoded value. Set:
                 //     CURS = CURS + IDS + SBDSOFFSET" (6.4.5)
-                match iads.decode(decoder) {
+                match contexts.iads.decode(decoder) {
                     Some(ids) => {
                         curs = curs + ids + sbdsoffset;
                     }
@@ -682,17 +705,17 @@ where
 
             // "iii) Decode the symbol instance's T coordinate as described in 6.4.9.
             // Let CURT be the decoded value. Set: T_I = STRIPT + CURT" (6.4.5)
-            let curt = decode_symbol_t_coordinate(decoder, &mut iait, sbstrips)?;
+            let curt = decode_symbol_t_coordinate(decoder, &mut contexts.iait, sbstrips)?;
             let t_i = stript + curt;
 
             // "iv) Decode the symbol instance's symbol ID as described in 6.4.10.
             // Let ID_I be the decoded value." (6.4.5)
-            let id_i = iaid.decode(decoder) as usize;
+            let id_i = contexts.iaid.decode(decoder) as usize;
 
             // "v) Determine the symbol instance's bitmap IB_I as described in 6.4.11.
             // The width and height of this bitmap shall be denoted as W_I and H_I
             // respectively." (6.4.5)
-            let symbol_bitmap = get_symbol_bitmap(decoder, id_i, symbols)?;
+            let symbol_bitmap = get_symbol_bitmap(decoder, id_i, symbols, contexts)?;
             let (ib_i, w_i, h_i): (&DecodedRegion, i32, i32) = match &symbol_bitmap {
                 SymbolBitmap::Reference(idx) => {
                     let sym = symbols.get(*idx).ok_or("symbol ID out of range")?;

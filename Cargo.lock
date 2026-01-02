@@ -630,6 +630,7 @@ dependencies = [
  "flate2",
  "hayro-ccitt",
  "hayro-common",
+ "hayro-jbig2",
  "hayro-jpeg2000",
  "log",
  "md5",

@@ -7,7 +7,6 @@ under the Apache 2.0 license.
 The following parts of code have been adapted/translated from [pdf.js](https://github.com/mozilla/pdf.js), available
 under the Apache 2.0 license:
 - The CalRGB and CalGray conversion code.
-- The code for decoding JBIG2 images.
 - The flate decoder.
 - The CMAP parser.
 - The implementation of AES, MD5, SHA and RC4.
