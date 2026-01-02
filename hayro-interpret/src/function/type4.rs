@@ -190,7 +190,7 @@ fn eval_inner(procedure: &[PostScriptOp], arg_stack: &mut InterpreterStack) -> O
             let n2 = arg_stack.pop()?;
             let n1 = arg_stack.pop()?;
 
-            let res = match ((n1, n2)) {
+            let res = match (n1, n2) {
                 (Argument::Float(f1), Argument::Float(f2)) => Argument::Float($eval_f(f1, f2)),
                 (Argument::Float(_), Argument::Bool(f2)) => {
                     Argument::Bool($eval_b(n1.as_bool(), f2))
@@ -482,8 +482,8 @@ pub(super) enum PostScriptOp {
     Or,
     True,
     Xor,
-    If(Vec<PostScriptOp>),
-    IfElse(Vec<PostScriptOp>, Vec<PostScriptOp>),
+    If(Vec<Self>),
+    IfElse(Vec<Self>, Vec<Self>),
     Copy,
     Dup,
     Exch,

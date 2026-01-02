@@ -68,18 +68,13 @@ pub(crate) struct Encoding<'a> {
     supplemental: LazyArray16<'a, Supplement>,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 pub(crate) enum EncodingKind<'a> {
+    #[default]
     Standard,
     Expert,
     Format0(LazyArray16<'a, u8>),
     Format1(LazyArray16<'a, Format1Range>),
-}
-
-impl Default for EncodingKind<'_> {
-    fn default() -> Self {
-        Self::Standard
-    }
 }
 
 impl Encoding<'_> {
