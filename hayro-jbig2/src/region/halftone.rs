@@ -4,7 +4,7 @@ use crate::bitmap::DecodedRegion;
 use super::generic::GbTemplate;
 use super::{CombinationOperator, RegionSegmentInfo, parse_region_segment_info};
 use crate::gray_scale::{GrayScaleParams, decode_gray_scale_image};
-use crate::pattern_dictionary::PatternDictionary;
+use crate::dictionary::pattern::PatternDictionary;
 use crate::reader::Reader;
 
 /// Template used for halftone arithmetic coding (7.4.5.1.1).
