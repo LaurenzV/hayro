@@ -29,8 +29,9 @@ mod huffman_table;
 mod reader;
 mod segment;
 
+use crate::file::parse_segments_sequential;
 use bitmap::DecodedRegion;
-use file::{parse_embedded, parse_file};
+use file::parse_file;
 use huffman_table::HuffmanTable;
 use reader::Reader;
 use segment::SegmentType;
@@ -68,10 +69,15 @@ pub fn decode(data: &[u8]) -> Result<Image, &'static str> {
 /// The file is expected to use the embedded organization defined in
 /// Annex D.3.
 pub fn decode_embedded(data: &[u8], globals: Option<&[u8]>) -> Result<Image, &'static str> {
-    let embedded = parse_embedded(data, globals)?;
+    let mut segments = Vec::new();
+    if let Some(globals_data) = globals {
+        let mut reader = Reader::new(globals_data);
+        parse_segments_sequential(&mut reader, &mut segments)?;
+    };
 
-    let mut segments = embedded.globals;
-    segments.extend(embedded.data);
+    let mut reader = Reader::new(data);
+    parse_segments_sequential(&mut reader, &mut segments)?;
+
     segments.sort_by_key(|seg| seg.header.segment_number);
 
     decode_with_segments(&segments)

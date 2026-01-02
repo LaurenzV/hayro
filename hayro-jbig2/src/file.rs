@@ -8,38 +8,6 @@ use crate::segment::{
     Segment, SegmentType, parse_segment, parse_segment_data, parse_segment_header,
 };
 
-/// Parsed segments from embedded JBIG2 data.
-#[derive(Debug)]
-pub(crate) struct EmbeddedSegments<'a> {
-    /// Segments from the globals stream (if any).
-    pub globals: Vec<Segment<'a>>,
-    /// Segments from the main data stream.
-    pub data: Vec<Segment<'a>>,
-}
-
-/// Parse embedded JBIG2 data with optional globals.
-///
-/// This is used for JBIG2 data embedded in PDF streams.
-pub(crate) fn parse_embedded<'a>(
-    data: &'a [u8],
-    globals: Option<&'a [u8]>,
-) -> Result<EmbeddedSegments<'a>, &'static str> {
-    let globals_segments = if let Some(globals_data) = globals {
-        let mut reader = Reader::new(globals_data);
-        parse_segments_sequential(&mut reader)?
-    } else {
-        Vec::new()
-    };
-
-    let mut reader = Reader::new(data);
-    let data_segments = parse_segments_sequential(&mut reader)?;
-
-    Ok(EmbeddedSegments {
-        globals: globals_segments,
-        data: data_segments,
-    })
-}
-
 /// "There are two standalone file organizations possible for a JBIG2 bitstream."
 /// (Annex D)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -163,10 +131,14 @@ fn parse_segments<'a>(
     reader: &mut Reader<'a>,
     organization: FileOrganization,
 ) -> Result<Vec<Segment<'a>>, &'static str> {
+    let mut segments = Vec::new();
+
     match organization {
-        FileOrganization::Sequential => parse_segments_sequential(reader),
-        FileOrganization::RandomAccess => parse_segments_random_access(reader),
+        FileOrganization::Sequential => parse_segments_sequential(reader, &mut segments)?,
+        FileOrganization::RandomAccess => parse_segments_random_access(reader, &mut segments)?,
     }
+
+    Ok(segments)
 }
 
 /// Parse segments in sequential organization.
@@ -174,11 +146,10 @@ fn parse_segments<'a>(
 /// "In this organization, the file structure looks like Figure D.1. A file header
 /// is followed by a sequence of segments. The two parts of each segment are stored
 /// together: first the segment header then the segment data." (D.1)
-fn parse_segments_sequential<'a>(
+pub(crate) fn parse_segments_sequential<'a>(
     reader: &mut Reader<'a>,
-) -> Result<Vec<Segment<'a>>, &'static str> {
-    let mut segments = Vec::new();
-
+    segments: &mut Vec<Segment<'a>>,
+) -> Result<(), &'static str> {
     loop {
         if reader.at_end() {
             break;
@@ -196,7 +167,7 @@ fn parse_segments_sequential<'a>(
         }
     }
 
-    Ok(segments)
+    Ok(())
 }
 
 /// Parse segments in random-access organization.
@@ -207,8 +178,8 @@ fn parse_segments_sequential<'a>(
 /// segment, and so on." (D.2)
 fn parse_segments_random_access<'a>(
     reader: &mut Reader<'a>,
-) -> Result<Vec<Segment<'a>>, &'static str> {
-    // First, read all segment headers.
+    segments: &mut Vec<Segment<'a>>,
+) -> Result<(), &'static str> {
     let mut headers = Vec::new();
 
     loop {
@@ -229,11 +200,9 @@ fn parse_segments_random_access<'a>(
     }
 
     // Then, read all segment data.
-    let mut segments = Vec::with_capacity(headers.len());
-
     for header in headers {
         segments.push(parse_segment_data(reader, header)?);
     }
 
-    Ok(segments)
+    Ok(())
 }
