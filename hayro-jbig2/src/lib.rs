@@ -30,7 +30,7 @@ mod reader;
 mod segment;
 
 use bitmap::DecodedRegion;
-use file::{File, parse_file};
+use file::{parse_embedded, parse_file};
 use huffman_table::HuffmanTable;
 use reader::Reader;
 use segment::SegmentType;
@@ -54,51 +54,69 @@ pub struct Image {
     pub data: Vec<bool>,
 }
 
-/// Decode a JBIG2 image from the given data.
+/// Decode a JBIG2 file from the given data.
 ///
-/// This function parses and decodes a standalone JBIG2 file, returning the
-/// decoded bitmap image.
-///
-/// # Example
-/// ```rust,no_run
-/// let data = std::fs::read("image.jb2").unwrap();
-/// let image = hayro_jbig2::decode(&data).unwrap();
-/// println!("{}x{} image", image.width, image.height);
-/// ```
+/// The file is expected to use the sequential or random-access organization,
+/// as defined in Annex D.1 and D.2.
 pub fn decode(data: &[u8]) -> Result<Image, &'static str> {
     let file = parse_file(data)?;
+    decode_with_segments(&file.segments)
+}
 
-    let height_from_stripes = scan_for_stripe_height(&file);
+/// Decode an embedded JBIG2 image. with the given global segments.
+///
+/// The file is expected to use the embedded organization defined in
+/// Annex D.3.
+pub fn decode_embedded(data: &[u8], globals: Option<&[u8]>) -> Result<Image, &'static str> {
+    let embedded = parse_embedded(data, globals)?;
 
-    let mut ctx: Result<DecodeContext, &'static str> = Err("attempted to decode\
-    region before page information appeared");
+    let mut segments = embedded.globals;
+    segments.extend(embedded.data);
+    segments.sort_by_key(|seg| seg.header.segment_number);
 
-    for seg in &file.segments {
+    decode_with_segments(&segments)
+}
+
+fn decode_with_segments(segments: &[segment::Segment<'_>]) -> Result<Image, &'static str> {
+    // Pre-scan for stripe height from EndOfStripe segments.
+    let height_from_stripes = segments
+        .iter()
+        .filter(|seg| seg.header.segment_type == SegmentType::EndOfStripe)
+        .filter_map(|seg| u32::from_be_bytes(seg.data.try_into().ok()?).checked_add(1))
+        .max();
+
+    // Find and parse page information segment first.
+    let mut ctx = if let Some(page_info) = segments
+        .iter()
+        .find(|s| s.header.segment_type == SegmentType::PageInformation)
+    {
+        let mut reader = Reader::new(page_info.data);
+        get_ctx(&mut reader, height_from_stripes)?
+    } else {
+        return Err("missing page information segment");
+    };
+
+    // Process all segments.
+    for seg in segments {
         let mut reader = Reader::new(seg.data);
 
         match seg.header.segment_type {
-            // "Page information – see 7.4.8." (type 48)
             SegmentType::PageInformation => {
-                ctx = Ok(get_ctx(&mut reader, height_from_stripes)?);
+                // Already processed above, skip.
             }
             SegmentType::ImmediateGenericRegion | SegmentType::ImmediateLosslessGenericRegion => {
-                let ctx = ctx.as_mut().map_err(|e| *e)?;
                 let region = decode_generic_region(&mut reader)?;
                 ctx.page_bitmap.combine(&region);
             }
             SegmentType::IntermediateGenericRegion => {
-                let ctx = ctx.as_mut().map_err(|e| *e)?;
                 let region = decode_generic_region(&mut reader)?;
                 ctx.store_region(seg.header.segment_number, region);
             }
             SegmentType::PatternDictionary => {
-                let ctx = ctx.as_mut().map_err(|e| *e)?;
                 let dictionary = decode_pattern_dictionary(&mut reader)?;
                 ctx.store_pattern_dictionary(seg.header.segment_number, dictionary);
             }
             SegmentType::SymbolDictionary => {
-                let ctx = ctx.as_mut().map_err(|e| *e)?;
-
                 // "1) Concatenate all the input symbol dictionaries to form SDINSYMS."
                 // (6.5.5, step 1)
                 // Collect references to avoid cloning; symbols are only cloned if re-exported.
@@ -123,8 +141,6 @@ pub fn decode(data: &[u8]) -> Result<Image, &'static str> {
                 ctx.store_symbol_dictionary(seg.header.segment_number, dictionary);
             }
             SegmentType::ImmediateTextRegion | SegmentType::ImmediateLosslessTextRegion => {
-                let ctx = ctx.as_mut().map_err(|e| *e)?;
-
                 // Collect symbols from referred symbol dictionaries (SBSYMS).
                 let symbols: Vec<&DecodedRegion> = seg
                     .header
@@ -148,8 +164,6 @@ pub fn decode(data: &[u8]) -> Result<Image, &'static str> {
                 ctx.page_bitmap.combine(&region);
             }
             SegmentType::IntermediateTextRegion => {
-                let ctx = ctx.as_mut().map_err(|e| *e)?;
-
                 // Collect symbols from referred symbol dictionaries (SBSYMS).
                 let symbols: Vec<&DecodedRegion> = seg
                     .header
@@ -171,8 +185,6 @@ pub fn decode(data: &[u8]) -> Result<Image, &'static str> {
                 ctx.store_region(seg.header.segment_number, region);
             }
             SegmentType::ImmediateHalftoneRegion | SegmentType::ImmediateLosslessHalftoneRegion => {
-                let ctx = ctx.as_mut().map_err(|e| *e)?;
-
                 let pattern_dict = seg
                     .header
                     .referred_to_segments
@@ -184,8 +196,6 @@ pub fn decode(data: &[u8]) -> Result<Image, &'static str> {
                 ctx.page_bitmap.combine(&region);
             }
             SegmentType::IntermediateHalftoneRegion => {
-                let ctx = ctx.as_mut().map_err(|e| *e)?;
-
                 let pattern_dict = seg
                     .header
                     .referred_to_segments
@@ -197,8 +207,6 @@ pub fn decode(data: &[u8]) -> Result<Image, &'static str> {
                 ctx.store_region(seg.header.segment_number, region);
             }
             SegmentType::IntermediateGenericRefinementRegion => {
-                let ctx = ctx.as_mut().map_err(|e| *e)?;
-
                 // Same logic as immediate refinement, but store result instead of combining.
                 let reference = seg
                     .header
@@ -212,8 +220,6 @@ pub fn decode(data: &[u8]) -> Result<Image, &'static str> {
             }
             SegmentType::ImmediateGenericRefinementRegion
             | SegmentType::ImmediateLosslessGenericRefinementRegion => {
-                let ctx = ctx.as_mut().map_err(|e| *e)?;
-
                 // "3) Determine the buffer associated with the region segment that
                 // this segment refers to." (7.4.7.5)
                 //
@@ -233,7 +239,6 @@ pub fn decode(data: &[u8]) -> Result<Image, &'static str> {
                 // "Tables – see 7.4.13." (type 53)
                 // "This segment contains data which defines one or more user-supplied
                 // Huffman coding tables." (7.4.13)
-                let ctx = ctx.as_mut().map_err(|e| *e)?;
                 let table = HuffmanTable::read_custom(&mut reader)?;
                 ctx.store_huffman_table(seg.header.segment_number, table);
             }
@@ -245,30 +250,11 @@ pub fn decode(data: &[u8]) -> Result<Image, &'static str> {
         }
     }
 
-    let ctx = ctx?;
-
     Ok(Image {
         width: ctx.page_bitmap.width,
         height: ctx.page_bitmap.height,
         data: ctx.page_bitmap.data,
     })
-}
-
-/// Pre-scan segments to find the page height from EndOfStripe segments (7.4.10).
-///
-/// Returns the maximum Y coordinate + 1 from all EndOfStripe segments, or None
-/// if no EndOfStripe segments are found.
-fn scan_for_stripe_height(file: &File) -> Option<u32> {
-    let mut max_y: Option<u32> = None;
-
-    for seg in &file.segments {
-        if seg.header.segment_type == SegmentType::EndOfStripe {
-            let height = u32::from_be_bytes(seg.data.try_into().ok()?).checked_add(1)?;
-            max_y = Some(max_y.map_or(height, |m| m.max(height)));
-        }
-    }
-
-    max_y
 }
 
 /// Decoding context for a JBIG2 page.
@@ -297,11 +283,9 @@ impl DecodeContext {
         self.referred_segments.push((segment_number, region));
     }
 
-    /// Look up a referred segment by number using binary search.
+    /// Look up a referred segment by number.
     fn get_referred_segment(&self, segment_number: u32) -> Option<&DecodedRegion> {
         self.referred_segments
-            // We iterate over the segments in order (which themselves are sorted),
-            // so here we can just do a binary search.
             .binary_search_by_key(&segment_number, |(num, _)| *num)
             .ok()
             .map(|idx| &self.referred_segments[idx].1)
@@ -312,7 +296,7 @@ impl DecodeContext {
         self.pattern_dictionaries.push((segment_number, dictionary));
     }
 
-    /// Look up a pattern dictionary by segment number using binary search.
+    /// Look up a pattern dictionary by segment number.
     fn get_pattern_dictionary(&self, segment_number: u32) -> Option<&PatternDictionary> {
         self.pattern_dictionaries
             .binary_search_by_key(&segment_number, |(num, _)| *num)
@@ -325,7 +309,7 @@ impl DecodeContext {
         self.symbol_dictionaries.push((segment_number, dictionary));
     }
 
-    /// Look up a symbol dictionary by segment number using binary search.
+    /// Look up a symbol dictionary by segment number.
     fn get_symbol_dictionary(&self, segment_number: u32) -> Option<&SymbolDictionary> {
         self.symbol_dictionaries
             .binary_search_by_key(&segment_number, |(num, _)| *num)
@@ -338,7 +322,7 @@ impl DecodeContext {
         self.huffman_tables.push((segment_number, table));
     }
 
-    /// Look up a Huffman table by segment number using binary search.
+    /// Look up a Huffman table by segment number.
     fn get_huffman_table(&self, segment_number: u32) -> Option<&HuffmanTable> {
         self.huffman_tables
             .binary_search_by_key(&segment_number, |(num, _)| *num)

@@ -8,6 +8,38 @@ use crate::segment::{
     Segment, SegmentType, parse_segment, parse_segment_data, parse_segment_header,
 };
 
+/// Parsed segments from embedded JBIG2 data.
+#[derive(Debug)]
+pub(crate) struct EmbeddedSegments<'a> {
+    /// Segments from the globals stream (if any).
+    pub globals: Vec<Segment<'a>>,
+    /// Segments from the main data stream.
+    pub data: Vec<Segment<'a>>,
+}
+
+/// Parse embedded JBIG2 data with optional globals.
+///
+/// This is used for JBIG2 data embedded in PDF streams.
+pub(crate) fn parse_embedded<'a>(
+    data: &'a [u8],
+    globals: Option<&'a [u8]>,
+) -> Result<EmbeddedSegments<'a>, &'static str> {
+    let globals_segments = if let Some(globals_data) = globals {
+        let mut reader = Reader::new(globals_data);
+        parse_segments_sequential(&mut reader)?
+    } else {
+        Vec::new()
+    };
+
+    let mut reader = Reader::new(data);
+    let data_segments = parse_segments_sequential(&mut reader)?;
+
+    Ok(EmbeddedSegments {
+        globals: globals_segments,
+        data: data_segments,
+    })
+}
+
 /// "There are two standalone file organizations possible for a JBIG2 bitstream."
 /// (Annex D)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
