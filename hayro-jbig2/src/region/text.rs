@@ -12,8 +12,8 @@ use super::{CombinationOperator, RegionSegmentInfo, parse_region_segment_info};
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use crate::bitmap::DecodedRegion;
 use crate::huffman_table::{
-    HuffmanResult, HuffmanTable, TABLE_A, TABLE_F, TABLE_G, TABLE_H, TABLE_I, TABLE_J, TABLE_K,
-    TABLE_L, TABLE_M, TABLE_N, TABLE_O, TableLine,
+    HuffmanTable, TABLE_A, TABLE_F, TABLE_G, TABLE_H, TABLE_I, TABLE_J, TABLE_K, TABLE_L, TABLE_M,
+    TABLE_N, TABLE_O, TableLine,
 };
 use crate::integer_decoder::IntegerDecoder;
 use crate::reader::Reader;
@@ -1139,15 +1139,12 @@ fn decode_text_region_huffman(
                 // "ii) Subsequent symbol instance S coordinate (6.4.8)
                 // If SBHUFF is 1, decode a value using the Huffman table
                 // specified by SBHUFFDS." (6.4.8)
-                match tables.sbhuffds.decode(reader)? {
-                    HuffmanResult::Value(ids) => {
-                        curs = curs + ids + sbdsoffset;
-                    }
-                    HuffmanResult::OutOfBand => {
-                        // End of strip
-                        break;
-                    }
-                }
+                let Some(ids) = tables.sbhuffds.decode(reader)? else {
+                    // End of strip (OOB).
+                    break;
+                };
+
+                curs = curs + ids + sbdsoffset;
             }
 
             // "iii) Symbol instance T coordinate (6.4.9)
@@ -1419,8 +1416,7 @@ fn decode_huffman_value(
     table: &HuffmanTable,
     reader: &mut Reader<'_>,
 ) -> Result<i32, &'static str> {
-    match table.decode(reader)? {
-        HuffmanResult::Value(v) => Ok(v),
-        HuffmanResult::OutOfBand => Err("unexpected OOB in huffman decode"),
-    }
+    table
+        .decode(reader)?
+        .ok_or("unexpected OOB in huffman decode")
 }

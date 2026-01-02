@@ -6,9 +6,7 @@
 
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use crate::bitmap::DecodedRegion;
-use crate::huffman_table::{
-    HuffmanResult, HuffmanTable, TABLE_A, TABLE_B, TABLE_C, TABLE_D, TABLE_E,
-};
+use crate::huffman_table::{HuffmanTable, TABLE_A, TABLE_B, TABLE_C, TABLE_D, TABLE_E};
 use crate::integer_decoder::IntegerDecoder;
 use crate::reader::Reader;
 use crate::region::CombinationOperator;
@@ -499,10 +497,9 @@ fn decode_symbols_huffman(
         // Let HCDH be the decoded value."
         // "If SDHUFF is 1, decode a value using the Huffman table specified by
         // SDHUFFDH." (6.5.6)
-        let hcdh = match sdhuffdh.decode(reader)? {
-            HuffmanResult::Value(v) => v,
-            HuffmanResult::OutOfBand => return Err("unexpected OOB decoding height class delta"),
-        };
+        let hcdh = sdhuffdh
+            .decode(reader)?
+            .ok_or("unexpected OOB decoding height class delta")?;
 
         // "Set: HCHEIGHT = HCHEIGHT + HCDH"
         hcheight = hcheight
@@ -517,7 +514,7 @@ fn decode_symbols_huffman(
         // "c) Decode each symbol within the height class as follows:"
         // "If the result of this decoding is OOB then all the symbols
         // in this height class have been decoded; proceed to step 4 d)."
-        while let HuffmanResult::Value(dw) = sdhuffdw.decode(reader)? {
+        while let Some(dw) = sdhuffdw.decode(reader)? {
             // "i) Decode the delta width for the symbol as described in 6.5.7."
             // "If SDHUFF is 1, decode a value using the Huffman table specified by
             // SDHUFFDW." (6.5.7)
@@ -567,9 +564,10 @@ fn decode_symbols_huffman(
         header.num_exported_symbols,
         input_symbols,
         &new_symbols,
-        || match TABLE_A.decode(reader)? {
-            HuffmanResult::Value(v) => Ok(v),
-            HuffmanResult::OutOfBand => Err("unexpected OOB decoding export flags"),
+        || {
+            TABLE_A
+                .decode(reader)?
+                .ok_or("unexpected OOB decoding export flags")
         },
     )?;
 
@@ -592,10 +590,9 @@ fn decode_height_class_collective_bitmap(
 ) -> Result<(), &'static str> {
     // "1) Read the size in bytes using the SDHUFFBMSIZE Huffman table.
     // Let BMSIZE be the value decoded."
-    let bmsize = match sdhuffbmsize.decode(reader)? {
-        HuffmanResult::Value(v) => v as u32,
-        HuffmanResult::OutOfBand => return Err("unexpected OOB decoding BMSIZE"),
-    };
+    let bmsize = sdhuffbmsize
+        .decode(reader)?
+        .ok_or("unexpected OOB decoding BMSIZE")? as u32;
 
     // "2) Skip over any bits remaining in the last byte read."
     reader.align();

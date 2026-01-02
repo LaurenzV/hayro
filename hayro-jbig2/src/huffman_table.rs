@@ -7,15 +7,6 @@ use std::sync::LazyLock;
 
 use crate::reader::Reader;
 
-/// Result of decoding a Huffman code.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum HuffmanResult {
-    /// A decoded integer value.
-    Value(i32),
-    /// Out-of-band marker (only possible when HTOOB=1).
-    OutOfBand,
-}
-
 /// Information stored at a leaf node of the Huffman tree.
 #[derive(Debug, Clone)]
 struct LeafData {
@@ -243,10 +234,12 @@ impl HuffmanTable {
     /// Implements B.4 "Using a Huffman table":
     /// 1) Read bits until matching a code
     /// 2) Read RANGELEN bits as HTOFFSET
-    /// 3) If OOB line: return OOB
+    /// 3) If OOB line: return None
     /// 4) If lower range line: return RANGELOW - HTOFFSET (we use `range_high` as the base)
     /// 5) Otherwise: return RANGELOW + HTOFFSET
-    pub(crate) fn decode(&self, reader: &mut Reader<'_>) -> Result<HuffmanResult, &'static str> {
+    ///
+    /// Returns `Ok(None)` for out-of-band (OOB) values, `Ok(Some(value))` for decoded values.
+    pub(crate) fn decode(&self, reader: &mut Reader<'_>) -> Result<Option<i32>, &'static str> {
         let mut node = &self.root;
 
         loop {
@@ -260,7 +253,7 @@ impl HuffmanTable {
                 }
                 HuffmanNode::Leaf(leaf) => {
                     if leaf.is_oob {
-                        return Ok(HuffmanResult::OutOfBand);
+                        return Ok(None);
                     }
 
                     let htoffset = reader.read_bits(leaf.range_len)? as i32;
@@ -271,7 +264,7 @@ impl HuffmanTable {
                         leaf.range_low + htoffset
                     };
 
-                    return Ok(HuffmanResult::Value(value));
+                    return Ok(Some(value));
                 }
             }
         }
