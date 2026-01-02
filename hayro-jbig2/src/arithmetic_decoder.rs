@@ -1,39 +1,27 @@
 //! The arithmetic decoder (Annex E).
-//!
-//! "The arithmetic encoding procedure encodes a string of binary symbols.
-//! The arithmetic decoding procedure receives an arithmetically coded bit
-//! sequence and an associated sequence of context labels, and reconstructs
-//! the original string of binary symbols." (E.1.1)
-//!
-//! The arithmetic decoder keeps track of some state and continuously receives
-//! context labels as input, each time yielding a new bit from the original data
-//! as output.
 
 /// The arithmetic decoder state (E.3).
-///
-/// "State variables used by the arithmetic decoder procedures are described in
-/// Table E.1." (E.3.1)
 pub(crate) struct ArithmeticDecoder<'a> {
     /// The underlying encoded data.
     data: &'a [u8],
-    /// "Chigh and Clow can be thought of as one 32-bit C-register" (E.3.1)
-    c: u32,
-    /// "A-register" (E.3.1)
-    a: u32,
+    /// "C - Chigh and Clow can be thought of as one 32-bit C-register" (E.3.1)
+    code_register: u32,
+    /// "A - The probability interval register" (E.3.1)
+    interval: u32,
     /// "BP - A pointer to the compressed data"
-    base_pointer: u32,
-    /// "CT - The bit counter"
-    shift_count: u32,
+    byte_offset: u32,
+    /// "CT - The count of available bits in the current byte"
+    bits_available: u32,
 }
 
 impl<'a> ArithmeticDecoder<'a> {
     pub(crate) fn new(data: &'a [u8]) -> Self {
         let mut decoder = ArithmeticDecoder {
             data,
-            c: 0,
-            a: 0,
-            base_pointer: 0,
-            shift_count: 0,
+            code_register: 0,
+            interval: 0,
+            byte_offset: 0,
+            bits_available: 0,
         };
 
         decoder.initialize();
@@ -52,15 +40,15 @@ impl<'a> ArithmeticDecoder<'a> {
     /// "The INITDEC procedure is used to start the arithmetic decoder."
     fn initialize(&mut self) {
         // Figure G.1: "C = (B XOR 0xFF) << 16"
-        self.c = ((self.current_byte() as u32) ^ 0xff) << 16;
+        self.code_register = ((self.current_byte() as u32) ^ 0xff) << 16;
 
         // Figure G.1: "BYTEIN"
         self.read_byte();
 
         // Figure G.1: "C = C << 7; CT = CT - 7; A = 0x8000"
-        self.c <<= 7;
-        self.shift_count -= 7;
-        self.a = 0x8000;
+        self.code_register <<= 7;
+        self.bits_available -= 7;
+        self.interval = 0x8000;
     }
 
     /// The BYTEIN procedure (E.3.4, Figure G.3).
@@ -72,30 +60,31 @@ impl<'a> ArithmeticDecoder<'a> {
     fn read_byte(&mut self) {
         // Figure G.3: "B = 0xFF?"
         if self.current_byte() == 0xff {
-            let b1 = self.next_byte();
+            // B1 - The next byte after current
+            let next_byte = self.next_byte();
 
             // Figure G.3: "B1 > 0x8F?"
             // "If B1 exceeds 0x8F, then B1 must be one of the marker codes."
-            if b1 > 0x8f {
+            if next_byte > 0x8f {
                 // Figure G.3: "CT = 8" (marker found, don't advance)
-                self.shift_count = 8;
+                self.bits_available = 8;
             } else {
                 // Figure G.3: "BP = BP + 1; C = C + 0xFE00 - (B << 9); CT = 7"
-                self.base_pointer += 1;
-                self.c = self
-                    .c
+                self.byte_offset += 1;
+                self.code_register = self
+                    .code_register
                     .wrapping_add(0xfe00)
                     .wrapping_sub((self.current_byte() as u32) << 9);
-                self.shift_count = 7;
+                self.bits_available = 7;
             }
         } else {
             // Figure G.3: "BP = BP + 1; C = C + 0xFF00 - (B << 8); CT = 8"
-            self.base_pointer += 1;
-            self.c = self
-                .c
+            self.byte_offset += 1;
+            self.code_register = self
+                .code_register
                 .wrapping_add(0xff00)
                 .wrapping_sub((self.current_byte() as u32) << 8);
-            self.shift_count = 8;
+            self.bits_available = 8;
         }
     }
 
@@ -110,17 +99,17 @@ impl<'a> ArithmeticDecoder<'a> {
         // Figure E.18: "Repeat ... Until A AND 0x8000 = 0?"
         loop {
             // Figure E.18: "CT = 0?" -> "BYTEIN"
-            if self.shift_count == 0 {
+            if self.bits_available == 0 {
                 self.read_byte();
             }
 
             // Figure E.18: "A = A << 1; C = C << 1; CT = CT - 1"
-            self.a <<= 1;
-            self.c <<= 1;
-            self.shift_count -= 1;
+            self.interval <<= 1;
+            self.code_register <<= 1;
+            self.bits_available -= 1;
 
             // Figure E.18: "A AND 0x8000 = 0?" (exit when bit 15 is set)
-            if self.a & 0x8000 != 0 {
+            if self.interval & 0x8000 != 0 {
                 break;
             }
         }
@@ -132,29 +121,30 @@ impl<'a> ArithmeticDecoder<'a> {
     /// given the `LPS_EXCHANGE` procedure shown in Figure E.17." (E.3.2)
     #[inline(always)]
     fn exchange_lps(&mut self, context: &mut ArithmeticDecoderContext, qe_entry: &QeData) -> u32 {
-        let d;
+        // D - The decoded binary decision
+        let decoded_bit;
 
         // Figure E.17: "A < Qe(I(CX))?"
-        if self.a < qe_entry.qe {
+        if self.interval < qe_entry.probability {
             // Figure E.17 (Yes branch): "A = Qe(I(CX)); D = MPS(CX); I(CX) = NMPS(I(CX))"
-            self.a = qe_entry.qe;
-            d = context.mps;
-            context.index = qe_entry.nmps;
+            self.interval = qe_entry.probability;
+            decoded_bit = context.mps;
+            context.state_index = qe_entry.next_index_on_mps;
         } else {
             // Figure E.17 (No branch): "A = Qe(I(CX)); D = 1 - MPS(CX)"
-            self.a = qe_entry.qe;
-            d = 1 - context.mps;
+            self.interval = qe_entry.probability;
+            decoded_bit = 1 - context.mps;
 
             // Figure E.17: "SWITCH(I(CX)) = 1?" -> "MPS(CX) = 1 - MPS(CX)"
-            if qe_entry.switch {
+            if qe_entry.switch_mps_sense {
                 context.mps = 1 - context.mps;
             }
 
             // Figure E.17: "I(CX) = NLPS(I(CX))"
-            context.index = qe_entry.nlps;
+            context.state_index = qe_entry.next_index_on_lps;
         }
 
-        d
+        decoded_bit
     }
 
     /// The DECODE procedure (E.3.2, Figure G.2).
@@ -164,33 +154,34 @@ impl<'a> ArithmeticDecoder<'a> {
     /// encoder added." (E.3.2)
     #[inline(always)]
     fn decode_internal(&mut self, context: &mut ArithmeticDecoderContext) -> u32 {
-        let qe_entry = &QE_TABLE[context.index as usize];
+        let qe_entry = &QE_TABLE[context.state_index as usize];
 
         // Figure G.2: "A = A - Qe(I(CX))"
-        self.a -= qe_entry.qe;
+        self.interval -= qe_entry.probability;
 
-        let d;
+        // D - The decoded binary decision
+        let decoded_bit;
 
         // Figure G.2: "Chigh < A?"
-        if (self.c >> 16) < self.a {
+        if (self.code_register >> 16) < self.interval {
             // Figure G.2: "A AND 0x8000 = 0?"
-            if self.a & 0x8000 == 0 {
+            if self.interval & 0x8000 == 0 {
                 // Figure G.2: "D = MPS_EXCHANGE; RENORMD"
-                d = self.exchange_mps(context, qe_entry);
+                decoded_bit = self.exchange_mps(context, qe_entry);
                 self.renormalize();
             } else {
                 // Figure G.2: "D = MPS(CX)"
-                d = context.mps;
+                decoded_bit = context.mps;
             }
         } else {
             // Figure G.2: "Chigh = Chigh - A; D = LPS_EXCHANGE; RENORMD"
-            self.c -= self.a << 16;
+            self.code_register -= self.interval << 16;
 
-            d = self.exchange_lps(context, qe_entry);
+            decoded_bit = self.exchange_lps(context, qe_entry);
             self.renormalize();
         }
 
-        d
+        decoded_bit
     }
 
     /// The `MPS_EXCHANGE` procedure (E.3.2, Figure E.16).
@@ -199,33 +190,34 @@ impl<'a> ArithmeticDecoder<'a> {
     /// Figure E.16." (E.3.2)
     #[inline(always)]
     fn exchange_mps(&mut self, context: &mut ArithmeticDecoderContext, qe_entry: &QeData) -> u32 {
-        let d;
+        // D - The decoded binary decision
+        let decoded_bit;
 
         // Figure E.16: "A < Qe(I(CX))?"
-        if self.a < qe_entry.qe {
+        if self.interval < qe_entry.probability {
             // Figure E.16 (Yes branch): "D = 1 - MPS(CX)"
-            d = 1 - context.mps;
+            decoded_bit = 1 - context.mps;
 
             // Figure E.16: "SWITCH(I(CX)) = 1?" -> "MPS(CX) = 1 - MPS(CX)"
-            if qe_entry.switch {
+            if qe_entry.switch_mps_sense {
                 context.mps = 1 - context.mps;
             }
 
             // Figure E.16: "I(CX) = NLPS(I(CX))"
-            context.index = qe_entry.nlps;
+            context.state_index = qe_entry.next_index_on_lps;
         } else {
             // Figure E.16 (No branch): "D = MPS(CX); I(CX) = NMPS(I(CX))"
-            d = context.mps;
-            context.index = qe_entry.nmps;
+            decoded_bit = context.mps;
+            context.state_index = qe_entry.next_index_on_mps;
         }
 
-        d
+        decoded_bit
     }
 
     #[inline(always)]
     fn current_byte(&self) -> u8 {
         self.data
-            .get(self.base_pointer as usize)
+            .get(self.byte_offset as usize)
             .copied()
             .unwrap_or(0xFF)
     }
@@ -233,7 +225,7 @@ impl<'a> ArithmeticDecoder<'a> {
     #[inline(always)]
     fn next_byte(&self) -> u8 {
         self.data
-            .get((self.base_pointer + 1) as usize)
+            .get((self.byte_offset + 1) as usize)
             .copied()
             .unwrap_or(0xFF)
     }
@@ -245,8 +237,8 @@ impl<'a> ArithmeticDecoder<'a> {
 /// particular probability estimate and its associated MPS value." (E.2.4)
 #[derive(Copy, Clone, Debug, Default)]
 pub(crate) struct ArithmeticDecoderContext {
-    /// "I(CX) - Index for context CX"
-    pub(crate) index: u32,
+    /// "I(CX) - Index into the probability estimation state machine"
+    pub(crate) state_index: u32,
     /// "MPS(CX) - The sense of MPS for context CX"
     pub(crate) mps: u32,
 }
@@ -254,14 +246,14 @@ pub(crate) struct ArithmeticDecoderContext {
 /// Qe value table entry (Table E.1).
 #[derive(Debug, Clone, Copy)]
 struct QeData {
-    /// "`Qe_Value`" - The probability estimate
-    qe: u32,
-    /// "NMPS" - Next index if MPS is coded
-    nmps: u32,
-    /// "NLPS" - Next index if LPS is coded
-    nlps: u32,
-    /// "SWITCH" - MPS/LPS symbol switch
-    switch: bool,
+    /// "Qe - The probability estimate value"
+    probability: u32,
+    /// "NMPS - Next state index if MPS is coded"
+    next_index_on_mps: u32,
+    /// "NLPS - Next state index if LPS is coded"
+    next_index_on_lps: u32,
+    /// "SWITCH - Whether to flip the MPS sense"
+    switch_mps_sense: bool,
 }
 
 macro_rules! qe {
@@ -269,10 +261,10 @@ macro_rules! qe {
         [
             $(
                 QeData {
-                    qe: $qe,
-                    nmps: $nmps,
-                    nlps: $nlps,
-                    switch: $switch,
+                    probability: $qe,
+                    next_index_on_mps: $nmps,
+                    next_index_on_lps: $nlps,
+                    switch_mps_sense: $switch,
                 }
             ),+
         ]
