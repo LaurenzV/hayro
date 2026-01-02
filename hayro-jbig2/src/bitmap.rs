@@ -17,19 +17,19 @@ use crate::region::CombinationOperator;
 #[derive(Debug, Clone)]
 pub(crate) struct DecodedRegion {
     /// Width in pixels.
-    pub width: u32,
+    pub(crate) width: u32,
     /// Height in pixels.
-    pub height: u32,
+    pub(crate) height: u32,
     /// Pixel data, one bool per pixel, row-major order.
-    pub data: Vec<bool>,
+    pub(crate) data: Vec<bool>,
     /// "This four-byte field gives the horizontal offset in pixels of the bitmap
     /// encoded in this segment relative to the page bitmap." (7.4.1.3)
-    pub x_location: u32,
+    pub(crate) x_location: u32,
     /// "This four-byte field gives the vertical offset in pixels of the bitmap
     /// encoded in this segment relative to the page bitmap." (7.4.1.4)
-    pub y_location: u32,
+    pub(crate) y_location: u32,
     /// "Bits 0-2: External combination operator." (7.4.1.5)
-    pub combination_operator: CombinationOperator,
+    pub(crate) combination_operator: CombinationOperator,
 }
 
 impl DecodedRegion {

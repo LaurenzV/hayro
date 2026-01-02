@@ -81,25 +81,25 @@ impl SymbolIdDecoder {
 /// Shared integer decoder contexts for text region decoding.
 pub(crate) struct TextRegionContexts {
     /// IADT: Strip delta T decoder (6.4.6)
-    pub iadt: IntegerDecoder,
+    pub(crate) iadt: IntegerDecoder,
     /// IAFS: First symbol S coordinate decoder (6.4.7)
-    pub iafs: IntegerDecoder,
+    pub(crate) iafs: IntegerDecoder,
     /// IADS: Subsequent symbol S coordinate decoder (6.4.8)
-    pub iads: IntegerDecoder,
+    pub(crate) iads: IntegerDecoder,
     /// IAIT: Symbol instance T coordinate decoder (6.4.9)
-    pub iait: IntegerDecoder,
+    pub(crate) iait: IntegerDecoder,
     /// IAID: Symbol ID decoder (6.4.10)
-    pub iaid: SymbolIdDecoder,
+    pub(crate) iaid: SymbolIdDecoder,
     /// IARI: Refinement image indicator decoder (6.4.11)
-    pub iari: IntegerDecoder,
+    pub(crate) iari: IntegerDecoder,
     /// IARDW: Refinement delta width decoder (6.4.11.1)
-    pub iardw: IntegerDecoder,
+    pub(crate) iardw: IntegerDecoder,
     /// IARDH: Refinement delta height decoder (6.4.11.2)
-    pub iardh: IntegerDecoder,
+    pub(crate) iardh: IntegerDecoder,
     /// IARDX: Refinement X offset decoder (6.4.11.3)
-    pub iardx: IntegerDecoder,
+    pub(crate) iardx: IntegerDecoder,
     /// IARDY: Refinement Y offset decoder (6.4.11.4)
-    pub iardy: IntegerDecoder,
+    pub(crate) iardy: IntegerDecoder,
 }
 
 impl TextRegionContexts {
@@ -161,26 +161,26 @@ pub(crate) struct TextRegionFlags {
     /// encoding variant. If this bit is 0, then the segment uses the arithmetic
     /// encoding variant. The setting of this flag determines how the data in
     /// this segment are encoded." (7.4.3.1.1)
-    pub sbhuff: bool,
+    pub(crate) sbhuff: bool,
 
     /// "Bit 1: SBREFINE. If this bit is 0, then the segment contains no symbol
     /// instance refinements. If this bit is 1, then the segment may contain
     /// symbol instance refinements." (7.4.3.1.1)
-    pub sbrefine: bool,
+    pub(crate) sbrefine: bool,
 
     /// "Bits 2-3: LOGSBSTRIPS. This two-bit field codes the base-2 logarithm of
     /// the strip size used to encode the segment. Thus, strip sizes of 1, 2, 4,
     /// and 8 can be encoded." (7.4.3.1.1)
-    pub log_sb_strips: u8,
+    pub(crate) log_sb_strips: u8,
 
     /// "Bits 4-5: REFCORNER." (7.4.3.1.1)
-    pub reference_corner: ReferenceCorner,
+    pub(crate) reference_corner: ReferenceCorner,
 
     /// "Bit 6: TRANSPOSED. If this bit is 1, then the primary direction of
     /// coding is top-to-bottom. If this bit is 0, then the primary direction
     /// of coding is left-to-right. This allows for text running up and down
     /// the page." (7.4.3.1.1)
-    pub transposed: bool,
+    pub(crate) transposed: bool,
 
     /// "Bits 7-8: SBCOMBOP. This field has four possible values, representing
     /// one of four possible combination operators:
@@ -188,20 +188,20 @@ pub(crate) struct TextRegionFlags {
     /// 1 AND
     /// 2 XOR
     /// 3 XNOR" (7.4.3.1.1)
-    pub combination_operator: CombinationOperator,
+    pub(crate) combination_operator: CombinationOperator,
 
     /// "Bit 9: SBDEFPIXEL. This bit contains the initial value for every pixel
     /// in the text region, before any symbols are drawn." (7.4.3.1.1)
-    pub default_pixel: bool,
+    pub(crate) default_pixel: bool,
 
     /// "Bits 10-14: SBDSOFFSET. This signed five-bit field contains the value
     /// of SBDSOFFSET – see 6.4.8." (7.4.3.1.1)
-    pub ds_offset: i8,
+    pub(crate) ds_offset: i8,
 
     /// "Bit 15: SBRTEMPLATE. This field controls the template used to decode
     /// symbol instance refinements if SBREFINE is 1. If SBREFINE is 0, this
     /// field must contain the value 0." (7.4.3.1.1)
-    pub sbrtemplate: u8,
+    pub(crate) sbrtemplate: u8,
 }
 
 /// Text region segment Huffman flags (7.4.3.1.2).
@@ -216,7 +216,7 @@ pub(crate) struct TextRegionHuffmanFlags {
     /// 1 Table B.7
     /// 3 User-supplied table
     /// The value 2 is not permitted." (7.4.3.1.2)
-    pub sbhufffs: u8,
+    pub(crate) sbhufffs: u8,
 
     /// "Bits 2-3: SBHUFFDS selection. This two-bit field can take on one of
     /// four values, indicating which table is to be used for SBHUFFDS.
@@ -224,7 +224,7 @@ pub(crate) struct TextRegionHuffmanFlags {
     /// 1 Table B.9
     /// 2 Table B.10
     /// 3 User-supplied table" (7.4.3.1.2)
-    pub sbhuffds: u8,
+    pub(crate) sbhuffds: u8,
 
     /// "Bits 4-5: SBHUFFDT selection. This two-bit field can take on one of
     /// four values, indicating which table is to be used for SBHUFFDT.
@@ -232,7 +232,7 @@ pub(crate) struct TextRegionHuffmanFlags {
     /// 1 Table B.12
     /// 2 Table B.13
     /// 3 User-supplied table" (7.4.3.1.2)
-    pub sbhuffdt: u8,
+    pub(crate) sbhuffdt: u8,
 
     /// "Bits 6-7: SBHUFFRDW selection. This two-bit field can take on one of
     /// three values, indicating which table is to be used for SBHUFFRDW.
@@ -241,22 +241,22 @@ pub(crate) struct TextRegionHuffmanFlags {
     /// 3 User-supplied table
     /// The value 2 is not permitted. If SBREFINE is 0 then this field must
     /// contain the value 0." (7.4.3.1.2)
-    pub sbhuffrdw: u8,
+    pub(crate) sbhuffrdw: u8,
 
     /// "Bits 8-9: SBHUFFRDH selection." (7.4.3.1.2)
-    pub sbhuffrdh: u8,
+    pub(crate) sbhuffrdh: u8,
 
     /// "Bits 10-11: SBHUFFRDY selection." (7.4.3.1.2)
-    pub sbhuffrdy: u8,
+    pub(crate) sbhuffrdy: u8,
 
     /// "Bits 12-13: SBHUFFRDX selection." (7.4.3.1.2)
-    pub sbhuffrdx: u8,
+    pub(crate) sbhuffrdx: u8,
 
     /// "Bit 14: SBHUFFRSIZE selection. If this field is 0 then Table B.1 is
     /// used for SBHUFFRSIZE. If this field is 1 then a user-supplied table is
     /// used for SBHUFFRSIZE. If SBREFINE is 0 then this field must contain
     /// the value 0." (7.4.3.1.2)
-    pub sbhuffrsize: u8,
+    pub(crate) sbhuffrsize: u8,
 }
 
 /// Parsed text region segment header (7.4.3.1).
@@ -267,24 +267,24 @@ pub(crate) struct TextRegionHuffmanFlags {
 #[derive(Debug, Clone)]
 pub(crate) struct TextRegionHeader {
     /// "Region segment information field – see 7.4.1." (7.4.3.1)
-    pub region_info: RegionSegmentInfo,
+    pub(crate) region_info: RegionSegmentInfo,
 
     /// "Text region segment flags – see 7.4.3.1.1." (7.4.3.1)
-    pub flags: TextRegionFlags,
+    pub(crate) flags: TextRegionFlags,
 
     /// "Text region segment Huffman flags – see 7.4.3.1.2." (7.4.3.1)
     /// "This field is only present if SBHUFF is 1."
-    pub huffman_flags: Option<TextRegionHuffmanFlags>,
+    pub(crate) huffman_flags: Option<TextRegionHuffmanFlags>,
 
     /// "Text region segment refinement AT flags – see 7.4.3.1.3." (7.4.3.1)
     /// "This field is only present if SBREFINE is 1 and SBRTEMPLATE is 0."
     /// Contains 2 AT pixels (4 bytes, Figure 40).
-    pub refinement_at_pixels: Vec<RefinementAdaptiveTemplatePixel>,
+    pub(crate) refinement_at_pixels: Vec<RefinementAdaptiveTemplatePixel>,
 
     /// "SBNUMINSTANCES – see 7.4.3.1.4." (7.4.3.1)
     /// "This four-byte field contains the number of symbol instances coded in
     /// this segment." (7.4.3.1.4)
-    pub num_instances: u32,
+    pub(crate) num_instances: u32,
 }
 
 /// Parse text region segment flags (7.4.3.1.1).
@@ -460,27 +460,27 @@ pub(crate) fn parse_text_region_header(
 /// (e.g., for Table 17 aggregated symbol decoding).
 pub(crate) struct TextRegionParams<'a> {
     /// SBW: Region width.
-    pub sbw: u32,
+    pub(crate) sbw: u32,
     /// SBH: Region height.
-    pub sbh: u32,
+    pub(crate) sbh: u32,
     /// SBNUMINSTANCES: Number of symbol instances.
-    pub sbnuminstances: u32,
+    pub(crate) sbnuminstances: u32,
     /// SBSTRIPS: Strip size.
-    pub sbstrips: u32,
+    pub(crate) sbstrips: u32,
     /// SBDEFPIXEL: Default pixel value.
-    pub sbdefpixel: bool,
+    pub(crate) sbdefpixel: bool,
     /// SBCOMBOP: Combination operator.
-    pub sbcombop: CombinationOperator,
+    pub(crate) sbcombop: CombinationOperator,
     /// TRANSPOSED: Transposed flag.
-    pub transposed: bool,
+    pub(crate) transposed: bool,
     /// REFCORNER: Reference corner.
-    pub refcorner: ReferenceCorner,
+    pub(crate) refcorner: ReferenceCorner,
     /// SBDSOFFSET: S offset.
-    pub sbdsoffset: i32,
+    pub(crate) sbdsoffset: i32,
     /// SBRTEMPLATE: Refinement template.
-    pub sbrtemplate: GrTemplate,
+    pub(crate) sbrtemplate: GrTemplate,
     /// SBRATXn/SBRATYn: Refinement AT pixels.
-    pub refinement_at_pixels: &'a [RefinementAdaptiveTemplatePixel],
+    pub(crate) refinement_at_pixels: &'a [RefinementAdaptiveTemplatePixel],
 }
 
 impl<'a> TextRegionParams<'a> {

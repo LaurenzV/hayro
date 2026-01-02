@@ -92,35 +92,35 @@ pub(crate) struct SegmentHeader {
     /// "This four-byte field contains the segment's segment number. The valid
     /// range of segment numbers is 0 through 4294967295 (0xFFFFFFFF) inclusive."
     /// (7.2.2)
-    pub segment_number: u32,
+    pub(crate) segment_number: u32,
     /// "Bits 0-5: Segment type. See 7.3." (7.2.3)
-    pub segment_type: SegmentType,
+    pub(crate) segment_type: SegmentType,
     /// "Bit 7: Deferred non-retain. If this bit is 1, this segment is flagged
     /// as retained only by itself and its attached extension segments." (7.2.3)
-    pub _retain_flag: bool,
+    pub(crate) _retain_flag: bool,
     /// "This field encodes the number of the page to which this segment belongs.
     /// The first page must be numbered '1'. This field may contain a value of
     /// zero; this value indicates that this segment is not associated with any
     /// page." (7.2.6)
-    pub _page_association: u32,
+    pub(crate) _page_association: u32,
     /// "This field contains the segment numbers of the segments that this segment
     /// refers to, if any." (7.2.5)
-    pub referred_to_segments: Vec<u32>,
+    pub(crate) referred_to_segments: Vec<u32>,
     /// "This 4-byte field contains the length of the segment's segment data part,
     /// in bytes." (7.2.7)
     ///
     /// `None` means the length was unknown (0xFFFFFFFF), which is only valid for
     /// immediate generic region segments in sequential organization.
-    pub data_length: Option<u32>,
+    pub(crate) data_length: Option<u32>,
 }
 
 /// A parsed segment with its header and data.
 #[derive(Debug)]
 pub(crate) struct Segment<'a> {
     /// The segment header.
-    pub header: SegmentHeader,
+    pub(crate) header: SegmentHeader,
     /// The segment data (borrowed slice).
-    pub data: &'a [u8],
+    pub(crate) data: &'a [u8],
 }
 
 /// Parse a segment header (7.2).

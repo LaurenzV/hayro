@@ -49,21 +49,21 @@ impl CombinationOperator {
 pub(crate) struct RegionSegmentInfo {
     /// "This four-byte field gives the width in pixels of the bitmap encoded
     /// in this segment." (7.4.1.1)
-    pub width: u32,
+    pub(crate) width: u32,
     /// "This four-byte field gives the height in pixels of the bitmap encoded
     /// in this segment." (7.4.1.2)
-    pub height: u32,
+    pub(crate) height: u32,
     /// "This four-byte field gives the horizontal offset in pixels of the bitmap
     /// encoded in this segment relative to the page bitmap." (7.4.1.3)
-    pub x_location: u32,
+    pub(crate) x_location: u32,
     /// "This four-byte field gives the vertical offset in pixels of the bitmap
     /// encoded in this segment relative to the page bitmap." (7.4.1.4)
-    pub y_location: u32,
+    pub(crate) y_location: u32,
     /// "Bits 0-2: External combination operator." (7.4.1.5)
-    pub combination_operator: CombinationOperator,
+    pub(crate) combination_operator: CombinationOperator,
     /// "Bit 3: Colour extension flag (COLEXTFLAG). This field specifies whether
     /// the region segment is extended to represent coloured bitmap." (7.4.1.5)
-    pub _colour_extension: bool,
+    pub(crate) _colour_extension: bool,
 }
 
 /// Parse the region segment information field (7.4.1).

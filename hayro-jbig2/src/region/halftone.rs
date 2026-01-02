@@ -53,21 +53,21 @@ pub(crate) struct HalftoneRegionFlags {
     /// "Bit 0: HMMR. If this bit is 1, then the segment uses the MMR encoding
     /// variant. If this bit is 0, then the segment uses the arithmetic encoding
     /// variant."
-    pub hmmr: bool,
+    pub(crate) hmmr: bool,
     /// "Bits 1-2: HTEMPLATE. This field controls the template used to decode
     /// halftone gray-scale value bitplanes if HMMR is 0. If HMMR is 1, this
     /// field must contain the value 0."
-    pub htemplate: HTemplate,
+    pub(crate) htemplate: HTemplate,
     /// "Bit 3: HENABLESKIP. This field controls whether gray-scale values that
     /// do not contribute to the region contents are skipped during decoding.
     /// If HMMR is 1, this field must contain the value 0."
-    pub henableskip: bool,
+    pub(crate) henableskip: bool,
     /// "Bits 4-6: HCOMBOP. This field has five possible values, representing
     /// one of five possible combination operators."
-    pub hcombop: CombinationOperator,
+    pub(crate) hcombop: CombinationOperator,
     /// "Bit 7: HDEFPIXEL. This bit contains the initial value for every pixel
     /// in the halftone region, before any patterns are drawn."
-    pub hdefpixel: bool,
+    pub(crate) hdefpixel: bool,
 }
 
 /// Halftone grid position and size (7.4.5.1.2).
@@ -77,16 +77,16 @@ pub(crate) struct HalftoneRegionFlags {
 pub(crate) struct HalftoneGridPositionAndSize {
     /// "HGW: This four-byte field contains the width of the array of gray-scale
     /// values." (7.4.5.1.2.1)
-    pub hgw: u32,
+    pub(crate) hgw: u32,
     /// "HGH: This four-byte field contains the height of the array of gray-scale
     /// values." (7.4.5.1.2.2)
-    pub hgh: u32,
+    pub(crate) hgh: u32,
     /// "HGX: This signed four-byte field contains 256 times the horizontal offset
     /// of the origin of the halftone grid." (7.4.5.1.2.3)
-    pub hgx: i32,
+    pub(crate) hgx: i32,
     /// "HGY: This signed four-byte field contains 256 times the vertical offset
     /// of the origin of the halftone grid." (7.4.5.1.2.4)
-    pub hgy: i32,
+    pub(crate) hgy: i32,
 }
 
 /// Halftone grid vector (7.4.5.1.3).
@@ -96,10 +96,10 @@ pub(crate) struct HalftoneGridPositionAndSize {
 pub(crate) struct HalftoneGridVector {
     /// "HRX: This unsigned two-byte field contains 256 times the horizontal
     /// coordinate of the halftone grid vector." (7.4.5.1.3.1)
-    pub hrx: u16,
+    pub(crate) hrx: u16,
     /// "HRY: This unsigned two-byte field contains 256 times the vertical
     /// coordinate of the halftone grid vector." (7.4.5.1.3.2)
-    pub hry: u16,
+    pub(crate) hry: u16,
 }
 
 /// Parsed halftone region segment header (7.4.5.1).
@@ -109,13 +109,13 @@ pub(crate) struct HalftoneGridVector {
 #[derive(Debug, Clone)]
 pub(crate) struct HalftoneRegionHeader {
     /// Region segment information field (7.4.1).
-    pub region_info: RegionSegmentInfo,
+    pub(crate) region_info: RegionSegmentInfo,
     /// Halftone region segment flags (7.4.5.1.1).
-    pub flags: HalftoneRegionFlags,
+    pub(crate) flags: HalftoneRegionFlags,
     /// Halftone grid position and size (7.4.5.1.2).
-    pub grid_position_and_size: HalftoneGridPositionAndSize,
+    pub(crate) grid_position_and_size: HalftoneGridPositionAndSize,
     /// Halftone grid vector (7.4.5.1.3).
-    pub grid_vector: HalftoneGridVector,
+    pub(crate) grid_vector: HalftoneGridVector,
 }
 
 /// Parse a halftone region segment header (7.4.5.1).

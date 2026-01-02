@@ -10,19 +10,19 @@ use crate::region::generic::{
 #[derive(Debug, Clone)]
 pub(crate) struct GrayScaleParams<'a> {
     /// Whether MMR encoding is used (GSMMR).
-    pub use_mmr: bool,
+    pub(crate) use_mmr: bool,
     /// The number of bits per gray-scale value (GSBPP).
-    pub bits_per_pixel: u32,
+    pub(crate) bits_per_pixel: u32,
     /// The width of the gray-scale image (GSW).
-    pub width: u32,
+    pub(crate) width: u32,
     /// The height of the gray-scale image (GSH).
-    pub height: u32,
+    pub(crate) height: u32,
     /// The template used to code the gray-scale bitplanes (GSTEMPLATE).
     /// "Table C.4: GBTEMPLATE = GSTEMPLATE"
-    pub template: GbTemplate,
+    pub(crate) template: GbTemplate,
     /// A mask indicating which values should be skipped (GSKIP).
     /// Width × height pixels. None if skipping is disabled (GSUSESKIP = 0).
-    pub skip_mask: Option<&'a [bool]>,
+    pub(crate) skip_mask: Option<&'a [bool]>,
 }
 
 /// Decode a gray-scale image (Annex C).

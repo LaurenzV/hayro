@@ -32,34 +32,34 @@ impl GbTemplate {
 /// Adaptive template pixel position.
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct AdaptiveTemplatePixel {
-    pub x: i8,
-    pub y: i8,
+    pub(crate) x: i8,
+    pub(crate) y: i8,
 }
 
 /// Parsed generic region segment header (7.4.6.1).
 #[derive(Debug, Clone)]
 pub(crate) struct GenericRegionHeader {
     /// Region segment information field (7.4.1).
-    pub region_info: RegionSegmentInfo,
+    pub(crate) region_info: RegionSegmentInfo,
     /// "Bit 0: MMR" (7.4.6.2)
-    pub mmr: bool,
+    pub(crate) mmr: bool,
     /// "Bits 1-2: GBTEMPLATE. This field specifies the template used for
     /// template-based arithmetic coding. If MMR is 1 then this field must
     /// contain the value zero." (7.4.6.2)
-    pub gb_template: GbTemplate,
+    pub(crate) gb_template: GbTemplate,
     /// "Bit 3: TPGDON. This field specifies whether typical prediction for
     /// generic direct coding is used." (7.4.6.2)
-    pub tpgdon: bool,
+    pub(crate) tpgdon: bool,
     /// "Bit 4: EXTTEMPLATE. This field specifies whether extended reference
     /// template is used." (7.4.6.2)
-    pub _ext_template: bool,
+    pub(crate) _ext_template: bool,
     /// Adaptive template pixels (7.4.6.3).
     ///
     /// "This field is only present if MMR is 0."
     /// - If GBTEMPLATE is 0 and EXTTEMPLATE is 0: 4 AT pixels (8 bytes)
     /// - If GBTEMPLATE is 0 and EXTTEMPLATE is 1: 12 AT pixels (24 bytes)
     /// - If GBTEMPLATE is 1, 2, or 3: 1 AT pixel (2 bytes)
-    pub adaptive_template_pixels: Vec<AdaptiveTemplatePixel>,
+    pub(crate) adaptive_template_pixels: Vec<AdaptiveTemplatePixel>,
 }
 
 /// Parse a generic region segment header (7.4.6.1).

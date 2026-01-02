@@ -11,8 +11,8 @@ use crate::reader::Reader;
 /// that are permitted according to 6.3.5.3." (7.4.7.3)
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct RefinementAdaptiveTemplatePixel {
-    pub x: i8,
-    pub y: i8,
+    pub(crate) x: i8,
+    pub(crate) y: i8,
 }
 
 /// Template used for refinement arithmetic coding (7.4.7.2).
@@ -28,18 +28,18 @@ pub(crate) enum GrTemplate {
 #[derive(Debug, Clone)]
 pub(crate) struct GenericRefinementRegionHeader {
     /// Region segment information field (7.4.1).
-    pub region_info: RegionSegmentInfo,
+    pub(crate) region_info: RegionSegmentInfo,
     /// "Bit 0: GRTEMPLATE. This field specifies the template used for
     /// template-based arithmetic coding." (7.4.7.2)
-    pub gr_template: GrTemplate,
+    pub(crate) gr_template: GrTemplate,
     /// "Bit 1: TPGRON. This field specifies whether typical prediction for
     /// generic refinement is used." (7.4.7.2)
-    pub tpgron: bool,
+    pub(crate) tpgron: bool,
     /// Adaptive template pixels (7.4.7.3).
     ///
     /// "This field is only present if GRTEMPLATE is 0."
     /// Contains 2 AT pixels (4 bytes): GRATX1, GRATY1, GRATX2, GRATY2
-    pub adaptive_template_pixels: Vec<RefinementAdaptiveTemplatePixel>,
+    pub(crate) adaptive_template_pixels: Vec<RefinementAdaptiveTemplatePixel>,
 }
 
 /// Parse a generic refinement region segment header (7.4.7.1).

@@ -122,46 +122,46 @@ pub(crate) struct SymbolDictionaryFlags {
     /// "Bit 0: SDHUFF. If this bit is 1, then the segment uses the Huffman
     /// encoding variant. If this bit is 0, then the segment uses the arithmetic
     /// encoding variant." (7.4.2.1.1)
-    pub sdhuff: bool,
+    pub(crate) sdhuff: bool,
 
     /// "Bit 1: SDREFAGG. If this bit is 0, then no refinement or aggregate
     /// coding is used in this segment. If this bit is 1, then every symbol
     /// bitmap is refinement/aggregate coded." (7.4.2.1.1)
-    pub sdrefagg: bool,
+    pub(crate) sdrefagg: bool,
 
     /// "Bits 2-3: SDHUFFDH selection." (7.4.2.1.1)
     /// Only meaningful when SDHUFF is 1.
-    pub sdhuffdh: SdHuffDh,
+    pub(crate) sdhuffdh: SdHuffDh,
 
     /// "Bits 4-5: SDHUFFDW selection." (7.4.2.1.1)
     /// Only meaningful when SDHUFF is 1.
-    pub sdhuffdw: SdHuffDw,
+    pub(crate) sdhuffdw: SdHuffDw,
 
     /// "Bit 6: SDHUFFBMSIZE selection." (7.4.2.1.1)
     /// Only meaningful when SDHUFF is 1.
-    pub sdhuffbmsize: SdHuffBmSize,
+    pub(crate) sdhuffbmsize: SdHuffBmSize,
 
     /// "Bit 7: SDHUFFAGGINST selection." (7.4.2.1.1)
     /// Only meaningful when SDHUFF is 1 and SDREFAGG is 1.
-    pub sdhuffagginst: SdHuffAggInst,
+    pub(crate) sdhuffagginst: SdHuffAggInst,
 
     /// "Bit 8: Bitmap coding context used. If SDHUFF is 1 and SDREFAGG is 0 then
     /// this field must contain the value 0." (7.4.2.1.1)
-    pub _bitmap_context_used: bool,
+    pub(crate) _bitmap_context_used: bool,
 
     /// "Bit 9: Bitmap coding context retained. If SDHUFF is 1 and SDREFAGG is 0
     /// then this field must contain the value 0." (7.4.2.1.1)
-    pub _bitmap_context_retained: bool,
+    pub(crate) _bitmap_context_retained: bool,
 
     /// "Bits 10-11: SDTEMPLATE. This field controls the template used to decode
     /// symbol bitmaps if SDHUFF is 0. If SDHUFF is 1, this field must contain
     /// the value 0." (7.4.2.1.1)
-    pub sdtemplate: GbTemplate,
+    pub(crate) sdtemplate: GbTemplate,
 
     /// "Bit 12: SDRTEMPLATE. This field controls the template used to decode
     /// symbol bitmaps if SDREFAGG is 1. If SDREFAGG is 0, this field must
     /// contain the value 0." (7.4.2.1.1)
-    pub sdrtemplate: SdRTemplate,
+    pub(crate) sdrtemplate: SdRTemplate,
 }
 
 /// Parsed symbol dictionary segment header (7.4.2.1).
@@ -171,29 +171,29 @@ pub(crate) struct SymbolDictionaryFlags {
 #[derive(Debug, Clone)]
 pub(crate) struct SymbolDictionaryHeader {
     /// Symbol dictionary flags (7.4.2.1.1).
-    pub flags: SymbolDictionaryFlags,
+    pub(crate) flags: SymbolDictionaryFlags,
 
     /// Symbol dictionary AT flags (7.4.2.1.2).
     ///
     /// "This field is only present if SDHUFF is 0." (7.4.2.1.2)
     /// - If SDTEMPLATE is 0: 4 AT pixels (8 bytes, Figure 34)
     /// - If SDTEMPLATE is 1, 2, or 3: 1 AT pixel (2 bytes, Figure 35)
-    pub adaptive_template_pixels: Vec<AdaptiveTemplatePixel>,
+    pub(crate) adaptive_template_pixels: Vec<AdaptiveTemplatePixel>,
 
     /// Symbol dictionary refinement AT flags (7.4.2.1.3).
     ///
     /// "This field is only present if SDREFAGG is 1 and SDRTEMPLATE is 0."
     /// (7.4.2.1.3)
     /// Contains 2 AT pixels (4 bytes, Figure 36).
-    pub refinement_at_pixels: Vec<RefinementAdaptiveTemplatePixel>,
+    pub(crate) refinement_at_pixels: Vec<RefinementAdaptiveTemplatePixel>,
 
     /// "SDNUMEXSYMS: This four-byte field contains the number of symbols
     /// exported from this dictionary." (7.4.2.1.4)
-    pub num_exported_symbols: u32,
+    pub(crate) num_exported_symbols: u32,
 
     /// "SDNUMNEWSYMS: This four-byte field contains the number of symbols
     /// defined in this dictionary." (7.4.2.1.5)
-    pub num_new_symbols: u32,
+    pub(crate) num_new_symbols: u32,
 }
 
 /// Parse a symbol dictionary segment header (7.4.2.1).
@@ -369,7 +369,7 @@ pub(crate) struct SymbolDictionary {
     /// The exported symbols (SDEXSYMS).
     /// "The symbols exported by this symbol dictionary. Contains SDNUMEXSYMS
     /// symbols." (Table 14)
-    pub exported_symbols: Vec<DecodedRegion>,
+    pub(crate) exported_symbols: Vec<DecodedRegion>,
 }
 
 /// Decode a symbol dictionary segment (7.4.2, 6.5).

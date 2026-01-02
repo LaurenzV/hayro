@@ -26,7 +26,7 @@ pub(crate) fn is_eol_character(char: u8) -> bool {
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Hash)]
-pub(crate) struct Comment<'a>(pub &'a [u8]);
+pub(crate) struct Comment<'a>(pub(crate) &'a [u8]);
 
 impl Skippable for Comment<'_> {
     fn skip(r: &mut Reader<'_>, _: bool) -> Option<()> {

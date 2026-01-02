@@ -626,9 +626,9 @@ struct MapRepr {
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct TrailerData {
-    pub pages_ref: ObjectIdentifier,
-    pub root_ref: ObjectIdentifier,
-    pub version: Option<PdfVersion>,
+    pub(crate) pages_ref: ObjectIdentifier,
+    pub(crate) root_ref: ObjectIdentifier,
+    pub(crate) version: Option<PdfVersion>,
 }
 
 impl TrailerData {

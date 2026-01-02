@@ -49,9 +49,9 @@ pub(crate) struct FileHeader {
 #[derive(Debug)]
 pub(crate) struct File<'a> {
     /// The file header.
-    pub _header: FileHeader,
+    pub(crate) _header: FileHeader,
     /// The segments in the file.
-    pub segments: Vec<Segment<'a>>,
+    pub(crate) segments: Vec<Segment<'a>>,
 }
 
 /// "This is an 8-byte sequence containing 0x97 0x4A 0x42 0x32 0x0D 0x0A 0x1A 0x0A."

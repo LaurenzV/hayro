@@ -50,11 +50,11 @@ pub(crate) struct PatternDictionaryFlags {
     /// "Bit 0: HDMMR. If this bit is 1, then the segment uses the MMR encoding
     /// variant. If this bit is 0, then the segment uses the arithmetic encoding
     /// variant."
-    pub hdmmr: bool,
+    pub(crate) hdmmr: bool,
     /// "Bits 1-2: HDTEMPLATE. This field controls the template used to decode
     /// patterns if HDMMR is 0. If HDMMR is 1, this field must contain the
     /// value 0."
-    pub hdtemplate: HdTemplate,
+    pub(crate) hdtemplate: HdTemplate,
 }
 
 /// Parsed pattern dictionary segment header (7.4.4.1).
@@ -64,18 +64,18 @@ pub(crate) struct PatternDictionaryFlags {
 #[derive(Debug, Clone)]
 pub(crate) struct PatternDictionaryHeader {
     /// Pattern dictionary flags (7.4.4.1.1).
-    pub flags: PatternDictionaryFlags,
+    pub(crate) flags: PatternDictionaryFlags,
     /// "HDPW: This one-byte field contains the width of the patterns defined
     /// in this pattern dictionary. Its value must be greater than zero."
     /// (7.4.4.1.2)
-    pub hdpw: u8,
+    pub(crate) hdpw: u8,
     /// "HDPH: This one-byte field contains the height of the patterns defined
     /// in this pattern dictionary. Its value must be greater than zero."
     /// (7.4.4.1.3)
-    pub hdph: u8,
+    pub(crate) hdph: u8,
     /// "GRAYMAX: This four-byte field contains one less than the number of
     /// patterns defined in this pattern dictionary." (7.4.4.1.4)
-    pub graymax: u32,
+    pub(crate) graymax: u32,
 }
 
 /// A decoded pattern dictionary containing GRAYMAX + 1 patterns.
@@ -85,11 +85,11 @@ pub(crate) struct PatternDictionaryHeader {
 #[derive(Debug, Clone)]
 pub(crate) struct PatternDictionary {
     /// The patterns in this dictionary, indexed 0 through GRAYMAX.
-    pub patterns: Vec<DecodedRegion>,
+    pub(crate) patterns: Vec<DecodedRegion>,
     /// Width of each pattern.
-    pub pattern_width: u32,
+    pub(crate) pattern_width: u32,
     /// Height of each pattern.
-    pub pattern_height: u32,
+    pub(crate) pattern_height: u32,
 }
 
 /// Parse a pattern dictionary segment header (7.4.4.1).
