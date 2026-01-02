@@ -5,7 +5,7 @@
 //!
 //! "GBREG - The decoded region bitmap." (Table 3)
 
-use crate::segment::region::CombinationOperator;
+use crate::region::CombinationOperator;
 
 /// A decoded bitmap region with position and combination information.
 ///

@@ -6,18 +6,18 @@
 
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext, IntegerDecoder};
 use crate::bitmap::DecodedRegion;
+use crate::generic_refinement_region::{
+    GrTemplate, RefinementAdaptiveTemplatePixel, decode_refinement_bitmap_with,
+};
+use crate::generic_region::{
+    AdaptiveTemplatePixel, GbTemplate, decode_bitmap_mmr, gather_context_with_at,
+};
 use crate::huffman_table::{
     HuffmanResult, HuffmanTable, TABLE_A, TABLE_B, TABLE_C, TABLE_D, TABLE_E,
 };
 use crate::reader::Reader;
-use crate::segment::generic_refinement_region::{
-    GrTemplate, RefinementAdaptiveTemplatePixel, decode_refinement_bitmap_with,
-};
-use crate::segment::generic_region::{
-    AdaptiveTemplatePixel, GbTemplate, decode_bitmap_mmr, gather_context_with_at,
-};
-use crate::segment::region::CombinationOperator;
-use crate::segment::text_region::{
+use crate::region::CombinationOperator;
+use crate::text_region::{
     ReferenceCorner, SymbolBitmap, TextRegionContexts, TextRegionParams, decode_text_region_with,
 };
 

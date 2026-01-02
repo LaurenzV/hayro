@@ -1,11 +1,11 @@
 //! Pattern dictionary segment parsing and decoding (7.4.4, 6.7).
 
 use crate::bitmap::DecodedRegion;
-use crate::reader::Reader;
-use crate::segment::generic_region::{
+use crate::generic_region::{
     AdaptiveTemplatePixel, GbTemplate, decode_bitmap_arith, decode_bitmap_mmr,
 };
-use crate::segment::region::CombinationOperator;
+use crate::reader::Reader;
+use crate::region::CombinationOperator;
 
 /// Template used for pattern dictionary arithmetic coding (7.4.4.1.1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

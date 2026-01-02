@@ -3,7 +3,7 @@
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use crate::bitmap::DecodedRegion;
 use crate::reader::Reader;
-use crate::segment::region::{RegionSegmentInfo, parse_region_segment_info};
+use crate::region::{RegionSegmentInfo, parse_region_segment_info};
 
 /// Adaptive template pixel position for refinement regions.
 ///

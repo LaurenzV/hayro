@@ -3,16 +3,6 @@
 //! This module handles parsing of individual segment headers and defines
 //! the segment types used in JBIG2.
 
-pub(crate) mod generic_refinement_region;
-pub(crate) mod generic_region;
-pub(crate) mod gray_scale;
-pub(crate) mod halftone_region;
-pub(crate) mod page_info;
-pub(crate) mod pattern_dictionary;
-pub(crate) mod region;
-pub(crate) mod symbol_dictionary;
-pub(crate) mod text_region;
-
 use crate::reader::Reader;
 
 /// "The segment type is a number between 0 and 63, inclusive. Not all values

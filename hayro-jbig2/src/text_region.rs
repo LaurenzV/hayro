@@ -51,15 +51,15 @@ impl TextRegionContexts {
     }
 }
 use crate::bitmap::DecodedRegion;
+use crate::generic_refinement_region::{
+    GrTemplate, RefinementAdaptiveTemplatePixel, decode_refinement_bitmap_with,
+};
 use crate::huffman_table::{
     HuffmanResult, HuffmanTable, TABLE_A, TABLE_F, TABLE_G, TABLE_H, TABLE_I, TABLE_J, TABLE_K,
     TABLE_L, TABLE_M, TABLE_N, TABLE_O, TableLine,
 };
 use crate::reader::Reader;
-use crate::segment::generic_refinement_region::{
-    GrTemplate, RefinementAdaptiveTemplatePixel, decode_refinement_bitmap_with,
-};
-use crate::segment::region::{CombinationOperator, RegionSegmentInfo, parse_region_segment_info};
+use crate::region::{CombinationOperator, RegionSegmentInfo, parse_region_segment_info};
 
 /// Reference corner for symbol placement (REFCORNER).
 ///
