@@ -1231,8 +1231,7 @@ fn decode_text_region_huffman(
                         GrTemplate::Template0 => 13,
                         GrTemplate::Template1 => 10,
                     };
-                    let mut contexts =
-                        vec![Context::default(); 1 << num_context_bits];
+                    let mut contexts = vec![Context::default(); 1 << num_context_bits];
 
                     decode_refinement_bitmap_with(
                         &mut decoder,
