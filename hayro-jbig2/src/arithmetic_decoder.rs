@@ -15,6 +15,7 @@ pub(crate) struct ArithmeticDecoder<'a> {
 }
 
 impl<'a> ArithmeticDecoder<'a> {
+    #[inline(always)]
     pub(crate) fn new(data: &'a [u8]) -> Self {
         let mut decoder = ArithmeticDecoder {
             data,
@@ -69,6 +70,7 @@ impl<'a> ArithmeticDecoder<'a> {
     }
 
     /// The INITDEC procedure (E.3.5, Figure G.1).
+    #[inline(always)]
     fn initialize(&mut self) {
         // Figure G.1: "C = (B XOR 0xFF) << 16"
         self.code_register = ((self.current_byte() as u32) ^ 0xff) << 16;
