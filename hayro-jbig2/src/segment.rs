@@ -292,7 +292,7 @@ pub(crate) fn parse_segment_data<'a>(
 /// occur anywhere after that eighteenth byte." (7.2.7)
 fn scan_for_immediate_generic_region_size(reader: &Reader<'_>) -> Result<usize, &'static str> {
     let mut scan = reader.clone();
-    let start_offset = scan.offset();
+    let start_offset = scan.byte_pos();
 
     scan.skip_bytes(17).ok_or("unexpected end of data")?;
     let flags = scan.read_byte().ok_or("unexpected end of data")?;
@@ -306,7 +306,7 @@ fn scan_for_immediate_generic_region_size(reader: &Reader<'_>) -> Result<usize, 
     while let Some(bytes) = scan.peek_bytes(6) {
         if bytes[..2] == end_marker {
             // Found the marker. Total size is current offset + 2 (marker) + 4 (row count) - start.
-            return Ok(scan.offset() - start_offset + 2 + 4);
+            return Ok(scan.byte_pos() - start_offset + 2 + 4);
         }
         scan.skip_bytes(1).ok_or("unexpected end of data")?;
     }

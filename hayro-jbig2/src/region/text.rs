@@ -1154,7 +1154,9 @@ fn decode_text_region_huffman(
             let curt = if sbstrips == 1 {
                 0
             } else {
-                reader.read_bits(log_sbstrips)? as i32
+                reader
+                    .read_bits(log_sbstrips)
+                    .ok_or("invalid huffman code")? as i32
             };
             let t_i = stript + curt;
 
@@ -1313,7 +1315,7 @@ fn decode_symbol_id_huffman_table(
     // as a four-bit value." (7.4.3.1.7)
     let mut runcode_lines: Vec<TableLine> = Vec::with_capacity(35);
     for i in 0..35 {
-        let preflen = reader.read_bits(4)? as u8;
+        let preflen = reader.read_bits(4).ok_or("invalid huffman code")? as u8;
         runcode_lines.push(TableLine::new(i, preflen, 0));
     }
 
@@ -1345,7 +1347,7 @@ fn decode_symbol_id_huffman_table(
             }
             32 => {
                 // Copy previous 3-6 times
-                let extra = reader.read_bits(2)? as usize;
+                let extra = reader.read_bits(2).ok_or("invalid huffman code")? as usize;
                 let repeat = extra + 3;
                 let prev = *symbol_code_lengths
                     .last()
@@ -1359,7 +1361,7 @@ fn decode_symbol_id_huffman_table(
             }
             33 => {
                 // Repeat 0 length 3-10 times
-                let extra = reader.read_bits(3)? as usize;
+                let extra = reader.read_bits(3).ok_or("invalid huffman code")? as usize;
                 let repeat = extra + 3;
                 for _ in 0..repeat {
                     if symbol_code_lengths.len() >= sbnumsyms as usize {
@@ -1370,7 +1372,7 @@ fn decode_symbol_id_huffman_table(
             }
             34 => {
                 // Repeat 0 length 11-138 times
-                let extra = reader.read_bits(7)? as usize;
+                let extra = reader.read_bits(7).ok_or("invalid huffman code")? as usize;
                 let repeat = extra + 11;
                 for _ in 0..repeat {
                     if symbol_code_lengths.len() >= sbnumsyms as usize {

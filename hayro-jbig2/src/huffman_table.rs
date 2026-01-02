@@ -256,7 +256,9 @@ impl HuffmanTable {
                         return Ok(None);
                     }
 
-                    let htoffset = reader.read_bits(leaf.range_len)? as i32;
+                    let htoffset = reader
+                        .read_bits(leaf.range_len)
+                        .ok_or("invalid huffman code")? as i32;
 
                     let value = if leaf.is_lower {
                         leaf.range_low - htoffset
@@ -309,8 +311,8 @@ impl HuffmanTable {
         let mut currangelow = htlow;
 
         while currangelow < hthigh {
-            let preflen = reader.read_bits(htps)? as u8;
-            let rangelen = reader.read_bits(htrs)? as u8;
+            let preflen = reader.read_bits(htps).ok_or("invalid huffman code")? as u8;
+            let rangelen = reader.read_bits(htrs).ok_or("invalid huffman code")? as u8;
 
             lines.push(TableLine::new(currangelow, preflen, rangelen));
 
@@ -329,7 +331,7 @@ impl HuffmanTable {
         // Only PREFLEN is read; RANGELEN is implicitly 32.
         lines.push(TableLine::lower(
             htlow - 1,
-            reader.read_bits(htps)? as u8,
+            reader.read_bits(htps).ok_or("invalid huffman code")? as u8,
             32,
         ));
 
@@ -337,13 +339,15 @@ impl HuffmanTable {
         // Only PREFLEN is read; RANGELEN is implicitly 32.
         lines.push(TableLine::upper(
             currangelow,
-            reader.read_bits(htps)? as u8,
+            reader.read_bits(htps).ok_or("invalid huffman code")? as u8,
             32,
         ));
 
         // Step 7: If HTOOB, read OOB line.
         if htoob {
-            lines.push(TableLine::oob(reader.read_bits(htps)? as u8));
+            lines.push(TableLine::oob(
+                reader.read_bits(htps).ok_or("invalid huffman code")? as u8,
+            ));
         }
 
         Ok(Self::build(&lines))
