@@ -514,18 +514,12 @@ fn decode_symbols_huffman(
         let hcfirstsym = nsymsdecoded;
 
         // "c) Decode each symbol within the height class as follows:"
-        loop {
+        // "If the result of this decoding is OOB then all the symbols
+        // in this height class have been decoded; proceed to step 4 d)."
+        while let HuffmanResult::Value(dw) = sdhuffdw.decode(reader)? {
             // "i) Decode the delta width for the symbol as described in 6.5.7."
             // "If SDHUFF is 1, decode a value using the Huffman table specified by
             // SDHUFFDW." (6.5.7)
-            let dw = match sdhuffdw.decode(reader)? {
-                HuffmanResult::Value(v) => v,
-                HuffmanResult::OutOfBand => {
-                    // "If the result of this decoding is OOB then all the symbols
-                    // in this height class have been decoded; proceed to step 4 d)."
-                    break;
-                }
-            };
 
             // "Set: SYMWIDTH = SYMWIDTH + DW, TOTWIDTH = TOTWIDTH + SYMWIDTH"
             symwidth = symwidth
@@ -872,16 +866,10 @@ where
         let mut symwidth: u32 = 0;
 
         // "c) Decode each symbol within the height class as follows:"
-        loop {
+        // "If the result of this decoding is OOB then all the symbols
+        // in this height class have been decoded; proceed to step 4 d)."
+        while let Some(dw) = iadw.decode(&mut arith_decoder) {
             // "i) Decode the delta width for the symbol as described in 6.5.7."
-            let dw = match iadw.decode(&mut arith_decoder) {
-                Some(v) => v,
-                None => {
-                    // "If the result of this decoding is OOB then all the symbols
-                    // in this height class have been decoded; proceed to step 4 d)."
-                    break;
-                }
-            };
 
             // "Set: SYMWIDTH = SYMWIDTH + DW"
             // DW can be negative, but the result must be non-negative.

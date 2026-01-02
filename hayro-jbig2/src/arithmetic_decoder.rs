@@ -322,6 +322,10 @@ impl IntegerDecoder {
         let s = self.decode_bit(decoder, &mut prev);
 
         // Follow Figure A.1 flowchart to decode V
+        #[expect(
+            clippy::same_functions_in_if_condition,
+            reason = "each call mutates `prev`"
+        )]
         let v = if self.decode_bit(decoder, &mut prev) == 0 {
             // "V = next 2 bits" (values 0-3)
             self.decode_n_bits(decoder, &mut prev, 2)
