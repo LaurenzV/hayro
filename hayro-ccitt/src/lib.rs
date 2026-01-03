@@ -78,8 +78,9 @@ pub struct DecodeSettings {
     pub columns: u32,
     /// How many rows the image has (i.e. its height).
     ///
-    /// In case `end_of_block` has been set to true, this value will be ignored
-    /// and decoding happens untilt he end-of-block marker has been reached.
+    /// In case `end_of_block` has been set to true, decoding will run until
+    /// the given number of rows have been decoded, or the `end_of_block` marker
+    /// has been encountered, whichever occurs first.
     pub rows: u32,
     /// Whether the stream _MAY_ contain an end-of-block marker
     /// (It doesn't have to. In that case this is set to `true` but there are
@@ -198,9 +199,13 @@ fn decode_group3_1d<T: Decoder>(
         decode_1d_line(ctx, reader)?;
         ctx.next_line(reader)?;
         let num_eol = reader.read_eol_if_available();
+        
+        if ctx.settings.end_of_block && num_eol == 6  {
+            // RTC (Return To Control).
+            break;
+        }
 
-        // RTC (Return To Control).
-        if num_eol == 6 {
+        if ctx.decoded_rows == ctx.settings.rows || reader.at_end() {
             break;
         }
     }
@@ -228,8 +233,12 @@ fn decode_group3_2d<T: Decoder>(
         ctx.next_line(reader)?;
         let num_eol = reader.read_eol_if_available();
 
-        // RTC (Return To Control).
-        if num_eol == 6 {
+        if ctx.settings.end_of_block && num_eol == 6  {
+            // RTC (Return To Control).
+            break;
+        }
+
+        if ctx.decoded_rows == ctx.settings.rows || reader.at_end() {
             break;
         }
     }
@@ -242,12 +251,12 @@ fn decode_group4<T: Decoder>(
     reader: &mut BitReader<'_>,
 ) -> Result<()> {
     loop {
-        if ctx.settings.end_of_block && reader.peak_bits(24) == Ok(EOFB) {
+        if ctx.settings.end_of_block && reader.peak_bits(24) == Ok(EOFB){
             reader.read_bits(24)?;
             break;
         }
 
-        if ctx.decoded_rows == ctx.settings.rows {
+        if ctx.decoded_rows == ctx.settings.rows || reader.at_end() {
             break;
         }
 

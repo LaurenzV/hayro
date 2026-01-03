@@ -47,6 +47,10 @@ impl<'a> BitReader<'a> {
         }
     }
 
+    pub(crate) fn at_end(&self) -> bool {
+        self.byte_pos() >= self.data.len()
+    }
+
     #[inline]
     pub(crate) fn byte_pos(&self) -> usize {
         self.cur_pos / 8
