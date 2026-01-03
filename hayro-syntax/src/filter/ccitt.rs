@@ -56,7 +56,14 @@ pub(crate) fn decode(data: &[u8], params: Dict<'_>) -> Option<Vec<u8>> {
     }
 
     let mut decoder = ByteDecoder { output: Vec::new() };
-    let _ = hayro_ccitt::decode(data, &mut decoder, &settings);
+    let decode_res = hayro_ccitt::decode(data, &mut decoder, &settings);
+    
+    // We are lenient and return the image if at least one row as decoded
+    // but the overall decoding process resulted in an error. However, if not
+    // even a single scanline was decoded successfully, we return `None`.
+    if decode_res.is_err() && decoder.output.is_empty() {
+        return None;
+    }
 
     Some(decoder.output)
 }

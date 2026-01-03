@@ -173,6 +173,11 @@ impl BitPacker {
 ///
 /// If decoding was successful, the number of bytes that have been read in total
 /// is returned.
+/// 
+/// If an error is returned, it means that the file is somehow malformed. 
+/// However, even if that's the case, it is possible that a number
+/// of rows were decoded successfully and written into the decoder, so those
+/// can still be used, but the image might be truncated.
 pub fn decode(data: &[u8], decoder: &mut impl Decoder, settings: &DecodeSettings) -> Result<usize> {
     let mut ctx = DecoderContext::new(decoder, settings);
     let mut reader = BitReader::new(data);
