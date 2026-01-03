@@ -2,23 +2,18 @@ use crate::object::Dict;
 use crate::object::dict::keys::{
     BLACK_IS_1, COLUMNS, ENCODED_BYTE_ALIGN, END_OF_BLOCK, END_OF_LINE, K, ROWS,
 };
+use crate::object::stream::ImageDecodeParams;
 use hayro_ccitt::{DecodeSettings, Decoder, EncodingMode};
 
-pub(crate) fn decode(data: &[u8], params: Dict<'_>) -> Option<Vec<u8>> {
+pub(crate) fn decode(
+    data: &[u8],
+    params: Dict<'_>,
+    image_params: &ImageDecodeParams,
+) -> Option<Vec<u8>> {
     let k = params.get::<i32>(K).unwrap_or(0);
 
-    let mut rows = params.get::<usize>(ROWS).unwrap_or(0) as u32;
+    let rows = params.get::<u32>(ROWS).unwrap_or(image_params.height);
     let end_of_block = params.get::<bool>(END_OF_BLOCK).unwrap_or(true);
-
-    // hayro-ccitt's `end_of_block` defines whether the image MAY have an EOFB
-    // block, but it will still use the `rows` attribute to check if decoding should
-    // be stopped.  In PDF, it means whether it WILL have an EOFB, and the `rows`
-    // attribute will be 0 then. Because of this, we set `rows` to max, so that
-    // `hayro-ccitt` keeps decoding untilt he EOFB has been found, instead of
-    // decoding 0 rows.
-    if end_of_block {
-        rows = u32::MAX;
-    }
 
     let settings = DecodeSettings {
         columns: params.get::<usize>(COLUMNS).unwrap_or(1728) as u32,
@@ -56,14 +51,7 @@ pub(crate) fn decode(data: &[u8], params: Dict<'_>) -> Option<Vec<u8>> {
     }
 
     let mut decoder = ByteDecoder { output: Vec::new() };
-    let decode_res = hayro_ccitt::decode(data, &mut decoder, &settings);
-
-    // We are lenient and return the image if at least one row as decoded
-    // but the overall decoding process resulted in an error. However, if not
-    // even a single scanline was decoded successfully, we return `None`.
-    if decode_res.is_err() && decoder.output.is_empty() {
-        return None;
-    }
+    hayro_ccitt::decode(data, &mut decoder, &settings).ok()?;
 
     Some(decoder.output)
 }
