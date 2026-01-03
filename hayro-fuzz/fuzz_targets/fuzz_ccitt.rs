@@ -6,8 +6,14 @@ use libfuzzer_sys::fuzz_target;
 struct Decoder;
 
 impl hayro_ccitt::Decoder for Decoder {
-    fn push_byte(&mut self, _byte: u8) {}
-    fn push_bytes(&mut self, _byte: u8, _count: usize) {}
+    fn push_pixel(&mut self, _white: bool) {
+        todo!()
+    }
+
+    fn push_pixel_chunk(&mut self, _white: bool, _chunk_count: usize) {
+        todo!()
+    }
+
     fn next_line(&mut self) {}
 }
 
