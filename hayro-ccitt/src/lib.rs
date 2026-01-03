@@ -199,8 +199,8 @@ fn decode_group3_1d<T: Decoder>(
         decode_1d_line(ctx, reader)?;
         ctx.next_line(reader)?;
         let num_eol = reader.read_eol_if_available();
-        
-        if ctx.settings.end_of_block && num_eol == 6  {
+
+        if ctx.settings.end_of_block && num_eol == 6 {
             // RTC (Return To Control).
             break;
         }
@@ -233,7 +233,7 @@ fn decode_group3_2d<T: Decoder>(
         ctx.next_line(reader)?;
         let num_eol = reader.read_eol_if_available();
 
-        if ctx.settings.end_of_block && num_eol == 6  {
+        if ctx.settings.end_of_block && num_eol == 6 {
             // RTC (Return To Control).
             break;
         }
@@ -251,7 +251,7 @@ fn decode_group4<T: Decoder>(
     reader: &mut BitReader<'_>,
 ) -> Result<()> {
     loop {
-        if ctx.settings.end_of_block && reader.peak_bits(24) == Ok(EOFB){
+        if ctx.settings.end_of_block && reader.peak_bits(24) == Ok(EOFB) {
             reader.read_bits(24)?;
             break;
         }
