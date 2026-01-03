@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use core::fmt::Debug;
 
 #[derive(Debug, Clone)]
 pub(crate) struct BitReader<'a> {

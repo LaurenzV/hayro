@@ -7,14 +7,22 @@
 //! The main entry point is the [decode] function, which takes encoded data and
 //! decoding settings, and outputs the decoded pixels through a [Decoder] trait.
 //!
+//! The crate is `no_std` compatible.
+//!
 //! # Safety
 //! Unsafe code is forbidden via a crate-level attribute.
 
+#![no_std]
 #![forbid(unsafe_code)]
 #![forbid(missing_docs)]
 
+extern crate alloc;
+
 use crate::bit::BitReader;
 use crate::states::{EOFB, Mode};
+
+use alloc::vec;
+use alloc::vec::Vec;
 
 mod bit;
 mod decode;
