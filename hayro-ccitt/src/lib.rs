@@ -47,10 +47,10 @@ pub enum DecodeError {
 impl core::fmt::Display for DecodeError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            DecodeError::UnexpectedEof => write!(f, "unexpected end of input"),
-            DecodeError::InvalidCode => write!(f, "invalid CCITT code sequence"),
-            DecodeError::LineLengthMismatch => write!(f, "scanline length mismatch"),
-            DecodeError::Overflow => write!(f, "arithmetic overflow in position calculation"),
+            Self::UnexpectedEof => write!(f, "unexpected end of input"),
+            Self::InvalidCode => write!(f, "invalid CCITT code sequence"),
+            Self::LineLengthMismatch => write!(f, "scanline length mismatch"),
+            Self::Overflow => write!(f, "arithmetic overflow in position calculation"),
         }
     }
 }
