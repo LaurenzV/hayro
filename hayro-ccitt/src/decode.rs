@@ -42,11 +42,17 @@ impl BitReader<'_> {
     #[inline(always)]
     pub(crate) fn decode_white_run(&mut self) -> Result<u16> {
         self.decode_run_inner(&WHITE_STATES)
+            // See 0506179.pdf. We are lenient and check whether perhaps
+            // the opposite color works.
+            .or_else(|_| self.decode_run_inner(&BLACK_STATES))
     }
 
     #[inline(always)]
     pub(crate) fn decode_black_run(&mut self) -> Result<u16> {
         self.decode_run_inner(&BLACK_STATES)
+            // See 0506179.pdf. We are lenient and check whether perhaps
+            // the opposite color works.
+            .or_else(|_| self.decode_run_inner(&WHITE_STATES))
     }
 
     #[inline(always)]
