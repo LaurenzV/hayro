@@ -312,27 +312,24 @@ impl<'a> BitmapDecoder<'a> {
 }
 
 impl hayro_ccitt::Decoder for BitmapDecoder<'_> {
-    /// "Push a single packed byte containing the data for 8 pixels."
-    fn push_byte(&mut self, byte: u8) {
-        // Write 8 pixels from the byte (MSB first).
-        for i in 0..8 {
-            if self.x >= self.region.width {
-                break;
-            }
-            let bit = (byte >> (7 - i)) & 1;
-            self.region.set_pixel(self.x, self.y, bit != 0);
+    /// Push a single pixel with the given color.
+    fn push_pixel(&mut self, white: bool) {
+        if self.x < self.region.width {
+            self.region.set_pixel(self.x, self.y, white);
             self.x += 1;
         }
     }
 
-    /// "Push multiple columns of same-color pixels."
-    fn push_bytes(&mut self, byte: u8, count: usize) {
-        for _ in 0..count {
-            self.push_byte(byte);
-        }
+    /// Push multiple chunks of 8 pixels of the same color.
+    fn push_pixel_chunk(&mut self, white: bool, chunk_count: usize) {
+        let pixel_count = chunk_count * 8;
+        let start = (self.y * self.region.width + self.x) as usize;
+        let end = (start + pixel_count).min(self.region.data.len());
+        self.region.data[start..end].fill(white);
+        self.x += pixel_count as u32;
     }
 
-    /// "Called when a row has been completed."
+    /// Called when a row has been completed.
     fn next_line(&mut self) {
         self.x = 0;
         self.y += 1;

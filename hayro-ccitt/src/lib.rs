@@ -112,16 +112,17 @@ pub struct DecodeSettings {
 
 /// A decoder for CCITT images.
 pub trait Decoder {
-    /// Push a single packed byte containing the data for 8 pixels.
-    /// Each bit represents one pixel (1 for white and 0 for black).
-    fn push_byte(&mut self, byte: u8);
-    /// Push multiple columns of same-color pixels. The `byte` value will either
-    /// be 0xFF if all pixels are white or 0x00 if all pixels are black.
+    /// Push a single pixel with the given color.
+    fn push_pixel(&mut self, white: bool);
+    /// Push multiple chunks of 8 pixels of the same color.
     ///
-    /// The `count` parameter indicates how many such bytes such be pushed.
-    /// For example, if that method is called with `byte = 0xFF` and
-    /// `count = 10`, we have 80 white pixels in total.
-    fn push_bytes(&mut self, byte: u8, count: usize);
+    /// The `chunk_count` parameter indicates how many 8-pixel chunks to push.
+    /// For example, if this method is called with `white = true` and
+    /// `chunk_count = 10`, 80 white pixels are pushed (10 × 8 = 80).
+    ///
+    /// You can assume that this method is only called if the number of already
+    /// pushed pixels is a multiple of 8 (i.e. byte-aligned).
+    fn push_pixel_chunk(&mut self, white: bool, chunk_count: usize);
     /// Called when a row has been completed.
     fn next_line(&mut self);
 }
@@ -131,54 +132,6 @@ pub trait Decoder {
 struct ColorChange {
     idx: usize,
     color: u8,
-}
-
-/// Accumulates individual bits into a byte buffer.
-#[derive(Default)]
-struct BitPacker {
-    /// Accumulated bits.
-    buffer: u8,
-    /// Number of bits currently in the buffer (0-7).
-    count: u8,
-}
-
-impl BitPacker {
-    fn new() -> Self {
-        Self::default()
-    }
-
-    /// Push a single bit. Returns `Some(byte)` if the buffer is now full.
-    fn push_bit(&mut self, white: bool) -> Option<u8> {
-        let bit = if white { 1 } else { 0 };
-        self.buffer = (self.buffer << 1) | bit;
-        self.count += 1;
-
-        if self.count == 8 {
-            let byte = self.buffer;
-            self.buffer = 0;
-            self.count = 0;
-            Some(byte)
-        } else {
-            None
-        }
-    }
-
-    /// Returns true if there are pending bits in the buffer.
-    fn has_pending(&self) -> bool {
-        self.count > 0
-    }
-
-    /// Flush any partial byte with zero padding. Returns `Some(byte)` if there were pending bits.
-    fn flush(&mut self) -> Option<u8> {
-        if self.count > 0 {
-            let padded = self.buffer << (8 - self.count);
-            self.buffer = 0;
-            self.count = 0;
-            Some(padded)
-        } else {
-            None
-        }
-    }
 }
 
 /// Decode the given image using the provided settings and the decoder.
@@ -368,8 +321,6 @@ struct DecoderContext<'a, T: Decoder> {
     coding_line_len: usize,
     /// The decoder sink.
     decoder: &'a mut T,
-    /// The current byte we are writing.
-    packer: BitPacker,
     /// The maximum permissible index for all "pointer" variables (i.e. a0, b1 and b2).
     max_idx: usize,
     /// Whether the next run to be decoded is white.
@@ -378,9 +329,8 @@ struct DecoderContext<'a, T: Decoder> {
     decoded_rows: u32,
     /// The settings to apply during decoding.
     settings: &'a DecodeSettings,
-    /// Precomputed mask for inverting output bytes if the `invert_black` option
-    /// has been set to `true`.
-    invert_mask: u8,
+    /// Whether to invert black and white.
+    invert_black: bool,
 }
 
 impl<'a, T: Decoder> DecoderContext<'a, T> {
@@ -394,13 +344,12 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
             coding_changes: Vec::new(),
             coding_line_len: 0,
             decoder,
-            packer: BitPacker::new(),
             max_idx,
             // Each run starts with a white color.
             is_white: true,
             decoded_rows: 0,
             settings,
-            invert_mask: if settings.invert_black { 0xFF } else { 0x00 },
+            invert_black: settings.invert_black,
         }
     }
 
@@ -462,30 +411,27 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
         // Clamp how many pixels we push so that we don't exceed the column
         // count for malformed files.
         let count = count.min(self.max_idx.saturating_sub(self.coding_line_len));
-        let white = self.is_white;
-        let byte_val: u8 = if white { 0xFF } else { 0x00 } ^ self.invert_mask;
+        let white = self.is_white ^ self.invert_black;
         let mut remaining = count;
 
-        // Fill partial byte buffer to boundary.
-        while self.packer.has_pending() && remaining > 0 {
-            if let Some(byte) = self.packer.push_bit(white) {
-                self.decoder.push_byte(byte ^ self.invert_mask);
-            }
+        // Push individual pixels until we reach an 8-pixel boundary.
+        let pixels_to_boundary = (8 - (self.coding_line_len % 8)) % 8;
+        let individual_start = remaining.min(pixels_to_boundary);
+        for _ in 0..individual_start {
+            self.decoder.push_pixel(white);
             remaining -= 1;
         }
 
-        // Push full bytes.
-        let full_bytes = remaining / 8;
-        if full_bytes > 0 {
-            self.decoder.push_bytes(byte_val, full_bytes);
+        // Push full chunks of 8 pixels.
+        let full_chunks = remaining / 8;
+        if full_chunks > 0 {
+            self.decoder.push_pixel_chunk(white, full_chunks);
             remaining %= 8;
         }
 
-        // Push remaining bits into buffer.
+        // Push remaining individual pixels.
         for _ in 0..remaining {
-            if let Some(byte) = self.packer.push_bit(white) {
-                self.decoder.push_byte(byte ^ self.invert_mask);
-            }
+            self.decoder.push_pixel(white);
         }
 
         // Track the color change:
@@ -522,11 +468,6 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
 
         if self.coding_line_len != self.settings.columns as usize {
             return Err(DecodeError::LineLengthMismatch);
-        }
-
-        // Flush any partial byte with zero padding before finishing the line.
-        if let Some(byte) = self.packer.flush() {
-            self.decoder.push_byte(byte ^ self.invert_mask);
         }
 
         // Swap coding_changes into ref_changes for the next line.
