@@ -1,7 +1,4 @@
-//! Huffman table decoding for JBIG2.
-//!
-//! This module implements the standard Huffman tables defined in Annex B of
-//! ITU-T T.88 (ISO/IEC 14492).
+//! Huffman table decoding, described in Annex B.
 
 use std::sync::LazyLock;
 
@@ -133,11 +130,7 @@ impl HuffmanTable {
         // each prefix length value occurs in PREFLEN: LENCOUNT[I] is the number of times
         // that the value I occurs in the array PREFLEN."
         // `LENMAX` - Maximum prefix length.
-        let max_prefix_length = lines
-            .iter()
-            .map(|l| l.prefix_length)
-            .max()
-            .unwrap_or(0) as usize;
+        let max_prefix_length = lines.iter().map(|l| l.prefix_length).max().unwrap_or(0) as usize;
         // `LENCOUNT` - Histogram of prefix lengths.
         let mut length_counts = vec![0_u32; max_prefix_length + 1];
         for line in lines {
@@ -158,9 +151,8 @@ impl HuffmanTable {
             // a) "Set: FIRSTCODE[CURLEN] = (FIRSTCODE[CURLEN − 1] + LENCOUNT[CURLEN − 1]) × 2
             //         CURCODE = FIRSTCODE[CURLEN]
             //         CURTEMP = 0"
-            first_code_per_length[current_length] = (first_code_per_length[current_length - 1]
-                + length_counts[current_length - 1])
-                * 2;
+            first_code_per_length[current_length] =
+                (first_code_per_length[current_length - 1] + length_counts[current_length - 1]) * 2;
             // `CURCODE` - Current code value being assigned.
             let mut current_code = first_code_per_length[current_length];
 
@@ -273,7 +265,8 @@ impl HuffmanTable {
                     // `HTOFFSET` - Additional bits value used to compute the final value.
                     let range_offset = reader
                         .read_bits(leaf.range_length)
-                        .ok_or("invalid huffman code")? as i32;
+                        .ok_or("invalid huffman code")?
+                        as i32;
 
                     let value = if leaf.is_lower {
                         leaf.range_low - range_offset
@@ -329,12 +322,18 @@ impl HuffmanTable {
         let mut current_range_low = minimum_value;
 
         while current_range_low < maximum_value {
-            let prefix_length =
-                reader.read_bits(prefix_length_bits).ok_or("invalid huffman code")? as u8;
-            let range_length =
-                reader.read_bits(range_length_bits).ok_or("invalid huffman code")? as u8;
+            let prefix_length = reader
+                .read_bits(prefix_length_bits)
+                .ok_or("invalid huffman code")? as u8;
+            let range_length = reader
+                .read_bits(range_length_bits)
+                .ok_or("invalid huffman code")? as u8;
 
-            lines.push(TableLine::new(current_range_low, prefix_length, range_length));
+            lines.push(TableLine::new(
+                current_range_low,
+                prefix_length,
+                range_length,
+            ));
 
             // Advance to next range.
             // Range covers current_range_low to current_range_low + 2^range_length - 1.
@@ -352,7 +351,9 @@ impl HuffmanTable {
         // Only PREFLEN is read; RANGELEN is implicitly 32.
         lines.push(TableLine::lower(
             minimum_value - 1,
-            reader.read_bits(prefix_length_bits).ok_or("invalid huffman code")? as u8,
+            reader
+                .read_bits(prefix_length_bits)
+                .ok_or("invalid huffman code")? as u8,
             32,
         ));
 
@@ -360,14 +361,18 @@ impl HuffmanTable {
         // Only PREFLEN is read; RANGELEN is implicitly 32.
         lines.push(TableLine::upper(
             current_range_low,
-            reader.read_bits(prefix_length_bits).ok_or("invalid huffman code")? as u8,
+            reader
+                .read_bits(prefix_length_bits)
+                .ok_or("invalid huffman code")? as u8,
             32,
         ));
 
         // Step 7: If HTOOB, read OOB line.
         if has_out_of_band {
             lines.push(TableLine::oob(
-                reader.read_bits(prefix_length_bits).ok_or("invalid huffman code")? as u8,
+                reader
+                    .read_bits(prefix_length_bits)
+                    .ok_or("invalid huffman code")? as u8,
             ));
         }
 
