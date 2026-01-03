@@ -52,6 +52,10 @@ fn load_jpx_list() -> std::io::Result<HashSet<String>> {
     load_list("jpx_images")
 }
 
+fn load_ccitt_list() -> std::io::Result<HashSet<String>> {
+    load_list("ccitt_ignore_list")
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
 
@@ -145,7 +149,8 @@ fn check_jpx_images(folder: &str) {
 }
 
 fn check_ccitt_images(folder: &str) {
-    let paths = load_pdf_paths(folder, |_| true);
+    let ccitt_list = load_ccitt_list().unwrap();
+    let paths = load_pdf_paths(folder, |name| !ccitt_list.contains(name));
 
     println!("Found {} PDF files", paths.len());
 
@@ -155,6 +160,8 @@ fn check_ccitt_images(folder: &str) {
     paths.par_iter().for_each(|path| {
         let name = path.file_stem().unwrap().to_str().unwrap().to_string();
         let data = Arc::new(fs::read(path).unwrap());
+
+        let mut has_error = false;
 
         if let Ok(pdf) = Pdf::new(data.clone()) {
             for object in pdf.objects() {
@@ -167,17 +174,20 @@ fn check_ccitt_images(folder: &str) {
                         Ok(Ok(_)) => {
                             ccitt_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                         }
-                        Ok(Err(e)) => {
-                            eprintln!("{}", name);
-                            eprintln!("CCITT decode error: {:?}", e);
+                        Ok(Err(_)) => {
+                            has_error = true;
                         }
                         Err(_) => {
-                            eprintln!("{}", name);
-                            eprintln!("panic while decoding CCITT image");
+                            has_error = true;
                         }
                     }
                 }
             }
+        }
+
+        if has_error {
+            eprintln!("{}", name);
+            println!("{}", name);
         }
 
         let count = pdf_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
