@@ -11,10 +11,7 @@ use super::generic_refinement::{
 use super::{CombinationOperator, RegionSegmentInfo, parse_region_segment_info};
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::DecodedRegion;
-use crate::huffman_table::{
-    HuffmanTable, TABLE_A, TABLE_F, TABLE_G, TABLE_H, TABLE_I, TABLE_J, TABLE_K, TABLE_L, TABLE_M,
-    TABLE_N, TABLE_O, TableLine,
-};
+use crate::huffman_table::{HuffmanTable, StandardHuffmanTables, TableLine};
 use crate::integer_decoder::IntegerDecoder;
 use crate::reader::Reader;
 
@@ -521,7 +518,8 @@ impl<'a> TextRegionParams<'a> {
 pub(crate) fn decode_text_region(
     reader: &mut Reader<'_>,
     symbols: &[&DecodedRegion],
-    referred_tables: &[&HuffmanTable],
+    referred_tables: &[HuffmanTable],
+    standard_tables: &StandardHuffmanTables,
 ) -> Result<DecodedRegion, &'static str> {
     let header = parse_text_region_header(reader)?;
     let params = TextRegionParams::from_header(&header);
@@ -529,7 +527,14 @@ pub(crate) fn decode_text_region(
     let mut sbreg = if header.flags.sbhuff {
         // "If this bit is 1, then the segment uses the Huffman encoding variant."
         // (7.4.3.1.1)
-        decode_text_region_huffman(reader, symbols, &header, &params, referred_tables)?
+        decode_text_region_huffman(
+            reader,
+            symbols,
+            &header,
+            &params,
+            referred_tables,
+            standard_tables,
+        )?
     } else {
         // "If this bit is 0, then the segment uses the arithmetic encoding variant."
         // (7.4.3.1.1)
@@ -963,79 +968,79 @@ fn draw_symbol(
 /// Select Huffman tables based on flags (7.4.3.1.6).
 fn select_huffman_tables<'a>(
     flags: &TextRegionHuffmanFlags,
-    custom_tables: &[&'a HuffmanTable],
+    custom_tables: &'a [HuffmanTable],
+    standard_tables: &'a StandardHuffmanTables,
 ) -> Result<TextRegionHuffmanTables<'a>, &'static str> {
     let mut custom_idx = 0;
 
-    let mut get_custom = || -> Result<&'a HuffmanTable, &'static str> {
-        let table = custom_tables[custom_idx];
-
+    let mut get_custom = || -> &'a HuffmanTable {
+        let table = &custom_tables[custom_idx];
         custom_idx += 1;
-        Ok(table)
+        table
     };
 
     // "1) SBHUFFFS"
-    let sbhufffs: &HuffmanTable = match flags.sbhufffs {
-        0 => &TABLE_F,
-        1 => &TABLE_G,
-        3 => get_custom()?,
+    let sbhufffs = match flags.sbhufffs {
+        0 => standard_tables.table_f(),
+        1 => standard_tables.table_g(),
+        3 => get_custom(),
         _ => return Err("invalid SBHUFFFS selection"),
     };
 
     // "2) SBHUFFDS"
-    let sbhuffds: &HuffmanTable = match flags.sbhuffds {
-        0 => &TABLE_H,
-        1 => &TABLE_I,
-        2 => &TABLE_J,
-        3 => get_custom()?,
+    let sbhuffds = match flags.sbhuffds {
+        0 => standard_tables.table_h(),
+        1 => standard_tables.table_i(),
+        2 => standard_tables.table_j(),
+        3 => get_custom(),
         _ => return Err("invalid SBHUFFDS selection"),
     };
 
     // "3) SBHUFFDT"
-    let sbhuffdt: &HuffmanTable = match flags.sbhuffdt {
-        0 => &TABLE_K,
-        1 => &TABLE_L,
-        2 => &TABLE_M,
-        3 => get_custom()?,
+    let sbhuffdt = match flags.sbhuffdt {
+        0 => standard_tables.table_k(),
+        1 => standard_tables.table_l(),
+        2 => standard_tables.table_m(),
+        3 => get_custom(),
         _ => return Err("invalid SBHUFFDT selection"),
     };
 
     // "4) SBHUFFRDW"
-    let sbhuffrdw: &HuffmanTable = match flags.sbhuffrdw {
-        0 => &TABLE_N,
-        1 => &TABLE_O,
-        3 => get_custom()?,
+    let sbhuffrdw = match flags.sbhuffrdw {
+        0 => standard_tables.table_n(),
+        1 => standard_tables.table_o(),
+        3 => get_custom(),
         _ => return Err("invalid SBHUFFRDW selection"),
     };
 
     // "5) SBHUFFRDH"
-    let sbhuffrdh: &HuffmanTable = match flags.sbhuffrdh {
-        0 => &TABLE_N,
-        1 => &TABLE_O,
-        3 => get_custom()?,
+    let sbhuffrdh = match flags.sbhuffrdh {
+        0 => standard_tables.table_n(),
+        1 => standard_tables.table_o(),
+        3 => get_custom(),
         _ => return Err("invalid SBHUFFRDH selection"),
     };
 
     // "6) SBHUFFRDY"
-    let sbhuffrdy: &HuffmanTable = match flags.sbhuffrdy {
-        0 => &TABLE_N,
-        1 => &TABLE_O,
-        3 => get_custom()?,
+    let sbhuffrdy = match flags.sbhuffrdy {
+        0 => standard_tables.table_n(),
+        1 => standard_tables.table_o(),
+        3 => get_custom(),
         _ => return Err("invalid SBHUFFRDY selection"),
     };
 
     // "7) SBHUFFRDX"
-    let sbhuffrdx: &HuffmanTable = match flags.sbhuffrdx {
-        0 => &TABLE_N,
-        1 => &TABLE_O,
-        3 => get_custom()?,
+    let sbhuffrdx = match flags.sbhuffrdx {
+        0 => standard_tables.table_n(),
+        1 => standard_tables.table_o(),
+        3 => get_custom(),
         _ => return Err("invalid SBHUFFRDX selection"),
     };
 
     // "8) SBHUFFRSIZE"
-    let sbhuffrsize: &HuffmanTable = match flags.sbhuffrsize {
-        0 => &TABLE_A,
-        1 => get_custom()?,
+    let sbhuffrsize = match flags.sbhuffrsize {
+        0 => standard_tables.table_a(),
+        1 => get_custom(),
         _ => return Err("invalid SBHUFFRSIZE selection"),
     };
 
@@ -1057,7 +1062,8 @@ fn decode_text_region_huffman(
     symbols: &[&DecodedRegion],
     header: &TextRegionHeader,
     params: &TextRegionParams<'_>,
-    referred_tables: &[&HuffmanTable],
+    referred_tables: &[HuffmanTable],
+    standard_tables: &StandardHuffmanTables,
 ) -> Result<DecodedRegion, &'static str> {
     let huffman_flags = header
         .huffman_flags
@@ -1082,7 +1088,7 @@ fn decode_text_region_huffman(
         return Err("not enough referred huffman tables");
     }
 
-    let tables = select_huffman_tables(huffman_flags, referred_tables)?;
+    let tables = select_huffman_tables(huffman_flags, referred_tables, standard_tables)?;
 
     let sbnumsyms = symbols.len() as u32;
     let sbsymcodes = decode_symbol_id_huffman_table(reader, sbnumsyms)?;
@@ -1111,7 +1117,7 @@ fn decode_text_region_huffman(
     // "2) Decode the initial STRIPT value as described in 6.4.6." (6.4.5)
     // "If SBHUFF is 1, decode a value using the Huffman table specified by
     // SBHUFFDT and multiply the resulting value by SBSTRIPS." (6.4.6)
-    let initial_stript = decode_huffman_value(tables.sbhuffdt, reader)? * sbstrips as i32;
+    let initial_stript = decode_huffman_value(&tables.sbhuffdt, reader)? * sbstrips as i32;
     let mut stript: i32 = -initial_stript;
     let mut firsts: i32 = 0;
     let mut ninstances: u32 = 0;
@@ -1119,7 +1125,7 @@ fn decode_text_region_huffman(
     // "4) Decode each strip as follows:" (6.4.5)
     while ninstances < sbnuminstances {
         // "b) Decode the strip's delta T value as described in 6.4.6."
-        let dt = decode_huffman_value(tables.sbhuffdt, reader)? * sbstrips as i32;
+        let dt = decode_huffman_value(&tables.sbhuffdt, reader)? * sbstrips as i32;
         stript += dt;
 
         // "c) Decode each symbol instance in the strip"
@@ -1131,7 +1137,7 @@ fn decode_text_region_huffman(
                 // "i) First symbol instance's S coordinate (6.4.7)
                 // If SBHUFF is 1, decode a value using the Huffman table
                 // specified by SBHUFFFS." (6.4.7)
-                let dfs = decode_huffman_value(tables.sbhufffs, reader)?;
+                let dfs = decode_huffman_value(&tables.sbhufffs, reader)?;
                 firsts += dfs;
                 curs = firsts;
                 first_symbol_in_strip = false;
@@ -1196,21 +1202,21 @@ fn decode_text_region_huffman(
                     let ho_i = ibo_i.height;
 
                     // "1) Decode the symbol instance refinement delta width"
-                    let rdw_i = decode_huffman_value(tables.sbhuffrdw, reader)?;
+                    let rdw_i = decode_huffman_value(&tables.sbhuffrdw, reader)?;
 
                     // "2) Decode the symbol instance refinement delta height"
-                    let rdh_i = decode_huffman_value(tables.sbhuffrdh, reader)?;
+                    let rdh_i = decode_huffman_value(&tables.sbhuffrdh, reader)?;
 
                     // "3) Decode the symbol instance refinement X offset"
-                    let rdx_i = decode_huffman_value(tables.sbhuffrdx, reader)?;
+                    let rdx_i = decode_huffman_value(&tables.sbhuffrdx, reader)?;
 
                     // "4) Decode the symbol instance refinement Y offset"
-                    let rdy_i = decode_huffman_value(tables.sbhuffrdy, reader)?;
+                    let rdy_i = decode_huffman_value(&tables.sbhuffrdy, reader)?;
 
                     // "5) If SBHUFF is 1, then:
                     // a) Decode the symbol instance refinement bitmap data size
                     // b) Skip over any bits remaining in the last byte read"
-                    let rsize = decode_huffman_value(tables.sbhuffrsize, reader)? as u32;
+                    let rsize = decode_huffman_value(&tables.sbhuffrsize, reader)? as u32;
                     reader.align();
 
                     // "6) Decode the refinement bitmap"

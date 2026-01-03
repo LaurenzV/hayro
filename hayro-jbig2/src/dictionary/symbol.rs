@@ -6,7 +6,7 @@
 
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::DecodedRegion;
-use crate::huffman_table::{HuffmanTable, TABLE_A, TABLE_B, TABLE_C, TABLE_D, TABLE_E};
+use crate::huffman_table::{HuffmanTable, StandardHuffmanTables};
 use crate::integer_decoder::IntegerDecoder;
 use crate::reader::Reader;
 use crate::region::CombinationOperator;
@@ -379,15 +379,24 @@ pub(crate) struct SymbolDictionary {
 ///
 /// `referred_tables` contains Huffman tables from referred table segments (type 53).
 /// These are used when SDHUFF=1 and the Huffman flags specify user-supplied tables.
+///
+/// `standard_tables` provides access to the standard Huffman tables (TABLE_A through TABLE_O).
 pub(crate) fn decode_symbol_dictionary(
     reader: &mut Reader<'_>,
     input_symbols: &[&DecodedRegion],
-    referred_tables: &[&HuffmanTable],
+    referred_tables: &[HuffmanTable],
+    standard_tables: &StandardHuffmanTables,
 ) -> Result<SymbolDictionary, &'static str> {
     let header = parse_symbol_dictionary_header(reader)?;
 
     // "6) Invoke the symbol dictionary decoding procedure described in 6.5"
-    let exported_symbols = decode_symbols(reader, &header, input_symbols, referred_tables)?;
+    let exported_symbols = decode_symbols(
+        reader,
+        &header,
+        input_symbols,
+        referred_tables,
+        standard_tables,
+    )?;
 
     Ok(SymbolDictionary { exported_symbols })
 }
@@ -401,11 +410,18 @@ fn decode_symbols(
     reader: &mut Reader<'_>,
     header: &SymbolDictionaryHeader,
     input_symbols: &[&DecodedRegion],
-    referred_tables: &[&HuffmanTable],
+    referred_tables: &[HuffmanTable],
+    standard_tables: &StandardHuffmanTables,
 ) -> Result<Vec<DecodedRegion>, &'static str> {
     if header.flags.sdhuff {
         // "If SDHUFF is 1, then the segment uses the Huffman encoding variant."
-        decode_symbols_huffman(reader, header, input_symbols, referred_tables)
+        decode_symbols_huffman(
+            reader,
+            header,
+            input_symbols,
+            referred_tables,
+            standard_tables,
+        )
     } else {
         // "If SDHUFF is 0, then the segment uses the arithmetic encoding variant."
         let data = reader.tail().ok_or("unexpected end of data")?;
@@ -424,7 +440,8 @@ fn decode_symbols_huffman(
     reader: &mut Reader<'_>,
     header: &SymbolDictionaryHeader,
     input_symbols: &[&DecodedRegion],
-    referred_tables: &[&HuffmanTable],
+    referred_tables: &[HuffmanTable],
+    standard_tables: &StandardHuffmanTables,
 ) -> Result<Vec<DecodedRegion>, &'static str> {
     // "These user-supplied Huffman decoding tables may be supplied either as a
     // Tables segment, which is referred to by the symbol dictionary segment, or
@@ -445,36 +462,35 @@ fn decode_symbols_huffman(
     }
 
     let mut custom_idx = 0;
-    let mut get_custom = || -> Result<&HuffmanTable, &'static str> {
-        let table = referred_tables[custom_idx];
+    let mut get_custom = || -> &HuffmanTable {
+        let table = &referred_tables[custom_idx];
         custom_idx += 1;
-
-        Ok(table)
+        table
     };
 
     // Select Huffman tables based on flags (7.4.2.1.6)
     // "The order of the tables that appear is in the natural order determined
     // by 7.4.2.1.1." (7.4.2.1.6)
-    let sdhuffdh: &HuffmanTable = match header.flags.sdhuffdh {
-        SdHuffDh::TableB4 => &TABLE_D,
-        SdHuffDh::TableB5 => &TABLE_E,
-        SdHuffDh::UserSupplied => get_custom()?,
+    let sdhuffdh = match header.flags.sdhuffdh {
+        SdHuffDh::TableB4 => standard_tables.table_d(),
+        SdHuffDh::TableB5 => standard_tables.table_e(),
+        SdHuffDh::UserSupplied => get_custom(),
     };
 
-    let sdhuffdw: &HuffmanTable = match header.flags.sdhuffdw {
-        SdHuffDw::TableB2 => &TABLE_B,
-        SdHuffDw::TableB3 => &TABLE_C,
-        SdHuffDw::UserSupplied => get_custom()?,
+    let sdhuffdw = match header.flags.sdhuffdw {
+        SdHuffDw::TableB2 => standard_tables.table_b(),
+        SdHuffDw::TableB3 => standard_tables.table_c(),
+        SdHuffDw::UserSupplied => get_custom(),
     };
 
-    let sdhuffbmsize: &HuffmanTable = match header.flags.sdhuffbmsize {
-        SdHuffBmSize::TableB1 => &TABLE_A,
-        SdHuffBmSize::UserSupplied => get_custom()?,
+    let sdhuffbmsize = match header.flags.sdhuffbmsize {
+        SdHuffBmSize::TableB1 => standard_tables.table_a(),
+        SdHuffBmSize::UserSupplied => get_custom(),
     };
 
-    let _sdhuffagginst: &HuffmanTable = match header.flags.sdhuffagginst {
-        SdHuffAggInst::TableB1 => &TABLE_A,
-        SdHuffAggInst::UserSupplied => get_custom()?,
+    let _sdhuffagginst = match header.flags.sdhuffagginst {
+        SdHuffAggInst::TableB1 => standard_tables.table_a(),
+        SdHuffAggInst::UserSupplied => get_custom(),
     };
 
     let num_input_symbols = input_symbols.len() as u32;
@@ -545,7 +561,7 @@ fn decode_symbols_huffman(
         if !header.flags.sdrefagg {
             decode_height_class_collective_bitmap(
                 reader,
-                sdhuffbmsize,
+                &sdhuffbmsize,
                 &mut new_symbols,
                 &new_sym_widths,
                 hcfirstsym,
@@ -559,13 +575,14 @@ fn decode_symbols_huffman(
     // "5) Determine which symbol bitmaps are exported from this symbol dictionary,
     // as described in 6.5.10."
     // "If SDHUFF is 1, decode a value using Table B.1." (6.5.10)
+    let table_a = standard_tables.table_a();
     let exported = decode_exported_symbols_with(
         num_input_symbols,
         header.num_exported_symbols,
         input_symbols,
         &new_symbols,
         || {
-            TABLE_A
+            table_a
                 .decode(reader)?
                 .ok_or("unexpected OOB decoding export flags")
         },
