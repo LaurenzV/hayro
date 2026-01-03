@@ -12,7 +12,7 @@
 //!
 //! # Safety
 //! Unsafe code is forbidden via a crate-level attribute.
-//! 
+//!
 //! [`decode`]: crate::decode
 //! [`Decoder`]: crate::Decoder
 
