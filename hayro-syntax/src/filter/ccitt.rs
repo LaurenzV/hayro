@@ -15,7 +15,7 @@ pub(crate) fn decode(data: &[u8], params: Dict<'_>) -> Option<Vec<u8>> {
     // be stopped.  In PDF, it means whether it WILL have an EOFB, and the `rows`
     // attribute will be 0 then. Because of this, we set `rows` to max, so that
     // `hayro-ccitt` keeps decoding untilt he EOFB has been found, instead of
-    // decoding 0 rows..
+    // decoding 0 rows.
     if end_of_block {
         rows = u32::MAX;
     }
@@ -56,7 +56,7 @@ pub(crate) fn decode(data: &[u8], params: Dict<'_>) -> Option<Vec<u8>> {
     }
 
     let mut decoder = ByteDecoder { output: Vec::new() };
-    hayro_ccitt::decode(data, &mut decoder, &settings);
+    let _ = hayro_ccitt::decode(data, &mut decoder, &settings);
 
     Some(decoder.output)
 }

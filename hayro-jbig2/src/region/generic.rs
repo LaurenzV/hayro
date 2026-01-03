@@ -295,7 +295,7 @@ pub(crate) fn decode_bitmap_mmr(
         invert_black: true,
     };
 
-    hayro_ccitt::decode(data, &mut decoder, &settings).ok_or("MMR decoding failed")
+    hayro_ccitt::decode(data, &mut decoder, &settings).map_err(|_| "MMR decoding failed")
 }
 
 /// A decoder sink that writes decoded pixels into a `DecodedRegion`.

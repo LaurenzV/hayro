@@ -1,3 +1,4 @@
+use crate::{DecodeError, Result};
 use core::fmt::Debug;
 
 #[derive(Debug, Clone)]
@@ -13,27 +14,27 @@ impl<'a> BitReader<'a> {
     }
 
     #[inline(always)]
-    pub(crate) fn read_bit(&mut self) -> Option<u32> {
+    pub(crate) fn read_bit(&mut self) -> Result<u32> {
         let byte_pos = self.byte_pos();
-        let byte = *self.data.get(byte_pos)? as u32;
+        let byte = *self.data.get(byte_pos).ok_or(DecodeError::UnexpectedEof)? as u32;
         let shift = 7 - self.bit_pos();
         self.cur_pos += 1;
-        Some((byte >> shift) & 1)
+        Ok((byte >> shift) & 1)
     }
 
     #[inline(always)]
-    pub(crate) fn read_bits(&mut self, num_bits: usize) -> Option<u32> {
+    pub(crate) fn read_bits(&mut self, num_bits: usize) -> Result<u32> {
         let mut result = 0_u32;
 
         for i in (0..num_bits).rev() {
             result |= (self.read_bit()?) << i;
         }
 
-        Some(result)
+        Ok(result)
     }
 
     #[inline(always)]
-    pub(crate) fn peak_bits(&mut self, num_bits: usize) -> Option<u32> {
+    pub(crate) fn peak_bits(&mut self, num_bits: usize) -> Result<u32> {
         self.clone().read_bits(num_bits)
     }
 

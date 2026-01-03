@@ -7,7 +7,7 @@
 //! The main entry point is the [decode] function, which takes encoded data and
 //! decoding settings, and outputs the decoded pixels through a [Decoder] trait.
 //!
-//! The crate is `no_std` compatible.
+//! The crate is `no_std` compatible but requires an allocator to be available.
 //!
 //! # Safety
 //! Unsafe code is forbidden via a crate-level attribute.
@@ -27,6 +27,35 @@ use alloc::vec::Vec;
 mod bit;
 mod decode;
 mod states;
+
+/// A specialized Result type for CCITT decoding operations.
+pub type Result<T> = core::result::Result<T, DecodeError>;
+
+/// An error that can occur during CCITT decoding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DecodeError {
+    /// Unexpected end of input while reading bits.
+    UnexpectedEof,
+    /// Invalid Huffman code sequence was encountered during decoding.
+    InvalidCode,
+    /// A scanline didn't have the expected number of pixels.
+    LineLengthMismatch,
+    /// Arithmetic overflow in run length or position calculation.
+    Overflow,
+}
+
+impl core::fmt::Display for DecodeError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            DecodeError::UnexpectedEof => write!(f, "unexpected end of input"),
+            DecodeError::InvalidCode => write!(f, "invalid CCITT code sequence"),
+            DecodeError::LineLengthMismatch => write!(f, "scanline length mismatch"),
+            DecodeError::Overflow => write!(f, "arithmetic overflow in position calculation"),
+        }
+    }
+}
+
+impl core::error::Error for DecodeError {}
 
 /// The encoding mode for CCITT fax decoding.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -143,7 +172,7 @@ impl BitPacker {
 ///
 /// If decoding was successful, the number of bytes that have been read in total
 /// is returned.
-pub fn decode(data: &[u8], decoder: &mut impl Decoder, settings: &DecodeSettings) -> Option<usize> {
+pub fn decode(data: &[u8], decoder: &mut impl Decoder, settings: &DecodeSettings) -> Result<usize> {
     let mut ctx = DecoderContext::new(decoder, settings);
     let mut reader = BitReader::new(data);
 
@@ -154,13 +183,13 @@ pub fn decode(data: &[u8], decoder: &mut impl Decoder, settings: &DecodeSettings
     }
 
     reader.align();
-    Some(reader.byte_pos())
+    Ok(reader.byte_pos())
 }
 
 fn decode_group3_1d<T: Decoder>(
     ctx: &mut DecoderContext<'_, T>,
     reader: &mut BitReader<'_>,
-) -> Option<()> {
+) -> Result<()> {
     // It seems like PDF producers are a bit sloppy with the `end_of_line` flag,
     // so we just always try to read one.
     let _ = reader.read_eol_if_available();
@@ -176,13 +205,13 @@ fn decode_group3_1d<T: Decoder>(
         }
     }
 
-    Some(())
+    Ok(())
 }
 
 fn decode_group3_2d<T: Decoder>(
     ctx: &mut DecoderContext<'_, T>,
     reader: &mut BitReader<'_>,
-) -> Option<()> {
+) -> Result<()> {
     // It seems like PDF producers are a bit sloppy with the `end_of_line` flag,
     // so we just always try to read one.
     let _ = reader.read_eol_if_available();
@@ -205,16 +234,16 @@ fn decode_group3_2d<T: Decoder>(
         }
     }
 
-    Some(())
+    Ok(())
 }
 
 fn decode_group4<T: Decoder>(
     ctx: &mut DecoderContext<'_, T>,
     reader: &mut BitReader<'_>,
-) -> Option<()> {
+) -> Result<()> {
     loop {
-        if ctx.settings.end_of_block && reader.peak_bits(24) == Some(EOFB) {
-            reader.read_bits(24);
+        if ctx.settings.end_of_block && reader.peak_bits(24) == Ok(EOFB) {
+            reader.read_bits(24)?;
             break;
         }
 
@@ -226,28 +255,28 @@ fn decode_group4<T: Decoder>(
         ctx.next_line(reader)?;
     }
 
-    Some(())
+    Ok(())
 }
 
 #[inline(always)]
 fn decode_1d_line<T: Decoder>(
     ctx: &mut DecoderContext<'_, T>,
     reader: &mut BitReader<'_>,
-) -> Option<()> {
+) -> Result<()> {
     while !ctx.at_eol() {
         let run_length = reader.decode_run(ctx.is_white)? as usize;
         ctx.push_pixels(run_length);
         ctx.is_white = !ctx.is_white;
     }
 
-    Some(())
+    Ok(())
 }
 
 #[inline(always)]
 fn decode_2d_line<T: Decoder>(
     ctx: &mut DecoderContext<'_, T>,
     reader: &mut BitReader<'_>,
-) -> Option<()> {
+) -> Result<()> {
     while !ctx.at_eol() {
         let mode = reader.decode_mode()?;
 
@@ -274,14 +303,14 @@ fn decode_2d_line<T: Decoder>(
             Mode::Vertical(i) => {
                 let b1 = ctx.b1();
                 let a1 = if i >= 0 {
-                    b1.checked_add(i as usize)?
+                    b1.checked_add(i as usize).ok_or(DecodeError::Overflow)?
                 } else {
-                    b1.checked_sub((-i) as usize)?
+                    b1.checked_sub((-i) as usize).ok_or(DecodeError::Overflow)?
                 };
 
                 let a0 = ctx.a0().unwrap_or(0);
 
-                ctx.push_pixels(a1.checked_sub(a0)?);
+                ctx.push_pixels(a1.checked_sub(a0).ok_or(DecodeError::Overflow)?);
                 ctx.is_white = !ctx.is_white;
 
                 ctx.update_b();
@@ -289,7 +318,7 @@ fn decode_2d_line<T: Decoder>(
         }
     }
 
-    Some(())
+    Ok(())
 }
 
 struct DecoderContext<'a, T: Decoder> {
@@ -454,11 +483,11 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
     }
 
     #[inline(always)]
-    fn next_line(&mut self, reader: &mut BitReader<'_>) -> Option<()> {
+    fn next_line(&mut self, reader: &mut BitReader<'_>) -> Result<()> {
         // Go to next line.
 
         if self.coding_line_len != self.settings.columns as usize {
-            return None;
+            return Err(DecodeError::LineLengthMismatch);
         }
 
         // Flush any partial byte with zero padding before finishing the line.
@@ -482,6 +511,6 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
 
         self.update_b();
 
-        Some(())
+        Ok(())
     }
 }
