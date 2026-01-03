@@ -194,7 +194,7 @@ fn decode_group3_1d<T: Decoder>(
     // It seems like PDF producers are a bit sloppy with the `end_of_line` flag,
     // so we just always try to read one.
     let _ = reader.read_eol_if_available();
-    
+
     loop {
         decode_1d_line(ctx, reader)?;
         ctx.next_line(reader)?;
@@ -234,7 +234,10 @@ fn decode_group3_2d<T: Decoder>(
     Ok(())
 }
 
-fn group3_check_eob<T: Decoder>(ctx: &mut DecoderContext<'_, T>, reader: &mut BitReader<'_>) -> bool {
+fn group3_check_eob<T: Decoder>(
+    ctx: &mut DecoderContext<'_, T>,
+    reader: &mut BitReader<'_>,
+) -> bool {
     let num_eol = reader.read_eol_if_available();
 
     // PDFBOX-2778 has 7 EOL, although it should only be 6. Let's be lenient
@@ -247,7 +250,7 @@ fn group3_check_eob<T: Decoder>(ctx: &mut DecoderContext<'_, T>, reader: &mut Bi
     if ctx.decoded_rows == ctx.settings.rows || reader.at_end() {
         return true;
     }
-    
+
     false
 }
 
