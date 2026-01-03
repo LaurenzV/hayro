@@ -1260,3 +1260,4 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn corpus_0076190() { run_render_test("corpus_0076190", "downloads/corpus/0076190.pdf", None); }
 #[test] fn corpus_0076584() { run_render_test("corpus_0076584", "downloads/corpus/0076584.pdf", None); }
 #[test] fn corpus_0755501() { run_render_test("corpus_0755501", "downloads/corpus/0755501.pdf", None); }
+#[test] fn corpus_0020461() { run_render_test("corpus_0020461", "downloads/corpus/0020461.pdf", None); }

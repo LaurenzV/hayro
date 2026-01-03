@@ -1,6 +1,6 @@
 use crate::bit::BitReader;
 use crate::states::{
-    BLACK_STATES, EOL, INVALID, MODE_STATES, Mode, State, VALUE_FLAG, VALUE_MASK, WHITE_STATES,
+    BLACK_STATES, INVALID, MODE_STATES, Mode, State, VALUE_FLAG, VALUE_MASK, WHITE_STATES,
 };
 use crate::{DecodeError, Result};
 
@@ -78,12 +78,34 @@ impl BitReader<'_> {
     #[inline(always)]
     pub(crate) fn read_eol_if_available(&mut self) -> usize {
         let mut count = 0;
-        while self.peak_bits(12) == Ok(EOL) {
-            count += 1;
-            self.read_bits(12).unwrap();
-        }
 
-        count
+        // See section 4.1.2 and 4.1.3. Search for the EOL pattern with
+        // potential fill bits.
+        loop {
+            let mut fill_bits = 0;
+
+            // Let's limit the maximum number of fill bits to prevent
+            // exponential explosion in malformed files.
+            const MAX_FILL_BITS: usize = 24;
+
+            while fill_bits < MAX_FILL_BITS {
+                match self.peak_bits(fill_bits + 1) {
+                    Ok(bits) if bits == 0 => fill_bits += 1,
+                    _ => break,
+                }
+            }
+
+            if fill_bits >= 11 {
+                if self.peak_bits(fill_bits + 1) == Ok(1) {
+                    // Found EOL with fill bits, consume all of it.
+                    self.read_bits(fill_bits + 1).unwrap();
+                    count += 1;
+                    continue;
+                }
+            }
+
+            return count;
+        }
     }
 }
 
