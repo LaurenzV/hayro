@@ -2,14 +2,14 @@ use crate::object::Dict;
 use crate::object::dict::keys::{
     BLACK_IS_1, COLUMNS, ENCODED_BYTE_ALIGN, END_OF_BLOCK, END_OF_LINE, K, ROWS,
 };
-use crate::object::stream::ImageDecodeParams;
+use crate::object::stream::{FilterResult, ImageColorSpace, ImageData, ImageDecodeParams};
 use hayro_ccitt::{DecodeSettings, Decoder, EncodingMode};
 
 pub(crate) fn decode(
     data: &[u8],
     params: Dict<'_>,
     image_params: &ImageDecodeParams,
-) -> Option<Vec<u8>> {
+) -> Option<FilterResult> {
     let k = params.get::<i32>(K).unwrap_or(0);
 
     let rows = params.get::<u32>(ROWS).unwrap_or(image_params.height);
@@ -33,6 +33,7 @@ pub(crate) fn decode(
 
     struct ByteDecoder {
         output: Vec<u8>,
+        decoded_rows: u32,
     }
 
     impl Decoder for ByteDecoder {
@@ -45,13 +46,32 @@ pub(crate) fn decode(
         }
 
         fn next_line(&mut self) {
-            // Nothing to do here, as hayro-ccitt will already align to
+            self.decoded_rows += 1;
+            // Nothing else to do here, as hayro-ccitt will already align to
             // byte-boundary after each row.
         }
     }
 
-    let mut decoder = ByteDecoder { output: Vec::new() };
-    hayro_ccitt::decode(data, &mut decoder, &settings).ok()?;
+    let mut decoder = ByteDecoder {
+        output: Vec::new(),
+        decoded_rows: 0,
+    };
+    let result = hayro_ccitt::decode(data, &mut decoder, &settings);
 
-    Some(decoder.output)
+    // If we decoded at least one row, let's be lenient and return what we got.
+    // See also 0001763.pdf.
+    if result.is_err() && decoder.decoded_rows == 0 {
+        return None;
+    }
+
+    Some(FilterResult {
+        data: decoder.output,
+        image_data: Some(ImageData {
+            alpha: None,
+            color_space: Some(ImageColorSpace::Gray),
+            bits_per_component: 1,
+            width: settings.columns,
+            height: image_params.height,
+        }),
+    })
 }

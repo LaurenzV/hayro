@@ -102,9 +102,9 @@ impl Filter {
             Self::FlateDecode => lzw_flate::flate::decode(data, params)
                 .map(FilterResult::from_data)
                 .ok_or(DecodeFailure::StreamDecode),
-            Self::CcittFaxDecode => ccitt::decode(data, params, image_params)
-                .map(FilterResult::from_data)
-                .ok_or(DecodeFailure::ImageDecode),
+            Self::CcittFaxDecode => {
+                ccitt::decode(data, params, image_params).ok_or(DecodeFailure::ImageDecode)
+            }
             Self::Jbig2Decode => Ok(FilterResult::from_data(
                 jbig2::decode(data, params).ok_or(DecodeFailure::ImageDecode)?,
             )),
