@@ -173,8 +173,8 @@ impl BitPacker {
 ///
 /// If decoding was successful, the number of bytes that have been read in total
 /// is returned.
-/// 
-/// If an error is returned, it means that the file is somehow malformed. 
+///
+/// If an error is returned, it means that the file is somehow malformed.
 /// However, even if that's the case, it is possible that a number
 /// of rows were decoded successfully and written into the decoder, so those
 /// can still be used, but the image might be truncated.
