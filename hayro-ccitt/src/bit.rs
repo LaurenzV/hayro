@@ -8,7 +8,7 @@ pub(crate) struct BitReader<'a> {
 }
 
 impl<'a> BitReader<'a> {
-    #[inline]
+    #[inline(always)]
     pub(crate) fn new(data: &'a [u8]) -> Self {
         Self { data, cur_pos: 0 }
     }
@@ -38,7 +38,7 @@ impl<'a> BitReader<'a> {
         self.clone().read_bits(num_bits)
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) fn align(&mut self) {
         let bit_pos = self.bit_pos();
 
@@ -47,17 +47,18 @@ impl<'a> BitReader<'a> {
         }
     }
 
+    #[inline(always)]
     pub(crate) fn at_end(&self) -> bool {
         self.byte_pos() >= self.data.len()
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) fn byte_pos(&self) -> usize {
-        self.cur_pos / 8
+        self.cur_pos >> 3
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) fn bit_pos(&self) -> usize {
-        self.cur_pos % 8
+        self.cur_pos & 7
     }
 }
