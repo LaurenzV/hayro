@@ -90,18 +90,16 @@ impl BitReader<'_> {
 
             while fill_bits < MAX_FILL_BITS {
                 match self.peak_bits(fill_bits + 1) {
-                    Ok(bits) if bits == 0 => fill_bits += 1,
+                    Ok(0) => fill_bits += 1,
                     _ => break,
                 }
             }
 
-            if fill_bits >= 11 {
-                if self.peak_bits(fill_bits + 1) == Ok(1) {
-                    // Found EOL with fill bits, consume all of it.
-                    self.read_bits(fill_bits + 1).unwrap();
-                    count += 1;
-                    continue;
-                }
+            if fill_bits >= 11 && self.peak_bits(fill_bits + 1) == Ok(1) {
+                // Found EOL with fill bits, consume all of it.
+                self.read_bits(fill_bits + 1).unwrap();
+                count += 1;
+                continue;
             }
 
             return count;
