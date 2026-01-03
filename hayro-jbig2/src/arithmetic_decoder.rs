@@ -87,7 +87,7 @@ impl<'a> ArithmeticDecoder<'a> {
     fn read_byte(&mut self) {
         // Figure G.3: "B = 0xFF?"
         if self.current_byte() == 0xff {
-            // `B1`
+            // `B1` - The next byte.
             let next_byte = self.next_byte();
 
             // Figure G.3: "B1 > 0x8F?"
@@ -139,7 +139,7 @@ impl<'a> ArithmeticDecoder<'a> {
     /// The `LPS_EXCHANGE` procedure (E.3.2, Figure E.17).
     #[inline(always)]
     fn exchange_lps(&mut self, context: &mut Context, qe_entry: &QeData) -> u32 {
-        // `D`
+        // `D` - The decoded binary decision.
         let decoded_bit;
 
         // Figure E.17: "A < Qe(I(CX))?"
@@ -169,7 +169,7 @@ impl<'a> ArithmeticDecoder<'a> {
     /// The `MPS_EXCHANGE` procedure (E.3.2, Figure E.16).
     #[inline(always)]
     fn exchange_mps(&mut self, context: &mut Context, qe_entry: &QeData) -> u32 {
-        // D
+        // `D` - The decoded binary decision.
         let decoded_bit;
 
         // Figure E.16: "A < Qe(I(CX))?"
