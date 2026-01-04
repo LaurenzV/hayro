@@ -1,3 +1,5 @@
+//! Bit-level reader for CCITT encoded data streams.
+
 use crate::{DecodeError, Result};
 use core::fmt::Debug;
 

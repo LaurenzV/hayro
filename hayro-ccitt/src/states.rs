@@ -1,19 +1,23 @@
-//! The state machine for decoding black and white runs.
-//! 
+//! State machine for decoding CCITT run-length codes.
+//!
 //! CCITT assigns binary codes to integers that indicate how many pixels are
 //! of that specific color. The binary codes vary depending on whether we are
 //! decoding black pixels or white pixels.
-//! 
+//!
 //! To achieve this, we create a simple "state-machine" by building a tree
 //! of nodes, where each node represents one binary digit and can contain
-//! up two children based on whether the next digit is 0 or 1 (basically a 
+//! up two children based on whether the next digit is 0 or 1 (basically a
 //! huffman tree). Then, we simply can read bit by bit and traverse the
-//! tree to find the corresponding black/white code for the given bit sequence. 
+//! tree to find the corresponding black/white code for the given bit sequence.
 
+/// 2D coding modes (T.4 Section 4.2.1.3.2, T.6 Section 2.2.3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Mode {
+    /// Pass mode (T.4 Section 4.2.1.3.2a, T.6 Section 2.2.3.1).
     Pass,
+    /// Horizontal mode (T.4 Section 4.2.1.3.2c, T.6 Section 2.2.3.3).
     Horizontal,
+    /// Vertical mode with offset (T.4 Section 4.2.1.3.2b, T.6 Section 2.2.3.2).
     Vertical(i8),
 }
 
@@ -24,6 +28,8 @@ pub(crate) enum Mode {
 pub(crate) const VALUE_FLAG: u16 = 0x8000;
 pub(crate) const VALUE_MASK: u16 = 0x1FFF;
 pub(crate) const INVALID: u16 = 0xFFFF;
+/// End-of-facsimile-block marker (T.6 Section 2.4.1.1).
+/// Two consecutive EOL codes: 000000000001 000000000001.
 pub(crate) const EOFB: u32 = 0x1001;
 
 #[derive(Clone, Copy)]
@@ -94,7 +100,7 @@ const fn insert_code<const N: usize>(
     num_states
 }
 
-/// Table 2/T.6 - White terminating codes.
+/// White terminating codes (T.4 Table 2/T.4, T.6 Table 2/T.6).
 const WHITE_TERMINATING: [(u16, u8, u16); 64] = [
     (0, 8, 0b00110101),
     (1, 6, 0b000111),
@@ -162,7 +168,7 @@ const WHITE_TERMINATING: [(u16, u8, u16); 64] = [
     (63, 8, 0b00110100),
 ];
 
-/// Table 3/T.6 - White make-up codes.
+/// White make-up codes (T.4 Table 3a/T.4, T.6 Table 3/T.6).
 const WHITE_MAKEUP: [(u16, u8, u16); 27] = [
     (64, 5, 0b11011),
     (128, 5, 0b10010),
@@ -193,7 +199,7 @@ const WHITE_MAKEUP: [(u16, u8, u16); 27] = [
     (1728, 9, 0b010011011),
 ];
 
-/// Table 2/T.6 - Black terminating codes.
+/// Black terminating codes (T.4 Table 2/T.4, T.6 Table 2/T.6).
 const BLACK_TERMINATING: [(u16, u8, u16); 64] = [
     (0, 10, 0b0000110111),
     (1, 3, 0b010),
@@ -261,7 +267,7 @@ const BLACK_TERMINATING: [(u16, u8, u16); 64] = [
     (63, 12, 0b000001100111),
 ];
 
-/// Table 3/T.6 - Black make-up codes.
+/// Black make-up codes (T.4 Table 3a/T.4, T.6 Table 3/T.6).
 const BLACK_MAKEUP: [(u16, u8, u16); 27] = [
     (64, 10, 0b0000001111),
     (128, 12, 0b000011001000),
@@ -292,7 +298,7 @@ const BLACK_MAKEUP: [(u16, u8, u16); 27] = [
     (1728, 13, 0b0000001100101),
 ];
 
-/// Table 3/T.6 - Common make-up codes.
+/// Extended make-up codes for run lengths > 1728 (T.4 Table 3b/T.4, T.6 Table 3/T.6).
 const COMMON_MAKEUP: [(u16, u8, u16); 13] = [
     (1792, 11, 0b00000001000),
     (1856, 11, 0b00000001100),
@@ -309,7 +315,7 @@ const COMMON_MAKEUP: [(u16, u8, u16); 13] = [
     (2560, 12, 0b000000011111),
 ];
 
-/// Table 4/T.6 - Mode codes for 2D encoding.
+/// Mode codes for 2D encoding (T.4 Table 4/T.4, T.6 Table 1/T.6).
 const MODE_CODES: [(u16, u8, u16); 9] = [
     (0, 4, 0b0001),    // Pass
     (1, 3, 0b001),     // Horizontal

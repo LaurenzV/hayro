@@ -5,6 +5,10 @@ use crate::states::{
 use crate::{DecodeError, Result};
 
 impl BitReader<'_> {
+    /// Decode a run length using the given state machine (T.4 Section 4.1.1, T.6 Section 2.2.4).
+    ///
+    /// Run lengths 0-63 use terminating codes.
+    /// Run lengths 64+ use one or more make-up codes followed by a terminating code.
     #[inline(always)]
     fn decode_run_inner(&mut self, states: &[State]) -> Result<u16> {
         let mut total: u16 = 0;
@@ -39,6 +43,7 @@ impl BitReader<'_> {
         }
     }
 
+    /// Decode a white run length.
     #[inline(always)]
     pub(crate) fn decode_white_run(&mut self) -> Result<u16> {
         self.decode_run_inner(&WHITE_STATES)
@@ -47,6 +52,7 @@ impl BitReader<'_> {
             .or_else(|_| self.decode_run_inner(&BLACK_STATES))
     }
 
+    /// Decode a black run length.
     #[inline(always)]
     pub(crate) fn decode_black_run(&mut self) -> Result<u16> {
         self.decode_run_inner(&BLACK_STATES)
@@ -55,6 +61,7 @@ impl BitReader<'_> {
             .or_else(|_| self.decode_run_inner(&WHITE_STATES))
     }
 
+    /// Decode a run length for the specified color.
     #[inline(always)]
     pub(crate) fn decode_run(&mut self, is_white: bool) -> Result<u16> {
         if is_white {
@@ -64,6 +71,7 @@ impl BitReader<'_> {
         }
     }
 
+    /// Decode a 2D mode code.
     #[inline(always)]
     pub(crate) fn decode_mode(&mut self) -> Result<Mode> {
         let mode_id = self.decode_run_inner(&MODE_STATES)?;
@@ -81,12 +89,17 @@ impl BitReader<'_> {
         })
     }
 
+    /// Read EOL (End-of-Line) codes if present (T.4 Section 4.1.2).
+    ///
+    /// EOL is defined as `000000000001` (11 zeros followed by a 1).
+    /// Fill bits (T.4 Section 4.1.3) may precede the EOL as a variable-length
+    /// string of zeros.
     #[inline(always)]
     pub(crate) fn read_eol_if_available(&mut self) -> usize {
         let mut count = 0;
 
-        // See section 4.1.2 and 4.1.3. Search for the EOL pattern with
-        // potential fill bits.
+        // T.4 Section 4.1.2: EOL = 000000000001
+        // T.4 Section 4.1.3: Fill = variable length string of 0s before EOL
         loop {
             let mut fill_bits = 0;
 

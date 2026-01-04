@@ -157,6 +157,7 @@ pub fn decode(data: &[u8], decoder: &mut impl Decoder, settings: &DecodeSettings
     Ok(reader.byte_pos())
 }
 
+/// Group 3 1D decoding (T.4 Section 4.1).
 fn decode_group3_1d<T: Decoder>(
     ctx: &mut DecoderContext<'_, T>,
     reader: &mut BitReader<'_>,
@@ -177,6 +178,7 @@ fn decode_group3_1d<T: Decoder>(
     Ok(())
 }
 
+/// Group 3 2D decoding (T.4 Section 4.2).
 fn decode_group3_2d<T: Decoder>(
     ctx: &mut DecoderContext<'_, T>,
     reader: &mut BitReader<'_>,
@@ -204,16 +206,18 @@ fn decode_group3_2d<T: Decoder>(
     Ok(())
 }
 
+/// Check for end-of-block, including RTC (T.4 Section 4.1.4).
 fn group3_check_eob<T: Decoder>(
     ctx: &mut DecoderContext<'_, T>,
     reader: &mut BitReader<'_>,
 ) -> bool {
     let num_eol = reader.read_eol_if_available();
 
+    // T.4 Section 4.1.4: "The end of a document transmission is indicated by
+    // sending six consecutive EOLs."
     // PDFBOX-2778 has 7 EOL, although it should only be 6. Let's be lenient
     // and check with >=.
     if ctx.settings.end_of_block && num_eol >= 6 {
-        // RTC (Return To Control).
         return true;
     }
 
@@ -245,6 +249,7 @@ fn decode_group4<T: Decoder>(
     Ok(())
 }
 
+/// Decode a single 1D-coded line (T.4 Section 4.1.1, T.6 Section 2.2.4).
 #[inline(always)]
 fn decode_1d_line<T: Decoder>(
     ctx: &mut DecoderContext<'_, T>,
@@ -259,6 +264,7 @@ fn decode_1d_line<T: Decoder>(
     Ok(())
 }
 
+/// Decode a single 2D-coded line (T.4 Section 4.2, T.6 Section 2.2).
 #[inline(always)]
 fn decode_2d_line<T: Decoder>(
     ctx: &mut DecoderContext<'_, T>,
@@ -268,25 +274,13 @@ fn decode_2d_line<T: Decoder>(
         let mode = reader.decode_mode()?;
 
         match mode {
-            // 2.2.3.1 Pass mode.
+            // Pass mode (T.4 Section 4.2.1.3.2a, T.6 Section 2.2.3.1).
             Mode::Pass => {
                 ctx.push_pixels(ctx.b2() - ctx.a0().unwrap_or(0));
                 ctx.update_b();
                 // No color change happens in pass mode.
             }
-            // 2.2.3.3 Horizontal mode.
-            Mode::Horizontal => {
-                let a0a1 = reader.decode_run(ctx.is_white)? as usize;
-                ctx.push_pixels(a0a1);
-                ctx.is_white = !ctx.is_white;
-
-                let a1a2 = reader.decode_run(ctx.is_white)? as usize;
-                ctx.push_pixels(a1a2);
-                ctx.is_white = !ctx.is_white;
-
-                ctx.update_b();
-            }
-            // 2.2.3.2 Vertical mode.
+            // Vertical mode (T.4 Section 4.2.1.3.2b, T.6 Section 2.2.3.2).
             Mode::Vertical(i) => {
                 let b1 = ctx.b1();
                 let a1 = if i >= 0 {
@@ -298,6 +292,18 @@ fn decode_2d_line<T: Decoder>(
                 let a0 = ctx.a0().unwrap_or(0);
 
                 ctx.push_pixels(a1.checked_sub(a0).ok_or(DecodeError::Overflow)?);
+                ctx.is_white = !ctx.is_white;
+
+                ctx.update_b();
+            }
+            // Horizontal mode (T.4 Section 4.2.1.3.2c, T.6 Section 2.2.3.3).
+            Mode::Horizontal => {
+                let a0a1 = reader.decode_run(ctx.is_white)? as usize;
+                ctx.push_pixels(a0a1);
+                ctx.is_white = !ctx.is_white;
+
+                let a1a2 = reader.decode_run(ctx.is_white)? as usize;
+                ctx.push_pixels(a1a2);
                 ctx.is_white = !ctx.is_white;
 
                 ctx.update_b();
