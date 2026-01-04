@@ -9,7 +9,7 @@ license = { workspace = true }
 readme = "README.md"
 
 [dependencies]
-hayro-ccitt = { path = "../hayro-ccitt" }
+hayro-ccitt = { workspace = true }
 
 
 [lints]
