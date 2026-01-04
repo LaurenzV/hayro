@@ -1,3 +1,15 @@
+//! The state machine for decoding black and white runs.
+//! 
+//! CCITT assigns binary codes to integers that indicate how many pixels are
+//! of that specific color. The binary codes vary depending on whether we are
+//! decoding black pixels or white pixels.
+//! 
+//! To achieve this, we create a simple "state-machine" by building a tree
+//! of nodes, where each node represents one binary digit and can contain
+//! up two children based on whether the next digit is 0 or 1 (basically a 
+//! huffman tree). Then, we simply can read bit by bit and traverse the
+//! tree to find the corresponding black/white code for the given bit sequence. 
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Mode {
     Pass,
