@@ -10,30 +10,17 @@
 //! huffman tree). Then, we simply can read bit by bit and traverse the
 //! tree to find the corresponding black/white code for the given bit sequence.
 
-/// 2D coding modes (T.4 Section 4.2.1.3.2, T.6 Section 2.2.3).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Mode {
-    /// Pass mode (T.4 Section 4.2.1.3.2a, T.6 Section 2.2.3.1).
-    Pass,
-    /// Horizontal mode (T.4 Section 4.2.1.3.2c, T.6 Section 2.2.3.3).
-    Horizontal,
-    /// Vertical mode with offset (T.4 Section 4.2.1.3.2b, T.6 Section 2.2.3.2).
-    Vertical(i8),
-}
-
 /// The flag indicating whether the state is terminal.
 pub(crate) const TERMINAL: u16 = 0x8000;
 /// The mask used to get the actual value from a terminal state.
 pub(crate) const VALUE_MASK: u16 = 0x1FFF;
 /// An invalid state.
 pub(crate) const INVALID: u16 = 0xFFFF;
-/// End-of-facsimile-block marker (T.6 Section 2.4.1.1).
-/// Two consecutive EOL codes: 000000000001 000000000001.
-pub(crate) const EOFB: u32 = 0x1001;
-
+/// List of states for white color codes.
 pub(crate) const WHITE_STATES: [State; 104] = build_run_states(&WHITE_TERMINATING, &WHITE_MAKEUP);
+/// List of states for black color codes.
 pub(crate) const BLACK_STATES: [State; 104] = build_run_states(&BLACK_TERMINATING, &BLACK_MAKEUP);
-
+/// List of states for coding modes.
 pub(crate) const MODE_STATES: [State; 9] = {
     let mut states: [State; 9] = [State::new(); 9];
     let _ = insert_codes(&mut states, 1, &MODE_CODES);

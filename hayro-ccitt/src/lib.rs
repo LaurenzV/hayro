@@ -31,8 +31,8 @@
 extern crate alloc;
 
 use crate::bit_reader::BitReader;
-use crate::state_machine::{EOFB, Mode};
 
+use crate::decode::{EOFB, Mode};
 use alloc::vec;
 use alloc::vec::Vec;
 
