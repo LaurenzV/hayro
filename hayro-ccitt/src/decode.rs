@@ -25,8 +25,8 @@ impl BitReader<'_> {
     /// Run lengths 0-63 use terminating codes.
     /// Run lengths 64+ use one or more make-up codes followed by a terminating code.
     #[inline(always)]
-    fn decode_run_inner(&mut self, states: &[State]) -> Result<u16> {
-        let mut total: u16 = 0;
+    fn decode_run_inner(&mut self, states: &[State]) -> Result<u32> {
+        let mut total: u32 = 0;
         let mut state: usize = 0;
 
         loop {
@@ -41,7 +41,7 @@ impl BitReader<'_> {
             if transition == INVALID {
                 return Err(DecodeError::InvalidCode);
             } else if transition & TERMINAL != 0 {
-                let len = transition & VALUE_MASK;
+                let len = (transition & VALUE_MASK) as u32;
                 total = total.checked_add(len).ok_or(DecodeError::Overflow)?;
 
                 // For decoding black/white runs, less than 64 means we have
@@ -60,7 +60,7 @@ impl BitReader<'_> {
 
     /// Decode a white run length.
     #[inline(always)]
-    fn decode_white_run(&mut self) -> Result<u16> {
+    fn decode_white_run(&mut self) -> Result<u32> {
         self.decode_run_inner(&WHITE_STATES)
             // See 0506179.pdf. We are lenient and check whether perhaps
             // the opposite color works.
@@ -69,7 +69,7 @@ impl BitReader<'_> {
 
     /// Decode a black run length.
     #[inline(always)]
-    fn decode_black_run(&mut self) -> Result<u16> {
+    fn decode_black_run(&mut self) -> Result<u32> {
         self.decode_run_inner(&BLACK_STATES)
             // See 0506179.pdf. We are lenient and check whether perhaps
             // the opposite color works.
@@ -78,7 +78,7 @@ impl BitReader<'_> {
 
     /// Decode a run length for the specified color.
     #[inline(always)]
-    pub(crate) fn decode_run(&mut self, is_white: bool) -> Result<u16> {
+    pub(crate) fn decode_run(&mut self, is_white: bool) -> Result<u32> {
         if is_white {
             self.decode_white_run()
         } else {

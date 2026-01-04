@@ -10,7 +10,7 @@ impl hayro_ccitt::Decoder for Decoder {
         todo!()
     }
 
-    fn push_pixel_chunk(&mut self, _white: bool, _chunk_count: usize) {
+    fn push_pixel_chunk(&mut self, _white: bool, _chunk_count: u32) {
         todo!()
     }
 

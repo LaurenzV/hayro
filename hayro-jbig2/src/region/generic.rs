@@ -321,8 +321,8 @@ impl hayro_ccitt::Decoder for BitmapDecoder<'_> {
     }
 
     /// Push multiple chunks of 8 pixels of the same color.
-    fn push_pixel_chunk(&mut self, white: bool, chunk_count: usize) {
-        let pixel_count = chunk_count * 8;
+    fn push_pixel_chunk(&mut self, white: bool, chunk_count: u32) {
+        let pixel_count = chunk_count as usize * 8;
         let start = (self.y * self.region.width + self.x) as usize;
         let end = (start + pixel_count).min(self.region.data.len());
         self.region.data[start..end].fill(white);

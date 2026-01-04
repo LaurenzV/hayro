@@ -66,9 +66,10 @@ pub(crate) fn decode(
             self.push_bit(white);
         }
 
-        fn push_pixel_chunk(&mut self, white: bool, chunk_count: usize) {
+        fn push_pixel_chunk(&mut self, white: bool, chunk_count: u32) {
             let byte = if white { 0xFF } else { 0x00 };
-            self.output.extend(std::iter::repeat_n(byte, chunk_count));
+            self.output
+                .extend(std::iter::repeat_n(byte, chunk_count as usize));
         }
 
         fn next_line(&mut self) {
