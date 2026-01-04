@@ -127,11 +127,37 @@ pub trait Decoder {
     fn next_line(&mut self);
 }
 
+/// Pixel color in a bi-level (black and white) image.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Color {
+    /// White pixel.
+    White,
+    /// Black pixel.
+    Black,
+}
+
+impl Color {
+    /// Returns the opposite color.
+    #[inline(always)]
+    fn opposite(self) -> Self {
+        match self {
+            Color::White => Color::Black,
+            Color::Black => Color::White,
+        }
+    }
+
+    /// Returns true if this color is white.
+    #[inline(always)]
+    fn is_white(self) -> bool {
+        matches!(self, Color::White)
+    }
+}
+
 /// Represents a color change at a specific index in a line.
 #[derive(Clone, Copy)]
 struct ColorChange {
     idx: u32,
-    color: u8,
+    color: Color,
 }
 
 /// Decode the given image using the provided settings and the decoder.
@@ -256,9 +282,9 @@ fn decode_1d_line<T: Decoder>(
     reader: &mut BitReader<'_>,
 ) -> Result<()> {
     while !ctx.at_eol() {
-        let run_length = reader.decode_run(ctx.is_white)?;
+        let run_length = reader.decode_run(ctx.color)?;
         ctx.push_pixels(run_length);
-        ctx.is_white = !ctx.is_white;
+        ctx.color = ctx.color.opposite();
     }
 
     Ok(())
@@ -292,19 +318,19 @@ fn decode_2d_line<T: Decoder>(
                 let a0 = ctx.a0().unwrap_or(0);
 
                 ctx.push_pixels(a1.checked_sub(a0).ok_or(DecodeError::Overflow)?);
-                ctx.is_white = !ctx.is_white;
+                ctx.color = ctx.color.opposite();
 
                 ctx.update_b();
             }
             // Horizontal mode (T.4 Section 4.2.1.3.2c, T.6 Section 2.2.3.3).
             Mode::Horizontal => {
-                let a0a1 = reader.decode_run(ctx.is_white)?;
+                let a0a1 = reader.decode_run(ctx.color)?;
                 ctx.push_pixels(a0a1);
-                ctx.is_white = !ctx.is_white;
+                ctx.color = ctx.color.opposite();
 
-                let a1a2 = reader.decode_run(ctx.is_white)?;
+                let a1a2 = reader.decode_run(ctx.color)?;
                 ctx.push_pixels(a1a2);
-                ctx.is_white = !ctx.is_white;
+                ctx.color = ctx.color.opposite();
 
                 ctx.update_b();
             }
@@ -329,8 +355,8 @@ struct DecoderContext<'a, T: Decoder> {
     decoder: &'a mut T,
     /// The width of a line in pixels (i.e. number of columns).
     line_width: u32,
-    /// Whether the next run to be decoded is white.
-    is_white: bool,
+    /// The color of the next run to be decoded.
+    color: Color,
     /// How many rows have been decoded so far.
     decoded_rows: u32,
     /// The settings to apply during decoding.
@@ -349,8 +375,8 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
             pixels_decoded: 0,
             decoder,
             line_width: settings.columns,
-            // Each run starts with a white color.
-            is_white: true,
+            // Each run starts with an imaginary white pixel on the left.
+            color: Color::White,
             decoded_rows: 0,
             settings,
             invert_black: settings.invert_black,
@@ -381,7 +407,7 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
     /// "The next changing element to the right of b1, on the reference line."
     fn b2(&self) -> u32 {
         self.ref_changes
-            .get((self.b1_idx + 1) as usize)
+            .get(self.b1_idx as usize + 1)
             .map_or(self.line_width, |c| c.idx)
     }
 
@@ -389,7 +415,7 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
     #[inline(always)]
     fn update_b(&mut self) {
         // b1 refers to an element of the opposite color.
-        let target_color = self.cur_color() ^ 1;
+        let target_color = self.color.opposite();
         // b1 must be strictly greater than a0.
         let min_idx = self.a0().map_or(0, |a| a + 1);
 
@@ -414,7 +440,7 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
     fn push_pixels(&mut self, count: u32) {
         // Make sure we don't have too many pixels (for invalid files).
         let count = count.min(self.line_width - self.pixels_decoded);
-        let white = self.is_white ^ self.invert_black;
+        let white = self.color.is_white() ^ self.invert_black;
         let mut remaining = count;
 
         // Push individual pixels until we reach an 8-pixel boundary.
@@ -439,26 +465,21 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
 
         // Track the color change:
         // - At start of line (no previous changes): only add if color differs from
-        //   imaginary white (0), i.e., only add if black.
+        //   imaginary white, i.e., only add if black.
         // - Mid-line: only add if color differs from previous.
         if count > 0 {
-            let color = self.cur_color();
             let is_change = self
                 .coding_changes
                 .last()
-                .map_or(color != 0, |last| last.color != color);
+                .map_or(!self.color.is_white(), |last| last.color != self.color);
             if is_change {
                 self.coding_changes.push(ColorChange {
                     idx: self.pixels_decoded,
-                    color,
+                    color: self.color,
                 });
             }
             self.pixels_decoded += count;
         }
-    }
-
-    fn cur_color(&self) -> u8 {
-        if self.is_white { 0 } else { 1 }
     }
 
     fn at_eol(&self) -> bool {
@@ -476,7 +497,7 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
         self.pixels_decoded = 0;
         self.ref_pos = 0;
         self.b1_idx = 0;
-        self.is_white = true;
+        self.color = Color::White;
         self.decoded_rows += 1;
         self.decoder.next_line();
 

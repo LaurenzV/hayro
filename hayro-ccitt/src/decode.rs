@@ -2,7 +2,7 @@ use crate::bit_reader::BitReader;
 use crate::state_machine::{
     BLACK_STATES, INVALID, MODE_STATES, State, TERMINAL, VALUE_MASK, WHITE_STATES,
 };
-use crate::{DecodeError, Result};
+use crate::{Color, DecodeError, Result};
 
 /// End-of-facsimile-block marker (T.6 Section 2.4.1.1).
 /// Two consecutive EOL codes: 000000000001 000000000001.
@@ -78,11 +78,10 @@ impl BitReader<'_> {
 
     /// Decode a run length for the specified color.
     #[inline(always)]
-    pub(crate) fn decode_run(&mut self, is_white: bool) -> Result<u32> {
-        if is_white {
-            self.decode_white_run()
-        } else {
-            self.decode_black_run()
+    pub(crate) fn decode_run(&mut self, color: Color) -> Result<u32> {
+        match color {
+            Color::White => self.decode_white_run(),
+            Color::Black => self.decode_black_run(),
         }
     }
 
