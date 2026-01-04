@@ -1,4 +1,4 @@
-use crate::bit::BitReader;
+use crate::bit_reader::BitReader;
 use crate::states::{
     BLACK_STATES, INVALID, MODE_STATES, Mode, State, VALUE_FLAG, VALUE_MASK, WHITE_STATES,
 };

@@ -30,13 +30,13 @@
 
 extern crate alloc;
 
-use crate::bit::BitReader;
+use crate::bit_reader::BitReader;
 use crate::states::{EOFB, Mode};
 
 use alloc::vec;
 use alloc::vec::Vec;
 
-mod bit;
+mod bit_reader;
 mod decode;
 mod states;
 
