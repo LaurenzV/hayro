@@ -7,11 +7,11 @@ struct Decoder;
 
 impl hayro_ccitt::Decoder for Decoder {
     fn push_pixel(&mut self, _white: bool) {
-        todo!()
+        
     }
 
     fn push_pixel_chunk(&mut self, _white: bool, _chunk_count: u32) {
-        todo!()
+        
     }
 
     fn next_line(&mut self) {}
