@@ -412,9 +412,8 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
 
     #[inline(always)]
     fn push_pixels(&mut self, count: u32) {
-        // Clamp how many pixels we push so that we don't exceed the column
-        // count for malformed files.
-        let count = count.min(self.line_width.saturating_sub(self.pixels_decoded));
+        // Make sure we don't have too many pixels (for invalid files).
+        let count = count.min(self.line_width - self.pixels_decoded);
         let white = self.is_white ^ self.invert_black;
         let mut remaining = count;
 
