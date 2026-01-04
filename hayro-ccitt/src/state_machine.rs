@@ -21,16 +21,24 @@ pub(crate) enum Mode {
     Vertical(i8),
 }
 
-// State machine encoding:
-// - 0x0000-0x3FFF: next state index
-// - 0x8000 | value: decoded run length (value & 0x1FFF)
-// - 0xFFFF: invalid/unused
-pub(crate) const VALUE_FLAG: u16 = 0x8000;
+/// The flag indicating whether the state is terminal.
+pub(crate) const TERMINAL: u16 = 0x8000;
+/// The mask used to get the actual value from a terminal state.
 pub(crate) const VALUE_MASK: u16 = 0x1FFF;
+/// An invalid state.
 pub(crate) const INVALID: u16 = 0xFFFF;
 /// End-of-facsimile-block marker (T.6 Section 2.4.1.1).
 /// Two consecutive EOL codes: 000000000001 000000000001.
 pub(crate) const EOFB: u32 = 0x1001;
+
+pub(crate) const WHITE_STATES: [State; 104] = build_run_states(&WHITE_TERMINATING, &WHITE_MAKEUP);
+pub(crate) const BLACK_STATES: [State; 104] = build_run_states(&BLACK_TERMINATING, &BLACK_MAKEUP);
+
+pub(crate) const MODE_STATES: [State; 9] = {
+    let mut states: [State; 9] = [State::new(); 9];
+    let _ = insert_codes(&mut states, 1, &MODE_CODES);
+    states
+};
 
 #[derive(Clone, Copy)]
 pub(crate) struct State {
@@ -61,7 +69,7 @@ const fn insert_code<const N: usize>(
 
     while i < code_length {
         let bit = (code >> (code_length - 1 - i)) & 1;
-        let is_last = i == code_length - 1;
+        let is_terminal = i == code_length - 1;
 
         let next = if bit == 0 {
             states[current_state].on_0
@@ -69,16 +77,15 @@ const fn insert_code<const N: usize>(
             states[current_state].on_1
         };
 
-        if is_last {
-            // Terminal state - store the result.
-            let result = VALUE_FLAG | (run_length & VALUE_MASK);
+        if is_terminal {
+            let result = TERMINAL | (run_length & VALUE_MASK);
 
             if bit == 0 {
                 states[current_state].on_0 = result;
             } else {
                 states[current_state].on_1 = result;
             }
-        } else if next == INVALID || next >= VALUE_FLAG {
+        } else if next == INVALID {
             // Create a new state.
             let new_state = num_states;
             num_states += 1;
@@ -98,6 +105,32 @@ const fn insert_code<const N: usize>(
     }
 
     num_states
+}
+
+const fn insert_codes<const N: usize, const M: usize>(
+    states: &mut [State; N],
+    mut num_states: usize,
+    codes: &[(u16, u8, u16); M],
+) -> usize {
+    let mut i = 0;
+    while i < codes.len() {
+        let (run_length, code_length, code) = codes[i];
+        num_states = insert_code(states, num_states, run_length, code_length, code);
+        i += 1;
+    }
+    num_states
+}
+
+const fn build_run_states<const N: usize, const T: usize, const M: usize>(
+    terminating: &[(u16, u8, u16); T],
+    makeup: &[(u16, u8, u16); M],
+) -> [State; N] {
+    let mut states: [State; N] = [State::new(); N];
+    let mut num_states: usize = 1;
+    num_states = insert_codes(&mut states, num_states, terminating);
+    num_states = insert_codes(&mut states, num_states, makeup);
+    let _ = insert_codes(&mut states, num_states, &COMMON_MAKEUP);
+    states
 }
 
 /// White terminating codes (T.4 Table 2/T.4, T.6 Table 2/T.6).
@@ -327,38 +360,3 @@ const MODE_CODES: [(u16, u8, u16); 9] = [
     (7, 6, 0b000010),  // Vertical_L2
     (8, 7, 0b0000010), // Vertical_L3
 ];
-
-const fn insert_codes<const N: usize, const M: usize>(
-    states: &mut [State; N],
-    mut num_states: usize,
-    codes: &[(u16, u8, u16); M],
-) -> usize {
-    let mut i = 0;
-    while i < codes.len() {
-        let (run_length, code_length, code) = codes[i];
-        num_states = insert_code(states, num_states, run_length, code_length, code);
-        i += 1;
-    }
-    num_states
-}
-
-const fn build_run_states<const N: usize, const T: usize, const M: usize>(
-    terminating: &[(u16, u8, u16); T],
-    makeup: &[(u16, u8, u16); M],
-) -> [State; N] {
-    let mut states: [State; N] = [State::new(); N];
-    let mut num_states: usize = 1;
-    num_states = insert_codes(&mut states, num_states, terminating);
-    num_states = insert_codes(&mut states, num_states, makeup);
-    let _ = insert_codes(&mut states, num_states, &COMMON_MAKEUP);
-    states
-}
-
-pub(crate) const WHITE_STATES: [State; 104] = build_run_states(&WHITE_TERMINATING, &WHITE_MAKEUP);
-pub(crate) const BLACK_STATES: [State; 104] = build_run_states(&BLACK_TERMINATING, &BLACK_MAKEUP);
-
-pub(crate) const MODE_STATES: [State; 9] = {
-    let mut states: [State; 9] = [State::new(); 9];
-    let _ = insert_codes(&mut states, 1, &MODE_CODES);
-    states
-};

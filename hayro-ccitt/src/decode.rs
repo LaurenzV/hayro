@@ -1,6 +1,6 @@
 use crate::bit_reader::BitReader;
-use crate::states::{
-    BLACK_STATES, INVALID, MODE_STATES, Mode, State, VALUE_FLAG, VALUE_MASK, WHITE_STATES,
+use crate::state_machine::{
+    BLACK_STATES, INVALID, MODE_STATES, Mode, State, TERMINAL, VALUE_MASK, WHITE_STATES,
 };
 use crate::{DecodeError, Result};
 
@@ -25,7 +25,7 @@ impl BitReader<'_> {
 
             if transition == INVALID {
                 return Err(DecodeError::InvalidCode);
-            } else if transition & VALUE_FLAG != 0 {
+            } else if transition & TERMINAL != 0 {
                 let len = transition & VALUE_MASK;
                 total = total.checked_add(len).ok_or(DecodeError::Overflow)?;
 

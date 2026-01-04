@@ -31,14 +31,14 @@
 extern crate alloc;
 
 use crate::bit_reader::BitReader;
-use crate::states::{EOFB, Mode};
+use crate::state_machine::{EOFB, Mode};
 
 use alloc::vec;
 use alloc::vec::Vec;
 
 mod bit_reader;
 mod decode;
-mod states;
+mod state_machine;
 
 /// A specialized Result type for CCITT decoding operations.
 pub type Result<T> = core::result::Result<T, DecodeError>;
