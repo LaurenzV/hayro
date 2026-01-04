@@ -56,7 +56,7 @@ const fn insert_code<const N: usize>(
 
     while i < code_length {
         let bit = (code >> (code_length - 1 - i)) & 1;
-        let is_terminal = i == code_length - 1;
+        let is_last_bit = i == code_length - 1;
 
         let next = if bit == 0 {
             states[current_state].on_0
@@ -64,7 +64,7 @@ const fn insert_code<const N: usize>(
             states[current_state].on_1
         };
 
-        if is_terminal {
+        if is_last_bit {
             let result = TERMINAL | (run_length & VALUE_MASK);
 
             if bit == 0 {

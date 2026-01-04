@@ -211,13 +211,13 @@ fn group3_check_eob<T: Decoder>(
     ctx: &mut DecoderContext<'_, T>,
     reader: &mut BitReader<'_>,
 ) -> bool {
-    let num_eol = reader.read_eol_if_available();
+    let eol_count = reader.read_eol_if_available();
 
     // T.4 Section 4.1.4: "The end of a document transmission is indicated by
     // sending six consecutive EOLs."
     // PDFBOX-2778 has 7 EOL, although it should only be 6. Let's be lenient
     // and check with >=.
-    if ctx.settings.end_of_block && num_eol >= 6 {
+    if ctx.settings.end_of_block && eol_count >= 6 {
         return true;
     }
 
@@ -323,12 +323,12 @@ struct DecoderContext<'a, T: Decoder> {
     b1_idx: usize,
     /// Color changes in the coding line (current line being decoded).
     coding_changes: Vec<ColorChange>,
-    /// Current length of the coding line in pixels.
-    coding_line_len: usize,
+    /// Current position in the coding line (number of pixels decoded).
+    pixels_decoded: usize,
     /// The decoder sink.
     decoder: &'a mut T,
-    /// The maximum permissible index for all "pointer" variables (i.e. a0, b1 and b2).
-    max_idx: usize,
+    /// The width of a line in pixels (i.e. number of columns).
+    line_width: usize,
     /// Whether the next run to be decoded is white.
     is_white: bool,
     /// How many rows have been decoded so far.
@@ -341,16 +341,16 @@ struct DecoderContext<'a, T: Decoder> {
 
 impl<'a, T: Decoder> DecoderContext<'a, T> {
     fn new(decoder: &'a mut T, settings: &'a DecodeSettings) -> Self {
-        let max_idx = settings.columns as usize;
+        let line_width = settings.columns as usize;
 
         Self {
             ref_changes: vec![],
             ref_pos: 0,
             b1_idx: 0,
             coding_changes: Vec::new(),
-            coding_line_len: 0,
+            pixels_decoded: 0,
             decoder,
-            max_idx,
+            line_width,
             // Each run starts with a white color.
             is_white: true,
             decoded_rows: 0,
@@ -361,14 +361,14 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
 
     /// `a0` refers to the first changing element on the current line.
     fn a0(&self) -> Option<usize> {
-        if self.coding_line_len == 0 {
+        if self.pixels_decoded == 0 {
             // If we haven't coded anything yet, a0 conceptually points at the
             // index -1. This is a bit of an edge case, and we therefore require
             // callers of this method to handle the case themselves.
             None
         } else {
             // Otherwise, the index points to the next element to be decoded.
-            Some(self.coding_line_len)
+            Some(self.pixels_decoded)
         }
     }
 
@@ -377,14 +377,14 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
     fn b1(&self) -> usize {
         self.ref_changes
             .get(self.b1_idx)
-            .map_or(self.max_idx, |c| c.idx)
+            .map_or(self.line_width, |c| c.idx)
     }
 
     /// "The next changing element to the right of b1, on the reference line."
     fn b2(&self) -> usize {
         self.ref_changes
             .get(self.b1_idx + 1)
-            .map_or(self.max_idx, |c| c.idx)
+            .map_or(self.line_width, |c| c.idx)
     }
 
     /// Compute the new position of b1 (and implicitly b2).
@@ -395,7 +395,7 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
         // b1 must be strictly greater than a0.
         let min_idx = self.a0().map_or(0, |a| a + 1);
 
-        self.b1_idx = self.max_idx;
+        self.b1_idx = self.line_width;
 
         for i in self.ref_pos..self.ref_changes.len() {
             let change = &self.ref_changes[i];
@@ -416,14 +416,14 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
     fn push_pixels(&mut self, count: usize) {
         // Clamp how many pixels we push so that we don't exceed the column
         // count for malformed files.
-        let count = count.min(self.max_idx.saturating_sub(self.coding_line_len));
+        let count = count.min(self.line_width.saturating_sub(self.pixels_decoded));
         let white = self.is_white ^ self.invert_black;
         let mut remaining = count;
 
         // Push individual pixels until we reach an 8-pixel boundary.
-        let pixels_to_boundary = (8 - (self.coding_line_len % 8)) % 8;
-        let individual_start = remaining.min(pixels_to_boundary);
-        for _ in 0..individual_start {
+        let pixels_to_boundary = (8 - (self.pixels_decoded % 8)) % 8;
+        let unaligned_pixels = remaining.min(pixels_to_boundary);
+        for _ in 0..unaligned_pixels {
             self.decoder.push_pixel(white);
             remaining -= 1;
         }
@@ -452,11 +452,11 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
                 .map_or(color != 0, |last| last.color != color);
             if is_change {
                 self.coding_changes.push(ColorChange {
-                    idx: self.coding_line_len,
+                    idx: self.pixels_decoded,
                     color,
                 });
             }
-            self.coding_line_len += count;
+            self.pixels_decoded += count;
         }
     }
 
@@ -465,21 +465,21 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
     }
 
     fn at_eol(&self) -> bool {
-        self.a0().unwrap_or(0) == self.max_idx
+        self.a0().unwrap_or(0) == self.line_width
     }
 
     #[inline(always)]
     fn next_line(&mut self, reader: &mut BitReader<'_>) -> Result<()> {
         // Go to next line.
 
-        if self.coding_line_len != self.settings.columns as usize {
+        if self.pixels_decoded != self.settings.columns as usize {
             return Err(DecodeError::LineLengthMismatch);
         }
 
         // Swap coding_changes into ref_changes for the next line.
         core::mem::swap(&mut self.ref_changes, &mut self.coding_changes);
         self.coding_changes.clear();
-        self.coding_line_len = 0;
+        self.pixels_decoded = 0;
         self.ref_pos = 0;
         self.b1_idx = 0;
         self.is_white = true;

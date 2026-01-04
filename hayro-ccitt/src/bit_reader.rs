@@ -6,13 +6,16 @@ use core::fmt::Debug;
 #[derive(Debug, Clone)]
 pub(crate) struct BitReader<'a> {
     data: &'a [u8],
-    cur_pos: usize,
+    bit_offset: usize,
 }
 
 impl<'a> BitReader<'a> {
     #[inline(always)]
     pub(crate) fn new(data: &'a [u8]) -> Self {
-        Self { data, cur_pos: 0 }
+        Self {
+            data,
+            bit_offset: 0,
+        }
     }
 
     #[inline(always)]
@@ -20,7 +23,7 @@ impl<'a> BitReader<'a> {
         let byte_pos = self.byte_pos();
         let byte = *self.data.get(byte_pos).ok_or(DecodeError::UnexpectedEof)? as u32;
         let shift = 7 - self.bit_pos();
-        self.cur_pos += 1;
+        self.bit_offset += 1;
         Ok((byte >> shift) & 1)
     }
 
@@ -45,7 +48,7 @@ impl<'a> BitReader<'a> {
         let bit_pos = self.bit_pos();
 
         if !bit_pos.is_multiple_of(8) {
-            self.cur_pos += 8 - bit_pos;
+            self.bit_offset += 8 - bit_pos;
         }
     }
 
@@ -56,11 +59,11 @@ impl<'a> BitReader<'a> {
 
     #[inline(always)]
     pub(crate) fn byte_pos(&self) -> usize {
-        self.cur_pos >> 3
+        self.bit_offset >> 3
     }
 
     #[inline(always)]
-    pub(crate) fn bit_pos(&self) -> usize {
-        self.cur_pos & 7
+    fn bit_pos(&self) -> usize {
+        self.bit_offset & 7
     }
 }
