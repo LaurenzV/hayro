@@ -141,15 +141,15 @@ impl Color {
     #[inline(always)]
     fn opposite(self) -> Self {
         match self {
-            Color::White => Color::Black,
-            Color::Black => Color::White,
+            Self::White => Self::Black,
+            Self::Black => Self::White,
         }
     }
 
     /// Returns true if this color is white.
     #[inline(always)]
     fn is_white(self) -> bool {
-        matches!(self, Color::White)
+        matches!(self, Self::White)
     }
 }
 
