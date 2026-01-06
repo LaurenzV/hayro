@@ -180,7 +180,7 @@ mod inner {
         pub(crate) fn madd(self, scalar: f32, addend: Self) -> Self {
             let mut result = [0.0f32; SIMD_WIDTH];
             for i in 0..SIMD_WIDTH {
-                result[i] = crate::util::mul_add(self.val[i], scalar, addend.val[i]);
+                result[i] = mul_add(self.val[i], scalar, addend.val[i]);
             }
             Self {
                 val: result,
@@ -314,6 +314,30 @@ mod inner {
             for i in 0..SIMD_WIDTH {
                 self.val[i] /= rhs;
             }
+        }
+    }
+
+    #[inline(always)]
+    fn mul_add(a: f32, b: f32, c: f32) -> f32 {
+        #[cfg(any(
+            all(
+                any(target_arch = "x86", target_arch = "x86_64"),
+                target_feature = "fma"
+            ),
+            all(target_arch = "aarch64", target_feature = "neon")
+        ))]
+        {
+            f32::mul_add(a, b, c)
+        }
+        #[cfg(not(any(
+            all(
+                any(target_arch = "x86", target_arch = "x86_64"),
+                target_feature = "fma"
+            ),
+            all(target_arch = "aarch64", target_feature = "neon")
+        )))]
+        {
+            a * b + c
         }
     }
 

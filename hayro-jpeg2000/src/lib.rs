@@ -74,7 +74,6 @@ mod image;
 mod j2c;
 mod jp2;
 pub(crate) mod reader;
-mod util;
 
 /// Settings to apply during decoding.
 #[derive(Debug, Copy, Clone)]
