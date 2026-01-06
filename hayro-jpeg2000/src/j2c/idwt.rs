@@ -4,7 +4,7 @@ use super::build::{Decomposition, SubBand, SubBandType};
 use super::codestream::WaveletTransform;
 use super::decode::{DecompositionStorage, TileDecodeContext};
 use super::rect::IntRect;
-use super::simd::{Level, Simd, SIMD_WIDTH, dispatch, f32x8};
+use super::simd::{Level, SIMD_WIDTH, Simd, dispatch, f32x8};
 use crate::j2c::Header;
 
 #[derive(Default, Copy, Clone)]
