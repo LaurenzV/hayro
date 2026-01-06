@@ -8,6 +8,7 @@ mod mct;
 mod progression;
 mod rect;
 mod segment;
+pub(crate) mod simd;
 mod tag_tree;
 mod tile;
 
