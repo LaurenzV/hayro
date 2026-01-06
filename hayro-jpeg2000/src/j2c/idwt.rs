@@ -718,7 +718,7 @@ fn irreversible_filter_97i_simd<S: Simd>(
             let s2 = f32x8::from_slice(simd, &scanline[base_idx - stride..][..SIMD_WIDTH]);
             let s3 = f32x8::from_slice(simd, &scanline[base_idx + stride..][..SIMD_WIDTH]);
 
-            s1 = s1 - delta * (s2 + s3);
+            s1 -= delta * (s2 + s3);
             s1.store(&mut scanline[base_idx..][..SIMD_WIDTH]);
         }
     }
@@ -732,7 +732,7 @@ fn irreversible_filter_97i_simd<S: Simd>(
             let s2 = f32x8::from_slice(simd, &scanline[base_idx - stride..][..SIMD_WIDTH]);
             let s3 = f32x8::from_slice(simd, &scanline[base_idx + stride..][..SIMD_WIDTH]);
 
-            s1 = s1 - gamma * (s2 + s3);
+            s1 -= gamma * (s2 + s3);
             s1.store(&mut scanline[base_idx..][..SIMD_WIDTH]);
         }
     }
@@ -746,7 +746,7 @@ fn irreversible_filter_97i_simd<S: Simd>(
             let s2 = f32x8::from_slice(simd, &scanline[base_idx - stride..][..SIMD_WIDTH]);
             let s3 = f32x8::from_slice(simd, &scanline[base_idx + stride..][..SIMD_WIDTH]);
 
-            s1 = s1 - beta * (s2 + s3);
+            s1 -= beta * (s2 + s3);
             s1.store(&mut scanline[base_idx..][..SIMD_WIDTH]);
         }
     }
@@ -760,7 +760,7 @@ fn irreversible_filter_97i_simd<S: Simd>(
             let s2 = f32x8::from_slice(simd, &scanline[base_idx - stride..][..SIMD_WIDTH]);
             let s3 = f32x8::from_slice(simd, &scanline[base_idx + stride..][..SIMD_WIDTH]);
 
-            s1 = s1 - alpha * (s2 + s3);
+            s1 -= alpha * (s2 + s3);
             s1.store(&mut scanline[base_idx..][..SIMD_WIDTH]);
         }
     }
