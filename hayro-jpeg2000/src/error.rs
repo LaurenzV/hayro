@@ -94,11 +94,11 @@ pub enum ValidationError {
 pub enum DecodingError {
     /// An error occurred while decoding a code-block.
     CodeBlockDecodeFailure,
-    /// Number of bitplanes in a codeblock is too large.
+    /// Number of bitplanes in a code-block is too large.
     TooManyBitplanes,
-    /// A codeblock contains too many coding passes.
+    /// A code-block contains too many coding passes.
     TooManyCodingPasses,
-    /// Invalid number of bitplanes in a codeblock.
+    /// Invalid number of bitplanes in a code-block.
     InvalidBitplaneCount,
     /// A precinct was invalid.
     InvalidPrecinct,
@@ -153,7 +153,7 @@ impl fmt::Display for MarkerError {
             MarkerError::Unsupported => write!(f, "unsupported marker"),
             MarkerError::Expected(marker) => write!(f, "expected {marker} marker"),
             MarkerError::Missing(marker) => write!(f, "missing {marker} marker"),
-            MarkerError::ParseFailure(marker) => write!(f, "failed to read {marker} marker"),
+            MarkerError::ParseFailure(marker) => write!(f, "failed to parse {marker} marker"),
         }
     }
 }
@@ -202,12 +202,12 @@ impl fmt::Display for DecodingError {
             DecodingError::CodeBlockDecodeFailure => write!(f, "failed to decode code-block"),
             DecodingError::TooManyBitplanes => write!(f, "number of bitplanes is too large"),
             DecodingError::TooManyCodingPasses => {
-                write!(f, "codeblock contains too many coding passes")
+                write!(f, "code-block contains too many coding passes")
             }
             DecodingError::InvalidBitplaneCount => write!(f, "invalid number of bitplanes"),
-            DecodingError::InvalidPrecinct => write!(f, "failed to build precincts"),
+            DecodingError::InvalidPrecinct => write!(f, "a precinct was invalid"),
             DecodingError::InvalidProgressionIterator => {
-                write!(f, "failed to build progression iterator")
+                write!(f, "a progression iterator was invalid")
             }
             DecodingError::UnexpectedEof => write!(f, "unexpected end of data"),
         }
