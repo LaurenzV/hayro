@@ -1,6 +1,5 @@
 //! Performing the inverse discrete wavelet transform, as specified in Annex F.
 
-use std::ops::Div;
 use super::build::{Decomposition, SubBand, SubBandType};
 use super::codestream::WaveletTransform;
 use super::decode::{DecompositionStorage, TileDecodeContext};
@@ -607,13 +606,23 @@ fn reversible_filter_53r_simd<S: Simd>(
 ) {
     let end = start + height;
 
+    // Note that this for loop does not match exactly what's in the reference.
+    // There is a clever subtlety that we can make use of to make the loop shorter.
+    //
+    // In the reference, the presented semantics of IDWT is that we explicitly
+    // store the top/bottom padding in an array. As part of the for loop, we will
+    // first modify an out-of-bound row (conceptually at the relative location
+    // -1) before proceeding to the rows that are actually inside of the image.
+    // However, the key insight is that the row at location -1 will actually
+    // have the same filtered values as the row at location of 1 due to reflection.
+    // Therefore, as long as we properly reflect -1 to 1 (and do the same for the
+    // upper value), we can skip thous boundary rows. This is reflected in the different
+    // start/end values of the loop.
+    //
+    // The above comment also applies to the 9-7 filter.
+
     // Equation (F-5).
-    // We only process rows within [start, end). Rows outside this range would be
-    // padding rows in the original implementation. We can skip them because symmetric
-    // pairs of rows are always modified by the same amount (they read from symmetric
-    // neighbors), so the symmetry is preserved through all filter steps. When we later
-    // need to read a padding row as a neighbor, we read from its reflection instead,
-    // which has the same value.
+    // Originally: for i in start / 2..(end / 2) + 1.
     for i in start.div_ceil(2)..end.div_ceil(2) {
         let local_row = 2 * i - start;
         let (row_above, row_below) = upper_and_lower_row(local_row, height);
@@ -689,6 +698,8 @@ fn irreversible_filter_97i_simd<S: Simd>(
     let end = start + height;
 
     // Step 1.
+    // Originally: for i in start / 2..(end / 2) + 1. See the comment in
+    // `reversible_filter_53r_simd`.
     for i in start.div_ceil(2)..end.div_ceil(2) {
         let local_row = 2 * i - start;
 
@@ -701,6 +712,8 @@ fn irreversible_filter_97i_simd<S: Simd>(
     }
 
     // Step 2.
+    // Originally: for i in (start / 2 - 2)..(end / 2 + 2). See the comment in
+    // `reversible_filter_53r_simd`.
     for i in start / 2..end / 2 {
         let local_row = 2 * i + 1 - start;
 
@@ -713,6 +726,8 @@ fn irreversible_filter_97i_simd<S: Simd>(
     }
 
     // Step 3.
+    // Originally: for i in (start / 2 - 1)..(end / 2 + 2). See the comment in
+    // `reversible_filter_53r_simd`.
     for i in start.div_ceil(2)..end.div_ceil(2) {
         let local_row = 2 * i - start;
         let (row_above, row_below) = upper_and_lower_row(local_row, height);
@@ -736,6 +751,8 @@ fn irreversible_filter_97i_simd<S: Simd>(
     }
 
     // Step 4.
+    // Originally: for i in (start / 2 - 1)..(end / 2 + 1). See the comment in
+    // `reversible_filter_53r_simd`.
     for i in start / 2..end / 2 {
         let local_row = 2 * i + 1 - start;
         let (row_above, row_below) = upper_and_lower_row(local_row, height);
@@ -759,6 +776,8 @@ fn irreversible_filter_97i_simd<S: Simd>(
     }
 
     // Step 5.
+    // Originally: for i in (start / 2)..(end / 2 + 1). See the comment in
+    // `reversible_filter_53r_simd`.
     for i in start.div_ceil(2)..end.div_ceil(2) {
         let local_row = 2 * i - start;
         let (row_above, row_below) = upper_and_lower_row(local_row, height);
@@ -782,6 +801,8 @@ fn irreversible_filter_97i_simd<S: Simd>(
     }
 
     // Step 6.
+    // Originally: for i in (start / 2 - 2)..(end / 2 + 2). See the comment in
+    // `reversible_filter_53r_simd`.
     for i in start / 2..end / 2 {
         let local_row = 2 * i + 1 - start;
         let (row_above, row_below) = upper_and_lower_row(local_row, height);
