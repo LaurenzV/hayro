@@ -3,6 +3,8 @@
 //! This module handles parsing of standalone JBIG2 files in both sequential
 //! and random-access organization formats.
 
+use alloc::vec::Vec;
+
 use crate::reader::Reader;
 use crate::segment::{
     Segment, SegmentType, parse_segment, parse_segment_data, parse_segment_header,

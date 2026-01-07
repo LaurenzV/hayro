@@ -5,6 +5,9 @@
 //!
 //! "GBREG - The decoded region bitmap." (Table 3)
 
+use alloc::vec;
+use alloc::vec::Vec;
+
 use crate::region::CombinationOperator;
 
 /// A decoded bitmap region with position and combination information.

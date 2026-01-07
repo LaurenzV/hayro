@@ -4,6 +4,9 @@
 //! Symbol dictionaries store collections of symbol bitmaps that can be
 //! referenced by text region segments.
 
+use alloc::vec;
+use alloc::vec::Vec;
+
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::DecodedRegion;
 use crate::huffman_table::{HuffmanTable, StandardHuffmanTables};

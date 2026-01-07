@@ -1,5 +1,8 @@
 //! Pattern dictionary segment parsing and decoding (7.4.4, 6.7).
 
+use alloc::vec;
+use alloc::vec::Vec;
+
 use crate::bitmap::DecodedRegion;
 use crate::reader::Reader;
 use crate::region::CombinationOperator;

@@ -1,5 +1,8 @@
 //! Generic region segment parsing and decoding (7.4.6, 6.2).
 
+use alloc::vec;
+use alloc::vec::Vec;
+
 use super::{RegionSegmentInfo, parse_region_segment_info};
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::DecodedRegion;

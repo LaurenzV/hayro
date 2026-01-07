@@ -1,7 +1,9 @@
 //! Huffman table decoding, described in Annex B.
 
-use std::num::NonZeroU32;
-use std::rc::Rc;
+use alloc::rc::Rc;
+use alloc::vec;
+use alloc::vec::Vec;
+use core::num::NonZeroU32;
 
 use crate::reader::Reader;
 

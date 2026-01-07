@@ -1,3 +1,6 @@
+use alloc::vec;
+use alloc::vec::Vec;
+
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 
 /// Integer arithmetic decoder (Annex A.2).

@@ -5,6 +5,9 @@
 //! are coded identically, but are acted upon differently, see 8.2. The syntax
 //! of these segment types' data parts is specified here." (7.4.3)
 
+use alloc::vec;
+use alloc::vec::Vec;
+
 use super::generic_refinement::{
     GrTemplate, RefinementAdaptiveTemplatePixel, decode_refinement_bitmap_with,
 };
@@ -1174,11 +1177,11 @@ fn decode_text_region_huffman(
 
             // "v) Determine the symbol instance's bitmap IB_I as described in
             // 6.4.11." (6.4.5)
-            let (ib_i, w_i, h_i): (std::borrow::Cow<'_, DecodedRegion>, i32, i32) = if !sbrefine {
+            let (ib_i, w_i, h_i): (alloc::borrow::Cow<'_, DecodedRegion>, i32, i32) = if !sbrefine {
                 // "If SBREFINE is 0, then set R_I to 0." (6.4.11)
                 let sym = symbols.get(id_i).ok_or("symbol ID out of range")?;
                 (
-                    std::borrow::Cow::Borrowed(*sym),
+                    alloc::borrow::Cow::Borrowed(*sym),
                     sym.width as i32,
                     sym.height as i32,
                 )
@@ -1191,7 +1194,7 @@ fn decode_text_region_huffman(
                 if r_i == 0 {
                     let sym = symbols.get(id_i).ok_or("symbol ID out of range")?;
                     (
-                        std::borrow::Cow::Borrowed(*sym),
+                        alloc::borrow::Cow::Borrowed(*sym),
                         sym.width as i32,
                         sym.height as i32,
                     )
@@ -1253,7 +1256,7 @@ fn decode_text_region_huffman(
                         false, // TPGRON = 0
                     )?;
 
-                    (std::borrow::Cow::Owned(refined), grw as i32, grh as i32)
+                    (alloc::borrow::Cow::Owned(refined), grw as i32, grh as i32)
                 }
             };
 

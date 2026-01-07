@@ -1,5 +1,8 @@
 //! Halftone region segment parsing and decoding (7.4.5, 6.6).
 
+use alloc::vec;
+use alloc::vec::Vec;
+
 use super::generic::GbTemplate;
 use super::{CombinationOperator, RegionSegmentInfo, parse_region_segment_info};
 use crate::bitmap::DecodedRegion;

@@ -5,22 +5,19 @@ A memory-safe, pure-Rust JBIG2 decoder.
 ISO/IEC 14492). JBIG2 is a bi-level image compression standard commonly used
 in PDF documents for compressing scanned text documents.
 
-# Example
-```rust,no_run
-use hayro_jbig2::decode;
-
-let data = std::fs::read("image.jb2").unwrap();
-let image = decode(&data).unwrap();
-
-println!("{}x{} image", image.width, image.height);
-```
+The crate is `no_std` compatible but requires an allocator to be available.
 
 # Safety
 This crate forbids unsafe code via a crate-level attribute.
 */
 
+#![no_std]
 #![forbid(unsafe_code)]
 #![allow(missing_docs)]
+
+extern crate alloc;
+
+use alloc::vec::Vec;
 
 mod arithmetic_decoder;
 mod bitmap;

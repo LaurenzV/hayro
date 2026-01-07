@@ -1,5 +1,8 @@
 //! Gray-scale image decoding procedure (Annex C).
 
+use alloc::vec;
+use alloc::vec::Vec;
+
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::DecodedRegion;
 use crate::region::generic::{
