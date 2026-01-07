@@ -5,7 +5,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::num::NonZeroU32;
 
-use crate::error::{DecodeError, HuffmanError, ParseError, Result, bail};
+use crate::error::{HuffmanError, ParseError, Result, bail};
 use crate::lazy::Lazy;
 use crate::reader::Reader;
 
@@ -212,11 +212,12 @@ impl HuffmanTable {
 
             let range_size = 1_i64
                 .checked_shl(range_length as u32)
-                .ok_or(DecodeError::Overflow)?;
+                .ok_or(HuffmanError::InvalidCode)?;
             let next_range_low = (current_range_low as i64)
                 .checked_add(range_size)
-                .ok_or(DecodeError::Overflow)?;
-            current_range_low = i32::try_from(next_range_low).map_err(|_| DecodeError::Overflow)?;
+                .ok_or(HuffmanError::InvalidCode)?;
+            current_range_low =
+                i32::try_from(next_range_low).map_err(|_| HuffmanError::InvalidCode)?;
         }
 
         // 6) "Read HTPS bits. Let LOWPREFLEN be the value read."

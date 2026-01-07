@@ -71,8 +71,6 @@ pub enum HuffmanError {
     MissingTables,
     /// Unexpected out-of-band value.
     UnexpectedOob,
-    /// Invalid runcode in symbol ID table.
-    InvalidRuncode,
 }
 
 /// Errors related to region parameters.
@@ -80,7 +78,7 @@ pub enum HuffmanError {
 pub enum RegionError {
     /// Invalid combination operator value.
     InvalidCombinationOperator,
-    /// Invalid dimension value (e.g., width/height must be > 0, or exceeds reference).
+    /// Region with invalid dimension.
     InvalidDimension,
     /// Gray-scale value exceeds pattern count.
     GrayScaleOutOfRange,
@@ -89,7 +87,7 @@ pub enum RegionError {
 /// Errors related to template configuration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TemplateError {
-    /// Invalid template value.
+    /// An invalid template value was used.
     Invalid,
     /// Invalid adaptive template pixel location.
     InvalidAtPixel,
@@ -158,7 +156,6 @@ impl fmt::Display for HuffmanError {
             Self::InvalidSelection => write!(f, "invalid Huffman table selection"),
             Self::MissingTables => write!(f, "not enough referred Huffman tables"),
             Self::UnexpectedOob => write!(f, "unexpected out-of-band value"),
-            Self::InvalidRuncode => write!(f, "invalid runcode in symbol ID table"),
         }
     }
 }
