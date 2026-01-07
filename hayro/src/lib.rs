@@ -34,6 +34,7 @@ This crate has one optional feature:
 #![deny(missing_docs)]
 
 use crate::renderer::Renderer;
+pub use hayro_interpret;
 use hayro_interpret::Device;
 use hayro_interpret::FillRule;
 pub use hayro_interpret::font::{
