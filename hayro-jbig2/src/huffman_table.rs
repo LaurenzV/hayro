@@ -60,7 +60,7 @@ impl HuffmanNode {
     /// Get the child index for a given bit (0 or 1).
     fn get_child(&self, bit: u32) -> Option<NonZeroU32> {
         match self {
-            HuffmanNode::Intermediate { zero, one } => {
+            Self::Intermediate { zero, one } => {
                 if bit == 0 {
                     *zero
                 } else {
@@ -74,7 +74,7 @@ impl HuffmanNode {
     /// Set the child index for a given bit (0 or 1).
     fn set_child(&mut self, bit: u32, index: NonZeroU32) {
         match self {
-            HuffmanNode::Intermediate { zero, one } => {
+            Self::Intermediate { zero, one } => {
                 if bit == 0 {
                     *zero = Some(index);
                 } else {
@@ -87,20 +87,20 @@ impl HuffmanNode {
 
     /// Decode from this node, returning the decoded value or None for OOB.
     fn decode_from(
-        nodes: &[HuffmanNode],
+        nodes: &[Self],
         mut node_index: u32,
         reader: &mut Reader<'_>,
     ) -> Result<Option<i32>, &'static str> {
         loop {
             match nodes[node_index as usize] {
-                HuffmanNode::Intermediate { zero, one } => {
+                Self::Intermediate { zero, one } => {
                     let bit = reader
                         .read_bit()
                         .ok_or("unexpected end of data in huffman decode")?;
                     let child_index = if bit == 0 { zero } else { one };
                     node_index = child_index.ok_or("invalid huffman code")?.get();
                 }
-                HuffmanNode::Leaf(leaf) => {
+                Self::Leaf(leaf) => {
                     if leaf.is_out_of_band {
                         return Ok(None);
                     }
@@ -118,7 +118,7 @@ impl HuffmanNode {
 
                     return Ok(Some(value));
                 }
-                HuffmanNode::Empty => {
+                Self::Empty => {
                     return Err("invalid huffman code (empty node)");
                 }
             }
@@ -131,9 +131,13 @@ impl HuffmanNode {
 /// This can be either an inline table (fixed-size array for standard tables)
 /// or a dynamic table (Vec for runtime-built custom tables).
 #[derive(Debug, Clone)]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "Inline variant is expected to be large."
+)]
 enum InnerHuffmanTable {
     /// Inline table with a fixed-size node array.
-    /// Used for standard tables (TABLE_A through TABLE_O).
+    /// Used for standard tables (`TABLE_A` through `TABLE_O`).
     Inline {
         nodes: [HuffmanNode; INLINE_TABLE_SIZE],
     },
@@ -464,7 +468,7 @@ impl TableLine {
     }
 }
 
-/// Standard Huffman tables (TABLE_A through TABLE_O) for JBIG2 decoding.
+/// Standard Huffman tables (`TABLE_A` through `TABLE_O`) for JBIG2 decoding.
 ///
 /// All tables are initialized eagerly from precomputed inline data.
 #[derive(Debug)]
@@ -508,77 +512,77 @@ impl StandardHuffmanTables {
         }
     }
 
-    /// Get Table B.1 (TABLE_A).
+    /// Get Table B.1 (`TABLE_A`).
     pub(crate) fn table_a(&self) -> &HuffmanTable {
         &self.table_a
     }
 
-    /// Get Table B.2 (TABLE_B).
+    /// Get Table B.2 (`TABLE_B`).
     pub(crate) fn table_b(&self) -> &HuffmanTable {
         &self.table_b
     }
 
-    /// Get Table B.3 (TABLE_C).
+    /// Get Table B.3 (`TABLE_C`).
     pub(crate) fn table_c(&self) -> &HuffmanTable {
         &self.table_c
     }
 
-    /// Get Table B.4 (TABLE_D).
+    /// Get Table B.4 (`TABLE_D`).
     pub(crate) fn table_d(&self) -> &HuffmanTable {
         &self.table_d
     }
 
-    /// Get Table B.5 (TABLE_E).
+    /// Get Table B.5 (`TABLE_E`).
     pub(crate) fn table_e(&self) -> &HuffmanTable {
         &self.table_e
     }
 
-    /// Get Table B.6 (TABLE_F).
+    /// Get Table B.6 (`TABLE_F`).
     pub(crate) fn table_f(&self) -> &HuffmanTable {
         &self.table_f
     }
 
-    /// Get Table B.7 (TABLE_G).
+    /// Get Table B.7 (`TABLE_G`).
     pub(crate) fn table_g(&self) -> &HuffmanTable {
         &self.table_g
     }
 
-    /// Get Table B.8 (TABLE_H).
+    /// Get Table B.8 (`TABLE_H`).
     pub(crate) fn table_h(&self) -> &HuffmanTable {
         &self.table_h
     }
 
-    /// Get Table B.9 (TABLE_I).
+    /// Get Table B.9 (`TABLE_I`).
     pub(crate) fn table_i(&self) -> &HuffmanTable {
         &self.table_i
     }
 
-    /// Get Table B.10 (TABLE_J).
+    /// Get Table B.10 (`TABLE_J`).
     pub(crate) fn table_j(&self) -> &HuffmanTable {
         &self.table_j
     }
 
-    /// Get Table B.11 (TABLE_K).
+    /// Get Table B.11 (`TABLE_K`).
     pub(crate) fn table_k(&self) -> &HuffmanTable {
         &self.table_k
     }
 
-    /// Get Table B.12 (TABLE_L).
+    /// Get Table B.12 (`TABLE_L`).
     pub(crate) fn table_l(&self) -> &HuffmanTable {
         &self.table_l
     }
 
-    /// Get Table B.13 (TABLE_M).
+    /// Get Table B.13 (`TABLE_M`).
     pub(crate) fn table_m(&self) -> &HuffmanTable {
         &self.table_m
     }
 
-    /// Get Table B.14 (TABLE_N).
+    /// Get Table B.14 (`TABLE_N`).
     pub(crate) fn table_n(&self) -> &HuffmanTable {
         &self.table_n
     }
 
-    /// Get Table B.15 (TABLE_O).
+    /// Get Table B.15 (`TABLE_O`).
     pub(crate) fn table_o(&self) -> &HuffmanTable {
         &self.table_o
     }
