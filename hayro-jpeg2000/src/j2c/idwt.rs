@@ -440,6 +440,7 @@ fn filter_vertical_impl<S: Simd>(
             }
 
             // Scalar remainder.
+            #[allow(clippy::needless_range_loop)]
             for col in simd_width..width {
                 scanline[col] /= 2.0;
             }
