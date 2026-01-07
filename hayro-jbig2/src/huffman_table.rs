@@ -5,6 +5,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::num::NonZeroU32;
 
+use crate::lazy::Lazy;
 use crate::reader::Reader;
 
 include!("huffman_tables_generated.rs");
@@ -471,117 +472,117 @@ enum InnerHuffmanTable {
 /// Standard Huffman tables (`TABLE_A` through `TABLE_O`).
 #[derive(Debug)]
 pub(crate) struct StandardHuffmanTables {
-    table_a: HuffmanTable,
-    table_b: HuffmanTable,
-    table_c: HuffmanTable,
-    table_d: HuffmanTable,
-    table_e: HuffmanTable,
-    table_f: HuffmanTable,
-    table_g: HuffmanTable,
-    table_h: HuffmanTable,
-    table_i: HuffmanTable,
-    table_j: HuffmanTable,
-    table_k: HuffmanTable,
-    table_l: HuffmanTable,
-    table_m: HuffmanTable,
-    table_n: HuffmanTable,
-    table_o: HuffmanTable,
+    table_a: Lazy<HuffmanTable>,
+    table_b: Lazy<HuffmanTable>,
+    table_c: Lazy<HuffmanTable>,
+    table_d: Lazy<HuffmanTable>,
+    table_e: Lazy<HuffmanTable>,
+    table_f: Lazy<HuffmanTable>,
+    table_g: Lazy<HuffmanTable>,
+    table_h: Lazy<HuffmanTable>,
+    table_i: Lazy<HuffmanTable>,
+    table_j: Lazy<HuffmanTable>,
+    table_k: Lazy<HuffmanTable>,
+    table_l: Lazy<HuffmanTable>,
+    table_m: Lazy<HuffmanTable>,
+    table_n: Lazy<HuffmanTable>,
+    table_o: Lazy<HuffmanTable>,
 }
 
 impl StandardHuffmanTables {
-    /// Create a new instance with all tables initialized.
+    /// Create a new instance.
     pub(crate) fn new() -> Self {
         Self {
-            table_a: HuffmanTable::from_inline(TABLE_A),
-            table_b: HuffmanTable::from_inline(TABLE_B),
-            table_c: HuffmanTable::from_inline(TABLE_C),
-            table_d: HuffmanTable::from_inline(TABLE_D),
-            table_e: HuffmanTable::from_inline(TABLE_E),
-            table_f: HuffmanTable::from_inline(TABLE_F),
-            table_g: HuffmanTable::from_inline(TABLE_G),
-            table_h: HuffmanTable::from_inline(TABLE_H),
-            table_i: HuffmanTable::from_inline(TABLE_I),
-            table_j: HuffmanTable::from_inline(TABLE_J),
-            table_k: HuffmanTable::from_inline(TABLE_K),
-            table_l: HuffmanTable::from_inline(TABLE_L),
-            table_m: HuffmanTable::from_inline(TABLE_M),
-            table_n: HuffmanTable::from_inline(TABLE_N),
-            table_o: HuffmanTable::from_inline(TABLE_O),
+            table_a: Lazy::new(|| HuffmanTable::from_inline(TABLE_A)),
+            table_b: Lazy::new(|| HuffmanTable::from_inline(TABLE_B)),
+            table_c: Lazy::new(|| HuffmanTable::from_inline(TABLE_C)),
+            table_d: Lazy::new(|| HuffmanTable::from_inline(TABLE_D)),
+            table_e: Lazy::new(|| HuffmanTable::from_inline(TABLE_E)),
+            table_f: Lazy::new(|| HuffmanTable::from_inline(TABLE_F)),
+            table_g: Lazy::new(|| HuffmanTable::from_inline(TABLE_G)),
+            table_h: Lazy::new(|| HuffmanTable::from_inline(TABLE_H)),
+            table_i: Lazy::new(|| HuffmanTable::from_inline(TABLE_I)),
+            table_j: Lazy::new(|| HuffmanTable::from_inline(TABLE_J)),
+            table_k: Lazy::new(|| HuffmanTable::from_inline(TABLE_K)),
+            table_l: Lazy::new(|| HuffmanTable::from_inline(TABLE_L)),
+            table_m: Lazy::new(|| HuffmanTable::from_inline(TABLE_M)),
+            table_n: Lazy::new(|| HuffmanTable::from_inline(TABLE_N)),
+            table_o: Lazy::new(|| HuffmanTable::from_inline(TABLE_O)),
         }
     }
 
     /// Get Table B.1 (`TABLE_A`).
     pub(crate) fn table_a(&self) -> &HuffmanTable {
-        &self.table_a
+        self.table_a.get(|| HuffmanTable::from_inline(TABLE_A))
     }
 
     /// Get Table B.2 (`TABLE_B`).
     pub(crate) fn table_b(&self) -> &HuffmanTable {
-        &self.table_b
+        self.table_b.get(|| HuffmanTable::from_inline(TABLE_B))
     }
 
     /// Get Table B.3 (`TABLE_C`).
     pub(crate) fn table_c(&self) -> &HuffmanTable {
-        &self.table_c
+        self.table_c.get(|| HuffmanTable::from_inline(TABLE_C))
     }
 
     /// Get Table B.4 (`TABLE_D`).
     pub(crate) fn table_d(&self) -> &HuffmanTable {
-        &self.table_d
+        self.table_d.get(|| HuffmanTable::from_inline(TABLE_D))
     }
 
     /// Get Table B.5 (`TABLE_E`).
     pub(crate) fn table_e(&self) -> &HuffmanTable {
-        &self.table_e
+        self.table_e.get(|| HuffmanTable::from_inline(TABLE_E))
     }
 
     /// Get Table B.6 (`TABLE_F`).
     pub(crate) fn table_f(&self) -> &HuffmanTable {
-        &self.table_f
+        self.table_f.get(|| HuffmanTable::from_inline(TABLE_F))
     }
 
     /// Get Table B.7 (`TABLE_G`).
     pub(crate) fn table_g(&self) -> &HuffmanTable {
-        &self.table_g
+        self.table_g.get(|| HuffmanTable::from_inline(TABLE_G))
     }
 
     /// Get Table B.8 (`TABLE_H`).
     pub(crate) fn table_h(&self) -> &HuffmanTable {
-        &self.table_h
+        self.table_h.get(|| HuffmanTable::from_inline(TABLE_H))
     }
 
     /// Get Table B.9 (`TABLE_I`).
     pub(crate) fn table_i(&self) -> &HuffmanTable {
-        &self.table_i
+        self.table_i.get(|| HuffmanTable::from_inline(TABLE_I))
     }
 
     /// Get Table B.10 (`TABLE_J`).
     pub(crate) fn table_j(&self) -> &HuffmanTable {
-        &self.table_j
+        self.table_j.get(|| HuffmanTable::from_inline(TABLE_J))
     }
 
     /// Get Table B.11 (`TABLE_K`).
     pub(crate) fn table_k(&self) -> &HuffmanTable {
-        &self.table_k
+        self.table_k.get(|| HuffmanTable::from_inline(TABLE_K))
     }
 
     /// Get Table B.12 (`TABLE_L`).
     pub(crate) fn table_l(&self) -> &HuffmanTable {
-        &self.table_l
+        self.table_l.get(|| HuffmanTable::from_inline(TABLE_L))
     }
 
     /// Get Table B.13 (`TABLE_M`).
     pub(crate) fn table_m(&self) -> &HuffmanTable {
-        &self.table_m
+        self.table_m.get(|| HuffmanTable::from_inline(TABLE_M))
     }
 
     /// Get Table B.14 (`TABLE_N`).
     pub(crate) fn table_n(&self) -> &HuffmanTable {
-        &self.table_n
+        self.table_n.get(|| HuffmanTable::from_inline(TABLE_N))
     }
 
     /// Get Table B.15 (`TABLE_O`).
     pub(crate) fn table_o(&self) -> &HuffmanTable {
-        &self.table_o
+        self.table_o.get(|| HuffmanTable::from_inline(TABLE_O))
     }
 }
