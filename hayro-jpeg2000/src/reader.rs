@@ -171,7 +171,7 @@ impl<'a> BitReader<'a> {
         }
 
         self.read_byte().unwrap();
-        self.read_byte().ok_or(MarkerError::Invalid.into())
+        Ok(self.read_byte().ok_or(MarkerError::Invalid)?)
     }
 
     #[inline]

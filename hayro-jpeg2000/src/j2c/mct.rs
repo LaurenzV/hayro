@@ -4,7 +4,7 @@
 use super::codestream::{Header, WaveletTransform};
 use super::decode::TileDecodeContext;
 use super::simd::{Level, Simd, dispatch, f32x8};
-use crate::error::{ColorError, Result, bail};
+use crate::error::{ColorError, Result, bail, err};
 
 /// Apply the inverse multi-component transform, as specified in G.2 and G.3.
 pub(crate) fn apply_inverse(
@@ -13,7 +13,7 @@ pub(crate) fn apply_inverse(
 ) -> Result<()> {
     if tile_ctx.channel_data.len() < 3 {
         return if header.strict {
-            Err(ColorError::Mct.into())
+            err!(ColorError::Mct)
         } else {
             Ok(())
         };

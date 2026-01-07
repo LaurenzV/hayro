@@ -62,7 +62,7 @@ via a crate-level attribute.
 #![forbid(unsafe_code)]
 #![forbid(missing_docs)]
 
-use crate::error::bail;
+use crate::error::{bail, err};
 use crate::j2c::{ComponentData, DecodedCodestream, Header};
 use crate::jp2::cdef::{ChannelAssociation, ChannelType};
 use crate::jp2::cmap::ComponentMappingType;
@@ -147,7 +147,7 @@ impl<'a> Image<'a> {
         } else if data.starts_with(CODESTREAM_MAGIC) {
             j2c::parse(data, settings)
         } else {
-            Err(FormatError::InvalidSignature.into())
+            err!(FormatError::InvalidSignature)
         }
     }
 

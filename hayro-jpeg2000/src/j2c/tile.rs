@@ -3,7 +3,7 @@
 use super::build::{PrecinctData, SubBandType};
 use super::codestream::{ComponentInfo, Header, ProgressionOrder, markers, skip_marker_segment};
 use super::rect::IntRect;
-use crate::error::{MarkerError, Result, TileError, ValidationError, bail};
+use crate::error::{MarkerError, Result, TileError, ValidationError, bail, err};
 use crate::j2c::codestream;
 use crate::reader::BitReader;
 
@@ -186,7 +186,7 @@ fn parse_tile_part<'a>(
     loop {
         let Some(marker) = reader.peek_marker() else {
             return if main_header.strict {
-                Err(MarkerError::Invalid.into())
+                err!(MarkerError::Invalid)
             } else {
                 Ok(())
             };
@@ -279,7 +279,7 @@ fn parse_tile_part<'a>(
         len
     } else {
         return if main_header.strict {
-            Err(TileError::Invalid.into())
+            err!(TileError::Invalid)
         } else {
             Ok(())
         };

@@ -3,7 +3,7 @@
 use super::DecodeSettings;
 use super::bitplane::BITPLANE_BIT_SIZE;
 use super::build::SubBandType;
-use crate::error::{MarkerError, Result, ValidationError, bail};
+use crate::error::{MarkerError, Result, ValidationError, bail, err};
 use crate::reader::BitReader;
 
 const MAX_LAYER_COUNT: u8 = 32;
@@ -239,9 +239,9 @@ impl ComponentInfo {
                     step_sizes.get(1 + (resolution as usize - 1) * 3 + sb_index as usize)
                 };
 
-                entry
+                Ok(entry
                     .map(|s| (s.exponent, s.mantissa))
-                    .ok_or(ValidationError::MissingStepSize.into())
+                    .ok_or(ValidationError::MissingStepSize)?)
             }
             QuantizationStyle::ScalarDerived => {
                 let (e_0, mantissa) = step_sizes
@@ -299,7 +299,7 @@ impl ProgressionOrder {
             2 => Ok(Self::ResolutionPositionComponentLayer),
             3 => Ok(Self::PositionComponentResolutionLayer),
             4 => Ok(Self::ComponentPositionResolutionLayer),
-            _ => Err(ValidationError::InvalidProgressionOrder.into()),
+            _ => err!(ValidationError::InvalidProgressionOrder),
         }
     }
 }
@@ -316,7 +316,7 @@ impl WaveletTransform {
         match value {
             0 => Ok(Self::Irreversible97),
             1 => Ok(Self::Reversible53),
-            _ => Err(ValidationError::InvalidTransformation.into()),
+            _ => err!(ValidationError::InvalidTransformation),
         }
     }
 }
@@ -383,7 +383,7 @@ impl QuantizationStyle {
             0 => Ok(Self::NoQuantization),
             1 => Ok(Self::ScalarDerived),
             2 => Ok(Self::ScalarExpounded),
-            _ => Err(ValidationError::InvalidQuantizationStyle.into()),
+            _ => err!(ValidationError::InvalidQuantizationStyle),
         }
     }
 }
