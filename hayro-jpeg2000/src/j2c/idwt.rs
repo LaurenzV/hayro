@@ -1,5 +1,6 @@
 //! Performing the inverse discrete wavelet transform, as specified in Annex F.
 
+use std::ops::Div;
 use super::build::{Decomposition, SubBand, SubBandType};
 use super::codestream::WaveletTransform;
 use super::decode::{DecompositionStorage, TileDecodeContext};
@@ -527,19 +528,29 @@ fn periodic_symmetric_extension(idx: usize, start: usize, end: usize) -> usize {
     (start as i32 + offset.min(span - offset)) as usize
 }
 
-/// Get the actual row index to read from, applying periodic symmetric extension for OOB indices.
-/// Since we only ever access ±1 offset, we use simple formulas:
-/// - Row -1 reflects to row 1
-/// - Row `height` reflects to row `height - 2`
+/// The `1D_EXTR` procedure, defined in F.3.7.
+///
+/// Similar `extend_signal` but it only computes the indices of the upper/lower
+/// row needed for the vertical SIMD filtering implementation. In that case,
+/// we only need to access one upper/lower out-of-bounds row at most,
+/// significantly simplifying the implementation.
 #[inline(always)]
-fn get_row_index(row: isize, height: usize) -> usize {
-    if row == -1 {
+fn upper_and_lower_row(row: usize, height: usize) -> (usize, usize) {
+    let lower = if row == 0 {
+        // Would access index -1, so reflect to 1.
         1
-    } else if row == height as isize {
+    } else {
+        row - 1
+    };
+
+    let upper = if row == height - 1 {
+        // Would access index height, so reflect to height - 2.
         height - 2
     } else {
-        row as usize
-    }
+        row + 1
+    };
+
+    (lower, upper)
 }
 
 /// The `VER_SR` procedure from F.3.5.
@@ -563,12 +574,11 @@ fn filter_vertical_impl<S: Simd>(
     let stride = rect.width() as usize + padding.left + padding.right;
     let height = rect.height() as usize;
     let start = rect.y0 as usize;
-    
+
     if height == 1 {
         if !start.is_multiple_of(2) {
             for base_column in (0..stride).step_by(SIMD_WIDTH) {
-                let mut loaded =
-                    f32x8::from_slice(simd, &scanline[base_column..][..SIMD_WIDTH]);
+                let mut loaded = f32x8::from_slice(simd, &scanline[base_column..][..SIMD_WIDTH]);
                 loaded /= 2.0;
                 loaded.store(&mut scanline[base_column..][..SIMD_WIDTH]);
             }
@@ -598,19 +608,29 @@ fn reversible_filter_53r_simd<S: Simd>(
     let end = start + height;
 
     // Equation (F-5).
-    for i in start / 2..(end / 2) + 1 {
-        let global_row = 2 * i;
-        if global_row < start || global_row >= end {
-            continue;
-        }
-        let local_row = global_row - start;
-        let row_above = get_row_index(local_row as isize - 1, height);
-        let row_below = get_row_index(local_row as isize + 1, height);
+    // We only process rows within [start, end). Rows outside this range would be
+    // padding rows in the original implementation. We can skip them because symmetric
+    // pairs of rows are always modified by the same amount (they read from symmetric
+    // neighbors), so the symmetry is preserved through all filter steps. When we later
+    // need to read a padding row as a neighbor, we read from its reflection instead,
+    // which has the same value.
+    for i in start.div_ceil(2)..end.div_ceil(2) {
+        let local_row = 2 * i - start;
+        let (row_above, row_below) = upper_and_lower_row(local_row, height);
 
         for base_column in (0..stride).step_by(SIMD_WIDTH) {
-            let mut s1 = f32x8::from_slice(simd, &scanline[local_row * stride + base_column..][..SIMD_WIDTH]);
-            let s2 = f32x8::from_slice(simd, &scanline[row_above * stride + base_column..][..SIMD_WIDTH]);
-            let s3 = f32x8::from_slice(simd, &scanline[row_below * stride + base_column..][..SIMD_WIDTH]);
+            let mut s1 = f32x8::from_slice(
+                simd,
+                &scanline[local_row * stride + base_column..][..SIMD_WIDTH],
+            );
+            let s2 = f32x8::from_slice(
+                simd,
+                &scanline[row_above * stride + base_column..][..SIMD_WIDTH],
+            );
+            let s3 = f32x8::from_slice(
+                simd,
+                &scanline[row_below * stride + base_column..][..SIMD_WIDTH],
+            );
 
             s1 -= ((s2 + s3 + 2.0) * 0.25).floor();
             s1.store(&mut scanline[local_row * stride + base_column..][..SIMD_WIDTH]);
@@ -619,18 +639,22 @@ fn reversible_filter_53r_simd<S: Simd>(
 
     // Equation (F-6).
     for i in start / 2..end / 2 {
-        let global_row = 2 * i + 1;
-        if global_row < start || global_row >= end {
-            continue;
-        }
-        let local_row = global_row - start;
-        let row_above = get_row_index(local_row as isize - 1, height);
-        let row_below = get_row_index(local_row as isize + 1, height);
+        let local_row = 2 * i + 1 - start;
+        let (row_above, row_below) = upper_and_lower_row(local_row, height);
 
         for base_column in (0..stride).step_by(SIMD_WIDTH) {
-            let mut s1 = f32x8::from_slice(simd, &scanline[local_row * stride + base_column..][..SIMD_WIDTH]);
-            let s2 = f32x8::from_slice(simd, &scanline[row_above * stride + base_column..][..SIMD_WIDTH]);
-            let s3 = f32x8::from_slice(simd, &scanline[row_below * stride + base_column..][..SIMD_WIDTH]);
+            let mut s1 = f32x8::from_slice(
+                simd,
+                &scanline[local_row * stride + base_column..][..SIMD_WIDTH],
+            );
+            let s2 = f32x8::from_slice(
+                simd,
+                &scanline[row_above * stride + base_column..][..SIMD_WIDTH],
+            );
+            let s3 = f32x8::from_slice(
+                simd,
+                &scanline[row_below * stride + base_column..][..SIMD_WIDTH],
+            );
 
             s1 += ((s2 + s3) * 0.5).floor();
             s1.store(&mut scanline[local_row * stride + base_column..][..SIMD_WIDTH]);
@@ -665,12 +689,8 @@ fn irreversible_filter_97i_simd<S: Simd>(
     let end = start + height;
 
     // Step 1.
-    for i in start / 2..=(end / 2) {
-        let global_row = 2 * i;
-        if global_row < start || global_row >= end {
-            continue;
-        }
-        let local_row = global_row - start;
+    for i in start.div_ceil(2)..end.div_ceil(2) {
+        let local_row = 2 * i - start;
 
         for base_column in (0..stride).step_by(SIMD_WIDTH) {
             let base_idx = local_row * stride + base_column;
@@ -682,11 +702,7 @@ fn irreversible_filter_97i_simd<S: Simd>(
 
     // Step 2.
     for i in start / 2..end / 2 {
-        let global_row = 2 * i + 1;
-        if global_row < start || global_row >= end {
-            continue;
-        }
-        let local_row = global_row - start;
+        let local_row = 2 * i + 1 - start;
 
         for base_column in (0..stride).step_by(SIMD_WIDTH) {
             let base_idx = local_row * stride + base_column;
@@ -697,21 +713,22 @@ fn irreversible_filter_97i_simd<S: Simd>(
     }
 
     // Step 3.
-    for i in start / 2..=(end / 2) {
-        let global_row = 2 * i;
-        if global_row < start || global_row >= end {
-            continue;
-        }
-        let local_row = global_row - start;
-        let row_above = get_row_index(local_row as isize - 1, height);
-        let row_below = get_row_index(local_row as isize + 1, height);
+    for i in start.div_ceil(2)..end.div_ceil(2) {
+        let local_row = 2 * i - start;
+        let (row_above, row_below) = upper_and_lower_row(local_row, height);
 
         for base_column in (0..stride).step_by(SIMD_WIDTH) {
             let base_idx = local_row * stride + base_column;
 
             let mut s1 = f32x8::from_slice(simd, &scanline[base_idx..][..SIMD_WIDTH]);
-            let s2 = f32x8::from_slice(simd, &scanline[row_above * stride + base_column..][..SIMD_WIDTH]);
-            let s3 = f32x8::from_slice(simd, &scanline[row_below * stride + base_column..][..SIMD_WIDTH]);
+            let s2 = f32x8::from_slice(
+                simd,
+                &scanline[row_above * stride + base_column..][..SIMD_WIDTH],
+            );
+            let s3 = f32x8::from_slice(
+                simd,
+                &scanline[row_below * stride + base_column..][..SIMD_WIDTH],
+            );
 
             s1 -= delta * (s2 + s3);
             s1.store(&mut scanline[base_idx..][..SIMD_WIDTH]);
@@ -720,20 +737,21 @@ fn irreversible_filter_97i_simd<S: Simd>(
 
     // Step 4.
     for i in start / 2..end / 2 {
-        let global_row = 2 * i + 1;
-        if global_row < start || global_row >= end {
-            continue;
-        }
-        let local_row = global_row - start;
-        let row_above = get_row_index(local_row as isize - 1, height);
-        let row_below = get_row_index(local_row as isize + 1, height);
+        let local_row = 2 * i + 1 - start;
+        let (row_above, row_below) = upper_and_lower_row(local_row, height);
 
         for base_column in (0..stride).step_by(SIMD_WIDTH) {
             let base_idx = local_row * stride + base_column;
 
             let mut s1 = f32x8::from_slice(simd, &scanline[base_idx..][..SIMD_WIDTH]);
-            let s2 = f32x8::from_slice(simd, &scanline[row_above * stride + base_column..][..SIMD_WIDTH]);
-            let s3 = f32x8::from_slice(simd, &scanline[row_below * stride + base_column..][..SIMD_WIDTH]);
+            let s2 = f32x8::from_slice(
+                simd,
+                &scanline[row_above * stride + base_column..][..SIMD_WIDTH],
+            );
+            let s3 = f32x8::from_slice(
+                simd,
+                &scanline[row_below * stride + base_column..][..SIMD_WIDTH],
+            );
 
             s1 -= gamma * (s2 + s3);
             s1.store(&mut scanline[base_idx..][..SIMD_WIDTH]);
@@ -741,21 +759,22 @@ fn irreversible_filter_97i_simd<S: Simd>(
     }
 
     // Step 5.
-    for i in start / 2..=(end / 2) {
-        let global_row = 2 * i;
-        if global_row < start || global_row >= end {
-            continue;
-        }
-        let local_row = global_row - start;
-        let row_above = get_row_index(local_row as isize - 1, height);
-        let row_below = get_row_index(local_row as isize + 1, height);
+    for i in start.div_ceil(2)..end.div_ceil(2) {
+        let local_row = 2 * i - start;
+        let (row_above, row_below) = upper_and_lower_row(local_row, height);
 
         for base_column in (0..stride).step_by(SIMD_WIDTH) {
             let base_idx = local_row * stride + base_column;
 
             let mut s1 = f32x8::from_slice(simd, &scanline[base_idx..][..SIMD_WIDTH]);
-            let s2 = f32x8::from_slice(simd, &scanline[row_above * stride + base_column..][..SIMD_WIDTH]);
-            let s3 = f32x8::from_slice(simd, &scanline[row_below * stride + base_column..][..SIMD_WIDTH]);
+            let s2 = f32x8::from_slice(
+                simd,
+                &scanline[row_above * stride + base_column..][..SIMD_WIDTH],
+            );
+            let s3 = f32x8::from_slice(
+                simd,
+                &scanline[row_below * stride + base_column..][..SIMD_WIDTH],
+            );
 
             s1 -= beta * (s2 + s3);
             s1.store(&mut scanline[base_idx..][..SIMD_WIDTH]);
@@ -764,20 +783,21 @@ fn irreversible_filter_97i_simd<S: Simd>(
 
     // Step 6.
     for i in start / 2..end / 2 {
-        let global_row = 2 * i + 1;
-        if global_row < start || global_row >= end {
-            continue;
-        }
-        let local_row = global_row - start;
-        let row_above = get_row_index(local_row as isize - 1, height);
-        let row_below = get_row_index(local_row as isize + 1, height);
+        let local_row = 2 * i + 1 - start;
+        let (row_above, row_below) = upper_and_lower_row(local_row, height);
 
         for base_column in (0..stride).step_by(SIMD_WIDTH) {
             let base_idx = local_row * stride + base_column;
 
             let mut s1 = f32x8::from_slice(simd, &scanline[base_idx..][..SIMD_WIDTH]);
-            let s2 = f32x8::from_slice(simd, &scanline[row_above * stride + base_column..][..SIMD_WIDTH]);
-            let s3 = f32x8::from_slice(simd, &scanline[row_below * stride + base_column..][..SIMD_WIDTH]);
+            let s2 = f32x8::from_slice(
+                simd,
+                &scanline[row_above * stride + base_column..][..SIMD_WIDTH],
+            );
+            let s3 = f32x8::from_slice(
+                simd,
+                &scanline[row_below * stride + base_column..][..SIMD_WIDTH],
+            );
 
             s1 -= alpha * (s2 + s3);
             s1.store(&mut scanline[base_idx..][..SIMD_WIDTH]);
