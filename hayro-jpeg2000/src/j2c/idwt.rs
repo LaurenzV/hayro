@@ -371,16 +371,16 @@ fn reversible_filter_53r(scanline: &mut [f32], width: usize, x0: usize) {
     // Equation (F-5).
     // Originally: for i in (start / 2)..(end / 2 + 1).
     for i in (first_even..width).step_by(2) {
-        let left = reflect_index(i, -1, width);
-        let right = reflect_index(i, 1, width);
+        let left = periodic_symmetric_extension(i, -1, width);
+        let right = periodic_symmetric_extension(i, 1, width);
         scanline[i] -= ((scanline[left] + scanline[right] + 2.0) * 0.25).floor();
     }
 
     // Equation (F-6).
     // Originally: for i in (start / 2)..(end / 2).
     for i in (first_odd..width).step_by(2) {
-        let left = reflect_index(i, -1, width);
-        let right = reflect_index(i, 1, width);
+        let left = periodic_symmetric_extension(i, -1, width);
+        let right = periodic_symmetric_extension(i, 1, width);
         scanline[i] += ((scanline[left] + scanline[right]) * 0.5).floor();
     }
 }
@@ -413,43 +413,43 @@ fn irreversible_filter_97i(scanline: &mut [f32], width: usize, x0: usize) {
     // Step 3.
     // Originally: for i in (start / 2 - 1)..(end / 2 + 2).
     for i in (first_even..width).step_by(2) {
-        let left = reflect_index(i, -1, width);
-        let right = reflect_index(i, 1, width);
+        let left = periodic_symmetric_extension(i, -1, width);
+        let right = periodic_symmetric_extension(i, 1, width);
         scanline[i] -= DELTA * (scanline[left] + scanline[right]);
     }
 
     // Step 4.
     // Originally: for i in (start / 2 - 1)..((x0 + width) / 2 + 1).
     for i in (first_odd..width).step_by(2) {
-        let left = reflect_index(i, -1, width);
-        let right = reflect_index(i, 1, width);
+        let left = periodic_symmetric_extension(i, -1, width);
+        let right = periodic_symmetric_extension(i, 1, width);
         scanline[i] -= GAMMA * (scanline[left] + scanline[right]);
     }
 
     // Step 5.
     // Originally: for i in (start / 2)..(end / 2 + 1).
     for i in (first_even..width).step_by(2) {
-        let left = reflect_index(i, -1, width);
-        let right = reflect_index(i, 1, width);
+        let left = periodic_symmetric_extension(i, -1, width);
+        let right = periodic_symmetric_extension(i, 1, width);
         scanline[i] -= BETA * (scanline[left] + scanline[right]);
     }
 
     // Step 6.
     // Originally: for i in (start / 2)..(end / 2).
     for i in (first_odd..width).step_by(2) {
-        let left = reflect_index(i, -1, width);
-        let right = reflect_index(i, 1, width);
+        let left = periodic_symmetric_extension(i, -1, width);
+        let right = periodic_symmetric_extension(i, 1, width);
         scanline[i] -= ALPHA * (scanline[left] + scanline[right]);
     }
 }
 
-/// The `1D_EXTR` procedure, defined in F.3.7.
+/// Part of the `1D_EXTR` procedure, defined in F.3.7.
 ///
 /// It performs a basic periodic symmetric extension. Our formula looks different
 /// because we have no start offset and also want to avoid converting `usize`
 /// to `isize` in case it's negative.
 #[inline(always)]
-fn reflect_index(idx: usize, offset: isize, length: usize) -> usize {
+fn periodic_symmetric_extension(idx: usize, offset: isize, length: usize) -> usize {
     if offset < 0 {
         let abs_offset = (-offset) as usize;
         abs_offset.abs_diff(idx)
@@ -522,8 +522,8 @@ fn reversible_filter_53r_simd<S: Simd>(
     // Equation (F-5).
     // Originally: for i in (start / 2)..(end / 2 + 1).
     for row in (first_even..height).step_by(2) {
-        let row_above = reflect_index(row, -1, height);
-        let row_below = reflect_index(row, 1, height);
+        let row_above = periodic_symmetric_extension(row, -1, height);
+        let row_below = periodic_symmetric_extension(row, 1, height);
 
         for base_column in (0..stride).step_by(SIMD_WIDTH) {
             let mut s1 =
@@ -545,8 +545,8 @@ fn reversible_filter_53r_simd<S: Simd>(
     // Equation (F-6).
     // Originally: for i in (start / 2)..(end / 2).
     for row in (first_odd..height).step_by(2) {
-        let row_above = reflect_index(row, -1, height);
-        let row_below = reflect_index(row, 1, height);
+        let row_above = periodic_symmetric_extension(row, -1, height);
+        let row_below = periodic_symmetric_extension(row, 1, height);
 
         for base_column in (0..stride).step_by(SIMD_WIDTH) {
             let mut s1 =
@@ -619,8 +619,8 @@ fn irreversible_filter_97i_simd<S: Simd>(
     // Step 3.
     // Originally: for i in (start / 2 - 1)..(end / 2 + 2).
     for row in (first_even..height).step_by(2) {
-        let row_above = reflect_index(row, -1, height);
-        let row_below = reflect_index(row, 1, height);
+        let row_above = periodic_symmetric_extension(row, -1, height);
+        let row_below = periodic_symmetric_extension(row, 1, height);
 
         for base_column in (0..stride).step_by(SIMD_WIDTH) {
             let base_idx = row * stride + base_column;
@@ -643,8 +643,8 @@ fn irreversible_filter_97i_simd<S: Simd>(
     // Step 4.
     // Originally: for i in (start / 2 - 1)..(end / 2 + 1).
     for row in (first_odd..height).step_by(2) {
-        let row_above = reflect_index(row, -1, height);
-        let row_below = reflect_index(row, 1, height);
+        let row_above = periodic_symmetric_extension(row, -1, height);
+        let row_below = periodic_symmetric_extension(row, 1, height);
 
         for base_column in (0..stride).step_by(SIMD_WIDTH) {
             let base_idx = row * stride + base_column;
@@ -667,8 +667,8 @@ fn irreversible_filter_97i_simd<S: Simd>(
     // Step 5.
     // Originally: for i in (start / 2)..(end / 2 + 1).
     for row in (first_even..height).step_by(2) {
-        let row_above = reflect_index(row, -1, height);
-        let row_below = reflect_index(row, 1, height);
+        let row_above = periodic_symmetric_extension(row, -1, height);
+        let row_below = periodic_symmetric_extension(row, 1, height);
 
         for base_column in (0..stride).step_by(SIMD_WIDTH) {
             let base_idx = row * stride + base_column;
@@ -691,8 +691,8 @@ fn irreversible_filter_97i_simd<S: Simd>(
     // Step 6.
     // Originally: for i in (start / 2)..(end / 2).
     for row in (first_odd..height).step_by(2) {
-        let row_above = reflect_index(row, -1, height);
-        let row_below = reflect_index(row, 1, height);
+        let row_above = periodic_symmetric_extension(row, -1, height);
+        let row_below = periodic_symmetric_extension(row, 1, height);
 
         for base_column in (0..stride).step_by(SIMD_WIDTH) {
             let base_idx = row * stride + base_column;
