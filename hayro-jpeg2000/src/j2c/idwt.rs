@@ -299,40 +299,20 @@ fn filter_row(scanline: &mut [f32], width: usize, x0: usize, transform: WaveletT
 
 /// The 1D FILTER 5-3R procedure from F.3.8.1.
 fn reversible_filter_53r(scanline: &mut [f32], width: usize, x0: usize) {
-    // Note that this for loop does not match exactly what's in the reference.
-    // There is a clever subtlety that we can make use of to make the loop shorter.
-    //
-    // In the reference, the presented semantics of IDWT is that we explicitly
-    // store the left/right padding in an array. As part of the for loop, we will
-    // first modify an out-of-bound column (conceptually at the relative location
-    // -1) before proceeding to the columns that are actually inside of the image.
-    // However, the key insight is that for example the column at location -1 will
-    // actually have the same filtered values as the column at location of 1 due
-    // to reflection. The same applies to -3 and 3, etc.
-    // Therefore, as long as we properly reflect the lower and upper indices,
-    // we don't need to compute and store those boundary values explicitly.
-    //
-    // The above comment also applies to the 9-7 filter.
-
-    // Indices depend on whether the _global_ start coordinate is even or odd.
     let first_even = x0 % 2;
     let first_odd = 1 - first_even;
 
     // Equation (F-5).
     // Originally: for i in (start / 2)..(end / 2 + 1).
-    for i in (first_even..width).step_by(2) {
-        let left = periodic_symmetric_extension_left(i, 1);
-        let right = periodic_symmetric_extension_right(i, 1, width);
-        scanline[i] -= ((scanline[left] + scanline[right] + 2.0) * 0.25).floor();
-    }
+    filter_step(scanline, width, first_even, |s, left, right| {
+        s - ((left + right + 2.0) * 0.25).floor()
+    });
 
     // Equation (F-6).
     // Originally: for i in (start / 2)..(end / 2).
-    for i in (first_odd..width).step_by(2) {
-        let left = periodic_symmetric_extension_left(i, 1);
-        let right = periodic_symmetric_extension_right(i, 1, width);
-        scanline[i] += ((scanline[left] + scanline[right]) * 0.5).floor();
-    }
+    filter_step(scanline, width, first_odd, |s, left, right| {
+        s + ((left + right) * 0.5).floor()
+    });
 }
 
 /// The 1D Filter 9-7I procedure from F.3.8.2.
@@ -362,49 +342,62 @@ fn irreversible_filter_97i(scanline: &mut [f32], width: usize, x0: usize) {
 
     // Step 3.
     // Originally: for i in (start / 2 - 1)..(end / 2 + 2).
-    for i in (first_even..width).step_by(2) {
-        let left = periodic_symmetric_extension_left(i, 1);
-        let right = periodic_symmetric_extension_right(i, 1, width);
-        scanline[i] -= DELTA * (scanline[left] + scanline[right]);
-    }
+    filter_step(scanline, width, first_even, |s, left, right| {
+        s - DELTA * (left + right)
+    });
 
     // Step 4.
     // Originally: for i in (start / 2 - 1)..((x0 + width) / 2 + 1).
-    for i in (first_odd..width).step_by(2) {
-        let left = periodic_symmetric_extension_left(i, 1);
-        let right = periodic_symmetric_extension_right(i, 1, width);
-        scanline[i] -= GAMMA * (scanline[left] + scanline[right]);
-    }
+    filter_step(scanline, width, first_odd, |s, left, right| {
+        s - GAMMA * (left + right)
+    });
 
     // Step 5.
     // Originally: for i in (start / 2)..(end / 2 + 1).
-    for i in (first_even..width).step_by(2) {
-        let left = periodic_symmetric_extension_left(i, 1);
-        let right = periodic_symmetric_extension_right(i, 1, width);
-        scanline[i] -= BETA * (scanline[left] + scanline[right]);
-    }
+    filter_step(scanline, width, first_even, |s, left, right| {
+        s - BETA * (left + right)
+    });
 
     // Step 6.
     // Originally: for i in (start / 2)..(end / 2).
-    for i in (first_odd..width).step_by(2) {
+    filter_step(scanline, width, first_odd, |s, left, right| {
+        s - ALPHA * (left + right)
+    });
+}
+
+#[inline(always)]
+fn filter_step(scanline: &mut [f32], width: usize, first: usize, f: impl Fn(f32, f32, f32) -> f32) {
+    if first == 0 {
+        let left = periodic_symmetric_extension_left(0, 1);
+        let right = periodic_symmetric_extension_right(0, 1, width);
+        scanline[0] = f(scanline[0], scanline[left], scanline[right]);
+    }
+
+    let middle_start = if first == 0 { 2 } else { 1 };
+    for i in (middle_start..width - 1).step_by(2) {
+        scanline[i] = f(scanline[i], scanline[i - 1], scanline[i + 1]);
+    }
+
+    if width > 1 && (width - 1) % 2 == first {
+        let i = width - 1;
         let left = periodic_symmetric_extension_left(i, 1);
         let right = periodic_symmetric_extension_right(i, 1, width);
-        scanline[i] -= ALPHA * (scanline[left] + scanline[right]);
+        scanline[i] = f(scanline[i], scanline[left], scanline[right]);
     }
 }
 
 /// Part of the `1D_EXTR` procedure, defined in F.3.7.
 ///
 /// Applies the period symmetric extension on the left side.
-#[inline(never)]
+#[inline(always)]
 fn periodic_symmetric_extension_left(idx: usize, offset: usize) -> usize {
     offset.abs_diff(idx)
 }
 
 /// Part of the `1D_EXTR` procedure, defined in F.3.7.
 ///
-/// Applies the period symmetric extension on the right side.
-#[inline(never)]
+/// Applies the period symmetric extension on the right side (branchless).
+#[inline(always)]
 fn periodic_symmetric_extension_right(idx: usize, offset: usize, length: usize) -> usize {
     let new_idx = idx + offset;
     if new_idx >= length {
