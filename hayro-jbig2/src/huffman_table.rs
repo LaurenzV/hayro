@@ -159,52 +159,59 @@ impl HuffmanTable {
 
     /// Read a custom Huffman table from the bitstream (B.2 "Decoding a code table").
     pub(crate) fn read_custom(reader: &mut Reader<'_>) -> Result<Self, &'static str> {
-        // Step 1: Read code table flags.
+        // 1) "Decode the code table flags field as described in B.2.1. This sets the values
+        //    HTOOB, HTPS and HTRS."
         let flags = reader
             .read_byte()
             .ok_or("unexpected end of data reading huffman flags")?;
 
-        // `HTOOB` - "Bit 0 is HTOOB for this code table."
+        // `HTOOB`
         let has_out_of_band = (flags & 1) != 0;
-        // `HTPS` - "Bits 1-3 specify the value of HTPS – 1 for this code table."
+        // `HTPS`
         let prefix_length_bits = ((flags >> 1) & 7) + 1;
-        // `HTRS` - "Bits 4-6 specify the value of HTRS – 1 for this code table."
+        // `HTRS`
         let range_length_bits = ((flags >> 4) & 7) + 1;
 
-        // Step 2: Read HTLOW (lowest value in table).
-        // `HTLOW` - The minimum value in the table.
+        // 2) "Decode the code table lowest value field as described in B.2.2. Let HTLOW be
+        //    the value decoded."
+        // `HTLOW`
         let minimum_value = reader
             .read_i32()
             .ok_or("unexpected end of data reading HTLOW")?;
 
-        // Step 3: Read HTHIGH (highest value in table).
-        // `HTHIGH` - The maximum value in the table.
+        // 3) "Decode the code table highest value field as described in B.2.3. Let HTHIGH be
+        //    the value decoded."
+        // `HTHIGH`
         let maximum_value = reader
             .read_i32()
             .ok_or("unexpected end of data reading HTHIGH")?;
 
-        // Step 4: Read table lines covering HTLOW to HTHIGH.
-        // "Continue reading table lines... until CURRANGELOW > HTHIGH."
+        // 4) "Set: CURRANGELOW = HTLOW, NTEMP = 0"
         let mut lines = Vec::new();
-        // `CURRANGELOW` - Current range low value.
+        // `CURRANGELOW`
         let mut current_range_low = minimum_value;
 
+        // 5) "Decode each table line as follows:"
+        //    d) "If CURRANGELOW ≥ HTHIGH then proceed to step 6."
         while current_range_low < maximum_value {
+            // a) "Read HTPS bits. Set PREFLEN[NTEMP] to the value decoded."
             let prefix_length = reader
                 .read_bits(prefix_length_bits)
                 .ok_or("invalid huffman code")? as u8;
+            // b) "Read HTRS bits. Let RANGELEN[NTEMP] be the value decoded."
             let range_length = reader
                 .read_bits(range_length_bits)
                 .ok_or("invalid huffman code")? as u8;
 
+            // c) "Set: RANGELOW[NTEMP] = CURRANGELOW
+            //         CURRANGELOW = CURRANGELOW + 2^RANGELEN[NTEMP]
+            //         NTEMP = NTEMP + 1"
             lines.push(TableLine::new(
                 current_range_low,
                 prefix_length,
                 range_length,
             ));
 
-            // Advance to next range.
-            // Range covers current_range_low to current_range_low + 2^range_length - 1.
             let range_size = 1_i64
                 .checked_shl(range_length as u32)
                 .ok_or("range size overflow")?;
@@ -215,8 +222,10 @@ impl HuffmanTable {
                 i32::try_from(next_range_low).map_err(|_| "current_range_low out of i32 range")?;
         }
 
-        // Step 5: Read lower range line (-∞ to HTLOW-1).
-        // Only PREFLEN is read; RANGELEN is implicitly 32.
+        // 6) "Read HTPS bits. Let LOWPREFLEN be the value read."
+        // 7) "Set: PREFLEN[NTEMP] = LOWPREFLEN, RANGELEN[NTEMP] = 32,
+        //         RANGELOW[NTEMP] = HTLOW − 1, NTEMP = NTEMP + 1
+        //    This is the lower range table line for this table."
         lines.push(TableLine::lower(
             minimum_value - 1,
             reader
@@ -225,8 +234,10 @@ impl HuffmanTable {
             32,
         ));
 
-        // Step 6: Read upper range line (current_range_low to +∞).
-        // Only PREFLEN is read; RANGELEN is implicitly 32.
+        // 8) "Read HTPS bits. Let HIGHPREFLEN be the value read."
+        // 9) "Set: PREFLEN[NTEMP] = HIGHPREFLEN, RANGELEN[NTEMP] = 32,
+        //         RANGELOW[NTEMP] = HTHIGH, NTEMP = NTEMP + 1
+        //    This is the upper range table line for this table."
         lines.push(TableLine::upper(
             current_range_low,
             reader
@@ -235,7 +246,10 @@ impl HuffmanTable {
             32,
         ));
 
-        // Step 7: If HTOOB, read OOB line.
+        // 10) "If HTOOB is 1, then:
+        //     a) Read HTPS bits. Let OOBPREFLEN be the value read.
+        //     b) Set: PREFLEN[NTEMP] = OOBPREFLEN, NTEMP = NTEMP + 1
+        //     This is the out-of-band table line for this table."
         if has_out_of_band {
             lines.push(TableLine::oob(
                 reader
@@ -244,6 +258,7 @@ impl HuffmanTable {
             ));
         }
 
+        // 11) "Create the prefix codes using the algorithm described in B.3."
         Ok(Self::build(&lines))
     }
 }
