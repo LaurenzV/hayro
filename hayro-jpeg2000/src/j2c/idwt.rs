@@ -7,17 +7,10 @@ use super::rect::IntRect;
 use super::simd::{Level, SIMD_WIDTH, Simd, dispatch, f32x8};
 use crate::j2c::Header;
 
-#[derive(Default, Copy, Clone)]
-pub(crate) struct Padding {
-    pub(crate) right: usize,
-}
-
 /// The output from performing the IDWT operation.
 pub(crate) struct IDWTOutput {
     /// The buffer that will hold the final coefficients.
     pub(crate) coefficients: Vec<f32>,
-    /// The size of the padding applied to each side.
-    pub(crate) padding: Padding,
     /// The rect that the coefficients belong to. This will be equivalent
     /// to the rectangle that forms the smallest decomposition level. It does
     /// not have to be equivalent to the original size of the tile, as the
@@ -30,21 +23,12 @@ impl IDWTOutput {
     pub(crate) fn dummy() -> Self {
         Self {
             coefficients: vec![],
-            padding: Padding::default(),
             rect: IntRect::from_ltrb(0, 0, u32::MAX, u32::MAX),
         }
     }
 }
 
-impl IDWTOutput {
-    /// The total width of the output, including padding.
-    pub(crate) fn total_width(&self) -> u32 {
-        self.rect.width() + self.padding.right as u32
-    }
-}
-
 struct IDWTTempOutput {
-    padding: Padding,
     rect: IntRect,
 }
 
@@ -80,12 +64,11 @@ pub(crate) fn apply(
     let (scratch_buf, output) = (&mut tile_ctx.idwt_scratch_buffer, &mut tile_ctx.idwt_output);
 
     let estimate_buffer_size = |decomposition: &Decomposition| {
-        // For the width, we need to account for SIMD padding on the right.
-        let total_width = decomposition.rect.width() as usize + SIMD_WIDTH;
+        let total_width = decomposition.rect.width() as usize;
         let total_height = decomposition.rect.height() as usize;
 
         let min = total_width * total_height;
-        // Different sub-bands can have shifts by one, so add even more padding
+        // Different sub-bands can have shifts by one, so add padding
         // for the maximum case.
         let max = (total_width + 1) * (total_height + 1);
 
@@ -99,7 +82,6 @@ pub(crate) fn apply(
             .coefficients
             .extend_from_slice(&storage.coefficients[ll_sub_band.coefficients.clone()]);
 
-        output.padding = Padding::default();
         output.rect = ll_sub_band.rect;
 
         return;
@@ -145,7 +127,7 @@ pub(crate) fn apply(
 
         temp_output = if use_scratch {
             filter_2d(
-                IDWTInput::from_output(&temp_output, &output.coefficients),
+                IDWTInput::from_output(&output.coefficients),
                 scratch_buf,
                 decomposition,
                 transform,
@@ -153,7 +135,7 @@ pub(crate) fn apply(
             )
         } else {
             filter_2d(
-                IDWTInput::from_output(&temp_output, scratch_buf),
+                IDWTInput::from_output(scratch_buf),
                 &mut output.coefficients,
                 decomposition,
                 transform,
@@ -163,12 +145,10 @@ pub(crate) fn apply(
     }
 
     output.rect = temp_output.rect;
-    output.padding = temp_output.padding;
 }
 
 struct IDWTInput<'a> {
     coefficients: &'a [f32],
-    padding: Padding,
     sub_band_type: SubBandType,
 }
 
@@ -176,15 +156,13 @@ impl<'a> IDWTInput<'a> {
     fn from_sub_band(sub_band: &'a SubBand, storage: &'a DecompositionStorage<'_>) -> Self {
         IDWTInput {
             coefficients: &storage.coefficients[sub_band.coefficients.clone()],
-            padding: Padding::default(),
             sub_band_type: sub_band.sub_band_type,
         }
     }
 
-    fn from_output(idwt_output: &'a IDWTTempOutput, coefficients: &'a [f32]) -> Self {
+    fn from_output(coefficients: &'a [f32]) -> Self {
         IDWTInput {
             coefficients,
-            padding: idwt_output.padding,
             // The output from a previous iteration turns into the LL sub band
             // for the next iteration.
             sub_band_type: SubBandType::LowLow,
@@ -201,18 +179,16 @@ fn filter_2d(
     transform: WaveletTransform,
     storage: &DecompositionStorage<'_>,
 ) -> IDWTTempOutput {
-    // First interleave all sub-bands into a single buffer. We also
-    // apply a padding so that we can transparently deal with border values.
-    let padding = interleave_samples(input, decomposition, coefficients, storage);
+    // First interleave all sub-bands into a single buffer.
+    interleave_samples(input, decomposition, coefficients, storage);
 
     if decomposition.rect.width() > 0 && decomposition.rect.height() > 0 {
-        filter_horizontal(coefficients, padding, decomposition.rect, transform);
-        filter_vertical(coefficients, padding, decomposition.rect, transform);
+        filter_horizontal(coefficients, decomposition.rect, transform);
+        filter_vertical(coefficients, decomposition.rect, transform);
     }
 
     IDWTTempOutput {
         rect: decomposition.rect,
-        padding,
     }
 }
 
@@ -222,34 +198,20 @@ fn interleave_samples(
     decomposition: &Decomposition,
     coefficients: &mut Vec<f32>,
     storage: &DecompositionStorage<'_>,
-) -> Padding {
-    let new_padding = {
-        // For vertical filtering, we use SIMD to process multiple columns at
-        // the same time. Therefore, we add padding to the right such that we
-        // can always iterate in chunks of our SIMD width without having to
-        // deal with any remainder.
-        let current_width = decomposition.rect.width() as usize;
-        let target_width = current_width.next_multiple_of(SIMD_WIDTH);
-        let right_padding = target_width - current_width;
-
-        Padding {
-            right: right_padding,
-        }
-    };
-
-    let total_width = decomposition.rect.width() as usize + new_padding.right;
-    let total_height = decomposition.rect.height() as usize;
+) {
+    let width = decomposition.rect.width() as usize;
+    let height = decomposition.rect.height() as usize;
 
     // Just a sanity check. We should have allocated enough upfront before
     // starting the IDWT.
-    assert!(coefficients.capacity() >= total_width * total_height);
+    assert!(coefficients.capacity() >= width * height);
 
     // The cleaner way would be to first clear and then resize, so that we
     // have a clean buffer with just zeroes. However, this is actually not
     // necessary, because when interleaving and generating the border values
     // we will replace all the data anyway, so we can save the cost of
     // the clear operation.
-    coefficients.resize(total_width * total_height, 0.0);
+    coefficients.resize(width * height, 0.0);
 
     let IntRect {
         x0: u0,
@@ -258,8 +220,7 @@ fn interleave_samples(
         y1: v1,
     } = decomposition.rect;
 
-    // Perform the actual interleaving of sub-bands, taking the padding into
-    // account.
+    // Perform the actual interleaving of sub-bands.
     for idwt_input in [
         input,
         IDWTInput::from_sub_band(&storage.sub_bands[decomposition.sub_bands[0]], storage),
@@ -279,8 +240,6 @@ fn interleave_samples(
         let num_v = v_max - v_min;
         let num_u = u_max - u_min;
 
-        let input_total_width = num_u as usize + idwt_input.padding.right;
-
         if num_u == 0 || num_v == 0 {
             continue;
         }
@@ -293,8 +252,7 @@ fn interleave_samples(
         };
 
         let coefficient_rows = coefficients
-            .chunks_exact_mut(total_width)
-            .map(|s| &mut s[..decomposition.rect.width() as usize])
+            .chunks_exact_mut(width)
             .skip((start_y - v0) as usize)
             .step_by(2);
 
@@ -305,29 +263,21 @@ fn interleave_samples(
 
             for u_b in 0..num_u {
                 coefficient_row[u_b as usize * 2] =
-                    idwt_input.coefficients[v_b * input_total_width + u_b as usize];
+                    idwt_input.coefficients[v_b * num_u as usize + u_b as usize];
             }
         }
     }
-
-    new_padding
 }
 
 /// The `HOR_SR` procedure from F.3.4.
-fn filter_horizontal(
-    coefficients: &mut [f32],
-    padding: Padding,
-    rect: IntRect,
-    transform: WaveletTransform,
-) {
+fn filter_horizontal(coefficients: &mut [f32], rect: IntRect, transform: WaveletTransform) {
     let width = rect.width() as usize;
-    let total_width = width + padding.right;
 
     for scanline in coefficients
-        .chunks_exact_mut(total_width)
+        .chunks_exact_mut(width)
         .take(rect.height() as usize)
     {
-        filter_row(&mut scanline[..width], width, rect.x0 as usize, transform);
+        filter_row(scanline, width, rect.x0 as usize, transform);
     }
 }
 
@@ -465,33 +415,33 @@ fn periodic_symmetric_extension(idx: usize, offset: isize, length: usize) -> usi
 }
 
 /// The `VER_SR` procedure from F.3.5.
-fn filter_vertical(
-    coefficients: &mut [f32],
-    padding: Padding,
-    rect: IntRect,
-    transform: WaveletTransform,
-) {
-    dispatch!(Level::new(), simd => filter_vertical_impl(simd, coefficients, padding, rect, transform));
+fn filter_vertical(coefficients: &mut [f32], rect: IntRect, transform: WaveletTransform) {
+    dispatch!(Level::new(), simd => filter_vertical_impl(simd, coefficients, rect, transform));
 }
 
 #[inline(always)]
 fn filter_vertical_impl<S: Simd>(
     simd: S,
     scanline: &mut [f32],
-    padding: Padding,
     rect: IntRect,
     transform: WaveletTransform,
 ) {
-    let stride = rect.width() as usize + padding.right;
+    let width = rect.width() as usize;
     let height = rect.height() as usize;
     let y0 = rect.y0 as usize;
 
     if height == 1 {
         if !y0.is_multiple_of(2) {
-            for base_column in (0..stride).step_by(SIMD_WIDTH) {
+            let simd_width = width / SIMD_WIDTH * SIMD_WIDTH;
+            for base_column in (0..simd_width).step_by(SIMD_WIDTH) {
                 let mut loaded = f32x8::from_slice(simd, &scanline[base_column..][..SIMD_WIDTH]);
                 loaded /= 2.0;
                 loaded.store(&mut scanline[base_column..][..SIMD_WIDTH]);
+            }
+
+            // Scalar remainder.
+            for col in simd_width..width {
+                scanline[col] /= 2.0;
             }
         }
         return;
@@ -499,10 +449,10 @@ fn filter_vertical_impl<S: Simd>(
 
     match transform {
         WaveletTransform::Reversible53 => {
-            reversible_filter_53r_simd(simd, scanline, height, stride, y0);
+            reversible_filter_53r_simd(simd, scanline, height, width, y0);
         }
         WaveletTransform::Irreversible97 => {
-            irreversible_filter_97i_simd(simd, scanline, height, stride, y0);
+            irreversible_filter_97i_simd(simd, scanline, height, width, y0);
         }
     }
 }
@@ -513,11 +463,12 @@ fn reversible_filter_53r_simd<S: Simd>(
     simd: S,
     scanline: &mut [f32],
     height: usize,
-    stride: usize,
+    width: usize,
     y0: usize,
 ) {
     let first_even = y0 % 2;
     let first_odd = 1 - first_even;
+    let simd_width = width / SIMD_WIDTH * SIMD_WIDTH;
 
     // Equation (F-5).
     // Originally: for i in (start / 2)..(end / 2 + 1).
@@ -525,20 +476,28 @@ fn reversible_filter_53r_simd<S: Simd>(
         let row_above = periodic_symmetric_extension(row, -1, height);
         let row_below = periodic_symmetric_extension(row, 1, height);
 
-        for base_column in (0..stride).step_by(SIMD_WIDTH) {
+        for base_column in (0..simd_width).step_by(SIMD_WIDTH) {
             let mut s1 =
-                f32x8::from_slice(simd, &scanline[row * stride + base_column..][..SIMD_WIDTH]);
+                f32x8::from_slice(simd, &scanline[row * width + base_column..][..SIMD_WIDTH]);
             let s2 = f32x8::from_slice(
                 simd,
-                &scanline[row_above * stride + base_column..][..SIMD_WIDTH],
+                &scanline[row_above * width + base_column..][..SIMD_WIDTH],
             );
             let s3 = f32x8::from_slice(
                 simd,
-                &scanline[row_below * stride + base_column..][..SIMD_WIDTH],
+                &scanline[row_below * width + base_column..][..SIMD_WIDTH],
             );
 
             s1 -= ((s2 + s3 + 2.0) * 0.25).floor();
-            s1.store(&mut scanline[row * stride + base_column..][..SIMD_WIDTH]);
+            s1.store(&mut scanline[row * width + base_column..][..SIMD_WIDTH]);
+        }
+
+        // Scalar remainder.
+        for col in simd_width..width {
+            let s1 = scanline[row * width + col];
+            let s2 = scanline[row_above * width + col];
+            let s3 = scanline[row_below * width + col];
+            scanline[row * width + col] = s1 - ((s2 + s3 + 2.0) * 0.25).floor();
         }
     }
 
@@ -548,20 +507,28 @@ fn reversible_filter_53r_simd<S: Simd>(
         let row_above = periodic_symmetric_extension(row, -1, height);
         let row_below = periodic_symmetric_extension(row, 1, height);
 
-        for base_column in (0..stride).step_by(SIMD_WIDTH) {
+        for base_column in (0..simd_width).step_by(SIMD_WIDTH) {
             let mut s1 =
-                f32x8::from_slice(simd, &scanline[row * stride + base_column..][..SIMD_WIDTH]);
+                f32x8::from_slice(simd, &scanline[row * width + base_column..][..SIMD_WIDTH]);
             let s2 = f32x8::from_slice(
                 simd,
-                &scanline[row_above * stride + base_column..][..SIMD_WIDTH],
+                &scanline[row_above * width + base_column..][..SIMD_WIDTH],
             );
             let s3 = f32x8::from_slice(
                 simd,
-                &scanline[row_below * stride + base_column..][..SIMD_WIDTH],
+                &scanline[row_below * width + base_column..][..SIMD_WIDTH],
             );
 
             s1 += ((s2 + s3) * 0.5).floor();
-            s1.store(&mut scanline[row * stride + base_column..][..SIMD_WIDTH]);
+            s1.store(&mut scanline[row * width + base_column..][..SIMD_WIDTH]);
+        }
+
+        // Scalar remainder.
+        for col in simd_width..width {
+            let s1 = scanline[row * width + col];
+            let s2 = scanline[row_above * width + col];
+            let s3 = scanline[row_below * width + col];
+            scanline[row * width + col] = s1 + ((s2 + s3) * 0.5).floor();
         }
     }
 }
@@ -572,7 +539,7 @@ fn irreversible_filter_97i_simd<S: Simd>(
     simd: S,
     scanline: &mut [f32],
     height: usize,
-    stride: usize,
+    width: usize,
     y0: usize,
 ) {
     const ALPHA: f32 = -1.586_134_3;
@@ -593,26 +560,37 @@ fn irreversible_filter_97i_simd<S: Simd>(
     // Determine which local row indices correspond to even/odd global positions.
     let first_even = y0 % 2;
     let first_odd = 1 - first_even;
+    let simd_width = width / SIMD_WIDTH * SIMD_WIDTH;
 
     // Step 1.
     // Originally: for i in (start / 2 - 1)..(end / 2 + 2).
     for row in (first_even..height).step_by(2) {
-        for base_column in (0..stride).step_by(SIMD_WIDTH) {
-            let base_idx = row * stride + base_column;
+        for base_column in (0..simd_width).step_by(SIMD_WIDTH) {
+            let base_idx = row * width + base_column;
             let mut vals = f32x8::from_slice(simd, &scanline[base_idx..][..SIMD_WIDTH]);
             vals = vals * kappa;
             vals.store(&mut scanline[base_idx..][..SIMD_WIDTH]);
+        }
+
+        // Scalar remainder.
+        for col in simd_width..width {
+            scanline[row * width + col] *= KAPPA;
         }
     }
 
     // Step 2.
     // Originally: for i in (start / 2 - 2)..(end / 2 + 2).
     for row in (first_odd..height).step_by(2) {
-        for base_column in (0..stride).step_by(SIMD_WIDTH) {
-            let base_idx = row * stride + base_column;
+        for base_column in (0..simd_width).step_by(SIMD_WIDTH) {
+            let base_idx = row * width + base_column;
             let mut vals = f32x8::from_slice(simd, &scanline[base_idx..][..SIMD_WIDTH]);
             vals = vals * inv_kappa;
             vals.store(&mut scanline[base_idx..][..SIMD_WIDTH]);
+        }
+
+        // Scalar remainder.
+        for col in simd_width..width {
+            scanline[row * width + col] *= INV_KAPPA;
         }
     }
 
@@ -622,21 +600,29 @@ fn irreversible_filter_97i_simd<S: Simd>(
         let row_above = periodic_symmetric_extension(row, -1, height);
         let row_below = periodic_symmetric_extension(row, 1, height);
 
-        for base_column in (0..stride).step_by(SIMD_WIDTH) {
-            let base_idx = row * stride + base_column;
+        for base_column in (0..simd_width).step_by(SIMD_WIDTH) {
+            let base_idx = row * width + base_column;
 
             let mut s1 = f32x8::from_slice(simd, &scanline[base_idx..][..SIMD_WIDTH]);
             let s2 = f32x8::from_slice(
                 simd,
-                &scanline[row_above * stride + base_column..][..SIMD_WIDTH],
+                &scanline[row_above * width + base_column..][..SIMD_WIDTH],
             );
             let s3 = f32x8::from_slice(
                 simd,
-                &scanline[row_below * stride + base_column..][..SIMD_WIDTH],
+                &scanline[row_below * width + base_column..][..SIMD_WIDTH],
             );
 
             s1 -= delta * (s2 + s3);
             s1.store(&mut scanline[base_idx..][..SIMD_WIDTH]);
+        }
+
+        // Scalar remainder.
+        for col in simd_width..width {
+            let s1 = scanline[row * width + col];
+            let s2 = scanline[row_above * width + col];
+            let s3 = scanline[row_below * width + col];
+            scanline[row * width + col] = s1 - DELTA * (s2 + s3);
         }
     }
 
@@ -646,21 +632,29 @@ fn irreversible_filter_97i_simd<S: Simd>(
         let row_above = periodic_symmetric_extension(row, -1, height);
         let row_below = periodic_symmetric_extension(row, 1, height);
 
-        for base_column in (0..stride).step_by(SIMD_WIDTH) {
-            let base_idx = row * stride + base_column;
+        for base_column in (0..simd_width).step_by(SIMD_WIDTH) {
+            let base_idx = row * width + base_column;
 
             let mut s1 = f32x8::from_slice(simd, &scanline[base_idx..][..SIMD_WIDTH]);
             let s2 = f32x8::from_slice(
                 simd,
-                &scanline[row_above * stride + base_column..][..SIMD_WIDTH],
+                &scanline[row_above * width + base_column..][..SIMD_WIDTH],
             );
             let s3 = f32x8::from_slice(
                 simd,
-                &scanline[row_below * stride + base_column..][..SIMD_WIDTH],
+                &scanline[row_below * width + base_column..][..SIMD_WIDTH],
             );
 
             s1 -= gamma * (s2 + s3);
             s1.store(&mut scanline[base_idx..][..SIMD_WIDTH]);
+        }
+
+        // Scalar remainder.
+        for col in simd_width..width {
+            let s1 = scanline[row * width + col];
+            let s2 = scanline[row_above * width + col];
+            let s3 = scanline[row_below * width + col];
+            scanline[row * width + col] = s1 - GAMMA * (s2 + s3);
         }
     }
 
@@ -670,21 +664,29 @@ fn irreversible_filter_97i_simd<S: Simd>(
         let row_above = periodic_symmetric_extension(row, -1, height);
         let row_below = periodic_symmetric_extension(row, 1, height);
 
-        for base_column in (0..stride).step_by(SIMD_WIDTH) {
-            let base_idx = row * stride + base_column;
+        for base_column in (0..simd_width).step_by(SIMD_WIDTH) {
+            let base_idx = row * width + base_column;
 
             let mut s1 = f32x8::from_slice(simd, &scanline[base_idx..][..SIMD_WIDTH]);
             let s2 = f32x8::from_slice(
                 simd,
-                &scanline[row_above * stride + base_column..][..SIMD_WIDTH],
+                &scanline[row_above * width + base_column..][..SIMD_WIDTH],
             );
             let s3 = f32x8::from_slice(
                 simd,
-                &scanline[row_below * stride + base_column..][..SIMD_WIDTH],
+                &scanline[row_below * width + base_column..][..SIMD_WIDTH],
             );
 
             s1 -= beta * (s2 + s3);
             s1.store(&mut scanline[base_idx..][..SIMD_WIDTH]);
+        }
+
+        // Scalar remainder.
+        for col in simd_width..width {
+            let s1 = scanline[row * width + col];
+            let s2 = scanline[row_above * width + col];
+            let s3 = scanline[row_below * width + col];
+            scanline[row * width + col] = s1 - BETA * (s2 + s3);
         }
     }
 
@@ -694,21 +696,29 @@ fn irreversible_filter_97i_simd<S: Simd>(
         let row_above = periodic_symmetric_extension(row, -1, height);
         let row_below = periodic_symmetric_extension(row, 1, height);
 
-        for base_column in (0..stride).step_by(SIMD_WIDTH) {
-            let base_idx = row * stride + base_column;
+        for base_column in (0..simd_width).step_by(SIMD_WIDTH) {
+            let base_idx = row * width + base_column;
 
             let mut s1 = f32x8::from_slice(simd, &scanline[base_idx..][..SIMD_WIDTH]);
             let s2 = f32x8::from_slice(
                 simd,
-                &scanline[row_above * stride + base_column..][..SIMD_WIDTH],
+                &scanline[row_above * width + base_column..][..SIMD_WIDTH],
             );
             let s3 = f32x8::from_slice(
                 simd,
-                &scanline[row_below * stride + base_column..][..SIMD_WIDTH],
+                &scanline[row_below * width + base_column..][..SIMD_WIDTH],
             );
 
             s1 -= alpha * (s2 + s3);
             s1.store(&mut scanline[base_idx..][..SIMD_WIDTH]);
+        }
+
+        // Scalar remainder.
+        for col in simd_width..width {
+            let s1 = scanline[row * width + col];
+            let s2 = scanline[row_above * width + col];
+            let s3 = scanline[row_below * width + col];
+            scanline[row * width + col] = s1 - ALPHA * (s2 + s3);
         }
     }
 }
