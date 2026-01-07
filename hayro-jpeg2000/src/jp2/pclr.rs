@@ -1,6 +1,6 @@
 //! The palette box (pclr), defined in I.5.3.4.
 
-use crate::error::{bail, FormatError, Result};
+use crate::error::{FormatError, Result, bail};
 use crate::jp2::ImageBoxes;
 use crate::reader::BitReader;
 
@@ -35,7 +35,9 @@ pub(crate) fn parse(boxes: &mut ImageBoxes, data: &[u8]) -> Result<()> {
 
         for column in &columns {
             let num_bytes = (column.bit_depth as usize).div_ceil(8).max(1);
-            let raw_bytes = reader.read_bytes(num_bytes).ok_or(FormatError::InvalidBox)?;
+            let raw_bytes = reader
+                .read_bytes(num_bytes)
+                .ok_or(FormatError::InvalidBox)?;
             let mut raw_value = 0_u64;
             for &byte in raw_bytes {
                 raw_value = (raw_value << 8) | byte as u64;

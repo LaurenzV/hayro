@@ -1,6 +1,6 @@
 //! Combined byte and bit reader utilities.
 
-use crate::error::{bail, MarkerError, Result};
+use crate::error::{MarkerError, Result, bail};
 use std::fmt::Debug;
 
 #[derive(Debug, Clone)]

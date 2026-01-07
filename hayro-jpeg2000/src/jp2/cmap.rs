@@ -1,6 +1,6 @@
 //! The component mapping box (cmap), defined in I.5.3.5.
 
-use crate::error::{bail, FormatError, Result};
+use crate::error::{FormatError, Result, bail};
 use crate::jp2::ImageBoxes;
 use crate::reader::BitReader;
 

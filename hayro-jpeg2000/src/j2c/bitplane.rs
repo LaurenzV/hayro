@@ -13,7 +13,7 @@ use super::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use super::build::{CodeBlock, SubBandType};
 use super::codestream::CodeBlockStyle;
 use super::decode::{DecompositionStorage, TileDecodeContext};
-use crate::error::{bail, DecodingError, Result};
+use crate::error::{DecodingError, Result, bail};
 use crate::reader::BitReader;
 
 /// Decode the layers of the given code block into coefficients.

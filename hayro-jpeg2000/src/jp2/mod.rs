@@ -1,6 +1,6 @@
 //! Reading a JP2 file, defined in Annex I.
 
-use crate::error::{bail, FormatError, Result};
+use crate::error::{FormatError, Result, bail};
 use crate::j2c::DecodedCodestream;
 use crate::jp2::r#box::{FILE_TYPE, JP2_SIGNATURE};
 use crate::jp2::cdef::ChannelDefinitionBox;
