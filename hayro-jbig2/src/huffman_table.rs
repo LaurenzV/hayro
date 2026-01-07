@@ -81,13 +81,14 @@ impl HuffmanNode {
             _ => panic!("set_child called on non-intermediate node"),
         }
     }
-
-    /// Decode from this node, returning the decoded value or None for OOB.
+    
     fn decode_from(
         nodes: &[Self],
         mut node_index: u32,
         reader: &mut Reader<'_>,
     ) -> Result<Option<i32>, &'static str> {
+        // 1) "Read one bit at a time until the bit string read matches the code assigned to
+        //    one of the table lines."
         loop {
             match nodes[node_index as usize] {
                 Self::Intermediate { zero, one } => {
@@ -98,15 +99,23 @@ impl HuffmanNode {
                     node_index = child_index.ok_or("invalid huffman code")?.get();
                 }
                 Self::Leaf(leaf) => {
+                    // 3) "If HTOOB is 1 for this table, and table line I is the out-of-band
+                    //    table line for this table, then set: HTVAL = OOB"
                     if leaf.is_out_of_band {
                         return Ok(None);
                     }
 
+                    // 2) "Read RANGELEN[I] bits. Let HTOFFSET be the value read."
+                    // `HTOFFSET`
                     let range_offset = reader
                         .read_bits(leaf.range_length)
                         .ok_or("invalid huffman code")?
                         as i32;
 
+                    // 4) "Otherwise, if table line I is the lower range table line for this
+                    //    table, then set: HTVAL = RANGELOW[I] − HTOFFSET"
+                    // 5) "Otherwise, set: HTVAL = RANGELOW[I] + HTOFFSET"
+                    // `HTVAL`
                     let value = if leaf.is_lower {
                         leaf.range_low - range_offset
                     } else {
@@ -154,15 +163,9 @@ impl HuffmanTable {
         Self(Rc::new(InnerHuffmanTable::Dynamic { nodes }))
     }
 
-    /// Decode a value from the bit reader using this Huffman table.
-    ///
-    /// Implements B.4 "Using a Huffman table":
-    /// 1) Read bits until matching a code
-    /// 2) Read RANGELEN bits as HTOFFSET
-    /// 3) If OOB line: return None
-    /// 4) If lower range line: return RANGELOW - HTOFFSET
-    /// 5) Otherwise: return RANGELOW + HTOFFSET
-    ///
+    /// Decode a value from the bit reader using this Huffman table 
+    /// (B.4 "Using a Huffman table").
+    /// 
     /// Returns `Ok(None)` for out-of-band (OOB) values, `Ok(Some(value))` for decoded values.
     pub(crate) fn decode(&self, reader: &mut Reader<'_>) -> Result<Option<i32>, &'static str> {
         let nodes: &[HuffmanNode] = match self.0.as_ref() {
