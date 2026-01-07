@@ -305,7 +305,7 @@ pub(crate) struct DecodeContext {
     /// Decoded Huffman tables from table segments, stored as (`segment_number`, table) pairs.
     /// "Tables – see 7.4.13." (type 53)
     pub(crate) huffman_tables: Vec<(u32, HuffmanTable)>,
-    /// Standard Huffman tables (TABLE_A through TABLE_O).
+    /// Standard Huffman tables (`TABLE_A` through `TABLE_O`).
     pub(crate) standard_tables: StandardHuffmanTables,
 }
 

@@ -561,7 +561,7 @@ fn decode_symbols_huffman(
         if !header.flags.sdrefagg {
             decode_height_class_collective_bitmap(
                 reader,
-                &sdhuffbmsize,
+                sdhuffbmsize,
                 &mut new_symbols,
                 &new_sym_widths,
                 hcfirstsym,
