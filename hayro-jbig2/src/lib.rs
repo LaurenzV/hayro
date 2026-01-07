@@ -11,7 +11,7 @@ The crate is `no_std` compatible but requires an allocator to be available.
 This crate forbids unsafe code via a crate-level attribute.
 */
 
-#![no_std]
+#![cfg_attr(not(feature = "std"), no_std)]
 #![forbid(unsafe_code)]
 #![allow(missing_docs)]
 
@@ -26,6 +26,7 @@ mod file;
 mod gray_scale;
 mod huffman_table;
 mod integer_decoder;
+mod lazy;
 mod page_info;
 mod reader;
 mod region;
