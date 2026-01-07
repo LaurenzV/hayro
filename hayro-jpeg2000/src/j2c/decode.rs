@@ -462,8 +462,7 @@ fn store<'a>(
 
         let input_row_iter = idwt_output
             .coefficients
-            .chunks_exact(idwt_output.total_width() as usize)
-            .map(|s| &s[..idwt_output.rect.width() as usize])
+            .chunks_exact(idwt_output.rect.width() as usize)
             .skip(skip_y as usize)
             .take(idwt_output.rect.height() as usize);
 
@@ -506,7 +505,7 @@ fn store<'a>(
                 let reference_grid_x = (scale_x as u32 * x) / x_shrink_factor;
 
                 let sample = idwt_output.coefficients
-                    [relative_y * idwt_output.total_width() as usize + relative_x];
+                    [relative_y * idwt_output.rect.width() as usize + relative_x];
 
                 for x_position in u32::max(reference_grid_x, x_offset)
                     ..u32::min(reference_grid_x + scale_x as u32, image_width + x_offset)
