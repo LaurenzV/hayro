@@ -374,11 +374,26 @@ fn filter_row(scanline: &mut [f32], width: usize, x0: usize, transform: WaveletT
 
 /// The 1D FILTER 5-3R procedure from F.3.8.1.
 fn reversible_filter_53r(scanline: &mut [f32], width: usize, x0: usize) {
+    // Note that this for loop does not match exactly what's in the reference.
+    // There is a clever subtlety that we can make use of to make the loop shorter.
+    //
+    // In the reference, the presented semantics of IDWT is that we explicitly
+    // store the left/right padding in an array. As part of the for loop, we will
+    // first modify an out-of-bound column (conceptually at the relative location
+    // -1) before proceeding to the columns that are actually inside of the image.
+    // However, the key insight is that the column at location -1 will actually
+    // have the same filtered values as the column at location of 1 due to reflection.
+    // Therefore, as long as we properly reflect -1 to 1 (and do the same for the
+    // upper value), we can skip those boundary columns.
+    //
+    // The above comment also applies to the 9-7 filter.
+
     // Determine which buffer indices correspond to even/odd global positions.
     let first_even = x0 % 2;
     let first_odd = 1 - first_even;
 
     // Equation (F-5).
+    // Originally: for i in (x0 / 2)..((x0 + width) / 2 + 1).
     for i in (first_even..width).step_by(2) {
         let left = reflect_index(i as isize - 1, width);
         let right = reflect_index(i as isize + 1, width);
@@ -386,6 +401,7 @@ fn reversible_filter_53r(scanline: &mut [f32], width: usize, x0: usize) {
     }
 
     // Equation (F-6).
+    // Originally: for i in (x0 / 2)..((x0 + width) / 2).
     for i in (first_odd..width).step_by(2) {
         let left = reflect_index(i as isize - 1, width);
         let right = reflect_index(i as isize + 1, width);
@@ -395,6 +411,8 @@ fn reversible_filter_53r(scanline: &mut [f32], width: usize, x0: usize) {
 
 /// The 1D Filter 9-7I procedure from F.3.8.2.
 fn irreversible_filter_97i(scanline: &mut [f32], width: usize, x0: usize) {
+    // See the comment in `reversible_filter_53r` for why the loop ranges differ
+    // from the reference.
     // Table F.4.
     const ALPHA: f32 = -1.586_134_3;
     const BETA: f32 = -0.052_980_117;
@@ -408,16 +426,19 @@ fn irreversible_filter_97i(scanline: &mut [f32], width: usize, x0: usize) {
     let first_odd = 1 - first_even;
 
     // Step 1.
+    // Originally: for i in (x0 / 2 - 1)..((x0 + width) / 2 + 2).
     for i in (first_even..width).step_by(2) {
         scanline[i] *= KAPPA;
     }
 
     // Step 2.
+    // Originally: for i in (x0 / 2 - 2)..((x0 + width) / 2 + 2).
     for i in (first_odd..width).step_by(2) {
         scanline[i] *= INV_KAPPA;
     }
 
     // Step 3.
+    // Originally: for i in (x0 / 2 - 1)..((x0 + width) / 2 + 2).
     for i in (first_even..width).step_by(2) {
         let left = reflect_index(i as isize - 1, width);
         let right = reflect_index(i as isize + 1, width);
@@ -425,6 +446,7 @@ fn irreversible_filter_97i(scanline: &mut [f32], width: usize, x0: usize) {
     }
 
     // Step 4.
+    // Originally: for i in (x0 / 2 - 1)..((x0 + width) / 2 + 1).
     for i in (first_odd..width).step_by(2) {
         let left = reflect_index(i as isize - 1, width);
         let right = reflect_index(i as isize + 1, width);
@@ -432,6 +454,7 @@ fn irreversible_filter_97i(scanline: &mut [f32], width: usize, x0: usize) {
     }
 
     // Step 5.
+    // Originally: for i in (x0 / 2)..((x0 + width) / 2 + 1).
     for i in (first_even..width).step_by(2) {
         let left = reflect_index(i as isize - 1, width);
         let right = reflect_index(i as isize + 1, width);
@@ -439,6 +462,7 @@ fn irreversible_filter_97i(scanline: &mut [f32], width: usize, x0: usize) {
     }
 
     // Step 6.
+    // Originally: for i in (x0 / 2)..((x0 + width) / 2).
     for i in (first_odd..width).step_by(2) {
         let left = reflect_index(i as isize - 1, width);
         let right = reflect_index(i as isize + 1, width);
@@ -511,11 +535,26 @@ fn reversible_filter_53r_simd<S: Simd>(
     stride: usize,
     y0: usize,
 ) {
+    // Note that this for loop does not match exactly what's in the reference.
+    // There is a clever subtlety that we can make use of to make the loop shorter.
+    //
+    // In the reference, the presented semantics of IDWT is that we explicitly
+    // store the top/bottom padding in an array. As part of the for loop, we will
+    // first modify an out-of-bound row (conceptually at the relative location
+    // -1) before proceeding to the rows that are actually inside of the image.
+    // However, the key insight is that the row at location -1 will actually
+    // have the same filtered values as the row at location of 1 due to reflection.
+    // Therefore, as long as we properly reflect -1 to 1 (and do the same for the
+    // upper value), we can skip those boundary rows.
+    //
+    // The above comment also applies to the 9-7 filter.
+
     // Determine which local row indices correspond to even/odd global positions.
     let first_even = y0 % 2;
     let first_odd = 1 - first_even;
 
     // Equation (F-5).
+    // Originally: for i in (y0 / 2)..((y0 + height) / 2 + 1).
     for row in (first_even..height).step_by(2) {
         let row_above = reflect_index(row as isize - 1, height);
         let row_below = reflect_index(row as isize + 1, height);
@@ -540,6 +579,7 @@ fn reversible_filter_53r_simd<S: Simd>(
     }
 
     // Equation (F-6).
+    // Originally: for i in (y0 / 2)..((y0 + height) / 2).
     for row in (first_odd..height).step_by(2) {
         let row_above = reflect_index(row as isize - 1, height);
         let row_below = reflect_index(row as isize + 1, height);
@@ -573,6 +613,9 @@ fn irreversible_filter_97i_simd<S: Simd>(
     stride: usize,
     y0: usize,
 ) {
+    // See the comment in `reversible_filter_53r_simd` for why the loop ranges
+    // differ from the reference.
+
     const ALPHA: f32 = -1.586_134_3;
     const BETA: f32 = -0.052_980_117;
     const GAMMA: f32 = 0.882_911_1;
@@ -593,6 +636,7 @@ fn irreversible_filter_97i_simd<S: Simd>(
     let first_odd = 1 - first_even;
 
     // Step 1.
+    // Originally: for i in (y0 / 2 - 1)..((y0 + height) / 2 + 2).
     for row in (first_even..height).step_by(2) {
         for base_column in (0..stride).step_by(SIMD_WIDTH) {
             let base_idx = row * stride + base_column;
@@ -603,6 +647,7 @@ fn irreversible_filter_97i_simd<S: Simd>(
     }
 
     // Step 2.
+    // Originally: for i in (y0 / 2 - 2)..((y0 + height) / 2 + 2).
     for row in (first_odd..height).step_by(2) {
         for base_column in (0..stride).step_by(SIMD_WIDTH) {
             let base_idx = row * stride + base_column;
@@ -613,6 +658,7 @@ fn irreversible_filter_97i_simd<S: Simd>(
     }
 
     // Step 3.
+    // Originally: for i in (y0 / 2 - 1)..((y0 + height) / 2 + 2).
     for row in (first_even..height).step_by(2) {
         let row_above = reflect_index(row as isize - 1, height);
         let row_below = reflect_index(row as isize + 1, height);
@@ -636,6 +682,7 @@ fn irreversible_filter_97i_simd<S: Simd>(
     }
 
     // Step 4.
+    // Originally: for i in (y0 / 2 - 1)..((y0 + height) / 2 + 1).
     for row in (first_odd..height).step_by(2) {
         let row_above = reflect_index(row as isize - 1, height);
         let row_below = reflect_index(row as isize + 1, height);
@@ -659,6 +706,7 @@ fn irreversible_filter_97i_simd<S: Simd>(
     }
 
     // Step 5.
+    // Originally: for i in (y0 / 2)..((y0 + height) / 2 + 1).
     for row in (first_even..height).step_by(2) {
         let row_above = reflect_index(row as isize - 1, height);
         let row_below = reflect_index(row as isize + 1, height);
@@ -682,6 +730,7 @@ fn irreversible_filter_97i_simd<S: Simd>(
     }
 
     // Step 6.
+    // Originally: for i in (y0 / 2)..((y0 + height) / 2).
     for row in (first_odd..height).step_by(2) {
         let row_above = reflect_index(row as isize - 1, height);
         let row_below = reflect_index(row as isize + 1, height);
