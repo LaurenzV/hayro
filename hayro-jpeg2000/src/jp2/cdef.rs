@@ -1,26 +1,28 @@
 //! The channel definition box (cdef), defined in I.5.3.6.
 
+use crate::error::{FormatError, Result};
 use crate::jp2::ImageBoxes;
 use crate::reader::BitReader;
 
-pub(crate) fn parse(boxes: &mut ImageBoxes, data: &[u8]) -> Option<()> {
+pub(crate) fn parse(boxes: &mut ImageBoxes, data: &[u8]) -> Result<()> {
     let mut reader = BitReader::new(data);
-    let count = reader.read_u16()? as usize;
+    let count = reader.read_u16().ok_or(FormatError::InvalidBox)? as usize;
     let mut definitions = Vec::with_capacity(count);
 
     if count == 0 {
-        return None;
+        return Err(FormatError::InvalidBox.into());
     }
 
     for _ in 0..count {
-        let channel_index = reader.read_u16()?;
-        let channel_type = reader.read_u16()?;
-        let association = reader.read_u16()?;
+        let channel_index = reader.read_u16().ok_or(FormatError::InvalidBox)?;
+        let channel_type = reader.read_u16().ok_or(FormatError::InvalidBox)?;
+        let association = reader.read_u16().ok_or(FormatError::InvalidBox)?;
 
         definitions.push(ChannelDefinition {
             channel_index,
-            channel_type: ChannelType::from_raw(channel_type)?,
-            _association: ChannelAssociation::from_raw(association)?,
+            channel_type: ChannelType::from_raw(channel_type).ok_or(FormatError::InvalidBox)?,
+            _association: ChannelAssociation::from_raw(association)
+                .ok_or(FormatError::InvalidBox)?,
         });
     }
 
@@ -29,7 +31,7 @@ pub(crate) fn parse(boxes: &mut ImageBoxes, data: &[u8]) -> Option<()> {
     // Ensure channel indices increases in steps of 1, starting from 0.
     for (idx, def) in definitions.iter().enumerate() {
         if def.channel_index as usize != idx {
-            return None;
+            return Err(FormatError::InvalidBox.into());
         }
     }
 
@@ -37,7 +39,7 @@ pub(crate) fn parse(boxes: &mut ImageBoxes, data: &[u8]) -> Option<()> {
         channel_definitions: definitions,
     });
 
-    Some(())
+    Ok(())
 }
 
 #[derive(Debug, Clone)]

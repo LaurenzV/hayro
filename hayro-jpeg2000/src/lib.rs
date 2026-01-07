@@ -201,8 +201,7 @@ impl<'a> Image<'a> {
         // Resolve palette indices.
         if settings.resolve_palette_indices {
             decoded_image.decoded.components =
-                resolve_palette_indices(decoded_image.decoded.components, &decoded_image.boxes)
-                    .ok_or(ColorError::PaletteResolutionFailed)?;
+                resolve_palette_indices(decoded_image.decoded.components, &decoded_image.boxes)?;
         }
 
         if let Some(cdef) = &decoded_image.boxes.channel_definition {
@@ -464,12 +463,10 @@ fn convert_color_space(image: &mut DecodedImage, bit_depth: u8) -> Result<()> {
     {
         match e {
             EnumeratedColorspace::Sycc => {
-                sycc_to_rgb(&mut image.decoded.components, bit_depth)
-                    .ok_or(ColorError::SyccConversionFailed)?;
+                sycc_to_rgb(&mut image.decoded.components, bit_depth)?;
             }
             EnumeratedColorspace::CieLab(cielab) => {
-                cielab_to_rgb(&mut image.decoded.components, bit_depth, cielab)
-                    .ok_or(ColorError::LabConversionFailed)?;
+                cielab_to_rgb(&mut image.decoded.components, bit_depth, cielab)?;
             }
             _ => {}
         }
@@ -536,10 +533,10 @@ fn get_color_space(boxes: &ImageBoxes, num_components: usize) -> Result<ColorSpa
 fn resolve_palette_indices(
     components: Vec<ComponentData>,
     boxes: &ImageBoxes,
-) -> Option<Vec<ComponentData>> {
+) -> Result<Vec<ComponentData>> {
     let Some(palette) = boxes.palette.as_ref() else {
         // Nothing to resolve.
-        return Some(components);
+        return Ok(components);
     };
 
     let mapping = boxes.component_mapping.as_ref().unwrap();
@@ -547,19 +544,26 @@ fn resolve_palette_indices(
 
     for entry in &mapping.entries {
         let component_idx = entry.component_index as usize;
-        let component = components.get(component_idx)?;
+        let component = components
+            .get(component_idx)
+            .ok_or(ColorError::PaletteResolutionFailed)?;
 
         match entry.mapping_type {
             ComponentMappingType::Direct => resolved.push(component.clone()),
             ComponentMappingType::Palette { column } => {
                 let column_idx = column as usize;
-                let column_info = palette.columns.get(column_idx)?;
+                let column_info = palette
+                    .columns
+                    .get(column_idx)
+                    .ok_or(ColorError::PaletteResolutionFailed)?;
 
                 let mut mapped = Vec::with_capacity(component.container.len());
 
                 for &sample in &component.container {
                     let index = sample.round() as i64;
-                    let value = palette.map(index as usize, column_idx)?;
+                    let value = palette
+                        .map(index as usize, column_idx)
+                        .ok_or(ColorError::PaletteResolutionFailed)?;
                     mapped.push(value as f32);
                 }
 
@@ -571,11 +575,13 @@ fn resolve_palette_indices(
         }
     }
 
-    Some(resolved)
+    Ok(resolved)
 }
 
-fn cielab_to_rgb(components: &mut [ComponentData], bit_depth: u8, lab: &CieLab) -> Option<()> {
-    let (head, _) = components.split_at_mut_checked(3)?;
+fn cielab_to_rgb(components: &mut [ComponentData], bit_depth: u8, lab: &CieLab) -> Result<()> {
+    let (head, _) = components
+        .split_at_mut_checked(3)
+        .ok_or(ColorError::LabConversionFailed)?;
 
     let [l, a, b] = head else {
         unreachable!();
@@ -587,7 +593,7 @@ fn cielab_to_rgb(components: &mut [ComponentData], bit_depth: u8, lab: &CieLab) 
 
     // Prevent underflows/divisions by zero further below.
     if prec0 < 4 || prec1 < 4 || prec2 < 4 {
-        return None;
+        return Err(ColorError::LabConversionFailed.into());
     }
 
     // Table M.29bis – Default Offset Values and Encoding of Offsets for the CIELab Colourspace.
@@ -630,14 +636,16 @@ fn cielab_to_rgb(components: &mut [ComponentData], bit_depth: u8, lab: &CieLab) 
         *b = (*b + 128.0) * bit_max as f32 / 255.0;
     }
 
-    Some(())
+    Ok(())
 }
 
-fn sycc_to_rgb(components: &mut [ComponentData], bit_depth: u8) -> Option<()> {
+fn sycc_to_rgb(components: &mut [ComponentData], bit_depth: u8) -> Result<()> {
     let offset = (1_u32 << (bit_depth as u32 - 1)) as f32;
     let max_value = ((1_u32 << bit_depth as u32) - 1) as f32;
 
-    let (head, _) = components.split_at_mut_checked(3)?;
+    let (head, _) = components
+        .split_at_mut_checked(3)
+        .ok_or(ColorError::SyccConversionFailed)?;
 
     let [y, cb, cr] = head else {
         unreachable!();
@@ -662,5 +670,5 @@ fn sycc_to_rgb(components: &mut [ComponentData], bit_depth: u8) -> Option<()> {
         *cr = b.min(max_value).max(0.0);
     }
 
-    Some(())
+    Ok(())
 }

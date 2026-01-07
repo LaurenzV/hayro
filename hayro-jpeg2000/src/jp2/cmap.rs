@@ -1,23 +1,24 @@
 //! The component mapping box (cmap), defined in I.5.3.5.
 
+use crate::error::{FormatError, Result};
 use crate::jp2::ImageBoxes;
 use crate::reader::BitReader;
 
-pub(crate) fn parse(boxes: &mut ImageBoxes, data: &[u8]) -> Option<()> {
+pub(crate) fn parse(boxes: &mut ImageBoxes, data: &[u8]) -> Result<()> {
     let mut reader = BitReader::new(data);
     let mut entries = Vec::with_capacity(data.len() / 4);
 
     while !reader.at_end() {
-        let component_index = reader.read_u16()?;
-        let mapping_type = reader.read_byte()?;
-        let palette_column = reader.read_byte()?;
+        let component_index = reader.read_u16().ok_or(FormatError::InvalidBox)?;
+        let mapping_type = reader.read_byte().ok_or(FormatError::InvalidBox)?;
+        let palette_column = reader.read_byte().ok_or(FormatError::InvalidBox)?;
 
         let mapping_type = match mapping_type {
             0 => ComponentMappingType::Direct,
             1 => ComponentMappingType::Palette {
                 column: palette_column,
             },
-            _ => return None,
+            _ => return Err(FormatError::InvalidBox.into()),
         };
 
         entries.push(ComponentMappingEntry {
@@ -28,7 +29,7 @@ pub(crate) fn parse(boxes: &mut ImageBoxes, data: &[u8]) -> Option<()> {
 
     boxes.component_mapping = Some(ComponentMappingBox { entries });
 
-    Some(())
+    Ok(())
 }
 
 #[derive(Debug, Clone)]

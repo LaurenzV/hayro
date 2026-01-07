@@ -73,20 +73,17 @@ pub(crate) fn parse<'a>(data: &'a [u8], mut settings: DecodeSettings) -> Result<
 
                     match child_box.box_type {
                         r#box::CHANNEL_DEFINITION => {
-                            if cdef::parse(&mut boxes, child_box.data).is_none() && settings.strict
-                            {
+                            if cdef::parse(&mut boxes, child_box.data).is_err() && settings.strict {
                                 return Err(FormatError::InvalidBox.into());
                             }
                             // If not strict decoding, just assume default
                             // configuration.
                         }
                         r#box::COLOUR_SPECIFICATION => {
-                            colr::parse(&mut boxes, child_box.data)
-                                .ok_or(FormatError::InvalidBox)?;
+                            colr::parse(&mut boxes, child_box.data)?;
                         }
                         r#box::PALETTE => {
-                            if pclr::parse(&mut boxes, child_box.data).is_none() && settings.strict
-                            {
+                            if pclr::parse(&mut boxes, child_box.data).is_err() && settings.strict {
                                 return Err(FormatError::InvalidBox.into());
                             }
 
@@ -96,8 +93,7 @@ pub(crate) fn parse<'a>(data: &'a [u8], mut settings: DecodeSettings) -> Result<
                             settings.target_resolution = None;
                         }
                         r#box::COMPONENT_MAPPING => {
-                            cmap::parse(&mut boxes, child_box.data)
-                                .ok_or(FormatError::InvalidBox)?;
+                            cmap::parse(&mut boxes, child_box.data)?;
                         }
                         _ => {
                             debug!(

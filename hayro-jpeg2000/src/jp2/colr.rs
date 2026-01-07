@@ -1,9 +1,10 @@
 //! The color specification box (colr), defined in I.5.3.3.
 
+use crate::error::{FormatError, Result};
 use crate::jp2::ImageBoxes;
 use crate::reader::BitReader;
 
-pub(crate) fn parse(boxes: &mut ImageBoxes, data: &[u8]) -> Option<()> {
+pub(crate) fn parse(boxes: &mut ImageBoxes, data: &[u8]) -> Result<()> {
     if boxes.color_specification.is_some() {
         // "A JP2 file may contain multiple Colour Specification boxes, but
         // must contain at least one, specifying different methods
@@ -12,23 +13,26 @@ pub(crate) fn parse(boxes: &mut ImageBoxes, data: &[u8]) -> Option<()> {
         // However, readers conforming to other standards may use those boxes as
         // defined in those other standards."
 
-        return Some(());
+        return Ok(());
     }
 
     let mut reader = BitReader::new(data);
 
-    let meth = reader.read_byte()?;
+    let meth = reader.read_byte().ok_or(FormatError::InvalidBox)?;
     // We don't care about those.
-    let _prec = reader.read_byte()?;
-    let _approx = reader.read_byte()?;
+    let _prec = reader.read_byte().ok_or(FormatError::InvalidBox)?;
+    let _approx = reader.read_byte().ok_or(FormatError::InvalidBox)?;
 
     let method = match meth {
         1 => {
-            let enumerated = reader.read_u32()?;
-            ColorSpace::Enumerated(EnumeratedColorspace::from_raw(enumerated, &mut reader)?)
+            let enumerated = reader.read_u32().ok_or(FormatError::InvalidBox)?;
+            ColorSpace::Enumerated(
+                EnumeratedColorspace::from_raw(enumerated, &mut reader)
+                    .ok_or(FormatError::InvalidBox)?,
+            )
         }
         2 => {
-            let profile_data = reader.tail()?.to_vec();
+            let profile_data = reader.tail().ok_or(FormatError::InvalidBox)?.to_vec();
             ColorSpace::Icc(profile_data)
         }
         _ => ColorSpace::Unknown,
@@ -38,7 +42,7 @@ pub(crate) fn parse(boxes: &mut ImageBoxes, data: &[u8]) -> Option<()> {
         color_space: method,
     });
 
-    Some(())
+    Ok(())
 }
 
 #[derive(Debug, Clone)]
