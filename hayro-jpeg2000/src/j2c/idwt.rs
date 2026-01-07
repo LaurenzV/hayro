@@ -218,7 +218,7 @@ fn filter_2d(
 ) -> IDWTTempOutput {
     // First interleave all sub-bands into a single buffer. We also
     // apply a padding so that we can transparently deal with border values.
-    let padding = interleave_samples(input, decomposition, coefficients, transform, storage);
+    let padding = interleave_samples(input, decomposition, coefficients, storage);
 
     if decomposition.rect.width() > 0 && decomposition.rect.height() > 0 {
         filter_horizontal(coefficients, padding, decomposition.rect, transform);
@@ -236,7 +236,6 @@ fn interleave_samples(
     input: IDWTInput<'_>,
     decomposition: &Decomposition,
     coefficients: &mut Vec<f32>,
-    _transform: WaveletTransform,
     storage: &DecompositionStorage<'_>,
 ) -> Padding {
     let new_padding = {
