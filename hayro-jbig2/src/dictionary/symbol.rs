@@ -380,7 +380,7 @@ pub(crate) struct SymbolDictionary {
 /// `referred_tables` contains Huffman tables from referred table segments (type 53).
 /// These are used when SDHUFF=1 and the Huffman flags specify user-supplied tables.
 ///
-/// `standard_tables` provides access to the standard Huffman tables (TABLE_A through TABLE_O).
+/// `standard_tables` provides access to the standard Huffman tables.
 pub(crate) fn decode_symbol_dictionary(
     reader: &mut Reader<'_>,
     input_symbols: &[&DecodedRegion],

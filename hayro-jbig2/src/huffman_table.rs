@@ -24,17 +24,14 @@ struct LeafData {
 const INLINE_TABLE_SIZE: usize = 43;
 
 /// A node in the Huffman tree.
-///
-/// Nodes are stored in an arena (Vec or fixed-size array) and reference children by index.
 #[derive(Debug, Clone, Copy)]
 enum HuffmanNode {
-    /// Intermediate node with two children (0 and 1 branches).
-    /// Children are indices into the arena (always non-zero since index 0 is the root).
+    /// Intermediate node.
     Intermediate {
         zero: Option<NonZeroU32>,
         one: Option<NonZeroU32>,
     },
-    /// Leaf node containing the decoded value information.
+    /// Leaf node.
     Leaf(LeafData),
     /// Empty node (padding to fill fixed-size arrays in inline tables).
     Empty,
@@ -58,10 +55,10 @@ impl HuffmanNode {
     }
 
     /// Get the child index for a given bit (0 or 1).
-    fn get_child(&self, bit: u32) -> Option<NonZeroU32> {
+    fn get_child(&self, child_zero: bool) -> Option<NonZeroU32> {
         match self {
             Self::Intermediate { zero, one } => {
-                if bit == 0 {
+                if child_zero {
                     *zero
                 } else {
                     *one
@@ -72,10 +69,10 @@ impl HuffmanNode {
     }
 
     /// Set the child index for a given bit (0 or 1).
-    fn set_child(&mut self, bit: u32, index: NonZeroU32) {
+    fn set_child(&mut self, child_zero: bool, index: NonZeroU32) {
         match self {
             Self::Intermediate { zero, one } => {
-                if bit == 0 {
+                if child_zero {
                     *zero = Some(index);
                 } else {
                     *one = Some(index);
@@ -136,24 +133,13 @@ impl HuffmanNode {
     reason = "Inline variant is expected to be large."
 )]
 enum InnerHuffmanTable {
-    /// Inline table with a fixed-size node array.
-    /// Used for standard tables (`TABLE_A` through `TABLE_O`).
     Inline {
         nodes: [HuffmanNode; INLINE_TABLE_SIZE],
     },
-    /// Dynamic table with a Vec node array.
-    /// Used for runtime-built custom tables.
     Dynamic { nodes: Vec<HuffmanNode> },
 }
 
 /// A Huffman table for JBIG2 decoding.
-///
-/// The table is represented as a binary tree stored in an arena,
-/// where each path from root to leaf corresponds to a prefix code.
-/// The root node is always at index 0.
-///
-/// This is a cheaply cloneable wrapper around the inner table representation
-/// using reference counting.
 #[derive(Debug, Clone)]
 pub(crate) struct HuffmanTable(Rc<InnerHuffmanTable>);
 
@@ -284,12 +270,12 @@ impl HuffmanTable {
         let bit = (code >> (prefix_length - 1)) & 1;
         let remaining_code = code & ((1 << (prefix_length - 1)) - 1);
 
-        let child_index = match nodes[node_index as usize].get_child(bit) {
+        let child_index = match nodes[node_index as usize].get_child(bit == 0) {
             Some(idx) => idx,
             None => {
                 let new_idx = NonZeroU32::new(nodes.len() as u32).unwrap();
                 nodes.push(HuffmanNode::new_intermediate());
-                nodes[node_index as usize].set_child(bit, new_idx);
+                nodes[node_index as usize].set_child(bit == 0, new_idx);
                 new_idx
             }
         };
