@@ -9,21 +9,7 @@ use crate::j2c::Header;
 
 #[derive(Default, Copy, Clone)]
 pub(crate) struct Padding {
-    pub(crate) left: usize,
-    pub(crate) top: usize,
     pub(crate) right: usize,
-    pub(crate) bottom: usize,
-}
-
-impl Padding {
-    fn new(left: usize, top: usize, right: usize, bottom: usize) -> Self {
-        Self {
-            left,
-            top,
-            right,
-            bottom,
-        }
-    }
 }
 
 /// The output from performing the IDWT operation.
@@ -53,7 +39,7 @@ impl IDWTOutput {
 impl IDWTOutput {
     /// The total width of the output, including padding.
     pub(crate) fn total_width(&self) -> u32 {
-        self.padding.left as u32 + self.rect.width() + self.padding.right as u32
+        self.rect.width() + self.padding.right as u32
     }
 }
 
@@ -247,11 +233,13 @@ fn interleave_samples(
         let target_width = current_width.next_multiple_of(SIMD_WIDTH);
         let right_padding = target_width - current_width;
 
-        Padding::new(0, 0, right_padding, 0)
+        Padding {
+            right: right_padding,
+        }
     };
 
-    let total_width = decomposition.rect.width() as usize + new_padding.left + new_padding.right;
-    let total_height = decomposition.rect.height() as usize + new_padding.top + new_padding.bottom;
+    let total_width = decomposition.rect.width() as usize + new_padding.right;
+    let total_height = decomposition.rect.height() as usize;
 
     // Just a sanity check. We should have allocated enough upfront before
     // starting the IDWT.
@@ -292,9 +280,7 @@ fn interleave_samples(
         let num_v = v_max - v_min;
         let num_u = u_max - u_min;
 
-        let input_left_padding = idwt_input.padding.left;
-        let input_right_padding = idwt_input.padding.right;
-        let input_total_width = num_u + input_left_padding as u32 + input_right_padding as u32;
+        let input_total_width = num_u as usize + idwt_input.padding.right;
 
         if num_u == 0 || num_v == 0 {
             continue;
@@ -309,8 +295,8 @@ fn interleave_samples(
 
         let coefficient_rows = coefficients
             .chunks_exact_mut(total_width)
-            .map(|s| &mut s[new_padding.left..][..decomposition.rect.width() as usize])
-            .skip((start_y - v0) as usize + new_padding.top)
+            .map(|s| &mut s[..decomposition.rect.width() as usize])
+            .skip((start_y - v0) as usize)
             .step_by(2);
 
         for (v_b, coefficient_row) in coefficient_rows.enumerate().take(num_v as usize) {
@@ -319,11 +305,8 @@ fn interleave_samples(
                 &mut coefficient_row[(start_x - u0) as usize..][..(num_u - 1) as usize * 2 + 1];
 
             for u_b in 0..num_u {
-                coefficient_row[u_b as usize * 2] = idwt_input.coefficients[(v_b
-                    + idwt_input.padding.top)
-                    * input_total_width as usize
-                    + u_b as usize
-                    + input_left_padding];
+                coefficient_row[u_b as usize * 2] =
+                    idwt_input.coefficients[v_b * input_total_width + u_b as usize];
             }
         }
     }
@@ -339,19 +322,13 @@ fn filter_horizontal(
     transform: WaveletTransform,
 ) {
     let width = rect.width() as usize;
-    let total_width = width + padding.left + padding.right;
+    let total_width = width + padding.right;
 
     for scanline in coefficients
         .chunks_exact_mut(total_width)
-        .skip(padding.top)
         .take(rect.height() as usize)
     {
-        filter_row(
-            &mut scanline[padding.left..][..width],
-            width,
-            rect.x0 as usize,
-            transform,
-        );
+        filter_row(&mut scanline[..width], width, rect.x0 as usize, transform);
     }
 }
 
@@ -510,7 +487,7 @@ fn filter_vertical_impl<S: Simd>(
     rect: IntRect,
     transform: WaveletTransform,
 ) {
-    let stride = rect.width() as usize + padding.left + padding.right;
+    let stride = rect.width() as usize + padding.right;
     let height = rect.height() as usize;
     let y0 = rect.y0 as usize;
 

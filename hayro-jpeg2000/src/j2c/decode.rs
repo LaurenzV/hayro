@@ -463,8 +463,8 @@ fn store<'a>(
         let input_row_iter = idwt_output
             .coefficients
             .chunks_exact(idwt_output.total_width() as usize)
-            .map(|s| &s[idwt_output.padding.left..][..idwt_output.rect.width() as usize])
-            .skip(skip_y as usize + idwt_output.padding.top)
+            .map(|s| &s[..idwt_output.rect.width() as usize])
+            .skip(skip_y as usize)
             .take(idwt_output.rect.height() as usize);
 
         let output_row_iter = channel_data
@@ -505,10 +505,8 @@ fn store<'a>(
                 let relative_x = (x - component_tile.rect.x0) as usize;
                 let reference_grid_x = (scale_x as u32 * x) / x_shrink_factor;
 
-                let sample = idwt_output.coefficients[(relative_y + idwt_output.padding.top)
-                    * idwt_output.total_width() as usize
-                    + relative_x
-                    + idwt_output.padding.left];
+                let sample = idwt_output.coefficients
+                    [relative_y * idwt_output.total_width() as usize + relative_x];
 
                 for x_position in u32::max(reference_grid_x, x_offset)
                     ..u32::min(reference_grid_x + scale_x as u32, image_width + x_offset)
