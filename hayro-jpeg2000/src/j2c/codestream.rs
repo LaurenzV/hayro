@@ -55,43 +55,43 @@ pub(crate) fn read_header<'a>(
             markers::SOT => break,
             markers::COD => {
                 reader.read_marker()?;
-                cod = Some(cod_marker(reader).ok_or(MarkerError::FailedToRead("COD"))?);
+                cod = Some(cod_marker(reader).ok_or(MarkerError::ParseFailure("COD"))?);
             }
             markers::COC => {
                 reader.read_marker()?;
                 let (component_index, coc) =
-                    coc_marker(reader, num_components).ok_or(MarkerError::FailedToRead("COC"))?;
+                    coc_marker(reader, num_components).ok_or(MarkerError::ParseFailure("COC"))?;
                 *cod_components
                     .get_mut(component_index as usize)
-                    .ok_or(MarkerError::FailedToRead("COC"))? = Some(coc);
+                    .ok_or(MarkerError::ParseFailure("COC"))? = Some(coc);
             }
             markers::QCD => {
                 reader.read_marker()?;
-                qcd = Some(qcd_marker(reader).ok_or(MarkerError::FailedToRead("QCD"))?);
+                qcd = Some(qcd_marker(reader).ok_or(MarkerError::ParseFailure("QCD"))?);
             }
             markers::QCC => {
                 reader.read_marker()?;
                 let (component_index, qcc) =
-                    qcc_marker(reader, num_components).ok_or(MarkerError::FailedToRead("QCC"))?;
+                    qcc_marker(reader, num_components).ok_or(MarkerError::ParseFailure("QCC"))?;
                 *qcd_components
                     .get_mut(component_index as usize)
-                    .ok_or(MarkerError::FailedToRead("QCC"))? = Some(qcc);
+                    .ok_or(MarkerError::ParseFailure("QCC"))? = Some(qcc);
             }
             markers::RGN => {
                 reader.read_marker()?;
-                rgn_marker(reader).ok_or(MarkerError::FailedToRead("RGN"))?;
+                rgn_marker(reader).ok_or(MarkerError::ParseFailure("RGN"))?;
             }
             markers::TLM => {
                 reader.read_marker()?;
-                tlm_marker(reader).ok_or(MarkerError::FailedToRead("TLM"))?;
+                tlm_marker(reader).ok_or(MarkerError::ParseFailure("TLM"))?;
             }
             markers::COM => {
                 reader.read_marker()?;
-                com_marker(reader).ok_or(MarkerError::FailedToRead("COM"))?;
+                com_marker(reader).ok_or(MarkerError::ParseFailure("COM"))?;
             }
             markers::PPM => {
                 reader.read_marker()?;
-                ppm_markers.push(ppm_marker(reader).ok_or(MarkerError::FailedToRead("PPM"))?);
+                ppm_markers.push(ppm_marker(reader).ok_or(MarkerError::ParseFailure("PPM"))?);
             }
             markers::CRG => {
                 reader.read_marker()?;
@@ -515,7 +515,7 @@ impl SizeData {
 
 /// SIZ marker (A.5.1).
 fn size_marker(reader: &mut BitReader<'_>) -> Result<SizeData> {
-    let size_data = size_marker_inner(reader).ok_or(MarkerError::FailedToRead("SIZ"))?;
+    let size_data = size_marker_inner(reader).ok_or(MarkerError::ParseFailure("SIZ"))?;
 
     if size_data.tile_width == 0
         || size_data.tile_height == 0
@@ -545,12 +545,12 @@ fn size_marker(reader: &mut BitReader<'_>) -> Result<SizeData> {
     if size_data
         .tile_x_offset
         .checked_add(size_data.tile_width)
-        .ok_or(crate::TileError::OffsetsTooLarge)?
+        .ok_or(crate::TileError::InvalidOffsets)?
         <= size_data.image_area_x_offset
         || size_data
             .tile_y_offset
             .checked_add(size_data.tile_height)
-            .ok_or(crate::TileError::OffsetsTooLarge)?
+            .ok_or(crate::TileError::InvalidOffsets)?
             <= size_data.image_area_y_offset
     {
         return Err(crate::TileError::InvalidOffsets.into());

@@ -46,30 +46,20 @@ pub enum MarkerError {
     /// Missing a required marker.
     Missing(&'static str),
     /// Failed to read or parse a marker.
-    FailedToRead(&'static str),
+    ParseFailure(&'static str),
 }
 
 /// Errors related to tile processing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TileError {
-    /// Image contains no tiles.
-    NoTiles,
+    /// Invalid image tile was encountered.
+    Invalid,
     /// Invalid tile index in tile-part header.
     InvalidIndex,
-    /// Invalid tile offsets.
+    /// Invalid tile or image offsets.
     InvalidOffsets,
-    /// Tile offsets exceed image bounds.
-    OffsetsTooLarge,
-    /// Tile-part length shorter than header.
-    PartTooShort,
-    /// Insufficient data in tile part.
-    InsufficientData,
     /// PPT marker present when PPM marker exists in main header.
     PpmPptConflict,
-    /// Failed to parse tile part.
-    ParseFailed,
-    /// Failed to fully process tile part.
-    ProcessingFailed,
 }
 
 /// Errors related to image dimensions and validation.
@@ -102,22 +92,18 @@ pub enum ValidationError {
 /// Errors related to decoding operations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DecodingError {
-    /// Failed to decode code-block.
-    CodeblockFailed,
-    /// Number of bitplanes is too large.
+    /// An error occurred while decoding a code-block.
+    CodeBlockDecodeFailure,
+    /// Number of bitplanes in a codeblock is too large.
     TooManyBitplanes,
-    /// Codeblock contains too many coding passes.
+    /// A codeblock contains too many coding passes.
     TooManyCodingPasses,
-    /// Invalid number of bitplanes.
+    /// Invalid number of bitplanes in a codeblock.
     InvalidBitplaneCount,
-    /// Number of missing bitplanes was too high.
-    MissingBitplanesTooHigh,
-    /// Failed to build precincts.
-    PrecinctBuildFailed,
-    /// Failed to build progression iterator.
-    ProgressionBuildFailed,
-    /// Arithmetic overflow during decoding.
-    Overflow,
+    /// A precinct was invalid.
+    InvalidPrecinct,
+    /// A progression iterator ver invalid.
+    InvalidProgressionIterator,
     /// Unexpected end of data.
     UnexpectedEof,
 }
@@ -167,7 +153,7 @@ impl fmt::Display for MarkerError {
             MarkerError::Unsupported => write!(f, "unsupported marker"),
             MarkerError::Expected(marker) => write!(f, "expected {marker} marker"),
             MarkerError::Missing(marker) => write!(f, "missing {marker} marker"),
-            MarkerError::FailedToRead(marker) => write!(f, "failed to read {marker} marker"),
+            MarkerError::ParseFailure(marker) => write!(f, "failed to read {marker} marker"),
         }
     }
 }
@@ -175,17 +161,15 @@ impl fmt::Display for MarkerError {
 impl fmt::Display for TileError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TileError::NoTiles => write!(f, "image contains no tiles"),
+            TileError::Invalid => write!(f, "image contains no tiles"),
             TileError::InvalidIndex => write!(f, "invalid tile index in tile-part header"),
             TileError::InvalidOffsets => write!(f, "invalid tile offsets"),
-            TileError::OffsetsTooLarge => write!(f, "tile offsets are too large"),
-            TileError::PartTooShort => write!(f, "tile-part length shorter than header"),
-            TileError::InsufficientData => write!(f, "insufficient data in tile part"),
             TileError::PpmPptConflict => {
-                write!(f, "PPT marker present when PPM marker exists in main header")
+                write!(
+                    f,
+                    "PPT marker present when PPM marker exists in main header"
+                )
             }
-            TileError::ParseFailed => write!(f, "failed to parse tile part"),
-            TileError::ProcessingFailed => write!(f, "failed to process tile part"),
         }
     }
 }
@@ -215,20 +199,16 @@ impl fmt::Display for ValidationError {
 impl fmt::Display for DecodingError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            DecodingError::CodeblockFailed => write!(f, "failed to decode code-block"),
+            DecodingError::CodeBlockDecodeFailure => write!(f, "failed to decode code-block"),
             DecodingError::TooManyBitplanes => write!(f, "number of bitplanes is too large"),
             DecodingError::TooManyCodingPasses => {
                 write!(f, "codeblock contains too many coding passes")
             }
             DecodingError::InvalidBitplaneCount => write!(f, "invalid number of bitplanes"),
-            DecodingError::MissingBitplanesTooHigh => {
-                write!(f, "number of missing bitplanes was too high")
-            }
-            DecodingError::PrecinctBuildFailed => write!(f, "failed to build precincts"),
-            DecodingError::ProgressionBuildFailed => {
+            DecodingError::InvalidPrecinct => write!(f, "failed to build precincts"),
+            DecodingError::InvalidProgressionIterator => {
                 write!(f, "failed to build progression iterator")
             }
-            DecodingError::Overflow => write!(f, "arithmetic overflow"),
             DecodingError::UnexpectedEof => write!(f, "unexpected end of data"),
         }
     }
@@ -289,5 +269,5 @@ impl From<ColorError> for DecodeError {
     }
 }
 
-/// Result type alias for JPEG 2000 decoding operations.
+/// Result type for JPEG 2000 decoding operations.
 pub type Result<T> = core::result::Result<T, DecodeError>;

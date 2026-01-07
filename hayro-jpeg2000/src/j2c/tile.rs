@@ -160,7 +160,7 @@ fn parse_tile_part<'a>(
         return Err(MarkerError::Expected("SOT").into());
     }
 
-    let tile_part_header = sot_marker(reader).ok_or(MarkerError::FailedToRead("SOT"))?;
+    let tile_part_header = sot_marker(reader).ok_or(MarkerError::ParseFailure("SOT"))?;
 
     if tile_part_header.tile_index as u32 >= main_header.size_data.num_tiles() {
         return Err(TileError::InvalidIndex.into());
@@ -173,7 +173,7 @@ fn parse_tile_part<'a>(
 
         (tile_part_header.tile_part_length as usize)
             .checked_sub(12)
-            .ok_or(TileError::PartTooShort)?
+            .ok_or(TileError::Invalid)?
     };
 
     let start = reader.offset();
@@ -186,7 +186,7 @@ fn parse_tile_part<'a>(
     loop {
         let Some(marker) = reader.peek_marker() else {
             return if main_header.strict {
-                Err(TileError::ParseFailed.into())
+                Err(MarkerError::Invalid.into())
             } else {
                 Ok(())
             };
@@ -201,7 +201,7 @@ fn parse_tile_part<'a>(
             // tile-part header, if they appear at all.
             markers::COD => {
                 reader.read_marker()?;
-                let cod = codestream::cod_marker(reader).ok_or(MarkerError::FailedToRead("COD"))?;
+                let cod = codestream::cod_marker(reader).ok_or(MarkerError::ParseFailure("COD"))?;
 
                 tile.mct = cod.mct;
                 tile.num_layers = cod.num_layers;
@@ -216,7 +216,7 @@ fn parse_tile_part<'a>(
                 reader.read_marker()?;
 
                 let (component_index, coc) = codestream::coc_marker(reader, num_components as u16)
-                    .ok_or(MarkerError::FailedToRead("COC"))?;
+                    .ok_or(MarkerError::ParseFailure("COC"))?;
 
                 let old = tile
                     .component_infos
@@ -228,7 +228,7 @@ fn parse_tile_part<'a>(
             }
             markers::QCD => {
                 reader.read_marker()?;
-                let qcd = codestream::qcd_marker(reader).ok_or(MarkerError::FailedToRead("QCD"))?;
+                let qcd = codestream::qcd_marker(reader).ok_or(MarkerError::ParseFailure("QCD"))?;
 
                 for component_info in &mut tile.component_infos {
                     component_info.quantization_info = qcd.clone();
@@ -237,7 +237,7 @@ fn parse_tile_part<'a>(
             markers::QCC => {
                 reader.read_marker()?;
                 let (component_index, qcc) = codestream::qcc_marker(reader, num_components as u16)
-                    .ok_or(MarkerError::FailedToRead("QCC"))?;
+                    .ok_or(MarkerError::ParseFailure("QCC"))?;
 
                 tile.component_infos
                     .get_mut(component_index as usize)
@@ -251,16 +251,16 @@ fn parse_tile_part<'a>(
                 }
 
                 reader.read_marker()?;
-                ppt_headers.push(ppt_marker(reader).ok_or(MarkerError::FailedToRead("PPT"))?);
+                ppt_headers.push(ppt_marker(reader).ok_or(MarkerError::ParseFailure("PPT"))?);
             }
             markers::PLT => {
                 // Can be inferred ourselves.
                 reader.read_marker()?;
-                skip_marker_segment(reader).ok_or(MarkerError::FailedToRead("PLT"))?;
+                skip_marker_segment(reader).ok_or(MarkerError::ParseFailure("PLT"))?;
             }
             markers::COM => {
                 reader.read_marker()?;
-                skip_marker_segment(reader).ok_or(MarkerError::FailedToRead("COM"))?;
+                skip_marker_segment(reader).ok_or(MarkerError::ParseFailure("COM"))?;
             }
             (0x30..=0x3F) => {
                 // "All markers with the marker code between 0xFF30 and 0xFF3F
@@ -279,7 +279,7 @@ fn parse_tile_part<'a>(
         len
     } else {
         return if main_header.strict {
-            Err(TileError::InsufficientData.into())
+            Err(TileError::Invalid.into())
         } else {
             Ok(())
         };
@@ -294,7 +294,7 @@ fn parse_tile_part<'a>(
 
     let data = reader
         .read_bytes(remaining_bytes)
-        .ok_or(TileError::InsufficientData)?;
+        .ok_or(TileError::Invalid)?;
 
     let tile_part = if !headers.is_empty() {
         TilePart::Separated(SeparatedTilePart {

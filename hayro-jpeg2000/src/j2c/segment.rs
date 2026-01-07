@@ -29,7 +29,7 @@ pub(crate) fn parse<'a>(
         .is_none()
             && header.strict
         {
-            return Err(TileError::ProcessingFailed.into());
+            return Err(TileError::Invalid.into());
         }
     }
 

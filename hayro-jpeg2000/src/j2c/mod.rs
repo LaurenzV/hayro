@@ -38,10 +38,7 @@ pub(crate) struct ComponentData {
     pub(crate) bit_depth: u8,
 }
 
-pub(crate) fn parse<'a>(
-    stream: &'a [u8],
-    settings: &DecodeSettings,
-) -> Result<Image<'a>> {
+pub(crate) fn parse<'a>(stream: &'a [u8], settings: &DecodeSettings) -> Result<Image<'a>> {
     let parsed_codestream = parse_raw(stream, settings)?;
     let header = &parsed_codestream.header;
     let mut boxes = ImageBoxes::default();
@@ -81,9 +78,7 @@ pub(crate) fn parse_raw<'a>(
     }
 
     let header = codestream::read_header(&mut reader, settings)?;
-    let code_stream_data = reader
-        .tail()
-        .ok_or(FormatError::MissingCodestream)?;
+    let code_stream_data = reader.tail().ok_or(FormatError::MissingCodestream)?;
 
     Ok(ParsedCodestream {
         header,

@@ -34,10 +34,7 @@ pub(crate) struct DecodedImage {
     pub(crate) boxes: ImageBoxes,
 }
 
-pub(crate) fn parse<'a>(
-    data: &'a [u8],
-    mut settings: DecodeSettings,
-) -> Result<Image<'a>> {
+pub(crate) fn parse<'a>(data: &'a [u8], mut settings: DecodeSettings) -> Result<Image<'a>> {
     let mut reader = BitReader::new(data);
     let signature_box = r#box::read(&mut reader).ok_or(FormatError::InvalidBox)?;
 
@@ -72,8 +69,7 @@ pub(crate) fn parse<'a>(
 
                 // Read child boxes within JP2 Header box
                 while !jp2h_reader.at_end() {
-                    let child_box =
-                        r#box::read(&mut jp2h_reader).ok_or(FormatError::InvalidBox)?;
+                    let child_box = r#box::read(&mut jp2h_reader).ok_or(FormatError::InvalidBox)?;
 
                     match child_box.box_type {
                         r#box::CHANNEL_DEFINITION => {

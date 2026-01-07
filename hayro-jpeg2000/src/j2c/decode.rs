@@ -29,7 +29,7 @@ pub(crate) fn decode(data: &[u8], header: &Header<'_>) -> Result<Vec<ComponentDa
     let tiles = tile::parse(&mut reader, header)?;
 
     if tiles.is_empty() {
-        return Err(TileError::NoTiles.into());
+        return Err(TileError::Invalid.into());
     }
 
     let mut tile_ctx = TileDecodeContext::new(header, &tiles[0]);
@@ -57,15 +57,15 @@ pub(crate) fn decode(data: &[u8], header: &Header<'_>) -> Result<Vec<ComponentDa
                 }
                 ProgressionOrder::ResolutionPositionComponentLayer => Box::new(
                     resolution_position_component_layer_progression(iter_input)
-                        .ok_or(DecodingError::ProgressionBuildFailed)?,
+                        .ok_or(DecodingError::InvalidProgressionIterator)?,
                 ),
                 ProgressionOrder::PositionComponentResolutionLayer => Box::new(
                     position_component_resolution_layer_progression(iter_input)
-                        .ok_or(DecodingError::ProgressionBuildFailed)?,
+                        .ok_or(DecodingError::InvalidProgressionIterator)?,
                 ),
                 ProgressionOrder::ComponentPositionResolutionLayer => Box::new(
                     component_position_resolution_layer_progression(iter_input)
-                        .ok_or(DecodingError::ProgressionBuildFailed)?,
+                        .ok_or(DecodingError::InvalidProgressionIterator)?,
                 ),
             };
 
@@ -344,8 +344,7 @@ fn decode_sub_band_bitplanes(
     };
 
     let num_bitplanes = {
-        let (exponent, _) =
-            component_info.exponent_mantissa(sub_band.sub_band_type, resolution)?;
+        let (exponent, _) = component_info.exponent_mantissa(sub_band.sub_band_type, resolution)?;
         // Equation (E-2)
         let num_bitplanes = (component_info.quantization_info.guard_bits as u16)
             .checked_add(exponent)

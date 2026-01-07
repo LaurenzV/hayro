@@ -44,7 +44,7 @@ pub(crate) fn decode(
         &mut tile_ctx.bit_plane_decode_context,
         &mut tile_ctx.bit_plane_decode_buffers,
     )
-    .ok_or(DecodingError::CodeblockFailed)?;
+    .ok_or(DecodingError::CodeBlockDecodeFailure)?;
 
     Ok(())
 }
@@ -485,7 +485,7 @@ impl BitPlaneDecodeContext {
         self.bitplanes = if strict {
             total_bitplanes
                 .checked_sub(code_block.missing_bit_planes)
-                .ok_or(DecodingError::MissingBitplanesTooHigh)?
+                .ok_or(DecodingError::InvalidBitplaneCount)?
         } else {
             total_bitplanes.saturating_sub(code_block.missing_bit_planes)
         };
