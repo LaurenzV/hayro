@@ -25,20 +25,20 @@ impl HuffmanTable {
         Self(Rc::new(InnerHuffmanTable::Dynamic { nodes }))
     }
 
-    /// Decode a value from the bit reader using this Huffman table 
+    /// Decode a value from the bit reader using this Huffman table
     /// (B.4 "Using a Huffman table").
-    /// 
+    ///
     /// Returns `Ok(None)` for out-of-band (OOB) values, `Ok(Some(value))` for decoded values.
     pub(crate) fn decode(&self, reader: &mut Reader<'_>) -> Result<Option<i32>, &'static str> {
         let nodes: &[HuffmanNode] = match self.0.as_ref() {
             InnerHuffmanTable::Inline { nodes } => nodes,
             InnerHuffmanTable::Dynamic { nodes } => nodes,
         };
-        
+
         HuffmanNode::decode_from(nodes, 0, reader)
     }
 
-    /// Build a Huffman table from table line definitions (B.3 "Assigning 
+    /// Build a Huffman table from table line definitions (B.3 "Assigning
     /// the prefix codes").
     pub(crate) fn build(lines: &[TableLine]) -> Self {
         // `NTEMP` - Number of table lines.
@@ -384,6 +384,7 @@ impl HuffmanNode {
         }
     }
 
+    /// Implements B.4 "Using a Huffman table".
     fn decode_from(
         nodes: &[Self],
         mut node_index: u32,
@@ -460,12 +461,12 @@ enum InnerHuffmanTable {
     Inline {
         nodes: [HuffmanNode; INLINE_TABLE_SIZE],
     },
-    Dynamic { nodes: Vec<HuffmanNode> },
+    Dynamic {
+        nodes: Vec<HuffmanNode>,
+    },
 }
 
-/// Standard Huffman tables (`TABLE_A` through `TABLE_O`) for JBIG2 decoding.
-///
-/// All tables are initialized eagerly from precomputed inline data.
+/// Standard Huffman tables (`TABLE_A` through `TABLE_O`).
 #[derive(Debug)]
 pub(crate) struct StandardHuffmanTables {
     table_a: HuffmanTable,
