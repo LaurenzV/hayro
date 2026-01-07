@@ -80,8 +80,7 @@ pub(crate) fn apply(
     let (scratch_buf, output) = (&mut tile_ctx.idwt_scratch_buffer, &mut tile_ctx.idwt_output);
 
     let estimate_buffer_size = |decomposition: &Decomposition| {
-        // For the width, we need to account for SIMD padding on the right
-        // (see `interleave_samples`).
+        // For the width, we need to account for SIMD padding on the right.
         let total_width = decomposition.rect.width() as usize + SIMD_WIDTH;
         let total_height = decomposition.rect.height() as usize;
 
