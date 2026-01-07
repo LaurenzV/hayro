@@ -33,11 +33,11 @@ mod reader;
 mod region;
 mod segment;
 
+use error::bail;
 pub use error::{
     DecodeError, FormatError, HuffmanError, ParseError, RegionError, Result, SegmentError,
     SymbolError, TemplateError,
 };
-use error::bail;
 
 use crate::file::parse_segments_sequential;
 use bitmap::DecodedRegion;

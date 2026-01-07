@@ -546,7 +546,9 @@ fn decode_symbols_huffman(
             symwidth = symwidth
                 .checked_add_signed(dw)
                 .ok_or(RegionError::InvalidDimension)?;
-            totwidth = totwidth.checked_add(symwidth).ok_or(DecodeError::Overflow)?;
+            totwidth = totwidth
+                .checked_add(symwidth)
+                .ok_or(DecodeError::Overflow)?;
 
             if header.flags.sdrefagg {
                 // "ii) If SDHUFF is 0 or SDREFAGG is 1, then decode the symbol's bitmap
@@ -588,11 +590,7 @@ fn decode_symbols_huffman(
         header.num_exported_symbols,
         input_symbols,
         &new_symbols,
-        || {
-            table_a
-                .decode(reader)?
-                .ok_or(HuffmanError::UnexpectedOob.into())
-        },
+        || Ok(table_a.decode(reader)?.ok_or(HuffmanError::UnexpectedOob)?),
     )?;
 
     Ok(exported)
@@ -914,8 +912,9 @@ where
         input_symbols,
         &new_symbols,
         || {
-            iaex.decode(&mut arith_decoder)
-                .ok_or(SymbolError::OutOfRange.into())
+            Ok(iaex
+                .decode(&mut arith_decoder)
+                .ok_or(SymbolError::OutOfRange)?)
         },
     )?;
 
@@ -975,9 +974,7 @@ fn decode_refinement_aggregate_symbol(
 ) -> Result<DecodedRegion> {
     // "1) Decode the number of symbol instances contained in the aggregation,
     // as specified in 6.5.8.2.1. Let REFAGGNINST be the value decoded." (6.5.8.2)
-    let refaggninst = iaai
-        .decode(decoder)
-        .ok_or(SymbolError::OutOfRange)?;
+    let refaggninst = iaai.decode(decoder).ok_or(SymbolError::OutOfRange)?;
 
     if refaggninst == 1 {
         // "3) If REFAGGNINST is equal to one, then decode the bitmap as described

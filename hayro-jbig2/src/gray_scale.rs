@@ -117,11 +117,7 @@ fn decode_ae(data: &[u8], params: &GrayScaleParams<'_>) -> Result<Vec<u32>> {
 ///
 /// The closure `decode_next` is called for each bitplane, receiving the bitplane
 /// index (GSBPP-1 down to 0) and returning the decoded bitplane data.
-fn decode_bitplanes<F>(
-    bits_per_pixel: u32,
-    size: usize,
-    mut decode_next: F,
-) -> Result<Vec<u32>>
+fn decode_bitplanes<F>(bits_per_pixel: u32, size: usize, mut decode_next: F) -> Result<Vec<u32>>
 where
     F: FnMut(u32) -> Result<Vec<bool>>,
 {

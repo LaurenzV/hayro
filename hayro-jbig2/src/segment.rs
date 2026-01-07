@@ -282,9 +282,7 @@ pub(crate) fn parse_segment_data<'a>(
         // they are preceded by the two-byte sequence 0x00 0x00; if MMR is 0, they
         // are preceded by the two-byte sequence 0xFF 0xAC." (7.4.6.4)
         let len = scan_for_immediate_generic_region_size(reader)?;
-        reader
-            .read_bytes(len)
-            .ok_or(ParseError::UnexpectedEof)?
+        reader.read_bytes(len).ok_or(ParseError::UnexpectedEof)?
     };
 
     Ok(Segment { header, data })

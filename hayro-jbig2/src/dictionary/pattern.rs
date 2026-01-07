@@ -4,7 +4,9 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use crate::bitmap::DecodedRegion;
-use crate::error::{DecodeError, FormatError, ParseError, RegionError, Result, TemplateError, bail, err};
+use crate::error::{
+    DecodeError, FormatError, ParseError, RegionError, Result, TemplateError, bail, err,
+};
 use crate::reader::Reader;
 use crate::region::CombinationOperator;
 use crate::region::generic::{

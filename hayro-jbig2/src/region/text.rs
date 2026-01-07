@@ -1309,10 +1309,7 @@ fn decode_text_region_huffman(
 /// Huffman coded. This is very similar to the 'zlib' coded format documented
 /// in RFC 1951, though not identical. The encoding is based on the codes shown
 /// in Table 29." (7.4.3.1.7)
-fn decode_symbol_id_huffman_table(
-    reader: &mut Reader<'_>,
-    sbnumsyms: u32,
-) -> Result<HuffmanTable> {
+fn decode_symbol_id_huffman_table(reader: &mut Reader<'_>, sbnumsyms: u32) -> Result<HuffmanTable> {
     // "1) Read the code lengths for RUNCODE0 through RUNCODE34; each is stored
     // as a four-bit value." (7.4.3.1.7)
     let mut runcode_lines: Vec<TableLine> = Vec::with_capacity(35);
@@ -1416,5 +1413,5 @@ struct TextRegionHuffmanTables<'a> {
 
 /// Decode a value from a Huffman table, requiring a value (not OOB).
 fn decode_huffman_value(table: &HuffmanTable, reader: &mut Reader<'_>) -> Result<i32> {
-    table.decode(reader)?.ok_or(HuffmanError::InvalidCode.into())
+    Ok(table.decode(reader)?.ok_or(HuffmanError::InvalidCode)?)
 }

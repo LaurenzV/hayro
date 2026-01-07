@@ -165,9 +165,7 @@ impl HuffmanTable {
     pub(crate) fn read_custom(reader: &mut Reader<'_>) -> Result<Self> {
         // 1) "Decode the code table flags field as described in B.2.1. This sets the values
         //    HTOOB, HTPS and HTRS."
-        let flags = reader
-            .read_byte()
-            .ok_or(ParseError::UnexpectedEof)?;
+        let flags = reader.read_byte().ok_or(ParseError::UnexpectedEof)?;
 
         // `HTOOB`
         let has_out_of_band = (flags & 1) != 0;
@@ -218,8 +216,7 @@ impl HuffmanTable {
             let next_range_low = (current_range_low as i64)
                 .checked_add(range_size)
                 .ok_or(DecodeError::Overflow)?;
-            current_range_low =
-                i32::try_from(next_range_low).map_err(|_| DecodeError::Overflow)?;
+            current_range_low = i32::try_from(next_range_low).map_err(|_| DecodeError::Overflow)?;
         }
 
         // 6) "Read HTPS bits. Let LOWPREFLEN be the value read."
@@ -410,7 +407,8 @@ impl HuffmanNode {
                     // `HTOFFSET`
                     let range_offset = reader
                         .read_bits(leaf.range_length)
-                        .ok_or(HuffmanError::InvalidCode)? as i32;
+                        .ok_or(HuffmanError::InvalidCode)?
+                        as i32;
 
                     // 4) "Otherwise, if table line I is the lower range table line for this
                     //    table, then set: HTVAL = RANGELOW[I] − HTOFFSET"

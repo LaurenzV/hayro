@@ -229,10 +229,7 @@ pub(crate) fn decode_generic_region(
 }
 
 /// Decode a generic region using MMR coding (6.2.6).
-fn decode_generic_region_mmr(
-    header: &GenericRegionHeader,
-    data: &[u8],
-) -> Result<DecodedRegion> {
+fn decode_generic_region_mmr(header: &GenericRegionHeader, data: &[u8]) -> Result<DecodedRegion> {
     if !header.mmr {
         bail!(TemplateError::Invalid);
     }
@@ -294,8 +291,8 @@ pub(crate) fn decode_bitmap_mmr(region: &mut DecodedRegion, data: &[u8]) -> Resu
         invert_black: true,
     };
 
-    hayro_ccitt::decode(data, &mut decoder, &settings)
-        .map_err(|_| RegionError::InvalidDimension.into())
+    Ok(hayro_ccitt::decode(data, &mut decoder, &settings)
+        .map_err(|_| RegionError::InvalidDimension)?)
 }
 
 /// A decoder sink that writes decoded pixels into a `DecodedRegion`.
