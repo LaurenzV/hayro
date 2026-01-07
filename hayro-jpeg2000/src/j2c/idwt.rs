@@ -453,11 +453,7 @@ fn irreversible_filter_97i(scanline: &mut [f32], width: usize, x0: usize) {
 fn reflect_index(idx: usize, offset: isize, length: usize) -> usize {
     if offset < 0 {
         let abs_offset = (-offset) as usize;
-        if idx < abs_offset {
-            abs_offset - idx
-        } else {
-            idx - abs_offset
-        }
+        abs_offset.abs_diff(idx)
     } else {
         let new_idx = idx + offset as usize;
         if new_idx >= length {
