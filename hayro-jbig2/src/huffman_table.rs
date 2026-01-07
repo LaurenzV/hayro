@@ -7,146 +7,8 @@ use crate::reader::Reader;
 
 include!("huffman_tables_generated.rs");
 
-/// Information stored at a leaf node of the Huffman tree.
-#[derive(Debug, Clone, Copy)]
-struct LeafData {
-    /// `RANGELOW` - The base value for computing the decoded value.
-    range_low: i32,
-    /// `RANGELEN` - Number of additional bits to read.
-    range_length: u8,
-    /// True if this is a lower range line (uses subtraction).
-    is_lower: bool,
-    /// `OOB` - True if this is the out-of-band marker.
-    is_out_of_band: bool,
-}
-
 /// Maximum number of nodes in an inline Huffman table.
 const INLINE_TABLE_SIZE: usize = 43;
-
-/// A node in the Huffman tree.
-#[derive(Debug, Clone, Copy)]
-enum HuffmanNode {
-    /// Intermediate node.
-    Intermediate {
-        zero: Option<NonZeroU32>,
-        one: Option<NonZeroU32>,
-    },
-    /// Leaf node.
-    Leaf(LeafData),
-    /// Empty node (padding to fill fixed-size arrays in inline tables).
-    Empty,
-}
-
-impl HuffmanNode {
-    fn new_intermediate() -> Self {
-        Self::Intermediate {
-            zero: None,
-            one: None,
-        }
-    }
-
-    fn new_leaf(range_low: i32, range_length: u8, is_lower: bool, is_out_of_band: bool) -> Self {
-        Self::Leaf(LeafData {
-            range_low,
-            range_length,
-            is_lower,
-            is_out_of_band,
-        })
-    }
-
-    /// Get the child index for a given bit (0 or 1).
-    fn get_child(&self, child_zero: bool) -> Option<NonZeroU32> {
-        match self {
-            Self::Intermediate { zero, one } => {
-                if child_zero {
-                    *zero
-                } else {
-                    *one
-                }
-            }
-            _ => None,
-        }
-    }
-
-    /// Set the child index for a given bit (0 or 1).
-    fn set_child(&mut self, child_zero: bool, index: NonZeroU32) {
-        match self {
-            Self::Intermediate { zero, one } => {
-                if child_zero {
-                    *zero = Some(index);
-                } else {
-                    *one = Some(index);
-                }
-            }
-            _ => panic!("set_child called on non-intermediate node"),
-        }
-    }
-    
-    fn decode_from(
-        nodes: &[Self],
-        mut node_index: u32,
-        reader: &mut Reader<'_>,
-    ) -> Result<Option<i32>, &'static str> {
-        // 1) "Read one bit at a time until the bit string read matches the code assigned to
-        //    one of the table lines."
-        loop {
-            match nodes[node_index as usize] {
-                Self::Intermediate { zero, one } => {
-                    let bit = reader
-                        .read_bit()
-                        .ok_or("unexpected end of data in huffman decode")?;
-                    let child_index = if bit == 0 { zero } else { one };
-                    node_index = child_index.ok_or("invalid huffman code")?.get();
-                }
-                Self::Leaf(leaf) => {
-                    // 3) "If HTOOB is 1 for this table, and table line I is the out-of-band
-                    //    table line for this table, then set: HTVAL = OOB"
-                    if leaf.is_out_of_band {
-                        return Ok(None);
-                    }
-
-                    // 2) "Read RANGELEN[I] bits. Let HTOFFSET be the value read."
-                    // `HTOFFSET`
-                    let range_offset = reader
-                        .read_bits(leaf.range_length)
-                        .ok_or("invalid huffman code")?
-                        as i32;
-
-                    // 4) "Otherwise, if table line I is the lower range table line for this
-                    //    table, then set: HTVAL = RANGELOW[I] − HTOFFSET"
-                    // 5) "Otherwise, set: HTVAL = RANGELOW[I] + HTOFFSET"
-                    // `HTVAL`
-                    let value = if leaf.is_lower {
-                        leaf.range_low - range_offset
-                    } else {
-                        leaf.range_low + range_offset
-                    };
-
-                    return Ok(Some(value));
-                }
-                Self::Empty => {
-                    return Err("invalid huffman code (empty node)");
-                }
-            }
-        }
-    }
-}
-
-/// The inner representation of a Huffman table.
-///
-/// This can be either an inline table (fixed-size array for standard tables)
-/// or a dynamic table (Vec for runtime-built custom tables).
-#[derive(Debug, Clone)]
-#[allow(
-    clippy::large_enum_variant,
-    reason = "Inline variant is expected to be large."
-)]
-enum InnerHuffmanTable {
-    Inline {
-        nodes: [HuffmanNode; INLINE_TABLE_SIZE],
-    },
-    Dynamic { nodes: Vec<HuffmanNode> },
-}
 
 /// A Huffman table for JBIG2 decoding.
 #[derive(Debug, Clone)]
@@ -455,6 +317,144 @@ impl TableLine {
             is_out_of_band: true,
         }
     }
+}
+
+/// A node in the Huffman tree.
+#[derive(Debug, Clone, Copy)]
+enum HuffmanNode {
+    /// Intermediate node.
+    Intermediate {
+        zero: Option<NonZeroU32>,
+        one: Option<NonZeroU32>,
+    },
+    /// Leaf node.
+    Leaf(LeafData),
+    /// Empty node (padding to fill fixed-size arrays in inline tables).
+    Empty,
+}
+
+impl HuffmanNode {
+    fn new_intermediate() -> Self {
+        Self::Intermediate {
+            zero: None,
+            one: None,
+        }
+    }
+
+    fn new_leaf(range_low: i32, range_length: u8, is_lower: bool, is_out_of_band: bool) -> Self {
+        Self::Leaf(LeafData {
+            range_low,
+            range_length,
+            is_lower,
+            is_out_of_band,
+        })
+    }
+
+    /// Get the child index for a given bit (0 or 1).
+    fn get_child(&self, child_zero: bool) -> Option<NonZeroU32> {
+        match self {
+            Self::Intermediate { zero, one } => {
+                if child_zero {
+                    *zero
+                } else {
+                    *one
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// Set the child index for a given bit (0 or 1).
+    fn set_child(&mut self, child_zero: bool, index: NonZeroU32) {
+        match self {
+            Self::Intermediate { zero, one } => {
+                if child_zero {
+                    *zero = Some(index);
+                } else {
+                    *one = Some(index);
+                }
+            }
+            _ => panic!("set_child called on non-intermediate node"),
+        }
+    }
+
+    fn decode_from(
+        nodes: &[Self],
+        mut node_index: u32,
+        reader: &mut Reader<'_>,
+    ) -> Result<Option<i32>, &'static str> {
+        // 1) "Read one bit at a time until the bit string read matches the code assigned to
+        //    one of the table lines."
+        loop {
+            match nodes[node_index as usize] {
+                Self::Intermediate { zero, one } => {
+                    let bit = reader
+                        .read_bit()
+                        .ok_or("unexpected end of data in huffman decode")?;
+                    let child_index = if bit == 0 { zero } else { one };
+                    node_index = child_index.ok_or("invalid huffman code")?.get();
+                }
+                Self::Leaf(leaf) => {
+                    // 3) "If HTOOB is 1 for this table, and table line I is the out-of-band
+                    //    table line for this table, then set: HTVAL = OOB"
+                    if leaf.is_out_of_band {
+                        return Ok(None);
+                    }
+
+                    // 2) "Read RANGELEN[I] bits. Let HTOFFSET be the value read."
+                    // `HTOFFSET`
+                    let range_offset = reader
+                        .read_bits(leaf.range_length)
+                        .ok_or("invalid huffman code")?
+                        as i32;
+
+                    // 4) "Otherwise, if table line I is the lower range table line for this
+                    //    table, then set: HTVAL = RANGELOW[I] − HTOFFSET"
+                    // 5) "Otherwise, set: HTVAL = RANGELOW[I] + HTOFFSET"
+                    // `HTVAL`
+                    let value = if leaf.is_lower {
+                        leaf.range_low - range_offset
+                    } else {
+                        leaf.range_low + range_offset
+                    };
+
+                    return Ok(Some(value));
+                }
+                Self::Empty => {
+                    return Err("invalid huffman code (empty node)");
+                }
+            }
+        }
+    }
+}
+
+/// Information stored at a leaf node of the Huffman tree.
+#[derive(Debug, Clone, Copy)]
+struct LeafData {
+    /// `RANGELOW` - The base value for computing the decoded value.
+    range_low: i32,
+    /// `RANGELEN` - Number of additional bits to read.
+    range_length: u8,
+    /// True if this is a lower range line (uses subtraction).
+    is_lower: bool,
+    /// `OOB` - True if this is the out-of-band marker.
+    is_out_of_band: bool,
+}
+
+/// The inner representation of a Huffman table.
+///
+/// This can be either an inline table (fixed-size array for standard tables)
+/// or a dynamic table (Vec for runtime-built custom tables).
+#[derive(Debug, Clone)]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "Inline variant is expected to be large."
+)]
+enum InnerHuffmanTable {
+    Inline {
+        nodes: [HuffmanNode; INLINE_TABLE_SIZE],
+    },
+    Dynamic { nodes: Vec<HuffmanNode> },
 }
 
 /// Standard Huffman tables (`TABLE_A` through `TABLE_O`) for JBIG2 decoding.
