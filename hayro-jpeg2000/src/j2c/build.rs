@@ -4,6 +4,7 @@ use super::decode::{DecompositionStorage, TileDecodeContext, TileDecompositions}
 use super::rect::IntRect;
 use super::tag_tree::TagTree;
 use super::tile::{ResolutionTile, Tile};
+use crate::error::{DecodingError, Result};
 use log::trace;
 use std::iter;
 use std::ops::Range;
@@ -14,7 +15,7 @@ pub(crate) fn build(
     tile: &Tile<'_>,
     tile_ctx: &mut TileDecodeContext<'_>,
     storage: &mut DecompositionStorage<'_>,
-) -> Result<(), &'static str> {
+) -> Result<()> {
     build_decompositions(tile, tile_ctx, storage)
 }
 
@@ -22,7 +23,7 @@ fn build_decompositions(
     tile: &Tile<'_>,
     tile_ctx: &mut TileDecodeContext<'_>,
     storage: &mut DecompositionStorage<'_>,
-) -> Result<(), &'static str> {
+) -> Result<()> {
     let mut total_coefficients = 0;
 
     for component_tile in tile.component_tiles() {
@@ -40,7 +41,8 @@ fn build_decompositions(
         let mut build_sub_band =
             |sub_band_type: SubBandType,
              resolution_tile: &ResolutionTile<'_>,
-             storage: &mut DecompositionStorage<'_>| {
+             storage: &mut DecompositionStorage<'_>|
+             -> Result<usize> {
                 let sub_band_rect = resolution_tile.sub_band_rect(sub_band_type);
 
                 trace!(
@@ -111,12 +113,12 @@ fn build_precincts(
     sub_band_rect: IntRect,
     tile_ctx: &mut TileDecodeContext<'_>,
     storage: &mut DecompositionStorage<'_>,
-) -> Result<Range<usize>, &'static str> {
+) -> Result<Range<usize>> {
     let start = storage.precincts.len();
 
     for precinct_data in resolution_tile
         .precincts()
-        .ok_or("failed to build precincts")?
+        .ok_or(DecodingError::PrecinctBuildFailed)?
     {
         let precinct_rect = precinct_data.rect;
 

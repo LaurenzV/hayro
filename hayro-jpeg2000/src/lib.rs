@@ -69,6 +69,13 @@ use crate::jp2::colr::{CieLab, EnumeratedColorspace};
 use crate::jp2::icc::ICCMetadata;
 use crate::jp2::{DecodedImage, ImageBoxes};
 
+pub mod error;
+
+pub use error::{
+    ColorError, DecodeError, DecodingError, FormatError, MarkerError, Result, TileError,
+    ValidationError,
+};
+
 #[cfg(feature = "image")]
 mod image;
 mod j2c;
@@ -128,7 +135,7 @@ pub struct Image<'a> {
 
 impl<'a> Image<'a> {
     /// Try to create a new JPEG2000 image from the given data.
-    pub fn new(data: &'a [u8], settings: &DecodeSettings) -> Result<Self, &'static str> {
+    pub fn new(data: &'a [u8], settings: &DecodeSettings) -> Result<Self> {
         // JP2 signature box: 00 00 00 0C 6A 50 20 20
         const JP2_MAGIC: &[u8] = b"\x00\x00\x00\x0C\x6A\x50\x20\x20";
         // Codestream signature: FF 4F FF 51 (SOC + SIZ markers)
@@ -139,7 +146,7 @@ impl<'a> Image<'a> {
         } else if data.starts_with(CODESTREAM_MAGIC) {
             j2c::parse(data, settings)
         } else {
-            Err("invalid JPEG2000 file")
+            Err(FormatError::InvalidSignature.into())
         }
     }
 
@@ -171,7 +178,7 @@ impl<'a> Image<'a> {
     }
 
     /// Decode the image.
-    pub fn decode(&self) -> Result<Vec<u8>, &'static str> {
+    pub fn decode(&self) -> Result<Vec<u8>> {
         let buffer_size = self.width() as usize
             * self.height() as usize
             * (self.color_space.num_channels() as usize + if self.has_alpha { 1 } else { 0 });
@@ -183,7 +190,7 @@ impl<'a> Image<'a> {
 
     /// Decode the image into the given buffer. The buffer must have the correct
     /// size.
-    pub(crate) fn decode_into(&self, buf: &mut [u8]) -> Result<(), &'static str> {
+    pub(crate) fn decode_into(&self, buf: &mut [u8]) -> Result<()> {
         let settings = &self.settings;
         let mut decoded_image =
             j2c::decode(self.codestream, &self.header).map(move |data| DecodedImage {
@@ -195,7 +202,7 @@ impl<'a> Image<'a> {
         if settings.resolve_palette_indices {
             decoded_image.decoded.components =
                 resolve_palette_indices(decoded_image.decoded.components, &decoded_image.boxes)
-                    .ok_or("failed to resolve palette indices")?;
+                    .ok_or(ColorError::PaletteResolutionFailed)?;
         }
 
         if let Some(cdef) = &decoded_image.boxes.channel_definition {
@@ -232,7 +239,7 @@ pub(crate) fn resolve_alpha_and_color_space(
     boxes: &ImageBoxes,
     header: &Header<'_>,
     settings: &DecodeSettings,
-) -> Result<(ColorSpace, bool), &'static str> {
+) -> Result<(ColorSpace, bool)> {
     let mut num_components = header.component_infos.len();
 
     // Override number of components with what is actually in the palette box
@@ -285,7 +292,7 @@ pub(crate) fn resolve_alpha_and_color_space(
                     color_space = ColorSpace::CMYK;
                 }
             } else {
-                return Err("image has too many channels");
+                return Err(ValidationError::TooManyChannels.into());
             }
         }
     }
@@ -448,7 +455,7 @@ fn interleave_and_convert(image: DecodedImage, buf: &mut [u8]) {
     }
 }
 
-fn convert_color_space(image: &mut DecodedImage, bit_depth: u8) -> Result<(), &'static str> {
+fn convert_color_space(image: &mut DecodedImage, bit_depth: u8) -> Result<()> {
     if let Some(jp2::colr::ColorSpace::Enumerated(e)) = &image
         .boxes
         .color_specification
@@ -458,11 +465,11 @@ fn convert_color_space(image: &mut DecodedImage, bit_depth: u8) -> Result<(), &'
         match e {
             EnumeratedColorspace::Sycc => {
                 sycc_to_rgb(&mut image.decoded.components, bit_depth)
-                    .ok_or("failed to convert image from sycc to RGB")?;
+                    .ok_or(ColorError::SyccConversionFailed)?;
             }
             EnumeratedColorspace::CieLab(cielab) => {
                 cielab_to_rgb(&mut image.decoded.components, bit_depth, cielab)
-                    .ok_or("failed to convert image from LAB to RGB")?;
+                    .ok_or(ColorError::LabConversionFailed)?;
             }
             _ => {}
         }
@@ -471,7 +478,7 @@ fn convert_color_space(image: &mut DecodedImage, bit_depth: u8) -> Result<(), &'
     Ok(())
 }
 
-fn get_color_space(boxes: &ImageBoxes, num_components: usize) -> Result<ColorSpace, &'static str> {
+fn get_color_space(boxes: &ImageBoxes, num_components: usize) -> Result<ColorSpace> {
     let cs = match boxes
         .color_specification
         .as_ref()
@@ -496,7 +503,7 @@ fn get_color_space(boxes: &ImageBoxes, num_components: usize) -> Result<ColorSpa
                     profile: include_bytes!("../assets/LAB.icc").to_vec(),
                     num_channels: 3,
                 },
-                _ => return Err("unsupported JP2 image"),
+                _ => return Err(FormatError::Unsupported.into()),
             }
         }
         jp2::colr::ColorSpace::Icc(icc) => {

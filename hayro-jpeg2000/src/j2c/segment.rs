@@ -6,6 +6,7 @@ use super::codestream::{ComponentInfo, Header};
 use super::decode::{DecompositionStorage, TileDecodeContext};
 use super::progression::ProgressionData;
 use super::tile::{Tile, TilePart};
+use crate::error::{Result, TileError};
 use crate::reader::BitReader;
 use log::{trace, warn};
 
@@ -17,7 +18,7 @@ pub(crate) fn parse<'a>(
     tile_ctx: &mut TileDecodeContext<'a>,
     header: &Header<'_>,
     storage: &mut DecompositionStorage<'a>,
-) -> Result<(), &'static str> {
+) -> Result<()> {
     for tile_part in &tile.tile_parts {
         if parse_inner(
             tile_part.clone(),
@@ -28,7 +29,7 @@ pub(crate) fn parse<'a>(
         .is_none()
             && header.strict
         {
-            return Err("failed to fully process a tile part in tile");
+            return Err(TileError::ProcessingFailed.into());
         }
     }
 

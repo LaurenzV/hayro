@@ -3,6 +3,7 @@
 use super::build::{PrecinctData, SubBandType};
 use super::codestream::{ComponentInfo, Header, ProgressionOrder, markers, skip_marker_segment};
 use super::rect::IntRect;
+use crate::error::{MarkerError, Result, TileError, ValidationError};
 use crate::j2c::codestream;
 use crate::reader::BitReader;
 
@@ -127,7 +128,7 @@ impl<'a> Tile<'a> {
 pub(crate) fn parse<'a>(
     reader: &mut BitReader<'a>,
     main_header: &'a Header<'a>,
-) -> Result<Vec<Tile<'a>>, &'static str> {
+) -> Result<Vec<Tile<'a>>> {
     let mut tiles = (0..main_header.size_data.num_tiles() as usize)
         .map(|idx| Tile::new(idx as u32, main_header))
         .collect::<Vec<_>>();
@@ -143,7 +144,7 @@ pub(crate) fn parse<'a>(
     }
 
     if main_header.strict && reader.read_marker()? != markers::EOC {
-        return Err("expected EOC marker when parsing tiles");
+        return Err(MarkerError::Expected("EOC").into());
     }
 
     Ok(tiles)
@@ -154,15 +155,15 @@ fn parse_tile_part<'a>(
     main_header: &'a Header<'a>,
     tiles: &mut [Tile<'a>],
     tile_part_idx: usize,
-) -> Result<(), &'static str> {
+) -> Result<()> {
     if reader.read_marker()? != markers::SOT {
-        return Err("expected SOT marker at tile-part start");
+        return Err(MarkerError::Expected("SOT").into());
     }
 
-    let tile_part_header = sot_marker(reader).ok_or("failed to read SOT marker")?;
+    let tile_part_header = sot_marker(reader).ok_or(MarkerError::FailedToRead("SOT"))?;
 
     if tile_part_header.tile_index as u32 >= main_header.size_data.num_tiles() {
-        return Err("invalid tile index in tile-part header");
+        return Err(TileError::InvalidIndex.into());
     }
 
     let data_len = if tile_part_header.tile_part_length == 0 {
@@ -172,7 +173,7 @@ fn parse_tile_part<'a>(
 
         (tile_part_header.tile_part_length as usize)
             .checked_sub(12)
-            .ok_or("tile-part length shorter than header")?
+            .ok_or(TileError::PartTooShort)?
     };
 
     let start = reader.offset();
@@ -185,7 +186,7 @@ fn parse_tile_part<'a>(
     loop {
         let Some(marker) = reader.peek_marker() else {
             return if main_header.strict {
-                Err("failed to parse tile part")
+                Err(TileError::ParseFailed.into())
             } else {
                 Ok(())
             };
@@ -200,7 +201,7 @@ fn parse_tile_part<'a>(
             // tile-part header, if they appear at all.
             markers::COD => {
                 reader.read_marker()?;
-                let cod = codestream::cod_marker(reader).ok_or("failed to read COD marker")?;
+                let cod = codestream::cod_marker(reader).ok_or(MarkerError::FailedToRead("COD"))?;
 
                 tile.mct = cod.mct;
                 tile.num_layers = cod.num_layers;
@@ -215,19 +216,19 @@ fn parse_tile_part<'a>(
                 reader.read_marker()?;
 
                 let (component_index, coc) = codestream::coc_marker(reader, num_components as u16)
-                    .ok_or("failed to read COC marker")?;
+                    .ok_or(MarkerError::FailedToRead("COC"))?;
 
                 let old = tile
                     .component_infos
                     .get_mut(component_index as usize)
-                    .ok_or("invalid component index in tile-part header")?;
+                    .ok_or(ValidationError::InvalidComponentMetadata)?;
 
                 old.coding_style.parameters = coc.parameters;
                 old.coding_style.flags.raw |= coc.flags.raw;
             }
             markers::QCD => {
                 reader.read_marker()?;
-                let qcd = codestream::qcd_marker(reader).ok_or("failed to read QCD marker")?;
+                let qcd = codestream::qcd_marker(reader).ok_or(MarkerError::FailedToRead("QCD"))?;
 
                 for component_info in &mut tile.component_infos {
                     component_info.quantization_info = qcd.clone();
@@ -236,32 +237,30 @@ fn parse_tile_part<'a>(
             markers::QCC => {
                 reader.read_marker()?;
                 let (component_index, qcc) = codestream::qcc_marker(reader, num_components as u16)
-                    .ok_or("failed to read QCC marker")?;
+                    .ok_or(MarkerError::FailedToRead("QCC"))?;
 
                 tile.component_infos
                     .get_mut(component_index as usize)
-                    .ok_or("invalid component index in tile-part header")?
+                    .ok_or(ValidationError::InvalidComponentMetadata)?
                     .quantization_info = qcc.clone();
             }
             markers::EOC => break,
             markers::PPT => {
                 if !main_header.ppm_packets.is_empty() {
-                    return Err("PPT marker shouldn't exist if main header hat PPM marker");
+                    return Err(TileError::PpmPptConflict.into());
                 }
 
                 reader.read_marker()?;
-                ppt_headers.push(ppt_marker(reader).ok_or("failed to read PPT marker")?);
+                ppt_headers.push(ppt_marker(reader).ok_or(MarkerError::FailedToRead("PPT"))?);
             }
             markers::PLT => {
                 // Can be inferred ourselves.
                 reader.read_marker()?;
-                skip_marker_segment(reader)
-                    .ok_or("failed to skip PLT marker during tile part parsing")?;
+                skip_marker_segment(reader).ok_or(MarkerError::FailedToRead("PLT"))?;
             }
             markers::COM => {
                 reader.read_marker()?;
-                skip_marker_segment(reader)
-                    .ok_or("failed to skip COM marker during tile part parsing")?;
+                skip_marker_segment(reader).ok_or(MarkerError::FailedToRead("COM"))?;
             }
             (0x30..=0x3F) => {
                 // "All markers with the marker code between 0xFF30 and 0xFF3F
@@ -271,7 +270,7 @@ fn parse_tile_part<'a>(
                 // skip_marker_segment(reader);
             }
             _ => {
-                return Err("unsupported marker encountered");
+                return Err(MarkerError::Unsupported.into());
             }
         }
     }
@@ -280,7 +279,7 @@ fn parse_tile_part<'a>(
         len
     } else {
         return if main_header.strict {
-            Err("didn't find sufficient data in tile part")
+            Err(TileError::InsufficientData.into())
         } else {
             Ok(())
         };
@@ -295,7 +294,7 @@ fn parse_tile_part<'a>(
 
     let data = reader
         .read_bytes(remaining_bytes)
-        .ok_or("failed to get tile part data")?;
+        .ok_or(TileError::InsufficientData)?;
 
     let tile_part = if !headers.is_empty() {
         TilePart::Separated(SeparatedTilePart {

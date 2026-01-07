@@ -28,7 +28,7 @@ fn convert(path: &Path) -> Result<DynamicImage, String> {
     let settings = DecodeSettings::default();
 
     // Read image and its metadata.
-    let image = Image::new(&data, &settings)?;
+    let image = Image::new(&data, &settings).map_err(|e| e.to_string())?;
     let color_type = image.color_type();
     let width = image.width();
     let height = image.height();

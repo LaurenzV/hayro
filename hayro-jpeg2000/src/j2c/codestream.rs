@@ -3,6 +3,7 @@
 use super::DecodeSettings;
 use super::bitplane::BITPLANE_BIT_SIZE;
 use super::build::SubBandType;
+use crate::error::{MarkerError, Result, ValidationError};
 use crate::reader::BitReader;
 
 const MAX_LAYER_COUNT: u8 = 32;
@@ -34,9 +35,9 @@ pub(crate) struct PpmPacket<'a> {
 pub(crate) fn read_header<'a>(
     reader: &mut BitReader<'a>,
     settings: &DecodeSettings,
-) -> Result<Header<'a>, &'static str> {
+) -> Result<Header<'a>> {
     if reader.read_marker()? != markers::SIZ {
-        return Err("expected SIZ marker after SOC");
+        return Err(MarkerError::Expected("SIZ").into());
     }
 
     let mut size_data = size_marker(reader)?;
@@ -50,47 +51,47 @@ pub(crate) fn read_header<'a>(
     let mut ppm_markers = vec![];
 
     loop {
-        match reader.peek_marker().ok_or("failed to read marker")? {
+        match reader.peek_marker().ok_or(MarkerError::Invalid)? {
             markers::SOT => break,
             markers::COD => {
                 reader.read_marker()?;
-                cod = Some(cod_marker(reader).ok_or("failed to read COD marker")?);
+                cod = Some(cod_marker(reader).ok_or(MarkerError::FailedToRead("COD"))?);
             }
             markers::COC => {
                 reader.read_marker()?;
                 let (component_index, coc) =
-                    coc_marker(reader, num_components).ok_or("failed to read COC marker")?;
+                    coc_marker(reader, num_components).ok_or(MarkerError::FailedToRead("COC"))?;
                 *cod_components
                     .get_mut(component_index as usize)
-                    .ok_or("invalid COC marker")? = Some(coc);
+                    .ok_or(MarkerError::FailedToRead("COC"))? = Some(coc);
             }
             markers::QCD => {
                 reader.read_marker()?;
-                qcd = Some(qcd_marker(reader).ok_or("failed to read QCD marker")?);
+                qcd = Some(qcd_marker(reader).ok_or(MarkerError::FailedToRead("QCD"))?);
             }
             markers::QCC => {
                 reader.read_marker()?;
                 let (component_index, qcc) =
-                    qcc_marker(reader, num_components).ok_or("failed to read QCC marker")?;
+                    qcc_marker(reader, num_components).ok_or(MarkerError::FailedToRead("QCC"))?;
                 *qcd_components
                     .get_mut(component_index as usize)
-                    .ok_or("invalid COC marker")? = Some(qcc);
+                    .ok_or(MarkerError::FailedToRead("QCC"))? = Some(qcc);
             }
             markers::RGN => {
                 reader.read_marker()?;
-                rgn_marker(reader).ok_or("failed to read RGN marker")?;
+                rgn_marker(reader).ok_or(MarkerError::FailedToRead("RGN"))?;
             }
             markers::TLM => {
                 reader.read_marker()?;
-                tlm_marker(reader).ok_or("failed to read TLM marker")?;
+                tlm_marker(reader).ok_or(MarkerError::FailedToRead("TLM"))?;
             }
             markers::COM => {
                 reader.read_marker()?;
-                com_marker(reader).ok_or("failed to read COM marker")?;
+                com_marker(reader).ok_or(MarkerError::FailedToRead("COM"))?;
             }
             markers::PPM => {
                 reader.read_marker()?;
-                ppm_markers.push(ppm_marker(reader).ok_or("failed to read PPM marker")?);
+                ppm_markers.push(ppm_marker(reader).ok_or(MarkerError::FailedToRead("PPM"))?);
             }
             markers::CRG => {
                 reader.read_marker()?;
@@ -104,13 +105,13 @@ pub(crate) fn read_header<'a>(
                 // skip_marker_segment(reader);
             }
             _ => {
-                return Err("unsupported marker encountered in main header");
+                return Err(MarkerError::Unsupported.into());
             }
         }
     }
 
-    let cod = cod.ok_or("missing COD marker")?;
-    let qcd = qcd.ok_or("missing QCD marker")?;
+    let cod = cod.ok_or(MarkerError::Missing("COD"))?;
+    let qcd = qcd.ok_or(MarkerError::Missing("QCD"))?;
 
     let component_infos: Vec<ComponentInfo> = size_data
         .component_sizes
@@ -178,14 +179,14 @@ pub(crate) fn read_header<'a>(
     Ok(header)
 }
 
-fn validate(header: &Header<'_>) -> Result<(), &'static str> {
+fn validate(header: &Header<'_>) -> Result<()> {
     for info in &header.component_infos {
         let max_resolution_idx = info.coding_style.parameters.num_resolution_levels - 1;
         let quantization_style = info.quantization_info.quantization_style;
         let num_precinct_exponents = info.quantization_info.step_sizes.len();
 
         if num_precinct_exponents == 0 {
-            return Err("missing exponents for precinct sizes");
+            return Err(ValidationError::MissingPrecinctExponents.into());
         } else if matches!(
             quantization_style,
             QuantizationStyle::NoQuantization | QuantizationStyle::ScalarExpounded
@@ -195,10 +196,10 @@ fn validate(header: &Header<'_>) -> Result<(), &'static str> {
 
             if max_resolution_idx == 0 {
                 if num_precinct_exponents == 0 {
-                    return Err("not enough exponents were provided in header");
+                    return Err(ValidationError::InsufficientExponents.into());
                 }
             } else if 1 + (max_resolution_idx as usize - 1) * 3 + 2 >= num_precinct_exponents {
-                return Err("not enough exponents were provided in header");
+                return Err(ValidationError::InsufficientExponents.into());
             }
         }
     }
@@ -218,7 +219,7 @@ impl ComponentInfo {
         &self,
         sub_band_type: SubBandType,
         resolution: u8,
-    ) -> Result<(u16, u16), &'static str> {
+    ) -> Result<(u16, u16)> {
         let n_ll = self.coding_style.parameters.num_decomposition_levels;
 
         let sb_index = match sub_band_type {
@@ -240,13 +241,13 @@ impl ComponentInfo {
 
                 entry
                     .map(|s| (s.exponent, s.mantissa))
-                    .ok_or("missing exponent step size")
+                    .ok_or(ValidationError::MissingStepSize.into())
             }
             QuantizationStyle::ScalarDerived => {
                 let (e_0, mantissa) = step_sizes
                     .first()
                     .map(|s| (s.exponent, s.mantissa))
-                    .ok_or("missing exponent step size")?;
+                    .ok_or(ValidationError::MissingStepSize)?;
                 let n_b = if resolution == 0 {
                     n_ll as u16
                 } else {
@@ -256,7 +257,7 @@ impl ComponentInfo {
                 let exponent = e_0
                     .checked_sub(n_ll as u16)
                     .and_then(|e| e.checked_add(n_b))
-                    .ok_or("invalid quantization exponents")?;
+                    .ok_or(ValidationError::InvalidExponents)?;
 
                 Ok((exponent, mantissa))
             }
@@ -291,14 +292,14 @@ pub(crate) enum ProgressionOrder {
 }
 
 impl ProgressionOrder {
-    fn from_u8(value: u8) -> Result<Self, &'static str> {
+    fn from_u8(value: u8) -> Result<Self> {
         match value {
             0 => Ok(Self::LayerResolutionComponentPosition),
             1 => Ok(Self::ResolutionLayerComponentPosition),
             2 => Ok(Self::ResolutionPositionComponentLayer),
             3 => Ok(Self::PositionComponentResolutionLayer),
             4 => Ok(Self::ComponentPositionResolutionLayer),
-            _ => Err("invalid progression order"),
+            _ => Err(ValidationError::InvalidProgressionOrder.into()),
         }
     }
 }
@@ -311,11 +312,11 @@ pub(crate) enum WaveletTransform {
 }
 
 impl WaveletTransform {
-    fn from_u8(value: u8) -> Result<Self, &'static str> {
+    fn from_u8(value: u8) -> Result<Self> {
         match value {
             0 => Ok(Self::Irreversible97),
             1 => Ok(Self::Reversible53),
-            _ => Err("invalid transformation type"),
+            _ => Err(ValidationError::InvalidTransformation.into()),
         }
     }
 }
@@ -377,12 +378,12 @@ pub(crate) enum QuantizationStyle {
 }
 
 impl QuantizationStyle {
-    fn from_u8(value: u8) -> Result<Self, &'static str> {
+    fn from_u8(value: u8) -> Result<Self> {
         match value & 0x1F {
             0 => Ok(Self::NoQuantization),
             1 => Ok(Self::ScalarDerived),
             2 => Ok(Self::ScalarExpounded),
-            _ => Err("invalid quantization style"),
+            _ => Err(ValidationError::InvalidQuantizationStyle.into()),
         }
     }
 }
@@ -513,21 +514,21 @@ impl SizeData {
 }
 
 /// SIZ marker (A.5.1).
-fn size_marker(reader: &mut BitReader<'_>) -> Result<SizeData, &'static str> {
-    let size_data = size_marker_inner(reader).ok_or("failed to read SIZ marker")?;
+fn size_marker(reader: &mut BitReader<'_>) -> Result<SizeData> {
+    let size_data = size_marker_inner(reader).ok_or(MarkerError::FailedToRead("SIZ"))?;
 
     if size_data.tile_width == 0
         || size_data.tile_height == 0
         || size_data.reference_grid_width == 0
         || size_data.reference_grid_height == 0
     {
-        return Err("invalid image dimensions");
+        return Err(ValidationError::InvalidDimensions.into());
     }
 
     if size_data.tile_x_offset >= size_data.reference_grid_width
         || size_data.tile_y_offset >= size_data.reference_grid_height
     {
-        return Err("invalid image dimensions");
+        return Err(ValidationError::InvalidDimensions.into());
     }
 
     // The tile grid offsets (XTOsiz, YTOsiz) are constrained to be no greater than the
@@ -535,7 +536,7 @@ fn size_marker(reader: &mut BitReader<'_>) -> Result<SizeData, &'static str> {
     if size_data.tile_x_offset > size_data.image_area_x_offset
         || size_data.tile_y_offset > size_data.image_area_y_offset
     {
-        return Err("tile offsets are invalid");
+        return Err(crate::TileError::InvalidOffsets.into());
     }
 
     // Also, the tile size plus the tile offset shall be greater than the image area offset.
@@ -544,20 +545,20 @@ fn size_marker(reader: &mut BitReader<'_>) -> Result<SizeData, &'static str> {
     if size_data
         .tile_x_offset
         .checked_add(size_data.tile_width)
-        .ok_or("tile offsets are too large")?
+        .ok_or(crate::TileError::OffsetsTooLarge)?
         <= size_data.image_area_x_offset
         || size_data
             .tile_y_offset
             .checked_add(size_data.tile_height)
-            .ok_or("tile offsets are too large")?
+            .ok_or(crate::TileError::OffsetsTooLarge)?
             <= size_data.image_area_y_offset
     {
-        return Err("tile offsets are invalid");
+        return Err(crate::TileError::InvalidOffsets.into());
     }
 
     for comp in &size_data.component_sizes {
         if comp.precision == 0 || comp.vertical_resolution == 0 || comp.horizontal_resolution == 0 {
-            return Err("invalid component metadata");
+            return Err(ValidationError::InvalidComponentMetadata.into());
         }
     }
 
@@ -566,7 +567,7 @@ fn size_marker(reader: &mut BitReader<'_>) -> Result<SizeData, &'static str> {
     if size_data.image_width() as usize > MAX_DIMENSIONS
         || size_data.image_height() as usize > MAX_DIMENSIONS
     {
-        return Err("image is too large");
+        return Err(ValidationError::ImageTooLarge.into());
     }
 
     Ok(size_data)

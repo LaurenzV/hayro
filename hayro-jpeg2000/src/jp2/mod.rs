@@ -1,5 +1,6 @@
 //! Reading a JP2 file, defined in Annex I.
 
+use crate::error::{FormatError, Result};
 use crate::j2c::DecodedCodestream;
 use crate::jp2::r#box::{FILE_TYPE, JP2_SIGNATURE};
 use crate::jp2::cdef::ChannelDefinitionBox;
@@ -36,28 +37,28 @@ pub(crate) struct DecodedImage {
 pub(crate) fn parse<'a>(
     data: &'a [u8],
     mut settings: DecodeSettings,
-) -> Result<Image<'a>, &'static str> {
+) -> Result<Image<'a>> {
     let mut reader = BitReader::new(data);
-    let signature_box = r#box::read(&mut reader).ok_or("failed to read signature box")?;
+    let signature_box = r#box::read(&mut reader).ok_or(FormatError::InvalidBox)?;
 
     if signature_box.box_type != JP2_SIGNATURE {
-        return Err("invalid JP2 signature");
+        return Err(FormatError::InvalidSignature.into());
     }
 
-    let file_type_box = r#box::read(&mut reader).ok_or("failed to read file type box")?;
+    let file_type_box = r#box::read(&mut reader).ok_or(FormatError::InvalidBox)?;
 
     if file_type_box.box_type != FILE_TYPE {
-        return Err("invalid JP2 file type");
+        return Err(FormatError::InvalidFileType.into());
     }
 
-    let mut image_boxes = Err("failed to read metadata");
-    let mut parsed_codestream = Err("failed to parse codestream");
+    let mut image_boxes: Option<ImageBoxes> = None;
+    let mut parsed_codestream = None;
 
     // Read boxes until we find the JP2 Header box
     while !reader.at_end() {
         let Some(current_box) = r#box::read(&mut reader) else {
             if settings.strict {
-                return Err("failed to read a JP2 box");
+                return Err(FormatError::InvalidBox.into());
             }
 
             break;
@@ -72,25 +73,25 @@ pub(crate) fn parse<'a>(
                 // Read child boxes within JP2 Header box
                 while !jp2h_reader.at_end() {
                     let child_box =
-                        r#box::read(&mut jp2h_reader).ok_or("failed to read JP2 box")?;
+                        r#box::read(&mut jp2h_reader).ok_or(FormatError::InvalidBox)?;
 
                     match child_box.box_type {
                         r#box::CHANNEL_DEFINITION => {
                             if cdef::parse(&mut boxes, child_box.data).is_none() && settings.strict
                             {
-                                return Err("failed to parse cdef box");
+                                return Err(FormatError::InvalidBox.into());
                             }
                             // If not strict decoding, just assume default
                             // configuration.
                         }
                         r#box::COLOUR_SPECIFICATION => {
                             colr::parse(&mut boxes, child_box.data)
-                                .ok_or("failed to parse colr box")?;
+                                .ok_or(FormatError::InvalidBox)?;
                         }
                         r#box::PALETTE => {
                             if pclr::parse(&mut boxes, child_box.data).is_none() && settings.strict
                             {
-                                return Err("failed to parse pclr box");
+                                return Err(FormatError::InvalidBox.into());
                             }
 
                             // If we have a palettized image, decoding at a
@@ -100,7 +101,7 @@ pub(crate) fn parse<'a>(
                         }
                         r#box::COMPONENT_MAPPING => {
                             cmap::parse(&mut boxes, child_box.data)
-                                .ok_or("failed to parse cmap box")?;
+                                .ok_or(FormatError::InvalidBox)?;
                         }
                         _ => {
                             debug!(
@@ -111,16 +112,17 @@ pub(crate) fn parse<'a>(
                     }
                 }
 
-                image_boxes = Ok(boxes);
+                image_boxes = Some(boxes);
             }
             r#box::CONTIGUOUS_CODESTREAM => {
-                parsed_codestream = Ok(crate::j2c::parse_raw(current_box.data, &settings)?);
+                parsed_codestream = Some(crate::j2c::parse_raw(current_box.data, &settings)?);
             }
             _ => {}
         }
     }
 
-    let (mut image_boxes, parsed_codestream) = (image_boxes?, parsed_codestream?);
+    let mut image_boxes = image_boxes.ok_or(FormatError::InvalidBox)?;
+    let parsed_codestream = parsed_codestream.ok_or(FormatError::MissingCodestream)?;
 
     if let Some(palette) = image_boxes.palette.as_ref()
         && image_boxes.component_mapping.is_none()

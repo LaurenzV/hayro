@@ -13,6 +13,7 @@ use super::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use super::build::{CodeBlock, SubBandType};
 use super::codestream::CodeBlockStyle;
 use super::decode::{DecompositionStorage, TileDecodeContext};
+use crate::error::{DecodingError, Result};
 use crate::reader::BitReader;
 
 /// Decode the layers of the given code block into coefficients.
@@ -27,7 +28,7 @@ pub(crate) fn decode(
     tile_ctx: &mut TileDecodeContext<'_>,
     storage: &DecompositionStorage<'_>,
     strict: bool,
-) -> Result<(), &'static str> {
+) -> Result<()> {
     tile_ctx.bit_plane_decode_context.reset(
         code_block,
         sub_band_type,
@@ -43,7 +44,7 @@ pub(crate) fn decode(
         &mut tile_ctx.bit_plane_decode_context,
         &mut tile_ctx.bit_plane_decode_buffers,
     )
-    .ok_or("failed to decode code-block")?;
+    .ok_or(DecodingError::CodeblockFailed)?;
 
     Ok(())
 }
@@ -448,7 +449,7 @@ impl BitPlaneDecodeContext {
         code_block_style: &CodeBlockStyle,
         total_bitplanes: u8,
         strict: bool,
-    ) -> Result<(), &'static str> {
+    ) -> Result<()> {
         let (width, height) = (code_block.rect.width(), code_block.rect.height());
         let padded_width = width + COEFFICIENTS_PADDING * 2;
         let padded_height = height + COEFFICIENTS_PADDING * 2;
@@ -484,7 +485,7 @@ impl BitPlaneDecodeContext {
         self.bitplanes = if strict {
             total_bitplanes
                 .checked_sub(code_block.missing_bit_planes)
-                .ok_or("number of missing bit planes was too hgh")?
+                .ok_or(DecodingError::MissingBitplanesTooHigh)?
         } else {
             total_bitplanes.saturating_sub(code_block.missing_bit_planes)
         };
@@ -496,7 +497,7 @@ impl BitPlaneDecodeContext {
         };
 
         if self.max_coding_passes < code_block.number_of_coding_passes && strict {
-            return Err("codeblock contains too many coding passes");
+            return Err(DecodingError::TooManyCodingPasses.into());
         }
 
         Ok(())

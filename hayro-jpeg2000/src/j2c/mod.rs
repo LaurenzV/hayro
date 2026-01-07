@@ -14,6 +14,7 @@ mod tile;
 
 use super::jp2::ImageBoxes;
 use super::jp2::colr::{ColorSpace, ColorSpecificationBox, EnumeratedColorspace};
+use crate::error::{FormatError, MarkerError, Result};
 use crate::j2c::codestream::markers;
 use crate::reader::BitReader;
 use crate::{DecodeSettings, Image, resolve_alpha_and_color_space};
@@ -40,7 +41,7 @@ pub(crate) struct ComponentData {
 pub(crate) fn parse<'a>(
     stream: &'a [u8],
     settings: &DecodeSettings,
-) -> Result<Image<'a>, &'static str> {
+) -> Result<Image<'a>> {
     let parsed_codestream = parse_raw(stream, settings)?;
     let header = &parsed_codestream.header;
     let mut boxes = ImageBoxes::default();
@@ -71,18 +72,18 @@ pub(crate) fn parse<'a>(
 pub(crate) fn parse_raw<'a>(
     stream: &'a [u8],
     settings: &DecodeSettings,
-) -> Result<ParsedCodestream<'a>, &'static str> {
+) -> Result<ParsedCodestream<'a>> {
     let mut reader = BitReader::new(stream);
 
     let marker = reader.read_marker()?;
     if marker != markers::SOC {
-        return Err("invalid marker: expected SOC marker");
+        return Err(MarkerError::Expected("SOC").into());
     }
 
     let header = codestream::read_header(&mut reader, settings)?;
     let code_stream_data = reader
         .tail()
-        .ok_or("code stream data is missing from image")?;
+        .ok_or(FormatError::MissingCodestream)?;
 
     Ok(ParsedCodestream {
         header,
