@@ -543,7 +543,7 @@ fn upper_and_lower_row(row: usize, height: usize) -> (usize, usize) {
     };
 
     let upper = if row == height - 1 {
-        // Would access index height, so reflect to height - 2.
+        // Would access index `height`, so reflect to height - 2.
         height - 2
     } else {
         row + 1
