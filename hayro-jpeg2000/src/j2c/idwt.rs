@@ -304,13 +304,13 @@ fn reversible_filter_53r(scanline: &mut [f32], width: usize, x0: usize) {
 
     // Equation (F-5).
     // Originally: for i in (start / 2)..(end / 2 + 1).
-    filter_step(scanline, width, first_even, |s, left, right| {
+    filter_step_horizontal(scanline, width, first_even, |s, left, right| {
         s - ((left + right + 2.0) * 0.25).floor()
     });
 
     // Equation (F-6).
     // Originally: for i in (start / 2)..(end / 2).
-    filter_step(scanline, width, first_odd, |s, left, right| {
+    filter_step_horizontal(scanline, width, first_odd, |s, left, right| {
         s + ((left + right) * 0.5).floor()
     });
 }
@@ -342,31 +342,36 @@ fn irreversible_filter_97i(scanline: &mut [f32], width: usize, x0: usize) {
 
     // Step 3.
     // Originally: for i in (start / 2 - 1)..(end / 2 + 2).
-    filter_step(scanline, width, first_even, |s, left, right| {
+    filter_step_horizontal(scanline, width, first_even, |s, left, right| {
         s - DELTA * (left + right)
     });
 
     // Step 4.
     // Originally: for i in (start / 2 - 1)..((x0 + width) / 2 + 1).
-    filter_step(scanline, width, first_odd, |s, left, right| {
+    filter_step_horizontal(scanline, width, first_odd, |s, left, right| {
         s - GAMMA * (left + right)
     });
 
     // Step 5.
     // Originally: for i in (start / 2)..(end / 2 + 1).
-    filter_step(scanline, width, first_even, |s, left, right| {
+    filter_step_horizontal(scanline, width, first_even, |s, left, right| {
         s - BETA * (left + right)
     });
 
     // Step 6.
     // Originally: for i in (start / 2)..(end / 2).
-    filter_step(scanline, width, first_odd, |s, left, right| {
+    filter_step_horizontal(scanline, width, first_odd, |s, left, right| {
         s - ALPHA * (left + right)
     });
 }
 
 #[inline(always)]
-fn filter_step(scanline: &mut [f32], width: usize, first: usize, f: impl Fn(f32, f32, f32) -> f32) {
+fn filter_step_horizontal(
+    scanline: &mut [f32],
+    width: usize,
+    first: usize,
+    f: impl Fn(f32, f32, f32) -> f32,
+) {
     if first == 0 {
         let left = periodic_symmetric_extension_left(0, 1);
         let right = periodic_symmetric_extension_right(0, 1, width);
