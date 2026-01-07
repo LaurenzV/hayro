@@ -304,15 +304,23 @@ fn reversible_filter_53r(scanline: &mut [f32], width: usize, x0: usize) {
 
     // Equation (F-5).
     // Originally: for i in (start / 2)..(end / 2 + 1).
-    filter_step_horizontal(scanline, width, first_even, |s, left, right| {
-        s - ((left + right + 2.0) * 0.25).floor()
-    });
+    filter_step_horizontal(
+        scanline,
+        width,
+        first_even,
+        #[inline(always)]
+        |s, left, right| s - ((left + right + 2.0) * 0.25).floor(),
+    );
 
     // Equation (F-6).
     // Originally: for i in (start / 2)..(end / 2).
-    filter_step_horizontal(scanline, width, first_odd, |s, left, right| {
-        s + ((left + right) * 0.5).floor()
-    });
+    filter_step_horizontal(
+        scanline,
+        width,
+        first_odd,
+        #[inline(always)]
+        |s, left, right| s + ((left + right) * 0.5).floor(),
+    );
 }
 
 /// The 1D Filter 9-7I procedure from F.3.8.2.
@@ -347,27 +355,43 @@ fn irreversible_filter_97i(scanline: &mut [f32], width: usize, x0: usize) {
 
     // Step 3.
     // Originally: for i in (start / 2 - 1)..(end / 2 + 2).
-    filter_step_horizontal(scanline, width, first_even, |s, left, right| {
-        s - DELTA * (left + right)
-    });
+    filter_step_horizontal(
+        scanline,
+        width,
+        first_even,
+        #[inline(always)]
+        |s, left, right| s - DELTA * (left + right),
+    );
 
     // Step 4.
     // Originally: for i in (start / 2 - 1)..((x0 + width) / 2 + 1).
-    filter_step_horizontal(scanline, width, first_odd, |s, left, right| {
-        s - GAMMA * (left + right)
-    });
+    filter_step_horizontal(
+        scanline,
+        width,
+        first_odd,
+        #[inline(always)]
+        |s, left, right| s - GAMMA * (left + right),
+    );
 
     // Step 5.
     // Originally: for i in (start / 2)..(end / 2 + 1).
-    filter_step_horizontal(scanline, width, first_even, |s, left, right| {
-        s - BETA * (left + right)
-    });
+    filter_step_horizontal(
+        scanline,
+        width,
+        first_even,
+        #[inline(always)]
+        |s, left, right| s - BETA * (left + right),
+    );
 
     // Step 6.
     // Originally: for i in (start / 2)..(end / 2).
-    filter_step_horizontal(scanline, width, first_odd, |s, left, right| {
-        s - ALPHA * (left + right)
-    });
+    filter_step_horizontal(
+        scanline,
+        width,
+        first_odd,
+        #[inline(always)]
+        |s, left, right| s - ALPHA * (left + right),
+    );
 }
 
 #[inline(always)]
@@ -393,6 +417,47 @@ fn filter_step_horizontal(
         let left = periodic_symmetric_extension_left(i, 1);
         let right = periodic_symmetric_extension_right(i, 1, width);
         scanline[i] = f(scanline[i], scanline[left], scanline[right]);
+    }
+}
+
+#[inline(always)]
+fn filter_step_vertical<S: Simd>(
+    simd: S,
+    scanline: &mut [f32],
+    height: usize,
+    width: usize,
+    simd_width: usize,
+    first: usize,
+    f_simd: impl Fn(f32x8<S>, f32x8<S>, f32x8<S>) -> f32x8<S>,
+    f_scalar: impl Fn(f32, f32, f32) -> f32,
+) {
+    for row in (first..height).step_by(2) {
+        let row_above = periodic_symmetric_extension_left(row, 1);
+        let row_below = periodic_symmetric_extension_right(row, 1, height);
+
+        // Process SIMD chunks.
+        for base_column in (0..simd_width).step_by(SIMD_WIDTH) {
+            let s1 = f32x8::from_slice(simd, &scanline[row * width + base_column..][..SIMD_WIDTH]);
+            let s2 = f32x8::from_slice(
+                simd,
+                &scanline[row_above * width + base_column..][..SIMD_WIDTH],
+            );
+            let s3 = f32x8::from_slice(
+                simd,
+                &scanline[row_below * width + base_column..][..SIMD_WIDTH],
+            );
+
+            let result = f_simd(s1, s2, s3);
+            result.store(&mut scanline[row * width + base_column..][..SIMD_WIDTH]);
+        }
+
+        // Process scalar remainder.
+        for col in simd_width..width {
+            let s1 = scanline[row * width + col];
+            let s2 = scanline[row_above * width + col];
+            let s3 = scanline[row_below * width + col];
+            scanline[row * width + col] = f_scalar(s1, s2, s3);
+        }
     }
 }
 
@@ -477,65 +542,33 @@ fn reversible_filter_53r_simd<S: Simd>(
 
     // Equation (F-5).
     // Originally: for i in (start / 2)..(end / 2 + 1).
-    for row in (first_even..height).step_by(2) {
-        let row_above = periodic_symmetric_extension_left(row, 1);
-        let row_below = periodic_symmetric_extension_right(row, 1, height);
-
-        for base_column in (0..simd_width).step_by(SIMD_WIDTH) {
-            let mut s1 =
-                f32x8::from_slice(simd, &scanline[row * width + base_column..][..SIMD_WIDTH]);
-            let s2 = f32x8::from_slice(
-                simd,
-                &scanline[row_above * width + base_column..][..SIMD_WIDTH],
-            );
-            let s3 = f32x8::from_slice(
-                simd,
-                &scanline[row_below * width + base_column..][..SIMD_WIDTH],
-            );
-
-            s1 -= ((s2 + s3 + 2.0) * 0.25).floor();
-            s1.store(&mut scanline[row * width + base_column..][..SIMD_WIDTH]);
-        }
-
-        // Scalar remainder.
-        for col in simd_width..width {
-            let s1 = scanline[row * width + col];
-            let s2 = scanline[row_above * width + col];
-            let s3 = scanline[row_below * width + col];
-            scanline[row * width + col] = s1 - ((s2 + s3 + 2.0) * 0.25).floor();
-        }
-    }
+    filter_step_vertical(
+        simd,
+        scanline,
+        height,
+        width,
+        simd_width,
+        first_even,
+        #[inline(always)]
+        |s1, s2, s3| s1 - ((s2 + s3 + 2.0) * 0.25).floor(),
+        #[inline(always)]
+        |s1, s2, s3| s1 - ((s2 + s3 + 2.0) * 0.25).floor(),
+    );
 
     // Equation (F-6).
     // Originally: for i in (start / 2)..(end / 2).
-    for row in (first_odd..height).step_by(2) {
-        let row_above = periodic_symmetric_extension_left(row, 1);
-        let row_below = periodic_symmetric_extension_right(row, 1, height);
-
-        for base_column in (0..simd_width).step_by(SIMD_WIDTH) {
-            let mut s1 =
-                f32x8::from_slice(simd, &scanline[row * width + base_column..][..SIMD_WIDTH]);
-            let s2 = f32x8::from_slice(
-                simd,
-                &scanline[row_above * width + base_column..][..SIMD_WIDTH],
-            );
-            let s3 = f32x8::from_slice(
-                simd,
-                &scanline[row_below * width + base_column..][..SIMD_WIDTH],
-            );
-
-            s1 += ((s2 + s3) * 0.5).floor();
-            s1.store(&mut scanline[row * width + base_column..][..SIMD_WIDTH]);
-        }
-
-        // Scalar remainder.
-        for col in simd_width..width {
-            let s1 = scanline[row * width + col];
-            let s2 = scanline[row_above * width + col];
-            let s3 = scanline[row_below * width + col];
-            scanline[row * width + col] = s1 + ((s2 + s3) * 0.5).floor();
-        }
-    }
+    filter_step_vertical(
+        simd,
+        scanline,
+        height,
+        width,
+        simd_width,
+        first_odd,
+        #[inline(always)]
+        |s1, s2, s3| s1 + ((s2 + s3) * 0.5).floor(),
+        #[inline(always)]
+        |s1, s2, s3| s1 + ((s2 + s3) * 0.5).floor(),
+    );
 }
 
 /// The 1D Filter 9-7I procedure from F.3.8.2.
@@ -610,129 +643,61 @@ fn irreversible_filter_97i_simd<S: Simd>(
 
     // Step 3.
     // Originally: for i in (start / 2 - 1)..(end / 2 + 2).
-    for row in (first_even..height).step_by(2) {
-        let row_above = periodic_symmetric_extension_left(row, 1);
-        let row_below = periodic_symmetric_extension_right(row, 1, height);
-
-        for base_column in (0..simd_width).step_by(SIMD_WIDTH) {
-            let base_idx = row * width + base_column;
-
-            let mut s1 = f32x8::from_slice(simd, &scanline[base_idx..][..SIMD_WIDTH]);
-            let s2 = f32x8::from_slice(
-                simd,
-                &scanline[row_above * width + base_column..][..SIMD_WIDTH],
-            );
-            let s3 = f32x8::from_slice(
-                simd,
-                &scanline[row_below * width + base_column..][..SIMD_WIDTH],
-            );
-
-            s1 -= delta * (s2 + s3);
-            s1.store(&mut scanline[base_idx..][..SIMD_WIDTH]);
-        }
-
-        // Scalar remainder.
-        for col in simd_width..width {
-            let s1 = scanline[row * width + col];
-            let s2 = scanline[row_above * width + col];
-            let s3 = scanline[row_below * width + col];
-            scanline[row * width + col] = s1 - DELTA * (s2 + s3);
-        }
-    }
+    filter_step_vertical(
+        simd,
+        scanline,
+        height,
+        width,
+        simd_width,
+        first_even,
+        #[inline(always)]
+        |s1, s2, s3| s1 - delta * (s2 + s3),
+        #[inline(always)]
+        |s1, s2, s3| s1 - DELTA * (s2 + s3),
+    );
 
     // Step 4.
     // Originally: for i in (start / 2 - 1)..(end / 2 + 1).
-    for row in (first_odd..height).step_by(2) {
-        let row_above = periodic_symmetric_extension_left(row, 1);
-        let row_below = periodic_symmetric_extension_right(row, 1, height);
-
-        for base_column in (0..simd_width).step_by(SIMD_WIDTH) {
-            let base_idx = row * width + base_column;
-
-            let mut s1 = f32x8::from_slice(simd, &scanline[base_idx..][..SIMD_WIDTH]);
-            let s2 = f32x8::from_slice(
-                simd,
-                &scanline[row_above * width + base_column..][..SIMD_WIDTH],
-            );
-            let s3 = f32x8::from_slice(
-                simd,
-                &scanline[row_below * width + base_column..][..SIMD_WIDTH],
-            );
-
-            s1 -= gamma * (s2 + s3);
-            s1.store(&mut scanline[base_idx..][..SIMD_WIDTH]);
-        }
-
-        // Scalar remainder.
-        for col in simd_width..width {
-            let s1 = scanline[row * width + col];
-            let s2 = scanline[row_above * width + col];
-            let s3 = scanline[row_below * width + col];
-            scanline[row * width + col] = s1 - GAMMA * (s2 + s3);
-        }
-    }
+    filter_step_vertical(
+        simd,
+        scanline,
+        height,
+        width,
+        simd_width,
+        first_odd,
+        #[inline(always)]
+        |s1, s2, s3| s1 - gamma * (s2 + s3),
+        #[inline(always)]
+        |s1, s2, s3| s1 - GAMMA * (s2 + s3),
+    );
 
     // Step 5.
     // Originally: for i in (start / 2)..(end / 2 + 1).
-    for row in (first_even..height).step_by(2) {
-        let row_above = periodic_symmetric_extension_left(row, 1);
-        let row_below = periodic_symmetric_extension_right(row, 1, height);
-
-        for base_column in (0..simd_width).step_by(SIMD_WIDTH) {
-            let base_idx = row * width + base_column;
-
-            let mut s1 = f32x8::from_slice(simd, &scanline[base_idx..][..SIMD_WIDTH]);
-            let s2 = f32x8::from_slice(
-                simd,
-                &scanline[row_above * width + base_column..][..SIMD_WIDTH],
-            );
-            let s3 = f32x8::from_slice(
-                simd,
-                &scanline[row_below * width + base_column..][..SIMD_WIDTH],
-            );
-
-            s1 -= beta * (s2 + s3);
-            s1.store(&mut scanline[base_idx..][..SIMD_WIDTH]);
-        }
-
-        // Scalar remainder.
-        for col in simd_width..width {
-            let s1 = scanline[row * width + col];
-            let s2 = scanline[row_above * width + col];
-            let s3 = scanline[row_below * width + col];
-            scanline[row * width + col] = s1 - BETA * (s2 + s3);
-        }
-    }
+    filter_step_vertical(
+        simd,
+        scanline,
+        height,
+        width,
+        simd_width,
+        first_even,
+        #[inline(always)]
+        |s1, s2, s3| s1 - beta * (s2 + s3),
+        #[inline(always)]
+        |s1, s2, s3| s1 - BETA * (s2 + s3),
+    );
 
     // Step 6.
     // Originally: for i in (start / 2)..(end / 2).
-    for row in (first_odd..height).step_by(2) {
-        let row_above = periodic_symmetric_extension_left(row, 1);
-        let row_below = periodic_symmetric_extension_right(row, 1, height);
-
-        for base_column in (0..simd_width).step_by(SIMD_WIDTH) {
-            let base_idx = row * width + base_column;
-
-            let mut s1 = f32x8::from_slice(simd, &scanline[base_idx..][..SIMD_WIDTH]);
-            let s2 = f32x8::from_slice(
-                simd,
-                &scanline[row_above * width + base_column..][..SIMD_WIDTH],
-            );
-            let s3 = f32x8::from_slice(
-                simd,
-                &scanline[row_below * width + base_column..][..SIMD_WIDTH],
-            );
-
-            s1 -= alpha * (s2 + s3);
-            s1.store(&mut scanline[base_idx..][..SIMD_WIDTH]);
-        }
-
-        // Scalar remainder.
-        for col in simd_width..width {
-            let s1 = scanline[row * width + col];
-            let s2 = scanline[row_above * width + col];
-            let s3 = scanline[row_below * width + col];
-            scanline[row * width + col] = s1 - ALPHA * (s2 + s3);
-        }
-    }
+    filter_step_vertical(
+        simd,
+        scanline,
+        height,
+        width,
+        simd_width,
+        first_odd,
+        #[inline(always)]
+        |s1, s2, s3| s1 - alpha * (s2 + s3),
+        #[inline(always)]
+        |s1, s2, s3| s1 - ALPHA * (s2 + s3),
+    );
 }
