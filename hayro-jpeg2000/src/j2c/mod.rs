@@ -14,7 +14,7 @@ mod tile;
 
 use super::jp2::ImageBoxes;
 use super::jp2::colr::{ColorSpace, ColorSpecificationBox, EnumeratedColorspace};
-use crate::error::{FormatError, MarkerError, Result};
+use crate::error::{FormatError, MarkerError, Result, bail};
 use crate::j2c::codestream::markers;
 use crate::reader::BitReader;
 use crate::{DecodeSettings, Image, resolve_alpha_and_color_space};
@@ -74,7 +74,7 @@ pub(crate) fn parse_raw<'a>(
 
     let marker = reader.read_marker()?;
     if marker != markers::SOC {
-        return Err(MarkerError::Expected("SOC").into());
+        bail!(MarkerError::Expected("SOC"));
     }
 
     let header = codestream::read_header(&mut reader, settings)?;

@@ -1,6 +1,6 @@
 //! The component mapping box (cmap), defined in I.5.3.5.
 
-use crate::error::{FormatError, Result};
+use crate::error::{bail, FormatError, Result};
 use crate::jp2::ImageBoxes;
 use crate::reader::BitReader;
 
@@ -18,7 +18,7 @@ pub(crate) fn parse(boxes: &mut ImageBoxes, data: &[u8]) -> Result<()> {
             1 => ComponentMappingType::Palette {
                 column: palette_column,
             },
-            _ => return Err(FormatError::InvalidBox.into()),
+            _ => bail!(FormatError::InvalidBox),
         };
 
         entries.push(ComponentMappingEntry {

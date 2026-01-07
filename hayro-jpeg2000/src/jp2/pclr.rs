@@ -1,6 +1,6 @@
 //! The palette box (pclr), defined in I.5.3.4.
 
-use crate::error::{FormatError, Result};
+use crate::error::{bail, FormatError, Result};
 use crate::jp2::ImageBoxes;
 use crate::reader::BitReader;
 
@@ -10,7 +10,7 @@ pub(crate) fn parse(boxes: &mut ImageBoxes, data: &[u8]) -> Result<()> {
     let num_components = reader.read_byte().ok_or(FormatError::InvalidBox)? as usize;
 
     if num_entries == 0 || num_components == 0 {
-        return Err(FormatError::InvalidBox.into());
+        bail!(FormatError::InvalidBox);
     }
 
     let mut columns = Vec::with_capacity(num_components);
@@ -22,7 +22,7 @@ pub(crate) fn parse(boxes: &mut ImageBoxes, data: &[u8]) -> Result<()> {
         let is_signed = (descriptor & 0x80) != 0;
 
         if is_signed {
-            return Err(FormatError::InvalidBox.into());
+            bail!(FormatError::InvalidBox);
         }
 
         columns.push(PaletteColumn { bit_depth });

@@ -18,7 +18,7 @@ use super::progression::{
 use super::tag_tree::TagNode;
 use super::tile::{ComponentTile, ResolutionTile, Tile};
 use super::{ComponentData, bitplane, build, idwt, mct, segment, tile};
-use crate::error::{DecodingError, Result, TileError};
+use crate::error::{DecodingError, Result, TileError, bail};
 use crate::j2c::segment::MAX_BITPLANE_COUNT;
 use crate::reader::BitReader;
 use log::trace;
@@ -29,7 +29,7 @@ pub(crate) fn decode(data: &[u8], header: &Header<'_>) -> Result<Vec<ComponentDa
     let tiles = tile::parse(&mut reader, header)?;
 
     if tiles.is_empty() {
-        return Err(TileError::Invalid.into());
+        bail!(TileError::Invalid);
     }
 
     let mut tile_ctx = TileDecodeContext::new(header, &tiles[0]);
@@ -352,7 +352,7 @@ fn decode_sub_band_bitplanes(
             .ok_or(DecodingError::InvalidBitplaneCount)?;
 
         if num_bitplanes > MAX_BITPLANE_COUNT as u16 {
-            return Err(DecodingError::TooManyBitplanes.into());
+            bail!(DecodingError::TooManyBitplanes);
         }
 
         num_bitplanes as u8

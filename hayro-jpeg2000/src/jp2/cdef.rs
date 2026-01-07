@@ -1,6 +1,6 @@
 //! The channel definition box (cdef), defined in I.5.3.6.
 
-use crate::error::{FormatError, Result};
+use crate::error::{bail, FormatError, Result};
 use crate::jp2::ImageBoxes;
 use crate::reader::BitReader;
 
@@ -10,7 +10,7 @@ pub(crate) fn parse(boxes: &mut ImageBoxes, data: &[u8]) -> Result<()> {
     let mut definitions = Vec::with_capacity(count);
 
     if count == 0 {
-        return Err(FormatError::InvalidBox.into());
+        bail!(FormatError::InvalidBox);
     }
 
     for _ in 0..count {
@@ -31,7 +31,7 @@ pub(crate) fn parse(boxes: &mut ImageBoxes, data: &[u8]) -> Result<()> {
     // Ensure channel indices increases in steps of 1, starting from 0.
     for (idx, def) in definitions.iter().enumerate() {
         if def.channel_index as usize != idx {
-            return Err(FormatError::InvalidBox.into());
+            bail!(FormatError::InvalidBox);
         }
     }
 

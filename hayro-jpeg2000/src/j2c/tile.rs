@@ -3,7 +3,7 @@
 use super::build::{PrecinctData, SubBandType};
 use super::codestream::{ComponentInfo, Header, ProgressionOrder, markers, skip_marker_segment};
 use super::rect::IntRect;
-use crate::error::{MarkerError, Result, TileError, ValidationError};
+use crate::error::{MarkerError, Result, TileError, ValidationError, bail};
 use crate::j2c::codestream;
 use crate::reader::BitReader;
 
@@ -144,7 +144,7 @@ pub(crate) fn parse<'a>(
     }
 
     if main_header.strict && reader.read_marker()? != markers::EOC {
-        return Err(MarkerError::Expected("EOC").into());
+        bail!(MarkerError::Expected("EOC"));
     }
 
     Ok(tiles)
@@ -157,13 +157,13 @@ fn parse_tile_part<'a>(
     tile_part_idx: usize,
 ) -> Result<()> {
     if reader.read_marker()? != markers::SOT {
-        return Err(MarkerError::Expected("SOT").into());
+        bail!(MarkerError::Expected("SOT"));
     }
 
     let tile_part_header = sot_marker(reader).ok_or(MarkerError::ParseFailure("SOT"))?;
 
     if tile_part_header.tile_index as u32 >= main_header.size_data.num_tiles() {
-        return Err(TileError::InvalidIndex.into());
+        bail!(TileError::InvalidIndex);
     }
 
     let data_len = if tile_part_header.tile_part_length == 0 {
@@ -247,7 +247,7 @@ fn parse_tile_part<'a>(
             markers::EOC => break,
             markers::PPT => {
                 if !main_header.ppm_packets.is_empty() {
-                    return Err(TileError::PpmPptConflict.into());
+                    bail!(TileError::PpmPptConflict);
                 }
 
                 reader.read_marker()?;
@@ -270,7 +270,7 @@ fn parse_tile_part<'a>(
                 // skip_marker_segment(reader);
             }
             _ => {
-                return Err(MarkerError::Unsupported.into());
+                bail!(MarkerError::Unsupported);
             }
         }
     }

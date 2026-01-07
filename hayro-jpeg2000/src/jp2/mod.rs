@@ -1,6 +1,6 @@
 //! Reading a JP2 file, defined in Annex I.
 
-use crate::error::{FormatError, Result};
+use crate::error::{bail, FormatError, Result};
 use crate::j2c::DecodedCodestream;
 use crate::jp2::r#box::{FILE_TYPE, JP2_SIGNATURE};
 use crate::jp2::cdef::ChannelDefinitionBox;
@@ -39,13 +39,13 @@ pub(crate) fn parse<'a>(data: &'a [u8], mut settings: DecodeSettings) -> Result<
     let signature_box = r#box::read(&mut reader).ok_or(FormatError::InvalidBox)?;
 
     if signature_box.box_type != JP2_SIGNATURE {
-        return Err(FormatError::InvalidSignature.into());
+        bail!(FormatError::InvalidSignature);
     }
 
     let file_type_box = r#box::read(&mut reader).ok_or(FormatError::InvalidBox)?;
 
     if file_type_box.box_type != FILE_TYPE {
-        return Err(FormatError::InvalidFileType.into());
+        bail!(FormatError::InvalidFileType);
     }
 
     let mut image_boxes: Option<ImageBoxes> = None;
@@ -55,7 +55,7 @@ pub(crate) fn parse<'a>(data: &'a [u8], mut settings: DecodeSettings) -> Result<
     while !reader.at_end() {
         let Some(current_box) = r#box::read(&mut reader) else {
             if settings.strict {
-                return Err(FormatError::InvalidBox.into());
+                bail!(FormatError::InvalidBox);
             }
 
             break;
@@ -74,7 +74,7 @@ pub(crate) fn parse<'a>(data: &'a [u8], mut settings: DecodeSettings) -> Result<
                     match child_box.box_type {
                         r#box::CHANNEL_DEFINITION => {
                             if cdef::parse(&mut boxes, child_box.data).is_err() && settings.strict {
-                                return Err(FormatError::InvalidBox.into());
+                                bail!(FormatError::InvalidBox);
                             }
                             // If not strict decoding, just assume default
                             // configuration.
@@ -84,7 +84,7 @@ pub(crate) fn parse<'a>(data: &'a [u8], mut settings: DecodeSettings) -> Result<
                         }
                         r#box::PALETTE => {
                             if pclr::parse(&mut boxes, child_box.data).is_err() && settings.strict {
-                                return Err(FormatError::InvalidBox.into());
+                                bail!(FormatError::InvalidBox);
                             }
 
                             // If we have a palettized image, decoding at a

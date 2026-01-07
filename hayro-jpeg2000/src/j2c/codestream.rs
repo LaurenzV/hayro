@@ -3,7 +3,7 @@
 use super::DecodeSettings;
 use super::bitplane::BITPLANE_BIT_SIZE;
 use super::build::SubBandType;
-use crate::error::{MarkerError, Result, ValidationError};
+use crate::error::{MarkerError, Result, ValidationError, bail};
 use crate::reader::BitReader;
 
 const MAX_LAYER_COUNT: u8 = 32;
@@ -37,7 +37,7 @@ pub(crate) fn read_header<'a>(
     settings: &DecodeSettings,
 ) -> Result<Header<'a>> {
     if reader.read_marker()? != markers::SIZ {
-        return Err(MarkerError::Expected("SIZ").into());
+        bail!(MarkerError::Expected("SIZ"));
     }
 
     let mut size_data = size_marker(reader)?;
@@ -105,7 +105,7 @@ pub(crate) fn read_header<'a>(
                 // skip_marker_segment(reader);
             }
             _ => {
-                return Err(MarkerError::Unsupported.into());
+                bail!(MarkerError::Unsupported);
             }
         }
     }
@@ -186,7 +186,7 @@ fn validate(header: &Header<'_>) -> Result<()> {
         let num_precinct_exponents = info.quantization_info.step_sizes.len();
 
         if num_precinct_exponents == 0 {
-            return Err(ValidationError::MissingPrecinctExponents.into());
+            bail!(ValidationError::MissingPrecinctExponents);
         } else if matches!(
             quantization_style,
             QuantizationStyle::NoQuantization | QuantizationStyle::ScalarExpounded
@@ -196,10 +196,10 @@ fn validate(header: &Header<'_>) -> Result<()> {
 
             if max_resolution_idx == 0 {
                 if num_precinct_exponents == 0 {
-                    return Err(ValidationError::InsufficientExponents.into());
+                    bail!(ValidationError::InsufficientExponents);
                 }
             } else if 1 + (max_resolution_idx as usize - 1) * 3 + 2 >= num_precinct_exponents {
-                return Err(ValidationError::InsufficientExponents.into());
+                bail!(ValidationError::InsufficientExponents);
             }
         }
     }
@@ -522,13 +522,13 @@ fn size_marker(reader: &mut BitReader<'_>) -> Result<SizeData> {
         || size_data.reference_grid_width == 0
         || size_data.reference_grid_height == 0
     {
-        return Err(ValidationError::InvalidDimensions.into());
+        bail!(ValidationError::InvalidDimensions);
     }
 
     if size_data.tile_x_offset >= size_data.reference_grid_width
         || size_data.tile_y_offset >= size_data.reference_grid_height
     {
-        return Err(ValidationError::InvalidDimensions.into());
+        bail!(ValidationError::InvalidDimensions);
     }
 
     // The tile grid offsets (XTOsiz, YTOsiz) are constrained to be no greater than the
@@ -536,7 +536,7 @@ fn size_marker(reader: &mut BitReader<'_>) -> Result<SizeData> {
     if size_data.tile_x_offset > size_data.image_area_x_offset
         || size_data.tile_y_offset > size_data.image_area_y_offset
     {
-        return Err(crate::TileError::InvalidOffsets.into());
+        bail!(crate::TileError::InvalidOffsets);
     }
 
     // Also, the tile size plus the tile offset shall be greater than the image area offset.
@@ -553,12 +553,12 @@ fn size_marker(reader: &mut BitReader<'_>) -> Result<SizeData> {
             .ok_or(crate::TileError::InvalidOffsets)?
             <= size_data.image_area_y_offset
     {
-        return Err(crate::TileError::InvalidOffsets.into());
+        bail!(crate::TileError::InvalidOffsets);
     }
 
     for comp in &size_data.component_sizes {
         if comp.precision == 0 || comp.vertical_resolution == 0 || comp.horizontal_resolution == 0 {
-            return Err(ValidationError::InvalidComponentMetadata.into());
+            bail!(ValidationError::InvalidComponentMetadata);
         }
     }
 
@@ -567,7 +567,7 @@ fn size_marker(reader: &mut BitReader<'_>) -> Result<SizeData> {
     if size_data.image_width() as usize > MAX_DIMENSIONS
         || size_data.image_height() as usize > MAX_DIMENSIONS
     {
-        return Err(ValidationError::ImageTooLarge.into());
+        bail!(ValidationError::ImageTooLarge);
     }
 
     Ok(size_data)

@@ -1,6 +1,6 @@
 //! Combined byte and bit reader utilities.
 
-use crate::error::{MarkerError, Result};
+use crate::error::{bail, MarkerError, Result};
 use std::fmt::Debug;
 
 #[derive(Debug, Clone)]
@@ -167,7 +167,7 @@ impl<'a> BitReader<'a> {
     #[inline]
     pub(crate) fn read_marker(&mut self) -> Result<u8> {
         if self.peek_byte().ok_or(MarkerError::Invalid)? != 0xFF {
-            return Err(MarkerError::Invalid.into());
+            bail!(MarkerError::Invalid);
         }
 
         self.read_byte().unwrap();

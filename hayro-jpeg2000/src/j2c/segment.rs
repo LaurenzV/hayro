@@ -6,7 +6,7 @@ use super::codestream::{ComponentInfo, Header};
 use super::decode::{DecompositionStorage, TileDecodeContext};
 use super::progression::ProgressionData;
 use super::tile::{Tile, TilePart};
-use crate::error::{Result, TileError};
+use crate::error::{Result, TileError, bail};
 use crate::reader::BitReader;
 use log::{trace, warn};
 
@@ -29,7 +29,7 @@ pub(crate) fn parse<'a>(
         .is_none()
             && header.strict
         {
-            return Err(TileError::Invalid.into());
+            bail!(TileError::Invalid);
         }
     }
 

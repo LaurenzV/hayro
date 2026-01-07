@@ -13,7 +13,7 @@ use super::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use super::build::{CodeBlock, SubBandType};
 use super::codestream::CodeBlockStyle;
 use super::decode::{DecompositionStorage, TileDecodeContext};
-use crate::error::{DecodingError, Result};
+use crate::error::{bail, DecodingError, Result};
 use crate::reader::BitReader;
 
 /// Decode the layers of the given code block into coefficients.
@@ -497,7 +497,7 @@ impl BitPlaneDecodeContext {
         };
 
         if self.max_coding_passes < code_block.number_of_coding_passes && strict {
-            return Err(DecodingError::TooManyCodingPasses.into());
+            bail!(DecodingError::TooManyCodingPasses);
         }
 
         Ok(())

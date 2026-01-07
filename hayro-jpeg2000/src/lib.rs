@@ -62,6 +62,7 @@ via a crate-level attribute.
 #![forbid(unsafe_code)]
 #![forbid(missing_docs)]
 
+use crate::error::bail;
 use crate::j2c::{ComponentData, DecodedCodestream, Header};
 use crate::jp2::cdef::{ChannelAssociation, ChannelType};
 use crate::jp2::cmap::ComponentMappingType;
@@ -291,7 +292,7 @@ pub(crate) fn resolve_alpha_and_color_space(
                     color_space = ColorSpace::CMYK;
                 }
             } else {
-                return Err(ValidationError::TooManyChannels.into());
+                bail!(ValidationError::TooManyChannels);
             }
         }
     }
@@ -500,7 +501,7 @@ fn get_color_space(boxes: &ImageBoxes, num_components: usize) -> Result<ColorSpa
                     profile: include_bytes!("../assets/LAB.icc").to_vec(),
                     num_channels: 3,
                 },
-                _ => return Err(FormatError::Unsupported.into()),
+                _ => bail!(FormatError::Unsupported),
             }
         }
         jp2::colr::ColorSpace::Icc(icc) => {
@@ -593,7 +594,7 @@ fn cielab_to_rgb(components: &mut [ComponentData], bit_depth: u8, lab: &CieLab) 
 
     // Prevent underflows/divisions by zero further below.
     if prec0 < 4 || prec1 < 4 || prec2 < 4 {
-        return Err(ColorError::LabConversionFailed.into());
+        bail!(ColorError::LabConversionFailed);
     }
 
     // Table M.29bis – Default Offset Values and Encoding of Offsets for the CIELab Colourspace.

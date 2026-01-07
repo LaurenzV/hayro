@@ -4,7 +4,7 @@
 use super::codestream::{Header, WaveletTransform};
 use super::decode::TileDecodeContext;
 use super::simd::{Level, Simd, dispatch, f32x8};
-use crate::error::{ColorError, Result};
+use crate::error::{bail, ColorError, Result};
 
 /// Apply the inverse multi-component transform, as specified in G.2 and G.3.
 pub(crate) fn apply_inverse(
@@ -31,13 +31,13 @@ pub(crate) fn apply_inverse(
         || tile_ctx.tile.component_infos[1].wavelet_transform()
             != tile_ctx.tile.component_infos[2].wavelet_transform()
     {
-        return Err(ColorError::Mct.into());
+        bail!(ColorError::Mct);
     }
 
     let len = s0.len();
 
     if len != s1.len() || s1.len() != s2.len() {
-        return Err(ColorError::Mct.into());
+        bail!(ColorError::Mct);
     }
 
     let new_len = len.next_multiple_of(8);
