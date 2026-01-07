@@ -603,9 +603,6 @@ fn irreversible_filter_97i_simd<S: Simd>(
     stride: usize,
     y0: usize,
 ) {
-    // See the comment in `reversible_filter_53r_simd` for why the loop ranges
-    // differ from the reference.
-
     const ALPHA: f32 = -1.586_134_3;
     const BETA: f32 = -0.052_980_117;
     const GAMMA: f32 = 0.882_911_1;
