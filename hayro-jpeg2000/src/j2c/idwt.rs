@@ -469,17 +469,27 @@ fn irreversible_filter_97i(scanline: &mut [f32], width: usize, x0: usize) {
 }
 
 /// The `1D_EXTR` procedure, defined in F.3.7.
-/// 
-/// It performs a basic periodic symmetric extension.
+///
+/// It performs a basic periodic symmetric extension. Our formula looks different
+/// because we have no start offset and also want to avoid converting `usize`
+/// to `isize` in case it's negative.
 #[inline(always)]
 fn reflect_index(idx: usize, offset: isize, length: usize) -> usize {
-    let actual = idx as isize + offset;
-    if actual < 0 {
-        (-actual) as usize
-    } else if actual as usize >= length {
-        2 * length - 2 - actual as usize
+    if offset < 0 {
+        let abs_offset = (-offset) as usize;
+        if idx < abs_offset {
+            abs_offset - idx
+        } else {
+            idx - abs_offset
+        }
     } else {
-        actual as usize
+        let new_idx = idx + offset as usize;
+        if new_idx >= length {
+            let overshoot = new_idx - length;
+            length - 2 - overshoot
+        } else {
+            new_idx
+        }
     }
 }
 
