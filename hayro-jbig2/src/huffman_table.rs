@@ -10,7 +10,7 @@ include!("huffman_tables_generated.rs");
 /// Maximum number of nodes in an inline Huffman table.
 const INLINE_TABLE_SIZE: usize = 43;
 
-/// A Huffman table for JBIG2 decoding.
+/// A queryable Huffman table.
 #[derive(Debug, Clone)]
 pub(crate) struct HuffmanTable(Rc<InnerHuffmanTable>);
 
@@ -20,7 +20,7 @@ impl HuffmanTable {
         Self(Rc::new(InnerHuffmanTable::Inline { nodes }))
     }
 
-    /// Create a new dynamic Huffman table from a Vec of nodes.
+    /// Create a new dynamic Huffman table from a vector of nodes.
     fn from_dynamic(nodes: Vec<HuffmanNode>) -> Self {
         Self(Rc::new(InnerHuffmanTable::Dynamic { nodes }))
     }
@@ -34,12 +34,12 @@ impl HuffmanTable {
             InnerHuffmanTable::Inline { nodes } => nodes,
             InnerHuffmanTable::Dynamic { nodes } => nodes,
         };
+        
         HuffmanNode::decode_from(nodes, 0, reader)
     }
 
-    /// Build a Huffman table from table line definitions.
-    ///
-    /// This implements the algorithm from B.3 "Assigning the prefix codes".
+    /// Build a Huffman table from table line definitions (B.3 "Assigning 
+    /// the prefix codes").
     pub(crate) fn build(lines: &[TableLine]) -> Self {
         // `NTEMP` - Number of table lines.
         let line_count = lines.len();
@@ -89,11 +89,11 @@ impl HuffmanTable {
             // c) "Set CURLEN = CURLEN + 1" (implicit in for loop)
         }
 
-        // Build tree from assigned codes using arena allocation.
-        // "Note that the PREFLEN value 0 indicates that the table line is never used."
+        // Build tree from assigned codes.
         let mut nodes = vec![HuffmanNode::new_intermediate()];
 
         for (i, line) in lines.iter().enumerate() {
+            // "Note that the PREFLEN value 0 indicates that the table line is never used."
             if line.prefix_length == 0 {
                 continue;
             }
@@ -113,7 +113,7 @@ impl HuffmanTable {
         Self::from_dynamic(nodes)
     }
 
-    /// Insert a code into the Huffman tree arena.
+    /// Insert a code into the Huffman tree.
     fn insert_code(
         nodes: &mut Vec<HuffmanNode>,
         node_index: u32,
@@ -157,16 +157,7 @@ impl HuffmanTable {
         );
     }
 
-    /// Read a custom Huffman table from the bitstream.
-    ///
-    /// Implements B.2 "Decoding a code table":
-    /// 1) Read code table flags (1 byte): HTOOB (bit 0), HTPS-1 (bits 1-3), HTRS-1 (bits 4-6)
-    /// 2) Read HTLOW (4 bytes, signed)
-    /// 3) Read HTHIGH (4 bytes, signed)
-    /// 4) Read table lines (PREFLEN as HTPS bits, RANGELEN as HTRS bits) until RANGELOW > HTHIGH
-    /// 5) Read lower range line (PREFLEN only, RANGELEN=32 implied)
-    /// 6) Read upper range line (PREFLEN only, RANGELEN=32 implied)
-    /// 7) If HTOOB=1, read OOB line (PREFLEN only)
+    /// Read a custom Huffman table from the bitstream (B.2 "Decoding a code table").
     pub(crate) fn read_custom(reader: &mut Reader<'_>) -> Result<Self, &'static str> {
         // Step 1: Read code table flags.
         let flags = reader
