@@ -187,7 +187,7 @@ def generate_rust_table(name: str, nodes: list[HuffmanNode]) -> str:
 
     nodes_str = ",\n        ".join(node_strs)
     return f"""#[rustfmt::skip]
-const {name}_NODES: [N; INLINE_TABLE_SIZE] = [
+const {name}: [N; INLINE_TABLE_SIZE] = [
         {nodes_str},
 ];"""
 

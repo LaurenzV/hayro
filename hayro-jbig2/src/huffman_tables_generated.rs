@@ -6,7 +6,7 @@ type L = LeafData;
 
 /// Standard Huffman table A (Table B.1) node data from JBIG2 Annex B
 #[rustfmt::skip]
-const TABLE_A_NODES: [N; INLINE_TABLE_SIZE] = [
+const TABLE_A: [N; INLINE_TABLE_SIZE] = [
         N::Intermediate { zero: Some(1), one: Some(2) },
         N::Leaf(L { range_low: 0, range_length: 4, is_lower: false, is_out_of_band: false }),
         N::Intermediate { zero: Some(3), one: Some(4) },
@@ -54,7 +54,7 @@ const TABLE_A_NODES: [N; INLINE_TABLE_SIZE] = [
 
 /// Standard Huffman table B (Table B.2) node data from JBIG2 Annex B
 #[rustfmt::skip]
-const TABLE_B_NODES: [N; INLINE_TABLE_SIZE] = [
+const TABLE_B: [N; INLINE_TABLE_SIZE] = [
         N::Intermediate { zero: Some(1), one: Some(2) },
         N::Leaf(L { range_low: 0, range_length: 0, is_lower: false, is_out_of_band: false }),
         N::Intermediate { zero: Some(3), one: Some(4) },
@@ -102,7 +102,7 @@ const TABLE_B_NODES: [N; INLINE_TABLE_SIZE] = [
 
 /// Standard Huffman table C (Table B.3) node data from JBIG2 Annex B
 #[rustfmt::skip]
-const TABLE_C_NODES: [N; INLINE_TABLE_SIZE] = [
+const TABLE_C: [N; INLINE_TABLE_SIZE] = [
         N::Intermediate { zero: Some(9), one: Some(1) },
         N::Intermediate { zero: Some(10), one: Some(2) },
         N::Intermediate { zero: Some(11), one: Some(3) },
@@ -150,7 +150,7 @@ const TABLE_C_NODES: [N; INLINE_TABLE_SIZE] = [
 
 /// Standard Huffman table D (Table B.4) node data from JBIG2 Annex B
 #[rustfmt::skip]
-const TABLE_D_NODES: [N; INLINE_TABLE_SIZE] = [
+const TABLE_D: [N; INLINE_TABLE_SIZE] = [
         N::Intermediate { zero: Some(1), one: Some(2) },
         N::Leaf(L { range_low: 1, range_length: 0, is_lower: false, is_out_of_band: false }),
         N::Intermediate { zero: Some(3), one: Some(4) },
@@ -198,7 +198,7 @@ const TABLE_D_NODES: [N; INLINE_TABLE_SIZE] = [
 
 /// Standard Huffman table E (Table B.5) node data from JBIG2 Annex B
 #[rustfmt::skip]
-const TABLE_E_NODES: [N; INLINE_TABLE_SIZE] = [
+const TABLE_E: [N; INLINE_TABLE_SIZE] = [
         N::Intermediate { zero: Some(8), one: Some(1) },
         N::Intermediate { zero: Some(9), one: Some(2) },
         N::Intermediate { zero: Some(10), one: Some(3) },
@@ -246,7 +246,7 @@ const TABLE_E_NODES: [N; INLINE_TABLE_SIZE] = [
 
 /// Standard Huffman table F (Table B.6) node data from JBIG2 Annex B
 #[rustfmt::skip]
-const TABLE_F_NODES: [N; INLINE_TABLE_SIZE] = [
+const TABLE_F: [N; INLINE_TABLE_SIZE] = [
         N::Intermediate { zero: Some(16), one: Some(1) },
         N::Intermediate { zero: Some(6), one: Some(2) },
         N::Intermediate { zero: Some(21), one: Some(3) },
@@ -294,7 +294,7 @@ const TABLE_F_NODES: [N; INLINE_TABLE_SIZE] = [
 
 /// Standard Huffman table G (Table B.7) node data from JBIG2 Annex B
 #[rustfmt::skip]
-const TABLE_G_NODES: [N; INLINE_TABLE_SIZE] = [
+const TABLE_G: [N; INLINE_TABLE_SIZE] = [
         N::Intermediate { zero: Some(5), one: Some(1) },
         N::Intermediate { zero: Some(2), one: Some(9) },
         N::Intermediate { zero: Some(3), one: Some(14) },
@@ -342,7 +342,7 @@ const TABLE_G_NODES: [N; INLINE_TABLE_SIZE] = [
 
 /// Standard Huffman table H (Table B.8) node data from JBIG2 Annex B
 #[rustfmt::skip]
-const TABLE_H_NODES: [N; INLINE_TABLE_SIZE] = [
+const TABLE_H: [N; INLINE_TABLE_SIZE] = [
         N::Intermediate { zero: Some(19), one: Some(1) },
         N::Intermediate { zero: Some(16), one: Some(2) },
         N::Intermediate { zero: Some(21), one: Some(3) },
@@ -390,7 +390,7 @@ const TABLE_H_NODES: [N; INLINE_TABLE_SIZE] = [
 
 /// Standard Huffman table I (Table B.9) node data from JBIG2 Annex B
 #[rustfmt::skip]
-const TABLE_I_NODES: [N; INLINE_TABLE_SIZE] = [
+const TABLE_I: [N; INLINE_TABLE_SIZE] = [
         N::Intermediate { zero: Some(19), one: Some(1) },
         N::Intermediate { zero: Some(16), one: Some(2) },
         N::Intermediate { zero: Some(23), one: Some(3) },
@@ -438,7 +438,7 @@ const TABLE_I_NODES: [N; INLINE_TABLE_SIZE] = [
 
 /// Standard Huffman table J (Table B.10) node data from JBIG2 Annex B
 #[rustfmt::skip]
-const TABLE_J_NODES: [N; INLINE_TABLE_SIZE] = [
+const TABLE_J: [N; INLINE_TABLE_SIZE] = [
         N::Intermediate { zero: Some(16), one: Some(1) },
         N::Intermediate { zero: Some(40), one: Some(2) },
         N::Intermediate { zero: Some(13), one: Some(3) },
@@ -486,7 +486,7 @@ const TABLE_J_NODES: [N; INLINE_TABLE_SIZE] = [
 
 /// Standard Huffman table K (Table B.11) node data from JBIG2 Annex B
 #[rustfmt::skip]
-const TABLE_K_NODES: [N; INLINE_TABLE_SIZE] = [
+const TABLE_K: [N; INLINE_TABLE_SIZE] = [
         N::Intermediate { zero: Some(1), one: Some(2) },
         N::Leaf(L { range_low: 1, range_length: 0, is_lower: false, is_out_of_band: false }),
         N::Intermediate { zero: Some(3), one: Some(4) },
@@ -534,7 +534,7 @@ const TABLE_K_NODES: [N; INLINE_TABLE_SIZE] = [
 
 /// Standard Huffman table L (Table B.12) node data from JBIG2 Annex B
 #[rustfmt::skip]
-const TABLE_L_NODES: [N; INLINE_TABLE_SIZE] = [
+const TABLE_L: [N; INLINE_TABLE_SIZE] = [
         N::Intermediate { zero: Some(1), one: Some(2) },
         N::Leaf(L { range_low: 1, range_length: 0, is_lower: false, is_out_of_band: false }),
         N::Intermediate { zero: Some(3), one: Some(4) },
@@ -582,7 +582,7 @@ const TABLE_L_NODES: [N; INLINE_TABLE_SIZE] = [
 
 /// Standard Huffman table M (Table B.13) node data from JBIG2 Annex B
 #[rustfmt::skip]
-const TABLE_M_NODES: [N; INLINE_TABLE_SIZE] = [
+const TABLE_M: [N; INLINE_TABLE_SIZE] = [
         N::Intermediate { zero: Some(1), one: Some(2) },
         N::Leaf(L { range_low: 1, range_length: 0, is_lower: false, is_out_of_band: false }),
         N::Intermediate { zero: Some(3), one: Some(5) },
@@ -630,7 +630,7 @@ const TABLE_M_NODES: [N; INLINE_TABLE_SIZE] = [
 
 /// Standard Huffman table N (Table B.14) node data from JBIG2 Annex B
 #[rustfmt::skip]
-const TABLE_N_NODES: [N; INLINE_TABLE_SIZE] = [
+const TABLE_N: [N; INLINE_TABLE_SIZE] = [
         N::Intermediate { zero: Some(5), one: Some(1) },
         N::Intermediate { zero: Some(2), one: Some(6) },
         N::Intermediate { zero: Some(3), one: Some(4) },
@@ -678,7 +678,7 @@ const TABLE_N_NODES: [N; INLINE_TABLE_SIZE] = [
 
 /// Standard Huffman table O (Table B.15) node data from JBIG2 Annex B
 #[rustfmt::skip]
-const TABLE_O_NODES: [N; INLINE_TABLE_SIZE] = [
+const TABLE_O: [N; INLINE_TABLE_SIZE] = [
         N::Intermediate { zero: Some(16), one: Some(1) },
         N::Intermediate { zero: Some(14), one: Some(2) },
         N::Intermediate { zero: Some(12), one: Some(3) },

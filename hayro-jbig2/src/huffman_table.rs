@@ -486,21 +486,21 @@ impl StandardHuffmanTables {
     /// Create a new instance with all tables initialized.
     pub(crate) fn new() -> Self {
         Self {
-            table_a: HuffmanTable::from_inline(TABLE_A_NODES),
-            table_b: HuffmanTable::from_inline(TABLE_B_NODES),
-            table_c: HuffmanTable::from_inline(TABLE_C_NODES),
-            table_d: HuffmanTable::from_inline(TABLE_D_NODES),
-            table_e: HuffmanTable::from_inline(TABLE_E_NODES),
-            table_f: HuffmanTable::from_inline(TABLE_F_NODES),
-            table_g: HuffmanTable::from_inline(TABLE_G_NODES),
-            table_h: HuffmanTable::from_inline(TABLE_H_NODES),
-            table_i: HuffmanTable::from_inline(TABLE_I_NODES),
-            table_j: HuffmanTable::from_inline(TABLE_J_NODES),
-            table_k: HuffmanTable::from_inline(TABLE_K_NODES),
-            table_l: HuffmanTable::from_inline(TABLE_L_NODES),
-            table_m: HuffmanTable::from_inline(TABLE_M_NODES),
-            table_n: HuffmanTable::from_inline(TABLE_N_NODES),
-            table_o: HuffmanTable::from_inline(TABLE_O_NODES),
+            table_a: HuffmanTable::from_inline(TABLE_A),
+            table_b: HuffmanTable::from_inline(TABLE_B),
+            table_c: HuffmanTable::from_inline(TABLE_C),
+            table_d: HuffmanTable::from_inline(TABLE_D),
+            table_e: HuffmanTable::from_inline(TABLE_E),
+            table_f: HuffmanTable::from_inline(TABLE_F),
+            table_g: HuffmanTable::from_inline(TABLE_G),
+            table_h: HuffmanTable::from_inline(TABLE_H),
+            table_i: HuffmanTable::from_inline(TABLE_I),
+            table_j: HuffmanTable::from_inline(TABLE_J),
+            table_k: HuffmanTable::from_inline(TABLE_K),
+            table_l: HuffmanTable::from_inline(TABLE_L),
+            table_m: HuffmanTable::from_inline(TABLE_M),
+            table_n: HuffmanTable::from_inline(TABLE_N),
+            table_o: HuffmanTable::from_inline(TABLE_O),
         }
     }
 
