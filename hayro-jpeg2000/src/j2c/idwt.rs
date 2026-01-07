@@ -698,7 +698,7 @@ fn irreversible_filter_97i_simd<S: Simd>(
     let end = start + height;
 
     // Step 1.
-    // Originally: for i in start / 2..(end / 2) + 1. See the comment in
+    // Originally: for i in (start / 2 - 1)..(end / 2 + 2). See the comment in
     // `reversible_filter_53r_simd`.
     for i in start.div_ceil(2)..end.div_ceil(2) {
         let local_row = 2 * i - start;
