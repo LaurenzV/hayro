@@ -299,7 +299,16 @@ pub(crate) mod flate {
                             }
                         };
 
-                        let dist_info = DIST_DECODE[dist_code as usize];
+                        let dist_info = match DIST_DECODE.get(dist_code as usize) {
+                            Some(&info) => info,
+                            None => {
+                                warn!("invalid distance code {} in flate stream", dist_code);
+
+                                self.eof = true;
+                                return;
+                            }
+                        };
+
                         let extra_bits = (dist_info >> 16) as u8;
                         let mut distance = (dist_info & 0xffff) as usize;
 
