@@ -328,16 +328,21 @@ fn irreversible_filter_97i(scanline: &mut [f32], width: usize, x0: usize) {
     let first_even = x0 % 2;
     let first_odd = 1 - first_even;
 
-    // Step 1.
-    // Originally: for i in (start / 2 - 1)..(end / 2 + 2).
-    for i in (first_even..width).step_by(2) {
-        scanline[i] *= KAPPA;
-    }
+    let (k0, k1) = if first_even == 0 {
+        (KAPPA, INV_KAPPA)
+    } else {
+        (INV_KAPPA, KAPPA)
+    };
 
-    // Step 2.
+    // Step 1 and 2.
+    // Originally: for i in (start / 2 - 1)..(end / 2 + 2).
     // Originally: for i in (start / 2 - 2)..(end / 2 + 2).
-    for i in (first_odd..width).step_by(2) {
-        scanline[i] *= INV_KAPPA;
+    for i in (0..width.saturating_sub(1)).step_by(2) {
+        scanline[i] *= k0;
+        scanline[i + 1] *= k1;
+    }
+    if width % 2 == 1 {
+        scanline[width - 1] *= k0;
     }
 
     // Step 3.
@@ -562,35 +567,44 @@ fn irreversible_filter_97i_simd<S: Simd>(
     let first_odd = 1 - first_even;
     let simd_width = width / SIMD_WIDTH * SIMD_WIDTH;
 
-    // Step 1.
-    // Originally: for i in (start / 2 - 1)..(end / 2 + 2).
-    for row in (first_even..height).step_by(2) {
-        for base_column in (0..simd_width).step_by(SIMD_WIDTH) {
-            let base_idx = row * width + base_column;
-            let mut vals = f32x8::from_slice(simd, &scanline[base_idx..][..SIMD_WIDTH]);
-            vals = vals * kappa;
-            vals.store(&mut scanline[base_idx..][..SIMD_WIDTH]);
-        }
+    let (k0, k1, k0_simd, k1_simd) = if first_even == 0 {
+        (KAPPA, INV_KAPPA, kappa, inv_kappa)
+    } else {
+        (INV_KAPPA, KAPPA, inv_kappa, kappa)
+    };
 
-        // Scalar remainder.
+    // Step 1 and 2.
+    // Originally: for i in (start / 2 - 1)..(end / 2 + 2).
+    // Originally: for i in (start / 2 - 2)..(end / 2 + 2).
+    for row in (0..height.saturating_sub(1)).step_by(2) {
+        for base_column in (0..simd_width).step_by(SIMD_WIDTH) {
+            let mut vals0 =
+                f32x8::from_slice(simd, &scanline[row * width + base_column..][..SIMD_WIDTH]);
+            let mut vals1 = f32x8::from_slice(
+                simd,
+                &scanline[(row + 1) * width + base_column..][..SIMD_WIDTH],
+            );
+            vals0 = vals0 * k0_simd;
+            vals1 = vals1 * k1_simd;
+            vals0.store(&mut scanline[row * width + base_column..][..SIMD_WIDTH]);
+            vals1.store(&mut scanline[(row + 1) * width + base_column..][..SIMD_WIDTH]);
+        }
         for col in simd_width..width {
-            scanline[row * width + col] *= KAPPA;
+            scanline[row * width + col] *= k0;
+            scanline[(row + 1) * width + col] *= k1;
         }
     }
 
-    // Step 2.
-    // Originally: for i in (start / 2 - 2)..(end / 2 + 2).
-    for row in (first_odd..height).step_by(2) {
+    if height % 2 == 1 {
+        let row = height - 1;
         for base_column in (0..simd_width).step_by(SIMD_WIDTH) {
-            let base_idx = row * width + base_column;
-            let mut vals = f32x8::from_slice(simd, &scanline[base_idx..][..SIMD_WIDTH]);
-            vals = vals * inv_kappa;
-            vals.store(&mut scanline[base_idx..][..SIMD_WIDTH]);
+            let mut vals =
+                f32x8::from_slice(simd, &scanline[row * width + base_column..][..SIMD_WIDTH]);
+            vals = vals * k0_simd;
+            vals.store(&mut scanline[row * width + base_column..][..SIMD_WIDTH]);
         }
-
-        // Scalar remainder.
         for col in simd_width..width {
-            scanline[row * width + col] *= INV_KAPPA;
+            scanline[row * width + col] *= k0;
         }
     }
 
