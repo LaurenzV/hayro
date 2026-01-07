@@ -401,7 +401,7 @@ fn periodic_symmetric_extension_left(idx: usize, offset: usize) -> usize {
 
 /// Part of the `1D_EXTR` procedure, defined in F.3.7.
 ///
-/// Applies the period symmetric extension on the right side (branchless).
+/// Applies the period symmetric extension on the right side.
 #[inline(always)]
 fn periodic_symmetric_extension_right(idx: usize, offset: usize, length: usize) -> usize {
     let new_idx = idx + offset;
