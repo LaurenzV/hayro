@@ -5,6 +5,7 @@
 
 use alloc::vec::Vec;
 
+use crate::error::{FormatError, ParseError, Result, bail};
 use crate::reader::Reader;
 use crate::segment::{
     Segment, SegmentType, parse_segment, parse_segment_data, parse_segment_header,
@@ -61,7 +62,7 @@ pub(crate) struct File<'a> {
 const FILE_HEADER_ID: [u8; 8] = [0x97, 0x4A, 0x42, 0x32, 0x0D, 0x0A, 0x1A, 0x0A];
 
 /// Parse a standalone JBIG2 file.
-pub(crate) fn parse_file(data: &[u8]) -> Result<File<'_>, &'static str> {
+pub(crate) fn parse_file(data: &[u8]) -> Result<File<'_>> {
     let mut reader = Reader::new(data);
 
     let header = parse_file_header(&mut reader)?;
@@ -77,15 +78,15 @@ pub(crate) fn parse_file(data: &[u8]) -> Result<File<'_>, &'static str> {
     })
 }
 
-fn parse_file_header(reader: &mut Reader<'_>) -> Result<FileHeader, &'static str> {
+fn parse_file_header(reader: &mut Reader<'_>) -> Result<FileHeader> {
     // D.4.1: ID string
-    let id = reader.read_bytes(8).ok_or("unexpected end of data")?;
+    let id = reader.read_bytes(8).ok_or(ParseError::UnexpectedEof)?;
     if id != FILE_HEADER_ID {
-        return Err("invalid JBIG2 file header ID string");
+        bail!(FormatError::InvalidHeader);
     }
 
     // D.4.2: File header flags
-    let flags = reader.read_byte().ok_or("unexpected end of data")?;
+    let flags = reader.read_byte().ok_or(ParseError::UnexpectedEof)?;
 
     // "Bit 0: File organization type. If this bit is 0, the file uses the
     // random-access organization. If this bit is 1, the file uses the
@@ -112,7 +113,7 @@ fn parse_file_header(reader: &mut Reader<'_>) -> Result<FileHeader, &'static str
 
     // "Bits 4-7: Reserved; must be 0." (D.4.2)
     if flags & 0xF0 != 0 {
-        return Err("reserved bits in file header flags must be 0");
+        bail!(FormatError::ReservedBits);
     }
 
     // D.4.3: Number of pages
@@ -121,7 +122,7 @@ fn parse_file_header(reader: &mut Reader<'_>) -> Result<FileHeader, &'static str
     let number_of_pages = if unknown_page_count {
         None
     } else {
-        Some(reader.read_u32().ok_or("unexpected end of data")?)
+        Some(reader.read_u32().ok_or(ParseError::UnexpectedEof)?)
     };
 
     Ok(FileHeader {
@@ -135,7 +136,7 @@ fn parse_file_header(reader: &mut Reader<'_>) -> Result<FileHeader, &'static str
 fn parse_segments<'a>(
     reader: &mut Reader<'a>,
     organization: FileOrganization,
-) -> Result<Vec<Segment<'a>>, &'static str> {
+) -> Result<Vec<Segment<'a>>> {
     let mut segments = Vec::new();
 
     match organization {
@@ -154,7 +155,7 @@ fn parse_segments<'a>(
 pub(crate) fn parse_segments_sequential<'a>(
     reader: &mut Reader<'a>,
     segments: &mut Vec<Segment<'a>>,
-) -> Result<(), &'static str> {
+) -> Result<()> {
     loop {
         if reader.at_end() {
             break;
@@ -184,7 +185,7 @@ pub(crate) fn parse_segments_sequential<'a>(
 fn parse_segments_random_access<'a>(
     reader: &mut Reader<'a>,
     segments: &mut Vec<Segment<'a>>,
-) -> Result<(), &'static str> {
+) -> Result<()> {
     let mut headers = Vec::new();
 
     loop {

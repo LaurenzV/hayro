@@ -22,6 +22,7 @@ use alloc::vec::Vec;
 mod arithmetic_decoder;
 mod bitmap;
 mod dictionary;
+mod error;
 mod file;
 mod gray_scale;
 mod huffman_table;
@@ -31,6 +32,12 @@ mod page_info;
 mod reader;
 mod region;
 mod segment;
+
+pub use error::{
+    DecodeError, FormatError, HuffmanError, ParseError, RegionError, Result, SegmentError,
+    SymbolError, TemplateError,
+};
+use error::bail;
 
 use crate::file::parse_segments_sequential;
 use bitmap::DecodedRegion;
@@ -62,7 +69,7 @@ pub struct Image {
 ///
 /// The file is expected to use the sequential or random-access organization,
 /// as defined in Annex D.1 and D.2.
-pub fn decode(data: &[u8]) -> Result<Image, &'static str> {
+pub fn decode(data: &[u8]) -> Result<Image> {
     let file = parse_file(data)?;
     decode_with_segments(&file.segments)
 }
@@ -71,7 +78,7 @@ pub fn decode(data: &[u8]) -> Result<Image, &'static str> {
 ///
 /// The file is expected to use the embedded organization defined in
 /// Annex D.3.
-pub fn decode_embedded(data: &[u8], globals: Option<&[u8]>) -> Result<Image, &'static str> {
+pub fn decode_embedded(data: &[u8], globals: Option<&[u8]>) -> Result<Image> {
     let mut segments = Vec::new();
     if let Some(globals_data) = globals {
         let mut reader = Reader::new(globals_data);
@@ -86,7 +93,7 @@ pub fn decode_embedded(data: &[u8], globals: Option<&[u8]>) -> Result<Image, &'s
     decode_with_segments(&segments)
 }
 
-fn decode_with_segments(segments: &[segment::Segment<'_>]) -> Result<Image, &'static str> {
+fn decode_with_segments(segments: &[segment::Segment<'_>]) -> Result<Image> {
     // Pre-scan for stripe height from EndOfStripe segments.
     let height_from_stripes = segments
         .iter()
@@ -102,7 +109,7 @@ fn decode_with_segments(segments: &[segment::Segment<'_>]) -> Result<Image, &'st
         let mut reader = Reader::new(page_info.data);
         get_ctx(&mut reader, height_from_stripes)?
     } else {
-        return Err("missing page information segment");
+        bail!(FormatError::MissingPageInfo);
     };
 
     // Process all segments.
@@ -218,7 +225,7 @@ fn decode_with_segments(segments: &[segment::Segment<'_>]) -> Result<Image, &'st
                     .referred_to_segments
                     .first()
                     .and_then(|&num| ctx.get_pattern_dictionary(num))
-                    .ok_or("halftone region requires a pattern dictionary")?;
+                    .ok_or(SegmentError::MissingPatternDictionary)?;
 
                 let region = decode_halftone_region(&mut reader, pattern_dict)?;
                 ctx.page_bitmap.combine(&region);
@@ -229,7 +236,7 @@ fn decode_with_segments(segments: &[segment::Segment<'_>]) -> Result<Image, &'st
                     .referred_to_segments
                     .first()
                     .and_then(|&num| ctx.get_pattern_dictionary(num))
-                    .ok_or("halftone region requires a pattern dictionary")?;
+                    .ok_or(SegmentError::MissingPatternDictionary)?;
 
                 let region = decode_halftone_region(&mut reader, pattern_dict)?;
                 ctx.store_region(seg.header.segment_number, region);
@@ -368,14 +375,14 @@ impl DecodeContext {
 pub(crate) fn get_ctx(
     reader: &mut Reader<'_>,
     height_from_stripes: Option<u32>,
-) -> Result<DecodeContext, &'static str> {
+) -> Result<DecodeContext> {
     let page_info = parse_page_information(reader)?;
 
     // "A page's bitmap height may be declared in its page information segment
     // to be unknown (by specifying a height of 0xFFFFFFFF). In this case, the
     // page must be striped." (7.4.8.2)
     let height = if page_info.height == 0xFFFF_FFFF {
-        height_from_stripes.ok_or("page height is missing")?
+        height_from_stripes.ok_or(FormatError::UnknownPageHeight)?
     } else {
         page_info.height
     };

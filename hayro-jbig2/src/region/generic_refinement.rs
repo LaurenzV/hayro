@@ -6,6 +6,7 @@ use alloc::vec::Vec;
 use super::{RegionSegmentInfo, parse_region_segment_info};
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::DecodedRegion;
+use crate::error::{ParseError, RegionError, Result, bail};
 use crate::reader::Reader;
 
 /// Adaptive template pixel position for refinement regions.
@@ -48,7 +49,7 @@ pub(crate) struct GenericRefinementRegionHeader {
 /// Parse a generic refinement region segment header (7.4.7.1).
 pub(crate) fn parse_generic_refinement_region_header(
     reader: &mut Reader<'_>,
-) -> Result<GenericRefinementRegionHeader, &'static str> {
+) -> Result<GenericRefinementRegionHeader> {
     // 7.4.7.1: "The data part of a generic refinement region segment begins
     // with a generic refinement region segment data header. This header
     // contains the fields shown in Figure 52."
@@ -58,7 +59,7 @@ pub(crate) fn parse_generic_refinement_region_header(
 
     // 7.4.7.2: Generic refinement region segment flags
     // "This one-byte field is formatted as shown in Figure 53."
-    let flags = reader.read_byte().ok_or("unexpected end of data")?;
+    let flags = reader.read_byte().ok_or(ParseError::UnexpectedEof)?;
 
     // "Bit 0: GRTEMPLATE"
     let gr_template = if flags & 0x01 == 0 {
@@ -91,17 +92,17 @@ pub(crate) fn parse_generic_refinement_region_header(
 /// "It is a four-byte field, formatted as shown in Figure 54."
 fn parse_refinement_adaptive_template_pixels(
     reader: &mut Reader<'_>,
-) -> Result<Vec<RefinementAdaptiveTemplatePixel>, &'static str> {
+) -> Result<Vec<RefinementAdaptiveTemplatePixel>> {
     let mut pixels = Vec::with_capacity(2);
 
     // GRATX1, GRATY1
-    let x1 = reader.read_byte().ok_or("unexpected end of data")? as i8;
-    let y1 = reader.read_byte().ok_or("unexpected end of data")? as i8;
+    let x1 = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
+    let y1 = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
     pixels.push(RefinementAdaptiveTemplatePixel { x: x1, y: y1 });
 
     // GRATX2, GRATY2
-    let x2 = reader.read_byte().ok_or("unexpected end of data")? as i8;
-    let y2 = reader.read_byte().ok_or("unexpected end of data")? as i8;
+    let x2 = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
+    let y2 = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
     pixels.push(RefinementAdaptiveTemplatePixel { x: x2, y: y2 });
 
     Ok(pixels)
@@ -117,14 +118,14 @@ fn parse_refinement_adaptive_template_pixels(
 pub(crate) fn decode_generic_refinement_region(
     reader: &mut Reader<'_>,
     reference: &DecodedRegion,
-) -> Result<DecodedRegion, &'static str> {
+) -> Result<DecodedRegion> {
     let header = parse_generic_refinement_region_header(reader)?;
 
     // Validate that the region fits within the reference bitmap.
     // When referring to another segment, dimensions must match exactly (7.4.7.5).
     // When using the page bitmap as reference, the region must fit within the page.
     if header.region_info.width > reference.width || header.region_info.height > reference.height {
-        return Err("refinement region dimensions exceed reference");
+        bail!(RegionError::InvalidDimension);
     }
 
     // "The X offset of the reference bitmap with respect to the bitmap
@@ -135,7 +136,7 @@ pub(crate) fn decode_generic_refinement_region(
     let reference_dx = reference.x_location as i32 - header.region_info.x_location as i32;
     let reference_dy = reference.y_location as i32 - header.region_info.y_location as i32;
 
-    let encoded_data = reader.tail().ok_or("unexpected end of data")?;
+    let encoded_data = reader.tail().ok_or(ParseError::UnexpectedEof)?;
 
     decode_refinement_bitmap(&header, encoded_data, reference, reference_dx, reference_dy)
 }
@@ -149,7 +150,7 @@ fn decode_refinement_bitmap(
     reference: &DecodedRegion,
     reference_dx: i32,
     reference_dy: i32,
-) -> Result<DecodedRegion, &'static str> {
+) -> Result<DecodedRegion> {
     let mut decoder = ArithmeticDecoder::new(data);
 
     let num_context_bits = match header.gr_template {
@@ -201,7 +202,7 @@ pub(crate) fn decode_refinement_bitmap_with(
     gr_template: GrTemplate,
     adaptive_template_pixels: &[RefinementAdaptiveTemplatePixel],
     tpgron: bool,
-) -> Result<(), &'static str> {
+) -> Result<()> {
     let width = region.width;
     let height = region.height;
 

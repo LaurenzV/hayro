@@ -7,6 +7,7 @@ use super::generic::GbTemplate;
 use super::{CombinationOperator, RegionSegmentInfo, parse_region_segment_info};
 use crate::bitmap::DecodedRegion;
 use crate::dictionary::pattern::PatternDictionary;
+use crate::error::{ParseError, RegionError, Result, TemplateError, bail, err};
 use crate::gray_scale::{GrayScaleParams, decode_gray_scale_image};
 use crate::reader::Reader;
 
@@ -27,13 +28,13 @@ pub(crate) enum HTemplate {
 }
 
 impl HTemplate {
-    fn from_value(value: u8) -> Result<Self, &'static str> {
+    fn from_value(value: u8) -> Result<Self> {
         match value {
             0 => Ok(Self::Template0),
             1 => Ok(Self::Template1),
             2 => Ok(Self::Template2),
             3 => Ok(Self::Template3),
-            _ => Err("invalid halftone template"),
+            _ => err!(TemplateError::Invalid),
         }
     }
 
@@ -124,12 +125,12 @@ pub(crate) struct HalftoneRegionHeader {
 /// Parse a halftone region segment header (7.4.5.1).
 pub(crate) fn parse_halftone_region_header(
     reader: &mut Reader<'_>,
-) -> Result<HalftoneRegionHeader, &'static str> {
+) -> Result<HalftoneRegionHeader> {
     // Region segment information field (7.4.1)
     let region_info = parse_region_segment_info(reader)?;
 
     // 7.4.5.1.1: Halftone region segment flags
-    let flags_byte = reader.read_byte().ok_or("unexpected end of data")?;
+    let flags_byte = reader.read_byte().ok_or(ParseError::UnexpectedEof)?;
 
     // "Bit 0: HMMR"
     let hmmr = flags_byte & 0x01 != 0;
@@ -148,7 +149,7 @@ pub(crate) fn parse_halftone_region_header(
         2 => CombinationOperator::Xor,
         3 => CombinationOperator::Xnor,
         4 => CombinationOperator::Replace,
-        _ => return Err("invalid halftone combination operator"),
+        _ => bail!(RegionError::InvalidCombinationOperator),
     };
 
     // "Bit 7: HDEFPIXEL"
@@ -157,10 +158,10 @@ pub(crate) fn parse_halftone_region_header(
     // Validate constraints when HMMR is 1
     if hmmr {
         if htemplate != HTemplate::Template0 {
-            return Err("HTEMPLATE must be 0 when HMMR is 1");
+            bail!(TemplateError::Invalid);
         }
         if henableskip {
-            return Err("HENABLESKIP must be 0 when HMMR is 1");
+            bail!(TemplateError::Invalid);
         }
     }
 
@@ -173,16 +174,16 @@ pub(crate) fn parse_halftone_region_header(
     };
 
     // 7.4.5.1.2: Halftone grid position and size
-    let hgw = reader.read_u32().ok_or("unexpected end of data")?;
-    let hgh = reader.read_u32().ok_or("unexpected end of data")?;
-    let hgx = reader.read_i32().ok_or("unexpected end of data")?;
-    let hgy = reader.read_i32().ok_or("unexpected end of data")?;
+    let hgw = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
+    let hgh = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
+    let hgx = reader.read_i32().ok_or(ParseError::UnexpectedEof)?;
+    let hgy = reader.read_i32().ok_or(ParseError::UnexpectedEof)?;
 
     let grid_position_and_size = HalftoneGridPositionAndSize { hgw, hgh, hgx, hgy };
 
     // 7.4.5.1.3: Halftone grid vector
-    let hrx = reader.read_u16().ok_or("unexpected end of data")?;
-    let hry = reader.read_u16().ok_or("unexpected end of data")?;
+    let hrx = reader.read_u16().ok_or(ParseError::UnexpectedEof)?;
+    let hry = reader.read_u16().ok_or(ParseError::UnexpectedEof)?;
 
     let grid_vector = HalftoneGridVector { hrx, hry };
 
@@ -205,7 +206,7 @@ pub(crate) fn parse_halftone_region_header(
 pub(crate) fn decode_halftone_region(
     reader: &mut Reader<'_>,
     pattern_dict: &PatternDictionary,
-) -> Result<DecodedRegion, &'static str> {
+) -> Result<DecodedRegion> {
     let header = parse_halftone_region_header(reader)?;
 
     let hbw = header.region_info.width;
@@ -246,7 +247,7 @@ pub(crate) fn decode_halftone_region(
         .checked_ilog2()
         .map_or(1, |n| n + 1);
 
-    let encoded_data = reader.tail().ok_or("unexpected end of data")?;
+    let encoded_data = reader.tail().ok_or(ParseError::UnexpectedEof)?;
 
     // "4) Decode an image GI of size HGW by HGH with HBPP bits per pixel using
     // the gray-scale image decoding procedure as described in Annex C." (6.6.5)
@@ -337,7 +338,7 @@ fn render_patterns(
     hry: i32,
     pattern_dict: &PatternDictionary,
     hcombop: CombinationOperator,
-) -> Result<(), &'static str> {
+) -> Result<()> {
     let hpw = pattern_dict.pattern_width;
     let hph = pattern_dict.pattern_height;
     let hbw = htreg.width;
@@ -362,7 +363,7 @@ fn render_patterns(
             let pattern = pattern_dict
                 .patterns
                 .get(pattern_index)
-                .ok_or("gray-scale value exceeds pattern count")?;
+                .ok_or(RegionError::InvalidDimension)?;
 
             // Draw pattern at (x, y) using HCOMBOP.
             draw_pattern(htreg, pattern, x, y, hpw, hph, hbw, hbh, hcombop);

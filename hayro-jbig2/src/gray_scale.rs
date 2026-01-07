@@ -5,6 +5,7 @@ use alloc::vec::Vec;
 
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::DecodedRegion;
+use crate::error::{RegionError, Result, bail};
 use crate::region::generic::{
     AdaptiveTemplatePixel, GbTemplate, decode_bitmap_mmr, gather_context_with_at,
 };
@@ -34,7 +35,7 @@ pub(crate) struct GrayScaleParams<'a> {
 pub(crate) fn decode_gray_scale_image(
     data: &[u8],
     params: &GrayScaleParams<'_>,
-) -> Result<Vec<u32>, &'static str> {
+) -> Result<Vec<u32>> {
     if params.use_mmr {
         decode_mmr(data, params)
     } else {
@@ -43,7 +44,7 @@ pub(crate) fn decode_gray_scale_image(
 }
 
 /// Decode gray-scale image using MMR encoding.
-fn decode_mmr(data: &[u8], params: &GrayScaleParams<'_>) -> Result<Vec<u32>, &'static str> {
+fn decode_mmr(data: &[u8], params: &GrayScaleParams<'_>) -> Result<Vec<u32>> {
     let width = params.width;
     let height = params.height;
     let bits_per_pixel = params.bits_per_pixel;
@@ -58,7 +59,7 @@ fn decode_mmr(data: &[u8], params: &GrayScaleParams<'_>) -> Result<Vec<u32>, &'s
 }
 
 /// Decode gray-scale image using arithmetic encoding.
-fn decode_ae(data: &[u8], params: &GrayScaleParams<'_>) -> Result<Vec<u32>, &'static str> {
+fn decode_ae(data: &[u8], params: &GrayScaleParams<'_>) -> Result<Vec<u32>> {
     let width = params.width;
     let height = params.height;
     let bits_per_pixel = params.bits_per_pixel;
@@ -120,12 +121,12 @@ fn decode_bitplanes<F>(
     bits_per_pixel: u32,
     size: usize,
     mut decode_next: F,
-) -> Result<Vec<u32>, &'static str>
+) -> Result<Vec<u32>>
 where
-    F: FnMut(u32) -> Result<Vec<bool>, &'static str>,
+    F: FnMut(u32) -> Result<Vec<bool>>,
 {
     if bits_per_pixel == 0 {
-        return Err("bits per pixel must be at least 1");
+        bail!(RegionError::InvalidDimension);
     }
 
     let mut values = vec![0_u32; size];

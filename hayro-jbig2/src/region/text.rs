@@ -14,6 +14,7 @@ use super::generic_refinement::{
 use super::{CombinationOperator, RegionSegmentInfo, parse_region_segment_info};
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::DecodedRegion;
+use crate::error::{HuffmanError, ParseError, Result, SymbolError, bail};
 use crate::huffman_table::{HuffmanTable, StandardHuffmanTables, TableLine};
 use crate::integer_decoder::IntegerDecoder;
 use crate::reader::Reader;
@@ -288,8 +289,8 @@ pub(crate) struct TextRegionHeader {
 }
 
 /// Parse text region segment flags (7.4.3.1.1).
-fn parse_text_region_flags(reader: &mut Reader<'_>) -> Result<TextRegionFlags, &'static str> {
-    let flags_word = reader.read_u16().ok_or("unexpected end of data")?;
+fn parse_text_region_flags(reader: &mut Reader<'_>) -> Result<TextRegionFlags> {
+    let flags_word = reader.read_u16().ok_or(ParseError::UnexpectedEof)?;
 
     // "Bit 0: SBHUFF"
     let sbhuff = flags_word & 0x0001 != 0;
@@ -352,31 +353,29 @@ fn parse_text_region_flags(reader: &mut Reader<'_>) -> Result<TextRegionFlags, &
 /// (7.4.3.1.3)
 fn parse_text_region_refinement_at_flags(
     reader: &mut Reader<'_>,
-) -> Result<Vec<RefinementAdaptiveTemplatePixel>, &'static str> {
+) -> Result<Vec<RefinementAdaptiveTemplatePixel>> {
     let mut pixels = Vec::with_capacity(2);
 
     // "Byte 0: SBRATX1"
     // "Byte 1: SBRATY1"
     // "The AT coordinate X and Y fields are signed values, and may take on
     // values that are permitted according to 6.3.5.3." (7.4.3.1.3)
-    let x1 = reader.read_byte().ok_or("unexpected end of data")? as i8;
-    let y1 = reader.read_byte().ok_or("unexpected end of data")? as i8;
+    let x1 = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
+    let y1 = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
     pixels.push(RefinementAdaptiveTemplatePixel { x: x1, y: y1 });
 
     // "Byte 2: SBRATX2"
     // "Byte 3: SBRATY2"
-    let x2 = reader.read_byte().ok_or("unexpected end of data")? as i8;
-    let y2 = reader.read_byte().ok_or("unexpected end of data")? as i8;
+    let x2 = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
+    let y2 = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
     pixels.push(RefinementAdaptiveTemplatePixel { x: x2, y: y2 });
 
     Ok(pixels)
 }
 
 /// Parse text region Huffman flags (7.4.3.1.2).
-fn parse_text_region_huffman_flags(
-    reader: &mut Reader<'_>,
-) -> Result<TextRegionHuffmanFlags, &'static str> {
-    let flags_word = reader.read_u16().ok_or("unexpected end of data")?;
+fn parse_text_region_huffman_flags(reader: &mut Reader<'_>) -> Result<TextRegionHuffmanFlags> {
+    let flags_word = reader.read_u16().ok_or(ParseError::UnexpectedEof)?;
 
     // "Bits 0-1: SBHUFFFS selection"
     let sbhufffs = (flags_word & 0x03) as u8;
@@ -415,9 +414,7 @@ fn parse_text_region_huffman_flags(
 }
 
 /// Parse a text region segment header (7.4.3.1).
-pub(crate) fn parse_text_region_header(
-    reader: &mut Reader<'_>,
-) -> Result<TextRegionHeader, &'static str> {
+pub(crate) fn parse_text_region_header(reader: &mut Reader<'_>) -> Result<TextRegionHeader> {
     // "Region segment information field – see 7.4.1."
     let region_info = parse_region_segment_info(reader)?;
 
@@ -443,7 +440,7 @@ pub(crate) fn parse_text_region_header(
     // "SBNUMINSTANCES – see 7.4.3.1.4."
     // "This four-byte field contains the number of symbol instances coded in
     // this segment."
-    let num_instances = reader.read_u32().ok_or("unexpected end of data")?;
+    let num_instances = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
 
     Ok(TextRegionHeader {
         region_info,
@@ -523,7 +520,7 @@ pub(crate) fn decode_text_region(
     symbols: &[&DecodedRegion],
     referred_tables: &[HuffmanTable],
     standard_tables: &StandardHuffmanTables,
-) -> Result<DecodedRegion, &'static str> {
+) -> Result<DecodedRegion> {
     let header = parse_text_region_header(reader)?;
     let params = TextRegionParams::from_header(&header);
 
@@ -541,7 +538,7 @@ pub(crate) fn decode_text_region(
     } else {
         // "If this bit is 0, then the segment uses the arithmetic encoding variant."
         // (7.4.3.1.1)
-        let data = reader.tail().ok_or("unexpected end of data")?;
+        let data = reader.tail().ok_or(ParseError::UnexpectedEof)?;
         let mut decoder = ArithmeticDecoder::new(data);
 
         if header.flags.sbrefine {
@@ -564,10 +561,10 @@ fn decode_text_region_direct(
     decoder: &mut ArithmeticDecoder<'_>,
     symbols: &[&DecodedRegion],
     params: &TextRegionParams<'_>,
-) -> Result<DecodedRegion, &'static str> {
+) -> Result<DecodedRegion> {
     let sbnumsyms = symbols.len() as u32;
     if sbnumsyms == 0 {
-        return Err("text region has no symbols");
+        bail!(SymbolError::NoSymbols);
     }
     let sbsymcodelen = 32 - (sbnumsyms - 1).leading_zeros();
     let mut contexts = TextRegionContexts::new(sbsymcodelen);
@@ -593,11 +590,11 @@ pub(crate) fn decode_text_region_refine(
     decoder: &mut ArithmeticDecoder<'_>,
     symbols: &[&DecodedRegion],
     params: &TextRegionParams<'_>,
-) -> Result<DecodedRegion, &'static str> {
+) -> Result<DecodedRegion> {
     // Create fresh contexts (for normal text region segments)
     let sbnumsyms = symbols.len() as u32;
     if sbnumsyms == 0 {
-        return Err("text region has no symbols");
+        bail!(SymbolError::NoSymbols);
     }
     let sbsymcodelen = 32 - (sbnumsyms - 1).leading_zeros();
     let mut contexts = TextRegionContexts::new(sbsymcodelen);
@@ -619,31 +616,31 @@ pub(crate) fn decode_text_region_refine(
             let r_i = contexts
                 .iari
                 .decode(decoder)
-                .ok_or("unexpected OOB decoding R_I")?;
+                .ok_or(SymbolError::OutOfRange)?;
 
             if r_i == 0 {
                 Ok(SymbolBitmap::Reference(id_i))
             } else {
-                let ibo_i = symbols.get(id_i).ok_or("symbol ID out of range")?;
+                let ibo_i = symbols.get(id_i).ok_or(SymbolError::OutOfRange)?;
                 let wo_i = ibo_i.width;
                 let ho_i = ibo_i.height;
 
                 let rdw_i = contexts
                     .iardw
                     .decode(decoder)
-                    .ok_or("unexpected OOB decoding RDW_I")?;
+                    .ok_or(SymbolError::OutOfRange)?;
                 let rdh_i = contexts
                     .iardh
                     .decode(decoder)
-                    .ok_or("unexpected OOB decoding RDH_I")?;
+                    .ok_or(SymbolError::OutOfRange)?;
                 let rdx_i = contexts
                     .iardx
                     .decode(decoder)
-                    .ok_or("unexpected OOB decoding RDX_I")?;
+                    .ok_or(SymbolError::OutOfRange)?;
                 let rdy_i = contexts
                     .iardy
                     .decode(decoder)
-                    .ok_or("unexpected OOB decoding RDY_I")?;
+                    .ok_or(SymbolError::OutOfRange)?;
 
                 let grw = (wo_i as i32 + rdw_i) as u32;
                 let grh = (ho_i as i32 + rdh_i) as u32;
@@ -685,14 +682,14 @@ pub(crate) fn decode_text_region_with<F>(
     params: &TextRegionParams<'_>,
     contexts: &mut TextRegionContexts,
     mut get_symbol_bitmap: F,
-) -> Result<DecodedRegion, &'static str>
+) -> Result<DecodedRegion>
 where
     F: FnMut(
         &mut ArithmeticDecoder<'_>,
         usize,
         &[&DecodedRegion],
         &mut TextRegionContexts,
-    ) -> Result<SymbolBitmap, &'static str>,
+    ) -> Result<SymbolBitmap>,
 {
     let sbw = params.sbw;
     let sbh = params.sbh;
@@ -748,7 +745,7 @@ where
                 let dfs = contexts
                     .iafs
                     .decode(decoder)
-                    .ok_or("unexpected OOB decoding first S coordinate")?;
+                    .ok_or(SymbolError::OutOfRange)?;
                 firsts += dfs;
                 curs = firsts;
                 first_symbol_in_strip = false;
@@ -785,7 +782,7 @@ where
             let symbol_bitmap = get_symbol_bitmap(decoder, id_i, symbols, contexts)?;
             let (ib_i, w_i, h_i): (&DecodedRegion, i32, i32) = match &symbol_bitmap {
                 SymbolBitmap::Reference(idx) => {
-                    let sym = symbols.get(*idx).ok_or("symbol ID out of range")?;
+                    let sym = symbols.get(*idx).ok_or(SymbolError::OutOfRange)?;
                     (sym, sym.width as i32, sym.height as i32)
                 }
                 SymbolBitmap::Owned(region) => (region, region.width as i32, region.height as i32),
@@ -857,10 +854,8 @@ fn decode_strip_delta_t(
     decoder: &mut ArithmeticDecoder<'_>,
     iadt: &mut IntegerDecoder,
     sbstrips: u32,
-) -> Result<i32, &'static str> {
-    let value = iadt
-        .decode(decoder)
-        .ok_or("unexpected OOB decoding strip delta T")?;
+) -> Result<i32> {
+    let value = iadt.decode(decoder).ok_or(SymbolError::OutOfRange)?;
     Ok(value * sbstrips as i32)
 }
 
@@ -873,15 +868,13 @@ fn decode_symbol_t_coordinate(
     decoder: &mut ArithmeticDecoder<'_>,
     iait: &mut IntegerDecoder,
     sbstrips: u32,
-) -> Result<i32, &'static str> {
+) -> Result<i32> {
     if sbstrips == 1 {
         // "NOTE – If SBSTRIPS = 1, then no bits are consumed, and the IAIT
         // integer arithmetic decoding procedure is never invoked." (6.4.9)
         Ok(0)
     } else {
-        let value = iait
-            .decode(decoder)
-            .ok_or("unexpected OOB decoding symbol T coordinate")?;
+        let value = iait.decode(decoder).ok_or(SymbolError::OutOfRange)?;
         Ok(value)
     }
 }
@@ -973,7 +966,7 @@ fn select_huffman_tables<'a>(
     flags: &TextRegionHuffmanFlags,
     custom_tables: &'a [HuffmanTable],
     standard_tables: &'a StandardHuffmanTables,
-) -> Result<TextRegionHuffmanTables<'a>, &'static str> {
+) -> Result<TextRegionHuffmanTables<'a>> {
     let mut custom_idx = 0;
 
     let mut get_custom = || -> &'a HuffmanTable {
@@ -987,7 +980,7 @@ fn select_huffman_tables<'a>(
         0 => standard_tables.table_f(),
         1 => standard_tables.table_g(),
         3 => get_custom(),
-        _ => return Err("invalid SBHUFFFS selection"),
+        _ => bail!(HuffmanError::InvalidSelection),
     };
 
     // "2) SBHUFFDS"
@@ -996,7 +989,7 @@ fn select_huffman_tables<'a>(
         1 => standard_tables.table_i(),
         2 => standard_tables.table_j(),
         3 => get_custom(),
-        _ => return Err("invalid SBHUFFDS selection"),
+        _ => bail!(HuffmanError::InvalidSelection),
     };
 
     // "3) SBHUFFDT"
@@ -1005,7 +998,7 @@ fn select_huffman_tables<'a>(
         1 => standard_tables.table_l(),
         2 => standard_tables.table_m(),
         3 => get_custom(),
-        _ => return Err("invalid SBHUFFDT selection"),
+        _ => bail!(HuffmanError::InvalidSelection),
     };
 
     // "4) SBHUFFRDW"
@@ -1013,7 +1006,7 @@ fn select_huffman_tables<'a>(
         0 => standard_tables.table_n(),
         1 => standard_tables.table_o(),
         3 => get_custom(),
-        _ => return Err("invalid SBHUFFRDW selection"),
+        _ => bail!(HuffmanError::InvalidSelection),
     };
 
     // "5) SBHUFFRDH"
@@ -1021,7 +1014,7 @@ fn select_huffman_tables<'a>(
         0 => standard_tables.table_n(),
         1 => standard_tables.table_o(),
         3 => get_custom(),
-        _ => return Err("invalid SBHUFFRDH selection"),
+        _ => bail!(HuffmanError::InvalidSelection),
     };
 
     // "6) SBHUFFRDY"
@@ -1029,7 +1022,7 @@ fn select_huffman_tables<'a>(
         0 => standard_tables.table_n(),
         1 => standard_tables.table_o(),
         3 => get_custom(),
-        _ => return Err("invalid SBHUFFRDY selection"),
+        _ => bail!(HuffmanError::InvalidSelection),
     };
 
     // "7) SBHUFFRDX"
@@ -1037,14 +1030,14 @@ fn select_huffman_tables<'a>(
         0 => standard_tables.table_n(),
         1 => standard_tables.table_o(),
         3 => get_custom(),
-        _ => return Err("invalid SBHUFFRDX selection"),
+        _ => bail!(HuffmanError::InvalidSelection),
     };
 
     // "8) SBHUFFRSIZE"
     let sbhuffrsize = match flags.sbhuffrsize {
         0 => standard_tables.table_a(),
         1 => get_custom(),
-        _ => return Err("invalid SBHUFFRSIZE selection"),
+        _ => bail!(HuffmanError::InvalidSelection),
     };
 
     Ok(TextRegionHuffmanTables {
@@ -1067,11 +1060,11 @@ fn decode_text_region_huffman(
     params: &TextRegionParams<'_>,
     referred_tables: &[HuffmanTable],
     standard_tables: &StandardHuffmanTables,
-) -> Result<DecodedRegion, &'static str> {
+) -> Result<DecodedRegion> {
     let huffman_flags = header
         .huffman_flags
         .as_ref()
-        .ok_or("missing huffman flags for SBHUFF=1")?;
+        .ok_or(HuffmanError::InvalidSelection)?;
 
     let custom_count = [
         huffman_flags.sbhufffs == 3,
@@ -1088,7 +1081,7 @@ fn decode_text_region_huffman(
     .count();
 
     if referred_tables.len() < custom_count {
-        return Err("not enough referred huffman tables");
+        bail!(HuffmanError::MissingTables);
     }
 
     let tables = select_huffman_tables(huffman_flags, referred_tables, standard_tables)?;
@@ -1165,7 +1158,7 @@ fn decode_text_region_huffman(
             } else {
                 reader
                     .read_bits(log_sbstrips)
-                    .ok_or("invalid huffman code")? as i32
+                    .ok_or(HuffmanError::InvalidCode)? as i32
             };
             let t_i = stript + curt;
 
@@ -1179,7 +1172,7 @@ fn decode_text_region_huffman(
             // 6.4.11." (6.4.5)
             let (ib_i, w_i, h_i): (alloc::borrow::Cow<'_, DecodedRegion>, i32, i32) = if !sbrefine {
                 // "If SBREFINE is 0, then set R_I to 0." (6.4.11)
-                let sym = symbols.get(id_i).ok_or("symbol ID out of range")?;
+                let sym = symbols.get(id_i).ok_or(SymbolError::OutOfRange)?;
                 (
                     alloc::borrow::Cow::Borrowed(*sym),
                     sym.width as i32,
@@ -1189,10 +1182,10 @@ fn decode_text_region_huffman(
                 // "If SBREFINE is 1, then decode R_I as follows:
                 // If SBHUFF is 1, then read one bit and set R_I to the value
                 // of that bit." (6.4.11)
-                let r_i = reader.read_bit().ok_or("unexpected end reading R_I")?;
+                let r_i = reader.read_bit().ok_or(ParseError::UnexpectedEof)?;
 
                 if r_i == 0 {
-                    let sym = symbols.get(id_i).ok_or("symbol ID out of range")?;
+                    let sym = symbols.get(id_i).ok_or(SymbolError::OutOfRange)?;
                     (
                         alloc::borrow::Cow::Borrowed(*sym),
                         sym.width as i32,
@@ -1200,7 +1193,7 @@ fn decode_text_region_huffman(
                     )
                 } else {
                     // Refinement decoding (6.4.11)
-                    let ibo_i = symbols.get(id_i).ok_or("symbol ID out of range")?;
+                    let ibo_i = symbols.get(id_i).ok_or(SymbolError::OutOfRange)?;
                     let wo_i = ibo_i.width;
                     let ho_i = ibo_i.height;
 
@@ -1233,7 +1226,7 @@ fn decode_text_region_huffman(
                     // Read the refinement data (rsize bytes)
                     let refinement_data = reader
                         .read_bytes(rsize as usize)
-                        .ok_or("unexpected end reading refinement data")?;
+                        .ok_or(ParseError::UnexpectedEof)?;
 
                     // Decode refinement bitmap from raw bytes.
                     // TPGRON is always 0 for text region refinements (Table 12).
@@ -1319,12 +1312,12 @@ fn decode_text_region_huffman(
 fn decode_symbol_id_huffman_table(
     reader: &mut Reader<'_>,
     sbnumsyms: u32,
-) -> Result<HuffmanTable, &'static str> {
+) -> Result<HuffmanTable> {
     // "1) Read the code lengths for RUNCODE0 through RUNCODE34; each is stored
     // as a four-bit value." (7.4.3.1.7)
     let mut runcode_lines: Vec<TableLine> = Vec::with_capacity(35);
     for i in 0..35 {
-        let preflen = reader.read_bits(4).ok_or("invalid huffman code")? as u8;
+        let preflen = reader.read_bits(4).ok_or(HuffmanError::InvalidCode)? as u8;
         runcode_lines.push(TableLine::new(i, preflen, 0));
     }
 
@@ -1356,11 +1349,11 @@ fn decode_symbol_id_huffman_table(
             }
             32 => {
                 // Copy previous 3-6 times
-                let extra = reader.read_bits(2).ok_or("invalid huffman code")? as usize;
+                let extra = reader.read_bits(2).ok_or(HuffmanError::InvalidCode)? as usize;
                 let repeat = extra + 3;
                 let prev = *symbol_code_lengths
                     .last()
-                    .ok_or("RUNCODE32 with no previous length")?;
+                    .ok_or(HuffmanError::InvalidCode)?;
                 for _ in 0..repeat {
                     if symbol_code_lengths.len() >= sbnumsyms as usize {
                         break;
@@ -1370,7 +1363,7 @@ fn decode_symbol_id_huffman_table(
             }
             33 => {
                 // Repeat 0 length 3-10 times
-                let extra = reader.read_bits(3).ok_or("invalid huffman code")? as usize;
+                let extra = reader.read_bits(3).ok_or(HuffmanError::InvalidCode)? as usize;
                 let repeat = extra + 3;
                 for _ in 0..repeat {
                     if symbol_code_lengths.len() >= sbnumsyms as usize {
@@ -1381,7 +1374,7 @@ fn decode_symbol_id_huffman_table(
             }
             34 => {
                 // Repeat 0 length 11-138 times
-                let extra = reader.read_bits(7).ok_or("invalid huffman code")? as usize;
+                let extra = reader.read_bits(7).ok_or(HuffmanError::InvalidCode)? as usize;
                 let repeat = extra + 11;
                 for _ in 0..repeat {
                     if symbol_code_lengths.len() >= sbnumsyms as usize {
@@ -1390,7 +1383,7 @@ fn decode_symbol_id_huffman_table(
                     symbol_code_lengths.push(0);
                 }
             }
-            _ => return Err("invalid runcode"),
+            _ => bail!(HuffmanError::InvalidCode),
         }
     }
 
@@ -1422,11 +1415,6 @@ struct TextRegionHuffmanTables<'a> {
 }
 
 /// Decode a value from a Huffman table, requiring a value (not OOB).
-fn decode_huffman_value(
-    table: &HuffmanTable,
-    reader: &mut Reader<'_>,
-) -> Result<i32, &'static str> {
-    table
-        .decode(reader)?
-        .ok_or("unexpected OOB in huffman decode")
+fn decode_huffman_value(table: &HuffmanTable, reader: &mut Reader<'_>) -> Result<i32> {
+    table.decode(reader)?.ok_or(HuffmanError::InvalidCode.into())
 }

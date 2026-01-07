@@ -5,6 +5,7 @@
 
 use alloc::vec::Vec;
 
+use crate::error::{ParseError, Result, SegmentError, bail, err};
 use crate::reader::Reader;
 
 /// "The segment type is a number between 0 and 63, inclusive. Not all values
@@ -59,7 +60,7 @@ pub(crate) enum SegmentType {
 
 impl SegmentType {
     /// "All other segment types are reserved and must not be used." (7.3)
-    fn from_type_value(value: u8) -> Result<Self, &'static str> {
+    fn from_type_value(value: u8) -> Result<Self> {
         match value {
             0 => Ok(Self::SymbolDictionary),
             4 => Ok(Self::IntermediateTextRegion),
@@ -83,7 +84,7 @@ impl SegmentType {
             53 => Ok(Self::Tables),
             54 => Ok(Self::ColourPalette),
             62 => Ok(Self::Extension),
-            _ => Err("unknown or reserved segment type"),
+            _ => err!(SegmentError::UnknownType),
         }
     }
 }
@@ -126,17 +127,17 @@ pub(crate) struct Segment<'a> {
 }
 
 /// Parse a segment header (7.2).
-pub(crate) fn parse_segment_header(reader: &mut Reader<'_>) -> Result<SegmentHeader, &'static str> {
+pub(crate) fn parse_segment_header(reader: &mut Reader<'_>) -> Result<SegmentHeader> {
     // 7.2.2: Segment number
     // "This four-byte field contains the segment's segment number. The valid
     // range of segment numbers is 0 through 4294967295 (0xFFFFFFFF) inclusive.
     // As mentioned before, it is possible for there to be gaps in the segment
     // numbering."
-    let segment_number = reader.read_u32().ok_or("unexpected end of data")?;
+    let segment_number = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
 
     // 7.2.3: Segment header flags
     // "This is a 1-byte field."
-    let flags = reader.read_byte().ok_or("unexpected end of data")?;
+    let flags = reader.read_byte().ok_or(ParseError::UnexpectedEof)?;
 
     // "Bits 0-5: Segment type. See 7.3."
     let segment_type = SegmentType::from_type_value(flags & 0x3F)?;
@@ -158,11 +159,11 @@ pub(crate) fn parse_segment_header(reader: &mut Reader<'_>) -> Result<SegmentHea
     // 0 and 4, then the field is one byte long. If the value of this three-bit
     // subfield is 7, then the field is at least five bytes long. This three-bit
     // subfield must not contain values of 5 and 6."
-    let count_and_retention = reader.read_byte().ok_or("unexpected end of data")?;
+    let count_and_retention = reader.read_byte().ok_or(ParseError::UnexpectedEof)?;
     let short_count = (count_and_retention >> 5) & 0x07;
 
     if short_count == 5 || short_count == 6 {
-        return Err("invalid referred-to segment count (values 5 and 6 are reserved)");
+        bail!(SegmentError::InvalidReferredCount);
     }
 
     let referred_to_count = if short_count < 7 {
@@ -178,7 +179,7 @@ pub(crate) fn parse_segment_header(reader: &mut Reader<'_>) -> Result<SegmentHea
         // segments that this segment refers to."
         // "Bits 29-31: Indication of long-form format. This field must contain the
         // value 7."
-        let rest = reader.read_bytes(3).ok_or("unexpected end of data")?;
+        let rest = reader.read_bytes(3).ok_or(ParseError::UnexpectedEof)?;
         u32::from_be_bytes([count_and_retention & 0x1F, rest[0], rest[1], rest[2]])
     };
 
@@ -191,7 +192,7 @@ pub(crate) fn parse_segment_header(reader: &mut Reader<'_>) -> Result<SegmentHea
         let retention_bytes = (referred_to_count as usize + 1).div_ceil(8);
         reader
             .skip_bytes(retention_bytes)
-            .ok_or("unexpected end of data")?;
+            .ok_or(ParseError::UnexpectedEof)?;
     }
 
     // 7.2.5: Referred-to segment numbers
@@ -202,17 +203,17 @@ pub(crate) fn parse_segment_header(reader: &mut Reader<'_>) -> Result<SegmentHea
     let mut referred_to_segments = Vec::with_capacity(referred_to_count as usize);
     for _ in 0..referred_to_count {
         let referred = if segment_number <= 256 {
-            reader.read_byte().ok_or("unexpected end of data")? as u32
+            reader.read_byte().ok_or(ParseError::UnexpectedEof)? as u32
         } else if segment_number <= 65536 {
-            reader.read_u16().ok_or("unexpected end of data")? as u32
+            reader.read_u16().ok_or(ParseError::UnexpectedEof)? as u32
         } else {
-            reader.read_u32().ok_or("unexpected end of data")?
+            reader.read_u32().ok_or(ParseError::UnexpectedEof)?
         };
 
         // If a segment refers to other segments, it must refer to only segments
         // with lower segment numbers.
         if referred >= segment_number {
-            return Err("segment referred to segment with larger segment number");
+            bail!(SegmentError::InvalidReference);
         }
 
         referred_to_segments.push(referred);
@@ -223,9 +224,9 @@ pub(crate) fn parse_segment_header(reader: &mut Reader<'_>) -> Result<SegmentHea
     // flag bit is 0, and is four bytes long if this segment's page association
     // field size flag bit is 1."
     let page_association = if page_association_long {
-        reader.read_u32().ok_or("unexpected end of data")?
+        reader.read_u32().ok_or(ParseError::UnexpectedEof)?
     } else {
-        reader.read_byte().ok_or("unexpected end of data")? as u32
+        reader.read_byte().ok_or(ParseError::UnexpectedEof)? as u32
     };
 
     // 7.2.7: Segment data length
@@ -236,7 +237,7 @@ pub(crate) fn parse_segment_header(reader: &mut Reader<'_>) -> Result<SegmentHea
     // may contain the value 0xFFFFFFFF. This value is intended to mean that the
     // length of the segment's data part is unknown at the time that the segment
     // header is written."
-    let data_length_raw = reader.read_u32().ok_or("unexpected end of data")?;
+    let data_length_raw = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
     let data_length = if data_length_raw == 0xFFFFFFFF {
         None
     } else {
@@ -254,7 +255,7 @@ pub(crate) fn parse_segment_header(reader: &mut Reader<'_>) -> Result<SegmentHea
 }
 
 /// Parse a complete segment (header + data).
-pub(crate) fn parse_segment<'a>(reader: &mut Reader<'a>) -> Result<Segment<'a>, &'static str> {
+pub(crate) fn parse_segment<'a>(reader: &mut Reader<'a>) -> Result<Segment<'a>> {
     let header = parse_segment_header(reader)?;
     parse_segment_data(reader, header)
 }
@@ -268,11 +269,11 @@ pub(crate) fn parse_segment<'a>(reader: &mut Reader<'a>) -> Result<Segment<'a>, 
 pub(crate) fn parse_segment_data<'a>(
     reader: &mut Reader<'a>,
     header: SegmentHeader,
-) -> Result<Segment<'a>, &'static str> {
+) -> Result<Segment<'a>> {
     let data = if let Some(len) = header.data_length {
         reader
             .read_bytes(len as usize)
-            .ok_or("unexpected end of data")?
+            .ok_or(ParseError::UnexpectedEof)?
     } else {
         // "In order for the decoder to correctly decode the segment, it needs to
         // read the four-byte row count field, which is stored in the last four
@@ -281,7 +282,9 @@ pub(crate) fn parse_segment_data<'a>(
         // they are preceded by the two-byte sequence 0x00 0x00; if MMR is 0, they
         // are preceded by the two-byte sequence 0xFF 0xAC." (7.4.6.4)
         let len = scan_for_immediate_generic_region_size(reader)?;
-        reader.read_bytes(len).ok_or("unexpected end of data")?
+        reader
+            .read_bytes(len)
+            .ok_or(ParseError::UnexpectedEof)?
     };
 
     Ok(Segment { header, data })
@@ -292,12 +295,12 @@ pub(crate) fn parse_segment_data<'a>(
 /// "The form of encoding used by the segment may be determined by examining
 /// the eighteenth byte of its segment data part, and the end sequences can
 /// occur anywhere after that eighteenth byte." (7.2.7)
-fn scan_for_immediate_generic_region_size(reader: &Reader<'_>) -> Result<usize, &'static str> {
+fn scan_for_immediate_generic_region_size(reader: &Reader<'_>) -> Result<usize> {
     let mut scan = reader.clone();
     let start_offset = scan.byte_pos();
 
-    scan.skip_bytes(17).ok_or("unexpected end of data")?;
-    let flags = scan.read_byte().ok_or("unexpected end of data")?;
+    scan.skip_bytes(17).ok_or(ParseError::UnexpectedEof)?;
+    let flags = scan.read_byte().ok_or(ParseError::UnexpectedEof)?;
     let uses_mmr = (flags & 1) != 0;
 
     // "if MMR is 1, they are preceded by the two-byte sequence 0x00 0x00;
@@ -310,10 +313,10 @@ fn scan_for_immediate_generic_region_size(reader: &Reader<'_>) -> Result<usize, 
             // Found the marker. Total size is current offset + 2 (marker) + 4 (row count) - start.
             return Ok(scan.byte_pos() - start_offset + 2 + 4);
         }
-        scan.skip_bytes(1).ok_or("unexpected end of data")?;
+        scan.skip_bytes(1).ok_or(ParseError::UnexpectedEof)?;
     }
 
-    Err("could not find end marker in unknown length generic region")
+    err!(SegmentError::MissingEndMarker)
 }
 
 #[cfg(test)]

@@ -1,5 +1,6 @@
 //! Page information segment parsing (7.4.8).
 
+use crate::error::{ParseError, Result};
 use crate::reader::Reader;
 use crate::region::CombinationOperator;
 
@@ -82,17 +83,15 @@ pub(crate) struct PageStriping {
 }
 
 /// Parse a page information segment (7.4.8).
-pub(crate) fn parse_page_information(
-    reader: &mut Reader<'_>,
-) -> Result<PageInformation, &'static str> {
+pub(crate) fn parse_page_information(reader: &mut Reader<'_>) -> Result<PageInformation> {
     // 7.4.8.1: Page bitmap width
-    let width = reader.read_u32().ok_or("unexpected end of data")?;
+    let width = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
 
     // 7.4.8.2: Page bitmap height
-    let height = reader.read_u32().ok_or("unexpected end of data")?;
+    let height = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
 
     // 7.4.8.3: Page X resolution
-    let x_resolution_raw = reader.read_u32().ok_or("unexpected end of data")?;
+    let x_resolution_raw = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
     let x_resolution = if x_resolution_raw == 0 {
         None
     } else {
@@ -100,7 +99,7 @@ pub(crate) fn parse_page_information(
     };
 
     // 7.4.8.4: Page Y resolution
-    let y_resolution_raw = reader.read_u32().ok_or("unexpected end of data")?;
+    let y_resolution_raw = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
     let y_resolution = if y_resolution_raw == 0 {
         None
     } else {
@@ -108,11 +107,11 @@ pub(crate) fn parse_page_information(
     };
 
     // 7.4.8.5: Page segment flags
-    let flags_byte = reader.read_byte().ok_or("unexpected end of data")?;
-    let flags = parse_page_flags(flags_byte)?;
+    let flags_byte = reader.read_byte().ok_or(ParseError::UnexpectedEof)?;
+    let flags = parse_page_flags(flags_byte);
 
     // 7.4.8.6: Page striping information
-    let striping_raw = reader.read_u16().ok_or("unexpected end of data")?;
+    let striping_raw = reader.read_u16().ok_or(ParseError::UnexpectedEof)?;
     let striping = PageStriping {
         _is_striped: striping_raw & 0x8000 != 0,
         _max_stripe_size: striping_raw & 0x7FFF,
@@ -128,7 +127,7 @@ pub(crate) fn parse_page_information(
     })
 }
 
-fn parse_page_flags(flags: u8) -> Result<PageFlags, &'static str> {
+fn parse_page_flags(flags: u8) -> PageFlags {
     let combo_bits = (flags >> 3) & 0x03;
     let default_combination_operator = match combo_bits {
         0 => CombinationOperator::Or,
@@ -138,7 +137,7 @@ fn parse_page_flags(flags: u8) -> Result<PageFlags, &'static str> {
         _ => unreachable!(),
     };
 
-    Ok(PageFlags {
+    PageFlags {
         is_lossless: flags & 0x01 != 0,
         might_contain_refinements: flags & 0x02 != 0,
         default_pixel: (flags >> 2) & 0x01,
@@ -146,5 +145,5 @@ fn parse_page_flags(flags: u8) -> Result<PageFlags, &'static str> {
         requires_auxiliary_buffers: flags & 0x20 != 0,
         combination_operator_overridden: flags & 0x40 != 0,
         might_contain_coloured: flags & 0x80 != 0,
-    })
+    }
 }

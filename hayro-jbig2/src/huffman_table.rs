@@ -5,6 +5,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::num::NonZeroU32;
 
+use crate::error::{DecodeError, HuffmanError, ParseError, Result, bail};
 use crate::lazy::Lazy;
 use crate::reader::Reader;
 
@@ -32,7 +33,7 @@ impl HuffmanTable {
     /// (B.4 "Using a Huffman table").
     ///
     /// Returns `Ok(None)` for out-of-band (OOB) values, `Ok(Some(value))` for decoded values.
-    pub(crate) fn decode(&self, reader: &mut Reader<'_>) -> Result<Option<i32>, &'static str> {
+    pub(crate) fn decode(&self, reader: &mut Reader<'_>) -> Result<Option<i32>> {
         let nodes: &[HuffmanNode] = match self.0.as_ref() {
             InnerHuffmanTable::Inline { nodes } => nodes,
             InnerHuffmanTable::Dynamic { nodes } => nodes,
@@ -161,12 +162,12 @@ impl HuffmanTable {
     }
 
     /// Read a custom Huffman table from the bitstream (B.2 "Decoding a code table").
-    pub(crate) fn read_custom(reader: &mut Reader<'_>) -> Result<Self, &'static str> {
+    pub(crate) fn read_custom(reader: &mut Reader<'_>) -> Result<Self> {
         // 1) "Decode the code table flags field as described in B.2.1. This sets the values
         //    HTOOB, HTPS and HTRS."
         let flags = reader
             .read_byte()
-            .ok_or("unexpected end of data reading huffman flags")?;
+            .ok_or(ParseError::UnexpectedEof)?;
 
         // `HTOOB`
         let has_out_of_band = (flags & 1) != 0;
@@ -178,16 +179,12 @@ impl HuffmanTable {
         // 2) "Decode the code table lowest value field as described in B.2.2. Let HTLOW be
         //    the value decoded."
         // `HTLOW`
-        let minimum_value = reader
-            .read_i32()
-            .ok_or("unexpected end of data reading HTLOW")?;
+        let minimum_value = reader.read_i32().ok_or(ParseError::UnexpectedEof)?;
 
         // 3) "Decode the code table highest value field as described in B.2.3. Let HTHIGH be
         //    the value decoded."
         // `HTHIGH`
-        let maximum_value = reader
-            .read_i32()
-            .ok_or("unexpected end of data reading HTHIGH")?;
+        let maximum_value = reader.read_i32().ok_or(ParseError::UnexpectedEof)?;
 
         // 4) "Set: CURRANGELOW = HTLOW, NTEMP = 0"
         let mut lines = Vec::new();
@@ -200,11 +197,11 @@ impl HuffmanTable {
             // a) "Read HTPS bits. Set PREFLEN[NTEMP] to the value decoded."
             let prefix_length = reader
                 .read_bits(prefix_length_bits)
-                .ok_or("invalid huffman code")? as u8;
+                .ok_or(HuffmanError::InvalidCode)? as u8;
             // b) "Read HTRS bits. Let RANGELEN[NTEMP] be the value decoded."
             let range_length = reader
                 .read_bits(range_length_bits)
-                .ok_or("invalid huffman code")? as u8;
+                .ok_or(HuffmanError::InvalidCode)? as u8;
 
             // c) "Set: RANGELOW[NTEMP] = CURRANGELOW
             //         CURRANGELOW = CURRANGELOW + 2^RANGELEN[NTEMP]
@@ -217,12 +214,12 @@ impl HuffmanTable {
 
             let range_size = 1_i64
                 .checked_shl(range_length as u32)
-                .ok_or("range size overflow")?;
+                .ok_or(DecodeError::Overflow)?;
             let next_range_low = (current_range_low as i64)
                 .checked_add(range_size)
-                .ok_or("current_range_low overflow")?;
+                .ok_or(DecodeError::Overflow)?;
             current_range_low =
-                i32::try_from(next_range_low).map_err(|_| "current_range_low out of i32 range")?;
+                i32::try_from(next_range_low).map_err(|_| DecodeError::Overflow)?;
         }
 
         // 6) "Read HTPS bits. Let LOWPREFLEN be the value read."
@@ -233,7 +230,7 @@ impl HuffmanTable {
             minimum_value - 1,
             reader
                 .read_bits(prefix_length_bits)
-                .ok_or("invalid huffman code")? as u8,
+                .ok_or(HuffmanError::InvalidCode)? as u8,
             32,
         ));
 
@@ -245,7 +242,7 @@ impl HuffmanTable {
             current_range_low,
             reader
                 .read_bits(prefix_length_bits)
-                .ok_or("invalid huffman code")? as u8,
+                .ok_or(HuffmanError::InvalidCode)? as u8,
             32,
         ));
 
@@ -257,7 +254,7 @@ impl HuffmanTable {
             lines.push(TableLine::oob(
                 reader
                     .read_bits(prefix_length_bits)
-                    .ok_or("invalid huffman code")? as u8,
+                    .ok_or(HuffmanError::InvalidCode)? as u8,
             ));
         }
 
@@ -392,17 +389,15 @@ impl HuffmanNode {
         nodes: &[Self],
         mut node_index: u32,
         reader: &mut Reader<'_>,
-    ) -> Result<Option<i32>, &'static str> {
+    ) -> Result<Option<i32>> {
         // 1) "Read one bit at a time until the bit string read matches the code assigned to
         //    one of the table lines."
         loop {
             match nodes[node_index as usize] {
                 Self::Intermediate { zero, one } => {
-                    let bit = reader
-                        .read_bit()
-                        .ok_or("unexpected end of data in huffman decode")?;
+                    let bit = reader.read_bit().ok_or(ParseError::UnexpectedEof)?;
                     let child_index = if bit == 0 { zero } else { one };
-                    node_index = child_index.ok_or("invalid huffman code")?.get();
+                    node_index = child_index.ok_or(HuffmanError::InvalidCode)?.get();
                 }
                 Self::Leaf(leaf) => {
                     // 3) "If HTOOB is 1 for this table, and table line I is the out-of-band
@@ -415,8 +410,7 @@ impl HuffmanNode {
                     // `HTOFFSET`
                     let range_offset = reader
                         .read_bits(leaf.range_length)
-                        .ok_or("invalid huffman code")?
-                        as i32;
+                        .ok_or(HuffmanError::InvalidCode)? as i32;
 
                     // 4) "Otherwise, if table line I is the lower range table line for this
                     //    table, then set: HTVAL = RANGELOW[I] − HTOFFSET"
@@ -431,7 +425,7 @@ impl HuffmanNode {
                     return Ok(Some(value));
                 }
                 Self::Empty => {
-                    return Err("invalid huffman code (empty node)");
+                    bail!(HuffmanError::InvalidCode);
                 }
             }
         }

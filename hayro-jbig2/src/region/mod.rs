@@ -5,6 +5,7 @@ pub(crate) mod generic_refinement;
 pub(crate) mod halftone;
 pub(crate) mod text;
 
+use crate::error::{ParseError, RegionError, Result, bail, err};
 use crate::reader::Reader;
 
 /// "These operators describe how the segment's bitmap is to be combined with
@@ -24,14 +25,14 @@ pub(crate) enum CombinationOperator {
 }
 
 impl CombinationOperator {
-    fn from_value(value: u8) -> Result<Self, &'static str> {
+    fn from_value(value: u8) -> Result<Self> {
         match value {
             0 => Ok(Self::Or),
             1 => Ok(Self::And),
             2 => Ok(Self::Xor),
             3 => Ok(Self::Xnor),
             4 => Ok(Self::Replace),
-            _ => Err("invalid combination operator"),
+            _ => err!(RegionError::InvalidCombinationOperator),
         }
     }
 }
@@ -67,20 +68,18 @@ pub(crate) struct RegionSegmentInfo {
 }
 
 /// Parse the region segment information field (7.4.1).
-pub(crate) fn parse_region_segment_info(
-    reader: &mut Reader<'_>,
-) -> Result<RegionSegmentInfo, &'static str> {
+pub(crate) fn parse_region_segment_info(reader: &mut Reader<'_>) -> Result<RegionSegmentInfo> {
     // 7.4.1.1: Region segment bitmap width
-    let width = reader.read_u32().ok_or("unexpected end of data")?;
+    let width = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
     // 7.4.1.2: Region segment bitmap height
-    let height = reader.read_u32().ok_or("unexpected end of data")?;
+    let height = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
     // 7.4.1.3: Region segment bitmap X location
-    let x_location = reader.read_u32().ok_or("unexpected end of data")?;
+    let x_location = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
     // 7.4.1.: Region segment bitmap Y location
-    let y_location = reader.read_u32().ok_or("unexpected end of data")?;
+    let y_location = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
 
     // 7.4.1.5: Region segment flags
-    let flags = reader.read_byte().ok_or("unexpected end of data")?;
+    let flags = reader.read_byte().ok_or(ParseError::UnexpectedEof)?;
 
     // "Bits 0-2: External combination operator."
     let combination_operator = CombinationOperator::from_value(flags & 0x07)?;
@@ -90,7 +89,7 @@ pub(crate) fn parse_region_segment_info(
 
     // "Bits 4-7: Reserved; must be 0."
     if flags & 0xF0 != 0 {
-        return Err("reserved bits in region segment flags must be 0");
+        bail!(RegionError::InvalidCombinationOperator);
     }
 
     Ok(RegionSegmentInfo {

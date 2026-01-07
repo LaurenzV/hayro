@@ -4,6 +4,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use crate::bitmap::DecodedRegion;
+use crate::error::{DecodeError, FormatError, ParseError, RegionError, Result, TemplateError, bail, err};
 use crate::reader::Reader;
 use crate::region::CombinationOperator;
 use crate::region::generic::{
@@ -24,13 +25,13 @@ pub(crate) enum HdTemplate {
 }
 
 impl HdTemplate {
-    fn from_value(value: u8) -> Result<Self, &'static str> {
+    fn from_value(value: u8) -> Result<Self> {
         match value {
             0 => Ok(Self::Template0),
             1 => Ok(Self::Template1),
             2 => Ok(Self::Template2),
             3 => Ok(Self::Template3),
-            _ => Err("invalid pattern dictionary template"),
+            _ => err!(TemplateError::Invalid),
         }
     }
 
@@ -98,9 +99,9 @@ pub(crate) struct PatternDictionary {
 /// Parse a pattern dictionary segment header (7.4.4.1).
 pub(crate) fn parse_pattern_dictionary_header(
     reader: &mut Reader<'_>,
-) -> Result<PatternDictionaryHeader, &'static str> {
+) -> Result<PatternDictionaryHeader> {
     // 7.4.4.1.1: Pattern dictionary flags
-    let flags_byte = reader.read_byte().ok_or("unexpected end of data")?;
+    let flags_byte = reader.read_byte().ok_or(ParseError::UnexpectedEof)?;
 
     // "Bit 0: HDMMR"
     let hdmmr = flags_byte & 0x01 != 0;
@@ -110,30 +111,30 @@ pub(crate) fn parse_pattern_dictionary_header(
 
     // "Bits 3-7: Reserved; must be 0."
     if flags_byte & 0xF8 != 0 {
-        return Err("reserved bits in pattern dictionary flags must be 0");
+        bail!(FormatError::ReservedBits);
     }
 
     // Validate constraint: HDTEMPLATE must be 0 when HDMMR is 1
     if hdmmr && hdtemplate != HdTemplate::Template0 {
-        return Err("HDTEMPLATE must be 0 when HDMMR is 1");
+        bail!(TemplateError::Invalid);
     }
 
     let flags = PatternDictionaryFlags { hdmmr, hdtemplate };
 
     // 7.4.4.1.2: HDPW - Width of patterns
-    let hdpw = reader.read_byte().ok_or("unexpected end of data")?;
+    let hdpw = reader.read_byte().ok_or(ParseError::UnexpectedEof)?;
     if hdpw == 0 {
-        return Err("HDPW must be greater than zero");
+        bail!(RegionError::InvalidDimension);
     }
 
     // 7.4.4.1.3: HDPH - Height of patterns
-    let hdph = reader.read_byte().ok_or("unexpected end of data")?;
+    let hdph = reader.read_byte().ok_or(ParseError::UnexpectedEof)?;
     if hdph == 0 {
-        return Err("HDPH must be greater than zero");
+        bail!(RegionError::InvalidDimension);
     }
 
     // 7.4.4.1.4: GRAYMAX - One less than number of patterns
-    let graymax = reader.read_u32().ok_or("unexpected end of data")?;
+    let graymax = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
 
     Ok(PatternDictionaryHeader {
         flags,
@@ -149,24 +150,22 @@ pub(crate) fn parse_pattern_dictionary_header(
 /// 1) Interpret its header, as described in 7.4.4.1.
 /// 2) As described in E.3.7, reset all the arithmetic coding statistics to zero.
 /// 3) Invoke the pattern dictionary decoding procedure described in 6.7."
-pub(crate) fn decode_pattern_dictionary(
-    reader: &mut Reader<'_>,
-) -> Result<PatternDictionary, &'static str> {
+pub(crate) fn decode_pattern_dictionary(reader: &mut Reader<'_>) -> Result<PatternDictionary> {
     let header = parse_pattern_dictionary_header(reader)?;
 
     let hdpw = header.hdpw as u32;
     let hdph = header.hdph as u32;
-    let num_patterns = header.graymax.checked_add(1).ok_or("GRAYMAX overflow")?;
+    let num_patterns = header.graymax.checked_add(1).ok_or(DecodeError::Overflow)?;
 
     // "1) Create a bitmap B_HDC. The height of this bitmap is HDPH. The width
     // of the bitmap is (GRAYMAX + 1) × HDPW. This bitmap contains all the
     // patterns concatenated left to right." (6.7.5)
     let collective_width = num_patterns
         .checked_mul(hdpw)
-        .ok_or("collective bitmap width overflow")?;
+        .ok_or(DecodeError::Overflow)?;
 
     // Get the remaining data for decoding.
-    let encoded_data = reader.tail().ok_or("unexpected end of data")?;
+    let encoded_data = reader.tail().ok_or(ParseError::UnexpectedEof)?;
 
     // Create the collective bitmap.
     let mut collective_bitmap = DecodedRegion {

@@ -9,6 +9,10 @@ use alloc::vec::Vec;
 
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::DecodedRegion;
+use crate::error::{
+    DecodeError, HuffmanError, ParseError, RegionError, Result, SymbolError, TemplateError, bail,
+    err,
+};
 use crate::huffman_table::{HuffmanTable, StandardHuffmanTables};
 use crate::integer_decoder::IntegerDecoder;
 use crate::reader::Reader;
@@ -38,12 +42,12 @@ pub(crate) enum SdHuffDh {
 }
 
 impl SdHuffDh {
-    fn from_value(value: u8) -> Result<Self, &'static str> {
+    fn from_value(value: u8) -> Result<Self> {
         match value {
             0 => Ok(Self::TableB4),
             1 => Ok(Self::TableB5),
             // "The value 2 is not permitted." (7.4.2.1.1)
-            2 => Err("SDHUFFDH value 2 is not permitted"),
+            2 => err!(HuffmanError::InvalidSelection),
             3 => Ok(Self::UserSupplied),
             _ => unreachable!(),
         }
@@ -65,12 +69,12 @@ pub(crate) enum SdHuffDw {
 }
 
 impl SdHuffDw {
-    fn from_value(value: u8) -> Result<Self, &'static str> {
+    fn from_value(value: u8) -> Result<Self> {
         match value {
             0 => Ok(Self::TableB2),
             1 => Ok(Self::TableB3),
             // "The value 2 is not permitted." (7.4.2.1.1)
-            2 => Err("SDHUFFDW value 2 is not permitted"),
+            2 => err!(HuffmanError::InvalidSelection),
             3 => Ok(Self::UserSupplied),
             _ => unreachable!(),
         }
@@ -202,9 +206,9 @@ pub(crate) struct SymbolDictionaryHeader {
 /// Parse a symbol dictionary segment header (7.4.2.1).
 pub(crate) fn parse_symbol_dictionary_header(
     reader: &mut Reader<'_>,
-) -> Result<SymbolDictionaryHeader, &'static str> {
+) -> Result<SymbolDictionaryHeader> {
     // 7.4.2.1.1: Symbol dictionary flags
-    let flags_word = reader.read_u16().ok_or("unexpected end of data")?;
+    let flags_word = reader.read_u16().ok_or(ParseError::UnexpectedEof)?;
 
     // "Bit 0: SDHUFF"
     let sdhuff = flags_word & 0x0001 != 0;
@@ -286,12 +290,12 @@ pub(crate) fn parse_symbol_dictionary_header(
     // 7.4.2.1.4: SDNUMEXSYMS
     // "This four-byte field contains the number of symbols exported from this
     // dictionary."
-    let num_exported_symbols = reader.read_u32().ok_or("unexpected end of data")?;
+    let num_exported_symbols = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
 
     // 7.4.2.1.5: SDNUMNEWSYMS
     // "This four-byte field contains the number of symbols defined in this
     // dictionary."
-    let num_new_symbols = reader.read_u32().ok_or("unexpected end of data")?;
+    let num_new_symbols = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
 
     Ok(SymbolDictionaryHeader {
         flags,
@@ -310,7 +314,7 @@ pub(crate) fn parse_symbol_dictionary_header(
 fn parse_symbol_dictionary_at_flags(
     reader: &mut Reader<'_>,
     sdtemplate: GbTemplate,
-) -> Result<Vec<AdaptiveTemplatePixel>, &'static str> {
+) -> Result<Vec<AdaptiveTemplatePixel>> {
     let num_pixels = match sdtemplate {
         GbTemplate::Template0 => 4,
         GbTemplate::Template1 | GbTemplate::Template2 | GbTemplate::Template3 => 1,
@@ -321,15 +325,15 @@ fn parse_symbol_dictionary_at_flags(
     for _ in 0..num_pixels {
         // "The AT coordinate X and Y fields are signed values, and may take on
         // values that are permitted according to Figure 7." (7.4.2.1.2)
-        let x = reader.read_byte().ok_or("unexpected end of data")? as i8;
-        let y = reader.read_byte().ok_or("unexpected end of data")? as i8;
+        let x = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
+        let y = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
 
         // Validate AT pixel location (6.2.5.4, Figure 7).
         // AT pixels must reference already-decoded pixels:
         // - y must be <= 0 (current row or above)
         // - if y == 0, x must be < 0 (strictly to the left of current pixel)
         if y > 0 || (y == 0 && x >= 0) {
-            return Err("AT pixel location out of valid range");
+            bail!(TemplateError::InvalidAtPixel);
         }
 
         pixels.push(AdaptiveTemplatePixel { x, y });
@@ -343,19 +347,19 @@ fn parse_symbol_dictionary_at_flags(
 /// "It is a four-byte field, formatted as shown in Figure 36." (7.4.2.1.3)
 fn parse_symbol_dictionary_refinement_at_flags(
     reader: &mut Reader<'_>,
-) -> Result<Vec<RefinementAdaptiveTemplatePixel>, &'static str> {
+) -> Result<Vec<RefinementAdaptiveTemplatePixel>> {
     let mut pixels = Vec::with_capacity(2);
 
     // SDRATX1, SDRATY1
     // "The AT coordinate X and Y fields are signed values, and may take on
     // values that are permitted according to 6.3.5.3." (7.4.2.1.3)
-    let x1 = reader.read_byte().ok_or("unexpected end of data")? as i8;
-    let y1 = reader.read_byte().ok_or("unexpected end of data")? as i8;
+    let x1 = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
+    let y1 = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
     pixels.push(RefinementAdaptiveTemplatePixel { x: x1, y: y1 });
 
     // SDRATX2, SDRATY2
-    let x2 = reader.read_byte().ok_or("unexpected end of data")? as i8;
-    let y2 = reader.read_byte().ok_or("unexpected end of data")? as i8;
+    let x2 = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
+    let y2 = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
     pixels.push(RefinementAdaptiveTemplatePixel { x: x2, y: y2 });
 
     Ok(pixels)
@@ -389,7 +393,7 @@ pub(crate) fn decode_symbol_dictionary(
     input_symbols: &[&DecodedRegion],
     referred_tables: &[HuffmanTable],
     standard_tables: &StandardHuffmanTables,
-) -> Result<SymbolDictionary, &'static str> {
+) -> Result<SymbolDictionary> {
     let header = parse_symbol_dictionary_header(reader)?;
 
     // "6) Invoke the symbol dictionary decoding procedure described in 6.5"
@@ -415,7 +419,7 @@ fn decode_symbols(
     input_symbols: &[&DecodedRegion],
     referred_tables: &[HuffmanTable],
     standard_tables: &StandardHuffmanTables,
-) -> Result<Vec<DecodedRegion>, &'static str> {
+) -> Result<Vec<DecodedRegion>> {
     if header.flags.sdhuff {
         // "If SDHUFF is 1, then the segment uses the Huffman encoding variant."
         decode_symbols_huffman(
@@ -427,7 +431,7 @@ fn decode_symbols(
         )
     } else {
         // "If SDHUFF is 0, then the segment uses the arithmetic encoding variant."
-        let data = reader.tail().ok_or("unexpected end of data")?;
+        let data = reader.tail().ok_or(ParseError::UnexpectedEof)?;
         if header.flags.sdrefagg {
             decode_symbols_refagg(data, header, input_symbols)
         } else {
@@ -445,7 +449,7 @@ fn decode_symbols_huffman(
     input_symbols: &[&DecodedRegion],
     referred_tables: &[HuffmanTable],
     standard_tables: &StandardHuffmanTables,
-) -> Result<Vec<DecodedRegion>, &'static str> {
+) -> Result<Vec<DecodedRegion>> {
     // "These user-supplied Huffman decoding tables may be supplied either as a
     // Tables segment, which is referred to by the symbol dictionary segment, or
     // they may be included directly in the symbol dictionary segment, immediately
@@ -461,7 +465,7 @@ fn decode_symbols_huffman(
     .count();
 
     if referred_tables.len() < custom_count {
-        return Err("not enough referred huffman tables for symbol dictionary");
+        bail!(HuffmanError::MissingTables);
     }
 
     let mut custom_idx = 0;
@@ -518,12 +522,12 @@ fn decode_symbols_huffman(
         // SDHUFFDH." (6.5.6)
         let hcdh = sdhuffdh
             .decode(reader)?
-            .ok_or("unexpected OOB decoding height class delta")?;
+            .ok_or(HuffmanError::UnexpectedOob)?;
 
         // "Set: HCHEIGHT = HCHEIGHT + HCDH"
         hcheight = hcheight
             .checked_add_signed(hcdh)
-            .ok_or("invalid height class height")?;
+            .ok_or(RegionError::InvalidDimension)?;
 
         // "SYMWIDTH = 0, TOTWIDTH = 0, HCFIRSTSYM = NSYMSDECODED"
         let mut symwidth: u32 = 0;
@@ -541,14 +545,14 @@ fn decode_symbols_huffman(
             // "Set: SYMWIDTH = SYMWIDTH + DW, TOTWIDTH = TOTWIDTH + SYMWIDTH"
             symwidth = symwidth
                 .checked_add_signed(dw)
-                .ok_or("invalid symbol width")?;
-            totwidth = totwidth.checked_add(symwidth).ok_or("totwidth overflow")?;
+                .ok_or(RegionError::InvalidDimension)?;
+            totwidth = totwidth.checked_add(symwidth).ok_or(DecodeError::Overflow)?;
 
             if header.flags.sdrefagg {
                 // "ii) If SDHUFF is 0 or SDREFAGG is 1, then decode the symbol's bitmap
                 // as described in 6.5.8."
                 // TODO: Implement refinement/aggregate with Huffman
-                return Err("SDHUFF=1 with SDREFAGG=1 not yet supported");
+                bail!(DecodeError::Unsupported);
             } else {
                 // "iii) If SDHUFF is 1 and SDREFAGG is 0, then set:
                 // SDNEWSYMWIDTHS[NSYMSDECODED] = SYMWIDTH"
@@ -587,7 +591,7 @@ fn decode_symbols_huffman(
         || {
             table_a
                 .decode(reader)?
-                .ok_or("unexpected OOB decoding export flags")
+                .ok_or(HuffmanError::UnexpectedOob.into())
         },
     )?;
 
@@ -607,12 +611,12 @@ fn decode_height_class_collective_bitmap(
     nsymsdecoded: u32,
     totwidth: u32,
     hcheight: u32,
-) -> Result<(), &'static str> {
+) -> Result<()> {
     // "1) Read the size in bytes using the SDHUFFBMSIZE Huffman table.
     // Let BMSIZE be the value decoded."
     let bmsize = sdhuffbmsize
         .decode(reader)?
-        .ok_or("unexpected OOB decoding BMSIZE")? as u32;
+        .ok_or(HuffmanError::UnexpectedOob)? as u32;
 
     // "2) Skip over any bits remaining in the last byte read."
     reader.align();
@@ -626,7 +630,7 @@ fn decode_height_class_collective_bitmap(
         let mut bitmap = DecodedRegion::new(totwidth, hcheight);
         for y in 0..hcheight {
             for byte_x in 0..row_bytes {
-                let byte = reader.read_byte().ok_or("unexpected end of data")?;
+                let byte = reader.read_byte().ok_or(ParseError::UnexpectedEof)?;
                 for bit in 0..8 {
                     let x = byte_x * 8 + bit;
                     if x < totwidth {
@@ -643,7 +647,7 @@ fn decode_height_class_collective_bitmap(
         // shown in Table 19." (MMR = 1)
         let bitmap_data = reader
             .read_bytes(bmsize as usize)
-            .ok_or("unexpected end of data")?;
+            .ok_or(ParseError::UnexpectedEof)?;
 
         let mut bitmap = DecodedRegion::new(totwidth, hcheight);
         decode_bitmap_mmr(&mut bitmap, bitmap_data)?;
@@ -690,9 +694,9 @@ fn decode_exported_symbols_with<F>(
     input_symbols: &[&DecodedRegion],
     new_symbols: &[DecodedRegion],
     mut decode_value: F,
-) -> Result<Vec<DecodedRegion>, &'static str>
+) -> Result<Vec<DecodedRegion>>
 where
-    F: FnMut() -> Result<i32, &'static str>,
+    F: FnMut() -> Result<i32>,
 {
     let num_new_symbols = new_symbols.len() as u32;
     let total_symbols = num_input_symbols + num_new_symbols;
@@ -712,7 +716,7 @@ where
         let exrunlength = decode_value()?;
 
         if exrunlength < 0 {
-            return Err("negative export run length");
+            bail!(HuffmanError::InvalidCode);
         }
 
         let exrunlength = exrunlength as u32;
@@ -751,7 +755,7 @@ where
     }
 
     if exported.len() != num_exported as usize {
-        return Err("exported symbol count mismatch");
+        bail!(SymbolError::NoSymbols);
     }
 
     Ok(exported)
@@ -762,7 +766,7 @@ fn decode_symbols_direct(
     data: &[u8],
     header: &SymbolDictionaryHeader,
     input_symbols: &[&DecodedRegion],
-) -> Result<Vec<DecodedRegion>, &'static str> {
+) -> Result<Vec<DecodedRegion>> {
     let template = header.flags.sdtemplate;
     let num_contexts = 1 << template.context_bits();
     let mut gb_contexts = vec![Context::default(); num_contexts];
@@ -782,7 +786,7 @@ fn decode_symbols_refagg(
     data: &[u8],
     header: &SymbolDictionaryHeader,
     input_symbols: &[&DecodedRegion],
-) -> Result<Vec<DecodedRegion>, &'static str> {
+) -> Result<Vec<DecodedRegion>> {
     // Additional decoder for refinement (6.5.8.2)
     let mut iaai = IntegerDecoder::new(); // REFAGGNINST decoder
 
@@ -837,14 +841,9 @@ fn decode_symbols_with<F>(
     header: &SymbolDictionaryHeader,
     input_symbols: &[&DecodedRegion],
     mut decode_symbol: F,
-) -> Result<Vec<DecodedRegion>, &'static str>
+) -> Result<Vec<DecodedRegion>>
 where
-    F: FnMut(
-        &mut ArithmeticDecoder<'_>,
-        u32,
-        u32,
-        &[DecodedRegion],
-    ) -> Result<DecodedRegion, &'static str>,
+    F: FnMut(&mut ArithmeticDecoder<'_>, u32, u32, &[DecodedRegion]) -> Result<DecodedRegion>,
 {
     let num_input_symbols = input_symbols.len() as u32;
     let num_new_symbols = header.num_new_symbols;
@@ -872,13 +871,13 @@ where
         // Let HCDH be the decoded value."
         let hcdh = iadh
             .decode(&mut arith_decoder)
-            .ok_or("unexpected OOB decoding height class delta")?;
+            .ok_or(SymbolError::OutOfRange)?;
 
         // "Set: HCHEIGHT = HCHEIGHT + HCDH"
         // HCDH can be negative, but the result must be non-negative.
         hcheight = hcheight
             .checked_add_signed(hcdh)
-            .ok_or("invalid height class height")?;
+            .ok_or(RegionError::InvalidDimension)?;
 
         // "SYMWIDTH = 0, TOTWIDTH = 0, HCFIRSTSYM = NSYMSDECODED"
         let mut symwidth: u32 = 0;
@@ -893,7 +892,7 @@ where
             // DW can be negative, but the result must be non-negative.
             symwidth = symwidth
                 .checked_add_signed(dw)
-                .ok_or("invalid symbol width")?;
+                .ok_or(RegionError::InvalidDimension)?;
 
             // "ii) If SDHUFF is 0 or SDREFAGG is 1, then decode the symbol's bitmap
             // as described in 6.5.8."
@@ -916,7 +915,7 @@ where
         &new_symbols,
         || {
             iaex.decode(&mut arith_decoder)
-                .ok_or("unexpected OOB decoding export flags")
+                .ok_or(SymbolError::OutOfRange.into())
         },
     )?;
 
@@ -934,7 +933,7 @@ fn decode_symbol_bitmap(
     header: &SymbolDictionaryHeader,
     width: u32,
     height: u32,
-) -> Result<DecodedRegion, &'static str> {
+) -> Result<DecodedRegion> {
     // Table 16 parameters:
     // MMR = 0, GBW = SYMWIDTH, GBH = HCHEIGHT, GBTEMPLATE = SDTEMPLATE
     // TPGDON = 0, USESKIP = 0
@@ -973,12 +972,12 @@ fn decode_refinement_aggregate_symbol(
     symwidth: u32,
     hcheight: u32,
     gr_template: GrTemplate,
-) -> Result<DecodedRegion, &'static str> {
+) -> Result<DecodedRegion> {
     // "1) Decode the number of symbol instances contained in the aggregation,
     // as specified in 6.5.8.2.1. Let REFAGGNINST be the value decoded." (6.5.8.2)
     let refaggninst = iaai
         .decode(decoder)
-        .ok_or("unexpected OOB decoding REFAGGNINST")?;
+        .ok_or(SymbolError::OutOfRange)?;
 
     if refaggninst == 1 {
         // "3) If REFAGGNINST is equal to one, then decode the bitmap as described
@@ -1030,7 +1029,7 @@ fn decode_multi_refinement_symbol(
     hcheight: u32,
     refaggninst: i32,
     gr_template: GrTemplate,
-) -> Result<DecodedRegion, &'static str> {
+) -> Result<DecodedRegion> {
     // Build the combined symbol array SBSYMS as per 6.5.8.2.4:
     // "Set SBSYMS to an array of SDNUMINSYMS + NSYMSDECODED symbols, formed by
     // concatenating the array SDINSYMS and the first NSYMSDECODED entries of
@@ -1084,31 +1083,31 @@ fn decode_multi_refinement_symbol(
             let r_i = contexts
                 .iari
                 .decode(decoder)
-                .ok_or("unexpected OOB decoding R_I")?;
+                .ok_or(SymbolError::OutOfRange)?;
 
             if r_i == 0 {
                 Ok(SymbolBitmap::Reference(id_i))
             } else {
-                let ibo_i = symbols.get(id_i).ok_or("symbol ID out of range")?;
+                let ibo_i = symbols.get(id_i).ok_or(SymbolError::OutOfRange)?;
                 let wo_i = ibo_i.width;
                 let ho_i = ibo_i.height;
 
                 let rdw_i = contexts
                     .iardw
                     .decode(decoder)
-                    .ok_or("unexpected OOB decoding RDW_I")?;
+                    .ok_or(SymbolError::OutOfRange)?;
                 let rdh_i = contexts
                     .iardh
                     .decode(decoder)
-                    .ok_or("unexpected OOB decoding RDH_I")?;
+                    .ok_or(SymbolError::OutOfRange)?;
                 let rdx_i = contexts
                     .iardx
                     .decode(decoder)
-                    .ok_or("unexpected OOB decoding RDX_I")?;
+                    .ok_or(SymbolError::OutOfRange)?;
                 let rdy_i = contexts
                     .iardy
                     .decode(decoder)
-                    .ok_or("unexpected OOB decoding RDY_I")?;
+                    .ok_or(SymbolError::OutOfRange)?;
 
                 let grw = (wo_i as i32 + rdw_i) as u32;
                 let grh = (ho_i as i32 + rdh_i) as u32;
@@ -1149,7 +1148,7 @@ fn decode_single_refinement_symbol(
     symwidth: u32,
     hcheight: u32,
     gr_template: GrTemplate,
-) -> Result<DecodedRegion, &'static str> {
+) -> Result<DecodedRegion> {
     // "2) Decode a symbol ID as described in 6.4.10, using the values of
     // SBSYMCODES and SBSYMCODELEN described in 6.5.8.2.3. Let ID_I be the
     // value decoded." (6.5.8.2.2)
@@ -1160,14 +1159,14 @@ fn decode_single_refinement_symbol(
     let rdx_i = text_region_contexts
         .iardx
         .decode(decoder)
-        .ok_or("unexpected OOB decoding RDX_I")?;
+        .ok_or(SymbolError::OutOfRange)?;
 
     // "4) Decode the instance refinement Y offset as described in 6.4.11.4.
     // [...] Let RDY_I be the value decoded." (6.5.8.2.2)
     let rdy_i = text_region_contexts
         .iardy
         .decode(decoder)
-        .ok_or("unexpected OOB decoding RDY_I")?;
+        .ok_or(SymbolError::OutOfRange)?;
 
     // "6) Let IBO_I be SBSYMS[ID_I], where SBSYMS is as shown in 6.5.8.2.4."
     // (6.5.8.2.2)
@@ -1180,9 +1179,7 @@ fn decode_single_refinement_symbol(
         input_symbols[id_i]
     } else {
         let new_idx = id_i - num_input;
-        new_symbols
-            .get(new_idx)
-            .ok_or("refinement symbol ID out of range")?
+        new_symbols.get(new_idx).ok_or(SymbolError::OutOfRange)?
     };
 
     // "The symbol's bitmap is the result of applying the generic refinement
