@@ -124,12 +124,12 @@ pub enum ColorError {
 impl fmt::Display for DecodeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            DecodeError::Format(e) => write!(f, "{e}"),
-            DecodeError::Marker(e) => write!(f, "{e}"),
-            DecodeError::Tile(e) => write!(f, "{e}"),
-            DecodeError::Validation(e) => write!(f, "{e}"),
-            DecodeError::Decoding(e) => write!(f, "{e}"),
-            DecodeError::Color(e) => write!(f, "{e}"),
+            Self::Format(e) => write!(f, "{e}"),
+            Self::Marker(e) => write!(f, "{e}"),
+            Self::Tile(e) => write!(f, "{e}"),
+            Self::Validation(e) => write!(f, "{e}"),
+            Self::Decoding(e) => write!(f, "{e}"),
+            Self::Color(e) => write!(f, "{e}"),
         }
     }
 }
@@ -137,11 +137,11 @@ impl fmt::Display for DecodeError {
 impl fmt::Display for FormatError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            FormatError::InvalidSignature => write!(f, "invalid JP2 signature"),
-            FormatError::InvalidFileType => write!(f, "invalid JP2 file type"),
-            FormatError::InvalidBox => write!(f, "invalid JP2 box"),
-            FormatError::MissingCodestream => write!(f, "missing codestream data"),
-            FormatError::Unsupported => write!(f, "unsupported JP2 image"),
+            Self::InvalidSignature => write!(f, "invalid JP2 signature"),
+            Self::InvalidFileType => write!(f, "invalid JP2 file type"),
+            Self::InvalidBox => write!(f, "invalid JP2 box"),
+            Self::MissingCodestream => write!(f, "missing codestream data"),
+            Self::Unsupported => write!(f, "unsupported JP2 image"),
         }
     }
 }
@@ -149,11 +149,11 @@ impl fmt::Display for FormatError {
 impl fmt::Display for MarkerError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            MarkerError::Invalid => write!(f, "invalid marker"),
-            MarkerError::Unsupported => write!(f, "unsupported marker"),
-            MarkerError::Expected(marker) => write!(f, "expected {marker} marker"),
-            MarkerError::Missing(marker) => write!(f, "missing {marker} marker"),
-            MarkerError::ParseFailure(marker) => write!(f, "failed to parse {marker} marker"),
+            Self::Invalid => write!(f, "invalid marker"),
+            Self::Unsupported => write!(f, "unsupported marker"),
+            Self::Expected(marker) => write!(f, "expected {marker} marker"),
+            Self::Missing(marker) => write!(f, "missing {marker} marker"),
+            Self::ParseFailure(marker) => write!(f, "failed to parse {marker} marker"),
         }
     }
 }
@@ -161,10 +161,10 @@ impl fmt::Display for MarkerError {
 impl fmt::Display for TileError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TileError::Invalid => write!(f, "image contains no tiles"),
-            TileError::InvalidIndex => write!(f, "invalid tile index in tile-part header"),
-            TileError::InvalidOffsets => write!(f, "invalid tile offsets"),
-            TileError::PpmPptConflict => {
+            Self::Invalid => write!(f, "image contains no tiles"),
+            Self::InvalidIndex => write!(f, "invalid tile index in tile-part header"),
+            Self::InvalidOffsets => write!(f, "invalid tile offsets"),
+            Self::PpmPptConflict => {
                 write!(
                     f,
                     "PPT marker present when PPM marker exists in main header"
@@ -177,21 +177,21 @@ impl fmt::Display for TileError {
 impl fmt::Display for ValidationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ValidationError::InvalidDimensions => write!(f, "invalid image dimensions"),
-            ValidationError::ImageTooLarge => write!(f, "image is too large"),
-            ValidationError::TooManyChannels => write!(f, "image has too many channels"),
-            ValidationError::InvalidComponentMetadata => write!(f, "invalid component metadata"),
-            ValidationError::InvalidProgressionOrder => write!(f, "invalid progression order"),
-            ValidationError::InvalidTransformation => write!(f, "invalid transformation type"),
-            ValidationError::InvalidQuantizationStyle => write!(f, "invalid quantization style"),
-            ValidationError::MissingPrecinctExponents => {
+            Self::InvalidDimensions => write!(f, "invalid image dimensions"),
+            Self::ImageTooLarge => write!(f, "image is too large"),
+            Self::TooManyChannels => write!(f, "image has too many channels"),
+            Self::InvalidComponentMetadata => write!(f, "invalid component metadata"),
+            Self::InvalidProgressionOrder => write!(f, "invalid progression order"),
+            Self::InvalidTransformation => write!(f, "invalid transformation type"),
+            Self::InvalidQuantizationStyle => write!(f, "invalid quantization style"),
+            Self::MissingPrecinctExponents => {
                 write!(f, "missing exponents for precinct sizes")
             }
-            ValidationError::InsufficientExponents => {
+            Self::InsufficientExponents => {
                 write!(f, "not enough exponents provided in header")
             }
-            ValidationError::MissingStepSize => write!(f, "missing exponent step size"),
-            ValidationError::InvalidExponents => write!(f, "invalid quantization exponents"),
+            Self::MissingStepSize => write!(f, "missing exponent step size"),
+            Self::InvalidExponents => write!(f, "invalid quantization exponents"),
         }
     }
 }
@@ -199,17 +199,17 @@ impl fmt::Display for ValidationError {
 impl fmt::Display for DecodingError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            DecodingError::CodeBlockDecodeFailure => write!(f, "failed to decode code-block"),
-            DecodingError::TooManyBitplanes => write!(f, "number of bitplanes is too large"),
-            DecodingError::TooManyCodingPasses => {
+            Self::CodeBlockDecodeFailure => write!(f, "failed to decode code-block"),
+            Self::TooManyBitplanes => write!(f, "number of bitplanes is too large"),
+            Self::TooManyCodingPasses => {
                 write!(f, "code-block contains too many coding passes")
             }
-            DecodingError::InvalidBitplaneCount => write!(f, "invalid number of bitplanes"),
-            DecodingError::InvalidPrecinct => write!(f, "a precinct was invalid"),
-            DecodingError::InvalidProgressionIterator => {
+            Self::InvalidBitplaneCount => write!(f, "invalid number of bitplanes"),
+            Self::InvalidPrecinct => write!(f, "a precinct was invalid"),
+            Self::InvalidProgressionIterator => {
                 write!(f, "a progression iterator was invalid")
             }
-            DecodingError::UnexpectedEof => write!(f, "unexpected end of data"),
+            Self::UnexpectedEof => write!(f, "unexpected end of data"),
         }
     }
 }
@@ -217,10 +217,10 @@ impl fmt::Display for DecodingError {
 impl fmt::Display for ColorError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ColorError::Mct => write!(f, "multi-component transform failed"),
-            ColorError::PaletteResolutionFailed => write!(f, "failed to resolve palette indices"),
-            ColorError::SyccConversionFailed => write!(f, "failed to convert from sYCC to RGB"),
-            ColorError::LabConversionFailed => write!(f, "failed to convert from LAB to RGB"),
+            Self::Mct => write!(f, "multi-component transform failed"),
+            Self::PaletteResolutionFailed => write!(f, "failed to resolve palette indices"),
+            Self::SyccConversionFailed => write!(f, "failed to convert from sYCC to RGB"),
+            Self::LabConversionFailed => write!(f, "failed to convert from LAB to RGB"),
         }
     }
 }
@@ -235,37 +235,37 @@ impl std::error::Error for ColorError {}
 
 impl From<FormatError> for DecodeError {
     fn from(e: FormatError) -> Self {
-        DecodeError::Format(e)
+        Self::Format(e)
     }
 }
 
 impl From<MarkerError> for DecodeError {
     fn from(e: MarkerError) -> Self {
-        DecodeError::Marker(e)
+        Self::Marker(e)
     }
 }
 
 impl From<TileError> for DecodeError {
     fn from(e: TileError) -> Self {
-        DecodeError::Tile(e)
+        Self::Tile(e)
     }
 }
 
 impl From<ValidationError> for DecodeError {
     fn from(e: ValidationError) -> Self {
-        DecodeError::Validation(e)
+        Self::Validation(e)
     }
 }
 
 impl From<DecodingError> for DecodeError {
     fn from(e: DecodingError) -> Self {
-        DecodeError::Decoding(e)
+        Self::Decoding(e)
     }
 }
 
 impl From<ColorError> for DecodeError {
     fn from(e: ColorError) -> Self {
-        DecodeError::Color(e)
+        Self::Color(e)
     }
 }
 
