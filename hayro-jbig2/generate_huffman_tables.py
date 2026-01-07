@@ -434,7 +434,7 @@ def main():
         nodes = build_huffman_table(lines)
         print(f"{name}: {len(nodes)} nodes")
         table_num = table_numbers[name]
-        output.append(f"/// Standard Huffman table {name[-1]} (Table B.{table_num}) node data from JBIG2 Annex B")
+        output.append(f"/// Standard Huffman table {name[-1]} (Table B.{table_num})")
         output.append(generate_rust_table(name, nodes))
         output.append("")
 
