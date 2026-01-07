@@ -165,8 +165,8 @@ def insert_code(
 def generate_rust_node(node: HuffmanNode) -> str:
     """Generate Rust code for a single node."""
     if node.is_intermediate():
-        zero = f"Some({node.zero})" if node.zero is not None else "None"
-        one = f"Some({node.one})" if node.one is not None else "None"
+        zero = f"Some(nz({node.zero}))" if node.zero is not None else "None"
+        one = f"Some(nz({node.one}))" if node.one is not None else "None"
         return f"N::Intermediate {{ zero: {zero}, one: {one} }}"
     else:
         leaf = node.leaf
@@ -418,6 +418,8 @@ def main():
     output.append("")
     output.append("type N = HuffmanNode;")
     output.append("type L = LeafData;")
+    output.append("")
+    output.append("const fn nz(n: u32) -> NonZeroU32 { NonZeroU32::new(n).unwrap() }")
     output.append("")
 
     # Map table names to their B.X numbers

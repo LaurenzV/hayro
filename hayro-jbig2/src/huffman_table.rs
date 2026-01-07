@@ -1,5 +1,6 @@
 //! Huffman table decoding, described in Annex B.
 
+use std::num::NonZeroU32;
 use std::rc::Rc;
 
 use crate::reader::Reader;
@@ -28,8 +29,11 @@ const INLINE_TABLE_SIZE: usize = 43;
 #[derive(Debug, Clone, Copy)]
 enum HuffmanNode {
     /// Intermediate node with two children (0 and 1 branches).
-    /// Children are indices into the arena.
-    Intermediate { zero: Option<u32>, one: Option<u32> },
+    /// Children are indices into the arena (always non-zero since index 0 is the root).
+    Intermediate {
+        zero: Option<NonZeroU32>,
+        one: Option<NonZeroU32>,
+    },
     /// Leaf node containing the decoded value information.
     Leaf(LeafData),
     /// Empty node (padding to fill fixed-size arrays in inline tables).
@@ -54,7 +58,7 @@ impl HuffmanNode {
     }
 
     /// Get the child index for a given bit (0 or 1).
-    fn get_child(&self, bit: u32) -> Option<u32> {
+    fn get_child(&self, bit: u32) -> Option<NonZeroU32> {
         match self {
             HuffmanNode::Intermediate { zero, one } => {
                 if bit == 0 {
@@ -68,7 +72,7 @@ impl HuffmanNode {
     }
 
     /// Set the child index for a given bit (0 or 1).
-    fn set_child(&mut self, bit: u32, index: u32) {
+    fn set_child(&mut self, bit: u32, index: NonZeroU32) {
         match self {
             HuffmanNode::Intermediate { zero, one } => {
                 if bit == 0 {
@@ -94,7 +98,7 @@ impl HuffmanNode {
                         .read_bit()
                         .ok_or("unexpected end of data in huffman decode")?;
                     let child_index = if bit == 0 { zero } else { one };
-                    node_index = child_index.ok_or("invalid huffman code")?;
+                    node_index = child_index.ok_or("invalid huffman code")?.get();
                 }
                 HuffmanNode::Leaf(leaf) => {
                     if leaf.is_out_of_band {
@@ -279,7 +283,7 @@ impl HuffmanTable {
         let child_index = match nodes[node_index as usize].get_child(bit) {
             Some(idx) => idx,
             None => {
-                let new_idx = nodes.len() as u32;
+                let new_idx = NonZeroU32::new(nodes.len() as u32).unwrap();
                 nodes.push(HuffmanNode::new_intermediate());
                 nodes[node_index as usize].set_child(bit, new_idx);
                 new_idx
@@ -288,7 +292,7 @@ impl HuffmanTable {
 
         Self::insert_code(
             nodes,
-            child_index,
+            child_index.get(),
             remaining_code,
             prefix_length - 1,
             range_low,
