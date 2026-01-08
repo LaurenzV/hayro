@@ -287,8 +287,6 @@ fn interleave_samples_inner<S: Simd>(
     );
 }
 
-/// Interleave a set of rows. `first_band` values go to positions 0,2,4,...
-/// `second_band` values go to positions 1,3,5,...
 #[inline(always)]
 fn interleave_rows<S: Simd>(
     simd: S,
@@ -316,7 +314,6 @@ fn interleave_rows<S: Simd>(
     }
 }
 
-/// Interleave a single row: first[i] -> out[2i], second[i] -> out[2i+1]
 #[inline(always)]
 fn interleave_row<S: Simd>(simd: S, first: &[f32], second: &[f32], output: &mut [f32]) {
     let num_pairs = first.len().min(second.len());
