@@ -229,38 +229,38 @@ fn interleave_samples_inner<S: Simd>(
     coefficients.resize(width * height, 0.0);
 
     let IntRect { x0: u0, x1: u1, y0: v0, y1: v1 } = decomposition.rect;
-
-    // Get all four sub-bands.
+    
     let ll = input.coefficients;
     let hl = &storage.coefficients[storage.sub_bands[decomposition.sub_bands[0]].coefficients.clone()];
     let lh = &storage.coefficients[storage.sub_bands[decomposition.sub_bands[1]].coefficients.clone()];
     let hh = &storage.coefficients[storage.sub_bands[decomposition.sub_bands[2]].coefficients.clone()];
 
-    // Compute dimensions.
+    // See Figure F.8.
     let num_u_low = (u1.div_ceil(2) - u0.div_ceil(2)) as usize;
     let num_u_high = (u1 / 2 - u0 / 2) as usize;
     let num_v_low = (v1.div_ceil(2) - v0.div_ceil(2)) as usize;
     let num_v_high = (v1 / 2 - v0 / 2) as usize;
 
-    // Determine which band comes first horizontally based on u0 parity.
+    // Depending on whether the star row is even or odd, either LL/HL comes first
+    // or HL/HH.
+    
     let (first_w, second_w) = if u0 % 2 == 0 {
         (num_u_low, num_u_high)
     } else {
         (num_u_high, num_u_low)
     };
 
-    // Starting row in output buffer.
     let even_row_start = if v0 % 2 == 0 { 0 } else { 1 };
     let odd_row_start = if v0 % 2 == 0 { 1 } else { 0 };
 
-    // Process even rows (LL + HL): swap order based on u0 parity.
+    // Determine whether LL or HL is the band in the first column.
     let (first_even, second_even) = if u0 % 2 == 0 { (ll, hl) } else { (hl, ll) };
     interleave_rows(
         simd, first_even, second_even, first_w, second_w,
         coefficients, width, height, even_row_start, num_v_low,
     );
 
-    // Process odd rows (LH + HH): swap order based on u0 parity.
+    // Determine whether LH or HH is the band in the first column.
     let (first_odd, second_odd) = if u0 % 2 == 0 { (lh, hh) } else { (hh, lh) };
     interleave_rows(
         simd, first_odd, second_odd, first_w, second_w,
@@ -303,7 +303,7 @@ fn interleave_row<S: Simd>(simd: S, first: &[f32], second: &[f32], output: &mut 
     let num_pairs = first.len().min(second.len());
     let simd_chunks = num_pairs / SIMD_WIDTH;
 
-    // SIMD loop: process 8 pairs at a time.
+    // Process as much as possible using SIMD.
     for i in 0..simd_chunks {
         let base = i * SIMD_WIDTH;
         let f = f32x8::from_slice(simd, &first[base..base + SIMD_WIDTH]);
