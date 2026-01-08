@@ -149,25 +149,17 @@ pub(crate) fn apply(
 
 struct IDWTInput<'a> {
     coefficients: &'a [f32],
-    #[allow(dead_code)]
-    sub_band_type: SubBandType,
 }
 
 impl<'a> IDWTInput<'a> {
     fn from_sub_band(sub_band: &'a SubBand, storage: &'a DecompositionStorage<'_>) -> Self {
         IDWTInput {
             coefficients: &storage.coefficients[sub_band.coefficients.clone()],
-            sub_band_type: sub_band.sub_band_type,
         }
     }
 
     fn from_output(coefficients: &'a [f32]) -> Self {
-        IDWTInput {
-            coefficients,
-            // The output from a previous iteration turns into the LL sub band
-            // for the next iteration.
-            sub_band_type: SubBandType::LowLow,
-        }
+        IDWTInput { coefficients }
     }
 }
 
