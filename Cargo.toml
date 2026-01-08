@@ -46,7 +46,7 @@ phf = { version = "0.13.1" }
 moxcms = { version = "0.7.11" }
 rustc-hash = { version = "2" }
 siphasher = "1"
-skrifa = { version = "0.39.0" }
+skrifa = { version = "0.40.0" }
 smallvec = { version = "1" }
 yoke = { version = "0.8" }
 pdf-writer = "0.14.0"
@@ -54,7 +54,7 @@ sitro = { git = "https://github.com/LaurenzV/sitro", rev="fb804b3" }
 xmlwriter = { version = "0.1" }
 base64 = { version = "0.22" }
 zune-jpeg = { version = "0.5" }
-vello_cpu = { git = "https://github.com/linebender/vello", rev = "4ea47b4", default-features = false, features = ["std", "png", "u8_pipeline"] }
+vello_cpu = { version = "0.0.5", default-features = false, features = ["std", "png", "u8_pipeline"] }
 fast_image_resize = { version = "5", default-features = false }
 fearless_simd = "0.3.0"
 

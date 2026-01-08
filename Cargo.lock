@@ -423,6 +423,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "font-types"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b1e4d2d0cf79d38430cc9dc9aadec84774bff2e1ba30ae2bf6c16cfce9385a23"
+dependencies = [
+ "bytemuck",
+]
+
+[[package]]
 name = "fontconfig-parser"
 version = "0.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -577,7 +586,7 @@ dependencies = [
  "phf",
  "rustc-hash",
  "siphasher",
- "skrifa 0.39.0",
+ "skrifa 0.40.0",
  "smallvec",
  "yoke",
 ]
@@ -1139,17 +1148,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6717cf23b488adf64b9d711329542ba34de147df262370221940dfabc2c91358"
 dependencies = [
  "bytemuck",
- "font-types",
+ "font-types 0.10.1",
 ]
 
 [[package]]
 name = "read-fonts"
-version = "0.36.0"
+version = "0.37.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5eaa2941a4c05443ee3a7b26ab076a553c343ad5995230cc2b1d3e993bdc6345"
+checksum = "7b634fabf032fab15307ffd272149b622260f55974d9fad689292a5d33df02e5"
 dependencies = [
  "bytemuck",
- "font-types",
+ "font-types 0.11.0",
 ]
 
 [[package]]
@@ -1374,12 +1383,12 @@ dependencies = [
 
 [[package]]
 name = "skrifa"
-version = "0.39.0"
+version = "0.40.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c9eb0b904a04d09bd68c65d946617b8ff733009999050f3b851c32fb3cfb60e"
+checksum = "7fbdfe3d2475fbd7ddd1f3e5cf8288a30eb3e5f95832829570cd88115a7434ac"
 dependencies = [
  "bytemuck",
- "read-fonts 0.36.0",
+ "read-fonts 0.37.0",
 ]
 
 [[package]]
@@ -1618,8 +1627,9 @@ dependencies = [
 
 [[package]]
 name = "vello_common"
-version = "0.0.4"
-source = "git+https://github.com/linebender/vello?rev=4ea47b4#4ea47b47c3e04a68b20422c9a12b2b98c735f547"
+version = "0.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2dc01cc9e1e2511e5e77024e8d4c2287b9272cafc05ba669ed1056579219dd73"
 dependencies = [
  "bytemuck",
  "fearless_simd",
@@ -1633,8 +1643,9 @@ dependencies = [
 
 [[package]]
 name = "vello_cpu"
-version = "0.0.4"
-source = "git+https://github.com/linebender/vello?rev=4ea47b4#4ea47b47c3e04a68b20422c9a12b2b98c735f547"
+version = "0.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9228d8ed0f1f030de9a09b66b4750012194c0f171030ec74214ba1ca3b9eed23"
 dependencies = [
  "bytemuck",
  "hashbrown",
