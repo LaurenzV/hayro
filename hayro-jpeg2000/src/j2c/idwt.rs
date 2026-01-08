@@ -244,7 +244,7 @@ fn interleave_samples_inner<S: Simd>(
     let num_v_low = (v1.div_ceil(2) - v0.div_ceil(2)) as usize;
     let num_v_high = (v1 / 2 - v0 / 2) as usize;
 
-    // Depending on whether the star row is even or odd, either LL/HL comes first
+    // Depending on whether the start row is even or odd, either LL/HL comes first
     // or HL/HH.
 
     let (first_w, second_w) = if u0 % 2 == 0 {
