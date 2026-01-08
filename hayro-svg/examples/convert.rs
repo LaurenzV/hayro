@@ -2,8 +2,8 @@
 
 use hayro_interpret::InterpreterSettings;
 use hayro_svg::convert;
-use std::sync::Arc;
 use hayro_svg::hayro_syntax::Pdf;
+use std::sync::Arc;
 
 fn main() {
     let pdf = std::fs::read(std::env::args().nth(1).unwrap()).unwrap();

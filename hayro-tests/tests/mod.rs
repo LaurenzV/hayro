@@ -1,5 +1,5 @@
-use hayro::hayro_interpret::font::{FontData, FontQuery, StandardFont};
 use hayro::hayro_interpret::InterpreterSettings;
+use hayro::hayro_interpret::font::{FontData, FontQuery, StandardFont};
 use hayro_syntax::Pdf;
 use hayro_syntax::{DecryptionError, LoadPdfError};
 use image::{Rgba, RgbaImage, load_from_memory};

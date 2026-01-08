@@ -1,7 +1,7 @@
 use hayro::hayro_interpret::InterpreterSettings;
-use hayro_syntax::Pdf;
 use hayro::render_pdf;
 use hayro_jpeg2000::{DecodeSettings, Image};
+use hayro_syntax::Pdf;
 use hayro_syntax::metadata::Metadata;
 use hayro_syntax::object::DateTime;
 use std::sync::Arc;
