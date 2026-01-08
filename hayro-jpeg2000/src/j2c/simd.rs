@@ -48,6 +48,20 @@ mod inner {
         pub(crate) fn store(self, slice: &mut [f32]) {
             slice[..SIMD_WIDTH].copy_from_slice(&self.inner.val);
         }
+
+        #[inline(always)]
+        pub(crate) fn zip_low(self, other: Self) -> Self {
+            Self {
+                inner: self.inner.zip_low(other.inner),
+            }
+        }
+
+        #[inline(always)]
+        pub(crate) fn zip_high(self, other: Self) -> Self {
+            Self {
+                inner: self.inner.zip_high(other.inner),
+            }
+        }
     }
 
     impl<S: Simd> Add for f32x8<S> {
@@ -203,6 +217,40 @@ mod inner {
         #[inline(always)]
         pub(crate) fn store(self, slice: &mut [f32]) {
             slice[..SIMD_WIDTH].copy_from_slice(&self.val);
+        }
+
+        #[inline(always)]
+        pub(crate) fn zip_low(self, other: Self) -> Self {
+            Self {
+                val: [
+                    self.val[0],
+                    other.val[0],
+                    self.val[1],
+                    other.val[1],
+                    self.val[2],
+                    other.val[2],
+                    self.val[3],
+                    other.val[3],
+                ],
+                _marker: PhantomData,
+            }
+        }
+
+        #[inline(always)]
+        pub(crate) fn zip_high(self, other: Self) -> Self {
+            Self {
+                val: [
+                    self.val[4],
+                    other.val[4],
+                    self.val[5],
+                    other.val[5],
+                    self.val[6],
+                    other.val[6],
+                    self.val[7],
+                    other.val[7],
+                ],
+                _marker: PhantomData,
+            }
         }
     }
 
