@@ -516,7 +516,7 @@ dependencies = [
 
 [[package]]
 name = "hayro"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "bytemuck",
  "fast_image_resize",
@@ -547,7 +547,7 @@ dependencies = [
 
 [[package]]
 name = "hayro-font"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "log",
  "phf",
@@ -566,7 +566,7 @@ dependencies = [
 
 [[package]]
 name = "hayro-interpret"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "bitflags 2.10.0",
  "hayro-font",
@@ -597,7 +597,7 @@ dependencies = [
 
 [[package]]
 name = "hayro-jpeg2000"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "fearless_simd",
  "image 0.25.9",
@@ -611,7 +611,7 @@ dependencies = [
 
 [[package]]
 name = "hayro-svg"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "base64",
  "hayro-interpret",
@@ -624,7 +624,7 @@ dependencies = [
 
 [[package]]
 name = "hayro-syntax"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "aes",
  "cbc",
@@ -661,7 +661,7 @@ dependencies = [
 
 [[package]]
 name = "hayro-write"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "flate2",
  "hayro-syntax",

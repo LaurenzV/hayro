@@ -1,6 +1,6 @@
 [package]
 name = "hayro-write"
-version = "0.3.0"
+version = "0.4.0"
 description = "A crate for rewriting pages of a PDF file."
 authors = { workspace = true }
 edition = { workspace = true }
