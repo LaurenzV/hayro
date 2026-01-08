@@ -51,7 +51,6 @@ pub use context::*;
 pub use device::*;
 pub use function::Function;
 pub use hayro_syntax;
-pub use hayro_syntax::Pdf;
 pub use interpret::*;
 pub use soft_mask::*;
 pub use types::*;

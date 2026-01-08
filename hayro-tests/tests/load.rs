@@ -1,5 +1,5 @@
-use hayro::InterpreterSettings;
-use hayro::Pdf;
+use hayro::hayro_interpret::InterpreterSettings;
+use hayro_syntax::Pdf;
 use hayro::render_pdf;
 use hayro_jpeg2000::{DecodeSettings, Image};
 use hayro_syntax::metadata::Metadata;

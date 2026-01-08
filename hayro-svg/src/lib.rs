@@ -35,6 +35,9 @@ use std::fmt::{Display, Formatter};
 use std::hash::Hash;
 use xmlwriter::{Options, XmlWriter};
 
+pub use hayro_interpret;
+pub use hayro_interpret::hayro_syntax;
+
 mod clip;
 mod glyph;
 pub(crate) mod image;

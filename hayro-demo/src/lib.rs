@@ -1,5 +1,7 @@
 use console_error_panic_hook;
-use hayro::{InterpreterSettings, Pdf, RenderSettings};
+use hayro::RenderSettings;
+use hayro::hayro_interpret::InterpreterSettings;
+use hayro::hayro_syntax::Pdf;
 use js_sys;
 use std::sync::Arc;
 use vello_cpu::color::palette::css::WHITE;

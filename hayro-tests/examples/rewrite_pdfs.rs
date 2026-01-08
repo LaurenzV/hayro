@@ -1,6 +1,6 @@
 //! This is just a test script to make it easier to manually test `hayro-write`.
 
-use hayro::Pdf;
+use hayro_syntax::Pdf;
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;

@@ -1,8 +1,8 @@
 #![allow(dead_code)]
 
-use hayro::Pdf;
 use hayro_jpeg2000::DecodeSettings;
 use hayro_syntax::Filter;
+use hayro_syntax::Pdf;
 use rayon::prelude::*;
 use std::collections::HashSet;
 use std::env;

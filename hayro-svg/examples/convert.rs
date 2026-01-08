@@ -1,8 +1,9 @@
 //! Convert a PDF file into a series of SVG files.
 
-use hayro_interpret::{InterpreterSettings, Pdf};
+use hayro_interpret::InterpreterSettings;
 use hayro_svg::convert;
 use std::sync::Arc;
+use hayro_svg::hayro_syntax::Pdf;
 
 fn main() {
     let pdf = std::fs::read(std::env::args().nth(1).unwrap()).unwrap();

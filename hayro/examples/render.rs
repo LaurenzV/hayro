@@ -1,7 +1,8 @@
 //! This example shows you how you can render a PDF file to PNG.
 
-use hayro::{Pdf, RenderSettings, render};
-use hayro_interpret::InterpreterSettings;
+use hayro::hayro_interpret::InterpreterSettings;
+use hayro::hayro_syntax::Pdf;
+use hayro::{RenderSettings, render};
 use std::sync::Arc;
 use vello_cpu::color::palette::css::WHITE;
 

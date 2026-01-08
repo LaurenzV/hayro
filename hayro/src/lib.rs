@@ -36,16 +36,17 @@ This crate has one optional feature:
 use crate::renderer::Renderer;
 use hayro_interpret::Device;
 use hayro_interpret::FillRule;
-pub use hayro_interpret::font::{
-    FallbackFontQuery, FontData, FontQuery, FontStretch, StandardFont,
-};
-pub use hayro_interpret::hayro_syntax::page::{Page, Pages};
+use hayro_interpret::InterpreterSettings;
+use hayro_interpret::hayro_syntax::Pdf;
+use hayro_interpret::hayro_syntax::page::Page;
 use hayro_interpret::util::{PageExt, RectExt};
 use hayro_interpret::{BlendMode, Context};
 use hayro_interpret::{ClipPath, interpret_page};
-pub use hayro_interpret::{InterpreterSettings, Pdf};
 use kurbo::{Affine, Rect, Shape};
 use std::ops::RangeInclusive;
+
+pub use hayro_interpret;
+pub use hayro_interpret::hayro_syntax;
 pub use vello_cpu;
 
 use vello_cpu::color::AlphaColor;
@@ -123,8 +124,10 @@ pub fn render(
     device
         .ctx
         .fill_rect(&Rect::new(0.0, 0.0, pix_width as f64, pix_height as f64));
+    let mut clip_path = page.intersected_crop_box().to_kurbo().to_path(0.1);
+    clip_path.apply_affine(initial_transform);
     device.push_clip_path(&ClipPath {
-        path: initial_transform * page.intersected_crop_box().to_kurbo().to_path(0.1),
+        path: clip_path,
         fill: FillRule::NonZero,
     });
 

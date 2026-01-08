@@ -1,5 +1,5 @@
 use crate::{load_pdf, run_write_test};
-use hayro::Pdf;
+use hayro_syntax::Pdf;
 use hayro_write::ExtractionQuery;
 use pdf_writer::Ref;
 use sitro::Renderer;

@@ -13,13 +13,14 @@ mod primitive;
 use crate::primitive::{WriteDirect, WriteIndirect};
 use flate2::Compression;
 use flate2::write::ZlibEncoder;
+use hayro_syntax::Pdf;
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Object;
 use hayro_syntax::object::dict::keys::{
     COLORSPACE, EXT_G_STATE, FONT, GROUP, PATTERN, PROPERTIES, SHADING, XOBJECT,
 };
 use hayro_syntax::object::{MaybeRef, ObjRef};
-use hayro_syntax::page::{Resources, Rotation};
+use hayro_syntax::page::{Page, Resources, Rotation};
 use kurbo::Affine;
 use log::warn;
 use pdf_writer::{Chunk, Content, Filter, Finish, Name, Rect, Ref};
@@ -27,8 +28,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::ops::Deref;
 use std::ops::DerefMut;
 
-pub use hayro_syntax::page::{Page, Pages};
-pub use hayro_syntax::{LoadPdfError, Pdf, PdfData, PdfVersion};
+pub use hayro_syntax;
 
 /// Apply the extraction queries to the given PDF and return the results.
 pub fn extract<'a>(
