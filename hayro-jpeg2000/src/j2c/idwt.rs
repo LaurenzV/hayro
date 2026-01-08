@@ -228,12 +228,23 @@ fn interleave_samples_inner<S: Simd>(
     // the clear operation.
     coefficients.resize(width * height, 0.0);
 
-    let IntRect { x0: u0, x1: u1, y0: v0, y1: v1 } = decomposition.rect;
-    
+    let IntRect {
+        x0: u0,
+        x1: u1,
+        y0: v0,
+        y1: v1,
+    } = decomposition.rect;
+
     let ll = input.coefficients;
-    let hl = &storage.coefficients[storage.sub_bands[decomposition.sub_bands[0]].coefficients.clone()];
-    let lh = &storage.coefficients[storage.sub_bands[decomposition.sub_bands[1]].coefficients.clone()];
-    let hh = &storage.coefficients[storage.sub_bands[decomposition.sub_bands[2]].coefficients.clone()];
+    let hl = &storage.coefficients[storage.sub_bands[decomposition.sub_bands[0]]
+        .coefficients
+        .clone()];
+    let lh = &storage.coefficients[storage.sub_bands[decomposition.sub_bands[1]]
+        .coefficients
+        .clone()];
+    let hh = &storage.coefficients[storage.sub_bands[decomposition.sub_bands[2]]
+        .coefficients
+        .clone()];
 
     // See Figure F.8.
     let num_u_low = (u1.div_ceil(2) - u0.div_ceil(2)) as usize;
@@ -243,7 +254,7 @@ fn interleave_samples_inner<S: Simd>(
 
     // Depending on whether the star row is even or odd, either LL/HL comes first
     // or HL/HH.
-    
+
     let (first_w, second_w) = if u0 % 2 == 0 {
         (num_u_low, num_u_high)
     } else {
@@ -256,15 +267,31 @@ fn interleave_samples_inner<S: Simd>(
     // Determine whether LL or HL is the band in the first column.
     let (first_even, second_even) = if u0 % 2 == 0 { (ll, hl) } else { (hl, ll) };
     interleave_rows(
-        simd, first_even, second_even, first_w, second_w,
-        coefficients, width, height, even_row_start, num_v_low,
+        simd,
+        first_even,
+        second_even,
+        first_w,
+        second_w,
+        coefficients,
+        width,
+        height,
+        even_row_start,
+        num_v_low,
     );
 
     // Determine whether LH or HH is the band in the first column.
     let (first_odd, second_odd) = if u0 % 2 == 0 { (lh, hh) } else { (hh, lh) };
     interleave_rows(
-        simd, first_odd, second_odd, first_w, second_w,
-        coefficients, width, height, odd_row_start, num_v_high,
+        simd,
+        first_odd,
+        second_odd,
+        first_w,
+        second_w,
+        coefficients,
+        width,
+        height,
+        odd_row_start,
+        num_v_high,
     );
 }
 
