@@ -1,6 +1,6 @@
 //! Performing the inverse discrete wavelet transform, as specified in Annex F.
 
-use super::build::{Decomposition, SubBand, SubBandType};
+use super::build::{Decomposition, SubBand};
 use super::codestream::WaveletTransform;
 use super::decode::{DecompositionStorage, TileDecodeContext};
 use super::rect::IntRect;
