@@ -1,4 +1,4 @@
-use hayro_common::byte::Reader;
+use crate::byte_reader::Reader;
 use std::str::FromStr;
 
 /// A date time.

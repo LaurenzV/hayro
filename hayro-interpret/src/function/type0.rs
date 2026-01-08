@@ -1,5 +1,5 @@
 use crate::function::{Clamper, TupleVec, Values, interpolate};
-use hayro_common::bit::BitReader;
+use hayro_syntax::bit_reader::BitReader;
 use hayro_syntax::object::Array;
 use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::{BITS_PER_SAMPLE, DECODE, ENCODE, SIZE};

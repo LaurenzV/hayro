@@ -10,7 +10,6 @@ members = [
     "hayro-svg",
     "hayro-jpeg2000",
     "hayro-jbig2",
-    "hayro-common",
     "hayro-ccitt",
     "hayro-fuzz"
 ]
@@ -24,7 +23,6 @@ license = "Apache-2.0 OR MIT"
 
 [workspace.dependencies]
 hayro = { path = "hayro", version = "0.4.0", default-features = false }
-hayro-common = { path = "hayro-common", version = "0.1.0", default-features = false }
 hayro-ccitt = { path = "hayro-ccitt", version = "0.2.0", default-features = false }
 hayro-font = { path = "hayro-font", version = "0.3.0", default-features = false }
 hayro-interpret = { path = "hayro-interpret", version = "0.4.0", default-features = false }

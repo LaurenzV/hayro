@@ -55,7 +55,7 @@ impl<'a> BitReader<'a> {
             0..=32 => {
                 let bit_pos = self.bit_pos();
                 let end_byte_pos = (bit_pos + bit_size as usize - 1) / 8;
-                let mut read = [0u8; 8];
+                let mut read = [0_u8; 8];
 
                 for (i, r) in read.iter_mut().enumerate().take(end_byte_pos + 1) {
                     *r = *self.data.get(byte_pos + i)?;
@@ -116,7 +116,7 @@ impl<'a> BitReader<'a> {
 
 /// Get the mask for the given bit size.
 pub fn bit_mask(bit_size: u8) -> u32 {
-    ((1u64 << bit_size as u64) - 1) as u32
+    ((1_u64 << bit_size as u64) - 1) as u32
 }
 /// A bit writer.
 #[derive(Debug)]
@@ -143,7 +143,7 @@ impl<'a> BitWriter<'a> {
 
     /// Split off the already-written parts and return a new bit writer for the tail.
     #[inline]
-    pub fn split_off(self) -> (&'a [u8], BitWriter<'a>) {
+    pub fn split_off(self) -> (&'a [u8], Self) {
         // Assumes that we are currently aligned to a byte boundary!
         let (left, right) = self.data.split_at_mut(self.cur_pos / 8);
         (
@@ -283,7 +283,11 @@ impl BitChunk {
     }
 
     /// Create a new bit chunk from the given reader.
-    pub fn from_reader(bit_reader: &mut BitReader, bit_size: u8, chunk_len: usize) -> Option<Self> {
+    pub fn from_reader(
+        bit_reader: &mut BitReader<'_>,
+        bit_size: u8,
+        chunk_len: usize,
+    ) -> Option<Self> {
         if bit_size > 16 {
             return None;
         }
@@ -294,7 +298,7 @@ impl BitChunk {
             bits.push(bit_reader.read(bit_size)? as u16);
         }
 
-        Some(BitChunk { bits })
+        Some(Self { bits })
     }
 }
 

@@ -1,7 +1,7 @@
+use crate::bit_reader::BitWriter;
 use crate::object::Dict;
 use crate::object::Stream;
 use crate::object::dict::keys::JBIG2_GLOBALS;
-use hayro_common::bit::BitWriter;
 
 /// Decode JBIG2 data from a PDF stream.
 ///

@@ -532,13 +532,6 @@ name = "hayro-ccitt"
 version = "0.2.0"
 
 [[package]]
-name = "hayro-common"
-version = "0.1.0"
-dependencies = [
- "smallvec",
-]
-
-[[package]]
 name = "hayro-demo"
 version = "0.1.0"
 dependencies = [
@@ -576,7 +569,6 @@ name = "hayro-interpret"
 version = "0.4.0"
 dependencies = [
  "bitflags 2.10.0",
- "hayro-common",
  "hayro-font",
  "hayro-syntax",
  "image 0.25.9",
@@ -638,7 +630,6 @@ dependencies = [
  "cbc",
  "flate2",
  "hayro-ccitt",
- "hayro-common",
  "hayro-jbig2",
  "hayro-jpeg2000",
  "log",

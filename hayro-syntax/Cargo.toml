@@ -12,7 +12,6 @@ readme = "README.md"
 log = { workspace = true }
 rustc-hash = { workspace = true }
 smallvec = { workspace = true }
-hayro-common = { workspace = true }
 zune-jpeg = { workspace = true }
 flate2 = { workspace = true }
 
