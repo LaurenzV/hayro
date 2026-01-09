@@ -4,8 +4,8 @@ use super::build::{Decomposition, SubBand};
 use super::codestream::WaveletTransform;
 use super::decode::{DecompositionStorage, TileDecodeContext};
 use super::rect::IntRect;
-use super::simd::{Level, SIMD_WIDTH, Simd, dispatch, f32x8};
-use crate::j2c::{Header, simd};
+use crate::j2c::Header;
+use crate::simd::{self, Level, SIMD_WIDTH, Simd, dispatch, f32x8};
 
 /// The output from performing the IDWT operation.
 pub(crate) struct IDWTOutput {

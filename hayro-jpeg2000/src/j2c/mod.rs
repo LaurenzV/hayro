@@ -8,7 +8,6 @@ mod mct;
 mod progression;
 mod rect;
 mod segment;
-pub(crate) mod simd;
 mod tag_tree;
 mod tile;
 
@@ -34,7 +33,7 @@ pub(crate) struct DecodedCodestream {
 
 #[derive(Debug, Clone)]
 pub(crate) struct ComponentData {
-    pub(crate) container: Vec<f32>,
+    pub(crate) container: crate::simd::SimdBuffer<{ crate::simd::SIMD_WIDTH }>,
     pub(crate) bit_depth: u8,
 }
 

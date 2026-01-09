@@ -21,8 +21,9 @@ use super::{ComponentData, bitplane, build, idwt, mct, segment, tile};
 use crate::error::{DecodingError, Result, TileError, bail};
 use crate::j2c::segment::MAX_BITPLANE_COUNT;
 use crate::reader::BitReader;
+use crate::simd::SimdBuffer;
 use log::trace;
-use std::ops::Range;
+use std::ops::{DerefMut, Range};
 
 pub(crate) fn decode(data: &[u8], header: &Header<'_>) -> Result<Vec<ComponentData>> {
     let mut reader = BitReader::new(data);
@@ -253,11 +254,10 @@ impl<'a> TileDecodeContext<'a> {
 
         for info in &initial_tile.component_infos {
             channel_data.push(ComponentData {
-                container: vec![
-                    0.0;
+                container: SimdBuffer::zeros(
                     header.size_data.image_width() as usize
-                        * header.size_data.image_height() as usize
-                ],
+                        * header.size_data.image_height() as usize,
+                ),
                 bit_depth: info.size_info.precision,
             });
         }
@@ -407,7 +407,7 @@ fn apply_sign_shift(tile_ctx: &mut TileDecodeContext<'_>, component_infos: &[Com
     for (channel_data, component_info) in
         tile_ctx.channel_data.iter_mut().zip(component_infos.iter())
     {
-        for sample in &mut channel_data.container {
+        for sample in channel_data.container.deref_mut() {
             *sample += (1_u32 << (component_info.size_info.precision - 1)) as f32;
         }
     }

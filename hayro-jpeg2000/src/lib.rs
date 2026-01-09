@@ -71,6 +71,7 @@ use crate::jp2::icc::ICCMetadata;
 use crate::jp2::{DecodedImage, ImageBoxes};
 
 pub mod error;
+pub(crate) mod simd;
 
 pub use error::{
     ColorError, DecodeError, DecodingError, FormatError, MarkerError, Result, TileError,
@@ -375,7 +376,7 @@ fn interleave_and_convert(image: DecodedImage, buf: &mut [u8]) {
         }
     }
 
-    let max_len = components[0].container.len();
+    let max_len = components[0].container.truncated().len();
 
     let mut output_iter = buf.iter_mut();
 
@@ -558,9 +559,9 @@ fn resolve_palette_indices(
                     .get(column_idx)
                     .ok_or(ColorError::PaletteResolutionFailed)?;
 
-                let mut mapped = Vec::with_capacity(component.container.len());
+                let mut mapped = Vec::with_capacity(component.container.truncated().len());
 
-                for &sample in &component.container {
+                for &sample in component.container.truncated() {
                     let index = sample.round() as i64;
                     let value = palette
                         .map(index as usize, column_idx)
@@ -569,7 +570,7 @@ fn resolve_palette_indices(
                 }
 
                 resolved.push(ComponentData {
-                    container: mapped,
+                    container: simd::SimdBuffer::new(mapped),
                     bit_depth: column_info.bit_depth,
                 });
             }

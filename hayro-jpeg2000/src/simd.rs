@@ -370,7 +370,7 @@ mod inner {
     macro_rules! simd_dispatch {
         ($level:expr, $simd:ident => $body:expr) => {{
             let _ = $level;
-            let $simd = $crate::j2c::simd::ScalarSimd;
+            let $simd = $crate::simd::ScalarSimd;
             $body
         }};
     }
@@ -403,3 +403,51 @@ pub(crate) fn mul_add(a: f32, b: f32, c: f32) -> f32 {
 }
 
 pub(crate) use inner::*;
+
+/// A wrapper around `Vec<f32>` that pads the vector to a multiple of `N` elements.
+/// This allows SIMD operations to safely process the data without bounds checking
+/// at the end of the buffer.
+#[derive(Debug, Clone)]
+pub(crate) struct SimdBuffer<const N: usize> {
+    data: Vec<f32>,
+    original_len: usize,
+}
+
+impl<const N: usize> SimdBuffer<N> {
+    /// Create a new `SimdBuffer` from a `Vec<f32>`, padding it to a multiple of `N`.
+    pub(crate) fn new(mut data: Vec<f32>) -> Self {
+        let original_len = data.len();
+        let remainder = original_len % N;
+        if remainder != 0 {
+            let padding = N - remainder;
+            data.resize(original_len + padding, 0.0);
+        }
+        Self { data, original_len }
+    }
+
+    /// Create a new `SimdBuffer` filled with zeros.
+    pub(crate) fn zeros(len: usize) -> Self {
+        Self::new(vec![0.0; len])
+    }
+
+    /// Returns only the original (non-padded) data as an immutable slice.
+    pub(crate) fn truncated(&self) -> &[f32] {
+        &self.data[..self.original_len]
+    }
+}
+
+impl<const N: usize> std::ops::Deref for SimdBuffer<N> {
+    type Target = [f32];
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        &self.data
+    }
+}
+
+impl<const N: usize> std::ops::DerefMut for SimdBuffer<N> {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.data
+    }
+}

@@ -3,8 +3,8 @@
 
 use super::codestream::{Header, WaveletTransform};
 use super::decode::TileDecodeContext;
-use super::simd::{Level, Simd, dispatch, f32x8};
 use crate::error::{ColorError, Result, bail, err};
+use crate::simd::{Level, Simd, dispatch, f32x8};
 
 /// Apply the inverse multi-component transform, as specified in G.2 and G.3.
 pub(crate) fn apply_inverse(
@@ -21,9 +21,6 @@ pub(crate) fn apply_inverse(
 
     let (s, _) = tile_ctx.channel_data.split_at_mut(3);
     let [s0, s1, s2] = s else { unreachable!() };
-    let s0 = &mut s0.container;
-    let s1 = &mut s1.container;
-    let s2 = &mut s2.container;
 
     let transform = tile_ctx.tile.component_infos[0].wavelet_transform();
 
@@ -34,22 +31,16 @@ pub(crate) fn apply_inverse(
         bail!(ColorError::Mct);
     }
 
-    let len = s0.len();
-
-    if len != s1.len() || s1.len() != s2.len() {
+    if s0.container.len() != s1.container.len() || s1.container.len() != s2.container.len() {
         bail!(ColorError::Mct);
     }
 
-    let new_len = len.next_multiple_of(8);
-    s0.resize(new_len, 0.0);
-    s1.resize(new_len, 0.0);
-    s2.resize(new_len, 0.0);
-
-    apply_inner(transform, s0, s1, s2);
-
-    s0.truncate(len);
-    s1.truncate(len);
-    s2.truncate(len);
+    apply_inner(
+        transform,
+        &mut s0.container,
+        &mut s1.container,
+        &mut s2.container,
+    );
 
     Ok(())
 }
