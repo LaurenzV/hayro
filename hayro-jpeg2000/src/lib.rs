@@ -697,8 +697,8 @@ fn sycc_to_rgb<S: Simd>(
     let max_v = f32x8::splat(simd, max_value);
     let zero_v = f32x8::splat(simd, 0.0);
     let cr_to_r = f32x8::splat(simd, 1.402);
-    let cb_to_g = f32x8::splat(simd, 0.344136);
-    let cr_to_g = f32x8::splat(simd, 0.714136);
+    let cb_to_g = f32x8::splat(simd, -0.344136);
+    let cr_to_g = f32x8::splat(simd, -0.714136);
     let cb_to_b = f32x8::splat(simd, 1.772);
 
     for ((y_chunk, cb_chunk), cr_chunk) in y
@@ -711,9 +711,12 @@ fn sycc_to_rgb<S: Simd>(
         let cb_v = f32x8::from_slice(simd, cb_chunk) - offset_v;
         let cr_v = f32x8::from_slice(simd, cr_chunk) - offset_v;
 
-        let r = y_v + cr_v * cr_to_r;
-        let g = y_v - cb_v * cb_to_g - cr_v * cr_to_g;
-        let b = y_v + cb_v * cb_to_b;
+        // r = y + 1.402 * cr
+        let r = cr_v.mul_add(cr_to_r, y_v);
+        // g = y - 0.344136 * cb - 0.714136 * cr
+        let g = cr_v.mul_add(cr_to_g, cb_v.mul_add(cb_to_g, y_v));
+        // b = y + 1.772 * cb
+        let b = cb_v.mul_add(cb_to_b, y_v);
 
         r.min(max_v).max(zero_v).store(y_chunk);
         g.min(max_v).max(zero_v).store(cb_chunk);
