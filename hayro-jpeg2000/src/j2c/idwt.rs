@@ -5,7 +5,7 @@ use super::codestream::WaveletTransform;
 use super::decode::{DecompositionStorage, TileDecodeContext};
 use super::rect::IntRect;
 use super::simd::{Level, SIMD_WIDTH, Simd, dispatch, f32x8};
-use crate::j2c::Header;
+use crate::j2c::{Header, simd};
 
 /// The output from performing the IDWT operation.
 pub(crate) struct IDWTOutput {
@@ -723,9 +723,9 @@ fn irreversible_filter_97i_simd<S: Simd>(
         simd_width,
         first_even,
         #[inline(always)]
-        |s1, s2, s3| s1 + neg_delta * (s2 + s3),
+        |s1, s2, s3| (s2 + s3).mul_add(neg_delta, s1),
         #[inline(always)]
-        |s1, s2, s3| s1 + NEG_DELTA * (s2 + s3),
+        |s1, s2, s3| simd::mul_add(s2 + s3, NEG_DELTA, s1),
     );
 
     // Step 4.
@@ -738,9 +738,9 @@ fn irreversible_filter_97i_simd<S: Simd>(
         simd_width,
         first_odd,
         #[inline(always)]
-        |s1, s2, s3| s1 + neg_gamma * (s2 + s3),
+        |s1, s2, s3| (s2 + s3).mul_add(neg_gamma, s1),
         #[inline(always)]
-        |s1, s2, s3| s1 + NEG_GAMMA * (s2 + s3),
+        |s1, s2, s3| simd::mul_add(s2 + s3, NEG_GAMMA, s1),
     );
 
     // Step 5.
@@ -753,9 +753,9 @@ fn irreversible_filter_97i_simd<S: Simd>(
         simd_width,
         first_even,
         #[inline(always)]
-        |s1, s2, s3| s1 + neg_beta * (s2 + s3),
+        |s1, s2, s3| (s2 + s3).mul_add(neg_beta, s1),
         #[inline(always)]
-        |s1, s2, s3| s1 + NEG_BETA * (s2 + s3),
+        |s1, s2, s3| simd::mul_add(s2 + s3, NEG_BETA, s1),
     );
 
     // Step 6.
@@ -768,8 +768,8 @@ fn irreversible_filter_97i_simd<S: Simd>(
         simd_width,
         first_odd,
         #[inline(always)]
-        |s1, s2, s3| s1 + neg_alpha * (s2 + s3),
+        |s1, s2, s3| (s2 + s3).mul_add(neg_alpha, s1),
         #[inline(always)]
-        |s1, s2, s3| s1 + NEG_ALPHA * (s2 + s3),
+        |s1, s2, s3| simd::mul_add(s2 + s3, NEG_ALPHA, s1),
     );
 }

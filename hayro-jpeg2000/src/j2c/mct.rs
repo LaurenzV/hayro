@@ -78,9 +78,12 @@ fn apply_inner_impl<S: Simd>(
                 let y_1 = f32x8::from_slice(simd, y1);
                 let y_2 = f32x8::from_slice(simd, y2);
 
-                let i0 = y_2.madd(1.402, y_0);
-                let i1 = y_2.madd(-0.71414, y_1.madd(-0.34413, y_0));
-                let i2 = y_1.madd(1.772, y_0);
+                let i0 = y_2.mul_add(f32x8::splat(simd, 1.402), y_0);
+                let i1 = y_2.mul_add(
+                    f32x8::splat(simd, -0.71414),
+                    y_1.mul_add(f32x8::splat(simd, -0.34413), y_0),
+                );
+                let i2 = y_1.mul_add(f32x8::splat(simd, 1.772), y_0);
 
                 i0.store(y0);
                 i1.store(y1);

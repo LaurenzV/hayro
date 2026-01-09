@@ -31,9 +31,9 @@ mod inner {
         }
 
         #[inline(always)]
-        pub(crate) fn madd(self, scalar: f32, addend: Self) -> Self {
+        pub(crate) fn mul_add(self, mul: Self, addend: Self) -> Self {
             Self {
-                inner: self.inner.madd(scalar, addend.inner),
+                inner: self.inner.madd(mul.inner, addend.inner),
             }
         }
 
@@ -191,10 +191,10 @@ mod inner {
         }
 
         #[inline(always)]
-        pub(crate) fn madd(self, scalar: f32, addend: Self) -> Self {
+        pub(crate) fn mul_add(self, mul: Self, addend: Self) -> Self {
             let mut result = [0.0f32; SIMD_WIDTH];
             for i in 0..SIMD_WIDTH {
-                result[i] = mul_add(self.val[i], scalar, addend.val[i]);
+                result[i] = super::mul_add(self.val[i], mul.val[i], addend.val[i]);
             }
             Self {
                 val: result,
@@ -365,30 +365,6 @@ mod inner {
         }
     }
 
-    #[inline(always)]
-    fn mul_add(a: f32, b: f32, c: f32) -> f32 {
-        #[cfg(any(
-            all(
-                any(target_arch = "x86", target_arch = "x86_64"),
-                target_feature = "fma"
-            ),
-            all(target_arch = "aarch64", target_feature = "neon")
-        ))]
-        {
-            f32::mul_add(a, b, c)
-        }
-        #[cfg(not(any(
-            all(
-                any(target_arch = "x86", target_arch = "x86_64"),
-                target_feature = "fma"
-            ),
-            all(target_arch = "aarch64", target_feature = "neon")
-        )))]
-        {
-            a * b + c
-        }
-    }
-
     /// Scalar fallback for SIMD dispatch.
     #[macro_export]
     macro_rules! simd_dispatch {
@@ -400,6 +376,30 @@ mod inner {
     }
 
     pub(crate) use simd_dispatch as dispatch;
+}
+
+#[inline(always)]
+pub(crate) fn mul_add(a: f32, b: f32, c: f32) -> f32 {
+    #[cfg(any(
+        all(
+            any(target_arch = "x86", target_arch = "x86_64"),
+            target_feature = "fma"
+        ),
+        all(target_arch = "aarch64", target_feature = "neon")
+    ))]
+    {
+        f32::mul_add(a, b, c)
+    }
+    #[cfg(not(any(
+        all(
+            any(target_arch = "x86", target_arch = "x86_64"),
+            target_feature = "fma"
+        ),
+        all(target_arch = "aarch64", target_feature = "neon")
+    )))]
+    {
+        a * b + c
+    }
 }
 
 pub(crate) use inner::*;
