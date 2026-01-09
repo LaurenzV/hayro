@@ -357,7 +357,7 @@ fn filter_horizontal(coefficients: &mut [f32], rect: IntRect, transform: Wavelet
 fn filter_row(scanline: &mut [f32], width: usize, x0: usize, transform: WaveletTransform) {
     if width == 1 {
         if !x0.is_multiple_of(2) {
-            scanline[0] /= 2.0;
+            scanline[0] *= 0.5;
         }
 
         return;
@@ -381,7 +381,7 @@ fn reversible_filter_53r(scanline: &mut [f32], width: usize, x0: usize) {
         width,
         first_even,
         #[inline(always)]
-        |s, left, right| s - ((left + right + 2.0) * 0.25).floor(),
+        |s, left, right| s - simd::mul_add(left + right, 0.25, 0.5).floor(),
     );
 
     // Equation (F-6).
@@ -576,7 +576,7 @@ fn filter_vertical_impl<S: Simd>(
             let simd_width = width / SIMD_WIDTH * SIMD_WIDTH;
             for base_column in (0..simd_width).step_by(SIMD_WIDTH) {
                 let mut loaded = f32x8::from_slice(simd, &scanline[base_column..][..SIMD_WIDTH]);
-                loaded /= 2.0;
+                loaded *= 0.5;
                 loaded.store(&mut scanline[base_column..][..SIMD_WIDTH]);
             }
 
@@ -624,7 +624,7 @@ fn reversible_filter_53r_simd<S: Simd>(
         #[inline(always)]
         |s1, s2, s3| s1 - ((s2 + s3 + 2.0) * 0.25).floor(),
         #[inline(always)]
-        |s1, s2, s3| s1 - ((s2 + s3 + 2.0) * 0.25).floor(),
+        |s1, s2, s3| s1 - (s2 + s3).mul_add(0.25, 0.5).floor(),
     );
 
     // Equation (F-6).
