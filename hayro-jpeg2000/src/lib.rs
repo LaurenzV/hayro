@@ -73,7 +73,7 @@ use crate::jp2::{DecodedImage, ImageBoxes};
 pub mod error;
 pub(crate) mod simd;
 
-use crate::simd::SIMD_WIDTH;
+use crate::simd::{Level, Simd, SIMD_WIDTH, dispatch, f32x8};
 pub use error::{
     ColorError, DecodeError, DecodingError, FormatError, MarkerError, Result, TileError,
     ValidationError,
@@ -466,10 +466,14 @@ fn convert_color_space(image: &mut DecodedImage, bit_depth: u8) -> Result<()> {
     {
         match e {
             EnumeratedColorspace::Sycc => {
-                sycc_to_rgb(&mut image.decoded.components, bit_depth)?;
+                dispatch!(Level::new(), simd => {
+                    sycc_to_rgb(simd, &mut image.decoded.components, bit_depth)
+                })?;
             }
             EnumeratedColorspace::CieLab(cielab) => {
-                cielab_to_rgb(&mut image.decoded.components, bit_depth, cielab)?;
+                dispatch!(Level::new(), simd => {
+                    cielab_to_rgb(simd, &mut image.decoded.components, bit_depth, cielab)
+                })?;
             }
             _ => {}
         }
@@ -582,7 +586,13 @@ fn resolve_palette_indices(
     Ok(resolved)
 }
 
-fn cielab_to_rgb(components: &mut [ComponentData], bit_depth: u8, lab: &CieLab) -> Result<()> {
+#[inline(always)]
+fn cielab_to_rgb<S: Simd>(
+    simd: S,
+    components: &mut [ComponentData],
+    bit_depth: u8,
+    lab: &CieLab,
+) -> Result<()> {
     let (head, _) = components
         .split_at_mut_checked(3)
         .ok_or(ColorError::LabConversionFailed)?;
@@ -624,26 +634,54 @@ fn cielab_to_rgb(components: &mut [ComponentData], bit_depth: u8, lab: &CieLab) 
     // Note that we are not doing the actual conversion with the ICC profile yet,
     // just decoding the raw LAB values.
     // We leave applying the ICC profile to the user.
-    for ((l, a), b) in l
-        .container
-        .iter_mut()
-        .zip(a.container.iter_mut())
-        .zip(b.container.iter_mut())
-    {
-        *l = min_l + *l * (max_l - min_l) / ((1 << prec0) - 1) as f32;
-        *a = min_a + *a * (max_a - min_a) / ((1 << prec1) - 1) as f32;
-        *b = min_b + *b * (max_b - min_b) / ((1 << prec2) - 1) as f32;
+    let divisor_l = ((1 << prec0) - 1) as f32;
+    let divisor_a = ((1 << prec1) - 1) as f32;
+    let divisor_b = ((1 << prec2) - 1) as f32;
 
-        // Make sure we are in the range [0.0, 2ˆbit_depth - 1].
-        *l *= bit_max as f32 / 100.0;
-        *a = (*a + 128.0) * bit_max as f32 / 255.0;
-        *b = (*b + 128.0) * bit_max as f32 / 255.0;
+    let scale_l_final = bit_max as f32 / 100.0;
+    let scale_ab_final = bit_max as f32 / 255.0;
+
+    let l_offset = min_l * scale_l_final;
+    let l_scale = (max_l - min_l) / divisor_l * scale_l_final;
+    let a_offset = (min_a + 128.0) * scale_ab_final;
+    let a_scale = (max_a - min_a) / divisor_a * scale_ab_final;
+    let b_offset = (min_b + 128.0) * scale_ab_final;
+    let b_scale = (max_b - min_b) / divisor_b * scale_ab_final;
+
+    let l_offset_v = f32x8::splat(simd, l_offset);
+    let l_scale_v = f32x8::splat(simd, l_scale);
+    let a_offset_v = f32x8::splat(simd, a_offset);
+    let a_scale_v = f32x8::splat(simd, a_scale);
+    let b_offset_v = f32x8::splat(simd, b_offset);
+    let b_scale_v = f32x8::splat(simd, b_scale);
+
+    // Note that we are not doing the actual conversion with the ICC profile yet,
+    // just decoding the raw LAB values.
+    // We leave applying the ICC profile to the user.
+    for ((l_chunk, a_chunk), b_chunk) in l
+        .container
+        .chunks_exact_mut(SIMD_WIDTH)
+        .zip(a.container.chunks_exact_mut(SIMD_WIDTH))
+        .zip(b.container.chunks_exact_mut(SIMD_WIDTH))
+    {
+        let l_v = f32x8::from_slice(simd, l_chunk);
+        let a_v = f32x8::from_slice(simd, a_chunk);
+        let b_v = f32x8::from_slice(simd, b_chunk);
+        
+        l_v.mul_add(l_scale_v, l_offset_v).store(l_chunk);
+        a_v.mul_add(a_scale_v, a_offset_v).store(a_chunk);
+        b_v.mul_add(b_scale_v, b_offset_v).store(b_chunk);
     }
 
     Ok(())
 }
 
-fn sycc_to_rgb(components: &mut [ComponentData], bit_depth: u8) -> Result<()> {
+#[inline(always)]
+fn sycc_to_rgb<S: Simd>(
+    simd: S,
+    components: &mut [ComponentData],
+    bit_depth: u8,
+) -> Result<()> {
     let offset = (1_u32 << (bit_depth as u32 - 1)) as f32;
     let max_value = ((1_u32 << bit_depth as u32) - 1) as f32;
 
@@ -655,23 +693,31 @@ fn sycc_to_rgb(components: &mut [ComponentData], bit_depth: u8) -> Result<()> {
         unreachable!();
     };
 
-    for ((y, cb), cr) in y
+    let offset_v = f32x8::splat(simd, offset);
+    let max_v = f32x8::splat(simd, max_value);
+    let zero_v = f32x8::splat(simd, 0.0);
+    let cr_to_r = f32x8::splat(simd, 1.402);
+    let cb_to_g = f32x8::splat(simd, 0.344136);
+    let cr_to_g = f32x8::splat(simd, 0.714136);
+    let cb_to_b = f32x8::splat(simd, 1.772);
+
+    for ((y_chunk, cb_chunk), cr_chunk) in y
         .container
-        .iter_mut()
-        .zip(cb.container.iter_mut())
-        .zip(cr.container.iter_mut())
+        .chunks_exact_mut(SIMD_WIDTH)
+        .zip(cb.container.chunks_exact_mut(SIMD_WIDTH))
+        .zip(cr.container.chunks_exact_mut(SIMD_WIDTH))
     {
-        *cb -= offset;
-        *cr -= offset;
+        let y_v = f32x8::from_slice(simd, y_chunk);
+        let cb_v = f32x8::from_slice(simd, cb_chunk) - offset_v;
+        let cr_v = f32x8::from_slice(simd, cr_chunk) - offset_v;
 
-        let r = *y + 1.402_f32 * *cr;
-        let g = *y - 0.344136_f32 * *cb - 0.714136_f32 * *cr;
-        let b = *y + 1.772_f32 * *cb;
+        let r = y_v + cr_v * cr_to_r;
+        let g = y_v - cb_v * cb_to_g - cr_v * cr_to_g;
+        let b = y_v + cb_v * cb_to_b;
 
-        // min + max is better than clamp in terms of performance.
-        *y = r.min(max_value).max(0.0);
-        *cb = g.min(max_value).max(0.0);
-        *cr = b.min(max_value).max(0.0);
+        r.min(max_v).max(zero_v).store(y_chunk);
+        g.min(max_v).max(zero_v).store(cb_chunk);
+        b.min(max_v).max(zero_v).store(cr_chunk);
     }
 
     Ok(())

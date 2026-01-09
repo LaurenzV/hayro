@@ -62,6 +62,20 @@ mod inner {
                 inner: self.inner.zip_high(other.inner),
             }
         }
+
+        #[inline(always)]
+        pub(crate) fn min(self, other: Self) -> Self {
+            Self {
+                inner: self.inner.min(other.inner),
+            }
+        }
+
+        #[inline(always)]
+        pub(crate) fn max(self, other: Self) -> Self {
+            Self {
+                inner: self.inner.max(other.inner),
+            }
+        }
     }
 
     impl<S: Simd> Add for f32x8<S> {
@@ -249,6 +263,30 @@ mod inner {
                     self.val[7],
                     other.val[7],
                 ],
+                _marker: PhantomData,
+            }
+        }
+
+        #[inline(always)]
+        pub(crate) fn min(self, other: Self) -> Self {
+            let mut result = [0.0f32; SIMD_WIDTH];
+            for i in 0..SIMD_WIDTH {
+                result[i] = self.val[i].min(other.val[i]);
+            }
+            Self {
+                val: result,
+                _marker: PhantomData,
+            }
+        }
+
+        #[inline(always)]
+        pub(crate) fn max(self, other: Self) -> Self {
+            let mut result = [0.0f32; SIMD_WIDTH];
+            for i in 0..SIMD_WIDTH {
+                result[i] = self.val[i].max(other.val[i]);
+            }
+            Self {
+                val: result,
                 _marker: PhantomData,
             }
         }
