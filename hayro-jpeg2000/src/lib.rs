@@ -73,7 +73,7 @@ use crate::jp2::{DecodedImage, ImageBoxes};
 pub mod error;
 pub(crate) mod simd;
 
-use crate::simd::{Level, Simd, SIMD_WIDTH, dispatch, f32x8};
+use crate::simd::{Level, SIMD_WIDTH, Simd, dispatch, f32x8};
 pub use error::{
     ColorError, DecodeError, DecodingError, FormatError, MarkerError, Result, TileError,
     ValidationError,
@@ -667,7 +667,7 @@ fn cielab_to_rgb<S: Simd>(
         let l_v = f32x8::from_slice(simd, l_chunk);
         let a_v = f32x8::from_slice(simd, a_chunk);
         let b_v = f32x8::from_slice(simd, b_chunk);
-        
+
         l_v.mul_add(l_scale_v, l_offset_v).store(l_chunk);
         a_v.mul_add(a_scale_v, a_offset_v).store(a_chunk);
         b_v.mul_add(b_scale_v, b_offset_v).store(b_chunk);
@@ -677,11 +677,7 @@ fn cielab_to_rgb<S: Simd>(
 }
 
 #[inline(always)]
-fn sycc_to_rgb<S: Simd>(
-    simd: S,
-    components: &mut [ComponentData],
-    bit_depth: u8,
-) -> Result<()> {
+fn sycc_to_rgb<S: Simd>(simd: S, components: &mut [ComponentData], bit_depth: u8) -> Result<()> {
     let offset = (1_u32 << (bit_depth as u32 - 1)) as f32;
     let max_value = ((1_u32 << bit_depth as u32) - 1) as f32;
 
