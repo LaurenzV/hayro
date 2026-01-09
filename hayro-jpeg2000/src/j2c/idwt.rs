@@ -432,7 +432,7 @@ fn irreversible_filter_97i(scanline: &mut [f32], width: usize, x0: usize) {
         width,
         first_even,
         #[inline(always)]
-        |s, left, right| s + NEG_DELTA * (left + right),
+        |s, left, right| simd::mul_add(left + right, NEG_DELTA, s),
     );
 
     // Step 4.
@@ -442,7 +442,7 @@ fn irreversible_filter_97i(scanline: &mut [f32], width: usize, x0: usize) {
         width,
         first_odd,
         #[inline(always)]
-        |s, left, right| s + NEG_GAMMA * (left + right),
+        |s, left, right| simd::mul_add(left + right, NEG_GAMMA, s),
     );
 
     // Step 5.
@@ -452,7 +452,7 @@ fn irreversible_filter_97i(scanline: &mut [f32], width: usize, x0: usize) {
         width,
         first_even,
         #[inline(always)]
-        |s, left, right| s + NEG_BETA * (left + right),
+        |s, left, right| simd::mul_add(left + right, NEG_BETA, s),
     );
 
     // Step 6.
@@ -462,7 +462,7 @@ fn irreversible_filter_97i(scanline: &mut [f32], width: usize, x0: usize) {
         width,
         first_odd,
         #[inline(always)]
-        |s, left, right| s + NEG_ALPHA * (left + right),
+        |s, left, right| simd::mul_add(left + right, NEG_ALPHA, s),
     );
 }
 
