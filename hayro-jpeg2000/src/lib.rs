@@ -77,6 +77,7 @@ pub use error::{
     ColorError, DecodeError, DecodingError, FormatError, MarkerError, Result, TileError,
     ValidationError,
 };
+use crate::simd::SIMD_WIDTH;
 
 #[cfg(feature = "image")]
 mod image;
@@ -559,7 +560,7 @@ fn resolve_palette_indices(
                     .get(column_idx)
                     .ok_or(ColorError::PaletteResolutionFailed)?;
 
-                let mut mapped = Vec::with_capacity(component.container.truncated().len());
+                let mut mapped = Vec::with_capacity(component.container.truncated().len() + SIMD_WIDTH);
 
                 for &sample in component.container.truncated() {
                     let index = sample.round() as i64;
