@@ -777,7 +777,7 @@ impl<'a> Device<'a> for Renderer {
 }
 
 // TODO: Deduplicate with hayro-svg?
-fn render_shading_texture(
+pub(crate) fn render_shading_texture(
     path_bbox: Rect,
     shading_pattern: &EncodedShadingPattern,
 ) -> (Vec<PremulRgba8>, u32, u32, Affine) {
@@ -902,14 +902,14 @@ pub(crate) fn x_y_advances(transform: &Affine) -> (Vec2, Vec2) {
     )
 }
 
-fn convert_fill_rule(fill_rule: FillRule) -> Fill {
+pub(crate) fn convert_fill_rule(fill_rule: FillRule) -> Fill {
     match fill_rule {
         FillRule::NonZero => Fill::NonZero,
         FillRule::EvenOdd => Fill::EvenOdd,
     }
 }
 
-fn convert_blend_mode(blend_mode: BlendMode) -> peniko::BlendMode {
+pub(crate) fn convert_blend_mode(blend_mode: BlendMode) -> peniko::BlendMode {
     let mix = match blend_mode {
         BlendMode::Normal => Mix::Normal,
         BlendMode::Multiply => Mix::Multiply,

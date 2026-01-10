@@ -15,6 +15,7 @@ image = { workspace = true, features = ["png"] }
 bytemuck = { workspace = true, features = ["bytemuck_derive"] }
 vello_cpu = { workspace = true }
 fast_image_resize = { workspace = true }
+vello = {git = "https://github.com/linebender/vello", optional = true}
 
 [dev-dependencies]
 log = { workspace = true }
@@ -22,6 +23,7 @@ log = { workspace = true }
 [features]
 default = ["embed-fonts"]
 embed-fonts = ["hayro-interpret/embed-fonts"]
+gpu = ["dep:vello"]
 
 [lints]
 workspace = true
