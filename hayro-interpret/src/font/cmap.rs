@@ -467,7 +467,20 @@ fn parse_bf_range(cmap: &mut CMap, lexer: &mut CMapLexer<'_>) -> Option<()> {
                                         Token::Integer(val) => array.push(val as u32),
                                         ref arr_token => {
                                             if let Some(val_str) = expect_string(arr_token) {
-                                                array.push(bf_string_char(&val_str));
+                                                // For hex strings (like <2014>), properly
+                                                // convert to Unicode code point
+                                                if val_str.chars().count() <= 2 {
+                                                    let code_point = str_to_int(&val_str);
+                                                    if let Some(unicode_char) =
+                                                        char::from_u32(code_point)
+                                                    {
+                                                        array.push(unicode_char as u32);
+                                                    } else {
+                                                        array.push(bf_string_char(&val_str));
+                                                    }
+                                                } else {
+                                                    array.push(bf_string_char(&val_str));
+                                                }
                                             }
                                         }
                                     }
@@ -683,6 +696,36 @@ endbfrange"#
         assert_eq!(cmap.lookup_code(0x0d), Some(0x00));
         assert_eq!(cmap.lookup_code(0x12), Some(0x05));
         assert!(cmap.lookup_code(0x13).is_none());
+    }
+
+    #[test]
+    fn test_parse_beginbfrange_with_hex_array() {
+        // Test case from real PDF: em-dash (U+2014) mapped via array
+        let input = r#"1 beginbfrange
+<00B2> <00B2> [<2014>]
+endbfrange"#
+            .to_string();
+
+        let cmap = parse_cmap(&input).unwrap();
+
+        assert!(cmap.lookup_code(0xB1).is_none());
+        assert_eq!(cmap.lookup_code(0xB2), Some(0x2014)); // em-dash
+        assert!(cmap.lookup_code(0xB3).is_none());
+    }
+
+    #[test]
+    fn test_parse_beginbfrange_with_high_byte_hex_array() {
+        // Test hex strings with bytes >= 0x80
+        // This verifies that chars().count() is needed (not as_bytes().len())
+        // because bytes >= 0x80 become multi-byte UTF-8 sequences
+        let input = r#"1 beginbfrange
+<00B3> <00B3> [<00E9>]
+endbfrange"#
+            .to_string();
+
+        let cmap = parse_cmap(&input).unwrap();
+
+        assert_eq!(cmap.lookup_code(0xB3), Some(0x00E9)); // é (U+00E9)
     }
 
     #[test]
