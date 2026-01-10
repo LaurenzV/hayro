@@ -5,7 +5,7 @@ use alloc::vec::Vec;
 
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::DecodedRegion;
-use crate::error::{RegionError, Result, bail};
+use crate::error::Result;
 use crate::region::generic::{
     AdaptiveTemplatePixel, GbTemplate, decode_bitmap_mmr, gather_context_with_at,
 };
