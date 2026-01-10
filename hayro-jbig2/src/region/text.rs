@@ -19,62 +19,62 @@ use crate::huffman_table::{HuffmanTable, StandardHuffmanTables, TableLine};
 use crate::integer_decoder::IntegerDecoder;
 use crate::reader::Reader;
 
-/// IAID decoder for symbol IDs (A.3).
+/// The IAID decoder(A.3).
 ///
-/// "This decoding procedure is different from all the other integer arithmetic
-/// decoding procedures. It uses fixed-length representations of the values being
-/// decoded, and does not limit the number of previously-decoded bits used as
-/// part of the context." (A.3)
+/// A.3: "This decoding procedure is different from all the other integer
+/// arithmetic decoding procedures. It uses fixed-length representations of
+/// the values being decoded, and does not limit the number of previously-
+/// decoded bits used as part of the context."
 pub(crate) struct SymbolIdDecoder {
-    /// "The number of contexts required is 2^SBSYMCODELEN" (A.3)
+    /// `CX` - Context memory for the IAID decoder.
+    /// A.3: "The number of contexts required is 2^SBSYMCODELEN."
     contexts: Vec<Context>,
-    /// "The length is equal to SBSYMCODELEN." (A.3)
+    /// `SBSYMCODELEN` - The code length (number of bits per symbol ID).
     code_len: u32,
 }
 
 impl SymbolIdDecoder {
-    /// Create a new symbol ID decoder for the given code length.
-    ///
-    /// "The number of contexts required is 2^SBSYMCODELEN, which is less than
-    /// twice the maximum symbol ID." (A.3)
+    /// Create a new IAID decoder for the given code length.
+    #[inline(always)]
     pub(crate) fn new(code_len: u32) -> Self {
+        // A.3: "The number of contexts required is 2^SBSYMCODELEN, which is less
+        // than twice the maximum symbol ID."
         let num_contexts = 1_usize << code_len;
+        
         Self {
             contexts: vec![Context::default(); num_contexts],
             code_len,
         }
     }
 
-    /// Decode a symbol ID.
-    ///
-    /// "The procedure for decoding an integer using the IAID decoding procedure
-    /// is as follows:" (A.3)
+    /// The IAID decoding procedure (A.3).
+    #[inline(always)]
     pub(crate) fn decode(&mut self, decoder: &mut ArithmeticDecoder<'_>) -> u32 {
-        // "1) Set: PREV = 1" (A.3)
+        // A.3 step 1: "Set: PREV = 1"
+        // `PREV` - Context prefix, contains bits decoded so far plus a leading 1.
         let mut prev = 1_u32;
 
-        // "2) Decode SBSYMCODELEN bits as follows:" (A.3)
+        // A.3 step 2: "Decode SBSYMCODELEN bits as follows:"
         for _ in 0..self.code_len {
-            // "a) Decode a bit with CX equal to 'IAID + PREV' where '+' represents
-            // concatenation, and the rightmost SBSYMCODELEN + 1 bits of PREV are
-            // used." (A.3)
+            // A.3 step 2a: "Decode a bit with CX equal to 'IAID + PREV' where '+'
+            // represents concatenation, and the rightmost SBSYMCODELEN + 1 bits
+            // of PREV are used."
             let ctx_mask = (1_u32 << (self.code_len + 1)) - 1;
             let ctx_idx = (prev & ctx_mask) as usize;
+            // `D` - The just-decoded bit.
             let d = decoder.decode(&mut self.contexts[ctx_idx]);
 
-            // "b) After each bit is decoded, set: PREV = (PREV << 1) OR D
-            // where D represents the value of the just-decoded bit." (A.3)
+            // A.3 step 2b: "After each bit is decoded, set: PREV = (PREV << 1) OR D"
             prev = (prev << 1) | d;
         }
 
-        // "3) After SBSYMCODELEN bits have been decoded, set:
-        //     PREV = PREV - 2^SBSYMCODELEN
-        // This step has the effect of clearing the topmost (leading 1) bit of
-        // PREV before returning it." (A.3)
+        // A.3 step 3: "After SBSYMCODELEN bits have been decoded, set:
+        // PREV = PREV - 2^SBSYMCODELEN. This step has the effect of clearing
+        // the topmost (leading 1) bit of PREV before returning it."
         prev -= 1 << self.code_len;
 
-        // "4) The contents of PREV are the result of this invocation of the IAID
-        // decoding procedure." (A.3)
+        // A.3 step 4: "The contents of PREV are the result of this invocation
+        // of the IAID decoding procedure."
         prev
     }
 }
