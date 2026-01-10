@@ -40,7 +40,7 @@ impl SymbolIdDecoder {
         // A.3: "The number of contexts required is 2^SBSYMCODELEN, which is less
         // than twice the maximum symbol ID."
         let num_contexts = 1_usize << code_len;
-        
+
         Self {
             contexts: vec![Context::default(); num_contexts],
             code_len,
