@@ -17,7 +17,7 @@ use crate::object::{Object, ObjectLike};
 use crate::pdf::PdfVersion;
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt};
-use crate::sync::{Arc, RwLock, RwLockExt, FxHashMap};
+use crate::sync::{Arc, FxHashMap, RwLock, RwLockExt};
 use crate::{PdfData, object};
 use alloc::vec;
 use alloc::vec::Vec;

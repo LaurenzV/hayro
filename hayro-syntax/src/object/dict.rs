@@ -7,12 +7,12 @@ use crate::object::{Object, ObjectLike};
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 use crate::sync::Arc;
+use crate::sync::HashMap;
 use crate::xref::XRef;
 use alloc::format;
 use alloc::vec::Vec;
 use core::fmt::{Debug, Formatter};
 use core::ops::Deref;
-use crate::sync::HashMap;
 
 /// A dictionary, which is a key-value map, keys being names, and values being any PDF object or
 /// objetc reference.

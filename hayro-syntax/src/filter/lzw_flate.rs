@@ -31,7 +31,7 @@ pub(crate) mod flate {
             .or_else(|| deflate_stream(data))
             .or_else(|| {
                 warn!("flate stream is broken, decoding with fallback");
-                
+
                 fallback::decode(data)
             })?;
         let params = PredictorParams::from_params(&params);

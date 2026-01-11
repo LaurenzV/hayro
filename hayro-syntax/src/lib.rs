@@ -72,7 +72,6 @@ extern crate alloc;
 
 pub(crate) mod sync;
 
-
 mod data;
 pub(crate) mod filter;
 pub(crate) mod pdf;

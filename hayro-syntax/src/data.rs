@@ -1,11 +1,11 @@
 use crate::object::ObjectIdentifier;
 use crate::object::Stream;
 use crate::reader::ReaderContext;
+use crate::sync::HashMap;
 use crate::sync::{Arc, Mutex, MutexExt};
 use crate::util::SegmentList;
 use alloc::vec::Vec;
 use core::fmt::{Debug, Formatter};
-use crate::sync::HashMap;
 
 /// A container for the bytes of a PDF file.
 #[derive(Clone)]
@@ -44,7 +44,9 @@ impl<T: AsRef<[u8]> + 'static> From<Arc<T>> for PdfData {
 
 impl From<Vec<u8>> for PdfData {
     fn from(data: Vec<u8>) -> Self {
-        Self { inner: Arc::new(data) }
+        Self {
+            inner: Arc::new(data),
+        }
     }
 }
 

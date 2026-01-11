@@ -40,7 +40,10 @@ impl Pdf {
     /// Try to read the given PDF file with a password.
     ///
     /// Returns `Err` if it was unable to read it or if the password is incorrect.
-    pub fn new_with_password(data: impl Into<PdfData>, password: &str) -> Result<Self, LoadPdfError> {
+    pub fn new_with_password(
+        data: impl Into<PdfData>,
+        password: &str,
+    ) -> Result<Self, LoadPdfError> {
         let data = data.into();
         let password = password.as_bytes();
         let version = find_version(data.as_ref()).unwrap_or(PdfVersion::Pdf10);

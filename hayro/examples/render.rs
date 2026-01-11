@@ -3,7 +3,6 @@
 use hayro::hayro_interpret::InterpreterSettings;
 use hayro::hayro_syntax::Pdf;
 use hayro::{RenderSettings, render};
-use std::sync::Arc;
 use vello_cpu::color::palette::css::WHITE;
 
 fn main() {
@@ -21,8 +20,7 @@ fn main() {
     // Create output directory if it doesn't exist
     std::fs::create_dir_all(&output_dir).unwrap();
 
-    let data = Arc::new(file);
-    let pdf = Pdf::new(data).unwrap();
+    let pdf = Pdf::new(file).unwrap();
 
     let interpreter_settings = InterpreterSettings::default();
 
