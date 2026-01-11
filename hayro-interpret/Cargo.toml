@@ -9,7 +9,7 @@ license = { workspace = true }
 readme = "README.md"
 
 [dependencies]
-hayro-syntax = { workspace = true, features = ["std"] }
+hayro-syntax = { workspace = true, features = ["std", "images"] }
 kurbo = { workspace = true }
 smallvec = { workspace = true }
 log = { workspace = true }

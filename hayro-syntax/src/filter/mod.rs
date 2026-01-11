@@ -2,9 +2,13 @@
 
 mod ascii_85;
 pub(crate) mod ascii_hex;
+#[cfg(feature = "images")]
 mod ccitt;
+#[cfg(feature = "images")]
 mod dct;
+#[cfg(feature = "images")]
 mod jbig2;
+#[cfg(feature = "images")]
 mod jpx;
 mod lzw_flate;
 mod run_length;
@@ -81,7 +85,7 @@ impl Filter {
         &self,
         data: &[u8],
         params: Dict<'_>,
-        image_params: &ImageDecodeParams,
+        #[cfg_attr(not(feature = "images"), allow(unused))] image_params: &ImageDecodeParams,
     ) -> Result<FilterResult, DecodeFailure> {
         let res = match self {
             Self::AsciiHexDecode => ascii_hex::decode(data)
@@ -96,19 +100,28 @@ impl Filter {
             Self::LzwDecode => lzw_flate::lzw::decode(data, params)
                 .map(FilterResult::from_data)
                 .ok_or(DecodeFailure::StreamDecode),
-            Self::DctDecode => {
-                dct::decode(data, params, image_params).ok_or(DecodeFailure::ImageDecode)
-            }
             Self::FlateDecode => lzw_flate::flate::decode(data, params)
                 .map(FilterResult::from_data)
                 .ok_or(DecodeFailure::StreamDecode),
+            #[cfg(feature = "images")]
+            Self::DctDecode => {
+                dct::decode(data, params, image_params).ok_or(DecodeFailure::ImageDecode)
+            }
+            #[cfg(feature = "images")]
             Self::CcittFaxDecode => {
                 ccitt::decode(data, params, image_params).ok_or(DecodeFailure::ImageDecode)
             }
+            #[cfg(feature = "images")]
             Self::Jbig2Decode => Ok(FilterResult::from_data(
                 jbig2::decode(data, params).ok_or(DecodeFailure::ImageDecode)?,
             )),
+            #[cfg(feature = "images")]
             Self::JpxDecode => jpx::decode(data, image_params).ok_or(DecodeFailure::ImageDecode),
+            #[cfg(not(feature = "images"))]
+            Self::DctDecode | Self::CcittFaxDecode | Self::Jbig2Decode | Self::JpxDecode => {
+                warn!("image decoding is not supported (enable the `images` feature)");
+                Err(DecodeFailure::ImageDecode)
+            }
             _ => Err(DecodeFailure::StreamDecode),
         };
 

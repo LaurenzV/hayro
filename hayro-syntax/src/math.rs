@@ -1,6 +1,7 @@
 // Note that these polyfills can be very imprecise, but hopefully good enough
 // for the vast majority of cases.
 
+#[cfg(feature = "images")]
 #[inline(always)]
 pub(crate) fn round_f32(x: f32) -> f32 {
     #[cfg(feature = "std")]
@@ -17,8 +18,8 @@ pub(crate) fn round_f32(x: f32) -> f32 {
     }
 }
 
+#[cfg(all(feature = "images", not(feature = "std")))]
 #[inline(always)]
-#[cfg(not(feature = "std"))]
 fn floor_f32(x: f32) -> f32 {
     let xi = x as i32;
     let xf = xi as f32;

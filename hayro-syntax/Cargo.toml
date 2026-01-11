@@ -9,19 +9,20 @@ license = { workspace = true }
 readme = "README.md"
 
 [features]
-default = ["std"]
-std = ["dep:flate2", "hayro-jbig2/std", "hayro-jpeg2000/std", "hayro-jpeg2000/simd", "dep:rustc-hash", "zune-jpeg/std"]
+default = ["std", "images"]
+std = ["dep:flate2", "hayro-jbig2?/std", "hayro-jpeg2000?/std", "hayro-jpeg2000?/simd", "dep:rustc-hash", "zune-jpeg?/std"]
+images = ["dep:zune-jpeg", "dep:hayro-ccitt", "dep:hayro-jbig2", "dep:hayro-jpeg2000"]
 
 [dependencies]
 log = { workspace = true }
 rustc-hash = { workspace = true, optional = true }
 smallvec = { workspace = true }
-zune-jpeg = { workspace = true, features = ["neon", "x86"] }
 flate2 = { workspace = true, optional = true }
 
-hayro-ccitt = { workspace = true }
-hayro-jbig2 = { workspace = true }
-hayro-jpeg2000 = { workspace = true }
+zune-jpeg = { workspace = true, features = ["neon", "x86"], optional = true }
+hayro-ccitt = { workspace = true, optional = true }
+hayro-jbig2 = { workspace = true, optional = true }
+hayro-jpeg2000 = { workspace = true, optional = true }
 
 [lints]
 workspace = true
