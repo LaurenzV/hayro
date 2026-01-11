@@ -6,11 +6,13 @@ use crate::object::{Name, ObjectIdentifier};
 use crate::object::{Object, ObjectLike};
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
+use crate::sync::Arc;
 use crate::xref::XRef;
-use std::collections::HashMap;
-use std::fmt::{Debug, Formatter};
-use std::ops::Deref;
-use std::sync::Arc;
+use alloc::format;
+use alloc::vec::Vec;
+use core::fmt::{Debug, Formatter};
+use core::ops::Deref;
+use crate::sync::HashMap;
 
 /// A dictionary, which is a key-value map, keys being names, and values being any PDF object or
 /// objetc reference.
@@ -36,7 +38,7 @@ impl<'a> Dict<'a> {
     pub fn empty() -> Self {
         let repr = Repr {
             data: &[],
-            offsets: HashMap::default(),
+            offsets: HashMap::new(),
             ctx: ReaderContext::new(XRef::dummy(), false),
         };
 
@@ -122,7 +124,7 @@ impl<'a> Dict<'a> {
 }
 
 impl Debug for Dict<'_> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         let mut r = Reader::new(self.0.data);
         let mut debug_struct = f.debug_struct("Dict");
 

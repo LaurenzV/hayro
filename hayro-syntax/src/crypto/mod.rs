@@ -13,8 +13,12 @@ use crate::object::dict::keys::{
     CF, CFM, ENCRYPT_META_DATA, FILTER, LENGTH, O, OE, P, R, STM_F, STR_F, U, UE, V,
 };
 use crate::object::{Dict, Name, ObjectIdentifier};
-use std::collections::HashMap;
-use std::ops::Deref;
+use alloc::string::ToString;
+use alloc::vec;
+use alloc::vec::Vec;
+use core::cmp;
+use core::ops::Deref;
+use crate::sync::HashMap;
 
 mod aes;
 mod md5;
@@ -262,7 +266,7 @@ fn decrypt_rc_aes(
     // d) Use the first (n + 5) bytes, up to a maximum of 16, of the output
     // from the MD5 hash as the key for the RC4 or AES symmetric key algorithms,
     // along with the string or stream data to be encrypted.
-    let final_key = &hash[..std::cmp::min(16, n + 5)];
+    let final_key = &hash[..cmp::min(16, n + 5)];
 
     with_key(final_key)
 }

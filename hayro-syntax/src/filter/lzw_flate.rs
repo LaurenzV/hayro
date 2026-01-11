@@ -1,44 +1,55 @@
 use crate::bit_reader::{BitChunk, BitChunks, BitReader, BitWriter, bit_mask};
 use crate::object::Dict;
 use crate::object::dict::keys::{BITS_PER_COMPONENT, COLORS, COLUMNS, EARLY_CHANGE, PREDICTOR};
+use alloc::vec;
+use alloc::vec::Vec;
 use log::warn;
 
 pub(crate) mod flate {
+    use super::*;
     use crate::filter::lzw_flate::{PredictorParams, apply_predictor};
     use crate::object::Dict;
-    use flate2::read::{DeflateDecoder, ZlibDecoder};
-    use log::warn;
-    use std::io::Read;
 
+    #[cfg(feature = "std")]
     pub(crate) fn decode(data: &[u8], params: Dict<'_>) -> Option<Vec<u8>> {
+        use flate2::read::{DeflateDecoder, ZlibDecoder};
+        use std::io::Read;
+
+        fn zlib_stream(data: &[u8]) -> Option<Vec<u8>> {
+            let mut decoder = ZlibDecoder::new(data);
+            let mut result = Vec::new();
+            decoder.read_to_end(&mut result).ok().map(|_| result)
+        }
+
+        fn deflate_stream(data: &[u8]) -> Option<Vec<u8>> {
+            let mut decoder = DeflateDecoder::new(data);
+            let mut result = Vec::new();
+            decoder.read_to_end(&mut result).ok().map(|_| result)
+        }
+
         let decoded = zlib_stream(data)
             .or_else(|| deflate_stream(data))
             .or_else(|| {
                 warn!("flate stream is broken, decoding with fallback");
-
+                
                 fallback::decode(data)
             })?;
         let params = PredictorParams::from_params(&params);
         apply_predictor(decoded, &params)
     }
 
-    fn zlib_stream(data: &[u8]) -> Option<Vec<u8>> {
-        let mut decoder = ZlibDecoder::new(data);
-        let mut result = Vec::new();
-
-        decoder.read_to_end(&mut result).ok().map(|_| result)
-    }
-
-    fn deflate_stream(data: &[u8]) -> Option<Vec<u8>> {
-        let mut decoder = DeflateDecoder::new(data);
-        let mut result = Vec::new();
-
-        decoder.read_to_end(&mut result).ok().map(|_| result)
+    #[cfg(not(feature = "std"))]
+    pub(crate) fn decode(data: &[u8], params: Dict<'_>) -> Option<Vec<u8>> {
+        let decoded = fallback::decode(data)?;
+        let params = PredictorParams::from_params(&params);
+        apply_predictor(decoded, &params)
     }
 
     /// Ported from <https://github.com/mozilla/pdf.js/blob/master/src/core/flate_stream.js>
     /// TODO: Rewrite this in idiomatic Rust.
     mod fallback {
+        use alloc::vec;
+        use alloc::vec::Vec;
         use log::warn;
 
         pub(crate) fn decode(data: &[u8]) -> Option<Vec<u8>> {
@@ -89,7 +100,7 @@ pub(crate) mod flate {
                     self.read_block();
                 }
 
-                Some(std::mem::take(&mut self.output))
+                Some(core::mem::take(&mut self.output))
             }
 
             fn get_byte(&mut self) -> Option<u8> {
@@ -556,6 +567,8 @@ pub(crate) mod lzw {
     use crate::bit_reader::BitReader;
     use crate::filter::lzw_flate::{PredictorParams, apply_predictor};
     use crate::object::Dict;
+    use alloc::vec;
+    use alloc::vec::Vec;
     use log::warn;
 
     /// Decode a LZW-encoded stream.
