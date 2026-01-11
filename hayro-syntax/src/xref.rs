@@ -37,9 +37,9 @@ pub(crate) enum XRefError {
 /// Parse the "root" xref from the PDF.
 pub(crate) fn root_xref(data: PdfData, password: &[u8]) -> Result<XRef, XRefError> {
     let mut xref_map = FxHashMap::default();
-    let xref_pos = find_last_xref_pos(data.as_ref().as_ref()).ok_or(XRefError::Unknown)?;
-    let trailer = populate_xref_impl(data.as_ref().as_ref(), xref_pos, &mut xref_map)
-        .ok_or(XRefError::Unknown)?;
+    let xref_pos = find_last_xref_pos(data.as_ref()).ok_or(XRefError::Unknown)?;
+    let trailer =
+        populate_xref_impl(data.as_ref(), xref_pos, &mut xref_map).ok_or(XRefError::Unknown)?;
 
     XRef::new(
         data.clone(),
@@ -80,7 +80,7 @@ fn fallback_xref_map_inner<'a>(
     let mut trailer_dicts = vec![];
     let mut root_ref = None;
 
-    let mut r = Reader::new(data.as_ref().as_ref());
+    let mut r = Reader::new(data.as_ref());
 
     let mut last_obj_num = None;
 
@@ -152,7 +152,7 @@ fn fallback_xref_map_inner<'a>(
             match root_id {
                 MaybeRef::Ref(r) => match xref_map.get(&r.into()) {
                     Some(EntryType::Normal(offset)) => {
-                        let mut reader = Reader::new(&data.as_ref().as_ref()[*offset..]);
+                        let mut reader = Reader::new(&data.as_ref()[*offset..]);
 
                         if let Some(obj) =
                             reader.read_with_context::<IndirectObject<Dict<'_>>>(&dummy_ctx)
@@ -165,7 +165,7 @@ fn fallback_xref_map_inner<'a>(
                         if let Some(EntryType::Normal(offset)) =
                             xref_map.get(&ObjectIdentifier::new(*obj_num as i32, 0))
                         {
-                            let mut reader = Reader::new(&data.as_ref().as_ref()[*offset..]);
+                            let mut reader = Reader::new(&data.as_ref()[*offset..]);
 
                             if let Some(stream) =
                                 reader.read_with_context::<IndirectObject<Stream<'_>>>(&dummy_ctx)
@@ -500,7 +500,7 @@ impl XRef {
 
         let locked = repr.map.try_get().unwrap();
 
-        let mut r = Reader::new(repr.data.get().as_ref().as_ref());
+        let mut r = Reader::new(repr.data.get().as_ref());
 
         let entry = *locked.xref_map.get(&id).or({
             // An indirect reference to an undefined object shall not be considered an error by a PDF processor; it
