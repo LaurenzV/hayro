@@ -13,6 +13,8 @@ The decoder abstracts away most of the internal complexity of JPEG2000
 and yields a simple 8-bit image with either greyscale, RGB, CMYK or an ICC-based
 color space, which can then be processed further according to your needs.
 
+The crate is preparing for `no_std` compatibility but currently requires `std`.
+
 # Example
 ```rust,no_run
 use hayro_jpeg2000::{Image, DecodeSettings};
@@ -61,6 +63,11 @@ via a crate-level attribute.
 
 #![forbid(unsafe_code)]
 #![forbid(missing_docs)]
+
+extern crate alloc;
+
+use alloc::vec;
+use alloc::vec::Vec;
 
 use crate::error::{bail, err};
 use crate::j2c::{ComponentData, DecodedCodestream, Header};

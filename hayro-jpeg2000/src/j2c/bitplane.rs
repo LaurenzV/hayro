@@ -9,6 +9,9 @@
 //! Some of the references are taken from the
 //! "JPEG2000 Standard for Image Compression" book instead of the specification.
 
+use alloc::vec;
+use alloc::vec::Vec;
+
 use super::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use super::build::{CodeBlock, SubBandType};
 use super::codestream::CodeBlockStyle;

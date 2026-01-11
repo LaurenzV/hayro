@@ -4,9 +4,12 @@
 //! (`layer_num`, resolution, component, precinct) in a specific order that
 //! determines in which order the data appears in the codestream.
 
+use alloc::vec;
+use alloc::vec::Vec;
+
 use super::tile::{ComponentTile, ResolutionTile, Tile};
-use std::cmp::Ordering;
-use std::iter;
+use core::cmp::Ordering;
+use core::iter;
 
 #[derive(Default, Copy, Clone, Debug, PartialEq, Hash, Eq)]
 pub(crate) struct ProgressionData {

@@ -5,6 +5,8 @@
     reason = "JP2 box constants exist for completeness but not all are referenced yet"
 )]
 
+use alloc::string::String;
+
 use crate::reader::BitReader;
 
 /// JP2 signature box - 'jP\040\040'.

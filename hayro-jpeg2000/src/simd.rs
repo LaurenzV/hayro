@@ -1,10 +1,13 @@
+use alloc::vec;
+use alloc::vec::Vec;
+
 pub(crate) const SIMD_WIDTH: usize = 8;
 
 #[cfg(feature = "simd")]
 mod inner {
     use super::SIMD_WIDTH;
+    use core::ops::{Add, AddAssign, DivAssign, Mul, MulAssign, Sub, SubAssign};
     use fearless_simd::{SimdBase, SimdFloat};
-    use std::ops::{Add, AddAssign, DivAssign, Mul, MulAssign, Sub, SubAssign};
 
     pub(crate) use fearless_simd::{Level, Simd, dispatch};
 
@@ -161,7 +164,7 @@ mod inner {
 mod inner {
     use super::SIMD_WIDTH;
     use core::marker::PhantomData;
-    use std::ops::{Add, AddAssign, DivAssign, Mul, MulAssign, Sub, SubAssign};
+    use core::ops::{Add, AddAssign, DivAssign, Mul, MulAssign, Sub, SubAssign};
 
     pub(crate) trait Simd: Copy + Clone {}
 
@@ -474,7 +477,7 @@ impl<const N: usize> SimdBuffer<N> {
     }
 }
 
-impl<const N: usize> std::ops::Deref for SimdBuffer<N> {
+impl<const N: usize> core::ops::Deref for SimdBuffer<N> {
     type Target = [f32];
 
     #[inline]
@@ -483,7 +486,7 @@ impl<const N: usize> std::ops::Deref for SimdBuffer<N> {
     }
 }
 
-impl<const N: usize> std::ops::DerefMut for SimdBuffer<N> {
+impl<const N: usize> core::ops::DerefMut for SimdBuffer<N> {
     #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.data

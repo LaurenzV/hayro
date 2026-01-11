@@ -11,6 +11,8 @@ mod segment;
 mod tag_tree;
 mod tile;
 
+use alloc::vec::Vec;
+
 use super::jp2::ImageBoxes;
 use super::jp2::colr::{ColorSpace, ColorSpecificationBox, EnumeratedColorspace};
 use crate::error::{FormatError, MarkerError, Result, bail};

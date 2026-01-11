@@ -5,9 +5,9 @@ use super::rect::IntRect;
 use super::tag_tree::TagTree;
 use super::tile::{ResolutionTile, Tile};
 use crate::error::{DecodingError, Result};
+use core::iter;
+use core::ops::Range;
 use log::trace;
-use std::iter;
-use std::ops::Range;
 
 /// Build and allocate all necessary structures to process the code-blocks
 /// for a specific tile. Also parses the segments for each code-block.

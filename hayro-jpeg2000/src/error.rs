@@ -225,13 +225,13 @@ impl fmt::Display for ColorError {
     }
 }
 
-impl std::error::Error for DecodeError {}
-impl std::error::Error for FormatError {}
-impl std::error::Error for MarkerError {}
-impl std::error::Error for TileError {}
-impl std::error::Error for ValidationError {}
-impl std::error::Error for DecodingError {}
-impl std::error::Error for ColorError {}
+impl core::error::Error for DecodeError {}
+impl core::error::Error for FormatError {}
+impl core::error::Error for MarkerError {}
+impl core::error::Error for TileError {}
+impl core::error::Error for ValidationError {}
+impl core::error::Error for DecodingError {}
+impl core::error::Error for ColorError {}
 
 impl From<FormatError> for DecodeError {
     fn from(e: FormatError) -> Self {

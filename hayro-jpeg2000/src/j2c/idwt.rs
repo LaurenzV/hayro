@@ -1,5 +1,8 @@
 //! Performing the inverse discrete wavelet transform, as specified in Annex F.
 
+use alloc::vec;
+use alloc::vec::Vec;
+
 use super::build::{Decomposition, SubBand};
 use super::codestream::WaveletTransform;
 use super::decode::{DecompositionStorage, TileDecodeContext};

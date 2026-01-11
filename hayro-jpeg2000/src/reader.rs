@@ -1,7 +1,7 @@
 //! Combined byte and bit reader utilities.
 
 use crate::error::{MarkerError, Result, bail};
-use std::fmt::Debug;
+use core::fmt::Debug;
 
 #[derive(Debug, Clone)]
 pub(crate) struct BitReader<'a> {

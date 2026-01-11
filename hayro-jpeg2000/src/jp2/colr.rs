@@ -1,5 +1,7 @@
 //! The color specification box (colr), defined in I.5.3.3.
 
+use alloc::vec::Vec;
+
 use crate::error::{FormatError, Result};
 use crate::jp2::ImageBoxes;
 use crate::reader::BitReader;

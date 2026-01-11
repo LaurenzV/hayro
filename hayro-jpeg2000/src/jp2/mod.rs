@@ -1,5 +1,7 @@
 //! Reading a JP2 file, defined in Annex I.
 
+use alloc::vec::Vec;
+
 use crate::error::{FormatError, Result, bail};
 use crate::j2c::DecodedCodestream;
 use crate::jp2::r#box::{FILE_TYPE, JP2_SIGNATURE};

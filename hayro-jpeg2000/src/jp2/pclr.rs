@@ -1,5 +1,7 @@
 //! The palette box (pclr), defined in I.5.3.4.
 
+use alloc::vec::Vec;
+
 use crate::error::{FormatError, Result, bail};
 use crate::jp2::ImageBoxes;
 use crate::reader::BitReader;

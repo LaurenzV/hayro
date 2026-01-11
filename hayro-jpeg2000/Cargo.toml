@@ -15,11 +15,13 @@ image = { workspace = true, default-features = false, optional = true }
 moxcms = { workspace = true, optional = true }
 
 [features]
-default = ["simd", "image"]
+default = ["std", "simd", "image"]
+# Enable std library support. Disable for no_std environments.
+std = []
 # Enable SIMD via `fearless_simd`.
-simd = ["fearless_simd"]
+simd = ["fearless_simd", "std"]
 # Integration with the `image` crate.
-image = ["dep:image", "dep:moxcms"]
+image = ["dep:image", "dep:moxcms", "std"]
 
 [lints]
 workspace = true

@@ -1,5 +1,7 @@
 //! Parsing of layers and their segments, as specified in Annex B.
 
+use alloc::boxed::Box;
+
 use super::build::Segment;
 use super::codestream::markers::{EPH, SOP};
 use super::codestream::{ComponentInfo, Header};

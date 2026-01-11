@@ -1,5 +1,8 @@
 //! Creating tiles and parsing their constituent tile parts.
 
+use alloc::vec;
+use alloc::vec::Vec;
+
 use super::build::{PrecinctData, SubBandType};
 use super::codestream::{ComponentInfo, Header, ProgressionOrder, markers, skip_marker_segment};
 use super::rect::IntRect;

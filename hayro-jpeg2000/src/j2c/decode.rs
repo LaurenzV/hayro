@@ -4,6 +4,10 @@
 //! stages in such a way that a given codestream is decoded into its
 //! component channels.
 
+use alloc::boxed::Box;
+use alloc::vec;
+use alloc::vec::Vec;
+
 use super::bitplane::{BitPlaneDecodeBuffers, BitPlaneDecodeContext};
 use super::build::{CodeBlock, Decomposition, Layer, Precinct, Segment, SubBand, SubBandType};
 use super::codestream::{ComponentInfo, Header, ProgressionOrder, QuantizationStyle};
@@ -22,8 +26,8 @@ use crate::error::{DecodingError, Result, TileError, bail};
 use crate::j2c::segment::MAX_BITPLANE_COUNT;
 use crate::reader::BitReader;
 use crate::simd::SimdBuffer;
+use core::ops::{DerefMut, Range};
 use log::trace;
-use std::ops::{DerefMut, Range};
 
 pub(crate) fn decode(data: &[u8], header: &Header<'_>) -> Result<Vec<ComponentData>> {
     let mut reader = BitReader::new(data);

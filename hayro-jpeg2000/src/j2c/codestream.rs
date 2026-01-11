@@ -1,5 +1,8 @@
 //! Read and decode a JPEG2000 codestream, as described in Annex A.
 
+use alloc::vec;
+use alloc::vec::Vec;
+
 use super::DecodeSettings;
 use super::bitplane::BITPLANE_BIT_SIZE;
 use super::build::SubBandType;
