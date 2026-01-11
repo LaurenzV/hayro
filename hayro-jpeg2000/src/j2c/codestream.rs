@@ -473,7 +473,7 @@ impl SizeData {
 
     pub(crate) fn tile_y_coord(&self, idx: u32) -> u32 {
         // See B-6.
-        (idx as f64 / self.num_x_tiles() as f64).floor() as u32
+        idx / self.num_x_tiles()
     }
 }
 
