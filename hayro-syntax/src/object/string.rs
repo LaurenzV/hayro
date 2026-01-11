@@ -7,9 +7,11 @@ use crate::object::{Object, ObjectLike};
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 use crate::trivia::is_white_space_character;
+use alloc::borrow::Cow;
+use alloc::vec;
+use alloc::vec::Vec;
+use core::hash::{Hash, Hasher};
 use log::warn;
-use std::borrow::Cow;
-use std::hash::{Hash, Hasher};
 // TODO: Make `HexString` and `LiteralString` own their values.
 
 /// A hex-encoded string.
@@ -159,7 +161,7 @@ impl<'a> LiteralString<'a> {
                                 _ => [b'0', b'0', next],
                             };
 
-                            let str = std::str::from_utf8(&bytes).unwrap();
+                            let str = core::str::from_utf8(&bytes).unwrap();
 
                             if let Ok(num) = u8::from_str_radix(str, 8) {
                                 cleaned.push(num);

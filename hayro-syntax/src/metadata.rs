@@ -1,6 +1,7 @@
 //! Reading document metadata.
 
 use crate::object::DateTime;
+use alloc::vec::Vec;
 
 #[derive(Clone, Default, Debug, PartialEq, Eq)]
 /// The metadata of a PDF document.

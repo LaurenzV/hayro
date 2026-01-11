@@ -5,10 +5,11 @@ use crate::object::r#ref::MaybeRef;
 use crate::object::{FromBytes, Object, ObjectLike};
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
+use alloc::vec::Vec;
+use core::fmt::{Debug, Formatter};
+use core::marker::PhantomData;
 use log::warn;
 use smallvec::SmallVec;
-use std::fmt::{Debug, Formatter};
-use std::marker::PhantomData;
 
 /// An array of PDF objects.
 #[derive(Clone)]
@@ -55,7 +56,7 @@ impl<'a> Array<'a> {
 }
 
 impl Debug for Array<'_> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         let mut debug_list = f.debug_list();
 
         self.raw_iter().for_each(|i| {

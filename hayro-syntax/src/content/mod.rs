@@ -40,10 +40,10 @@ use crate::object::name::{Name, skip_name_like};
 use crate::object::{Object, ObjectLike};
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
+use core::fmt::{Debug, Formatter};
+use core::ops::Deref;
 use log::warn;
 use smallvec::SmallVec;
-use std::fmt::{Debug, Formatter};
-use std::ops::Deref;
 
 // 6 operands are used for example for ctm or cubic curves,
 // but anything above should be pretty rare (only for example for
@@ -51,7 +51,7 @@ use std::ops::Deref;
 const OPERANDS_THRESHOLD: usize = 6;
 
 impl Debug for Operator<'_> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         write!(f, "{}", self.0.as_str())
     }
 }
@@ -452,7 +452,7 @@ mod macros {
             impl<'a> TryFrom<TypedInstruction<'a>> for $t$(<$l>),* {
                 type Error = ();
 
-                fn try_from(value: TypedInstruction<'a>) -> std::result::Result<Self, Self::Error> {
+                fn try_from(value: TypedInstruction<'a>) -> core::result::Result<Self, Self::Error> {
                     match value {
                         TypedInstruction::$t(e) => Ok(e),
                         _ => Err(())

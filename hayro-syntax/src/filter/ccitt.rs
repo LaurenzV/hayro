@@ -3,6 +3,8 @@ use crate::object::dict::keys::{
     BLACK_IS_1, COLUMNS, ENCODED_BYTE_ALIGN, END_OF_BLOCK, END_OF_LINE, K, ROWS,
 };
 use crate::object::stream::{FilterResult, ImageColorSpace, ImageData, ImageDecodeParams};
+use alloc::vec::Vec;
+use core::iter;
 use hayro_ccitt::{DecodeSettings, Decoder, EncodingMode};
 
 pub(crate) fn decode(
@@ -69,7 +71,7 @@ pub(crate) fn decode(
         fn push_pixel_chunk(&mut self, white: bool, chunk_count: u32) {
             let byte = if white { 0xFF } else { 0x00 };
             self.output
-                .extend(std::iter::repeat_n(byte, chunk_count as usize));
+                .extend(iter::repeat_n(byte, chunk_count as usize));
         }
 
         fn next_line(&mut self) {

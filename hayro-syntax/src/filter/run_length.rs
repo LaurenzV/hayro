@@ -1,4 +1,6 @@
 use crate::reader::Reader;
+use alloc::vec;
+use alloc::vec::Vec;
 use log::warn;
 
 pub(crate) fn decode(data: &[u8]) -> Option<Vec<u8>> {

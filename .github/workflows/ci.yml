@@ -35,6 +35,7 @@ jobs:
       - run: cargo check -p hayro-font --no-default-features --target thumbv6m-none-eabi
       - run: cargo check -p hayro-jbig2 --no-default-features --target thumbv6m-none-eabi
       - run: cargo check -p hayro-jpeg2000 --no-default-features --target thumbv6m-none-eabi
+      - run: cargo check -p hayro-syntax --no-default-features --target thumbv6m-none-eabi
     
 
   load_tests:

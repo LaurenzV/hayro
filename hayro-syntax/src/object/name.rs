@@ -5,9 +5,11 @@ use crate::object::macros::object;
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, Skippable};
 use crate::trivia::is_regular_character;
-use std::fmt::Debug;
-use std::hash::Hash;
-use std::ops::Deref;
+use alloc::vec;
+use alloc::vec::Vec;
+use core::fmt::Debug;
+use core::hash::Hash;
+use core::ops::Deref;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 enum Cow<'a> {
@@ -23,7 +25,7 @@ pub struct Name<'a>(Cow<'a>);
 // so we need these manual implementations.
 
 impl<'a> Hash for Name<'a> {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
         self.deref().hash(state);
     }
 }
@@ -38,13 +40,13 @@ impl Eq for Name<'_> {}
 
 #[allow(clippy::non_canonical_partial_ord_impl)]
 impl PartialOrd for Name<'_> {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
         self.deref().partial_cmp(other.deref())
     }
 }
 
 impl Ord for Name<'_> {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
         self.deref().cmp(other.deref())
     }
 }
@@ -108,7 +110,7 @@ impl<'a> Name<'a> {
 
     /// Return a string representation of the name.
     pub fn as_str(&self) -> &str {
-        std::str::from_utf8(self.deref()).unwrap_or("{non-ascii key}")
+        core::str::from_utf8(self.deref()).unwrap_or("{non-ascii key}")
     }
 }
 

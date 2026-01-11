@@ -4,7 +4,7 @@ use crate::object::ObjectIdentifier;
 use crate::object::ObjectLike;
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
-use std::fmt::{Debug, Formatter};
+use core::fmt::{Debug, Formatter};
 
 /// A reference to an object.
 #[derive(PartialEq, Eq, Debug, Clone, Copy, Hash)]
@@ -103,7 +103,7 @@ impl<T> Debug for MaybeRef<T>
 where
     T: Debug,
 {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::Ref(r) => write!(f, "{r:?}"),
             Self::NotRef(nr) => write!(f, "{nr:?}"),

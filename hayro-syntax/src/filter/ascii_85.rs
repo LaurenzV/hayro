@@ -1,3 +1,6 @@
+use alloc::vec;
+use alloc::vec::Vec;
+
 pub(crate) fn decode(data: &[u8]) -> Option<Vec<u8>> {
     let mut decoded = vec![];
 

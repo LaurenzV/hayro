@@ -1,5 +1,6 @@
 use crate::reader::Reader;
 use crate::trivia::is_white_space_character;
+use alloc::vec::Vec;
 
 pub(crate) fn decode(data: &[u8]) -> Option<Vec<u8>> {
     let mut end = 0;

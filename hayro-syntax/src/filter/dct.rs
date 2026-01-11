@@ -1,8 +1,8 @@
 use crate::object::Dict;
 use crate::object::dict::keys::COLOR_TRANSFORM;
 use crate::object::stream::{FilterResult, ImageColorSpace, ImageData, ImageDecodeParams};
-use std::io::Cursor;
-use std::num::NonZeroU32;
+use core::num::NonZeroU32;
+use zune_jpeg::zune_core::bytestream::ZCursor;
 use zune_jpeg::zune_core::colorspace::ColorSpace;
 use zune_jpeg::zune_core::colorspace::ColorSpace::CMYK;
 use zune_jpeg::zune_core::options::DecoderOptions;
@@ -12,7 +12,7 @@ pub(crate) fn decode(
     params: Dict<'_>,
     image_params: &ImageDecodeParams,
 ) -> Option<FilterResult> {
-    let reader = Cursor::new(data);
+    let reader = ZCursor::new(data);
     let options = DecoderOptions::default()
         .set_max_width(u16::MAX as usize)
         .set_max_height(u16::MAX as usize);

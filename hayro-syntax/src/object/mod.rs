@@ -13,7 +13,7 @@ pub use crate::object::stream::Stream;
 pub use crate::object::string::String;
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
-use std::fmt::Debug;
+use core::fmt::Debug;
 
 mod bool;
 mod date;
@@ -266,7 +266,7 @@ mod macros {
             impl<'a> TryFrom<Object<'a>> for $t$(<$l>),* {
                 type Error = ();
 
-                fn try_from(value: Object<'a>) -> std::result::Result<Self, Self::Error> {
+                fn try_from(value: Object<'a>) -> core::result::Result<Self, Self::Error> {
                     match value {
                         Object::$s(b) => Ok(b),
                         _ => Err(()),

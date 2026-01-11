@@ -8,16 +8,20 @@ repository = { workspace = true }
 license = { workspace = true }
 readme = "README.md"
 
+[features]
+default = ["std"]
+std = ["flate2", "hayro-jbig2/std", "hayro-jpeg2000/std", "hayro-jpeg2000/simd"]
+
 [dependencies]
 log = { workspace = true }
 rustc-hash = { workspace = true }
 smallvec = { workspace = true }
 zune-jpeg = { workspace = true }
-flate2 = { workspace = true }
+flate2 = { workspace = true, optional = true }
 
 hayro-ccitt = { workspace = true }
-hayro-jbig2 = { workspace = true }
-hayro-jpeg2000 = { workspace = true, features = ["std", "simd"] }
+hayro-jbig2 = { workspace = true, default-features = false }
+hayro-jpeg2000 = { workspace = true, default-features = false }
 
 [lints]
 workspace = true

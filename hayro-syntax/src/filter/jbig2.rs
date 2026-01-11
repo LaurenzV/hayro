@@ -2,6 +2,8 @@ use crate::bit_reader::BitWriter;
 use crate::object::Dict;
 use crate::object::Stream;
 use crate::object::dict::keys::JBIG2_GLOBALS;
+use alloc::vec;
+use alloc::vec::Vec;
 
 /// Decode JBIG2 data from a PDF stream.
 ///

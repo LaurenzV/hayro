@@ -1,5 +1,5 @@
 use crate::byte_reader::Reader;
-use std::str::FromStr;
+use core::str::FromStr;
 
 /// A date time.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
@@ -33,7 +33,7 @@ impl DateTime {
                 return None;
             }
 
-            let num = u16::from_str(std::str::from_utf8(reader.read_bytes(bytes as usize)?).ok()?)
+            let num = u16::from_str(core::str::from_utf8(reader.read_bytes(bytes as usize)?).ok()?)
                 .ok()?;
 
             if num < min || num > max {

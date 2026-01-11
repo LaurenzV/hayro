@@ -1,7 +1,7 @@
 //! A simple bit reader and writer.
 
+use core::fmt::Debug;
 use smallvec::{SmallVec, smallvec};
-use std::fmt::Debug;
 
 /// A bit reader.
 #[derive(Debug, Clone)]

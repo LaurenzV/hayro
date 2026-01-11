@@ -1,5 +1,7 @@
 //! Ported from <https://github.com/mozilla/pdf.js/blob/master/src/core/calculate_sha_other.js>.
 
+use alloc::vec;
+
 pub(super) const K: [u64; 80] = [
     0x428a2f98d728ae22,
     0x7137449123ef65cd,

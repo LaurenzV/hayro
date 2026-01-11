@@ -1,6 +1,6 @@
 //! A byte reader.
 
-use std::ops::Range;
+use core::ops::Range;
 
 /// A reader for reading bytes and PDF objects.
 #[derive(Clone, Debug)]
