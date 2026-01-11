@@ -12,6 +12,7 @@ use crate::reader::ReaderContext;
 use crate::sync::OnceLock;
 use crate::util::FloatExt;
 use crate::xref::XRef;
+use alloc::boxed::Box;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::ops::Deref;
