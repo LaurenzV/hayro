@@ -8,7 +8,7 @@ use super::codestream::WaveletTransform;
 use super::decode::{DecompositionStorage, TileDecodeContext};
 use super::rect::IntRect;
 use crate::j2c::Header;
-use crate::simd::{self, Level, SIMD_WIDTH, Simd, dispatch, f32x8};
+use crate::math::{self, Level, SIMD_WIDTH, Simd, dispatch, f32x8};
 
 /// The output from performing the IDWT operation.
 pub(crate) struct IDWTOutput {
@@ -384,7 +384,7 @@ fn reversible_filter_53r(scanline: &mut [f32], width: usize, x0: usize) {
         width,
         first_even,
         #[inline(always)]
-        |s, left, right| s - simd::floor_f32(simd::mul_add(left + right, 0.25, 0.5)),
+        |s, left, right| s - math::floor_f32(math::mul_add(left + right, 0.25, 0.5)),
     );
 
     // Equation (F-6).
@@ -394,7 +394,7 @@ fn reversible_filter_53r(scanline: &mut [f32], width: usize, x0: usize) {
         width,
         first_odd,
         #[inline(always)]
-        |s, left, right| s + simd::floor_f32((left + right) * 0.5),
+        |s, left, right| s + math::floor_f32((left + right) * 0.5),
     );
 }
 
@@ -435,7 +435,7 @@ fn irreversible_filter_97i(scanline: &mut [f32], width: usize, x0: usize) {
         width,
         first_even,
         #[inline(always)]
-        |s, left, right| simd::mul_add(left + right, NEG_DELTA, s),
+        |s, left, right| math::mul_add(left + right, NEG_DELTA, s),
     );
 
     // Step 4.
@@ -445,7 +445,7 @@ fn irreversible_filter_97i(scanline: &mut [f32], width: usize, x0: usize) {
         width,
         first_odd,
         #[inline(always)]
-        |s, left, right| simd::mul_add(left + right, NEG_GAMMA, s),
+        |s, left, right| math::mul_add(left + right, NEG_GAMMA, s),
     );
 
     // Step 5.
@@ -455,7 +455,7 @@ fn irreversible_filter_97i(scanline: &mut [f32], width: usize, x0: usize) {
         width,
         first_even,
         #[inline(always)]
-        |s, left, right| simd::mul_add(left + right, NEG_BETA, s),
+        |s, left, right| math::mul_add(left + right, NEG_BETA, s),
     );
 
     // Step 6.
@@ -465,7 +465,7 @@ fn irreversible_filter_97i(scanline: &mut [f32], width: usize, x0: usize) {
         width,
         first_odd,
         #[inline(always)]
-        |s, left, right| simd::mul_add(left + right, NEG_ALPHA, s),
+        |s, left, right| math::mul_add(left + right, NEG_ALPHA, s),
     );
 }
 
@@ -627,7 +627,7 @@ fn reversible_filter_53r_simd<S: Simd>(
         #[inline(always)]
         |s1, s2, s3| s1 - ((s2 + s3 + 2.0) * 0.25).floor(),
         #[inline(always)]
-        |s1, s2, s3| s1 - simd::floor_f32(simd::mul_add(s2 + s3, 0.25, 0.5)),
+        |s1, s2, s3| s1 - math::floor_f32(math::mul_add(s2 + s3, 0.25, 0.5)),
     );
 
     // Equation (F-6).
@@ -642,7 +642,7 @@ fn reversible_filter_53r_simd<S: Simd>(
         #[inline(always)]
         |s1, s2, s3| s1 + ((s2 + s3) * 0.5).floor(),
         #[inline(always)]
-        |s1, s2, s3| s1 + simd::floor_f32((s2 + s3) * 0.5),
+        |s1, s2, s3| s1 + math::floor_f32((s2 + s3) * 0.5),
     );
 }
 
@@ -728,7 +728,7 @@ fn irreversible_filter_97i_simd<S: Simd>(
         #[inline(always)]
         |s1, s2, s3| (s2 + s3).mul_add(neg_delta, s1),
         #[inline(always)]
-        |s1, s2, s3| simd::mul_add(s2 + s3, NEG_DELTA, s1),
+        |s1, s2, s3| math::mul_add(s2 + s3, NEG_DELTA, s1),
     );
 
     // Step 4.
@@ -743,7 +743,7 @@ fn irreversible_filter_97i_simd<S: Simd>(
         #[inline(always)]
         |s1, s2, s3| (s2 + s3).mul_add(neg_gamma, s1),
         #[inline(always)]
-        |s1, s2, s3| simd::mul_add(s2 + s3, NEG_GAMMA, s1),
+        |s1, s2, s3| math::mul_add(s2 + s3, NEG_GAMMA, s1),
     );
 
     // Step 5.
@@ -758,7 +758,7 @@ fn irreversible_filter_97i_simd<S: Simd>(
         #[inline(always)]
         |s1, s2, s3| (s2 + s3).mul_add(neg_beta, s1),
         #[inline(always)]
-        |s1, s2, s3| simd::mul_add(s2 + s3, NEG_BETA, s1),
+        |s1, s2, s3| math::mul_add(s2 + s3, NEG_BETA, s1),
     );
 
     // Step 6.
@@ -773,6 +773,6 @@ fn irreversible_filter_97i_simd<S: Simd>(
         #[inline(always)]
         |s1, s2, s3| (s2 + s3).mul_add(neg_alpha, s1),
         #[inline(always)]
-        |s1, s2, s3| simd::mul_add(s2 + s3, NEG_ALPHA, s1),
+        |s1, s2, s3| math::mul_add(s2 + s3, NEG_ALPHA, s1),
     );
 }

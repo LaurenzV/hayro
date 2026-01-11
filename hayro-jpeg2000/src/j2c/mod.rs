@@ -20,7 +20,7 @@ use crate::j2c::codestream::markers;
 use crate::reader::BitReader;
 use crate::{DecodeSettings, Image, resolve_alpha_and_color_space};
 
-use crate::simd::{SIMD_WIDTH, SimdBuffer};
+use crate::math::{SIMD_WIDTH, SimdBuffer};
 pub(crate) use codestream::Header;
 pub(crate) use decode::decode;
 

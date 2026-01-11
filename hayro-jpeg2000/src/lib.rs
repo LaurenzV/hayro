@@ -79,9 +79,9 @@ use crate::jp2::icc::ICCMetadata;
 use crate::jp2::{DecodedImage, ImageBoxes};
 
 pub mod error;
-pub(crate) mod simd;
+pub(crate) mod math;
 
-use crate::simd::{Level, SIMD_WIDTH, Simd, dispatch, f32x8};
+use crate::math::{Level, SIMD_WIDTH, Simd, dispatch, f32x8};
 pub use error::{
     ColorError, DecodeError, DecodingError, FormatError, MarkerError, Result, TileError,
     ValidationError,
@@ -398,7 +398,7 @@ fn interleave_and_convert(image: DecodedImage, buf: &mut [u8]) {
                     components[0]
                         .container
                         .iter()
-                        .map(|v| simd::round_f32(*v) as u8),
+                        .map(|v| math::round_f32(*v) as u8),
                 ) {
                     *output = input;
                 }
@@ -412,8 +412,8 @@ fn interleave_and_convert(image: DecodedImage, buf: &mut [u8]) {
                 let c1 = &c1.container[..max_len];
 
                 for i in 0..max_len {
-                    *output_iter.next().unwrap() = simd::round_f32(c0[i]) as u8;
-                    *output_iter.next().unwrap() = simd::round_f32(c1[i]) as u8;
+                    *output_iter.next().unwrap() = math::round_f32(c0[i]) as u8;
+                    *output_iter.next().unwrap() = math::round_f32(c1[i]) as u8;
                 }
             }
             // RGB
@@ -427,9 +427,9 @@ fn interleave_and_convert(image: DecodedImage, buf: &mut [u8]) {
                 let c2 = &c2.container[..max_len];
 
                 for i in 0..max_len {
-                    *output_iter.next().unwrap() = simd::round_f32(c0[i]) as u8;
-                    *output_iter.next().unwrap() = simd::round_f32(c1[i]) as u8;
-                    *output_iter.next().unwrap() = simd::round_f32(c2[i]) as u8;
+                    *output_iter.next().unwrap() = math::round_f32(c0[i]) as u8;
+                    *output_iter.next().unwrap() = math::round_f32(c1[i]) as u8;
+                    *output_iter.next().unwrap() = math::round_f32(c2[i]) as u8;
                 }
             }
             // RGBA or CMYK.
@@ -445,10 +445,10 @@ fn interleave_and_convert(image: DecodedImage, buf: &mut [u8]) {
                 let c3 = &c3.container[..max_len];
 
                 for i in 0..max_len {
-                    *output_iter.next().unwrap() = simd::round_f32(c0[i]) as u8;
-                    *output_iter.next().unwrap() = simd::round_f32(c1[i]) as u8;
-                    *output_iter.next().unwrap() = simd::round_f32(c2[i]) as u8;
-                    *output_iter.next().unwrap() = simd::round_f32(c3[i]) as u8;
+                    *output_iter.next().unwrap() = math::round_f32(c0[i]) as u8;
+                    *output_iter.next().unwrap() = math::round_f32(c1[i]) as u8;
+                    *output_iter.next().unwrap() = math::round_f32(c2[i]) as u8;
+                    *output_iter.next().unwrap() = math::round_f32(c3[i]) as u8;
                 }
             }
             _ => unreachable!(),
@@ -459,7 +459,7 @@ fn interleave_and_convert(image: DecodedImage, buf: &mut [u8]) {
 
         for sample in 0..max_len {
             for channel in components.iter() {
-                *output_iter.next().unwrap() = simd::round_f32(
+                *output_iter.next().unwrap() = math::round_f32(
                     (channel.container[sample] / ((1_u32 << channel.bit_depth) - 1) as f32)
                         * mul_factor,
                 ) as u8;
@@ -579,7 +579,7 @@ fn resolve_palette_indices(
                     Vec::with_capacity(component.container.truncated().len() + SIMD_WIDTH);
 
                 for &sample in component.container.truncated() {
-                    let index = simd::round_f32(sample) as i64;
+                    let index = math::round_f32(sample) as i64;
                     let value = palette
                         .map(index as usize, column_idx)
                         .ok_or(ColorError::PaletteResolutionFailed)?;
@@ -587,7 +587,7 @@ fn resolve_palette_indices(
                 }
 
                 resolved.push(ComponentData {
-                    container: simd::SimdBuffer::new(mapped),
+                    container: math::SimdBuffer::new(mapped),
                     bit_depth: column_info.bit_depth,
                 });
             }

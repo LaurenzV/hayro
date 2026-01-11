@@ -411,7 +411,7 @@ mod inner {
     macro_rules! simd_dispatch {
         ($level:expr, $simd:ident => $body:expr) => {{
             let _ = $level;
-            let $simd = $crate::simd::ScalarSimd;
+            let $simd = $crate::math::ScalarSimd;
             $body
         }};
     }

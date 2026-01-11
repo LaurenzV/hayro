@@ -24,8 +24,8 @@ use super::tile::{ComponentTile, ResolutionTile, Tile};
 use super::{ComponentData, bitplane, build, idwt, mct, segment, tile};
 use crate::error::{DecodingError, Result, TileError, bail};
 use crate::j2c::segment::MAX_BITPLANE_COUNT;
+use crate::math::SimdBuffer;
 use crate::reader::BitReader;
-use crate::simd::SimdBuffer;
 use core::ops::{DerefMut, Range};
 use log::trace;
 
@@ -342,7 +342,7 @@ fn decode_sub_band_bitplanes(
                 component_info.size_info.precision as u16 + log_gain
             };
 
-            crate::simd::pow2i(r_b as i32 - exponent as i32) * (1.0 + (mantissa as f32) / 2048.0)
+            crate::math::pow2i(r_b as i32 - exponent as i32) * (1.0 + (mantissa as f32) / 2048.0)
         }
     };
 

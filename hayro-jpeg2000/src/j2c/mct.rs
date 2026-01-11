@@ -4,7 +4,7 @@
 use super::codestream::{Header, WaveletTransform};
 use super::decode::TileDecodeContext;
 use crate::error::{ColorError, Result, bail, err};
-use crate::simd::{Level, Simd, dispatch, f32x8};
+use crate::math::{Level, Simd, dispatch, f32x8};
 
 /// Apply the inverse multi-component transform, as specified in G.2 and G.3.
 pub(crate) fn apply_inverse(
