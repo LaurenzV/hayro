@@ -2,10 +2,11 @@ use crate::PdfData;
 use crate::object::ObjectIdentifier;
 use crate::object::Stream;
 use crate::reader::ReaderContext;
+use crate::sync::{Mutex, MutexExt};
 use crate::util::SegmentList;
-use std::collections::HashMap;
-use std::fmt::{Debug, Formatter};
-use std::sync::Mutex;
+use alloc::vec::Vec;
+use core::fmt::{Debug, Formatter};
+use crate::sync::HashMap;
 
 /// A structure for storing the data of the PDF.
 // To explain further: This crate uses a zero-parse approach, meaning that objects like
@@ -26,7 +27,7 @@ pub(crate) struct Data {
 }
 
 impl Debug for Data {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         write!(f, "Data {{ ... }}")
     }
 }
@@ -48,12 +49,12 @@ impl Data {
 
     /// Get access to the data of a decoded object stream.
     pub(crate) fn get_with(&self, id: ObjectIdentifier, ctx: &ReaderContext<'_>) -> Option<&[u8]> {
-        if let Some(&idx) = self.map.lock().unwrap().get(&id) {
+        if let Some(&idx) = self.map.get().get(&id) {
             self.decoded.get(idx)?.as_deref()
         } else {
             // Block scope to keep the lock short-lived.
             let idx = {
-                let mut locked = self.map.lock().unwrap();
+                let mut locked = self.map.get();
                 let idx = locked.len();
                 locked.insert(id, idx);
                 idx
