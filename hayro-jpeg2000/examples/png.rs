@@ -8,6 +8,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 fn main() {
+    #[cfg(feature = "logging")]
     if let Ok(()) = log::set_logger(&LOGGER) {
         log::set_max_level(log::LevelFilter::Warn);
     }
@@ -56,10 +57,13 @@ fn convert(path: &Path) -> Result<DynamicImage, String> {
     Ok(rgba)
 }
 
+#[cfg(feature = "logging")]
 static LOGGER: SimpleLogger = SimpleLogger;
 
+#[cfg(feature = "logging")]
 struct SimpleLogger;
 
+#[cfg(feature = "logging")]
 impl log::Log for SimpleLogger {
     fn enabled(&self, metadata: &log::Metadata<'_>) -> bool {
         metadata.level() <= log::LevelFilter::Warn
