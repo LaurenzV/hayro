@@ -419,6 +419,9 @@ mod inner {
     pub(crate) use simd_dispatch as dispatch;
 }
 
+// Note that these polyfills can be very imprecise, but hopefully good enough
+// for the vast majority of cases.
+
 #[inline(always)]
 pub(crate) fn mul_add(a: f32, b: f32, c: f32) -> f32 {
     #[cfg(all(

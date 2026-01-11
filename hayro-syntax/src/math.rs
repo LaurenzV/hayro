@@ -1,4 +1,5 @@
-//! Math polyfills for no_std compatibility.
+// Note that these polyfills can be very imprecise, but hopefully good enough
+// for the vast majority of cases.
 
 #[inline(always)]
 pub(crate) fn round_f32(x: f32) -> f32 {
