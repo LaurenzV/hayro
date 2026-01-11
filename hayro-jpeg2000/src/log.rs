@@ -1,24 +1,28 @@
 //! Logging macros that optionally forward to the `log` crate.
 
 macro_rules! ldebug {
-    ($($arg:tt)*) => {
+    ($fmt:literal $(, $($arg:expr),* $(,)?)?) => {
         #[cfg(feature = "logging")]
-        ::log::debug!($($arg)*)
+        ::log::debug!($fmt $(, $($arg),*)?);
+        #[cfg(not(feature = "logging"))]
+        { $($(let _ = &$arg;)*)? }
     };
 }
 
 macro_rules! ltrace {
-    ($($arg:tt)*) => {
+    ($fmt:literal $(, $($arg:expr),* $(,)?)?) => {
         #[cfg(feature = "logging")]
-        ::log::trace!($($arg)*)
+        ::log::trace!($fmt $(, $($arg),*)?);
+        #[cfg(not(feature = "logging"))]
+        { $($(let _ = &$arg;)*)? }
     };
 }
 
 macro_rules! lwarn {
-    ($($arg:tt)*) => {
+    ($fmt:literal $(, $($arg:expr),* $(,)?)?) => {
         #[cfg(feature = "logging")]
-        ::log::warn!($($arg)*)
+        ::log::warn!($fmt $(, $($arg),*)?);
+        #[cfg(not(feature = "logging"))]
+        { $($(let _ = &$arg;)*)? }
     };
 }
-
-pub(crate) use {ldebug, ltrace, lwarn};

@@ -10,7 +10,6 @@ use super::progression::ProgressionData;
 use super::tile::{Tile, TilePart};
 use crate::error::{Result, TileError, bail};
 use crate::reader::BitReader;
-use crate::log::{ltrace, lwarn};
 
 pub(crate) const MAX_BITPLANE_COUNT: u8 = 32;
 

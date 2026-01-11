@@ -27,7 +27,6 @@ use crate::j2c::segment::MAX_BITPLANE_COUNT;
 use crate::math::SimdBuffer;
 use crate::reader::BitReader;
 use core::ops::{DerefMut, Range};
-use crate::log::ltrace;
 
 pub(crate) fn decode(data: &[u8], header: &Header<'_>) -> Result<Vec<ComponentData>> {
     let mut reader = BitReader::new(data);
