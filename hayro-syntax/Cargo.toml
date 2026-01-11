@@ -10,7 +10,7 @@ readme = "README.md"
 
 [features]
 default = ["std"]
-std = ["flate2", "hayro-jbig2/std", "hayro-jpeg2000/std", "hayro-jpeg2000/simd", "dep:rustc-hash"]
+std = ["dep:flate2", "hayro-jbig2/std", "hayro-jpeg2000/std", "hayro-jpeg2000/simd", "dep:rustc-hash"]
 
 [dependencies]
 log = { workspace = true }
