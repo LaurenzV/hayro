@@ -13,8 +13,6 @@ The decoder abstracts away most of the internal complexity of JPEG2000
 and yields a simple 8-bit image with either greyscale, RGB, CMYK or an ICC-based
 color space, which can then be processed further according to your needs.
 
-The crate is preparing for `no_std` compatibility but currently requires `std`.
-
 # Example
 ```rust,no_run
 use hayro_jpeg2000::{Image, DecodeSettings};
