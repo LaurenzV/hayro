@@ -1,5 +1,8 @@
 //! Ported from <https://github.com/mozilla/pdf.js/blob/master/src/core/crypto.js>.
 
+use alloc::vec;
+use alloc::vec::Vec;
+
 #[derive(Clone)]
 pub(crate) struct Rc4 {
     a: u8,
