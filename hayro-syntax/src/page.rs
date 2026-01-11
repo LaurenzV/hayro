@@ -9,11 +9,13 @@ use crate::object::Stream;
 use crate::object::dict::keys::*;
 use crate::object::{Object, ObjectLike};
 use crate::reader::ReaderContext;
+use crate::sync::OnceLock;
 use crate::util::FloatExt;
 use crate::xref::XRef;
+use alloc::vec;
+use alloc::vec::Vec;
+use core::ops::Deref;
 use log::warn;
-use std::ops::Deref;
-use std::sync::OnceLock;
 
 /// Attributes that can be inherited.
 #[derive(Debug, Clone)]
@@ -295,7 +297,7 @@ impl<'a> Page<'a> {
             self.rotation(),
             Rotation::Horizontal | Rotation::FlippedHorizontal
         ) {
-            std::mem::swap(&mut base_width, &mut base_height);
+            core::mem::swap(&mut base_width, &mut base_height);
         }
 
         (base_width, base_height)
@@ -438,8 +440,15 @@ pub(crate) mod cached {
     use crate::page::Pages;
     use crate::reader::ReaderContext;
     use crate::xref::XRef;
-    use std::ops::Deref;
-    use std::sync::Arc;
+    use core::ops::Deref;
+
+    // Keep in sync with the implementation in `sync`. We duplicate it here
+    // to make it more visible since we have unsafe code here.
+    #[cfg(feature = "std")]
+    pub(crate) use std::sync::Arc;
+
+    #[cfg(not(feature = "std"))]
+    pub(crate) use alloc::rc::Rc as Arc;
 
     pub(crate) struct CachedPages {
         pages: Pages<'static>,
@@ -452,12 +461,12 @@ pub(crate) mod cached {
         pub(crate) fn new(xref: Arc<XRef>) -> Option<Self> {
             // SAFETY:
             // - The XRef's location is stable in memory:
-            //   - We wrapped it in a `Arc`, which implements `StableDeref`.
+            //   - We wrapped it in a `Arc` (or `Rc` in `no_std`), which implements `StableDeref`.
             //   - The struct owns the `Arc`, ensuring that the inner value is not dropped during the whole
             //     duration.
             // - The internal 'static lifetime is not leaked because its rewritten
             //   to the self-lifetime in `pages()`.
-            let xref_reference: &'static XRef = unsafe { std::mem::transmute(xref.deref()) };
+            let xref_reference: &'static XRef = unsafe { core::mem::transmute(xref.deref()) };
 
             let ctx = ReaderContext::new(xref_reference, false);
             let pages = xref_reference
