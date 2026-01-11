@@ -24,6 +24,11 @@ pub(crate) use alloc::collections::BTreeMap as Map;
 #[cfg(feature = "std")]
 pub(crate) use std::collections::HashMap as Map;
 
+#[cfg(not(feature = "std"))]
+pub(crate) use alloc::rc::Rc as Arc;
+#[cfg(feature = "std")]
+pub(crate) use alloc::sync::Arc;
+
 use crate::util::TryNumFrom;
 
 pub mod cff;
