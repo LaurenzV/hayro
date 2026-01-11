@@ -623,8 +623,6 @@ fn cielab_to_rgb<S: Simd>(
         bail!(ColorError::LabConversionFailed);
     }
 
-    // Table M.29bis – Default Offset Values and Encoding of Offsets for the CIELab Colourspace.
-    // Signed values aren't handled.
     let rl = lab.rl.unwrap_or(100);
     let ra = lab.ra.unwrap_or(170);
     let rb = lab.ra.unwrap_or(200);
