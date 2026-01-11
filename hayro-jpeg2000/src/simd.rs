@@ -471,8 +471,11 @@ pub(crate) fn round_f32(x: f32) -> f32 {
     }
     #[cfg(not(feature = "std"))]
     {
-        // Note: This assumes non-negative values, which is true for all call sites.
-        floor_f32(x + 0.5)
+        if x >= 0.0 {
+            floor_f32(x + 0.5)
+        } else {
+            -floor_f32(-x + 0.5)
+        }
     }
 }
 
