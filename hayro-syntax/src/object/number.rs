@@ -1,5 +1,6 @@
 //! Numbers.
 
+use crate::math::{fract_f64, trunc_f64};
 use crate::object::macros::object;
 use crate::object::{Object, ObjectLike};
 use crate::reader::Reader;
@@ -40,7 +41,7 @@ impl Number {
             InternalNumber::Real(r) => {
                 let res = r as i64;
 
-                if !(r.trunc() == r) {
+                if !(trunc_f64(r) == r) {
                     debug!("float {r} was truncated to {res}");
                 }
 
@@ -100,7 +101,7 @@ impl Readable<'_> for Number {
         // precision.
         let num = f64::from_str(core::str::from_utf8(data).ok()?).ok()?;
 
-        if num.fract() == 0.0 {
+        if fract_f64(num) == 0.0 {
             Some(Self(InternalNumber::Integer(num as i64)))
         } else {
             Some(Self(InternalNumber::Real(num)))

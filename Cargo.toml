@@ -52,7 +52,7 @@ pdf-writer = "0.14.0"
 sitro = { git = "https://github.com/LaurenzV/sitro", rev="fb804b3" }
 xmlwriter = { version = "0.1" }
 base64 = { version = "0.22" }
-zune-jpeg = { version = "0.5" }
+zune-jpeg = { version = "0.5", default-features = false }
 vello_cpu = { version = "0.0.5", default-features = false, features = ["std", "png", "u8_pipeline"] }
 fast_image_resize = { version = "5", default-features = false }
 fearless_simd = "0.3.0"

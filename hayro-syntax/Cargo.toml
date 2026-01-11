@@ -10,13 +10,13 @@ readme = "README.md"
 
 [features]
 default = ["std"]
-std = ["dep:flate2", "hayro-jbig2/std", "hayro-jpeg2000/std", "hayro-jpeg2000/simd", "dep:rustc-hash"]
+std = ["dep:flate2", "hayro-jbig2/std", "hayro-jpeg2000/std", "hayro-jpeg2000/simd", "dep:rustc-hash", "zune-jpeg/std"]
 
 [dependencies]
 log = { workspace = true }
 rustc-hash = { workspace = true, optional = true }
 smallvec = { workspace = true }
-zune-jpeg = { workspace = true }
+zune-jpeg = { workspace = true, features = ["neon", "x86"] }
 flate2 = { workspace = true, optional = true }
 
 hayro-ccitt = { workspace = true }
