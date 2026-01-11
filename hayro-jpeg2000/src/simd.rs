@@ -449,7 +449,6 @@ pub(crate) fn mul_add(a: f32, b: f32, c: f32) -> f32 {
     }
 }
 
-/// Floor for f32.
 #[inline(always)]
 pub(crate) fn floor_f32(x: f32) -> f32 {
     #[cfg(feature = "std")]
@@ -464,7 +463,6 @@ pub(crate) fn floor_f32(x: f32) -> f32 {
     }
 }
 
-/// Round for f32.
 #[inline(always)]
 pub(crate) fn round_f32(x: f32) -> f32 {
     #[cfg(feature = "std")]
@@ -478,7 +476,6 @@ pub(crate) fn round_f32(x: f32) -> f32 {
     }
 }
 
-/// Power of 2 with integer exponent.
 #[inline(always)]
 pub(crate) fn pow2i(exp: i32) -> f32 {
     if exp >= 0 {
@@ -488,8 +485,6 @@ pub(crate) fn pow2i(exp: i32) -> f32 {
     }
 }
 
-/// Min for f32.
-/// Used in the scalar SIMD fallback.
 #[inline(always)]
 #[cfg_attr(feature = "simd", allow(dead_code))]
 pub(crate) fn min_f32(a: f32, b: f32) -> f32 {
@@ -503,8 +498,6 @@ pub(crate) fn min_f32(a: f32, b: f32) -> f32 {
     }
 }
 
-/// Max for f32.
-/// Used in the scalar SIMD fallback.
 #[inline(always)]
 #[cfg_attr(feature = "simd", allow(dead_code))]
 pub(crate) fn max_f32(a: f32, b: f32) -> f32 {
