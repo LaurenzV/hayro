@@ -11,7 +11,7 @@ use crate::jp2::colr::ColorSpecificationBox;
 use crate::jp2::pclr::PaletteBox;
 use crate::reader::BitReader;
 use crate::{DecodeSettings, Image, resolve_alpha_and_color_space};
-use log::debug;
+use crate::log::ldebug;
 
 pub(crate) mod r#box;
 pub(crate) mod cdef;
@@ -98,7 +98,7 @@ pub(crate) fn parse<'a>(data: &'a [u8], mut settings: DecodeSettings) -> Result<
                             cmap::parse(&mut boxes, child_box.data)?;
                         }
                         _ => {
-                            debug!(
+                            ldebug!(
                                 "ignoring header box {}",
                                 r#box::tag_to_string(child_box.box_type)
                             );

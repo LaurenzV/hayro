@@ -27,7 +27,7 @@ use crate::j2c::segment::MAX_BITPLANE_COUNT;
 use crate::math::SimdBuffer;
 use crate::reader::BitReader;
 use core::ops::{DerefMut, Range};
-use log::trace;
+use crate::log::ltrace;
 
 pub(crate) fn decode(data: &[u8], header: &Header<'_>) -> Result<Vec<ComponentData>> {
     let mut reader = BitReader::new(data);
@@ -41,7 +41,7 @@ pub(crate) fn decode(data: &[u8], header: &Header<'_>) -> Result<Vec<ComponentDa
     let mut storage = DecompositionStorage::default();
 
     for tile in tiles.iter() {
-        trace!(
+        ltrace!(
             "tile {} rect [{},{} {}x{}]",
             tile.idx,
             tile.rect.x0,

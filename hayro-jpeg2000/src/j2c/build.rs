@@ -7,7 +7,7 @@ use super::tile::{ResolutionTile, Tile};
 use crate::error::{DecodingError, Result};
 use core::iter;
 use core::ops::Range;
-use log::trace;
+use crate::log::ltrace;
 
 /// Build and allocate all necessary structures to process the code-blocks
 /// for a specific tile. Also parses the segments for each code-block.
@@ -44,11 +44,11 @@ fn build_decompositions(
          -> Result<usize> {
             let sub_band_rect = resolution_tile.sub_band_rect(sub_band_type);
 
-            trace!(
+            ltrace!(
                 "r {} making sub-band {} for component {component_idx}",
                 resolution_tile.resolution, sub_band_type as u8
             );
-            trace!(
+            ltrace!(
                 "Sub-band rect: [{},{} {}x{}], ll rect [{},{} {}x{}]",
                 sub_band_rect.x0,
                 sub_band_rect.y0,
@@ -148,7 +148,7 @@ fn build_precincts(
             code_block_area.height() / cb_height
         };
 
-        trace!(
+        ltrace!(
             "Precinct rect: [{},{} {}x{}], num_code_blocks_wide: {}, num_code_blocks_high: {}",
             precinct_rect.x0,
             precinct_rect.y0,
@@ -212,7 +212,7 @@ fn build_code_blocks(
             let area = IntRect::from_xywh(x, y, code_block_width, code_block_height)
                 .intersect(sub_band_rect);
 
-            trace!(
+            ltrace!(
                 "Codeblock rect: [{},{} {}x{}]",
                 area.x0,
                 area.y0,

@@ -79,6 +79,8 @@ use crate::jp2::icc::ICCMetadata;
 use crate::jp2::{DecodedImage, ImageBoxes};
 
 pub mod error;
+#[macro_use]
+pub(crate) mod log;
 pub(crate) mod math;
 
 use crate::math::{Level, SIMD_WIDTH, Simd, dispatch, f32x8};
