@@ -1,6 +1,8 @@
+use crate::sync::OnceLock;
+use alloc::boxed::Box;
+use alloc::vec::Vec;
+use core::ops::Sub;
 use log::error;
-use std::ops::Sub;
-use std::sync::OnceLock;
 
 pub(crate) trait OptionLog {
     fn error_none(self, f: &str) -> Self;
@@ -52,7 +54,7 @@ pub(crate) struct SegmentList<T, const C: usize>([OnceLock<Box<[OnceLock<T>]>>; 
 
 impl<T, const C: usize> SegmentList<T, C> {
     pub(crate) fn new() -> Self {
-        Self(std::array::from_fn(|_| OnceLock::new()))
+        Self(core::array::from_fn(|_| OnceLock::new()))
     }
 
     pub(crate) fn get(&self, i: usize) -> Option<&T> {
