@@ -5,7 +5,7 @@
     reason = "JP2 box constants exist for completeness but not all are referenced yet"
 )]
 
-use alloc::string::String;
+use alloc::string::{String, ToString};
 
 use crate::reader::BitReader;
 

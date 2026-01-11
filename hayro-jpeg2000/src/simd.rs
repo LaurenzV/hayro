@@ -223,7 +223,7 @@ mod inner {
         pub(crate) fn floor(self) -> Self {
             let mut result = [0.0f32; SIMD_WIDTH];
             for i in 0..SIMD_WIDTH {
-                result[i] = self.val[i].floor();
+                result[i] = super::floor_f32(self.val[i]);
             }
             Self {
                 val: result,
@@ -274,7 +274,7 @@ mod inner {
         pub(crate) fn min(self, other: Self) -> Self {
             let mut result = [0.0f32; SIMD_WIDTH];
             for i in 0..SIMD_WIDTH {
-                result[i] = self.val[i].min(other.val[i]);
+                result[i] = super::min_f32(self.val[i], other.val[i]);
             }
             Self {
                 val: result,
@@ -286,7 +286,7 @@ mod inner {
         pub(crate) fn max(self, other: Self) -> Self {
             let mut result = [0.0f32; SIMD_WIDTH];
             for i in 0..SIMD_WIDTH {
-                result[i] = self.val[i].max(other.val[i]);
+                result[i] = super::max_f32(self.val[i], other.val[i]);
             }
             Self {
                 val: result,
@@ -421,25 +421,96 @@ mod inner {
 
 #[inline(always)]
 pub(crate) fn mul_add(a: f32, b: f32, c: f32) -> f32 {
-    #[cfg(any(
-        all(
-            any(target_arch = "x86", target_arch = "x86_64"),
-            target_feature = "fma"
-        ),
-        all(target_arch = "aarch64", target_feature = "neon")
+    #[cfg(all(
+        feature = "std",
+        any(
+            all(
+                any(target_arch = "x86", target_arch = "x86_64"),
+                target_feature = "fma"
+            ),
+            all(target_arch = "aarch64", target_feature = "neon")
+        )
     ))]
     {
         f32::mul_add(a, b, c)
     }
-    #[cfg(not(any(
-        all(
-            any(target_arch = "x86", target_arch = "x86_64"),
-            target_feature = "fma"
-        ),
-        all(target_arch = "aarch64", target_feature = "neon")
+    #[cfg(not(all(
+        feature = "std",
+        any(
+            all(
+                any(target_arch = "x86", target_arch = "x86_64"),
+                target_feature = "fma"
+            ),
+            all(target_arch = "aarch64", target_feature = "neon")
+        )
     )))]
     {
         a * b + c
+    }
+}
+
+#[inline(always)]
+pub(crate) fn floor_f32(x: f32) -> f32 {
+    #[cfg(feature = "std")]
+    {
+        x.floor()
+    }
+    #[cfg(not(feature = "std"))]
+    {
+        let xi = x as i32;
+        let xf = xi as f32;
+        if x < xf { xf - 1.0 } else { xf }
+    }
+}
+
+#[inline(always)]
+pub(crate) fn round_f32(x: f32) -> f32 {
+    #[cfg(feature = "std")]
+    {
+        x.round()
+    }
+    #[cfg(not(feature = "std"))]
+    {
+        if x >= 0.0 {
+            floor_f32(x + 0.5)
+        } else {
+            -floor_f32(-x + 0.5)
+        }
+    }
+}
+
+#[inline(always)]
+pub(crate) fn pow2i(exp: i32) -> f32 {
+    if exp >= 0 {
+        (1_u32 << exp) as f32
+    } else {
+        1.0 / (1_u32 << -exp) as f32
+    }
+}
+
+#[inline(always)]
+#[cfg_attr(feature = "simd", allow(dead_code))]
+pub(crate) fn min_f32(a: f32, b: f32) -> f32 {
+    #[cfg(feature = "std")]
+    {
+        a.min(b)
+    }
+    #[cfg(not(feature = "std"))]
+    {
+        if a < b { a } else { b }
+    }
+}
+
+#[inline(always)]
+#[cfg_attr(feature = "simd", allow(dead_code))]
+pub(crate) fn max_f32(a: f32, b: f32) -> f32 {
+    #[cfg(feature = "std")]
+    {
+        a.max(b)
+    }
+    #[cfg(not(feature = "std"))]
+    {
+        if a > b { a } else { b }
     }
 }
 
