@@ -384,7 +384,7 @@ fn reversible_filter_53r(scanline: &mut [f32], width: usize, x0: usize) {
         width,
         first_even,
         #[inline(always)]
-        |s, left, right| s - simd::mul_add(left + right, 0.25, 0.5).floor(),
+        |s, left, right| s - simd::floor_f32(simd::mul_add(left + right, 0.25, 0.5)),
     );
 
     // Equation (F-6).
@@ -394,7 +394,7 @@ fn reversible_filter_53r(scanline: &mut [f32], width: usize, x0: usize) {
         width,
         first_odd,
         #[inline(always)]
-        |s, left, right| s + ((left + right) * 0.5).floor(),
+        |s, left, right| s + simd::floor_f32((left + right) * 0.5),
     );
 }
 
@@ -627,7 +627,7 @@ fn reversible_filter_53r_simd<S: Simd>(
         #[inline(always)]
         |s1, s2, s3| s1 - ((s2 + s3 + 2.0) * 0.25).floor(),
         #[inline(always)]
-        |s1, s2, s3| s1 - (s2 + s3).mul_add(0.25, 0.5).floor(),
+        |s1, s2, s3| s1 - simd::floor_f32(simd::mul_add(s2 + s3, 0.25, 0.5)),
     );
 
     // Equation (F-6).
@@ -642,7 +642,7 @@ fn reversible_filter_53r_simd<S: Simd>(
         #[inline(always)]
         |s1, s2, s3| s1 + ((s2 + s3) * 0.5).floor(),
         #[inline(always)]
-        |s1, s2, s3| s1 + ((s2 + s3) * 0.5).floor(),
+        |s1, s2, s3| s1 + simd::floor_f32((s2 + s3) * 0.5),
     );
 }
 
