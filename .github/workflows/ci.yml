@@ -22,6 +22,19 @@ jobs:
       - run: RUSTFLAGS="-D warnings" cargo doc --workspace --exclude hayro-demo --no-deps
       - run: RUSTFLAGS="-D warnings" cargo hack check --each-feature --workspace --exclude hayro-demo
         
+  no_std:
+    name: Check no_std compatibility
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.92.0
+        with:
+          targets: x86_64-unknown-none
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check -p hayro-ccitt --target x86_64-unknown-none
+      - run: cargo check -p hayro-jbig2 --no-default-features --target x86_64-unknown-none
+      - run: cargo check -p hayro-jpeg2000 --no-default-features --target x86_64-unknown-none
+
   load_tests:
     name: Run CI tests
     runs-on: ubuntu-latest
