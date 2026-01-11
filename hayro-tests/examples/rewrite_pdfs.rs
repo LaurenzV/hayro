@@ -3,7 +3,6 @@
 use hayro_syntax::Pdf;
 use std::fs;
 use std::path::Path;
-use std::sync::Arc;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let input_dir = Path::new("pdfs_without_page_attrs");
@@ -43,9 +42,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Processing: {filename:?}");
 
         let pdf_bytes = fs::read(path)?;
-        let data = Arc::new(pdf_bytes);
 
-        match Pdf::new(data) {
+        match Pdf::new(pdf_bytes) {
             Ok(hayro_pdf) => {
                 let page_count = hayro_pdf.pages().len();
 

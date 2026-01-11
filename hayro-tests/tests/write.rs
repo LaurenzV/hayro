@@ -3,7 +3,6 @@ use hayro_syntax::Pdf;
 use hayro_write::ExtractionQuery;
 use pdf_writer::Ref;
 use sitro::Renderer;
-use std::sync::Arc;
 
 #[test]
 fn write_page_basic_1() {
@@ -323,7 +322,7 @@ fn write_null_objects() {
     // object doesn't exist at all / is invalid.
     let extracted = hayro_write::extract_pages_to_pdf(&hayro_pdf, &[0]);
 
-    let reread = Pdf::new(Arc::new(extracted)).unwrap();
+    let reread = Pdf::new(extracted).unwrap();
     let dict = reread.pages()[0]
         .raw()
         .get::<hayro_syntax::object::Dict>(&b"Resources"[..])

@@ -9,8 +9,8 @@ use std::env;
 use std::fs;
 use std::panic::catch_unwind;
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 use std::sync::atomic::AtomicU32;
-use std::sync::{Arc, LazyLock};
 use walkdir::WalkDir;
 
 static IGNORE_LIST: LazyLock<HashSet<String>> = LazyLock::new(|| {
@@ -100,9 +100,9 @@ fn check_jpx_images(folder: &str) {
 
     paths.par_iter().for_each(|path| {
         let name = path.file_stem().unwrap().to_str().unwrap().to_string();
-        let data = Arc::new(fs::read(path).unwrap());
+        let data = fs::read(path).unwrap();
 
-        match Pdf::new(data.clone()) {
+        match Pdf::new(data) {
             Ok(pdf) => {
                 for object in pdf.objects() {
                     if let Some(stream) = object.into_stream()
@@ -159,11 +159,11 @@ fn check_ccitt_images(folder: &str) {
 
     paths.par_iter().for_each(|path| {
         let name = path.file_stem().unwrap().to_str().unwrap().to_string();
-        let data = Arc::new(fs::read(path).unwrap());
+        let data = fs::read(path).unwrap();
 
         let mut has_error = false;
 
-        if let Ok(pdf) = Pdf::new(data.clone()) {
+        if let Ok(pdf) = Pdf::new(data) {
             for object in pdf.objects() {
                 if let Some(stream) = object.into_stream()
                     && stream.filters().contains(&Filter::CcittFaxDecode)

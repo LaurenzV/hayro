@@ -4,11 +4,9 @@ use hayro_jpeg2000::{DecodeSettings, Image};
 use hayro_syntax::Pdf;
 use hayro_syntax::metadata::Metadata;
 use hayro_syntax::object::DateTime;
-use std::sync::Arc;
 
 fn load_pdf(file: &[u8]) {
-    let data = Arc::new(file.to_vec());
-    let pdf = Pdf::new(data);
+    let pdf = Pdf::new(file.to_vec());
 
     if let Ok(pdf) = pdf {
         let _pixmaps = render_pdf(&pdf, 1.0, InterpreterSettings::default(), None);
@@ -612,7 +610,7 @@ fn metadata_in_object_stream() {
     // in a stream. Therefore, we need to ensure that no encryption is applied when the object
     // itself is in an object stream.
     let file = include_bytes!("../pdfs/custom/metadata_in_object_stream_encrypted.pdf");
-    let pdf = Pdf::new(Arc::new(file.to_vec())).unwrap();
+    let pdf = Pdf::new(file.to_vec()).unwrap();
 
     let expected = Metadata {
         creation_date: Some(DateTime {

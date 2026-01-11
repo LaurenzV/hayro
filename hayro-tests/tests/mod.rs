@@ -165,8 +165,7 @@ fn load_pdf(path: &str) -> Pdf {
 fn load_pdf_with_password(path: &str, password: &str) -> Pdf {
     let path = WORKSPACE_PATH.join(path);
     let content = std::fs::read(&path).unwrap();
-    let data = Arc::new(content);
-    Pdf::new_with_password(data, password).unwrap()
+    Pdf::new_with_password(content, password).unwrap()
 }
 
 fn interpreter_settings() -> InterpreterSettings {
