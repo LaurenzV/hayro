@@ -342,8 +342,7 @@ fn decode_sub_band_bitplanes(
                 component_info.size_info.precision as u16 + log_gain
             };
 
-            2.0_f32.powi(r_b as i32 - exponent as i32)
-                * (1.0 + (mantissa as f32) / (2_u32.pow(11) as f32))
+            crate::simd::pow2i(r_b as i32 - exponent as i32) * (1.0 + (mantissa as f32) / 2048.0)
         }
     };
 

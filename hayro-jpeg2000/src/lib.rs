@@ -57,8 +57,11 @@ important parts of the pipeline. If you want to eliminate any usage of unsafe
 in this crate as well as its dependencies, you can simply disable this
 feature, at the cost of worse decoding performance. Unsafe code is forbidden
 via a crate-level attribute.
+
+The crate is `no_std` compatible but requires an allocator to be available.
 */
 
+#![cfg_attr(not(feature = "std"), no_std)]
 #![forbid(unsafe_code)]
 #![forbid(missing_docs)]
 
@@ -391,9 +394,12 @@ fn interleave_and_convert(image: DecodedImage, buf: &mut [u8]) {
         match num_components {
             // Gray-scale.
             1 => {
-                for (output, input) in
-                    output_iter.zip(components[0].container.iter().map(|v| v.round() as u8))
-                {
+                for (output, input) in output_iter.zip(
+                    components[0]
+                        .container
+                        .iter()
+                        .map(|v| simd::round_f32(*v) as u8),
+                ) {
                     *output = input;
                 }
             }
@@ -406,8 +412,8 @@ fn interleave_and_convert(image: DecodedImage, buf: &mut [u8]) {
                 let c1 = &c1.container[..max_len];
 
                 for i in 0..max_len {
-                    *output_iter.next().unwrap() = c0[i].round() as u8;
-                    *output_iter.next().unwrap() = c1[i].round() as u8;
+                    *output_iter.next().unwrap() = simd::round_f32(c0[i]) as u8;
+                    *output_iter.next().unwrap() = simd::round_f32(c1[i]) as u8;
                 }
             }
             // RGB
@@ -421,9 +427,9 @@ fn interleave_and_convert(image: DecodedImage, buf: &mut [u8]) {
                 let c2 = &c2.container[..max_len];
 
                 for i in 0..max_len {
-                    *output_iter.next().unwrap() = c0[i].round() as u8;
-                    *output_iter.next().unwrap() = c1[i].round() as u8;
-                    *output_iter.next().unwrap() = c2[i].round() as u8;
+                    *output_iter.next().unwrap() = simd::round_f32(c0[i]) as u8;
+                    *output_iter.next().unwrap() = simd::round_f32(c1[i]) as u8;
+                    *output_iter.next().unwrap() = simd::round_f32(c2[i]) as u8;
                 }
             }
             // RGBA or CMYK.
@@ -439,10 +445,10 @@ fn interleave_and_convert(image: DecodedImage, buf: &mut [u8]) {
                 let c3 = &c3.container[..max_len];
 
                 for i in 0..max_len {
-                    *output_iter.next().unwrap() = c0[i].round() as u8;
-                    *output_iter.next().unwrap() = c1[i].round() as u8;
-                    *output_iter.next().unwrap() = c2[i].round() as u8;
-                    *output_iter.next().unwrap() = c3[i].round() as u8;
+                    *output_iter.next().unwrap() = simd::round_f32(c0[i]) as u8;
+                    *output_iter.next().unwrap() = simd::round_f32(c1[i]) as u8;
+                    *output_iter.next().unwrap() = simd::round_f32(c2[i]) as u8;
+                    *output_iter.next().unwrap() = simd::round_f32(c3[i]) as u8;
                 }
             }
             _ => unreachable!(),
@@ -453,10 +459,10 @@ fn interleave_and_convert(image: DecodedImage, buf: &mut [u8]) {
 
         for sample in 0..max_len {
             for channel in components.iter() {
-                *output_iter.next().unwrap() = ((channel.container[sample]
-                    / ((1_u32 << channel.bit_depth) - 1) as f32)
-                    * mul_factor)
-                    .round() as u8;
+                *output_iter.next().unwrap() = simd::round_f32(
+                    (channel.container[sample] / ((1_u32 << channel.bit_depth) - 1) as f32)
+                        * mul_factor,
+                ) as u8;
             }
         }
     }
@@ -573,7 +579,7 @@ fn resolve_palette_indices(
                     Vec::with_capacity(component.container.truncated().len() + SIMD_WIDTH);
 
                 for &sample in component.container.truncated() {
-                    let index = sample.round() as i64;
+                    let index = simd::round_f32(sample) as i64;
                     let value = palette
                         .map(index as usize, column_idx)
                         .ok_or(ColorError::PaletteResolutionFailed)?;

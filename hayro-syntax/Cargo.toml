@@ -17,7 +17,7 @@ flate2 = { workspace = true }
 
 hayro-ccitt = { workspace = true }
 hayro-jbig2 = { workspace = true }
-hayro-jpeg2000 = { workspace = true, features = ["simd"] }
+hayro-jpeg2000 = { workspace = true, features = ["std", "simd"] }
 
 [lints]
 workspace = true
