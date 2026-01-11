@@ -17,13 +17,14 @@ use crate::object::{Object, ObjectLike};
 use crate::pdf::PdfVersion;
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt};
+use crate::sync::{Arc, RwLock, RwLockExt, FxHashMap};
 use crate::{PdfData, object};
+use alloc::vec;
+use alloc::vec::Vec;
+use core::cmp::max;
+use core::iter;
+use core::ops::Deref;
 use log::{error, warn};
-use rustc_hash::FxHashMap;
-use std::cmp::max;
-use std::iter;
-use std::ops::Deref;
-use std::sync::{Arc, RwLock};
 
 pub(crate) const XREF_ENTRY_LEN: usize = 20;
 
@@ -223,7 +224,7 @@ fn fallback_xref_map_inner<'a>(
     }
 }
 
-static DUMMY_XREF: &XRef = &XRef(Inner::Dummy);
+const DUMMY_XREF: XRef = XRef(Inner::Dummy);
 
 /// An xref table.
 #[derive(Debug, Clone)]
@@ -341,20 +342,20 @@ impl XRef {
         match &self.0 {
             Inner::Dummy => false,
             Inner::Some(r) => {
-                let locked = r.map.read().unwrap();
+                let locked = r.map.get();
                 locked.repaired
             }
         }
     }
 
     pub(crate) fn dummy() -> &'static Self {
-        DUMMY_XREF
+        &DUMMY_XREF
     }
 
     pub(crate) fn len(&self) -> usize {
         match &self.0 {
             Inner::Dummy => 0,
-            Inner::Some(r) => r.map.read().unwrap().xref_map.len(),
+            Inner::Some(r) => r.map.get().xref_map.len(),
         }
     }
 
@@ -389,7 +390,7 @@ impl XRef {
         match &self.0 {
             Inner::Dummy => unimplemented!(),
             Inner::Some(r) => {
-                let locked = r.map.read().unwrap();
+                let locked = r.map.get();
                 let mut elements = locked
                     .xref_map
                     .iter()
@@ -438,7 +439,7 @@ impl XRef {
             unreachable!();
         };
 
-        let mut locked = r.map.try_write().unwrap();
+        let mut locked = r.map.try_put().unwrap();
         assert!(!locked.repaired);
 
         let (xref_map, _) = fallback_xref_map(r.data.get(), &r.password);
@@ -497,7 +498,7 @@ impl XRef {
             return None;
         };
 
-        let locked = repr.map.try_read().unwrap();
+        let locked = repr.map.try_get().unwrap();
 
         let mut r = Reader::new(repr.data.get().as_ref().as_ref());
 
