@@ -1,4 +1,6 @@
 use super::stream::Stream;
+use alloc::vec;
+use alloc::vec::Vec;
 use log::error;
 
 pub(crate) fn decrypt(data: &[u8], use_decryption: bool) -> Option<Vec<u8>> {

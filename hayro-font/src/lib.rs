@@ -9,10 +9,20 @@ for parsing Type1 fonts was newly added.
 
 Note that this is an internal crate and not meant to be used directly. Therefore,
 it's not well-documented.
+
+The crate is `no_std` compatible but requires an allocator to be available.
 */
 
+#![cfg_attr(not(feature = "std"), no_std)]
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
+
+extern crate alloc;
+
+#[cfg(not(feature = "std"))]
+pub(crate) use alloc::collections::BTreeMap as Map;
+#[cfg(feature = "std")]
+pub(crate) use std::collections::HashMap as Map;
 
 use crate::util::TryNumFrom;
 

@@ -11,14 +11,16 @@ use crate::type1::charstring::parse_char_string;
 use crate::type1::decrypt::{decrypt, decrypt_byte};
 use crate::type1::standard::STANDARD;
 use crate::type1::stream::Stream;
-use crate::{Matrix, OutlineBuilder};
+use crate::{Map, Matrix, OutlineBuilder};
+use alloc::borrow::Cow;
+use alloc::string::{String, ToString};
+use alloc::sync::Arc;
+use alloc::vec;
+use alloc::vec::Vec;
+use core::iter::Copied;
+use core::slice::Iter;
+use core::str::FromStr;
 use log::error;
-use std::borrow::Cow;
-use std::collections::HashMap;
-use std::iter::Copied;
-use std::slice::Iter;
-use std::str::FromStr;
-use std::sync::Arc;
 // Many parts of the parser code are adapted from
 // https://github.com/janpe2/CFFDump/blob/master/cff/type1/Type1Dump.java
 
@@ -26,8 +28,8 @@ use std::sync::Arc;
 pub(crate) struct Parameters {
     font_matrix: Matrix,
     encoding_type: EncodingType,
-    subroutines: HashMap<u32, Vec<u8>>,
-    charstrings: HashMap<String, Vec<u8>>,
+    subroutines: Map<u32, Vec<u8>>,
+    charstrings: Map<String, Vec<u8>>,
 }
 
 impl Default for Parameters {
@@ -35,8 +37,8 @@ impl Default for Parameters {
         Self {
             font_matrix: Matrix::default(),
             encoding_type: EncodingType::Standard,
-            subroutines: HashMap::new(),
-            charstrings: HashMap::new(),
+            subroutines: Map::new(),
+            charstrings: Map::new(),
         }
     }
 }
@@ -214,7 +216,7 @@ fn extract_pfb_segments(pfb: &[u8]) -> Option<Cow<'static, [u8]>> {
         let ar = barr_list[i];
         if i == type_list.len() - 1
             && ar.len() < 600
-            && let Ok(s) = std::str::from_utf8(ar)
+            && let Ok(s) = core::str::from_utf8(ar)
             && s.contains("cleartomark")
         {
             cleartomark_segment = Some(ar);
@@ -250,15 +252,15 @@ const NP_ALT: &[u8] = b"|";
 
 impl<'a> Stream<'a> {
     fn next_int(&mut self) -> Option<i64> {
-        parse_int(std::str::from_utf8(self.next_token()?).ok()?)
+        parse_int(core::str::from_utf8(self.next_token()?).ok()?)
     }
 
     fn parse_charstrings(
         &mut self,
         len_iv: i64,
         use_decryption: bool,
-    ) -> Option<HashMap<String, Vec<u8>>> {
-        let mut charstrings = HashMap::new();
+    ) -> Option<Map<String, Vec<u8>>> {
+        let mut charstrings = Map::new();
 
         let mut first_glyph_name = None;
         let mut int_token = None;
@@ -274,7 +276,7 @@ impl<'a> Stream<'a> {
                 .iter()
                 .all(|b| matches!(*b, b'#') || b.is_ascii_digit())
             {
-                int_token = parse_int(std::str::from_utf8(token).ok()?);
+                int_token = parse_int(core::str::from_utf8(token).ok()?);
             } else if token == RD || token == RD_ALT {
                 break;
             }
@@ -329,7 +331,7 @@ impl<'a> Stream<'a> {
             let encrypted_bytes = self.read_bytes(bin_len as usize)?;
             let decrypted_bytes = decrypt_charstring(encrypted_bytes, len_iv, use_decryption)?;
             charstrings.insert(
-                std::str::from_utf8(glyph_name).ok()?.to_string(),
+                core::str::from_utf8(glyph_name).ok()?.to_string(),
                 decrypted_bytes,
             );
 
@@ -349,10 +351,10 @@ impl<'a> Stream<'a> {
         &mut self,
         len_iv: i64,
         use_decryption: bool,
-    ) -> Option<HashMap<u32, Vec<u8>>> {
-        let mut subroutines = HashMap::new();
+    ) -> Option<Map<u32, Vec<u8>>> {
+        let mut subroutines = Map::new();
 
-        let num_subrs = parse_int(std::str::from_utf8(self.next_token()?).ok()?)?;
+        let num_subrs = parse_int(core::str::from_utf8(self.next_token()?).ok()?)?;
 
         if num_subrs < 1 {
             return Some(subroutines);
@@ -525,7 +527,7 @@ impl<'a> Stream<'a> {
         self.skip_token();
 
         while let Some(token) = self.next_token() {
-            entries[idx] = f32::from_str(std::str::from_utf8(token).ok()?).ok()?;
+            entries[idx] = f32::from_str(core::str::from_utf8(token).ok()?).ok()?;
 
             idx += 1;
             if idx == 5 {
@@ -540,7 +542,7 @@ impl<'a> Stream<'a> {
     }
 
     fn read_encoding(&mut self) -> Option<EncodingType> {
-        let mut map = HashMap::new();
+        let mut map = Map::new();
 
         let t1 = self.next_token()?;
         let t2 = self.next_token()?;
@@ -566,8 +568,8 @@ impl<'a> Stream<'a> {
 
             let next = self.next_token();
             // TODO: Should other places in the parser also use `parse_int`?
-            let code = parse_int(std::str::from_utf8(next?).ok()?)?;
-            let glyph_name = std::str::from_utf8(&self.next_token()?[1..])
+            let code = parse_int(core::str::from_utf8(next?).ok()?)?;
+            let glyph_name = core::str::from_utf8(&self.next_token()?[1..])
                 .ok()?
                 .to_string();
 
@@ -684,7 +686,7 @@ fn is_self_delim_after_token(c: u8) -> bool {
 #[derive(Debug, Clone)]
 pub(crate) enum EncodingType {
     Standard,
-    Custom(Arc<HashMap<u8, String>>),
+    Custom(Arc<Map<u8, String>>),
 }
 
 impl EncodingType {

@@ -11,6 +11,7 @@ members = [
     "hayro-jpeg2000",
     "hayro-jbig2",
     "hayro-ccitt",
+    "hayro-font",
     "hayro-fuzz"
 ]
 
@@ -40,7 +41,7 @@ log = { version = "0.4" }
 resvg = { version = "0.45.1" }
 flate2 = { version = "1", default-features = false, features = ["zlib-rs"] }
 once_cell = { version = "1" }
-phf = { version = "0.13.1" }
+phf = { version = "0.13.1", default-features = false }
 moxcms = { version = "0.7.11" }
 rustc-hash = { version = "2" }
 siphasher = "1"

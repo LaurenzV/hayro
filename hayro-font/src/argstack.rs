@@ -1,4 +1,6 @@
 use crate::OutlineError;
+use alloc::format;
+use alloc::string::String;
 
 pub(crate) struct ArgumentsStack<'a> {
     pub data: &'a mut [f32],

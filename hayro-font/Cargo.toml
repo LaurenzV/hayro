@@ -13,5 +13,9 @@ readme = "README.md"
 log =  { workspace = true }
 phf = { workspace = true, features = ["macros"] }
 
+[features]
+default = ["std"]
+std = []
+
 [lints]
 workspace = true
