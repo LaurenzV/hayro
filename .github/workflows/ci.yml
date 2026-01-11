@@ -29,11 +29,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.92.0
         with:
-          targets: x86_64-unknown-none
+          targets: x86_64-unknown-none, thumbv6m-none-eabi
       - uses: Swatinem/rust-cache@v2
-      - run: cargo check -p hayro-ccitt --target x86_64-unknown-none
-      - run: cargo check -p hayro-jbig2 --no-default-features --target x86_64-unknown-none
-      - run: cargo check -p hayro-jpeg2000 --no-default-features --target x86_64-unknown-none
+      - run: cargo check -p hayro-ccitt --target thumbv6m-none-eabi
+      - run: cargo check -p hayro-jbig2 --no-default-features --target thumbv6m-none-eabi
+      - run: cargo check -p hayro-jpeg2000 --no-default-features --target thumbv6m-none-eabi
+    
 
   load_tests:
     name: Run CI tests
