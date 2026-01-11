@@ -12,7 +12,6 @@ use hayro_syntax::Pdf;
 use image::{DynamicImage, ImageBuffer};
 use kurbo::{Affine, BezPath, Rect};
 use std::path::PathBuf;
-use std::sync::Arc;
 
 fn main() {
     let data = std::fs::read(
@@ -20,7 +19,7 @@ fn main() {
     )
     .unwrap();
 
-    let pdf = Pdf::new(Arc::new(data)).unwrap();
+    let pdf = Pdf::new(data).unwrap();
 
     let mut extractor = ImageExtractor::new();
     let settings = InterpreterSettings::default();

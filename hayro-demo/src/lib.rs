@@ -3,7 +3,6 @@ use hayro::RenderSettings;
 use hayro::hayro_interpret::InterpreterSettings;
 use hayro::hayro_syntax::Pdf;
 use js_sys;
-use std::sync::Arc;
 use vello_cpu::color::palette::css::WHITE;
 use wasm_bindgen::prelude::*;
 
@@ -79,7 +78,7 @@ impl PdfViewer {
 
     #[wasm_bindgen]
     pub fn load_pdf(&mut self, data: &[u8]) -> Result<(), JsValue> {
-        let pdf = Pdf::new(Arc::new(data.to_vec()))
+        let pdf = Pdf::new(data.to_vec())
             .map_err(|_| JsValue::from_str("Failed to parse PDF"))?;
 
         let pages = pdf.pages();

@@ -2,7 +2,6 @@
 
 use hayro_syntax::Pdf;
 use std::path::PathBuf;
-use std::sync::Arc;
 
 fn main() {
     // First load the data that constitutes the PDF file.
@@ -15,7 +14,7 @@ fn main() {
     //
     // Here we are just unwrapping in case reading the file failed, but you
     // might instead want to apply proper error handling.
-    let pdf = Pdf::new(Arc::new(data)).unwrap();
+    let pdf = Pdf::new(data).unwrap();
 
     // First access all pages, and then iterate over the operators of each page's
     // content stream and print them.

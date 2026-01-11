@@ -13,13 +13,14 @@ Functionality-wise, this crate is therefore close to feature-complete. The main 
 is support for password-protected documents. In addition to that, more low-level APIs might be
 added in the future.
 
+The crate is `no_std` compatible but requires an allocator to be available.
+
 # Example
 This short example shows you how to load a PDF file and iterate over the content streams of all
 pages.
 ```rust
 use hayro_syntax::Pdf;
 use std::path::PathBuf;
-use std::sync::Arc;
 
 // First load the data that constitutes the PDF file.
 let data = std::fs::read(
@@ -31,7 +32,7 @@ let data = std::fs::read(
 //
 // Here we are just unwrapping in case reading the file failed, but you
 // might instead want to apply proper error handling.
-let pdf = Pdf::new(Arc::new(data)).unwrap();
+let pdf = Pdf::new(data).unwrap();
 
 // First access all pages, and then iterate over the operators of each page's
 // content stream and print them.
@@ -64,11 +65,15 @@ The supported features include:
   If you need to do that, there are other crates in the Rust ecosystem that are suitable for this.
 */
 
+#![cfg_attr(not(feature = "std"), no_std)]
 #![deny(missing_docs)]
 
-use std::sync::Arc;
+extern crate alloc;
 
-pub(crate) mod data;
+pub(crate) mod sync;
+
+
+mod data;
 pub(crate) mod filter;
 pub(crate) mod pdf;
 pub(crate) mod trivia;
@@ -90,8 +95,6 @@ pub mod byte_reader;
 #[doc(hidden)]
 pub mod reader;
 
+pub use data::PdfData;
 pub use filter::*;
 pub use pdf::*;
-
-/// A container for the bytes of a PDF file.
-pub type PdfData = Arc<dyn AsRef<[u8]> + Send + Sync>;

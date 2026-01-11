@@ -16,7 +16,6 @@ use std::fmt::Write;
 
 use kurbo::{Affine, BezPath, Point, Rect};
 use std::path::PathBuf;
-use std::sync::Arc;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -26,7 +25,7 @@ fn main() {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(relative_path);
     let data = std::fs::read(path).unwrap();
 
-    let pdf = Pdf::new(Arc::new(data)).unwrap();
+    let pdf = Pdf::new(data).unwrap();
 
     let settings = InterpreterSettings::default();
     // Pass dummy values for bbox and initial transform, since we don't care about those.

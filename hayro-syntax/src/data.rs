@@ -1,12 +1,52 @@
-use crate::PdfData;
 use crate::object::ObjectIdentifier;
 use crate::object::Stream;
 use crate::reader::ReaderContext;
-use crate::sync::{Mutex, MutexExt};
+use crate::sync::{Arc, Mutex, MutexExt};
 use crate::util::SegmentList;
 use alloc::vec::Vec;
 use core::fmt::{Debug, Formatter};
 use crate::sync::HashMap;
+
+/// A container for the bytes of a PDF file.
+#[derive(Clone)]
+pub struct PdfData {
+    #[cfg(feature = "std")]
+    inner: Arc<dyn AsRef<[u8]> + Send + Sync>,
+    #[cfg(not(feature = "std"))]
+    inner: Arc<dyn AsRef<[u8]>>,
+}
+
+impl Debug for PdfData {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        write!(f, "PdfData {{ ... }}")
+    }
+}
+
+impl AsRef<[u8]> for PdfData {
+    fn as_ref(&self) -> &[u8] {
+        (*self.inner).as_ref()
+    }
+}
+
+#[cfg(feature = "std")]
+impl<T: AsRef<[u8]> + Send + Sync + 'static> From<Arc<T>> for PdfData {
+    fn from(data: Arc<T>) -> Self {
+        Self { inner: data }
+    }
+}
+
+#[cfg(not(feature = "std"))]
+impl<T: AsRef<[u8]> + 'static> From<Arc<T>> for PdfData {
+    fn from(data: Arc<T>) -> Self {
+        Self { inner: data }
+    }
+}
+
+impl From<Vec<u8>> for PdfData {
+    fn from(data: Vec<u8>) -> Self {
+        Self { inner: Arc::new(data) }
+    }
+}
 
 /// A structure for storing the data of the PDF.
 // To explain further: This crate uses a zero-parse approach, meaning that objects like

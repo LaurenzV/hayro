@@ -33,16 +33,17 @@ impl Pdf {
     /// Try to read the given PDF file.
     ///
     /// Returns `Err` if it was unable to read it.
-    pub fn new(data: PdfData) -> Result<Self, LoadPdfError> {
+    pub fn new(data: impl Into<PdfData>) -> Result<Self, LoadPdfError> {
         Self::new_with_password(data, "")
     }
 
     /// Try to read the given PDF file with a password.
     ///
     /// Returns `Err` if it was unable to read it or if the password is incorrect.
-    pub fn new_with_password(data: PdfData, password: &str) -> Result<Self, LoadPdfError> {
+    pub fn new_with_password(data: impl Into<PdfData>, password: &str) -> Result<Self, LoadPdfError> {
+        let data = data.into();
         let password = password.as_bytes();
-        let version = find_version(data.as_ref().as_ref()).unwrap_or(PdfVersion::Pdf10);
+        let version = find_version(data.as_ref()).unwrap_or(PdfVersion::Pdf10);
         let xref = match root_xref(data.clone(), password) {
             Ok(x) => x,
             Err(e) => match e {
@@ -157,18 +158,16 @@ impl PdfVersion {
 #[cfg(test)]
 mod tests {
     use crate::pdf::{Pdf, PdfVersion};
-    use std::sync::Arc;
 
     #[test]
     fn issue_49() {
-        let data = Arc::new([]);
-        let _ = Pdf::new(data);
+        let _ = Pdf::new(Vec::new());
     }
 
     #[test]
     fn pdf_version_header() {
         let data = std::fs::read("../hayro-tests/downloads/pdfjs/alphatrans.pdf").unwrap();
-        let pdf = Pdf::new(Arc::new(data)).unwrap();
+        let pdf = Pdf::new(data).unwrap();
 
         assert_eq!(pdf.version(), PdfVersion::Pdf17);
     }
@@ -176,7 +175,7 @@ mod tests {
     #[test]
     fn pdf_version_catalog() {
         let data = std::fs::read("../hayro-tests/downloads/pdfbox/2163.pdf").unwrap();
-        let pdf = Pdf::new(Arc::new(data)).unwrap();
+        let pdf = Pdf::new(data).unwrap();
 
         assert_eq!(pdf.version(), PdfVersion::Pdf14);
     }
