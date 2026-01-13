@@ -83,7 +83,7 @@ fn parse(reader: &mut Reader<'_>) -> Result<GenericRefinementRegionHeader> {
     let adaptive_template_pixels = if gr_template == RefinementTemplate::Template0 {
         parse_refinement_at_pixels(reader)?
     } else {
-        AdaptiveTemplatePixels::Zero
+        AdaptiveTemplatePixels::None
     };
 
     Ok(GenericRefinementRegionHeader {

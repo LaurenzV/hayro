@@ -297,7 +297,7 @@ fn parse(reader: &mut Reader<'_>) -> Result<SymbolDictionaryHeader> {
     let adaptive_template_pixels = if !sdhuff {
         parse_symbol_dictionary_at_flags(reader, sdtemplate)?
     } else {
-        AdaptiveTemplatePixels::Zero
+        AdaptiveTemplatePixels::None
     };
 
     // 7.4.2.1.3: Symbol dictionary refinement AT flags
@@ -305,7 +305,7 @@ fn parse(reader: &mut Reader<'_>) -> Result<SymbolDictionaryHeader> {
     let refinement_at_pixels = if sdrefagg && sdrtemplate == SdRTemplate::Template0 {
         parse_refinement_at_pixels(reader)?
     } else {
-        AdaptiveTemplatePixels::Zero
+        AdaptiveTemplatePixels::None
     };
 
     // 7.4.2.1.4: SDNUMEXSYMS

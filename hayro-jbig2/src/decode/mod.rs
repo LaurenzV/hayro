@@ -164,7 +164,7 @@ pub(crate) struct AdaptiveTemplatePixel {
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) enum AdaptiveTemplatePixels {
     #[default]
-    Zero,
+    None,
     One([AdaptiveTemplatePixel; 1]),
     Two([AdaptiveTemplatePixel; 2]),
     Four([AdaptiveTemplatePixel; 4]),
@@ -174,7 +174,7 @@ impl AdaptiveTemplatePixels {
     #[inline]
     pub(crate) fn as_slice(&self) -> &[AdaptiveTemplatePixel] {
         match self {
-            Self::Zero => &[],
+            Self::None => &[],
             Self::One(arr) => arr,
             Self::Two(arr) => arr,
             Self::Four(arr) => arr,

@@ -128,7 +128,7 @@ fn parse(reader: &mut Reader<'_>) -> Result<GenericRegionHeader> {
     // 7.4.6.3: Generic region segment AT flags
     // "This field is only present if MMR is 0."
     let adaptive_template_pixels = if mmr {
-        AdaptiveTemplatePixels::Zero
+        AdaptiveTemplatePixels::None
     } else {
         parse_adaptive_template_pixels(reader, gb_template, ext_template)?
     };

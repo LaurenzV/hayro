@@ -459,7 +459,7 @@ fn parse(reader: &mut Reader<'_>) -> Result<TextRegionHeader> {
     let refinement_at_pixels = if flags.sbrefine && flags.sbrtemplate == 0 {
         parse_refinement_at_pixels(reader)?
     } else {
-        AdaptiveTemplatePixels::Zero
+        AdaptiveTemplatePixels::None
     };
 
     // "SBNUMINSTANCES – see 7.4.3.1.4."
