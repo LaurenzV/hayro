@@ -88,6 +88,14 @@ impl Template {
             Self::Template2 | Self::Template3 => 10,
         }
     }
+
+    /// Number of adaptive template pixels (6.2.5.3).
+    pub(crate) fn adaptive_template_pixels(&self) -> u8 {
+        match self {
+            Self::Template0 => 4,
+            Self::Template1 | Self::Template2 | Self::Template3 => 1,
+        }
+    }
 }
 
 /// Parsed region segment information field (7.4.1).

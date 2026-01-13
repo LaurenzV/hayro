@@ -3,7 +3,7 @@
 use alloc::vec;
 use alloc::vec::Vec;
 
-use super::generic::{decode_bitmap_arith, decode_bitmap_mmr};
+use super::generic::{decode_bitmap_arithmetic_coding, decode_bitmap_mmr};
 use super::{AdaptiveTemplatePixel, CombinationOperator, Template};
 use crate::bitmap::DecodedRegion;
 use crate::error::{
@@ -52,7 +52,7 @@ pub(crate) fn decode(reader: &mut Reader<'_>) -> Result<PatternDictionary> {
     } else {
         // Build AT pixels according to Table 27.
         let at_pixels = build_pattern_at_pixels(header.flags.hdtemplate, hdpw);
-        decode_bitmap_arith(
+        decode_bitmap_arithmetic_coding(
             &mut collective_bitmap,
             encoded_data,
             header.flags.hdtemplate,

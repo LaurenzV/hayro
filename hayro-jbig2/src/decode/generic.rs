@@ -10,24 +10,8 @@ use crate::error::{DecodeError, ParseError, RegionError, Result, TemplateError, 
 use crate::reader::Reader;
 
 /// Generic region decoding procedure (6.2).
-///
-/// "This decoding procedure is used to decode a rectangular array of 0 or 1
-/// values, which are coded one pixel at a time (i.e., it is used to decode a
-/// bitmap using simple, generic, coding)." (6.2.1)
-///
-/// "The data parts of all three of the generic region segment types
-/// ('intermediate generic region', 'immediate generic region' and 'immediate
-/// lossless generic region') are coded identically, but are acted upon
-/// differently, see 8.2." (7.4.6)
-///
-/// If `had_unknown_length` is true, the segment data ends with a row count
-/// field that should be used instead of the height from the region info.
-///
-/// Returns the decoded region with its location and combination operator.
 pub(crate) fn decode(reader: &mut Reader<'_>, had_unknown_length: bool) -> Result<DecodedRegion> {
     let mut header = parse(reader)?;
-
-    // Get the remaining data after the header for decoding.
     let mut encoded_data = reader.tail().ok_or(ParseError::UnexpectedEof)?;
 
     // "As a special case, as noted in 7.2.7, an immediate generic region segment
@@ -37,106 +21,74 @@ pub(crate) fn decode(reader: &mut Reader<'_>, had_unknown_length: bool) -> Resul
     // in the segment's region segment information field." (7.4.6.4)
     if had_unknown_length {
         // Length has already been validated during segment parsing.
-        let row_count_bytes = &encoded_data[encoded_data.len() - 4..];
-        let row_count = u32::from_be_bytes(row_count_bytes.try_into().unwrap());
+        let (head, tail) = encoded_data.split_at(encoded_data.len() - 4);
+        let row_count = u32::from_be_bytes(tail.try_into().unwrap());
 
         if row_count > header.region_info.height {
             bail!(RegionError::InvalidDimension);
         }
 
         header.region_info.height = row_count;
-        encoded_data = &encoded_data[..encoded_data.len() - 4];
+        encoded_data = head;
     }
 
-    // Decode the region.
+    let mut region = DecodedRegion {
+        width: header.region_info.width,
+        height: header.region_info.height,
+        data: vec![false; (header.region_info.width * header.region_info.height) as usize],
+        x_location: header.region_info.x_location,
+        y_location: header.region_info.y_location,
+        combination_operator: header.region_info.combination_operator,
+    };
+
     if header.mmr {
         // "6.2.6 Decoding using MMR coding"
-        decode_generic_region_mmr(&header, encoded_data)
+        let _ = decode_bitmap_mmr(&mut region, encoded_data)?;
+        
+        Ok(region)
     } else {
         // "6.2.5 Decoding using a template and arithmetic coding"
-        decode_generic_region_ad(&header, encoded_data)
+        decode_bitmap_arithmetic_coding(
+            &mut region,
+            encoded_data,
+            header.template,
+            header.tpgdon,
+            &header.adaptive_template_pixels,
+        )?;
+
+        Ok(region)
     }
 }
 
 /// Parsed generic region segment header (7.4.6.1).
 #[derive(Debug, Clone)]
 struct GenericRegionHeader {
-    /// Region segment information field (7.4.1).
     region_info: RegionSegmentInfo,
-    /// "Bit 0: MMR" (7.4.6.2)
     mmr: bool,
-    /// "Bits 1-2: GBTEMPLATE. This field specifies the template used for
-    /// template-based arithmetic coding. If MMR is 1 then this field must
-    /// contain the value zero." (7.4.6.2)
-    gb_template: Template,
-    /// "Bit 3: TPGDON. This field specifies whether typical prediction for
-    /// generic direct coding is used." (7.4.6.2)
+    template: Template,
     tpgdon: bool,
-    /// "Bit 4: EXTTEMPLATE. This field specifies whether extended reference
-    /// template is used." (7.4.6.2)
-    _ext_template: bool,
-    /// Adaptive template pixels (7.4.6.3).
-    ///
-    /// "This field is only present if MMR is 0."
-    /// - If GBTEMPLATE is 0 and EXTTEMPLATE is 0: 4 AT pixels (8 bytes)
-    /// - If GBTEMPLATE is 0 and EXTTEMPLATE is 1: 12 AT pixels (24 bytes)
-    /// - If GBTEMPLATE is 1, 2, or 3: 1 AT pixel (2 bytes)
     adaptive_template_pixels: Vec<AdaptiveTemplatePixel>,
 }
 
 /// Parse a generic region segment header (7.4.6.1).
 fn parse(reader: &mut Reader<'_>) -> Result<GenericRegionHeader> {
-    // 7.4.6.1: "The data part of a generic region segment begins with a generic
-    // region segment data header. This header contains the fields shown in
-    // Figure 47."
-
-    // Region segment information field (7.4.1)
     let region_info = parse_region_segment_info(reader)?;
-
-    // 7.4.6.2: Generic region segment flags
-    // "This one-byte field is formatted as shown in Figure 48."
     let flags = reader.read_byte().ok_or(ParseError::UnexpectedEof)?;
-
-    // "Bit 0: MMR"
     let mmr = flags & 0x01 != 0;
-
-    // "Bits 1-2: GBTEMPLATE. This field specifies the template used for
-    // template-based arithmetic coding. If MMR is 1 then this field must
-    // contain the value zero."
-    let gb_template = Template::from_byte(flags >> 1);
-
-    // "Bit 3: TPGDON. This field specifies whether typical prediction for
-    // generic direct coding is used."
+    let template = Template::from_byte(flags >> 1);
     let tpgdon = flags & 0x08 != 0;
-
-    // "Bit 4: EXTTEMPLATE. This field specifies whether extended reference
-    // template is used."
     let ext_template = flags & 0x10 != 0;
-
-    // "Bits 5-7: Reserved; must be zero."
-    if flags & 0xE0 != 0 {
-        bail!(TemplateError::Invalid);
-    }
-
-    // Validate MMR + GBTEMPLATE constraint
-    if mmr && gb_template != Template::Template0 {
-        bail!(TemplateError::Invalid);
-    }
-
-    // 7.4.6.3: Generic region segment AT flags
-    // "This field is only present if MMR is 0."
     let adaptive_template_pixels = if mmr {
         Vec::new()
     } else {
-        parse_adaptive_template_pixels(reader, gb_template, ext_template)?
+        parse_adaptive_template_pixels(reader, template, ext_template)?
     };
 
     Ok(GenericRegionHeader {
         region_info,
         mmr,
-        gb_template,
+        template,
         tpgdon,
-        _ext_template: ext_template,
         adaptive_template_pixels,
     })
 }
@@ -144,29 +96,11 @@ fn parse(reader: &mut Reader<'_>) -> Result<GenericRegionHeader> {
 /// Parse adaptive template pixel positions (7.4.6.3).
 fn parse_adaptive_template_pixels(
     reader: &mut Reader<'_>,
-    gb_template: Template,
-    ext_template: bool,
+    template: Template,
+    // TODO: Find a test with this flag.
+    _ext_template: bool,
 ) -> Result<Vec<AdaptiveTemplatePixel>> {
-    // "If GBTEMPLATE is 0 and EXTTEMPLATE is 0, it is an eight-byte field,
-    // formatted as shown in Figure 49."
-    //
-    // "If GBTEMPLATE is 0 and EXTTEMPLATE is 1, it is a 32-byte field,
-    // formatted as shown in Figure 50." (but we only use first 24 bytes
-    // for 12 AT pixels)
-    //
-    // "If GBTEMPLATE is 1, 2 or 3, it is a two-byte field formatted as shown
-    // in Figure 51."
-
-    let num_pixels = match gb_template {
-        Template::Template0 => {
-            if ext_template {
-                bail!(DecodeError::Unsupported);
-            } else {
-                4
-            }
-        }
-        Template::Template1 | Template::Template2 | Template::Template3 => 1,
-    };
+    let num_pixels = template.adaptive_template_pixels() as usize;
 
     let mut pixels = Vec::with_capacity(num_pixels);
 
@@ -188,55 +122,54 @@ fn parse_adaptive_template_pixels(
     Ok(pixels)
 }
 
-/// Decode a generic region using MMR coding (6.2.6).
-fn decode_generic_region_mmr(header: &GenericRegionHeader, data: &[u8]) -> Result<DecodedRegion> {
-    if !header.mmr {
-        bail!(TemplateError::Invalid);
+/// Decode a bitmap using MMR coding (6.2.6).
+pub(crate) fn decode_bitmap_mmr(region: &mut DecodedRegion, data: &[u8]) -> Result<usize> {
+    /// A decoder sink that writes decoded pixels into a `DecodedRegion`.
+    struct BitmapDecoder<'a> {
+        region: &'a mut DecodedRegion,
+        x: u32,
+        y: u32,
     }
 
-    let mut region = DecodedRegion {
-        width: header.region_info.width,
-        height: header.region_info.height,
-        data: vec![false; (header.region_info.width * header.region_info.height) as usize],
-        x_location: header.region_info.x_location,
-        y_location: header.region_info.y_location,
-        combination_operator: header.region_info.combination_operator,
-    };
+    impl<'a> BitmapDecoder<'a> {
+        fn new(region: &'a mut DecodedRegion) -> Self {
+            Self { region, x: 0, y: 0 }
+        }
+    }
 
-    let _ = decode_bitmap_mmr(&mut region, data)?;
-    Ok(region)
-}
+    impl hayro_ccitt::Decoder for BitmapDecoder<'_> {
+        fn push_pixel(&mut self, white: bool) {
+            if self.x < self.region.width {
+                self.region.set_pixel(self.x, self.y, white);
+                self.x += 1;
+            }
+        }
 
-/// Decode a bitmap using MMR coding (6.2.6).
-///
-/// "If MMR is 1, the generic region decoding procedure is identical to an
-/// MMR (Modified Modified READ) decoder described in Recommendation ITU-T
-/// T.6 (G4)." (6.2.6)
-///
-/// The region must already have width, height, and data allocated.
-/// Returns the number of bytes consumed from the input data.
-pub(crate) fn decode_bitmap_mmr(region: &mut DecodedRegion, data: &[u8]) -> Result<usize> {
+        fn push_pixel_chunk(&mut self, white: bool, chunk_count: u32) {
+            let pixel_count = chunk_count as usize * 8;
+            let start = (self.y * self.region.width + self.x) as usize;
+            let end = (start + pixel_count).min(self.region.data.len());
+            self.region.data[start..end].fill(white);
+            self.x += pixel_count as u32;
+        }
+
+        fn next_line(&mut self) {
+            self.x = 0;
+            self.y += 1;
+        }
+    }
+
     let width = region.width;
     let height = region.height;
-
     let mut decoder = BitmapDecoder::new(region);
 
-    // "An invocation of the generic region decoding procedure with MMR equal to
-    // 1 shall consume an integral number of bytes, beginning and ending on a
-    // byte boundary. This may involve skipping over some bits in the last byte
-    // read." (6.2.6)
-    //
-    // "If the number of bytes contained in the encoded bitmap is known in
-    // advance, then it is permissible for the data stream not to contain an
-    // EOFB (000000000001000000000001) at the end of the MMR-encoded data."
-    // (6.2.6)
     let settings = hayro_ccitt::DecodeSettings {
         columns: width,
         rows: height,
         // "If the number of bytes contained in the encoded bitmap is known in
         // advance, then it is permissible for the data stream not to contain
-        // an EOFB" (but it _can_) (6.2.6)
-        //
+        // an EOFB" (6.2.6). But it _can_ contain it, which is what this
+        // flag indicates.
         end_of_block: true,
         end_of_line: false,
         rows_are_byte_aligned: false,
@@ -251,82 +184,22 @@ pub(crate) fn decode_bitmap_mmr(region: &mut DecodedRegion, data: &[u8]) -> Resu
         invert_black: true,
     };
 
+    // "An invocation of the generic region decoding procedure with MMR equal to
+    // 1 shall consume an integral number of bytes, beginning and ending on a
+    // byte boundary. This may involve skipping over some bits in the last byte
+    // read." (6.2.6)
+    //
+    // hayro-ccitt already aligns to the byte boundary before returning, so
+    // nothing else to do here.
     Ok(hayro_ccitt::decode(data, &mut decoder, &settings)
         .map_err(|_| RegionError::InvalidDimension)?)
 }
 
-/// A decoder sink that writes decoded pixels into a `DecodedRegion`.
-struct BitmapDecoder<'a> {
-    region: &'a mut DecodedRegion,
-    x: u32,
-    y: u32,
-}
-
-impl<'a> BitmapDecoder<'a> {
-    fn new(region: &'a mut DecodedRegion) -> Self {
-        Self { region, x: 0, y: 0 }
-    }
-}
-
-impl hayro_ccitt::Decoder for BitmapDecoder<'_> {
-    /// Push a single pixel with the given color.
-    fn push_pixel(&mut self, white: bool) {
-        if self.x < self.region.width {
-            self.region.set_pixel(self.x, self.y, white);
-            self.x += 1;
-        }
-    }
-
-    /// Push multiple chunks of 8 pixels of the same color.
-    fn push_pixel_chunk(&mut self, white: bool, chunk_count: u32) {
-        let pixel_count = chunk_count as usize * 8;
-        let start = (self.y * self.region.width + self.x) as usize;
-        let end = (start + pixel_count).min(self.region.data.len());
-        self.region.data[start..end].fill(white);
-        self.x += pixel_count as u32;
-    }
-
-    /// Called when a row has been completed.
-    fn next_line(&mut self) {
-        self.x = 0;
-        self.y += 1;
-    }
-}
-
-/// Decode a generic region using arithmetic coding (6.2.5).
-///
-/// "If MMR is 0 the generic region decoding procedure is based on arithmetic
-/// coding with a template to determine the coding state." (6.2.5.1)
-fn decode_generic_region_ad(header: &GenericRegionHeader, data: &[u8]) -> Result<DecodedRegion> {
-    let mut region = DecodedRegion {
-        width: header.region_info.width,
-        height: header.region_info.height,
-        data: vec![false; (header.region_info.width * header.region_info.height) as usize],
-        x_location: header.region_info.x_location,
-        y_location: header.region_info.y_location,
-        combination_operator: header.region_info.combination_operator,
-    };
-
-    decode_bitmap_arith(
-        &mut region,
-        data,
-        header.gb_template,
-        header.tpgdon,
-        &header.adaptive_template_pixels,
-    )?;
-    Ok(region)
-}
-
 /// Decode a bitmap using arithmetic coding (6.2.5).
-///
-/// "If MMR is 0 the generic region decoding procedure is based on arithmetic
-/// coding with a template to determine the coding state." (6.2.5.1)
-///
-/// The region must already have width, height, and data allocated.
-pub(crate) fn decode_bitmap_arith(
+pub(crate) fn decode_bitmap_arithmetic_coding(
     region: &mut DecodedRegion,
     data: &[u8],
-    gb_template: Template,
+    template: Template,
     tpgdon: bool,
     adaptive_template_pixels: &[AdaptiveTemplatePixel],
 ) -> Result<()> {
@@ -335,7 +208,7 @@ pub(crate) fn decode_bitmap_arith(
 
     let mut decoder = ArithmeticDecoder::new(data);
 
-    let mut contexts = vec![Context::default(); 1 << gb_template.context_bits()];
+    let mut contexts = vec![Context::default(); 1 << template.context_bits()];
 
     // "1) Set: LTP = 0" (6.2.5.7)
     let mut ltp = false;
@@ -346,7 +219,7 @@ pub(crate) fn decode_bitmap_arith(
         // coder" (6.2.5.7)
         if tpgdon {
             // See Figure 8 - 11.
-            let sltp_context: u32 = match gb_template {
+            let sltp_context: u32 = match template {
                 Template::Template0 => 0b1001101100100101,
                 Template::Template1 => 0b0011110010101,
                 Template::Template2 => 0b0011100101,
@@ -361,18 +234,18 @@ pub(crate) fn decode_bitmap_arith(
         // to the corresponding pixel of the row immediately above." (6.2.5.7)
         if ltp {
             for x in 0..width {
+                // If y == 0, pixels remain the same.
                 if y > 0 {
                     let above = region.get_pixel(x, y - 1);
                     region.set_pixel(x, y, above);
                 }
-                // If y == 0, pixels remain 0 (default)
             }
         } else {
             // "d) If LTP = 0 then, from left to right, decode each pixel of the
             // current row of GBREG." (6.2.5.7)
             for x in 0..width {
                 let context_bits =
-                    gather_context_with_at(region, x, y, gb_template, adaptive_template_pixels);
+                    gather_context_with_at(region, x, y, template, adaptive_template_pixels);
                 let pixel = decoder.decode(&mut contexts[context_bits as usize]);
                 region.set_pixel(x, y, pixel != 0);
             }
@@ -383,9 +256,6 @@ pub(crate) fn decode_bitmap_arith(
 }
 
 /// Gather context bits for a pixel at (x, y) (6.2.5.3, 6.2.5.4).
-///
-/// "Form an integer CONTEXT by gathering the values of the image pixels overlaid
-/// by the template (including AT pixels) at its current location." (6.2.5.7)
 pub(crate) fn gather_context_with_at(
     region: &DecodedRegion,
     x: u32,
@@ -403,16 +273,16 @@ pub(crate) fn gather_context_with_at(
     }
 }
 
+// TODO: Rewrite everything below & make it more performant. Also don't
+// cast from u32 to i32.
+
 /// Get a pixel value, returning 0 for out-of-bounds coordinates.
-///
-/// "Near the edges of the bitmap, these neighbour references might not lie in
-/// the actual bitmap. The rule to satisfy out-of-bounds references shall be:
-/// All pixels lying outside the bounds of the actual bitmap have the value 0."
-/// (6.2.5.2)
 #[inline]
 fn get_pixel(region: &DecodedRegion, x: i32, y: i32) -> u32 {
-    // Note: y >= region.height is not checked because all template positions
-    // have y <= 0 relative to the current pixel (6.2.5.4, Figure 7).
+    // "Near the edges of the bitmap, these neighbour references might not lie in
+    // the actual bitmap. The rule to satisfy out-of-bounds references shall be:
+    // All pixels lying outside the bounds of the actual bitmap have the value 0."
+    // (6.2.5.2)
     if x < 0 || y < 0 || x >= region.width as i32 {
         0
     } else if region.get_pixel(x as u32, y as u32) {
