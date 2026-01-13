@@ -7,18 +7,18 @@ use crate::reader::{Readable, ReaderContext, Skippable};
 use crate::trivia::is_regular_character;
 use alloc::vec;
 use alloc::vec::Vec;
-use core::fmt::Debug;
+use core::fmt::{self, Debug, Formatter};
 use core::hash::Hash;
 use core::ops::Deref;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone)]
 enum Cow<'a> {
     Borrowed(&'a [u8]),
     Owned(Vec<u8>),
 }
 
 /// A name.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Name<'a>(Cow<'a>);
 
 // Two names should be equal even if one is borrowed and the other is owned,
@@ -111,6 +111,15 @@ impl<'a> Name<'a> {
     /// Return a string representation of the name.
     pub fn as_str(&self) -> &str {
         core::str::from_utf8(self.deref()).unwrap_or("{non-ascii key}")
+    }
+}
+
+impl Debug for Name<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match core::str::from_utf8(self.deref()) {
+            Ok(s) => <str as Debug>::fmt(s, f),
+            Err(_) => <[u8] as Debug>::fmt(self.deref(), f),
+        }
     }
 }
 
