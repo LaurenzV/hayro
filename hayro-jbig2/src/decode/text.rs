@@ -20,6 +20,57 @@ use crate::huffman_table::{HuffmanTable, StandardHuffmanTables, TableLine};
 use crate::integer_decoder::IntegerDecoder;
 use crate::reader::Reader;
 
+/// Decode a text region segment (6.4).
+///
+/// "This decoding procedure is used to decode a bitmap by decoding a number of
+/// symbol instances. A symbol instance contains a location and a symbol ID, and
+/// possibly a refinement bitmap. These symbol instances are combined to form
+/// the decoded bitmap." (6.4.1)
+///
+/// The `referred_tables` parameter contains Huffman tables from referred table
+/// segments (type 53). These are used when SBHUFF=1 and the Huffman flags
+/// specify user-supplied tables.
+pub(crate) fn decode(
+    reader: &mut Reader<'_>,
+    symbols: &[&DecodedRegion],
+    referred_tables: &[HuffmanTable],
+    standard_tables: &StandardHuffmanTables,
+) -> Result<DecodedRegion> {
+    let header = parse(reader)?;
+    let params = TextRegionParams::from_header(&header);
+
+    let mut sbreg = if header.flags.sbhuff {
+        // "If this bit is 1, then the segment uses the Huffman encoding variant."
+        // (7.4.3.1.1)
+        decode_text_region_huffman(
+            reader,
+            symbols,
+            &header,
+            &params,
+            referred_tables,
+            standard_tables,
+        )?
+    } else {
+        // "If this bit is 0, then the segment uses the arithmetic encoding variant."
+        // (7.4.3.1.1)
+        let data = reader.tail().ok_or(ParseError::UnexpectedEof)?;
+        let mut decoder = ArithmeticDecoder::new(data);
+
+        if header.flags.sbrefine {
+            decode_text_region_refine(&mut decoder, symbols, &params)?
+        } else {
+            decode_text_region_direct(&mut decoder, symbols, &params)?
+        }
+    };
+
+    // Set location info from header
+    sbreg.x_location = header.region_info.x_location;
+    sbreg.y_location = header.region_info.y_location;
+    sbreg.combination_operator = header.region_info.combination_operator;
+
+    Ok(sbreg)
+}
+
 /// The IAID decoder(A.3).
 ///
 /// A.3: "This decoding procedure is different from all the other integer
@@ -388,7 +439,7 @@ fn parse_text_region_huffman_flags(reader: &mut Reader<'_>) -> Result<TextRegion
 }
 
 /// Parse a text region segment header (7.4.3.1).
-pub(crate) fn parse_text_region_header(reader: &mut Reader<'_>) -> Result<TextRegionHeader> {
+fn parse(reader: &mut Reader<'_>) -> Result<TextRegionHeader> {
     // "Region segment information field – see 7.4.1."
     let region_info = parse_region_segment_info(reader)?;
 
@@ -477,57 +528,6 @@ impl<'a> TextRegionParams<'a> {
             refinement_at_pixels: &header.refinement_at_pixels,
         }
     }
-}
-
-/// Decode a text region segment (6.4).
-///
-/// "This decoding procedure is used to decode a bitmap by decoding a number of
-/// symbol instances. A symbol instance contains a location and a symbol ID, and
-/// possibly a refinement bitmap. These symbol instances are combined to form
-/// the decoded bitmap." (6.4.1)
-///
-/// The `referred_tables` parameter contains Huffman tables from referred table
-/// segments (type 53). These are used when SBHUFF=1 and the Huffman flags
-/// specify user-supplied tables.
-pub(crate) fn decode_text_region(
-    reader: &mut Reader<'_>,
-    symbols: &[&DecodedRegion],
-    referred_tables: &[HuffmanTable],
-    standard_tables: &StandardHuffmanTables,
-) -> Result<DecodedRegion> {
-    let header = parse_text_region_header(reader)?;
-    let params = TextRegionParams::from_header(&header);
-
-    let mut sbreg = if header.flags.sbhuff {
-        // "If this bit is 1, then the segment uses the Huffman encoding variant."
-        // (7.4.3.1.1)
-        decode_text_region_huffman(
-            reader,
-            symbols,
-            &header,
-            &params,
-            referred_tables,
-            standard_tables,
-        )?
-    } else {
-        // "If this bit is 0, then the segment uses the arithmetic encoding variant."
-        // (7.4.3.1.1)
-        let data = reader.tail().ok_or(ParseError::UnexpectedEof)?;
-        let mut decoder = ArithmeticDecoder::new(data);
-
-        if header.flags.sbrefine {
-            decode_text_region_refine(&mut decoder, symbols, &params)?
-        } else {
-            decode_text_region_direct(&mut decoder, symbols, &params)?
-        }
-    };
-
-    // Set location info from header
-    sbreg.x_location = header.region_info.x_location;
-    sbreg.y_location = header.region_info.y_location;
-    sbreg.combination_operator = header.region_info.combination_operator;
-
-    Ok(sbreg)
 }
 
 /// Decode text region without refinement (SBREFINE=0).

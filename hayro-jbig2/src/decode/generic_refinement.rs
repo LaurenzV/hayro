@@ -12,28 +12,56 @@ use crate::bitmap::DecodedRegion;
 use crate::error::{ParseError, RegionError, Result, bail};
 use crate::reader::Reader;
 
+/// Generic refinement region decoding procedure (6.3).
+///
+/// "This decoding procedure is used to decode a rectangular array of 0 or 1
+/// values, which are coded one pixel at a time. There is a reference bitmap
+/// known to the decoding procedure, and this is used as part of the decoding
+/// process. The reference bitmap is intended to resemble the bitmap being
+/// decoded, and this similarity is used to increase compression." (6.3.1)
+pub(crate) fn decode(reader: &mut Reader<'_>, reference: &DecodedRegion) -> Result<DecodedRegion> {
+    let header = parse(reader)?;
+
+    // Validate that the region fits within the reference bitmap.
+    // When referring to another segment, dimensions must match exactly (7.4.7.5).
+    // When using the page bitmap as reference, the region must fit within the page.
+    if header.region_info.width > reference.width || header.region_info.height > reference.height {
+        bail!(RegionError::InvalidDimension);
+    }
+
+    // "The X offset of the reference bitmap with respect to the bitmap
+    // being decoded." (Table 6, GRREFERENCEDX/GRREFERENCEDY)
+    //
+    // The offset is computed from the difference in location between the
+    // reference and the region being decoded.
+    let reference_dx = reference.x_location as i32 - header.region_info.x_location as i32;
+    let reference_dy = reference.y_location as i32 - header.region_info.y_location as i32;
+
+    let encoded_data = reader.tail().ok_or(ParseError::UnexpectedEof)?;
+
+    decode_refinement_bitmap(&header, encoded_data, reference, reference_dx, reference_dy)
+}
+
 /// Parsed generic refinement region segment header (7.4.7.1).
 #[derive(Debug, Clone)]
-pub(crate) struct GenericRefinementRegionHeader {
+struct GenericRefinementRegionHeader {
     /// Region segment information field (7.4.1).
-    pub(crate) region_info: RegionSegmentInfo,
+    region_info: RegionSegmentInfo,
     /// "Bit 0: GRTEMPLATE. This field specifies the template used for
     /// template-based arithmetic coding." (7.4.7.2)
-    pub(crate) gr_template: RefinementTemplate,
+    gr_template: RefinementTemplate,
     /// "Bit 1: TPGRON. This field specifies whether typical prediction for
     /// generic refinement is used." (7.4.7.2)
-    pub(crate) tpgron: bool,
+    tpgron: bool,
     /// Adaptive template pixels (7.4.7.3).
     ///
     /// "This field is only present if GRTEMPLATE is 0."
     /// Contains 2 AT pixels (4 bytes): GRATX1, GRATY1, GRATX2, GRATY2
-    pub(crate) adaptive_template_pixels: Vec<AdaptiveTemplatePixel>,
+    adaptive_template_pixels: Vec<AdaptiveTemplatePixel>,
 }
 
 /// Parse a generic refinement region segment header (7.4.7.1).
-pub(crate) fn parse_generic_refinement_region_header(
-    reader: &mut Reader<'_>,
-) -> Result<GenericRefinementRegionHeader> {
+fn parse(reader: &mut Reader<'_>) -> Result<GenericRefinementRegionHeader> {
     // 7.4.7.1: "The data part of a generic refinement region segment begins
     // with a generic refinement region segment data header. This header
     // contains the fields shown in Figure 52."
@@ -65,39 +93,6 @@ pub(crate) fn parse_generic_refinement_region_header(
         tpgron,
         adaptive_template_pixels,
     })
-}
-
-/// Generic refinement region decoding procedure (6.3).
-///
-/// "This decoding procedure is used to decode a rectangular array of 0 or 1
-/// values, which are coded one pixel at a time. There is a reference bitmap
-/// known to the decoding procedure, and this is used as part of the decoding
-/// process. The reference bitmap is intended to resemble the bitmap being
-/// decoded, and this similarity is used to increase compression." (6.3.1)
-pub(crate) fn decode_generic_refinement_region(
-    reader: &mut Reader<'_>,
-    reference: &DecodedRegion,
-) -> Result<DecodedRegion> {
-    let header = parse_generic_refinement_region_header(reader)?;
-
-    // Validate that the region fits within the reference bitmap.
-    // When referring to another segment, dimensions must match exactly (7.4.7.5).
-    // When using the page bitmap as reference, the region must fit within the page.
-    if header.region_info.width > reference.width || header.region_info.height > reference.height {
-        bail!(RegionError::InvalidDimension);
-    }
-
-    // "The X offset of the reference bitmap with respect to the bitmap
-    // being decoded." (Table 6, GRREFERENCEDX/GRREFERENCEDY)
-    //
-    // The offset is computed from the difference in location between the
-    // reference and the region being decoded.
-    let reference_dx = reference.x_location as i32 - header.region_info.x_location as i32;
-    let reference_dy = reference.y_location as i32 - header.region_info.y_location as i32;
-
-    let encoded_data = reader.tail().ok_or(ParseError::UnexpectedEof)?;
-
-    decode_refinement_bitmap(&header, encoded_data, reference, reference_dx, reference_dy)
 }
 
 /// Decode the refinement bitmap (6.3.5.6).

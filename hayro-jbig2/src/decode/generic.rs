@@ -9,34 +9,83 @@ use crate::bitmap::DecodedRegion;
 use crate::error::{DecodeError, ParseError, RegionError, Result, TemplateError, bail};
 use crate::reader::Reader;
 
+/// Generic region decoding procedure (6.2).
+///
+/// "This decoding procedure is used to decode a rectangular array of 0 or 1
+/// values, which are coded one pixel at a time (i.e., it is used to decode a
+/// bitmap using simple, generic, coding)." (6.2.1)
+///
+/// "The data parts of all three of the generic region segment types
+/// ('intermediate generic region', 'immediate generic region' and 'immediate
+/// lossless generic region') are coded identically, but are acted upon
+/// differently, see 8.2." (7.4.6)
+///
+/// If `had_unknown_length` is true, the segment data ends with a row count
+/// field that should be used instead of the height from the region info.
+///
+/// Returns the decoded region with its location and combination operator.
+pub(crate) fn decode(reader: &mut Reader<'_>, had_unknown_length: bool) -> Result<DecodedRegion> {
+    let mut header = parse(reader)?;
+
+    // Get the remaining data after the header for decoding.
+    let mut encoded_data = reader.tail().ok_or(ParseError::UnexpectedEof)?;
+
+    // "As a special case, as noted in 7.2.7, an immediate generic region segment
+    // may have an unknown length. In this case, it also indicates the height of
+    // the generic region (i.e. the number of rows that have been decoded in this
+    // segment; it must be no greater than the region segment bitmap height value
+    // in the segment's region segment information field." (7.4.6.4)
+    if had_unknown_length {
+        // Length has already been validated during segment parsing.
+        let row_count_bytes = &encoded_data[encoded_data.len() - 4..];
+        let row_count = u32::from_be_bytes(row_count_bytes.try_into().unwrap());
+
+        if row_count > header.region_info.height {
+            bail!(RegionError::InvalidDimension);
+        }
+
+        header.region_info.height = row_count;
+        encoded_data = &encoded_data[..encoded_data.len() - 4];
+    }
+
+    // Decode the region.
+    if header.mmr {
+        // "6.2.6 Decoding using MMR coding"
+        decode_generic_region_mmr(&header, encoded_data)
+    } else {
+        // "6.2.5 Decoding using a template and arithmetic coding"
+        decode_generic_region_ad(&header, encoded_data)
+    }
+}
+
 /// Parsed generic region segment header (7.4.6.1).
 #[derive(Debug, Clone)]
-pub(crate) struct GenericRegionHeader {
+struct GenericRegionHeader {
     /// Region segment information field (7.4.1).
-    pub(crate) region_info: RegionSegmentInfo,
+    region_info: RegionSegmentInfo,
     /// "Bit 0: MMR" (7.4.6.2)
-    pub(crate) mmr: bool,
+    mmr: bool,
     /// "Bits 1-2: GBTEMPLATE. This field specifies the template used for
     /// template-based arithmetic coding. If MMR is 1 then this field must
     /// contain the value zero." (7.4.6.2)
-    pub(crate) gb_template: Template,
+    gb_template: Template,
     /// "Bit 3: TPGDON. This field specifies whether typical prediction for
     /// generic direct coding is used." (7.4.6.2)
-    pub(crate) tpgdon: bool,
+    tpgdon: bool,
     /// "Bit 4: EXTTEMPLATE. This field specifies whether extended reference
     /// template is used." (7.4.6.2)
-    pub(crate) _ext_template: bool,
+    _ext_template: bool,
     /// Adaptive template pixels (7.4.6.3).
     ///
     /// "This field is only present if MMR is 0."
     /// - If GBTEMPLATE is 0 and EXTTEMPLATE is 0: 4 AT pixels (8 bytes)
     /// - If GBTEMPLATE is 0 and EXTTEMPLATE is 1: 12 AT pixels (24 bytes)
     /// - If GBTEMPLATE is 1, 2, or 3: 1 AT pixel (2 bytes)
-    pub(crate) adaptive_template_pixels: Vec<AdaptiveTemplatePixel>,
+    adaptive_template_pixels: Vec<AdaptiveTemplatePixel>,
 }
 
 /// Parse a generic region segment header (7.4.6.1).
-pub(crate) fn parse_generic_region_header(reader: &mut Reader<'_>) -> Result<GenericRegionHeader> {
+fn parse(reader: &mut Reader<'_>) -> Result<GenericRegionHeader> {
     // 7.4.6.1: "The data part of a generic region segment begins with a generic
     // region segment data header. This header contains the fields shown in
     // Figure 47."
@@ -137,58 +186,6 @@ fn parse_adaptive_template_pixels(
     }
 
     Ok(pixels)
-}
-
-/// Generic region decoding procedure (6.2).
-///
-/// "This decoding procedure is used to decode a rectangular array of 0 or 1
-/// values, which are coded one pixel at a time (i.e., it is used to decode a
-/// bitmap using simple, generic, coding)." (6.2.1)
-///
-/// "The data parts of all three of the generic region segment types
-/// ('intermediate generic region', 'immediate generic region' and 'immediate
-/// lossless generic region') are coded identically, but are acted upon
-/// differently, see 8.2." (7.4.6)
-///
-/// If `had_unknown_length` is true, the segment data ends with a row count
-/// field that should be used instead of the height from the region info.
-///
-/// Returns the decoded region with its location and combination operator.
-pub(crate) fn decode_generic_region(
-    reader: &mut Reader<'_>,
-    had_unknown_length: bool,
-) -> Result<DecodedRegion> {
-    let mut header = parse_generic_region_header(reader)?;
-
-    // Get the remaining data after the header for decoding.
-    let mut encoded_data = reader.tail().ok_or(ParseError::UnexpectedEof)?;
-
-    // "As a special case, as noted in 7.2.7, an immediate generic region segment
-    // may have an unknown length. In this case, it also indicates the height of
-    // the generic region (i.e. the number of rows that have been decoded in this
-    // segment; it must be no greater than the region segment bitmap height value
-    // in the segment's region segment information field." (7.4.6.4)
-    if had_unknown_length {
-        // Length has already been validated during segment parsing.
-        let row_count_bytes = &encoded_data[encoded_data.len() - 4..];
-        let row_count = u32::from_be_bytes(row_count_bytes.try_into().unwrap());
-
-        if row_count > header.region_info.height {
-            bail!(RegionError::InvalidDimension);
-        }
-
-        header.region_info.height = row_count;
-        encoded_data = &encoded_data[..encoded_data.len() - 4];
-    }
-
-    // Decode the region.
-    if header.mmr {
-        // "6.2.6 Decoding using MMR coding"
-        decode_generic_region_mmr(&header, encoded_data)
-    } else {
-        // "6.2.5 Decoding using a template and arithmetic coding"
-        decode_generic_region_ad(&header, encoded_data)
-    }
 }
 
 /// Decode a generic region using MMR coding (6.2.6).

@@ -11,112 +11,14 @@ use crate::error::{
 };
 use crate::reader::Reader;
 
-/// Parsed pattern dictionary segment flags (7.4.4.1.1).
-///
-/// "This one-byte field is formatted as shown in Figure 42."
-#[derive(Debug, Clone)]
-pub(crate) struct PatternDictionaryFlags {
-    /// "Bit 0: HDMMR. If this bit is 1, then the segment uses the MMR encoding
-    /// variant. If this bit is 0, then the segment uses the arithmetic encoding
-    /// variant."
-    pub(crate) hdmmr: bool,
-    /// "Bits 1-2: HDTEMPLATE. This field controls the template used to decode
-    /// patterns if HDMMR is 0. If HDMMR is 1, this field must contain the
-    /// value 0."
-    pub(crate) hdtemplate: Template,
-}
-
-/// Parsed pattern dictionary segment header (7.4.4.1).
-///
-/// "A pattern dictionary segment's data part begins with a pattern dictionary
-/// segment data header, formatted as shown in Figure 41."
-#[derive(Debug, Clone)]
-pub(crate) struct PatternDictionaryHeader {
-    /// Pattern dictionary flags (7.4.4.1.1).
-    pub(crate) flags: PatternDictionaryFlags,
-    /// "HDPW: This one-byte field contains the width of the patterns defined
-    /// in this pattern dictionary. Its value must be greater than zero."
-    /// (7.4.4.1.2)
-    pub(crate) hdpw: u8,
-    /// "HDPH: This one-byte field contains the height of the patterns defined
-    /// in this pattern dictionary. Its value must be greater than zero."
-    /// (7.4.4.1.3)
-    pub(crate) hdph: u8,
-    /// "GRAYMAX: This four-byte field contains one less than the number of
-    /// patterns defined in this pattern dictionary." (7.4.4.1.4)
-    pub(crate) graymax: u32,
-}
-
-/// A decoded pattern dictionary containing GRAYMAX + 1 patterns.
-///
-/// "The patterns exported by this pattern dictionary. Contains GRAYMAX + 1
-/// patterns." (Table 25)
-#[derive(Debug, Clone)]
-pub(crate) struct PatternDictionary {
-    /// The patterns in this dictionary, indexed 0 through GRAYMAX.
-    pub(crate) patterns: Vec<DecodedRegion>,
-    /// Width of each pattern.
-    pub(crate) pattern_width: u32,
-    /// Height of each pattern.
-    pub(crate) pattern_height: u32,
-}
-
-/// Parse a pattern dictionary segment header (7.4.4.1).
-pub(crate) fn parse_pattern_dictionary_header(
-    reader: &mut Reader<'_>,
-) -> Result<PatternDictionaryHeader> {
-    // 7.4.4.1.1: Pattern dictionary flags
-    let flags_byte = reader.read_byte().ok_or(ParseError::UnexpectedEof)?;
-
-    // "Bit 0: HDMMR"
-    let hdmmr = flags_byte & 0x01 != 0;
-
-    // "Bits 1-2: HDTEMPLATE"
-    let hdtemplate = Template::from_byte(flags_byte >> 1);
-
-    // "Bits 3-7: Reserved; must be 0."
-    if flags_byte & 0xF8 != 0 {
-        bail!(FormatError::ReservedBits);
-    }
-
-    // Validate constraint: HDTEMPLATE must be 0 when HDMMR is 1
-    if hdmmr && hdtemplate != Template::Template0 {
-        bail!(TemplateError::Invalid);
-    }
-
-    let flags = PatternDictionaryFlags { hdmmr, hdtemplate };
-
-    // 7.4.4.1.2: HDPW - Width of patterns
-    let hdpw = reader.read_byte().ok_or(ParseError::UnexpectedEof)?;
-    if hdpw == 0 {
-        bail!(RegionError::InvalidDimension);
-    }
-
-    // 7.4.4.1.3: HDPH - Height of patterns
-    let hdph = reader.read_byte().ok_or(ParseError::UnexpectedEof)?;
-    if hdph == 0 {
-        bail!(RegionError::InvalidDimension);
-    }
-
-    // 7.4.4.1.4: GRAYMAX - One less than number of patterns
-    let graymax = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
-
-    Ok(PatternDictionaryHeader {
-        flags,
-        hdpw,
-        hdph,
-        graymax,
-    })
-}
-
 /// Decode a pattern dictionary segment (7.4.4.2, 6.7).
 ///
 /// "A pattern dictionary segment is decoded according to the following steps:
 /// 1) Interpret its header, as described in 7.4.4.1.
 /// 2) As described in E.3.7, reset all the arithmetic coding statistics to zero.
 /// 3) Invoke the pattern dictionary decoding procedure described in 6.7."
-pub(crate) fn decode_pattern_dictionary(reader: &mut Reader<'_>) -> Result<PatternDictionary> {
-    let header = parse_pattern_dictionary_header(reader)?;
+pub(crate) fn decode(reader: &mut Reader<'_>) -> Result<PatternDictionary> {
+    let header = parse(reader)?;
 
     let hdpw = header.hdpw as u32;
     let hdph = header.hdph as u32;
@@ -176,6 +78,102 @@ pub(crate) fn decode_pattern_dictionary(reader: &mut Reader<'_>) -> Result<Patte
         patterns,
         pattern_width: hdpw,
         pattern_height: hdph,
+    })
+}
+
+/// Parsed pattern dictionary segment flags (7.4.4.1.1).
+///
+/// "This one-byte field is formatted as shown in Figure 42."
+#[derive(Debug, Clone)]
+struct PatternDictionaryFlags {
+    /// "Bit 0: HDMMR. If this bit is 1, then the segment uses the MMR encoding
+    /// variant. If this bit is 0, then the segment uses the arithmetic encoding
+    /// variant."
+    hdmmr: bool,
+    /// "Bits 1-2: HDTEMPLATE. This field controls the template used to decode
+    /// patterns if HDMMR is 0. If HDMMR is 1, this field must contain the
+    /// value 0."
+    hdtemplate: Template,
+}
+
+/// Parsed pattern dictionary segment header (7.4.4.1).
+///
+/// "A pattern dictionary segment's data part begins with a pattern dictionary
+/// segment data header, formatted as shown in Figure 41."
+#[derive(Debug, Clone)]
+struct PatternDictionaryHeader {
+    /// Pattern dictionary flags (7.4.4.1.1).
+    flags: PatternDictionaryFlags,
+    /// "HDPW: This one-byte field contains the width of the patterns defined
+    /// in this pattern dictionary. Its value must be greater than zero."
+    /// (7.4.4.1.2)
+    hdpw: u8,
+    /// "HDPH: This one-byte field contains the height of the patterns defined
+    /// in this pattern dictionary. Its value must be greater than zero."
+    /// (7.4.4.1.3)
+    hdph: u8,
+    /// "GRAYMAX: This four-byte field contains one less than the number of
+    /// patterns defined in this pattern dictionary." (7.4.4.1.4)
+    graymax: u32,
+}
+
+/// A decoded pattern dictionary containing GRAYMAX + 1 patterns.
+///
+/// "The patterns exported by this pattern dictionary. Contains GRAYMAX + 1
+/// patterns." (Table 25)
+#[derive(Debug, Clone)]
+pub(crate) struct PatternDictionary {
+    /// The patterns in this dictionary, indexed 0 through GRAYMAX.
+    pub(crate) patterns: Vec<DecodedRegion>,
+    /// Width of each pattern.
+    pub(crate) pattern_width: u32,
+    /// Height of each pattern.
+    pub(crate) pattern_height: u32,
+}
+
+/// Parse a pattern dictionary segment header (7.4.4.1).
+fn parse(reader: &mut Reader<'_>) -> Result<PatternDictionaryHeader> {
+    // 7.4.4.1.1: Pattern dictionary flags
+    let flags_byte = reader.read_byte().ok_or(ParseError::UnexpectedEof)?;
+
+    // "Bit 0: HDMMR"
+    let hdmmr = flags_byte & 0x01 != 0;
+
+    // "Bits 1-2: HDTEMPLATE"
+    let hdtemplate = Template::from_byte(flags_byte >> 1);
+
+    // "Bits 3-7: Reserved; must be 0."
+    if flags_byte & 0xF8 != 0 {
+        bail!(FormatError::ReservedBits);
+    }
+
+    // Validate constraint: HDTEMPLATE must be 0 when HDMMR is 1
+    if hdmmr && hdtemplate != Template::Template0 {
+        bail!(TemplateError::Invalid);
+    }
+
+    let flags = PatternDictionaryFlags { hdmmr, hdtemplate };
+
+    // 7.4.4.1.2: HDPW - Width of patterns
+    let hdpw = reader.read_byte().ok_or(ParseError::UnexpectedEof)?;
+    if hdpw == 0 {
+        bail!(RegionError::InvalidDimension);
+    }
+
+    // 7.4.4.1.3: HDPH - Height of patterns
+    let hdph = reader.read_byte().ok_or(ParseError::UnexpectedEof)?;
+    if hdph == 0 {
+        bail!(RegionError::InvalidDimension);
+    }
+
+    // 7.4.4.1.4: GRAYMAX - One less than number of patterns
+    let graymax = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
+
+    Ok(PatternDictionaryHeader {
+        flags,
+        hdpw,
+        hdph,
+        graymax,
     })
 }
 

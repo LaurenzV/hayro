@@ -26,6 +26,35 @@ use crate::huffman_table::{HuffmanTable, StandardHuffmanTables};
 use crate::integer_decoder::IntegerDecoder;
 use crate::reader::Reader;
 
+/// Decode a symbol dictionary segment (7.4.2, 6.5).
+///
+/// `input_symbols` are references to symbols from referred-to symbol dictionaries
+/// (SDINSYMS). Symbols are only cloned if they need to be re-exported.
+///
+/// `referred_tables` contains Huffman tables from referred table segments (type 53).
+/// These are used when SDHUFF=1 and the Huffman flags specify user-supplied tables.
+///
+/// `standard_tables` provides access to the standard Huffman tables.
+pub(crate) fn decode(
+    reader: &mut Reader<'_>,
+    input_symbols: &[&DecodedRegion],
+    referred_tables: &[HuffmanTable],
+    standard_tables: &StandardHuffmanTables,
+) -> Result<SymbolDictionary> {
+    let header = parse(reader)?;
+
+    // "6) Invoke the symbol dictionary decoding procedure described in 6.5"
+    let exported_symbols = decode_symbols(
+        reader,
+        &header,
+        input_symbols,
+        referred_tables,
+        standard_tables,
+    )?;
+
+    Ok(SymbolDictionary { exported_symbols })
+}
+
 /// Huffman table selection for symbol dictionary height differences (SDHUFFDH).
 ///
 /// "Bits 2-3: SDHUFFDH selection. This two-bit field can take on one of three
@@ -203,9 +232,7 @@ pub(crate) struct SymbolDictionaryHeader {
 }
 
 /// Parse a symbol dictionary segment header (7.4.2.1).
-pub(crate) fn parse_symbol_dictionary_header(
-    reader: &mut Reader<'_>,
-) -> Result<SymbolDictionaryHeader> {
+fn parse(reader: &mut Reader<'_>) -> Result<SymbolDictionaryHeader> {
     // 7.4.2.1.1: Symbol dictionary flags
     let flags_word = reader.read_u16().ok_or(ParseError::UnexpectedEof)?;
 
@@ -347,35 +374,6 @@ pub(crate) struct SymbolDictionary {
     /// "The symbols exported by this symbol dictionary. Contains SDNUMEXSYMS
     /// symbols." (Table 14)
     pub(crate) exported_symbols: Vec<DecodedRegion>,
-}
-
-/// Decode a symbol dictionary segment (7.4.2, 6.5).
-///
-/// `input_symbols` are references to symbols from referred-to symbol dictionaries
-/// (SDINSYMS). Symbols are only cloned if they need to be re-exported.
-///
-/// `referred_tables` contains Huffman tables from referred table segments (type 53).
-/// These are used when SDHUFF=1 and the Huffman flags specify user-supplied tables.
-///
-/// `standard_tables` provides access to the standard Huffman tables.
-pub(crate) fn decode_symbol_dictionary(
-    reader: &mut Reader<'_>,
-    input_symbols: &[&DecodedRegion],
-    referred_tables: &[HuffmanTable],
-    standard_tables: &StandardHuffmanTables,
-) -> Result<SymbolDictionary> {
-    let header = parse_symbol_dictionary_header(reader)?;
-
-    // "6) Invoke the symbol dictionary decoding procedure described in 6.5"
-    let exported_symbols = decode_symbols(
-        reader,
-        &header,
-        input_symbols,
-        referred_tables,
-        standard_tables,
-    )?;
-
-    Ok(SymbolDictionary { exported_symbols })
 }
 
 /// Symbol dictionary decoding procedure (6.5).
