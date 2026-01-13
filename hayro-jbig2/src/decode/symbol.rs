@@ -772,7 +772,7 @@ fn decode_symbols_refagg(
         SdRTemplate::Template0 => RefinementTemplate::Template0,
         SdRTemplate::Template1 => RefinementTemplate::Template1,
     };
-    let num_gr_contexts = (1 << gr_template.context_bits());
+    let num_gr_contexts = 1 << gr_template.context_bits();
     let mut gr_contexts = vec![Context::default(); num_gr_contexts];
 
     let mut text_region_contexts = TextRegionContexts::new(sbsymcodelen);
