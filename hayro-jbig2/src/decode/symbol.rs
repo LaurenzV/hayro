@@ -9,6 +9,16 @@ use alloc::vec::Vec;
 
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::DecodedRegion;
+use crate::decode::CombinationOperator;
+use crate::decode::generic::{
+    AdaptiveTemplatePixel, GbTemplate, decode_bitmap_mmr, gather_context_with_at,
+};
+use crate::decode::generic_refinement::{
+    GrTemplate, RefinementAdaptiveTemplatePixel, decode_refinement_bitmap_with,
+};
+use crate::decode::text::{
+    ReferenceCorner, SymbolBitmap, TextRegionContexts, TextRegionParams, decode_text_region_with,
+};
 use crate::error::{
     DecodeError, HuffmanError, ParseError, RegionError, Result, SymbolError, TemplateError, bail,
     err,
@@ -16,16 +26,6 @@ use crate::error::{
 use crate::huffman_table::{HuffmanTable, StandardHuffmanTables};
 use crate::integer_decoder::IntegerDecoder;
 use crate::reader::Reader;
-use crate::region::CombinationOperator;
-use crate::region::generic::{
-    AdaptiveTemplatePixel, GbTemplate, decode_bitmap_mmr, gather_context_with_at,
-};
-use crate::region::generic_refinement::{
-    GrTemplate, RefinementAdaptiveTemplatePixel, decode_refinement_bitmap_with,
-};
-use crate::region::text::{
-    ReferenceCorner, SymbolBitmap, TextRegionContexts, TextRegionParams, decode_text_region_with,
-};
 
 /// Huffman table selection for symbol dictionary height differences (SDHUFFDH).
 ///

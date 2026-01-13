@@ -1,8 +1,8 @@
 //! Page information segment parsing (7.4.8).
 
+use crate::decode::CombinationOperator;
 use crate::error::{ParseError, Result};
 use crate::reader::Reader;
-use crate::region::CombinationOperator;
 
 /// Parsed page information segment (7.4.8).
 #[derive(Debug, Clone)]

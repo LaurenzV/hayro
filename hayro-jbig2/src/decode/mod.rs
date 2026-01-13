@@ -3,6 +3,8 @@
 pub(crate) mod generic;
 pub(crate) mod generic_refinement;
 pub(crate) mod halftone;
+pub(crate) mod pattern;
+pub(crate) mod symbol;
 pub(crate) mod text;
 
 use crate::error::{ParseError, RegionError, Result, bail, err};

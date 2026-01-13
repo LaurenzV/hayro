@@ -6,7 +6,7 @@ use alloc::vec::Vec;
 use super::generic::GbTemplate;
 use super::{CombinationOperator, RegionSegmentInfo, parse_region_segment_info};
 use crate::bitmap::DecodedRegion;
-use crate::dictionary::pattern::PatternDictionary;
+use crate::decode::pattern::PatternDictionary;
 use crate::error::{ParseError, RegionError, Result, TemplateError, bail, err};
 use crate::gray_scale::{GrayScaleParams, decode_gray_scale_image};
 use crate::reader::Reader;

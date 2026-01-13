@@ -8,7 +8,7 @@
 use alloc::vec;
 use alloc::vec::Vec;
 
-use crate::region::CombinationOperator;
+use crate::decode::CombinationOperator;
 
 /// A decoded bitmap region with position and combination information.
 ///

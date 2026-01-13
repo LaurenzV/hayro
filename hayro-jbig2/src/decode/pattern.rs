@@ -4,14 +4,14 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use crate::bitmap::DecodedRegion;
+use crate::decode::CombinationOperator;
+use crate::decode::generic::{
+    AdaptiveTemplatePixel, GbTemplate, decode_bitmap_arith, decode_bitmap_mmr,
+};
 use crate::error::{
     DecodeError, FormatError, ParseError, RegionError, Result, TemplateError, bail, err,
 };
 use crate::reader::Reader;
-use crate::region::CombinationOperator;
-use crate::region::generic::{
-    AdaptiveTemplatePixel, GbTemplate, decode_bitmap_arith, decode_bitmap_mmr,
-};
 
 /// Template used for pattern dictionary arithmetic coding (7.4.4.1.1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

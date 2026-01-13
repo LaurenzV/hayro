@@ -21,7 +21,7 @@ use alloc::vec::Vec;
 
 mod arithmetic_decoder;
 mod bitmap;
-mod dictionary;
+mod decode;
 mod error;
 mod file;
 mod gray_scale;
@@ -30,7 +30,6 @@ mod integer_decoder;
 mod lazy;
 mod page_info;
 mod reader;
-mod region;
 mod segment;
 
 use error::bail;
@@ -41,16 +40,16 @@ pub use error::{
 
 use crate::file::parse_segments_sequential;
 use bitmap::DecodedRegion;
-use dictionary::pattern::{PatternDictionary, decode_pattern_dictionary};
-use dictionary::symbol::{SymbolDictionary, decode_symbol_dictionary};
+use decode::generic::decode_generic_region;
+use decode::generic_refinement::decode_generic_refinement_region;
+use decode::halftone::decode_halftone_region;
+use decode::pattern::{PatternDictionary, decode_pattern_dictionary};
+use decode::symbol::{SymbolDictionary, decode_symbol_dictionary};
+use decode::text::decode_text_region;
 use file::parse_file;
 use huffman_table::{HuffmanTable, StandardHuffmanTables};
 use page_info::{PageInformation, parse_page_information};
 use reader::Reader;
-use region::generic::decode_generic_region;
-use region::generic_refinement::decode_generic_refinement_region;
-use region::halftone::decode_halftone_region;
-use region::text::decode_text_region;
 use segment::SegmentType;
 
 /// A decoded JBIG2 image.
