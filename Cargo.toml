@@ -33,7 +33,7 @@ hayro-syntax = { path = "hayro-syntax", version = "0.5.0", default-features = fa
 hayro-svg = { path = "hayro-svg", version = "0.3.0", default-features = false }
 hayro-write = { path = "hayro-write", version = "0.4.0", default-features = false }
 
-bitflags = { version = "2.9" }
+bitflags = { version = "2.10" }
 bytemuck = { version = "1" }
 image = { version = "0.25", default-features = false }
 kurbo = { version = "0.12.0" }
@@ -54,7 +54,7 @@ xmlwriter = { version = "0.1" }
 base64 = { version = "0.22" }
 zune-jpeg = { version = "0.5", default-features = false }
 vello_cpu = { version = "0.0.5", default-features = false, features = ["std", "png", "u8_pipeline"] }
-fast_image_resize = { version = "5", default-features = false }
+fast_image_resize = { version = "5.6.0", default-features = false, features = ["std"] }
 fearless_simd = "0.3.0"
 
 [workspace.lints]

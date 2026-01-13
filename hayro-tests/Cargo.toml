@@ -27,7 +27,7 @@ pdf-writer = { workspace = true }
 image = { workspace = true, default-features = false}
 resvg = { workspace = true }
 walkdir = "2"
-rayon = "1.8"
+rayon = "1.11"
 memchr = { version = "2.7.6"}
 
 
