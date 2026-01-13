@@ -3,30 +3,14 @@
 use alloc::vec;
 use alloc::vec::Vec;
 
-use super::{RegionSegmentInfo, parse_region_segment_info};
+use super::{
+    AdaptiveTemplatePixel, RefinementTemplate, RegionSegmentInfo, parse_refinement_at_pixels,
+    parse_region_segment_info,
+};
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::DecodedRegion;
 use crate::error::{ParseError, RegionError, Result, bail};
 use crate::reader::Reader;
-
-/// Adaptive template pixel position for refinement regions.
-///
-/// "The AT coordinate X and Y fields are signed values, and may take on values
-/// that are permitted according to 6.3.5.3." (7.4.7.3)
-#[derive(Debug, Clone, Copy, Default)]
-pub(crate) struct RefinementAdaptiveTemplatePixel {
-    pub(crate) x: i8,
-    pub(crate) y: i8,
-}
-
-/// Template used for refinement arithmetic coding (7.4.7.2).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum GrTemplate {
-    /// Template 0: 13 pixels (6.3.5.2, Figure 12)
-    Template0 = 0,
-    /// Template 1: 10 pixels (6.3.5.2, Figure 13)
-    Template1 = 1,
-}
 
 /// Parsed generic refinement region segment header (7.4.7.1).
 #[derive(Debug, Clone)]
@@ -35,7 +19,7 @@ pub(crate) struct GenericRefinementRegionHeader {
     pub(crate) region_info: RegionSegmentInfo,
     /// "Bit 0: GRTEMPLATE. This field specifies the template used for
     /// template-based arithmetic coding." (7.4.7.2)
-    pub(crate) gr_template: GrTemplate,
+    pub(crate) gr_template: RefinementTemplate,
     /// "Bit 1: TPGRON. This field specifies whether typical prediction for
     /// generic refinement is used." (7.4.7.2)
     pub(crate) tpgron: bool,
@@ -43,7 +27,7 @@ pub(crate) struct GenericRefinementRegionHeader {
     ///
     /// "This field is only present if GRTEMPLATE is 0."
     /// Contains 2 AT pixels (4 bytes): GRATX1, GRATY1, GRATX2, GRATY2
-    pub(crate) adaptive_template_pixels: Vec<RefinementAdaptiveTemplatePixel>,
+    pub(crate) adaptive_template_pixels: Vec<AdaptiveTemplatePixel>,
 }
 
 /// Parse a generic refinement region segment header (7.4.7.1).
@@ -62,19 +46,15 @@ pub(crate) fn parse_generic_refinement_region_header(
     let flags = reader.read_byte().ok_or(ParseError::UnexpectedEof)?;
 
     // "Bit 0: GRTEMPLATE"
-    let gr_template = if flags & 0x01 == 0 {
-        GrTemplate::Template0
-    } else {
-        GrTemplate::Template1
-    };
+    let gr_template = RefinementTemplate::from_byte(flags);
 
     // "Bit 1: TPGRON"
     let tpgron = flags & 0x02 != 0;
 
     // 7.4.7.3: Generic refinement region segment AT flags
     // "This field is only present if GRTEMPLATE is 0."
-    let adaptive_template_pixels = if gr_template == GrTemplate::Template0 {
-        parse_refinement_adaptive_template_pixels(reader)?
+    let adaptive_template_pixels = if gr_template == RefinementTemplate::Template0 {
+        parse_refinement_at_pixels(reader)?
     } else {
         Vec::new()
     };
@@ -85,27 +65,6 @@ pub(crate) fn parse_generic_refinement_region_header(
         tpgron,
         adaptive_template_pixels,
     })
-}
-
-/// Parse refinement adaptive template pixel positions (7.4.7.3).
-///
-/// "It is a four-byte field, formatted as shown in Figure 54."
-fn parse_refinement_adaptive_template_pixels(
-    reader: &mut Reader<'_>,
-) -> Result<Vec<RefinementAdaptiveTemplatePixel>> {
-    let mut pixels = Vec::with_capacity(2);
-
-    // GRATX1, GRATY1
-    let x1 = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
-    let y1 = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
-    pixels.push(RefinementAdaptiveTemplatePixel { x: x1, y: y1 });
-
-    // GRATX2, GRATY2
-    let x2 = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
-    let y2 = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
-    pixels.push(RefinementAdaptiveTemplatePixel { x: x2, y: y2 });
-
-    Ok(pixels)
 }
 
 /// Generic refinement region decoding procedure (6.3).
@@ -153,10 +112,7 @@ fn decode_refinement_bitmap(
 ) -> Result<DecodedRegion> {
     let mut decoder = ArithmeticDecoder::new(data);
 
-    let num_context_bits = match header.gr_template {
-        GrTemplate::Template0 => 13,
-        GrTemplate::Template1 => 10,
-    };
+    let num_context_bits = header.gr_template.context_bits();
     let mut contexts = vec![Context::default(); 1 << num_context_bits];
 
     let width = header.region_info.width;
@@ -199,8 +155,8 @@ pub(crate) fn decode_refinement_bitmap_with(
     reference: &DecodedRegion,
     reference_dx: i32,
     reference_dy: i32,
-    gr_template: GrTemplate,
-    adaptive_template_pixels: &[RefinementAdaptiveTemplatePixel],
+    gr_template: RefinementTemplate,
+    adaptive_template_pixels: &[AdaptiveTemplatePixel],
     tpgron: bool,
 ) -> Result<()> {
     let width = region.width;
@@ -217,8 +173,8 @@ pub(crate) fn decode_refinement_bitmap_with(
             // Context for SLTP depends on template (Figures 14, 15).
             // The SLTP context has only the center reference pixel (0,0) set.
             let sltp_context: u32 = match gr_template {
-                GrTemplate::Template0 => 0b0000000010000,
-                GrTemplate::Template1 => 0b0000001000,
+                RefinementTemplate::Template0 => 0b0000000010000,
+                RefinementTemplate::Template1 => 0b0000001000,
             };
             let sltp = decoder.decode(&mut contexts[sltp_context as usize]);
             // "Let SLTP be the value of this bit. Set: LTP = LTP XOR SLTP"
@@ -335,8 +291,8 @@ fn gather_refinement_context(
     y: u32,
     reference_dx: i32,
     reference_dy: i32,
-    gr_template: GrTemplate,
-    adaptive_template_pixels: &[RefinementAdaptiveTemplatePixel],
+    gr_template: RefinementTemplate,
+    adaptive_template_pixels: &[AdaptiveTemplatePixel],
 ) -> u32 {
     let x = x as i32;
     let y = y as i32;
@@ -346,7 +302,7 @@ fn gather_refinement_context(
     let ref_y = y - reference_dy;
 
     match gr_template {
-        GrTemplate::Template0 => {
+        RefinementTemplate::Template0 => {
             // Figure 12: 13-pixel template with 2 AT pixels.
             // Left group (bitmap being decoded): 4 pixels (including RA1)
             // Right group (reference bitmap): 9 pixels (including RA2)
@@ -373,7 +329,7 @@ fn gather_refinement_context(
 
             context
         }
-        GrTemplate::Template1 => {
+        RefinementTemplate::Template1 => {
             let mut context = 0_u32;
 
             context = (context << 1) | get_pixel_u32(region, x - 1, y - 1);

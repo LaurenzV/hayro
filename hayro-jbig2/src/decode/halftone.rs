@@ -3,51 +3,12 @@
 use alloc::vec;
 use alloc::vec::Vec;
 
-use super::generic::GbTemplate;
-use super::{CombinationOperator, RegionSegmentInfo, parse_region_segment_info};
+use super::pattern::PatternDictionary;
+use super::{CombinationOperator, RegionSegmentInfo, Template, parse_region_segment_info};
 use crate::bitmap::DecodedRegion;
-use crate::decode::pattern::PatternDictionary;
-use crate::error::{ParseError, RegionError, Result, TemplateError, bail, err};
+use crate::error::{ParseError, RegionError, Result, TemplateError, bail};
 use crate::gray_scale::{GrayScaleParams, decode_gray_scale_image};
 use crate::reader::Reader;
-
-/// Template used for halftone arithmetic coding (7.4.5.1.1).
-///
-/// "This field controls the template used to decode halftone gray-scale value
-/// bitplanes if HMMR is 0. If HMMR is 1, this field must contain the value 0."
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum HTemplate {
-    /// Template 0
-    Template0 = 0,
-    /// Template 1
-    Template1 = 1,
-    /// Template 2
-    Template2 = 2,
-    /// Template 3
-    Template3 = 3,
-}
-
-impl HTemplate {
-    fn from_value(value: u8) -> Result<Self> {
-        match value {
-            0 => Ok(Self::Template0),
-            1 => Ok(Self::Template1),
-            2 => Ok(Self::Template2),
-            3 => Ok(Self::Template3),
-            _ => err!(TemplateError::Invalid),
-        }
-    }
-
-    /// Convert to `GbTemplate` for gray-scale image decoding.
-    fn to_gb_template(self) -> GbTemplate {
-        match self {
-            Self::Template0 => GbTemplate::Template0,
-            Self::Template1 => GbTemplate::Template1,
-            Self::Template2 => GbTemplate::Template2,
-            Self::Template3 => GbTemplate::Template3,
-        }
-    }
-}
 
 /// Parsed halftone region segment flags (7.4.5.1.1).
 ///
@@ -61,7 +22,7 @@ pub(crate) struct HalftoneRegionFlags {
     /// "Bits 1-2: HTEMPLATE. This field controls the template used to decode
     /// halftone gray-scale value bitplanes if HMMR is 0. If HMMR is 1, this
     /// field must contain the value 0."
-    pub(crate) htemplate: HTemplate,
+    pub(crate) htemplate: Template,
     /// "Bit 3: HENABLESKIP. This field controls whether gray-scale values that
     /// do not contribute to the region contents are skipped during decoding.
     /// If HMMR is 1, this field must contain the value 0."
@@ -136,7 +97,7 @@ pub(crate) fn parse_halftone_region_header(
     let hmmr = flags_byte & 0x01 != 0;
 
     // "Bits 1-2: HTEMPLATE"
-    let htemplate = HTemplate::from_value((flags_byte >> 1) & 0x03)?;
+    let htemplate = Template::from_byte(flags_byte >> 1);
 
     // "Bit 3: HENABLESKIP"
     let henableskip = flags_byte & 0x08 != 0;
@@ -157,7 +118,7 @@ pub(crate) fn parse_halftone_region_header(
 
     // Validate constraints when HMMR is 1
     if hmmr {
-        if htemplate != HTemplate::Template0 {
+        if htemplate != Template::Template0 {
             bail!(TemplateError::Invalid);
         }
         if henableskip {
@@ -258,7 +219,7 @@ pub(crate) fn decode_halftone_region(
         bits_per_pixel: hbpp,
         width: hgw,
         height: hgh,
-        template: header.flags.htemplate.to_gb_template(),
+        template: header.flags.htemplate,
         skip_mask: hskip.as_deref(),
     };
     let gi = decode_gray_scale_image(encoded_data, &gs_params)?;

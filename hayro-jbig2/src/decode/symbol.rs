@@ -10,14 +10,13 @@ use alloc::vec::Vec;
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::DecodedRegion;
 use crate::decode::CombinationOperator;
-use crate::decode::generic::{
-    AdaptiveTemplatePixel, GbTemplate, decode_bitmap_mmr, gather_context_with_at,
-};
-use crate::decode::generic_refinement::{
-    GrTemplate, RefinementAdaptiveTemplatePixel, decode_refinement_bitmap_with,
-};
+use crate::decode::generic::{decode_bitmap_mmr, gather_context_with_at};
+use crate::decode::generic_refinement::decode_refinement_bitmap_with;
 use crate::decode::text::{
     ReferenceCorner, SymbolBitmap, TextRegionContexts, TextRegionParams, decode_text_region_with,
+};
+use crate::decode::{
+    AdaptiveTemplatePixel, RefinementTemplate, Template, parse_refinement_at_pixels,
 };
 use crate::error::{
     DecodeError, HuffmanError, ParseError, RegionError, Result, SymbolError, TemplateError, bail,
@@ -163,7 +162,7 @@ pub(crate) struct SymbolDictionaryFlags {
     /// "Bits 10-11: SDTEMPLATE. This field controls the template used to decode
     /// symbol bitmaps if SDHUFF is 0. If SDHUFF is 1, this field must contain
     /// the value 0." (7.4.2.1.1)
-    pub(crate) sdtemplate: GbTemplate,
+    pub(crate) sdtemplate: Template,
 
     /// "Bit 12: SDRTEMPLATE. This field controls the template used to decode
     /// symbol bitmaps if SDREFAGG is 1. If SDREFAGG is 0, this field must
@@ -192,7 +191,7 @@ pub(crate) struct SymbolDictionaryHeader {
     /// "This field is only present if SDREFAGG is 1 and SDRTEMPLATE is 0."
     /// (7.4.2.1.3)
     /// Contains 2 AT pixels (4 bytes, Figure 36).
-    pub(crate) refinement_at_pixels: Vec<RefinementAdaptiveTemplatePixel>,
+    pub(crate) refinement_at_pixels: Vec<AdaptiveTemplatePixel>,
 
     /// "SDNUMEXSYMS: This four-byte field contains the number of symbols
     /// exported from this dictionary." (7.4.2.1.4)
@@ -243,13 +242,7 @@ pub(crate) fn parse_symbol_dictionary_header(
     let bitmap_context_retained = flags_word & 0x0200 != 0;
 
     // "Bits 10-11: SDTEMPLATE"
-    let sdtemplate = match (flags_word >> 10) & 0x03 {
-        0 => GbTemplate::Template0,
-        1 => GbTemplate::Template1,
-        2 => GbTemplate::Template2,
-        3 => GbTemplate::Template3,
-        _ => unreachable!(),
-    };
+    let sdtemplate = Template::from_byte((flags_word >> 10) as u8);
 
     // "Bit 12: SDRTEMPLATE"
     let sdrtemplate = if flags_word & 0x1000 != 0 {
@@ -282,7 +275,7 @@ pub(crate) fn parse_symbol_dictionary_header(
     // 7.4.2.1.3: Symbol dictionary refinement AT flags
     // "This field is only present if SDREFAGG is 1 and SDRTEMPLATE is 0."
     let refinement_at_pixels = if sdrefagg && sdrtemplate == SdRTemplate::Template0 {
-        parse_symbol_dictionary_refinement_at_flags(reader)?
+        parse_refinement_at_pixels(reader)?
     } else {
         Vec::new()
     };
@@ -313,11 +306,11 @@ pub(crate) fn parse_symbol_dictionary_header(
 /// as shown in Figure 35." (7.4.2.1.2)
 fn parse_symbol_dictionary_at_flags(
     reader: &mut Reader<'_>,
-    sdtemplate: GbTemplate,
+    sdtemplate: Template,
 ) -> Result<Vec<AdaptiveTemplatePixel>> {
     let num_pixels = match sdtemplate {
-        GbTemplate::Template0 => 4,
-        GbTemplate::Template1 | GbTemplate::Template2 | GbTemplate::Template3 => 1,
+        Template::Template0 => 4,
+        Template::Template1 | Template::Template2 | Template::Template3 => 1,
     };
 
     let mut pixels = Vec::with_capacity(num_pixels);
@@ -338,29 +331,6 @@ fn parse_symbol_dictionary_at_flags(
 
         pixels.push(AdaptiveTemplatePixel { x, y });
     }
-
-    Ok(pixels)
-}
-
-/// Parse symbol dictionary refinement AT flags (7.4.2.1.3).
-///
-/// "It is a four-byte field, formatted as shown in Figure 36." (7.4.2.1.3)
-fn parse_symbol_dictionary_refinement_at_flags(
-    reader: &mut Reader<'_>,
-) -> Result<Vec<RefinementAdaptiveTemplatePixel>> {
-    let mut pixels = Vec::with_capacity(2);
-
-    // SDRATX1, SDRATY1
-    // "The AT coordinate X and Y fields are signed values, and may take on
-    // values that are permitted according to 6.3.5.3." (7.4.2.1.3)
-    let x1 = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
-    let y1 = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
-    pixels.push(RefinementAdaptiveTemplatePixel { x: x1, y: y1 });
-
-    // SDRATX2, SDRATY2
-    let x2 = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
-    let y2 = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
-    pixels.push(RefinementAdaptiveTemplatePixel { x: x2, y: y2 });
 
     Ok(pixels)
 }
@@ -799,13 +769,10 @@ fn decode_symbols_refagg(
 
     // Refinement contexts
     let gr_template = match header.flags.sdrtemplate {
-        SdRTemplate::Template0 => GrTemplate::Template0,
-        SdRTemplate::Template1 => GrTemplate::Template1,
+        SdRTemplate::Template0 => RefinementTemplate::Template0,
+        SdRTemplate::Template1 => RefinementTemplate::Template1,
     };
-    let num_gr_contexts = match gr_template {
-        GrTemplate::Template0 => 1 << 13,
-        GrTemplate::Template1 => 1 << 10,
-    };
+    let num_gr_contexts = (1 << gr_template.context_bits());
     let mut gr_contexts = vec![Context::default(); num_gr_contexts];
 
     let mut text_region_contexts = TextRegionContexts::new(sbsymcodelen);
@@ -970,7 +937,7 @@ fn decode_refinement_aggregate_symbol(
     new_symbols: &[DecodedRegion],
     symwidth: u32,
     hcheight: u32,
-    gr_template: GrTemplate,
+    gr_template: RefinementTemplate,
 ) -> Result<DecodedRegion> {
     // "1) Decode the number of symbol instances contained in the aggregation,
     // as specified in 6.5.8.2.1. Let REFAGGNINST be the value decoded." (6.5.8.2)
@@ -1025,7 +992,7 @@ fn decode_multi_refinement_symbol(
     symwidth: u32,
     hcheight: u32,
     refaggninst: i32,
-    gr_template: GrTemplate,
+    gr_template: RefinementTemplate,
 ) -> Result<DecodedRegion> {
     // Build the combined symbol array SBSYMS as per 6.5.8.2.4:
     // "Set SBSYMS to an array of SDNUMINSYMS + NSYMSDECODED symbols, formed by
@@ -1144,7 +1111,7 @@ fn decode_single_refinement_symbol(
     new_symbols: &[DecodedRegion],
     symwidth: u32,
     hcheight: u32,
-    gr_template: GrTemplate,
+    gr_template: RefinementTemplate,
 ) -> Result<DecodedRegion> {
     // "2) Decode a symbol ID as described in 6.4.10, using the values of
     // SBSYMCODES and SBSYMCODELEN described in 6.5.8.2.3. Let ID_I be the

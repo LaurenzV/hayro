@@ -3,50 +3,13 @@
 use alloc::vec;
 use alloc::vec::Vec;
 
+use super::generic::{decode_bitmap_arith, decode_bitmap_mmr};
+use super::{AdaptiveTemplatePixel, CombinationOperator, Template};
 use crate::bitmap::DecodedRegion;
-use crate::decode::CombinationOperator;
-use crate::decode::generic::{
-    AdaptiveTemplatePixel, GbTemplate, decode_bitmap_arith, decode_bitmap_mmr,
-};
 use crate::error::{
-    DecodeError, FormatError, ParseError, RegionError, Result, TemplateError, bail, err,
+    DecodeError, FormatError, ParseError, RegionError, Result, TemplateError, bail,
 };
 use crate::reader::Reader;
-
-/// Template used for pattern dictionary arithmetic coding (7.4.4.1.1).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum HdTemplate {
-    /// Template 0
-    Template0 = 0,
-    /// Template 1
-    Template1 = 1,
-    /// Template 2
-    Template2 = 2,
-    /// Template 3
-    Template3 = 3,
-}
-
-impl HdTemplate {
-    fn from_value(value: u8) -> Result<Self> {
-        match value {
-            0 => Ok(Self::Template0),
-            1 => Ok(Self::Template1),
-            2 => Ok(Self::Template2),
-            3 => Ok(Self::Template3),
-            _ => err!(TemplateError::Invalid),
-        }
-    }
-
-    /// Convert to `GbTemplate` for generic region decoding.
-    fn to_gb_template(self) -> GbTemplate {
-        match self {
-            Self::Template0 => GbTemplate::Template0,
-            Self::Template1 => GbTemplate::Template1,
-            Self::Template2 => GbTemplate::Template2,
-            Self::Template3 => GbTemplate::Template3,
-        }
-    }
-}
 
 /// Parsed pattern dictionary segment flags (7.4.4.1.1).
 ///
@@ -60,7 +23,7 @@ pub(crate) struct PatternDictionaryFlags {
     /// "Bits 1-2: HDTEMPLATE. This field controls the template used to decode
     /// patterns if HDMMR is 0. If HDMMR is 1, this field must contain the
     /// value 0."
-    pub(crate) hdtemplate: HdTemplate,
+    pub(crate) hdtemplate: Template,
 }
 
 /// Parsed pattern dictionary segment header (7.4.4.1).
@@ -109,7 +72,7 @@ pub(crate) fn parse_pattern_dictionary_header(
     let hdmmr = flags_byte & 0x01 != 0;
 
     // "Bits 1-2: HDTEMPLATE"
-    let hdtemplate = HdTemplate::from_value((flags_byte >> 1) & 0x03)?;
+    let hdtemplate = Template::from_byte(flags_byte >> 1);
 
     // "Bits 3-7: Reserved; must be 0."
     if flags_byte & 0xF8 != 0 {
@@ -117,7 +80,7 @@ pub(crate) fn parse_pattern_dictionary_header(
     }
 
     // Validate constraint: HDTEMPLATE must be 0 when HDMMR is 1
-    if hdmmr && hdtemplate != HdTemplate::Template0 {
+    if hdmmr && hdtemplate != Template::Template0 {
         bail!(TemplateError::Invalid);
     }
 
@@ -190,7 +153,7 @@ pub(crate) fn decode_pattern_dictionary(reader: &mut Reader<'_>) -> Result<Patte
         decode_bitmap_arith(
             &mut collective_bitmap,
             encoded_data,
-            header.flags.hdtemplate.to_gb_template(),
+            header.flags.hdtemplate,
             false, // TPGDON = 0 (Table 27)
             &at_pixels,
         )?;
@@ -217,9 +180,9 @@ pub(crate) fn decode_pattern_dictionary(reader: &mut Reader<'_>) -> Result<Patte
 }
 
 /// Build adaptive template pixels for pattern dictionary decoding (Table 27).
-fn build_pattern_at_pixels(hdtemplate: HdTemplate, hdpw: u32) -> Vec<AdaptiveTemplatePixel> {
+fn build_pattern_at_pixels(hdtemplate: Template, hdpw: u32) -> Vec<AdaptiveTemplatePixel> {
     match hdtemplate {
-        HdTemplate::Template0 => {
+        Template::Template0 => {
             vec![
                 AdaptiveTemplatePixel {
                     x: -(hdpw as i8),
@@ -230,7 +193,7 @@ fn build_pattern_at_pixels(hdtemplate: HdTemplate, hdpw: u32) -> Vec<AdaptiveTem
                 AdaptiveTemplatePixel { x: -2, y: -2 },
             ]
         }
-        HdTemplate::Template1 | HdTemplate::Template2 | HdTemplate::Template3 => {
+        Template::Template1 | Template::Template2 | Template::Template3 => {
             vec![AdaptiveTemplatePixel {
                 x: -(hdpw as i8),
                 y: 0,

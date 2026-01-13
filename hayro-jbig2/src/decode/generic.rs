@@ -3,42 +3,11 @@
 use alloc::vec;
 use alloc::vec::Vec;
 
-use super::{RegionSegmentInfo, parse_region_segment_info};
+use super::{AdaptiveTemplatePixel, RegionSegmentInfo, Template, parse_region_segment_info};
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::DecodedRegion;
 use crate::error::{DecodeError, ParseError, RegionError, Result, TemplateError, bail};
 use crate::reader::Reader;
-
-/// Template used for arithmetic coding (7.4.6.2, 6.2.5.3).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum GbTemplate {
-    /// Template 0: 16 pixels (6.2.5.3, Figure 3)
-    Template0 = 0,
-    /// Template 1: 13 pixels (6.2.5.3, Figure 4)
-    Template1 = 1,
-    /// Template 2: 10 pixels (6.2.5.3, Figure 5)
-    Template2 = 2,
-    /// Template 3: 10 pixels (6.2.5.3, Figure 6)
-    Template3 = 3,
-}
-
-impl GbTemplate {
-    /// Number of context bits for this template (6.2.5.3).
-    pub(crate) fn context_bits(self) -> usize {
-        match self {
-            Self::Template0 => 16,
-            Self::Template1 => 13,
-            Self::Template2 | Self::Template3 => 10,
-        }
-    }
-}
-
-/// Adaptive template pixel position.
-#[derive(Debug, Clone, Copy, Default)]
-pub(crate) struct AdaptiveTemplatePixel {
-    pub(crate) x: i8,
-    pub(crate) y: i8,
-}
 
 /// Parsed generic region segment header (7.4.6.1).
 #[derive(Debug, Clone)]
@@ -50,7 +19,7 @@ pub(crate) struct GenericRegionHeader {
     /// "Bits 1-2: GBTEMPLATE. This field specifies the template used for
     /// template-based arithmetic coding. If MMR is 1 then this field must
     /// contain the value zero." (7.4.6.2)
-    pub(crate) gb_template: GbTemplate,
+    pub(crate) gb_template: Template,
     /// "Bit 3: TPGDON. This field specifies whether typical prediction for
     /// generic direct coding is used." (7.4.6.2)
     pub(crate) tpgdon: bool,
@@ -85,13 +54,7 @@ pub(crate) fn parse_generic_region_header(reader: &mut Reader<'_>) -> Result<Gen
     // "Bits 1-2: GBTEMPLATE. This field specifies the template used for
     // template-based arithmetic coding. If MMR is 1 then this field must
     // contain the value zero."
-    let gb_template = match (flags >> 1) & 0x03 {
-        0 => GbTemplate::Template0,
-        1 => GbTemplate::Template1,
-        2 => GbTemplate::Template2,
-        3 => GbTemplate::Template3,
-        _ => unreachable!(), // Only 2 bits, so 0-3 are the only possibilities
-    };
+    let gb_template = Template::from_byte(flags >> 1);
 
     // "Bit 3: TPGDON. This field specifies whether typical prediction for
     // generic direct coding is used."
@@ -107,7 +70,7 @@ pub(crate) fn parse_generic_region_header(reader: &mut Reader<'_>) -> Result<Gen
     }
 
     // Validate MMR + GBTEMPLATE constraint
-    if mmr && gb_template != GbTemplate::Template0 {
+    if mmr && gb_template != Template::Template0 {
         bail!(TemplateError::Invalid);
     }
 
@@ -132,7 +95,7 @@ pub(crate) fn parse_generic_region_header(reader: &mut Reader<'_>) -> Result<Gen
 /// Parse adaptive template pixel positions (7.4.6.3).
 fn parse_adaptive_template_pixels(
     reader: &mut Reader<'_>,
-    gb_template: GbTemplate,
+    gb_template: Template,
     ext_template: bool,
 ) -> Result<Vec<AdaptiveTemplatePixel>> {
     // "If GBTEMPLATE is 0 and EXTTEMPLATE is 0, it is an eight-byte field,
@@ -146,14 +109,14 @@ fn parse_adaptive_template_pixels(
     // in Figure 51."
 
     let num_pixels = match gb_template {
-        GbTemplate::Template0 => {
+        Template::Template0 => {
             if ext_template {
                 bail!(DecodeError::Unsupported);
             } else {
                 4
             }
         }
-        GbTemplate::Template1 | GbTemplate::Template2 | GbTemplate::Template3 => 1,
+        Template::Template1 | Template::Template2 | Template::Template3 => 1,
     };
 
     let mut pixels = Vec::with_capacity(num_pixels);
@@ -366,7 +329,7 @@ fn decode_generic_region_ad(header: &GenericRegionHeader, data: &[u8]) -> Result
 pub(crate) fn decode_bitmap_arith(
     region: &mut DecodedRegion,
     data: &[u8],
-    gb_template: GbTemplate,
+    gb_template: Template,
     tpgdon: bool,
     adaptive_template_pixels: &[AdaptiveTemplatePixel],
 ) -> Result<()> {
@@ -387,10 +350,10 @@ pub(crate) fn decode_bitmap_arith(
         if tpgdon {
             // See Figure 8 - 11.
             let sltp_context: u32 = match gb_template {
-                GbTemplate::Template0 => 0b1001101100100101,
-                GbTemplate::Template1 => 0b0011110010101,
-                GbTemplate::Template2 => 0b0011100101,
-                GbTemplate::Template3 => 0b0110010101,
+                Template::Template0 => 0b1001101100100101,
+                Template::Template1 => 0b0011110010101,
+                Template::Template2 => 0b0011100101,
+                Template::Template3 => 0b0110010101,
             };
             let sltp = decoder.decode(&mut contexts[sltp_context as usize]);
             // "Let SLTP be the value of this bit. Set: LTP = LTP XOR SLTP" (6.2.5.7)
@@ -430,16 +393,16 @@ pub(crate) fn gather_context_with_at(
     region: &DecodedRegion,
     x: u32,
     y: u32,
-    gb_template: GbTemplate,
+    gb_template: Template,
     adaptive_template_pixels: &[AdaptiveTemplatePixel],
 ) -> u32 {
     match gb_template {
-        GbTemplate::Template0 => {
+        Template::Template0 => {
             gather_context_template0_no_ext(region, x, y, adaptive_template_pixels)
         }
-        GbTemplate::Template1 => gather_context_template1(region, x, y, adaptive_template_pixels),
-        GbTemplate::Template2 => gather_context_template2(region, x, y, adaptive_template_pixels),
-        GbTemplate::Template3 => gather_context_template3(region, x, y, adaptive_template_pixels),
+        Template::Template1 => gather_context_template1(region, x, y, adaptive_template_pixels),
+        Template::Template2 => gather_context_template2(region, x, y, adaptive_template_pixels),
+        Template::Template3 => gather_context_template3(region, x, y, adaptive_template_pixels),
     }
 }
 

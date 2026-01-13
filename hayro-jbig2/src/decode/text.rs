@@ -8,10 +8,11 @@
 use alloc::vec;
 use alloc::vec::Vec;
 
-use super::generic_refinement::{
-    GrTemplate, RefinementAdaptiveTemplatePixel, decode_refinement_bitmap_with,
+use super::generic_refinement::decode_refinement_bitmap_with;
+use super::{
+    AdaptiveTemplatePixel, CombinationOperator, RefinementTemplate, RegionSegmentInfo,
+    parse_refinement_at_pixels, parse_region_segment_info,
 };
-use super::{CombinationOperator, RegionSegmentInfo, parse_region_segment_info};
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::DecodedRegion;
 use crate::error::{HuffmanError, ParseError, Result, SymbolError, bail};
@@ -280,7 +281,7 @@ pub(crate) struct TextRegionHeader {
     /// "Text region segment refinement AT flags – see 7.4.3.1.3." (7.4.3.1)
     /// "This field is only present if SBREFINE is 1 and SBRTEMPLATE is 0."
     /// Contains 2 AT pixels (4 bytes, Figure 40).
-    pub(crate) refinement_at_pixels: Vec<RefinementAdaptiveTemplatePixel>,
+    pub(crate) refinement_at_pixels: Vec<AdaptiveTemplatePixel>,
 
     /// "SBNUMINSTANCES – see 7.4.3.1.4." (7.4.3.1)
     /// "This four-byte field contains the number of symbol instances coded in
@@ -346,33 +347,6 @@ fn parse_text_region_flags(reader: &mut Reader<'_>) -> Result<TextRegionFlags> {
     })
 }
 
-/// Parse text region refinement AT flags (7.4.3.1.3).
-///
-/// "This field is only present if SBREFINE is 1 and SBRTEMPLATE is 0. It is a
-/// four-byte field, formatted as shown in Figure 40 and as described below."
-/// (7.4.3.1.3)
-fn parse_text_region_refinement_at_flags(
-    reader: &mut Reader<'_>,
-) -> Result<Vec<RefinementAdaptiveTemplatePixel>> {
-    let mut pixels = Vec::with_capacity(2);
-
-    // "Byte 0: SBRATX1"
-    // "Byte 1: SBRATY1"
-    // "The AT coordinate X and Y fields are signed values, and may take on
-    // values that are permitted according to 6.3.5.3." (7.4.3.1.3)
-    let x1 = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
-    let y1 = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
-    pixels.push(RefinementAdaptiveTemplatePixel { x: x1, y: y1 });
-
-    // "Byte 2: SBRATX2"
-    // "Byte 3: SBRATY2"
-    let x2 = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
-    let y2 = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
-    pixels.push(RefinementAdaptiveTemplatePixel { x: x2, y: y2 });
-
-    Ok(pixels)
-}
-
 /// Parse text region Huffman flags (7.4.3.1.2).
 fn parse_text_region_huffman_flags(reader: &mut Reader<'_>) -> Result<TextRegionHuffmanFlags> {
     let flags_word = reader.read_u16().ok_or(ParseError::UnexpectedEof)?;
@@ -432,7 +406,7 @@ pub(crate) fn parse_text_region_header(reader: &mut Reader<'_>) -> Result<TextRe
     // "Text region segment refinement AT flags – see 7.4.3.1.3."
     // "This field is only present if SBREFINE is 1 and SBRTEMPLATE is 0."
     let refinement_at_pixels = if flags.sbrefine && flags.sbrtemplate == 0 {
-        parse_text_region_refinement_at_flags(reader)?
+        parse_refinement_at_pixels(reader)?
     } else {
         Vec::new()
     };
@@ -475,18 +449,18 @@ pub(crate) struct TextRegionParams<'a> {
     /// SBDSOFFSET: S offset.
     pub(crate) sbdsoffset: i32,
     /// SBRTEMPLATE: Refinement template.
-    pub(crate) sbrtemplate: GrTemplate,
+    pub(crate) sbrtemplate: RefinementTemplate,
     /// SBRATXn/SBRATYn: Refinement AT pixels.
-    pub(crate) refinement_at_pixels: &'a [RefinementAdaptiveTemplatePixel],
+    pub(crate) refinement_at_pixels: &'a [AdaptiveTemplatePixel],
 }
 
 impl<'a> TextRegionParams<'a> {
     /// Create parameters from a parsed text region header.
     pub(crate) fn from_header(header: &'a TextRegionHeader) -> Self {
         let sbrtemplate = if header.flags.sbrtemplate == 0 {
-            GrTemplate::Template0
+            RefinementTemplate::Template0
         } else {
-            GrTemplate::Template1
+            RefinementTemplate::Template1
         };
 
         Self {
@@ -600,10 +574,7 @@ pub(crate) fn decode_text_region_refine(
     let mut contexts = TextRegionContexts::new(sbsymcodelen);
 
     // Create refinement contexts
-    let num_gr_contexts = match params.sbrtemplate {
-        GrTemplate::Template0 => 1 << 13,
-        GrTemplate::Template1 => 1 << 10,
-    };
+    let num_gr_contexts = params.sbrtemplate.context_bits();
     let mut gr_contexts = vec![Context::default(); num_gr_contexts];
 
     decode_text_region_with(
@@ -1231,10 +1202,7 @@ fn decode_text_region_huffman(
                     // Decode refinement bitmap from raw bytes.
                     // TPGRON is always 0 for text region refinements (Table 12).
                     let mut decoder = ArithmeticDecoder::new(refinement_data);
-                    let num_context_bits = match params.sbrtemplate {
-                        GrTemplate::Template0 => 13,
-                        GrTemplate::Template1 => 10,
-                    };
+                    let num_context_bits = params.sbrtemplate.context_bits();
                     let mut contexts = vec![Context::default(); 1 << num_context_bits];
 
                     decode_refinement_bitmap_with(

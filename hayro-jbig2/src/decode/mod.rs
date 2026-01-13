@@ -7,11 +7,11 @@ pub(crate) mod pattern;
 pub(crate) mod symbol;
 pub(crate) mod text;
 
-use alloc::vec;
-use alloc::vec::Vec;
-
+use crate::decode::RefinementTemplate::{Template0, Template1};
 use crate::error::{ParseError, RegionError, Result, bail, err};
 use crate::reader::Reader;
+use alloc::vec;
+use alloc::vec::Vec;
 
 /// "These operators describe how the segment's bitmap is to be combined with
 /// the page bitmap." (7.4.1.5)
@@ -194,4 +194,22 @@ pub(crate) enum RefinementTemplate {
     Template0 = 0,
     /// Template 1: 10 pixels (6.3.5.3, Figure 13)
     Template1 = 1,
+}
+
+impl RefinementTemplate {
+    pub(crate) fn from_byte(value: u8) -> Self {
+        if value & 0x01 == 0 {
+            Template0
+        } else {
+            Template1
+        }
+    }
+
+    /// Number of context bits for this template (6.3.5.3).
+    pub(crate) fn context_bits(&self) -> usize {
+        match self {
+            Self::Template0 => 13,
+            Self::Template1 => 10,
+        }
+    }
 }

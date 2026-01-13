@@ -5,9 +5,8 @@ use alloc::vec::Vec;
 
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::DecodedRegion;
-use crate::decode::generic::{
-    AdaptiveTemplatePixel, GbTemplate, decode_bitmap_mmr, gather_context_with_at,
-};
+use crate::decode::generic::{decode_bitmap_mmr, gather_context_with_at};
+use crate::decode::{AdaptiveTemplatePixel, Template};
 use crate::error::Result;
 
 /// Input parameters to the gray-scale image decoding procedure (Table C.1).
@@ -22,7 +21,7 @@ pub(crate) struct GrayScaleParams<'a> {
     /// `GSH` - The height of the gray-scale image.
     pub(crate) height: u32,
     /// `GSTEMPLATE` - The template used to code the gray-scale bitplanes.
-    pub(crate) template: GbTemplate,
+    pub(crate) template: Template,
     /// `GSKIP` - A mask indicating which values should be skipped.
     /// GSW pixels wide, GSH pixels high. None if `GSUSESKIP` = 0.
     pub(crate) skip_mask: Option<&'a [bool]>,
@@ -83,14 +82,14 @@ fn decode_arithmetic(data: &[u8], params: &GrayScaleParams<'_>) -> Result<Vec<u3
 
     // Table C.4: Adaptive template pixel positions.
     let at_pixels: Vec<AdaptiveTemplatePixel> = match template {
-        GbTemplate::Template0 => vec![
+        Template::Template0 => vec![
             AdaptiveTemplatePixel { x: 3, y: -1 },
             AdaptiveTemplatePixel { x: -3, y: -1 },
             AdaptiveTemplatePixel { x: 2, y: -2 },
             AdaptiveTemplatePixel { x: -2, y: -2 },
         ],
-        GbTemplate::Template1 => vec![AdaptiveTemplatePixel { x: 3, y: -1 }],
-        GbTemplate::Template2 | GbTemplate::Template3 => {
+        Template::Template1 => vec![AdaptiveTemplatePixel { x: 3, y: -1 }],
+        Template::Template2 | Template::Template3 => {
             vec![AdaptiveTemplatePixel { x: 2, y: -1 }]
         }
     };
