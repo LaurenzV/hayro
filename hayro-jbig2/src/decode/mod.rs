@@ -1,4 +1,4 @@
-//! Region segment information field parsing (7.4.1).
+//! Region and dictionary segment parsing and decoding.
 
 pub(crate) mod generic;
 pub(crate) mod generic_refinement;
@@ -6,6 +6,9 @@ pub(crate) mod halftone;
 pub(crate) mod pattern;
 pub(crate) mod symbol;
 pub(crate) mod text;
+
+use alloc::vec;
+use alloc::vec::Vec;
 
 use crate::error::{ParseError, RegionError, Result, bail, err};
 use crate::reader::Reader;
@@ -27,7 +30,7 @@ pub(crate) enum CombinationOperator {
 }
 
 impl CombinationOperator {
-    fn from_value(value: u8) -> Result<Self> {
+    pub(crate) fn from_value(value: u8) -> Result<Self> {
         match value {
             0 => Ok(Self::Or),
             1 => Ok(Self::And),
@@ -35,6 +38,54 @@ impl CombinationOperator {
             3 => Ok(Self::Xnor),
             4 => Ok(Self::Replace),
             _ => err!(RegionError::InvalidCombinationOperator),
+        }
+    }
+}
+
+/// Template used for arithmetic of generic regions.
+///
+/// - Generic regions: `GBTEMPLATE` (7.4.6.2)
+/// - Symbol dictionaries: `SDTEMPLATE` (7.4.2.1.1)
+/// - Pattern dictionaries: `HDTEMPLATE` (7.4.4.1.1)
+/// - Halftone regions: `HTEMPLATE` (7.4.5.1.1)
+/// - Gray-scale images: `GSTEMPLATE` (Annex C)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Template {
+    /// Template 0
+    ///
+    /// Context bits: 16 (Figure 3).
+    Template0 = 0,
+    /// Template 1
+    ///
+    /// Context bits: 13 (Figure 4).
+    Template1 = 1,
+    /// Template 2
+    ///
+    /// Context bits: 10 (Figure 5).
+    Template2 = 2,
+    /// Template 3
+    ///
+    /// Context bits: 10 (Figure 6).
+    Template3 = 3,
+}
+
+impl Template {
+    pub(crate) fn from_byte(value: u8) -> Self {
+        match value & 0x03 {
+            0 => Self::Template0,
+            1 => Self::Template1,
+            2 => Self::Template2,
+            3 => Self::Template3,
+            _ => unreachable!(),
+        }
+    }
+
+    /// Number of context bits for this template (6.2.5.3).
+    pub(crate) fn context_bits(self) -> usize {
+        match self {
+            Self::Template0 => 16,
+            Self::Template1 => 13,
+            Self::Template2 | Self::Template3 => 10,
         }
     }
 }
@@ -102,4 +153,45 @@ pub(crate) fn parse_region_segment_info(reader: &mut Reader<'_>) -> Result<Regio
         combination_operator,
         _colour_extension: colour_extension,
     })
+}
+
+/// Adaptive template pixel position for generic and refinement regions (6.2.5.4, Figure 7).
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct AdaptiveTemplatePixel {
+    pub(crate) x: i8,
+    pub(crate) y: i8,
+}
+
+/// Parse refinement adaptive template pixels (used by symbol dictionary and text region).
+///
+/// Used for:
+/// - Symbol dictionary refinement AT flags (7.4.2.1.3): SDRATX1/SDRATY1, SDRATX2/SDRATY2
+/// - Text region refinement AT flags (7.4.3.1.3): SBRATX1/SBRATY1, SBRATX2/SBRATY2
+/// - Generic refinement region AT flags (7.4.7.3): GRATX1/GRATY1, GRATX2/GRATY2
+pub(crate) fn parse_refinement_at_pixels(
+    reader: &mut Reader<'_>,
+) -> Result<Vec<AdaptiveTemplatePixel>> {
+    let x1 = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
+    let y1 = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
+
+    let x2 = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
+    let y2 = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
+
+    Ok(vec![
+        AdaptiveTemplatePixel { x: x1, y: y1 },
+        AdaptiveTemplatePixel { x: x2, y: y2 },
+    ])
+}
+
+/// Template used for refinement arithmetic coding (7.4.7.2).
+///
+/// - Generic refinement regions: `GRTEMPLATE` (7.4.7.2)
+/// - Symbol dictionaries: `SDRTEMPLATE` (7.4.2.1.1)
+/// - Text regions: `SBRTEMPLATE` (7.4.3.1.1)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RefinementTemplate {
+    /// Template 0: 13 pixels (6.3.5.3, Figure 12)
+    Template0 = 0,
+    /// Template 1: 10 pixels (6.3.5.3, Figure 13)
+    Template1 = 1,
 }
