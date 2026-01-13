@@ -574,7 +574,7 @@ pub(crate) fn decode_text_region_refine(
     let mut contexts = TextRegionContexts::new(sbsymcodelen);
 
     // Create refinement contexts
-    let num_gr_contexts = params.sbrtemplate.context_bits();
+    let num_gr_contexts = 1 << params.sbrtemplate.context_bits();
     let mut gr_contexts = vec![Context::default(); num_gr_contexts];
 
     decode_text_region_with(
