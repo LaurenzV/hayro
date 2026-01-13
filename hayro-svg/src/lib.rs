@@ -46,7 +46,11 @@ pub(crate) mod paint;
 mod path;
 
 /// Convert the given page into an SVG string.
-pub fn convert(page: &Page<'_>, interpreter_settings: &InterpreterSettings) -> String {
+pub fn convert(
+    page: &Page<'_>,
+    interpreter_settings: &InterpreterSettings,
+    render_settings: &SvgRenderSettings,
+) -> String {
     let mut state = Context::new(
         page.initial_transform(true),
         Rect::new(
@@ -58,7 +62,7 @@ pub fn convert(page: &Page<'_>, interpreter_settings: &InterpreterSettings) -> S
         page.xref(),
         interpreter_settings.clone(),
     );
-    let mut device = SvgRenderer::new(page);
+    let mut device = SvgRenderer::new(page, render_settings.clone());
     device.write_header(page.render_dimensions());
 
     interpret_page(page, &mut state, &mut device);
@@ -66,7 +70,25 @@ pub fn convert(page: &Page<'_>, interpreter_settings: &InterpreterSettings) -> S
     device.finish()
 }
 
+/// Settings to apply during SVG rendering.
+#[derive(Debug, Clone)]
+pub struct SvgRenderSettings {
+    /// The background color in format [red, green, blue, alpha].
+    /// Determines the background color of the generated SVG root element.
+    pub bg_color: [u8; 4],
+}
+
+#[allow(clippy::derivable_impls)]
+impl Default for SvgRenderSettings {
+    fn default() -> Self {
+        Self {
+            bg_color: [0, 0, 0, 0],
+        }
+    }
+}
+
 pub(crate) struct SvgRenderer<'a> {
+    pub(crate) render_settings: SvgRenderSettings,
     pub(crate) xml: XmlWriter,
     pub(crate) outline_glyphs: Deduplicator<CachedOutlineGlyph>,
     pub(crate) type3_glyphs: Deduplicator<CachedType3Glyph<'a>>,
@@ -302,8 +324,9 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
 }
 
 impl<'a> SvgRenderer<'a> {
-    pub(crate) fn new(page: &'a Page<'a>) -> Self {
+    pub(crate) fn new(page: &'a Page<'a>, render_settings: SvgRenderSettings) -> Self {
         Self {
+            render_settings,
             xml: XmlWriter::new(Options::default()),
             outline_glyphs: Deduplicator::new('g'),
             type3_glyphs: Deduplicator::new('e'),
@@ -319,6 +342,8 @@ impl<'a> SvgRenderer<'a> {
     }
 
     pub(crate) fn write_header(&mut self, size: (f32, f32)) {
+        let bg_color = self.render_settings.bg_color;
+
         self.xml.start_element("svg");
         self.xml
             .write_attribute_fmt("viewBox", format_args!("0 0 {} {}", size.0, size.1));
@@ -330,6 +355,15 @@ impl<'a> SvgRenderer<'a> {
             .write_attribute("xmlns", "http://www.w3.org/2000/svg");
         self.xml
             .write_attribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
+        if bg_color[3] > 0 {
+            self.xml.write_attribute(
+                "style",
+                &format!(
+                    "background-color: rgba({}, {}, {}, {});",
+                    bg_color[0], bg_color[1], bg_color[2], bg_color[3]
+                ),
+            );
+        }
     }
 
     // We need this because we have a small problem. `xmlwriter` doesn't allow us to write sub-streams

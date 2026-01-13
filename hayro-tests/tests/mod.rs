@@ -1,10 +1,11 @@
 use hayro::hayro_interpret::InterpreterSettings;
 use hayro::hayro_interpret::font::{FontData, FontQuery, StandardFont};
+use hayro_svg::SvgRenderSettings;
 use hayro_syntax::Pdf;
 use hayro_syntax::{DecryptionError, LoadPdfError};
 use image::{Rgba, RgbaImage, load_from_memory};
 use once_cell::sync::Lazy;
-use resvg::tiny_skia::{Color, Pixmap};
+use resvg::tiny_skia::Pixmap;
 use resvg::usvg::{Options, Transform, Tree};
 use sitro::{RenderOptions, Renderer};
 use std::cmp::max;
@@ -178,6 +179,12 @@ fn interpreter_settings() -> InterpreterSettings {
     }
 }
 
+fn svg_render_settings() -> SvgRenderSettings {
+    SvgRenderSettings {
+        bg_color: [255, 255, 255, 255],
+    }
+}
+
 pub fn run_render_test(name: &str, file_path: &str, range_str: Option<&str>) {
     run_render_test_with_password(name, file_path, range_str, "")
 }
@@ -228,7 +235,8 @@ fn render_pdf(
 fn render_svg(
     pdf: &Pdf,
     name: &str,
-    settings: InterpreterSettings,
+    interpreter_settings: InterpreterSettings,
+    render_settings: SvgRenderSettings,
     range: Option<RangeInclusive<usize>>,
 ) -> Vec<Vec<u8>> {
     pdf.pages()
@@ -239,7 +247,7 @@ fn render_svg(
                 return None;
             }
 
-            let svg = hayro_svg::convert(p, &settings);
+            let svg = hayro_svg::convert(p, &interpreter_settings, &render_settings);
 
             if STORE.is_some() {
                 let dir = STORE_PATH.join("svg");
@@ -254,7 +262,6 @@ fn render_svg(
                 tree.size().height().ceil() as u32,
             )
             .unwrap();
-            pixmap.fill(Color::WHITE);
             resvg::render(&tree, Transform::default(), &mut pixmap.as_mut());
             Some(pixmap.encode_png().unwrap())
         })
@@ -264,9 +271,10 @@ fn render_svg(
 pub fn run_svg_test(name: &str, file_path: &str, range_str: Option<&str>) {
     let pdf = load_pdf(file_path);
 
-    let settings = interpreter_settings();
+    let interpreter_settings = interpreter_settings();
+    let render_settings = svg_render_settings();
     let range = range_str.and_then(parse_range);
-    let converted = render_svg(&pdf, name, settings, range);
+    let converted = render_svg(&pdf, name, interpreter_settings, render_settings, range);
     check_render(name, SVG_SNAPSHOTS_PATH.clone(), converted);
 }
 
