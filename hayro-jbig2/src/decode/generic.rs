@@ -1,9 +1,11 @@
 //! Generic region segment parsing and decoding (7.4.6, 6.2).
 
 use alloc::vec;
-use alloc::vec::Vec;
 
-use super::{AdaptiveTemplatePixel, RegionSegmentInfo, Template, parse_region_segment_info};
+use super::{
+    AdaptiveTemplatePixel, AdaptiveTemplatePixels, RegionSegmentInfo, Template,
+    parse_region_segment_info,
+};
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::DecodedRegion;
 use crate::error::{DecodeError, ParseError, RegionError, Result, TemplateError, bail};
@@ -81,7 +83,7 @@ struct GenericRegionHeader {
     /// - If GBTEMPLATE is 0 and EXTTEMPLATE is 0: 4 AT pixels (8 bytes)
     /// - If GBTEMPLATE is 0 and EXTTEMPLATE is 1: 12 AT pixels (24 bytes)
     /// - If GBTEMPLATE is 1, 2, or 3: 1 AT pixel (2 bytes)
-    adaptive_template_pixels: Vec<AdaptiveTemplatePixel>,
+    adaptive_template_pixels: AdaptiveTemplatePixels,
 }
 
 /// Parse a generic region segment header (7.4.6.1).
@@ -126,7 +128,7 @@ fn parse(reader: &mut Reader<'_>) -> Result<GenericRegionHeader> {
     // 7.4.6.3: Generic region segment AT flags
     // "This field is only present if MMR is 0."
     let adaptive_template_pixels = if mmr {
-        Vec::new()
+        AdaptiveTemplatePixels::Zero
     } else {
         parse_adaptive_template_pixels(reader, gb_template, ext_template)?
     };
@@ -146,7 +148,7 @@ fn parse_adaptive_template_pixels(
     reader: &mut Reader<'_>,
     gb_template: Template,
     ext_template: bool,
-) -> Result<Vec<AdaptiveTemplatePixel>> {
+) -> Result<AdaptiveTemplatePixels> {
     // "If GBTEMPLATE is 0 and EXTTEMPLATE is 0, it is an eight-byte field,
     // formatted as shown in Figure 49."
     //
@@ -157,20 +159,8 @@ fn parse_adaptive_template_pixels(
     // "If GBTEMPLATE is 1, 2 or 3, it is a two-byte field formatted as shown
     // in Figure 51."
 
-    let num_pixels = match gb_template {
-        Template::Template0 => {
-            if ext_template {
-                bail!(DecodeError::Unsupported);
-            } else {
-                4
-            }
-        }
-        Template::Template1 | Template::Template2 | Template::Template3 => 1,
-    };
-
-    let mut pixels = Vec::with_capacity(num_pixels);
-
-    for _ in 0..num_pixels {
+    /// Read and validate a single AT pixel.
+    fn read_at_pixel(reader: &mut Reader<'_>) -> Result<AdaptiveTemplatePixel> {
         let x = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
         let y = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
 
@@ -182,10 +172,26 @@ fn parse_adaptive_template_pixels(
             bail!(TemplateError::InvalidAtPixel);
         }
 
-        pixels.push(AdaptiveTemplatePixel { x, y });
+        Ok(AdaptiveTemplatePixel { x, y })
     }
 
-    Ok(pixels)
+    match gb_template {
+        Template::Template0 => {
+            if ext_template {
+                bail!(DecodeError::Unsupported);
+            }
+            Ok([
+                read_at_pixel(reader)?,
+                read_at_pixel(reader)?,
+                read_at_pixel(reader)?,
+                read_at_pixel(reader)?,
+            ]
+            .into())
+        }
+        Template::Template1 | Template::Template2 | Template::Template3 => {
+            Ok([read_at_pixel(reader)?].into())
+        }
+    }
 }
 
 /// Decode a generic region using MMR coding (6.2.6).
@@ -312,7 +318,7 @@ fn decode_generic_region_ad(header: &GenericRegionHeader, data: &[u8]) -> Result
         data,
         header.gb_template,
         header.tpgdon,
-        &header.adaptive_template_pixels,
+        header.adaptive_template_pixels.as_slice(),
     )?;
     Ok(region)
 }

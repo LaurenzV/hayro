@@ -10,8 +10,8 @@ use alloc::vec::Vec;
 
 use super::generic_refinement::decode_refinement_bitmap_with;
 use super::{
-    AdaptiveTemplatePixel, CombinationOperator, RefinementTemplate, RegionSegmentInfo,
-    parse_refinement_at_pixels, parse_region_segment_info,
+    AdaptiveTemplatePixel, AdaptiveTemplatePixels, CombinationOperator, RefinementTemplate,
+    RegionSegmentInfo, parse_refinement_at_pixels, parse_region_segment_info,
 };
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::DecodedRegion;
@@ -332,7 +332,7 @@ pub(crate) struct TextRegionHeader {
     /// "Text region segment refinement AT flags – see 7.4.3.1.3." (7.4.3.1)
     /// "This field is only present if SBREFINE is 1 and SBRTEMPLATE is 0."
     /// Contains 2 AT pixels (4 bytes, Figure 40).
-    pub(crate) refinement_at_pixels: Vec<AdaptiveTemplatePixel>,
+    pub(crate) refinement_at_pixels: AdaptiveTemplatePixels,
 
     /// "SBNUMINSTANCES – see 7.4.3.1.4." (7.4.3.1)
     /// "This four-byte field contains the number of symbol instances coded in
@@ -459,7 +459,7 @@ fn parse(reader: &mut Reader<'_>) -> Result<TextRegionHeader> {
     let refinement_at_pixels = if flags.sbrefine && flags.sbrtemplate == 0 {
         parse_refinement_at_pixels(reader)?
     } else {
-        Vec::new()
+        AdaptiveTemplatePixels::Zero
     };
 
     // "SBNUMINSTANCES – see 7.4.3.1.4."
@@ -525,7 +525,7 @@ impl<'a> TextRegionParams<'a> {
             refcorner: header.flags.reference_corner,
             sbdsoffset: header.flags.ds_offset as i32,
             sbrtemplate,
-            refinement_at_pixels: &header.refinement_at_pixels,
+            refinement_at_pixels: header.refinement_at_pixels.as_slice(),
         }
     }
 }

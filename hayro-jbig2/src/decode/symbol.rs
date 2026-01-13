@@ -16,7 +16,8 @@ use crate::decode::text::{
     ReferenceCorner, SymbolBitmap, TextRegionContexts, TextRegionParams, decode_text_region_with,
 };
 use crate::decode::{
-    AdaptiveTemplatePixel, RefinementTemplate, Template, parse_refinement_at_pixels,
+    AdaptiveTemplatePixel, AdaptiveTemplatePixels, RefinementTemplate, Template,
+    parse_refinement_at_pixels,
 };
 use crate::error::{
     DecodeError, HuffmanError, ParseError, RegionError, Result, SymbolError, TemplateError, bail,
@@ -213,14 +214,14 @@ pub(crate) struct SymbolDictionaryHeader {
     /// "This field is only present if SDHUFF is 0." (7.4.2.1.2)
     /// - If SDTEMPLATE is 0: 4 AT pixels (8 bytes, Figure 34)
     /// - If SDTEMPLATE is 1, 2, or 3: 1 AT pixel (2 bytes, Figure 35)
-    pub(crate) adaptive_template_pixels: Vec<AdaptiveTemplatePixel>,
+    pub(crate) adaptive_template_pixels: AdaptiveTemplatePixels,
 
     /// Symbol dictionary refinement AT flags (7.4.2.1.3).
     ///
     /// "This field is only present if SDREFAGG is 1 and SDRTEMPLATE is 0."
     /// (7.4.2.1.3)
     /// Contains 2 AT pixels (4 bytes, Figure 36).
-    pub(crate) refinement_at_pixels: Vec<AdaptiveTemplatePixel>,
+    pub(crate) refinement_at_pixels: AdaptiveTemplatePixels,
 
     /// "SDNUMEXSYMS: This four-byte field contains the number of symbols
     /// exported from this dictionary." (7.4.2.1.4)
@@ -296,7 +297,7 @@ fn parse(reader: &mut Reader<'_>) -> Result<SymbolDictionaryHeader> {
     let adaptive_template_pixels = if !sdhuff {
         parse_symbol_dictionary_at_flags(reader, sdtemplate)?
     } else {
-        Vec::new()
+        AdaptiveTemplatePixels::Zero
     };
 
     // 7.4.2.1.3: Symbol dictionary refinement AT flags
@@ -304,7 +305,7 @@ fn parse(reader: &mut Reader<'_>) -> Result<SymbolDictionaryHeader> {
     let refinement_at_pixels = if sdrefagg && sdrtemplate == SdRTemplate::Template0 {
         parse_refinement_at_pixels(reader)?
     } else {
-        Vec::new()
+        AdaptiveTemplatePixels::Zero
     };
 
     // 7.4.2.1.4: SDNUMEXSYMS
@@ -334,15 +335,9 @@ fn parse(reader: &mut Reader<'_>) -> Result<SymbolDictionaryHeader> {
 fn parse_symbol_dictionary_at_flags(
     reader: &mut Reader<'_>,
     sdtemplate: Template,
-) -> Result<Vec<AdaptiveTemplatePixel>> {
-    let num_pixels = match sdtemplate {
-        Template::Template0 => 4,
-        Template::Template1 | Template::Template2 | Template::Template3 => 1,
-    };
-
-    let mut pixels = Vec::with_capacity(num_pixels);
-
-    for _ in 0..num_pixels {
+) -> Result<AdaptiveTemplatePixels> {
+    /// Read and validate a single AT pixel.
+    fn read_at_pixel(reader: &mut Reader<'_>) -> Result<AdaptiveTemplatePixel> {
         // "The AT coordinate X and Y fields are signed values, and may take on
         // values that are permitted according to Figure 7." (7.4.2.1.2)
         let x = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
@@ -356,10 +351,21 @@ fn parse_symbol_dictionary_at_flags(
             bail!(TemplateError::InvalidAtPixel);
         }
 
-        pixels.push(AdaptiveTemplatePixel { x, y });
+        Ok(AdaptiveTemplatePixel { x, y })
     }
 
-    Ok(pixels)
+    match sdtemplate {
+        Template::Template0 => Ok([
+            read_at_pixel(reader)?,
+            read_at_pixel(reader)?,
+            read_at_pixel(reader)?,
+            read_at_pixel(reader)?,
+        ]
+        .into()),
+        Template::Template1 | Template::Template2 | Template::Template3 => {
+            Ok([read_at_pixel(reader)?].into())
+        }
+    }
 }
 
 /// A decoded symbol dictionary segment.
@@ -910,8 +916,13 @@ fn decode_symbol_bitmap(
     // with TPGDON = 0 (no typical prediction)
     for y in 0..height {
         for x in 0..width {
-            let context =
-                gather_context_with_at(&region, x, y, template, &header.adaptive_template_pixels);
+            let context = gather_context_with_at(
+                &region,
+                x,
+                y,
+                template,
+                header.adaptive_template_pixels.as_slice(),
+            );
             let pixel = decoder.decode(&mut contexts[context as usize]);
             region.set_pixel(x, y, pixel != 0);
         }
@@ -1031,7 +1042,7 @@ fn decode_multi_refinement_symbol(
         refcorner: ReferenceCorner::TopLeft,
         sbdsoffset: 0,
         sbrtemplate: gr_template,
-        refinement_at_pixels: &header.refinement_at_pixels,
+        refinement_at_pixels: header.refinement_at_pixels.as_slice(),
     };
 
     // SBREFINE = 1 per Table 17, so we always use refinement decoding
@@ -1085,7 +1096,7 @@ fn decode_multi_refinement_symbol(
                     grreferencedx,
                     grreferencedy,
                     gr_template,
-                    &header.refinement_at_pixels,
+                    header.refinement_at_pixels.as_slice(),
                     false,
                 )?;
                 Ok(SymbolBitmap::Owned(refined))
@@ -1167,7 +1178,7 @@ fn decode_single_refinement_symbol(
         rdx_i,
         rdy_i,
         gr_template,
-        &header.refinement_at_pixels,
+        header.refinement_at_pixels.as_slice(),
         false, // TPGRON = 0
     )?;
 

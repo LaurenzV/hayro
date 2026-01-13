@@ -6,7 +6,7 @@ use alloc::vec::Vec;
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::DecodedRegion;
 use crate::decode::generic::{decode_bitmap_mmr, gather_context_with_at};
-use crate::decode::{AdaptiveTemplatePixel, Template};
+use crate::decode::{AdaptiveTemplatePixel, AdaptiveTemplatePixels, Template};
 use crate::error::Result;
 
 /// Input parameters to the gray-scale image decoding procedure (Table C.1).
@@ -81,17 +81,16 @@ fn decode_arithmetic(data: &[u8], params: &GrayScaleParams<'_>) -> Result<Vec<u3
     let template = params.template;
 
     // Table C.4: Adaptive template pixel positions.
-    let at_pixels: Vec<AdaptiveTemplatePixel> = match template {
-        Template::Template0 => vec![
+    let at_pixels: AdaptiveTemplatePixels = match template {
+        Template::Template0 => [
             AdaptiveTemplatePixel { x: 3, y: -1 },
             AdaptiveTemplatePixel { x: -3, y: -1 },
             AdaptiveTemplatePixel { x: 2, y: -2 },
             AdaptiveTemplatePixel { x: -2, y: -2 },
-        ],
-        Template::Template1 => vec![AdaptiveTemplatePixel { x: 3, y: -1 }],
-        Template::Template2 | Template::Template3 => {
-            vec![AdaptiveTemplatePixel { x: 2, y: -1 }]
-        }
+        ]
+        .into(),
+        Template::Template1 => [AdaptiveTemplatePixel { x: 3, y: -1 }].into(),
+        Template::Template2 | Template::Template3 => [AdaptiveTemplatePixel { x: 2, y: -1 }].into(),
     };
 
     let mut decoder = ArithmeticDecoder::new(data);
@@ -111,7 +110,8 @@ fn decode_arithmetic(data: &[u8], params: &GrayScaleParams<'_>) -> Result<Vec<u3
                     }
                 }
 
-                let context = gather_context_with_at(&bitplane, x, y, template, &at_pixels);
+                let context =
+                    gather_context_with_at(&bitplane, x, y, template, at_pixels.as_slice());
                 let pixel = decoder.decode(&mut contexts[context as usize]);
 
                 bitplane.set_pixel(x, y, pixel != 0);

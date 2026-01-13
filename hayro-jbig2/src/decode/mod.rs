@@ -10,8 +10,6 @@ pub(crate) mod text;
 use crate::decode::RefinementTemplate::{Template0, Template1};
 use crate::error::{ParseError, RegionError, Result, bail, err};
 use crate::reader::Reader;
-use alloc::vec;
-use alloc::vec::Vec;
 
 /// "These operators describe how the segment's bitmap is to be combined with
 /// the page bitmap." (7.4.1.5)
@@ -162,6 +160,46 @@ pub(crate) struct AdaptiveTemplatePixel {
     pub(crate) y: i8,
 }
 
+/// The adaptive template pixels in a procedure.
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) enum AdaptiveTemplatePixels {
+    #[default]
+    Zero,
+    One([AdaptiveTemplatePixel; 1]),
+    Two([AdaptiveTemplatePixel; 2]),
+    Four([AdaptiveTemplatePixel; 4]),
+}
+
+impl AdaptiveTemplatePixels {
+    #[inline]
+    pub(crate) fn as_slice(&self) -> &[AdaptiveTemplatePixel] {
+        match self {
+            Self::Zero => &[],
+            Self::One(arr) => arr,
+            Self::Two(arr) => arr,
+            Self::Four(arr) => arr,
+        }
+    }
+}
+
+impl From<[AdaptiveTemplatePixel; 1]> for AdaptiveTemplatePixels {
+    fn from(arr: [AdaptiveTemplatePixel; 1]) -> Self {
+        Self::One(arr)
+    }
+}
+
+impl From<[AdaptiveTemplatePixel; 2]> for AdaptiveTemplatePixels {
+    fn from(arr: [AdaptiveTemplatePixel; 2]) -> Self {
+        Self::Two(arr)
+    }
+}
+
+impl From<[AdaptiveTemplatePixel; 4]> for AdaptiveTemplatePixels {
+    fn from(arr: [AdaptiveTemplatePixel; 4]) -> Self {
+        Self::Four(arr)
+    }
+}
+
 /// Parse refinement adaptive template pixels (used by symbol dictionary and text region).
 ///
 /// Used for:
@@ -170,17 +208,18 @@ pub(crate) struct AdaptiveTemplatePixel {
 /// - Generic refinement region AT flags (7.4.7.3): GRATX1/GRATY1, GRATX2/GRATY2
 pub(crate) fn parse_refinement_at_pixels(
     reader: &mut Reader<'_>,
-) -> Result<Vec<AdaptiveTemplatePixel>> {
+) -> Result<AdaptiveTemplatePixels> {
     let x1 = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
     let y1 = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
 
     let x2 = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
     let y2 = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
 
-    Ok(vec![
+    Ok([
         AdaptiveTemplatePixel { x: x1, y: y1 },
         AdaptiveTemplatePixel { x: x2, y: y2 },
-    ])
+    ]
+    .into())
 }
 
 /// Template used for refinement arithmetic coding (7.4.7.2).

@@ -4,7 +4,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use super::generic::{decode_bitmap_arith, decode_bitmap_mmr};
-use super::{AdaptiveTemplatePixel, CombinationOperator, Template};
+use super::{AdaptiveTemplatePixel, AdaptiveTemplatePixels, CombinationOperator, Template};
 use crate::bitmap::DecodedRegion;
 use crate::error::{
     DecodeError, FormatError, ParseError, RegionError, Result, TemplateError, bail,
@@ -57,7 +57,7 @@ pub(crate) fn decode(reader: &mut Reader<'_>) -> Result<PatternDictionary> {
             encoded_data,
             header.flags.hdtemplate,
             false, // TPGDON = 0 (Table 27)
-            &at_pixels,
+            at_pixels.as_slice(),
         )?;
     }
 
@@ -178,24 +178,24 @@ fn parse(reader: &mut Reader<'_>) -> Result<PatternDictionaryHeader> {
 }
 
 /// Build adaptive template pixels for pattern dictionary decoding (Table 27).
-fn build_pattern_at_pixels(hdtemplate: Template, hdpw: u32) -> Vec<AdaptiveTemplatePixel> {
+fn build_pattern_at_pixels(hdtemplate: Template, hdpw: u32) -> AdaptiveTemplatePixels {
     match hdtemplate {
-        Template::Template0 => {
-            vec![
-                AdaptiveTemplatePixel {
-                    x: -(hdpw as i8),
-                    y: 0,
-                },
-                AdaptiveTemplatePixel { x: -3, y: -1 },
-                AdaptiveTemplatePixel { x: 2, y: -2 },
-                AdaptiveTemplatePixel { x: -2, y: -2 },
-            ]
-        }
+        Template::Template0 => [
+            AdaptiveTemplatePixel {
+                x: -(hdpw as i8),
+                y: 0,
+            },
+            AdaptiveTemplatePixel { x: -3, y: -1 },
+            AdaptiveTemplatePixel { x: 2, y: -2 },
+            AdaptiveTemplatePixel { x: -2, y: -2 },
+        ]
+        .into(),
         Template::Template1 | Template::Template2 | Template::Template3 => {
-            vec![AdaptiveTemplatePixel {
+            [AdaptiveTemplatePixel {
                 x: -(hdpw as i8),
                 y: 0,
             }]
+            .into()
         }
     }
 }

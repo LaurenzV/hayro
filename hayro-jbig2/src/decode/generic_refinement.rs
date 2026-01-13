@@ -1,11 +1,10 @@
 //! Generic refinement region segment parsing and decoding (7.4.7, 6.3).
 
 use alloc::vec;
-use alloc::vec::Vec;
 
 use super::{
-    AdaptiveTemplatePixel, RefinementTemplate, RegionSegmentInfo, parse_refinement_at_pixels,
-    parse_region_segment_info,
+    AdaptiveTemplatePixel, AdaptiveTemplatePixels, RefinementTemplate, RegionSegmentInfo,
+    parse_refinement_at_pixels, parse_region_segment_info,
 };
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::DecodedRegion;
@@ -57,7 +56,7 @@ struct GenericRefinementRegionHeader {
     ///
     /// "This field is only present if GRTEMPLATE is 0."
     /// Contains 2 AT pixels (4 bytes): GRATX1, GRATY1, GRATX2, GRATY2
-    adaptive_template_pixels: Vec<AdaptiveTemplatePixel>,
+    adaptive_template_pixels: AdaptiveTemplatePixels,
 }
 
 /// Parse a generic refinement region segment header (7.4.7.1).
@@ -84,7 +83,7 @@ fn parse(reader: &mut Reader<'_>) -> Result<GenericRefinementRegionHeader> {
     let adaptive_template_pixels = if gr_template == RefinementTemplate::Template0 {
         parse_refinement_at_pixels(reader)?
     } else {
-        Vec::new()
+        AdaptiveTemplatePixels::Zero
     };
 
     Ok(GenericRefinementRegionHeader {
@@ -131,7 +130,7 @@ fn decode_refinement_bitmap(
         reference_dx,
         reference_dy,
         header.gr_template,
-        &header.adaptive_template_pixels,
+        header.adaptive_template_pixels.as_slice(),
         header.tpgron,
     )?;
 
