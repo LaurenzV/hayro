@@ -44,7 +44,7 @@ pub(crate) fn decode(reader: &mut Reader<'_>, had_unknown_length: bool) -> Resul
     if header.mmr {
         // "6.2.6 Decoding using MMR coding"
         let _ = decode_bitmap_mmr(&mut region, encoded_data)?;
-        
+
         Ok(region)
     } else {
         // "6.2.5 Decoding using a template and arithmetic coding"
