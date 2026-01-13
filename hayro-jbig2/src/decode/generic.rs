@@ -6,7 +6,7 @@ use alloc::vec::Vec;
 use super::{AdaptiveTemplatePixel, RegionSegmentInfo, Template, parse_region_segment_info};
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::DecodedRegion;
-use crate::error::{DecodeError, ParseError, RegionError, Result, TemplateError, bail};
+use crate::error::{ParseError, RegionError, Result, TemplateError, bail};
 use crate::reader::Reader;
 
 /// Generic region decoding procedure (6.2).
