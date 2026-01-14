@@ -11,13 +11,6 @@ use crate::gray_scale::{GrayScaleParams, decode_gray_scale_image};
 use crate::reader::Reader;
 
 /// Decode a halftone region segment (7.4.5.2, 6.6).
-///
-/// "A halftone region segment is decoded according to the following steps:
-/// 1) Interpret its header, as described in 7.4.5.1.
-/// 2) Decode (or retrieve the results of decoding) the referred-to pattern
-///    dictionary segment.
-/// 3) As described in E.3.7, reset all the arithmetic coding statistics to zero.
-/// 4) Invoke the halftone region decoding procedure described in 6.6."
 pub(crate) fn decode(
     reader: &mut Reader<'_>,
     pattern_dict: &PatternDictionary,
