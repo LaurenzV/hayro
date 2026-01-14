@@ -79,25 +79,23 @@ struct HalftoneRegionFlags {
 /// Halftone grid position and size (7.4.5.1.2).
 #[derive(Debug, Clone)]
 struct HalftoneGridPositionAndSize {
-    /// `HGW`
+    /// `HGW` - The width of a grayscale image.
     width: u32,
-    /// `HGH`
+    /// `HGH` - The height of a grayscale image.
     height: u32,
-    /// `HGX`
+    /// `HGX` - 256 times the horizontal offset of the grid origin.
     horizontal_offset: i32,
-    /// `HGY`
+    /// `HGY` - 256 times the vertical offset of the grid origin.
     vertical_offset: i32,
 }
 
 /// Halftone grid vector (7.4.5.1.3).
 #[derive(Debug, Clone)]
 struct HalftoneGridVector {
-    /// "`HRX`: This unsigned two-byte field contains 256 times the horizontal
-    /// coordinate of the halftone grid vector."
-    horizontal_coordinate: u16,
-    /// "`HRY`: This unsigned two-byte field contains 256 times the vertical
-    /// coordinate of the halftone grid vector."
-    vertical_coordinate: u16,
+    /// `HRX` - 256 times the horizontal coordinate of the halftone grid vector.
+    x_vector: u16,
+    /// `HRY` - 256 times the vertical coordinate of the halftone grid vector.
+    y_vector: u16,
 }
 
 /// Parsed halftone region segment header (7.4.5.1).
@@ -127,26 +125,24 @@ fn parse(reader: &mut Reader<'_>) -> Result<HalftoneRegionHeader> {
         initial_pixel_color,
     };
 
-    // 7.4.5.1.2: Halftone grid position and size
-    let hgw = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
-    let hgh = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
-    let hgx = reader.read_i32().ok_or(ParseError::UnexpectedEof)?;
-    let hgy = reader.read_i32().ok_or(ParseError::UnexpectedEof)?;
+    let grid_width = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
+    let grid_height = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
+    let grid_horizontal_offset = reader.read_i32().ok_or(ParseError::UnexpectedEof)?;
+    let grid_vertical_offset = reader.read_i32().ok_or(ParseError::UnexpectedEof)?;
 
     let grid_position_and_size = HalftoneGridPositionAndSize {
-        width: hgw,
-        height: hgh,
-        horizontal_offset: hgx,
-        vertical_offset: hgy,
+        width: grid_width,
+        height: grid_height,
+        horizontal_offset: grid_horizontal_offset,
+        vertical_offset: grid_vertical_offset,
     };
 
-    // 7.4.5.1.3: Halftone grid vector
-    let hrx = reader.read_u16().ok_or(ParseError::UnexpectedEof)?;
-    let hry = reader.read_u16().ok_or(ParseError::UnexpectedEof)?;
+    let grid_x_vector = reader.read_u16().ok_or(ParseError::UnexpectedEof)?;
+    let grid_y_vector = reader.read_u16().ok_or(ParseError::UnexpectedEof)?;
 
     let grid_vector = HalftoneGridVector {
-        horizontal_coordinate: hrx,
-        vertical_coordinate: hry,
+        x_vector: grid_x_vector,
+        y_vector: grid_y_vector,
     };
 
     Ok(HalftoneRegionHeader {
@@ -185,8 +181,8 @@ fn compute_hskip(
             // "i) Set:
             //    x = (HGX + m_g × HRY + n_g × HRX) >>_A 8
             //    y = (HGY + m_g × HRX − n_g × HRY) >>_A 8" (6.6.5.1)
-            let hrx = vector.horizontal_coordinate as i32;
-            let hry = vector.vertical_coordinate as i32;
+            let hrx = vector.x_vector as i32;
+            let hry = vector.y_vector as i32;
             let x = (grid.horizontal_offset + (m_g as i32) * hry + (n_g as i32) * hrx) >> 8;
             let y = (grid.vertical_offset + (m_g as i32) * hrx - (n_g as i32) * hry) >> 8;
 
@@ -213,8 +209,8 @@ fn render_patterns(
 ) -> Result<()> {
     let grid = &header.grid_position_and_size;
     let vector = &header.grid_vector;
-    let hrx = vector.horizontal_coordinate as i32;
-    let hry = vector.vertical_coordinate as i32;
+    let hrx = vector.x_vector as i32;
+    let hry = vector.y_vector as i32;
 
     // "1) For each value of m_g between 0 and HGH − 1, beginning from 0,
     // perform the following steps:" (6.6.5.2)
