@@ -31,7 +31,7 @@ pub(crate) enum CombinationOperator {
 
 impl CombinationOperator {
     pub(crate) fn from_value(value: u8) -> Result<Self> {
-        match value {
+        match value & 0x07 {
             0 => Ok(Self::Or),
             1 => Ok(Self::And),
             2 => Ok(Self::Xor),
@@ -143,7 +143,7 @@ pub(crate) fn parse_region_segment_info(reader: &mut Reader<'_>) -> Result<Regio
     let flags = reader.read_byte().ok_or(ParseError::UnexpectedEof)?;
 
     // "Bits 0-2: External combination operator."
-    let combination_operator = CombinationOperator::from_value(flags & 0x07)?;
+    let combination_operator = CombinationOperator::from_value(flags)?;
 
     // "Bit 3: Colour extension flag (COLEXTFLAG)."
     let colour_extension = flags & 0x08 != 0;

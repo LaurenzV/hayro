@@ -26,12 +26,12 @@ pub(crate) fn decode(
 
     let hbw = header.region_info.width;
     let hbh = header.region_info.height;
-    let hgw = header.grid_position_and_size.hgw;
-    let hgh = header.grid_position_and_size.hgh;
-    let hgx = header.grid_position_and_size.hgx;
-    let hgy = header.grid_position_and_size.hgy;
-    let hrx = header.grid_vector.hrx as i32;
-    let hry = header.grid_vector.hry as i32;
+    let hgw = header.grid_position_and_size.width;
+    let hgh = header.grid_position_and_size.height;
+    let hgx = header.grid_position_and_size.horizontal_offset;
+    let hgy = header.grid_position_and_size.vertical_offset;
+    let hrx = header.grid_vector.horizontal_coordinate as i32;
+    let hry = header.grid_vector.vertical_coordinate as i32;
     let hpw = pattern_dict.pattern_width;
     let hph = pattern_dict.pattern_height;
     let hnumpats = pattern_dict.patterns.len() as u32;
@@ -41,14 +41,14 @@ pub(crate) fn decode(
     let mut htreg = DecodedRegion {
         width: hbw,
         height: hbh,
-        data: vec![header.flags.hdefpixel; (hbw * hbh) as usize],
+        data: vec![header.flags.initial_pixel_color; (hbw * hbh) as usize],
         x_location: header.region_info.x_location,
         y_location: header.region_info.y_location,
         combination_operator: header.region_info.combination_operator,
     };
 
     // "2) If HENABLESKIP equals 1, compute a bitmap HSKIP as shown in 6.6.5.1."
-    let hskip = if header.flags.henableskip {
+    let hskip = if header.flags.enable_skip {
         Some(compute_hskip(
             hgw, hgh, hgx, hgy, hrx, hry, hpw, hph, hbw, hbh,
         ))
@@ -69,11 +69,11 @@ pub(crate) fn decode(
     //
     // "The parameters to this decoding procedure are shown in Table 23." (6.6.5)
     let gs_params = GrayScaleParams {
-        use_mmr: header.flags.hmmr,
+        use_mmr: header.flags.mmr,
         bits_per_pixel: hbpp,
         width: hgw,
         height: hgh,
-        template: header.flags.htemplate,
+        template: header.flags.template,
         skip_mask: hskip.as_deref(),
     };
     let gi = decode_gray_scale_image(encoded_data, &gs_params)?;
@@ -90,132 +90,74 @@ pub(crate) fn decode(
         hrx,
         hry,
         pattern_dict,
-        header.flags.hcombop,
+        header.flags.combination_operator,
     )?;
 
     Ok(htreg)
 }
 
 /// Parsed halftone region segment flags (7.4.5.1.1).
-///
-/// "This one-byte field is formatted as shown in Figure 44."
 #[derive(Debug, Clone)]
 struct HalftoneRegionFlags {
-    /// "Bit 0: HMMR. If this bit is 1, then the segment uses the MMR encoding
-    /// variant. If this bit is 0, then the segment uses the arithmetic encoding
-    /// variant."
-    hmmr: bool,
-    /// "Bits 1-2: HTEMPLATE. This field controls the template used to decode
-    /// halftone gray-scale value bitplanes if HMMR is 0. If HMMR is 1, this
-    /// field must contain the value 0."
-    htemplate: Template,
-    /// "Bit 3: HENABLESKIP. This field controls whether gray-scale values that
-    /// do not contribute to the region contents are skipped during decoding.
-    /// If HMMR is 1, this field must contain the value 0."
-    henableskip: bool,
-    /// "Bits 4-6: HCOMBOP. This field has five possible values, representing
-    /// one of five possible combination operators."
-    hcombop: CombinationOperator,
-    /// "Bit 7: HDEFPIXEL. This bit contains the initial value for every pixel
-    /// in the halftone region, before any patterns are drawn."
-    hdefpixel: bool,
+    mmr: bool,
+    template: Template,
+    /// `HENABLESKIP`
+    enable_skip: bool,
+    /// `HCOMBOP`
+    combination_operator: CombinationOperator,
+    /// `HDEFPIXEL`
+    initial_pixel_color: bool,
 }
 
 /// Halftone grid position and size (7.4.5.1.2).
-///
-/// "This field describes the location and size of the grid of gray-scale values."
 #[derive(Debug, Clone)]
 struct HalftoneGridPositionAndSize {
-    /// "HGW: This four-byte field contains the width of the array of gray-scale
-    /// values." (7.4.5.1.2.1)
-    hgw: u32,
-    /// "HGH: This four-byte field contains the height of the array of gray-scale
-    /// values." (7.4.5.1.2.2)
-    hgh: u32,
-    /// "HGX: This signed four-byte field contains 256 times the horizontal offset
-    /// of the origin of the halftone grid." (7.4.5.1.2.3)
-    hgx: i32,
-    /// "HGY: This signed four-byte field contains 256 times the vertical offset
-    /// of the origin of the halftone grid." (7.4.5.1.2.4)
-    hgy: i32,
+    /// `HGW`
+    width: u32,
+    /// `HGH`
+    height: u32,
+    /// `HGX`
+    horizontal_offset: i32,
+    /// `HGY`
+    vertical_offset: i32,
 }
 
 /// Halftone grid vector (7.4.5.1.3).
-///
-/// "This field describes the vector used to draw the grid of gray-scale values."
 #[derive(Debug, Clone)]
 struct HalftoneGridVector {
-    /// "HRX: This unsigned two-byte field contains 256 times the horizontal
-    /// coordinate of the halftone grid vector." (7.4.5.1.3.1)
-    hrx: u16,
-    /// "HRY: This unsigned two-byte field contains 256 times the vertical
-    /// coordinate of the halftone grid vector." (7.4.5.1.3.2)
-    hry: u16,
+    /// "`HRX`: This unsigned two-byte field contains 256 times the horizontal
+    /// coordinate of the halftone grid vector."
+    horizontal_coordinate: u16,
+    /// "`HRY`: This unsigned two-byte field contains 256 times the vertical
+    /// coordinate of the halftone grid vector."
+    vertical_coordinate: u16,
 }
 
 /// Parsed halftone region segment header (7.4.5.1).
-///
-/// "The data part of a halftone region segment begins with a halftone region
-/// segment data header. This header contains the fields shown in Figure 43."
 #[derive(Debug, Clone)]
 struct HalftoneRegionHeader {
-    /// Region segment information field (7.4.1).
     region_info: RegionSegmentInfo,
-    /// Halftone region segment flags (7.4.5.1.1).
     flags: HalftoneRegionFlags,
-    /// Halftone grid position and size (7.4.5.1.2).
     grid_position_and_size: HalftoneGridPositionAndSize,
-    /// Halftone grid vector (7.4.5.1.3).
     grid_vector: HalftoneGridVector,
 }
 
 /// Parse a halftone region segment header (7.4.5.1).
 fn parse(reader: &mut Reader<'_>) -> Result<HalftoneRegionHeader> {
-    // Region segment information field (7.4.1)
     let region_info = parse_region_segment_info(reader)?;
-
-    // 7.4.5.1.1: Halftone region segment flags
     let flags_byte = reader.read_byte().ok_or(ParseError::UnexpectedEof)?;
-
-    // "Bit 0: HMMR"
-    let hmmr = flags_byte & 0x01 != 0;
-
-    // "Bits 1-2: HTEMPLATE"
-    let htemplate = Template::from_byte(flags_byte >> 1);
-
-    // "Bit 3: HENABLESKIP"
-    let henableskip = flags_byte & 0x08 != 0;
-
-    // "Bits 4-6: HCOMBOP"
-    let hcombop_value = (flags_byte >> 4) & 0x07;
-    let hcombop = match hcombop_value {
-        0 => CombinationOperator::Or,
-        1 => CombinationOperator::And,
-        2 => CombinationOperator::Xor,
-        3 => CombinationOperator::Xnor,
-        4 => CombinationOperator::Replace,
-        _ => bail!(RegionError::InvalidCombinationOperator),
-    };
-
-    // "Bit 7: HDEFPIXEL"
-    let hdefpixel = flags_byte & 0x80 != 0;
-
-    // Validate constraints when HMMR is 1
-    if hmmr {
-        if htemplate != Template::Template0 {
-            bail!(TemplateError::Invalid);
-        }
-        if henableskip {
-            bail!(TemplateError::Invalid);
-        }
-    }
+    let mmr = flags_byte & 0x01 != 0;
+    let template = Template::from_byte(flags_byte >> 1);
+    let enable_skip = flags_byte & 0x08 != 0;
+    let combination_operator = CombinationOperator::from_value(flags_byte >> 4)?;
+    let initial_pixel_color = flags_byte & 0x80 != 0;
 
     let flags = HalftoneRegionFlags {
-        hmmr,
-        htemplate,
-        henableskip,
-        hcombop,
-        hdefpixel,
+        mmr,
+        template,
+        enable_skip,
+        combination_operator,
+        initial_pixel_color,
     };
 
     // 7.4.5.1.2: Halftone grid position and size
@@ -224,13 +166,21 @@ fn parse(reader: &mut Reader<'_>) -> Result<HalftoneRegionHeader> {
     let hgx = reader.read_i32().ok_or(ParseError::UnexpectedEof)?;
     let hgy = reader.read_i32().ok_or(ParseError::UnexpectedEof)?;
 
-    let grid_position_and_size = HalftoneGridPositionAndSize { hgw, hgh, hgx, hgy };
+    let grid_position_and_size = HalftoneGridPositionAndSize {
+        width: hgw,
+        height: hgh,
+        horizontal_offset: hgx,
+        vertical_offset: hgy,
+    };
 
     // 7.4.5.1.3: Halftone grid vector
     let hrx = reader.read_u16().ok_or(ParseError::UnexpectedEof)?;
     let hry = reader.read_u16().ok_or(ParseError::UnexpectedEof)?;
 
-    let grid_vector = HalftoneGridVector { hrx, hry };
+    let grid_vector = HalftoneGridVector {
+        horizontal_coordinate: hrx,
+        vertical_coordinate: hry,
+    };
 
     Ok(HalftoneRegionHeader {
         region_info,
