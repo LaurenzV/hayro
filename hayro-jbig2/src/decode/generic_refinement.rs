@@ -20,9 +20,7 @@ pub(crate) fn decode(reader: &mut Reader<'_>, reference: &DecodedRegion) -> Resu
     // Validate that the region fits within the reference bitmap.
     // When referring to another segment, dimensions must match exactly (7.4.7.5).
     // When using the page bitmap as reference, the region must fit within the page.
-    if header.region_info.width > reference.width
-        || header.region_info.height > reference.height
-    {
+    if header.region_info.width > reference.width || header.region_info.height > reference.height {
         bail!(RegionError::InvalidDimension);
     }
 
@@ -151,8 +149,26 @@ pub(crate) fn decode_bitmap(
                 //    - a 3 × 3 pixel array in the reference bitmap (Figure 16),
                 //      centred at the location corresponding to the current pixel,
                 //      contains pixels all of the same value." (6.3.5.6)
-                let tpgrpix =
-                    tpgron && is_tpgr(reference, x as i32 - reference_dx, y as i32 - reference_dy);
+                let tpgrpix = tpgron && {
+                    let ref_x = x as i32 - reference_dx;
+                    let ref_y = y as i32 - reference_dy;
+
+                    let mut all_same = true;
+
+                    let center = get_pixel(reference, ref_x, ref_y);
+
+                    // Check all 9 pixels in the 3×3 region.
+                    for dy in -1..=1 {
+                        for dx in -1..=1 {
+                            if get_pixel(reference, ref_x + dx, ref_y + dy) != center {
+                                all_same = false;
+                                break;
+                            }
+                        }
+                    }
+
+                    all_same
+                };
 
                 if tpgrpix {
                     // "ii) If TPGRPIX is 1 then implicitly decode the current pixel
@@ -188,26 +204,6 @@ pub(crate) fn decode_bitmap(
     Ok(())
 }
 
-/// Check the TPGR condition (Figure 16).
-///
-/// Returns true if all 9 pixels in the 3×3 region centered at (`ref_x`, `ref_y`)
-/// in the reference bitmap have the same value.
-fn is_tpgr(reference: &DecodedRegion, ref_x: i32, ref_y: i32) -> bool {
-    // Get the center pixel value.
-    let center = get_pixel(reference, ref_x, ref_y);
-
-    // Check all 9 pixels in the 3×3 region (Figure 16).
-    for dy in -1..=1 {
-        for dx in -1..=1 {
-            if get_pixel(reference, ref_x + dx, ref_y + dy) != center {
-                return false;
-            }
-        }
-    }
-
-    true
-}
-
 /// Gather context bits for refinement decoding (6.3.5.3).
 fn gather_refinement_context(
     region: &DecodedRegion,
@@ -229,20 +225,20 @@ fn gather_refinement_context(
     match gr_template {
         RefinementTemplate::Template0 => {
             // Figure 12: 13-pixel template with 2 AT pixels.
-            // Left group (bitmap being decoded): 4 pixels (including RA1)
-            // Right group (reference bitmap): 9 pixels (including RA2)
-            let at1 = adaptive_template_pixels[0]; // RA1 for decoded bitmap
-            let at2 = adaptive_template_pixels[1]; // RA2 for reference bitmap
+            let at1 = adaptive_template_pixels[0];
+            let at2 = adaptive_template_pixels[1];
 
             let mut context = 0_u32;
 
+            // 4 pixels from the bitmap we are currently decoding.
             context = (context << 1) | get_pixel(region, x + at1.x as i32, y + at1.y as i32);
             context = (context << 1) | get_pixel(region, x, y - 1);
             context = (context << 1) | get_pixel(region, x + 1, y - 1);
             context = (context << 1) | get_pixel(region, x - 1, y);
 
-            context = (context << 1)
-                | get_pixel(reference, ref_x + at2.x as i32, ref_y + at2.y as i32);
+            // 9 pixels from the reference bitmap.
+            context =
+                (context << 1) | get_pixel(reference, ref_x + at2.x as i32, ref_y + at2.y as i32);
             context = (context << 1) | get_pixel(reference, ref_x, ref_y - 1);
             context = (context << 1) | get_pixel(reference, ref_x + 1, ref_y - 1);
             context = (context << 1) | get_pixel(reference, ref_x - 1, ref_y);
@@ -255,13 +251,16 @@ fn gather_refinement_context(
             context
         }
         RefinementTemplate::Template1 => {
+            // Figure 13: 10-pixel template.
             let mut context = 0_u32;
 
+            // 4 pixels from the bitmap we are currently decoding.
             context = (context << 1) | get_pixel(region, x - 1, y - 1);
             context = (context << 1) | get_pixel(region, x, y - 1);
             context = (context << 1) | get_pixel(region, x + 1, y - 1);
             context = (context << 1) | get_pixel(region, x - 1, y);
 
+            // 6 pixels from the reference bitmap.
             context = (context << 1) | get_pixel(reference, ref_x, ref_y - 1);
             context = (context << 1) | get_pixel(reference, ref_x - 1, ref_y);
             context = (context << 1) | get_pixel(reference, ref_x, ref_y);

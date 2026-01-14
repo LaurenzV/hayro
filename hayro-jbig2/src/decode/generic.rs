@@ -264,12 +264,134 @@ pub(crate) fn gather_context_with_at(
     adaptive_template_pixels: &[AdaptiveTemplatePixel],
 ) -> u32 {
     match gb_template {
+        // Gather context for Template 0 (Figure 3a, 16 pixels).
         Template::Template0 => {
-            gather_context_template0_no_ext(region, x, y, adaptive_template_pixels)
+            let x = x as i32;
+            let y = y as i32;
+
+            let at1 = (
+                adaptive_template_pixels[0].x as i32,
+                adaptive_template_pixels[0].y as i32,
+            );
+            let at2 = (
+                adaptive_template_pixels[1].x as i32,
+                adaptive_template_pixels[1].y as i32,
+            );
+            let at3 = (
+                adaptive_template_pixels[2].x as i32,
+                adaptive_template_pixels[2].y as i32,
+            );
+            let at4 = (
+                adaptive_template_pixels[3].x as i32,
+                adaptive_template_pixels[3].y as i32,
+            );
+
+            let mut context = 0_u32;
+
+            context = (context << 1) | get_pixel(region, x + at4.0, y + at4.1);
+            context = (context << 1) | get_pixel(region, x - 1, y - 2);
+            context = (context << 1) | get_pixel(region, x, y - 2);
+            context = (context << 1) | get_pixel(region, x + 1, y - 2);
+            context = (context << 1) | get_pixel(region, x + at3.0, y + at3.1);
+
+            context = (context << 1) | get_pixel(region, x + at2.0, y + at2.1);
+            context = (context << 1) | get_pixel(region, x - 2, y - 1);
+            context = (context << 1) | get_pixel(region, x - 1, y - 1);
+            context = (context << 1) | get_pixel(region, x, y - 1);
+            context = (context << 1) | get_pixel(region, x + 1, y - 1);
+            context = (context << 1) | get_pixel(region, x + 2, y - 1);
+            context = (context << 1) | get_pixel(region, x + at1.0, y + at1.1);
+
+            context = (context << 1) | get_pixel(region, x - 4, y);
+            context = (context << 1) | get_pixel(region, x - 3, y);
+            context = (context << 1) | get_pixel(region, x - 2, y);
+            context = (context << 1) | get_pixel(region, x - 1, y);
+
+            context
         }
-        Template::Template1 => gather_context_template1(region, x, y, adaptive_template_pixels),
-        Template::Template2 => gather_context_template2(region, x, y, adaptive_template_pixels),
-        Template::Template3 => gather_context_template3(region, x, y, adaptive_template_pixels),
+        // Gather context for Template 1 (Figure 4).
+        Template::Template1 => {
+            let x = x as i32;
+            let y = y as i32;
+
+            let at1 = (
+                adaptive_template_pixels[0].x as i32,
+                adaptive_template_pixels[0].y as i32,
+            );
+
+            let mut context = 0_u32;
+
+            context = (context << 1) | get_pixel(region, x - 1, y - 2);
+            context = (context << 1) | get_pixel(region, x, y - 2);
+            context = (context << 1) | get_pixel(region, x + 1, y - 2);
+            context = (context << 1) | get_pixel(region, x + 2, y - 2);
+
+            context = (context << 1) | get_pixel(region, x - 2, y - 1);
+            context = (context << 1) | get_pixel(region, x - 1, y - 1);
+            context = (context << 1) | get_pixel(region, x, y - 1);
+            context = (context << 1) | get_pixel(region, x + 1, y - 1);
+            context = (context << 1) | get_pixel(region, x + 2, y - 1);
+            context = (context << 1) | get_pixel(region, x + at1.0, y + at1.1);
+
+            context = (context << 1) | get_pixel(region, x - 3, y);
+            context = (context << 1) | get_pixel(region, x - 2, y);
+            context = (context << 1) | get_pixel(region, x - 1, y);
+
+            context
+        }
+        // Gather context for Template 2 (Figure 5).
+        Template::Template2 => {
+            let x = x as i32;
+            let y = y as i32;
+
+            let at1 = (
+                adaptive_template_pixels[0].x as i32,
+                adaptive_template_pixels[0].y as i32,
+            );
+
+            let mut context = 0_u32;
+
+            context = (context << 1) | get_pixel(region, x - 1, y - 2);
+            context = (context << 1) | get_pixel(region, x, y - 2);
+            context = (context << 1) | get_pixel(region, x + 1, y - 2);
+
+            context = (context << 1) | get_pixel(region, x - 2, y - 1);
+            context = (context << 1) | get_pixel(region, x - 1, y - 1);
+            context = (context << 1) | get_pixel(region, x, y - 1);
+            context = (context << 1) | get_pixel(region, x + 1, y - 1);
+            context = (context << 1) | get_pixel(region, x + at1.0, y + at1.1);
+
+            context = (context << 1) | get_pixel(region, x - 2, y);
+            context = (context << 1) | get_pixel(region, x - 1, y);
+
+            context
+        }
+        // Gather context for Template 3 (Figure 6).
+        Template::Template3 => {
+            let x = x as i32;
+            let y = y as i32;
+
+            let at1 = (
+                adaptive_template_pixels[0].x as i32,
+                adaptive_template_pixels[0].y as i32,
+            );
+
+            let mut context = 0_u32;
+
+            context = (context << 1) | get_pixel(region, x - 3, y - 1);
+            context = (context << 1) | get_pixel(region, x - 2, y - 1);
+            context = (context << 1) | get_pixel(region, x - 1, y - 1);
+            context = (context << 1) | get_pixel(region, x, y - 1);
+            context = (context << 1) | get_pixel(region, x + 1, y - 1);
+            context = (context << 1) | get_pixel(region, x + at1.0, y + at1.1);
+
+            context = (context << 1) | get_pixel(region, x - 4, y);
+            context = (context << 1) | get_pixel(region, x - 3, y);
+            context = (context << 1) | get_pixel(region, x - 2, y);
+            context = (context << 1) | get_pixel(region, x - 1, y);
+
+            context
+        }
     }
 }
 
@@ -290,135 +412,4 @@ pub(crate) fn get_pixel(region: &DecodedRegion, x: i32, y: i32) -> u32 {
     } else {
         0
     }
-}
-
-/// Gather context for Template 0 (Figure 3a, 16 pixels).
-fn gather_context_template0_no_ext(
-    region: &DecodedRegion,
-    x: u32,
-    y: u32,
-    at: &[AdaptiveTemplatePixel],
-) -> u32 {
-    let x = x as i32;
-    let y = y as i32;
-
-    let at1 = (at[0].x as i32, at[0].y as i32);
-    let at2 = (at[1].x as i32, at[1].y as i32);
-    let at3 = (at[2].x as i32, at[2].y as i32);
-    let at4 = (at[3].x as i32, at[3].y as i32);
-
-    let mut context = 0_u32;
-
-    context = (context << 1) | get_pixel(region, x + at4.0, y + at4.1);
-    context = (context << 1) | get_pixel(region, x - 1, y - 2);
-    context = (context << 1) | get_pixel(region, x, y - 2);
-    context = (context << 1) | get_pixel(region, x + 1, y - 2);
-    context = (context << 1) | get_pixel(region, x + at3.0, y + at3.1);
-
-    context = (context << 1) | get_pixel(region, x + at2.0, y + at2.1);
-    context = (context << 1) | get_pixel(region, x - 2, y - 1);
-    context = (context << 1) | get_pixel(region, x - 1, y - 1);
-    context = (context << 1) | get_pixel(region, x, y - 1);
-    context = (context << 1) | get_pixel(region, x + 1, y - 1);
-    context = (context << 1) | get_pixel(region, x + 2, y - 1);
-    context = (context << 1) | get_pixel(region, x + at1.0, y + at1.1);
-
-    context = (context << 1) | get_pixel(region, x - 4, y);
-    context = (context << 1) | get_pixel(region, x - 3, y);
-    context = (context << 1) | get_pixel(region, x - 2, y);
-    context = (context << 1) | get_pixel(region, x - 1, y);
-
-    context
-}
-
-/// Gather context for Template 1 (Figure 4).
-fn gather_context_template1(
-    region: &DecodedRegion,
-    x: u32,
-    y: u32,
-    at: &[AdaptiveTemplatePixel],
-) -> u32 {
-    let x = x as i32;
-    let y = y as i32;
-
-    let at1 = (at[0].x as i32, at[0].y as i32);
-
-    let mut context = 0_u32;
-
-    context = (context << 1) | get_pixel(region, x - 1, y - 2);
-    context = (context << 1) | get_pixel(region, x, y - 2);
-    context = (context << 1) | get_pixel(region, x + 1, y - 2);
-    context = (context << 1) | get_pixel(region, x + 2, y - 2);
-
-    context = (context << 1) | get_pixel(region, x - 2, y - 1);
-    context = (context << 1) | get_pixel(region, x - 1, y - 1);
-    context = (context << 1) | get_pixel(region, x, y - 1);
-    context = (context << 1) | get_pixel(region, x + 1, y - 1);
-    context = (context << 1) | get_pixel(region, x + 2, y - 1);
-    context = (context << 1) | get_pixel(region, x + at1.0, y + at1.1);
-
-    context = (context << 1) | get_pixel(region, x - 3, y);
-    context = (context << 1) | get_pixel(region, x - 2, y);
-    context = (context << 1) | get_pixel(region, x - 1, y);
-
-    context
-}
-
-/// Gather context for Template 2 (Figure 5).
-fn gather_context_template2(
-    region: &DecodedRegion,
-    x: u32,
-    y: u32,
-    at: &[AdaptiveTemplatePixel],
-) -> u32 {
-    let x = x as i32;
-    let y = y as i32;
-
-    let at1 = (at[0].x as i32, at[0].y as i32);
-
-    let mut context = 0_u32;
-
-    context = (context << 1) | get_pixel(region, x - 1, y - 2);
-    context = (context << 1) | get_pixel(region, x, y - 2);
-    context = (context << 1) | get_pixel(region, x + 1, y - 2);
-
-    context = (context << 1) | get_pixel(region, x - 2, y - 1);
-    context = (context << 1) | get_pixel(region, x - 1, y - 1);
-    context = (context << 1) | get_pixel(region, x, y - 1);
-    context = (context << 1) | get_pixel(region, x + 1, y - 1);
-    context = (context << 1) | get_pixel(region, x + at1.0, y + at1.1);
-
-    context = (context << 1) | get_pixel(region, x - 2, y);
-    context = (context << 1) | get_pixel(region, x - 1, y);
-
-    context
-}
-
-/// Gather context for Template 3 (Figure 6).
-fn gather_context_template3(
-    region: &DecodedRegion,
-    x: u32,
-    y: u32,
-    at: &[AdaptiveTemplatePixel],
-) -> u32 {
-    let x = x as i32;
-    let y = y as i32;
-
-    let at1 = (at[0].x as i32, at[0].y as i32);
-
-    let mut context = 0_u32;
-
-    context = (context << 1) | get_pixel(region, x - 3, y - 1);
-    context = (context << 1) | get_pixel(region, x - 2, y - 1);
-    context = (context << 1) | get_pixel(region, x - 1, y - 1);
-    context = (context << 1) | get_pixel(region, x, y - 1);
-    context = (context << 1) | get_pixel(region, x + 1, y - 1);
-    context = (context << 1) | get_pixel(region, x + at1.0, y + at1.1);
-
-    context = (context << 1) | get_pixel(region, x - 4, y);
-    context = (context << 1) | get_pixel(region, x - 3, y);
-    context = (context << 1) | get_pixel(region, x - 2, y);
-    context = (context << 1) | get_pixel(region, x - 1, y);
-
-    context
 }
