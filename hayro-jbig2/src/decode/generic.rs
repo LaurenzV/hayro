@@ -278,7 +278,7 @@ pub(crate) fn gather_context_with_at(
 
 /// Get a pixel value, returning 0 for out-of-bounds coordinates.
 #[inline]
-fn get_pixel(region: &DecodedRegion, x: i32, y: i32) -> u32 {
+pub(crate) fn get_pixel(region: &DecodedRegion, x: i32, y: i32) -> u32 {
     // "Near the edges of the bitmap, these neighbour references might not lie in
     // the actual bitmap. The rule to satisfy out-of-bounds references shall be:
     // All pixels lying outside the bounds of the actual bitmap have the value 0."

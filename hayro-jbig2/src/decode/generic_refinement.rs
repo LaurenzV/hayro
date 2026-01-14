@@ -9,6 +9,7 @@ use super::{
 };
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::DecodedRegion;
+use crate::decode::generic::get_pixel;
 use crate::error::{ParseError, RegionError, Result, bail};
 use crate::reader::Reader;
 
@@ -91,6 +92,7 @@ fn parse(reader: &mut Reader<'_>) -> Result<GenericRefinementRegionHeader> {
 
 /// Decode a refinement bitmap (6.3.5.6).
 pub(crate) fn decode_bitmap(
+    // TODO: Maybe reduce number of arguments?
     decoder: &mut ArithmeticDecoder<'_>,
     contexts: &mut [Context],
     region: &mut DecodedRegion,
@@ -113,7 +115,6 @@ pub(crate) fn decode_bitmap(
         // coder" (6.3.5.6)
         if tpgron {
             // Context for SLTP depends on template (Figures 14, 15).
-            // The SLTP context has only the center reference pixel (0,0) set.
             let sltp_context: u32 = match gr_template {
                 RefinementTemplate::Template0 => 0b0000000010000,
                 RefinementTemplate::Template1 => 0b0000001000,
@@ -163,7 +164,7 @@ pub(crate) fn decode_bitmap(
                     let ref_x = x as i32 - reference_dx;
                     let ref_y = y as i32 - reference_dy;
                     let tpgrval = get_pixel(reference, ref_x, ref_y);
-                    region.set_pixel(x, y, tpgrval);
+                    region.set_pixel(x, y, tpgrval != 0);
                 } else {
                     // "iii) Otherwise, explicitly decode the current pixel using the
                     // methodology of steps 3 c) i) through 3 c) iii) above." (6.3.5.6)
@@ -207,25 +208,7 @@ fn is_tpgr(reference: &DecodedRegion, ref_x: i32, ref_y: i32) -> bool {
     true
 }
 
-/// Get a pixel from a region, returning false for out-of-bounds.
-///
-/// "Near the edges of the bitmap, these neighbour references might not lie in
-/// the actual bitmap. The rule to satisfy out-of-bounds references shall be:
-/// All pixels lying outside the bounds of the actual bitmap or the reference
-/// bitmap have the value 0." (6.3.5.2)
-#[inline]
-fn get_pixel(region: &DecodedRegion, x: i32, y: i32) -> bool {
-    if x < 0 || y < 0 || x >= region.width as i32 || y >= region.height as i32 {
-        false
-    } else {
-        region.get_pixel(x as u32, y as u32)
-    }
-}
-
 /// Gather context bits for refinement decoding (6.3.5.3).
-///
-/// "The values of the pixels in the template shall be combined to form a
-/// context." (6.3.5.3)
 fn gather_refinement_context(
     region: &DecodedRegion,
     reference: &DecodedRegion,
@@ -253,46 +236,40 @@ fn gather_refinement_context(
 
             let mut context = 0_u32;
 
-            context = (context << 1) | get_pixel_u32(region, x + at1.x as i32, y + at1.y as i32);
-            context = (context << 1) | get_pixel_u32(region, x, y - 1);
-            context = (context << 1) | get_pixel_u32(region, x + 1, y - 1);
-            context = (context << 1) | get_pixel_u32(region, x - 1, y);
+            context = (context << 1) | get_pixel(region, x + at1.x as i32, y + at1.y as i32);
+            context = (context << 1) | get_pixel(region, x, y - 1);
+            context = (context << 1) | get_pixel(region, x + 1, y - 1);
+            context = (context << 1) | get_pixel(region, x - 1, y);
 
             context = (context << 1)
-                | get_pixel_u32(reference, ref_x + at2.x as i32, ref_y + at2.y as i32);
-            context = (context << 1) | get_pixel_u32(reference, ref_x, ref_y - 1);
-            context = (context << 1) | get_pixel_u32(reference, ref_x + 1, ref_y - 1);
-            context = (context << 1) | get_pixel_u32(reference, ref_x - 1, ref_y);
-            context = (context << 1) | get_pixel_u32(reference, ref_x, ref_y);
-            context = (context << 1) | get_pixel_u32(reference, ref_x + 1, ref_y);
-            context = (context << 1) | get_pixel_u32(reference, ref_x - 1, ref_y + 1);
-            context = (context << 1) | get_pixel_u32(reference, ref_x, ref_y + 1);
-            context = (context << 1) | get_pixel_u32(reference, ref_x + 1, ref_y + 1);
+                | get_pixel(reference, ref_x + at2.x as i32, ref_y + at2.y as i32);
+            context = (context << 1) | get_pixel(reference, ref_x, ref_y - 1);
+            context = (context << 1) | get_pixel(reference, ref_x + 1, ref_y - 1);
+            context = (context << 1) | get_pixel(reference, ref_x - 1, ref_y);
+            context = (context << 1) | get_pixel(reference, ref_x, ref_y);
+            context = (context << 1) | get_pixel(reference, ref_x + 1, ref_y);
+            context = (context << 1) | get_pixel(reference, ref_x - 1, ref_y + 1);
+            context = (context << 1) | get_pixel(reference, ref_x, ref_y + 1);
+            context = (context << 1) | get_pixel(reference, ref_x + 1, ref_y + 1);
 
             context
         }
         RefinementTemplate::Template1 => {
             let mut context = 0_u32;
 
-            context = (context << 1) | get_pixel_u32(region, x - 1, y - 1);
-            context = (context << 1) | get_pixel_u32(region, x, y - 1);
-            context = (context << 1) | get_pixel_u32(region, x + 1, y - 1);
-            context = (context << 1) | get_pixel_u32(region, x - 1, y);
+            context = (context << 1) | get_pixel(region, x - 1, y - 1);
+            context = (context << 1) | get_pixel(region, x, y - 1);
+            context = (context << 1) | get_pixel(region, x + 1, y - 1);
+            context = (context << 1) | get_pixel(region, x - 1, y);
 
-            context = (context << 1) | get_pixel_u32(reference, ref_x, ref_y - 1);
-            context = (context << 1) | get_pixel_u32(reference, ref_x - 1, ref_y);
-            context = (context << 1) | get_pixel_u32(reference, ref_x, ref_y);
-            context = (context << 1) | get_pixel_u32(reference, ref_x + 1, ref_y);
-            context = (context << 1) | get_pixel_u32(reference, ref_x, ref_y + 1);
-            context = (context << 1) | get_pixel_u32(reference, ref_x + 1, ref_y + 1);
+            context = (context << 1) | get_pixel(reference, ref_x, ref_y - 1);
+            context = (context << 1) | get_pixel(reference, ref_x - 1, ref_y);
+            context = (context << 1) | get_pixel(reference, ref_x, ref_y);
+            context = (context << 1) | get_pixel(reference, ref_x + 1, ref_y);
+            context = (context << 1) | get_pixel(reference, ref_x, ref_y + 1);
+            context = (context << 1) | get_pixel(reference, ref_x + 1, ref_y + 1);
 
             context
         }
     }
-}
-
-/// Get a pixel as u32, returning 0 for out-of-bounds.
-#[inline]
-fn get_pixel_u32(region: &DecodedRegion, x: i32, y: i32) -> u32 {
-    u32::from(get_pixel(region, x, y))
 }
