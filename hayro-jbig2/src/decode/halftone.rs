@@ -37,15 +37,14 @@ pub(crate) fn decode(
     };
 
     // "2) If HENABLESKIP equals 1, compute a bitmap HSKIP as shown in 6.6.5.1."
-    let hskip = if header.flags.enable_skip {
+    let skip_bitmap = if header.flags.enable_skip {
         Some(compute_hskip(&header, pattern_dict, &htreg))
     } else {
         None
     };
 
     // "3) Set HBPP to ⌈log₂(HNUMPATS)⌉." (6.6.5)
-    let hnumpats = pattern_dict.patterns.len() as u32;
-    let hbpp = hnumpats
+    let bits_per_pixel = (pattern_dict.patterns.len() as u32)
         .saturating_sub(1)
         .checked_ilog2()
         .map_or(1, |n| n + 1);
@@ -54,15 +53,13 @@ pub(crate) fn decode(
 
     // "4) Decode an image GI of size HGW by HGH with HBPP bits per pixel using
     // the gray-scale image decoding procedure as described in Annex C." (6.6.5)
-    //
-    // "The parameters to this decoding procedure are shown in Table 23." (6.6.5)
     let gs_params = GrayScaleParams {
         use_mmr: header.flags.mmr,
-        bits_per_pixel: hbpp,
+        bits_per_pixel,
         width: header.grid_position_and_size.width,
         height: header.grid_position_and_size.height,
         template: header.flags.template,
-        skip_mask: hskip.as_deref(),
+        skip_mask: skip_bitmap.as_deref(),
     };
     let gi = decode_gray_scale_image(encoded_data, &gs_params)?;
 
