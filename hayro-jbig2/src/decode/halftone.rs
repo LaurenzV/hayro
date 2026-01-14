@@ -6,7 +6,7 @@ use alloc::vec::Vec;
 use super::pattern::PatternDictionary;
 use super::{CombinationOperator, RegionSegmentInfo, Template, parse_region_segment_info};
 use crate::bitmap::DecodedRegion;
-use crate::error::{ParseError, RegionError, Result, TemplateError, bail};
+use crate::error::{ParseError, RegionError, Result};
 use crate::gray_scale::{GrayScaleParams, decode_gray_scale_image};
 use crate::reader::Reader;
 
@@ -23,40 +23,28 @@ pub(crate) fn decode(
     pattern_dict: &PatternDictionary,
 ) -> Result<DecodedRegion> {
     let header = parse(reader)?;
-
-    let hbw = header.region_info.width;
-    let hbh = header.region_info.height;
-    let hgw = header.grid_position_and_size.width;
-    let hgh = header.grid_position_and_size.height;
-    let hgx = header.grid_position_and_size.horizontal_offset;
-    let hgy = header.grid_position_and_size.vertical_offset;
-    let hrx = header.grid_vector.horizontal_coordinate as i32;
-    let hry = header.grid_vector.vertical_coordinate as i32;
-    let hpw = pattern_dict.pattern_width;
-    let hph = pattern_dict.pattern_height;
-    let hnumpats = pattern_dict.patterns.len() as u32;
+    let region = &header.region_info;
 
     // "1) Fill a bitmap HTREG, of the size given by HBW and HBH, with the
     // HDEFPIXEL value." (6.6.5)
     let mut htreg = DecodedRegion {
-        width: hbw,
-        height: hbh,
-        data: vec![header.flags.initial_pixel_color; (hbw * hbh) as usize],
-        x_location: header.region_info.x_location,
-        y_location: header.region_info.y_location,
-        combination_operator: header.region_info.combination_operator,
+        width: region.width,
+        height: region.height,
+        data: vec![header.flags.initial_pixel_color; (region.width * region.height) as usize],
+        x_location: region.x_location,
+        y_location: region.y_location,
+        combination_operator: region.combination_operator,
     };
 
     // "2) If HENABLESKIP equals 1, compute a bitmap HSKIP as shown in 6.6.5.1."
     let hskip = if header.flags.enable_skip {
-        Some(compute_hskip(
-            hgw, hgh, hgx, hgy, hrx, hry, hpw, hph, hbw, hbh,
-        ))
+        Some(compute_hskip(&header, pattern_dict, &htreg))
     } else {
         None
     };
 
     // "3) Set HBPP to ⌈log₂(HNUMPATS)⌉." (6.6.5)
+    let hnumpats = pattern_dict.patterns.len() as u32;
     let hbpp = hnumpats
         .saturating_sub(1)
         .checked_ilog2()
@@ -71,8 +59,8 @@ pub(crate) fn decode(
     let gs_params = GrayScaleParams {
         use_mmr: header.flags.mmr,
         bits_per_pixel: hbpp,
-        width: hgw,
-        height: hgh,
+        width: header.grid_position_and_size.width,
+        height: header.grid_position_and_size.height,
         template: header.flags.template,
         skip_mask: hskip.as_deref(),
     };
@@ -80,18 +68,7 @@ pub(crate) fn decode(
 
     // "5) Place sequentially the patterns corresponding to the values in GI into
     // HTREG by the procedure described in 6.6.5.2." (6.6.5)
-    render_patterns(
-        &mut htreg,
-        &gi,
-        hgw,
-        hgh,
-        hgx,
-        hgy,
-        hrx,
-        hry,
-        pattern_dict,
-        header.flags.combination_operator,
-    )?;
+    render_patterns(&mut htreg, &gi, &header, pattern_dict)?;
 
     Ok(htreg)
 }
@@ -196,39 +173,41 @@ fn parse(reader: &mut Reader<'_>) -> Result<HalftoneRegionHeader> {
 /// corresponding location on the halftone grid does not affect any pixels
 /// of HTREG."
 fn compute_hskip(
-    hgw: u32,
-    hgh: u32,
-    hgx: i32,
-    hgy: i32,
-    hrx: i32,
-    hry: i32,
-    hpw: u32,
-    hph: u32,
-    hbw: u32,
-    hbh: u32,
+    header: &HalftoneRegionHeader,
+    pattern_dict: &PatternDictionary,
+    htreg: &DecodedRegion,
 ) -> Vec<bool> {
-    let mut hskip = vec![false; (hgw * hgh) as usize];
+    let grid = &header.grid_position_and_size;
+    let vector = &header.grid_vector;
+    let pattern_width = pattern_dict.pattern_width as i32;
+    let pattern_height = pattern_dict.pattern_height as i32;
+    let region_width = htreg.width as i32;
+    let region_height = htreg.height as i32;
+
+    let mut hskip = vec![false; (grid.width * grid.height) as usize];
 
     // "1) For each value of m_g between 0 and HGH − 1, beginning from 0,
     // perform the following steps:" (6.6.5.1)
-    for m_g in 0..hgh {
+    for m_g in 0..grid.height {
         // "a) For each value of n_g between 0 and HGW − 1, beginning from 0,
         // perform the following steps:" (6.6.5.1)
-        for n_g in 0..hgw {
+        for n_g in 0..grid.width {
             // "i) Set:
             //    x = (HGX + m_g × HRY + n_g × HRX) >>_A 8
             //    y = (HGY + m_g × HRX − n_g × HRY) >>_A 8" (6.6.5.1)
-            let x = (hgx + (m_g as i32) * hry + (n_g as i32) * hrx) >> 8;
-            let y = (hgy + (m_g as i32) * hrx - (n_g as i32) * hry) >> 8;
+            let hrx = vector.horizontal_coordinate as i32;
+            let hry = vector.vertical_coordinate as i32;
+            let x = (grid.horizontal_offset + (m_g as i32) * hry + (n_g as i32) * hrx) >> 8;
+            let y = (grid.vertical_offset + (m_g as i32) * hrx - (n_g as i32) * hry) >> 8;
 
             // "ii) If ((x + HPW ≤ 0) OR (x ≥ HBW) OR (y + HPH ≤ 0) OR (y ≥ HBH))
             // then set: HSKIP[n_g, m_g] = 1" (6.6.5.1)
-            let skip = (x + hpw as i32 <= 0)
-                || (x >= hbw as i32)
-                || (y + hph as i32 <= 0)
-                || (y >= hbh as i32);
+            let skip = (x + pattern_width <= 0)
+                || (x >= region_width)
+                || (y + pattern_height <= 0)
+                || (y >= region_height);
 
-            hskip[(m_g * hgw + n_g) as usize] = skip;
+            hskip[(m_g * grid.width + n_g) as usize] = skip;
         }
     }
 
@@ -239,35 +218,29 @@ fn compute_hskip(
 fn render_patterns(
     htreg: &mut DecodedRegion,
     gi: &[u32],
-    hgw: u32,
-    hgh: u32,
-    hgx: i32,
-    hgy: i32,
-    hrx: i32,
-    hry: i32,
+    header: &HalftoneRegionHeader,
     pattern_dict: &PatternDictionary,
-    hcombop: CombinationOperator,
 ) -> Result<()> {
-    let hpw = pattern_dict.pattern_width;
-    let hph = pattern_dict.pattern_height;
-    let hbw = htreg.width;
-    let hbh = htreg.height;
+    let grid = &header.grid_position_and_size;
+    let vector = &header.grid_vector;
+    let hrx = vector.horizontal_coordinate as i32;
+    let hry = vector.vertical_coordinate as i32;
 
     // "1) For each value of m_g between 0 and HGH − 1, beginning from 0,
     // perform the following steps:" (6.6.5.2)
-    for m_g in 0..hgh {
+    for m_g in 0..grid.height {
         // "a) For each value of n_g between 0 and HGW − 1, beginning from 0,
         // perform the following steps:" (6.6.5.2)
-        for n_g in 0..hgw {
+        for n_g in 0..grid.width {
             // "i) Set:
             //    x = (HGX + m_g × HRY + n_g × HRX) >>_A 8
             //    y = (HGY + m_g × HRX − n_g × HRY) >>_A 8" (6.6.5.2)
-            let x = (hgx + (m_g as i32) * hry + (n_g as i32) * hrx) >> 8;
-            let y = (hgy + (m_g as i32) * hrx - (n_g as i32) * hry) >> 8;
+            let x = (grid.horizontal_offset + (m_g as i32) * hry + (n_g as i32) * hrx) >> 8;
+            let y = (grid.vertical_offset + (m_g as i32) * hrx - (n_g as i32) * hry) >> 8;
 
             // "ii) Draw the pattern HPATS[GI[n_g, m_g]] into HTREG such that its
             // upper left pixel is at location (x, y) in HTREG." (6.6.5.2)
-            let pattern_index = gi[(m_g * hgw + n_g) as usize] as usize;
+            let pattern_index = gi[(m_g * grid.width + n_g) as usize] as usize;
 
             let pattern = pattern_dict
                 .patterns
@@ -275,7 +248,14 @@ fn render_patterns(
                 .ok_or(RegionError::InvalidDimension)?;
 
             // Draw pattern at (x, y) using HCOMBOP.
-            draw_pattern(htreg, pattern, x, y, hpw, hph, hbw, hbh, hcombop);
+            draw_pattern(
+                htreg,
+                pattern,
+                x,
+                y,
+                pattern_dict,
+                header.flags.combination_operator,
+            );
         }
     }
 
@@ -292,31 +272,33 @@ fn draw_pattern(
     pattern: &DecodedRegion,
     x: i32,
     y: i32,
-    hpw: u32,
-    hph: u32,
-    hbw: u32,
-    hbh: u32,
-    hcombop: CombinationOperator,
+    pattern_dict: &PatternDictionary,
+    combination_operator: CombinationOperator,
 ) {
+    let pattern_width = pattern_dict.pattern_width;
+    let pattern_height = pattern_dict.pattern_height;
+    let region_width = htreg.width as i32;
+    let region_height = htreg.height as i32;
+
     // "If any part of a decoded pattern, when placed at location (x, y) lies
     // outside the actual halftone-coded bitmap, then this part of the pattern
     // shall be ignored in the process of combining the pattern with the bitmap."
-    for py in 0..hph {
+    for py in 0..pattern_height {
         let dest_y = y + py as i32;
-        if dest_y < 0 || dest_y >= hbh as i32 {
+        if dest_y < 0 || dest_y >= region_height {
             continue;
         }
 
-        for px in 0..hpw {
+        for px in 0..pattern_width {
             let dest_x = x + px as i32;
-            if dest_x < 0 || dest_x >= hbw as i32 {
+            if dest_x < 0 || dest_x >= region_width {
                 continue;
             }
 
             let src_pixel = pattern.get_pixel(px, py);
             let dst_pixel = htreg.get_pixel(dest_x as u32, dest_y as u32);
 
-            let result = match hcombop {
+            let result = match combination_operator {
                 CombinationOperator::Or => dst_pixel | src_pixel,
                 CombinationOperator::And => dst_pixel & src_pixel,
                 CombinationOperator::Xor => dst_pixel ^ src_pixel,
