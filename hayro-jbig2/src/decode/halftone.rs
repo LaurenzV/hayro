@@ -18,8 +18,6 @@ pub(crate) fn decode(
     let header = parse(reader)?;
     let region = &header.region_info;
 
-    // "1) Fill a bitmap HTREG, of the size given by HBW and HBH, with the
-    // HDEFPIXEL value." (6.6.5)
     let mut htreg = DecodedRegion {
         width: region.width,
         height: region.height,
@@ -29,9 +27,8 @@ pub(crate) fn decode(
         combination_operator: region.combination_operator,
     };
 
-    // "2) If HENABLESKIP equals 1, compute a bitmap HSKIP as shown in 6.6.5.1."
     let skip_bitmap = if header.flags.enable_skip {
-        Some(compute_hskip(&header, pattern_dict, &htreg))
+        Some(compute_skip_bitmap(&header, pattern_dict, &htreg))
     } else {
         None
     };
@@ -58,53 +55,10 @@ pub(crate) fn decode(
 
     // "5) Place sequentially the patterns corresponding to the values in GI into
     // HTREG by the procedure described in 6.6.5.2." (6.6.5)
+    // TODO: Optimize drawing axis-aligned grids.
     render_patterns(&mut htreg, &gi, &header, pattern_dict)?;
 
     Ok(htreg)
-}
-
-/// Parsed halftone region segment flags (7.4.5.1.1).
-#[derive(Debug, Clone)]
-struct HalftoneRegionFlags {
-    mmr: bool,
-    template: Template,
-    /// `HENABLESKIP`
-    enable_skip: bool,
-    /// `HCOMBOP`
-    combination_operator: CombinationOperator,
-    /// `HDEFPIXEL`
-    initial_pixel_color: bool,
-}
-
-/// Halftone grid position and size (7.4.5.1.2).
-#[derive(Debug, Clone)]
-struct HalftoneGridPositionAndSize {
-    /// `HGW` - The width of a grayscale image.
-    width: u32,
-    /// `HGH` - The height of a grayscale image.
-    height: u32,
-    /// `HGX` - 256 times the horizontal offset of the grid origin.
-    horizontal_offset: i32,
-    /// `HGY` - 256 times the vertical offset of the grid origin.
-    vertical_offset: i32,
-}
-
-/// Halftone grid vector (7.4.5.1.3).
-#[derive(Debug, Clone)]
-struct HalftoneGridVector {
-    /// `HRX` - 256 times the horizontal coordinate of the halftone grid vector.
-    x_vector: u16,
-    /// `HRY` - 256 times the vertical coordinate of the halftone grid vector.
-    y_vector: u16,
-}
-
-/// Parsed halftone region segment header (7.4.5.1).
-#[derive(Debug, Clone)]
-struct HalftoneRegionHeader {
-    region_info: RegionSegmentInfo,
-    flags: HalftoneRegionFlags,
-    grid_position_and_size: HalftoneGridPositionAndSize,
-    grid_vector: HalftoneGridVector,
 }
 
 /// Parse a halftone region segment header (7.4.5.1).
@@ -153,12 +107,45 @@ fn parse(reader: &mut Reader<'_>) -> Result<HalftoneRegionHeader> {
     })
 }
 
+/// Parsed halftone region segment flags (7.4.5.1.1).
+#[derive(Debug, Clone)]
+struct HalftoneRegionFlags {
+    mmr: bool,
+    template: Template,
+    enable_skip: bool,
+    combination_operator: CombinationOperator,
+    initial_pixel_color: bool,
+}
+
+/// Halftone grid position and size (7.4.5.1.2).
+#[derive(Debug, Clone)]
+struct HalftoneGridPositionAndSize {
+    width: u32,
+    height: u32,
+    horizontal_offset: i32,
+    vertical_offset: i32,
+}
+
+/// Halftone grid vector (7.4.5.1.3).
+#[derive(Debug, Clone)]
+struct HalftoneGridVector {
+    /// `HRX` - 256 times the horizontal coordinate of the halftone grid vector.
+    x_vector: u16,
+    /// `HRY` - 256 times the vertical coordinate of the halftone grid vector.
+    y_vector: u16,
+}
+
+/// Parsed halftone region segment header (7.4.5.1).
+#[derive(Debug, Clone)]
+struct HalftoneRegionHeader {
+    region_info: RegionSegmentInfo,
+    flags: HalftoneRegionFlags,
+    grid_position_and_size: HalftoneGridPositionAndSize,
+    grid_vector: HalftoneGridVector,
+}
+
 /// Compute the HSKIP bitmap (6.6.5.1).
-///
-/// "The bitmap HSKIP contains 1 at a pixel if drawing a pattern at the
-/// corresponding location on the halftone grid does not affect any pixels
-/// of HTREG."
-fn compute_hskip(
+fn compute_skip_bitmap(
     header: &HalftoneRegionHeader,
     pattern_dict: &PatternDictionary,
     htreg: &DecodedRegion,
@@ -200,9 +187,9 @@ fn compute_hskip(
     hskip
 }
 
-/// Render patterns into HTREG (6.6.5.2).
+/// Render patterns into the target region (6.6.5.2).
 fn render_patterns(
-    htreg: &mut DecodedRegion,
+    region: &mut DecodedRegion,
     gi: &[u32],
     header: &HalftoneRegionHeader,
     pattern_dict: &PatternDictionary,
@@ -233,9 +220,9 @@ fn render_patterns(
                 .get(pattern_index)
                 .ok_or(RegionError::InvalidDimension)?;
 
-            // Draw pattern at (x, y) using HCOMBOP.
+            // "Draw pattern at (x, y) using HCOMBOP."
             draw_pattern(
-                htreg,
+                region,
                 pattern,
                 x,
                 y,
@@ -254,7 +241,7 @@ fn render_patterns(
 /// be combined with the current value of the corresponding pixel in the
 /// halftone-coded bitmap, using the combination operator specified by HCOMBOP."
 fn draw_pattern(
-    htreg: &mut DecodedRegion,
+    region: &mut DecodedRegion,
     pattern: &DecodedRegion,
     x: i32,
     y: i32,
@@ -263,8 +250,8 @@ fn draw_pattern(
 ) {
     let pattern_width = pattern_dict.pattern_width;
     let pattern_height = pattern_dict.pattern_height;
-    let region_width = htreg.width as i32;
-    let region_height = htreg.height as i32;
+    let region_width = region.width as i32;
+    let region_height = region.height as i32;
 
     // "If any part of a decoded pattern, when placed at location (x, y) lies
     // outside the actual halftone-coded bitmap, then this part of the pattern
@@ -282,7 +269,7 @@ fn draw_pattern(
             }
 
             let src_pixel = pattern.get_pixel(px, py);
-            let dst_pixel = htreg.get_pixel(dest_x as u32, dest_y as u32);
+            let dst_pixel = region.get_pixel(dest_x as u32, dest_y as u32);
 
             let result = match combination_operator {
                 CombinationOperator::Or => dst_pixel | src_pixel,
@@ -292,7 +279,7 @@ fn draw_pattern(
                 CombinationOperator::Replace => src_pixel,
             };
 
-            htreg.set_pixel(dest_x as u32, dest_y as u32, result);
+            region.set_pixel(dest_x as u32, dest_y as u32, result);
         }
     }
 }
