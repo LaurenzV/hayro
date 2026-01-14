@@ -58,6 +58,14 @@ impl<'a> Reader<'a> {
         Some(byte)
     }
 
+    /// Read a single byte, returning `None` if it's zero.
+    #[inline(always)]
+    pub(crate) fn read_nonzero_byte(&mut self) -> Option<u8> {
+        let byte = self.read_byte()?;
+
+        if byte == 0 { None } else { Some(byte) }
+    }
+
     /// Skip the given number of bytes.
     ///
     /// Assumes that the reader is currently byte-aligned.

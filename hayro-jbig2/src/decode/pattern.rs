@@ -3,60 +3,70 @@
 use alloc::vec;
 use alloc::vec::Vec;
 
-use super::generic::{decode_bitmap_arithmetic_coding, decode_bitmap_mmr};
-use super::{AdaptiveTemplatePixel, CombinationOperator, Template};
+use super::{AdaptiveTemplatePixel, CombinationOperator, Template, generic};
 use crate::bitmap::DecodedRegion;
-use crate::error::{
-    DecodeError, FormatError, ParseError, RegionError, Result, TemplateError, bail,
-};
+use crate::error::{DecodeError, ParseError, Result};
 use crate::reader::Reader;
 
 /// Decode a pattern dictionary segment (7.4.4.2, 6.7).
-///
-/// "A pattern dictionary segment is decoded according to the following steps:
-/// 1) Interpret its header, as described in 7.4.4.1.
-/// 2) As described in E.3.7, reset all the arithmetic coding statistics to zero.
-/// 3) Invoke the pattern dictionary decoding procedure described in 6.7."
 pub(crate) fn decode(reader: &mut Reader<'_>) -> Result<PatternDictionary> {
     let header = parse(reader)?;
 
-    let hdpw = header.hdpw as u32;
-    let hdph = header.hdph as u32;
-    let num_patterns = header.graymax.checked_add(1).ok_or(DecodeError::Overflow)?;
+    let pattern_width = header.pattern_width as u32;
+    let pattern_height = header.pattern_height as u32;
+    let num_patterns = header
+        .num_patterns
+        .checked_add(1)
+        .ok_or(DecodeError::Overflow)?;
 
     // "1) Create a bitmap B_HDC. The height of this bitmap is HDPH. The width
     // of the bitmap is (GRAYMAX + 1) × HDPW. This bitmap contains all the
     // patterns concatenated left to right." (6.7.5)
     let collective_width = num_patterns
-        .checked_mul(hdpw)
+        .checked_mul(pattern_width)
         .ok_or(DecodeError::Overflow)?;
 
-    // Get the remaining data for decoding.
     let encoded_data = reader.tail().ok_or(ParseError::UnexpectedEof)?;
 
-    // Create the collective bitmap.
     let mut collective_bitmap = DecodedRegion {
         width: collective_width,
-        height: hdph,
-        data: vec![false; (collective_width * hdph) as usize],
+        height: pattern_height,
+        data: vec![false; (collective_width * pattern_height) as usize],
         x_location: 0,
         y_location: 0,
         combination_operator: CombinationOperator::Replace,
     };
 
     // "2) Decode the collective bitmap using a generic region decoding procedure
-    // as described in 6.2. Set the parameters to this decoding procedure as
-    // shown in Table 27." (6.7.5)
-    if header.flags.hdmmr {
-        let _ = decode_bitmap_mmr(&mut collective_bitmap, encoded_data)?;
+    // as described in 6.2." (6.7.5)
+    if header.mmr {
+        let _ = generic::decode_bitmap_mmr(&mut collective_bitmap, encoded_data)?;
     } else {
-        // Build AT pixels according to Table 27.
-        let at_pixels = build_pattern_at_pixels(header.flags.hdtemplate, hdpw);
-        decode_bitmap_arithmetic_coding(
+        let at_pixels = match header.template {
+            Template::Template0 => {
+                vec![
+                    AdaptiveTemplatePixel {
+                        x: -(pattern_height as i8),
+                        y: 0,
+                    },
+                    AdaptiveTemplatePixel { x: -3, y: -1 },
+                    AdaptiveTemplatePixel { x: 2, y: -2 },
+                    AdaptiveTemplatePixel { x: -2, y: -2 },
+                ]
+            }
+            Template::Template1 | Template::Template2 | Template::Template3 => {
+                vec![AdaptiveTemplatePixel {
+                    x: -(pattern_width as i8),
+                    y: 0,
+                }]
+            }
+        };
+
+        generic::decode_bitmap_arithmetic_coding(
             &mut collective_bitmap,
             encoded_data,
-            header.flags.hdtemplate,
-            false, // TPGDON = 0 (Table 27)
+            header.template,
+            false,
             &at_pixels,
         )?;
     }
@@ -68,156 +78,70 @@ pub(crate) fn decode(reader: &mut Reader<'_>) -> Result<PatternDictionary> {
     for gray in 0..num_patterns {
         // "a) Let the subimage of B_HDC consisting of HPH rows and columns
         // HDPW × GRAY through HDPW × (GRAY + 1) − 1 be denoted B_P. Set:
-        // HDPATS[GRAY] = B_P" (6.7.5)
-        let start_x = gray * hdpw;
-        let pattern = extract_pattern(&collective_bitmap, start_x, hdpw, hdph);
+        // HDPATS[GRAY] = B_P" (6.7.5)"
+        let start_x = gray * pattern_width;
+        let pattern = {
+            let mut pattern = DecodedRegion::new(pattern_width, pattern_height);
+
+            for y in 0..pattern_height {
+                for x in 0..pattern_width {
+                    let pixel = collective_bitmap.get_pixel(start_x + x, y);
+                    pattern.set_pixel(x, y, pixel);
+                }
+            }
+
+            pattern
+        };
+
         patterns.push(pattern);
     }
 
     Ok(PatternDictionary {
         patterns,
-        pattern_width: hdpw,
-        pattern_height: hdph,
+        pattern_width,
+        pattern_height,
     })
 }
 
-/// Parsed pattern dictionary segment flags (7.4.4.1.1).
-///
-/// "This one-byte field is formatted as shown in Figure 42."
+/// A decoded pattern dictionary.
 #[derive(Debug, Clone)]
-struct PatternDictionaryFlags {
-    /// "Bit 0: HDMMR. If this bit is 1, then the segment uses the MMR encoding
-    /// variant. If this bit is 0, then the segment uses the arithmetic encoding
-    /// variant."
-    hdmmr: bool,
-    /// "Bits 1-2: HDTEMPLATE. This field controls the template used to decode
-    /// patterns if HDMMR is 0. If HDMMR is 1, this field must contain the
-    /// value 0."
-    hdtemplate: Template,
+pub(crate) struct PatternDictionary {
+    pub(crate) patterns: Vec<DecodedRegion>,
+    pub(crate) pattern_width: u32,
+    pub(crate) pattern_height: u32,
 }
 
 /// Parsed pattern dictionary segment header (7.4.4.1).
-///
-/// "A pattern dictionary segment's data part begins with a pattern dictionary
-/// segment data header, formatted as shown in Figure 41."
 #[derive(Debug, Clone)]
 struct PatternDictionaryHeader {
-    /// Pattern dictionary flags (7.4.4.1.1).
-    flags: PatternDictionaryFlags,
-    /// "HDPW: This one-byte field contains the width of the patterns defined
-    /// in this pattern dictionary. Its value must be greater than zero."
-    /// (7.4.4.1.2)
-    hdpw: u8,
-    /// "HDPH: This one-byte field contains the height of the patterns defined
-    /// in this pattern dictionary. Its value must be greater than zero."
-    /// (7.4.4.1.3)
-    hdph: u8,
-    /// "GRAYMAX: This four-byte field contains one less than the number of
-    /// patterns defined in this pattern dictionary." (7.4.4.1.4)
-    graymax: u32,
-}
-
-/// A decoded pattern dictionary containing GRAYMAX + 1 patterns.
-///
-/// "The patterns exported by this pattern dictionary. Contains GRAYMAX + 1
-/// patterns." (Table 25)
-#[derive(Debug, Clone)]
-pub(crate) struct PatternDictionary {
-    /// The patterns in this dictionary, indexed 0 through GRAYMAX.
-    pub(crate) patterns: Vec<DecodedRegion>,
-    /// Width of each pattern.
-    pub(crate) pattern_width: u32,
-    /// Height of each pattern.
-    pub(crate) pattern_height: u32,
+    mmr: bool,
+    template: Template,
+    /// `HDPW`
+    pattern_width: u8,
+    /// `HDPH`
+    pattern_height: u8,
+    /// `GRAYMAX`
+    num_patterns: u32,
 }
 
 /// Parse a pattern dictionary segment header (7.4.4.1).
 fn parse(reader: &mut Reader<'_>) -> Result<PatternDictionaryHeader> {
-    // 7.4.4.1.1: Pattern dictionary flags
     let flags_byte = reader.read_byte().ok_or(ParseError::UnexpectedEof)?;
-
-    // "Bit 0: HDMMR"
-    let hdmmr = flags_byte & 0x01 != 0;
-
-    // "Bits 1-2: HDTEMPLATE"
-    let hdtemplate = Template::from_byte(flags_byte >> 1);
-
-    // "Bits 3-7: Reserved; must be 0."
-    if flags_byte & 0xF8 != 0 {
-        bail!(FormatError::ReservedBits);
-    }
-
-    // Validate constraint: HDTEMPLATE must be 0 when HDMMR is 1
-    if hdmmr && hdtemplate != Template::Template0 {
-        bail!(TemplateError::Invalid);
-    }
-
-    let flags = PatternDictionaryFlags { hdmmr, hdtemplate };
-
-    // 7.4.4.1.2: HDPW - Width of patterns
-    let hdpw = reader.read_byte().ok_or(ParseError::UnexpectedEof)?;
-    if hdpw == 0 {
-        bail!(RegionError::InvalidDimension);
-    }
-
-    // 7.4.4.1.3: HDPH - Height of patterns
-    let hdph = reader.read_byte().ok_or(ParseError::UnexpectedEof)?;
-    if hdph == 0 {
-        bail!(RegionError::InvalidDimension);
-    }
-
-    // 7.4.4.1.4: GRAYMAX - One less than number of patterns
-    let graymax = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
+    let mmr = flags_byte & 0x01 != 0;
+    let template = Template::from_byte(flags_byte >> 1);
+    let pattern_width = reader
+        .read_nonzero_byte()
+        .ok_or(ParseError::UnexpectedEof)?;
+    let pattern_height = reader
+        .read_nonzero_byte()
+        .ok_or(ParseError::UnexpectedEof)?;
+    let num_patterns = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
 
     Ok(PatternDictionaryHeader {
-        flags,
-        hdpw,
-        hdph,
-        graymax,
+        mmr,
+        template,
+        pattern_width,
+        pattern_height,
+        num_patterns,
     })
-}
-
-/// Build adaptive template pixels for pattern dictionary decoding (Table 27).
-fn build_pattern_at_pixels(hdtemplate: Template, hdpw: u32) -> Vec<AdaptiveTemplatePixel> {
-    match hdtemplate {
-        Template::Template0 => {
-            vec![
-                AdaptiveTemplatePixel {
-                    x: -(hdpw as i8),
-                    y: 0,
-                },
-                AdaptiveTemplatePixel { x: -3, y: -1 },
-                AdaptiveTemplatePixel { x: 2, y: -2 },
-                AdaptiveTemplatePixel { x: -2, y: -2 },
-            ]
-        }
-        Template::Template1 | Template::Template2 | Template::Template3 => {
-            vec![AdaptiveTemplatePixel {
-                x: -(hdpw as i8),
-                y: 0,
-            }]
-        }
-    }
-}
-
-/// Extract a pattern from the collective bitmap.
-///
-/// "Let the subimage of `B_HDC` consisting of HPH rows and columns HDPW × GRAY
-/// through HDPW × (GRAY + 1) − 1 be denoted `B_P`." (6.7.5)
-fn extract_pattern(
-    collective: &DecodedRegion,
-    start_x: u32,
-    width: u32,
-    height: u32,
-) -> DecodedRegion {
-    let mut pattern = DecodedRegion::new(width, height);
-
-    for y in 0..height {
-        for x in 0..width {
-            let pixel = collective.get_pixel(start_x + x, y);
-            pattern.set_pixel(x, y, pixel);
-        }
-    }
-
-    pattern
 }
