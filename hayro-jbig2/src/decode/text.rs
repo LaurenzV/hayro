@@ -8,7 +8,7 @@
 use alloc::vec;
 use alloc::vec::Vec;
 
-use super::generic_refinement::decode_refinement_bitmap_with;
+use super::generic_refinement::decode_bitmap;
 use super::{
     AdaptiveTemplatePixel, CombinationOperator, RefinementTemplate, RegionSegmentInfo,
     parse_refinement_at_pixels, parse_region_segment_info,
@@ -619,7 +619,7 @@ pub(crate) fn decode_text_region_refine(
                 let grreferencedy = rdh_i.div_euclid(2) + rdy_i;
 
                 let mut refined = DecodedRegion::new(grw, grh);
-                decode_refinement_bitmap_with(
+                decode_bitmap(
                     decoder,
                     &mut gr_contexts,
                     &mut refined,
@@ -1205,7 +1205,7 @@ fn decode_text_region_huffman(
                     let num_context_bits = params.sbrtemplate.context_bits();
                     let mut contexts = vec![Context::default(); 1 << num_context_bits];
 
-                    decode_refinement_bitmap_with(
+                    decode_bitmap(
                         &mut decoder,
                         &mut contexts,
                         &mut refined,

@@ -13,107 +13,29 @@ use crate::error::{ParseError, RegionError, Result, bail};
 use crate::reader::Reader;
 
 /// Generic refinement region decoding procedure (6.3).
-///
-/// "This decoding procedure is used to decode a rectangular array of 0 or 1
-/// values, which are coded one pixel at a time. There is a reference bitmap
-/// known to the decoding procedure, and this is used as part of the decoding
-/// process. The reference bitmap is intended to resemble the bitmap being
-/// decoded, and this similarity is used to increase compression." (6.3.1)
 pub(crate) fn decode(reader: &mut Reader<'_>, reference: &DecodedRegion) -> Result<DecodedRegion> {
     let header = parse(reader)?;
 
     // Validate that the region fits within the reference bitmap.
     // When referring to another segment, dimensions must match exactly (7.4.7.5).
     // When using the page bitmap as reference, the region must fit within the page.
-    if header.region_info.width > reference.width || header.region_info.height > reference.height {
+    if header.region_info.width > reference.width
+        || header.region_info.height > reference.height
+    {
         bail!(RegionError::InvalidDimension);
     }
 
-    // "The X offset of the reference bitmap with respect to the bitmap
-    // being decoded." (Table 6, GRREFERENCEDX/GRREFERENCEDY)
-    //
-    // The offset is computed from the difference in location between the
-    // reference and the region being decoded.
     let reference_dx = reference.x_location as i32 - header.region_info.x_location as i32;
     let reference_dy = reference.y_location as i32 - header.region_info.y_location as i32;
-
     let encoded_data = reader.tail().ok_or(ParseError::UnexpectedEof)?;
 
-    decode_refinement_bitmap(&header, encoded_data, reference, reference_dx, reference_dy)
-}
-
-/// Parsed generic refinement region segment header (7.4.7.1).
-#[derive(Debug, Clone)]
-struct GenericRefinementRegionHeader {
-    /// Region segment information field (7.4.1).
-    region_info: RegionSegmentInfo,
-    /// "Bit 0: GRTEMPLATE. This field specifies the template used for
-    /// template-based arithmetic coding." (7.4.7.2)
-    gr_template: RefinementTemplate,
-    /// "Bit 1: TPGRON. This field specifies whether typical prediction for
-    /// generic refinement is used." (7.4.7.2)
-    tpgron: bool,
-    /// Adaptive template pixels (7.4.7.3).
-    ///
-    /// "This field is only present if GRTEMPLATE is 0."
-    /// Contains 2 AT pixels (4 bytes): GRATX1, GRATY1, GRATX2, GRATY2
-    adaptive_template_pixels: Vec<AdaptiveTemplatePixel>,
-}
-
-/// Parse a generic refinement region segment header (7.4.7.1).
-fn parse(reader: &mut Reader<'_>) -> Result<GenericRefinementRegionHeader> {
-    // 7.4.7.1: "The data part of a generic refinement region segment begins
-    // with a generic refinement region segment data header. This header
-    // contains the fields shown in Figure 52."
-
-    // Region segment information field (7.4.1)
-    let region_info = parse_region_segment_info(reader)?;
-
-    // 7.4.7.2: Generic refinement region segment flags
-    // "This one-byte field is formatted as shown in Figure 53."
-    let flags = reader.read_byte().ok_or(ParseError::UnexpectedEof)?;
-
-    // "Bit 0: GRTEMPLATE"
-    let gr_template = RefinementTemplate::from_byte(flags);
-
-    // "Bit 1: TPGRON"
-    let tpgron = flags & 0x02 != 0;
-
-    // 7.4.7.3: Generic refinement region segment AT flags
-    // "This field is only present if GRTEMPLATE is 0."
-    let adaptive_template_pixels = if gr_template == RefinementTemplate::Template0 {
-        parse_refinement_at_pixels(reader)?
-    } else {
-        Vec::new()
-    };
-
-    Ok(GenericRefinementRegionHeader {
-        region_info,
-        gr_template,
-        tpgron,
-        adaptive_template_pixels,
-    })
-}
-
-/// Decode the refinement bitmap (6.3.5.6).
-///
-/// "The decoding of the bitmap proceeds as follows:" (6.3.5.6)
-fn decode_refinement_bitmap(
-    header: &GenericRefinementRegionHeader,
-    data: &[u8],
-    reference: &DecodedRegion,
-    reference_dx: i32,
-    reference_dy: i32,
-) -> Result<DecodedRegion> {
-    let mut decoder = ArithmeticDecoder::new(data);
-
-    let num_context_bits = header.gr_template.context_bits();
+    let mut decoder = ArithmeticDecoder::new(encoded_data);
+    let num_context_bits = header.template.context_bits();
     let mut contexts = vec![Context::default(); 1 << num_context_bits];
 
     let width = header.region_info.width;
     let height = header.region_info.height;
 
-    // "2) Create a bitmap GRREG of width GRW and height GRH pixels." (6.3.5.6)
     let mut region = DecodedRegion {
         width,
         height,
@@ -123,14 +45,14 @@ fn decode_refinement_bitmap(
         combination_operator: header.region_info.combination_operator,
     };
 
-    decode_refinement_bitmap_with(
+    decode_bitmap(
         &mut decoder,
         &mut contexts,
         &mut region,
         reference,
         reference_dx,
         reference_dy,
-        header.gr_template,
+        header.template,
         &header.adaptive_template_pixels,
         header.tpgron,
     )?;
@@ -138,12 +60,37 @@ fn decode_refinement_bitmap(
     Ok(region)
 }
 
-/// Decode a refinement bitmap with provided decoder and contexts.
-///
-/// This is the core refinement decoding loop (6.3.5.6). It allows sharing
-/// decoder and context state across multiple refinements (e.g., in symbol
-/// dictionary decoding per Table 18).
-pub(crate) fn decode_refinement_bitmap_with(
+/// Parsed generic refinement region segment header (7.4.7.1).
+#[derive(Debug, Clone)]
+struct GenericRefinementRegionHeader {
+    region_info: RegionSegmentInfo,
+    template: RefinementTemplate,
+    tpgron: bool,
+    adaptive_template_pixels: Vec<AdaptiveTemplatePixel>,
+}
+
+/// Parse a generic refinement region segment header (7.4.7.1).
+fn parse(reader: &mut Reader<'_>) -> Result<GenericRefinementRegionHeader> {
+    let region_info = parse_region_segment_info(reader)?;
+    let flags = reader.read_byte().ok_or(ParseError::UnexpectedEof)?;
+    let template = RefinementTemplate::from_byte(flags);
+    let tpgron = flags & 0x02 != 0;
+    let adaptive_template_pixels = if template == RefinementTemplate::Template0 {
+        parse_refinement_at_pixels(reader)?
+    } else {
+        Vec::new()
+    };
+
+    Ok(GenericRefinementRegionHeader {
+        region_info,
+        template,
+        tpgron,
+        adaptive_template_pixels,
+    })
+}
+
+/// Decode a refinement bitmap (6.3.5.6).
+pub(crate) fn decode_bitmap(
     decoder: &mut ArithmeticDecoder<'_>,
     contexts: &mut [Context],
     region: &mut DecodedRegion,
