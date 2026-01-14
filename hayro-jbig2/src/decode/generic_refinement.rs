@@ -122,11 +122,9 @@ pub(crate) fn decode_bitmap(
             ltp = ltp != (sltp != 0);
         }
 
-        // "c) If LTP = 0 then, from left to right, explicitly decode all pixels
-        // of the current row of GRREG." (6.3.5.6)
-        if !ltp {
-            for x in 0..width {
-                let context = gather_refinement_context(
+        let mut decode_single =
+            |x: u32, decoder: &mut ArithmeticDecoder<'_>, region: &mut DecodedRegion| {
+                let context = gather_context(
                     region,
                     reference,
                     x,
@@ -138,6 +136,13 @@ pub(crate) fn decode_bitmap(
                 );
                 let pixel = decoder.decode(&mut contexts[context as usize]);
                 region.set_pixel(x, y, pixel != 0);
+            };
+
+        // "c) If LTP = 0 then, from left to right, explicitly decode all pixels
+        // of the current row of GRREG." (6.3.5.6)
+        if !ltp {
+            for x in 0..width {
+                decode_single(x, decoder, region);
             }
         } else {
             // "d) If LTP = 1 then, from left to right, implicitly decode certain
@@ -184,18 +189,7 @@ pub(crate) fn decode_bitmap(
                 } else {
                     // "iii) Otherwise, explicitly decode the current pixel using the
                     // methodology of steps 3 c) i) through 3 c) iii) above." (6.3.5.6)
-                    let context = gather_refinement_context(
-                        region,
-                        reference,
-                        x,
-                        y,
-                        reference_dx,
-                        reference_dy,
-                        gr_template,
-                        adaptive_template_pixels,
-                    );
-                    let pixel = decoder.decode(&mut contexts[context as usize]);
-                    region.set_pixel(x, y, pixel != 0);
+                    decode_single(x, decoder, region);
                 }
             }
         }
@@ -205,7 +199,7 @@ pub(crate) fn decode_bitmap(
 }
 
 /// Gather context bits for refinement decoding (6.3.5.3).
-fn gather_refinement_context(
+fn gather_context(
     region: &DecodedRegion,
     reference: &DecodedRegion,
     x: u32,
@@ -223,8 +217,9 @@ fn gather_refinement_context(
     let ref_y = y - reference_dy;
 
     match gr_template {
+        // Context for Template 0 (Figure 12).
         RefinementTemplate::Template0 => {
-            // Figure 12: 13-pixel template with 2 AT pixels.
+            // 13-pixel template with 2 AT pixels.
             let at1 = adaptive_template_pixels[0];
             let at2 = adaptive_template_pixels[1];
 
@@ -250,8 +245,9 @@ fn gather_refinement_context(
 
             context
         }
+        // Context for Template 1 (Figure 13).
         RefinementTemplate::Template1 => {
-            // Figure 13: 10-pixel template.
+            // 10-pixel template.
             let mut context = 0_u32;
 
             // 4 pixels from the bitmap we are currently decoding.

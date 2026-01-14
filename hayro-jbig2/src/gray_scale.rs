@@ -5,7 +5,7 @@ use alloc::vec::Vec;
 
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::DecodedRegion;
-use crate::decode::generic::{decode_bitmap_mmr, gather_context_with_at};
+use crate::decode::generic::{decode_bitmap_mmr, gather_context};
 use crate::decode::{AdaptiveTemplatePixel, Template};
 use crate::error::Result;
 
@@ -111,7 +111,7 @@ fn decode_arithmetic(data: &[u8], params: &GrayScaleParams<'_>) -> Result<Vec<u3
                     }
                 }
 
-                let context = gather_context_with_at(&bitplane, x, y, template, &at_pixels);
+                let context = gather_context(&bitplane, x, y, template, &at_pixels);
                 let pixel = decoder.decode(&mut contexts[context as usize]);
 
                 bitplane.set_pixel(x, y, pixel != 0);

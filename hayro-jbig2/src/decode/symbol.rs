@@ -10,7 +10,7 @@ use alloc::vec::Vec;
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::DecodedRegion;
 use crate::decode::CombinationOperator;
-use crate::decode::generic::{decode_bitmap_mmr, gather_context_with_at};
+use crate::decode::generic::{decode_bitmap_mmr, gather_context};
 use crate::decode::generic_refinement::decode_bitmap;
 use crate::decode::text::{
     ReferenceCorner, SymbolBitmap, TextRegionContexts, TextRegionParams, decode_text_region_with,
@@ -910,8 +910,7 @@ fn decode_symbol_bitmap(
     // with TPGDON = 0 (no typical prediction)
     for y in 0..height {
         for x in 0..width {
-            let context =
-                gather_context_with_at(&region, x, y, template, &header.adaptive_template_pixels);
+            let context = gather_context(&region, x, y, template, &header.adaptive_template_pixels);
             let pixel = decoder.decode(&mut contexts[context as usize]);
             region.set_pixel(x, y, pixel != 0);
         }

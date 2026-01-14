@@ -244,8 +244,7 @@ pub(crate) fn decode_bitmap_arithmetic_coding(
             // "d) If LTP = 0 then, from left to right, decode each pixel of the
             // current row of GBREG." (6.2.5.7)
             for x in 0..width {
-                let context_bits =
-                    gather_context_with_at(region, x, y, template, adaptive_template_pixels);
+                let context_bits = gather_context(region, x, y, template, adaptive_template_pixels);
                 let pixel = decoder.decode(&mut contexts[context_bits as usize]);
                 region.set_pixel(x, y, pixel != 0);
             }
@@ -256,7 +255,7 @@ pub(crate) fn decode_bitmap_arithmetic_coding(
 }
 
 /// Gather context bits for a pixel at (x, y) (6.2.5.3, 6.2.5.4).
-pub(crate) fn gather_context_with_at(
+pub(crate) fn gather_context(
     region: &DecodedRegion,
     x: u32,
     y: u32,
@@ -264,7 +263,7 @@ pub(crate) fn gather_context_with_at(
     adaptive_template_pixels: &[AdaptiveTemplatePixel],
 ) -> u32 {
     match gb_template {
-        // Gather context for Template 0 (Figure 3a, 16 pixels).
+        // Context for Template 0 (Figure 3a, 16 pixels).
         Template::Template0 => {
             let x = x as i32;
             let y = y as i32;
@@ -309,7 +308,7 @@ pub(crate) fn gather_context_with_at(
 
             context
         }
-        // Gather context for Template 1 (Figure 4).
+        // Context for Template 1 (Figure 4).
         Template::Template1 => {
             let x = x as i32;
             let y = y as i32;
@@ -339,7 +338,7 @@ pub(crate) fn gather_context_with_at(
 
             context
         }
-        // Gather context for Template 2 (Figure 5).
+        // Context for Template 2 (Figure 5).
         Template::Template2 => {
             let x = x as i32;
             let y = y as i32;
@@ -366,7 +365,7 @@ pub(crate) fn gather_context_with_at(
 
             context
         }
-        // Gather context for Template 3 (Figure 6).
+        // Context for Template 3 (Figure 6).
         Template::Template3 => {
             let x = x as i32;
             let y = y as i32;
