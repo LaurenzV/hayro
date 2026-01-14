@@ -344,7 +344,7 @@ impl DecodedImageXObject {
         let mut decoded = obj
             .stream
             .decoded_image(&decode_params)
-            .map_err(|_| InterpreterWarning::ImageDecodeFailure)
+            .map_err(|_| (obj.warning_sink)(InterpreterWarning::ImageDecodeFailure))
             .ok()?;
 
         let (mut scale_x, mut scale_y) = (1.0, 1.0);
