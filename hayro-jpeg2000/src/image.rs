@@ -1,3 +1,5 @@
+//! Integration with the [image] crate
+
 use std::io::{BufRead, Seek};
 
 use crate::{ColorSpace, DecodeSettings, Image};
@@ -84,6 +86,7 @@ impl ImageDecoder for Image<'_> {
     }
 }
 
+#[doc(hidden)]
 /// JPEG2000 decoder compatible with `image` decoding hook APIs that pass an `impl Read + Seek`
 pub struct Jp2Decoder {
     // Lots of fields from `crate::Image` are duplicated here;
