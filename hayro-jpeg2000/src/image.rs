@@ -108,7 +108,6 @@ pub struct Jp2Decoder {
     height: u32,
     color_type: ColorType,
     orig_color_type: ExtendedColorType,
-    limits: Limits,
 }
 
 impl Jp2Decoder {
@@ -123,8 +122,6 @@ impl Jp2Decoder {
             height: headers.height(),
             color_type: headers.color_type(),
             orig_color_type: headers.original_color_type(),
-            // Limits are disabled by default in the constructor for all decoders
-            limits: Limits::no_limits(),
             input,
         })
     }
