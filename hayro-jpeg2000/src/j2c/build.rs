@@ -7,6 +7,7 @@ use super::tile::{ResolutionTile, Tile};
 use crate::error::{DecodingError, Result};
 use core::iter;
 use core::ops::Range;
+use alloc::vec;
 
 /// Build and allocate all necessary structures to process the code-blocks
 /// for a specific tile. Also parses the segments for each code-block.
