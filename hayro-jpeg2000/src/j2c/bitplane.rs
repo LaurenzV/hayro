@@ -541,10 +541,12 @@ impl BitPlaneDecodeContext {
         }
     }
 
+    #[inline(always)]
     fn is_significant(&self, position: Position) -> bool {
         self.coefficient_states[position.index(self.padded_width)].is_significant()
     }
 
+    #[inline(always)]
     fn set_significant(&mut self, position: Position) {
         let idx = position.index(self.padded_width);
         let is_significant = self.coefficient_states[idx].is_significant();
@@ -569,22 +571,27 @@ impl BitPlaneDecodeContext {
         }
     }
 
+    #[inline(always)]
     fn set_zero_coded(&mut self, position: Position) {
         self.coefficient_states[position.index(self.padded_width)].set_zero_coded(1);
     }
 
+    #[inline(always)]
     fn set_magnitude_refined(&mut self, position: Position) {
         self.coefficient_states[position.index(self.padded_width)].set_magnitude_refined();
     }
 
+    #[inline(always)]
     fn magnitude_refinement(&self, position: Position) -> u8 {
         self.coefficient_states[position.index(self.padded_width)].magnitude_refinement()
     }
 
+    #[inline(always)]
     fn is_zero_coded(&self, position: Position) -> bool {
         self.coefficient_states[position.index(self.padded_width)].is_zero_coded()
     }
 
+    #[inline(always)]
     fn push_magnitude_bit(&mut self, position: Position, bit: u32) {
         let idx = position.index(self.padded_width);
         let count = self.coefficient_states[idx].num_bitplanes();
@@ -595,18 +602,18 @@ impl BitPlaneDecodeContext {
         self.coefficient_states[idx].set_magnitude_bits(count + 1);
     }
 
-    #[inline]
+    #[inline(always)]
     fn sign(&self, position: Position) -> u8 {
         self.coefficients[position.index(self.padded_width)].sign() as u8
     }
 
-    #[inline]
+    #[inline(always)]
     fn neighbor_in_next_stripe(&self, pos: Position) -> bool {
         let neighbor = pos.bottom();
         neighbor.real_y() < self.height && (neighbor.real_y() >> 2) > (pos.real_y() >> 2)
     }
 
-    #[inline]
+    #[inline(always)]
     fn neighborhood_significance_states(&self, pos: Position) -> u8 {
         let neighbors = &self.neighbor_significances[pos.index(self.padded_width)];
 
