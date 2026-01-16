@@ -153,7 +153,9 @@ impl ImageDecoder for Jp2Decoder {
     }
 
     fn read_image_boxed(self: Box<Self>, buf: &mut [u8]) -> ImageResult<()> {
-        self.read_image(buf)
+        // we can safely .unwrap() because we've already done this on decoder creation and know this works
+        let decoder = Image::new(&self.input, &DecodeSettings::default()).unwrap();
+        decoder.read_image(buf)
     }
 }
 
