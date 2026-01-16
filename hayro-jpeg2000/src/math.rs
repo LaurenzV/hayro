@@ -540,8 +540,10 @@ impl<const N: usize> SimdBuffer<N> {
     }
 
     /// Create a new `SimdBuffer` filled with zeros.
-    pub(crate) fn zeros(len: usize) -> Self {
-        Self::new(vec![0.0; len])
+    pub(crate) fn zeros(original_len: usize) -> Self {
+        let padded_len = Self::padded_len(original_len);
+        let data = vec![0.0; padded_len];
+        Self { data, original_len }
     }
 
     /// Returns only the original (non-padded) data as an immutable slice.
