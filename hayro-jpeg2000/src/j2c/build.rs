@@ -30,7 +30,7 @@ fn build_decompositions(
             component_tile.rect.width() as usize * component_tile.rect.height() as usize;
     }
 
-    if storage.coefficients.len() == 0 {
+    if storage.coefficients.is_empty() {
         // fast path that requests pre-zeroed memory from the OS where available
         storage.coefficients = vec![0.0; total_coefficients];
     } else {
