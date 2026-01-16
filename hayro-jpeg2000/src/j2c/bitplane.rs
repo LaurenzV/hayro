@@ -142,17 +142,6 @@ fn decode_inner(
         }
     }
 
-    // Extend all coefficients with zero bits until we have the required number
-    // of bits.
-    for (coefficient, coefficient_state) in ctx
-        .coefficients
-        .iter_mut()
-        .zip(ctx.coefficient_states.iter().copied())
-    {
-        let count = ctx.bitplanes - coefficient_state.num_bitplanes();
-        coefficient.push_zeroes(count);
-    }
-
     Some(())
 }
 
@@ -177,6 +166,9 @@ fn handle_coding_passes(
             2 => PassType::MagnitudeRefinement,
             _ => unreachable!(),
         };
+        
+        let current_bitplane = (coding_pass + 2) / 3;
+        ctx.current_bit_position = ctx.bitplanes - 1 - current_bitplane;
 
         match pass {
             PassType::Cleanup => {
@@ -217,20 +209,11 @@ pub(crate) const BITPLANE_BIT_SIZE: u32 = size_of::<u32>() as u32 * 8 - 1;
 const SIGNIFICANCE_SHIFT: u8 = 7;
 const HAS_MAGNITUDE_REFINEMENT_SHIFT: u8 = 6;
 const HAS_ZERO_CODING_SHIFT: u8 = 5;
-const BITPLANE_COUNT_MASK: u8 = (1 << 5) - 1;
 
-/// From MSB to LSB:
-/// Bit 1 represents the significance state of each coefficient. Will be
-/// set to one as soon as the first non-zero bit for that coefficient is
-/// encountered.
-/// Bit 2 stores whether the coefficient has previously had (at least one)
-/// magnitude refinement pass.
-/// Bit 3 stores whether the given coefficient belongs to a zero coding pass
-/// applied as part of sign propagation in the current bitplane. This
-/// value will be reset every time we advance to a new bitplane.
-/// Bits 4-8 store the current number of bitplanes for the given coefficient.
-/// Five bits are enough to store 0-31, which works out nicely because our
-/// maximum number of bitplanes also is 31.
+/// Bit-packed coefficient state (only 3 bits used):
+/// - Bit 7: significance state (set when first non-zero bit is encountered)
+/// - Bit 6: has had magnitude refinement pass
+/// - Bit 5: zero coded in current bitplane's significance propagation pass
 #[derive(Default, Copy, Clone)]
 pub(crate) struct CoefficientState(u8);
 
@@ -277,17 +260,6 @@ impl CoefficientState {
     fn is_zero_coded(&self) -> bool {
         (self.0 >> HAS_ZERO_CODING_SHIFT) & 1 == 1
     }
-
-    #[inline(always)]
-    fn num_bitplanes(&self) -> u8 {
-        self.0 & BITPLANE_COUNT_MASK
-    }
-
-    #[inline(always)]
-    fn set_magnitude_bits(&mut self, count: u8) {
-        debug_assert!((count as u32) <= BITPLANE_BIT_SIZE);
-        self.0 = (self.0 & !BITPLANE_COUNT_MASK) | (count & BITPLANE_COUNT_MASK);
-    }
 }
 
 #[derive(Copy, Clone, Debug, Default)]
@@ -310,14 +282,8 @@ impl Coefficient {
         (self.0 >> 31) & 1
     }
 
-    fn push_bit(&mut self, bit: u32) {
-        let sign = self.0 & 0x80000000;
-        self.0 = sign | ((self.0 << 1) | bit);
-    }
-
-    fn push_zeroes(&mut self, num: u8) {
-        let sign = self.0 & 0x80000000;
-        self.0 = sign | self.0.unbounded_shl(num as u32);
+    fn push_bit_at(&mut self, bit: u32, position: u8) {
+        self.0 |= bit << position;
     }
 }
 
@@ -422,6 +388,8 @@ pub(crate) struct BitPlaneDecodeContext {
     sub_band_type: SubBandType,
     /// The arithmetic decoder contexts for each context label.
     contexts: [ArithmeticDecoderContext; 19],
+    /// The bit position for the current bitplane.
+    current_bit_position: u8,
 }
 
 impl Default for BitPlaneDecodeContext {
@@ -439,6 +407,7 @@ impl Default for BitPlaneDecodeContext {
             strict: false,
             sub_band_type: SubBandType::LowLow,
             contexts: [ArithmeticDecoderContext::default(); 19],
+            current_bit_position: 0,
         }
     }
 }
@@ -594,12 +563,7 @@ impl BitPlaneDecodeContext {
     #[inline(always)]
     fn push_magnitude_bit(&mut self, position: Position, bit: u32) {
         let idx = position.index(self.padded_width);
-        let count = self.coefficient_states[idx].num_bitplanes();
-
-        debug_assert!((count as u32) < BITPLANE_BIT_SIZE);
-
-        self.coefficients[idx].push_bit(bit);
-        self.coefficient_states[idx].set_magnitude_bits(count + 1);
+        self.coefficients[idx].push_bit_at(bit, self.current_bit_position);
     }
 
     #[inline(always)]
