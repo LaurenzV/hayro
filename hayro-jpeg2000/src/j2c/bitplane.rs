@@ -166,7 +166,7 @@ fn handle_coding_passes(
             2 => PassType::MagnitudeRefinement,
             _ => unreachable!(),
         };
-        
+
         let current_bitplane = (coding_pass + 2) / 3;
         ctx.current_bit_position = ctx.bitplanes - 1 - current_bitplane;
 
