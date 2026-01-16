@@ -1,7 +1,9 @@
-use crate::{ColorSpace, Image};
+use std::io::{BufRead, Seek};
+
+use crate::{ColorSpace, DecodeSettings, Image};
 use ::image::error::{DecodingError, ImageFormatHint};
 use ::image::{ColorType, ImageDecoder, ImageError, ImageResult};
-use image::ExtendedColorType;
+use image::{ExtendedColorType, Limits};
 use moxcms::{ColorProfile, Layout, TransformOptions};
 
 const CMYK_PROFILE: &[u8] = include_bytes!("../assets/CGATS001Compat-v2-micro.icc");
@@ -79,6 +81,45 @@ impl ImageDecoder for Image<'_> {
             ImageFormatHint::Name("JPEG2000".to_string()),
             "failed to decode image",
         )))
+    }
+}
+
+/// JPEG2000 decoder compatible with `image` decoding hook APIs that pass an `impl Read + Seek`
+pub struct Jp2Decoder {
+    // Lots of fields from `crate::Image` are duplicated here;
+    // this is necessary because `crate::Image` borrows a slice and keeping it in the same struct
+    // as `input: Vec<u8>` would create a self-referential struct that Rust cannot easily express.
+    //
+    // This approach is modeled after the integration of early versions of zune-jpeg into image:
+    // https://docs.rs/image/0.25.6/src/image/codecs/jpeg/decoder.rs.html#27-58
+    //
+    // Buffering the entire input in memory is not an issue for lossy formats like JPEG.
+    // The compression ratio is so high that an image that expands to hundreds of MB when decoded
+    // only takes up a single-digit number of MB in a compressed form.
+    input: Vec<u8>,
+    width: u32,
+    height: u32,
+    color_type: ColorType,
+    orig_color_type: ExtendedColorType,
+    limits: Limits,
+}
+
+impl Jp2Decoder {
+    /// Create a new decoder that decodes from the stream ```r```
+    pub fn new<R: BufRead + Seek>(r: R) -> ImageResult<Jp2Decoder> {
+        let mut input = Vec::new();
+        let mut r = r;
+        r.read_to_end(&mut input)?;
+        let headers = Image::new(&input, &DecodeSettings::default())?;
+        Ok(Jp2Decoder {
+            width: headers.width(),
+            height: headers.height(),
+            color_type: headers.color_type(),
+            orig_color_type: headers.original_color_type(),
+            // Limits are disabled by default in the constructor for all decoders
+            limits: Limits::no_limits(),
+            input,
+        })
     }
 }
 
@@ -213,4 +254,17 @@ fn convert_inner(image: &Image<'_>, buf: &mut [u8]) -> Option<()> {
     }
 
     process(image, buf, width, height, has_alpha, color_space)
+}
+
+impl From<crate::DecodeError> for DecodingError {
+    fn from(value: crate::DecodeError) -> Self {
+        let format = ImageFormatHint::Name("JPEG2000".to_owned());
+        DecodingError::new(format, value)
+    }
+}
+
+impl From<crate::DecodeError> for ImageError {
+    fn from(value: crate::DecodeError) -> Self {
+        ImageError::Decoding(value.into())
+    }
 }
