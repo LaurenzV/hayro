@@ -80,19 +80,6 @@ impl ImageDecoder for Image<'_> {
             "failed to decode image",
         )))
     }
-
-    fn total_bytes(&self) -> u64 {
-        let base = self.width() as u64 * self.height() as u64;
-        let factor = match self.color_type() {
-            ColorType::L8 => 1,
-            ColorType::La8 => 2,
-            ColorType::Rgb8 => 3,
-            ColorType::Rgba8 => 4,
-            _ => unreachable!(),
-        };
-
-        base * factor as u64
-    }
 }
 
 /// Private convenience function for `image` integration
