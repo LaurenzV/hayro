@@ -9,7 +9,7 @@ use crate::{ColorSpace, DecodeSettings, Image};
 use ::image::error::{DecodingError, ImageFormatHint};
 use ::image::{ColorType, ExtendedColorType, ImageDecoder, ImageError, ImageResult};
 use image::hooks::{decoding_hook_registered, register_format_detection_hook};
-use moxcms::{ColorProfile, Layout, TransformOptions};
+use moxcms::{CmsError, ColorProfile, Layout, TransformOptions};
 
 const CMYK_PROFILE: &[u8] = include_bytes!("../assets/CGATS001Compat-v2-micro.icc");
 
@@ -75,17 +75,11 @@ impl ImageDecoder for Image<'_> {
     where
         Self: Sized,
     {
-        convert_inner(&self, buf).ok_or(ImageError::Decoding(DecodingError::new(
-            ImageFormatHint::Name("JPEG2000".to_string()),
-            "failed to decode image",
-        )))
+        convert_inner(&self, buf)
     }
 
     fn read_image_boxed(self: Box<Self>, buf: &mut [u8]) -> ImageResult<()> {
-        convert_inner(&self, buf).ok_or(ImageError::Decoding(DecodingError::new(
-            ImageFormatHint::Name("JPEG2000".to_string()),
-            "failed to decode image",
-        )))
+        convert_inner(&self, buf)
     }
 }
 
@@ -164,7 +158,7 @@ fn orig_bits_per_pixel(img: &Image<'_>) -> u8 {
     channel_count * img.original_bit_depth()
 }
 
-fn convert_inner(image: &Image<'_>, buf: &mut [u8]) -> Option<()> {
+fn convert_inner(image: &Image<'_>, buf: &mut [u8]) -> ImageResult<()> {
     let width = image.width();
     let height = image.height();
     let color_space = image.color_space().clone();
@@ -177,8 +171,8 @@ fn convert_inner(image: &Image<'_>, buf: &mut [u8]) -> Option<()> {
         width: u32,
         height: u32,
         input_data: &[u8],
-    ) -> Option<Vec<u8>> {
-        let src_profile = ColorProfile::new_from_slice(icc).ok()?;
+    ) -> Result<Vec<u8>, CmsError> {
+        let src_profile = ColorProfile::new_from_slice(icc)?;
         let dest_profile = ColorProfile::new_srgb();
 
         let (src_layout, dest_layout, out_channels) = match (num_channels, has_alpha) {
@@ -189,24 +183,22 @@ fn convert_inner(image: &Image<'_>, buf: &mut [u8]) -> Option<()> {
             // CMYK will be converted to RGB.
             (4, false) => (Layout::Rgba, Layout::Rgb, 3),
             _ => {
-                unimplemented!()
+                return Err(CmsError::UnsupportedChannelConfiguration);
             }
         };
 
-        let transform = src_profile
-            .create_transform_8bit(
-                src_layout,
-                &dest_profile,
-                dest_layout,
-                TransformOptions::default(),
-            )
-            .ok()?;
+        let transform = src_profile.create_transform_8bit(
+            src_layout,
+            &dest_profile,
+            dest_layout,
+            TransformOptions::default(),
+        )?;
 
         let mut transformed = vec![0; (width * height * out_channels) as usize];
 
-        transform.transform(input_data, &mut transformed).ok()?;
+        transform.transform(input_data, &mut transformed)?;
 
-        Some(transformed)
+        Ok(transformed)
     }
 
     fn process(
@@ -216,29 +208,30 @@ fn convert_inner(image: &Image<'_>, buf: &mut [u8]) -> Option<()> {
         height: u32,
         has_alpha: bool,
         cs: ColorSpace,
-    ) -> Option<()> {
+    ) -> Result<(), ImageError> {
         match (cs, has_alpha) {
             (ColorSpace::Gray, false) => {
-                image.decode_into(buf).ok()?;
+                image.decode_into(buf)?;
             }
             (ColorSpace::Gray, true) => {
-                image.decode_into(buf).ok()?;
+                image.decode_into(buf)?;
             }
             (ColorSpace::RGB, false) => {
-                image.decode_into(buf).ok()?;
+                image.decode_into(buf)?;
             }
             (ColorSpace::RGB, true) => {
-                image.decode_into(buf).ok()?;
+                image.decode_into(buf)?;
             }
             (ColorSpace::CMYK, false) => {
-                let decoded = image.decode().ok()?;
-                let transformed = from_icc(CMYK_PROFILE, 4, has_alpha, width, height, &decoded)?;
+                let decoded = image.decode()?;
+                let transformed = from_icc(CMYK_PROFILE, 4, has_alpha, width, height, &decoded)
+                    .map_err(icc_err_to_image)?;
                 buf.copy_from_slice(&transformed);
             }
             (ColorSpace::CMYK, true) => {
                 // moxcms doesn't support CMYK interleaved with alpha, so we
                 // need to split it.
-                let decoded = image.decode().ok()?;
+                let decoded = image.decode()?;
                 let mut cmyk = vec![];
                 let mut alpha = vec![];
 
@@ -247,7 +240,8 @@ fn convert_inner(image: &Image<'_>, buf: &mut [u8]) -> Option<()> {
                     alpha.push(sample[4]);
                 }
 
-                let rgb = from_icc(CMYK_PROFILE, 4, false, width, height, &cmyk)?;
+                let rgb = from_icc(CMYK_PROFILE, 4, false, width, height, &cmyk)
+                    .map_err(icc_err_to_image)?;
                 for (out, pixel) in buf.chunks_exact_mut(4).zip(
                     rgb.chunks_exact(3)
                         .zip(alpha)
@@ -263,26 +257,30 @@ fn convert_inner(image: &Image<'_>, buf: &mut [u8]) -> Option<()> {
                 },
                 has_alpha,
             ) => {
-                let decoded = image.decode().ok()?;
+                let decoded = image.decode()?;
 
                 let transformed =
                     from_icc(&profile, num_components, has_alpha, width, height, &decoded);
 
-                if let Some(transformed) = transformed {
+                if let Ok(transformed) = transformed {
                     buf.copy_from_slice(&transformed);
                 } else {
                     match num_components {
                         1 => process(image, buf, width, height, has_alpha, ColorSpace::Gray)?,
                         3 => process(image, buf, width, height, has_alpha, ColorSpace::RGB)?,
                         4 => process(image, buf, width, height, has_alpha, ColorSpace::CMYK)?,
-                        _ => return None,
+                        _ => {
+                            return Err(unsupported_color_error(image.original_color_type()));
+                        }
                     }
                 };
             }
-            (ColorSpace::Unknown { .. }, _) => return None,
+            (ColorSpace::Unknown { .. }, _) => {
+                return Err(unsupported_color_error(image.original_color_type()));
+            }
         };
 
-        Some(())
+        Ok(())
     }
 
     process(image, buf, width, height, has_alpha, color_space)
@@ -299,6 +297,18 @@ impl From<crate::DecodeError> for ImageError {
     fn from(value: crate::DecodeError) -> Self {
         Self::Decoding(value.into())
     }
+}
+
+fn icc_err_to_image(err: CmsError) -> ImageError {
+    let format = ImageFormatHint::Name("JPEG2000".to_owned());
+    ImageError::Decoding(DecodingError::new(format, err))
+}
+
+fn unsupported_color_error(color: ExtendedColorType) -> ImageError {
+    ImageError::Unsupported(image::error::UnsupportedError::from_format_and_kind(
+        ImageFormatHint::Name("JPEG2000".to_owned()),
+        image::error::UnsupportedErrorKind::Color(color),
+    ))
 }
 
 /// Registers the decoder with the `image` crate so that non-format-specific calls such as
