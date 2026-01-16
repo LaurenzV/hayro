@@ -16,7 +16,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("test.jp2"));
 
-    hayro_jpeg2000::image::register_decoding_hook();
+    hayro_jpeg2000::integration::register_decoding_hook();
     let image = image::ImageReader::open(target)?.decode()?;
     image.save("out.png")?;
     Ok(())

@@ -90,7 +90,7 @@ pub use error::{
 };
 
 #[cfg(feature = "image")]
-pub mod image;
+pub mod integration;
 mod j2c;
 mod jp2;
 pub(crate) mod reader;
