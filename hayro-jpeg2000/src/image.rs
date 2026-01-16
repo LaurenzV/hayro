@@ -60,7 +60,7 @@ impl ImageDecoder for Image<'_> {
             (4, 8, false) => ExtendedColorType::Cmyk8,
             (4, 16, false) => ExtendedColorType::Cmyk16,
             // CMYK with alpha is not representable
-            _ => ExtendedColorType::Unknown(channel_count * depth),
+            _ => ExtendedColorType::Unknown(orig_bits_per_pixel(self)),
         }
     }
 
@@ -93,6 +93,15 @@ impl ImageDecoder for Image<'_> {
 
         base * factor as u64
     }
+}
+
+/// Private convenience function for `image` integration
+fn orig_bits_per_pixel(img: &Image<'_>) -> u8 {
+    let mut channel_count = img.color_space().num_channels();
+    if img.has_alpha {
+        channel_count += 1;
+    }
+    channel_count * img.original_bit_depth()
 }
 
 fn convert_inner(image: &Image<'_>, buf: &mut [u8]) -> Option<()> {
