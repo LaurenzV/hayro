@@ -7,9 +7,8 @@ use std::{
 
 use crate::{ColorSpace, DecodeSettings, Image};
 use ::image::error::{DecodingError, ImageFormatHint};
-use ::image::{ColorType, ImageDecoder, ImageError, ImageResult};
+use ::image::{ColorType, ExtendedColorType, ImageDecoder, ImageError, ImageResult};
 use image::hooks::{decoding_hook_registered, register_format_detection_hook};
-use image::{ExtendedColorType, Limits};
 use moxcms::{ColorProfile, Layout, TransformOptions};
 
 const CMYK_PROFILE: &[u8] = include_bytes!("../assets/CGATS001Compat-v2-micro.icc");
