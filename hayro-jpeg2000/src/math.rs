@@ -532,10 +532,9 @@ impl<const N: usize> SimdBuffer<N> {
     /// Create a new `SimdBuffer` from a `Vec<f32>`, padding it to a multiple of `N`.
     pub(crate) fn new(mut data: Vec<f32>) -> Self {
         let original_len = data.len();
-        let remainder = original_len % N;
-        if remainder != 0 {
-            let padding = N - remainder;
-            data.resize(original_len + padding, 0.0);
+        let padded_len = Self::padded_len(original_len);
+        if padded_len > original_len {
+            data.resize(padded_len, 0.0);
         }
         Self { data, original_len }
     }
@@ -548,6 +547,13 @@ impl<const N: usize> SimdBuffer<N> {
     /// Returns only the original (non-padded) data as an immutable slice.
     pub(crate) fn truncated(&self) -> &[f32] {
         &self.data[..self.original_len]
+    }
+
+    /// Returns the length padded to a multiple of `N`
+    fn padded_len(original_len: usize) -> usize {
+        let remainder = original_len % N;
+        let padding = N - remainder;
+        original_len + padding
     }
 }
 
