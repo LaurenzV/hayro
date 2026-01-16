@@ -526,13 +526,12 @@ impl BitPlaneDecodeContext {
     /// Reset each context to the initial state defined in table D.7.
     fn reset_contexts(&mut self) {
         for context in &mut self.contexts {
-            context.mps = 0;
-            context.index = 0;
+            context.reset();
         }
 
-        self.contexts[0].index = 4;
-        self.contexts[17].index = 3;
-        self.contexts[18].index = 46;
+        self.contexts[0].reset_with_index(4);
+        self.contexts[17].reset_with_index(3);
+        self.contexts[18].reset_with_index(46);
     }
 
     /// Reset state that is transient for each bitplane that is decoded.

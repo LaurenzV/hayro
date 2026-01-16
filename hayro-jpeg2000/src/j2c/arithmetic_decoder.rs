@@ -138,11 +138,13 @@ impl<'a> ArithmeticDecoder<'a> {
 
         self.a = qe_entry.qe;
         // d = if cond { mps } else { 1 - mps }
-        let d = context.mps ^ inv_cond;
+        let d = context.mps() ^ inv_cond;
         // flip mps only when !cond && switch
-        context.mps ^= inv_cond & (qe_entry.switch as u32);
+        context.xor_mps(inv_cond & (qe_entry.switch as u32));
         // index = if cond { nmps } else { nlps }
-        context.index = cond * qe_entry.nmps + inv_cond * qe_entry.nlps;
+        let cond_u8 = cond as u8;
+        let inv_cond_u8 = inv_cond as u8;
+        context.set_index(cond_u8 * qe_entry.nmps + inv_cond_u8 * qe_entry.nlps);
 
         d
     }
@@ -152,7 +154,7 @@ impl<'a> ArithmeticDecoder<'a> {
     /// We use the version from Annex G from <https://www.itu.int/rec/T-REC-T.88-201808-I>.
     #[inline(always)]
     fn decode(&mut self, context: &mut ArithmeticDecoderContext) -> u32 {
-        let qe_entry = &QE_TABLE[context.index as usize];
+        let qe_entry = &QE_TABLE[context.index() as usize];
 
         self.a -= qe_entry.qe;
 
@@ -163,7 +165,7 @@ impl<'a> ArithmeticDecoder<'a> {
                 d = self.exchange_mps(context, qe_entry);
                 self.renormalize();
             } else {
-                d = context.mps;
+                d = context.mps();
             }
         } else {
             self.c -= self.a << 16;
@@ -198,11 +200,13 @@ impl<'a> ArithmeticDecoder<'a> {
         let cond = (self.a < qe_entry.qe) as u32;
         let inv_cond = 1 - cond;
         // d = if cond { 1 - mps } else { mps }
-        let d = context.mps ^ cond;
+        let d = context.mps() ^ cond;
         // flip mps only when cond && switch
-        context.mps ^= cond & (qe_entry.switch as u32);
+        context.xor_mps(cond & (qe_entry.switch as u32));
         // index = if cond { nlps } else { nmps }
-        context.index = cond * qe_entry.nlps + inv_cond * qe_entry.nmps;
+        let cond_u8 = cond as u8;
+        let inv_cond_u8 = inv_cond as u8;
+        context.set_index(cond_u8 * qe_entry.nlps + inv_cond_u8 * qe_entry.nmps);
         d
     }
 
@@ -228,17 +232,51 @@ impl<'a> ArithmeticDecoder<'a> {
     }
 }
 
+// Previously, we stored the context as 2 u32's, but doing it with a bit-packed
+// u8 seems to be slightly better (though it doesn't make that huge of a
+// difference).
+/// Bits 0-6 = index (0-46).
+/// Bit 7 = mps (0 or 1).
 #[derive(Copy, Clone, Debug, Default)]
-pub(crate) struct ArithmeticDecoderContext {
-    pub(crate) index: u32,
-    pub(crate) mps: u32,
+pub(crate) struct ArithmeticDecoderContext(u8);
+
+impl ArithmeticDecoderContext {
+    #[inline(always)]
+    pub(crate) fn index(self) -> u32 {
+        (self.0 & 0x7F) as u32
+    }
+
+    #[inline(always)]
+    pub(crate) fn mps(self) -> u32 {
+        (self.0 >> 7) as u32
+    }
+
+    #[inline(always)]
+    fn set_index(&mut self, index: u8) {
+        self.0 = (self.0 & 0x80) | index;
+    }
+
+    #[inline(always)]
+    fn xor_mps(&mut self, val: u32) {
+        self.0 ^= ((val & 1) << 7) as u8;
+    }
+
+    #[inline(always)]
+    pub(crate) fn reset(&mut self) {
+        self.0 = 0;
+    }
+
+    #[inline(always)]
+    pub(crate) fn reset_with_index(&mut self, index: u8) {
+        self.0 = index;
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
 struct QeData {
     qe: u32,
-    nmps: u32,
-    nlps: u32,
+    nmps: u8,
+    nlps: u8,
     switch: bool,
 }
 
