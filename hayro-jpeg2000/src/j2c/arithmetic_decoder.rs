@@ -78,21 +78,35 @@ impl<'a> ArithmeticDecoder<'a> {
         }
     }
 
-    /// The RENORMD procedure from C.3.3.
+    /// The RENORMD procedure from C.3.3 (optimized with batch shifts).
     #[inline(always)]
     fn renormalize(&mut self) {
-        loop {
+        // Original code:
+        // loop {
+        //     if self.shift_count == 0 {
+        //         self.read_byte();
+        //     }
+        //
+        //     self.a <<= 1;
+        //     self.c <<= 1;
+        //     self.shift_count -= 1;
+        //
+        //     if self.a & 0x8000 != 0 {
+        //         break;
+        //     }
+        // }
+
+        // Optimization: Batch shifts.
+        while self.a & 0x8000 == 0 {
             if self.shift_count == 0 {
                 self.read_byte();
             }
-
-            self.a <<= 1;
-            self.c <<= 1;
-            self.shift_count -= 1;
-
-            if self.a & 0x8000 != 0 {
-                break;
-            }
+            
+            let shifts_needed = self.a.leading_zeros() - 16;
+            let batch = shifts_needed.min(self.shift_count);
+            self.a <<= batch;
+            self.c <<= batch;
+            self.shift_count -= batch;
         }
     }
 
