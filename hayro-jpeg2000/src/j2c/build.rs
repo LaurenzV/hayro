@@ -32,7 +32,7 @@ fn build_decompositions(
     }
 
     if storage.coefficients.is_empty() {
-        // fast path that requests pre-zeroed memory from the OS where available
+        // Fast path that requests pre-zeroed memory from the OS where available.
         storage.coefficients = vec![0.0; total_coefficients];
     } else {
         storage.coefficients.resize(total_coefficients, 0.0);
