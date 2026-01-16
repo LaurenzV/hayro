@@ -1,10 +1,14 @@
 //! Integration with the [image] crate
 
-use std::io::{BufRead, Seek};
+use std::{
+    ffi::OsStr,
+    io::{BufRead, Seek},
+};
 
 use crate::{ColorSpace, DecodeSettings, Image};
 use ::image::error::{DecodingError, ImageFormatHint};
 use ::image::{ColorType, ImageDecoder, ImageError, ImageResult};
+use image::hooks::{decoding_hook_registered, register_format_detection_hook};
 use image::{ExtendedColorType, Limits};
 use moxcms::{ColorProfile, Layout, TransformOptions};
 
@@ -297,4 +301,32 @@ impl From<crate::DecodeError> for ImageError {
     fn from(value: crate::DecodeError) -> Self {
         ImageError::Decoding(value.into())
     }
+}
+
+/// Registers the decoder with the `image` crate so that non-format-specific calls such as
+/// `ImageReader::open("image.jp2")?.decode()?;` work with JPEG2000 files.
+///
+/// Returns `true` on success, or `false` if the hook for JPEG2000 is already registered.
+pub fn register_decoding_hook() -> bool {
+    if decoding_hook_registered(OsStr::new("jp2")) {
+        return false;
+    }
+
+    for extension in ["jp2", "jpg2", "j2k", "jpf"] {
+        image::hooks::register_decoding_hook(
+            extension.into(),
+            Box::new(|r| Ok(Box::new(Jp2Decoder::new(r)?))),
+        );
+        register_format_detection_hook(extension.into(), crate::JP2_MAGIC, None);
+    }
+
+    for extension in ["j2c", "jpc"] {
+        image::hooks::register_decoding_hook(
+            extension.into(),
+            Box::new(|r| Ok(Box::new(Jp2Decoder::new(r)?))),
+        );
+        register_format_detection_hook(extension.into(), crate::CODESTREAM_MAGIC, None);
+    }
+
+    true
 }
