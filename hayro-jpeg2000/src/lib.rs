@@ -95,6 +95,11 @@ mod j2c;
 mod jp2;
 pub(crate) mod reader;
 
+/// JP2 signature box: 00 00 00 0C 6A 50 20 20
+pub(crate) const JP2_MAGIC: &[u8] = b"\x00\x00\x00\x0C\x6A\x50\x20\x20";
+/// Codestream signature: FF 4F FF 51 (SOC + SIZ markers)
+pub(crate) const CODESTREAM_MAGIC: &[u8] = b"\xFF\x4F\xFF\x51";
+
 /// Settings to apply during decoding.
 #[derive(Debug, Copy, Clone)]
 pub struct DecodeSettings {
@@ -149,11 +154,6 @@ pub struct Image<'a> {
 impl<'a> Image<'a> {
     /// Try to create a new JPEG2000 image from the given data.
     pub fn new(data: &'a [u8], settings: &DecodeSettings) -> Result<Self> {
-        // JP2 signature box: 00 00 00 0C 6A 50 20 20
-        const JP2_MAGIC: &[u8] = b"\x00\x00\x00\x0C\x6A\x50\x20\x20";
-        // Codestream signature: FF 4F FF 51 (SOC + SIZ markers)
-        const CODESTREAM_MAGIC: &[u8] = b"\xFF\x4F\xFF\x51";
-
         if data.starts_with(JP2_MAGIC) {
             jp2::parse(data, *settings)
         } else if data.starts_with(CODESTREAM_MAGIC) {
