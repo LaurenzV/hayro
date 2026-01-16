@@ -123,6 +123,33 @@ impl Jp2Decoder {
     }
 }
 
+impl ImageDecoder for Jp2Decoder {
+    fn dimensions(&self) -> (u32, u32) {
+        (self.width, self.height)
+    }
+
+    fn color_type(&self) -> ColorType {
+        self.color_type
+    }
+
+    fn original_color_type(&self) -> ExtendedColorType {
+        self.orig_color_type
+    }
+
+    fn read_image(self, buf: &mut [u8]) -> ImageResult<()>
+    where
+        Self: Sized,
+    {
+        // we can safely .unwrap() because we've already done this on decoder creation and know this works
+        let decoder = Image::new(&self.input, &DecodeSettings::default()).unwrap();
+        decoder.read_image(buf)
+    }
+
+    fn read_image_boxed(self: Box<Self>, buf: &mut [u8]) -> ImageResult<()> {
+        self.read_image(buf)
+    }
+}
+
 /// Private convenience function for `image` integration
 fn orig_bits_per_pixel(img: &Image<'_>) -> u8 {
     let mut channel_count = img.color_space().num_channels();
