@@ -111,12 +111,12 @@ pub struct Jp2Decoder {
 
 impl Jp2Decoder {
     /// Create a new decoder that decodes from the stream ```r```
-    pub fn new<R: BufRead + Seek>(r: R) -> ImageResult<Jp2Decoder> {
+    pub fn new<R: BufRead + Seek>(r: R) -> ImageResult<Self> {
         let mut input = Vec::new();
         let mut r = r;
         r.read_to_end(&mut input)?;
         let headers = Image::new(&input, &DecodeSettings::default())?;
-        Ok(Jp2Decoder {
+        Ok(Self {
             width: headers.width(),
             height: headers.height(),
             color_type: headers.color_type(),
@@ -291,13 +291,13 @@ fn convert_inner(image: &Image<'_>, buf: &mut [u8]) -> Option<()> {
 impl From<crate::DecodeError> for DecodingError {
     fn from(value: crate::DecodeError) -> Self {
         let format = ImageFormatHint::Name("JPEG2000".to_owned());
-        DecodingError::new(format, value)
+        Self::new(format, value)
     }
 }
 
 impl From<crate::DecodeError> for ImageError {
     fn from(value: crate::DecodeError) -> Self {
-        ImageError::Decoding(value.into())
+        Self::Decoding(value.into())
     }
 }
 
