@@ -249,8 +249,8 @@ fn decrypt_rc_aes(
     // n-byte file encryption key to n + 5 bytes by appending the low-order 3 bytes of
     // the object number and the low-order 2 bytes of the generation number in that
     // order, low-order byte first.
-    key.extend(&id.obj_num.to_le_bytes()[..3]);
-    key.extend(&id.gen_num.to_le_bytes()[..2]);
+    key.extend(&id.obj_number.to_le_bytes()[..3]);
+    key.extend(&id.gen_number.to_le_bytes()[..2]);
 
     // If using the AES algorithm, extend the file encryption key an additional 4 bytes by adding the value
     // "sAlT", which corresponds to the hexadecimal values 0x73, 0x41, 0x6C, 0x54. (This addition is done

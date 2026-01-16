@@ -128,7 +128,7 @@ fn fallback_xref_map_inner<'a>(
                     {
                         xref_map.insert(
                             id,
-                            EntryType::ObjStream(last_obj_num.obj_num as u32, idx as u32),
+                            EntryType::ObjStream(last_obj_num.obj_number as u32, idx as u32),
                         );
                     }
                 }
