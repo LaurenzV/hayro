@@ -167,7 +167,7 @@ fn handle_coding_passes(
             _ => unreachable!(),
         };
 
-        let current_bitplane = (coding_pass + 2) / 3;
+        let current_bitplane = coding_pass.div_ceil(3);
         ctx.current_bit_position = ctx.bitplanes - 1 - current_bitplane;
 
         match pass {
