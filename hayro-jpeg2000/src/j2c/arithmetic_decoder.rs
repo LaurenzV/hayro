@@ -101,7 +101,7 @@ impl<'a> ArithmeticDecoder<'a> {
             if self.shift_count == 0 {
                 self.read_byte();
             }
-            
+
             let shifts_needed = self.a.leading_zeros() - 16;
             let batch = shifts_needed.min(self.shift_count);
             self.a <<= batch;
