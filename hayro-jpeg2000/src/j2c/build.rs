@@ -30,7 +30,12 @@ fn build_decompositions(
             component_tile.rect.width() as usize * component_tile.rect.height() as usize;
     }
 
-    storage.coefficients.resize(total_coefficients, 0.0);
+    if storage.coefficients.len() == 0 {
+        // fast path that requests pre-zeroed memory from the OS where available
+        storage.coefficients = vec![0.0; total_coefficients];
+    } else {
+        storage.coefficients.resize(total_coefficients, 0.0);
+    }
     let mut coefficient_counter = 0;
 
     for (component_idx, component_tile) in tile.component_tiles().enumerate() {
