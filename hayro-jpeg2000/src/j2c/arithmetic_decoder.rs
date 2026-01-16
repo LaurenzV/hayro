@@ -78,7 +78,7 @@ impl<'a> ArithmeticDecoder<'a> {
         }
     }
 
-    /// The RENORMD procedure from C.3.3 (optimized with batch shifts).
+    /// The RENORMD procedure from C.3.3.
     #[inline(always)]
     fn renormalize(&mut self) {
         // Original code:
