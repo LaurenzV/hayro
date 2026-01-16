@@ -101,7 +101,7 @@ impl<'a> ArithmeticDecoder<'a> {
     fn exchange_lps(&mut self, context: &mut ArithmeticDecoderContext, qe_entry: &QeData) -> u32 {
         // Original code:
         // let d;
-        // 
+        //
         // if self.a < qe_entry.qe {
         //     self.a = qe_entry.qe;
         //     d = context.mps;
@@ -109,19 +109,19 @@ impl<'a> ArithmeticDecoder<'a> {
         // } else {
         //     self.a = qe_entry.qe;
         //     d = 1 - context.mps;
-        // 
+        //
         //     if qe_entry.switch {
         //         context.mps = 1 - context.mps;
         //     }
-        // 
+        //
         //     context.index = qe_entry.nlps;
         // }
-        
+
         // Branchless version, shows better performance.
-        
+
         let cond = (self.a < qe_entry.qe) as u32;
         let inv_cond = 1 - cond;
-        
+
         self.a = qe_entry.qe;
         // d = if cond { mps } else { 1 - mps }
         let d = context.mps ^ inv_cond;
@@ -129,7 +129,7 @@ impl<'a> ArithmeticDecoder<'a> {
         context.mps ^= inv_cond & (qe_entry.switch as u32);
         // index = if cond { nmps } else { nlps }
         context.index = cond * qe_entry.nmps + inv_cond * qe_entry.nlps;
-        
+
         d
     }
 
@@ -166,14 +166,14 @@ impl<'a> ArithmeticDecoder<'a> {
     fn exchange_mps(&mut self, context: &mut ArithmeticDecoderContext, qe_entry: &QeData) -> u32 {
         // Original code:
         //  let d;
-        // 
+        //
         //  if self.a < qe_entry.qe {
         //      d = 1 - context.mps;
-        // 
+        //
         //      if qe_entry.switch {
         //          context.mps = 1 - context.mps;
         //      }
-        // 
+        //
         //      context.index = qe_entry.nlps;
         //  } else {
         //      d = context.mps;
