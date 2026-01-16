@@ -213,26 +213,34 @@ impl<'a, T: Readable<'a>> FromBytes<'a> for T {
 /// An identifier for a PDF object.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct ObjectIdentifier {
-    pub(crate) obj_num: i32,
-    pub(crate) gen_num: i32,
+    /// The object number.
+    pub obj_number: i32,
+    /// The generation number.
+    pub gen_number: i32,
 }
 
 impl ObjectIdentifier {
     /// Create a new `ObjectIdentifier`.
-    pub fn new(obj_num: i32, gen_num: i32) -> Self {
-        Self { obj_num, gen_num }
+    pub fn new(obj_number: i32, gen_number: i32) -> Self {
+        Self {
+            obj_number,
+            gen_number,
+        }
     }
 }
 
 impl Readable<'_> for ObjectIdentifier {
     fn read(r: &mut Reader<'_>, _: &ReaderContext<'_>) -> Option<Self> {
-        let obj_num = r.read_without_context::<i32>()?;
+        let obj_number = r.read_without_context::<i32>()?;
         r.skip_white_spaces_and_comments();
-        let gen_num = r.read_without_context::<i32>()?;
+        let gen_number = r.read_without_context::<i32>()?;
         r.skip_white_spaces_and_comments();
         r.forward_tag(b"obj")?;
 
-        Some(Self { obj_num, gen_num })
+        Some(Self {
+            obj_number,
+            gen_number,
+        })
     }
 }
 

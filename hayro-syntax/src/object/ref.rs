@@ -31,6 +31,12 @@ impl From<ObjRef> for ObjectIdentifier {
     }
 }
 
+impl From<ObjectIdentifier> for ObjRef {
+    fn from(value: ObjectIdentifier) -> Self {
+        Self::new(value.obj_number, value.gen_number)
+    }
+}
+
 impl Skippable for ObjRef {
     fn skip(r: &mut Reader<'_>, _: bool) -> Option<()> {
         r.skip_not_in_content_stream::<i32>()?;
