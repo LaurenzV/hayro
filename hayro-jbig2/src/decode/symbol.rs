@@ -1,8 +1,4 @@
 //! Symbol dictionary segment parsing and decoding (7.4.2, 6.5).
-//!
-//! This module handles parsing and decoding of symbol dictionary segments.
-//! Symbol dictionaries store collections of symbol bitmaps that can be
-//! referenced by text region segments.
 
 use alloc::vec;
 use alloc::vec::Vec;
@@ -27,14 +23,6 @@ use crate::integer_decoder::IntegerDecoder;
 use crate::reader::Reader;
 
 /// Decode a symbol dictionary segment (7.4.2, 6.5).
-///
-/// `input_symbols` are references to symbols from referred-to symbol dictionaries
-/// (SDINSYMS). Symbols are only cloned if they need to be re-exported.
-///
-/// `referred_tables` contains Huffman tables from referred table segments (type 53).
-/// These are used when SDHUFF=1 and the Huffman flags specify user-supplied tables.
-///
-/// `standard_tables` provides access to the standard Huffman tables.
 pub(crate) fn decode(
     reader: &mut Reader<'_>,
     input_symbols: &[&DecodedRegion],
@@ -43,14 +31,22 @@ pub(crate) fn decode(
 ) -> Result<SymbolDictionary> {
     let header = parse(reader)?;
 
-    // "6) Invoke the symbol dictionary decoding procedure described in 6.5"
-    let exported_symbols = decode_symbols(
-        reader,
-        &header,
-        input_symbols,
-        referred_tables,
-        standard_tables,
-    )?;
+    let exported_symbols = if header.flags.use_huffman {
+        decode_symbols_huffman(
+            reader,
+            &header,
+            input_symbols,
+            referred_tables,
+            standard_tables,
+        )
+    } else {
+        let data = reader.tail().ok_or(ParseError::UnexpectedEof)?;
+        if header.flags.use_refagg {
+            decode_symbols_refagg(data, &header, input_symbols)
+        } else {
+            decode_symbols_direct(data, &header, input_symbols)
+        }
+    }?;
 
     Ok(SymbolDictionary { exported_symbols })
 }
@@ -149,177 +145,89 @@ pub(crate) enum SdRTemplate {
 }
 
 /// Parsed symbol dictionary segment flags (7.4.2.1.1).
-///
-/// "This two-byte field is formatted as shown in Figure 33 and as described
-/// below." (7.4.2.1.1)
 #[derive(Debug, Clone)]
 pub(crate) struct SymbolDictionaryFlags {
-    /// "Bit 0: SDHUFF. If this bit is 1, then the segment uses the Huffman
-    /// encoding variant. If this bit is 0, then the segment uses the arithmetic
-    /// encoding variant." (7.4.2.1.1)
-    pub(crate) sdhuff: bool,
-
-    /// "Bit 1: SDREFAGG. If this bit is 0, then no refinement or aggregate
-    /// coding is used in this segment. If this bit is 1, then every symbol
-    /// bitmap is refinement/aggregate coded." (7.4.2.1.1)
-    pub(crate) sdrefagg: bool,
-
-    /// "Bits 2-3: SDHUFFDH selection." (7.4.2.1.1)
-    /// Only meaningful when SDHUFF is 1.
-    pub(crate) sdhuffdh: SdHuffDh,
-
-    /// "Bits 4-5: SDHUFFDW selection." (7.4.2.1.1)
-    /// Only meaningful when SDHUFF is 1.
-    pub(crate) sdhuffdw: SdHuffDw,
-
-    /// "Bit 6: SDHUFFBMSIZE selection." (7.4.2.1.1)
-    /// Only meaningful when SDHUFF is 1.
-    pub(crate) sdhuffbmsize: SdHuffBmSize,
-
-    /// "Bit 7: SDHUFFAGGINST selection." (7.4.2.1.1)
-    /// Only meaningful when SDHUFF is 1 and SDREFAGG is 1.
-    pub(crate) sdhuffagginst: SdHuffAggInst,
-
-    /// "Bit 8: Bitmap coding context used. If SDHUFF is 1 and SDREFAGG is 0 then
-    /// this field must contain the value 0." (7.4.2.1.1)
+    pub(crate) use_huffman: bool,
+    pub(crate) use_refagg: bool,
+    pub(crate) delta_height_table: SdHuffDh,
+    pub(crate) delta_width_table: SdHuffDw,
+    pub(crate) bitmap_size_table: SdHuffBmSize,
+    pub(crate) aggregate_instance_table: SdHuffAggInst,
     pub(crate) _bitmap_context_used: bool,
-
-    /// "Bit 9: Bitmap coding context retained. If SDHUFF is 1 and SDREFAGG is 0
-    /// then this field must contain the value 0." (7.4.2.1.1)
     pub(crate) _bitmap_context_retained: bool,
-
-    /// "Bits 10-11: SDTEMPLATE. This field controls the template used to decode
-    /// symbol bitmaps if SDHUFF is 0. If SDHUFF is 1, this field must contain
-    /// the value 0." (7.4.2.1.1)
-    pub(crate) sdtemplate: Template,
-
-    /// "Bit 12: SDRTEMPLATE. This field controls the template used to decode
-    /// symbol bitmaps if SDREFAGG is 1. If SDREFAGG is 0, this field must
-    /// contain the value 0." (7.4.2.1.1)
-    pub(crate) sdrtemplate: SdRTemplate,
+    pub(crate) template: Template,
+    pub(crate) refinement_template: SdRTemplate,
 }
 
 /// Parsed symbol dictionary segment header (7.4.2.1).
-///
-/// "A symbol dictionary segment's data part begins with a symbol dictionary
-/// segment data header, containing the fields shown in Figure 32." (7.4.2.1)
 #[derive(Debug, Clone)]
 pub(crate) struct SymbolDictionaryHeader {
-    /// Symbol dictionary flags (7.4.2.1.1).
     pub(crate) flags: SymbolDictionaryFlags,
-
-    /// Symbol dictionary AT flags (7.4.2.1.2).
-    ///
-    /// "This field is only present if SDHUFF is 0." (7.4.2.1.2)
-    /// - If SDTEMPLATE is 0: 4 AT pixels (8 bytes, Figure 34)
-    /// - If SDTEMPLATE is 1, 2, or 3: 1 AT pixel (2 bytes, Figure 35)
-    pub(crate) adaptive_template_pixels: Vec<AdaptiveTemplatePixel>,
-
-    /// Symbol dictionary refinement AT flags (7.4.2.1.3).
-    ///
-    /// "This field is only present if SDREFAGG is 1 and SDRTEMPLATE is 0."
-    /// (7.4.2.1.3)
-    /// Contains 2 AT pixels (4 bytes, Figure 36).
+    pub(crate) at_pixels: Vec<AdaptiveTemplatePixel>,
     pub(crate) refinement_at_pixels: Vec<AdaptiveTemplatePixel>,
-
-    /// "SDNUMEXSYMS: This four-byte field contains the number of symbols
-    /// exported from this dictionary." (7.4.2.1.4)
     pub(crate) num_exported_symbols: u32,
-
-    /// "SDNUMNEWSYMS: This four-byte field contains the number of symbols
-    /// defined in this dictionary." (7.4.2.1.5)
     pub(crate) num_new_symbols: u32,
 }
 
 /// Parse a symbol dictionary segment header (7.4.2.1).
 fn parse(reader: &mut Reader<'_>) -> Result<SymbolDictionaryHeader> {
-    // 7.4.2.1.1: Symbol dictionary flags
     let flags_word = reader.read_u16().ok_or(ParseError::UnexpectedEof)?;
-
-    // "Bit 0: SDHUFF"
-    let sdhuff = flags_word & 0x0001 != 0;
-
-    // "Bit 1: SDREFAGG"
-    let sdrefagg = flags_word & 0x0002 != 0;
-
-    // "Bits 2-3: SDHUFFDH selection"
-    let sdhuffdh = SdHuffDh::from_value(((flags_word >> 2) & 0x03) as u8)?;
-
-    // "Bits 4-5: SDHUFFDW selection"
-    let sdhuffdw = SdHuffDw::from_value(((flags_word >> 4) & 0x03) as u8)?;
-
-    // "Bit 6: SDHUFFBMSIZE selection"
-    let sdhuffbmsize = if flags_word & 0x0040 != 0 {
+    let use_huffman = flags_word & 0x0001 != 0;
+    let use_refagg = flags_word & 0x0002 != 0;
+    let delta_height_table = SdHuffDh::from_value(((flags_word >> 2) & 0x03) as u8)?;
+    let delta_width_table = SdHuffDw::from_value(((flags_word >> 4) & 0x03) as u8)?;
+    let bitmap_size_table = if flags_word & 0x0040 != 0 {
         SdHuffBmSize::UserSupplied
     } else {
         SdHuffBmSize::TableB1
     };
 
-    // "Bit 7: SDHUFFAGGINST selection"
-    let sdhuffagginst = if flags_word & 0x0080 != 0 {
+    let aggregate_instance_table = if flags_word & 0x0080 != 0 {
         SdHuffAggInst::UserSupplied
     } else {
         SdHuffAggInst::TableB1
     };
 
-    // "Bit 8: Bitmap coding context used"
     let bitmap_context_used = flags_word & 0x0100 != 0;
-
-    // "Bit 9: Bitmap coding context retained"
     let bitmap_context_retained = flags_word & 0x0200 != 0;
-
-    // "Bits 10-11: SDTEMPLATE"
-    let sdtemplate = Template::from_byte((flags_word >> 10) as u8);
-
-    // "Bit 12: SDRTEMPLATE"
-    let sdrtemplate = if flags_word & 0x1000 != 0 {
+    let template = Template::from_byte((flags_word >> 10) as u8);
+    let refinement_template = if flags_word & 0x1000 != 0 {
         SdRTemplate::Template1
     } else {
         SdRTemplate::Template0
     };
 
     let flags = SymbolDictionaryFlags {
-        sdhuff,
-        sdrefagg,
-        sdhuffdh,
-        sdhuffdw,
-        sdhuffbmsize,
-        sdhuffagginst,
+        use_huffman,
+        use_refagg,
+        delta_height_table,
+        delta_width_table,
+        bitmap_size_table,
+        aggregate_instance_table,
+        // TODO: Implement those.
         _bitmap_context_used: bitmap_context_used,
         _bitmap_context_retained: bitmap_context_retained,
-        sdtemplate,
-        sdrtemplate,
+        template,
+        refinement_template,
     };
 
-    // 7.4.2.1.2: Symbol dictionary AT flags
-    // "This field is only present if SDHUFF is 0."
-    let adaptive_template_pixels = if !sdhuff {
-        parse_symbol_dictionary_at_flags(reader, sdtemplate)?
+    let at_pixels = if !use_huffman {
+        parse_symbol_dictionary_at_flags(reader, template)?
     } else {
         Vec::new()
     };
 
-    // 7.4.2.1.3: Symbol dictionary refinement AT flags
-    // "This field is only present if SDREFAGG is 1 and SDRTEMPLATE is 0."
-    let refinement_at_pixels = if sdrefagg && sdrtemplate == SdRTemplate::Template0 {
+    let refinement_at_pixels = if use_refagg && refinement_template == SdRTemplate::Template0 {
         parse_refinement_at_pixels(reader)?
     } else {
         Vec::new()
     };
-
-    // 7.4.2.1.4: SDNUMEXSYMS
-    // "This four-byte field contains the number of symbols exported from this
-    // dictionary."
     let num_exported_symbols = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
-
-    // 7.4.2.1.5: SDNUMNEWSYMS
-    // "This four-byte field contains the number of symbols defined in this
-    // dictionary."
     let num_new_symbols = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
 
     Ok(SymbolDictionaryHeader {
         flags,
-        adaptive_template_pixels,
+        at_pixels,
         refinement_at_pixels,
         num_exported_symbols,
         num_new_symbols,
@@ -327,10 +235,6 @@ fn parse(reader: &mut Reader<'_>) -> Result<SymbolDictionaryHeader> {
 }
 
 /// Parse symbol dictionary AT flags (7.4.2.1.2).
-///
-/// "If SDTEMPLATE is 0, it is an eight-byte field, formatted as shown in
-/// Figure 34. If SDTEMPLATE is 1, 2 or 3, it is a two-byte field formatted
-/// as shown in Figure 35." (7.4.2.1.2)
 fn parse_symbol_dictionary_at_flags(
     reader: &mut Reader<'_>,
     sdtemplate: Template,
@@ -363,49 +267,9 @@ fn parse_symbol_dictionary_at_flags(
 }
 
 /// A decoded symbol dictionary segment.
-///
-/// "A symbol dictionary segment is decoded according to the following steps:
-/// 1) Interpret its header, as described in 7.4.2.1.
-/// 2) Decode (or retrieve the results of decoding) any referred-to symbol
-///    dictionary segments and tables segments"
 #[derive(Debug, Clone)]
 pub(crate) struct SymbolDictionary {
-    /// The exported symbols (SDEXSYMS).
-    /// "The symbols exported by this symbol dictionary. Contains SDNUMEXSYMS
-    /// symbols." (Table 14)
     pub(crate) exported_symbols: Vec<DecodedRegion>,
-}
-
-/// Symbol dictionary decoding procedure (6.5).
-///
-/// "This decoding procedure is used to decode a set of symbols; these symbols
-/// can then be used by text region decoding procedures, or in some cases by
-/// other symbol dictionary decoding procedures." (6.5.1)
-fn decode_symbols(
-    reader: &mut Reader<'_>,
-    header: &SymbolDictionaryHeader,
-    input_symbols: &[&DecodedRegion],
-    referred_tables: &[HuffmanTable],
-    standard_tables: &StandardHuffmanTables,
-) -> Result<Vec<DecodedRegion>> {
-    if header.flags.sdhuff {
-        // "If SDHUFF is 1, then the segment uses the Huffman encoding variant."
-        decode_symbols_huffman(
-            reader,
-            header,
-            input_symbols,
-            referred_tables,
-            standard_tables,
-        )
-    } else {
-        // "If SDHUFF is 0, then the segment uses the arithmetic encoding variant."
-        let data = reader.tail().ok_or(ParseError::UnexpectedEof)?;
-        if header.flags.sdrefagg {
-            decode_symbols_refagg(data, header, input_symbols)
-        } else {
-            decode_symbols_direct(data, header, input_symbols)
-        }
-    }
 }
 
 /// Decode symbols using Huffman coding (SDHUFF=1).
@@ -423,10 +287,10 @@ fn decode_symbols_huffman(
     // they may be included directly in the symbol dictionary segment, immediately
     // following the symbol dictionary segment header." (7.4.2.1.6)
     let custom_count = [
-        header.flags.sdhuffdh == SdHuffDh::UserSupplied,
-        header.flags.sdhuffdw == SdHuffDw::UserSupplied,
-        header.flags.sdhuffbmsize == SdHuffBmSize::UserSupplied,
-        header.flags.sdhuffagginst == SdHuffAggInst::UserSupplied,
+        header.flags.delta_height_table == SdHuffDh::UserSupplied,
+        header.flags.delta_width_table == SdHuffDw::UserSupplied,
+        header.flags.bitmap_size_table == SdHuffBmSize::UserSupplied,
+        header.flags.aggregate_instance_table == SdHuffAggInst::UserSupplied,
     ]
     .into_iter()
     .filter(|x| *x)
@@ -446,24 +310,24 @@ fn decode_symbols_huffman(
     // Select Huffman tables based on flags (7.4.2.1.6)
     // "The order of the tables that appear is in the natural order determined
     // by 7.4.2.1.1." (7.4.2.1.6)
-    let sdhuffdh = match header.flags.sdhuffdh {
+    let sdhuffdh = match header.flags.delta_height_table {
         SdHuffDh::TableB4 => standard_tables.table_d(),
         SdHuffDh::TableB5 => standard_tables.table_e(),
         SdHuffDh::UserSupplied => get_custom(),
     };
 
-    let sdhuffdw = match header.flags.sdhuffdw {
+    let sdhuffdw = match header.flags.delta_width_table {
         SdHuffDw::TableB2 => standard_tables.table_b(),
         SdHuffDw::TableB3 => standard_tables.table_c(),
         SdHuffDw::UserSupplied => get_custom(),
     };
 
-    let sdhuffbmsize = match header.flags.sdhuffbmsize {
+    let sdhuffbmsize = match header.flags.bitmap_size_table {
         SdHuffBmSize::TableB1 => standard_tables.table_a(),
         SdHuffBmSize::UserSupplied => get_custom(),
     };
 
-    let _sdhuffagginst = match header.flags.sdhuffagginst {
+    let _sdhuffagginst = match header.flags.aggregate_instance_table {
         SdHuffAggInst::TableB1 => standard_tables.table_a(),
         SdHuffAggInst::UserSupplied => get_custom(),
     };
@@ -518,7 +382,7 @@ fn decode_symbols_huffman(
                 .checked_add(symwidth)
                 .ok_or(DecodeError::Overflow)?;
 
-            if header.flags.sdrefagg {
+            if header.flags.use_refagg {
                 // "ii) If SDHUFF is 0 or SDREFAGG is 1, then decode the symbol's bitmap
                 // as described in 6.5.8."
                 // TODO: Implement refinement/aggregate with Huffman
@@ -535,7 +399,7 @@ fn decode_symbols_huffman(
 
         // "d) If SDHUFF is 1 and SDREFAGG is 0, then decode the height class collective
         // bitmap as described in 6.5.9."
-        if !header.flags.sdrefagg {
+        if !header.flags.use_refagg {
             decode_height_class_collective_bitmap(
                 reader,
                 sdhuffbmsize,
@@ -733,7 +597,7 @@ fn decode_symbols_direct(
     header: &SymbolDictionaryHeader,
     input_symbols: &[&DecodedRegion],
 ) -> Result<Vec<DecodedRegion>> {
-    let template = header.flags.sdtemplate;
+    let template = header.flags.template;
     let num_contexts = 1 << template.context_bits();
     let mut gb_contexts = vec![Context::default(); num_contexts];
 
@@ -766,7 +630,7 @@ fn decode_symbols_refagg(
     };
 
     // Refinement contexts
-    let gr_template = match header.flags.sdrtemplate {
+    let gr_template = match header.flags.refinement_template {
         SdRTemplate::Template0 => RefinementTemplate::Template0,
         SdRTemplate::Template1 => RefinementTemplate::Template1,
     };
@@ -904,13 +768,13 @@ fn decode_symbol_bitmap(
     // GBAT = SDAT (adaptive template pixels from header)
 
     let mut region = DecodedRegion::new(width, height);
-    let template = header.flags.sdtemplate;
+    let template = header.flags.template;
 
     // Decode each pixel using generic region decoding (6.2.5)
     // with TPGDON = 0 (no typical prediction)
     for y in 0..height {
         for x in 0..width {
-            let context = gather_context(&region, x, y, template, &header.adaptive_template_pixels);
+            let context = gather_context(&region, x, y, template, &header.at_pixels);
             let pixel = decoder.decode(&mut contexts[context as usize]);
             region.set_pixel(x, y, pixel != 0);
         }
