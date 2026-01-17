@@ -16,7 +16,6 @@ use crate::decode::{
 };
 use crate::error::{
     DecodeError, HuffmanError, ParseError, RegionError, Result, SymbolError, TemplateError, bail,
-    err,
 };
 use crate::huffman_table::{HuffmanTable, StandardHuffmanTables};
 use crate::integer_decoder::IntegerDecoder;
@@ -51,55 +50,14 @@ pub(crate) fn decode(
     Ok(SymbolDictionary { exported_symbols })
 }
 
-/// Huffman table selection for symbol dictionary height differences (SDHUFFDH).
+/// Huffman table selection for symbol dictionary fields.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum SdHuffDh {
-    TableB4,
-    TableB5,
-    UserSupplied,
-}
-
-impl SdHuffDh {
-    fn from_value(value: u8) -> Result<Self> {
-        match value & 0x03 {
-            0 => Ok(Self::TableB4),
-            1 => Ok(Self::TableB5),
-            3 => Ok(Self::UserSupplied),
-            _ => err!(HuffmanError::InvalidSelection),
-        }
-    }
-}
-
-/// Huffman table selection for symbol dictionary width differences (SDHUFFDW).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum SdHuffDw {
+pub(crate) enum HuffmanTableSelection {
+    TableB1,
     TableB2,
     TableB3,
-    UserSupplied,
-}
-
-impl SdHuffDw {
-    fn from_value(value: u8) -> Result<Self> {
-        match value {
-            0 => Ok(Self::TableB2),
-            1 => Ok(Self::TableB3),
-            3 => Ok(Self::UserSupplied),
-            _ => err!(HuffmanError::InvalidSelection),
-        }
-    }
-}
-
-/// Huffman table selection for bitmap size (SDHUFFBMSIZE).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum SdHuffBmSize {
-    TableB1,
-    UserSupplied,
-}
-
-/// Huffman table selection for aggregate instances (SDHUFFAGGINST).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum SdHuffAggInst {
-    TableB1,
+    TableB4,
+    TableB5,
     UserSupplied,
 }
 
@@ -121,10 +79,10 @@ pub(crate) enum SdRTemplate {
 pub(crate) struct SymbolDictionaryFlags {
     pub(crate) use_huffman: bool,
     pub(crate) use_refagg: bool,
-    pub(crate) delta_height_table: SdHuffDh,
-    pub(crate) delta_width_table: SdHuffDw,
-    pub(crate) bitmap_size_table: SdHuffBmSize,
-    pub(crate) aggregate_instance_table: SdHuffAggInst,
+    pub(crate) delta_height_table: HuffmanTableSelection,
+    pub(crate) delta_width_table: HuffmanTableSelection,
+    pub(crate) bitmap_size_table: HuffmanTableSelection,
+    pub(crate) aggregate_instance_table: HuffmanTableSelection,
     pub(crate) _bitmap_context_used: bool,
     pub(crate) _bitmap_context_retained: bool,
     pub(crate) template: Template,
@@ -146,18 +104,31 @@ fn parse(reader: &mut Reader<'_>) -> Result<SymbolDictionaryHeader> {
     let flags_word = reader.read_u16().ok_or(ParseError::UnexpectedEof)?;
     let use_huffman = flags_word & 0x0001 != 0;
     let use_refagg = flags_word & 0x0002 != 0;
-    let delta_height_table = SdHuffDh::from_value((flags_word >> 2) as u8)?;
-    let delta_width_table = SdHuffDw::from_value((flags_word >> 4) as u8)?;
+
+    let delta_height_table = match (flags_word >> 2) & 0x03 {
+        0 => HuffmanTableSelection::TableB4,
+        1 => HuffmanTableSelection::TableB5,
+        3 => HuffmanTableSelection::UserSupplied,
+        _ => bail!(HuffmanError::InvalidSelection),
+    };
+
+    let delta_width_table = match (flags_word >> 4) & 0x03 {
+        0 => HuffmanTableSelection::TableB2,
+        1 => HuffmanTableSelection::TableB3,
+        3 => HuffmanTableSelection::UserSupplied,
+        _ => bail!(HuffmanError::InvalidSelection),
+    };
+
     let bitmap_size_table = if flags_word & 0x0040 != 0 {
-        SdHuffBmSize::UserSupplied
+        HuffmanTableSelection::UserSupplied
     } else {
-        SdHuffBmSize::TableB1
+        HuffmanTableSelection::TableB1
     };
 
     let aggregate_instance_table = if flags_word & 0x0080 != 0 {
-        SdHuffAggInst::UserSupplied
+        HuffmanTableSelection::UserSupplied
     } else {
-        SdHuffAggInst::TableB1
+        HuffmanTableSelection::TableB1
     };
 
     let bitmap_context_used = flags_word & 0x0100 != 0;
@@ -259,10 +230,10 @@ fn decode_symbols_huffman(
     // they may be included directly in the symbol dictionary segment, immediately
     // following the symbol dictionary segment header." (7.4.2.1.6)
     let custom_count = [
-        header.flags.delta_height_table == SdHuffDh::UserSupplied,
-        header.flags.delta_width_table == SdHuffDw::UserSupplied,
-        header.flags.bitmap_size_table == SdHuffBmSize::UserSupplied,
-        header.flags.aggregate_instance_table == SdHuffAggInst::UserSupplied,
+        header.flags.delta_height_table == HuffmanTableSelection::UserSupplied,
+        header.flags.delta_width_table == HuffmanTableSelection::UserSupplied,
+        header.flags.bitmap_size_table == HuffmanTableSelection::UserSupplied,
+        header.flags.aggregate_instance_table == HuffmanTableSelection::UserSupplied,
     ]
     .into_iter()
     .filter(|x| *x)
@@ -283,25 +254,29 @@ fn decode_symbols_huffman(
     // "The order of the tables that appear is in the natural order determined
     // by 7.4.2.1.1." (7.4.2.1.6)
     let sdhuffdh = match header.flags.delta_height_table {
-        SdHuffDh::TableB4 => standard_tables.table_d(),
-        SdHuffDh::TableB5 => standard_tables.table_e(),
-        SdHuffDh::UserSupplied => get_custom(),
+        HuffmanTableSelection::TableB4 => standard_tables.table_d(),
+        HuffmanTableSelection::TableB5 => standard_tables.table_e(),
+        HuffmanTableSelection::UserSupplied => get_custom(),
+        _ => unreachable!(),
     };
 
     let sdhuffdw = match header.flags.delta_width_table {
-        SdHuffDw::TableB2 => standard_tables.table_b(),
-        SdHuffDw::TableB3 => standard_tables.table_c(),
-        SdHuffDw::UserSupplied => get_custom(),
+        HuffmanTableSelection::TableB2 => standard_tables.table_b(),
+        HuffmanTableSelection::TableB3 => standard_tables.table_c(),
+        HuffmanTableSelection::UserSupplied => get_custom(),
+        _ => unreachable!(),
     };
 
     let sdhuffbmsize = match header.flags.bitmap_size_table {
-        SdHuffBmSize::TableB1 => standard_tables.table_a(),
-        SdHuffBmSize::UserSupplied => get_custom(),
+        HuffmanTableSelection::TableB1 => standard_tables.table_a(),
+        HuffmanTableSelection::UserSupplied => get_custom(),
+        _ => unreachable!(),
     };
 
     let _sdhuffagginst = match header.flags.aggregate_instance_table {
-        SdHuffAggInst::TableB1 => standard_tables.table_a(),
-        SdHuffAggInst::UserSupplied => get_custom(),
+        HuffmanTableSelection::TableB1 => standard_tables.table_a(),
+        HuffmanTableSelection::UserSupplied => get_custom(),
+        _ => unreachable!(),
     };
 
     let num_input_symbols = input_symbols.len() as u32;
