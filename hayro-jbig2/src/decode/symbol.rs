@@ -6,7 +6,7 @@ use alloc::vec::Vec;
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::DecodedRegion;
 use crate::decode::CombinationOperator;
-use crate::decode::generic::{decode_bitmap_mmr, gather_context};
+use crate::decode::generic::{decode_bitmap_mmr, gather_context, parse_adaptive_template_pixels};
 use crate::decode::generic_refinement::decode_bitmap;
 use crate::decode::text::{
     ReferenceCorner, SymbolBitmap, TextRegionContexts, TextRegionParams, decode_text_region_with,
@@ -14,9 +14,7 @@ use crate::decode::text::{
 use crate::decode::{
     AdaptiveTemplatePixel, RefinementTemplate, Template, parse_refinement_at_pixels,
 };
-use crate::error::{
-    DecodeError, HuffmanError, ParseError, RegionError, Result, SymbolError, TemplateError, bail,
-};
+use crate::error::{DecodeError, HuffmanError, ParseError, RegionError, Result, SymbolError, bail};
 use crate::huffman_table::{HuffmanTable, StandardHuffmanTables};
 use crate::integer_decoder::IntegerDecoder;
 use crate::reader::Reader;
@@ -60,7 +58,6 @@ pub(crate) enum HuffmanTableSelection {
     TableB5,
     UserSupplied,
 }
-
 
 /// Parsed symbol dictionary segment flags (7.4.2.1.1).
 #[derive(Debug, Clone)]
@@ -139,12 +136,13 @@ fn parse(reader: &mut Reader<'_>) -> Result<SymbolDictionaryHeader> {
     };
 
     let at_pixels = if !use_huffman {
-        parse_symbol_dictionary_at_flags(reader, template)?
+        parse_adaptive_template_pixels(reader, template, false)?
     } else {
         Vec::new()
     };
 
-    let refinement_at_pixels = if use_refagg && refinement_template == RefinementTemplate::Template0 {
+    let refinement_at_pixels = if use_refagg && refinement_template == RefinementTemplate::Template0
+    {
         parse_refinement_at_pixels(reader)?
     } else {
         Vec::new()
@@ -159,38 +157,6 @@ fn parse(reader: &mut Reader<'_>) -> Result<SymbolDictionaryHeader> {
         num_exported_symbols,
         num_new_symbols,
     })
-}
-
-/// Parse symbol dictionary AT flags (7.4.2.1.2).
-fn parse_symbol_dictionary_at_flags(
-    reader: &mut Reader<'_>,
-    sdtemplate: Template,
-) -> Result<Vec<AdaptiveTemplatePixel>> {
-    let num_pixels = match sdtemplate {
-        Template::Template0 => 4,
-        Template::Template1 | Template::Template2 | Template::Template3 => 1,
-    };
-
-    let mut pixels = Vec::with_capacity(num_pixels);
-
-    for _ in 0..num_pixels {
-        // "The AT coordinate X and Y fields are signed values, and may take on
-        // values that are permitted according to Figure 7." (7.4.2.1.2)
-        let x = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
-        let y = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
-
-        // Validate AT pixel location (6.2.5.4, Figure 7).
-        // AT pixels must reference already-decoded pixels:
-        // - y must be <= 0 (current row or above)
-        // - if y == 0, x must be < 0 (strictly to the left of current pixel)
-        if y > 0 || (y == 0 && x >= 0) {
-            bail!(TemplateError::InvalidAtPixel);
-        }
-
-        pixels.push(AdaptiveTemplatePixel { x, y });
-    }
-
-    Ok(pixels)
 }
 
 /// A decoded symbol dictionary segment.

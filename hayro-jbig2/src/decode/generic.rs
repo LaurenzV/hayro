@@ -94,7 +94,7 @@ fn parse(reader: &mut Reader<'_>) -> Result<GenericRegionHeader> {
 }
 
 /// Parse adaptive template pixel positions (7.4.6.3).
-fn parse_adaptive_template_pixels(
+pub(crate) fn parse_adaptive_template_pixels(
     reader: &mut Reader<'_>,
     template: Template,
     // TODO: Find a test with this flag.
