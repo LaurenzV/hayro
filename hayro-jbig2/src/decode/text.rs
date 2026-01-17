@@ -537,10 +537,10 @@ fn decode_text_region_direct(
     params: &TextRegionParams<'_>,
 ) -> Result<DecodedRegion> {
     let sbnumsyms = symbols.len() as u32;
-    if sbnumsyms == 0 {
-        bail!(SymbolError::NoSymbols);
-    }
-    let sbsymcodelen = 32 - (sbnumsyms - 1).leading_zeros();
+
+    // Support text regions with 0 symbols, as other decoders seem to support
+    // this as well.
+    let sbsymcodelen = 32 - (sbnumsyms.saturating_sub(1)).leading_zeros();
     let mut contexts = TextRegionContexts::new(sbsymcodelen);
 
     decode_text_region_with(

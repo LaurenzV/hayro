@@ -45,7 +45,7 @@
   "bitmap-stripe.jbig2",
   "bitmap-symbol-big-segmentid.jbig2",
   { "id": "bitmap-symbol-context-reuse.jbig2", "ignore": true },
-  { "id": "bitmap-symbol-empty.jbig2", "ignore": true },
+  "bitmap-symbol-empty.jbig2",
   "bitmap-symbol-manyrefs.jbig2",
   "bitmap-symbol-negative-sbdsoffset.jbig2",
   "bitmap-symbol-refine.jbig2",
