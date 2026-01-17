@@ -46,7 +46,7 @@ pub(crate) fn decode(reader: &mut Reader<'_>) -> Result<PatternDictionary> {
             Template::Template0 => {
                 vec![
                     AdaptiveTemplatePixel {
-                        x: -(pattern_height as i8),
+                        x: -(pattern_width as i8),
                         y: 0,
                     },
                     AdaptiveTemplatePixel { x: -3, y: -1 },

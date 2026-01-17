@@ -12,7 +12,7 @@
   "bitmap-customat.jbig2",
   "bitmap-halftone-10bpp-mmr.jbig2",
   "bitmap-halftone-10bpp.jbig2",
-  {"id": "bitmap-halftone-composite.jbig2", "ignore": true },
+  "bitmap-halftone-composite.jbig2",
   "bitmap-halftone-grid.jbig2",
   "bitmap-halftone-refine.jbig2",
   "bitmap-halftone-skip-dummy.jbig2",
