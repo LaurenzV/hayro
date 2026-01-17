@@ -253,31 +253,22 @@ fn decode_symbols_huffman(
     // Select Huffman tables based on flags (7.4.2.1.6)
     // "The order of the tables that appear is in the natural order determined
     // by 7.4.2.1.1." (7.4.2.1.6)
-    let sdhuffdh = match header.flags.delta_height_table {
-        HuffmanTableSelection::TableB4 => standard_tables.table_d(),
-        HuffmanTableSelection::TableB5 => standard_tables.table_e(),
-        HuffmanTableSelection::UserSupplied => get_custom(),
-        _ => unreachable!(),
+    let mut get_table = |selection: HuffmanTableSelection| -> &HuffmanTable {
+        match selection {
+            HuffmanTableSelection::TableB1 => standard_tables.table_a(),
+            HuffmanTableSelection::TableB2 => standard_tables.table_b(),
+            HuffmanTableSelection::TableB3 => standard_tables.table_c(),
+            HuffmanTableSelection::TableB4 => standard_tables.table_d(),
+            HuffmanTableSelection::TableB5 => standard_tables.table_e(),
+            HuffmanTableSelection::UserSupplied => get_custom(),
+        }
     };
 
-    let sdhuffdw = match header.flags.delta_width_table {
-        HuffmanTableSelection::TableB2 => standard_tables.table_b(),
-        HuffmanTableSelection::TableB3 => standard_tables.table_c(),
-        HuffmanTableSelection::UserSupplied => get_custom(),
-        _ => unreachable!(),
-    };
-
-    let sdhuffbmsize = match header.flags.bitmap_size_table {
-        HuffmanTableSelection::TableB1 => standard_tables.table_a(),
-        HuffmanTableSelection::UserSupplied => get_custom(),
-        _ => unreachable!(),
-    };
-
-    let _sdhuffagginst = match header.flags.aggregate_instance_table {
-        HuffmanTableSelection::TableB1 => standard_tables.table_a(),
-        HuffmanTableSelection::UserSupplied => get_custom(),
-        _ => unreachable!(),
-    };
+    let sdhuffdh = get_table(header.flags.delta_height_table);
+    let sdhuffdw = get_table(header.flags.delta_width_table);
+    let sdhuffbmsize = get_table(header.flags.bitmap_size_table);
+    // TODO: Use this one.
+    let _sdhuffagginst = get_table(header.flags.aggregate_instance_table);
 
     let num_input_symbols = input_symbols.len() as u32;
     let num_new_symbols = header.num_new_symbols;
