@@ -61,18 +61,6 @@ pub(crate) enum HuffmanTableSelection {
     UserSupplied,
 }
 
-/// Template used for refinement coding in symbol dictionary (SDRTEMPLATE).
-///
-/// "Bit 12: SDRTEMPLATE. This field controls the template used to decode symbol
-/// bitmaps if SDREFAGG is 1. If SDREFAGG is 0, this field must contain the
-/// value 0." (7.4.2.1.1)
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum SdRTemplate {
-    /// Template 0 (13 pixels)
-    Template0,
-    /// Template 1 (10 pixels)
-    Template1,
-}
 
 /// Parsed symbol dictionary segment flags (7.4.2.1.1).
 #[derive(Debug, Clone)]
@@ -86,7 +74,7 @@ pub(crate) struct SymbolDictionaryFlags {
     pub(crate) _bitmap_context_used: bool,
     pub(crate) _bitmap_context_retained: bool,
     pub(crate) template: Template,
-    pub(crate) refinement_template: SdRTemplate,
+    pub(crate) refinement_template: RefinementTemplate,
 }
 
 /// Parsed symbol dictionary segment header (7.4.2.1).
@@ -134,11 +122,7 @@ fn parse(reader: &mut Reader<'_>) -> Result<SymbolDictionaryHeader> {
     let bitmap_context_used = flags_word & 0x0100 != 0;
     let bitmap_context_retained = flags_word & 0x0200 != 0;
     let template = Template::from_byte((flags_word >> 10) as u8);
-    let refinement_template = if flags_word & 0x1000 != 0 {
-        SdRTemplate::Template1
-    } else {
-        SdRTemplate::Template0
-    };
+    let refinement_template = RefinementTemplate::from_byte((flags_word >> 12) as u8);
 
     let flags = SymbolDictionaryFlags {
         use_huffman,
