@@ -52,43 +52,29 @@ pub(crate) fn decode(
 }
 
 /// Huffman table selection for symbol dictionary height differences (SDHUFFDH).
-///
-/// "Bits 2-3: SDHUFFDH selection. This two-bit field can take on one of three
-/// values, indicating which table is to be used for SDHUFFDH." (7.4.2.1.1)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SdHuffDh {
-    /// "0: Table B.4"
     TableB4,
-    /// "1: Table B.5"
     TableB5,
-    /// "3: User-supplied table"
     UserSupplied,
 }
 
 impl SdHuffDh {
     fn from_value(value: u8) -> Result<Self> {
-        match value {
+        match value & 0x03 {
             0 => Ok(Self::TableB4),
             1 => Ok(Self::TableB5),
-            // "The value 2 is not permitted." (7.4.2.1.1)
-            2 => err!(HuffmanError::InvalidSelection),
             3 => Ok(Self::UserSupplied),
-            _ => unreachable!(),
+            _ => err!(HuffmanError::InvalidSelection),
         }
     }
 }
 
 /// Huffman table selection for symbol dictionary width differences (SDHUFFDW).
-///
-/// "Bits 4-5: SDHUFFDW selection. This two-bit field can take on one of three
-/// values, indicating which table is to be used for SDHUFFDW." (7.4.2.1.1)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SdHuffDw {
-    /// "0: Table B.2"
     TableB2,
-    /// "1: Table B.3"
     TableB3,
-    /// "3: User-supplied table"
     UserSupplied,
 }
 
@@ -97,37 +83,23 @@ impl SdHuffDw {
         match value {
             0 => Ok(Self::TableB2),
             1 => Ok(Self::TableB3),
-            // "The value 2 is not permitted." (7.4.2.1.1)
-            2 => err!(HuffmanError::InvalidSelection),
             3 => Ok(Self::UserSupplied),
-            _ => unreachable!(),
+            _ => err!(HuffmanError::InvalidSelection),
         }
     }
 }
 
 /// Huffman table selection for bitmap size (SDHUFFBMSIZE).
-///
-/// "Bit 6: SDHUFFBMSIZE selection. If this field is 0 then Table B.1 is used
-/// for SDHUFFBMSIZE. If this field is 1 then a user-supplied table is used for
-/// SDHUFFBMSIZE." (7.4.2.1.1)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SdHuffBmSize {
-    /// Table B.1
     TableB1,
-    /// User-supplied table
     UserSupplied,
 }
 
 /// Huffman table selection for aggregate instances (SDHUFFAGGINST).
-///
-/// "Bit 7: SDHUFFAGGINST selection. If this field is 0 then Table B.1 is used
-/// for SDHUFFAGGINST. If this field is 1 then a user-supplied table is used for
-/// SDHUFFAGGINST." (7.4.2.1.1)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SdHuffAggInst {
-    /// Table B.1
     TableB1,
-    /// User-supplied table
     UserSupplied,
 }
 
@@ -174,8 +146,8 @@ fn parse(reader: &mut Reader<'_>) -> Result<SymbolDictionaryHeader> {
     let flags_word = reader.read_u16().ok_or(ParseError::UnexpectedEof)?;
     let use_huffman = flags_word & 0x0001 != 0;
     let use_refagg = flags_word & 0x0002 != 0;
-    let delta_height_table = SdHuffDh::from_value(((flags_word >> 2) & 0x03) as u8)?;
-    let delta_width_table = SdHuffDw::from_value(((flags_word >> 4) & 0x03) as u8)?;
+    let delta_height_table = SdHuffDh::from_value((flags_word >> 2) as u8)?;
+    let delta_width_table = SdHuffDw::from_value((flags_word >> 4) as u8)?;
     let bitmap_size_table = if flags_word & 0x0040 != 0 {
         SdHuffBmSize::UserSupplied
     } else {
