@@ -144,7 +144,7 @@ fn parse(reader: &mut Reader<'_>) -> Result<SymbolDictionaryHeader> {
         Vec::new()
     };
 
-    let refinement_at_pixels = if use_refagg && refinement_template == SdRTemplate::Template0 {
+    let refinement_at_pixels = if use_refagg && refinement_template == RefinementTemplate::Template0 {
         parse_refinement_at_pixels(reader)?
     } else {
         Vec::new()
@@ -552,10 +552,7 @@ fn decode_symbols_refagg(
     };
 
     // Refinement contexts
-    let gr_template = match header.flags.refinement_template {
-        SdRTemplate::Template0 => RefinementTemplate::Template0,
-        SdRTemplate::Template1 => RefinementTemplate::Template1,
-    };
+    let gr_template = header.flags.refinement_template;
     let num_gr_contexts = 1 << gr_template.context_bits();
     let mut gr_contexts = vec![Context::default(); num_gr_contexts];
 
