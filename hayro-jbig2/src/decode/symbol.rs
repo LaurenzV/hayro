@@ -271,12 +271,12 @@ fn decode_single_refinement_symbol(
         let rdx_i = contexts
             .iardx
             .decode(&mut a_ctx.decoder)
-            .ok_or(SymbolError::OutOfRange)?;
+            .ok_or(SymbolError::UnexpectedOob)?;
 
         let rdy_i = contexts
             .iardy
             .decode(&mut a_ctx.decoder)
-            .ok_or(SymbolError::OutOfRange)?;
+            .ok_or(SymbolError::UnexpectedOob)?;
 
         (id_i, rdx_i, rdy_i)
     };
