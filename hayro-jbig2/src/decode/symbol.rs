@@ -8,9 +8,12 @@ use crate::bitmap::DecodedRegion;
 use crate::decode::generic;
 use crate::decode::generic::{decode_bitmap_mmr, parse_adaptive_template_pixels};
 use crate::decode::generic_refinement::decode_bitmap as decode_refinement_bitmap;
-use crate::decode::text::SymbolIdDecoder;
+use crate::decode::text::{
+    ReferenceCorner, TextRegionContexts, TextRegionParams, decode_text_region_refine_with_contexts,
+};
 use crate::decode::{
-    AdaptiveTemplatePixel, RefinementTemplate, Template, parse_refinement_at_pixels,
+    AdaptiveTemplatePixel, CombinationOperator, RefinementTemplate, Template,
+    parse_refinement_at_pixels,
 };
 use crate::error::{DecodeError, HuffmanError, ParseError, RegionError, Result, SymbolError, bail};
 use crate::huffman_table::{HuffmanTable, StandardHuffmanTables};
@@ -191,15 +194,20 @@ fn decode_bitmap_refagg(
             standard_tables,
         )
     } else {
-        panic!(
-            "REFAGGNINST > 1 not yet implemented: {}, refaggninst={}",
-            if header.flags.use_huffman {
-                "huffman"
-            } else {
-                "arithmetic"
-            },
-            refaggninst
-        );
+        // 6.5.8.2 step 2: "If REFAGGNINST is greater than one, then decode the bitmap
+        // itself using a text region decoding procedure as described in 6.4. Set the
+        // parameters to this decoding procedure as shown in Table 17."
+        decode_aggregation_bitmap(
+            header,
+            a_ctx,
+            h_ctx,
+            input_symbols,
+            new_symbols,
+            symwidth,
+            hcheight,
+            refaggninst as u32,
+            standard_tables,
+        )
     }
 }
 
@@ -222,42 +230,46 @@ fn decode_single_refinement_symbol(
     let total_symbols = num_input_symbols + header.num_new_symbols;
     let mut sbsymcodelen = 32 - (total_symbols - 1).leading_zeros();
 
-    let id_i = if use_huffman {
+    let (id_i, rdx_i, rdy_i) = if use_huffman {
         // See 6.5.8.2.3, the value should be at least 1 if we use huffman coding.
         sbsymcodelen = sbsymcodelen.max(1);
 
-        h_ctx
+        let id_i = h_ctx
             .reader
             .read_bits(sbsymcodelen as u8)
-            .ok_or(ParseError::UnexpectedEof)? as usize
-    } else {
-        let iaid = a_ctx.iaid.get_or_insert(SymbolIdDecoder::new(sbsymcodelen));
+            .ok_or(ParseError::UnexpectedEof)? as usize;
 
-        iaid.decode(&mut a_ctx.decoder) as usize
-    };
-
-    let rdx_i = if use_huffman {
-        standard_tables
+        let rdx_i = standard_tables
             .table_o()
             .decode(&mut h_ctx.reader)?
-            .ok_or(HuffmanError::UnexpectedOob)?
+            .ok_or(HuffmanError::UnexpectedOob)?;
+
+        let rdy_i = standard_tables
+            .table_o()
+            .decode(&mut h_ctx.reader)?
+            .ok_or(HuffmanError::UnexpectedOob)?;
+
+        (id_i, rdx_i, rdy_i)
     } else {
-        a_ctx
+        // Use TextRegionContexts for IAID, IARDX, IARDY so they're shared with
+        // REFAGGNINST > 1 cases (per spec, contexts should be reused).
+        let contexts = a_ctx
+            .text_region_contexts
+            .get_or_insert_with(|| TextRegionContexts::new(sbsymcodelen));
+
+        let id_i = contexts.iaid.decode(&mut a_ctx.decoder) as usize;
+
+        let rdx_i = contexts
             .iardx
             .decode(&mut a_ctx.decoder)
-            .ok_or(SymbolError::OutOfRange)?
-    };
+            .ok_or(SymbolError::OutOfRange)?;
 
-    let rdy_i = if use_huffman {
-        standard_tables
-            .table_o()
-            .decode(&mut h_ctx.reader)?
-            .ok_or(HuffmanError::UnexpectedOob)?
-    } else {
-        a_ctx
+        let rdy_i = contexts
             .iardy
             .decode(&mut a_ctx.decoder)
-            .ok_or(SymbolError::OutOfRange)?
+            .ok_or(SymbolError::OutOfRange)?;
+
+        (id_i, rdx_i, rdy_i)
     };
 
     let reference_region = if id_i < num_input_symbols as usize {
@@ -316,6 +328,75 @@ fn decode_single_refinement_symbol(
     Ok(region)
 }
 
+/// Decode a bitmap when REFAGGNINST > 1 (6.5.8.2, Table 17).
+///
+/// Uses the text region decoding procedure (6.4) with Table 17 parameters.
+#[allow(clippy::too_many_arguments)]
+fn decode_aggregation_bitmap(
+    header: &SymbolDictionaryHeader,
+    a_ctx: &mut ArithmeticContext<'_>,
+    _h_ctx: &mut HuffmanContext<'_>,
+    input_symbols: &[&DecodedRegion],
+    new_symbols: &[DecodedRegion],
+    symwidth: u32,
+    hcheight: u32,
+    refaggninst: u32,
+    _standard_tables: &StandardHuffmanTables,
+) -> Result<DecodedRegion> {
+    let use_huffman = header.flags.use_huffman;
+    let num_input_symbols = input_symbols.len() as u32;
+
+    // 6.5.8.2.4 Setting SBSYMS
+    // "Set SBSYMS to an array of SDNUMINSYMS + NSYMSDECODED symbols, formed by
+    // concatenating the array SDINSYMS and the first NSYMSDECODED entries of
+    // the array SDNEWSYMS."
+    let mut sbsyms: Vec<&DecodedRegion> =
+        Vec::with_capacity(input_symbols.len() + new_symbols.len());
+    sbsyms.extend(input_symbols);
+    for sym in new_symbols {
+        sbsyms.push(sym);
+    }
+    // 6.5.8.2.3 Setting SBSYMCODES and SBSYMCODELEN.
+    let total_symbols = num_input_symbols + header.num_new_symbols;
+    let sbsymcodelen = 32 - (total_symbols - 1).leading_zeros();
+
+    // Table 17 – Parameters used to decode a symbol's bitmap using refinement/aggregate decoding.
+    let params = TextRegionParams {
+        sbw: symwidth,
+        sbh: hcheight,
+        sbnuminstances: refaggninst,
+        sbstrips: 1,
+        sbdefpixel: false,
+        sbcombop: CombinationOperator::Or,
+        transposed: false,
+        refcorner: ReferenceCorner::TopLeft,
+        sbdsoffset: 0,
+        sbrtemplate: header.flags.refinement_template,
+        refinement_at_pixels: &header.refinement_at_pixels,
+    };
+
+    if use_huffman {
+        // REFAGGNINST > 1 with Huffman is not yet supported.
+        // Table 17 specifies SBHUFF = 0 (arithmetic), but the data embedding
+        // for Huffman symbol dictionaries is complex and not yet implemented.
+        bail!(DecodeError::Unsupported);
+    }
+
+    // For arithmetic mode, use the text region decoding with refinement.
+    // Initialize text region contexts lazily if needed.
+    let contexts = a_ctx
+        .text_region_contexts
+        .get_or_insert_with(|| TextRegionContexts::new(sbsymcodelen));
+
+    // Use shared refinement contexts from ArithmeticContext.
+    decode_text_region_refine_with_contexts(
+        &mut a_ctx.decoder,
+        &sbsyms,
+        &params,
+        contexts,
+        &mut a_ctx.refinement_contexts,
+    )
+}
 struct ArithmeticContext<'a> {
     decoder: ArithmeticDecoder<'a>,
     delta_height_decoder: IntegerDecoder,
@@ -323,11 +404,10 @@ struct ArithmeticContext<'a> {
     symbol_run_length_decoder: IntegerDecoder,
     number_of_symbol_instances_decoder: IntegerDecoder,
     bitmap_decode_contexts: Vec<Context>,
-    iardx: IntegerDecoder,
-    iardy: IntegerDecoder,
     refinement_contexts: Vec<Context>,
-    // Will be initialized lazily.
-    iaid: Option<SymbolIdDecoder>,
+    // Text region contexts for REFAGGNINST (initialized lazily).
+    // Contains IAID, IARDX, IARDY, and other decoders for text region decoding.
+    text_region_contexts: Option<TextRegionContexts>,
 }
 
 impl<'a> ArithmeticContext<'a> {
@@ -353,10 +433,8 @@ impl<'a> ArithmeticContext<'a> {
             symbol_run_length_decoder,
             number_of_symbol_instances_decoder,
             bitmap_decode_contexts,
-            iardx: IntegerDecoder::new(),
-            iardy: IntegerDecoder::new(),
             refinement_contexts,
-            iaid: None,
+            text_region_contexts: None,
         }
     }
 }

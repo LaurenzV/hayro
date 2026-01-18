@@ -577,11 +577,31 @@ pub(crate) fn decode_text_region_refine(
     let num_gr_contexts = 1 << params.sbrtemplate.context_bits();
     let mut gr_contexts = vec![Context::default(); num_gr_contexts];
 
-    decode_text_region_with(
+    decode_text_region_refine_with_contexts(
         decoder,
         symbols,
         params,
         &mut contexts,
+        &mut gr_contexts,
+    )
+}
+
+/// Text region decoding with refinement, using provided contexts.
+///
+/// This variant allows sharing contexts across multiple calls, which is
+/// required for symbol dictionary decoding (REFAGGNINST > 1).
+pub(crate) fn decode_text_region_refine_with_contexts(
+    decoder: &mut ArithmeticDecoder<'_>,
+    symbols: &[&DecodedRegion],
+    params: &TextRegionParams<'_>,
+    contexts: &mut TextRegionContexts,
+    gr_contexts: &mut [Context],
+) -> Result<DecodedRegion> {
+    decode_text_region_with(
+        decoder,
+        symbols,
+        params,
+        contexts,
         |decoder, id_i, symbols, contexts| {
             // Decode R_I (refinement indicator)
             let r_i = contexts
@@ -621,7 +641,7 @@ pub(crate) fn decode_text_region_refine(
                 let mut refined = DecodedRegion::new(grw, grh);
                 decode_bitmap(
                     decoder,
-                    &mut gr_contexts,
+                    gr_contexts,
                     &mut refined,
                     ibo_i,
                     grreferencedx,
