@@ -14,7 +14,9 @@ use crate::decode::{
     AdaptiveTemplatePixel, RefinementTemplate, Template, parse_refinement_at_pixels,
 };
 use crate::decode::{CombinationOperator, generic};
-use crate::error::{DecodeError, HuffmanError, ParseError, RegionError, Result, SymbolError, bail};
+use crate::error::{
+    DecodeError, HuffmanError, ParseError, RegionError, Result, SymbolError, bail, err,
+};
 use crate::huffman_table::{HuffmanTable, StandardHuffmanTables};
 use crate::integer_decoder::IntegerDecoder;
 use crate::reader::Reader;
@@ -28,7 +30,7 @@ pub(crate) fn decode(
 ) -> Result<SymbolDictionary> {
     let header = parse(reader)?;
 
-    if header.flags.use_refagg || header.flags.use_huffman {
+    if header.flags.use_refagg {
         unimplemented!();
     }
 
@@ -37,23 +39,30 @@ pub(crate) fn decode(
     let mut arithmetic_context = ArithmeticContext::new(data, &header);
     let mut huffman_context = HuffmanContext::new(data, &header, referred_tables, standard_tables)?;
 
-    let mut read_height_delta =
-        |h_ctx: &mut HuffmanContext<'_>, a_ctx: &mut ArithmeticContext<'_>| {
-            if header.flags.use_huffman {
-                huffman_context.delta_height_table.decode(&mut h_ctx.reader)
-            } else {
-                Ok(a_ctx.delta_height_decoder.decode(&mut a_ctx.decoder))
-            }
-        };
+    let read_height_delta = |h_ctx: &mut HuffmanContext<'_>, a_ctx: &mut ArithmeticContext<'_>| {
+        if header.flags.use_huffman {
+            huffman_context.delta_height_table.decode(&mut h_ctx.reader)
+        } else {
+            Ok(a_ctx.delta_height_decoder.decode(&mut a_ctx.decoder))
+        }
+    };
 
-    let mut read_width_delta = |h_ctx: &mut HuffmanContext<'_>,
-                                a_ctx: &mut ArithmeticContext<'_>| {
+    let read_width_delta = |h_ctx: &mut HuffmanContext<'_>, a_ctx: &mut ArithmeticContext<'_>| {
         if header.flags.use_huffman {
             huffman_context.delta_width_table.decode(&mut h_ctx.reader)
         } else {
             Ok(a_ctx.delta_width_decoder.decode(&mut a_ctx.decoder))
         }
     };
+
+    let decode_symbol_run_length =
+        |h_ctx: &mut HuffmanContext<'_>, a_ctx: &mut ArithmeticContext<'_>| {
+            if header.flags.use_huffman {
+                h_ctx.symbol_run_length_table.decode(&mut h_ctx.reader)
+            } else {
+                Ok(a_ctx.symbol_run_length_decoder.decode(&mut a_ctx.decoder))
+            }
+        };
 
     let num_new_symbols = header.num_new_symbols;
 
@@ -74,6 +83,7 @@ pub(crate) fn decode(
 
         let mut symwidth: u32 = 0;
         let mut totwidth: u32 = 0;
+        let hcfirstsym = nsymsdecoded;
 
         // "If the result of this decoding is OOB then all the symbols
         // in this height class have been decoded."
@@ -112,6 +122,19 @@ pub(crate) fn decode(
 
             nsymsdecoded += 1;
         }
+
+        if header.flags.use_huffman && !header.flags.use_refagg {
+            decode_height_class_collective_bitmap(
+                &mut huffman_context.reader,
+                huffman_context.bitmap_size_table,
+                &mut new_symbols,
+                &symbol_widths,
+                hcfirstsym,
+                nsymsdecoded,
+                totwidth,
+                hcheight,
+            )?;
+        }
     }
 
     let num_input_symbols = input_symbols.len() as u32;
@@ -121,12 +144,7 @@ pub(crate) fn decode(
         header.num_exported_symbols,
         input_symbols,
         &new_symbols,
-        || {
-            Ok(arithmetic_context
-                .symbol_run_length_decoder
-                .decode(&mut arithmetic_context.decoder)
-                .ok_or(SymbolError::OutOfRange)?)
-        },
+        || decode_symbol_run_length(&mut huffman_context, &mut arithmetic_context),
     )?;
 
     Ok(SymbolDictionary {
@@ -446,7 +464,7 @@ fn decode_exported_symbols_with<F>(
     mut decode_value: F,
 ) -> Result<Vec<DecodedRegion>>
 where
-    F: FnMut() -> Result<i32>,
+    F: FnMut() -> Result<Option<i32>>,
 {
     let num_new_symbols = new_symbols.len() as u32;
     let total_symbols = num_input_symbols + num_new_symbols;
@@ -463,7 +481,8 @@ where
         // "2) Decode a value using Table B.1 if SDHUFF is 1, or the IAEX integer
         // arithmetic decoding procedure if SDHUFF is 0. Let EXRUNLENGTH be the
         // decoded value."
-        let exrunlength = decode_value()?;
+        let exrunlength =
+            decode_value()?.ok_or(DecodeError::Huffman(HuffmanError::UnexpectedOob))?;
 
         if exrunlength < 0 {
             bail!(HuffmanError::InvalidCode);
@@ -509,37 +528,4 @@ where
     }
 
     Ok(exported)
-}
-
-/// Decode a symbol bitmap using direct bitmap coding (6.5.8.1, Table 16).
-///
-/// "If SDREFAGG is 0, then decode the symbol's bitmap using a generic region
-/// decoding procedure as described in 6.2. Set the parameters to this decoding
-/// procedure as shown in Table 16."
-fn decode_symbol_bitmap(
-    decoder: &mut ArithmeticDecoder<'_>,
-    contexts: &mut [Context],
-    header: &SymbolDictionaryHeader,
-    width: u32,
-    height: u32,
-) -> Result<DecodedRegion> {
-    // Table 16 parameters:
-    // MMR = 0, GBW = SYMWIDTH, GBH = HCHEIGHT, GBTEMPLATE = SDTEMPLATE
-    // TPGDON = 0, USESKIP = 0
-    // GBAT = SDAT (adaptive template pixels from header)
-
-    let mut region = DecodedRegion::new(width, height);
-    let template = header.flags.template;
-
-    // Decode each pixel using generic region decoding (6.2.5)
-    // with TPGDON = 0 (no typical prediction)
-    for y in 0..height {
-        for x in 0..width {
-            let context = gather_context(&region, x, y, template, &header.adaptive_template_pixels);
-            let pixel = decoder.decode(&mut contexts[context as usize]);
-            region.set_pixel(x, y, pixel != 0);
-        }
-    }
-
-    Ok(region)
 }
