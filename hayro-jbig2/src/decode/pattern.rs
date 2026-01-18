@@ -1,12 +1,12 @@
 //! Pattern dictionary segment parsing and decoding (7.4.4, 6.7).
 
-use alloc::vec;
-use alloc::vec::Vec;
-
 use super::{AdaptiveTemplatePixel, CombinationOperator, Template, generic};
+use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::DecodedRegion;
 use crate::error::{DecodeError, ParseError, Result};
 use crate::reader::Reader;
+use alloc::vec;
+use alloc::vec::Vec;
 
 /// Decode a pattern dictionary segment (7.4.4.2, 6.7).
 pub(crate) fn decode(reader: &mut Reader<'_>) -> Result<PatternDictionary> {
@@ -62,9 +62,13 @@ pub(crate) fn decode(reader: &mut Reader<'_>) -> Result<PatternDictionary> {
             }
         };
 
+        let mut decoder = ArithmeticDecoder::new(encoded_data);
+        let mut contexts = vec![Context::default(); 1 << header.template.context_bits()];
+
         generic::decode_bitmap_arithmetic_coding(
             &mut collective_bitmap,
-            encoded_data,
+            &mut decoder,
+            &mut contexts,
             header.template,
             false,
             &at_pixels,

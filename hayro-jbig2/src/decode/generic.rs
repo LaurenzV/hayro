@@ -47,10 +47,14 @@ pub(crate) fn decode(reader: &mut Reader<'_>, had_unknown_length: bool) -> Resul
 
         Ok(region)
     } else {
+        let mut decoder = ArithmeticDecoder::new(encoded_data);
+        let mut contexts = vec![Context::default(); 1 << header.template.context_bits()];
+
         // "6.2.5 Decoding using a template and arithmetic coding"
         decode_bitmap_arithmetic_coding(
             &mut region,
-            encoded_data,
+            &mut decoder,
+            &mut contexts,
             header.template,
             header.tpgdon,
             &header.adaptive_template_pixels,
@@ -198,17 +202,14 @@ pub(crate) fn decode_bitmap_mmr(region: &mut DecodedRegion, data: &[u8]) -> Resu
 /// Decode a bitmap using arithmetic coding (6.2.5).
 pub(crate) fn decode_bitmap_arithmetic_coding(
     region: &mut DecodedRegion,
-    data: &[u8],
+    decoder: &mut ArithmeticDecoder<'_>,
+    contexts: &mut [Context],
     template: Template,
     tpgdon: bool,
     adaptive_template_pixels: &[AdaptiveTemplatePixel],
 ) -> Result<()> {
     let width = region.width;
     let height = region.height;
-
-    let mut decoder = ArithmeticDecoder::new(data);
-
-    let mut contexts = vec![Context::default(); 1 << template.context_bits()];
 
     // "1) Set: LTP = 0" (6.2.5.7)
     let mut ltp = false;

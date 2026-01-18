@@ -90,17 +90,22 @@ pub(crate) fn decode(
                 // yet, those will be decoded later on from the collective bitmap.
                 symbol_widths.push(symwidth);
             } else {
+                let mut region = DecodedRegion::new(symwidth, hcheight);
+
                 let symbol = if !header.flags.use_refagg && !header.flags.use_huffman {
-                    decode_symbol_bitmap(
+                    generic::decode_bitmap_arithmetic_coding(
+                        &mut region,
                         &mut arithmetic_context.decoder,
                         &mut arithmetic_context.bitmap_decode_contexts,
-                        &header,
-                        symwidth,
-                        hcheight,
-                    )
+                        header.flags.template,
+                        false,
+                        &header.adaptive_template_pixels,
+                    )?;
+
+                    region
                 } else {
                     unimplemented!();
-                }?;
+                };
 
                 new_symbols.push(symbol);
             }
@@ -256,7 +261,7 @@ pub(crate) struct SymbolDictionaryFlags {
 #[derive(Debug, Clone)]
 pub(crate) struct SymbolDictionaryHeader {
     pub(crate) flags: SymbolDictionaryFlags,
-    pub(crate) at_pixels: Vec<AdaptiveTemplatePixel>,
+    pub(crate) adaptive_template_pixels: Vec<AdaptiveTemplatePixel>,
     pub(crate) refinement_at_pixels: Vec<AdaptiveTemplatePixel>,
     pub(crate) num_exported_symbols: u32,
     pub(crate) num_new_symbols: u32,
@@ -330,7 +335,7 @@ fn parse(reader: &mut Reader<'_>) -> Result<SymbolDictionaryHeader> {
 
     Ok(SymbolDictionaryHeader {
         flags,
-        at_pixels,
+        adaptive_template_pixels: at_pixels,
         refinement_at_pixels,
         num_exported_symbols,
         num_new_symbols,
@@ -530,7 +535,7 @@ fn decode_symbol_bitmap(
     // with TPGDON = 0 (no typical prediction)
     for y in 0..height {
         for x in 0..width {
-            let context = gather_context(&region, x, y, template, &header.at_pixels);
+            let context = gather_context(&region, x, y, template, &header.adaptive_template_pixels);
             let pixel = decoder.decode(&mut contexts[context as usize]);
             region.set_pixel(x, y, pixel != 0);
         }
