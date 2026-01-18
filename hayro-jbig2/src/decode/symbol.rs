@@ -31,7 +31,11 @@ pub(crate) fn decode(
     let header = parse(reader)?;
 
     if header.flags.use_refagg {
-        unimplemented!();
+        if header.flags.use_huffman {
+            panic!("huffman");
+        }   else {
+            panic!("arithmetic");
+        }
     }
 
     let data = reader.tail().ok_or(ParseError::UnexpectedEof)?;
@@ -94,15 +98,10 @@ pub(crate) fn decode(
             totwidth = totwidth
                 .checked_add(symwidth)
                 .ok_or(RegionError::InvalidDimension)?;
-
-            if header.flags.use_huffman && !header.flags.use_refagg {
-                // Decode a single symbol width. We don't actually decode the symbols
-                // yet, those will be decoded later on from the collective bitmap.
-                symbol_widths.push(symwidth);
-            } else {
-                let mut region = DecodedRegion::new(symwidth, hcheight);
-
-                let symbol = if !header.flags.use_refagg && !header.flags.use_huffman {
+            
+            match (header.flags.use_huffman, header.flags.use_refagg) {
+                (false, false) => {
+                    let mut region = DecodedRegion::new(symwidth, hcheight);
                     generic::decode_bitmap_arithmetic_coding(
                         &mut region,
                         &mut arithmetic_context.decoder,
@@ -112,12 +111,14 @@ pub(crate) fn decode(
                         &header.adaptive_template_pixels,
                     )?;
 
-                    region
-                } else {
-                    unimplemented!();
-                };
-
-                new_symbols.push(symbol);
+                    new_symbols.push(region);
+                }
+                (true, false) => {
+                    // Decode a single symbol width. We don't actually decode the symbols
+                    // yet, those will be decoded later on from the collective bitmap.
+                    symbol_widths.push(symwidth);
+                }
+                _ => unimplemented!()
             }
 
             nsymsdecoded += 1;
