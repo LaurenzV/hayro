@@ -5,7 +5,6 @@ use alloc::vec::Vec;
 
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::DecodedRegion;
-use crate::decode::{generic, CombinationOperator};
 use crate::decode::generic::{decode_bitmap_mmr, gather_context, parse_adaptive_template_pixels};
 use crate::decode::generic_refinement::decode_bitmap;
 use crate::decode::text::{
@@ -14,6 +13,7 @@ use crate::decode::text::{
 use crate::decode::{
     AdaptiveTemplatePixel, RefinementTemplate, Template, parse_refinement_at_pixels,
 };
+use crate::decode::{CombinationOperator, generic};
 use crate::error::{DecodeError, HuffmanError, ParseError, RegionError, Result, SymbolError, bail};
 use crate::huffman_table::{HuffmanTable, StandardHuffmanTables};
 use crate::integer_decoder::IntegerDecoder;
@@ -33,22 +33,28 @@ pub(crate) fn decode(
     }
 
     let data = reader.tail().ok_or(ParseError::UnexpectedEof)?;
-    
-    let mut arithmetic_context = ArithmeticContext::new(data);
+
+    let mut arithmetic_context = ArithmeticContext::new(data, &header);
     let mut huffman_context = HuffmanContext::new(data, &header, referred_tables, standard_tables)?;
-    
-    let mut read_height_delta = |h_ctx: &mut HuffmanContext, a_ctx: &mut ArithmeticContext| if header.flags.use_huffman {
-        huffman_context.delta_height_table.decode(&mut h_ctx.reader)
-    }   else {
-        Ok(a_ctx.delta_height_decoder.decode(&mut a_ctx.decoder))   
+
+    let mut read_height_delta =
+        |h_ctx: &mut HuffmanContext<'_>, a_ctx: &mut ArithmeticContext<'_>| {
+            if header.flags.use_huffman {
+                huffman_context.delta_height_table.decode(&mut h_ctx.reader)
+            } else {
+                Ok(a_ctx.delta_height_decoder.decode(&mut a_ctx.decoder))
+            }
+        };
+
+    let mut read_width_delta = |h_ctx: &mut HuffmanContext<'_>,
+                                a_ctx: &mut ArithmeticContext<'_>| {
+        if header.flags.use_huffman {
+            huffman_context.delta_width_table.decode(&mut h_ctx.reader)
+        } else {
+            Ok(a_ctx.delta_width_decoder.decode(&mut a_ctx.decoder))
+        }
     };
 
-    let mut read_width_delta = |h_ctx: &mut HuffmanContext, a_ctx: &mut ArithmeticContext| if header.flags.use_huffman {
-        huffman_context.delta_width_table.decode(&mut h_ctx.reader)
-    }   else {
-        Ok(a_ctx.delta_width_decoder.decode(&mut a_ctx.decoder))
-    };
-    
     let num_new_symbols = header.num_new_symbols;
 
     let mut new_symbols = Vec::with_capacity(num_new_symbols as usize);
@@ -68,7 +74,7 @@ pub(crate) fn decode(
 
         let mut symwidth: u32 = 0;
         let mut totwidth: u32 = 0;
-        
+
         // "If the result of this decoding is OOB then all the symbols
         // in this height class have been decoded."
         while let Some(dw) = read_width_delta(&mut huffman_context, &mut arithmetic_context)? {
@@ -83,38 +89,44 @@ pub(crate) fn decode(
                 // Decode a single symbol width. We don't actually decode the symbols
                 // yet, those will be decoded later on from the collective bitmap.
                 symbol_widths.push(symwidth);
-            }   else {
+            } else {
                 let symbol = if !header.flags.use_refagg && !header.flags.use_huffman {
-                    let template = header.flags.template;
-                    let num_contexts = 1 << template.context_bits();
-                    let mut gb_contexts = vec![Context::default(); num_contexts];
-                    decode_symbol_bitmap(&mut arithmetic_context.decoder, &mut gb_contexts, &header, symwidth, hcheight)
-                }   else {
+                    decode_symbol_bitmap(
+                        &mut arithmetic_context.decoder,
+                        &mut arithmetic_context.bitmap_decode_contexts,
+                        &header,
+                        symwidth,
+                        hcheight,
+                    )
+                } else {
                     unimplemented!();
                 }?;
-                
+
                 new_symbols.push(symbol);
             }
-            
+
             nsymsdecoded += 1;
         }
     }
 
     let num_input_symbols = input_symbols.len() as u32;
-    
+
     let exported = decode_exported_symbols_with(
         num_input_symbols,
         header.num_exported_symbols,
         input_symbols,
         &new_symbols,
         || {
-            Ok(arithmetic_context.symbol_run_length_decoder
+            Ok(arithmetic_context
+                .symbol_run_length_decoder
                 .decode(&mut arithmetic_context.decoder)
                 .ok_or(SymbolError::OutOfRange)?)
         },
     )?;
 
-    Ok(SymbolDictionary { exported_symbols: exported })
+    Ok(SymbolDictionary {
+        exported_symbols: exported,
+    })
 }
 
 struct ArithmeticContext<'a> {
@@ -122,20 +134,26 @@ struct ArithmeticContext<'a> {
     delta_height_decoder: IntegerDecoder,
     delta_width_decoder: IntegerDecoder,
     symbol_run_length_decoder: IntegerDecoder,
+    bitmap_decode_contexts: Vec<Context>,
 }
 
 impl<'a> ArithmeticContext<'a> {
-    fn new(data: &'a [u8]) -> Self {
+    fn new(data: &'a [u8], header: &SymbolDictionaryHeader) -> Self {
         let decoder = ArithmeticDecoder::new(data);
         let delta_height_decoder = IntegerDecoder::new();
         let delta_width_decoder = IntegerDecoder::new();
         let symbol_run_length_decoder = IntegerDecoder::new();
-        
+
+        let template = header.flags.template;
+        let num_contexts = 1 << template.context_bits();
+        let bitmap_decode_contexts = vec![Context::default(); num_contexts];
+
         Self {
             decoder,
             delta_height_decoder,
             delta_width_decoder,
             symbol_run_length_decoder,
+            bitmap_decode_contexts,
         }
     }
 }
@@ -146,7 +164,7 @@ struct HuffmanContext<'a> {
     bitmap_size_table: &'a HuffmanTable,
     aggregate_instance_table: &'a HuffmanTable,
     symbol_run_length_table: &'a HuffmanTable,
-    reader: Reader<'a>
+    reader: Reader<'a>,
 }
 
 impl<'a> HuffmanContext<'a> {
@@ -157,16 +175,16 @@ impl<'a> HuffmanContext<'a> {
         standard_tables: &'a StandardHuffmanTables,
     ) -> Result<Self> {
         let reader = Reader::new(data);
-        
+
         let custom_count = [
             header.flags.delta_height_table == HuffmanTableSelection::UserSupplied,
             header.flags.delta_width_table == HuffmanTableSelection::UserSupplied,
             header.flags.bitmap_size_table == HuffmanTableSelection::UserSupplied,
             header.flags.aggregate_instance_table == HuffmanTableSelection::UserSupplied,
         ]
-            .into_iter()
-            .filter(|x| *x)
-            .count();
+        .into_iter()
+        .filter(|x| *x)
+        .count();
 
         if referred_tables.len() < custom_count {
             bail!(HuffmanError::MissingTables);
@@ -196,7 +214,7 @@ impl<'a> HuffmanContext<'a> {
         let bitmap_size_table = get_table(header.flags.bitmap_size_table);
         let aggregate_instance_table = get_table(header.flags.aggregate_instance_table);
         let symbol_run_length_table = get_table(HuffmanTableSelection::TableB1);
-        
+
         Ok(Self {
             reader,
             delta_height_table,
