@@ -124,6 +124,7 @@ pub(crate) fn decode(
         }
 
         if header.flags.use_huffman && !header.flags.use_refagg {
+            // Now, we use the symbol widths to decode the collective bitmap.
             decode_height_class_collective_bitmap(
                 &mut huffman_context.reader,
                 huffman_context.bitmap_size_table,
