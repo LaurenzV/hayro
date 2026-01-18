@@ -5,20 +5,15 @@ use alloc::vec::Vec;
 
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::DecodedRegion;
-use crate::decode::generic::{decode_bitmap_mmr, gather_context, parse_adaptive_template_pixels};
-use crate::decode::generic_refinement::decode_bitmap;
-use crate::decode::text::{
-    ReferenceCorner, SymbolBitmap, TextRegionContexts, TextRegionParams, decode_text_region_with,
-};
+use crate::decode::generic;
+use crate::decode::generic::{decode_bitmap_mmr, parse_adaptive_template_pixels};
+use crate::decode::generic_refinement::decode_bitmap as decode_refinement_bitmap;
+use crate::decode::text::SymbolIdDecoder;
 use crate::decode::{
     AdaptiveTemplatePixel, RefinementTemplate, Template, parse_refinement_at_pixels,
 };
-use crate::decode::{CombinationOperator, generic};
-use crate::error::{
-    DecodeError, HuffmanError, ParseError, RegionError, Result, SymbolError, bail, err,
-};
+use crate::error::{DecodeError, HuffmanError, ParseError, RegionError, Result, SymbolError, bail};
 use crate::huffman_table::{HuffmanTable, StandardHuffmanTables};
-use crate::HuffmanError::UnexpectedOob;
 use crate::integer_decoder::IntegerDecoder;
 use crate::reader::Reader;
 
@@ -57,7 +52,7 @@ pub(crate) fn decode(
             if header.flags.use_huffman {
                 h_ctx.symbol_run_length_table.decode(&mut h_ctx.reader)
             } else {
-                Ok(a_ctx.number_of_symbol_instances_decoder.decode(&mut a_ctx.decoder))
+                Ok(a_ctx.symbol_run_length_decoder.decode(&mut a_ctx.decoder))
             }
         };
 
@@ -91,7 +86,7 @@ pub(crate) fn decode(
             totwidth = totwidth
                 .checked_add(symwidth)
                 .ok_or(RegionError::InvalidDimension)?;
-            
+
             match (header.flags.use_huffman, header.flags.use_refagg) {
                 (false, false) => {
                     let mut region = DecodedRegion::new(symwidth, hcheight);
@@ -112,7 +107,18 @@ pub(crate) fn decode(
                     symbol_widths.push(symwidth);
                 }
                 (_, true) => {
-                    decode_bitmap_refagg(&header, &mut arithmetic_context, &mut huffman_context)?;
+                    let symbol = decode_bitmap_refagg(
+                        &header,
+                        &mut arithmetic_context,
+                        &mut huffman_context,
+                        input_symbols,
+                        &new_symbols,
+                        symwidth,
+                        hcheight,
+                        standard_tables,
+                    )?;
+
+                    new_symbols.push(symbol);
                 }
             }
 
@@ -149,23 +155,165 @@ pub(crate) fn decode(
     })
 }
 
+/// Decode a symbol bitmap using refinement/aggregate coding (6.5.8.2).
+#[allow(clippy::too_many_arguments)]
 fn decode_bitmap_refagg(
     header: &SymbolDictionaryHeader,
     a_ctx: &mut ArithmeticContext<'_>,
     h_ctx: &mut HuffmanContext<'_>,
+    input_symbols: &[&DecodedRegion],
+    new_symbols: &[DecodedRegion],
+    symwidth: u32,
+    hcheight: u32,
+    standard_tables: &StandardHuffmanTables,
 ) -> Result<DecodedRegion> {
     // 6.5.8.2.1 Number of symbol instances in aggregation.
-    let number_of_symbol_instances = if header.flags.use_huffman {
-        h_ctx.number_of_symbol_instances_table.decode(&mut h_ctx.reader)?
-    }   else {
-        a_ctx.number_of_symbol_instances_decoder.decode(&mut a_ctx.decoder)
-    }.ok_or(DecodeError::Symbol(SymbolError::UnexpectedOob))?;
-    
-    if number_of_symbol_instances == 1 {
-        // tex
+    let refaggninst = if header.flags.use_huffman {
+        h_ctx
+            .number_of_symbol_instances_table
+            .decode(&mut h_ctx.reader)?
+    } else {
+        a_ctx
+            .number_of_symbol_instances_decoder
+            .decode(&mut a_ctx.decoder)
     }
-    
-    panic!("{}, num_symbols: {}", if header.flags.use_huffman {"huffman"} else {"arithmetic"}, number_of_symbol_instances);
+    .ok_or(DecodeError::Symbol(SymbolError::UnexpectedOob))?;
+
+    if refaggninst == 1 {
+        decode_single_refinement_symbol(
+            header,
+            a_ctx,
+            h_ctx,
+            input_symbols,
+            new_symbols,
+            symwidth,
+            hcheight,
+            standard_tables,
+        )
+    } else {
+        panic!(
+            "REFAGGNINST > 1 not yet implemented: {}, refaggninst={}",
+            if header.flags.use_huffman {
+                "huffman"
+            } else {
+                "arithmetic"
+            },
+            refaggninst
+        );
+    }
+}
+
+/// Decode a bitmap when REFAGGNINST = 1 (6.5.8.2.2).
+#[allow(clippy::too_many_arguments)]
+fn decode_single_refinement_symbol(
+    header: &SymbolDictionaryHeader,
+    a_ctx: &mut ArithmeticContext<'_>,
+    h_ctx: &mut HuffmanContext<'_>,
+    input_symbols: &[&DecodedRegion],
+    new_symbols: &[DecodedRegion],
+    symwidth: u32,
+    hcheight: u32,
+    standard_tables: &StandardHuffmanTables,
+) -> Result<DecodedRegion> {
+    let use_huffman = header.flags.use_huffman;
+    let num_input_symbols = input_symbols.len() as u32;
+
+    // 6.5.8.2.3 Setting SBSYMCODES and SBSYMCODELEN.
+    let total_symbols = num_input_symbols + header.num_new_symbols;
+    let mut sbsymcodelen = 32 - (total_symbols - 1).leading_zeros();
+
+    let id_i = if use_huffman {
+        // See 6.5.8.2.3, the value should be at least 1 if we use huffman coding.
+        sbsymcodelen = sbsymcodelen.max(1);
+
+        h_ctx
+            .reader
+            .read_bits(sbsymcodelen as u8)
+            .ok_or(ParseError::UnexpectedEof)? as usize
+    } else {
+        let iaid = a_ctx.iaid.get_or_insert(SymbolIdDecoder::new(sbsymcodelen));
+
+        iaid.decode(&mut a_ctx.decoder) as usize
+    };
+
+    let rdx_i = if use_huffman {
+        standard_tables
+            .table_o()
+            .decode(&mut h_ctx.reader)?
+            .ok_or(HuffmanError::UnexpectedOob)?
+    } else {
+        a_ctx
+            .iardx
+            .decode(&mut a_ctx.decoder)
+            .ok_or(SymbolError::OutOfRange)?
+    };
+
+    let rdy_i = if use_huffman {
+        standard_tables
+            .table_o()
+            .decode(&mut h_ctx.reader)?
+            .ok_or(HuffmanError::UnexpectedOob)?
+    } else {
+        a_ctx
+            .iardy
+            .decode(&mut a_ctx.decoder)
+            .ok_or(SymbolError::OutOfRange)?
+    };
+
+    let reference_region = if id_i < num_input_symbols as usize {
+        input_symbols[id_i]
+    } else {
+        let new_idx = id_i - num_input_symbols as usize;
+        new_symbols.get(new_idx).ok_or(SymbolError::OutOfRange)?
+    };
+    let mut region = DecodedRegion::new(symwidth, hcheight);
+
+    if use_huffman {
+        let bmsize = standard_tables
+            .table_a()
+            .decode(&mut h_ctx.reader)?
+            .ok_or(HuffmanError::UnexpectedOob)? as usize;
+        h_ctx.reader.align();
+
+        let bitmap_data = h_ctx
+            .reader
+            .read_bytes(bmsize)
+            .ok_or(ParseError::UnexpectedEof)?;
+
+        let mut bitmap_decoder = ArithmeticDecoder::new(bitmap_data);
+        // Not sure if this is mentioned somewhere explicitly, but it seems like we
+        // need to create fresh contexts for each bitmap, unlike arithmetic decoding
+        // where we reuse them across multiple runs.
+        let gr_template = header.flags.refinement_template;
+        let num_gr_contexts = 1 << gr_template.context_bits();
+        let mut gr_contexts = vec![Context::default(); num_gr_contexts];
+
+        decode_refinement_bitmap(
+            &mut bitmap_decoder,
+            &mut gr_contexts,
+            &mut region,
+            reference_region,
+            rdx_i,
+            rdy_i,
+            header.flags.refinement_template,
+            &header.refinement_at_pixels,
+            false,
+        )?;
+    } else {
+        decode_refinement_bitmap(
+            &mut a_ctx.decoder,
+            &mut a_ctx.refinement_contexts,
+            &mut region,
+            reference_region,
+            rdx_i,
+            rdy_i,
+            header.flags.refinement_template,
+            &header.refinement_at_pixels,
+            false,
+        )?;
+    }
+
+    Ok(region)
 }
 
 struct ArithmeticContext<'a> {
@@ -175,6 +323,11 @@ struct ArithmeticContext<'a> {
     symbol_run_length_decoder: IntegerDecoder,
     number_of_symbol_instances_decoder: IntegerDecoder,
     bitmap_decode_contexts: Vec<Context>,
+    iardx: IntegerDecoder,
+    iardy: IntegerDecoder,
+    refinement_contexts: Vec<Context>,
+    // Will be initialized lazily.
+    iaid: Option<SymbolIdDecoder>,
 }
 
 impl<'a> ArithmeticContext<'a> {
@@ -189,6 +342,10 @@ impl<'a> ArithmeticContext<'a> {
         let num_contexts = 1 << template.context_bits();
         let bitmap_decode_contexts = vec![Context::default(); num_contexts];
 
+        let refinement_template = header.flags.refinement_template;
+        let num_refinement_contexts = 1 << refinement_template.context_bits();
+        let refinement_contexts = vec![Context::default(); num_refinement_contexts];
+
         Self {
             decoder,
             delta_height_decoder,
@@ -196,6 +353,10 @@ impl<'a> ArithmeticContext<'a> {
             symbol_run_length_decoder,
             number_of_symbol_instances_decoder,
             bitmap_decode_contexts,
+            iardx: IntegerDecoder::new(),
+            iardy: IntegerDecoder::new(),
+            refinement_contexts,
+            iaid: None,
         }
     }
 }

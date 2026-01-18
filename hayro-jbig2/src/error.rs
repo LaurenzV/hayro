@@ -101,7 +101,7 @@ pub enum SymbolError {
     /// Symbol ID out of valid range.
     OutOfRange,
     /// Unexpected out-of-band value.
-    UnexpectedOob
+    UnexpectedOob,
 }
 
 impl fmt::Display for DecodeError {
