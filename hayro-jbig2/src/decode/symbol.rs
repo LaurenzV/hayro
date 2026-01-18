@@ -18,6 +18,7 @@ use crate::error::{
     DecodeError, HuffmanError, ParseError, RegionError, Result, SymbolError, bail, err,
 };
 use crate::huffman_table::{HuffmanTable, StandardHuffmanTables};
+use crate::HuffmanError::UnexpectedOob;
 use crate::integer_decoder::IntegerDecoder;
 use crate::reader::Reader;
 
@@ -29,14 +30,6 @@ pub(crate) fn decode(
     standard_tables: &StandardHuffmanTables,
 ) -> Result<SymbolDictionary> {
     let header = parse(reader)?;
-
-    if header.flags.use_refagg {
-        if header.flags.use_huffman {
-            panic!("huffman");
-        }   else {
-            panic!("arithmetic");
-        }
-    }
 
     let data = reader.tail().ok_or(ParseError::UnexpectedEof)?;
 
@@ -64,7 +57,7 @@ pub(crate) fn decode(
             if header.flags.use_huffman {
                 h_ctx.symbol_run_length_table.decode(&mut h_ctx.reader)
             } else {
-                Ok(a_ctx.symbol_run_length_decoder.decode(&mut a_ctx.decoder))
+                Ok(a_ctx.number_of_symbol_instances_decoder.decode(&mut a_ctx.decoder))
             }
         };
 
@@ -118,7 +111,9 @@ pub(crate) fn decode(
                     // yet, those will be decoded later on from the collective bitmap.
                     symbol_widths.push(symwidth);
                 }
-                _ => unimplemented!()
+                (_, true) => {
+                    decode_bitmap_refagg(&header, &mut arithmetic_context, &mut huffman_context)?;
+                }
             }
 
             nsymsdecoded += 1;
@@ -154,11 +149,31 @@ pub(crate) fn decode(
     })
 }
 
+fn decode_bitmap_refagg(
+    header: &SymbolDictionaryHeader,
+    a_ctx: &mut ArithmeticContext<'_>,
+    h_ctx: &mut HuffmanContext<'_>,
+) -> Result<DecodedRegion> {
+    // 6.5.8.2.1 Number of symbol instances in aggregation.
+    let number_of_symbol_instances = if header.flags.use_huffman {
+        h_ctx.number_of_symbol_instances_table.decode(&mut h_ctx.reader)?
+    }   else {
+        a_ctx.number_of_symbol_instances_decoder.decode(&mut a_ctx.decoder)
+    }.ok_or(DecodeError::Symbol(SymbolError::UnexpectedOob))?;
+    
+    if number_of_symbol_instances == 1 {
+        // tex
+    }
+    
+    panic!("{}, num_symbols: {}", if header.flags.use_huffman {"huffman"} else {"arithmetic"}, number_of_symbol_instances);
+}
+
 struct ArithmeticContext<'a> {
     decoder: ArithmeticDecoder<'a>,
     delta_height_decoder: IntegerDecoder,
     delta_width_decoder: IntegerDecoder,
     symbol_run_length_decoder: IntegerDecoder,
+    number_of_symbol_instances_decoder: IntegerDecoder,
     bitmap_decode_contexts: Vec<Context>,
 }
 
@@ -168,6 +183,7 @@ impl<'a> ArithmeticContext<'a> {
         let delta_height_decoder = IntegerDecoder::new();
         let delta_width_decoder = IntegerDecoder::new();
         let symbol_run_length_decoder = IntegerDecoder::new();
+        let number_of_symbol_instances_decoder = IntegerDecoder::new();
 
         let template = header.flags.template;
         let num_contexts = 1 << template.context_bits();
@@ -178,6 +194,7 @@ impl<'a> ArithmeticContext<'a> {
             delta_height_decoder,
             delta_width_decoder,
             symbol_run_length_decoder,
+            number_of_symbol_instances_decoder,
             bitmap_decode_contexts,
         }
     }
@@ -187,7 +204,7 @@ struct HuffmanContext<'a> {
     delta_height_table: &'a HuffmanTable,
     delta_width_table: &'a HuffmanTable,
     bitmap_size_table: &'a HuffmanTable,
-    aggregate_instance_table: &'a HuffmanTable,
+    number_of_symbol_instances_table: &'a HuffmanTable,
     symbol_run_length_table: &'a HuffmanTable,
     reader: Reader<'a>,
 }
@@ -237,7 +254,7 @@ impl<'a> HuffmanContext<'a> {
         let delta_height_table = get_table(header.flags.delta_height_table);
         let delta_width_table = get_table(header.flags.delta_width_table);
         let bitmap_size_table = get_table(header.flags.bitmap_size_table);
-        let aggregate_instance_table = get_table(header.flags.aggregate_instance_table);
+        let number_of_symbol_instances_table = get_table(header.flags.aggregate_instance_table);
         let symbol_run_length_table = get_table(HuffmanTableSelection::TableB1);
 
         Ok(Self {
@@ -245,7 +262,7 @@ impl<'a> HuffmanContext<'a> {
             delta_height_table,
             delta_width_table,
             bitmap_size_table,
-            aggregate_instance_table,
+            number_of_symbol_instances_table,
             symbol_run_length_table,
         })
     }

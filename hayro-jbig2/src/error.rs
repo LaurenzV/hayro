@@ -100,6 +100,8 @@ pub enum SymbolError {
     NoSymbols,
     /// Symbol ID out of valid range.
     OutOfRange,
+    /// Unexpected out-of-band value.
+    UnexpectedOob
 }
 
 impl fmt::Display for DecodeError {
@@ -184,6 +186,7 @@ impl fmt::Display for SymbolError {
         match self {
             Self::NoSymbols => write!(f, "no symbols available"),
             Self::OutOfRange => write!(f, "symbol ID out of range"),
+            Self::UnexpectedOob => write!(f, "unexpected out-of-band value"),
         }
     }
 }
