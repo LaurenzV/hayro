@@ -36,9 +36,9 @@ hayro-write = { path = "hayro-write", version = "0.4.0", default-features = fals
 bitflags = { version = "2.10" }
 bytemuck = { version = "1" }
 image = { version = "0.25", default-features = false }
-kurbo = { version = "0.12.0" }
+kurbo = { version = "0.13.0" }
 log = { version = "0.4" }
-resvg = { version = "0.45.1" }
+resvg = { version = "0.46.0" }
 flate2 = { version = "1", default-features = false, features = ["zlib-rs"] }
 once_cell = { version = "1" }
 phf = { version = "0.13.1", default-features = false }
@@ -53,7 +53,7 @@ sitro = { git = "https://github.com/LaurenzV/sitro", rev="fb804b3" }
 xmlwriter = { version = "0.1" }
 base64 = { version = "0.22" }
 zune-jpeg = { version = "0.5", default-features = false }
-vello_cpu = { version = "0.0.5", default-features = false, features = ["std", "png", "u8_pipeline"] }
+vello_cpu = { version = "0.0.6", default-features = false, features = ["std", "png", "u8_pipeline"] }
 fast_image_resize = { version = "6.0", default-features = false, features = ["std"] }
 fearless_simd = "0.3.0"
 
