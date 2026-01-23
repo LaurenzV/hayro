@@ -175,6 +175,12 @@ impl<'a> Context<'a> {
         if self.states.len() > 1 {
             self.states.pop();
         }
+
+        device.set_soft_mask(
+            self.states
+                .last()
+                .and_then(|l| l.graphics_state.soft_mask.clone()),
+        );
     }
 
     pub(crate) fn path(&self) -> &BezPath {
