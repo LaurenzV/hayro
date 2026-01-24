@@ -5,6 +5,7 @@ pub(crate) mod generic_refinement;
 pub(crate) mod halftone;
 pub(crate) mod pattern;
 pub(crate) mod symbol;
+pub(crate) mod symbol_id_decoder;
 pub(crate) mod text;
 
 use crate::decode::RefinementTemplate::{Template0, Template1};
