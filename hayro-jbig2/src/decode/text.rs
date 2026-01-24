@@ -146,12 +146,6 @@ pub(crate) struct TextRegionParams<'a> {
 impl<'a> TextRegionParams<'a> {
     /// Create parameters from a parsed text region header.
     pub(crate) fn from_header(header: &'a TextRegionHeader) -> Self {
-        let refinement_template = if header.flags.refinement_template == 0 {
-            RefinementTemplate::Template0
-        } else {
-            RefinementTemplate::Template1
-        };
-
         Self {
             width: header.region_info.width,
             height: header.region_info.height,
@@ -162,7 +156,7 @@ impl<'a> TextRegionParams<'a> {
             transposed: header.flags.transposed,
             reference_corner: header.flags.reference_corner,
             delta_s_offset: header.flags.delta_s_offset as i32,
-            refinement_template,
+            refinement_template: header.flags.refinement_template,
             refinement_at_pixels: &header.refinement_at_pixels,
         }
     }
@@ -1114,7 +1108,7 @@ pub(crate) struct TextRegionFlags {
     pub(crate) combination_operator: CombinationOperator,
     pub(crate) default_pixel: bool,
     pub(crate) delta_s_offset: i8,
-    pub(crate) refinement_template: u8,
+    pub(crate) refinement_template: RefinementTemplate,
 }
 
 /// Text region segment Huffman flags (7.4.3.1.2).
@@ -1159,7 +1153,7 @@ fn parse_text_region_flags(reader: &mut Reader<'_>) -> Result<TextRegionFlags> {
         delta_s_offset_raw as i8
     };
 
-    let refinement_template = ((flags_word >> 15) & 0x01) as u8;
+    let refinement_template = RefinementTemplate::from_byte((flags_word >> 15) as u8);
 
     Ok(TextRegionFlags {
         use_huffman,
@@ -1208,7 +1202,7 @@ fn parse(reader: &mut Reader<'_>) -> Result<TextRegionHeader> {
         None
     };
 
-    let refinement_at_pixels = if flags.use_refinement && flags.refinement_template == 0 {
+    let refinement_at_pixels = if flags.use_refinement && flags.refinement_template == RefinementTemplate::Template0 {
         parse_refinement_at_pixels(reader)?
     } else {
         Vec::new()
