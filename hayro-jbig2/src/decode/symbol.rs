@@ -36,6 +36,11 @@ pub(crate) fn decode(
         h_ctx: HuffmanContext::new(data, &header, referred_tables, standard_tables)?,
         num_input_symbols: input_symbols.len() as u32,
         new_symbols: Vec::with_capacity(num_new_symbols as usize),
+        symbol_widths: Vec::with_capacity(num_new_symbols as usize),
+        height_class_first_symbol: 0,
+        symbols_decoded_count: 0,
+        total_width: 0,
+        height_class_height: 0,
         header,
         input_symbols,
         standard_tables,
@@ -66,36 +71,33 @@ pub(crate) fn decode(
                 .decode(&mut ctx.a_ctx.decoder))
         }
     };
-    // Only used if SDHUFF = 1 and SDREFAGG = 0.
-    let mut symbol_widths = Vec::with_capacity(num_new_symbols as usize);
 
-    let mut height_class_height: u32 = 0;
-    let mut symbols_decoded_count: u32 = 0;
-
-    while symbols_decoded_count < num_new_symbols {
+    while ctx.symbols_decoded_count < num_new_symbols {
         let height_class_delta =
             read_height_class_delta(&mut ctx)?.ok_or(SymbolError::OutOfRange)?;
 
-        height_class_height = height_class_height
+        ctx.height_class_height = ctx
+            .height_class_height
             .checked_add_signed(height_class_delta)
             .ok_or(RegionError::InvalidDimension)?;
 
         let mut symbol_width: u32 = 0;
-        let mut total_width: u32 = 0;
-        let height_class_first_symbol = symbols_decoded_count;
+        ctx.total_width = 0;
+        ctx.height_class_first_symbol = ctx.symbols_decoded_count;
 
         // "If the result of this decoding is OOB then all the symbols
         // in this height class have been decoded."
         while let Some(width_delta) = read_symbol_width_delta(&mut ctx)? {
             // Prevent infinite loop for invalid files.
-            if symbols_decoded_count >= num_new_symbols {
+            if ctx.symbols_decoded_count >= num_new_symbols {
                 bail!(SymbolError::TooManySymbols)
             }
 
             symbol_width = symbol_width
                 .checked_add_signed(width_delta)
                 .ok_or(RegionError::InvalidDimension)?;
-            total_width = total_width
+            ctx.total_width = ctx
+                .total_width
                 .checked_add(symbol_width)
                 .ok_or(RegionError::InvalidDimension)?;
 
@@ -103,7 +105,7 @@ pub(crate) fn decode(
                 (false, false) => {
                     // Decode a single symbol using a simple generic decoding procedure,
                     // described in 6.5.8.1.
-                    let mut region = DecodedRegion::new(symbol_width, height_class_height);
+                    let mut region = DecodedRegion::new(symbol_width, ctx.height_class_height);
                     generic::decode_bitmap_arithmetic_coding(
                         &mut region,
                         &mut ctx.a_ctx.decoder,
@@ -118,32 +120,23 @@ pub(crate) fn decode(
                 (true, false) => {
                     // Decode a single symbol width. We don't actually decode the symbols
                     // yet, those will be decoded later on from the collective bitmap.
-                    symbol_widths.push(symbol_width);
+                    ctx.symbol_widths.push(symbol_width);
                 }
                 (_, true) => {
                     // Also decode a single symbol, but using refinement-aggregation.
                     // In this case, we can have both, huffman and arithmetic coding.
-                    let symbol = decode_bitmap_refagg(&mut ctx, symbol_width, height_class_height)?;
+                    let symbol = decode_bitmap_refagg(&mut ctx, symbol_width)?;
 
                     ctx.new_symbols.push(symbol);
                 }
             }
 
-            symbols_decoded_count += 1;
+            ctx.symbols_decoded_count += 1;
         }
 
         if ctx.header.flags.use_huffman && !ctx.header.flags.use_refagg {
             // Now, we use the symbol widths to decode the collective bitmap.
-            decode_height_class_collective_bitmap(
-                &mut ctx.h_ctx.reader,
-                ctx.h_ctx.collective_bitmap_size_table,
-                &mut ctx.new_symbols,
-                &symbol_widths,
-                height_class_first_symbol,
-                symbols_decoded_count,
-                total_width,
-                height_class_height,
-            )?;
+            decode_collective_bitmap(&mut ctx)?;
         }
     }
 
@@ -164,7 +157,6 @@ pub(crate) struct SymbolDictionary {
 fn decode_bitmap_refagg(
     ctx: &mut SymbolDecodeContext<'_>,
     symbol_width: u32,
-    height_class_height: u32,
 ) -> Result<DecodedRegion> {
     // 6.5.8.2.1 Number of symbol instances in aggregation.
     let aggregation_instance_count = if ctx.header.flags.use_huffman {
@@ -179,17 +171,12 @@ fn decode_bitmap_refagg(
     .ok_or(DecodeError::Symbol(SymbolError::UnexpectedOob))?;
 
     if aggregation_instance_count == 1 {
-        decode_single_refinement_symbol(ctx, symbol_width, height_class_height)
+        decode_single_refinement_symbol(ctx, symbol_width)
     } else {
         // 6.5.8.2 step 2: "If REFAGGNINST is greater than one, then decode the bitmap
         // itself using a text region decoding procedure as described in 6.4. Set the
         // parameters to this decoding procedure as shown in Table 17."
-        decode_aggregation_bitmap(
-            ctx,
-            symbol_width,
-            height_class_height,
-            aggregation_instance_count as u32,
-        )
+        decode_aggregation_bitmap(ctx, symbol_width, aggregation_instance_count as u32)
     }
 }
 
@@ -197,7 +184,6 @@ fn decode_bitmap_refagg(
 fn decode_single_refinement_symbol(
     ctx: &mut SymbolDecodeContext<'_>,
     symbol_width: u32,
-    height_class_height: u32,
 ) -> Result<DecodedRegion> {
     let use_huffman = ctx.header.flags.use_huffman;
 
@@ -259,7 +245,7 @@ fn decode_single_refinement_symbol(
             .get(new_idx)
             .ok_or(SymbolError::OutOfRange)?
     };
-    let mut region = DecodedRegion::new(symbol_width, height_class_height);
+    let mut region = DecodedRegion::new(symbol_width, ctx.height_class_height);
 
     if use_huffman {
         let bmsize = ctx
@@ -317,7 +303,6 @@ fn decode_single_refinement_symbol(
 fn decode_aggregation_bitmap(
     ctx: &mut SymbolDecodeContext<'_>,
     symbol_width: u32,
-    height_class_height: u32,
     aggregation_instance_count: u32,
 ) -> Result<DecodedRegion> {
     let use_huffman = ctx.header.flags.use_huffman;
@@ -339,7 +324,7 @@ fn decode_aggregation_bitmap(
     // Table 17 – Parameters used to decode a symbol's bitmap using refinement/aggregate decoding.
     let params = TextRegionParams {
         sbw: symbol_width,
-        sbh: height_class_height,
+        sbh: ctx.height_class_height,
         sbnuminstances: aggregation_instance_count,
         sbstrips: 1,
         sbdefpixel: false,
@@ -383,6 +368,12 @@ struct SymbolDecodeContext<'a> {
     num_input_symbols: u32,
     standard_tables: &'a StandardHuffmanTables,
     new_symbols: Vec<DecodedRegion>,
+    /// Only used if SDHUFF = 1 and SDREFAGG = 0.
+    symbol_widths: Vec<u32>,
+    height_class_first_symbol: u32,
+    symbols_decoded_count: u32,
+    total_width: u32,
+    height_class_height: u32,
 }
 
 struct ArithmeticContext<'a> {
@@ -503,41 +494,31 @@ impl<'a> HuffmanContext<'a> {
 }
 
 /// Decode a height class collective bitmap (6.5.9).
-///
-/// "This field is only present if SDHUFF = 1 and SDREFAGG = 0." (6.5.9)
-#[allow(clippy::too_many_arguments)]
-fn decode_height_class_collective_bitmap(
-    reader: &mut Reader<'_>,
-    collective_bitmap_size_table: &HuffmanTable,
-    new_symbols: &mut Vec<DecodedRegion>,
-    new_symbols_widths: &[u32],
-    height_class_first_symbol: u32,
-    symbols_decoded_count: u32,
-    total_width: u32,
-    height_class_height: u32,
-) -> Result<()> {
-    // "1) Read the size in bytes using the SDHUFFBMSIZE Huffman table.
-    // Let BMSIZE be the value decoded."
-    let bmsize = collective_bitmap_size_table
-        .decode(reader)?
+fn decode_collective_bitmap(ctx: &mut SymbolDecodeContext<'_>) -> Result<()> {
+    let bitmap_size = ctx
+        .h_ctx
+        .collective_bitmap_size_table
+        .decode(&mut ctx.h_ctx.reader)?
         .ok_or(HuffmanError::UnexpectedOob)? as u32;
 
-    // "2) Skip over any bits remaining in the last byte read."
-    reader.align();
+    ctx.h_ctx.reader.align();
 
-    // Decode the collective bitmap
-    let collective_bitmap = if bmsize == 0 {
-        // "3) If BMSIZE is zero, then the bitmap is stored uncompressed, and the
-        // actual size in bytes is: HCHEIGHT × ⌈TOTWIDTH / 8⌉"
-        let row_bytes = total_width.div_ceil(8);
+    let collective_bitmap = if bitmap_size == 0 {
+        // Bitmap is stored uncompressed, so we basically just copy-paste
+        // each byte. Rows are padded to the byte boundary.
+        let row_bytes = ctx.total_width.div_ceil(8);
 
-        let mut bitmap = DecodedRegion::new(total_width, height_class_height);
-        for y in 0..height_class_height {
+        let mut bitmap = DecodedRegion::new(ctx.total_width, ctx.height_class_height);
+        for y in 0..ctx.height_class_height {
             for byte_x in 0..row_bytes {
-                let byte = reader.read_byte().ok_or(ParseError::UnexpectedEof)?;
+                let byte = ctx
+                    .h_ctx
+                    .reader
+                    .read_byte()
+                    .ok_or(ParseError::UnexpectedEof)?;
                 for bit in 0..8 {
                     let x = byte_x * 8 + bit;
-                    if x < total_width {
+                    if x < ctx.total_width {
                         let pixel = (byte >> (7 - bit)) & 1 != 0;
                         bitmap.set_pixel(x, y, pixel);
                     }
@@ -546,37 +527,33 @@ fn decode_height_class_collective_bitmap(
         }
         bitmap
     } else {
-        // "4) Otherwise, decode the bitmap using a generic bitmap decoding procedure
-        // as described in 6.2. Set the parameters to this decoding procedure as
-        // shown in Table 19." (MMR = 1)
-        let bitmap_data = reader
-            .read_bytes(bmsize as usize)
+        // Otherwise, we need to use MMR decoding.
+        let bitmap_data = ctx
+            .h_ctx
+            .reader
+            .read_bytes(bitmap_size as usize)
             .ok_or(ParseError::UnexpectedEof)?;
 
-        let mut bitmap = DecodedRegion::new(total_width, height_class_height);
+        let mut bitmap = DecodedRegion::new(ctx.total_width, ctx.height_class_height);
         decode_bitmap_mmr(&mut bitmap, bitmap_data)?;
         bitmap
     };
 
-    // "Break up the bitmap B_HC as follows to obtain the symbols
-    // SDNEWSYMS[HCFIRSTSYM] through SDNEWSYMS[NSYMSDECODED − 1]." (6.5.5, step 4d)
-    //
-    // "B_HC contains the NSYMSDECODED − HCFIRSTSYM symbols concatenated left-to-right,
-    // with no intervening gaps."
+    // Finally, we simply chop up the collective bitmap into its constituent
+    // symbols.
     let mut x_offset: u32 = 0;
-    for i in height_class_first_symbol..symbols_decoded_count {
-        let sym_width = new_symbols_widths[i as usize];
-        let mut symbol = DecodedRegion::new(sym_width, height_class_height);
+    for i in ctx.height_class_first_symbol..ctx.symbols_decoded_count {
+        let sym_width = ctx.symbol_widths[i as usize];
+        let mut symbol = DecodedRegion::new(sym_width, ctx.height_class_height);
 
-        // Copy pixels from collective bitmap to individual symbol
-        for y in 0..height_class_height {
+        for y in 0..ctx.height_class_height {
             for x in 0..sym_width {
                 let pixel = collective_bitmap.get_pixel(x_offset + x, y);
                 symbol.set_pixel(x, y, pixel);
             }
         }
 
-        new_symbols.push(symbol);
+        ctx.new_symbols.push(symbol);
         x_offset += sym_width;
     }
 
