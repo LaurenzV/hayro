@@ -211,8 +211,6 @@ fn decode_refinement_bitmap(
 
         (symbol_id, refinement_x_offset, refinement_y_offset)
     } else {
-        // Use TextRegionContexts for IAID, IARDX, IARDY so they're shared with
-        // REFAGGNINST > 1 cases (per spec, contexts should be reused).
         let contexts = ctx
             .a_ctx
             .text_region_contexts
