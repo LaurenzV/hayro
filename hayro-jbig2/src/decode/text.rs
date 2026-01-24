@@ -37,7 +37,7 @@ pub(crate) fn decode(
     referred_tables: &[HuffmanTable],
     standard_tables: &StandardHuffmanTables,
 ) -> Result<DecodedRegion> {
-    let header = parse(reader)?;
+    let header = parse(reader, symbols.len() as u32)?;
     decode_with_header(reader, symbols, &header, referred_tables, standard_tables)
 }
 
@@ -681,8 +681,10 @@ fn decode_text_region_huffman(
 
     let tables = select_huffman_tables(huffman_flags, referred_tables, standard_tables)?;
 
-    let num_symbols = symbols.len() as u32;
-    let symbol_codes = decode_symbol_id_huffman_table(reader, num_symbols)?;
+    let symbol_codes = header
+        .symbol_id_table
+        .as_ref()
+        .ok_or(HuffmanError::MissingTables)?;
 
     let width = header.region_info.width;
     let height = header.region_info.height;
@@ -902,10 +904,6 @@ fn decode_text_region_huffman(
 
             // "xii) Set: NINSTANCES = NINSTANCES + 1"
             instance_count += 1;
-
-            if instance_count >= num_instances {
-                break;
-            }
         }
     }
 
@@ -1088,6 +1086,10 @@ pub(crate) struct TextRegionHeader {
     pub(crate) huffman_flags: Option<TextRegionHuffmanFlags>,
     pub(crate) refinement_at_pixels: Vec<AdaptiveTemplatePixel>,
     pub(crate) num_instances: u32,
+    /// Symbol ID Huffman table (SBSYMCODES).
+    /// For normal text regions, this is read from the stream (7.4.3.1.7).
+    /// For aggregate decoding (Table 17), this is a fixed-width table (6.5.8.2.3).
+    pub(crate) symbol_id_table: Option<HuffmanTable>,
 }
 
 impl TextRegionHeader {
@@ -1156,7 +1158,7 @@ fn parse_text_region_huffman_flags(reader: &mut Reader<'_>) -> Result<TextRegion
 }
 
 /// Parse a text region segment header (7.4.3.1).
-fn parse(reader: &mut Reader<'_>) -> Result<TextRegionHeader> {
+fn parse(reader: &mut Reader<'_>, num_symbols: u32) -> Result<TextRegionHeader> {
     let region_info = parse_region_segment_info(reader)?;
     let flags = parse_text_region_flags(reader)?;
     let huffman_flags = if flags.use_huffman {
@@ -1171,7 +1173,14 @@ fn parse(reader: &mut Reader<'_>) -> Result<TextRegionHeader> {
         } else {
             Vec::new()
         };
+
     let num_instances = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
+
+    let symbol_id_table = if flags.use_huffman {
+        Some(decode_symbol_id_huffman_table(reader, num_symbols)?)
+    } else {
+        None
+    };
 
     Ok(TextRegionHeader {
         region_info,
@@ -1179,5 +1188,6 @@ fn parse(reader: &mut Reader<'_>) -> Result<TextRegionHeader> {
         huffman_flags,
         refinement_at_pixels,
         num_instances,
+        symbol_id_table,
     })
 }

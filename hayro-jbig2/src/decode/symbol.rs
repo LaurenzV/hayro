@@ -7,8 +7,8 @@ use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::DecodedRegion;
 use crate::decode::generic::{decode_bitmap_mmr, parse_adaptive_template_pixels};
 use crate::decode::text::{
-    ReferenceCorner, TextRegionContexts, TextRegionFlags, TextRegionHeader,
-    decode_text_region_refine_with_contexts,
+    ReferenceCorner, TextRegionContexts, TextRegionFlags, TextRegionHeader, TextRegionHuffmanFlags,
+    decode_text_region_refine_with_contexts, decode_with_header,
 };
 use crate::decode::{
     AdaptiveTemplatePixel, CombinationOperator, RefinementTemplate, RegionSegmentInfo, Template,
@@ -289,20 +289,42 @@ fn decode_aggregation_bitmap(
 ) -> Result<DecodedRegion> {
     let use_huffman = ctx.header.flags.use_huffman;
 
-    // 6.5.8.2.4 Setting SBSYMS
-    // "Set SBSYMS to an array of SDNUMINSYMS + NSYMSDECODED symbols, formed by
-    // concatenating the array SDINSYMS and the first NSYMSDECODED entries of
-    // the array SDNEWSYMS."
+    // Concatenate input and new symbols.
     let mut sbsyms: Vec<&DecodedRegion> =
         Vec::with_capacity(ctx.symbols.input.len() + ctx.symbols.new.len());
     sbsyms.extend(ctx.symbols.input.iter().copied());
     for sym in &ctx.symbols.new {
         sbsyms.push(sym);
     }
-    // 6.5.8.2.3 Setting SBSYMCODES and SBSYMCODELEN.
+
+    // Set all parameters according to Table 17.
+
     let sbsymcodelen = 32 - (ctx.total_symbols() - 1).leading_zeros();
 
-    // Table 17 – Parameters used to decode a symbol's bitmap using refinement/aggregate decoding.
+    let symbol_id_table = if use_huffman {
+        Some(HuffmanTable::build_uniform(
+            ctx.total_symbols(),
+            sbsymcodelen,
+        ))
+    } else {
+        None
+    };
+
+    let huffman_flags = if use_huffman {
+        Some(TextRegionHuffmanFlags {
+            first_s_table: 0,
+            delta_s_table: 0,
+            delta_t_table: 0,
+            refinement_width_table: 1,
+            refinement_height_table: 1,
+            refinement_y_table: 1,
+            refinement_x_table: 1,
+            refinement_size_table: 0,
+        })
+    } else {
+        None
+    };
+
     let header = TextRegionHeader {
         region_info: RegionSegmentInfo {
             width: symbol_width,
@@ -323,17 +345,20 @@ fn decode_aggregation_bitmap(
             delta_s_offset: 0,
             refinement_template: ctx.header.flags.refinement_template,
         },
-        huffman_flags: None, // TODO: Set standard tables for Huffman mode
+        huffman_flags,
         refinement_at_pixels: ctx.header.refinement_at_pixels.clone(),
         num_instances: aggregation_instance_count,
+        symbol_id_table,
     };
 
     if use_huffman {
-        // REFAGGNINST > 1 with Huffman is not yet supported.
-        // Table 17 specifies standard Huffman tables (B.6, B.8, B.11, B.15, B.1),
-        // but the data embedding for Huffman symbol dictionaries is complex
-        // and not yet implemented.
-        bail!(DecodeError::Unsupported);
+        return decode_with_header(
+            &mut ctx.h_ctx.reader,
+            &sbsyms,
+            &header,
+            &[], // Only standard tables are used.
+            ctx.standard_tables,
+        );
     }
 
     // For arithmetic mode, use the text region decoding with refinement.
