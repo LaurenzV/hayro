@@ -258,16 +258,10 @@ fn decode_refinement_bitmap(
             .ok_or(ParseError::UnexpectedEof)?;
 
         let mut bitmap_decoder = ArithmeticDecoder::new(bitmap_data);
-        // Not sure if this is mentioned somewhere explicitly, but it seems like we
-        // need to create fresh contexts for each bitmap, unlike arithmetic decoding
-        // where we reuse them across multiple runs.
-        let template = ctx.header.flags.refinement_template;
-        let num_contexts = 1 << template.context_bits();
-        let mut contexts = vec![Context::default(); num_contexts];
 
         generic_refinement::decode_bitmap(
             &mut bitmap_decoder,
-            &mut contexts,
+            &mut ctx.a_ctx.refinement_region_contexts,
             &mut region,
             reference_region,
             refinement_x_offset,
