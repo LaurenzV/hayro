@@ -7,10 +7,11 @@ use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::DecodedRegion;
 use crate::decode::generic::{decode_bitmap_mmr, parse_adaptive_template_pixels};
 use crate::decode::text::{
-    ReferenceCorner, TextRegionContexts, TextRegionParams, decode_text_region_refine_with_contexts,
+    ReferenceCorner, TextRegionContexts, TextRegionFlags, TextRegionHeader,
+    decode_text_region_refine_with_contexts,
 };
 use crate::decode::{
-    AdaptiveTemplatePixel, CombinationOperator, RefinementTemplate, Template,
+    AdaptiveTemplatePixel, CombinationOperator, RefinementTemplate, RegionSegmentInfo, Template,
     parse_refinement_at_pixels,
 };
 use crate::decode::{generic, generic_refinement};
@@ -302,24 +303,36 @@ fn decode_aggregation_bitmap(
     let sbsymcodelen = 32 - (ctx.total_symbols() - 1).leading_zeros();
 
     // Table 17 – Parameters used to decode a symbol's bitmap using refinement/aggregate decoding.
-    let params = TextRegionParams {
-        width: symbol_width,
-        height: ctx.height_class_height,
+    let header = TextRegionHeader {
+        region_info: RegionSegmentInfo {
+            width: symbol_width,
+            height: ctx.height_class_height,
+            x_location: 0,
+            y_location: 0,
+            combination_operator: CombinationOperator::Or,
+            _colour_extension: false,
+        },
+        flags: TextRegionFlags {
+            use_huffman,
+            use_refinement: true,
+            log_strip_size: 0, // strip_size = 1
+            reference_corner: ReferenceCorner::TopLeft,
+            transposed: false,
+            combination_operator: CombinationOperator::Or,
+            default_pixel: false,
+            delta_s_offset: 0,
+            refinement_template: ctx.header.flags.refinement_template,
+        },
+        huffman_flags: None, // TODO: Set standard tables for Huffman mode
+        refinement_at_pixels: ctx.header.refinement_at_pixels.clone(),
         num_instances: aggregation_instance_count,
-        strip_size: 1,
-        default_pixel: false,
-        combination_operator: CombinationOperator::Or,
-        transposed: false,
-        reference_corner: ReferenceCorner::TopLeft,
-        delta_s_offset: 0,
-        refinement_template: ctx.header.flags.refinement_template,
-        refinement_at_pixels: &ctx.header.refinement_at_pixels,
     };
 
     if use_huffman {
         // REFAGGNINST > 1 with Huffman is not yet supported.
-        // Table 17 specifies SBHUFF = 0 (arithmetic), but the data embedding
-        // for Huffman symbol dictionaries is complex and not yet implemented.
+        // Table 17 specifies standard Huffman tables (B.6, B.8, B.11, B.15, B.1),
+        // but the data embedding for Huffman symbol dictionaries is complex
+        // and not yet implemented.
         bail!(DecodeError::Unsupported);
     }
 
@@ -334,7 +347,7 @@ fn decode_aggregation_bitmap(
     decode_text_region_refine_with_contexts(
         &mut ctx.a_ctx.decoder,
         &sbsyms,
-        &params,
+        &header,
         contexts,
         &mut ctx.a_ctx.refinement_region_contexts,
     )

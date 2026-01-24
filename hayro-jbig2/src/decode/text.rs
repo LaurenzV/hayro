@@ -38,19 +38,24 @@ pub(crate) fn decode(
     standard_tables: &StandardHuffmanTables,
 ) -> Result<DecodedRegion> {
     let header = parse(reader)?;
-    let params = TextRegionParams::from_header(&header);
+    decode_with_header(reader, symbols, &header, referred_tables, standard_tables)
+}
 
+/// Decode a text region with an already-parsed header.
+///
+/// This is used both for normal text region segments and for aggregate symbol
+/// decoding in symbol dictionaries (Table 17).
+pub(crate) fn decode_with_header(
+    reader: &mut Reader<'_>,
+    symbols: &[&DecodedRegion],
+    header: &TextRegionHeader,
+    referred_tables: &[HuffmanTable],
+    standard_tables: &StandardHuffmanTables,
+) -> Result<DecodedRegion> {
     let mut region = if header.flags.use_huffman {
         // "If this bit is 1, then the segment uses the Huffman encoding variant."
         // (7.4.3.1.1)
-        decode_text_region_huffman(
-            reader,
-            symbols,
-            &header,
-            &params,
-            referred_tables,
-            standard_tables,
-        )?
+        decode_text_region_huffman(reader, symbols, header, referred_tables, standard_tables)?
     } else {
         // "If this bit is 0, then the segment uses the arithmetic encoding variant."
         // (7.4.3.1.1)
@@ -58,9 +63,9 @@ pub(crate) fn decode(
         let mut decoder = ArithmeticDecoder::new(data);
 
         if header.flags.use_refinement {
-            decode_text_region_refine(&mut decoder, symbols, &params)?
+            decode_text_region_refine(&mut decoder, symbols, header)?
         } else {
-            decode_text_region_direct(&mut decoder, symbols, &params)?
+            decode_text_region_direct(&mut decoder, symbols, header)?
         }
     };
 
@@ -114,59 +119,11 @@ impl TextRegionContexts {
     }
 }
 
-/// Parameters for text region decoding.
-///
-/// This can be constructed from a `TextRegionHeader` or with explicit values
-/// (e.g., for Table 17 aggregated symbol decoding).
-pub(crate) struct TextRegionParams<'a> {
-    /// SBW: Region width.
-    pub(crate) width: u32,
-    /// SBH: Region height.
-    pub(crate) height: u32,
-    /// SBNUMINSTANCES: Number of symbol instances.
-    pub(crate) num_instances: u32,
-    /// SBSTRIPS: Strip size.
-    pub(crate) strip_size: u32,
-    /// SBDEFPIXEL: Default pixel value.
-    pub(crate) default_pixel: bool,
-    /// SBCOMBOP: Combination operator.
-    pub(crate) combination_operator: CombinationOperator,
-    /// TRANSPOSED: Transposed flag.
-    pub(crate) transposed: bool,
-    /// REFCORNER: Reference corner.
-    pub(crate) reference_corner: ReferenceCorner,
-    /// SBDSOFFSET: S offset.
-    pub(crate) delta_s_offset: i32,
-    /// SBRTEMPLATE: Refinement template.
-    pub(crate) refinement_template: RefinementTemplate,
-    /// SBRATXn/SBRATYn: Refinement AT pixels.
-    pub(crate) refinement_at_pixels: &'a [AdaptiveTemplatePixel],
-}
-
-impl<'a> TextRegionParams<'a> {
-    /// Create parameters from a parsed text region header.
-    pub(crate) fn from_header(header: &'a TextRegionHeader) -> Self {
-        Self {
-            width: header.region_info.width,
-            height: header.region_info.height,
-            num_instances: header.num_instances,
-            strip_size: 1_u32 << header.flags.log_strip_size,
-            default_pixel: header.flags.default_pixel,
-            combination_operator: header.flags.combination_operator,
-            transposed: header.flags.transposed,
-            reference_corner: header.flags.reference_corner,
-            delta_s_offset: header.flags.delta_s_offset as i32,
-            refinement_template: header.flags.refinement_template,
-            refinement_at_pixels: &header.refinement_at_pixels,
-        }
-    }
-}
-
 /// Decode text region without refinement (SBREFINE=0).
 fn decode_text_region_direct(
     decoder: &mut ArithmeticDecoder<'_>,
     symbols: &[&DecodedRegion],
-    params: &TextRegionParams<'_>,
+    header: &TextRegionHeader,
 ) -> Result<DecodedRegion> {
     let num_symbols = symbols.len() as u32;
 
@@ -178,7 +135,7 @@ fn decode_text_region_direct(
     decode_text_region_with(
         decoder,
         symbols,
-        params,
+        header,
         &mut contexts,
         |_decoder, symbol_id, _symbols, _contexts| {
             // "If SBREFINE is 0, then set R_I to 0." (6.4.11)
@@ -192,10 +149,10 @@ fn decode_text_region_direct(
 ///
 /// This is also used for aggregated symbol decoding (REFAGGNINST > 1)
 /// per Table 17, which always uses SBREFINE=1.
-pub(crate) fn decode_text_region_refine(
+fn decode_text_region_refine(
     decoder: &mut ArithmeticDecoder<'_>,
     symbols: &[&DecodedRegion],
-    params: &TextRegionParams<'_>,
+    header: &TextRegionHeader,
 ) -> Result<DecodedRegion> {
     // Create fresh contexts (for normal text region segments)
     let num_symbols = symbols.len() as u32;
@@ -206,13 +163,13 @@ pub(crate) fn decode_text_region_refine(
     let mut contexts = TextRegionContexts::new(symbol_code_length);
 
     // Create refinement contexts
-    let num_gr_contexts = 1 << params.refinement_template.context_bits();
+    let num_gr_contexts = 1 << header.flags.refinement_template.context_bits();
     let mut gr_contexts = vec![Context::default(); num_gr_contexts];
 
     decode_text_region_refine_with_contexts(
         decoder,
         symbols,
-        params,
+        header,
         &mut contexts,
         &mut gr_contexts,
     )
@@ -225,14 +182,14 @@ pub(crate) fn decode_text_region_refine(
 pub(crate) fn decode_text_region_refine_with_contexts(
     decoder: &mut ArithmeticDecoder<'_>,
     symbols: &[&DecodedRegion],
-    params: &TextRegionParams<'_>,
+    header: &TextRegionHeader,
     contexts: &mut TextRegionContexts,
     gr_contexts: &mut [Context],
 ) -> Result<DecodedRegion> {
     decode_text_region_with(
         decoder,
         symbols,
-        params,
+        header,
         contexts,
         |decoder, symbol_id, symbols, contexts| {
             // Decode R_I (refinement indicator)
@@ -279,8 +236,8 @@ pub(crate) fn decode_text_region_refine_with_contexts(
                     reference_bitmap,
                     reference_x_offset,
                     reference_y_offset,
-                    params.refinement_template,
-                    params.refinement_at_pixels,
+                    header.flags.refinement_template,
+                    &header.refinement_at_pixels,
                     false,
                 )?;
                 Ok(SymbolBitmap::Owned(refined))
@@ -300,10 +257,10 @@ pub(crate) enum SymbolBitmap {
 /// Core text region decoding loop (6.4.5).
 ///
 /// Takes a closure that determines each symbol instance bitmap.
-pub(crate) fn decode_text_region_with<F>(
+fn decode_text_region_with<F>(
     decoder: &mut ArithmeticDecoder<'_>,
     symbols: &[&DecodedRegion],
-    params: &TextRegionParams<'_>,
+    header: &TextRegionHeader,
     contexts: &mut TextRegionContexts,
     mut get_symbol_bitmap: F,
 ) -> Result<DecodedRegion>
@@ -315,15 +272,15 @@ where
         &mut TextRegionContexts,
     ) -> Result<SymbolBitmap>,
 {
-    let width = params.width;
-    let height = params.height;
-    let num_instances = params.num_instances;
-    let strip_size = params.strip_size;
-    let default_pixel = params.default_pixel;
-    let transposed = params.transposed;
-    let reference_corner = params.reference_corner;
-    let delta_s_offset = params.delta_s_offset;
-    let combination_operator = params.combination_operator;
+    let width = header.region_info.width;
+    let height = header.region_info.height;
+    let num_instances = header.num_instances;
+    let strip_size = header.strip_size();
+    let default_pixel = header.flags.default_pixel;
+    let transposed = header.flags.transposed;
+    let reference_corner = header.flags.reference_corner;
+    let delta_s_offset = header.flags.delta_s_offset as i32;
+    let combination_operator = header.flags.combination_operator;
 
     // "1) Fill a bitmap SBREG, of the size given by SBW and SBH, with the
     // SBDEFPIXEL value." (6.4.5)
@@ -696,7 +653,6 @@ fn decode_text_region_huffman(
     reader: &mut Reader<'_>,
     symbols: &[&DecodedRegion],
     header: &TextRegionHeader,
-    params: &TextRegionParams<'_>,
     referred_tables: &[HuffmanTable],
     standard_tables: &StandardHuffmanTables,
 ) -> Result<DecodedRegion> {
@@ -728,15 +684,15 @@ fn decode_text_region_huffman(
     let num_symbols = symbols.len() as u32;
     let symbol_codes = decode_symbol_id_huffman_table(reader, num_symbols)?;
 
-    let width = params.width;
-    let height = params.height;
-    let num_instances = params.num_instances;
-    let strip_size = params.strip_size;
-    let default_pixel = params.default_pixel;
-    let transposed = params.transposed;
-    let reference_corner = params.reference_corner;
-    let delta_s_offset = params.delta_s_offset;
-    let combination_operator = params.combination_operator;
+    let width = header.region_info.width;
+    let height = header.region_info.height;
+    let num_instances = header.num_instances;
+    let strip_size = header.strip_size();
+    let default_pixel = header.flags.default_pixel;
+    let transposed = header.flags.transposed;
+    let reference_corner = header.flags.reference_corner;
+    let delta_s_offset = header.flags.delta_s_offset as i32;
+    let combination_operator = header.flags.combination_operator;
     let use_refinement = header.flags.use_refinement;
     let log_strip_size = header.flags.log_strip_size;
 
@@ -879,7 +835,7 @@ fn decode_text_region_huffman(
                     // Decode refinement bitmap from raw bytes.
                     // TPGRON is always 0 for text region refinements (Table 12).
                     let mut decoder = ArithmeticDecoder::new(refinement_data);
-                    let num_context_bits = params.refinement_template.context_bits();
+                    let num_context_bits = header.flags.refinement_template.context_bits();
                     let mut contexts = vec![Context::default(); 1 << num_context_bits];
 
                     decode_bitmap(
@@ -889,8 +845,8 @@ fn decode_text_region_huffman(
                         reference_bitmap,
                         reference_x_offset,
                         reference_y_offset,
-                        params.refinement_template,
-                        params.refinement_at_pixels,
+                        header.flags.refinement_template,
+                        &header.refinement_at_pixels,
                         false, // TPGRON = 0
                     )?;
 
@@ -1134,6 +1090,13 @@ pub(crate) struct TextRegionHeader {
     pub(crate) num_instances: u32,
 }
 
+impl TextRegionHeader {
+    /// Compute SBSTRIPS from log_strip_size.
+    pub(crate) fn strip_size(&self) -> u32 {
+        1_u32 << self.flags.log_strip_size
+    }
+}
+
 /// Parse text region segment flags (7.4.3.1.1).
 fn parse_text_region_flags(reader: &mut Reader<'_>) -> Result<TextRegionFlags> {
     let flags_word = reader.read_u16().ok_or(ParseError::UnexpectedEof)?;
@@ -1202,11 +1165,12 @@ fn parse(reader: &mut Reader<'_>) -> Result<TextRegionHeader> {
         None
     };
 
-    let refinement_at_pixels = if flags.use_refinement && flags.refinement_template == RefinementTemplate::Template0 {
-        parse_refinement_at_pixels(reader)?
-    } else {
-        Vec::new()
-    };
+    let refinement_at_pixels =
+        if flags.use_refinement && flags.refinement_template == RefinementTemplate::Template0 {
+            parse_refinement_at_pixels(reader)?
+        } else {
+            Vec::new()
+        };
     let num_instances = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
 
     Ok(TextRegionHeader {
