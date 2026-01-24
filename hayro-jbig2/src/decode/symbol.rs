@@ -171,8 +171,10 @@ fn decode_refinement_aggregation_bitmap(
 
     if aggregation_instance_count == 1 {
         decode_refinement_bitmap(ctx, symbol_width)
-    } else {
+    } else if aggregation_instance_count > 1 {
         decode_aggregation_bitmap(ctx, symbol_width, aggregation_instance_count as u32)
+    }   else {
+        return Err(DecodeError::Symbol(SymbolError::Invalid));
     }
 }
 
@@ -183,16 +185,16 @@ fn decode_refinement_bitmap(
 ) -> Result<DecodedRegion> {
     let use_huffman = ctx.header.flags.use_huffman;
 
-    let mut sbsymcodelen = 32 - (ctx.total_symbols() - 1).leading_zeros();
+    let mut symbol_code_length = 32 - (ctx.total_symbols() - 1).leading_zeros();
 
     let (id_i, rdx_i, rdy_i) = if use_huffman {
         // See 6.5.8.2.3, the value should be at least 1 if we use huffman coding.
-        sbsymcodelen = sbsymcodelen.max(1);
+        symbol_code_length = symbol_code_length.max(1);
 
         let id_i = ctx
             .h_ctx
             .reader
-            .read_bits(sbsymcodelen as u8)
+            .read_bits(symbol_code_length as u8)
             .ok_or(ParseError::UnexpectedEof)? as usize;
 
         let rdx_i = ctx
@@ -214,7 +216,7 @@ fn decode_refinement_bitmap(
         let contexts = ctx
             .a_ctx
             .text_region_contexts
-            .get_or_insert_with(|| TextRegionContexts::new(sbsymcodelen));
+            .get_or_insert_with(|| TextRegionContexts::new(symbol_code_length));
 
         let id_i = contexts.iaid.decode(&mut ctx.a_ctx.decoder) as usize;
 
