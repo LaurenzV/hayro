@@ -133,8 +133,10 @@ pub(crate) fn decode(
         }
 
         if ctx.header.flags.use_huffman && !ctx.header.flags.use_refagg {
-            // Now, we use the symbol widths to decode the collective bitmap.
-            decode_collective_bitmap(&mut ctx)?;
+            // In case we have huffman coding and no refinement-aggregation, we use 
+            // the previously decoded symbol widths to decode the collective bitmap
+            // and extract the individual symbols from that bitmap.
+            decode_height_class_collective_bitmap(&mut ctx)?;
         }
     }
 
@@ -156,7 +158,7 @@ fn decode_refinement_aggregation_bitmap(
     ctx: &mut SymbolDecodeContext<'_>,
     symbol_width: u32,
 ) -> Result<DecodedRegion> {
-    // 6.5.8.2.1 Number of symbol instances in aggregation.
+    // 6.5.8.2.1 Number of symbol instances in the aggregation.
     let aggregation_instance_count = if ctx.header.flags.use_huffman {
         ctx.h_ctx
             .aggregation_instance_count_table
@@ -177,7 +179,7 @@ fn decode_refinement_aggregation_bitmap(
     }
 }
 
-/// Decode a refinement bitmap symbol (6.5.8.2.2).
+/// Decode a refinement bitmap symbol with a single aggregate (6.5.8.2).
 fn decode_refinement_bitmap(
     ctx: &mut SymbolDecodeContext<'_>,
     symbol_width: u32,
@@ -232,7 +234,6 @@ fn decode_refinement_bitmap(
     };
 
     let reference_region = ctx.symbols.get(symbol_id).ok_or(SymbolError::OutOfRange)?;
-
     let mut region = DecodedRegion::new(symbol_width, ctx.height_class_height);
 
     if use_huffman {
@@ -279,9 +280,7 @@ fn decode_refinement_bitmap(
     Ok(region)
 }
 
-/// Decode a bitmap when REFAGGNINST > 1 (6.5.8.2, Table 17).
-///
-/// Uses the text region decoding procedure (6.4) with Table 17 parameters.
+/// Decode an aggregation bitmap with more than one aggregate (6.5.8.2).
 fn decode_aggregation_bitmap(
     ctx: &mut SymbolDecodeContext<'_>,
     symbol_width: u32,
@@ -358,7 +357,6 @@ fn decode_aggregation_bitmap(
             standard_tables: ctx.standard_tables,
         }
     } else {
-        // Initialize text region contexts lazily if needed.
         let contexts = ctx
             .a_ctx
             .text_region_contexts
@@ -538,7 +536,7 @@ impl<'a> HuffmanContext<'a> {
 }
 
 /// Decode a height class collective bitmap (6.5.9).
-fn decode_collective_bitmap(ctx: &mut SymbolDecodeContext<'_>) -> Result<()> {
+fn decode_height_class_collective_bitmap(ctx: &mut SymbolDecodeContext<'_>) -> Result<()> {
     let bitmap_size = ctx
         .h_ctx
         .collective_bitmap_size_table
