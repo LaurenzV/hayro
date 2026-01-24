@@ -183,8 +183,7 @@ fn decode_refinement_bitmap(
 ) -> Result<DecodedRegion> {
     let use_huffman = ctx.header.flags.use_huffman;
 
-    let total_symbols = ctx.num_input_symbols + ctx.header.num_new_symbols;
-    let mut sbsymcodelen = 32 - (total_symbols - 1).leading_zeros();
+    let mut sbsymcodelen = 32 - (ctx.total_symbols() - 1).leading_zeros();
 
     let (id_i, rdx_i, rdy_i) = if use_huffman {
         // See 6.5.8.2.3, the value should be at least 1 if we use huffman coding.
@@ -313,8 +312,7 @@ fn decode_aggregation_bitmap(
         sbsyms.push(sym);
     }
     // 6.5.8.2.3 Setting SBSYMCODES and SBSYMCODELEN.
-    let total_symbols = ctx.num_input_symbols + ctx.header.num_new_symbols;
-    let sbsymcodelen = 32 - (total_symbols - 1).leading_zeros();
+    let sbsymcodelen = 32 - (ctx.total_symbols() - 1).leading_zeros();
 
     // Table 17 – Parameters used to decode a symbol's bitmap using refinement/aggregate decoding.
     let params = TextRegionParams {
@@ -369,6 +367,12 @@ struct SymbolDecodeContext<'a> {
     symbols_decoded_count: u32,
     total_width: u32,
     height_class_height: u32,
+}
+
+impl SymbolDecodeContext<'_> {
+    fn total_symbols(&self) -> u32 {
+        self.num_input_symbols + self.header.num_new_symbols
+    }
 }
 
 struct ArithmeticContext<'a> {
@@ -557,6 +561,8 @@ fn decode_collective_bitmap(ctx: &mut SymbolDecodeContext<'_>) -> Result<()> {
 
 /// Exported symbols (6.5.10).
 fn export_symbols(ctx: &mut SymbolDecodeContext<'_>) -> Result<Vec<DecodedRegion>> {
+    let total_symbols = ctx.total_symbols();
+
     let mut read_run_length = || -> Result<u32> {
         let value = if ctx.header.flags.use_huffman {
             ctx.h_ctx
@@ -571,8 +577,6 @@ fn export_symbols(ctx: &mut SymbolDecodeContext<'_>) -> Result<Vec<DecodedRegion
 
         u32::try_from(value).map_err(|_| HuffmanError::InvalidCode.into())
     };
-
-    let total_symbols = ctx.num_input_symbols + ctx.new_symbols.len() as u32;
     let mut exported = Vec::with_capacity(ctx.header.num_exported_symbols as usize);
     let mut index: u32 = 0;
     let mut should_export = false;
