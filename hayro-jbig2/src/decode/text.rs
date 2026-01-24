@@ -763,7 +763,7 @@ fn decode_text_region_huffman(
             // If SBHUFF is 1, decode a value by reading one bit at a time until
             // the resulting bit string is equal to one of the entries in
             // SBSYMCODES." (6.4.10)
-            let symbol_id = decode_huffman_value(&symbol_codes, reader)? as usize;
+            let symbol_id = decode_huffman_value(symbol_codes, reader)? as usize;
 
             // "v) Determine the symbol instance's bitmap IB_I as described in
             // 6.4.11." (6.4.5)
