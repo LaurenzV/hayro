@@ -92,6 +92,11 @@ pub(crate) fn decode(
         while let Some(width_delta) =
             read_symbol_width_delta(&mut huffman_context, &mut arithmetic_context)?
         {
+            // Prevent infinite loop for invalid files.
+            if symbols_decoded_count >= num_new_symbols {
+                bail!(SymbolError::TooManySymbols)
+            }
+
             symbol_width = symbol_width
                 .checked_add_signed(width_delta)
                 .ok_or(RegionError::InvalidDimension)?;

@@ -98,6 +98,8 @@ pub enum TemplateError {
 pub enum SymbolError {
     /// No symbols available for text region.
     NoSymbols,
+    /// The symbol dictionary contains more symbols than expected.
+    TooManySymbols,
     /// Symbol ID out of valid range.
     OutOfRange,
     /// Unexpected out-of-band value.
@@ -187,6 +189,7 @@ impl fmt::Display for SymbolError {
             Self::NoSymbols => write!(f, "no symbols available"),
             Self::OutOfRange => write!(f, "symbol ID out of range"),
             Self::UnexpectedOob => write!(f, "unexpected out-of-band value"),
+            Self::TooManySymbols => write!(f, "symbol dictionary contains too many symbols"),
         }
     }
 }
