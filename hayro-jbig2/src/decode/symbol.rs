@@ -5,9 +5,8 @@ use alloc::vec::Vec;
 
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::DecodedRegion;
-use crate::decode::generic;
+use crate::decode::{generic, generic_refinement};
 use crate::decode::generic::{decode_bitmap_mmr, parse_adaptive_template_pixels};
-use crate::decode::generic_refinement::decode_bitmap as decode_refinement_bitmap;
 use crate::decode::text::{
     ReferenceCorner, TextRegionContexts, TextRegionParams, decode_text_region_refine_with_contexts,
 };
@@ -125,7 +124,7 @@ pub(crate) fn decode(
                 (_, true) => {
                     // Also decode a single symbol, but using refinement-aggregation.
                     // In this case, we can have both, huffman and arithmetic coding.
-                    let symbol = decode_bitmap_refagg(&mut ctx, symbol_width)?;
+                    let symbol = decode_refinement_aggregation_bitmap(&mut ctx, symbol_width)?;
 
                     ctx.new_symbols.push(symbol);
                 }
@@ -154,7 +153,7 @@ pub(crate) struct SymbolDictionary {
 }
 
 /// Decode a symbol bitmap using refinement/aggregate coding (6.5.8.2).
-fn decode_bitmap_refagg(
+fn decode_refinement_aggregation_bitmap(
     ctx: &mut SymbolDecodeContext<'_>,
     symbol_width: u32,
 ) -> Result<DecodedRegion> {
@@ -171,23 +170,19 @@ fn decode_bitmap_refagg(
     .ok_or(DecodeError::Symbol(SymbolError::UnexpectedOob))?;
 
     if aggregation_instance_count == 1 {
-        decode_single_refinement_symbol(ctx, symbol_width)
+        decode_refinement_bitmap(ctx, symbol_width)
     } else {
-        // 6.5.8.2 step 2: "If REFAGGNINST is greater than one, then decode the bitmap
-        // itself using a text region decoding procedure as described in 6.4. Set the
-        // parameters to this decoding procedure as shown in Table 17."
         decode_aggregation_bitmap(ctx, symbol_width, aggregation_instance_count as u32)
     }
 }
 
-/// Decode a bitmap when REFAGGNINST = 1 (6.5.8.2.2).
-fn decode_single_refinement_symbol(
+/// Decode a refinement bitmap symbol (6.5.8.2.2).
+fn decode_refinement_bitmap(
     ctx: &mut SymbolDecodeContext<'_>,
     symbol_width: u32,
 ) -> Result<DecodedRegion> {
     let use_huffman = ctx.header.flags.use_huffman;
 
-    // 6.5.8.2.3 Setting SBSYMCODES and SBSYMCODELEN.
     let total_symbols = ctx.num_input_symbols + ctx.header.num_new_symbols;
     let mut sbsymcodelen = 32 - (total_symbols - 1).leading_zeros();
 
@@ -269,7 +264,7 @@ fn decode_single_refinement_symbol(
         let num_gr_contexts = 1 << gr_template.context_bits();
         let mut gr_contexts = vec![Context::default(); num_gr_contexts];
 
-        decode_refinement_bitmap(
+        generic_refinement::decode_bitmap(
             &mut bitmap_decoder,
             &mut gr_contexts,
             &mut region,
@@ -281,7 +276,7 @@ fn decode_single_refinement_symbol(
             false,
         )?;
     } else {
-        decode_refinement_bitmap(
+        generic_refinement::decode_bitmap(
             &mut ctx.a_ctx.decoder,
             &mut ctx.a_ctx.refinement_region_contexts,
             &mut region,
