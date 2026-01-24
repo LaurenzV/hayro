@@ -173,7 +173,7 @@ fn decode_refinement_aggregation_bitmap(
         decode_refinement_bitmap(ctx, symbol_width)
     } else if aggregation_instance_count > 1 {
         decode_aggregation_bitmap(ctx, symbol_width, aggregation_instance_count as u32)
-    }   else {
+    } else {
         return Err(DecodeError::Symbol(SymbolError::Invalid));
     }
 }
@@ -211,6 +211,8 @@ fn decode_refinement_bitmap(
 
         (symbol_id, refinement_x_offset, refinement_y_offset)
     } else {
+        // Note that the contexts should be reused across multiple
+        // bitmaps in the same symbol dictionary.
         let contexts = ctx
             .a_ctx
             .text_region_contexts
@@ -242,7 +244,7 @@ fn decode_refinement_bitmap(
     let mut region = DecodedRegion::new(symbol_width, ctx.height_class_height);
 
     if use_huffman {
-        let bmsize = ctx
+        let bitmap_size = ctx
             .standard_tables
             .table_a()
             .decode(&mut ctx.h_ctx.reader)?
@@ -252,20 +254,20 @@ fn decode_refinement_bitmap(
         let bitmap_data = ctx
             .h_ctx
             .reader
-            .read_bytes(bmsize)
+            .read_bytes(bitmap_size)
             .ok_or(ParseError::UnexpectedEof)?;
 
         let mut bitmap_decoder = ArithmeticDecoder::new(bitmap_data);
         // Not sure if this is mentioned somewhere explicitly, but it seems like we
         // need to create fresh contexts for each bitmap, unlike arithmetic decoding
         // where we reuse them across multiple runs.
-        let gr_template = ctx.header.flags.refinement_template;
-        let num_gr_contexts = 1 << gr_template.context_bits();
-        let mut gr_contexts = vec![Context::default(); num_gr_contexts];
+        let template = ctx.header.flags.refinement_template;
+        let num_contexts = 1 << template.context_bits();
+        let mut contexts = vec![Context::default(); num_contexts];
 
         generic_refinement::decode_bitmap(
             &mut bitmap_decoder,
-            &mut gr_contexts,
+            &mut contexts,
             &mut region,
             reference_region,
             refinement_x_offset,
