@@ -562,74 +562,46 @@ fn decode_collective_bitmap(ctx: &mut SymbolDecodeContext<'_>) -> Result<()> {
 
 /// Exported symbols (6.5.10).
 fn export_symbols(ctx: &mut SymbolDecodeContext<'_>) -> Result<Vec<DecodedRegion>> {
-    let mut decode_export_run_length = || {
-        if ctx.header.flags.use_huffman {
+    let mut read_run_length = || -> Result<u32> {
+        let value = if ctx.header.flags.use_huffman {
             ctx.h_ctx
                 .export_run_length_table
-                .decode(&mut ctx.h_ctx.reader)
+                .decode(&mut ctx.h_ctx.reader)?
         } else {
-            Ok(ctx
-                .a_ctx
+            ctx.a_ctx
                 .export_run_length_decoder
-                .decode(&mut ctx.a_ctx.decoder))
+                .decode(&mut ctx.a_ctx.decoder)
         }
+        .ok_or(HuffmanError::UnexpectedOob)?;
+
+        u32::try_from(value).map_err(|_| HuffmanError::InvalidCode.into())
     };
 
-    let num_new_symbols = ctx.new_symbols.len() as u32;
-    let total_symbols = ctx.num_input_symbols + num_new_symbols;
+    let total_symbols = ctx.num_input_symbols + ctx.new_symbols.len() as u32;
+    let mut exported = Vec::with_capacity(ctx.header.num_exported_symbols as usize);
+    let mut index: u32 = 0;
+    let mut should_export = false;
 
-    // "1) Set: EXINDEX = 0, CUREXFLAG = 0"
-    let mut export_index: u32 = 0;
-    let mut current_export_flag: bool = false;
+    while index < total_symbols {
+        let run_length = read_run_length()?;
 
-    // EXFLAGS array - one bit per symbol indicating if exported
-    let mut export_flags = vec![false; total_symbols as usize];
-
-    // "5) Repeat steps 2) through 4) until EXINDEX = SDNUMINSYMS + SDNUMNEWSYMS"
-    while export_index < total_symbols {
-        // "2) Decode a value using Table B.1 if SDHUFF is 1, or the IAEX integer
-        // arithmetic decoding procedure if SDHUFF is 0. Let EXRUNLENGTH be the
-        // decoded value."
-        let export_run_length =
-            decode_export_run_length()?.ok_or(DecodeError::Huffman(HuffmanError::UnexpectedOob))?;
-
-        if export_run_length < 0 {
-            bail!(HuffmanError::InvalidCode);
+        if index + run_length > total_symbols {
+            bail!(SymbolError::OutOfRange);
         }
 
-        let export_run_length = export_run_length as u32;
-
-        // "3) Set EXFLAGS[EXINDEX] through EXFLAGS[EXINDEX + EXRUNLENGTH - 1]
-        // to CUREXFLAG."
-        for i in 0..export_run_length {
-            let idx = (export_index + i) as usize;
-            if idx < export_flags.len() {
-                export_flags[idx] = current_export_flag;
+        if should_export {
+            for i in index..index + run_length {
+                let symbol = if i < ctx.num_input_symbols {
+                    ctx.input_symbols[i as usize].clone()
+                } else {
+                    ctx.new_symbols[i as usize - ctx.num_input_symbols as usize].clone()
+                };
+                exported.push(symbol);
             }
         }
 
-        // "4) Set: EXINDEX = EXINDEX + EXRUNLENGTH, CUREXFLAG = NOT(CUREXFLAG)"
-        export_index += export_run_length;
-        current_export_flag = !current_export_flag;
-    }
-
-    // "8) For each value of I from 0 to SDNUMINSYMS + SDNUMNEWSYMS - 1, if
-    // EXFLAGS[I] = 1 then perform the following steps:"
-    let mut exported = Vec::with_capacity(ctx.header.num_exported_symbols as usize);
-
-    for (i, &is_exported) in export_flags.iter().enumerate() {
-        if is_exported {
-            let symbol = if (i as u32) < ctx.num_input_symbols {
-                // "a) If I < SDNUMINSYMS then set: SDEXSYMS[J] = SDINSYMS[I]"
-                ctx.input_symbols[i].clone()
-            } else {
-                // "b) If I >= SDNUMINSYMS then set:
-                // SDEXSYMS[J] = SDNEWSYMS[I - SDNUMINSYMS]"
-                let new_idx = i - ctx.num_input_symbols as usize;
-                ctx.new_symbols[new_idx].clone()
-            };
-            exported.push(symbol);
-        }
+        index += run_length;
+        should_export = !should_export;
     }
 
     if exported.len() != ctx.header.num_exported_symbols as usize {
