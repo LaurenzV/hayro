@@ -9,7 +9,6 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use super::generic_refinement::decode_bitmap;
-use super::symbol_id_decoder::SymbolIdDecoder;
 use super::{
     AdaptiveTemplatePixel, CombinationOperator, RefinementTemplate, RegionSegmentInfo,
     parse_refinement_at_pixels, parse_region_segment_info,
@@ -20,6 +19,7 @@ use crate::error::{HuffmanError, ParseError, Result, SymbolError, bail};
 use crate::huffman_table::{HuffmanTable, StandardHuffmanTables, TableLine};
 use crate::integer_decoder::IntegerDecoder;
 use crate::reader::Reader;
+use crate::symbol_id_decoder::SymbolIdDecoder;
 
 /// Decode a text region segment (6.4).
 ///

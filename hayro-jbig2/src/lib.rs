@@ -31,6 +31,7 @@ mod lazy;
 mod page_info;
 mod reader;
 mod segment;
+mod symbol_id_decoder;
 
 use error::bail;
 pub use error::{
