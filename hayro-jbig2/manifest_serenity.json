@@ -1,5 +1,5 @@
 [
-  { "id": "annex-h.jbig2", "ignore": true },
+  { "id": "annex-h.jbig2", "comment": "TODO: Support reading multiple pages of JBIG2 file" },
   "bitmap-composite-and-xnor-halftone.jbig2",
   "bitmap-composite-and-xnor-refine.jbig2",
   "bitmap-composite-and-xnor-text.jbig2",
