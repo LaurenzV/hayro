@@ -174,7 +174,7 @@ fn decode_refinement_aggregation_bitmap(
     } else if aggregation_instance_count > 1 {
         decode_aggregation_bitmap(ctx, symbol_width, aggregation_instance_count as u32)
     } else {
-        return Err(DecodeError::Symbol(SymbolError::Invalid));
+        Err(DecodeError::Symbol(SymbolError::Invalid))
     }
 }
 
