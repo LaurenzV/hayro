@@ -184,7 +184,6 @@ fn decode_refinement_bitmap(
     symbol_width: u32,
 ) -> Result<DecodedRegion> {
     let use_huffman = ctx.header.flags.use_huffman;
-
     let mut symbol_code_length = 32 - (ctx.total_symbols() - 1).leading_zeros();
 
     let (symbol_id, refinement_x_offset, refinement_y_offset) = if use_huffman {
@@ -241,6 +240,7 @@ fn decode_refinement_bitmap(
             .get(new_idx)
             .ok_or(SymbolError::OutOfRange)?
     };
+
     let mut region = DecodedRegion::new(symbol_width, ctx.height_class_height);
 
     if use_huffman {
