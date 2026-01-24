@@ -56,15 +56,6 @@ pub(crate) fn decode(
             }
         };
 
-    let decode_export_run_length =
-        |h_ctx: &mut HuffmanContext<'_>, a_ctx: &mut ArithmeticContext<'_>| {
-            if header.flags.use_huffman {
-                h_ctx.export_run_length_table.decode(&mut h_ctx.reader)
-            } else {
-                Ok(a_ctx.export_run_length_decoder.decode(&mut a_ctx.decoder))
-            }
-        };
-
     let num_new_symbols = header.num_new_symbols;
 
     let mut new_symbols = Vec::with_capacity(num_new_symbols as usize);
@@ -159,12 +150,13 @@ pub(crate) fn decode(
 
     let num_input_symbols = input_symbols.len() as u32;
 
-    let exported = decode_exported_symbols_with(
+    let exported = export_symbols(
         num_input_symbols,
-        header.num_exported_symbols,
+        &header,
+        &mut huffman_context,
+        &mut arithmetic_context,
         input_symbols,
         &new_symbols,
-        || decode_export_run_length(&mut huffman_context, &mut arithmetic_context),
     )?;
 
     Ok(SymbolDictionary {
@@ -726,25 +718,23 @@ fn decode_height_class_collective_bitmap(
     Ok(())
 }
 
-/// Determine exported symbols (6.5.10).
-///
-/// "The symbols that may be exported from a given dictionary include any of the
-/// symbols that are input to the dictionary, plus any of the symbols defined in
-/// the dictionary." (6.5.10)
-///
-/// The `decode_value` closure decodes the run length value:
-/// - For Huffman coding (SDHUFF=1): uses Table B.1
-/// - For arithmetic coding (SDHUFF=0): uses the IAEX integer decoder
-fn decode_exported_symbols_with<F>(
+/// Exported symbols (6.5.10).
+fn export_symbols(
     num_input_symbols: u32,
-    num_exported: u32,
+    header: &SymbolDictionaryHeader,
+    h_ctx: &mut HuffmanContext<'_>,
+    a_ctx: &mut ArithmeticContext<'_>,
     input_symbols: &[&DecodedRegion],
     new_symbols: &[DecodedRegion],
-    mut decode_value: F,
-) -> Result<Vec<DecodedRegion>>
-where
-    F: FnMut() -> Result<Option<i32>>,
-{
+) -> Result<Vec<DecodedRegion>> {
+    let mut decode_export_run_length = || {
+        if header.flags.use_huffman {
+            h_ctx.export_run_length_table.decode(&mut h_ctx.reader)
+        } else {
+            Ok(a_ctx.export_run_length_decoder.decode(&mut a_ctx.decoder))
+        }
+    };
+
     let num_new_symbols = new_symbols.len() as u32;
     let total_symbols = num_input_symbols + num_new_symbols;
 
@@ -761,7 +751,7 @@ where
         // arithmetic decoding procedure if SDHUFF is 0. Let EXRUNLENGTH be the
         // decoded value."
         let export_run_length =
-            decode_value()?.ok_or(DecodeError::Huffman(HuffmanError::UnexpectedOob))?;
+            decode_export_run_length()?.ok_or(DecodeError::Huffman(HuffmanError::UnexpectedOob))?;
 
         if export_run_length < 0 {
             bail!(HuffmanError::InvalidCode);
@@ -785,7 +775,7 @@ where
 
     // "8) For each value of I from 0 to SDNUMINSYMS + SDNUMNEWSYMS - 1, if
     // EXFLAGS[I] = 1 then perform the following steps:"
-    let mut exported = Vec::with_capacity(num_exported as usize);
+    let mut exported = Vec::with_capacity(header.num_exported_symbols as usize);
 
     for (i, &is_exported) in export_flags.iter().enumerate() {
         if is_exported {
@@ -802,7 +792,7 @@ where
         }
     }
 
-    if exported.len() != num_exported as usize {
+    if exported.len() != header.num_exported_symbols as usize {
         bail!(SymbolError::NoSymbols);
     }
 
