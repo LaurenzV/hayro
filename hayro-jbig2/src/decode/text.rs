@@ -1091,7 +1091,7 @@ pub(crate) struct TextRegionHeader {
 }
 
 impl TextRegionHeader {
-    /// Compute SBSTRIPS from log_strip_size.
+    /// Compute SBSTRIPS from `log_strip_size`.
     pub(crate) fn strip_size(&self) -> u32 {
         1_u32 << self.flags.log_strip_size
     }
