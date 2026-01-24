@@ -5,7 +5,6 @@ use alloc::vec::Vec;
 
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::DecodedRegion;
-use crate::decode::{generic, generic_refinement};
 use crate::decode::generic::{decode_bitmap_mmr, parse_adaptive_template_pixels};
 use crate::decode::text::{
     ReferenceCorner, TextRegionContexts, TextRegionParams, decode_text_region_refine_with_contexts,
@@ -14,6 +13,7 @@ use crate::decode::{
     AdaptiveTemplatePixel, CombinationOperator, RefinementTemplate, Template,
     parse_refinement_at_pixels,
 };
+use crate::decode::{generic, generic_refinement};
 use crate::error::{DecodeError, HuffmanError, ParseError, RegionError, Result, SymbolError, bail};
 use crate::huffman_table::{HuffmanTable, StandardHuffmanTables};
 use crate::integer_decoder::IntegerDecoder;
