@@ -133,7 +133,7 @@ pub(crate) fn decode(
         }
 
         if ctx.header.flags.use_huffman && !ctx.header.flags.use_refagg {
-            // In case we have huffman coding and no refinement-aggregation, we use 
+            // In case we have huffman coding and no refinement-aggregation, we use
             // the previously decoded symbol widths to decode the collective bitmap
             // and extract the individual symbols from that bitmap.
             decode_height_class_collective_bitmap(&mut ctx)?;
@@ -289,21 +289,21 @@ fn decode_aggregation_bitmap(
     let use_huffman = ctx.header.flags.use_huffman;
 
     // Concatenate input and new symbols.
-    let mut sbsyms: Vec<&DecodedRegion> =
+    let mut all_symbols: Vec<&DecodedRegion> =
         Vec::with_capacity(ctx.symbols.input.len() + ctx.symbols.new.len());
-    sbsyms.extend(ctx.symbols.input.iter().copied());
+    all_symbols.extend(ctx.symbols.input.iter().copied());
     for sym in &ctx.symbols.new {
-        sbsyms.push(sym);
+        all_symbols.push(sym);
     }
 
     // Set all parameters according to Table 17.
 
-    let sbsymcodelen = 32 - (ctx.total_symbols() - 1).leading_zeros();
+    let symbol_code_length = 32 - (ctx.total_symbols() - 1).leading_zeros();
 
     let symbol_id_table = if use_huffman {
         Some(HuffmanTable::build_uniform(
             ctx.total_symbols(),
-            sbsymcodelen,
+            symbol_code_length,
         ))
     } else {
         None
@@ -336,7 +336,7 @@ fn decode_aggregation_bitmap(
         flags: TextRegionFlags {
             use_huffman,
             use_refinement: true,
-            log_strip_size: 0, // strip_size = 1
+            log_strip_size: 0,
             reference_corner: ReferenceCorner::TopLeft,
             transposed: false,
             combination_operator: CombinationOperator::Or,
@@ -360,7 +360,7 @@ fn decode_aggregation_bitmap(
         let contexts = ctx
             .a_ctx
             .text_region_contexts
-            .get_or_insert_with(|| TextRegionContexts::new(sbsymcodelen));
+            .get_or_insert_with(|| TextRegionContexts::new(symbol_code_length));
 
         CodingMode::Arithmetic {
             decoder: &mut ctx.a_ctx.decoder,
@@ -369,7 +369,7 @@ fn decode_aggregation_bitmap(
         }
     };
 
-    decode_with(coding, &sbsyms, &header)
+    decode_with(coding, &all_symbols, &header)
 }
 
 struct Symbols<'a> {
@@ -404,7 +404,6 @@ struct SymbolDecodeContext<'a> {
     h_ctx: HuffmanContext<'a>,
     symbols: Symbols<'a>,
     standard_tables: &'a StandardHuffmanTables,
-    /// Only used if SDHUFF = 1 and SDREFAGG = 0.
     symbol_widths: Vec<u32>,
     height_class_first_symbol: u32,
     symbols_decoded_count: u32,
@@ -430,7 +429,6 @@ struct ArithmeticContext<'a> {
     aggregation_instance_count_decoder: IntegerDecoder,
     generic_region_contexts: Vec<Context>,
     refinement_region_contexts: Vec<Context>,
-    /// `IAID`, `IARDX`, `IARDY`, etc.
     text_region_contexts: Option<TextRegionContexts>,
 }
 
@@ -499,10 +497,10 @@ impl<'a> HuffmanContext<'a> {
             bail!(HuffmanError::MissingTables);
         }
 
-        let mut custom_idx = 0;
+        let mut custom_table_idx = 0;
         let mut get_custom = || -> &HuffmanTable {
-            let table = &referred_tables[custom_idx];
-            custom_idx += 1;
+            let table = &referred_tables[custom_table_idx];
+            custom_table_idx += 1;
             table
         };
 
@@ -584,19 +582,19 @@ fn decode_height_class_collective_bitmap(ctx: &mut SymbolDecodeContext<'_>) -> R
     // Finally, we simply chop up the collective bitmap into its constituent
     // symbols.
     let mut x_offset: u32 = 0;
-    for i in ctx.height_class_first_symbol..ctx.symbols_decoded_count {
-        let sym_width = ctx.symbol_widths[i as usize];
-        let mut symbol = DecodedRegion::new(sym_width, ctx.height_class_height);
+    for symbol_idx in ctx.height_class_first_symbol..ctx.symbols_decoded_count {
+        let symbol_width = ctx.symbol_widths[symbol_idx as usize];
+        let mut symbol = DecodedRegion::new(symbol_width, ctx.height_class_height);
 
         for y in 0..ctx.height_class_height {
-            for x in 0..sym_width {
+            for x in 0..symbol_width {
                 let pixel = collective_bitmap.get_pixel(x_offset + x, y);
                 symbol.set_pixel(x, y, pixel);
             }
         }
 
         ctx.symbols.new.push(symbol);
-        x_offset += sym_width;
+        x_offset += symbol_width;
     }
 
     Ok(())
@@ -632,10 +630,10 @@ fn export_symbols(ctx: &mut SymbolDecodeContext<'_>) -> Result<Vec<DecodedRegion
         }
 
         if should_export {
-            for i in index..index + run_length {
+            for symbol_idx in index..index + run_length {
                 let symbol = ctx
                     .symbols
-                    .get(i as usize)
+                    .get(symbol_idx as usize)
                     .ok_or(SymbolError::OutOfRange)?
                     .clone();
                 exported.push(symbol);
