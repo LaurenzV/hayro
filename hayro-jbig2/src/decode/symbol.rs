@@ -303,16 +303,16 @@ fn decode_aggregation_bitmap(
 
     // Table 17 – Parameters used to decode a symbol's bitmap using refinement/aggregate decoding.
     let params = TextRegionParams {
-        sbw: symbol_width,
-        sbh: ctx.height_class_height,
-        sbnuminstances: aggregation_instance_count,
-        sbstrips: 1,
-        sbdefpixel: false,
-        sbcombop: CombinationOperator::Or,
+        width: symbol_width,
+        height: ctx.height_class_height,
+        num_instances: aggregation_instance_count,
+        strip_size: 1,
+        default_pixel: false,
+        combination_operator: CombinationOperator::Or,
         transposed: false,
-        refcorner: ReferenceCorner::TopLeft,
-        sbdsoffset: 0,
-        sbrtemplate: ctx.header.flags.refinement_template,
+        reference_corner: ReferenceCorner::TopLeft,
+        delta_s_offset: 0,
+        refinement_template: ctx.header.flags.refinement_template,
         refinement_at_pixels: &ctx.header.refinement_at_pixels,
     };
 
