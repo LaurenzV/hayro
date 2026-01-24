@@ -114,309 +114,6 @@ impl TextRegionContexts {
     }
 }
 
-/// Reference corner for symbol placement (REFCORNER).
-///
-/// "Bits 4-5: REFCORNER. The four values that this two-bit field can take are:
-/// 0 BOTTOMLEFT
-/// 1 TOPLEFT
-/// 2 BOTTOMRIGHT
-/// 3 TOPRIGHT" (7.4.3.1.1)
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ReferenceCorner {
-    /// "0 BOTTOMLEFT"
-    BottomLeft,
-    /// "1 TOPLEFT"
-    TopLeft,
-    /// "2 BOTTOMRIGHT"
-    BottomRight,
-    /// "3 TOPRIGHT"
-    TopRight,
-}
-
-impl ReferenceCorner {
-    fn from_value(value: u8) -> Self {
-        match value {
-            0 => Self::BottomLeft,
-            1 => Self::TopLeft,
-            2 => Self::BottomRight,
-            3 => Self::TopRight,
-            _ => unreachable!(),
-        }
-    }
-}
-
-/// Parsed text region segment flags (7.4.3.1.1).
-///
-/// "This two-byte field is formatted as shown in Figure 38 and as described
-/// below." (7.4.3.1.1)
-#[derive(Debug, Clone)]
-pub(crate) struct TextRegionFlags {
-    /// "Bit 0: SBHUFF. If this bit is 1, then the segment uses the Huffman
-    /// encoding variant. If this bit is 0, then the segment uses the arithmetic
-    /// encoding variant. The setting of this flag determines how the data in
-    /// this segment are encoded." (7.4.3.1.1)
-    pub(crate) sbhuff: bool,
-
-    /// "Bit 1: SBREFINE. If this bit is 0, then the segment contains no symbol
-    /// instance refinements. If this bit is 1, then the segment may contain
-    /// symbol instance refinements." (7.4.3.1.1)
-    pub(crate) sbrefine: bool,
-
-    /// "Bits 2-3: LOGSBSTRIPS. This two-bit field codes the base-2 logarithm of
-    /// the strip size used to encode the segment. Thus, strip sizes of 1, 2, 4,
-    /// and 8 can be encoded." (7.4.3.1.1)
-    pub(crate) log_sb_strips: u8,
-
-    /// "Bits 4-5: REFCORNER." (7.4.3.1.1)
-    pub(crate) reference_corner: ReferenceCorner,
-
-    /// "Bit 6: TRANSPOSED. If this bit is 1, then the primary direction of
-    /// coding is top-to-bottom. If this bit is 0, then the primary direction
-    /// of coding is left-to-right. This allows for text running up and down
-    /// the page." (7.4.3.1.1)
-    pub(crate) transposed: bool,
-
-    /// "Bits 7-8: SBCOMBOP. This field has four possible values, representing
-    /// one of four possible combination operators:
-    /// 0 OR
-    /// 1 AND
-    /// 2 XOR
-    /// 3 XNOR" (7.4.3.1.1)
-    pub(crate) combination_operator: CombinationOperator,
-
-    /// "Bit 9: SBDEFPIXEL. This bit contains the initial value for every pixel
-    /// in the text region, before any symbols are drawn." (7.4.3.1.1)
-    pub(crate) default_pixel: bool,
-
-    /// "Bits 10-14: SBDSOFFSET. This signed five-bit field contains the value
-    /// of SBDSOFFSET – see 6.4.8." (7.4.3.1.1)
-    pub(crate) ds_offset: i8,
-
-    /// "Bit 15: SBRTEMPLATE. This field controls the template used to decode
-    /// symbol instance refinements if SBREFINE is 1. If SBREFINE is 0, this
-    /// field must contain the value 0." (7.4.3.1.1)
-    pub(crate) sbrtemplate: u8,
-}
-
-/// Text region segment Huffman flags (7.4.3.1.2).
-///
-/// "This field is only present if SBHUFF is 1. This two-byte field is formatted
-/// as shown in Figure 39 and as described below." (7.4.3.1.2)
-#[derive(Debug, Clone)]
-pub(crate) struct TextRegionHuffmanFlags {
-    /// "Bits 0-1: SBHUFFFS selection. This two-bit field can take on one of
-    /// three values, indicating which table is to be used for SBHUFFFS.
-    /// 0 Table B.6
-    /// 1 Table B.7
-    /// 3 User-supplied table
-    /// The value 2 is not permitted." (7.4.3.1.2)
-    pub(crate) sbhufffs: u8,
-
-    /// "Bits 2-3: SBHUFFDS selection. This two-bit field can take on one of
-    /// four values, indicating which table is to be used for SBHUFFDS.
-    /// 0 Table B.8
-    /// 1 Table B.9
-    /// 2 Table B.10
-    /// 3 User-supplied table" (7.4.3.1.2)
-    pub(crate) sbhuffds: u8,
-
-    /// "Bits 4-5: SBHUFFDT selection. This two-bit field can take on one of
-    /// four values, indicating which table is to be used for SBHUFFDT.
-    /// 0 Table B.11
-    /// 1 Table B.12
-    /// 2 Table B.13
-    /// 3 User-supplied table" (7.4.3.1.2)
-    pub(crate) sbhuffdt: u8,
-
-    /// "Bits 6-7: SBHUFFRDW selection. This two-bit field can take on one of
-    /// three values, indicating which table is to be used for SBHUFFRDW.
-    /// 0 Table B.14
-    /// 1 Table B.15
-    /// 3 User-supplied table
-    /// The value 2 is not permitted. If SBREFINE is 0 then this field must
-    /// contain the value 0." (7.4.3.1.2)
-    pub(crate) sbhuffrdw: u8,
-
-    /// "Bits 8-9: SBHUFFRDH selection." (7.4.3.1.2)
-    pub(crate) sbhuffrdh: u8,
-
-    /// "Bits 10-11: SBHUFFRDY selection." (7.4.3.1.2)
-    pub(crate) sbhuffrdy: u8,
-
-    /// "Bits 12-13: SBHUFFRDX selection." (7.4.3.1.2)
-    pub(crate) sbhuffrdx: u8,
-
-    /// "Bit 14: SBHUFFRSIZE selection. If this field is 0 then Table B.1 is
-    /// used for SBHUFFRSIZE. If this field is 1 then a user-supplied table is
-    /// used for SBHUFFRSIZE. If SBREFINE is 0 then this field must contain
-    /// the value 0." (7.4.3.1.2)
-    pub(crate) sbhuffrsize: u8,
-}
-
-/// Parsed text region segment header (7.4.3.1).
-///
-/// "The data part of a text region segment begins with a text region segment
-/// data header. This header contains the fields shown in Figure 37 and
-/// described below." (7.4.3.1)
-#[derive(Debug, Clone)]
-pub(crate) struct TextRegionHeader {
-    /// "Region segment information field – see 7.4.1." (7.4.3.1)
-    pub(crate) region_info: RegionSegmentInfo,
-
-    /// "Text region segment flags – see 7.4.3.1.1." (7.4.3.1)
-    pub(crate) flags: TextRegionFlags,
-
-    /// "Text region segment Huffman flags – see 7.4.3.1.2." (7.4.3.1)
-    /// "This field is only present if SBHUFF is 1."
-    pub(crate) huffman_flags: Option<TextRegionHuffmanFlags>,
-
-    /// "Text region segment refinement AT flags – see 7.4.3.1.3." (7.4.3.1)
-    /// "This field is only present if SBREFINE is 1 and SBRTEMPLATE is 0."
-    /// Contains 2 AT pixels (4 bytes, Figure 40).
-    pub(crate) refinement_at_pixels: Vec<AdaptiveTemplatePixel>,
-
-    /// "SBNUMINSTANCES – see 7.4.3.1.4." (7.4.3.1)
-    /// "This four-byte field contains the number of symbol instances coded in
-    /// this segment." (7.4.3.1.4)
-    pub(crate) num_instances: u32,
-}
-
-/// Parse text region segment flags (7.4.3.1.1).
-fn parse_text_region_flags(reader: &mut Reader<'_>) -> Result<TextRegionFlags> {
-    let flags_word = reader.read_u16().ok_or(ParseError::UnexpectedEof)?;
-
-    // "Bit 0: SBHUFF"
-    let sbhuff = flags_word & 0x0001 != 0;
-
-    // "Bit 1: SBREFINE"
-    let sbrefine = flags_word & 0x0002 != 0;
-
-    // "Bits 2-3: LOGSBSTRIPS"
-    let log_sb_strips = ((flags_word >> 2) & 0x03) as u8;
-
-    // "Bits 4-5: REFCORNER"
-    let reference_corner = ReferenceCorner::from_value(((flags_word >> 4) & 0x03) as u8);
-
-    // "Bit 6: TRANSPOSED"
-    let transposed = flags_word & 0x0040 != 0;
-
-    // "Bits 7-8: SBCOMBOP"
-    let sbcombop_value = ((flags_word >> 7) & 0x03) as u8;
-    let combination_operator = match sbcombop_value {
-        0 => CombinationOperator::Or,
-        1 => CombinationOperator::And,
-        2 => CombinationOperator::Xor,
-        3 => CombinationOperator::Xnor,
-        _ => unreachable!(),
-    };
-
-    // "Bit 9: SBDEFPIXEL"
-    let default_pixel = flags_word & 0x0200 != 0;
-
-    // "Bits 10-14: SBDSOFFSET" (signed 5-bit field)
-    let ds_offset_raw = ((flags_word >> 10) & 0x1F) as u8;
-    // Sign-extend from 5 bits to i8
-    let ds_offset = if ds_offset_raw & 0x10 != 0 {
-        // Negative value: sign extend
-        (ds_offset_raw | 0xE0) as i8
-    } else {
-        ds_offset_raw as i8
-    };
-
-    // "Bit 15: SBRTEMPLATE"
-    let sbrtemplate = ((flags_word >> 15) & 0x01) as u8;
-
-    Ok(TextRegionFlags {
-        sbhuff,
-        sbrefine,
-        log_sb_strips,
-        reference_corner,
-        transposed,
-        combination_operator,
-        default_pixel,
-        ds_offset,
-        sbrtemplate,
-    })
-}
-
-/// Parse text region Huffman flags (7.4.3.1.2).
-fn parse_text_region_huffman_flags(reader: &mut Reader<'_>) -> Result<TextRegionHuffmanFlags> {
-    let flags_word = reader.read_u16().ok_or(ParseError::UnexpectedEof)?;
-
-    // "Bits 0-1: SBHUFFFS selection"
-    let sbhufffs = (flags_word & 0x03) as u8;
-
-    // "Bits 2-3: SBHUFFDS selection"
-    let sbhuffds = ((flags_word >> 2) & 0x03) as u8;
-
-    // "Bits 4-5: SBHUFFDT selection"
-    let sbhuffdt = ((flags_word >> 4) & 0x03) as u8;
-
-    // "Bits 6-7: SBHUFFRDW selection"
-    let sbhuffrdw = ((flags_word >> 6) & 0x03) as u8;
-
-    // "Bits 8-9: SBHUFFRDH selection"
-    let sbhuffrdh = ((flags_word >> 8) & 0x03) as u8;
-
-    // "Bits 10-11: SBHUFFRDY selection"
-    let sbhuffrdy = ((flags_word >> 10) & 0x03) as u8;
-
-    // "Bits 12-13: SBHUFFRDX selection"
-    let sbhuffrdx = ((flags_word >> 12) & 0x03) as u8;
-
-    // "Bit 14: SBHUFFRSIZE selection"
-    let sbhuffrsize = ((flags_word >> 14) & 0x01) as u8;
-
-    Ok(TextRegionHuffmanFlags {
-        sbhufffs,
-        sbhuffds,
-        sbhuffdt,
-        sbhuffrdw,
-        sbhuffrdh,
-        sbhuffrdy,
-        sbhuffrdx,
-        sbhuffrsize,
-    })
-}
-
-/// Parse a text region segment header (7.4.3.1).
-fn parse(reader: &mut Reader<'_>) -> Result<TextRegionHeader> {
-    // "Region segment information field – see 7.4.1."
-    let region_info = parse_region_segment_info(reader)?;
-
-    // "Text region segment flags – see 7.4.3.1.1."
-    let flags = parse_text_region_flags(reader)?;
-
-    // "Text region segment Huffman flags – see 7.4.3.1.2."
-    // "This field is only present if SBHUFF is 1."
-    let huffman_flags = if flags.sbhuff {
-        Some(parse_text_region_huffman_flags(reader)?)
-    } else {
-        None
-    };
-
-    // "Text region segment refinement AT flags – see 7.4.3.1.3."
-    // "This field is only present if SBREFINE is 1 and SBRTEMPLATE is 0."
-    let refinement_at_pixels = if flags.sbrefine && flags.sbrtemplate == 0 {
-        parse_refinement_at_pixels(reader)?
-    } else {
-        Vec::new()
-    };
-
-    // "SBNUMINSTANCES – see 7.4.3.1.4."
-    // "This four-byte field contains the number of symbol instances coded in
-    // this segment."
-    let num_instances = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
-
-    Ok(TextRegionHeader {
-        region_info,
-        flags,
-        huffman_flags,
-        refinement_at_pixels,
-        num_instances,
-    })
-}
-
 /// Parameters for text region decoding.
 ///
 /// This can be constructed from a `TextRegionHeader` or with explicit values
@@ -1343,4 +1040,153 @@ struct TextRegionHuffmanTables<'a> {
 /// Decode a value from a Huffman table, requiring a value (not OOB).
 fn decode_huffman_value(table: &HuffmanTable, reader: &mut Reader<'_>) -> Result<i32> {
     Ok(table.decode(reader)?.ok_or(HuffmanError::InvalidCode)?)
+}
+
+/// Reference corner for symbol placement.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ReferenceCorner {
+    BottomLeft,
+    TopLeft,
+    BottomRight,
+    TopRight,
+}
+
+impl ReferenceCorner {
+    fn from_byte(value: u8) -> Self {
+        match value {
+            0 => Self::BottomLeft,
+            1 => Self::TopLeft,
+            2 => Self::BottomRight,
+            3 => Self::TopRight,
+            _ => unreachable!(),
+        }
+    }
+}
+
+/// Parsed text region segment flags (7.4.3.1.1).
+#[derive(Debug, Clone)]
+pub(crate) struct TextRegionFlags {
+    pub(crate) sbhuff: bool,
+    pub(crate) sbrefine: bool,
+    pub(crate) log_sb_strips: u8,
+    pub(crate) reference_corner: ReferenceCorner,
+    pub(crate) transposed: bool,
+    pub(crate) combination_operator: CombinationOperator,
+    pub(crate) default_pixel: bool,
+    pub(crate) ds_offset: i8,
+    pub(crate) sbrtemplate: u8,
+}
+
+/// Text region segment Huffman flags (7.4.3.1.2).
+#[derive(Debug, Clone)]
+pub(crate) struct TextRegionHuffmanFlags {
+    pub(crate) sbhufffs: u8,
+    pub(crate) sbhuffds: u8,
+    pub(crate) sbhuffdt: u8,
+    pub(crate) sbhuffrdw: u8,
+    pub(crate) sbhuffrdh: u8,
+    pub(crate) sbhuffrdy: u8,
+    pub(crate) sbhuffrdx: u8,
+    pub(crate) sbhuffrsize: u8,
+}
+
+/// Parsed text region segment header (7.4.3.1).
+#[derive(Debug, Clone)]
+pub(crate) struct TextRegionHeader {
+    pub(crate) region_info: RegionSegmentInfo,
+    pub(crate) flags: TextRegionFlags,
+    pub(crate) huffman_flags: Option<TextRegionHuffmanFlags>,
+    pub(crate) refinement_at_pixels: Vec<AdaptiveTemplatePixel>,
+    pub(crate) num_instances: u32,
+}
+
+/// Parse text region segment flags (7.4.3.1.1).
+fn parse_text_region_flags(reader: &mut Reader<'_>) -> Result<TextRegionFlags> {
+    let flags_word = reader.read_u16().ok_or(ParseError::UnexpectedEof)?;
+    let sbhuff = flags_word & 0x0001 != 0;
+    let sbrefine = flags_word & 0x0002 != 0;
+    let log_sb_strips = ((flags_word >> 2) & 0x03) as u8;
+    let reference_corner = ReferenceCorner::from_byte(((flags_word >> 4) & 0x03) as u8);
+    let transposed = flags_word & 0x0040 != 0;
+    let sbcombop_value = ((flags_word >> 7) & 0x03) as u8;
+    let combination_operator = match sbcombop_value {
+        0 => CombinationOperator::Or,
+        1 => CombinationOperator::And,
+        2 => CombinationOperator::Xor,
+        3 => CombinationOperator::Xnor,
+        _ => unreachable!(),
+    };
+
+    let default_pixel = flags_word & 0x0200 != 0;
+
+    let ds_offset_raw = ((flags_word >> 10) & 0x1F) as u8;
+    let ds_offset = if ds_offset_raw & 0x10 != 0 {
+        (ds_offset_raw | 0xE0) as i8
+    } else {
+        ds_offset_raw as i8
+    };
+
+    let sbrtemplate = ((flags_word >> 15) & 0x01) as u8;
+
+    Ok(TextRegionFlags {
+        sbhuff,
+        sbrefine,
+        log_sb_strips,
+        reference_corner,
+        transposed,
+        combination_operator,
+        default_pixel,
+        ds_offset,
+        sbrtemplate,
+    })
+}
+
+/// Parse text region Huffman flags (7.4.3.1.2).
+fn parse_text_region_huffman_flags(reader: &mut Reader<'_>) -> Result<TextRegionHuffmanFlags> {
+    let flags_word = reader.read_u16().ok_or(ParseError::UnexpectedEof)?;
+    let sbhufffs = (flags_word & 0x03) as u8;
+    let sbhuffds = ((flags_word >> 2) & 0x03) as u8;
+    let sbhuffdt = ((flags_word >> 4) & 0x03) as u8;
+    let sbhuffrdw = ((flags_word >> 6) & 0x03) as u8;
+    let sbhuffrdh = ((flags_word >> 8) & 0x03) as u8;
+    let sbhuffrdy = ((flags_word >> 10) & 0x03) as u8;
+    let sbhuffrdx = ((flags_word >> 12) & 0x03) as u8;
+    let sbhuffrsize = ((flags_word >> 14) & 0x01) as u8;
+
+    Ok(TextRegionHuffmanFlags {
+        sbhufffs,
+        sbhuffds,
+        sbhuffdt,
+        sbhuffrdw,
+        sbhuffrdh,
+        sbhuffrdy,
+        sbhuffrdx,
+        sbhuffrsize,
+    })
+}
+
+/// Parse a text region segment header (7.4.3.1).
+fn parse(reader: &mut Reader<'_>) -> Result<TextRegionHeader> {
+    let region_info = parse_region_segment_info(reader)?;
+    let flags = parse_text_region_flags(reader)?;
+    let huffman_flags = if flags.sbhuff {
+        Some(parse_text_region_huffman_flags(reader)?)
+    } else {
+        None
+    };
+
+    let refinement_at_pixels = if flags.sbrefine && flags.sbrtemplate == 0 {
+        parse_refinement_at_pixels(reader)?
+    } else {
+        Vec::new()
+    };
+    let num_instances = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
+
+    Ok(TextRegionHeader {
+        region_info,
+        flags,
+        huffman_flags,
+        refinement_at_pixels,
+        num_instances,
+    })
 }
