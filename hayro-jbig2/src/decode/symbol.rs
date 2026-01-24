@@ -33,15 +33,13 @@ pub(crate) fn decode(
     let mut ctx = SymbolDecodeContext {
         a_ctx: ArithmeticContext::new(data, &header),
         h_ctx: HuffmanContext::new(data, &header, referred_tables, standard_tables)?,
-        num_input_symbols: input_symbols.len() as u32,
-        new_symbols: Vec::with_capacity(num_new_symbols as usize),
+        symbols: Symbols::new(input_symbols, num_new_symbols as usize),
         symbol_widths: Vec::with_capacity(num_new_symbols as usize),
         height_class_first_symbol: 0,
         symbols_decoded_count: 0,
         total_width: 0,
         height_class_height: 0,
         header,
-        input_symbols,
         standard_tables,
     };
 
@@ -114,7 +112,7 @@ pub(crate) fn decode(
                         &ctx.header.adaptive_template_pixels,
                     )?;
 
-                    ctx.new_symbols.push(region);
+                    ctx.symbols.new.push(region);
                 }
                 (true, false) => {
                     // Decode a single symbol width. We don't actually decode the symbols
@@ -126,7 +124,7 @@ pub(crate) fn decode(
                     // In this case, we can have both, huffman and arithmetic coding.
                     let symbol = decode_refinement_aggregation_bitmap(&mut ctx, symbol_width)?;
 
-                    ctx.new_symbols.push(symbol);
+                    ctx.symbols.new.push(symbol);
                 }
             }
 
@@ -232,14 +230,7 @@ fn decode_refinement_bitmap(
         (symbol_id, refinement_x_offset, refinement_y_offset)
     };
 
-    let reference_region = if symbol_id < ctx.num_input_symbols as usize {
-        ctx.input_symbols[symbol_id]
-    } else {
-        let new_idx = symbol_id - ctx.num_input_symbols as usize;
-        ctx.new_symbols
-            .get(new_idx)
-            .ok_or(SymbolError::OutOfRange)?
-    };
+    let reference_region = ctx.symbols.get(symbol_id).ok_or(SymbolError::OutOfRange)?;
 
     let mut region = DecodedRegion::new(symbol_width, ctx.height_class_height);
 
@@ -302,9 +293,9 @@ fn decode_aggregation_bitmap(
     // concatenating the array SDINSYMS and the first NSYMSDECODED entries of
     // the array SDNEWSYMS."
     let mut sbsyms: Vec<&DecodedRegion> =
-        Vec::with_capacity(ctx.input_symbols.len() + ctx.new_symbols.len());
-    sbsyms.extend(ctx.input_symbols.iter().copied());
-    for sym in &ctx.new_symbols {
+        Vec::with_capacity(ctx.symbols.input.len() + ctx.symbols.new.len());
+    sbsyms.extend(ctx.symbols.input.iter().copied());
+    for sym in &ctx.symbols.new {
         sbsyms.push(sym);
     }
     // 6.5.8.2.3 Setting SBSYMCODES and SBSYMCODELEN.
@@ -349,14 +340,38 @@ fn decode_aggregation_bitmap(
     )
 }
 
+struct Symbols<'a> {
+    input: &'a [&'a DecodedRegion],
+    new: Vec<DecodedRegion>,
+}
+
+impl<'a> Symbols<'a> {
+    fn new(input: &'a [&'a DecodedRegion], capacity: usize) -> Self {
+        Self {
+            input,
+            new: Vec::with_capacity(capacity),
+        }
+    }
+
+    fn input_count(&self) -> u32 {
+        self.input.len() as u32
+    }
+
+    fn get(&self, index: usize) -> Option<&DecodedRegion> {
+        if index < self.input.len() {
+            Some(self.input[index])
+        } else {
+            self.new.get(index - self.input.len())
+        }
+    }
+}
+
 struct SymbolDecodeContext<'a> {
     header: SymbolDictionaryHeader,
     a_ctx: ArithmeticContext<'a>,
     h_ctx: HuffmanContext<'a>,
-    input_symbols: &'a [&'a DecodedRegion],
-    num_input_symbols: u32,
+    symbols: Symbols<'a>,
     standard_tables: &'a StandardHuffmanTables,
-    new_symbols: Vec<DecodedRegion>,
     /// Only used if SDHUFF = 1 and SDREFAGG = 0.
     symbol_widths: Vec<u32>,
     height_class_first_symbol: u32,
@@ -367,7 +382,7 @@ struct SymbolDecodeContext<'a> {
 
 impl SymbolDecodeContext<'_> {
     fn total_symbols(&self) -> u32 {
-        self.num_input_symbols + self.header.num_new_symbols
+        self.symbols.input_count() + self.header.num_new_symbols
     }
 }
 
@@ -548,7 +563,7 @@ fn decode_collective_bitmap(ctx: &mut SymbolDecodeContext<'_>) -> Result<()> {
             }
         }
 
-        ctx.new_symbols.push(symbol);
+        ctx.symbols.new.push(symbol);
         x_offset += sym_width;
     }
 
@@ -586,11 +601,11 @@ fn export_symbols(ctx: &mut SymbolDecodeContext<'_>) -> Result<Vec<DecodedRegion
 
         if should_export {
             for i in index..index + run_length {
-                let symbol = if i < ctx.num_input_symbols {
-                    ctx.input_symbols[i as usize].clone()
-                } else {
-                    ctx.new_symbols[i as usize - ctx.num_input_symbols as usize].clone()
-                };
+                let symbol = ctx
+                    .symbols
+                    .get(i as usize)
+                    .ok_or(SymbolError::OutOfRange)?
+                    .clone();
                 exported.push(symbol);
             }
         }
