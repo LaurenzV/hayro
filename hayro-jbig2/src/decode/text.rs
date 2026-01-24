@@ -21,15 +21,12 @@ use crate::integer_decoder::IntegerDecoder;
 use crate::reader::Reader;
 use crate::symbol_id_decoder::SymbolIdDecoder;
 
-/// Coding method for text region decoding.
 pub(crate) enum CodingMode<'a, 'b> {
-    /// Huffman coding with a bit reader.
     Huffman {
         reader: &'a mut Reader<'b>,
         referred_tables: &'a [HuffmanTable],
         standard_tables: &'a StandardHuffmanTables,
     },
-    /// Arithmetic coding with decoder and contexts.
     Arithmetic {
         decoder: &'a mut ArithmeticDecoder<'b>,
         contexts: &'a mut TextRegionContexts,
