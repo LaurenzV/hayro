@@ -97,6 +97,7 @@ pub(crate) fn decode(
 
             match (header.flags.use_huffman, header.flags.use_refagg) {
                 (false, false) => {
+                    // Decode a single symbol using a simple generic decoding procedure.
                     let mut region = DecodedRegion::new(symbol_width, height_class_height);
                     generic::decode_bitmap_arithmetic_coding(
                         &mut region,
@@ -115,6 +116,8 @@ pub(crate) fn decode(
                     symbol_widths.push(symbol_width);
                 }
                 (_, true) => {
+                    // Also decode a single symbol, but using refinement-aggregation.
+                    // In this case, we can have both, huffman and arithmetic coding.
                     let symbol = decode_bitmap_refagg(
                         &header,
                         &mut arithmetic_context,
@@ -162,6 +165,12 @@ pub(crate) fn decode(
     Ok(SymbolDictionary {
         exported_symbols: exported,
     })
+}
+
+/// A decoded symbol dictionary segment.
+#[derive(Debug, Clone)]
+pub(crate) struct SymbolDictionary {
+    pub(crate) exported_symbols: Vec<DecodedRegion>,
 }
 
 /// Decode a symbol bitmap using refinement/aggregate coding (6.5.8.2).
@@ -520,123 +529,6 @@ impl<'a> HuffmanContext<'a> {
     }
 }
 
-/// Huffman table selection for symbol dictionary fields.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum HuffmanTableSelection {
-    TableB1,
-    TableB2,
-    TableB3,
-    TableB4,
-    TableB5,
-    UserSupplied,
-}
-
-/// Parsed symbol dictionary segment flags (7.4.2.1.1).
-#[derive(Debug, Clone)]
-pub(crate) struct SymbolDictionaryFlags {
-    pub(crate) use_huffman: bool,
-    pub(crate) use_refagg: bool,
-    pub(crate) delta_height_table: HuffmanTableSelection,
-    pub(crate) delta_width_table: HuffmanTableSelection,
-    pub(crate) collective_bitmap_size_table: HuffmanTableSelection,
-    pub(crate) aggregate_instance_table: HuffmanTableSelection,
-    pub(crate) _bitmap_context_used: bool,
-    pub(crate) _bitmap_context_retained: bool,
-    pub(crate) template: Template,
-    pub(crate) refinement_template: RefinementTemplate,
-}
-
-/// Parsed symbol dictionary segment header (7.4.2.1).
-#[derive(Debug, Clone)]
-pub(crate) struct SymbolDictionaryHeader {
-    pub(crate) flags: SymbolDictionaryFlags,
-    pub(crate) adaptive_template_pixels: Vec<AdaptiveTemplatePixel>,
-    pub(crate) refinement_at_pixels: Vec<AdaptiveTemplatePixel>,
-    pub(crate) num_exported_symbols: u32,
-    pub(crate) num_new_symbols: u32,
-}
-
-/// Parse a symbol dictionary segment header (7.4.2.1).
-fn parse(reader: &mut Reader<'_>) -> Result<SymbolDictionaryHeader> {
-    let flags_word = reader.read_u16().ok_or(ParseError::UnexpectedEof)?;
-    let use_huffman = flags_word & 0x0001 != 0;
-    let use_refagg = flags_word & 0x0002 != 0;
-
-    let delta_height_table = match (flags_word >> 2) & 0x03 {
-        0 => HuffmanTableSelection::TableB4,
-        1 => HuffmanTableSelection::TableB5,
-        3 => HuffmanTableSelection::UserSupplied,
-        _ => bail!(HuffmanError::InvalidSelection),
-    };
-
-    let delta_width_table = match (flags_word >> 4) & 0x03 {
-        0 => HuffmanTableSelection::TableB2,
-        1 => HuffmanTableSelection::TableB3,
-        3 => HuffmanTableSelection::UserSupplied,
-        _ => bail!(HuffmanError::InvalidSelection),
-    };
-
-    let collective_bitmap_size_table = if flags_word & 0x0040 != 0 {
-        HuffmanTableSelection::UserSupplied
-    } else {
-        HuffmanTableSelection::TableB1
-    };
-
-    let aggregate_instance_table = if flags_word & 0x0080 != 0 {
-        HuffmanTableSelection::UserSupplied
-    } else {
-        HuffmanTableSelection::TableB1
-    };
-
-    let bitmap_context_used = flags_word & 0x0100 != 0;
-    let bitmap_context_retained = flags_word & 0x0200 != 0;
-    let template = Template::from_byte((flags_word >> 10) as u8);
-    let refinement_template = RefinementTemplate::from_byte((flags_word >> 12) as u8);
-
-    let flags = SymbolDictionaryFlags {
-        use_huffman,
-        use_refagg,
-        delta_height_table,
-        delta_width_table,
-        collective_bitmap_size_table,
-        aggregate_instance_table,
-        // TODO: Implement those.
-        _bitmap_context_used: bitmap_context_used,
-        _bitmap_context_retained: bitmap_context_retained,
-        template,
-        refinement_template,
-    };
-
-    let at_pixels = if !use_huffman {
-        parse_adaptive_template_pixels(reader, template, false)?
-    } else {
-        Vec::new()
-    };
-
-    let refinement_at_pixels = if use_refagg && refinement_template == RefinementTemplate::Template0
-    {
-        parse_refinement_at_pixels(reader)?
-    } else {
-        Vec::new()
-    };
-    let num_exported_symbols = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
-    let num_new_symbols = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
-
-    Ok(SymbolDictionaryHeader {
-        flags,
-        adaptive_template_pixels: at_pixels,
-        refinement_at_pixels,
-        num_exported_symbols,
-        num_new_symbols,
-    })
-}
-
-/// A decoded symbol dictionary segment.
-#[derive(Debug, Clone)]
-pub(crate) struct SymbolDictionary {
-    pub(crate) exported_symbols: Vec<DecodedRegion>,
-}
-
 /// Decode a height class collective bitmap (6.5.9).
 ///
 /// "This field is only present if SDHUFF = 1 and SDREFAGG = 0." (6.5.9)
@@ -797,4 +689,114 @@ fn export_symbols(
     }
 
     Ok(exported)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum HuffmanTableSelection {
+    TableB1,
+    TableB2,
+    TableB3,
+    TableB4,
+    TableB5,
+    UserSupplied,
+}
+
+/// Parsed symbol dictionary segment flags (7.4.2.1.1).
+#[derive(Debug, Clone)]
+pub(crate) struct SymbolDictionaryFlags {
+    pub(crate) use_huffman: bool,
+    pub(crate) use_refagg: bool,
+    pub(crate) delta_height_table: HuffmanTableSelection,
+    pub(crate) delta_width_table: HuffmanTableSelection,
+    pub(crate) collective_bitmap_size_table: HuffmanTableSelection,
+    pub(crate) aggregate_instance_table: HuffmanTableSelection,
+    pub(crate) _bitmap_context_used: bool,
+    pub(crate) _bitmap_context_retained: bool,
+    pub(crate) template: Template,
+    pub(crate) refinement_template: RefinementTemplate,
+}
+
+/// Parsed symbol dictionary segment header (7.4.2.1).
+#[derive(Debug, Clone)]
+pub(crate) struct SymbolDictionaryHeader {
+    pub(crate) flags: SymbolDictionaryFlags,
+    pub(crate) adaptive_template_pixels: Vec<AdaptiveTemplatePixel>,
+    pub(crate) refinement_at_pixels: Vec<AdaptiveTemplatePixel>,
+    pub(crate) num_exported_symbols: u32,
+    pub(crate) num_new_symbols: u32,
+}
+
+/// Parse a symbol dictionary segment header (7.4.2.1).
+fn parse(reader: &mut Reader<'_>) -> Result<SymbolDictionaryHeader> {
+    let flags_word = reader.read_u16().ok_or(ParseError::UnexpectedEof)?;
+    let use_huffman = flags_word & 0x0001 != 0;
+    let use_refagg = flags_word & 0x0002 != 0;
+
+    let delta_height_table = match (flags_word >> 2) & 0x03 {
+        0 => HuffmanTableSelection::TableB4,
+        1 => HuffmanTableSelection::TableB5,
+        3 => HuffmanTableSelection::UserSupplied,
+        _ => bail!(HuffmanError::InvalidSelection),
+    };
+
+    let delta_width_table = match (flags_word >> 4) & 0x03 {
+        0 => HuffmanTableSelection::TableB2,
+        1 => HuffmanTableSelection::TableB3,
+        3 => HuffmanTableSelection::UserSupplied,
+        _ => bail!(HuffmanError::InvalidSelection),
+    };
+
+    let collective_bitmap_size_table = if flags_word & 0x0040 != 0 {
+        HuffmanTableSelection::UserSupplied
+    } else {
+        HuffmanTableSelection::TableB1
+    };
+
+    let aggregate_instance_table = if flags_word & 0x0080 != 0 {
+        HuffmanTableSelection::UserSupplied
+    } else {
+        HuffmanTableSelection::TableB1
+    };
+
+    let bitmap_context_used = flags_word & 0x0100 != 0;
+    let bitmap_context_retained = flags_word & 0x0200 != 0;
+    let template = Template::from_byte((flags_word >> 10) as u8);
+    let refinement_template = RefinementTemplate::from_byte((flags_word >> 12) as u8);
+
+    let flags = SymbolDictionaryFlags {
+        use_huffman,
+        use_refagg,
+        delta_height_table,
+        delta_width_table,
+        collective_bitmap_size_table,
+        aggregate_instance_table,
+        // TODO: Implement those.
+        _bitmap_context_used: bitmap_context_used,
+        _bitmap_context_retained: bitmap_context_retained,
+        template,
+        refinement_template,
+    };
+
+    let at_pixels = if !use_huffman {
+        parse_adaptive_template_pixels(reader, template, false)?
+    } else {
+        Vec::new()
+    };
+
+    let refinement_at_pixels = if use_refagg && refinement_template == RefinementTemplate::Template0
+    {
+        parse_refinement_at_pixels(reader)?
+    } else {
+        Vec::new()
+    };
+    let num_exported_symbols = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
+    let num_new_symbols = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
+
+    Ok(SymbolDictionaryHeader {
+        flags,
+        adaptive_template_pixels: at_pixels,
+        refinement_at_pixels,
+        num_exported_symbols,
+        num_new_symbols,
+    })
 }
