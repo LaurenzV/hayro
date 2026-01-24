@@ -7,8 +7,8 @@ use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::DecodedRegion;
 use crate::decode::generic::{decode_bitmap_mmr, parse_adaptive_template_pixels};
 use crate::decode::text::{
-    ReferenceCorner, TextRegionContexts, TextRegionFlags, TextRegionHeader, TextRegionHuffmanFlags,
-    decode_text_region_refine_with_contexts, decode_with_header,
+    CodingMode, ReferenceCorner, TextRegionContexts, TextRegionFlags, TextRegionHeader,
+    TextRegionHuffmanFlags, decode_with,
 };
 use crate::decode::{
     AdaptiveTemplatePixel, CombinationOperator, RefinementTemplate, RegionSegmentInfo, Template,
@@ -351,31 +351,27 @@ fn decode_aggregation_bitmap(
         symbol_id_table,
     };
 
-    if use_huffman {
-        return decode_with_header(
-            &mut ctx.h_ctx.reader,
-            &sbsyms,
-            &header,
-            &[], // Only standard tables are used.
-            ctx.standard_tables,
-        );
-    }
+    let coding = if use_huffman {
+        CodingMode::Huffman {
+            reader: &mut ctx.h_ctx.reader,
+            referred_tables: &[],
+            standard_tables: ctx.standard_tables,
+        }
+    } else {
+        // Initialize text region contexts lazily if needed.
+        let contexts = ctx
+            .a_ctx
+            .text_region_contexts
+            .get_or_insert_with(|| TextRegionContexts::new(sbsymcodelen));
 
-    // For arithmetic mode, use the text region decoding with refinement.
-    // Initialize text region contexts lazily if needed.
-    let contexts = ctx
-        .a_ctx
-        .text_region_contexts
-        .get_or_insert_with(|| TextRegionContexts::new(sbsymcodelen));
+        CodingMode::Arithmetic {
+            decoder: &mut ctx.a_ctx.decoder,
+            contexts,
+            gr_contexts: &mut ctx.a_ctx.refinement_region_contexts,
+        }
+    };
 
-    // Use shared refinement contexts from ArithmeticContext.
-    decode_text_region_refine_with_contexts(
-        &mut ctx.a_ctx.decoder,
-        &sbsyms,
-        &header,
-        contexts,
-        &mut ctx.a_ctx.refinement_region_contexts,
-    )
+    decode_with(coding, &sbsyms, &header)
 }
 
 struct Symbols<'a> {

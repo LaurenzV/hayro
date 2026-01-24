@@ -21,6 +21,22 @@ use crate::integer_decoder::IntegerDecoder;
 use crate::reader::Reader;
 use crate::symbol_id_decoder::SymbolIdDecoder;
 
+/// Coding method for text region decoding.
+pub(crate) enum CodingMode<'a, 'b> {
+    /// Huffman coding with a bit reader.
+    Huffman {
+        reader: &'a mut Reader<'b>,
+        referred_tables: &'a [HuffmanTable],
+        standard_tables: &'a StandardHuffmanTables,
+    },
+    /// Arithmetic coding with decoder and contexts.
+    Arithmetic {
+        decoder: &'a mut ArithmeticDecoder<'b>,
+        contexts: &'a mut TextRegionContexts,
+        gr_contexts: &'a mut [Context],
+    },
+}
+
 /// Decode a text region segment (6.4).
 ///
 /// "This decoding procedure is used to decode a bitmap by decoding a number of
@@ -38,38 +54,68 @@ pub(crate) fn decode(
     standard_tables: &StandardHuffmanTables,
 ) -> Result<DecodedRegion> {
     let header = parse(reader, symbols.len() as u32)?;
-    decode_with_header(reader, symbols, &header, referred_tables, standard_tables)
+
+    if header.flags.use_huffman {
+        let coding = CodingMode::Huffman {
+            reader,
+            referred_tables,
+            standard_tables,
+        };
+        decode_with(coding, symbols, &header)
+    } else {
+        let data = reader.tail().ok_or(ParseError::UnexpectedEof)?;
+        let mut decoder = ArithmeticDecoder::new(data);
+
+        let num_symbols = symbols.len() as u32;
+        let symbol_code_length = 32 - num_symbols.saturating_sub(1).leading_zeros();
+        let mut contexts = TextRegionContexts::new(symbol_code_length);
+
+        let num_gr_contexts = 1 << header.flags.refinement_template.context_bits();
+        let mut gr_contexts = vec![Context::default(); num_gr_contexts];
+
+        let coding = CodingMode::Arithmetic {
+            decoder: &mut decoder,
+            contexts: &mut contexts,
+            gr_contexts: &mut gr_contexts,
+        };
+        decode_with(coding, symbols, &header)
+    }
 }
 
 /// Decode a text region with an already-parsed header.
 ///
 /// This is used both for normal text region segments and for aggregate symbol
 /// decoding in symbol dictionaries (Table 17).
-pub(crate) fn decode_with_header(
-    reader: &mut Reader<'_>,
+pub(crate) fn decode_with(
+    coding: CodingMode<'_, '_>,
     symbols: &[&DecodedRegion],
     header: &TextRegionHeader,
-    referred_tables: &[HuffmanTable],
-    standard_tables: &StandardHuffmanTables,
 ) -> Result<DecodedRegion> {
-    let mut region = if header.flags.use_huffman {
-        // "If this bit is 1, then the segment uses the Huffman encoding variant."
-        // (7.4.3.1.1)
-        decode_text_region_huffman(reader, symbols, header, referred_tables, standard_tables)?
-    } else {
-        // "If this bit is 0, then the segment uses the arithmetic encoding variant."
-        // (7.4.3.1.1)
-        let data = reader.tail().ok_or(ParseError::UnexpectedEof)?;
-        let mut decoder = ArithmeticDecoder::new(data);
-
-        if header.flags.use_refinement {
-            decode_text_region_refine(&mut decoder, symbols, header)?
-        } else {
-            decode_text_region_direct(&mut decoder, symbols, header)?
+    let mut region = match coding {
+        CodingMode::Huffman {
+            reader,
+            referred_tables,
+            standard_tables,
+        } => decode_text_region_huffman(reader, symbols, header, referred_tables, standard_tables)?,
+        CodingMode::Arithmetic {
+            decoder,
+            contexts,
+            gr_contexts,
+        } => {
+            if header.flags.use_refinement {
+                decode_text_region_refine_with_contexts(
+                    decoder,
+                    symbols,
+                    header,
+                    contexts,
+                    gr_contexts,
+                )?
+            } else {
+                decode_text_region_direct_with_contexts(decoder, symbols, header, contexts)?
+            }
         }
     };
 
-    // Set location info from header
     region.x_location = header.region_info.x_location;
     region.y_location = header.region_info.y_location;
     region.combination_operator = header.region_info.combination_operator;
@@ -119,24 +165,18 @@ impl TextRegionContexts {
     }
 }
 
-/// Decode text region without refinement (SBREFINE=0).
-fn decode_text_region_direct(
+/// Decode text region without refinement (SBREFINE=0), using provided contexts.
+fn decode_text_region_direct_with_contexts(
     decoder: &mut ArithmeticDecoder<'_>,
     symbols: &[&DecodedRegion],
     header: &TextRegionHeader,
+    contexts: &mut TextRegionContexts,
 ) -> Result<DecodedRegion> {
-    let num_symbols = symbols.len() as u32;
-
-    // Support text regions with 0 symbols, as other decoders seem to support
-    // this as well.
-    let symbol_code_length = 32 - (num_symbols.saturating_sub(1)).leading_zeros();
-    let mut contexts = TextRegionContexts::new(symbol_code_length);
-
     decode_text_region_with(
         decoder,
         symbols,
         header,
-        &mut contexts,
+        contexts,
         |_decoder, symbol_id, _symbols, _contexts| {
             // "If SBREFINE is 0, then set R_I to 0." (6.4.11)
             // "If R_I is 0 then set the symbol instance bitmap IB_I to SBSYMS[ID_I]."
@@ -145,41 +185,11 @@ fn decode_text_region_direct(
     )
 }
 
-/// Decode text region with refinement (SBREFINE=1).
-///
-/// This is also used for aggregated symbol decoding (REFAGGNINST > 1)
-/// per Table 17, which always uses SBREFINE=1.
-fn decode_text_region_refine(
-    decoder: &mut ArithmeticDecoder<'_>,
-    symbols: &[&DecodedRegion],
-    header: &TextRegionHeader,
-) -> Result<DecodedRegion> {
-    // Create fresh contexts (for normal text region segments)
-    let num_symbols = symbols.len() as u32;
-    if num_symbols == 0 {
-        bail!(SymbolError::NoSymbols);
-    }
-    let symbol_code_length = 32 - (num_symbols - 1).leading_zeros();
-    let mut contexts = TextRegionContexts::new(symbol_code_length);
-
-    // Create refinement contexts
-    let num_gr_contexts = 1 << header.flags.refinement_template.context_bits();
-    let mut gr_contexts = vec![Context::default(); num_gr_contexts];
-
-    decode_text_region_refine_with_contexts(
-        decoder,
-        symbols,
-        header,
-        &mut contexts,
-        &mut gr_contexts,
-    )
-}
-
 /// Text region decoding with refinement, using provided contexts.
 ///
 /// This variant allows sharing contexts across multiple calls, which is
 /// required for symbol dictionary decoding (REFAGGNINST > 1).
-pub(crate) fn decode_text_region_refine_with_contexts(
+fn decode_text_region_refine_with_contexts(
     decoder: &mut ArithmeticDecoder<'_>,
     symbols: &[&DecodedRegion],
     header: &TextRegionHeader,
