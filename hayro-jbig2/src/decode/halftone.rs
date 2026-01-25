@@ -147,8 +147,8 @@ struct HalftoneRegionHeader {
 /// Compute grid coordinates with checked arithmetic (6.6.5.1, 6.6.5.2).
 ///
 /// Returns (x, y) where:
-///   x = (HGX + m_g × HRY + n_g × HRX) >>_A 8
-///   y = (HGY + m_g × HRX − n_g × HRY) >>_A 8
+///   x = (HGX + `m_g` × HRY + `n_g` × HRX) >>_A 8
+///   y = (HGY + `m_g` × HRX − `n_g` × HRY) >>_A 8
 fn compute_grid_coords(
     grid: &HalftoneGridPositionAndSize,
     vector: &HalftoneGridVector,
