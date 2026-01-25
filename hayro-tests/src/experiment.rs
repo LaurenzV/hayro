@@ -229,7 +229,7 @@ fn check_jbig2_images(folder: &str) {
                         Ok(Ok(d)) => {
                             if d.is_empty() {
                                 has_error = true;
-                            }   else {
+                            } else {
                                 jbig2_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                             }
                         }
