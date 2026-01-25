@@ -45,20 +45,174 @@ pub(crate) fn decode(
     }
 }
 
-/// Decode a text region with an already-parsed header.
-///
-/// This is used both for normal text region segments and for aggregate symbol
-/// decoding in symbol dictionaries (Table 17).
+/// Decode a text region segment with a decode context (6.4).
 pub(crate) fn decode_with(
-    ctx: DecodeContext<'_, '_>,
+    mut ctx: DecodeContext<'_, '_>,
     symbols: &[&DecodedRegion],
     header: &TextRegionHeader,
 ) -> Result<DecodedRegion> {
-    let mut region = decode_text_region(ctx, symbols, header)?;
-
+    let mut region = DecodedRegion::new(header.region_info.width, header.region_info.height);
     region.x_location = header.region_info.x_location;
     region.y_location = header.region_info.y_location;
     region.combination_operator = header.region_info.combination_operator;
+
+    let strip_size = header.strip_size();
+
+    if header.flags.default_pixel {
+        for pixel in &mut region.data {
+            *pixel = true;
+        }
+    }
+
+    // "2) Decode the initial STRIPT value as described in 6.4.6." (6.4.5)
+    let initial_strip_t = ctx.read_strip_delta_t(strip_size)?;
+    let mut strip_t: i32 = -initial_strip_t;
+    let mut first_s: i32 = 0;
+    let mut instance_count: u32 = 0;
+
+    // "4) Decode each strip as follows:" (6.4.5)
+    while instance_count < header.num_instances {
+        // "b) Decode the strip's delta T value as described in 6.4.6."
+        let delta_t = ctx.read_strip_delta_t(strip_size)?;
+        strip_t += delta_t;
+
+        // "c) Decode each symbol instance in the strip as follows:"
+        let mut first_symbol_in_strip = true;
+        let mut current_s: i32 = 0;
+
+        loop {
+            // "i) First symbol S coordinate / ii) Subsequent symbol S coordinate"
+            if first_symbol_in_strip {
+                let delta_first_s = ctx.read_first_s()?;
+                first_s += delta_first_s;
+                current_s = first_s;
+                first_symbol_in_strip = false;
+            } else {
+                match ctx.read_delta_s()? {
+                    Some(delta_s) => {
+                        current_s = current_s + delta_s + header.flags.delta_s_offset as i32;
+                    }
+                    None => {
+                        // OOB - end of strip.
+                        break;
+                    }
+                }
+            }
+
+            // "iii) Decode the symbol instance's T coordinate."
+            let current_t = ctx.read_symbol_t(strip_size, header.flags.log_strip_size)?;
+            let symbol_t = strip_t + current_t;
+
+            // "iv) Decode the symbol instance's symbol ID."
+            let symbol_id = ctx.read_symbol_id()?;
+
+            // "v) Determine the symbol instance's bitmap IB_I as described in 6.4.11."
+            let (symbol_bitmap, symbol_width, symbol_height): (SymbolBitmap, i32, i32) =
+                if !header.flags.use_refinement {
+                    // "If SBREFINE is 0, then set R_I to 0." (6.4.11)
+                    let symbol = symbols.get(symbol_id).ok_or(SymbolError::OutOfRange)?;
+                    (
+                        SymbolBitmap::Reference(symbol_id),
+                        symbol.width as i32,
+                        symbol.height as i32,
+                    )
+                } else {
+                    let refinement_flag = ctx.read_refinement_flag()?;
+
+                    if refinement_flag == 0 {
+                        let symbol = symbols.get(symbol_id).ok_or(SymbolError::OutOfRange)?;
+                        (
+                            SymbolBitmap::Reference(symbol_id),
+                            symbol.width as i32,
+                            symbol.height as i32,
+                        )
+                    } else {
+                        // Refinement decoding (6.4.11).
+                        let reference_bitmap =
+                            symbols.get(symbol_id).ok_or(SymbolError::OutOfRange)?;
+                        let reference_width = reference_bitmap.width;
+                        let reference_height = reference_bitmap.height;
+
+                        let rdw = ctx.read_refinement_delta_width()?;
+                        let rdh = ctx.read_refinement_delta_height()?;
+                        let rdx = ctx.read_refinement_x_offset()?;
+                        let rdy = ctx.read_refinement_y_offset()?;
+
+                        let refined_width = (reference_width as i32 + rdw) as u32;
+                        let refined_height = (reference_height as i32 + rdh) as u32;
+                        let reference_x_offset = rdw.div_euclid(2) + rdx;
+                        let reference_y_offset = rdh.div_euclid(2) + rdy;
+
+                        let mut refined = DecodedRegion::new(refined_width, refined_height);
+
+                        ctx.decode_refinement_bitmap(
+                            &mut refined,
+                            reference_bitmap,
+                            reference_x_offset,
+                            reference_y_offset,
+                            header.flags.refinement_template,
+                            &header.refinement_at_pixels,
+                        )?;
+
+                        (
+                            SymbolBitmap::Owned(refined),
+                            refined_width as i32,
+                            refined_height as i32,
+                        )
+                    }
+                };
+
+            let symbol_bitmap_ref: &DecodedRegion = match &symbol_bitmap {
+                SymbolBitmap::Reference(idx) => symbols.get(*idx).ok_or(SymbolError::OutOfRange)?,
+                SymbolBitmap::Owned(region) => region,
+            };
+
+            // "vi) Update CURS as follows:" (6.4.5)
+            if !header.flags.transposed
+                && (header.flags.reference_corner == ReferenceCorner::TopRight
+                    || header.flags.reference_corner == ReferenceCorner::BottomRight)
+            {
+                current_s += symbol_width - 1;
+            } else if header.flags.transposed
+                && (header.flags.reference_corner == ReferenceCorner::BottomLeft
+                    || header.flags.reference_corner == ReferenceCorner::BottomRight)
+            {
+                current_s += symbol_height - 1;
+            }
+
+            // "vii) Set: S_I = CURS"
+            let symbol_s = current_s;
+
+            // "viii) Determine the location of the symbol instance bitmap."
+            let (x, y) = compute_symbol_location(
+                symbol_s,
+                symbol_t,
+                symbol_width,
+                symbol_height,
+                header.flags.transposed,
+                header.flags.reference_corner,
+            );
+
+            // "x) Draw IB_I into SBREG."
+            region.combine(symbol_bitmap_ref, x, y, header.flags.combination_operator);
+
+            // "xi) Update CURS as follows:" (6.4.5)
+            if !header.flags.transposed
+                && (header.flags.reference_corner == ReferenceCorner::TopLeft
+                    || header.flags.reference_corner == ReferenceCorner::BottomLeft)
+            {
+                current_s += symbol_width - 1;
+            } else if header.flags.transposed
+                && (header.flags.reference_corner == ReferenceCorner::TopLeft
+                    || header.flags.reference_corner == ReferenceCorner::TopRight)
+            {
+                current_s += symbol_height - 1;
+            }
+
+            // "xii) Set: NINSTANCES = NINSTANCES + 1"
+            instance_count += 1;
+        }
+    }
 
     Ok(region)
 }
@@ -345,177 +499,6 @@ impl<'a, 'b> DecodeContext<'a, 'b> {
             ),
         }
     }
-}
-
-fn decode_text_region(
-    mut ctx: DecodeContext<'_, '_>,
-    symbols: &[&DecodedRegion],
-    header: &TextRegionHeader,
-) -> Result<DecodedRegion> {
-    let strip_size = header.strip_size();
-
-    // "1) Fill a bitmap SBREG, of the size given by SBW and SBH, with the
-    // SBDEFPIXEL value." (6.4.5)
-    let mut region = DecodedRegion::new(header.region_info.width, header.region_info.height);
-    if header.flags.default_pixel {
-        for pixel in &mut region.data {
-            *pixel = true;
-        }
-    }
-
-    // "2) Decode the initial STRIPT value as described in 6.4.6." (6.4.5)
-    let initial_strip_t = ctx.read_strip_delta_t(strip_size)?;
-    let mut strip_t: i32 = -initial_strip_t;
-    let mut first_s: i32 = 0;
-    let mut instance_count: u32 = 0;
-
-    // "4) Decode each strip as follows:" (6.4.5)
-    while instance_count < header.num_instances {
-        // "b) Decode the strip's delta T value as described in 6.4.6."
-        let delta_t = ctx.read_strip_delta_t(strip_size)?;
-        strip_t += delta_t;
-
-        // "c) Decode each symbol instance in the strip as follows:"
-        let mut first_symbol_in_strip = true;
-        let mut current_s: i32 = 0;
-
-        loop {
-            // "i) First symbol S coordinate / ii) Subsequent symbol S coordinate"
-            if first_symbol_in_strip {
-                let delta_first_s = ctx.read_first_s()?;
-                first_s += delta_first_s;
-                current_s = first_s;
-                first_symbol_in_strip = false;
-            } else {
-                match ctx.read_delta_s()? {
-                    Some(delta_s) => {
-                        current_s = current_s + delta_s + header.flags.delta_s_offset as i32;
-                    }
-                    None => {
-                        // OOB - end of strip.
-                        break;
-                    }
-                }
-            }
-
-            // "iii) Decode the symbol instance's T coordinate."
-            let current_t = ctx.read_symbol_t(strip_size, header.flags.log_strip_size)?;
-            let symbol_t = strip_t + current_t;
-
-            // "iv) Decode the symbol instance's symbol ID."
-            let symbol_id = ctx.read_symbol_id()?;
-
-            // "v) Determine the symbol instance's bitmap IB_I as described in 6.4.11."
-            let (symbol_bitmap, symbol_width, symbol_height): (SymbolBitmap, i32, i32) =
-                if !header.flags.use_refinement {
-                    // "If SBREFINE is 0, then set R_I to 0." (6.4.11)
-                    let symbol = symbols.get(symbol_id).ok_or(SymbolError::OutOfRange)?;
-                    (
-                        SymbolBitmap::Reference(symbol_id),
-                        symbol.width as i32,
-                        symbol.height as i32,
-                    )
-                } else {
-                    let refinement_flag = ctx.read_refinement_flag()?;
-
-                    if refinement_flag == 0 {
-                        let symbol = symbols.get(symbol_id).ok_or(SymbolError::OutOfRange)?;
-                        (
-                            SymbolBitmap::Reference(symbol_id),
-                            symbol.width as i32,
-                            symbol.height as i32,
-                        )
-                    } else {
-                        // Refinement decoding (6.4.11).
-                        let reference_bitmap =
-                            symbols.get(symbol_id).ok_or(SymbolError::OutOfRange)?;
-                        let reference_width = reference_bitmap.width;
-                        let reference_height = reference_bitmap.height;
-
-                        let rdw = ctx.read_refinement_delta_width()?;
-                        let rdh = ctx.read_refinement_delta_height()?;
-                        let rdx = ctx.read_refinement_x_offset()?;
-                        let rdy = ctx.read_refinement_y_offset()?;
-
-                        let refined_width = (reference_width as i32 + rdw) as u32;
-                        let refined_height = (reference_height as i32 + rdh) as u32;
-                        let reference_x_offset = rdw.div_euclid(2) + rdx;
-                        let reference_y_offset = rdh.div_euclid(2) + rdy;
-
-                        let mut refined = DecodedRegion::new(refined_width, refined_height);
-
-                        ctx.decode_refinement_bitmap(
-                            &mut refined,
-                            reference_bitmap,
-                            reference_x_offset,
-                            reference_y_offset,
-                            header.flags.refinement_template,
-                            &header.refinement_at_pixels,
-                        )?;
-
-                        (
-                            SymbolBitmap::Owned(refined),
-                            refined_width as i32,
-                            refined_height as i32,
-                        )
-                    }
-                };
-
-            let symbol_bitmap_ref: &DecodedRegion = match &symbol_bitmap {
-                SymbolBitmap::Reference(idx) => symbols.get(*idx).ok_or(SymbolError::OutOfRange)?,
-                SymbolBitmap::Owned(region) => region,
-            };
-
-            // "vi) Update CURS as follows:" (6.4.5)
-            if !header.flags.transposed
-                && (header.flags.reference_corner == ReferenceCorner::TopRight
-                    || header.flags.reference_corner == ReferenceCorner::BottomRight)
-            {
-                current_s += symbol_width - 1;
-            } else if header.flags.transposed
-                && (header.flags.reference_corner == ReferenceCorner::BottomLeft
-                    || header.flags.reference_corner == ReferenceCorner::BottomRight)
-            {
-                current_s += symbol_height - 1;
-            }
-
-            // "vii) Set: S_I = CURS"
-            let symbol_s = current_s;
-
-            // "viii) Determine the location of the symbol instance bitmap."
-            let (x, y) = compute_symbol_location(
-                symbol_s,
-                symbol_t,
-                symbol_width,
-                symbol_height,
-                header.flags.transposed,
-                header.flags.reference_corner,
-            );
-
-            // "x) Draw IB_I into SBREG."
-            region.combine(symbol_bitmap_ref, x, y, header.flags.combination_operator);
-
-            // "xi) Update CURS as follows:" (6.4.5)
-            if !header.flags.transposed
-                && (header.flags.reference_corner == ReferenceCorner::TopLeft
-                    || header.flags.reference_corner == ReferenceCorner::BottomLeft)
-            {
-                current_s += symbol_width - 1;
-            } else if header.flags.transposed
-                && (header.flags.reference_corner == ReferenceCorner::TopLeft
-                    || header.flags.reference_corner == ReferenceCorner::TopRight)
-            {
-                current_s += symbol_height - 1;
-            }
-
-            // "xii) Set: NINSTANCES = NINSTANCES + 1"
-            instance_count += 1;
-        }
-    }
-
-    // "5) After all the strips have been decoded, the current contents of SBREG
-    // are the results that shall be obtained by every decoder" (6.4.5)
-    Ok(region)
 }
 
 /// Result of determining a symbol instance bitmap.
