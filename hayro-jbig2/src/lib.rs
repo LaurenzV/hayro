@@ -162,11 +162,20 @@ fn decode_with_segments(segments: &[segment::Segment<'_>]) -> Result<Image> {
                     .cloned()
                     .collect();
 
+                // Get retained contexts from the last referred symbol dictionary (7.4.2.2 step 3).
+                let retained_contexts = seg
+                    .header
+                    .referred_to_segments
+                    .last()
+                    .and_then(|&num| ctx.get_symbol_dictionary(num))
+                    .and_then(|dict| dict.retained_contexts.as_ref());
+
                 let dictionary = symbol::decode(
                     &mut reader,
                     &input_symbols,
                     &referred_tables,
                     &ctx.standard_tables,
+                    retained_contexts,
                 )?;
                 ctx.store_symbol_dictionary(seg.header.segment_number, dictionary);
             }

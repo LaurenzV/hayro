@@ -26,13 +26,14 @@ pub(crate) fn decode(
     input_symbols: &[&Bitmap],
     referred_tables: &[HuffmanTable],
     standard_tables: &StandardHuffmanTables,
+    input_contexts: Option<&RetainedContexts>,
 ) -> Result<SymbolDictionary> {
     let header = parse(reader)?;
     let data = reader.tail().ok_or(ParseError::UnexpectedEof)?;
     let num_new_symbols = header.num_new_symbols;
 
     let mut ctx = SymbolDecodeContext {
-        a_ctx: ArithmeticContext::new(data, &header),
+        a_ctx: ArithmeticContext::new(data, &header, input_contexts)?,
         h_ctx: HuffmanContext::new(data, &header, referred_tables, standard_tables)?,
         symbols: Symbols::new(input_symbols, num_new_symbols as usize),
         symbol_widths: Vec::with_capacity(num_new_symbols as usize),
@@ -142,15 +143,32 @@ pub(crate) fn decode(
 
     let exported = export_symbols(&mut ctx)?;
 
+    let retained_contexts = if ctx.header.flags.bitmap_context_retained {
+        Some(RetainedContexts {
+            generic_region: ctx.a_ctx.generic_region_contexts,
+            refinement_region: ctx.a_ctx.refinement_region_contexts,
+        })
+    } else {
+        None
+    };
+
     Ok(SymbolDictionary {
         exported_symbols: exported,
+        retained_contexts,
     })
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RetainedContexts {
+    pub(crate) generic_region: Vec<Context>,
+    pub(crate) refinement_region: Vec<Context>,
 }
 
 /// A decoded symbol dictionary segment.
 #[derive(Debug, Clone)]
 pub(crate) struct SymbolDictionary {
     pub(crate) exported_symbols: Vec<Bitmap>,
+    pub(crate) retained_contexts: Option<RetainedContexts>,
 }
 
 /// Decode a symbol bitmap using refinement/aggregate coding (6.5.8.2).
@@ -429,22 +447,34 @@ struct ArithmeticContext<'a> {
 }
 
 impl<'a> ArithmeticContext<'a> {
-    fn new(data: &'a [u8], header: &SymbolDictionaryHeader) -> Self {
+    fn new(
+        data: &'a [u8],
+        header: &SymbolDictionaryHeader,
+        input_contexts: Option<&RetainedContexts>,
+    ) -> Result<Self> {
         let decoder = ArithmeticDecoder::new(data);
+
         let height_class_delta_decoder = IntegerDecoder::new();
         let symbol_width_delta_decoder = IntegerDecoder::new();
         let export_run_length_decoder = IntegerDecoder::new();
         let aggregation_instance_count_decoder = IntegerDecoder::new();
 
-        let template = header.flags.template;
-        let num_contexts = 1 << template.context_bits();
-        let generic_region_contexts = vec![Context::default(); num_contexts];
+        let (generic_region_contexts, refinement_region_contexts) =
+            if header.flags.bitmap_context_used {
+                let ctx = input_contexts.ok_or(SymbolError::Invalid)?;
+                (ctx.generic_region.clone(), ctx.refinement_region.clone())
+            } else {
+                let template = header.flags.template;
+                let num_contexts = 1 << template.context_bits();
+                let refinement_template = header.flags.refinement_template;
+                let num_refinement_contexts = 1 << refinement_template.context_bits();
+                (
+                    vec![Context::default(); num_contexts],
+                    vec![Context::default(); num_refinement_contexts],
+                )
+            };
 
-        let refinement_template = header.flags.refinement_template;
-        let num_refinement_contexts = 1 << refinement_template.context_bits();
-        let refinement_region_contexts = vec![Context::default(); num_refinement_contexts];
-
-        Self {
+        Ok(Self {
             decoder,
             height_class_delta_decoder,
             symbol_width_delta_decoder,
@@ -453,7 +483,7 @@ impl<'a> ArithmeticContext<'a> {
             generic_region_contexts,
             refinement_region_contexts,
             text_region_contexts: None,
-        }
+        })
     }
 }
 
@@ -669,8 +699,8 @@ pub(crate) struct SymbolDictionaryFlags {
     pub(crate) delta_width_table: HuffmanTableSelection,
     pub(crate) collective_bitmap_size_table: HuffmanTableSelection,
     pub(crate) aggregate_instance_table: HuffmanTableSelection,
-    pub(crate) _bitmap_context_used: bool,
-    pub(crate) _bitmap_context_retained: bool,
+    pub(crate) bitmap_context_used: bool,
+    pub(crate) bitmap_context_retained: bool,
     pub(crate) template: Template,
     pub(crate) refinement_template: RefinementTemplate,
 }
@@ -729,9 +759,8 @@ fn parse(reader: &mut Reader<'_>) -> Result<SymbolDictionaryHeader> {
         delta_width_table,
         collective_bitmap_size_table,
         aggregate_instance_table,
-        // TODO: Implement those.
-        _bitmap_context_used: bitmap_context_used,
-        _bitmap_context_retained: bitmap_context_retained,
+        bitmap_context_used,
+        bitmap_context_retained,
         template,
         refinement_template,
     };
