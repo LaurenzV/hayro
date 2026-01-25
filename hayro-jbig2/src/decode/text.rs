@@ -2,6 +2,7 @@
 
 use alloc::vec;
 use alloc::vec::Vec;
+use core::iter;
 
 use super::generic_refinement::decode_bitmap;
 use super::{
@@ -917,66 +918,41 @@ fn decode_symbol_id_huffman_table(
     while symbol_code_lengths.len() < num_symbols as usize {
         let runcode = runcode_table.decode_no_oob(reader)? as u32;
 
-        // "4) Interpret the RUNCODE code and the additional bits (if any)
-        // according to Table 29. This gives the symbol ID code lengths for
-        // one or more symbols." (7.4.3.1.7)
-        //
-        // Table 32 – Meaning of the run codes:
-        // RUNCODE0-31: Symbol ID code length is 0-31
-        // RUNCODE32: Copy previous length 3-6 times (2 extra bits + 3)
-        // RUNCODE33: Repeat 0 length 3-10 times (3 extra bits + 3)
-        // RUNCODE34: Repeat 0 length 11-138 times (7 extra bits + 11)
         match runcode {
             0..=31 => {
                 symbol_code_lengths.push(runcode as u8);
             }
             32 => {
-                // Copy previous 3-6 times
+                // Copy previous 3-6 times.
                 let extra_bits = reader.read_bits(2).ok_or(HuffmanError::InvalidCode)? as usize;
                 let repeat = extra_bits + 3;
                 let previous_length = *symbol_code_lengths
                     .last()
                     .ok_or(HuffmanError::InvalidCode)?;
-                for _ in 0..repeat {
-                    if symbol_code_lengths.len() >= num_symbols as usize {
-                        break;
-                    }
-                    symbol_code_lengths.push(previous_length);
-                }
+                symbol_code_lengths.extend(iter::repeat_n(previous_length, repeat));
             }
             33 => {
-                // Repeat 0 length 3-10 times
+                // Repeat 0 length 3-10 times.
                 let extra_bits = reader.read_bits(3).ok_or(HuffmanError::InvalidCode)? as usize;
                 let repeat = extra_bits + 3;
-                for _ in 0..repeat {
-                    if symbol_code_lengths.len() >= num_symbols as usize {
-                        break;
-                    }
-                    symbol_code_lengths.push(0);
-                }
+                symbol_code_lengths.extend(iter::repeat_n(0, repeat));
             }
             34 => {
-                // Repeat 0 length 11-138 times
+                // Repeat 0 length 11-138 times.
                 let extra_bits = reader.read_bits(7).ok_or(HuffmanError::InvalidCode)? as usize;
                 let repeat = extra_bits + 11;
-                for _ in 0..repeat {
-                    if symbol_code_lengths.len() >= num_symbols as usize {
-                        break;
-                    }
-                    symbol_code_lengths.push(0);
-                }
+                symbol_code_lengths.extend(iter::repeat_n(0, repeat));
             }
             _ => bail!(HuffmanError::InvalidCode),
         }
     }
 
-    // "6) Skip over the remaining bits in the last byte read, so that the actual
-    // text region decoding procedure begins on a byte boundary." (7.4.3.1.7)
+    if symbol_code_lengths.len() != num_symbols as usize {
+        bail!(HuffmanError::InvalidCode);
+    }
+
     reader.align();
 
-    // "7) Assign a Huffman code to each symbol by applying the algorithm in B.3
-    // to the symbol ID code lengths just decoded. The result is the symbol ID
-    // Huffman table SBSYMCODES." (7.4.3.1.7)
     let symbol_lines: Vec<TableLine> = symbol_code_lengths
         .iter()
         .enumerate()
@@ -985,7 +961,6 @@ fn decode_symbol_id_huffman_table(
     Ok(HuffmanTable::build(&symbol_lines))
 }
 
-/// Collection of Huffman tables for text region decoding.
 struct TextRegionHuffmanTables<'a> {
     first_s: &'a HuffmanTable,
     delta_s: &'a HuffmanTable,
@@ -1053,14 +1028,10 @@ pub(crate) struct TextRegionHeader {
     pub(crate) huffman_flags: Option<TextRegionHuffmanFlags>,
     pub(crate) refinement_at_pixels: Vec<AdaptiveTemplatePixel>,
     pub(crate) num_instances: u32,
-    /// Symbol ID Huffman table (SBSYMCODES).
-    /// For normal text regions, this is read from the stream (7.4.3.1.7).
-    /// For aggregate decoding (Table 17), this is a fixed-width table (6.5.8.2.3).
     pub(crate) symbol_id_table: Option<HuffmanTable>,
 }
 
 impl TextRegionHeader {
-    /// Compute SBSTRIPS from `log_strip_size`.
     pub(crate) fn strip_size(&self) -> u32 {
         1_u32 << self.flags.log_strip_size
     }
