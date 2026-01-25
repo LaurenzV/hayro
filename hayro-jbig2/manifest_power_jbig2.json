@@ -57,13 +57,13 @@
   "200-20-45.jb2",
   "200-20-45-stripe.jb2",
   "200-lossless.jb2",
-  {"id": "600-6-0.jb2", "ignore": true},
-  {"id": "600-6-45.jb2", "ignore":  true},
-  {"id": "600-10-0.jb2", "ignore":  true},
-  {"id": "600-10-45.jb2", "ignore":  true},
-  {"id": "600-20-0.jb2", "ignore":  true},
-  {"id": "600-20-45.jb2", "ignore":  true},
-  {"id": "600-30-0.jb2", "ignore":  true},
-  {"id": "600-30-45.jb2", "ignore":  true},
-  {"id": "600-lossless.jb2", "ignore": true}
+  "600-6-0.jb2",
+  "600-6-45.jb2",
+  "600-10-0.jb2",
+  "600-10-45.jb2",
+  "600-20-0.jb2",
+  "600-20-45.jb2",
+  "600-30-0.jb2",
+  "600-30-45.jb2",
+  "600-lossless.jb2"
 ]
