@@ -493,13 +493,7 @@ fn decode_text_region(
             );
 
             // "x) Draw IB_I into SBREG."
-            draw_symbol(
-                &mut region,
-                symbol_bitmap_ref,
-                x,
-                y,
-                header.flags.combination_operator,
-            );
+            region.combine(symbol_bitmap_ref, x, y, header.flags.combination_operator);
 
             // "xi) Update CURS as follows:" (6.4.5)
             if !header.flags.transposed
@@ -578,42 +572,6 @@ fn compute_symbol_location(
             ReferenceCorner::BottomRight => {
                 (symbol_t - symbol_width + 1, symbol_s - symbol_height + 1)
             }
-        }
-    }
-}
-
-/// Draw a symbol bitmap into the region using the specified combination operator.
-fn draw_symbol(
-    region: &mut DecodedRegion,
-    symbol: &DecodedRegion,
-    x: i32,
-    y: i32,
-    combination_operator: CombinationOperator,
-) {
-    for src_y in 0..symbol.height {
-        let dest_y = y + src_y as i32;
-        if dest_y < 0 || dest_y >= region.height as i32 {
-            continue;
-        }
-
-        for src_x in 0..symbol.width {
-            let dest_x = x + src_x as i32;
-            if dest_x < 0 || dest_x >= region.width as i32 {
-                continue;
-            }
-
-            let src_pixel = symbol.get_pixel(src_x, src_y);
-            let dst_pixel = region.get_pixel(dest_x as u32, dest_y as u32);
-
-            let result = match combination_operator {
-                CombinationOperator::Or => dst_pixel | src_pixel,
-                CombinationOperator::And => dst_pixel & src_pixel,
-                CombinationOperator::Xor => dst_pixel ^ src_pixel,
-                CombinationOperator::Xnor => !(dst_pixel ^ src_pixel),
-                CombinationOperator::Replace => src_pixel,
-            };
-
-            region.set_pixel(dest_x as u32, dest_y as u32, result);
         }
     }
 }

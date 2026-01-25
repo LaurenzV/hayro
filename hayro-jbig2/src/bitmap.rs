@@ -69,41 +69,40 @@ impl DecodedRegion {
         self.data[(y * self.width + x) as usize] = value;
     }
 
-    /// Combine another region into this one using the other region's location
-    /// and combination operator.
+    /// Combine another region into this one at a specific location.
     ///
     /// "These operators describe how the segment's bitmap is to be combined with
     /// the page bitmap." (7.4.1.5)
-    pub(crate) fn combine(&mut self, other: &Self) {
-        for y in 0..other.height {
-            let dest_y = other.y_location + y;
-            if dest_y >= self.height {
-                break;
+    ///
+    /// Pixels outside the destination region are ignored.
+    pub(crate) fn combine(&mut self, other: &Self, x: i32, y: i32, operator: CombinationOperator) {
+        let dest_width = self.width as i32;
+        let dest_height = self.height as i32;
+
+        for src_y in 0..other.height {
+            let dest_y = y + src_y as i32;
+            if dest_y < 0 || dest_y >= dest_height {
+                continue;
             }
 
-            for x in 0..other.width {
-                let dest_x = other.x_location + x;
-                if dest_x >= self.width {
-                    break;
+            for src_x in 0..other.width {
+                let dest_x = x + src_x as i32;
+                if dest_x < 0 || dest_x >= dest_width {
+                    continue;
                 }
 
-                let src_pixel = other.get_pixel(x, y);
-                let dst_pixel = self.get_pixel(dest_x, dest_y);
+                let src_pixel = other.get_pixel(src_x, src_y);
+                let dst_pixel = self.get_pixel(dest_x as u32, dest_y as u32);
 
-                let result = match other.combination_operator {
-                    // "0 OR"
+                let result = match operator {
                     CombinationOperator::Or => dst_pixel | src_pixel,
-                    // "1 AND"
                     CombinationOperator::And => dst_pixel & src_pixel,
-                    // "2 XOR"
                     CombinationOperator::Xor => dst_pixel ^ src_pixel,
-                    // "3 XNOR"
                     CombinationOperator::Xnor => !(dst_pixel ^ src_pixel),
-                    // "4 REPLACE"
                     CombinationOperator::Replace => src_pixel,
                 };
 
-                self.set_pixel(dest_x, dest_y, result);
+                self.set_pixel(dest_x as u32, dest_y as u32, result);
             }
         }
     }

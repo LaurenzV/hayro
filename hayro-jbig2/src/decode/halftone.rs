@@ -221,65 +221,9 @@ fn render_patterns(
                 .ok_or(RegionError::InvalidDimension)?;
 
             // "Draw pattern at (x, y) using HCOMBOP."
-            draw_pattern(
-                region,
-                pattern,
-                x,
-                y,
-                pattern_dict,
-                header.flags.combination_operator,
-            );
+            region.combine(pattern, x, y, header.flags.combination_operator);
         }
     }
 
     Ok(())
-}
-
-/// Draw a pattern into the halftone region at the specified location.
-///
-/// "A pattern is drawn into HTREG as follows. Each pixel of the pattern shall
-/// be combined with the current value of the corresponding pixel in the
-/// halftone-coded bitmap, using the combination operator specified by HCOMBOP."
-fn draw_pattern(
-    region: &mut DecodedRegion,
-    pattern: &DecodedRegion,
-    x: i32,
-    y: i32,
-    pattern_dict: &PatternDictionary,
-    combination_operator: CombinationOperator,
-) {
-    let pattern_width = pattern_dict.pattern_width;
-    let pattern_height = pattern_dict.pattern_height;
-    let region_width = region.width as i32;
-    let region_height = region.height as i32;
-
-    // "If any part of a decoded pattern, when placed at location (x, y) lies
-    // outside the actual halftone-coded bitmap, then this part of the pattern
-    // shall be ignored in the process of combining the pattern with the bitmap."
-    for py in 0..pattern_height {
-        let dest_y = y + py as i32;
-        if dest_y < 0 || dest_y >= region_height {
-            continue;
-        }
-
-        for px in 0..pattern_width {
-            let dest_x = x + px as i32;
-            if dest_x < 0 || dest_x >= region_width {
-                continue;
-            }
-
-            let src_pixel = pattern.get_pixel(px, py);
-            let dst_pixel = region.get_pixel(dest_x as u32, dest_y as u32);
-
-            let result = match combination_operator {
-                CombinationOperator::Or => dst_pixel | src_pixel,
-                CombinationOperator::And => dst_pixel & src_pixel,
-                CombinationOperator::Xor => dst_pixel ^ src_pixel,
-                CombinationOperator::Xnor => !(dst_pixel ^ src_pixel),
-                CombinationOperator::Replace => src_pixel,
-            };
-
-            region.set_pixel(dest_x as u32, dest_y as u32, result);
-        }
-    }
 }

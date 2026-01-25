@@ -125,7 +125,12 @@ fn decode_with_segments(segments: &[segment::Segment<'_>]) -> Result<Image> {
             SegmentType::ImmediateGenericRegion | SegmentType::ImmediateLosslessGenericRegion => {
                 let had_unknown_length = seg.header.data_length.is_none();
                 let region = generic::decode(&mut reader, had_unknown_length)?;
-                ctx.page_bitmap.combine(&region);
+                ctx.page_bitmap.combine(
+                    &region,
+                    region.x_location as i32,
+                    region.y_location as i32,
+                    region.combination_operator,
+                );
             }
             SegmentType::IntermediateGenericRegion => {
                 // Intermediate segments cannot have unknown length.
@@ -192,7 +197,12 @@ fn decode_with_segments(segments: &[segment::Segment<'_>]) -> Result<Image> {
                     &referred_tables,
                     &ctx.standard_tables,
                 )?;
-                ctx.page_bitmap.combine(&region);
+                ctx.page_bitmap.combine(
+                    &region,
+                    region.x_location as i32,
+                    region.y_location as i32,
+                    region.combination_operator,
+                );
             }
             SegmentType::IntermediateTextRegion => {
                 // Collect symbols from referred symbol dictionaries (SBSYMS).
@@ -230,7 +240,12 @@ fn decode_with_segments(segments: &[segment::Segment<'_>]) -> Result<Image> {
                     .ok_or(SegmentError::MissingPatternDictionary)?;
 
                 let region = halftone::decode(&mut reader, pattern_dict)?;
-                ctx.page_bitmap.combine(&region);
+                ctx.page_bitmap.combine(
+                    &region,
+                    region.x_location as i32,
+                    region.y_location as i32,
+                    region.combination_operator,
+                );
             }
             SegmentType::IntermediateHalftoneRegion => {
                 let pattern_dict = seg
@@ -270,7 +285,12 @@ fn decode_with_segments(segments: &[segment::Segment<'_>]) -> Result<Image> {
                     .unwrap_or(&ctx.page_bitmap);
 
                 let region = generic_refinement::decode(&mut reader, reference)?;
-                ctx.page_bitmap.combine(&region);
+                ctx.page_bitmap.combine(
+                    &region,
+                    region.x_location as i32,
+                    region.y_location as i32,
+                    region.combination_operator,
+                );
             }
             SegmentType::Tables => {
                 // "Tables – see 7.4.13." (type 53)
