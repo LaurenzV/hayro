@@ -227,7 +227,7 @@ fn check_jbig2_images(folder: &str) {
 
                     match decoded {
                         Ok(Ok(d)) => {
-                            if d.len() == 0 {
+                            if d.is_empty() {
                                 has_error = true;
                             }   else {
                                 jbig2_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
