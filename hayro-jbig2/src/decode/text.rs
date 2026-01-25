@@ -17,19 +17,6 @@ use crate::integer_decoder::IntegerDecoder;
 use crate::reader::Reader;
 use crate::symbol_id_decoder::SymbolIdDecoder;
 
-pub(crate) enum CodingMode<'a, 'b> {
-    Huffman {
-        reader: &'a mut Reader<'b>,
-        referred_tables: &'a [HuffmanTable],
-        standard_tables: &'a StandardHuffmanTables,
-    },
-    Arithmetic {
-        decoder: &'a mut ArithmeticDecoder<'b>,
-        contexts: &'a mut TextRegionContexts,
-        gr_contexts: &'a mut [Context],
-    },
-}
-
 /// Decode a text region segment (6.4).
 pub(crate) fn decode(
     reader: &mut Reader<'_>,
@@ -40,12 +27,8 @@ pub(crate) fn decode(
     let header = parse(reader, symbols.len() as u32)?;
 
     if header.flags.use_huffman {
-        let coding = CodingMode::Huffman {
-            reader,
-            referred_tables,
-            standard_tables,
-        };
-        decode_with(coding, symbols, &header)
+        let ctx = DecodeContext::new_huffman(reader, &header, referred_tables, standard_tables)?;
+        decode_with(ctx, symbols, &header)
     } else {
         let data = reader.tail().ok_or(ParseError::UnexpectedEof)?;
         let mut decoder = ArithmeticDecoder::new(data);
@@ -57,12 +40,8 @@ pub(crate) fn decode(
         let num_gr_contexts = 1 << header.flags.refinement_template.context_bits();
         let mut gr_contexts = vec![Context::default(); num_gr_contexts];
 
-        let coding = CodingMode::Arithmetic {
-            decoder: &mut decoder,
-            contexts: &mut contexts,
-            gr_contexts: &mut gr_contexts,
-        };
-        decode_with(coding, symbols, &header)
+        let ctx = DecodeContext::new_arithmetic(&mut decoder, &mut contexts, &mut gr_contexts);
+        decode_with(ctx, symbols, &header)
     }
 }
 
@@ -71,11 +50,11 @@ pub(crate) fn decode(
 /// This is used both for normal text region segments and for aggregate symbol
 /// decoding in symbol dictionaries (Table 17).
 pub(crate) fn decode_with(
-    coding: CodingMode<'_, '_>,
+    ctx: DecodeContext<'_, '_>,
     symbols: &[&DecodedRegion],
     header: &TextRegionHeader,
 ) -> Result<DecodedRegion> {
-    let mut region = decode_text_region(coding, symbols, header)?;
+    let mut region = decode_text_region(ctx, symbols, header)?;
 
     region.x_location = header.region_info.x_location;
     region.y_location = header.region_info.y_location;
@@ -126,7 +105,7 @@ impl TextRegionContexts {
     }
 }
 
-enum DecodeContext<'a, 'b> {
+pub(crate) enum DecodeContext<'a, 'b> {
     Huffman {
         reader: &'a mut Reader<'b>,
         tables: TextRegionHuffmanTables<'a>,
@@ -139,7 +118,42 @@ enum DecodeContext<'a, 'b> {
     },
 }
 
-impl DecodeContext<'_, '_> {
+impl<'a, 'b> DecodeContext<'a, 'b> {
+    pub(crate) fn new_huffman(
+        reader: &'a mut Reader<'b>,
+        header: &'a TextRegionHeader,
+        referred_tables: &'a [HuffmanTable],
+        standard_tables: &'a StandardHuffmanTables,
+    ) -> Result<Self> {
+        let huffman_flags = header
+            .huffman_flags
+            .as_ref()
+            .ok_or(HuffmanError::InvalidSelection)?;
+        let tables = select_huffman_tables(huffman_flags, referred_tables, standard_tables)?;
+        let symbol_codes = header
+            .symbol_id_table
+            .as_ref()
+            .ok_or(HuffmanError::MissingTables)?;
+
+        Ok(DecodeContext::Huffman {
+            reader,
+            tables,
+            symbol_codes,
+        })
+    }
+
+    pub(crate) fn new_arithmetic(
+        decoder: &'a mut ArithmeticDecoder<'b>,
+        contexts: &'a mut TextRegionContexts,
+        gr_contexts: &'a mut [Context],
+    ) -> Self {
+        DecodeContext::Arithmetic {
+            decoder,
+            contexts,
+            gr_contexts,
+        }
+    }
+
     fn read_strip_delta_t(&mut self, strip_size: u32) -> Result<i32> {
         match self {
             DecodeContext::Huffman { reader, tables, .. } => {
@@ -334,43 +348,11 @@ impl DecodeContext<'_, '_> {
 }
 
 fn decode_text_region(
-    coding: CodingMode<'_, '_>,
+    mut ctx: DecodeContext<'_, '_>,
     symbols: &[&DecodedRegion],
     header: &TextRegionHeader,
 ) -> Result<DecodedRegion> {
     let strip_size = header.strip_size();
-
-    let mut ctx = match coding {
-        CodingMode::Huffman {
-            reader,
-            referred_tables,
-            standard_tables,
-        } => {
-            let huffman_flags = header
-                .huffman_flags
-                .as_ref()
-                .ok_or(HuffmanError::InvalidSelection)?;
-            let tables = select_huffman_tables(huffman_flags, referred_tables, standard_tables)?;
-            let symbol_codes = header
-                .symbol_id_table
-                .as_ref()
-                .ok_or(HuffmanError::MissingTables)?;
-            DecodeContext::Huffman {
-                reader,
-                tables,
-                symbol_codes,
-            }
-        }
-        CodingMode::Arithmetic {
-            decoder,
-            contexts,
-            gr_contexts,
-        } => DecodeContext::Arithmetic {
-            decoder,
-            contexts,
-            gr_contexts,
-        },
-    };
 
     // "1) Fill a bitmap SBREG, of the size given by SBW and SBH, with the
     // SBDEFPIXEL value." (6.4.5)
@@ -787,7 +769,7 @@ fn decode_symbol_id_huffman_table(
     Ok(HuffmanTable::build(&symbol_lines))
 }
 
-struct TextRegionHuffmanTables<'a> {
+pub(crate) struct TextRegionHuffmanTables<'a> {
     first_s: &'a HuffmanTable,
     delta_s: &'a HuffmanTable,
     delta_t: &'a HuffmanTable,

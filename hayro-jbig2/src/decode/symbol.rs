@@ -7,7 +7,7 @@ use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::DecodedRegion;
 use crate::decode::generic::{decode_bitmap_mmr, parse_adaptive_template_pixels};
 use crate::decode::text::{
-    CodingMode, ReferenceCorner, TextRegionContexts, TextRegionFlags, TextRegionHeader,
+    DecodeContext, ReferenceCorner, TextRegionContexts, TextRegionFlags, TextRegionHeader,
     TextRegionHuffmanFlags, decode_with,
 };
 use crate::decode::{
@@ -350,26 +350,27 @@ fn decode_aggregation_bitmap(
         symbol_id_table,
     };
 
-    let coding = if use_huffman {
-        CodingMode::Huffman {
-            reader: &mut ctx.h_ctx.reader,
-            referred_tables: &[],
-            standard_tables: ctx.standard_tables,
-        }
+    let decode_ctx = if use_huffman {
+        DecodeContext::new_huffman(
+            &mut ctx.h_ctx.reader,
+            &header,
+            &[],
+            ctx.standard_tables,
+        )?
     } else {
         let contexts = ctx
             .a_ctx
             .text_region_contexts
             .get_or_insert_with(|| TextRegionContexts::new(symbol_code_length));
 
-        CodingMode::Arithmetic {
-            decoder: &mut ctx.a_ctx.decoder,
+        DecodeContext::new_arithmetic(
+            &mut ctx.a_ctx.decoder,
             contexts,
-            gr_contexts: &mut ctx.a_ctx.refinement_region_contexts,
-        }
+            &mut ctx.a_ctx.refinement_region_contexts,
+        )
     };
 
-    decode_with(coding, &all_symbols, &header)
+    decode_with(decode_ctx, &all_symbols, &header)
 }
 
 struct Symbols<'a> {
