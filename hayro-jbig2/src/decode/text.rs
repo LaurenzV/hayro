@@ -67,24 +67,26 @@ pub(crate) fn decode_with(
 
     let strip_size = header.strip_size();
 
-    // "2) Decode the initial STRIPT value as described in 6.4.6." (6.4.5)
-    let initial_strip_t = ctx.read_strip_delta_t(strip_size)?;
-    let mut strip_t: i32 = initial_strip_t.checked_neg().ok_or(DecodeError::Overflow)?;
+    let mut strip_t = ctx
+        .read_strip_delta_t(strip_size)?
+        .checked_neg()
+        .ok_or(DecodeError::Overflow)?;
     let mut first_s: i32 = 0;
-    let mut instance_count: u32 = 0;
+    let mut instance_count = 0;
 
-    // "4) Decode each strip as follows:" (6.4.5)
     while instance_count < header.num_instances {
-        // "b) Decode the strip's delta T value as described in 6.4.6."
         let delta_t = ctx.read_strip_delta_t(strip_size)?;
         strip_t = strip_t.checked_add(delta_t).ok_or(DecodeError::Overflow)?;
 
-        // "c) Decode each symbol instance in the strip as follows:"
         let mut first_symbol_in_strip = true;
-        let mut current_s: i32 = 0;
+        let mut current_s = 0;
 
         loop {
-            // "i) First symbol S coordinate / ii) Subsequent symbol S coordinate"
+            // Prevent infinite loop for invalid files.
+            if instance_count > header.num_instances {
+                bail!(SymbolError::TooManySymbols);
+            }
+
             if first_symbol_in_strip {
                 let delta_first_s = ctx.read_first_s()?;
                 first_s = first_s
@@ -93,27 +95,22 @@ pub(crate) fn decode_with(
                 current_s = first_s;
                 first_symbol_in_strip = false;
             } else {
-                match ctx.read_delta_s()? {
-                    Some(delta_s) => {
-                        current_s = current_s
-                            .checked_add(delta_s)
-                            .and_then(|v| v.checked_add(header.flags.delta_s_offset as i32))
-                            .ok_or(DecodeError::Overflow)?;
-                    }
-                    None => {
-                        // OOB - end of strip.
-                        break;
-                    }
-                }
+                let Some(delta_s) = ctx.read_delta_s()? else {
+                    // OOB - end of strip.
+                    break;
+                };
+
+                current_s = current_s
+                    .checked_add(delta_s)
+                    .and_then(|v| v.checked_add(header.flags.delta_s_offset as i32))
+                    .ok_or(DecodeError::Overflow)?;
             }
 
-            // "iii) Decode the symbol instance's T coordinate."
             let current_t = ctx.read_symbol_t(strip_size, header.flags.log_strip_size)?;
             let symbol_t = strip_t
                 .checked_add(current_t)
                 .ok_or(DecodeError::Overflow)?;
 
-            // "iv) Decode the symbol instance's symbol ID."
             let symbol_id = ctx.read_symbol_id()?;
 
             // "v) Determine the symbol instance's bitmap IB_I as described in 6.4.11."
@@ -239,7 +236,6 @@ pub(crate) fn decode_with(
                     .ok_or(DecodeError::Overflow)?;
             }
 
-            // "xii) Set: NINSTANCES = NINSTANCES + 1"
             instance_count += 1;
         }
     }
@@ -355,6 +351,7 @@ impl<'a, 'b> DecodeContext<'a, 'b> {
         }
     }
 
+    /// Decode first symbol instance S coordinate (6.4.7).
     fn read_first_s(&mut self) -> Result<i32> {
         match self {
             DecodeContext::Huffman { reader, tables, .. } => tables.first_s.decode_no_oob(reader),
@@ -367,6 +364,7 @@ impl<'a, 'b> DecodeContext<'a, 'b> {
         }
     }
 
+    /// Decode subsequent symbol instance S coordinate (6.4.8).
     fn read_delta_s(&mut self) -> Result<Option<i32>> {
         match self {
             DecodeContext::Huffman { reader, tables, .. } => tables.delta_s.decode(reader),
@@ -376,6 +374,7 @@ impl<'a, 'b> DecodeContext<'a, 'b> {
         }
     }
 
+    /// Decode symbol instance T coordinate (6.4.9).
     fn read_symbol_t(&mut self, strip_size: u32, log_strip_size: u8) -> Result<i32> {
         if strip_size == 1 {
             return Ok(0);
@@ -395,6 +394,7 @@ impl<'a, 'b> DecodeContext<'a, 'b> {
         }
     }
 
+    /// Decode symbol instance symbol ID (6.4.10).
     fn read_symbol_id(&mut self) -> Result<usize> {
         match self {
             DecodeContext::Huffman {

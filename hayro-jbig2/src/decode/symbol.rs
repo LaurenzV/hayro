@@ -88,7 +88,7 @@ pub(crate) fn decode(
         while let Some(width_delta) = read_symbol_width_delta(&mut ctx)? {
             // Prevent infinite loop for invalid files.
             if ctx.symbols_decoded_count >= num_new_symbols {
-                bail!(SymbolError::TooManySymbols)
+                bail!(SymbolError::TooManySymbols);
             }
 
             symbol_width = symbol_width
