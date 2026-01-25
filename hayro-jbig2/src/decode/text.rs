@@ -4,12 +4,11 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::iter;
 
-use super::RegionBitmap;
-use super::generic_refinement::decode_bitmap;
 use super::{
     AdaptiveTemplatePixel, CombinationOperator, RefinementTemplate, RegionSegmentInfo,
     parse_refinement_at_pixels, parse_region_segment_info,
 };
+use super::{RegionBitmap, generic_refinement};
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::Bitmap;
 use crate::error::{DecodeError, HuffmanError, ParseError, Result, SymbolError, bail};
@@ -114,77 +113,15 @@ pub(crate) fn decode_with(
             let symbol_id = ctx.read_symbol_id()?;
 
             // "v) Determine the symbol instance's bitmap IB_I as described in 6.4.11."
-            let (symbol_bitmap, symbol_width, symbol_height): (SymbolBitmap, i32, i32) =
-                if !header.flags.use_refinement {
-                    // "If SBREFINE is 0, then set R_I to 0." (6.4.11)
-                    let symbol = symbols.get(symbol_id).ok_or(SymbolError::OutOfRange)?;
-                    (
-                        SymbolBitmap::Reference(symbol_id),
-                        symbol.width as i32,
-                        symbol.height as i32,
-                    )
-                } else {
-                    let refinement_flag = ctx.read_refinement_flag()?;
-
-                    if refinement_flag == 0 {
-                        let symbol = symbols.get(symbol_id).ok_or(SymbolError::OutOfRange)?;
-                        (
-                            SymbolBitmap::Reference(symbol_id),
-                            symbol.width as i32,
-                            symbol.height as i32,
-                        )
-                    } else {
-                        // Refinement decoding (6.4.11).
-                        let reference_bitmap =
-                            symbols.get(symbol_id).ok_or(SymbolError::OutOfRange)?;
-                        let reference_width = reference_bitmap.width;
-                        let reference_height = reference_bitmap.height;
-
-                        let rdw = ctx.read_refinement_delta_width()?;
-                        let rdh = ctx.read_refinement_delta_height()?;
-                        let rdx = ctx.read_refinement_x_offset()?;
-                        let rdy = ctx.read_refinement_y_offset()?;
-
-                        let refined_width = (reference_width as i32)
-                            .checked_add(rdw)
-                            .ok_or(DecodeError::Overflow)?
-                            as u32;
-                        let refined_height = (reference_height as i32)
-                            .checked_add(rdh)
-                            .ok_or(DecodeError::Overflow)?
-                            as u32;
-                        let reference_x_offset = rdw
-                            .div_euclid(2)
-                            .checked_add(rdx)
-                            .ok_or(DecodeError::Overflow)?;
-                        let reference_y_offset = rdh
-                            .div_euclid(2)
-                            .checked_add(rdy)
-                            .ok_or(DecodeError::Overflow)?;
-
-                        let mut refined = Bitmap::new(refined_width, refined_height);
-
-                        ctx.decode_refinement_bitmap(
-                            &mut refined,
-                            reference_bitmap,
-                            reference_x_offset,
-                            reference_y_offset,
-                            header.flags.refinement_template,
-                            &header.refinement_at_pixels,
-                        )?;
-
-                        (
-                            SymbolBitmap::Owned(refined),
-                            refined_width as i32,
-                            refined_height as i32,
-                        )
-                    }
-                };
+            let symbol_bitmap =
+                decode_symbol_instance_bitmap(&mut ctx, symbols, header, symbol_id)?;
 
             let symbol_bitmap_ref: &Bitmap = match &symbol_bitmap {
                 SymbolBitmap::Reference(idx) => symbols.get(*idx).ok_or(SymbolError::OutOfRange)?,
-                SymbolBitmap::Owned(region) => region,
+                SymbolBitmap::Owned(bitmap) => bitmap,
             };
+            let symbol_width = symbol_bitmap_ref.width as i32;
+            let symbol_height = symbol_bitmap_ref.height as i32;
 
             // "vi) Update CURS as follows:" (6.4.5)
             if !header.flags.transposed
@@ -422,6 +359,7 @@ impl<'a, 'b> DecodeContext<'a, 'b> {
         }
     }
 
+    /// Decode symbol instance refinement delta width (6.4.11.1).
     fn read_refinement_delta_width(&mut self) -> Result<i32> {
         match self {
             DecodeContext::Huffman { reader, tables, .. } => {
@@ -436,6 +374,7 @@ impl<'a, 'b> DecodeContext<'a, 'b> {
         }
     }
 
+    /// Decode symbol instance refinement delta height (6.4.11.2).
     fn read_refinement_delta_height(&mut self) -> Result<i32> {
         match self {
             DecodeContext::Huffman { reader, tables, .. } => {
@@ -450,6 +389,7 @@ impl<'a, 'b> DecodeContext<'a, 'b> {
         }
     }
 
+    /// Decode symbol instance refinement x offset (6.4.11.3).
     fn read_refinement_x_offset(&mut self) -> Result<i32> {
         match self {
             DecodeContext::Huffman { reader, tables, .. } => {
@@ -464,6 +404,7 @@ impl<'a, 'b> DecodeContext<'a, 'b> {
         }
     }
 
+    /// Decode symbol instance refinement y offset (6.4.11.4).
     fn read_refinement_y_offset(&mut self) -> Result<i32> {
         match self {
             DecodeContext::Huffman { reader, tables, .. } => {
@@ -478,6 +419,7 @@ impl<'a, 'b> DecodeContext<'a, 'b> {
         }
     }
 
+    /// Decode the refinement bitmap, steps 5) to 7) of 6.4.11.
     fn decode_refinement_bitmap(
         &mut self,
         refined: &mut Bitmap,
@@ -496,13 +438,13 @@ impl<'a, 'b> DecodeContext<'a, 'b> {
                     .read_bytes(refinement_data_size as usize)
                     .ok_or(ParseError::UnexpectedEof)?;
 
-                let mut temp_decoder = ArithmeticDecoder::new(refinement_data);
+                let mut decoder = ArithmeticDecoder::new(refinement_data);
                 let num_context_bits = refinement_template.context_bits();
-                let mut temp_contexts = vec![Context::default(); 1 << num_context_bits];
+                let mut contexts = vec![Context::default(); 1 << num_context_bits];
 
-                decode_bitmap(
-                    &mut temp_decoder,
-                    &mut temp_contexts,
+                generic_refinement::decode_bitmap(
+                    &mut decoder,
+                    &mut contexts,
                     refined,
                     reference_bitmap,
                     reference_x_offset,
@@ -516,7 +458,7 @@ impl<'a, 'b> DecodeContext<'a, 'b> {
                 decoder,
                 gr_contexts,
                 ..
-            } => decode_bitmap(
+            } => generic_refinement::decode_bitmap(
                 decoder,
                 gr_contexts,
                 refined,
@@ -537,6 +479,55 @@ enum SymbolBitmap {
     Reference(usize),
     /// Use this refined bitmap (`R_I` = 1).
     Owned(Bitmap),
+}
+
+/// Decode the symbol instance bitmap (6.4.11).
+fn decode_symbol_instance_bitmap(
+    ctx: &mut DecodeContext<'_, '_>,
+    symbols: &[&Bitmap],
+    header: &TextRegionHeader,
+    symbol_id: usize,
+) -> Result<SymbolBitmap> {
+    if !header.flags.use_refinement || ctx.read_refinement_flag()? == 0 {
+        return Ok(SymbolBitmap::Reference(symbol_id));
+    }
+
+    // Otherwise, the refinement flag was 1.
+
+    let reference_bitmap = symbols.get(symbol_id).ok_or(SymbolError::OutOfRange)?;
+
+    let rdw = ctx.read_refinement_delta_width()?;
+    let rdh = ctx.read_refinement_delta_height()?;
+    let rdx = ctx.read_refinement_x_offset()?;
+    let rdy = ctx.read_refinement_y_offset()?;
+
+    let refined_width = (reference_bitmap.width as i32)
+        .checked_add(rdw)
+        .ok_or(DecodeError::Overflow)? as u32;
+    let refined_height = (reference_bitmap.height as i32)
+        .checked_add(rdh)
+        .ok_or(DecodeError::Overflow)? as u32;
+    let reference_x_offset = rdw
+        .div_euclid(2)
+        .checked_add(rdx)
+        .ok_or(DecodeError::Overflow)?;
+    let reference_y_offset = rdh
+        .div_euclid(2)
+        .checked_add(rdy)
+        .ok_or(DecodeError::Overflow)?;
+
+    let mut refined_bitmap = Bitmap::new(refined_width, refined_height);
+
+    ctx.decode_refinement_bitmap(
+        &mut refined_bitmap,
+        reference_bitmap,
+        reference_x_offset,
+        reference_y_offset,
+        header.flags.refinement_template,
+        &header.refinement_at_pixels,
+    )?;
+
+    Ok(SymbolBitmap::Owned(refined_bitmap))
 }
 
 /// Compute the location of a symbol instance bitmap (6.4.5 step viii).
