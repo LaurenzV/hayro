@@ -4,13 +4,14 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::iter;
 
+use super::RegionBitmap;
 use super::generic_refinement::decode_bitmap;
 use super::{
     AdaptiveTemplatePixel, CombinationOperator, RefinementTemplate, RegionSegmentInfo,
     parse_refinement_at_pixels, parse_region_segment_info,
 };
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
-use crate::bitmap::DecodedRegion;
+use crate::bitmap::Bitmap;
 use crate::error::{DecodeError, HuffmanError, ParseError, Result, SymbolError, bail};
 use crate::huffman_table::{HuffmanTable, StandardHuffmanTables, TableLine};
 use crate::integer_decoder::IntegerDecoder;
@@ -20,15 +21,15 @@ use crate::symbol_id_decoder::SymbolIdDecoder;
 /// Decode a text region segment (6.4).
 pub(crate) fn decode(
     reader: &mut Reader<'_>,
-    symbols: &[&DecodedRegion],
+    symbols: &[&Bitmap],
     referred_tables: &[HuffmanTable],
     standard_tables: &StandardHuffmanTables,
-) -> Result<DecodedRegion> {
+) -> Result<RegionBitmap> {
     let header = parse(reader, symbols.len() as u32)?;
 
-    if header.flags.use_huffman {
+    let bitmap = if header.flags.use_huffman {
         let ctx = DecodeContext::new_huffman(reader, &header, referred_tables, standard_tables)?;
-        decode_with(ctx, symbols, &header)
+        decode_with(ctx, symbols, &header)?
     } else {
         let data = reader.tail().ok_or(ParseError::UnexpectedEof)?;
         let mut decoder = ArithmeticDecoder::new(data);
@@ -41,28 +42,30 @@ pub(crate) fn decode(
         let mut gr_contexts = vec![Context::default(); num_gr_contexts];
 
         let ctx = DecodeContext::new_arithmetic(&mut decoder, &mut contexts, &mut gr_contexts);
-        decode_with(ctx, symbols, &header)
-    }
+        decode_with(ctx, symbols, &header)?
+    };
+
+    Ok(RegionBitmap {
+        bitmap,
+        combination_operator: header.region_info.combination_operator,
+    })
 }
 
 /// Decode a text region segment with a decode context (6.4).
 pub(crate) fn decode_with(
     mut ctx: DecodeContext<'_, '_>,
-    symbols: &[&DecodedRegion],
+    symbols: &[&Bitmap],
     header: &TextRegionHeader,
-) -> Result<DecodedRegion> {
-    let mut region = DecodedRegion::new(header.region_info.width, header.region_info.height);
-    region.x_location = header.region_info.x_location;
-    region.y_location = header.region_info.y_location;
-    region.combination_operator = header.region_info.combination_operator;
+) -> Result<Bitmap> {
+    let mut region = Bitmap::new_with(
+        header.region_info.width,
+        header.region_info.height,
+        header.region_info.x_location,
+        header.region_info.y_location,
+        header.flags.default_pixel,
+    );
 
     let strip_size = header.strip_size();
-
-    if header.flags.default_pixel {
-        for pixel in &mut region.data {
-            *pixel = true;
-        }
-    }
 
     // "2) Decode the initial STRIPT value as described in 6.4.6." (6.4.5)
     let initial_strip_t = ctx.read_strip_delta_t(strip_size)?;
@@ -162,7 +165,7 @@ pub(crate) fn decode_with(
                             .checked_add(rdy)
                             .ok_or(DecodeError::Overflow)?;
 
-                        let mut refined = DecodedRegion::new(refined_width, refined_height);
+                        let mut refined = Bitmap::new(refined_width, refined_height);
 
                         ctx.decode_refinement_bitmap(
                             &mut refined,
@@ -181,7 +184,7 @@ pub(crate) fn decode_with(
                     }
                 };
 
-            let symbol_bitmap_ref: &DecodedRegion = match &symbol_bitmap {
+            let symbol_bitmap_ref: &Bitmap = match &symbol_bitmap {
                 SymbolBitmap::Reference(idx) => symbols.get(*idx).ok_or(SymbolError::OutOfRange)?,
                 SymbolBitmap::Owned(region) => region,
             };
@@ -477,8 +480,8 @@ impl<'a, 'b> DecodeContext<'a, 'b> {
 
     fn decode_refinement_bitmap(
         &mut self,
-        refined: &mut DecodedRegion,
-        reference_bitmap: &DecodedRegion,
+        refined: &mut Bitmap,
+        reference_bitmap: &Bitmap,
         reference_x_offset: i32,
         reference_y_offset: i32,
         refinement_template: RefinementTemplate,
@@ -533,7 +536,7 @@ enum SymbolBitmap {
     /// Use the symbol at this index directly (`R_I` = 0).
     Reference(usize),
     /// Use this refined bitmap (`R_I` = 1).
-    Owned(DecodedRegion),
+    Owned(Bitmap),
 }
 
 /// Compute the location of a symbol instance bitmap (6.4.5 step viii).

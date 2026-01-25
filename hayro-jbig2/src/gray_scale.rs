@@ -4,7 +4,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
-use crate::bitmap::DecodedRegion;
+use crate::bitmap::Bitmap;
 use crate::decode::generic::{decode_bitmap_mmr, gather_context};
 use crate::decode::{AdaptiveTemplatePixel, Template};
 use crate::error::Result;
@@ -58,7 +58,7 @@ fn decode_mmr(data: &[u8], params: &GrayScaleParams<'_>) -> Result<Vec<u32>> {
     let mut offset = 0;
     decode_bitplanes(bits_per_pixel, size, |_| {
         // Table C.4: "GBW = GSW, GBH = GSH"
-        let mut bitplane = DecodedRegion::new(width, height);
+        let mut bitplane = Bitmap::new(width, height);
         offset += decode_bitmap_mmr(&mut bitplane, &data[offset..])?;
         Ok(bitplane.data)
     })
@@ -99,7 +99,7 @@ fn decode_arithmetic(data: &[u8], params: &GrayScaleParams<'_>) -> Result<Vec<u3
 
     decode_bitplanes(bits_per_pixel, size, |_| {
         // Table C.4: "GBW = GSW, GBH = GSH, TPGDON = 0"
-        let mut bitplane = DecodedRegion::new(width, height);
+        let mut bitplane = Bitmap::new(width, height);
 
         for y in 0..height {
             for x in 0..width {

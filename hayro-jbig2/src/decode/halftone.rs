@@ -3,9 +3,10 @@
 use alloc::vec;
 use alloc::vec::Vec;
 
+use super::RegionBitmap;
 use super::pattern::PatternDictionary;
 use super::{CombinationOperator, RegionSegmentInfo, Template, parse_region_segment_info};
-use crate::bitmap::DecodedRegion;
+use crate::bitmap::Bitmap;
 use crate::error::{DecodeError, ParseError, RegionError, Result};
 use crate::gray_scale::{GrayScaleParams, decode_gray_scale_image};
 use crate::reader::Reader;
@@ -14,18 +15,17 @@ use crate::reader::Reader;
 pub(crate) fn decode(
     reader: &mut Reader<'_>,
     pattern_dict: &PatternDictionary,
-) -> Result<DecodedRegion> {
+) -> Result<RegionBitmap> {
     let header = parse(reader)?;
     let region = &header.region_info;
 
-    let mut htreg = DecodedRegion {
-        width: region.width,
-        height: region.height,
-        data: vec![header.flags.initial_pixel_color; (region.width * region.height) as usize],
-        x_location: region.x_location,
-        y_location: region.y_location,
-        combination_operator: region.combination_operator,
-    };
+    let mut htreg = Bitmap::new_with(
+        region.width,
+        region.height,
+        region.x_location,
+        region.y_location,
+        header.flags.initial_pixel_color,
+    );
 
     let skip_bitmap = if header.flags.enable_skip {
         Some(compute_skip_bitmap(&header, pattern_dict, &htreg)?)
@@ -58,7 +58,10 @@ pub(crate) fn decode(
     // TODO: Optimize drawing axis-aligned grids.
     render_patterns(&mut htreg, &gi, &header, pattern_dict)?;
 
-    Ok(htreg)
+    Ok(RegionBitmap {
+        bitmap: htreg,
+        combination_operator: region.combination_operator,
+    })
 }
 
 /// Parse a halftone region segment header (7.4.5.1).
@@ -181,7 +184,7 @@ fn compute_grid_coords(
 fn compute_skip_bitmap(
     header: &HalftoneRegionHeader,
     pattern_dict: &PatternDictionary,
-    htreg: &DecodedRegion,
+    htreg: &Bitmap,
 ) -> Result<Vec<bool>> {
     let grid = &header.grid_position_and_size;
     let vector = &header.grid_vector;
@@ -216,7 +219,7 @@ fn compute_skip_bitmap(
 
 /// Render patterns into the target region (6.6.5.2).
 fn render_patterns(
-    region: &mut DecodedRegion,
+    region: &mut Bitmap,
     gi: &[u32],
     header: &HalftoneRegionHeader,
     pattern_dict: &PatternDictionary,

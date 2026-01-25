@@ -4,17 +4,17 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use super::{
-    AdaptiveTemplatePixel, RefinementTemplate, RegionSegmentInfo, parse_refinement_at_pixels,
-    parse_region_segment_info,
+    AdaptiveTemplatePixel, RefinementTemplate, RegionBitmap, RegionSegmentInfo,
+    parse_refinement_at_pixels, parse_region_segment_info,
 };
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
-use crate::bitmap::DecodedRegion;
+use crate::bitmap::Bitmap;
 use crate::decode::generic::get_pixel;
 use crate::error::{DecodeError, ParseError, RegionError, Result, bail};
 use crate::reader::Reader;
 
 /// Generic refinement region decoding procedure (6.3).
-pub(crate) fn decode(reader: &mut Reader<'_>, reference: &DecodedRegion) -> Result<DecodedRegion> {
+pub(crate) fn decode(reader: &mut Reader<'_>, reference: &Bitmap) -> Result<RegionBitmap> {
     let header = parse(reader)?;
 
     // Validate that the region fits within the reference bitmap.
@@ -26,7 +26,7 @@ pub(crate) fn decode(reader: &mut Reader<'_>, reference: &DecodedRegion) -> Resu
 
     let reference_dx = i32::try_from(reference.x_location)
         .ok()
-        .and_then(|r| {
+        .and_then(|r: i32| {
             i32::try_from(header.region_info.x_location)
                 .ok()
                 .and_then(|h| r.checked_sub(h))
@@ -34,7 +34,7 @@ pub(crate) fn decode(reader: &mut Reader<'_>, reference: &DecodedRegion) -> Resu
         .ok_or(DecodeError::Overflow)?;
     let reference_dy = i32::try_from(reference.y_location)
         .ok()
-        .and_then(|r| {
+        .and_then(|r: i32| {
             i32::try_from(header.region_info.y_location)
                 .ok()
                 .and_then(|h| r.checked_sub(h))
@@ -46,17 +46,13 @@ pub(crate) fn decode(reader: &mut Reader<'_>, reference: &DecodedRegion) -> Resu
     let num_context_bits = header.template.context_bits();
     let mut contexts = vec![Context::default(); 1 << num_context_bits];
 
-    let width = header.region_info.width;
-    let height = header.region_info.height;
-
-    let mut region = DecodedRegion {
-        width,
-        height,
-        data: vec![false; (width * height) as usize],
-        x_location: header.region_info.x_location,
-        y_location: header.region_info.y_location,
-        combination_operator: header.region_info.combination_operator,
-    };
+    let mut region = Bitmap::new_with(
+        header.region_info.width,
+        header.region_info.height,
+        header.region_info.x_location,
+        header.region_info.y_location,
+        false,
+    );
 
     decode_bitmap(
         &mut decoder,
@@ -70,7 +66,10 @@ pub(crate) fn decode(reader: &mut Reader<'_>, reference: &DecodedRegion) -> Resu
         header.tpgron,
     )?;
 
-    Ok(region)
+    Ok(RegionBitmap {
+        bitmap: region,
+        combination_operator: header.region_info.combination_operator,
+    })
 }
 
 /// Parsed generic refinement region segment header (7.4.7.1).
@@ -107,8 +106,8 @@ pub(crate) fn decode_bitmap(
     // TODO: Maybe reduce number of arguments?
     decoder: &mut ArithmeticDecoder<'_>,
     contexts: &mut [Context],
-    region: &mut DecodedRegion,
-    reference: &DecodedRegion,
+    region: &mut Bitmap,
+    reference: &Bitmap,
     reference_dx: i32,
     reference_dy: i32,
     gr_template: RefinementTemplate,
@@ -137,7 +136,7 @@ pub(crate) fn decode_bitmap(
         }
 
         let mut decode_single =
-            |x: u32, decoder: &mut ArithmeticDecoder<'_>, region: &mut DecodedRegion| {
+            |x: u32, decoder: &mut ArithmeticDecoder<'_>, region: &mut Bitmap| {
                 let context = gather_context(
                     region,
                     reference,
@@ -214,8 +213,8 @@ pub(crate) fn decode_bitmap(
 
 /// Gather context bits for refinement decoding (6.3.5.3).
 fn gather_context(
-    region: &DecodedRegion,
-    reference: &DecodedRegion,
+    region: &Bitmap,
+    reference: &Bitmap,
     x: u32,
     y: u32,
     reference_dx: i32,

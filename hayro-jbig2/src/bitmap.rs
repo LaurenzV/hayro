@@ -10,7 +10,7 @@ use alloc::vec::Vec;
 
 use crate::decode::CombinationOperator;
 
-/// A decoded bitmap region with position and combination information.
+/// A decoded bitmap with position information.
 ///
 /// Pixels are stored as booleans where `true` means black, `false` means white.
 ///
@@ -18,7 +18,7 @@ use crate::decode::CombinationOperator;
 /// as having the value 1. Pixels decoded by the MMR decoder having the value
 /// 'white' shall be treated as having the value 0." (6.2.6)
 #[derive(Debug, Clone)]
-pub(crate) struct DecodedRegion {
+pub(crate) struct Bitmap {
     /// Width in pixels.
     pub(crate) width: u32,
     /// Height in pixels.
@@ -31,23 +31,31 @@ pub(crate) struct DecodedRegion {
     /// "This four-byte field gives the vertical offset in pixels of the bitmap
     /// encoded in this segment relative to the page bitmap." (7.4.1.4)
     pub(crate) y_location: u32,
-    /// "Bits 0-2: External combination operator." (7.4.1.5)
-    pub(crate) combination_operator: CombinationOperator,
 }
 
-impl DecodedRegion {
-    /// Create a new bitmap filled with `false` (white pixels).
+impl Bitmap {
+    /// Create a new bitmap filled with white pixels (false).
     ///
-    /// The bitmap is positioned at (0, 0) with the Replace operator.
+    /// The bitmap is positioned at (0, 0).
     pub(crate) fn new(width: u32, height: u32) -> Self {
-        let data = vec![false; (width * height) as usize];
+        Self::new_with(width, height, 0, 0, false)
+    }
+
+    /// Create a new bitmap with full configuration.
+    pub(crate) fn new_with(
+        width: u32,
+        height: u32,
+        x_location: u32,
+        y_location: u32,
+        default_pixel: bool,
+    ) -> Self {
+        let data = vec![default_pixel; (width * height) as usize];
         Self {
             width,
             height,
             data,
-            x_location: 0,
-            y_location: 0,
-            combination_operator: CombinationOperator::Replace,
+            x_location,
+            y_location,
         }
     }
 
@@ -69,12 +77,12 @@ impl DecodedRegion {
         self.data[(y * self.width + x) as usize] = value;
     }
 
-    /// Combine another region into this one at a specific location.
+    /// Combine another bitmap into this one at a specific location.
     ///
     /// "These operators describe how the segment's bitmap is to be combined with
     /// the page bitmap." (7.4.1.5)
     ///
-    /// Pixels outside the destination region are ignored.
+    /// Pixels outside the destination bitmap are ignored.
     pub(crate) fn combine(&mut self, other: &Self, x: i32, y: i32, operator: CombinationOperator) {
         let dest_width = self.width as i32;
         let dest_height = self.height as i32;

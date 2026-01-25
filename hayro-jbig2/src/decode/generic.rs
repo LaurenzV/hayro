@@ -3,14 +3,16 @@
 use alloc::vec;
 use alloc::vec::Vec;
 
-use super::{AdaptiveTemplatePixel, RegionSegmentInfo, Template, parse_region_segment_info};
+use super::{
+    AdaptiveTemplatePixel, RegionBitmap, RegionSegmentInfo, Template, parse_region_segment_info,
+};
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
-use crate::bitmap::DecodedRegion;
+use crate::bitmap::Bitmap;
 use crate::error::{ParseError, RegionError, Result, TemplateError, bail};
 use crate::reader::Reader;
 
 /// Generic region decoding procedure (6.2).
-pub(crate) fn decode(reader: &mut Reader<'_>, had_unknown_length: bool) -> Result<DecodedRegion> {
+pub(crate) fn decode(reader: &mut Reader<'_>, had_unknown_length: bool) -> Result<RegionBitmap> {
     let mut header = parse(reader)?;
     let mut encoded_data = reader.tail().ok_or(ParseError::UnexpectedEof)?;
 
@@ -32,36 +34,36 @@ pub(crate) fn decode(reader: &mut Reader<'_>, had_unknown_length: bool) -> Resul
         encoded_data = head;
     }
 
-    let mut region = DecodedRegion {
-        width: header.region_info.width,
-        height: header.region_info.height,
-        data: vec![false; (header.region_info.width * header.region_info.height) as usize],
-        x_location: header.region_info.x_location,
-        y_location: header.region_info.y_location,
-        combination_operator: header.region_info.combination_operator,
-    };
+    let mut bitmap = Bitmap::new_with(
+        header.region_info.width,
+        header.region_info.height,
+        header.region_info.x_location,
+        header.region_info.y_location,
+        false,
+    );
 
     if header.mmr {
         // "6.2.6 Decoding using MMR coding"
-        let _ = decode_bitmap_mmr(&mut region, encoded_data)?;
-
-        Ok(region)
+        let _ = decode_bitmap_mmr(&mut bitmap, encoded_data)?;
     } else {
         let mut decoder = ArithmeticDecoder::new(encoded_data);
         let mut contexts = vec![Context::default(); 1 << header.template.context_bits()];
 
         // "6.2.5 Decoding using a template and arithmetic coding"
         decode_bitmap_arithmetic_coding(
-            &mut region,
+            &mut bitmap,
             &mut decoder,
             &mut contexts,
             header.template,
             header.tpgdon,
             &header.adaptive_template_pixels,
         )?;
-
-        Ok(region)
     }
+
+    Ok(RegionBitmap {
+        bitmap,
+        combination_operator: header.region_info.combination_operator,
+    })
 }
 
 /// Parsed generic region segment header (7.4.6.1).
@@ -127,33 +129,33 @@ pub(crate) fn parse_adaptive_template_pixels(
 }
 
 /// Decode a bitmap using MMR coding (6.2.6).
-pub(crate) fn decode_bitmap_mmr(region: &mut DecodedRegion, data: &[u8]) -> Result<usize> {
-    /// A decoder sink that writes decoded pixels into a `DecodedRegion`.
+pub(crate) fn decode_bitmap_mmr(bitmap: &mut Bitmap, data: &[u8]) -> Result<usize> {
+    /// A decoder sink that writes decoded pixels into a `Bitmap`.
     struct BitmapDecoder<'a> {
-        region: &'a mut DecodedRegion,
+        bitmap: &'a mut Bitmap,
         x: u32,
         y: u32,
     }
 
     impl<'a> BitmapDecoder<'a> {
-        fn new(region: &'a mut DecodedRegion) -> Self {
-            Self { region, x: 0, y: 0 }
+        fn new(bitmap: &'a mut Bitmap) -> Self {
+            Self { bitmap, x: 0, y: 0 }
         }
     }
 
     impl hayro_ccitt::Decoder for BitmapDecoder<'_> {
         fn push_pixel(&mut self, white: bool) {
-            if self.x < self.region.width {
-                self.region.set_pixel(self.x, self.y, white);
+            if self.x < self.bitmap.width {
+                self.bitmap.set_pixel(self.x, self.y, white);
                 self.x += 1;
             }
         }
 
         fn push_pixel_chunk(&mut self, white: bool, chunk_count: u32) {
             let pixel_count = chunk_count as usize * 8;
-            let start = (self.y * self.region.width + self.x) as usize;
-            let end = (start + pixel_count).min(self.region.data.len());
-            self.region.data[start..end].fill(white);
+            let start = (self.y * self.bitmap.width + self.x) as usize;
+            let end = (start + pixel_count).min(self.bitmap.data.len());
+            self.bitmap.data[start..end].fill(white);
             self.x += pixel_count as u32;
         }
 
@@ -163,9 +165,9 @@ pub(crate) fn decode_bitmap_mmr(region: &mut DecodedRegion, data: &[u8]) -> Resu
         }
     }
 
-    let width = region.width;
-    let height = region.height;
-    let mut decoder = BitmapDecoder::new(region);
+    let width = bitmap.width;
+    let height = bitmap.height;
+    let mut decoder = BitmapDecoder::new(bitmap);
 
     let settings = hayro_ccitt::DecodeSettings {
         columns: width,
@@ -201,15 +203,15 @@ pub(crate) fn decode_bitmap_mmr(region: &mut DecodedRegion, data: &[u8]) -> Resu
 
 /// Decode a bitmap using arithmetic coding (6.2.5).
 pub(crate) fn decode_bitmap_arithmetic_coding(
-    region: &mut DecodedRegion,
+    bitmap: &mut Bitmap,
     decoder: &mut ArithmeticDecoder<'_>,
     contexts: &mut [Context],
     template: Template,
     tpgdon: bool,
     adaptive_template_pixels: &[AdaptiveTemplatePixel],
 ) -> Result<()> {
-    let width = region.width;
-    let height = region.height;
+    let width = bitmap.width;
+    let height = bitmap.height;
 
     // "1) Set: LTP = 0" (6.2.5.7)
     let mut ltp = false;
@@ -237,17 +239,17 @@ pub(crate) fn decode_bitmap_arithmetic_coding(
             for x in 0..width {
                 // If y == 0, pixels remain the same.
                 if y > 0 {
-                    let above = region.get_pixel(x, y - 1);
-                    region.set_pixel(x, y, above);
+                    let above = bitmap.get_pixel(x, y - 1);
+                    bitmap.set_pixel(x, y, above);
                 }
             }
         } else {
             // "d) If LTP = 0 then, from left to right, decode each pixel of the
             // current row of GBREG." (6.2.5.7)
             for x in 0..width {
-                let context_bits = gather_context(region, x, y, template, adaptive_template_pixels);
+                let context_bits = gather_context(bitmap, x, y, template, adaptive_template_pixels);
                 let pixel = decoder.decode(&mut contexts[context_bits as usize]);
-                region.set_pixel(x, y, pixel != 0);
+                bitmap.set_pixel(x, y, pixel != 0);
             }
         }
     }
@@ -257,7 +259,7 @@ pub(crate) fn decode_bitmap_arithmetic_coding(
 
 /// Gather context bits for a pixel at (x, y) (6.2.5.3, 6.2.5.4).
 pub(crate) fn gather_context(
-    region: &DecodedRegion,
+    bitmap: &Bitmap,
     x: u32,
     y: u32,
     gb_template: Template,
@@ -288,24 +290,24 @@ pub(crate) fn gather_context(
 
             let mut context = 0_u32;
 
-            context = (context << 1) | get_pixel(region, x + at4.0, y + at4.1);
-            context = (context << 1) | get_pixel(region, x - 1, y - 2);
-            context = (context << 1) | get_pixel(region, x, y - 2);
-            context = (context << 1) | get_pixel(region, x + 1, y - 2);
-            context = (context << 1) | get_pixel(region, x + at3.0, y + at3.1);
+            context = (context << 1) | get_pixel(bitmap, x + at4.0, y + at4.1);
+            context = (context << 1) | get_pixel(bitmap, x - 1, y - 2);
+            context = (context << 1) | get_pixel(bitmap, x, y - 2);
+            context = (context << 1) | get_pixel(bitmap, x + 1, y - 2);
+            context = (context << 1) | get_pixel(bitmap, x + at3.0, y + at3.1);
 
-            context = (context << 1) | get_pixel(region, x + at2.0, y + at2.1);
-            context = (context << 1) | get_pixel(region, x - 2, y - 1);
-            context = (context << 1) | get_pixel(region, x - 1, y - 1);
-            context = (context << 1) | get_pixel(region, x, y - 1);
-            context = (context << 1) | get_pixel(region, x + 1, y - 1);
-            context = (context << 1) | get_pixel(region, x + 2, y - 1);
-            context = (context << 1) | get_pixel(region, x + at1.0, y + at1.1);
+            context = (context << 1) | get_pixel(bitmap, x + at2.0, y + at2.1);
+            context = (context << 1) | get_pixel(bitmap, x - 2, y - 1);
+            context = (context << 1) | get_pixel(bitmap, x - 1, y - 1);
+            context = (context << 1) | get_pixel(bitmap, x, y - 1);
+            context = (context << 1) | get_pixel(bitmap, x + 1, y - 1);
+            context = (context << 1) | get_pixel(bitmap, x + 2, y - 1);
+            context = (context << 1) | get_pixel(bitmap, x + at1.0, y + at1.1);
 
-            context = (context << 1) | get_pixel(region, x - 4, y);
-            context = (context << 1) | get_pixel(region, x - 3, y);
-            context = (context << 1) | get_pixel(region, x - 2, y);
-            context = (context << 1) | get_pixel(region, x - 1, y);
+            context = (context << 1) | get_pixel(bitmap, x - 4, y);
+            context = (context << 1) | get_pixel(bitmap, x - 3, y);
+            context = (context << 1) | get_pixel(bitmap, x - 2, y);
+            context = (context << 1) | get_pixel(bitmap, x - 1, y);
 
             context
         }
@@ -321,21 +323,21 @@ pub(crate) fn gather_context(
 
             let mut context = 0_u32;
 
-            context = (context << 1) | get_pixel(region, x - 1, y - 2);
-            context = (context << 1) | get_pixel(region, x, y - 2);
-            context = (context << 1) | get_pixel(region, x + 1, y - 2);
-            context = (context << 1) | get_pixel(region, x + 2, y - 2);
+            context = (context << 1) | get_pixel(bitmap, x - 1, y - 2);
+            context = (context << 1) | get_pixel(bitmap, x, y - 2);
+            context = (context << 1) | get_pixel(bitmap, x + 1, y - 2);
+            context = (context << 1) | get_pixel(bitmap, x + 2, y - 2);
 
-            context = (context << 1) | get_pixel(region, x - 2, y - 1);
-            context = (context << 1) | get_pixel(region, x - 1, y - 1);
-            context = (context << 1) | get_pixel(region, x, y - 1);
-            context = (context << 1) | get_pixel(region, x + 1, y - 1);
-            context = (context << 1) | get_pixel(region, x + 2, y - 1);
-            context = (context << 1) | get_pixel(region, x + at1.0, y + at1.1);
+            context = (context << 1) | get_pixel(bitmap, x - 2, y - 1);
+            context = (context << 1) | get_pixel(bitmap, x - 1, y - 1);
+            context = (context << 1) | get_pixel(bitmap, x, y - 1);
+            context = (context << 1) | get_pixel(bitmap, x + 1, y - 1);
+            context = (context << 1) | get_pixel(bitmap, x + 2, y - 1);
+            context = (context << 1) | get_pixel(bitmap, x + at1.0, y + at1.1);
 
-            context = (context << 1) | get_pixel(region, x - 3, y);
-            context = (context << 1) | get_pixel(region, x - 2, y);
-            context = (context << 1) | get_pixel(region, x - 1, y);
+            context = (context << 1) | get_pixel(bitmap, x - 3, y);
+            context = (context << 1) | get_pixel(bitmap, x - 2, y);
+            context = (context << 1) | get_pixel(bitmap, x - 1, y);
 
             context
         }
@@ -351,18 +353,18 @@ pub(crate) fn gather_context(
 
             let mut context = 0_u32;
 
-            context = (context << 1) | get_pixel(region, x - 1, y - 2);
-            context = (context << 1) | get_pixel(region, x, y - 2);
-            context = (context << 1) | get_pixel(region, x + 1, y - 2);
+            context = (context << 1) | get_pixel(bitmap, x - 1, y - 2);
+            context = (context << 1) | get_pixel(bitmap, x, y - 2);
+            context = (context << 1) | get_pixel(bitmap, x + 1, y - 2);
 
-            context = (context << 1) | get_pixel(region, x - 2, y - 1);
-            context = (context << 1) | get_pixel(region, x - 1, y - 1);
-            context = (context << 1) | get_pixel(region, x, y - 1);
-            context = (context << 1) | get_pixel(region, x + 1, y - 1);
-            context = (context << 1) | get_pixel(region, x + at1.0, y + at1.1);
+            context = (context << 1) | get_pixel(bitmap, x - 2, y - 1);
+            context = (context << 1) | get_pixel(bitmap, x - 1, y - 1);
+            context = (context << 1) | get_pixel(bitmap, x, y - 1);
+            context = (context << 1) | get_pixel(bitmap, x + 1, y - 1);
+            context = (context << 1) | get_pixel(bitmap, x + at1.0, y + at1.1);
 
-            context = (context << 1) | get_pixel(region, x - 2, y);
-            context = (context << 1) | get_pixel(region, x - 1, y);
+            context = (context << 1) | get_pixel(bitmap, x - 2, y);
+            context = (context << 1) | get_pixel(bitmap, x - 1, y);
 
             context
         }
@@ -378,17 +380,17 @@ pub(crate) fn gather_context(
 
             let mut context = 0_u32;
 
-            context = (context << 1) | get_pixel(region, x - 3, y - 1);
-            context = (context << 1) | get_pixel(region, x - 2, y - 1);
-            context = (context << 1) | get_pixel(region, x - 1, y - 1);
-            context = (context << 1) | get_pixel(region, x, y - 1);
-            context = (context << 1) | get_pixel(region, x + 1, y - 1);
-            context = (context << 1) | get_pixel(region, x + at1.0, y + at1.1);
+            context = (context << 1) | get_pixel(bitmap, x - 3, y - 1);
+            context = (context << 1) | get_pixel(bitmap, x - 2, y - 1);
+            context = (context << 1) | get_pixel(bitmap, x - 1, y - 1);
+            context = (context << 1) | get_pixel(bitmap, x, y - 1);
+            context = (context << 1) | get_pixel(bitmap, x + 1, y - 1);
+            context = (context << 1) | get_pixel(bitmap, x + at1.0, y + at1.1);
 
-            context = (context << 1) | get_pixel(region, x - 4, y);
-            context = (context << 1) | get_pixel(region, x - 3, y);
-            context = (context << 1) | get_pixel(region, x - 2, y);
-            context = (context << 1) | get_pixel(region, x - 1, y);
+            context = (context << 1) | get_pixel(bitmap, x - 4, y);
+            context = (context << 1) | get_pixel(bitmap, x - 3, y);
+            context = (context << 1) | get_pixel(bitmap, x - 2, y);
+            context = (context << 1) | get_pixel(bitmap, x - 1, y);
 
             context
         }
@@ -400,14 +402,14 @@ pub(crate) fn gather_context(
 
 /// Get a pixel value, returning 0 for out-of-bounds coordinates.
 #[inline]
-pub(crate) fn get_pixel(region: &DecodedRegion, x: i32, y: i32) -> u32 {
+pub(crate) fn get_pixel(bitmap: &Bitmap, x: i32, y: i32) -> u32 {
     // "Near the edges of the bitmap, these neighbour references might not lie in
     // the actual bitmap. The rule to satisfy out-of-bounds references shall be:
     // All pixels lying outside the bounds of the actual bitmap have the value 0."
     // (6.2.5.2)
-    if x < 0 || y < 0 || x >= region.width as i32 {
+    if x < 0 || y < 0 || x >= bitmap.width as i32 {
         0
-    } else if region.get_pixel(x as u32, y as u32) {
+    } else if bitmap.get_pixel(x as u32, y as u32) {
         1
     } else {
         0

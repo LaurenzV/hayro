@@ -1,8 +1,8 @@
 //! Pattern dictionary segment parsing and decoding (7.4.4, 6.7).
 
-use super::{AdaptiveTemplatePixel, CombinationOperator, Template, generic};
+use super::{AdaptiveTemplatePixel, Template, generic};
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
-use crate::bitmap::DecodedRegion;
+use crate::bitmap::Bitmap;
 use crate::error::{DecodeError, ParseError, Result};
 use crate::reader::Reader;
 use alloc::vec;
@@ -28,14 +28,7 @@ pub(crate) fn decode(reader: &mut Reader<'_>) -> Result<PatternDictionary> {
 
     let encoded_data = reader.tail().ok_or(ParseError::UnexpectedEof)?;
 
-    let mut collective_bitmap = DecodedRegion {
-        width: collective_width,
-        height: pattern_height,
-        data: vec![false; (collective_width * pattern_height) as usize],
-        x_location: 0,
-        y_location: 0,
-        combination_operator: CombinationOperator::Replace,
-    };
+    let mut collective_bitmap = Bitmap::new(collective_width, pattern_height);
 
     // "2) Decode the collective bitmap using a generic region decoding procedure
     // as described in 6.2." (6.7.5)
@@ -85,7 +78,7 @@ pub(crate) fn decode(reader: &mut Reader<'_>) -> Result<PatternDictionary> {
         // HDPATS[GRAY] = B_P" (6.7.5)"
         let start_x = gray * pattern_width;
         let pattern = {
-            let mut pattern = DecodedRegion::new(pattern_width, pattern_height);
+            let mut pattern = Bitmap::new(pattern_width, pattern_height);
 
             for y in 0..pattern_height {
                 for x in 0..pattern_width {
@@ -110,7 +103,7 @@ pub(crate) fn decode(reader: &mut Reader<'_>) -> Result<PatternDictionary> {
 /// A decoded pattern dictionary.
 #[derive(Debug, Clone)]
 pub(crate) struct PatternDictionary {
-    pub(crate) patterns: Vec<DecodedRegion>,
+    pub(crate) patterns: Vec<Bitmap>,
     pub(crate) pattern_width: u32,
     pub(crate) pattern_height: u32,
 }

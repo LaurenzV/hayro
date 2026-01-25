@@ -7,11 +7,21 @@ pub(crate) mod pattern;
 pub(crate) mod symbol;
 pub(crate) mod text;
 
+use crate::bitmap::Bitmap;
 use crate::decode::RefinementTemplate::{Template0, Template1};
 use crate::error::{ParseError, RegionError, Result, bail, err};
 use crate::reader::Reader;
 use alloc::vec;
 use alloc::vec::Vec;
+
+/// A decoded region bitmap with its combination operator.
+#[derive(Debug, Clone)]
+pub(crate) struct RegionBitmap {
+    /// The decoded bitmap.
+    pub(crate) bitmap: Bitmap,
+    /// How to combine this region with the page bitmap.
+    pub(crate) combination_operator: CombinationOperator,
+}
 
 /// "These operators describe how the segment's bitmap is to be combined with
 /// the page bitmap." (7.4.1.5)

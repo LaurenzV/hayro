@@ -40,7 +40,7 @@ pub use error::{
 };
 
 use crate::file::parse_segments_sequential;
-use bitmap::DecodedRegion;
+use bitmap::Bitmap;
 use decode::generic;
 use decode::generic_refinement;
 use decode::halftone;
@@ -126,16 +126,16 @@ fn decode_with_segments(segments: &[segment::Segment<'_>]) -> Result<Image> {
                 let had_unknown_length = seg.header.data_length.is_none();
                 let region = generic::decode(&mut reader, had_unknown_length)?;
                 ctx.page_bitmap.combine(
-                    &region,
-                    region.x_location as i32,
-                    region.y_location as i32,
+                    &region.bitmap,
+                    region.bitmap.x_location as i32,
+                    region.bitmap.y_location as i32,
                     region.combination_operator,
                 );
             }
             SegmentType::IntermediateGenericRegion => {
                 // Intermediate segments cannot have unknown length.
                 let region = generic::decode(&mut reader, false)?;
-                ctx.store_region(seg.header.segment_number, region);
+                ctx.store_region(seg.header.segment_number, region.bitmap);
             }
             SegmentType::PatternDictionary => {
                 let dictionary = pattern::decode(&mut reader)?;
@@ -145,7 +145,7 @@ fn decode_with_segments(segments: &[segment::Segment<'_>]) -> Result<Image> {
                 // "1) Concatenate all the input symbol dictionaries to form SDINSYMS."
                 // (6.5.5, step 1)
                 // Collect references to avoid cloning; symbols are only cloned if re-exported.
-                let input_symbols: Vec<&DecodedRegion> = seg
+                let input_symbols: Vec<&Bitmap> = seg
                     .header
                     .referred_to_segments
                     .iter()
@@ -172,7 +172,7 @@ fn decode_with_segments(segments: &[segment::Segment<'_>]) -> Result<Image> {
             }
             SegmentType::ImmediateTextRegion | SegmentType::ImmediateLosslessTextRegion => {
                 // Collect symbols from referred symbol dictionaries (SBSYMS).
-                let symbols: Vec<&DecodedRegion> = seg
+                let symbols: Vec<&Bitmap> = seg
                     .header
                     .referred_to_segments
                     .iter()
@@ -198,15 +198,15 @@ fn decode_with_segments(segments: &[segment::Segment<'_>]) -> Result<Image> {
                     &ctx.standard_tables,
                 )?;
                 ctx.page_bitmap.combine(
-                    &region,
-                    region.x_location as i32,
-                    region.y_location as i32,
+                    &region.bitmap,
+                    region.bitmap.x_location as i32,
+                    region.bitmap.y_location as i32,
                     region.combination_operator,
                 );
             }
             SegmentType::IntermediateTextRegion => {
                 // Collect symbols from referred symbol dictionaries (SBSYMS).
-                let symbols: Vec<&DecodedRegion> = seg
+                let symbols: Vec<&Bitmap> = seg
                     .header
                     .referred_to_segments
                     .iter()
@@ -229,7 +229,7 @@ fn decode_with_segments(segments: &[segment::Segment<'_>]) -> Result<Image> {
                     &referred_tables,
                     &ctx.standard_tables,
                 )?;
-                ctx.store_region(seg.header.segment_number, region);
+                ctx.store_region(seg.header.segment_number, region.bitmap);
             }
             SegmentType::ImmediateHalftoneRegion | SegmentType::ImmediateLosslessHalftoneRegion => {
                 let pattern_dict = seg
@@ -241,9 +241,9 @@ fn decode_with_segments(segments: &[segment::Segment<'_>]) -> Result<Image> {
 
                 let region = halftone::decode(&mut reader, pattern_dict)?;
                 ctx.page_bitmap.combine(
-                    &region,
-                    region.x_location as i32,
-                    region.y_location as i32,
+                    &region.bitmap,
+                    region.bitmap.x_location as i32,
+                    region.bitmap.y_location as i32,
                     region.combination_operator,
                 );
             }
@@ -256,7 +256,7 @@ fn decode_with_segments(segments: &[segment::Segment<'_>]) -> Result<Image> {
                     .ok_or(SegmentError::MissingPatternDictionary)?;
 
                 let region = halftone::decode(&mut reader, pattern_dict)?;
-                ctx.store_region(seg.header.segment_number, region);
+                ctx.store_region(seg.header.segment_number, region.bitmap);
             }
             SegmentType::IntermediateGenericRefinementRegion => {
                 // Same logic as immediate refinement, but store result instead of combining.
@@ -268,7 +268,7 @@ fn decode_with_segments(segments: &[segment::Segment<'_>]) -> Result<Image> {
                     .unwrap_or(&ctx.page_bitmap);
 
                 let region = generic_refinement::decode(&mut reader, reference)?;
-                ctx.store_region(seg.header.segment_number, region);
+                ctx.store_region(seg.header.segment_number, region.bitmap);
             }
             SegmentType::ImmediateGenericRefinementRegion
             | SegmentType::ImmediateLosslessGenericRefinementRegion => {
@@ -286,9 +286,9 @@ fn decode_with_segments(segments: &[segment::Segment<'_>]) -> Result<Image> {
 
                 let region = generic_refinement::decode(&mut reader, reference)?;
                 ctx.page_bitmap.combine(
-                    &region,
-                    region.x_location as i32,
-                    region.y_location as i32,
+                    &region.bitmap,
+                    region.bitmap.x_location as i32,
+                    region.bitmap.y_location as i32,
                     region.combination_operator,
                 );
             }
@@ -322,9 +322,9 @@ pub(crate) struct DecodeContext {
     /// The parsed page information.
     pub(crate) _page_info: PageInformation,
     /// The page bitmap that regions are combined into.
-    pub(crate) page_bitmap: DecodedRegion,
+    pub(crate) page_bitmap: Bitmap,
     /// Decoded intermediate regions, stored as (`segment_number`, region) pairs.
-    pub(crate) referred_segments: Vec<(u32, DecodedRegion)>,
+    pub(crate) referred_segments: Vec<(u32, Bitmap)>,
     /// Decoded pattern dictionaries, stored as (`segment_number`, dictionary) pairs.
     pub(crate) pattern_dictionaries: Vec<(u32, PatternDictionary)>,
     /// Decoded symbol dictionaries, stored as (`segment_number`, dictionary) pairs.
@@ -338,12 +338,12 @@ pub(crate) struct DecodeContext {
 
 impl DecodeContext {
     /// Store a decoded region for later reference.
-    fn store_region(&mut self, segment_number: u32, region: DecodedRegion) {
+    fn store_region(&mut self, segment_number: u32, region: Bitmap) {
         self.referred_segments.push((segment_number, region));
     }
 
     /// Look up a referred segment by number.
-    fn get_referred_segment(&self, segment_number: u32) -> Option<&DecodedRegion> {
+    fn get_referred_segment(&self, segment_number: u32) -> Option<&Bitmap> {
         self.referred_segments
             .binary_search_by_key(&segment_number, |(num, _)| *num)
             .ok()
@@ -412,13 +412,13 @@ pub(crate) fn get_ctx(
     // "Bit 2: Page default pixel value. This bit contains the initial value
     // for every pixel in the page, before any region segments are decoded
     // or drawn." (7.4.8.5)
-    let mut page_bitmap = DecodedRegion::new(page_info.width, height);
-    if page_info.flags.default_pixel != 0 {
-        // Fill with true (black) if default pixel is 1.
-        for pixel in &mut page_bitmap.data {
-            *pixel = true;
-        }
-    }
+    let page_bitmap = Bitmap::new_with(
+        page_info.width,
+        height,
+        0,
+        0,
+        page_info.flags.default_pixel != 0,
+    );
 
     Ok(DecodeContext {
         _page_info: page_info,
