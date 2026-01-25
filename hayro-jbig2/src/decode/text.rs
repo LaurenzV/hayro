@@ -75,30 +75,7 @@ pub(crate) fn decode_with(
     symbols: &[&DecodedRegion],
     header: &TextRegionHeader,
 ) -> Result<DecodedRegion> {
-    let mut region = match coding {
-        CodingMode::Huffman {
-            reader,
-            referred_tables,
-            standard_tables,
-        } => decode_text_region_huffman(reader, symbols, header, referred_tables, standard_tables)?,
-        CodingMode::Arithmetic {
-            decoder,
-            contexts,
-            gr_contexts,
-        } => {
-            if header.flags.use_refinement {
-                decode_text_region_refine_with_contexts(
-                    decoder,
-                    symbols,
-                    header,
-                    contexts,
-                    gr_contexts,
-                )?
-            } else {
-                decode_text_region_direct_with_contexts(decoder, symbols, header, contexts)?
-            }
-        }
-    };
+    let mut region = decode_text_region(coding, symbols, header)?;
 
     region.x_location = header.region_info.x_location;
     region.y_location = header.region_info.y_location;
@@ -149,280 +126,413 @@ impl TextRegionContexts {
     }
 }
 
-/// Decode text region without refinement (SBREFINE=0), using provided contexts.
-fn decode_text_region_direct_with_contexts(
-    decoder: &mut ArithmeticDecoder<'_>,
-    symbols: &[&DecodedRegion],
-    header: &TextRegionHeader,
-    contexts: &mut TextRegionContexts,
-) -> Result<DecodedRegion> {
-    decode_text_region_with(
-        decoder,
-        symbols,
-        header,
-        contexts,
-        |_decoder, symbol_id, _symbols, _contexts| {
-            // "If SBREFINE is 0, then set R_I to 0." (6.4.11)
-            // "If R_I is 0 then set the symbol instance bitmap IB_I to SBSYMS[ID_I]."
-            Ok(SymbolBitmap::Reference(symbol_id))
-        },
-    )
+enum DecodeContext<'a, 'b> {
+    Huffman {
+        reader: &'a mut Reader<'b>,
+        tables: TextRegionHuffmanTables<'a>,
+        symbol_codes: &'a HuffmanTable,
+    },
+    Arithmetic {
+        decoder: &'a mut ArithmeticDecoder<'b>,
+        contexts: &'a mut TextRegionContexts,
+        gr_contexts: &'a mut [Context],
+    },
 }
 
-/// Text region decoding with refinement, using provided contexts.
-///
-/// This variant allows sharing contexts across multiple calls, which is
-/// required for symbol dictionary decoding (REFAGGNINST > 1).
-fn decode_text_region_refine_with_contexts(
-    decoder: &mut ArithmeticDecoder<'_>,
-    symbols: &[&DecodedRegion],
-    header: &TextRegionHeader,
-    contexts: &mut TextRegionContexts,
-    gr_contexts: &mut [Context],
-) -> Result<DecodedRegion> {
-    decode_text_region_with(
-        decoder,
-        symbols,
-        header,
-        contexts,
-        |decoder, symbol_id, symbols, contexts| {
-            // Decode R_I (refinement indicator)
-            let refinement_flag = contexts
+impl DecodeContext<'_, '_> {
+    fn read_strip_delta_t(&mut self, strip_size: u32) -> Result<i32> {
+        match self {
+            DecodeContext::Huffman { reader, tables, .. } => {
+                Ok(tables.delta_t.decode_no_oob(reader)? * strip_size as i32)
+            }
+            DecodeContext::Arithmetic {
+                decoder, contexts, ..
+            } => {
+                let value = contexts
+                    .iadt
+                    .decode(decoder)
+                    .ok_or(SymbolError::OutOfRange)?;
+                Ok(value * strip_size as i32)
+            }
+        }
+    }
+
+    fn read_first_s(&mut self) -> Result<i32> {
+        match self {
+            DecodeContext::Huffman { reader, tables, .. } => tables.first_s.decode_no_oob(reader),
+            DecodeContext::Arithmetic {
+                decoder, contexts, ..
+            } => contexts
+                .iafs
+                .decode(decoder)
+                .ok_or(SymbolError::OutOfRange.into()),
+        }
+    }
+
+    fn read_delta_s(&mut self) -> Result<Option<i32>> {
+        match self {
+            DecodeContext::Huffman { reader, tables, .. } => tables.delta_s.decode(reader),
+            DecodeContext::Arithmetic {
+                decoder, contexts, ..
+            } => Ok(contexts.iads.decode(decoder)),
+        }
+    }
+
+    fn read_symbol_t(&mut self, strip_size: u32, log_strip_size: u8) -> Result<i32> {
+        if strip_size == 1 {
+            return Ok(0);
+        }
+
+        match self {
+            DecodeContext::Huffman { reader, .. } => reader
+                .read_bits(log_strip_size)
+                .ok_or(HuffmanError::InvalidCode.into())
+                .map(|v| v as i32),
+            DecodeContext::Arithmetic {
+                decoder, contexts, ..
+            } => contexts
+                .iait
+                .decode(decoder)
+                .ok_or(SymbolError::OutOfRange.into()),
+        }
+    }
+
+    fn read_symbol_id(&mut self) -> Result<usize> {
+        match self {
+            DecodeContext::Huffman {
+                reader,
+                symbol_codes,
+                ..
+            } => symbol_codes.decode_no_oob(reader).map(|v| v as usize),
+            DecodeContext::Arithmetic {
+                decoder, contexts, ..
+            } => Ok(contexts.iaid.decode(decoder) as usize),
+        }
+    }
+
+    fn read_refinement_flag(&mut self) -> Result<u8> {
+        match self {
+            DecodeContext::Huffman { reader, .. } => {
+                reader.read_bit().ok_or(ParseError::UnexpectedEof.into())
+            }
+            DecodeContext::Arithmetic {
+                decoder, contexts, ..
+            } => Ok(contexts
                 .iari
                 .decode(decoder)
-                .ok_or(SymbolError::OutOfRange)?;
+                .ok_or(SymbolError::OutOfRange)? as u8),
+        }
+    }
 
-            if refinement_flag == 0 {
-                Ok(SymbolBitmap::Reference(symbol_id))
-            } else {
-                let reference_bitmap = symbols.get(symbol_id).ok_or(SymbolError::OutOfRange)?;
-                let reference_width = reference_bitmap.width;
-                let reference_height = reference_bitmap.height;
+    fn read_refinement_delta_width(&mut self) -> Result<i32> {
+        match self {
+            DecodeContext::Huffman { reader, tables, .. } => {
+                tables.refinement_width.decode_no_oob(reader)
+            }
+            DecodeContext::Arithmetic {
+                decoder, contexts, ..
+            } => contexts
+                .iardw
+                .decode(decoder)
+                .ok_or(SymbolError::OutOfRange.into()),
+        }
+    }
 
-                let refinement_delta_width = contexts
-                    .iardw
-                    .decode(decoder)
-                    .ok_or(SymbolError::OutOfRange)?;
-                let refinement_delta_height = contexts
-                    .iardh
-                    .decode(decoder)
-                    .ok_or(SymbolError::OutOfRange)?;
-                let refinement_x_offset = contexts
-                    .iardx
-                    .decode(decoder)
-                    .ok_or(SymbolError::OutOfRange)?;
-                let refinement_y_offset = contexts
-                    .iardy
-                    .decode(decoder)
-                    .ok_or(SymbolError::OutOfRange)?;
+    fn read_refinement_delta_height(&mut self) -> Result<i32> {
+        match self {
+            DecodeContext::Huffman { reader, tables, .. } => {
+                tables.refinement_height.decode_no_oob(reader)
+            }
+            DecodeContext::Arithmetic {
+                decoder, contexts, ..
+            } => contexts
+                .iardh
+                .decode(decoder)
+                .ok_or(SymbolError::OutOfRange.into()),
+        }
+    }
 
-                let refined_width = (reference_width as i32 + refinement_delta_width) as u32;
-                let refined_height = (reference_height as i32 + refinement_delta_height) as u32;
-                let reference_x_offset = refinement_delta_width.div_euclid(2) + refinement_x_offset;
-                let reference_y_offset =
-                    refinement_delta_height.div_euclid(2) + refinement_y_offset;
+    fn read_refinement_x_offset(&mut self) -> Result<i32> {
+        match self {
+            DecodeContext::Huffman { reader, tables, .. } => {
+                tables.refinement_x.decode_no_oob(reader)
+            }
+            DecodeContext::Arithmetic {
+                decoder, contexts, ..
+            } => contexts
+                .iardx
+                .decode(decoder)
+                .ok_or(SymbolError::OutOfRange.into()),
+        }
+    }
 
-                let mut refined = DecodedRegion::new(refined_width, refined_height);
+    fn read_refinement_y_offset(&mut self) -> Result<i32> {
+        match self {
+            DecodeContext::Huffman { reader, tables, .. } => {
+                tables.refinement_y.decode_no_oob(reader)
+            }
+            DecodeContext::Arithmetic {
+                decoder, contexts, ..
+            } => contexts
+                .iardy
+                .decode(decoder)
+                .ok_or(SymbolError::OutOfRange.into()),
+        }
+    }
+
+    fn decode_refinement_bitmap(
+        &mut self,
+        refined: &mut DecodedRegion,
+        reference_bitmap: &DecodedRegion,
+        reference_x_offset: i32,
+        reference_y_offset: i32,
+        refinement_template: RefinementTemplate,
+        refinement_at_pixels: &[AdaptiveTemplatePixel],
+    ) -> Result<()> {
+        match self {
+            DecodeContext::Huffman { reader, tables, .. } => {
+                let refinement_data_size = tables.refinement_size.decode_no_oob(reader)? as u32;
+                reader.align();
+
+                let refinement_data = reader
+                    .read_bytes(refinement_data_size as usize)
+                    .ok_or(ParseError::UnexpectedEof)?;
+
+                let mut temp_decoder = ArithmeticDecoder::new(refinement_data);
+                let num_context_bits = refinement_template.context_bits();
+                let mut temp_contexts = vec![Context::default(); 1 << num_context_bits];
+
                 decode_bitmap(
-                    decoder,
-                    gr_contexts,
-                    &mut refined,
+                    &mut temp_decoder,
+                    &mut temp_contexts,
+                    refined,
                     reference_bitmap,
                     reference_x_offset,
                     reference_y_offset,
-                    header.flags.refinement_template,
-                    &header.refinement_at_pixels,
+                    refinement_template,
+                    refinement_at_pixels,
                     false,
-                )?;
-                Ok(SymbolBitmap::Owned(refined))
+                )
             }
-        },
-    )
+            DecodeContext::Arithmetic {
+                decoder,
+                gr_contexts,
+                ..
+            } => decode_bitmap(
+                decoder,
+                gr_contexts,
+                refined,
+                reference_bitmap,
+                reference_x_offset,
+                reference_y_offset,
+                refinement_template,
+                refinement_at_pixels,
+                false,
+            ),
+        }
+    }
 }
 
-/// Result of determining a symbol instance bitmap.
-pub(crate) enum SymbolBitmap {
-    /// Use the symbol at this index directly (`R_I` = 0).
-    Reference(usize),
-    /// Use this refined bitmap (`R_I` = 1).
-    Owned(DecodedRegion),
-}
-
-/// Core text region decoding loop (6.4.5).
-///
-/// Takes a closure that determines each symbol instance bitmap.
-fn decode_text_region_with<F>(
-    decoder: &mut ArithmeticDecoder<'_>,
+fn decode_text_region(
+    coding: CodingMode<'_, '_>,
     symbols: &[&DecodedRegion],
     header: &TextRegionHeader,
-    contexts: &mut TextRegionContexts,
-    mut get_symbol_bitmap: F,
-) -> Result<DecodedRegion>
-where
-    F: FnMut(
-        &mut ArithmeticDecoder<'_>,
-        usize,
-        &[&DecodedRegion],
-        &mut TextRegionContexts,
-    ) -> Result<SymbolBitmap>,
-{
-    let width = header.region_info.width;
-    let height = header.region_info.height;
-    let num_instances = header.num_instances;
+) -> Result<DecodedRegion> {
     let strip_size = header.strip_size();
-    let default_pixel = header.flags.default_pixel;
-    let transposed = header.flags.transposed;
-    let reference_corner = header.flags.reference_corner;
-    let delta_s_offset = header.flags.delta_s_offset as i32;
-    let combination_operator = header.flags.combination_operator;
+
+    let mut ctx = match coding {
+        CodingMode::Huffman {
+            reader,
+            referred_tables,
+            standard_tables,
+        } => {
+            let huffman_flags = header
+                .huffman_flags
+                .as_ref()
+                .ok_or(HuffmanError::InvalidSelection)?;
+            let tables = select_huffman_tables(huffman_flags, referred_tables, standard_tables)?;
+            let symbol_codes = header
+                .symbol_id_table
+                .as_ref()
+                .ok_or(HuffmanError::MissingTables)?;
+            DecodeContext::Huffman {
+                reader,
+                tables,
+                symbol_codes,
+            }
+        }
+        CodingMode::Arithmetic {
+            decoder,
+            contexts,
+            gr_contexts,
+        } => DecodeContext::Arithmetic {
+            decoder,
+            contexts,
+            gr_contexts,
+        },
+    };
 
     // "1) Fill a bitmap SBREG, of the size given by SBW and SBH, with the
     // SBDEFPIXEL value." (6.4.5)
-    let mut region = DecodedRegion::new(width, height);
-
-    if default_pixel {
+    let mut region = DecodedRegion::new(header.region_info.width, header.region_info.height);
+    if header.flags.default_pixel {
         for pixel in &mut region.data {
             *pixel = true;
         }
     }
 
-    // "2) Decode the initial STRIPT value as described in 6.4.6. Negate the
-    // decoded value and assign this negated value to the variable STRIPT.
-    // Assign the value 0 to FIRSTS. Assign the value 0 to NINSTANCES." (6.4.5)
-    let initial_strip_t = decode_strip_delta_t(decoder, &mut contexts.iadt, strip_size)?;
+    // "2) Decode the initial STRIPT value as described in 6.4.6." (6.4.5)
+    let initial_strip_t = ctx.read_strip_delta_t(strip_size)?;
     let mut strip_t: i32 = -initial_strip_t;
     let mut first_s: i32 = 0;
     let mut instance_count: u32 = 0;
 
     // "4) Decode each strip as follows:" (6.4.5)
-    while instance_count < num_instances {
-        // "a) If NINSTANCES is equal to SBNUMINSTANCES then there are no more
-        // strips to decode, and the process of decoding the text region is
-        // complete; proceed to step 5)." (6.4.5)
-        // (checked by while condition)
-
-        // "b) Decode the strip's delta T value as described in 6.4.6. Let DT be
-        // the decoded value. Set: STRIPT = STRIPT + DT" (6.4.5)
-        let delta_t = decode_strip_delta_t(decoder, &mut contexts.iadt, strip_size)?;
+    while instance_count < header.num_instances {
+        // "b) Decode the strip's delta T value as described in 6.4.6."
+        let delta_t = ctx.read_strip_delta_t(strip_size)?;
         strip_t += delta_t;
 
-        // "c) Decode each symbol instance in the strip as follows:" (6.4.5)
+        // "c) Decode each symbol instance in the strip as follows:"
         let mut first_symbol_in_strip = true;
         let mut current_s: i32 = 0;
 
         loop {
-            // "i) If the current symbol instance is the first symbol instance in
-            // the strip, then decode the first symbol instance's S coordinate as
-            // described in 6.4.7. Let DFS be the decoded value. Set:
-            //     FIRSTS = FIRSTS + DFS
-            //     CURS = FIRSTS" (6.4.5)
+            // "i) First symbol S coordinate / ii) Subsequent symbol S coordinate"
             if first_symbol_in_strip {
-                let delta_first_s = contexts
-                    .iafs
-                    .decode(decoder)
-                    .ok_or(SymbolError::OutOfRange)?;
+                let delta_first_s = ctx.read_first_s()?;
                 first_s += delta_first_s;
                 current_s = first_s;
                 first_symbol_in_strip = false;
             } else {
-                // "ii) Otherwise, if the current symbol instance is not the first
-                // symbol instance in the strip, decode the symbol instance's S
-                // coordinate as described in 6.4.8. If the result of this decoding
-                // is OOB then the last symbol instance of the strip has been decoded;
-                // proceed to step 3 d). Otherwise, let IDS be the decoded value. Set:
-                //     CURS = CURS + IDS + SBDSOFFSET" (6.4.5)
-                match contexts.iads.decode(decoder) {
+                match ctx.read_delta_s()? {
                     Some(delta_s) => {
-                        current_s = current_s + delta_s + delta_s_offset;
+                        current_s = current_s + delta_s + header.flags.delta_s_offset as i32;
                     }
                     None => {
-                        // OOB - end of strip
+                        // OOB - end of strip.
                         break;
                     }
                 }
             }
 
-            // "iii) Decode the symbol instance's T coordinate as described in 6.4.9.
-            // Let CURT be the decoded value. Set: T_I = STRIPT + CURT" (6.4.5)
-            let current_t = decode_symbol_t_coordinate(decoder, &mut contexts.iait, strip_size)?;
+            // "iii) Decode the symbol instance's T coordinate."
+            let current_t = ctx.read_symbol_t(strip_size, header.flags.log_strip_size)?;
             let symbol_t = strip_t + current_t;
 
-            // "iv) Decode the symbol instance's symbol ID as described in 6.4.10.
-            // Let ID_I be the decoded value." (6.4.5)
-            let symbol_id = contexts.iaid.decode(decoder) as usize;
+            // "iv) Decode the symbol instance's symbol ID."
+            let symbol_id = ctx.read_symbol_id()?;
 
-            // "v) Determine the symbol instance's bitmap IB_I as described in 6.4.11.
-            // The width and height of this bitmap shall be denoted as W_I and H_I
-            // respectively." (6.4.5)
-            let symbol_bitmap = get_symbol_bitmap(decoder, symbol_id, symbols, contexts)?;
-            let (symbol_bitmap, symbol_width, symbol_height): (&DecodedRegion, i32, i32) =
-                match &symbol_bitmap {
-                    SymbolBitmap::Reference(symbol_idx) => {
-                        let symbol = symbols.get(*symbol_idx).ok_or(SymbolError::OutOfRange)?;
-                        (symbol, symbol.width as i32, symbol.height as i32)
-                    }
-                    SymbolBitmap::Owned(region) => {
-                        (region, region.width as i32, region.height as i32)
+            // "v) Determine the symbol instance's bitmap IB_I as described in 6.4.11."
+            let (symbol_bitmap, symbol_width, symbol_height): (SymbolBitmap, i32, i32) =
+                if !header.flags.use_refinement {
+                    // "If SBREFINE is 0, then set R_I to 0." (6.4.11)
+                    let symbol = symbols.get(symbol_id).ok_or(SymbolError::OutOfRange)?;
+                    (
+                        SymbolBitmap::Reference(symbol_id),
+                        symbol.width as i32,
+                        symbol.height as i32,
+                    )
+                } else {
+                    let refinement_flag = ctx.read_refinement_flag()?;
+
+                    if refinement_flag == 0 {
+                        let symbol = symbols.get(symbol_id).ok_or(SymbolError::OutOfRange)?;
+                        (
+                            SymbolBitmap::Reference(symbol_id),
+                            symbol.width as i32,
+                            symbol.height as i32,
+                        )
+                    } else {
+                        // Refinement decoding (6.4.11).
+                        let reference_bitmap =
+                            symbols.get(symbol_id).ok_or(SymbolError::OutOfRange)?;
+                        let reference_width = reference_bitmap.width;
+                        let reference_height = reference_bitmap.height;
+
+                        let rdw = ctx.read_refinement_delta_width()?;
+                        let rdh = ctx.read_refinement_delta_height()?;
+                        let rdx = ctx.read_refinement_x_offset()?;
+                        let rdy = ctx.read_refinement_y_offset()?;
+
+                        let refined_width = (reference_width as i32 + rdw) as u32;
+                        let refined_height = (reference_height as i32 + rdh) as u32;
+                        let reference_x_offset = rdw.div_euclid(2) + rdx;
+                        let reference_y_offset = rdh.div_euclid(2) + rdy;
+
+                        let mut refined = DecodedRegion::new(refined_width, refined_height);
+
+                        ctx.decode_refinement_bitmap(
+                            &mut refined,
+                            reference_bitmap,
+                            reference_x_offset,
+                            reference_y_offset,
+                            header.flags.refinement_template,
+                            &header.refinement_at_pixels,
+                        )?;
+
+                        (
+                            SymbolBitmap::Owned(refined),
+                            refined_width as i32,
+                            refined_height as i32,
+                        )
                     }
                 };
 
+            let symbol_bitmap_ref: &DecodedRegion = match &symbol_bitmap {
+                SymbolBitmap::Reference(idx) => symbols.get(*idx).ok_or(SymbolError::OutOfRange)?,
+                SymbolBitmap::Owned(region) => region,
+            };
+
             // "vi) Update CURS as follows:" (6.4.5)
-            // - If TRANSPOSED is 0, and REFCORNER is TOPRIGHT or BOTTOMRIGHT, set:
-            //     CURS = CURS + W_I - 1
-            // - If TRANSPOSED is 1, and REFCORNER is BOTTOMLEFT or BOTTOMRIGHT, set:
-            //     CURS = CURS + H_I - 1
-            // - Otherwise, do not change CURS in this step.
-            if !transposed
-                && (reference_corner == ReferenceCorner::TopRight
-                    || reference_corner == ReferenceCorner::BottomRight)
+            if !header.flags.transposed
+                && (header.flags.reference_corner == ReferenceCorner::TopRight
+                    || header.flags.reference_corner == ReferenceCorner::BottomRight)
             {
                 current_s += symbol_width - 1;
-            } else if transposed
-                && (reference_corner == ReferenceCorner::BottomLeft
-                    || reference_corner == ReferenceCorner::BottomRight)
+            } else if header.flags.transposed
+                && (header.flags.reference_corner == ReferenceCorner::BottomLeft
+                    || header.flags.reference_corner == ReferenceCorner::BottomRight)
             {
                 current_s += symbol_height - 1;
             }
 
-            // "vii) Set: S_I = CURS" (6.4.5)
+            // "vii) Set: S_I = CURS"
             let symbol_s = current_s;
 
-            // "viii) Determine the location of the symbol instance bitmap with
-            // respect to SBREG as follows:" (6.4.5)
+            // "viii) Determine the location of the symbol instance bitmap."
             let (x, y) = compute_symbol_location(
                 symbol_s,
                 symbol_t,
                 symbol_width,
                 symbol_height,
-                transposed,
-                reference_corner,
+                header.flags.transposed,
+                header.flags.reference_corner,
             );
 
-            // "x) Draw IB_I into SBREG. Combine each pixel of IB_I with the current
-            // value of the corresponding pixel in SBREG, using the combination
-            // operator specified by SBCOMBOP. Write the results of each combination
-            // into that pixel in SBREG." (6.4.5)
-            draw_symbol(&mut region, symbol_bitmap, x, y, combination_operator);
+            // "x) Draw IB_I into SBREG."
+            draw_symbol(
+                &mut region,
+                symbol_bitmap_ref,
+                x,
+                y,
+                header.flags.combination_operator,
+            );
 
             // "xi) Update CURS as follows:" (6.4.5)
-            // - If TRANSPOSED is 0, and REFCORNER is TOPLEFT or BOTTOMLEFT, set:
-            //     CURS = CURS + W_I - 1
-            // - If TRANSPOSED is 1, and REFCORNER is TOPLEFT or TOPRIGHT, set:
-            //     CURS = CURS + H_I - 1
-            // - Otherwise, do not change CURS in this step.
-            if !transposed
-                && (reference_corner == ReferenceCorner::TopLeft
-                    || reference_corner == ReferenceCorner::BottomLeft)
+            if !header.flags.transposed
+                && (header.flags.reference_corner == ReferenceCorner::TopLeft
+                    || header.flags.reference_corner == ReferenceCorner::BottomLeft)
             {
                 current_s += symbol_width - 1;
-            } else if transposed
-                && (reference_corner == ReferenceCorner::TopLeft
-                    || reference_corner == ReferenceCorner::TopRight)
+            } else if header.flags.transposed
+                && (header.flags.reference_corner == ReferenceCorner::TopLeft
+                    || header.flags.reference_corner == ReferenceCorner::TopRight)
             {
                 current_s += symbol_height - 1;
             }
 
-            // "xii) Set: NINSTANCES = NINSTANCES + 1" (6.4.5)
+            // "xii) Set: NINSTANCES = NINSTANCES + 1"
             instance_count += 1;
         }
     }
@@ -432,37 +542,12 @@ where
     Ok(region)
 }
 
-/// Decode strip delta T (6.4.6).
-///
-/// "If SBHUFF is 0, decode a value using the IADT integer arithmetic decoding
-/// procedure (see Annex A) and multiply the resulting value by SBSTRIPS." (6.4.6)
-fn decode_strip_delta_t(
-    decoder: &mut ArithmeticDecoder<'_>,
-    iadt: &mut IntegerDecoder,
-    strip_size: u32,
-) -> Result<i32> {
-    let value = iadt.decode(decoder).ok_or(SymbolError::OutOfRange)?;
-    Ok(value * strip_size as i32)
-}
-
-/// Decode symbol instance T coordinate (6.4.9).
-///
-/// "If SBSTRIPS = 1, then the value decoded is always zero." (6.4.9)
-/// "If SBHUFF is 0, decode a value using the IAIT integer arithmetic decoding
-/// procedure (see Annex A)." (6.4.9)
-fn decode_symbol_t_coordinate(
-    decoder: &mut ArithmeticDecoder<'_>,
-    iait: &mut IntegerDecoder,
-    strip_size: u32,
-) -> Result<i32> {
-    if strip_size == 1 {
-        // "NOTE – If SBSTRIPS = 1, then no bits are consumed, and the IAIT
-        // integer arithmetic decoding procedure is never invoked." (6.4.9)
-        Ok(0)
-    } else {
-        let value = iait.decode(decoder).ok_or(SymbolError::OutOfRange)?;
-        Ok(value)
-    }
+/// Result of determining a symbol instance bitmap.
+enum SymbolBitmap {
+    /// Use the symbol at this index directly (`R_I` = 0).
+    Reference(usize),
+    /// Use this refined bitmap (`R_I` = 1).
+    Owned(DecodedRegion),
 }
 
 /// Compute the location of a symbol instance bitmap (6.4.5 step viii).
@@ -640,265 +725,6 @@ fn select_huffman_tables<'a>(
         refinement_x,
         refinement_size,
     })
-}
-
-/// Decode a text region using Huffman coding (SBHUFF=1).
-fn decode_text_region_huffman(
-    reader: &mut Reader<'_>,
-    symbols: &[&DecodedRegion],
-    header: &TextRegionHeader,
-    referred_tables: &[HuffmanTable],
-    standard_tables: &StandardHuffmanTables,
-) -> Result<DecodedRegion> {
-    let huffman_flags = header
-        .huffman_flags
-        .as_ref()
-        .ok_or(HuffmanError::InvalidSelection)?;
-
-    let custom_count = [
-        huffman_flags.first_s_table == 3,
-        huffman_flags.delta_s_table == 3,
-        huffman_flags.delta_t_table == 3,
-        huffman_flags.refinement_width_table == 3,
-        huffman_flags.refinement_height_table == 3,
-        huffman_flags.refinement_y_table == 3,
-        huffman_flags.refinement_x_table == 3,
-        huffman_flags.refinement_size_table == 1,
-    ]
-    .into_iter()
-    .filter(|x| *x)
-    .count();
-
-    if referred_tables.len() < custom_count {
-        bail!(HuffmanError::MissingTables);
-    }
-
-    let tables = select_huffman_tables(huffman_flags, referred_tables, standard_tables)?;
-
-    let symbol_codes = header
-        .symbol_id_table
-        .as_ref()
-        .ok_or(HuffmanError::MissingTables)?;
-
-    let width = header.region_info.width;
-    let height = header.region_info.height;
-    let num_instances = header.num_instances;
-    let strip_size = header.strip_size();
-    let default_pixel = header.flags.default_pixel;
-    let transposed = header.flags.transposed;
-    let reference_corner = header.flags.reference_corner;
-    let delta_s_offset = header.flags.delta_s_offset as i32;
-    let combination_operator = header.flags.combination_operator;
-    let use_refinement = header.flags.use_refinement;
-    let log_strip_size = header.flags.log_strip_size;
-
-    // "1) Fill a bitmap SBREG, of the size given by SBW and SBH, with the
-    // SBDEFPIXEL value." (6.4.5)
-    let mut region = DecodedRegion::new(width, height);
-    if default_pixel {
-        for pixel in &mut region.data {
-            *pixel = true;
-        }
-    }
-
-    // "2) Decode the initial STRIPT value as described in 6.4.6." (6.4.5)
-    // "If SBHUFF is 1, decode a value using the Huffman table specified by
-    // SBHUFFDT and multiply the resulting value by SBSTRIPS." (6.4.6)
-    let initial_strip_t = tables.delta_t.decode_no_oob(reader)? * strip_size as i32;
-    let mut strip_t: i32 = -initial_strip_t;
-    let mut first_s: i32 = 0;
-    let mut instance_count: u32 = 0;
-
-    // "4) Decode each strip as follows:" (6.4.5)
-    while instance_count < num_instances {
-        // "b) Decode the strip's delta T value as described in 6.4.6."
-        let dt = tables.delta_t.decode_no_oob(reader)? * strip_size as i32;
-        strip_t += dt;
-
-        // "c) Decode each symbol instance in the strip"
-        let mut first_symbol_in_strip = true;
-        let mut current_s: i32 = 0;
-
-        loop {
-            if first_symbol_in_strip {
-                // "i) First symbol instance's S coordinate (6.4.7)
-                // If SBHUFF is 1, decode a value using the Huffman table
-                // specified by SBHUFFFS." (6.4.7)
-                let delta_first_s = tables.first_s.decode_no_oob(reader)?;
-                first_s += delta_first_s;
-                current_s = first_s;
-                first_symbol_in_strip = false;
-            } else {
-                // "ii) Subsequent symbol instance S coordinate (6.4.8)
-                // If SBHUFF is 1, decode a value using the Huffman table
-                // specified by SBHUFFDS." (6.4.8)
-                let Some(delta_s) = tables.delta_s.decode(reader)? else {
-                    // End of strip (OOB).
-                    break;
-                };
-
-                current_s = current_s + delta_s + delta_s_offset;
-            }
-
-            // "iii) Symbol instance T coordinate (6.4.9)
-            // If SBSTRIPS = 1, then the value decoded is always zero.
-            // If SBHUFF is 1, decode a value by reading ceil(log2(SBSTRIPS))
-            // bits directly from the bitstream." (6.4.9)
-            let current_t = if strip_size == 1 {
-                0
-            } else {
-                reader
-                    .read_bits(log_strip_size)
-                    .ok_or(HuffmanError::InvalidCode)? as i32
-            };
-            let symbol_t = strip_t + current_t;
-
-            // "iv) Symbol instance symbol ID (6.4.10)
-            // If SBHUFF is 1, decode a value by reading one bit at a time until
-            // the resulting bit string is equal to one of the entries in
-            // SBSYMCODES." (6.4.10)
-            let symbol_id = symbol_codes.decode_no_oob(reader)? as usize;
-
-            // "v) Determine the symbol instance's bitmap IB_I as described in
-            // 6.4.11." (6.4.5)
-            let (symbol_bitmap, symbol_width, symbol_height): (
-                alloc::borrow::Cow<'_, DecodedRegion>,
-                i32,
-                i32,
-            ) = if !use_refinement {
-                // "If SBREFINE is 0, then set R_I to 0." (6.4.11)
-                let symbol = symbols.get(symbol_id).ok_or(SymbolError::OutOfRange)?;
-                (
-                    alloc::borrow::Cow::Borrowed(*symbol),
-                    symbol.width as i32,
-                    symbol.height as i32,
-                )
-            } else {
-                // "If SBREFINE is 1, then decode R_I as follows:
-                // If SBHUFF is 1, then read one bit and set R_I to the value
-                // of that bit." (6.4.11)
-                let refinement_flag = reader.read_bit().ok_or(ParseError::UnexpectedEof)?;
-
-                if refinement_flag == 0 {
-                    let symbol = symbols.get(symbol_id).ok_or(SymbolError::OutOfRange)?;
-                    (
-                        alloc::borrow::Cow::Borrowed(*symbol),
-                        symbol.width as i32,
-                        symbol.height as i32,
-                    )
-                } else {
-                    // Refinement decoding (6.4.11)
-                    let reference_bitmap = symbols.get(symbol_id).ok_or(SymbolError::OutOfRange)?;
-                    let reference_width = reference_bitmap.width;
-                    let reference_height = reference_bitmap.height;
-
-                    // "1) Decode the symbol instance refinement delta width"
-                    let refinement_delta_width = tables.refinement_width.decode_no_oob(reader)?;
-
-                    // "2) Decode the symbol instance refinement delta height"
-                    let refinement_delta_height = tables.refinement_height.decode_no_oob(reader)?;
-
-                    // "3) Decode the symbol instance refinement X offset"
-                    let refinement_x_offset = tables.refinement_x.decode_no_oob(reader)?;
-
-                    // "4) Decode the symbol instance refinement Y offset"
-                    let refinement_y_offset = tables.refinement_y.decode_no_oob(reader)?;
-
-                    // "5) If SBHUFF is 1, then:
-                    // a) Decode the symbol instance refinement bitmap data size
-                    // b) Skip over any bits remaining in the last byte read"
-                    let refinement_data_size = tables.refinement_size.decode_no_oob(reader)? as u32;
-                    reader.align();
-
-                    // "6) Decode the refinement bitmap"
-                    let refined_width = (reference_width as i32 + refinement_delta_width) as u32;
-                    let refined_height = (reference_height as i32 + refinement_delta_height) as u32;
-                    let reference_x_offset =
-                        refinement_delta_width.div_euclid(2) + refinement_x_offset;
-                    let reference_y_offset =
-                        refinement_delta_height.div_euclid(2) + refinement_y_offset;
-
-                    let mut refined = DecodedRegion::new(refined_width, refined_height);
-
-                    // Read the refinement data (refinement_data_size bytes)
-                    let refinement_data = reader
-                        .read_bytes(refinement_data_size as usize)
-                        .ok_or(ParseError::UnexpectedEof)?;
-
-                    // Decode refinement bitmap from raw bytes.
-                    // TPGRON is always 0 for text region refinements (Table 12).
-                    let mut decoder = ArithmeticDecoder::new(refinement_data);
-                    let num_context_bits = header.flags.refinement_template.context_bits();
-                    let mut contexts = vec![Context::default(); 1 << num_context_bits];
-
-                    decode_bitmap(
-                        &mut decoder,
-                        &mut contexts,
-                        &mut refined,
-                        reference_bitmap,
-                        reference_x_offset,
-                        reference_y_offset,
-                        header.flags.refinement_template,
-                        &header.refinement_at_pixels,
-                        false, // TPGRON = 0
-                    )?;
-
-                    (
-                        alloc::borrow::Cow::Owned(refined),
-                        refined_width as i32,
-                        refined_height as i32,
-                    )
-                }
-            };
-
-            // "vi) Update CURS as follows:"
-            if !transposed
-                && (reference_corner == ReferenceCorner::TopRight
-                    || reference_corner == ReferenceCorner::BottomRight)
-            {
-                current_s += symbol_width - 1;
-            } else if transposed
-                && (reference_corner == ReferenceCorner::BottomLeft
-                    || reference_corner == ReferenceCorner::BottomRight)
-            {
-                current_s += symbol_height - 1;
-            }
-
-            // "vii) Set: S_I = CURS"
-            let symbol_s = current_s;
-
-            // "viii) Determine the location"
-            let (x, y) = compute_symbol_location(
-                symbol_s,
-                symbol_t,
-                symbol_width,
-                symbol_height,
-                transposed,
-                reference_corner,
-            );
-
-            // "x) Draw IB_I into SBREG"
-            draw_symbol(&mut region, &symbol_bitmap, x, y, combination_operator);
-
-            // "xi) Update CURS"
-            if !transposed
-                && (reference_corner == ReferenceCorner::TopLeft
-                    || reference_corner == ReferenceCorner::BottomLeft)
-            {
-                current_s += symbol_width - 1;
-            } else if transposed
-                && (reference_corner == ReferenceCorner::TopLeft
-                    || reference_corner == ReferenceCorner::TopRight)
-            {
-                current_s += symbol_height - 1;
-            }
-
-            // "xii) Set: NINSTANCES = NINSTANCES + 1"
-            instance_count += 1;
-        }
-    }
-
-    Ok(region)
 }
 
 /// Decode the symbol ID Huffman table (7.4.3.1.7).
