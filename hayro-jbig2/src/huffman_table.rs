@@ -42,6 +42,12 @@ impl HuffmanTable {
         HuffmanNode::decode_from(nodes, 0, reader)
     }
 
+    /// Decode a value using the huffman table, erroring out in case an OOB
+    /// was encountered.
+    pub(crate) fn decode_no_oob(&self, reader: &mut Reader<'_>) -> Result<i32> {
+        Ok(self.decode(reader)?.ok_or(HuffmanError::UnexpectedOob)?)
+    }
+
     /// Build a Huffman table from table line definitions (B.3 "Assigning
     /// the prefix codes").
     pub(crate) fn build(lines: &[TableLine]) -> Self {

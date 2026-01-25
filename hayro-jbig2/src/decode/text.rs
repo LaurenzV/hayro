@@ -703,7 +703,7 @@ fn decode_text_region_huffman(
     // "2) Decode the initial STRIPT value as described in 6.4.6." (6.4.5)
     // "If SBHUFF is 1, decode a value using the Huffman table specified by
     // SBHUFFDT and multiply the resulting value by SBSTRIPS." (6.4.6)
-    let initial_strip_t = decode_huffman_value(tables.delta_t, reader)? * strip_size as i32;
+    let initial_strip_t = tables.delta_t.decode_no_oob(reader)? * strip_size as i32;
     let mut strip_t: i32 = -initial_strip_t;
     let mut first_s: i32 = 0;
     let mut instance_count: u32 = 0;
@@ -711,7 +711,7 @@ fn decode_text_region_huffman(
     // "4) Decode each strip as follows:" (6.4.5)
     while instance_count < num_instances {
         // "b) Decode the strip's delta T value as described in 6.4.6."
-        let dt = decode_huffman_value(tables.delta_t, reader)? * strip_size as i32;
+        let dt = tables.delta_t.decode_no_oob(reader)? * strip_size as i32;
         strip_t += dt;
 
         // "c) Decode each symbol instance in the strip"
@@ -723,7 +723,7 @@ fn decode_text_region_huffman(
                 // "i) First symbol instance's S coordinate (6.4.7)
                 // If SBHUFF is 1, decode a value using the Huffman table
                 // specified by SBHUFFFS." (6.4.7)
-                let delta_first_s = decode_huffman_value(tables.first_s, reader)?;
+                let delta_first_s = tables.first_s.decode_no_oob(reader)?;
                 first_s += delta_first_s;
                 current_s = first_s;
                 first_symbol_in_strip = false;
@@ -756,7 +756,7 @@ fn decode_text_region_huffman(
             // If SBHUFF is 1, decode a value by reading one bit at a time until
             // the resulting bit string is equal to one of the entries in
             // SBSYMCODES." (6.4.10)
-            let symbol_id = decode_huffman_value(symbol_codes, reader)? as usize;
+            let symbol_id = symbol_codes.decode_no_oob(reader)? as usize;
 
             // "v) Determine the symbol instance's bitmap IB_I as described in
             // 6.4.11." (6.4.5)
@@ -792,24 +792,21 @@ fn decode_text_region_huffman(
                     let reference_height = reference_bitmap.height;
 
                     // "1) Decode the symbol instance refinement delta width"
-                    let refinement_delta_width =
-                        decode_huffman_value(tables.refinement_width, reader)?;
+                    let refinement_delta_width = tables.refinement_width.decode_no_oob(reader)?;
 
                     // "2) Decode the symbol instance refinement delta height"
-                    let refinement_delta_height =
-                        decode_huffman_value(tables.refinement_height, reader)?;
+                    let refinement_delta_height = tables.refinement_height.decode_no_oob(reader)?;
 
                     // "3) Decode the symbol instance refinement X offset"
-                    let refinement_x_offset = decode_huffman_value(tables.refinement_x, reader)?;
+                    let refinement_x_offset = tables.refinement_x.decode_no_oob(reader)?;
 
                     // "4) Decode the symbol instance refinement Y offset"
-                    let refinement_y_offset = decode_huffman_value(tables.refinement_y, reader)?;
+                    let refinement_y_offset = tables.refinement_y.decode_no_oob(reader)?;
 
                     // "5) If SBHUFF is 1, then:
                     // a) Decode the symbol instance refinement bitmap data size
                     // b) Skip over any bits remaining in the last byte read"
-                    let refinement_data_size =
-                        decode_huffman_value(tables.refinement_size, reader)? as u32;
+                    let refinement_data_size = tables.refinement_size.decode_no_oob(reader)? as u32;
                     reader.align();
 
                     // "6) Decode the refinement bitmap"
@@ -918,7 +915,7 @@ fn decode_symbol_id_huffman_table(
     let mut symbol_code_lengths = Vec::with_capacity(num_symbols as usize);
 
     while symbol_code_lengths.len() < num_symbols as usize {
-        let runcode = decode_huffman_value(&runcode_table, reader)? as u32;
+        let runcode = runcode_table.decode_no_oob(reader)? as u32;
 
         // "4) Interpret the RUNCODE code and the additional bits (if any)
         // according to Table 29. This gives the symbol ID code lengths for
@@ -998,11 +995,6 @@ struct TextRegionHuffmanTables<'a> {
     refinement_y: &'a HuffmanTable,
     refinement_x: &'a HuffmanTable,
     refinement_size: &'a HuffmanTable,
-}
-
-/// Decode a value from a Huffman table, requiring a value (not OOB).
-fn decode_huffman_value(table: &HuffmanTable, reader: &mut Reader<'_>) -> Result<i32> {
-    Ok(table.decode(reader)?.ok_or(HuffmanError::InvalidCode)?)
 }
 
 /// Reference corner for symbol placement.
