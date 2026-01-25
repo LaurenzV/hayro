@@ -604,6 +604,13 @@ fn issue388() {
     let file = include_bytes!("../pdfs/load/issue388.pdf");
     load_pdf(file);
 }
+
+#[test]
+fn issue202() {
+    let file = include_bytes!("../pdfs/load/issue202.pdf");
+    load_pdf(file);
+}
+
 #[test]
 fn metadata_in_object_stream() {
     // Normally, in an encrypted PDF file strings need to be encrypted when they are not
