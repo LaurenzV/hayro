@@ -56,6 +56,10 @@ fn load_ccitt_list() -> std::io::Result<HashSet<String>> {
     load_list("ccitt_ignore_list")
 }
 
+fn load_jbig2_list() -> std::io::Result<HashSet<String>> {
+    load_list("jbig2_ignore_list")
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
 
@@ -65,7 +69,7 @@ fn main() {
     }
 
     let folder = &args[1];
-    check_ccitt_images(folder);
+    check_jbig2_images(folder);
 }
 
 fn load_pdf_paths(folder: &str, mut custom_condition: impl FnMut(&str) -> bool) -> Vec<PathBuf> {
@@ -195,6 +199,61 @@ fn check_ccitt_images(folder: &str) {
         if count.is_multiple_of(20000) {
             let images = ccitt_count.load(std::sync::atomic::Ordering::Relaxed);
             eprintln!("Processed {} PDFs, {} CCITT images decoded", count, images);
+        }
+    });
+}
+
+fn check_jbig2_images(folder: &str) {
+    let jbig2_list = load_jbig2_list().unwrap();
+    let paths = load_pdf_paths(folder, |name| !jbig2_list.contains(name));
+
+    println!("Found {} PDF files", paths.len());
+
+    let pdf_count = AtomicU32::new(0);
+    let jbig2_count = AtomicU32::new(0);
+
+    paths.par_iter().for_each(|path| {
+        let name = path.file_stem().unwrap().to_str().unwrap().to_string();
+        let data = fs::read(path).unwrap();
+
+        let mut has_error = false;
+
+        if let Ok(pdf) = Pdf::new(data) {
+            for object in pdf.objects() {
+                if let Some(stream) = object.into_stream()
+                    && stream.filters().contains(&Filter::Jbig2Decode)
+                {
+                    let decoded = catch_unwind(std::panic::AssertUnwindSafe(|| stream.decoded()));
+
+                    match decoded {
+                        Ok(Ok(d)) => {
+                            if d.len() == 0 {
+                                has_error = true;
+                            }   else {
+                                jbig2_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                            }
+                        }
+                        Ok(Err(_)) => {
+                            has_error = true;
+                        }
+                        Err(_) => {
+                            has_error = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        if has_error {
+            eprintln!("{}", name);
+            println!("{}", name);
+        }
+
+        let count = pdf_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+
+        if count.is_multiple_of(1000) {
+            let images = jbig2_count.load(std::sync::atomic::Ordering::Relaxed);
+            eprintln!("Processed {} PDFs, {} JBIG2 images decoded", count, images);
         }
     });
 }
