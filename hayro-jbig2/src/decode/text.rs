@@ -11,7 +11,7 @@ use super::{
 };
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::DecodedRegion;
-use crate::error::{HuffmanError, ParseError, Result, SymbolError, bail};
+use crate::error::{DecodeError, HuffmanError, ParseError, Result, SymbolError, bail};
 use crate::huffman_table::{HuffmanTable, StandardHuffmanTables, TableLine};
 use crate::integer_decoder::IntegerDecoder;
 use crate::reader::Reader;
@@ -66,7 +66,7 @@ pub(crate) fn decode_with(
 
     // "2) Decode the initial STRIPT value as described in 6.4.6." (6.4.5)
     let initial_strip_t = ctx.read_strip_delta_t(strip_size)?;
-    let mut strip_t: i32 = -initial_strip_t;
+    let mut strip_t: i32 = initial_strip_t.checked_neg().ok_or(DecodeError::Overflow)?;
     let mut first_s: i32 = 0;
     let mut instance_count: u32 = 0;
 
@@ -74,7 +74,7 @@ pub(crate) fn decode_with(
     while instance_count < header.num_instances {
         // "b) Decode the strip's delta T value as described in 6.4.6."
         let delta_t = ctx.read_strip_delta_t(strip_size)?;
-        strip_t += delta_t;
+        strip_t = strip_t.checked_add(delta_t).ok_or(DecodeError::Overflow)?;
 
         // "c) Decode each symbol instance in the strip as follows:"
         let mut first_symbol_in_strip = true;
@@ -84,13 +84,16 @@ pub(crate) fn decode_with(
             // "i) First symbol S coordinate / ii) Subsequent symbol S coordinate"
             if first_symbol_in_strip {
                 let delta_first_s = ctx.read_first_s()?;
-                first_s += delta_first_s;
+                first_s = first_s.checked_add(delta_first_s).ok_or(DecodeError::Overflow)?;
                 current_s = first_s;
                 first_symbol_in_strip = false;
             } else {
                 match ctx.read_delta_s()? {
                     Some(delta_s) => {
-                        current_s = current_s + delta_s + header.flags.delta_s_offset as i32;
+                        current_s = current_s
+                            .checked_add(delta_s)
+                            .and_then(|v| v.checked_add(header.flags.delta_s_offset as i32))
+                            .ok_or(DecodeError::Overflow)?;
                     }
                     None => {
                         // OOB - end of strip.
@@ -101,7 +104,7 @@ pub(crate) fn decode_with(
 
             // "iii) Decode the symbol instance's T coordinate."
             let current_t = ctx.read_symbol_t(strip_size, header.flags.log_strip_size)?;
-            let symbol_t = strip_t + current_t;
+            let symbol_t = strip_t.checked_add(current_t).ok_or(DecodeError::Overflow)?;
 
             // "iv) Decode the symbol instance's symbol ID."
             let symbol_id = ctx.read_symbol_id()?;
@@ -138,10 +141,20 @@ pub(crate) fn decode_with(
                         let rdx = ctx.read_refinement_x_offset()?;
                         let rdy = ctx.read_refinement_y_offset()?;
 
-                        let refined_width = (reference_width as i32 + rdw) as u32;
-                        let refined_height = (reference_height as i32 + rdh) as u32;
-                        let reference_x_offset = rdw.div_euclid(2) + rdx;
-                        let reference_y_offset = rdh.div_euclid(2) + rdy;
+                        let refined_width = (reference_width as i32)
+                            .checked_add(rdw)
+                            .ok_or(DecodeError::Overflow)? as u32;
+                        let refined_height = (reference_height as i32)
+                            .checked_add(rdh)
+                            .ok_or(DecodeError::Overflow)? as u32;
+                        let reference_x_offset = rdw
+                            .div_euclid(2)
+                            .checked_add(rdx)
+                            .ok_or(DecodeError::Overflow)?;
+                        let reference_y_offset = rdh
+                            .div_euclid(2)
+                            .checked_add(rdy)
+                            .ok_or(DecodeError::Overflow)?;
 
                         let mut refined = DecodedRegion::new(refined_width, refined_height);
 
@@ -172,12 +185,16 @@ pub(crate) fn decode_with(
                 && (header.flags.reference_corner == ReferenceCorner::TopRight
                     || header.flags.reference_corner == ReferenceCorner::BottomRight)
             {
-                current_s += symbol_width - 1;
+                current_s = current_s
+                    .checked_add(symbol_width - 1)
+                    .ok_or(DecodeError::Overflow)?;
             } else if header.flags.transposed
                 && (header.flags.reference_corner == ReferenceCorner::BottomLeft
                     || header.flags.reference_corner == ReferenceCorner::BottomRight)
             {
-                current_s += symbol_height - 1;
+                current_s = current_s
+                    .checked_add(symbol_height - 1)
+                    .ok_or(DecodeError::Overflow)?;
             }
 
             // "vii) Set: S_I = CURS"
@@ -201,12 +218,16 @@ pub(crate) fn decode_with(
                 && (header.flags.reference_corner == ReferenceCorner::TopLeft
                     || header.flags.reference_corner == ReferenceCorner::BottomLeft)
             {
-                current_s += symbol_width - 1;
+                current_s = current_s
+                    .checked_add(symbol_width - 1)
+                    .ok_or(DecodeError::Overflow)?;
             } else if header.flags.transposed
                 && (header.flags.reference_corner == ReferenceCorner::TopLeft
                     || header.flags.reference_corner == ReferenceCorner::TopRight)
             {
-                current_s += symbol_height - 1;
+                current_s = current_s
+                    .checked_add(symbol_height - 1)
+                    .ok_or(DecodeError::Overflow)?;
             }
 
             // "xii) Set: NINSTANCES = NINSTANCES + 1"
