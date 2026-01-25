@@ -847,6 +847,10 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn pdfjs_ccitt_EndOfBlock_false() { run_render_test("pdfjs_ccitt_EndOfBlock_false", "downloads/pdfjs/ccitt_EndOfBlock_false.pdf", None); }
 #[test] fn pdfjs_issue6741() { run_render_test("pdfjs_issue6741", "downloads/pdfjs/issue6741.pdf", None); }
 #[test] fn pdfjs_issue8076() { run_render_test("pdfjs_issue8076", "downloads/pdfjs/issue8076.pdf", None); }
+#[test] fn pdfjs_jbig2_huffman_2() { run_render_test("pdfjs_jbig2_huffman_2", "downloads/pdfjs/jbig2_huffman_2.pdf", Some("6..=6")); }
+#[test] fn pdfjs_issue15942() { run_render_test("pdfjs_issue15942", "downloads/pdfjs/issue15942.pdf", Some("..=0")); }
+#[test] fn pdfjs_issue18973() { run_render_test("pdfjs_issue18973", "downloads/pdfjs/issue18973.pdf", Some("44..")); }
+#[test] fn pdfjs_issue18896() { run_render_test("pdfjs_issue18896", "downloads/pdfjs/issue18896.pdf", None); }
 #[test] fn pdfbox_31() { run_render_test("pdfbox_31", "downloads/pdfbox/31.pdf", Some("..=0")); }
 #[test] fn pdfbox_142() { run_render_test("pdfbox_142", "downloads/pdfbox/142.pdf", None); }
 #[test] fn pdfbox_163() { run_render_test("pdfbox_163", "downloads/pdfbox/163.pdf", None); }

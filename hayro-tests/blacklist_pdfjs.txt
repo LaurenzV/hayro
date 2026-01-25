@@ -15,7 +15,6 @@ issue13748
 issue13751
 
 # Look into it
-jbig2_huffman_2
 ShowText-ShadingPattern
 Type3WordSpacing
 xobject-image
@@ -183,9 +182,6 @@ issue17906
 #black rectangle, type0 without embeddedf font
 issue18466
 
-# panic in jbig
-issue15942
-
 # doesnt finish
 issue16263
 
@@ -219,9 +215,6 @@ issue4934
 # weirdly spaced text
 issue4630
 
-#crash in jbig decoder
-issue18973
-
 # wrong handling of extgstate text
 extgstate
 
@@ -229,7 +222,5 @@ extgstate
 
 # ballon type3 emojis which is decoded time and time again
 issue10717
-# jbig/jpx image + a lot of resizing, takes 6 secs
-issue18896
 # likely missing caching of shading function
 bug1721218_reduced

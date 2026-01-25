@@ -1147,5 +1147,20 @@
   "issue8169",
   "ccitt_EndOfBlock_false",
   "issue6741",
-  "issue8076"
+  "issue8076",
+  {
+    "id": "jbig2_huffman_2",
+    "first_page": 6,
+    "last_page": 6
+  },
+  {
+    "id":  "issue15942",
+    "last_page": 0,
+    "ignore": true
+  },
+  {
+    "id": "issue18973",
+    "first_page": 44
+  },
+  "issue18896"
 ]
