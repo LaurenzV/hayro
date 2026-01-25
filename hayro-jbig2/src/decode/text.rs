@@ -1,9 +1,4 @@
 //! Text region segment parsing and decoding (7.4.3, 6.4).
-//!
-//! "The data parts of all three of the text region segment types ('intermediate
-//! text region', 'immediate text region' and 'immediate lossless text region')
-//! are coded identically, but are acted upon differently, see 8.2. The syntax
-//! of these segment types' data parts is specified here." (7.4.3)
 
 use alloc::vec;
 use alloc::vec::Vec;
@@ -35,15 +30,6 @@ pub(crate) enum CodingMode<'a, 'b> {
 }
 
 /// Decode a text region segment (6.4).
-///
-/// "This decoding procedure is used to decode a bitmap by decoding a number of
-/// symbol instances. A symbol instance contains a location and a symbol ID, and
-/// possibly a refinement bitmap. These symbol instances are combined to form
-/// the decoded bitmap." (6.4.1)
-///
-/// The `referred_tables` parameter contains Huffman tables from referred table
-/// segments (type 53). These are used when SBHUFF=1 and the Huffman flags
-/// specify user-supplied tables.
 pub(crate) fn decode(
     reader: &mut Reader<'_>,
     symbols: &[&DecodedRegion],
@@ -316,8 +302,8 @@ where
 
         // "b) Decode the strip's delta T value as described in 6.4.6. Let DT be
         // the decoded value. Set: STRIPT = STRIPT + DT" (6.4.5)
-        let dt = decode_strip_delta_t(decoder, &mut contexts.iadt, strip_size)?;
-        strip_t += dt;
+        let delta_t = decode_strip_delta_t(decoder, &mut contexts.iadt, strip_size)?;
+        strip_t += delta_t;
 
         // "c) Decode each symbol instance in the strip as follows:" (6.4.5)
         let mut first_symbol_in_strip = true;
@@ -370,9 +356,9 @@ where
             let symbol_bitmap = get_symbol_bitmap(decoder, symbol_id, symbols, contexts)?;
             let (symbol_bitmap, symbol_width, symbol_height): (&DecodedRegion, i32, i32) =
                 match &symbol_bitmap {
-                    SymbolBitmap::Reference(idx) => {
-                        let sym = symbols.get(*idx).ok_or(SymbolError::OutOfRange)?;
-                        (sym, sym.width as i32, sym.height as i32)
+                    SymbolBitmap::Reference(symbol_idx) => {
+                        let symbol = symbols.get(*symbol_idx).ok_or(SymbolError::OutOfRange)?;
+                        (symbol, symbol.width as i32, symbol.height as i32)
                     }
                     SymbolBitmap::Owned(region) => {
                         (region, region.width as i32, region.height as i32)
@@ -534,24 +520,24 @@ fn draw_symbol(
     symbol: &DecodedRegion,
     x: i32,
     y: i32,
-    combop: CombinationOperator,
+    combination_operator: CombinationOperator,
 ) {
-    for sy in 0..symbol.height {
-        let dest_y = y + sy as i32;
+    for src_y in 0..symbol.height {
+        let dest_y = y + src_y as i32;
         if dest_y < 0 || dest_y >= region.height as i32 {
             continue;
         }
 
-        for sx in 0..symbol.width {
-            let dest_x = x + sx as i32;
+        for src_x in 0..symbol.width {
+            let dest_x = x + src_x as i32;
             if dest_x < 0 || dest_x >= region.width as i32 {
                 continue;
             }
 
-            let src_pixel = symbol.get_pixel(sx, sy);
+            let src_pixel = symbol.get_pixel(src_x, src_y);
             let dst_pixel = region.get_pixel(dest_x as u32, dest_y as u32);
 
-            let result = match combop {
+            let result = match combination_operator {
                 CombinationOperator::Or => dst_pixel | src_pixel,
                 CombinationOperator::And => dst_pixel & src_pixel,
                 CombinationOperator::Xor => dst_pixel ^ src_pixel,
@@ -570,11 +556,11 @@ fn select_huffman_tables<'a>(
     custom_tables: &'a [HuffmanTable],
     standard_tables: &'a StandardHuffmanTables,
 ) -> Result<TextRegionHuffmanTables<'a>> {
-    let mut custom_idx = 0;
+    let mut custom_table_idx = 0;
 
     let mut get_custom = || -> &'a HuffmanTable {
-        let table = &custom_tables[custom_idx];
-        custom_idx += 1;
+        let table = &custom_tables[custom_table_idx];
+        custom_table_idx += 1;
         table
     };
 
@@ -780,11 +766,11 @@ fn decode_text_region_huffman(
                 i32,
             ) = if !use_refinement {
                 // "If SBREFINE is 0, then set R_I to 0." (6.4.11)
-                let sym = symbols.get(symbol_id).ok_or(SymbolError::OutOfRange)?;
+                let symbol = symbols.get(symbol_id).ok_or(SymbolError::OutOfRange)?;
                 (
-                    alloc::borrow::Cow::Borrowed(*sym),
-                    sym.width as i32,
-                    sym.height as i32,
+                    alloc::borrow::Cow::Borrowed(*symbol),
+                    symbol.width as i32,
+                    symbol.height as i32,
                 )
             } else {
                 // "If SBREFINE is 1, then decode R_I as follows:
@@ -793,11 +779,11 @@ fn decode_text_region_huffman(
                 let refinement_flag = reader.read_bit().ok_or(ParseError::UnexpectedEof)?;
 
                 if refinement_flag == 0 {
-                    let sym = symbols.get(symbol_id).ok_or(SymbolError::OutOfRange)?;
+                    let symbol = symbols.get(symbol_id).ok_or(SymbolError::OutOfRange)?;
                     (
-                        alloc::borrow::Cow::Borrowed(*sym),
-                        sym.width as i32,
-                        sym.height as i32,
+                        alloc::borrow::Cow::Borrowed(*symbol),
+                        symbol.width as i32,
+                        symbol.height as i32,
                     )
                 } else {
                     // Refinement decoding (6.4.11)
@@ -918,35 +904,17 @@ fn decode_text_region_huffman(
 }
 
 /// Decode the symbol ID Huffman table (7.4.3.1.7).
-///
-/// "This table is encoded as SBNUMSYMS symbol ID code lengths; the actual codes
-/// in SBSYMCODES are assigned from these symbol ID code lengths using the
-/// algorithm in B.3.
-///
-/// The symbol ID code lengths themselves are run-length coded and the runs
-/// Huffman coded. This is very similar to the 'zlib' coded format documented
-/// in RFC 1951, though not identical. The encoding is based on the codes shown
-/// in Table 29." (7.4.3.1.7)
 fn decode_symbol_id_huffman_table(
     reader: &mut Reader<'_>,
     num_symbols: u32,
 ) -> Result<HuffmanTable> {
-    // "1) Read the code lengths for RUNCODE0 through RUNCODE34; each is stored
-    // as a four-bit value." (7.4.3.1.7)
     let mut runcode_lines: Vec<TableLine> = Vec::with_capacity(35);
-    for i in 0..35 {
-        let preflen = reader.read_bits(4).ok_or(HuffmanError::InvalidCode)? as u8;
-        runcode_lines.push(TableLine::new(i, preflen, 0));
+    for runcode_idx in 0..35 {
+        let prefix_length = reader.read_bits(4).ok_or(HuffmanError::InvalidCode)? as u8;
+        runcode_lines.push(TableLine::new(runcode_idx, prefix_length, 0));
     }
 
-    // "2) Given the lengths, assign Huffman codes for RUNCODE0 through RUNCODE34
-    // using the algorithm in B.3." (7.4.3.1.7)
     let runcode_table = HuffmanTable::build(&runcode_lines);
-
-    // "3) Read a Huffman code using this assignment. This decodes into one of
-    // RUNCODE0 through RUNCODE34." (7.4.3.1.7)
-    // "5) Repeat steps 3) and 4) until the symbol ID code lengths for all
-    // SBNUMSYMS symbols have been determined." (7.4.3.1.7)
     let mut symbol_code_lengths = Vec::with_capacity(num_symbols as usize);
 
     while symbol_code_lengths.len() < num_symbols as usize {
@@ -967,22 +935,22 @@ fn decode_symbol_id_huffman_table(
             }
             32 => {
                 // Copy previous 3-6 times
-                let extra = reader.read_bits(2).ok_or(HuffmanError::InvalidCode)? as usize;
-                let repeat = extra + 3;
-                let prev = *symbol_code_lengths
+                let extra_bits = reader.read_bits(2).ok_or(HuffmanError::InvalidCode)? as usize;
+                let repeat = extra_bits + 3;
+                let previous_length = *symbol_code_lengths
                     .last()
                     .ok_or(HuffmanError::InvalidCode)?;
                 for _ in 0..repeat {
                     if symbol_code_lengths.len() >= num_symbols as usize {
                         break;
                     }
-                    symbol_code_lengths.push(prev);
+                    symbol_code_lengths.push(previous_length);
                 }
             }
             33 => {
                 // Repeat 0 length 3-10 times
-                let extra = reader.read_bits(3).ok_or(HuffmanError::InvalidCode)? as usize;
-                let repeat = extra + 3;
+                let extra_bits = reader.read_bits(3).ok_or(HuffmanError::InvalidCode)? as usize;
+                let repeat = extra_bits + 3;
                 for _ in 0..repeat {
                     if symbol_code_lengths.len() >= num_symbols as usize {
                         break;
@@ -992,8 +960,8 @@ fn decode_symbol_id_huffman_table(
             }
             34 => {
                 // Repeat 0 length 11-138 times
-                let extra = reader.read_bits(7).ok_or(HuffmanError::InvalidCode)? as usize;
-                let repeat = extra + 11;
+                let extra_bits = reader.read_bits(7).ok_or(HuffmanError::InvalidCode)? as usize;
+                let repeat = extra_bits + 11;
                 for _ in 0..repeat {
                     if symbol_code_lengths.len() >= num_symbols as usize {
                         break;
@@ -1015,7 +983,7 @@ fn decode_symbol_id_huffman_table(
     let symbol_lines: Vec<TableLine> = symbol_code_lengths
         .iter()
         .enumerate()
-        .map(|(idx, &preflen)| TableLine::new(idx as i32, preflen, 0))
+        .map(|(symbol_idx, &prefix_length)| TableLine::new(symbol_idx as i32, prefix_length, 0))
         .collect();
     Ok(HuffmanTable::build(&symbol_lines))
 }
