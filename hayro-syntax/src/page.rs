@@ -74,6 +74,7 @@ impl<'a> Pages<'a> {
                     &dict,
                     &PagesContext::new(),
                     Resources::new(Dict::empty(), None, ctx),
+                    true,
                 )
             {
                 pages.push(page);
@@ -134,7 +135,7 @@ fn resolve_pages<'a>(
             // Let's be lenient and assume it's a `Page` in case it's `None` or something else
             // (see corpus test case 0083781).
             _ => {
-                if let Some(page) = Page::new(&dict, &ctx, resources.clone()) {
+                if let Some(page) = Page::new(&dict, &ctx, resources.clone(), false) {
                     entries.push(page);
                 }
             }
@@ -169,7 +170,18 @@ pub struct Page<'a> {
 }
 
 impl<'a> Page<'a> {
-    fn new(dict: &Dict<'a>, ctx: &PagesContext, resources: Resources<'a>) -> Option<Self> {
+    fn new(
+        dict: &Dict<'a>,
+        ctx: &PagesContext,
+        resources: Resources<'a>,
+        brute_force: bool,
+    ) -> Option<Self> {
+        // In general, pages without content are allowed, but in case we are brute-forcing
+        // we ignore them.
+        if brute_force && !dict.contains_key(CONTENTS) {
+            return None;
+        }
+
         let media_box = dict.get::<Rect>(MEDIA_BOX).or(ctx.media_box).unwrap_or(A4);
 
         let crop_box = dict

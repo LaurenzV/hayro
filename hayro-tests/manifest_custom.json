@@ -1153,5 +1153,9 @@
   {
     "id": "issue892",
     "link": true
+  },
+  {
+    "id": "blank_page_without_contents",
+    "file": "pdfs/custom/blank_page_without_contents.pdf"
   }
 ]
