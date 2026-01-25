@@ -112,7 +112,6 @@ pub(crate) fn decode_with(
 
             let symbol_id = ctx.read_symbol_id()?;
 
-            // "v) Determine the symbol instance's bitmap IB_I as described in 6.4.11."
             let symbol_bitmap =
                 decode_symbol_instance_bitmap(&mut ctx, symbols, header, symbol_id)?;
 
@@ -123,7 +122,6 @@ pub(crate) fn decode_with(
             let symbol_width = symbol_bitmap_ref.width as i32;
             let symbol_height = symbol_bitmap_ref.height as i32;
 
-            // "vi) Update CURS as follows:" (6.4.5)
             if !header.flags.transposed
                 && (header.flags.reference_corner == ReferenceCorner::TopRight
                     || header.flags.reference_corner == ReferenceCorner::BottomRight)
@@ -140,23 +138,30 @@ pub(crate) fn decode_with(
                     .ok_or(DecodeError::Overflow)?;
             }
 
-            // "vii) Set: S_I = CURS"
             let symbol_s = current_s;
 
-            // "viii) Determine the location of the symbol instance bitmap."
-            let (x, y) = compute_symbol_location(
-                symbol_s,
-                symbol_t,
-                symbol_width,
-                symbol_height,
-                header.flags.transposed,
-                header.flags.reference_corner,
-            );
+            let (x, y) = if !header.flags.transposed {
+                match header.flags.reference_corner {
+                    ReferenceCorner::TopLeft => (symbol_s, symbol_t),
+                    ReferenceCorner::TopRight => (symbol_s - symbol_width + 1, symbol_t),
+                    ReferenceCorner::BottomLeft => (symbol_s, symbol_t - symbol_height + 1),
+                    ReferenceCorner::BottomRight => {
+                        (symbol_s - symbol_width + 1, symbol_t - symbol_height + 1)
+                    }
+                }
+            } else {
+                match header.flags.reference_corner {
+                    ReferenceCorner::TopLeft => (symbol_t, symbol_s),
+                    ReferenceCorner::TopRight => (symbol_t - symbol_width + 1, symbol_s),
+                    ReferenceCorner::BottomLeft => (symbol_t, symbol_s - symbol_height + 1),
+                    ReferenceCorner::BottomRight => {
+                        (symbol_t - symbol_width + 1, symbol_s - symbol_height + 1)
+                    }
+                }
+            };
 
-            // "x) Draw IB_I into SBREG."
             region.combine(symbol_bitmap_ref, x, y, header.flags.combination_operator);
 
-            // "xi) Update CURS as follows:" (6.4.5)
             if !header.flags.transposed
                 && (header.flags.reference_corner == ReferenceCorner::TopLeft
                     || header.flags.reference_corner == ReferenceCorner::BottomLeft)
@@ -528,56 +533,6 @@ fn decode_symbol_instance_bitmap(
     )?;
 
     Ok(SymbolBitmap::Owned(refined_bitmap))
-}
-
-/// Compute the location of a symbol instance bitmap (6.4.5 step viii).
-///
-/// Returns (x, y) coordinates where the symbol should be placed.
-fn compute_symbol_location(
-    symbol_s: i32,
-    symbol_t: i32,
-    symbol_width: i32,
-    symbol_height: i32,
-    transposed: bool,
-    reference_corner: ReferenceCorner,
-) -> (i32, i32) {
-    if !transposed {
-        // "If TRANSPOSED is 0, then:"
-        match reference_corner {
-            // "If REFCORNER is TOPLEFT then the top left pixel of the symbol
-            // instance bitmap IB_I shall be placed at SBREG[S_I, T_I]."
-            ReferenceCorner::TopLeft => (symbol_s, symbol_t),
-            // "If REFCORNER is TOPRIGHT then the top right pixel of the symbol
-            // instance bitmap IB_I shall be placed at SBREG[S_I, T_I]."
-            ReferenceCorner::TopRight => (symbol_s - symbol_width + 1, symbol_t),
-            // "If REFCORNER is BOTTOMLEFT then the bottom left pixel of the symbol
-            // instance bitmap IB_I shall be placed at SBREG[S_I, T_I]."
-            ReferenceCorner::BottomLeft => (symbol_s, symbol_t - symbol_height + 1),
-            // "If REFCORNER is BOTTOMRIGHT then the bottom right pixel of the symbol
-            // instance bitmap IB_I shall be placed at SBREG[S_I, T_I]."
-            ReferenceCorner::BottomRight => {
-                (symbol_s - symbol_width + 1, symbol_t - symbol_height + 1)
-            }
-        }
-    } else {
-        // "If TRANSPOSED is 1, then:"
-        match reference_corner {
-            // "If REFCORNER is TOPLEFT then the top left pixel of the symbol
-            // instance bitmap IB_I shall be placed at SBREG[T_I, S_I]."
-            ReferenceCorner::TopLeft => (symbol_t, symbol_s),
-            // "If REFCORNER is TOPRIGHT then the top right pixel of the symbol
-            // instance bitmap IB_I shall be placed at SBREG[T_I, S_I]."
-            ReferenceCorner::TopRight => (symbol_t - symbol_width + 1, symbol_s),
-            // "If REFCORNER is BOTTOMLEFT then the bottom left pixel of the symbol
-            // instance bitmap IB_I shall be placed at SBREG[T_I, S_I]."
-            ReferenceCorner::BottomLeft => (symbol_t, symbol_s - symbol_height + 1),
-            // "If REFCORNER is BOTTOMRIGHT then the bottom right pixel of the symbol
-            // instance bitmap IB_I shall be placed at SBREG[T_I, S_I]."
-            ReferenceCorner::BottomRight => {
-                (symbol_t - symbol_width + 1, symbol_s - symbol_height + 1)
-            }
-        }
-    }
 }
 
 /// Select Huffman tables based on flags (7.4.3.1.6).
