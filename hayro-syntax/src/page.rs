@@ -170,10 +170,6 @@ pub struct Page<'a> {
 
 impl<'a> Page<'a> {
     fn new(dict: &Dict<'a>, ctx: &PagesContext, resources: Resources<'a>) -> Option<Self> {
-        if !dict.contains_key(CONTENTS) {
-            return None;
-        }
-
         let media_box = dict.get::<Rect>(MEDIA_BOX).or(ctx.media_box).unwrap_or(A4);
 
         let crop_box = dict
