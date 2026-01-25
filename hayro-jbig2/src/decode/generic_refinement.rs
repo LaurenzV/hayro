@@ -10,7 +10,7 @@ use super::{
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::DecodedRegion;
 use crate::decode::generic::get_pixel;
-use crate::error::{ParseError, RegionError, Result, bail};
+use crate::error::{DecodeError, ParseError, RegionError, Result, bail};
 use crate::reader::Reader;
 
 /// Generic refinement region decoding procedure (6.3).
@@ -24,8 +24,22 @@ pub(crate) fn decode(reader: &mut Reader<'_>, reference: &DecodedRegion) -> Resu
         bail!(RegionError::InvalidDimension);
     }
 
-    let reference_dx = reference.x_location as i32 - header.region_info.x_location as i32;
-    let reference_dy = reference.y_location as i32 - header.region_info.y_location as i32;
+    let reference_dx = i32::try_from(reference.x_location)
+        .ok()
+        .and_then(|r| {
+            i32::try_from(header.region_info.x_location)
+                .ok()
+                .and_then(|h| r.checked_sub(h))
+        })
+        .ok_or(DecodeError::Overflow)?;
+    let reference_dy = i32::try_from(reference.y_location)
+        .ok()
+        .and_then(|r| {
+            i32::try_from(header.region_info.y_location)
+                .ok()
+                .and_then(|h| r.checked_sub(h))
+        })
+        .ok_or(DecodeError::Overflow)?;
     let encoded_data = reader.tail().ok_or(ParseError::UnexpectedEof)?;
 
     let mut decoder = ArithmeticDecoder::new(encoded_data);

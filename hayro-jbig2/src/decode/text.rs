@@ -84,7 +84,9 @@ pub(crate) fn decode_with(
             // "i) First symbol S coordinate / ii) Subsequent symbol S coordinate"
             if first_symbol_in_strip {
                 let delta_first_s = ctx.read_first_s()?;
-                first_s = first_s.checked_add(delta_first_s).ok_or(DecodeError::Overflow)?;
+                first_s = first_s
+                    .checked_add(delta_first_s)
+                    .ok_or(DecodeError::Overflow)?;
                 current_s = first_s;
                 first_symbol_in_strip = false;
             } else {
@@ -104,7 +106,9 @@ pub(crate) fn decode_with(
 
             // "iii) Decode the symbol instance's T coordinate."
             let current_t = ctx.read_symbol_t(strip_size, header.flags.log_strip_size)?;
-            let symbol_t = strip_t.checked_add(current_t).ok_or(DecodeError::Overflow)?;
+            let symbol_t = strip_t
+                .checked_add(current_t)
+                .ok_or(DecodeError::Overflow)?;
 
             // "iv) Decode the symbol instance's symbol ID."
             let symbol_id = ctx.read_symbol_id()?;
@@ -143,10 +147,12 @@ pub(crate) fn decode_with(
 
                         let refined_width = (reference_width as i32)
                             .checked_add(rdw)
-                            .ok_or(DecodeError::Overflow)? as u32;
+                            .ok_or(DecodeError::Overflow)?
+                            as u32;
                         let refined_height = (reference_height as i32)
                             .checked_add(rdh)
-                            .ok_or(DecodeError::Overflow)? as u32;
+                            .ok_or(DecodeError::Overflow)?
+                            as u32;
                         let reference_x_offset = rdw
                             .div_euclid(2)
                             .checked_add(rdx)

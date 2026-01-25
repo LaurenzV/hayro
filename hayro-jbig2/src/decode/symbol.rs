@@ -590,7 +590,9 @@ fn decode_height_class_collective_bitmap(ctx: &mut SymbolDecodeContext<'_>) -> R
         }
 
         ctx.symbols.new.push(symbol);
-        x_offset += symbol_width;
+        x_offset = x_offset
+            .checked_add(symbol_width)
+            .ok_or(DecodeError::Overflow)?;
     }
 
     Ok(())
@@ -621,12 +623,13 @@ fn export_symbols(ctx: &mut SymbolDecodeContext<'_>) -> Result<Vec<DecodedRegion
     while index < total_symbols {
         let run_length = read_run_length()?;
 
-        if index + run_length > total_symbols {
+        let end_index = index.checked_add(run_length).ok_or(DecodeError::Overflow)?;
+        if end_index > total_symbols {
             bail!(SymbolError::OutOfRange);
         }
 
         if should_export {
-            for symbol_idx in index..index + run_length {
+            for symbol_idx in index..end_index {
                 let symbol = ctx
                     .symbols
                     .get(symbol_idx as usize)
@@ -636,7 +639,7 @@ fn export_symbols(ctx: &mut SymbolDecodeContext<'_>) -> Result<Vec<DecodedRegion
             }
         }
 
-        index += run_length;
+        index = end_index;
         should_export = !should_export;
     }
 

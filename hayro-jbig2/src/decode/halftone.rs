@@ -6,7 +6,7 @@ use alloc::vec::Vec;
 use super::pattern::PatternDictionary;
 use super::{CombinationOperator, RegionSegmentInfo, Template, parse_region_segment_info};
 use crate::bitmap::DecodedRegion;
-use crate::error::{ParseError, RegionError, Result};
+use crate::error::{DecodeError, ParseError, RegionError, Result};
 use crate::gray_scale::{GrayScaleParams, decode_gray_scale_image};
 use crate::reader::Reader;
 
@@ -28,7 +28,7 @@ pub(crate) fn decode(
     };
 
     let skip_bitmap = if header.flags.enable_skip {
-        Some(compute_skip_bitmap(&header, pattern_dict, &htreg))
+        Some(compute_skip_bitmap(&header, pattern_dict, &htreg)?)
     } else {
         None
     };
@@ -144,12 +144,45 @@ struct HalftoneRegionHeader {
     grid_vector: HalftoneGridVector,
 }
 
+/// Compute grid coordinates with checked arithmetic (6.6.5.1, 6.6.5.2).
+///
+/// Returns (x, y) where:
+///   x = (HGX + m_g × HRY + n_g × HRX) >>_A 8
+///   y = (HGY + m_g × HRX − n_g × HRY) >>_A 8
+fn compute_grid_coords(
+    grid: &HalftoneGridPositionAndSize,
+    vector: &HalftoneGridVector,
+    m_g: u32,
+    n_g: u32,
+) -> Result<(i32, i32)> {
+    let hrx = vector.x_vector as i32;
+    let hry = vector.y_vector as i32;
+    let m_g = m_g as i32;
+    let n_g = n_g as i32;
+
+    let x = m_g
+        .checked_mul(hry)
+        .and_then(|v| v.checked_add(n_g.checked_mul(hrx)?))
+        .and_then(|v| grid.horizontal_offset.checked_add(v))
+        .ok_or(DecodeError::Overflow)?
+        >> 8;
+
+    let y = m_g
+        .checked_mul(hrx)
+        .and_then(|v| v.checked_sub(n_g.checked_mul(hry)?))
+        .and_then(|v| grid.vertical_offset.checked_add(v))
+        .ok_or(DecodeError::Overflow)?
+        >> 8;
+
+    Ok((x, y))
+}
+
 /// Compute the HSKIP bitmap (6.6.5.1).
 fn compute_skip_bitmap(
     header: &HalftoneRegionHeader,
     pattern_dict: &PatternDictionary,
     htreg: &DecodedRegion,
-) -> Vec<bool> {
+) -> Result<Vec<bool>> {
     let grid = &header.grid_position_and_size;
     let vector = &header.grid_vector;
     let pattern_width = pattern_dict.pattern_width as i32;
@@ -165,13 +198,7 @@ fn compute_skip_bitmap(
         // "a) For each value of n_g between 0 and HGW − 1, beginning from 0,
         // perform the following steps:" (6.6.5.1)
         for n_g in 0..grid.width {
-            // "i) Set:
-            //    x = (HGX + m_g × HRY + n_g × HRX) >>_A 8
-            //    y = (HGY + m_g × HRX − n_g × HRY) >>_A 8" (6.6.5.1)
-            let hrx = vector.x_vector as i32;
-            let hry = vector.y_vector as i32;
-            let x = (grid.horizontal_offset + (m_g as i32) * hry + (n_g as i32) * hrx) >> 8;
-            let y = (grid.vertical_offset + (m_g as i32) * hrx - (n_g as i32) * hry) >> 8;
+            let (x, y) = compute_grid_coords(grid, vector, m_g, n_g)?;
 
             // "ii) If ((x + HPW ≤ 0) OR (x ≥ HBW) OR (y + HPH ≤ 0) OR (y ≥ HBH))
             // then set: HSKIP[n_g, m_g] = 1" (6.6.5.1)
@@ -184,7 +211,7 @@ fn compute_skip_bitmap(
         }
     }
 
-    hskip
+    Ok(hskip)
 }
 
 /// Render patterns into the target region (6.6.5.2).
@@ -196,8 +223,6 @@ fn render_patterns(
 ) -> Result<()> {
     let grid = &header.grid_position_and_size;
     let vector = &header.grid_vector;
-    let hrx = vector.x_vector as i32;
-    let hry = vector.y_vector as i32;
 
     // "1) For each value of m_g between 0 and HGH − 1, beginning from 0,
     // perform the following steps:" (6.6.5.2)
@@ -205,11 +230,7 @@ fn render_patterns(
         // "a) For each value of n_g between 0 and HGW − 1, beginning from 0,
         // perform the following steps:" (6.6.5.2)
         for n_g in 0..grid.width {
-            // "i) Set:
-            //    x = (HGX + m_g × HRY + n_g × HRX) >>_A 8
-            //    y = (HGY + m_g × HRX − n_g × HRY) >>_A 8" (6.6.5.2)
-            let x = (grid.horizontal_offset + (m_g as i32) * hry + (n_g as i32) * hrx) >> 8;
-            let y = (grid.vertical_offset + (m_g as i32) * hrx - (n_g as i32) * hry) >> 8;
+            let (x, y) = compute_grid_coords(grid, vector, m_g, n_g)?;
 
             // "ii) Draw the pattern HPATS[GI[n_g, m_g]] into HTREG such that its
             // upper left pixel is at location (x, y) in HTREG." (6.6.5.2)
