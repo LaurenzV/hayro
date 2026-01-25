@@ -1149,5 +1149,9 @@
     "id": "password_2",
     "file": "pdfs/custom/password_2.pdf",
     "password": "samplefiles"
+  },
+  {
+    "id": "issue892",
+    "link": true
   }
 ]
