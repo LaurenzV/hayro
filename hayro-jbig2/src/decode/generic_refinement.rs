@@ -126,7 +126,7 @@ pub(crate) fn decode_bitmap(
         // coder" (6.3.5.6)
         if tpgron {
             // Context for SLTP depends on template (Figures 14, 15).
-            let sltp_context: u32 = match gr_template {
+            let sltp_context: u16 = match gr_template {
                 RefinementTemplate::Template0 => 0b0000000010000,
                 RefinementTemplate::Template1 => 0b0000001000,
             };
@@ -221,7 +221,7 @@ fn gather_context(
     reference_dy: i32,
     gr_template: RefinementTemplate,
     adaptive_template_pixels: &[AdaptiveTemplatePixel],
-) -> u32 {
+) -> u16 {
     let x = x as i32;
     let y = y as i32;
 
@@ -236,7 +236,7 @@ fn gather_context(
             let at1 = adaptive_template_pixels[0];
             let at2 = adaptive_template_pixels[1];
 
-            let mut context = 0_u32;
+            let mut context = 0_u16;
 
             // 4 pixels from the bitmap we are currently decoding.
             context = (context << 1) | get_pixel(region, x + at1.x as i32, y + at1.y as i32);
@@ -261,7 +261,7 @@ fn gather_context(
         // Context for Template 1 (Figure 13).
         RefinementTemplate::Template1 => {
             // 10-pixel template.
-            let mut context = 0_u32;
+            let mut context = 0_u16;
 
             // 4 pixels from the bitmap we are currently decoding.
             context = (context << 1) | get_pixel(region, x - 1, y - 1);

@@ -222,7 +222,7 @@ pub(crate) fn decode_bitmap_arithmetic_coding(
         // coder" (6.2.5.7)
         if tpgdon {
             // See Figure 8 - 11.
-            let sltp_context: u32 = match template {
+            let sltp_context: u16 = match template {
                 Template::Template0 => 0b1001101100100101,
                 Template::Template1 => 0b0011110010101,
                 Template::Template2 => 0b0011100101,
@@ -264,7 +264,7 @@ pub(crate) fn gather_context(
     y: u32,
     gb_template: Template,
     adaptive_template_pixels: &[AdaptiveTemplatePixel],
-) -> u32 {
+) -> u16 {
     match gb_template {
         // Context for Template 0 (Figure 3a, 16 pixels).
         Template::Template0 => {
@@ -288,7 +288,7 @@ pub(crate) fn gather_context(
                 adaptive_template_pixels[3].y as i32,
             );
 
-            let mut context = 0_u32;
+            let mut context = 0_u16;
 
             context = (context << 1) | get_pixel(bitmap, x + at4.0, y + at4.1);
             context = (context << 1) | get_pixel(bitmap, x - 1, y - 2);
@@ -321,7 +321,7 @@ pub(crate) fn gather_context(
                 adaptive_template_pixels[0].y as i32,
             );
 
-            let mut context = 0_u32;
+            let mut context = 0_u16;
 
             context = (context << 1) | get_pixel(bitmap, x - 1, y - 2);
             context = (context << 1) | get_pixel(bitmap, x, y - 2);
@@ -351,7 +351,7 @@ pub(crate) fn gather_context(
                 adaptive_template_pixels[0].y as i32,
             );
 
-            let mut context = 0_u32;
+            let mut context = 0_u16;
 
             context = (context << 1) | get_pixel(bitmap, x - 1, y - 2);
             context = (context << 1) | get_pixel(bitmap, x, y - 2);
@@ -378,7 +378,7 @@ pub(crate) fn gather_context(
                 adaptive_template_pixels[0].y as i32,
             );
 
-            let mut context = 0_u32;
+            let mut context = 0_u16;
 
             context = (context << 1) | get_pixel(bitmap, x - 3, y - 1);
             context = (context << 1) | get_pixel(bitmap, x - 2, y - 1);
@@ -402,7 +402,7 @@ pub(crate) fn gather_context(
 
 /// Get a pixel value, returning 0 for out-of-bounds coordinates.
 #[inline]
-pub(crate) fn get_pixel(bitmap: &Bitmap, x: i32, y: i32) -> u32 {
+pub(crate) fn get_pixel(bitmap: &Bitmap, x: i32, y: i32) -> u16 {
     // "Near the edges of the bitmap, these neighbour references might not lie in
     // the actual bitmap. The rule to satisfy out-of-bounds references shall be:
     // All pixels lying outside the bounds of the actual bitmap have the value 0."
