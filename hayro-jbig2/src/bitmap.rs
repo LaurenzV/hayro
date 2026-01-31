@@ -164,7 +164,7 @@ impl Bitmap {
         if row >= self.height || word_idx >= self.stride {
             return 0;
         }
-        
+
         self.data[(row * self.stride + word_idx) as usize]
     }
 }

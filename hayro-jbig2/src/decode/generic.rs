@@ -178,7 +178,7 @@ pub(crate) fn decode_bitmap_mmr(bitmap: &mut Bitmap, data: &[u8]) -> Result<usiz
             let row_start = (self.y * self.bitmap.stride) as usize;
             let end_x = (self.x + chunk_count * 8).min(self.bitmap.width);
             // 0xFFFFFFFF for white, 0 for black.
-            let white_mask = (white as u32).wrapping_neg(); 
+            let white_mask = (white as u32).wrapping_neg();
 
             let start = (self.x / 8) as usize;
             let end = (end_x / 8) as usize;
