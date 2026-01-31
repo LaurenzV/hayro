@@ -19,6 +19,23 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 
+/// A decoder for JBIG2 images.
+pub trait Decoder {
+    /// Push a single pixel to the output.
+    fn push_pixel(&mut self, black: bool);
+    /// Push multiple chunks of 8 pixels of the same color.
+    ///
+    /// The `chunk_count` parameter indicates how many 8-pixel chunks to push.
+    /// For example, if this method is called with `white = true` and
+    /// `chunk_count = 10`, 80 white pixels are pushed (10 × 8 = 80).
+    ///
+    /// You can assume that this method is only called if the number of already
+    /// pushed pixels is a multiple of 8 (i.e. byte-aligned).
+    fn push_pixel_chunk(&mut self, black: bool, chunk_count: u32);
+    /// Called when a row has been completed.
+    fn next_line(&mut self);
+}
+
 mod arithmetic_decoder;
 mod bitmap;
 mod decode;
@@ -62,9 +79,69 @@ pub struct Image {
     pub width: u32,
     /// The height of the image in pixels.
     pub height: u32,
-    /// The raw pixel data, one bool per pixel, row-major order.
-    /// `true` means black, `false` means white.
-    pub data: Vec<bool>,
+    /// Number of u32 words per row.
+    stride: u32,
+    /// The packed pixel data.
+    data: Vec<u32>,
+}
+
+impl Image {
+    /// Decode the image data into the decoder.
+    pub fn decode<D: Decoder>(&self, decoder: &mut D) {
+        let bytes_per_row = self.width.div_ceil(8) as usize;
+
+        for row in self.data.chunks_exact(self.stride as usize) {
+            let mut x = 0u32;
+            let mut chunk_byte: Option<u8> = None;
+            let mut chunk_count = 0u32;
+
+            let bytes = row.iter().flat_map(|w| w.to_be_bytes()).take(bytes_per_row);
+
+            for byte in bytes {
+                let remaining = self.width - x;
+
+                if remaining >= 8 && (byte == 0x00 || byte == 0xFF) {
+                    // Continue the previous chunk.
+                    if chunk_byte == Some(byte) {
+                        chunk_count += 1;
+                        x += 8;
+                        continue;
+                    }
+                    
+                    // Flush previous chunk if any, then start new one.
+                    if let Some(b) = chunk_byte {
+                        decoder.push_pixel_chunk(b == 0xFF, chunk_count);
+                    }
+                    
+                    chunk_byte = Some(byte);
+                    chunk_count = 1;
+                    x += 8;
+                    
+                    continue;
+                }
+
+                // Can't continue/start chunk, flush any existing chunk first.
+                if let Some(b) = chunk_byte.take() {
+                    decoder.push_pixel_chunk(b == 0xFF, chunk_count);
+                    chunk_count = 0;
+                }
+
+                // Emit individual pixels.
+                let count = remaining.min(8);
+                for i in 0..count {
+                    decoder.push_pixel((byte >> (7 - i)) & 1 != 0);
+                }
+                x += count;
+            }
+
+            // Flush any remaining chunk at end of row.
+            if let Some(b) = chunk_byte {
+                decoder.push_pixel_chunk(b == 0xFF, chunk_count);
+            }
+
+            decoder.next_line();
+        }
+    }
 }
 
 /// Decode a JBIG2 file from the given data.
@@ -319,6 +396,7 @@ fn decode_with_segments(segments: &[segment::Segment<'_>]) -> Result<Image> {
     Ok(Image {
         width: ctx.page_bitmap.width,
         height: ctx.page_bitmap.height,
+        stride: ctx.page_bitmap.stride,
         data: ctx.page_bitmap.data,
     })
 }
