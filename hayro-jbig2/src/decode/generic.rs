@@ -477,15 +477,9 @@ impl<'a> ContextGatherer<'a> {
             yi + self.at_pixels[0].y as i32,
         );
 
-        // Combine: ctx_m2(12-9) | ctx_m1(8-4) | AT1(3) | ctx_cur(2-0)
         (self.ctx_m2 << 9) | (self.ctx_m1 << 4) | (at1 << 3) | self.ctx_cur
     }
 
-    /// Template 2: 10 bits total
-    /// - Row y-2: 3 bits (x-1 to x+1) at positions 9-7
-    /// - Row y-1: 4 bits (x-2 to x+1) at positions 6-3
-    /// - Row y: 2 bits (x-2, x-1) at positions 1-0
-    /// - AT1 at position 2
     #[inline]
     fn gather_template2(&mut self, bitmap: &Bitmap, x: u32) -> u16 {
         let bx = x - self.cur_x;
@@ -503,14 +497,9 @@ impl<'a> ContextGatherer<'a> {
             yi + self.at_pixels[0].y as i32,
         );
 
-        // Combine: ctx_m2(9-7) | ctx_m1(6-3) | AT1(2) | ctx_cur(1-0)
         (self.ctx_m2 << 7) | (self.ctx_m1 << 3) | (at1 << 2) | self.ctx_cur
     }
 
-    /// Template 3: 10 bits total (no y-2 row)
-    /// - Row y-1: 5 bits (x-3 to x+1) at positions 9-5
-    /// - Row y: 4 bits (x-4 to x-1) at positions 3-0
-    /// - AT1 at position 4
     #[inline]
     fn gather_template3(&mut self, bitmap: &Bitmap, x: u32) -> u16 {
         let bx = x - self.cur_x;
@@ -527,11 +516,9 @@ impl<'a> ContextGatherer<'a> {
             yi + self.at_pixels[0].y as i32,
         );
 
-        // Combine: ctx_m1(9-5) | AT1(4) | ctx_cur(3-0)
         (self.ctx_m1 << 5) | (at1 << 4) | self.ctx_cur
     }
 
-    /// Update the current row buffer after a pixel is written at position x.
     #[inline]
     pub(crate) fn update_current_row(&mut self, x: u32, value: bool) {
         if x >= self.cur_x && x < self.cur_x + 32 {
