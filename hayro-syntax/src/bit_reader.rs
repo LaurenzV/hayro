@@ -217,7 +217,7 @@ impl<'a> BitWriter<'a> {
     #[inline]
     pub fn fill_bytes(&mut self, byte: u8, count: usize) -> Option<()> {
         debug_assert_eq!(self.cur_pos % 8, 0);
-        
+
         let start = self.cur_pos / 8;
         let end = start + count;
         self.data.get_mut(start..end)?.fill(byte);

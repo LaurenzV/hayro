@@ -107,16 +107,16 @@ impl Image {
                         x += 8;
                         continue;
                     }
-                    
+
                     // Flush previous chunk if any, then start new one.
                     if let Some(b) = chunk_byte {
                         decoder.push_pixel_chunk(b == 0xFF, chunk_count);
                     }
-                    
+
                     chunk_byte = Some(byte);
                     chunk_count = 1;
                     x += 8;
-                    
+
                     continue;
                 }
 
