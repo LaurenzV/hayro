@@ -22,19 +22,17 @@ use crate::reader::Reader;
 
 /// Decode a symbol dictionary segment (7.4.2, 6.5).
 pub(crate) fn decode(
-    reader: &mut Reader<'_>,
+    header: &SymbolDictionaryHeader<'_>,
     input_symbols: &[&Bitmap],
     referred_tables: &[HuffmanTable],
     standard_tables: &StandardHuffmanTables,
     input_contexts: Option<&RetainedContexts>,
 ) -> Result<SymbolDictionary> {
-    let header = parse(reader)?;
-    let data = reader.tail().ok_or(ParseError::UnexpectedEof)?;
     let num_new_symbols = header.num_new_symbols;
 
     let mut ctx = SymbolDecodeContext {
-        a_ctx: ArithmeticContext::new(data, &header, input_contexts)?,
-        h_ctx: HuffmanContext::new(data, &header, referred_tables, standard_tables)?,
+        a_ctx: ArithmeticContext::new(header.data, header, input_contexts)?,
+        h_ctx: HuffmanContext::new(header.data, header, referred_tables, standard_tables)?,
         symbols: Symbols::new(input_symbols, num_new_symbols as usize),
         symbol_widths: Vec::with_capacity(num_new_symbols as usize),
         height_class_first_symbol: 0,
@@ -366,6 +364,8 @@ fn decode_aggregation_bitmap(
         refinement_at_pixels: ctx.header.refinement_at_pixels.clone(),
         num_instances: aggregation_instance_count,
         symbol_id_table,
+        // Data comes from parent decoder context, not the header.
+        data: &[],
     };
 
     let decode_ctx = if use_huffman {
@@ -413,7 +413,7 @@ impl<'a> Symbols<'a> {
 }
 
 struct SymbolDecodeContext<'a> {
-    header: SymbolDictionaryHeader,
+    header: &'a SymbolDictionaryHeader<'a>,
     a_ctx: ArithmeticContext<'a>,
     h_ctx: HuffmanContext<'a>,
     symbols: Symbols<'a>,
@@ -449,7 +449,7 @@ struct ArithmeticContext<'a> {
 impl<'a> ArithmeticContext<'a> {
     fn new(
         data: &'a [u8],
-        header: &SymbolDictionaryHeader,
+        header: &SymbolDictionaryHeader<'_>,
         input_contexts: Option<&RetainedContexts>,
     ) -> Result<Self> {
         let decoder = ArithmeticDecoder::new(data);
@@ -503,7 +503,7 @@ struct HuffmanContext<'a> {
 impl<'a> HuffmanContext<'a> {
     fn new(
         data: &'a [u8],
-        header: &SymbolDictionaryHeader,
+        header: &SymbolDictionaryHeader<'_>,
         referred_tables: &'a [HuffmanTable],
         standard_tables: &'a StandardHuffmanTables,
     ) -> Result<Self> {
@@ -707,16 +707,17 @@ pub(crate) struct SymbolDictionaryFlags {
 
 /// Parsed symbol dictionary segment header (7.4.2.1).
 #[derive(Debug, Clone)]
-pub(crate) struct SymbolDictionaryHeader {
+pub(crate) struct SymbolDictionaryHeader<'a> {
     pub(crate) flags: SymbolDictionaryFlags,
     pub(crate) adaptive_template_pixels: Vec<AdaptiveTemplatePixel>,
     pub(crate) refinement_at_pixels: Vec<AdaptiveTemplatePixel>,
     pub(crate) num_exported_symbols: u32,
     pub(crate) num_new_symbols: u32,
+    pub(crate) data: &'a [u8],
 }
 
 /// Parse a symbol dictionary segment header (7.4.2.1).
-fn parse(reader: &mut Reader<'_>) -> Result<SymbolDictionaryHeader> {
+pub(crate) fn parse<'a>(reader: &mut Reader<'a>) -> Result<SymbolDictionaryHeader<'a>> {
     let flags_word = reader.read_u16().ok_or(ParseError::UnexpectedEof)?;
     let use_huffman = flags_word & 0x0001 != 0;
     let use_refagg = flags_word & 0x0002 != 0;
@@ -779,6 +780,7 @@ fn parse(reader: &mut Reader<'_>) -> Result<SymbolDictionaryHeader> {
     };
     let num_exported_symbols = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
     let num_new_symbols = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
+    let data = reader.tail().ok_or(ParseError::UnexpectedEof)?;
 
     Ok(SymbolDictionaryHeader {
         flags,
@@ -786,5 +788,6 @@ fn parse(reader: &mut Reader<'_>) -> Result<SymbolDictionaryHeader> {
         refinement_at_pixels,
         num_exported_symbols,
         num_new_symbols,
+        data,
     })
 }

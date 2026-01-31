@@ -9,9 +9,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 /// Decode a pattern dictionary segment (7.4.4.2, 6.7).
-pub(crate) fn decode(reader: &mut Reader<'_>) -> Result<PatternDictionary> {
-    let header = parse(reader)?;
-
+pub(crate) fn decode(header: &PatternDictionaryHeader<'_>) -> Result<PatternDictionary> {
     let pattern_width = header.pattern_width as u32;
     let pattern_height = header.pattern_height as u32;
     let num_patterns = header
@@ -26,14 +24,12 @@ pub(crate) fn decode(reader: &mut Reader<'_>) -> Result<PatternDictionary> {
         .checked_mul(pattern_width)
         .ok_or(DecodeError::Overflow)?;
 
-    let encoded_data = reader.tail().ok_or(ParseError::UnexpectedEof)?;
-
     let mut collective_bitmap = Bitmap::new(collective_width, pattern_height);
 
     // "2) Decode the collective bitmap using a generic region decoding procedure
     // as described in 6.2." (6.7.5)
     if header.mmr {
-        let _ = generic::decode_bitmap_mmr(&mut collective_bitmap, encoded_data)?;
+        let _ = generic::decode_bitmap_mmr(&mut collective_bitmap, header.data)?;
     } else {
         let at_pixels = match header.template {
             Template::Template0 => {
@@ -55,7 +51,7 @@ pub(crate) fn decode(reader: &mut Reader<'_>) -> Result<PatternDictionary> {
             }
         };
 
-        let mut decoder = ArithmeticDecoder::new(encoded_data);
+        let mut decoder = ArithmeticDecoder::new(header.data);
         let mut contexts = vec![Context::default(); 1 << header.template.context_bits()];
 
         generic::decode_bitmap_arithmetic_coding(
@@ -110,19 +106,20 @@ pub(crate) struct PatternDictionary {
 
 /// Parsed pattern dictionary segment header (7.4.4.1).
 #[derive(Debug, Clone)]
-struct PatternDictionaryHeader {
-    mmr: bool,
-    template: Template,
+pub(crate) struct PatternDictionaryHeader<'a> {
+    pub(crate) mmr: bool,
+    pub(crate) template: Template,
     /// `HDPW`
-    pattern_width: u8,
+    pub(crate) pattern_width: u8,
     /// `HDPH`
-    pattern_height: u8,
+    pub(crate) pattern_height: u8,
     /// `GRAYMAX`
-    num_patterns: u32,
+    pub(crate) num_patterns: u32,
+    pub(crate) data: &'a [u8],
 }
 
 /// Parse a pattern dictionary segment header (7.4.4.1).
-fn parse(reader: &mut Reader<'_>) -> Result<PatternDictionaryHeader> {
+pub(crate) fn parse<'a>(reader: &mut Reader<'a>) -> Result<PatternDictionaryHeader<'a>> {
     let flags_byte = reader.read_byte().ok_or(ParseError::UnexpectedEof)?;
     let mmr = flags_byte & 0x01 != 0;
     let template = Template::from_byte(flags_byte >> 1);
@@ -133,6 +130,7 @@ fn parse(reader: &mut Reader<'_>) -> Result<PatternDictionaryHeader> {
         .read_nonzero_byte()
         .ok_or(ParseError::UnexpectedEof)?;
     let num_patterns = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
+    let data = reader.tail().ok_or(ParseError::UnexpectedEof)?;
 
     Ok(PatternDictionaryHeader {
         mmr,
@@ -140,5 +138,6 @@ fn parse(reader: &mut Reader<'_>) -> Result<PatternDictionaryHeader> {
         pattern_width,
         pattern_height,
         num_patterns,
+        data,
     })
 }

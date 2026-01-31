@@ -13,9 +13,11 @@ use crate::error::{DecodeError, ParseError, RegionError, Result, bail};
 use crate::reader::Reader;
 
 /// Generic refinement region decoding procedure (6.3).
-pub(crate) fn decode(reader: &mut Reader<'_>, reference: &Bitmap) -> Result<RegionBitmap> {
-    let header = parse(reader)?;
-
+pub(crate) fn decode(
+    header: &GenericRefinementRegionHeader<'_>,
+    reference: &Bitmap,
+) -> Result<RegionBitmap> {
+    let data = header.data;
     // Validate that the region fits within the reference bitmap.
     // When referring to another segment, dimensions must match exactly (7.4.7.5).
     // When using the page bitmap as reference, the region must fit within the page.
@@ -39,9 +41,8 @@ pub(crate) fn decode(reader: &mut Reader<'_>, reference: &Bitmap) -> Result<Regi
                 .and_then(|h| r.checked_sub(h))
         })
         .ok_or(DecodeError::Overflow)?;
-    let encoded_data = reader.tail().ok_or(ParseError::UnexpectedEof)?;
 
-    let mut decoder = ArithmeticDecoder::new(encoded_data);
+    let mut decoder = ArithmeticDecoder::new(data);
     let num_context_bits = header.template.context_bits();
     let mut contexts = vec![Context::default(); 1 << num_context_bits];
 
@@ -73,15 +74,16 @@ pub(crate) fn decode(reader: &mut Reader<'_>, reference: &Bitmap) -> Result<Regi
 
 /// Parsed generic refinement region segment header (7.4.7.1).
 #[derive(Debug, Clone)]
-struct GenericRefinementRegionHeader {
-    region_info: RegionSegmentInfo,
-    template: RefinementTemplate,
-    tpgron: bool,
-    adaptive_template_pixels: Vec<AdaptiveTemplatePixel>,
+pub(crate) struct GenericRefinementRegionHeader<'a> {
+    pub(crate) region_info: RegionSegmentInfo,
+    pub(crate) template: RefinementTemplate,
+    pub(crate) tpgron: bool,
+    pub(crate) adaptive_template_pixels: Vec<AdaptiveTemplatePixel>,
+    pub(crate) data: &'a [u8],
 }
 
 /// Parse a generic refinement region segment header (7.4.7.1).
-fn parse(reader: &mut Reader<'_>) -> Result<GenericRefinementRegionHeader> {
+pub(crate) fn parse<'a>(reader: &mut Reader<'a>) -> Result<GenericRefinementRegionHeader<'a>> {
     let region_info = parse_region_segment_info(reader)?;
     let flags = reader.read_byte().ok_or(ParseError::UnexpectedEof)?;
     let template = RefinementTemplate::from_byte(flags);
@@ -91,12 +93,14 @@ fn parse(reader: &mut Reader<'_>) -> Result<GenericRefinementRegionHeader> {
     } else {
         Vec::new()
     };
+    let data = reader.tail().ok_or(ParseError::UnexpectedEof)?;
 
     Ok(GenericRefinementRegionHeader {
         region_info,
         template,
         tpgron,
         adaptive_template_pixels,
+        data,
     })
 }
 

@@ -19,19 +19,18 @@ use crate::symbol_id_decoder::SymbolIdDecoder;
 
 /// Decode a text region segment (6.4).
 pub(crate) fn decode(
-    reader: &mut Reader<'_>,
+    header: &TextRegionHeader<'_>,
     symbols: &[&Bitmap],
     referred_tables: &[HuffmanTable],
     standard_tables: &StandardHuffmanTables,
 ) -> Result<RegionBitmap> {
-    let header = parse(reader, symbols.len() as u32)?;
-
     let bitmap = if header.flags.use_huffman {
-        let ctx = DecodeContext::new_huffman(reader, &header, referred_tables, standard_tables)?;
-        decode_with(ctx, symbols, &header)?
+        let mut reader = Reader::new(header.data);
+        let ctx =
+            DecodeContext::new_huffman(&mut reader, header, referred_tables, standard_tables)?;
+        decode_with(ctx, symbols, header)?
     } else {
-        let data = reader.tail().ok_or(ParseError::UnexpectedEof)?;
-        let mut decoder = ArithmeticDecoder::new(data);
+        let mut decoder = ArithmeticDecoder::new(header.data);
 
         let num_symbols = symbols.len() as u32;
         let symbol_code_length = 32 - num_symbols.saturating_sub(1).leading_zeros();
@@ -41,7 +40,7 @@ pub(crate) fn decode(
         let mut gr_contexts = vec![Context::default(); num_gr_contexts];
 
         let ctx = DecodeContext::new_arithmetic(&mut decoder, &mut contexts, &mut gr_contexts);
-        decode_with(ctx, symbols, &header)?
+        decode_with(ctx, symbols, header)?
     };
 
     Ok(RegionBitmap {
@@ -54,7 +53,7 @@ pub(crate) fn decode(
 pub(crate) fn decode_with(
     mut ctx: DecodeContext<'_, '_>,
     symbols: &[&Bitmap],
-    header: &TextRegionHeader,
+    header: &TextRegionHeader<'_>,
 ) -> Result<Bitmap> {
     let mut region = Bitmap::new_with(
         header.region_info.width,
@@ -243,7 +242,7 @@ pub(crate) enum DecodeContext<'a, 'b> {
 impl<'a, 'b> DecodeContext<'a, 'b> {
     pub(crate) fn new_huffman(
         reader: &'a mut Reader<'b>,
-        header: &'a TextRegionHeader,
+        header: &'a TextRegionHeader<'_>,
         referred_tables: &'a [HuffmanTable],
         standard_tables: &'a StandardHuffmanTables,
     ) -> Result<Self> {
@@ -490,7 +489,7 @@ enum SymbolBitmap {
 fn decode_symbol_instance_bitmap(
     ctx: &mut DecodeContext<'_, '_>,
     symbols: &[&Bitmap],
-    header: &TextRegionHeader,
+    header: &TextRegionHeader<'_>,
     symbol_id: usize,
 ) -> Result<SymbolBitmap> {
     if !header.flags.use_refinement || ctx.read_refinement_flag()? == 0 {
@@ -747,16 +746,17 @@ pub(crate) struct TextRegionHuffmanFlags {
 
 /// Parsed text region segment header (7.4.3.1).
 #[derive(Debug, Clone)]
-pub(crate) struct TextRegionHeader {
+pub(crate) struct TextRegionHeader<'a> {
     pub(crate) region_info: RegionSegmentInfo,
     pub(crate) flags: TextRegionFlags,
     pub(crate) huffman_flags: Option<TextRegionHuffmanFlags>,
     pub(crate) refinement_at_pixels: Vec<AdaptiveTemplatePixel>,
     pub(crate) num_instances: u32,
     pub(crate) symbol_id_table: Option<HuffmanTable>,
+    pub(crate) data: &'a [u8],
 }
 
-impl TextRegionHeader {
+impl TextRegionHeader<'_> {
     pub(crate) fn strip_size(&self) -> u32 {
         1_u32 << self.flags.log_strip_size
     }
@@ -821,7 +821,7 @@ fn parse_text_region_huffman_flags(reader: &mut Reader<'_>) -> Result<TextRegion
 }
 
 /// Parse a text region segment header (7.4.3.1).
-fn parse(reader: &mut Reader<'_>, num_symbols: u32) -> Result<TextRegionHeader> {
+pub(crate) fn parse<'a>(reader: &mut Reader<'a>, num_symbols: u32) -> Result<TextRegionHeader<'a>> {
     let region_info = parse_region_segment_info(reader)?;
     let flags = parse_text_region_flags(reader)?;
     let huffman_flags = if flags.use_huffman {
@@ -845,6 +845,8 @@ fn parse(reader: &mut Reader<'_>, num_symbols: u32) -> Result<TextRegionHeader> 
         None
     };
 
+    let data = reader.tail().ok_or(ParseError::UnexpectedEof)?;
+
     Ok(TextRegionHeader {
         region_info,
         flags,
@@ -852,5 +854,6 @@ fn parse(reader: &mut Reader<'_>, num_symbols: u32) -> Result<TextRegionHeader> 
         refinement_at_pixels,
         num_instances,
         symbol_id_table,
+        data,
     })
 }

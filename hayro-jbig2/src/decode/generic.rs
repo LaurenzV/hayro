@@ -12,28 +12,8 @@ use crate::error::{ParseError, RegionError, Result, TemplateError, bail};
 use crate::reader::Reader;
 
 /// Generic region decoding procedure (6.2).
-pub(crate) fn decode(reader: &mut Reader<'_>, had_unknown_length: bool) -> Result<RegionBitmap> {
-    let mut header = parse(reader)?;
-    let mut encoded_data = reader.tail().ok_or(ParseError::UnexpectedEof)?;
-
-    // "As a special case, as noted in 7.2.7, an immediate generic region segment
-    // may have an unknown length. In this case, it also indicates the height of
-    // the generic region (i.e. the number of rows that have been decoded in this
-    // segment; it must be no greater than the region segment bitmap height value
-    // in the segment's region segment information field." (7.4.6.4)
-    if had_unknown_length {
-        // Length has already been validated during segment parsing.
-        let (head, tail) = encoded_data.split_at(encoded_data.len() - 4);
-        let row_count = u32::from_be_bytes(tail.try_into().unwrap());
-
-        if row_count > header.region_info.height {
-            bail!(RegionError::InvalidDimension);
-        }
-
-        header.region_info.height = row_count;
-        encoded_data = head;
-    }
-
+pub(crate) fn decode(header: &GenericRegionHeader<'_>) -> Result<RegionBitmap> {
+    let data = header.data;
     let mut bitmap = Bitmap::new_with(
         header.region_info.width,
         header.region_info.height,
@@ -44,9 +24,9 @@ pub(crate) fn decode(reader: &mut Reader<'_>, had_unknown_length: bool) -> Resul
 
     if header.mmr {
         // "6.2.6 Decoding using MMR coding"
-        let _ = decode_bitmap_mmr(&mut bitmap, encoded_data)?;
+        let _ = decode_bitmap_mmr(&mut bitmap, data)?;
     } else {
-        let mut decoder = ArithmeticDecoder::new(encoded_data);
+        let mut decoder = ArithmeticDecoder::new(data);
         let mut contexts = vec![Context::default(); 1 << header.template.context_bits()];
 
         // "6.2.5 Decoding using a template and arithmetic coding"
@@ -68,17 +48,21 @@ pub(crate) fn decode(reader: &mut Reader<'_>, had_unknown_length: bool) -> Resul
 
 /// Parsed generic region segment header (7.4.6.1).
 #[derive(Debug, Clone)]
-struct GenericRegionHeader {
-    region_info: RegionSegmentInfo,
-    mmr: bool,
-    template: Template,
-    tpgdon: bool,
-    adaptive_template_pixels: Vec<AdaptiveTemplatePixel>,
+pub(crate) struct GenericRegionHeader<'a> {
+    pub(crate) region_info: RegionSegmentInfo,
+    pub(crate) mmr: bool,
+    pub(crate) template: Template,
+    pub(crate) tpgdon: bool,
+    pub(crate) adaptive_template_pixels: Vec<AdaptiveTemplatePixel>,
+    pub(crate) data: &'a [u8],
 }
 
 /// Parse a generic region segment header (7.4.6.1).
-fn parse(reader: &mut Reader<'_>) -> Result<GenericRegionHeader> {
-    let region_info = parse_region_segment_info(reader)?;
+pub(crate) fn parse<'a>(
+    reader: &mut Reader<'a>,
+    had_unknown_length: bool,
+) -> Result<GenericRegionHeader<'a>> {
+    let mut region_info = parse_region_segment_info(reader)?;
     let flags = reader.read_byte().ok_or(ParseError::UnexpectedEof)?;
     let mmr = flags & 0x01 != 0;
     let template = Template::from_byte(flags >> 1);
@@ -89,6 +73,27 @@ fn parse(reader: &mut Reader<'_>) -> Result<GenericRegionHeader> {
     } else {
         parse_adaptive_template_pixels(reader, template, ext_template)?
     };
+    let mut data = reader.tail().ok_or(ParseError::UnexpectedEof)?;
+
+    // "As a special case, as noted in 7.2.7, an immediate generic region segment
+    // may have an unknown length. In this case, it also indicates the height of
+    // the generic region (i.e. the number of rows that have been decoded in this
+    // segment; it must be no greater than the region segment bitmap height value
+    // in the segment's region segment information field." (7.4.6.4)
+    if had_unknown_length {
+        if data.len() < 4 {
+            bail!(ParseError::UnexpectedEof);
+        }
+        let (head, tail) = data.split_at(data.len() - 4);
+        let row_count = u32::from_be_bytes(tail.try_into().unwrap());
+
+        if row_count > region_info.height {
+            bail!(RegionError::InvalidDimension);
+        }
+
+        region_info.height = row_count;
+        data = head;
+    }
 
     Ok(GenericRegionHeader {
         region_info,
@@ -96,6 +101,7 @@ fn parse(reader: &mut Reader<'_>) -> Result<GenericRegionHeader> {
         template,
         tpgdon,
         adaptive_template_pixels,
+        data,
     })
 }
 

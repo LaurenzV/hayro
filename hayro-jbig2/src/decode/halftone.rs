@@ -13,10 +13,9 @@ use crate::reader::Reader;
 
 /// Decode a halftone region segment (7.4.5.2, 6.6).
 pub(crate) fn decode(
-    reader: &mut Reader<'_>,
+    header: &HalftoneRegionHeader<'_>,
     pattern_dict: &PatternDictionary,
 ) -> Result<RegionBitmap> {
-    let header = parse(reader)?;
     let region = &header.region_info;
 
     let mut htreg = Bitmap::new_with(
@@ -28,7 +27,7 @@ pub(crate) fn decode(
     );
 
     let skip_bitmap = if header.flags.enable_skip {
-        Some(compute_skip_bitmap(&header, pattern_dict, &htreg)?)
+        Some(compute_skip_bitmap(header, pattern_dict, &htreg)?)
     } else {
         None
     };
@@ -38,8 +37,6 @@ pub(crate) fn decode(
         .saturating_sub(1)
         .checked_ilog2()
         .map_or(1, |n| n + 1);
-
-    let encoded_data = reader.tail().ok_or(ParseError::UnexpectedEof)?;
 
     // "4) Decode an image GI of size HGW by HGH with HBPP bits per pixel using
     // the gray-scale image decoding procedure as described in Annex C." (6.6.5)
@@ -51,12 +48,12 @@ pub(crate) fn decode(
         template: header.flags.template,
         skip_mask: skip_bitmap.as_deref(),
     };
-    let gi = decode_gray_scale_image(encoded_data, &gs_params)?;
+    let gi = decode_gray_scale_image(header.data, &gs_params)?;
 
     // "5) Place sequentially the patterns corresponding to the values in GI into
     // HTREG by the procedure described in 6.6.5.2." (6.6.5)
     // TODO: Optimize drawing axis-aligned grids.
-    render_patterns(&mut htreg, &gi, &header, pattern_dict)?;
+    render_patterns(&mut htreg, &gi, header, pattern_dict)?;
 
     Ok(RegionBitmap {
         bitmap: htreg,
@@ -65,7 +62,7 @@ pub(crate) fn decode(
 }
 
 /// Parse a halftone region segment header (7.4.5.1).
-fn parse(reader: &mut Reader<'_>) -> Result<HalftoneRegionHeader> {
+pub(crate) fn parse<'a>(reader: &mut Reader<'a>) -> Result<HalftoneRegionHeader<'a>> {
     let region_info = parse_region_segment_info(reader)?;
     let flags_byte = reader.read_byte().ok_or(ParseError::UnexpectedEof)?;
     let mmr = flags_byte & 0x01 != 0;
@@ -102,49 +99,53 @@ fn parse(reader: &mut Reader<'_>) -> Result<HalftoneRegionHeader> {
         y_vector: grid_y_vector,
     };
 
+    let data = reader.tail().ok_or(ParseError::UnexpectedEof)?;
+
     Ok(HalftoneRegionHeader {
         region_info,
         flags,
         grid_position_and_size,
         grid_vector,
+        data,
     })
 }
 
 /// Parsed halftone region segment flags (7.4.5.1.1).
 #[derive(Debug, Clone)]
-struct HalftoneRegionFlags {
-    mmr: bool,
-    template: Template,
-    enable_skip: bool,
-    combination_operator: CombinationOperator,
-    initial_pixel_color: bool,
+pub(crate) struct HalftoneRegionFlags {
+    pub(crate) mmr: bool,
+    pub(crate) template: Template,
+    pub(crate) enable_skip: bool,
+    pub(crate) combination_operator: CombinationOperator,
+    pub(crate) initial_pixel_color: bool,
 }
 
 /// Halftone grid position and size (7.4.5.1.2).
 #[derive(Debug, Clone)]
-struct HalftoneGridPositionAndSize {
-    width: u32,
-    height: u32,
-    horizontal_offset: i32,
-    vertical_offset: i32,
+pub(crate) struct HalftoneGridPositionAndSize {
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+    pub(crate) horizontal_offset: i32,
+    pub(crate) vertical_offset: i32,
 }
 
 /// Halftone grid vector (7.4.5.1.3).
 #[derive(Debug, Clone)]
-struct HalftoneGridVector {
+pub(crate) struct HalftoneGridVector {
     /// `HRX` - 256 times the horizontal coordinate of the halftone grid vector.
-    x_vector: u16,
+    pub(crate) x_vector: u16,
     /// `HRY` - 256 times the vertical coordinate of the halftone grid vector.
-    y_vector: u16,
+    pub(crate) y_vector: u16,
 }
 
 /// Parsed halftone region segment header (7.4.5.1).
 #[derive(Debug, Clone)]
-struct HalftoneRegionHeader {
-    region_info: RegionSegmentInfo,
-    flags: HalftoneRegionFlags,
-    grid_position_and_size: HalftoneGridPositionAndSize,
-    grid_vector: HalftoneGridVector,
+pub(crate) struct HalftoneRegionHeader<'a> {
+    pub(crate) region_info: RegionSegmentInfo,
+    pub(crate) flags: HalftoneRegionFlags,
+    pub(crate) grid_position_and_size: HalftoneGridPositionAndSize,
+    pub(crate) grid_vector: HalftoneGridVector,
+    pub(crate) data: &'a [u8],
 }
 
 struct GridCoords {
@@ -190,7 +191,7 @@ impl GridCoords {
 
 /// Compute the HSKIP bitmap (6.6.5.1).
 fn compute_skip_bitmap(
-    header: &HalftoneRegionHeader,
+    header: &HalftoneRegionHeader<'_>,
     pattern_dict: &PatternDictionary,
     htreg: &Bitmap,
 ) -> Result<Vec<u32>> {
@@ -231,7 +232,7 @@ fn compute_skip_bitmap(
 fn render_patterns(
     region: &mut Bitmap,
     gi: &[u32],
-    header: &HalftoneRegionHeader,
+    header: &HalftoneRegionHeader<'_>,
     pattern_dict: &PatternDictionary,
 ) -> Result<()> {
     let grid = &header.grid_position_and_size;
