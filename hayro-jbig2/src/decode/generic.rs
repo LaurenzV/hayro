@@ -352,7 +352,7 @@ impl<'a> ContextGatherer<'a> {
 
     #[inline]
     fn load_chunk(bitmap: &Bitmap, row_y: u32, start_x: u32) -> u32 {
-        let mut buf = 0u32;
+        let mut buf = 0_u32;
         let row_start = (row_y * bitmap.width) as usize;
         let end_x = (start_x + 32).min(bitmap.width);
         for x in start_x..end_x {
