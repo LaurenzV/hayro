@@ -213,6 +213,18 @@ impl<'a> BitWriter<'a> {
         Some(())
     }
 
+    /// Fill bytes with a repeated value when at a byte boundary.
+    #[inline]
+    pub fn fill_bytes(&mut self, byte: u8, count: usize) -> Option<()> {
+        debug_assert_eq!(self.cur_pos % 8, 0);
+        
+        let start = self.cur_pos / 8;
+        let end = start + count;
+        self.data.get_mut(start..end)?.fill(byte);
+        self.cur_pos += count * 8;
+        Some(())
+    }
+
     /// Write multiple numbers at once.
     #[inline]
     pub fn write_bits(&mut self, bits: impl IntoIterator<Item = u32>) -> Option<()> {
