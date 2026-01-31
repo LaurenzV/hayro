@@ -81,9 +81,7 @@ pub(crate) fn parse<'a>(
     // segment; it must be no greater than the region segment bitmap height value
     // in the segment's region segment information field." (7.4.6.4)
     if had_unknown_length {
-        if data.len() < 4 {
-            bail!(ParseError::UnexpectedEof);
-        }
+        // Length has already been validated during segment parsing.
         let (head, tail) = data.split_at(data.len() - 4);
         let row_count = u32::from_be_bytes(tail.try_into().unwrap());
 
