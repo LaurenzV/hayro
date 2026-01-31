@@ -24,11 +24,34 @@ pub(crate) fn decode(
     referred_tables: &[HuffmanTable],
     standard_tables: &StandardHuffmanTables,
 ) -> Result<RegionBitmap> {
-    let bitmap = if header.flags.use_huffman {
+    let mut bitmap = Bitmap::new_with(
+        header.region_info.width,
+        header.region_info.height,
+        header.region_info.x_location,
+        header.region_info.y_location,
+        header.flags.default_pixel,
+    );
+
+    decode_into(header, symbols, referred_tables, standard_tables, &mut bitmap)?;
+
+    Ok(RegionBitmap {
+        bitmap,
+        combination_operator: header.region_info.combination_operator,
+    })
+}
+
+pub(crate) fn decode_into(
+    header: &TextRegionHeader<'_>,
+    symbols: &[&Bitmap],
+    referred_tables: &[HuffmanTable],
+    standard_tables: &StandardHuffmanTables,
+    bitmap: &mut Bitmap,
+) -> Result<()> {
+    if header.flags.use_huffman {
         let mut reader = Reader::new(header.data);
         let ctx =
             DecodeContext::new_huffman(&mut reader, header, referred_tables, standard_tables)?;
-        decode_with(ctx, symbols, header)?
+        decode_with(ctx, symbols, header, bitmap)?;
     } else {
         let mut decoder = ArithmeticDecoder::new(header.data);
 
@@ -40,13 +63,10 @@ pub(crate) fn decode(
         let mut gr_contexts = vec![Context::default(); num_gr_contexts];
 
         let ctx = DecodeContext::new_arithmetic(&mut decoder, &mut contexts, &mut gr_contexts);
-        decode_with(ctx, symbols, header)?
-    };
+        decode_with(ctx, symbols, header, bitmap)?;
+    }
 
-    Ok(RegionBitmap {
-        bitmap,
-        combination_operator: header.region_info.combination_operator,
-    })
+    Ok(())
 }
 
 /// Decode a text region segment with a decode context (6.4).
@@ -54,15 +74,8 @@ pub(crate) fn decode_with(
     mut ctx: DecodeContext<'_, '_>,
     symbols: &[&Bitmap],
     header: &TextRegionHeader<'_>,
-) -> Result<Bitmap> {
-    let mut region = Bitmap::new_with(
-        header.region_info.width,
-        header.region_info.height,
-        header.region_info.x_location,
-        header.region_info.y_location,
-        header.flags.default_pixel,
-    );
-
+    region: &mut Bitmap,
+) -> Result<()> {
     let strip_size = header.strip_size();
 
     let mut strip_t = ctx
@@ -181,7 +194,7 @@ pub(crate) fn decode_with(
         }
     }
 
-    Ok(region)
+    Ok(())
 }
 
 /// Shared integer decoder contexts for text region decoding.
