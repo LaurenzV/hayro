@@ -180,24 +180,21 @@ pub(crate) fn decode_bitmap_mmr(bitmap: &mut Bitmap, data: &[u8]) -> Result<usiz
             // 0xFFFFFFFF for white, 0 for black.
             let white_mask = (white as u32).wrapping_neg(); 
 
-            let start_byte = (self.x / 8) as usize;
-            let end_byte = (end_x / 8) as usize;
+            let start = (self.x / 8) as usize;
+            let end = (end_x / 8) as usize;
+            let first_full = start.div_ceil(4);
+            let last_full = end / 4;
 
-            let prefix_end = start_byte.next_multiple_of(4).min(end_byte);
-            for byte in start_byte..prefix_end {
-                self.bitmap.data[row_start + byte / 4] |= BYTE_MASKS[byte % 4] & white_mask;
+            for b in start..(first_full * 4).min(end) {
+                self.bitmap.data[row_start + b / 4] |= BYTE_MASKS[b % 4] & white_mask;
             }
 
-            let middle_start = prefix_end;
-            let middle_end = (end_byte / 4) * 4;
-            if middle_end > middle_start {
-                let start_word = row_start + middle_start / 4;
-                let end_word = row_start + middle_end / 4;
-                self.bitmap.data[start_word..end_word].fill(white_mask);
+            if last_full > first_full {
+                self.bitmap.data[row_start + first_full..row_start + last_full].fill(white_mask);
             }
 
-            for byte in middle_end.max(prefix_end)..end_byte {
-                self.bitmap.data[row_start + byte / 4] |= BYTE_MASKS[byte % 4] & white_mask;
+            for b in (first_full.max(last_full) * 4)..end {
+                self.bitmap.data[row_start + b / 4] |= BYTE_MASKS[b % 4] & white_mask;
             }
 
             self.x = end_x;
@@ -442,7 +439,7 @@ impl<'a> ContextGatherer<'a> {
     #[inline]
     fn load_word(bitmap: &Bitmap, row_y: u32, start_x: u32) -> u32 {
         let word_idx = start_x / 32;
-        
+
         if start_x % 32 == 0 {
             bitmap.get_word(row_y, word_idx)
         } else {
