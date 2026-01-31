@@ -263,9 +263,9 @@ pub(crate) fn decode_bitmap_arithmetic_coding(
     Ok(())
 }
 
-pub(crate) struct ContextGatherer {
+pub(crate) struct ContextGatherer<'a> {
     template: Template,
-    at_pixels: [(i8, i8); 4],
+    at_pixels: &'a [AdaptiveTemplatePixel],
     width: u32,
     height: u32,
     /// Current position.
@@ -281,18 +281,13 @@ pub(crate) struct ContextGatherer {
     ctx_cur: u16,
 }
 
-impl ContextGatherer {
+impl<'a> ContextGatherer<'a> {
     pub(crate) fn new(
         width: u32,
         height: u32,
         template: Template,
-        adaptive_template_pixels: &[AdaptiveTemplatePixel],
+        at_pixels: &'a [AdaptiveTemplatePixel],
     ) -> Self {
-        let mut at_pixels = [(0i8, 0i8); 4];
-        for (i, at) in adaptive_template_pixels.iter().enumerate().take(4) {
-            at_pixels[i] = (at.x, at.y);
-        }
-
         Self {
             template,
             at_pixels,
@@ -309,12 +304,10 @@ impl ContextGatherer {
         }
     }
 
-    /// Start a new row. Call this before processing pixels in row y.
     pub(crate) fn start_row(&mut self, bitmap: &Bitmap, y: u32) {
         self.cur_y = y;
         self.cur_x = 0;
 
-        // Load initial buffers
         self.buf_m2 = if y >= 2 {
             Self::load_chunk(bitmap, y - 2, 0)
         } else {
@@ -325,54 +318,38 @@ impl ContextGatherer {
         } else {
             0
         };
-        self.buf_cur = 0; // Current row starts empty
+        self.buf_cur = 0;
 
-        // Initialize context windows so that after gather(x=0) does its shift-and-add,
-        // we get the correct context. gather does: ctx = ((ctx << 1) & mask) | new_pixel
-        // So we need to pre-load all pixels except the rightmost one.
+        // Start initializing the contexts. Note that this won't load all initial
+        // pixels yet, those will only be loaded after our first call to `gather`.
+        // See 6.2.5.3 for the pixel positions.
         match self.template {
             Template::Template0 => {
-                // Row y-2: 3 bits for (x-1, x, x+1). At x=0, rightmost is pixel(1).
-                // Before gather: need pixel(0) so after shift+add we get [0, p0, p1]
                 self.ctx_m2 = Self::get_buf_pixel(self.buf_m2, 0);
-                // Row y-1: 5 bits for (x-2..x+2). At x=0, rightmost is pixel(2).
-                // Before gather: need [p0, p1] so after shift+add we get [0, 0, p0, p1, p2]
                 self.ctx_m1 = (Self::get_buf_pixel(self.buf_m1, 0) << 1)
                     | Self::get_buf_pixel(self.buf_m1, 1);
-                // Row y: 4 bits for (x-4..x-1). At x=0, all are negative → 0
                 self.ctx_cur = 0;
             }
             Template::Template1 => {
-                // Row y-2: 4 bits for (x-1..x+2). At x=0, rightmost is pixel(2).
-                // Before gather: need [p0, p1] so after shift+add we get [0, p0, p1, p2]
                 self.ctx_m2 = (Self::get_buf_pixel(self.buf_m2, 0) << 1)
                     | Self::get_buf_pixel(self.buf_m2, 1);
-                // Row y-1: 5 bits for (x-2..x+2). Same as Template0.
                 self.ctx_m1 = (Self::get_buf_pixel(self.buf_m1, 0) << 1)
                     | Self::get_buf_pixel(self.buf_m1, 1);
-                // Row y: 3 bits for (x-3..x-1). At x=0, all negative → 0
                 self.ctx_cur = 0;
             }
             Template::Template2 => {
-                // Row y-2: 3 bits for (x-1..x+1). At x=0, rightmost is pixel(1).
                 self.ctx_m2 = Self::get_buf_pixel(self.buf_m2, 0);
-                // Row y-1: 4 bits for (x-2..x+1). At x=0, rightmost is pixel(1).
                 self.ctx_m1 = Self::get_buf_pixel(self.buf_m1, 0);
-                // Row y: 2 bits for (x-2, x-1). At x=0, all negative → 0
                 self.ctx_cur = 0;
             }
             Template::Template3 => {
-                // No row y-2
                 self.ctx_m2 = 0;
-                // Row y-1: 5 bits for (x-3..x+1). At x=0, rightmost is pixel(1).
                 self.ctx_m1 = Self::get_buf_pixel(self.buf_m1, 0);
-                // Row y: 4 bits for (x-4..x-1). At x=0, all negative → 0
                 self.ctx_cur = 0;
             }
         }
     }
 
-    /// Load 32 pixels from bitmap row into u32 (MSB = leftmost pixel).
     #[inline]
     fn load_chunk(bitmap: &Bitmap, row_y: u32, start_x: u32) -> u32 {
         let mut buf = 0u32;
@@ -386,7 +363,6 @@ impl ContextGatherer {
         buf
     }
 
-    /// Get pixel from buffer at position (relative to buffer start).
     #[inline]
     fn get_buf_pixel(buf: u32, pos: u32) -> u16 {
         if pos < 32 {
@@ -396,9 +372,8 @@ impl ContextGatherer {
         }
     }
 
-    /// Get a pixel using direct bitmap access (for AT pixels).
     #[inline]
-    fn get_pixel_direct(&self, bitmap: &Bitmap, px: i32, py: i32) -> u16 {
+    fn get_bitmap_pixel(&self, bitmap: &Bitmap, px: i32, py: i32) -> u16 {
         if px < 0 || py < 0 || px >= self.width as i32 || py >= self.height as i32 {
             0
         } else if bitmap.data[(py as u32 * self.width + px as u32) as usize] {
@@ -408,17 +383,15 @@ impl ContextGatherer {
         }
     }
 
-    /// Reload buffers when we've consumed all 32 pixels.
     #[inline]
     fn maybe_reload_buffers(&mut self, bitmap: &Bitmap, x: u32) {
-        // Check if we need to reload (when rightmost needed pixel exceeds buffer)
         let max_right = match self.template {
             Template::Template0 | Template::Template1 => 2,
             Template::Template2 | Template::Template3 => 1,
         };
 
         if x + max_right >= self.cur_x + 32 {
-            let new_start = x.saturating_sub(4); // Leave room for left pixels
+            let new_start = x.saturating_sub(4);
             self.cur_x = new_start;
             self.buf_m2 = if self.cur_y >= 2 {
                 Self::load_chunk(bitmap, self.cur_y - 2, new_start)
@@ -434,7 +407,6 @@ impl ContextGatherer {
         }
     }
 
-    /// Gather context bits for pixel at position x in the current row.
     #[inline]
     pub(crate) fn gather(&mut self, bitmap: &Bitmap, x: u32) -> u16 {
         self.maybe_reload_buffers(bitmap, x);
@@ -446,50 +418,39 @@ impl ContextGatherer {
             Template::Template3 => self.gather_template3(bitmap, x),
         }
     }
-
-    /// Template 0: 16 bits total
-    /// - Row y-2: 3 bits (x-1, x, x+1) at positions 14-12
-    /// - Row y-1: 5 bits (x-2 to x+2) at positions 9-5
-    /// - Row y: 4 bits (x-4 to x-1) at positions 3-0
-    /// - AT pixels at positions 15, 11, 10, 4
+    
     #[inline]
     fn gather_template0(&mut self, bitmap: &Bitmap, x: u32) -> u16 {
         let bx = x - self.cur_x;
         let xi = x as i32;
         let yi = self.cur_y as i32;
 
-        // Shift row contexts left and add new rightmost pixels
-        // Row y-2: 3 bits, new pixel at x+1
         self.ctx_m2 = ((self.ctx_m2 << 1) & 0b111) | Self::get_buf_pixel(self.buf_m2, bx + 1);
-        // Row y-1: 5 bits, new pixel at x+2
         self.ctx_m1 = ((self.ctx_m1 << 1) & 0b11111) | Self::get_buf_pixel(self.buf_m1, bx + 2);
-        // Row y: 4 bits, new pixel at x-1 (just decoded)
         self.ctx_cur =
             ((self.ctx_cur << 1) & 0b1111) | Self::get_buf_pixel(self.buf_cur, bx.wrapping_sub(1));
 
-        // Fetch AT pixels
-        let at1 = self.get_pixel_direct(
+        let at1 = self.get_bitmap_pixel(
             bitmap,
-            xi + self.at_pixels[0].0 as i32,
-            yi + self.at_pixels[0].1 as i32,
+            xi + self.at_pixels[0].x as i32,
+            yi + self.at_pixels[0].y as i32,
         );
-        let at2 = self.get_pixel_direct(
+        let at2 = self.get_bitmap_pixel(
             bitmap,
-            xi + self.at_pixels[1].0 as i32,
-            yi + self.at_pixels[1].1 as i32,
+            xi + self.at_pixels[1].x as i32,
+            yi + self.at_pixels[1].y as i32,
         );
-        let at3 = self.get_pixel_direct(
+        let at3 = self.get_bitmap_pixel(
             bitmap,
-            xi + self.at_pixels[2].0 as i32,
-            yi + self.at_pixels[2].1 as i32,
+            xi + self.at_pixels[2].x as i32,
+            yi + self.at_pixels[2].y as i32,
         );
-        let at4 = self.get_pixel_direct(
+        let at4 = self.get_bitmap_pixel(
             bitmap,
-            xi + self.at_pixels[3].0 as i32,
-            yi + self.at_pixels[3].1 as i32,
+            xi + self.at_pixels[3].x as i32,
+            yi + self.at_pixels[3].y as i32,
         );
 
-        // Combine: AT4(15) | ctx_m2(14-12) | AT3(11) | AT2(10) | ctx_m1(9-5) | AT1(4) | ctx_cur(3-0)
         (at4 << 15)
             | (self.ctx_m2 << 12)
             | (at3 << 11)
@@ -499,27 +460,21 @@ impl ContextGatherer {
             | self.ctx_cur
     }
 
-    /// Template 1: 13 bits total
-    /// - Row y-2: 4 bits (x-1 to x+2) at positions 12-9
-    /// - Row y-1: 5 bits (x-2 to x+2) at positions 8-4
-    /// - Row y: 3 bits (x-3 to x-1) at positions 2-0
-    /// - AT1 at position 3
     #[inline]
     fn gather_template1(&mut self, bitmap: &Bitmap, x: u32) -> u16 {
         let bx = x - self.cur_x;
         let xi = x as i32;
         let yi = self.cur_y as i32;
 
-        // Shift and add new pixels
         self.ctx_m2 = ((self.ctx_m2 << 1) & 0b1111) | Self::get_buf_pixel(self.buf_m2, bx + 2);
         self.ctx_m1 = ((self.ctx_m1 << 1) & 0b11111) | Self::get_buf_pixel(self.buf_m1, bx + 2);
         self.ctx_cur =
             ((self.ctx_cur << 1) & 0b111) | Self::get_buf_pixel(self.buf_cur, bx.wrapping_sub(1));
 
-        let at1 = self.get_pixel_direct(
+        let at1 = self.get_bitmap_pixel(
             bitmap,
-            xi + self.at_pixels[0].0 as i32,
-            yi + self.at_pixels[0].1 as i32,
+            xi + self.at_pixels[0].x as i32,
+            yi + self.at_pixels[0].y as i32,
         );
 
         // Combine: ctx_m2(12-9) | ctx_m1(8-4) | AT1(3) | ctx_cur(2-0)
@@ -542,10 +497,10 @@ impl ContextGatherer {
         self.ctx_cur =
             ((self.ctx_cur << 1) & 0b11) | Self::get_buf_pixel(self.buf_cur, bx.wrapping_sub(1));
 
-        let at1 = self.get_pixel_direct(
+        let at1 = self.get_bitmap_pixel(
             bitmap,
-            xi + self.at_pixels[0].0 as i32,
-            yi + self.at_pixels[0].1 as i32,
+            xi + self.at_pixels[0].x as i32,
+            yi + self.at_pixels[0].y as i32,
         );
 
         // Combine: ctx_m2(9-7) | ctx_m1(6-3) | AT1(2) | ctx_cur(1-0)
@@ -566,10 +521,10 @@ impl ContextGatherer {
         self.ctx_cur =
             ((self.ctx_cur << 1) & 0b1111) | Self::get_buf_pixel(self.buf_cur, bx.wrapping_sub(1));
 
-        let at1 = self.get_pixel_direct(
+        let at1 = self.get_bitmap_pixel(
             bitmap,
-            xi + self.at_pixels[0].0 as i32,
-            yi + self.at_pixels[0].1 as i32,
+            xi + self.at_pixels[0].x as i32,
+            yi + self.at_pixels[0].y as i32,
         );
 
         // Combine: ctx_m1(9-5) | AT1(4) | ctx_cur(3-0)
