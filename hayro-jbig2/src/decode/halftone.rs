@@ -26,8 +26,21 @@ pub(crate) fn decode(
         header.flags.initial_pixel_color,
     );
 
+    decode_into(header, pattern_dict, &mut htreg)?;
+
+    Ok(RegionBitmap {
+        bitmap: htreg,
+        combination_operator: region.combination_operator,
+    })
+}
+
+pub(crate) fn decode_into(
+    header: &HalftoneRegionHeader<'_>,
+    pattern_dict: &PatternDictionary,
+    htreg: &mut Bitmap,
+) -> Result<()> {
     let skip_bitmap = if header.flags.enable_skip {
-        Some(compute_skip_bitmap(header, pattern_dict, &htreg)?)
+        Some(compute_skip_bitmap(header, pattern_dict, htreg)?)
     } else {
         None
     };
@@ -53,12 +66,9 @@ pub(crate) fn decode(
     // "5) Place sequentially the patterns corresponding to the values in GI into
     // HTREG by the procedure described in 6.6.5.2." (6.6.5)
     // TODO: Optimize drawing axis-aligned grids.
-    render_patterns(&mut htreg, &gi, header, pattern_dict)?;
+    render_patterns(htreg, &gi, header, pattern_dict)?;
 
-    Ok(RegionBitmap {
-        bitmap: htreg,
-        combination_operator: region.combination_operator,
-    })
+    Ok(())
 }
 
 /// Parse a halftone region segment header (7.4.5.1).
