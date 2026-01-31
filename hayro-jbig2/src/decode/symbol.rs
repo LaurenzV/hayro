@@ -382,7 +382,15 @@ fn decode_aggregation_bitmap(
         )
     };
 
-    decode_with(decode_ctx, &all_symbols, &header)
+    let mut bitmap = Bitmap::new_with(
+        header.region_info.width,
+        header.region_info.height,
+        header.region_info.x_location,
+        header.region_info.y_location,
+        header.flags.default_pixel,
+    );
+    decode_with(decode_ctx, &all_symbols, &header, &mut bitmap)?;
+    Ok(bitmap)
 }
 
 struct Symbols<'a> {
