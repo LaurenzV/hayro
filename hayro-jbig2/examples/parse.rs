@@ -5,7 +5,7 @@ fn main() {
     // let filename = "bitmap-symbol-refine.jbig2";
 
     let path = "/Users/lstampfl/Programming/hayro/test.jb2";
-    let data = std::fs::read(&path).expect("Failed to read test file");
+    let data = std::fs::read(path).expect("Failed to read test file");
 
     // println!("Decoding: {filename} ({} bytes)", data.len());
 
