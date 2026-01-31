@@ -364,8 +364,7 @@ fn decode_aggregation_bitmap(
         refinement_at_pixels: ctx.header.refinement_at_pixels.clone(),
         num_instances: aggregation_instance_count,
         symbol_id_table,
-        // Data comes from parent decoder context, not the header.
-        data: &[],
+        data: &[], // Data comes from parent decoder context, not the header.
     };
 
     let decode_ctx = if use_huffman {

@@ -201,7 +201,8 @@ fn decode_with_segments(segments: &[segment::Segment<'_>]) -> Result<Image> {
             }
             SegmentType::ImmediateGenericRegion | SegmentType::ImmediateLosslessGenericRegion => {
                 let had_unknown_length = seg.header.data_length.is_none();
-                let region = generic::decode(&mut reader, had_unknown_length)?;
+                let header = generic::parse(&mut reader, had_unknown_length)?;
+                let region = generic::decode(&header)?;
                 ctx.page_bitmap.combine(
                     &region.bitmap,
                     region.bitmap.x_location as i32,
@@ -211,11 +212,13 @@ fn decode_with_segments(segments: &[segment::Segment<'_>]) -> Result<Image> {
             }
             SegmentType::IntermediateGenericRegion => {
                 // Intermediate segments cannot have unknown length.
-                let region = generic::decode(&mut reader, false)?;
+                let header = generic::parse(&mut reader, false)?;
+                let region = generic::decode(&header)?;
                 ctx.store_region(seg.header.segment_number, region.bitmap);
             }
             SegmentType::PatternDictionary => {
-                let dictionary = pattern::decode(&mut reader)?;
+                let header = pattern::parse(&mut reader)?;
+                let dictionary = pattern::decode(&header)?;
                 ctx.store_pattern_dictionary(seg.header.segment_number, dictionary);
             }
             SegmentType::SymbolDictionary => {
@@ -247,8 +250,9 @@ fn decode_with_segments(segments: &[segment::Segment<'_>]) -> Result<Image> {
                     .and_then(|&num| ctx.get_symbol_dictionary(num))
                     .and_then(|dict| dict.retained_contexts.as_ref());
 
+                let header = symbol::parse(&mut reader)?;
                 let dictionary = symbol::decode(
-                    &mut reader,
+                    &header,
                     &input_symbols,
                     &referred_tables,
                     &ctx.standard_tables,
@@ -277,12 +281,9 @@ fn decode_with_segments(segments: &[segment::Segment<'_>]) -> Result<Image> {
                     .cloned()
                     .collect();
 
-                let region = text::decode(
-                    &mut reader,
-                    &symbols,
-                    &referred_tables,
-                    &ctx.standard_tables,
-                )?;
+                let header = text::parse(&mut reader, symbols.len() as u32)?;
+                let region =
+                    text::decode(&header, &symbols, &referred_tables, &ctx.standard_tables)?;
                 ctx.page_bitmap.combine(
                     &region.bitmap,
                     region.bitmap.x_location as i32,
@@ -309,12 +310,9 @@ fn decode_with_segments(segments: &[segment::Segment<'_>]) -> Result<Image> {
                     .cloned()
                     .collect();
 
-                let region = text::decode(
-                    &mut reader,
-                    &symbols,
-                    &referred_tables,
-                    &ctx.standard_tables,
-                )?;
+                let header = text::parse(&mut reader, symbols.len() as u32)?;
+                let region =
+                    text::decode(&header, &symbols, &referred_tables, &ctx.standard_tables)?;
                 ctx.store_region(seg.header.segment_number, region.bitmap);
             }
             SegmentType::ImmediateHalftoneRegion | SegmentType::ImmediateLosslessHalftoneRegion => {
@@ -325,7 +323,8 @@ fn decode_with_segments(segments: &[segment::Segment<'_>]) -> Result<Image> {
                     .and_then(|&num| ctx.get_pattern_dictionary(num))
                     .ok_or(SegmentError::MissingPatternDictionary)?;
 
-                let region = halftone::decode(&mut reader, pattern_dict)?;
+                let header = halftone::parse(&mut reader)?;
+                let region = halftone::decode(&header, pattern_dict)?;
                 ctx.page_bitmap.combine(
                     &region.bitmap,
                     region.bitmap.x_location as i32,
@@ -341,7 +340,8 @@ fn decode_with_segments(segments: &[segment::Segment<'_>]) -> Result<Image> {
                     .and_then(|&num| ctx.get_pattern_dictionary(num))
                     .ok_or(SegmentError::MissingPatternDictionary)?;
 
-                let region = halftone::decode(&mut reader, pattern_dict)?;
+                let header = halftone::parse(&mut reader)?;
+                let region = halftone::decode(&header, pattern_dict)?;
                 ctx.store_region(seg.header.segment_number, region.bitmap);
             }
             SegmentType::IntermediateGenericRefinementRegion => {
@@ -353,7 +353,8 @@ fn decode_with_segments(segments: &[segment::Segment<'_>]) -> Result<Image> {
                     .and_then(|&num| ctx.get_referred_segment(num))
                     .unwrap_or(&ctx.page_bitmap);
 
-                let region = generic_refinement::decode(&mut reader, reference)?;
+                let header = generic_refinement::parse(&mut reader)?;
+                let region = generic_refinement::decode(&header, reference)?;
                 ctx.store_region(seg.header.segment_number, region.bitmap);
             }
             SegmentType::ImmediateGenericRefinementRegion
@@ -370,7 +371,8 @@ fn decode_with_segments(segments: &[segment::Segment<'_>]) -> Result<Image> {
                     .and_then(|&num| ctx.get_referred_segment(num))
                     .unwrap_or(&ctx.page_bitmap);
 
-                let region = generic_refinement::decode(&mut reader, reference)?;
+                let header = generic_refinement::parse(&mut reader)?;
+                let region = generic_refinement::decode(&header, reference)?;
                 ctx.page_bitmap.combine(
                     &region.bitmap,
                     region.bitmap.x_location as i32,
