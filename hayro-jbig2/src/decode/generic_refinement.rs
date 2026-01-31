@@ -9,7 +9,6 @@ use super::{
 };
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::Bitmap;
-use crate::decode::generic::get_pixel;
 use crate::error::{DecodeError, ParseError, RegionError, Result, bail};
 use crate::reader::Reader;
 
@@ -279,5 +278,17 @@ fn gather_context(
 
             context
         }
+    }
+}
+
+/// Get a pixel value, returning 0 for out-of-bounds coordinates.
+#[inline]
+fn get_pixel(bitmap: &Bitmap, x: i32, y: i32) -> u16 {
+    if x < 0 || y < 0 || x >= bitmap.width as i32 || y >= bitmap.height as i32 {
+        0
+    } else if bitmap.get_pixel(x as u32, y as u32) {
+        1
+    } else {
+        0
     }
 }

@@ -5,7 +5,7 @@ use alloc::vec::Vec;
 
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::Bitmap;
-use crate::decode::generic::{decode_bitmap_mmr, gather_context};
+use crate::decode::generic::{ContextGatherer, decode_bitmap_mmr};
 use crate::decode::{AdaptiveTemplatePixel, Template};
 use crate::error::Result;
 
@@ -100,21 +100,28 @@ fn decode_arithmetic(data: &[u8], params: &GrayScaleParams<'_>) -> Result<Vec<u3
     decode_bitplanes(bits_per_pixel, size, |_| {
         // Table C.4: "GBW = GSW, GBH = GSH, TPGDON = 0"
         let mut bitplane = Bitmap::new(width, height);
+        let mut gatherer = ContextGatherer::new(width, height, template, &at_pixels);
 
         for y in 0..height {
+            gatherer.start_row(&bitplane, y);
             for x in 0..width {
                 // Table C.4: "USESKIP = GSUSESKIP, SKIP = GSKIP"
                 if let Some(mask) = skip_mask {
                     let idx = (y * width + x) as usize;
                     if mask[idx] {
+                        // Still need to update the context.
+                        let _ = gatherer.gather(&bitplane, x);
+                        gatherer.update_current_row(x, false);
                         continue;
                     }
                 }
 
-                let context = gather_context(&bitplane, x, y, template, &at_pixels);
+                let context = gatherer.gather(&bitplane, x);
                 let pixel = decoder.decode(&mut contexts[context as usize]);
+                let value = pixel != 0;
 
-                bitplane.set_pixel(x, y, pixel != 0);
+                bitplane.set_pixel(x, y, value);
+                gatherer.update_current_row(x, value);
             }
         }
 
