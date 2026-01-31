@@ -128,6 +128,27 @@ pub(crate) fn parse_adaptive_template_pixels(
     Ok(pixels)
 }
 
+/// Whether the adaptive template pixels correspond to the default ones.
+/// See Table 5.
+fn has_default_at_pixels(template: Template, at_pixels: &[AdaptiveTemplatePixel]) -> bool {
+    match template {
+        Template::Template0 => {
+            at_pixels.len() == 4
+                && at_pixels[0].x == 3
+                && at_pixels[0].y == -1
+                && at_pixels[1].x == -3
+                && at_pixels[1].y == -1
+                && at_pixels[2].x == 2
+                && at_pixels[2].y == -2
+                && at_pixels[3].x == -2
+                && at_pixels[3].y == -2
+        }
+        Template::Template1 => at_pixels.len() == 1 && at_pixels[0].x == 3 && at_pixels[0].y == -1,
+        Template::Template2 => at_pixels.len() == 1 && at_pixels[0].x == 2 && at_pixels[0].y == -1,
+        Template::Template3 => at_pixels.len() == 1 && at_pixels[0].x == 2 && at_pixels[0].y == -1,
+    }
+}
+
 /// Decode a bitmap using MMR coding (6.2.6).
 pub(crate) fn decode_bitmap_mmr(bitmap: &mut Bitmap, data: &[u8]) -> Result<usize> {
     /// A decoder sink that writes decoded pixels into a `Bitmap`.
@@ -266,6 +287,7 @@ pub(crate) fn decode_bitmap_arithmetic_coding(
 pub(crate) struct ContextGatherer<'a> {
     template: Template,
     at_pixels: &'a [AdaptiveTemplatePixel],
+    use_default_at: bool,
     width: u32,
     height: u32,
     /// Current position.
@@ -289,6 +311,7 @@ impl<'a> ContextGatherer<'a> {
         Self {
             template,
             at_pixels,
+            use_default_at: has_default_at_pixels(template, at_pixels),
             width,
             height,
             cur_y: 0,
@@ -304,6 +327,11 @@ impl<'a> ContextGatherer<'a> {
     const SHIFT_MASK_T1: u16 = 0b0001_1101_1110_0110;
     const SHIFT_MASK_T2: u16 = 0b0000_0011_0111_0010;
     const SHIFT_MASK_T3: u16 = 0b0000_0011_1100_1110;
+
+    const SHIFT_MASK_T0_DEFAULT: u16 = 0b1111_0111_1110_1110;
+    const SHIFT_MASK_T1_DEFAULT: u16 = 0b0001_1101_1111_0110;
+    const SHIFT_MASK_T2_DEFAULT: u16 = 0b0000_0011_0111_1010;
+    const SHIFT_MASK_T3_DEFAULT: u16 = 0b0000_0011_1110_1110;
 
     pub(crate) fn start_row(&mut self, bitmap: &Bitmap, y: u32) {
         self.cur_y = y;
@@ -324,7 +352,16 @@ impl<'a> ContextGatherer<'a> {
         // Start initializing the contexts. Note that this won't load all initial
         // pixels yet, those will only be loaded after our first call to `gather`.
         // See 6.2.5.3 for the pixel positions.
-        self.ctx = match self.template {
+        self.ctx = if self.use_default_at {
+            self.init_context_default()
+        } else {
+            self.init_context_custom()
+        };
+    }
+
+    #[inline]
+    fn init_context_custom(&self) -> u16 {
+        match self.template {
             Template::Template0 => {
                 let m2 = Self::get_buf_pixel(self.buf_m2, 0);
                 let m1 = (Self::get_buf_pixel(self.buf_m1, 0) << 1)
@@ -347,7 +384,36 @@ impl<'a> ContextGatherer<'a> {
                 let m1 = Self::get_buf_pixel(self.buf_m1, 0);
                 m1 << 5
             }
-        };
+        }
+    }
+
+    #[inline]
+    fn init_context_default(&self) -> u16 {
+        match self.template {
+            Template::Template0 => {
+                (Self::get_buf_pixel(self.buf_m2, 0) << 12)
+                    | (Self::get_buf_pixel(self.buf_m2, 1) << 11)
+                    | (Self::get_buf_pixel(self.buf_m1, 0) << 6)
+                    | (Self::get_buf_pixel(self.buf_m1, 1) << 5)
+                    | (Self::get_buf_pixel(self.buf_m1, 2) << 4)
+            }
+            Template::Template1 => {
+                (Self::get_buf_pixel(self.buf_m2, 0) << 10)
+                    | (Self::get_buf_pixel(self.buf_m2, 1) << 9)
+                    | (Self::get_buf_pixel(self.buf_m1, 0) << 5)
+                    | (Self::get_buf_pixel(self.buf_m1, 1) << 4)
+                    | (Self::get_buf_pixel(self.buf_m1, 2) << 3)
+            }
+            Template::Template2 => {
+                (Self::get_buf_pixel(self.buf_m2, 0) << 7)
+                    | (Self::get_buf_pixel(self.buf_m1, 0) << 3)
+                    | (Self::get_buf_pixel(self.buf_m1, 1) << 2)
+            }
+            Template::Template3 => {
+                (Self::get_buf_pixel(self.buf_m1, 0) << 5)
+                    | (Self::get_buf_pixel(self.buf_m1, 1) << 4)
+            }
+        }
     }
 
     #[inline]
@@ -386,8 +452,20 @@ impl<'a> ContextGatherer<'a> {
     #[inline]
     fn maybe_reload_buffers(&mut self, bitmap: &Bitmap, x: u32) {
         let max_right = match self.template {
-            Template::Template0 | Template::Template1 => 2,
-            Template::Template2 | Template::Template3 => 1,
+            Template::Template0 | Template::Template1 => {
+                if self.use_default_at {
+                    3
+                } else {
+                    2
+                }
+            }
+            Template::Template2 | Template::Template3 => {
+                if self.use_default_at {
+                    2
+                } else {
+                    1
+                }
+            }
         };
 
         if x + max_right >= self.cur_x + 32 {
@@ -411,16 +489,25 @@ impl<'a> ContextGatherer<'a> {
     pub(crate) fn gather(&mut self, bitmap: &Bitmap, x: u32) -> u16 {
         self.maybe_reload_buffers(bitmap, x);
 
-        match self.template {
-            Template::Template0 => self.gather_template0(bitmap, x),
-            Template::Template1 => self.gather_template1(bitmap, x),
-            Template::Template2 => self.gather_template2(bitmap, x),
-            Template::Template3 => self.gather_template3(bitmap, x),
+        if self.use_default_at {
+            match self.template {
+                Template::Template0 => self.gather_template0_default(x),
+                Template::Template1 => self.gather_template1_default(x),
+                Template::Template2 => self.gather_template2_default(x),
+                Template::Template3 => self.gather_template3_default(x),
+            }
+        } else {
+            match self.template {
+                Template::Template0 => self.gather_template0_custom(bitmap, x),
+                Template::Template1 => self.gather_template1_custom(bitmap, x),
+                Template::Template2 => self.gather_template2_custom(bitmap, x),
+                Template::Template3 => self.gather_template3_custom(bitmap, x),
+            }
         }
     }
 
     #[inline]
-    fn gather_template0(&mut self, bitmap: &Bitmap, x: u32) -> u16 {
+    fn gather_template0_custom(&mut self, bitmap: &Bitmap, x: u32) -> u16 {
         let bx = x - self.cur_x;
         let xi = x as i32;
         let yi = self.cur_y as i32;
@@ -454,7 +541,7 @@ impl<'a> ContextGatherer<'a> {
     }
 
     #[inline]
-    fn gather_template1(&mut self, bitmap: &Bitmap, x: u32) -> u16 {
+    fn gather_template1_custom(&mut self, bitmap: &Bitmap, x: u32) -> u16 {
         let bx = x - self.cur_x;
         let xi = x as i32;
         let yi = self.cur_y as i32;
@@ -473,7 +560,7 @@ impl<'a> ContextGatherer<'a> {
     }
 
     #[inline]
-    fn gather_template2(&mut self, bitmap: &Bitmap, x: u32) -> u16 {
+    fn gather_template2_custom(&mut self, bitmap: &Bitmap, x: u32) -> u16 {
         let bx = x - self.cur_x;
         let xi = x as i32;
         let yi = self.cur_y as i32;
@@ -492,7 +579,7 @@ impl<'a> ContextGatherer<'a> {
     }
 
     #[inline]
-    fn gather_template3(&mut self, bitmap: &Bitmap, x: u32) -> u16 {
+    fn gather_template3_custom(&mut self, bitmap: &Bitmap, x: u32) -> u16 {
         let bx = x - self.cur_x;
         let xi = x as i32;
         let yi = self.cur_y as i32;
@@ -506,6 +593,49 @@ impl<'a> ContextGatherer<'a> {
             ) << 4);
 
         self.ctx = ((self.ctx << 1) & Self::SHIFT_MASK_T3) | new_pixels;
+        self.ctx
+    }
+
+    #[inline]
+    fn gather_template0_default(&mut self, x: u32) -> u16 {
+        let bx = x - self.cur_x;
+        let new_pixels = (Self::get_buf_pixel(self.buf_m2, bx + 2) << 11)
+            | (Self::get_buf_pixel(self.buf_m1, bx + 3) << 4)
+            | Self::get_buf_pixel(self.buf_cur, bx.wrapping_sub(1));
+
+        self.ctx = ((self.ctx << 1) & Self::SHIFT_MASK_T0_DEFAULT) | new_pixels;
+        self.ctx
+    }
+
+    #[inline]
+    fn gather_template1_default(&mut self, x: u32) -> u16 {
+        let bx = x - self.cur_x;
+        let new_pixels = (Self::get_buf_pixel(self.buf_m2, bx + 2) << 9)
+            | (Self::get_buf_pixel(self.buf_m1, bx + 3) << 3)
+            | Self::get_buf_pixel(self.buf_cur, bx.wrapping_sub(1));
+
+        self.ctx = ((self.ctx << 1) & Self::SHIFT_MASK_T1_DEFAULT) | new_pixels;
+        self.ctx
+    }
+
+    #[inline]
+    fn gather_template2_default(&mut self, x: u32) -> u16 {
+        let bx = x - self.cur_x;
+        let new_pixels = (Self::get_buf_pixel(self.buf_m2, bx + 1) << 7)
+            | (Self::get_buf_pixel(self.buf_m1, bx + 2) << 2)
+            | Self::get_buf_pixel(self.buf_cur, bx.wrapping_sub(1));
+
+        self.ctx = ((self.ctx << 1) & Self::SHIFT_MASK_T2_DEFAULT) | new_pixels;
+        self.ctx
+    }
+
+    #[inline]
+    fn gather_template3_default(&mut self, x: u32) -> u16 {
+        let bx = x - self.cur_x;
+        let new_pixels = (Self::get_buf_pixel(self.buf_m1, bx + 2) << 4)
+            | Self::get_buf_pixel(self.buf_cur, bx.wrapping_sub(1));
+
+        self.ctx = ((self.ctx << 1) & Self::SHIFT_MASK_T3_DEFAULT) | new_pixels;
         self.ctx
     }
 
