@@ -204,7 +204,6 @@ fn decode_with_segments(segments: &[segment::Segment<'_>]) -> Result<Image> {
                 let had_unknown_length = seg.header.data_length.is_none();
                 let header = generic::parse(&mut reader, had_unknown_length)?;
 
-                // Generic regions always initialize with default pixel = false.
                 if ctx.can_decode_directly(&page_bitmap, &header.region_info, false) {
                     generic::decode_into(&header, &mut page_bitmap)?;
                 } else {
