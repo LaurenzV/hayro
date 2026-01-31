@@ -51,7 +51,7 @@ impl Bitmap {
         default_pixel: bool,
     ) -> Self {
         let stride = width.div_ceil(32);
-        let default_word = if default_pixel { !0u32 } else { 0u32 };
+        let default_word = if default_pixel { !0_u32 } else { 0_u32 };
         let data = vec![default_word; (stride * height) as usize];
         Self {
             width,
@@ -124,9 +124,9 @@ impl Bitmap {
                 let bit_end = px_end - word_start_x;
 
                 let mask = if bit_end == 32 {
-                    !0u32 >> bit_start
+                    !0_u32 >> bit_start
                 } else {
-                    (!0u32 >> bit_start) & !(!0u32 >> bit_end)
+                    (!0_u32 >> bit_start) & !(!0_u32 >> bit_end)
                 };
 
                 let src_x_for_range = src_x_start + (px_start - dest_x_start);

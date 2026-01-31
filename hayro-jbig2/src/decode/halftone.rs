@@ -194,7 +194,7 @@ fn compute_skip_bitmap(
     let region_height = htreg.height as i32;
 
     let stride = grid.width.div_ceil(32);
-    let mut hskip = vec![0u32; (stride * grid.height) as usize];
+    let mut hskip = vec![0_u32; (stride * grid.height) as usize];
 
     // "1) For each value of m_g between 0 and HGH − 1, beginning from 0,
     // perform the following steps:" (6.6.5.1)

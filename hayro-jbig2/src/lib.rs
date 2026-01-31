@@ -91,9 +91,9 @@ impl Image {
         let bytes_per_row = self.width.div_ceil(8) as usize;
 
         for row in self.data.chunks_exact(self.stride as usize) {
-            let mut x = 0u32;
+            let mut x = 0_u32;
             let mut chunk_byte: Option<u8> = None;
-            let mut chunk_count = 0u32;
+            let mut chunk_count = 0_u32;
 
             let bytes = row.iter().flat_map(|w| w.to_be_bytes()).take(bytes_per_row);
 

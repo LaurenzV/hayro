@@ -440,7 +440,7 @@ impl<'a> ContextGatherer<'a> {
     fn load_word(bitmap: &Bitmap, row_y: u32, start_x: u32) -> u32 {
         let word_idx = start_x / 32;
 
-        if start_x % 32 == 0 {
+        if start_x.is_multiple_of(32) {
             bitmap.get_word(row_y, word_idx)
         } else {
             let bit_offset = start_x % 32;
