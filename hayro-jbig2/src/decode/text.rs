@@ -32,7 +32,13 @@ pub(crate) fn decode(
         header.flags.default_pixel,
     );
 
-    decode_into(header, symbols, referred_tables, standard_tables, &mut bitmap)?;
+    decode_into(
+        header,
+        symbols,
+        referred_tables,
+        standard_tables,
+        &mut bitmap,
+    )?;
 
     Ok(RegionBitmap {
         bitmap,

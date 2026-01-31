@@ -291,7 +291,11 @@ fn decode_with_segments(segments: &[segment::Segment<'_>]) -> Result<Image> {
 
                 let header = text::parse(&mut reader, symbols.len() as u32)?;
 
-                if ctx.can_decode_directly(&page_bitmap, &header.region_info, header.flags.default_pixel) {
+                if ctx.can_decode_directly(
+                    &page_bitmap,
+                    &header.region_info,
+                    header.flags.default_pixel,
+                ) {
                     text::decode_into(
                         &header,
                         &symbols,
@@ -345,7 +349,11 @@ fn decode_with_segments(segments: &[segment::Segment<'_>]) -> Result<Image> {
 
                 let header = halftone::parse(&mut reader)?;
 
-                if ctx.can_decode_directly(&page_bitmap, &header.region_info, header.flags.initial_pixel_color) {
+                if ctx.can_decode_directly(
+                    &page_bitmap,
+                    &header.region_info,
+                    header.flags.initial_pixel_color,
+                ) {
                     halftone::decode_into(&header, pattern_dict, &mut page_bitmap)?;
                 } else {
                     let region = halftone::decode(&header, pattern_dict)?;
@@ -397,15 +405,11 @@ fn decode_with_segments(segments: &[segment::Segment<'_>]) -> Result<Image> {
                     .and_then(|&num| ctx.get_referred_segment(num));
 
                 let header = generic_refinement::parse(&mut reader)?;
-                
+
                 if let Some(referred_segment) = referred_segment
                     && ctx.can_decode_directly(&page_bitmap, &header.region_info, false)
                 {
-                    generic_refinement::decode_into(
-                        &header,
-                        referred_segment,
-                        &mut page_bitmap,
-                    )?;
+                    generic_refinement::decode_into(&header, referred_segment, &mut page_bitmap)?;
                 } else {
                     let reference = referred_segment.unwrap_or(&page_bitmap);
                     let region = generic_refinement::decode(&header, reference)?;
