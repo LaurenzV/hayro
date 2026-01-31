@@ -418,7 +418,7 @@ impl<'a> ContextGatherer<'a> {
             Template::Template3 => self.gather_template3(bitmap, x),
         }
     }
-    
+
     #[inline]
     fn gather_template0(&mut self, bitmap: &Bitmap, x: u32) -> u16 {
         let bx = x - self.cur_x;

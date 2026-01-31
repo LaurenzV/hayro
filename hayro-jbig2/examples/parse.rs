@@ -1,6 +1,5 @@
 //! A basic example demonstrating how to convert a JBIG2 image into a PNG image.
 
-
 fn main() {
     // let base_path = concat!(env!("CARGO_MANIFEST_DIR"), "/test-inputs/serenity/");
     // let filename = "bitmap-symbol-refine.jbig2";
