@@ -185,7 +185,7 @@ fn compute_skip_bitmap(
     header: &HalftoneRegionHeader,
     pattern_dict: &PatternDictionary,
     htreg: &Bitmap,
-) -> Result<Vec<bool>> {
+) -> Result<Vec<u32>> {
     let grid = &header.grid_position_and_size;
     let vector = &header.grid_vector;
     let pattern_width = pattern_dict.pattern_width as i32;
@@ -193,7 +193,8 @@ fn compute_skip_bitmap(
     let region_width = htreg.width as i32;
     let region_height = htreg.height as i32;
 
-    let mut hskip = vec![false; (grid.width * grid.height) as usize];
+    let stride = grid.width.div_ceil(32);
+    let mut hskip = vec![0u32; (stride * grid.height) as usize];
 
     // "1) For each value of m_g between 0 and HGH − 1, beginning from 0,
     // perform the following steps:" (6.6.5.1)
@@ -210,7 +211,11 @@ fn compute_skip_bitmap(
                 || (y + pattern_height <= 0)
                 || (y >= region_height);
 
-            hskip[(m_g * grid.width + n_g) as usize] = skip;
+            if skip {
+                let word_idx = (m_g * stride + n_g / 32) as usize;
+                let bit_pos = 31 - (n_g % 32);
+                hskip[word_idx] |= 1 << bit_pos;
+            }
         }
     }
 
