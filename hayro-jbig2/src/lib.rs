@@ -489,7 +489,7 @@ impl DecodeContext {
 
         let page_default_is_zero = self.page_info.flags.default_pixel == 0;
 
-        if region_default_pixel != !page_default_is_zero {
+        if region_default_pixel == page_default_is_zero {
             return false;
         }
 
