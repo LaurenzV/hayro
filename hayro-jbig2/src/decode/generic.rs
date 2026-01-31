@@ -173,11 +173,34 @@ pub(crate) fn decode_bitmap_mmr(bitmap: &mut Bitmap, data: &[u8]) -> Result<usiz
         }
 
         fn push_pixel_chunk(&mut self, white: bool, chunk_count: u32) {
-            let pixel_count = chunk_count as usize * 8;
-            let start = (self.y * self.bitmap.width + self.x) as usize;
-            let end = (start + pixel_count).min(self.bitmap.data.len());
-            self.bitmap.data[start..end].fill(white);
-            self.x += pixel_count as u32;
+            const BYTE_MASKS: [u32; 4] = [0xFF000000, 0x00FF0000, 0x0000FF00, 0x000000FF];
+
+            let row_start = (self.y * self.bitmap.stride) as usize;
+            let end_x = (self.x + chunk_count * 8).min(self.bitmap.width);
+            // 0xFFFFFFFF for white, 0 for black.
+            let white_mask = (white as u32).wrapping_neg(); 
+
+            let start_byte = (self.x / 8) as usize;
+            let end_byte = (end_x / 8) as usize;
+
+            let prefix_end = start_byte.next_multiple_of(4).min(end_byte);
+            for byte in start_byte..prefix_end {
+                self.bitmap.data[row_start + byte / 4] |= BYTE_MASKS[byte % 4] & white_mask;
+            }
+
+            let middle_start = prefix_end;
+            let middle_end = (end_byte / 4) * 4;
+            if middle_end > middle_start {
+                let start_word = row_start + middle_start / 4;
+                let end_word = row_start + middle_end / 4;
+                self.bitmap.data[start_word..end_word].fill(white_mask);
+            }
+
+            for byte in middle_end.max(prefix_end)..end_byte {
+                self.bitmap.data[row_start + byte / 4] |= BYTE_MASKS[byte % 4] & white_mask;
+            }
+
+            self.x = end_x;
         }
 
         fn next_line(&mut self) {
@@ -338,12 +361,12 @@ impl<'a> ContextGatherer<'a> {
         self.cur_x = 0;
 
         self.buf_m2 = if y >= 2 {
-            Self::load_chunk(bitmap, y - 2, 0)
+            Self::load_word(bitmap, y - 2, 0)
         } else {
             0
         };
         self.buf_m1 = if y >= 1 {
-            Self::load_chunk(bitmap, y - 1, 0)
+            Self::load_word(bitmap, y - 1, 0)
         } else {
             0
         };
@@ -417,16 +440,17 @@ impl<'a> ContextGatherer<'a> {
     }
 
     #[inline]
-    fn load_chunk(bitmap: &Bitmap, row_y: u32, start_x: u32) -> u32 {
-        let mut buf = 0_u32;
-        let row_start = (row_y * bitmap.width) as usize;
-        let end_x = (start_x + 32).min(bitmap.width);
-        for x in start_x..end_x {
-            if bitmap.data[row_start + x as usize] {
-                buf |= 1 << (31 - (x - start_x));
-            }
+    fn load_word(bitmap: &Bitmap, row_y: u32, start_x: u32) -> u32 {
+        let word_idx = start_x / 32;
+        
+        if start_x % 32 == 0 {
+            bitmap.get_word(row_y, word_idx)
+        } else {
+            let bit_offset = start_x % 32;
+            let word1 = bitmap.get_word(row_y, word_idx);
+            let word2 = bitmap.get_word(row_y, word_idx + 1);
+            (word1 << bit_offset) | (word2 >> (32 - bit_offset))
         }
-        buf
     }
 
     #[inline]
@@ -442,7 +466,7 @@ impl<'a> ContextGatherer<'a> {
     fn get_bitmap_pixel(&self, bitmap: &Bitmap, px: i32, py: i32) -> u16 {
         if px < 0 || py < 0 || px >= self.width as i32 || py >= self.height as i32 {
             0
-        } else if bitmap.data[(py as u32 * self.width + px as u32) as usize] {
+        } else if bitmap.get_pixel(px as u32, py as u32) {
             1
         } else {
             0
@@ -472,16 +496,16 @@ impl<'a> ContextGatherer<'a> {
             let new_start = x.saturating_sub(4);
             self.cur_x = new_start;
             self.buf_m2 = if self.cur_y >= 2 {
-                Self::load_chunk(bitmap, self.cur_y - 2, new_start)
+                Self::load_word(bitmap, self.cur_y - 2, new_start)
             } else {
                 0
             };
             self.buf_m1 = if self.cur_y >= 1 {
-                Self::load_chunk(bitmap, self.cur_y - 1, new_start)
+                Self::load_word(bitmap, self.cur_y - 1, new_start)
             } else {
                 0
             };
-            self.buf_cur = Self::load_chunk(bitmap, self.cur_y, new_start);
+            self.buf_cur = Self::load_word(bitmap, self.cur_y, new_start);
         }
     }
 
