@@ -13,7 +13,6 @@ use crate::reader::Reader;
 
 /// Generic region decoding procedure (6.2).
 pub(crate) fn decode(header: &GenericRegionHeader<'_>) -> Result<RegionBitmap> {
-    let data = header.data;
     let mut bitmap = Bitmap::new_with(
         header.region_info.width,
         header.region_info.height,
@@ -22,16 +21,27 @@ pub(crate) fn decode(header: &GenericRegionHeader<'_>) -> Result<RegionBitmap> {
         false,
     );
 
+    decode_into(header, &mut bitmap)?;
+
+    Ok(RegionBitmap {
+        bitmap,
+        combination_operator: header.region_info.combination_operator,
+    })
+}
+
+pub(crate) fn decode_into(header: &GenericRegionHeader<'_>, bitmap: &mut Bitmap) -> Result<()> {
+    let data = header.data;
+
     if header.mmr {
         // "6.2.6 Decoding using MMR coding"
-        let _ = decode_bitmap_mmr(&mut bitmap, data)?;
+        let _ = decode_bitmap_mmr(bitmap, data)?;
     } else {
         let mut decoder = ArithmeticDecoder::new(data);
         let mut contexts = vec![Context::default(); 1 << header.template.context_bits()];
 
         // "6.2.5 Decoding using a template and arithmetic coding"
         decode_bitmap_arithmetic_coding(
-            &mut bitmap,
+            bitmap,
             &mut decoder,
             &mut contexts,
             header.template,
@@ -40,10 +50,7 @@ pub(crate) fn decode(header: &GenericRegionHeader<'_>) -> Result<RegionBitmap> {
         )?;
     }
 
-    Ok(RegionBitmap {
-        bitmap,
-        combination_operator: header.region_info.combination_operator,
-    })
+    Ok(())
 }
 
 /// Parsed generic region segment header (7.4.6.1).
