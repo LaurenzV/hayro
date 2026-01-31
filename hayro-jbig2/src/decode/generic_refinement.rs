@@ -17,6 +17,28 @@ pub(crate) fn decode(
     header: &GenericRefinementRegionHeader<'_>,
     reference: &Bitmap,
 ) -> Result<RegionBitmap> {
+    let mut region = Bitmap::new_with(
+        header.region_info.width,
+        header.region_info.height,
+        header.region_info.x_location,
+        header.region_info.y_location,
+        false,
+    );
+
+    decode_into(header, reference, &mut region)?;
+
+    Ok(RegionBitmap {
+        bitmap: region,
+        combination_operator: header.region_info.combination_operator,
+    })
+}
+
+/// Decode a generic refinement region directly into an existing bitmap.
+pub(crate) fn decode_into(
+    header: &GenericRefinementRegionHeader<'_>,
+    reference: &Bitmap,
+    region: &mut Bitmap,
+) -> Result<()> {
     let data = header.data;
     // Validate that the region fits within the reference bitmap.
     // When referring to another segment, dimensions must match exactly (7.4.7.5).
@@ -46,18 +68,10 @@ pub(crate) fn decode(
     let num_context_bits = header.template.context_bits();
     let mut contexts = vec![Context::default(); 1 << num_context_bits];
 
-    let mut region = Bitmap::new_with(
-        header.region_info.width,
-        header.region_info.height,
-        header.region_info.x_location,
-        header.region_info.y_location,
-        false,
-    );
-
     decode_bitmap(
         &mut decoder,
         &mut contexts,
-        &mut region,
+        region,
         reference,
         reference_dx,
         reference_dy,
@@ -66,10 +80,7 @@ pub(crate) fn decode(
         header.tpgron,
     )?;
 
-    Ok(RegionBitmap {
-        bitmap: region,
-        combination_operator: header.region_info.combination_operator,
-    })
+    Ok(())
 }
 
 /// Parsed generic refinement region segment header (7.4.7.1).
