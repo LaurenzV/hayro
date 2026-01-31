@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
-use image::{ImageFormat, Rgba, RgbaImage};
+use image::{GrayImage, ImageFormat, Rgba, RgbaImage};
 use indicatif::{ProgressBar, ProgressStyle};
 use rayon::prelude::*;
 use serde::Deserialize;
@@ -289,7 +289,7 @@ fn run_asset_test(asset: &AssetEntry) -> Result<(), String> {
     }
 
     // Convert 1-bit packed bitmap to 8-bit grayscale for comparison.
-    let rgba = bitmap_to_rgba(&image);
+    let luma = bitmap_to_luma(&image);
 
     let reference_path = asset.snapshot_stem.with_extension("png");
     let snapshot_path = SNAPSHOTS_PATH.join(&reference_path);
@@ -300,7 +300,7 @@ fn run_asset_test(asset: &AssetEntry) -> Result<(), String> {
     }
 
     if !snapshot_path.exists() {
-        rgba.save_with_format(&snapshot_path, ImageFormat::Png)
+        luma.save_with_format(&snapshot_path, ImageFormat::Png)
             .map_err(|err| format!("failed to save snapshot for {}: {err}", asset_name))?;
         return Err(format!(
             "new reference image was created for {}",
@@ -311,6 +311,7 @@ fn run_asset_test(asset: &AssetEntry) -> Result<(), String> {
     let expected = image::open(&snapshot_path)
         .map_err(|err| format!("failed to load snapshot for {}: {err}", asset_name))?
         .into_rgba8();
+    let rgba = image::DynamicImage::ImageLuma8(luma).into_rgba8();
     let (diff_image, pixel_diff) = get_diff(&expected, &rgba);
 
     if pixel_diff > 0 {
@@ -340,29 +341,40 @@ fn run_asset_test(asset: &AssetEntry) -> Result<(), String> {
     Ok(())
 }
 
-/// Convert a JBIG2 bitmap to an RGBA image.
+/// Convert a JBIG2 bitmap to a grayscale image.
 ///
 /// In JBIG2, true = black, false = white. We convert to grayscale where:
 /// - false (white in JBIG2) -> 255 (white in image)
 /// - true (black in JBIG2) -> 0 (black in image)
-fn bitmap_to_rgba(image: &hayro_jbig2::Image) -> RgbaImage {
+fn bitmap_to_luma(image: &hayro_jbig2::Image) -> GrayImage {
     let width = image.width;
     let height = image.height;
 
-    let mut rgba = RgbaImage::new(width, height);
-
-    for y in 0..height {
-        for x in 0..width {
-            let pixel = image.data[(y * width + x) as usize];
-
-            // JBIG2: true = black, false = white
-            // Image: 0 = black, 255 = white
-            let luma = if pixel { 0 } else { 255 };
-            rgba.put_pixel(x, y, Rgba([luma, luma, luma, 255]));
-        }
+    struct LumaDecoder {
+        buffer: Vec<u8>,
     }
 
-    rgba
+    impl hayro_jbig2::Decoder for LumaDecoder {
+        fn push_pixel(&mut self, black: bool) {
+            self.buffer.push(if black { 0 } else { 255 });
+        }
+
+        fn push_pixel_chunk(&mut self, black: bool, chunk_count: u32) {
+            let luma = if black { 0 } else { 255 };
+            self.buffer
+                .extend(std::iter::repeat_n(luma, chunk_count as usize * 8));
+        }
+
+        fn next_line(&mut self) {}
+    }
+
+    let mut decoder = LumaDecoder {
+        buffer: Vec::with_capacity((width * height) as usize),
+    };
+
+    image.decode(&mut decoder);
+
+    GrayImage::from_raw(width, height, decoder.buffer).expect("buffer size mismatch")
 }
 
 fn get_diff(expected_image: &RgbaImage, actual_image: &RgbaImage) -> (RgbaImage, u32) {
