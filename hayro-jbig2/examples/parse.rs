@@ -1,6 +1,5 @@
 //! A basic example demonstrating how to convert a JBIG2 image into a PNG image.
 
-use image::{GrayImage, Luma};
 
 fn main() {
     // let base_path = concat!(env!("CARGO_MANIFEST_DIR"), "/test-inputs/serenity/");
