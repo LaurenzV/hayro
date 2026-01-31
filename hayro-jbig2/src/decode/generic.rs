@@ -275,10 +275,8 @@ pub(crate) struct ContextGatherer<'a> {
     buf_m2: u32,
     buf_m1: u32,
     buf_cur: u32,
-    /// The context bits for each row.
-    ctx_m2: u16,
-    ctx_m1: u16,
-    ctx_cur: u16,
+    /// The current context for all 3 rows.
+    ctx: u16,
 }
 
 impl<'a> ContextGatherer<'a> {
@@ -298,11 +296,14 @@ impl<'a> ContextGatherer<'a> {
             buf_m1: 0,
             buf_cur: 0,
             cur_x: 0,
-            ctx_m2: 0,
-            ctx_m1: 0,
-            ctx_cur: 0,
+            ctx: 0,
         }
     }
+
+    const SHIFT_MASK_T0: u16 = 0b0110_0011_1100_1110;
+    const SHIFT_MASK_T1: u16 = 0b0001_1101_1110_0110;
+    const SHIFT_MASK_T2: u16 = 0b0000_0011_0111_0010;
+    const SHIFT_MASK_T3: u16 = 0b0000_0011_1100_1110;
 
     pub(crate) fn start_row(&mut self, bitmap: &Bitmap, y: u32) {
         self.cur_y = y;
@@ -323,31 +324,30 @@ impl<'a> ContextGatherer<'a> {
         // Start initializing the contexts. Note that this won't load all initial
         // pixels yet, those will only be loaded after our first call to `gather`.
         // See 6.2.5.3 for the pixel positions.
-        match self.template {
+        self.ctx = match self.template {
             Template::Template0 => {
-                self.ctx_m2 = Self::get_buf_pixel(self.buf_m2, 0);
-                self.ctx_m1 = (Self::get_buf_pixel(self.buf_m1, 0) << 1)
+                let m2 = Self::get_buf_pixel(self.buf_m2, 0);
+                let m1 = (Self::get_buf_pixel(self.buf_m1, 0) << 1)
                     | Self::get_buf_pixel(self.buf_m1, 1);
-                self.ctx_cur = 0;
+                (m2 << 12) | (m1 << 5)
             }
             Template::Template1 => {
-                self.ctx_m2 = (Self::get_buf_pixel(self.buf_m2, 0) << 1)
+                let m2 = (Self::get_buf_pixel(self.buf_m2, 0) << 1)
                     | Self::get_buf_pixel(self.buf_m2, 1);
-                self.ctx_m1 = (Self::get_buf_pixel(self.buf_m1, 0) << 1)
+                let m1 = (Self::get_buf_pixel(self.buf_m1, 0) << 1)
                     | Self::get_buf_pixel(self.buf_m1, 1);
-                self.ctx_cur = 0;
+                (m2 << 9) | (m1 << 4)
             }
             Template::Template2 => {
-                self.ctx_m2 = Self::get_buf_pixel(self.buf_m2, 0);
-                self.ctx_m1 = Self::get_buf_pixel(self.buf_m1, 0);
-                self.ctx_cur = 0;
+                let m2 = Self::get_buf_pixel(self.buf_m2, 0);
+                let m1 = Self::get_buf_pixel(self.buf_m1, 0);
+                (m2 << 7) | (m1 << 3)
             }
             Template::Template3 => {
-                self.ctx_m2 = 0;
-                self.ctx_m1 = Self::get_buf_pixel(self.buf_m1, 0);
-                self.ctx_cur = 0;
+                let m1 = Self::get_buf_pixel(self.buf_m1, 0);
+                m1 << 5
             }
-        }
+        };
     }
 
     #[inline]
@@ -425,39 +425,32 @@ impl<'a> ContextGatherer<'a> {
         let xi = x as i32;
         let yi = self.cur_y as i32;
 
-        self.ctx_m2 = ((self.ctx_m2 << 1) & 0b111) | Self::get_buf_pixel(self.buf_m2, bx + 1);
-        self.ctx_m1 = ((self.ctx_m1 << 1) & 0b11111) | Self::get_buf_pixel(self.buf_m1, bx + 2);
-        self.ctx_cur =
-            ((self.ctx_cur << 1) & 0b1111) | Self::get_buf_pixel(self.buf_cur, bx.wrapping_sub(1));
+        let new_pixels = (Self::get_buf_pixel(self.buf_m2, bx + 1) << 12)
+            | (Self::get_buf_pixel(self.buf_m1, bx + 2) << 5)
+            | Self::get_buf_pixel(self.buf_cur, bx.wrapping_sub(1))
+            | (self.get_bitmap_pixel(
+                bitmap,
+                xi + self.at_pixels[3].x as i32,
+                yi + self.at_pixels[3].y as i32,
+            ) << 15)
+            | (self.get_bitmap_pixel(
+                bitmap,
+                xi + self.at_pixels[2].x as i32,
+                yi + self.at_pixels[2].y as i32,
+            ) << 11)
+            | (self.get_bitmap_pixel(
+                bitmap,
+                xi + self.at_pixels[1].x as i32,
+                yi + self.at_pixels[1].y as i32,
+            ) << 10)
+            | (self.get_bitmap_pixel(
+                bitmap,
+                xi + self.at_pixels[0].x as i32,
+                yi + self.at_pixels[0].y as i32,
+            ) << 4);
 
-        let at1 = self.get_bitmap_pixel(
-            bitmap,
-            xi + self.at_pixels[0].x as i32,
-            yi + self.at_pixels[0].y as i32,
-        );
-        let at2 = self.get_bitmap_pixel(
-            bitmap,
-            xi + self.at_pixels[1].x as i32,
-            yi + self.at_pixels[1].y as i32,
-        );
-        let at3 = self.get_bitmap_pixel(
-            bitmap,
-            xi + self.at_pixels[2].x as i32,
-            yi + self.at_pixels[2].y as i32,
-        );
-        let at4 = self.get_bitmap_pixel(
-            bitmap,
-            xi + self.at_pixels[3].x as i32,
-            yi + self.at_pixels[3].y as i32,
-        );
-
-        (at4 << 15)
-            | (self.ctx_m2 << 12)
-            | (at3 << 11)
-            | (at2 << 10)
-            | (self.ctx_m1 << 5)
-            | (at1 << 4)
-            | self.ctx_cur
+        self.ctx = ((self.ctx << 1) & Self::SHIFT_MASK_T0) | new_pixels;
+        self.ctx
     }
 
     #[inline]
@@ -466,18 +459,17 @@ impl<'a> ContextGatherer<'a> {
         let xi = x as i32;
         let yi = self.cur_y as i32;
 
-        self.ctx_m2 = ((self.ctx_m2 << 1) & 0b1111) | Self::get_buf_pixel(self.buf_m2, bx + 2);
-        self.ctx_m1 = ((self.ctx_m1 << 1) & 0b11111) | Self::get_buf_pixel(self.buf_m1, bx + 2);
-        self.ctx_cur =
-            ((self.ctx_cur << 1) & 0b111) | Self::get_buf_pixel(self.buf_cur, bx.wrapping_sub(1));
+        let new_pixels = (Self::get_buf_pixel(self.buf_m2, bx + 2) << 9)
+            | (Self::get_buf_pixel(self.buf_m1, bx + 2) << 4)
+            | Self::get_buf_pixel(self.buf_cur, bx.wrapping_sub(1))
+            | (self.get_bitmap_pixel(
+                bitmap,
+                xi + self.at_pixels[0].x as i32,
+                yi + self.at_pixels[0].y as i32,
+            ) << 3);
 
-        let at1 = self.get_bitmap_pixel(
-            bitmap,
-            xi + self.at_pixels[0].x as i32,
-            yi + self.at_pixels[0].y as i32,
-        );
-
-        (self.ctx_m2 << 9) | (self.ctx_m1 << 4) | (at1 << 3) | self.ctx_cur
+        self.ctx = ((self.ctx << 1) & Self::SHIFT_MASK_T1) | new_pixels;
+        self.ctx
     }
 
     #[inline]
@@ -486,18 +478,17 @@ impl<'a> ContextGatherer<'a> {
         let xi = x as i32;
         let yi = self.cur_y as i32;
 
-        self.ctx_m2 = ((self.ctx_m2 << 1) & 0b111) | Self::get_buf_pixel(self.buf_m2, bx + 1);
-        self.ctx_m1 = ((self.ctx_m1 << 1) & 0b1111) | Self::get_buf_pixel(self.buf_m1, bx + 1);
-        self.ctx_cur =
-            ((self.ctx_cur << 1) & 0b11) | Self::get_buf_pixel(self.buf_cur, bx.wrapping_sub(1));
+        let new_pixels = (Self::get_buf_pixel(self.buf_m2, bx + 1) << 7)
+            | (Self::get_buf_pixel(self.buf_m1, bx + 1) << 3)
+            | Self::get_buf_pixel(self.buf_cur, bx.wrapping_sub(1))
+            | (self.get_bitmap_pixel(
+                bitmap,
+                xi + self.at_pixels[0].x as i32,
+                yi + self.at_pixels[0].y as i32,
+            ) << 2);
 
-        let at1 = self.get_bitmap_pixel(
-            bitmap,
-            xi + self.at_pixels[0].x as i32,
-            yi + self.at_pixels[0].y as i32,
-        );
-
-        (self.ctx_m2 << 7) | (self.ctx_m1 << 3) | (at1 << 2) | self.ctx_cur
+        self.ctx = ((self.ctx << 1) & Self::SHIFT_MASK_T2) | new_pixels;
+        self.ctx
     }
 
     #[inline]
@@ -506,17 +497,16 @@ impl<'a> ContextGatherer<'a> {
         let xi = x as i32;
         let yi = self.cur_y as i32;
 
-        self.ctx_m1 = ((self.ctx_m1 << 1) & 0b11111) | Self::get_buf_pixel(self.buf_m1, bx + 1);
-        self.ctx_cur =
-            ((self.ctx_cur << 1) & 0b1111) | Self::get_buf_pixel(self.buf_cur, bx.wrapping_sub(1));
+        let new_pixels = (Self::get_buf_pixel(self.buf_m1, bx + 1) << 5)
+            | Self::get_buf_pixel(self.buf_cur, bx.wrapping_sub(1))
+            | (self.get_bitmap_pixel(
+                bitmap,
+                xi + self.at_pixels[0].x as i32,
+                yi + self.at_pixels[0].y as i32,
+            ) << 4);
 
-        let at1 = self.get_bitmap_pixel(
-            bitmap,
-            xi + self.at_pixels[0].x as i32,
-            yi + self.at_pixels[0].y as i32,
-        );
-
-        (self.ctx_m1 << 5) | (at1 << 4) | self.ctx_cur
+        self.ctx = ((self.ctx << 1) & Self::SHIFT_MASK_T3) | new_pixels;
+        self.ctx
     }
 
     #[inline]
