@@ -1,70 +1,71 @@
-use crate::reader::Reader;
 use crate::trivia::is_white_space_character;
 use alloc::vec::Vec;
 
 pub(crate) fn decode(data: &[u8]) -> Option<Vec<u8>> {
-    let mut end = 0;
-    let mut needs_cleaning = false;
+    // Find end (at `>` or end of data) and check for whitespace.
+    let mut has_whitespace = false;
+    let mut end = data.len();
 
-    let mut reader = Reader::new(data);
+    for (idx, byte) in data.iter().enumerate() {
+        has_whitespace |= is_white_space_character(*byte);
 
-    // We are lenient and don't require a > in the stream.
-    while let Some(byte) = reader.read_byte() {
-        match byte {
-            b'>' => {
-                if end % 2 != 0 {
-                    needs_cleaning = true;
-                }
+        if *byte == b'>' {
+            end = idx;
+            break;
+        }
+    }
 
-                break;
-            }
-            b if b.is_ascii_hexdigit() => {}
-            b if is_white_space_character(b) => {
-                needs_cleaning = true;
-            }
-            _ => {
-                return None;
-            }
+    let data = &data[..end];
+    let mut decoded = Vec::with_capacity(data.len().div_ceil(2));
+
+    if !has_whitespace {
+        // Fast path, don't need to worry about white spaces.
+        let (chunks, remainder) = data.as_chunks::<2>();
+
+        for &[hi, lo] in chunks {
+            decoded.push(decode_hex_digit(hi)? << 4 | decode_hex_digit(lo)?);
         }
 
-        end += 1;
-    }
-
-    let trimmed = &data[0..end];
-
-    if needs_cleaning {
-        let cleaned = trimmed
-            .iter()
-            .flat_map(|c| {
-                if c.is_ascii_hexdigit() {
-                    Some(*c)
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<_>>();
-
-        decode_hex_string(&cleaned).ok()
+        if let [hi] = remainder {
+            decoded.push(decode_hex_digit(*hi)? << 4);
+        }
     } else {
-        decode_hex_string(trimmed).ok()
+        // Slow path, need to strip white spaces.
+        let mut iter = data.iter().copied();
+        let mut read_byte = || -> Option<u8> {
+            loop {
+                let b = iter.next()?;
+                if !is_white_space_character(b) {
+                    return Some(b);
+                }
+            }
+        };
+
+        loop {
+            match (read_byte(), read_byte()) {
+                (Some(hi), Some(lo)) => {
+                    decoded.push(decode_hex_digit(hi)? << 4 | decode_hex_digit(lo)?);
+                }
+                (Some(hi), None) => {
+                    decoded.push(decode_hex_digit(hi)? << 4);
+
+                    break;
+                }
+                (None, _) => break,
+            }
+        }
     }
+
+    Some(decoded)
 }
 
-// Taken from the `hex` crate
-
-pub(crate) fn decode_hex_string(str: &[u8]) -> Result<Vec<u8>, ()> {
-    str.chunks(2)
-        // In case length is not a multiple of 2, pad with 0.
-        .map(|pair| Ok(val(pair[0])? << 4 | val(*pair.get(1).unwrap_or(&b'0'))?))
-        .collect()
-}
-
-fn val(c: u8) -> Result<u8, ()> {
+#[inline(always)]
+fn decode_hex_digit(c: u8) -> Option<u8> {
     match c {
-        b'A'..=b'F' => Ok(c - b'A' + 10),
-        b'a'..=b'f' => Ok(c - b'a' + 10),
-        b'0'..=b'9' => Ok(c - b'0'),
-        _ => Err(()),
+        b'0'..=b'9' => Some(c - b'0'),
+        b'A'..=b'F' => Some(c - b'A' + 10),
+        b'a'..=b'f' => Some(c - b'a' + 10),
+        _ => None,
     }
 }
 
@@ -85,7 +86,8 @@ mod tests {
     }
 
     #[test]
-    // Technically not valid, but doesn't hurt to support either way.
+    // Not valid for ASCII hex streams since they require a trailing >,
+    // but used by PDF hex strings as well.
     fn decode_without_gt() {
         let input = b"AF3E2901";
         assert_eq!(decode(input).unwrap(), vec![0xaf, 0x3e, 0x29, 0x01]);

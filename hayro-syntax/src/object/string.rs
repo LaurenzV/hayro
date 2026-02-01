@@ -1,7 +1,7 @@
 //! Strings.
 
 use crate::crypto::DecryptionTarget;
-use crate::filter::ascii_hex::decode_hex_string;
+use crate::filter::ascii_hex;
 use crate::object::macros::object;
 use crate::object::{Object, ObjectLike};
 use crate::reader::Reader;
@@ -21,25 +21,8 @@ struct HexString<'a>(&'a [u8], bool, ReaderContext<'a>);
 impl HexString<'_> {
     /// Returns the content of the string.
     fn get(&self) -> Vec<u8> {
-        let decoded = if self.1 {
-            let mut cleaned = Vec::with_capacity(self.0.len() + 1);
-
-            for b in self.0.iter().copied() {
-                if !is_white_space_character(b) {
-                    cleaned.push(b);
-                }
-            }
-
-            if cleaned.len() % 2 != 0 {
-                cleaned.push(b'0');
-            }
-
-            // We made sure while parsing that it is a valid hex string.
-            decode_hex_string(&cleaned).unwrap()
-        } else {
-            // We made sure while parsing that it is a valid hex string.
-            decode_hex_string(self.0).unwrap()
-        };
+        // We made sure while parsing that it is a valid hex string.
+        let decoded = ascii_hex::decode(self.0).unwrap();
 
         if self.2.xref.needs_decryption(&self.2) {
             self.2
