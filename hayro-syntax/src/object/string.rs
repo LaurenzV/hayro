@@ -125,13 +125,17 @@ fn skip_literal(r: &mut Reader<'_>) -> Option<()> {
 }
 
 fn read_literal(r: &mut Reader<'_>) -> Option<SmallVec<[u8; 16]>> {
-    r.forward_tag(b"(")?;
+    let start = r.offset();
+    skip_literal(r)?;
+    let end = r.offset();
+
+    // Exclude outer parentheses.
+    let data = r.range(start + 1..end - 1)?;
+
+    let mut r = Reader::new(data);
     let mut result = SmallVec::new();
-    let mut bracket_counter = 1;
 
-    while bracket_counter > 0 {
-        let byte = r.read_byte()?;
-
+    while let Some(byte) = r.read_byte() {
         match byte {
             b'\\' => {
                 let next = r.read_byte()?;
@@ -194,16 +198,7 @@ fn read_literal(r: &mut Reader<'_>) -> Option<SmallVec<[u8; 16]>> {
                     }
                 }
             }
-            b'(' => {
-                bracket_counter += 1;
-                result.push(b'(');
-            }
-            b')' => {
-                bracket_counter -= 1;
-                if bracket_counter > 0 {
-                    result.push(b')');
-                }
-            }
+            b'(' | b')' => result.push(byte),
             // An end-of-line marker appearing within a literal string
             // without a preceding REVERSE SOLIDUS shall be treated as
             // a byte value of (0Ah), irrespective of whether the end-of-line
