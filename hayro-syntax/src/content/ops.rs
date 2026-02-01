@@ -17,10 +17,7 @@ include!("ops_generated.rs");
 // Need to special-case those because they have variable arguments.
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct StrokeColorNamed(
-    pub SmallVec<[Number; OPERANDS_THRESHOLD]>,
-    pub Option<Name>,
-);
+pub struct StrokeColorNamed(pub SmallVec<[Number; OPERANDS_THRESHOLD]>, pub Option<Name>);
 
 fn scn_fn(stack: &Stack<'_>) -> Option<(SmallVec<[Number; OPERANDS_THRESHOLD]>, Option<Name>)> {
     let mut nums = smallvec![];
@@ -52,10 +49,7 @@ op_impl!(
 );
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct NonStrokeColorNamed(
-    pub SmallVec<[Number; OPERANDS_THRESHOLD]>,
-    pub Option<Name>,
-);
+pub struct NonStrokeColorNamed(pub SmallVec<[Number; OPERANDS_THRESHOLD]>, pub Option<Name>);
 
 op_impl!(
     NonStrokeColorNamed,

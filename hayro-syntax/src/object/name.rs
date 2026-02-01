@@ -1,146 +1,101 @@
 //! Names.
 
+use crate::filter::ascii_hex::decode_hex_digit;
 use crate::object::Object;
 use crate::object::macros::object;
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, Skippable};
 use crate::trivia::is_regular_character;
-use alloc::vec;
-use alloc::vec::Vec;
+use core::borrow::Borrow;
 use core::fmt::{self, Debug, Formatter};
 use core::hash::Hash;
 use core::ops::Deref;
+use smallvec::SmallVec;
 
-#[derive(Clone)]
-enum Cow<'a> {
-    Borrowed(&'a [u8]),
-    Owned(Vec<u8>),
-}
+type NameInner = SmallVec<[u8; 23]>;
 
-/// A name.
-#[derive(Clone)]
-pub struct Name<'a>(Cow<'a>);
+/// A PDF name object.
+#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Name(NameInner);
 
-// Two names should be equal even if one is borrowed and the other is owned,
-// so we need these manual implementations.
-
-impl<'a> Hash for Name<'a> {
-    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
-        self.deref().hash(state);
-    }
-}
-
-impl PartialEq for Name<'_> {
-    fn eq(&self, other: &Self) -> bool {
-        self.deref() == other.deref()
-    }
-}
-
-impl Eq for Name<'_> {}
-
-#[allow(clippy::non_canonical_partial_ord_impl)]
-impl PartialOrd for Name<'_> {
-    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
-        self.deref().partial_cmp(other.deref())
-    }
-}
-
-impl Ord for Name<'_> {
-    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
-        self.deref().cmp(other.deref())
-    }
-}
-
-impl<'a> AsRef<Self> for Name<'a> {
-    fn as_ref(&self) -> &Self {
-        self
-    }
-}
-
-impl Deref for Name<'_> {
+impl Deref for Name {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
-        match &self.0 {
-            Cow::Borrowed(a) => a,
-            Cow::Owned(v) => v.as_ref(),
-        }
+        &self.0
     }
 }
 
-impl<'a> Name<'a> {
+impl AsRef<[u8]> for Name {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl Borrow<[u8]> for Name {
+    fn borrow(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl Name {
     /// Create a new name from a sequence of bytes.
-    pub fn new(data: &'a [u8]) -> Self {
-        fn convert_hex(c: u8) -> u8 {
-            match c {
-                b'A'..=b'F' => c - b'A' + 10,
-                b'a'..=b'f' => c - b'a' + 10,
-                b'0'..=b'9' => c - b'0',
-                _ => unreachable!(),
-            }
-        }
-
-        let data = if !data.contains(&b'#') {
-            Cow::Borrowed(data)
+    pub fn new(data: &[u8]) -> Self {
+        if !data.contains(&b'#') {
+            Self(SmallVec::from_slice(data))
         } else {
-            let mut cleaned = vec![];
-
+            let mut result = SmallVec::new();
             let mut r = Reader::new(data);
 
             while let Some(b) = r.read_byte() {
                 if b == b'#' {
                     // We already verified when skipping that it's a valid hex sequence.
                     let hex = r.read_bytes(2).unwrap();
-                    cleaned.push(convert_hex(hex[0]) << 4 | convert_hex(hex[1]));
+                    result.push(
+                        decode_hex_digit(hex[0] << 4).unwrap() | decode_hex_digit(hex[1]).unwrap(),
+                    );
                 } else {
-                    cleaned.push(b);
+                    result.push(b);
                 }
             }
 
-            Cow::Owned(cleaned)
-        };
-
-        Self(data)
-    }
-
-    /// Create a new name from an unescaped bytes string.
-    pub(crate) const fn from_unescaped(data: &'a [u8]) -> Self {
-        Self(Cow::Borrowed(data))
+            Self(result)
+        }
     }
 
     /// Return a string representation of the name.
+    ///
+    /// Returns a placeholder in case the name is not UTF-8 encoded.
     pub fn as_str(&self) -> &str {
-        core::str::from_utf8(self.deref()).unwrap_or("{non-ascii key}")
+        core::str::from_utf8(&self.0).unwrap_or("{non-ascii key}")
     }
 }
 
-impl Debug for Name<'_> {
+impl Debug for Name {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match core::str::from_utf8(self.deref()) {
+        match core::str::from_utf8(&self.0) {
             Ok(s) => <str as Debug>::fmt(s, f),
-            Err(_) => <[u8] as Debug>::fmt(self.deref(), f),
+            Err(_) => <[u8] as Debug>::fmt(&self.0, f),
         }
     }
 }
 
-object!(Name<'a>, Name);
+object!(Name, Name);
 
-impl Skippable for Name<'_> {
+impl Skippable for Name {
     fn skip(r: &mut Reader<'_>, _: bool) -> Option<()> {
         skip_name_like(r, true).map(|_| ())
     }
 }
 
-impl<'a> Readable<'a> for Name<'a> {
-    fn read(r: &mut Reader<'a>, _: &ReaderContext<'_>) -> Option<Self> {
-        let data = {
-            let start = r.offset();
-            skip_name_like(r, true)?;
-            let end = r.offset();
+impl Readable<'_> for Name {
+    fn read(r: &mut Reader<'_>, _: &ReaderContext<'_>) -> Option<Self> {
+        let start = r.offset();
+        skip_name_like(r, true)?;
+        let end = r.offset();
 
-            r.range(start + 1..end).unwrap()
-        };
-
+        // Exclude leading solidus.
+        let data = r.range(start + 1..end)?;
         Some(Self::new(data))
     }
 }
@@ -179,7 +134,7 @@ mod tests {
     fn name_1() {
         assert_eq!(
             Reader::new("/".as_bytes())
-                .read_without_context::<Name<'_>>()
+                .read_without_context::<Name>()
                 .unwrap()
                 .deref(),
             b""
@@ -190,7 +145,7 @@ mod tests {
     fn name_2() {
         assert!(
             Reader::new("dfg".as_bytes())
-                .read_without_context::<Name<'_>>()
+                .read_without_context::<Name>()
                 .is_none()
         );
     }
@@ -199,7 +154,7 @@ mod tests {
     fn name_3() {
         assert!(
             Reader::new("/AB#FG".as_bytes())
-                .read_without_context::<Name<'_>>()
+                .read_without_context::<Name>()
                 .is_none()
         );
     }
@@ -208,7 +163,7 @@ mod tests {
     fn name_4() {
         assert_eq!(
             Reader::new("/Name1".as_bytes())
-                .read_without_context::<Name<'_>>()
+                .read_without_context::<Name>()
                 .unwrap()
                 .deref(),
             b"Name1"
@@ -219,7 +174,7 @@ mod tests {
     fn name_5() {
         assert_eq!(
             Reader::new("/ASomewhatLongerName".as_bytes())
-                .read_without_context::<Name<'_>>()
+                .read_without_context::<Name>()
                 .unwrap()
                 .deref(),
             b"ASomewhatLongerName"
@@ -230,7 +185,7 @@ mod tests {
     fn name_6() {
         assert_eq!(
             Reader::new("/A;Name_With-Various***Characters?".as_bytes())
-                .read_without_context::<Name<'_>>()
+                .read_without_context::<Name>()
                 .unwrap()
                 .deref(),
             b"A;Name_With-Various***Characters?"
@@ -241,7 +196,7 @@ mod tests {
     fn name_7() {
         assert_eq!(
             Reader::new("/1.2".as_bytes())
-                .read_without_context::<Name<'_>>()
+                .read_without_context::<Name>()
                 .unwrap()
                 .deref(),
             b"1.2"
@@ -252,7 +207,7 @@ mod tests {
     fn name_8() {
         assert_eq!(
             Reader::new("/$$".as_bytes())
-                .read_without_context::<Name<'_>>()
+                .read_without_context::<Name>()
                 .unwrap()
                 .deref(),
             b"$$"
@@ -263,7 +218,7 @@ mod tests {
     fn name_9() {
         assert_eq!(
             Reader::new("/@pattern".as_bytes())
-                .read_without_context::<Name<'_>>()
+                .read_without_context::<Name>()
                 .unwrap()
                 .deref(),
             b"@pattern"
@@ -274,7 +229,7 @@ mod tests {
     fn name_10() {
         assert_eq!(
             Reader::new("/.notdef".as_bytes())
-                .read_without_context::<Name<'_>>()
+                .read_without_context::<Name>()
                 .unwrap()
                 .deref(),
             b".notdef"
@@ -285,7 +240,7 @@ mod tests {
     fn name_11() {
         assert_eq!(
             Reader::new("/lime#20Green".as_bytes())
-                .read_without_context::<Name<'_>>()
+                .read_without_context::<Name>()
                 .unwrap()
                 .deref(),
             b"lime Green"
@@ -296,7 +251,7 @@ mod tests {
     fn name_12() {
         assert_eq!(
             Reader::new("/paired#28#29parentheses".as_bytes())
-                .read_without_context::<Name<'_>>()
+                .read_without_context::<Name>()
                 .unwrap()
                 .deref(),
             b"paired()parentheses"
@@ -307,7 +262,7 @@ mod tests {
     fn name_13() {
         assert_eq!(
             Reader::new("/The_Key_of_F#23_Minor".as_bytes())
-                .read_without_context::<Name<'_>>()
+                .read_without_context::<Name>()
                 .unwrap()
                 .deref(),
             b"The_Key_of_F#_Minor"
@@ -318,7 +273,7 @@ mod tests {
     fn name_14() {
         assert_eq!(
             Reader::new("/A#42".as_bytes())
-                .read_without_context::<Name<'_>>()
+                .read_without_context::<Name>()
                 .unwrap()
                 .deref(),
             b"AB"
@@ -329,7 +284,7 @@ mod tests {
     fn name_15() {
         assert_eq!(
             Reader::new("/A#3b".as_bytes())
-                .read_without_context::<Name<'_>>()
+                .read_without_context::<Name>()
                 .unwrap()
                 .deref(),
             b"A;"
@@ -340,7 +295,7 @@ mod tests {
     fn name_16() {
         assert_eq!(
             Reader::new("/A#3B".as_bytes())
-                .read_without_context::<Name<'_>>()
+                .read_without_context::<Name>()
                 .unwrap()
                 .deref(),
             b"A;"
@@ -351,7 +306,7 @@ mod tests {
     fn name_17() {
         assert_eq!(
             Reader::new("/k1  ".as_bytes())
-                .read_without_context::<Name<'_>>()
+                .read_without_context::<Name>()
                 .unwrap()
                 .deref(),
             b"k1"

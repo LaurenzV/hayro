@@ -231,11 +231,7 @@ impl<'a> Context<'a> {
         self.get_mut().ctm *= transform;
     }
 
-    pub(crate) fn get_font(
-        &mut self,
-        resources: &Resources<'a>,
-        name: Name,
-    ) -> Option<Font<'a>> {
+    pub(crate) fn get_font(&mut self, resources: &Resources<'a>, name: Name) -> Option<Font<'a>> {
         let font_dict = resources.get_font(name)?;
         let cache_key = font_dict.cache_key();
         self.font_cache

@@ -60,7 +60,7 @@ pub(crate) fn decode(data: &[u8]) -> Option<Vec<u8>> {
 }
 
 #[inline(always)]
-fn decode_hex_digit(c: u8) -> Option<u8> {
+pub(crate) fn decode_hex_digit(c: u8) -> Option<u8> {
     match c {
         b'0'..=b'9' => Some(c - b'0'),
         b'A'..=b'F' => Some(c - b'A' + 10),

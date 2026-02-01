@@ -810,10 +810,7 @@ impl DeviceN {
         // Skip `/DeviceN`
         let _ = iter.next::<Name>()?;
         // Skip `Name`.
-        let names = iter
-            .next::<Array<'_>>()?
-            .iter::<Name>()
-            .collect::<Vec<_>>();
+        let names = iter.next::<Array<'_>>()?.iter::<Name>().collect::<Vec<_>>();
         let num_components = u8::try_from(names.len()).ok()?;
         let all_none = names.iter().all(|n| n.as_str() == "None");
         let alternate_space = ColorSpace::new(iter.next::<Object<'_>>()?, cache)?;
