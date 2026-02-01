@@ -106,7 +106,7 @@ impl<'a> Stream<'a> {
     pub fn raw_data(&self) -> Cow<'a, [u8]> {
         let ctx = self.dict.ctx();
 
-        if ctx.xref.needs_decryption(ctx)
+        if ctx.xref().needs_decryption(ctx)
             && self
                 .dict
                 .get::<object::String>(TYPE)
@@ -114,7 +114,7 @@ impl<'a> Stream<'a> {
                 .unwrap_or(true)
         {
             Cow::Owned(
-                ctx.xref
+                ctx.xref()
                     .decrypt(
                         self.dict.obj_id().unwrap(),
                         self.data,

@@ -96,7 +96,7 @@ fn fallback_xref_map_inner<'a>(
             if cloned.skip::<Object<'_>>(false).is_some() {
                 xref_map.insert(obj_id, EntryType::Normal(cur_pos));
                 last_obj_num = Some(obj_id);
-                dummy_ctx.obj_number = Some(obj_id);
+                dummy_ctx.set_obj_number(obj_id);
             }
         } else if let Some(dict) = r.read::<Dict<'_>>(&dummy_ctx) {
             if dict.contains_key(ROOT) {
@@ -455,7 +455,7 @@ impl XRef {
                 if matches!(r.decryptor.as_ref(), Decryptor::None) {
                     false
                 } else {
-                    !ctx.in_content_stream && !ctx.in_object_stream
+                    !ctx.in_content_stream() && !ctx.in_object_stream()
                 }
             }
         }
@@ -510,12 +510,12 @@ impl XRef {
         drop(locked);
 
         let mut ctx = ctx.clone();
-        ctx.obj_number = Some(id);
-        ctx.in_content_stream = false;
+        ctx.set_obj_number(id);
+        ctx.set_in_content_stream(false);
 
         match entry {
             EntryType::Normal(offset) => {
-                ctx.in_object_stream = false;
+                ctx.set_in_object_stream(false);
                 r.jump(offset);
 
                 if let Some(object) = r.read_with_context::<IndirectObject<T>>(&ctx) {
@@ -1007,7 +1007,7 @@ impl<'a> ObjectStream<'a> {
         }
 
         let mut ctx = ctx.clone();
-        ctx.in_object_stream = true;
+        ctx.set_in_object_stream(true);
 
         Some(Self { data, ctx, offsets })
     }

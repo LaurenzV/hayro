@@ -103,7 +103,7 @@ impl Data {
             };
             self.decoded
                 .get_or_init(idx, || {
-                    let stream = ctx.xref.get_with::<Stream<'_>>(id, ctx)?;
+                    let stream = ctx.xref().get_with::<Stream<'_>>(id, ctx)?;
                     stream.decoded().ok()
                 })
                 .as_deref()

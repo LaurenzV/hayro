@@ -354,8 +354,8 @@ mod tests {
     #[test]
     #[cfg(target_pointer_width = "64")]
     fn object_sizes() {
-        assert_eq!(size_of::<Object<'_>>(), 88);
-        assert_eq!(size_of::<Array<'_>>(), 88);
+        assert_eq!(size_of::<Object<'_>>(), 80);
+        assert_eq!(size_of::<Array<'_>>(), 24);
         assert_eq!(size_of::<Dict<'_>>(), 8);
         assert_eq!(size_of::<Name>(), 40);
         assert_eq!(size_of::<Null>(), 0);

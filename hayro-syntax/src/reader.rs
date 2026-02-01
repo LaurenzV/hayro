@@ -1,6 +1,7 @@
 //! Reading bytes and PDF objects from data.
 
 use crate::object::ObjectIdentifier;
+use crate::sync::Arc;
 use crate::trivia::{Comment, is_eol_character, is_white_space_character};
 use crate::xref::XRef;
 use smallvec::{SmallVec, smallvec};
@@ -125,27 +126,76 @@ impl<'a> ReaderExt<'a> for Reader<'a> {
 }
 
 #[derive(Clone, Debug)]
-pub struct ReaderContext<'a> {
-    pub(crate) xref: &'a XRef,
-    pub(crate) in_content_stream: bool,
-    pub(crate) in_object_stream: bool,
-    pub(crate) obj_number: Option<ObjectIdentifier>,
-    pub(crate) parent_chain: SmallVec<[ObjectIdentifier; 4]>,
+struct ReaderContextInner<'a> {
+    xref: &'a XRef,
+    in_content_stream: bool,
+    in_object_stream: bool,
+    obj_number: Option<ObjectIdentifier>,
+    parent_chain: SmallVec<[ObjectIdentifier; 8]>,
 }
+
+/// Context for reading PDF objects.
+#[derive(Clone, Debug)]
+pub struct ReaderContext<'a>(Arc<ReaderContextInner<'a>>);
 
 impl<'a> ReaderContext<'a> {
     pub(crate) fn new(xref: &'a XRef, in_content_stream: bool) -> Self {
-        Self {
+        Self(Arc::new(ReaderContextInner {
             xref,
             in_content_stream,
             obj_number: None,
             in_object_stream: false,
             parent_chain: smallvec![],
-        }
+        }))
     }
 
     pub fn dummy() -> Self {
         Self::new(XRef::dummy(), false)
+    }
+
+    #[inline]
+    pub(crate) fn xref(&self) -> &'a XRef {
+        self.0.xref
+    }
+
+    #[inline]
+    pub(crate) fn in_content_stream(&self) -> bool {
+        self.0.in_content_stream
+    }
+
+    #[inline]
+    pub(crate) fn in_object_stream(&self) -> bool {
+        self.0.in_object_stream
+    }
+
+    #[inline]
+    pub(crate) fn obj_number(&self) -> Option<ObjectIdentifier> {
+        self.0.obj_number
+    }
+
+    #[inline]
+    pub(crate) fn set_obj_number(&mut self, id: ObjectIdentifier) {
+        Arc::make_mut(&mut self.0).obj_number = Some(id);
+    }
+
+    #[inline]
+    pub(crate) fn set_in_content_stream(&mut self, val: bool) {
+        Arc::make_mut(&mut self.0).in_content_stream = val;
+    }
+
+    #[inline]
+    pub(crate) fn set_in_object_stream(&mut self, val: bool) {
+        Arc::make_mut(&mut self.0).in_object_stream = val;
+    }
+
+    #[inline]
+    pub(crate) fn parent_chain_contains(&self, id: &ObjectIdentifier) -> bool {
+        self.0.parent_chain.contains(id)
+    }
+
+    #[inline]
+    pub(crate) fn parent_chain_push(&mut self, id: ObjectIdentifier) {
+        Arc::make_mut(&mut self.0).parent_chain.push(id);
     }
 }
 

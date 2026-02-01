@@ -324,7 +324,7 @@ impl<'a> Page<'a> {
 
     /// Get the xref table (of the document the page belongs to).
     pub fn xref(&self) -> &'a XRef {
-        self.ctx.xref
+        self.ctx.xref()
     }
 
     /// Return a typed iterator over the operators of the page's content stream.

@@ -27,14 +27,14 @@ where
         let mut ctx = ctx.clone();
         let id = r.read_without_context::<ObjectIdentifier>()?;
 
-        if ctx.parent_chain.contains(&id) {
+        if ctx.parent_chain_contains(&id) {
             warn!("cycle detected in indirect object: {id:?}");
 
             return None;
         }
 
-        ctx.obj_number = Some(id);
-        ctx.parent_chain.push(id);
+        ctx.set_obj_number(id);
+        ctx.parent_chain_push(id);
         r.skip_white_spaces_and_comments();
         let inner = r.read_with_context::<T>(&ctx)?;
         r.skip_white_spaces_and_comments();

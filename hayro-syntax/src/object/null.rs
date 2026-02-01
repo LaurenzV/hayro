@@ -19,7 +19,7 @@ impl Skippable for Null {
 
 impl Readable<'_> for Null {
     fn read(r: &mut Reader<'_>, ctx: &ReaderContext<'_>) -> Option<Self> {
-        Self::skip(r, ctx.in_content_stream)?;
+        Self::skip(r, ctx.in_content_stream())?;
 
         Some(Self)
     }

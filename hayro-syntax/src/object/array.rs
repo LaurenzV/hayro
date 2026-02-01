@@ -95,7 +95,7 @@ impl Default for Array<'_> {
 
 impl<'a> Readable<'a> for Array<'a> {
     fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
-        let bytes = r.skip::<Array<'_>>(ctx.in_content_stream)?;
+        let bytes = r.skip::<Array<'_>>(ctx.in_content_stream())?;
 
         Some(Self {
             data: &bytes[1..bytes.len() - 1],
@@ -189,7 +189,7 @@ impl<'a> FlexArrayIter<'a> {
 
         if !self.reader.at_end() {
             return match self.reader.read_with_context::<MaybeRef<T>>(&self.ctx)? {
-                MaybeRef::Ref(r) => self.ctx.xref.get_with::<T>(r.into(), &self.ctx),
+                MaybeRef::Ref(r) => self.ctx.xref().get_with::<T>(r.into(), &self.ctx),
                 MaybeRef::NotRef(i) => Some(i),
             };
         }

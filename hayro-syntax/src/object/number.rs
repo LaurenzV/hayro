@@ -92,7 +92,7 @@ impl Readable<'_> for Number {
         // worth optimizing (i.e. reading the number directly from the bytes instead
         // of first parsing it to a number).
 
-        let mut data = r.skip::<Self>(ctx.in_content_stream)?;
+        let mut data = r.skip::<Self>(ctx.in_content_stream())?;
         // Some weird PDFs have trailing minus in the fraction of number, try to strip those.
         if let Some(idx) = data[1..].iter().position(|b| *b == b'-') {
             data = &data[..idx.saturating_sub(1)];

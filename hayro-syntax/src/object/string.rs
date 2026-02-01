@@ -59,9 +59,9 @@ impl Readable<'_> for String {
         };
 
         // Apply decryption if needed.
-        let final_data = if ctx.xref.needs_decryption(ctx) {
-            if let Some(obj_number) = ctx.obj_number {
-                ctx.xref
+        let final_data = if ctx.xref().needs_decryption(ctx) {
+            if let Some(obj_number) = ctx.obj_number() {
+                ctx.xref()
                     .decrypt(obj_number, &decoded, DecryptionTarget::String)
                     .map(SmallVec::from_vec)
                     .unwrap_or(decoded)

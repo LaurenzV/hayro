@@ -102,7 +102,7 @@ impl<'a> Dict<'a> {
 
     /// Return the object identifier of the dict, if it's an indirect object.
     pub fn obj_id(&self) -> Option<ObjectIdentifier> {
-        self.0.ctx.obj_number
+        self.0.ctx.obj_number()
     }
 
     /// Return the raw entry for a specific key.
@@ -222,10 +222,10 @@ fn read_inner<'a>(
                 let offset = r.offset() - start_offset;
                 offsets.insert(name, offset);
 
-                if ctx.in_content_stream {
-                    r.skip::<Object<'_>>(ctx.in_content_stream)?;
+                if ctx.in_content_stream() {
+                    r.skip::<Object<'_>>(ctx.in_content_stream())?;
                 } else {
-                    r.skip::<MaybeRef<Object<'_>>>(ctx.in_content_stream)?;
+                    r.skip::<MaybeRef<Object<'_>>>(ctx.in_content_stream())?;
                 }
             }
         }
