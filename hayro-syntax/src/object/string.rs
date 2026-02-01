@@ -12,9 +12,11 @@ use core::ops::Deref;
 use log::warn;
 use smallvec::SmallVec;
 
+type StringInner = SmallVec<[u8; 23]>;
+
 /// A PDF string object.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct String(SmallVec<[u8; 16]>);
+pub struct String(StringInner);
 
 impl String {
     /// Returns the string data as a byte slice.
@@ -92,7 +94,7 @@ fn skip_hex(r: &mut Reader<'_>) -> Option<()> {
     Some(())
 }
 
-fn read_hex(r: &mut Reader<'_>) -> Option<SmallVec<[u8; 16]>> {
+fn read_hex(r: &mut Reader<'_>) -> Option<StringInner> {
     let start = r.offset();
     skip_hex(r)?;
     let end = r.offset();
@@ -124,7 +126,7 @@ fn skip_literal(r: &mut Reader<'_>) -> Option<()> {
     Some(())
 }
 
-fn read_literal(r: &mut Reader<'_>) -> Option<SmallVec<[u8; 16]>> {
+fn read_literal(r: &mut Reader<'_>) -> Option<StringInner> {
     let start = r.offset();
     skip_literal(r)?;
     let end = r.offset();
