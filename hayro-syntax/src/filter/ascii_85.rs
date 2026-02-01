@@ -19,54 +19,52 @@ pub(crate) fn decode(data: &[u8]) -> Option<Vec<u8>> {
     };
 
     // Flush a group of characters to decoded output.
-    let flush_group = |group: &[u8; 5], group_len: usize, decoded: &mut Vec<u8>| -> Option<()> {
-        if group_len == 0 {
+    let flush_group = |group: &mut Vec<u8>, decoded: &mut Vec<u8>| -> Option<()> {
+        if group.is_empty() {
             return Some(());
         }
-        if group_len == 1 {
+        if group.len() == 1 {
             return None; // Single char is invalid
         }
         let mut value: u32 = 0;
         for j in 0..5 {
-            let digit = if j < group_len { (group[j] - b'!') as u32 } else { 84 };
+            let digit = if j < group.len() { (group[j] - b'!') as u32 } else { 84 };
             value = value.checked_add(digit.checked_mul(POW_85[j])?)?;
         }
         let bytes = value.to_be_bytes();
-        let output_len = if group_len == 5 { 4 } else { group_len - 1 };
+        let output_len = if group.len() == 5 { 4 } else { group.len() - 1 };
         decoded.extend_from_slice(&bytes[..output_len]);
+        group.clear();
         Some(())
     };
 
     let mut decoded = Vec::with_capacity(data.len() * 4 / 5);
-    let mut group = [0u8; 5];
-    let mut group_len = 0usize;
+    let mut group = Vec::with_capacity(5);
 
     loop {
         let Some(b) = read_byte() else {
             // End of data without EOD marker.
-            flush_group(&group, group_len, &mut decoded)?;
+            flush_group(&mut group, &mut decoded)?;
             return Some(decoded);
         };
 
         match b {
             b'!'..=b'u' => {
-                group[group_len] = b;
-                group_len += 1;
-                if group_len == 5 {
-                    flush_group(&group, group_len, &mut decoded)?;
-                    group_len = 0;
+                group.push(b);
+                
+                if group.len() == 5 {
+                    flush_group(&mut group, &mut decoded)?;
                 }
             }
             b'z' => {
-                // 'z' represents four zero bytes; flush pending group first.
-                flush_group(&group, group_len, &mut decoded)?;
-                group_len = 0;
+                // 'z' represents four zero bytes.
+                flush_group(&mut group, &mut decoded)?;
                 decoded.extend_from_slice(&[0, 0, 0, 0]);
             }
             b'~' => {
                 // Technically requires a ~, but there is a PDF where it isn't
                 // appended and decodes fine in other viewers.
-                flush_group(&group, group_len, &mut decoded)?;
+                flush_group(&mut group, &mut decoded)?;
                 return Some(decoded);
             }
             _ => return None, // Invalid character
