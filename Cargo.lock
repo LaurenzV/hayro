@@ -597,6 +597,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "hayro-postscript"
+version = "0.1.0"
+
+[[package]]
 name = "hayro-svg"
 version = "0.3.0"
 dependencies = [

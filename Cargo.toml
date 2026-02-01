@@ -12,7 +12,8 @@ members = [
     "hayro-jbig2",
     "hayro-ccitt",
     "hayro-font",
-    "hayro-fuzz"
+    "hayro-fuzz",
+    "hayro-postscript"
 ]
 
 [workspace.package]
@@ -32,6 +33,7 @@ hayro-jbig2 = { path = "hayro-jbig2", version = "0.1.0", default-features = fals
 hayro-syntax = { path = "hayro-syntax", version = "0.5.0", default-features = false }
 hayro-svg = { path = "hayro-svg", version = "0.3.0", default-features = false }
 hayro-write = { path = "hayro-write", version = "0.4.0", default-features = false }
+hayro-postscript = { path = "hayro-postscript", version = "0.1.0", default-features = false }
 
 bitflags = { version = "2.10" }
 bytemuck = { version = "1" }

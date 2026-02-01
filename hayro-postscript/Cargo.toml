@@ -1,0 +1,17 @@
+[package]
+name = "hayro-postscript"
+version = "0.1.0"
+description = "A lightweight PostScript parser and interpreter."
+authors = { workspace = true }
+edition = { workspace = true }
+repository = { workspace = true }
+license = { workspace = true }
+
+[features]
+default = ["std"]
+std = []
+
+[dependencies]
+
+[lints]
+workspace = true
