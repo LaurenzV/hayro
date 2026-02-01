@@ -10,6 +10,7 @@ use crate::object::{Array, ObjectIdentifier};
 use crate::object::{Object, ObjectLike};
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
+use crate::sync::Arc;
 use crate::util::OptionLog;
 use alloc::borrow::Cow;
 use alloc::vec::Vec;
@@ -17,18 +18,21 @@ use core::fmt::{Debug, Formatter};
 use log::warn;
 use smallvec::SmallVec;
 
-/// A stream of arbitrary data.
 #[derive(Clone)]
-pub struct Stream<'a> {
+struct StreamInner<'a> {
     dict: Dict<'a>,
     filters: SmallVec<[Filter; 2]>,
     filter_params: SmallVec<[Dict<'a>; 2]>,
     data: &'a [u8],
 }
 
+/// A stream of arbitrary data.
+#[derive(Clone)]
+pub struct Stream<'a>(Arc<StreamInner<'a>>);
+
 impl PartialEq for Stream<'_> {
     fn eq(&self, other: &Self) -> bool {
-        self.dict == other.dict && self.data == other.data
+        self.0.dict == other.0.dict && self.0.data == other.0.data
     }
 }
 
@@ -92,22 +96,23 @@ impl<'a> Stream<'a> {
             }
         }
 
-        Self {
+        Self(Arc::new(StreamInner {
             dict,
             filters: collected_filters,
             filter_params: collected_params,
             data,
-        }
+        }))
     }
 
     /// Return the raw, decrypted data of the stream.
     ///
     /// Stream filters will not be applied.
     pub fn raw_data(&self) -> Cow<'a, [u8]> {
-        let ctx = self.dict.ctx();
+        let ctx = self.0.dict.ctx();
 
         if ctx.xref().needs_decryption(ctx)
             && self
+                .0
                 .dict
                 .get::<object::String>(TYPE)
                 .map(|t| t.as_ref() != b"XRef")
@@ -116,31 +121,31 @@ impl<'a> Stream<'a> {
             Cow::Owned(
                 ctx.xref()
                     .decrypt(
-                        self.dict.obj_id().unwrap(),
-                        self.data,
+                        self.0.dict.obj_id().unwrap(),
+                        self.0.data,
                         DecryptionTarget::Stream,
                     )
                     // TODO: MAybe an error would be better?
                     .unwrap_or_default(),
             )
         } else {
-            Cow::Borrowed(self.data)
+            Cow::Borrowed(self.0.data)
         }
     }
 
     /// Return the raw, underlying dictionary of the stream.
     pub fn dict(&self) -> &Dict<'a> {
-        &self.dict
+        &self.0.dict
     }
 
     /// Return the object identifier of the stream.
     pub fn obj_id(&self) -> ObjectIdentifier {
-        self.dict.obj_id().unwrap()
+        self.0.dict.obj_id().unwrap()
     }
 
     /// Return the filters that are applied to the stream.
     pub fn filters(&self) -> &[Filter] {
-        &self.filters
+        &self.0.filters
     }
 
     /// Return the decoded data of the stream.
@@ -162,7 +167,7 @@ impl<'a> Stream<'a> {
 
         let mut current: Option<FilterResult> = None;
 
-        for (filter, params) in self.filters.iter().zip(self.filter_params.iter()) {
+        for (filter, params) in self.0.filters.iter().zip(self.0.filter_params.iter()) {
             let new = filter.apply(
                 current.as_ref().map(|c| c.data.as_ref()).unwrap_or(&data),
                 params.clone(),
@@ -180,7 +185,7 @@ impl<'a> Stream<'a> {
 
 impl Debug for Stream<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-        write!(f, "Stream (len: {:?})", self.data.len())
+        write!(f, "Stream (len: {:?})", self.0.data.len())
     }
 }
 
@@ -350,6 +355,6 @@ mod tests {
             .read_with_context::<Stream<'_>>(&ReaderContext::dummy())
             .unwrap();
 
-        assert_eq!(stream.data, b"abcdefghij");
+        assert_eq!(stream.0.data, b"abcdefghij");
     }
 }

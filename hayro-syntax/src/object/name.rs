@@ -12,7 +12,7 @@ use core::hash::Hash;
 use core::ops::Deref;
 use smallvec::SmallVec;
 
-type NameInner = SmallVec<[u8; 31]>;
+type NameInner = SmallVec<[u8; 23]>;
 
 /// A PDF name object.
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
