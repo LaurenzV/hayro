@@ -52,7 +52,7 @@ impl Name {
                     // We already verified when skipping that it's a valid hex sequence.
                     let hex = r.read_bytes(2).unwrap();
                     result.push(
-                        decode_hex_digit(hex[0] << 4).unwrap() | decode_hex_digit(hex[1]).unwrap(),
+                        decode_hex_digit(hex[0]).unwrap() << 4 | decode_hex_digit(hex[1]).unwrap(),
                     );
                 } else {
                     result.push(b);
