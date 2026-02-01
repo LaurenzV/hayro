@@ -291,7 +291,7 @@ mod macros {
 
 #[cfg(test)]
 mod tests {
-    use crate::object::Object;
+    use crate::object::{Array, Dict, Name, Null, Number, Object, Stream, String};
     use crate::reader::Reader;
     use crate::reader::{ReaderContext, ReaderExt};
 
@@ -349,5 +349,18 @@ mod tests {
             object_impl(b"<< /Length 3 >> stream\nabc\nendstream").unwrap(),
             Object::Stream(_)
         ));
+    }
+
+    #[test]
+    #[cfg(target_pointer_width = "64")]
+    fn object_sizes() {
+        assert_eq!(size_of::<Object<'_>>(), 104);
+        assert_eq!(size_of::<Array<'_>>(), 88);
+        assert_eq!(size_of::<Dict<'_>>(), 8);
+        assert_eq!(size_of::<Name<'_>>(), 24);
+        assert_eq!(size_of::<Null>(), 0);
+        assert_eq!(size_of::<Number>(), 16);
+        assert_eq!(size_of::<Stream<'_>>(), 80);
+        assert_eq!(size_of::<String<'_>>(), 104);
     }
 }
