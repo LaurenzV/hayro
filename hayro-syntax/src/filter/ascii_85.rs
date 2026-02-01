@@ -57,7 +57,6 @@ pub(crate) fn decode(data: &[u8]) -> Option<Vec<u8>> {
                 }
             }
             b'z' => {
-                // 'z' represents four zero bytes.
                 flush_group(&mut group, &mut decoded)?;
                 decoded.extend_from_slice(&[0, 0, 0, 0]);
             }
