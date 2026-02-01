@@ -92,9 +92,9 @@ impl CacheKey for hayro_syntax::object::Number {
     }
 }
 
-impl CacheKey for hayro_syntax::object::String<'_> {
+impl CacheKey for hayro_syntax::object::String {
     fn cache_key(&self) -> u128 {
-        hash128(self.get().as_ref())
+        hash128(self.as_ref())
     }
 }
 

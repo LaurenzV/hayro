@@ -109,8 +109,8 @@ impl<'a> Stream<'a> {
         if ctx.xref.needs_decryption(ctx)
             && self
                 .dict
-                .get::<object::String<'_>>(TYPE)
-                .map(|t| t.get().as_ref() != b"XRef")
+                .get::<object::String>(TYPE)
+                .map(|t| t.as_ref() != b"XRef")
                 .unwrap_or(true)
         {
             Cow::Owned(

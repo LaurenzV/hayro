@@ -986,7 +986,7 @@ mod tests {
         assert!(dict.get::<Number>(Name::new(b"Version")).is_some());
         assert!(dict.get::<i32>(Name::new(b"IntegerItem")).is_some());
         assert!(
-            dict.get::<string::String<'_>>(Name::new(b"StringItem"))
+            dict.get::<string::String>(Name::new(b"StringItem"))
                 .is_some()
         );
         assert!(dict.get::<Dict<'_>>(Name::new(b"Subdictionary")).is_some());

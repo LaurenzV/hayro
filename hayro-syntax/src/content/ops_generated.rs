@@ -307,20 +307,20 @@ pub struct NextLineUsingLeading;
 op0!(NextLineUsingLeading, "T*");
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct ShowText<'a>(pub object::String<'a>);
-op1!(ShowText<'a>, "Tj");
+pub struct ShowText(pub object::String);
+op1!(ShowText, "Tj");
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct NextLineAndShowText<'a>(pub object::String<'a>);
-op1!(NextLineAndShowText<'a>, "'");
+pub struct NextLineAndShowText(pub object::String);
+op1!(NextLineAndShowText, "'");
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct ShowTextWithParameters<'a>(
+pub struct ShowTextWithParameters(
     pub Number,
     pub Number,
-    pub object::String<'a>,
+    pub object::String,
 );
-op3!(ShowTextWithParameters<'a>, "\"");
+op3!(ShowTextWithParameters, "\"");
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct ShowTexts<'a>(pub Array<'a>);
@@ -432,9 +432,9 @@ pub enum TypedInstruction<'a> {
     NextLineAndSetLeading(NextLineAndSetLeading),
     SetTextMatrix(SetTextMatrix),
     NextLineUsingLeading(NextLineUsingLeading),
-    ShowText(ShowText<'a>),
-    NextLineAndShowText(NextLineAndShowText<'a>),
-    ShowTextWithParameters(ShowTextWithParameters<'a>),
+    ShowText(ShowText),
+    NextLineAndShowText(NextLineAndShowText),
+    ShowTextWithParameters(ShowTextWithParameters),
     ShowTexts(ShowTexts<'a>),
     ColorGlyph(ColorGlyph),
     ShapeGlyph(ShapeGlyph),
@@ -447,7 +447,7 @@ pub enum TypedInstruction<'a> {
 }
 
 impl<'a> TypedInstruction<'a> {
-    pub(crate) fn dispatch(instruction: &Instruction<'a>) -> Option<Self> {
+    pub(crate) fn dispatch(instruction: &Instruction<'a>) -> Option<TypedInstruction<'a>> {
         let op_name = instruction.operator.as_ref();
         Some(match op_name {
             b"BX" => BeginCompatibility::from_stack(&instruction.operands)?.into(),

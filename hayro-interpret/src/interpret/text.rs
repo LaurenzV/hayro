@@ -12,7 +12,7 @@ pub(crate) fn show_text_string<'a>(
     ctx: &mut Context<'a>,
     device: &mut impl Device<'a>,
     resources: &Resources<'a>,
-    text: object::String<'_>,
+    text: object::String,
 ) {
     let Some(font) = ctx.get().text_state.font.clone() else {
         warn!("tried to show text without active font");
@@ -20,8 +20,7 @@ pub(crate) fn show_text_string<'a>(
         return;
     };
 
-    let text_str = text.get();
-    let bytes = text_str.as_ref();
+    let bytes = text.as_bytes();
     let mut cur_idx = 0;
 
     while cur_idx < bytes.len() {

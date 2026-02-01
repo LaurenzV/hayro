@@ -121,7 +121,7 @@ ops = {
 def rust_type(t: Type) -> str:
     return {
         Type.Number: "Number",
-        Type.String: "object::String<'a>",
+        Type.String: "object::String",
         Type.Array: "Array<'a>",
         Type.Object: "Object<'a>",
         Type.Stream: "Stream<'a>",
@@ -136,7 +136,7 @@ def lifetime_if_needed(types):
         "<'a>"
         if any(
             t
-            in [Type.String, Type.Array, Type.Object, Type.Name, Type.Stream, Type.Dict]
+            in [Type.Array, Type.Object, Type.Name, Type.Stream, Type.Dict]
             for t in types
         )
         else ""
@@ -166,7 +166,7 @@ def gen_struct(name, code, types):
 
 def gen_enum_variant(name, types):
     has_lifetime = (type(types) is bool and types) or any(
-        t in [Type.String, Type.Array, Type.Object, Type.Name, Type.Stream]
+        t in [Type.Array, Type.Object, Type.Name, Type.Stream]
         for t in types
     )
     inner_type = f"{name}<'a>" if has_lifetime else name

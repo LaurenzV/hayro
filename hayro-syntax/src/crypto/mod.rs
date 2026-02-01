@@ -146,8 +146,8 @@ pub(crate) fn get(
 
     let byte_length = length / 8;
 
-    let owner_string = dict.get::<object::String<'_>>(O).ok_or(InvalidEncryption)?;
-    let user_string = dict.get::<object::String<'_>>(U).ok_or(InvalidEncryption)?;
+    let owner_string = dict.get::<object::String>(O).ok_or(InvalidEncryption)?;
+    let user_string = dict.get::<object::String>(U).ok_or(InvalidEncryption)?;
     let permissions = {
         let raw = dict.get::<i64>(P).ok_or(InvalidEncryption)?;
 
@@ -451,7 +451,7 @@ fn decryption_key_rev1234(
     encrypt_metadata: bool,
     revision: u8,
     byte_length: u16,
-    owner_string: &object::String<'_>,
+    owner_string: &object::String,
     permissions: u32,
     id: &[u8],
 ) -> Result<Vec<u8>, DecryptionError> {
@@ -472,7 +472,7 @@ fn decryption_key_rev1234(
 
     // c) Pass the value of the encryption dictionary's O entry
     // to the MD5 hash function.
-    md5_input.extend(owner_string.get().as_ref());
+    md5_input.extend(owner_string.as_ref());
 
     // d) Convert the integer value of the P entry to a 32-bit unsigned
     // binary number and pass these bytes to the MD5 hash function, low-order byte first.
@@ -509,7 +509,7 @@ fn authenticate_user_password_rev234(
     revision: u8,
     decryption_key: &[u8],
     id: &[u8],
-    user_string: &object::String<'_>,
+    user_string: &object::String,
 ) -> Result<(), DecryptionError> {
     // a) Perform all but the last step of Algorithm 4 (revision 2) or Algorithm 5 (revision 3 + 4).
     let result = match revision {
@@ -523,12 +523,12 @@ fn authenticate_user_password_rev234(
     // revision 3 or greater), the password supplied is the correct user password.
     match revision {
         2 => {
-            if result.as_slice() != user_string.get().as_ref() {
+            if result.as_slice() != user_string.as_ref() {
                 return Err(DecryptionError::PasswordProtected);
             }
         }
         3 | 4 => {
-            if Some(&result[..16]) != user_string.get().as_ref().get(0..16) {
+            if Some(&result[..16]) != user_string.as_ref().get(0..16) {
                 return Err(DecryptionError::PasswordProtected);
             }
         }
@@ -591,8 +591,8 @@ fn decryption_key_rev56(
     dict: &Dict<'_>,
     revision: u8,
     password: &[u8],
-    owner_string: &object::String<'_>,
-    user_string: &object::String<'_>,
+    owner_string: &object::String,
+    user_string: &object::String,
 ) -> Result<Vec<u8>, DecryptionError> {
     // a) The UTF-8 password string shall be generated from Unicode input by processing the input string with
     // the SASLprep (Internet RFC 4013) profile of stringprep (Internet RFC 3454) using the Normalize and BiDi
@@ -603,15 +603,13 @@ fn decryption_key_rev56(
 
     let string_len = if revision <= 4 { 32 } else { 48 };
 
-    let os = owner_string.get();
-    let trimmed_os = os.get(..string_len).ok_or(InvalidEncryption)?;
+    let trimmed_os = owner_string.get(..string_len).ok_or(InvalidEncryption)?;
 
     let (owner_hash, owner_tail) = trimmed_os.split_at_checked(32).ok_or(InvalidEncryption)?;
     let (owner_validation_salt, owner_key_salt) =
         owner_tail.split_at_checked(8).ok_or(InvalidEncryption)?;
 
-    let us = user_string.get();
-    let trimmed_us = us.get(..string_len).ok_or(InvalidEncryption)?;
+    let trimmed_us = user_string.get(..string_len).ok_or(InvalidEncryption)?;
     let (user_hash, user_tail) = trimmed_us.split_at_checked(32).ok_or(InvalidEncryption)?;
     let (user_validation_salt, user_key_salt) =
         user_tail.split_at_checked(8).ok_or(InvalidEncryption)?;
@@ -631,17 +629,17 @@ fn decryption_key_rev56(
             compute_hash_rev56(password, owner_key_salt, Some(trimmed_us), revision)?;
 
         let oe_string = dict
-            .get::<object::String<'_>>(OE)
+            .get::<object::String>(OE)
             .ok_or(InvalidEncryption)?;
 
-        if oe_string.get().len() != 32 {
+        if oe_string.len() != 32 {
             return Err(InvalidEncryption);
         }
 
         let cipher = AES256Cipher::new(&intermediate_owner_key).ok_or(InvalidEncryption)?;
         let zero_iv = [0_u8; 16];
 
-        Ok(cipher.decrypt_cbc(&oe_string.get(), &zero_iv, false))
+        Ok(cipher.decrypt_cbc(&oe_string, &zero_iv, false))
     } else if compute_hash_rev56(password, user_validation_salt, None, revision)? == user_hash {
         // e) Compute an intermediate user key by computing a hash using algorithm 2.B with an input string
         // consisting of the UTF-8 user password concatenated with the 8 bytes of user Key Salt. The 32-byte result
@@ -650,17 +648,17 @@ fn decryption_key_rev56(
         let intermediate_key = compute_hash_rev56(password, user_key_salt, None, revision)?;
 
         let ue_string = dict
-            .get::<object::String<'_>>(UE)
+            .get::<object::String>(UE)
             .ok_or(InvalidEncryption)?;
 
-        if ue_string.get().len() != 32 {
+        if ue_string.len() != 32 {
             return Err(InvalidEncryption);
         }
 
         let cipher = AES256Cipher::new(&intermediate_key).ok_or(InvalidEncryption)?;
         let zero_iv = [0_u8; 16];
 
-        Ok(cipher.decrypt_cbc(&ue_string.get(), &zero_iv, false))
+        Ok(cipher.decrypt_cbc(&ue_string, &zero_iv, false))
     } else {
         Err(DecryptionError::PasswordProtected)
     }

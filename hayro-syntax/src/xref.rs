@@ -968,9 +968,9 @@ fn get_decryptor(trailer_dict: &Dict<'_>, password: &[u8]) -> Result<Decryptor, 
     if let Some(encryption_dict) = trailer_dict.get::<Dict<'_>>(ENCRYPT) {
         let id = if let Some(id) = trailer_dict
             .get::<Array<'_>>(ID)
-            .and_then(|a| a.flex_iter().next::<object::String<'_>>())
+            .and_then(|a| a.flex_iter().next::<object::String>())
         {
-            id.get().to_vec()
+            id.to_vec()
         } else {
             // Assume an empty ID entry.
             vec![]
@@ -1028,28 +1028,28 @@ impl<'a> ObjectStream<'a> {
 fn parse_metadata(info_dict: &Dict<'_>) -> Metadata {
     Metadata {
         creation_date: info_dict
-            .get::<object::String<'_>>(CREATION_DATE)
-            .and_then(|c| DateTime::from_bytes(c.get().as_ref())),
+            .get::<object::String>(CREATION_DATE)
+            .and_then(|c| DateTime::from_bytes(&c)),
         modification_date: info_dict
-            .get::<object::String<'_>>(MOD_DATE)
-            .and_then(|c| DateTime::from_bytes(c.get().as_ref())),
+            .get::<object::String>(MOD_DATE)
+            .and_then(|c| DateTime::from_bytes(&c)),
         title: info_dict
-            .get::<object::String<'_>>(TITLE)
-            .map(|t| t.get().to_vec()),
+            .get::<object::String>(TITLE)
+            .map(|t| t.to_vec()),
         author: info_dict
-            .get::<object::String<'_>>(AUTHOR)
-            .map(|t| t.get().to_vec()),
+            .get::<object::String>(AUTHOR)
+            .map(|t| t.to_vec()),
         subject: info_dict
-            .get::<object::String<'_>>(SUBJECT)
-            .map(|t| t.get().to_vec()),
+            .get::<object::String>(SUBJECT)
+            .map(|t| t.to_vec()),
         keywords: info_dict
-            .get::<object::String<'_>>(KEYWORDS)
-            .map(|t| t.get().to_vec()),
+            .get::<object::String>(KEYWORDS)
+            .map(|t| t.to_vec()),
         creator: info_dict
-            .get::<object::String<'_>>(CREATOR)
-            .map(|t| t.get().to_vec()),
+            .get::<object::String>(CREATOR)
+            .map(|t| t.to_vec()),
         producer: info_dict
-            .get::<object::String<'_>>(PRODUCER)
-            .map(|t| t.get().to_vec()),
+            .get::<object::String>(PRODUCER)
+            .map(|t| t.to_vec()),
     }
 }
