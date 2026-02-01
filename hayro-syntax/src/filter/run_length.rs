@@ -12,13 +12,13 @@ pub(crate) fn decode(data: &[u8]) -> Option<Vec<u8>> {
         match length {
             128 => break,
             0..=127 => {
-                // PDFBOX-3990, just abort early if stream is invalid. 
+                // PDFBOX-3990, just abort early if stream is invalid.
                 let Some(bytes) = reader.read_bytes(length as usize + 1) else {
                     break;
                 };
-                
+
                 decoded.extend(bytes);
-            },
+            }
             _ => {
                 let length = 257 - length as usize;
                 decoded.extend([reader.read_byte()?].repeat(length));
