@@ -85,7 +85,7 @@ impl Readable<'_> for Operator {
             return None;
         }
 
-        Some(Operator(Name::new(data)))
+        Some(Self(Name::new(data)))
     }
 }
 
