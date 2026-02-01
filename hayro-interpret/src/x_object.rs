@@ -37,7 +37,7 @@ impl<'a> XObject<'a> {
         transfer_function: Option<ActiveTransferFunction>,
     ) -> Option<Self> {
         let dict = stream.dict();
-        match dict.get::<Name<'_>>(SUBTYPE)?.deref() {
+        match dict.get::<Name>(SUBTYPE)?.deref() {
             IMAGE => Some(Self::ImageXObject(ImageXObject::new(
                 stream,
                 |_| None,
@@ -234,7 +234,7 @@ pub(crate) struct ImageXObject<'a> {
 impl<'a> ImageXObject<'a> {
     pub(crate) fn new(
         stream: &Stream<'a>,
-        resolve_cs: impl FnOnce(&Name<'_>) -> Option<ColorSpace>,
+        resolve_cs: impl FnOnce(&Name) -> Option<ColorSpace>,
         warning_sink: &WarningSinkFn,
         cache: &Cache,
         force_luma: bool,

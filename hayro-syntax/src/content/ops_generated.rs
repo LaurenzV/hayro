@@ -53,16 +53,16 @@ pub struct DashPattern<'a>(
 op2!(DashPattern<'a>, "d");
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct RenderingIntent<'a>(pub Name<'a>);
-op1!(RenderingIntent<'a>, "ri");
+pub struct RenderingIntent(pub Name);
+op1!(RenderingIntent, "ri");
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct FlatnessTolerance(pub Number);
 op1!(FlatnessTolerance, "i");
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct SetGraphicsState<'a>(pub Name<'a>);
-op1!(SetGraphicsState<'a>, "gs");
+pub struct SetGraphicsState(pub Name);
+op1!(SetGraphicsState, "gs");
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct MoveTo(
@@ -169,12 +169,12 @@ pub struct ClipEvenOdd;
 op0!(ClipEvenOdd, "W*");
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct ColorSpaceStroke<'a>(pub Name<'a>);
-op1!(ColorSpaceStroke<'a>, "CS");
+pub struct ColorSpaceStroke(pub Name);
+op1!(ColorSpaceStroke, "CS");
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct ColorSpaceNonStroke<'a>(pub Name<'a>);
-op1!(ColorSpaceNonStroke<'a>, "cs");
+pub struct ColorSpaceNonStroke(pub Name);
+op1!(ColorSpaceNonStroke, "cs");
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct StrokeColor(pub SmallVec<[Number; OPERANDS_THRESHOLD]>);
@@ -227,12 +227,12 @@ pub struct NonStrokeColorCmyk(
 op4!(NonStrokeColorCmyk, "k");
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct Shading<'a>(pub Name<'a>);
-op1!(Shading<'a>, "sh");
+pub struct Shading(pub Name);
+op1!(Shading, "sh");
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct XObject<'a>(pub Name<'a>);
-op1!(XObject<'a>, "Do");
+pub struct XObject(pub Name);
+op1!(XObject, "Do");
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct InlineImage<'a>(pub Stream<'a>);
@@ -255,11 +255,11 @@ pub struct TextLeading(pub Number);
 op1!(TextLeading, "TL");
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct TextFont<'a>(
-    pub Name<'a>,
+pub struct TextFont(
+    pub Name,
     pub Number,
 );
-op2!(TextFont<'a>, "Tf");
+op2!(TextFont, "Tf");
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct TextRenderingMode(pub Number);
@@ -345,23 +345,23 @@ pub struct ShapeGlyph(
 op6!(ShapeGlyph, "d1");
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct MarkedContentPoint<'a>(pub Name<'a>);
-op1!(MarkedContentPoint<'a>, "MP");
+pub struct MarkedContentPoint(pub Name);
+op1!(MarkedContentPoint, "MP");
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct MarkedContentPointWithProperties<'a>(
-    pub Name<'a>,
+    pub Name,
     pub Object<'a>,
 );
 op2!(MarkedContentPointWithProperties<'a>, "DP");
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct BeginMarkedContent<'a>(pub Name<'a>);
-op1!(BeginMarkedContent<'a>, "BMC");
+pub struct BeginMarkedContent(pub Name);
+op1!(BeginMarkedContent, "BMC");
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct BeginMarkedContentWithProperties<'a>(
-    pub Name<'a>,
+    pub Name,
     pub Object<'a>,
 );
 op2!(BeginMarkedContentWithProperties<'a>, "BDC");
@@ -382,9 +382,9 @@ pub enum TypedInstruction<'a> {
     LineJoin(LineJoin),
     MiterLimit(MiterLimit),
     DashPattern(DashPattern<'a>),
-    RenderingIntent(RenderingIntent<'a>),
+    RenderingIntent(RenderingIntent),
     FlatnessTolerance(FlatnessTolerance),
-    SetGraphicsState(SetGraphicsState<'a>),
+    SetGraphicsState(SetGraphicsState),
     MoveTo(MoveTo),
     LineTo(LineTo),
     CubicTo(CubicTo),
@@ -404,26 +404,26 @@ pub enum TypedInstruction<'a> {
     EndPath(EndPath),
     ClipNonZero(ClipNonZero),
     ClipEvenOdd(ClipEvenOdd),
-    ColorSpaceStroke(ColorSpaceStroke<'a>),
-    ColorSpaceNonStroke(ColorSpaceNonStroke<'a>),
+    ColorSpaceStroke(ColorSpaceStroke),
+    ColorSpaceNonStroke(ColorSpaceNonStroke),
     StrokeColor(StrokeColor),
-    StrokeColorNamed(StrokeColorNamed<'a>),
+    StrokeColorNamed(StrokeColorNamed),
     NonStrokeColor(NonStrokeColor),
-    NonStrokeColorNamed(NonStrokeColorNamed<'a>),
+    NonStrokeColorNamed(NonStrokeColorNamed),
     StrokeColorDeviceGray(StrokeColorDeviceGray),
     NonStrokeColorDeviceGray(NonStrokeColorDeviceGray),
     StrokeColorDeviceRgb(StrokeColorDeviceRgb),
     NonStrokeColorDeviceRgb(NonStrokeColorDeviceRgb),
     StrokeColorCmyk(StrokeColorCmyk),
     NonStrokeColorCmyk(NonStrokeColorCmyk),
-    Shading(Shading<'a>),
-    XObject(XObject<'a>),
+    Shading(Shading),
+    XObject(XObject),
     InlineImage(InlineImage<'a>),
     CharacterSpacing(CharacterSpacing),
     WordSpacing(WordSpacing),
     HorizontalScaling(HorizontalScaling),
     TextLeading(TextLeading),
-    TextFont(TextFont<'a>),
+    TextFont(TextFont),
     TextRenderingMode(TextRenderingMode),
     TextRise(TextRise),
     BeginText(BeginText),
@@ -438,12 +438,12 @@ pub enum TypedInstruction<'a> {
     ShowTexts(ShowTexts<'a>),
     ColorGlyph(ColorGlyph),
     ShapeGlyph(ShapeGlyph),
-    MarkedContentPoint(MarkedContentPoint<'a>),
+    MarkedContentPoint(MarkedContentPoint),
     MarkedContentPointWithProperties(MarkedContentPointWithProperties<'a>),
-    BeginMarkedContent(BeginMarkedContent<'a>),
+    BeginMarkedContent(BeginMarkedContent),
     BeginMarkedContentWithProperties(BeginMarkedContentWithProperties<'a>),
     EndMarkedContent(EndMarkedContent),
-    Fallback(Operator<'a>),
+    Fallback(Operator),
 }
 
 impl<'a> TypedInstruction<'a> {

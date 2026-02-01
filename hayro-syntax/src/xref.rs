@@ -104,14 +104,14 @@ fn fallback_xref_map_inner<'a>(
             }
 
             if dict
-                .get::<Name<'_>>(TYPE)
+                .get::<Name>(TYPE)
                 .is_some_and(|n| n.as_str() == "Catalog")
             {
                 root_ref = last_obj_num;
             }
 
             if let Some(stream) = old_r.read::<Stream<'_>>(&dummy_ctx)
-                && stream.dict().get::<Name<'_>>(TYPE).as_deref() == Some(b"ObjStm")
+                && stream.dict().get::<Name>(TYPE).as_deref() == Some(b"ObjStm")
                 && let Some(data) = stream.decoded().ok()
                 && let Some(last_obj_num) = last_obj_num
                 && let Some(obj_stream) = ObjectStream::new(stream, &data, &dummy_ctx)
@@ -299,7 +299,7 @@ impl XRef {
                 let pages_ref = root.get_ref(PAGES).ok_or(XRefError::Unknown)?;
                 let has_ocgs = root.get::<Dict<'_>>(OCPROPERTIES).is_some();
                 let version = root
-                    .get::<Name<'_>>(VERSION)
+                    .get::<Name>(VERSION)
                     .and_then(|v| PdfVersion::from_bytes(v.deref()));
 
                 let td = TrailerData {

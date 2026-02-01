@@ -220,7 +220,7 @@ pub(crate) struct Font<'a>(u128, FontType<'a>);
 
 impl<'a> Font<'a> {
     pub(crate) fn new(dict: &Dict<'a>, resolver: &FontResolverFn) -> Option<Self> {
-        let f_type = match dict.get::<Name<'_>>(SUBTYPE)?.deref() {
+        let f_type = match dict.get::<Name>(SUBTYPE)?.deref() {
             TYPE1 | MM_TYPE1 => FontType::Type1(Rc::new(Type1Font::new(dict, resolver)?)),
             TRUE_TYPE => TrueTypeFont::new(dict)
                 .map(Rc::new)
@@ -505,7 +505,7 @@ pub struct FallbackFontQuery {
 impl FallbackFontQuery {
     pub(crate) fn new(dict: &Dict<'_>) -> Self {
         let post_script_name = dict
-            .get::<Name<'_>>(BASE_FONT)
+            .get::<Name>(BASE_FONT)
             .map(|n| strip_subset_prefix(n.as_str()).to_string());
 
         let mut data = Self {
@@ -515,13 +515,13 @@ impl FallbackFontQuery {
 
         if let Some(descriptor) = dict.get::<Dict<'_>>(FONT_DESC) {
             data.font_name = dict
-                .get::<Name<'_>>(FONT_NAME)
+                .get::<Name>(FONT_NAME)
                 .map(|n| strip_subset_prefix(n.as_str()).to_string());
             data.font_family = descriptor
-                .get::<Name<'_>>(FONT_FAMILY)
+                .get::<Name>(FONT_FAMILY)
                 .map(|n| n.as_str().to_string());
             data.font_stretch = descriptor
-                .get::<Name<'_>>(FONT_STRETCH)
+                .get::<Name>(FONT_STRETCH)
                 .map(|n| FontStretch::from_string(n.as_str()))
                 .unwrap_or(FontStretch::Normal);
             data.font_weight = descriptor.get::<u32>(FONT_WEIGHT).unwrap_or(400);

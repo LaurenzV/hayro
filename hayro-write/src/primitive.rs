@@ -83,7 +83,7 @@ impl WriteDirect for object::String {
     }
 }
 
-impl WriteDirect for object::Name<'_> {
+impl WriteDirect for object::Name {
     fn write_direct(&self, obj: Obj<'_>, _: &mut ExtractionContext<'_>) {
         obj.primitive(pdf_writer::Name(self.deref()));
     }
@@ -166,7 +166,7 @@ write_indirect!(Null);
 write_indirect!(bool);
 write_indirect!(Number);
 write_indirect!(object::String);
-write_indirect!(object::Name<'_>);
+write_indirect!(object::Name);
 write_indirect!(dict::Dict<'_>);
 write_indirect!(array::Array<'_>);
 

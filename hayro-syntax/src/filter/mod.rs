@@ -61,7 +61,7 @@ impl Filter {
         }
     }
 
-    pub(crate) fn from_name(name: Name<'_>) -> Option<Self> {
+    pub(crate) fn from_name(name: Name) -> Option<Self> {
         match name.deref() {
             ASCII_HEX_DECODE | ASCII_HEX_DECODE_ABBREVIATION => Some(Self::AsciiHexDecode),
             ASCII85_DECODE | ASCII85_DECODE_ABBREVIATION => Some(Self::Ascii85Decode),

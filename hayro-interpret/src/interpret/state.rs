@@ -261,7 +261,7 @@ pub(crate) fn handle_gs<'a>(
 
 pub(crate) fn handle_gs_single<'a>(
     dict: &Dict<'a>,
-    key: Name<'_>,
+    key: Name,
     context: &mut Context<'a>,
     parent_resources: &Resources<'a>,
 ) -> Option<()> {
@@ -303,7 +303,7 @@ pub(crate) fn handle_gs_single<'a>(
             context.get_mut().graphics_state.transfer_function = function;
         }
         "SMask" => {
-            if let Some(name) = dict.get::<Name<'_>>(SMASK) {
+            if let Some(name) = dict.get::<Name>(SMASK) {
                 if name.deref() == b"None" {
                     context.get_mut().graphics_state.soft_mask = None;
                 }
@@ -314,14 +314,14 @@ pub(crate) fn handle_gs_single<'a>(
             }
         }
         "BM" => {
-            if let Some(name) = dict.get::<Name<'_>>(key.clone()) {
+            if let Some(name) = dict.get::<Name>(key.clone()) {
                 if let Some(bm) = convert_blend_mode(name.as_str()) {
                     context.get_mut().graphics_state.blend_mode = bm;
 
                     return Some(());
                 }
             } else if let Some(arr) = dict.get::<Array<'_>>(key) {
-                for name in arr.iter::<Name<'_>>() {
+                for name in arr.iter::<Name>() {
                     if let Some(bm) = convert_blend_mode(name.as_str()) {
                         context.get_mut().graphics_state.blend_mode = bm;
 

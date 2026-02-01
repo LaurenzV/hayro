@@ -67,7 +67,7 @@ impl Type0Font {
         let to_unicode = read_to_unicode(dict);
 
         let postscript_name = dict
-            .get::<Name<'_>>(BASE_FONT)
+            .get::<Name>(BASE_FONT)
             .map(|n| strip_subset_prefix(n.as_str()).to_string());
 
         // Extract font flags from descriptor
@@ -265,7 +265,7 @@ impl FontType {
         } else if let Some(stream) = descriptor.get::<Stream<'_>>(FONT_FILE3) {
             let decoded = stream.decoded().ok()?;
 
-            return match stream.dict().get::<Name<'_>>(SUBTYPE)?.deref() {
+            return match stream.dict().get::<Name>(SUBTYPE)?.deref() {
                 CID_FONT_TYPE0C => {
                     let data = Arc::new(decoded.to_vec());
 
@@ -300,7 +300,7 @@ enum CidToGIdMap {
 
 impl CidToGIdMap {
     fn new(dict: &Dict<'_>) -> Option<Self> {
-        if let Some(name) = dict.get::<Name<'_>>(CID_TO_GID_MAP) {
+        if let Some(name) = dict.get::<Name>(CID_TO_GID_MAP) {
             if name.deref() == IDENTITY {
                 Some(Self::Identity)
             } else {

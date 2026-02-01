@@ -498,7 +498,7 @@ impl PostScriptOp {
             // TODO: Support radix numbers
             Self::Number(n)
         } else {
-            let op = r.read::<content::Operator<'_>>(&ReaderContext::dummy())?;
+            let op = r.read::<content::Operator>(&ReaderContext::dummy())?;
             match op.as_ref() {
                 b"abs" => Self::Abs,
                 b"add" => Self::Add,

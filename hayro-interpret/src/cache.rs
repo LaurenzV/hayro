@@ -98,7 +98,7 @@ impl CacheKey for hayro_syntax::object::String {
     }
 }
 
-impl CacheKey for Name<'_> {
+impl CacheKey for Name {
     fn cache_key(&self) -> u128 {
         hash128(self)
     }

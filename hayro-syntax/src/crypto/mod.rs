@@ -55,7 +55,7 @@ enum DecryptorTag {
 }
 
 impl DecryptorTag {
-    fn from_name(name: &Name<'_>) -> Option<Self> {
+    fn from_name(name: &Name) -> Option<Self> {
         match name.as_str() {
             "None" | "Identity" => Some(Self::None),
             "V2" => Some(Self::Rc4),
@@ -111,7 +111,7 @@ pub(crate) fn get(
     id: &[u8],
     password: &[u8],
 ) -> Result<Decryptor, DecryptionError> {
-    let filter = dict.get::<Name<'_>>(FILTER).ok_or(InvalidEncryption)?;
+    let filter = dict.get::<Name>(FILTER).ok_or(InvalidEncryption)?;
 
     if filter.deref() != b"Standard" {
         return Err(DecryptionError::UnsupportedAlgorithm);
@@ -292,10 +292,10 @@ impl DecryptorData {
         }
 
         let stm_f = *mappings
-            .get(dict.get::<Name<'_>>(STM_F)?.as_str())
+            .get(dict.get::<Name>(STM_F)?.as_str())
             .unwrap_or(&CryptDictionary::identity(default_length));
         let str_f = *mappings
-            .get(dict.get::<Name<'_>>(STR_F)?.as_str())
+            .get(dict.get::<Name>(STR_F)?.as_str())
             .unwrap_or(&CryptDictionary::identity(default_length));
 
         Some(Self {
@@ -313,7 +313,7 @@ struct CryptDictionary {
 
 impl CryptDictionary {
     fn from_dict(dict: &Dict<'_>, default_length: u16) -> Option<Self> {
-        let cfm = DecryptorTag::from_name(&dict.get::<Name<'_>>(CFM)?)?;
+        let cfm = DecryptorTag::from_name(&dict.get::<Name>(CFM)?)?;
         // The standard security handler expresses the Length entry in bytes (e.g., 32 means a
         // length of 256 bits) and public-key security handlers express it as is (e.g., 256 means a
         // length of 256 bits).

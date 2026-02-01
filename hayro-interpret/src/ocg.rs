@@ -27,7 +27,7 @@ impl OcgState {
         let mut inactive = HashSet::new();
 
         let base_state = config
-            .get::<Name<'_>>(BASE_STATE)
+            .get::<Name>(BASE_STATE)
             .and_then(|b| BaseState::from_name(b.as_ref()));
 
         if base_state.unwrap_or(BaseState::On) == BaseState::Off

@@ -234,7 +234,7 @@ impl<'a> Context<'a> {
     pub(crate) fn get_font(
         &mut self,
         resources: &Resources<'a>,
-        name: Name<'_>,
+        name: Name,
     ) -> Option<Font<'a>> {
         let font_dict = resources.get_font(name)?;
         let cache_key = font_dict.cache_key();
@@ -247,7 +247,7 @@ impl<'a> Context<'a> {
     pub(crate) fn get_color_space(
         &mut self,
         resources: &Resources<'_>,
-        name: Name<'_>,
+        name: Name,
     ) -> Option<ColorSpace> {
         let cs_object = resources.get_color_space(name)?;
         self.object_cache

@@ -112,7 +112,7 @@ impl<'a> SoftMask<'a> {
             .get::<Object<'_>>(TR)
             .and_then(|o| Function::new(&o))
             .map(TransferFunction);
-        let (mask_type, background) = match dict.get::<Name<'_>>(S)?.deref() {
+        let (mask_type, background) = match dict.get::<Name>(S)?.deref() {
             LUMINOSITY => {
                 let color = dict
                     .get::<ColorComponents>(BC)
