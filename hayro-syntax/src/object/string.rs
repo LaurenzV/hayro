@@ -2,8 +2,8 @@
 
 use crate::crypto::DecryptionTarget;
 use crate::filter::ascii_hex;
-use crate::object::macros::object;
 use crate::object::Object;
+use crate::object::macros::object;
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 use crate::trivia::is_white_space_character;
@@ -88,7 +88,7 @@ fn skip_hex(r: &mut Reader<'_>) -> Option<()> {
         r.read_byte()?;
     }
     r.forward_tag(b">")?;
-    
+
     Some(())
 }
 
@@ -100,7 +100,7 @@ fn read_hex(r: &mut Reader<'_>) -> Option<SmallVec<[u8; 16]>> {
     // Exclude outer brackets.
     let raw = r.range(start + 1..end - 1)?;
     let decoded = ascii_hex::decode(raw)?;
-    
+
     Some(SmallVec::from_vec(decoded))
 }
 
@@ -145,19 +145,17 @@ fn read_literal(r: &mut Reader<'_>) -> Option<SmallVec<[u8; 16]>> {
                     let third = r.read_byte();
 
                     let bytes = match (second, third) {
-                        (Some(n1), Some(n2)) => {
-                            match (is_octal_digit(n1), is_octal_digit(n2)) {
-                                (true, true) => [next, n1, n2],
-                                (true, _) => {
-                                    r.jump(r.offset() - 1);
-                                    [b'0', next, n1]
-                                }
-                                _ => {
-                                    r.jump(r.offset() - 2);
-                                    [b'0', b'0', next]
-                                }
+                        (Some(n1), Some(n2)) => match (is_octal_digit(n1), is_octal_digit(n2)) {
+                            (true, true) => [next, n1, n2],
+                            (true, _) => {
+                                r.jump(r.offset() - 1);
+                                [b'0', next, n1]
                             }
-                        }
+                            _ => {
+                                r.jump(r.offset() - 2);
+                                [b'0', b'0', next]
+                            }
+                        },
                         (Some(n1), None) => {
                             if is_octal_digit(n1) {
                                 [b'0', next, n1]
@@ -297,9 +295,11 @@ mod tests {
 
     #[test]
     fn hex_string_invalid_2() {
-        assert!(Reader::new(b"34AD")
-            .read_without_context::<String>()
-            .is_none());
+        assert!(
+            Reader::new(b"34AD")
+                .read_without_context::<String>()
+                .is_none()
+        );
     }
 
     #[test]
@@ -326,9 +326,11 @@ mod tests {
 
     #[test]
     fn literal_string_2() {
-        assert!(Reader::new(b"(Hi \\777)")
-            .read_without_context::<String>()
-            .is_some());
+        assert!(
+            Reader::new(b"(Hi \\777)")
+                .read_without_context::<String>()
+                .is_some()
+        );
     }
 
     #[test]

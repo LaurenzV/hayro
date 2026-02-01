@@ -1033,21 +1033,13 @@ fn parse_metadata(info_dict: &Dict<'_>) -> Metadata {
         modification_date: info_dict
             .get::<object::String>(MOD_DATE)
             .and_then(|c| DateTime::from_bytes(&c)),
-        title: info_dict
-            .get::<object::String>(TITLE)
-            .map(|t| t.to_vec()),
-        author: info_dict
-            .get::<object::String>(AUTHOR)
-            .map(|t| t.to_vec()),
-        subject: info_dict
-            .get::<object::String>(SUBJECT)
-            .map(|t| t.to_vec()),
+        title: info_dict.get::<object::String>(TITLE).map(|t| t.to_vec()),
+        author: info_dict.get::<object::String>(AUTHOR).map(|t| t.to_vec()),
+        subject: info_dict.get::<object::String>(SUBJECT).map(|t| t.to_vec()),
         keywords: info_dict
             .get::<object::String>(KEYWORDS)
             .map(|t| t.to_vec()),
-        creator: info_dict
-            .get::<object::String>(CREATOR)
-            .map(|t| t.to_vec()),
+        creator: info_dict.get::<object::String>(CREATOR).map(|t| t.to_vec()),
         producer: info_dict
             .get::<object::String>(PRODUCER)
             .map(|t| t.to_vec()),

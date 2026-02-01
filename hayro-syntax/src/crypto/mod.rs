@@ -628,9 +628,7 @@ fn decryption_key_rev56(
         let intermediate_owner_key =
             compute_hash_rev56(password, owner_key_salt, Some(trimmed_us), revision)?;
 
-        let oe_string = dict
-            .get::<object::String>(OE)
-            .ok_or(InvalidEncryption)?;
+        let oe_string = dict.get::<object::String>(OE).ok_or(InvalidEncryption)?;
 
         if oe_string.len() != 32 {
             return Err(InvalidEncryption);
@@ -647,9 +645,7 @@ fn decryption_key_rev56(
         // initialization vector of zero. The 32-byte result is the file encryption key.
         let intermediate_key = compute_hash_rev56(password, user_key_salt, None, revision)?;
 
-        let ue_string = dict
-            .get::<object::String>(UE)
-            .ok_or(InvalidEncryption)?;
+        let ue_string = dict.get::<object::String>(UE).ok_or(InvalidEncryption)?;
 
         if ue_string.len() != 32 {
             return Err(InvalidEncryption);
