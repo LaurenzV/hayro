@@ -7,7 +7,6 @@ use crate::object::macros::object;
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 use crate::trivia::is_white_space_character;
-use alloc::vec::Vec;
 use core::ops::Deref;
 use log::warn;
 use smallvec::SmallVec;
@@ -73,7 +72,7 @@ impl Readable<'_> for String {
             decoded
         };
 
-        Some(String(final_data))
+        Some(Self(final_data))
     }
 }
 
