@@ -125,7 +125,10 @@ pub(crate) fn is_whitespace(b: u8) -> bool {
 /// Returns `true` if the byte is a PostScript delimiter character.
 #[inline(always)]
 pub(crate) fn is_delimiter(b: u8) -> bool {
-    matches!(b, b'(' | b')' | b'<' | b'>' | b'[' | b']' | b'{' | b'}' | b'/' | b'%')
+    matches!(
+        b,
+        b'(' | b')' | b'<' | b'>' | b'[' | b']' | b'{' | b'}' | b'/' | b'%'
+    )
 }
 
 /// Returns `true` if the byte is a PostScript regular character.

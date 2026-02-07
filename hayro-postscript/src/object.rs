@@ -76,12 +76,10 @@ pub(crate) fn read<'a>(r: &mut Reader<'a>) -> Result<Option<Object<'a>>> {
             r.forward();
             Err(Error::UnsupportedType)
         }
-        b'.' | b'+' | b'-' | b'0'..=b'9' => {
-            number::read(r).map(|n| match n {
-                Number::Integer(v) => Object::Integer(v),
-                Number::Real(v) => Object::Real(v),
-            })
-        }
+        b'.' | b'+' | b'-' | b'0'..=b'9' => number::read(r).map(|n| match n {
+            Number::Integer(v) => Object::Integer(v),
+            Number::Real(v) => Object::Real(v),
+        }),
         _ => name::parse_executable(r)
             .map(|s| Object::Name(Name::new(s, false)))
             .ok_or(Error::SyntaxError),

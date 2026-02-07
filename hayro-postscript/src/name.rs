@@ -30,7 +30,7 @@ impl<'a> Name<'a> {
     /// Decode the name into `out`, replacing any previous contents.
     pub fn decode_into(&self, out: &mut Vec<u8>) -> Result<()> {
         out.clear();
-        
+
         // Fast path: no `#` escapes.
         if !self.data.contains(&b'#') {
             out.extend_from_slice(self.data);

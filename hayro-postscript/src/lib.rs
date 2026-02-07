@@ -124,22 +124,13 @@ endcmap"#;
             Object::Name(Name::new(b"endcodespacerange", false))
         );
         assert_eq!(objects[16], Object::Integer(2));
-        assert_eq!(
-            objects[17],
-            Object::Name(Name::new(b"beginbfchar", false))
-        );
+        assert_eq!(objects[17], Object::Name(Name::new(b"beginbfchar", false)));
         assert_eq!(objects[18], Object::String(String::from_hex(b"03")));
         assert_eq!(objects[19], Object::String(String::from_hex(b"0041")));
         assert_eq!(objects[20], Object::String(String::from_hex(b"04")));
         assert_eq!(objects[21], Object::String(String::from_hex(b"0042")));
-        assert_eq!(
-            objects[22],
-            Object::Name(Name::new(b"endbfchar", false))
-        );
-        assert_eq!(
-            objects[23],
-            Object::Name(Name::new(b"endcmap", false))
-        );
+        assert_eq!(objects[22], Object::Name(Name::new(b"endbfchar", false)));
+        assert_eq!(objects[23], Object::Name(Name::new(b"endcmap", false)));
         assert_eq!(objects.len(), 24);
     }
 
@@ -149,7 +140,10 @@ endcmap"#;
         let mut scanner = Scanner::new(input);
 
         assert_eq!(scanner.next(), Err(Error::UnsupportedType)); // <<
-        assert_eq!(scanner.next().unwrap(), Some(Object::Name(Name::new(b"Registry", true))));
+        assert_eq!(
+            scanner.next().unwrap(),
+            Some(Object::Name(Name::new(b"Registry", true)))
+        );
         assert_eq!(
             scanner.next().unwrap(),
             Some(Object::String(String::from_literal(b"Adobe")))

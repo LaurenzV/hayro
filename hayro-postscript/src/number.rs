@@ -20,7 +20,7 @@ pub(crate) fn read(r: &mut Reader<'_>) -> Result<Number> {
     // Optional sign.
     let first = r.peek_byte().ok_or(Error::SyntaxError)?;
     let has_sign = first == b'+' || first == b'-';
-    
+
     if has_sign {
         r.forward();
     }
@@ -59,7 +59,7 @@ pub(crate) fn read(r: &mut Reader<'_>) -> Result<Number> {
 
     // Check for real number indicators: `.` or `e`/`E`.
     let has_dot = r.peek_byte() == Some(b'.');
-    
+
     if has_dot {
         r.forward(); // skip '.'
         r.forward_while(|b| b.is_ascii_digit());
@@ -73,12 +73,12 @@ pub(crate) fn read(r: &mut Reader<'_>) -> Result<Number> {
     let has_exponent = matches!(r.peek_byte(), Some(b'e' | b'E'));
     if has_exponent {
         r.forward();
-        
+
         // Optional exponent sign.
         if matches!(r.peek_byte(), Some(b'+' | b'-')) {
             r.forward();
         }
-        
+
         r.forward_while(|b| b.is_ascii_digit());
     }
 
@@ -91,15 +91,15 @@ pub(crate) fn read(r: &mut Reader<'_>) -> Result<Number> {
 
     if has_dot || has_exponent {
         let value = str.parse::<f32>().map_err(|_| Error::SyntaxError)?;
-        
+
         Ok(Number::Real(value))
     } else {
         if !has_digits {
             return Err(Error::SyntaxError);
         }
-        
+
         let value = str.parse::<i32>().map_err(|_| Error::SyntaxError)?;
-        
+
         Ok(Number::Integer(value))
     }
 }
@@ -133,7 +133,6 @@ mod tests {
         assert_eq!(read_num(b"-1. ").unwrap(), Number::Real(-1.0));
         assert_eq!(read_num(b"0.0 ").unwrap(), Number::Real(0.0));
     }
-
 
     #[test]
     fn radix_numbers() {

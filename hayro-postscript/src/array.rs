@@ -155,35 +155,23 @@ mod tests {
 
     #[test]
     fn nested() {
-        assert_eq!(
-            parse_array(b"[1 [2 3] 4]").unwrap(),
-            b"1 [2 3] 4"
-        );
+        assert_eq!(parse_array(b"[1 [2 3] 4]").unwrap(), b"1 [2 3] 4");
     }
 
     #[test]
     fn with_string() {
         // The ']' inside the string should not close the array.
-        assert_eq!(
-            parse_array(b"[1 (str]) 2]").unwrap(),
-            b"1 (str]) 2"
-        );
+        assert_eq!(parse_array(b"[1 (str]) 2]").unwrap(), b"1 (str]) 2");
     }
 
     #[test]
     fn with_hex_string() {
-        assert_eq!(
-            parse_array(b"[<48> /name]").unwrap(),
-            b"<48> /name"
-        );
+        assert_eq!(parse_array(b"[<48> /name]").unwrap(), b"<48> /name");
     }
 
     #[test]
     fn with_ascii85_string() {
-        assert_eq!(
-            parse_array(b"[<~87cURDZ~> 1]").unwrap(),
-            b"<~87cURDZ~> 1"
-        );
+        assert_eq!(parse_array(b"[<~87cURDZ~> 1]").unwrap(), b"<~87cURDZ~> 1");
     }
 
     #[test]

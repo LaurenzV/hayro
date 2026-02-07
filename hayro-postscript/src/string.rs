@@ -22,15 +22,21 @@ pub struct String<'a> {
 
 impl<'a> String<'a> {
     pub(crate) const fn from_literal(data: &'a [u8]) -> Self {
-        Self { inner: StringInner::Literal(data) }
+        Self {
+            inner: StringInner::Literal(data),
+        }
     }
 
     pub(crate) const fn from_hex(data: &'a [u8]) -> Self {
-        Self { inner: StringInner::Hex(data) }
+        Self {
+            inner: StringInner::Hex(data),
+        }
     }
 
     pub(crate) const fn from_ascii85(data: &'a [u8]) -> Self {
-        Self { inner: StringInner::Ascii85(data) }
+        Self {
+            inner: StringInner::Ascii85(data),
+        }
     }
 
     /// Decode the string content into `out`, replacing any previous contents.
@@ -84,7 +90,6 @@ pub(crate) fn parse_ascii85<'a>(r: &mut Reader<'a>) -> Option<&'a [u8]> {
     }
 }
 
-
 fn skip_literal(r: &mut Reader<'_>) -> Option<()> {
     r.forward_tag(b"(")?;
     let mut depth = 1u32;
@@ -107,7 +112,7 @@ fn skip_literal(r: &mut Reader<'_>) -> Option<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     fn decode_literal(input: &[u8]) -> Result<Vec<u8>> {
         let mut r = Reader::new(input);
         let data = parse_literal(&mut r).ok_or(Error::SyntaxError)?;
@@ -257,10 +262,7 @@ mod tests {
     #[test]
     fn ascii85_simple() {
         // "Hello" in ASCII85 is "87cURDZ"
-        assert_eq!(
-            decode_a85(b"<~87cURDZ~>").unwrap(),
-            b"Hello"
-        );
+        assert_eq!(decode_a85(b"<~87cURDZ~>").unwrap(), b"Hello");
     }
 
     #[test]
@@ -270,10 +272,7 @@ mod tests {
 
     #[test]
     fn ascii85_z_shorthand() {
-        assert_eq!(
-            decode_a85(b"<~z~>").unwrap(),
-            &[0, 0, 0, 0]
-        );
+        assert_eq!(decode_a85(b"<~z~>").unwrap(), &[0, 0, 0, 0]);
     }
 
     #[test]
@@ -284,9 +283,6 @@ mod tests {
 
     #[test]
     fn ascii85_with_whitespace() {
-        assert_eq!(
-            decode_a85(b"<~87cU RDZ~>").unwrap(),
-            b"Hello"
-        );
+        assert_eq!(decode_a85(b"<~87cU RDZ~>").unwrap(), b"Hello");
     }
 }

@@ -1,6 +1,6 @@
 #![allow(missing_docs)]
 
-use hayro_postscript::{Scanner, Object};
+use hayro_postscript::{Object, Scanner};
 use std::env;
 use std::fs;
 use std::process;
@@ -29,7 +29,11 @@ fn main() {
                 Object::Integer(n) => println!("Integer({n})"),
                 Object::Real(n) => println!("Real({n})"),
                 Object::Name(ref name) => {
-                    let kind = if name.is_literal() { "literal" } else { "executable" };
+                    let kind = if name.is_literal() {
+                        "literal"
+                    } else {
+                        "executable"
+                    };
                     let text = name.as_str().unwrap_or("<non-ascii name>");
                     println!("Name({text}, {kind})");
                 }
