@@ -1,6 +1,6 @@
 #![allow(missing_docs)]
 
-use hayro_postscript::{Object, Scanner};
+use hayro_postscript::{Number, Object, Scanner};
 use std::env;
 use std::fs;
 use std::process;
@@ -37,8 +37,8 @@ fn main() {
 
 fn print_object(object: &Object<'_>) {
     match object {
-        Object::Integer(n) => print!("Integer({n})"),
-        Object::Real(n) => print!("Real({n})"),
+        Object::Number(Number::Integer(n)) => print!("Integer({n})"),
+        Object::Number(Number::Real(n)) => print!("Real({n})"),
         Object::Name(name) => {
             let kind = if name.is_literal() {
                 "literal"

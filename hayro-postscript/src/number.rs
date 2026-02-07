@@ -1,10 +1,37 @@
 use crate::error::{Error, Result};
 use crate::reader::{Reader, is_delimiter, is_whitespace};
 
+/// A PostScript number object (integer or real).
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) enum Number {
+pub enum Number {
     Integer(i32),
     Real(f32),
+}
+
+impl Number {
+    /// Return the value as an `i32`. Reals are truncated.
+    pub fn as_i32(self) -> i32 {
+        match self {
+            Number::Integer(v) => v,
+            Number::Real(v) => v as i32,
+        }
+    }
+
+    /// Return the value as an `f32`.
+    pub fn as_f32(self) -> f32 {
+        match self {
+            Number::Integer(v) => v as f32,
+            Number::Real(v) => v,
+        }
+    }
+
+    /// Return the value as an `f64`.
+    pub fn as_f64(self) -> f64 {
+        match self {
+            Number::Integer(v) => v as f64,
+            Number::Real(v) => v as f64,
+        }
+    }
 }
 
 fn is_terminated(r: &Reader<'_>) -> bool {

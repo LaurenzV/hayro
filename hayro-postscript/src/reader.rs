@@ -1,8 +1,5 @@
-//! A byte reader.
-
 use core::ops::Range;
 
-/// A reader for reading bytes.
 #[derive(Clone, Debug)]
 pub(crate) struct Reader<'a> {
     pub(crate) data: &'a [u8],
@@ -103,7 +100,6 @@ impl<'a> Reader<'a> {
         Some(())
     }
 
-    /// Skip EOL characters (CR and LF).
     #[inline]
     pub(crate) fn skip_eol(&mut self) {
         while let Some(b) = self.peek_byte() {
@@ -116,13 +112,11 @@ impl<'a> Reader<'a> {
     }
 }
 
-/// Returns `true` if the byte is a PostScript whitespace character.
 #[inline(always)]
 pub(crate) fn is_whitespace(b: u8) -> bool {
     matches!(b, 0x00 | 0x09 | 0x0a | 0x0c | 0x0d | 0x20)
 }
 
-/// Returns `true` if the byte is a PostScript delimiter character.
 #[inline(always)]
 pub(crate) fn is_delimiter(b: u8) -> bool {
     matches!(
@@ -131,13 +125,11 @@ pub(crate) fn is_delimiter(b: u8) -> bool {
     )
 }
 
-/// Returns `true` if the byte is a PostScript regular character.
 #[inline(always)]
 pub(crate) fn is_regular(b: u8) -> bool {
     !is_whitespace(b) && !is_delimiter(b)
 }
 
-/// Returns `true` if the byte is an end-of-line character (CR or LF).
 #[inline(always)]
 pub(crate) fn is_eol(b: u8) -> bool {
     matches!(b, 0x0a | 0x0d)

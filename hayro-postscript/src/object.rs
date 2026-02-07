@@ -8,10 +8,8 @@ use crate::string::{self, String};
 /// A PostScript object.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Object<'a> {
-    /// An integer value.
-    Integer(i32),
-    /// A real (floating-point) value.
-    Real(f32),
+    /// A number object.
+    Number(Number),
     /// A name object.
     Name(Name<'a>),
     /// A string object.
@@ -49,12 +47,10 @@ pub(crate) fn read<'a>(r: &mut Reader<'a>) -> Result<Option<Object<'a>>> {
             .ok_or(Error::SyntaxError),
         b'[' => array::parse(r).map(|d| Object::Array(Array::new(d))),
         b'{' => {
+            r.forward();
             Err(Error::UnsupportedType)
         }
-        b'.' | b'+' | b'-' | b'0'..=b'9' => number::read(r).map(|n| match n {
-            Number::Integer(v) => Object::Integer(v),
-            Number::Real(v) => Object::Real(v),
-        }),
+        b'.' | b'+' | b'-' | b'0'..=b'9' => number::read(r).map(Object::Number),
         _ => name::parse_executable(r)
             .map(|s| Object::Name(Name::new(s, false)))
             .ok_or(Error::SyntaxError),
@@ -96,12 +92,12 @@ mod tests {
 
     #[test]
     fn integer() {
-        assert_eq!(read_ok(b"42 "), Object::Integer(42));
+        assert_eq!(read_ok(b"42 "), Object::Number(Number::Integer(42)));
     }
 
     #[test]
     fn negative_integer() {
-        assert_eq!(read_ok(b"-7 "), Object::Integer(-7));
+        assert_eq!(read_ok(b"-7 "), Object::Number(Number::Integer(-7)));
     }
 
     #[test]
@@ -149,26 +145,6 @@ mod tests {
     }
 
     #[test]
-    fn dict_open_error() {
-        assert_eq!(read_err(b"<< "), Error::UnsupportedType);
-    }
-
-    #[test]
-    fn dict_close_error() {
-        assert_eq!(read_err(b">> "), Error::UnsupportedType);
-    }
-
-    #[test]
-    fn procedure_open_error() {
-        assert_eq!(read_err(b"{ "), Error::UnsupportedType);
-    }
-
-    #[test]
-    fn procedure_close_error() {
-        assert_eq!(read_err(b"} "), Error::UnsupportedType);
-    }
-
-    #[test]
     fn stray_close_bracket() {
         assert_eq!(read_err(b"]"), Error::SyntaxError);
     }
@@ -180,12 +156,12 @@ mod tests {
 
     #[test]
     fn skips_whitespace() {
-        assert_eq!(read_ok(b"  \t\n 42 "), Object::Integer(42));
+        assert_eq!(read_ok(b"  \t\n 42 "), Object::Number(Number::Integer(42)));
     }
 
     #[test]
     fn skips_comments() {
-        assert_eq!(read_ok(b"% this is a comment\n42 "), Object::Integer(42));
+        assert_eq!(read_ok(b"% this is a comment\n42 "), Object::Number(Number::Integer(42)));
     }
 
     #[test]

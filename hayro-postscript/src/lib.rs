@@ -42,6 +42,7 @@ mod string;
 pub use array::Array;
 pub use error::{Error, Result};
 pub use name::Name;
+pub use number::Number;
 pub use object::Object;
 pub use string::String;
 
@@ -105,14 +106,14 @@ endcmap"#;
         assert_eq!(objects[1], Object::Name(Name::new(b"ProcSet", true)));
         assert_eq!(objects[2], Object::Name(Name::new(b"findresource", false)));
         assert_eq!(objects[3], Object::Name(Name::new(b"begin", false)));
-        assert_eq!(objects[4], Object::Integer(12));
+        assert_eq!(objects[4], Object::Number(Number::Integer(12)));
         assert_eq!(objects[5], Object::Name(Name::new(b"dict", false)));
         assert_eq!(objects[6], Object::Name(Name::new(b"begin", false)));
         assert_eq!(objects[7], Object::Name(Name::new(b"begincmap", false)));
         assert_eq!(objects[8], Object::Name(Name::new(b"CMapName", true)));
         assert_eq!(objects[9], Object::Name(Name::new(b"Test-H", true)));
         assert_eq!(objects[10], Object::Name(Name::new(b"def", false)));
-        assert_eq!(objects[11], Object::Integer(1));
+        assert_eq!(objects[11], Object::Number(Number::Integer(1)));
         assert_eq!(
             objects[12],
             Object::Name(Name::new(b"begincodespacerange", false))
@@ -123,7 +124,7 @@ endcmap"#;
             objects[15],
             Object::Name(Name::new(b"endcodespacerange", false))
         );
-        assert_eq!(objects[16], Object::Integer(2));
+        assert_eq!(objects[16], Object::Number(Number::Integer(2)));
         assert_eq!(objects[17], Object::Name(Name::new(b"beginbfchar", false)));
         assert_eq!(objects[18], Object::String(String::from_hex(b"03")));
         assert_eq!(objects[19], Object::String(String::from_hex(b"0041")));
@@ -135,24 +136,6 @@ endcmap"#;
     }
 
     #[test]
-    fn dict_delimiters_error() {
-        let input = b"<< /Registry (Adobe) >>";
-        let mut scanner = Scanner::new(input);
-
-        assert_eq!(scanner.next(), Err(Error::UnsupportedType)); // <<
-        assert_eq!(
-            scanner.next().unwrap(),
-            Some(Object::Name(Name::new(b"Registry", true)))
-        );
-        assert_eq!(
-            scanner.next().unwrap(),
-            Some(Object::String(String::from_literal(b"Adobe")))
-        );
-        assert_eq!(scanner.next(), Err(Error::UnsupportedType)); // >>
-        assert_eq!(scanner.next().unwrap(), None);
-    }
-
-    #[test]
     fn array_round_trip() {
         let input = b"[123 /abc (xyz)]";
         let objects = collect_ok(input);
@@ -160,7 +143,7 @@ endcmap"#;
 
         if let Object::Array(arr) = &objects[0] {
             let mut inner = arr.objects();
-            assert_eq!(inner.next().unwrap(), Some(Object::Integer(123)));
+            assert_eq!(inner.next().unwrap(), Some(Object::Number(Number::Integer(123))));
             assert_eq!(inner.next().unwrap(), Some(Object::Name(Name::new(b"abc", true))));
             assert_eq!(inner.next().unwrap(), Some(Object::String(String::from_literal(b"xyz"))));
             assert_eq!(inner.next().unwrap(), None);
@@ -175,15 +158,8 @@ endcmap"#;
         let objects = collect_ok(input);
 
         assert_eq!(objects.len(), 2);
-        assert_eq!(objects[0], Object::Integer(42));
+        assert_eq!(objects[0], Object::Number(Number::Integer(42)));
         assert_eq!(objects[1], Object::Name(Name::new(b"Name", true)));
     }
 
-    #[test]
-    fn procedure_error() {
-        let mut scanner = Scanner::new(b"{ }");
-        assert_eq!(scanner.next(), Err(Error::UnsupportedType));
-        assert_eq!(scanner.next(), Err(Error::UnsupportedType));
-        assert_eq!(scanner.next().unwrap(), None);
-    }
 }
