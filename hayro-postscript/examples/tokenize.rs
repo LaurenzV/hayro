@@ -1,6 +1,6 @@
 #![allow(missing_docs)]
 
-use hayro_postscript::{Lexer, Object};
+use hayro_postscript::{Scanner, Object};
 use std::env;
 use std::fs;
 use std::process;
@@ -22,7 +22,7 @@ fn main() {
         }
     };
 
-    for result in Lexer::new(&data) {
+    for result in Scanner::new(&data) {
         match result {
             Ok(object) => match object {
                 Object::Integer(n) => println!("Integer({n})"),

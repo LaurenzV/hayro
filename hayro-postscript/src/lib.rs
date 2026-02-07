@@ -1,7 +1,7 @@
 /*!
-A lightweight PostScript lexer.
+A lightweight PostScript scanner.
 
-This crate provides a lexer for tokenizing PostScript programs into typed objects.
+This crate provides a scanner for tokenizing PostScript programs into typed objects.
 It currently implements a small subset of the PostScript language, focused on what
 is needed to support CMap parsing in PDF documents.
 
@@ -48,13 +48,13 @@ pub use string::String;
 
 use reader::Reader;
 
-/// A PostScript lexer that iterates over [`Object`]s in a byte stream.
-pub struct Lexer<'a> {
+/// A PostScript scanner that iterates over [`Object`]s in a byte stream.
+pub struct Scanner<'a> {
     reader: Reader<'a>,
 }
 
-impl<'a> Lexer<'a> {
-    /// Create a new lexer over the given bytes.
+impl<'a> Scanner<'a> {
+    /// Create a new scanner over the given bytes.
     pub fn new(data: &'a [u8]) -> Self {
         Self {
             reader: Reader::new(data),
@@ -62,7 +62,7 @@ impl<'a> Lexer<'a> {
     }
 }
 
-impl<'a> Iterator for Lexer<'a> {
+impl<'a> Iterator for Scanner<'a> {
     type Item = Result<Object<'a>, Error>;
 
     fn next(&mut self) -> Option<Result<Object<'a>, Error>> {
@@ -77,7 +77,7 @@ mod tests {
     use super::*;
 
     fn collect_ok(input: &[u8]) -> Vec<Object<'_>> {
-        Lexer::new(input)
+        Scanner::new(input)
             .map(|r| r.unwrap())
             .collect()
     }
@@ -144,7 +144,7 @@ endcmap"#;
     #[test]
     fn dict_delimiters_error() {
         let input = b"<< /Registry (Adobe) >>";
-        let results: Vec<Result<Object<'_>, Error>> = Lexer::new(input).collect();
+        let results: Vec<Result<Object<'_>, Error>> = Scanner::new(input).collect();
 
         assert_eq!(results[0], Err(Error::UnsupportedType)); // <<
         assert_eq!(results[1], Ok(Object::Name(Name::new(b"Registry", true))));
@@ -184,7 +184,7 @@ endcmap"#;
 
     #[test]
     fn procedure_error() {
-        let results: Vec<Result<Object<'_>, Error>> = Lexer::new(b"{ }").collect();
+        let results: Vec<Result<Object<'_>, Error>> = Scanner::new(b"{ }").collect();
         assert_eq!(results[0], Err(Error::UnsupportedType));
         assert_eq!(results[1], Err(Error::UnsupportedType));
     }

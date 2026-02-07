@@ -5,9 +5,9 @@
 
 <!-- cargo-rdme start -->
 
-A lightweight PostScript lexer.
+A lightweight PostScript scanner.
 
-This crate provides a lexer for tokenizing PostScript programs into typed objects.
+This crate provides a scanner for tokenizing PostScript programs into typed objects.
 It currently implements a small subset of the PostScript language, focused on what
 is needed to support CMap parsing in PDF documents.
 

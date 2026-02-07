@@ -26,10 +26,10 @@ impl<'a> Array<'a> {
         self.data
     }
 
-    /// Return a [`Lexer`](crate::Lexer) that iterates over the objects inside
+    /// Return a [`Scanner`](crate::Scanner) that iterates over the objects inside
     /// this array.
-    pub fn objects(&self) -> crate::Lexer<'a> {
-        crate::Lexer::new(self.data)
+    pub fn objects(&self) -> crate::Scanner<'a> {
+        crate::Scanner::new(self.data)
     }
 }
 

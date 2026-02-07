@@ -1,8 +1,8 @@
-//! Error types for the PostScript lexer.
+//! Error types for the PostScript scanner.
 
 use core::fmt;
 
-/// An error encountered while lexing a PostScript token stream.
+/// An error encountered while scanning a PostScript token stream.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Error {
     /// A syntax error in the input (e.g. malformed string, unexpected delimiter).
