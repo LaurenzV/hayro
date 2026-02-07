@@ -31,13 +31,13 @@ impl<'a> Name<'a> {
     pub fn decode_into(&self, out: &mut Vec<u8>) -> Result<()> {
         out.clear();
 
-        // Fast path: no `#` escapes.
+        // Fast path: no escape sequences.
         if !self.data.contains(&b'#') {
             out.extend_from_slice(self.data);
             return Ok(());
         }
 
-        // Slow path: decode `#XX` hex escapes.
+        // Slow path: Process escape sequences.
         let mut inner = Reader::new(self.data);
 
         while let Some(b) = inner.read_byte() {
