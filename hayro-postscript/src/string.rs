@@ -4,7 +4,7 @@ mod literal;
 
 use alloc::vec::Vec;
 
-use crate::error::Error;
+use crate::error::{Error, Result};
 use crate::reader::Reader;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -34,7 +34,7 @@ impl<'a> String<'a> {
     }
 
     /// Decode the string content into `out`, replacing any previous contents.
-    pub fn decode_into(&self, out: &mut Vec<u8>) -> Result<(), Error> {
+    pub fn decode_into(&self, out: &mut Vec<u8>) -> Result<()> {
         out.clear();
         match self.inner {
             StringInner::Literal(data) => literal::decode_into(data, out),
@@ -45,7 +45,7 @@ impl<'a> String<'a> {
     }
 
     /// Decode the string content.
-    pub fn decode(&self) -> Result<Vec<u8>, Error> {
+    pub fn decode(&self) -> Result<Vec<u8>> {
         let mut out = Vec::new();
         self.decode_into(&mut out)?;
         Ok(out)
@@ -132,7 +132,7 @@ mod tests {
 
     // ---- Literal parsing + decoding ----
 
-    fn decode_literal(input: &[u8]) -> Result<Vec<u8>, Error> {
+    fn decode_literal(input: &[u8]) -> Result<Vec<u8>> {
         let mut r = Reader::new(input);
         let data = parse_literal(&mut r).ok_or(Error::SyntaxError)?;
         String::from_literal(data).decode()
@@ -238,9 +238,9 @@ mod tests {
 
     // ---- Hex parsing + decoding ----
 
-    fn decode_hex(input: &[u8]) -> Result<Vec<u8>, crate::error::Error> {
+    fn decode_hex(input: &[u8]) -> Result<Vec<u8>> {
         let mut r = Reader::new(input);
-        let data = parse_hex(&mut r).ok_or(crate::error::Error::SyntaxError)?;
+        let data = parse_hex(&mut r).ok_or(Error::SyntaxError)?;
         String::from_hex(data).decode()
     }
 
@@ -276,9 +276,9 @@ mod tests {
 
     // ---- ASCII85 parsing + decoding ----
 
-    fn decode_a85(input: &[u8]) -> Result<Vec<u8>, crate::error::Error> {
+    fn decode_a85(input: &[u8]) -> Result<Vec<u8>> {
         let mut r = Reader::new(input);
-        let data = parse_ascii85(&mut r).ok_or(crate::error::Error::SyntaxError)?;
+        let data = parse_ascii85(&mut r).ok_or(Error::SyntaxError)?;
         String::from_ascii85(data).decode()
     }
 

@@ -2,6 +2,9 @@
 
 use core::fmt;
 
+/// A specialized [`Result`] type for PostScript scanner operations.
+pub type Result<T> = core::result::Result<T, Error>;
+
 /// An error encountered while scanning a PostScript token stream.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Error {

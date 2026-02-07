@@ -40,7 +40,7 @@ mod reader;
 mod string;
 
 pub use array::Array;
-pub use error::Error;
+pub use error::{Error, Result};
 pub use name::Name;
 pub use object::Object;
 pub use string::String;
@@ -62,9 +62,9 @@ impl<'a> Scanner<'a> {
 }
 
 impl<'a> Iterator for Scanner<'a> {
-    type Item = Result<Object<'a>, Error>;
+    type Item = Result<Object<'a>>;
 
-    fn next(&mut self) -> Option<Result<Object<'a>, Error>> {
+    fn next(&mut self) -> Option<Result<Object<'a>>> {
         object::read(&mut self.reader)
     }
 }
@@ -143,7 +143,7 @@ endcmap"#;
     #[test]
     fn dict_delimiters_error() {
         let input = b"<< /Registry (Adobe) >>";
-        let results: Vec<Result<Object<'_>, Error>> = Scanner::new(input).collect();
+        let results: Vec<Result<Object<'_>>> = Scanner::new(input).collect();
 
         assert_eq!(results[0], Err(Error::UnsupportedType)); // <<
         assert_eq!(results[1], Ok(Object::Name(Name::new(b"Registry", true))));
@@ -183,7 +183,7 @@ endcmap"#;
 
     #[test]
     fn procedure_error() {
-        let results: Vec<Result<Object<'_>, Error>> = Scanner::new(b"{ }").collect();
+        let results: Vec<Result<Object<'_>>> = Scanner::new(b"{ }").collect();
         assert_eq!(results[0], Err(Error::UnsupportedType));
         assert_eq!(results[1], Err(Error::UnsupportedType));
     }

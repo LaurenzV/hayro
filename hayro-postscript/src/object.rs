@@ -1,7 +1,7 @@
 //! Object enum and top-level read dispatch.
 
 use crate::array::{self, Array};
-use crate::error::Error;
+use crate::error::{Error, Result};
 use crate::name::{self, Name};
 use crate::number::{self, Number};
 use crate::reader::Reader;
@@ -27,7 +27,7 @@ pub enum Object<'a> {
 /// Whitespace and comments are skipped before dispatching.
 /// Returns `None` at EOF, `Some(Ok(..))` on success, `Some(Err(..))`
 /// on error.
-pub(crate) fn read<'a>(r: &mut Reader<'a>) -> Option<Result<Object<'a>, Error>> {
+pub(crate) fn read<'a>(r: &mut Reader<'a>) -> Option<Result<Object<'a>>> {
     skip_whitespace_and_comments(r);
 
     let b = r.peek_byte()?;
@@ -124,7 +124,7 @@ pub(crate) fn skip_whitespace_and_comments(r: &mut Reader<'_>) {
 mod tests {
     use super::*;
 
-    fn read_one(input: &[u8]) -> Option<Result<Object<'_>, Error>> {
+    fn read_one(input: &[u8]) -> Option<Result<Object<'_>>> {
         let mut r = Reader::new(input);
         read(&mut r)
     }

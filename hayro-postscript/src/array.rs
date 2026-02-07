@@ -3,7 +3,7 @@
 //! The parser only finds the extent of the array (the matching `]`).
 //! The inner objects are lazily produced via [`Array::objects`].
 
-use crate::error::Error;
+use crate::error::{Error, Result};
 use crate::reader::Reader;
 
 /// A PostScript array object.
@@ -36,7 +36,7 @@ impl<'a> Array<'a> {
 /// Parse an array `[...]`, returning the raw inner bytes.
 ///
 /// The reader must be positioned at the opening `[`.
-pub(crate) fn parse<'a>(r: &mut Reader<'a>) -> Result<&'a [u8], Error> {
+pub(crate) fn parse<'a>(r: &mut Reader<'a>) -> Result<&'a [u8]> {
     r.forward_tag(b"[").ok_or(Error::SyntaxError)?;
     let start = r.offset();
     skip_to_matching_bracket(r)?;
@@ -49,7 +49,7 @@ pub(crate) fn parse<'a>(r: &mut Reader<'a>) -> Result<&'a [u8], Error> {
 /// Properly handles nested brackets, string literals, hex strings,
 /// ASCII85 strings, and comments so that delimiters inside those
 /// constructs are not mistaken for the closing bracket.
-fn skip_to_matching_bracket(r: &mut Reader<'_>) -> Result<(), Error> {
+fn skip_to_matching_bracket(r: &mut Reader<'_>) -> Result<()> {
     let mut depth = 1u32;
 
     while depth > 0 {
@@ -95,7 +95,7 @@ fn skip_to_matching_bracket(r: &mut Reader<'_>) -> Result<(), Error> {
 }
 
 /// Skip a literal string body after the opening `(` has been consumed.
-fn skip_literal_string(r: &mut Reader<'_>) -> Result<(), Error> {
+fn skip_literal_string(r: &mut Reader<'_>) -> Result<()> {
     let mut depth = 1u32;
     while depth > 0 {
         let byte = r.read_byte().ok_or(Error::SyntaxError)?;
@@ -112,7 +112,7 @@ fn skip_literal_string(r: &mut Reader<'_>) -> Result<(), Error> {
 }
 
 /// Skip a hex string body after the opening `<` has been consumed.
-fn skip_hex_string(r: &mut Reader<'_>) -> Result<(), Error> {
+fn skip_hex_string(r: &mut Reader<'_>) -> Result<()> {
     loop {
         let byte = r.read_byte().ok_or(Error::SyntaxError)?;
         if byte == b'>' {
@@ -122,7 +122,7 @@ fn skip_hex_string(r: &mut Reader<'_>) -> Result<(), Error> {
 }
 
 /// Skip an ASCII85 string body after the opening `<~` has been consumed.
-fn skip_ascii85_string(r: &mut Reader<'_>) -> Result<(), Error> {
+fn skip_ascii85_string(r: &mut Reader<'_>) -> Result<()> {
     loop {
         let byte = r.read_byte().ok_or(Error::SyntaxError)?;
         if byte == b'~' {
@@ -138,7 +138,7 @@ fn skip_ascii85_string(r: &mut Reader<'_>) -> Result<(), Error> {
 mod tests {
     use super::*;
 
-    fn parse_array(input: &[u8]) -> Result<&[u8], Error> {
+    fn parse_array(input: &[u8]) -> Result<&[u8]> {
         let mut r = Reader::new(input);
         parse(&mut r)
     }
