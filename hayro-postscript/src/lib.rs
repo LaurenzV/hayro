@@ -159,11 +159,11 @@ endcmap"#;
         assert_eq!(objects.len(), 1);
 
         if let Object::Array(arr) = &objects[0] {
-            let inner = collect_ok(arr.data());
-            assert_eq!(inner.len(), 3);
-            assert_eq!(inner[0], Object::Integer(123));
-            assert_eq!(inner[1], Object::Name(Name::new(b"abc", true)));
-            assert_eq!(inner[2], Object::String(String::from_literal(b"xyz")));
+            let mut inner = arr.objects();
+            assert_eq!(inner.next().unwrap(), Some(Object::Integer(123)));
+            assert_eq!(inner.next().unwrap(), Some(Object::Name(Name::new(b"abc", true))));
+            assert_eq!(inner.next().unwrap(), Some(Object::String(String::from_literal(b"xyz"))));
+            assert_eq!(inner.next().unwrap(), None);
         } else {
             panic!("expected Array");
         }

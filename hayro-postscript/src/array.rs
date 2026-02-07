@@ -1,5 +1,6 @@
 use crate::error::{Error, Result};
 use crate::reader::Reader;
+use crate::string;
 
 /// A PostScript array object.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -22,85 +23,48 @@ impl<'a> Array<'a> {
 pub(crate) fn parse<'a>(r: &mut Reader<'a>) -> Result<&'a [u8]> {
     r.forward_tag(b"[").ok_or(Error::SyntaxError)?;
     let start = r.offset();
-    skip_to_matching_bracket(r)?;
+    skip_array(r)?;
     let end = r.offset() - 1;
     r.range(start..end).ok_or(Error::SyntaxError)
 }
 
-fn skip_to_matching_bracket(r: &mut Reader<'_>) -> Result<()> {
+fn skip_array(r: &mut Reader<'_>) -> Result<()> {
     let mut depth = 1u32;
 
     while depth > 0 {
-        let byte = r.read_byte().ok_or(Error::SyntaxError)?;
-
-        match byte {
-            b'[' => depth += 1,
-            b']' => depth -= 1,
-            // Literal string: skip to matching `)`, handling nesting/escapes.
-            b'(' => skip_literal_string(r)?,
+        match r.peek_byte().ok_or(Error::SyntaxError)? {
+            b'[' => {
+                r.forward();
+                depth += 1;
+            }
+            b']' => {
+                r.forward();
+                depth -= 1;
+            }
+            b'(' => {
+                let _ = string::parse_literal(r).ok_or(Error::SyntaxError)?;
+            }
             b'<' => {
-                match r.peek_byte() {
-                    Some(b'~') => {
-                        r.forward();
-                        skip_ascii85_string(r)?;
-                    }
-                    Some(b'<') => {
-                        r.forward();
-                    }
-                    _ => {
-                        skip_hex_string(r)?;
-                    }
+                if r.peek_bytes(2) == Some(b"<~") {
+                    let _ = string::parse_ascii85(r).ok_or(Error::SyntaxError)?;
+                } else if r.peek_bytes(2) == Some(b"<<") {
+                    r.forward();
+                    r.forward();
+                } else {
+                    let _ = string::parse_hex(r).ok_or(Error::SyntaxError)?;
                 }
             }
             b'%' => {
-                // Comment: skip to end of line.
+                r.forward();
                 r.forward_while(|b| !crate::reader::is_eol(b));
             }
-            _ => {}
-        }
-    }
-
-    Ok(())
-}
-
-/// Skip a literal string body after the opening `(` has been consumed.
-fn skip_literal_string(r: &mut Reader<'_>) -> Result<()> {
-    let mut depth = 1u32;
-    while depth > 0 {
-        let byte = r.read_byte().ok_or(Error::SyntaxError)?;
-        match byte {
-            b'\\' => {
-                r.read_byte().ok_or(Error::SyntaxError)?;
-            }
-            b'(' => depth += 1,
-            b')' => depth -= 1,
-            _ => {}
-        }
-    }
-    Ok(())
-}
-
-/// Skip a hex string body after the opening `<` has been consumed.
-fn skip_hex_string(r: &mut Reader<'_>) -> Result<()> {
-    loop {
-        let byte = r.read_byte().ok_or(Error::SyntaxError)?;
-        if byte == b'>' {
-            return Ok(());
-        }
-    }
-}
-
-/// Skip an ASCII85 string body after the opening `<~` has been consumed.
-fn skip_ascii85_string(r: &mut Reader<'_>) -> Result<()> {
-    loop {
-        let byte = r.read_byte().ok_or(Error::SyntaxError)?;
-        if byte == b'~' {
-            if r.peek_byte() == Some(b'>') {
+            _ => {
                 r.forward();
-                return Ok(());
             }
         }
     }
+
+    Ok(())
 }
 
 #[cfg(test)]
