@@ -11,9 +11,6 @@ enum StringInner<'a> {
 }
 
 /// A PostScript string object.
-///
-/// Stores raw bytes lazily. Call [`decode_into`](String::decode_into) or
-/// [`decode`](String::decode) to materialise the decoded content.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct String<'a> {
     inner: StringInner<'a>,
