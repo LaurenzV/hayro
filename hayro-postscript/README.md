@@ -8,24 +8,13 @@
 A lightweight PostScript scanner.
 
 This crate provides a scanner for tokenizing PostScript programs into typed objects.
-It currently implements a small subset of the PostScript language, focused on what
-is needed to support CMap parsing in PDF documents.
+It currently only implements a very small subset of the PostScript language, 
+with the main goal of being enough to parse CMAP files, but the scope _might_
+be expanded upon in the future.
 
-### Supported object types
-- **Integers** — signed integers, radix numbers (e.g. `8#1777`, `16#FFFE`)
-- **Reals** — floating-point numbers with optional exponent (e.g. `34.5`, `1.0E-5`)
-- **Names** — literal (`/Name`) and executable (`Name`), with `#XX` hex-escape decoding
-- **Strings** — literal `(...)`, hex `<...>`, and ASCII85 `<~...~>`, with lazy decoding
-- **Arrays** — `[...]` with lazy inner object iteration
-
-### Limitations
-This crate only implements a small subset of the PostScript language. In particular,
-the following features are **not** supported:
-- Dictionaries (`<<` / `>>`)
-- Procedures (`{` / `}`)
-- The PostScript execution model (operand/dictionary stacks, operators, etc.)
-
-Encountering unsupported syntax returns an error rather than silently skipping it.
+The supported types include integers and real numbers, name objects, strings and arrays.
+Unsupported is anything else, including dictionaries, procedures, etc. An error
+will be returned in case any of these is encountered.
 
 ### Safety
 This crate forbids unsafe code via a crate-level attribute.
