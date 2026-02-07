@@ -5,10 +5,12 @@ use alloc::vec::Vec;
 use hayro_postscript::{Object, Scanner};
 
 use crate::scanner_ext::ScannerExt;
-use crate::{CMap, CMapName, CidRange, MAX_NESTING_DEPTH, Metadata, WritingMode};
+use crate::{BfRange, CMap, CMapName, CidRange, MAX_NESTING_DEPTH, Metadata, WritingMode};
 
 struct Context<F> {
     buf: Vec<u8>,
+    // Used for converting UTF-16 to UTF-8.
+    u16_buf: Vec<u16>,
     get_cmap: F,
 }
 
@@ -16,6 +18,7 @@ impl<F> Context<F> {
     fn new(get_cmap: F) -> Self {
         Self {
             buf: Vec::new(),
+            u16_buf: Vec::new(),
             get_cmap,
         }
     }
@@ -35,6 +38,7 @@ pub(crate) fn parse<'a>(
     let mut ctx = Context::new(get_cmap);
     let mut ranges = Vec::new();
     let mut notdef_ranges = Vec::new();
+    let mut bf_entries = Vec::new();
     let mut base = None;
 
     let mut registry = None;
@@ -84,6 +88,12 @@ pub(crate) fn parse<'a>(
                 Some("beginnotdefchar") => {
                     parse_char(&mut scanner, &mut notdef_ranges, &mut ctx, "endnotdefchar")?;
                 }
+                Some("beginbfchar") => {
+                    parse_bf_char(&mut scanner, &mut bf_entries, &mut ctx)?;
+                }
+                Some("beginbfrange") => {
+                    parse_bf_range(&mut scanner, &mut bf_entries, &mut ctx)?;
+                }
                 Some("usecmap") => {
                     let nested_data = (ctx.get_cmap)(last_name?.as_bytes())?;
                     base = Some(Box::new(parse(
@@ -99,6 +109,7 @@ pub(crate) fn parse<'a>(
 
     ranges.sort_by(|a, b| a.start.cmp(&b.start));
     notdef_ranges.sort_by(|a, b| a.start.cmp(&b.start));
+    bf_entries.sort_by(|a, b| a.start.cmp(&b.start));
 
     let metadata = Metadata {
         registry: registry?,
@@ -108,7 +119,7 @@ pub(crate) fn parse<'a>(
         writing_mode,
     };
 
-    Some(CMap::new(metadata, ranges, notdef_ranges, base))
+    Some(CMap::new(metadata, ranges, notdef_ranges, bf_entries, base))
 }
 
 fn parse_cmap_name(scanner: &mut Scanner<'_>) -> Option<String> {
@@ -172,6 +183,95 @@ fn parse_char<F>(
             cid_start,
         });
     }
+}
+
+fn parse_bf_char<F>(
+    scanner: &mut Scanner<'_>,
+    entries: &mut Vec<BfRange>,
+    ctx: &mut Context<F>,
+) -> Option<()> {
+    loop {
+        let obj = scanner.parse_object().ok()?;
+
+        if is_exec_name(&obj, "endbfchar") {
+            return Some(());
+        }
+
+        let code = extract_u32_code(&obj, &mut ctx.buf)?;
+        let dst = scanner.parse_string().ok()?;
+        dst.decode_into(&mut ctx.buf).ok()?;
+        decode_be_into(&ctx.buf, &mut ctx.u16_buf)?;
+
+        entries.push(BfRange {
+            start: code,
+            end: code,
+            dst_base: ctx.u16_buf.clone(),
+        });
+    }
+}
+
+fn parse_bf_range<F>(
+    scanner: &mut Scanner<'_>,
+    entries: &mut Vec<BfRange>,
+    ctx: &mut Context<F>,
+) -> Option<()> {
+    loop {
+        let obj = scanner.parse_object().ok()?;
+
+        if is_exec_name(&obj, "endbfrange") {
+            return Some(());
+        }
+
+        let start = extract_u32_code(&obj, &mut ctx.buf)?;
+        let end = scanner.read_u32_code(&mut ctx.buf)?;
+
+        let next = scanner.parse_object().ok()?;
+
+        match &next {
+            Object::String(s) => {
+                // Incrementing form: stored as a single entry.
+                s.decode_into(&mut ctx.buf).ok()?;
+                decode_be_into(&ctx.buf, &mut ctx.u16_buf)?;
+
+                entries.push(BfRange {
+                    start,
+                    end,
+                    dst_base: ctx.u16_buf.clone(),
+                });
+            }
+            Object::Array(array) => {
+                // Array form: each code maps to a specific dstString.
+                let mut array_scanner = array.objects();
+                for code in start..=end {
+                    let s = array_scanner.parse_string().ok()?;
+                    s.decode_into(&mut ctx.buf).ok()?;
+                    decode_be_into(&ctx.buf, &mut ctx.u16_buf)?;
+
+                    entries.push(BfRange {
+                        start: code,
+                        end: code,
+                        dst_base: ctx.u16_buf.clone(),
+                    });
+                }
+            }
+            _ => return None,
+        }
+    }
+}
+
+/// Decode raw UTF-16BE bytes into a reusable `Vec<u16>` buffer.
+fn decode_be_into(bytes: &[u8], out: &mut Vec<u16>) -> Option<()> {
+    if bytes.len() < 2 || bytes.len() % 2 != 0 {
+        return None;
+    }
+
+    out.clear();
+    let mut i = 0;
+    while i < bytes.len() {
+        out.push(u16::from_be_bytes([bytes[i], bytes[i + 1]]));
+        i += 2;
+    }
+    Some(())
 }
 
 fn extract_u32_code(obj: &Object<'_>, buf: &mut Vec<u8>) -> Option<u32> {

@@ -14,8 +14,8 @@ This crate forbids unsafe code via a crate-level attribute.
 
 extern crate alloc;
 
-mod scanner_ext;
 mod parse;
+mod scanner_ext;
 
 use alloc::boxed::Box;
 use alloc::string::String;
@@ -23,6 +23,9 @@ use alloc::vec::Vec;
 
 /// The name of a CMap.
 pub type CMapName<'a> = &'a [u8];
+
+/// A CID (Character Identifier).
+pub type Cid = u32;
 
 /// Don't allow more than 16 `usecmap` references.
 const MAX_NESTING_DEPTH: u32 = 16;
@@ -33,6 +36,7 @@ pub struct CMap {
     metadata: Metadata,
     ranges: Vec<CidRange>,
     notdef_ranges: Vec<CidRange>,
+    bf_entries: Vec<BfRange>,
     base: Option<Box<CMap>>,
 }
 
@@ -52,12 +56,14 @@ impl CMap {
         metadata: Metadata,
         ranges: Vec<CidRange>,
         notdef_ranges: Vec<CidRange>,
+        bf_entries: Vec<BfRange>,
         base: Option<Box<CMap>>,
     ) -> Self {
         Self {
             metadata,
             ranges,
             notdef_ranges,
+            bf_entries,
             base,
         }
     }
@@ -68,16 +74,35 @@ impl CMap {
     }
 
     /// Look up a character code and return the corresponding CID.
-    pub fn lookup_cid(&self, code: u32) -> Option<u32> {
+    pub fn lookup_cid(&self, code: u32) -> Option<Cid> {
         if let Some(range) = find_range(&self.ranges, code) {
             let offset = code.checked_sub(range.start)?;
-            
             return Some(range.cid_start + offset);
         } else if let Some(range) = find_range(&self.notdef_ranges, code) {
             return Some(range.cid_start);
         }
 
         self.base.as_ref()?.lookup_cid(code)
+    }
+
+    /// Look up a character code and return the corresponding Unicode value.
+    pub fn lookup_unicode(&self, code: u32) -> Option<UnicodeString> {
+        if let Some(entry) = find_range_in_bf(&self.bf_entries, code) {
+            let offset = u16::try_from(code - entry.start).ok()?;
+            let mut units = entry.dst_base.clone();
+            let last = units.last_mut()?;
+            *last = last.checked_add(offset)?;
+            let s = String::from_utf16(&units).ok()?;
+            let mut chars = s.chars();
+            let first = chars.next()?;
+            return if chars.next().is_none() {
+                Some(UnicodeString::Char(first))
+            } else {
+                Some(UnicodeString::String(s))
+            };
+        }
+
+        self.base.as_ref()?.lookup_unicode(code)
     }
 }
 
@@ -97,101 +122,46 @@ fn find_range(ranges: &[CidRange], code: u32) -> Option<&CidRange> {
     Some(&ranges[idx])
 }
 
+fn find_range_in_bf(entries: &[BfRange], code: u32) -> Option<&BfRange> {
+    let idx = entries
+        .binary_search_by(|entry| {
+            if code < entry.start {
+                core::cmp::Ordering::Greater
+            } else if code > entry.end {
+                core::cmp::Ordering::Less
+            } else {
+                core::cmp::Ordering::Equal
+            }
+        })
+        .ok()?;
+
+    Some(&entries[idx])
+}
+
 /// A range of character codes mapped to CIDs.
 #[derive(Debug, Clone)]
 pub struct CidRange {
     pub(crate) start: u32,
     pub(crate) end: u32,
-    pub(crate) cid_start: u32,
+    pub(crate) cid_start: Cid,
 }
 
-/// A character string in a CMap, used for ToUnicode mappings.
-#[allow(dead_code)]
+/// A character code to Unicode mapping (potentially a range).
+#[derive(Debug, Clone)]
+pub(crate) struct BfRange {
+    pub(crate) start: u32,
+    pub(crate) end: u32,
+    /// UTF-16 code units. For ranges, the last unit is incremented by the offset.
+    pub(crate) dst_base: Vec<u16>,
+}
+
+/// A Unicode value decoded from a ToUnicode CMap.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum CharacterString {
-    /// A single character that fits in 4 bytes or fewer.
-    Char(u32),
-    /// A multi-byte character string longer than 4 bytes.
-    Multi(Vec<u8>),
-}
-
-#[allow(dead_code)]
-impl CharacterString {
-    /// Create a `CharacterString` from decoded bytes.
-    pub fn from_bytes(bytes: &[u8]) -> Self {
-        Self::from(bytes)
-    }
-}
-
-#[allow(dead_code)]
-impl PartialOrd for CharacterString {
-    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-#[allow(dead_code)]
-impl Ord for CharacterString {
-    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
-        match (self, other) {
-            (Self::Char(a), Self::Char(b)) => a.cmp(b),
-            (Self::Multi(a), Self::Multi(b)) => a.cmp(b),
-            (Self::Char(_), Self::Multi(_)) => core::cmp::Ordering::Less,
-            (Self::Multi(_), Self::Char(_)) => core::cmp::Ordering::Greater,
-        }
-    }
-}
-
-impl From<u8> for CharacterString {
-    fn from(val: u8) -> Self {
-        Self::Char(val as u32)
-    }
-}
-
-impl From<u16> for CharacterString {
-    fn from(val: u16) -> Self {
-        Self::Char(val as u32)
-    }
-}
-
-impl From<u32> for CharacterString {
-    fn from(val: u32) -> Self {
-        Self::Char(val)
-    }
-}
-
-impl From<char> for CharacterString {
-    fn from(val: char) -> Self {
-        Self::Char(val as u32)
-    }
-}
-
-impl From<&[u8]> for CharacterString {
-    fn from(bytes: &[u8]) -> Self {
-        if bytes.len() <= 4 {
-            let mut val = 0u32;
-            for &b in bytes {
-                val = (val << 8) | u32::from(b);
-            }
-            Self::Char(val)
-        } else {
-            Self::Multi(bytes.to_vec())
-        }
-    }
-}
-
-impl From<Vec<u8>> for CharacterString {
-    fn from(bytes: Vec<u8>) -> Self {
-        if bytes.len() <= 4 {
-            let mut val = 0u32;
-            for &b in &bytes {
-                val = (val << 8) | u32::from(b);
-            }
-            Self::Char(val)
-        } else {
-            Self::Multi(bytes)
-        }
-    }
+pub enum UnicodeString {
+    /// A single Unicode character.
+    Char(char),
+    /// A string consisting of multiple Unicode characters, stored as a UTF-8 string.
+    String(String),
 }
 
 /// Metadata extracted from a CMap file.
@@ -359,26 +329,6 @@ endcidrange
     }
 
     #[test]
-    fn char_string_from_bytes() {
-        assert_eq!(
-            CharacterString::from_bytes(&[0x03]),
-            CharacterString::Char(0x03)
-        );
-        assert_eq!(
-            CharacterString::from_bytes(&[0x00, 0x41]),
-            CharacterString::Char(0x0041)
-        );
-        assert_eq!(
-            CharacterString::from_bytes(&[0x81, 0x40]),
-            CharacterString::Char(0x8140)
-        );
-        assert_eq!(
-            CharacterString::from_bytes(&[0x01, 0x02, 0x03, 0x04, 0x05]),
-            CharacterString::Multi(alloc::vec![0x01, 0x02, 0x03, 0x04, 0x05])
-        );
-    }
-
-    #[test]
     fn single_byte_codes() {
         let cmap = parse_with_preamble(
             br#"
@@ -523,5 +473,108 @@ endnotdefrange
         assert_eq!(cmap.lookup_cid(0x0001), Some(100));
         assert_eq!(cmap.lookup_cid(0x001F), Some(100));
         assert_eq!(cmap.lookup_cid(0x0020), None);
+    }
+
+    #[test]
+    fn bfchar_lookup() {
+        let cmap = parse_with_preamble(
+            br#"
+2 beginbfchar
+<0041> <0048>
+<0042> <0065>
+endbfchar
+"#,
+        );
+
+        assert_eq!(cmap.lookup_unicode(0x0041), Some(UnicodeString::Char('H')));
+        assert_eq!(cmap.lookup_unicode(0x0042), Some(UnicodeString::Char('e')));
+        assert_eq!(cmap.lookup_unicode(0x0043), None);
+    }
+
+    #[test]
+    fn bfchar_ligature() {
+        let cmap = parse_with_preamble(
+            br#"
+1 beginbfchar
+<005F> <00660066>
+endbfchar
+"#,
+        );
+
+        assert_eq!(
+            cmap.lookup_unicode(0x005F),
+            Some(UnicodeString::String(String::from("ff")))
+        );
+    }
+
+    #[test]
+    fn bfchar_surrogate_pair() {
+        let cmap = parse_with_preamble(
+            br#"
+1 beginbfchar
+<3A51> <D840DC3E>
+endbfchar
+"#,
+        );
+
+        assert_eq!(
+            cmap.lookup_unicode(0x3A51),
+            Some(UnicodeString::Char('\u{2003E}'))
+        );
+    }
+
+    #[test]
+    fn bfrange_incrementing() {
+        let cmap = parse_with_preamble(
+            br#"
+1 beginbfrange
+<0000> <0004> <0041>
+endbfrange
+"#,
+        );
+
+        assert_eq!(cmap.lookup_unicode(0x0000), Some(UnicodeString::Char('A')));
+        assert_eq!(cmap.lookup_unicode(0x0001), Some(UnicodeString::Char('B')));
+        assert_eq!(cmap.lookup_unicode(0x0004), Some(UnicodeString::Char('E')));
+        assert_eq!(cmap.lookup_unicode(0x0005), None);
+    }
+
+    #[test]
+    fn bfrange_array() {
+        let cmap = parse_with_preamble(
+            br#"
+1 beginbfrange
+<005F> <0061> [<00660066> <00660069> <0066006C>]
+endbfrange
+"#,
+        );
+
+        // ff, fi, fl ligatures
+        assert_eq!(
+            cmap.lookup_unicode(0x005F),
+            Some(UnicodeString::String(String::from("ff")))
+        );
+        assert_eq!(
+            cmap.lookup_unicode(0x0060),
+            Some(UnicodeString::String(String::from("fi")))
+        );
+        assert_eq!(
+            cmap.lookup_unicode(0x0061),
+            Some(UnicodeString::String(String::from("fl")))
+        );
+    }
+
+    #[test]
+    fn unicode_lookup_miss() {
+        let cmap = parse_with_preamble(
+            br#"
+1 beginbfchar
+<0041> <0048>
+endbfchar
+"#,
+        );
+
+        assert_eq!(cmap.lookup_unicode(0x0000), None);
+        assert_eq!(cmap.lookup_unicode(0x0042), None);
     }
 }
