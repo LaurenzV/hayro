@@ -145,13 +145,13 @@ impl CMap {
                 }
             }
 
-            if offset == 0 {
-                return Some(decode_utf16(&entry.dst_base)?);
-            }  
-
-            let mut units = entry.dst_base.clone();
-            *units.last_mut()? = units.last()?.checked_add(offset)?;
-            return Some(decode_utf16(&units)?);
+            return if offset == 0 {
+                Some(decode_utf16(&entry.dst_base)?)
+            } else {
+                let mut units = entry.dst_base.clone();
+                *units.last_mut()? = units.last()?.checked_add(offset)?;
+                Some(decode_utf16(&units)?)
+            }
         }
 
         self.base.as_ref()?.lookup_unicode(code)
