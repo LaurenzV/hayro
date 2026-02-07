@@ -134,19 +134,26 @@ impl CMap {
     pub fn lookup_unicode(&self, code: u32) -> Option<UnicodeString> {
         if let Some(entry) = find_range_in_bf(&self.bf_entries, code) {
             let offset = u16::try_from(code - entry.start).ok()?;
+
+            fn decode_utf16(units: &[u16]) -> Option<UnicodeString> {
+                let mut iter = core::char::decode_utf16(units.iter().copied());
+                let first = iter.next()?.ok()?;
+
+                if iter.next().is_none() {
+                    Some(UnicodeString::Char(first))
+                } else {
+                    let s = String::from_utf16(units).ok()?;
+                    Some(UnicodeString::String(s))
+                }
+            }
+
+            if offset == 0 {
+                return Some(decode_utf16(&entry.dst_base)?);
+            }  
+
             let mut units = entry.dst_base.clone();
-            // See 9.10.3 in the PDF specification, the last byte should be incremented
-            // by the offset, but it must not overflow.
-            let last = units.last_mut()?;
-            *last = last.checked_add(offset)?;
-            let s = String::from_utf16(&units).ok()?;
-            let mut chars = s.chars();
-            let first = chars.next()?;
-            return if chars.next().is_none() {
-                Some(UnicodeString::Char(first))
-            } else {
-                Some(UnicodeString::String(s))
-            };
+            *units.last_mut()? = units.last()?.checked_add(offset)?;
+            return Some(decode_utf16(&units)?);
         }
 
         self.base.as_ref()?.lookup_unicode(code)
@@ -358,16 +365,13 @@ endcidrange
 "#,
         );
 
-        // First range: <0000>-<00FF> -> CID 0-255
         assert_eq!(cmap.lookup_cid(0x0000, 2), Some(0));
         assert_eq!(cmap.lookup_cid(0x0042, 2), Some(0x42));
         assert_eq!(cmap.lookup_cid(0x00FF, 2), Some(0xFF));
 
-        // Second range: <0100>-<01FF> -> CID 256-511
         assert_eq!(cmap.lookup_cid(0x0100, 2), Some(256));
         assert_eq!(cmap.lookup_cid(0x01FF, 2), Some(511));
 
-        // Third range: <8140>-<817E> -> CID 633-695
         assert_eq!(cmap.lookup_cid(0x8140, 2), Some(633));
         assert_eq!(cmap.lookup_cid(0x817E, 2), Some(633 + 62));
     }
