@@ -94,7 +94,7 @@ impl CMap {
         &self.metadata
     }
 
-    /// Look up a character code and return the corresponding CID.
+    /// Look up the CID of a character code.
     ///
     /// Returns `None` if the code is not within any codespace range for the
     /// given byte length.
@@ -110,8 +110,11 @@ impl CMap {
 
         if let Some(range) = find_range(&self.cid_ranges, code) {
             let offset = code.checked_sub(range.start)?;
+            
             return Some(range.cid_start + offset);
         } else if let Some(range) = find_range(&self.notdef_ranges, code) {
+            // For `.notdef` ranges, all codes map to the same `.notdef` CID, so
+            // no adding of the offset here.
             return Some(range.cid_start);
         }
 
@@ -125,11 +128,15 @@ impl CMap {
         )
     }
 
-    /// Look up a character code and return the corresponding Unicode value.
+    /// Look up the Unicode string of the given character code.
+    /// 
+    /// Returns `None` if no mapping is available.
     pub fn lookup_unicode(&self, code: u32) -> Option<UnicodeString> {
         if let Some(entry) = find_range_in_bf(&self.bf_entries, code) {
             let offset = u16::try_from(code - entry.start).ok()?;
             let mut units = entry.dst_base.clone();
+            // See 9.10.3 in the PDF specification, the last byte should be incremented
+            // by the offset, but it must not overflow.
             let last = units.last_mut()?;
             *last = last.checked_add(offset)?;
             let s = String::from_utf16(&units).ok()?;
