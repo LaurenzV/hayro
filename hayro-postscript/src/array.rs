@@ -23,11 +23,11 @@ impl<'a> Array<'a> {
 
 pub(crate) fn parse<'a>(r: &mut Reader<'a>) -> Result<&'a [u8]> {
     r.forward_tag(b"[").ok_or(Error::SyntaxError)?;
-    
+
     let start = r.offset();
     skip_array(r)?;
     let end = r.offset() - 1;
-    
+
     r.range(start..end).ok_or(Error::SyntaxError)
 }
 

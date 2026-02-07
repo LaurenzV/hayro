@@ -53,7 +53,7 @@ pub(crate) fn read<'a>(r: &mut Reader<'a>) -> Option<Result<Object<'a>>> {
             .map(|s| Object::Name(Name::new(s, false)))
             .ok_or(Error::SyntaxError),
     };
-    
+
     Some(object)
 }
 
@@ -160,7 +160,10 @@ mod tests {
 
     #[test]
     fn skips_comments() {
-        assert_eq!(read_ok(b"% this is a comment\n42 "), Object::Number(Number::Integer(42)));
+        assert_eq!(
+            read_ok(b"% this is a comment\n42 "),
+            Object::Number(Number::Integer(42))
+        );
     }
 
     #[test]

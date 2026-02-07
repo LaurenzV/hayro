@@ -2,7 +2,7 @@
 A lightweight PostScript scanner.
 
 This crate provides a scanner for tokenizing PostScript programs into typed objects.
-It currently only implements a very small subset of the PostScript language, 
+It currently only implements a very small subset of the PostScript language,
 with the main goal of being enough to parse CMAP files, but the scope _might_
 be expanded upon in the future.
 
@@ -127,9 +127,18 @@ endcmap"#;
 
         if let Object::Array(arr) = &objects[0] {
             let mut inner = arr.objects();
-            assert_eq!(inner.next().unwrap().unwrap(), Object::Number(Number::Integer(123)));
-            assert_eq!(inner.next().unwrap().unwrap(), Object::Name(Name::new(b"abc", true)));
-            assert_eq!(inner.next().unwrap().unwrap(), Object::String(String::from_literal(b"xyz")));
+            assert_eq!(
+                inner.next().unwrap().unwrap(),
+                Object::Number(Number::Integer(123))
+            );
+            assert_eq!(
+                inner.next().unwrap().unwrap(),
+                Object::Name(Name::new(b"abc", true))
+            );
+            assert_eq!(
+                inner.next().unwrap().unwrap(),
+                Object::String(String::from_literal(b"xyz"))
+            );
             assert!(inner.next().is_none());
         } else {
             panic!("expected Array");
@@ -145,5 +154,4 @@ endcmap"#;
         assert_eq!(objects[0], Object::Number(Number::Integer(42)));
         assert_eq!(objects[1], Object::Name(Name::new(b"Name", true)));
     }
-
 }
