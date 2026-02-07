@@ -8,12 +8,12 @@ pub type Result<T> = core::result::Result<T, Error>;
 /// An error encountered while scanning a PostScript token stream.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Error {
-    /// A syntax error in the input (e.g. malformed string, unexpected delimiter).
+    /// A syntax error in the input.
     SyntaxError,
     /// A numeric value exceeded implementation limits.
     LimitCheck,
-    /// An unsupported PostScript type was encountered (e.g. `<<` dictionary,
-    /// `{` procedure).
+    /// An unsupported PostScript type was encountered (like dictionaries or
+    /// procedures, which will be added in the future).
     UnsupportedType,
 }
 
@@ -26,3 +26,5 @@ impl fmt::Display for Error {
         }
     }
 }
+
+impl core::error::Error for Error {}

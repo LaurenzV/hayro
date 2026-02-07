@@ -25,30 +25,57 @@ fn main() {
     let mut scanner = Scanner::new(&data);
     loop {
         match scanner.next() {
-            Ok(Some(object)) => match object {
-                Object::Integer(n) => println!("Integer({n})"),
-                Object::Real(n) => println!("Real({n})"),
-                Object::Name(ref name) => {
-                    let kind = if name.is_literal() {
-                        "literal"
-                    } else {
-                        "executable"
-                    };
-                    let text = name.as_str().unwrap_or("<non-ascii name>");
-                    println!("Name({text}, {kind})");
-                }
-                Object::String(s) => {
-                    let decoded = s.decode().unwrap_or_else(|_| Vec::new());
-                    println!("String({})", lossy(&decoded));
-                }
-                Object::Array(ref arr) => {
-                    println!("Array({} bytes)", arr.data().len());
-                }
-            },
-            Ok(None) => break,
-            Err(e) => {
-                eprintln!("Error: {e}");
+            Ok(Some(object)) => {
+                print_object(&object);
+                println!();
             }
+            Ok(None) => break,
+            Err(e) => eprintln!("Error: {e}"),
+        }
+    }
+}
+
+fn print_object(object: &Object<'_>) {
+    match object {
+        Object::Integer(n) => print!("Integer({n})"),
+        Object::Real(n) => print!("Real({n})"),
+        Object::Name(name) => {
+            let kind = if name.is_literal() {
+                "literal"
+            } else {
+                "executable"
+            };
+            let text = name.as_str().unwrap_or("<non-ascii name>");
+            print!("Name({text}, {kind})");
+        }
+        Object::String(s) => {
+            let decoded = s.decode().unwrap_or_else(|_| Vec::new());
+            print!("String({})", lossy(&decoded));
+        }
+        Object::Array(arr) => {
+            print!("[");
+            let mut inner = arr.objects();
+            let mut first = true;
+            loop {
+                match inner.next() {
+                    Ok(Some(obj)) => {
+                        if !first {
+                            print!(" ");
+                        }
+                        first = false;
+                        print_object(&obj);
+                    }
+                    Ok(None) => break,
+                    Err(e) => {
+                        if !first {
+                            print!(" ");
+                        }
+                        first = false;
+                        print!("Error({e})");
+                    }
+                }
+            }
+            print!("]");
         }
     }
 }

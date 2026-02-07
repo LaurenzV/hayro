@@ -1,16 +1,7 @@
-//! Array `[...]` parsing.
-//!
-//! The parser only finds the extent of the array (the matching `]`).
-//! The inner objects are lazily produced via [`Array::objects`].
-
 use crate::error::{Error, Result};
 use crate::reader::Reader;
 
 /// A PostScript array object.
-///
-/// Stores a reference to the raw bytes between `[` and `]`, without parsing
-/// the inner objects. Call [`objects`](Array::objects) to iterate over the
-/// contained objects.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Array<'a> {
     data: &'a [u8],
@@ -21,11 +12,6 @@ impl<'a> Array<'a> {
         Self { data }
     }
 
-    /// The raw bytes between `[` and `]`.
-    pub fn data(&self) -> &'a [u8] {
-        self.data
-    }
-
     /// Return a [`Scanner`](crate::Scanner) that iterates over the objects inside
     /// this array.
     pub fn objects(&self) -> crate::Scanner<'a> {
@@ -33,22 +19,14 @@ impl<'a> Array<'a> {
     }
 }
 
-/// Parse an array `[...]`, returning the raw inner bytes.
-///
-/// The reader must be positioned at the opening `[`.
 pub(crate) fn parse<'a>(r: &mut Reader<'a>) -> Result<&'a [u8]> {
     r.forward_tag(b"[").ok_or(Error::SyntaxError)?;
     let start = r.offset();
     skip_to_matching_bracket(r)?;
-    let end = r.offset() - 1; // exclude the closing `]`
+    let end = r.offset() - 1;
     r.range(start..end).ok_or(Error::SyntaxError)
 }
 
-/// Skip forward until the matching `]` is found.
-///
-/// Properly handles nested brackets, string literals, hex strings,
-/// ASCII85 strings, and comments so that delimiters inside those
-/// constructs are not mistaken for the closing bracket.
 fn skip_to_matching_bracket(r: &mut Reader<'_>) -> Result<()> {
     let mut depth = 1u32;
 
@@ -63,24 +41,15 @@ fn skip_to_matching_bracket(r: &mut Reader<'_>) -> Result<()> {
             b'<' => {
                 match r.peek_byte() {
                     Some(b'~') => {
-                        // ASCII85 string: skip to `~>`.
                         r.forward();
                         skip_ascii85_string(r)?;
                     }
                     Some(b'<') => {
-                        // `<<` — just consume the second `<`.
                         r.forward();
                     }
                     _ => {
-                        // Hex string: skip to `>`.
                         skip_hex_string(r)?;
                     }
-                }
-            }
-            b'>' => {
-                // `>>` — consume the second `>` if present.
-                if r.peek_byte() == Some(b'>') {
-                    r.forward();
                 }
             }
             b'%' => {
