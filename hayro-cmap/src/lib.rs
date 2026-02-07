@@ -45,7 +45,7 @@ pub struct CMap {
 impl CMap {
     /// Parse a CMap from raw bytes.
     ///
-    /// The `get_cmap` callback is used to recursively resolve CMaps that 
+    /// The `get_cmap` callback is used to recursively resolve CMaps that
     /// are referenced via `usecmap`.
     pub fn parse<'a>(
         data: &[u8],
@@ -94,24 +94,17 @@ impl CMap {
         &self.metadata
     }
 
-    /// Check whether a character code with the given byte length
-    /// is contained in this CMap's codespace.
-    /// 
-    /// This doesn't mean that the code has an active mapping (i.e. it could
-    /// still map to the `.notdef` CID), it simply checks whether the codespace
-    /// range of the CMap indicates that this code is covered.
-    pub fn contains_code(&self, code: u32, byte_len: u8) -> bool {
-        self.codespace_ranges
-            .iter()
-            .any(|r| r.n_bytes == byte_len && code >= r.low && code <= r.high)
-    }
-
     /// Look up a character code and return the corresponding CID.
     ///
-    /// Returns `None` if the code has no mapping in this CMap.
+    /// Returns `None` if the code is not within any codespace range for the
+    /// given byte length.
     pub fn lookup_cid(&self, code: u32, byte_len: u8) -> Option<Cid> {
-        // Validate against codespace ranges if any are defined.
-        if !self.contains_code(code, byte_len) {
+        let in_codespace = self
+            .codespace_ranges
+            .iter()
+            .any(|r| r.n_bytes == byte_len && code >= r.low && code <= r.high);
+
+        if !in_codespace {
             return None;
         }
 
@@ -122,7 +115,14 @@ impl CMap {
             return Some(range.cid_start);
         }
 
-        self.base.as_ref()?.lookup_cid(code, byte_len)
+        // If character code is in code space range but has no active mapping, so
+        // assume `.notdef`.
+        Some(
+            self.base
+                .as_ref()
+                .and_then(|b| b.lookup_cid(code, byte_len))
+                .unwrap_or(0),
+        )
     }
 
     /// Look up a character code and return the corresponding Unicode value.
@@ -360,9 +360,9 @@ endcidrange
 "#,
         );
 
-        assert_eq!(cmap.lookup_cid(0x00FF, 2), None);
-        assert_eq!(cmap.lookup_cid(0x0200, 2), None);
-        assert_eq!(cmap.lookup_cid(0xFFFF, 2), None);
+        assert_eq!(cmap.lookup_cid(0x00FF, 2), Some(0));
+        assert_eq!(cmap.lookup_cid(0x0200, 2), Some(0));
+        assert_eq!(cmap.lookup_cid(0xFFFF, 2), Some(0));
     }
 
     #[test]
@@ -460,7 +460,7 @@ endcidrange
         assert_eq!(cmap.lookup_cid(0x0000, 2), Some(0));
         assert_eq!(cmap.lookup_cid(0x00FF, 2), Some(0xFF));
 
-        assert_eq!(cmap.lookup_cid(0x0200, 2), None);
+        assert_eq!(cmap.lookup_cid(0x0200, 2), Some(0));
     }
 
     #[test]
@@ -528,7 +528,7 @@ endnotdefchar
 
         assert_eq!(cmap.lookup_cid(0x03, 1), Some(10));
         assert_eq!(cmap.lookup_cid(0x20, 1), Some(20));
-        assert_eq!(cmap.lookup_cid(0x04, 1), None);
+        assert_eq!(cmap.lookup_cid(0x04, 1), Some(0));
     }
 
     #[test]
@@ -544,7 +544,7 @@ endnotdefrange
         assert_eq!(cmap.lookup_cid(0x0000, 2), Some(100));
         assert_eq!(cmap.lookup_cid(0x0001, 2), Some(100));
         assert_eq!(cmap.lookup_cid(0x001F, 2), Some(100));
-        assert_eq!(cmap.lookup_cid(0x0020, 2), None);
+        assert_eq!(cmap.lookup_cid(0x0020, 2), Some(0));
     }
 
     #[test]
@@ -660,12 +660,8 @@ endbfchar
         assert_eq!(cmap.lookup_cid(0x1234, 2), Some(0x1234));
         assert_eq!(cmap.lookup_cid(0xFFFF, 2), Some(0xFFFF));
 
-        // Wrong byte length.
         assert_eq!(cmap.lookup_cid(0x0041, 1), None);
         assert_eq!(cmap.lookup_cid(0x0041, 3), None);
-
-        assert!(cmap.contains_code(0x0041, 2));
-        assert!(!cmap.contains_code(0x0041, 1));
     }
 
     #[test]
@@ -701,22 +697,15 @@ endcidrange
 "#;
         let cmap = CMap::parse(data.as_slice(), |_| None).unwrap();
 
-        // 1-byte codes.
-        assert!(cmap.contains_code(0x41, 1));
-        assert!(cmap.contains_code(0x00, 1));
-        assert!(cmap.contains_code(0x80, 1));
-        assert!(!cmap.contains_code(0x81, 1));
-
-        // 2-byte codes.
-        assert!(cmap.contains_code(0x8140, 2));
-        assert!(cmap.contains_code(0x9FFC, 2));
-        assert!(!cmap.contains_code(0x8100, 2));
-
-        // Lookups with correct byte length.
         assert_eq!(cmap.lookup_cid(0x41, 1), Some(0x41));
-        assert_eq!(cmap.lookup_cid(0x8140, 2), Some(200));
+        assert_eq!(cmap.lookup_cid(0x00, 1), Some(0));
+        assert_eq!(cmap.lookup_cid(0x80, 1), Some(0x80));
+        assert_eq!(cmap.lookup_cid(0x81, 1), None);
 
-        // Lookup with wrong byte length.
+        assert_eq!(cmap.lookup_cid(0x8140, 2), Some(200));
+        assert_eq!(cmap.lookup_cid(0x9FFC, 2), Some(200 + 0x9FFC - 0x8140));
+        assert_eq!(cmap.lookup_cid(0x8100, 2), None);
+
         assert_eq!(cmap.lookup_cid(0x41, 2), None);
     }
 
@@ -730,9 +719,9 @@ endcodespacerange
 "#,
         );
 
-        assert!(cmap.contains_code(0x8EA1A1A1, 4));
-        assert!(cmap.contains_code(0x8EA1FEFE, 4));
-        assert!(!cmap.contains_code(0x8EA1A1A0, 4));
-        assert!(!cmap.contains_code(0x8EA1A1A1, 3));
+        assert_eq!(cmap.lookup_cid(0x8EA1A1A1, 4), Some(0));
+        assert_eq!(cmap.lookup_cid(0x8EA1FEFE, 4), Some(0));
+        assert_eq!(cmap.lookup_cid(0x8EA1A1A0, 4), None);
+        assert_eq!(cmap.lookup_cid(0x8EA1A1A1, 3), None);
     }
 }
