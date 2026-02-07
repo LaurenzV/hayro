@@ -18,8 +18,11 @@ While the main goal of `hayro` is rendering PDF files, the `hayro` project actua
 - [`hayro`](hayro): Rendering PDF pages into bitmaps.
 - [`hayro-svg`](hayro-svg): Converting PDF pages into SVG images.
 - [`hayro-jpeg2000`](hayro-jpeg2000): A JPEG2000 image decoder.
+- [`hayro-jbig2`](hayro-jbig2): A JBIG2 image decoder (this crate is still WIP and not recommended for external consumption
+  yet, but it already is completely functional).
 - [`hayro-ccitt`](hayro-ccitt): A decoder for group 3 and group 4 CCITT-encoded images.
 - [`hayro-font`](hayro-font): A parser for Type1 and CFF fonts.
+- [`hayro-postscript`](hayro-postscript): A lightweight scanner for a specific subset of PostScript.
 
 ## Demo
 A demo tool can be found at https://laurenzv.github.io/hayro/. Please note that this is not intended to be a PDF viewer application: It misses many important features like zooming, selecting text and important optimizations for improving the user experience. It's really just meant as a quick way to test the rendering capabilities of `hayro`.
