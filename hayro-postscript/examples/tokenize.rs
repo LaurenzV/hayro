@@ -1,6 +1,6 @@
 #![allow(missing_docs)]
 
-use hayro_postscript::{Lexer, Object};
+use hayro_postscript::{Lexer, Object, StringKind};
 use std::env;
 use std::fs;
 use std::process;
@@ -26,8 +26,20 @@ fn main() {
         match object {
             Object::Integer(n) => println!("Integer({n})"),
             Object::Name(ref b) => println!("Name({})", lossy(b)),
-            Object::String(ref b) => println!("String({})", lossy(b)),
-            Object::HexString(ref b) => println!("HexString({})", hex(b)),
+            Object::String(sk) => match sk {
+                StringKind::Literal(_) => {
+                    let decoded = sk.decode().unwrap_or_default();
+                    println!("String({})", lossy(&decoded));
+                }
+                StringKind::Hex(_) => {
+                    let decoded = sk.decode().unwrap_or_default();
+                    println!("HexString({})", hex(&decoded));
+                }
+                StringKind::Ascii85(_) => {
+                    let decoded = sk.decode().unwrap_or_default();
+                    println!("Ascii85String({})", hex(&decoded));
+                }
+            },
             Object::Operator(ref b) => println!("Operator({})", lossy(b)),
         }
     }

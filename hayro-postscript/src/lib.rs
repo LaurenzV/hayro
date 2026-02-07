@@ -17,7 +17,6 @@ This crate forbids unsafe code via a crate-level attribute.
 
 extern crate alloc;
 
-mod hex_string;
 mod name;
 mod number;
 mod object;
@@ -26,6 +25,7 @@ mod reader;
 mod string;
 
 pub use object::{Bytes, Object};
+pub use string::StringKind;
 
 use reader::Reader;
 
@@ -43,10 +43,10 @@ impl<'a> Lexer<'a> {
     }
 }
 
-impl Iterator for Lexer<'_> {
-    type Item = Object;
+impl<'a> Iterator for Lexer<'a> {
+    type Item = Object<'a>;
 
-    fn next(&mut self) -> Option<Object> {
+    fn next(&mut self) -> Option<Object<'a>> {
         object::read(&mut self.reader)
     }
 }
@@ -70,7 +70,7 @@ endcodespacerange
 endbfchar
 endcmap"#;
 
-        let objects: Vec<Object> = Lexer::new(input).collect();
+        let objects: Vec<Object<'_>> = Lexer::new(input).collect();
 
         // Spot-check a few objects.
         assert_eq!(objects[0], Object::Name(bytes!(b"CIDInit")));
@@ -89,18 +89,18 @@ endcmap"#;
             objects[12],
             Object::Operator(bytes!(b"begincodespacerange"))
         );
-        assert_eq!(objects[13], Object::HexString(bytes!(&[0x00])));
-        assert_eq!(objects[14], Object::HexString(bytes!(&[0xFF])));
+        assert_eq!(objects[13], Object::String(StringKind::Hex(b"00")));
+        assert_eq!(objects[14], Object::String(StringKind::Hex(b"FF")));
         assert_eq!(
             objects[15],
             Object::Operator(bytes!(b"endcodespacerange"))
         );
         assert_eq!(objects[16], Object::Integer(2));
         assert_eq!(objects[17], Object::Operator(bytes!(b"beginbfchar")));
-        assert_eq!(objects[18], Object::HexString(bytes!(&[0x03])));
-        assert_eq!(objects[19], Object::HexString(bytes!(&[0x00, 0x41])));
-        assert_eq!(objects[20], Object::HexString(bytes!(&[0x04])));
-        assert_eq!(objects[21], Object::HexString(bytes!(&[0x00, 0x42])));
+        assert_eq!(objects[18], Object::String(StringKind::Hex(b"03")));
+        assert_eq!(objects[19], Object::String(StringKind::Hex(b"0041")));
+        assert_eq!(objects[20], Object::String(StringKind::Hex(b"04")));
+        assert_eq!(objects[21], Object::String(StringKind::Hex(b"0042")));
         assert_eq!(objects[22], Object::Operator(bytes!(b"endbfchar")));
         assert_eq!(objects[23], Object::Operator(bytes!(b"endcmap")));
         assert_eq!(objects.len(), 24);
@@ -109,13 +109,16 @@ endcmap"#;
     #[test]
     fn dict_delimiters() {
         let input = b"<< /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> def";
-        let objects: Vec<Object> = Lexer::new(input).collect();
+        let objects: Vec<Object<'_>> = Lexer::new(input).collect();
 
         assert_eq!(objects[0], Object::Operator(bytes!(b"<<")));
         assert_eq!(objects[1], Object::Name(bytes!(b"Registry")));
-        assert_eq!(objects[2], Object::String(bytes!(b"Adobe")));
+        assert_eq!(objects[2], Object::String(StringKind::Literal(b"Adobe")));
         assert_eq!(objects[3], Object::Name(bytes!(b"Ordering")));
-        assert_eq!(objects[4], Object::String(bytes!(b"Identity")));
+        assert_eq!(
+            objects[4],
+            Object::String(StringKind::Literal(b"Identity"))
+        );
         assert_eq!(objects[5], Object::Name(bytes!(b"Supplement")));
         assert_eq!(objects[6], Object::Integer(0));
         assert_eq!(objects[7], Object::Operator(bytes!(b">>")));
@@ -125,7 +128,7 @@ endcmap"#;
     #[test]
     fn comments_skipped() {
         let input = b"% comment\n42 % another\n/Name";
-        let objects: Vec<Object> = Lexer::new(input).collect();
+        let objects: Vec<Object<'_>> = Lexer::new(input).collect();
 
         assert_eq!(objects.len(), 2);
         assert_eq!(objects[0], Object::Integer(42));

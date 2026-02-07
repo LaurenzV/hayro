@@ -1,96 +1,97 @@
-//! Literal string `(...)` parsing.
+//! String parsing and decoding for all three PostScript string types.
+//!
+//! The parser only finds the range of the string content (lazy).
+//! Decoding is deferred to [`StringKind::decode_into`] / [`StringKind::decode`].
 
-use crate::object::Bytes;
-use crate::reader::Reader;
+use alloc::vec::Vec;
 
-/// Read a literal string `(...)`, returning the decoded contents.
+use crate::reader::{Reader, is_whitespace};
+
+/// A lazily-decoded PostScript string.
 ///
-/// The reader must be positioned at the opening `(`.
-pub(crate) fn read(r: &mut Reader<'_>) -> Option<Bytes> {
-    // Skip the inner content to find the matching `)`, handling nested parens.
-    let start = r.offset();
-    skip(r)?;
-    let end = r.offset();
+/// Each variant stores a reference to the raw bytes between the delimiters,
+/// without any decoding. Call [`decode_into`](StringKind::decode_into) or
+/// [`decode`](StringKind::decode) to materialize the decoded content.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StringKind<'a> {
+    /// Raw bytes between `(` and `)`, no decoding applied.
+    Literal(&'a [u8]),
+    /// Raw bytes between `<` and `>`, no decoding applied.
+    Hex(&'a [u8]),
+    /// Raw bytes between `<~` and `~>`, no decoding applied.
+    Ascii85(&'a [u8]),
+}
 
-    // Exclude outer parentheses.
-    let data = r.range(start + 1..end - 1)?;
-
-    let mut inner = Reader::new(data);
-    let mut result = Bytes::new();
-
-    while let Some(byte) = inner.read_byte() {
-        match byte {
-            b'\\' => {
-                let next = inner.read_byte()?;
-
-                if is_octal_digit(next) {
-                    let second = inner.read_byte();
-                    let third = inner.read_byte();
-
-                    let digits = match (second, third) {
-                        (Some(n1), Some(n2)) => match (is_octal_digit(n1), is_octal_digit(n2)) {
-                            (true, true) => [next, n1, n2],
-                            (true, _) => {
-                                inner.jump(inner.offset() - 1);
-                                [b'0', next, n1]
-                            }
-                            _ => {
-                                inner.jump(inner.offset() - 2);
-                                [b'0', b'0', next]
-                            }
-                        },
-                        (Some(n1), None) => {
-                            if is_octal_digit(n1) {
-                                [b'0', next, n1]
-                            } else {
-                                inner.jump(inner.offset() - 1);
-                                [b'0', b'0', next]
-                            }
-                        }
-                        _ => [b'0', b'0', next],
-                    };
-
-                    let s = core::str::from_utf8(&digits).unwrap();
-                    // Octal values that overflow u8 are implementation-defined;
-                    // we truncate to the low 8 bits as hayro-syntax does.
-                    if let Ok(num) = u8::from_str_radix(s, 8) {
-                        result.push(num);
-                    }
-                } else {
-                    match next {
-                        b'n' => result.push(0x0A),
-                        b'r' => result.push(0x0D),
-                        b't' => result.push(0x09),
-                        b'b' => result.push(0x08),
-                        b'f' => result.push(0x0C),
-                        b'(' => result.push(b'('),
-                        b')' => result.push(b')'),
-                        b'\\' => result.push(b'\\'),
-                        // Line continuation: backslash followed by EOL is discarded.
-                        b'\n' | b'\r' => {
-                            inner.skip_eol();
-                        }
-                        // Unknown escape: the spec says to ignore the backslash.
-                        _ => result.push(next),
-                    }
-                }
-            }
-            // Balanced parens are kept literally.
-            b'(' | b')' => result.push(byte),
-            // Bare EOL normalised to LF.
-            b'\n' | b'\r' => {
-                result.push(b'\n');
-                inner.skip_eol();
-            }
-            other => result.push(other),
+impl StringKind<'_> {
+    /// Decode the string content and append it to `out`.
+    pub fn decode_into(&self, out: &mut Vec<u8>) -> Option<()> {
+        match self {
+            StringKind::Literal(data) => decode_literal_into(data, out),
+            StringKind::Hex(data) => decode_hex_into(data, out),
+            StringKind::Ascii85(data) => decode_ascii85_into(data, out),
         }
     }
 
-    Some(result)
+    /// Decode the string content and return it as a new `Vec<u8>`.
+    pub fn decode(&self) -> Option<Vec<u8>> {
+        let mut out = Vec::new();
+        self.decode_into(&mut out)?;
+        Some(out)
+    }
 }
 
+// ---------------------------------------------------------------------------
+// Range-finding parsers (no decoding)
+// ---------------------------------------------------------------------------
+
+/// Parse a literal string `(...)`, returning the raw inner bytes.
+///
+/// The reader must be positioned at the opening `(`.
+pub(crate) fn parse_literal<'a>(r: &mut Reader<'a>) -> Option<&'a [u8]> {
+    let start = r.offset();
+    skip_literal(r)?;
+    let end = r.offset();
+    // Exclude outer parentheses.
+    r.range(start + 1..end - 1)
+}
+
+/// Parse a hex string `<...>`, returning the raw inner bytes.
+///
+/// The reader must be positioned at the opening `<`.
+pub(crate) fn parse_hex<'a>(r: &mut Reader<'a>) -> Option<&'a [u8]> {
+    r.forward_tag(b"<")?;
+    let start = r.offset();
+    while let Some(b) = r.read_byte() {
+        if b == b'>' {
+            return r.range(start..r.offset() - 1);
+        }
+    }
+    None
+}
+
+/// Parse an ASCII85 string `<~...~>`, returning the raw inner bytes.
+///
+/// The reader must be positioned at the opening `<`.
+pub(crate) fn parse_ascii85<'a>(r: &mut Reader<'a>) -> Option<&'a [u8]> {
+    r.forward_tag(b"<~")?;
+    let start = r.offset();
+    loop {
+        let b = r.read_byte()?;
+        if b == b'~' {
+            let end = r.offset() - 1;
+            // Consume the closing `>`.
+            r.forward_tag(b">")?;
+            return r.range(start..end);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Skip helper for literal strings
+// ---------------------------------------------------------------------------
+
 /// Skip past a literal string without decoding.
-fn skip(r: &mut Reader<'_>) -> Option<()> {
+fn skip_literal(r: &mut Reader<'_>) -> Option<()> {
     r.forward_tag(b"(")?;
     let mut depth = 1u32;
 
@@ -109,114 +110,424 @@ fn skip(r: &mut Reader<'_>) -> Option<()> {
     Some(())
 }
 
+// ---------------------------------------------------------------------------
+// Decode functions
+// ---------------------------------------------------------------------------
+
+/// Decode a literal string's inner bytes (escape sequences, octal, EOL
+/// normalization) and append to `out`.
+fn decode_literal_into(data: &[u8], out: &mut Vec<u8>) -> Option<()> {
+    let mut r = Reader::new(data);
+
+    while let Some(byte) = r.read_byte() {
+        match byte {
+            b'\\' => {
+                let next = r.read_byte()?;
+
+                if is_octal_digit(next) {
+                    let second = r.read_byte();
+                    let third = r.read_byte();
+
+                    let digits = match (second, third) {
+                        (Some(n1), Some(n2)) => match (is_octal_digit(n1), is_octal_digit(n2)) {
+                            (true, true) => [next, n1, n2],
+                            (true, _) => {
+                                r.jump(r.offset() - 1);
+                                [b'0', next, n1]
+                            }
+                            _ => {
+                                r.jump(r.offset() - 2);
+                                [b'0', b'0', next]
+                            }
+                        },
+                        (Some(n1), None) => {
+                            if is_octal_digit(n1) {
+                                [b'0', next, n1]
+                            } else {
+                                r.jump(r.offset() - 1);
+                                [b'0', b'0', next]
+                            }
+                        }
+                        _ => [b'0', b'0', next],
+                    };
+
+                    let s = core::str::from_utf8(&digits).unwrap();
+                    if let Ok(num) = u8::from_str_radix(s, 8) {
+                        out.push(num);
+                    }
+                } else {
+                    match next {
+                        b'n' => out.push(0x0A),
+                        b'r' => out.push(0x0D),
+                        b't' => out.push(0x09),
+                        b'b' => out.push(0x08),
+                        b'f' => out.push(0x0C),
+                        b'(' => out.push(b'('),
+                        b')' => out.push(b')'),
+                        b'\\' => out.push(b'\\'),
+                        // Line continuation: backslash followed by EOL is discarded.
+                        b'\n' | b'\r' => {
+                            r.skip_eol();
+                        }
+                        // Unknown escape: the spec says to ignore the backslash.
+                        _ => out.push(next),
+                    }
+                }
+            }
+            // Balanced parens are kept literally.
+            b'(' | b')' => out.push(byte),
+            // Bare EOL normalised to LF.
+            b'\n' | b'\r' => {
+                out.push(b'\n');
+                r.skip_eol();
+            }
+            other => out.push(other),
+        }
+    }
+
+    Some(())
+}
+
+/// Decode hex string inner bytes and append to `out`.
+fn decode_hex_into(data: &[u8], out: &mut Vec<u8>) -> Option<()> {
+    let has_whitespace = data.iter().any(|&b| is_whitespace(b));
+
+    out.reserve(data.len().div_ceil(2));
+
+    if !has_whitespace {
+        // Fast path: no whitespace to strip.
+        let mut i = 0;
+        while i + 1 < data.len() {
+            out.push(decode_hex_digit(data[i])? << 4 | decode_hex_digit(data[i + 1])?);
+            i += 2;
+        }
+        if i < data.len() {
+            out.push(decode_hex_digit(data[i])? << 4);
+        }
+    } else {
+        // Slow path: strip whitespace.
+        let mut iter = data.iter().copied();
+        let mut read_byte = || -> Option<u8> {
+            loop {
+                let b = iter.next()?;
+                if !is_whitespace(b) {
+                    return Some(b);
+                }
+            }
+        };
+
+        loop {
+            match (read_byte(), read_byte()) {
+                (Some(hi), Some(lo)) => {
+                    out.push(decode_hex_digit(hi)? << 4 | decode_hex_digit(lo)?);
+                }
+                (Some(hi), None) => {
+                    out.push(decode_hex_digit(hi)? << 4);
+                    break;
+                }
+                (None, _) => break,
+            }
+        }
+    }
+
+    Some(())
+}
+
+/// Decode ASCII85 inner bytes and append to `out`.
+fn decode_ascii85_into(data: &[u8], out: &mut Vec<u8>) -> Option<()> {
+    const POW_85: [u32; 5] = [52200625, 614125, 7225, 85, 1];
+
+    let mut reader = Reader::new(data);
+
+    let mut read_byte = || -> Option<u8> {
+        loop {
+            let b = reader.read_byte()?;
+            // White space characters should be ignored.
+            if !is_whitespace(b) {
+                return Some(b);
+            }
+        }
+    };
+
+    let flush_group = |group: &mut Vec<u8>, decoded: &mut Vec<u8>| -> Option<()> {
+        let (digits, output_len): ([u32; 5], usize) = match group.len() {
+            0 => return Some(()),
+            1 => return None, // A single character is not valid.
+            2 => (
+                [group[0], group[1], b'u', b'u', b'u'].map(|b| (b - b'!') as u32),
+                1,
+            ),
+            3 => (
+                [group[0], group[1], group[2], b'u', b'u'].map(|b| (b - b'!') as u32),
+                2,
+            ),
+            4 => (
+                [group[0], group[1], group[2], group[3], b'u'].map(|b| (b - b'!') as u32),
+                3,
+            ),
+            5 => (
+                [group[0], group[1], group[2], group[3], group[4]].map(|b| (b - b'!') as u32),
+                4,
+            ),
+            _ => unreachable!(),
+        };
+
+        let value = digits[0]
+            .checked_mul(POW_85[0])?
+            .checked_add(digits[1].checked_mul(POW_85[1])?)?
+            .checked_add(digits[2].checked_mul(POW_85[2])?)?
+            .checked_add(digits[3].checked_mul(POW_85[3])?)?
+            .checked_add(digits[4])?;
+
+        decoded.extend_from_slice(&value.to_be_bytes()[..output_len]);
+        group.clear();
+        Some(())
+    };
+
+    out.reserve(data.len() * 4 / 5);
+    let mut group = Vec::with_capacity(5);
+
+    loop {
+        let Some(b) = read_byte() else {
+            // Be lenient and accept what we have.
+            flush_group(&mut group, out)?;
+            return Some(());
+        };
+
+        match b {
+            b'!'..=b'u' => {
+                group.push(b);
+                if group.len() == 5 {
+                    flush_group(&mut group, out)?;
+                }
+            }
+            b'z' => {
+                flush_group(&mut group, out)?;
+                out.extend_from_slice(&[0, 0, 0, 0]);
+            }
+            b'~' => {
+                // End of data marker. Technically requires a '>', but be lenient.
+                flush_group(&mut group, out)?;
+                return Some(());
+            }
+            _ => return None, // Invalid character.
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
 fn is_octal_digit(b: u8) -> bool {
     matches!(b, b'0'..=b'7')
 }
+
+/// Decode a single ASCII hex digit to its numeric value.
+#[inline(always)]
+pub(crate) fn decode_hex_digit(c: u8) -> Option<u8> {
+    match c {
+        b'0'..=b'9' => Some(c - b'0'),
+        b'A'..=b'F' => Some(c - b'A' + 10),
+        b'a'..=b'f' => Some(c - b'a' + 10),
+        _ => None,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn read_string(input: &[u8]) -> Option<Bytes> {
+    // ---- Literal parsing + decoding ----
+
+    fn decode_literal(input: &[u8]) -> Option<Vec<u8>> {
         let mut r = Reader::new(input);
-        read(&mut r)
+        let sk = StringKind::Literal(parse_literal(&mut r)?);
+        sk.decode()
     }
 
     #[test]
-    fn empty() {
-        assert_eq!(&*read_string(b"()").unwrap(), b"");
+    fn literal_empty() {
+        assert_eq!(decode_literal(b"()").unwrap(), b"");
     }
 
     #[test]
-    fn simple() {
-        assert_eq!(&*read_string(b"(Hello)").unwrap(), b"Hello");
+    fn literal_simple() {
+        assert_eq!(decode_literal(b"(Hello)").unwrap(), b"Hello");
     }
 
     #[test]
-    fn nested_parens() {
+    fn literal_nested_parens() {
         assert_eq!(
-            &*read_string(b"(Hi (()) there)").unwrap(),
+            decode_literal(b"(Hi (()) there)").unwrap(),
             b"Hi (()) there"
         );
     }
 
     #[test]
-    fn escape_n() {
-        assert_eq!(&*read_string(b"(a\\nb)").unwrap(), b"a\nb");
+    fn literal_escape_n() {
+        assert_eq!(decode_literal(b"(a\\nb)").unwrap(), b"a\nb");
     }
 
     #[test]
-    fn escape_r() {
-        assert_eq!(&*read_string(b"(a\\rb)").unwrap(), b"a\rb");
+    fn literal_escape_r() {
+        assert_eq!(decode_literal(b"(a\\rb)").unwrap(), b"a\rb");
     }
 
     #[test]
-    fn escape_t() {
-        assert_eq!(&*read_string(b"(a\\tb)").unwrap(), b"a\tb");
+    fn literal_escape_t() {
+        assert_eq!(decode_literal(b"(a\\tb)").unwrap(), b"a\tb");
     }
 
     #[test]
-    fn escape_b() {
-        assert_eq!(&*read_string(b"(a\\bb)").unwrap(), &[b'a', 0x08, b'b']);
+    fn literal_escape_b() {
+        assert_eq!(decode_literal(b"(a\\bb)").unwrap(), &[b'a', 0x08, b'b']);
     }
 
     #[test]
-    fn escape_f() {
-        assert_eq!(&*read_string(b"(a\\fb)").unwrap(), &[b'a', 0x0C, b'b']);
+    fn literal_escape_f() {
+        assert_eq!(decode_literal(b"(a\\fb)").unwrap(), &[b'a', 0x0C, b'b']);
     }
 
     #[test]
-    fn escape_backslash() {
-        assert_eq!(&*read_string(b"(a\\\\b)").unwrap(), b"a\\b");
+    fn literal_escape_backslash() {
+        assert_eq!(decode_literal(b"(a\\\\b)").unwrap(), b"a\\b");
     }
 
     #[test]
-    fn escape_parens() {
-        assert_eq!(&*read_string(b"(Hi \\()").unwrap(), b"Hi (");
+    fn literal_escape_parens() {
+        assert_eq!(decode_literal(b"(Hi \\()").unwrap(), b"Hi (");
     }
 
     #[test]
-    fn octal_three_digits() {
-        assert_eq!(&*read_string(b"(\\053)").unwrap(), b"+");
+    fn literal_octal_three_digits() {
+        assert_eq!(decode_literal(b"(\\053)").unwrap(), b"+");
     }
 
     #[test]
-    fn octal_two_digits() {
-        assert_eq!(&*read_string(b"(\\36)").unwrap(), b"\x1e");
+    fn literal_octal_two_digits() {
+        assert_eq!(decode_literal(b"(\\36)").unwrap(), b"\x1e");
     }
 
     #[test]
-    fn octal_one_digit() {
-        assert_eq!(&*read_string(b"(\\3)").unwrap(), b"\x03");
+    fn literal_octal_one_digit() {
+        assert_eq!(decode_literal(b"(\\3)").unwrap(), b"\x03");
     }
 
     #[test]
-    fn line_continuation_lf() {
-        assert_eq!(&*read_string(b"(Hi \\\nthere)").unwrap(), b"Hi there");
+    fn literal_line_continuation_lf() {
+        assert_eq!(decode_literal(b"(Hi \\\nthere)").unwrap(), b"Hi there");
     }
 
     #[test]
-    fn line_continuation_cr() {
-        assert_eq!(&*read_string(b"(Hi \\\rthere)").unwrap(), b"Hi there");
+    fn literal_line_continuation_cr() {
+        assert_eq!(decode_literal(b"(Hi \\\rthere)").unwrap(), b"Hi there");
     }
 
     #[test]
-    fn line_continuation_crlf() {
-        assert_eq!(&*read_string(b"(Hi \\\r\nthere)").unwrap(), b"Hi there");
+    fn literal_line_continuation_crlf() {
+        assert_eq!(decode_literal(b"(Hi \\\r\nthere)").unwrap(), b"Hi there");
     }
 
     #[test]
-    fn bare_eol_lf() {
-        assert_eq!(&*read_string(b"(a\nb)").unwrap(), b"a\nb");
+    fn literal_bare_eol_lf() {
+        assert_eq!(decode_literal(b"(a\nb)").unwrap(), b"a\nb");
     }
 
     #[test]
-    fn bare_eol_cr() {
-        assert_eq!(&*read_string(b"(a\rb)").unwrap(), b"a\nb");
+    fn literal_bare_eol_cr() {
+        assert_eq!(decode_literal(b"(a\rb)").unwrap(), b"a\nb");
     }
 
     #[test]
-    fn bare_eol_crlf() {
-        assert_eq!(&*read_string(b"(a\r\nb)").unwrap(), b"a\nb");
+    fn literal_bare_eol_crlf() {
+        assert_eq!(decode_literal(b"(a\r\nb)").unwrap(), b"a\nb");
+    }
+
+    // ---- Hex parsing + decoding ----
+
+    fn decode_hex(input: &[u8]) -> Option<Vec<u8>> {
+        let mut r = Reader::new(input);
+        let sk = StringKind::Hex(parse_hex(&mut r)?);
+        sk.decode()
+    }
+
+    #[test]
+    fn hex_simple() {
+        assert_eq!(decode_hex(b"<48656C6C6F>").unwrap(), b"Hello");
+    }
+
+    #[test]
+    fn hex_with_whitespace() {
+        assert_eq!(decode_hex(b"<48 65 6C 6C 6F>").unwrap(), b"Hello");
+    }
+
+    #[test]
+    fn hex_odd_nibble() {
+        assert_eq!(decode_hex(b"<ABC>").unwrap(), &[0xAB, 0xC0]);
+    }
+
+    #[test]
+    fn hex_empty() {
+        assert_eq!(decode_hex(b"<>").unwrap(), b"");
+    }
+
+    #[test]
+    fn hex_lowercase() {
+        assert_eq!(decode_hex(b"<abcd>").unwrap(), &[0xAB, 0xCD]);
+    }
+
+    #[test]
+    fn hex_mixed_case() {
+        assert_eq!(decode_hex(b"<aB3E>").unwrap(), &[0xAB, 0x3E]);
+    }
+
+    // ---- ASCII85 parsing + decoding ----
+
+    fn decode_a85(input: &[u8]) -> Option<Vec<u8>> {
+        let mut r = Reader::new(input);
+        let sk = StringKind::Ascii85(parse_ascii85(&mut r)?);
+        sk.decode()
+    }
+
+    #[test]
+    fn ascii85_simple() {
+        // "Hello" in ASCII85 is "87cURDZ"
+        assert_eq!(
+            decode_a85(b"<~87cURDZ~>").unwrap(),
+            b"Hello"
+        );
+    }
+
+    #[test]
+    fn ascii85_empty() {
+        assert_eq!(decode_a85(b"<~~>").unwrap(), b"");
+    }
+
+    #[test]
+    fn ascii85_z_shorthand() {
+        assert_eq!(
+            decode_a85(b"<~z~>").unwrap(),
+            &[0, 0, 0, 0]
+        );
+    }
+
+    #[test]
+    fn ascii85_partial_group() {
+        // Two-char partial group "87" -> 1 byte
+        let result = decode_a85(b"<~87~>").unwrap();
+        assert_eq!(result.len(), 1);
+    }
+
+    #[test]
+    fn ascii85_with_whitespace() {
+        assert_eq!(
+            decode_a85(b"<~87cU RDZ~>").unwrap(),
+            b"Hello"
+        );
     }
 }

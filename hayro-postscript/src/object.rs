@@ -6,17 +6,14 @@ use core::ops::Deref;
 use smallvec::SmallVec;
 
 use crate::reader::Reader;
-use crate::{hex_string, name, number, operator, string};
+use crate::string::StringKind;
+use crate::{name, number, operator, string};
 
 /// Inline byte buffer used for all string-like object payloads.
 #[derive(Clone, Eq)]
 pub struct Bytes(SmallVec<[u8; 8]>);
 
 impl Bytes {
-    pub(crate) fn new() -> Self {
-        Self(SmallVec::new())
-    }
-
     pub(crate) fn with_capacity(cap: usize) -> Self {
         Self(SmallVec::with_capacity(cap))
     }
@@ -91,15 +88,13 @@ macro_rules! bytes {
 
 /// A PostScript object.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Object {
+pub enum Object<'a> {
     /// An integer value.
     Integer(i32),
     /// A name object (e.g. `/CMapName`). The bytes do not include the leading `/`.
     Name(Bytes),
-    /// A literal string (e.g. `(Hello)`).
-    String(Bytes),
-    /// A hex string (e.g. `<48656C6C6F>`).
-    HexString(Bytes),
+    /// A string object (literal, hex, or ASCII85).
+    String(StringKind<'a>),
     /// A bare-word operator or single-character delimiter used as an operator
     /// (e.g. `beginbfchar`, `def`, `[`, `]`, `{`, `}`, `<<`, `>>`).
     Operator(Bytes),
@@ -109,21 +104,23 @@ pub enum Object {
 ///
 /// Whitespace and comments are skipped before dispatching.
 /// Returns `None` at EOF.
-pub(crate) fn read(r: &mut Reader<'_>) -> Option<Object> {
+pub(crate) fn read<'a>(r: &mut Reader<'a>) -> Option<Object<'a>> {
     skip_whitespace_and_comments(r);
 
     let b = r.peek_byte()?;
 
     match b {
-        b'(' => string::read(r).map(Object::String),
+        b'(' => string::parse_literal(r).map(|s| Object::String(StringKind::Literal(s))),
         b'<' => {
-            // `<<` is a dict-open operator.
-            if r.peek_bytes(2) == Some(b"<<") {
+            // Check for `<~` (ASCII85) before `<<` (dict-open).
+            if r.peek_bytes(2) == Some(b"<~") {
+                string::parse_ascii85(r).map(|s| Object::String(StringKind::Ascii85(s)))
+            } else if r.peek_bytes(2) == Some(b"<<") {
                 r.forward();
                 r.forward();
                 Some(Object::Operator(Bytes::from_slice(b"<<")))
             } else {
-                hex_string::read(r).map(Object::HexString)
+                string::parse_hex(r).map(|s| Object::String(StringKind::Hex(s)))
             }
         }
         b'>' => {
@@ -175,7 +172,7 @@ fn skip_whitespace_and_comments(r: &mut Reader<'_>) {
 mod tests {
     use super::*;
 
-    fn read_one(input: &[u8]) -> Option<Object> {
+    fn read_one(input: &[u8]) -> Option<Object<'_>> {
         let mut r = Reader::new(input);
         read(&mut r)
     }
@@ -202,7 +199,7 @@ mod tests {
     fn literal_string() {
         assert_eq!(
             read_one(b"(Hello)"),
-            Some(Object::String(bytes!(b"Hello")))
+            Some(Object::String(StringKind::Literal(b"Hello")))
         );
     }
 
@@ -210,7 +207,15 @@ mod tests {
     fn hex_string() {
         assert_eq!(
             read_one(b"<48656C6C6F>"),
-            Some(Object::HexString(bytes!(b"Hello")))
+            Some(Object::String(StringKind::Hex(b"48656C6C6F")))
+        );
+    }
+
+    #[test]
+    fn ascii85_string() {
+        assert_eq!(
+            read_one(b"<~87cURDZ~>"),
+            Some(Object::String(StringKind::Ascii85(b"87cURDZ")))
         );
     }
 

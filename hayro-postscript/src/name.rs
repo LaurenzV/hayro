@@ -1,6 +1,6 @@
 //! Name `/...` parsing.
 
-use crate::hex_string::decode_hex_digit;
+use crate::string::decode_hex_digit;
 use crate::object::Bytes;
 use crate::reader::{Reader, is_regular};
 
