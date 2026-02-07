@@ -70,7 +70,7 @@ pub(crate) fn parse<'a>(
                     cmap_name = Some(scanner.parse_name().ok()?.decode().ok()?);
                 }
                 Some("WMode") => {
-                    writing_mode = parse_wmode(&mut scanner)?;
+                    writing_mode = parse_writing_mode(&mut scanner)?;
                 }
                 other => {
                     last_name = other;
@@ -101,6 +101,7 @@ pub(crate) fn parse<'a>(
                 }
                 Some("usecmap") => {
                     let nested_data = (ctx.get_cmap)(last_name?.as_bytes())?;
+                    
                     base = Some(Box::new(parse(
                         nested_data,
                         ctx.get_cmap.clone(),
@@ -112,6 +113,7 @@ pub(crate) fn parse<'a>(
         }
     }
 
+    // Since we will use binary search for finding the correct entry, sort now.
     ranges.sort_by(|a, b| a.range.start.cmp(&b.range.start));
     notdef_ranges.sort_by(|a, b| a.range.start.cmp(&b.range.start));
     bf_entries.sort_by(|a, b| a.range.start.cmp(&b.range.start));
@@ -134,7 +136,7 @@ pub(crate) fn parse<'a>(
     })
 }
 
-fn parse_wmode(scanner: &mut Scanner<'_>) -> Option<WritingMode> {
+fn parse_writing_mode(scanner: &mut Scanner<'_>) -> Option<WritingMode> {
     match scanner.parse_number().ok()?.as_i32() {
         0 => Some(WritingMode::Horizontal),
         1 => Some(WritingMode::Vertical),
@@ -150,7 +152,7 @@ fn parse_codespace_range<F>(
     loop {
         let obj = scanner.parse_object().ok()?;
 
-        if is_exec_name(&obj, "endcodespacerange") {
+        if name_matches(&obj, "endcodespacerange") {
             return Some(());
         }
 
@@ -175,7 +177,7 @@ fn parse_range<F>(
     loop {
         let obj = scanner.parse_object().ok()?;
 
-        if is_exec_name(&obj, end_marker) {
+        if name_matches(&obj, end_marker) {
             return Some(());
         }
 
@@ -199,7 +201,7 @@ fn parse_char<F>(
     loop {
         let obj = scanner.parse_object().ok()?;
 
-        if is_exec_name(&obj, end_marker) {
+        if name_matches(&obj, end_marker) {
             return Some(());
         }
 
@@ -221,7 +223,7 @@ fn parse_bf_char<F>(
     loop {
         let obj = scanner.parse_object().ok()?;
 
-        if is_exec_name(&obj, "endbfchar") {
+        if name_matches(&obj, "endbfchar") {
             return Some(());
         }
 
@@ -245,7 +247,7 @@ fn parse_bf_range<F>(
     loop {
         let obj = scanner.parse_object().ok()?;
 
-        if is_exec_name(&obj, "endbfrange") {
+        if name_matches(&obj, "endbfrange") {
             return Some(());
         }
 
@@ -316,6 +318,6 @@ fn bytes_to_u32(bytes: &[u8]) -> Option<u32> {
     Some(val)
 }
 
-fn is_exec_name(obj: &Object<'_>, expected: &str) -> bool {
+fn name_matches(obj: &Object<'_>, expected: &str) -> bool {
     matches!(obj, Object::Name(name) if !name.is_literal() && name.as_str() == Some(expected))
 }
