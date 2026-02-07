@@ -11,7 +11,7 @@ This crate forbids unsafe code via a crate-level attribute.
 
 #![no_std]
 #![forbid(unsafe_code)]
-#![allow(missing_docs)]
+#![deny(missing_docs)]
 
 extern crate alloc;
 
@@ -25,11 +25,10 @@ use alloc::vec::Vec;
 
 /// The name of a CMap.
 pub type CMapName<'a> = &'a [u8];
-
 /// A CID (Character Identifier).
 pub type Cid = u32;
 
-/// Don't allow more than 16 `usecmap` references.
+/// Let's limit the number of nested `usecmap` references to 16.
 const MAX_NESTING_DEPTH: u32 = 16;
 
 /// A parsed CMap.
@@ -37,7 +36,7 @@ const MAX_NESTING_DEPTH: u32 = 16;
 pub struct CMap {
     metadata: Metadata,
     codespace_ranges: Vec<CodespaceRange>,
-    ranges: Vec<CidRange>,
+    cid_ranges: Vec<CidRange>,
     notdef_ranges: Vec<CidRange>,
     bf_entries: Vec<BfRange>,
     base: Option<Box<CMap>>,
@@ -46,8 +45,8 @@ pub struct CMap {
 impl CMap {
     /// Parse a CMap from raw bytes.
     ///
-    /// The `get_cmap` callback is used to resolve CMaps that are referenced
-    /// via `usecmap`.
+    /// The `get_cmap` callback is used to recursively resolve CMaps that 
+    /// are referenced via `usecmap`.
     pub fn parse<'a>(
         data: &[u8],
         get_cmap: impl Fn(CMapName<'_>) -> Option<&'a [u8]> + Clone + 'a,
@@ -79,7 +78,7 @@ impl CMap {
                 low: 0,
                 high: 0xFFFF,
             }],
-            ranges: vec![CidRange {
+            cid_ranges: vec![CidRange {
                 start: 0,
                 end: 0xFFFF,
                 cid_start: 0,
@@ -90,24 +89,6 @@ impl CMap {
         }
     }
 
-    pub(crate) fn new(
-        metadata: Metadata,
-        codespace_ranges: Vec<CodespaceRange>,
-        ranges: Vec<CidRange>,
-        notdef_ranges: Vec<CidRange>,
-        bf_entries: Vec<BfRange>,
-        base: Option<Box<CMap>>,
-    ) -> Self {
-        Self {
-            metadata,
-            codespace_ranges,
-            ranges,
-            notdef_ranges,
-            bf_entries,
-            base,
-        }
-    }
-
     /// Return the metadata of this CMap.
     pub fn metadata(&self) -> &Metadata {
         &self.metadata
@@ -115,6 +96,10 @@ impl CMap {
 
     /// Check whether a character code with the given byte length
     /// is contained in this CMap's codespace.
+    /// 
+    /// This doesn't mean that the code has an active mapping (i.e. it could
+    /// still map to the `.notdef` CID), it simply checks whether the codespace
+    /// range of the CMap indicates that this code is covered.
     pub fn contains_code(&self, code: u32, byte_len: u8) -> bool {
         self.codespace_ranges
             .iter()
@@ -130,7 +115,7 @@ impl CMap {
             return None;
         }
 
-        if let Some(range) = find_range(&self.ranges, code) {
+        if let Some(range) = find_range(&self.cid_ranges, code) {
             let offset = code.checked_sub(range.start)?;
             return Some(range.cid_start + offset);
         } else if let Some(range) = find_range(&self.notdef_ranges, code) {
@@ -231,18 +216,25 @@ pub enum UnicodeString {
 /// Metadata extracted from a CMap file.
 #[derive(Debug, Clone)]
 pub struct Metadata {
+    /// The registry name (e.g. "Adobe").
     pub registry: String,
+    /// The ordering name (e.g. "Japan1").
     pub ordering: String,
+    /// The supplement number.
     pub supplement: i32,
+    /// The CMap name.
     pub name: String,
+    /// The writing mode.
     pub writing_mode: WritingMode,
 }
 
 /// The writing mode of a CMap.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum WritingMode {
+    /// Horizontal writing mode.
     #[default]
     Horizontal,
+    /// Vertical writing mode.
     Vertical,
 }
 

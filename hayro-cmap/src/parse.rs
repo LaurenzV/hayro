@@ -125,14 +125,14 @@ pub(crate) fn parse<'a>(
         writing_mode,
     };
 
-    Some(CMap::new(
+    Some(CMap {
         metadata,
         codespace_ranges,
-        ranges,
+        cid_ranges: ranges,
         notdef_ranges,
         bf_entries,
         base,
-    ))
+    })
 }
 
 fn parse_cmap_name(scanner: &mut Scanner<'_>) -> Option<String> {
