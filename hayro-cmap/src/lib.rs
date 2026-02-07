@@ -19,6 +19,7 @@ mod scanner_ext;
 
 use alloc::boxed::Box;
 use alloc::string::String;
+use alloc::vec;
 use alloc::vec::Vec;
 
 /// The name of a CMap.
@@ -34,6 +35,7 @@ const MAX_NESTING_DEPTH: u32 = 16;
 #[derive(Debug, Clone)]
 pub struct CMap {
     metadata: Metadata,
+    codespace_ranges: Vec<CodespaceRange>,
     ranges: Vec<CidRange>,
     notdef_ranges: Vec<CidRange>,
     bf_entries: Vec<BfRange>,
@@ -52,8 +54,44 @@ impl CMap {
         parse::parse(data, get_cmap, 0)
     }
 
+    /// Create an Identity-H CMap.
+    pub fn identity_h() -> Self {
+        Self::identity(WritingMode::Horizontal, "Identity-H")
+    }
+
+    /// Create an Identity-V CMap.
+    pub fn identity_v() -> Self {
+        Self::identity(WritingMode::Vertical, "Identity-V")
+    }
+
+    fn identity(writing_mode: WritingMode, name: &str) -> Self {
+        Self {
+            metadata: Metadata {
+                registry: String::from("Adobe"),
+                ordering: String::from("Identity"),
+                supplement: 0,
+                name: String::from(name),
+                writing_mode,
+            },
+            codespace_ranges: vec![CodespaceRange {
+                n_bytes: 2,
+                low: 0,
+                high: 0xFFFF,
+            }],
+            ranges: vec![CidRange {
+                start: 0,
+                end: 0xFFFF,
+                cid_start: 0,
+            }],
+            notdef_ranges: Vec::new(),
+            bf_entries: Vec::new(),
+            base: None,
+        }
+    }
+
     pub(crate) fn new(
         metadata: Metadata,
+        codespace_ranges: Vec<CodespaceRange>,
         ranges: Vec<CidRange>,
         notdef_ranges: Vec<CidRange>,
         bf_entries: Vec<BfRange>,
@@ -61,6 +99,7 @@ impl CMap {
     ) -> Self {
         Self {
             metadata,
+            codespace_ranges,
             ranges,
             notdef_ranges,
             bf_entries,
@@ -73,8 +112,23 @@ impl CMap {
         &self.metadata
     }
 
+    /// Check whether a character code with the given byte length 
+    /// is contained in this CMap's codespace.
+    pub fn contains_code(&self, code: u32, byte_len: u8) -> bool {
+        self.codespace_ranges
+            .iter()
+            .any(|r| r.n_bytes == byte_len && code >= r.low && code <= r.high)
+    }
+
     /// Look up a character code and return the corresponding CID.
-    pub fn lookup_cid(&self, code: u32) -> Option<Cid> {
+    ///
+    /// Returns `None` if the code has no mapping in this CMap.
+    pub fn lookup_cid(&self, code: u32, byte_len: u8) -> Option<Cid> {
+        // Validate against codespace ranges if any are defined.
+        if !self.contains_code(code, byte_len) {
+            return None;
+        }
+
         if let Some(range) = find_range(&self.ranges, code) {
             let offset = code.checked_sub(range.start)?;
             return Some(range.cid_start + offset);
@@ -82,7 +136,7 @@ impl CMap {
             return Some(range.cid_start);
         }
 
-        self.base.as_ref()?.lookup_cid(code)
+        self.base.as_ref()?.lookup_cid(code, byte_len)
     }
 
     /// Look up a character code and return the corresponding Unicode value.
@@ -153,6 +207,15 @@ pub(crate) struct BfRange {
     pub(crate) end: u32,
     /// UTF-16 code units. For ranges, the last unit is incremented by the offset.
     pub(crate) dst_base: Vec<u16>,
+}
+
+/// A codespace range defining valid character code byte sequences.
+#[derive(Debug, Clone)]
+pub(crate) struct CodespaceRange {
+    /// Number of bytes in this codespace range (1–4).
+    pub(crate) n_bytes: u8,
+    pub(crate) low: u32,
+    pub(crate) high: u32,
 }
 
 /// A Unicode value decoded from a ToUnicode CMap.
@@ -260,17 +323,17 @@ endcidrange
         );
 
         // First range: <0000>-<00FF> -> CID 0-255
-        assert_eq!(cmap.lookup_cid(0x0000), Some(0));
-        assert_eq!(cmap.lookup_cid(0x0042), Some(0x42));
-        assert_eq!(cmap.lookup_cid(0x00FF), Some(0xFF));
+        assert_eq!(cmap.lookup_cid(0x0000, 2), Some(0));
+        assert_eq!(cmap.lookup_cid(0x0042, 2), Some(0x42));
+        assert_eq!(cmap.lookup_cid(0x00FF, 2), Some(0xFF));
 
         // Second range: <0100>-<01FF> -> CID 256-511
-        assert_eq!(cmap.lookup_cid(0x0100), Some(256));
-        assert_eq!(cmap.lookup_cid(0x01FF), Some(511));
+        assert_eq!(cmap.lookup_cid(0x0100, 2), Some(256));
+        assert_eq!(cmap.lookup_cid(0x01FF, 2), Some(511));
 
         // Third range: <8140>-<817E> -> CID 633-695
-        assert_eq!(cmap.lookup_cid(0x8140), Some(633));
-        assert_eq!(cmap.lookup_cid(0x817E), Some(633 + 62));
+        assert_eq!(cmap.lookup_cid(0x8140, 2), Some(633));
+        assert_eq!(cmap.lookup_cid(0x817E, 2), Some(633 + 62));
     }
 
     #[test]
@@ -285,9 +348,9 @@ endcidchar
 "#,
         );
 
-        assert_eq!(cmap.lookup_cid(0x03), Some(1));
-        assert_eq!(cmap.lookup_cid(0x04), Some(2));
-        assert_eq!(cmap.lookup_cid(0x20), Some(50));
+        assert_eq!(cmap.lookup_cid(0x03, 1), Some(1));
+        assert_eq!(cmap.lookup_cid(0x04, 1), Some(2));
+        assert_eq!(cmap.lookup_cid(0x20, 1), Some(50));
     }
 
     #[test]
@@ -300,9 +363,9 @@ endcidrange
 "#,
         );
 
-        assert_eq!(cmap.lookup_cid(0x00FF), None);
-        assert_eq!(cmap.lookup_cid(0x0200), None);
-        assert_eq!(cmap.lookup_cid(0xFFFF), None);
+        assert_eq!(cmap.lookup_cid(0x00FF, 2), None);
+        assert_eq!(cmap.lookup_cid(0x0200, 2), None);
+        assert_eq!(cmap.lookup_cid(0xFFFF, 2), None);
     }
 
     #[test]
@@ -322,10 +385,10 @@ endcidrange
 "#,
         );
 
-        assert_eq!(cmap.lookup_cid(0x0000), Some(0));
-        assert_eq!(cmap.lookup_cid(0x0100), Some(256));
-        assert_eq!(cmap.lookup_cid(0x0200), Some(600));
-        assert_eq!(cmap.lookup_cid(0x8140), Some(633));
+        assert_eq!(cmap.lookup_cid(0x0000, 2), Some(0));
+        assert_eq!(cmap.lookup_cid(0x0100, 2), Some(256));
+        assert_eq!(cmap.lookup_cid(0x0200, 2), Some(600));
+        assert_eq!(cmap.lookup_cid(0x8140, 2), Some(633));
     }
 
     #[test]
@@ -339,10 +402,10 @@ endcidrange
 "#,
         );
 
-        assert_eq!(cmap.lookup_cid(0x00), Some(0));
-        assert_eq!(cmap.lookup_cid(0x41), Some(0x41));
-        assert_eq!(cmap.lookup_cid(0x80), Some(200));
-        assert_eq!(cmap.lookup_cid(0xFF), Some(200 + 127));
+        assert_eq!(cmap.lookup_cid(0x00, 1), Some(0));
+        assert_eq!(cmap.lookup_cid(0x41, 1), Some(0x41));
+        assert_eq!(cmap.lookup_cid(0x80, 1), Some(200));
+        assert_eq!(cmap.lookup_cid(0xFF, 1), Some(200 + 127));
     }
 
     #[test]
@@ -389,12 +452,12 @@ endcidrange
         })
         .unwrap();
 
-        assert_eq!(cmap.lookup_cid(0x0100), Some(256));
-        assert_eq!(cmap.lookup_cid(0x01FF), Some(511));
-        assert_eq!(cmap.lookup_cid(0x0000), Some(0));
-        assert_eq!(cmap.lookup_cid(0x00FF), Some(0xFF));
+        assert_eq!(cmap.lookup_cid(0x0100, 2), Some(256));
+        assert_eq!(cmap.lookup_cid(0x01FF, 2), Some(511));
+        assert_eq!(cmap.lookup_cid(0x0000, 2), Some(0));
+        assert_eq!(cmap.lookup_cid(0x00FF, 2), Some(0xFF));
 
-        assert_eq!(cmap.lookup_cid(0x0200), None);
+        assert_eq!(cmap.lookup_cid(0x0200, 2), None);
     }
 
     #[test]
@@ -435,12 +498,12 @@ endcidrange
         })
         .unwrap();
 
-        assert_eq!(cmap.lookup_cid(0x0000), Some(0));
-        assert_eq!(cmap.lookup_cid(0x003F), Some(0x3F));
-        assert_eq!(cmap.lookup_cid(0x0040), Some(500));
-        assert_eq!(cmap.lookup_cid(0x007F), Some(563));
-        assert_eq!(cmap.lookup_cid(0x0080), Some(0x80));
-        assert_eq!(cmap.lookup_cid(0x00FF), Some(0xFF));
+        assert_eq!(cmap.lookup_cid(0x0000, 2), Some(0));
+        assert_eq!(cmap.lookup_cid(0x003F, 2), Some(0x3F));
+        assert_eq!(cmap.lookup_cid(0x0040, 2), Some(500));
+        assert_eq!(cmap.lookup_cid(0x007F, 2), Some(563));
+        assert_eq!(cmap.lookup_cid(0x0080, 2), Some(0x80));
+        assert_eq!(cmap.lookup_cid(0x00FF, 2), Some(0xFF));
     }
 
     #[test]
@@ -454,9 +517,9 @@ endnotdefchar
 "#,
         );
 
-        assert_eq!(cmap.lookup_cid(0x03), Some(10));
-        assert_eq!(cmap.lookup_cid(0x20), Some(20));
-        assert_eq!(cmap.lookup_cid(0x04), None);
+        assert_eq!(cmap.lookup_cid(0x03, 1), Some(10));
+        assert_eq!(cmap.lookup_cid(0x20, 1), Some(20));
+        assert_eq!(cmap.lookup_cid(0x04, 1), None);
     }
 
     #[test]
@@ -469,10 +532,10 @@ endnotdefrange
 "#,
         );
 
-        assert_eq!(cmap.lookup_cid(0x0000), Some(100));
-        assert_eq!(cmap.lookup_cid(0x0001), Some(100));
-        assert_eq!(cmap.lookup_cid(0x001F), Some(100));
-        assert_eq!(cmap.lookup_cid(0x0020), None);
+        assert_eq!(cmap.lookup_cid(0x0000, 2), Some(100));
+        assert_eq!(cmap.lookup_cid(0x0001, 2), Some(100));
+        assert_eq!(cmap.lookup_cid(0x001F, 2), Some(100));
+        assert_eq!(cmap.lookup_cid(0x0020, 2), None);
     }
 
     #[test]
@@ -576,5 +639,85 @@ endbfchar
 
         assert_eq!(cmap.lookup_unicode(0x0000), None);
         assert_eq!(cmap.lookup_unicode(0x0042), None);
+    }
+
+    #[test]
+    fn identity_h() {
+        let cmap = CMap::identity_h();
+        assert_eq!(cmap.metadata().name, "Identity-H");
+        assert_eq!(cmap.metadata().writing_mode, WritingMode::Horizontal);
+
+        assert_eq!(cmap.lookup_cid(0x0041, 2), Some(0x0041));
+        assert_eq!(cmap.lookup_cid(0x1234, 2), Some(0x1234));
+        assert_eq!(cmap.lookup_cid(0xFFFF, 2), Some(0xFFFF));
+
+        // Wrong byte length.
+        assert_eq!(cmap.lookup_cid(0x0041, 1), None);
+        assert_eq!(cmap.lookup_cid(0x0041, 3), None);
+
+        assert!(cmap.contains_code(0x0041, 2));
+        assert!(!cmap.contains_code(0x0041, 1));
+    }
+
+    #[test]
+    fn identity_v() {
+        let cmap = CMap::identity_v();
+        assert_eq!(cmap.metadata().name, "Identity-V");
+        assert_eq!(cmap.metadata().writing_mode, WritingMode::Vertical);
+
+        assert_eq!(cmap.lookup_cid(0x0041, 2), Some(0x0041));
+        assert_eq!(cmap.lookup_cid(0xFFFF, 2), Some(0xFFFF));
+    }
+
+    #[test]
+    fn codespace_range_mixed() {
+        let cmap = parse_with_preamble(
+            br#"
+2 begincodespacerange
+<00> <80>
+<8140> <9FFC>
+endcodespacerange
+1 begincidrange
+<00> <80> 0
+endcidrange
+1 begincidrange
+<8140> <9FFC> 200
+endcidrange
+"#,
+        );
+
+        // 1-byte codes.
+        assert!(cmap.contains_code(0x41, 1));
+        assert!(cmap.contains_code(0x00, 1));
+        assert!(cmap.contains_code(0x80, 1));
+        assert!(!cmap.contains_code(0x81, 1));
+
+        // 2-byte codes.
+        assert!(cmap.contains_code(0x8140, 2));
+        assert!(cmap.contains_code(0x9FFC, 2));
+        assert!(!cmap.contains_code(0x8100, 2));
+
+        // Lookups with correct byte length.
+        assert_eq!(cmap.lookup_cid(0x41, 1), Some(0x41));
+        assert_eq!(cmap.lookup_cid(0x8140, 2), Some(200));
+
+        // Lookup with wrong byte length.
+        assert_eq!(cmap.lookup_cid(0x41, 2), None);
+    }
+
+    #[test]
+    fn codespace_range_4_byte() {
+        let cmap = parse_with_preamble(
+            br#"
+1 begincodespacerange
+<8EA1A1A1> <8EA1FEFE>
+endcodespacerange
+"#,
+        );
+
+        assert!(cmap.contains_code(0x8EA1A1A1, 4));
+        assert!(cmap.contains_code(0x8EA1FEFE, 4));
+        assert!(!cmap.contains_code(0x8EA1A1A0, 4));
+        assert!(!cmap.contains_code(0x8EA1A1A1, 3));
     }
 }

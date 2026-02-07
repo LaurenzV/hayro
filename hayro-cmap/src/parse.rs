@@ -5,7 +5,9 @@ use alloc::vec::Vec;
 use hayro_postscript::{Object, Scanner};
 
 use crate::scanner_ext::ScannerExt;
-use crate::{BfRange, CMap, CMapName, CidRange, MAX_NESTING_DEPTH, Metadata, WritingMode};
+use crate::{
+    BfRange, CMap, CMapName, CidRange, CodespaceRange, MAX_NESTING_DEPTH, Metadata, WritingMode,
+};
 
 struct Context<F> {
     buf: Vec<u8>,
@@ -36,6 +38,7 @@ pub(crate) fn parse<'a>(
 
     let mut scanner = Scanner::new(data);
     let mut ctx = Context::new(get_cmap);
+    let mut codespace_ranges = Vec::new();
     let mut ranges = Vec::new();
     let mut notdef_ranges = Vec::new();
     let mut bf_entries = Vec::new();
@@ -76,6 +79,13 @@ pub(crate) fn parse<'a>(
             }
         } else {
             match name.as_str() {
+                Some("begincodespacerange") => {
+                    parse_codespace_range(
+                        &mut scanner,
+                        &mut codespace_ranges,
+                        &mut ctx,
+                    )?;
+                }
                 Some("begincidrange") => {
                     parse_range(&mut scanner, &mut ranges, &mut ctx, "endcidrange")?;
                 }
@@ -119,7 +129,14 @@ pub(crate) fn parse<'a>(
         writing_mode,
     };
 
-    Some(CMap::new(metadata, ranges, notdef_ranges, bf_entries, base))
+    Some(CMap::new(
+        metadata,
+        codespace_ranges,
+        ranges,
+        notdef_ranges,
+        bf_entries,
+        base,
+    ))
 }
 
 fn parse_cmap_name(scanner: &mut Scanner<'_>) -> Option<String> {
@@ -133,6 +150,34 @@ fn parse_wmode(scanner: &mut Scanner<'_>) -> Option<WritingMode> {
         0 => Some(WritingMode::Horizontal),
         1 => Some(WritingMode::Vertical),
         _ => None,
+    }
+}
+
+fn parse_codespace_range<F>(
+    scanner: &mut Scanner<'_>,
+    ranges: &mut Vec<CodespaceRange>,
+    ctx: &mut Context<F>,
+) -> Option<()> {
+    loop {
+        let obj = scanner.parse_object().ok()?;
+
+        if is_exec_name(&obj, "endcodespacerange") {
+            return Some(());
+        }
+
+        let low = extract_u32_code(&obj, &mut ctx.buf)?;
+        let n_bytes = u8::try_from(ctx.buf.len()).ok()?;
+        let high = scanner.read_u32_code(&mut ctx.buf)?;
+
+        if ctx.buf.len() != usize::from(n_bytes) {
+            return None;
+        }
+
+        ranges.push(CodespaceRange {
+            n_bytes,
+            low,
+            high,
+        });
     }
 }
 
