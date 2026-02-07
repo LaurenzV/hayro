@@ -163,7 +163,7 @@ fn parse_codespace_range<F>(
             return None;
         }
 
-        ranges.push(CodespaceRange { n_bytes, low, high });
+        ranges.push(CodespaceRange { number_bytes: n_bytes, low, high });
     }
 }
 

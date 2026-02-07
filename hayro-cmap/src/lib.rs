@@ -74,7 +74,7 @@ impl CMap {
                 writing_mode,
             },
             codespace_ranges: vec![CodespaceRange {
-                n_bytes: 2,
+                number_bytes: 2,
                 low: 0,
                 high: 0xFFFF,
             }],
@@ -101,7 +101,7 @@ impl CMap {
         let in_codespace = self
             .codespace_ranges
             .iter()
-            .any(|r| r.n_bytes == byte_len && code >= r.low && code <= r.high);
+            .any(|r| r.number_bytes == byte_len && code >= r.low && code <= r.high);
 
         if !in_codespace {
             return None;
@@ -216,8 +216,7 @@ impl HasRange for BfRange {
 /// A codespace range defining valid character code byte sequences.
 #[derive(Debug, Clone)]
 pub(crate) struct CodespaceRange {
-    /// Number of bytes in this codespace range (1–4).
-    pub(crate) n_bytes: u8,
+    pub(crate) number_bytes: u8,
     pub(crate) low: u32,
     pub(crate) high: u32,
 }
