@@ -1,3 +1,5 @@
+//! A small example that shows how to tokenize a PostScript program.
+
 #![allow(missing_docs)]
 
 use hayro_postscript::{Number, Object, Scanner};
@@ -48,7 +50,7 @@ fn print_object(object: &Object<'_>) {
         }
         Object::String(s) => {
             let decoded = s.decode().unwrap_or_else(|_| Vec::new());
-            print!("String({})", lossy(&decoded));
+            print!("String({})", String::from_utf8_lossy(&decoded));
         }
         Object::Array(arr) => {
             print!("[");
@@ -66,8 +68,4 @@ fn print_object(object: &Object<'_>) {
             print!("]");
         }
     }
-}
-
-fn lossy(bytes: &[u8]) -> String {
-    String::from_utf8_lossy(bytes).into_owned()
 }
