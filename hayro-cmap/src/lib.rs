@@ -277,13 +277,17 @@ impl ScannerExt for Scanner<'_> {
     fn read_u32_code(&mut self, buf: &mut Vec<u8>) -> Option<u32> {
         let s = self.parse_string().ok()?;
         s.decode_into(buf).ok()?;
+        
         if buf.len() > 4 {
             return None;
         }
+        
         let mut val = 0u32;
+        
         for &b in buf.iter() {
             val = (val << 8) | u32::from(b);
         }
+        
         Some(val)
     }
 }
