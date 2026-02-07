@@ -1,7 +1,7 @@
 /*!
-A parser for CMap files, as they are found in PDFs.
+A parser for `CMap` files, as they are found in PDFs.
 
-This crate provides a parser for CMap files and allows you to
+This crate provides a parser for `CMap` files and allows you to
 - Map character codes from text-showing operators to CID identifiers.
 - Map CIDs to Unicode characters or strings.
 
@@ -22,7 +22,7 @@ use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 
-/// The name of a CMap.
+/// The name of a `CMap`.
 pub type CMapName<'a> = &'a [u8];
 /// A CID (Character Identifier).
 pub type Cid = u32;
@@ -30,7 +30,7 @@ pub type Cid = u32;
 /// Let's limit the number of nested `usecmap` references to 16.
 const MAX_NESTING_DEPTH: u32 = 16;
 
-/// A parsed CMap.
+/// A parsed `CMap`.
 #[derive(Debug, Clone)]
 pub struct CMap {
     metadata: Metadata,
@@ -38,13 +38,13 @@ pub struct CMap {
     cid_ranges: Vec<CidRange>,
     notdef_ranges: Vec<CidRange>,
     bf_entries: Vec<BfRange>,
-    base: Option<Box<CMap>>,
+    base: Option<Box<Self>>,
 }
 
 impl CMap {
-    /// Parse a CMap from raw bytes.
+    /// Parse a `CMap` from raw bytes.
     ///
-    /// The `get_cmap` callback is used to recursively resolve CMaps that
+    /// The `get_cmap` callback is used to recursively resolve `CMaps` that
     /// are referenced via `usecmap`.
     pub fn parse<'a>(
         data: &[u8],
@@ -53,12 +53,12 @@ impl CMap {
         parse::parse(data, get_cmap, 0)
     }
 
-    /// Create an Identity-H CMap.
+    /// Create an Identity-H `CMap`.
     pub fn identity_h() -> Self {
         Self::identity(WritingMode::Horizontal, b"Identity-H")
     }
 
-    /// Create an Identity-V CMap.
+    /// Create an Identity-V `CMap`.
     pub fn identity_v() -> Self {
         Self::identity(WritingMode::Vertical, b"Identity-V")
     }
@@ -90,7 +90,7 @@ impl CMap {
         }
     }
 
-    /// Return the metadata of this CMap.
+    /// Return the metadata of this `CMap`.
     pub fn metadata(&self) -> &Metadata {
         &self.metadata
     }
@@ -111,7 +111,7 @@ impl CMap {
 
         if let Some(entry) = find_in_ranges(&self.cid_ranges, code) {
             let offset = code.checked_sub(entry.range.start)?;
-            return Some(entry.cid_start.checked_add(offset)?);
+            return entry.cid_start.checked_add(offset);
         } else if let Some(entry) = find_in_ranges(&self.notdef_ranges, code) {
             // For `.notdef` ranges, all codes map to the same `.notdef` CID, so
             // no adding of the offset here.
@@ -223,7 +223,7 @@ pub(crate) struct CodespaceRange {
     pub(crate) high: u32,
 }
 
-/// A Unicode value decoded from a CMap.
+/// A Unicode value decoded from a `CMap`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UnicodeString {
     /// A single Unicode character.
@@ -232,7 +232,7 @@ pub enum UnicodeString {
     String(String),
 }
 
-/// Metadata extracted from a CMap file.
+/// Metadata extracted from a `CMap` file.
 #[derive(Debug, Clone)]
 pub struct Metadata {
     /// The registry name (e.g. `b"Adobe"`).
@@ -241,13 +241,13 @@ pub struct Metadata {
     pub ordering: Vec<u8>,
     /// The supplement number.
     pub supplement: i32,
-    /// The CMap name.
+    /// The `CMap` name.
     pub name: Vec<u8>,
     /// The writing mode.
     pub writing_mode: WritingMode,
 }
 
-/// The writing mode of a CMap.
+/// The writing mode of a `CMap`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum WritingMode {
     /// Horizontal writing mode.

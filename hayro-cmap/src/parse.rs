@@ -288,7 +288,7 @@ fn parse_bf_range<F>(
 
 /// Convert the buffer into native-endian u16, so that we can use `String::from_utf16`.
 fn decode_be(bytes: &[u8]) -> Option<Vec<u16>> {
-    if bytes.len() < 2 || bytes.len() % 2 != 0 {
+    if bytes.len() < 2 || !bytes.len().is_multiple_of(2) {
         return None;
     }
 
@@ -320,7 +320,7 @@ fn bytes_to_u32(bytes: &[u8]) -> Option<u32> {
         return None;
     }
 
-    let mut val = 0u32;
+    let mut val = 0_u32;
     for &b in bytes {
         val = (val << 8) | b as u32;
     }
