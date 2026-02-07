@@ -1,5 +1,3 @@
-//! Object enum and top-level read dispatch.
-
 use crate::array::{self, Array};
 use crate::error::{Error, Result};
 use crate::name::{self, Name};
@@ -14,19 +12,14 @@ pub enum Object<'a> {
     Integer(i32),
     /// A real (floating-point) value.
     Real(f32),
-    /// A name object — either literal (`/foo`) or executable (`foo`).
+    /// A name object.
     Name(Name<'a>),
-    /// A string object (literal, hex, or ASCII85).
+    /// A string object.
     String(String<'a>),
-    /// An array object `[...]`.
+    /// An array object.
     Array(Array<'a>),
 }
 
-/// Try to read the next PostScript object from the reader.
-///
-/// Whitespace and comments are skipped before dispatching.
-/// Returns `Ok(None)` at EOF, `Ok(Some(..))` on success, `Err(..)`
-/// on error.
 pub(crate) fn read<'a>(r: &mut Reader<'a>) -> Result<Option<Object<'a>>> {
     skip_whitespace_and_comments(r);
 
@@ -39,14 +32,11 @@ pub(crate) fn read<'a>(r: &mut Reader<'a>) -> Result<Option<Object<'a>>> {
             .map(|s| Object::String(String::from_literal(s)))
             .ok_or(Error::SyntaxError),
         b'<' => {
-            // Check for `<~` (ASCII85) before `<<` (dict).
             if r.peek_bytes(2) == Some(b"<~") {
                 string::parse_ascii85(r)
                     .map(|s| Object::String(String::from_ascii85(s)))
                     .ok_or(Error::SyntaxError)
             } else if r.peek_bytes(2) == Some(b"<<") {
-                r.forward();
-                r.forward();
                 Err(Error::UnsupportedType)
             } else {
                 string::parse_hex(r)
@@ -54,26 +44,11 @@ pub(crate) fn read<'a>(r: &mut Reader<'a>) -> Result<Option<Object<'a>>> {
                     .ok_or(Error::SyntaxError)
             }
         }
-        b'>' => {
-            if r.peek_bytes(2) == Some(b">>") {
-                r.forward();
-                r.forward();
-                Err(Error::UnsupportedType)
-            } else {
-                r.forward();
-                Err(Error::SyntaxError)
-            }
-        }
         b'/' => name::parse_literal(r)
             .map(|s| Object::Name(Name::new(s, true)))
             .ok_or(Error::SyntaxError),
         b'[' => array::parse(r).map(|d| Object::Array(Array::new(d))),
-        b']' => {
-            r.forward();
-            Err(Error::SyntaxError)
-        }
-        b'{' | b'}' => {
-            r.forward();
+        b'{' => {
             Err(Error::UnsupportedType)
         }
         b'.' | b'+' | b'-' | b'0'..=b'9' => number::read(r).map(|n| match n {
