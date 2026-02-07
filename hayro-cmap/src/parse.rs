@@ -80,11 +80,7 @@ pub(crate) fn parse<'a>(
         } else {
             match name.as_str() {
                 Some("begincodespacerange") => {
-                    parse_codespace_range(
-                        &mut scanner,
-                        &mut codespace_ranges,
-                        &mut ctx,
-                    )?;
+                    parse_codespace_range(&mut scanner, &mut codespace_ranges, &mut ctx)?;
                 }
                 Some("begincidrange") => {
                     parse_range(&mut scanner, &mut ranges, &mut ctx, "endcidrange")?;
@@ -173,11 +169,7 @@ fn parse_codespace_range<F>(
             return None;
         }
 
-        ranges.push(CodespaceRange {
-            n_bytes,
-            low,
-            high,
-        });
+        ranges.push(CodespaceRange { n_bytes, low, high });
     }
 }
 

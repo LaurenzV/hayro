@@ -1,8 +1,9 @@
 /*!
-A CMap parser.
+A parser for CMap files, as they are found in PDFs.
 
-This crate provides a parser for CMap files, which are used in PDF to map
-character codes to CID (Character Identifier) values.
+This crate provides a parser for CMap files and allows you to
+- Map character codes from text-showing operators to CID identifiers.
+- Map CIDs to Unicode characters or strings.
 
 ## Safety
 This crate forbids unsafe code via a crate-level attribute.
@@ -112,7 +113,7 @@ impl CMap {
         &self.metadata
     }
 
-    /// Check whether a character code with the given byte length 
+    /// Check whether a character code with the given byte length
     /// is contained in this CMap's codespace.
     pub fn contains_code(&self, code: u32, byte_len: u8) -> bool {
         self.codespace_ranges
@@ -260,6 +261,10 @@ mod tests {
 end def
 /CMapName /Test def
 /WMode 0 def
+2 begincodespacerange
+<00> <FF>
+<0000> <FFFF>
+endcodespacerange
 "#;
 
     fn parse_with_preamble(body: &[u8]) -> CMap {
@@ -424,6 +429,9 @@ endcidrange
 end def
 /CMapName /Base def
 /WMode 0 def
+1 begincodespacerange
+<0000> <FFFF>
+endcodespacerange
 1 begincidrange
 <0000> <00FF> 0
 endcidrange
@@ -438,6 +446,9 @@ endcidrange
 end def
 /CMapName /Child def
 /WMode 0 def
+1 begincodespacerange
+<0000> <FFFF>
+endcodespacerange
 1 begincidrange
 <0100> <01FF> 256
 endcidrange
@@ -470,6 +481,9 @@ endcidrange
 end def
 /CMapName /Base def
 /WMode 0 def
+1 begincodespacerange
+<0000> <FFFF>
+endcodespacerange
 1 begincidrange
 <0000> <00FF> 0
 endcidrange
@@ -484,6 +498,9 @@ endcidrange
 end def
 /CMapName /Child def
 /WMode 0 def
+1 begincodespacerange
+<0000> <FFFF>
+endcodespacerange
 1 begincidrange
 <0040> <007F> 500
 endcidrange
@@ -671,8 +688,14 @@ endbfchar
 
     #[test]
     fn codespace_range_mixed() {
-        let cmap = parse_with_preamble(
-            br#"
+        let data = br#"
+/CIDSystemInfo 3 dict dup begin
+  /Registry (Adobe) def
+  /Ordering (Japan1) def
+  /Supplement 0 def
+end def
+/CMapName /Test def
+/WMode 0 def
 2 begincodespacerange
 <00> <80>
 <8140> <9FFC>
@@ -683,8 +706,8 @@ endcidrange
 1 begincidrange
 <8140> <9FFC> 200
 endcidrange
-"#,
-        );
+"#;
+        let cmap = CMap::parse(data.as_slice(), |_| None).unwrap();
 
         // 1-byte codes.
         assert!(cmap.contains_code(0x41, 1));
