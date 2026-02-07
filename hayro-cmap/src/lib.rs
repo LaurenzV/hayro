@@ -21,7 +21,6 @@ use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
-use hayro_postscript::Scanner;
 
 /// The name of a CMap.
 pub type CMapName<'a> = &'a [u8];
@@ -221,7 +220,7 @@ pub(crate) struct CodespaceRange {
     pub(crate) high: u32,
 }
 
-/// A Unicode value decoded from a ToUnicode CMap.
+/// A Unicode value decoded from a CMap.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UnicodeString {
     /// A single Unicode character.
@@ -253,24 +252,6 @@ pub enum WritingMode {
     Horizontal,
     /// Vertical writing mode.
     Vertical,
-}
-
-pub(crate) trait ScannerExt {
-    fn read_string(&mut self, buf: &mut Vec<u8>) -> Option<Vec<u8>>;
-    fn read_integer(&mut self) -> Option<i32>;
-}
-
-impl ScannerExt for Scanner<'_> {
-    fn read_string(&mut self, buf: &mut Vec<u8>) -> Option<Vec<u8>> {
-        let s = self.parse_string().ok()?;
-        s.decode_into(buf).ok()?;
-        Some(buf.to_vec())
-    }
-
-    fn read_integer(&mut self) -> Option<i32> {
-        let n = self.parse_number().ok()?;
-        Some(n.as_i32())
-    }
 }
 
 #[cfg(test)]

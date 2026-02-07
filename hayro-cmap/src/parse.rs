@@ -5,7 +5,7 @@ use hayro_postscript::{Object, Scanner};
 
 use crate::{
     BfRange, CMap, CMapName, CidRange, CodespaceRange, MAX_NESTING_DEPTH, Metadata, Range,
-    ScannerExt, WritingMode,
+    WritingMode,
 };
 
 struct Context<F> {
@@ -58,13 +58,13 @@ pub(crate) fn parse<'a>(
         if name.is_literal() {
             match name.as_str() {
                 Some("Registry") => {
-                    registry = Some(scanner.read_string(&mut ctx.buf)?);
+                    registry = Some(scanner.parse_string().ok()?.decode().ok()?);
                 }
                 Some("Ordering") => {
-                    ordering = Some(scanner.read_string(&mut ctx.buf)?);
+                    ordering = Some(scanner.parse_string().ok()?.decode().ok()?);
                 }
                 Some("Supplement") => {
-                    supplement = Some(scanner.read_integer()?);
+                    supplement = Some(scanner.parse_number().ok()?.as_i32());
                 }
                 Some("CMapName") => {
                     cmap_name = Some(scanner.parse_name().ok()?.decode().ok()?);
@@ -135,8 +135,7 @@ pub(crate) fn parse<'a>(
 }
 
 fn parse_wmode(scanner: &mut Scanner<'_>) -> Option<WritingMode> {
-    let wmode = scanner.read_integer()?;
-    match wmode {
+    match scanner.parse_number().ok()?.as_i32() {
         0 => Some(WritingMode::Horizontal),
         1 => Some(WritingMode::Vertical),
         _ => None,
@@ -182,7 +181,7 @@ fn parse_range<F>(
 
         let start = extract_u32_code(&obj, &mut ctx.buf)?;
         let end = extract_u32_code(&scanner.parse_object().ok()?, &mut ctx.buf)?;
-        let cid_start = u32::try_from(scanner.read_integer()?).ok()?;
+        let cid_start = u32::try_from(scanner.parse_number().ok()?.as_i32()).ok()?;
 
         ranges.push(CidRange {
             range: Range { start, end },
@@ -205,7 +204,7 @@ fn parse_char<F>(
         }
 
         let code = extract_u32_code(&obj, &mut ctx.buf)?;
-        let cid_start = u32::try_from(scanner.read_integer()?).ok()?;
+        let cid_start = u32::try_from(scanner.parse_number().ok()?.as_i32()).ok()?;
 
         ranges.push(CidRange {
             range: Range { start: code, end: code },
