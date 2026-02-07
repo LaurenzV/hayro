@@ -5,8 +5,8 @@ use alloc::vec::Vec;
 use hayro_postscript::{Object, Scanner};
 
 use crate::{
-    BfRange, CMap, CMapName, CidRange, CodespaceRange, MAX_NESTING_DEPTH, Metadata, ScannerExt,
-    WritingMode,
+    BfRange, CMap, CMapName, CidRange, CodespaceRange, MAX_NESTING_DEPTH, Metadata, Range,
+    ScannerExt, WritingMode,
 };
 
 struct Context<F> {
@@ -113,9 +113,9 @@ pub(crate) fn parse<'a>(
         }
     }
 
-    ranges.sort_by(|a, b| a.start.cmp(&b.start));
-    notdef_ranges.sort_by(|a, b| a.start.cmp(&b.start));
-    bf_entries.sort_by(|a, b| a.start.cmp(&b.start));
+    ranges.sort_by(|a, b| a.range.start.cmp(&b.range.start));
+    notdef_ranges.sort_by(|a, b| a.range.start.cmp(&b.range.start));
+    bf_entries.sort_by(|a, b| a.range.start.cmp(&b.range.start));
 
     let metadata = Metadata {
         registry: registry?,
@@ -191,8 +191,7 @@ fn parse_range<F>(
         let cid_start = u32::try_from(scanner.read_integer()?).ok()?;
 
         ranges.push(CidRange {
-            start,
-            end,
+            range: Range { start, end },
             cid_start,
         });
     }
@@ -215,8 +214,7 @@ fn parse_char<F>(
         let cid_start = u32::try_from(scanner.read_integer()?).ok()?;
 
         ranges.push(CidRange {
-            start: code,
-            end: code,
+            range: Range { start: code, end: code },
             cid_start,
         });
     }
@@ -240,8 +238,7 @@ fn parse_bf_char<F>(
         decode_be_into(&ctx.buf, &mut ctx.u16_buf)?;
 
         entries.push(BfRange {
-            start: code,
-            end: code,
+            range: Range { start: code, end: code },
             dst_base: ctx.u16_buf.clone(),
         });
     }
@@ -271,8 +268,7 @@ fn parse_bf_range<F>(
                 decode_be_into(&ctx.buf, &mut ctx.u16_buf)?;
 
                 entries.push(BfRange {
-                    start,
-                    end,
+                    range: Range { start, end },
                     dst_base: ctx.u16_buf.clone(),
                 });
             }
@@ -285,8 +281,7 @@ fn parse_bf_range<F>(
                     decode_be_into(&ctx.buf, &mut ctx.u16_buf)?;
 
                     entries.push(BfRange {
-                        start: code,
-                        end: code,
+                        range: Range { start: code, end: code },
                         dst_base: ctx.u16_buf.clone(),
                     });
                 }

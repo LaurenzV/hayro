@@ -79,8 +79,7 @@ impl CMap {
                 high: 0xFFFF,
             }],
             cid_ranges: vec![CidRange {
-                start: 0,
-                end: 0xFFFF,
+                range: Range { start: 0, end: 0xFFFF },
                 cid_start: 0,
             }],
             notdef_ranges: Vec::new(),
@@ -108,14 +107,13 @@ impl CMap {
             return None;
         }
 
-        if let Some(range) = find_range(&self.cid_ranges, code) {
-            let offset = code.checked_sub(range.start)?;
-            
-            return Some(range.cid_start + offset);
-        } else if let Some(range) = find_range(&self.notdef_ranges, code) {
+        if let Some(entry) = find_in_ranges(&self.cid_ranges, code) {
+            let offset = code.checked_sub(entry.range.start)?;
+            return Some(entry.cid_start + offset);
+        } else if let Some(entry) = find_in_ranges(&self.notdef_ranges, code) {
             // For `.notdef` ranges, all codes map to the same `.notdef` CID, so
             // no adding of the offset here.
-            return Some(range.cid_start);
+            return Some(entry.cid_start);
         }
 
         // If character code is in code space range but has no active mapping, so
@@ -132,8 +130,8 @@ impl CMap {
     /// 
     /// Returns `None` if no mapping is available.
     pub fn lookup_unicode(&self, code: u32) -> Option<UnicodeString> {
-        if let Some(entry) = find_range_in_bf(&self.bf_entries, code) {
-            let offset = u16::try_from(code - entry.start).ok()?;
+        if let Some(entry) = find_in_ranges(&self.bf_entries, code) {
+            let offset = u16::try_from(code - entry.range.start).ok()?;
 
             fn decode_utf16(units: &[u16]) -> Option<UnicodeString> {
                 let mut iter = core::char::decode_utf16(units.iter().copied());
@@ -160,28 +158,17 @@ impl CMap {
     }
 }
 
-fn find_range(ranges: &[CidRange], code: u32) -> Option<&CidRange> {
-    let idx = ranges
-        .binary_search_by(|range| {
-            if code < range.start {
-                core::cmp::Ordering::Greater
-            } else if code > range.end {
-                core::cmp::Ordering::Less
-            } else {
-                core::cmp::Ordering::Equal
-            }
-        })
-        .ok()?;
-
-    Some(&ranges[idx])
+trait HasRange {
+    fn range(&self) -> &Range;
 }
 
-fn find_range_in_bf(entries: &[BfRange], code: u32) -> Option<&BfRange> {
+fn find_in_ranges<T: HasRange>(entries: &[T], code: u32) -> Option<&T> {
     let idx = entries
         .binary_search_by(|entry| {
-            if code < entry.start {
+            let r = entry.range();
+            if code < r.start {
                 core::cmp::Ordering::Greater
-            } else if code > entry.end {
+            } else if code > r.end {
                 core::cmp::Ordering::Less
             } else {
                 core::cmp::Ordering::Equal
@@ -192,21 +179,38 @@ fn find_range_in_bf(entries: &[BfRange], code: u32) -> Option<&BfRange> {
     Some(&entries[idx])
 }
 
+/// A range with a start and end code.
+#[derive(Debug, Clone)]
+pub(crate) struct Range {
+    pub(crate) start: u32,
+    pub(crate) end: u32,
+}
+
 /// A range of character codes mapped to CIDs.
 #[derive(Debug, Clone)]
 pub struct CidRange {
-    pub(crate) start: u32,
-    pub(crate) end: u32,
+    pub(crate) range: Range,
     pub(crate) cid_start: Cid,
+}
+
+impl HasRange for CidRange {
+    fn range(&self) -> &Range {
+        &self.range
+    }
 }
 
 /// A character code to Unicode mapping (potentially a range).
 #[derive(Debug, Clone)]
 pub(crate) struct BfRange {
-    pub(crate) start: u32,
-    pub(crate) end: u32,
+    pub(crate) range: Range,
     /// UTF-16 code units. For ranges, the last unit is incremented by the offset.
     pub(crate) dst_base: Vec<u16>,
+}
+
+impl HasRange for BfRange {
+    fn range(&self) -> &Range {
+        &self.range
+    }
 }
 
 /// A codespace range defining valid character code byte sequences.
