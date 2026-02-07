@@ -1,101 +1,197 @@
-//! Name `/...` parsing.
+//! Name object parsing.
+//!
+//! A name stores its raw bytes lazily. Call [`Name::decode`] to resolve
+//! `#XX` hex escapes.
 
-use crate::string::decode_hex_digit;
-use crate::object::Bytes;
+use alloc::vec::Vec;
+
 use crate::reader::{Reader, is_regular};
+use crate::filter::ascii_hex::decode_hex_digit;
 
-/// Read a name object `/...`, returning the decoded bytes.
+/// A PostScript name object.
+///
+/// Names are stored as raw bytes without decoding `#XX` hex escapes.
+/// Use [`decode`](Name::decode) to materialise the decoded form.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Name<'a> {
+    data: &'a [u8],
+    literal: bool,
+}
+
+impl<'a> Name<'a> {
+    pub(crate) fn new(data: &'a [u8], literal: bool) -> Self {
+        Self { data, literal }
+    }
+
+    /// The raw bytes of the name (without the leading `/` for literal names,
+    /// and without `#XX` decoding).
+    pub fn data(&self) -> &'a [u8] {
+        self.data
+    }
+
+    /// Returns `true` if this is a literal name (introduced by `/`).
+    ///
+    /// Executable names (bare words) return `false`.
+    pub fn is_literal(&self) -> bool {
+        self.literal
+    }
+
+    /// Decode `#XX` hex escapes and return the result.
+    ///
+    /// Returns `None` if a `#XX` escape is malformed.
+    pub fn decode(&self) -> Option<Vec<u8>> {
+        // Fast path: no `#` escapes.
+        if !self.data.contains(&b'#') {
+            return Some(self.data.to_vec());
+        }
+
+        // Slow path: decode `#XX` hex escapes.
+        let mut result = Vec::with_capacity(self.data.len());
+        let mut inner = Reader::new(self.data);
+
+        while let Some(b) = inner.read_byte() {
+            if b == b'#' {
+                let hex = inner.read_bytes(2)?;
+                result.push(decode_hex_digit(hex[0])? << 4 | decode_hex_digit(hex[1])?);
+            } else {
+                result.push(b);
+            }
+        }
+
+        Some(result)
+    }
+}
+
+/// Parse a literal name `/...`, returning the raw bytes after the `/`.
 ///
 /// The reader must be positioned at the leading `/`.
-pub(crate) fn read(r: &mut Reader<'_>) -> Option<Bytes> {
+pub(crate) fn parse_literal<'a>(r: &mut Reader<'a>) -> Option<&'a [u8]> {
     r.forward_tag(b"/")?;
-
     let start = r.offset();
-
-    // Scan for the extent of the name.
     while r.eat(is_regular).is_some() {}
+    r.range(start..r.offset())
+}
 
-    let raw = r.range(start..r.offset())?;
-
-    // Fast path: no `#` escapes.
-    if !raw.contains(&b'#') {
-        return Some(Bytes::from_slice(raw));
+/// Parse an executable name (bare word of regular characters).
+///
+/// The reader must be positioned at the first character.
+pub(crate) fn parse_executable<'a>(r: &mut Reader<'a>) -> Option<&'a [u8]> {
+    let start = r.offset();
+    r.forward_while(is_regular);
+    if r.offset() == start {
+        return None;
     }
-
-    // Slow path: decode `#XX` hex escapes.
-    let mut result = Bytes::with_capacity(raw.len());
-    let mut inner = Reader::new(raw);
-
-    while let Some(b) = inner.read_byte() {
-        if b == b'#' {
-            let hex = inner.read_bytes(2)?;
-            result.push(decode_hex_digit(hex[0])? << 4 | decode_hex_digit(hex[1])?);
-        } else {
-            result.push(b);
-        }
-    }
-
-    Some(result)
+    r.range(start..r.offset())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn read_name(input: &[u8]) -> Option<Bytes> {
+    fn read_literal(input: &[u8]) -> Option<Name<'_>> {
         let mut r = Reader::new(input);
-        read(&mut r)
+        parse_literal(&mut r).map(|d| Name::new(d, true))
+    }
+
+    fn read_executable(input: &[u8]) -> Option<Name<'_>> {
+        let mut r = Reader::new(input);
+        parse_executable(&mut r).map(|d| Name::new(d, false))
     }
 
     #[test]
-    fn simple() {
-        assert_eq!(&*read_name(b"/Name1").unwrap(), b"Name1");
+    fn literal_simple() {
+        let n = read_literal(b"/Name1").unwrap();
+        assert_eq!(n.data(), b"Name1");
+        assert!(n.is_literal());
     }
 
     #[test]
-    fn empty_name() {
-        assert_eq!(&*read_name(b"/").unwrap(), b"");
+    fn literal_empty_name() {
+        let n = read_literal(b"/").unwrap();
+        assert_eq!(n.data(), b"");
+        assert!(n.is_literal());
     }
 
     #[test]
-    fn with_hex_escape() {
-        assert_eq!(&*read_name(b"/lime#20Green").unwrap(), b"lime Green");
+    fn literal_with_hex_escape() {
+        let n = read_literal(b"/lime#20Green").unwrap();
+        assert_eq!(n.data(), b"lime#20Green");
+        assert_eq!(n.decode().unwrap(), b"lime Green");
     }
 
     #[test]
-    fn multiple_hex_escapes() {
-        assert_eq!(
-            &*read_name(b"/paired#28#29parentheses").unwrap(),
-            b"paired()parentheses"
-        );
+    fn literal_multiple_hex_escapes() {
+        let n = read_literal(b"/paired#28#29parentheses").unwrap();
+        assert_eq!(n.decode().unwrap(), b"paired()parentheses");
     }
 
     #[test]
-    fn special_chars() {
-        assert_eq!(
-            &*read_name(b"/A;Name_With-Various***Characters?").unwrap(),
-            b"A;Name_With-Various***Characters?"
-        );
+    fn literal_special_chars() {
+        let n = read_literal(b"/A;Name_With-Various***Characters?").unwrap();
+        assert_eq!(n.data(), b"A;Name_With-Various***Characters?");
     }
 
     #[test]
-    fn stops_at_delimiter() {
+    fn literal_stops_at_delimiter() {
         let mut r = Reader::new(b"/Name(rest");
-        let name = read(&mut r).unwrap();
-        assert_eq!(&*name, b"Name");
+        let data = parse_literal(&mut r).unwrap();
+        assert_eq!(data, b"Name");
         assert_eq!(r.peek_byte(), Some(b'('));
     }
 
     #[test]
-    fn stops_at_whitespace() {
+    fn literal_stops_at_whitespace() {
         let mut r = Reader::new(b"/Name rest");
-        let name = read(&mut r).unwrap();
-        assert_eq!(&*name, b"Name");
+        let data = parse_literal(&mut r).unwrap();
+        assert_eq!(data, b"Name");
         assert_eq!(r.peek_byte(), Some(b' '));
     }
 
     #[test]
-    fn not_a_name() {
-        assert!(read_name(b"Name").is_none());
+    fn literal_not_a_name() {
+        assert!(read_literal(b"Name").is_none());
+    }
+
+    #[test]
+    fn executable_simple() {
+        let n = read_executable(b"beginbfchar ").unwrap();
+        assert_eq!(n.data(), b"beginbfchar");
+        assert!(!n.is_literal());
+    }
+
+    #[test]
+    fn executable_stops_at_delimiter() {
+        let mut r = Reader::new(b"def/name");
+        let data = parse_executable(&mut r).unwrap();
+        assert_eq!(data, b"def");
+        assert_eq!(r.peek_byte(), Some(b'/'));
+    }
+
+    #[test]
+    fn executable_at_eof() {
+        let n = read_executable(b"endcmap").unwrap();
+        assert_eq!(n.data(), b"endcmap");
+    }
+
+    #[test]
+    fn executable_empty() {
+        assert!(read_executable(b"").is_none());
+    }
+
+    #[test]
+    fn executable_starts_at_delimiter() {
+        assert!(read_executable(b"(foo)").is_none());
+    }
+
+    #[test]
+    fn decode_no_escapes() {
+        let n = Name::new(b"simple", true);
+        assert_eq!(n.decode().unwrap(), b"simple");
+    }
+
+    #[test]
+    fn decode_with_escapes() {
+        let n = Name::new(b"lime#20Green", true);
+        assert_eq!(n.decode().unwrap(), b"lime Green");
     }
 }

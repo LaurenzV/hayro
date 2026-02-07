@@ -1,158 +1,94 @@
 //! Object enum and top-level read dispatch.
 
-use core::fmt;
-use core::ops::Deref;
-
-use smallvec::SmallVec;
-
+use crate::array::{self, Array};
+use crate::error::Error;
+use crate::name::{self, Name};
 use crate::reader::Reader;
-use crate::string::StringKind;
-use crate::{name, number, operator, string};
-
-/// Inline byte buffer used for all string-like object payloads.
-#[derive(Clone, Eq)]
-pub struct Bytes(SmallVec<[u8; 8]>);
-
-impl Bytes {
-    pub(crate) fn with_capacity(cap: usize) -> Self {
-        Self(SmallVec::with_capacity(cap))
-    }
-
-    pub(crate) fn push(&mut self, b: u8) {
-        self.0.push(b);
-    }
-
-    pub fn from_slice(s: &[u8]) -> Self {
-        Self(SmallVec::from_slice(s))
-    }
-}
-
-impl Deref for Bytes {
-    type Target = [u8];
-
-    fn deref(&self) -> &[u8] {
-        &self.0
-    }
-}
-
-impl PartialEq for Bytes {
-    fn eq(&self, other: &Self) -> bool {
-        **self == **other
-    }
-}
-
-impl PartialEq<[u8]> for Bytes {
-    fn eq(&self, other: &[u8]) -> bool {
-        **self == *other
-    }
-}
-
-impl<const N: usize> PartialEq<&[u8; N]> for Bytes {
-    fn eq(&self, other: &&[u8; N]) -> bool {
-        **self == **other
-    }
-}
-
-impl<const N: usize> PartialEq<[u8; N]> for Bytes {
-    fn eq(&self, other: &[u8; N]) -> bool {
-        **self == *other
-    }
-}
-
-impl fmt::Debug for Bytes {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "b\"")?;
-        for &byte in &self.0 {
-            match byte {
-                b' '..=b'~' => write!(f, "{}", byte as char)?,
-                _ => write!(f, "\\x{byte:02X}")?,
-            }
-        }
-        write!(f, "\"")
-    }
-}
-
-/// Shorthand for [`Bytes::from_slice`].
-///
-/// ```
-/// # use hayro_postscript::bytes;
-/// let b = bytes!(b"Hello");
-/// assert_eq!(&*b, b"Hello");
-/// ```
-#[macro_export]
-macro_rules! bytes {
-    ($s:expr) => {
-        $crate::Bytes::from_slice($s)
-    };
-}
+use crate::string::{self, String};
+use crate::number;
 
 /// A PostScript object.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Object<'a> {
     /// An integer value.
     Integer(i32),
-    /// A name object (e.g. `/CMapName`). The bytes do not include the leading `/`.
-    Name(Bytes),
+    /// A name object — either literal (`/foo`) or executable (`foo`).
+    Name(Name<'a>),
     /// A string object (literal, hex, or ASCII85).
-    String(StringKind<'a>),
-    /// A bare-word operator or single-character delimiter used as an operator
-    /// (e.g. `beginbfchar`, `def`, `[`, `]`, `{`, `}`, `<<`, `>>`).
-    Operator(Bytes),
+    String(String<'a>),
+    /// An array object `[...]`.
+    Array(Array<'a>),
 }
 
 /// Try to read the next PostScript object from the reader.
 ///
 /// Whitespace and comments are skipped before dispatching.
-/// Returns `None` at EOF.
-pub(crate) fn read<'a>(r: &mut Reader<'a>) -> Option<Object<'a>> {
+/// Returns `None` at EOF, `Some(Ok(..))` on success, `Some(Err(..))`
+/// on error.
+pub(crate) fn read<'a>(r: &mut Reader<'a>) -> Option<Result<Object<'a>, Error>> {
     skip_whitespace_and_comments(r);
 
     let b = r.peek_byte()?;
 
-    match b {
-        b'(' => string::parse_literal(r).map(|s| Object::String(StringKind::Literal(s))),
+    Some(match b {
+        b'(' => string::parse_literal(r)
+            .map(|s| Object::String(String::Literal(s)))
+            .ok_or(Error::SyntaxError),
         b'<' => {
-            // Check for `<~` (ASCII85) before `<<` (dict-open).
+            // Check for `<~` (ASCII85) before `<<` (dict).
             if r.peek_bytes(2) == Some(b"<~") {
-                string::parse_ascii85(r).map(|s| Object::String(StringKind::Ascii85(s)))
+                string::parse_ascii85(r)
+                    .map(|s| Object::String(String::Ascii85(s)))
+                    .ok_or(Error::SyntaxError)
             } else if r.peek_bytes(2) == Some(b"<<") {
                 r.forward();
                 r.forward();
-                Some(Object::Operator(Bytes::from_slice(b"<<")))
+                Err(Error::UnsupportedType)
             } else {
-                string::parse_hex(r).map(|s| Object::String(StringKind::Hex(s)))
+                string::parse_hex(r)
+                    .map(|s| Object::String(String::Hex(s)))
+                    .ok_or(Error::SyntaxError)
             }
         }
         b'>' => {
-            // `>>` is a dict-close operator.
             if r.peek_bytes(2) == Some(b">>") {
                 r.forward();
                 r.forward();
-                Some(Object::Operator(Bytes::from_slice(b">>")))
+                Err(Error::UnsupportedType)
             } else {
-                // Stray `>` — shouldn't happen in valid PS, but consume it.
                 r.forward();
-                Some(Object::Operator(Bytes::from_slice(b">")))
+                Err(Error::SyntaxError)
             }
         }
-        b'/' => name::read(r).map(Object::Name),
-        b'[' | b']' | b'{' | b'}' => {
+        b'/' => name::parse_literal(r)
+            .map(|s| Object::Name(Name::new(s, true)))
+            .ok_or(Error::SyntaxError),
+        b'[' => array::parse(r).map(|d| Object::Array(Array::new(d))),
+        b']' => {
             r.forward();
-            Some(Object::Operator(Bytes::from_slice(&[b])))
+            Err(Error::SyntaxError)
+        }
+        b'{' | b'}' => {
+            r.forward();
+            Err(Error::UnsupportedType)
         }
         b'+' | b'-' | b'0'..=b'9' => {
-            // Try integer first; fall through to operator if it doesn't parse.
+            // Try integer first; fall through to executable name.
             if let Some(n) = number::read(r) {
-                Some(Object::Integer(n))
+                Ok(Object::Integer(n))
             } else {
-                operator::read(r).map(Object::Operator)
+                name::parse_executable(r)
+                    .map(|s| Object::Name(Name::new(s, false)))
+                    .ok_or(Error::SyntaxError)
             }
         }
-        _ => operator::read(r).map(Object::Operator),
-    }
+        _ => name::parse_executable(r)
+            .map(|s| Object::Name(Name::new(s, false)))
+            .ok_or(Error::SyntaxError),
+    })
 }
 
-fn skip_whitespace_and_comments(r: &mut Reader<'_>) {
+pub(crate) fn skip_whitespace_and_comments(r: &mut Reader<'_>) {
     loop {
         match r.peek_byte() {
             Some(b) if crate::reader::is_whitespace(b) => {
@@ -172,108 +108,111 @@ fn skip_whitespace_and_comments(r: &mut Reader<'_>) {
 mod tests {
     use super::*;
 
-    fn read_one(input: &[u8]) -> Option<Object<'_>> {
+    fn read_one(input: &[u8]) -> Option<Result<Object<'_>, Error>> {
         let mut r = Reader::new(input);
         read(&mut r)
     }
 
+    fn read_ok(input: &[u8]) -> Object<'_> {
+        read_one(input).unwrap().unwrap()
+    }
+
+    fn read_err(input: &[u8]) -> Error {
+        read_one(input).unwrap().unwrap_err()
+    }
+
     #[test]
     fn integer() {
-        assert_eq!(read_one(b"42 "), Some(Object::Integer(42)));
+        assert_eq!(read_ok(b"42 "), Object::Integer(42));
     }
 
     #[test]
     fn negative_integer() {
-        assert_eq!(read_one(b"-7 "), Some(Object::Integer(-7)));
+        assert_eq!(read_ok(b"-7 "), Object::Integer(-7));
     }
 
     #[test]
-    fn name_simple() {
+    fn literal_name() {
         assert_eq!(
-            read_one(b"/CMapName "),
-            Some(Object::Name(bytes!(b"CMapName")))
+            read_ok(b"/CMapName "),
+            Object::Name(Name::new(b"CMapName", true))
         );
+    }
+
+    #[test]
+    fn executable_name() {
+        let obj = read_ok(b"beginbfchar ");
+        assert_eq!(obj, Object::Name(Name::new(b"beginbfchar", false)));
     }
 
     #[test]
     fn literal_string() {
         assert_eq!(
-            read_one(b"(Hello)"),
-            Some(Object::String(StringKind::Literal(b"Hello")))
+            read_ok(b"(Hello)"),
+            Object::String(String::Literal(b"Hello"))
         );
     }
 
     #[test]
     fn hex_string() {
         assert_eq!(
-            read_one(b"<48656C6C6F>"),
-            Some(Object::String(StringKind::Hex(b"48656C6C6F")))
+            read_ok(b"<48656C6C6F>"),
+            Object::String(String::Hex(b"48656C6C6F"))
         );
     }
 
     #[test]
     fn ascii85_string() {
         assert_eq!(
-            read_one(b"<~87cURDZ~>"),
-            Some(Object::String(StringKind::Ascii85(b"87cURDZ")))
+            read_ok(b"<~87cURDZ~>"),
+            Object::String(String::Ascii85(b"87cURDZ"))
         );
     }
 
     #[test]
-    fn operator_word() {
-        assert_eq!(
-            read_one(b"beginbfchar "),
-            Some(Object::Operator(bytes!(b"beginbfchar")))
-        );
+    fn array_simple() {
+        let obj = read_ok(b"[1 2 3]");
+        assert_eq!(obj, Object::Array(Array::new(b"1 2 3")));
     }
 
     #[test]
-    fn dict_open() {
-        assert_eq!(
-            read_one(b"<< "),
-            Some(Object::Operator(bytes!(b"<<")))
-        );
+    fn dict_open_error() {
+        assert_eq!(read_err(b"<< "), Error::UnsupportedType);
     }
 
     #[test]
-    fn dict_close() {
-        assert_eq!(
-            read_one(b">> "),
-            Some(Object::Operator(bytes!(b">>")))
-        );
+    fn dict_close_error() {
+        assert_eq!(read_err(b">> "), Error::UnsupportedType);
     }
 
     #[test]
-    fn bracket_operators() {
-        assert_eq!(
-            read_one(b"["),
-            Some(Object::Operator(bytes!(b"[")))
-        );
-        assert_eq!(
-            read_one(b"]"),
-            Some(Object::Operator(bytes!(b"]")))
-        );
-        assert_eq!(
-            read_one(b"{"),
-            Some(Object::Operator(bytes!(b"{")))
-        );
-        assert_eq!(
-            read_one(b"}"),
-            Some(Object::Operator(bytes!(b"}")))
-        );
+    fn procedure_open_error() {
+        assert_eq!(read_err(b"{ "), Error::UnsupportedType);
+    }
+
+    #[test]
+    fn procedure_close_error() {
+        assert_eq!(read_err(b"} "), Error::UnsupportedType);
+    }
+
+    #[test]
+    fn stray_close_bracket() {
+        assert_eq!(read_err(b"]"), Error::SyntaxError);
+    }
+
+    #[test]
+    fn stray_gt() {
+        assert_eq!(read_err(b">x"), Error::SyntaxError);
     }
 
     #[test]
     fn skips_whitespace() {
-        assert_eq!(read_one(b"  \t\n 42 "), Some(Object::Integer(42)));
+        assert_eq!(read_ok(b"  \t\n 42 "), Object::Integer(42));
     }
 
     #[test]
     fn skips_comments() {
-        assert_eq!(
-            read_one(b"% this is a comment\n42 "),
-            Some(Object::Integer(42))
-        );
+        assert_eq!(read_ok(b"% this is a comment\n42 "), Object::Integer(42));
     }
 
     #[test]

@@ -17,15 +17,20 @@ This crate forbids unsafe code via a crate-level attribute.
 
 extern crate alloc;
 
+mod array;
+mod error;
+mod filter;
 mod name;
 mod number;
 mod object;
-mod operator;
 mod reader;
 mod string;
 
-pub use object::{Bytes, Object};
-pub use string::StringKind;
+pub use array::Array;
+pub use error::Error;
+pub use name::Name;
+pub use object::Object;
+pub use string::String;
 
 use reader::Reader;
 
@@ -44,9 +49,9 @@ impl<'a> Lexer<'a> {
 }
 
 impl<'a> Iterator for Lexer<'a> {
-    type Item = Object<'a>;
+    type Item = Result<Object<'a>, Error>;
 
-    fn next(&mut self) -> Option<Object<'a>> {
+    fn next(&mut self) -> Option<Result<Object<'a>, Error>> {
         object::read(&mut self.reader)
     }
 }
@@ -56,6 +61,12 @@ mod tests {
     use alloc::vec::Vec;
 
     use super::*;
+
+    fn collect_ok(input: &[u8]) -> Vec<Object<'_>> {
+        Lexer::new(input)
+            .map(|r| r.unwrap())
+            .collect()
+    }
 
     #[test]
     fn cmap_snippet() {
@@ -72,68 +83,95 @@ endcodespacerange
 endbfchar
 endcmap"#;
 
-        let objects: Vec<Object<'_>> = Lexer::new(input).collect();
+        let objects = collect_ok(input);
 
-        // Spot-check a few objects.
-        assert_eq!(objects[0], Object::Name(bytes!(b"CIDInit")));
-        assert_eq!(objects[1], Object::Name(bytes!(b"ProcSet")));
-        assert_eq!(objects[2], Object::Operator(bytes!(b"findresource")));
-        assert_eq!(objects[3], Object::Operator(bytes!(b"begin")));
+        assert_eq!(objects[0], Object::Name(Name::new(b"CIDInit", true)));
+        assert_eq!(objects[1], Object::Name(Name::new(b"ProcSet", true)));
+        assert_eq!(objects[2], Object::Name(Name::new(b"findresource", false)));
+        assert_eq!(objects[3], Object::Name(Name::new(b"begin", false)));
         assert_eq!(objects[4], Object::Integer(12));
-        assert_eq!(objects[5], Object::Operator(bytes!(b"dict")));
-        assert_eq!(objects[6], Object::Operator(bytes!(b"begin")));
-        assert_eq!(objects[7], Object::Operator(bytes!(b"begincmap")));
-        assert_eq!(objects[8], Object::Name(bytes!(b"CMapName")));
-        assert_eq!(objects[9], Object::Name(bytes!(b"Test-H")));
-        assert_eq!(objects[10], Object::Operator(bytes!(b"def")));
+        assert_eq!(objects[5], Object::Name(Name::new(b"dict", false)));
+        assert_eq!(objects[6], Object::Name(Name::new(b"begin", false)));
+        assert_eq!(objects[7], Object::Name(Name::new(b"begincmap", false)));
+        assert_eq!(objects[8], Object::Name(Name::new(b"CMapName", true)));
+        assert_eq!(objects[9], Object::Name(Name::new(b"Test-H", true)));
+        assert_eq!(objects[10], Object::Name(Name::new(b"def", false)));
         assert_eq!(objects[11], Object::Integer(1));
         assert_eq!(
             objects[12],
-            Object::Operator(bytes!(b"begincodespacerange"))
+            Object::Name(Name::new(b"begincodespacerange", false))
         );
-        assert_eq!(objects[13], Object::String(StringKind::Hex(b"00")));
-        assert_eq!(objects[14], Object::String(StringKind::Hex(b"FF")));
+        assert_eq!(objects[13], Object::String(String::Hex(b"00")));
+        assert_eq!(objects[14], Object::String(String::Hex(b"FF")));
         assert_eq!(
             objects[15],
-            Object::Operator(bytes!(b"endcodespacerange"))
+            Object::Name(Name::new(b"endcodespacerange", false))
         );
         assert_eq!(objects[16], Object::Integer(2));
-        assert_eq!(objects[17], Object::Operator(bytes!(b"beginbfchar")));
-        assert_eq!(objects[18], Object::String(StringKind::Hex(b"03")));
-        assert_eq!(objects[19], Object::String(StringKind::Hex(b"0041")));
-        assert_eq!(objects[20], Object::String(StringKind::Hex(b"04")));
-        assert_eq!(objects[21], Object::String(StringKind::Hex(b"0042")));
-        assert_eq!(objects[22], Object::Operator(bytes!(b"endbfchar")));
-        assert_eq!(objects[23], Object::Operator(bytes!(b"endcmap")));
+        assert_eq!(
+            objects[17],
+            Object::Name(Name::new(b"beginbfchar", false))
+        );
+        assert_eq!(objects[18], Object::String(String::Hex(b"03")));
+        assert_eq!(objects[19], Object::String(String::Hex(b"0041")));
+        assert_eq!(objects[20], Object::String(String::Hex(b"04")));
+        assert_eq!(objects[21], Object::String(String::Hex(b"0042")));
+        assert_eq!(
+            objects[22],
+            Object::Name(Name::new(b"endbfchar", false))
+        );
+        assert_eq!(
+            objects[23],
+            Object::Name(Name::new(b"endcmap", false))
+        );
         assert_eq!(objects.len(), 24);
     }
 
     #[test]
-    fn dict_delimiters() {
-        let input = b"<< /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> def";
-        let objects: Vec<Object<'_>> = Lexer::new(input).collect();
+    fn dict_delimiters_error() {
+        let input = b"<< /Registry (Adobe) >>";
+        let results: Vec<Result<Object<'_>, Error>> = Lexer::new(input).collect();
 
-        assert_eq!(objects[0], Object::Operator(bytes!(b"<<")));
-        assert_eq!(objects[1], Object::Name(bytes!(b"Registry")));
-        assert_eq!(objects[2], Object::String(StringKind::Literal(b"Adobe")));
-        assert_eq!(objects[3], Object::Name(bytes!(b"Ordering")));
+        assert_eq!(results[0], Err(Error::UnsupportedType)); // <<
+        assert_eq!(results[1], Ok(Object::Name(Name::new(b"Registry", true))));
         assert_eq!(
-            objects[4],
-            Object::String(StringKind::Literal(b"Identity"))
+            results[2],
+            Ok(Object::String(String::Literal(b"Adobe")))
         );
-        assert_eq!(objects[5], Object::Name(bytes!(b"Supplement")));
-        assert_eq!(objects[6], Object::Integer(0));
-        assert_eq!(objects[7], Object::Operator(bytes!(b">>")));
-        assert_eq!(objects[8], Object::Operator(bytes!(b"def")));
+        assert_eq!(results[3], Err(Error::UnsupportedType)); // >>
+    }
+
+    #[test]
+    fn array_round_trip() {
+        let input = b"[123 /abc (xyz)]";
+        let objects = collect_ok(input);
+        assert_eq!(objects.len(), 1);
+
+        if let Object::Array(arr) = &objects[0] {
+            let inner: Vec<Object<'_>> = arr.objects().map(|r| r.unwrap()).collect();
+            assert_eq!(inner.len(), 3);
+            assert_eq!(inner[0], Object::Integer(123));
+            assert_eq!(inner[1], Object::Name(Name::new(b"abc", true)));
+            assert_eq!(inner[2], Object::String(String::Literal(b"xyz")));
+        } else {
+            panic!("expected Array");
+        }
     }
 
     #[test]
     fn comments_skipped() {
         let input = b"% comment\n42 % another\n/Name";
-        let objects: Vec<Object<'_>> = Lexer::new(input).collect();
+        let objects = collect_ok(input);
 
         assert_eq!(objects.len(), 2);
         assert_eq!(objects[0], Object::Integer(42));
-        assert_eq!(objects[1], Object::Name(bytes!(b"Name")));
+        assert_eq!(objects[1], Object::Name(Name::new(b"Name", true)));
+    }
+
+    #[test]
+    fn procedure_error() {
+        let results: Vec<Result<Object<'_>, Error>> = Lexer::new(b"{ }").collect();
+        assert_eq!(results[0], Err(Error::UnsupportedType));
+        assert_eq!(results[1], Err(Error::UnsupportedType));
     }
 }

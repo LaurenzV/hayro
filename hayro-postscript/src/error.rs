@@ -1,0 +1,25 @@
+//! Error types for the PostScript lexer.
+
+use core::fmt;
+
+/// An error encountered while lexing a PostScript token stream.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Error {
+    /// A syntax error in the input (e.g. malformed string, unexpected delimiter).
+    SyntaxError,
+    /// A numeric value exceeded implementation limits.
+    LimitCheck,
+    /// An unsupported PostScript type was encountered (e.g. `<<` dictionary,
+    /// `{` procedure).
+    UnsupportedType,
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Error::SyntaxError => f.write_str("syntaxerror"),
+            Error::LimitCheck => f.write_str("limitcheck"),
+            Error::UnsupportedType => f.write_str("unsupported type"),
+        }
+    }
+}

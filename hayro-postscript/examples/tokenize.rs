@@ -1,6 +1,6 @@
 #![allow(missing_docs)]
 
-use hayro_postscript::{Lexer, Object, StringKind};
+use hayro_postscript::{Lexer, Object};
 use std::env;
 use std::fs;
 use std::process;
@@ -22,25 +22,35 @@ fn main() {
         }
     };
 
-    for object in Lexer::new(&data) {
-        match object {
-            Object::Integer(n) => println!("Integer({n})"),
-            Object::Name(ref b) => println!("Name({})", lossy(b)),
-            Object::String(sk) => match sk {
-                StringKind::Literal(_) => {
-                    let decoded = sk.decode().unwrap_or_default();
-                    println!("String({})", lossy(&decoded));
+    for result in Lexer::new(&data) {
+        match result {
+            Ok(object) => match object {
+                Object::Integer(n) => println!("Integer({n})"),
+                Object::Name(ref name) => {
+                    let kind = if name.is_literal() { "literal" } else { "executable" };
+                    println!("Name({}, {})", lossy(name.data()), kind);
                 }
-                StringKind::Hex(_) => {
-                    let decoded = sk.decode().unwrap_or_default();
-                    println!("HexString({})", hex(&decoded));
+                Object::String(s) => {
+                    let decoded = s.decode().unwrap_or_default();
+                    match s {
+                        hayro_postscript::String::Literal(_) => {
+                            println!("String({})", lossy(&decoded));
+                        }
+                        hayro_postscript::String::Hex(_) => {
+                            println!("HexString({})", hex(&decoded));
+                        }
+                        hayro_postscript::String::Ascii85(_) => {
+                            println!("Ascii85String({})", hex(&decoded));
+                        }
+                    }
                 }
-                StringKind::Ascii85(_) => {
-                    let decoded = sk.decode().unwrap_or_default();
-                    println!("Ascii85String({})", hex(&decoded));
+                Object::Array(ref arr) => {
+                    println!("Array({} bytes)", arr.data().len());
                 }
             },
-            Object::Operator(ref b) => println!("Operator({})", lossy(b)),
+            Err(e) => {
+                eprintln!("Error: {e}");
+            }
         }
     }
 }

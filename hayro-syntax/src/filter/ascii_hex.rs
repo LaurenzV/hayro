@@ -1,3 +1,5 @@
+// Keep in sync with `hayro-postscript/src/filter/ascii_hex.rs`.
+
 use crate::trivia::is_white_space_character;
 use alloc::vec::Vec;
 

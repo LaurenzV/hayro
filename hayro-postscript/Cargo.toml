@@ -7,8 +7,5 @@ edition = { workspace = true }
 repository = { workspace = true }
 license = { workspace = true }
 
-[dependencies]
-smallvec = { workspace = true }
-
 [lints]
 workspace = true

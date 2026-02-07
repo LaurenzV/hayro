@@ -1,19 +1,20 @@
 //! String parsing and decoding for all three PostScript string types.
 //!
 //! The parser only finds the range of the string content (lazy).
-//! Decoding is deferred to [`StringKind::decode_into`] / [`StringKind::decode`].
+//! Decoding is deferred to [`String::decode_into`] / [`String::decode`].
 
 use alloc::vec::Vec;
 
-use crate::reader::{Reader, is_whitespace};
+use crate::filter::{ascii_85, ascii_hex};
+use crate::reader::Reader;
 
 /// A lazily-decoded PostScript string.
 ///
 /// Each variant stores a reference to the raw bytes between the delimiters,
-/// without any decoding. Call [`decode_into`](StringKind::decode_into) or
-/// [`decode`](StringKind::decode) to materialize the decoded content.
+/// without any decoding. Call [`decode_into`](String::decode_into) or
+/// [`decode`](String::decode) to materialize the decoded content.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum StringKind<'a> {
+pub enum String<'a> {
     /// Raw bytes between `(` and `)`, no decoding applied.
     Literal(&'a [u8]),
     /// Raw bytes between `<` and `>`, no decoding applied.
@@ -22,13 +23,13 @@ pub enum StringKind<'a> {
     Ascii85(&'a [u8]),
 }
 
-impl StringKind<'_> {
+impl String<'_> {
     /// Decode the string content and append it to `out`.
     pub fn decode_into(&self, out: &mut Vec<u8>) -> Option<()> {
         match self {
-            StringKind::Literal(data) => decode_literal_into(data, out),
-            StringKind::Hex(data) => decode_hex_into(data, out),
-            StringKind::Ascii85(data) => decode_ascii85_into(data, out),
+            String::Literal(data) => decode_literal_into(data, out),
+            String::Hex(data) => ascii_hex::decode_into(data, out),
+            String::Ascii85(data) => ascii_85::decode_into(data, out),
         }
     }
 
@@ -111,7 +112,7 @@ fn skip_literal(r: &mut Reader<'_>) -> Option<()> {
 }
 
 // ---------------------------------------------------------------------------
-// Decode functions
+// Literal string decode
 // ---------------------------------------------------------------------------
 
 /// Decode a literal string's inner bytes (escape sequences, octal, EOL
@@ -188,150 +189,8 @@ fn decode_literal_into(data: &[u8], out: &mut Vec<u8>) -> Option<()> {
     Some(())
 }
 
-/// Decode hex string inner bytes and append to `out`.
-fn decode_hex_into(data: &[u8], out: &mut Vec<u8>) -> Option<()> {
-    let has_whitespace = data.iter().any(|&b| is_whitespace(b));
-
-    out.reserve(data.len().div_ceil(2));
-
-    if !has_whitespace {
-        // Fast path: no whitespace to strip.
-        let mut i = 0;
-        while i + 1 < data.len() {
-            out.push(decode_hex_digit(data[i])? << 4 | decode_hex_digit(data[i + 1])?);
-            i += 2;
-        }
-        if i < data.len() {
-            out.push(decode_hex_digit(data[i])? << 4);
-        }
-    } else {
-        // Slow path: strip whitespace.
-        let mut iter = data.iter().copied();
-        let mut read_byte = || -> Option<u8> {
-            loop {
-                let b = iter.next()?;
-                if !is_whitespace(b) {
-                    return Some(b);
-                }
-            }
-        };
-
-        loop {
-            match (read_byte(), read_byte()) {
-                (Some(hi), Some(lo)) => {
-                    out.push(decode_hex_digit(hi)? << 4 | decode_hex_digit(lo)?);
-                }
-                (Some(hi), None) => {
-                    out.push(decode_hex_digit(hi)? << 4);
-                    break;
-                }
-                (None, _) => break,
-            }
-        }
-    }
-
-    Some(())
-}
-
-/// Decode ASCII85 inner bytes and append to `out`.
-fn decode_ascii85_into(data: &[u8], out: &mut Vec<u8>) -> Option<()> {
-    const POW_85: [u32; 5] = [52200625, 614125, 7225, 85, 1];
-
-    let mut reader = Reader::new(data);
-
-    let mut read_byte = || -> Option<u8> {
-        loop {
-            let b = reader.read_byte()?;
-            // White space characters should be ignored.
-            if !is_whitespace(b) {
-                return Some(b);
-            }
-        }
-    };
-
-    let flush_group = |group: &mut Vec<u8>, decoded: &mut Vec<u8>| -> Option<()> {
-        let (digits, output_len): ([u32; 5], usize) = match group.len() {
-            0 => return Some(()),
-            1 => return None, // A single character is not valid.
-            2 => (
-                [group[0], group[1], b'u', b'u', b'u'].map(|b| (b - b'!') as u32),
-                1,
-            ),
-            3 => (
-                [group[0], group[1], group[2], b'u', b'u'].map(|b| (b - b'!') as u32),
-                2,
-            ),
-            4 => (
-                [group[0], group[1], group[2], group[3], b'u'].map(|b| (b - b'!') as u32),
-                3,
-            ),
-            5 => (
-                [group[0], group[1], group[2], group[3], group[4]].map(|b| (b - b'!') as u32),
-                4,
-            ),
-            _ => unreachable!(),
-        };
-
-        let value = digits[0]
-            .checked_mul(POW_85[0])?
-            .checked_add(digits[1].checked_mul(POW_85[1])?)?
-            .checked_add(digits[2].checked_mul(POW_85[2])?)?
-            .checked_add(digits[3].checked_mul(POW_85[3])?)?
-            .checked_add(digits[4])?;
-
-        decoded.extend_from_slice(&value.to_be_bytes()[..output_len]);
-        group.clear();
-        Some(())
-    };
-
-    out.reserve(data.len() * 4 / 5);
-    let mut group = Vec::with_capacity(5);
-
-    loop {
-        let Some(b) = read_byte() else {
-            // Be lenient and accept what we have.
-            flush_group(&mut group, out)?;
-            return Some(());
-        };
-
-        match b {
-            b'!'..=b'u' => {
-                group.push(b);
-                if group.len() == 5 {
-                    flush_group(&mut group, out)?;
-                }
-            }
-            b'z' => {
-                flush_group(&mut group, out)?;
-                out.extend_from_slice(&[0, 0, 0, 0]);
-            }
-            b'~' => {
-                // End of data marker. Technically requires a '>', but be lenient.
-                flush_group(&mut group, out)?;
-                return Some(());
-            }
-            _ => return None, // Invalid character.
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 fn is_octal_digit(b: u8) -> bool {
     matches!(b, b'0'..=b'7')
-}
-
-/// Decode a single ASCII hex digit to its numeric value.
-#[inline(always)]
-pub(crate) fn decode_hex_digit(c: u8) -> Option<u8> {
-    match c {
-        b'0'..=b'9' => Some(c - b'0'),
-        b'A'..=b'F' => Some(c - b'A' + 10),
-        b'a'..=b'f' => Some(c - b'a' + 10),
-        _ => None,
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -346,7 +205,7 @@ mod tests {
 
     fn decode_literal(input: &[u8]) -> Option<Vec<u8>> {
         let mut r = Reader::new(input);
-        let sk = StringKind::Literal(parse_literal(&mut r)?);
+        let sk = String::Literal(parse_literal(&mut r)?);
         sk.decode()
     }
 
@@ -452,7 +311,7 @@ mod tests {
 
     fn decode_hex(input: &[u8]) -> Option<Vec<u8>> {
         let mut r = Reader::new(input);
-        let sk = StringKind::Hex(parse_hex(&mut r)?);
+        let sk = String::Hex(parse_hex(&mut r)?);
         sk.decode()
     }
 
@@ -490,7 +349,7 @@ mod tests {
 
     fn decode_a85(input: &[u8]) -> Option<Vec<u8>> {
         let mut r = Reader::new(input);
-        let sk = StringKind::Ascii85(parse_ascii85(&mut r)?);
+        let sk = String::Ascii85(parse_ascii85(&mut r)?);
         sk.decode()
     }
 
