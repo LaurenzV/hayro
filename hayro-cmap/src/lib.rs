@@ -14,7 +14,7 @@ This crate forbids unsafe code via a crate-level attribute.
 
 extern crate alloc;
 
-mod ext;
+mod scanner_ext;
 mod parse;
 
 use alloc::boxed::Box;
@@ -104,15 +104,7 @@ pub enum CharacterCode {
 impl CharacterCode {
     /// Create a `CharacterCode` from decoded bytes.
     pub fn from_bytes(bytes: &[u8]) -> Self {
-        if bytes.len() <= 4 {
-            let mut val = 0u32;
-            for &b in bytes {
-                val = (val << 8) | u32::from(b);
-            }
-            Self::Single(val)
-        } else {
-            Self::Multi(bytes.to_vec())
-        }
+        Self::from(bytes)
     }
 
     fn offset_from(&self, start: &Self) -> Option<u32> {
@@ -141,6 +133,58 @@ impl Ord for CharacterCode {
             (Self::Multi(a), Self::Multi(b)) => a.cmp(b),
             (Self::Single(_), Self::Multi(_)) => Ordering::Less,
             (Self::Multi(_), Self::Single(_)) => Ordering::Greater,
+        }
+    }
+}
+
+impl From<u8> for CharacterCode {
+    fn from(val: u8) -> Self {
+        Self::Single(val as u32)
+    }
+}
+
+impl From<u16> for CharacterCode {
+    fn from(val: u16) -> Self {
+        Self::Single(val as u32)
+    }
+}
+
+impl From<u32> for CharacterCode {
+    fn from(val: u32) -> Self {
+        Self::Single(val)
+    }
+}
+
+impl From<char> for CharacterCode {
+    fn from(val: char) -> Self {
+        Self::Single(val as u32)
+    }
+}
+
+impl From<&[u8]> for CharacterCode {
+    fn from(bytes: &[u8]) -> Self {
+        if bytes.len() <= 4 {
+            let mut val = 0u32;
+            for &b in bytes {
+                val = (val << 8) | u32::from(b);
+            }
+            Self::Single(val)
+        } else {
+            Self::Multi(bytes.to_vec())
+        }
+    }
+}
+
+impl From<Vec<u8>> for CharacterCode {
+    fn from(bytes: Vec<u8>) -> Self {
+        if bytes.len() <= 4 {
+            let mut val = 0u32;
+            for &b in &bytes {
+                val = (val << 8) | u32::from(b);
+            }
+            Self::Single(val)
+        } else {
+            Self::Multi(bytes)
         }
     }
 }
