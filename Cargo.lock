@@ -519,6 +519,13 @@ name = "hayro-ccitt"
 version = "0.2.0"
 
 [[package]]
+name = "hayro-cmap"
+version = "0.1.0"
+dependencies = [
+ "hayro-postscript",
+]
+
+[[package]]
 name = "hayro-demo"
 version = "0.1.0"
 dependencies = [

@@ -1,0 +1,14 @@
+[package]
+name = "hayro-cmap"
+version = "0.1.0"
+description = "A CMap parser."
+authors = { workspace = true }
+edition = { workspace = true }
+repository = { workspace = true }
+license = { workspace = true }
+
+[dependencies]
+hayro-postscript = { workspace = true }
+
+[lints]
+workspace = true
