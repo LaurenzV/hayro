@@ -10,8 +10,6 @@ use crate::{
 
 struct Context<F> {
     buf: Vec<u8>,
-    // Used for converting UTF-16 to UTF-8.
-    u16_buf: Vec<u16>,
     get_cmap: F,
 }
 
@@ -19,7 +17,6 @@ impl<F> Context<F> {
     fn new(get_cmap: F) -> Self {
         Self {
             buf: Vec::new(),
-            u16_buf: Vec::new(),
             get_cmap,
         }
     }
@@ -230,11 +227,10 @@ fn parse_bf_char<F>(
         let code = extract_u32_code(&obj, &mut ctx.buf)?;
         let dst = scanner.parse_string().ok()?;
         dst.decode_into(&mut ctx.buf).ok()?;
-        decode_be_into(&ctx.buf, &mut ctx.u16_buf)?;
 
         entries.push(BfRange {
             range: Range { start: code, end: code },
-            dst_base: ctx.u16_buf.clone(),
+            dst_base: decode_be(&ctx.buf)?,
         });
     }
 }
@@ -258,26 +254,23 @@ fn parse_bf_range<F>(
 
         match &next {
             Object::String(s) => {
-                // Incrementing form: stored as a single entry.
                 s.decode_into(&mut ctx.buf).ok()?;
-                decode_be_into(&ctx.buf, &mut ctx.u16_buf)?;
 
                 entries.push(BfRange {
                     range: Range { start, end },
-                    dst_base: ctx.u16_buf.clone(),
+                    dst_base: decode_be(&ctx.buf)?,
                 });
             }
             Object::Array(array) => {
-                // Array form: each code maps to a specific dstString.
                 let mut array_scanner = array.objects();
+                
                 for code in start..=end {
                     let s = array_scanner.parse_string().ok()?;
                     s.decode_into(&mut ctx.buf).ok()?;
-                    decode_be_into(&ctx.buf, &mut ctx.u16_buf)?;
 
                     entries.push(BfRange {
                         range: Range { start: code, end: code },
-                        dst_base: ctx.u16_buf.clone(),
+                        dst_base: decode_be(&ctx.buf)?,
                     });
                 }
             }
@@ -286,19 +279,21 @@ fn parse_bf_range<F>(
     }
 }
 
-/// Decode raw UTF-16BE bytes into a reusable `Vec<u16>` buffer.
-fn decode_be_into(bytes: &[u8], out: &mut Vec<u16>) -> Option<()> {
+/// Convert the buffer into native-endian u16, so that we can use `String::from_utf16`.
+fn decode_be(bytes: &[u8]) -> Option<Vec<u16>> {
     if bytes.len() < 2 || bytes.len() % 2 != 0 {
         return None;
     }
 
-    out.clear();
+    let mut out = Vec::with_capacity(bytes.len() / 2);
     let mut i = 0;
+    
     while i < bytes.len() {
         out.push(u16::from_be_bytes([bytes[i], bytes[i + 1]]));
         i += 2;
     }
-    Some(())
+    
+    Some(out)
 }
 
 fn read_u32_code(scanner: &mut Scanner<'_>, buf: &mut Vec<u8>) -> Option<u32> {
@@ -317,10 +312,12 @@ fn bytes_to_u32(bytes: &[u8]) -> Option<u32> {
     if bytes.len() > 4 {
         return None;
     }
+    
     let mut val = 0u32;
     for &b in bytes {
-        val = (val << 8) | u32::from(b);
+        val = (val << 8) | b as u32;
     }
+    
     Some(val)
 }
 
