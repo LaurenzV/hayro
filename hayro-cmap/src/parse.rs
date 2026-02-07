@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 
 use hayro_postscript::{Object, Scanner};
 
-use crate::ext::ScannerExt;
+use crate::scanner_ext::ScannerExt;
 use crate::{CMap, CMapName, CharacterCode, CidRange, MAX_NESTING_DEPTH, Metadata, WritingMode};
 
 struct Context<F> {
