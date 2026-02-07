@@ -20,9 +20,9 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Error::SyntaxError => f.write_str("syntaxerror"),
-            Error::LimitCheck => f.write_str("limitcheck"),
-            Error::UnsupportedType => f.write_str("unsupported type"),
+            Self::SyntaxError => f.write_str("syntaxerror"),
+            Self::LimitCheck => f.write_str("limitcheck"),
+            Self::UnsupportedType => f.write_str("unsupported type"),
         }
     }
 }

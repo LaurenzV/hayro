@@ -92,7 +92,7 @@ pub(crate) fn parse_ascii85<'a>(r: &mut Reader<'a>) -> Option<&'a [u8]> {
 
 fn skip_literal(r: &mut Reader<'_>) -> Option<()> {
     r.forward_tag(b"(")?;
-    let mut depth = 1u32;
+    let mut depth = 1_u32;
 
     while depth > 0 {
         let byte = r.read_byte()?;

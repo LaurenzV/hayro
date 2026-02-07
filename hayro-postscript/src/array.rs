@@ -32,7 +32,7 @@ pub(crate) fn parse<'a>(r: &mut Reader<'a>) -> Result<&'a [u8]> {
 }
 
 fn skip_array(r: &mut Reader<'_>) -> Result<()> {
-    let mut depth = 1u32;
+    let mut depth = 1_u32;
 
     while depth > 0 {
         match r.peek_byte().ok_or(Error::SyntaxError)? {

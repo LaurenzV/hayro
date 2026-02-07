@@ -12,24 +12,24 @@ impl Number {
     /// Return the value as an `i32`. Reals are truncated.
     pub fn as_i32(self) -> i32 {
         match self {
-            Number::Integer(v) => v,
-            Number::Real(v) => v as i32,
+            Self::Integer(v) => v,
+            Self::Real(v) => v as i32,
         }
     }
 
     /// Return the value as an `f32`.
     pub fn as_f32(self) -> f32 {
         match self {
-            Number::Integer(v) => v as f32,
-            Number::Real(v) => v,
+            Self::Integer(v) => v as f32,
+            Self::Real(v) => v,
         }
     }
 
     /// Return the value as an `f64`.
     pub fn as_f64(self) -> f64 {
         match self {
-            Number::Integer(v) => v as f64,
-            Number::Real(v) => v as f64,
+            Self::Integer(v) => v as f64,
+            Self::Real(v) => v as f64,
         }
     }
 }
