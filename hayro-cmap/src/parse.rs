@@ -4,9 +4,9 @@ use alloc::vec::Vec;
 
 use hayro_postscript::{Object, Scanner};
 
-use crate::scanner_ext::ScannerExt;
 use crate::{
-    BfRange, CMap, CMapName, CidRange, CodespaceRange, MAX_NESTING_DEPTH, Metadata, WritingMode,
+    BfRange, CMap, CMapName, CidRange, CodespaceRange, MAX_NESTING_DEPTH, Metadata, ScannerExt,
+    WritingMode,
 };
 
 struct Context<F> {
