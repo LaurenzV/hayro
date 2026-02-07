@@ -4,7 +4,6 @@ use alloc::vec::Vec;
 
 use crate::reader::{Reader, is_whitespace};
 
-/// Decode ASCII85 data and append to `out`.
 pub(crate) fn decode_into(data: &[u8], out: &mut Vec<u8>) -> Option<()> {
     const POW_85: [u32; 5] = [52200625, 614125, 7225, 85, 1];
 
