@@ -5,9 +5,6 @@ use crate::reader::{Reader, is_regular};
 use crate::string::ascii_hex::decode_hex_digit;
 
 /// A PostScript name object.
-///
-/// Names are stored as raw bytes without decoding `#XX` hex escapes.
-/// Use [`decode`](Name::decode) to materialise the decoded form.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Name<'a> {
     data: &'a [u8],
@@ -19,9 +16,7 @@ impl<'a> Name<'a> {
         Self { data, literal }
     }
 
-    /// Returns `true` if this is a literal name (introduced by `/`).
-    ///
-    /// Executable names (bare words) return `false`.
+    /// Returns `true` if this is a literal name.
     pub fn is_literal(&self) -> bool {
         self.literal
     }
@@ -32,9 +27,10 @@ impl<'a> Name<'a> {
         core::str::from_utf8(self.data).ok()
     }
 
-    /// Decode `#XX` hex escapes into `out`, replacing any previous contents.
+    /// Decode the name into `out`, replacing any previous contents.
     pub fn decode_into(&self, out: &mut Vec<u8>) -> Result<()> {
         out.clear();
+        
         // Fast path: no `#` escapes.
         if !self.data.contains(&b'#') {
             out.extend_from_slice(self.data);
@@ -58,7 +54,7 @@ impl<'a> Name<'a> {
         Ok(())
     }
 
-    /// Decode `#XX` hex escapes and return the result.
+    /// Decode the name.
     pub fn decode(&self) -> Result<Vec<u8>> {
         let mut out = Vec::new();
         self.decode_into(&mut out)?;
@@ -66,9 +62,6 @@ impl<'a> Name<'a> {
     }
 }
 
-/// Parse a literal name `/...`, returning the raw bytes after the `/`.
-///
-/// The reader must be positioned at the leading `/`.
 pub(crate) fn parse_literal<'a>(r: &mut Reader<'a>) -> Option<&'a [u8]> {
     r.forward_tag(b"/")?;
     let start = r.offset();
@@ -76,9 +69,6 @@ pub(crate) fn parse_literal<'a>(r: &mut Reader<'a>) -> Option<&'a [u8]> {
     r.range(start..r.offset())
 }
 
-/// Parse an executable name (bare word of regular characters).
-///
-/// The reader must be positioned at the first character.
 pub(crate) fn parse_executable<'a>(r: &mut Reader<'a>) -> Option<&'a [u8]> {
     let start = r.offset();
     r.forward_while(is_regular);

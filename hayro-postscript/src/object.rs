@@ -13,7 +13,7 @@ pub enum Object<'a> {
     /// An integer value.
     Integer(i32),
     /// A real (floating-point) value.
-    Real(f64),
+    Real(f32),
     /// A name object — either literal (`/foo`) or executable (`foo`).
     Name(Name<'a>),
     /// A string object (literal, hex, or ASCII85).
@@ -76,29 +76,11 @@ pub(crate) fn read<'a>(r: &mut Reader<'a>) -> Result<Option<Object<'a>>> {
             r.forward();
             Err(Error::UnsupportedType)
         }
-        b'.' => {
-            if let Some(n) = number::read(r) {
-                Ok(match n {
-                    Number::Integer(v) => Object::Integer(v),
-                    Number::Real(v) => Object::Real(v),
-                })
-            } else {
-                name::parse_executable(r)
-                    .map(|s| Object::Name(Name::new(s, false)))
-                    .ok_or(Error::SyntaxError)
-            }
-        }
-        b'+' | b'-' | b'0'..=b'9' => {
-            if let Some(n) = number::read(r) {
-                Ok(match n {
-                    Number::Integer(v) => Object::Integer(v),
-                    Number::Real(v) => Object::Real(v),
-                })
-            } else {
-                name::parse_executable(r)
-                    .map(|s| Object::Name(Name::new(s, false)))
-                    .ok_or(Error::SyntaxError)
-            }
+        b'.' | b'+' | b'-' | b'0'..=b'9' => {
+            number::read(r).map(|n| match n {
+                Number::Integer(v) => Object::Integer(v),
+                Number::Real(v) => Object::Real(v),
+            })
         }
         _ => name::parse_executable(r)
             .map(|s| Object::Name(Name::new(s, false)))
