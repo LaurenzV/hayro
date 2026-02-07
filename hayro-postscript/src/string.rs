@@ -3,24 +3,41 @@ use alloc::vec::Vec;
 use crate::filter::{ascii_85, ascii_hex};
 use crate::reader::Reader;
 
-/// A PostScript string object.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum String<'a> {
-    /// Raw bytes between `(` and `)`, no decoding applied.
+enum StringInner<'a> {
     Literal(&'a [u8]),
-    /// Raw bytes between `<` and `>`, no decoding applied.
     Hex(&'a [u8]),
-    /// Raw bytes between `<~` and `~>`, no decoding applied.
     Ascii85(&'a [u8]),
 }
 
-impl String<'_> {
+/// A PostScript string object.
+///
+/// Stores raw bytes lazily. Call [`decode_into`](String::decode_into) or
+/// [`decode`](String::decode) to materialise the decoded content.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct String<'a> {
+    inner: StringInner<'a>,
+}
+
+impl<'a> String<'a> {
+    pub(crate) const fn from_literal(data: &'a [u8]) -> Self {
+        Self { inner: StringInner::Literal(data) }
+    }
+
+    pub(crate) const fn from_hex(data: &'a [u8]) -> Self {
+        Self { inner: StringInner::Hex(data) }
+    }
+
+    pub(crate) const fn from_ascii85(data: &'a [u8]) -> Self {
+        Self { inner: StringInner::Ascii85(data) }
+    }
+
     /// Decode the string content and append it to `out`.
     pub fn decode_into(&self, out: &mut Vec<u8>) -> Option<()> {
-        match self {
-            String::Literal(data) => decode_literal_into(data, out),
-            String::Hex(data) => ascii_hex::decode_into(data, out),
-            String::Ascii85(data) => ascii_85::decode_into(data, out),
+        match self.inner {
+            StringInner::Literal(data) => decode_literal_into(data, out),
+            StringInner::Hex(data) => ascii_hex::decode_into(data, out),
+            StringInner::Ascii85(data) => ascii_85::decode_into(data, out),
         }
     }
 
@@ -196,7 +213,7 @@ mod tests {
 
     fn decode_literal(input: &[u8]) -> Option<Vec<u8>> {
         let mut r = Reader::new(input);
-        let sk = String::Literal(parse_literal(&mut r)?);
+        let sk = String::from_literal(parse_literal(&mut r)?);
         sk.decode()
     }
 
@@ -302,7 +319,7 @@ mod tests {
 
     fn decode_hex(input: &[u8]) -> Option<Vec<u8>> {
         let mut r = Reader::new(input);
-        let sk = String::Hex(parse_hex(&mut r)?);
+        let sk = String::from_hex(parse_hex(&mut r)?);
         sk.decode()
     }
 
@@ -340,7 +357,7 @@ mod tests {
 
     fn decode_a85(input: &[u8]) -> Option<Vec<u8>> {
         let mut r = Reader::new(input);
-        let sk = String::Ascii85(parse_ascii85(&mut r)?);
+        let sk = String::from_ascii85(parse_ascii85(&mut r)?);
         sk.decode()
     }
 

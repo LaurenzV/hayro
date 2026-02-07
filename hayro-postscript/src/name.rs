@@ -1,8 +1,3 @@
-//! Name object parsing.
-//!
-//! A name stores its raw bytes lazily. Call [`Name::decode`] to resolve
-//! `#XX` hex escapes.
-
 use alloc::vec::Vec;
 
 use crate::reader::{Reader, is_regular};
@@ -23,12 +18,6 @@ impl<'a> Name<'a> {
         Self { data, literal }
     }
 
-    /// The raw bytes of the name (without the leading `/` for literal names,
-    /// and without `#XX` decoding).
-    pub fn data(&self) -> &'a [u8] {
-        self.data
-    }
-
     /// Returns `true` if this is a literal name (introduced by `/`).
     ///
     /// Executable names (bare words) return `false`.
@@ -36,29 +25,44 @@ impl<'a> Name<'a> {
         self.literal
     }
 
-    /// Decode `#XX` hex escapes and return the result.
+    /// Returns the name as a `&str` if it is valid UTF-8, or
+    /// `None` if it contains non-ASCII bytes.
+    pub fn as_str(&self) -> Option<&'a str> {
+        core::str::from_utf8(self.data).ok()
+    }
+
+    /// Decode `#XX` hex escapes and append the result to `out`.
     ///
     /// Returns `None` if a `#XX` escape is malformed.
-    pub fn decode(&self) -> Option<Vec<u8>> {
+    pub fn decode_into(&self, out: &mut Vec<u8>) -> Option<()> {
         // Fast path: no `#` escapes.
         if !self.data.contains(&b'#') {
-            return Some(self.data.to_vec());
+            out.extend_from_slice(self.data);
+            return Some(());
         }
 
         // Slow path: decode `#XX` hex escapes.
-        let mut result = Vec::with_capacity(self.data.len());
         let mut inner = Reader::new(self.data);
 
         while let Some(b) = inner.read_byte() {
             if b == b'#' {
                 let hex = inner.read_bytes(2)?;
-                result.push(decode_hex_digit(hex[0])? << 4 | decode_hex_digit(hex[1])?);
+                out.push(decode_hex_digit(hex[0])? << 4 | decode_hex_digit(hex[1])?);
             } else {
-                result.push(b);
+                out.push(b);
             }
         }
 
-        Some(result)
+        Some(())
+    }
+
+    /// Decode `#XX` hex escapes and return the result.
+    ///
+    /// Returns `None` if a `#XX` escape is malformed.
+    pub fn decode(&self) -> Option<Vec<u8>> {
+        let mut out = Vec::new();
+        self.decode_into(&mut out)?;
+        Some(out)
     }
 }
 
@@ -101,21 +105,21 @@ mod tests {
     #[test]
     fn literal_simple() {
         let n = read_literal(b"/Name1").unwrap();
-        assert_eq!(n.data(), b"Name1");
+        assert_eq!(n.as_str().unwrap(), "Name1");
         assert!(n.is_literal());
     }
 
     #[test]
     fn literal_empty_name() {
         let n = read_literal(b"/").unwrap();
-        assert_eq!(n.data(), b"");
+        assert_eq!(n.as_str().unwrap(), "");
         assert!(n.is_literal());
     }
 
     #[test]
     fn literal_with_hex_escape() {
         let n = read_literal(b"/lime#20Green").unwrap();
-        assert_eq!(n.data(), b"lime#20Green");
+        assert_eq!(n.as_str().unwrap(), "lime#20Green");
         assert_eq!(n.decode().unwrap(), b"lime Green");
     }
 
@@ -128,7 +132,7 @@ mod tests {
     #[test]
     fn literal_special_chars() {
         let n = read_literal(b"/A;Name_With-Various***Characters?").unwrap();
-        assert_eq!(n.data(), b"A;Name_With-Various***Characters?");
+        assert_eq!(n.as_str().unwrap(), "A;Name_With-Various***Characters?");
     }
 
     #[test]
@@ -155,7 +159,7 @@ mod tests {
     #[test]
     fn executable_simple() {
         let n = read_executable(b"beginbfchar ").unwrap();
-        assert_eq!(n.data(), b"beginbfchar");
+        assert_eq!(n.as_str().unwrap(), "beginbfchar");
         assert!(!n.is_literal());
     }
 
@@ -170,7 +174,7 @@ mod tests {
     #[test]
     fn executable_at_eof() {
         let n = read_executable(b"endcmap").unwrap();
-        assert_eq!(n.data(), b"endcmap");
+        assert_eq!(n.as_str().unwrap(), "endcmap");
     }
 
     #[test]

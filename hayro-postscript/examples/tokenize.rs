@@ -26,23 +26,15 @@ fn main() {
         match result {
             Ok(object) => match object {
                 Object::Integer(n) => println!("Integer({n})"),
+                Object::Real(n) => println!("Real({n})"),
                 Object::Name(ref name) => {
                     let kind = if name.is_literal() { "literal" } else { "executable" };
-                    println!("Name({}, {})", lossy(name.data()), kind);
+                    let text = name.as_str().unwrap_or("<non-ascii name>");
+                    println!("Name({text}, {kind})");
                 }
                 Object::String(s) => {
                     let decoded = s.decode().unwrap_or_default();
-                    match s {
-                        hayro_postscript::String::Literal(_) => {
-                            println!("String({})", lossy(&decoded));
-                        }
-                        hayro_postscript::String::Hex(_) => {
-                            println!("HexString({})", hex(&decoded));
-                        }
-                        hayro_postscript::String::Ascii85(_) => {
-                            println!("Ascii85String({})", hex(&decoded));
-                        }
-                    }
+                    println!("String({})", lossy(&decoded));
                 }
                 Object::Array(ref arr) => {
                     println!("Array({} bytes)", arr.data().len());
@@ -57,8 +49,4 @@ fn main() {
 
 fn lossy(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes).into_owned()
-}
-
-fn hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{b:02X}")).collect::<String>()
 }

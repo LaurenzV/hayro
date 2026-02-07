@@ -1,13 +1,27 @@
 /*!
-A lightweight PostScript parser and interpreter.
+A lightweight PostScript lexer.
 
-This crate provides parsing and interpretation of PostScript programs,
-focused on the subset commonly used in PDF documents (Type 1 fonts,
-CFF/Type 2 charstrings, etc.).
+This crate provides a lexer for tokenizing PostScript programs into typed objects.
+It currently implements a small subset of the PostScript language, focused on what
+is needed to support CMap parsing in PDF documents.
 
-The crate is `no_std` compatible but requires an allocator to be available.
+## Supported object types
+- **Integers** — signed integers, radix numbers (e.g. `8#1777`, `16#FFFE`)
+- **Reals** — floating-point numbers with optional exponent (e.g. `34.5`, `1.0E-5`)
+- **Names** — literal (`/Name`) and executable (`Name`), with `#XX` hex-escape decoding
+- **Strings** — literal `(...)`, hex `<...>`, and ASCII85 `<~...~>`, with lazy decoding
+- **Arrays** — `[...]` with lazy inner object iteration
 
-# Safety
+## Limitations
+This crate only implements a small subset of the PostScript language. In particular,
+the following features are **not** supported:
+- Dictionaries (`<<` / `>>`)
+- Procedures (`{` / `}`)
+- The PostScript execution model (operand/dictionary stacks, operators, etc.)
+
+Encountering unsupported syntax returns an error rather than silently skipping it.
+
+## Safety
 This crate forbids unsafe code via a crate-level attribute.
 */
 
@@ -101,8 +115,8 @@ endcmap"#;
             objects[12],
             Object::Name(Name::new(b"begincodespacerange", false))
         );
-        assert_eq!(objects[13], Object::String(String::Hex(b"00")));
-        assert_eq!(objects[14], Object::String(String::Hex(b"FF")));
+        assert_eq!(objects[13], Object::String(String::from_hex(b"00")));
+        assert_eq!(objects[14], Object::String(String::from_hex(b"FF")));
         assert_eq!(
             objects[15],
             Object::Name(Name::new(b"endcodespacerange", false))
@@ -112,10 +126,10 @@ endcmap"#;
             objects[17],
             Object::Name(Name::new(b"beginbfchar", false))
         );
-        assert_eq!(objects[18], Object::String(String::Hex(b"03")));
-        assert_eq!(objects[19], Object::String(String::Hex(b"0041")));
-        assert_eq!(objects[20], Object::String(String::Hex(b"04")));
-        assert_eq!(objects[21], Object::String(String::Hex(b"0042")));
+        assert_eq!(objects[18], Object::String(String::from_hex(b"03")));
+        assert_eq!(objects[19], Object::String(String::from_hex(b"0041")));
+        assert_eq!(objects[20], Object::String(String::from_hex(b"04")));
+        assert_eq!(objects[21], Object::String(String::from_hex(b"0042")));
         assert_eq!(
             objects[22],
             Object::Name(Name::new(b"endbfchar", false))
@@ -136,7 +150,7 @@ endcmap"#;
         assert_eq!(results[1], Ok(Object::Name(Name::new(b"Registry", true))));
         assert_eq!(
             results[2],
-            Ok(Object::String(String::Literal(b"Adobe")))
+            Ok(Object::String(String::from_literal(b"Adobe")))
         );
         assert_eq!(results[3], Err(Error::UnsupportedType)); // >>
     }
@@ -152,7 +166,7 @@ endcmap"#;
             assert_eq!(inner.len(), 3);
             assert_eq!(inner[0], Object::Integer(123));
             assert_eq!(inner[1], Object::Name(Name::new(b"abc", true)));
-            assert_eq!(inner[2], Object::String(String::Literal(b"xyz")));
+            assert_eq!(inner[2], Object::String(String::from_literal(b"xyz")));
         } else {
             panic!("expected Array");
         }

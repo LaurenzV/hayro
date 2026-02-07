@@ -3,15 +3,17 @@
 use crate::array::{self, Array};
 use crate::error::Error;
 use crate::name::{self, Name};
+use crate::number::{self, Number};
 use crate::reader::Reader;
 use crate::string::{self, String};
-use crate::number;
 
 /// A PostScript object.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Object<'a> {
     /// An integer value.
     Integer(i32),
+    /// A real (floating-point) value.
+    Real(f64),
     /// A name object — either literal (`/foo`) or executable (`foo`).
     Name(Name<'a>),
     /// A string object (literal, hex, or ASCII85).
@@ -32,13 +34,13 @@ pub(crate) fn read<'a>(r: &mut Reader<'a>) -> Option<Result<Object<'a>, Error>> 
 
     Some(match b {
         b'(' => string::parse_literal(r)
-            .map(|s| Object::String(String::Literal(s)))
+            .map(|s| Object::String(String::from_literal(s)))
             .ok_or(Error::SyntaxError),
         b'<' => {
             // Check for `<~` (ASCII85) before `<<` (dict).
             if r.peek_bytes(2) == Some(b"<~") {
                 string::parse_ascii85(r)
-                    .map(|s| Object::String(String::Ascii85(s)))
+                    .map(|s| Object::String(String::from_ascii85(s)))
                     .ok_or(Error::SyntaxError)
             } else if r.peek_bytes(2) == Some(b"<<") {
                 r.forward();
@@ -46,7 +48,7 @@ pub(crate) fn read<'a>(r: &mut Reader<'a>) -> Option<Result<Object<'a>, Error>> 
                 Err(Error::UnsupportedType)
             } else {
                 string::parse_hex(r)
-                    .map(|s| Object::String(String::Hex(s)))
+                    .map(|s| Object::String(String::from_hex(s)))
                     .ok_or(Error::SyntaxError)
             }
         }
@@ -72,10 +74,24 @@ pub(crate) fn read<'a>(r: &mut Reader<'a>) -> Option<Result<Object<'a>, Error>> 
             r.forward();
             Err(Error::UnsupportedType)
         }
-        b'+' | b'-' | b'0'..=b'9' => {
-            // Try integer first; fall through to executable name.
+        b'.' => {
             if let Some(n) = number::read(r) {
-                Ok(Object::Integer(n))
+                Ok(match n {
+                    Number::Integer(v) => Object::Integer(v),
+                    Number::Real(v) => Object::Real(v),
+                })
+            } else {
+                name::parse_executable(r)
+                    .map(|s| Object::Name(Name::new(s, false)))
+                    .ok_or(Error::SyntaxError)
+            }
+        }
+        b'+' | b'-' | b'0'..=b'9' => {
+            if let Some(n) = number::read(r) {
+                Ok(match n {
+                    Number::Integer(v) => Object::Integer(v),
+                    Number::Real(v) => Object::Real(v),
+                })
             } else {
                 name::parse_executable(r)
                     .map(|s| Object::Name(Name::new(s, false)))
@@ -149,7 +165,7 @@ mod tests {
     fn literal_string() {
         assert_eq!(
             read_ok(b"(Hello)"),
-            Object::String(String::Literal(b"Hello"))
+            Object::String(String::from_literal(b"Hello"))
         );
     }
 
@@ -157,7 +173,7 @@ mod tests {
     fn hex_string() {
         assert_eq!(
             read_ok(b"<48656C6C6F>"),
-            Object::String(String::Hex(b"48656C6C6F"))
+            Object::String(String::from_hex(b"48656C6C6F"))
         );
     }
 
@@ -165,7 +181,7 @@ mod tests {
     fn ascii85_string() {
         assert_eq!(
             read_ok(b"<~87cURDZ~>"),
-            Object::String(String::Ascii85(b"87cURDZ"))
+            Object::String(String::from_ascii85(b"87cURDZ"))
         );
     }
 
