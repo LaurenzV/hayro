@@ -33,7 +33,6 @@ extern crate alloc;
 
 mod array;
 mod error;
-mod filter;
 mod name;
 mod number;
 mod object;

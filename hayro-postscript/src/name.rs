@@ -1,7 +1,7 @@
 use alloc::vec::Vec;
 
 use crate::reader::{Reader, is_regular};
-use crate::filter::ascii_hex::decode_hex_digit;
+use crate::string::ascii_hex::decode_hex_digit;
 
 /// A PostScript name object.
 ///
@@ -31,10 +31,11 @@ impl<'a> Name<'a> {
         core::str::from_utf8(self.data).ok()
     }
 
-    /// Decode `#XX` hex escapes and append the result to `out`.
+    /// Decode `#XX` hex escapes into `out`, replacing any previous contents.
     ///
     /// Returns `None` if a `#XX` escape is malformed.
     pub fn decode_into(&self, out: &mut Vec<u8>) -> Option<()> {
+        out.clear();
         // Fast path: no `#` escapes.
         if !self.data.contains(&b'#') {
             out.extend_from_slice(self.data);
