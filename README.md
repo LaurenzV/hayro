@@ -23,6 +23,7 @@ While the main goal of `hayro` is rendering PDF files, the `hayro` project actua
 - [`hayro-ccitt`](hayro-ccitt): A decoder for group 3 and group 4 CCITT-encoded images.
 - [`hayro-font`](hayro-font): A parser for Type1 and CFF fonts.
 - [`hayro-postscript`](hayro-postscript): A lightweight scanner for a specific subset of PostScript.
+- [`hayro-cmap`](hayro-cmap): A parser for CMap files in PDFs.
 
 ## Demo
 A demo tool can be found at https://laurenzv.github.io/hayro/. Please note that this is not intended to be a PDF viewer application: It misses many important features like zooming, selecting text and important optimizations for improving the user experience. It's really just meant as a quick way to test the rendering capabilities of `hayro`.
