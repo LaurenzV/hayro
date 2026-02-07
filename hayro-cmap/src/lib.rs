@@ -48,11 +48,7 @@ impl CMap {
         parse::parse(data, get_cmap, 0)
     }
 
-    pub(crate) fn new(
-        metadata: Metadata,
-        ranges: Vec<CidRange>,
-        base: Option<Box<CMap>>,
-    ) -> Self {
+    pub(crate) fn new(metadata: Metadata, ranges: Vec<CidRange>, base: Option<Box<CMap>>) -> Self {
         Self {
             metadata,
             ranges,
@@ -80,7 +76,7 @@ impl CMap {
         if let Ok(idx) = result {
             let range = &self.ranges[idx];
             let offset = code.offset_from(&range.start)?;
-            
+
             return Some(range.cid_start + offset);
         }
 
@@ -170,7 +166,7 @@ pub enum WritingMode {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     // Note that those CMaps might not be completely valid according to the rules
     // of CMap/Postscript, but since our parser is very lenient and doesn't run a real
     // interpreter we can shorten them by a lot.
