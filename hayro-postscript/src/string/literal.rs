@@ -1,11 +1,9 @@
-// Keep in sync with `hayro-syntax/src/object/string.rs`.
+// Keep in sync with `hayro-syntax/src/object/string.rs` (`read_literal`).
 
 use alloc::vec::Vec;
 
 use crate::reader::Reader;
 
-/// Decode a literal string's inner bytes (escape sequences, octal, EOL
-/// normalization) and append to `out`.
 pub(crate) fn decode_into(data: &[u8], out: &mut Vec<u8>) -> Option<()> {
     let mut r = Reader::new(data);
 
@@ -18,7 +16,7 @@ pub(crate) fn decode_into(data: &[u8], out: &mut Vec<u8>) -> Option<()> {
                     let second = r.read_byte();
                     let third = r.read_byte();
 
-                    let digits = match (second, third) {
+                    let bytes = match (second, third) {
                         (Some(n1), Some(n2)) => match (is_octal_digit(n1), is_octal_digit(n2)) {
                             (true, true) => [next, n1, n2],
                             (true, _) => {
@@ -41,32 +39,38 @@ pub(crate) fn decode_into(data: &[u8], out: &mut Vec<u8>) -> Option<()> {
                         _ => [b'0', b'0', next],
                     };
 
-                    let s = core::str::from_utf8(&digits).unwrap();
-                    if let Ok(num) = u8::from_str_radix(s, 8) {
+                    let str = core::str::from_utf8(&bytes).unwrap();
+
+                    if let Ok(num) = u8::from_str_radix(str, 8) {
                         out.push(num);
                     }
                 } else {
                     match next {
-                        b'n' => out.push(0x0A),
-                        b'r' => out.push(0x0D),
-                        b't' => out.push(0x09),
-                        b'b' => out.push(0x08),
-                        b'f' => out.push(0x0C),
+                        b'n' => out.push(0xA),
+                        b'r' => out.push(0xD),
+                        b't' => out.push(0x9),
+                        b'b' => out.push(0x8),
+                        b'f' => out.push(0xC),
                         b'(' => out.push(b'('),
                         b')' => out.push(b')'),
                         b'\\' => out.push(b'\\'),
-                        // Line continuation: backslash followed by EOL is discarded.
                         b'\n' | b'\r' => {
+                            // A conforming reader shall disregard the REVERSE SOLIDUS
+                            // and the end-of-line marker following it when reading
+                            // the string; the resulting string value shall be
+                            // identical to that which would be read if the string
+                            // were not split.
                             r.skip_eol();
                         }
-                        // Unknown escape: the spec says to ignore the backslash.
                         _ => out.push(next),
                     }
                 }
             }
-            // Balanced parens are kept literally.
             b'(' | b')' => out.push(byte),
-            // Bare EOL normalised to LF.
+            // An end-of-line marker appearing within a literal string
+            // without a preceding REVERSE SOLIDUS shall be treated as
+            // a byte value of (0Ah), irrespective of whether the end-of-line
+            // marker was a CARRIAGE RETURN (0Dh), a LINE FEED (0Ah), or both.
             b'\n' | b'\r' => {
                 out.push(b'\n');
                 r.skip_eol();
@@ -78,6 +82,6 @@ pub(crate) fn decode_into(data: &[u8], out: &mut Vec<u8>) -> Option<()> {
     Some(())
 }
 
-fn is_octal_digit(b: u8) -> bool {
-    matches!(b, b'0'..=b'7')
+fn is_octal_digit(byte: u8) -> bool {
+    matches!(byte, b'0'..=b'7')
 }

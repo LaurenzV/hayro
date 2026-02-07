@@ -1,8 +1,7 @@
 // Keep in sync with `hayro-syntax/src/filter/ascii_hex.rs`.
 
-use alloc::vec::Vec;
-
 use crate::reader::is_whitespace;
+use alloc::vec::Vec;
 
 pub(crate) fn decode_into(data: &[u8], out: &mut Vec<u8>) -> Option<()> {
     let has_whitespace = data.iter().any(|&b| is_whitespace(b));
@@ -10,7 +9,7 @@ pub(crate) fn decode_into(data: &[u8], out: &mut Vec<u8>) -> Option<()> {
     out.reserve(data.len().div_ceil(2));
 
     if !has_whitespace {
-        // Fast path: no whitespace to strip.
+        // Fast path, don't need to worry about white spaces.
         let mut i = 0;
         while i + 1 < data.len() {
             out.push(decode_hex_digit(data[i])? << 4 | decode_hex_digit(data[i + 1])?);
@@ -20,7 +19,7 @@ pub(crate) fn decode_into(data: &[u8], out: &mut Vec<u8>) -> Option<()> {
             out.push(decode_hex_digit(data[i])? << 4);
         }
     } else {
-        // Slow path: strip whitespace.
+        // Slow path, need to strip white spaces.
         let mut iter = data.iter().copied();
         let mut read_byte = || -> Option<u8> {
             loop {
@@ -38,6 +37,7 @@ pub(crate) fn decode_into(data: &[u8], out: &mut Vec<u8>) -> Option<()> {
                 }
                 (Some(hi), None) => {
                     out.push(decode_hex_digit(hi)? << 4);
+
                     break;
                 }
                 (None, _) => break,
