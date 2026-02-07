@@ -4,6 +4,7 @@ mod literal;
 
 use alloc::vec::Vec;
 
+use crate::error::Error;
 use crate::reader::Reader;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -33,20 +34,21 @@ impl<'a> String<'a> {
     }
 
     /// Decode the string content into `out`, replacing any previous contents.
-    pub fn decode_into(&self, out: &mut Vec<u8>) -> Option<()> {
+    pub fn decode_into(&self, out: &mut Vec<u8>) -> Result<(), Error> {
         out.clear();
         match self.inner {
             StringInner::Literal(data) => literal::decode_into(data, out),
             StringInner::Hex(data) => ascii_hex::decode_into(data, out),
             StringInner::Ascii85(data) => ascii_85::decode_into(data, out),
         }
+        .ok_or(Error::SyntaxError)
     }
 
-    /// Decode the string content and return it as a new `Vec<u8>`.
-    pub fn decode(&self) -> Option<Vec<u8>> {
+    /// Decode the string content.
+    pub fn decode(&self) -> Result<Vec<u8>, Error> {
         let mut out = Vec::new();
         self.decode_into(&mut out)?;
-        Some(out)
+        Ok(out)
     }
 }
 
@@ -130,10 +132,10 @@ mod tests {
 
     // ---- Literal parsing + decoding ----
 
-    fn decode_literal(input: &[u8]) -> Option<Vec<u8>> {
+    fn decode_literal(input: &[u8]) -> Result<Vec<u8>, Error> {
         let mut r = Reader::new(input);
-        let sk = String::from_literal(parse_literal(&mut r)?);
-        sk.decode()
+        let data = parse_literal(&mut r).ok_or(Error::SyntaxError)?;
+        String::from_literal(data).decode()
     }
 
     #[test]
@@ -236,10 +238,10 @@ mod tests {
 
     // ---- Hex parsing + decoding ----
 
-    fn decode_hex(input: &[u8]) -> Option<Vec<u8>> {
+    fn decode_hex(input: &[u8]) -> Result<Vec<u8>, crate::error::Error> {
         let mut r = Reader::new(input);
-        let sk = String::from_hex(parse_hex(&mut r)?);
-        sk.decode()
+        let data = parse_hex(&mut r).ok_or(crate::error::Error::SyntaxError)?;
+        String::from_hex(data).decode()
     }
 
     #[test]
@@ -274,10 +276,10 @@ mod tests {
 
     // ---- ASCII85 parsing + decoding ----
 
-    fn decode_a85(input: &[u8]) -> Option<Vec<u8>> {
+    fn decode_a85(input: &[u8]) -> Result<Vec<u8>, crate::error::Error> {
         let mut r = Reader::new(input);
-        let sk = String::from_ascii85(parse_ascii85(&mut r)?);
-        sk.decode()
+        let data = parse_ascii85(&mut r).ok_or(crate::error::Error::SyntaxError)?;
+        String::from_ascii85(data).decode()
     }
 
     #[test]

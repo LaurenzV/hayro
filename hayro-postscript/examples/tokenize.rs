@@ -33,7 +33,7 @@ fn main() {
                     println!("Name({text}, {kind})");
                 }
                 Object::String(s) => {
-                    let decoded = s.decode().unwrap_or_default();
+                    let decoded = s.decode().unwrap_or_else(|_| Vec::new());
                     println!("String({})", lossy(&decoded));
                 }
                 Object::Array(ref arr) => {
