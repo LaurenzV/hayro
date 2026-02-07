@@ -13,15 +13,6 @@ struct Context<F> {
     get_cmap: F,
 }
 
-impl<F> Context<F> {
-    fn new(get_cmap: F) -> Self {
-        Self {
-            buf: Vec::new(),
-            get_cmap,
-        }
-    }
-}
-
 pub(crate) fn parse<'a>(
     data: &[u8],
     get_cmap: impl Fn(CMapName<'_>) -> Option<&'a [u8]> + Clone + 'a,
@@ -33,7 +24,10 @@ pub(crate) fn parse<'a>(
     }
 
     let mut scanner = Scanner::new(data);
-    let mut ctx = Context::new(get_cmap);
+    let mut ctx = Context {
+        buf: Vec::new(),
+        get_cmap,
+    };
     let mut codespace_ranges = Vec::new();
     let mut ranges = Vec::new();
     let mut notdef_ranges = Vec::new();
@@ -45,7 +39,7 @@ pub(crate) fn parse<'a>(
     let mut supplement = None;
     let mut cmap_name = None;
     let mut writing_mode = WritingMode::Horizontal;
-    let mut last_name: Option<&str> = None;
+    let mut last_name: Option<Vec<u8>> = None;
 
     while !scanner.at_end() {
         let obj = scanner.parse_object().ok()?;
@@ -69,8 +63,8 @@ pub(crate) fn parse<'a>(
                 Some("WMode") => {
                     writing_mode = parse_writing_mode(&mut scanner)?;
                 }
-                other => {
-                    last_name = other;
+                _ => {
+                    last_name = name.decode().ok();
                 }
             }
         } else {
@@ -97,8 +91,8 @@ pub(crate) fn parse<'a>(
                     parse_bf_range(&mut scanner, &mut bf_entries, &mut ctx)?;
                 }
                 Some("usecmap") => {
-                    let nested_data = (ctx.get_cmap)(last_name?.as_bytes())?;
-                    
+                    let nested_data = (ctx.get_cmap)(last_name.as_deref()?)?;
+
                     base = Some(Box::new(parse(
                         nested_data,
                         ctx.get_cmap.clone(),
@@ -161,7 +155,11 @@ fn parse_codespace_range<F>(
             return None;
         }
 
-        ranges.push(CodespaceRange { number_bytes: n_bytes, low, high });
+        ranges.push(CodespaceRange {
+            number_bytes: n_bytes,
+            low,
+            high,
+        });
     }
 }
 
@@ -206,7 +204,10 @@ fn parse_char<F>(
         let cid_start = u32::try_from(scanner.parse_number().ok()?.as_i32()).ok()?;
 
         ranges.push(CidRange {
-            range: Range { start: code, end: code },
+            range: Range {
+                start: code,
+                end: code,
+            },
             cid_start,
         });
     }
@@ -229,7 +230,10 @@ fn parse_bf_char<F>(
         dst.decode_into(&mut ctx.buf).ok()?;
 
         entries.push(BfRange {
-            range: Range { start: code, end: code },
+            range: Range {
+                start: code,
+                end: code,
+            },
             dst_base: decode_be(&ctx.buf)?,
         });
     }
@@ -263,13 +267,16 @@ fn parse_bf_range<F>(
             }
             Object::Array(array) => {
                 let mut array_scanner = array.objects();
-                
+
                 for code in start..=end {
                     let s = array_scanner.parse_string().ok()?;
                     s.decode_into(&mut ctx.buf).ok()?;
 
                     entries.push(BfRange {
-                        range: Range { start: code, end: code },
+                        range: Range {
+                            start: code,
+                            end: code,
+                        },
                         dst_base: decode_be(&ctx.buf)?,
                     });
                 }
@@ -287,12 +294,12 @@ fn decode_be(bytes: &[u8]) -> Option<Vec<u16>> {
 
     let mut out = Vec::with_capacity(bytes.len() / 2);
     let mut i = 0;
-    
+
     while i < bytes.len() {
         out.push(u16::from_be_bytes([bytes[i], bytes[i + 1]]));
         i += 2;
     }
-    
+
     Some(out)
 }
 
@@ -309,15 +316,15 @@ fn extract_u32_code(obj: &Object<'_>, buf: &mut Vec<u8>) -> Option<u32> {
 }
 
 fn bytes_to_u32(bytes: &[u8]) -> Option<u32> {
-    if bytes.len() > 4 {
+    if bytes.is_empty() || bytes.len() > 4 {
         return None;
     }
-    
+
     let mut val = 0u32;
     for &b in bytes {
         val = (val << 8) | b as u32;
     }
-    
+
     Some(val)
 }
 

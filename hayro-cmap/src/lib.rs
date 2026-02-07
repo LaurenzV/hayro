@@ -78,7 +78,10 @@ impl CMap {
                 high: 0xFFFF,
             }],
             cid_ranges: vec![CidRange {
-                range: Range { start: 0, end: 0xFFFF },
+                range: Range {
+                    start: 0,
+                    end: 0xFFFF,
+                },
                 cid_start: 0,
             }],
             notdef_ranges: Vec::new(),
@@ -108,7 +111,7 @@ impl CMap {
 
         if let Some(entry) = find_in_ranges(&self.cid_ranges, code) {
             let offset = code.checked_sub(entry.range.start)?;
-            return Some(entry.cid_start + offset);
+            return Some(entry.cid_start.checked_add(offset)?);
         } else if let Some(entry) = find_in_ranges(&self.notdef_ranges, code) {
             // For `.notdef` ranges, all codes map to the same `.notdef` CID, so
             // no adding of the offset here.
@@ -126,7 +129,7 @@ impl CMap {
     }
 
     /// Look up the Unicode string of the given character code.
-    /// 
+    ///
     /// Returns `None` if no mapping is available.
     pub fn lookup_unicode(&self, code: u32) -> Option<UnicodeString> {
         if let Some(entry) = find_in_ranges(&self.bf_entries, code) {
@@ -150,7 +153,7 @@ impl CMap {
                 let mut units = entry.dst_base.clone();
                 *units.last_mut()? = units.last()?.checked_add(offset)?;
                 Some(decode_utf16(&units)?)
-            }
+            };
         }
 
         self.base.as_ref()?.lookup_unicode(code)
