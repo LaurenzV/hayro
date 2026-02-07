@@ -403,7 +403,7 @@ endcidrange
     }
 
     #[test]
-    fn usecmap_child_overrides_base() {
+    fn usecmap_partial_override() {
         let base_data = br#"
 /CIDSystemInfo 3 dict dup begin
   /Registry (Adobe) def
@@ -427,7 +427,7 @@ end def
 /CMapName /Child def
 /WMode 0 def
 1 begincidrange
-<0000> <00FF> 100
+<0040> <007F> 500
 endcidrange
 "#;
 
@@ -440,8 +440,11 @@ endcidrange
         })
         .unwrap();
 
-        // Child overrides base for the same range
-        assert_eq!(cmap.lookup(&CharacterCode::Single(0x0000)), Some(100));
-        assert_eq!(cmap.lookup(&CharacterCode::Single(0x00FF)), Some(100 + 0xFF));
+        assert_eq!(cmap.lookup(&CharacterCode::Single(0x0000)), Some(0));
+        assert_eq!(cmap.lookup(&CharacterCode::Single(0x003F)), Some(0x3F));
+        assert_eq!(cmap.lookup(&CharacterCode::Single(0x0040)), Some(500));
+        assert_eq!(cmap.lookup(&CharacterCode::Single(0x007F)), Some(563));
+        assert_eq!(cmap.lookup(&CharacterCode::Single(0x0080)), Some(0x80));
+        assert_eq!(cmap.lookup(&CharacterCode::Single(0x00FF)), Some(0xFF));
     }
 }
