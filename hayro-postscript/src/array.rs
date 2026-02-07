@@ -1,4 +1,5 @@
 use crate::error::{Error, Result};
+use crate::object;
 use crate::reader::Reader;
 use crate::string;
 
@@ -22,9 +23,11 @@ impl<'a> Array<'a> {
 
 pub(crate) fn parse<'a>(r: &mut Reader<'a>) -> Result<&'a [u8]> {
     r.forward_tag(b"[").ok_or(Error::SyntaxError)?;
+    
     let start = r.offset();
     skip_array(r)?;
     let end = r.offset() - 1;
+    
     r.range(start..end).ok_or(Error::SyntaxError)
 }
 
@@ -54,10 +57,7 @@ fn skip_array(r: &mut Reader<'_>) -> Result<()> {
                     let _ = string::parse_hex(r).ok_or(Error::SyntaxError)?;
                 }
             }
-            b'%' => {
-                r.forward();
-                r.forward_while(|b| !crate::reader::is_eol(b));
-            }
+            b'%' => object::skip_whitespace_and_comments(r),
             _ => {
                 r.forward();
             }

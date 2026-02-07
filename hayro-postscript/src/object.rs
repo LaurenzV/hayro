@@ -94,7 +94,6 @@ pub(crate) fn skip_whitespace_and_comments(r: &mut Reader<'_>) {
                 r.forward();
             }
             Some(b'%') => {
-                // Comment: skip to end of line.
                 r.forward();
                 r.forward_while(|b| !crate::reader::is_eol(b));
             }
