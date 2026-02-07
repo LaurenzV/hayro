@@ -125,12 +125,12 @@ impl Ord for CharacterCode {
 }
 
 /// Metadata extracted from a CMap file.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct Metadata {
-    pub registry: Option<String>,
-    pub ordering: Option<String>,
-    pub supplement: Option<i32>,
-    pub name: Option<String>,
+    pub registry: String,
+    pub ordering: String,
+    pub supplement: i32,
+    pub name: String,
     pub writing_mode: WritingMode,
 }
 
@@ -146,6 +146,22 @@ pub enum WritingMode {
 mod tests {
     use super::*;
 
+    const PREAMBLE: &[u8] = br#"/CIDSystemInfo 3 dict dup begin
+  /Registry (Adobe) def
+  /Ordering (Japan1) def
+  /Supplement 0 def
+end def
+/CMapName /Test def
+/WMode 0 def
+"#;
+
+    fn parse_with_preamble(body: &[u8]) -> CMap {
+        let mut data = Vec::new();
+        data.extend_from_slice(PREAMBLE);
+        data.extend_from_slice(body);
+        CMap::parse(&data).unwrap()
+    }
+
     #[test]
     fn metadata_parsing() {
         let data = br#"
@@ -160,23 +176,19 @@ end def
 /CMapName /Adobe-Japan1-H def
 /CMapType 1 def
 /WMode 0 def
-1 begincodespacerange
-<0000> <FFFF>
-endcodespacerange
 endcmap"#;
 
         let cmap = CMap::parse(data).unwrap();
-        assert_eq!(cmap.metadata().registry.as_deref(), Some("Adobe"));
-        assert_eq!(cmap.metadata().ordering.as_deref(), Some("Japan1"));
-        assert_eq!(cmap.metadata().supplement, Some(6));
-        assert_eq!(cmap.metadata().name.as_deref(), Some("Adobe-Japan1-H"));
+        assert_eq!(cmap.metadata().registry, "Adobe");
+        assert_eq!(cmap.metadata().ordering, "Japan1");
+        assert_eq!(cmap.metadata().supplement, 6);
+        assert_eq!(cmap.metadata().name, "Adobe-Japan1-H");
         assert_eq!(cmap.metadata().writing_mode, WritingMode::Horizontal);
     }
 
     #[test]
     fn vertical_writing_mode() {
         let data = br#"
-begincmap
 /CIDSystemInfo 3 dict dup begin
   /Registry (Adobe) def
   /Ordering (Japan1) def
@@ -184,27 +196,24 @@ begincmap
 end def
 /CMapName /Adobe-Japan1-V def
 /WMode 1 def
-endcmap
 "#;
 
         let cmap = CMap::parse(data).unwrap();
         assert_eq!(cmap.metadata().writing_mode, WritingMode::Vertical);
-        assert_eq!(cmap.metadata().name.as_deref(), Some("Adobe-Japan1-V"));
+        assert_eq!(cmap.metadata().name, "Adobe-Japan1-V");
     }
 
     #[test]
     fn cid_range_lookup() {
-        let data = br#"
-begincmap
+        let cmap = parse_with_preamble(
+            br#"
 3 begincidrange
 <0000> <00FF> 0
 <0100> <01FF> 256
 <8140> <817E> 633
 endcidrange
-endcmap
-"#;
-
-        let cmap = CMap::parse(data).unwrap();
+"#,
+        );
 
         // First range: <0000>-<00FF> -> CID 0-255
         assert_eq!(cmap.lookup(&CharacterCode::Single(0x0000)), Some(0));
@@ -222,17 +231,16 @@ endcmap
 
     #[test]
     fn cid_char_lookup() {
-        let data = br#"
-begincmap
+        let cmap = parse_with_preamble(
+            br#"
 3 begincidchar
 <03> 1
 <04> 2
 <20> 50
 endcidchar
-endcmap
-"#;
+"#,
+        );
 
-        let cmap = CMap::parse(data).unwrap();
         assert_eq!(cmap.lookup(&CharacterCode::Single(0x03)), Some(1));
         assert_eq!(cmap.lookup(&CharacterCode::Single(0x04)), Some(2));
         assert_eq!(cmap.lookup(&CharacterCode::Single(0x20)), Some(50));
@@ -240,15 +248,14 @@ endcmap
 
     #[test]
     fn lookup_miss() {
-        let data = br#"
-begincmap
+        let cmap = parse_with_preamble(
+            br#"
 1 begincidrange
 <0100> <01FF> 0
 endcidrange
-endcmap
-"#;
+"#,
+        );
 
-        let cmap = CMap::parse(data).unwrap();
         assert_eq!(cmap.lookup(&CharacterCode::Single(0x00FF)), None);
         assert_eq!(cmap.lookup(&CharacterCode::Single(0x0200)), None);
         assert_eq!(cmap.lookup(&CharacterCode::Single(0xFFFF)), None);
@@ -256,8 +263,8 @@ endcmap
 
     #[test]
     fn multiple_sections() {
-        let data = br#"
-begincmap
+        let cmap = parse_with_preamble(
+            br#"
 2 begincidrange
 <0000> <00FF> 0
 <0100> <01FF> 256
@@ -268,10 +275,9 @@ endcidchar
 1 begincidrange
 <8140> <817E> 633
 endcidrange
-endcmap
-"#;
+"#,
+        );
 
-        let cmap = CMap::parse(data).unwrap();
         assert_eq!(cmap.lookup(&CharacterCode::Single(0x0000)), Some(0));
         assert_eq!(cmap.lookup(&CharacterCode::Single(0x0100)), Some(256));
         assert_eq!(cmap.lookup(&CharacterCode::Single(0x0200)), Some(600));
@@ -300,16 +306,15 @@ endcmap
 
     #[test]
     fn single_byte_codes() {
-        let data = br#"
-begincmap
+        let cmap = parse_with_preamble(
+            br#"
 2 begincidrange
 <00> <7F> 0
 <80> <FF> 200
 endcidrange
-endcmap
-"#;
+"#,
+        );
 
-        let cmap = CMap::parse(data).unwrap();
         assert_eq!(cmap.lookup(&CharacterCode::Single(0x00)), Some(0));
         assert_eq!(cmap.lookup(&CharacterCode::Single(0x41)), Some(0x41));
         assert_eq!(cmap.lookup(&CharacterCode::Single(0x80)), Some(200));
@@ -317,10 +322,8 @@ endcmap
     }
 
     #[test]
-    fn empty_cmap() {
-        let cmap = CMap::parse(b"").unwrap();
-        assert!(cmap.metadata().registry.is_none());
-        assert!(cmap.metadata().name.is_none());
-        assert_eq!(cmap.lookup(&CharacterCode::Single(0)), None);
+    fn missing_metadata_fails() {
+        assert!(CMap::parse(b"").is_none());
+        assert!(CMap::parse(b"/CMapName /X def").is_none());
     }
 }
