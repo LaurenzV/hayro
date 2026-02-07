@@ -1,7 +1,7 @@
 [package]
 name = "hayro-cmap"
 version = "0.1.0"
-description = "A CMap parser."
+description = "A parser for CMap files."
 authors = { workspace = true }
 edition = { workspace = true }
 repository = { workspace = true }
