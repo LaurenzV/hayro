@@ -21,7 +21,7 @@ impl<'a> Name<'a> {
         self.literal
     }
 
-    /// Returns the name as a `&str` if it is valid UTF-8, or
+    /// Returns the name as a string if it is valid UTF-8, or
     /// `None` if it contains non-ASCII bytes.
     pub fn as_str(&self) -> Option<&'a str> {
         core::str::from_utf8(self.data).ok()
