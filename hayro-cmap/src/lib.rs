@@ -17,25 +17,47 @@ extern crate alloc;
 mod ext;
 mod parse;
 
+use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::cmp::Ordering;
+
+/// The name of a CMap.
+pub type CMapName<'a> = &'a [u8];
+
+/// Don't allow more than 16 `usecmap` references.
+const MAX_NESTING_DEPTH: u32 = 16;
 
 /// A parsed CMap.
 #[derive(Debug, Clone)]
 pub struct CMap {
     metadata: Metadata,
     ranges: Vec<CidRange>,
+    base: Option<Box<CMap>>,
 }
 
 impl CMap {
     /// Parse a CMap from raw bytes.
-    pub fn parse(data: &[u8]) -> Option<Self> {
-        parse::parse(data)
+    ///
+    /// The `get_cmap` callback is used to resolve CMaps that are referenced
+    /// via `usecmap`.
+    pub fn parse<'a>(
+        data: &[u8],
+        get_cmap: impl Fn(CMapName<'_>) -> Option<&'a [u8]> + Clone + 'a,
+    ) -> Option<Self> {
+        parse::parse(data, get_cmap, 0)
     }
 
-    pub(crate) fn new(metadata: Metadata, ranges: Vec<CidRange>) -> Self {
-        Self { metadata, ranges }
+    pub(crate) fn new(
+        metadata: Metadata,
+        ranges: Vec<CidRange>,
+        base: Option<Box<CMap>>,
+    ) -> Self {
+        Self {
+            metadata,
+            ranges,
+            base,
+        }
     }
 
     /// Return the metadata of this CMap.
@@ -45,22 +67,24 @@ impl CMap {
 
     /// Look up a character code and return the corresponding CID.
     pub fn lookup(&self, code: &CharacterCode) -> Option<u32> {
-        let idx = self
-            .ranges
-            .binary_search_by(|range| {
-                if *code < range.start {
-                    Ordering::Greater
-                } else if *code > range.end {
-                    Ordering::Less
-                } else {
-                    Ordering::Equal
-                }
-            })
-            .ok()?;
+        let result = self.ranges.binary_search_by(|range| {
+            if *code < range.start {
+                Ordering::Greater
+            } else if *code > range.end {
+                Ordering::Less
+            } else {
+                Ordering::Equal
+            }
+        });
 
-        let range = &self.ranges[idx];
-        let offset = code.offset_from(&range.start)?;
-        Some(range.cid_start + offset)
+        if let Ok(idx) = result {
+            let range = &self.ranges[idx];
+            let offset = code.offset_from(&range.start)?;
+            
+            return Some(range.cid_start + offset);
+        }
+
+        self.base.as_ref()?.lookup(code)
     }
 }
 
@@ -146,6 +170,10 @@ pub enum WritingMode {
 #[cfg(test)]
 mod tests {
     use super::*;
+    
+    // Note that those CMaps might not be completely valid according to the rules
+    // of CMap/Postscript, but since our parser is very lenient and doesn't run a real
+    // interpreter we can shorten them by a lot.
 
     const PREAMBLE: &[u8] = br#"/CIDSystemInfo 3 dict dup begin
   /Registry (Adobe) def
@@ -160,7 +188,7 @@ end def
         let mut data = Vec::new();
         data.extend_from_slice(PREAMBLE);
         data.extend_from_slice(body);
-        CMap::parse(&data).unwrap()
+        CMap::parse(&data, |_| None).unwrap()
     }
 
     #[test]
@@ -179,7 +207,7 @@ end def
 /WMode 0 def
 endcmap"#;
 
-        let cmap = CMap::parse(data).unwrap();
+        let cmap = CMap::parse(data, |_| None).unwrap();
         assert_eq!(cmap.metadata().registry, "Adobe");
         assert_eq!(cmap.metadata().ordering, "Japan1");
         assert_eq!(cmap.metadata().supplement, 6);
@@ -199,7 +227,7 @@ end def
 /WMode 1 def
 "#;
 
-        let cmap = CMap::parse(data).unwrap();
+        let cmap = CMap::parse(data, |_| None).unwrap();
         assert_eq!(cmap.metadata().writing_mode, WritingMode::Vertical);
         assert_eq!(cmap.metadata().name, "Adobe-Japan1-V");
     }
@@ -324,7 +352,96 @@ endcidrange
 
     #[test]
     fn missing_metadata_fails() {
-        assert!(CMap::parse(b"").is_none());
-        assert!(CMap::parse(b"/CMapName /X def").is_none());
+        assert!(CMap::parse(b"", |_| None).is_none());
+        assert!(CMap::parse(b"/CMapName /X def", |_| None).is_none());
+    }
+
+    #[test]
+    fn usecmap_chaining() {
+        let base_data = br#"
+/CIDSystemInfo 3 dict dup begin
+  /Registry (Adobe) def
+  /Ordering (Japan1) def
+  /Supplement 0 def
+end def
+/CMapName /Base def
+/WMode 0 def
+1 begincidrange
+<0000> <00FF> 0
+endcidrange
+"#;
+
+        let child_data = br#"
+/Base usecmap
+/CIDSystemInfo 3 dict dup begin
+  /Registry (Adobe) def
+  /Ordering (Japan1) def
+  /Supplement 0 def
+end def
+/CMapName /Child def
+/WMode 0 def
+1 begincidrange
+<0100> <01FF> 256
+endcidrange
+"#;
+
+        let cmap = CMap::parse(child_data, |name| {
+            if name == b"Base" {
+                Some(base_data.as_slice())
+            } else {
+                None
+            }
+        })
+        .unwrap();
+
+        assert_eq!(cmap.lookup(&CharacterCode::Single(0x0100)), Some(256));
+        assert_eq!(cmap.lookup(&CharacterCode::Single(0x01FF)), Some(511));
+        assert_eq!(cmap.lookup(&CharacterCode::Single(0x0000)), Some(0));
+        assert_eq!(cmap.lookup(&CharacterCode::Single(0x00FF)), Some(0xFF));
+
+        assert_eq!(cmap.lookup(&CharacterCode::Single(0x0200)), None);
+    }
+
+    #[test]
+    fn usecmap_child_overrides_base() {
+        let base_data = br#"
+/CIDSystemInfo 3 dict dup begin
+  /Registry (Adobe) def
+  /Ordering (Japan1) def
+  /Supplement 0 def
+end def
+/CMapName /Base def
+/WMode 0 def
+1 begincidrange
+<0000> <00FF> 0
+endcidrange
+"#;
+
+        let child_data = br#"
+/Base usecmap
+/CIDSystemInfo 3 dict dup begin
+  /Registry (Adobe) def
+  /Ordering (Japan1) def
+  /Supplement 0 def
+end def
+/CMapName /Child def
+/WMode 0 def
+1 begincidrange
+<0000> <00FF> 100
+endcidrange
+"#;
+
+        let cmap = CMap::parse(child_data, |name| {
+            if name == b"Base" {
+                Some(base_data.as_slice())
+            } else {
+                None
+            }
+        })
+        .unwrap();
+
+        // Child overrides base for the same range
+        assert_eq!(cmap.lookup(&CharacterCode::Single(0x0000)), Some(100));
+        assert_eq!(cmap.lookup(&CharacterCode::Single(0x00FF)), Some(100 + 0xFF));
     }
 }

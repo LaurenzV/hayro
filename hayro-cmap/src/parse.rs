@@ -1,31 +1,47 @@
+use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
 
 use hayro_postscript::{Object, Scanner};
 
 use crate::ext::ScannerExt;
-use crate::{CMap, CharacterCode, CidRange, Metadata, WritingMode};
+use crate::{CMap, CMapName, CharacterCode, CidRange, MAX_NESTING_DEPTH, Metadata, WritingMode};
 
-struct Context {
+struct Context<F> {
     buf: Vec<u8>,
+    get_cmap: F,
 }
 
-impl Context {
-    fn new() -> Self {
-        Self { buf: Vec::new() }
+impl<F> Context<F> {
+    fn new(get_cmap: F) -> Self {
+        Self {
+            buf: Vec::new(),
+            get_cmap,
+        }
     }
 }
 
-pub(crate) fn parse(data: &[u8]) -> Option<CMap> {
+pub(crate) fn parse<'a>(
+    data: &[u8],
+    get_cmap: impl Fn(CMapName<'_>) -> Option<&'a [u8]> + Clone + 'a,
+    depth: u32,
+) -> Option<CMap> {
+    // Prevent stack overflow for malicious CMap files or circular references.
+    if depth >= MAX_NESTING_DEPTH {
+        return None;
+    }
+
     let mut scanner = Scanner::new(data);
-    let mut ctx = Context::new();
+    let mut ctx = Context::new(get_cmap);
     let mut ranges = Vec::new();
+    let mut base = None;
 
     let mut registry = None;
     let mut ordering = None;
     let mut supplement = None;
     let mut cmap_name = None;
     let mut writing_mode = WritingMode::Horizontal;
+    let mut last_name: Option<&str> = None;
 
     while !scanner.at_end() {
         let obj = scanner.parse_object().ok()?;
@@ -49,7 +65,9 @@ pub(crate) fn parse(data: &[u8]) -> Option<CMap> {
                 Some("WMode") => {
                     writing_mode = parse_wmode(&mut scanner)?;
                 }
-                _ => {}
+                other => {
+                    last_name = other;
+                }
             }
         } else {
             match name.as_str() {
@@ -58,6 +76,14 @@ pub(crate) fn parse(data: &[u8]) -> Option<CMap> {
                 }
                 Some("begincidchar") => {
                     parse_cid_char(&mut scanner, &mut ranges, &mut ctx)?;
+                }
+                Some("usecmap") => {
+                    let nested_data = (ctx.get_cmap)(last_name?.as_bytes())?;
+                    base = Some(Box::new(parse(
+                        nested_data,
+                        ctx.get_cmap.clone(),
+                        depth + 1,
+                    )?));
                 }
                 _ => {}
             }
@@ -74,7 +100,7 @@ pub(crate) fn parse(data: &[u8]) -> Option<CMap> {
         writing_mode,
     };
 
-    Some(CMap::new(metadata, ranges))
+    Some(CMap::new(metadata, ranges, base))
 }
 
 fn parse_cmap_name(scanner: &mut Scanner<'_>) -> Option<String> {
@@ -91,10 +117,10 @@ fn parse_wmode(scanner: &mut Scanner<'_>) -> Option<WritingMode> {
     }
 }
 
-fn parse_cid_range(
+fn parse_cid_range<F>(
     scanner: &mut Scanner<'_>,
     ranges: &mut Vec<CidRange>,
-    ctx: &mut Context,
+    ctx: &mut Context<F>,
 ) -> Option<()> {
     loop {
         let obj = scanner.parse_object().ok()?;
@@ -115,10 +141,10 @@ fn parse_cid_range(
     }
 }
 
-fn parse_cid_char(
+fn parse_cid_char<F>(
     scanner: &mut Scanner<'_>,
     ranges: &mut Vec<CidRange>,
-    ctx: &mut Context,
+    ctx: &mut Context<F>,
 ) -> Option<()> {
     loop {
         let obj = scanner.parse_object().ok()?;
