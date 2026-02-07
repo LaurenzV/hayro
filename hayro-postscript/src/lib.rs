@@ -11,7 +11,7 @@ The crate is `no_std` compatible but requires an allocator to be available.
 This crate forbids unsafe code via a crate-level attribute.
 */
 
-#![cfg_attr(not(feature = "std"), no_std)]
+#![no_std]
 #![forbid(unsafe_code)]
 #![allow(missing_docs)]
 
@@ -53,6 +53,8 @@ impl<'a> Iterator for Lexer<'a> {
 
 #[cfg(test)]
 mod tests {
+    use alloc::vec::Vec;
+
     use super::*;
 
     #[test]

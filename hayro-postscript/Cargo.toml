@@ -7,10 +7,6 @@ edition = { workspace = true }
 repository = { workspace = true }
 license = { workspace = true }
 
-[features]
-default = ["std"]
-std = []
-
 [dependencies]
 smallvec = { workspace = true }
 
