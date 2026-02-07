@@ -158,7 +158,7 @@ fn parse_codespace_range<F>(
 
         let low = extract_u32_code(&obj, &mut ctx.buf)?;
         let n_bytes = u8::try_from(ctx.buf.len()).ok()?;
-        let high = extract_u32_code(&scanner.parse_object().ok()?, &mut ctx.buf)?;
+        let high = read_u32_code(scanner, &mut ctx.buf)?;
 
         if ctx.buf.len() != usize::from(n_bytes) {
             return None;
@@ -182,7 +182,7 @@ fn parse_range<F>(
         }
 
         let start = extract_u32_code(&obj, &mut ctx.buf)?;
-        let end = extract_u32_code(&scanner.parse_object().ok()?, &mut ctx.buf)?;
+        let end = read_u32_code(scanner, &mut ctx.buf)?;
         let cid_start = u32::try_from(scanner.parse_number().ok()?.as_i32()).ok()?;
 
         ranges.push(CidRange {
@@ -252,7 +252,7 @@ fn parse_bf_range<F>(
         }
 
         let start = extract_u32_code(&obj, &mut ctx.buf)?;
-        let end = extract_u32_code(&scanner.parse_object().ok()?, &mut ctx.buf)?;
+        let end = read_u32_code(scanner, &mut ctx.buf)?;
 
         let next = scanner.parse_object().ok()?;
 
@@ -299,6 +299,12 @@ fn decode_be_into(bytes: &[u8], out: &mut Vec<u16>) -> Option<()> {
         i += 2;
     }
     Some(())
+}
+
+fn read_u32_code(scanner: &mut Scanner<'_>, buf: &mut Vec<u8>) -> Option<u32> {
+    let s = scanner.parse_string().ok()?;
+    s.decode_into(buf).ok()?;
+    bytes_to_u32(buf)
 }
 
 fn extract_u32_code(obj: &Object<'_>, buf: &mut Vec<u8>) -> Option<u32> {
