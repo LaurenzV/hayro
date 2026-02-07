@@ -34,6 +34,7 @@ pub(crate) fn parse<'a>(
     let mut scanner = Scanner::new(data);
     let mut ctx = Context::new(get_cmap);
     let mut ranges = Vec::new();
+    let mut notdef_ranges = Vec::new();
     let mut base = None;
 
     let mut registry = None;
@@ -72,10 +73,16 @@ pub(crate) fn parse<'a>(
         } else {
             match name.as_str() {
                 Some("begincidrange") => {
-                    parse_cid_range(&mut scanner, &mut ranges, &mut ctx)?;
+                    parse_range(&mut scanner, &mut ranges, &mut ctx, "endcidrange")?;
                 }
                 Some("begincidchar") => {
-                    parse_cid_char(&mut scanner, &mut ranges, &mut ctx)?;
+                    parse_char(&mut scanner, &mut ranges, &mut ctx, "endcidchar")?;
+                }
+                Some("beginnotdefrange") => {
+                    parse_range(&mut scanner, &mut notdef_ranges, &mut ctx, "endnotdefrange")?;
+                }
+                Some("beginnotdefchar") => {
+                    parse_char(&mut scanner, &mut notdef_ranges, &mut ctx, "endnotdefchar")?;
                 }
                 Some("usecmap") => {
                     let nested_data = (ctx.get_cmap)(last_name?.as_bytes())?;
@@ -91,6 +98,7 @@ pub(crate) fn parse<'a>(
     }
 
     ranges.sort_by(|a, b| a.start.cmp(&b.start));
+    notdef_ranges.sort_by(|a, b| a.start.cmp(&b.start));
 
     let metadata = Metadata {
         registry: registry?,
@@ -100,7 +108,7 @@ pub(crate) fn parse<'a>(
         writing_mode,
     };
 
-    Some(CMap::new(metadata, ranges, base))
+    Some(CMap::new(metadata, ranges, notdef_ranges, base))
 }
 
 fn parse_cmap_name(scanner: &mut Scanner<'_>) -> Option<String> {
@@ -117,15 +125,16 @@ fn parse_wmode(scanner: &mut Scanner<'_>) -> Option<WritingMode> {
     }
 }
 
-fn parse_cid_range<F>(
+fn parse_range<F>(
     scanner: &mut Scanner<'_>,
     ranges: &mut Vec<CidRange>,
     ctx: &mut Context<F>,
+    end_marker: &str,
 ) -> Option<()> {
     loop {
         let obj = scanner.parse_object().ok()?;
 
-        if is_exec_name(&obj, "endcidrange") {
+        if is_exec_name(&obj, end_marker) {
             return Some(());
         }
 
@@ -141,15 +150,16 @@ fn parse_cid_range<F>(
     }
 }
 
-fn parse_cid_char<F>(
+fn parse_char<F>(
     scanner: &mut Scanner<'_>,
     ranges: &mut Vec<CidRange>,
     ctx: &mut Context<F>,
+    end_marker: &str,
 ) -> Option<()> {
     loop {
         let obj = scanner.parse_object().ok()?;
 
-        if is_exec_name(&obj, "endcidchar") {
+        if is_exec_name(&obj, end_marker) {
             return Some(());
         }
 

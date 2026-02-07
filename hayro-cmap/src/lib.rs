@@ -32,6 +32,7 @@ const MAX_NESTING_DEPTH: u32 = 16;
 pub struct CMap {
     metadata: Metadata,
     ranges: Vec<CidRange>,
+    notdef_ranges: Vec<CidRange>,
     base: Option<Box<CMap>>,
 }
 
@@ -47,10 +48,16 @@ impl CMap {
         parse::parse(data, get_cmap, 0)
     }
 
-    pub(crate) fn new(metadata: Metadata, ranges: Vec<CidRange>, base: Option<Box<CMap>>) -> Self {
+    pub(crate) fn new(
+        metadata: Metadata,
+        ranges: Vec<CidRange>,
+        notdef_ranges: Vec<CidRange>,
+        base: Option<Box<CMap>>,
+    ) -> Self {
         Self {
             metadata,
             ranges,
+            notdef_ranges,
             base,
         }
     }
@@ -62,7 +69,21 @@ impl CMap {
 
     /// Look up a character code and return the corresponding CID.
     pub fn lookup_cid(&self, code: u32) -> Option<u32> {
-        let result = self.ranges.binary_search_by(|range| {
+        if let Some(range) = find_range(&self.ranges, code) {
+            let offset = code.checked_sub(range.start)?;
+            
+            return Some(range.cid_start + offset);
+        } else if let Some(range) = find_range(&self.notdef_ranges, code) {
+            return Some(range.cid_start);
+        }
+
+        self.base.as_ref()?.lookup_cid(code)
+    }
+}
+
+fn find_range(ranges: &[CidRange], code: u32) -> Option<&CidRange> {
+    let idx = ranges
+        .binary_search_by(|range| {
             if code < range.start {
                 core::cmp::Ordering::Greater
             } else if code > range.end {
@@ -70,16 +91,10 @@ impl CMap {
             } else {
                 core::cmp::Ordering::Equal
             }
-        });
+        })
+        .ok()?;
 
-        if let Ok(idx) = result {
-            let range = &self.ranges[idx];
-            let offset = code.checked_sub(range.start)?;
-            return Some(range.cid_start + offset);
-        }
-
-        self.base.as_ref()?.lookup_cid(code)
-    }
+    Some(&ranges[idx])
 }
 
 /// A range of character codes mapped to CIDs.
@@ -476,5 +491,37 @@ endcidrange
         assert_eq!(cmap.lookup_cid(0x007F), Some(563));
         assert_eq!(cmap.lookup_cid(0x0080), Some(0x80));
         assert_eq!(cmap.lookup_cid(0x00FF), Some(0xFF));
+    }
+
+    #[test]
+    fn notdef_char_lookup() {
+        let cmap = parse_with_preamble(
+            br#"
+2 beginnotdefchar
+<03> 10
+<20> 20
+endnotdefchar
+"#,
+        );
+
+        assert_eq!(cmap.lookup_cid(0x03), Some(10));
+        assert_eq!(cmap.lookup_cid(0x20), Some(20));
+        assert_eq!(cmap.lookup_cid(0x04), None);
+    }
+
+    #[test]
+    fn notdef_range_lookup() {
+        let cmap = parse_with_preamble(
+            br#"
+1 beginnotdefrange
+<0000> <001F> 100
+endnotdefrange
+"#,
+        );
+
+        assert_eq!(cmap.lookup_cid(0x0000), Some(100));
+        assert_eq!(cmap.lookup_cid(0x0001), Some(100));
+        assert_eq!(cmap.lookup_cid(0x001F), Some(100));
+        assert_eq!(cmap.lookup_cid(0x0020), None);
     }
 }
