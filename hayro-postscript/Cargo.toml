@@ -12,6 +12,7 @@ default = ["std"]
 std = []
 
 [dependencies]
+smallvec = { workspace = true }
 
 [lints]
 workspace = true
