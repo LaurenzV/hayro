@@ -25,14 +25,16 @@ pub enum Object<'a> {
 /// Try to read the next PostScript object from the reader.
 ///
 /// Whitespace and comments are skipped before dispatching.
-/// Returns `None` at EOF, `Some(Ok(..))` on success, `Some(Err(..))`
+/// Returns `Ok(None)` at EOF, `Ok(Some(..))` on success, `Err(..)`
 /// on error.
-pub(crate) fn read<'a>(r: &mut Reader<'a>) -> Option<Result<Object<'a>>> {
+pub(crate) fn read<'a>(r: &mut Reader<'a>) -> Result<Option<Object<'a>>> {
     skip_whitespace_and_comments(r);
 
-    let b = r.peek_byte()?;
+    let Some(b) = r.peek_byte() else {
+        return Ok(None);
+    };
 
-    Some(match b {
+    match b {
         b'(' => string::parse_literal(r)
             .map(|s| Object::String(String::from_literal(s)))
             .ok_or(Error::SyntaxError),
@@ -101,7 +103,8 @@ pub(crate) fn read<'a>(r: &mut Reader<'a>) -> Option<Result<Object<'a>>> {
         _ => name::parse_executable(r)
             .map(|s| Object::Name(Name::new(s, false)))
             .ok_or(Error::SyntaxError),
-    })
+    }
+    .map(Some)
 }
 
 pub(crate) fn skip_whitespace_and_comments(r: &mut Reader<'_>) {
@@ -124,7 +127,7 @@ pub(crate) fn skip_whitespace_and_comments(r: &mut Reader<'_>) {
 mod tests {
     use super::*;
 
-    fn read_one(input: &[u8]) -> Option<Result<Object<'_>>> {
+    fn read_one(input: &[u8]) -> Result<Option<Object<'_>>> {
         let mut r = Reader::new(input);
         read(&mut r)
     }
@@ -134,7 +137,7 @@ mod tests {
     }
 
     fn read_err(input: &[u8]) -> Error {
-        read_one(input).unwrap().unwrap_err()
+        read_one(input).unwrap_err()
     }
 
     #[test]
@@ -233,8 +236,8 @@ mod tests {
 
     #[test]
     fn eof() {
-        assert_eq!(read_one(b""), None);
-        assert_eq!(read_one(b"   "), None);
-        assert_eq!(read_one(b"% comment only\n"), None);
+        assert_eq!(read_one(b"").unwrap(), None);
+        assert_eq!(read_one(b"   ").unwrap(), None);
+        assert_eq!(read_one(b"% comment only\n").unwrap(), None);
     }
 }

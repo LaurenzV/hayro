@@ -59,12 +59,12 @@ impl<'a> Scanner<'a> {
             reader: Reader::new(data),
         }
     }
-}
 
-impl<'a> Iterator for Scanner<'a> {
-    type Item = Result<Object<'a>>;
-
-    fn next(&mut self) -> Option<Result<Object<'a>>> {
+    /// Read the next object from the stream.
+    ///
+    /// Returns `Ok(None)` at EOF, `Ok(Some(..))` on success, `Err(..)`
+    /// on error.
+    pub fn next(&mut self) -> Result<Option<Object<'a>>> {
         object::read(&mut self.reader)
     }
 }
@@ -76,9 +76,12 @@ mod tests {
     use super::*;
 
     fn collect_ok(input: &[u8]) -> Vec<Object<'_>> {
-        Scanner::new(input)
-            .map(|r| r.unwrap())
-            .collect()
+        let mut scanner = Scanner::new(input);
+        let mut objects = Vec::new();
+        while let Some(obj) = scanner.next().unwrap() {
+            objects.push(obj);
+        }
+        objects
     }
 
     #[test]
@@ -143,15 +146,16 @@ endcmap"#;
     #[test]
     fn dict_delimiters_error() {
         let input = b"<< /Registry (Adobe) >>";
-        let results: Vec<Result<Object<'_>>> = Scanner::new(input).collect();
+        let mut scanner = Scanner::new(input);
 
-        assert_eq!(results[0], Err(Error::UnsupportedType)); // <<
-        assert_eq!(results[1], Ok(Object::Name(Name::new(b"Registry", true))));
+        assert_eq!(scanner.next(), Err(Error::UnsupportedType)); // <<
+        assert_eq!(scanner.next().unwrap(), Some(Object::Name(Name::new(b"Registry", true))));
         assert_eq!(
-            results[2],
-            Ok(Object::String(String::from_literal(b"Adobe")))
+            scanner.next().unwrap(),
+            Some(Object::String(String::from_literal(b"Adobe")))
         );
-        assert_eq!(results[3], Err(Error::UnsupportedType)); // >>
+        assert_eq!(scanner.next(), Err(Error::UnsupportedType)); // >>
+        assert_eq!(scanner.next().unwrap(), None);
     }
 
     #[test]
@@ -161,7 +165,7 @@ endcmap"#;
         assert_eq!(objects.len(), 1);
 
         if let Object::Array(arr) = &objects[0] {
-            let inner: Vec<Object<'_>> = arr.objects().map(|r| r.unwrap()).collect();
+            let inner = collect_ok(arr.data());
             assert_eq!(inner.len(), 3);
             assert_eq!(inner[0], Object::Integer(123));
             assert_eq!(inner[1], Object::Name(Name::new(b"abc", true)));
@@ -183,8 +187,9 @@ endcmap"#;
 
     #[test]
     fn procedure_error() {
-        let results: Vec<Result<Object<'_>>> = Scanner::new(b"{ }").collect();
-        assert_eq!(results[0], Err(Error::UnsupportedType));
-        assert_eq!(results[1], Err(Error::UnsupportedType));
+        let mut scanner = Scanner::new(b"{ }");
+        assert_eq!(scanner.next(), Err(Error::UnsupportedType));
+        assert_eq!(scanner.next(), Err(Error::UnsupportedType));
+        assert_eq!(scanner.next().unwrap(), None);
     }
 }

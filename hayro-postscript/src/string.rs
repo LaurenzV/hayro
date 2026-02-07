@@ -52,13 +52,6 @@ impl<'a> String<'a> {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Range-finding parsers (no decoding)
-// ---------------------------------------------------------------------------
-
-/// Parse a literal string `(...)`, returning the raw inner bytes.
-///
-/// The reader must be positioned at the opening `(`.
 pub(crate) fn parse_literal<'a>(r: &mut Reader<'a>) -> Option<&'a [u8]> {
     let start = r.offset();
     skip_literal(r)?;
@@ -67,9 +60,6 @@ pub(crate) fn parse_literal<'a>(r: &mut Reader<'a>) -> Option<&'a [u8]> {
     r.range(start + 1..end - 1)
 }
 
-/// Parse a hex string `<...>`, returning the raw inner bytes.
-///
-/// The reader must be positioned at the opening `<`.
 pub(crate) fn parse_hex<'a>(r: &mut Reader<'a>) -> Option<&'a [u8]> {
     r.forward_tag(b"<")?;
     let start = r.offset();
@@ -81,9 +71,6 @@ pub(crate) fn parse_hex<'a>(r: &mut Reader<'a>) -> Option<&'a [u8]> {
     None
 }
 
-/// Parse an ASCII85 string `<~...~>`, returning the raw inner bytes.
-///
-/// The reader must be positioned at the opening `<`.
 pub(crate) fn parse_ascii85<'a>(r: &mut Reader<'a>) -> Option<&'a [u8]> {
     r.forward_tag(b"<~")?;
     let start = r.offset();
@@ -91,18 +78,13 @@ pub(crate) fn parse_ascii85<'a>(r: &mut Reader<'a>) -> Option<&'a [u8]> {
         let b = r.read_byte()?;
         if b == b'~' {
             let end = r.offset() - 1;
-            // Consume the closing `>`.
             r.forward_tag(b">")?;
             return r.range(start..end);
         }
     }
 }
 
-// ---------------------------------------------------------------------------
-// Skip helper for literal strings
-// ---------------------------------------------------------------------------
 
-/// Skip past a literal string without decoding.
 fn skip_literal(r: &mut Reader<'_>) -> Option<()> {
     r.forward_tag(b"(")?;
     let mut depth = 1u32;
@@ -122,16 +104,10 @@ fn skip_literal(r: &mut Reader<'_>) -> Option<()> {
     Some(())
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // ---- Literal parsing + decoding ----
-
+    
     fn decode_literal(input: &[u8]) -> Result<Vec<u8>> {
         let mut r = Reader::new(input);
         let data = parse_literal(&mut r).ok_or(Error::SyntaxError)?;
@@ -236,8 +212,6 @@ mod tests {
         assert_eq!(decode_literal(b"(a\r\nb)").unwrap(), b"a\nb");
     }
 
-    // ---- Hex parsing + decoding ----
-
     fn decode_hex(input: &[u8]) -> Result<Vec<u8>> {
         let mut r = Reader::new(input);
         let data = parse_hex(&mut r).ok_or(Error::SyntaxError)?;
@@ -274,8 +248,6 @@ mod tests {
         assert_eq!(decode_hex(b"<aB3E>").unwrap(), &[0xAB, 0x3E]);
     }
 
-    // ---- ASCII85 parsing + decoding ----
-
     fn decode_a85(input: &[u8]) -> Result<Vec<u8>> {
         let mut r = Reader::new(input);
         let data = parse_ascii85(&mut r).ok_or(Error::SyntaxError)?;
@@ -306,7 +278,6 @@ mod tests {
 
     #[test]
     fn ascii85_partial_group() {
-        // Two-char partial group "87" -> 1 byte
         let result = decode_a85(b"<~87~>").unwrap();
         assert_eq!(result.len(), 1);
     }

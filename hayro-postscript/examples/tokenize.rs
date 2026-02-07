@@ -22,9 +22,10 @@ fn main() {
         }
     };
 
-    for result in Scanner::new(&data) {
-        match result {
-            Ok(object) => match object {
+    let mut scanner = Scanner::new(&data);
+    loop {
+        match scanner.next() {
+            Ok(Some(object)) => match object {
                 Object::Integer(n) => println!("Integer({n})"),
                 Object::Real(n) => println!("Real({n})"),
                 Object::Name(ref name) => {
@@ -40,6 +41,7 @@ fn main() {
                     println!("Array({} bytes)", arr.data().len());
                 }
             },
+            Ok(None) => break,
             Err(e) => {
                 eprintln!("Error: {e}");
             }

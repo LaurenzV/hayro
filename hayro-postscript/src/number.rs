@@ -28,7 +28,7 @@ pub(crate) fn read(r: &mut Reader<'_>) -> Option<Number> {
     r.forward_while(|b| b.is_ascii_digit());
     let has_digits = r.offset() > digit_start;
 
-    // Check for radix syntax: `base#digits` (no sign allowed).
+    // Check for radix syntax: `base#digits`.
     if !has_sign && has_digits && r.peek_byte() == Some(b'#') {
         let base_bytes = r.range(digit_start..r.offset())?;
         let base_str = core::str::from_utf8(base_bytes).ok()?;

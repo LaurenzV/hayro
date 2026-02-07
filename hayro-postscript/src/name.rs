@@ -1,5 +1,6 @@
 use alloc::vec::Vec;
 
+use crate::error::{Error, Result};
 use crate::reader::{Reader, is_regular};
 use crate::string::ascii_hex::decode_hex_digit;
 
@@ -32,14 +33,12 @@ impl<'a> Name<'a> {
     }
 
     /// Decode `#XX` hex escapes into `out`, replacing any previous contents.
-    ///
-    /// Returns `None` if a `#XX` escape is malformed.
-    pub fn decode_into(&self, out: &mut Vec<u8>) -> Option<()> {
+    pub fn decode_into(&self, out: &mut Vec<u8>) -> Result<()> {
         out.clear();
         // Fast path: no `#` escapes.
         if !self.data.contains(&b'#') {
             out.extend_from_slice(self.data);
-            return Some(());
+            return Ok(());
         }
 
         // Slow path: decode `#XX` hex escapes.
@@ -47,23 +46,23 @@ impl<'a> Name<'a> {
 
         while let Some(b) = inner.read_byte() {
             if b == b'#' {
-                let hex = inner.read_bytes(2)?;
-                out.push(decode_hex_digit(hex[0])? << 4 | decode_hex_digit(hex[1])?);
+                let hex = inner.read_bytes(2).ok_or(Error::SyntaxError)?;
+                let hi = decode_hex_digit(hex[0]).ok_or(Error::SyntaxError)?;
+                let lo = decode_hex_digit(hex[1]).ok_or(Error::SyntaxError)?;
+                out.push(hi << 4 | lo);
             } else {
                 out.push(b);
             }
         }
 
-        Some(())
+        Ok(())
     }
 
     /// Decode `#XX` hex escapes and return the result.
-    ///
-    /// Returns `None` if a `#XX` escape is malformed.
-    pub fn decode(&self) -> Option<Vec<u8>> {
+    pub fn decode(&self) -> Result<Vec<u8>> {
         let mut out = Vec::new();
         self.decode_into(&mut out)?;
-        Some(out)
+        Ok(out)
     }
 }
 
