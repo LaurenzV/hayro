@@ -56,21 +56,21 @@ impl CMap {
 
     /// Create an Identity-H CMap.
     pub fn identity_h() -> Self {
-        Self::identity(WritingMode::Horizontal, "Identity-H")
+        Self::identity(WritingMode::Horizontal, b"Identity-H")
     }
 
     /// Create an Identity-V CMap.
     pub fn identity_v() -> Self {
-        Self::identity(WritingMode::Vertical, "Identity-V")
+        Self::identity(WritingMode::Vertical, b"Identity-V")
     }
 
-    fn identity(writing_mode: WritingMode, name: &str) -> Self {
+    fn identity(writing_mode: WritingMode, name: &[u8]) -> Self {
         Self {
             metadata: Metadata {
-                registry: String::from("Adobe"),
-                ordering: String::from("Identity"),
+                registry: Vec::from(b"Adobe" as &[u8]),
+                ordering: Vec::from(b"Identity" as &[u8]),
                 supplement: 0,
-                name: String::from(name),
+                name: Vec::from(name),
                 writing_mode,
             },
             codespace_ranges: vec![CodespaceRange {
@@ -234,14 +234,14 @@ pub enum UnicodeString {
 /// Metadata extracted from a CMap file.
 #[derive(Debug, Clone)]
 pub struct Metadata {
-    /// The registry name (e.g. "Adobe").
-    pub registry: String,
-    /// The ordering name (e.g. "Japan1").
-    pub ordering: String,
+    /// The registry name (e.g. `b"Adobe"`).
+    pub registry: Vec<u8>,
+    /// The ordering name (e.g. `b"Japan1"`).
+    pub ordering: Vec<u8>,
     /// The supplement number.
     pub supplement: i32,
     /// The CMap name.
-    pub name: String,
+    pub name: Vec<u8>,
     /// The writing mode.
     pub writing_mode: WritingMode,
 }
@@ -257,38 +257,20 @@ pub enum WritingMode {
 }
 
 pub(crate) trait ScannerExt {
-    fn read_string(&mut self, buf: &mut Vec<u8>) -> Option<String>;
+    fn read_string(&mut self, buf: &mut Vec<u8>) -> Option<Vec<u8>>;
     fn read_integer(&mut self) -> Option<i32>;
-    fn read_u32_code(&mut self, buf: &mut Vec<u8>) -> Option<u32>;
 }
 
 impl ScannerExt for Scanner<'_> {
-    fn read_string(&mut self, buf: &mut Vec<u8>) -> Option<String> {
+    fn read_string(&mut self, buf: &mut Vec<u8>) -> Option<Vec<u8>> {
         let s = self.parse_string().ok()?;
         s.decode_into(buf).ok()?;
-        String::from_utf8(buf.to_vec()).ok()
+        Some(buf.to_vec())
     }
 
     fn read_integer(&mut self) -> Option<i32> {
         let n = self.parse_number().ok()?;
         Some(n.as_i32())
-    }
-
-    fn read_u32_code(&mut self, buf: &mut Vec<u8>) -> Option<u32> {
-        let s = self.parse_string().ok()?;
-        s.decode_into(buf).ok()?;
-        
-        if buf.len() > 4 {
-            return None;
-        }
-        
-        let mut val = 0u32;
-        
-        for &b in buf.iter() {
-            val = (val << 8) | u32::from(b);
-        }
-        
-        Some(val)
     }
 }
 
@@ -337,10 +319,10 @@ end def
 endcmap"#;
 
         let cmap = CMap::parse(data, |_| None).unwrap();
-        assert_eq!(cmap.metadata().registry, "Adobe");
-        assert_eq!(cmap.metadata().ordering, "Japan1");
+        assert_eq!(cmap.metadata().registry, b"Adobe");
+        assert_eq!(cmap.metadata().ordering, b"Japan1");
         assert_eq!(cmap.metadata().supplement, 6);
-        assert_eq!(cmap.metadata().name, "Adobe-Japan1-H");
+        assert_eq!(cmap.metadata().name, b"Adobe-Japan1-H");
         assert_eq!(cmap.metadata().writing_mode, WritingMode::Horizontal);
     }
 
@@ -358,7 +340,7 @@ end def
 
         let cmap = CMap::parse(data, |_| None).unwrap();
         assert_eq!(cmap.metadata().writing_mode, WritingMode::Vertical);
-        assert_eq!(cmap.metadata().name, "Adobe-Japan1-V");
+        assert_eq!(cmap.metadata().name, b"Adobe-Japan1-V");
     }
 
     #[test]
@@ -704,7 +686,7 @@ endbfchar
     #[test]
     fn identity_h() {
         let cmap = CMap::identity_h();
-        assert_eq!(cmap.metadata().name, "Identity-H");
+        assert_eq!(cmap.metadata().name, b"Identity-H");
         assert_eq!(cmap.metadata().writing_mode, WritingMode::Horizontal);
 
         assert_eq!(cmap.lookup_cid(0x0041, 2), Some(0x0041));
@@ -718,7 +700,7 @@ endbfchar
     #[test]
     fn identity_v() {
         let cmap = CMap::identity_v();
-        assert_eq!(cmap.metadata().name, "Identity-V");
+        assert_eq!(cmap.metadata().name, b"Identity-V");
         assert_eq!(cmap.metadata().writing_mode, WritingMode::Vertical);
 
         assert_eq!(cmap.lookup_cid(0x0041, 2), Some(0x0041));

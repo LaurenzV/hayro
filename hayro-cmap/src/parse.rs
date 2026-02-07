@@ -1,5 +1,4 @@
 use alloc::boxed::Box;
-use alloc::string::String;
 use alloc::vec::Vec;
 
 use hayro_postscript::{Object, Scanner};
@@ -68,7 +67,7 @@ pub(crate) fn parse<'a>(
                     supplement = Some(scanner.read_integer()?);
                 }
                 Some("CMapName") => {
-                    cmap_name = Some(parse_cmap_name(&mut scanner)?);
+                    cmap_name = Some(scanner.parse_name().ok()?.decode().ok()?);
                 }
                 Some("WMode") => {
                     writing_mode = parse_wmode(&mut scanner)?;
@@ -135,11 +134,6 @@ pub(crate) fn parse<'a>(
     })
 }
 
-fn parse_cmap_name(scanner: &mut Scanner<'_>) -> Option<String> {
-    let name = scanner.parse_name().ok()?;
-    Some(String::from(name.as_str()?))
-}
-
 fn parse_wmode(scanner: &mut Scanner<'_>) -> Option<WritingMode> {
     let wmode = scanner.read_integer()?;
     match wmode {
@@ -163,7 +157,7 @@ fn parse_codespace_range<F>(
 
         let low = extract_u32_code(&obj, &mut ctx.buf)?;
         let n_bytes = u8::try_from(ctx.buf.len()).ok()?;
-        let high = scanner.read_u32_code(&mut ctx.buf)?;
+        let high = extract_u32_code(&scanner.parse_object().ok()?, &mut ctx.buf)?;
 
         if ctx.buf.len() != usize::from(n_bytes) {
             return None;
@@ -187,7 +181,7 @@ fn parse_range<F>(
         }
 
         let start = extract_u32_code(&obj, &mut ctx.buf)?;
-        let end = scanner.read_u32_code(&mut ctx.buf)?;
+        let end = extract_u32_code(&scanner.parse_object().ok()?, &mut ctx.buf)?;
         let cid_start = u32::try_from(scanner.read_integer()?).ok()?;
 
         ranges.push(CidRange {
@@ -257,7 +251,7 @@ fn parse_bf_range<F>(
         }
 
         let start = extract_u32_code(&obj, &mut ctx.buf)?;
-        let end = scanner.read_u32_code(&mut ctx.buf)?;
+        let end = extract_u32_code(&scanner.parse_object().ok()?, &mut ctx.buf)?;
 
         let next = scanner.parse_object().ok()?;
 
