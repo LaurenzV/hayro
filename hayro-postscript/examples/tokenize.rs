@@ -24,8 +24,10 @@ fn main() {
         }
     };
 
-    for result in Scanner::new(&data) {
-        match result {
+    let mut scanner = Scanner::new(&data);
+
+    while !scanner.at_end() {
+        match scanner.parse_object() {
             Ok(object) => {
                 print_object(&object);
                 println!();
@@ -54,13 +56,14 @@ fn print_object(object: &Object<'_>) {
         }
         Object::Array(arr) => {
             print!("[");
+            let mut inner = arr.objects();
             let mut first = true;
-            for result in arr.objects() {
+            while !inner.at_end() {
                 if !first {
                     print!(" ");
                 }
                 first = false;
-                match result {
+                match inner.parse_object() {
                     Ok(obj) => print_object(&obj),
                     Err(e) => print!("Error({e})"),
                 }

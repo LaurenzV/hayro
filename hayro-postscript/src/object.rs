@@ -18,12 +18,12 @@ pub enum Object<'a> {
     Array(Array<'a>),
 }
 
-pub(crate) fn read<'a>(r: &mut Reader<'a>) -> Option<Result<Object<'a>>> {
+pub(crate) fn read<'a>(r: &mut Reader<'a>) -> Result<Object<'a>> {
     skip_whitespace_and_comments(r);
 
-    let b = r.peek_byte()?;
+    let b = r.peek_byte().ok_or(Error::SyntaxError)?;
 
-    let object = match b {
+    match b {
         b'(' => string::parse_literal(r)
             .map(|s| Object::String(String::from_literal(s)))
             .ok_or(Error::SyntaxError),
@@ -52,9 +52,12 @@ pub(crate) fn read<'a>(r: &mut Reader<'a>) -> Option<Result<Object<'a>>> {
         _ => name::parse_executable(r)
             .map(|s| Object::Name(Name::new(s, false)))
             .ok_or(Error::SyntaxError),
-    };
+    }
+}
 
-    Some(object)
+pub(crate) fn at_end(r: &mut Reader<'_>) -> bool {
+    skip_whitespace_and_comments(r);
+    r.peek_byte().is_none()
 }
 
 pub(crate) fn skip_whitespace_and_comments(r: &mut Reader<'_>) {
@@ -76,17 +79,17 @@ pub(crate) fn skip_whitespace_and_comments(r: &mut Reader<'_>) {
 mod tests {
     use super::*;
 
-    fn read_one(input: &[u8]) -> Option<Result<Object<'_>>> {
+    fn read_one(input: &[u8]) -> Result<Object<'_>> {
         let mut r = Reader::new(input);
         read(&mut r)
     }
 
     fn read_ok(input: &[u8]) -> Object<'_> {
-        read_one(input).unwrap().unwrap()
+        read_one(input).unwrap()
     }
 
     fn read_err(input: &[u8]) -> Error {
-        read_one(input).unwrap().unwrap_err()
+        read_one(input).unwrap_err()
     }
 
     #[test]
@@ -168,8 +171,8 @@ mod tests {
 
     #[test]
     fn eof() {
-        assert!(read_one(b"").is_none());
-        assert!(read_one(b"   ").is_none());
-        assert!(read_one(b"% comment only\n").is_none());
+        assert!(read_one(b"").is_err());
+        assert!(read_one(b"   ").is_err());
+        assert!(read_one(b"% comment only\n").is_err());
     }
 }
