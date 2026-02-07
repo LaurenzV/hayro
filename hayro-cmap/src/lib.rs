@@ -14,6 +14,7 @@ This crate forbids unsafe code via a crate-level attribute.
 
 extern crate alloc;
 
+mod ext;
 mod parse;
 
 use alloc::string::String;

@@ -3,6 +3,7 @@ use alloc::vec::Vec;
 
 use hayro_postscript::{Object, Scanner};
 
+use crate::ext::ScannerExt;
 use crate::{CMap, CharacterCode, CidRange, Metadata, WritingMode};
 
 struct Context {
@@ -26,21 +27,21 @@ pub(crate) fn parse(data: &[u8]) -> Option<CMap> {
     let mut cmap_name = None;
     let mut writing_mode = WritingMode::Horizontal;
 
-    while let Some(result) = scanner.next() {
-        let obj = result.ok()?;
+    while !scanner.at_end() {
+        let obj = scanner.parse_object().ok()?;
 
         let Object::Name(name) = &obj else { continue };
 
         if name.is_literal() {
             match name.as_str() {
                 Some("Registry") => {
-                    registry = Some(read_string(&mut scanner, &mut ctx)?);
+                    registry = Some(scanner.read_string(&mut ctx.buf)?);
                 }
                 Some("Ordering") => {
-                    ordering = Some(read_string(&mut scanner, &mut ctx)?);
+                    ordering = Some(scanner.read_string(&mut ctx.buf)?);
                 }
                 Some("Supplement") => {
-                    supplement = Some(read_integer(&mut scanner)?);
+                    supplement = Some(scanner.read_integer()?);
                 }
                 Some("CMapName") => {
                     cmap_name = Some(parse_cmap_name(&mut scanner)?);
@@ -77,13 +78,12 @@ pub(crate) fn parse(data: &[u8]) -> Option<CMap> {
 }
 
 fn parse_cmap_name(scanner: &mut Scanner<'_>) -> Option<String> {
-    let obj = scanner.next()?.ok()?;
-    let Object::Name(name) = &obj else { return None };
+    let name = scanner.parse_name().ok()?;
     Some(String::from(name.as_str()?))
 }
 
 fn parse_wmode(scanner: &mut Scanner<'_>) -> Option<WritingMode> {
-    let wmode = read_integer(scanner)?;
+    let wmode = scanner.read_integer()?;
     match wmode {
         0 => Some(WritingMode::Horizontal),
         1 => Some(WritingMode::Vertical),
@@ -97,15 +97,15 @@ fn parse_cid_range(
     ctx: &mut Context,
 ) -> Option<()> {
     loop {
-        let obj = scanner.next()?.ok()?;
+        let obj = scanner.parse_object().ok()?;
 
         if is_exec_name(&obj, "endcidrange") {
             return Some(());
         }
 
-        let start = extract_char_code(&obj, ctx)?;
-        let end = read_char_code(scanner, ctx)?;
-        let cid_start = u32::try_from(read_integer(scanner)?).ok()?;
+        let start = extract_char_code(&obj, &mut ctx.buf)?;
+        let end = scanner.read_char_code(&mut ctx.buf)?;
+        let cid_start = u32::try_from(scanner.read_integer()?).ok()?;
 
         ranges.push(CidRange {
             start,
@@ -121,14 +121,14 @@ fn parse_cid_char(
     ctx: &mut Context,
 ) -> Option<()> {
     loop {
-        let obj = scanner.next()?.ok()?;
+        let obj = scanner.parse_object().ok()?;
 
         if is_exec_name(&obj, "endcidchar") {
             return Some(());
         }
 
-        let code = extract_char_code(&obj, ctx)?;
-        let cid_start = u32::try_from(read_integer(scanner)?).ok()?;
+        let code = extract_char_code(&obj, &mut ctx.buf)?;
+        let cid_start = u32::try_from(scanner.read_integer()?).ok()?;
 
         ranges.push(CidRange {
             start: code.clone(),
@@ -138,28 +138,10 @@ fn parse_cid_char(
     }
 }
 
-fn read_string(scanner: &mut Scanner<'_>, ctx: &mut Context) -> Option<String> {
-    let obj = scanner.next()?.ok()?;
-    let Object::String(s) = &obj else { return None };
-    s.decode_into(&mut ctx.buf).ok()?;
-    String::from_utf8(ctx.buf.to_vec()).ok()
-}
-
-fn read_integer(scanner: &mut Scanner<'_>) -> Option<i32> {
-    let obj = scanner.next()?.ok()?;
-    let Object::Number(n) = &obj else { return None };
-    Some(n.as_i32())
-}
-
-fn read_char_code(scanner: &mut Scanner<'_>, ctx: &mut Context) -> Option<CharacterCode> {
-    let obj = scanner.next()?.ok()?;
-    extract_char_code(&obj, ctx)
-}
-
-fn extract_char_code(obj: &Object<'_>, ctx: &mut Context) -> Option<CharacterCode> {
+fn extract_char_code(obj: &Object<'_>, buf: &mut Vec<u8>) -> Option<CharacterCode> {
     let Object::String(s) = obj else { return None };
-    s.decode_into(&mut ctx.buf).ok()?;
-    Some(CharacterCode::from_bytes(&ctx.buf))
+    s.decode_into(buf).ok()?;
+    Some(CharacterCode::from_bytes(buf))
 }
 
 fn is_exec_name(obj: &Object<'_>, expected: &str) -> bool {
