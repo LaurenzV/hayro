@@ -1,18 +1,9 @@
-//! String parsing and decoding for all three PostScript string types.
-//!
-//! The parser only finds the range of the string content (lazy).
-//! Decoding is deferred to [`String::decode_into`] / [`String::decode`].
-
 use alloc::vec::Vec;
 
 use crate::filter::{ascii_85, ascii_hex};
 use crate::reader::Reader;
 
-/// A lazily-decoded PostScript string.
-///
-/// Each variant stores a reference to the raw bytes between the delimiters,
-/// without any decoding. Call [`decode_into`](String::decode_into) or
-/// [`decode`](String::decode) to materialize the decoded content.
+/// A PostScript string object.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum String<'a> {
     /// Raw bytes between `(` and `)`, no decoding applied.
