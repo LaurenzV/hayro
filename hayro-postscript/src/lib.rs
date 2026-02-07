@@ -49,9 +49,12 @@ impl<'a> Scanner<'a> {
             reader: Reader::new(data),
         }
     }
+}
 
-    /// Read the next object from the stream.
-    pub fn next(&mut self) -> Result<Option<Object<'a>>> {
+impl<'a> Iterator for Scanner<'a> {
+    type Item = Result<Object<'a>>;
+
+    fn next(&mut self) -> Option<Self::Item> {
         object::read(&mut self.reader)
     }
 }
@@ -63,12 +66,7 @@ mod tests {
     use super::*;
 
     fn collect_ok(input: &[u8]) -> Vec<Object<'_>> {
-        let mut scanner = Scanner::new(input);
-        let mut objects = Vec::new();
-        while let Some(obj) = scanner.next().unwrap() {
-            objects.push(obj);
-        }
-        objects
+        Scanner::new(input).collect::<Result<Vec<_>>>().unwrap()
     }
 
     #[test]
@@ -129,10 +127,10 @@ endcmap"#;
 
         if let Object::Array(arr) = &objects[0] {
             let mut inner = arr.objects();
-            assert_eq!(inner.next().unwrap(), Some(Object::Number(Number::Integer(123))));
-            assert_eq!(inner.next().unwrap(), Some(Object::Name(Name::new(b"abc", true))));
-            assert_eq!(inner.next().unwrap(), Some(Object::String(String::from_literal(b"xyz"))));
-            assert_eq!(inner.next().unwrap(), None);
+            assert_eq!(inner.next().unwrap().unwrap(), Object::Number(Number::Integer(123)));
+            assert_eq!(inner.next().unwrap().unwrap(), Object::Name(Name::new(b"abc", true)));
+            assert_eq!(inner.next().unwrap().unwrap(), Object::String(String::from_literal(b"xyz")));
+            assert!(inner.next().is_none());
         } else {
             panic!("expected Array");
         }

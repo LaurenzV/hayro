@@ -18,14 +18,12 @@ pub enum Object<'a> {
     Array(Array<'a>),
 }
 
-pub(crate) fn read<'a>(r: &mut Reader<'a>) -> Result<Option<Object<'a>>> {
+pub(crate) fn read<'a>(r: &mut Reader<'a>) -> Option<Result<Object<'a>>> {
     skip_whitespace_and_comments(r);
 
-    let Some(b) = r.peek_byte() else {
-        return Ok(None);
-    };
+    let b = r.peek_byte()?;
 
-    match b {
+    let object = match b {
         b'(' => string::parse_literal(r)
             .map(|s| Object::String(String::from_literal(s)))
             .ok_or(Error::SyntaxError),
@@ -54,8 +52,9 @@ pub(crate) fn read<'a>(r: &mut Reader<'a>) -> Result<Option<Object<'a>>> {
         _ => name::parse_executable(r)
             .map(|s| Object::Name(Name::new(s, false)))
             .ok_or(Error::SyntaxError),
-    }
-    .map(Some)
+    };
+    
+    Some(object)
 }
 
 pub(crate) fn skip_whitespace_and_comments(r: &mut Reader<'_>) {
@@ -77,7 +76,7 @@ pub(crate) fn skip_whitespace_and_comments(r: &mut Reader<'_>) {
 mod tests {
     use super::*;
 
-    fn read_one(input: &[u8]) -> Result<Option<Object<'_>>> {
+    fn read_one(input: &[u8]) -> Option<Result<Object<'_>>> {
         let mut r = Reader::new(input);
         read(&mut r)
     }
@@ -87,7 +86,7 @@ mod tests {
     }
 
     fn read_err(input: &[u8]) -> Error {
-        read_one(input).unwrap_err()
+        read_one(input).unwrap().unwrap_err()
     }
 
     #[test]
@@ -166,8 +165,8 @@ mod tests {
 
     #[test]
     fn eof() {
-        assert_eq!(read_one(b"").unwrap(), None);
-        assert_eq!(read_one(b"   ").unwrap(), None);
-        assert_eq!(read_one(b"% comment only\n").unwrap(), None);
+        assert!(read_one(b"").is_none());
+        assert!(read_one(b"   ").is_none());
+        assert!(read_one(b"% comment only\n").is_none());
     }
 }

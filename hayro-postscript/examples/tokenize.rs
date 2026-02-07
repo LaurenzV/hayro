@@ -22,14 +22,12 @@ fn main() {
         }
     };
 
-    let mut scanner = Scanner::new(&data);
-    loop {
-        match scanner.next() {
-            Ok(Some(object)) => {
+    for result in Scanner::new(&data) {
+        match result {
+            Ok(object) => {
                 print_object(&object);
                 println!();
             }
-            Ok(None) => break,
             Err(e) => eprintln!("Error: {e}"),
         }
     }
@@ -54,25 +52,15 @@ fn print_object(object: &Object<'_>) {
         }
         Object::Array(arr) => {
             print!("[");
-            let mut inner = arr.objects();
             let mut first = true;
-            loop {
-                match inner.next() {
-                    Ok(Some(obj)) => {
-                        if !first {
-                            print!(" ");
-                        }
-                        first = false;
-                        print_object(&obj);
-                    }
-                    Ok(None) => break,
-                    Err(e) => {
-                        if !first {
-                            print!(" ");
-                        }
-                        first = false;
-                        print!("Error({e})");
-                    }
+            for result in arr.objects() {
+                if !first {
+                    print!(" ");
+                }
+                first = false;
+                match result {
+                    Ok(obj) => print_object(&obj),
+                    Err(e) => print!("Error({e})"),
                 }
             }
             print!("]");
