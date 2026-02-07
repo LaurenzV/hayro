@@ -20,7 +20,6 @@ mod parse;
 use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
-use core::cmp::Ordering;
 
 /// The name of a CMap.
 pub type CMapName<'a> = &'a [u8];
@@ -62,127 +61,118 @@ impl CMap {
     }
 
     /// Look up a character code and return the corresponding CID.
-    pub fn lookup(&self, code: &CharacterCode) -> Option<u32> {
+    pub fn lookup_cid(&self, code: u32) -> Option<u32> {
         let result = self.ranges.binary_search_by(|range| {
-            if *code < range.start {
-                Ordering::Greater
-            } else if *code > range.end {
-                Ordering::Less
+            if code < range.start {
+                core::cmp::Ordering::Greater
+            } else if code > range.end {
+                core::cmp::Ordering::Less
             } else {
-                Ordering::Equal
+                core::cmp::Ordering::Equal
             }
         });
 
         if let Ok(idx) = result {
             let range = &self.ranges[idx];
-            let offset = code.offset_from(&range.start)?;
-
+            let offset = code.checked_sub(range.start)?;
             return Some(range.cid_start + offset);
         }
 
-        self.base.as_ref()?.lookup(code)
+        self.base.as_ref()?.lookup_cid(code)
     }
 }
 
 /// A range of character codes mapped to CIDs.
 #[derive(Debug, Clone)]
 pub struct CidRange {
-    pub(crate) start: CharacterCode,
-    pub(crate) end: CharacterCode,
+    pub(crate) start: u32,
+    pub(crate) end: u32,
     pub(crate) cid_start: u32,
 }
 
-/// A character code in a CMap.
+/// A character string in a CMap, used for ToUnicode mappings.
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum CharacterCode {
-    /// A character code that fits in 4 bytes or fewer.
-    Single(u32),
-    /// A character code longer than 4 bytes.
+pub enum CharacterString {
+    /// A single character that fits in 4 bytes or fewer.
+    Char(u32),
+    /// A multi-byte character string longer than 4 bytes.
     Multi(Vec<u8>),
 }
 
-impl CharacterCode {
-    /// Create a `CharacterCode` from decoded bytes.
+#[allow(dead_code)]
+impl CharacterString {
+    /// Create a `CharacterString` from decoded bytes.
     pub fn from_bytes(bytes: &[u8]) -> Self {
         Self::from(bytes)
     }
-
-    fn offset_from(&self, start: &Self) -> Option<u32> {
-        match (self, start) {
-            (Self::Single(c), Self::Single(s)) => c.checked_sub(*s),
-            (Self::Multi(c), Self::Multi(s)) if c.len() == s.len() => {
-                let c_val: u64 = c.iter().fold(0u64, |acc, &b| (acc << 8) | u64::from(b));
-                let s_val: u64 = s.iter().fold(0u64, |acc, &b| (acc << 8) | u64::from(b));
-                u32::try_from(c_val.checked_sub(s_val)?).ok()
-            }
-            _ => None,
-        }
-    }
 }
 
-impl PartialOrd for CharacterCode {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+#[allow(dead_code)]
+impl PartialOrd for CharacterString {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl Ord for CharacterCode {
-    fn cmp(&self, other: &Self) -> Ordering {
+#[allow(dead_code)]
+impl Ord for CharacterString {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
         match (self, other) {
-            (Self::Single(a), Self::Single(b)) => a.cmp(b),
+            (Self::Char(a), Self::Char(b)) => a.cmp(b),
             (Self::Multi(a), Self::Multi(b)) => a.cmp(b),
-            (Self::Single(_), Self::Multi(_)) => Ordering::Less,
-            (Self::Multi(_), Self::Single(_)) => Ordering::Greater,
+            (Self::Char(_), Self::Multi(_)) => core::cmp::Ordering::Less,
+            (Self::Multi(_), Self::Char(_)) => core::cmp::Ordering::Greater,
         }
     }
 }
 
-impl From<u8> for CharacterCode {
+impl From<u8> for CharacterString {
     fn from(val: u8) -> Self {
-        Self::Single(val as u32)
+        Self::Char(val as u32)
     }
 }
 
-impl From<u16> for CharacterCode {
+impl From<u16> for CharacterString {
     fn from(val: u16) -> Self {
-        Self::Single(val as u32)
+        Self::Char(val as u32)
     }
 }
 
-impl From<u32> for CharacterCode {
+impl From<u32> for CharacterString {
     fn from(val: u32) -> Self {
-        Self::Single(val)
+        Self::Char(val)
     }
 }
 
-impl From<char> for CharacterCode {
+impl From<char> for CharacterString {
     fn from(val: char) -> Self {
-        Self::Single(val as u32)
+        Self::Char(val as u32)
     }
 }
 
-impl From<&[u8]> for CharacterCode {
+impl From<&[u8]> for CharacterString {
     fn from(bytes: &[u8]) -> Self {
         if bytes.len() <= 4 {
             let mut val = 0u32;
             for &b in bytes {
                 val = (val << 8) | u32::from(b);
             }
-            Self::Single(val)
+            Self::Char(val)
         } else {
             Self::Multi(bytes.to_vec())
         }
     }
 }
 
-impl From<Vec<u8>> for CharacterCode {
+impl From<Vec<u8>> for CharacterString {
     fn from(bytes: Vec<u8>) -> Self {
         if bytes.len() <= 4 {
             let mut val = 0u32;
             for &b in &bytes {
                 val = (val << 8) | u32::from(b);
             }
-            Self::Single(val)
+            Self::Char(val)
         } else {
             Self::Multi(bytes)
         }
@@ -285,17 +275,17 @@ endcidrange
         );
 
         // First range: <0000>-<00FF> -> CID 0-255
-        assert_eq!(cmap.lookup(&CharacterCode::Single(0x0000)), Some(0));
-        assert_eq!(cmap.lookup(&CharacterCode::Single(0x0042)), Some(0x42));
-        assert_eq!(cmap.lookup(&CharacterCode::Single(0x00FF)), Some(0xFF));
+        assert_eq!(cmap.lookup_cid(0x0000), Some(0));
+        assert_eq!(cmap.lookup_cid(0x0042), Some(0x42));
+        assert_eq!(cmap.lookup_cid(0x00FF), Some(0xFF));
 
         // Second range: <0100>-<01FF> -> CID 256-511
-        assert_eq!(cmap.lookup(&CharacterCode::Single(0x0100)), Some(256));
-        assert_eq!(cmap.lookup(&CharacterCode::Single(0x01FF)), Some(511));
+        assert_eq!(cmap.lookup_cid(0x0100), Some(256));
+        assert_eq!(cmap.lookup_cid(0x01FF), Some(511));
 
         // Third range: <8140>-<817E> -> CID 633-695
-        assert_eq!(cmap.lookup(&CharacterCode::Single(0x8140)), Some(633));
-        assert_eq!(cmap.lookup(&CharacterCode::Single(0x817E)), Some(633 + 62));
+        assert_eq!(cmap.lookup_cid(0x8140), Some(633));
+        assert_eq!(cmap.lookup_cid(0x817E), Some(633 + 62));
     }
 
     #[test]
@@ -310,9 +300,9 @@ endcidchar
 "#,
         );
 
-        assert_eq!(cmap.lookup(&CharacterCode::Single(0x03)), Some(1));
-        assert_eq!(cmap.lookup(&CharacterCode::Single(0x04)), Some(2));
-        assert_eq!(cmap.lookup(&CharacterCode::Single(0x20)), Some(50));
+        assert_eq!(cmap.lookup_cid(0x03), Some(1));
+        assert_eq!(cmap.lookup_cid(0x04), Some(2));
+        assert_eq!(cmap.lookup_cid(0x20), Some(50));
     }
 
     #[test]
@@ -325,9 +315,9 @@ endcidrange
 "#,
         );
 
-        assert_eq!(cmap.lookup(&CharacterCode::Single(0x00FF)), None);
-        assert_eq!(cmap.lookup(&CharacterCode::Single(0x0200)), None);
-        assert_eq!(cmap.lookup(&CharacterCode::Single(0xFFFF)), None);
+        assert_eq!(cmap.lookup_cid(0x00FF), None);
+        assert_eq!(cmap.lookup_cid(0x0200), None);
+        assert_eq!(cmap.lookup_cid(0xFFFF), None);
     }
 
     #[test]
@@ -347,29 +337,29 @@ endcidrange
 "#,
         );
 
-        assert_eq!(cmap.lookup(&CharacterCode::Single(0x0000)), Some(0));
-        assert_eq!(cmap.lookup(&CharacterCode::Single(0x0100)), Some(256));
-        assert_eq!(cmap.lookup(&CharacterCode::Single(0x0200)), Some(600));
-        assert_eq!(cmap.lookup(&CharacterCode::Single(0x8140)), Some(633));
+        assert_eq!(cmap.lookup_cid(0x0000), Some(0));
+        assert_eq!(cmap.lookup_cid(0x0100), Some(256));
+        assert_eq!(cmap.lookup_cid(0x0200), Some(600));
+        assert_eq!(cmap.lookup_cid(0x8140), Some(633));
     }
 
     #[test]
-    fn char_code_from_bytes() {
+    fn char_string_from_bytes() {
         assert_eq!(
-            CharacterCode::from_bytes(&[0x03]),
-            CharacterCode::Single(0x03)
+            CharacterString::from_bytes(&[0x03]),
+            CharacterString::Char(0x03)
         );
         assert_eq!(
-            CharacterCode::from_bytes(&[0x00, 0x41]),
-            CharacterCode::Single(0x0041)
+            CharacterString::from_bytes(&[0x00, 0x41]),
+            CharacterString::Char(0x0041)
         );
         assert_eq!(
-            CharacterCode::from_bytes(&[0x81, 0x40]),
-            CharacterCode::Single(0x8140)
+            CharacterString::from_bytes(&[0x81, 0x40]),
+            CharacterString::Char(0x8140)
         );
         assert_eq!(
-            CharacterCode::from_bytes(&[0x01, 0x02, 0x03, 0x04, 0x05]),
-            CharacterCode::Multi(alloc::vec![0x01, 0x02, 0x03, 0x04, 0x05])
+            CharacterString::from_bytes(&[0x01, 0x02, 0x03, 0x04, 0x05]),
+            CharacterString::Multi(alloc::vec![0x01, 0x02, 0x03, 0x04, 0x05])
         );
     }
 
@@ -384,10 +374,10 @@ endcidrange
 "#,
         );
 
-        assert_eq!(cmap.lookup(&CharacterCode::Single(0x00)), Some(0));
-        assert_eq!(cmap.lookup(&CharacterCode::Single(0x41)), Some(0x41));
-        assert_eq!(cmap.lookup(&CharacterCode::Single(0x80)), Some(200));
-        assert_eq!(cmap.lookup(&CharacterCode::Single(0xFF)), Some(200 + 127));
+        assert_eq!(cmap.lookup_cid(0x00), Some(0));
+        assert_eq!(cmap.lookup_cid(0x41), Some(0x41));
+        assert_eq!(cmap.lookup_cid(0x80), Some(200));
+        assert_eq!(cmap.lookup_cid(0xFF), Some(200 + 127));
     }
 
     #[test]
@@ -434,12 +424,12 @@ endcidrange
         })
         .unwrap();
 
-        assert_eq!(cmap.lookup(&CharacterCode::Single(0x0100)), Some(256));
-        assert_eq!(cmap.lookup(&CharacterCode::Single(0x01FF)), Some(511));
-        assert_eq!(cmap.lookup(&CharacterCode::Single(0x0000)), Some(0));
-        assert_eq!(cmap.lookup(&CharacterCode::Single(0x00FF)), Some(0xFF));
+        assert_eq!(cmap.lookup_cid(0x0100), Some(256));
+        assert_eq!(cmap.lookup_cid(0x01FF), Some(511));
+        assert_eq!(cmap.lookup_cid(0x0000), Some(0));
+        assert_eq!(cmap.lookup_cid(0x00FF), Some(0xFF));
 
-        assert_eq!(cmap.lookup(&CharacterCode::Single(0x0200)), None);
+        assert_eq!(cmap.lookup_cid(0x0200), None);
     }
 
     #[test]
@@ -480,11 +470,11 @@ endcidrange
         })
         .unwrap();
 
-        assert_eq!(cmap.lookup(&CharacterCode::Single(0x0000)), Some(0));
-        assert_eq!(cmap.lookup(&CharacterCode::Single(0x003F)), Some(0x3F));
-        assert_eq!(cmap.lookup(&CharacterCode::Single(0x0040)), Some(500));
-        assert_eq!(cmap.lookup(&CharacterCode::Single(0x007F)), Some(563));
-        assert_eq!(cmap.lookup(&CharacterCode::Single(0x0080)), Some(0x80));
-        assert_eq!(cmap.lookup(&CharacterCode::Single(0x00FF)), Some(0xFF));
+        assert_eq!(cmap.lookup_cid(0x0000), Some(0));
+        assert_eq!(cmap.lookup_cid(0x003F), Some(0x3F));
+        assert_eq!(cmap.lookup_cid(0x0040), Some(500));
+        assert_eq!(cmap.lookup_cid(0x007F), Some(563));
+        assert_eq!(cmap.lookup_cid(0x0080), Some(0x80));
+        assert_eq!(cmap.lookup_cid(0x00FF), Some(0xFF));
     }
 }

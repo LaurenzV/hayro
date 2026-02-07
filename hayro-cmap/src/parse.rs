@@ -5,7 +5,7 @@ use alloc::vec::Vec;
 use hayro_postscript::{Object, Scanner};
 
 use crate::scanner_ext::ScannerExt;
-use crate::{CMap, CMapName, CharacterCode, CidRange, MAX_NESTING_DEPTH, Metadata, WritingMode};
+use crate::{CMap, CMapName, CidRange, MAX_NESTING_DEPTH, Metadata, WritingMode};
 
 struct Context<F> {
     buf: Vec<u8>,
@@ -129,8 +129,8 @@ fn parse_cid_range<F>(
             return Some(());
         }
 
-        let start = extract_char_code(&obj, &mut ctx.buf)?;
-        let end = scanner.read_char_code(&mut ctx.buf)?;
+        let start = extract_u32_code(&obj, &mut ctx.buf)?;
+        let end = scanner.read_u32_code(&mut ctx.buf)?;
         let cid_start = u32::try_from(scanner.read_integer()?).ok()?;
 
         ranges.push(CidRange {
@@ -153,21 +153,32 @@ fn parse_cid_char<F>(
             return Some(());
         }
 
-        let code = extract_char_code(&obj, &mut ctx.buf)?;
+        let code = extract_u32_code(&obj, &mut ctx.buf)?;
         let cid_start = u32::try_from(scanner.read_integer()?).ok()?;
 
         ranges.push(CidRange {
-            start: code.clone(),
+            start: code,
             end: code,
             cid_start,
         });
     }
 }
 
-fn extract_char_code(obj: &Object<'_>, buf: &mut Vec<u8>) -> Option<CharacterCode> {
+fn extract_u32_code(obj: &Object<'_>, buf: &mut Vec<u8>) -> Option<u32> {
     let Object::String(s) = obj else { return None };
     s.decode_into(buf).ok()?;
-    Some(CharacterCode::from_bytes(buf))
+    bytes_to_u32(buf)
+}
+
+fn bytes_to_u32(bytes: &[u8]) -> Option<u32> {
+    if bytes.len() > 4 {
+        return None;
+    }
+    let mut val = 0u32;
+    for &b in bytes {
+        val = (val << 8) | u32::from(b);
+    }
+    Some(val)
 }
 
 fn is_exec_name(obj: &Object<'_>, expected: &str) -> bool {

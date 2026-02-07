@@ -3,12 +3,10 @@ use alloc::vec::Vec;
 
 use hayro_postscript::Scanner;
 
-use crate::CharacterCode;
-
 pub(crate) trait ScannerExt {
     fn read_string(&mut self, buf: &mut Vec<u8>) -> Option<String>;
     fn read_integer(&mut self) -> Option<i32>;
-    fn read_char_code(&mut self, buf: &mut Vec<u8>) -> Option<CharacterCode>;
+    fn read_u32_code(&mut self, buf: &mut Vec<u8>) -> Option<u32>;
 }
 
 impl ScannerExt for Scanner<'_> {
@@ -23,9 +21,16 @@ impl ScannerExt for Scanner<'_> {
         Some(n.as_i32())
     }
 
-    fn read_char_code(&mut self, buf: &mut Vec<u8>) -> Option<CharacterCode> {
+    fn read_u32_code(&mut self, buf: &mut Vec<u8>) -> Option<u32> {
         let s = self.parse_string().ok()?;
         s.decode_into(buf).ok()?;
-        Some(CharacterCode::from_bytes(buf))
+        if buf.len() > 4 {
+            return None;
+        }
+        let mut val = 0u32;
+        for &b in buf.iter() {
+            val = (val << 8) | u32::from(b);
+        }
+        Some(val)
     }
 }
