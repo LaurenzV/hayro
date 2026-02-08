@@ -311,12 +311,20 @@ fn parse_bf_range<F>(
 
 /// Convert the buffer into native-endian u16, so that we can use `String::from_utf16`.
 fn decode_be(bytes: &[u8]) -> Option<Vec<u16>> {
-    if bytes.len() < 2 || !bytes.len().is_multiple_of(2) {
+    if bytes.is_empty() {
         return None;
     }
 
-    let mut out = Vec::with_capacity(bytes.len() / 2);
+    let mut out = Vec::with_capacity((bytes.len() + 1) / 2);
     let mut i = 0;
+
+    // My understanding is that the bf strings should always be UTF16-BE encoded,
+    // but it seems like some PDFs only have a single byte there? I guess we just 
+    // pad them? Wasn't able to find anything specific in the specifications.
+    if bytes.len() % 2 != 0 {
+        out.push(u16::from(bytes[0]));
+        i = 1;
+    }
 
     while i < bytes.len() {
         out.push(u16::from_be_bytes([bytes[i], bytes[i + 1]]));

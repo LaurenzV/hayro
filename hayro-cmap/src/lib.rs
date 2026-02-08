@@ -887,4 +887,29 @@ endbfrange
             Some(UnicodeString::Char('\u{6881}'))
         );
     }
+
+    #[test]
+    fn single_byte_bfrange_destination() {
+        // See for example corpus test case 0625248.
+        let cmap = parse_with_preamble(
+            br#"
+1 beginbfrange
+<00> <7f> <00>
+endbfrange
+"#,
+        );
+
+        assert_eq!(
+            cmap.lookup_unicode_code(0x00),
+            Some(UnicodeString::Char('\u{0000}'))
+        );
+        assert_eq!(
+            cmap.lookup_unicode_code(0x41),
+            Some(UnicodeString::Char('A'))
+        );
+        assert_eq!(
+            cmap.lookup_unicode_code(0x7f),
+            Some(UnicodeString::Char('\u{007F}'))
+        );
+    }
 }
