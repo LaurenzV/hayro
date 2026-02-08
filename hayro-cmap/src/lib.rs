@@ -331,7 +331,10 @@ endcmap"#;
         assert_eq!(cc.registry, b"Adobe");
         assert_eq!(cc.ordering, b"Japan1");
         assert_eq!(cc.supplement, 6);
-        assert_eq!(cmap.metadata().name.as_deref(), Some(b"Adobe-Japan1-H".as_slice()));
+        assert_eq!(
+            cmap.metadata().name.as_deref(),
+            Some(b"Adobe-Japan1-H".as_slice())
+        );
         assert_eq!(cmap.metadata().writing_mode, Some(WritingMode::Horizontal));
     }
 
@@ -349,7 +352,10 @@ end def
 
         let cmap = CMap::parse(data, |_| None).unwrap();
         assert_eq!(cmap.metadata().writing_mode, Some(WritingMode::Vertical));
-        assert_eq!(cmap.metadata().name.as_deref(), Some(b"Adobe-Japan1-V".as_slice()));
+        assert_eq!(
+            cmap.metadata().name.as_deref(),
+            Some(b"Adobe-Japan1-V".as_slice())
+        );
     }
 
     #[test]
@@ -477,7 +483,10 @@ end
         assert_eq!(cc.registry, b"Adobe");
         assert_eq!(cc.ordering, b"UCS");
         assert_eq!(cc.supplement, 0);
-        assert_eq!(cmap.metadata().name.as_deref(), Some(b"Adobe-Identity-UCS".as_slice()));
+        assert_eq!(
+            cmap.metadata().name.as_deref(),
+            Some(b"Adobe-Identity-UCS".as_slice())
+        );
         assert_eq!(
             cmap.lookup_unicode_code(0x001F),
             Some(UnicodeString::Char('\u{F049}'))
@@ -745,7 +754,10 @@ endbfchar
     #[test]
     fn identity_h() {
         let cmap = CMap::identity_h();
-        assert_eq!(cmap.metadata().name.as_deref(), Some(b"Identity-H".as_slice()));
+        assert_eq!(
+            cmap.metadata().name.as_deref(),
+            Some(b"Identity-H".as_slice())
+        );
         assert_eq!(cmap.metadata().writing_mode, Some(WritingMode::Horizontal));
 
         assert_eq!(cmap.lookup_cid_code(0x0041, 2), Some(0x0041));
@@ -759,7 +771,10 @@ endbfchar
     #[test]
     fn identity_v() {
         let cmap = CMap::identity_v();
-        assert_eq!(cmap.metadata().name.as_deref(), Some(b"Identity-V".as_slice()));
+        assert_eq!(
+            cmap.metadata().name.as_deref(),
+            Some(b"Identity-V".as_slice())
+        );
         assert_eq!(cmap.metadata().writing_mode, Some(WritingMode::Vertical));
 
         assert_eq!(cmap.lookup_cid_code(0x0041, 2), Some(0x0041));
