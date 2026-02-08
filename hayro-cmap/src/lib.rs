@@ -448,6 +448,47 @@ endcidrange
     }
 
     #[test]
+    fn dict_style_cidsysteminfo() {
+        let data = br#"
+/CIDInit /ProcSet findresource begin
+10 dict begin
+begincmap
+/CIDSystemInfo
+<< /Registry (Adobe)
+/Ordering (UCS)
+/Supplement 0
+>> def
+/CMapName /Adobe-Identity-UCS def
+/CMapType 2 def
+1 begincodespacerange
+<0000> <FFFF>
+endcodespacerange
+2 beginbfchar
+<001F> <F049>
+<002A> <F055>
+endbfchar
+endcmap
+CMapName currentdict /CMap defineresource pop
+end
+end
+"#;
+        let cmap = CMap::parse(data, |_| None).unwrap();
+        let cc = cmap.metadata().character_collection.as_ref().unwrap();
+        assert_eq!(cc.registry, b"Adobe");
+        assert_eq!(cc.ordering, b"UCS");
+        assert_eq!(cc.supplement, 0);
+        assert_eq!(cmap.metadata().name, b"Adobe-Identity-UCS");
+        assert_eq!(
+            cmap.lookup_unicode_code(0x001F),
+            Some(UnicodeString::Char('\u{F049}'))
+        );
+        assert_eq!(
+            cmap.lookup_unicode_code(0x002A),
+            Some(UnicodeString::Char('\u{F055}'))
+        );
+    }
+
+    #[test]
     fn usecmap_chaining() {
         let base_data = br#"
 /CIDSystemInfo 3 dict dup begin

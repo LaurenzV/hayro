@@ -33,7 +33,11 @@ pub(crate) fn read<'a>(r: &mut Reader<'a>) -> Result<Object<'a>> {
                     .map(|s| Object::String(String::from_ascii85(s)))
                     .ok_or(Error::SyntaxError)
             } else if r.peek_bytes(2) == Some(b"<<") {
-                Err(Error::UnsupportedType)
+                // TODO: Proper dict support. For now, skip `<<` and return
+                // the next object so callers see the inner tokens.
+                r.forward();
+                r.forward();
+                read(r)
             } else {
                 string::parse_hex(r)
                     .map(|s| Object::String(String::from_hex(s)))
@@ -44,6 +48,16 @@ pub(crate) fn read<'a>(r: &mut Reader<'a>) -> Result<Object<'a>> {
             .map(|s| Object::Name(Name::new(s, true)))
             .ok_or(Error::SyntaxError),
         b'[' => array::parse(r).map(|d| Object::Array(Array::new(d))),
+        b'>' => {
+            if r.peek_bytes(2) == Some(b">>") {
+                // TODO: Proper dict support. Skip `>>` closing delimiter.
+                r.forward();
+                r.forward();
+                read(r)
+            } else {
+                Err(Error::SyntaxError)
+            }
+        }
         b'{' => {
             r.forward();
             Err(Error::UnsupportedType)
