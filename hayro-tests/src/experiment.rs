@@ -281,7 +281,7 @@ fn check_cmaps(folder: &str) {
                     };
 
                     // Check if it looks like a CMap.
-                    if !memchr::memmem::find(&decoded, b"begincmap").is_some() {
+                    if memchr::memmem::find(&decoded, b"begincmap").is_none() {
                         continue;
                     }
 
