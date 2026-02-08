@@ -315,7 +315,7 @@ fn decode_be(bytes: &[u8]) -> Option<Vec<u16>> {
         return None;
     }
 
-    let mut out = Vec::with_capacity((bytes.len() + 1) / 2);
+    let mut out = Vec::with_capacity(bytes.len().div_ceil(2));
     let mut i = 0;
 
     // My understanding is that the bf strings should always be UTF16-BE encoded,
