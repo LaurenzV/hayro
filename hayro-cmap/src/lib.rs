@@ -120,8 +120,15 @@ impl CMap {
             return Some(entry.cid_start);
         }
 
-        // If character code is in code space range but has no active mapping, so
-        // assume `.notdef`.
+        // See pdfjs_bug920426, it uses bf chars for encoding the characters
+        // of a text-showing operator, so try that as well. We don't want to
+        // recurse though, only check the bf chars of this level.
+        if let Some(UnicodeString::Char(lookup)) = self.lookup_unicode_code_inner(code, false) {
+            return Some(lookup as u32);
+        }
+
+        // If character code is in code space range but has no active mapping,
+        // here or in any referenced CMaps, assume `.notdef`.
         Some(
             self.base
                 .as_ref()
@@ -135,6 +142,10 @@ impl CMap {
     ///
     /// Returns `None` if no mapping is available.
     pub fn lookup_unicode_code(&self, code: u32) -> Option<UnicodeString> {
+        self.lookup_unicode_code_inner(code, true)
+    }
+
+    fn lookup_unicode_code_inner(&self, code: u32, recurse: bool) -> Option<UnicodeString> {
         if let Some(entry) = find_in_ranges(&self.bf_entries, code) {
             let offset = u16::try_from(code - entry.range.start).ok()?;
 
@@ -159,7 +170,11 @@ impl CMap {
             };
         }
 
-        self.base.as_ref()?.lookup_unicode_code(code)
+        if recurse {
+            self.base.as_ref()?.lookup_unicode_code(code)
+        } else {
+            None
+        }
     }
 }
 
