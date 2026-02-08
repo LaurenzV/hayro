@@ -406,6 +406,7 @@ fn read_encoding(object: &Object<'_>) -> Option<CMap> {
         },
         Object::Stream(s) => {
             let decoded = s.decoded().ok()?;
+            // TODO: Support usecmap
             CMap::parse(&decoded, |_| None)
         }
         _ => None,
