@@ -9,13 +9,26 @@ This crate provides a parser for `CMap` files and allows you to
 This crate forbids unsafe code via a crate-level attribute.
 */
 
-#![no_std]
+#![cfg_attr(not(feature = "std"), no_std)]
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
 extern crate alloc;
 
+#[cfg(feature = "embed-cmaps")]
+mod bcmap;
 mod parse;
+
+#[cfg(feature = "embed-cmaps")]
+pub use bcmap::load_embedded;
+
+/// Look up an embedded binary CMap by name.
+///
+/// Returns `None` when the `embed-cmaps` feature is not enabled.
+#[cfg(not(feature = "embed-cmaps"))]
+pub fn load_embedded(_name: &[u8]) -> Option<&'static [u8]> {
+    None
+}
 
 use alloc::boxed::Box;
 use alloc::string::String;
@@ -50,7 +63,7 @@ impl CMap {
         data: &[u8],
         get_cmap: impl Fn(CMapName<'_>) -> Option<&'a [u8]> + Clone + 'a,
     ) -> Option<Self> {
-        parse::parse(data, get_cmap, 0)
+        parse::parse_inner(data, get_cmap, 0)
     }
 
     /// Create an Identity-H `CMap`.
@@ -102,10 +115,7 @@ impl CMap {
     /// Returns `None` if the code is not within any codespace range for the
     /// given byte length.
     pub fn lookup_cid_code(&self, code: u32, byte_len: u8) -> Option<Cid> {
-        let in_codespace = self
-            .codespace_ranges
-            .iter()
-            .any(|r| r.number_bytes == byte_len && code >= r.low && code <= r.high);
+        let in_codespace = self.in_codespace(code, byte_len);
 
         if !in_codespace {
             return None;
@@ -143,6 +153,23 @@ impl CMap {
     /// Returns `None` if no mapping is available.
     pub fn lookup_unicode_code(&self, code: u32) -> Option<UnicodeString> {
         self.lookup_unicode_code_inner(code, true)
+    }
+
+    /// Check whether a character code is within any codespace range, including
+    /// those of the base `CMap` (for `CMap` files that inherit codespace via `usecmap`).
+    fn in_codespace(&self, code: u32, byte_len: u8) -> bool {
+        if !self.codespace_ranges.is_empty() {
+            return self
+                .codespace_ranges
+                .iter()
+                .any(|r| r.number_bytes == byte_len && code >= r.low && code <= r.high);
+        }
+
+        // This CMap has no codespace ranges (e.g. a vertical CMap that
+        // inherits everything via usecmap). Check the base.
+        self.base
+            .as_ref()
+            .is_some_and(|b| b.in_codespace(code, byte_len))
     }
 
     fn lookup_unicode_code_inner(&self, code: u32, recurse: bool) -> Option<UnicodeString> {
@@ -911,5 +938,197 @@ endbfrange
             cmap.lookup_unicode_code(0x7f),
             Some(UnicodeString::Char('\u{007F}'))
         );
+    }
+}
+
+#[cfg(all(test, feature = "embed-cmaps"))]
+mod bcmap_tests {
+    use super::*;
+
+    fn get_embedded_cmap(name: &[u8]) -> Option<&'static [u8]> {
+        load_embedded(name)
+    }
+
+    #[test]
+    fn embedded_h_cmap() {
+        let data = get_embedded_cmap(b"H").expect("embedded H cmap not found");
+        let cmap = CMap::parse(data, get_embedded_cmap).expect("failed to parse H cmap");
+        assert_eq!(cmap.metadata().writing_mode, None);
+        assert_eq!(
+            cmap.metadata().character_collection,
+            Some(CharacterCollection {
+                registry: b"Adobe".to_vec(),
+                ordering: b"Japan1".to_vec(),
+                supplement: 1,
+            })
+        );
+        assert_eq!(cmap.lookup_cid_code(0x2121, 2), Some(633));
+        assert_eq!(cmap.lookup_cid_code(0x2221, 2), Some(727));
+    }
+
+    #[test]
+    fn embedded_90ms_rksj_h() {
+        let data = get_embedded_cmap(b"90ms-RKSJ-H").expect("embedded 90ms-RKSJ-H cmap not found");
+        let cmap = CMap::parse(data, get_embedded_cmap).expect("failed to parse 90ms-RKSJ-H cmap");
+        assert_eq!(
+            cmap.metadata().character_collection,
+            Some(CharacterCollection {
+                registry: b"Adobe".to_vec(),
+                ordering: b"Japan1".to_vec(),
+                supplement: 2,
+            })
+        );
+        assert_eq!(cmap.lookup_cid_code(0x20, 1), Some(231));
+        assert_eq!(cmap.lookup_cid_code(0x8140, 2), Some(633));
+    }
+
+    #[test]
+    fn embedded_v_cmap() {
+        let data = get_embedded_cmap(b"V").expect("embedded V cmap not found");
+        let cmap = CMap::parse(data, get_embedded_cmap).expect("failed to parse V cmap");
+        assert_eq!(cmap.metadata().writing_mode, Some(WritingMode::Vertical));
+        assert_eq!(
+            cmap.metadata().character_collection,
+            Some(CharacterCollection {
+                registry: b"Adobe".to_vec(),
+                ordering: b"Japan1".to_vec(),
+                supplement: 1,
+            })
+        );
+        // Inherited from base "H" via usecmap.
+        assert_eq!(cmap.lookup_cid_code(0x2121, 2), Some(633));
+    }
+
+    #[test]
+    fn embedded_gbk_euc_h() {
+        let data = get_embedded_cmap(b"GBK-EUC-H").expect("embedded GBK-EUC-H not found");
+        let cmap = CMap::parse(data, get_embedded_cmap).expect("failed to parse GBK-EUC-H");
+        assert_eq!(
+            cmap.metadata().character_collection,
+            Some(CharacterCollection {
+                registry: b"Adobe".to_vec(),
+                ordering: b"GB1".to_vec(),
+                supplement: 2,
+            })
+        );
+        assert_eq!(cmap.lookup_cid_code(0x20, 1), Some(7716));
+        assert_eq!(cmap.lookup_cid_code(0x21, 1), Some(814));
+        assert_eq!(cmap.lookup_cid_code(0x7E, 1), Some(814 + 0x7E - 0x21));
+        assert_eq!(cmap.lookup_cid_code(0xFE80, 2), Some(22094));
+        assert_eq!(cmap.lookup_cid_code(0xFEA0, 2), Some(22094 + 0xA0 - 0x80));
+    }
+
+    #[test]
+    fn embedded_ksc_euc_h() {
+        let data = get_embedded_cmap(b"KSC-EUC-H").unwrap();
+        let cmap = CMap::parse(data, get_embedded_cmap).unwrap();
+        assert_eq!(
+            cmap.metadata().character_collection,
+            Some(CharacterCollection {
+                registry: b"Adobe".to_vec(),
+                ordering: b"Korea1".to_vec(),
+                supplement: 0,
+            })
+        );
+        assert_eq!(cmap.lookup_cid_code(0x20, 1), Some(8094));
+        assert_eq!(cmap.lookup_cid_code(0x41, 1), Some(8094 + 0x41 - 0x20));
+        assert_eq!(cmap.lookup_cid_code(0xA1A1, 2), Some(101));
+        assert_eq!(cmap.lookup_cid_code(0xA1FE, 2), Some(101 + 0xFE - 0xA1));
+        assert_eq!(cmap.lookup_cid_code(0xFDA1, 2), Some(7962));
+    }
+
+    #[test]
+    fn embedded_b5pc_h() {
+        let data = get_embedded_cmap(b"B5pc-H").unwrap();
+        let cmap = CMap::parse(data, get_embedded_cmap).unwrap();
+        assert_eq!(
+            cmap.metadata().character_collection,
+            Some(CharacterCollection {
+                registry: b"Adobe".to_vec(),
+                ordering: b"CNS1".to_vec(),
+                supplement: 0,
+            })
+        );
+        assert_eq!(cmap.lookup_cid_code(0x20, 1), Some(1));
+        assert_eq!(cmap.lookup_cid_code(0x41, 1), Some(1 + 0x41 - 0x20));
+        assert_eq!(cmap.lookup_cid_code(0x80, 1), Some(61));
+        assert_eq!(cmap.lookup_cid_code(0xD140, 2), Some(7251));
+        assert_eq!(cmap.lookup_cid_code(0xD17E, 2), Some(7251 + 0x7E - 0x40));
+        assert_eq!(cmap.lookup_cid_code(0xF9D5, 2), Some(13642 + 3));
+    }
+
+    #[test]
+    fn embedded_unijis_utf16_h() {
+        let data = get_embedded_cmap(b"UniJIS-UTF16-H").unwrap();
+        let cmap = CMap::parse(data, get_embedded_cmap).unwrap();
+        assert_eq!(
+            cmap.metadata().character_collection,
+            Some(CharacterCollection {
+                registry: b"Adobe".to_vec(),
+                ordering: b"Japan1".to_vec(),
+                supplement: 7,
+            })
+        );
+        assert_eq!(cmap.lookup_cid_code(0x20, 2), Some(1));
+        assert_eq!(cmap.lookup_cid_code(0x41, 2), Some(1 + 0x41 - 0x20));
+        assert_eq!(cmap.lookup_cid_code(0x5C, 2), Some(97));
+        assert_eq!(cmap.lookup_cid_code(0x5BCC, 2), Some(3531));
+        assert_eq!(cmap.lookup_cid_code(0xD884DF50, 4), Some(19130));
+    }
+
+    #[test]
+    fn embedded_identity_h() {
+        let data = get_embedded_cmap(b"Identity-H").expect("embedded Identity-H not found");
+        let cmap = CMap::parse(data, get_embedded_cmap).expect("failed to parse Identity-H cmap");
+        assert_eq!(cmap.metadata().writing_mode, None);
+        assert_eq!(
+            cmap.metadata().character_collection,
+            Some(CharacterCollection {
+                registry: b"Adobe".to_vec(),
+                ordering: b"Identity".to_vec(),
+                supplement: 0,
+            })
+        );
+        assert_eq!(cmap.lookup_cid_code(0x0000, 2), Some(0));
+        assert_eq!(cmap.lookup_cid_code(0x0041, 2), Some(0x41));
+        assert_eq!(cmap.lookup_cid_code(0xFFFF, 2), Some(0xFFFF));
+    }
+
+    #[test]
+    fn embedded_identity_v() {
+        let data = get_embedded_cmap(b"Identity-V").expect("embedded Identity-V not found");
+        let cmap = CMap::parse(data, get_embedded_cmap).expect("failed to parse Identity-V cmap");
+        assert_eq!(cmap.metadata().writing_mode, Some(WritingMode::Vertical));
+        assert_eq!(
+            cmap.metadata().character_collection,
+            Some(CharacterCollection {
+                registry: b"Adobe".to_vec(),
+                ordering: b"Identity".to_vec(),
+                supplement: 0,
+            })
+        );
+        assert_eq!(cmap.lookup_cid_code(0x0000, 2), Some(0));
+        assert_eq!(cmap.lookup_cid_code(0x0041, 2), Some(0x41));
+        assert_eq!(cmap.lookup_cid_code(0xFFFF, 2), Some(0xFFFF));
+    }
+
+    #[test]
+    fn embedded_eten_b5_h() {
+        let data = get_embedded_cmap(b"ETen-B5-H").unwrap();
+        let cmap = CMap::parse(data, get_embedded_cmap).unwrap();
+        assert_eq!(
+            cmap.metadata().character_collection,
+            Some(CharacterCollection {
+                registry: b"Adobe".to_vec(),
+                ordering: b"CNS1".to_vec(),
+                supplement: 0,
+            })
+        );
+        assert_eq!(cmap.lookup_cid_code(0x20, 1), Some(13648));
+        assert_eq!(cmap.lookup_cid_code(0x7E, 1), Some(13648 + 0x7E - 0x20));
+        assert_eq!(cmap.lookup_cid_code(0xA140, 2), Some(99));
+        assert_eq!(cmap.lookup_cid_code(0xA158, 2), Some(99 + 0x58 - 0x40));
+        assert_eq!(cmap.lookup_cid_code(0xD040, 2), Some(7094));
+        assert_eq!(cmap.lookup_cid_code(0xF9FE, 2), Some(14056 + 0xFE - 0xD6));
     }
 }

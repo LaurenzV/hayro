@@ -7,8 +7,15 @@ edition = { workspace = true }
 repository = { workspace = true }
 license = { workspace = true }
 
+[features]
+default = ["embed-cmaps"]
+std = []
+# Embed the 61 predefined CMaps into the binary. Adds about ~150KB of brotli-encoded data.
+embed-cmaps = ["std", "dep:brotli"]
+
 [dependencies]
 hayro-postscript = { workspace = true }
+brotli = { workspace = true, optional = true }
 
 [lints]
 workspace = true
