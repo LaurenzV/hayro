@@ -36,6 +36,7 @@ impl<'a> Reader<'a> {
             .try_into()
             .ok()?;
         self.byte_pos += 2;
+
         Some(u16::from_be_bytes(bytes))
     }
 
@@ -48,6 +49,7 @@ impl<'a> Reader<'a> {
             .try_into()
             .ok()?;
         self.byte_pos += 4;
+
         Some(u32::from_be_bytes(bytes))
     }
 
@@ -56,6 +58,7 @@ impl<'a> Reader<'a> {
 
         let val = *self.data.get(self.byte_pos)?;
         self.byte_pos += 1;
+
         Some(val)
     }
 
@@ -82,6 +85,7 @@ impl<'a> Reader<'a> {
 
         let bytes = self.data.get(self.byte_pos..self.byte_pos + n)?;
         self.byte_pos += n;
+
         Some(bytes)
     }
 
@@ -93,8 +97,6 @@ impl<'a> Reader<'a> {
         self.byte_pos >= self.data.len()
     }
 
-    /// Consumes bytes until the predicate returns `true` (or EOF), returning
-    /// the consumed slice.
     pub(super) fn eat_until(&mut self, f: impl Fn(u8) -> bool) -> &'a [u8] {
         debug_assert_eq!(self.bit_pos, 0, "eat_until called at non-byte boundary");
 

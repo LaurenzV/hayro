@@ -60,6 +60,7 @@ zune-jpeg = { version = "0.5", default-features = false }
 vello_cpu = { version = "0.0.6", default-features = false, features = ["std", "png", "u8_pipeline"] }
 fast_image_resize = { version = "6.0", default-features = false, features = ["std"] }
 fearless_simd = "0.3.0"
+brotli = { version = "8", default-features = false, features = ["std"] }
 
 [workspace.lints]
 # This one may vary depending on the project.

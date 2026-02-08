@@ -4,7 +4,6 @@ use core::num::NonZeroU32;
 
 use super::reader::Reader;
 
-/// A node in the Huffman tree, stored in a flat Vec.
 #[derive(Debug, Clone, Copy)]
 pub(super) enum HuffmanNode {
     /// Intermediate node with optional children.
@@ -41,7 +40,6 @@ impl HuffmanTable {
         }
     }
 
-    /// Insert a code into the Huffman tree.
     fn insert_code(
         nodes: &mut Vec<HuffmanNode>,
         node_index: u32,
@@ -88,7 +86,6 @@ impl HuffmanTable {
         Self::insert_code(nodes, child_index.get(), remaining, length - 1, symbol);
     }
 
-    /// Build a Huffman table from code lengths and symbols (canonical Huffman).
     fn build(code_lengths: &[u8], symbols: &[u32]) -> Self {
         debug_assert_eq!(code_lengths.len(), symbols.len());
 
@@ -103,7 +100,6 @@ impl HuffmanTable {
 
         let max_length = *code_lengths.iter().max().unwrap_or(&0) as usize;
 
-        // Assign canonical codes.
         let mut codes = vec![0_u32; symbols.len()];
         let mut code = 0_u32;
         for length in 1..=max_length {
@@ -116,7 +112,6 @@ impl HuffmanTable {
             code <<= 1;
         }
 
-        // Build tree.
         let mut nodes = vec![HuffmanNode::Intermediate {
             zero: None,
             one: None,
@@ -126,6 +121,7 @@ impl HuffmanTable {
             if code_lengths[i] == 0 {
                 continue;
             }
+
             Self::insert_code(&mut nodes, 0, codes[i], code_lengths[i], symbol);
         }
 
@@ -133,11 +129,11 @@ impl HuffmanTable {
     }
 }
 
-/// Decode both delta and count Huffman tables from the binary header.
 pub(super) fn decode_tables(data: &[u8]) -> Option<(HuffmanTable, HuffmanTable)> {
     let mut reader = Reader::new(data);
     let delta = decode_single_table(&mut reader, |r| r.read_u32())?;
     let count = decode_single_table(&mut reader, |r| r.read_u8().map(u32::from))?;
+
     Some((delta, count))
 }
 
@@ -146,8 +142,10 @@ fn decode_single_table(
     read_sym: fn(&mut Reader<'_>) -> Option<u32>,
 ) -> Option<HuffmanTable> {
     let n_symbols = reader.read_u16()? as usize;
+
     if n_symbols == 0 {
         let _max_len = reader.read_u8()?;
+
         return Some(HuffmanTable {
             nodes: vec![HuffmanNode::Intermediate {
                 zero: None,
@@ -158,18 +156,17 @@ fn decode_single_table(
 
     let max_code_length = reader.read_u8()? as usize;
 
-    // Read per-length counts: counts[i] = number of symbols with code length i+1.
     let mut counts = Vec::with_capacity(max_code_length);
     for _ in 0..max_code_length {
         counts.push(reader.read_u16()?);
     }
 
-    // Read symbols in canonical order and assign code lengths.
     let mut code_lengths = Vec::with_capacity(n_symbols);
     let mut symbols = Vec::with_capacity(n_symbols);
 
     for (length_idx, &count) in counts.iter().enumerate() {
         let code_len = (length_idx + 1) as u8;
+
         for _ in 0..count {
             symbols.push(read_sym(reader)?);
             code_lengths.push(code_len);

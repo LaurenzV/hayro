@@ -16,7 +16,6 @@ static BUNDLE: LazyLock<Option<Bundle>> = LazyLock::new(|| {
     let huff_data = reader.read_bytes(huff_size)?;
     let (delta_table, count_table) = huffman::decode_tables(huff_data)?;
 
-    // Precompute byte ranges for each bcmap file in the decompressed data.
     let mut entries = Vec::new();
 
     while !reader.at_end() {
@@ -26,14 +25,14 @@ static BUNDLE: LazyLock<Option<Bundle>> = LazyLock::new(|| {
             break;
         }
 
-        reader.read_u8()?; // version
+        reader.read_u8()?; // Skip version.
         let file_len = reader.read_u32()? as usize;
 
         if file_len < 10 {
             break;
         }
 
-        reader.read_bytes(file_len - 10)?;
+        reader.read_bytes(file_len.checked_sub(10)?)?;
         entries.push(start..start + file_len);
     }
 
@@ -52,17 +51,19 @@ struct Bundle {
     entries: Vec<Range<usize>>,
 }
 
-/// Look up an embedded bcmap by `CMap` name, returning the raw bcmap bytes.
+/// Load the data for a cmap file, by name.
 pub fn load_embedded(name: &[u8]) -> Option<&'static [u8]> {
     let bundle = (*BUNDLE).as_ref()?;
     let idx = cmap_index(name)?;
     let range = bundle.entries.get(idx)?;
+
     Some(&bundle.data[range.start..range.end])
 }
 
 /// Return references to the cached Huffman trees.
 pub(super) fn huffman_trees() -> Option<(&'static HuffmanTable, &'static HuffmanTable)> {
     let bundle = (*BUNDLE).as_ref()?;
+
     Some((&bundle.delta_table, &bundle.count_table))
 }
 
