@@ -14,6 +14,7 @@ use hayro_syntax::Pdf;
 
 use std::fmt::Write;
 
+use hayro_cmap::UnicodeString;
 use kurbo::{Affine, BezPath, Point, Rect};
 use std::path::PathBuf;
 
@@ -98,7 +99,10 @@ impl Device<'_> for TextExtractor {
             writeln!(
                 self.text,
                 "<div style='position: absolute; color: black; left: {}px; top: {}px; font-size: {}pt'>{}</div>",
-                position.x, position.y, 6, unicode_char
+                position.x, position.y, 6, match unicode_char {
+                    UnicodeString::Char(c) => c.to_string(),
+                    UnicodeString::String(s) => s
+                }
             ).unwrap();
         } else {
             // Fallback for glyphs without Unicode mapping.
