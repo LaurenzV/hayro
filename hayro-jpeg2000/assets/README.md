@@ -1,0 +1,3 @@
+- The LAB profile was created manually via lcms.
+- The CGATS001 profile (for CMYK) is taken from https://github.com/saucecontrol/Compact-ICC-Profiles
+- The ProPhotoRGB profile was copied from  `/usr/share/color/icc/colord/ProPhotoRGB.icc` of an Ubuntu distribution.
