@@ -67,13 +67,9 @@ pub(super) fn huffman_trees() -> Option<(&'static HuffmanTable, &'static Huffman
     Some((&bundle.delta_table, &bundle.count_table))
 }
 
-/// Map a predefined PDF `CMap` name to its index in the sorted bundle.
-///
-/// The bundle contains exactly the `CMaps` from ISO 32000-2 Table 116,
-/// sorted alphabetically. This match must stay in sync with the set
-/// in `cmap_common.py::PDF_PREDEFINED`.
+/// Get the index of the font of the cmap in the bundle. They are sorted
+/// alphabetically.
 fn cmap_index(name: &[u8]) -> Option<usize> {
-    // Sorted alphabetically — indices 0..60.
     Some(match name {
         b"83pv-RKSJ-H" => 0,
         b"90ms-RKSJ-H" => 1,
