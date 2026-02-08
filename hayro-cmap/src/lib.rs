@@ -97,11 +97,11 @@ impl CMap {
         &self.metadata
     }
 
-    /// Look up the CID of a character code.
+    /// Look up the CID code of a character code.
     ///
     /// Returns `None` if the code is not within any codespace range for the
     /// given byte length.
-    pub fn lookup_cid(&self, code: u32, byte_len: u8) -> Option<Cid> {
+    pub fn lookup_cid_code(&self, code: u32, byte_len: u8) -> Option<Cid> {
         let in_codespace = self
             .codespace_ranges
             .iter()
@@ -125,15 +125,16 @@ impl CMap {
         Some(
             self.base
                 .as_ref()
-                .and_then(|b| b.lookup_cid(code, byte_len))
+                .and_then(|b| b.lookup_cid_code(code, byte_len))
                 .unwrap_or(0),
         )
     }
 
-    /// Look up the Unicode string of the given character code.
+    /// Look up the base font code of the given character code. This is usually
+    /// used for `ToUnicode` CMaps
     ///
     /// Returns `None` if no mapping is available.
-    pub fn lookup_unicode(&self, code: u32) -> Option<UnicodeString> {
+    pub fn lookup_unicode_code(&self, code: u32) -> Option<UnicodeString> {
         if let Some(entry) = find_in_ranges(&self.bf_entries, code) {
             let offset = u16::try_from(code - entry.range.start).ok()?;
 
@@ -158,7 +159,7 @@ impl CMap {
             };
         }
 
-        self.base.as_ref()?.lookup_unicode(code)
+        self.base.as_ref()?.lookup_unicode_code(code)
     }
 }
 
@@ -348,15 +349,15 @@ endcidrange
 "#,
         );
 
-        assert_eq!(cmap.lookup_cid(0x0000, 2), Some(0));
-        assert_eq!(cmap.lookup_cid(0x0042, 2), Some(0x42));
-        assert_eq!(cmap.lookup_cid(0x00FF, 2), Some(0xFF));
+        assert_eq!(cmap.lookup_cid_code(0x0000, 2), Some(0));
+        assert_eq!(cmap.lookup_cid_code(0x0042, 2), Some(0x42));
+        assert_eq!(cmap.lookup_cid_code(0x00FF, 2), Some(0xFF));
 
-        assert_eq!(cmap.lookup_cid(0x0100, 2), Some(256));
-        assert_eq!(cmap.lookup_cid(0x01FF, 2), Some(511));
+        assert_eq!(cmap.lookup_cid_code(0x0100, 2), Some(256));
+        assert_eq!(cmap.lookup_cid_code(0x01FF, 2), Some(511));
 
-        assert_eq!(cmap.lookup_cid(0x8140, 2), Some(633));
-        assert_eq!(cmap.lookup_cid(0x817E, 2), Some(633 + 62));
+        assert_eq!(cmap.lookup_cid_code(0x8140, 2), Some(633));
+        assert_eq!(cmap.lookup_cid_code(0x817E, 2), Some(633 + 62));
     }
 
     #[test]
@@ -371,9 +372,9 @@ endcidchar
 "#,
         );
 
-        assert_eq!(cmap.lookup_cid(0x03, 1), Some(1));
-        assert_eq!(cmap.lookup_cid(0x04, 1), Some(2));
-        assert_eq!(cmap.lookup_cid(0x20, 1), Some(50));
+        assert_eq!(cmap.lookup_cid_code(0x03, 1), Some(1));
+        assert_eq!(cmap.lookup_cid_code(0x04, 1), Some(2));
+        assert_eq!(cmap.lookup_cid_code(0x20, 1), Some(50));
     }
 
     #[test]
@@ -386,9 +387,9 @@ endcidrange
 "#,
         );
 
-        assert_eq!(cmap.lookup_cid(0x00FF, 2), Some(0));
-        assert_eq!(cmap.lookup_cid(0x0200, 2), Some(0));
-        assert_eq!(cmap.lookup_cid(0xFFFF, 2), Some(0));
+        assert_eq!(cmap.lookup_cid_code(0x00FF, 2), Some(0));
+        assert_eq!(cmap.lookup_cid_code(0x0200, 2), Some(0));
+        assert_eq!(cmap.lookup_cid_code(0xFFFF, 2), Some(0));
     }
 
     #[test]
@@ -408,10 +409,10 @@ endcidrange
 "#,
         );
 
-        assert_eq!(cmap.lookup_cid(0x0000, 2), Some(0));
-        assert_eq!(cmap.lookup_cid(0x0100, 2), Some(256));
-        assert_eq!(cmap.lookup_cid(0x0200, 2), Some(600));
-        assert_eq!(cmap.lookup_cid(0x8140, 2), Some(633));
+        assert_eq!(cmap.lookup_cid_code(0x0000, 2), Some(0));
+        assert_eq!(cmap.lookup_cid_code(0x0100, 2), Some(256));
+        assert_eq!(cmap.lookup_cid_code(0x0200, 2), Some(600));
+        assert_eq!(cmap.lookup_cid_code(0x8140, 2), Some(633));
     }
 
     #[test]
@@ -425,10 +426,10 @@ endcidrange
 "#,
         );
 
-        assert_eq!(cmap.lookup_cid(0x00, 1), Some(0));
-        assert_eq!(cmap.lookup_cid(0x41, 1), Some(0x41));
-        assert_eq!(cmap.lookup_cid(0x80, 1), Some(200));
-        assert_eq!(cmap.lookup_cid(0xFF, 1), Some(200 + 127));
+        assert_eq!(cmap.lookup_cid_code(0x00, 1), Some(0));
+        assert_eq!(cmap.lookup_cid_code(0x41, 1), Some(0x41));
+        assert_eq!(cmap.lookup_cid_code(0x80, 1), Some(200));
+        assert_eq!(cmap.lookup_cid_code(0xFF, 1), Some(200 + 127));
     }
 
     #[test]
@@ -475,12 +476,12 @@ endcidrange
         })
         .unwrap();
 
-        assert_eq!(cmap.lookup_cid(0x0100, 2), Some(256));
-        assert_eq!(cmap.lookup_cid(0x01FF, 2), Some(511));
-        assert_eq!(cmap.lookup_cid(0x0000, 2), Some(0));
-        assert_eq!(cmap.lookup_cid(0x00FF, 2), Some(0xFF));
+        assert_eq!(cmap.lookup_cid_code(0x0100, 2), Some(256));
+        assert_eq!(cmap.lookup_cid_code(0x01FF, 2), Some(511));
+        assert_eq!(cmap.lookup_cid_code(0x0000, 2), Some(0));
+        assert_eq!(cmap.lookup_cid_code(0x00FF, 2), Some(0xFF));
 
-        assert_eq!(cmap.lookup_cid(0x0200, 2), Some(0));
+        assert_eq!(cmap.lookup_cid_code(0x0200, 2), Some(0));
     }
 
     #[test]
@@ -527,12 +528,12 @@ endcidrange
         })
         .unwrap();
 
-        assert_eq!(cmap.lookup_cid(0x0000, 2), Some(0));
-        assert_eq!(cmap.lookup_cid(0x003F, 2), Some(0x3F));
-        assert_eq!(cmap.lookup_cid(0x0040, 2), Some(500));
-        assert_eq!(cmap.lookup_cid(0x007F, 2), Some(563));
-        assert_eq!(cmap.lookup_cid(0x0080, 2), Some(0x80));
-        assert_eq!(cmap.lookup_cid(0x00FF, 2), Some(0xFF));
+        assert_eq!(cmap.lookup_cid_code(0x0000, 2), Some(0));
+        assert_eq!(cmap.lookup_cid_code(0x003F, 2), Some(0x3F));
+        assert_eq!(cmap.lookup_cid_code(0x0040, 2), Some(500));
+        assert_eq!(cmap.lookup_cid_code(0x007F, 2), Some(563));
+        assert_eq!(cmap.lookup_cid_code(0x0080, 2), Some(0x80));
+        assert_eq!(cmap.lookup_cid_code(0x00FF, 2), Some(0xFF));
     }
 
     #[test]
@@ -546,9 +547,9 @@ endnotdefchar
 "#,
         );
 
-        assert_eq!(cmap.lookup_cid(0x03, 1), Some(10));
-        assert_eq!(cmap.lookup_cid(0x20, 1), Some(20));
-        assert_eq!(cmap.lookup_cid(0x04, 1), Some(0));
+        assert_eq!(cmap.lookup_cid_code(0x03, 1), Some(10));
+        assert_eq!(cmap.lookup_cid_code(0x20, 1), Some(20));
+        assert_eq!(cmap.lookup_cid_code(0x04, 1), Some(0));
     }
 
     #[test]
@@ -561,10 +562,10 @@ endnotdefrange
 "#,
         );
 
-        assert_eq!(cmap.lookup_cid(0x0000, 2), Some(100));
-        assert_eq!(cmap.lookup_cid(0x0001, 2), Some(100));
-        assert_eq!(cmap.lookup_cid(0x001F, 2), Some(100));
-        assert_eq!(cmap.lookup_cid(0x0020, 2), Some(0));
+        assert_eq!(cmap.lookup_cid_code(0x0000, 2), Some(100));
+        assert_eq!(cmap.lookup_cid_code(0x0001, 2), Some(100));
+        assert_eq!(cmap.lookup_cid_code(0x001F, 2), Some(100));
+        assert_eq!(cmap.lookup_cid_code(0x0020, 2), Some(0));
     }
 
     #[test]
@@ -578,9 +579,15 @@ endbfchar
 "#,
         );
 
-        assert_eq!(cmap.lookup_unicode(0x0041), Some(UnicodeString::Char('H')));
-        assert_eq!(cmap.lookup_unicode(0x0042), Some(UnicodeString::Char('e')));
-        assert_eq!(cmap.lookup_unicode(0x0043), None);
+        assert_eq!(
+            cmap.lookup_unicode_code(0x0041),
+            Some(UnicodeString::Char('H'))
+        );
+        assert_eq!(
+            cmap.lookup_unicode_code(0x0042),
+            Some(UnicodeString::Char('e'))
+        );
+        assert_eq!(cmap.lookup_unicode_code(0x0043), None);
     }
 
     #[test]
@@ -594,7 +601,7 @@ endbfchar
         );
 
         assert_eq!(
-            cmap.lookup_unicode(0x005F),
+            cmap.lookup_unicode_code(0x005F),
             Some(UnicodeString::String(String::from("ff")))
         );
     }
@@ -610,7 +617,7 @@ endbfchar
         );
 
         assert_eq!(
-            cmap.lookup_unicode(0x3A51),
+            cmap.lookup_unicode_code(0x3A51),
             Some(UnicodeString::Char('\u{2003E}'))
         );
     }
@@ -625,10 +632,19 @@ endbfrange
 "#,
         );
 
-        assert_eq!(cmap.lookup_unicode(0x0000), Some(UnicodeString::Char('A')));
-        assert_eq!(cmap.lookup_unicode(0x0001), Some(UnicodeString::Char('B')));
-        assert_eq!(cmap.lookup_unicode(0x0004), Some(UnicodeString::Char('E')));
-        assert_eq!(cmap.lookup_unicode(0x0005), None);
+        assert_eq!(
+            cmap.lookup_unicode_code(0x0000),
+            Some(UnicodeString::Char('A'))
+        );
+        assert_eq!(
+            cmap.lookup_unicode_code(0x0001),
+            Some(UnicodeString::Char('B'))
+        );
+        assert_eq!(
+            cmap.lookup_unicode_code(0x0004),
+            Some(UnicodeString::Char('E'))
+        );
+        assert_eq!(cmap.lookup_unicode_code(0x0005), None);
     }
 
     #[test]
@@ -643,15 +659,15 @@ endbfrange
 
         // ff, fi, fl ligatures
         assert_eq!(
-            cmap.lookup_unicode(0x005F),
+            cmap.lookup_unicode_code(0x005F),
             Some(UnicodeString::String(String::from("ff")))
         );
         assert_eq!(
-            cmap.lookup_unicode(0x0060),
+            cmap.lookup_unicode_code(0x0060),
             Some(UnicodeString::String(String::from("fi")))
         );
         assert_eq!(
-            cmap.lookup_unicode(0x0061),
+            cmap.lookup_unicode_code(0x0061),
             Some(UnicodeString::String(String::from("fl")))
         );
     }
@@ -666,8 +682,8 @@ endbfchar
 "#,
         );
 
-        assert_eq!(cmap.lookup_unicode(0x0000), None);
-        assert_eq!(cmap.lookup_unicode(0x0042), None);
+        assert_eq!(cmap.lookup_unicode_code(0x0000), None);
+        assert_eq!(cmap.lookup_unicode_code(0x0042), None);
     }
 
     #[test]
@@ -676,12 +692,12 @@ endbfchar
         assert_eq!(cmap.metadata().name, b"Identity-H");
         assert_eq!(cmap.metadata().writing_mode, WritingMode::Horizontal);
 
-        assert_eq!(cmap.lookup_cid(0x0041, 2), Some(0x0041));
-        assert_eq!(cmap.lookup_cid(0x1234, 2), Some(0x1234));
-        assert_eq!(cmap.lookup_cid(0xFFFF, 2), Some(0xFFFF));
+        assert_eq!(cmap.lookup_cid_code(0x0041, 2), Some(0x0041));
+        assert_eq!(cmap.lookup_cid_code(0x1234, 2), Some(0x1234));
+        assert_eq!(cmap.lookup_cid_code(0xFFFF, 2), Some(0xFFFF));
 
-        assert_eq!(cmap.lookup_cid(0x0041, 1), None);
-        assert_eq!(cmap.lookup_cid(0x0041, 3), None);
+        assert_eq!(cmap.lookup_cid_code(0x0041, 1), None);
+        assert_eq!(cmap.lookup_cid_code(0x0041, 3), None);
     }
 
     #[test]
@@ -690,8 +706,8 @@ endbfchar
         assert_eq!(cmap.metadata().name, b"Identity-V");
         assert_eq!(cmap.metadata().writing_mode, WritingMode::Vertical);
 
-        assert_eq!(cmap.lookup_cid(0x0041, 2), Some(0x0041));
-        assert_eq!(cmap.lookup_cid(0xFFFF, 2), Some(0xFFFF));
+        assert_eq!(cmap.lookup_cid_code(0x0041, 2), Some(0x0041));
+        assert_eq!(cmap.lookup_cid_code(0xFFFF, 2), Some(0xFFFF));
     }
 
     #[test]
@@ -717,16 +733,16 @@ endcidrange
 "#;
         let cmap = CMap::parse(data.as_slice(), |_| None).unwrap();
 
-        assert_eq!(cmap.lookup_cid(0x41, 1), Some(0x41));
-        assert_eq!(cmap.lookup_cid(0x00, 1), Some(0));
-        assert_eq!(cmap.lookup_cid(0x80, 1), Some(0x80));
-        assert_eq!(cmap.lookup_cid(0x81, 1), None);
+        assert_eq!(cmap.lookup_cid_code(0x41, 1), Some(0x41));
+        assert_eq!(cmap.lookup_cid_code(0x00, 1), Some(0));
+        assert_eq!(cmap.lookup_cid_code(0x80, 1), Some(0x80));
+        assert_eq!(cmap.lookup_cid_code(0x81, 1), None);
 
-        assert_eq!(cmap.lookup_cid(0x8140, 2), Some(200));
-        assert_eq!(cmap.lookup_cid(0x9FFC, 2), Some(200 + 0x9FFC - 0x8140));
-        assert_eq!(cmap.lookup_cid(0x8100, 2), None);
+        assert_eq!(cmap.lookup_cid_code(0x8140, 2), Some(200));
+        assert_eq!(cmap.lookup_cid_code(0x9FFC, 2), Some(200 + 0x9FFC - 0x8140));
+        assert_eq!(cmap.lookup_cid_code(0x8100, 2), None);
 
-        assert_eq!(cmap.lookup_cid(0x41, 2), None);
+        assert_eq!(cmap.lookup_cid_code(0x41, 2), None);
     }
 
     #[test]
@@ -739,9 +755,9 @@ endcodespacerange
 "#,
         );
 
-        assert_eq!(cmap.lookup_cid(0x8EA1A1A1, 4), Some(0));
-        assert_eq!(cmap.lookup_cid(0x8EA1FEFE, 4), Some(0));
-        assert_eq!(cmap.lookup_cid(0x8EA1A1A0, 4), None);
-        assert_eq!(cmap.lookup_cid(0x8EA1A1A1, 3), None);
+        assert_eq!(cmap.lookup_cid_code(0x8EA1A1A1, 4), Some(0));
+        assert_eq!(cmap.lookup_cid_code(0x8EA1FEFE, 4), Some(0));
+        assert_eq!(cmap.lookup_cid_code(0x8EA1A1A0, 4), None);
+        assert_eq!(cmap.lookup_cid_code(0x8EA1A1A1, 3), None);
     }
 }
