@@ -38,7 +38,7 @@ pub(crate) fn parse<'a>(
     let mut ordering = None;
     let mut supplement = None;
     let mut cmap_name = None;
-    let mut writing_mode = WritingMode::Horizontal;
+    let mut writing_mode = None;
     let mut last_name: Option<Vec<u8>> = None;
 
     while !scanner.at_end() {
@@ -61,7 +61,7 @@ pub(crate) fn parse<'a>(
                     cmap_name = Some(scanner.parse_name().ok()?.decode().ok()?);
                 }
                 Some("WMode") => {
-                    writing_mode = parse_writing_mode(&mut scanner)?;
+                    writing_mode = Some(parse_writing_mode(&mut scanner)?);
                 }
                 _ => {
                     last_name = name.decode().ok();
@@ -125,7 +125,7 @@ pub(crate) fn parse<'a>(
 
     let metadata = Metadata {
         character_collection,
-        name: cmap_name?,
+        name: cmap_name,
         writing_mode,
     };
 

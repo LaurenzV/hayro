@@ -71,8 +71,8 @@ impl CMap {
                     ordering: Vec::from(b"Identity" as &[u8]),
                     supplement: 0,
                 }),
-                name: Vec::from(name),
-                writing_mode,
+                name: Some(Vec::from(name)),
+                writing_mode: Some(writing_mode),
             },
             codespace_ranges: vec![CodespaceRange {
                 number_bytes: 2,
@@ -256,13 +256,13 @@ pub struct Metadata {
     /// The referenced character collection.
     pub character_collection: Option<CharacterCollection>,
     /// The `CMap` name.
-    pub name: Vec<u8>,
+    pub name: Option<Vec<u8>>,
     /// The writing mode.
-    pub writing_mode: WritingMode,
+    pub writing_mode: Option<WritingMode>,
 }
 
 /// A CID character collection identifying the character set and ordering.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CharacterCollection {
     /// The registry name (e.g. `b"Adobe"`).
     pub registry: Vec<u8>,
@@ -331,8 +331,8 @@ endcmap"#;
         assert_eq!(cc.registry, b"Adobe");
         assert_eq!(cc.ordering, b"Japan1");
         assert_eq!(cc.supplement, 6);
-        assert_eq!(cmap.metadata().name, b"Adobe-Japan1-H");
-        assert_eq!(cmap.metadata().writing_mode, WritingMode::Horizontal);
+        assert_eq!(cmap.metadata().name.as_deref(), Some(b"Adobe-Japan1-H".as_slice()));
+        assert_eq!(cmap.metadata().writing_mode, Some(WritingMode::Horizontal));
     }
 
     #[test]
@@ -348,8 +348,8 @@ end def
 "#;
 
         let cmap = CMap::parse(data, |_| None).unwrap();
-        assert_eq!(cmap.metadata().writing_mode, WritingMode::Vertical);
-        assert_eq!(cmap.metadata().name, b"Adobe-Japan1-V");
+        assert_eq!(cmap.metadata().writing_mode, Some(WritingMode::Vertical));
+        assert_eq!(cmap.metadata().name.as_deref(), Some(b"Adobe-Japan1-V".as_slice()));
     }
 
     #[test]
@@ -477,7 +477,7 @@ end
         assert_eq!(cc.registry, b"Adobe");
         assert_eq!(cc.ordering, b"UCS");
         assert_eq!(cc.supplement, 0);
-        assert_eq!(cmap.metadata().name, b"Adobe-Identity-UCS");
+        assert_eq!(cmap.metadata().name.as_deref(), Some(b"Adobe-Identity-UCS".as_slice()));
         assert_eq!(
             cmap.lookup_unicode_code(0x001F),
             Some(UnicodeString::Char('\u{F049}'))
@@ -745,8 +745,8 @@ endbfchar
     #[test]
     fn identity_h() {
         let cmap = CMap::identity_h();
-        assert_eq!(cmap.metadata().name, b"Identity-H");
-        assert_eq!(cmap.metadata().writing_mode, WritingMode::Horizontal);
+        assert_eq!(cmap.metadata().name.as_deref(), Some(b"Identity-H".as_slice()));
+        assert_eq!(cmap.metadata().writing_mode, Some(WritingMode::Horizontal));
 
         assert_eq!(cmap.lookup_cid_code(0x0041, 2), Some(0x0041));
         assert_eq!(cmap.lookup_cid_code(0x1234, 2), Some(0x1234));
@@ -759,8 +759,8 @@ endbfchar
     #[test]
     fn identity_v() {
         let cmap = CMap::identity_v();
-        assert_eq!(cmap.metadata().name, b"Identity-V");
-        assert_eq!(cmap.metadata().writing_mode, WritingMode::Vertical);
+        assert_eq!(cmap.metadata().name.as_deref(), Some(b"Identity-V".as_slice()));
+        assert_eq!(cmap.metadata().writing_mode, Some(WritingMode::Vertical));
 
         assert_eq!(cmap.lookup_cid_code(0x0041, 2), Some(0x0041));
         assert_eq!(cmap.lookup_cid_code(0xFFFF, 2), Some(0xFFFF));
@@ -815,5 +815,31 @@ endcodespacerange
         assert_eq!(cmap.lookup_cid_code(0x8EA1FEFE, 4), Some(0));
         assert_eq!(cmap.lookup_cid_code(0x8EA1A1A0, 4), None);
         assert_eq!(cmap.lookup_cid_code(0x8EA1A1A1, 3), None);
+    }
+
+    #[test]
+    fn minimal_cmap_no_name_no_wmode() {
+        // Extracted from corpus PDF 0500013.
+        let data = br#"
+/CIDInit /ProcSet findresource begin
+12 dict begin
+begincmap
+/CMapType 2 def
+1 begincodespacerange
+<00><ff>
+endcodespacerange
+1 beginbfrange
+<01><01><0020>
+endbfrange
+endcmap
+"#;
+        let cmap = CMap::parse(data, |_| None).unwrap();
+        assert_eq!(cmap.metadata().name, None);
+        assert_eq!(cmap.metadata().character_collection, None);
+        assert_eq!(cmap.metadata().writing_mode, None);
+        assert_eq!(
+            cmap.lookup_unicode_code(0x01),
+            Some(UnicodeString::Char(' '))
+        );
     }
 }
