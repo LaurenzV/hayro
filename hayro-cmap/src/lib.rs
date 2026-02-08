@@ -857,4 +857,34 @@ endcmap
             Some(UnicodeString::Char(' '))
         );
     }
+
+    #[test]
+    fn registry_as_name() {
+        // Extracted from corpus PDF 0875241, uses names instead of strings for
+        // strings for metadata.
+        let data = br#"
+/CIDSystemInfo
+<< /Registry /ABCDEF+SimSun
+/Ordering (pdfbeaninc)
+/Supplement 0
+>> def
+/CMapName /ABCDEF+SimSun def
+/CMapType 2 def
+1 begincodespacerange
+<0000> <FFFF>
+endcodespacerange
+1 beginbfrange
+<0000> <0000> <6881>
+endbfrange
+"#;
+        let cmap = CMap::parse(data, |_| None).unwrap();
+        let cc = cmap.metadata().character_collection.as_ref().unwrap();
+        assert_eq!(cc.registry, b"ABCDEF+SimSun");
+        assert_eq!(cc.ordering, b"pdfbeaninc");
+        assert_eq!(cc.supplement, 0);
+        assert_eq!(
+            cmap.lookup_unicode_code(0x0000),
+            Some(UnicodeString::Char('\u{6881}'))
+        );
+    }
 }

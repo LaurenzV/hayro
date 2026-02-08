@@ -48,20 +48,23 @@ pub(crate) fn parse<'a>(
 
         if name.is_literal() {
             match name.as_str() {
+                // Strictly speaking, Registry and Ordering should be strings,
+                // but some PDF generators emit names instead, so be lenient
+                // and try both.
                 Some("Registry") => {
-                    registry = Some(scanner.parse_string().ok()?.decode().ok()?);
+                    registry = parse_string_or_name(&mut scanner);
                 }
                 Some("Ordering") => {
-                    ordering = Some(scanner.parse_string().ok()?.decode().ok()?);
+                    ordering = parse_string_or_name(&mut scanner);
                 }
                 Some("Supplement") => {
-                    supplement = Some(scanner.parse_number().ok()?.as_i32());
+                    supplement = scanner.parse_number().ok().map(|n| n.as_i32());
                 }
                 Some("CMapName") => {
-                    cmap_name = Some(scanner.parse_name().ok()?.decode().ok()?);
+                    cmap_name = scanner.parse_name().ok().and_then(|n| n.decode().ok());
                 }
                 Some("WMode") => {
-                    writing_mode = Some(parse_writing_mode(&mut scanner)?);
+                    writing_mode = parse_writing_mode(&mut scanner);
                 }
                 _ => {
                     last_name = name.decode().ok();
@@ -143,6 +146,14 @@ fn parse_writing_mode(scanner: &mut Scanner<'_>) -> Option<WritingMode> {
     match scanner.parse_number().ok()?.as_i32() {
         0 => Some(WritingMode::Horizontal),
         1 => Some(WritingMode::Vertical),
+        _ => None,
+    }
+}
+
+fn parse_string_or_name(scanner: &mut Scanner<'_>) -> Option<Vec<u8>> {
+    match scanner.parse_object().ok()? {
+        Object::String(s) => s.decode().ok(),
+        Object::Name(n) => n.decode().ok(),
         _ => None,
     }
 }
