@@ -12,6 +12,7 @@ use alloc::vec::Vec;
 
 pub use embedded::load_embedded;
 
+use crate::bcmap::embedded::BUNDLE;
 use crate::{
     CMap, CMapName, CharacterCollection, CidRange, CodespaceRange, Metadata, Range, WritingMode,
     parse,
@@ -61,7 +62,8 @@ pub(crate) fn parse<'a>(
 
     let file_len = reader.read_u32()? as usize;
 
-    let (delta_table, count_table) = embedded::huffman_trees()?;
+    let delta_table = &BUNDLE.delta_table;
+    let count_table = &BUNDLE.count_table;
 
     let mut cmap_name = None;
     let mut character_collection = None;

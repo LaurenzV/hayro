@@ -4,67 +4,63 @@ use std::sync::LazyLock;
 use super::huffman::{self, HuffmanTable};
 use super::reader::Reader;
 
-static BUNDLE: LazyLock<Option<Bundle>> = LazyLock::new(|| {
+pub(super) static BUNDLE: LazyLock<Bundle> = LazyLock::new(|| {
     let compressed = include_bytes!("../../assets/cmaps.brotli");
     let mut decompressed = Vec::new();
     let mut reader = compressed.as_slice();
 
-    brotli::BrotliDecompress(&mut reader, &mut decompressed).ok()?;
+    brotli::BrotliDecompress(&mut reader, &mut decompressed)
+        .ok()
+        .unwrap();
 
     let mut reader = Reader::new(&decompressed);
-    let huff_size = reader.read_u32()? as usize;
-    let huff_data = reader.read_bytes(huff_size)?;
-    let (delta_table, count_table) = huffman::decode_tables(huff_data)?;
+    let huff_size = reader.read_u32().unwrap() as usize;
+    let huff_data = reader.read_bytes(huff_size).unwrap();
+    let (delta_table, count_table) = huffman::decode_tables(huff_data).unwrap();
 
     let mut entries = Vec::new();
 
     while !reader.at_end() {
         let start = reader.position();
 
-        if reader.read_bytes(5)? != b"bcmap" {
+        if reader.read_bytes(5).unwrap() != b"bcmap" {
             break;
         }
 
-        reader.read_u8()?; // Skip version.
-        let file_len = reader.read_u32()? as usize;
+        reader.read_u8().unwrap(); // Skip version.
+        let file_len = reader.read_u32().unwrap() as usize;
 
         if file_len < 10 {
             break;
         }
 
-        reader.read_bytes(file_len.checked_sub(10)?)?;
+        reader
+            .read_bytes(file_len.checked_sub(10).unwrap())
+            .unwrap();
         entries.push(start..start + file_len);
     }
 
-    Some(Bundle {
+    Bundle {
         data: decompressed,
         delta_table,
         count_table,
         entries,
-    })
+    }
 });
 
-struct Bundle {
+pub(super) struct Bundle {
     data: Vec<u8>,
-    delta_table: HuffmanTable,
-    count_table: HuffmanTable,
+    pub(super) delta_table: HuffmanTable,
+    pub(super) count_table: HuffmanTable,
     entries: Vec<Range<usize>>,
 }
 
 /// Load the data for a cmap file, by name.
 pub fn load_embedded(name: &[u8]) -> Option<&'static [u8]> {
-    let bundle = (*BUNDLE).as_ref()?;
     let idx = cmap_index(name)?;
-    let range = bundle.entries.get(idx)?;
+    let range = BUNDLE.entries.get(idx)?;
 
-    Some(&bundle.data[range.start..range.end])
-}
-
-/// Return references to the cached Huffman trees.
-pub(super) fn huffman_trees() -> Option<(&'static HuffmanTable, &'static HuffmanTable)> {
-    let bundle = (*BUNDLE).as_ref()?;
-
-    Some((&bundle.delta_table, &bundle.count_table))
+    Some(&BUNDLE.data[range.clone()])
 }
 
 /// Get the index of the font of the cmap in the bundle. They are sorted
