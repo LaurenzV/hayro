@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use hayro_cmap::CMap;
 use hayro_jpeg2000::DecodeSettings;
 use hayro_syntax::Filter;
 use hayro_syntax::Pdf;
@@ -69,7 +70,7 @@ fn main() {
     }
 
     let folder = &args[1];
-    check_jbig2_images(folder);
+    check_cmaps(folder);
 }
 
 fn load_pdf_paths(folder: &str, mut custom_condition: impl FnMut(&str) -> bool) -> Vec<PathBuf> {
@@ -254,6 +255,65 @@ fn check_jbig2_images(folder: &str) {
         if count.is_multiple_of(1000) {
             let images = jbig2_count.load(std::sync::atomic::Ordering::Relaxed);
             eprintln!("Processed {} PDFs, {} JBIG2 images decoded", count, images);
+        }
+    });
+}
+
+fn check_cmaps(folder: &str) {
+    let paths = load_pdf_paths(folder, |_| true);
+
+    println!("Found {} PDF files", paths.len());
+
+    let pdf_count = AtomicU32::new(0);
+    let cmap_count = AtomicU32::new(0);
+
+    paths.par_iter().for_each(|path| {
+        let name = path.file_stem().unwrap().to_str().unwrap().to_string();
+        let data = fs::read(path).unwrap();
+
+        let mut has_error = false;
+
+        if let Ok(pdf) = Pdf::new(data) {
+            for object in pdf.objects() {
+                if let Some(stream) = object.into_stream() {
+                    let Ok(decoded) = stream.decoded() else {
+                        continue;
+                    };
+
+                    // Check if it looks like a CMap.
+                    if !memchr::memmem::find(&decoded, b"begincmap").is_some() {
+                        continue;
+                    }
+
+                    cmap_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
+                    let result = catch_unwind(|| CMap::parse(&decoded, |_| None));
+
+                    match result {
+                        Ok(Some(_)) => {}
+                        Ok(None) => {
+                            has_error = true;
+                            let _ = fs::write(format!("{}.txt", name), &*decoded);
+                        }
+                        Err(_) => {
+                            has_error = true;
+                            let _ = fs::write(format!("{}.txt", name), &*decoded);
+                            eprintln!("{}: panic while parsing CMap", name);
+                        }
+                    }
+                }
+            }
+        }
+
+        if has_error {
+            eprintln!("{}", name);
+        }
+
+        let count = pdf_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+
+        if count.is_multiple_of(10000) {
+            let cmaps = cmap_count.load(std::sync::atomic::Ordering::Relaxed);
+            eprintln!("Processed {} PDFs, {} CMaps parsed", count, cmaps);
         }
     });
 }

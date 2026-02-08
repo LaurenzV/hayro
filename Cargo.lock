@@ -644,6 +644,7 @@ name = "hayro-tests"
 version = "0.1.0"
 dependencies = [
  "hayro",
+ "hayro-cmap",
  "hayro-jpeg2000",
  "hayro-svg",
  "hayro-syntax",

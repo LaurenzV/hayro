@@ -19,6 +19,7 @@ path = "tests/mod.rs"
 
 [dependencies]
 hayro = { workspace = true }
+hayro-cmap = { workspace = true }
 hayro-write = { workspace = true }
 hayro-svg = { workspace = true }
 hayro-syntax = { workspace = true }
