@@ -62,7 +62,7 @@ impl<'a> Reader<'a> {
         Some(val)
     }
 
-    pub(super) fn read_n_bytes_be(&mut self, n: usize) -> Option<u32> {
+    pub(super) fn read_n_bytes(&mut self, n: usize) -> Option<u32> {
         debug_assert_eq!(
             self.bit_pos, 0,
             "read_n_bytes_be called at non-byte boundary"

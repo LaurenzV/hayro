@@ -49,16 +49,12 @@ pub(crate) fn parse<'a>(
     // of course happen that an invalid one has been passed from outside, so
     // we still need to do proper validation.
 
-    if data.len() < BCMAP_FILE_HEADER_SIZE {
-        return None;
-    }
-
-    if &data[..5] != BCMAP_MAGIC || data[5] != BCMAP_VERSION {
+    if data.get(..5)? != BCMAP_MAGIC || *data.get(5)? != BCMAP_VERSION {
         return None;
     }
 
     let mut reader = Reader::new(data);
-    reader.read_bytes(6)?; // skip magic + version
+    reader.read_bytes(6)?; // Skip magic + version.
 
     let file_len = reader.read_u32()? as usize;
 
@@ -80,24 +76,23 @@ pub(crate) fn parse<'a>(
         let seg_type = reader.read_u8()?;
         let seg_len = reader.read_u32()? as usize;
 
-        if seg_len < SEG_HEADER_SIZE {
-            return None;
-        }
-
-        let payload = reader.read_bytes(seg_len - SEG_HEADER_SIZE)?;
+        let payload = reader.read_bytes(seg_len.checked_sub(SEG_HEADER_SIZE)?)?;
 
         match seg_type {
             SEGMENT_NAME => {
                 cmap_name = Some(Vec::from(payload));
             }
             SEGMENT_CID_SYSTEM_INFO => {
-                // Format: registry\0 ordering\0 supplement_u16_be
+                // Format: Each string is 0-terminated.
                 let mut r = Reader::new(payload);
                 let registry = Vec::from(r.eat_until(|b| b == 0));
-                r.read_u8()?; // Null terminator.
+                // Skip terminator.
+                r.read_u8()?; 
                 let ordering = Vec::from(r.eat_until(|b| b == 0));
-                r.read_u8()?; // Null terminator.
+                // Skip terminator.
+                r.read_u8()?; 
                 let supplement = r.read_u16()? as i32;
+                
                 character_collection = Some(CharacterCollection {
                     registry,
                     ordering,
@@ -105,7 +100,8 @@ pub(crate) fn parse<'a>(
                 });
             }
             SEGMENT_USECMAP => {
-                let base_data = (get_cmap)(payload)?;
+                let base_data = get_cmap(payload)?;
+                
                 base = Some(Box::new(parse::parse_inner(
                     base_data,
                     get_cmap.clone(),
@@ -113,13 +109,11 @@ pub(crate) fn parse<'a>(
                 )?));
             }
             SEGMENT_WMODE => {
-                if !payload.is_empty() {
-                    writing_mode = match payload[0] {
-                        0 => Some(WritingMode::Horizontal),
-                        1 => Some(WritingMode::Vertical),
-                        _ => None,
-                    };
-                }
+                writing_mode = match payload.get(0)? {
+                    0 => Some(WritingMode::Horizontal),
+                    1 => Some(WritingMode::Vertical),
+                    _ => None,
+                };
             }
             SEGMENT_CODESPACE => {
                 parse_codespace(payload, &mut codespace_ranges)?;
@@ -162,8 +156,8 @@ fn parse_codespace(payload: &[u8], ranges: &mut Vec<CodespaceRange>) -> Option<(
 
     for _ in 0..n_ranges {
         let bw = r.read_u8()? as usize;
-        let low = r.read_n_bytes_be(bw)?;
-        let high = r.read_n_bytes_be(bw)?;
+        let low = r.read_n_bytes(bw)?;
+        let high = r.read_n_bytes(bw)?;
 
         ranges.push(CodespaceRange {
             number_bytes: bw as u8,
@@ -181,8 +175,8 @@ fn parse_notdef(payload: &[u8], ranges: &mut Vec<CidRange>) -> Option<()> {
     let n_entries = r.read_u16()? as usize;
 
     for _ in 0..n_entries {
-        let start = r.read_n_bytes_be(bw)?;
-        let end = r.read_n_bytes_be(bw)?;
+        let start = r.read_n_bytes(bw)?;
+        let end = r.read_n_bytes(bw)?;
         let cid = r.read_u16()? as u32;
 
         ranges.push(CidRange {
