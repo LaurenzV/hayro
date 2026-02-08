@@ -38,7 +38,7 @@ impl Type0Font {
     pub(crate) fn new(dict: &Dict<'_>) -> Option<Self> {
         let cmap = read_encoding(&dict.get::<Object<'_>>(ENCODING)?)?;
 
-        let horizontal = cmap.metadata().writing_mode == WritingMode::Horizontal;
+        let horizontal = cmap.metadata().writing_mode != Some(WritingMode::Vertical);
 
         let descendant_font = dict
             .get::<Array<'_>>(DESCENDANT_FONTS)?
