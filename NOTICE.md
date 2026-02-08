@@ -8,7 +8,6 @@ The following parts of code have been adapted/translated from [pdf.js](https://g
 under the Apache 2.0 license:
 - The CalRGB and CalGray conversion code.
 - The flate decoder.
-- The CMAP parser.
 - The implementation of AES, MD5, SHA and RC4.
 
 The following parts of code have been adapted/translated from the [CFFDump](https://github.com/janpe2/CFFDump/) utility tool, available under the Apache 2.0 license:

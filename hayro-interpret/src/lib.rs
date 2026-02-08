@@ -50,6 +50,7 @@ pub use cache::CacheKey;
 pub use context::*;
 pub use device::*;
 pub use function::Function;
+pub use hayro_cmap;
 pub use hayro_syntax;
 pub use interpret::*;
 pub use soft_mask::*;

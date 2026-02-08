@@ -563,6 +563,7 @@ name = "hayro-interpret"
 version = "0.5.0"
 dependencies = [
  "bitflags 2.10.0",
+ "hayro-cmap",
  "hayro-font",
  "hayro-syntax",
  "image 0.25.9",

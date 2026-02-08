@@ -1,6 +1,5 @@
 use crate::context::Context;
 use crate::device::Device;
-use crate::font::cmap::CMap;
 use crate::font::glyph_simulator::GlyphSimulator;
 use crate::font::true_type::{read_encoding, read_widths};
 use crate::font::{Encoding, Glyph, Type3Glyph, UNITS_PER_EM, read_to_unicode};
@@ -10,6 +9,7 @@ use crate::util::RectExt;
 use crate::{BlendMode, interpret};
 use crate::{CacheKey, ClipPath, GlyphDrawMode, PathDrawMode};
 use crate::{Image, Paint};
+use hayro_cmap::{CMap, UnicodeString};
 use hayro_syntax::content::TypedIter;
 use hayro_syntax::content::ops::TypedInstruction;
 use hayro_syntax::object::Dict;
@@ -89,15 +89,11 @@ impl<'a> Type3<'a> {
             * UNITS_PER_EM
     }
 
-    pub(crate) fn char_code_to_unicode(&self, char_code: u32) -> Option<char> {
+    pub(crate) fn char_code_to_unicode(&self, char_code: u32) -> Option<UnicodeString> {
         // Type3 fonts can only provide Unicode via ToUnicode CMap.
-        if let Some(to_unicode) = &self.to_unicode
-            && let Some(unicode) = to_unicode.lookup_code(char_code)
-        {
-            return char::from_u32(unicode);
-        }
-
-        None
+        self.to_unicode
+            .as_ref()
+            .and_then(|t| t.lookup_unicode_code(char_code))
     }
 
     pub(crate) fn render_glyph(

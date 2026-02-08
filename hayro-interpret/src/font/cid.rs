@@ -1,7 +1,7 @@
 use crate::CacheKey;
 use crate::font::blob::{CffFontBlob, OpenTypeFontBlob};
-use crate::font::cmap::{CMap, parse_cmap};
 use crate::font::{FontFlags, read_to_unicode, strip_subset_prefix};
+use hayro_cmap::{CMap, UnicodeString, WritingMode};
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Name;
 use hayro_syntax::object::Stream;
@@ -38,7 +38,7 @@ impl Type0Font {
     pub(crate) fn new(dict: &Dict<'_>) -> Option<Self> {
         let cmap = read_encoding(&dict.get::<Object<'_>>(ENCODING)?)?;
 
-        let horizontal = !cmap.is_vertical();
+        let horizontal = cmap.metadata().writing_mode == WritingMode::Horizontal;
 
         let descendant_font = dict
             .get::<Array<'_>>(DESCENDANT_FONTS)?
@@ -114,7 +114,13 @@ impl Type0Font {
     }
 
     fn code_to_cid(&self, code: u32) -> Option<u32> {
-        self.encoding.lookup_code(code)
+        for byte_len in 1..=4_u8 {
+            if let Some(cid) = self.encoding.lookup_cid_code(code, byte_len) {
+                return Some(cid);
+            }
+        }
+
+        None
     }
 
     pub(crate) fn outline_glyph(&self, glyph: GlyphId) -> BezPath {
@@ -209,7 +215,18 @@ impl Type0Font {
     }
 
     pub(crate) fn read_code(&self, bytes: &[u8], offset: usize) -> (u32, usize) {
-        self.encoding.read_code(bytes, offset)
+        let mut code = 0_u32;
+        let remaining = bytes.len() - offset;
+
+        for n in 0..4.min(remaining) {
+            code = (code << 8) | bytes[offset + n] as u32;
+
+            if self.encoding.lookup_cid_code(code, (n + 1) as u8).is_some() {
+                return (code, n + 1);
+            }
+        }
+
+        (0, 1)
     }
 
     pub(crate) fn origin_displacement(&self, code: u32) -> Vec2 {
@@ -224,11 +241,9 @@ impl Type0Font {
         }
     }
 
-    pub(crate) fn char_code_to_unicode(&self, code: u32) -> Option<char> {
-        if let Some(to_unicode) = &self.to_unicode
-            && let Some(unicode) = to_unicode.lookup_code(code)
-        {
-            return char::from_u32(unicode);
+    pub(crate) fn char_code_to_unicode(&self, code: u32) -> Option<UnicodeString> {
+        if let Some(to_unicode) = &self.to_unicode {
+            return to_unicode.lookup_unicode_code(code);
         }
 
         // TODO: Implement CID collection mappings (Adobe-Japan1, Adobe-GB1, etc.).
@@ -390,13 +405,8 @@ fn read_encoding(object: &Object<'_>) -> Option<CMap> {
             }
         },
         Object::Stream(s) => {
-            let dict = s.dict();
-            if dict.contains_key(USE_CMAP) {
-                warn!("USE_CMAP is not supported yet");
-            }
-
             let decoded = s.decoded().ok()?;
-            parse_cmap(std::str::from_utf8(&decoded).ok()?)
+            CMap::parse(&decoded, |_| None)
         }
         _ => None,
     }
