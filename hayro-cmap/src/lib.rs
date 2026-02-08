@@ -131,7 +131,7 @@ impl CMap {
     }
 
     /// Look up the base font code of the given character code. This is usually
-    /// used for `ToUnicode` CMaps
+    /// used for `ToUnicode` `CMaps`
     ///
     /// Returns `None` if no mapping is available.
     pub fn lookup_unicode_code(&self, code: u32) -> Option<UnicodeString> {
