@@ -66,9 +66,11 @@ impl CMap {
     fn identity(writing_mode: WritingMode, name: &[u8]) -> Self {
         Self {
             metadata: Metadata {
-                registry: Vec::from(b"Adobe" as &[u8]),
-                ordering: Vec::from(b"Identity" as &[u8]),
-                supplement: 0,
+                character_collection: Some(CharacterCollection {
+                    registry: Vec::from(b"Adobe" as &[u8]),
+                    ordering: Vec::from(b"Identity" as &[u8]),
+                    supplement: 0,
+                }),
                 name: Vec::from(name),
                 writing_mode,
             },
@@ -235,16 +237,23 @@ pub enum UnicodeString {
 /// Metadata extracted from a `CMap` file.
 #[derive(Debug, Clone)]
 pub struct Metadata {
+    /// The referenced character collection.
+    pub character_collection: Option<CharacterCollection>,
+    /// The `CMap` name.
+    pub name: Vec<u8>,
+    /// The writing mode.
+    pub writing_mode: WritingMode,
+}
+
+/// A CID character collection identifying the character set and ordering.
+#[derive(Debug, Clone)]
+pub struct CharacterCollection {
     /// The registry name (e.g. `b"Adobe"`).
     pub registry: Vec<u8>,
     /// The ordering name (e.g. `b"Japan1"`).
     pub ordering: Vec<u8>,
     /// The supplement number.
     pub supplement: i32,
-    /// The `CMap` name.
-    pub name: Vec<u8>,
-    /// The writing mode.
-    pub writing_mode: WritingMode,
 }
 
 /// The writing mode of a `CMap`.
@@ -302,9 +311,10 @@ end def
 endcmap"#;
 
         let cmap = CMap::parse(data, |_| None).unwrap();
-        assert_eq!(cmap.metadata().registry, b"Adobe");
-        assert_eq!(cmap.metadata().ordering, b"Japan1");
-        assert_eq!(cmap.metadata().supplement, 6);
+        let cc = cmap.metadata().character_collection.as_ref().unwrap();
+        assert_eq!(cc.registry, b"Adobe");
+        assert_eq!(cc.ordering, b"Japan1");
+        assert_eq!(cc.supplement, 6);
         assert_eq!(cmap.metadata().name, b"Adobe-Japan1-H");
         assert_eq!(cmap.metadata().writing_mode, WritingMode::Horizontal);
     }
@@ -419,12 +429,6 @@ endcidrange
         assert_eq!(cmap.lookup_cid(0x41, 1), Some(0x41));
         assert_eq!(cmap.lookup_cid(0x80, 1), Some(200));
         assert_eq!(cmap.lookup_cid(0xFF, 1), Some(200 + 127));
-    }
-
-    #[test]
-    fn missing_metadata_fails() {
-        assert!(CMap::parse(b"", |_| None).is_none());
-        assert!(CMap::parse(b"/CMapName /X def", |_| None).is_none());
     }
 
     #[test]

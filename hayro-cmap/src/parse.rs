@@ -4,8 +4,8 @@ use alloc::vec::Vec;
 use hayro_postscript::{Object, Scanner};
 
 use crate::{
-    BfRange, CMap, CMapName, CidRange, CodespaceRange, MAX_NESTING_DEPTH, Metadata, Range,
-    WritingMode,
+    BfRange, CMap, CMapName, CharacterCollection, CidRange, CodespaceRange, MAX_NESTING_DEPTH,
+    Metadata, Range, WritingMode,
 };
 
 struct Context<F> {
@@ -109,10 +109,22 @@ pub(crate) fn parse<'a>(
     notdef_ranges.sort_by(|a, b| a.range.start.cmp(&b.range.start));
     bf_entries.sort_by(|a, b| a.range.start.cmp(&b.range.start));
 
+    // See PDFJS-3323, which has an invalid CIDSystemInfo entry.
+    // We ignore it if it's invalid.
+    let character_collection = if let (Some(registry), Some(ordering), Some(supplement)) =
+        (registry, ordering, supplement)
+    {
+        Some(CharacterCollection {
+            registry,
+            ordering,
+            supplement,
+        })
+    } else {
+        None
+    };
+
     let metadata = Metadata {
-        registry: registry?,
-        ordering: ordering?,
-        supplement: supplement?,
+        character_collection,
         name: cmap_name?,
         writing_mode,
     };
