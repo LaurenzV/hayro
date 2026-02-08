@@ -37,6 +37,7 @@ pub(crate) fn read<'a>(r: &mut Reader<'a>) -> Result<Object<'a>> {
                 // the next object so callers see the inner tokens.
                 r.forward();
                 r.forward();
+                // TODO: This can easily overflow the stack if we have nested <<<<<.
                 read(r)
             } else {
                 string::parse_hex(r)
