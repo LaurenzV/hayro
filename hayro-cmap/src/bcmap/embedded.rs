@@ -5,6 +5,9 @@ use super::huffman::{self, HuffmanTable};
 use super::reader::Reader;
 
 pub(super) static BUNDLE: LazyLock<Bundle> = LazyLock::new(|| {
+    // We already know the bundle is valid, so we can skip validation and just
+    // unwrap everywhere.
+    
     let compressed = include_bytes!("../../assets/cmaps.brotli");
     let mut decompressed = Vec::new();
     let mut reader = compressed.as_slice();
@@ -22,20 +25,13 @@ pub(super) static BUNDLE: LazyLock<Bundle> = LazyLock::new(|| {
 
     while !reader.at_end() {
         let start = reader.position();
-
-        if reader.read_bytes(5).unwrap() != b"bcmap" {
-            break;
-        }
-
-        reader.read_u8().unwrap(); // Skip version.
+        
+        // Skip file magic and version.
+        reader.read_bytes(6).unwrap();
         let file_len = reader.read_u32().unwrap() as usize;
 
-        if file_len < 10 {
-            break;
-        }
-
         reader
-            .read_bytes(file_len.checked_sub(10).unwrap())
+            .read_bytes(file_len - 10)
             .unwrap();
         entries.push(start..start + file_len);
     }
