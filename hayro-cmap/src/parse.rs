@@ -319,7 +319,7 @@ fn decode_be(bytes: &[u8]) -> Option<Vec<u16>> {
     let mut i = 0;
 
     // My understanding is that the bf strings should always be UTF16-BE encoded,
-    // but it seems like some PDFs only have a single byte there? I guess we just 
+    // but it seems like some PDFs only have a single byte there? I guess we just
     // pad them? Wasn't able to find anything specific in the specifications.
     if !bytes.len().is_multiple_of(2) {
         out.push(u16::from(bytes[0]));
