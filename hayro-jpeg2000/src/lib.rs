@@ -509,7 +509,7 @@ fn get_color_space(boxes: &ImageBoxes, num_components: usize) -> Result<ColorSpa
                 EnumeratedColorspace::RommRgb => {
                     // Use an ICC profile to process the RommRGB color space.
                     ColorSpace::Icc {
-                        profile: include_bytes!("../assets/ProPhotoRGB.icc").to_vec(),
+                        profile: include_bytes!("../assets/ProPhoto-v2-micro.icc").to_vec(),
                         num_channels: 3,
                     }
                 }
