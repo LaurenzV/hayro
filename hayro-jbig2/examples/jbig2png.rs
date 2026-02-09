@@ -11,7 +11,7 @@ fn main() -> ExitCode {
 
     if args.len() != 3 {
         eprintln!("Usage: {} <input.jbig2> <output.png>", args[0]);
-        
+
         return ExitCode::FAILURE;
     }
 
@@ -22,16 +22,16 @@ fn main() -> ExitCode {
         Ok(data) => data,
         Err(err) => {
             eprintln!("Failed to read input file: {err}");
-            
+
             return ExitCode::FAILURE;
         }
     };
-    
+
     let image = match hayro_jbig2::decode(&data) {
         Ok(image) => image,
         Err(err) => {
             eprintln!("Failed to decode JBIG2: {err}");
-            
+
             return ExitCode::FAILURE;
         }
     };
@@ -64,17 +64,17 @@ fn main() -> ExitCode {
 
     let Some(gray) = GrayImage::from_raw(image.width, image.height, decoder.buffer) else {
         eprintln!("Internal error: Buffer size mismatch");
-        
+
         return ExitCode::FAILURE;
     };
 
     if let Err(err) = gray.save(output_path) {
         eprintln!("Failed to save PNG: {err}");
-        
+
         return ExitCode::FAILURE;
     }
 
     eprintln!("Saved: {output_path}");
-    
+
     ExitCode::SUCCESS
 }
