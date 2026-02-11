@@ -236,7 +236,13 @@ impl<'a> Context<'a> {
         let cache_key = font_dict.cache_key();
         self.font_cache
             .entry(cache_key)
-            .or_insert_with(|| Font::new(&font_dict, &self.settings.font_resolver))
+            .or_insert_with(|| {
+                Font::new(
+                    &font_dict,
+                    &self.settings.font_resolver,
+                    &self.settings.cmap_resolver,
+                )
+            })
             .clone()
     }
 

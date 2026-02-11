@@ -33,6 +33,8 @@ pub(crate) mod text;
 /// The first argument is the raw data, the second argument is the index in case the font
 /// is a TTC, otherwise it should be 0.
 pub type FontResolverFn = Arc<dyn Fn(&FontQuery) -> Option<(FontData, u32)> + Send + Sync>;
+/// A callback function for resolving cmap names to their files.
+pub type CMapResolverFn = Arc<dyn Fn(&[u8]) -> Option<&'static [u8]> + Send + Sync>;
 /// A callback function for resolving warnings during interpretation.
 pub type WarningSinkFn = Arc<dyn Fn(InterpreterWarning) + Send + Sync>;
 
@@ -75,6 +77,19 @@ pub struct InterpreterSettings {
     /// If you don't want having to deal with this, you can just enable the `embed-fonts` feature
     /// and use the default implementation of the callback.
     pub font_resolver: FontResolverFn,
+    /// A callback for resolving cmaps that aren't embedded.
+    ///
+    /// When the PDF requires using a cmap that is not directly embedded in the PDF,
+    /// this callback will be called to attempt fetching the data of the file.
+    ///
+    /// When the `embed-cmaps` feature is enabled, this uses `load_embedded`
+    /// method from `hayro-cmap` by default, which embeds the cmap files for
+    /// all 61 predefined cmaps
+    /// that the PDF specification requires to be readily available on a system.
+    /// Otherwise, you can implement your custom logic for lazily fetching the
+    /// data. If you are fine not supporting such PDFs, you can simply pass a closure
+    /// that always returns `None`.
+    pub cmap_resolver: CMapResolverFn,
     /// In certain cases, `hayro` will emit a warning in case an issue was encountered while interpreting
     /// the PDF file. Providing a callback allows you to catch those warnings and handle them, if desired.
     pub warning_sink: WarningSinkFn,
@@ -95,6 +110,10 @@ impl Default for InterpreterSettings {
                 FontQuery::Standard(s) => Some(s.get_font_data()),
                 FontQuery::Fallback(f) => Some(f.pick_standard_font().get_font_data()),
             }),
+            #[cfg(feature = "embed-cmaps")]
+            cmap_resolver: Arc::new(hayro_cmap::load_embedded),
+            #[cfg(not(feature = "embed-cmaps"))]
+            cmap_resolver: Arc::new(|_| None),
             warning_sink: Arc::new(|_| {}),
             render_annotations: true,
         }

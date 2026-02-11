@@ -1,6 +1,6 @@
-use crate::CacheKey;
 use crate::font::blob::{CffFontBlob, OpenTypeFontBlob};
 use crate::font::{FontFlags, read_to_unicode, strip_subset_prefix};
+use crate::{CMapResolverFn, CacheKey};
 use hayro_cmap::{CMap, UnicodeString, WritingMode};
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Name;
@@ -35,8 +35,8 @@ pub(crate) struct Type0Font {
 }
 
 impl Type0Font {
-    pub(crate) fn new(dict: &Dict<'_>) -> Option<Self> {
-        let cmap = read_encoding(&dict.get::<Object<'_>>(ENCODING)?)?;
+    pub(crate) fn new(dict: &Dict<'_>, cmap_resolver: &CMapResolverFn) -> Option<Self> {
+        let cmap = read_encoding(&dict.get::<Object<'_>>(ENCODING)?, cmap_resolver)?;
 
         let horizontal = cmap.metadata().writing_mode != Some(WritingMode::Vertical);
 
@@ -64,7 +64,7 @@ impl Type0Font {
         let cid_to_gid_map = CidToGIdMap::new(&descendant_font).unwrap_or_default();
         let cache_key = dict.cache_key();
 
-        let to_unicode = read_to_unicode(dict);
+        let to_unicode = read_to_unicode(dict, cmap_resolver);
 
         let postscript_name = dict
             .get::<Name>(BASE_FONT)
@@ -393,21 +393,22 @@ fn read_widths2(arr: &Array<'_>) -> Option<HashMap<u32, [f32; 3]>> {
     Some(map)
 }
 
-fn read_encoding(object: &Object<'_>) -> Option<CMap> {
+fn read_encoding(object: &Object<'_>, cmap_resolver: &CMapResolverFn) -> Option<CMap> {
+    // TODO: Support fetching CMaps referenced via `usecmap` in the PDF.
     match object {
         Object::Name(n) => match n.deref() {
             IDENTITY_H => Some(CMap::identity_h()),
             IDENTITY_V => Some(CMap::identity_v()),
-            _ => {
-                warn!("built-in encodings are not supported yet: {n:?}");
-
-                None
+            name => {
+                let data = (cmap_resolver)(name)?;
+                let resolver = cmap_resolver.clone();
+                CMap::parse(data, move |n| (resolver)(n))
             }
         },
         Object::Stream(s) => {
             let decoded = s.decoded().ok()?;
-            // TODO: Support usecmap
-            CMap::parse(&decoded, |_| None)
+            let resolver = cmap_resolver.clone();
+            CMap::parse(&decoded, move |n| (resolver)(n))
         }
         _ => None,
     }

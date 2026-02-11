@@ -20,8 +20,10 @@ fast_image_resize = { workspace = true }
 log = { workspace = true }
 
 [features]
-default = ["embed-fonts"]
+default = ["embed-fonts", "embed-cmaps"]
 embed-fonts = ["hayro-interpret/embed-fonts"]
+# Embed the 61 predefined cmaps into the binary. Adds about ~150KB of brotli-encoded data.
+embed-cmaps = ["hayro-interpret/embed-cmaps"]
 
 [lints]
 workspace = true

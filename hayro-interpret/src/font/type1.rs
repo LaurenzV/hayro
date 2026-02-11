@@ -4,7 +4,7 @@ use crate::font::glyph_simulator::GlyphSimulator;
 use crate::font::standard_font::{StandardFont, StandardFontBlob, select_standard_font};
 use crate::font::true_type::{read_encoding, read_widths};
 use crate::font::{Encoding, FallbackFontQuery, FontQuery, glyph_name_to_unicode, read_to_unicode};
-use crate::{CacheKey, FontResolverFn};
+use crate::{CMapResolverFn, CacheKey, FontResolverFn};
 use hayro_cmap::{CMap, UnicodeString};
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Stream;
@@ -20,10 +20,14 @@ use std::sync::Arc;
 pub(crate) struct Type1Font(u128, Kind, Option<CMap>);
 
 impl Type1Font {
-    pub(crate) fn new(dict: &Dict<'_>, resolver: &FontResolverFn) -> Option<Self> {
+    pub(crate) fn new(
+        dict: &Dict<'_>,
+        resolver: &FontResolverFn,
+        cmap_resolver: &CMapResolverFn,
+    ) -> Option<Self> {
         let cache_key = dict.cache_key();
 
-        let to_unicode = read_to_unicode(dict);
+        let to_unicode = read_to_unicode(dict, cmap_resolver);
 
         let fallback = || {
             // TODO: Actually use fallback fonts

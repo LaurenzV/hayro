@@ -11,7 +11,7 @@ use crate::font::true_type::TrueTypeFont;
 use crate::font::type1::Type1Font;
 use crate::font::type3::Type3;
 use crate::interpret::state::State;
-use crate::{CacheKey, FontResolverFn, InterpreterSettings, Paint};
+use crate::{CMapResolverFn, CacheKey, FontResolverFn, InterpreterSettings, Paint};
 use bitflags::bitflags;
 use hayro_syntax::object::Name;
 use hayro_syntax::object::dict::keys::SUBTYPE;
@@ -218,19 +218,25 @@ impl CacheKey for Type3Glyph<'_> {
 pub(crate) struct Font<'a>(u128, FontType<'a>);
 
 impl<'a> Font<'a> {
-    pub(crate) fn new(dict: &Dict<'a>, resolver: &FontResolverFn) -> Option<Self> {
+    pub(crate) fn new(
+        dict: &Dict<'a>,
+        font_resolver: &FontResolverFn,
+        cmap_resolver: &CMapResolverFn,
+    ) -> Option<Self> {
         let f_type = match dict.get::<Name>(SUBTYPE)?.deref() {
-            TYPE1 | MM_TYPE1 => FontType::Type1(Rc::new(Type1Font::new(dict, resolver)?)),
-            TRUE_TYPE => TrueTypeFont::new(dict)
+            TYPE1 | MM_TYPE1 => {
+                FontType::Type1(Rc::new(Type1Font::new(dict, font_resolver, cmap_resolver)?))
+            }
+            TRUE_TYPE => TrueTypeFont::new(dict, cmap_resolver)
                 .map(Rc::new)
                 .map(FontType::TrueType)
                 .or_else(|| {
-                    Type1Font::new(dict, resolver)
+                    Type1Font::new(dict, font_resolver, cmap_resolver)
                         .map(Rc::new)
                         .map(FontType::Type1)
                 })?,
-            TYPE0 => FontType::Type0(Rc::new(Type0Font::new(dict)?)),
-            TYPE3 => FontType::Type3(Rc::new(Type3::new(dict)?)),
+            TYPE0 => FontType::Type0(Rc::new(Type0Font::new(dict, cmap_resolver)?)),
+            TYPE3 => FontType::Type3(Rc::new(Type3::new(dict, cmap_resolver)?)),
             f => {
                 warn!(
                     "unimplemented font type {:?}",
@@ -617,8 +623,11 @@ pub(crate) fn unicode_from_name(name: &str) -> Option<char> {
         .flatten()
 }
 
-pub(crate) fn read_to_unicode(dict: &Dict<'_>) -> Option<CMap> {
+pub(crate) fn read_to_unicode(dict: &Dict<'_>, cmap_resolver: &CMapResolverFn) -> Option<CMap> {
     dict.get::<Stream<'_>>(TO_UNICODE)
         .and_then(|s| s.decoded().ok())
-        .and_then(|data| CMap::parse(&data, |_| None))
+        .and_then(|data| {
+            let cmap_resolver = cmap_resolver.clone();
+            CMap::parse(&data, move |n| (cmap_resolver)(n))
+        })
 }

@@ -1,3 +1,4 @@
+use crate::CMapResolverFn;
 use crate::context::Context;
 use crate::device::Device;
 use crate::font::glyph_simulator::GlyphSimulator;
@@ -34,7 +35,7 @@ pub(crate) struct Type3<'a> {
 }
 
 impl<'a> Type3<'a> {
-    pub(crate) fn new(dict: &Dict<'a>) -> Option<Self> {
+    pub(crate) fn new(dict: &Dict<'a>, cmap_resolver: &CMapResolverFn) -> Option<Self> {
         let (encoding, encodings) = read_encoding(dict);
         let widths = read_widths(dict, dict)?;
         let font_bbox = dict
@@ -60,7 +61,7 @@ impl<'a> Type3<'a> {
             procs
         };
 
-        let to_unicode = read_to_unicode(dict);
+        let to_unicode = read_to_unicode(dict, cmap_resolver);
 
         Some(Self {
             glyph_simulator: GlyphSimulator::new(),

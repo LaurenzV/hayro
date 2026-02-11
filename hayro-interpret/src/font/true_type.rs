@@ -1,4 +1,3 @@
-use crate::CacheKey;
 use crate::font::blob::{CffFontBlob, OpenTypeFontBlob};
 use crate::font::generated::{glyph_names, mac_os_roman, mac_roman};
 use crate::font::{
@@ -6,6 +5,7 @@ use crate::font::{
     unicode_from_name,
 };
 use crate::util::OptionLog;
+use crate::{CMapResolverFn, CacheKey};
 use hayro_cmap::{CMap, UnicodeString};
 use hayro_syntax::object::Array;
 use hayro_syntax::object::Dict;
@@ -43,7 +43,7 @@ pub(crate) struct TrueTypeFont {
 }
 
 impl TrueTypeFont {
-    pub(crate) fn new(dict: &Dict<'_>) -> Option<Self> {
+    pub(crate) fn new(dict: &Dict<'_>, cmap_resolver: &CMapResolverFn) -> Option<Self> {
         let descriptor = dict.get::<Dict<'_>>(FONT_DESC).unwrap_or_default();
 
         let font_flags = descriptor.get::<u32>(FLAGS).and_then(FontFlags::from_bits);
@@ -74,7 +74,7 @@ impl TrueTypeFont {
             .ok()
             .and_then(|cff| CffFontBlob::new(Arc::new(cff.offset_data().as_ref().to_vec())));
 
-        let to_unicode = read_to_unicode(dict);
+        let to_unicode = read_to_unicode(dict, cmap_resolver);
 
         let postscript_name = dict
             .get::<Name>(BASE_FONT)
