@@ -49,6 +49,7 @@ impl HuffmanTable {
     ) {
         if length == 0 {
             nodes[node_index as usize] = HuffmanNode::Leaf(symbol);
+            
             return;
         }
 
@@ -66,6 +67,7 @@ impl HuffmanTable {
                             zero: None,
                             one: None,
                         });
+                        
                         match &mut nodes[node_index as usize] {
                             HuffmanNode::Intermediate { zero, one } => {
                                 if bit == 0 {
@@ -102,6 +104,7 @@ impl HuffmanTable {
 
         let mut codes = vec![0_u32; symbols.len()];
         let mut code = 0_u32;
+        
         for length in 1..=max_length {
             for (i, &cl) in code_lengths.iter().enumerate() {
                 if cl as usize == length {

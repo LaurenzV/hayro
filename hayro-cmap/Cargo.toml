@@ -15,7 +15,7 @@ embed-cmaps = ["std", "dep:brotli"]
 
 [dependencies]
 hayro-postscript = { workspace = true }
-brotli = { workspace = true, optional = true }
+brotli = { workspace = true, optional = true, features = ["std"] }
 
 [lints]
 workspace = true

@@ -51,16 +51,9 @@ pub(super) struct Bundle {
 
 /// Load the data for a cmap file, by name.
 pub fn load_embedded(name: &[u8]) -> Option<&'static [u8]> {
-    let idx = cmap_index(name)?;
-    let range = BUNDLE.entries.get(idx)?;
-
-    Some(&BUNDLE.data[range.clone()])
-}
-
-/// Get the index of the font of the cmap in the bundle. They are sorted
-/// alphabetically.
-fn cmap_index(name: &[u8]) -> Option<usize> {
-    Some(match name {
+    // Get the index of the font of the cmap in the bundle. They are sorted
+    // alphabetically.
+    let idx = match name {
         b"83pv-RKSJ-H" => 0,
         b"90ms-RKSJ-H" => 1,
         b"90ms-RKSJ-V" => 2,
@@ -123,5 +116,9 @@ fn cmap_index(name: &[u8]) -> Option<usize> {
         b"UniKS-UTF16-V" => 59,
         b"V" => 60,
         _ => return None,
-    })
+    };
+    
+    let range = BUNDLE.entries.get(idx)?;
+
+    Some(&BUNDLE.data[range.clone()])
 }
