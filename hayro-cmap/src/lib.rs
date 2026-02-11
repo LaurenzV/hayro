@@ -22,7 +22,7 @@ mod parse;
 #[cfg(feature = "embed-cmaps")]
 pub use bcmap::load_embedded;
 
-/// Look up an embedded binary CMap by name.
+/// Look up an embedded binary cmap by name.
 ///
 /// Returns `None` when the `embed-cmaps` feature is not enabled.
 #[cfg(not(feature = "embed-cmaps"))]
@@ -57,7 +57,7 @@ pub struct CMap {
 impl CMap {
     /// Parse a cmap from raw bytes.
     ///
-    /// The `get_cmap` callback is used to recursively resolve `CMaps` that
+    /// The `get_cmap` callback is used to recursively resolve cmaps that
     /// are referenced via `usecmap`.
     pub fn parse<'a>(
         data: &[u8],
@@ -138,7 +138,7 @@ impl CMap {
         }
 
         // If character code is in code space range but has no active mapping,
-        // here or in any referenced CMaps, assume `.notdef`.
+        // here or in any referenced cmaps, assume `.notdef`.
         Some(
             self.base
                 .as_ref()
@@ -310,8 +310,8 @@ pub enum WritingMode {
 mod tests {
     use super::*;
 
-    // Note that those CMaps might not be completely valid according to the rules
-    // of CMap/Postscript, but since our parser is very lenient and doesn't run a real
+    // Note that those cmaps might not be completely valid according to the rules
+    // of cmap/Postscript, but since our parser is very lenient and doesn't run a real
     // interpreter we can shorten them by a lot.
 
     const PREAMBLE: &[u8] = br#"/CIDSystemInfo 3 dict dup begin

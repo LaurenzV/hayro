@@ -20,12 +20,12 @@ pub(crate) fn parse_inner<'a>(
     get_cmap: impl Fn(CMapName<'_>) -> Option<&'a [u8]> + Clone + 'a,
     depth: u32,
 ) -> Option<CMap> {
-    // Prevent stack overflow for malicious CMap files or circular references.
+    // Prevent stack overflow for malicious cmap files or circular references.
     if depth >= MAX_NESTING_DEPTH {
         return None;
     }
 
-    // Check if it's in our custom embedded CMap format.
+    // Check if it's in our custom embedded cmap format.
     #[cfg(feature = "embed-cmaps")]
     if data.starts_with(b"bcmap") {
         return bcmap::parse(data, get_cmap, depth);
