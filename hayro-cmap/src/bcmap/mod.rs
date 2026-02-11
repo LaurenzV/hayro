@@ -87,7 +87,7 @@ pub(crate) fn parse<'a>(
                 let mut r = Reader::new(payload);
                 let registry = Vec::from(r.eat_until(|b| b == 0));
                 r.read_u8()?;
-                
+
                 let ordering = Vec::from(r.eat_until(|b| b == 0));
                 r.read_u8()?;
                 let supplement = r.read_u16()? as i32;
@@ -195,18 +195,18 @@ fn parse_cid_segment(
 ) -> Option<()> {
     let mut r = Reader::new(payload);
     let n_entries = r.read_u16()? as usize;
-    
+
     if n_entries == 0 {
         return Some(());
     }
-    
+
     // There are two types of CID segments, all of which are stored in a columnar
     // fastion in the file:
     // For the first type, we have a simple mapping from a single code to a single
     // CID. In this case, the data stream first contains all codes using delta-coding,
-    // encoded using huffman coding. This is followed by all CIDs, stored as 
+    // encoded using huffman coding. This is followed by all CIDs, stored as
     // u16 (either as a raw CID, or as `0` in case the CID is +1 the previous CID).
-    // 
+    //
     // For the second type, we have a range of consecutive codes, which map
     // to a range of consecutive CIDs. In this case, we have an additional "count"
     // column that stores how many codes are mapped consecutively. These are also
@@ -218,7 +218,7 @@ fn parse_cid_segment(
 
     let mut delta_reader = Reader::new(delta_data);
     let mut deltas = Vec::with_capacity(n_entries);
-    
+
     for _ in 0..n_entries {
         deltas.push(delta_table.decode(&mut delta_reader)?);
     }
@@ -244,7 +244,7 @@ fn parse_cid_segment(
 
     for i in 0..n_entries {
         let raw_cid = r.read_u16()?;
-        
+
         // Note that start deltas and counts are encoded minus one, so we
         // need to add one when reconstructing them.
 

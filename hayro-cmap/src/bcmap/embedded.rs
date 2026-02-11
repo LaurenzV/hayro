@@ -117,7 +117,7 @@ pub fn load_embedded(name: &[u8]) -> Option<&'static [u8]> {
         b"V" => 60,
         _ => return None,
     };
-    
+
     let range = BUNDLE.entries.get(idx)?;
 
     Some(&BUNDLE.data[range.clone()])
