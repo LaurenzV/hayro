@@ -87,12 +87,12 @@ pub(crate) fn parse<'a>(
                 let mut r = Reader::new(payload);
                 let registry = Vec::from(r.eat_until(|b| b == 0));
                 // Skip terminator.
-                r.read_u8()?; 
+                r.read_u8()?;
                 let ordering = Vec::from(r.eat_until(|b| b == 0));
                 // Skip terminator.
-                r.read_u8()?; 
+                r.read_u8()?;
                 let supplement = r.read_u16()? as i32;
-                
+
                 character_collection = Some(CharacterCollection {
                     registry,
                     ordering,
@@ -101,7 +101,7 @@ pub(crate) fn parse<'a>(
             }
             SEGMENT_USECMAP => {
                 let base_data = get_cmap(payload)?;
-                
+
                 base = Some(Box::new(parse::parse_inner(
                     base_data,
                     get_cmap.clone(),
@@ -109,7 +109,7 @@ pub(crate) fn parse<'a>(
                 )?));
             }
             SEGMENT_WMODE => {
-                writing_mode = match payload.get(0)? {
+                writing_mode = match payload.first()? {
                     0 => Some(WritingMode::Horizontal),
                     1 => Some(WritingMode::Vertical),
                     _ => None,
