@@ -5,7 +5,7 @@
 
 <!-- cargo-rdme start -->
 
-A parser for CMap files, as they are found in PDFs.
+A parser for cmap files, as they are found in PDFs.
 
 This crate provides a parser for CMap files and allows you to
 - Map character codes from text-showing operators to CID identifiers.

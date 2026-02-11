@@ -342,18 +342,21 @@ fn decode_be(bytes: &[u8]) -> Option<Vec<u16>> {
     Some(out)
 }
 
+#[inline]
 fn read_u32_code(scanner: &mut Scanner<'_>, buf: &mut Vec<u8>) -> Option<u32> {
     let s = scanner.parse_string().ok()?;
     s.decode_into(buf).ok()?;
     bytes_to_u32(buf)
 }
 
+#[inline]
 fn extract_u32_code(obj: &Object<'_>, buf: &mut Vec<u8>) -> Option<u32> {
     let Object::String(s) = obj else { return None };
     s.decode_into(buf).ok()?;
     bytes_to_u32(buf)
 }
 
+#[inline]
 fn bytes_to_u32(bytes: &[u8]) -> Option<u32> {
     if bytes.is_empty() || bytes.len() > 4 {
         return None;

@@ -5,6 +5,7 @@ pub(super) struct Reader<'a> {
 }
 
 impl<'a> Reader<'a> {
+    #[inline]
     pub(super) fn new(data: &'a [u8]) -> Self {
         Self {
             data,
@@ -13,6 +14,7 @@ impl<'a> Reader<'a> {
         }
     }
 
+    #[inline]
     pub(super) fn read_bit(&mut self) -> Option<u8> {
         let byte = *self.data.get(self.byte_pos)?;
         let bit = (byte >> (7 - self.bit_pos)) & 1;
@@ -27,6 +29,7 @@ impl<'a> Reader<'a> {
         Some(bit)
     }
 
+    #[inline]
     pub(super) fn read_u16(&mut self) -> Option<u16> {
         debug_assert_eq!(self.bit_pos, 0, "read_u16 called at non-byte boundary");
 
@@ -40,6 +43,7 @@ impl<'a> Reader<'a> {
         Some(u16::from_be_bytes(bytes))
     }
 
+    #[inline]
     pub(super) fn read_u32(&mut self) -> Option<u32> {
         debug_assert_eq!(self.bit_pos, 0, "read_u32 called at non-byte boundary");
 
@@ -53,6 +57,7 @@ impl<'a> Reader<'a> {
         Some(u32::from_be_bytes(bytes))
     }
 
+    #[inline]
     pub(super) fn read_u8(&mut self) -> Option<u8> {
         debug_assert_eq!(self.bit_pos, 0, "read_u8 called at non-byte boundary");
 
@@ -62,6 +67,7 @@ impl<'a> Reader<'a> {
         Some(val)
     }
 
+    #[inline]
     pub(super) fn read_n_bytes(&mut self, n: usize) -> Option<u32> {
         debug_assert_eq!(
             self.bit_pos, 0,
@@ -80,6 +86,7 @@ impl<'a> Reader<'a> {
         }
     }
 
+    #[inline]
     pub(super) fn read_bytes(&mut self, n: usize) -> Option<&'a [u8]> {
         debug_assert_eq!(self.bit_pos, 0, "read_bytes called at non-byte boundary");
 
@@ -89,14 +96,17 @@ impl<'a> Reader<'a> {
         Some(bytes)
     }
 
+    #[inline]
     pub(super) fn position(&self) -> usize {
         self.byte_pos
     }
 
+    #[inline]
     pub(super) fn at_end(&self) -> bool {
         self.byte_pos >= self.data.len()
     }
 
+    #[inline]
     pub(super) fn eat_until(&mut self, f: impl Fn(u8) -> bool) -> &'a [u8] {
         debug_assert_eq!(self.bit_pos, 0, "eat_until called at non-byte boundary");
 

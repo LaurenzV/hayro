@@ -1,7 +1,7 @@
 /*!
-A parser for `CMap` files, as they are found in PDFs.
+A parser for cmap files, as they are found in PDFs.
 
-This crate provides a parser for `CMap` files and allows you to
+This crate provides a parser for cmap files and allows you to
 - Map character codes from text-showing operators to CID identifiers.
 - Map CIDs to Unicode characters or strings.
 
@@ -35,7 +35,7 @@ use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 
-/// The name of a `CMap`.
+/// The name of a cmap.
 pub type CMapName<'a> = &'a [u8];
 /// A CID (Character Identifier).
 pub type Cid = u32;
@@ -43,7 +43,7 @@ pub type Cid = u32;
 /// Let's limit the number of nested `usecmap` references to 16.
 const MAX_NESTING_DEPTH: u32 = 16;
 
-/// A parsed `CMap`.
+/// A parsed cmap.
 #[derive(Debug, Clone)]
 pub struct CMap {
     metadata: Metadata,
@@ -55,7 +55,7 @@ pub struct CMap {
 }
 
 impl CMap {
-    /// Parse a `CMap` from raw bytes.
+    /// Parse a cmap from raw bytes.
     ///
     /// The `get_cmap` callback is used to recursively resolve `CMaps` that
     /// are referenced via `usecmap`.
@@ -66,12 +66,12 @@ impl CMap {
         parse::parse_inner(data, get_cmap, 0)
     }
 
-    /// Create an Identity-H `CMap`.
+    /// Create an Identity-H cmap.
     pub fn identity_h() -> Self {
         Self::identity(WritingMode::Horizontal, b"Identity-H")
     }
 
-    /// Create an Identity-V `CMap`.
+    /// Create an Identity-V cmap.
     pub fn identity_v() -> Self {
         Self::identity(WritingMode::Vertical, b"Identity-V")
     }
@@ -105,7 +105,7 @@ impl CMap {
         }
     }
 
-    /// Return the metadata of this `CMap`.
+    /// Return the metadata of this cmap.
     pub fn metadata(&self) -> &Metadata {
         &self.metadata
     }
@@ -148,7 +148,7 @@ impl CMap {
     }
 
     /// Look up the base font code of the given character code. This is usually
-    /// used for `ToUnicode` `CMaps`
+    /// used for `ToUnicode` cmaps
     ///
     /// Returns `None` if no mapping is available.
     pub fn lookup_unicode_code(&self, code: u32) -> Option<UnicodeString> {
@@ -156,7 +156,7 @@ impl CMap {
     }
 
     /// Check whether a character code is within any codespace range, including
-    /// those of the base `CMap` (for `CMap` files that inherit codespace via `usecmap`).
+    /// those of the base cmap (for cmap files that inherit codespace via `usecmap`).
     fn in_codespace(&self, code: u32, byte_len: u8) -> bool {
         if !self.codespace_ranges.is_empty() {
             return self
@@ -165,8 +165,7 @@ impl CMap {
                 .any(|r| r.number_bytes == byte_len && code >= r.low && code <= r.high);
         }
 
-        // This CMap has no codespace ranges (e.g. a vertical CMap that
-        // inherits everything via usecmap). Check the base.
+        // If nothing was found in this cmap, check if there's a parent cmap.
         self.base
             .as_ref()
             .is_some_and(|b| b.in_codespace(code, byte_len))
@@ -246,11 +245,9 @@ impl HasRange for CidRange {
     }
 }
 
-/// A character code to Unicode mapping (potentially a range).
 #[derive(Debug, Clone)]
 pub(crate) struct BfRange {
     pub(crate) range: Range,
-    /// UTF-16 code units. For ranges, the last unit is incremented by the offset.
     pub(crate) dst_base: Vec<u16>,
 }
 
@@ -268,7 +265,7 @@ pub(crate) struct CodespaceRange {
     pub(crate) high: u32,
 }
 
-/// A Unicode value decoded from a `CMap`.
+/// A Unicode value decoded from a cmap.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UnicodeString {
     /// A single Unicode character.
@@ -277,12 +274,12 @@ pub enum UnicodeString {
     String(String),
 }
 
-/// Metadata extracted from a `CMap` file.
+/// Metadata extracted from a cmap file.
 #[derive(Debug, Clone)]
 pub struct Metadata {
     /// The referenced character collection.
     pub character_collection: Option<CharacterCollection>,
-    /// The `CMap` name.
+    /// The cmap name.
     pub name: Option<Vec<u8>>,
     /// The writing mode.
     pub writing_mode: Option<WritingMode>,
@@ -299,7 +296,7 @@ pub struct CharacterCollection {
     pub supplement: i32,
 }
 
-/// The writing mode of a `CMap`.
+/// The writing mode of a cmap.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum WritingMode {
     /// Horizontal writing mode.

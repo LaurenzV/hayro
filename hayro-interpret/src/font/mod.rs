@@ -75,16 +75,16 @@ impl Glyph<'_> {
     /// represents. The exact fallback chain depends on the font type:
     ///
     /// **For Outline Fonts (Type1, TrueType, CFF):**
-    /// 1. `ToUnicode` `CMap`
+    /// 1. `ToUnicode` cmap
     /// 2. Glyph name → Unicode (via Adobe Glyph List)
     /// 3. Unicode naming conventions (e.g., "uni0041", "u0041")
     ///
     /// **For CID Fonts (Type0):**
-    /// 1. `ToUnicode` `CMap`
+    /// 1. `ToUnicode` cmap
     ///
     ///
     /// **For Type3 Fonts:**
-    /// 1. `ToUnicode` `CMap`
+    /// 1. `ToUnicode` cmap
     ///
     /// Returns `None` if the Unicode value could not be determined.
     ///
@@ -202,7 +202,7 @@ impl<'a> Type3Glyph<'a> {
 
     /// Returns the Unicode code point for this glyph, if available.
     ///
-    /// Note: Type3 fonts can only provide Unicode via `ToUnicode` `CMap`.
+    /// Note: Type3 fonts can only provide Unicode via `ToUnicode` cmap.
     pub fn as_unicode(&self) -> Option<UnicodeString> {
         self.font.char_code_to_unicode(self.char_code)
     }
