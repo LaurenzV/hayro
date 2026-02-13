@@ -8,6 +8,7 @@ use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 use core::fmt::Debug;
 use core::str::FromStr;
 use log::debug;
+use crate::trivia::is_white_space_character;
 
 /// A number.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -64,7 +65,7 @@ impl Number {
 
 impl Skippable for Number {
     fn skip(r: &mut Reader<'_>, _: bool) -> Option<()> {
-        r.forward_if(|b| b == b'+' || b == b'-');
+        let has_sign = r.forward_if(|b| b == b'+' || b == b'-').is_some();
 
         // Some PDFs have weird trailing minuses, so try to accept those as well.
         match r.peek_byte()? {
@@ -72,13 +73,14 @@ impl Skippable for Number {
                 r.read_byte()?;
                 r.forward_while_1(is_digit_or_minus)?;
             }
-
             b'0'..=b'9' | b'-' => {
                 r.forward_while_1(is_digit_or_minus)?;
                 if let Some(()) = r.forward_tag(b".") {
                     r.forward_while(is_digit_or_minus);
                 }
             }
+            // See PDFJS-bug1753983 - accept just + or - as a zero.
+            b if is_white_space_character(b) && has_sign => {},
             _ => return None,
         }
 
@@ -93,6 +95,12 @@ impl Readable<'_> for Number {
         // of first parsing it to a number).
 
         let mut data = r.skip::<Self>(ctx.in_content_stream())?;
+
+        if data.len() == 1 && matches!(data[0], b'-' | b'+') {
+            // See PDFJS-bug1753983 - accept just + or - as a zero.
+            return Some(Self(InternalNumber::Integer(0)));
+        }
+
         // Some weird PDFs have trailing minus in the fraction of number, try to strip those.
         if let Some(idx) = data[1..].iter().position(|b| *b == b'-') {
             data = &data[..idx.saturating_sub(1)];
