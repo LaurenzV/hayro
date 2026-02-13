@@ -1168,8 +1168,7 @@
   },
   {
     "id": "bug1734802",
-    "last_page": 2,
-    "ignore": true
+    "last_page": 2
   },
   {
     "id": "bug1753983",
@@ -1186,8 +1185,7 @@
     "ignore": true
   },
   {
-    "id": "bug854315",
-    "ignore": true
+    "id": "bug854315"
   },
   {
     "id": "bug921409",
@@ -1202,8 +1200,7 @@
     "ignore": true
   },
   {
-    "id": "issue5946",
-    "ignore": true
+    "id": "issue5946"
   },
   {
     "id": "issue6127",
@@ -1334,8 +1331,7 @@
     "ignore": true
   },
   {
-    "id": "issue11144_reduced",
-    "ignore": true
+    "id": "issue11144_reduced"
   },
   {
     "id": "issue19550",
@@ -1365,7 +1361,6 @@
   },
   {
     "id": "issue18801",
-    "last_page": 0,
-    "ignore": true
+    "last_page": 0
   }
 ]
