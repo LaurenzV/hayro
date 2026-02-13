@@ -1161,5 +1161,211 @@
     "id": "issue18973",
     "first_page": 44
   },
-  "issue18896"
+  "issue18896",
+  {
+    "id": "bug1727053",
+    "ignore": true
+  },
+  {
+    "id": "bug1734802",
+    "last_page": 2,
+    "ignore": true
+  },
+  {
+    "id": "bug1753983",
+    "ignore": true
+  },
+  {
+    "id": "bug1905623",
+    "first_page": 1,
+    "last_page": 1,
+    "ignore": true
+  },
+  {
+    "id": "bug1953099",
+    "ignore": true
+  },
+  {
+    "id": "bug854315",
+    "ignore": true
+  },
+  {
+    "id": "bug921409",
+    "ignore": true
+  },
+  {
+    "id": "issue5751",
+    "ignore": true
+  },
+  {
+    "id": "issue5801",
+    "ignore": true
+  },
+  {
+    "id": "issue5946",
+    "ignore": true
+  },
+  {
+    "id": "issue6127",
+    "last_page": 0,
+    "ignore": true
+  },
+  {
+    "id": "issue6286",
+    "ignore": true
+  },
+  {
+    "id": "issue6410",
+    "ignore": true
+  },
+  {
+    "id": "issue6692",
+    "first_page": 10,
+    "last_page": 10,
+    "ignore": true
+  },
+  {
+    "id": "issue6782",
+    "ignore": true
+  },
+  {
+    "id": "issue7835",
+    "ignore": true
+  },
+  {
+    "id": "issue8586",
+    "ignore": true
+  },
+  {
+    "id": "issue8614",
+    "last_page": 0,
+    "ignore": true
+  },
+  {
+    "id": "issue9084",
+    "ignore": true
+  },
+  {
+    "id": "issue9195",
+    "last_page": 0,
+    "ignore": true
+  },
+  {
+    "id": "issue9252",
+    "ignore": true
+  },
+  {
+    "id": "issue9367",
+    "last_page": 0,
+    "ignore": true
+  },
+  {
+    "id": "issue9949",
+    "ignore": true
+  },
+  {
+    "id": "issue11088",
+    "last_page": 0,
+    "ignore": true
+  },
+  {
+    "id": "issue11555",
+    "ignore": true
+  },
+  {
+    "id": "issue11915",
+    "ignore": true
+  },
+  {
+    "id": "issue13343",
+    "ignore": true
+  },
+  {
+    "id": "issue13916",
+    "ignore": true
+  },
+  {
+    "id": "issue15033",
+    "last_page": 0,
+    "ignore": true
+  },
+  {
+    "id": "issue15044",
+    "last_page": 0,
+    "ignore": true
+  },
+  {
+    "id": "issue15139",
+    "last_page": 0,
+    "ignore": true
+  },
+  {
+    "id": "issue15292",
+    "last_page": 0,
+    "ignore": true
+  },
+  {
+    "id": "issue15441",
+    "ignore": true
+  },
+  {
+    "id": "issue15443",
+    "ignore": true
+  },
+  {
+    "id": "issue15559",
+    "last_page": 0,
+    "ignore": true
+  },
+  {
+    "id": "issue15604",
+    "ignore": true
+  },
+  {
+    "id": "issue15784",
+    "ignore": true
+  },
+  {
+    "id": "issue17671",
+    "ignore": true
+  },
+  {
+    "id": "issue11131_reduced",
+    "ignore": true
+  },
+  {
+    "id": "issue11144_reduced",
+    "ignore": true
+  },
+  {
+    "id": "issue19550",
+    "ignore": true
+  },
+  {
+    "id": "issue19695",
+    "ignore": true
+  },
+  {
+    "id": "issue2391-1",
+    "ignore": true
+  },
+  {
+    "id": "issue3521",
+    "ignore": true
+  },
+  {
+    "id": "issue16432",
+    "last_page": 0,
+    "ignore": true
+  },
+  {
+    "id": "issue16464",
+    "last_page": 0,
+    "ignore": true
+  },
+  {
+    "id": "issue18801",
+    "last_page": 0,
+    "ignore": true
+  }
 ]
