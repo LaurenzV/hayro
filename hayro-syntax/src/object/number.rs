@@ -5,10 +5,10 @@ use crate::object::macros::object;
 use crate::object::{Object, ObjectLike};
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
+use crate::trivia::is_white_space_character;
 use core::fmt::Debug;
 use core::str::FromStr;
 use log::debug;
-use crate::trivia::is_white_space_character;
 
 /// A number.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -80,7 +80,7 @@ impl Skippable for Number {
                 }
             }
             // See PDFJS-bug1753983 - accept just + or - as a zero.
-            b if is_white_space_character(b) && has_sign => {},
+            b if is_white_space_character(b) && has_sign => {}
             _ => return None,
         }
 
