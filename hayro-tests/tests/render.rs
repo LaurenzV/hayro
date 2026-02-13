@@ -852,9 +852,11 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn pdfjs_issue15942() { run_render_test("pdfjs_issue15942", "downloads/pdfjs/issue15942.pdf", Some("..=0")); }
 #[test] fn pdfjs_issue18973() { run_render_test("pdfjs_issue18973", "downloads/pdfjs/issue18973.pdf", Some("44..")); }
 #[test] fn pdfjs_issue18896() { run_render_test("pdfjs_issue18896", "downloads/pdfjs/issue18896.pdf", None); }
+#[test] fn pdfjs_bug1727053() { run_render_test("pdfjs_bug1727053", "downloads/pdfjs/bug1727053.pdf", None); }
 #[test] fn pdfjs_bug1734802() { run_render_test("pdfjs_bug1734802", "downloads/pdfjs/bug1734802.pdf", Some("..=2")); }
 #[test] fn pdfjs_bug854315() { run_render_test("pdfjs_bug854315", "downloads/pdfjs/bug854315.pdf", None); }
 #[test] fn pdfjs_issue5946() { run_render_test("pdfjs_issue5946", "downloads/pdfjs/issue5946.pdf", None); }
+#[test] fn pdfjs_issue6410() { run_render_test("pdfjs_issue6410", "downloads/pdfjs/issue6410.pdf", None); }
 #[test] fn pdfjs_issue11144_reduced() { run_render_test("pdfjs_issue11144_reduced", "downloads/pdfjs/issue11144_reduced.pdf", None); }
 #[test] fn pdfjs_issue18801() { run_render_test("pdfjs_issue18801", "downloads/pdfjs/issue18801.pdf", Some("..=0")); }
 #[test] fn pdfbox_31() { run_render_test("pdfbox_31", "downloads/pdfbox/31.pdf", Some("..=0")); }

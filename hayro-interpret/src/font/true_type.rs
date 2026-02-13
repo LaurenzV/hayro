@@ -1,5 +1,5 @@
 use crate::font::blob::{CffFontBlob, OpenTypeFontBlob};
-use crate::font::generated::{glyph_names, mac_os_roman, mac_roman};
+use crate::font::generated::{glyph_names, mac_os_roman, mac_roman, standard};
 use crate::font::{
     Encoding, FontFlags, glyph_name_to_unicode, read_to_unicode, strip_subset_prefix,
     unicode_from_name,
@@ -171,6 +171,9 @@ impl TrueTypeFont {
             .get(&code)
             .map(|s| s.as_str())
             .or_else(|| self.encoding.map_code(code))
+            // See PDFJS-6410 - PDF has no base encoding, so let's fallback to
+            // standard here.
+            .or_else(|| standard::get(code))
     }
 
     pub(crate) fn map_code(&self, code: u8) -> GlyphId {

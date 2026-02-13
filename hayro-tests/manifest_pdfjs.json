@@ -1163,8 +1163,7 @@
   },
   "issue18896",
   {
-    "id": "bug1727053",
-    "ignore": true
+    "id": "bug1727053"
   },
   {
     "id": "bug1734802",
@@ -1212,8 +1211,7 @@
     "ignore": true
   },
   {
-    "id": "issue6410",
-    "ignore": true
+    "id": "issue6410"
   },
   {
     "id": "issue6692",
