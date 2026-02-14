@@ -162,7 +162,7 @@ fn find_sof_marker(data: &[u8]) -> Option<usize> {
             // All other markers have a 2-byte length field — skip over them.
             _ => {
                 let seg_len = u16::from_be_bytes([*data.get(i + 2)?, *data.get(i + 3)?]) as usize;
-                
+
                 i += 2 + seg_len;
             }
         }
