@@ -71,7 +71,8 @@ impl Skippable for Number {
         match r.peek_byte()? {
             b'.' => {
                 r.read_byte()?;
-                r.forward_while_1(is_digit_or_minus)?;
+                // See PDFJS-9252 - treat a single . as 0.
+                r.forward_while(is_digit_or_minus);
             }
             b'0'..=b'9' | b'-' => {
                 r.forward_while_1(is_digit_or_minus)?;
@@ -98,8 +99,9 @@ impl Readable<'_> for Number {
 
         let mut data = r.skip::<Self>(ctx.in_content_stream())?;
 
-        if data.len() == 1 && matches!(data[0], b'-' | b'+') {
+        if data.len() == 1 && matches!(data[0], b'-' | b'+' | b'.') {
             // See PDFJS-bug1753983 - accept just + or - as a zero.
+            // Also see PDFJS-9252 - treat a single . as 0.
             return Some(Self(InternalNumber::Integer(0)));
         }
 
