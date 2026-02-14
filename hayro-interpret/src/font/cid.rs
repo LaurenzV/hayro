@@ -108,7 +108,7 @@ impl Type0Font {
                             .glyph_index_by_cid(cid as u16)
                             .map(|g| GlyphId::new(g.0 as u32))
                             .unwrap_or(GlyphId::NOTDEF)
-                    }   else {
+                    } else {
                         GlyphId::new(self.cid_to_gid_map.inverse_map(GlyphId::new(cid)) as u32)
                     }
                 } else {
@@ -321,7 +321,7 @@ impl CidToGIdMap {
 
             for (cid, gid) in decoded.chunks_exact(2).enumerate() {
                 let gid = GlyphId::new(u16::from_be_bytes([gid[0], gid[1]]) as u32);
-                
+
                 forward.insert(cid as u16, gid);
                 inverse.insert(gid, cid as u16);
             }
@@ -335,16 +335,16 @@ impl CidToGIdMap {
     fn map(&self, code: u16) -> GlyphId {
         match self {
             Self::Identity => GlyphId::new(code as u32),
-            Self::Mapped { forward, .. } => {
-                forward.get(&code).copied().unwrap_or(GlyphId::NOTDEF)
-            }
+            Self::Mapped { forward, .. } => forward.get(&code).copied().unwrap_or(GlyphId::NOTDEF),
         }
     }
 
     fn inverse_map(&self, gid: GlyphId) -> u16 {
         match self {
             Self::Identity => gid.to_u32() as u16,
-            Self::Mapped { inverse, .. } => inverse.get(&gid).copied().unwrap_or(gid.to_u32() as u16),
+            Self::Mapped { inverse, .. } => {
+                inverse.get(&gid).copied().unwrap_or(gid.to_u32() as u16)
+            }
         }
     }
 }
