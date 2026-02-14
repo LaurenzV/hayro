@@ -301,7 +301,7 @@ impl FontType {
 
                     // See PDFJS-bug921409. File contains the `Type1C` entry,
                     // even though that's only valid for Type1 fonts.
-                    parse_cff().or_else(|| parse_opentype())
+                    parse_cff().or_else(parse_opentype)
                 }
             };
         }
