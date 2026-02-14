@@ -1319,7 +1319,8 @@
   },
   {
     "id": "issue11131_reduced",
-    "ignore": true
+    "ignore": true,
+    "comment": "broken loca table, might need fixing in skrifa?"
   },
   {
     "id": "issue11144_reduced"
