@@ -42,7 +42,7 @@ pub type Cid = u32;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CMapName<'a> {
     // ── Adobe-Japan1 (Japanese) ── Shift-JIS (RKSJ) encodings ──
-    /// `83pv-RKSJ-H` — Adobe-Japan1, Mac Shift-JIS (KanjiTalk 6), horizontal.
+    /// `83pv-RKSJ-H` — Adobe-Japan1, Mac Shift-JIS (`KanjiTalk` 6), horizontal.
     N83pvRksjH,
     /// `90ms-RKSJ-H` — Adobe-Japan1, Windows Shift-JIS (code page 932), horizontal.
     N90msRksjH,
@@ -52,7 +52,7 @@ pub enum CMapName<'a> {
     N90mspRksjH,
     /// `90msp-RKSJ-V` — Adobe-Japan1, Windows Shift-JIS with proportional Roman, vertical.
     N90mspRksjV,
-    /// `90pv-RKSJ-H` — Adobe-Japan1, Mac Shift-JIS (KanjiTalk 7), horizontal.
+    /// `90pv-RKSJ-H` — Adobe-Japan1, Mac Shift-JIS (`KanjiTalk` 7), horizontal.
     N90pvRksjH,
     /// `Add-RKSJ-H` — Adobe-Japan1, Fujitsu FMR Shift-JIS, horizontal.
     AddRksjH,
@@ -60,21 +60,21 @@ pub enum CMapName<'a> {
     AddRksjV,
 
     // ── Adobe-CNS1 (Traditional Chinese) ── Big Five encodings ──
-    /// `B5pc-H` — Adobe-CNS1, Mac Big Five (ETen extensions), horizontal.
+    /// `B5pc-H` — Adobe-CNS1, Mac Big Five (`ETen` extensions), horizontal.
     B5pcH,
-    /// `B5pc-V` — Adobe-CNS1, Mac Big Five (ETen extensions), vertical.
+    /// `B5pc-V` — Adobe-CNS1, Mac Big Five (`ETen` extensions), vertical.
     B5pcV,
     /// `CNS-EUC-H` — Adobe-CNS1, CNS 11643 EUC encoding, horizontal.
     CnsEucH,
     /// `CNS-EUC-V` — Adobe-CNS1, CNS 11643 EUC encoding, vertical.
     CnsEucV,
-    /// `ETen-B5-H` — Adobe-CNS1, ETen Big Five extensions, horizontal.
+    /// `ETen-B5-H` — Adobe-CNS1, `ETen` Big Five extensions, horizontal.
     ETenB5H,
-    /// `ETen-B5-V` — Adobe-CNS1, ETen Big Five extensions, vertical.
+    /// `ETen-B5-V` — Adobe-CNS1, `ETen` Big Five extensions, vertical.
     ETenB5V,
-    /// `ETenms-B5-H` — Adobe-CNS1, ETen Big Five with Microsoft symbol extensions, horizontal.
+    /// `ETenms-B5-H` — Adobe-CNS1, `ETen` Big Five with Microsoft symbol extensions, horizontal.
     ETenmsB5H,
-    /// `ETenms-B5-V` — Adobe-CNS1, ETen Big Five with Microsoft symbol extensions, vertical.
+    /// `ETenms-B5-V` — Adobe-CNS1, `ETen` Big Five with Microsoft symbol extensions, vertical.
     ETenmsB5V,
 
     // ── Adobe-Japan1 (Japanese) ── EUC and extended Shift-JIS encodings ──
@@ -191,7 +191,7 @@ pub enum CMapName<'a> {
     /// `V` — Adobe-Japan1, JIS X 0208 row-cell encoding, vertical.
     V,
 
-    /// A custom (non-predefined) CMap name.
+    /// A custom (non-predefined) `CMap` name.
     Custom(&'a [u8]),
 }
 
