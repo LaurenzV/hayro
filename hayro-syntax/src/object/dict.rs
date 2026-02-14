@@ -849,6 +849,7 @@ pub mod keys {
     key!(TYPE, b"Type");
     key!(TYPE0, b"Type0");
     key!(TYPE1, b"Type1");
+    key!(TYPE1C, b"Type1C");
     key!(TYPE3, b"Type3");
 
     // U

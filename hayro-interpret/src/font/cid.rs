@@ -280,22 +280,28 @@ impl FontType {
         } else if let Some(stream) = descriptor.get::<Stream<'_>>(FONT_FILE3) {
             let decoded = stream.decoded().ok()?;
 
+            let parse_cff = || {
+                let data = Arc::new(decoded.to_vec());
+
+                Some(Self::Cff(CffFontBlob::new(data)?))
+            };
+
+            let parse_opentype = || {
+                let font_ref = FontRef::new(decoded.as_ref()).ok()?;
+                let cff_data = Arc::new(font_ref.cff().ok()?.offset_data().as_ref().to_vec());
+
+                Some(Self::Cff(CffFontBlob::new(cff_data)?))
+            };
+
             return match stream.dict().get::<Name>(SUBTYPE)?.deref() {
-                CID_FONT_TYPE0C => {
-                    let data = Arc::new(decoded.to_vec());
-
-                    Some(Self::Cff(CffFontBlob::new(data)?))
-                }
-                OPEN_TYPE => {
-                    let font_ref = FontRef::new(decoded.as_ref()).ok()?;
-                    let cff_data = Arc::new(font_ref.cff().ok()?.offset_data().as_ref().to_vec());
-
-                    Some(Self::Cff(CffFontBlob::new(cff_data)?))
-                }
+                CID_FONT_TYPE0C => parse_cff(),
+                OPEN_TYPE => parse_opentype(),
                 _ => {
                     warn!("unknown subtype for FontFile3");
 
-                    None
+                    // See PDFJS-bug921409. File contains the `Type1C` entry,
+                    // even though that's only valid for Type1 fonts.
+                    parse_cff().or_else(|| parse_opentype())
                 }
             };
         }
