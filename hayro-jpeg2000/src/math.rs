@@ -49,7 +49,7 @@ mod inner {
 
         #[inline(always)]
         pub(crate) fn store(self, slice: &mut [f32]) {
-            slice[..SIMD_WIDTH].copy_from_slice(self.inner.as_slice());
+            self.inner.store_slice(&mut slice[..SIMD_WIDTH]);
         }
 
         #[inline(always)]
