@@ -16,19 +16,19 @@ mod index;
 mod parser;
 mod std_names;
 
-use core::convert::TryFrom;
-use core::num::NonZeroU16;
-use core::ops::Range;
-
 use crate::argstack::ArgumentsStack;
 use crate::cff::parser::FromData;
 use crate::util::TryNumFrom;
 use crate::{Builder, DummyOutline, GlyphId, Matrix, OutlineBuilder, OutlineError, Rect, RectF};
 use charset::{Charset, parse_charset};
 use charstring::CharStringParser;
+use core::convert::TryFrom;
+use core::num::NonZeroU16;
+use core::ops::Range;
 use dict::DictionaryParser;
 use encoding::{Encoding, STANDARD_ENCODING, parse_encoding};
 use index::{Index, parse_index, skip_index};
+use log::warn;
 use parser::{LazyArray16, NumFrom, Stream};
 use std_names::STANDARD_NAMES;
 
@@ -575,7 +575,7 @@ fn _parse_char_string(
         match op {
             0 | 2 | 9 | 13 | 15 | 16 | 17 => {
                 // Reserved.
-                return Err(OutlineError::InvalidOperator);
+                warn!("encountered reserved operator {}", op);
             }
             operator::HORIZONTAL_STEM
             | operator::VERTICAL_STEM
