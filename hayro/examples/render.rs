@@ -3,7 +3,6 @@
 use hayro::hayro_interpret::InterpreterSettings;
 use hayro::hayro_syntax::Pdf;
 use hayro::{RenderSettings, render};
-use log::warn;
 use vello_cpu::color::palette::css::WHITE;
 
 fn main() {
