@@ -409,6 +409,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "fearless_simd"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "76258897e51fd156ee03b6246ea53f3e0eb395d0b327e9961c4fc4c8b2fa151a"
+
+[[package]]
 name = "find-msvc-tools"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -631,7 +637,7 @@ dependencies = [
 name = "hayro-jpeg2000"
 version = "0.3.2"
 dependencies = [
- "fearless_simd",
+ "fearless_simd 0.4.0",
  "image 0.25.9",
  "indicatif",
  "log",
@@ -1637,7 +1643,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1bd1a4c633ce09e7d713df1a6e036644a125e15e0c169cfb5180ddf5836ca04b"
 dependencies = [
  "bytemuck",
- "fearless_simd",
+ "fearless_simd 0.3.0",
  "hashbrown",
  "log",
  "peniko",
