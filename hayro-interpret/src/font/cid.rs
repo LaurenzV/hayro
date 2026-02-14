@@ -291,7 +291,7 @@ impl FontType {
 
                 // See PDFJS-9949: Accept TrueType fonts as well, even though
                 // technically speaking not valid.
-                let result = if let Some(cff_table) = font_ref.cff().ok() {
+                let result = if let Ok(cff_table) = font_ref.cff() {
                     Self::Cff(CffFontBlob::new(Arc::new(
                         cff_table.offset_data().as_ref().to_vec(),
                     ))?)
