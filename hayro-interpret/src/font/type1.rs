@@ -75,6 +75,13 @@ impl Type1Font {
         Some(inner)
     }
 
+    pub(crate) fn new_standard(font: StandardFont, resolver: &FontResolverFn) -> Option<Self> {
+        let dict = Dict::default();
+        let standard = StandardKind::new_with_standard(&dict, font, true, resolver)?;
+        
+        Some(Self(0, Kind::Standard(standard), None))
+    }
+
     pub(crate) fn map_code(&self, code: u8) -> GlyphId {
         match &self.1 {
             Kind::Standard(s) => s.map_code(code),

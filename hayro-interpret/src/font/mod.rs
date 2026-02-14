@@ -252,6 +252,12 @@ impl<'a> Font<'a> {
         Some(Self(cache_key, f_type))
     }
 
+    pub(crate) fn new_standard(standard_font: StandardFont, font_resolver: &FontResolverFn) -> Option<Self> {
+        let font = Type1Font::new_standard(standard_font, font_resolver)?;
+        
+        Some(Self(0, FontType::Type1(Rc::new(font))))
+    }
+
     pub(crate) fn map_code(&self, code: u32) -> GlyphId {
         match &self.1 {
             FontType::Type1(f) => {

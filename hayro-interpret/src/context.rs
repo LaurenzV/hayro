@@ -22,7 +22,7 @@ pub struct Context<'a> {
     sub_path_start: Point,
     last_point: Point,
     clip: Option<FillRule>,
-    font_cache: HashMap<u128, Option<Font<'a>>>,
+    pub(crate) font_cache: HashMap<u128, Option<Font<'a>>>,
     root_transforms: Vec<Affine>,
     bbox: Vec<Rect>,
     pub(crate) settings: InterpreterSettings,
@@ -229,21 +229,6 @@ impl<'a> Context<'a> {
 
     pub(crate) fn pre_concat_affine(&mut self, transform: Affine) {
         self.get_mut().ctm *= transform;
-    }
-
-    pub(crate) fn get_font(&mut self, resources: &Resources<'a>, name: Name) -> Option<Font<'a>> {
-        let font_dict = resources.get_font(name)?;
-        let cache_key = font_dict.cache_key();
-        self.font_cache
-            .entry(cache_key)
-            .or_insert_with(|| {
-                Font::new(
-                    &font_dict,
-                    &self.settings.font_resolver,
-                    &self.settings.cmap_resolver,
-                )
-            })
-            .clone()
     }
 
     pub(crate) fn get_color_space(

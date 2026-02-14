@@ -1,9 +1,9 @@
-use crate::FillRule;
+use crate::{CacheKey, FillRule};
 use crate::color::ColorSpace;
 use crate::context::Context;
 use crate::convert::{convert_line_cap, convert_line_join};
 use crate::device::Device;
-use crate::font::{FontData, FontQuery};
+use crate::font::{Font, FontData, FontQuery, StandardFont};
 use crate::interpret::path::{
     close_path, fill_path, fill_path_impl, fill_stroke_path, stroke_path,
 };
@@ -522,7 +522,33 @@ pub fn interpret<'a, 'b>(
                 context.get_mut().text_state.clip_paths.truncate(0);
             }
             TypedInstruction::TextFont(t) => {
-                let font = context.get_font(resources, t.0);
+                let name = t.0;
+
+                // In case we are unable to resolve the font, two scenarios:
+                // 1) If the font doesn't exist in the first place in the resource dictionary,
+                // assume Helvetica (this seems to be what other PDF viewers do).
+                // 2) In case it's `None` because we were unable to resolve the font
+                // (for whatever reason), leave it as `None`. Better showing no
+                // text at all than garbage text.
+                let font = if let Some(font_dict) = resources.get_font(name.clone()) {
+                    let cache_key = font_dict.cache_key();
+
+                    context.font_cache
+                        .entry(cache_key)
+                        .or_insert_with(|| {
+                            Font::new(
+                                &font_dict,
+                                &context.settings.font_resolver,
+                                &context.settings.cmap_resolver,
+                            )
+                        })
+                        .clone()
+                }   else {
+                    warn!("font {:?} not found, falling back to Helvetica", name.as_str());
+
+                    Font::new_standard(StandardFont::Helvetica, &context.settings.font_resolver)
+                };
+                
                 context.get_mut().text_state.font_size = t.1.as_f32();
                 context.get_mut().text_state.font = font;
             }
