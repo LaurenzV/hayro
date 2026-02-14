@@ -14,7 +14,7 @@ pub use embedded::load_embedded;
 
 use crate::bcmap::embedded::BUNDLE;
 use crate::{
-    CMap, CMapType, CharacterCollection, CidRange, CodespaceRange, Metadata, Range, WritingMode,
+    CMap, CMapName, CharacterCollection, CidRange, CodespaceRange, Metadata, Range, WritingMode,
     parse,
 };
 use huffman::HuffmanTable;
@@ -42,7 +42,7 @@ const SEGMENT_CID_SYSTEM_INFO: u8 = 0x0E;
 
 pub(crate) fn parse<'a>(
     data: &[u8],
-    get_cmap: impl Fn(CMapType<'_>) -> Option<&'a [u8]> + Clone + 'a,
+    get_cmap: impl Fn(CMapName<'_>) -> Option<&'a [u8]> + Clone + 'a,
     depth: u32,
 ) -> Option<CMap> {
     // While in theory we can assume that all binary cmaps are valid, it can
@@ -99,7 +99,7 @@ pub(crate) fn parse<'a>(
                 });
             }
             SEGMENT_USECMAP => {
-                let base_data = get_cmap(CMapType::from_bytes(payload))?;
+                let base_data = get_cmap(CMapName::from_bytes(payload))?;
 
                 base = Some(Box::new(parse::parse_inner(
                     base_data,

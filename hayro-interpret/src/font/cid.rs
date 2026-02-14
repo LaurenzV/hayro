@@ -397,10 +397,10 @@ fn read_encoding(object: &Object<'_>, cmap_resolver: &CMapResolverFn) -> Option<
     // TODO: Support fetching CMaps referenced via `usecmap` in the PDF.
     match object {
         Object::Name(n) => {
-            let cmap_type = hayro_cmap::CMapType::from_bytes(n.deref());
+            let cmap_type = hayro_cmap::CMapName::from_bytes(n.deref());
             match cmap_type {
-                hayro_cmap::CMapType::IdentityH => Some(CMap::identity_h()),
-                hayro_cmap::CMapType::IdentityV => Some(CMap::identity_v()),
+                hayro_cmap::CMapName::IdentityH => Some(CMap::identity_h()),
+                hayro_cmap::CMapName::IdentityV => Some(CMap::identity_v()),
                 _ => {
                     let data = (cmap_resolver)(cmap_type)?;
                     let resolver = cmap_resolver.clone();

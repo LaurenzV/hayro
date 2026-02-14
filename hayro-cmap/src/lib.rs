@@ -26,7 +26,7 @@ pub use bcmap::load_embedded;
 ///
 /// Returns `None` when the `embed-cmaps` feature is not enabled.
 #[cfg(not(feature = "embed-cmaps"))]
-pub fn load_embedded(_name: &[u8]) -> Option<&'static [u8]> {
+pub fn load_embedded(_name: CMapName<'_>) -> Option<&'static [u8]> {
     None
 }
 
@@ -35,10 +35,316 @@ use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 
-/// The name of a cmap.
-pub type CMapName<'a> = &'a [u8];
 /// A CID (Character Identifier).
 pub type Cid = u32;
+
+/// The name of the cmap.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CMapName<'a> {
+    // ── Adobe-Japan1 (Japanese) ── Shift-JIS (RKSJ) encodings ──
+
+    /// `83pv-RKSJ-H` — Adobe-Japan1, Mac Shift-JIS (KanjiTalk 6), horizontal.
+    N83pvRksjH,
+    /// `90ms-RKSJ-H` — Adobe-Japan1, Windows Shift-JIS (code page 932), horizontal.
+    N90msRksjH,
+    /// `90ms-RKSJ-V` — Adobe-Japan1, Windows Shift-JIS (code page 932), vertical.
+    N90msRksjV,
+    /// `90msp-RKSJ-H` — Adobe-Japan1, Windows Shift-JIS with proportional Roman, horizontal.
+    N90mspRksjH,
+    /// `90msp-RKSJ-V` — Adobe-Japan1, Windows Shift-JIS with proportional Roman, vertical.
+    N90mspRksjV,
+    /// `90pv-RKSJ-H` — Adobe-Japan1, Mac Shift-JIS (KanjiTalk 7), horizontal.
+    N90pvRksjH,
+    /// `Add-RKSJ-H` — Adobe-Japan1, Fujitsu FMR Shift-JIS, horizontal.
+    AddRksjH,
+    /// `Add-RKSJ-V` — Adobe-Japan1, Fujitsu FMR Shift-JIS, vertical.
+    AddRksjV,
+
+    // ── Adobe-CNS1 (Traditional Chinese) ── Big Five encodings ──
+
+    /// `B5pc-H` — Adobe-CNS1, Mac Big Five (ETen extensions), horizontal.
+    B5pcH,
+    /// `B5pc-V` — Adobe-CNS1, Mac Big Five (ETen extensions), vertical.
+    B5pcV,
+    /// `CNS-EUC-H` — Adobe-CNS1, CNS 11643 EUC encoding, horizontal.
+    CnsEucH,
+    /// `CNS-EUC-V` — Adobe-CNS1, CNS 11643 EUC encoding, vertical.
+    CnsEucV,
+    /// `ETen-B5-H` — Adobe-CNS1, ETen Big Five extensions, horizontal.
+    ETenB5H,
+    /// `ETen-B5-V` — Adobe-CNS1, ETen Big Five extensions, vertical.
+    ETenB5V,
+    /// `ETenms-B5-H` — Adobe-CNS1, ETen Big Five with Microsoft symbol extensions, horizontal.
+    ETenmsB5H,
+    /// `ETenms-B5-V` — Adobe-CNS1, ETen Big Five with Microsoft symbol extensions, vertical.
+    ETenmsB5V,
+
+    // ── Adobe-Japan1 (Japanese) ── EUC and extended Shift-JIS encodings ──
+
+    /// `EUC-H` — Adobe-Japan1, JIS X 0208 EUC-JP encoding, horizontal.
+    EucH,
+    /// `EUC-V` — Adobe-Japan1, JIS X 0208 EUC-JP encoding, vertical.
+    EucV,
+    /// `Ext-RKSJ-H` — Adobe-Japan1, Shift-JIS with NEC/IBM extensions, horizontal.
+    ExtRksjH,
+    /// `Ext-RKSJ-V` — Adobe-Japan1, Shift-JIS with NEC/IBM extensions, vertical.
+    ExtRksjV,
+
+    // ── Adobe-GB1 (Simplified Chinese) ──
+
+    /// `GB-EUC-H` — Adobe-GB1, GB 2312-80 EUC encoding, horizontal.
+    GbEucH,
+    /// `GB-EUC-V` — Adobe-GB1, GB 2312-80 EUC encoding, vertical.
+    GbEucV,
+    /// `GBK-EUC-H` — Adobe-GB1, GBK encoding (Microsoft code page 936), horizontal.
+    GbkEucH,
+    /// `GBK-EUC-V` — Adobe-GB1, GBK encoding (Microsoft code page 936), vertical.
+    GbkEucV,
+    /// `GBK2K-H` — Adobe-GB1, GB 18030-2000 encoding, horizontal.
+    Gbk2kH,
+    /// `GBK2K-V` — Adobe-GB1, GB 18030-2000 encoding, vertical.
+    Gbk2kV,
+    /// `GBKp-EUC-H` — Adobe-GB1, GBK with proportional Roman, horizontal.
+    GbkpEucH,
+    /// `GBKp-EUC-V` — Adobe-GB1, GBK with proportional Roman, vertical.
+    GbkpEucV,
+    /// `GBpc-EUC-H` — Adobe-GB1, Mac GB 2312 (simplified) EUC encoding, horizontal.
+    GbpcEucH,
+    /// `GBpc-EUC-V` — Adobe-GB1, Mac GB 2312 (simplified) EUC encoding, vertical.
+    GbpcEucV,
+
+    // ── Adobe-Japan1 (Japanese) ── JIS encoding ──
+
+    /// `H` — Adobe-Japan1, JIS X 0208 row-cell encoding, horizontal.
+    H,
+
+    // ── Adobe-CNS1 (Traditional Chinese) ── Hong Kong SCS ──
+
+    /// `HKscs-B5-H` — Adobe-CNS1, Hong Kong SCS (Big Five with HKSCS extensions), horizontal.
+    HKscsB5H,
+    /// `HKscs-B5-V` — Adobe-CNS1, Hong Kong SCS (Big Five with HKSCS extensions), vertical.
+    HKscsB5V,
+
+    // ── Adobe-Identity ──
+
+    /// `Identity-H` — Adobe-Identity, two-byte identity mapping, horizontal.
+    /// Character codes map directly to CIDs (i.e. CID = character code).
+    IdentityH,
+    /// `Identity-V` — Adobe-Identity, two-byte identity mapping, vertical.
+    /// Character codes map directly to CIDs (i.e. CID = character code).
+    IdentityV,
+
+    // ── Adobe-Korea1 (Korean) ──
+
+    /// `KSC-EUC-H` — Adobe-Korea1, KS X 1001:1992 EUC-KR encoding, horizontal.
+    KscEucH,
+    /// `KSC-EUC-V` — Adobe-Korea1, KS X 1001:1992 EUC-KR encoding, vertical.
+    KscEucV,
+    /// `KSCms-UHC-H` — Adobe-Korea1, Microsoft UHC (Unified Hangul Code, code page 949), horizontal.
+    KscmsUhcH,
+    /// `KSCms-UHC-HW-H` — Adobe-Korea1, Microsoft UHC with half-width Roman, horizontal.
+    KscmsUhcHwH,
+    /// `KSCms-UHC-HW-V` — Adobe-Korea1, Microsoft UHC with half-width Roman, vertical.
+    KscmsUhcHwV,
+    /// `KSCms-UHC-V` — Adobe-Korea1, Microsoft UHC (Unified Hangul Code, code page 949), vertical.
+    KscmsUhcV,
+    /// `KSCpc-EUC-H` — Adobe-Korea1, Mac KS X 1001:1992 EUC-KR encoding, horizontal.
+    KscpcEucH,
+
+    // ── Adobe-CNS1 (Traditional Chinese) ── Unicode encodings ──
+
+    /// `UniCNS-UCS2-H` — Adobe-CNS1, Unicode UCS-2 encoding, horizontal.
+    UniCnsUcs2H,
+    /// `UniCNS-UCS2-V` — Adobe-CNS1, Unicode UCS-2 encoding, vertical.
+    UniCnsUcs2V,
+    /// `UniCNS-UTF16-H` — Adobe-CNS1, Unicode UTF-16 encoding, horizontal.
+    UniCnsUtf16H,
+    /// `UniCNS-UTF16-V` — Adobe-CNS1, Unicode UTF-16 encoding, vertical.
+    UniCnsUtf16V,
+
+    // ── Adobe-GB1 (Simplified Chinese) ── Unicode encodings ──
+
+    /// `UniGB-UCS2-H` — Adobe-GB1, Unicode UCS-2 encoding, horizontal.
+    UniGbUcs2H,
+    /// `UniGB-UCS2-V` — Adobe-GB1, Unicode UCS-2 encoding, vertical.
+    UniGbUcs2V,
+    /// `UniGB-UTF16-H` — Adobe-GB1, Unicode UTF-16 encoding, horizontal.
+    UniGbUtf16H,
+    /// `UniGB-UTF16-V` — Adobe-GB1, Unicode UTF-16 encoding, vertical.
+    UniGbUtf16V,
+
+    // ── Adobe-Japan1 (Japanese) ── Unicode encodings ──
+
+    /// `UniJIS-UCS2-H` — Adobe-Japan1, Unicode UCS-2 encoding, horizontal.
+    UniJisUcs2H,
+    /// `UniJIS-UCS2-HW-H` — Adobe-Japan1, Unicode UCS-2 with half-width Roman, horizontal.
+    UniJisUcs2HwH,
+    /// `UniJIS-UCS2-HW-V` — Adobe-Japan1, Unicode UCS-2 with half-width Roman, vertical.
+    UniJisUcs2HwV,
+    /// `UniJIS-UCS2-V` — Adobe-Japan1, Unicode UCS-2 encoding, vertical.
+    UniJisUcs2V,
+    /// `UniJIS-UTF16-H` — Adobe-Japan1, Unicode UTF-16 encoding, horizontal.
+    UniJisUtf16H,
+    /// `UniJIS-UTF16-V` — Adobe-Japan1, Unicode UTF-16 encoding, vertical.
+    UniJisUtf16V,
+
+    // ── Adobe-Korea1 (Korean) ── Unicode encodings ──
+
+    /// `UniKS-UCS2-H` — Adobe-Korea1, Unicode UCS-2 encoding, horizontal.
+    UniKsUcs2H,
+    /// `UniKS-UCS2-V` — Adobe-Korea1, Unicode UCS-2 encoding, vertical.
+    UniKsUcs2V,
+    /// `UniKS-UTF16-H` — Adobe-Korea1, Unicode UTF-16 encoding, horizontal.
+    UniKsUtf16H,
+    /// `UniKS-UTF16-V` — Adobe-Korea1, Unicode UTF-16 encoding, vertical.
+    UniKsUtf16V,
+
+    // ── Adobe-Japan1 (Japanese) ── JIS encoding ──
+
+    /// `V` — Adobe-Japan1, JIS X 0208 row-cell encoding, vertical.
+    V,
+
+    /// A custom (non-predefined) CMap name.
+    Custom(&'a [u8]),
+}
+
+impl<'a> CMapName<'a> {
+    /// Create a `CMapType` from raw bytes.
+    pub fn from_bytes(name: &'a [u8]) -> Self {
+        match name {
+            b"83pv-RKSJ-H" => Self::N83pvRksjH,
+            b"90ms-RKSJ-H" => Self::N90msRksjH,
+            b"90ms-RKSJ-V" => Self::N90msRksjV,
+            b"90msp-RKSJ-H" => Self::N90mspRksjH,
+            b"90msp-RKSJ-V" => Self::N90mspRksjV,
+            b"90pv-RKSJ-H" => Self::N90pvRksjH,
+            b"Add-RKSJ-H" => Self::AddRksjH,
+            b"Add-RKSJ-V" => Self::AddRksjV,
+            b"B5pc-H" => Self::B5pcH,
+            b"B5pc-V" => Self::B5pcV,
+            b"CNS-EUC-H" => Self::CnsEucH,
+            b"CNS-EUC-V" => Self::CnsEucV,
+            b"ETen-B5-H" => Self::ETenB5H,
+            b"ETen-B5-V" => Self::ETenB5V,
+            b"ETenms-B5-H" => Self::ETenmsB5H,
+            b"ETenms-B5-V" => Self::ETenmsB5V,
+            b"EUC-H" => Self::EucH,
+            b"EUC-V" => Self::EucV,
+            b"Ext-RKSJ-H" => Self::ExtRksjH,
+            b"Ext-RKSJ-V" => Self::ExtRksjV,
+            b"GB-EUC-H" => Self::GbEucH,
+            b"GB-EUC-V" => Self::GbEucV,
+            b"GBK-EUC-H" => Self::GbkEucH,
+            b"GBK-EUC-V" => Self::GbkEucV,
+            b"GBK2K-H" => Self::Gbk2kH,
+            b"GBK2K-V" => Self::Gbk2kV,
+            b"GBKp-EUC-H" => Self::GbkpEucH,
+            b"GBKp-EUC-V" => Self::GbkpEucV,
+            b"GBpc-EUC-H" => Self::GbpcEucH,
+            b"GBpc-EUC-V" => Self::GbpcEucV,
+            b"H" => Self::H,
+            b"HKscs-B5-H" => Self::HKscsB5H,
+            b"HKscs-B5-V" => Self::HKscsB5V,
+            b"Identity-H" => Self::IdentityH,
+            b"Identity-V" => Self::IdentityV,
+            b"KSC-EUC-H" => Self::KscEucH,
+            b"KSC-EUC-V" => Self::KscEucV,
+            b"KSCms-UHC-H" => Self::KscmsUhcH,
+            b"KSCms-UHC-HW-H" => Self::KscmsUhcHwH,
+            b"KSCms-UHC-HW-V" => Self::KscmsUhcHwV,
+            b"KSCms-UHC-V" => Self::KscmsUhcV,
+            b"KSCpc-EUC-H" => Self::KscpcEucH,
+            b"UniCNS-UCS2-H" => Self::UniCnsUcs2H,
+            b"UniCNS-UCS2-V" => Self::UniCnsUcs2V,
+            b"UniCNS-UTF16-H" => Self::UniCnsUtf16H,
+            b"UniCNS-UTF16-V" => Self::UniCnsUtf16V,
+            b"UniGB-UCS2-H" => Self::UniGbUcs2H,
+            b"UniGB-UCS2-V" => Self::UniGbUcs2V,
+            b"UniGB-UTF16-H" => Self::UniGbUtf16H,
+            b"UniGB-UTF16-V" => Self::UniGbUtf16V,
+            b"UniJIS-UCS2-H" => Self::UniJisUcs2H,
+            b"UniJIS-UCS2-HW-H" => Self::UniJisUcs2HwH,
+            b"UniJIS-UCS2-HW-V" => Self::UniJisUcs2HwV,
+            b"UniJIS-UCS2-V" => Self::UniJisUcs2V,
+            b"UniJIS-UTF16-H" => Self::UniJisUtf16H,
+            b"UniJIS-UTF16-V" => Self::UniJisUtf16V,
+            b"UniKS-UCS2-H" => Self::UniKsUcs2H,
+            b"UniKS-UCS2-V" => Self::UniKsUcs2V,
+            b"UniKS-UTF16-H" => Self::UniKsUtf16H,
+            b"UniKS-UTF16-V" => Self::UniKsUtf16V,
+            b"V" => Self::V,
+            _ => Self::Custom(name),
+        }
+    }
+
+    /// Convert the `CMapType` back to its raw byte representation.
+    pub fn to_bytes(&self) -> &[u8] {
+        match self {
+            Self::N83pvRksjH => b"83pv-RKSJ-H",
+            Self::N90msRksjH => b"90ms-RKSJ-H",
+            Self::N90msRksjV => b"90ms-RKSJ-V",
+            Self::N90mspRksjH => b"90msp-RKSJ-H",
+            Self::N90mspRksjV => b"90msp-RKSJ-V",
+            Self::N90pvRksjH => b"90pv-RKSJ-H",
+            Self::AddRksjH => b"Add-RKSJ-H",
+            Self::AddRksjV => b"Add-RKSJ-V",
+            Self::B5pcH => b"B5pc-H",
+            Self::B5pcV => b"B5pc-V",
+            Self::CnsEucH => b"CNS-EUC-H",
+            Self::CnsEucV => b"CNS-EUC-V",
+            Self::ETenB5H => b"ETen-B5-H",
+            Self::ETenB5V => b"ETen-B5-V",
+            Self::ETenmsB5H => b"ETenms-B5-H",
+            Self::ETenmsB5V => b"ETenms-B5-V",
+            Self::EucH => b"EUC-H",
+            Self::EucV => b"EUC-V",
+            Self::ExtRksjH => b"Ext-RKSJ-H",
+            Self::ExtRksjV => b"Ext-RKSJ-V",
+            Self::GbEucH => b"GB-EUC-H",
+            Self::GbEucV => b"GB-EUC-V",
+            Self::GbkEucH => b"GBK-EUC-H",
+            Self::GbkEucV => b"GBK-EUC-V",
+            Self::Gbk2kH => b"GBK2K-H",
+            Self::Gbk2kV => b"GBK2K-V",
+            Self::GbkpEucH => b"GBKp-EUC-H",
+            Self::GbkpEucV => b"GBKp-EUC-V",
+            Self::GbpcEucH => b"GBpc-EUC-H",
+            Self::GbpcEucV => b"GBpc-EUC-V",
+            Self::H => b"H",
+            Self::HKscsB5H => b"HKscs-B5-H",
+            Self::HKscsB5V => b"HKscs-B5-V",
+            Self::IdentityH => b"Identity-H",
+            Self::IdentityV => b"Identity-V",
+            Self::KscEucH => b"KSC-EUC-H",
+            Self::KscEucV => b"KSC-EUC-V",
+            Self::KscmsUhcH => b"KSCms-UHC-H",
+            Self::KscmsUhcHwH => b"KSCms-UHC-HW-H",
+            Self::KscmsUhcHwV => b"KSCms-UHC-HW-V",
+            Self::KscmsUhcV => b"KSCms-UHC-V",
+            Self::KscpcEucH => b"KSCpc-EUC-H",
+            Self::UniCnsUcs2H => b"UniCNS-UCS2-H",
+            Self::UniCnsUcs2V => b"UniCNS-UCS2-V",
+            Self::UniCnsUtf16H => b"UniCNS-UTF16-H",
+            Self::UniCnsUtf16V => b"UniCNS-UTF16-V",
+            Self::UniGbUcs2H => b"UniGB-UCS2-H",
+            Self::UniGbUcs2V => b"UniGB-UCS2-V",
+            Self::UniGbUtf16H => b"UniGB-UTF16-H",
+            Self::UniGbUtf16V => b"UniGB-UTF16-V",
+            Self::UniJisUcs2H => b"UniJIS-UCS2-H",
+            Self::UniJisUcs2HwH => b"UniJIS-UCS2-HW-H",
+            Self::UniJisUcs2HwV => b"UniJIS-UCS2-HW-V",
+            Self::UniJisUcs2V => b"UniJIS-UCS2-V",
+            Self::UniJisUtf16H => b"UniJIS-UTF16-H",
+            Self::UniJisUtf16V => b"UniJIS-UTF16-V",
+            Self::UniKsUcs2H => b"UniKS-UCS2-H",
+            Self::UniKsUcs2V => b"UniKS-UCS2-V",
+            Self::UniKsUtf16H => b"UniKS-UTF16-H",
+            Self::UniKsUtf16V => b"UniKS-UTF16-V",
+            Self::V => b"V",
+            Self::Custom(name) => name,
+        }
+    }
+}
 
 /// Let's limit the number of nested `usecmap` references to 16.
 const MAX_NESTING_DEPTH: u32 = 16;
@@ -557,7 +863,7 @@ endcidrange
 "#;
 
         let cmap = CMap::parse(child_data, |name| {
-            if name == b"Base" {
+            if name.to_bytes() == b"Base" {
                 Some(base_data.as_slice())
             } else {
                 None
@@ -609,7 +915,7 @@ endcidrange
 "#;
 
         let cmap = CMap::parse(child_data, |name| {
-            if name == b"Base" {
+            if name.to_bytes() == b"Base" {
                 Some(base_data.as_slice())
             } else {
                 None
@@ -942,13 +1248,13 @@ endbfrange
 mod bcmap_tests {
     use super::*;
 
-    fn get_embedded_cmap(name: &[u8]) -> Option<&'static [u8]> {
+    fn get_embedded_cmap(name: CMapName<'_>) -> Option<&'static [u8]> {
         load_embedded(name)
     }
 
     #[test]
     fn embedded_h_cmap() {
-        let data = get_embedded_cmap(b"H").expect("embedded H cmap not found");
+        let data = load_embedded(CMapName::H).expect("embedded H cmap not found");
         let cmap = CMap::parse(data, get_embedded_cmap).expect("failed to parse H cmap");
         assert_eq!(cmap.metadata().writing_mode, None);
         assert_eq!(
@@ -965,7 +1271,8 @@ mod bcmap_tests {
 
     #[test]
     fn embedded_90ms_rksj_h() {
-        let data = get_embedded_cmap(b"90ms-RKSJ-H").expect("embedded 90ms-RKSJ-H cmap not found");
+        let data =
+            load_embedded(CMapName::N90msRksjH).expect("embedded 90ms-RKSJ-H cmap not found");
         let cmap = CMap::parse(data, get_embedded_cmap).expect("failed to parse 90ms-RKSJ-H cmap");
         assert_eq!(
             cmap.metadata().character_collection,
@@ -981,7 +1288,7 @@ mod bcmap_tests {
 
     #[test]
     fn embedded_v_cmap() {
-        let data = get_embedded_cmap(b"V").expect("embedded V cmap not found");
+        let data = load_embedded(CMapName::V).expect("embedded V cmap not found");
         let cmap = CMap::parse(data, get_embedded_cmap).expect("failed to parse V cmap");
         assert_eq!(cmap.metadata().writing_mode, Some(WritingMode::Vertical));
         assert_eq!(
@@ -998,7 +1305,7 @@ mod bcmap_tests {
 
     #[test]
     fn embedded_gbk_euc_h() {
-        let data = get_embedded_cmap(b"GBK-EUC-H").expect("embedded GBK-EUC-H not found");
+        let data = load_embedded(CMapName::GbkEucH).expect("embedded GBK-EUC-H not found");
         let cmap = CMap::parse(data, get_embedded_cmap).expect("failed to parse GBK-EUC-H");
         assert_eq!(
             cmap.metadata().character_collection,
@@ -1017,7 +1324,7 @@ mod bcmap_tests {
 
     #[test]
     fn embedded_ksc_euc_h() {
-        let data = get_embedded_cmap(b"KSC-EUC-H").unwrap();
+        let data = load_embedded(CMapName::KscEucH).unwrap();
         let cmap = CMap::parse(data, get_embedded_cmap).unwrap();
         assert_eq!(
             cmap.metadata().character_collection,
@@ -1036,7 +1343,7 @@ mod bcmap_tests {
 
     #[test]
     fn embedded_b5pc_h() {
-        let data = get_embedded_cmap(b"B5pc-H").unwrap();
+        let data = load_embedded(CMapName::B5pcH).unwrap();
         let cmap = CMap::parse(data, get_embedded_cmap).unwrap();
         assert_eq!(
             cmap.metadata().character_collection,
@@ -1056,7 +1363,7 @@ mod bcmap_tests {
 
     #[test]
     fn embedded_unijis_utf16_h() {
-        let data = get_embedded_cmap(b"UniJIS-UTF16-H").unwrap();
+        let data = load_embedded(CMapName::UniJisUtf16H).unwrap();
         let cmap = CMap::parse(data, get_embedded_cmap).unwrap();
         assert_eq!(
             cmap.metadata().character_collection,
@@ -1075,7 +1382,7 @@ mod bcmap_tests {
 
     #[test]
     fn embedded_identity_h() {
-        let data = get_embedded_cmap(b"Identity-H").expect("embedded Identity-H not found");
+        let data = load_embedded(CMapName::IdentityH).expect("embedded Identity-H not found");
         let cmap = CMap::parse(data, get_embedded_cmap).expect("failed to parse Identity-H cmap");
         assert_eq!(cmap.metadata().writing_mode, None);
         assert_eq!(
@@ -1093,7 +1400,7 @@ mod bcmap_tests {
 
     #[test]
     fn embedded_identity_v() {
-        let data = get_embedded_cmap(b"Identity-V").expect("embedded Identity-V not found");
+        let data = load_embedded(CMapName::IdentityV).expect("embedded Identity-V not found");
         let cmap = CMap::parse(data, get_embedded_cmap).expect("failed to parse Identity-V cmap");
         assert_eq!(cmap.metadata().writing_mode, Some(WritingMode::Vertical));
         assert_eq!(
@@ -1111,7 +1418,7 @@ mod bcmap_tests {
 
     #[test]
     fn embedded_eten_b5_h() {
-        let data = get_embedded_cmap(b"ETen-B5-H").unwrap();
+        let data = load_embedded(CMapName::ETenB5H).unwrap();
         let cmap = CMap::parse(data, get_embedded_cmap).unwrap();
         assert_eq!(
             cmap.metadata().character_collection,
