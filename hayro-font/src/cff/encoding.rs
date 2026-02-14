@@ -5,7 +5,7 @@ use crate::GlyphId;
 
 /// The Standard Encoding as defined in the Adobe Technical Note #5176 Appendix B.
 #[rustfmt::skip]
-pub(crate) const STANDARD_ENCODING: [u8; 256] = [
+pub(crate) const STANDARD_ENCODING: [u16; 256] = [
       0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
       0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
       1,   2,   3,   4,   5,   6,   7,   8,   9,  10,  11,  12,  13,  14,  15,  16,
@@ -22,6 +22,27 @@ pub(crate) const STANDARD_ENCODING: [u8; 256] = [
     137,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
       0, 138,   0, 139,   0,   0,   0,   0, 140, 141, 142, 143,   0,   0,   0,   0,
       0, 144,   0,   0,   0, 145,   0,   0, 146, 147, 148, 149,   0,   0,   0,   0,
+];
+
+/// The Expert Encoding as defined in the Adobe Technical Note #5176 Appendix B.
+#[rustfmt::skip]
+pub(crate) const EXPERT_ENCODING: [u16; 256] = [
+      0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, 
+      1, 229, 230,   0, 231, 232, 233, 234, 235, 236, 237, 238,  13,  14,  15,  99, 
+    239, 240, 241, 242, 243, 244, 245, 246, 247, 248,  27,  28, 249, 250, 251, 252, 
+      0, 253, 254, 255, 256, 257,   0,   0,   0, 258,   0,   0, 259, 260, 261, 262, 
+      0,   0, 263, 264, 265,   0, 266, 109, 110, 267, 268, 269,   0, 270, 271, 272, 
+    273, 274, 275, 276, 277, 278, 279, 280, 281, 282, 283, 284, 285, 286, 287, 288, 
+    289, 290, 291, 292, 293, 294, 295, 296, 297, 298, 299, 300, 301, 302, 303,   0, 
+      0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, 
+      0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, 
+      0, 304, 305, 306,   0,   0, 307, 308, 309, 310, 311,   0, 312,   0,   0, 313, 
+      0,   0, 314, 315,   0,   0, 316, 317, 318,   0,   0,   0, 158, 155, 163, 319, 
+    320, 321, 322, 323, 324, 325,   0,   0, 326, 150, 164, 169, 327, 328, 329, 330, 
+    331, 332, 333, 334, 335, 336, 337, 338, 339, 340, 341, 342, 343, 344, 345, 346, 
+    347, 348, 349, 350, 351, 352, 353, 354, 355, 356, 357, 358, 359, 360, 361, 362, 
+    363, 364, 365, 366, 367, 368, 369, 370, 371, 372, 373, 374, 375, 376, 377, 378, 
 ];
 
 #[derive(Clone, Copy, Debug)]
@@ -101,16 +122,18 @@ impl Encoding<'_> {
 
         let index = usize::from(code);
         match self.kind {
-            // Standard encodings store a StringID/SID and not GlyphID/GID.
+            // Predefined encodings store a StringID/SID and not GlyphID/GID.
             // Therefore we have to get SID first and then convert it to GID via Charset.
             // Custom encodings (FormatN) store GID directly.
             //
             // Indexing for predefined encodings never fails,
             // because `code` is always `u8` and encodings have 256 entries.
-            //
-            // We treat `Expert` as `Standard` as well, since we allow only 8bit codepoints.
-            EncodingKind::Standard | EncodingKind::Expert => {
-                let sid = StringId(u16::from(STANDARD_ENCODING[index]));
+            EncodingKind::Standard => {
+                let sid = StringId(STANDARD_ENCODING[index]);
+                charset.sid_to_gid(sid)
+            }
+            EncodingKind::Expert => {
+                let sid = StringId(EXPERT_ENCODING[index]);
                 charset.sid_to_gid(sid)
             }
             EncodingKind::Format0(ref table) => {
