@@ -2,6 +2,7 @@ use crate::object::Dict;
 use crate::object::dict::keys::COLOR_TRANSFORM;
 use crate::object::stream::{FilterResult, ImageColorSpace, ImageData, ImageDecodeParams};
 use core::num::NonZeroU32;
+use std::borrow::Cow;
 use zune_jpeg::zune_core::bytestream::ZCursor;
 use zune_jpeg::zune_core::colorspace::ColorSpace;
 use zune_jpeg::zune_core::colorspace::ColorSpace::CMYK;
@@ -12,11 +13,17 @@ pub(crate) fn decode(
     params: Dict<'_>,
     image_params: &ImageDecodeParams,
 ) -> Option<FilterResult> {
-    let reader = ZCursor::new(data);
+    // Some PDFs have weird JPEGs where the JPEG metadata is completely wrong
+    // (for example indicating that one of the dimensions is u16::MAX), but the
+    // metadata in the PDF image dictionary is correct. Therefore, we first
+    // validate the JPEG metadata and patch the data if any of the dimensions
+    // are too large (if they are too small, they will just be padded later on).
+    let data = maybe_patch_jpeg_dimensions(data, image_params);
+
     let options = DecoderOptions::default()
         .set_max_width(u16::MAX as usize)
         .set_max_height(u16::MAX as usize);
-    let mut decoder = zune_jpeg::JpegDecoder::new_with_options(reader, options);
+    let mut decoder = zune_jpeg::JpegDecoder::new_with_options(ZCursor::new(&*data), options);
     decoder.decode_headers().ok()?;
 
     let color_transform = params.get::<u8>(COLOR_TRANSFORM);
@@ -64,21 +71,8 @@ pub(crate) fn decode(
         }
     }
 
-    let mut width = decoder.dimensions().unwrap().0 as u32;
-    let mut height = decoder.dimensions().unwrap().1 as u32;
-
-    let expected_len = out_colorspace.num_components()
-        * image_params.width as usize
-        * image_params.height as usize;
-
-    // If actual image is larger than expected, truncate data and treat the
-    // PDF metadata as authoritative. If actual image is smaller than the PDF
-    // metadata, treat the JPEG metadata as authoritative.
-    if expected_len < decoded.len() {
-        decoded.truncate(expected_len);
-        width = image_params.width;
-        height = image_params.height;
-    }
+    let width = decoder.dimensions().unwrap().0 as u32;
+    let height = decoder.dimensions().unwrap().1 as u32;
 
     let image_data = ImageData {
         alpha: None,
@@ -98,4 +92,79 @@ pub(crate) fn decode(
         data: decoded,
         image_data: Some(image_data),
     })
+}
+
+fn maybe_patch_jpeg_dimensions<'a>(
+    data: &'a [u8],
+    image_params: &ImageDecodeParams,
+) -> Cow<'a, [u8]> {
+    let Some(sof_offset) = find_sof_marker(data) else {
+        return Cow::Borrowed(data);
+    };
+    
+    let height_offset = sof_offset + 5;
+    let width_offset = sof_offset + 7;
+
+    if width_offset + 2 > data.len() {
+        return Cow::Borrowed(data);
+    }
+
+    let jpeg_height = u16::from_be_bytes([data[height_offset], data[height_offset + 1]]);
+    let jpeg_width = u16::from_be_bytes([data[width_offset], data[width_offset + 1]]);
+
+    let need_patch =
+        jpeg_width as u32 > image_params.width || jpeg_height as u32 > image_params.height;
+
+    if !need_patch {
+        return Cow::Borrowed(data);
+    }
+
+    let target_w = (image_params.width as u16).to_be_bytes();
+    let target_h = (image_params.height as u16).to_be_bytes();
+
+    let mut patched = data.to_vec();
+    patched[height_offset..height_offset + 2].copy_from_slice(&target_h);
+    patched[width_offset..width_offset + 2].copy_from_slice(&target_w);
+    
+    Cow::Owned(patched)
+}
+
+fn find_sof_marker(data: &[u8]) -> Option<usize> {
+    let mut i = 0;
+    
+    while i + 1 < data.len() {
+        if data[i] != 0xFF {
+            i += 1;
+            continue;
+        }
+
+        let marker = data[i + 1];
+        
+        match marker {
+            // SOF0 (baseline), SOF1 (extended sequential), SOF2 (progressive),
+            // SOF3 (lossless) — these are the frame types that carry dimensions.
+            0xC0..=0xC3 => return Some(i),
+            // Skip padding bytes (0xFF followed by 0xFF).
+            0xFF => {
+                i += 1;
+                continue;
+            }
+            // SOI (0xD8) and standalone markers have no payload.
+            0xD8 | 0x00 => {
+                i += 2;
+                continue;
+            }
+            // All other markers have a 2-byte length field — skip over them.
+            _ => {
+                if i + 3 >= data.len() {
+                    break;
+                }
+                
+                let seg_len = u16::from_be_bytes([data[i + 2], data[i + 3]]) as usize;
+                i += 2 + seg_len;
+            }
+        }
+    }
+
+    None
 }
