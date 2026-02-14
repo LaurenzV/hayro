@@ -80,7 +80,9 @@ impl Skippable for Number {
                 }
             }
             // See PDFJS-bug1753983 - accept just + or - as a zero.
-            b if is_white_space_character(b) && has_sign => {}
+            // ALso see PDFJS-bug1953099, where the sign is followed by a show
+            // text string operand, requiring us to allow '<' and '(' as well.
+            b if has_sign && (is_white_space_character(b) || matches!(b, b'(' | b'<')) => {}
             _ => return None,
         }
 
