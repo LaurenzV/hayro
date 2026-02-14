@@ -294,8 +294,11 @@ impl FontType {
             };
 
             return match stream.dict().get::<Name>(SUBTYPE)?.deref() {
-                CID_FONT_TYPE0C => parse_cff(),
-                OPEN_TYPE => parse_opentype(),
+                // Also see PDFJS-6782, where CIDFontType0C is indicated, even
+                // though it's OpenType. So we always ignore the subtype
+                // and just bruteforce.
+                CID_FONT_TYPE0C => parse_cff().or_else(parse_opentype),
+                OPEN_TYPE => parse_opentype().or_else(parse_cff),
                 _ => {
                     warn!("unknown subtype for FontFile3");
 
