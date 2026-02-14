@@ -6,7 +6,7 @@ use hayro_postscript::{Object, Scanner};
 #[cfg(feature = "embed-cmaps")]
 use crate::bcmap;
 use crate::{
-    BfRange, CMap, CMapName, CharacterCollection, CidRange, CodespaceRange, MAX_NESTING_DEPTH,
+    BfRange, CMap, CMapType, CharacterCollection, CidRange, CodespaceRange, MAX_NESTING_DEPTH,
     Metadata, Range, WritingMode,
 };
 
@@ -17,7 +17,7 @@ struct Context<F> {
 
 pub(crate) fn parse_inner<'a>(
     data: &[u8],
-    get_cmap: impl Fn(CMapName<'_>) -> Option<&'a [u8]> + Clone + 'a,
+    get_cmap: impl Fn(CMapType<'_>) -> Option<&'a [u8]> + Clone + 'a,
     depth: u32,
 ) -> Option<CMap> {
     // Prevent stack overflow for malicious cmap files or circular references.
@@ -102,7 +102,7 @@ pub(crate) fn parse_inner<'a>(
                     parse_bf_range(&mut scanner, &mut bf_entries, &mut ctx)?;
                 }
                 Some("usecmap") => {
-                    let nested_data = (ctx.get_cmap)(last_name.as_deref()?)?;
+                    let nested_data = (ctx.get_cmap)(CMapType::from_bytes(last_name.as_deref()?))?;
 
                     base = Some(Box::new(parse_inner(
                         nested_data,

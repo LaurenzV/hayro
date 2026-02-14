@@ -628,6 +628,6 @@ pub(crate) fn read_to_unicode(dict: &Dict<'_>, cmap_resolver: &CMapResolverFn) -
         .and_then(|s| s.decoded().ok())
         .and_then(|data| {
             let cmap_resolver = cmap_resolver.clone();
-            CMap::parse(&data, move |n| (cmap_resolver)(n))
+            CMap::parse(&data, move |name| (cmap_resolver)(name))
         })
 }

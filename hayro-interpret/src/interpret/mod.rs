@@ -34,7 +34,8 @@ pub(crate) mod text;
 /// is a TTC, otherwise it should be 0.
 pub type FontResolverFn = Arc<dyn Fn(&FontQuery) -> Option<(FontData, u32)> + Send + Sync>;
 /// A callback function for resolving cmap names to their files.
-pub type CMapResolverFn = Arc<dyn Fn(&[u8]) -> Option<&'static [u8]> + Send + Sync>;
+pub type CMapResolverFn =
+    Arc<dyn Fn(hayro_cmap::CMapType<'_>) -> Option<&'static [u8]> + Send + Sync>;
 /// A callback function for resolving warnings during interpretation.
 pub type WarningSinkFn = Arc<dyn Fn(InterpreterWarning) + Send + Sync>;
 
