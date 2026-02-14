@@ -8,9 +8,7 @@ use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::*;
 use hayro_syntax::object::{Array, Object};
 use kurbo::{BezPath, Vec2};
-use log::warn;
 use skrifa::attribute::Style;
-use skrifa::raw::TableProvider;
 use skrifa::{FontRef, GlyphId, MetadataProvider};
 use std::collections::HashMap;
 use std::ops::Deref;
@@ -97,7 +95,7 @@ impl Type0Font {
         };
 
         match &self.font_type {
-            FontType::TrueType(_) => self.cid_to_gid_map.map(cid as u16),
+            FontType::OpenType(_) => self.cid_to_gid_map.map(cid as u16),
             FontType::Cff(c) => {
                 let table = c.table();
 
@@ -125,14 +123,14 @@ impl Type0Font {
 
     pub(crate) fn outline_glyph(&self, glyph: GlyphId) -> BezPath {
         match &self.font_type {
-            FontType::TrueType(t) => t.outline_glyph(glyph),
+            FontType::OpenType(t) => t.outline_glyph(glyph),
             FontType::Cff(c) => c.outline_glyph(glyph),
         }
     }
 
     pub(crate) fn font_data(&self) -> crate::font::FontData {
         match &self.font_type {
-            FontType::TrueType(t) => t.font_data(),
+            FontType::OpenType(t) => t.font_data(),
             FontType::Cff(c) => c.font_data(),
         }
     }
@@ -147,7 +145,7 @@ impl Type0Font {
     /// Returns `None` if weight cannot be determined (CFF fonts or invalid weight).
     pub(crate) fn weight(&self) -> Option<u32> {
         match &self.font_type {
-            FontType::TrueType(t) => {
+            FontType::OpenType(t) => {
                 let weight = t.font_ref().attributes().weight.value().round() as u32;
                 if weight > 0 { Some(weight) } else { None }
             }
@@ -163,7 +161,7 @@ impl Type0Font {
             return true;
         }
         match &self.font_type {
-            FontType::TrueType(t) => t.font_ref().attributes().style != Style::Normal,
+            FontType::OpenType(t) => t.font_ref().attributes().style != Style::Normal,
             FontType::Cff(_) => false,
         }
     }
@@ -183,7 +181,7 @@ impl Type0Font {
             return true;
         }
         match &self.font_type {
-            FontType::TrueType(t) => {
+            FontType::OpenType(t) => {
                 t.font_ref()
                     .metrics(
                         skrifa::instance::Size::unscaled(),
@@ -260,67 +258,34 @@ impl CacheKey for Type0Font {
 
 #[derive(Debug)]
 enum FontType {
-    /// Type2 CID font.
-    TrueType(OpenTypeFontBlob),
-    /// Type0 CID font, backed by CFF font program (either via `CIDFontType0C` or OpenType).
+    /// An OpenType font.
+    OpenType(OpenTypeFontBlob),
+    /// A CFF font.
     Cff(CffFontBlob),
 }
 
 impl FontType {
     fn new(descriptor: &Dict<'_>) -> Option<Self> {
-        // Apparently there are some PDFs that have the wrong subtype,
-        // so we just brute-force trying to parse the correct type to give
-        // some leeway.
+        // PDF has a distinction between CIDFontType0 and CIDFontType 2, with
+        // specific requirements what font type can appear where. However, some
+        // PDFs use wrong metadata, so we simply bruteforce without even looking
+        // at the metadata.
 
-        if let Some(stream) = descriptor.get::<Stream<'_>>(FONT_FILE2) {
-            let decoded = stream.decoded().ok()?;
-            let data = Arc::new(decoded.to_vec());
+        let data = descriptor
+            .get::<Stream<'_>>(FONT_FILE2)
+            .or_else(|| descriptor.get::<Stream<'_>>(FONT_FILE3))?
+            .decoded()
+            .ok()?;
 
-            return Some(Self::TrueType(OpenTypeFontBlob::new(data, 0)?));
-        } else if let Some(stream) = descriptor.get::<Stream<'_>>(FONT_FILE3) {
-            let decoded = stream.decoded().ok()?;
+        let parsed = if let Ok(_font_ref) = FontRef::from_index(&data, 0) {
+            // It's an OpenType font, either TrueType or CFF.
+            Self::OpenType(OpenTypeFontBlob::new(Arc::new(data), 0)?)
+        } else {
+            // It's a CFF font.
+            Self::Cff(CffFontBlob::new(Arc::new(data))?)
+        };
 
-            let parse_cff = || {
-                let data = Arc::new(decoded.to_vec());
-
-                Some(Self::Cff(CffFontBlob::new(data)?))
-            };
-
-            let parse_opentype = || {
-                let font_ref = FontRef::new(decoded.as_ref()).ok()?;
-
-                // See PDFJS-9949: Accept TrueType fonts as well, even though
-                // technically speaking not valid.
-                let result = if let Ok(cff_table) = font_ref.cff() {
-                    Self::Cff(CffFontBlob::new(Arc::new(
-                        cff_table.offset_data().as_ref().to_vec(),
-                    ))?)
-                } else {
-                    Self::TrueType(OpenTypeFontBlob::new(Arc::new(decoded.to_vec()), 0)?)
-                };
-
-                Some(result)
-            };
-
-            return match stream.dict().get::<Name>(SUBTYPE)?.deref() {
-                // Also see PDFJS-6782, where CIDFontType0C is indicated, even
-                // though it's OpenType. So we always ignore the subtype
-                // and just bruteforce.
-                CID_FONT_TYPE0C => parse_cff().or_else(parse_opentype),
-                OPEN_TYPE => parse_opentype().or_else(parse_cff),
-                _ => {
-                    warn!("unknown subtype for FontFile3");
-
-                    // See PDFJS-bug921409. File contains the `Type1C` entry,
-                    // even though that's only valid for Type1 fonts.
-                    parse_cff().or_else(parse_opentype)
-                }
-            };
-        }
-
-        warn!("CID font didn't have an embededd font file");
-
-        None
+        Some(parsed)
     }
 }
 
