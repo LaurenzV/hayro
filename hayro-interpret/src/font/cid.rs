@@ -288,9 +288,18 @@ impl FontType {
 
             let parse_opentype = || {
                 let font_ref = FontRef::new(decoded.as_ref()).ok()?;
-                let cff_data = Arc::new(font_ref.cff().ok()?.offset_data().as_ref().to_vec());
 
-                Some(Self::Cff(CffFontBlob::new(cff_data)?))
+                // See PDFJS-9949: Accept TrueType fonts as well, even though
+                // technically speaking not valid.
+                let result = if let Some(cff_table) = font_ref.cff().ok() {
+                    Self::Cff(CffFontBlob::new(Arc::new(
+                        cff_table.offset_data().as_ref().to_vec(),
+                    ))?)
+                } else {
+                    Self::TrueType(OpenTypeFontBlob::new(Arc::new(decoded.to_vec()), 0)?)
+                };
+
+                Some(result)
             };
 
             return match stream.dict().get::<Name>(SUBTYPE)?.deref() {
