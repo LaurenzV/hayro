@@ -42,7 +42,6 @@ pub type Cid = u32;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CMapName<'a> {
     // ── Adobe-Japan1 (Japanese) ── Shift-JIS (RKSJ) encodings ──
-
     /// `83pv-RKSJ-H` — Adobe-Japan1, Mac Shift-JIS (KanjiTalk 6), horizontal.
     N83pvRksjH,
     /// `90ms-RKSJ-H` — Adobe-Japan1, Windows Shift-JIS (code page 932), horizontal.
@@ -61,7 +60,6 @@ pub enum CMapName<'a> {
     AddRksjV,
 
     // ── Adobe-CNS1 (Traditional Chinese) ── Big Five encodings ──
-
     /// `B5pc-H` — Adobe-CNS1, Mac Big Five (ETen extensions), horizontal.
     B5pcH,
     /// `B5pc-V` — Adobe-CNS1, Mac Big Five (ETen extensions), vertical.
@@ -80,7 +78,6 @@ pub enum CMapName<'a> {
     ETenmsB5V,
 
     // ── Adobe-Japan1 (Japanese) ── EUC and extended Shift-JIS encodings ──
-
     /// `EUC-H` — Adobe-Japan1, JIS X 0208 EUC-JP encoding, horizontal.
     EucH,
     /// `EUC-V` — Adobe-Japan1, JIS X 0208 EUC-JP encoding, vertical.
@@ -91,7 +88,6 @@ pub enum CMapName<'a> {
     ExtRksjV,
 
     // ── Adobe-GB1 (Simplified Chinese) ──
-
     /// `GB-EUC-H` — Adobe-GB1, GB 2312-80 EUC encoding, horizontal.
     GbEucH,
     /// `GB-EUC-V` — Adobe-GB1, GB 2312-80 EUC encoding, vertical.
@@ -114,19 +110,16 @@ pub enum CMapName<'a> {
     GbpcEucV,
 
     // ── Adobe-Japan1 (Japanese) ── JIS encoding ──
-
     /// `H` — Adobe-Japan1, JIS X 0208 row-cell encoding, horizontal.
     H,
 
     // ── Adobe-CNS1 (Traditional Chinese) ── Hong Kong SCS ──
-
     /// `HKscs-B5-H` — Adobe-CNS1, Hong Kong SCS (Big Five with HKSCS extensions), horizontal.
     HKscsB5H,
     /// `HKscs-B5-V` — Adobe-CNS1, Hong Kong SCS (Big Five with HKSCS extensions), vertical.
     HKscsB5V,
 
     // ── Adobe-Identity ──
-
     /// `Identity-H` — Adobe-Identity, two-byte identity mapping, horizontal.
     /// Character codes map directly to CIDs (i.e. CID = character code).
     IdentityH,
@@ -135,7 +128,6 @@ pub enum CMapName<'a> {
     IdentityV,
 
     // ── Adobe-Korea1 (Korean) ──
-
     /// `KSC-EUC-H` — Adobe-Korea1, KS X 1001:1992 EUC-KR encoding, horizontal.
     KscEucH,
     /// `KSC-EUC-V` — Adobe-Korea1, KS X 1001:1992 EUC-KR encoding, vertical.
@@ -152,7 +144,6 @@ pub enum CMapName<'a> {
     KscpcEucH,
 
     // ── Adobe-CNS1 (Traditional Chinese) ── Unicode encodings ──
-
     /// `UniCNS-UCS2-H` — Adobe-CNS1, Unicode UCS-2 encoding, horizontal.
     UniCnsUcs2H,
     /// `UniCNS-UCS2-V` — Adobe-CNS1, Unicode UCS-2 encoding, vertical.
@@ -163,7 +154,6 @@ pub enum CMapName<'a> {
     UniCnsUtf16V,
 
     // ── Adobe-GB1 (Simplified Chinese) ── Unicode encodings ──
-
     /// `UniGB-UCS2-H` — Adobe-GB1, Unicode UCS-2 encoding, horizontal.
     UniGbUcs2H,
     /// `UniGB-UCS2-V` — Adobe-GB1, Unicode UCS-2 encoding, vertical.
@@ -174,7 +164,6 @@ pub enum CMapName<'a> {
     UniGbUtf16V,
 
     // ── Adobe-Japan1 (Japanese) ── Unicode encodings ──
-
     /// `UniJIS-UCS2-H` — Adobe-Japan1, Unicode UCS-2 encoding, horizontal.
     UniJisUcs2H,
     /// `UniJIS-UCS2-HW-H` — Adobe-Japan1, Unicode UCS-2 with half-width Roman, horizontal.
@@ -189,7 +178,6 @@ pub enum CMapName<'a> {
     UniJisUtf16V,
 
     // ── Adobe-Korea1 (Korean) ── Unicode encodings ──
-
     /// `UniKS-UCS2-H` — Adobe-Korea1, Unicode UCS-2 encoding, horizontal.
     UniKsUcs2H,
     /// `UniKS-UCS2-V` — Adobe-Korea1, Unicode UCS-2 encoding, vertical.
@@ -200,7 +188,6 @@ pub enum CMapName<'a> {
     UniKsUtf16V,
 
     // ── Adobe-Japan1 (Japanese) ── JIS encoding ──
-
     /// `V` — Adobe-Japan1, JIS X 0208 row-cell encoding, vertical.
     V,
 
