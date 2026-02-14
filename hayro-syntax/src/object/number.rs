@@ -99,9 +99,12 @@ impl Readable<'_> for Number {
 
         let mut data = r.skip::<Self>(ctx.in_content_stream())?;
 
-        if data.len() == 1 && matches!(data[0], b'-' | b'+' | b'.') {
+        if (data.len() == 1 && matches!(data[0], b'-' | b'+' | b'.'))
+            || (data.len() == 2 && matches!(data[0], b'-' | b'+') && matches!(data[1], b'.'))
+        {
             // See PDFJS-bug1753983 - accept just + or - as a zero.
             // Also see PDFJS-9252 - treat a single . as 0.
+            // Also see PDFJS-15604 - treat -. as 0.
             return Some(Self(InternalNumber::Integer(0)));
         }
 
