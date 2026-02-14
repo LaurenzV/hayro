@@ -843,7 +843,7 @@ fn seac_code_to_glyph_id(charset: &Charset<'_>, n: f32) -> Option<GlyphId> {
     let code = u8::try_num_from(n)?;
 
     let sid = STANDARD_ENCODING[usize::from(code)];
-    let sid = StringId(u16::from(sid));
+    let sid = StringId(sid);
 
     match charset {
         Charset::ISOAdobe => {
