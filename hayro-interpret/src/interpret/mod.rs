@@ -1,4 +1,3 @@
-use crate::{CacheKey, FillRule};
 use crate::color::ColorSpace;
 use crate::context::Context;
 use crate::convert::{convert_line_cap, convert_line_join};
@@ -15,6 +14,7 @@ use crate::util::{OptionLog, RectExt};
 use crate::x_object::{
     FormXObject, ImageXObject, XObject, draw_form_xobject, draw_image_xobject, draw_xobject,
 };
+use crate::{CacheKey, FillRule};
 use hayro_syntax::content::ops::TypedInstruction;
 use hayro_syntax::object::dict::keys::{ANNOTS, AP, F, N, OC, RECT};
 use hayro_syntax::object::{Array, Dict, Object, Rect, Stream, dict_or_stream};
@@ -533,7 +533,8 @@ pub fn interpret<'a, 'b>(
                 let font = if let Some(font_dict) = resources.get_font(name.clone()) {
                     let cache_key = font_dict.cache_key();
 
-                    context.font_cache
+                    context
+                        .font_cache
                         .entry(cache_key)
                         .or_insert_with(|| {
                             Font::new(
@@ -543,12 +544,15 @@ pub fn interpret<'a, 'b>(
                             )
                         })
                         .clone()
-                }   else {
-                    warn!("font {:?} not found, falling back to Helvetica", name.as_str());
+                } else {
+                    warn!(
+                        "font {:?} not found, falling back to Helvetica",
+                        name.as_str()
+                    );
 
                     Font::new_standard(StandardFont::Helvetica, &context.settings.font_resolver)
                 };
-                
+
                 context.get_mut().text_state.font_size = t.1.as_f32();
                 context.get_mut().text_state.font = font;
             }
