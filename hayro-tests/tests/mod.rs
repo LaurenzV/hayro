@@ -1,5 +1,6 @@
 use hayro::hayro_interpret::InterpreterSettings;
 use hayro::hayro_interpret::font::{FontData, FontQuery, StandardFont};
+use hayro::hayro_interpret::hayro_cmap::CidFamily;
 use hayro_svg::SvgRenderSettings;
 use hayro_syntax::Pdf;
 use hayro_syntax::{DecryptionError, LoadPdfError};
@@ -173,10 +174,36 @@ fn interpreter_settings() -> InterpreterSettings {
     InterpreterSettings {
         font_resolver: Arc::new(|query| match query {
             FontQuery::Standard(s) => Some((get_standard(s)?, 0)),
-            FontQuery::Fallback(f) => Some((get_standard(&f.pick_standard_font())?, 0)),
+            FontQuery::Fallback(f) => {
+                if let Some(data) = get_noto_fallback(f) {
+                    return Some((data, 0));
+                }
+
+                Some((get_standard(&f.pick_standard_font())?, 0))
+            }
         }),
         ..Default::default()
     }
+}
+
+fn get_noto_fallback(query: &hayro::hayro_interpret::font::FallbackFontQuery) -> Option<FontData> {
+    let family = &query.character_collection.as_ref()?.family;
+
+    let data: &[u8] = match family {
+        CidFamily::AdobeGB1
+        | CidFamily::AdobeJapan1
+        | CidFamily::AdobeCNS1
+        | CidFamily::AdobeKorea1 => {
+            if query.is_bold {
+                &include_bytes!("../assets/NotoSansSC-Bold.ttf")[..]
+            } else {
+                &include_bytes!("../assets/NotoSansSC-Regular.ttf")[..]
+            }
+        }
+        _ => return None,
+    };
+
+    Some(Arc::new(data))
 }
 
 fn svg_render_settings() -> SvgRenderSettings {

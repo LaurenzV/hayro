@@ -56,7 +56,7 @@ pub(crate) fn strip_subset_prefix(name: &str) -> &str {
 }
 
 use crate::util::hash128;
-use hayro_cmap::{BfString, CMap};
+use hayro_cmap::{BfString, CMap, CharacterCollection};
 pub use outline::OutlineFontData;
 pub use standard_font::StandardFont;
 
@@ -235,7 +235,7 @@ impl<'a> Font<'a> {
                         .map(Rc::new)
                         .map(FontType::Type1)
                 })?,
-            TYPE0 => FontType::Type0(Rc::new(Type0Font::new(dict, cmap_resolver)?)),
+            TYPE0 => FontType::Type0(Rc::new(Type0Font::new(dict, font_resolver, cmap_resolver)?)),
             TYPE3 => FontType::Type3(Rc::new(Type3::new(dict, cmap_resolver)?)),
             f => {
                 warn!(
@@ -514,6 +514,8 @@ pub struct FallbackFontQuery {
     pub is_bold: bool,
     /// Whether the font is small cap.
     pub is_small_cap: bool,
+    /// The character collection (registry/ordering) if this is a CID font.
+    pub character_collection: Option<CharacterCollection>,
 }
 
 impl FallbackFontQuery {
@@ -601,6 +603,7 @@ impl Default for FallbackFontQuery {
             is_italic: false,
             is_bold: false,
             is_small_cap: false,
+            character_collection: None,
         }
     }
 }

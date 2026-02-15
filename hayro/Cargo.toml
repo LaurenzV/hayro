@@ -18,6 +18,7 @@ fast_image_resize = { workspace = true }
 
 [dev-dependencies]
 log = { workspace = true }
+fontdb = "0.23.0"
 
 [features]
 default = ["embed-fonts", "embed-cmaps"]

@@ -1,13 +1,17 @@
 use crate::font::blob::{CffFontBlob, OpenTypeFontBlob};
-use crate::font::{FontFlags, read_to_unicode, strip_subset_prefix};
-use crate::{CMapResolverFn, CacheKey};
-use hayro_cmap::{BfString, CMap, WritingMode};
+use crate::font::generated::glyph_names;
+use crate::font::{
+    FallbackFontQuery, FontFlags, FontQuery, read_to_unicode, strip_subset_prefix,
+};
+use crate::{CMapResolverFn, CacheKey, FontResolverFn};
+use hayro_cmap::{BfString, CMap, CidFamily, WritingMode};
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Name;
 use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::*;
 use hayro_syntax::object::{Array, Object};
 use kurbo::{BezPath, Vec2};
+use log::warn;
 use skrifa::attribute::Style;
 use skrifa::{FontRef, GlyphId, MetadataProvider};
 use std::collections::HashMap;
@@ -30,10 +34,16 @@ pub(crate) struct Type0Font {
     postscript_name: Option<String>,
     /// Font flags from the font descriptor.
     font_flags: Option<FontFlags>,
+    /// Whether this font is using a fallback (non-embedded) font.
+    fallback: bool,
 }
 
 impl Type0Font {
-    pub(crate) fn new(dict: &Dict<'_>, cmap_resolver: &CMapResolverFn) -> Option<Self> {
+    pub(crate) fn new(
+        dict: &Dict<'_>,
+        font_resolver: &FontResolverFn,
+        cmap_resolver: &CMapResolverFn,
+    ) -> Option<Self> {
         let cmap = read_encoding(&dict.get::<Object<'_>>(ENCODING)?, cmap_resolver)?;
 
         let horizontal = cmap.metadata().writing_mode != Some(WritingMode::Vertical);
@@ -43,7 +53,29 @@ impl Type0Font {
             .iter::<Dict<'_>>()
             .next()?;
         let font_descriptor = descendant_font.get::<Dict<'_>>(FONT_DESC)?;
-        let font_type = FontType::new(&font_descriptor)?;
+
+        let (font_type, fallback) = match FontType::new(&font_descriptor) {
+            Some(ft) => (ft, false),
+            None => {
+                let mut query = FallbackFontQuery::new(dict);
+                query.character_collection =
+                    cmap.metadata().character_collection.clone();
+
+                warn!(
+                    "unable to load CID font {}, attempting fallback",
+                    query
+                        .post_script_name
+                        .as_deref()
+                        .unwrap_or("(no name)")
+                );
+
+                let (data, index) =
+                    font_resolver(&FontQuery::Fallback(query))?;
+                let blob = OpenTypeFontBlob::new(data.clone(), index).map(FontType::OpenType)
+                    .or_else(|| CffFontBlob::new(data).map(FontType::Cff))?;
+                (blob, true)
+            }
+        };
 
         let default_width = descendant_font.get::<f32>(DW).unwrap_or(1000.0);
         let dw2 = descendant_font
@@ -62,7 +94,31 @@ impl Type0Font {
         let cid_to_gid_map = CidToGIdMap::new(&descendant_font).unwrap_or_default();
         let cache_key = dict.cache_key();
 
-        let to_unicode = read_to_unicode(dict, cmap_resolver);
+        let mut to_unicode = read_to_unicode(dict, cmap_resolver);
+
+        // For fallback fonts without a ToUnicode map, build a reversed UTF-16 CMap
+        // so we can map CID → Unicode → glyph via the fallback font's cmap table.
+        if fallback && to_unicode.is_none() {
+            if let Some(cc) = cmap.metadata().character_collection.as_ref() {
+                if cc.family != CidFamily::AdobeIdentity {
+                    if let Some(cmap_name) = cc.family.unicode_cmap() {
+                        if let Some(data) = (cmap_resolver)(cmap_name) {
+                            let resolver = cmap_resolver.clone();
+                            if let Some(utf16_cmap) =
+                                CMap::parse(data, move |n| (resolver)(n))
+                            {
+                                to_unicode = Some(utf16_cmap.reversed());
+                            }
+                        }
+                    }
+                }
+            }
+
+            // If we still have no to_unicode, we can't map CIDs to glyphs.
+            if to_unicode.is_none() {
+                return None;
+            }
+        }
 
         let postscript_name = dict
             .get::<Name>(BASE_FONT)
@@ -86,6 +142,7 @@ impl Type0Font {
             cid_to_gid_map,
             postscript_name,
             font_flags,
+            fallback,
         })
     }
 
@@ -93,6 +150,10 @@ impl Type0Font {
         let Some(cid) = self.code_to_cid(code) else {
             return GlyphId::NOTDEF;
         };
+
+        if self.fallback {
+            return self.map_code_fallback(cid);
+        }
 
         match &self.font_type {
             FontType::OpenType(_) => self.cid_to_gid_map.map(cid as u16),
@@ -114,6 +175,52 @@ impl Type0Font {
                 } else {
                     self.cid_to_gid_map.map(cid as u16)
                 }
+            }
+        }
+    }
+
+    /// Map a CID to a glyph ID using the fallback font path:
+    /// CID → reversed to_unicode CMap → Unicode char → OpenType cmap → GlyphId
+    fn map_code_fallback(&self, cid: u32) -> GlyphId {
+        let to_unicode = match &self.to_unicode {
+            Some(cmap) => cmap,
+            None => return GlyphId::NOTDEF,
+        };
+
+        // Try lookup_cid_code (reversed CMap: CID input → Unicode output)
+        let unicode_val = (1..=4_u8)
+            .find_map(|byte_len| to_unicode.lookup_cid_code(cid, byte_len));
+
+        let Some(code_point) = unicode_val else {
+            return GlyphId::NOTDEF;
+        };
+
+        let Some(ch) = char::from_u32(code_point) else {
+            return GlyphId::NOTDEF;
+        };
+
+        match &self.font_type {
+            FontType::OpenType(t) => t
+                .font_ref()
+                .charmap()
+                .map(ch)
+                .unwrap_or(GlyphId::NOTDEF),
+            FontType::Cff(c) => {
+                let table = c.table();
+
+                // Try AGL reverse lookup first (e.g. 'A' -> "A")
+                if let Some(name) = glyph_names::get_reverse(ch) {
+                    if let Some(gid) = table.glyph_index_by_name(name) {
+                        return GlyphId::new(gid.0 as u32);
+                    }
+                }
+
+                // Fall back to uniXXXX naming convention
+                let name = format!("uni{:04X}", code_point);
+                table
+                    .glyph_index_by_name(&name)
+                    .map(|g| GlyphId::new(g.0 as u32))
+                    .unwrap_or(GlyphId::NOTDEF)
             }
         }
     }

@@ -397,6 +397,61 @@ impl CMap {
         }
     }
 
+    /// Create a reversed copy of this cmap where character codes and CIDs are
+    /// swapped. This essentially allows you to create a new CMap that maps from
+    /// CIDs to character codes. For example, if the original map was a map from
+    /// Unicode to CID, this reversed map will be a map from CID to Unicode. In
+    /// this case, [`lookup_cid_code`] takes a CID as input and returns a
+    /// Unicode codepoint as output.
+    ///
+    /// Note that there are caveats: Bf string entries, notdef ranges, and base 
+    /// cmaps will be discarded. If multiple character codes mapped to the same
+    /// CID, only one of those mappings will be preserved.
+    pub fn reversed(&self) -> Self {
+        let mut cid_ranges: Vec<CidRange> = self
+            .cid_ranges
+            .iter()
+            .flat_map(|r| {
+                let len = r.range.end - r.range.start;
+                (0..=len).map(move |i| CidRange {
+                    range: Range {
+                        start: r.cid_start + i,
+                        end: r.cid_start + i,
+                    },
+                    cid_start: r.range.start + i,
+                })
+            })
+            .collect();
+
+        cid_ranges.sort_by(|a, b| a.range.start.cmp(&b.range.start));
+
+        let mut codespace_ranges = Vec::new();
+        if let (Some(first), Some(last)) = (cid_ranges.first(), cid_ranges.last()) {
+            let low = first.range.start;
+            let high = last.range.end;
+            let number_bytes = match high {
+                0..=0xFF => 1,
+                0..=0xFFFF => 2,
+                0..=0xFFFFFF => 3,
+                _ => 4,
+            };
+            codespace_ranges.push(CodespaceRange {
+                number_bytes,
+                low,
+                high,
+            });
+        }
+
+        Self {
+            metadata: self.metadata.clone(),
+            codespace_ranges,
+            cid_ranges,
+            notdef_ranges: Vec::new(),
+            bf_entries: Vec::new(),
+            base: None,
+        }
+    }
+
     /// Return the metadata of this cmap.
     pub fn metadata(&self) -> &Metadata {
         &self.metadata
@@ -620,6 +675,18 @@ impl CidFamily {
                 registry: registry.to_vec(),
                 ordering: ordering.to_vec(),
             }
+        }
+    }
+
+    /// Return the predefined UTF-16 CMap that maps Unicode code points to CIDs
+    /// for this family, if one exists.
+    pub fn unicode_cmap(&self) -> Option<CMapName<'static>> {
+        match self {
+            Self::AdobeJapan1 => Some(CMapName::UniJisUtf16H),
+            Self::AdobeGB1 => Some(CMapName::UniGbUtf16H),
+            Self::AdobeCNS1 => Some(CMapName::UniCnsUtf16H),
+            Self::AdobeKorea1 => Some(CMapName::UniKsUtf16H),
+            Self::AdobeIdentity | Self::Custom { .. } => None,
         }
     }
 }

@@ -1,8 +1,12 @@
 //! This example shows you how you can render a PDF file to PNG.
 
+use fontdb::{Family, Query, Weight};
+use hayro::hayro_interpret::font::{FontData, FontQuery};
+use hayro::hayro_interpret::hayro_cmap::CidFamily;
 use hayro::hayro_interpret::InterpreterSettings;
 use hayro::hayro_syntax::Pdf;
 use hayro::{RenderSettings, render};
+use std::sync::Arc;
 use vello_cpu::color::palette::css::WHITE;
 
 fn main() {
@@ -22,7 +26,42 @@ fn main() {
 
     let pdf = Pdf::new(file).unwrap();
 
-    let interpreter_settings = InterpreterSettings::default();
+    let mut fontdb = fontdb::Database::new();
+    fontdb.load_system_fonts();
+
+    let interpreter_settings = InterpreterSettings {
+        font_resolver: Arc::new(move |query| match query {
+            FontQuery::Standard(s) => Some(s.get_font_data()),
+            FontQuery::Fallback(f) => {
+                if f.character_collection
+                    .as_ref()
+                    .is_none_or(|c| matches!(c.family, CidFamily::AdobeIdentity))
+                {
+                    return Some(f.pick_standard_font().get_font_data());
+                }
+
+                let query = Query {
+                    families: &[Family::Name("Noto Sans SC")],
+                    weight: if f.is_bold {
+                        Weight::BOLD
+                    } else {
+                        Weight::NORMAL
+                    },
+                    ..Default::default()
+                };
+
+                let id = fontdb.query(&query)?;
+                let mut font_data: Option<(FontData, u32)> = None;
+
+                fontdb.with_face_data(id, |data, idx| {
+                    font_data = Some((Arc::new(data.to_vec()), idx));
+                });
+
+                font_data
+            }
+        }),
+        ..Default::default()
+    };
 
     let render_settings = RenderSettings {
         x_scale: scale,
