@@ -6,8 +6,8 @@ use hayro_postscript::{Object, Scanner};
 #[cfg(feature = "embed-cmaps")]
 use crate::bcmap;
 use crate::{
-    BfRange, CMap, CMapName, CharacterCollection, CidRange, CodespaceRange, MAX_NESTING_DEPTH,
-    Metadata, Range, WritingMode,
+    BfRange, CMap, CMapName, CharacterCollection, CidFamily, CidRange, CodespaceRange,
+    MAX_NESTING_DEPTH, Metadata, Range, WritingMode,
 };
 
 struct Context<F> {
@@ -126,8 +126,7 @@ pub(crate) fn parse_inner<'a>(
         (registry, ordering, supplement)
     {
         Some(CharacterCollection {
-            registry,
-            ordering,
+            family: CidFamily::from_registry_ordering(&registry, &ordering),
             supplement,
         })
     } else {

@@ -373,8 +373,7 @@ impl CMap {
         Self {
             metadata: Metadata {
                 character_collection: Some(CharacterCollection {
-                    registry: Vec::from(b"Adobe" as &[u8]),
-                    ordering: Vec::from(b"Identity" as &[u8]),
+                    family: CidFamily::AdobeIdentity,
                     supplement: 0,
                 }),
                 name: Some(Vec::from(name)),
@@ -578,13 +577,57 @@ pub struct Metadata {
     pub writing_mode: Option<WritingMode>,
 }
 
+/// The registry+ordering family of a CID character collection.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CidFamily {
+    /// Adobe-Japan1
+    AdobeJapan1,
+    /// Adobe-GB1
+    AdobeGB1,
+    /// Adobe-CNS1
+    AdobeCNS1,
+    /// Adobe-Korea1
+    AdobeKorea1,
+    /// Adobe-Identity
+    AdobeIdentity,
+    /// A non-predefined registry/ordering pair.
+    Custom {
+        /// The registry name.
+        registry: Vec<u8>,
+        /// The ordering name.
+        ordering: Vec<u8>,
+    },
+}
+
+impl CidFamily {
+    /// Create a `CidFamily` from raw registry and ordering byte strings.
+    pub fn from_registry_ordering(registry: &[u8], ordering: &[u8]) -> Self {
+        if registry == b"Adobe" {
+            match ordering {
+                b"Japan1" => Self::AdobeJapan1,
+                b"GB1" => Self::AdobeGB1,
+                b"CNS1" => Self::AdobeCNS1,
+                b"Korea1" => Self::AdobeKorea1,
+                b"Identity" => Self::AdobeIdentity,
+                _ => Self::Custom {
+                    registry: registry.to_vec(),
+                    ordering: ordering.to_vec(),
+                },
+            }
+        } else {
+            Self::Custom {
+                registry: registry.to_vec(),
+                ordering: ordering.to_vec(),
+            }
+        }
+    }
+}
+
 /// A CID character collection identifying the character set and ordering.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CharacterCollection {
-    /// The registry name (e.g. `b"Adobe"`).
-    pub registry: Vec<u8>,
-    /// The ordering name (e.g. `b"Japan1"`).
-    pub ordering: Vec<u8>,
+    /// The registry+ordering family.
+    pub family: CidFamily,
     /// The supplement number.
     pub supplement: i32,
 }
@@ -645,8 +688,7 @@ endcmap"#;
 
         let cmap = CMap::parse(data, |_| None).unwrap();
         let cc = cmap.metadata().character_collection.as_ref().unwrap();
-        assert_eq!(cc.registry, b"Adobe");
-        assert_eq!(cc.ordering, b"Japan1");
+        assert_eq!(cc.family, CidFamily::AdobeJapan1);
         assert_eq!(cc.supplement, 6);
         assert_eq!(
             cmap.metadata().name.as_deref(),
@@ -797,8 +839,13 @@ end
 "#;
         let cmap = CMap::parse(data, |_| None).unwrap();
         let cc = cmap.metadata().character_collection.as_ref().unwrap();
-        assert_eq!(cc.registry, b"Adobe");
-        assert_eq!(cc.ordering, b"UCS");
+        assert_eq!(
+            cc.family,
+            CidFamily::Custom {
+                registry: b"Adobe".to_vec(),
+                ordering: b"UCS".to_vec(),
+            }
+        );
         assert_eq!(cc.supplement, 0);
         assert_eq!(
             cmap.metadata().name.as_deref(),
@@ -1196,8 +1243,13 @@ endbfrange
 "#;
         let cmap = CMap::parse(data, |_| None).unwrap();
         let cc = cmap.metadata().character_collection.as_ref().unwrap();
-        assert_eq!(cc.registry, b"ABCDEF+SimSun");
-        assert_eq!(cc.ordering, b"pdfbeaninc");
+        assert_eq!(
+            cc.family,
+            CidFamily::Custom {
+                registry: b"ABCDEF+SimSun".to_vec(),
+                ordering: b"pdfbeaninc".to_vec(),
+            }
+        );
         assert_eq!(cc.supplement, 0);
         assert_eq!(
             cmap.lookup_unicode_code(0x0000),
@@ -1247,8 +1299,7 @@ mod bcmap_tests {
         assert_eq!(
             cmap.metadata().character_collection,
             Some(CharacterCollection {
-                registry: b"Adobe".to_vec(),
-                ordering: b"Japan1".to_vec(),
+                family: CidFamily::AdobeJapan1,
                 supplement: 1,
             })
         );
@@ -1264,8 +1315,7 @@ mod bcmap_tests {
         assert_eq!(
             cmap.metadata().character_collection,
             Some(CharacterCollection {
-                registry: b"Adobe".to_vec(),
-                ordering: b"Japan1".to_vec(),
+                family: CidFamily::AdobeJapan1,
                 supplement: 2,
             })
         );
@@ -1281,8 +1331,7 @@ mod bcmap_tests {
         assert_eq!(
             cmap.metadata().character_collection,
             Some(CharacterCollection {
-                registry: b"Adobe".to_vec(),
-                ordering: b"Japan1".to_vec(),
+                family: CidFamily::AdobeJapan1,
                 supplement: 1,
             })
         );
@@ -1297,8 +1346,7 @@ mod bcmap_tests {
         assert_eq!(
             cmap.metadata().character_collection,
             Some(CharacterCollection {
-                registry: b"Adobe".to_vec(),
-                ordering: b"GB1".to_vec(),
+                family: CidFamily::AdobeGB1,
                 supplement: 2,
             })
         );
@@ -1316,8 +1364,7 @@ mod bcmap_tests {
         assert_eq!(
             cmap.metadata().character_collection,
             Some(CharacterCollection {
-                registry: b"Adobe".to_vec(),
-                ordering: b"Korea1".to_vec(),
+                family: CidFamily::AdobeKorea1,
                 supplement: 0,
             })
         );
@@ -1335,8 +1382,7 @@ mod bcmap_tests {
         assert_eq!(
             cmap.metadata().character_collection,
             Some(CharacterCollection {
-                registry: b"Adobe".to_vec(),
-                ordering: b"CNS1".to_vec(),
+                family: CidFamily::AdobeCNS1,
                 supplement: 0,
             })
         );
@@ -1355,8 +1401,7 @@ mod bcmap_tests {
         assert_eq!(
             cmap.metadata().character_collection,
             Some(CharacterCollection {
-                registry: b"Adobe".to_vec(),
-                ordering: b"Japan1".to_vec(),
+                family: CidFamily::AdobeJapan1,
                 supplement: 7,
             })
         );
@@ -1375,8 +1420,7 @@ mod bcmap_tests {
         assert_eq!(
             cmap.metadata().character_collection,
             Some(CharacterCollection {
-                registry: b"Adobe".to_vec(),
-                ordering: b"Identity".to_vec(),
+                family: CidFamily::AdobeIdentity,
                 supplement: 0,
             })
         );
@@ -1393,8 +1437,7 @@ mod bcmap_tests {
         assert_eq!(
             cmap.metadata().character_collection,
             Some(CharacterCollection {
-                registry: b"Adobe".to_vec(),
-                ordering: b"Identity".to_vec(),
+                family: CidFamily::AdobeIdentity,
                 supplement: 0,
             })
         );
@@ -1410,8 +1453,7 @@ mod bcmap_tests {
         assert_eq!(
             cmap.metadata().character_collection,
             Some(CharacterCollection {
-                registry: b"Adobe".to_vec(),
-                ordering: b"CNS1".to_vec(),
+                family: CidFamily::AdobeCNS1,
                 supplement: 0,
             })
         );

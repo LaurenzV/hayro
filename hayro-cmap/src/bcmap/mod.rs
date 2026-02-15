@@ -14,8 +14,8 @@ pub use embedded::load_embedded;
 
 use crate::bcmap::embedded::BUNDLE;
 use crate::{
-    CMap, CMapName, CharacterCollection, CidRange, CodespaceRange, Metadata, Range, WritingMode,
-    parse,
+    CMap, CMapName, CharacterCollection, CidFamily, CidRange, CodespaceRange, Metadata, Range,
+    WritingMode, parse,
 };
 use huffman::HuffmanTable;
 use reader::Reader;
@@ -93,8 +93,7 @@ pub(crate) fn parse<'a>(
                 let supplement = r.read_u16()? as i32;
 
                 character_collection = Some(CharacterCollection {
-                    registry,
-                    ordering,
+                    family: CidFamily::from_registry_ordering(&registry, &ordering),
                     supplement,
                 });
             }
