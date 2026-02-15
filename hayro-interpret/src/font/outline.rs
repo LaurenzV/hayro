@@ -2,7 +2,7 @@ use crate::CacheKey;
 use crate::font::cid::Type0Font;
 use crate::font::true_type::TrueTypeFont;
 use crate::font::type1::Type1Font;
-use hayro_cmap::UnicodeString;
+use hayro_cmap::BfString;
 use hayro_font::OutlineBuilder;
 use kurbo::BezPath;
 use skrifa::GlyphId;
@@ -131,7 +131,7 @@ impl OutlineFont {
         }
     }
 
-    pub(crate) fn char_code_to_unicode(&self, char_code: u32) -> Option<UnicodeString> {
+    pub(crate) fn char_code_to_unicode(&self, char_code: u32) -> Option<BfString> {
         match self {
             Self::Type1(t) => t.char_code_to_unicode(char_code),
             Self::TrueType(t) => t.char_code_to_unicode(char_code),

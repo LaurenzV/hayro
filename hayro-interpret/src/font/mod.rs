@@ -56,7 +56,7 @@ pub(crate) fn strip_subset_prefix(name: &str) -> &str {
 }
 
 use crate::util::hash128;
-use hayro_cmap::{CMap, UnicodeString};
+use hayro_cmap::{BfString, CMap};
 pub use outline::OutlineFontData;
 pub use standard_font::StandardFont;
 
@@ -90,7 +90,7 @@ impl Glyph<'_> {
     ///
     /// Please note that this method is still somewhat experimental and might
     /// not work reliably in all cases.
-    pub fn as_unicode(&self) -> Option<UnicodeString> {
+    pub fn as_unicode(&self) -> Option<BfString> {
         match self {
             Glyph::Outline(g) => g.as_unicode(),
             Glyph::Type3(g) => g.as_unicode(),
@@ -140,7 +140,7 @@ impl OutlineGlyph {
     /// Returns the Unicode code point for this glyph, if available.
     ///
     /// See [`Glyph::as_unicode`] for details on the fallback chain used.
-    pub fn as_unicode(&self) -> Option<UnicodeString> {
+    pub fn as_unicode(&self) -> Option<BfString> {
         self.font.char_code_to_unicode(self.char_code)
     }
 
@@ -203,7 +203,7 @@ impl<'a> Type3Glyph<'a> {
     /// Returns the Unicode code point for this glyph, if available.
     ///
     /// Note: Type3 fonts can only provide Unicode via `ToUnicode` cmap.
-    pub fn as_unicode(&self) -> Option<UnicodeString> {
+    pub fn as_unicode(&self) -> Option<BfString> {
         self.font.char_code_to_unicode(self.char_code)
     }
 }

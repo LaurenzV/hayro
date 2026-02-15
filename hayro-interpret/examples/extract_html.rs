@@ -14,7 +14,7 @@ use hayro_syntax::Pdf;
 
 use std::fmt::Write;
 
-use hayro_cmap::UnicodeString;
+use hayro_cmap::BfString;
 use kurbo::{Affine, BezPath, Point, Rect};
 use std::path::PathBuf;
 
@@ -100,8 +100,8 @@ impl Device<'_> for TextExtractor {
                 self.text,
                 "<div style='position: absolute; color: black; left: {}px; top: {}px; font-size: {}pt'>{}</div>",
                 position.x, position.y, 6, match unicode_char {
-                    UnicodeString::Char(c) => c.to_string(),
-                    UnicodeString::String(s) => s
+                    BfString::Char(c) => c.to_string(),
+                    BfString::String(s) => s
                 }
             ).unwrap();
         } else {

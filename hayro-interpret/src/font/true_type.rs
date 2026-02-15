@@ -6,7 +6,7 @@ use crate::font::{
 };
 use crate::util::OptionLog;
 use crate::{CMapResolverFn, CacheKey};
-use hayro_cmap::{CMap, UnicodeString};
+use hayro_cmap::{BfString, CMap};
 use hayro_syntax::object::Array;
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Name;
@@ -281,15 +281,15 @@ impl TrueTypeFont {
             .unwrap_or(0.0)
     }
 
-    pub(crate) fn char_code_to_unicode(&self, code: u32) -> Option<UnicodeString> {
+    pub(crate) fn char_code_to_unicode(&self, code: u32) -> Option<BfString> {
         if let Some(to_unicode) = &self.to_unicode
-            && let Some(c) = to_unicode.lookup_unicode_code(code)
+            && let Some(c) = to_unicode.lookup_bf_string(code)
         {
             Some(c)
         } else {
             self.code_to_name(code as u8)
                 .and_then(glyph_name_to_unicode)
-                .map(UnicodeString::Char)
+                .map(BfString::Char)
         }
 
         // TODO: The test PDFs below fail (but mutool can render them correctly).

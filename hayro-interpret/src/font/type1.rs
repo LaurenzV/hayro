@@ -5,7 +5,7 @@ use crate::font::standard_font::{StandardFont, StandardFontBlob, select_standard
 use crate::font::true_type::{read_encoding, read_widths};
 use crate::font::{Encoding, FallbackFontQuery, FontQuery, glyph_name_to_unicode, read_to_unicode};
 use crate::{CMapResolverFn, CacheKey, FontResolverFn};
-use hayro_cmap::{CMap, UnicodeString};
+use hayro_cmap::{BfString, CMap};
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::{FONT_DESC, FONT_FILE, FONT_FILE3};
@@ -106,23 +106,23 @@ impl Type1Font {
         }
     }
 
-    pub(crate) fn char_code_to_unicode(&self, char_code: u32) -> Option<UnicodeString> {
+    pub(crate) fn char_code_to_unicode(&self, char_code: u32) -> Option<BfString> {
         if let Some(to_unicode) = &self.2
-            && let Some(c) = to_unicode.lookup_unicode_code(char_code)
+            && let Some(c) = to_unicode.lookup_bf_string(char_code)
         {
             // Skip null character mappings and fall back to glyph name
             // lookup. Some PDFs have incorrect ToUnicode mappings that map
             // to U+0000.
-            if c != UnicodeString::Char('\0') {
+            if c != BfString::Char('\0') {
                 return Some(c);
             }
         }
 
         let code = char_code as u8;
         match &self.1 {
-            Kind::Standard(s) => s.char_code_to_unicode(code).map(UnicodeString::Char),
-            Kind::Cff(c) => c.char_code_to_unicode(code).map(UnicodeString::Char),
-            Kind::Type1(t) => t.char_code_to_unicode(code).map(UnicodeString::Char),
+            Kind::Standard(s) => s.char_code_to_unicode(code).map(BfString::Char),
+            Kind::Cff(c) => c.char_code_to_unicode(code).map(BfString::Char),
+            Kind::Type1(t) => t.char_code_to_unicode(code).map(BfString::Char),
         }
     }
 }

@@ -425,7 +425,7 @@ impl CMap {
         // See pdfjs_bug920426, it uses bf chars for encoding the characters
         // of a text-showing operator, so try that as well. We don't want to
         // recurse though, only check the bf chars of this level.
-        if let Some(UnicodeString::Char(lookup)) = self.lookup_unicode_code_inner(code, false) {
+        if let Some(BfString::Char(lookup)) = self.lookup_bf_string_inner(code, false) {
             return Some(lookup as u32);
         }
 
@@ -439,12 +439,13 @@ impl CMap {
         )
     }
 
-    /// Look up the base font code of the given character code. This is usually
-    /// used for `ToUnicode` cmaps
+    /// Look up a bf string in the cmap. This is usually
+    /// used for mapping character codes to Unicode codepoints in a
+    /// `ToUnicode` cmap.
     ///
     /// Returns `None` if no mapping is available.
-    pub fn lookup_unicode_code(&self, code: u32) -> Option<UnicodeString> {
-        self.lookup_unicode_code_inner(code, true)
+    pub fn lookup_bf_string(&self, code: u32) -> Option<BfString> {
+        self.lookup_bf_string_inner(code, true)
     }
 
     /// Check whether a character code is within any codespace range, including
@@ -463,19 +464,19 @@ impl CMap {
             .is_some_and(|b| b.in_codespace(code, byte_len))
     }
 
-    fn lookup_unicode_code_inner(&self, code: u32, recurse: bool) -> Option<UnicodeString> {
+    fn lookup_bf_string_inner(&self, code: u32, recurse: bool) -> Option<BfString> {
         if let Some(entry) = find_in_ranges(&self.bf_entries, code) {
             let offset = u16::try_from(code - entry.range.start).ok()?;
 
-            fn decode_utf16(units: &[u16]) -> Option<UnicodeString> {
+            fn decode_utf16(units: &[u16]) -> Option<BfString> {
                 let mut iter = core::char::decode_utf16(units.iter().copied());
                 let first = iter.next()?.ok()?;
 
                 if iter.next().is_none() {
-                    Some(UnicodeString::Char(first))
+                    Some(BfString::Char(first))
                 } else {
                     let s = String::from_utf16(units).ok()?;
-                    Some(UnicodeString::String(s))
+                    Some(BfString::String(s))
                 }
             }
 
@@ -489,7 +490,7 @@ impl CMap {
         }
 
         if recurse {
-            self.base.as_ref()?.lookup_unicode_code(code)
+            self.base.as_ref()?.lookup_bf_string(code)
         } else {
             None
         }
@@ -559,10 +560,10 @@ pub(crate) struct CodespaceRange {
 
 /// A Unicode value decoded from a cmap.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum UnicodeString {
-    /// A single Unicode character.
+pub enum BfString {
+    /// A single character.
     Char(char),
-    /// A string consisting of multiple Unicode characters, stored as a UTF-8 string.
+    /// A UTF-8 string.
     String(String),
 }
 
@@ -852,12 +853,12 @@ end
             Some(b"Adobe-Identity-UCS".as_slice())
         );
         assert_eq!(
-            cmap.lookup_unicode_code(0x001F),
-            Some(UnicodeString::Char('\u{F049}'))
+            cmap.lookup_bf_string(0x001F),
+            Some(BfString::Char('\u{F049}'))
         );
         assert_eq!(
-            cmap.lookup_unicode_code(0x002A),
-            Some(UnicodeString::Char('\u{F055}'))
+            cmap.lookup_bf_string(0x002A),
+            Some(BfString::Char('\u{F055}'))
         );
     }
 
@@ -1008,15 +1009,9 @@ endbfchar
 "#,
         );
 
-        assert_eq!(
-            cmap.lookup_unicode_code(0x0041),
-            Some(UnicodeString::Char('H'))
-        );
-        assert_eq!(
-            cmap.lookup_unicode_code(0x0042),
-            Some(UnicodeString::Char('e'))
-        );
-        assert_eq!(cmap.lookup_unicode_code(0x0043), None);
+        assert_eq!(cmap.lookup_bf_string(0x0041), Some(BfString::Char('H')));
+        assert_eq!(cmap.lookup_bf_string(0x0042), Some(BfString::Char('e')));
+        assert_eq!(cmap.lookup_bf_string(0x0043), None);
     }
 
     #[test]
@@ -1030,8 +1025,8 @@ endbfchar
         );
 
         assert_eq!(
-            cmap.lookup_unicode_code(0x005F),
-            Some(UnicodeString::String(String::from("ff")))
+            cmap.lookup_bf_string(0x005F),
+            Some(BfString::String(String::from("ff")))
         );
     }
 
@@ -1046,8 +1041,8 @@ endbfchar
         );
 
         assert_eq!(
-            cmap.lookup_unicode_code(0x3A51),
-            Some(UnicodeString::Char('\u{2003E}'))
+            cmap.lookup_bf_string(0x3A51),
+            Some(BfString::Char('\u{2003E}'))
         );
     }
 
@@ -1061,19 +1056,10 @@ endbfrange
 "#,
         );
 
-        assert_eq!(
-            cmap.lookup_unicode_code(0x0000),
-            Some(UnicodeString::Char('A'))
-        );
-        assert_eq!(
-            cmap.lookup_unicode_code(0x0001),
-            Some(UnicodeString::Char('B'))
-        );
-        assert_eq!(
-            cmap.lookup_unicode_code(0x0004),
-            Some(UnicodeString::Char('E'))
-        );
-        assert_eq!(cmap.lookup_unicode_code(0x0005), None);
+        assert_eq!(cmap.lookup_bf_string(0x0000), Some(BfString::Char('A')));
+        assert_eq!(cmap.lookup_bf_string(0x0001), Some(BfString::Char('B')));
+        assert_eq!(cmap.lookup_bf_string(0x0004), Some(BfString::Char('E')));
+        assert_eq!(cmap.lookup_bf_string(0x0005), None);
     }
 
     #[test]
@@ -1088,16 +1074,16 @@ endbfrange
 
         // ff, fi, fl ligatures
         assert_eq!(
-            cmap.lookup_unicode_code(0x005F),
-            Some(UnicodeString::String(String::from("ff")))
+            cmap.lookup_bf_string(0x005F),
+            Some(BfString::String(String::from("ff")))
         );
         assert_eq!(
-            cmap.lookup_unicode_code(0x0060),
-            Some(UnicodeString::String(String::from("fi")))
+            cmap.lookup_bf_string(0x0060),
+            Some(BfString::String(String::from("fi")))
         );
         assert_eq!(
-            cmap.lookup_unicode_code(0x0061),
-            Some(UnicodeString::String(String::from("fl")))
+            cmap.lookup_bf_string(0x0061),
+            Some(BfString::String(String::from("fl")))
         );
     }
 
@@ -1111,8 +1097,8 @@ endbfchar
 "#,
         );
 
-        assert_eq!(cmap.lookup_unicode_code(0x0000), None);
-        assert_eq!(cmap.lookup_unicode_code(0x0042), None);
+        assert_eq!(cmap.lookup_bf_string(0x0000), None);
+        assert_eq!(cmap.lookup_bf_string(0x0042), None);
     }
 
     #[test]
@@ -1216,10 +1202,7 @@ endcmap
         assert_eq!(cmap.metadata().name, None);
         assert_eq!(cmap.metadata().character_collection, None);
         assert_eq!(cmap.metadata().writing_mode, None);
-        assert_eq!(
-            cmap.lookup_unicode_code(0x01),
-            Some(UnicodeString::Char(' '))
-        );
+        assert_eq!(cmap.lookup_bf_string(0x01), Some(BfString::Char(' ')));
     }
 
     #[test]
@@ -1252,8 +1235,8 @@ endbfrange
         );
         assert_eq!(cc.supplement, 0);
         assert_eq!(
-            cmap.lookup_unicode_code(0x0000),
-            Some(UnicodeString::Char('\u{6881}'))
+            cmap.lookup_bf_string(0x0000),
+            Some(BfString::Char('\u{6881}'))
         );
     }
 
@@ -1269,16 +1252,13 @@ endbfrange
         );
 
         assert_eq!(
-            cmap.lookup_unicode_code(0x00),
-            Some(UnicodeString::Char('\u{0000}'))
+            cmap.lookup_bf_string(0x00),
+            Some(BfString::Char('\u{0000}'))
         );
+        assert_eq!(cmap.lookup_bf_string(0x41), Some(BfString::Char('A')));
         assert_eq!(
-            cmap.lookup_unicode_code(0x41),
-            Some(UnicodeString::Char('A'))
-        );
-        assert_eq!(
-            cmap.lookup_unicode_code(0x7f),
-            Some(UnicodeString::Char('\u{007F}'))
+            cmap.lookup_bf_string(0x7f),
+            Some(BfString::Char('\u{007F}'))
         );
     }
 }

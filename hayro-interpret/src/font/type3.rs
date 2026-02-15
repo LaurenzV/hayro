@@ -10,7 +10,7 @@ use crate::util::RectExt;
 use crate::{BlendMode, interpret};
 use crate::{CacheKey, ClipPath, GlyphDrawMode, PathDrawMode};
 use crate::{Image, Paint};
-use hayro_cmap::{CMap, UnicodeString};
+use hayro_cmap::{BfString, CMap};
 use hayro_syntax::content::TypedIter;
 use hayro_syntax::content::ops::TypedInstruction;
 use hayro_syntax::object::Dict;
@@ -90,11 +90,11 @@ impl<'a> Type3<'a> {
             * UNITS_PER_EM
     }
 
-    pub(crate) fn char_code_to_unicode(&self, char_code: u32) -> Option<UnicodeString> {
+    pub(crate) fn char_code_to_unicode(&self, char_code: u32) -> Option<BfString> {
         // Type3 fonts can only provide Unicode via ToUnicode CMap.
         self.to_unicode
             .as_ref()
-            .and_then(|t| t.lookup_unicode_code(char_code))
+            .and_then(|t| t.lookup_bf_string(char_code))
     }
 
     pub(crate) fn render_glyph(

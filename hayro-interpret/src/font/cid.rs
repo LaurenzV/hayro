@@ -1,7 +1,7 @@
 use crate::font::blob::{CffFontBlob, OpenTypeFontBlob};
 use crate::font::{FontFlags, read_to_unicode, strip_subset_prefix};
 use crate::{CMapResolverFn, CacheKey};
-use hayro_cmap::{CMap, UnicodeString, WritingMode};
+use hayro_cmap::{BfString, CMap, WritingMode};
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Name;
 use hayro_syntax::object::Stream;
@@ -246,9 +246,9 @@ impl Type0Font {
         }
     }
 
-    pub(crate) fn char_code_to_unicode(&self, code: u32) -> Option<UnicodeString> {
+    pub(crate) fn char_code_to_unicode(&self, code: u32) -> Option<BfString> {
         if let Some(to_unicode) = &self.to_unicode {
-            return to_unicode.lookup_unicode_code(code);
+            return to_unicode.lookup_bf_string(code);
         }
 
         // TODO: Implement CID collection mappings (Adobe-Japan1, Adobe-GB1, etc.).
