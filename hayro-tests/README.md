@@ -20,12 +20,12 @@ Each test category has its own manifest file, defining the names of the tests as
    ```bash
    python3 -m pip install --user rich
    ```
-2. Download the corpora and regenerate the manifests and Rust tests:
+2. Download the corpora, fonts, and regenerate the manifests and Rust tests:
    ```bash
    python3 sync.py
    ```
 
-Doing so will create a new `downloads` folder containing all PDF files. In case you have added new tests to a manifest file, it will also regenerate the corresponding Rust tests.
+Doing so will create a new `downloads` folder containing all PDF files. It will also download any missing font files into the `assets` folder. These fonts are not checked into the repository and needed for the tests. In case you have added new tests to a manifest file, it will also regenerate the corresponding Rust tests.
 
 ## Generating the baseline snapshots
 
