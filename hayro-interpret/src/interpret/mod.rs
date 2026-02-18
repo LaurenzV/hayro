@@ -16,7 +16,7 @@ use crate::x_object::{
 };
 use crate::{CacheKey, FillRule};
 use hayro_syntax::content::ops::TypedInstruction;
-use hayro_syntax::object::dict::keys::{ANNOTS, AP, F, N, OC, RECT};
+use hayro_syntax::object::dict::keys::{ANNOTS, AP, F, MCID, N, OC, RECT};
 use hayro_syntax::object::{Array, Dict, Object, Rect, Stream, dict_or_stream};
 use hayro_syntax::page::{Page, Resources};
 use kurbo::{Affine, Point, Shape};
@@ -468,6 +468,8 @@ pub fn interpret<'a, 'b>(
                 // 1. A Name that references an entry in the Resources/Properties dictionary
                 // 2. An inline dictionary with an OC key
 
+                let mcid = dict_or_stream(&bdc.1).and_then(|(props, _)| props.get::<i32>(MCID));
+
                 if let Some(name) = bdc.1.clone().into_name()
                     && let Some(ocg_ref) = resources.properties.get_ref(name.clone())
                 {
@@ -479,14 +481,18 @@ pub fn interpret<'a, 'b>(
                 } else {
                     context.ocg_state.begin_marked_content();
                 }
+
+                device.begin_marked_content(&bdc.0, mcid);
             }
             TypedInstruction::MarkedContentPointWithProperties(_) => {}
             TypedInstruction::EndMarkedContent(_) => {
                 context.ocg_state.end_marked_content();
+                device.end_marked_content();
             }
             TypedInstruction::MarkedContentPoint(_) => {}
-            TypedInstruction::BeginMarkedContent(_) => {
+            TypedInstruction::BeginMarkedContent(bmc) => {
                 context.ocg_state.begin_marked_content();
+                device.begin_marked_content(&bmc.0, None);
             }
             TypedInstruction::BeginText(_) => {
                 context.get_mut().text_state.text_matrix = Affine::IDENTITY;

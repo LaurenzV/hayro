@@ -172,8 +172,8 @@ fn load_pdf_with_password(path: &str, password: &str) -> Pdf {
 fn interpreter_settings() -> InterpreterSettings {
     InterpreterSettings {
         font_resolver: Arc::new(|query| match query {
-            FontQuery::Standard(s) => Some((get_standard(s), 0)),
-            FontQuery::Fallback(f) => Some((get_standard(&f.pick_standard_font()), 0)),
+            FontQuery::Standard(s) => Some((get_standard(s)?, 0)),
+            FontQuery::Fallback(f) => Some((get_standard(&f.pick_standard_font())?, 0)),
         }),
         ..Default::default()
     }
@@ -362,37 +362,34 @@ fn is_pix_diff(pixel1: &Rgba<u8>, pixel2: &Rgba<u8>) -> bool {
         || pixel1.0[3] != pixel2.0[3]
 }
 
-// We don't use the `embed-fonts` feature because we use the more complete liberation fonts for
-// testing.
-fn get_standard(font: &StandardFont) -> FontData {
-    let data = match font {
-        StandardFont::Helvetica => &include_bytes!("../assets/LiberationSans-Regular.ttf")[..],
-        StandardFont::HelveticaBold => &include_bytes!("../assets/LiberationSans-Bold.ttf")[..],
-        StandardFont::HelveticaOblique => {
-            &include_bytes!("../assets/LiberationSans-Italic.ttf")[..]
-        }
-        StandardFont::HelveticaBoldOblique => {
-            &include_bytes!("../assets/LiberationSans-BoldItalic.ttf")[..]
-        }
-        StandardFont::Courier => &include_bytes!("../assets/LiberationMono-Regular.ttf")[..],
-        StandardFont::CourierBold => &include_bytes!("../assets/LiberationMono-Bold.ttf")[..],
-        StandardFont::CourierOblique => &include_bytes!("../assets/LiberationMono-Italic.ttf")[..],
-        StandardFont::CourierBoldOblique => {
-            &include_bytes!("../assets/LiberationMono-BoldItalic.ttf")[..]
-        }
-        StandardFont::TimesRoman => &include_bytes!("../assets/LiberationSerif-Regular.ttf")[..],
-        StandardFont::TimesBold => &include_bytes!("../assets/LiberationSerif-Bold.ttf")[..],
-        StandardFont::TimesItalic => &include_bytes!("../assets/LiberationSerif-Italic.ttf")[..],
-        StandardFont::TimesBoldItalic => {
-            &include_bytes!("../assets/LiberationSerif-BoldItalic.ttf")[..]
-        }
-        StandardFont::ZapfDingBats => {
-            &include_bytes!("../../hayro-interpret/assets/FoxitDingbats.pfb")[..]
-        }
-        StandardFont::Symbol => &include_bytes!("../../hayro-interpret/assets/FoxitSymbol.pfb")[..],
-    };
+fn read_font(name: &str) -> Option<FontData> {
+    let path = WORKSPACE_PATH.join("assets").join(name);
+    Some(Arc::new(std::fs::read(&path).ok()?))
+}
 
-    Arc::new(data)
+// We don't use the `embed-fonts` feature because we use the more complete liberation fonts for
+// testing. Fonts are downloaded by sync.py and not checked into git.
+fn get_standard(font: &StandardFont) -> Option<FontData> {
+    match font {
+        StandardFont::Helvetica => read_font("LiberationSans-Regular.ttf"),
+        StandardFont::HelveticaBold => read_font("LiberationSans-Bold.ttf"),
+        StandardFont::HelveticaOblique => read_font("LiberationSans-Italic.ttf"),
+        StandardFont::HelveticaBoldOblique => read_font("LiberationSans-BoldItalic.ttf"),
+        StandardFont::Courier => read_font("LiberationMono-Regular.ttf"),
+        StandardFont::CourierBold => read_font("LiberationMono-Bold.ttf"),
+        StandardFont::CourierOblique => read_font("LiberationMono-Italic.ttf"),
+        StandardFont::CourierBoldOblique => read_font("LiberationMono-BoldItalic.ttf"),
+        StandardFont::TimesRoman => read_font("LiberationSerif-Regular.ttf"),
+        StandardFont::TimesBold => read_font("LiberationSerif-Bold.ttf"),
+        StandardFont::TimesItalic => read_font("LiberationSerif-Italic.ttf"),
+        StandardFont::TimesBoldItalic => read_font("LiberationSerif-BoldItalic.ttf"),
+        StandardFont::ZapfDingBats => Some(Arc::new(
+            &include_bytes!("../../hayro-interpret/assets/FoxitDingbats.pfb")[..],
+        )),
+        StandardFont::Symbol => Some(Arc::new(
+            &include_bytes!("../../hayro-interpret/assets/FoxitSymbol.pfb")[..],
+        )),
+    }
 }
 
 #[test]

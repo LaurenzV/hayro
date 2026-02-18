@@ -44,4 +44,11 @@ pub trait Device<'a> {
     fn pop_clip_path(&mut self);
     /// Pop the last transparency group from the blend stack.
     fn pop_transparency_group(&mut self);
+    /// Called at the beginning of a marked content sequence (BMC/BDC).
+    ///
+    /// The tag is the marked content tag (e.g. b"P", b"Span"). The mcid is
+    /// the marked content identifier from the properties dict, if present.
+    fn begin_marked_content(&mut self, _tag: &[u8], _mcid: Option<i32>) {}
+    /// Called at the end of a marked content sequence (EMC).
+    fn end_marked_content(&mut self) {}
 }

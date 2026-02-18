@@ -18,7 +18,30 @@ from rich.text import Text
 SCRIPT_DIR = Path(__file__).resolve().parent
 PDFS_DIR = SCRIPT_DIR / "pdfs"
 DOWNLOADS_DIR = SCRIPT_DIR / "downloads"
+ASSETS_DIR = SCRIPT_DIR / "assets"
 OUTPUT_FILE = SCRIPT_DIR / "tests" / "render.rs"
+
+FONTS_BASE_URL = "https://hayro-assets.dev/fonts/"
+REQUIRED_FONTS = [
+    "LiberationMono-Bold.ttf",
+    "LiberationMono-BoldItalic.ttf",
+    "LiberationMono-Italic.ttf",
+    "LiberationMono-Regular.ttf",
+    "LiberationSans-Bold.ttf",
+    "LiberationSans-BoldItalic.ttf",
+    "LiberationSans-Italic.ttf",
+    "LiberationSans-Regular.ttf",
+    "LiberationSerif-Bold.ttf",
+    "LiberationSerif-BoldItalic.ttf",
+    "LiberationSerif-Italic.ttf",
+    "LiberationSerif-Regular.ttf",
+    "NotoSansCJKjp-Bold.otf",
+    "NotoSansCJKjp-Regular.otf",
+    "NotoSansCJKkr-Bold.otf",
+    "NotoSansCJKkr-Regular.otf",
+    "NotoSansCJKsc-Bold.otf",
+    "NotoSansCJKsc-Regular.otf",
+]
 
 MANIFESTS = [
     ("custom", SCRIPT_DIR / "manifest_custom.json", False),
@@ -151,9 +174,32 @@ def write_tests(rust_functions: list[str]) -> None:
     OUTPUT_FILE.write_text(content)
 
 
+def sync_fonts() -> None:
+    missing = [f for f in REQUIRED_FONTS if not (ASSETS_DIR / f).exists()]
+    if not missing:
+        CONSOLE.print("All fonts are present.")
+        return
+
+    CONSOLE.print(f"Downloading {len(missing)} font(s)...")
+    for name in missing:
+        url = f"{FONTS_BASE_URL}{name}"
+        destination = ASSETS_DIR / name
+        try:
+            response = requests.get(url, timeout=60)
+            response.raise_for_status()
+            destination.write_bytes(response.content)
+            CONSOLE.print(f"  [green]{name}[/green]")
+        except requests.RequestException as exc:
+            if destination.exists():
+                destination.unlink()
+            CONSOLE.print(f"  [red]{name}: {exc}[/red]")
+
+
 def main() -> None:
     DOWNLOADS_DIR.mkdir(exist_ok=True)
     (PDFS_DIR / "corpus").mkdir(parents=True, exist_ok=True)
+
+    sync_fonts()
 
     plan, total_downloads, cached_count = collect_entries()
     rust_functions: list[str] = []

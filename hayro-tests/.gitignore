@@ -3,3 +3,5 @@ snapshots
 downloads
 store
 outputs
+assets/*.ttf
+assets/*.otf
