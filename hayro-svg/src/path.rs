@@ -22,11 +22,11 @@ impl<'a> SvgRenderer<'a> {
                 if *f == FillRule::EvenOdd {
                     self.xml.write_attribute("fill-rule", "evenodd");
                 }
-                self.write_paint(paint, path, transform, false);
+                self.write_paint(paint, path, transform, None);
             }
             PathDrawMode::Stroke(s) => {
                 self.write_stroke_properties(s);
-                self.write_paint(paint, path, transform, true);
+                self.write_paint(paint, path, transform, Some(s));
             }
         }
 

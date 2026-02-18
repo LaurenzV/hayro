@@ -3,7 +3,7 @@ use crate::{Id, hash128};
 use crate::{SvgRenderer, convert_transform};
 use hayro_interpret::encode::EncodedShadingPattern;
 use hayro_interpret::pattern::{Pattern, ShadingPattern, TilingPattern};
-use hayro_interpret::{CacheKey, FillRule, Paint};
+use hayro_interpret::{CacheKey, FillRule, Paint, StrokeProps};
 use image::{DynamicImage, ImageBuffer};
 use kurbo::{Affine, BezPath, Point, Rect, Shape, Vec2};
 
@@ -31,8 +31,10 @@ impl<'a> SvgRenderer<'a> {
         paint: &Paint<'a>,
         path: &BezPath,
         path_transform: Affine,
-        is_stroke: bool,
+        stroke_props: Option<&StrokeProps>,
     ) {
+        let is_stroke = stroke_props.is_some();
+        
         let (paint_str, alpha) = match &paint {
             Paint::Color(c) => {
                 let rgba8 = c.to_rgba().to_rgba8();
@@ -50,7 +52,13 @@ impl<'a> SvgRenderer<'a> {
             Paint::Pattern(p) => {
                 let id = match p.as_ref() {
                     Pattern::Shading(s) => {
-                        let bbox = (path_transform * path).bounding_box();
+                        let mut basic_bbox = path.bounding_box();
+                        
+                        if let Some(stroke_width) = stroke_props.map(|s| s.line_width) {
+                            basic_bbox = basic_bbox.inflate(stroke_width as f64, stroke_width as f64);
+                        }
+                        
+                        let bbox = (path_transform * basic_bbox.to_path(0.0)).bounding_box();
                         let shading_key = hash128(&(
                             s.cache_key(),
                             bbox.x0.to_bits(),

@@ -1157,5 +1157,9 @@
   {
     "id": "blank_page_without_contents",
     "file": "pdfs/custom/blank_page_without_contents.pdf"
+  },
+  {
+    "id": "issue968",
+    "file": "pdfs/custom/issue968.pdf"
   }
 ]

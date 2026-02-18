@@ -238,3 +238,8 @@ fn issue_typst_7269() {
         None,
     );
 }
+
+#[test]
+fn issue_986() {
+    run_svg_test("issue968", "pdfs/custom/issue968.pdf", None);
+}

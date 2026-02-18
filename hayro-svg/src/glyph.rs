@@ -49,11 +49,11 @@ impl<'a> SvgRenderer<'a> {
 
                 match mode {
                     GlyphDrawMode::Fill => {
-                        self.write_paint(paint, &outline, transform, false);
+                        self.write_paint(paint, &outline, transform, None);
                     }
                     GlyphDrawMode::Stroke(s) => {
                         self.write_stroke_properties(s);
-                        self.write_paint(paint, &outline, transform, true);
+                        self.write_paint(paint, &outline, transform, Some(s));
                     }
                     GlyphDrawMode::Invisible => {
                         // We exited above.
