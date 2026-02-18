@@ -34,7 +34,7 @@ impl<'a> SvgRenderer<'a> {
         stroke_props: Option<&StrokeProps>,
     ) {
         let is_stroke = stroke_props.is_some();
-        
+
         let (paint_str, alpha) = match &paint {
             Paint::Color(c) => {
                 let rgba8 = c.to_rgba().to_rgba8();
@@ -53,11 +53,12 @@ impl<'a> SvgRenderer<'a> {
                 let id = match p.as_ref() {
                     Pattern::Shading(s) => {
                         let mut basic_bbox = path.bounding_box();
-                        
+
                         if let Some(stroke_width) = stroke_props.map(|s| s.line_width) {
-                            basic_bbox = basic_bbox.inflate(stroke_width as f64, stroke_width as f64);
+                            basic_bbox =
+                                basic_bbox.inflate(stroke_width as f64, stroke_width as f64);
                         }
-                        
+
                         let bbox = (path_transform * basic_bbox.to_path(0.0)).bounding_box();
                         let shading_key = hash128(&(
                             s.cache_key(),
