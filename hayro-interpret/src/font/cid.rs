@@ -194,9 +194,13 @@ impl Type0Font {
     /// up the codepoint in the font's cmap.
     fn map_code_fallback(&self, cid: u32) -> Option<GlyphId> {
         let to_unicode = self.to_unicode.as_ref()?;
-        let character = (1..=4_u8)
-            .find_map(|byte_len| to_unicode.lookup_cid_code(cid, byte_len))
-            .and_then(char::from_u32)?;
+        let raw = (1..=4_u8).find_map(|byte_len| to_unicode.lookup_cid_code(cid, byte_len))?;
+        let character = char::from_u32(raw).or_else(|| {
+            // See PDFJS-19182. Try to decode as a surrogate pair.
+            let high = (raw >> 16) as u16;
+            let low = raw as u16;
+            char::decode_utf16([high, low]).next()?.ok()
+        })?;
 
         match &self.font_type {
             FontType::OpenType(t) => t.font_ref().charmap().map(character),
