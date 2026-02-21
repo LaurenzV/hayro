@@ -1,8 +1,8 @@
 use crate::font::Glyph;
 use crate::soft_mask::SoftMask;
 use crate::{BlendMode, ClipPath, Image};
-use crate::{GlyphDrawMode, Paint, PathDrawMode};
-use kurbo::{Affine, BezPath};
+use crate::{FillRule, GlyphDrawMode, Paint, PathDrawMode};
+use kurbo::{Affine, BezPath, Rect, Shape};
 
 /// A trait for a device that can be used to process PDF drawing instructions.
 pub trait Device<'a> {
@@ -44,6 +44,21 @@ pub trait Device<'a> {
     fn pop_clip_path(&mut self);
     /// Pop the last transparency group from the blend stack.
     fn pop_transparency_group(&mut self);
+    /// Fill a rectangle directly, without going through the general path pipeline.
+    fn fill_rect(
+        &mut self,
+        rect: &Rect,
+        transform: Affine,
+        paint: &Paint<'a>,
+        fill_rule: FillRule,
+    ) {
+        self.draw_path(
+            &rect.to_path(0.1),
+            transform,
+            paint,
+            &PathDrawMode::Fill(fill_rule),
+        );
+    }
     /// Called at the beginning of a marked content sequence (BMC/BDC).
     ///
     /// The tag is the marked content tag (e.g. b"P", b"Span"). The mcid is

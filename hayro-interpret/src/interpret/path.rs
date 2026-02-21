@@ -1,5 +1,5 @@
 use crate::color::{Color, ColorSpace};
-use crate::context::Context;
+use crate::context::{Context, path_as_rect};
 use crate::device::Device;
 use crate::util::Float32Ext;
 use crate::{FillRule, Paint, PathDrawMode, StrokeProps};
@@ -69,7 +69,11 @@ pub(crate) fn fill_path_impl<'a>(
             (bbox.height() as f32).is_nearly_zero(),
         ) {
             (false, false) => {
-                device.draw_path(path, base_transform, &paint, &PathDrawMode::Fill(fill_rule));
+                if let Some(rect) = path_as_rect(path) {
+                    device.fill_rect(&rect, base_transform, &paint, fill_rule);
+                } else {
+                    device.draw_path(path, base_transform, &paint, &PathDrawMode::Fill(fill_rule));
+                }
             }
             _ => {
                 let mut path = BezPath::new();
