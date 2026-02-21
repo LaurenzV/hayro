@@ -1,6 +1,6 @@
 use crate::font::blob::{CffFontBlob, OpenTypeFontBlob};
 use crate::font::generated::{metrics, standard, symbol, zapf_dings};
-use crate::font::{FontData, normalized_glyph_name};
+use crate::font::{FontData, normalized_glyph_name, strip_subset_prefix};
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Name;
 use hayro_syntax::object::dict::keys::BASE_FONT;
@@ -8,7 +8,6 @@ use kurbo::BezPath;
 use skrifa::GlyphId16;
 use skrifa::raw::TableProvider;
 use std::collections::HashMap;
-use std::ops::Deref;
 
 /// The 14 standard fonts of PDF.
 #[derive(Copy, Clone, Debug)]
@@ -160,83 +159,83 @@ impl StandardFont {
 
 pub(crate) fn select_standard_font(dict: &Dict<'_>) -> Option<StandardFont> {
     // See <https://github.com/apache/pdfbox/blob/4438b8fdc67a3a9ebfb194595d0e81f88b708a37/pdfbox/src/main/java/org/apache/pdfbox/pdmodel/font/FontMapperImpl.java#L62-L102>
-    match dict.get::<Name>(BASE_FONT)?.deref() {
-        b"Helvetica" | b"ArialMT" | b"Arial" | b"LiberationSans" | b"NimbusSanL-Regu" => {
+    match strip_subset_prefix(dict.get::<Name>(BASE_FONT)?.as_str()) {
+        "Helvetica" | "ArialMT" | "Arial" | "LiberationSans" | "NimbusSanL-Regu" => {
             Some(StandardFont::Helvetica)
         }
-        b"Helvetica-Bold"
-        | b"Arial-BoldMT"
-        | b"Arial-Bold"
-        | b"Arial,Bold"
-        | b"LiberationSans-Bold"
-        | b"NimbusSanL-Bold" => Some(StandardFont::HelveticaBold),
-        b"Helvetica-Oblique"
-        | b"Arial-ItalicMT"
-        | b"Arial-Italic"
-        | b"Arial,Italic"
-        | b"Helvetica-Italic"
-        | b"Helvetica,Italic"
-        | b"LiberationSans-Italic"
-        | b"NimbusSanL-ReguItal" => Some(StandardFont::HelveticaOblique),
-        b"Helvetica-BoldOblique"
-        | b"Arial-BoldItalicMT"
-        | b"Helvetica-BoldItalic"
-        | b"Helvetica,BoldItalic"
-        | b"LiberationSans-BoldItalic"
-        | b"NimbusSanL-BoldItal" => Some(StandardFont::HelveticaBoldOblique),
-        b"Courier" | b"CourierNew" | b"CourierNewPSMT" | b"LiberationMono" | b"NimbusMonL-Regu" => {
+        "Helvetica-Bold"
+        | "Arial-BoldMT"
+        | "Arial-Bold"
+        | "Arial,Bold"
+        | "LiberationSans-Bold"
+        | "NimbusSanL-Bold" => Some(StandardFont::HelveticaBold),
+        "Helvetica-Oblique"
+        | "Arial-ItalicMT"
+        | "Arial-Italic"
+        | "Arial,Italic"
+        | "Helvetica-Italic"
+        | "Helvetica,Italic"
+        | "LiberationSans-Italic"
+        | "NimbusSanL-ReguItal" => Some(StandardFont::HelveticaOblique),
+        "Helvetica-BoldOblique"
+        | "Arial-BoldItalicMT"
+        | "Helvetica-BoldItalic"
+        | "Helvetica,BoldItalic"
+        | "LiberationSans-BoldItalic"
+        | "NimbusSanL-BoldItal" => Some(StandardFont::HelveticaBoldOblique),
+        "Courier" | "CourierNew" | "CourierNewPSMT" | "LiberationMono" | "NimbusMonL-Regu" => {
             Some(StandardFont::Courier)
         }
-        b"Courier-Bold"
-        | b"Courier,Bold"
-        | b"CourierNewPS-BoldMT"
-        | b"CourierNew-Bold"
-        | b"LiberationMono-Bold"
-        | b"NimbusMonL-Bold" => Some(StandardFont::CourierBold),
-        b"Courier-Oblique"
-        | b"CourierNewPS-ItalicMT"
-        | b"CourierNew-Italic"
-        | b"LiberationMono-Italic"
-        | b"NimbusMonL-ReguObli" => Some(StandardFont::CourierOblique),
-        b"Courier-BoldOblique"
-        | b"CourierNewPS-BoldItalicMT"
-        | b"CourierNew-BoldItalic"
-        | b"LiberationMono-BoldItalic"
-        | b"NimbusMonL-BoldObli" => Some(StandardFont::CourierBoldOblique),
-        b"Times-Roman"
-        | b"Times New Roman"
-        | b"TimesNewRomanPSMT"
-        | b"TimesNewRoman"
-        | b"TimesNewRomanPS"
-        | b"LiberationSerif"
-        | b"NimbusRomNo9L-Regu" => Some(StandardFont::TimesRoman),
-        b"Times-Bold"
-        | b"TimesNewRomanPS-BoldMT"
-        | b"TimesNewRomanPS-Bold"
-        | b"TimesNewRoman-Bold"
-        | b"TimesNewRoman,Bold"
-        | b"LiberationSerif-Bold"
-        | b"NimbusRomNo9L-Medi" => Some(StandardFont::TimesBold),
-        b"Times-Italic"
-        | b"TimesNewRomanPS-ItalicMT"
-        | b"TimesNewRomanPS-Italic"
-        | b"TimesNewRoman-Italic"
-        | b"TimesNewRoman,Italic"
-        | b"LiberationSerif-Italic"
-        | b"NimbusRomNo9L-ReguItal" => Some(StandardFont::TimesItalic),
-        b"Times-BoldItalic"
-        | b"TimesNewRomanPS-BoldItalicMT"
-        | b"TimesNewRomanPS-BoldItalic"
-        | b"TimesNewRoman-BoldItalic"
-        | b"TimesNewRoman,BoldItalic"
-        | b"LiberationSerif-BoldItalic"
-        | b"NimbusRomNo9L-MediItal" => Some(StandardFont::TimesBoldItalic),
-        b"Symbol" | b"SymbolMT" | b"StandardSymL" => Some(StandardFont::Symbol),
-        b"ZapfDingbats"
-        | b"ZapfDingbatsITCbyBT-Regular"
-        | b"ZapfDingbatsITC"
-        | b"Dingbats"
-        | b"MS-Gothic" => Some(StandardFont::ZapfDingBats),
+        "Courier-Bold"
+        | "Courier,Bold"
+        | "CourierNewPS-BoldMT"
+        | "CourierNew-Bold"
+        | "LiberationMono-Bold"
+        | "NimbusMonL-Bold" => Some(StandardFont::CourierBold),
+        "Courier-Oblique"
+        | "CourierNewPS-ItalicMT"
+        | "CourierNew-Italic"
+        | "LiberationMono-Italic"
+        | "NimbusMonL-ReguObli" => Some(StandardFont::CourierOblique),
+        "Courier-BoldOblique"
+        | "CourierNewPS-BoldItalicMT"
+        | "CourierNew-BoldItalic"
+        | "LiberationMono-BoldItalic"
+        | "NimbusMonL-BoldObli" => Some(StandardFont::CourierBoldOblique),
+        "Times-Roman"
+        | "Times New Roman"
+        | "TimesNewRomanPSMT"
+        | "TimesNewRoman"
+        | "TimesNewRomanPS"
+        | "LiberationSerif"
+        | "NimbusRomNo9L-Regu" => Some(StandardFont::TimesRoman),
+        "Times-Bold"
+        | "TimesNewRomanPS-BoldMT"
+        | "TimesNewRomanPS-Bold"
+        | "TimesNewRoman-Bold"
+        | "TimesNewRoman,Bold"
+        | "LiberationSerif-Bold"
+        | "NimbusRomNo9L-Medi" => Some(StandardFont::TimesBold),
+        "Times-Italic"
+        | "TimesNewRomanPS-ItalicMT"
+        | "TimesNewRomanPS-Italic"
+        | "TimesNewRoman-Italic"
+        | "TimesNewRoman,Italic"
+        | "LiberationSerif-Italic"
+        | "NimbusRomNo9L-ReguItal" => Some(StandardFont::TimesItalic),
+        "Times-BoldItalic"
+        | "TimesNewRomanPS-BoldItalicMT"
+        | "TimesNewRomanPS-BoldItalic"
+        | "TimesNewRoman-BoldItalic"
+        | "TimesNewRoman,BoldItalic"
+        | "LiberationSerif-BoldItalic"
+        | "NimbusRomNo9L-MediItal" => Some(StandardFont::TimesBoldItalic),
+        "Symbol" | "SymbolMT" | "StandardSymL" => Some(StandardFont::Symbol),
+        "ZapfDingbats"
+        | "ZapfDingbatsITCbyBT-Regular"
+        | "ZapfDingbatsITC"
+        | "Dingbats"
+        | "MS-Gothic" => Some(StandardFont::ZapfDingBats),
         _ => None,
     }
 }
