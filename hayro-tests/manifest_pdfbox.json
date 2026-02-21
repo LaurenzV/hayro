@@ -570,7 +570,7 @@
   {
     "id": "4598",
     "ignore": true,
-    "comment": "lots of jbig2 images, takes 1+min. good benchmark target"
+    "comment": "lots of jbig2 images, takes 1+ mins. good benchmark target"
   },
   "4607",
   "4627",
