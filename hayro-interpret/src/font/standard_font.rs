@@ -179,18 +179,22 @@ pub(crate) fn select_standard_font(dict: &Dict<'_>) -> Option<StandardFont> {
         b"Helvetica-Oblique"
         | b"Arial-ItalicMT"
         | b"Arial-Italic"
+        | b"Arial,Italic"
         | b"Helvetica-Italic"
+        | b"Helvetica,Italic"
         | b"LiberationSans-Italic"
         | b"NimbusSanL-ReguItal" => Some(StandardFont::HelveticaOblique),
         b"Helvetica-BoldOblique"
         | b"Arial-BoldItalicMT"
         | b"Helvetica-BoldItalic"
+        | b"Helvetica,BoldItalic"
         | b"LiberationSans-BoldItalic"
         | b"NimbusSanL-BoldItal" => Some(StandardFont::HelveticaBoldOblique),
         b"Courier" | b"CourierNew" | b"CourierNewPSMT" | b"LiberationMono" | b"NimbusMonL-Regu" => {
             Some(StandardFont::Courier)
         }
         b"Courier-Bold"
+        | b"Courier,Bold"
         | b"CourierNewPS-BoldMT"
         | b"CourierNew-Bold"
         | b"LiberationMono-Bold"
@@ -216,18 +220,21 @@ pub(crate) fn select_standard_font(dict: &Dict<'_>) -> Option<StandardFont> {
         | b"TimesNewRomanPS-BoldMT"
         | b"TimesNewRomanPS-Bold"
         | b"TimesNewRoman-Bold"
+        | b"TimesNewRoman,Bold"
         | b"LiberationSerif-Bold"
         | b"NimbusRomNo9L-Medi" => Some(StandardFont::TimesBold),
         b"Times-Italic"
         | b"TimesNewRomanPS-ItalicMT"
         | b"TimesNewRomanPS-Italic"
         | b"TimesNewRoman-Italic"
+        | b"TimesNewRoman,Italic"
         | b"LiberationSerif-Italic"
         | b"NimbusRomNo9L-ReguItal" => Some(StandardFont::TimesItalic),
         b"Times-BoldItalic"
         | b"TimesNewRomanPS-BoldItalicMT"
         | b"TimesNewRomanPS-BoldItalic"
         | b"TimesNewRoman-BoldItalic"
+        | b"TimesNewRoman,BoldItalic"
         | b"LiberationSerif-BoldItalic"
         | b"NimbusRomNo9L-MediItal" => Some(StandardFont::TimesBoldItalic),
         b"Symbol" | b"SymbolMT" | b"StandardSymL" => Some(StandardFont::Symbol),
