@@ -671,8 +671,17 @@ fn _parse_char_string(
                     operator::FLEX => p.parse_flex()?,
                     operator::HFLEX1 => p.parse_hflex1()?,
                     operator::FLEX1 => p.parse_flex1()?,
+                    // Division operator.
+                    12 => {
+                        let num2 = p.stack.pop();
+                        let num1 = p.stack.pop();
+
+                        p.stack.push(num1 / num2)?;
+                    }
                     operator::DOTSECTION => {}
-                    _ => return Err(OutlineError::UnsupportedOperator),
+                    _ => {
+                        return Err(OutlineError::UnsupportedOperator);
+                    }
                 }
             }
             operator::ENDCHAR => {
