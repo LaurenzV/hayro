@@ -387,11 +387,7 @@
     "last_page": 0
   },
   "3456",
-  {
-    "id": "3457",
-    "ignore": true,
-    "comment": "bullet points dont show, CID without embedded"
-  },
+  "3457",
   "3465",
   "3475",
   "3491",
@@ -723,11 +719,7 @@
   "5706",
   "5738",
   "5778",
-  {
-    "id": "5782",
-    "ignore": true,
-    "comment": "doesnt open in nearly any other pdf viewer, causes a stack overflow"
-  },
+  "5782",
   "5795",
   "5802",
   "5829",
