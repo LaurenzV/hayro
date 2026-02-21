@@ -202,13 +202,10 @@ pub(crate) fn select_standard_font(dict: &Dict<'_>) -> Option<StandardFont> {
         | "CourierNew-BoldItalic"
         | "LiberationMono-BoldItalic"
         | "NimbusMonL-BoldObli" => Some(StandardFont::CourierBoldOblique),
-        "Times-Roman"
-        | "Times New Roman"
-        | "TimesNewRomanPSMT"
-        | "TimesNewRoman"
-        | "TimesNewRomanPS"
-        | "LiberationSerif"
-        | "NimbusRomNo9L-Regu" => Some(StandardFont::TimesRoman),
+        "Times-Roman" | "Times New Roman" | "TimesNewRomanPSMT" | "TimesNewRoman"
+        | "TimesNewRomanPS" | "LiberationSerif" | "NimbusRomNo9L-Regu" => {
+            Some(StandardFont::TimesRoman)
+        }
         "Times-Bold"
         | "TimesNewRomanPS-BoldMT"
         | "TimesNewRomanPS-Bold"
