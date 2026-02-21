@@ -90,23 +90,20 @@ impl Type0Font {
 
         let mut to_unicode = read_to_unicode(dict, cmap_resolver);
 
-        // For fallback fonts without a ToUnicode map, build a reversed UTF-16 CMap
-        // so we can map CID → Unicode → glyph via the fallback font's cmap table.
+        // If there is no ToUnicode map, build one from the reversed UTF-16 map.
         if fallback && to_unicode.is_none() {
-            if let Some(cc) = cmap.metadata().character_collection.as_ref() {
-                if cc.family != CidFamily::AdobeIdentity {
-                    if let Some(cmap_name) = cc.family.unicode_cmap() {
-                        if let Some(data) = (cmap_resolver)(cmap_name) {
-                            let resolver = cmap_resolver.clone();
-                            if let Some(utf16_cmap) = CMap::parse(data, move |n| (resolver)(n)) {
-                                to_unicode = Some(utf16_cmap.reversed());
-                            }
-                        }
-                    }
+            if let Some(cc) = cmap.metadata().character_collection.as_ref()
+                && cc.family != CidFamily::AdobeIdentity
+                && let Some(cmap_name) = cc.family.unicode_cmap()
+                && let Some(data) = (cmap_resolver)(cmap_name)
+            {
+                let resolver = cmap_resolver.clone();
+                if let Some(utf16_cmap) = CMap::parse(data, move |n| (resolver)(n)) {
+                    to_unicode = Some(utf16_cmap.reversed());
                 }
             }
 
-            // If we still have no to_unicode, we can't map CIDs to glyphs.
+            // If we still have no to_unicode, we can't map CIDs to glyphs, so abort.
             if to_unicode.is_none() {
                 return None;
             }

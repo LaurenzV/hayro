@@ -96,6 +96,25 @@ fn main() {
     }
 }
 
+fn pick_standard_font(font: &StandardFont) -> &'static str {
+    match font {
+        StandardFont::Helvetica => "LiberationSans-Regular.ttf",
+        StandardFont::HelveticaBold => "LiberationSans-Bold.ttf",
+        StandardFont::HelveticaOblique => "LiberationSans-Italic.ttf",
+        StandardFont::HelveticaBoldOblique => "LiberationSans-BoldItalic.ttf",
+        StandardFont::Courier => "LiberationMono-Regular.ttf",
+        StandardFont::CourierBold => "LiberationMono-Bold.ttf",
+        StandardFont::CourierOblique => "LiberationMono-Italic.ttf",
+        StandardFont::CourierBoldOblique => "LiberationMono-BoldItalic.ttf",
+        StandardFont::TimesRoman => "LiberationSerif-Regular.ttf",
+        StandardFont::TimesBold => "LiberationSerif-Bold.ttf",
+        StandardFont::TimesItalic => "LiberationSerif-Italic.ttf",
+        StandardFont::TimesBoldItalic => "LiberationSerif-BoldItalic.ttf",
+        StandardFont::ZapfDingBats => "FoxitDingbats.pfb",
+        StandardFont::Symbol => "FoxitSymbol.pfb",
+    }
+}
+
 /// A simple stderr logger.
 static LOGGER: SimpleLogger = SimpleLogger;
 struct SimpleLogger;
