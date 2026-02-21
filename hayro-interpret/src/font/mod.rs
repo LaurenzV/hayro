@@ -655,6 +655,6 @@ pub(crate) fn normalized_glyph_name(mut name: &str) -> &str {
     if name == "sfthyphen" {
         name = "hyphen";
     }
-    
+
     name
 }

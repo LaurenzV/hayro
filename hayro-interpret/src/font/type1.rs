@@ -3,7 +3,10 @@ use crate::font::generated::glyph_names;
 use crate::font::glyph_simulator::GlyphSimulator;
 use crate::font::standard_font::{StandardFont, StandardFontBlob, select_standard_font};
 use crate::font::true_type::{read_encoding, read_widths};
-use crate::font::{Encoding, FallbackFontQuery, FontQuery, glyph_name_to_unicode, read_to_unicode, normalized_glyph_name};
+use crate::font::{
+    Encoding, FallbackFontQuery, FontQuery, glyph_name_to_unicode, normalized_glyph_name,
+    read_to_unicode,
+};
 use crate::{CMapResolverFn, CacheKey, FontResolverFn};
 use hayro_cmap::{BfString, CMap};
 use hayro_syntax::object::Dict;

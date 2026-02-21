@@ -1,6 +1,6 @@
-use crate::font::{normalized_glyph_name, FontData};
 use crate::font::blob::{CffFontBlob, OpenTypeFontBlob};
 use crate::font::generated::{metrics, standard, symbol, zapf_dings};
+use crate::font::{FontData, normalized_glyph_name};
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Name;
 use hayro_syntax::object::dict::keys::BASE_FONT;
