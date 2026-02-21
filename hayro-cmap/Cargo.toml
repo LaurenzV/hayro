@@ -10,7 +10,7 @@ license = { workspace = true }
 [features]
 default = ["embed-cmaps"]
 std = []
-# Embed the 61 predefined cmaps into the binary. Adds about ~150KB of brotli-encoded data.
+# Embed the 61 predefined cmaps into the binary. Adds about ~250KB of brotli-encoded data.
 embed-cmaps = ["std", "dep:brotli"]
 
 [dependencies]

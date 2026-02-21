@@ -100,16 +100,16 @@ impl Type0Font {
 
         let mut to_unicode = read_to_unicode(dict, cmap_resolver);
 
-        // If there is no ToUnicode map, build one from the reversed UTF-16 map.
+        // If there is no ToUnicode map, use the UCS2 CMap.
         if fallback && to_unicode.is_none() {
             if let Some(cc) = cmap.metadata().character_collection.as_ref()
                 && cc.family != CidFamily::AdobeIdentity
-                && let Some(cmap_name) = cc.family.unicode_cmap()
-                && let Some(data) = (cmap_resolver)(cmap_name)
+                && let Some(ucs2_name) = cc.family.ucs2_cmap()
+                && let Some(data) = (cmap_resolver)(ucs2_name)
             {
                 let resolver = cmap_resolver.clone();
-                if let Some(utf16_cmap) = CMap::parse(data, move |n| (resolver)(n)) {
-                    to_unicode = Some(utf16_cmap.reversed());
+                if let Some(ucs2_cmap) = CMap::parse(data, move |n| (resolver)(n)) {
+                    to_unicode = Some(ucs2_cmap);
                 }
             }
 
@@ -194,12 +194,10 @@ impl Type0Font {
     /// up the codepoint in the font's cmap.
     fn map_code_fallback(&self, cid: u32) -> Option<GlyphId> {
         let to_unicode = self.to_unicode.as_ref()?;
-        let raw = (1..=4_u8).find_map(|byte_len| to_unicode.lookup_cid_code(cid, byte_len))?;
-        let character = char::from_u32(raw).or_else(|| {
-            // See PDFJS-19182. Try to decode as a surrogate pair.
-            let high = (raw >> 16) as u16;
-            let low = raw as u16;
-            char::decode_utf16([high, low]).next()?.ok()
+
+        let character = to_unicode.lookup_bf_string(cid).and_then(|bf| match bf {
+            BfString::Char(c) => Some(c),
+            BfString::String(_) => None,
         })?;
 
         match &self.font_type {

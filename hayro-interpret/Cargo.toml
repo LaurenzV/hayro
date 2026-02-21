@@ -30,7 +30,7 @@ image = { workspace = true, features = ["png"] }
 default = ["embed-fonts", "embed-cmaps"]
 # Embed a light-weight set of fonts (around 240KB) that can be used as a substitute for the 14 PDF standard fonts.
 embed-fonts = []
-# Embed the 61 predefined cmaps into the binary. Adds about ~150KB of brotli-encoded data.
+# Embed the 61 predefined cmaps into the binary. Adds about ~250KB of brotli-encoded data.
 embed-cmaps = ["hayro-cmap/embed-cmaps"]
 
 [lints]
