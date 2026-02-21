@@ -186,35 +186,28 @@ fn interpreter_settings() -> InterpreterSettings {
     }
 }
 
+fn read_font(name: &str) -> Option<FontData> {
+    let path = WORKSPACE_PATH.join("assets").join(name);
+    Some(Arc::new(std::fs::read(&path).ok()?))
+}
+
 fn get_noto_fallback(query: &hayro::hayro_interpret::font::FallbackFontQuery) -> Option<FontData> {
     let family = &query.character_collection.as_ref()?.family;
 
-    let data: &[u8] = match family {
+    let name = match family {
         CidFamily::AdobeGB1 | CidFamily::AdobeCNS1 => {
-            if query.is_bold {
-                &include_bytes!("../assets/NotoSansCJKsc-Bold.otf")[..]
-            } else {
-                &include_bytes!("../assets/NotoSansCJKsc-Regular.otf")[..]
-            }
+            if query.is_bold { "NotoSansCJKsc-Bold.otf" } else { "NotoSansCJKsc-Regular.otf" }
         }
         CidFamily::AdobeJapan1 => {
-            if query.is_bold {
-                &include_bytes!("../assets/NotoSansCJKjp-Bold.otf")[..]
-            } else {
-                &include_bytes!("../assets/NotoSansCJKjp-Regular.otf")[..]
-            }
+            if query.is_bold { "NotoSansCJKjp-Bold.otf" } else { "NotoSansCJKjp-Regular.otf" }
         }
         CidFamily::AdobeKorea1 => {
-            if query.is_bold {
-                &include_bytes!("../assets/NotoSansCJKkr-Bold.otf")[..]
-            } else {
-                &include_bytes!("../assets/NotoSansCJKkr-Regular.otf")[..]
-            }
+            if query.is_bold { "NotoSansCJKkr-Bold.otf" } else { "NotoSansCJKkr-Regular.otf" }
         }
         _ => return None,
     };
 
-    Some(Arc::new(data))
+    read_font(name)
 }
 
 fn svg_render_settings() -> SvgRenderSettings {
@@ -401,7 +394,7 @@ fn is_pix_diff(pixel1: &Rgba<u8>, pixel2: &Rgba<u8>) -> bool {
 }
 
 // We don't use the `embed-fonts` feature because we use the more complete liberation fonts for
-// testing. Fonts are downloaded by sync.py and not checked into git.
+// testing.
 fn get_standard(font: &StandardFont) -> Option<FontData> {
     match font {
         StandardFont::Helvetica => Some(Arc::new(

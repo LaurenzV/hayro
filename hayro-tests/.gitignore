@@ -5,3 +5,5 @@ store
 outputs
 assets/*.ttf
 assets/*.otf
+# Liberation fonts are checked in
+!assets/Liberation*.ttf
