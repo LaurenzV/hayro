@@ -436,8 +436,7 @@
   },
   {
     "id": "3694",
-    "ignore": true,
-    "comment": "image, conflation artifacts but seems like it might be possible to fix?"
+    "comment": "has many small images, PDFBox and PDFIum manage to render without conflation artifacts. we still have them."
   },
   "3702",
   "3703",
@@ -448,11 +447,7 @@
   "3724",
   "3725_1",
   "3725_2",
-  {
-    "id": "3728",
-    "ignore": true,
-    "comment": "no text shows up"
-  },
+  "3728",
   "3731",
   "3754",
   "3755",
