@@ -196,13 +196,25 @@ fn get_noto_fallback(query: &hayro::hayro_interpret::font::FallbackFontQuery) ->
 
     let name = match family {
         CidFamily::AdobeGB1 | CidFamily::AdobeCNS1 => {
-            if query.is_bold { "NotoSansCJKsc-Bold.otf" } else { "NotoSansCJKsc-Regular.otf" }
+            if query.is_bold {
+                "NotoSansCJKsc-Bold.otf"
+            } else {
+                "NotoSansCJKsc-Regular.otf"
+            }
         }
         CidFamily::AdobeJapan1 => {
-            if query.is_bold { "NotoSansCJKjp-Bold.otf" } else { "NotoSansCJKjp-Regular.otf" }
+            if query.is_bold {
+                "NotoSansCJKjp-Bold.otf"
+            } else {
+                "NotoSansCJKjp-Regular.otf"
+            }
         }
         CidFamily::AdobeKorea1 => {
-            if query.is_bold { "NotoSansCJKkr-Bold.otf" } else { "NotoSansCJKkr-Regular.otf" }
+            if query.is_bold {
+                "NotoSansCJKkr-Bold.otf"
+            } else {
+                "NotoSansCJKkr-Regular.otf"
+            }
         }
         _ => return None,
     };
