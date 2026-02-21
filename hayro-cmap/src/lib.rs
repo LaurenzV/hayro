@@ -404,9 +404,9 @@ impl CMap {
     /// this case, [`lookup_cid_code`] takes a CID as input and returns a
     /// Unicode codepoint as output.
     ///
-    /// Note that there are caveats: Bf string entries, notdef ranges, and base 
-    /// cmaps will be discarded. If multiple character codes mapped to the same
-    /// CID, only one of those mappings will be preserved.
+    /// Note that there are caveats: Bf string entries and notdef ranges will be
+    /// discarded. If multiple character codes mapped to the same CID, only one
+    /// of those mappings will be preserved.
     pub fn reversed(&self) -> Self {
         let mut cid_ranges: Vec<CidRange> = self
             .cid_ranges
@@ -448,7 +448,7 @@ impl CMap {
             cid_ranges,
             notdef_ranges: Vec::new(),
             bf_entries: Vec::new(),
-            base: None,
+            base: self.base.as_ref().map(|b| Box::new(b.reversed())),
         }
     }
 

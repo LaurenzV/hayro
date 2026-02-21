@@ -1,8 +1,6 @@
 use crate::font::blob::{CffFontBlob, OpenTypeFontBlob};
 use crate::font::generated::glyph_names;
-use crate::font::{
-    FallbackFontQuery, FontFlags, FontQuery, read_to_unicode, strip_subset_prefix,
-};
+use crate::font::{FallbackFontQuery, FontFlags, FontQuery, read_to_unicode, strip_subset_prefix};
 use crate::{CMapResolverFn, CacheKey, FontResolverFn};
 use hayro_cmap::{BfString, CMap, CidFamily, WritingMode};
 use hayro_syntax::object::Dict;
@@ -58,20 +56,16 @@ impl Type0Font {
             Some(ft) => (ft, false),
             None => {
                 let mut query = FallbackFontQuery::new(dict);
-                query.character_collection =
-                    cmap.metadata().character_collection.clone();
+                query.character_collection = cmap.metadata().character_collection.clone();
 
                 warn!(
                     "unable to load CID font {}, attempting fallback",
-                    query
-                        .post_script_name
-                        .as_deref()
-                        .unwrap_or("(no name)")
+                    query.post_script_name.as_deref().unwrap_or("(no name)")
                 );
 
-                let (data, index) =
-                    font_resolver(&FontQuery::Fallback(query))?;
-                let blob = OpenTypeFontBlob::new(data.clone(), index).map(FontType::OpenType)
+                let (data, index) = font_resolver(&FontQuery::Fallback(query))?;
+                let blob = OpenTypeFontBlob::new(data.clone(), index)
+                    .map(FontType::OpenType)
                     .or_else(|| CffFontBlob::new(data).map(FontType::Cff))?;
                 (blob, true)
             }
@@ -104,9 +98,7 @@ impl Type0Font {
                     if let Some(cmap_name) = cc.family.unicode_cmap() {
                         if let Some(data) = (cmap_resolver)(cmap_name) {
                             let resolver = cmap_resolver.clone();
-                            if let Some(utf16_cmap) =
-                                CMap::parse(data, move |n| (resolver)(n))
-                            {
+                            if let Some(utf16_cmap) = CMap::parse(data, move |n| (resolver)(n)) {
                                 to_unicode = Some(utf16_cmap.reversed());
                             }
                         }
@@ -188,8 +180,7 @@ impl Type0Font {
         };
 
         // Try lookup_cid_code (reversed CMap: CID input → Unicode output)
-        let unicode_val = (1..=4_u8)
-            .find_map(|byte_len| to_unicode.lookup_cid_code(cid, byte_len));
+        let unicode_val = (1..=4_u8).find_map(|byte_len| to_unicode.lookup_cid_code(cid, byte_len));
 
         let Some(code_point) = unicode_val else {
             return GlyphId::NOTDEF;
@@ -200,11 +191,7 @@ impl Type0Font {
         };
 
         match &self.font_type {
-            FontType::OpenType(t) => t
-                .font_ref()
-                .charmap()
-                .map(ch)
-                .unwrap_or(GlyphId::NOTDEF),
+            FontType::OpenType(t) => t.font_ref().charmap().map(ch).unwrap_or(GlyphId::NOTDEF),
             FontType::Cff(c) => {
                 let table = c.table();
 

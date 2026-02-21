@@ -1,13 +1,20 @@
 //! This example shows you how you can render a PDF file to PNG.
 
-use fontdb::{Family, Query, Weight};
-use hayro::hayro_interpret::font::{FontData, FontQuery};
-use hayro::hayro_interpret::hayro_cmap::CidFamily;
 use hayro::hayro_interpret::InterpreterSettings;
+use hayro::hayro_interpret::font::{FontData, FontQuery, StandardFont};
+use hayro::hayro_interpret::hayro_cmap::CidFamily;
 use hayro::hayro_syntax::Pdf;
 use hayro::{RenderSettings, render};
+use std::path::Path;
 use std::sync::Arc;
 use vello_cpu::color::palette::css::WHITE;
+
+fn load_asset(name: &str) -> Option<(FontData, u32)> {
+    let base = Path::new(env!("CARGO_MANIFEST_DIR")).join("../hayro-tests/assets");
+    let path = base.join(name);
+    let data = std::fs::read(&path).ok()?;
+    Some((Arc::new(data), 0))
+}
 
 fn main() {
     if let Ok(()) = log::set_logger(&LOGGER) {
@@ -26,38 +33,50 @@ fn main() {
 
     let pdf = Pdf::new(file).unwrap();
 
-    let mut fontdb = fontdb::Database::new();
-    fontdb.load_system_fonts();
-
     let interpreter_settings = InterpreterSettings {
         font_resolver: Arc::new(move |query| match query {
-            FontQuery::Standard(s) => Some(s.get_font_data()),
+            FontQuery::Standard(s) => {
+                let name = pick_standard_font(s);
+                load_asset(name).or_else(|| Some(s.get_font_data()))
+            }
             FontQuery::Fallback(f) => {
-                if f.character_collection
-                    .as_ref()
-                    .is_none_or(|c| matches!(c.family, CidFamily::AdobeIdentity))
-                {
-                    return Some(f.pick_standard_font().get_font_data());
+                if let Some(cc) = &f.character_collection {
+                    let name = match cc.family {
+                        CidFamily::AdobeGB1 | CidFamily::AdobeCNS1 => {
+                            if f.is_bold {
+                                "NotoSansCJKsc-Bold.otf"
+                            } else {
+                                "NotoSansCJKsc-Regular.otf"
+                            }
+                        }
+                        CidFamily::AdobeJapan1 => {
+                            if f.is_bold {
+                                "NotoSansCJKjp-Bold.otf"
+                            } else {
+                                "NotoSansCJKjp-Regular.otf"
+                            }
+                        }
+                        CidFamily::AdobeKorea1 => {
+                            if f.is_bold {
+                                "NotoSansCJKkr-Bold.otf"
+                            } else {
+                                "NotoSansCJKkr-Regular.otf"
+                            }
+                        }
+                        _ => {
+                            let name = pick_standard_font(&f.pick_standard_font());
+                            return load_asset(name)
+                                .or_else(|| Some(f.pick_standard_font().get_font_data()));
+                        }
+                    };
+
+                    if let Some(data) = load_asset(name) {
+                        return Some(data);
+                    }
                 }
 
-                let query = Query {
-                    families: &[Family::Name("Noto Sans SC")],
-                    weight: if f.is_bold {
-                        Weight::BOLD
-                    } else {
-                        Weight::NORMAL
-                    },
-                    ..Default::default()
-                };
-
-                let id = fontdb.query(&query)?;
-                let mut font_data: Option<(FontData, u32)> = None;
-
-                fontdb.with_face_data(id, |data, idx| {
-                    font_data = Some((Arc::new(data.to_vec()), idx));
-                });
-
-                font_data
+                let name = pick_standard_font(&f.pick_standard_font());
+                load_asset(name).or_else(|| Some(f.pick_standard_font().get_font_data()))
             }
         }),
         ..Default::default()

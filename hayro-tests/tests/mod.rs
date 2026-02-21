@@ -190,14 +190,25 @@ fn get_noto_fallback(query: &hayro::hayro_interpret::font::FallbackFontQuery) ->
     let family = &query.character_collection.as_ref()?.family;
 
     let data: &[u8] = match family {
-        CidFamily::AdobeGB1
-        | CidFamily::AdobeJapan1
-        | CidFamily::AdobeCNS1
-        | CidFamily::AdobeKorea1 => {
+        CidFamily::AdobeGB1 | CidFamily::AdobeCNS1 => {
             if query.is_bold {
-                &include_bytes!("../assets/NotoSansSC-Bold.ttf")[..]
+                &include_bytes!("../assets/NotoSansCJKsc-Bold.otf")[..]
             } else {
-                &include_bytes!("../assets/NotoSansSC-Regular.ttf")[..]
+                &include_bytes!("../assets/NotoSansCJKsc-Regular.otf")[..]
+            }
+        }
+        CidFamily::AdobeJapan1 => {
+            if query.is_bold {
+                &include_bytes!("../assets/NotoSansCJKjp-Bold.otf")[..]
+            } else {
+                &include_bytes!("../assets/NotoSansCJKjp-Regular.otf")[..]
+            }
+        }
+        CidFamily::AdobeKorea1 => {
+            if query.is_bold {
+                &include_bytes!("../assets/NotoSansCJKkr-Bold.otf")[..]
+            } else {
+                &include_bytes!("../assets/NotoSansCJKkr-Regular.otf")[..]
             }
         }
         _ => return None,
@@ -389,27 +400,46 @@ fn is_pix_diff(pixel1: &Rgba<u8>, pixel2: &Rgba<u8>) -> bool {
         || pixel1.0[3] != pixel2.0[3]
 }
 
-fn read_font(name: &str) -> Option<FontData> {
-    let path = WORKSPACE_PATH.join("assets").join(name);
-    Some(Arc::new(std::fs::read(&path).ok()?))
-}
-
 // We don't use the `embed-fonts` feature because we use the more complete liberation fonts for
 // testing. Fonts are downloaded by sync.py and not checked into git.
 fn get_standard(font: &StandardFont) -> Option<FontData> {
     match font {
-        StandardFont::Helvetica => read_font("LiberationSans-Regular.ttf"),
-        StandardFont::HelveticaBold => read_font("LiberationSans-Bold.ttf"),
-        StandardFont::HelveticaOblique => read_font("LiberationSans-Italic.ttf"),
-        StandardFont::HelveticaBoldOblique => read_font("LiberationSans-BoldItalic.ttf"),
-        StandardFont::Courier => read_font("LiberationMono-Regular.ttf"),
-        StandardFont::CourierBold => read_font("LiberationMono-Bold.ttf"),
-        StandardFont::CourierOblique => read_font("LiberationMono-Italic.ttf"),
-        StandardFont::CourierBoldOblique => read_font("LiberationMono-BoldItalic.ttf"),
-        StandardFont::TimesRoman => read_font("LiberationSerif-Regular.ttf"),
-        StandardFont::TimesBold => read_font("LiberationSerif-Bold.ttf"),
-        StandardFont::TimesItalic => read_font("LiberationSerif-Italic.ttf"),
-        StandardFont::TimesBoldItalic => read_font("LiberationSerif-BoldItalic.ttf"),
+        StandardFont::Helvetica => Some(Arc::new(
+            &include_bytes!("../assets/LiberationSans-Regular.ttf")[..],
+        )),
+        StandardFont::HelveticaBold => Some(Arc::new(
+            &include_bytes!("../assets/LiberationSans-Bold.ttf")[..],
+        )),
+        StandardFont::HelveticaOblique => Some(Arc::new(
+            &include_bytes!("../assets/LiberationSans-Italic.ttf")[..],
+        )),
+        StandardFont::HelveticaBoldOblique => Some(Arc::new(
+            &include_bytes!("../assets/LiberationSans-BoldItalic.ttf")[..],
+        )),
+        StandardFont::Courier => Some(Arc::new(
+            &include_bytes!("../assets/LiberationMono-Regular.ttf")[..],
+        )),
+        StandardFont::CourierBold => Some(Arc::new(
+            &include_bytes!("../assets/LiberationMono-Bold.ttf")[..],
+        )),
+        StandardFont::CourierOblique => Some(Arc::new(
+            &include_bytes!("../assets/LiberationMono-Italic.ttf")[..],
+        )),
+        StandardFont::CourierBoldOblique => Some(Arc::new(
+            &include_bytes!("../assets/LiberationMono-BoldItalic.ttf")[..],
+        )),
+        StandardFont::TimesRoman => Some(Arc::new(
+            &include_bytes!("../assets/LiberationSerif-Regular.ttf")[..],
+        )),
+        StandardFont::TimesBold => Some(Arc::new(
+            &include_bytes!("../assets/LiberationSerif-Bold.ttf")[..],
+        )),
+        StandardFont::TimesItalic => Some(Arc::new(
+            &include_bytes!("../assets/LiberationSerif-Italic.ttf")[..],
+        )),
+        StandardFont::TimesBoldItalic => Some(Arc::new(
+            &include_bytes!("../assets/LiberationSerif-BoldItalic.ttf")[..],
+        )),
         StandardFont::ZapfDingBats => Some(Arc::new(
             &include_bytes!("../../hayro-interpret/assets/FoxitDingbats.pfb")[..],
         )),
