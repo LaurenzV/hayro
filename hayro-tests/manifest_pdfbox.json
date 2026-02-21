@@ -300,8 +300,7 @@
   "2452",
   {
     "id": "2487",
-    "ignore": true,
-    "comment": "weird black part, probably bug in type1 parser"
+    "last_page": 2
   },
   "2489",
   {
@@ -316,9 +315,7 @@
   "2555",
   "2558",
   {
-    "id": "2560",
-    "ignore": true,
-    "comment": "non-embedded CID font"
+    "id": "2560"
   },
   "2561",
   "2585",
@@ -355,9 +352,7 @@
   "2906",
   "2909",
   {
-    "id": "2957",
-    "ignore": true,
-    "comment": "text spacing issues"
+    "id": "2957"
   },
   "2958",
   "2959",
@@ -412,11 +407,7 @@
     "id": "3526",
     "last_page": 0
   },
-  {
-    "id": "3558",
-    "ignore": true,
-    "comment": "jbig2 soft mask, image is 1x1 but soft mask 2000x2000"
-  },
+  "3558",
   "3562",
   {
     "id": "3579",
@@ -479,11 +470,7 @@
   "3909_1",
   "3909_2",
   "3922",
-  {
-    "id": "3923",
-    "ignore": true,
-    "comment": "PDF without embedded CID font"
-  },
+  "3923",
   {
     "id": "3928",
     "last_page": 0
@@ -501,28 +488,16 @@
     "id": "3956",
     "last_page": 1
   },
-  {
-    "id": "3965",
-    "ignore": true,
-    "comment": "truetype text doesnt render"
-  },
+  "3965",
   "3977",
   "3979",
   "3990",
-  {
-    "id": "4001",
-    "ignore": true,
-    "comment": "some edge case with line feeds not rendering"
-  },
+  "4001",
   "4006",
   "4010",
   "4015",
   "4059",
-  {
-    "id": "4060",
-    "ignore": true,
-    "comment": "image with deviceN jpeg, takes long, renders slow"
-  },
+  "4060",
   "4064",
   "4077",
   "4081",
@@ -538,11 +513,7 @@
   "4228",
   "4245",
   "4246",
-  {
-    "id": "4268",
-    "ignore": true,
-    "comment": "built-in CMAP encoding"
-  },
+  "4268",
   {
     "id": "4277",
     "last_page": 2
@@ -620,18 +591,10 @@
     "id": "4719",
     "last_page": 1
   },
-  {
-    "id": "4753",
-    "ignore": true,
-    "comment": "bullet points missing"
-  },
+  "4753",
   "4778",
   "4787",
-  {
-    "id": "4793",
-    "ignore": true,
-    "comment": "non-embedded font chinese text"
-  },
+  "4793",
   "4798",
   {
     "id": "4800",
@@ -691,18 +654,10 @@
   "5134",
   "5140",
   "5250",
-  {
-    "id": "5251",
-    "ignore": true,
-    "comment": "rectangles are not filled properly"
-  },
+  "5251",
   "5260",
   "5275",
-  {
-    "id": "5283",
-    "ignore": true,
-    "comment": "text doesnt display, probably invalid stream"
-  },
+  "5283",
   "5294",
   "5296",
   "5302",
@@ -753,21 +708,13 @@
     "ignore": true,
     "comment": "glyphs dont render, embedded font seems to be invalid"
   },
-  {
-    "id": "5616",
-    "ignore": true,
-    "comment": "table lines are too thick?"
-  },
+  "5616",
   "5635",
   "5651",
   "5657",
   "5665",
   "5702",
-  {
-    "id": "5704",
-    "ignore": true,
-    "comment": "missing character"
-  },
+  "5704",
   "5706",
   "5738",
   "5778",
