@@ -644,3 +644,17 @@ pub(crate) fn read_to_unicode(dict: &Dict<'_>, cmap_resolver: &CMapResolverFn) -
             CMap::parse(&data, move |name| (cmap_resolver)(name))
         })
 }
+
+// When mapping to glyphs, some fonts might only have a glyph for the "normalized"
+// name.
+pub(crate) fn normalized_glyph_name(mut name: &str) -> &str {
+    if name == "nbspace" {
+        name = "space";
+    }
+
+    if name == "sfthyphen" {
+        name = "hyphen";
+    }
+    
+    name
+}

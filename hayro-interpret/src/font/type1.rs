@@ -3,7 +3,7 @@ use crate::font::generated::glyph_names;
 use crate::font::glyph_simulator::GlyphSimulator;
 use crate::font::standard_font::{StandardFont, StandardFontBlob, select_standard_font};
 use crate::font::true_type::{read_encoding, read_widths};
-use crate::font::{Encoding, FallbackFontQuery, FontQuery, glyph_name_to_unicode, read_to_unicode};
+use crate::font::{Encoding, FallbackFontQuery, FontQuery, glyph_name_to_unicode, read_to_unicode, normalized_glyph_name};
 use crate::{CMapResolverFn, CacheKey, FontResolverFn};
 use hayro_cmap::{BfString, CMap};
 use hayro_syntax::object::Dict;
@@ -362,6 +362,7 @@ impl CffKind {
         let get_glyph = |entry: &str| {
             table
                 .glyph_index_by_name(entry)
+                .or_else(|| table.glyph_index_by_name(normalized_glyph_name(entry)))
                 .map(|g| GlyphId::new(g.0 as u32))
         };
 
