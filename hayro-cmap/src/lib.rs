@@ -429,6 +429,7 @@ impl CMap {
         if let (Some(first), Some(last)) = (cid_ranges.first(), cid_ranges.last()) {
             let low = first.range.start;
             let high = last.range.end;
+            #[allow(clippy::match_overlapping_arm)]
             let number_bytes = match high {
                 0..=0xFF => 1,
                 0..=0xFFFF => 2,
