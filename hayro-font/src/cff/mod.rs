@@ -55,6 +55,7 @@ pub struct Table<'a> {
     charset: Charset<'a>,
     number_of_glyphs: NonZeroU16,
     matrix: Matrix,
+    top_matrix_explicit: bool,
     char_strings: Index<'a>,
     kind: FontKind<'a>,
 }
@@ -116,7 +117,8 @@ impl<'a> Table<'a> {
             None => Charset::ISOAdobe, // default
         };
 
-        let matrix = top_dict.matrix;
+        let top_matrix_explicit = top_dict.matrix.is_some();
+        let matrix = top_dict.matrix.unwrap_or_default();
 
         let kind = if top_dict.has_ros {
             parse_cid_metadata(data, top_dict, number_of_glyphs.get())?
@@ -139,6 +141,7 @@ impl<'a> Table<'a> {
             charset,
             number_of_glyphs,
             matrix,
+            top_matrix_explicit,
             char_strings,
             kind,
         })
@@ -152,10 +155,56 @@ impl<'a> Table<'a> {
         self.number_of_glyphs.get()
     }
 
-    /// Returns a font transformation matrix.
-    #[inline]
-    pub fn matrix(&self) -> Matrix {
-        self.matrix
+    /// This is a hot mess, as the interaction between top-level matrix and
+    /// font-dict matrix is not properly specified. I dealt with this in the
+    /// past, see: https://github.com/typst/subsetter/blob/5c7764b2835e9273801ed7f0078d0ca06550ce74/src/cff/dict/top_dict.rs#L109-L123
+    pub fn glyph_matrix(&self, glyph_id: GlyphId) -> Matrix {
+        let FontKind::CID(ref cid) = self.kind else {
+            return self.matrix;
+        };
+
+        let fd_matrix = (|| {
+            let font_dict_index = cid.fd_select.font_dict_index(glyph_id)?;
+            let font_dict_data = cid.fd_array.get(u32::from(font_dict_index))?;
+            parse_font_dict_matrix(font_dict_data)
+        })();
+
+        let effective_fd = match (self.top_matrix_explicit, fd_matrix) {
+            // Case 1.
+            (true, Some(fd)) => fd,
+            // Case 2.
+            (false, Some(fd)) => Matrix {
+                sx: fd.sx * 1000.0,
+                ky: fd.ky * 1000.0,
+                kx: fd.kx * 1000.0,
+                sy: fd.sy * 1000.0,
+                tx: fd.tx * 1000.0,
+                ty: fd.ty * 1000.0,
+            },
+            // Case 3 & 4.
+            (_, None) => Matrix {
+                sx: 1.0,
+                ky: 0.0,
+                kx: 0.0,
+                sy: 1.0,
+                tx: 0.0,
+                ty: 0.0,
+            },
+        };
+
+        // Compose the two matrices.
+        Matrix {
+            sx: self.matrix.sx * effective_fd.sx + self.matrix.kx * effective_fd.ky,
+            ky: self.matrix.ky * effective_fd.sx + self.matrix.sy * effective_fd.ky,
+            kx: self.matrix.sx * effective_fd.kx + self.matrix.kx * effective_fd.sy,
+            sy: self.matrix.ky * effective_fd.kx + self.matrix.sy * effective_fd.sy,
+            tx: self.matrix.sx * effective_fd.tx
+                + self.matrix.kx * effective_fd.ty
+                + self.matrix.tx,
+            ty: self.matrix.ky * effective_fd.tx
+                + self.matrix.sy * effective_fd.ty
+                + self.matrix.ty,
+        }
     }
 
     /// Outlines a glyph.
@@ -373,7 +422,7 @@ struct TopDict {
     encoding_offset: Option<usize>,
     char_strings_offset: usize,
     private_dict_range: Option<Range<usize>>,
-    matrix: Matrix,
+    matrix: Option<Matrix>,
     has_ros: bool,
     fd_array_offset: Option<usize>,
     fd_select_offset: Option<usize>,
@@ -407,14 +456,14 @@ fn parse_top_dict(s: &mut Stream<'_>) -> Option<TopDict> {
                 dict_parser.parse_operands()?;
                 let operands = dict_parser.operands();
                 if operands.len() == 6 {
-                    top_dict.matrix = Matrix {
+                    top_dict.matrix = Some(Matrix {
                         sx: operands[0] as f32,
                         ky: operands[1] as f32,
                         kx: operands[2] as f32,
                         sy: operands[3] as f32,
                         tx: operands[4] as f32,
                         ty: operands[5] as f32,
-                    };
+                    });
                 }
             }
             top_dict_operator::ROS => {
@@ -463,6 +512,29 @@ fn parse_font_dict(data: &[u8]) -> Option<Range<usize>> {
     while let Some(operator) = dict_parser.parse_next() {
         if operator.get() == top_dict_operator::PRIVATE_DICT_SIZE_AND_OFFSET {
             return dict_parser.parse_range();
+        }
+    }
+
+    None
+}
+
+fn parse_font_dict_matrix(data: &[u8]) -> Option<Matrix> {
+    let mut operands_buffer = [0.0; MAX_OPERANDS_LEN];
+    let mut dict_parser = DictionaryParser::new(data, &mut operands_buffer);
+    while let Some(operator) = dict_parser.parse_next() {
+        if operator.get() == top_dict_operator::FONT_MATRIX {
+            dict_parser.parse_operands()?;
+            let operands = dict_parser.operands();
+            if operands.len() == 6 {
+                return Some(Matrix {
+                    sx: operands[0] as f32,
+                    ky: operands[1] as f32,
+                    kx: operands[2] as f32,
+                    sy: operands[3] as f32,
+                    tx: operands[4] as f32,
+                    ty: operands[5] as f32,
+                });
+            }
         }
     }
 

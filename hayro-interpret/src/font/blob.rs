@@ -78,14 +78,15 @@ impl CffFontBlob {
     pub(crate) fn outline_glyph(&self, glyph: GlyphId) -> BezPath {
         let mut path = OutlinePath::new();
 
-        let Ok(_) = self
-            .table()
-            .outline(hayro_font::GlyphId(glyph.to_u32() as u16), &mut path)
-        else {
+        let glyph_id = hayro_font::GlyphId(glyph.to_u32() as u16);
+
+        let Ok(_) = self.table().outline(glyph_id, &mut path) else {
             return BezPath::new();
         };
 
-        Affine::scale(UNITS_PER_EM as f64) * convert_matrix(self.table().matrix()) * path.take()
+        let matrix = self.table().glyph_matrix(glyph_id);
+
+        Affine::scale(UNITS_PER_EM as f64) * convert_matrix(matrix) * path.take()
     }
 }
 

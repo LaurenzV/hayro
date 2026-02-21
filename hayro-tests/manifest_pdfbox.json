@@ -592,11 +592,7 @@
   "4787",
   "4793",
   "4798",
-  {
-    "id": "4800",
-    "ignore": true,
-    "comment": "text renders completely wrong, somehow too big"
-  },
+  "4800",
   "4801",
   {
     "id": "4820",
