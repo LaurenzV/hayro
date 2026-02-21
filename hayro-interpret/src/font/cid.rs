@@ -104,9 +104,7 @@ impl Type0Font {
             }
 
             // If we still have no to_unicode, we can't map CIDs to glyphs, so abort.
-            if to_unicode.is_none() {
-                return None;
-            }
+            to_unicode.as_ref()?;
         }
 
         let postscript_name = dict
@@ -141,7 +139,7 @@ impl Type0Font {
         };
 
         if self.fallback {
-            return self.map_code_fallback(cid);
+            return self.map_code_fallback(cid).unwrap_or(GlyphId::NOTDEF);
         }
 
         match &self.font_type {
@@ -168,43 +166,27 @@ impl Type0Font {
         }
     }
 
-    /// Map a CID to a glyph ID using the fallback font path:
-    /// CID → reversed to_unicode CMap → Unicode char → OpenType cmap → GlyphId
-    fn map_code_fallback(&self, cid: u32) -> GlyphId {
-        let to_unicode = match &self.to_unicode {
-            Some(cmap) => cmap,
-            None => return GlyphId::NOTDEF,
-        };
-
-        // Try lookup_cid_code (reversed CMap: CID input → Unicode output)
-        let unicode_val = (1..=4_u8).find_map(|byte_len| to_unicode.lookup_cid_code(cid, byte_len));
-
-        let Some(code_point) = unicode_val else {
-            return GlyphId::NOTDEF;
-        };
-
-        let Some(ch) = char::from_u32(code_point) else {
-            return GlyphId::NOTDEF;
-        };
+    /// Map a CID to a glyph ID by first getting its Unicode and then looking
+    /// up the codepoint in the font's cmap.
+    fn map_code_fallback(&self, cid: u32) -> Option<GlyphId> {
+        let to_unicode = self.to_unicode.as_ref()?;
+        let character = (1..=4_u8)
+            .find_map(|byte_len| to_unicode.lookup_cid_code(cid, byte_len))
+            .and_then(|c| char::from_u32(c))?;
 
         match &self.font_type {
-            FontType::OpenType(t) => t.font_ref().charmap().map(ch).unwrap_or(GlyphId::NOTDEF),
+            FontType::OpenType(t) => t.font_ref().charmap().map(character),
             FontType::Cff(c) => {
                 let table = c.table();
 
-                // Try AGL reverse lookup first (e.g. 'A' -> "A")
-                if let Some(name) = glyph_names::get_reverse(ch) {
-                    if let Some(gid) = table.glyph_index_by_name(name) {
-                        return GlyphId::new(gid.0 as u32);
-                    }
+                // Map codepoint to glyph name via AFL, and then look it up.
+                if let Some(name) = glyph_names::get_reverse(character)
+                    && let Some(gid) = table.glyph_index_by_name(name)
+                {
+                    Some(GlyphId::new(gid.0 as u32))
+                } else {
+                    None
                 }
-
-                // Fall back to uniXXXX naming convention
-                let name = format!("uni{:04X}", code_point);
-                table
-                    .glyph_index_by_name(&name)
-                    .map(|g| GlyphId::new(g.0 as u32))
-                    .unwrap_or(GlyphId::NOTDEF)
             }
         }
     }

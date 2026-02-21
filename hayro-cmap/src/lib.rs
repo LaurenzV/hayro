@@ -398,7 +398,7 @@ impl CMap {
     }
 
     /// Create a reversed copy of this cmap where character codes and CIDs are
-    /// swapped. This essentially allows you to create a new CMap that maps from
+    /// swapped. This essentially allows you to create a new `CMap` that maps from
     /// CIDs to character codes. For example, if the original map was a map from
     /// Unicode to CID, this reversed map will be a map from CID to Unicode. In
     /// this case, [`lookup_cid_code`] takes a CID as input and returns a
@@ -678,7 +678,7 @@ impl CidFamily {
         }
     }
 
-    /// Return the predefined UTF-16 CMap that maps Unicode code points to CIDs
+    /// Return the predefined UTF-16 `CMap` that maps Unicode code points to CIDs
     /// for this family, if one exists.
     pub fn unicode_cmap(&self) -> Option<CMapName<'static>> {
         match self {
