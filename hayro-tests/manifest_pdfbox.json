@@ -551,17 +551,12 @@
   "4470",
   "4474",
   "4484",
-  {
-    "id": "4503",
-    "ignore": true,
-    "comment": "panic when rendering image with zero-width image?"
-  },
+  "4503",
   "4516_1",
   "4516_2",
   {
     "id": "4517",
-    "ignore": true,
-    "comment": "crypt filter"
+    "password": "userpassword1234"
   },
   "4518",
   "4520",
@@ -575,7 +570,7 @@
   {
     "id": "4598",
     "ignore": true,
-    "comment": "jbig images that take up a lot of memory and render very slow"
+    "comment": "lots of jbig2 images, takes 1+min. good benchmark target"
   },
   "4607",
   "4627",
