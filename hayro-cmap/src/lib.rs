@@ -59,6 +59,18 @@ pub enum CMapName<'a> {
     /// `Add-RKSJ-V` — Adobe-Japan1, Fujitsu FMR Shift-JIS, vertical.
     AddRksjV,
 
+    // ── Adobe UCS2 (CID → Unicode) ──
+    // Note that these are not part of the predefined CMaps, but we use them
+    // so we can more easily map CIDs back to Unicode.
+    /// `Adobe-CNS1-UCS2` — Adobe-CNS1, CID-to-Unicode mapping.
+    AdobeCns1Ucs2,
+    /// `Adobe-GB1-UCS2` — Adobe-GB1, CID-to-Unicode mapping.
+    AdobeGb1Ucs2,
+    /// `Adobe-Japan1-UCS2` — Adobe-Japan1, CID-to-Unicode mapping.
+    AdobeJapan1Ucs2,
+    /// `Adobe-Korea1-UCS2` — Adobe-Korea1, CID-to-Unicode mapping.
+    AdobeKorea1Ucs2,
+
     // ── Adobe-CNS1 (Traditional Chinese) ── Big Five encodings ──
     /// `B5pc-H` — Adobe-CNS1, Mac Big Five (`ETen` extensions), horizontal.
     B5pcH,
@@ -207,6 +219,10 @@ impl<'a> CMapName<'a> {
             b"90pv-RKSJ-H" => Self::N90pvRksjH,
             b"Add-RKSJ-H" => Self::AddRksjH,
             b"Add-RKSJ-V" => Self::AddRksjV,
+            b"Adobe-CNS1-UCS2" => Self::AdobeCns1Ucs2,
+            b"Adobe-GB1-UCS2" => Self::AdobeGb1Ucs2,
+            b"Adobe-Japan1-UCS2" => Self::AdobeJapan1Ucs2,
+            b"Adobe-Korea1-UCS2" => Self::AdobeKorea1Ucs2,
             b"B5pc-H" => Self::B5pcH,
             b"B5pc-V" => Self::B5pcV,
             b"CNS-EUC-H" => Self::CnsEucH,
@@ -275,6 +291,10 @@ impl<'a> CMapName<'a> {
             Self::N90pvRksjH => b"90pv-RKSJ-H",
             Self::AddRksjH => b"Add-RKSJ-H",
             Self::AddRksjV => b"Add-RKSJ-V",
+            Self::AdobeCns1Ucs2 => b"Adobe-CNS1-UCS2",
+            Self::AdobeGb1Ucs2 => b"Adobe-GB1-UCS2",
+            Self::AdobeJapan1Ucs2 => b"Adobe-Japan1-UCS2",
+            Self::AdobeKorea1Ucs2 => b"Adobe-Korea1-UCS2",
             Self::B5pcH => b"B5pc-H",
             Self::B5pcV => b"B5pc-V",
             Self::CnsEucH => b"CNS-EUC-H",
@@ -687,6 +707,17 @@ impl CidFamily {
             Self::AdobeGB1 => Some(CMapName::UniGbUtf16H),
             Self::AdobeCNS1 => Some(CMapName::UniCnsUtf16H),
             Self::AdobeKorea1 => Some(CMapName::UniKsUtf16H),
+            Self::AdobeIdentity | Self::Custom { .. } => None,
+        }
+    }
+
+    /// Return the `UCS2` cmap corresponding to the given character collection.
+    pub fn ucs2_cmap(&self) -> Option<CMapName<'static>> {
+        match self {
+            Self::AdobeJapan1 => Some(CMapName::AdobeJapan1Ucs2),
+            Self::AdobeGB1 => Some(CMapName::AdobeGb1Ucs2),
+            Self::AdobeCNS1 => Some(CMapName::AdobeCns1Ucs2),
+            Self::AdobeKorea1 => Some(CMapName::AdobeKorea1Ucs2),
             Self::AdobeIdentity | Self::Custom { .. } => None,
         }
     }
@@ -1492,6 +1523,127 @@ mod bcmap_tests {
         assert_eq!(cmap.lookup_cid_code(0x0000, 2), Some(0));
         assert_eq!(cmap.lookup_cid_code(0x0041, 2), Some(0x41));
         assert_eq!(cmap.lookup_cid_code(0xFFFF, 2), Some(0xFFFF));
+    }
+
+    // Note: Some tests AI-generated, haven't double-checked them.
+
+    #[test]
+    fn embedded_adobe_gb1_ucs2() {
+        let data = load_embedded(CMapName::AdobeGb1Ucs2).unwrap();
+        let cmap = CMap::parse(data, get_embedded_cmap).unwrap();
+        assert_eq!(
+            cmap.metadata().character_collection,
+            Some(CharacterCollection {
+                family: CidFamily::Custom {
+                    registry: b"Adobe".to_vec(),
+                    ordering: b"Adobe_GB1_UCS2".to_vec(),
+                },
+                supplement: 5,
+            })
+        );
+
+        assert_eq!(
+            cmap.lookup_bf_string(0x0063),
+            Some(BfString::Char('\u{00B7}'))
+        );
+        assert_eq!(cmap.lookup_bf_string(0x0001), Some(BfString::Char(' ')));
+        assert_eq!(cmap.lookup_bf_string(0x0022), Some(BfString::Char('A')));
+        assert_eq!(cmap.lookup_bf_string(0x005F), Some(BfString::Char('~')));
+        assert_eq!(
+            cmap.lookup_bf_string(0x560F),
+            Some(BfString::String(String::from("\u{90CE}\u{FE00}")))
+        );
+    }
+
+    #[test]
+    fn embedded_adobe_japan1_ucs2() {
+        let data = load_embedded(CMapName::AdobeJapan1Ucs2).unwrap();
+        let cmap = CMap::parse(data, get_embedded_cmap).unwrap();
+        assert_eq!(
+            cmap.metadata().character_collection,
+            Some(CharacterCollection {
+                family: CidFamily::Custom {
+                    registry: b"Adobe".to_vec(),
+                    ordering: b"Adobe_Japan1_UCS2".to_vec(),
+                },
+                supplement: 7,
+            })
+        );
+
+        assert_eq!(
+            cmap.lookup_bf_string(0x003D),
+            Some(BfString::Char('\u{00A5}'))
+        );
+        assert_eq!(cmap.lookup_bf_string(0x0001), Some(BfString::Char(' ')));
+        assert_eq!(cmap.lookup_bf_string(0x003C), Some(BfString::Char('[')));
+        assert_eq!(
+            cmap.lookup_bf_string(0x0476),
+            Some(BfString::String(String::from("\u{82A6}\u{E0100}")))
+        );
+        assert_eq!(
+            cmap.lookup_bf_string(0x265B),
+            Some(BfString::String(String::from("10/11")))
+        );
+        assert_eq!(
+            cmap.lookup_bf_string(0x2E6B),
+            Some(BfString::String(String::from("オングストローム")))
+        );
+    }
+
+    #[test]
+    fn embedded_adobe_korea1_ucs2() {
+        let data = load_embedded(CMapName::AdobeKorea1Ucs2).unwrap();
+        let cmap = CMap::parse(data, get_embedded_cmap).unwrap();
+        assert_eq!(
+            cmap.metadata().character_collection,
+            Some(CharacterCollection {
+                family: CidFamily::Custom {
+                    registry: b"Adobe".to_vec(),
+                    ordering: b"Adobe_Korea1_UCS2".to_vec(),
+                },
+                supplement: 2,
+            })
+        );
+
+        assert_eq!(
+            cmap.lookup_bf_string(0x0060),
+            Some(BfString::Char('\u{20A9}'))
+        );
+        assert_eq!(
+            cmap.lookup_bf_string(0x2072),
+            Some(BfString::String(String::from("[10]")))
+        );
+        assert_eq!(
+            cmap.lookup_bf_string(0x2073),
+            Some(BfString::String(String::from("[11]")))
+        );
+    }
+
+    #[test]
+    fn embedded_adobe_cns1_ucs2() {
+        let data = load_embedded(CMapName::AdobeCns1Ucs2).unwrap();
+        let cmap = CMap::parse(data, get_embedded_cmap).unwrap();
+        assert_eq!(
+            cmap.metadata().character_collection,
+            Some(CharacterCollection {
+                family: CidFamily::Custom {
+                    registry: b"Adobe".to_vec(),
+                    ordering: b"Adobe_CNS1_UCS2".to_vec(),
+                },
+                supplement: 7,
+            })
+        );
+
+        assert_eq!(
+            cmap.lookup_bf_string(0x0060),
+            Some(BfString::Char('\u{00A9}'))
+        );
+        assert_eq!(cmap.lookup_bf_string(0x0001), Some(BfString::Char(' ')));
+        assert_eq!(cmap.lookup_bf_string(0x005F), Some(BfString::Char('~')));
+        assert_eq!(
+            cmap.lookup_bf_string(0x36B0),
+            Some(BfString::Char('\u{200CC}'))
+        );
     }
 
     #[test]

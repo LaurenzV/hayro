@@ -14,8 +14,8 @@ pub use embedded::load_embedded;
 
 use crate::bcmap::embedded::BUNDLE;
 use crate::{
-    CMap, CMapName, CharacterCollection, CidFamily, CidRange, CodespaceRange, Metadata, Range,
-    WritingMode, parse,
+    BfRange, CMap, CMapName, CharacterCollection, CidFamily, CidRange, CodespaceRange, Metadata,
+    Range, WritingMode, parse,
 };
 use huffman::HuffmanTable;
 use reader::Reader;
@@ -39,6 +39,14 @@ const SEGMENT_WMODE: u8 = 0x0B;
 const SEGMENT_CODESPACE: u8 = 0x0C;
 const SEGMENT_NAME: u8 = 0x0D;
 const SEGMENT_CID_SYSTEM_INFO: u8 = 0x0E;
+const SEGMENT_BF_RANGE_VARIABLE: u8 = 0x0F;
+const SEGMENT_BF_SINGLE_VARIABLE: u8 = 0x10;
+const SEGMENT_BF_SINGLE_1U: u8 = 0x11;
+const SEGMENT_BF_SINGLE_2U: u8 = 0x12;
+const SEGMENT_BF_SINGLE_3U: u8 = 0x13;
+const SEGMENT_BF_SINGLE_4U: u8 = 0x14;
+const SEGMENT_BF_RANGE_1U: u8 = 0x15;
+const SEGMENT_BF_RANGE_2U: u8 = 0x16;
 
 pub(crate) fn parse<'a>(
     data: &[u8],
@@ -68,6 +76,7 @@ pub(crate) fn parse<'a>(
     let mut codespace_ranges = Vec::new();
     let mut cid_ranges = Vec::new();
     let mut notdef_ranges = Vec::new();
+    let mut bf_entries = Vec::new();
 
     // Start parsing all segments of the file.
     let mut reader = Reader::new(data.get(BCMAP_FILE_HEADER_SIZE..file_len)?);
@@ -125,6 +134,48 @@ pub(crate) fn parse<'a>(
             SEGMENT_SINGLE_1B | SEGMENT_SINGLE_2B | SEGMENT_SINGLE_3B | SEGMENT_SINGLE_4B => {
                 parse_cid_segment(payload, &mut cid_ranges, delta_table, None)?;
             }
+            SEGMENT_BF_RANGE_VARIABLE => {
+                parse_bf_segment(
+                    payload,
+                    &mut bf_entries,
+                    delta_table,
+                    Some(count_table),
+                    None,
+                )?;
+            }
+            SEGMENT_BF_SINGLE_VARIABLE => {
+                parse_bf_segment(payload, &mut bf_entries, delta_table, None, None)?;
+            }
+            SEGMENT_BF_RANGE_1U => {
+                parse_bf_segment(
+                    payload,
+                    &mut bf_entries,
+                    delta_table,
+                    Some(count_table),
+                    Some(1),
+                )?;
+            }
+            SEGMENT_BF_RANGE_2U => {
+                parse_bf_segment(
+                    payload,
+                    &mut bf_entries,
+                    delta_table,
+                    Some(count_table),
+                    Some(2),
+                )?;
+            }
+            SEGMENT_BF_SINGLE_1U => {
+                parse_bf_segment(payload, &mut bf_entries, delta_table, None, Some(1))?;
+            }
+            SEGMENT_BF_SINGLE_2U => {
+                parse_bf_segment(payload, &mut bf_entries, delta_table, None, Some(2))?;
+            }
+            SEGMENT_BF_SINGLE_3U => {
+                parse_bf_segment(payload, &mut bf_entries, delta_table, None, Some(3))?;
+            }
+            SEGMENT_BF_SINGLE_4U => {
+                parse_bf_segment(payload, &mut bf_entries, delta_table, None, Some(4))?;
+            }
             _ => {
                 return None;
             }
@@ -133,6 +184,7 @@ pub(crate) fn parse<'a>(
 
     cid_ranges.sort_by(|a, b| a.range.start.cmp(&b.range.start));
     notdef_ranges.sort_by(|a, b| a.range.start.cmp(&b.range.start));
+    bf_entries.sort_by(|a, b| a.range.start.cmp(&b.range.start));
 
     Some(CMap {
         metadata: Metadata {
@@ -143,7 +195,7 @@ pub(crate) fn parse<'a>(
         codespace_ranges,
         cid_ranges,
         notdef_ranges,
-        bf_entries: Vec::new(),
+        bf_entries,
         base,
     })
 }
@@ -280,6 +332,75 @@ fn parse_cid_segment(
         prev_end = Some(end);
         prev_cid = Some(cid);
         prev_range_len = end - start;
+    }
+
+    Some(())
+}
+
+fn parse_bf_segment(
+    payload: &[u8],
+    entries: &mut Vec<BfRange>,
+    delta_table: &HuffmanTable,
+    count_table: Option<&HuffmanTable>,
+    fixed_units: Option<usize>,
+) -> Option<()> {
+    let mut r = Reader::new(payload);
+    let n_entries = r.read_u16()? as usize;
+
+    let delta_len = r.read_u32()? as usize;
+    let delta_data = r.read_bytes(delta_len)?;
+
+    let mut delta_reader = Reader::new(delta_data);
+    let mut deltas = Vec::with_capacity(n_entries);
+    for _ in 0..n_entries {
+        deltas.push(delta_table.decode(&mut delta_reader)?);
+    }
+
+    // Read counts for range segments.
+    let mut counts = Vec::new();
+    if let Some(ct) = count_table {
+        let count_len = r.read_u32()? as usize;
+        let count_data = r.read_bytes(count_len)?;
+
+        let mut count_reader = Reader::new(count_data);
+        counts.reserve(n_entries);
+        for _ in 0..n_entries {
+            counts.push(ct.decode(&mut count_reader)?);
+        }
+    }
+
+    let is_range = count_table.is_some();
+    let mut prev_end: Option<u32> = None;
+
+    for i in 0..n_entries {
+        // Fixed-width segments encode destinations without a length prefix.
+        let n_units = match fixed_units {
+            Some(nu) => nu,
+            None => r.read_u8()? as usize,
+        };
+        let mut dst_base = Vec::with_capacity(n_units);
+        for _ in 0..n_units {
+            dst_base.push(r.read_u16()?);
+        }
+
+        let start = if let Some(pe) = prev_end {
+            pe + 1 + deltas[i]
+        } else {
+            deltas[i]
+        };
+
+        let end = if is_range {
+            start + counts[i] + 1
+        } else {
+            start
+        };
+
+        entries.push(BfRange {
+            range: Range { start, end },
+            dst_base,
+        });
+
+        prev_end = Some(end);
     }
 
     Some(())
