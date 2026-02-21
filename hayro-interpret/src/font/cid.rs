@@ -172,7 +172,7 @@ impl Type0Font {
         let to_unicode = self.to_unicode.as_ref()?;
         let character = (1..=4_u8)
             .find_map(|byte_len| to_unicode.lookup_cid_code(cid, byte_len))
-            .and_then(|c| char::from_u32(c))?;
+            .and_then(char::from_u32)?;
 
         match &self.font_type {
             FontType::OpenType(t) => t.font_ref().charmap().map(character),
