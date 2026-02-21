@@ -1,5 +1,6 @@
 use crate::font::blob::{CffFontBlob, OpenTypeFontBlob};
 use crate::font::generated::glyph_names;
+use crate::font::standard_font::select_standard_font;
 use crate::font::{FallbackFontQuery, FontFlags, FontQuery, read_to_unicode, strip_subset_prefix};
 use crate::{CMapResolverFn, CacheKey, FontResolverFn};
 use hayro_cmap::{BfString, CMap, CidFamily, WritingMode};
@@ -34,6 +35,8 @@ pub(crate) struct Type0Font {
     font_flags: Option<FontFlags>,
     /// Whether this font is using a fallback (non-embedded) font.
     fallback: bool,
+    /// Whether this font fell back to a standard font (e.g. Helvetica).
+    is_standard_fallback: bool,
 }
 
 impl Type0Font {
@@ -52,22 +55,29 @@ impl Type0Font {
             .next()?;
         let font_descriptor = descendant_font.get::<Dict<'_>>(FONT_DESC)?;
 
-        let (font_type, fallback) = match FontType::new(&font_descriptor) {
-            Some(ft) => (ft, false),
+        let (font_type, fallback, is_standard_fallback) = match FontType::new(&font_descriptor) {
+            Some(ft) => (ft, false, false),
             None => {
-                let mut query = FallbackFontQuery::new(dict);
-                query.character_collection = cmap.metadata().character_collection.clone();
+                let (query, is_standard) = if let Some(standard) = select_standard_font(dict) {
+                    (FontQuery::Standard(standard), true)
+                } else {
+                    let mut query = FallbackFontQuery::new(dict);
+                    query.character_collection = cmap.metadata().character_collection.clone();
 
-                warn!(
-                    "unable to load CID font {}, attempting fallback",
-                    query.post_script_name.as_deref().unwrap_or("(no name)")
-                );
+                    warn!(
+                        "unable to load CID font {} ({:?}), attempting fallback",
+                        query.post_script_name.as_deref().unwrap_or("(no name)"),
+                        dict.obj_id()
+                    );
 
-                let (data, index) = font_resolver(&FontQuery::Fallback(query))?;
+                    (FontQuery::Fallback(query), false)
+                };
+
+                let (data, index) = font_resolver(&query)?;
                 let blob = OpenTypeFontBlob::new(data.clone(), index)
                     .map(FontType::OpenType)
                     .or_else(|| CffFontBlob::new(data).map(FontType::Cff))?;
-                (blob, true)
+                (blob, true, is_standard)
             }
         };
 
@@ -103,8 +113,11 @@ impl Type0Font {
                 }
             }
 
-            // If we still have no to_unicode, we can't map CIDs to glyphs, so abort.
-            to_unicode.as_ref()?;
+            // If we still have no `ToUnicode` and it's not a standard font, we have no way
+            // of mapping to glyph IDs, so abort.
+            if !is_standard_fallback {
+                to_unicode.as_ref()?;
+            }
         }
 
         let postscript_name = dict
@@ -130,6 +143,7 @@ impl Type0Font {
             postscript_name,
             font_flags,
             fallback,
+            is_standard_fallback,
         })
     }
 
@@ -139,6 +153,16 @@ impl Type0Font {
         };
 
         if self.fallback {
+            // TODO: This is not the best thing to do. It assumes that the font
+            // the query returned has the same glyph order as the original
+            // standard font. If this is not the case, we get garbage glyphs.
+            // The correct way of handling this would be to store a Glyph -> Unicode
+            // map for the standard fonts, and then map via the actual font's
+            // CMAP, as is done for other fallback fonts.
+            if self.is_standard_fallback {
+                return GlyphId::new(code);
+            }
+
             return self.map_code_fallback(cid).unwrap_or(GlyphId::NOTDEF);
         }
 
