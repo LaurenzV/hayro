@@ -1258,6 +1258,7 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn pdfbox_5795() { run_render_test("pdfbox_5795", "downloads/pdfbox/5795.pdf", None); }
 #[test] fn pdfbox_5802() { run_render_test("pdfbox_5802", "downloads/pdfbox/5802.pdf", None); }
 #[test] fn pdfbox_5829() { run_render_test("pdfbox_5829", "downloads/pdfbox/5829.pdf", None); }
+#[test] fn pdfbox_5839() { run_render_test("pdfbox_5839", "downloads/pdfbox/5839.pdf", None); }
 #[test] fn pdfbox_5876() { run_render_test("pdfbox_5876", "downloads/pdfbox/5876.pdf", None); }
 #[test] fn pdfbox_5910() { run_render_test("pdfbox_5910", "downloads/pdfbox/5910.pdf", None); }
 #[test] fn pdfbox_5926() { run_render_test("pdfbox_5926", "downloads/pdfbox/5926.pdf", Some("..=1")); }
