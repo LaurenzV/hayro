@@ -683,11 +683,7 @@
     "last_page": 1
   },
   "5461",
-  {
-    "id": "5463",
-    "ignore": true,
-    "comment": "missing text"
-  },
+  "5463",
   {
     "id": "5464",
     "last_page": 2
@@ -707,7 +703,7 @@
   {
     "id": "5611",
     "ignore": true,
-    "comment": "glyphs dont render, embedded font seems to be invalid"
+    "comment": "not a valid font accroding to skrifa, no outline glyphs"
   },
   "5616",
   "5635",
