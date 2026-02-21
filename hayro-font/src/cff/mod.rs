@@ -154,8 +154,8 @@ impl<'a> Table<'a> {
     pub fn number_of_glyphs(&self) -> u16 {
         self.number_of_glyphs.get()
     }
-    
-    /// Return the matrix that needs to be applied to the glyph to scale it to 
+
+    /// Return the matrix that needs to be applied to the glyph to scale it to
     /// a single font unit.
     pub fn glyph_matrix(&self, glyph_id: GlyphId) -> Matrix {
         // This is a hot mess, as the interaction between top-level matrix and
