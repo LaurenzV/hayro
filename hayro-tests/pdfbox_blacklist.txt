@@ -1,9 +1,3 @@
-# text doesnt render
-4093
-
-# pattern with soft mask, renders wrong
-5250
-
 # transprency group
 5491
 
