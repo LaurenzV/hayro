@@ -10,6 +10,7 @@ pub(crate) struct CharStringParser<'a> {
     pub x: f32,
     pub y: f32,
     pub is_flexing: bool,
+    pub ps_stack: ArgumentsStack<'a>,
 }
 
 impl CharStringParser<'_> {

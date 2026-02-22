@@ -40,6 +40,12 @@ pub(crate) fn parse_char_string(
         max_len: MAX_ARGUMENTS_STACK_LEN,
     };
 
+    let ps_stack = ArgumentsStack {
+        data: &mut [0.0; MAX_ARGUMENTS_STACK_LEN],
+        len: 0,
+        max_len: MAX_ARGUMENTS_STACK_LEN,
+    };
+
     let mut parser = CharStringParser {
         stack,
         builder: &mut inner_builder,
@@ -47,6 +53,7 @@ pub(crate) fn parse_char_string(
         y: 0.0,
         sbx: 0.0,
         is_flexing: false,
+        ps_stack,
     };
     _parse_char_string(&mut ctx, data, 0, &mut parser)?;
 
@@ -216,12 +223,65 @@ fn _parse_char_string(
                         } else if subr_index == 0 && n_args == 3 {
                             p.parse_flex()?;
                             p.is_flexing = false;
+                        } else if (14..=17).contains(&subr_index)
+                            && let Some(wv) = &ctx.params.weight_vector
+                            && wv.len() > 1
+                        {
+                            // Note: Following code was AI-generated, haven't double-checked.
+                            
+                            // MultipleMaster interpolation (base + delta form).
+                            //
+                            // Stack layout: [base0, ..., baseN, d0_m1, d0_m2, ..., d(N-1)_m(M-1)]
+                            // where N = num_points, M = num_designs.
+                            //
+                            // result_i = base_i + sum(delta_i_j * w_j) for j = 1..M-1
+                            let n_results = (subr_index - 13) as usize;
+                            let n_masters = wv.len();
+                            let stack_base = p.stack.len() - n_args as usize;
+                            let mut delta_idx = stack_base + n_results;
+
+                            // Compute blended results.
+                            let mut results = [0.0f32; 4];
+                            for i in 0..n_results {
+                                let mut tmp = p.stack.at(stack_base + i);
+                                for mm in 1..n_masters {
+                                    tmp += p.stack.at(delta_idx) * wv[mm];
+                                    delta_idx += 1;
+                                }
+                                results[i] = tmp;
+                            }
+
+                            // Remove consumed args from charstring stack.
+                            for _ in 0..n_args {
+                                p.stack.pop();
+                            }
+
+                            // Push results to ps_stack in reverse order
+                            // so that POP retrieves result[0] first.
+                            p.ps_stack.clear();
+                            for i in (0..n_results).rev() {
+                                p.ps_stack.push(results[i])?;
+                            }
                         } else {
                             trace!("ignoring call_other_subr with {subr_index}, {n_args}");
+
+                            p.ps_stack.clear();
+                            for _ in 0..n_args {
+                                if p.stack.is_empty() {
+                                    break;
+                                }
+                                let val = p.stack.pop();
+                                p.ps_stack.push(val)?;
+                            }
                         }
                     }
                     tb_operator::POP => {
                         trace_op!("POP");
+
+                        if !p.ps_stack.is_empty() {
+                            let val = p.ps_stack.pop();
+                            p.stack.push(val)?;
+                        }
                     }
                     tb_operator::SET_CURRENT_POINT => {
                         trace_op!("SET_CURRENT_POINT");

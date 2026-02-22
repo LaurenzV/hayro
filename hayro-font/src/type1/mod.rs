@@ -29,6 +29,7 @@ pub(crate) struct Parameters {
     encoding_type: EncodingType,
     subroutines: Map<u32, Vec<u8>>,
     charstrings: Map<String, Vec<u8>>,
+    pub(crate) weight_vector: Option<Vec<f32>>,
 }
 
 impl Default for Parameters {
@@ -38,6 +39,7 @@ impl Default for Parameters {
             encoding_type: EncodingType::Standard,
             subroutines: Map::new(),
             charstrings: Map::new(),
+            weight_vector: None,
         }
     }
 }
@@ -85,6 +87,11 @@ impl Table {
                         ty: matrix[5],
                     };
                 }
+                b"/WeightVector" => {
+                    if let Some(wv) = s.read_float_array() {
+                        params.weight_vector = Some(wv);
+                    }
+                }
                 b"/Encoding" => params.encoding_type = s.read_encoding()?,
                 b"eexec" => {
                     let decrypted = decrypt(s.tail()?, true)?;
@@ -128,11 +135,21 @@ impl Table {
                         len_iv = 0;
                     }
                 }
+                b"/WeightVector" => {
+                    if let Some(wv) = s.read_float_array() {
+                        params.weight_vector = Some(wv);
+                    }
+                }
                 _ => {}
             }
         }
 
         Some(())
+    }
+
+    /// Returns whether this is a MultipleMaster font.
+    pub fn is_multiple_master(&self) -> bool {
+        self.params.weight_vector.is_some()
     }
 
     /// Returns a font transformation matrix.
@@ -521,6 +538,28 @@ impl<'a> Stream<'a> {
         }
 
         None
+    }
+
+    // Note: AI generated, haven't double-checked.
+    fn read_float_array(&mut self) -> Option<Vec<f32>> {
+        let mut entries = Vec::new();
+
+        if self.next_token()? != b"[" {
+            return None;
+        }
+
+        while let Some(token) = self.next_token() {
+            if token == b"]" {
+                break;
+            }
+            if let Ok(s) = core::str::from_utf8(token) {
+                if let Ok(v) = f32::from_str(s) {
+                    entries.push(v);
+                }
+            }
+        }
+
+        Some(entries)
     }
 
     fn read_font_matrix(&mut self) -> Option<[f32; 6]> {
