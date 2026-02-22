@@ -227,7 +227,8 @@ fn _parse_char_string(
                             && let Some(wv) = &ctx.params.weight_vector
                             && wv.len() > 1
                         {
-                            // Note: Following code was AI-generated, haven't double-checked.
+                            // Note: Following code (as well as any code related to
+                            // MM fonts) was AI-generated, haven't double-checked.
 
                             // MultipleMaster interpolation (base + delta form).
                             //
