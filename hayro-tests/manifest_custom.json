@@ -1161,5 +1161,17 @@
   {
     "id": "issue968",
     "file": "pdfs/custom/issue968.pdf"
+  },
+  {
+    "id": "lopdf_issue_449_1",
+    "file": "pdfs/custom/lopdf_issue_449_1.pdf"
+  },
+  {
+    "id": "lopdf_issue_449_2",
+    "file": "pdfs/custom/lopdf_issue_449_2.pdf"
+  },
+  {
+    "id": "text_no_explicit_font",
+    "file": "pdfs/custom/text_no_explicit_font.pdf"
   }
 ]
