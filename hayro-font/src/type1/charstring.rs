@@ -228,7 +228,7 @@ fn _parse_char_string(
                             && wv.len() > 1
                         {
                             // Note: Following code was AI-generated, haven't double-checked.
-                            
+
                             // MultipleMaster interpolation (base + delta form).
                             //
                             // Stack layout: [base0, ..., baseN, d0_m1, d0_m2, ..., d(N-1)_m(M-1)]
