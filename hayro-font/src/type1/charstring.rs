@@ -228,7 +228,8 @@ fn _parse_char_string(
                             && wv.len() > 1
                         {
                             // Note: Following code (as well as any code related to
-                            // MM fonts) was AI-generated, haven't double-checked.
+                            // MM fonts) was AI-generated based on FreeType code, 
+                            // haven't double-checked.
 
                             // MultipleMaster interpolation (base + delta form).
                             //
