@@ -147,7 +147,7 @@ impl Table {
         Some(())
     }
 
-    /// Returns whether this is a MultipleMaster font.
+    /// Returns whether this is a `MultipleMaster` font.
     pub fn is_multiple_master(&self) -> bool {
         self.params.weight_vector.is_some()
     }
@@ -552,10 +552,10 @@ impl<'a> Stream<'a> {
             if token == b"]" {
                 break;
             }
-            if let Ok(s) = core::str::from_utf8(token) {
-                if let Ok(v) = f32::from_str(s) {
-                    entries.push(v);
-                }
+            if let Ok(s) = core::str::from_utf8(token)
+                && let Ok(v) = f32::from_str(s)
+            {
+                entries.push(v);
             }
         }
 

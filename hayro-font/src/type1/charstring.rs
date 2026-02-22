@@ -228,7 +228,7 @@ fn _parse_char_string(
                             && wv.len() > 1
                         {
                             // Note: Following code (as well as any code related to
-                            // MM fonts) was AI-generated based on FreeType code, 
+                            // MM fonts) was AI-generated based on FreeType code,
                             // haven't double-checked.
 
                             // MultipleMaster interpolation (base + delta form).
@@ -238,19 +238,18 @@ fn _parse_char_string(
                             //
                             // result_i = base_i + sum(delta_i_j * w_j) for j = 1..M-1
                             let n_results = (subr_index - 13) as usize;
-                            let n_masters = wv.len();
                             let stack_base = p.stack.len() - n_args as usize;
                             let mut delta_idx = stack_base + n_results;
 
                             // Compute blended results.
-                            let mut results = [0.0f32; 4];
-                            for i in 0..n_results {
+                            let mut results = [0.0_f32; 4];
+                            for (i, result) in results[..n_results].iter_mut().enumerate() {
                                 let mut tmp = p.stack.at(stack_base + i);
-                                for mm in 1..n_masters {
-                                    tmp += p.stack.at(delta_idx) * wv[mm];
+                                for w in &wv[1..] {
+                                    tmp += p.stack.at(delta_idx) * w;
                                     delta_idx += 1;
                                 }
-                                results[i] = tmp;
+                                *result = tmp;
                             }
 
                             // Remove consumed args from charstring stack.
