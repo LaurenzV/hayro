@@ -81,13 +81,33 @@ impl<'a> State<'a> {
 }
 
 #[derive(Clone, Debug)]
+pub(crate) enum TextStateFont<'a> {
+    /// The font in the text state was explicitly set and resolves to a valid
+    /// font.
+    Font(Font<'a>),
+    /// The font was not set or an invalid font was set.
+    Fallback(Font<'a>),
+}
+
+impl<'a> Deref for TextStateFont<'a> {
+    type Target = Font<'a>;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            TextStateFont::Font(f) => f,
+            TextStateFont::Fallback(f) => f,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
 pub(crate) struct TextState<'a> {
     pub(crate) char_space: f32,
     pub(crate) word_space: f32,
     // Note that this stores 1/100 of the actual scaling.
     pub(crate) horizontal_scaling: f32,
     pub(crate) leading: f32,
-    pub(crate) font: Option<Font<'a>>,
+    pub(crate) font: Option<TextStateFont<'a>>,
     pub(crate) font_size: f32,
     pub(crate) rise: f32,
     pub(crate) render_mode: TextRenderingMode,

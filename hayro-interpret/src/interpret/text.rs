@@ -3,6 +3,7 @@ use crate::context::Context;
 use crate::device::Device;
 use crate::font::Glyph;
 use crate::interpret::path::get_paint;
+use crate::interpret::state::TextStateFont;
 use hayro_syntax::object;
 use hayro_syntax::page::Resources;
 use kurbo::Affine;
@@ -21,20 +22,29 @@ pub(crate) fn show_text_string<'a>(
     };
 
     let bytes = text.as_bytes();
+
+    // In case we have a fallback font (which occurs if either no font was set at all
+    // in the content stream, or an invalid one), we only want to show the glyphs
+    // using Helvetica if the bytes are actually valid ASCII.
+    let show_glyphs = matches!(font, TextStateFont::Font(_))
+        || (matches!(font, TextStateFont::Fallback(_)) && bytes.is_ascii());
+
     let mut cur_idx = 0;
 
     while cur_idx < bytes.len() {
         let (code, adv) = font.read_code(bytes, cur_idx);
         cur_idx += adv;
 
-        let (glyph, glyph_transform) = font.get_glyph(
-            font.map_code(code),
-            code,
-            ctx,
-            resources,
-            font.origin_displacement(code),
-        );
-        show_glyph(ctx, device, &glyph, glyph_transform);
+        if show_glyphs {
+            let (glyph, glyph_transform) = font.get_glyph(
+                font.map_code(code),
+                code,
+                ctx,
+                resources,
+                font.origin_displacement(code),
+            );
+            show_glyph(ctx, device, &glyph, glyph_transform);
+        }
 
         ctx.get_mut().text_state.apply_code_advance(code, adv);
     }

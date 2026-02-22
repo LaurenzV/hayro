@@ -6,7 +6,7 @@ use crate::font::{Font, FontData, FontQuery, StandardFont};
 use crate::interpret::path::{
     close_path, fill_path, fill_path_impl, fill_stroke_path, stroke_path,
 };
-use crate::interpret::state::handle_gs;
+use crate::interpret::state::{TextStateFont, handle_gs};
 use crate::interpret::text::TextRenderingMode;
 use crate::pattern::{Pattern, ShadingPattern};
 use crate::shading::Shading;
@@ -539,7 +539,7 @@ pub fn interpret<'a, 'b>(
                 let font = if let Some(font_dict) = resources.get_font(name.clone()) {
                     let cache_key = font_dict.cache_key();
 
-                    context
+                    if let Some(resolved) = context
                         .font_cache
                         .entry(cache_key)
                         .or_insert_with(|| {
@@ -550,22 +550,44 @@ pub fn interpret<'a, 'b>(
                             )
                         })
                         .clone()
+                    {
+                        Some(TextStateFont::Font(resolved))
+                    } else {
+                        Font::new_standard(StandardFont::Helvetica, &context.settings.font_resolver)
+                            .map(TextStateFont::Fallback)
+                    }
                 } else {
-                    warn!(
-                        "font {:?} not found, falling back to Helvetica",
-                        name.as_str()
-                    );
-
                     Font::new_standard(StandardFont::Helvetica, &context.settings.font_resolver)
+                        .map(TextStateFont::Fallback)
                 };
 
                 context.get_mut().text_state.font_size = t.1.as_f32();
                 context.get_mut().text_state.font = font;
             }
             TypedInstruction::ShowText(s) => {
+                if context.get().text_state.font.is_none() {
+                    // Even if no explicit font was set, we try to assume Helvetica. Acrobat
+                    // seems to do the same.
+                    context.get_mut().text_state.font = Font::new_standard(
+                        StandardFont::Helvetica,
+                        &context.settings.font_resolver,
+                    )
+                    .map(TextStateFont::Fallback);
+                }
+
                 text::show_text_string(context, device, resources, s.0);
             }
             TypedInstruction::ShowTexts(s) => {
+                if context.get().text_state.font.is_none() {
+                    // Even if no explicit font was set, we try to assume Helvetica. Acrobat
+                    // seems to do the same.
+                    context.get_mut().text_state.font = Font::new_standard(
+                        StandardFont::Helvetica,
+                        &context.settings.font_resolver,
+                    )
+                    .map(TextStateFont::Fallback);
+                }
+
                 for obj in s.0.iter::<Object<'_>>() {
                     if let Some(adjustment) = obj.clone().into_f32() {
                         context.get_mut().text_state.apply_adjustment(adjustment);
