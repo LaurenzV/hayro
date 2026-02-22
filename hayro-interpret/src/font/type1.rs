@@ -57,9 +57,7 @@ impl Type1Font {
             ))
         };
 
-        let inner = if let Some(standard) = StandardKind::new(dict, resolver) {
-            Self(cache_key, Kind::Standard(standard), to_unicode)
-        } else if is_cff(dict) {
+        let inner = if is_cff(dict) {
             if let Some(cff) = CffKind::new(dict) {
                 Self(cache_key, Kind::Cff(cff), to_unicode)
             } else {
@@ -71,6 +69,8 @@ impl Type1Font {
             } else {
                 return fallback();
             }
+        } else if let Some(standard) = StandardKind::new(dict, resolver) {
+            Self(cache_key, Kind::Standard(standard), to_unicode)
         } else {
             return fallback();
         };
