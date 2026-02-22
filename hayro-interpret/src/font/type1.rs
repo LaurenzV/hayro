@@ -265,6 +265,7 @@ struct Type1Kind {
     widths: Vec<f32>,
     encodings: HashMap<u8, String>,
     glyph_simulator: GlyphSimulator,
+    standard_font: Option<StandardFont>,
 }
 
 impl Type1Kind {
@@ -275,6 +276,7 @@ impl Type1Kind {
 
         let (encoding, encodings) = read_encoding(dict);
         let widths = read_widths(dict, &descriptor)?;
+        let standard_font = select_standard_font(dict);
 
         let glyph_simulator = GlyphSimulator::new();
 
@@ -284,6 +286,7 @@ impl Type1Kind {
             glyph_simulator,
             widths,
             encodings,
+            standard_font,
         })
     }
 
@@ -316,21 +319,27 @@ impl Type1Kind {
         )
     }
 
+    fn code_to_ps_name(&self, code: u8) -> Option<&str> {
+        self.encodings
+            .get(&code)
+            .map(String::as_str)
+            .or_else(|| match self.encoding {
+                Encoding::BuiltIn => self.font.table().code_to_string(code),
+                _ => self.encoding.map_code(code),
+            })
+    }
+
     fn glyph_width(&self, code: u8) -> Option<f32> {
-        self.widths.get(code as usize).copied()
+        self.widths.get(code as usize).copied().or_else(|| {
+            // If font looks like a standard font, get the width from there.
+            let sf = self.standard_font?;
+            self.code_to_ps_name(code)
+                .and_then(|name| sf.get_width(name))
+        })
     }
 
     fn char_code_to_unicode(&self, code: u8) -> Option<char> {
-        let glyph_name = if let Some(entry) = self.encodings.get(&code) {
-            Some(entry.as_str())
-        } else {
-            match self.encoding {
-                Encoding::BuiltIn => self.font.table().code_to_string(code),
-                _ => self.encoding.map_code(code),
-            }
-        };
-
-        glyph_name.and_then(glyph_name_to_unicode)
+        self.code_to_ps_name(code).and_then(glyph_name_to_unicode)
     }
 }
 
@@ -340,6 +349,7 @@ struct CffKind {
     encoding: Encoding,
     widths: Vec<f32>,
     encodings: HashMap<u8, String>,
+    standard_font: Option<StandardFont>,
 }
 
 impl CffKind {
@@ -350,12 +360,14 @@ impl CffKind {
 
         let (encoding, encodings) = read_encoding(dict);
         let widths = read_widths(dict, &descriptor)?;
+        let standard_font = select_standard_font(dict);
 
         Some(Self {
             font,
             encoding,
             widths,
             encodings,
+            standard_font,
         })
     }
 
@@ -384,12 +396,8 @@ impl CffKind {
         self.font.outline_glyph(glyph)
     }
 
-    fn glyph_width(&self, code: u8) -> Option<f32> {
-        self.widths.get(code as usize).copied()
-    }
-
-    fn char_code_to_unicode(&self, code: u8) -> Option<char> {
-        let glyph_name = if let Some(entry) = self.encodings.get(&code) {
+    fn code_to_ps_name(&self, code: u8) -> Option<&str> {
+        if let Some(entry) = self.encodings.get(&code) {
             Some(entry.as_str())
         } else {
             let table = self.font.table();
@@ -397,8 +405,19 @@ impl CffKind {
                 Encoding::BuiltIn => table.glyph_index(code).and_then(|g| table.glyph_name(g)),
                 _ => self.encoding.map_code(code),
             }
-        };
+        }
+    }
 
-        glyph_name.and_then(glyph_name_to_unicode)
+    fn glyph_width(&self, code: u8) -> Option<f32> {
+        self.widths.get(code as usize).copied().or_else(|| {
+            // If font looks like a standard font, get the width from there.
+            let sf = self.standard_font?;
+            self.code_to_ps_name(code)
+                .and_then(|name| sf.get_width(name))
+        })
+    }
+
+    fn char_code_to_unicode(&self, code: u8) -> Option<char> {
+        self.code_to_ps_name(code).and_then(glyph_name_to_unicode)
     }
 }
