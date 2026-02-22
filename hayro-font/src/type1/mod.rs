@@ -93,7 +93,7 @@ impl Table {
                 _ => {}
             }
         }
-        
+
         // Parsing seems to have failed, so reject as invalid.
         if params.charstrings.is_empty() {
             return None;
