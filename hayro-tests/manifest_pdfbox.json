@@ -315,11 +315,7 @@
   "2561",
   "2585",
   "2598",
-  {
-    "id": "2599",
-    "ignore": true,
-    "comment": "non-embedded CID font"
-  },
+  "2599",
   {
     "id": "2607",
     "last_page": 0
