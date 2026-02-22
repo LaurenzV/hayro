@@ -1173,5 +1173,9 @@
   {
     "id": "text_no_explicit_font",
     "file": "pdfs/custom/text_no_explicit_font.pdf"
+  },
+  {
+    "id": "font_mmtype_1",
+    "link": true
   }
 ]

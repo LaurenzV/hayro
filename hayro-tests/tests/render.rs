@@ -286,6 +286,7 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn lopdf_issue_449_1() { run_render_test("lopdf_issue_449_1", "pdfs/custom/lopdf_issue_449_1.pdf", None); }
 #[test] fn lopdf_issue_449_2() { run_render_test("lopdf_issue_449_2", "pdfs/custom/lopdf_issue_449_2.pdf", None); }
 #[test] fn text_no_explicit_font() { run_render_test("text_no_explicit_font", "pdfs/custom/text_no_explicit_font.pdf", None); }
+#[test] fn font_mmtype_1() { run_render_test("font_mmtype_1", "downloads/custom/font_mmtype_1.pdf", None); }
 #[test] fn pdfjs_20130226130259() { run_render_test("pdfjs_20130226130259", "downloads/pdfjs/20130226130259.pdf", Some("0..=0")); }
 #[test] fn pdfjs_ContentStreamNoCycleType3insideType3() { run_render_test("pdfjs_ContentStreamNoCycleType3insideType3", "downloads/pdfjs/ContentStreamNoCycleType3insideType3.pdf", None); }
 #[test] fn pdfjs_High_Pressure_Measurement_WP_001287() { run_render_test("pdfjs_High_Pressure_Measurement_WP_001287", "downloads/pdfjs/High-Pressure-Measurement-WP-001287.pdf", Some("2..=2")); }
@@ -910,6 +911,7 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn pdfbox_905() { run_render_test("pdfbox_905", "downloads/pdfbox/905.pdf", None); }
 #[test] fn pdfbox_907() { run_render_test("pdfbox_907", "downloads/pdfbox/907.pdf", Some("..=0")); }
 #[test] fn pdfbox_918() { run_render_test("pdfbox_918", "downloads/pdfbox/918.pdf", None); }
+#[test] fn pdfbox_921() { run_render_test("pdfbox_921", "downloads/pdfbox/921.pdf", None); }
 #[test] fn pdfbox_994() { run_render_test("pdfbox_994", "downloads/pdfbox/994.pdf", None); }
 #[test] fn pdfbox_1058() { run_render_test("pdfbox_1058", "downloads/pdfbox/1058.pdf", Some("..=1")); }
 #[test] fn pdfbox_1067() { run_render_test("pdfbox_1067", "downloads/pdfbox/1067.pdf", None); }
