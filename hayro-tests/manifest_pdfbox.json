@@ -60,8 +60,7 @@
   "813",
   {
     "id": "833",
-    "ignore": true,
-    "comment": "weird rectangle (maybe conflation artifact?)"
+    "comment": "still has some conflation artifacts"
   },
   "905",
   {
@@ -84,7 +83,6 @@
   "1147",
   {
     "id": "1174",
-    "ignore": true,
     "comment": "non-embedded CID font"
   },
   "1200_1",
@@ -332,7 +330,6 @@
   "2658",
   {
     "id": "2660",
-    "ignore": true,
     "comment": "missing text, maybe annotation?"
   },
   "2681",
