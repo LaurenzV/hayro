@@ -228,10 +228,9 @@ pub(crate) fn select_standard_font(dict: &Dict<'_>) -> Option<StandardFont> {
         | "LiberationSerif-BoldItalic"
         | "NimbusRomNo9L-MediItal" => Some(StandardFont::TimesBoldItalic),
         "Symbol" | "SymbolMT" | "StandardSymL" => Some(StandardFont::Symbol),
-        "ZapfDingbats"
-        | "ZapfDingbatsITCbyBT-Regular"
-        | "ZapfDingbatsITC"
-        | "Dingbats" => Some(StandardFont::ZapfDingBats),
+        "ZapfDingbats" | "ZapfDingbatsITCbyBT-Regular" | "ZapfDingbatsITC" | "Dingbats" => {
+            Some(StandardFont::ZapfDingBats)
+        }
         _ => None,
     }
 }
