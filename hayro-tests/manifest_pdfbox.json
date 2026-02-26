@@ -140,8 +140,7 @@
   "1908",
   {
     "id": "1910",
-    "ignore": true,
-    "comment": "/V 4 encryption with custom dictionary, CID font with built-in encoding"
+    "last_page": 1  
   },
   {
     "id": "1911",

@@ -231,8 +231,7 @@ pub(crate) fn select_standard_font(dict: &Dict<'_>) -> Option<StandardFont> {
         "ZapfDingbats"
         | "ZapfDingbatsITCbyBT-Regular"
         | "ZapfDingbatsITC"
-        | "Dingbats"
-        | "MS-Gothic" => Some(StandardFont::ZapfDingBats),
+        | "Dingbats" => Some(StandardFont::ZapfDingBats),
         _ => None,
     }
 }
