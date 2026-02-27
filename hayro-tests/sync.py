@@ -154,8 +154,6 @@ def collect_entries() -> tuple[list[tuple[dict, str, bool]], int, int]:
     for kind, path, assume_link in MANIFESTS:
         entries = load_manifest(path, assume_link)
         for entry in entries:
-            if entry.get("ignore"):
-                continue
             is_cached = False
             if entry.get("link"):
                 download_total += 1
@@ -276,7 +274,7 @@ def main() -> None:
                     show_label(f"{entry['id']} missing local file", "red")
                     include_entry = False
 
-            if include_entry:
+            if include_entry and not entry.get("ignore"):
                 rust_functions.append(build_test(entry, kind))
 
         clear_label()
