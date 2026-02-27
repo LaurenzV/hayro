@@ -2,7 +2,7 @@ use crate::font::blob::{CffFontBlob, OpenTypeFontBlob};
 use crate::font::generated::glyph_names;
 use crate::font::standard_font::select_standard_font;
 use crate::font::{
-    FallbackFontQuery, FontFlags, FontQuery, StandardFont, read_to_unicode, stretch_glyph,
+    FallbackFontQuery, FontFlags, FontQuery, read_to_unicode, stretch_glyph,
     strip_subset_prefix,
 };
 use crate::{CMapResolverFn, CacheKey, FontResolverFn};
