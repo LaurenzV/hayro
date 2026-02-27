@@ -137,7 +137,7 @@ impl<'a> Iterator for UntypedIter<'a> {
                 // such an operator and then simply skip it.
                 if let Some(object) = self.reader.read_without_context::<Object<'_>>() {
                     self.stack.push(object);
-                } else if let Some(_) = self.reader.read_without_context::<Operator>() {
+                } else if self.reader.read_without_context::<Operator>().is_some() {
                     self.stack.clear();
                 } else {
                     return None;

@@ -88,7 +88,7 @@ impl Skippable for Number {
         }
 
         // See issue 994. Don't accept numbers that are followed by a regular character.
-        if r.peek_byte().is_some_and(|n| is_regular_character(n)) {
+        if r.peek_byte().is_some_and(is_regular_character) {
             return None;
         }
 
