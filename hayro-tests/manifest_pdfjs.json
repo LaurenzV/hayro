@@ -1192,7 +1192,8 @@
   },
   {
     "id": "issue5801",
-    "ignore": true
+    "ignore": true,
+    "comment": "Uses non-embedded ArialBlack font, some characters are wrong"
   },
   {
     "id": "issue5946"
