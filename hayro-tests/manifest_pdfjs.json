@@ -1323,10 +1323,7 @@
   {
     "id": "issue2391-1"
   },
-  {
-    "id": "issue3521",
-    "ignore": true
-  },
+  "issue3521",
   {
     "id": "issue16432",
     "last_page": 0

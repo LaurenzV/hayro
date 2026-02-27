@@ -886,6 +886,7 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn pdfjs_issue15784() { run_render_test("pdfjs_issue15784", "downloads/pdfjs/issue15784.pdf", None); }
 #[test] fn pdfjs_issue11144_reduced() { run_render_test("pdfjs_issue11144_reduced", "downloads/pdfjs/issue11144_reduced.pdf", None); }
 #[test] fn pdfjs_issue2391_1() { run_render_test("pdfjs_issue2391_1", "downloads/pdfjs/issue2391-1.pdf", None); }
+#[test] fn pdfjs_issue3521() { run_render_test("pdfjs_issue3521", "downloads/pdfjs/issue3521.pdf", None); }
 #[test] fn pdfjs_issue16432() { run_render_test("pdfjs_issue16432", "downloads/pdfjs/issue16432.pdf", Some("..=0")); }
 #[test] fn pdfjs_issue16464() { run_render_test("pdfjs_issue16464", "downloads/pdfjs/issue16464.pdf", Some("..=0")); }
 #[test] fn pdfjs_issue18801() { run_render_test("pdfjs_issue18801", "downloads/pdfjs/issue18801.pdf", Some("..=0")); }
