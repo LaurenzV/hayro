@@ -56,7 +56,7 @@ pub(crate) fn strip_subset_prefix(name: &str) -> &str {
 }
 
 use crate::util::hash128;
-use hayro_cmap::{BfString, CMap, CharacterCollection};
+use hayro_cmap::{BfString, CMap, CMapName, CharacterCollection};
 pub use outline::OutlineFontData;
 pub use standard_font::StandardFont;
 
@@ -639,6 +639,13 @@ pub(crate) fn unicode_from_name(name: &str) -> Option<char> {
 pub(crate) fn read_to_unicode(dict: &Dict<'_>, cmap_resolver: &CMapResolverFn) -> Option<CMap> {
     dict.get::<Stream<'_>>(TO_UNICODE)
         .and_then(|s| s.decoded().ok())
+        // See PDFJS-11915, where `Identity-H` is used for `ToUnicode`. I don't
+        // believe it's valid, but at least mupdf seems to be able to deal with it.
+        .or_else(|| {
+            dict.get::<Name>(TO_UNICODE)
+                .and_then(|name| (cmap_resolver)(CMapName::from_bytes(name.as_ref())))
+                .map(|d| d.to_vec())
+        })
         .and_then(|data| {
             let cmap_resolver = cmap_resolver.clone();
             CMap::parse(&data, move |name| (cmap_resolver)(name))
