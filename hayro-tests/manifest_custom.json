@@ -1177,5 +1177,9 @@
   {
     "id": "font_mmtype_1",
     "link": true
+  },
+  {
+    "id": "issue994",
+    "file": "pdfs/custom/issue994.pdf"
   }
 ]

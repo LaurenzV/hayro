@@ -128,8 +128,20 @@ impl<'a> Iterator for UntypedIter<'a> {
                 self.reader.peek_byte()?,
                 b'/' | b'.' | b'+' | b'-' | b'0'..=b'9' | b'[' | b'<' | b'('
             ) {
-                self.stack
-                    .push(self.reader.read_without_context::<Object<'_>>()?);
+                // See issue 994. In all sane scenarios, if the next byte is a number
+                // it has to be an operand (a number). However, it's possible that
+                // the number is followed by a regular character, in which case it
+                // should behave more like an operator (even though there exists
+                // no operator that starts with a number). In order to preserve
+                // similar behavior to Acrobat and Chromium, we try to consume
+                // such an operator and then simply skip it.
+                if let Some(object) = self.reader.read_without_context::<Object<'_>>() {
+                    self.stack.push(object);
+                } else if let Some(_) = self.reader.read_without_context::<Operator>() {
+                    self.stack.clear();
+                } else {
+                    return None;
+                }
             } else {
                 let operator = match self.reader.read_without_context::<Operator>() {
                     Some(o) => o,

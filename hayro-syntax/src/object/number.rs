@@ -5,7 +5,7 @@ use crate::object::macros::object;
 use crate::object::{Object, ObjectLike};
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
-use crate::trivia::is_white_space_character;
+use crate::trivia::{is_regular_character, is_white_space_character};
 use core::fmt::Debug;
 use core::str::FromStr;
 use log::debug;
@@ -85,6 +85,11 @@ impl Skippable for Number {
             // text string operand, requiring us to allow '<' and '(' as well.
             b if has_sign && (is_white_space_character(b) || matches!(b, b'(' | b'<')) => {}
             _ => return None,
+        }
+
+        // See issue 994. Don't accept numbers that are followed by a regular character.
+        if r.peek_byte().is_some_and(|n| is_regular_character(n)) {
+            return None;
         }
 
         Some(())
