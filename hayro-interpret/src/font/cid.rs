@@ -1,7 +1,10 @@
 use crate::font::blob::{CffFontBlob, OpenTypeFontBlob};
 use crate::font::generated::glyph_names;
 use crate::font::standard_font::select_standard_font;
-use crate::font::{FallbackFontQuery, FontFlags, FontQuery, read_to_unicode, strip_subset_prefix};
+use crate::font::{
+    FallbackFontQuery, FontFlags, FontQuery, StandardFont, read_to_unicode, stretch_glyph,
+    strip_subset_prefix,
+};
 use crate::{CMapResolverFn, CacheKey, FontResolverFn};
 use hayro_cmap::{BfString, CMap, CidFamily, WritingMode};
 use hayro_syntax::object::Dict;
@@ -230,11 +233,24 @@ impl Type0Font {
         None
     }
 
-    pub(crate) fn outline_glyph(&self, glyph: GlyphId) -> BezPath {
-        match &self.font_type {
+    pub(crate) fn outline_glyph(&self, glyph: GlyphId, code: u32) -> BezPath {
+        let path = match &self.font_type {
             FontType::OpenType(t) => t.outline_glyph(glyph),
             FontType::Cff(c) => c.outline_glyph(glyph),
+        };
+
+        if self.fallback
+            && let FontType::OpenType(t) = &self.font_type
+            && let Some(cid) = self.code_to_cid(code)
+            && let Some(actual_width) = t.glyph_metrics().advance_width(glyph)
+            // Only use an expected width if there is an explicit /W array,
+            // not the default width, as it leads to weird results from my testing.
+            && let Some(expected_width) = self.widths.get(&cid).copied()
+        {
+            return stretch_glyph(path, expected_width, actual_width);
         }
+
+        path
     }
 
     pub(crate) fn font_data(&self) -> crate::font::FontData {

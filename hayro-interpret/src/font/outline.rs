@@ -123,11 +123,11 @@ impl CacheKey for OutlineFont {
 }
 
 impl OutlineFont {
-    pub(crate) fn outline_glyph(&self, glyph: GlyphId) -> BezPath {
+    pub(crate) fn outline_glyph(&self, glyph: GlyphId, code: u32) -> BezPath {
         match self {
             Self::Type1(t) => t.outline_glyph(glyph),
             Self::TrueType(t) => t.outline_glyph(glyph),
-            Self::Type0(t) => t.outline_glyph(glyph),
+            Self::Type0(t) => t.outline_glyph(glyph, code),
         }
     }
 

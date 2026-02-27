@@ -40,6 +40,15 @@ pub(crate) mod type3;
 
 pub(crate) const UNITS_PER_EM: f32 = 1000.0;
 
+pub(crate) fn stretch_glyph(path: BezPath, expected_width: f32, actual_width: f32) -> BezPath {
+    if actual_width != 0.0 && actual_width != expected_width {
+        let stretch_factor = expected_width / actual_width;
+        Affine::scale_non_uniform(stretch_factor as f64, 1.0) * path
+    } else {
+        path
+    }
+}
+
 /// A container for the bytes of a PDF file.
 pub type FontData = Arc<dyn AsRef<[u8]> + Send + Sync>;
 
@@ -122,7 +131,7 @@ pub struct OutlineGlyph {
 impl OutlineGlyph {
     /// Return the outline of the glyph, assuming an upem value of 1000.
     pub fn outline(&self) -> BezPath {
-        self.font.outline_glyph(self.id)
+        self.font.outline_glyph(self.id, self.char_code)
     }
 
     /// Return the identifier of the glyph. You can use this to calculate the cache key

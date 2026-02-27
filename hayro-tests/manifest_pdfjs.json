@@ -1250,16 +1250,9 @@
     "id": "issue11088",
     "last_page": 0
   },
-  {
-    "id": "issue11555"
-  },
-  {
-    "id": "issue11915",
-    "ignore": true
-  },
-  {
-    "id": "issue13343"
-  },
+  "issue11555",
+  "issue11915",
+  "issue13343",
   {
     "id": "issue13916",
     "ignore": true

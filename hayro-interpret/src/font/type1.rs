@@ -5,14 +5,14 @@ use crate::font::standard_font::{StandardFont, StandardFontBlob, select_standard
 use crate::font::true_type::{read_encoding, read_widths};
 use crate::font::{
     Encoding, FallbackFontQuery, FontQuery, glyph_name_to_unicode, normalized_glyph_name,
-    read_to_unicode,
+    read_to_unicode, stretch_glyph,
 };
 use crate::{CMapResolverFn, CacheKey, FontResolverFn};
 use hayro_cmap::{BfString, CMap};
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::{FONT_DESC, FONT_FILE, FONT_FILE3};
-use kurbo::{Affine, BezPath};
+use kurbo::BezPath;
 use log::warn;
 use skrifa::GlyphId;
 use std::cell::RefCell;
@@ -224,11 +224,8 @@ impl StandardKind {
             && let Some(actual_width) = self
                 .code_to_ps_name(code)
                 .and_then(|name| self.base_font.get_width(name))
-            && actual_width != 0.0
         {
-            let stretch_factor = should_width / actual_width;
-
-            return Affine::scale_non_uniform(stretch_factor as f64, 1.0) * path;
+            return stretch_glyph(path, should_width, actual_width);
         }
 
         path
