@@ -1,3 +1,4 @@
+use crate::FillRule;
 use crate::color::ColorSpace;
 use crate::context::Context;
 use crate::convert::{convert_line_cap, convert_line_join};
@@ -14,7 +15,6 @@ use crate::util::{OptionLog, RectExt};
 use crate::x_object::{
     FormXObject, ImageXObject, XObject, draw_form_xobject, draw_image_xobject, draw_xobject,
 };
-use crate::FillRule;
 use hayro_syntax::content::ops::TypedInstruction;
 use hayro_syntax::object::dict::keys::{ANNOTS, AP, F, MCID, N, OC, RECT};
 use hayro_syntax::object::{Array, Dict, Object, Rect, Stream, dict_or_stream};
