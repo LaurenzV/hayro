@@ -233,7 +233,6 @@ impl Type1Kind {
                 let sf = self.standard_font?;
                 self.code_to_ps_name(code)
                     .and_then(|name| sf.get_width(name))
-                    .or(Some(self.missing_width))
             }
         }
     }
