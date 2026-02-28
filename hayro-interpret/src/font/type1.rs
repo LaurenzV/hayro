@@ -228,6 +228,7 @@ impl Type1Kind {
     fn glyph_width(&self, code: u8) -> Option<f32> {
         match self.widths.get(code as usize).copied() {
             Some(Width::Value(w)) => Some(w),
+            Some(Width::Missing) => Some(self.missing_width),
             _ => {
                 // If font looks like a standard font, get the width from there.
                 let sf = self.standard_font?;
