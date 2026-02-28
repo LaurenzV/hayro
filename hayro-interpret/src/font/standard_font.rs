@@ -438,21 +438,37 @@ impl StandardKind {
     pub(crate) fn outline_glyph(&self, glyph: GlyphId) -> BezPath {
         let path = self.base_font_blob.outline_glyph(glyph);
 
-        // If the font was not embedded in the file and we are using a standard font as a substitute,
-        // we stretch the glyph so it matches the width of the standard font.
-        if self.fallback
-            && let Some(code) = self.glyph_to_code.borrow().get(&glyph).copied()
-            // Only apply glyph stretching if the width was specified explicitly (and don't use
-            // missing width), otherwise yields some weird results in some of the tests.
-            && let Some(Width::Value(should_width)) = self.widths.get(code as usize).copied()
-            && let Some(actual_width) = self
-                .base_font_blob
-                .advance_width(glyph)
-                .or_else(|| {
-                    self.code_to_ps_name(code)
-                        .and_then(|name| self.base_font.get_width(name))
-                })
+        // If the font is not embedded, we might need to stretch it so that
+        // it matches the metrics of the actual underlying font blob.
+
+        if let Some(code) = self.glyph_to_code.borrow().get(&glyph).copied()
+            && let Some(actual_width) = self.base_font_blob.advance_width(glyph).or_else(|| {
+                self.code_to_ps_name(code)
+                    .and_then(|name| self.base_font.get_width(name))
+            })
         {
+            // From my experiments: Most PDF viewers, if they detect a font is a
+            // standard font, they completely ignore the widths array, even if
+            // different widths are indicated there. So only if it's an unknown
+            // font do we check the widths array. Otherwise, we always use the
+            // base font metrics.
+            let should_width = if self.fallback {
+                if let Some(Width::Value(w)) = self.widths.get(code as usize).copied() {
+                    w
+                } else {
+                    return path;
+                }
+            } else {
+                if let Some(w) = self
+                    .code_to_ps_name(code)
+                    .and_then(|name| self.base_font.get_width(name))
+                {
+                    w
+                } else {
+                    return path;
+                }
+            };
+
             return stretch_glyph(path, should_width, actual_width);
         }
 
