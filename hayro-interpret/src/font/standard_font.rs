@@ -336,6 +336,13 @@ impl StandardFontBlob {
         }
     }
 
+    pub(crate) fn advance_width(&self, glyph: GlyphId) -> Option<f32> {
+        match self {
+            Self::Cff(_) => None,
+            Self::Otf(blob, _) => blob.glyph_metrics().advance_width(glyph),
+        }
+    }
+
     pub(crate) fn outline_glyph(&self, glyph: GlyphId) -> BezPath {
         // Standard fonts have empty outlines for these, but in Liberation Sans
         // they are a .notdef rectangle.
@@ -439,8 +446,12 @@ impl StandardKind {
             // missing width), otherwise yields some weird results in some of the tests.
             && let Some(Width::Value(should_width)) = self.widths.get(code as usize).copied()
             && let Some(actual_width) = self
-                .code_to_ps_name(code)
-                .and_then(|name| self.base_font.get_width(name))
+                .base_font_blob
+                .advance_width(glyph)
+                .or_else(|| {
+                    self.code_to_ps_name(code)
+                        .and_then(|name| self.base_font.get_width(name))
+                })
         {
             return stretch_glyph(path, should_width, actual_width);
         }
