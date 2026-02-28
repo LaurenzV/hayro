@@ -1181,5 +1181,9 @@
   {
     "id": "issue994",
     "file": "pdfs/custom/issue994.pdf"
+  },
+  {
+    "id": "font_standard_widths_array",
+    "file": "pdfs/custom/font_standard_widths_array.pdf"
   }
 ]
