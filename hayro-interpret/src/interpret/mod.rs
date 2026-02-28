@@ -470,14 +470,27 @@ pub fn interpret<'a, 'b>(
 
                 let mcid = dict_or_stream(&bdc.1).and_then(|(props, _)| props.get::<i32>(MCID));
 
-                if let Some(name) = bdc.1.clone().into_name()
-                    && let Some(ocg_ref) = resources.properties.get_ref(name.clone())
-                {
-                    context.ocg_state.begin_ocg(ocg_ref.into());
-                } else if let Some((props, _)) = dict_or_stream(&bdc.1)
-                    && let Some(oc_ref) = props.get_ref(OC)
-                {
-                    context.ocg_state.begin_ocg(oc_ref.into());
+                let oc = bdc
+                    .1
+                    .clone()
+                    .into_name()
+                    .and_then(|name| {
+                        let r = resources.properties.get_ref(name.clone())?;
+                        let d = resources
+                            .properties
+                            .get::<Dict<'_>>(name)
+                            .unwrap_or_default();
+                        Some((d, r))
+                    })
+                    .or_else(|| {
+                        let (props, _) = dict_or_stream(&bdc.1)?;
+                        let r = props.get_ref(OC)?;
+                        let d = props.get::<Dict<'_>>(OC).unwrap_or_default();
+                        Some((d, r))
+                    });
+
+                if let Some((dict, oc_ref)) = oc {
+                    context.ocg_state.begin_ocg(&dict, oc_ref.into());
                 } else {
                     context.ocg_state.begin_marked_content();
                 }

@@ -1,4 +1,4 @@
-use hayro_syntax::object::dict::keys::{BASE_STATE, D, OCGS, OCPROPERTIES, OFF, ON};
+use hayro_syntax::object::dict::keys::{BASE_STATE, D, OCGS, OCMD, OCPROPERTIES, OFF, ON, P, TYPE};
 use hayro_syntax::object::{Array, Dict, Name, ObjectIdentifier};
 use std::collections::HashSet;
 
@@ -65,10 +65,50 @@ impl OcgState {
         }
     }
 
-    pub(crate) fn begin_ocg(&mut self, ocg_id: ObjectIdentifier) {
+    pub(crate) fn begin_single_oc(&mut self, ocg_id: ObjectIdentifier) {
         let is_active = !self.inactive_ocgs.contains(&ocg_id);
         let visible = self.is_visible() && is_active;
         self.visibility_stack.push(visible);
+    }
+
+    pub(crate) fn begin_ocmd(&mut self, ocmd: &Dict<'_>) {
+        let policy = ocmd
+            .get::<Name>(P)
+            .and_then(|n| OcmdPolicy::from_name(n.as_ref()))
+            .unwrap_or(OcmdPolicy::AnyOn);
+
+        let mut ocg_ids: Vec<ObjectIdentifier> = Vec::new();
+
+        if let Some(arr) = ocmd.get::<Array<'_>>(OCGS) {
+            for item in arr.raw_iter() {
+                if let Some(ref_) = item.as_obj_ref() {
+                    ocg_ids.push(ref_.into());
+                }
+            }
+        } else if let Some(ref_) = ocmd.get_ref(OCGS) {
+            ocg_ids.push(ref_.into());
+        }
+
+        let is_active = if ocg_ids.is_empty() {
+            true
+        } else {
+            match policy {
+                OcmdPolicy::AllOn => ocg_ids.iter().all(|id| !self.inactive_ocgs.contains(id)),
+                OcmdPolicy::AnyOn => ocg_ids.iter().any(|id| !self.inactive_ocgs.contains(id)),
+                OcmdPolicy::AnyOff => ocg_ids.iter().any(|id| self.inactive_ocgs.contains(id)),
+                OcmdPolicy::AllOff => ocg_ids.iter().all(|id| self.inactive_ocgs.contains(id)),
+            }
+        };
+
+        let visible = self.is_visible() && is_active;
+        self.visibility_stack.push(visible);
+    }
+
+    pub(crate) fn begin_ocg(&mut self, props: &Dict<'_>, ref_id: ObjectIdentifier) {
+        match props.get::<Name>(TYPE).as_deref() {
+            Some(OCMD) => self.begin_ocmd(props),
+            _ => self.begin_single_oc(ref_id),
+        }
     }
 
     pub(crate) fn begin_marked_content(&mut self) {
@@ -104,6 +144,26 @@ impl BaseState {
             b"ON" => Some(Self::On),
             b"OFF" => Some(Self::Off),
             b"Unchanged" => Some(Self::Unchanged),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+enum OcmdPolicy {
+    AllOn,
+    AnyOn,
+    AnyOff,
+    AllOff,
+}
+
+impl OcmdPolicy {
+    fn from_name(name: &[u8]) -> Option<Self> {
+        match name {
+            b"AllOn" => Some(Self::AllOn),
+            b"AnyOn" => Some(Self::AnyOn),
+            b"AnyOff" => Some(Self::AnyOff),
+            b"AllOff" => Some(Self::AllOff),
             _ => None,
         }
     }

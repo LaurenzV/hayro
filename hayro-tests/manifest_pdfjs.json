@@ -1594,11 +1594,7 @@
     "ignore": true,
     "comment": "text should be bold but isnt"
   },
-  {
-    "id": "issue269_2",
-    "ignore": true,
-    "comment": "optional content groups"
-  },
+  "issue269_2",
   {
     "id": "issue6132",
     "ignore": true,
