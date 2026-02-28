@@ -1379,20 +1379,16 @@
   {
     "id": "bug1365930",
     "ignore": true,
-    "comment": "investigate"
+    "comment": "non-embedded font Impact"
   },
   {
     "id": "bug1354114",
-    "first_page": 29,
-    "ignore": true,
-    "comment": "investigate"
+    "first_page": 29
   },
   {
     "id": "bug1443140",
     "first_page": 3,
-    "last_page": 3,
-    "ignore": true,
-    "comment": "investigate"
+    "last_page": 3
   },
   {
     "id": "bug1652224",
@@ -1409,9 +1405,7 @@
     "comment": "investigate"
   },
   {
-    "id": "bug1671312_reduced",
-    "ignore": true,
-    "comment": "investigate"
+    "id": "bug1671312_reduced"
   },
   {
     "id": "p020121130574743273239",
@@ -1422,34 +1416,25 @@
   },
   {
     "id": "bug1782186",
-    "password": "Hello",
-    "comment": "password-protected"
+    "password": "Hello"
   },
   {
     "id": "issue15893_reduced",
-    "password": "test",
-    "comment": "password-protected"
+    "password": "test"
   },
   {
     "id": "issue3371",
-    "password": "ELXRTQWS",
-    "comment": "password-protected"
+    "password": "ELXRTQWS"
   },
   {
     "id": "issue6010_1",
-    "password": "abc",
-    "comment": "password-protected"
+    "password": "abc"
   },
   {
     "id": "issue6010_2",
-    "password": "\u00e6\u00f8\u00e5",
-    "comment": "password-protected (UTF-8 æøå)"
+    "password": "\u00e6\u00f8\u00e5"
   },
-  {
-    "id": "bug1250079",
-    "ignore": true,
-    "comment": "trailer dict is cut off"
-  },
+  "bug1250079",
   {
     "id": "issue15577",
     "last_page": 0,
@@ -1635,11 +1620,7 @@
     "id": "issue4630",
     "comment": "weirdly spaced text"
   },
-  {
-    "id": "extgstate",
-    "ignore": true,
-    "comment": "wrong handling of extgstate text"
-  },
+  "extgstate",
   {
     "id": "issue10717",
     "first_page": 0,

@@ -10,7 +10,7 @@ use crate::soft_mask::SoftMask;
 use crate::types::BlendMode;
 use crate::util::OptionLog;
 use hayro_syntax::content::ops::{LineCap, LineJoin};
-use hayro_syntax::object::dict::keys::{SMASK, TR, TR2};
+use hayro_syntax::object::dict::keys::{FONT, SMASK, TR, TR2};
 use hayro_syntax::object::{Array, Dict, Name, Number, Object};
 use hayro_syntax::page::Resources;
 use kurbo::{Affine, BezPath, Vec2};
@@ -352,6 +352,29 @@ pub(crate) fn handle_gs_single<'a>(
 
             warn!("unknown blend mode, defaulting to Normal");
             context.get_mut().graphics_state.blend_mode = BlendMode::Normal;
+        }
+        "Font" => {
+            let arr = dict.get::<Array<'_>>(FONT)?;
+            let mut iter = arr.iter::<Object<'_>>();
+            let font_dict = iter.next()?.into_dict()?;
+            let size = iter.next()?.into_number()?.as_f32();
+
+            let font = context.resolve_font(&font_dict);
+            context.get_mut().text_state.font_size = size;
+            context.get_mut().text_state.font = font;
+        }
+        "D" => {
+            let arr = dict.get::<Array<'_>>(key)?;
+            let mut iter = arr.iter::<Object<'_>>();
+            let dash_array = iter.next()?.into_array()?;
+            let dash_phase = iter.next()?.into_number()?.as_f32();
+
+            context.get_mut().graphics_state.stroke_props.dash_offset = dash_phase;
+            context.get_mut().graphics_state.stroke_props.dash_array = dash_array
+                .iter::<f32>()
+                // kurbo apparently cannot properly deal with offsets that are exactly 0.
+                .map(|n| if n == 0.0 { 0.01 } else { n })
+                .collect();
         }
         "Type" => {}
         _ => {}

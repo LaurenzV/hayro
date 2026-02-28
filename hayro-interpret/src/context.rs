@@ -1,8 +1,8 @@
 use crate::cache::{Cache, CacheKey};
 use crate::color::ColorSpace;
 use crate::convert::convert_transform;
-use crate::font::Font;
-use crate::interpret::state::{ClipType, State};
+use crate::font::{Font, StandardFont};
+use crate::interpret::state::{ClipType, State, TextStateFont};
 use crate::ocg::OcgState;
 use crate::util::Float64Ext;
 use crate::{ClipPath, Device, FillRule, InterpreterSettings, StrokeProps};
@@ -249,6 +249,28 @@ impl<'a> Context<'a> {
 
     pub(crate) fn num_states(&self) -> usize {
         self.states.len()
+    }
+
+    pub(crate) fn resolve_font(&mut self, font_dict: &Dict<'a>) -> Option<TextStateFont<'a>> {
+        let cache_key = font_dict.cache_key();
+
+        if let Some(resolved) = self
+            .font_cache
+            .entry(cache_key)
+            .or_insert_with(|| {
+                Font::new(
+                    font_dict,
+                    &self.settings.font_resolver,
+                    &self.settings.cmap_resolver,
+                )
+            })
+            .clone()
+        {
+            Some(TextStateFont::Font(resolved))
+        } else {
+            Font::new_standard(StandardFont::Helvetica, &self.settings.font_resolver)
+                .map(TextStateFont::Fallback)
+        }
     }
 }
 

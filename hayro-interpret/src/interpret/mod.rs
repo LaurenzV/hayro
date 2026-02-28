@@ -14,7 +14,7 @@ use crate::util::{OptionLog, RectExt};
 use crate::x_object::{
     FormXObject, ImageXObject, XObject, draw_form_xobject, draw_image_xobject, draw_xobject,
 };
-use crate::{CacheKey, FillRule};
+use crate::FillRule;
 use hayro_syntax::content::ops::TypedInstruction;
 use hayro_syntax::object::dict::keys::{ANNOTS, AP, F, MCID, N, OC, RECT};
 use hayro_syntax::object::{Array, Dict, Object, Rect, Stream, dict_or_stream};
@@ -537,25 +537,7 @@ pub fn interpret<'a, 'b>(
                 // (for whatever reason), leave it as `None`. Better showing no
                 // text at all than garbage text.
                 let font = if let Some(font_dict) = resources.get_font(name.clone()) {
-                    let cache_key = font_dict.cache_key();
-
-                    if let Some(resolved) = context
-                        .font_cache
-                        .entry(cache_key)
-                        .or_insert_with(|| {
-                            Font::new(
-                                &font_dict,
-                                &context.settings.font_resolver,
-                                &context.settings.cmap_resolver,
-                            )
-                        })
-                        .clone()
-                    {
-                        Some(TextStateFont::Font(resolved))
-                    } else {
-                        Font::new_standard(StandardFont::Helvetica, &context.settings.font_resolver)
-                            .map(TextStateFont::Fallback)
-                    }
+                    context.resolve_font(&font_dict)
                 } else {
                     Font::new_standard(StandardFont::Helvetica, &context.settings.font_resolver)
                         .map(TextStateFont::Fallback)
