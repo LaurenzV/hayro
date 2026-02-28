@@ -38,8 +38,8 @@ pub(crate) struct Type0Font {
     font_flags: Option<FontFlags>,
     /// Whether this font is using a fallback (non-embedded) font.
     fallback: bool,
-    /// Whether the `to_unicode` map is a UCS2 CMap (CID-indexed) rather than
-    /// a ToUnicode CMap (code-indexed).
+    /// Whether the `to_unicode` map is a UCS2 `CMap` (CID-indexed) rather than
+    /// a `ToUnicode` `CMap` (code-indexed).
     to_unicode_is_cid_indexed: bool,
 }
 
