@@ -1,7 +1,7 @@
 use crate::FontResolverFn;
 use crate::font::blob::{CffFontBlob, OpenTypeFontBlob};
 use crate::font::generated::{glyph_names, metrics, standard, symbol, zapf_dings};
-use crate::font::true_type::{read_encoding, read_widths};
+use crate::font::true_type::{Width, read_encoding, read_widths};
 use crate::font::{
     Encoding, FontData, FontQuery, glyph_name_to_unicode, normalized_glyph_name, stretch_glyph,
     strip_subset_prefix,
@@ -355,7 +355,8 @@ pub(crate) struct StandardKind {
     base_font: StandardFont,
     base_font_blob: StandardFontBlob,
     encoding: Encoding,
-    widths: Vec<f32>,
+    widths: Vec<Width>,
+    missing_width: f32,
     fallback: bool,
     glyph_to_code: RefCell<HashMap<GlyphId, u8>>,
     encodings: HashMap<u8, String>,
@@ -373,7 +374,7 @@ impl StandardKind {
         resolver: &FontResolverFn,
     ) -> Option<Self> {
         let descriptor = dict.get::<Dict<'_>>(FONT_DESC).unwrap_or_default();
-        let widths = read_widths(dict, &descriptor)?;
+        let (widths, missing_width) = read_widths(dict, &descriptor)?;
 
         let (mut encoding, encoding_map) = read_encoding(dict);
 
@@ -389,6 +390,7 @@ impl StandardKind {
             base_font,
             base_font_blob,
             widths,
+            missing_width,
             encodings: encoding_map,
             glyph_to_code: RefCell::new(HashMap::new()),
             fallback,
@@ -433,7 +435,9 @@ impl StandardKind {
         // we stretch the glyph so it matches the width of the standard font.
         if self.fallback
             && let Some(code) = self.glyph_to_code.borrow().get(&glyph).copied()
-            && let Some(should_width) = self.widths.get(code as usize).copied()
+            // Only apply glyph stretching if the width was specified explicitly (and don't use
+            // missing width), otherwise yields some weird results in some of the tests.
+            && let Some(Width::Value(should_width)) = self.widths.get(code as usize).copied()
             && let Some(actual_width) = self
                 .code_to_ps_name(code)
                 .and_then(|name| self.base_font.get_width(name))
@@ -445,10 +449,13 @@ impl StandardKind {
     }
 
     pub(crate) fn glyph_width(&self, code: u8) -> Option<f32> {
-        self.widths.get(code as usize).copied().or_else(|| {
-            self.code_to_ps_name(code)
-                .and_then(|c| self.base_font.get_width(c))
-        })
+        match self.widths.get(code as usize).copied() {
+            Some(Width::Value(w)) => Some(w),
+            Some(Width::Missing) => Some(self.missing_width),
+            None => self
+                .code_to_ps_name(code)
+                .and_then(|c| self.base_font.get_width(c)),
+        }
     }
 
     pub(crate) fn char_code_to_unicode(&self, code: u8) -> Option<char> {

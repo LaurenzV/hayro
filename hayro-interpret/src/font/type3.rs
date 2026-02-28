@@ -2,7 +2,7 @@ use crate::CMapResolverFn;
 use crate::context::Context;
 use crate::device::Device;
 use crate::font::glyph_simulator::GlyphSimulator;
-use crate::font::true_type::{read_encoding, read_widths};
+use crate::font::true_type::{Width, read_encoding, read_widths};
 use crate::font::{Encoding, Glyph, Type3Glyph, UNITS_PER_EM, read_to_unicode};
 use crate::interpret::state::TextState;
 use crate::soft_mask::SoftMask;
@@ -23,7 +23,8 @@ use std::collections::HashMap;
 
 #[derive(Debug)]
 pub(crate) struct Type3<'a> {
-    widths: Vec<f32>,
+    widths: Vec<Width>,
+    missing_width: f32,
     encoding: Encoding,
     encodings: HashMap<u8, String>,
     dict: Dict<'a>,
@@ -37,7 +38,7 @@ pub(crate) struct Type3<'a> {
 impl<'a> Type3<'a> {
     pub(crate) fn new(dict: &Dict<'a>, cmap_resolver: &CMapResolverFn) -> Option<Self> {
         let (encoding, encodings) = read_encoding(dict);
-        let widths = read_widths(dict, dict)?;
+        let (widths, missing_width) = read_widths(dict, dict)?;
         let font_bbox = dict
             .get::<hayro_syntax::object::Rect>(FONT_BBOX)
             .unwrap_or(hayro_syntax::object::Rect::ZERO)
@@ -69,6 +70,7 @@ impl<'a> Type3<'a> {
             font_bbox,
             char_procs,
             widths,
+            missing_width,
             encodings,
             matrix,
             dict: dict.clone(),
@@ -86,8 +88,11 @@ impl<'a> Type3<'a> {
     }
 
     pub(crate) fn glyph_width(&self, code: u8) -> f32 {
-        (*self.widths.get(code as usize).unwrap_or(&0.0) * self.matrix.as_coeffs()[0] as f32)
-            * UNITS_PER_EM
+        let w = match self.widths.get(code as usize).copied() {
+            Some(Width::Value(w)) => w,
+            _ => self.missing_width,
+        };
+        (w * self.matrix.as_coeffs()[0] as f32) * UNITS_PER_EM
     }
 
     pub(crate) fn char_code_to_unicode(&self, char_code: u32) -> Option<BfString> {

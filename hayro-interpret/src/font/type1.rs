@@ -1,7 +1,7 @@
 use crate::font::blob::{CffFontBlob, Type1FontBlob};
 use crate::font::glyph_simulator::GlyphSimulator;
 use crate::font::standard_font::{StandardFont, StandardKind, select_standard_font};
-use crate::font::true_type::{read_encoding, read_widths};
+use crate::font::true_type::{Width, read_encoding, read_widths};
 use crate::font::{
     Encoding, FallbackFontQuery, glyph_name_to_unicode, normalized_glyph_name, read_to_unicode,
 };
@@ -156,7 +156,8 @@ fn is_type1(dict: &Dict<'_>) -> bool {
 struct Type1Kind {
     font: Type1FontBlob,
     encoding: Encoding,
-    widths: Vec<f32>,
+    widths: Vec<Width>,
+    missing_width: f32,
     encodings: HashMap<u8, String>,
     glyph_simulator: GlyphSimulator,
     standard_font: Option<StandardFont>,
@@ -169,7 +170,7 @@ impl Type1Kind {
         let font = Type1FontBlob::new(Arc::new(data.decoded().ok()?.to_vec()))?;
 
         let (encoding, encodings) = read_encoding(dict);
-        let widths = read_widths(dict, &descriptor)?;
+        let (widths, missing_width) = read_widths(dict, &descriptor)?;
         let standard_font = select_standard_font(dict);
 
         let glyph_simulator = GlyphSimulator::new();
@@ -179,6 +180,7 @@ impl Type1Kind {
             encoding,
             glyph_simulator,
             widths,
+            missing_width,
             encodings,
             standard_font,
         })
@@ -224,12 +226,16 @@ impl Type1Kind {
     }
 
     fn glyph_width(&self, code: u8) -> Option<f32> {
-        self.widths.get(code as usize).copied().or_else(|| {
-            // If font looks like a standard font, get the width from there.
-            let sf = self.standard_font?;
-            self.code_to_ps_name(code)
-                .and_then(|name| sf.get_width(name))
-        })
+        match self.widths.get(code as usize).copied() {
+            Some(Width::Value(w)) => Some(w),
+            _ => {
+                // If font looks like a standard font, get the width from there.
+                let sf = self.standard_font?;
+                self.code_to_ps_name(code)
+                    .and_then(|name| sf.get_width(name))
+                    .or(Some(self.missing_width))
+            }
+        }
     }
 
     fn char_code_to_unicode(&self, code: u8) -> Option<char> {
@@ -241,7 +247,8 @@ impl Type1Kind {
 struct CffKind {
     font: CffFontBlob,
     encoding: Encoding,
-    widths: Vec<f32>,
+    widths: Vec<Width>,
+    missing_width: f32,
     encodings: HashMap<u8, String>,
     standard_font: Option<StandardFont>,
 }
@@ -253,13 +260,14 @@ impl CffKind {
         let font = CffFontBlob::new(Arc::new(data.decoded().ok()?.to_vec()))?;
 
         let (encoding, encodings) = read_encoding(dict);
-        let widths = read_widths(dict, &descriptor)?;
+        let (widths, missing_width) = read_widths(dict, &descriptor)?;
         let standard_font = select_standard_font(dict);
 
         Some(Self {
             font,
             encoding,
             widths,
+            missing_width,
             encodings,
             standard_font,
         })
@@ -303,12 +311,16 @@ impl CffKind {
     }
 
     fn glyph_width(&self, code: u8) -> Option<f32> {
-        self.widths.get(code as usize).copied().or_else(|| {
-            // If font looks like a standard font, get the width from there.
-            let sf = self.standard_font?;
-            self.code_to_ps_name(code)
-                .and_then(|name| sf.get_width(name))
-        })
+        match self.widths.get(code as usize).copied() {
+            Some(Width::Value(w)) => Some(w),
+            Some(Width::Missing) => Some(self.missing_width),
+            _ => {
+                // If font looks like a standard font, get the width from there.
+                let sf = self.standard_font?;
+                self.code_to_ps_name(code)
+                    .and_then(|name| sf.get_width(name))
+            }
+        }
     }
 
     fn char_code_to_unicode(&self, code: u8) -> Option<char> {

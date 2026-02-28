@@ -208,7 +208,8 @@ impl TrueTypeFont {
 #[derive(Debug)]
 struct EmbeddedKind {
     base_font: OpenTypeFontBlob,
-    widths: Vec<f32>,
+    widths: Vec<Width>,
+    missing_width: f32,
     font_flags: Option<FontFlags>,
     glyph_names: HashMap<String, GlyphId>,
     encoding: Encoding,
@@ -227,7 +228,7 @@ impl EmbeddedKind {
 
         let font_flags = descriptor.get::<u32>(FLAGS).and_then(FontFlags::from_bits);
 
-        let widths = read_widths(dict, &descriptor)?;
+        let (widths, missing_width) = read_widths(dict, &descriptor)?;
         let (encoding, differences) = read_encoding(dict);
         let base_font = descriptor
             .get::<Stream<'_>>(FONT_FILE2)
@@ -260,6 +261,7 @@ impl EmbeddedKind {
             differences,
             cff_blob: cff_font_blob,
             widths,
+            missing_width,
             glyph_names,
             font_flags,
             encoding,
@@ -382,20 +384,26 @@ impl EmbeddedKind {
     }
 
     fn glyph_width(&self, code: u8) -> f32 {
-        self.widths
-            .get(code as usize)
-            .copied()
-            .or_else(|| {
-                self.base_font
-                    .glyph_metrics()
-                    .advance_width(self.map_code(code))
-            })
-            .warn_none(&format!("failed to find advance width for code {code}"))
-            .unwrap_or(0.0)
+        match self.widths.get(code as usize).copied() {
+            Some(Width::Value(w)) => w,
+            Some(Width::Missing) => self.missing_width,
+            _ => self
+                .base_font
+                .glyph_metrics()
+                .advance_width(self.map_code(code))
+                .warn_none(&format!("failed to find advance width for code {code}"))
+                .unwrap_or(0.0),
+        }
     }
 }
 
-pub(crate) fn read_widths(dict: &Dict<'_>, descriptor: &Dict<'_>) -> Option<Vec<f32>> {
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum Width {
+    Value(f32),
+    Missing,
+}
+
+pub(crate) fn read_widths(dict: &Dict<'_>, descriptor: &Dict<'_>) -> Option<(Vec<Width>, f32)> {
     let mut widths = Vec::new();
 
     let first_char = dict.get::<usize>(FIRST_CHAR);
@@ -407,19 +415,19 @@ pub(crate) fn read_widths(dict: &Dict<'_>, descriptor: &Dict<'_>) -> Option<Vec<
         let iter = w.iter::<f32>().take(lc.checked_sub(fc)?.checked_add(1)?);
 
         for _ in 0..fc {
-            widths.push(missing_width);
+            widths.push(Width::Missing);
         }
 
         for w in iter {
-            widths.push(w);
+            widths.push(Width::Value(w));
         }
 
         while widths.len() <= (u8::MAX as usize) + 1 {
-            widths.push(missing_width);
+            widths.push(Width::Missing);
         }
     }
 
-    Some(widths)
+    Some((widths, missing_width))
 }
 
 fn glyph_num_string(s: &str) -> Option<u32> {
