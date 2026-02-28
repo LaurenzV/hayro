@@ -433,7 +433,7 @@ impl StandardKind {
         // we stretch the glyph so it matches the width of the standard font.
         if self.fallback
             && let Some(code) = self.glyph_to_code.borrow().get(&glyph).copied()
-            && let Some(should_width) = self.glyph_width(code)
+            && let Some(should_width) = self.widths.get(code as usize).copied()
             && let Some(actual_width) = self
                 .code_to_ps_name(code)
                 .and_then(|name| self.base_font.get_width(name))
