@@ -1423,31 +1423,26 @@
   {
     "id": "bug1782186",
     "password": "Hello",
-    "ignore": true,
     "comment": "password-protected"
   },
   {
     "id": "issue15893_reduced",
     "password": "test",
-    "ignore": true,
     "comment": "password-protected"
   },
   {
     "id": "issue3371",
     "password": "ELXRTQWS",
-    "ignore": true,
     "comment": "password-protected"
   },
   {
     "id": "issue6010_1",
     "password": "abc",
-    "ignore": true,
     "comment": "password-protected"
   },
   {
     "id": "issue6010_2",
     "password": "\u00e6\u00f8\u00e5",
-    "ignore": true,
     "comment": "password-protected (UTF-8 æøå)"
   },
   {
