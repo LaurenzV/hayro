@@ -458,15 +458,13 @@ impl StandardKind {
                 } else {
                     return path;
                 }
+            } else if let Some(w) = self
+                .code_to_ps_name(code)
+                .and_then(|name| self.base_font.get_width(name))
+            {
+                w
             } else {
-                if let Some(w) = self
-                    .code_to_ps_name(code)
-                    .and_then(|name| self.base_font.get_width(name))
-                {
-                    w
-                } else {
-                    return path;
-                }
+                return path;
             };
 
             return stretch_glyph(path, should_width, actual_width);
