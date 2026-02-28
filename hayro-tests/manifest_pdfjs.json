@@ -1261,7 +1261,8 @@
   {
     "id": "issue15033",
     "last_page": 0,
-    "ignore": true
+    "ignore": true,
+    "comment": "non-embedded Arial font with Hebrew glyphs"
   },
   {
     "id": "issue15044",
