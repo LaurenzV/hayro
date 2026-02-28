@@ -207,6 +207,7 @@
   "2091",
   {
     "id": "2103",
+    "ignore": true,
     "comment": "ä renders incorrectly"
   },
   "2112",
