@@ -1512,24 +1512,12 @@
   {
     "id": "issue2537",
     "ignore": true,
-    "comment": "broken loca table"
+    "comment": "broken loca table, needs fixing in skrifa"
   },
-  {
-    "id": "issue2840",
-    "comment": "cid font without embedded file"
-  },
-  {
-    "id": "issue4722",
-    "comment": "cid font without embedded file"
-  },
-  {
-    "id": "issue5244",
-    "comment": "cid font without embedded file"
-  },
-  {
-    "id": "issue2128",
-    "comment": "cid font with custom encoding"
-  },
+  "issue2840",
+  "issue4722",
+  "issue5244",
+  "issue2128",
   {
     "id": "issue2829",
     "comment": "cid font with custom encoding",
@@ -1595,11 +1583,7 @@
     "comment": "text should be bold but isnt"
   },
   "issue269_2",
-  {
-    "id": "issue6132",
-    "ignore": true,
-    "comment": "missing letters"
-  },
+  "issue6132",
   {
     "id": "issue7454",
     "ignore": true,
@@ -1609,8 +1593,7 @@
     "id": "issue4934",
     "first_page": 0,
     "last_page": 0,
-    "ignore": true,
-    "comment": "wrong font in text?"
+    "comment": "uses Impact font"
   },
   {
     "id": "issue4630",

@@ -647,6 +647,24 @@ fn _parse_char_string(
     depth: u8,
     p: &mut CharStringParser<'_>,
 ) -> Result<(), OutlineError> {
+    // See PDFJS-6132: In case we encounter an error, try to return whatever
+    // we extracted so far.
+    macro_rules! try_or_endchar {
+        ($e:expr) => {
+            match $e {
+                Ok(()) => {}
+                Err(_) if p.stack.is_empty() => {
+                    if !p.is_first_move_to {
+                        p.builder.close();
+                    }
+                    ctx.has_endchar = true;
+                    return Ok(());
+                }
+                Err(e) => return Err(e),
+            }
+        };
+    }
+
     let mut s = Stream::new(char_string);
     while !s.at_end() {
         let op = s.read::<u8>().ok_or(OutlineError::ReadOutOfBounds)?;
@@ -686,19 +704,19 @@ fn _parse_char_string(
                     }
                 }
 
-                p.parse_vertical_move_to(i)?;
+                try_or_endchar!(p.parse_vertical_move_to(i));
             }
             operator::LINE_TO => {
-                p.parse_line_to()?;
+                try_or_endchar!(p.parse_line_to());
             }
             operator::HORIZONTAL_LINE_TO => {
-                p.parse_horizontal_line_to()?;
+                try_or_endchar!(p.parse_horizontal_line_to());
             }
             operator::VERTICAL_LINE_TO => {
-                p.parse_vertical_line_to()?;
+                try_or_endchar!(p.parse_vertical_line_to());
             }
             operator::CURVE_TO => {
-                p.parse_curve_to()?;
+                try_or_endchar!(p.parse_curve_to());
             }
             operator::CALL_LOCAL_SUBROUTINE => {
                 if p.stack.is_empty() {
@@ -745,10 +763,10 @@ fn _parse_char_string(
                 // flex
                 let op2 = s.read::<u8>().ok_or(OutlineError::ReadOutOfBounds)?;
                 match op2 {
-                    operator::HFLEX => p.parse_hflex()?,
-                    operator::FLEX => p.parse_flex()?,
-                    operator::HFLEX1 => p.parse_hflex1()?,
-                    operator::FLEX1 => p.parse_flex1()?,
+                    operator::HFLEX => try_or_endchar!(p.parse_hflex()),
+                    operator::FLEX => try_or_endchar!(p.parse_flex()),
+                    operator::HFLEX1 => try_or_endchar!(p.parse_hflex1()),
+                    operator::FLEX1 => try_or_endchar!(p.parse_flex1()),
                     // Division operator.
                     12 => {
                         let num2 = p.stack.pop();
@@ -841,7 +859,7 @@ fn _parse_char_string(
                     }
                 }
 
-                p.parse_move_to(i)?;
+                try_or_endchar!(p.parse_move_to(i));
             }
             operator::HORIZONTAL_MOVE_TO => {
                 let mut i = 0;
@@ -852,19 +870,19 @@ fn _parse_char_string(
                     }
                 }
 
-                p.parse_horizontal_move_to(i)?;
+                try_or_endchar!(p.parse_horizontal_move_to(i));
             }
             operator::CURVE_LINE => {
-                p.parse_curve_line()?;
+                try_or_endchar!(p.parse_curve_line());
             }
             operator::LINE_CURVE => {
-                p.parse_line_curve()?;
+                try_or_endchar!(p.parse_line_curve());
             }
             operator::VV_CURVE_TO => {
-                p.parse_vv_curve_to()?;
+                try_or_endchar!(p.parse_vv_curve_to());
             }
             operator::HH_CURVE_TO => {
-                p.parse_hh_curve_to()?;
+                try_or_endchar!(p.parse_hh_curve_to());
             }
             operator::SHORT_INT => {
                 let n = s.read::<i16>().ok_or(OutlineError::ReadOutOfBounds)?;
@@ -897,10 +915,10 @@ fn _parse_char_string(
                 }
             }
             operator::VH_CURVE_TO => {
-                p.parse_vh_curve_to()?;
+                try_or_endchar!(p.parse_vh_curve_to());
             }
             operator::HV_CURVE_TO => {
-                p.parse_hv_curve_to()?;
+                try_or_endchar!(p.parse_hv_curve_to());
             }
             32..=246 => {
                 p.parse_int1(op)?;
