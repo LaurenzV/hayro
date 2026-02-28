@@ -171,7 +171,7 @@ impl Type1Kind {
 
         let (encoding, encodings) = read_encoding(dict);
         let (widths, missing_width) = read_widths(dict, &descriptor)?;
-        let standard_font = select_standard_font(dict);
+        let standard_font = select_standard_font(dict).map(|(f, _)| f);
 
         let glyph_simulator = GlyphSimulator::new();
 
@@ -261,7 +261,7 @@ impl CffKind {
 
         let (encoding, encodings) = read_encoding(dict);
         let (widths, missing_width) = read_widths(dict, &descriptor)?;
-        let standard_font = select_standard_font(dict);
+        let standard_font = select_standard_font(dict).map(|(f, _)| f);
 
         Some(Self {
             font,

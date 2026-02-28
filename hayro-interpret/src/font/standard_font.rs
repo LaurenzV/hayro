@@ -201,83 +201,76 @@ impl StandardFont {
     }
 }
 
-pub(crate) fn select_standard_font(dict: &Dict<'_>) -> Option<StandardFont> {
-    // See <https://github.com/apache/pdfbox/blob/4438b8fdc67a3a9ebfb194595d0e81f88b708a37/pdfbox/src/main/java/org/apache/pdfbox/pdmodel/font/FontMapperImpl.java#L62-L102>
-    match strip_subset_prefix(dict.get::<Name>(BASE_FONT)?.as_str()) {
-        "Helvetica" | "ArialMT" | "Arial" | "LiberationSans" | "NimbusSanL-Regu" => {
-            Some(StandardFont::Helvetica)
-        }
-        "Helvetica-Bold"
-        | "Arial-BoldMT"
-        | "Arial-Bold"
-        | "Arial,Bold"
-        | "LiberationSans-Bold"
-        | "NimbusSanL-Bold" => Some(StandardFont::HelveticaBold),
-        "Helvetica-Oblique"
-        | "Arial-ItalicMT"
-        | "Arial-ItalicMT,Italic"
-        | "Arial-Italic"
-        | "Arial,Italic"
-        | "Helvetica-Italic"
-        | "Helvetica,Italic"
-        | "LiberationSans-Italic"
-        | "NimbusSanL-ReguItal" => Some(StandardFont::HelveticaOblique),
-        "Helvetica-BoldOblique"
-        | "Arial-BoldItalicMT"
-        | "Helvetica-BoldItalic"
-        | "Helvetica,BoldItalic"
-        | "LiberationSans-BoldItalic"
-        | "NimbusSanL-BoldItal" => Some(StandardFont::HelveticaBoldOblique),
-        "Courier" | "CourierNew" | "CourierNewPSMT" | "LiberationMono" | "NimbusMonL-Regu" => {
-            Some(StandardFont::Courier)
-        }
-        "Courier-Bold"
-        | "Courier,Bold"
-        | "CourierNewPS-BoldMT"
-        | "CourierNew-Bold"
-        | "LiberationMono-Bold"
-        | "NimbusMonL-Bold" => Some(StandardFont::CourierBold),
-        "Courier-Oblique"
-        | "CourierNewPS-ItalicMT"
-        | "CourierNew-Italic"
-        | "LiberationMono-Italic"
-        | "NimbusMonL-ReguObli" => Some(StandardFont::CourierOblique),
-        "Courier-BoldOblique"
-        | "CourierNewPS-BoldItalicMT"
-        | "CourierNew-BoldItalic"
-        | "LiberationMono-BoldItalic"
-        | "NimbusMonL-BoldObli" => Some(StandardFont::CourierBoldOblique),
-        "Times-Roman" | "Times New Roman" | "TimesNewRomanPSMT" | "TimesNewRoman"
-        | "TimesNewRomanPS" | "LiberationSerif" | "NimbusRomNo9L-Regu" => {
-            Some(StandardFont::TimesRoman)
-        }
-        "Times-Bold"
-        | "TimesNewRomanPS-BoldMT"
-        | "TimesNewRomanPS-Bold"
-        | "TimesNewRoman-Bold"
-        | "TimesNewRoman,Bold"
-        | "LiberationSerif-Bold"
-        | "NimbusRomNo9L-Medi" => Some(StandardFont::TimesBold),
-        "Times-Italic"
-        | "TimesNewRomanPS-ItalicMT"
-        | "TimesNewRomanPS-Italic"
-        | "TimesNewRoman-Italic"
-        | "TimesNewRoman,Italic"
-        | "LiberationSerif-Italic"
-        | "NimbusRomNo9L-ReguItal" => Some(StandardFont::TimesItalic),
-        "Times-BoldItalic"
-        | "TimesNewRomanPS-BoldItalicMT"
-        | "TimesNewRomanPS-BoldItalic"
-        | "TimesNewRoman-BoldItalic"
-        | "TimesNewRoman,BoldItalic"
-        | "LiberationSerif-BoldItalic"
-        | "NimbusRomNo9L-MediItal" => Some(StandardFont::TimesBoldItalic),
-        "Symbol" | "SymbolMT" | "StandardSymL" => Some(StandardFont::Symbol),
-        "ZapfDingbats" | "ZapfDingbatsITCbyBT-Regular" | "ZapfDingbatsITC" | "Dingbats" => {
-            Some(StandardFont::ZapfDingBats)
-        }
-        _ => None,
+enum StandardFontFamily {
+    Helvetica,
+    Courier,
+    Times,
+}
+
+pub(crate) fn select_standard_font(dict: &Dict<'_>) -> Option<(StandardFont, bool)> {
+    let base_font = dict.get::<Name>(BASE_FONT)?;
+    let name = strip_subset_prefix(base_font.as_str());
+
+    // First try whether it matches literally.
+    match name {
+        "Helvetica" => return Some((StandardFont::Helvetica, true)),
+        "Helvetica-Bold" => return Some((StandardFont::HelveticaBold, true)),
+        "Helvetica-Oblique" => return Some((StandardFont::HelveticaOblique, true)),
+        "Helvetica-BoldOblique" => return Some((StandardFont::HelveticaBoldOblique, true)),
+        "Courier" => return Some((StandardFont::Courier, true)),
+        "Courier-Bold" => return Some((StandardFont::CourierBold, true)),
+        "Courier-Oblique" => return Some((StandardFont::CourierOblique, true)),
+        "Courier-BoldOblique" => return Some((StandardFont::CourierBoldOblique, true)),
+        "Times-Roman" => return Some((StandardFont::TimesRoman, true)),
+        "Times-Bold" => return Some((StandardFont::TimesBold, true)),
+        "Times-Italic" => return Some((StandardFont::TimesItalic, true)),
+        "Times-BoldItalic" => return Some((StandardFont::TimesBoldItalic, true)),
+        "Symbol" => return Some((StandardFont::Symbol, true)),
+        "ZapfDingbats" => return Some((StandardFont::ZapfDingBats, true)),
+        _ => {}
     }
+
+    // Now, we bruteforce, trying to determine a suitable fonts based on the
+    // keywords that appear in the name.
+    let lower = name.to_ascii_lowercase();
+
+    let is_bold = lower.contains("bold");
+    let is_italic = lower.contains("italic") || lower.contains("oblique");
+
+    let (family, exact) = if lower.contains("helvetica") {
+        (Some(StandardFontFamily::Helvetica), true)
+    } else if lower.contains("arial") || lower.contains("sans") {
+        (Some(StandardFontFamily::Helvetica), false)
+    } else if lower.contains("courier") {
+        (Some(StandardFontFamily::Courier), true)
+    } else if lower.contains("mono") {
+        (Some(StandardFontFamily::Courier), false)
+    } else if lower.contains("times") {
+        (Some(StandardFontFamily::Times), true)
+    } else if lower.contains("serif") {
+        (Some(StandardFontFamily::Times), false)
+    } else if lower.contains("zapfdingbats") || lower.contains("dingbats") {
+        return Some((StandardFont::ZapfDingBats, false));
+    } else {
+        (None, false)
+    };
+
+    let font = match (family?, is_bold, is_italic) {
+        (StandardFontFamily::Helvetica, false, false) => StandardFont::Helvetica,
+        (StandardFontFamily::Helvetica, true, false) => StandardFont::HelveticaBold,
+        (StandardFontFamily::Helvetica, false, true) => StandardFont::HelveticaOblique,
+        (StandardFontFamily::Helvetica, true, true) => StandardFont::HelveticaBoldOblique,
+        (StandardFontFamily::Courier, false, false) => StandardFont::Courier,
+        (StandardFontFamily::Courier, true, false) => StandardFont::CourierBold,
+        (StandardFontFamily::Courier, false, true) => StandardFont::CourierOblique,
+        (StandardFontFamily::Courier, true, true) => StandardFont::CourierBoldOblique,
+        (StandardFontFamily::Times, false, false) => StandardFont::TimesRoman,
+        (StandardFontFamily::Times, true, false) => StandardFont::TimesBold,
+        (StandardFontFamily::Times, false, true) => StandardFont::TimesItalic,
+        (StandardFontFamily::Times, true, true) => StandardFont::TimesBoldItalic,
+    };
+
+    Some((font, exact))
 }
 
 #[derive(Debug)]
@@ -371,7 +364,8 @@ pub(crate) struct StandardKind {
 
 impl StandardKind {
     pub(crate) fn new(dict: &Dict<'_>, resolver: &FontResolverFn) -> Option<Self> {
-        Self::new_with_standard(dict, select_standard_font(dict)?, false, resolver)
+        let (font, exact) = select_standard_font(dict)?;
+        Self::new_with_standard(dict, font, !exact, resolver)
     }
 
     pub(crate) fn new_with_standard(
