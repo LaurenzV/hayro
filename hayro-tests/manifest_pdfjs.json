@@ -1334,5 +1334,347 @@
   {
     "id": "issue18801",
     "last_page": 0
+  },
+  {
+    "id": "ShowText-ShadingPattern",
+    "ignore": true,
+    "comment": "look into it; renders incorrectly in pdf.js too"
+  },
+  {
+    "id": "Type3WordSpacing",
+    "ignore": true,
+    "comment": "look into it"
+  },
+  {
+    "id": "ZapfDingbats",
+    "ignore": true,
+    "comment": "look into it"
+  },
+  {
+    "id": "issue19800-eq",
+    "ignore": true,
+    "comment": "stackoverflow"
+  },
+  {
+    "id": "issue7891_bc1",
+    "ignore": true,
+    "comment": "misapplied soft mask"
+  },
+  {
+    "id": "issue17190_1",
+    "ignore": true,
+    "comment": "very large image"
+  },
+  {
+    "id": "issue16038",
+    "ignore": true,
+    "comment": "tiling with negative step"
+  },
+  {
+    "id": "issue16114",
+    "ignore": true,
+    "comment": "transfer func"
+  },
+  {
+    "id": "bug1050040",
+    "ignore": true,
+    "comment": "CMAP table is broken, therefore we can't map codepoint to a glyph"
+  },
+  {
+    "id": "bug1365930",
+    "ignore": true,
+    "comment": "investigate"
+  },
+  {
+    "id": "bug1354114",
+    "first_page": 29,
+    "ignore": true,
+    "comment": "investigate"
+  },
+  {
+    "id": "bug1443140",
+    "first_page": 3,
+    "last_page": 3,
+    "ignore": true,
+    "comment": "investigate"
+  },
+  {
+    "id": "bug1652224",
+    "first_page": 4,
+    "last_page": 4,
+    "ignore": true,
+    "comment": "investigate"
+  },
+  {
+    "id": "bug1659412",
+    "ignore": true,
+    "comment": "investigate"
+  },
+  {
+    "id": "bug1671312_ArialNarrow",
+    "ignore": true,
+    "comment": "investigate"
+  },
+  {
+    "id": "bug1671312_reduced",
+    "ignore": true,
+    "comment": "investigate"
+  },
+  {
+    "id": "p020121130574743273239",
+    "first_page": 0,
+    "last_page": 0,
+    "ignore": true,
+    "comment": "missing text (probably not-embedded font), page rotated wrongly"
+  },
+  {
+    "id": "bug1782186",
+    "password": "Hello",
+    "ignore": true,
+    "comment": "password-protected"
+  },
+  {
+    "id": "issue15893_reduced",
+    "password": "test",
+    "ignore": true,
+    "comment": "password-protected"
+  },
+  {
+    "id": "issue3371",
+    "password": "ELXRTQWS",
+    "ignore": true,
+    "comment": "password-protected"
+  },
+  {
+    "id": "issue6010_1",
+    "password": "abc",
+    "ignore": true,
+    "comment": "password-protected"
+  },
+  {
+    "id": "issue6010_2",
+    "password": "\u00e6\u00f8\u00e5",
+    "ignore": true,
+    "comment": "password-protected (UTF-8 æøå)"
+  },
+  {
+    "id": "bug1250079",
+    "ignore": true,
+    "comment": "trailer dict is cut off"
+  },
+  {
+    "id": "issue15577",
+    "last_page": 0,
+    "ignore": true,
+    "comment": "root points to wrong object"
+  },
+  {
+    "id": "issue9105_other",
+    "ignore": true,
+    "comment": "doesnt parse / has encryption"
+  },
+  {
+    "id": "issue12294-print",
+    "last_page": 0,
+    "ignore": true,
+    "comment": "doesnt parse / has encryption"
+  },
+  {
+    "id": "filled-background-range",
+    "ignore": true,
+    "comment": "takes long time"
+  },
+  {
+    "id": "issue8078",
+    "last_page": 0,
+    "ignore": true,
+    "comment": "takes long time"
+  },
+  {
+    "id": "issue17190",
+    "ignore": true,
+    "comment": "takes long time"
+  },
+  {
+    "id": "issue17061",
+    "first_page": 0,
+    "last_page": 4,
+    "ignore": true,
+    "comment": "takes long time"
+  },
+  {
+    "id": "issue11242",
+    "ignore": true,
+    "comment": "missing text"
+  },
+  {
+    "id": "issue11549",
+    "ignore": true,
+    "comment": "missing text"
+  },
+  {
+    "id": "issue11578",
+    "ignore": true,
+    "comment": "missing text"
+  },
+  {
+    "id": "issue11740",
+    "ignore": true,
+    "comment": "missing text"
+  },
+  {
+    "id": "issue12418",
+    "ignore": true,
+    "comment": "missing text"
+  },
+  {
+    "id": "issue15594",
+    "ignore": true,
+    "comment": "missing text"
+  },
+  {
+    "id": "issue15977",
+    "ignore": true,
+    "comment": "missing text"
+  },
+  {
+    "id": "issue11651-eq",
+    "ignore": true,
+    "comment": "missing text"
+  },
+  {
+    "id": "issue2537",
+    "ignore": true,
+    "comment": "broken loca table"
+  },
+  {
+    "id": "issue2840",
+    "ignore": true,
+    "comment": "cid font without embedded file"
+  },
+  {
+    "id": "issue4722",
+    "ignore": true,
+    "comment": "cid font without embedded file"
+  },
+  {
+    "id": "issue5244",
+    "ignore": true,
+    "comment": "cid font without embedded file"
+  },
+  {
+    "id": "issue2128",
+    "ignore": true,
+    "comment": "cid font with custom encoding"
+  },
+  {
+    "id": "issue2829",
+    "ignore": true,
+    "comment": "cid font with custom encoding"
+  },
+  {
+    "id": "issue19176",
+    "ignore": true,
+    "comment": "user units"
+  },
+  {
+    "id": "issue5752",
+    "first_page": 0,
+    "last_page": 0,
+    "ignore": true,
+    "comment": "built-in encoding"
+  },
+  {
+    "id": "issue12007_reduced",
+    "ignore": true,
+    "comment": "pdf layers (optional content)"
+  },
+  {
+    "id": "issue17906",
+    "first_page": 0,
+    "last_page": 0,
+    "ignore": true,
+    "comment": "widget annotation"
+  },
+  {
+    "id": "issue18466",
+    "ignore": true,
+    "comment": "black rectangle, type0 without embedded font"
+  },
+  {
+    "id": "issue16263",
+    "ignore": true,
+    "comment": "doesnt finish"
+  },
+  {
+    "id": "issue16127",
+    "first_page": 0,
+    "last_page": 1,
+    "ignore": true,
+    "comment": "noto color emoji, some page doesnt finish"
+  },
+  {
+    "id": "issue14462",
+    "ignore": true,
+    "comment": "weird letter"
+  },
+  {
+    "id": "issue12295",
+    "ignore": true,
+    "comment": "black bars"
+  },
+  {
+    "id": "issue11768",
+    "ignore": true,
+    "comment": "wrong text"
+  },
+  {
+    "id": "issue9291",
+    "ignore": true,
+    "comment": "text should be bold but isnt"
+  },
+  {
+    "id": "issue269_2",
+    "ignore": true,
+    "comment": "optional content groups"
+  },
+  {
+    "id": "issue6132",
+    "ignore": true,
+    "comment": "missing letters"
+  },
+  {
+    "id": "issue7454",
+    "ignore": true,
+    "comment": "weird issue with wingdings font where metadata is wrong"
+  },
+  {
+    "id": "issue4934",
+    "first_page": 0,
+    "last_page": 0,
+    "ignore": true,
+    "comment": "wrong font in text?"
+  },
+  {
+    "id": "issue4630",
+    "ignore": true,
+    "comment": "weirdly spaced text"
+  },
+  {
+    "id": "extgstate",
+    "ignore": true,
+    "comment": "wrong handling of extgstate text"
+  },
+  {
+    "id": "issue10717",
+    "first_page": 0,
+    "last_page": 1,
+    "ignore": true,
+    "comment": "balloon type3 emojis which is decoded time and time again"
+  },
+  {
+    "id": "bug1721218_reduced",
+    "ignore": true,
+    "comment": "likely missing caching of shading function"
   }
 ]
