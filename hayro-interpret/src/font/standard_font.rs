@@ -124,6 +124,44 @@ impl StandardFont {
         }
     }
 
+    pub(crate) fn is_bold(&self) -> bool {
+        matches!(
+            self,
+            Self::HelveticaBold
+                | Self::HelveticaBoldOblique
+                | Self::CourierBold
+                | Self::CourierBoldOblique
+                | Self::TimesBold
+                | Self::TimesBoldItalic
+        )
+    }
+
+    pub(crate) fn is_italic(&self) -> bool {
+        matches!(
+            self,
+            Self::HelveticaOblique
+                | Self::HelveticaBoldOblique
+                | Self::CourierOblique
+                | Self::CourierBoldOblique
+                | Self::TimesItalic
+                | Self::TimesBoldItalic
+        )
+    }
+
+    pub(crate) fn is_serif(&self) -> bool {
+        matches!(
+            self,
+            Self::TimesRoman | Self::TimesBold | Self::TimesItalic | Self::TimesBoldItalic
+        )
+    }
+
+    pub(crate) fn is_monospace(&self) -> bool {
+        matches!(
+            self,
+            Self::Courier | Self::CourierBold | Self::CourierOblique | Self::CourierBoldOblique
+        )
+    }
+
     /// Return suitable font data for the given standard font.
     ///
     /// Currently, this will return the corresponding Foxit font, which is a set of permissibly
@@ -415,5 +453,21 @@ impl StandardKind {
 
     pub(crate) fn char_code_to_unicode(&self, code: u8) -> Option<char> {
         self.code_to_ps_name(code).and_then(glyph_name_to_unicode)
+    }
+
+    pub(crate) fn is_italic(&self) -> bool {
+        self.base_font.is_italic()
+    }
+
+    pub(crate) fn is_bold(&self) -> bool {
+        self.base_font.is_bold()
+    }
+
+    pub(crate) fn is_serif(&self) -> bool {
+        self.base_font.is_serif()
+    }
+
+    pub(crate) fn is_monospace(&self) -> bool {
+        self.base_font.is_monospace()
     }
 }

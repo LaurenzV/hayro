@@ -133,7 +133,7 @@ impl TrueTypeFont {
                 // Check skrifa font attributes
                 e.base_font.font_ref().attributes().style != Style::Normal
             }
-            Kind::Standard(_) => false,
+            Kind::Standard(s) => s.is_italic(),
         }
     }
 
@@ -143,7 +143,7 @@ impl TrueTypeFont {
                 .font_flags
                 .as_ref()
                 .is_some_and(|f| f.contains(FontFlags::SERIF)),
-            Kind::Standard(_) => false,
+            Kind::Standard(s) => s.is_serif(),
         }
     }
 
@@ -165,7 +165,7 @@ impl TrueTypeFont {
                     )
                     .is_monospace
             }
-            Kind::Standard(_) => false,
+            Kind::Standard(s) => s.is_monospace(),
         }
     }
 
