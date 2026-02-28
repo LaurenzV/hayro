@@ -38,6 +38,9 @@ pub(crate) struct Type0Font {
     font_flags: Option<FontFlags>,
     /// Whether this font is using a fallback (non-embedded) font.
     fallback: bool,
+    /// Whether the `to_unicode` map is a UCS2 CMap (CID-indexed) rather than
+    /// a ToUnicode CMap (code-indexed).
+    to_unicode_is_cid_indexed: bool,
 }
 
 impl Type0Font {
@@ -102,6 +105,7 @@ impl Type0Font {
         let cache_key = dict.cache_key();
 
         let mut to_unicode = read_to_unicode(dict, cmap_resolver);
+        let mut to_unicode_is_cid_indexed = false;
 
         // If there is no ToUnicode map, try to get the UCS2 CMap.
         if fallback
@@ -114,6 +118,7 @@ impl Type0Font {
             let resolver = cmap_resolver.clone();
             if let Some(ucs2_cmap) = CMap::parse(data, move |n| (resolver)(n)) {
                 to_unicode = Some(ucs2_cmap);
+                to_unicode_is_cid_indexed = true;
             }
         }
 
@@ -140,6 +145,7 @@ impl Type0Font {
             postscript_name,
             font_flags,
             fallback,
+            to_unicode_is_cid_indexed,
         })
     }
 
@@ -148,8 +154,16 @@ impl Type0Font {
             return GlyphId::NOTDEF;
         };
 
+        // UCS2 maps are indexed by CIDs, while embededd `ToUnicode` maps are
+        // indexed by character code.
+        let to_unicode_key = if self.to_unicode_is_cid_indexed {
+            cid
+        } else {
+            code
+        };
+
         if self.fallback
-            && let Some(glyph) = self.map_via_unicode(cid)
+            && let Some(glyph) = self.map_via_unicode(to_unicode_key)
         {
             // Yay, Unicode worked!
             return glyph;
@@ -182,16 +196,17 @@ impl Type0Font {
         }
     }
 
-    /// Map a CID to a glyph ID by first getting its Unicode and then looking
-    /// up the codepoint in the font's cmap.
-    fn map_via_unicode(&self, cid: u32) -> Option<GlyphId> {
+    /// Map a character code (or CID) to a glyph ID
+    /// by first getting its Unicode and then looking up the codepoint in the
+    /// font's cmap.
+    fn map_via_unicode(&self, key: u32) -> Option<GlyphId> {
         let to_unicode = self.to_unicode.as_ref()?;
 
         let character = to_unicode
-            .lookup_bf_string(cid)
+            .lookup_bf_string(key)
             .or_else(|| {
                 for len in 0..4 {
-                    if let Some(code) = to_unicode.lookup_cid_code(cid, len)
+                    if let Some(code) = to_unicode.lookup_cid_code(key, len)
                         && let Some(code) = char::from_u32(code.to_u32())
                     {
                         return Some(BfString::Char(code));
@@ -365,10 +380,13 @@ impl Type0Font {
 
     pub(crate) fn char_code_to_unicode(&self, code: u32) -> Option<BfString> {
         if let Some(to_unicode) = &self.to_unicode {
-            return to_unicode.lookup_bf_string(code);
+            let key = if self.to_unicode_is_cid_indexed {
+                self.code_to_cid(code).unwrap_or(0)
+            } else {
+                code
+            };
+            return to_unicode.lookup_bf_string(key);
         }
-
-        // TODO: Implement CID collection mappings (Adobe-Japan1, Adobe-GB1, etc.).
 
         None
     }
