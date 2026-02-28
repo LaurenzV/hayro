@@ -1337,7 +1337,6 @@
   },
   {
     "id": "ShowText-ShadingPattern",
-    "ignore": true,
     "comment": "look into it; renders incorrectly in pdf.js too"
   },
   {
@@ -1347,7 +1346,6 @@
   },
   {
     "id": "ZapfDingbats",
-    "ignore": true,
     "comment": "look into it"
   },
   {
@@ -1357,7 +1355,6 @@
   },
   {
     "id": "issue7891_bc1",
-    "ignore": true,
     "comment": "misapplied soft mask"
   },
   {
@@ -1377,7 +1374,6 @@
   },
   {
     "id": "bug1050040",
-    "ignore": true,
     "comment": "CMAP table is broken, therefore we can't map codepoint to a glyph"
   },
   {
@@ -1402,17 +1398,14 @@
     "id": "bug1652224",
     "first_page": 4,
     "last_page": 4,
-    "ignore": true,
     "comment": "investigate"
   },
   {
     "id": "bug1659412",
-    "ignore": true,
     "comment": "investigate"
   },
   {
     "id": "bug1671312_ArialNarrow",
-    "ignore": true,
     "comment": "investigate"
   },
   {
@@ -1476,12 +1469,10 @@
   {
     "id": "issue12294-print",
     "last_page": 0,
-    "ignore": true,
     "comment": "doesnt parse / has encryption"
   },
   {
     "id": "filled-background-range",
-    "ignore": true,
     "comment": "takes long time"
   },
   {
@@ -1509,12 +1500,10 @@
   },
   {
     "id": "issue11549",
-    "ignore": true,
     "comment": "missing text"
   },
   {
     "id": "issue11578",
-    "ignore": true,
     "comment": "missing text"
   },
   {
@@ -1524,7 +1513,6 @@
   },
   {
     "id": "issue12418",
-    "ignore": true,
     "comment": "missing text"
   },
   {
@@ -1539,7 +1527,6 @@
   },
   {
     "id": "issue11651-eq",
-    "ignore": true,
     "comment": "missing text"
   },
   {
@@ -1549,27 +1536,22 @@
   },
   {
     "id": "issue2840",
-    "ignore": true,
     "comment": "cid font without embedded file"
   },
   {
     "id": "issue4722",
-    "ignore": true,
     "comment": "cid font without embedded file"
   },
   {
     "id": "issue5244",
-    "ignore": true,
     "comment": "cid font without embedded file"
   },
   {
     "id": "issue2128",
-    "ignore": true,
     "comment": "cid font with custom encoding"
   },
   {
     "id": "issue2829",
-    "ignore": true,
     "comment": "cid font with custom encoding",
     "last_page": 1
   },
@@ -1582,7 +1564,6 @@
     "id": "issue5752",
     "first_page": 0,
     "last_page": 0,
-    "ignore": true,
     "comment": "built-in encoding"
   },
   {
@@ -1594,7 +1575,6 @@
     "id": "issue17906",
     "first_page": 0,
     "last_page": 0,
-    "ignore": true,
     "comment": "widget annotation"
   },
   {
@@ -1658,7 +1638,6 @@
   },
   {
     "id": "issue4630",
-    "ignore": true,
     "comment": "weirdly spaced text"
   },
   {
@@ -1675,7 +1654,6 @@
   },
   {
     "id": "bug1721218_reduced",
-    "ignore": true,
     "comment": "likely missing caching of shading function"
   }
 ]
