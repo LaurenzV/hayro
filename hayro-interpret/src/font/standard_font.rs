@@ -283,7 +283,7 @@ pub(crate) fn select_standard_font(dict: &Dict<'_>) -> Option<StandardFont> {
 #[derive(Debug)]
 pub(crate) enum StandardFontBlob {
     Cff(CffFontBlob),
-    Otf(OpenTypeFontBlob, HashMap<String, skrifa::GlyphId>),
+    Otf(OpenTypeFontBlob, HashMap<String, GlyphId>),
 }
 
 impl StandardFontBlob {
@@ -305,7 +305,7 @@ impl StandardFontBlob {
         if let Ok(post) = blob.font_ref().post() {
             for i in 0..blob.num_glyphs() {
                 if let Some(str) = post.glyph_name(GlyphId16::new(i)) {
-                    glyph_names.insert(str.to_string(), skrifa::GlyphId::new(i as u32));
+                    glyph_names.insert(str.to_string(), GlyphId::new(i as u32));
                 }
             }
         }
@@ -315,17 +315,17 @@ impl StandardFontBlob {
 }
 
 impl StandardFontBlob {
-    pub(crate) fn name_to_glyph(&self, name: &str) -> Option<skrifa::GlyphId> {
+    pub(crate) fn name_to_glyph(&self, name: &str) -> Option<GlyphId> {
         match self {
             Self::Cff(blob) => blob
                 .table()
                 .glyph_index_by_name(name)
-                .map(|g| skrifa::GlyphId::new(g.0 as u32)),
+                .map(|g| GlyphId::new(g.0 as u32)),
             Self::Otf(_, glyph_names) => glyph_names.get(name).copied(),
         }
     }
 
-    pub(crate) fn unicode_to_glyph(&self, code: u32) -> Option<skrifa::GlyphId> {
+    pub(crate) fn unicode_to_glyph(&self, code: u32) -> Option<GlyphId> {
         match self {
             Self::Cff(_) => None,
             Self::Otf(blob, _) => blob
@@ -336,10 +336,10 @@ impl StandardFontBlob {
         }
     }
 
-    pub(crate) fn outline_glyph(&self, glyph: skrifa::GlyphId) -> BezPath {
+    pub(crate) fn outline_glyph(&self, glyph: GlyphId) -> BezPath {
         // Standard fonts have empty outlines for these, but in Liberation Sans
         // they are a .notdef rectangle.
-        if glyph == skrifa::GlyphId::NOTDEF {
+        if glyph == GlyphId::NOTDEF {
             return BezPath::new();
         }
 

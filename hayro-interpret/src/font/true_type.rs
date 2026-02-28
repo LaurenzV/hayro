@@ -117,7 +117,7 @@ impl TrueTypeFont {
                 let weight = e.base_font.font_ref().attributes().weight.value().round() as u32;
                 if weight > 0 { Some(weight) } else { None }
             }
-            Kind::Standard(_) => None,
+            Kind::Standard(s) => Some(if s.is_bold() { 700 } else { 400 }),
         }
     }
 
