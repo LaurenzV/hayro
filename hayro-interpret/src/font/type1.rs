@@ -9,9 +9,9 @@ use crate::font::{
 };
 use crate::{CMapResolverFn, CacheKey, FontResolverFn};
 use hayro_cmap::{BfString, CMap};
+use hayro_syntax::object::Dict;
 use hayro_syntax::object::Stream;
-use hayro_syntax::object::dict::keys::{FONT_DESC, FONT_FILE, FONT_FILE3, SUBTYPE};
-use hayro_syntax::object::{Dict, Name};
+use hayro_syntax::object::dict::keys::{FONT_DESC, FONT_FILE, FONT_FILE3};
 use kurbo::BezPath;
 use log::warn;
 use skrifa::GlyphId;
@@ -172,7 +172,7 @@ impl StandardKind {
 
         // See PDFJS-16464: Ignore encodings for non-embedded Type1 symbol fonts.
         if matches!(base_font, StandardFont::Symbol | StandardFont::ZapfDingBats) {
-            encoding = Encoding::BuiltIn
+            encoding = Encoding::BuiltIn;
         }
 
         let (blob, index) = resolver(&FontQuery::Standard(base_font))?;
