@@ -1,12 +1,18 @@
+use crate::FontResolverFn;
 use crate::font::blob::{CffFontBlob, OpenTypeFontBlob};
-use crate::font::generated::{metrics, standard, symbol, zapf_dings};
-use crate::font::{FontData, normalized_glyph_name, strip_subset_prefix};
+use crate::font::generated::{glyph_names, metrics, standard, symbol, zapf_dings};
+use crate::font::true_type::{read_encoding, read_widths};
+use crate::font::{
+    Encoding, FontData, FontQuery, glyph_name_to_unicode, normalized_glyph_name, stretch_glyph,
+    strip_subset_prefix,
+};
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Name;
-use hayro_syntax::object::dict::keys::BASE_FONT;
+use hayro_syntax::object::dict::keys::{BASE_FONT, FONT_DESC};
 use kurbo::BezPath;
-use skrifa::GlyphId16;
 use skrifa::raw::TableProvider;
+use skrifa::{GlyphId, GlyphId16};
+use std::cell::RefCell;
 use std::collections::HashMap;
 
 /// The 14 standard fonts of PDF.
@@ -303,5 +309,111 @@ impl StandardFontBlob {
             Self::Cff(blob) => blob.outline_glyph(glyph),
             Self::Otf(blob, _) => blob.outline_glyph(glyph),
         }
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct StandardKind {
+    base_font: StandardFont,
+    base_font_blob: StandardFontBlob,
+    encoding: Encoding,
+    widths: Vec<f32>,
+    fallback: bool,
+    glyph_to_code: RefCell<HashMap<GlyphId, u8>>,
+    encodings: HashMap<u8, String>,
+}
+
+impl StandardKind {
+    pub(crate) fn new(dict: &Dict<'_>, resolver: &FontResolverFn) -> Option<Self> {
+        Self::new_with_standard(dict, select_standard_font(dict)?, false, resolver)
+    }
+
+    pub(crate) fn new_with_standard(
+        dict: &Dict<'_>,
+        base_font: StandardFont,
+        fallback: bool,
+        resolver: &FontResolverFn,
+    ) -> Option<Self> {
+        let descriptor = dict.get::<Dict<'_>>(FONT_DESC).unwrap_or_default();
+        let widths = read_widths(dict, &descriptor)?;
+
+        let (mut encoding, encoding_map) = read_encoding(dict);
+
+        // See PDFJS-16464: Ignore encodings for non-embedded Type1 symbol fonts.
+        if matches!(base_font, StandardFont::Symbol | StandardFont::ZapfDingBats) {
+            encoding = Encoding::BuiltIn;
+        }
+
+        let (blob, index) = resolver(&FontQuery::Standard(base_font))?;
+        let base_font_blob = StandardFontBlob::from_data(blob, index)?;
+
+        Some(Self {
+            base_font,
+            base_font_blob,
+            widths,
+            encodings: encoding_map,
+            glyph_to_code: RefCell::new(HashMap::new()),
+            fallback,
+            encoding,
+        })
+    }
+
+    fn code_to_ps_name(&self, code: u8) -> Option<&str> {
+        let bf = self.base_font;
+
+        self.encodings
+            .get(&code)
+            .map(String::as_str)
+            .or_else(|| match self.encoding {
+                Encoding::BuiltIn => bf.code_to_name(code),
+                _ => self.encoding.map_code(code),
+            })
+    }
+
+    pub(crate) fn map_code(&self, code: u8) -> GlyphId {
+        let result = self
+            .code_to_ps_name(code)
+            .and_then(|c| {
+                self.base_font_blob.name_to_glyph(c).or_else(|| {
+                    // If the font doesn't have a POST table, try to map via unicode instead.
+                    glyph_names::get(c).and_then(|c| {
+                        self.base_font_blob
+                            .unicode_to_glyph(c.chars().nth(0).unwrap() as u32)
+                    })
+                })
+            })
+            .unwrap_or(GlyphId::NOTDEF);
+        self.glyph_to_code.borrow_mut().insert(result, code);
+
+        result
+    }
+
+    pub(crate) fn outline_glyph(&self, glyph: GlyphId) -> BezPath {
+        let path = self.base_font_blob.outline_glyph(glyph);
+
+        // If the font was not embedded in the file and we are using a standard font as a substitute,
+        // we stretch the glyph so it matches the width of the standard font.
+        if self.fallback
+            && let Some(code) = self.glyph_to_code.borrow().get(&glyph).copied()
+            && let Some(should_width) = self.glyph_width(code)
+            && let Some(actual_width) = self
+                .code_to_ps_name(code)
+                .and_then(|name| self.base_font.get_width(name))
+        {
+            return stretch_glyph(path, should_width, actual_width);
+        }
+
+        path
+    }
+
+    pub(crate) fn glyph_width(&self, code: u8) -> Option<f32> {
+        self.widths.get(code as usize).copied().or_else(|| {
+            self.code_to_ps_name(code)
+                .and_then(|c| self.base_font.get_width(c))
+        })
+    }
+
+    pub(crate) fn char_code_to_unicode(&self, code: u8) -> Option<char> {
+        self.code_to_ps_name(code).and_then(glyph_name_to_unicode)
     }
 }

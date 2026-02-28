@@ -150,12 +150,12 @@ impl OutlineFont {
 
     /// Get raw font bytes and metadata.
     ///
-    /// Returns None for Type1 fonts.
+    /// Returns None for Type1 fonts and non-embedded TrueType fonts.
     pub(crate) fn font_data(&self) -> Option<OutlineFontData> {
         match self {
             Self::Type1(_) => None,
             Self::TrueType(t) => Some(OutlineFontData {
-                data: t.font_data(),
+                data: t.font_data()?,
                 cache_key: t.cache_key(),
                 postscript_name: t.postscript_name().map(|s| s.to_string()),
                 weight: t.weight(),

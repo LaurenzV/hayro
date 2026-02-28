@@ -1,11 +1,12 @@
 use crate::font::blob::{CffFontBlob, OpenTypeFontBlob};
 use crate::font::generated::{glyph_names, mac_os_roman, mac_roman, standard};
+use crate::font::standard_font::StandardKind;
 use crate::font::{
-    Encoding, FontFlags, glyph_name_to_unicode, read_to_unicode, strip_subset_prefix,
-    unicode_from_name,
+    Encoding, FallbackFontQuery, FontFlags, glyph_name_to_unicode, read_to_unicode,
+    strip_subset_prefix, unicode_from_name,
 };
 use crate::util::OptionLog;
-use crate::{CMapResolverFn, CacheKey};
+use crate::{CMapResolverFn, CacheKey, FontResolverFn};
 use hayro_cmap::{BfString, CMap};
 use hayro_syntax::object::Array;
 use hayro_syntax::object::Dict;
@@ -27,6 +28,185 @@ use std::sync::Arc;
 #[derive(Debug)]
 pub(crate) struct TrueTypeFont {
     cache_key: u128,
+    kind: Kind,
+    to_unicode: Option<CMap>,
+}
+
+#[derive(Debug)]
+enum Kind {
+    Embedded(EmbeddedKind),
+    Standard(StandardKind),
+}
+
+impl TrueTypeFont {
+    pub(crate) fn new(
+        dict: &Dict<'_>,
+        font_resolver: &FontResolverFn,
+        cmap_resolver: &CMapResolverFn,
+    ) -> Option<Self> {
+        let cache_key = dict.cache_key();
+        let to_unicode = read_to_unicode(dict, cmap_resolver);
+
+        if let Some(embedded) = EmbeddedKind::new(dict) {
+            return Some(Self {
+                cache_key,
+                kind: Kind::Embedded(embedded),
+                to_unicode,
+            });
+        }
+
+        let fallback = || {
+            let fallback_query = FallbackFontQuery::new(dict);
+            let standard_font = fallback_query.pick_standard_font();
+
+            warn!(
+                "unable to load TrueType font {}, falling back to {}",
+                fallback_query
+                    .post_script_name
+                    .unwrap_or("(no name)".to_string()),
+                standard_font.as_str()
+            );
+
+            Some(Self {
+                cache_key,
+                kind: Kind::Standard(StandardKind::new_with_standard(
+                    dict,
+                    standard_font,
+                    true,
+                    font_resolver,
+                )?),
+                to_unicode: to_unicode.clone(),
+            })
+        };
+
+        if let Some(standard) = StandardKind::new(dict, font_resolver) {
+            Some(Self {
+                cache_key,
+                kind: Kind::Standard(standard),
+                to_unicode,
+            })
+        } else {
+            fallback()
+        }
+    }
+
+    pub(crate) fn outline_glyph(&self, glyph: GlyphId) -> BezPath {
+        match &self.kind {
+            Kind::Embedded(e) => e.outline_glyph(glyph),
+            Kind::Standard(s) => s.outline_glyph(glyph),
+        }
+    }
+
+    pub(crate) fn font_data(&self) -> Option<crate::font::FontData> {
+        match &self.kind {
+            Kind::Embedded(e) => Some(e.base_font.font_data()),
+            Kind::Standard(_) => None,
+        }
+    }
+
+    pub(crate) fn postscript_name(&self) -> Option<&str> {
+        match &self.kind {
+            Kind::Embedded(e) => e.postscript_name.as_deref(),
+            Kind::Standard(_) => None,
+        }
+    }
+
+    pub(crate) fn weight(&self) -> Option<u32> {
+        match &self.kind {
+            Kind::Embedded(e) => {
+                let weight = e.base_font.font_ref().attributes().weight.value().round() as u32;
+                if weight > 0 { Some(weight) } else { None }
+            }
+            Kind::Standard(_) => None,
+        }
+    }
+
+    pub(crate) fn is_italic(&self) -> bool {
+        match &self.kind {
+            Kind::Embedded(e) => {
+                // Check PDF font flags first
+                if let Some(flags) = &e.font_flags
+                    && flags.contains(FontFlags::ITALIC)
+                {
+                    return true;
+                }
+                // Check skrifa font attributes
+                e.base_font.font_ref().attributes().style != Style::Normal
+            }
+            Kind::Standard(_) => false,
+        }
+    }
+
+    pub(crate) fn is_serif(&self) -> bool {
+        match &self.kind {
+            Kind::Embedded(e) => e
+                .font_flags
+                .as_ref()
+                .is_some_and(|f| f.contains(FontFlags::SERIF)),
+            Kind::Standard(_) => false,
+        }
+    }
+
+    pub(crate) fn is_monospace(&self) -> bool {
+        match &self.kind {
+            Kind::Embedded(e) => {
+                // Check PDF font flags first
+                if let Some(flags) = &e.font_flags
+                    && flags.contains(FontFlags::FIXED_PITCH)
+                {
+                    return true;
+                }
+                // Check skrifa font metrics
+                e.base_font
+                    .font_ref()
+                    .metrics(
+                        skrifa::instance::Size::unscaled(),
+                        skrifa::instance::LocationRef::default(),
+                    )
+                    .is_monospace
+            }
+            Kind::Standard(_) => false,
+        }
+    }
+
+    pub(crate) fn map_code(&self, code: u8) -> GlyphId {
+        match &self.kind {
+            Kind::Embedded(e) => e.map_code(code),
+            Kind::Standard(s) => s.map_code(code),
+        }
+    }
+
+    pub(crate) fn glyph_width(&self, code: u8) -> f32 {
+        match &self.kind {
+            Kind::Embedded(e) => e.glyph_width(code),
+            Kind::Standard(s) => s.glyph_width(code).unwrap_or(0.0),
+        }
+    }
+
+    pub(crate) fn char_code_to_unicode(&self, code: u32) -> Option<BfString> {
+        if let Some(to_unicode) = &self.to_unicode
+            && let Some(c) = to_unicode.lookup_bf_string(code)
+        {
+            return Some(c);
+        }
+
+        match &self.kind {
+            Kind::Embedded(e) => e
+                .code_to_name(code as u8)
+                .and_then(glyph_name_to_unicode)
+                .map(BfString::Char),
+            Kind::Standard(s) => s.char_code_to_unicode(code as u8).map(BfString::Char),
+        }
+
+        // TODO: The test PDFs below fail (but mutool can render them correctly).
+        // There is likely some other strategy that requires processing the font tables
+        // hayro-tests/pdfs/custom/font_truetype_7.pdf
+        // hayro-tests/pdfs/custom/font_truetype_6.pdf
+    }
+}
+
+#[derive(Debug)]
+struct EmbeddedKind {
     base_font: OpenTypeFontBlob,
     widths: Vec<f32>,
     font_flags: Option<FontFlags>,
@@ -37,13 +217,12 @@ pub(crate) struct TrueTypeFont {
     cff_blob: Option<CffFontBlob>,
     differences: HashMap<u8, String>,
     cached_mappings: RefCell<HashMap<u8, GlyphId>>,
-    to_unicode: Option<CMap>,
     /// PostScript name from the PDF.
     postscript_name: Option<String>,
 }
 
-impl TrueTypeFont {
-    pub(crate) fn new(dict: &Dict<'_>, cmap_resolver: &CMapResolverFn) -> Option<Self> {
+impl EmbeddedKind {
+    fn new(dict: &Dict<'_>) -> Option<Self> {
         let descriptor = dict.get::<Dict<'_>>(FONT_DESC).unwrap_or_default();
 
         let font_flags = descriptor.get::<u32>(FLAGS).and_then(FontFlags::from_bits);
@@ -66,15 +245,11 @@ impl TrueTypeFont {
             }
         }
 
-        let cache_key = dict.cache_key();
-
         let cff_font_blob = base_font
             .font_ref()
             .cff()
             .ok()
             .and_then(|cff| CffFontBlob::new(Arc::new(cff.offset_data().as_ref().to_vec())));
-
-        let to_unicode = read_to_unicode(dict, cmap_resolver);
 
         let postscript_name = dict
             .get::<Name>(BASE_FONT)
@@ -82,7 +257,6 @@ impl TrueTypeFont {
 
         Some(Self {
             base_font,
-            cache_key,
             differences,
             cff_blob: cff_font_blob,
             widths,
@@ -90,73 +264,8 @@ impl TrueTypeFont {
             font_flags,
             encoding,
             cached_mappings: RefCell::new(HashMap::new()),
-            to_unicode,
             postscript_name,
         })
-    }
-
-    pub(crate) fn outline_glyph(&self, glyph: GlyphId) -> BezPath {
-        self.base_font.outline_glyph(glyph)
-    }
-
-    pub(crate) fn font_data(&self) -> crate::font::FontData {
-        self.base_font.font_data()
-    }
-
-    /// Get the PostScript name.
-    pub(crate) fn postscript_name(&self) -> Option<&str> {
-        self.postscript_name.as_deref()
-    }
-
-    /// Get the font weight (100-900, 400=normal, 700=bold).
-    ///
-    /// Returns `None` if weight cannot be determined (invalid weight).
-    pub(crate) fn weight(&self) -> Option<u32> {
-        let weight = self
-            .base_font
-            .font_ref()
-            .attributes()
-            .weight
-            .value()
-            .round() as u32;
-        if weight > 0 { Some(weight) } else { None }
-    }
-
-    /// Check if font is italic based on font flags or font attributes.
-    pub(crate) fn is_italic(&self) -> bool {
-        // Check PDF font flags first
-        if let Some(flags) = &self.font_flags
-            && flags.contains(FontFlags::ITALIC)
-        {
-            return true;
-        }
-        // Check skrifa font attributes
-        self.base_font.font_ref().attributes().style != Style::Normal
-    }
-
-    /// Check if font is serif based on font flags.
-    pub(crate) fn is_serif(&self) -> bool {
-        self.font_flags
-            .as_ref()
-            .is_some_and(|f| f.contains(FontFlags::SERIF))
-    }
-
-    /// Check if font is monospace based on font flags or font metrics.
-    pub(crate) fn is_monospace(&self) -> bool {
-        // Check PDF font flags first
-        if let Some(flags) = &self.font_flags
-            && flags.contains(FontFlags::FIXED_PITCH)
-        {
-            return true;
-        }
-        // Check skrifa font metrics
-        self.base_font
-            .font_ref()
-            .metrics(
-                skrifa::instance::Size::unscaled(),
-                skrifa::instance::LocationRef::default(),
-            )
-            .is_monospace
     }
 
     fn is_non_symbolic(&self) -> bool {
@@ -176,7 +285,11 @@ impl TrueTypeFont {
             .or_else(|| standard::get(code))
     }
 
-    pub(crate) fn map_code(&self, code: u8) -> GlyphId {
+    fn outline_glyph(&self, glyph: GlyphId) -> BezPath {
+        self.base_font.outline_glyph(glyph)
+    }
+
+    fn map_code(&self, code: u8) -> GlyphId {
         if let Some(glyph) = self.cached_mappings.borrow().get(&code) {
             return *glyph;
         }
@@ -268,7 +381,7 @@ impl TrueTypeFont {
         glyph
     }
 
-    pub(crate) fn glyph_width(&self, code: u8) -> f32 {
+    fn glyph_width(&self, code: u8) -> f32 {
         self.widths
             .get(code as usize)
             .copied()
@@ -279,23 +392,6 @@ impl TrueTypeFont {
             })
             .warn_none(&format!("failed to find advance width for code {code}"))
             .unwrap_or(0.0)
-    }
-
-    pub(crate) fn char_code_to_unicode(&self, code: u32) -> Option<BfString> {
-        if let Some(to_unicode) = &self.to_unicode
-            && let Some(c) = to_unicode.lookup_bf_string(code)
-        {
-            Some(c)
-        } else {
-            self.code_to_name(code as u8)
-                .and_then(glyph_name_to_unicode)
-                .map(BfString::Char)
-        }
-
-        // TODO: The test PDFs below fail (but mutool can render them correctly).
-        // There is likely some other strategy that requires processing the font tables
-        // hayro-tests/pdfs/custom/font_truetype_7.pdf
-        // hayro-tests/pdfs/custom/font_truetype_6.pdf
     }
 }
 
