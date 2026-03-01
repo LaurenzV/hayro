@@ -1467,11 +1467,7 @@
     "ignore": true,
     "comment": "takes long time"
   },
-  {
-    "id": "issue11242",
-    "ignore": true,
-    "comment": "missing text"
-  },
+  "issue11242",
   {
     "id": "issue11549",
     "comment": "missing text"
@@ -1593,9 +1589,7 @@
   {
     "id": "issue10717",
     "first_page": 0,
-    "last_page": 1,
-    "ignore": true,
-    "comment": "balloon type3 emojis which is decoded time and time again"
+    "last_page": 1
   },
   {
     "id": "bug1721218_reduced",

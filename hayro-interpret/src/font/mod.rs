@@ -554,18 +554,20 @@ impl FallbackFontQuery {
                 .map(FontFlags::from_bits_truncate)
             {
                 data.is_serif = flags.contains(FontFlags::SERIF);
-                data.is_italic = flags.contains(FontFlags::ITALIC)
-                    || data
-                        .post_script_name
-                        .as_ref()
-                        .is_some_and(|s| s.contains("Italic"));
+                data.is_italic = flags.contains(FontFlags::ITALIC);
                 data.is_small_cap = flags.contains(FontFlags::SMALL_CAP);
-                data.is_bold = data
-                    .post_script_name
-                    .as_ref()
-                    .is_some_and(|s| s.contains("Bold"));
             }
         }
+
+        data.is_italic |= data
+            .post_script_name
+            .as_ref()
+            .is_some_and(|s| s.contains("Italic"));
+
+        data.is_bold |= data
+            .post_script_name
+            .as_ref()
+            .is_some_and(|s| s.contains("Bold"));
 
         data
     }
