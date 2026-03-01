@@ -417,62 +417,6 @@ impl CMap {
         }
     }
 
-    /// Create a reversed copy of this cmap where character codes and CIDs are
-    /// swapped. This essentially allows you to create a new `CMap` that maps from
-    /// CIDs to character codes. For example, if the original map was a map from
-    /// Unicode to CID, this reversed map will be a map from CID to Unicode. In
-    /// this case, [`lookup_cid_code`] takes a CID as input and returns a
-    /// Unicode codepoint as output.
-    ///
-    /// Note that there are caveats: Bf string entries and notdef ranges will be
-    /// discarded. If multiple character codes mapped to the same CID, only one
-    /// of those mappings will be preserved.
-    pub fn reversed(&self) -> Self {
-        let mut cid_ranges: Vec<CidRange> = self
-            .cid_ranges
-            .iter()
-            .flat_map(|r| {
-                let len = r.range.end - r.range.start;
-                (0..=len).map(move |i| CidRange {
-                    range: Range {
-                        start: r.cid_start + i,
-                        end: r.cid_start + i,
-                    },
-                    cid_start: r.range.start + i,
-                })
-            })
-            .collect();
-
-        cid_ranges.sort_by(|a, b| a.range.start.cmp(&b.range.start));
-
-        let mut codespace_ranges = Vec::new();
-        if let (Some(first), Some(last)) = (cid_ranges.first(), cid_ranges.last()) {
-            let low = first.range.start;
-            let high = last.range.end;
-            #[allow(clippy::match_overlapping_arm)]
-            let number_bytes = match high {
-                0..=0xFF => 1,
-                0..=0xFFFF => 2,
-                0..=0xFFFFFF => 3,
-                _ => 4,
-            };
-            codespace_ranges.push(CodespaceRange {
-                number_bytes,
-                low,
-                high,
-            });
-        }
-
-        Self {
-            metadata: self.metadata.clone(),
-            codespace_ranges,
-            cid_ranges,
-            notdef_ranges: Vec::new(),
-            bf_entries: Vec::new(),
-            base: self.base.as_ref().map(|b| Box::new(b.reversed())),
-        }
-    }
-
     /// Return the metadata of this cmap.
     pub fn metadata(&self) -> &Metadata {
         &self.metadata
