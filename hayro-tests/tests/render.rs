@@ -910,6 +910,7 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn pdfjs_issue6010_1() { run_render_test_with_password("pdfjs_issue6010_1", "downloads/pdfjs/issue6010_1.pdf", None, "abc"); }
 #[test] fn pdfjs_issue6010_2() { run_render_test_with_password("pdfjs_issue6010_2", "downloads/pdfjs/issue6010_2.pdf", None, "æøå"); }
 #[test] fn pdfjs_bug1250079() { run_render_test("pdfjs_bug1250079", "downloads/pdfjs/bug1250079.pdf", None); }
+#[test] fn pdfjs_issue15577() { run_render_test("pdfjs_issue15577", "downloads/pdfjs/issue15577.pdf", Some("..=0")); }
 #[test] fn pdfjs_issue12294_print() { run_render_test("pdfjs_issue12294_print", "downloads/pdfjs/issue12294-print.pdf", Some("..=0")); }
 #[test] fn pdfjs_filled_background_range() { run_render_test("pdfjs_filled_background_range", "downloads/pdfjs/filled-background-range.pdf", None); }
 #[test] fn pdfjs_issue11242() { run_render_test("pdfjs_issue11242", "downloads/pdfjs/issue11242.pdf", None); }

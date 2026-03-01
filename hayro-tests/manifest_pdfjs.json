@@ -1437,9 +1437,7 @@
   "bug1250079",
   {
     "id": "issue15577",
-    "last_page": 0,
-    "ignore": true,
-    "comment": "root points to wrong object"
+    "last_page": 0
   },
   {
     "id": "issue9105_other",
