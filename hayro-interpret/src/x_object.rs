@@ -181,7 +181,7 @@ pub(crate) fn draw_image_xobject<'a, 'b>(
         return;
     }
 
-    let has_oc = xobject_oc(&x_object.stream.dict(), context);
+    let has_oc = xobject_oc(x_object.stream.dict(), context);
     if !context.ocg_state.is_visible() {
         if has_oc {
             context.ocg_state.end_marked_content();
