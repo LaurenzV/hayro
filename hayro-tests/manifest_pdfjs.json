@@ -1520,11 +1520,7 @@
     "last_page": 0,
     "comment": "built-in encoding"
   },
-  {
-    "id": "issue12007_reduced",
-    "ignore": true,
-    "comment": "pdf layers (optional content)"
-  },
+  "issue12007_reduced",
   {
     "id": "issue17906",
     "first_page": 0,

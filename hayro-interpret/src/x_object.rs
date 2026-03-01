@@ -110,6 +110,14 @@ pub(crate) fn draw_form_xobject<'a, 'b>(
         return;
     }
 
+    let has_oc = xobject_oc(&x_object.dict, context);
+    if !context.ocg_state.is_visible() {
+        if has_oc {
+            context.ocg_state.end_marked_content();
+        }
+        return;
+    }
+
     let iter = TypedIter::new(x_object.decoded.as_ref());
 
     context.path_mut().truncate(0);
@@ -158,6 +166,10 @@ pub(crate) fn draw_form_xobject<'a, 'b>(
 
     context.pop_root_transform();
     context.restore_state(device);
+
+    if has_oc {
+        context.ocg_state.end_marked_content();
+    }
 }
 
 pub(crate) fn draw_image_xobject<'a, 'b>(
@@ -166,6 +178,14 @@ pub(crate) fn draw_image_xobject<'a, 'b>(
     device: &mut impl Device<'a>,
 ) {
     if !context.ocg_state.is_visible() {
+        return;
+    }
+
+    let has_oc = xobject_oc(&x_object.stream.dict(), context);
+    if !context.ocg_state.is_visible() {
+        if has_oc {
+            context.ocg_state.end_marked_content();
+        }
         return;
     }
 
@@ -215,6 +235,24 @@ pub(crate) fn draw_image_xobject<'a, 'b>(
     device.pop_transparency_group();
 
     context.restore_state(device);
+
+    if has_oc {
+        context.ocg_state.end_marked_content();
+    }
+}
+
+fn xobject_oc(dict: &Dict<'_>, context: &mut Context<'_>) -> bool {
+    let Some(oc_dict) = dict.get::<Dict<'_>>(OC) else {
+        return false;
+    };
+
+    if let Some(oc_ref) = dict.get_ref(OC) {
+        context.ocg_state.begin_ocg(&oc_dict, oc_ref.into());
+    } else {
+        context.ocg_state.begin_ocmd(&oc_dict);
+    }
+
+    true
 }
 
 #[derive(Clone)]
