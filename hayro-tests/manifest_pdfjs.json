@@ -1444,7 +1444,7 @@
   {
     "id": "issue9105_other",
     "ignore": true,
-    "comment": "doesnt parse / has encryption"
+    "comment": "shortest PDF that Acrobat opens"
   },
   {
     "id": "issue12294-print",
@@ -1453,12 +1453,6 @@
   },
   {
     "id": "filled-background-range",
-    "comment": "takes long time"
-  },
-  {
-    "id": "issue8078",
-    "last_page": 0,
-    "ignore": true,
     "comment": "takes long time"
   },
   {
@@ -1577,17 +1571,13 @@
     "ignore": true,
     "comment": "wrong text"
   },
-  {
-    "id": "issue9291",
-    "ignore": true,
-    "comment": "text should be bold but isnt"
-  },
+  "issue9291",
   "issue269_2",
   "issue6132",
   {
     "id": "issue7454",
     "ignore": true,
-    "comment": "weird issue with wingdings font where metadata is wrong"
+    "comment": "non-embedded wingdings font"
   },
   {
     "id": "issue4934",

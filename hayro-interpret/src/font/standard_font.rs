@@ -8,7 +8,7 @@ use crate::font::{
 };
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Name;
-use hayro_syntax::object::dict::keys::{BASE_FONT, FONT_DESC};
+use hayro_syntax::object::dict::keys::{BASE_FONT, FONT_DESC, FONT_WEIGHT, ITALIC_ANGLE};
 use kurbo::BezPath;
 use skrifa::raw::TableProvider;
 use skrifa::{GlyphId, GlyphId16};
@@ -207,7 +207,10 @@ enum StandardFontFamily {
     Times,
 }
 
-pub(crate) fn select_standard_font(dict: &Dict<'_>) -> Option<(StandardFont, bool)> {
+pub(crate) fn select_standard_font(
+    dict: &Dict<'_>,
+    descriptor: &Dict<'_>,
+) -> Option<(StandardFont, bool)> {
     let base_font = dict.get::<Name>(BASE_FONT)?;
     let name = strip_subset_prefix(base_font.as_str());
 
@@ -230,12 +233,18 @@ pub(crate) fn select_standard_font(dict: &Dict<'_>) -> Option<(StandardFont, boo
         _ => {}
     }
 
-    // Now, we bruteforce, trying to determine a suitable fonts based on the
+    // Now, we bruteforce, trying to determine a suitable font based on the
     // keywords that appear in the name.
     let lower = name.to_ascii_lowercase();
 
-    let is_bold = lower.contains("bold");
-    let is_italic = lower.contains("italic") || lower.contains("oblique");
+    let is_bold = descriptor.get::<u32>(FONT_WEIGHT).is_some_and(|w| w >= 700)
+        || lower.contains("bold")
+        || lower.contains("demi");
+    let is_italic = descriptor
+        .get::<f32>(ITALIC_ANGLE)
+        .is_some_and(|a| a != 0.0)
+        || lower.contains("italic")
+        || lower.contains("oblique");
 
     let (family, exact) = if lower.contains("helvetica") {
         (Some(StandardFontFamily::Helvetica), true)
@@ -364,7 +373,8 @@ pub(crate) struct StandardKind {
 
 impl StandardKind {
     pub(crate) fn new(dict: &Dict<'_>, resolver: &FontResolverFn) -> Option<Self> {
-        let (font, exact) = select_standard_font(dict)?;
+        let descriptor = dict.get::<Dict<'_>>(FONT_DESC).unwrap_or_default();
+        let (font, exact) = select_standard_font(dict, &descriptor)?;
         Self::new_with_standard(dict, font, !exact, resolver)
     }
 

@@ -64,20 +64,21 @@ impl Type0Font {
         let (font_type, fallback, _is_standard_fallback) = match FontType::new(&font_descriptor) {
             Some(ft) => (ft, false, false),
             None => {
-                let (query, is_standard) = if let Some((standard, _)) = select_standard_font(dict) {
-                    (FontQuery::Standard(standard), true)
-                } else {
-                    let mut query = FallbackFontQuery::new(dict);
-                    query.character_collection = cmap.metadata().character_collection.clone();
+                let (query, is_standard) =
+                    if let Some((standard, _)) = select_standard_font(dict, &font_descriptor) {
+                        (FontQuery::Standard(standard), true)
+                    } else {
+                        let mut query = FallbackFontQuery::new(dict);
+                        query.character_collection = cmap.metadata().character_collection.clone();
 
-                    warn!(
-                        "unable to load CID font {} ({:?}), attempting fallback",
-                        query.post_script_name.as_deref().unwrap_or("(no name)"),
-                        dict.obj_id()
-                    );
+                        warn!(
+                            "unable to load CID font {} ({:?}), attempting fallback",
+                            query.post_script_name.as_deref().unwrap_or("(no name)"),
+                            dict.obj_id()
+                        );
 
-                    (FontQuery::Fallback(query), false)
-                };
+                        (FontQuery::Fallback(query), false)
+                    };
 
                 let (data, index) = font_resolver(&query)?;
                 let blob = OpenTypeFontBlob::new(data.clone(), index)
