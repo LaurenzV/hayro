@@ -1,4 +1,4 @@
-use crate::font::blob::{CffFontBlob, OpenTypeFontBlob};
+use crate::font::blob::{CffFontBlob, OpenTypeFontBlob, Type1FontBlob};
 use crate::font::generated::glyph_names;
 use crate::font::standard_font::select_standard_font;
 use crate::font::{
@@ -194,6 +194,9 @@ impl Type0Font {
                     self.cid_to_gid_map.map(cid as u16)
                 }
             }
+            // Maybe we need similar processing to CFF fonts? But since
+            // Type1 fonts are invalid anyway, let's just ignore for now.
+            FontType::Type1(_) => GlyphId::new(cid),
         }
     }
 
@@ -235,6 +238,15 @@ impl Type0Font {
                     None
                 }
             }
+            FontType::Type1(t) => {
+                let name = glyph_names::get_reverse(character)?;
+                let idx = t
+                    .table()
+                    .charstring_names()
+                    .iter()
+                    .position(|n| n == name)?;
+                Some(GlyphId::new(idx as u32))
+            }
         }
     }
 
@@ -252,6 +264,15 @@ impl Type0Font {
         let path = match &self.font_type {
             FontType::OpenType(t) => t.outline_glyph(glyph),
             FontType::Cff(c) => c.outline_glyph(glyph),
+            FontType::Type1(t) => {
+                let name = t
+                    .table()
+                    .charstring_names()
+                    .get(glyph.to_u32() as usize)
+                    .map(|n| n.as_str())
+                    .unwrap_or(".notdef");
+                t.outline_glyph(name)
+            }
         };
 
         if self.fallback
@@ -268,10 +289,11 @@ impl Type0Font {
         path
     }
 
-    pub(crate) fn font_data(&self) -> crate::font::FontData {
+    pub(crate) fn font_data(&self) -> Option<crate::font::FontData> {
         match &self.font_type {
-            FontType::OpenType(t) => t.font_data(),
-            FontType::Cff(c) => c.font_data(),
+            FontType::OpenType(t) => Some(t.font_data()),
+            FontType::Cff(c) => Some(c.font_data()),
+            FontType::Type1(_) => None,
         }
     }
 
@@ -289,7 +311,7 @@ impl Type0Font {
                 let weight = t.font_ref().attributes().weight.value().round() as u32;
                 if weight > 0 { Some(weight) } else { None }
             }
-            FontType::Cff(_) => None,
+            FontType::Cff(_) | FontType::Type1(_) => None,
         }
     }
 
@@ -302,7 +324,7 @@ impl Type0Font {
         }
         match &self.font_type {
             FontType::OpenType(t) => t.font_ref().attributes().style != Style::Normal,
-            FontType::Cff(_) => false,
+            FontType::Cff(_) | FontType::Type1(_) => false,
         }
     }
 
@@ -329,7 +351,7 @@ impl Type0Font {
                     )
                     .is_monospace
             }
-            FontType::Cff(_) => false,
+            FontType::Cff(_) | FontType::Type1(_) => false,
         }
     }
 
@@ -405,6 +427,9 @@ enum FontType {
     OpenType(OpenTypeFontBlob),
     /// A CFF font.
     Cff(CffFontBlob),
+    /// A Type1 font. (Yes, there actually exist PDFs that embed a Type1 font in a
+    /// CID font :))
+    Type1(Type1FontBlob),
 }
 
 impl FontType {
@@ -422,12 +447,19 @@ impl FontType {
             .decoded()
             .ok()?;
 
-        let parsed = if let Ok(_font_ref) = FontRef::from_index(&data, 0) {
+        let data = Arc::new(data);
+
+        let parsed = if let Ok(_font_ref) = FontRef::from_index(data.as_ref(), 0) {
             // It's an OpenType font, either TrueType or CFF.
-            Self::OpenType(OpenTypeFontBlob::new(Arc::new(data), 0)?)
-        } else {
+            Self::OpenType(OpenTypeFontBlob::new(data, 0)?)
+        } else if let Some(cff) = CffFontBlob::new(data.clone()) {
             // It's a CFF font.
-            Self::Cff(CffFontBlob::new(Arc::new(data))?)
+            Self::Cff(cff)
+        } else if let Some(t1) = Type1FontBlob::new(data) {
+            // It's a Type1 (PFB) font.
+            Self::Type1(t1)
+        } else {
+            return None;
         };
 
         Some(parsed)

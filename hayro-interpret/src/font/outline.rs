@@ -164,7 +164,7 @@ impl OutlineFont {
                 is_monospace: t.is_monospace(),
             }),
             Self::Type0(t) => Some(OutlineFontData {
-                data: t.font_data(),
+                data: t.font_data()?,
                 cache_key: t.cache_key(),
                 postscript_name: t.postscript_name().map(|s| s.to_string()),
                 weight: t.weight(),

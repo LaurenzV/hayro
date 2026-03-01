@@ -29,6 +29,7 @@ pub(crate) struct Parameters {
     encoding_type: EncodingType,
     subroutines: Map<u32, Vec<u8>>,
     charstrings: Map<String, Vec<u8>>,
+    charstring_names: Vec<String>,
     pub(crate) weight_vector: Option<Vec<f32>>,
 }
 
@@ -39,6 +40,7 @@ impl Default for Parameters {
             encoding_type: EncodingType::Standard,
             subroutines: Map::new(),
             charstrings: Map::new(),
+            charstring_names: Vec::new(),
             weight_vector: None,
         }
     }
@@ -123,8 +125,9 @@ impl Table {
                     params.subroutines = s.parse_subroutines(len_iv, use_decryption)?;
                 }
                 b"/CharStrings" => {
-                    if let Some(chars) = s.parse_charstrings(len_iv, use_decryption) {
+                    if let Some((chars, names)) = s.parse_charstrings(len_iv, use_decryption) {
                         params.charstrings = chars;
+                        params.charstring_names = names;
                     }
                 }
                 b"/lenIV" => {
@@ -169,6 +172,11 @@ impl Table {
     /// Return the glyph name of the code point.
     pub fn code_to_string(&self, code_point: u8) -> Option<&str> {
         self.params.encoding_type.encode(code_point)
+    }
+
+    /// Returns charstring names in their original insertion order.
+    pub fn charstring_names(&self) -> &[String] {
+        &self.params.charstring_names
     }
 }
 
@@ -280,15 +288,16 @@ impl<'a> Stream<'a> {
         &mut self,
         len_iv: i64,
         use_decryption: bool,
-    ) -> Option<Map<String, Vec<u8>>> {
+    ) -> Option<(Map<String, Vec<u8>>, Vec<String>)> {
         let mut charstrings = Map::new();
+        let mut names = Vec::new();
 
         let mut first_glyph_name = None;
         let mut int_token = None;
 
         while let Some(token) = self.next_token() {
             if token == b"end" {
-                return Some(charstrings);
+                return Some((charstrings, names));
             }
 
             if token.starts_with(b"/") {
@@ -351,10 +360,9 @@ impl<'a> Stream<'a> {
 
             let encrypted_bytes = self.read_bytes(bin_len as usize)?;
             let decrypted_bytes = decrypt_charstring(encrypted_bytes, len_iv, use_decryption)?;
-            charstrings.insert(
-                core::str::from_utf8(glyph_name).ok()?.to_string(),
-                decrypted_bytes,
-            );
+            let name = core::str::from_utf8(glyph_name).ok()?.to_string();
+            names.push(name.clone());
+            charstrings.insert(name, decrypted_bytes);
 
             let tok = self.next_token()?;
             if tok == ND || tok == ND_ALT {
@@ -365,7 +373,7 @@ impl<'a> Stream<'a> {
             }
         }
 
-        Some(charstrings)
+        Some((charstrings, names))
     }
 
     fn parse_subroutines(
