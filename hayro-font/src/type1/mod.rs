@@ -30,6 +30,7 @@ pub(crate) struct Parameters {
     subroutines: Map<u32, Vec<u8>>,
     charstrings: Map<String, Vec<u8>>,
     charstring_names: Vec<String>,
+    charstring_indices: Map<String, u16>,
     pub(crate) weight_vector: Option<Vec<f32>>,
 }
 
@@ -41,6 +42,7 @@ impl Default for Parameters {
             subroutines: Map::new(),
             charstrings: Map::new(),
             charstring_names: Vec::new(),
+            charstring_indices: Map::new(),
             weight_vector: None,
         }
     }
@@ -126,6 +128,11 @@ impl Table {
                 }
                 b"/CharStrings" => {
                     if let Some((chars, names)) = s.parse_charstrings(len_iv, use_decryption) {
+                        params.charstring_indices = names
+                            .iter()
+                            .enumerate()
+                            .map(|(i, n)| (n.clone(), i as u16))
+                            .collect();
                         params.charstrings = chars;
                         params.charstring_names = names;
                     }
@@ -177,6 +184,11 @@ impl Table {
     /// Returns charstring names in their original insertion order.
     pub fn charstring_names(&self) -> &[String] {
         &self.params.charstring_names
+    }
+
+    /// Returns the insertion index of a charstring by name.
+    pub fn charstring_index(&self, name: &str) -> Option<u16> {
+        self.params.charstring_indices.get(name).copied()
     }
 }
 

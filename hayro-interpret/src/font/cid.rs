@@ -240,11 +240,7 @@ impl Type0Font {
             }
             FontType::Type1(t) => {
                 let name = glyph_names::get_reverse(character)?;
-                let idx = t
-                    .table()
-                    .charstring_names()
-                    .iter()
-                    .position(|n| n == name)?;
+                let idx = t.table().charstring_index(name)?;
                 Some(GlyphId::new(idx as u32))
             }
         }
