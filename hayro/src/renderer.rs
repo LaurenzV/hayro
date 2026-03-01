@@ -46,7 +46,7 @@ impl Renderer {
         // Best-effort attempt to ensure a line width of at least 1.0, as required by the PDF
         // specification. If we are stroking text, we reduce the threshold as it will otherwise
         // lead to very bold-looking text at low resolutions.
-        let min_factor = min_factor(self.ctx.transform());
+        let min_factor = max_factor(self.ctx.transform());
         let mut line_width = stroke_props.line_width.max(0.01);
         let transformed_width = line_width * min_factor;
 
@@ -904,7 +904,7 @@ fn draw_soft_mask(mask: &SoftMask<'_>, settings: RenderSettings, width: u16, hei
     rendered_mask
 }
 
-pub(crate) fn min_factor(transform: &Affine) -> f32 {
+pub(crate) fn max_factor(transform: &Affine) -> f32 {
     let scale_skew_transform = {
         let c = transform.as_coeffs();
         Affine::new([c[0], c[1], c[2], c[3], 0.0, 0.0])
@@ -916,7 +916,7 @@ pub(crate) fn min_factor(transform: &Affine) -> f32 {
     x_advance
         .to_vec2()
         .length()
-        .min(y_advance.to_vec2().length()) as f32
+        .max(y_advance.to_vec2().length()) as f32
 }
 
 pub(crate) fn x_y_advances(transform: &Affine) -> (Vec2, Vec2) {

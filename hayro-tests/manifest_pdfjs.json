@@ -1549,11 +1549,7 @@
     "ignore": true,
     "comment": "weird letter"
   },
-  {
-    "id": "issue12295",
-    "ignore": true,
-    "comment": "black bars"
-  },
+  "issue12295",
   "issue11768",
   "issue9291",
   "issue269_2",
