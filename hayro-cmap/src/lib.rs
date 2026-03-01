@@ -359,6 +359,9 @@ const MAX_NESTING_DEPTH: u32 = 16;
 #[derive(Debug, Clone)]
 pub struct CMap {
     metadata: Metadata,
+    // Note that we don't actually use this, because Acrobat _seems_ to ignore
+    // it, too.
+    _codespace_ranges: Vec<CodespaceRange>,
     cid_ranges: PartitionedRanges,
     notdef_ranges: PartitionedRanges,
     bf_entries: Vec<BfRange>,
@@ -397,6 +400,7 @@ impl CMap {
                 name: Some(Vec::from(name)),
                 writing_mode: Some(writing_mode),
             },
+            _codespace_ranges: Vec::new(),
             cid_ranges: {
                 let mut r = PartitionedRanges::new();
                 r.push(

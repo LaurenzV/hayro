@@ -141,6 +141,7 @@ pub(crate) fn parse_inner<'a>(
 
     Some(CMap {
         metadata,
+        _codespace_ranges,
         cid_ranges: ranges,
         notdef_ranges,
         bf_entries,

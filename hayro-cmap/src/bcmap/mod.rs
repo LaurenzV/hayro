@@ -194,6 +194,7 @@ pub(crate) fn parse<'a>(
             name: cmap_name,
             writing_mode,
         },
+        _codespace_ranges,
         cid_ranges,
         notdef_ranges,
         bf_entries,
