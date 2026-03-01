@@ -15,7 +15,7 @@ pub use embedded::load_embedded;
 use crate::bcmap::embedded::BUNDLE;
 use crate::{
     BfRange, CMap, CMapName, CharacterCollection, CidFamily, CidRange, CodespaceRange, Metadata,
-    Range, WritingMode, parse,
+    PartitionedRanges, Range, WritingMode, parse,
 };
 use huffman::HuffmanTable;
 use reader::Reader;
@@ -73,9 +73,9 @@ pub(crate) fn parse<'a>(
     let mut character_collection = None;
     let mut writing_mode = None;
     let mut base: Option<Box<CMap>> = None;
-    let mut codespace_ranges = Vec::new();
-    let mut cid_ranges = Vec::new();
-    let mut notdef_ranges = Vec::new();
+    let mut _codespace_ranges = Vec::new();
+    let mut cid_ranges = PartitionedRanges::new();
+    let mut notdef_ranges = PartitionedRanges::new();
     let mut bf_entries = Vec::new();
 
     // Start parsing all segments of the file.
@@ -123,16 +123,18 @@ pub(crate) fn parse<'a>(
                 };
             }
             SEGMENT_CODESPACE => {
-                parse_codespace(payload, &mut codespace_ranges)?;
+                parse_codespace(payload, &mut _codespace_ranges)?;
             }
             SEGMENT_NOTDEF => {
                 parse_notdef(payload, &mut notdef_ranges)?;
             }
             SEGMENT_RANGE_1B | SEGMENT_RANGE_2B | SEGMENT_RANGE_3B | SEGMENT_RANGE_4B => {
-                parse_cid_segment(payload, &mut cid_ranges, delta_table, Some(count_table))?;
+                let bw = seg_type.div_ceil(2) as usize;
+                parse_cid_segment(payload, &mut cid_ranges, bw, delta_table, Some(count_table))?;
             }
             SEGMENT_SINGLE_1B | SEGMENT_SINGLE_2B | SEGMENT_SINGLE_3B | SEGMENT_SINGLE_4B => {
-                parse_cid_segment(payload, &mut cid_ranges, delta_table, None)?;
+                let bw = seg_type.div_ceil(2) as usize;
+                parse_cid_segment(payload, &mut cid_ranges, bw, delta_table, None)?;
             }
             SEGMENT_BF_RANGE_VARIABLE => {
                 parse_bf_segment(
@@ -182,8 +184,8 @@ pub(crate) fn parse<'a>(
         }
     }
 
-    cid_ranges.sort_by(|a, b| a.range.start.cmp(&b.range.start));
-    notdef_ranges.sort_by(|a, b| a.range.start.cmp(&b.range.start));
+    cid_ranges.sort();
+    notdef_ranges.sort();
     bf_entries.sort_by(|a, b| a.range.start.cmp(&b.range.start));
 
     Some(CMap {
@@ -192,7 +194,6 @@ pub(crate) fn parse<'a>(
             name: cmap_name,
             writing_mode,
         },
-        codespace_ranges,
         cid_ranges,
         notdef_ranges,
         bf_entries,
@@ -219,7 +220,7 @@ fn parse_codespace(payload: &[u8], ranges: &mut Vec<CodespaceRange>) -> Option<(
     Some(())
 }
 
-fn parse_notdef(payload: &[u8], ranges: &mut Vec<CidRange>) -> Option<()> {
+fn parse_notdef(payload: &[u8], ranges: &mut PartitionedRanges) -> Option<()> {
     let mut r = Reader::new(payload);
     let bw = r.read_u8()? as usize;
     let n_entries = r.read_u16()? as usize;
@@ -229,10 +230,13 @@ fn parse_notdef(payload: &[u8], ranges: &mut Vec<CidRange>) -> Option<()> {
         let end = r.read_n_bytes(bw)?;
         let cid = r.read_u16()? as u32;
 
-        ranges.push(CidRange {
-            range: Range { start, end },
-            cid_start: cid,
-        });
+        ranges.push(
+            bw,
+            CidRange {
+                range: Range { start, end },
+                cid_start: cid,
+            },
+        );
     }
 
     Some(())
@@ -240,7 +244,8 @@ fn parse_notdef(payload: &[u8], ranges: &mut Vec<CidRange>) -> Option<()> {
 
 fn parse_cid_segment(
     payload: &[u8],
-    ranges: &mut Vec<CidRange>,
+    ranges: &mut PartitionedRanges,
+    byte_width: usize,
     delta_table: &HuffmanTable,
     count_table: Option<&HuffmanTable>,
 ) -> Option<()> {
@@ -324,10 +329,13 @@ fn parse_cid_segment(
             raw_cid as u32
         };
 
-        ranges.push(CidRange {
-            range: Range { start, end },
-            cid_start: cid,
-        });
+        ranges.push(
+            byte_width,
+            CidRange {
+                range: Range { start, end },
+                cid_start: cid,
+            },
+        );
 
         prev_end = Some(end);
         prev_cid = Some(cid);

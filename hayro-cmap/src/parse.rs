@@ -7,7 +7,7 @@ use hayro_postscript::{Object, Scanner};
 use crate::bcmap;
 use crate::{
     BfRange, CMap, CMapName, CharacterCollection, CidFamily, CidRange, CodespaceRange,
-    MAX_NESTING_DEPTH, Metadata, Range, WritingMode,
+    MAX_NESTING_DEPTH, Metadata, PartitionedRanges, Range, WritingMode,
 };
 
 struct Context<F> {
@@ -36,9 +36,9 @@ pub(crate) fn parse_inner<'a>(
         buf: Vec::new(),
         get_cmap,
     };
-    let mut codespace_ranges = Vec::new();
-    let mut ranges = Vec::new();
-    let mut notdef_ranges = Vec::new();
+    let mut _codespace_ranges = Vec::new();
+    let mut ranges = PartitionedRanges::new();
+    let mut notdef_ranges = PartitionedRanges::new();
     let mut bf_entries = Vec::new();
     let mut base = None;
 
@@ -81,7 +81,7 @@ pub(crate) fn parse_inner<'a>(
         } else {
             match name.as_str() {
                 Some("begincodespacerange") => {
-                    parse_codespace_range(&mut scanner, &mut codespace_ranges, &mut ctx)?;
+                    parse_codespace_range(&mut scanner, &mut _codespace_ranges, &mut ctx)?;
                 }
                 Some("begincidrange") => {
                     parse_range(&mut scanner, &mut ranges, &mut ctx, "endcidrange")?;
@@ -116,8 +116,8 @@ pub(crate) fn parse_inner<'a>(
     }
 
     // Since we will use binary search for finding the correct entry, sort now.
-    ranges.sort_by(|a, b| a.range.start.cmp(&b.range.start));
-    notdef_ranges.sort_by(|a, b| a.range.start.cmp(&b.range.start));
+    ranges.sort();
+    notdef_ranges.sort();
     bf_entries.sort_by(|a, b| a.range.start.cmp(&b.range.start));
 
     // See PDFJS-3323, which has an invalid CIDSystemInfo entry.
@@ -141,7 +141,6 @@ pub(crate) fn parse_inner<'a>(
 
     Some(CMap {
         metadata,
-        codespace_ranges,
         cid_ranges: ranges,
         notdef_ranges,
         bf_entries,
@@ -195,7 +194,7 @@ fn parse_codespace_range<F>(
 
 fn parse_range<F>(
     scanner: &mut Scanner<'_>,
-    ranges: &mut Vec<CidRange>,
+    ranges: &mut PartitionedRanges,
     ctx: &mut Context<F>,
     end_marker: &str,
 ) -> Option<()> {
@@ -207,19 +206,23 @@ fn parse_range<F>(
         }
 
         let start = extract_u32_code(&obj, &mut ctx.buf)?;
+        let byte_len = ctx.buf.len();
         let end = read_u32_code(scanner, &mut ctx.buf)?;
         let cid_start = u32::try_from(scanner.parse_number().ok()?.as_i32()).ok()?;
 
-        ranges.push(CidRange {
-            range: Range { start, end },
-            cid_start,
-        });
+        ranges.push(
+            byte_len,
+            CidRange {
+                range: Range { start, end },
+                cid_start,
+            },
+        );
     }
 }
 
 fn parse_char<F>(
     scanner: &mut Scanner<'_>,
-    ranges: &mut Vec<CidRange>,
+    ranges: &mut PartitionedRanges,
     ctx: &mut Context<F>,
     end_marker: &str,
 ) -> Option<()> {
@@ -231,15 +234,19 @@ fn parse_char<F>(
         }
 
         let code = extract_u32_code(&obj, &mut ctx.buf)?;
+        let byte_len = ctx.buf.len();
         let cid_start = u32::try_from(scanner.parse_number().ok()?.as_i32()).ok()?;
 
-        ranges.push(CidRange {
-            range: Range {
-                start: code,
-                end: code,
+        ranges.push(
+            byte_len,
+            CidRange {
+                range: Range {
+                    start: code,
+                    end: code,
+                },
+                cid_start,
             },
-            cid_start,
-        });
+        );
     }
 }
 

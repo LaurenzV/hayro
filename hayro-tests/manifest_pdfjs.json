@@ -1558,11 +1558,7 @@
     "ignore": true,
     "comment": "black bars"
   },
-  {
-    "id": "issue11768",
-    "ignore": true,
-    "comment": "wrong text"
-  },
+  "issue11768",
   "issue9291",
   "issue269_2",
   "issue6132",

@@ -32,7 +32,6 @@ pub fn load_embedded(_name: CMapName<'_>) -> Option<&'static [u8]> {
 
 use alloc::boxed::Box;
 use alloc::string::String;
-use alloc::vec;
 use alloc::vec::Vec;
 
 /// A CID (Character Identifier).
@@ -360,9 +359,8 @@ const MAX_NESTING_DEPTH: u32 = 16;
 #[derive(Debug, Clone)]
 pub struct CMap {
     metadata: Metadata,
-    codespace_ranges: Vec<CodespaceRange>,
-    cid_ranges: Vec<CidRange>,
-    notdef_ranges: Vec<CidRange>,
+    cid_ranges: PartitionedRanges,
+    notdef_ranges: PartitionedRanges,
     bf_entries: Vec<BfRange>,
     base: Option<Box<Self>>,
 }
@@ -399,19 +397,21 @@ impl CMap {
                 name: Some(Vec::from(name)),
                 writing_mode: Some(writing_mode),
             },
-            codespace_ranges: vec![CodespaceRange {
-                number_bytes: 2,
-                low: 0,
-                high: 0xFFFF,
-            }],
-            cid_ranges: vec![CidRange {
-                range: Range {
-                    start: 0,
-                    end: 0xFFFF,
-                },
-                cid_start: 0,
-            }],
-            notdef_ranges: Vec::new(),
+            cid_ranges: {
+                let mut r = PartitionedRanges::new();
+                r.push(
+                    2,
+                    CidRange {
+                        range: Range {
+                            start: 0,
+                            end: 0xFFFF,
+                        },
+                        cid_start: 0,
+                    },
+                );
+                r
+            },
+            notdef_ranges: PartitionedRanges::new(),
             bf_entries: Vec::new(),
             base: None,
         }
@@ -424,19 +424,19 @@ impl CMap {
 
     /// Look up the CID code of a character code.
     ///
-    /// Returns `None` if the code is not within any codespace range for the
-    /// given byte length.
+    /// Returns `None` if the code does not match any range for the given byte length.
     pub fn lookup_cid_code(&self, code: u32, byte_len: u8) -> Option<Cid> {
-        let in_codespace = self.in_codespace(code, byte_len);
+        // Note that, in theory, we are supposed to first check the code space range
+        // whether the entry exists in the first place. However, from my experiments
+        // Acrobat mostly seems to ignore this, so we do that as well.
 
-        if !in_codespace {
-            return None;
-        }
+        let cid_ranges = self.cid_ranges.get(byte_len)?;
+        let notdef_ranges = self.notdef_ranges.get(byte_len)?;
 
-        if let Some(entry) = find_in_ranges(&self.cid_ranges, code) {
+        if let Some(entry) = find_in_ranges(cid_ranges, code) {
             let offset = code.checked_sub(entry.range.start)?;
             return entry.cid_start.checked_add(offset);
-        } else if let Some(entry) = find_in_ranges(&self.notdef_ranges, code) {
+        } else if let Some(entry) = find_in_ranges(notdef_ranges, code) {
             // For `.notdef` ranges, all codes map to the same `.notdef` CID, so
             // no adding of the offset here.
             return Some(entry.cid_start);
@@ -449,14 +449,10 @@ impl CMap {
             return Some(lookup as u32);
         }
 
-        // If character code is in code space range but has no active mapping,
-        // here or in any referenced cmaps, assume `.notdef`.
-        Some(
-            self.base
-                .as_ref()
-                .and_then(|b| b.lookup_cid_code(code, byte_len))
-                .unwrap_or(0),
-        )
+        // If we still haven't found anything, check the base cmap.
+        self.base
+            .as_ref()
+            .and_then(|b| b.lookup_cid_code(code, byte_len))
     }
 
     /// Look up a bf string in the cmap. This is usually
@@ -466,22 +462,6 @@ impl CMap {
     /// Returns `None` if no mapping is available.
     pub fn lookup_bf_string(&self, code: u32) -> Option<BfString> {
         self.lookup_bf_string_inner(code, true)
-    }
-
-    /// Check whether a character code is within any codespace range, including
-    /// those of the base cmap (for cmap files that inherit codespace via `usecmap`).
-    fn in_codespace(&self, code: u32, byte_len: u8) -> bool {
-        if !self.codespace_ranges.is_empty() {
-            return self
-                .codespace_ranges
-                .iter()
-                .any(|r| r.number_bytes == byte_len && code >= r.low && code <= r.high);
-        }
-
-        // If nothing was found in this cmap, check if there's a parent cmap.
-        self.base
-            .as_ref()
-            .is_some_and(|b| b.in_codespace(code, byte_len))
     }
 
     fn lookup_bf_string_inner(&self, code: u32, recurse: bool) -> Option<BfString> {
@@ -559,6 +539,39 @@ impl HasRange for CidRange {
 }
 
 #[derive(Debug, Clone)]
+pub(crate) struct PartitionedRanges {
+    buckets: [Vec<CidRange>; 4],
+}
+
+impl PartitionedRanges {
+    pub(crate) fn new() -> Self {
+        Self {
+            buckets: [Vec::new(), Vec::new(), Vec::new(), Vec::new()],
+        }
+    }
+
+    pub(crate) fn push(&mut self, byte_len: usize, range: CidRange) {
+        if let Some(bucket) = byte_len
+            .checked_sub(1)
+            .and_then(|i| self.buckets.get_mut(i))
+        {
+            bucket.push(range);
+        }
+    }
+
+    pub(crate) fn get(&self, byte_len: u8) -> Option<&[CidRange]> {
+        let idx = (byte_len as usize).checked_sub(1)?;
+        self.buckets.get(idx).map(|v| v.as_slice())
+    }
+
+    pub(crate) fn sort(&mut self) {
+        for bucket in &mut self.buckets {
+            bucket.sort_by(|a, b| a.range.start.cmp(&b.range.start));
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub(crate) struct BfRange {
     pub(crate) range: Range,
     pub(crate) dst_base: Vec<u16>,
@@ -572,6 +585,7 @@ impl HasRange for BfRange {
 
 /// A codespace range defining valid character code byte sequences.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub(crate) struct CodespaceRange {
     pub(crate) number_bytes: u8,
     pub(crate) low: u32,
@@ -811,9 +825,9 @@ endcidrange
 "#,
         );
 
-        assert_eq!(cmap.lookup_cid_code(0x00FF, 2), Some(0));
-        assert_eq!(cmap.lookup_cid_code(0x0200, 2), Some(0));
-        assert_eq!(cmap.lookup_cid_code(0xFFFF, 2), Some(0));
+        assert_eq!(cmap.lookup_cid_code(0x00FF, 2), None);
+        assert_eq!(cmap.lookup_cid_code(0x0200, 2), None);
+        assert_eq!(cmap.lookup_cid_code(0xFFFF, 2), None);
     }
 
     #[test]
@@ -954,7 +968,7 @@ endcidrange
         assert_eq!(cmap.lookup_cid_code(0x0000, 2), Some(0));
         assert_eq!(cmap.lookup_cid_code(0x00FF, 2), Some(0xFF));
 
-        assert_eq!(cmap.lookup_cid_code(0x0200, 2), Some(0));
+        assert_eq!(cmap.lookup_cid_code(0x0200, 2), None);
     }
 
     #[test]
@@ -1022,7 +1036,7 @@ endnotdefchar
 
         assert_eq!(cmap.lookup_cid_code(0x03, 1), Some(10));
         assert_eq!(cmap.lookup_cid_code(0x20, 1), Some(20));
-        assert_eq!(cmap.lookup_cid_code(0x04, 1), Some(0));
+        assert_eq!(cmap.lookup_cid_code(0x04, 1), None);
     }
 
     #[test]
@@ -1038,7 +1052,7 @@ endnotdefrange
         assert_eq!(cmap.lookup_cid_code(0x0000, 2), Some(100));
         assert_eq!(cmap.lookup_cid_code(0x0001, 2), Some(100));
         assert_eq!(cmap.lookup_cid_code(0x001F, 2), Some(100));
-        assert_eq!(cmap.lookup_cid_code(0x0020, 2), Some(0));
+        assert_eq!(cmap.lookup_cid_code(0x0020, 2), None);
     }
 
     #[test]
@@ -1172,57 +1186,6 @@ endbfchar
 
         assert_eq!(cmap.lookup_cid_code(0x0041, 2), Some(0x0041));
         assert_eq!(cmap.lookup_cid_code(0xFFFF, 2), Some(0xFFFF));
-    }
-
-    #[test]
-    fn codespace_range_mixed() {
-        let data = br#"
-/CIDSystemInfo 3 dict dup begin
-  /Registry (Adobe) def
-  /Ordering (Japan1) def
-  /Supplement 0 def
-end def
-/CMapName /Test def
-/WMode 0 def
-2 begincodespacerange
-<00> <80>
-<8140> <9FFC>
-endcodespacerange
-1 begincidrange
-<00> <80> 0
-endcidrange
-1 begincidrange
-<8140> <9FFC> 200
-endcidrange
-"#;
-        let cmap = CMap::parse(data.as_slice(), |_| None).unwrap();
-
-        assert_eq!(cmap.lookup_cid_code(0x41, 1), Some(0x41));
-        assert_eq!(cmap.lookup_cid_code(0x00, 1), Some(0));
-        assert_eq!(cmap.lookup_cid_code(0x80, 1), Some(0x80));
-        assert_eq!(cmap.lookup_cid_code(0x81, 1), None);
-
-        assert_eq!(cmap.lookup_cid_code(0x8140, 2), Some(200));
-        assert_eq!(cmap.lookup_cid_code(0x9FFC, 2), Some(200 + 0x9FFC - 0x8140));
-        assert_eq!(cmap.lookup_cid_code(0x8100, 2), None);
-
-        assert_eq!(cmap.lookup_cid_code(0x41, 2), None);
-    }
-
-    #[test]
-    fn codespace_range_4_byte() {
-        let cmap = parse_with_preamble(
-            br#"
-1 begincodespacerange
-<8EA1A1A1> <8EA1FEFE>
-endcodespacerange
-"#,
-        );
-
-        assert_eq!(cmap.lookup_cid_code(0x8EA1A1A1, 4), Some(0));
-        assert_eq!(cmap.lookup_cid_code(0x8EA1FEFE, 4), Some(0));
-        assert_eq!(cmap.lookup_cid_code(0x8EA1A1A0, 4), None);
-        assert_eq!(cmap.lookup_cid_code(0x8EA1A1A1, 3), None);
     }
 
     #[test]
