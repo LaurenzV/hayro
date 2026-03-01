@@ -124,7 +124,9 @@ impl Table {
         while let Some(token) = s.next_token() {
             match token {
                 b"/Subrs" => {
-                    params.subroutines = s.parse_subroutines(len_iv, use_decryption)?;
+                    params.subroutines = s
+                        .parse_subroutines(len_iv, use_decryption)
+                        .unwrap_or_default();
                 }
                 b"/CharStrings" => {
                     if let Some((chars, names)) = s.parse_charstrings(len_iv, use_decryption) {
@@ -235,7 +237,11 @@ fn extract_pfb_segments(pfb: &[u8]) -> Option<Cow<'static, [u8]>> {
         size += (size_bytes[2] as usize) << 16;
         size += (size_bytes[3] as usize) << 24;
 
-        let ar = stream.read_bytes(size)?;
+        // PDFJS-14462: Simply abort parsing if we have an invalid size.
+        let Some(ar) = stream.read_bytes(size) else {
+            break;
+        };
+
         total += size;
         type_list.push(record_type);
         barr_list.push(ar);
@@ -379,10 +385,19 @@ impl<'a> Stream<'a> {
 
             let tok = self.next_token()?;
             if tok == ND || tok == ND_ALT {
+            } else if tok.starts_with(b"/") {
+                // PDFJS-14462: In case there are no end tokens, go back so
+                // that we can parse the next charstring in the font.
+                self.move_back(tok.len());
             } else {
                 error!("invalid charstring in end, expected ND, found {tok:?}");
 
-                return None;
+                if charstrings.is_empty() {
+                    return None;
+                } else {
+                    // Return what we have extracted so far.
+                    break;
+                }
             }
         }
 
