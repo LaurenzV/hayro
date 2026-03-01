@@ -897,6 +897,7 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn pdfjs_ShowText_ShadingPattern() { run_render_test("pdfjs_ShowText_ShadingPattern", "downloads/pdfjs/ShowText-ShadingPattern.pdf", None); }
 #[test] fn pdfjs_ZapfDingbats() { run_render_test("pdfjs_ZapfDingbats", "downloads/pdfjs/ZapfDingbats.pdf", None); }
 #[test] fn pdfjs_issue7891_bc1() { run_render_test("pdfjs_issue7891_bc1", "downloads/pdfjs/issue7891_bc1.pdf", None); }
+#[test] fn pdfjs_issue16038() { run_render_test("pdfjs_issue16038", "downloads/pdfjs/issue16038.pdf", None); }
 #[test] fn pdfjs_bug1050040() { run_render_test("pdfjs_bug1050040", "downloads/pdfjs/bug1050040.pdf", None); }
 #[test] fn pdfjs_bug1354114() { run_render_test("pdfjs_bug1354114", "downloads/pdfjs/bug1354114.pdf", Some("29..")); }
 #[test] fn pdfjs_bug1443140() { run_render_test("pdfjs_bug1443140", "downloads/pdfjs/bug1443140.pdf", Some("3..=3")); }

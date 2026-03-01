@@ -1362,11 +1362,7 @@
     "ignore": true,
     "comment": "very large image"
   },
-  {
-    "id": "issue16038",
-    "ignore": true,
-    "comment": "tiling with negative step"
-  },
+  "issue16038",
   {
     "id": "issue16114",
     "ignore": true,
@@ -1482,12 +1478,12 @@
   {
     "id": "issue15594",
     "ignore": true,
-    "comment": "missing text"
+    "comment": "non-embedded calibri font"
   },
   {
     "id": "issue15977",
     "ignore": true,
-    "comment": "missing text"
+    "comment": "another non-embedded font issue"
   },
   {
     "id": "issue11651-eq",
