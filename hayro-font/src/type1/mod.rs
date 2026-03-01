@@ -296,6 +296,7 @@ impl<'a> Stream<'a> {
         parse_int(core::str::from_utf8(self.next_token()?).ok()?)
     }
 
+    #[allow(clippy::type_complexity)]
     fn parse_charstrings(
         &mut self,
         len_iv: i64,
