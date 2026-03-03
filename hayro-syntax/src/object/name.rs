@@ -83,14 +83,12 @@ impl Debug for Name {
 object!(Name, Name);
 
 impl Skippable for Name {
-    #[inline]
     fn skip(r: &mut Reader<'_>, _: bool) -> Option<()> {
         skip_name_like(r, true).map(|_| ())
     }
 }
 
 impl Readable<'_> for Name {
-    #[inline]
     fn read(r: &mut Reader<'_>, _: &ReaderContext<'_>) -> Option<Self> {
         let start = r.offset();
         skip_name_like(r, true)?;

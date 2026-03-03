@@ -70,7 +70,6 @@ impl Debug for Array<'_> {
 object!(Array<'a>, Array);
 
 impl Skippable for Array<'_> {
-    #[inline]
     fn skip(r: &mut Reader<'_>, is_content_stream: bool) -> Option<()> {
         r.forward_tag(b"[")?;
 
@@ -95,7 +94,6 @@ impl Default for Array<'_> {
 }
 
 impl<'a> Readable<'a> for Array<'a> {
-    #[inline]
     fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
         let bytes = r.skip::<Array<'_>>(ctx.in_content_stream())?;
 
@@ -237,7 +235,6 @@ where
 }
 
 impl<'a, T: ObjectLike<'a> + Copy + Default, const C: usize> Readable<'a> for [T; C] {
-    #[inline]
     fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
         let array = Array::read(r, ctx)?;
         array.try_into().ok()
@@ -266,7 +263,6 @@ impl<'a, T: ObjectLike<'a>> TryFrom<Object<'a>> for Vec<T> {
 }
 
 impl<'a, T: ObjectLike<'a>> Readable<'a> for Vec<T> {
-    #[inline]
     fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
         let array = Array::read(r, ctx)?;
         array.try_into().ok()
@@ -301,7 +297,6 @@ impl<'a, U: ObjectLike<'a>, T: ObjectLike<'a> + smallvec::Array<Item = U>> TryFr
 impl<'a, U: ObjectLike<'a>, T: ObjectLike<'a> + smallvec::Array<Item = U>> Readable<'a>
     for SmallVec<T>
 {
-    #[inline]
     fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
         let array = Array::read(r, ctx)?;
         array.try_into().ok()

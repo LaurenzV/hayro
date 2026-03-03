@@ -64,7 +64,6 @@ impl Number {
 }
 
 impl Skippable for Number {
-    #[inline]
     fn skip(r: &mut Reader<'_>, _: bool) -> Option<()> {
         let has_sign = r.forward_if(|b| b == b'+' || b == b'-').is_some();
 
@@ -98,7 +97,6 @@ impl Skippable for Number {
 }
 
 impl Readable<'_> for Number {
-    #[inline]
     fn read(r: &mut Reader<'_>, ctx: &ReaderContext<'_>) -> Option<Self> {
         // TODO: This function is probably the biggest bottleneck in content parsing, so
         // worth optimizing (i.e. reading the number directly from the bytes instead
@@ -142,7 +140,6 @@ pub(crate) enum InternalNumber {
 macro_rules! int_num {
     ($i:ident) => {
         impl Skippable for $i {
-            #[inline]
             fn skip(r: &mut Reader<'_>, _: bool) -> Option<()> {
                 r.forward_if(|b| b == b'+' || b == b'-');
                 r.forward_while_1(is_digit)?;
@@ -157,7 +154,6 @@ macro_rules! int_num {
         }
 
         impl<'a> Readable<'a> for $i {
-            #[inline]
             fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<$i> {
                 r.read::<Number>(ctx)
                     .map(|n| n.as_i64())
@@ -188,14 +184,12 @@ int_num!(usize);
 int_num!(u8);
 
 impl Skippable for f32 {
-    #[inline]
     fn skip(r: &mut Reader<'_>, is_content_stream: bool) -> Option<()> {
         r.skip::<Number>(is_content_stream).map(|_| {})
     }
 }
 
 impl Readable<'_> for f32 {
-    #[inline]
     fn read(r: &mut Reader<'_>, _: &ReaderContext<'_>) -> Option<Self> {
         r.read_without_context::<Number>()
             .map(|n| n.as_f64() as Self)
@@ -216,14 +210,12 @@ impl TryFrom<Object<'_>> for f32 {
 impl ObjectLike<'_> for f32 {}
 
 impl Skippable for f64 {
-    #[inline]
     fn skip(r: &mut Reader<'_>, is_content_stream: bool) -> Option<()> {
         r.skip::<Number>(is_content_stream).map(|_| {})
     }
 }
 
 impl Readable<'_> for f64 {
-    #[inline]
     fn read(r: &mut Reader<'_>, _: &ReaderContext<'_>) -> Option<Self> {
         r.read_without_context::<Number>().map(|n| n.as_f64())
     }

@@ -38,7 +38,6 @@ impl From<ObjectIdentifier> for ObjRef {
 }
 
 impl Skippable for ObjRef {
-    #[inline]
     fn skip(r: &mut Reader<'_>, _: bool) -> Option<()> {
         r.skip_not_in_content_stream::<i32>()?;
         r.skip_white_spaces();
@@ -51,7 +50,6 @@ impl Skippable for ObjRef {
 }
 
 impl Readable<'_> for ObjRef {
-    #[inline]
     fn read(r: &mut Reader<'_>, _: &ReaderContext<'_>) -> Option<Self> {
         let obj_ref = r.read_without_context::<i32>()?;
         r.skip_white_spaces();
@@ -123,7 +121,6 @@ impl<T> Skippable for MaybeRef<T>
 where
     T: Skippable,
 {
-    #[inline]
     fn skip(r: &mut Reader<'_>, is_content_stream: bool) -> Option<()> {
         r.skip::<ObjRef>(is_content_stream)
             .or_else(|| r.skip::<T>(is_content_stream))
@@ -135,7 +132,6 @@ impl<'a, T> Readable<'a> for MaybeRef<T>
 where
     T: Readable<'a>,
 {
-    #[inline]
     fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
         if let Some(obj) = r.read::<ObjRef>(ctx) {
             Some(Self::Ref(obj))

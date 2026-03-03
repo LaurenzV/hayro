@@ -13,7 +13,6 @@ where
     T: ObjectLike<'a>,
     U: ObjectLike<'a>,
 {
-    #[inline]
     fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
         r.skip_white_spaces_and_comments();
         let t = r.read::<MaybeRef<T>>(ctx)?.resolve(ctx)?;
@@ -48,7 +47,6 @@ where
     U: ObjectLike<'a>,
     V: ObjectLike<'a>,
 {
-    #[inline]
     fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
         r.skip_white_spaces_and_comments();
         let t = r.read::<MaybeRef<T>>(ctx)?.resolve(ctx)?;
@@ -89,7 +87,6 @@ where
     V: ObjectLike<'a>,
     W: ObjectLike<'a>,
 {
-    #[inline]
     fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
         r.skip_white_spaces_and_comments();
         let t = r.read::<MaybeRef<T>>(ctx)?.resolve(ctx)?;
@@ -135,7 +132,6 @@ where
     W: ObjectLike<'a>,
     X: ObjectLike<'a>,
 {
-    #[inline]
     fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
         r.skip_white_spaces_and_comments();
         let t = r.read::<MaybeRef<T>>(ctx)?.resolve(ctx)?;

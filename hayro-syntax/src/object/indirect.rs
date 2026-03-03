@@ -23,7 +23,6 @@ impl<'a, T> Readable<'a> for IndirectObject<T>
 where
     T: ObjectLike<'a>,
 {
-    #[inline]
     fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
         let mut ctx = ctx.clone();
         let id = r.read_without_context::<ObjectIdentifier>()?;
@@ -50,7 +49,6 @@ impl<T> Skippable for IndirectObject<T>
 where
     T: Skippable,
 {
-    #[inline]
     fn skip(r: &mut Reader<'_>, _: bool) -> Option<()> {
         r.skip_in_content_stream::<ObjectIdentifier>()?;
         r.skip_white_spaces_and_comments();

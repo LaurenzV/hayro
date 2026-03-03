@@ -53,7 +53,6 @@ impl Rect {
 }
 
 impl<'a> Readable<'a> for Rect {
-    #[inline]
     fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
         let arr = r.read::<Array<'_>>(ctx)?;
         from_arr(&arr)

@@ -142,7 +142,6 @@ impl<'a> Object<'a> {
 impl<'a> ObjectLike<'a> for Object<'a> {}
 
 impl Skippable for Object<'_> {
-    #[inline]
     fn skip(r: &mut Reader<'_>, is_content_stream: bool) -> Option<()> {
         match r.peek_byte()? {
             b'n' => Null::skip(r, is_content_stream),
@@ -164,7 +163,6 @@ impl Skippable for Object<'_> {
 }
 
 impl<'a> Readable<'a> for Object<'a> {
-    #[inline]
     fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
         let object = match r.peek_byte()? {
             b'n' => Self::Null(Null::read(r, ctx)?),
@@ -232,7 +230,6 @@ impl ObjectIdentifier {
 }
 
 impl Readable<'_> for ObjectIdentifier {
-    #[inline]
     fn read(r: &mut Reader<'_>, _: &ReaderContext<'_>) -> Option<Self> {
         let obj_number = r.read_without_context::<i32>()?;
         r.skip_white_spaces_and_comments();
@@ -248,7 +245,6 @@ impl Readable<'_> for ObjectIdentifier {
 }
 
 impl Skippable for ObjectIdentifier {
-    #[inline]
     fn skip(r: &mut Reader<'_>, _: bool) -> Option<()> {
         r.skip_in_content_stream::<i32>()?;
         r.skip_white_spaces_and_comments();

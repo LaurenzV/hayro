@@ -41,7 +41,6 @@ impl AsRef<[u8]> for String {
 object!(String, String);
 
 impl Skippable for String {
-    #[inline]
     fn skip(r: &mut Reader<'_>, _: bool) -> Option<()> {
         match r.peek_byte()? {
             b'<' => skip_hex(r),
@@ -52,7 +51,6 @@ impl Skippable for String {
 }
 
 impl Readable<'_> for String {
-    #[inline]
     fn read(r: &mut Reader<'_>, ctx: &ReaderContext<'_>) -> Option<Self> {
         let decoded = match r.peek_byte()? {
             b'<' => read_hex(r)?,
