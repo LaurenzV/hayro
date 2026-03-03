@@ -190,6 +190,7 @@ impl Debug for Stream<'_> {
 }
 
 impl Skippable for Stream<'_> {
+    #[inline]
     fn skip(_: &mut Reader<'_>, _: bool) -> Option<()> {
         // A stream can never appear in a dict/array, so it should never be skipped.
         warn!("attempted to skip a stream object");
@@ -199,6 +200,7 @@ impl Skippable for Stream<'_> {
 }
 
 impl<'a> Readable<'a> for Stream<'a> {
+    #[inline]
     fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
         let dict = r.read_with_context::<Dict<'_>>(ctx)?;
 

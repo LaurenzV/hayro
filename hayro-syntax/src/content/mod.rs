@@ -117,6 +117,7 @@ impl<'a> UntypedIter<'a> {
 impl<'a> Iterator for UntypedIter<'a> {
     type Item = Instruction<'a>;
 
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         self.stack.clear();
 
@@ -298,6 +299,7 @@ impl<'a> TypedIter<'a> {
 impl<'a> Iterator for TypedIter<'a> {
     type Item = TypedInstruction<'a>;
 
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         let op = &self.untyped.next()?;
         match TypedInstruction::dispatch(op) {

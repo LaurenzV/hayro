@@ -139,6 +139,7 @@ impl Debug for Dict<'_> {
 }
 
 impl Skippable for Dict<'_> {
+    #[inline]
     fn skip(r: &mut Reader<'_>, is_content_stream: bool) -> Option<()> {
         r.forward_tag(b"<<")?;
 
@@ -167,6 +168,7 @@ impl Skippable for Dict<'_> {
 }
 
 impl<'a> Readable<'a> for Dict<'a> {
+    #[inline]
     fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
         read_inner(r, ctx, Some(b"<<"), b">>")
     }
@@ -255,6 +257,7 @@ impl<'a> InlineImageDict<'a> {
 }
 
 impl<'a> Readable<'a> for InlineImageDict<'a> {
+    #[inline]
     fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
         Some(Self(read_inner(r, ctx, None, b"ID")?))
     }
