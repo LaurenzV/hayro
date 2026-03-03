@@ -447,6 +447,7 @@ pub enum TypedInstruction<'a> {
 }
 
 impl<'a> TypedInstruction<'a> {
+    #[inline(always)]
     pub(crate) fn dispatch(instruction: &Instruction<'a>) -> Option<Self> {
         let op_name = instruction.operator.as_ref();
         Some(match op_name {

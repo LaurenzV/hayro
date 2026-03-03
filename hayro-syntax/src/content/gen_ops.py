@@ -200,6 +200,7 @@ enum_block = (
 
 dispatch_block = (
     "impl<'a> TypedInstruction<'a> {\n"
+    "    #[inline(always)]\n"
     "    pub(crate) fn dispatch(instruction: &Instruction<'a>) -> Option<Self> {\n"
     "        let op_name = instruction.operator.as_ref();\n"
     "        Some(match op_name {\n"
