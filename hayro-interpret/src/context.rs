@@ -298,7 +298,7 @@ pub(crate) fn path_as_rect(path: &BezPath) -> Option<Rect> {
                     return None;
                 }
 
-                check_point(*p)
+                check_point(*p);
             }
             PathEl::LineTo(l) => check_point(*l),
             PathEl::QuadTo(_, _) => return None,
