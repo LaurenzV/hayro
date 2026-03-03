@@ -1363,11 +1363,7 @@
     "comment": "very large image"
   },
   "issue16038",
-  {
-    "id": "issue16114",
-    "ignore": true,
-    "comment": "transfer func"
-  },
+  "issue16114",
   {
     "id": "bug1050040",
     "comment": "CMAP table is broken, therefore we can't map codepoint to a glyph"
