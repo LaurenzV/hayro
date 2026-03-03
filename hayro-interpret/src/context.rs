@@ -275,14 +275,14 @@ impl<'a> Context<'a> {
 }
 
 pub(crate) fn path_as_rect(path: &BezPath) -> Option<Rect> {
-    let bbox = path.bounding_box();
-    let (min_x, min_y, max_x, max_y) = (bbox.min_x(), bbox.min_y(), bbox.max_x(), bbox.max_y());
-    let mut corners = [false; 4];
-
     // One MoveTo, three LineTo, one ClosePath
     if path.elements().len() != 5 {
         return None;
     }
+    
+    let bbox = path.bounding_box();
+    let (min_x, min_y, max_x, max_y) = (bbox.min_x(), bbox.min_y(), bbox.max_x(), bbox.max_y());
+    let mut corners = [false; 4];
 
     let mut check_point = |p: Point| {
         corners[0] |= p.x.is_nearly_equal(min_x) && p.y.is_nearly_equal(min_y);
