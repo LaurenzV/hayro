@@ -62,3 +62,26 @@ pub trait Device<'a> {
     /// Called at the end of a marked content sequence (EMC).
     fn end_marked_content(&mut self) {}
 }
+
+/// A device that discards all drawing operations.
+pub struct DummyDevice;
+
+impl Device<'_> for DummyDevice {
+    fn set_soft_mask(&mut self, _: Option<SoftMask<'_>>) {}
+    fn set_blend_mode(&mut self, _: BlendMode) {}
+    fn draw_path(&mut self, _: &BezPath, _: Affine, _: &Paint<'_>, _: &PathDrawMode) {}
+    fn push_clip_path(&mut self, _: &ClipPath) {}
+    fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask<'_>>, _: BlendMode) {}
+    fn draw_glyph(
+        &mut self,
+        _: &Glyph<'_>,
+        _: Affine,
+        _: Affine,
+        _: &Paint<'_>,
+        _: &GlyphDrawMode,
+    ) {
+    }
+    fn draw_image(&mut self, _: Image<'_, '_>, _: Affine) {}
+    fn pop_clip_path(&mut self) {}
+    fn pop_transparency_group(&mut self) {}
+}
