@@ -291,9 +291,15 @@ pub(crate) fn path_as_rect(path: &BezPath) -> Option<Rect> {
         corners[3] |= p.x.is_nearly_equal(max_x) && p.y.is_nearly_equal(max_y);
     };
 
-    for el in path.elements() {
+    for (idx, el) in path.elements().iter().enumerate() {
         match el {
-            PathEl::MoveTo(p) => check_point(*p),
+            PathEl::MoveTo(p) => {
+                if idx != 0 {
+                    return None;
+                }
+
+                check_point(*p)
+            }
             PathEl::LineTo(l) => check_point(*l),
             PathEl::QuadTo(_, _) => return None,
             PathEl::CurveTo(_, _, _) => return None,
