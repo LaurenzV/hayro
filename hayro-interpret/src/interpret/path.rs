@@ -1,9 +1,9 @@
 use crate::color::{Color, ColorSpace};
 use crate::context::{Context, path_as_rect};
 use crate::device::Device;
-use crate::util::Float32Ext;
+use crate::util::{BezPathExt, Float32Ext};
 use crate::{FillRule, Paint, PathDrawMode, StrokeProps};
-use kurbo::{BezPath, Cap, Join, PathEl, Shape};
+use kurbo::{BezPath, Cap, Join, PathEl};
 use smallvec::smallvec;
 
 pub(crate) fn fill_path<'a>(
@@ -62,7 +62,7 @@ pub(crate) fn fill_path_impl<'a>(
 
     let mut draw = |path: &BezPath| {
         // pdf.js issue 4260: Replace zero-sized paths with a small stroke instead.
-        let bbox = path.bounding_box();
+        let bbox = path.fast_bounding_box();
 
         match (
             (bbox.width() as f32).is_nearly_zero(),

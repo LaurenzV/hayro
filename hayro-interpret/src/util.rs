@@ -1,7 +1,7 @@
 //! A number of utility methods.
 
 use hayro_syntax::page::{Page, Rotation};
-use kurbo::{Affine, Rect};
+use kurbo::{Affine, BezPath, PathEl, Rect};
 use log::warn;
 use siphasher::sip128::{Hasher128, SipHasher13};
 use std::hash::Hash;
@@ -116,6 +116,48 @@ pub(crate) fn hash128<T: Hash + ?Sized>(value: &T) -> u128 {
     let mut state = SipHasher13::new();
     value.hash(&mut state);
     state.finish128().as_u128()
+}
+
+pub(crate) trait BezPathExt {
+    fn fast_bounding_box(&self) -> Rect;
+}
+
+impl BezPathExt for BezPath {
+    fn fast_bounding_box(&self) -> Rect {
+        let mut min_x = f64::INFINITY;
+        let mut min_y = f64::INFINITY;
+        let mut max_x = f64::NEG_INFINITY;
+        let mut max_y = f64::NEG_INFINITY;
+
+        let mut include = |x: f64, y: f64| {
+            min_x = min_x.min(x);
+            min_y = min_y.min(y);
+            max_x = max_x.max(x);
+            max_y = max_y.max(y);
+        };
+
+        for el in self.elements() {
+            match *el {
+                PathEl::MoveTo(p) | PathEl::LineTo(p) => include(p.x, p.y),
+                PathEl::QuadTo(p1, p2) => {
+                    include(p1.x, p1.y);
+                    include(p2.x, p2.y);
+                }
+                PathEl::CurveTo(p1, p2, p3) => {
+                    include(p1.x, p1.y);
+                    include(p2.x, p2.y);
+                    include(p3.x, p3.y);
+                }
+                PathEl::ClosePath => {}
+            }
+        }
+
+        if min_x > max_x {
+            Rect::ZERO
+        } else {
+            Rect::new(min_x, min_y, max_x, max_y)
+        }
+    }
 }
 
 /// Extension methods for rectangles.

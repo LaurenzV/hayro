@@ -4,7 +4,7 @@ use crate::convert::convert_transform;
 use crate::font::{Font, StandardFont};
 use crate::interpret::state::{ClipType, State, TextStateFont};
 use crate::ocg::OcgState;
-use crate::util::Float64Ext;
+use crate::util::{BezPathExt, Float64Ext};
 use crate::{ClipPath, Device, FillRule, InterpreterSettings, StrokeProps};
 use hayro_syntax::content::ops::Transform;
 use hayro_syntax::object::Dict;
@@ -280,7 +280,7 @@ pub(crate) fn path_as_rect(path: &BezPath) -> Option<Rect> {
         return None;
     }
 
-    let bbox = path.bounding_box();
+    let bbox = path.fast_bounding_box();
     let (min_x, min_y, max_x, max_y) = (bbox.min_x(), bbox.min_y(), bbox.max_x(), bbox.max_y());
     let mut corners = [false; 4];
 
