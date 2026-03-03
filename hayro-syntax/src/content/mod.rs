@@ -263,7 +263,7 @@ impl<'a> Iterator for UntypedIter<'a> {
                 }
 
                 return Some(Instruction {
-                    operands: self.stack.clone(),
+                    operands: core::mem::take(&mut self.stack),
                     operator,
                 });
             }
