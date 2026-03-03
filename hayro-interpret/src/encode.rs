@@ -1,6 +1,7 @@
 //! Encoding shading patterns for easy sampling.
 
 use crate::color::{AlphaColor, ColorComponents, ColorSpace};
+use crate::interpret::state::ActiveTransferFunction;
 use crate::pattern::ShadingPattern;
 use crate::shading::{ShadingFunction, ShadingType, Triangle};
 use kurbo::{Affine, Point};
@@ -16,6 +17,7 @@ pub struct EncodedShadingPattern {
     pub(crate) background_color: AlphaColor,
     pub(crate) shading_type: EncodedShadingType,
     pub(crate) opacity: f32,
+    pub(crate) transfer_function: Option<ActiveTransferFunction>,
 }
 
 impl EncodedShadingPattern {
@@ -27,6 +29,10 @@ impl EncodedShadingPattern {
             .map(|v| {
                 let mut components = v.components();
                 components[3] *= self.opacity;
+
+                if let Some(tf) = &self.transfer_function {
+                    return tf.apply(&AlphaColor::new(components)).components();
+                }
 
                 components
             })
@@ -130,6 +136,7 @@ impl ShadingPattern {
             shading_type,
             base_transform,
             opacity: self.opacity,
+            transfer_function: self.transfer_function.clone(),
         }
     }
 }

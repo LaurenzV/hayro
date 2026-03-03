@@ -28,6 +28,8 @@ pub(crate) mod path;
 pub(crate) mod state;
 pub(crate) mod text;
 
+pub use state::ActiveTransferFunction;
+
 /// A callback function for resolving font queries.
 ///
 /// The first argument is the raw data, the second argument is the index in case the font
@@ -676,6 +678,8 @@ pub fn interpret<'a, 'b>(
                     continue;
                 }
 
+                let transfer_function = context.get().graphics_state.transfer_function.clone();
+
                 if let Some(sp) = resources
                     .get_shading(s.0)
                     .and_then(|o| dict_or_stream(&o))
@@ -685,6 +689,7 @@ pub fn interpret<'a, 'b>(
                             shading: Arc::new(s),
                             matrix: Affine::IDENTITY,
                             opacity: context.get().graphics_state.non_stroke_alpha,
+                            transfer_function: transfer_function.clone(),
                         })
                     })
                 {

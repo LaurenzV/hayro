@@ -1,5 +1,5 @@
 use crate::StrokeProps;
-use crate::color::{ColorComponents, ColorSpace};
+use crate::color::{AlphaColor, ColorComponents, ColorSpace};
 use crate::context::Context;
 use crate::convert::{convert_line_cap, convert_line_join};
 use crate::font::{Font, UNITS_PER_EM};
@@ -18,10 +18,40 @@ use log::warn;
 use smallvec::smallvec;
 use std::ops::Deref;
 
+/// A transfer function.
 #[derive(Clone, Debug)]
-pub(crate) enum ActiveTransferFunction {
+pub enum ActiveTransferFunction {
+    /// A single transfer function applied to all components.
     Single(Function),
+    /// Four transfer functions, one for each component.
     Four([Function; 4]),
+}
+
+impl ActiveTransferFunction {
+    /// Apply the transfer function to the RGB channels of an RGBA color.
+    /// The alpha channel is left unchanged.
+    pub fn apply(&self, color: &AlphaColor) -> AlphaColor {
+        let mut rgba = color.components();
+
+        match self {
+            Self::Single(f) => {
+                for c in &mut rgba[..3] {
+                    if let Some(out) = f.eval(smallvec![*c]) {
+                        *c = out[0];
+                    }
+                }
+            }
+            Self::Four(functions) => {
+                for (i, f) in functions[..3].iter().enumerate() {
+                    if let Some(out) = f.eval(smallvec![rgba[i]]) {
+                        rgba[i] = out[0];
+                    }
+                }
+            }
+        }
+
+        AlphaColor::new(rgba)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -67,6 +97,7 @@ impl<'a> State<'a> {
             color: self.graphics_state.stroke_color.clone(),
             color_space: self.graphics_state.stroke_cs.clone(),
             pattern: self.graphics_state.stroke_pattern.clone(),
+            transfer_function: self.graphics_state.transfer_function.clone(),
         }
     }
 
@@ -76,6 +107,7 @@ impl<'a> State<'a> {
             color: self.graphics_state.non_stroke_color.clone(),
             color_space: self.graphics_state.none_stroke_cs.clone(),
             pattern: self.graphics_state.non_stroke_pattern.clone(),
+            transfer_function: self.graphics_state.transfer_function.clone(),
         }
     }
 }
@@ -264,6 +296,7 @@ pub(crate) struct PaintData<'a> {
     pub(crate) color: ColorComponents,
     pub(crate) color_space: ColorSpace,
     pub(crate) pattern: Option<Pattern<'a>>,
+    pub(crate) transfer_function: Option<ActiveTransferFunction>,
 }
 
 pub(crate) fn handle_gs<'a>(

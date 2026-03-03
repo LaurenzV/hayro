@@ -5,7 +5,7 @@ use crate::color::{Color, ColorSpace};
 use crate::context::Context;
 use crate::device::Device;
 use crate::font::Glyph;
-use crate::interpret::state::State;
+use crate::interpret::state::{ActiveTransferFunction, State};
 use crate::shading::Shading;
 use crate::soft_mask::SoftMask;
 use crate::util::{Float32Ext, RectExt, hash128};
@@ -65,6 +65,12 @@ impl<'a> Pattern<'a> {
             Self::Tiling(p) => p.matrix = transform * p.matrix,
         }
     }
+
+    pub(crate) fn set_transfer_function(&mut self, tf: ActiveTransferFunction) {
+        if let Self::Shading(p) = self {
+            p.transfer_function = Some(tf);
+        }
+    }
 }
 
 impl CacheKey for Pattern<'_> {
@@ -85,6 +91,8 @@ pub struct ShadingPattern {
     pub matrix: Affine,
     /// An additional opacity to apply to the shading pattern.
     pub opacity: f32,
+    /// An optional transfer function to apply to the shading's output colors.
+    pub transfer_function: Option<ActiveTransferFunction>,
 }
 
 impl ShadingPattern {
@@ -107,6 +115,7 @@ impl ShadingPattern {
             shading: Arc::new(shading),
             opacity,
             matrix,
+            transfer_function: None,
         })
     }
 }

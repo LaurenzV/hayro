@@ -1004,6 +1004,16 @@ impl Color {
         self.color_space
             .to_rgba(&self.components, self.opacity, false)
     }
+
+    /// Create a color from RGBA.
+    pub fn from_rgba(rgba: AlphaColor) -> Self {
+        let c = rgba.components();
+        Self {
+            color_space: ColorSpace::device_rgb(),
+            components: smallvec![c[0], c[1], c[2]],
+            opacity: c[3],
+        }
+    }
 }
 
 static CMYK_TRANSFORM: LazyLock<ICCProfile> = LazyLock::new(|| {

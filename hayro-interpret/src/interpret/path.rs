@@ -140,6 +140,10 @@ pub(crate) fn get_paint<'a>(context: &Context<'a>, is_stroke: bool) -> Paint<'a>
 
     if data.color_space.is_pattern() {
         if let Some(mut pattern) = data.pattern {
+            if let Some(tf) = &data.transfer_function {
+                pattern.set_transfer_function(tf.clone());
+            }
+
             pattern.pre_concat_transform(context.root_transform());
 
             Paint::Pattern(Box::new(pattern))
@@ -150,6 +154,10 @@ pub(crate) fn get_paint<'a>(context: &Context<'a>, is_stroke: bool) -> Paint<'a>
     } else {
         let color = Color::new(data.color_space, data.color, data.alpha);
 
-        Paint::Color(color)
+        if let Some(tf) = &data.transfer_function {
+            Paint::Color(Color::from_rgba(tf.apply(&color.to_rgba())))
+        } else {
+            Paint::Color(color)
+        }
     }
 }
