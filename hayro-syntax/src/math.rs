@@ -37,15 +37,3 @@ pub(crate) fn trunc_f64(x: f64) -> f64 {
         x as i64 as f64
     }
 }
-
-#[inline(always)]
-pub(crate) fn fract_f64(x: f64) -> f64 {
-    #[cfg(feature = "std")]
-    {
-        x.fract()
-    }
-    #[cfg(not(feature = "std"))]
-    {
-        x - trunc_f64(x)
-    }
-}

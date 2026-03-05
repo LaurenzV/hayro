@@ -1,14 +1,19 @@
 //! Numbers.
 
-use crate::math::{fract_f64, trunc_f64};
+use crate::math::trunc_f64;
 use crate::object::macros::object;
 use crate::object::{Object, ObjectLike};
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 use crate::trivia::{is_regular_character, is_white_space_character};
 use core::fmt::Debug;
-use core::str::FromStr;
 use log::debug;
+
+#[rustfmt::skip]
+static POWERS_OF_10: [f64; 20] = [
+    1.0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9,
+    1e10, 1e11, 1e12, 1e13, 1e14, 1e15, 1e16, 1e17, 1e18, 1e19,
+];
 
 /// A number.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -97,35 +102,97 @@ impl Skippable for Number {
 }
 
 impl Readable<'_> for Number {
-    fn read(r: &mut Reader<'_>, ctx: &ReaderContext<'_>) -> Option<Self> {
-        // TODO: This function is probably the biggest bottleneck in content parsing, so
-        // worth optimizing (i.e. reading the number directly from the bytes instead
-        // of first parsing it to a number).
+    #[inline]
+    fn read(r: &mut Reader<'_>, _: &ReaderContext<'_>) -> Option<Self> {
+        let old_offset = r.offset();
+        read_inner(r).or_else(|| {
+            r.jump(old_offset);
+            None
+        })
+    }
+}
 
-        let mut data = r.skip::<Self>(ctx.in_content_stream())?;
-
-        if (data.len() == 1 && matches!(data[0], b'-' | b'+' | b'.'))
-            || (data.len() == 2 && matches!(data[0], b'-' | b'+') && matches!(data[1], b'.'))
-        {
-            // See PDFJS-bug1753983 - accept just + or - as a zero.
-            // Also see PDFJS-9252 - treat a single . as 0.
-            // Also see PDFJS-15604 - treat -. as 0.
-            return Some(Self(InternalNumber::Integer(0)));
+fn read_inner(r: &mut Reader<'_>) -> Option<Number> {
+    let negative = match r.peek_byte()? {
+        b'-' => {
+            r.forward();
+            true
         }
-
-        // Some weird PDFs have trailing minus in the fraction of number, try to strip those.
-        if let Some(idx) = data[1..].iter().position(|b| *b == b'-') {
-            data = &data[..idx.saturating_sub(1)];
+        b'+' => {
+            r.forward();
+            false
         }
-        // We need to use f64 here, so that we can still parse a full `i32` without losing
-        // precision.
-        let num = f64::from_str(core::str::from_utf8(data).ok()?).ok()?;
+        _ => false,
+    };
 
-        if fract_f64(num) == 0.0 {
-            Some(Self(InternalNumber::Integer(num as i64)))
+    let mut mantissa: u64 = 0;
+    let mut has_dot = false;
+    let mut decimal_shift: u32 = 0;
+    let mut has_digits = false;
+
+    loop {
+        match r.peek_byte() {
+            Some(b'0'..=b'9') => {
+                let d = r.read_byte().unwrap();
+                mantissa = mantissa
+                    .saturating_mul(10)
+                    .saturating_add((d - b'0') as u64);
+                has_digits = true;
+                if has_dot {
+                    decimal_shift += 1;
+                }
+            }
+            Some(b'.') if !has_dot => {
+                r.forward();
+                has_dot = true;
+            }
+            // Some weird PDFs have trailing minus in the fraction of number.
+            Some(b'-') if has_digits => {
+                r.forward();
+                r.forward_while(is_digit_or_minus);
+                break;
+            }
+            _ => break,
+        }
+    }
+
+    if !has_digits {
+        if negative || has_dot {
+            // Treat numbers like just `-`, `+` or `-.` as zero.
+            return Some(Number(InternalNumber::Integer(0)));
+        }
+        return None;
+    }
+
+    // See issue 994. Don't accept numbers that are followed by a regular character
+    // without any white space in-between.
+    if r.peek_byte().is_some_and(is_regular_character) {
+        return None;
+    }
+
+    if !has_dot {
+        let value = if negative {
+            -(mantissa as i64)
         } else {
-            Some(Self(InternalNumber::Real(num)))
+            mantissa as i64
+        };
+        Some(Number(InternalNumber::Integer(value)))
+    } else {
+        let mut value = mantissa as f64;
+
+        if decimal_shift > 0 {
+            if decimal_shift < POWERS_OF_10.len() as u32 {
+                value /= POWERS_OF_10[decimal_shift as usize];
+            } else {
+                value /= 10_f64.powi(decimal_shift as i32);
+            }
         }
+
+        if negative {
+            value = -value;
+        }
+
+        Some(Number(InternalNumber::Real(value)))
     }
 }
 
@@ -299,16 +366,6 @@ mod tests {
     }
 
     #[test]
-    fn int_trailing() {
-        assert_eq!(
-            Reader::new("0abc".as_bytes())
-                .read_without_context::<i32>()
-                .unwrap(),
-            0
-        );
-    }
-
-    #[test]
     fn real_1() {
         assert_eq!(
             Reader::new("3".as_bytes())
@@ -395,16 +452,6 @@ mod tests {
                 .read_without_context::<f32>()
                 .unwrap(),
             -34534656.34
-        );
-    }
-
-    #[test]
-    fn real_trailing() {
-        assert_eq!(
-            Reader::new("0abc".as_bytes())
-                .read_without_context::<f32>()
-                .unwrap(),
-            0.0
         );
     }
 
