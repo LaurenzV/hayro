@@ -130,14 +130,14 @@ f
 
         let expected = vec![
             TypedInstruction::NonStrokeColorNamed(NonStrokeColorNamed(
-                smallvec![Number::from_i32(0)],
+                smallvec![Number::from_f32(0.0)],
                 None,
             )),
             TypedInstruction::StrokeColorNamed(StrokeColorNamed(
                 smallvec![
-                    Number::from_i32(1),
-                    Number::from_i32(1),
-                    Number::from_i32(1)
+                    Number::from_f32(1.0),
+                    Number::from_f32(1.0),
+                    Number::from_f32(1.0)
                 ],
                 Some(Name::new(b"DeviceRgb")),
             )),

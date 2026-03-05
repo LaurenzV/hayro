@@ -578,7 +578,7 @@ mod tests {
             vec![
                 PostScriptOp::Copy,
                 PostScriptOp::Dup,
-                PostScriptOp::Number(Number::from_i32(2)),
+                PostScriptOp::Number(Number::from_f32(2.0)),
                 PostScriptOp::Exch,
                 PostScriptOp::Roll,
             ]
