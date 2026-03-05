@@ -112,6 +112,7 @@ impl Readable<'_> for Number {
     }
 }
 
+#[inline(always)]
 fn read_inner(r: &mut Reader<'_>) -> Option<Number> {
     let negative = match r.peek_byte()? {
         b'-' => {
