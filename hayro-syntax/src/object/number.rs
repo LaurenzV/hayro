@@ -136,8 +136,12 @@ fn read_inner(r: &mut Reader<'_>) -> Option<Number> {
             Some(b'0'..=b'9') => {
                 let d = r.read_byte().unwrap();
                 mantissa = mantissa
-                    .saturating_mul(10)
-                    .saturating_add((d - b'0') as u64);
+                    // Using `saturating` would arguably be better here, but
+                    // profiling showed that it seems to be more expensive, at least
+                    // on ARM. Since such large numbers shouldn't appear anyway,
+                    // it doesn't really matter a lot what mode we use.
+                    .wrapping_mul(10)
+                    .wrapping_add((d - b'0') as u64);
                 has_digits = true;
                 if has_dot {
                     decimal_shift += 1;
