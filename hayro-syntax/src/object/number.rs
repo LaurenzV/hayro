@@ -1,6 +1,6 @@
 //! Numbers.
 
-use crate::math::trunc_f64;
+use crate::math::{powi_f64, trunc_f64};
 use crate::object::macros::object;
 use crate::object::{Object, ObjectLike};
 use crate::reader::Reader;
@@ -189,7 +189,7 @@ fn read_inner(r: &mut Reader<'_>) -> Option<Number> {
             if decimal_shift < POWERS_OF_10.len() as u32 {
                 value /= POWERS_OF_10[decimal_shift as usize];
             } else {
-                value /= 10_f64.powi(decimal_shift as i32);
+                value /= powi_f64(10.0, decimal_shift);
             }
         }
 
