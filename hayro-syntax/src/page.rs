@@ -189,7 +189,12 @@ impl<'a> Page<'a> {
             .or(ctx.crop_box)
             .unwrap_or(media_box);
 
-        let rotation = match dict.get::<i32>(ROTATE).or(ctx.rotate).unwrap_or(0).rem_euclid(360) {
+        let rotation = match dict
+            .get::<i32>(ROTATE)
+            .or(ctx.rotate)
+            .unwrap_or(0)
+            .rem_euclid(360)
+        {
             0 => Rotation::None,
             90 => Rotation::Horizontal,
             180 => Rotation::Flipped,
