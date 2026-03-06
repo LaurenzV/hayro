@@ -629,7 +629,7 @@ dependencies = [
 
 [[package]]
 name = "hayro-jpeg2000"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "fearless_simd",
  "image 0.25.9",
