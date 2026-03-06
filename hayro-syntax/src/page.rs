@@ -23,7 +23,7 @@ use log::warn;
 struct PagesContext {
     media_box: Option<Rect>,
     crop_box: Option<Rect>,
-    rotate: Option<u32>,
+    rotate: Option<i32>,
 }
 
 impl PagesContext {
@@ -116,7 +116,7 @@ fn resolve_pages<'a>(
         ctx.crop_box = Some(crop_box);
     }
 
-    if let Some(rotate) = pages_dict.get::<u32>(ROTATE) {
+    if let Some(rotate) = pages_dict.get::<i32>(ROTATE) {
         ctx.rotate = Some(rotate);
     }
 
@@ -189,7 +189,7 @@ impl<'a> Page<'a> {
             .or(ctx.crop_box)
             .unwrap_or(media_box);
 
-        let rotation = match dict.get::<u32>(ROTATE).or(ctx.rotate).unwrap_or(0) % 360 {
+        let rotation = match dict.get::<i32>(ROTATE).or(ctx.rotate).unwrap_or(0).rem_euclid(360) {
             0 => Rotation::None,
             90 => Rotation::Horizontal,
             180 => Rotation::Flipped,
