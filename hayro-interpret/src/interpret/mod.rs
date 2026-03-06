@@ -233,15 +233,18 @@ pub fn interpret<'a, 'b>(
                 context.get_mut().graphics_state.stroke_cs = ColorSpace::device_rgb();
                 context.get_mut().graphics_state.stroke_color =
                     smallvec![s.0.as_f32(), s.1.as_f32(), s.2.as_f32()];
+                context.get_mut().graphics_state.stroke_pattern = None;
             }
             TypedInstruction::StrokeColorDeviceGray(s) => {
                 context.get_mut().graphics_state.stroke_cs = ColorSpace::device_gray();
                 context.get_mut().graphics_state.stroke_color = smallvec![s.0.as_f32()];
+                context.get_mut().graphics_state.stroke_pattern = None;
             }
             TypedInstruction::StrokeColorCmyk(s) => {
                 context.get_mut().graphics_state.stroke_cs = ColorSpace::device_cmyk();
                 context.get_mut().graphics_state.stroke_color =
                     smallvec![s.0.as_f32(), s.1.as_f32(), s.2.as_f32(), s.3.as_f32()];
+                context.get_mut().graphics_state.stroke_pattern = None;
             }
             TypedInstruction::LineWidth(w) => {
                 context.get_mut().graphics_state.stroke_props.line_width = w.0.as_f32();
@@ -304,16 +307,19 @@ pub fn interpret<'a, 'b>(
             TypedInstruction::NonStrokeColorDeviceGray(s) => {
                 context.get_mut().graphics_state.none_stroke_cs = ColorSpace::device_gray();
                 context.get_mut().graphics_state.non_stroke_color = smallvec![s.0.as_f32()];
+                context.get_mut().graphics_state.non_stroke_pattern = None;
             }
             TypedInstruction::NonStrokeColorDeviceRgb(s) => {
                 context.get_mut().graphics_state.none_stroke_cs = ColorSpace::device_rgb();
                 context.get_mut().graphics_state.non_stroke_color =
                     smallvec![s.0.as_f32(), s.1.as_f32(), s.2.as_f32()];
+                context.get_mut().graphics_state.non_stroke_pattern = None;
             }
             TypedInstruction::NonStrokeColorCmyk(s) => {
                 context.get_mut().graphics_state.none_stroke_cs = ColorSpace::device_cmyk();
                 context.get_mut().graphics_state.non_stroke_color =
                     smallvec![s.0.as_f32(), s.1.as_f32(), s.2.as_f32(), s.3.as_f32()];
+                context.get_mut().graphics_state.non_stroke_pattern = None;
             }
             TypedInstruction::LineTo(m) => {
                 if !context.path().elements().is_empty() {
@@ -387,20 +393,14 @@ pub fn interpret<'a, 'b>(
                 context.path_mut().truncate(0);
             }
             TypedInstruction::NonStrokeColor(c) => {
-                let fill_c = &mut context.get_mut().graphics_state.non_stroke_color;
-                fill_c.truncate(0);
-
-                for e in c.0 {
-                    fill_c.push(e.as_f32());
-                }
+                let gs = &mut context.get_mut().graphics_state;
+                gs.non_stroke_color = c.0.into_iter().map(|n| n.as_f32()).collect();
+                gs.non_stroke_pattern = None;
             }
             TypedInstruction::StrokeColor(c) => {
-                let stroke_c = &mut context.get_mut().graphics_state.stroke_color;
-                stroke_c.truncate(0);
-
-                for e in c.0 {
-                    stroke_c.push(e.as_f32());
-                }
+                let gs = &mut context.get_mut().graphics_state;
+                gs.stroke_color = c.0.into_iter().map(|n| n.as_f32()).collect();
+                gs.stroke_pattern = None;
             }
             TypedInstruction::ClipNonZero(_) => {
                 *(context.clip_mut()) = Some(FillRule::NonZero);
@@ -421,6 +421,9 @@ pub fn interpret<'a, 'b>(
                         .unwrap_or(ColorSpace::device_gray())
                 };
 
+                if !cs.is_pattern() {
+                    context.get_mut().graphics_state.stroke_pattern = None;
+                }
                 context.get_mut().graphics_state.stroke_color = cs.initial_color();
                 context.get_mut().graphics_state.stroke_cs = cs;
             }
@@ -433,6 +436,9 @@ pub fn interpret<'a, 'b>(
                         .unwrap_or(ColorSpace::device_gray())
                 };
 
+                if !cs.is_pattern() {
+                    context.get_mut().graphics_state.non_stroke_pattern = None;
+                }
                 context.get_mut().graphics_state.non_stroke_color = cs.initial_color();
                 context.get_mut().graphics_state.none_stroke_cs = cs;
             }

@@ -138,7 +138,7 @@ pub(crate) fn get_paint<'a>(context: &Context<'a>, is_stroke: bool) -> Paint<'a>
         context.get().non_stroke_data()
     };
 
-    if data.color_space.is_pattern() {
+    if data.color_space.is_pattern() || data.pattern.is_some() {
         if let Some(mut pattern) = data.pattern {
             if let Some(tf) = &data.transfer_function {
                 pattern.set_transfer_function(tf.clone());
