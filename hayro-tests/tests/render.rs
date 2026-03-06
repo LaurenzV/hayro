@@ -896,6 +896,7 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn pdfjs_issue16464() { run_render_test("pdfjs_issue16464", "downloads/pdfjs/issue16464.pdf", Some("..=0")); }
 #[test] fn pdfjs_issue18801() { run_render_test("pdfjs_issue18801", "downloads/pdfjs/issue18801.pdf", Some("..=0")); }
 #[test] fn pdfjs_ShowText_ShadingPattern() { run_render_test("pdfjs_ShowText_ShadingPattern", "downloads/pdfjs/ShowText-ShadingPattern.pdf", None); }
+#[test] fn pdfjs_Type3WordSpacing() { run_render_test("pdfjs_Type3WordSpacing", "downloads/pdfjs/Type3WordSpacing.pdf", None); }
 #[test] fn pdfjs_ZapfDingbats() { run_render_test("pdfjs_ZapfDingbats", "downloads/pdfjs/ZapfDingbats.pdf", None); }
 #[test] fn pdfjs_issue7891_bc1() { run_render_test("pdfjs_issue7891_bc1", "downloads/pdfjs/issue7891_bc1.pdf", None); }
 #[test] fn pdfjs_issue16038() { run_render_test("pdfjs_issue16038", "downloads/pdfjs/issue16038.pdf", None); }

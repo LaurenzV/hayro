@@ -1339,15 +1339,8 @@
     "id": "ShowText-ShadingPattern",
     "comment": "look into it; renders incorrectly in pdf.js too"
   },
-  {
-    "id": "Type3WordSpacing",
-    "ignore": true,
-    "comment": "look into it"
-  },
-  {
-    "id": "ZapfDingbats",
-    "comment": "look into it"
-  },
+  "Type3WordSpacing",
+  "ZapfDingbats",
   {
     "id": "issue19800-eq",
     "ignore": true,
