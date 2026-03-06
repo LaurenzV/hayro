@@ -1441,21 +1441,16 @@
     "last_page": 0,
     "comment": "doesnt parse / has encryption"
   },
-  {
-    "id": "filled-background-range",
-    "comment": "takes long time"
-  },
+  "filled-background-range",
   {
     "id": "issue17190",
     "ignore": true,
-    "comment": "takes long time"
+    "comment": "large jbig2 image, could benchmark target"
   },
   {
     "id": "issue17061",
     "first_page": 0,
-    "last_page": 4,
-    "ignore": true,
-    "comment": "takes long time"
+    "last_page": 4
   },
   "issue11242",
   {
@@ -1517,11 +1512,7 @@
     "last_page": 0,
     "comment": "widget annotation"
   },
-  {
-    "id": "issue18466",
-    "ignore": true,
-    "comment": "black rectangle, type0 without embedded font"
-  },
+  "issue18466",
   {
     "id": "issue16263",
     "ignore": true,

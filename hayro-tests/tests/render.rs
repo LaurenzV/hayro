@@ -916,6 +916,7 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn pdfjs_issue15577() { run_render_test("pdfjs_issue15577", "downloads/pdfjs/issue15577.pdf", Some("..=0")); }
 #[test] fn pdfjs_issue12294_print() { run_render_test("pdfjs_issue12294_print", "downloads/pdfjs/issue12294-print.pdf", Some("..=0")); }
 #[test] fn pdfjs_filled_background_range() { run_render_test("pdfjs_filled_background_range", "downloads/pdfjs/filled-background-range.pdf", None); }
+#[test] fn pdfjs_issue17061() { run_render_test("pdfjs_issue17061", "downloads/pdfjs/issue17061.pdf", Some("0..=4")); }
 #[test] fn pdfjs_issue11242() { run_render_test("pdfjs_issue11242", "downloads/pdfjs/issue11242.pdf", None); }
 #[test] fn pdfjs_issue11549() { run_render_test("pdfjs_issue11549", "downloads/pdfjs/issue11549.pdf", None); }
 #[test] fn pdfjs_issue11578() { run_render_test("pdfjs_issue11578", "downloads/pdfjs/issue11578.pdf", None); }
@@ -930,6 +931,8 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn pdfjs_issue5752() { run_render_test("pdfjs_issue5752", "downloads/pdfjs/issue5752.pdf", Some("0..=0")); }
 #[test] fn pdfjs_issue12007_reduced() { run_render_test("pdfjs_issue12007_reduced", "downloads/pdfjs/issue12007_reduced.pdf", None); }
 #[test] fn pdfjs_issue17906() { run_render_test("pdfjs_issue17906", "downloads/pdfjs/issue17906.pdf", Some("0..=0")); }
+#[test] fn pdfjs_issue18466() { run_render_test("pdfjs_issue18466", "downloads/pdfjs/issue18466.pdf", None); }
+#[test] fn pdfjs_issue16127() { run_render_test("pdfjs_issue16127", "downloads/pdfjs/issue16127.pdf", None); }
 #[test] fn pdfjs_issue14462() { run_render_test("pdfjs_issue14462", "downloads/pdfjs/issue14462.pdf", None); }
 #[test] fn pdfjs_issue12295() { run_render_test("pdfjs_issue12295", "downloads/pdfjs/issue12295.pdf", None); }
 #[test] fn pdfjs_issue11768() { run_render_test("pdfjs_issue11768", "downloads/pdfjs/issue11768.pdf", None); }
