@@ -5,7 +5,8 @@ use crate::font::{
     FallbackFontQuery, FontFlags, FontQuery, read_to_unicode, stretch_glyph, strip_subset_prefix,
 };
 use crate::{CMapResolverFn, CacheKey, FontResolverFn};
-use hayro_cmap::{BfString, CMap, CidFamily, WritingMode};
+use hayro_cmap::{BfString, CMap, CharacterCollection, CidFamily, WritingMode};
+use hayro_syntax::object;
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Name;
 use hayro_syntax::object::Stream;
@@ -61,6 +62,13 @@ impl Type0Font {
             .get::<Dict<'_>>(FONT_DESC)
             .unwrap_or_default();
 
+        let character_collection = cmap
+            .metadata()
+            .character_collection
+            .clone()
+            .filter(|cc| cc.family != CidFamily::AdobeIdentity)
+            .or_else(|| read_cid_system_info(&descendant_font));
+
         let (font_type, fallback, _is_standard_fallback) = match FontType::new(&font_descriptor) {
             Some(ft) => (ft, false, false),
             None => {
@@ -69,7 +77,7 @@ impl Type0Font {
                         (FontQuery::Standard(standard), true)
                     } else {
                         let mut query = FallbackFontQuery::new(dict);
-                        query.character_collection = cmap.metadata().character_collection.clone();
+                        query.character_collection = character_collection.clone();
 
                         warn!(
                             "unable to load CID font {} ({:?}), attempting fallback",
@@ -111,8 +119,7 @@ impl Type0Font {
         // If there is no ToUnicode map, try to get the UCS2 CMap.
         if fallback
             && to_unicode.is_none()
-            && let Some(cc) = cmap.metadata().character_collection.as_ref()
-            && cc.family != CidFamily::AdobeIdentity
+            && let Some(cc) = character_collection.as_ref()
             && let Some(ucs2_name) = cc.family.ucs2_cmap()
             && let Some(data) = (cmap_resolver)(ucs2_name)
         {
@@ -561,6 +568,16 @@ fn read_widths2(arr: &Array<'_>) -> Option<HashMap<u32, [f32; 3]>> {
     }
 
     Some(map)
+}
+
+fn read_cid_system_info(descendant_font: &Dict<'_>) -> Option<CharacterCollection> {
+    let info = descendant_font.get::<Dict<'_>>(CIDSYSTEMINFO)?;
+    let registry = info.get::<object::String>(REGISTRY)?;
+    let ordering = info.get::<object::String>(ORDERING)?;
+    let supplement = info.get::<i32>(SUPPLEMENT).unwrap_or(0);
+    let family = CidFamily::from_registry_ordering(registry.deref(), ordering.deref());
+
+    Some(CharacterCollection { family, supplement })
 }
 
 fn read_encoding(object: &Object<'_>, cmap_resolver: &CMapResolverFn) -> Option<CMap> {

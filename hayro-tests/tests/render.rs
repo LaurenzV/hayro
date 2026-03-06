@@ -907,6 +907,7 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn pdfjs_bug1659412() { run_render_test("pdfjs_bug1659412", "downloads/pdfjs/bug1659412.pdf", None); }
 #[test] fn pdfjs_bug1671312_ArialNarrow() { run_render_test("pdfjs_bug1671312_ArialNarrow", "downloads/pdfjs/bug1671312_ArialNarrow.pdf", None); }
 #[test] fn pdfjs_bug1671312_reduced() { run_render_test("pdfjs_bug1671312_reduced", "downloads/pdfjs/bug1671312_reduced.pdf", None); }
+#[test] fn pdfjs_p020121130574743273239() { run_render_test("pdfjs_p020121130574743273239", "downloads/pdfjs/p020121130574743273239.pdf", Some("0..=0")); }
 #[test] fn pdfjs_bug1782186() { run_render_test_with_password("pdfjs_bug1782186", "downloads/pdfjs/bug1782186.pdf", None, "Hello"); }
 #[test] fn pdfjs_issue15893_reduced() { run_render_test_with_password("pdfjs_issue15893_reduced", "downloads/pdfjs/issue15893_reduced.pdf", None, "test"); }
 #[test] fn pdfjs_issue3371() { run_render_test_with_password("pdfjs_issue3371", "downloads/pdfjs/issue3371.pdf", None, "ELXRTQWS"); }
