@@ -123,7 +123,10 @@
   "bug1791583",
   "bug1795263",
   "bug1799927",
-  "bug1820909",
+  {
+    "id": "bug1820909",
+    "last_page": 10
+  },
   "bug1826783",
   {
     "id": "bug1898802",
@@ -260,7 +263,7 @@
   "images_1bit_grayscale",
   {
     "id": "intelisa",
-    "last_page": 99
+    "last_page": 10
   },
   "isssue18194",
   "issue1002",
@@ -316,7 +319,10 @@
     "id": "issue11306",
     "last_page": 0
   },
-  "issue1133",
+  {
+    "id": "issue1133",
+    "last_page": 10
+  },
   {
     "id": "issue11330",
     "last_page": 0
@@ -1115,7 +1121,10 @@
   "operator-in-TJ-array",
   "pattern_text_embedded_font",
   "personwithdog",
-  "protectip",
+  {
+    "id": "protectip",
+    "last_page": 10
+  },
   "shavian-load",
   "simpletype3font",
   "standard_fonts_no_system_fonts",

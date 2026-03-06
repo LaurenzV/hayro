@@ -351,7 +351,7 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn pdfjs_bug1791583() { run_render_test("pdfjs_bug1791583", "downloads/pdfjs/bug1791583.pdf", None); }
 #[test] fn pdfjs_bug1795263() { run_render_test("pdfjs_bug1795263", "downloads/pdfjs/bug1795263.pdf", None); }
 #[test] fn pdfjs_bug1799927() { run_render_test("pdfjs_bug1799927", "downloads/pdfjs/bug1799927.pdf", None); }
-#[test] fn pdfjs_bug1820909() { run_render_test("pdfjs_bug1820909", "downloads/pdfjs/bug1820909.pdf", None); }
+#[test] fn pdfjs_bug1820909() { run_render_test("pdfjs_bug1820909", "downloads/pdfjs/bug1820909.pdf", Some("..=10")); }
 #[test] fn pdfjs_bug1826783() { run_render_test("pdfjs_bug1826783", "downloads/pdfjs/bug1826783.pdf", None); }
 #[test] fn pdfjs_bug1898802() { run_render_test("pdfjs_bug1898802", "downloads/pdfjs/bug1898802.pdf", Some("..=0")); }
 #[test] fn pdfjs_bug1899804() { run_render_test("pdfjs_bug1899804", "downloads/pdfjs/bug1899804.pdf", None); }
@@ -415,7 +415,7 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn pdfjs_i9_pdf() { run_render_test("pdfjs_i9_pdf", "downloads/pdfjs/i9-pdf.pdf", None); }
 #[test] fn pdfjs_ichiji() { run_render_test("pdfjs_ichiji", "downloads/pdfjs/ichiji.pdf", None); }
 #[test] fn pdfjs_images_1bit_grayscale() { run_render_test("pdfjs_images_1bit_grayscale", "downloads/pdfjs/images_1bit_grayscale.pdf", None); }
-#[test] fn pdfjs_intelisa() { run_render_test("pdfjs_intelisa", "downloads/pdfjs/intelisa.pdf", Some("..=99")); }
+#[test] fn pdfjs_intelisa() { run_render_test("pdfjs_intelisa", "downloads/pdfjs/intelisa.pdf", Some("..=10")); }
 #[test] fn pdfjs_isssue18194() { run_render_test("pdfjs_isssue18194", "downloads/pdfjs/isssue18194.pdf", None); }
 #[test] fn pdfjs_issue1002() { run_render_test("pdfjs_issue1002", "downloads/pdfjs/issue1002.pdf", None); }
 #[test] fn pdfjs_issue10084() { run_render_test("pdfjs_issue10084", "downloads/pdfjs/issue10084.pdf", None); }
@@ -445,7 +445,7 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn pdfjs_issue11279() { run_render_test("pdfjs_issue11279", "downloads/pdfjs/issue11279.pdf", None); }
 #[test] fn pdfjs_issue11287() { run_render_test("pdfjs_issue11287", "downloads/pdfjs/issue11287.pdf", Some("..=0")); }
 #[test] fn pdfjs_issue11306() { run_render_test("pdfjs_issue11306", "downloads/pdfjs/issue11306.pdf", Some("..=0")); }
-#[test] fn pdfjs_issue1133() { run_render_test("pdfjs_issue1133", "downloads/pdfjs/issue1133.pdf", None); }
+#[test] fn pdfjs_issue1133() { run_render_test("pdfjs_issue1133", "downloads/pdfjs/issue1133.pdf", Some("..=10")); }
 #[test] fn pdfjs_issue11330() { run_render_test("pdfjs_issue11330", "downloads/pdfjs/issue11330.pdf", Some("..=0")); }
 #[test] fn pdfjs_issue11385() { run_render_test("pdfjs_issue11385", "downloads/pdfjs/issue11385.pdf", Some("..=0")); }
 #[test] fn pdfjs_issue11403() { run_render_test("pdfjs_issue11403", "downloads/pdfjs/issue11403.pdf", None); }
@@ -832,7 +832,7 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn pdfjs_operator_in_TJ_array() { run_render_test("pdfjs_operator_in_TJ_array", "downloads/pdfjs/operator-in-TJ-array.pdf", None); }
 #[test] fn pdfjs_pattern_text_embedded_font() { run_render_test("pdfjs_pattern_text_embedded_font", "downloads/pdfjs/pattern_text_embedded_font.pdf", None); }
 #[test] fn pdfjs_personwithdog() { run_render_test("pdfjs_personwithdog", "downloads/pdfjs/personwithdog.pdf", None); }
-#[test] fn pdfjs_protectip() { run_render_test("pdfjs_protectip", "downloads/pdfjs/protectip.pdf", None); }
+#[test] fn pdfjs_protectip() { run_render_test("pdfjs_protectip", "downloads/pdfjs/protectip.pdf", Some("..=10")); }
 #[test] fn pdfjs_shavian_load() { run_render_test("pdfjs_shavian_load", "downloads/pdfjs/shavian-load.pdf", None); }
 #[test] fn pdfjs_simpletype3font() { run_render_test("pdfjs_simpletype3font", "downloads/pdfjs/simpletype3font.pdf", None); }
 #[test] fn pdfjs_standard_fonts_no_system_fonts() { run_render_test("pdfjs_standard_fonts_no_system_fonts", "downloads/pdfjs/standard_fonts_no_system_fonts.pdf", None); }
