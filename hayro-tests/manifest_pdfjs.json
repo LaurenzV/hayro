@@ -1527,13 +1527,7 @@
     "ignore": true,
     "comment": "doesnt finish, lots of images/masks, needs caching?"
   },
-  {
-    "id": "issue16127",
-    "first_page": 0,
-    "last_page": 1,
-    "ignore": true,
-    "comment": "noto color emoji, some page doesnt finish"
-  },
+  "issue16127",
   "issue14462",
   "issue12295",
   "issue11768",
