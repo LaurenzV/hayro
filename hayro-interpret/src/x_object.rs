@@ -414,12 +414,8 @@ impl DecodedImageXObject {
                     })
             })
             .unwrap_or(ColorSpace::device_gray());
-        
-        let fallback_bpc = if obj.is_image_mask {
-            1
-        }   else {
-            8
-        };
+
+        let fallback_bpc = if obj.is_image_mask { 1 } else { 8 };
 
         let mut bits_per_component = decoded
             .image_data
