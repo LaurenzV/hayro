@@ -221,7 +221,7 @@ pub(crate) fn draw_image_xobject<'a, 'b>(
     device.set_soft_mask(None);
     device.set_blend_mode(BlendMode::default());
 
-    let image = if x_object.is_image_mask {
+    let image = if x_object.is_mask {
         Image::Stencil(StencilImage {
             paint: get_paint(context, false),
             image_xobject: x_object.clone(),
@@ -261,7 +261,7 @@ pub(crate) struct ImageXObject<'a> {
     color_space: Option<ColorSpace>,
     cache: Cache,
     interpolate: bool,
-    is_image_mask: bool,
+    is_mask: bool,
     stream: Stream<'a>,
     transfer_function: Option<ActiveTransferFunction>,
     warning_sink: WarningSinkFn,
@@ -277,12 +277,12 @@ impl<'a> ImageXObject<'a> {
     ) -> Option<Self> {
         let dict = stream.dict();
 
-        let is_image_mask = dict
+        let is_mask = dict
             .get::<bool>(IM)
             .or_else(|| dict.get::<bool>(IMAGE_MASK))
             .unwrap_or(false);
         
-        let image_cs = if is_image_mask {
+        let image_cs = if is_mask {
             Some(ColorSpace::device_gray())
         } else {
             let cs_obj = dict
@@ -321,7 +321,7 @@ impl<'a> ImageXObject<'a> {
             transfer_function,
             interpolate,
             stream: stream.clone(),
-            is_image_mask,
+            is_mask,
         })
     }
 
@@ -343,7 +343,7 @@ impl<'a> ImageXObject<'a> {
     fn has_alpha(&self) -> bool {
         let dict = self.stream.dict();
 
-        self.is_image_mask
+        self.is_mask
             || dict.contains_key(SMASK_IN_DATA)
             || dict.contains_key(SMASK)
             || dict.contains_key(MASK)
@@ -428,7 +428,7 @@ impl DecodedImage {
             })
             .unwrap_or(ColorSpace::device_gray());
 
-        let fallback_bpc = if obj.is_image_mask { 1 } else { 8 };
+        let fallback_bpc = if obj.is_mask { 1 } else { 8 };
 
         let mut bits_per_component = decoded
             .image_data
@@ -449,8 +449,8 @@ impl DecodedImage {
             .map(|a| a.iter::<(f32, f32)>().collect::<SmallVec<_>>())
             .unwrap_or(color_space.default_decode_arr(bits_per_component as f32));
 
-        let should_decode_mask = matches!(mode, DecodeMode::Mask) || obj.is_image_mask;
-        let invert_mask = obj.is_image_mask;
+        let should_decode_mask = matches!(mode, DecodeMode::Mask) || obj.is_mask;
+        let invert_mask = obj.is_mask;
 
         if should_decode_mask {
             let data = decode_mask_bytes(
