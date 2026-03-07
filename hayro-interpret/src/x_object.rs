@@ -552,7 +552,7 @@ fn decode_raster(
             let mut output_buf = vec![0; ctx.width as usize * height as usize * 3];
             ctx.color_space
                 .convert_u8(&ctx.decoded.data, &mut output_buf)?;
-            
+
             Some(ImageData::Rgb(RgbData {
                 data: output_buf,
                 width: ctx.width,
