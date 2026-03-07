@@ -414,17 +414,19 @@ impl DecodedImageXObject {
                     })
             })
             .unwrap_or(ColorSpace::device_gray());
-
-        let mut bits_per_component = if obj.is_image_mask {
+        
+        let fallback_bpc = if obj.is_image_mask {
             1
-        } else {
-            decoded
-                .image_data
-                .as_ref()
-                .map(|i| i.bits_per_component)
-                .or(dict_bpc)
-                .unwrap_or(8)
+        }   else {
+            8
         };
+
+        let mut bits_per_component = decoded
+            .image_data
+            .as_ref()
+            .map(|i| i.bits_per_component)
+            .or(dict_bpc)
+            .unwrap_or(fallback_bpc);
 
         if !matches!(bits_per_component, 1 | 2 | 4 | 8 | 16) {
             bits_per_component = ((decoded.data.len() as u64 * 8)
