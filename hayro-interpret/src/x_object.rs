@@ -441,26 +441,43 @@ impl DecodedImageXObject {
         let mut luma_data = None;
 
         let rgb_data = if is_luma {
-            let components = get_components(
-                &decoded.data,
-                width,
-                height,
-                &color_space,
-                bits_per_component,
-            )?;
+            let mut data = if !obj.is_image_mask
+                && bits_per_component == 8
+                && decode_arr.as_slice()
+                    == color_space
+                        .default_decode_arr(bits_per_component as f32)
+                        .as_slice()
+            {
+                if obj.is_image_mask {
+                    for b in &mut decoded.data {
+                        *b = 255 - *b;
+                    }
+                }
 
-            let f32_data = { decode(&components, &color_space, bits_per_component, &decode_arr)? };
-
-            let mut data = if obj.is_image_mask {
-                f32_data
-                    .iter()
-                    .map(|alpha| ((1.0 - *alpha) * 255.0 + 0.5) as u8)
-                    .collect()
+                decoded.data
             } else {
-                f32_data
-                    .iter()
-                    .map(|alpha| (*alpha * 255.0 + 0.5) as u8)
-                    .collect()
+                let components = get_components(
+                    &decoded.data,
+                    width,
+                    height,
+                    &color_space,
+                    bits_per_component,
+                )?;
+
+                let f32_data =
+                    { decode(&components, &color_space, bits_per_component, &decode_arr)? };
+
+                if obj.is_image_mask {
+                    f32_data
+                        .iter()
+                        .map(|alpha| ((1.0 - *alpha) * 255.0 + 0.5) as u8)
+                        .collect()
+                } else {
+                    f32_data
+                        .iter()
+                        .map(|alpha| (*alpha * 255.0 + 0.5) as u8)
+                        .collect()
+                }
             };
 
             fix_image_length(&mut data, width, &mut height, 0, &color_space)?;
