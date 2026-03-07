@@ -43,6 +43,7 @@ impl<'a> XObject<'a> {
                 |_| None,
                 warning_sink,
                 cache,
+                false,
                 transfer_function,
             )?)),
             FORM => Some(Self::FormXObject(FormXObject::new(stream)?)),
@@ -262,6 +263,7 @@ pub(crate) struct ImageXObject<'a> {
     cache: Cache,
     interpolate: bool,
     is_mask: bool,
+    is_stencil_mask: bool,
     stream: Stream<'a>,
     transfer_function: Option<ActiveTransferFunction>,
     warning_sink: WarningSinkFn,
@@ -273,14 +275,16 @@ impl<'a> ImageXObject<'a> {
         resolve_cs: impl FnOnce(&Name) -> Option<ColorSpace>,
         warning_sink: &WarningSinkFn,
         cache: &Cache,
+        mut is_mask: bool,
         transfer_function: Option<ActiveTransferFunction>,
     ) -> Option<Self> {
         let dict = stream.dict();
 
-        let is_mask = dict
+        let is_stencil_mask = dict
             .get::<bool>(IM)
             .or_else(|| dict.get::<bool>(IMAGE_MASK))
             .unwrap_or(false);
+        is_mask |= is_stencil_mask;
         
         let image_cs = if is_mask {
             // Masks are always single-channel.
@@ -323,6 +327,7 @@ impl<'a> ImageXObject<'a> {
             interpolate,
             stream: stream.clone(),
             is_mask,
+            is_stencil_mask,
         })
     }
 
@@ -330,7 +335,7 @@ impl<'a> ImageXObject<'a> {
         &self,
         target_dimension: Option<(u32, u32)>,
     ) -> Option<DecodedMask> {
-        decode_mask(self, target_dimension, false)
+        decode_mask(self, target_dimension)
     }
 
     pub(crate) fn decoded_raster(
@@ -435,6 +440,7 @@ fn decode_context(
         })
         .unwrap_or(ColorSpace::device_gray());
 
+    // TODO: Use stencil mask here?
     let fallback_bpc = if obj.is_mask { 1 } else { 8 };
 
     let mut bits_per_component = decoded
@@ -470,11 +476,10 @@ fn decode_context(
 fn decode_mask(
     obj: &ImageXObject<'_>,
     target_dimension: Option<(u32, u32)>,
-    force_mask: bool,
 ) -> Option<DecodedMask> {
     let mut ctx = decode_context(obj, target_dimension)?;
 
-    if !force_mask && !obj.is_mask {
+    if !obj.is_mask {
         return None;
     }
 
@@ -487,7 +492,13 @@ fn decode_mask(
         &ctx.color_space,
         ctx.bits_per_component,
         &ctx.decode_arr,
-        obj.is_mask,
+        // Note: The semantics between "normal" soft masks (i.e. masks defined in
+        // the graphics state or via `Mask`/`SMask` are inverted compared to 
+        // stencil masks (defined via `ImageMask`). The former match the semantics
+        // of normal alpha images, where 0 stands for invisible and MAX stands for
+        // fully opaque. For stencil masks, it's the other way around: 1 means the 
+        // paint is visible, while 0 means it's invisible.
+        obj.is_stencil_mask,
     )?;
 
     Some(DecodedMask {
@@ -610,6 +621,8 @@ fn decode_raster(
         rgb_data.map(ImageData::Rgb)
     };
 
+    // Use flatten here, so in case the alpha channel is invalid we can still
+    // return the main image (see PDFJS-19611).
     let alpha = resolve_alpha(
         obj,
         &mut ctx.decoded,
@@ -620,7 +633,7 @@ fn decode_raster(
         &mut height,
         ctx.scale_factors,
         target_dimension,
-    )?;
+    ).flatten();
 
     Some(DecodedRaster {
         image: image_data?,
@@ -676,7 +689,7 @@ fn decode_mask_bytes(
 
 fn resolve_alpha(
     obj: &ImageXObject<'_>,
-    decoded: &mut hayro_syntax::object::stream::FilterResult,
+    decoded: &mut FilterResult,
     image_data: &Option<ImageData>,
     color_space: &ColorSpace,
     bits_per_component: u8,
@@ -706,10 +719,11 @@ fn resolve_alpha(
         } else {
             None
         }
-    } else if let Some(s_mask) = dict.get::<Stream<'_>>(SMASK) {
-        decode_mask_stream(&s_mask, target_dimension, &obj.warning_sink, &obj.cache)
-    } else if let Some(mask) = dict.get::<Stream<'_>>(MASK) {
-        decode_mask_stream(&mask, target_dimension, &obj.warning_sink, &obj.cache)
+        // Note: `SMASK` field takes precedence over `MASK`, so order matters here.
+    } else if let Some(s_mask) = dict.get::<Stream<'_>>(SMASK).or_else(|| dict.get::<Stream<'_>>(MASK)) {
+        let obj = ImageXObject::new(&s_mask, |_| None, &obj.warning_sink, &obj.cache, true, None)?;
+        
+        decode_mask(&obj, target_dimension).map(|decoded| decoded.luma)
     } else if let Some(color_key_mask) = dict.get::<SmallVec<[u16; 4]>>(MASK) {
         let mut mask_data = vec![];
 
@@ -755,17 +769,6 @@ fn resolve_alpha(
     };
 
     Some(alpha)
-}
-
-fn decode_mask_stream(
-    stream: &Stream<'_>,
-    target_dimension: Option<(u32, u32)>,
-    warning_sink: &WarningSinkFn,
-    cache: &Cache,
-) -> Option<LumaData> {
-    let obj = ImageXObject::new(stream, |_| None, warning_sink, cache, None)?;
-
-    decode_mask(&obj, target_dimension, true).map(|decoded| decoded.luma)
 }
 
 fn get_rgb_data(
