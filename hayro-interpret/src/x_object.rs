@@ -454,13 +454,6 @@ fn decode_context(
         .or(dict_bpc)
         .unwrap_or(fallback_bpc);
 
-    // TODO: Do we need this?
-    if !matches!(bits_per_component, 1 | 2 | 4 | 8 | 16) {
-        bits_per_component = ((decoded.data.len() as u64 * 8)
-            / (width as u64 * height as u64 * color_space.num_components() as u64))
-            as u8;
-    }
-
     let decode_arr = dict
         .get::<Array<'_>>(D)
         .or_else(|| dict.get::<Array<'_>>(DECODE))
