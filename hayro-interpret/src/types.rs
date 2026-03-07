@@ -81,15 +81,15 @@ impl RasterImage<'_> {
     /// certain cases.
     pub fn with_rgba(
         &self,
-        func: impl FnOnce(RgbData, Option<LumaData>),
+        func: impl FnOnce(ImageData, Option<LumaData>),
         target_dimension: Option<(u32, u32)>,
     ) {
         let decoded = self.0.decoded_object(target_dimension);
 
         if let Some(decoded) = decoded
-            && let Some(rgb) = decoded.rgb_data
+            && let Some(image) = decoded.image_data
         {
-            func(rgb, decoded.luma_data);
+            func(image, decoded.luma_data);
         }
     }
 
@@ -201,6 +201,49 @@ pub struct LumaData {
     /// The first number indicates the x scaling factor, the second number the
     /// y scaling factor.
     pub scale_factors: (f32, f32),
+}
+
+/// The color data of a raster image, either 3-channel RGB or 1-channel luma.
+#[derive(Clone)]
+pub enum ImageData {
+    /// 3-channel RGB data.
+    Rgb(RgbData),
+    /// 1-channel grayscale data.
+    Luma(LumaData),
+}
+
+impl ImageData {
+    /// The width of the image.
+    pub fn width(&self) -> u32 {
+        match self {
+            Self::Rgb(d) => d.width,
+            Self::Luma(d) => d.width,
+        }
+    }
+
+    /// The height of the image.
+    pub fn height(&self) -> u32 {
+        match self {
+            Self::Rgb(d) => d.height,
+            Self::Luma(d) => d.height,
+        }
+    }
+
+    /// Whether the image should be interpolated.
+    pub fn interpolate(&self) -> bool {
+        match self {
+            Self::Rgb(d) => d.interpolate,
+            Self::Luma(d) => d.interpolate,
+        }
+    }
+
+    /// The scaling factors of the image.
+    pub fn scale_factors(&self) -> (f32, f32) {
+        match self {
+            Self::Rgb(d) => d.scale_factors,
+            Self::Luma(d) => d.scale_factors,
+        }
+    }
 }
 
 /// A type of paint.

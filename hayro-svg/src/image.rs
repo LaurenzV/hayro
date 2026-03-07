@@ -2,7 +2,7 @@ use crate::Id;
 use crate::SvgRenderer;
 use crate::mask::{ImageLuminanceMask, MaskKind};
 use base64::Engine;
-use hayro_interpret::{BlendMode, Device, FillRule, LumaData, Paint, PathDrawMode, RgbData};
+use hayro_interpret::{BlendMode, Device, FillRule, ImageData, LumaData, Paint, PathDrawMode};
 use image::{DynamicImage, ImageBuffer, ImageFormat};
 use kurbo::{Affine, Rect, Shape};
 use std::io::Cursor;
@@ -11,31 +11,50 @@ use std::sync::Arc;
 impl<'a> SvgRenderer<'a> {
     pub(crate) fn draw_rgba_image(
         &mut self,
-        rgb_data: RgbData,
+        image_data: ImageData,
         transform: Affine,
         alpha: Option<LumaData>,
     ) {
+        let (rgb_data, width, height, interpolate) = match image_data {
+            ImageData::Rgb(rgb) => {
+                let w = rgb.width;
+                let h = rgb.height;
+                let i = rgb.interpolate;
+                (rgb.data, w, h, i)
+            }
+            // TODO: Store as gray-scale.
+            ImageData::Luma(luma) => {
+                let w = luma.width;
+                let h = luma.height;
+                let i = luma.interpolate;
+                let rgb = luma
+                    .data
+                    .iter()
+                    .flat_map(|g| [*g, *g, *g])
+                    .collect::<Vec<_>>();
+                (rgb, w, h, i)
+            }
+        };
+
         if let Some(alpha) = alpha {
-            if alpha.interpolate == rgb_data.interpolate
-                && alpha.width == rgb_data.width
-                && alpha.height == rgb_data.height
+            if alpha.interpolate == interpolate
+                && alpha.width == width
+                && alpha.height == height
             {
                 let interleaved = rgb_data
-                    .data
                     .chunks(3)
                     .zip(alpha.data)
                     .flat_map(|(rgb, a)| [rgb[0], rgb[1], rgb[2], a])
                     .collect::<Vec<u8>>();
 
                 let image = DynamicImage::ImageRgba8(
-                    ImageBuffer::from_raw(rgb_data.width, rgb_data.height, interleaved).unwrap(),
+                    ImageBuffer::from_raw(width, height, interleaved).unwrap(),
                 );
 
-                self.write_image(&image, rgb_data.interpolate, None, transform);
+                self.write_image(&image, interpolate, None, transform);
             } else {
                 let image = DynamicImage::ImageRgb8(
-                    ImageBuffer::from_raw(rgb_data.width, rgb_data.height, rgb_data.data.clone())
-                        .unwrap(),
+                    ImageBuffer::from_raw(width, height, rgb_data.clone()).unwrap(),
                 );
 
                 let alpha = {
@@ -45,8 +64,8 @@ impl<'a> SvgRenderer<'a> {
 
                     let transform = transform
                         * Affine::scale_non_uniform(
-                            rgb_data.width as f64 / alpha.width as f64,
-                            rgb_data.height as f64 / alpha.height as f64,
+                            width as f64 / alpha.width as f64,
+                            height as f64 / alpha.height as f64,
                         );
 
                     ImageLuminanceMask {
@@ -61,16 +80,15 @@ impl<'a> SvgRenderer<'a> {
                     Some(MaskKind::Image(Arc::new(alpha))),
                     BlendMode::Normal,
                 );
-                self.write_image(&image, rgb_data.interpolate, None, transform);
+                self.write_image(&image, interpolate, None, transform);
                 self.pop_transparency_group();
             }
         } else {
             let image = DynamicImage::ImageRgb8(
-                ImageBuffer::from_raw(rgb_data.width, rgb_data.height, rgb_data.data.clone())
-                    .unwrap(),
+                ImageBuffer::from_raw(width, height, rgb_data.clone()).unwrap(),
             );
 
-            self.write_image(&image, rgb_data.interpolate, None, transform);
+            self.write_image(&image, interpolate, None, transform);
         };
     }
 

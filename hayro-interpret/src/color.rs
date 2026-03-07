@@ -298,6 +298,10 @@ impl ColorSpace {
         }
     }
 
+    pub(crate) fn is_device_gray(&self) -> bool {
+        matches!(self.0.as_ref(), ColorSpaceType::DeviceGray)
+    }
+
     /// Get the number of components of the color space.
     pub(crate) fn num_components(&self) -> u8 {
         match self.0.as_ref() {

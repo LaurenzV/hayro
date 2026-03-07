@@ -301,12 +301,11 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
             }
             Image::Raster(r) => {
                 r.with_rgba(
-                    |rgb, alpha| {
-                        transform *= Affine::scale_non_uniform(
-                            rgb.scale_factors.0 as f64,
-                            rgb.scale_factors.1 as f64,
-                        );
-                        Self::draw_rgba_image(self, rgb, transform, alpha);
+                    |image, alpha| {
+                        let (sx, sy) = image.scale_factors();
+                        transform *=
+                            Affine::scale_non_uniform(sx as f64, sy as f64);
+                        Self::draw_rgba_image(self, image, transform, alpha);
                     },
                     None,
                 );
