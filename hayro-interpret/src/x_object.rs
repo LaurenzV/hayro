@@ -732,9 +732,7 @@ fn resolve_alpha(
     } else if let Some(color_key_mask) = dict.get::<SmallVec<[u16; 4]>>(MASK) {
         let mut mask_data = vec![];
 
-        // For `ImageData::Luma`, `decoded.data` has been moved into it, so
-        // borrow from there. For `Rgb`, the converted data differs from the
-        // raw data, but `decoded.data` is still available.
+        // TODO: Make this less ugly.
         let raw_data = match image_data {
             Some(ImageData::Luma(d)) => &d.data,
             _ => &decoded.data,
