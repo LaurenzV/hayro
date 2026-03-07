@@ -277,11 +277,12 @@ impl<'a> ImageXObject<'a> {
     ) -> Option<Self> {
         let dict = stream.dict();
 
-        let image_mask = dict
+        let is_image_mask = dict
             .get::<bool>(IM)
             .or_else(|| dict.get::<bool>(IMAGE_MASK))
             .unwrap_or(false);
-        let image_cs = if image_mask {
+        
+        let image_cs = if is_image_mask {
             Some(ColorSpace::device_gray())
         } else {
             let cs_obj = dict
@@ -320,7 +321,7 @@ impl<'a> ImageXObject<'a> {
             transfer_function,
             interpolate,
             stream: stream.clone(),
-            is_image_mask: image_mask,
+            is_image_mask,
         })
     }
 
@@ -359,7 +360,7 @@ pub(crate) enum DecodedImage {
 
 enum DecodeMode {
     Auto,
-    Mask { invert: bool },
+    Mask,
 }
 
 impl DecodedImage {
@@ -448,11 +449,8 @@ impl DecodedImage {
             .map(|a| a.iter::<(f32, f32)>().collect::<SmallVec<_>>())
             .unwrap_or(color_space.default_decode_arr(bits_per_component as f32));
 
-        let should_decode_mask = matches!(mode, DecodeMode::Mask { .. }) || obj.is_image_mask;
-        let invert_mask = match mode {
-            DecodeMode::Auto => obj.is_image_mask,
-            DecodeMode::Mask { invert } => invert,
-        };
+        let should_decode_mask = matches!(mode, DecodeMode::Mask) || obj.is_image_mask;
+        let invert_mask = obj.is_image_mask;
 
         if should_decode_mask {
             let data = decode_mask_bytes(
@@ -716,19 +714,9 @@ fn decode_mask_stream(
     warning_sink: &WarningSinkFn,
     cache: &Cache,
 ) -> Option<LumaData> {
-    let image_mask = stream
-        .dict()
-        .get::<bool>(IM)
-        .or_else(|| stream.dict().get::<bool>(IMAGE_MASK))
-        .unwrap_or(false);
-
     let obj = ImageXObject::new(stream, |_| None, warning_sink, cache, None)?;
 
-    DecodedImage::decode(
-        &obj,
-        target_dimension,
-        DecodeMode::Mask { invert: image_mask },
-    )
+    DecodedImage::decode(&obj, target_dimension, DecodeMode::Mask)
     .and_then(|decoded| match decoded {
         DecodedImage::Mask(luma) => Some(luma),
         _ => None,
