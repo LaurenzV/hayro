@@ -52,7 +52,7 @@ pub(crate) fn decode<'a>(
             tile.rect.height(),
         );
 
-        let iter_input = IteratorInput::new(&tile);
+        let iter_input = IteratorInput::new(tile);
 
         let progression_iterator: Box<dyn Iterator<Item = ProgressionData>> =
             match tile.progression_order {
@@ -76,7 +76,7 @@ pub(crate) fn decode<'a>(
                 ),
             };
 
-        decode_tile(&tile, header, progression_iterator, tile_ctx, storage)?;
+        decode_tile(tile, header, progression_iterator, tile_ctx, storage)?;
     }
 
     // Note that this assumes that either all tiles have MCT or none of them.
