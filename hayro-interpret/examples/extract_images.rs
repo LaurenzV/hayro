@@ -5,8 +5,8 @@
 
 use hayro_interpret::font::Glyph;
 use hayro_interpret::{
-    BlendMode, ClipPath, Context, Device, GlyphDrawMode, Image, InterpreterSettings, Paint,
-    PathDrawMode, SoftMask, interpret_page,
+    BlendMode, ClipPath, Context, Device, GlyphDrawMode, Image, ImageData, InterpreterSettings,
+    Paint, PathDrawMode, SoftMask, interpret_page,
 };
 use hayro_syntax::Pdf;
 use image::{DynamicImage, ImageBuffer};
@@ -97,39 +97,39 @@ impl Device<'_> for ImageExtractor {
                 // The alpha and RGB channels are provided separately.
                 r.with_rgba(
                     |image, alpha| {
+                        let (rgb_data, width, height) = match image {
+                            ImageData::Rgb(rgb) => (rgb.data, rgb.width, rgb.height),
+                            ImageData::Luma(luma) => {
+                                let rgb = luma
+                                    .data
+                                    .iter()
+                                    .flat_map(|g| [*g, *g, *g])
+                                    .collect::<Vec<_>>();
+                                (rgb, luma.width, luma.height)
+                            }
+                        };
+
                         let image = if let Some(alpha) = alpha {
                             // This is not complete, as it can in theory happen that the alpha channel has a different
                             // dimension than the RGB channel. We ignore this edge case for this example.
-                            if alpha.width == image.width && alpha.height == image.height {
-                                let interleaved = image
-                                    .data
+                            if alpha.width == width && alpha.height == height {
+                                let interleaved = rgb_data
                                     .chunks(3)
                                     .zip(alpha.data)
                                     .flat_map(|(rgb, a)| [rgb[0], rgb[1], rgb[2], a])
                                     .collect::<Vec<u8>>();
 
                                 DynamicImage::ImageRgba8(
-                                    ImageBuffer::from_raw(image.width, image.height, interleaved)
-                                        .unwrap(),
+                                    ImageBuffer::from_raw(width, height, interleaved).unwrap(),
                                 )
                             } else {
                                 DynamicImage::ImageRgb8(
-                                    ImageBuffer::from_raw(
-                                        image.width,
-                                        image.height,
-                                        image.data.clone(),
-                                    )
-                                    .unwrap(),
+                                    ImageBuffer::from_raw(width, height, rgb_data).unwrap(),
                                 )
                             }
                         } else {
                             DynamicImage::ImageRgb8(
-                                ImageBuffer::from_raw(
-                                    image.width,
-                                    image.height,
-                                    image.data.clone(),
-                                )
-                                .unwrap(),
+                                ImageBuffer::from_raw(width, height, rgb_data).unwrap(),
                             )
                         };
 
