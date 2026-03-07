@@ -7,7 +7,7 @@ use crate::interpret::path::get_paint;
 use crate::interpret::state::ActiveTransferFunction;
 use crate::{BlendMode, CacheKey, ClipPath, Image, RasterImage, StencilImage};
 use crate::{FillRule, InterpreterWarning, WarningSinkFn, interpret};
-use crate::{LumaData, RgbData};
+use crate::{ImageData, LumaData, RgbData};
 use hayro_syntax::bit_reader::BitReader;
 use hayro_syntax::content::TypedIter;
 use hayro_syntax::object::Array;
@@ -354,11 +354,12 @@ impl<'a> ImageXObject<'a> {
 }
 
 pub(crate) struct DecodedImageXObject {
-    pub(crate) rgb_data: Option<RgbData>,
+    pub(crate) image_data: Option<ImageData>,
     pub(crate) luma_data: Option<LumaData>,
 }
 
 impl DecodedImageXObject {
+    // TODO: Refactor this whole method to be more clear.
     fn new(obj: &ImageXObject<'_>, target_dimension: Option<(u32, u32)>) -> Option<Self> {
         let dict = obj.stream.dict();
 
@@ -440,7 +441,7 @@ impl DecodedImageXObject {
 
         let mut luma_data = None;
 
-        let rgb_data = if is_luma {
+        let image_data = if is_luma {
             let mut data = if bits_per_component == 8
                 && decode_arr.as_slice()
                     == color_space
@@ -490,7 +491,7 @@ impl DecodedImageXObject {
             });
 
             return Some(Self {
-                rgb_data: None,
+                image_data: None,
                 luma_data,
             });
         } else if bits_per_component == 8
@@ -502,21 +503,33 @@ impl DecodedImageXObject {
                     .as_slice()
             && !is_luma
         {
-            // This is actually the most common case, where the PDF is embedded as a 8-bit RGB color
-            // and no special decode array. In this case, we can prevent the round-trip from
-            // f32 back to u8 and just return the raw decoded data, which will already be in
-            // RGB8 with values between 0 and 255.
+            // This is actually the most common case, where the PDF is embedded
+            // in such a way where we don't need to decode. In this case, 
+            // we can prevent the round-trip from f32 back to u8 and just return 
+            // the raw decoded data, which will already be in
+            // RGB8/gray-scale with values between 0 and 255.
             fix_image_length(&mut decoded.data, width, &mut height, 0, &color_space)?;
-            let mut output_buf = vec![0; width as usize * height as usize * 3];
-            color_space.convert_u8(&decoded.data, &mut output_buf)?;
 
-            Some(RgbData {
-                data: output_buf,
-                width,
-                height,
-                interpolate: obj.interpolate,
-                scale_factors: (scale_x, scale_y),
-            })
+            if color_space.is_device_gray() {
+                Some(ImageData::Luma(LumaData {
+                    data: core::mem::take(&mut decoded.data),
+                    width,
+                    height,
+                    interpolate: obj.interpolate,
+                    scale_factors: (scale_x, scale_y),
+                }))
+            } else {
+                let mut output_buf = vec![0; width as usize * height as usize * 3];
+                color_space.convert_u8(&decoded.data, &mut output_buf)?;
+
+                Some(ImageData::Rgb(RgbData {
+                    data: output_buf,
+                    width,
+                    height,
+                    interpolate: obj.interpolate,
+                    scale_factors: (scale_x, scale_y),
+                }))
+            }
         } else {
             let components = get_components(
                 &decoded.data,
@@ -567,7 +580,7 @@ impl DecodedImageXObject {
                 }
             }
 
-            rgb_data
+            rgb_data.map(ImageData::Rgb)
         };
 
         if !is_luma {
@@ -604,8 +617,16 @@ impl DecodedImageXObject {
             } else if let Some(color_key_mask) = dict.get::<SmallVec<[u16; 4]>>(MASK) {
                 let mut mask_data = vec![];
 
+                // For `ImageData::Luma`, `decoded.data` has been moved into it, so
+                // borrow from there. For `Rgb`, the converted data differs from the
+                // raw data, but `decoded.data` is still available.
+                let raw_data = match &image_data {
+                    Some(ImageData::Luma(d)) => &d.data,
+                    _ => &decoded.data,
+                };
+
                 let components = get_components(
-                    &decoded.data,
+                    raw_data,
                     width,
                     height,
                     &color_space,
@@ -645,7 +666,7 @@ impl DecodedImageXObject {
         }
 
         Some(Self {
-            rgb_data,
+            image_data,
             luma_data,
         })
     }
