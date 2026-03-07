@@ -216,7 +216,7 @@ impl<'a> Image<'a> {
     pub fn decode_into(
         &'a self,
         buf: &mut [u8],
-        decoder_context: &mut DecoderContext<'a>,
+        decoder_context: &mut DecoderContext,
     ) -> Result<()> {
         let settings = &self.settings;
         j2c::decode(self.codestream, &self.header, decoder_context)?;
