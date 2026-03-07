@@ -330,11 +330,15 @@ impl<'a> ImageXObject<'a> {
             is_stencil_mask,
         })
     }
-
+    
     pub(crate) fn decoded_mask(
         &self,
         target_dimension: Option<(u32, u32)>,
     ) -> Option<DecodedMask> {
+        if !self.is_mask {
+            return None;
+        }
+        
         decode_mask(self, target_dimension)
     }
 
@@ -342,6 +346,10 @@ impl<'a> ImageXObject<'a> {
         &self,
         target_dimension: Option<(u32, u32)>,
     ) -> Option<DecodedRaster> {
+        if self.is_mask {
+            return None;
+        }
+
         decode_raster(self, target_dimension)
     }
 
@@ -478,11 +486,6 @@ fn decode_mask(
     target_dimension: Option<(u32, u32)>,
 ) -> Option<DecodedMask> {
     let mut ctx = decode_context(obj, target_dimension)?;
-
-    if !obj.is_mask {
-        return None;
-    }
-
     let mut height = ctx.height;
 
     let data = decode_mask_bytes(
@@ -516,10 +519,6 @@ fn decode_raster(
     obj: &ImageXObject<'_>,
     target_dimension: Option<(u32, u32)>,
 ) -> Option<DecodedRaster> {
-    if obj.is_mask {
-        return None;
-    }
-
     let mut ctx = decode_context(obj, target_dimension)?;
     let mut height = ctx.height;
 
