@@ -16,7 +16,7 @@ use hayro_syntax::object::Name;
 use hayro_syntax::object::Object;
 use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::*;
-use hayro_syntax::object::stream::{ImageColorSpace, ImageDecodeParams};
+use hayro_syntax::object::stream::{FilterResult, ImageColorSpace, ImageDecodeParams};
 use hayro_syntax::page::Resources;
 use kurbo::{Affine, Rect, Shape};
 use log::warn;
@@ -283,6 +283,7 @@ impl<'a> ImageXObject<'a> {
             .unwrap_or(false);
         
         let image_cs = if is_mask {
+            // Masks are always single-channel.
             Some(ColorSpace::device_gray())
         } else {
             let cs_obj = dict
@@ -366,7 +367,7 @@ pub(crate) struct DecodedRaster {
 }
 
 struct DecodeContext {
-    decoded: hayro_syntax::object::stream::FilterResult,
+    decoded: FilterResult,
     width: u32,
     height: u32,
     scale_factors: (f32, f32),
@@ -561,7 +562,7 @@ fn decode_raster(
             ctx.bits_per_component,
         )?;
 
-        let mut f32_data = decode(
+        let mut f32_data = apply_decode_array(
             &components,
             &ctx.color_space,
             ctx.bits_per_component,
@@ -653,7 +654,7 @@ fn decode_mask_bytes(
     } else {
         let components = get_components(decoded_data, width, *height, color_space, bits_per_component)?;
 
-        let f32_data = decode(&components, color_space, bits_per_component, decode_arr)?;
+        let f32_data = apply_decode_array(&components, color_space, bits_per_component, decode_arr)?;
 
         if invert {
             f32_data
@@ -870,7 +871,7 @@ fn get_components(
     Some(result)
 }
 
-fn decode(
+fn apply_decode_array(
     components: &[u16],
     color_space: &ColorSpace,
     bits_per_component: u8,
