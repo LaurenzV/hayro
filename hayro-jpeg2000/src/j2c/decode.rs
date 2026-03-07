@@ -90,8 +90,8 @@ pub(crate) fn decode<'a>(
     Ok(())
 }
 
+/// A decoder context for decoding JPEG2000 images.
 #[derive(Default)]
-/// Reusable decoder state for JPEG2000 codestream decoding.
 pub struct DecoderContext {
     tile_decode_context: TileDecodeContext,
     storage: DecompositionStorage,
