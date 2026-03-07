@@ -504,8 +504,8 @@ impl DecodedImageXObject {
             && !is_luma
         {
             // This is actually the most common case, where the PDF is embedded
-            // in such a way where we don't need to decode. In this case, 
-            // we can prevent the round-trip from f32 back to u8 and just return 
+            // in such a way where we don't need to decode. In this case,
+            // we can prevent the round-trip from f32 back to u8 and just return
             // the raw decoded data, which will already be in
             // RGB8/gray-scale with values between 0 and 255.
             fix_image_length(&mut decoded.data, width, &mut height, 0, &color_space)?;
@@ -625,13 +625,8 @@ impl DecodedImageXObject {
                     _ => &decoded.data,
                 };
 
-                let components = get_components(
-                    raw_data,
-                    width,
-                    height,
-                    &color_space,
-                    bits_per_component,
-                )?;
+                let components =
+                    get_components(raw_data, width, height, &color_space, bits_per_component)?;
 
                 for pixel in components.chunks_exact(color_space.num_components() as usize) {
                     let mut mask_val = 0;

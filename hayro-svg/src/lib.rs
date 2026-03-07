@@ -303,8 +303,7 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
                 r.with_rgba(
                     |image, alpha| {
                         let (sx, sy) = image.scale_factors();
-                        transform *=
-                            Affine::scale_non_uniform(sx as f64, sy as f64);
+                        transform *= Affine::scale_non_uniform(sx as f64, sy as f64);
                         Self::draw_rgba_image(self, image, transform, alpha);
                     },
                     None,

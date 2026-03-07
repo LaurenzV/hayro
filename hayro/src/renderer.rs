@@ -4,8 +4,8 @@ use hayro_interpret::encode::EncodedShadingPattern;
 use hayro_interpret::font::Glyph;
 use hayro_interpret::pattern::Pattern;
 use hayro_interpret::{
-    BlendMode, CacheKey, ClipPath, Device, FillRule, GlyphDrawMode, LumaData, MaskType, Paint,
-    PathDrawMode, RgbData, SoftMask, StrokeProps,
+    BlendMode, CacheKey, ClipPath, Device, FillRule, GlyphDrawMode, ImageData, LumaData, MaskType,
+    Paint, PathDrawMode, RgbData, SoftMask, StrokeProps,
 };
 use kurbo::{Affine, BezPath, Point, Rect, Shape, Vec2};
 use std::collections::HashMap;
@@ -69,12 +69,12 @@ impl Renderer {
         self.ctx.set_stroke(stroke);
     }
 
-    fn draw_image_with_alpha_mask(&mut self, rgb_data: RgbData, alpha_data: LumaData) {
+    fn draw_image_with_alpha_mask(&mut self, image_data: ImageData, alpha_data: LumaData) {
         let mask = {
             let transform = *self.ctx.transform()
                 * Affine::scale_non_uniform(
-                    rgb_data.width as f64 / alpha_data.width as f64,
-                    rgb_data.height as f64 / alpha_data.height as f64,
+                    image_data.width() as f64 / alpha_data.width as f64,
+                    image_data.height() as f64 / alpha_data.height as f64,
                 );
             let mut renderer = Self::new(
                 self.ctx.width(),
@@ -82,13 +82,13 @@ impl Renderer {
                 derive_settings(self.ctx.render_settings()),
             );
             let mut mask_pix = Pixmap::new(self.ctx.width(), self.ctx.height());
-            let rgb_data = RgbData {
+            let rgb_data = ImageData::Rgb(RgbData {
                 data: vec![0; alpha_data.width as usize * alpha_data.height as usize * 3],
                 width: alpha_data.width,
                 height: alpha_data.height,
                 interpolate: alpha_data.interpolate,
                 scale_factors: alpha_data.scale_factors,
-            };
+            });
             renderer.ctx.set_transform(transform);
             // Note that there is a circle between `draw_image` and `draw_image_with_alpha_mask`,
             // but `draw_image_with_alpha_mask` is only called if the dimensions or interpolate
@@ -100,11 +100,36 @@ impl Renderer {
         };
 
         self.ctx.push_mask_layer(mask);
-        self.draw_image(rgb_data, None);
+        self.draw_image(image_data, None);
         self.ctx.pop_layer();
     }
 
-    fn draw_image(&mut self, rgb_data: RgbData, alpha_data: Option<LumaData>) {
+    fn resize_image(
+        data: Vec<u8>,
+        src_width: u32,
+        src_height: u32,
+        new_width: u32,
+        new_height: u32,
+        pixel_type: PixelType,
+    ) -> Vec<u8> {
+        let src_image = FirImage::from_vec_u8(src_width, src_height, data, pixel_type).unwrap();
+        let mut dst_image = FirImage::new(new_width, new_height, pixel_type);
+
+        let mut resizer = Resizer::new();
+        resizer
+            .resize(
+                &src_image,
+                &mut dst_image,
+                &ResizeOptions::new().resize_alg(ResizeAlg::Convolution(
+                    fast_image_resize::FilterType::CatmullRom,
+                )),
+            )
+            .unwrap();
+
+        dst_image.into_vec()
+    }
+
+    fn draw_image(&mut self, image_data: ImageData, alpha_data: Option<LumaData>) {
         let cur_transform = *self.ctx.transform();
         let mut additional_transform = Affine::IDENTITY;
 
@@ -112,81 +137,116 @@ impl Renderer {
             let (x, y) = x_y_advances(&cur_transform);
             (x.length() as f32, y.length() as f32)
         };
-        let mut rgb_width = rgb_data.width;
-        let mut rgb_height = rgb_data.height;
+        let mut img_width = image_data.width();
+        let mut img_height = image_data.height();
+        let interpolate = image_data.interpolate();
 
-        let rgba_data = match alpha_data {
-            None => rgb_data
-                .data
-                .chunks_exact(3)
-                .flat_map(|rgb| [rgb[0], rgb[1], rgb[2], 255])
-                .collect::<Vec<_>>(),
-            Some(a) => {
-                if a.width != rgb_data.width
-                    || a.height != rgb_data.height
-                    || a.interpolate != rgb_data.interpolate
-                {
-                    return self.draw_image_with_alpha_mask(rgb_data, a);
-                } else {
-                    rgb_data
-                        .data
-                        .chunks_exact(3)
-                        .zip(a.data)
-                        .flat_map(|(rgb, a)| [rgb[0], rgb[1], rgb[2], a])
-                        .collect::<Vec<_>>()
-                }
+        if let Some(a) = &alpha_data {
+            if a.width != img_width || a.height != img_height || a.interpolate != interpolate {
+                return self.draw_image_with_alpha_mask(image_data, alpha_data.unwrap());
             }
-        };
+        }
 
-        let mut quality = if rgb_data.interpolate {
+        let mut quality = if interpolate {
             ImageQuality::Medium
         } else {
             ImageQuality::Low
         };
 
-        let mut rgba_data = if x_scale >= 1.0 && y_scale >= 1.0 {
-            rgba_data
-        } else {
-            // Resize the image, either doing down- or upsampling.
-            let new_width = (rgb_width as f32 * x_scale)
+        let needs_resize = x_scale < 1.0 || y_scale < 1.0;
+        let (new_width, new_height) = if needs_resize {
+            let w = (img_width as f32 * x_scale)
                 .ceil()
                 .max(1.0)
                 .min((u16::MAX / 2) as f32) as u32;
-            let new_height = (rgb_height as f32 * y_scale)
+            let h = (img_height as f32 * y_scale)
                 .ceil()
                 .max(1.0)
                 .min((u16::MAX / 2) as f32) as u32;
-
-            // For bitmap glyphs, quality is particularly important, so use `High` here.
             if self.in_type3_glyph {
                 quality = ImageQuality::High;
+            }
+            (w, h)
+        } else {
+            (img_width, img_height)
+        };
+
+        // For luma images without alpha, we can resize as single-channel and
+        // expand to RGBA afterwards, which is ~4x faster.
+        let mut rgba_data = if matches!(&image_data, ImageData::Luma(_)) && alpha_data.is_none() {
+            // We cannot lift this up due to borrowing issues.
+            let ImageData::Luma(luma) = image_data else {
+                unreachable!()
             };
 
-            let src_image =
-                FirImage::from_vec_u8(rgb_width, rgb_height, rgba_data, PixelType::U8x4).unwrap();
+            let luma_data = if !needs_resize {
+                luma.data
+            } else {
+                let resized = Self::resize_image(
+                    luma.data,
+                    img_width,
+                    img_height,
+                    new_width,
+                    new_height,
+                    PixelType::U8,
+                );
+                additional_transform = Affine::scale_non_uniform(
+                    img_width as f64 / new_width as f64,
+                    img_height as f64 / new_height as f64,
+                );
+                img_width = new_width;
+                img_height = new_height;
+                resized
+            };
 
-            let mut dst_image = FirImage::new(new_width, new_height, PixelType::U8x4);
+            luma_data
+                .iter()
+                .flat_map(|g| [*g, *g, *g, 255])
+                .collect::<Vec<_>>()
+        } else {
+            let (rgb_data, alpha_data) = match image_data {
+                ImageData::Rgb(rgb) => (rgb.data, alpha_data.map(|a| a.data)),
+                ImageData::Luma(luma) => {
+                    let rgb = luma
+                        .data
+                        .iter()
+                        .flat_map(|g| [*g, *g, *g])
+                        .collect::<Vec<_>>();
+                    (rgb, alpha_data.map(|a| a.data))
+                }
+            };
 
-            let mut resizer = Resizer::new();
-            resizer
-                .resize(
-                    &src_image,
-                    &mut dst_image,
-                    &ResizeOptions::new().resize_alg(ResizeAlg::Convolution(
-                        fast_image_resize::FilterType::CatmullRom,
-                    )),
-                )
-                .unwrap();
+            let rgba_data = match alpha_data {
+                None => rgb_data
+                    .chunks_exact(3)
+                    .flat_map(|rgb| [rgb[0], rgb[1], rgb[2], 255])
+                    .collect::<Vec<_>>(),
+                Some(alpha) => rgb_data
+                    .chunks_exact(3)
+                    .zip(alpha)
+                    .flat_map(|(rgb, a)| [rgb[0], rgb[1], rgb[2], a])
+                    .collect::<Vec<_>>(),
+            };
 
-            let t_scale_x = rgb_width as f32 / new_width as f32;
-            let t_scale_y = rgb_height as f32 / new_height as f32;
-
-            additional_transform = Affine::scale_non_uniform(t_scale_x as f64, t_scale_y as f64);
-
-            rgb_width = new_width;
-            rgb_height = new_height;
-
-            dst_image.into_vec()
+            if !needs_resize {
+                rgba_data
+            } else {
+                let resized = Self::resize_image(
+                    rgba_data,
+                    img_width,
+                    img_height,
+                    new_width,
+                    new_height,
+                    PixelType::U8x4,
+                );
+                additional_transform = Affine::scale_non_uniform(
+                    img_width as f64 / new_width as f64,
+                    img_height as f64 / new_height as f64,
+                );
+                img_width = new_width;
+                img_height = new_height;
+                resized
+            }
         };
 
         let (chunks, _) = rgba_data.as_chunks_mut::<4>();
@@ -205,17 +265,17 @@ impl Renderer {
         // of pixel width 2.
         if self.in_type3_glyph {
             let mut padded_image = vec![];
-            padded_image.extend(vec![0; (4 * rgb_width as usize + 16) * 2]);
+            padded_image.extend(vec![0; (4 * img_width as usize + 16) * 2]);
 
-            for row in rgba_data.chunks_exact(rgb_width as usize * 4) {
+            for row in rgba_data.chunks_exact(img_width as usize * 4) {
                 padded_image.extend([0; 8]);
                 padded_image.extend(row);
                 padded_image.extend([0; 8]);
             }
 
-            padded_image.extend(vec![0; (4 * rgb_width as usize + 16) * 2]);
-            rgb_width += 4;
-            rgb_height += 4;
+            padded_image.extend(vec![0; (4 * img_width as usize + 16) * 2]);
+            img_width += 4;
+            img_height += 4;
             additional_transform *= Affine::translate((-2.0, -2.0));
 
             rgba_data = padded_image;
@@ -223,8 +283,8 @@ impl Renderer {
 
         let pixmap = Pixmap::from_parts(
             bytemuck::cast_vec(rgba_data),
-            rgb_width as u16,
-            rgb_height as u16,
+            img_width as u16,
+            img_height as u16,
         );
 
         self.with_blend(|r| {
@@ -583,13 +643,13 @@ impl<'a> Device<'a> for Renderer {
                                 let old_rule = *self.ctx.fill_rule();
                                 self.ctx.set_fill_rule(Fill::NonZero);
 
-                                let rgb_data = RgbData {
+                                let rgb_data = ImageData::Rgb(RgbData {
                                     data: rgb_bytes,
                                     width: stencil.width,
                                     height: stencil.height,
                                     interpolate: stencil.interpolate,
                                     scale_factors: stencil.scale_factors,
-                                };
+                                });
                                 self.draw_image(rgb_data, Some(stencil));
 
                                 if push_layer {
@@ -607,7 +667,7 @@ impl<'a> Device<'a> for Renderer {
                                     stencil.height as f64,
                                 );
                                 let mask_pix = {
-                                    let rgb_bytes = RgbData {
+                                    let rgb_bytes = ImageData::Rgb(RgbData {
                                         data: vec![
                                             255;
                                             stencil.width as usize
@@ -618,7 +678,7 @@ impl<'a> Device<'a> for Renderer {
                                         height: stencil.height,
                                         interpolate: stencil.interpolate,
                                         scale_factors: stencil.scale_factors,
-                                    };
+                                    });
                                     let mut sub_renderer = Self::new(
                                         width,
                                         height,
@@ -660,14 +720,12 @@ impl<'a> Device<'a> for Renderer {
             }
             hayro_interpret::Image::Raster(r) => {
                 r.with_rgba(
-                    |rgb, alpha| {
-                        transform *= Affine::scale_non_uniform(
-                            rgb.scale_factors.0 as f64,
-                            rgb.scale_factors.1 as f64,
-                        );
+                    |image, alpha| {
+                        let (sx, sy) = image.scale_factors();
+                        transform *= Affine::scale_non_uniform(sx as f64, sy as f64);
                         self.ctx.set_transform(transform);
                         self.with_blend(|r| {
-                            r.draw_image(rgb, alpha);
+                            r.draw_image(image, alpha);
                         });
                     },
                     Some((target_width, target_height)),

@@ -37,10 +37,7 @@ impl<'a> SvgRenderer<'a> {
         };
 
         if let Some(alpha) = alpha {
-            if alpha.interpolate == interpolate
-                && alpha.width == width
-                && alpha.height == height
-            {
+            if alpha.interpolate == interpolate && alpha.width == width && alpha.height == height {
                 let interleaved = rgb_data
                     .chunks(3)
                     .zip(alpha.data)
