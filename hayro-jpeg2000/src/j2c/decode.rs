@@ -281,8 +281,8 @@ impl TileDecodeContext {
     }
 }
 
-fn decode_component_tile_bit_planes<'a, 'b>(
-    tile: &'b Tile<'a>,
+fn decode_component_tile_bit_planes<'a>(
+    tile: &Tile<'a>,
     tile_ctx: &mut TileDecodeContext,
     storage: &mut DecompositionStorage<'a>,
     header: &Header<'_>,
