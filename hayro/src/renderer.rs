@@ -141,11 +141,10 @@ impl Renderer {
         let mut img_height = image_data.height();
         let interpolate = image_data.interpolate();
 
-        if let Some(a) = &alpha_data {
-            if a.width != img_width || a.height != img_height || a.interpolate != interpolate {
+        if let Some(a) = &alpha_data
+            && (a.width != img_width || a.height != img_height || a.interpolate != interpolate) {
                 return self.draw_image_with_alpha_mask(image_data, alpha_data.unwrap());
             }
-        }
 
         let mut quality = if interpolate {
             ImageQuality::Medium
