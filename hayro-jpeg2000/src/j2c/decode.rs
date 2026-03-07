@@ -261,13 +261,13 @@ pub(crate) struct TileDecodeContext {
 }
 
 impl TileDecodeContext {
+    /// Reset the context for processing a new image.
     fn reset(&mut self, header: &Header<'_>, initial_tile: &Tile<'_>) {
-        self.idwt_scratch_buffer.clear();
-        self.idwt_output.reset();
-        // TODO: Add other reset methods
+        // Bitplane decode context and buffers will be reset in the
+        // corresponding methods. IDWT output and scratch buffer will be
+        // overridden on demand, so those don't need to be reset either.
         self.channel_data.clear();
 
-        // TODO: Reuse channel data as well.
         for info in &initial_tile.component_infos {
             self.channel_data.push(ComponentData {
                 container: SimdBuffer::zeros(
