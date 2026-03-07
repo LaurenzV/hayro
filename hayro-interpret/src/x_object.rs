@@ -441,8 +441,7 @@ impl DecodedImageXObject {
         let mut luma_data = None;
 
         let rgb_data = if is_luma {
-            let mut data = if !obj.is_image_mask
-                && bits_per_component == 8
+            let mut data = if bits_per_component == 8
                 && decode_arr.as_slice()
                     == color_space
                         .default_decode_arr(bits_per_component as f32)
