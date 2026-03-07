@@ -31,13 +31,6 @@ impl Default for IDWTOutput {
     }
 }
 
-impl IDWTOutput {
-    pub(crate) fn reset(&mut self) {
-        self.coefficients.clear();
-        self.rect = IntRect::from_ltrb(0, 0, u32::MAX, u32::MAX);
-    }
-}
-
 struct IDWTTempOutput {
     rect: IntRect,
 }
