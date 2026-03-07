@@ -112,9 +112,9 @@ impl Filter {
                 ccitt::decode(data, params, image_params).ok_or(DecodeFailure::ImageDecode)
             }
             #[cfg(feature = "images")]
-            Self::Jbig2Decode => Ok(FilterResult::from_data(
-                jbig2::decode(data, params).ok_or(DecodeFailure::ImageDecode)?,
-            )),
+            Self::Jbig2Decode => {
+                jbig2::decode(data, params, image_params).ok_or(DecodeFailure::ImageDecode)
+            }
             #[cfg(feature = "images")]
             Self::JpxDecode => jpx::decode(data, image_params).ok_or(DecodeFailure::ImageDecode),
             #[cfg(not(feature = "images"))]

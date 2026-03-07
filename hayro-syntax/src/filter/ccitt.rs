@@ -33,74 +33,114 @@ pub(crate) fn decode(
         invert_black: params.get::<bool>(BLACK_IS_1).unwrap_or(false),
     };
 
-    struct ByteDecoder {
-        output: Vec<u8>,
-        decoded_rows: u32,
-        buffer: u8,
-        bit_count: u8,
-    }
+    // Whenever possible (if we don't have an indexed color space), we convert
+    // the data as 8-bit instead of 1-bit, so that it can be easier converted
+    // into an RGBA8 image.
 
-    impl ByteDecoder {
-        fn push_bit(&mut self, white: bool) {
-            let bit = if white { 1 } else { 0 };
-            self.buffer = (self.buffer << 1) | bit;
-            self.bit_count += 1;
+    let (decoded, bpc) = if image_params.is_indexed {
+        struct BitPackDecoder {
+            output: Vec<u8>,
+            decoded_rows: u32,
+            buffer: u8,
+            bit_count: u8,
+        }
 
-            if self.bit_count == 8 {
-                self.output.push(self.buffer);
-                self.buffer = 0;
-                self.bit_count = 0;
+        impl BitPackDecoder {
+            fn push_bit(&mut self, white: bool) {
+                let bit = if white { 1 } else { 0 };
+                self.buffer = (self.buffer << 1) | bit;
+                self.bit_count += 1;
+
+                if self.bit_count == 8 {
+                    self.output.push(self.buffer);
+                    self.buffer = 0;
+                    self.bit_count = 0;
+                }
+            }
+
+            fn flush(&mut self) {
+                if self.bit_count > 0 {
+                    let padded = self.buffer << (8 - self.bit_count);
+                    self.output.push(padded);
+                    self.buffer = 0;
+                    self.bit_count = 0;
+                }
             }
         }
 
-        fn flush(&mut self) {
-            if self.bit_count > 0 {
-                let padded = self.buffer << (8 - self.bit_count);
-                self.output.push(padded);
-                self.buffer = 0;
-                self.bit_count = 0;
+        impl Decoder for BitPackDecoder {
+            fn push_pixel(&mut self, white: bool) {
+                self.push_bit(white);
+            }
+
+            fn push_pixel_chunk(&mut self, white: bool, chunk_count: u32) {
+                let byte = if white { 0xFF } else { 0x00 };
+                self.output
+                    .extend(iter::repeat_n(byte, chunk_count as usize));
+            }
+
+            fn next_line(&mut self) {
+                self.decoded_rows += 1;
+                self.flush();
             }
         }
-    }
 
-    impl Decoder for ByteDecoder {
-        fn push_pixel(&mut self, white: bool) {
-            self.push_bit(white);
+        let mut decoder = BitPackDecoder {
+            output: Vec::new(),
+            decoded_rows: 0,
+            buffer: 0,
+            bit_count: 0,
+        };
+        let result = hayro_ccitt::decode(data, &mut decoder, &settings);
+
+        // If we decoded at least one row, let's be lenient and return what we got.
+        // See also 0001763.pdf.
+        if result.is_err() && decoder.decoded_rows == 0 {
+            return None;
         }
 
-        fn push_pixel_chunk(&mut self, white: bool, chunk_count: u32) {
-            let byte = if white { 0xFF } else { 0x00 };
-            self.output
-                .extend(iter::repeat_n(byte, chunk_count as usize));
+        (decoder.output, 1)
+    } else {
+        struct Luma8Decoder {
+            output: Vec<u8>,
+            decoded_rows: u32,
         }
 
-        fn next_line(&mut self) {
-            self.decoded_rows += 1;
-            // Flush any remaining bits and align to byte boundary.
-            self.flush();
-        }
-    }
+        impl Decoder for Luma8Decoder {
+            fn push_pixel(&mut self, white: bool) {
+                self.output.push(if white { 0xFF } else { 0x00 });
+            }
 
-    let mut decoder = ByteDecoder {
-        output: Vec::new(),
-        decoded_rows: 0,
-        buffer: 0,
-        bit_count: 0,
+            fn push_pixel_chunk(&mut self, white: bool, chunk_count: u32) {
+                let byte = if white { 0xFF } else { 0x00 };
+                self.output
+                    .extend(iter::repeat_n(byte, chunk_count as usize * 8));
+            }
+
+            fn next_line(&mut self) {
+                self.decoded_rows += 1;
+            }
+        }
+
+        let mut decoder = Luma8Decoder {
+            output: Vec::new(),
+            decoded_rows: 0,
+        };
+        let result = hayro_ccitt::decode(data, &mut decoder, &settings);
+
+        if result.is_err() && decoder.decoded_rows == 0 {
+            return None;
+        }
+
+        (decoder.output, 8)
     };
-    let result = hayro_ccitt::decode(data, &mut decoder, &settings);
-
-    // If we decoded at least one row, let's be lenient and return what we got.
-    // See also 0001763.pdf.
-    if result.is_err() && decoder.decoded_rows == 0 {
-        return None;
-    }
 
     Some(FilterResult {
-        data: decoder.output,
+        data: decoded,
         image_data: Some(ImageData {
             alpha: None,
             color_space: Some(ImageColorSpace::Gray),
-            bits_per_component: 1,
+            bits_per_component: bpc,
             width: settings.columns,
             height: image_params.height,
         }),
