@@ -169,11 +169,7 @@ struct ColorChange {
 /// However, even if that's the case, it is possible that a number
 /// of rows were decoded successfully and written into the decoder, so those
 /// can still be used, but the image might be truncated.
-pub fn decode(
-    data: &[u8],
-    decoder: &mut impl Decoder,
-    ctx: &mut DecoderContext,
-) -> Result<usize> {
+pub fn decode(data: &[u8], decoder: &mut impl Decoder, ctx: &mut DecoderContext) -> Result<usize> {
     ctx.reset();
     let mut reader = BitReader::new(data);
 
