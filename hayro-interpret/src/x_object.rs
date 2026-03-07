@@ -394,13 +394,10 @@ fn decode_context(
     target_dimension: Option<(u32, u32)>,
 ) -> Option<DecodeContext> {
     let dict = obj.stream.dict();
-
     let dict_bpc = dict
         .get::<u8>(BPC)
         .or_else(|| dict.get::<u8>(BITS_PER_COMPONENT));
-
     let color_space = obj.color_space.clone();
-
     let is_indexed = obj.color_space.as_ref().is_some_and(|cs| cs.is_indexed());
 
     let decode_params = ImageDecodeParams {
@@ -458,6 +455,7 @@ fn decode_context(
         .or(dict_bpc)
         .unwrap_or(fallback_bpc);
 
+    // TODO: Do we need this?
     if !matches!(bits_per_component, 1 | 2 | 4 | 8 | 16) {
         bits_per_component = ((decoded.data.len() as u64 * 8)
             / (width as u64 * height as u64 * color_space.num_components() as u64))
@@ -649,14 +647,19 @@ fn decode_mask_bytes(
     decode_arr: &[(f32, f32)],
     invert: bool,
 ) -> Option<Vec<u8>> {
-    let mut data = if bits_per_component == 8
-        && decode_arr
-            == color_space
-                .default_decode_arr(bits_per_component as f32)
-                .as_slice()
-    {
+    let default_decode = color_space.default_decode_arr(bits_per_component as f32);
+    let inverted_default: SmallVec<[(f32, f32); 4]> = default_decode
+        .iter()
+        .map(|(min, max)| (*max, *min))
+        .collect();
+    let fast_path = bits_per_component == 8
+        && (decode_arr == default_decode.as_slice()
+            || decode_arr == inverted_default.as_slice());
+
+    let mut data = if fast_path {
         let mut data = core::mem::take(decoded_data);
-        if invert {
+        let should_invert = invert ^ (decode_arr == inverted_default.as_slice());
+        if should_invert {
             for b in &mut data {
                 *b = 255 - *b;
             }
