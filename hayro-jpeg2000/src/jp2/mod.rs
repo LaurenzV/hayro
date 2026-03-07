@@ -3,7 +3,7 @@
 use alloc::vec::Vec;
 
 use crate::error::{FormatError, Result, bail};
-use crate::j2c::DecodedCodestream;
+use crate::j2c::ComponentData;
 use crate::jp2::r#box::{FILE_TYPE, JP2_SIGNATURE};
 use crate::jp2::cdef::ChannelDefinitionBox;
 use crate::jp2::cmap::{ComponentMappingBox, ComponentMappingEntry, ComponentMappingType};
@@ -27,9 +27,9 @@ pub(crate) struct ImageBoxes {
     pub(crate) component_mapping: Option<ComponentMappingBox>,
 }
 
-pub(crate) struct DecodedImage {
-    /// The raw decoded JPEG2000 codestream.
-    pub(crate) decoded: DecodedCodestream,
+pub(crate) struct DecodedImage<'a> {
+    /// The raw decoded JPEG2000 codestream components.
+    pub(crate) decoded_components: &'a mut Vec<ComponentData>,
     /// The JP2 boxes of the image. In the case of a raw codestream, we
     /// will synthesize the necessary boxes.
     pub(crate) boxes: ImageBoxes,

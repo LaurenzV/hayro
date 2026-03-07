@@ -71,7 +71,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use crate::error::{bail, err};
-use crate::j2c::{ComponentData, DecodedCodestream, Header};
+use crate::j2c::{ComponentData, Header};
 use crate::jp2::cdef::{ChannelAssociation, ChannelType};
 use crate::jp2::cmap::ComponentMappingType;
 use crate::jp2::colr::{CieLab, EnumeratedColorspace};
@@ -88,6 +88,7 @@ pub use error::{
     ColorError, DecodeError, DecodingError, FormatError, MarkerError, Result, TileError,
     ValidationError,
 };
+pub use j2c::DecoderContext;
 
 #[cfg(feature = "image")]
 pub mod integration;
@@ -190,40 +191,54 @@ impl<'a> Image<'a> {
         self.header.component_infos[0].size_info.precision
     }
 
-    /// Decode the image.
+    /// Decode the image and return its decoded result as a `Vec<u8>`, with each
+    /// channel interleaved.
     pub fn decode(&self) -> Result<Vec<u8>> {
         let buffer_size = self.width() as usize
             * self.height() as usize
             * (self.color_space.num_channels() as usize + if self.has_alpha { 1 } else { 0 });
         let mut buf = vec![0; buffer_size];
-        self.decode_into(&mut buf)?;
+        let mut decoder_context = DecoderContext::default();
+        self.decode_into(&mut buf, &mut decoder_context)?;
 
         Ok(buf)
     }
 
-    /// Decode the image into the given buffer. The buffer must have the correct
-    /// size.
-    pub(crate) fn decode_into(&self, buf: &mut [u8]) -> Result<()> {
+    /// Decode the image into the given buffer.
+    ///
+    /// This method does the same as [`Image::decode`], but you can provide
+    /// a custom buffer for the output, as well as a decoder context. Doing
+    /// so will allow `hayro-jpeg2000` to reuse memory allocations, so this is
+    /// especially recommended if you plan on converting multiple images
+    /// in the same session.
+    ///
+    /// The buffer must have the correct size.
+    pub fn decode_into(
+        &'a self,
+        buf: &mut [u8],
+        decoder_context: &mut DecoderContext<'a>,
+    ) -> Result<()> {
         let settings = &self.settings;
-        let mut decoded_image =
-            j2c::decode(self.codestream, &self.header).map(move |data| DecodedImage {
-                decoded: DecodedCodestream { components: data },
-                boxes: self.boxes.clone(),
-            })?;
+        j2c::decode(self.codestream, &self.header, decoder_context)?;
+        let mut decoded_image = DecodedImage {
+            decoded_components: decoder_context.channel_data_mut(),
+            boxes: self.boxes.clone(),
+        };
 
         // Resolve palette indices.
         if settings.resolve_palette_indices {
-            decoded_image.decoded.components =
-                resolve_palette_indices(decoded_image.decoded.components, &decoded_image.boxes)?;
+            let components = core::mem::take(decoded_image.decoded_components);
+            *decoded_image.decoded_components =
+                resolve_palette_indices(components, &decoded_image.boxes)?;
         }
 
         if let Some(cdef) = &decoded_image.boxes.channel_definition {
             // Sort by the channel association. Note that this will only work if
             // each component is referenced only once.
             let mut components = decoded_image
-                .decoded
-                .components
-                .into_iter()
+                .decoded_components
+                .iter()
+                .cloned()
                 .zip(
                     cdef.channel_definitions
                         .iter()
@@ -234,14 +249,13 @@ impl<'a> Image<'a> {
                 )
                 .collect::<Vec<_>>();
             components.sort_by(|c1, c2| c1.1.cmp(&c2.1));
-            decoded_image.decoded.components = components.into_iter().map(|c| c.0).collect();
+            *decoded_image.decoded_components = components.into_iter().map(|c| c.0).collect();
         }
 
         // Note that this is only valid if all images have the same bit depth.
-        let bit_depth = decoded_image.decoded.components[0].bit_depth;
+        let bit_depth = decoded_image.decoded_components[0].bit_depth;
         convert_color_space(&mut decoded_image, bit_depth)?;
-
-        interleave_and_convert(decoded_image, buf);
+        interleave_and_convert(&mut decoded_image, buf);
 
         Ok(())
     }
@@ -375,8 +389,8 @@ pub struct Bitmap {
     pub original_bit_depth: u8,
 }
 
-fn interleave_and_convert(image: DecodedImage, buf: &mut [u8]) {
-    let mut components = image.decoded.components;
+fn interleave_and_convert(image: &mut DecodedImage<'_>, buf: &mut [u8]) {
+    let components = &mut *image.decoded_components;
     let num_components = components.len();
 
     let mut all_same_bit_depth = Some(components[0].bit_depth);
@@ -407,8 +421,8 @@ fn interleave_and_convert(image: DecodedImage, buf: &mut [u8]) {
             }
             // Gray-scale with alpha.
             2 => {
-                let c1 = components.pop().unwrap();
-                let c0 = components.pop().unwrap();
+                let c0 = &components[0];
+                let c1 = &components[1];
 
                 let c0 = &c0.container[..max_len];
                 let c1 = &c1.container[..max_len];
@@ -420,9 +434,9 @@ fn interleave_and_convert(image: DecodedImage, buf: &mut [u8]) {
             }
             // RGB
             3 => {
-                let c2 = components.pop().unwrap();
-                let c1 = components.pop().unwrap();
-                let c0 = components.pop().unwrap();
+                let c0 = &components[0];
+                let c1 = &components[1];
+                let c2 = &components[2];
 
                 let c0 = &c0.container[..max_len];
                 let c1 = &c1.container[..max_len];
@@ -436,10 +450,10 @@ fn interleave_and_convert(image: DecodedImage, buf: &mut [u8]) {
             }
             // RGBA or CMYK.
             4 => {
-                let c3 = components.pop().unwrap();
-                let c2 = components.pop().unwrap();
-                let c1 = components.pop().unwrap();
-                let c0 = components.pop().unwrap();
+                let c0 = &components[0];
+                let c1 = &components[1];
+                let c2 = &components[2];
+                let c3 = &components[3];
 
                 let c0 = &c0.container[..max_len];
                 let c1 = &c1.container[..max_len];
@@ -470,7 +484,7 @@ fn interleave_and_convert(image: DecodedImage, buf: &mut [u8]) {
     }
 }
 
-fn convert_color_space(image: &mut DecodedImage, bit_depth: u8) -> Result<()> {
+fn convert_color_space(image: &mut DecodedImage<'_>, bit_depth: u8) -> Result<()> {
     if let Some(jp2::colr::ColorSpace::Enumerated(e)) = &image
         .boxes
         .color_specification
@@ -480,12 +494,12 @@ fn convert_color_space(image: &mut DecodedImage, bit_depth: u8) -> Result<()> {
         match e {
             EnumeratedColorspace::Sycc => {
                 dispatch!(Level::new(), simd => {
-                    sycc_to_rgb(simd, &mut image.decoded.components, bit_depth)
+                    sycc_to_rgb(simd, image.decoded_components, bit_depth)
                 })?;
             }
             EnumeratedColorspace::CieLab(cielab) => {
                 dispatch!(Level::new(), simd => {
-                    cielab_to_rgb(simd, &mut image.decoded.components, bit_depth, cielab)
+                    cielab_to_rgb(simd, image.decoded_components, bit_depth, cielab)
                 })?;
             }
             _ => {}

@@ -209,18 +209,19 @@ fn convert_inner(image: &Image<'_>, buf: &mut [u8]) -> ImageResult<()> {
         has_alpha: bool,
         cs: ColorSpace,
     ) -> Result<(), ImageError> {
+        let mut decoder_context = crate::DecoderContext::default();
         match (cs, has_alpha) {
             (ColorSpace::Gray, false) => {
-                image.decode_into(buf)?;
+                image.decode_into(buf, &mut decoder_context)?;
             }
             (ColorSpace::Gray, true) => {
-                image.decode_into(buf)?;
+                image.decode_into(buf, &mut decoder_context)?;
             }
             (ColorSpace::RGB, false) => {
-                image.decode_into(buf)?;
+                image.decode_into(buf, &mut decoder_context)?;
             }
             (ColorSpace::RGB, true) => {
-                image.decode_into(buf)?;
+                image.decode_into(buf, &mut decoder_context)?;
             }
             (ColorSpace::CMYK, false) => {
                 let decoded = image.decode()?;

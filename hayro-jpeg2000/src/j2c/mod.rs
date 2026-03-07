@@ -11,8 +11,6 @@ mod segment;
 mod tag_tree;
 mod tile;
 
-use alloc::vec::Vec;
-
 use super::jp2::ImageBoxes;
 use super::jp2::colr::{ColorSpace, ColorSpecificationBox, EnumeratedColorspace};
 use crate::error::{FormatError, MarkerError, Result, bail};
@@ -22,16 +20,12 @@ use crate::{DecodeSettings, Image, resolve_alpha_and_color_space};
 
 use crate::math::{SIMD_WIDTH, SimdBuffer};
 pub(crate) use codestream::Header;
+pub use decode::DecoderContext;
 pub(crate) use decode::decode;
 
 pub(crate) struct ParsedCodestream<'a> {
     pub(crate) header: Header<'a>,
     pub(crate) data: &'a [u8],
-}
-
-pub(crate) struct DecodedCodestream {
-    /// The decoded components.
-    pub(crate) components: Vec<ComponentData>,
 }
 
 #[derive(Debug, Clone)]

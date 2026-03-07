@@ -11,17 +11,11 @@ use core::ops::Range;
 
 /// Build and allocate all necessary structures to process the code-blocks
 /// for a specific tile. Also parses the segments for each code-block.
-pub(crate) fn build(
-    tile: &Tile<'_>,
-    storage: &mut DecompositionStorage,
-) -> Result<()> {
+pub(crate) fn build(tile: &Tile<'_>, storage: &mut DecompositionStorage<'_>) -> Result<()> {
     build_decompositions(tile, storage)
 }
 
-fn build_decompositions(
-    tile: &Tile<'_>,
-    storage: &mut DecompositionStorage,
-) -> Result<()> {
+fn build_decompositions(tile: &Tile<'_>, storage: &mut DecompositionStorage<'_>) -> Result<()> {
     let mut total_coefficients = 0;
 
     for component_tile in tile.component_tiles() {
@@ -43,7 +37,7 @@ fn build_decompositions(
 
         let mut build_sub_band = |sub_band_type: SubBandType,
                                   resolution_tile: &ResolutionTile<'_>,
-                                  storage: &mut DecompositionStorage|
+                                  storage: &mut DecompositionStorage<'_>|
          -> Result<usize> {
             let sub_band_rect = resolution_tile.sub_band_rect(sub_band_type);
 
@@ -116,7 +110,7 @@ fn build_precincts(
     resolution_tile: &ResolutionTile<'_>,
     sub_band_rect: IntRect,
     tile: &Tile<'_>,
-    storage: &mut DecompositionStorage,
+    storage: &mut DecompositionStorage<'_>,
 ) -> Result<Range<usize>> {
     let start = storage.precincts.len();
 
@@ -197,7 +191,7 @@ fn build_code_blocks(
     code_blocks_x: u32,
     code_blocks_y: u32,
     tile: &Tile<'_>,
-    storage: &mut DecompositionStorage,
+    storage: &mut DecompositionStorage<'_>,
 ) -> Range<usize> {
     let mut y = code_block_area.y0;
 

@@ -29,7 +29,7 @@ pub(crate) fn decode(
     total_bitplanes: u8,
     style: &CodeBlockStyle,
     tile_ctx: &mut TileDecodeContext,
-    storage: &DecompositionStorage,
+    storage: &DecompositionStorage<'_>,
     strict: bool,
 ) -> Result<()> {
     tile_ctx.bit_plane_decode_context.reset(
@@ -54,7 +54,7 @@ pub(crate) fn decode(
 
 fn decode_inner(
     code_block: &CodeBlock,
-    storage: &DecompositionStorage,
+    storage: &DecompositionStorage<'_>,
     ctx: &mut BitPlaneDecodeContext,
     bp_buffers: &mut BitPlaneDecodeBuffers,
 ) -> Option<()> {
@@ -79,9 +79,7 @@ fn decode_inner(
                     last_segment_idx += 1;
                 }
 
-                bp_buffers
-                    .combined_layers
-                    .extend(segment.data);
+                bp_buffers.combined_layers.extend(segment.data);
                 coding_passes += segment.coding_pases;
             }
         }
