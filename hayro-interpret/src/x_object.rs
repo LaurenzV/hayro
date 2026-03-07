@@ -202,7 +202,7 @@ pub(crate) fn draw_image_xobject<'a, 'b>(
     ]));
     let transform = context.get().ctm;
 
-    let has_alpha = x_object.has_alpha();
+    let has_alpha = x_object.has_mask();
 
     let mut soft_mask = std::mem::take(&mut context.get_mut().graphics_state.soft_mask);
     let blend_mode = std::mem::take(&mut context.get_mut().graphics_state.blend_mode);
@@ -340,11 +340,10 @@ impl<'a> ImageXObject<'a> {
         self.height
     }
 
-    fn has_alpha(&self) -> bool {
+    fn has_mask(&self) -> bool {
         let dict = self.stream.dict();
 
-        self.is_mask
-            || dict.contains_key(SMASK_IN_DATA)
+        dict.contains_key(SMASK_IN_DATA)
             || dict.contains_key(SMASK)
             || dict.contains_key(MASK)
     }
