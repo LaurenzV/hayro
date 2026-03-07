@@ -268,6 +268,7 @@ impl TileDecodeContext {
         // overridden on demand, so those don't need to be reset either.
         self.channel_data.clear();
 
+        // TODO: SIMD Buffers should be reused across runs!
         for info in &initial_tile.component_infos {
             self.channel_data.push(ComponentData {
                 container: SimdBuffer::zeros(
