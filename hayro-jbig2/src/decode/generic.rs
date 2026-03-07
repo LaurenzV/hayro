@@ -249,7 +249,8 @@ pub(crate) fn decode_bitmap_mmr(bitmap: &mut Bitmap, data: &[u8]) -> Result<usiz
     //
     // hayro-ccitt already aligns to the byte boundary before returning, so
     // nothing else to do here.
-    Ok(hayro_ccitt::decode(data, &mut decoder, &settings)
+    let mut context = hayro_ccitt::DecoderContext::new(settings);
+    Ok(hayro_ccitt::decode(data, &mut decoder, &mut context)
         .map_err(|_| RegionError::InvalidDimension)?)
 }
 

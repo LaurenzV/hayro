@@ -4,8 +4,8 @@
 //! as defined in ITU-T Recommendations T.4 and T.6. These encodings are commonly
 //! used for bi-level (black and white) images in PDF documents and fax transmissions.
 //!
-//! The main entry point is the [`decode`] function, which takes encoded data and
-//! decoding settings, and outputs the decoded pixels through a [`Decoder`] trait
+//! The main entry point is the [`decode`] function, which takes encoded data, a
+//! [`DecoderContext`], and outputs the decoded pixels through a [`Decoder`] trait
 //! that can be implemented according to your needs.
 //!
 //! The crate is `no_std` compatible but requires an allocator to be available.
@@ -160,7 +160,7 @@ struct ColorChange {
     color: Color,
 }
 
-/// Decode the given image using the provided settings and the decoder.
+/// Decode the given image using the provided decoder context and decoder.
 ///
 /// If decoding was successful, the number of bytes that have been read in total
 /// is returned.
@@ -169,14 +169,18 @@ struct ColorChange {
 /// However, even if that's the case, it is possible that a number
 /// of rows were decoded successfully and written into the decoder, so those
 /// can still be used, but the image might be truncated.
-pub fn decode(data: &[u8], decoder: &mut impl Decoder, settings: &DecodeSettings) -> Result<usize> {
-    let mut ctx = DecoderContext::new(decoder, settings);
+pub fn decode(
+    data: &[u8],
+    decoder: &mut impl Decoder,
+    ctx: &mut DecoderContext,
+) -> Result<usize> {
+    ctx.reset();
     let mut reader = BitReader::new(data);
 
-    match settings.encoding {
-        EncodingMode::Group4 => decode_group4(&mut ctx, &mut reader)?,
-        EncodingMode::Group3_1D => decode_group3_1d(&mut ctx, &mut reader)?,
-        EncodingMode::Group3_2D { .. } => decode_group3_2d(&mut ctx, &mut reader)?,
+    match ctx.settings.encoding {
+        EncodingMode::Group4 => decode_group4(ctx, &mut reader, decoder)?,
+        EncodingMode::Group3_1D => decode_group3_1d(ctx, &mut reader, decoder)?,
+        EncodingMode::Group3_2D { .. } => decode_group3_2d(ctx, &mut reader, decoder)?,
     }
 
     reader.align();
@@ -184,17 +188,18 @@ pub fn decode(data: &[u8], decoder: &mut impl Decoder, settings: &DecodeSettings
 }
 
 /// Group 3 1D decoding (T.4 Section 4.1).
-fn decode_group3_1d<T: Decoder>(
-    ctx: &mut DecoderContext<'_, T>,
+fn decode_group3_1d(
+    ctx: &mut DecoderContext,
     reader: &mut BitReader<'_>,
+    decoder: &mut impl Decoder,
 ) -> Result<()> {
     // It seems like PDF producers are a bit sloppy with the `end_of_line` flag,
     // so we just always try to read one.
     let _ = reader.read_eol_if_available();
 
     loop {
-        decode_1d_line(ctx, reader)?;
-        ctx.next_line(reader)?;
+        decode_1d_line(ctx, reader, decoder)?;
+        ctx.next_line(reader, decoder)?;
 
         if group3_check_eob(ctx, reader) {
             break;
@@ -205,9 +210,10 @@ fn decode_group3_1d<T: Decoder>(
 }
 
 /// Group 3 2D decoding (T.4 Section 4.2).
-fn decode_group3_2d<T: Decoder>(
-    ctx: &mut DecoderContext<'_, T>,
+fn decode_group3_2d(
+    ctx: &mut DecoderContext,
     reader: &mut BitReader<'_>,
+    decoder: &mut impl Decoder,
 ) -> Result<()> {
     // It seems like PDF producers are a bit sloppy with the `end_of_line` flag,
     // so we just always try to read one.
@@ -217,12 +223,12 @@ fn decode_group3_2d<T: Decoder>(
         let tag_bit = reader.read_bit()?;
 
         if tag_bit == 1 {
-            decode_1d_line(ctx, reader)?;
+            decode_1d_line(ctx, reader, decoder)?;
         } else {
-            decode_2d_line(ctx, reader)?;
+            decode_2d_line(ctx, reader, decoder)?;
         }
 
-        ctx.next_line(reader)?;
+        ctx.next_line(reader, decoder)?;
 
         if group3_check_eob(ctx, reader) {
             break;
@@ -233,10 +239,7 @@ fn decode_group3_2d<T: Decoder>(
 }
 
 /// Check for end-of-block, including RTC (T.4 Section 4.1.4).
-fn group3_check_eob<T: Decoder>(
-    ctx: &mut DecoderContext<'_, T>,
-    reader: &mut BitReader<'_>,
-) -> bool {
+fn group3_check_eob(ctx: &mut DecoderContext, reader: &mut BitReader<'_>) -> bool {
     let eol_count = reader.read_eol_if_available();
 
     // T.4 Section 4.1.4: "The end of a document transmission is indicated by
@@ -254,9 +257,10 @@ fn group3_check_eob<T: Decoder>(
     false
 }
 
-fn decode_group4<T: Decoder>(
-    ctx: &mut DecoderContext<'_, T>,
+fn decode_group4(
+    ctx: &mut DecoderContext,
     reader: &mut BitReader<'_>,
+    decoder: &mut impl Decoder,
 ) -> Result<()> {
     loop {
         if ctx.settings.end_of_block && reader.peak_bits(24) == Ok(EOFB) {
@@ -268,8 +272,8 @@ fn decode_group4<T: Decoder>(
             break;
         }
 
-        decode_2d_line(ctx, reader)?;
-        ctx.next_line(reader)?;
+        decode_2d_line(ctx, reader, decoder)?;
+        ctx.next_line(reader, decoder)?;
     }
 
     Ok(())
@@ -277,13 +281,14 @@ fn decode_group4<T: Decoder>(
 
 /// Decode a single 1D-coded line (T.4 Section 4.1.1, T.6 Section 2.2.4).
 #[inline(always)]
-fn decode_1d_line<T: Decoder>(
-    ctx: &mut DecoderContext<'_, T>,
+fn decode_1d_line(
+    ctx: &mut DecoderContext,
     reader: &mut BitReader<'_>,
+    decoder: &mut impl Decoder,
 ) -> Result<()> {
     while !ctx.at_eol() {
         let run_length = reader.decode_run(ctx.color)?;
-        ctx.push_pixels(run_length);
+        ctx.push_pixels(decoder, run_length);
         ctx.color = ctx.color.opposite();
     }
 
@@ -292,9 +297,10 @@ fn decode_1d_line<T: Decoder>(
 
 /// Decode a single 2D-coded line (T.4 Section 4.2, T.6 Section 2.2).
 #[inline(always)]
-fn decode_2d_line<T: Decoder>(
-    ctx: &mut DecoderContext<'_, T>,
+fn decode_2d_line(
+    ctx: &mut DecoderContext,
     reader: &mut BitReader<'_>,
+    decoder: &mut impl Decoder,
 ) -> Result<()> {
     while !ctx.at_eol() {
         let mode = reader.decode_mode()?;
@@ -302,7 +308,7 @@ fn decode_2d_line<T: Decoder>(
         match mode {
             // Pass mode (T.4 Section 4.2.1.3.2a, T.6 Section 2.2.3.1).
             Mode::Pass => {
-                ctx.push_pixels(ctx.b2() - ctx.a0().unwrap_or(0));
+                ctx.push_pixels(decoder, ctx.b2() - ctx.a0().unwrap_or(0));
                 ctx.update_b();
                 // No color change happens in pass mode.
             }
@@ -317,7 +323,7 @@ fn decode_2d_line<T: Decoder>(
 
                 let a0 = ctx.a0().unwrap_or(0);
 
-                ctx.push_pixels(a1.checked_sub(a0).ok_or(DecodeError::Overflow)?);
+                ctx.push_pixels(decoder, a1.checked_sub(a0).ok_or(DecodeError::Overflow)?);
                 ctx.color = ctx.color.opposite();
 
                 ctx.update_b();
@@ -325,11 +331,11 @@ fn decode_2d_line<T: Decoder>(
             // Horizontal mode (T.4 Section 4.2.1.3.2c, T.6 Section 2.2.3.3).
             Mode::Horizontal => {
                 let a0a1 = reader.decode_run(ctx.color)?;
-                ctx.push_pixels(a0a1);
+                ctx.push_pixels(decoder, a0a1);
                 ctx.color = ctx.color.opposite();
 
                 let a1a2 = reader.decode_run(ctx.color)?;
-                ctx.push_pixels(a1a2);
+                ctx.push_pixels(decoder, a1a2);
                 ctx.color = ctx.color.opposite();
 
                 ctx.update_b();
@@ -340,7 +346,8 @@ fn decode_2d_line<T: Decoder>(
     Ok(())
 }
 
-struct DecoderContext<'a, T: Decoder> {
+/// A reusable context for decoding CCITT images.
+pub struct DecoderContext {
     /// Color changes in the reference line (previous line).
     ref_changes: Vec<ColorChange>,
     /// The minimum index we need to start from when searching for b1.
@@ -351,8 +358,6 @@ struct DecoderContext<'a, T: Decoder> {
     coding_changes: Vec<ColorChange>,
     /// Current position in the coding line (number of pixels decoded).
     pixels_decoded: u32,
-    /// The decoder sink.
-    decoder: &'a mut T,
     /// The width of a line in pixels (i.e. number of columns).
     line_width: u32,
     /// The color of the next run to be decoded.
@@ -360,20 +365,20 @@ struct DecoderContext<'a, T: Decoder> {
     /// How many rows have been decoded so far.
     decoded_rows: u32,
     /// The settings to apply during decoding.
-    settings: &'a DecodeSettings,
+    settings: DecodeSettings,
     /// Whether to invert black and white.
     invert_black: bool,
 }
 
-impl<'a, T: Decoder> DecoderContext<'a, T> {
-    fn new(decoder: &'a mut T, settings: &'a DecodeSettings) -> Self {
+impl DecoderContext {
+    /// Creates a new decoder context using the provided decode settings.
+    pub fn new(settings: DecodeSettings) -> Self {
         Self {
             ref_changes: vec![],
             ref_pos: 0,
             b1_idx: 0,
             coding_changes: Vec::new(),
             pixels_decoded: 0,
-            decoder,
             line_width: settings.columns,
             // Each run starts with an imaginary white pixel on the left.
             color: Color::White,
@@ -381,6 +386,18 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
             settings,
             invert_black: settings.invert_black,
         }
+    }
+
+    fn reset(&mut self) {
+        self.ref_changes.clear();
+        self.ref_pos = 0;
+        self.b1_idx = 0;
+        self.coding_changes.clear();
+        self.pixels_decoded = 0;
+        self.line_width = self.settings.columns;
+        self.color = Color::White;
+        self.decoded_rows = 0;
+        self.invert_black = self.settings.invert_black;
     }
 
     /// `a0` refers to the first changing element on the current line.
@@ -437,7 +454,7 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
     }
 
     #[inline(always)]
-    fn push_pixels(&mut self, count: u32) {
+    fn push_pixels(&mut self, decoder: &mut impl Decoder, count: u32) {
         // Make sure we don't have too many pixels (for invalid files).
         let count = count.min(self.line_width - self.pixels_decoded);
         let white = self.color.is_white() ^ self.invert_black;
@@ -447,20 +464,20 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
         let pixels_to_boundary = (8 - (self.pixels_decoded % 8)) % 8;
         let unaligned_pixels = remaining.min(pixels_to_boundary);
         for _ in 0..unaligned_pixels {
-            self.decoder.push_pixel(white);
+            decoder.push_pixel(white);
             remaining -= 1;
         }
 
         // Push full chunks of 8 pixels.
         let full_chunks = remaining / 8;
         if full_chunks > 0 {
-            self.decoder.push_pixel_chunk(white, full_chunks);
+            decoder.push_pixel_chunk(white, full_chunks);
             remaining %= 8;
         }
 
         // Push remaining individual pixels.
         for _ in 0..remaining {
-            self.decoder.push_pixel(white);
+            decoder.push_pixel(white);
         }
 
         // Track the color change:
@@ -487,7 +504,7 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
     }
 
     #[inline(always)]
-    fn next_line(&mut self, reader: &mut BitReader<'_>) -> Result<()> {
+    fn next_line(&mut self, reader: &mut BitReader<'_>, decoder: &mut impl Decoder) -> Result<()> {
         if self.pixels_decoded != self.settings.columns {
             return Err(DecodeError::LineLengthMismatch);
         }
@@ -499,7 +516,7 @@ impl<'a, T: Decoder> DecoderContext<'a, T> {
         self.b1_idx = 0;
         self.color = Color::White;
         self.decoded_rows += 1;
-        self.decoder.next_line();
+        decoder.next_line();
 
         if self.settings.rows_are_byte_aligned {
             reader.align();

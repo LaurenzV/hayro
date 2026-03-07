@@ -56,5 +56,6 @@ fuzz_target!(|data: &[u8]| {
     };
 
     let mut decoder = Decoder;
-    let _ = hayro_ccitt::decode(&data[HEADER_SIZE..], &mut decoder, &settings);
+    let mut context = hayro_ccitt::DecoderContext::new(settings);
+    let _ = hayro_ccitt::decode(&data[HEADER_SIZE..], &mut decoder, &mut context);
 });

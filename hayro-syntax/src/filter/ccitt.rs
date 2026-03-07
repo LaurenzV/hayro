@@ -5,7 +5,7 @@ use crate::object::dict::keys::{
 use crate::object::stream::{FilterResult, ImageColorSpace, ImageData, ImageDecodeParams};
 use alloc::vec::Vec;
 use core::iter;
-use hayro_ccitt::{DecodeSettings, Decoder, EncodingMode};
+use hayro_ccitt::{DecodeSettings, Decoder, DecoderContext, EncodingMode};
 
 pub(crate) fn decode(
     data: &[u8],
@@ -91,7 +91,8 @@ pub(crate) fn decode(
             buffer: 0,
             bit_count: 0,
         };
-        let result = hayro_ccitt::decode(data, &mut decoder, &settings);
+        let mut context = DecoderContext::new(settings);
+        let result = hayro_ccitt::decode(data, &mut decoder, &mut context);
 
         // If we decoded at least one row, let's be lenient and return what we got.
         // See also 0001763.pdf.
@@ -126,7 +127,8 @@ pub(crate) fn decode(
             output: Vec::new(),
             decoded_rows: 0,
         };
-        let result = hayro_ccitt::decode(data, &mut decoder, &settings);
+        let mut context = DecoderContext::new(settings);
+        let result = hayro_ccitt::decode(data, &mut decoder, &mut context);
 
         if result.is_err() && decoder.decoded_rows == 0 {
             return None;
