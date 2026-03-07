@@ -81,7 +81,7 @@ fn decode_inner(
 
                 bp_buffers
                     .combined_layers
-                    .extend(&storage.segment_data[segment.data_range.clone()]);
+                    .extend(segment.data);
                 coding_passes += segment.coding_pases;
             }
         }

@@ -314,11 +314,11 @@ pub(crate) struct CodeBlock {
     pub(crate) non_empty_layer_count: u8,
 }
 
-pub(crate) struct Segment {
+pub(crate) struct Segment<'a> {
     pub(crate) idx: u8,
     pub(crate) coding_pases: u8,
     pub(crate) data_length: u32,
-    pub(crate) data_range: Range<usize>,
+    pub(crate) data: &'a [u8],
 }
 
 #[derive(Clone)]
