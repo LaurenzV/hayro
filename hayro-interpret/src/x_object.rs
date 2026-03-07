@@ -325,11 +325,18 @@ impl<'a> ImageXObject<'a> {
         })
     }
 
-    pub(crate) fn decoded_object(
+    pub(crate) fn decoded_mask(
         &self,
         target_dimension: Option<(u32, u32)>,
-    ) -> Option<DecodedImage> {
-        DecodedImage::new(self, target_dimension)
+    ) -> Option<DecodedMask> {
+        decode_mask(self, target_dimension, false)
+    }
+
+    pub(crate) fn decoded_raster(
+        &self,
+        target_dimension: Option<(u32, u32)>,
+    ) -> Option<DecodedRaster> {
+        decode_raster(self, target_dimension)
     }
 
     pub(crate) fn width(&self) -> u32 {
@@ -349,233 +356,275 @@ impl<'a> ImageXObject<'a> {
     }
 }
 
-pub(crate) enum DecodedImage {
-    Mask(LumaData),
-    Raster {
-        image: ImageData,
-        alpha: Option<LumaData>,
-    },
+pub(crate) struct DecodedMask {
+    pub(crate) luma: LumaData,
 }
 
-enum DecodeMode {
-    Auto,
-    Mask,
+pub(crate) struct DecodedRaster {
+    pub(crate) image: ImageData,
+    pub(crate) alpha: Option<LumaData>,
 }
 
-impl DecodedImage {
-    fn new(obj: &ImageXObject<'_>, target_dimension: Option<(u32, u32)>) -> Option<Self> {
-        Self::decode(obj, target_dimension, DecodeMode::Auto)
+struct DecodeContext {
+    decoded: hayro_syntax::object::stream::FilterResult,
+    width: u32,
+    height: u32,
+    scale_factors: (f32, f32),
+    color_space: ColorSpace,
+    bits_per_component: u8,
+    decode_arr: SmallVec<[(f32, f32); 4]>,
+}
+
+fn decode_context(
+    obj: &ImageXObject<'_>,
+    target_dimension: Option<(u32, u32)>,
+) -> Option<DecodeContext> {
+    let dict = obj.stream.dict();
+
+    let dict_bpc = dict
+        .get::<u8>(BPC)
+        .or_else(|| dict.get::<u8>(BITS_PER_COMPONENT));
+
+    let color_space = obj.color_space.clone();
+
+    let is_indexed = obj.color_space.as_ref().is_some_and(|cs| cs.is_indexed());
+
+    let decode_params = ImageDecodeParams {
+        is_indexed,
+        bpc: dict_bpc,
+        num_components: color_space.as_ref().map(|c| c.num_components()),
+        target_dimension,
+        width: obj.width,
+        height: obj.height,
+    };
+
+    let decoded = obj
+        .stream
+        .decoded_image(&decode_params)
+        .map_err(|_| (obj.warning_sink)(InterpreterWarning::ImageDecodeFailure))
+        .ok()?;
+
+    let (mut scale_x, mut scale_y) = (1.0, 1.0);
+
+    let (width, height) = decoded
+        .image_data
+        .as_ref()
+        .map(|d| {
+            scale_x = obj.width as f32 / d.width as f32;
+            scale_y = obj.height as f32 / d.height as f32;
+
+            (d.width, d.height)
+        })
+        .unwrap_or((obj.width, obj.height));
+
+    let color_space = color_space
+        .or_else(|| {
+            decoded
+                .image_data
+                .as_ref()
+                .map(|i| i.color_space)
+                .and_then(|c| {
+                    c.and_then(|c| match c {
+                        ImageColorSpace::Gray => Some(ColorSpace::device_gray()),
+                        ImageColorSpace::Rgb => Some(ColorSpace::device_rgb()),
+                        ImageColorSpace::Cmyk => Some(ColorSpace::device_cmyk()),
+                        ImageColorSpace::Unknown(_) => None,
+                    })
+                })
+        })
+        .unwrap_or(ColorSpace::device_gray());
+
+    let fallback_bpc = if obj.is_mask { 1 } else { 8 };
+
+    let mut bits_per_component = decoded
+        .image_data
+        .as_ref()
+        .map(|i| i.bits_per_component)
+        .or(dict_bpc)
+        .unwrap_or(fallback_bpc);
+
+    if !matches!(bits_per_component, 1 | 2 | 4 | 8 | 16) {
+        bits_per_component = ((decoded.data.len() as u64 * 8)
+            / (width as u64 * height as u64 * color_space.num_components() as u64))
+            as u8;
     }
 
-    fn decode(
-        obj: &ImageXObject<'_>,
-        target_dimension: Option<(u32, u32)>,
-        mode: DecodeMode,
-    ) -> Option<Self> {
-        let dict = obj.stream.dict();
+    let decode_arr = dict
+        .get::<Array<'_>>(D)
+        .or_else(|| dict.get::<Array<'_>>(DECODE))
+        .map(|a| a.iter::<(f32, f32)>().collect::<SmallVec<_>>())
+        .unwrap_or(color_space.default_decode_arr(bits_per_component as f32));
 
-        let dict_bpc = dict
-            .get::<u8>(BPC)
-            .or_else(|| dict.get::<u8>(BITS_PER_COMPONENT));
+    Some(DecodeContext {
+        decoded,
+        width,
+        height,
+        scale_factors: (scale_x, scale_y),
+        color_space,
+        bits_per_component,
+        decode_arr,
+    })
+}
 
-        let color_space = obj.color_space.clone();
+fn decode_mask(
+    obj: &ImageXObject<'_>,
+    target_dimension: Option<(u32, u32)>,
+    force_mask: bool,
+) -> Option<DecodedMask> {
+    let mut ctx = decode_context(obj, target_dimension)?;
 
-        let is_indexed = obj.color_space.as_ref().is_some_and(|cs| cs.is_indexed());
+    if !force_mask && !obj.is_mask {
+        return None;
+    }
 
-        let decode_params = ImageDecodeParams {
-            is_indexed,
-            bpc: dict_bpc,
-            num_components: color_space.as_ref().map(|c| c.num_components()),
-            target_dimension,
-            width: obj.width,
-            height: obj.height,
-        };
+    let mut height = ctx.height;
 
-        let mut decoded = obj
-            .stream
-            .decoded_image(&decode_params)
-            .map_err(|_| (obj.warning_sink)(InterpreterWarning::ImageDecodeFailure))
-            .ok()?;
+    let data = decode_mask_bytes(
+        &mut ctx.decoded.data,
+        ctx.width,
+        &mut height,
+        &ctx.color_space,
+        ctx.bits_per_component,
+        &ctx.decode_arr,
+        obj.is_mask,
+    )?;
 
-        let (mut scale_x, mut scale_y) = (1.0, 1.0);
+    Some(DecodedMask {
+        luma: LumaData {
+            data,
+            width: ctx.width,
+            height,
+            interpolate: obj.interpolate,
+            scale_factors: ctx.scale_factors,
+        },
+    })
+}
 
-        let (width, mut height) = decoded
-            .image_data
-            .as_ref()
-            .map(|d| {
-                scale_x = obj.width as f32 / d.width as f32;
-                scale_y = obj.height as f32 / d.height as f32;
+fn decode_raster(
+    obj: &ImageXObject<'_>,
+    target_dimension: Option<(u32, u32)>,
+) -> Option<DecodedRaster> {
+    if obj.is_mask {
+        return None;
+    }
 
-                (d.width, d.height)
-            })
-            .unwrap_or((obj.width, obj.height));
+    let mut ctx = decode_context(obj, target_dimension)?;
+    let mut height = ctx.height;
 
-        let color_space = color_space
-            .or_else(|| {
-                decoded
-                    .image_data
-                    .as_ref()
-                    .map(|i| i.color_space)
-                    .and_then(|c| {
-                        c.and_then(|c| match c {
-                            ImageColorSpace::Gray => Some(ColorSpace::device_gray()),
-                            ImageColorSpace::Rgb => Some(ColorSpace::device_rgb()),
-                            ImageColorSpace::Cmyk => Some(ColorSpace::device_cmyk()),
-                            ImageColorSpace::Unknown(_) => None,
-                        })
-                    })
-            })
-            .unwrap_or(ColorSpace::device_gray());
+    let image_data = if ctx.bits_per_component == 8
+        && ctx.color_space.supports_u8()
+        && obj.transfer_function.is_none()
+        && ctx.decode_arr
+            == ctx
+                .color_space
+                .default_decode_arr(ctx.bits_per_component as f32)
+    {
+        // This is actually the most common case, where the PDF is embedded
+        // in such a way where we don't need to decode. In this case,
+        // we can prevent the round-trip from f32 back to u8 and just return
+        // the raw decoded data, which will already be in
+        // RGB8/gray-scale with values between 0 and 255.
+        fix_image_length(
+            &mut ctx.decoded.data,
+            ctx.width,
+            &mut height,
+            0,
+            &ctx.color_space,
+        )?;
 
-        let fallback_bpc = if obj.is_mask { 1 } else { 8 };
-
-        let mut bits_per_component = decoded
-            .image_data
-            .as_ref()
-            .map(|i| i.bits_per_component)
-            .or(dict_bpc)
-            .unwrap_or(fallback_bpc);
-
-        if !matches!(bits_per_component, 1 | 2 | 4 | 8 | 16) {
-            bits_per_component = ((decoded.data.len() as u64 * 8)
-                / (width as u64 * height as u64 * color_space.num_components() as u64))
-                as u8;
-        }
-
-        let decode_arr = dict
-            .get::<Array<'_>>(D)
-            .or_else(|| dict.get::<Array<'_>>(DECODE))
-            .map(|a| a.iter::<(f32, f32)>().collect::<SmallVec<_>>())
-            .unwrap_or(color_space.default_decode_arr(bits_per_component as f32));
-
-        let should_decode_mask = matches!(mode, DecodeMode::Mask) || obj.is_mask;
-        let invert_mask = obj.is_mask;
-
-        if should_decode_mask {
-            let data = decode_mask_bytes(
-                &mut decoded.data,
-                width,
-                &mut height,
-                &color_space,
-                bits_per_component,
-                &decode_arr,
-                invert_mask,
-            )?;
-
-            return Some(Self::Mask(LumaData {
-                data,
-                width,
+        if ctx.color_space.is_device_gray() {
+            Some(ImageData::Luma(LumaData {
+                data: core::mem::take(&mut ctx.decoded.data),
+                width: ctx.width,
                 height,
                 interpolate: obj.interpolate,
-                scale_factors: (scale_x, scale_y),
-            }));
-        }
-
-        let image_data = if bits_per_component == 8
-            && color_space.supports_u8()
-            && obj.transfer_function.is_none()
-            && decode_arr.as_slice()
-                == color_space
-                    .default_decode_arr(bits_per_component as f32)
-                    .as_slice()
-        {
-            // This is actually the most common case, where the PDF is embedded
-            // in such a way where we don't need to decode. In this case,
-            // we can prevent the round-trip from f32 back to u8 and just return
-            // the raw decoded data, which will already be in
-            // RGB8/gray-scale with values between 0 and 255.
-            fix_image_length(&mut decoded.data, width, &mut height, 0, &color_space)?;
-
-            if color_space.is_device_gray() {
-                Some(ImageData::Luma(LumaData {
-                    data: core::mem::take(&mut decoded.data),
-                    width,
-                    height,
-                    interpolate: obj.interpolate,
-                    scale_factors: (scale_x, scale_y),
-                }))
-            } else {
-                let mut output_buf = vec![0; width as usize * height as usize * 3];
-                color_space.convert_u8(&decoded.data, &mut output_buf)?;
-
-                Some(ImageData::Rgb(RgbData {
-                    data: output_buf,
-                    width,
-                    height,
-                    interpolate: obj.interpolate,
-                    scale_factors: (scale_x, scale_y),
-                }))
-            }
+                scale_factors: ctx.scale_factors,
+            }))
         } else {
-            let components = get_components(
-                &decoded.data,
-                width,
+            let mut output_buf = vec![0; ctx.width as usize * height as usize * 3];
+            ctx.color_space.convert_u8(&ctx.decoded.data, &mut output_buf)?;
+
+            Some(ImageData::Rgb(RgbData {
+                data: output_buf,
+                width: ctx.width,
                 height,
-                &color_space,
-                bits_per_component,
-            )?;
+                interpolate: obj.interpolate,
+                scale_factors: ctx.scale_factors,
+            }))
+        }
+    } else {
+        let components = get_components(
+            &ctx.decoded.data,
+            ctx.width,
+            height,
+            &ctx.color_space,
+            ctx.bits_per_component,
+        )?;
 
-            let mut f32_data =
-                { decode(&components, &color_space, bits_per_component, &decode_arr)? };
+        let mut f32_data = decode(
+            &components,
+            &ctx.color_space,
+            ctx.bits_per_component,
+            &ctx.decode_arr,
+        )?;
 
-            fix_image_length(&mut f32_data, width, &mut height, 0.0, &color_space)?;
+        fix_image_length(&mut f32_data, ctx.width, &mut height, 0.0, &ctx.color_space)?;
 
-            let mut rgb_data = get_rgb_data(
-                &f32_data,
-                width,
-                height,
-                (scale_x, scale_y),
-                &color_space,
-                obj.interpolate,
-            );
+        let mut rgb_data = get_rgb_data(
+            &f32_data,
+            ctx.width,
+            height,
+            ctx.scale_factors,
+            &ctx.color_space,
+            obj.interpolate,
+        );
 
-            if let Some(transfer_function) = &obj.transfer_function
-                && let Some(rgb_data) = &mut rgb_data
-            {
-                let apply_single = |data: u8, function: &Function| {
-                    function
-                        .eval(smallvec![data as f32 / 255.0])
-                        .and_then(|v| v.first().copied())
-                        .map(|v| (v * 255.0 + 0.5) as u8)
-                        .unwrap_or(data)
-                };
+        if let Some(transfer_function) = &obj.transfer_function
+            && let Some(rgb_data) = &mut rgb_data
+        {
+            let apply_single = |data: u8, function: &Function| {
+                function
+                    .eval(smallvec![data as f32 / 255.0])
+                    .and_then(|v| v.first().copied())
+                    .map(|v| (v * 255.0 + 0.5) as u8)
+                    .unwrap_or(data)
+            };
 
-                match transfer_function {
-                    ActiveTransferFunction::Single(s) => {
-                        for data in &mut rgb_data.data {
-                            *data = apply_single(*data, s);
-                        }
+            match transfer_function {
+                ActiveTransferFunction::Single(s) => {
+                    for data in &mut rgb_data.data {
+                        *data = apply_single(*data, s);
                     }
-                    ActiveTransferFunction::Four(f) => {
-                        for data in rgb_data.data.chunks_exact_mut(3) {
-                            data[0] = apply_single(data[0], &f[0]);
-                            data[1] = apply_single(data[1], &f[1]);
-                            data[2] = apply_single(data[2], &f[2]);
-                        }
+                }
+                ActiveTransferFunction::Four(f) => {
+                    for data in rgb_data.data.chunks_exact_mut(3) {
+                        data[0] = apply_single(data[0], &f[0]);
+                        data[1] = apply_single(data[1], &f[1]);
+                        data[2] = apply_single(data[2], &f[2]);
                     }
                 }
             }
+        }
 
-            rgb_data.map(ImageData::Rgb)
-        };
+        rgb_data.map(ImageData::Rgb)
+    };
 
-        let alpha = resolve_alpha(
-            obj,
-            &mut decoded,
-            &image_data,
-            &color_space,
-            bits_per_component,
-            width,
-            &mut height,
-            (scale_x, scale_y),
-            target_dimension,
-        )?;
+    let alpha = resolve_alpha(
+        obj,
+        &mut ctx.decoded,
+        &image_data,
+        &ctx.color_space,
+        ctx.bits_per_component,
+        ctx.width,
+        &mut height,
+        ctx.scale_factors,
+        target_dimension,
+    )?;
 
-        Some(Self::Raster {
-            image: image_data?,
-            alpha,
-        })
-    }
+    Some(DecodedRaster {
+        image: image_data?,
+        alpha,
+    })
 }
 
 fn decode_mask_bytes(
@@ -715,11 +764,7 @@ fn decode_mask_stream(
 ) -> Option<LumaData> {
     let obj = ImageXObject::new(stream, |_| None, warning_sink, cache, None)?;
 
-    DecodedImage::decode(&obj, target_dimension, DecodeMode::Mask)
-    .and_then(|decoded| match decoded {
-        DecodedImage::Mask(luma) => Some(luma),
-        _ => None,
-    })
+    decode_mask(&obj, target_dimension, true).map(|decoded| decoded.luma)
 }
 
 fn get_rgb_data(
