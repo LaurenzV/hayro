@@ -483,11 +483,11 @@ fn decode_mask(
     obj: &ImageXObject<'_>,
     target_dimension: Option<(u32, u32)>,
 ) -> Option<DecodedMask> {
-    let mut ctx = decode_context(obj, target_dimension)?;
+    let ctx = decode_context(obj, target_dimension)?;
     let mut height = ctx.height;
 
     let data = decode_mask_bytes(
-        &mut ctx.decoded.data,
+        ctx.decoded.data,
         ctx.width,
         &mut height,
         &ctx.color_space,
@@ -639,7 +639,7 @@ fn decode_raster(
 }
 
 fn decode_mask_bytes(
-    decoded_data: &mut Vec<u8>,
+    mut decoded_data: Vec<u8>,
     width: u32,
     height: &mut u32,
     color_space: &ColorSpace,
@@ -657,17 +657,16 @@ fn decode_mask_bytes(
             || decode_arr == inverted_default.as_slice());
 
     let mut data = if fast_path {
-        let mut data = core::mem::take(decoded_data);
         let should_invert = invert ^ (decode_arr == inverted_default.as_slice());
         if should_invert {
-            for b in &mut data {
+            for b in &mut decoded_data {
                 *b = 255 - *b;
             }
         }
 
-        data
+        decoded_data
     } else {
-        let components = get_components(decoded_data, width, *height, color_space, bits_per_component)?;
+        let components = get_components(&decoded_data, width, *height, color_space, bits_per_component)?;
 
         let f32_data = apply_decode_array(&components, color_space, bits_per_component, decode_arr)?;
 
