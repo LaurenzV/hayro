@@ -1,6 +1,6 @@
 //! Building and setting up decompositions, sub-bands, precincts and code-blocks.
 
-use super::decode::{DecompositionStorage, TileDecodeContext, TileDecompositions};
+use super::decode::{DecompositionStorage, TileDecompositions};
 use super::rect::IntRect;
 use super::tag_tree::TagTree;
 use super::tile::{ResolutionTile, Tile};
@@ -13,16 +13,14 @@ use core::ops::Range;
 /// for a specific tile. Also parses the segments for each code-block.
 pub(crate) fn build(
     tile: &Tile<'_>,
-    tile_ctx: &mut TileDecodeContext<'_>,
-    storage: &mut DecompositionStorage<'_>,
+    storage: &mut DecompositionStorage,
 ) -> Result<()> {
-    build_decompositions(tile, tile_ctx, storage)
+    build_decompositions(tile, storage)
 }
 
 fn build_decompositions(
     tile: &Tile<'_>,
-    tile_ctx: &mut TileDecodeContext<'_>,
-    storage: &mut DecompositionStorage<'_>,
+    storage: &mut DecompositionStorage,
 ) -> Result<()> {
     let mut total_coefficients = 0;
 
@@ -45,7 +43,7 @@ fn build_decompositions(
 
         let mut build_sub_band = |sub_band_type: SubBandType,
                                   resolution_tile: &ResolutionTile<'_>,
-                                  storage: &mut DecompositionStorage<'_>|
+                                  storage: &mut DecompositionStorage|
          -> Result<usize> {
             let sub_band_rect = resolution_tile.sub_band_rect(sub_band_type);
 
@@ -67,7 +65,7 @@ fn build_decompositions(
                 resolution_tile.rect.height(),
             );
 
-            let precincts = build_precincts(resolution_tile, sub_band_rect, tile_ctx, storage)?;
+            let precincts = build_precincts(resolution_tile, sub_band_rect, tile, storage)?;
 
             let added_coefficients = (sub_band_rect.width() * sub_band_rect.height()) as usize;
             let coefficients = coefficient_counter..(coefficient_counter + added_coefficients);
@@ -117,8 +115,8 @@ fn build_decompositions(
 fn build_precincts(
     resolution_tile: &ResolutionTile<'_>,
     sub_band_rect: IntRect,
-    tile_ctx: &mut TileDecodeContext<'_>,
-    storage: &mut DecompositionStorage<'_>,
+    tile: &Tile<'_>,
+    storage: &mut DecompositionStorage,
 ) -> Result<Range<usize>> {
     let start = storage.precincts.len();
 
@@ -171,7 +169,7 @@ fn build_precincts(
             resolution_tile,
             code_blocks_x,
             code_blocks_y,
-            tile_ctx,
+            tile,
             storage,
         );
 
@@ -198,8 +196,8 @@ fn build_code_blocks(
     tile_instance: &ResolutionTile<'_>,
     code_blocks_x: u32,
     code_blocks_y: u32,
-    tile_ctx: &mut TileDecodeContext<'_>,
-    storage: &mut DecompositionStorage<'_>,
+    tile: &Tile<'_>,
+    storage: &mut DecompositionStorage,
 ) -> Range<usize> {
     let mut y = code_block_area.y0;
 
@@ -234,7 +232,7 @@ fn build_code_blocks(
                     // layer segments.
                     segments: None,
                 },
-                tile_ctx.tile.num_layers as usize,
+                tile.num_layers as usize,
             ));
             let end = storage.layers.len();
 
@@ -316,11 +314,11 @@ pub(crate) struct CodeBlock {
     pub(crate) non_empty_layer_count: u8,
 }
 
-pub(crate) struct Segment<'a> {
+pub(crate) struct Segment {
     pub(crate) idx: u8,
     pub(crate) coding_pases: u8,
     pub(crate) data_length: u32,
-    pub(crate) data: &'a [u8],
+    pub(crate) data_range: Range<usize>,
 }
 
 #[derive(Clone)]

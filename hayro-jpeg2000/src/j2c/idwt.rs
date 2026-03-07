@@ -39,8 +39,8 @@ struct IDWTTempOutput {
 /// will be transformed samples covering the rectangle of the smallest
 /// decomposition level.
 pub(crate) fn apply(
-    storage: &DecompositionStorage<'_>,
-    tile_ctx: &mut TileDecodeContext<'_>,
+    storage: &DecompositionStorage,
+    tile_ctx: &mut TileDecodeContext,
     component_idx: usize,
     header: &Header<'_>,
     transform: WaveletTransform,
@@ -155,7 +155,7 @@ struct IDWTInput<'a> {
 }
 
 impl<'a> IDWTInput<'a> {
-    fn from_sub_band(sub_band: &'a SubBand, storage: &'a DecompositionStorage<'_>) -> Self {
+    fn from_sub_band(sub_band: &'a SubBand, storage: &'a DecompositionStorage) -> Self {
         IDWTInput {
             coefficients: &storage.coefficients[sub_band.coefficients.clone()],
         }
@@ -173,7 +173,7 @@ fn filter_2d(
     coefficients: &mut Vec<f32>,
     decomposition: &Decomposition,
     transform: WaveletTransform,
-    storage: &DecompositionStorage<'_>,
+    storage: &DecompositionStorage,
 ) -> IDWTTempOutput {
     // First interleave all sub-bands into a single buffer.
     interleave_samples(input, decomposition, coefficients, storage);
@@ -193,7 +193,7 @@ fn interleave_samples(
     input: IDWTInput<'_>,
     decomposition: &Decomposition,
     coefficients: &mut Vec<f32>,
-    storage: &DecompositionStorage<'_>,
+    storage: &DecompositionStorage,
 ) {
     let level = Level::new();
     dispatch!(level, simd => {
@@ -207,7 +207,7 @@ fn interleave_samples_inner<S: Simd>(
     input: IDWTInput<'_>,
     decomposition: &Decomposition,
     coefficients: &mut Vec<f32>,
-    storage: &DecompositionStorage<'_>,
+    storage: &DecompositionStorage,
 ) {
     let width = decomposition.rect.width() as usize;
     let height = decomposition.rect.height() as usize;

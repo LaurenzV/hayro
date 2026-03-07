@@ -73,20 +73,14 @@ pub(crate) fn decode(data: &[u8], header: &Header<'_>) -> Result<Vec<ComponentDa
                 ),
             };
 
-        decode_tile(
-            tile,
-            header,
-            progression_iterator,
-            &mut tile_ctx,
-            &mut storage,
-        )?;
+        decode_tile(tile, header, progression_iterator, &mut tile_ctx, &mut storage)?;
     }
 
     // Note that this assumes that either all tiles have MCT or none of them.
     // In theory, only some could have it... But hopefully no such cursed
     // images exist!
-    if tile_ctx.tile.mct {
-        mct::apply_inverse(&mut tile_ctx, header)?;
+    if tiles[0].mct {
+        mct::apply_inverse(&mut tile_ctx, &tiles[0].component_infos, header)?;
         apply_sign_shift(&mut tile_ctx, &header.component_infos);
     }
 
@@ -97,19 +91,18 @@ fn decode_tile<'a>(
     tile: &'a Tile<'a>,
     header: &Header<'_>,
     progression_iterator: Box<dyn Iterator<Item = ProgressionData> + '_>,
-    tile_ctx: &mut TileDecodeContext<'a>,
-    storage: &mut DecompositionStorage<'a>,
+    tile_ctx: &mut TileDecodeContext,
+    storage: &mut DecompositionStorage,
 ) -> Result<()> {
-    tile_ctx.set_tile(tile);
     storage.reset();
 
     // This is the method that orchestrates all steps.
 
     // First, we build the decompositions, including their sub-bands, precincts
     // and code blocks.
-    build::build(tile, tile_ctx, storage)?;
+    build::build(tile, storage)?;
     // Next, we parse the layers/segments for each code block.
-    segment::parse(tile, progression_iterator, tile_ctx, header, storage)?;
+    segment::parse(tile, progression_iterator, header, storage)?;
     // We then decode the bitplanes of each code block, yielding the
     // (possibly dequantized) coefficients of each code block.
     decode_component_tile_bit_planes(tile, tile_ctx, storage, header)?;
@@ -204,8 +197,9 @@ impl Iterator for SubBandIter {
 /// A buffer so that we can reuse allocations for layers/code blocks/etc.
 /// across different tiles.
 #[derive(Default)]
-pub(crate) struct DecompositionStorage<'a> {
-    pub(crate) segments: Vec<Segment<'a>>,
+pub(crate) struct DecompositionStorage {
+    pub(crate) segments: Vec<Segment>,
+    pub(crate) segment_data: Vec<u8>,
     pub(crate) layers: Vec<Layer>,
     pub(crate) code_blocks: Vec<CodeBlock>,
     pub(crate) precincts: Vec<Precinct>,
@@ -216,9 +210,10 @@ pub(crate) struct DecompositionStorage<'a> {
     pub(crate) tile_decompositions: Vec<TileDecompositions>,
 }
 
-impl DecompositionStorage<'_> {
+impl DecompositionStorage {
     fn reset(&mut self) {
         self.segments.clear();
+        self.segment_data.clear();
         self.layers.clear();
         self.code_blocks.clear();
         // No need to clear the coefficients, as they will be resized
@@ -236,9 +231,7 @@ impl DecompositionStorage<'_> {
 ///
 /// Some of the fields are temporary in nature and reset after moving on to the
 /// next tile, some contain global state.
-pub(crate) struct TileDecodeContext<'a> {
-    /// The tile that we are currently decoding.
-    pub(crate) tile: &'a Tile<'a>,
+pub(crate) struct TileDecodeContext {
     /// A reusable buffer for the IDWT output.
     pub(crate) idwt_output: IDWTOutput,
     /// A scratch buffer used during IDWT.
@@ -251,8 +244,8 @@ pub(crate) struct TileDecodeContext<'a> {
     pub(crate) channel_data: Vec<ComponentData>,
 }
 
-impl<'a> TileDecodeContext<'a> {
-    fn new(header: &Header<'_>, initial_tile: &'a Tile<'a>) -> Self {
+impl TileDecodeContext {
+    fn new(header: &Header<'_>, initial_tile: &Tile<'_>) -> Self {
         let mut channel_data = vec![];
 
         for info in &initial_tile.component_infos {
@@ -266,7 +259,6 @@ impl<'a> TileDecodeContext<'a> {
         }
 
         Self {
-            tile: initial_tile,
             idwt_scratch_buffer: vec![],
             idwt_output: IDWTOutput::dummy(),
             bit_plane_decode_context: BitPlaneDecodeContext::default(),
@@ -274,18 +266,12 @@ impl<'a> TileDecodeContext<'a> {
             channel_data,
         }
     }
-
-    fn set_tile(&mut self, tile: &'a Tile<'a>) {
-        // This is all that is needed when advancing to a new tile.
-        // The other fields will be resetted in due course as needed.
-        self.tile = tile;
-    }
 }
 
 fn decode_component_tile_bit_planes<'a>(
     tile: &'a Tile<'a>,
-    tile_ctx: &mut TileDecodeContext<'a>,
-    storage: &mut DecompositionStorage<'a>,
+    tile_ctx: &mut TileDecodeContext,
+    storage: &mut DecompositionStorage,
     header: &Header<'_>,
 ) -> Result<()> {
     for (tile_decompositions_idx, component_info) in tile.component_infos.iter().enumerate() {
@@ -316,8 +302,8 @@ fn decode_sub_band_bitplanes(
     sub_band_idx: usize,
     resolution: u8,
     component_info: &ComponentInfo,
-    tile_ctx: &mut TileDecodeContext<'_>,
-    storage: &mut DecompositionStorage<'_>,
+    tile_ctx: &mut TileDecodeContext,
+    storage: &mut DecompositionStorage,
     header: &Header<'_>,
 ) -> Result<()> {
     let sub_band = &storage.sub_bands[sub_band_idx];
@@ -405,7 +391,7 @@ fn decode_sub_band_bitplanes(
     Ok(())
 }
 
-fn apply_sign_shift(tile_ctx: &mut TileDecodeContext<'_>, component_infos: &[ComponentInfo]) {
+fn apply_sign_shift(tile_ctx: &mut TileDecodeContext, component_infos: &[ComponentInfo]) {
     for (channel_data, component_info) in
         tile_ctx.channel_data.iter_mut().zip(component_infos.iter())
     {
@@ -418,7 +404,7 @@ fn apply_sign_shift(tile_ctx: &mut TileDecodeContext<'_>, component_infos: &[Com
 fn store<'a>(
     tile: &'a Tile<'a>,
     header: &Header<'_>,
-    tile_ctx: &mut TileDecodeContext<'a>,
+    tile_ctx: &mut TileDecodeContext,
     component_info: &ComponentInfo,
     component_idx: usize,
 ) {

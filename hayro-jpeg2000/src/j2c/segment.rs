@@ -5,7 +5,7 @@ use alloc::boxed::Box;
 use super::build::Segment;
 use super::codestream::markers::{EPH, SOP};
 use super::codestream::{ComponentInfo, Header};
-use super::decode::{DecompositionStorage, TileDecodeContext};
+use super::decode::DecompositionStorage;
 use super::progression::ProgressionData;
 use super::tile::{Tile, TilePart};
 use crate::error::{Result, TileError, bail};
@@ -16,15 +16,14 @@ pub(crate) const MAX_BITPLANE_COUNT: u8 = 32;
 pub(crate) fn parse<'a>(
     tile: &'a Tile<'a>,
     mut progression_iterator: Box<dyn Iterator<Item = ProgressionData> + '_>,
-    tile_ctx: &mut TileDecodeContext<'a>,
     header: &Header<'_>,
-    storage: &mut DecompositionStorage<'a>,
+    storage: &mut DecompositionStorage,
 ) -> Result<()> {
     for tile_part in &tile.tile_parts {
         if parse_inner(
             tile_part.clone(),
             &mut progression_iterator,
-            tile_ctx,
+            &tile.component_infos,
             storage,
         )
         .is_none()
@@ -40,13 +39,13 @@ pub(crate) fn parse<'a>(
 fn parse_inner<'a>(
     mut tile_part: TilePart<'a>,
     progression_iterator: &mut dyn Iterator<Item = ProgressionData>,
-    tile_ctx: &mut TileDecodeContext<'a>,
-    storage: &mut DecompositionStorage<'a>,
+    component_infos: &[ComponentInfo],
+    storage: &mut DecompositionStorage,
 ) -> Option<()> {
     while !tile_part.header().at_end() {
         let progression_data = progression_iterator.next()?;
         let resolution = progression_data.resolution;
-        let component_info = &tile_ctx.tile.component_infos[progression_data.component as usize];
+        let component_info = &component_infos[progression_data.component as usize];
         let tile_decompositions =
             &mut storage.tile_decompositions[progression_data.component as usize];
         let sub_band_iter = tile_decompositions.sub_band_iter(resolution, &storage.decompositions);
@@ -102,14 +101,17 @@ fn parse_inner<'a>(
                     let layer = &mut storage.layers[code_block.layers.clone()]
                         [progression_data.layer_num as usize];
 
-                    if let Some(segments) = layer.segments.clone() {
-                        let segments = &mut storage.segments[segments.clone()];
+                        if let Some(segments) = layer.segments.clone() {
+                            let segments = &mut storage.segments[segments.clone()];
 
-                        for segment in segments {
-                            segment.data = body_reader.read_bytes(segment.data_length as usize)?;
+                            for segment in segments {
+                                let bytes = body_reader.read_bytes(segment.data_length as usize)?;
+                                let start = storage.segment_data.len();
+                                storage.segment_data.extend(bytes);
+                                segment.data_range = start..storage.segment_data.len();
+                            }
                         }
                     }
-                }
             }
         }
     }
@@ -121,7 +123,7 @@ fn resolve_segments(
     sub_band_dx: usize,
     progression_data: &ProgressionData,
     reader: &mut BitReader<'_>,
-    storage: &mut DecompositionStorage<'_>,
+    storage: &mut DecompositionStorage,
     component_info: &ComponentInfo,
 ) -> Option<()> {
     // We don't support more than 32-bit precision.
@@ -295,7 +297,7 @@ fn resolve_segments(
                 data_length: length,
                 coding_pases: coding_passes_for_segment,
                 // Will be set later.
-                data: &[],
+                data_range: 0..0,
             });
 
             ltrace!("length({segment}) {}", length);
