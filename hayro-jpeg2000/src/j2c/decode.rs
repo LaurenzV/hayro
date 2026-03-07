@@ -93,7 +93,7 @@ pub(crate) fn decode<'a>(
 /// A decoder context for decoding JPEG2000 images.
 #[derive(Default)]
 pub struct DecoderContext {
-    tile_decode_context: TileDecodeContext,
+    pub(crate) tile_decode_context: TileDecodeContext,
     storage: DecompositionStorage,
 }
 
@@ -101,10 +101,6 @@ impl DecoderContext {
     fn reset(&mut self, header: &Header<'_>, initial_tile: &Tile<'_>) {
         self.tile_decode_context.reset(header, initial_tile);
         self.storage.reset();
-    }
-
-    pub(crate) fn channel_data_mut(&mut self) -> &mut Vec<ComponentData> {
-        &mut self.tile_decode_context.channel_data
     }
 }
 
