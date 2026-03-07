@@ -263,7 +263,7 @@ pub(crate) struct ImageXObject<'a> {
     cache: Cache,
     interpolate: bool,
     is_image_mask: bool,
-    force_luma: bool,
+    force_mask: bool,
     stream: Stream<'a>,
     transfer_function: Option<ActiveTransferFunction>,
     warning_sink: WarningSinkFn,
@@ -275,7 +275,7 @@ impl<'a> ImageXObject<'a> {
         resolve_cs: impl FnOnce(&Name) -> Option<ColorSpace>,
         warning_sink: &WarningSinkFn,
         cache: &Cache,
-        force_luma: bool,
+        force_mask: bool,
         transfer_function: Option<ActiveTransferFunction>,
     ) -> Option<Self> {
         let dict = stream.dict();
@@ -315,7 +315,7 @@ impl<'a> ImageXObject<'a> {
         }
 
         Some(Self {
-            force_luma,
+            force_mask,
             width,
             cache: cache.clone(),
             height,
@@ -431,7 +431,7 @@ impl DecodedImageXObject {
                 as u8;
         }
 
-        let is_luma = obj.is_image_mask || obj.force_luma;
+        let is_mask = obj.is_image_mask || obj.force_mask;
 
         let decode_arr = dict
             .get::<Array<'_>>(D)
@@ -441,7 +441,7 @@ impl DecodedImageXObject {
 
         let mut luma_data = None;
 
-        let image_data = if is_luma {
+        let image_data = if is_mask {
             let mut data = if bits_per_component == 8
                 && decode_arr.as_slice()
                     == color_space
@@ -501,7 +501,7 @@ impl DecodedImageXObject {
                 == color_space
                     .default_decode_arr(bits_per_component as f32)
                     .as_slice()
-            && !is_luma
+            && !is_mask
         {
             // This is actually the most common case, where the PDF is embedded
             // in such a way where we don't need to decode. In this case,
@@ -583,7 +583,7 @@ impl DecodedImageXObject {
             rgb_data.map(ImageData::Rgb)
         };
 
-        if !is_luma {
+        if !is_mask {
             let dict = obj.stream.dict();
 
             luma_data = if let Some(1) = dict.get::<u8>(SMASK_IN_DATA) {
