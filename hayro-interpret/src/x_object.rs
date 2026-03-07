@@ -285,7 +285,7 @@ impl<'a> ImageXObject<'a> {
             .or_else(|| dict.get::<bool>(IMAGE_MASK))
             .unwrap_or(false);
         is_mask |= is_stencil_mask;
-        
+
         let image_cs = if is_mask {
             // Masks are always single-channel.
             Some(ColorSpace::device_gray())
@@ -330,15 +330,12 @@ impl<'a> ImageXObject<'a> {
             is_stencil_mask,
         })
     }
-    
-    pub(crate) fn decoded_mask(
-        &self,
-        target_dimension: Option<(u32, u32)>,
-    ) -> Option<DecodedMask> {
+
+    pub(crate) fn decoded_mask(&self, target_dimension: Option<(u32, u32)>) -> Option<DecodedMask> {
         if !self.is_mask {
             return None;
         }
-        
+
         decode_mask(self, target_dimension)
     }
 
@@ -364,9 +361,7 @@ impl<'a> ImageXObject<'a> {
     fn has_mask(&self) -> bool {
         let dict = self.stream.dict();
 
-        dict.contains_key(SMASK_IN_DATA)
-            || dict.contains_key(SMASK)
-            || dict.contains_key(MASK)
+        dict.contains_key(SMASK_IN_DATA) || dict.contains_key(SMASK) || dict.contains_key(MASK)
     }
 }
 
@@ -447,7 +442,7 @@ fn decode_context(
 
     let fallback_bpc = if obj.is_stencil_mask { 1 } else { 8 };
 
-    let mut bits_per_component = decoded
+    let bits_per_component = decoded
         .image_data
         .as_ref()
         .map(|i| i.bits_per_component)
@@ -486,10 +481,10 @@ fn decode_mask(
         ctx.bits_per_component,
         &ctx.decode_arr,
         // Note: The semantics between "normal" soft masks (i.e. masks defined in
-        // the graphics state or via `Mask`/`SMask` are inverted compared to 
+        // the graphics state or via `Mask`/`SMask` are inverted compared to
         // stencil masks (defined via `ImageMask`). The former match the semantics
         // of normal alpha images, where 0 stands for invisible and MAX stands for
-        // fully opaque. For stencil masks, it's the other way around: 1 means the 
+        // fully opaque. For stencil masks, it's the other way around: 1 means the
         // paint is visible, while 0 means it's invisible.
         obj.is_stencil_mask,
     )?;
@@ -512,13 +507,19 @@ fn decode_raster(
     let mut ctx = decode_context(obj, target_dimension)?;
     let mut height = ctx.height;
 
+    let is_default_decode = ctx.decode_arr
+        == ctx
+            .color_space
+            .default_decode_arr(ctx.bits_per_component as f32);
+    let is_inverted_default_decode = ctx.decode_arr
+        == ctx
+            .color_space
+            .inverted_default_decode_arr(ctx.bits_per_component as f32);
+
     let image_data = if ctx.bits_per_component == 8
         && ctx.color_space.supports_u8()
         && obj.transfer_function.is_none()
-        && ctx.decode_arr
-            == ctx
-                .color_space
-                .default_decode_arr(ctx.bits_per_component as f32)
+        && (is_default_decode || is_inverted_default_decode)
     {
         // This is actually the most common case, where the PDF is embedded
         // in such a way where we don't need to decode. In this case,
@@ -533,7 +534,15 @@ fn decode_raster(
             &ctx.color_space,
         )?;
 
+        if is_inverted_default_decode {
+            for b in &mut ctx.decoded.data {
+                *b = 255 - *b;
+            }
+        }
+
         if ctx.color_space.is_device_gray() {
+            
+
             Some(ImageData::Luma(LumaData {
                 data: core::mem::take(&mut ctx.decoded.data),
                 width: ctx.width,
@@ -543,8 +552,9 @@ fn decode_raster(
             }))
         } else {
             let mut output_buf = vec![0; ctx.width as usize * height as usize * 3];
-            ctx.color_space.convert_u8(&ctx.decoded.data, &mut output_buf)?;
-
+            ctx.color_space
+                .convert_u8(&ctx.decoded.data, &mut output_buf)?;
+            
             Some(ImageData::Rgb(RgbData {
                 data: output_buf,
                 width: ctx.width,
@@ -622,7 +632,8 @@ fn decode_raster(
         &mut height,
         ctx.scale_factors,
         target_dimension,
-    ).flatten();
+    )
+    .flatten();
 
     Some(DecodedRaster {
         image: image_data?,
@@ -640,13 +651,9 @@ fn decode_mask_bytes(
     invert: bool,
 ) -> Option<Vec<u8>> {
     let default_decode = color_space.default_decode_arr(bits_per_component as f32);
-    let inverted_default: SmallVec<[(f32, f32); 4]> = default_decode
-        .iter()
-        .map(|(min, max)| (*max, *min))
-        .collect();
+    let inverted_default = color_space.inverted_default_decode_arr(bits_per_component as f32);
     let fast_path = bits_per_component == 8
-        && (decode_arr == default_decode.as_slice()
-            || decode_arr == inverted_default.as_slice());
+        && (decode_arr == default_decode.as_slice() || decode_arr == inverted_default.as_slice());
 
     let mut data = if fast_path {
         let should_invert = invert ^ (decode_arr == inverted_default.as_slice());
@@ -658,9 +665,16 @@ fn decode_mask_bytes(
 
         decoded_data
     } else {
-        let components = get_components(&decoded_data, width, *height, color_space, bits_per_component)?;
+        let components = get_components(
+            &decoded_data,
+            width,
+            *height,
+            color_space,
+            bits_per_component,
+        )?;
 
-        let f32_data = apply_decode_array(&components, color_space, bits_per_component, decode_arr)?;
+        let f32_data =
+            apply_decode_array(&components, color_space, bits_per_component, decode_arr)?;
 
         if invert {
             f32_data
@@ -694,10 +708,7 @@ fn resolve_alpha(
     let dict = obj.stream.dict();
 
     let alpha = if let Some(1) = dict.get::<u8>(SMASK_IN_DATA) {
-        let smask_data = decoded
-            .image_data
-            .as_mut()
-            .and_then(|i| i.alpha.take());
+        let smask_data = decoded.image_data.as_mut().and_then(|i| i.alpha.take());
 
         if let Some(mut data) = smask_data {
             fix_image_length(&mut data, width, height, 0, &ColorSpace::device_gray())?;
@@ -713,9 +724,12 @@ fn resolve_alpha(
             None
         }
         // Note: `SMASK` field takes precedence over `MASK`, so order matters here.
-    } else if let Some(s_mask) = dict.get::<Stream<'_>>(SMASK).or_else(|| dict.get::<Stream<'_>>(MASK)) {
+    } else if let Some(s_mask) = dict
+        .get::<Stream<'_>>(SMASK)
+        .or_else(|| dict.get::<Stream<'_>>(MASK))
+    {
         let obj = ImageXObject::new(&s_mask, |_| None, &obj.warning_sink, &obj.cache, true, None)?;
-        
+
         decode_mask(&obj, target_dimension).map(|decoded| decoded.luma)
     } else if let Some(color_key_mask) = dict.get::<SmallVec<[u16; 4]>>(MASK) {
         let mut mask_data = vec![];
@@ -742,13 +756,7 @@ fn resolve_alpha(
             mask_data.push(mask_val);
         }
 
-        fix_image_length(
-            &mut mask_data,
-            width,
-            height,
-            0,
-            &ColorSpace::device_gray(),
-        )?;
+        fix_image_length(&mut mask_data, width, height, 0, &ColorSpace::device_gray())?;
 
         Some(LumaData {
             data: mask_data,

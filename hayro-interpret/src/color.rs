@@ -276,6 +276,13 @@ impl ColorSpace {
         }
     }
 
+    pub(crate) fn inverted_default_decode_arr(&self, n: f32) -> SmallVec<[(f32, f32); 4]> {
+        self.default_decode_arr(n)
+            .iter()
+            .map(|(min, max)| (*max, *min))
+            .collect()
+    }
+
     /// Get the initial color of the color space.
     pub(crate) fn initial_color(&self) -> ColorComponents {
         match self.0.as_ref() {
