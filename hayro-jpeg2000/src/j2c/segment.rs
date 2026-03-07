@@ -17,7 +17,7 @@ pub(crate) fn parse<'a, 'b>(
     tile: &'b Tile<'a>,
     mut progression_iterator: Box<dyn Iterator<Item = ProgressionData> + '_>,
     header: &Header<'_>,
-    storage: &mut DecompositionStorage,
+    storage: &mut DecompositionStorage<'a>,
 ) -> Result<()> {
     for tile_part in &tile.tile_parts {
         if parse_inner(
@@ -40,7 +40,7 @@ fn parse_inner<'a>(
     mut tile_part: TilePart<'a>,
     progression_iterator: &mut dyn Iterator<Item = ProgressionData>,
     component_infos: &[ComponentInfo],
-    storage: &mut DecompositionStorage,
+    storage: &mut DecompositionStorage<'a>,
 ) -> Option<()> {
     while !tile_part.header().at_end() {
         let progression_data = progression_iterator.next()?;
@@ -105,10 +105,7 @@ fn parse_inner<'a>(
                         let segments = &mut storage.segments[segments.clone()];
 
                         for segment in segments {
-                            let bytes = body_reader.read_bytes(segment.data_length as usize)?;
-                            let start = storage.segment_data.len();
-                            storage.segment_data.extend(bytes);
-                            segment.data_range = start..storage.segment_data.len();
+                            segment.data = body_reader.read_bytes(segment.data_length as usize)?;
                         }
                     }
                 }
@@ -123,7 +120,7 @@ fn resolve_segments(
     sub_band_dx: usize,
     progression_data: &ProgressionData,
     reader: &mut BitReader<'_>,
-    storage: &mut DecompositionStorage,
+    storage: &mut DecompositionStorage<'_>,
     component_info: &ComponentInfo,
 ) -> Option<()> {
     // We don't support more than 32-bit precision.
@@ -297,7 +294,7 @@ fn resolve_segments(
                 data_length: length,
                 coding_pases: coding_passes_for_segment,
                 // Will be set later.
-                data_range: 0..0,
+                data: &[],
             });
 
             ltrace!("length({segment}) {}", length);

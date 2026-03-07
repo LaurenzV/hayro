@@ -30,7 +30,7 @@ use core::ops::{DerefMut, Range};
 pub(crate) fn decode<'a>(
     data: &'a [u8],
     header: &'a Header<'a>,
-    ctx: &mut DecoderContext,
+    ctx: &mut DecoderContext<'a>,
 ) -> Result<()> {
     let mut reader = BitReader::new(data);
     let tiles = tile::parse(&mut reader, header)?;
@@ -92,12 +92,12 @@ pub(crate) fn decode<'a>(
 
 /// A decoder context for decoding JPEG2000 images.
 #[derive(Default)]
-pub struct DecoderContext {
+pub struct DecoderContext<'a> {
     pub(crate) tile_decode_context: TileDecodeContext,
-    storage: DecompositionStorage,
+    storage: DecompositionStorage<'a>,
 }
 
-impl DecoderContext {
+impl DecoderContext<'_> {
     fn reset(&mut self, header: &Header<'_>, initial_tile: &Tile<'_>) {
         self.tile_decode_context.reset(header, initial_tile);
         self.storage.reset();
@@ -109,7 +109,7 @@ fn decode_tile<'a, 'b>(
     header: &Header<'_>,
     progression_iterator: Box<dyn Iterator<Item = ProgressionData> + '_>,
     tile_ctx: &mut TileDecodeContext,
-    storage: &mut DecompositionStorage,
+    storage: &mut DecompositionStorage<'a>,
 ) -> Result<()> {
     storage.reset();
 
@@ -214,9 +214,8 @@ impl Iterator for SubBandIter {
 /// A buffer so that we can reuse allocations for layers/code blocks/etc.
 /// across different tiles.
 #[derive(Default)]
-pub(crate) struct DecompositionStorage {
-    pub(crate) segments: Vec<Segment>,
-    pub(crate) segment_data: Vec<u8>,
+pub(crate) struct DecompositionStorage<'a> {
+    pub(crate) segments: Vec<Segment<'a>>,
     pub(crate) layers: Vec<Layer>,
     pub(crate) code_blocks: Vec<CodeBlock>,
     pub(crate) precincts: Vec<Precinct>,
@@ -227,10 +226,9 @@ pub(crate) struct DecompositionStorage {
     pub(crate) tile_decompositions: Vec<TileDecompositions>,
 }
 
-impl DecompositionStorage {
+impl DecompositionStorage<'_> {
     fn reset(&mut self) {
         self.segments.clear();
-        self.segment_data.clear();
         self.layers.clear();
         self.code_blocks.clear();
         // No need to clear the coefficients, as they will be resized
@@ -285,7 +283,7 @@ impl TileDecodeContext {
 fn decode_component_tile_bit_planes<'a, 'b>(
     tile: &'b Tile<'a>,
     tile_ctx: &mut TileDecodeContext,
-    storage: &mut DecompositionStorage,
+    storage: &mut DecompositionStorage<'a>,
     header: &Header<'_>,
 ) -> Result<()> {
     for (tile_decompositions_idx, component_info) in tile.component_infos.iter().enumerate() {
@@ -317,7 +315,7 @@ fn decode_sub_band_bitplanes(
     resolution: u8,
     component_info: &ComponentInfo,
     tile_ctx: &mut TileDecodeContext,
-    storage: &mut DecompositionStorage,
+    storage: &mut DecompositionStorage<'_>,
     header: &Header<'_>,
 ) -> Result<()> {
     let sub_band = &storage.sub_bands[sub_band_idx];
