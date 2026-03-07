@@ -445,8 +445,7 @@ fn decode_context(
         })
         .unwrap_or(ColorSpace::device_gray());
 
-    // TODO: Use stencil mask here?
-    let fallback_bpc = if obj.is_mask { 1 } else { 8 };
+    let fallback_bpc = if obj.is_stencil_mask { 1 } else { 8 };
 
     let mut bits_per_component = decoded
         .image_data
