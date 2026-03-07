@@ -357,8 +357,21 @@ pub(crate) enum DecodedImage {
     },
 }
 
+enum DecodeMode {
+    Auto,
+    Mask { invert: bool },
+}
+
 impl DecodedImage {
     fn new(obj: &ImageXObject<'_>, target_dimension: Option<(u32, u32)>) -> Option<Self> {
+        Self::decode(obj, target_dimension, DecodeMode::Auto)
+    }
+
+    fn decode(
+        obj: &ImageXObject<'_>,
+        target_dimension: Option<(u32, u32)>,
+        mode: DecodeMode,
+    ) -> Option<Self> {
         let dict = obj.stream.dict();
 
         let dict_bpc = dict
@@ -435,7 +448,13 @@ impl DecodedImage {
             .map(|a| a.iter::<(f32, f32)>().collect::<SmallVec<_>>())
             .unwrap_or(color_space.default_decode_arr(bits_per_component as f32));
 
-        if obj.is_image_mask {
+        let should_decode_mask = matches!(mode, DecodeMode::Mask { .. }) || obj.is_image_mask;
+        let invert_mask = match mode {
+            DecodeMode::Auto => obj.is_image_mask,
+            DecodeMode::Mask { invert } => invert,
+        };
+
+        if should_decode_mask {
             let data = decode_mask_bytes(
                 &mut decoded.data,
                 width,
@@ -443,7 +462,7 @@ impl DecodedImage {
                 &color_space,
                 bits_per_component,
                 &decode_arr,
-                true,
+                invert_mask,
             )?;
 
             return Some(Self::Mask(LumaData {
@@ -641,9 +660,9 @@ fn resolve_alpha(
             None
         }
     } else if let Some(s_mask) = dict.get::<Stream<'_>>(SMASK) {
-        decode_alpha_stream(&s_mask, target_dimension, &obj.warning_sink, &obj.cache)
+        decode_mask_stream(&s_mask, target_dimension, &obj.warning_sink, &obj.cache)
     } else if let Some(mask) = dict.get::<Stream<'_>>(MASK) {
-        decode_alpha_stream(&mask, target_dimension, &obj.warning_sink, &obj.cache)
+        decode_mask_stream(&mask, target_dimension, &obj.warning_sink, &obj.cache)
     } else if let Some(color_key_mask) = dict.get::<SmallVec<[u16; 4]>>(MASK) {
         let mut mask_data = vec![];
 
@@ -691,124 +710,28 @@ fn resolve_alpha(
     Some(alpha)
 }
 
-fn decode_alpha_stream(
+fn decode_mask_stream(
     stream: &Stream<'_>,
     target_dimension: Option<(u32, u32)>,
     warning_sink: &WarningSinkFn,
     cache: &Cache,
 ) -> Option<LumaData> {
-    let dict = stream.dict();
-
-    let image_mask = dict
+    let image_mask = stream
+        .dict()
         .get::<bool>(IM)
-        .or_else(|| dict.get::<bool>(IMAGE_MASK))
+        .or_else(|| stream.dict().get::<bool>(IMAGE_MASK))
         .unwrap_or(false);
-    let dict_bpc = dict
-        .get::<u8>(BPC)
-        .or_else(|| dict.get::<u8>(BITS_PER_COMPONENT));
 
-    let width = dict.get::<u32>(W).or_else(|| dict.get::<u32>(WIDTH))?;
-    let height = dict.get::<u32>(H).or_else(|| dict.get::<u32>(HEIGHT))?;
+    let obj = ImageXObject::new(stream, |_| None, warning_sink, cache, None)?;
 
-    if width == 0 || height == 0 {
-        return None;
-    }
-
-    let cs_obj = dict
-        .get::<Object<'_>>(CS)
-        .or_else(|| dict.get::<Object<'_>>(COLORSPACE));
-    let color_space = if image_mask {
-        Some(ColorSpace::device_gray())
-    } else {
-        cs_obj.clone().and_then(|c| ColorSpace::new(c, cache))
-    };
-    let is_indexed = color_space.as_ref().is_some_and(|cs| cs.is_indexed());
-
-    let decode_params = ImageDecodeParams {
-        is_indexed,
-        bpc: dict_bpc,
-        num_components: color_space.as_ref().map(|c| c.num_components()),
+    DecodedImage::decode(
+        &obj,
         target_dimension,
-        width,
-        height,
-    };
-
-    let mut decoded = stream
-        .decoded_image(&decode_params)
-        .map_err(|_| (warning_sink)(InterpreterWarning::ImageDecodeFailure))
-        .ok()?;
-
-    let (mut scale_x, mut scale_y) = (1.0, 1.0);
-
-    let (width, mut height) = decoded
-        .image_data
-        .as_ref()
-        .map(|d| {
-            scale_x = width as f32 / d.width as f32;
-            scale_y = height as f32 / d.height as f32;
-
-            (d.width, d.height)
-        })
-        .unwrap_or((width, height));
-
-    let color_space = color_space
-        .or_else(|| {
-            decoded
-                .image_data
-                .as_ref()
-                .map(|i| i.color_space)
-                .and_then(|c| {
-                    c.and_then(|c| match c {
-                        ImageColorSpace::Gray => Some(ColorSpace::device_gray()),
-                        ImageColorSpace::Rgb => Some(ColorSpace::device_rgb()),
-                        ImageColorSpace::Cmyk => Some(ColorSpace::device_cmyk()),
-                        ImageColorSpace::Unknown(_) => None,
-                    })
-                })
-        })
-        .unwrap_or(ColorSpace::device_gray());
-
-    let fallback_bpc = if image_mask { 1 } else { 8 };
-    let mut bits_per_component = decoded
-        .image_data
-        .as_ref()
-        .map(|i| i.bits_per_component)
-        .or(dict_bpc)
-        .unwrap_or(fallback_bpc);
-
-    if !matches!(bits_per_component, 1 | 2 | 4 | 8 | 16) {
-        bits_per_component = ((decoded.data.len() as u64 * 8)
-            / (width as u64 * height as u64 * color_space.num_components() as u64))
-            as u8;
-    }
-
-    let decode_arr = dict
-        .get::<Array<'_>>(D)
-        .or_else(|| dict.get::<Array<'_>>(DECODE))
-        .map(|a| a.iter::<(f32, f32)>().collect::<SmallVec<_>>())
-        .unwrap_or(color_space.default_decode_arr(bits_per_component as f32));
-
-    let interpolate = dict
-        .get::<bool>(I)
-        .or_else(|| dict.get::<bool>(INTERPOLATE))
-        .unwrap_or(false);
-
-    let data = decode_mask_bytes(
-        &mut decoded.data,
-        width,
-        &mut height,
-        &color_space,
-        bits_per_component,
-        &decode_arr,
-        image_mask,
-    )?;
-
-    Some(LumaData {
-        data,
-        width,
-        height,
-        interpolate,
-        scale_factors: (scale_x, scale_y),
+        DecodeMode::Mask { invert: image_mask },
+    )
+    .and_then(|decoded| match decoded {
+        DecodedImage::Mask(luma) => Some(luma),
+        _ => None,
     })
 }
 
