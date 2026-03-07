@@ -210,7 +210,7 @@ fn convert_inner(image: &Image<'_>, buf: &mut [u8]) -> ImageResult<()> {
         cs: ColorSpace,
     ) -> Result<(), ImageError> {
         let mut decoder_context = crate::DecoderContext::default();
-        
+
         match (cs, has_alpha) {
             (ColorSpace::Gray, false) => {
                 image.decode_into(buf, &mut decoder_context)?;
