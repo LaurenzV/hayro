@@ -541,8 +541,6 @@ fn decode_raster(
         }
 
         if ctx.color_space.is_device_gray() {
-            
-
             Some(ImageData::Luma(LumaData {
                 data: core::mem::take(&mut ctx.decoded.data),
                 width: ctx.width,
