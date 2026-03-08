@@ -9,7 +9,7 @@ repository = { workspace = true }
 license = { workspace = true }
 
 [dependencies]
-hayro-syntax = { workspace = true, features = ["std"] }
+hayro-syntax = { workspace = true }
 pdf-writer = { workspace = true }
 flate2 = { workspace = true }
 log = { workspace = true }

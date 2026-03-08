@@ -41,14 +41,11 @@ impl Affine {
         Affine([s, 0.0, 0.0, s, 0.0, 0.0])
     }
 
-    /// An affine transform representing rotation.
-    ///
-    /// The angle, `th`, is expressed in radians.
-    #[inline]
-    pub(crate) fn rotate(th: f64) -> Affine {
-        let (s, c) = th.sin_cos();
-        Affine([c, s, -s, c, 0.0, 0.0])
-    }
+    /// A clockwise 90° rotation (in a Y-down coordinate system).
+    pub(crate) const ROTATE_CW_90: Affine = Affine::new([0.0, 1.0, -1.0, 0.0, 0.0, 0.0]);
+
+    /// A counter-clockwise 90° rotation (in a Y-down coordinate system).
+    pub(crate) const ROTATE_CCW_90: Affine = Affine::new([0.0, -1.0, 1.0, 0.0, 0.0, 0.0]);
 
     /// An affine transform representing translation.
     #[inline(always)]
