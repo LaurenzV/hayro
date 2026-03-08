@@ -4,9 +4,11 @@ use crate::device::Device;
 use crate::font::Glyph;
 use crate::interpret::path::get_paint;
 use crate::interpret::state::TextStateFont;
+use crate::text_span::{GlyphPosition, TextSpan};
+use hayro_cmap::BfString;
 use hayro_syntax::object;
 use hayro_syntax::page::Resources;
-use kurbo::Affine;
+use kurbo::{Affine, Point};
 use log::warn;
 
 pub(crate) fn show_text_string<'a>(
@@ -29,6 +31,10 @@ pub(crate) fn show_text_string<'a>(
     let show_glyphs = matches!(font, TextStateFont::Font(_))
         || (matches!(font, TextStateFont::Fallback(_)) && bytes.is_ascii());
 
+    let font_size = ctx.get().text_state.font_size;
+    let mut span_text = String::new();
+    let mut span_glyphs = Vec::new();
+
     let mut cur_idx = 0;
 
     while cur_idx < bytes.len() {
@@ -36,6 +42,10 @@ pub(crate) fn show_text_string<'a>(
         cur_idx += adv;
 
         if show_glyphs {
+            // Capture the glyph position *before* drawing or advancing.
+            let pos = (ctx.get().ctm * ctx.get().text_state.full_transform())
+                * Point::new(0.0, 0.0);
+
             let (glyph, glyph_transform) = font.get_glyph(
                 font.map_code(code),
                 code,
@@ -43,10 +53,51 @@ pub(crate) fn show_text_string<'a>(
                 resources,
                 font.origin_displacement(code),
             );
-            show_glyph(ctx, device, &glyph, glyph_transform);
-        }
 
-        ctx.get_mut().text_state.apply_code_advance(code, adv);
+            // Resolve the Unicode mapping for this glyph.
+            let mut glyph_text = String::new();
+            if let Some(unicode) = glyph.as_unicode() {
+                match unicode {
+                    BfString::Char(c) => glyph_text.push(c),
+                    BfString::String(s) => glyph_text.push_str(&s),
+                }
+            }
+
+            show_glyph(ctx, device, &glyph, glyph_transform);
+            ctx.get_mut().text_state.apply_code_advance(code, adv);
+
+            // Compute advance from the position delta.
+            let next_pos = (ctx.get().ctm * ctx.get().text_state.full_transform())
+                * Point::new(0.0, 0.0);
+
+            span_text.push_str(&glyph_text);
+            span_glyphs.push(GlyphPosition {
+                text: glyph_text,
+                x: pos.x,
+                y: pos.y,
+                advance_x: next_pos.x - pos.x,
+                advance_y: next_pos.y - pos.y,
+                char_code: code,
+            });
+        } else {
+            ctx.get_mut().text_state.apply_code_advance(code, adv);
+        }
+    }
+
+    let effective = ctx.get().ctm * ctx.get().text_state.full_transform();
+    let coeffs = effective.as_coeffs();
+    let font_size_device = (coeffs[2] * coeffs[2] + coeffs[3] * coeffs[3]).sqrt() as f32;
+
+    if !span_glyphs.is_empty() {
+        device.draw_text_span(&TextSpan {
+            text: span_text,
+            glyphs: span_glyphs,
+            font_size,
+            font_size_device,
+            tag: None,
+            is_block_start: false,
+            is_artifact: false,
+        });
     }
 }
 

@@ -1,6 +1,7 @@
 use crate::FillRule;
 use crate::color::ColorSpace;
 use crate::context::Context;
+
 use crate::convert::{convert_line_cap, convert_line_join};
 use crate::device::Device;
 use crate::font::{Font, FontData, FontQuery, StandardFont};

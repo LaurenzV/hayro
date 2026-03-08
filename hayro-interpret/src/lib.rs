@@ -36,6 +36,7 @@ mod function;
 mod interpret;
 mod ocg;
 mod soft_mask;
+mod text_span;
 mod types;
 mod x_object;
 
@@ -54,5 +55,6 @@ pub use hayro_cmap;
 pub use hayro_syntax;
 pub use interpret::*;
 pub use soft_mask::*;
+pub use text_span::*;
 pub use types::*;
 pub use util::{PageExt, RectExt};

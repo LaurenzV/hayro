@@ -19,6 +19,7 @@ use std::sync::Arc;
 mod render;
 mod load;
 mod svg;
+mod text;
 mod write;
 
 const REPLACE: Option<&str> = option_env!("REPLACE");
