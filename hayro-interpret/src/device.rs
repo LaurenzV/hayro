@@ -1,6 +1,6 @@
 use crate::font::Glyph;
 use crate::soft_mask::SoftMask;
-
+use crate::structure_tag::StructureTag;
 use crate::text_span::TextSpan;
 use crate::{BlendMode, ClipPath, Image};
 use crate::{GlyphDrawMode, Paint, PathDrawMode};
@@ -67,9 +67,10 @@ pub trait Device<'a> {
 
     /// Called at the beginning of a marked content sequence (BMC/BDC).
     ///
-    /// The tag is the marked content tag (e.g. b"P", b"Span"). The mcid is
-    /// the marked content identifier from the properties dict, if present.
-    fn begin_marked_content(&mut self, _tag: &[u8], _mcid: Option<i32>) {}
+    /// The tag is the parsed structure element tag (e.g. [`StructureTag::P`],
+    /// [`StructureTag::Span`]).  The mcid is the marked content identifier
+    /// from the properties dict, if present.
+    fn begin_marked_content(&mut self, _tag: &StructureTag, _mcid: Option<i32>) {}
     /// Called at the end of a marked content sequence (EMC).
     fn end_marked_content(&mut self) {}
 }

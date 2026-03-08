@@ -33,7 +33,7 @@
 //! 2. _Marked-content tags_ via [`begin_marked_content`](Device::begin_marked_content)
 //!    / [`end_marked_content`](Device::end_marked_content): tracking the
 //!    tag stack lets us annotate each span with its innermost structure tag
-//!    (e.g. `P`, `H1`) and detect
+//!    (e.g. [`P`](StructureTag::P), [`H1`](StructureTag::H1)) and detect
 //!    block boundaries and artifact regions.
 //!
 //! All other drawing operations are no-ops.
@@ -51,7 +51,7 @@ use hayro_interpret::hayro_syntax::page::Page;
 use hayro_interpret::util::PageExt;
 use hayro_interpret::{
     BlendMode, ClipPath, Context, Device, GlyphDrawMode, Image, InterpreterSettings, Paint,
-    PathDrawMode, SoftMask, TextSpan, interpret_page,
+    PathDrawMode, SoftMask, StructureTag, TextSpan, interpret_page,
 };
 use kurbo::{Affine, BezPath, Rect};
 
@@ -103,7 +103,7 @@ pub fn extract_text(page: &Page<'_>, interpreter_settings: &InterpreterSettings)
 struct TextExtractorDevice {
     spans: Vec<TextSpan>,
     /// Stack of marked-content tags (from BMC/BDC ... EMC).
-    tag_stack: Vec<String>,
+    tag_stack: Vec<StructureTag>,
     /// Set to `true` when a block-level marked-content sequence begins;
     /// consumed (set back to `false`) by the next `draw_text_span` call.
     pending_block_start: bool,
@@ -136,22 +136,19 @@ impl Device<'_> for TextExtractorDevice {
 
     // -- Marked content tracking (cheap, useful later) ---------------------
 
-    fn begin_marked_content(&mut self, tag: &[u8], _mcid: Option<i32>) {
-        let tag_str = String::from_utf8_lossy(tag).into_owned();
-        if is_block_level_tag(&tag_str) {
+    fn begin_marked_content(&mut self, tag: &StructureTag, _mcid: Option<i32>) {
+        if tag.is_block_level() {
             self.pending_block_start = true;
         }
-        if tag_str == "Artifact" {
+        if tag.is_artifact() {
             self.artifact_depth += 1;
         }
-        self.tag_stack.push(tag_str);
+        self.tag_stack.push(tag.clone());
     }
 
     fn end_marked_content(&mut self) {
-        if let Some(tag) = self.tag_stack.pop() {
-            if tag == "Artifact" {
-                self.artifact_depth = self.artifact_depth.saturating_sub(1);
-            }
+        if let Some(tag) = self.tag_stack.pop() && tag.is_artifact() {
+            self.artifact_depth = self.artifact_depth.saturating_sub(1);
         }
     }
 
@@ -188,16 +185,3 @@ impl Device<'_> for TextExtractorDevice {
     fn pop_transparency_group(&mut self) {}
 }
 
-fn is_block_level_tag(tag: &str) -> bool {
-    matches!(
-        tag,
-        "Document" | "Part" | "Art" | "Sect" | "Div"
-            | "H" | "H1" | "H2" | "H3" | "H4" | "H5" | "H6"
-            | "P"
-            | "L" | "LI" | "Lbl" | "LBody"
-            | "Table" | "TR" | "TH" | "TD"
-            | "BlockQuote" | "TOC" | "TOCI" | "Index"
-            | "Figure" | "Formula"
-            | "Artifact"
-    )
-}

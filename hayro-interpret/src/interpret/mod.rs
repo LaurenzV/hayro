@@ -1,6 +1,7 @@
 use crate::FillRule;
 use crate::color::ColorSpace;
 use crate::context::Context;
+use crate::structure_tag::StructureTag;
 
 use crate::convert::{convert_line_cap, convert_line_join};
 use crate::device::Device;
@@ -504,7 +505,8 @@ pub fn interpret<'a, 'b>(
                     context.ocg_state.begin_marked_content();
                 }
 
-                device.begin_marked_content(&bdc.0, mcid);
+                let tag = StructureTag::from_bytes(&bdc.0);
+                device.begin_marked_content(&tag, mcid);
             }
             TypedInstruction::MarkedContentPointWithProperties(_) => {}
             TypedInstruction::EndMarkedContent(_) => {
@@ -514,7 +516,8 @@ pub fn interpret<'a, 'b>(
             TypedInstruction::MarkedContentPoint(_) => {}
             TypedInstruction::BeginMarkedContent(bmc) => {
                 context.ocg_state.begin_marked_content();
-                device.begin_marked_content(&bmc.0, None);
+                let tag = StructureTag::from_bytes(&bmc.0);
+                device.begin_marked_content(&tag, None);
             }
             TypedInstruction::BeginText(_) => {
                 context.get_mut().text_state.text_matrix = Affine::IDENTITY;

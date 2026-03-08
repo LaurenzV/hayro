@@ -8,6 +8,11 @@
 //! Glyph positions are in device space, with the page's initial transform
 //! applied (Y-flip giving a top-left origin), matching the coordinate system
 //! used by the renderer.
+//!
+//! See also [`StructureTag`] for the set of standard PDF structure element
+//! tags used by the [`tag`](TextSpan::tag) field.
+
+use crate::StructureTag;
 
 
 /// A span of text extracted from a PDF page.
@@ -50,9 +55,10 @@ pub struct TextSpan {
     pub font_size_device: f32,
 
     /// The innermost marked-content tag active when this span was emitted
-    /// (e.g. "H1", "P", "LBody"). `None` when no marked-content
+    /// (e.g. [`H1`](StructureTag::H1), [`P`](StructureTag::P),
+    /// [`LBody`](StructureTag::LBody)). `None` when no marked-content
     /// sequence is active.
-    pub tag: Option<String>,
+    pub tag: Option<StructureTag>,
 
     /// `true` when a block-level marked-content sequence (heading,
     /// paragraph, list item, etc.) began before this span, i.e. this

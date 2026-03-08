@@ -51,7 +51,7 @@ pub use vello_cpu;
 
 /// Structured text extraction from PDF pages.
 pub mod text;
-pub use hayro_interpret::{GlyphPosition, TextSpan};
+pub use hayro_interpret::{GlyphPosition, StructureTag, TextSpan};
 
 use vello_cpu::color::AlphaColor;
 use vello_cpu::color::Srgb;
