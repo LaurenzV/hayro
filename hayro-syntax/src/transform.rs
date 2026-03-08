@@ -3,17 +3,11 @@
 
 //! Affine transforms.
 
+use crate::object::Rect;
 use core::ops::{Mul, MulAssign};
-
-use crate::{Point, Rect, Vec2};
-
-#[cfg(not(feature = "std"))]
-use crate::common::FloatFuncs;
 
 /// A 2D affine transform.
 #[derive(Clone, Copy, Debug, PartialEq)]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Affine([f64; 6]);
 
 impl Affine {
@@ -56,7 +50,7 @@ impl Affine {
     }
 
     /// An affine transform representing non-uniform scaling
-    /// with different scale values for x and y
+    /// with different scale values for x and y.
     #[inline(always)]
     pub const fn scale_non_uniform(s_x: f64, s_y: f64) -> Affine {
         Affine([s_x, 0.0, 0.0, s_y, 0.0, 0.0])
@@ -66,12 +60,9 @@ impl Affine {
     ///
     /// Useful for a view transform that zooms at a specific point,
     /// while keeping that point fixed in the result space.
-    ///
-    /// See [`Affine::scale()`] for more info.
     #[inline]
-    pub fn scale_about(s: f64, center: impl Into<Point>) -> Affine {
-        let center = center.into().to_vec2();
-        Self::translate(-center)
+    pub fn scale_about(s: f64, center: (f64, f64)) -> Affine {
+        Self::translate((-center.0, -center.1))
             .then_scale(s)
             .then_translate(center)
     }
@@ -91,83 +82,49 @@ impl Affine {
     }
 
     /// An affine transform representing a rotation of `th` radians about `center`.
-    ///
-    /// See [`Affine::rotate()`] for more info.
     #[inline]
-    pub fn rotate_about(th: f64, center: impl Into<Point>) -> Affine {
-        let center = center.into().to_vec2();
-        Self::translate(-center)
+    pub fn rotate_about(th: f64, center: (f64, f64)) -> Affine {
+        Self::translate((-center.0, -center.1))
             .then_rotate(th)
             .then_translate(center)
     }
 
     /// An affine transform representing translation.
     #[inline(always)]
-    pub fn translate<V: Into<Vec2>>(p: V) -> Affine {
-        let p = p.into();
-        Affine([1.0, 0.0, 0.0, 1.0, p.x, p.y])
+    pub const fn translate(p: (f64, f64)) -> Affine {
+        Affine([1.0, 0.0, 0.0, 1.0, p.0, p.1])
     }
 
     /// An affine transformation representing a skew.
     ///
     /// The `skew_x` and `skew_y` parameters represent skew factors for the
     /// horizontal and vertical directions, respectively.
-    ///
-    /// This is commonly used to generate a faux oblique transform for
-    /// font rendering. In this case, you can slant the glyph 20 degrees
-    /// clockwise in the horizontal direction (assuming a Y-up coordinate
-    /// system):
-    ///
-    /// ```
-    /// let oblique_transform = kurbo::Affine::skew(20f64.to_radians().tan(), 0.0);
-    /// ```
     #[inline(always)]
     pub const fn skew(skew_x: f64, skew_y: f64) -> Affine {
         Affine([1.0, skew_y, skew_x, 1.0, 0.0, 0.0])
     }
 
-    /// Create an affine transform that represents reflection about the line `point + direction * t, t in (-infty, infty)`
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use kurbo::{Point, Vec2, Affine};
-    /// # fn assert_near(p0: Point, p1: Point) {
-    /// #     assert!((p1 - p0).hypot() < 1e-9, "{p0:?} != {p1:?}");
-    /// # }
-    /// let point = Point::new(1., 0.);
-    /// let vec = Vec2::new(1., 1.);
-    /// let map = Affine::reflect(point, vec);
-    /// assert_near(map * Point::new(1., 0.), Point::new(1., 0.));
-    /// assert_near(map * Point::new(2., 1.), Point::new(2., 1.));
-    /// assert_near(map * Point::new(2., 2.), Point::new(3., 1.));
-    /// ```
+    /// An affine transform that represents reflection about a line through `point`
+    /// in the given `direction`.
     #[inline]
     #[must_use]
-    pub fn reflect(point: impl Into<Point>, direction: impl Into<Vec2>) -> Self {
-        let point = point.into();
-        let direction = direction.into();
+    pub fn reflect(point: (f64, f64), direction: (f64, f64)) -> Self {
+        let hypot = (direction.0 * direction.0 + direction.1 * direction.1).sqrt();
+        let nx = direction.1 / hypot;
+        let ny = -direction.0 / hypot;
 
-        let n = Vec2 {
-            x: direction.y,
-            y: -direction.x,
-        }
-            .normalize();
-
-        // Compute Householder reflection matrix
-        let x2 = n.x * n.x;
-        let xy = n.x * n.y;
-        let y2 = n.y * n.y;
-        // Here we also add in the post translation, because it doesn't require any further calc.
+        let x2 = nx * nx;
+        let xy = nx * ny;
+        let y2 = ny * ny;
         let aff = Affine::new([
             1. - 2. * x2,
             -2. * xy,
             -2. * xy,
             1. - 2. * y2,
-            point.x,
-            point.y,
+            point.0,
+            point.1,
         ]);
-        aff.pre_translate(-point.to_vec2())
+        aff.pre_translate((-point.0, -point.1))
     }
 
     /// A [rotation] by `th` followed by `self`.
@@ -183,12 +140,12 @@ impl Affine {
 
     /// A [rotation] by `th` about `center` followed by `self`.
     ///
-    /// Equivalent to `self * Affine::rotate_about(th, center)`
+    /// Equivalent to `Affine::rotate_about(th, center) * self`
     ///
     /// [rotation]: Affine::rotate_about
     #[inline]
     #[must_use]
-    pub fn pre_rotate_about(self, th: f64, center: impl Into<Point>) -> Self {
+    pub fn pre_rotate_about(self, th: f64, center: (f64, f64)) -> Self {
         Affine::rotate_about(th, center) * self
     }
 
@@ -221,7 +178,7 @@ impl Affine {
     /// [translation]: Affine::translate
     #[inline]
     #[must_use]
-    pub fn pre_translate(self, trans: Vec2) -> Self {
+    pub fn pre_translate(self, trans: (f64, f64)) -> Self {
         self * Affine::translate(trans)
     }
 
@@ -243,7 +200,7 @@ impl Affine {
     /// [rotation]: Affine::rotate_about
     #[inline]
     #[must_use]
-    pub fn then_rotate_about(self, th: f64, center: impl Into<Point>) -> Self {
+    pub fn then_rotate_about(self, th: f64, center: (f64, f64)) -> Self {
         Affine::rotate_about(th, center) * self
     }
 
@@ -271,32 +228,29 @@ impl Affine {
 
     /// `self` followed by a [scale] of `scale` about `center`.
     ///
-    /// Equivalent to `Affine::scale_about(scale) * self`
+    /// Equivalent to `Affine::scale_about(scale, center) * self`
     ///
     /// [scale]: Affine::scale_about
     #[inline]
     #[must_use]
-    pub fn then_scale_about(self, scale: f64, center: impl Into<Point>) -> Self {
+    pub fn then_scale_about(self, scale: f64, center: (f64, f64)) -> Self {
         Affine::scale_about(scale, center) * self
     }
 
     /// `self` followed by a translation of `trans`.
     ///
     /// Equivalent to `Affine::translate(trans) * self`
-    ///
-    /// [translation]: Affine::translate
     #[inline]
     #[must_use]
-    pub const fn then_translate(mut self, trans: Vec2) -> Self {
-        self.0[4] += trans.x;
-        self.0[5] += trans.y;
+    pub const fn then_translate(mut self, trans: (f64, f64)) -> Self {
+        self.0[4] += trans.0;
+        self.0[5] += trans.1;
         self
     }
 
     /// Creates an affine transformation that takes the unit square to the given rectangle.
     ///
     /// Useful when you want to draw into the unit square but have your output fill any rectangle.
-    /// In this case push the `Affine` onto the transform stack.
     pub const fn map_unit_square(rect: Rect) -> Affine {
         Affine([rect.width(), 0., 0., rect.height(), rect.x0, rect.y0])
     }
@@ -335,11 +289,26 @@ impl Affine {
     ///
     /// The returned rectangle always has non-negative width and height.
     pub fn transform_rect_bbox(self, rect: Rect) -> Rect {
-        let p00 = self * Point::new(rect.x0, rect.y0);
-        let p01 = self * Point::new(rect.x0, rect.y1);
-        let p10 = self * Point::new(rect.x1, rect.y0);
-        let p11 = self * Point::new(rect.x1, rect.y1);
-        Rect::from_points(p00, p01).union(Rect::from_points(p10, p11))
+        let p00 = self.transform_point(rect.x0, rect.y0);
+        let p01 = self.transform_point(rect.x0, rect.y1);
+        let p10 = self.transform_point(rect.x1, rect.y0);
+        let p11 = self.transform_point(rect.x1, rect.y1);
+
+        let min_x = p00.0.min(p01.0).min(p10.0).min(p11.0);
+        let min_y = p00.1.min(p01.1).min(p10.1).min(p11.1);
+        let max_x = p00.0.max(p01.0).max(p10.0).max(p11.0);
+        let max_y = p00.1.max(p01.1).max(p10.1).max(p11.1);
+
+        Rect::new(min_x, min_y, max_x, max_y)
+    }
+
+    /// Transform a point by this affine map.
+    #[inline]
+    pub fn transform_point(self, x: f64, y: f64) -> (f64, f64) {
+        (
+            self.0[0] * x + self.0[2] * y + self.0[4],
+            self.0[1] * x + self.0[3] * y + self.0[5],
+        )
     }
 
     /// Is this map [finite]?
@@ -368,105 +337,20 @@ impl Affine {
             || self.0[5].is_nan()
     }
 
-    /// Compute the singular value decomposition of the linear transformation (ignoring the
-    /// translation).
-    ///
-    /// All non-degenerate linear transformations can be represented as
-    ///
-    ///  1. a rotation about the origin.
-    ///  2. a scaling along the x and y axes
-    ///  3. another rotation about the origin
-    ///
-    /// composed together. Decomposing a 2x2 matrix in this way is called a "singular value
-    /// decomposition" and is written `U Σ V^T`, where U and V^T are orthogonal (rotations) and Σ
-    /// is a diagonal matrix (a scaling).
-    ///
-    /// Since currently this function is used to calculate ellipse radii and rotation from an
-    /// affine map on the unit circle, we don't calculate V^T, since a rotation of the unit (or
-    /// any) circle about its center always results in the same circle. This is the reason that an
-    /// ellipse mapped using an affine map is always an ellipse.
-    ///
-    /// Will return NaNs if the matrix (or equivalently the linear map) is non-finite.
-    ///
-    /// The first part of the returned tuple is the scaling, the second part is the angle of
-    /// rotation (in radians). The scaling along the x-axis is guaranteed to be greater than or
-    /// equal to the scaling along the y-axis.
-    //
-    // Note: though this does quite some computation, we are often interested only in specific
-    // components of the result. Hence this is marked `#[inline(always)]`, to give the compiler a
-    // good chance at eliminating dead code.
+    /// Returns the translation part of this affine map.
     #[inline(always)]
-    pub(crate) fn svd(self) -> (Vec2, f64) {
-        let [a, b, c, d, _, _] = self.0;
-        let a2 = a * a;
-        let b2 = b * b;
-        let c2 = c * c;
-        let d2 = d * d;
-        let ab = a * b;
-        let cd = c * d;
-        let angle = 0.5 * (2.0 * (ab + cd)).atan2(a2 - b2 + c2 - d2);
-
-        // Given matrix A = [ a c ]
-        //                  [ b d ]
-        //
-        // The two singular values σ1, σ2 of A are the square roots of the two eigen values λ1, λ2
-        // of M = A^T A. The common formula for 2x2 eigenvalues requires evaluating a square root,
-        // but we'd like to compute the singular values of the matrix without nested square roots.
-        //
-        // M = A^T A = [ aa+cc   ab+cd ]
-        //             [ ab+cd   bb+dd ]
-        //
-        // We have
-        // λ = 1/2 (tr(M) ± sqrt(tr(M)^2 - 4 det(M))).
-        //
-        // Note det(M) = det(A^T A) = det(A)^2.
-        // => 2λ = tr(M) ± sqrt(tr(M)^2 - 4 det(A)^2)
-        // => 2λ = tr(M) ± sqrt[(a^2+b^2+c^2+d^2)^2 - 4 (ad-bc)^2]
-        // By factorizing the inner term,
-        // => 2λ = tr(M) ± sqrt[((a+d)^2 + (b-c)^2) ((a-d)^2 + (b+c)^2)]
-        // => 2λ = tr(M) ± sqrt[(a+d)^2 + (b-c)^2] sqrt[(a-d)^2 + (b+c)^2]
-        //
-        // Define S1 = sqrt[(a+d)^2 + (b-c)^2]
-        //        S2 = sqrt[(a-d)^2 + (b+c)^2].
-        //
-        // => 2λ = tr(M) ± S1 S2
-        // => 2λ = 1/2 (S1^2 + S2^2) ± S1 S2
-        // => λ = 1/4 (S1^2 + S2^2 ± 2 S1 S2)
-        // => λ = 1/4 (S1 ± S2)^2
-        //
-        // Note we're interested in
-        // σ = sqrt(λ).
-        //
-        // => σ1 = 1/2 (S1 + S2)
-        // and similarly σ2 = 1/2 |S1 - S2|
-        let s1 = ((a + d).powi(2) + (b - c).powi(2)).sqrt();
-        let s2 = ((a - d).powi(2) + (b + c).powi(2)).sqrt();
-        (
-            Vec2 {
-                x: 0.5 * (s1 + s2),
-                y: 0.5 * (s1 - s2).abs(),
-            },
-            angle,
-        )
+    pub const fn translation(self) -> (f64, f64) {
+        (self.0[4], self.0[5])
     }
 
-    /// Returns the translation part of this affine map (`(self.0[4], self.0[5])`).
-    #[inline(always)]
-    pub const fn translation(self) -> Vec2 {
-        Vec2 {
-            x: self.0[4],
-            y: self.0[5],
-        }
-    }
-
-    /// Replaces the translation portion of this affine map
+    /// Replaces the translation portion of this affine map.
     ///
     /// The translation can be seen as being applied after the linear part of the map.
     #[must_use]
     #[inline(always)]
-    pub const fn with_translation(mut self, trans: Vec2) -> Affine {
-        self.0[4] = trans.x;
-        self.0[5] = trans.y;
+    pub const fn with_translation(mut self, trans: (f64, f64)) -> Affine {
+        self.0[4] = trans.0;
+        self.0[5] = trans.1;
         self
     }
 }
@@ -475,18 +359,6 @@ impl Default for Affine {
     #[inline(always)]
     fn default() -> Affine {
         Affine::IDENTITY
-    }
-}
-
-impl Mul<Point> for Affine {
-    type Output = Point;
-
-    #[inline]
-    fn mul(self, other: Point) -> Point {
-        Point::new(
-            self.0[0] * other.x + self.0[2] * other.y + self.0[4],
-            self.0[1] * other.x + self.0[3] * other.y + self.0[5],
-        )
     }
 }
 
