@@ -11,25 +11,25 @@ pub struct Transform([f64; 6]);
 
 impl Transform {
     /// The identity transform.
-    pub const IDENTITY: Transform = Transform::scale(1.0);
+    pub const IDENTITY: Self = Self::scale(1.0);
 
     #[inline(always)]
-    pub(crate) const fn new(c: [f64; 6]) -> Transform {
-        Transform(c)
+    pub(crate) const fn new(c: [f64; 6]) -> Self {
+        Self(c)
     }
 
     #[inline(always)]
-    pub(crate) const fn scale(s: f64) -> Transform {
-        Transform([s, 0.0, 0.0, s, 0.0, 0.0])
+    pub(crate) const fn scale(s: f64) -> Self {
+        Self([s, 0.0, 0.0, s, 0.0, 0.0])
     }
 
-    pub(crate) const ROTATE_CW_90: Transform = Transform::new([0.0, 1.0, -1.0, 0.0, 0.0, 0.0]);
+    pub(crate) const ROTATE_CW_90: Self = Self::new([0.0, 1.0, -1.0, 0.0, 0.0, 0.0]);
 
-    pub(crate) const ROTATE_CCW_90: Transform = Transform::new([0.0, -1.0, 1.0, 0.0, 0.0, 0.0]);
+    pub(crate) const ROTATE_CCW_90: Self = Self::new([0.0, -1.0, 1.0, 0.0, 0.0, 0.0]);
 
     #[inline(always)]
-    pub(crate) const fn translate(p: (f64, f64)) -> Transform {
-        Transform([1.0, 0.0, 0.0, 1.0, p.0, p.1])
+    pub(crate) const fn translate(p: (f64, f64)) -> Self {
+        Self([1.0, 0.0, 0.0, 1.0, p.0, p.1])
     }
 
     /// Get the coefficients of the transform.
@@ -40,11 +40,11 @@ impl Transform {
 }
 
 impl Mul for Transform {
-    type Output = Transform;
+    type Output = Self;
 
     #[inline]
-    fn mul(self, other: Transform) -> Transform {
-        Transform([
+    fn mul(self, other: Self) -> Self {
+        Self([
             self.0[0] * other.0[0] + self.0[2] * other.0[1],
             self.0[1] * other.0[0] + self.0[3] * other.0[1],
             self.0[0] * other.0[2] + self.0[2] * other.0[3],
