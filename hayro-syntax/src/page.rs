@@ -10,6 +10,7 @@ use crate::object::dict::keys::*;
 use crate::object::{Object, ObjectLike};
 use crate::reader::ReaderContext;
 use crate::sync::OnceLock;
+use crate::transform::Affine;
 use crate::util::FloatExt;
 use crate::xref::XRef;
 use alloc::boxed::Box;
@@ -335,6 +336,53 @@ impl<'a> Page<'a> {
     /// Return a typed iterator over the operators of the page's content stream.
     pub fn typed_operations(&self) -> TypedIter<'_> {
         TypedIter::from_untyped(self.operations())
+    }
+
+    /// Return the initial transform that should be applied when rendering.
+    ///
+    /// This accounts for the mismatch between PDF's y-up and most renderers'
+    /// y-down coordinate system, the rotation of the page and the offset of
+    /// the crop box.
+    pub fn initial_transform(&self, invert_y: bool) -> Affine {
+        let crop_box = self.intersected_crop_box();
+        let (_, base_height) = self.base_dimensions();
+        let (width, height) = self.render_dimensions();
+
+        let horizontal_t =
+            Affine::rotate(90.0_f64.to_radians()) * Affine::translate((0.0, -width as f64));
+        let flipped_horizontal_t =
+            Affine::translate((0.0, height as f64)) * Affine::rotate(-90.0_f64.to_radians());
+
+        let rotation_transform = match self.rotation() {
+            Rotation::None => Affine::IDENTITY,
+            Rotation::Horizontal => {
+                if invert_y {
+                    horizontal_t
+                } else {
+                    flipped_horizontal_t
+                }
+            }
+            Rotation::Flipped => {
+                Affine::scale(-1.0) * Affine::translate((-width as f64, -height as f64))
+            }
+            Rotation::FlippedHorizontal => {
+                if invert_y {
+                    flipped_horizontal_t
+                } else {
+                    horizontal_t
+                }
+            }
+        };
+
+        let inversion_transform = if invert_y {
+            Affine::new([1.0, 0.0, 0.0, -1.0, 0.0, base_height as f64])
+        } else {
+            Affine::IDENTITY
+        };
+
+        rotation_transform
+            * inversion_transform
+            * Affine::translate((-crop_box.x0, -crop_box.y0))
     }
 }
 

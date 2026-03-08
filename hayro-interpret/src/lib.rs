@@ -55,4 +55,4 @@ pub use hayro_syntax;
 pub use interpret::*;
 pub use soft_mask::*;
 pub use types::*;
-pub use util::{PageExt, RectExt};
+pub use util::RectExt;

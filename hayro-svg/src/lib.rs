@@ -22,7 +22,7 @@ use crate::mask::MaskKind;
 use crate::paint::{CachedShading, CachedShadingPattern, CachedTilingPattern};
 use hayro_interpret::font::Glyph;
 use hayro_interpret::hayro_syntax::page::Page;
-use hayro_interpret::util::{Float32Ext, PageExt};
+use hayro_interpret::util::Float32Ext;
 use hayro_interpret::{
     BlendMode, CacheKey, ClipPath, Context, Device, GlyphDrawMode, Image, InterpreterSettings,
     Paint, PathDrawMode, SoftMask, StrokeProps, interpret_page,
@@ -52,7 +52,7 @@ pub fn convert(
     render_settings: &SvgRenderSettings,
 ) -> String {
     let mut state = Context::new(
-        page.initial_transform(true),
+        Affine::new(page.initial_transform(true).as_coeffs()),
         Rect::new(
             0.0,
             0.0,

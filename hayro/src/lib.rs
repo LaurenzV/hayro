@@ -39,7 +39,7 @@ use hayro_interpret::FillRule;
 use hayro_interpret::InterpreterSettings;
 use hayro_interpret::hayro_syntax::Pdf;
 use hayro_interpret::hayro_syntax::page::Page;
-use hayro_interpret::util::{PageExt, RectExt};
+use hayro_interpret::util::RectExt;
 use hayro_interpret::{BlendMode, Context};
 use hayro_interpret::{ClipPath, interpret_page};
 use kurbo::{Affine, Rect, Shape};
@@ -96,8 +96,8 @@ pub fn render(
     let (x_scale, y_scale) = (render_settings.x_scale, render_settings.y_scale);
     let (width, height) = page.render_dimensions();
     let (scaled_width, scaled_height) = ((width * x_scale) as f64, (height * y_scale) as f64);
-    let initial_transform =
-        Affine::scale_non_uniform(x_scale as f64, y_scale as f64) * page.initial_transform(true);
+    let initial_transform = Affine::scale_non_uniform(x_scale as f64, y_scale as f64)
+        * Affine::new(page.initial_transform(true).as_coeffs());
 
     let (pix_width, pix_height) = (
         render_settings.width.unwrap_or(scaled_width.floor() as u16),
