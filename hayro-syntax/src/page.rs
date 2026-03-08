@@ -348,10 +348,8 @@ impl<'a> Page<'a> {
         let (_, base_height) = self.base_dimensions();
         let (width, height) = self.render_dimensions();
 
-        let horizontal_t =
-            Affine::ROTATE_CW_90 * Affine::translate((0.0, -width as f64));
-        let flipped_horizontal_t =
-            Affine::translate((0.0, height as f64)) * Affine::ROTATE_CCW_90;
+        let horizontal_t = Affine::ROTATE_CW_90 * Affine::translate((0.0, -width as f64));
+        let flipped_horizontal_t = Affine::translate((0.0, height as f64)) * Affine::ROTATE_CCW_90;
 
         let rotation_transform = match self.rotation() {
             Rotation::None => Affine::IDENTITY,
@@ -380,9 +378,7 @@ impl<'a> Page<'a> {
             Affine::IDENTITY
         };
 
-        rotation_transform
-            * inversion_transform
-            * Affine::translate((-crop_box.x0, -crop_box.y0))
+        rotation_transform * inversion_transform * Affine::translate((-crop_box.x0, -crop_box.y0))
     }
 }
 

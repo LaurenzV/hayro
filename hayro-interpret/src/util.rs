@@ -170,4 +170,3 @@ impl RectExt for hayro_syntax::object::Rect {
         Rect::new(self.x0, self.y0, self.x1, self.y1)
     }
 }
-

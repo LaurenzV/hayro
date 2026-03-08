@@ -478,4 +478,3 @@ impl ResourcesExt for pdf_writer::writers::FormXObject<'_> {
         Self::resources(self)
     }
 }
-
