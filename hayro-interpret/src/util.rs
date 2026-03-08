@@ -159,6 +159,18 @@ impl BezPathExt for BezPath {
     }
 }
 
+/// Extension methods for converting a [`hayro_syntax::transform::Transform`] to a [`kurbo::Affine`].
+pub trait TransformExt {
+    /// Convert to a `kurbo::Affine`.
+    fn to_kurbo(&self) -> kurbo::Affine;
+}
+
+impl TransformExt for hayro_syntax::transform::Transform {
+    fn to_kurbo(&self) -> kurbo::Affine {
+        kurbo::Affine::new(self.as_coeffs())
+    }
+}
+
 /// Extension methods for rectangles.
 pub trait RectExt {
     /// Convert the rectangle to a `kurbo` rectangle.
