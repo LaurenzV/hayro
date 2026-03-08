@@ -10,7 +10,7 @@ use crate::object::dict::keys::*;
 use crate::object::{Object, ObjectLike};
 use crate::reader::ReaderContext;
 use crate::sync::OnceLock;
-use crate::transform::Affine;
+use crate::transform::Transform;
 use crate::util::FloatExt;
 use crate::xref::XRef;
 use alloc::boxed::Box;
@@ -343,16 +343,17 @@ impl<'a> Page<'a> {
     /// This accounts for the mismatch between PDF's y-up and most renderers'
     /// y-down coordinate system, the rotation of the page and the offset of
     /// the crop box.
-    pub fn initial_transform(&self, invert_y: bool) -> Affine {
+    pub fn initial_transform(&self, invert_y: bool) -> Transform {
         let crop_box = self.intersected_crop_box();
         let (_, base_height) = self.base_dimensions();
         let (width, height) = self.render_dimensions();
 
-        let horizontal_t = Affine::ROTATE_CW_90 * Affine::translate((0.0, -width as f64));
-        let flipped_horizontal_t = Affine::translate((0.0, height as f64)) * Affine::ROTATE_CCW_90;
+        let horizontal_t = Transform::ROTATE_CW_90 * Transform::translate((0.0, -width as f64));
+        let flipped_horizontal_t =
+            Transform::translate((0.0, height as f64)) * Transform::ROTATE_CCW_90;
 
         let rotation_transform = match self.rotation() {
-            Rotation::None => Affine::IDENTITY,
+            Rotation::None => Transform::IDENTITY,
             Rotation::Horizontal => {
                 if invert_y {
                     horizontal_t
@@ -361,7 +362,7 @@ impl<'a> Page<'a> {
                 }
             }
             Rotation::Flipped => {
-                Affine::scale(-1.0) * Affine::translate((-width as f64, -height as f64))
+                Transform::scale(-1.0) * Transform::translate((-width as f64, -height as f64))
             }
             Rotation::FlippedHorizontal => {
                 if invert_y {
@@ -373,12 +374,14 @@ impl<'a> Page<'a> {
         };
 
         let inversion_transform = if invert_y {
-            Affine::new([1.0, 0.0, 0.0, -1.0, 0.0, base_height as f64])
+            Transform::new([1.0, 0.0, 0.0, -1.0, 0.0, base_height as f64])
         } else {
-            Affine::IDENTITY
+            Transform::IDENTITY
         };
 
-        rotation_transform * inversion_transform * Affine::translate((-crop_box.x0, -crop_box.y0))
+        rotation_transform
+            * inversion_transform
+            * Transform::translate((-crop_box.x0, -crop_box.y0))
     }
 }
 
