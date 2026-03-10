@@ -11,7 +11,7 @@ use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::*;
 use log::warn;
 use moxcms::{
-    ColorProfile, DataColorSpace, Layout, Transform8BitExecutor, TransformF32BitExecutor,
+    ColorProfile, DataColorSpace, Layout, Transform8BitExecutor, TransformF32Executor,
     TransformOptions, Xyzd,
 };
 use smallvec::{SmallVec, ToSmallVec, smallvec};
@@ -859,8 +859,8 @@ impl ToRgb for DeviceN {
 }
 
 struct ICCColorRepr {
-    transform_u8: Box<Transform8BitExecutor>,
-    transform_f32: Box<TransformF32BitExecutor>,
+    transform_u8: Arc<Transform8BitExecutor>,
+    transform_f32: Arc<TransformF32Executor>,
     number_components: usize,
     is_srgb: bool,
     is_lab: bool,
