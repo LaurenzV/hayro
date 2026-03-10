@@ -10,7 +10,10 @@ use hayro_syntax::object::Object;
 use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::*;
 use log::warn;
-use moxcms::{ColorProfile, DataColorSpace, Layout, Transform8BitExecutor, TransformF32Executor, TransformOptions, Xyzd};
+use moxcms::{
+    ColorProfile, DataColorSpace, Layout, Transform8BitExecutor, TransformF32Executor,
+    TransformOptions, Xyzd,
+};
 use smallvec::{SmallVec, ToSmallVec, smallvec};
 use std::fmt::{Debug, Formatter};
 use std::ops::Deref;
