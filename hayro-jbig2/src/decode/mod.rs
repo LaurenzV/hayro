@@ -26,8 +26,10 @@ pub(crate) struct RegionBitmap {
 /// "These operators describe how the segment's bitmap is to be combined with
 /// the page bitmap." (7.4.1.5)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub(crate) enum CombinationOperator {
     /// 0 OR
+    #[default]
     Or,
     /// 1 AND
     And,
@@ -40,11 +42,6 @@ pub(crate) enum CombinationOperator {
 }
 
 // Not really a default, just used as a dummy placeholder.
-impl Default for CombinationOperator {
-    fn default() -> Self {
-        Self::Or
-    }
-}
 
 impl CombinationOperator {
     pub(crate) fn from_value(value: u8) -> Result<Self> {

@@ -6,6 +6,7 @@ use crate::reader::Reader;
 
 /// Parsed page information segment (7.4.8).
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub(crate) struct PageInformation {
     /// "This is a four-byte value containing the width in pixels of the page's
     /// bitmap." (7.4.8.1)
@@ -34,6 +35,7 @@ pub(crate) struct PageInformation {
 /// Page segment flags (7.4.8.5, Figure 56).
 #[derive(Debug, Clone)]
 #[allow(unused)]
+#[derive(Default)]
 pub(crate) struct PageFlags {
     /// "Bit 0: Page is eventually lossless. If this bit is 0, then the file does
     /// not contain a lossless representation of the original (pre-coding) page.
@@ -66,6 +68,7 @@ pub(crate) struct PageFlags {
 
 /// Page striping information (7.4.8.6, Figure 57).
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub(crate) struct PageStriping {
     /// "Bit 15: Page is striped. If the 'page is striped' bit is 1, then the page
     /// may have end of stripe segments associated with it." (7.4.8.6)
@@ -83,43 +86,10 @@ pub(crate) struct PageStriping {
 }
 
 // Not really a default, just used as a dummy placeholder.
-impl Default for PageInformation {
-    fn default() -> Self {
-        Self {
-            width: 0,
-            height: 0,
-            _x_resolution: None,
-            _y_resolution: None,
-            flags: PageFlags::default(),
-            _striping: PageStriping::default(),
-        }
-    }
-}
 
 // Not really a default, just used as a dummy placeholder.
-impl Default for PageFlags {
-    fn default() -> Self {
-        Self {
-            is_lossless: false,
-            might_contain_refinements: false,
-            default_pixel: 0,
-            default_combination_operator: CombinationOperator::default(),
-            requires_auxiliary_buffers: false,
-            combination_operator_overridden: false,
-            might_contain_coloured: false,
-        }
-    }
-}
 
 // Not really a default, just used as a dummy placeholder.
-impl Default for PageStriping {
-    fn default() -> Self {
-        Self {
-            _is_striped: false,
-            _max_stripe_size: 0,
-        }
-    }
-}
 
 /// Parse a page information segment (7.4.8).
 pub(crate) fn parse_page_information(reader: &mut Reader<'_>) -> Result<PageInformation> {
