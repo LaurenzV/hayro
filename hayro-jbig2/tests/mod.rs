@@ -281,10 +281,17 @@ fn run_asset_test(asset: &AssetEntry) -> Result<(), String> {
     let data =
         fs::read(&asset_path).map_err(|err| format!("failed to read {}: {err}", asset_name))?;
 
-    let image = hayro_jbig2::decode(&data).map_err(|err| format!("decode failed: {err}"))?;
+    let image = hayro_jbig2::Image::new(&data).map_err(|err| format!("parse failed: {err}"))?;
 
     if !asset.render {
         // Crash-only test: just execute the decoder to ensure it handles the file.
+        struct NullDecoder;
+        impl hayro_jbig2::Decoder for NullDecoder {
+            fn push_pixel(&mut self, _black: bool) {}
+            fn push_pixel_chunk(&mut self, _black: bool, _chunk_count: u32) {}
+            fn next_line(&mut self) {}
+        }
+        let _ = image.decode(&mut NullDecoder);
         return Ok(());
     }
 
@@ -292,7 +299,7 @@ fn run_asset_test(asset: &AssetEntry) -> Result<(), String> {
     let mut buf = vec![0_u8; image.total_bytes() as usize];
     image
         .read_image(&mut buf)
-        .map_err(|err| format!("read_image failed: {err}"))?;
+        .map_err(|err| format!("decode failed: {err}"))?;
     let luma = GrayImage::from_raw(width, height, buf).expect("buffer size mismatch");
 
     let reference_path = asset.snapshot_stem.with_extension("png");

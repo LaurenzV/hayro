@@ -10,9 +10,9 @@ use ::image::error::{DecodingError, ImageFormatHint};
 use ::image::{ColorType, ExtendedColorType, ImageDecoder, ImageError, ImageResult};
 use image::hooks::{decoding_hook_registered, register_format_detection_hook};
 
-impl ImageDecoder for Image {
+impl ImageDecoder for Image<'_> {
     fn dimensions(&self) -> (u32, u32) {
-        (self.width, self.height)
+        (self.width(), self.height())
     }
 
     fn color_type(&self) -> ColorType {
@@ -27,19 +27,15 @@ impl ImageDecoder for Image {
     where
         Self: Sized,
     {
-        decode_into_buf(&self, buf);
-
-        Ok(())
+        decode_into_buf(&self, buf)
     }
 
     fn read_image_boxed(self: Box<Self>, buf: &mut [u8]) -> ImageResult<()> {
-        decode_into_buf(&self, buf);
-
-        Ok(())
+        decode_into_buf(&self, buf)
     }
 }
 
-fn decode_into_buf(image: &Image, buf: &mut [u8]) {
+fn decode_into_buf(image: &Image<'_>, buf: &mut [u8]) -> ImageResult<()> {
     struct LumaDecoder<'a> {
         buf: &'a mut [u8],
         pos: usize,
@@ -62,11 +58,13 @@ fn decode_into_buf(image: &Image, buf: &mut [u8]) {
     }
 
     let mut decoder = LumaDecoder { buf, pos: 0 };
-    image.decode(&mut decoder);
+    image.decode(&mut decoder)?;
+
+    Ok(())
 }
 
-#[doc(hidden)]
 /// JBIG2 decoder compatible with `image` decoding hook APIs that pass an `impl BufRead + Seek`.
+#[doc(hidden)]
 pub struct Jbig2Decoder {
     input: Vec<u8>,
     width: u32,
@@ -80,11 +78,11 @@ impl Jbig2Decoder {
         let mut r = r;
         r.read_to_end(&mut input)?;
 
-        let image = crate::decode(&input)?;
+        let image = Image::new(&input)?;
 
         Ok(Self {
-            width: image.width,
-            height: image.height,
+            width: image.width(),
+            height: image.height(),
             input,
         })
     }
@@ -107,17 +105,13 @@ impl ImageDecoder for Jbig2Decoder {
     where
         Self: Sized,
     {
-        let image = crate::decode(&self.input)?;
-        decode_into_buf(&image, buf);
-
-        Ok(())
+        let image = Image::new(&self.input)?;
+        decode_into_buf(&image, buf)
     }
 
     fn read_image_boxed(self: Box<Self>, buf: &mut [u8]) -> ImageResult<()> {
-        let image = crate::decode(&self.input)?;
-        decode_into_buf(&image, buf);
-
-        Ok(())
+        let image = Image::new(&self.input)?;
+        decode_into_buf(&image, buf)
     }
 }
 

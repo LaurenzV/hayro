@@ -4,7 +4,7 @@
 
 use std::process::ExitCode;
 
-use image::GrayImage;
+use image::{GrayImage, ImageDecoder};
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().collect();
@@ -27,42 +27,26 @@ fn main() -> ExitCode {
         }
     };
 
-    let image = match hayro_jbig2::decode(&data) {
+    let image = match hayro_jbig2::Image::new(&data) {
         Ok(image) => image,
         Err(err) => {
-            eprintln!("Failed to decode JBIG2: {err}");
+            eprintln!("Failed to parse JBIG2: {err}");
 
             return ExitCode::FAILURE;
         }
     };
 
-    println!("Decoded: {}x{} image", image.width, image.height);
+    let (width, height) = image.dimensions();
+    println!("Decoded: {width}x{height} image");
 
-    struct LumaDecoder {
-        buffer: Vec<u8>,
+    let mut buf = vec![0_u8; image.total_bytes() as usize];
+    if let Err(err) = image.read_image(&mut buf) {
+        eprintln!("Failed to decode JBIG2: {err}");
+
+        return ExitCode::FAILURE;
     }
 
-    impl hayro_jbig2::Decoder for LumaDecoder {
-        fn push_pixel(&mut self, black: bool) {
-            self.buffer.push(if black { 0 } else { 255 });
-        }
-
-        fn push_pixel_chunk(&mut self, black: bool, chunk_count: u32) {
-            let luma = if black { 0 } else { 255 };
-            self.buffer
-                .extend(std::iter::repeat_n(luma, chunk_count as usize * 8));
-        }
-
-        fn next_line(&mut self) {}
-    }
-
-    let mut decoder = LumaDecoder {
-        buffer: Vec::with_capacity((image.width * image.height) as usize),
-    };
-
-    image.decode(&mut decoder);
-
-    let Some(gray) = GrayImage::from_raw(image.width, image.height, decoder.buffer) else {
+    let Some(gray) = GrayImage::from_raw(width, height, buf) else {
         eprintln!("Internal error: Buffer size mismatch");
 
         return ExitCode::FAILURE;

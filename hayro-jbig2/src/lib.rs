@@ -90,139 +90,172 @@ use page_info::{PageInformation, parse_page_information};
 use reader::Reader;
 use segment::SegmentType;
 
-/// A decoded JBIG2 image.
-#[derive(Debug, Clone)]
-pub struct Image {
+/// A JBIG2 image.
+pub struct Image<'a> {
+    /// The parsed segments.
+    segments: Vec<segment::Segment<'a>>,
     /// The width of the image in pixels.
-    pub width: u32,
+    width: u32,
     /// The height of the image in pixels.
-    pub height: u32,
-    /// Number of u32 words per row.
-    stride: u32,
-    /// The packed pixel data.
-    data: Vec<u32>,
+    height: u32,
+    /// The height determined from `EndOfStripe` segments, if applicable.
+    height_from_stripes: Option<u32>,
 }
 
-impl Image {
-    /// Decode the image data into the decoder.
-    pub fn decode<D: Decoder>(&self, decoder: &mut D) {
-        let bytes_per_row = self.width.div_ceil(8) as usize;
+impl<'a> Image<'a> {
+    /// Parse a JBIG2 file from the given data.
+    ///
+    /// The file is expected to use the sequential or random-access organization,
+    /// as defined in Annex D.1 and D.2.
+    pub fn new(data: &'a [u8]) -> Result<Self> {
+        let file = parse_file(data)?;
+        Self::from_segments(file.segments)
+    }
 
-        for row in self.data.chunks_exact(self.stride as usize) {
-            let mut x = 0_u32;
-            let mut chunk_byte: Option<u8> = None;
-            let mut chunk_count = 0_u32;
+    /// Parse an embedded JBIG2 image with optional global segments.
+    ///
+    /// The file is expected to use the embedded organization defined in
+    /// Annex D.3.
+    pub fn new_embedded(data: &'a [u8], globals: Option<&'a [u8]>) -> Result<Self> {
+        let mut segments = Vec::new();
+        if let Some(globals_data) = globals {
+            let mut reader = Reader::new(globals_data);
+            parse_segments_sequential(&mut reader, &mut segments)?;
+        };
 
-            let bytes = row.iter().flat_map(|w| w.to_be_bytes()).take(bytes_per_row);
+        let mut reader = Reader::new(data);
+        parse_segments_sequential(&mut reader, &mut segments)?;
 
-            for byte in bytes {
-                let remaining = self.width - x;
+        segments.sort_by_key(|seg| seg.header.segment_number);
 
-                if remaining >= 8 && (byte == 0x00 || byte == 0xFF) {
-                    // Continue the previous chunk.
-                    if chunk_byte == Some(byte) {
-                        chunk_count += 1;
-                        x += 8;
-                        continue;
-                    }
+        Self::from_segments(segments)
+    }
 
-                    // Flush previous chunk if any, then start new one.
-                    if let Some(b) = chunk_byte {
-                        decoder.push_pixel_chunk(b == 0xFF, chunk_count);
-                    }
+    fn from_segments(segments: Vec<segment::Segment<'a>>) -> Result<Self> {
+        // Pre-scan for stripe height from EndOfStripe segments.
+        let height_from_stripes = segments
+            .iter()
+            .filter(|seg| seg.header.segment_type == SegmentType::EndOfStripe)
+            .filter_map(|seg| u32::from_be_bytes(seg.data.try_into().ok()?).checked_add(1))
+            .max();
 
-                    chunk_byte = Some(byte);
-                    chunk_count = 1;
-                    x += 8;
+        // Find and parse page information to extract dimensions.
+        let page_info_seg = segments
+            .iter()
+            .find(|s| s.header.segment_type == SegmentType::PageInformation)
+            .ok_or(FormatError::MissingPageInfo)?;
 
-                    continue;
-                }
+        let mut reader = Reader::new(page_info_seg.data);
+        let page_info = parse_page_information(&mut reader)?;
 
-                // Can't continue/start chunk, flush any existing chunk first.
-                if let Some(b) = chunk_byte.take() {
-                    decoder.push_pixel_chunk(b == 0xFF, chunk_count);
-                    chunk_count = 0;
-                }
+        // "A page's bitmap height may be declared in its page information segment
+        // to be unknown (by specifying a height of 0xFFFFFFFF). In this case, the
+        // page must be striped." (7.4.8.2)
+        let height = if page_info.height == 0xFFFF_FFFF {
+            height_from_stripes.ok_or(FormatError::UnknownPageHeight)?
+        } else {
+            page_info.height
+        };
 
-                // Emit individual pixels.
-                let count = remaining.min(8);
-                for i in 0..count {
-                    decoder.push_pixel((byte >> (7 - i)) & 1 != 0);
-                }
-                x += count;
-            }
+        Ok(Self {
+            segments,
+            width: page_info.width,
+            height,
+            height_from_stripes,
+        })
+    }
 
-            // Flush any remaining chunk at end of row.
-            if let Some(b) = chunk_byte {
-                decoder.push_pixel_chunk(b == 0xFF, chunk_count);
-            }
+    /// The width of the image in pixels.
+    pub fn width(&self) -> u32 {
+        self.width
+    }
 
-            decoder.next_line();
-        }
+    /// The height of the image in pixels.
+    pub fn height(&self) -> u32 {
+        self.height
+    }
+
+    /// Decode the image data through the given [`Decoder`].
+    pub fn decode<D: Decoder>(&self, decoder: &mut D) -> Result<()> {
+        let mut ctx = DecoderContext::default();
+
+        self.decode_with(decoder, &mut ctx)
+    }
+
+    /// Decode the image data through the given [`Decoder`] and [`DecoderContext`].
+    ///
+    /// This is useful in case you want to convert multiple JBIG2 images,
+    /// as it allows `hayro-jbig2` to reuse allocations during decoding.
+    pub fn decode_with<D: Decoder>(&self, decoder: &mut D, ctx: &mut DecoderContext) -> Result<()> {
+        let page_bitmap = decode_segments(&self.segments, self.height_from_stripes, ctx)?;
+        emit_bitmap(&page_bitmap, decoder);
+
+        Ok(())
     }
 }
 
-/// Decode a JBIG2 file from the given data.
-///
-/// The file is expected to use the sequential or random-access organization,
-/// as defined in Annex D.1 and D.2.
-pub fn decode(data: &[u8]) -> Result<Image> {
-    let mut decoder_ctx = DecoderContext::default();
-    decode_with(data, &mut decoder_ctx)
+fn emit_bitmap<D: Decoder>(bitmap: &Bitmap, decoder: &mut D) {
+    let width = bitmap.width;
+    let bytes_per_row = width.div_ceil(8) as usize;
+
+    for row in bitmap.data.chunks_exact(bitmap.stride as usize) {
+        let mut x = 0_u32;
+        let mut chunk_byte: Option<u8> = None;
+        let mut chunk_count = 0_u32;
+
+        let bytes = row.iter().flat_map(|w| w.to_be_bytes()).take(bytes_per_row);
+
+        for byte in bytes {
+            let remaining = width - x;
+
+            if remaining >= 8 && (byte == 0x00 || byte == 0xFF) {
+                // Continue the previous chunk.
+                if chunk_byte == Some(byte) {
+                    chunk_count += 1;
+                    x += 8;
+                    continue;
+                }
+
+                // Flush previous chunk if any, then start new one.
+                if let Some(b) = chunk_byte {
+                    decoder.push_pixel_chunk(b == 0xFF, chunk_count);
+                }
+
+                chunk_byte = Some(byte);
+                chunk_count = 1;
+                x += 8;
+
+                continue;
+            }
+
+            // Can't continue/start chunk, flush any existing chunk first.
+            if let Some(b) = chunk_byte.take() {
+                decoder.push_pixel_chunk(b == 0xFF, chunk_count);
+                chunk_count = 0;
+            }
+
+            // Emit individual pixels.
+            let count = remaining.min(8);
+            for i in 0..count {
+                decoder.push_pixel((byte >> (7 - i)) & 1 != 0);
+            }
+            x += count;
+        }
+
+        // Flush any remaining chunk at end of row.
+        if let Some(b) = chunk_byte {
+            decoder.push_pixel_chunk(b == 0xFF, chunk_count);
+        }
+
+        decoder.next_line();
+    }
 }
 
-/// Decode a JBIG2 file with the given [`DecoderContext`].
-///
-/// This is useful in case you want to convert multiple JBIG2 images,
-/// as it allows `hayro-jbig2` to reuse allocations during decoding.
-pub fn decode_with(data: &[u8], decoder_ctx: &mut DecoderContext) -> Result<Image> {
-    let file = parse_file(data)?;
-    decode_with_segments(&file.segments, decoder_ctx)
-}
-
-/// Decode an embedded JBIG2 image with the given global segments.
-///
-/// The file is expected to use the embedded organization defined in
-/// Annex D.3.
-pub fn decode_embedded(data: &[u8], globals: Option<&[u8]>) -> Result<Image> {
-    let mut ctx = DecoderContext::default();
-    decode_embedded_with_context(data, globals, &mut ctx)
-}
-
-/// Decode an embedded JBIG2 image with the given global segments and [`DecoderContext`].
-///
-/// This is useful in case you want to convert multiple JBIG2 images,
-/// as it allows `hayro-jbig2` to reuse allocations during decoding.
-pub fn decode_embedded_with_context(
-    data: &[u8],
-    globals: Option<&[u8]>,
-    ctx: &mut DecoderContext,
-) -> Result<Image> {
-    let mut segments = Vec::new();
-    if let Some(globals_data) = globals {
-        let mut reader = Reader::new(globals_data);
-        parse_segments_sequential(&mut reader, &mut segments)?;
-    };
-
-    let mut reader = Reader::new(data);
-    parse_segments_sequential(&mut reader, &mut segments)?;
-
-    segments.sort_by_key(|seg| seg.header.segment_number);
-
-    decode_with_segments(&segments, ctx)
-}
-
-fn decode_with_segments(
+fn decode_segments(
     segments: &[segment::Segment<'_>],
+    height_from_stripes: Option<u32>,
     decoder_ctx: &mut DecoderContext,
-) -> Result<Image> {
-    // Pre-scan for stripe height from EndOfStripe segments.
-    let height_from_stripes = segments
-        .iter()
-        .filter(|seg| seg.header.segment_type == SegmentType::EndOfStripe)
-        .filter_map(|seg| u32::from_be_bytes(seg.data.try_into().ok()?).checked_add(1))
-        .max();
-
+) -> Result<Bitmap> {
     // Find and parse page information segment first.
     let mut page_bitmap = if let Some(page_info) = segments
         .iter()
@@ -506,12 +539,7 @@ fn decode_with_segments(
         }
     }
 
-    Ok(Image {
-        width: page_bitmap.width,
-        height: page_bitmap.height,
-        stride: page_bitmap.stride,
-        data: page_bitmap.data,
-    })
+    Ok(page_bitmap)
 }
 
 /// Page-level decoding state for a JBIG2 page.

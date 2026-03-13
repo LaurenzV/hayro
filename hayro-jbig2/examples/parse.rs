@@ -12,7 +12,14 @@ fn main() {
     // let gray = jbig2::decode_to_image(&data).unwrap();
     for _ in 0..20 {
         // let _ = jbig2::decode(&data).unwrap();
-        let _ = hayro_jbig2::decode(&data).expect("Failed to decode JBIG2");
+        let image = hayro_jbig2::Image::new(&data).expect("Failed to parse JBIG2");
+        struct NullDecoder;
+        impl hayro_jbig2::Decoder for NullDecoder {
+            fn push_pixel(&mut self, _black: bool) {}
+            fn push_pixel_chunk(&mut self, _black: bool, _chunk_count: u32) {}
+            fn next_line(&mut self) {}
+        }
+        let _ = image.decode(&mut NullDecoder);
     }
 
     // gray.save("out.png").expect("Failed to save PNG");
