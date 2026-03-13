@@ -6,7 +6,7 @@ use alloc::vec::Vec;
 use super::RegionBitmap;
 use super::pattern::PatternDictionary;
 use super::{CombinationOperator, RegionSegmentInfo, Template, parse_region_segment_info};
-use crate::DecoderContext;
+use crate::ScratchBuffers;
 use crate::bitmap::Bitmap;
 use crate::error::{ParseError, RegionError, Result};
 use crate::gray_scale::{GrayScaleParams, decode_gray_scale_image};
@@ -16,7 +16,7 @@ use crate::reader::Reader;
 pub(crate) fn decode(
     header: &HalftoneRegionHeader<'_>,
     pattern_dict: &PatternDictionary,
-    ctx: &mut DecoderContext,
+    ctx: &mut ScratchBuffers,
 ) -> Result<RegionBitmap> {
     let region = &header.region_info;
 
@@ -40,7 +40,7 @@ pub(crate) fn decode_into(
     header: &HalftoneRegionHeader<'_>,
     pattern_dict: &PatternDictionary,
     htreg: &mut Bitmap,
-    ctx: &mut DecoderContext,
+    ctx: &mut ScratchBuffers,
 ) -> Result<()> {
     let skip_bitmap = if header.flags.enable_skip {
         Some(compute_skip_bitmap(header, pattern_dict, htreg)?)

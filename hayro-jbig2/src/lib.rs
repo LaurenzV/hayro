@@ -24,8 +24,13 @@ use crate::arithmetic_decoder::Context;
 /// A reusable context for decoding JBIG2 images.
 #[derive(Default)]
 pub struct DecoderContext {
-    /// A reusable buffer for storing arithmetic decoder contexts.
-    pub(crate) contexts_scratch1: Vec<Context>,
+    pub(crate) page_state: PageState,
+    pub(crate) scratch_buffers: ScratchBuffers,
+}
+
+#[derive(Default)]
+pub(crate) struct ScratchBuffers {
+    pub(crate) contexts: Vec<Context>,
 }
 
 /// A decoder for JBIG2 images.
@@ -219,15 +224,22 @@ fn decode_with_segments(
         .max();
 
     // Find and parse page information segment first.
-    let (mut ctx, mut page_bitmap) = if let Some(page_info) = segments
+    let mut page_bitmap = if let Some(page_info) = segments
         .iter()
         .find(|s| s.header.segment_type == SegmentType::PageInformation)
     {
         let mut reader = Reader::new(page_info.data);
-        get_ctx(&mut reader, height_from_stripes)?
+        init_page(
+            &mut reader,
+            height_from_stripes,
+            &mut decoder_ctx.page_state,
+        )?
     } else {
         bail!(FormatError::MissingPageInfo);
     };
+
+    let page_state = &mut decoder_ctx.page_state;
+    let scratch_buffers = &mut decoder_ctx.scratch_buffers;
 
     // Process all segments.
     for seg in segments {
@@ -241,10 +253,10 @@ fn decode_with_segments(
                 let had_unknown_length = seg.header.data_length.is_none();
                 let header = generic::parse(&mut reader, had_unknown_length)?;
 
-                if ctx.can_decode_directly(&page_bitmap, &header.region_info, false) {
-                    generic::decode_into(&header, &mut page_bitmap, decoder_ctx)?;
+                if page_state.can_decode_directly(&page_bitmap, &header.region_info, false) {
+                    generic::decode_into(&header, &mut page_bitmap, scratch_buffers)?;
                 } else {
-                    let region = generic::decode(&header, decoder_ctx)?;
+                    let region = generic::decode(&header, scratch_buffers)?;
                     page_bitmap.combine(
                         &region.bitmap,
                         region.bitmap.x_location as i32,
@@ -252,18 +264,18 @@ fn decode_with_segments(
                         region.combination_operator,
                     );
                 }
-                ctx.page_pristine = false;
+                page_state.page_pristine = false;
             }
             SegmentType::IntermediateGenericRegion => {
                 // Intermediate segments cannot have unknown length.
                 let header = generic::parse(&mut reader, false)?;
-                let region = generic::decode(&header, decoder_ctx)?;
-                ctx.store_region(seg.header.segment_number, region.bitmap);
+                let region = generic::decode(&header, scratch_buffers)?;
+                page_state.store_region(seg.header.segment_number, region.bitmap);
             }
             SegmentType::PatternDictionary => {
                 let header = pattern::parse(&mut reader)?;
-                let dictionary = pattern::decode(&header, decoder_ctx)?;
-                ctx.store_pattern_dictionary(seg.header.segment_number, dictionary);
+                let dictionary = pattern::decode(&header, scratch_buffers)?;
+                page_state.store_pattern_dictionary(seg.header.segment_number, dictionary);
             }
             SegmentType::SymbolDictionary => {
                 // "1) Concatenate all the input symbol dictionaries to form SDINSYMS."
@@ -273,7 +285,7 @@ fn decode_with_segments(
                     .header
                     .referred_to_segments
                     .iter()
-                    .filter_map(|&num| ctx.get_symbol_dictionary(num))
+                    .filter_map(|&num| page_state.get_symbol_dictionary(num))
                     .flat_map(|dict| dict.exported_symbols.iter())
                     .collect();
 
@@ -282,7 +294,7 @@ fn decode_with_segments(
                     .header
                     .referred_to_segments
                     .iter()
-                    .filter_map(|&num| ctx.get_huffman_table(num))
+                    .filter_map(|&num| page_state.get_huffman_table(num))
                     .cloned()
                     .collect();
 
@@ -291,7 +303,7 @@ fn decode_with_segments(
                     .header
                     .referred_to_segments
                     .last()
-                    .and_then(|&num| ctx.get_symbol_dictionary(num))
+                    .and_then(|&num| page_state.get_symbol_dictionary(num))
                     .and_then(|dict| dict.retained_contexts.as_ref());
 
                 let header = symbol::parse(&mut reader)?;
@@ -299,10 +311,10 @@ fn decode_with_segments(
                     &header,
                     &input_symbols,
                     &referred_tables,
-                    &ctx.standard_tables,
+                    &page_state.standard_tables,
                     retained_contexts,
                 )?;
-                ctx.store_symbol_dictionary(seg.header.segment_number, dictionary);
+                page_state.store_symbol_dictionary(seg.header.segment_number, dictionary);
             }
             SegmentType::ImmediateTextRegion | SegmentType::ImmediateLosslessTextRegion => {
                 // Collect symbols from referred symbol dictionaries (SBSYMS).
@@ -310,7 +322,7 @@ fn decode_with_segments(
                     .header
                     .referred_to_segments
                     .iter()
-                    .filter_map(|&num| ctx.get_symbol_dictionary(num))
+                    .filter_map(|&num| page_state.get_symbol_dictionary(num))
                     .flat_map(|dict| dict.exported_symbols.iter())
                     .collect();
 
@@ -321,13 +333,13 @@ fn decode_with_segments(
                     .header
                     .referred_to_segments
                     .iter()
-                    .filter_map(|&num| ctx.get_huffman_table(num))
+                    .filter_map(|&num| page_state.get_huffman_table(num))
                     .cloned()
                     .collect();
 
                 let header = text::parse(&mut reader, symbols.len() as u32)?;
 
-                if ctx.can_decode_directly(
+                if page_state.can_decode_directly(
                     &page_bitmap,
                     &header.region_info,
                     header.flags.default_pixel,
@@ -336,17 +348,17 @@ fn decode_with_segments(
                         &header,
                         &symbols,
                         &referred_tables,
-                        &ctx.standard_tables,
+                        &page_state.standard_tables,
                         &mut page_bitmap,
-                        decoder_ctx,
+                        scratch_buffers,
                     )?;
                 } else {
                     let region = text::decode(
                         &header,
                         &symbols,
                         &referred_tables,
-                        &ctx.standard_tables,
-                        decoder_ctx,
+                        &page_state.standard_tables,
+                        scratch_buffers,
                     )?;
                     page_bitmap.combine(
                         &region.bitmap,
@@ -355,7 +367,7 @@ fn decode_with_segments(
                         region.combination_operator,
                     );
                 }
-                ctx.page_pristine = false;
+                page_state.page_pristine = false;
             }
             SegmentType::IntermediateTextRegion => {
                 // Collect symbols from referred symbol dictionaries (SBSYMS).
@@ -363,7 +375,7 @@ fn decode_with_segments(
                     .header
                     .referred_to_segments
                     .iter()
-                    .filter_map(|&num| ctx.get_symbol_dictionary(num))
+                    .filter_map(|&num| page_state.get_symbol_dictionary(num))
                     .flat_map(|dict| dict.exported_symbols.iter())
                     .collect();
 
@@ -372,7 +384,7 @@ fn decode_with_segments(
                     .header
                     .referred_to_segments
                     .iter()
-                    .filter_map(|&num| ctx.get_huffman_table(num))
+                    .filter_map(|&num| page_state.get_huffman_table(num))
                     .cloned()
                     .collect();
 
@@ -381,29 +393,34 @@ fn decode_with_segments(
                     &header,
                     &symbols,
                     &referred_tables,
-                    &ctx.standard_tables,
-                    decoder_ctx,
+                    &page_state.standard_tables,
+                    scratch_buffers,
                 )?;
-                ctx.store_region(seg.header.segment_number, region.bitmap);
+                page_state.store_region(seg.header.segment_number, region.bitmap);
             }
             SegmentType::ImmediateHalftoneRegion | SegmentType::ImmediateLosslessHalftoneRegion => {
                 let pattern_dict = seg
                     .header
                     .referred_to_segments
                     .first()
-                    .and_then(|&num| ctx.get_pattern_dictionary(num))
+                    .and_then(|&num| page_state.get_pattern_dictionary(num))
                     .ok_or(SegmentError::MissingPatternDictionary)?;
 
                 let header = halftone::parse(&mut reader)?;
 
-                if ctx.can_decode_directly(
+                if page_state.can_decode_directly(
                     &page_bitmap,
                     &header.region_info,
                     header.flags.initial_pixel_color,
                 ) {
-                    halftone::decode_into(&header, pattern_dict, &mut page_bitmap, decoder_ctx)?;
+                    halftone::decode_into(
+                        &header,
+                        pattern_dict,
+                        &mut page_bitmap,
+                        scratch_buffers,
+                    )?;
                 } else {
-                    let region = halftone::decode(&header, pattern_dict, decoder_ctx)?;
+                    let region = halftone::decode(&header, pattern_dict, scratch_buffers)?;
                     page_bitmap.combine(
                         &region.bitmap,
                         region.bitmap.x_location as i32,
@@ -411,19 +428,19 @@ fn decode_with_segments(
                         region.combination_operator,
                     );
                 }
-                ctx.page_pristine = false;
+                page_state.page_pristine = false;
             }
             SegmentType::IntermediateHalftoneRegion => {
                 let pattern_dict = seg
                     .header
                     .referred_to_segments
                     .first()
-                    .and_then(|&num| ctx.get_pattern_dictionary(num))
+                    .and_then(|&num| page_state.get_pattern_dictionary(num))
                     .ok_or(SegmentError::MissingPatternDictionary)?;
 
                 let header = halftone::parse(&mut reader)?;
-                let region = halftone::decode(&header, pattern_dict, decoder_ctx)?;
-                ctx.store_region(seg.header.segment_number, region.bitmap);
+                let region = halftone::decode(&header, pattern_dict, scratch_buffers)?;
+                page_state.store_region(seg.header.segment_number, region.bitmap);
             }
             SegmentType::IntermediateGenericRefinementRegion => {
                 // Same logic as immediate refinement, but store result instead of combining.
@@ -431,12 +448,12 @@ fn decode_with_segments(
                     .header
                     .referred_to_segments
                     .first()
-                    .and_then(|&num| ctx.get_referred_segment(num))
+                    .and_then(|&num| page_state.get_referred_segment(num))
                     .unwrap_or(&page_bitmap);
 
                 let header = generic_refinement::parse(&mut reader)?;
-                let region = generic_refinement::decode(&header, reference, decoder_ctx)?;
-                ctx.store_region(seg.header.segment_number, region.bitmap);
+                let region = generic_refinement::decode(&header, reference, scratch_buffers)?;
+                page_state.store_region(seg.header.segment_number, region.bitmap);
             }
             SegmentType::ImmediateGenericRefinementRegion
             | SegmentType::ImmediateLosslessGenericRefinementRegion => {
@@ -449,22 +466,22 @@ fn decode_with_segments(
                     .header
                     .referred_to_segments
                     .first()
-                    .and_then(|&num| ctx.get_referred_segment(num));
+                    .and_then(|&num| page_state.get_referred_segment(num));
 
                 let header = generic_refinement::parse(&mut reader)?;
 
                 if let Some(referred_segment) = referred_segment
-                    && ctx.can_decode_directly(&page_bitmap, &header.region_info, false)
+                    && page_state.can_decode_directly(&page_bitmap, &header.region_info, false)
                 {
                     generic_refinement::decode_into(
                         &header,
                         referred_segment,
                         &mut page_bitmap,
-                        decoder_ctx,
+                        scratch_buffers,
                     )?;
                 } else {
                     let reference = referred_segment.unwrap_or(&page_bitmap);
-                    let region = generic_refinement::decode(&header, reference, decoder_ctx)?;
+                    let region = generic_refinement::decode(&header, reference, scratch_buffers)?;
                     page_bitmap.combine(
                         &region.bitmap,
                         region.bitmap.x_location as i32,
@@ -472,14 +489,14 @@ fn decode_with_segments(
                         region.combination_operator,
                     );
                 }
-                ctx.page_pristine = false;
+                page_state.page_pristine = false;
             }
             SegmentType::Tables => {
                 // "Tables – see 7.4.13." (type 53)
                 // "This segment contains data which defines one or more user-supplied
                 // Huffman coding tables." (7.4.13)
                 let table = HuffmanTable::read_custom(&mut reader)?;
-                ctx.store_huffman_table(seg.header.segment_number, table);
+                page_state.store_huffman_table(seg.header.segment_number, table);
             }
             SegmentType::EndOfPage | SegmentType::EndOfFile => {
                 break;
@@ -497,11 +514,9 @@ fn decode_with_segments(
     })
 }
 
-/// Decoding context for a JBIG2 page.
-///
-/// This holds the page information and the page bitmap that regions are
-/// decoded into.
-pub(crate) struct DecodeContext {
+/// Page-level decoding state for a JBIG2 page.
+#[derive(Default)]
+pub(crate) struct PageState {
     /// The parsed page information.
     pub(crate) page_info: PageInformation,
     /// Whether the page bitmap is still in its initial state (not yet painted to).
@@ -519,7 +534,17 @@ pub(crate) struct DecodeContext {
     pub(crate) standard_tables: StandardHuffmanTables,
 }
 
-impl DecodeContext {
+impl PageState {
+    fn reset(&mut self, page_info: PageInformation) {
+        self.page_info = page_info;
+        self.page_pristine = true;
+        self.referred_segments.clear();
+        self.pattern_dictionaries.clear();
+        self.symbol_dictionaries.clear();
+        self.huffman_tables.clear();
+        // Standard tables are lazily built and reused across images.
+    }
+
     /// Check if an immediate region can be decoded directly into the page bitmap.
     fn can_decode_directly(
         &self,
@@ -607,14 +632,12 @@ impl DecodeContext {
     }
 }
 
-/// Create a decode context from page information segment data.
-///
-/// This parses the page information and creates the initial page bitmap
-/// with the default pixel value.
-pub(crate) fn get_ctx(
+/// Parse page information and create the initial page bitmap.
+fn init_page(
     reader: &mut Reader<'_>,
     height_from_stripes: Option<u32>,
-) -> Result<(DecodeContext, Bitmap)> {
+    page: &mut PageState,
+) -> Result<Bitmap> {
     let page_info = parse_page_information(reader)?;
 
     // "A page's bitmap height may be declared in its page information segment
@@ -637,15 +660,7 @@ pub(crate) fn get_ctx(
         page_info.flags.default_pixel != 0,
     );
 
-    let ctx = DecodeContext {
-        page_info,
-        page_pristine: true,
-        referred_segments: Vec::new(),
-        pattern_dictionaries: Vec::new(),
-        symbol_dictionaries: Vec::new(),
-        huffman_tables: Vec::new(),
-        standard_tables: StandardHuffmanTables::new(),
-    };
+    page.reset(page_info);
 
-    Ok((ctx, page_bitmap))
+    Ok(page_bitmap)
 }

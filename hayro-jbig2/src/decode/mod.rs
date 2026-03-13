@@ -39,6 +39,13 @@ pub(crate) enum CombinationOperator {
     Replace,
 }
 
+// Not really a default, just used as a dummy placeholder.
+impl Default for CombinationOperator {
+    fn default() -> Self {
+        Self::Or
+    }
+}
+
 impl CombinationOperator {
     pub(crate) fn from_value(value: u8) -> Result<Self> {
         match value & 0x07 {

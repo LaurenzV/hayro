@@ -3,7 +3,7 @@
 use alloc::vec;
 use alloc::vec::Vec;
 
-use crate::DecoderContext;
+use crate::ScratchBuffers;
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::Bitmap;
 use crate::decode::generic::{ContextGatherer, decode_bitmap_mmr};
@@ -35,7 +35,7 @@ pub(crate) struct GrayScaleParams<'a> {
 pub(crate) fn decode_gray_scale_image(
     data: &[u8],
     params: &GrayScaleParams<'_>,
-    ctx: &mut DecoderContext,
+    ctx: &mut ScratchBuffers,
 ) -> Result<Vec<u32>> {
     // Table C.1: "GSMMR specifies whether MMR is used."
     if params.use_mmr {
@@ -72,7 +72,7 @@ fn decode_mmr(data: &[u8], params: &GrayScaleParams<'_>) -> Result<Vec<u32>> {
 fn decode_arithmetic(
     data: &[u8],
     params: &GrayScaleParams<'_>,
-    ctx: &mut DecoderContext,
+    ctx: &mut ScratchBuffers,
 ) -> Result<Vec<u32>> {
     // `GSW` - The width of the gray-scale image.
     let width = params.width;
@@ -101,8 +101,8 @@ fn decode_arithmetic(
     };
 
     let mut decoder = ArithmeticDecoder::new(data);
-    ctx.contexts_scratch1.clear();
-    ctx.contexts_scratch1
+    ctx.contexts.clear();
+    ctx.contexts
         .resize(1 << template.context_bits(), Context::default());
 
     decode_bitplanes(width, height, stride, bits_per_pixel, |_| {
@@ -126,7 +126,7 @@ fn decode_arithmetic(
                 }
 
                 let context = gatherer.gather(&bitplane, x);
-                let pixel = decoder.decode(&mut ctx.contexts_scratch1[context as usize]);
+                let pixel = decoder.decode(&mut ctx.contexts[context as usize]);
                 let value = pixel != 0;
 
                 bitplane.set_pixel(x, y, value);

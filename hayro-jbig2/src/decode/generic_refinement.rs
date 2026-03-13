@@ -6,7 +6,7 @@ use super::{
     AdaptiveTemplatePixel, RefinementTemplate, RegionBitmap, RegionSegmentInfo,
     parse_refinement_at_pixels, parse_region_segment_info,
 };
-use crate::DecoderContext;
+use crate::ScratchBuffers;
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::Bitmap;
 use crate::error::{DecodeError, ParseError, RegionError, Result, bail};
@@ -16,7 +16,7 @@ use crate::reader::Reader;
 pub(crate) fn decode(
     header: &GenericRefinementRegionHeader<'_>,
     reference: &Bitmap,
-    ctx: &mut DecoderContext,
+    ctx: &mut ScratchBuffers,
 ) -> Result<RegionBitmap> {
     let mut region = Bitmap::new_with(
         header.region_info.width,
@@ -39,7 +39,7 @@ pub(crate) fn decode_into(
     header: &GenericRefinementRegionHeader<'_>,
     reference: &Bitmap,
     region: &mut Bitmap,
-    ctx: &mut DecoderContext,
+    ctx: &mut ScratchBuffers,
 ) -> Result<()> {
     let data = header.data;
     // Validate that the region fits within the reference bitmap.
@@ -68,13 +68,13 @@ pub(crate) fn decode_into(
 
     let mut decoder = ArithmeticDecoder::new(data);
     let num_context_bits = header.template.context_bits();
-    ctx.contexts_scratch1.clear();
-    ctx.contexts_scratch1
+    ctx.contexts.clear();
+    ctx.contexts
         .resize(1 << num_context_bits, Context::default());
 
     decode_bitmap(
         &mut decoder,
-        &mut ctx.contexts_scratch1,
+        &mut ctx.contexts,
         region,
         reference,
         reference_dx,

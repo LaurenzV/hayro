@@ -9,7 +9,7 @@ use super::{
     parse_refinement_at_pixels, parse_region_segment_info,
 };
 use super::{RegionBitmap, generic_refinement};
-use crate::DecoderContext;
+use crate::ScratchBuffers;
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::Bitmap;
 use crate::error::{DecodeError, HuffmanError, ParseError, Result, SymbolError, bail};
@@ -24,7 +24,7 @@ pub(crate) fn decode(
     symbols: &[&Bitmap],
     referred_tables: &[HuffmanTable],
     standard_tables: &StandardHuffmanTables,
-    decoder_ctx: &mut DecoderContext,
+    scratch: &mut ScratchBuffers,
 ) -> Result<RegionBitmap> {
     let mut bitmap = Bitmap::new_with(
         header.region_info.width,
@@ -40,7 +40,7 @@ pub(crate) fn decode(
         referred_tables,
         standard_tables,
         &mut bitmap,
-        decoder_ctx,
+        scratch,
     )?;
 
     Ok(RegionBitmap {
@@ -55,7 +55,7 @@ pub(crate) fn decode_into(
     referred_tables: &[HuffmanTable],
     standard_tables: &StandardHuffmanTables,
     bitmap: &mut Bitmap,
-    decoder_ctx: &mut DecoderContext,
+    scratch: &mut ScratchBuffers,
 ) -> Result<()> {
     if header.flags.use_huffman {
         let mut reader = Reader::new(header.data);
@@ -70,16 +70,10 @@ pub(crate) fn decode_into(
         let mut contexts = TextRegionContexts::new(symbol_code_length);
 
         let num_gr_contexts = 1 << header.flags.refinement_template.context_bits();
-        decoder_ctx.contexts_scratch1.clear();
-        decoder_ctx
-            .contexts_scratch1
-            .resize(num_gr_contexts, Context::default());
+        scratch.contexts.clear();
+        scratch.contexts.resize(num_gr_contexts, Context::default());
 
-        let ctx = DecodeContext::new_arithmetic(
-            &mut decoder,
-            &mut contexts,
-            &mut decoder_ctx.contexts_scratch1,
-        );
+        let ctx = DecodeContext::new_arithmetic(&mut decoder, &mut contexts, &mut scratch.contexts);
         decode_with(ctx, symbols, header, bitmap)?;
     }
 

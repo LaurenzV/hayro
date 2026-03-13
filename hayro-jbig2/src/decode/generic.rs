@@ -5,7 +5,7 @@ use alloc::vec::Vec;
 use super::{
     AdaptiveTemplatePixel, RegionBitmap, RegionSegmentInfo, Template, parse_region_segment_info,
 };
-use crate::DecoderContext;
+use crate::ScratchBuffers;
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::Bitmap;
 use crate::error::{ParseError, RegionError, Result, TemplateError, bail};
@@ -14,7 +14,7 @@ use crate::reader::Reader;
 /// Generic region decoding procedure (6.2).
 pub(crate) fn decode(
     header: &GenericRegionHeader<'_>,
-    ctx: &mut DecoderContext,
+    ctx: &mut ScratchBuffers,
 ) -> Result<RegionBitmap> {
     let mut bitmap = Bitmap::new_with(
         header.region_info.width,
@@ -35,7 +35,7 @@ pub(crate) fn decode(
 pub(crate) fn decode_into(
     header: &GenericRegionHeader<'_>,
     bitmap: &mut Bitmap,
-    ctx: &mut DecoderContext,
+    ctx: &mut ScratchBuffers,
 ) -> Result<()> {
     let data = header.data;
 
@@ -44,15 +44,15 @@ pub(crate) fn decode_into(
         let _ = decode_bitmap_mmr(bitmap, data)?;
     } else {
         let mut decoder = ArithmeticDecoder::new(data);
-        ctx.contexts_scratch1.clear();
-        ctx.contexts_scratch1
+        ctx.contexts.clear();
+        ctx.contexts
             .resize(1 << header.template.context_bits(), Context::default());
 
         // "6.2.5 Decoding using a template and arithmetic coding"
         decode_bitmap_arithmetic_coding(
             bitmap,
             &mut decoder,
-            &mut ctx.contexts_scratch1,
+            &mut ctx.contexts,
             header.template,
             header.tpgdon,
             &header.adaptive_template_pixels,

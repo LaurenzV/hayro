@@ -500,6 +500,12 @@ pub(crate) struct StandardHuffmanTables {
     table_o: Lazy<HuffmanTable>,
 }
 
+impl Default for StandardHuffmanTables {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl StandardHuffmanTables {
     /// Create a new instance.
     pub(crate) fn new() -> Self {

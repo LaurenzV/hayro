@@ -82,6 +82,45 @@ pub(crate) struct PageStriping {
     pub(crate) _max_stripe_size: u16,
 }
 
+// Not really a default, just used as a dummy placeholder.
+impl Default for PageInformation {
+    fn default() -> Self {
+        Self {
+            width: 0,
+            height: 0,
+            _x_resolution: None,
+            _y_resolution: None,
+            flags: PageFlags::default(),
+            _striping: PageStriping::default(),
+        }
+    }
+}
+
+// Not really a default, just used as a dummy placeholder.
+impl Default for PageFlags {
+    fn default() -> Self {
+        Self {
+            is_lossless: false,
+            might_contain_refinements: false,
+            default_pixel: 0,
+            default_combination_operator: CombinationOperator::default(),
+            requires_auxiliary_buffers: false,
+            combination_operator_overridden: false,
+            might_contain_coloured: false,
+        }
+    }
+}
+
+// Not really a default, just used as a dummy placeholder.
+impl Default for PageStriping {
+    fn default() -> Self {
+        Self {
+            _is_striped: false,
+            _max_stripe_size: 0,
+        }
+    }
+}
+
 /// Parse a page information segment (7.4.8).
 pub(crate) fn parse_page_information(reader: &mut Reader<'_>) -> Result<PageInformation> {
     // 7.4.8.1: Page bitmap width
