@@ -15,7 +15,7 @@ use crate::decode::CombinationOperator;
 /// "Pixels decoded by the MMR decoder having the value 'black' shall be treated
 /// as having the value 1. Pixels decoded by the MMR decoder having the value
 /// 'white' shall be treated as having the value 0." (6.2.6)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub(crate) struct Bitmap {
     /// Width in pixels.
     pub(crate) width: u32,
@@ -61,6 +61,18 @@ impl Bitmap {
             x_location,
             y_location,
         }
+    }
+
+    pub(crate) fn reinitialize(&mut self, width: u32, height: u32, default_pixel: bool) {
+        let stride = width.div_ceil(32);
+        let default_word = if default_pixel { !0_u32 } else { 0_u32 };
+        self.width = width;
+        self.height = height;
+        self.stride = stride;
+        self.x_location = 0;
+        self.y_location = 0;
+        self.data.clear();
+        self.data.resize((stride * height) as usize, default_word);
     }
 
     /// Get a pixel value at (x, y).
