@@ -289,7 +289,7 @@ fn decode_segments(
                 let had_unknown_length = seg.header.data_length.is_none();
                 let header = generic::parse(&mut reader, had_unknown_length)?;
 
-                if page_state.can_decode_directly(&page_bitmap, &header.region_info, false) {
+                if page_state.can_decode_directly(page_bitmap, &header.region_info, false) {
                     generic::decode_into(&header, page_bitmap, scratch_buffers)?;
                 } else {
                     let region = generic::decode(&header, scratch_buffers)?;
@@ -376,7 +376,7 @@ fn decode_segments(
                 let header = text::parse(&mut reader, symbols.len() as u32)?;
 
                 if page_state.can_decode_directly(
-                    &page_bitmap,
+                    page_bitmap,
                     &header.region_info,
                     header.flags.default_pixel,
                 ) {
@@ -445,7 +445,7 @@ fn decode_segments(
                 let header = halftone::parse(&mut reader)?;
 
                 if page_state.can_decode_directly(
-                    &page_bitmap,
+                    page_bitmap,
                     &header.region_info,
                     header.flags.initial_pixel_color,
                 ) {
@@ -480,7 +480,7 @@ fn decode_segments(
                     .referred_to_segments
                     .first()
                     .and_then(|&num| page_state.get_referred_segment(num))
-                    .unwrap_or(&page_bitmap);
+                    .unwrap_or(page_bitmap);
 
                 let header = generic_refinement::parse(&mut reader)?;
                 let region = generic_refinement::decode(&header, reference, scratch_buffers)?;
@@ -502,7 +502,7 @@ fn decode_segments(
                 let header = generic_refinement::parse(&mut reader)?;
 
                 if let Some(referred_segment) = referred_segment
-                    && page_state.can_decode_directly(&page_bitmap, &header.region_info, false)
+                    && page_state.can_decode_directly(page_bitmap, &header.region_info, false)
                 {
                     generic_refinement::decode_into(
                         &header,
@@ -511,7 +511,7 @@ fn decode_segments(
                         scratch_buffers,
                     )?;
                 } else {
-                    let reference = referred_segment.unwrap_or(&page_bitmap);
+                    let reference = referred_segment.unwrap_or(page_bitmap);
                     let region = generic_refinement::decode(&header, reference, scratch_buffers)?;
                     page_bitmap.combine(
                         &region.bitmap,
