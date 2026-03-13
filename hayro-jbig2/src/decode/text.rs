@@ -98,7 +98,9 @@ pub(crate) fn decode_with(
 
     while instance_count < header.num_instances {
         let delta_t = ctx.read_strip_delta_t(strip_size)?;
-        strip_t = strip_t.checked_add(delta_t).ok_or(OverflowError::PlacementCoordinate)?;
+        strip_t = strip_t
+            .checked_add(delta_t)
+            .ok_or(OverflowError::PlacementCoordinate)?;
 
         let mut first_symbol_in_strip = true;
         let mut current_s = 0;

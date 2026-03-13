@@ -15,7 +15,9 @@ use crate::decode::{
     parse_refinement_at_pixels,
 };
 use crate::decode::{generic, generic_refinement};
-use crate::error::{DecodeError, HuffmanError, OverflowError, ParseError, RegionError, Result, SymbolError, bail};
+use crate::error::{
+    DecodeError, HuffmanError, OverflowError, ParseError, RegionError, Result, SymbolError, bail,
+};
 use crate::huffman_table::{HuffmanTable, StandardHuffmanTables};
 use crate::integer_decoder::IntegerDecoder;
 use crate::reader::Reader;
