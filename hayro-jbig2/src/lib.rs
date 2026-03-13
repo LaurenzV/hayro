@@ -36,6 +36,9 @@ pub trait Decoder {
     fn next_line(&mut self);
 }
 
+#[cfg(feature = "image")]
+pub mod integration;
+
 mod arithmetic_decoder;
 mod bitmap;
 mod decode;

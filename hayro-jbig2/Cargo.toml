@@ -10,12 +10,13 @@ readme = "README.md"
 exclude = ["/tests/", "/manifest_*.json", "/sync.py", "/generate_huffman_tables.py"]
 
 [features]
-default = ["std"]
+default = ["std", "image"]
 std = []
+image = ["dep:image", "std"]
 
 [dependencies]
 hayro-ccitt = { workspace = true }
-
+image = { workspace = true, default-features = false, optional = true }
 
 [lints]
 workspace = true

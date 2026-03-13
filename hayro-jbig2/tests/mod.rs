@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
-use image::{GrayImage, ImageFormat, Rgba, RgbaImage};
+use image::{GrayImage, ImageDecoder, ImageFormat, Rgba, RgbaImage};
 use indicatif::{ProgressBar, ProgressStyle};
 use rayon::prelude::*;
 use serde::Deserialize;
@@ -288,8 +288,12 @@ fn run_asset_test(asset: &AssetEntry) -> Result<(), String> {
         return Ok(());
     }
 
-    // Convert 1-bit packed bitmap to 8-bit grayscale for comparison.
-    let luma = bitmap_to_luma(&image);
+    let (width, height) = image.dimensions();
+    let mut buf = vec![0u8; image.total_bytes() as usize];
+    image
+        .read_image(&mut buf)
+        .map_err(|err| format!("read_image failed: {err}"))?;
+    let luma = GrayImage::from_raw(width, height, buf).expect("buffer size mismatch");
 
     let reference_path = asset.snapshot_stem.with_extension("png");
     let snapshot_path = SNAPSHOTS_PATH.join(&reference_path);
@@ -339,42 +343,6 @@ fn run_asset_test(asset: &AssetEntry) -> Result<(), String> {
     }
 
     Ok(())
-}
-
-/// Convert a JBIG2 bitmap to a grayscale image.
-///
-/// In JBIG2, true = black, false = white. We convert to grayscale where:
-/// - false (white in JBIG2) -> 255 (white in image)
-/// - true (black in JBIG2) -> 0 (black in image)
-fn bitmap_to_luma(image: &hayro_jbig2::Image) -> GrayImage {
-    let width = image.width;
-    let height = image.height;
-
-    struct LumaDecoder {
-        buffer: Vec<u8>,
-    }
-
-    impl hayro_jbig2::Decoder for LumaDecoder {
-        fn push_pixel(&mut self, black: bool) {
-            self.buffer.push(if black { 0 } else { 255 });
-        }
-
-        fn push_pixel_chunk(&mut self, black: bool, chunk_count: u32) {
-            let luma = if black { 0 } else { 255 };
-            self.buffer
-                .extend(std::iter::repeat_n(luma, chunk_count as usize * 8));
-        }
-
-        fn next_line(&mut self) {}
-    }
-
-    let mut decoder = LumaDecoder {
-        buffer: Vec::with_capacity((width * height) as usize),
-    };
-
-    image.decode(&mut decoder);
-
-    GrayImage::from_raw(width, height, decoder.buffer).expect("buffer size mismatch")
 }
 
 fn get_diff(expected_image: &RgbaImage, actual_image: &RgbaImage) -> (RgbaImage, u32) {
