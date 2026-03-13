@@ -306,8 +306,9 @@ impl CharStringParser<'_> {
         let b = s.read_bytes(4).ok_or(OutlineError::ReadOutOfBounds)?;
         let num = i32::from_be_bytes([b[0], b[1], b[2], b[3]]);
 
-        // Make sure number is in-range.
-        debug_assert!((num as f32 as i32) == num);
+        if !((num as f32 as i32) == num) {
+            return Err(OutlineError::TooLargeNumber);
+        }
 
         self.stack.push(num as f32)?;
         Ok(())

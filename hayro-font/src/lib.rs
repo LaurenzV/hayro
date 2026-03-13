@@ -237,4 +237,5 @@ pub enum OutlineError {
     InvalidSubroutineIndex,
     NoLocalSubroutines,
     InvalidSeacCode,
+    TooLargeNumber,
 }
