@@ -289,7 +289,7 @@ fn run_asset_test(asset: &AssetEntry) -> Result<(), String> {
     }
 
     let (width, height) = image.dimensions();
-    let mut buf = vec![0u8; image.total_bytes() as usize];
+    let mut buf = vec![0_u8; image.total_bytes() as usize];
     image
         .read_image(&mut buf)
         .map_err(|err| format!("read_image failed: {err}"))?;
