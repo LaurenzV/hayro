@@ -5,8 +5,7 @@ use crate::error::{ParseError, Result};
 use crate::reader::Reader;
 
 /// Parsed page information segment (7.4.8).
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub(crate) struct PageInformation {
     /// "This is a four-byte value containing the width in pixels of the page's
     /// bitmap." (7.4.8.1)
@@ -67,8 +66,7 @@ pub(crate) struct PageFlags {
 }
 
 /// Page striping information (7.4.8.6, Figure 57).
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub(crate) struct PageStriping {
     /// "Bit 15: Page is striped. If the 'page is striped' bit is 1, then the page
     /// may have end of stripe segments associated with it." (7.4.8.6)

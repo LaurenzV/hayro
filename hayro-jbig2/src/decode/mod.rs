@@ -25,8 +25,7 @@ pub(crate) struct RegionBitmap {
 
 /// "These operators describe how the segment's bitmap is to be combined with
 /// the page bitmap." (7.4.1.5)
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub(crate) enum CombinationOperator {
     /// 0 OR
     #[default]
