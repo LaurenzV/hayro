@@ -6,6 +6,7 @@ use alloc::vec::Vec;
 use super::RegionBitmap;
 use super::pattern::PatternDictionary;
 use super::{CombinationOperator, RegionSegmentInfo, Template, parse_region_segment_info};
+use crate::DecoderContext;
 use crate::bitmap::Bitmap;
 use crate::error::{ParseError, RegionError, Result};
 use crate::gray_scale::{GrayScaleParams, decode_gray_scale_image};
@@ -15,6 +16,7 @@ use crate::reader::Reader;
 pub(crate) fn decode(
     header: &HalftoneRegionHeader<'_>,
     pattern_dict: &PatternDictionary,
+    ctx: &mut DecoderContext,
 ) -> Result<RegionBitmap> {
     let region = &header.region_info;
 
@@ -26,7 +28,7 @@ pub(crate) fn decode(
         header.flags.initial_pixel_color,
     );
 
-    decode_into(header, pattern_dict, &mut htreg)?;
+    decode_into(header, pattern_dict, &mut htreg, ctx)?;
 
     Ok(RegionBitmap {
         bitmap: htreg,
@@ -38,6 +40,7 @@ pub(crate) fn decode_into(
     header: &HalftoneRegionHeader<'_>,
     pattern_dict: &PatternDictionary,
     htreg: &mut Bitmap,
+    ctx: &mut DecoderContext,
 ) -> Result<()> {
     let skip_bitmap = if header.flags.enable_skip {
         Some(compute_skip_bitmap(header, pattern_dict, htreg)?)
@@ -61,7 +64,7 @@ pub(crate) fn decode_into(
         template: header.flags.template,
         skip_mask: skip_bitmap.as_deref(),
     };
-    let gi = decode_gray_scale_image(header.data, &gs_params)?;
+    let gi = decode_gray_scale_image(header.data, &gs_params, ctx)?;
 
     // "5) Place sequentially the patterns corresponding to the values in GI into
     // HTREG by the procedure described in 6.6.5.2." (6.6.5)

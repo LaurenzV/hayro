@@ -1,6 +1,7 @@
 //! Pattern dictionary segment parsing and decoding (7.4.4, 6.7).
 
 use super::{AdaptiveTemplatePixel, Template, generic};
+use crate::DecoderContext;
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::Bitmap;
 use crate::error::{DecodeError, ParseError, Result};
@@ -9,7 +10,10 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 /// Decode a pattern dictionary segment (7.4.4.2, 6.7).
-pub(crate) fn decode(header: &PatternDictionaryHeader<'_>) -> Result<PatternDictionary> {
+pub(crate) fn decode(
+    header: &PatternDictionaryHeader<'_>,
+    decoder_ctx: &mut DecoderContext,
+) -> Result<PatternDictionary> {
     let pattern_width = header.pattern_width as u32;
     let pattern_height = header.pattern_height as u32;
     let num_patterns = header
@@ -52,12 +56,15 @@ pub(crate) fn decode(header: &PatternDictionaryHeader<'_>) -> Result<PatternDict
         };
 
         let mut decoder = ArithmeticDecoder::new(header.data);
-        let mut contexts = vec![Context::default(); 1 << header.template.context_bits()];
+        decoder_ctx.contexts_scratch1.clear();
+        decoder_ctx
+            .contexts_scratch1
+            .resize(1 << header.template.context_bits(), Context::default());
 
         generic::decode_bitmap_arithmetic_coding(
             &mut collective_bitmap,
             &mut decoder,
-            &mut contexts,
+            &mut decoder_ctx.contexts_scratch1,
             header.template,
             false,
             &at_pixels,

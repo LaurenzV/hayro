@@ -1,18 +1,21 @@
 //! Generic region segment parsing and decoding (7.4.6, 6.2).
 
-use alloc::vec;
 use alloc::vec::Vec;
 
 use super::{
     AdaptiveTemplatePixel, RegionBitmap, RegionSegmentInfo, Template, parse_region_segment_info,
 };
+use crate::DecoderContext;
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::Bitmap;
 use crate::error::{ParseError, RegionError, Result, TemplateError, bail};
 use crate::reader::Reader;
 
 /// Generic region decoding procedure (6.2).
-pub(crate) fn decode(header: &GenericRegionHeader<'_>) -> Result<RegionBitmap> {
+pub(crate) fn decode(
+    header: &GenericRegionHeader<'_>,
+    ctx: &mut DecoderContext,
+) -> Result<RegionBitmap> {
     let mut bitmap = Bitmap::new_with(
         header.region_info.width,
         header.region_info.height,
@@ -21,7 +24,7 @@ pub(crate) fn decode(header: &GenericRegionHeader<'_>) -> Result<RegionBitmap> {
         false,
     );
 
-    decode_into(header, &mut bitmap)?;
+    decode_into(header, &mut bitmap, ctx)?;
 
     Ok(RegionBitmap {
         bitmap,
@@ -29,7 +32,11 @@ pub(crate) fn decode(header: &GenericRegionHeader<'_>) -> Result<RegionBitmap> {
     })
 }
 
-pub(crate) fn decode_into(header: &GenericRegionHeader<'_>, bitmap: &mut Bitmap) -> Result<()> {
+pub(crate) fn decode_into(
+    header: &GenericRegionHeader<'_>,
+    bitmap: &mut Bitmap,
+    ctx: &mut DecoderContext,
+) -> Result<()> {
     let data = header.data;
 
     if header.mmr {
@@ -37,13 +44,15 @@ pub(crate) fn decode_into(header: &GenericRegionHeader<'_>, bitmap: &mut Bitmap)
         let _ = decode_bitmap_mmr(bitmap, data)?;
     } else {
         let mut decoder = ArithmeticDecoder::new(data);
-        let mut contexts = vec![Context::default(); 1 << header.template.context_bits()];
+        ctx.contexts_scratch1.clear();
+        ctx.contexts_scratch1
+            .resize(1 << header.template.context_bits(), Context::default());
 
         // "6.2.5 Decoding using a template and arithmetic coding"
         decode_bitmap_arithmetic_coding(
             bitmap,
             &mut decoder,
-            &mut contexts,
+            &mut ctx.contexts_scratch1,
             header.template,
             header.tpgdon,
             &header.adaptive_template_pixels,

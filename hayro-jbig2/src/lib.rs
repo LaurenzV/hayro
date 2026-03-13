@@ -19,6 +19,15 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 
+use crate::arithmetic_decoder::Context;
+
+/// A reusable context for decoding JBIG2 images.
+#[derive(Default)]
+pub struct DecoderContext {
+    /// A reusable buffer for storing arithmetic decoder contexts.
+    pub(crate) contexts_scratch1: Vec<Context>,
+}
+
 /// A decoder for JBIG2 images.
 pub trait Decoder {
     /// Push a single pixel to the output.
@@ -150,15 +159,37 @@ impl Image {
 /// The file is expected to use the sequential or random-access organization,
 /// as defined in Annex D.1 and D.2.
 pub fn decode(data: &[u8]) -> Result<Image> {
-    let file = parse_file(data)?;
-    decode_with_segments(&file.segments)
+    let mut decoder_ctx = DecoderContext::default();
+    decode_with(data, &mut decoder_ctx)
 }
 
-/// Decode an embedded JBIG2 image. with the given global segments.
+/// Decode a JBIG2 file with the given [`DecoderContext`].
+///
+/// This is useful in case you want to convert multiple JBIG2 images,
+/// as it allows `hayro-jbig2` to reuse allocations during decoding.
+pub fn decode_with(data: &[u8], decoder_ctx: &mut DecoderContext) -> Result<Image> {
+    let file = parse_file(data)?;
+    decode_with_segments(&file.segments, decoder_ctx)
+}
+
+/// Decode an embedded JBIG2 image with the given global segments.
 ///
 /// The file is expected to use the embedded organization defined in
 /// Annex D.3.
 pub fn decode_embedded(data: &[u8], globals: Option<&[u8]>) -> Result<Image> {
+    let mut ctx = DecoderContext::default();
+    decode_embedded_with_context(data, globals, &mut ctx)
+}
+
+/// Decode an embedded JBIG2 image with the given global segments and [`DecoderContext`].
+///
+/// This is useful in case you want to convert multiple JBIG2 images,
+/// as it allows `hayro-jbig2` to reuse allocations during decoding.
+pub fn decode_embedded_with_context(
+    data: &[u8],
+    globals: Option<&[u8]>,
+    ctx: &mut DecoderContext,
+) -> Result<Image> {
     let mut segments = Vec::new();
     if let Some(globals_data) = globals {
         let mut reader = Reader::new(globals_data);
@@ -170,10 +201,13 @@ pub fn decode_embedded(data: &[u8], globals: Option<&[u8]>) -> Result<Image> {
 
     segments.sort_by_key(|seg| seg.header.segment_number);
 
-    decode_with_segments(&segments)
+    decode_with_segments(&segments, ctx)
 }
 
-fn decode_with_segments(segments: &[segment::Segment<'_>]) -> Result<Image> {
+fn decode_with_segments(
+    segments: &[segment::Segment<'_>],
+    decoder_ctx: &mut DecoderContext,
+) -> Result<Image> {
     // Pre-scan for stripe height from EndOfStripe segments.
     let height_from_stripes = segments
         .iter()
@@ -205,9 +239,9 @@ fn decode_with_segments(segments: &[segment::Segment<'_>]) -> Result<Image> {
                 let header = generic::parse(&mut reader, had_unknown_length)?;
 
                 if ctx.can_decode_directly(&page_bitmap, &header.region_info, false) {
-                    generic::decode_into(&header, &mut page_bitmap)?;
+                    generic::decode_into(&header, &mut page_bitmap, decoder_ctx)?;
                 } else {
-                    let region = generic::decode(&header)?;
+                    let region = generic::decode(&header, decoder_ctx)?;
                     page_bitmap.combine(
                         &region.bitmap,
                         region.bitmap.x_location as i32,
@@ -220,12 +254,12 @@ fn decode_with_segments(segments: &[segment::Segment<'_>]) -> Result<Image> {
             SegmentType::IntermediateGenericRegion => {
                 // Intermediate segments cannot have unknown length.
                 let header = generic::parse(&mut reader, false)?;
-                let region = generic::decode(&header)?;
+                let region = generic::decode(&header, decoder_ctx)?;
                 ctx.store_region(seg.header.segment_number, region.bitmap);
             }
             SegmentType::PatternDictionary => {
                 let header = pattern::parse(&mut reader)?;
-                let dictionary = pattern::decode(&header)?;
+                let dictionary = pattern::decode(&header, decoder_ctx)?;
                 ctx.store_pattern_dictionary(seg.header.segment_number, dictionary);
             }
             SegmentType::SymbolDictionary => {
@@ -301,10 +335,16 @@ fn decode_with_segments(segments: &[segment::Segment<'_>]) -> Result<Image> {
                         &referred_tables,
                         &ctx.standard_tables,
                         &mut page_bitmap,
+                        decoder_ctx,
                     )?;
                 } else {
-                    let region =
-                        text::decode(&header, &symbols, &referred_tables, &ctx.standard_tables)?;
+                    let region = text::decode(
+                        &header,
+                        &symbols,
+                        &referred_tables,
+                        &ctx.standard_tables,
+                        decoder_ctx,
+                    )?;
                     page_bitmap.combine(
                         &region.bitmap,
                         region.bitmap.x_location as i32,
@@ -334,8 +374,13 @@ fn decode_with_segments(segments: &[segment::Segment<'_>]) -> Result<Image> {
                     .collect();
 
                 let header = text::parse(&mut reader, symbols.len() as u32)?;
-                let region =
-                    text::decode(&header, &symbols, &referred_tables, &ctx.standard_tables)?;
+                let region = text::decode(
+                    &header,
+                    &symbols,
+                    &referred_tables,
+                    &ctx.standard_tables,
+                    decoder_ctx,
+                )?;
                 ctx.store_region(seg.header.segment_number, region.bitmap);
             }
             SegmentType::ImmediateHalftoneRegion | SegmentType::ImmediateLosslessHalftoneRegion => {
@@ -353,9 +398,9 @@ fn decode_with_segments(segments: &[segment::Segment<'_>]) -> Result<Image> {
                     &header.region_info,
                     header.flags.initial_pixel_color,
                 ) {
-                    halftone::decode_into(&header, pattern_dict, &mut page_bitmap)?;
+                    halftone::decode_into(&header, pattern_dict, &mut page_bitmap, decoder_ctx)?;
                 } else {
-                    let region = halftone::decode(&header, pattern_dict)?;
+                    let region = halftone::decode(&header, pattern_dict, decoder_ctx)?;
                     page_bitmap.combine(
                         &region.bitmap,
                         region.bitmap.x_location as i32,
@@ -374,7 +419,7 @@ fn decode_with_segments(segments: &[segment::Segment<'_>]) -> Result<Image> {
                     .ok_or(SegmentError::MissingPatternDictionary)?;
 
                 let header = halftone::parse(&mut reader)?;
-                let region = halftone::decode(&header, pattern_dict)?;
+                let region = halftone::decode(&header, pattern_dict, decoder_ctx)?;
                 ctx.store_region(seg.header.segment_number, region.bitmap);
             }
             SegmentType::IntermediateGenericRefinementRegion => {
@@ -387,7 +432,7 @@ fn decode_with_segments(segments: &[segment::Segment<'_>]) -> Result<Image> {
                     .unwrap_or(&page_bitmap);
 
                 let header = generic_refinement::parse(&mut reader)?;
-                let region = generic_refinement::decode(&header, reference)?;
+                let region = generic_refinement::decode(&header, reference, decoder_ctx)?;
                 ctx.store_region(seg.header.segment_number, region.bitmap);
             }
             SegmentType::ImmediateGenericRefinementRegion
@@ -408,10 +453,15 @@ fn decode_with_segments(segments: &[segment::Segment<'_>]) -> Result<Image> {
                 if let Some(referred_segment) = referred_segment
                     && ctx.can_decode_directly(&page_bitmap, &header.region_info, false)
                 {
-                    generic_refinement::decode_into(&header, referred_segment, &mut page_bitmap)?;
+                    generic_refinement::decode_into(
+                        &header,
+                        referred_segment,
+                        &mut page_bitmap,
+                        decoder_ctx,
+                    )?;
                 } else {
                     let reference = referred_segment.unwrap_or(&page_bitmap);
-                    let region = generic_refinement::decode(&header, reference)?;
+                    let region = generic_refinement::decode(&header, reference, decoder_ctx)?;
                     page_bitmap.combine(
                         &region.bitmap,
                         region.bitmap.x_location as i32,

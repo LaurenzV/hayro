@@ -1,12 +1,12 @@
 //! Generic refinement region segment parsing and decoding (7.4.7, 6.3).
 
-use alloc::vec;
 use alloc::vec::Vec;
 
 use super::{
     AdaptiveTemplatePixel, RefinementTemplate, RegionBitmap, RegionSegmentInfo,
     parse_refinement_at_pixels, parse_region_segment_info,
 };
+use crate::DecoderContext;
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::Bitmap;
 use crate::error::{DecodeError, ParseError, RegionError, Result, bail};
@@ -16,6 +16,7 @@ use crate::reader::Reader;
 pub(crate) fn decode(
     header: &GenericRefinementRegionHeader<'_>,
     reference: &Bitmap,
+    ctx: &mut DecoderContext,
 ) -> Result<RegionBitmap> {
     let mut region = Bitmap::new_with(
         header.region_info.width,
@@ -25,7 +26,7 @@ pub(crate) fn decode(
         false,
     );
 
-    decode_into(header, reference, &mut region)?;
+    decode_into(header, reference, &mut region, ctx)?;
 
     Ok(RegionBitmap {
         bitmap: region,
@@ -38,6 +39,7 @@ pub(crate) fn decode_into(
     header: &GenericRefinementRegionHeader<'_>,
     reference: &Bitmap,
     region: &mut Bitmap,
+    ctx: &mut DecoderContext,
 ) -> Result<()> {
     let data = header.data;
     // Validate that the region fits within the reference bitmap.
@@ -66,11 +68,13 @@ pub(crate) fn decode_into(
 
     let mut decoder = ArithmeticDecoder::new(data);
     let num_context_bits = header.template.context_bits();
-    let mut contexts = vec![Context::default(); 1 << num_context_bits];
+    ctx.contexts_scratch1.clear();
+    ctx.contexts_scratch1
+        .resize(1 << num_context_bits, Context::default());
 
     decode_bitmap(
         &mut decoder,
-        &mut contexts,
+        &mut ctx.contexts_scratch1,
         region,
         reference,
         reference_dx,
