@@ -70,8 +70,8 @@ mod symbol_id_decoder;
 
 use error::bail;
 pub use error::{
-    DecodeError, FormatError, HuffmanError, ParseError, RegionError, Result, SegmentError,
-    SymbolError, TemplateError,
+    DecodeError, FormatError, HuffmanError, OverflowError, ParseError, RegionError, Result,
+    SegmentError, SymbolError, TemplateError,
 };
 
 use crate::file::parse_segments_sequential;

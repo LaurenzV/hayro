@@ -20,7 +20,7 @@ pub enum DecodeError {
     /// Errors related to symbol handling.
     Symbol(SymbolError),
     /// Arithmetic overflow in calculations.
-    Overflow,
+    Overflow(OverflowError),
     /// Feature not yet implemented.
     Unsupported,
 }
@@ -108,6 +108,19 @@ pub enum SymbolError {
     Invalid,
 }
 
+/// Arithmetic overflow errors.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OverflowError {
+    /// Bitmap dimension computation overflowed.
+    BitmapDimension,
+    /// Placement coordinate computation overflowed.
+    PlacementCoordinate,
+    /// Reference offset computation overflowed.
+    ReferenceOffset,
+    /// Index computation overflowed.
+    Index,
+}
+
 impl fmt::Display for DecodeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -118,8 +131,19 @@ impl fmt::Display for DecodeError {
             Self::Region(e) => write!(f, "{e}"),
             Self::Template(e) => write!(f, "{e}"),
             Self::Symbol(e) => write!(f, "{e}"),
-            Self::Overflow => write!(f, "arithmetic overflow"),
+            Self::Overflow(e) => write!(f, "{e}"),
             Self::Unsupported => write!(f, "unsupported feature"),
+        }
+    }
+}
+
+impl fmt::Display for OverflowError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::BitmapDimension => write!(f, "overflow in bitmap dimension computation"),
+            Self::PlacementCoordinate => write!(f, "overflow in placement coordinate computation"),
+            Self::ReferenceOffset => write!(f, "overflow in reference offset computation"),
+            Self::Index => write!(f, "overflow in index computation"),
         }
     }
 }
@@ -205,6 +229,7 @@ impl core::error::Error for HuffmanError {}
 impl core::error::Error for RegionError {}
 impl core::error::Error for TemplateError {}
 impl core::error::Error for SymbolError {}
+impl core::error::Error for OverflowError {}
 
 impl From<ParseError> for DecodeError {
     fn from(e: ParseError) -> Self {
@@ -245,6 +270,12 @@ impl From<TemplateError> for DecodeError {
 impl From<SymbolError> for DecodeError {
     fn from(e: SymbolError) -> Self {
         Self::Symbol(e)
+    }
+}
+
+impl From<OverflowError> for DecodeError {
+    fn from(e: OverflowError) -> Self {
+        Self::Overflow(e)
     }
 }
 

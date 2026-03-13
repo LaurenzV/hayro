@@ -12,7 +12,7 @@ use super::{RegionBitmap, generic_refinement};
 use crate::ScratchBuffers;
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::Bitmap;
-use crate::error::{DecodeError, HuffmanError, ParseError, Result, SymbolError, bail};
+use crate::error::{HuffmanError, OverflowError, ParseError, Result, SymbolError, bail};
 use crate::huffman_table::{HuffmanTable, StandardHuffmanTables, TableLine};
 use crate::integer_decoder::IntegerDecoder;
 use crate::reader::Reader;
@@ -92,13 +92,13 @@ pub(crate) fn decode_with(
     let mut strip_t = ctx
         .read_strip_delta_t(strip_size)?
         .checked_neg()
-        .ok_or(DecodeError::Overflow)?;
+        .ok_or(OverflowError::PlacementCoordinate)?;
     let mut first_s: i32 = 0;
     let mut instance_count = 0;
 
     while instance_count < header.num_instances {
         let delta_t = ctx.read_strip_delta_t(strip_size)?;
-        strip_t = strip_t.checked_add(delta_t).ok_or(DecodeError::Overflow)?;
+        strip_t = strip_t.checked_add(delta_t).ok_or(OverflowError::PlacementCoordinate)?;
 
         let mut first_symbol_in_strip = true;
         let mut current_s = 0;
@@ -113,7 +113,7 @@ pub(crate) fn decode_with(
                 let delta_first_s = ctx.read_first_s()?;
                 first_s = first_s
                     .checked_add(delta_first_s)
-                    .ok_or(DecodeError::Overflow)?;
+                    .ok_or(OverflowError::PlacementCoordinate)?;
                 current_s = first_s;
                 first_symbol_in_strip = false;
             } else {
@@ -125,13 +125,13 @@ pub(crate) fn decode_with(
                 current_s = current_s
                     .checked_add(delta_s)
                     .and_then(|v| v.checked_add(header.flags.delta_s_offset as i32))
-                    .ok_or(DecodeError::Overflow)?;
+                    .ok_or(OverflowError::PlacementCoordinate)?;
             }
 
             let current_t = ctx.read_symbol_t(strip_size, header.flags.log_strip_size)?;
             let symbol_t = strip_t
                 .checked_add(current_t)
-                .ok_or(DecodeError::Overflow)?;
+                .ok_or(OverflowError::PlacementCoordinate)?;
 
             let symbol_id = ctx.read_symbol_id()?;
 
@@ -151,14 +151,14 @@ pub(crate) fn decode_with(
             {
                 current_s = current_s
                     .checked_add(symbol_width - 1)
-                    .ok_or(DecodeError::Overflow)?;
+                    .ok_or(OverflowError::PlacementCoordinate)?;
             } else if header.flags.transposed
                 && (header.flags.reference_corner == ReferenceCorner::BottomLeft
                     || header.flags.reference_corner == ReferenceCorner::BottomRight)
             {
                 current_s = current_s
                     .checked_add(symbol_height - 1)
-                    .ok_or(DecodeError::Overflow)?;
+                    .ok_or(OverflowError::PlacementCoordinate)?;
             }
 
             let symbol_s = current_s;
@@ -191,14 +191,14 @@ pub(crate) fn decode_with(
             {
                 current_s = current_s
                     .checked_add(symbol_width - 1)
-                    .ok_or(DecodeError::Overflow)?;
+                    .ok_or(OverflowError::PlacementCoordinate)?;
             } else if header.flags.transposed
                 && (header.flags.reference_corner == ReferenceCorner::TopLeft
                     || header.flags.reference_corner == ReferenceCorner::TopRight)
             {
                 current_s = current_s
                     .checked_add(symbol_height - 1)
-                    .ok_or(DecodeError::Overflow)?;
+                    .ok_or(OverflowError::PlacementCoordinate)?;
             }
 
             instance_count += 1;
@@ -531,18 +531,18 @@ fn decode_symbol_instance_bitmap(
 
     let refined_width = (reference_bitmap.width as i32)
         .checked_add(rdw)
-        .ok_or(DecodeError::Overflow)? as u32;
+        .ok_or(OverflowError::BitmapDimension)? as u32;
     let refined_height = (reference_bitmap.height as i32)
         .checked_add(rdh)
-        .ok_or(DecodeError::Overflow)? as u32;
+        .ok_or(OverflowError::BitmapDimension)? as u32;
     let reference_x_offset = rdw
         .div_euclid(2)
         .checked_add(rdx)
-        .ok_or(DecodeError::Overflow)?;
+        .ok_or(OverflowError::ReferenceOffset)?;
     let reference_y_offset = rdh
         .div_euclid(2)
         .checked_add(rdy)
-        .ok_or(DecodeError::Overflow)?;
+        .ok_or(OverflowError::ReferenceOffset)?;
 
     let mut refined_bitmap = Bitmap::new(refined_width, refined_height);
 

@@ -9,7 +9,7 @@ use super::{
 use crate::ScratchBuffers;
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::Bitmap;
-use crate::error::{DecodeError, ParseError, RegionError, Result, bail};
+use crate::error::{OverflowError, ParseError, RegionError, Result, bail};
 use crate::reader::Reader;
 
 /// Generic refinement region decoding procedure (6.3).
@@ -56,7 +56,7 @@ pub(crate) fn decode_into(
                 .ok()
                 .and_then(|h| r.checked_sub(h))
         })
-        .ok_or(DecodeError::Overflow)?;
+        .ok_or(OverflowError::ReferenceOffset)?;
     let reference_dy = i32::try_from(reference.y_location)
         .ok()
         .and_then(|r: i32| {
@@ -64,7 +64,7 @@ pub(crate) fn decode_into(
                 .ok()
                 .and_then(|h| r.checked_sub(h))
         })
-        .ok_or(DecodeError::Overflow)?;
+        .ok_or(OverflowError::ReferenceOffset)?;
 
     let mut decoder = ArithmeticDecoder::new(data);
     let num_context_bits = header.template.context_bits();

@@ -4,7 +4,7 @@ use super::{AdaptiveTemplatePixel, Template, generic};
 use crate::ScratchBuffers;
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
 use crate::bitmap::Bitmap;
-use crate::error::{DecodeError, ParseError, Result};
+use crate::error::{OverflowError, ParseError, Result};
 use crate::reader::Reader;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -19,14 +19,14 @@ pub(crate) fn decode(
     let num_patterns = header
         .num_patterns
         .checked_add(1)
-        .ok_or(DecodeError::Overflow)?;
+        .ok_or(OverflowError::BitmapDimension)?;
 
     // "1) Create a bitmap B_HDC. The height of this bitmap is HDPH. The width
     // of the bitmap is (GRAYMAX + 1) × HDPW. This bitmap contains all the
     // patterns concatenated left to right." (6.7.5)
     let collective_width = num_patterns
         .checked_mul(pattern_width)
-        .ok_or(DecodeError::Overflow)?;
+        .ok_or(OverflowError::BitmapDimension)?;
 
     let mut collective_bitmap = Bitmap::new(collective_width, pattern_height);
 

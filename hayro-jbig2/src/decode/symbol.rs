@@ -15,7 +15,7 @@ use crate::decode::{
     parse_refinement_at_pixels,
 };
 use crate::decode::{generic, generic_refinement};
-use crate::error::{DecodeError, HuffmanError, ParseError, RegionError, Result, SymbolError, bail};
+use crate::error::{DecodeError, HuffmanError, OverflowError, ParseError, RegionError, Result, SymbolError, bail};
 use crate::huffman_table::{HuffmanTable, StandardHuffmanTables};
 use crate::integer_decoder::IntegerDecoder;
 use crate::reader::Reader;
@@ -629,7 +629,7 @@ fn decode_height_class_collective_bitmap(ctx: &mut SymbolDecodeContext<'_>) -> R
         ctx.symbols.new.push(symbol);
         x_offset = x_offset
             .checked_add(symbol_width)
-            .ok_or(DecodeError::Overflow)?;
+            .ok_or(OverflowError::Index)?;
     }
 
     Ok(())
@@ -660,7 +660,7 @@ fn export_symbols(ctx: &mut SymbolDecodeContext<'_>) -> Result<Vec<Bitmap>> {
     while index < total_symbols {
         let run_length = read_run_length()?;
 
-        let end_index = index.checked_add(run_length).ok_or(DecodeError::Overflow)?;
+        let end_index = index.checked_add(run_length).ok_or(OverflowError::Index)?;
         if end_index > total_symbols {
             bail!(SymbolError::OutOfRange);
         }
