@@ -7,6 +7,7 @@ edition = { workspace = true }
 repository = { workspace = true }
 license = { workspace = true }
 readme = "README.md"
+exclude = ["/tests/", "/manifest_*.json", "/sync.py", "/generate_huffman_tables.py"]
 
 [features]
 default = ["std"]
