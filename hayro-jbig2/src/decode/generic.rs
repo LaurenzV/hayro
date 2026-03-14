@@ -335,6 +335,9 @@ pub(crate) struct ContextGatherer<'a> {
     use_default_at: bool,
     width: u32,
     height: u32,
+    /// Used in `maybe_reload_buffers` to determine how far to the right
+    /// we might access pixels.
+    max_right: u32,
     /// Current position.
     cur_y: u32,
     cur_x: u32,
@@ -353,12 +356,30 @@ impl<'a> ContextGatherer<'a> {
         template: Template,
         at_pixels: &'a [AdaptiveTemplatePixel],
     ) -> Self {
+        let use_default_at = has_default_at_pixels(template, at_pixels);
+        let max_right = match template {
+            Template::Template0 | Template::Template1 => {
+                if use_default_at {
+                    3
+                } else {
+                    2
+                }
+            }
+            Template::Template2 | Template::Template3 => {
+                if use_default_at {
+                    2
+                } else {
+                    1
+                }
+            }
+        };
         Self {
             template,
             at_pixels,
-            use_default_at: has_default_at_pixels(template, at_pixels),
+            use_default_at,
             width,
             height,
+            max_right,
             cur_y: 0,
             buf_m2: 0,
             buf_m1: 0,
@@ -497,24 +518,7 @@ impl<'a> ContextGatherer<'a> {
 
     #[inline]
     fn maybe_reload_buffers(&mut self, bitmap: &Bitmap, x: u32) {
-        let max_right = match self.template {
-            Template::Template0 | Template::Template1 => {
-                if self.use_default_at {
-                    3
-                } else {
-                    2
-                }
-            }
-            Template::Template2 | Template::Template3 => {
-                if self.use_default_at {
-                    2
-                } else {
-                    1
-                }
-            }
-        };
-
-        if x + max_right >= self.cur_x + 32 {
+        if x + self.max_right >= self.cur_x + 32 {
             let new_start = x.saturating_sub(4);
             self.cur_x = new_start;
             self.buf_m2 = if self.cur_y >= 2 {
@@ -689,11 +693,8 @@ impl<'a> ContextGatherer<'a> {
     pub(crate) fn update_current_row(&mut self, x: u32, value: bool) {
         if x >= self.cur_x && x < self.cur_x + 32 {
             let bit_pos = 31 - (x - self.cur_x);
-            if value {
-                self.buf_cur |= 1 << bit_pos;
-            } else {
-                self.buf_cur &= !(1 << bit_pos);
-            }
+            let mask = 1_u32 << bit_pos;
+            self.buf_cur = (self.buf_cur & !mask) | ((value as u32) << bit_pos);
         }
     }
 }
