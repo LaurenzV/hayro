@@ -262,7 +262,6 @@ impl<'a> ArithmeticDecoder<'a> {
         let pick_nlps = ((cond ^ is_lps) as u8).wrapping_neg(); // 0xFF or 0x00
         context.set_index(qe_entry.nmps ^ ((qe_entry.nmps ^ qe_entry.nlps) & pick_nlps));
 
-
         self.renormalize();
 
         d
