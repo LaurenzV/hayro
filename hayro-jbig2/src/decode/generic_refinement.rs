@@ -191,12 +191,12 @@ pub(crate) fn decode_bitmap(
 
                     let mut all_same = true;
 
-                    let center = get_pixel(reference, ref_x, ref_y);
+                    let center = reference.get_pixel(ref_x as u32, ref_y as u32) as u16;
 
                     // Check all 9 pixels in the 3×3 region.
                     for dy in -1..=1 {
                         for dx in -1..=1 {
-                            if get_pixel(reference, ref_x + dx, ref_y + dy) != center {
+                            if reference.get_pixel((ref_x + dx) as u32, (ref_y + dy) as u32) as u16 != center {
                                 all_same = false;
                                 break;
                             }
@@ -215,7 +215,7 @@ pub(crate) fn decode_bitmap(
                     // pixels in the 3 × 3 array." (6.3.5.6)
                     let ref_x = x as i32 - reference_dx;
                     let ref_y = y as i32 - reference_dy;
-                    let tpgrval = get_pixel(reference, ref_x, ref_y);
+                    let tpgrval = reference.get_pixel(ref_x as u32, ref_y as u32) as u16;
                     region.set_pixel(x, y, tpgrval as u8);
                 } else {
                     // "iii) Otherwise, explicitly decode the current pixel using the
@@ -257,22 +257,21 @@ fn gather_context(
             let mut context = 0_u16;
 
             // 4 pixels from the bitmap we are currently decoding.
-            context = (context << 1) | get_pixel(region, x + at1.x as i32, y + at1.y as i32);
-            context = (context << 1) | get_pixel(region, x, y - 1);
-            context = (context << 1) | get_pixel(region, x + 1, y - 1);
-            context = (context << 1) | get_pixel(region, x - 1, y);
+            context = (context << 1) | region.get_pixel((x + at1.x as i32) as u32, (y + at1.y as i32) as u32) as u16;
+            context = (context << 1) | region.get_pixel(x as u32, (y - 1) as u32) as u16;
+            context = (context << 1) | region.get_pixel((x + 1) as u32, (y - 1) as u32) as u16;
+            context = (context << 1) | region.get_pixel((x - 1) as u32, y as u32) as u16;
 
             // 9 pixels from the reference bitmap.
-            context =
-                (context << 1) | get_pixel(reference, ref_x + at2.x as i32, ref_y + at2.y as i32);
-            context = (context << 1) | get_pixel(reference, ref_x, ref_y - 1);
-            context = (context << 1) | get_pixel(reference, ref_x + 1, ref_y - 1);
-            context = (context << 1) | get_pixel(reference, ref_x - 1, ref_y);
-            context = (context << 1) | get_pixel(reference, ref_x, ref_y);
-            context = (context << 1) | get_pixel(reference, ref_x + 1, ref_y);
-            context = (context << 1) | get_pixel(reference, ref_x - 1, ref_y + 1);
-            context = (context << 1) | get_pixel(reference, ref_x, ref_y + 1);
-            context = (context << 1) | get_pixel(reference, ref_x + 1, ref_y + 1);
+            context = (context << 1) | reference.get_pixel((ref_x + at2.x as i32) as u32, (ref_y + at2.y as i32) as u32) as u16;
+            context = (context << 1) | reference.get_pixel(ref_x as u32, (ref_y - 1) as u32) as u16;
+            context = (context << 1) | reference.get_pixel((ref_x + 1) as u32, (ref_y - 1) as u32) as u16;
+            context = (context << 1) | reference.get_pixel((ref_x - 1) as u32, ref_y as u32) as u16;
+            context = (context << 1) | reference.get_pixel(ref_x as u32, ref_y as u32) as u16;
+            context = (context << 1) | reference.get_pixel((ref_x + 1) as u32, ref_y as u32) as u16;
+            context = (context << 1) | reference.get_pixel((ref_x - 1) as u32, (ref_y + 1) as u32) as u16;
+            context = (context << 1) | reference.get_pixel(ref_x as u32, (ref_y + 1) as u32) as u16;
+            context = (context << 1) | reference.get_pixel((ref_x + 1) as u32, (ref_y + 1) as u32) as u16;
 
             context
         }
@@ -282,30 +281,21 @@ fn gather_context(
             let mut context = 0_u16;
 
             // 4 pixels from the bitmap we are currently decoding.
-            context = (context << 1) | get_pixel(region, x - 1, y - 1);
-            context = (context << 1) | get_pixel(region, x, y - 1);
-            context = (context << 1) | get_pixel(region, x + 1, y - 1);
-            context = (context << 1) | get_pixel(region, x - 1, y);
+            context = (context << 1) | region.get_pixel((x - 1) as u32, (y - 1) as u32) as u16;
+            context = (context << 1) | region.get_pixel(x as u32, (y - 1) as u32) as u16;
+            context = (context << 1) | region.get_pixel((x + 1) as u32, (y - 1) as u32) as u16;
+            context = (context << 1) | region.get_pixel((x - 1) as u32, y as u32) as u16;
 
             // 6 pixels from the reference bitmap.
-            context = (context << 1) | get_pixel(reference, ref_x, ref_y - 1);
-            context = (context << 1) | get_pixel(reference, ref_x - 1, ref_y);
-            context = (context << 1) | get_pixel(reference, ref_x, ref_y);
-            context = (context << 1) | get_pixel(reference, ref_x + 1, ref_y);
-            context = (context << 1) | get_pixel(reference, ref_x, ref_y + 1);
-            context = (context << 1) | get_pixel(reference, ref_x + 1, ref_y + 1);
+            context = (context << 1) | reference.get_pixel(ref_x as u32, (ref_y - 1) as u32) as u16;
+            context = (context << 1) | reference.get_pixel((ref_x - 1) as u32, ref_y as u32) as u16;
+            context = (context << 1) | reference.get_pixel(ref_x as u32, ref_y as u32) as u16;
+            context = (context << 1) | reference.get_pixel((ref_x + 1) as u32, ref_y as u32) as u16;
+            context = (context << 1) | reference.get_pixel(ref_x as u32, (ref_y + 1) as u32) as u16;
+            context = (context << 1) | reference.get_pixel((ref_x + 1) as u32, (ref_y + 1) as u32) as u16;
 
             context
         }
     }
 }
 
-/// Get a pixel value, returning 0 for out-of-bounds coordinates.
-#[inline]
-fn get_pixel(bitmap: &Bitmap, x: i32, y: i32) -> u16 {
-    if x < 0 || y < 0 {
-        0
-    } else {
-        bitmap.get_pixel(x as u32, y as u32) as u16
-    }
-}

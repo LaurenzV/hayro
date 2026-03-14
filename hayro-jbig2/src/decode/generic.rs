@@ -641,14 +641,6 @@ impl<'a> ContextGatherer<'a> {
         }
     }
 
-    #[inline]
-    fn get_bitmap_pixel(&self, bitmap: &Bitmap, px: i32, py: i32) -> u16 {
-        if px < 0 || py < 0 {
-            0
-        } else {
-            bitmap.get_pixel(px as u32, py as u32) as u16
-        }
-    }
 
     #[inline(always)]
     fn maybe_reload_buffers(&mut self, bitmap: &Bitmap, x: u32) {
@@ -699,26 +691,14 @@ impl<'a> ContextGatherer<'a> {
         let new_pixels = (Self::get_buf_pixel(self.buf_m2, bx + 1) << 12)
             | (Self::get_buf_pixel(self.buf_m1, bx + 2) << 5)
             | Self::get_buf_pixel(self.buf_cur, bx.wrapping_sub(1))
-            | (self.get_bitmap_pixel(
-                bitmap,
-                xi + self.at_pixels[3].x as i32,
-                yi + self.at_pixels[3].y as i32,
-            ) << 15)
-            | (self.get_bitmap_pixel(
-                bitmap,
-                xi + self.at_pixels[2].x as i32,
-                yi + self.at_pixels[2].y as i32,
-            ) << 11)
-            | (self.get_bitmap_pixel(
-                bitmap,
-                xi + self.at_pixels[1].x as i32,
-                yi + self.at_pixels[1].y as i32,
-            ) << 10)
-            | (self.get_bitmap_pixel(
-                bitmap,
-                xi + self.at_pixels[0].x as i32,
-                yi + self.at_pixels[0].y as i32,
-            ) << 4);
+            // Note that the cast from i32 to u32 is deliberate here: Negative positions
+            // should be resolved to 0, by casting negative i32 to u32 we end up with
+            // a very large positive number which is guaranteed to be OOB. The same
+            // applies to all other occurrences of this pattern (also in `generic_refinement.rs`).
+            | ((bitmap.get_pixel((xi + self.at_pixels[3].x as i32) as u32, (yi + self.at_pixels[3].y as i32) as u32) as u16) << 15)
+            | ((bitmap.get_pixel((xi + self.at_pixels[2].x as i32) as u32, (yi + self.at_pixels[2].y as i32) as u32) as u16) << 11)
+            | ((bitmap.get_pixel((xi + self.at_pixels[1].x as i32) as u32, (yi + self.at_pixels[1].y as i32) as u32) as u16) << 10)
+            | ((bitmap.get_pixel((xi + self.at_pixels[0].x as i32) as u32, (yi + self.at_pixels[0].y as i32) as u32) as u16) << 4);
 
         self.ctx = ((self.ctx << 1) & Self::SHIFT_MASK_T0) | new_pixels;
         self.ctx
@@ -733,11 +713,7 @@ impl<'a> ContextGatherer<'a> {
         let new_pixels = (Self::get_buf_pixel(self.buf_m2, bx + 2) << 9)
             | (Self::get_buf_pixel(self.buf_m1, bx + 2) << 4)
             | Self::get_buf_pixel(self.buf_cur, bx.wrapping_sub(1))
-            | (self.get_bitmap_pixel(
-                bitmap,
-                xi + self.at_pixels[0].x as i32,
-                yi + self.at_pixels[0].y as i32,
-            ) << 3);
+            | ((bitmap.get_pixel((xi + self.at_pixels[0].x as i32) as u32, (yi + self.at_pixels[0].y as i32) as u32) as u16) << 3);
 
         self.ctx = ((self.ctx << 1) & Self::SHIFT_MASK_T1) | new_pixels;
         self.ctx
@@ -752,11 +728,7 @@ impl<'a> ContextGatherer<'a> {
         let new_pixels = (Self::get_buf_pixel(self.buf_m2, bx + 1) << 7)
             | (Self::get_buf_pixel(self.buf_m1, bx + 1) << 3)
             | Self::get_buf_pixel(self.buf_cur, bx.wrapping_sub(1))
-            | (self.get_bitmap_pixel(
-                bitmap,
-                xi + self.at_pixels[0].x as i32,
-                yi + self.at_pixels[0].y as i32,
-            ) << 2);
+            | ((bitmap.get_pixel((xi + self.at_pixels[0].x as i32) as u32, (yi + self.at_pixels[0].y as i32) as u32) as u16) << 2);
 
         self.ctx = ((self.ctx << 1) & Self::SHIFT_MASK_T2) | new_pixels;
         self.ctx
@@ -770,11 +742,7 @@ impl<'a> ContextGatherer<'a> {
 
         let new_pixels = (Self::get_buf_pixel(self.buf_m1, bx + 1) << 5)
             | Self::get_buf_pixel(self.buf_cur, bx.wrapping_sub(1))
-            | (self.get_bitmap_pixel(
-                bitmap,
-                xi + self.at_pixels[0].x as i32,
-                yi + self.at_pixels[0].y as i32,
-            ) << 4);
+            | ((bitmap.get_pixel((xi + self.at_pixels[0].x as i32) as u32, (yi + self.at_pixels[0].y as i32) as u32) as u16) << 4);
 
         self.ctx = ((self.ctx << 1) & Self::SHIFT_MASK_T3) | new_pixels;
         self.ctx
