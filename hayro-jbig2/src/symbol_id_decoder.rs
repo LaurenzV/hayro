@@ -3,10 +3,10 @@
 use alloc::vec;
 use alloc::vec::Vec;
 
-use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
+use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 
 pub(crate) struct SymbolIdDecoder {
-    contexts: Vec<Context>,
+    contexts: Vec<ArithmeticDecoderContext>,
     code_len: u32,
 }
 
@@ -17,7 +17,7 @@ impl SymbolIdDecoder {
         let num_contexts = 1_usize << code_len;
 
         Self {
-            contexts: vec![Context::default(); num_contexts],
+            contexts: vec![ArithmeticDecoderContext::default(); num_contexts],
             code_len,
         }
     }
@@ -29,7 +29,7 @@ impl SymbolIdDecoder {
         for _ in 0..self.code_len {
             let ctx_mask = (1_u32 << (self.code_len + 1)) - 1;
             let ctx_idx = (prev & ctx_mask) as usize;
-            let d = decoder.decode(&mut self.contexts[ctx_idx]);
+            let d = decoder.read_bit(&mut self.contexts[ctx_idx]);
 
             prev = (prev << 1) | d;
         }

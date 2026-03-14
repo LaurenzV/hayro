@@ -3,7 +3,7 @@
 use alloc::vec;
 use alloc::vec::Vec;
 
-use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
+use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use crate::bitmap::Bitmap;
 use crate::decode::generic::{decode_bitmap_mmr, parse_adaptive_template_pixels};
 use crate::decode::text::{
@@ -162,8 +162,8 @@ pub(crate) fn decode(
 
 #[derive(Debug, Clone)]
 pub(crate) struct RetainedContexts {
-    pub(crate) generic_region: Vec<Context>,
-    pub(crate) refinement_region: Vec<Context>,
+    pub(crate) generic_region: Vec<ArithmeticDecoderContext>,
+    pub(crate) refinement_region: Vec<ArithmeticDecoderContext>,
 }
 
 /// A decoded symbol dictionary segment.
@@ -452,8 +452,8 @@ struct ArithmeticContext<'a> {
     export_run_length_decoder: IntegerDecoder,
     /// `IAAI`
     aggregation_instance_count_decoder: IntegerDecoder,
-    generic_region_contexts: Vec<Context>,
-    refinement_region_contexts: Vec<Context>,
+    generic_region_contexts: Vec<ArithmeticDecoderContext>,
+    refinement_region_contexts: Vec<ArithmeticDecoderContext>,
     text_region_contexts: Option<TextRegionContexts>,
 }
 
@@ -480,8 +480,8 @@ impl<'a> ArithmeticContext<'a> {
                 let refinement_template = header.flags.refinement_template;
                 let num_refinement_contexts = 1 << refinement_template.context_bits();
                 (
-                    vec![Context::default(); num_contexts],
-                    vec![Context::default(); num_refinement_contexts],
+                    vec![ArithmeticDecoderContext::default(); num_contexts],
+                    vec![ArithmeticDecoderContext::default(); num_refinement_contexts],
                 )
             };
 

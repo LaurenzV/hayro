@@ -4,7 +4,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use crate::ScratchBuffers;
-use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
+use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use crate::bitmap::{Bitmap, MAX_DIMENSION};
 use crate::decode::generic::{ContextGatherer, decode_bitmap_mmr};
 use crate::decode::{AdaptiveTemplatePixel, Template};
@@ -107,8 +107,10 @@ fn decode_arithmetic(
 
     let mut decoder = ArithmeticDecoder::new(data);
     ctx.contexts.clear();
-    ctx.contexts
-        .resize(1 << template.context_bits(), Context::default());
+    ctx.contexts.resize(
+        1 << template.context_bits(),
+        ArithmeticDecoderContext::default(),
+    );
 
     decode_bitplanes(width, height, stride, bits_per_pixel, |_| {
         // Table C.4: "GBW = GSW, GBH = GSH, TPGDON = 0"
@@ -131,7 +133,7 @@ fn decode_arithmetic(
                 }
 
                 let context = gatherer.gather(&bitplane, x);
-                let pixel = decoder.decode(&mut ctx.contexts[context as usize]);
+                let pixel = decoder.read_bit(&mut ctx.contexts[context as usize]);
                 let value = pixel != 0;
 
                 bitplane.set_pixel(x, y, value);

@@ -1,12 +1,12 @@
 use alloc::vec;
 use alloc::vec::Vec;
 
-use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
+use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 
 /// The integer arithmetic decoder (A.2).
 pub(crate) struct IntegerDecoder {
     /// `CX` - Context memory for the integer decoder.
-    contexts: Vec<Context>,
+    contexts: Vec<ArithmeticDecoderContext>,
 }
 
 impl IntegerDecoder {
@@ -16,7 +16,7 @@ impl IntegerDecoder {
         Self {
             // A.2: "Each arithmetic integer decoding procedure requires 512 bytes of
             // storage for its context memory."
-            contexts: vec![Context::default(); 512],
+            contexts: vec![ArithmeticDecoderContext::default(); 512],
         }
     }
 
@@ -84,7 +84,7 @@ impl IntegerDecoder {
     fn decode_bit(&mut self, decoder: &mut ArithmeticDecoder<'_>, prev: &mut u32) -> u32 {
         let ctx_idx = (*prev & 0x1FF) as usize;
         // `D` - The just-decoded bit.
-        let d = decoder.decode(&mut self.contexts[ctx_idx]);
+        let d = decoder.read_bit(&mut self.contexts[ctx_idx]);
 
         // A.2 step 3: Update PREV.
         if *prev < 256 {

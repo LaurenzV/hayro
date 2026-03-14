@@ -7,7 +7,7 @@ use super::{
     parse_refinement_at_pixels, parse_region_segment_info,
 };
 use crate::ScratchBuffers;
-use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
+use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use crate::bitmap::Bitmap;
 use crate::error::{OverflowError, ParseError, RegionError, Result, bail};
 use crate::reader::Reader;
@@ -70,7 +70,7 @@ pub(crate) fn decode_into(
     let num_context_bits = header.template.context_bits();
     ctx.contexts.clear();
     ctx.contexts
-        .resize(1 << num_context_bits, Context::default());
+        .resize(1 << num_context_bits, ArithmeticDecoderContext::default());
 
     decode_bitmap(
         &mut decoder,
@@ -123,7 +123,7 @@ pub(crate) fn parse<'a>(reader: &mut Reader<'a>) -> Result<GenericRefinementRegi
 pub(crate) fn decode_bitmap(
     // TODO: Maybe reduce number of arguments?
     decoder: &mut ArithmeticDecoder<'_>,
-    contexts: &mut [Context],
+    contexts: &mut [ArithmeticDecoderContext],
     region: &mut Bitmap,
     reference: &Bitmap,
     reference_dx: i32,
@@ -148,7 +148,7 @@ pub(crate) fn decode_bitmap(
                 RefinementTemplate::Template0 => 0b0000000010000,
                 RefinementTemplate::Template1 => 0b0000001000,
             };
-            let sltp = decoder.decode(&mut contexts[sltp_context as usize]);
+            let sltp = decoder.read_bit(&mut contexts[sltp_context as usize]);
             // "Let SLTP be the value of this bit. Set: LTP = LTP XOR SLTP"
             ltp = ltp != (sltp != 0);
         }
@@ -165,7 +165,7 @@ pub(crate) fn decode_bitmap(
                     gr_template,
                     adaptive_template_pixels,
                 );
-                let pixel = decoder.decode(&mut contexts[context as usize]);
+                let pixel = decoder.read_bit(&mut contexts[context as usize]);
                 region.set_pixel(x, y, pixel != 0);
             };
 

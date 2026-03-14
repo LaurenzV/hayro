@@ -6,7 +6,7 @@ use super::{
     AdaptiveTemplatePixel, RegionBitmap, RegionSegmentInfo, Template, parse_region_segment_info,
 };
 use crate::ScratchBuffers;
-use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
+use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use crate::bitmap::Bitmap;
 use crate::error::{ParseError, RegionError, Result, TemplateError, bail};
 use crate::reader::Reader;
@@ -45,8 +45,10 @@ pub(crate) fn decode_into(
     } else {
         let mut decoder = ArithmeticDecoder::new(data);
         ctx.contexts.clear();
-        ctx.contexts
-            .resize(1 << header.template.context_bits(), Context::default());
+        ctx.contexts.resize(
+            1 << header.template.context_bits(),
+            ArithmeticDecoderContext::default(),
+        );
 
         // "6.2.5 Decoding using a template and arithmetic coding"
         decode_bitmap_arithmetic_coding(
@@ -267,7 +269,7 @@ pub(crate) fn decode_bitmap_mmr(bitmap: &mut Bitmap, data: &[u8]) -> Result<usiz
 pub(crate) fn decode_bitmap_arithmetic_coding(
     bitmap: &mut Bitmap,
     decoder: &mut ArithmeticDecoder<'_>,
-    contexts: &mut [Context],
+    contexts: &mut [ArithmeticDecoderContext],
     template: Template,
     tpgdon: bool,
     adaptive_template_pixels: &[AdaptiveTemplatePixel],
@@ -292,7 +294,7 @@ pub(crate) fn decode_bitmap_arithmetic_coding(
                 Template::Template2 => 0b0011100101,
                 Template::Template3 => 0b0110010101,
             };
-            let sltp = decoder.decode(&mut contexts[sltp_context as usize]);
+            let sltp = decoder.read_bit(&mut contexts[sltp_context as usize]);
             // "Let SLTP be the value of this bit. Set: LTP = LTP XOR SLTP" (6.2.5.7)
             ltp = ltp != (sltp != 0);
         }
@@ -314,7 +316,7 @@ pub(crate) fn decode_bitmap_arithmetic_coding(
 
             for x in 0..width {
                 let context_bits = ctx_gatherer.gather(bitmap, x);
-                let pixel = decoder.decode(&mut contexts[context_bits as usize]);
+                let pixel = decoder.read_bit(&mut contexts[context_bits as usize]);
                 let value = pixel != 0;
                 bitmap.set_pixel(x, y, value);
                 ctx_gatherer.update_current_row(x, value);

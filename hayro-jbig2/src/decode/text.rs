@@ -10,7 +10,7 @@ use super::{
 };
 use super::{RegionBitmap, generic_refinement};
 use crate::ScratchBuffers;
-use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
+use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use crate::bitmap::Bitmap;
 use crate::error::{HuffmanError, OverflowError, ParseError, Result, SymbolError, bail};
 use crate::huffman_table::{HuffmanTable, StandardHuffmanTables, TableLine};
@@ -71,7 +71,9 @@ pub(crate) fn decode_into(
 
         let num_gr_contexts = 1 << header.flags.refinement_template.context_bits();
         scratch.contexts.clear();
-        scratch.contexts.resize(num_gr_contexts, Context::default());
+        scratch
+            .contexts
+            .resize(num_gr_contexts, ArithmeticDecoderContext::default());
 
         let ctx = DecodeContext::new_arithmetic(&mut decoder, &mut contexts, &mut scratch.contexts);
         decode_with(ctx, symbols, header, bitmap)?;
@@ -261,7 +263,7 @@ pub(crate) enum DecodeContext<'a, 'b> {
     Arithmetic {
         decoder: &'a mut ArithmeticDecoder<'b>,
         contexts: &'a mut TextRegionContexts,
-        gr_contexts: &'a mut [Context],
+        gr_contexts: &'a mut [ArithmeticDecoderContext],
     },
 }
 
@@ -292,7 +294,7 @@ impl<'a, 'b> DecodeContext<'a, 'b> {
     pub(crate) fn new_arithmetic(
         decoder: &'a mut ArithmeticDecoder<'b>,
         contexts: &'a mut TextRegionContexts,
-        gr_contexts: &'a mut [Context],
+        gr_contexts: &'a mut [ArithmeticDecoderContext],
     ) -> Self {
         DecodeContext::Arithmetic {
             decoder,
@@ -470,7 +472,7 @@ impl<'a, 'b> DecodeContext<'a, 'b> {
 
                 let mut decoder = ArithmeticDecoder::new(refinement_data);
                 let num_context_bits = refinement_template.context_bits();
-                let mut contexts = vec![Context::default(); 1 << num_context_bits];
+                let mut contexts = vec![ArithmeticDecoderContext::default(); 1 << num_context_bits];
 
                 generic_refinement::decode_bitmap(
                     &mut decoder,

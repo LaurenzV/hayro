@@ -2,7 +2,7 @@
 
 use super::{AdaptiveTemplatePixel, Template, generic};
 use crate::ScratchBuffers;
-use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
+use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use crate::bitmap::Bitmap;
 use crate::error::{OverflowError, ParseError, Result};
 use crate::reader::Reader;
@@ -57,9 +57,10 @@ pub(crate) fn decode(
 
         let mut decoder = ArithmeticDecoder::new(header.data);
         scratch.contexts.clear();
-        scratch
-            .contexts
-            .resize(1 << header.template.context_bits(), Context::default());
+        scratch.contexts.resize(
+            1 << header.template.context_bits(),
+            ArithmeticDecoderContext::default(),
+        );
 
         generic::decode_bitmap_arithmetic_coding(
             &mut collective_bitmap,

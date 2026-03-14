@@ -19,7 +19,7 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 
-use crate::arithmetic_decoder::Context;
+use crate::arithmetic_decoder::ArithmeticDecoderContext;
 
 /// A reusable context for decoding JBIG2 images.
 #[derive(Default)]
@@ -31,7 +31,7 @@ pub struct DecoderContext {
 
 #[derive(Default)]
 pub(crate) struct ScratchBuffers {
-    pub(crate) contexts: Vec<Context>,
+    pub(crate) contexts: Vec<ArithmeticDecoderContext>,
 }
 
 /// A decoder for JBIG2 images.
