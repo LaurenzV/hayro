@@ -693,11 +693,8 @@ impl<'a> ContextGatherer<'a> {
     pub(crate) fn update_current_row(&mut self, x: u32, value: bool) {
         if x >= self.cur_x && x < self.cur_x + 32 {
             let bit_pos = 31 - (x - self.cur_x);
-            if value {
-                self.buf_cur |= 1 << bit_pos;
-            } else {
-                self.buf_cur &= !(1 << bit_pos);
-            }
+            let mask = 1_u32 << bit_pos;
+            self.buf_cur = (self.buf_cur & !mask) | ((value as u32) << bit_pos);
         }
     }
 }
