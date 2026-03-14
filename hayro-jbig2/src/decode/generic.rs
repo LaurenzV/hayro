@@ -178,20 +178,53 @@ pub(crate) fn decode_bitmap_mmr(bitmap: &mut Bitmap, data: &[u8]) -> Result<usiz
         bitmap: &'a mut Bitmap,
         x: u32,
         y: u32,
+        /// Precomputed start index into `bitmap.data` for the current row.
+        row_start: usize,
+        /// Accumulator for pixels emitted by `push_pixel`.
+        buf: u8,
+        /// Number of bits accumulated in `buf`.
+        buf_len: u8,
     }
 
     impl<'a> BitmapDecoder<'a> {
         fn new(bitmap: &'a mut Bitmap) -> Self {
-            Self { bitmap, x: 0, y: 0 }
+            Self {
+                bitmap,
+                x: 0,
+                y: 0,
+                row_start: 0,
+                buf: 0,
+                buf_len: 0,
+            }
+        }
+
+        #[inline]
+        fn flush_buf(&mut self) {
+            if self.buf_len == 0 {
+                return;
+            }
+
+            let start_x = self.x - self.buf_len as u32;
+            if start_x < self.bitmap.width {
+                let word_idx = (start_x / WORD_BITS) as usize;
+                let bit_in_word = start_x % WORD_BITS;
+                let shift = WORD_SHIFT - bit_in_word - (self.buf_len as u32 - 1);
+                self.bitmap.data[self.row_start + word_idx] |= (self.buf as Word) << shift;
+            }
+            self.buf = 0;
+            self.buf_len = 0;
         }
     }
 
     impl hayro_ccitt::Decoder for BitmapDecoder<'_> {
         #[inline]
         fn push_pixel(&mut self, white: bool) {
-            if self.x < self.bitmap.width {
-                self.bitmap.set_pixel(self.x, self.y, white);
-                self.x += 1;
+            self.buf = (self.buf << 1) | white as u8;
+            self.buf_len += 1;
+            self.x += 1;
+
+            if self.buf_len == 8 {
+                self.flush_buf();
             }
         }
 
@@ -212,7 +245,7 @@ pub(crate) fn decode_bitmap_mmr(bitmap: &mut Bitmap, data: &[u8]) -> Result<usiz
                 masks
             };
 
-            let row_start = (self.y * self.bitmap.stride) as usize;
+            let row_start = self.row_start;
             let end_x = (self.x + chunk_count * 8).min(self.bitmap.width);
             let white_mask = (white as Word).wrapping_neg();
 
@@ -240,8 +273,11 @@ pub(crate) fn decode_bitmap_mmr(bitmap: &mut Bitmap, data: &[u8]) -> Result<usiz
 
         #[inline]
         fn next_line(&mut self) {
+            self.flush_buf();
+
             self.x = 0;
             self.y += 1;
+            self.row_start = (self.y * self.bitmap.stride) as usize;
         }
     }
 
