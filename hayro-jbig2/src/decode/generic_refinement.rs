@@ -300,7 +300,7 @@ impl<'a> RefinementContextGatherer<'a> {
         self.reg_cur = (self.reg_cur & !mask) | ((value as Word) << bit_pos);
     }
 
-    #[inline]
+    #[inline(always)]
     fn gather_template0_default(&mut self, _region: &Bitmap, _reference: &Bitmap, x: u32) -> u16 {
         let bx = x - self.reg_cur_x;
         let ref_x = (x as i32 - self.reference_dx) as u32;
@@ -316,7 +316,7 @@ impl<'a> RefinementContextGatherer<'a> {
         self.ctx
     }
 
-    #[inline]
+    #[inline(always)]
     fn gather_template0_custom(&mut self, region: &Bitmap, reference: &Bitmap, x: u32) -> u16 {
         let bx = x - self.reg_cur_x;
         let ref_x_i = x as i32 - self.reference_dx;
@@ -346,7 +346,7 @@ impl<'a> RefinementContextGatherer<'a> {
         self.ctx
     }
 
-    #[inline]
+    #[inline(always)]
     fn gather_template1(&mut self, _region: &Bitmap, _reference: &Bitmap, x: u32) -> u16 {
         let bx = x - self.reg_cur_x;
         let ref_x = (x as i32 - self.reference_dx) as u32;

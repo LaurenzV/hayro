@@ -678,7 +678,7 @@ impl<'a> ContextGatherer<'a> {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     fn gather_template0_custom(&mut self, bitmap: &Bitmap, x: u32) -> u16 {
         let bx = x - self.cur_x;
         let xi = x as i32;
@@ -700,7 +700,7 @@ impl<'a> ContextGatherer<'a> {
         self.ctx
     }
 
-    #[inline]
+    #[inline(always)]
     fn gather_template1_custom(&mut self, bitmap: &Bitmap, x: u32) -> u16 {
         let bx = x - self.cur_x;
         let xi = x as i32;
@@ -719,7 +719,7 @@ impl<'a> ContextGatherer<'a> {
         self.ctx
     }
 
-    #[inline]
+    #[inline(always)]
     fn gather_template2_custom(&mut self, bitmap: &Bitmap, x: u32) -> u16 {
         let bx = x - self.cur_x;
         let xi = x as i32;
@@ -738,7 +738,7 @@ impl<'a> ContextGatherer<'a> {
         self.ctx
     }
 
-    #[inline]
+    #[inline(always)]
     fn gather_template3_custom(&mut self, bitmap: &Bitmap, x: u32) -> u16 {
         let bx = x - self.cur_x;
         let xi = x as i32;
@@ -756,7 +756,7 @@ impl<'a> ContextGatherer<'a> {
         self.ctx
     }
 
-    #[inline]
+    #[inline(always)]
     fn gather_template0_default(&mut self, _bitmap: &Bitmap, x: u32) -> u16 {
         let bx = x - self.cur_x;
         let new_pixels = (Self::get_buf_pixel(self.buf_m2, bx + 2) << 11)
@@ -767,7 +767,7 @@ impl<'a> ContextGatherer<'a> {
         self.ctx
     }
 
-    #[inline]
+    #[inline(always)]
     fn gather_template1_default(&mut self, _bitmap: &Bitmap, x: u32) -> u16 {
         let bx = x - self.cur_x;
         let new_pixels = (Self::get_buf_pixel(self.buf_m2, bx + 2) << 9)
@@ -778,7 +778,7 @@ impl<'a> ContextGatherer<'a> {
         self.ctx
     }
 
-    #[inline]
+    #[inline(always)]
     fn gather_template2_default(&mut self, _bitmap: &Bitmap, x: u32) -> u16 {
         let bx = x - self.cur_x;
         let new_pixels = (Self::get_buf_pixel(self.buf_m2, bx + 1) << 7)
@@ -789,7 +789,7 @@ impl<'a> ContextGatherer<'a> {
         self.ctx
     }
 
-    #[inline]
+    #[inline(always)]
     fn gather_template3_default(&mut self, _bitmap: &Bitmap, x: u32) -> u16 {
         let bx = x - self.cur_x;
         let new_pixels = (Self::get_buf_pixel(self.buf_m1, bx + 2) << 4)
