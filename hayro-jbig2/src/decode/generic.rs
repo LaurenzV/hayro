@@ -303,12 +303,11 @@ pub(crate) fn decode_bitmap_arithmetic_coding(
         // "c) If LTP = 1 then set every pixel of the current row of GBREG equal
         // to the corresponding pixel of the row immediately above." (6.2.5.7)
         if ltp {
-            for x in 0..width {
-                // If y == 0, pixels remain the same.
-                if y > 0 {
-                    let above = bitmap.get_pixel(x, y - 1);
-                    bitmap.set_pixel(x, y, above);
-                }
+            // If y == 0, pixels remain the same.
+            if y > 0 {
+                let stride = bitmap.stride as usize;
+                let src = (y as usize - 1) * stride;
+                bitmap.data.copy_within(src..src + stride, y as usize * stride);
             }
         } else {
             // "d) If LTP = 0 then, from left to right, decode each pixel of the
