@@ -691,7 +691,7 @@ impl<'a> ContextGatherer<'a> {
 
     /// Note: The caller must ensure that `gather` has been called for this `x`
     /// first.
-    #[inline]
+    #[inline(always)]
     pub(crate) fn update_current_row(&mut self, x: u32, value: bool) {
         debug_assert!(x >= self.cur_x && x < self.cur_x + 32);
 
