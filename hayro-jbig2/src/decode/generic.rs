@@ -641,7 +641,6 @@ impl<'a> ContextGatherer<'a> {
         }
     }
 
-
     #[inline(always)]
     fn maybe_reload_buffers(&mut self, bitmap: &Bitmap, x: u32) {
         if x + self.max_right >= self.cur_x + WORD_BITS {
@@ -713,7 +712,11 @@ impl<'a> ContextGatherer<'a> {
         let new_pixels = (Self::get_buf_pixel(self.buf_m2, bx + 2) << 9)
             | (Self::get_buf_pixel(self.buf_m1, bx + 2) << 4)
             | Self::get_buf_pixel(self.buf_cur, bx.wrapping_sub(1))
-            | ((bitmap.get_pixel((xi + self.at_pixels[0].x as i32) as u32, (yi + self.at_pixels[0].y as i32) as u32) as u16) << 3);
+            | ((bitmap.get_pixel(
+                (xi + self.at_pixels[0].x as i32) as u32,
+                (yi + self.at_pixels[0].y as i32) as u32,
+            ) as u16)
+                << 3);
 
         self.ctx = ((self.ctx << 1) & Self::SHIFT_MASK_T1) | new_pixels;
         self.ctx
@@ -728,7 +731,11 @@ impl<'a> ContextGatherer<'a> {
         let new_pixels = (Self::get_buf_pixel(self.buf_m2, bx + 1) << 7)
             | (Self::get_buf_pixel(self.buf_m1, bx + 1) << 3)
             | Self::get_buf_pixel(self.buf_cur, bx.wrapping_sub(1))
-            | ((bitmap.get_pixel((xi + self.at_pixels[0].x as i32) as u32, (yi + self.at_pixels[0].y as i32) as u32) as u16) << 2);
+            | ((bitmap.get_pixel(
+                (xi + self.at_pixels[0].x as i32) as u32,
+                (yi + self.at_pixels[0].y as i32) as u32,
+            ) as u16)
+                << 2);
 
         self.ctx = ((self.ctx << 1) & Self::SHIFT_MASK_T2) | new_pixels;
         self.ctx
@@ -742,7 +749,11 @@ impl<'a> ContextGatherer<'a> {
 
         let new_pixels = (Self::get_buf_pixel(self.buf_m1, bx + 1) << 5)
             | Self::get_buf_pixel(self.buf_cur, bx.wrapping_sub(1))
-            | ((bitmap.get_pixel((xi + self.at_pixels[0].x as i32) as u32, (yi + self.at_pixels[0].y as i32) as u32) as u16) << 4);
+            | ((bitmap.get_pixel(
+                (xi + self.at_pixels[0].x as i32) as u32,
+                (yi + self.at_pixels[0].y as i32) as u32,
+            ) as u16)
+                << 4);
 
         self.ctx = ((self.ctx << 1) & Self::SHIFT_MASK_T3) | new_pixels;
         self.ctx

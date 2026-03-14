@@ -196,7 +196,9 @@ pub(crate) fn decode_bitmap(
                     // Check all 9 pixels in the 3×3 region.
                     for dy in -1..=1 {
                         for dx in -1..=1 {
-                            if reference.get_pixel((ref_x + dx) as u32, (ref_y + dy) as u32) as u16 != center {
+                            if reference.get_pixel((ref_x + dx) as u32, (ref_y + dy) as u32) as u16
+                                != center
+                            {
                                 all_same = false;
                                 break;
                             }
@@ -257,21 +259,27 @@ fn gather_context(
             let mut context = 0_u16;
 
             // 4 pixels from the bitmap we are currently decoding.
-            context = (context << 1) | region.get_pixel((x + at1.x as i32) as u32, (y + at1.y as i32) as u32) as u16;
+            context = (context << 1)
+                | region.get_pixel((x + at1.x as i32) as u32, (y + at1.y as i32) as u32) as u16;
             context = (context << 1) | region.get_pixel(x as u32, (y - 1) as u32) as u16;
             context = (context << 1) | region.get_pixel((x + 1) as u32, (y - 1) as u32) as u16;
             context = (context << 1) | region.get_pixel((x - 1) as u32, y as u32) as u16;
 
             // 9 pixels from the reference bitmap.
-            context = (context << 1) | reference.get_pixel((ref_x + at2.x as i32) as u32, (ref_y + at2.y as i32) as u32) as u16;
+            context = (context << 1)
+                | reference.get_pixel((ref_x + at2.x as i32) as u32, (ref_y + at2.y as i32) as u32)
+                    as u16;
             context = (context << 1) | reference.get_pixel(ref_x as u32, (ref_y - 1) as u32) as u16;
-            context = (context << 1) | reference.get_pixel((ref_x + 1) as u32, (ref_y - 1) as u32) as u16;
+            context =
+                (context << 1) | reference.get_pixel((ref_x + 1) as u32, (ref_y - 1) as u32) as u16;
             context = (context << 1) | reference.get_pixel((ref_x - 1) as u32, ref_y as u32) as u16;
             context = (context << 1) | reference.get_pixel(ref_x as u32, ref_y as u32) as u16;
             context = (context << 1) | reference.get_pixel((ref_x + 1) as u32, ref_y as u32) as u16;
-            context = (context << 1) | reference.get_pixel((ref_x - 1) as u32, (ref_y + 1) as u32) as u16;
+            context =
+                (context << 1) | reference.get_pixel((ref_x - 1) as u32, (ref_y + 1) as u32) as u16;
             context = (context << 1) | reference.get_pixel(ref_x as u32, (ref_y + 1) as u32) as u16;
-            context = (context << 1) | reference.get_pixel((ref_x + 1) as u32, (ref_y + 1) as u32) as u16;
+            context =
+                (context << 1) | reference.get_pixel((ref_x + 1) as u32, (ref_y + 1) as u32) as u16;
 
             context
         }
@@ -292,10 +300,10 @@ fn gather_context(
             context = (context << 1) | reference.get_pixel(ref_x as u32, ref_y as u32) as u16;
             context = (context << 1) | reference.get_pixel((ref_x + 1) as u32, ref_y as u32) as u16;
             context = (context << 1) | reference.get_pixel(ref_x as u32, (ref_y + 1) as u32) as u16;
-            context = (context << 1) | reference.get_pixel((ref_x + 1) as u32, (ref_y + 1) as u32) as u16;
+            context =
+                (context << 1) | reference.get_pixel((ref_x + 1) as u32, (ref_y + 1) as u32) as u16;
 
             context
         }
     }
 }
-
