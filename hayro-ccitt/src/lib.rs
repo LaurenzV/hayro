@@ -397,6 +397,7 @@ impl DecoderContext {
     }
 
     /// `a0` refers to the first changing element on the current line.
+    #[inline(always)]
     fn a0(&self) -> Option<u32> {
         if self.pixels_decoded == 0 {
             // If we haven't coded anything yet, a0 conceptually points at the
@@ -411,6 +412,7 @@ impl DecoderContext {
 
     /// "The first changing element on the reference line to the right of a0 and
     /// of opposite color to a0."
+    #[inline(always)]
     fn b1(&self) -> u32 {
         self.ref_changes
             .get(self.b1_idx as usize)
@@ -418,6 +420,7 @@ impl DecoderContext {
     }
 
     /// "The next changing element to the right of b1, on the reference line."
+    #[inline(always)]
     fn b2(&self) -> u32 {
         self.ref_changes
             .get(self.b1_idx as usize + 1)
@@ -495,6 +498,7 @@ impl DecoderContext {
         }
     }
 
+    #[inline(always)]
     fn at_eol(&self) -> bool {
         self.a0().unwrap_or(0) == self.line_width
     }
