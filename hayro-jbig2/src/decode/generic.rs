@@ -282,18 +282,19 @@ pub(crate) fn decode_bitmap_arithmetic_coding(
 
     let mut ctx_gatherer = ContextGatherer::new(width, height, template, adaptive_template_pixels);
 
+    // See Figure 8 - 11.
+    let sltp_context: u16 = match template {
+        Template::Template0 => 0b1001101100100101,
+        Template::Template1 => 0b0011110010101,
+        Template::Template2 => 0b0011100101,
+        Template::Template3 => 0b0110010101,
+    };
+
     // "3) Decode each row as follows:" (6.2.5.7)
     for y in 0..height {
         // "b) If TPGDON is 1, then decode a bit using the arithmetic entropy
         // coder" (6.2.5.7)
         if tpgdon {
-            // See Figure 8 - 11.
-            let sltp_context: u16 = match template {
-                Template::Template0 => 0b1001101100100101,
-                Template::Template1 => 0b0011110010101,
-                Template::Template2 => 0b0011100101,
-                Template::Template3 => 0b0110010101,
-            };
             let sltp = decoder.read_bit(&mut contexts[sltp_context as usize]);
             // "Let SLTP be the value of this bit. Set: LTP = LTP XOR SLTP" (6.2.5.7)
             ltp = ltp != (sltp != 0);
