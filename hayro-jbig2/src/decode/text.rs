@@ -32,7 +32,7 @@ pub(crate) fn decode(
         header.region_info.x_location,
         header.region_info.y_location,
         header.flags.default_pixel,
-    );
+    )?;
 
     decode_into(
         header,
@@ -533,10 +533,12 @@ fn decode_symbol_instance_bitmap(
 
     let refined_width = (reference_bitmap.width as i32)
         .checked_add(rdw)
-        .ok_or(OverflowError::BitmapDimension)? as u32;
+        .and_then(|v| u32::try_from(v).ok())
+        .ok_or(OverflowError::BitmapDimension)?;
     let refined_height = (reference_bitmap.height as i32)
         .checked_add(rdh)
-        .ok_or(OverflowError::BitmapDimension)? as u32;
+        .and_then(|v| u32::try_from(v).ok())
+        .ok_or(OverflowError::BitmapDimension)?;
     let reference_x_offset = rdw
         .div_euclid(2)
         .checked_add(rdx)
@@ -546,7 +548,7 @@ fn decode_symbol_instance_bitmap(
         .checked_add(rdy)
         .ok_or(OverflowError::ReferenceOffset)?;
 
-    let mut refined_bitmap = Bitmap::new(refined_width, refined_height);
+    let mut refined_bitmap = Bitmap::new(refined_width, refined_height)?;
 
     ctx.decode_refinement_bitmap(
         &mut refined_bitmap,

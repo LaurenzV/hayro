@@ -28,7 +28,7 @@ pub(crate) fn decode(
         .checked_mul(pattern_width)
         .ok_or(OverflowError::BitmapDimension)?;
 
-    let mut collective_bitmap = Bitmap::new(collective_width, pattern_height);
+    let mut collective_bitmap = Bitmap::new(collective_width, pattern_height)?;
 
     // "2) Decode the collective bitmap using a generic region decoding procedure
     // as described in 6.2." (6.7.5)
@@ -81,7 +81,7 @@ pub(crate) fn decode(
         // HDPATS[GRAY] = B_P" (6.7.5)"
         let start_x = gray * pattern_width;
         let pattern = {
-            let mut pattern = Bitmap::new(pattern_width, pattern_height);
+            let mut pattern = Bitmap::new(pattern_width, pattern_height)?;
 
             for y in 0..pattern_height {
                 for x in 0..pattern_width {

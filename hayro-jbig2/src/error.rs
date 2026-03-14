@@ -113,12 +113,16 @@ pub enum SymbolError {
 pub enum OverflowError {
     /// Bitmap dimension computation overflowed.
     BitmapDimension,
+    /// Halftone grid dimension computation overflowed.
+    GridDimension,
     /// Placement coordinate computation overflowed.
     PlacementCoordinate,
     /// Reference offset computation overflowed.
     ReferenceOffset,
     /// Index computation overflowed.
     Index,
+    /// A symbol dictionary has too many symbols.
+    SymbolCount,
 }
 
 impl fmt::Display for DecodeError {
@@ -144,6 +148,8 @@ impl fmt::Display for OverflowError {
             Self::PlacementCoordinate => write!(f, "overflow in placement coordinate computation"),
             Self::ReferenceOffset => write!(f, "overflow in reference offset computation"),
             Self::Index => write!(f, "overflow in index computation"),
+            Self::GridDimension => write!(f, "overflow in grid dimension computation"),
+            Self::SymbolCount => write!(f, "a symbol dictionary has too many symbols"),
         }
     }
 }

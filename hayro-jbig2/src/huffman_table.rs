@@ -243,7 +243,9 @@ impl HuffmanTable {
         //         RANGELOW[NTEMP] = HTLOW − 1, NTEMP = NTEMP + 1
         //    This is the lower range table line for this table."
         lines.push(TableLine::lower(
-            minimum_value - 1,
+            minimum_value
+                .checked_sub(1)
+                .ok_or(HuffmanError::InvalidCode)?,
             reader
                 .read_bits(prefix_length_bits)
                 .ok_or(HuffmanError::InvalidCode)? as u8,

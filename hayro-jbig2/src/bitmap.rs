@@ -5,10 +5,14 @@
 //!
 //! "GBREG - The decoded region bitmap." (Table 3)
 
+use crate::decode::CombinationOperator;
+use crate::error::{OverflowError, Result, bail};
 use alloc::vec;
 use alloc::vec::Vec;
 
-use crate::decode::CombinationOperator;
+// To guard better against malicious files, we limit bitmap dimensions
+// to `u16::MAX`, which should be more than enough.
+pub(crate) const MAX_DIMENSION: u32 = u16::MAX as u32;
 
 /// A decoded bitmap with position information.
 ///
@@ -38,7 +42,7 @@ impl Bitmap {
     /// Create a new bitmap filled with white pixels (false).
     ///
     /// The bitmap is positioned at (0, 0).
-    pub(crate) fn new(width: u32, height: u32) -> Self {
+    pub(crate) fn new(width: u32, height: u32) -> Result<Self> {
         Self::new_with(width, height, 0, 0, false)
     }
 
@@ -49,21 +53,34 @@ impl Bitmap {
         x_location: u32,
         y_location: u32,
         default_pixel: bool,
-    ) -> Self {
+    ) -> Result<Self> {
+        if width > MAX_DIMENSION || height > MAX_DIMENSION {
+            bail!(OverflowError::BitmapDimension);
+        }
+
         let stride = width.div_ceil(32);
         let default_word = if default_pixel { !0_u32 } else { 0_u32 };
-        let data = vec![default_word; (stride * height) as usize];
-        Self {
+        let data = vec![default_word; stride as usize * height as usize];
+        Ok(Self {
             width,
             height,
             stride,
             data,
             x_location,
             y_location,
-        }
+        })
     }
 
-    pub(crate) fn reinitialize(&mut self, width: u32, height: u32, default_pixel: bool) {
+    pub(crate) fn reinitialize(
+        &mut self,
+        width: u32,
+        height: u32,
+        default_pixel: bool,
+    ) -> Result<()> {
+        if width > MAX_DIMENSION || height > MAX_DIMENSION {
+            return Err(OverflowError::BitmapDimension.into());
+        }
+
         let stride = width.div_ceil(32);
         let default_word = if default_pixel { !0_u32 } else { 0_u32 };
         self.width = width;
@@ -72,7 +89,10 @@ impl Bitmap {
         self.x_location = 0;
         self.y_location = 0;
         self.data.clear();
-        self.data.resize((stride * height) as usize, default_word);
+        self.data
+            .resize(stride as usize * height as usize, default_word);
+
+        Ok(())
     }
 
     /// Get a pixel value at (x, y).

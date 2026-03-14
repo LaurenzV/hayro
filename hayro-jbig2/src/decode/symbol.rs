@@ -22,6 +22,8 @@ use crate::huffman_table::{HuffmanTable, StandardHuffmanTables};
 use crate::integer_decoder::IntegerDecoder;
 use crate::reader::Reader;
 
+const MAX_SYMBOLS: u32 = u16::MAX as u32;
+
 /// Decode a symbol dictionary segment (7.4.2, 6.5).
 pub(crate) fn decode(
     header: &SymbolDictionaryHeader<'_>,
@@ -104,7 +106,7 @@ pub(crate) fn decode(
                 (false, false) => {
                     // Decode a single symbol using a simple generic decoding procedure,
                     // described in 6.5.8.1.
-                    let mut region = Bitmap::new(symbol_width, ctx.height_class_height);
+                    let mut region = Bitmap::new(symbol_width, ctx.height_class_height)?;
                     generic::decode_bitmap_arithmetic_coding(
                         &mut region,
                         &mut ctx.a_ctx.decoder,
@@ -252,7 +254,7 @@ fn decode_refinement_bitmap(
     };
 
     let reference_region = ctx.symbols.get(symbol_id).ok_or(SymbolError::OutOfRange)?;
-    let mut region = Bitmap::new(symbol_width, ctx.height_class_height);
+    let mut region = Bitmap::new(symbol_width, ctx.height_class_height)?;
 
     if use_huffman {
         let bitmap_size = ctx
@@ -390,7 +392,7 @@ fn decode_aggregation_bitmap(
         header.region_info.x_location,
         header.region_info.y_location,
         header.flags.default_pixel,
-    );
+    )?;
     decode_with(decode_ctx, &all_symbols, &header, &mut bitmap)?;
     Ok(bitmap)
 }
@@ -574,7 +576,8 @@ fn decode_height_class_collective_bitmap(ctx: &mut SymbolDecodeContext<'_>) -> R
         .h_ctx
         .collective_bitmap_size_table
         .decode(&mut ctx.h_ctx.reader)?
-        .ok_or(HuffmanError::UnexpectedOob)? as u32;
+        .ok_or(HuffmanError::UnexpectedOob)?;
+    let bitmap_size = u32::try_from(bitmap_size).map_err(|_| OverflowError::BitmapDimension)?;
 
     ctx.h_ctx.reader.align();
 
@@ -583,7 +586,7 @@ fn decode_height_class_collective_bitmap(ctx: &mut SymbolDecodeContext<'_>) -> R
         // each byte. Rows are padded to the byte boundary.
         let row_bytes = ctx.total_width.div_ceil(8);
 
-        let mut bitmap = Bitmap::new(ctx.total_width, ctx.height_class_height);
+        let mut bitmap = Bitmap::new(ctx.total_width, ctx.height_class_height)?;
         for y in 0..ctx.height_class_height {
             for byte_x in 0..row_bytes {
                 let byte = ctx
@@ -609,7 +612,7 @@ fn decode_height_class_collective_bitmap(ctx: &mut SymbolDecodeContext<'_>) -> R
             .read_bytes(bitmap_size as usize)
             .ok_or(ParseError::UnexpectedEof)?;
 
-        let mut bitmap = Bitmap::new(ctx.total_width, ctx.height_class_height);
+        let mut bitmap = Bitmap::new(ctx.total_width, ctx.height_class_height)?;
         decode_bitmap_mmr(&mut bitmap, bitmap_data)?;
         bitmap
     };
@@ -619,7 +622,7 @@ fn decode_height_class_collective_bitmap(ctx: &mut SymbolDecodeContext<'_>) -> R
     let mut x_offset: u32 = 0;
     for symbol_idx in ctx.height_class_first_symbol..ctx.symbols_decoded_count {
         let symbol_width = ctx.symbol_widths[symbol_idx as usize];
-        let mut symbol = Bitmap::new(symbol_width, ctx.height_class_height);
+        let mut symbol = Bitmap::new(symbol_width, ctx.height_class_height)?;
 
         for y in 0..ctx.height_class_height {
             for x in 0..symbol_width {
@@ -789,6 +792,11 @@ pub(crate) fn parse<'a>(reader: &mut Reader<'a>) -> Result<SymbolDictionaryHeade
     };
     let num_exported_symbols = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
     let num_new_symbols = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
+
+    if num_exported_symbols.saturating_add(num_new_symbols) > MAX_SYMBOLS {
+        bail!(OverflowError::SymbolCount)
+    }
+
     let data = reader.tail().ok_or(ParseError::UnexpectedEof)?;
 
     Ok(SymbolDictionaryHeader {

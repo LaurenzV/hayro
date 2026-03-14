@@ -24,7 +24,7 @@ pub(crate) fn decode(
         header.region_info.x_location,
         header.region_info.y_location,
         false,
-    );
+    )?;
 
     decode_into(header, reference, &mut region, ctx)?;
 

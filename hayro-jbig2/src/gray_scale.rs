@@ -5,10 +5,10 @@ use alloc::vec::Vec;
 
 use crate::ScratchBuffers;
 use crate::arithmetic_decoder::{ArithmeticDecoder, Context};
-use crate::bitmap::Bitmap;
+use crate::bitmap::{Bitmap, MAX_DIMENSION};
 use crate::decode::generic::{ContextGatherer, decode_bitmap_mmr};
 use crate::decode::{AdaptiveTemplatePixel, Template};
-use crate::error::Result;
+use crate::error::{OverflowError, Result, bail};
 
 /// Input parameters to the gray-scale image decoding procedure (Table C.1).
 #[derive(Debug, Clone)]
@@ -60,7 +60,7 @@ fn decode_mmr(data: &[u8], params: &GrayScaleParams<'_>) -> Result<Vec<u32>> {
     let mut offset = 0;
     decode_bitplanes(width, height, stride, bits_per_pixel, |_| {
         // Table C.4: "GBW = GSW, GBH = GSH"
-        let mut bitplane = Bitmap::new(width, height);
+        let mut bitplane = Bitmap::new(width, height)?;
         offset += decode_bitmap_mmr(&mut bitplane, &data[offset..])?;
         Ok(bitplane.data)
     })
@@ -78,6 +78,11 @@ fn decode_arithmetic(
     let width = params.width;
     // `GSH` - The height of the gray-scale image.
     let height = params.height;
+
+    if width > MAX_DIMENSION || height > MAX_DIMENSION {
+        bail!(OverflowError::BitmapDimension);
+    }
+
     // `GSBPP` - The number of bits per gray-scale value.
     let bits_per_pixel = params.bits_per_pixel;
     let stride = width.div_ceil(32);
@@ -107,7 +112,7 @@ fn decode_arithmetic(
 
     decode_bitplanes(width, height, stride, bits_per_pixel, |_| {
         // Table C.4: "GBW = GSW, GBH = GSH, TPGDON = 0"
-        let mut bitplane = Bitmap::new(width, height);
+        let mut bitplane = Bitmap::new(width, height)?;
         let mut gatherer = ContextGatherer::new(width, height, template, &at_pixels);
 
         for y in 0..height {
@@ -152,7 +157,7 @@ fn decode_bitplanes<F>(
 where
     F: FnMut(u32) -> Result<Vec<u32>>,
 {
-    let size = (width * height) as usize;
+    let size = width as usize * height as usize;
     // `GSVALS` - The decoded gray-scale image array.
     let mut values = vec![0_u32; size];
 

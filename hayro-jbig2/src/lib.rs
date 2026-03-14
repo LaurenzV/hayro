@@ -679,7 +679,7 @@ fn init_page(
     // "Bit 2: Page default pixel value. This bit contains the initial value
     // for every pixel in the page, before any region segments are decoded
     // or drawn." (7.4.8.5)
-    bitmap.reinitialize(page_info.width, height, page_info.flags.default_pixel != 0);
+    bitmap.reinitialize(page_info.width, height, page_info.flags.default_pixel != 0)?;
 
     page.reset(page_info);
 

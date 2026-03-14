@@ -7,8 +7,8 @@ use super::RegionBitmap;
 use super::pattern::PatternDictionary;
 use super::{CombinationOperator, RegionSegmentInfo, Template, parse_region_segment_info};
 use crate::ScratchBuffers;
-use crate::bitmap::Bitmap;
-use crate::error::{ParseError, RegionError, Result};
+use crate::bitmap::{Bitmap, MAX_DIMENSION};
+use crate::error::{OverflowError, ParseError, RegionError, Result, bail};
 use crate::gray_scale::{GrayScaleParams, decode_gray_scale_image};
 use crate::reader::Reader;
 
@@ -26,7 +26,7 @@ pub(crate) fn decode(
         region.x_location,
         region.y_location,
         header.flags.initial_pixel_color,
-    );
+    )?;
 
     decode_into(header, pattern_dict, &mut htreg, ctx)?;
 
@@ -94,6 +94,13 @@ pub(crate) fn parse<'a>(reader: &mut Reader<'a>) -> Result<HalftoneRegionHeader<
 
     let grid_width = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
     let grid_height = reader.read_u32().ok_or(ParseError::UnexpectedEof)?;
+
+    if grid_width > MAX_DIMENSION || grid_height > MAX_DIMENSION {
+        bail!(OverflowError::GridDimension);
+    }
+
+    // TODO: Check grid offsets as well.
+
     let grid_horizontal_offset = reader.read_i32().ok_or(ParseError::UnexpectedEof)?;
     let grid_vertical_offset = reader.read_i32().ok_or(ParseError::UnexpectedEof)?;
 
@@ -215,7 +222,10 @@ fn compute_skip_bitmap(
     let region_height = htreg.height as i32;
 
     let stride = grid.width.div_ceil(32);
-    let mut hskip = vec![0_u32; (stride * grid.height) as usize];
+    let len = stride
+        .checked_mul(grid.height)
+        .ok_or(OverflowError::BitmapDimension)? as usize;
+    let mut hskip = vec![0_u32; len];
     let mut coords = GridCoords::new(grid, &header.grid_vector);
 
     for m_g in 0..grid.height {
