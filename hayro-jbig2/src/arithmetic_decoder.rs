@@ -244,7 +244,6 @@ impl<'a> ArithmeticDecoder<'a> {
 
         // Same condition as in exchange_mps / exchange_lps.
         let cond = (self.a < qe_entry.qe) as u32;
-        let inv_cond = 1 - cond;
 
         // LPS: a = qe (no-op when MPS, a stays as a - qe).
         self.a = (self.a & !lps_mask) | (qe_entry.qe & lps_mask);
@@ -261,14 +260,10 @@ impl<'a> ArithmeticDecoder<'a> {
 
         // exchange_mps: index = cond * nlps + inv_cond * nmps
         // exchange_lps: index = cond * nmps + inv_cond * nlps  (swapped)
-        // unified:      swap nmps/nlps roles based on is_lps
-        let cond_u8 = cond as u8;
-        let inv_cond_u8 = inv_cond as u8;
-        let il = is_lps as u8;
-        let iil = (1 - is_lps) as u8;
-        let when_cond = il * qe_entry.nmps + iil * qe_entry.nlps;
-        let when_inv = il * qe_entry.nlps + iil * qe_entry.nmps;
-        context.set_index(cond_u8 * when_cond + inv_cond_u8 * when_inv);
+        // unified: the result is always exactly nmps or nlps —
+        //          pick nlps when (cond ^ is_lps) == 1, nmps otherwise.
+        let pick_nlps = ((cond ^ is_lps) as u8).wrapping_neg(); // 0xFF or 0x00
+        context.set_index(qe_entry.nmps ^ ((qe_entry.nmps ^ qe_entry.nlps) & pick_nlps));
 
         self.renormalize();
 
