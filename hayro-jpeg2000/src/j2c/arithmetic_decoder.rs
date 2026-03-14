@@ -112,6 +112,7 @@ impl<'a> ArithmeticDecoder<'a> {
 
     /// The `LPS_EXCHANGE` procedure from C.3.2.
     #[inline(always)]
+    #[allow(unused, reason = "for reference")]
     fn exchange_lps(&mut self, context: &mut ArithmeticDecoderContext, qe_entry: &QeData) -> u32 {
         // Original code:
         // let d;
@@ -149,36 +150,9 @@ impl<'a> ArithmeticDecoder<'a> {
         d
     }
 
-    /// The DECODE procedure from C.3.2.
-    ///
-    /// We use the version from Annex G from <https://www.itu.int/rec/T-REC-T.88-201808-I>.
-    #[inline(always)]
-    fn decode(&mut self, context: &mut ArithmeticDecoderContext) -> u32 {
-        let qe_entry = &QE_TABLE[context.index() as usize];
-
-        self.a -= qe_entry.qe;
-
-        let d;
-
-        if (self.c >> 16) < self.a {
-            if self.a & 0x8000 == 0 {
-                d = self.exchange_mps(context, qe_entry);
-                self.renormalize();
-            } else {
-                d = context.mps();
-            }
-        } else {
-            self.c -= self.a << 16;
-
-            d = self.exchange_lps(context, qe_entry);
-            self.renormalize();
-        }
-
-        d
-    }
-
     /// The `MPS_EXCHANGE` procedure from C.3.2.
     #[inline(always)]
+    #[allow(unused, reason = "for reference")]
     fn exchange_mps(&mut self, context: &mut ArithmeticDecoderContext, qe_entry: &QeData) -> u32 {
         // Original code:
         //  let d;
@@ -207,6 +181,94 @@ impl<'a> ArithmeticDecoder<'a> {
         let cond_u8 = cond as u8;
         let inv_cond_u8 = inv_cond as u8;
         context.set_index(cond_u8 * qe_entry.nlps + inv_cond_u8 * qe_entry.nmps);
+        d
+    }
+
+    /// The DECODE procedure from C.3.2.
+    ///
+    /// We use the version from Annex G from <https://www.itu.int/rec/T-REC-T.88-201808-I>.
+    #[inline(always)]
+    pub(crate) fn decode(&mut self, context: &mut ArithmeticDecoderContext) -> u32 {
+        let qe_entry = &QE_TABLE[context.index() as usize];
+
+        self.a -= qe_entry.qe;
+
+        // Old code:
+        // let d;
+        //
+        // if (self.c >> 16) < self.a {
+        //     if self.a & 0x8000 == 0 {
+        //         d = self.exchange_mps(context, qe_entry);
+        //         self.renormalize();
+        //     } else {
+        //         d = context.mps();
+        //     }
+        // } else {
+        //     self.c -= self.a << 16;
+        //
+        //     d = self.exchange_lps(context, qe_entry);
+        //     self.renormalize();
+        // }
+        //
+        // d
+
+        // This is a faster version that reduces branching, which has shown
+        // itself to be the main limiting factor for better performance.
+        // We short-circuit the case where just the most probably symbol is
+        // returned, and otherwise use a code path that works for both,
+        // MPS_EXCHANGE and LPS_EXCHANGE.
+
+        if (self.c >> 16) < self.a && self.a & 0x8000 != 0 {
+            return context.mps();
+        }
+
+        // Unified branchless MPS_EXCHANGE / LPS_EXCHANGE.
+        //
+        // Compare with exchange_mps and exchange_lps above — the only
+        // difference between them is that LPS flips the role of cond:
+        //   exchange_mps: d = mps ^ cond,       flip when cond,      index = cond*nlps + inv*nmps
+        //   exchange_lps: d = mps ^ inv_cond,   flip when inv_cond,  index = cond*nmps + inv*nlps
+        //
+        // This is equivalent to XOR-ing cond with is_lps, so we can handle
+        // both paths with a single branchless computation.
+        //
+        // As can be seen above, renormalization is always performed.
+        let is_lps = ((self.c >> 16) >= self.a) as u32;
+
+        // LPS: C -= A << 16 (no-op when MPS).
+        let lps_mask = is_lps.wrapping_neg(); // 0xFFFF_FFFF if LPS, 0 if MPS
+        self.c -= (self.a << 16) & lps_mask;
+
+        // Same condition as in exchange_mps / exchange_lps.
+        let cond = (self.a < qe_entry.qe) as u32;
+        let inv_cond = 1 - cond;
+
+        // LPS: a = qe (no-op when MPS, a stays as a - qe).
+        self.a = (self.a & !lps_mask) | (qe_entry.qe & lps_mask);
+
+        // exchange_mps: d = mps ^ cond       →  cond ^ 0
+        // exchange_lps: d = mps ^ inv_cond   →  cond ^ 1
+        // unified:      d = mps ^ (cond ^ is_lps)
+        let d = context.mps() ^ cond ^ is_lps;
+
+        // exchange_mps: flip mps when cond & switch       →  (cond ^ 0) & switch
+        // exchange_lps: flip mps when inv_cond & switch   →  (cond ^ 1) & switch
+        // unified:      flip mps when (cond ^ is_lps) & switch
+        context.xor_mps((cond ^ is_lps) & (qe_entry.switch as u32));
+
+        // exchange_mps: index = cond * nlps + inv_cond * nmps
+        // exchange_lps: index = cond * nmps + inv_cond * nlps  (swapped)
+        // unified:      swap nmps/nlps roles based on is_lps
+        let cond_u8 = cond as u8;
+        let inv_cond_u8 = inv_cond as u8;
+        let il = is_lps as u8;
+        let iil = (1 - is_lps) as u8;
+        let when_cond = il * qe_entry.nmps + iil * qe_entry.nlps;
+        let when_inv = il * qe_entry.nlps + iil * qe_entry.nmps;
+        context.set_index(cond_u8 * when_cond + inv_cond_u8 * when_inv);
+
+        self.renormalize();
+
         d
     }
 
