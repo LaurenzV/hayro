@@ -307,7 +307,9 @@ pub(crate) fn decode_bitmap_arithmetic_coding(
             if y > 0 {
                 let stride = bitmap.stride as usize;
                 let src = (y as usize - 1) * stride;
-                bitmap.data.copy_within(src..src + stride, y as usize * stride);
+                bitmap
+                    .data
+                    .copy_within(src..src + stride, y as usize * stride);
             }
         } else {
             // "d) If LTP = 0 then, from left to right, decode each pixel of the
