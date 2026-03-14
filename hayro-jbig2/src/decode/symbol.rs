@@ -4,7 +4,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
-use crate::bitmap::Bitmap;
+use crate::bitmap::{Bitmap, WORD_BITS};
 use crate::decode::generic::{decode_bitmap_mmr, parse_adaptive_template_pixels};
 use crate::decode::text::{
     DecodeContext, ReferenceCorner, TextRegionContexts, TextRegionFlags, TextRegionHeader,
@@ -625,9 +625,27 @@ fn decode_height_class_collective_bitmap(ctx: &mut SymbolDecodeContext<'_>) -> R
         let mut symbol = Bitmap::new(symbol_width, ctx.height_class_height)?;
 
         for y in 0..ctx.height_class_height {
-            for x in 0..symbol_width {
-                let pixel = collective_bitmap.get_pixel(x_offset + x, y);
-                symbol.set_pixel(x, y, pixel);
+            let src_bit_offset = x_offset % WORD_BITS;
+            let src_word_start = x_offset / WORD_BITS;
+            let dest_row = (y * symbol.stride) as usize;
+
+            for w in 0..symbol.stride {
+                let sw = src_word_start + w;
+                let src1 = collective_bitmap.get_word(y, sw);
+                let word = if src_bit_offset == 0 {
+                    src1
+                } else {
+                    let src2 = collective_bitmap.get_word(y, sw + 1);
+                    (src1 << src_bit_offset) | (src2 >> (WORD_BITS - src_bit_offset))
+                };
+                symbol.data[dest_row + w as usize] = word;
+            }
+
+            // Clear trailing bits in the last word beyond `symbol_width`.
+            let trailing = symbol_width % WORD_BITS;
+            if trailing != 0 && symbol.stride > 0 {
+                let last = dest_row + (symbol.stride - 1) as usize;
+                symbol.data[last] &= !0 << (WORD_BITS - trailing);
             }
         }
 

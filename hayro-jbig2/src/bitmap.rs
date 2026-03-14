@@ -133,6 +133,8 @@ impl Bitmap {
     ///
     /// Pixels outside the destination bitmap are ignored.
     pub(crate) fn combine(&mut self, other: &Self, x: i32, y: i32, operator: CombinationOperator) {
+        // TODO: Figure out how we can optimize this, especially since this is a
+        // bottleneck for symbols/patterns.
         let dest_x_start = x.max(0);
         let dest_x_end = (x + other.width as i32).min(self.width as i32);
 
