@@ -281,7 +281,10 @@ impl<'a> RefinementContextGatherer<'a> {
                 (b0 << 2) | (b1 << 1) | b2
             } else {
                 // Fast path: shift and mask 3 bits at once.
-                ((buf >> (WORD_SHIFT - rbx - 1)) & 0b111) as u32
+                #[allow(trivial_numeric_casts)]
+                {
+                    ((buf >> (WORD_SHIFT - rbx - 1)) & 0b111) as u32
+                }
             }
         }
 
