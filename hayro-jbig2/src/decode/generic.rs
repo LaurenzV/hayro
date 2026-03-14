@@ -616,7 +616,7 @@ impl<'a> ContextGatherer<'a> {
     }
 
     #[inline(always)]
-    fn load_word(bitmap: &Bitmap, row_y: u32, start_x: u32) -> Word {
+    pub(crate) fn load_word(bitmap: &Bitmap, row_y: u32, start_x: u32) -> Word {
         let word_idx = start_x / WORD_BITS;
 
         if start_x.is_multiple_of(WORD_BITS) {
@@ -630,7 +630,7 @@ impl<'a> ContextGatherer<'a> {
     }
 
     #[inline]
-    fn get_buf_pixel(buf: Word, pos: u32) -> u16 {
+    pub(crate) fn get_buf_pixel(buf: Word, pos: u32) -> u16 {
         if pos < WORD_BITS {
             ((buf >> (WORD_SHIFT - pos)) & 1) as u16
         } else {
