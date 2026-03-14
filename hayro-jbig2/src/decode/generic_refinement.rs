@@ -267,23 +267,6 @@ impl<'a> RefinementContextGatherer<'a> {
     }
 
     #[inline(always)]
-    pub(crate) fn gather(&mut self, region: &Bitmap, reference: &Bitmap, x: u32) -> u16 {
-        let bx = x - self.reg_cur_x;
-        let ref_x = (x as i32 - self.reference_dx) as u32;
-        let rbx = ref_x - self.ref_cur_x;
-
-        match self.template {
-            RefinementTemplate::Template0 if self.use_default_at => {
-                self.gather_template0_default(bx, rbx)
-            }
-            RefinementTemplate::Template0 => {
-                self.gather_template0_custom(region, reference, x, bx, rbx)
-            }
-            RefinementTemplate::Template1 => self.gather_template1(bx, rbx),
-        }
-    }
-
-    #[inline(always)]
     pub(crate) fn tpgr_all_same(&self, x: u32) -> bool {
         let ref_x = (x as i32 - self.reference_dx) as u32;
         let rbx = ref_x - self.ref_cur_x;
@@ -318,7 +301,11 @@ impl<'a> RefinementContextGatherer<'a> {
     }
 
     #[inline]
-    fn gather_template0_default(&mut self, bx: u32, rbx: u32) -> u16 {
+    fn gather_template0_default(&mut self, _region: &Bitmap, _reference: &Bitmap, x: u32) -> u16 {
+        let bx = x - self.reg_cur_x;
+        let ref_x = (x as i32 - self.reference_dx) as u32;
+        let rbx = ref_x - self.ref_cur_x;
+
         let new_pixels = (ContextGatherer::get_buf_pixel(self.reg_m1, bx + 1) << 10)
             | (ContextGatherer::get_buf_pixel(self.reg_cur, bx.wrapping_sub(1)) << 9)
             | (ContextGatherer::get_buf_pixel(self.ref_m1, rbx + 1) << 6)
@@ -330,38 +317,41 @@ impl<'a> RefinementContextGatherer<'a> {
     }
 
     #[inline]
-    fn gather_template0_custom(
-        &mut self,
-        region: &Bitmap,
-        reference: &Bitmap,
-        x: u32,
-        bx: u32,
-        rbx: u32,
-    ) -> u16 {
+    fn gather_template0_custom(&mut self, region: &Bitmap, reference: &Bitmap, x: u32) -> u16 {
+        let bx = x - self.reg_cur_x;
+        let ref_x_i = x as i32 - self.reference_dx;
+        let rbx = ref_x_i as u32 - self.ref_cur_x;
+
         let xi = x as i32;
         let yi = self.reg_y as i32;
-        let ref_x = xi - self.reference_dx;
         let ref_y = yi - self.reference_dy;
         let at1 = self.at_pixels[0];
         let at2 = self.at_pixels[1];
 
-        let new_pixels =
-            (region.get_pixel((xi + at1.x as i32) as u32, (yi + at1.y as i32) as u32) as u16) << 12
-                | (ContextGatherer::get_buf_pixel(self.reg_m1, bx + 1) << 10)
-                | (ContextGatherer::get_buf_pixel(self.reg_cur, bx.wrapping_sub(1)) << 9)
-                | (reference.get_pixel((ref_x + at2.x as i32) as u32, (ref_y + at2.y as i32) as u32)
-                    as u16)
-                    << 8
-                | (ContextGatherer::get_buf_pixel(self.ref_m1, rbx + 1) << 6)
-                | (ContextGatherer::get_buf_pixel(self.ref_cur, rbx + 1) << 3)
-                | ContextGatherer::get_buf_pixel(self.ref_p1, rbx + 1);
+        let new_pixels = ((region.get_pixel((xi + at1.x as i32) as u32, (yi + at1.y as i32) as u32)
+            as u16)
+            << 12)
+            | (ContextGatherer::get_buf_pixel(self.reg_m1, bx + 1) << 10)
+            | (ContextGatherer::get_buf_pixel(self.reg_cur, bx.wrapping_sub(1)) << 9)
+            | ((reference.get_pixel(
+                (ref_x_i + at2.x as i32) as u32,
+                (ref_y + at2.y as i32) as u32,
+            ) as u16)
+                << 8)
+            | (ContextGatherer::get_buf_pixel(self.ref_m1, rbx + 1) << 6)
+            | (ContextGatherer::get_buf_pixel(self.ref_cur, rbx + 1) << 3)
+            | ContextGatherer::get_buf_pixel(self.ref_p1, rbx + 1);
 
         self.ctx = ((self.ctx << 1) & SHIFT_MASK_T0_CUSTOM) | new_pixels;
         self.ctx
     }
 
     #[inline]
-    fn gather_template1(&mut self, bx: u32, rbx: u32) -> u16 {
+    fn gather_template1(&mut self, _region: &Bitmap, _reference: &Bitmap, x: u32) -> u16 {
+        let bx = x - self.reg_cur_x;
+        let ref_x = (x as i32 - self.reference_dx) as u32;
+        let rbx = ref_x - self.ref_cur_x;
+
         let new_pixels = (ContextGatherer::get_buf_pixel(self.reg_m1, bx + 1) << 7)
             | (ContextGatherer::get_buf_pixel(self.reg_cur, bx.wrapping_sub(1)) << 6)
             | (ContextGatherer::get_buf_pixel(self.ref_m1, rbx) << 5)
@@ -385,8 +375,73 @@ pub(crate) fn decode_bitmap(
     adaptive_template_pixels: &[AdaptiveTemplatePixel],
     tpgron: bool,
 ) -> Result<()> {
-    let width = region.width;
-    let height = region.height;
+    macro_rules! refinement_decode_loop {
+        ($gatherer:expr, $tpgron:expr, $sltp_context:expr, $gather:expr) => {{
+            let gatherer: &mut RefinementContextGatherer<'_> = $gatherer;
+            let width = region.width;
+            let height = region.height;
+
+            // "1) Set LTP = 0." (6.3.5.6)
+            let mut ltp = false;
+
+            // "3) Decode each row as follows:" (6.3.5.6)
+            for y in 0..height {
+                // "b) If TPGRON is 1, then decode a bit using the arithmetic entropy
+                // coder" (6.3.5.6)
+                if $tpgron {
+                    let sltp = decoder.read_bit(&mut contexts[$sltp_context as usize]);
+                    // "Let SLTP be the value of this bit. Set: LTP = LTP XOR SLTP"
+                    ltp = ltp != (sltp != 0);
+                }
+
+                gatherer.start_row(region, reference, y);
+
+                // "c) If LTP = 0 then, from left to right, explicitly decode all pixels
+                // of the current row of GRREG." (6.3.5.6)
+                if !ltp {
+                    for x in 0..width {
+                        gatherer.maybe_reload_buffers(region, reference, x);
+                        let context = ($gather)(gatherer, region, reference, x) as usize;
+                        let pixel = decoder.read_bit(&mut contexts[context]);
+                        region.set_pixel(x, y, pixel as u8);
+                        gatherer.update_current_row(x, pixel as u8);
+                    }
+                } else {
+                    // "d) If LTP = 1 then, from left to right, implicitly decode certain
+                    // pixels of the current row of GRREG, and explicitly decode the rest."
+                    // (6.3.5.6)
+                    for x in 0..width {
+                        gatherer.maybe_reload_buffers(region, reference, x);
+
+                        let context = ($gather)(gatherer, region, reference, x) as usize;
+
+                        // "i) Set TPGRPIX equal to 1 if:
+                        //    - TPGRON is 1 AND;
+                        //    - a 3 × 3 pixel array in the reference bitmap (Figure 16),
+                        //      centred at the location corresponding to the current pixel,
+                        //      contains pixels all of the same value." (6.3.5.6)
+                        if gatherer.tpgr_all_same(x) {
+                            // "ii) If TPGRPIX is 1 then implicitly decode the current pixel
+                            // by setting it equal to its predicted value (TPGRVAL)." (6.3.5.6)
+                            //
+                            // "When TPGRPIX is set to 1, set TPGRVAL equal to the current pixel
+                            // predicted value, which is the common value of the nine adjacent
+                            // pixels in the 3 × 3 array." (6.3.5.6)
+                            let val = gatherer.ref_center_pixel(x);
+                            region.set_pixel(x, y, val);
+                            gatherer.update_current_row(x, val);
+                        } else {
+                            // "iii) Otherwise, explicitly decode the current pixel using the
+                            // methodology of steps 3 c) i) through 3 c) iii) above." (6.3.5.6)
+                            let pixel = decoder.read_bit(&mut contexts[context]);
+                            region.set_pixel(x, y, pixel as u8);
+                            gatherer.update_current_row(x, pixel as u8);
+                        }
+                    }
+                }
+            }
+        }};
+    }
 
     let mut gatherer = RefinementContextGatherer::new(
         gr_template,
@@ -395,68 +450,31 @@ pub(crate) fn decode_bitmap(
         reference_dy,
     );
 
-    // "1) Set LTP = 0." (6.3.5.6)
-    let mut ltp = false;
+    // Context for SLTP depends on template (Figures 14, 15).
+    let sltp_context: u16 = match gr_template {
+        RefinementTemplate::Template0 => 0b0000000010000,
+        RefinementTemplate::Template1 => 0b0000001000,
+    };
 
-    // "3) Decode each row as follows:" (6.3.5.6)
-    for y in 0..height {
-        // "b) If TPGRON is 1, then decode a bit using the arithmetic entropy
-        // coder" (6.3.5.6)
-        if tpgron {
-            // Context for SLTP depends on template (Figures 14, 15).
-            let sltp_context: u16 = match gr_template {
-                RefinementTemplate::Template0 => 0b0000000010000,
-                RefinementTemplate::Template1 => 0b0000001000,
-            };
-            let sltp = decoder.read_bit(&mut contexts[sltp_context as usize]);
-            // "Let SLTP be the value of this bit. Set: LTP = LTP XOR SLTP"
-            ltp = ltp != (sltp != 0);
-        }
-
-        gatherer.start_row(region, reference, y);
-
-        // "c) If LTP = 0 then, from left to right, explicitly decode all pixels
-        // of the current row of GRREG." (6.3.5.6)
-        if !ltp {
-            for x in 0..width {
-                gatherer.maybe_reload_buffers(region, reference, x);
-                let context = gatherer.gather(region, reference, x);
-                let pixel = decoder.read_bit(&mut contexts[context as usize]);
-                region.set_pixel(x, y, pixel as u8);
-                gatherer.update_current_row(x, pixel as u8);
-            }
-        } else {
-            // "d) If LTP = 1 then, from left to right, implicitly decode certain
-            // pixels of the current row of GRREG, and explicitly decode the rest."
-            // (6.3.5.6)
-            for x in 0..width {
-                gatherer.maybe_reload_buffers(region, reference, x);
-                let context = gatherer.gather(region, reference, x);
-
-                // "i) Set TPGRPIX equal to 1 if:
-                //    - TPGRON is 1 AND;
-                //    - a 3 × 3 pixel array in the reference bitmap (Figure 16),
-                //      centred at the location corresponding to the current pixel,
-                //      contains pixels all of the same value." (6.3.5.6)
-                if gatherer.tpgr_all_same(x) {
-                    // "ii) If TPGRPIX is 1 then implicitly decode the current pixel
-                    // by setting it equal to its predicted value (TPGRVAL)." (6.3.5.6)
-                    //
-                    // "When TPGRPIX is set to 1, set TPGRVAL equal to the current pixel
-                    // predicted value, which is the common value of the nine adjacent
-                    // pixels in the 3 × 3 array." (6.3.5.6)
-                    let val = gatherer.ref_center_pixel(x);
-                    region.set_pixel(x, y, val);
-                    gatherer.update_current_row(x, val);
-                } else {
-                    // "iii) Otherwise, explicitly decode the current pixel using the
-                    // methodology of steps 3 c) i) through 3 c) iii) above." (6.3.5.6)
-                    let pixel = decoder.read_bit(&mut contexts[context as usize]);
-                    region.set_pixel(x, y, pixel as u8);
-                    gatherer.update_current_row(x, pixel as u8);
-                }
-            }
-        }
+    match gr_template {
+        RefinementTemplate::Template0 if gatherer.use_default_at => refinement_decode_loop!(
+            &mut gatherer,
+            tpgron,
+            sltp_context,
+            RefinementContextGatherer::gather_template0_default
+        ),
+        RefinementTemplate::Template0 => refinement_decode_loop!(
+            &mut gatherer,
+            tpgron,
+            sltp_context,
+            RefinementContextGatherer::gather_template0_custom
+        ),
+        RefinementTemplate::Template1 => refinement_decode_loop!(
+            &mut gatherer,
+            tpgron,
+            sltp_context,
+            RefinementContextGatherer::gather_template1
+        ),
     }
 
     Ok(())
