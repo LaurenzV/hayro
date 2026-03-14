@@ -270,16 +270,27 @@ impl<'a> RefinementContextGatherer<'a> {
     pub(crate) fn tpgr_all_same(&self, x: u32) -> bool {
         let ref_x = (x as i32 - self.reference_dx) as u32;
         let rbx = ref_x - self.ref_cur_x;
-        let center = ContextGatherer::get_buf_pixel(self.ref_cur, rbx);
 
-        ContextGatherer::get_buf_pixel(self.ref_m1, rbx.wrapping_sub(1)) == center
-            && ContextGatherer::get_buf_pixel(self.ref_m1, rbx) == center
-            && ContextGatherer::get_buf_pixel(self.ref_m1, rbx + 1) == center
-            && ContextGatherer::get_buf_pixel(self.ref_cur, rbx.wrapping_sub(1)) == center
-            && ContextGatherer::get_buf_pixel(self.ref_cur, rbx + 1) == center
-            && ContextGatherer::get_buf_pixel(self.ref_p1, rbx.wrapping_sub(1)) == center
-            && ContextGatherer::get_buf_pixel(self.ref_p1, rbx) == center
-            && ContextGatherer::get_buf_pixel(self.ref_p1, rbx + 1) == center
+        #[inline(always)]
+        fn extract_3bits(buf: Word, rbx: u32) -> u32 {
+            if rbx == 0 || rbx + 1 >= WORD_BITS {
+                // Near word boundary, fall back to individual extraction.
+                let b0 = ContextGatherer::get_buf_pixel(buf, rbx.wrapping_sub(1)) as u32;
+                let b1 = ContextGatherer::get_buf_pixel(buf, rbx) as u32;
+                let b2 = ContextGatherer::get_buf_pixel(buf, rbx + 1) as u32;
+                (b0 << 2) | (b1 << 1) | b2
+            } else {
+                // Fast path: shift and mask 3 bits at once.
+                ((buf >> (WORD_SHIFT - rbx - 1)) & 0b111) as u32
+            }
+        }
+
+        let m1 = extract_3bits(self.ref_m1, rbx);
+        let cur = extract_3bits(self.ref_cur, rbx);
+        let p1 = extract_3bits(self.ref_p1, rbx);
+
+        // Check that all 9 pixels are the same.
+        m1 == cur && cur == p1 && (cur == 0 || cur == 0b111)
     }
 
     #[inline(always)]
