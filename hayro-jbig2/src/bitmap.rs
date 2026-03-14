@@ -104,21 +104,23 @@ impl Bitmap {
 
     /// Get a pixel value at (x, y).
     #[inline]
-    pub(crate) fn get_pixel(&self, x: u32, y: u32) -> bool {
+    pub(crate) fn get_pixel(&self, x: u32, y: u32) -> u8 {
         if x >= self.width || y >= self.height {
-            return false;
+            return 0;
         }
+
         let word_idx = (y * self.stride + x / WORD_BITS) as usize;
         let bit_pos = WORD_SHIFT - (x % WORD_BITS);
-        (self.data[word_idx] >> bit_pos) & 1 != 0
+        ((self.data[word_idx] >> bit_pos) & 1) as u8
     }
 
     /// Set a pixel value at (x, y).
     #[inline]
-    pub(crate) fn set_pixel(&mut self, x: u32, y: u32, value: bool) {
+    pub(crate) fn set_pixel(&mut self, x: u32, y: u32, value: u8) {
         if x >= self.width || y >= self.height {
             return;
         }
+
         let word_idx = (y * self.stride + x / WORD_BITS) as usize;
         let bit_pos = WORD_SHIFT - (x % WORD_BITS);
         self.data[word_idx] |= (value as Word) << bit_pos;

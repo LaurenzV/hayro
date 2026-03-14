@@ -363,7 +363,7 @@ macro_rules! decode_loop {
                     ctx_gatherer.maybe_reload_buffers(bitmap, x);
                     let context_bits = ($gather)(ctx_gatherer, bitmap, x) as usize;
                     let pixel = decoder.read_bit(&mut contexts[context_bits]);
-                    let value = pixel != 0;
+                    let value = pixel as u8;
                     bitmap.set_pixel(x, y, value);
                     ctx_gatherer.update_current_row(x, value);
                 }
@@ -381,12 +381,7 @@ pub(crate) fn decode_bitmap_arithmetic_coding(
     tpgdon: bool,
     adaptive_template_pixels: &[AdaptiveTemplatePixel],
 ) -> Result<()> {
-    let mut ctx_gatherer = ContextGatherer::new(
-        bitmap.width,
-        bitmap.height,
-        template,
-        adaptive_template_pixels,
-    );
+    let mut ctx_gatherer = ContextGatherer::new(template, adaptive_template_pixels);
 
     // See Figure 8 - 11.
     let sltp_context: u16 = match template {
@@ -483,8 +478,6 @@ pub(crate) struct ContextGatherer<'a> {
     template: Template,
     at_pixels: &'a [AdaptiveTemplatePixel],
     use_default_at: bool,
-    width: u32,
-    height: u32,
     /// Used in `maybe_reload_buffers` to determine how far to the right
     /// we might access pixels.
     max_right: u32,
@@ -500,12 +493,7 @@ pub(crate) struct ContextGatherer<'a> {
 }
 
 impl<'a> ContextGatherer<'a> {
-    pub(crate) fn new(
-        width: u32,
-        height: u32,
-        template: Template,
-        at_pixels: &'a [AdaptiveTemplatePixel],
-    ) -> Self {
+    pub(crate) fn new(template: Template, at_pixels: &'a [AdaptiveTemplatePixel]) -> Self {
         let use_default_at = has_default_at_pixels(template, at_pixels);
         let max_right = match template {
             Template::Template0 | Template::Template1 => {
@@ -527,8 +515,6 @@ impl<'a> ContextGatherer<'a> {
             template,
             at_pixels,
             use_default_at,
-            width,
-            height,
             max_right,
             cur_y: 0,
             buf_m2: 0,
@@ -657,12 +643,10 @@ impl<'a> ContextGatherer<'a> {
 
     #[inline]
     fn get_bitmap_pixel(&self, bitmap: &Bitmap, px: i32, py: i32) -> u16 {
-        if px < 0 || py < 0 || px >= self.width as i32 || py >= self.height as i32 {
+        if px < 0 || py < 0 {
             0
-        } else if bitmap.get_pixel(px as u32, py as u32) {
-            1
         } else {
-            0
+            bitmap.get_pixel(px as u32, py as u32) as u16
         }
     }
 
@@ -842,7 +826,7 @@ impl<'a> ContextGatherer<'a> {
     /// Note: The caller must ensure that `gather` has been called for this `x`
     /// first.
     #[inline(always)]
-    pub(crate) fn update_current_row(&mut self, x: u32, value: bool) {
+    pub(crate) fn update_current_row(&mut self, x: u32, value: u8) {
         debug_assert!(x >= self.cur_x && x < self.cur_x + WORD_BITS);
 
         let bit_pos = WORD_SHIFT - (x - self.cur_x);

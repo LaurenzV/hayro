@@ -116,7 +116,7 @@ fn decode_arithmetic(
     decode_bitplanes(width, height, stride, bits_per_pixel, |_| {
         // Table C.4: "GBW = GSW, GBH = GSH, TPGDON = 0"
         let mut bitplane = Bitmap::new(width, height)?;
-        let mut gatherer = ContextGatherer::new(width, height, template, &at_pixels);
+        let mut gatherer = ContextGatherer::new(template, &at_pixels);
 
         for y in 0..height {
             gatherer.start_row(&bitplane, y);
@@ -128,14 +128,14 @@ fn decode_arithmetic(
                     if (mask[word_idx] >> bit_pos) & 1 != 0 {
                         // Still need to update the context.
                         let _ = gatherer.gather(&bitplane, x);
-                        gatherer.update_current_row(x, false);
+                        gatherer.update_current_row(x, 0);
                         continue;
                     }
                 }
 
                 let context = gatherer.gather(&bitplane, x);
                 let pixel = decoder.read_bit(&mut ctx.contexts[context as usize]);
-                let value = pixel != 0;
+                let value = pixel as u8;
 
                 bitplane.set_pixel(x, y, value);
                 gatherer.update_current_row(x, value);

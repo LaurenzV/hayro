@@ -597,7 +597,7 @@ fn decode_height_class_collective_bitmap(ctx: &mut SymbolDecodeContext<'_>) -> R
                 for bit in 0..8 {
                     let x = byte_x * 8 + bit;
                     if x < ctx.total_width {
-                        let pixel = (byte >> (7 - bit)) & 1 != 0;
+                        let pixel = (byte >> (7 - bit)) & 1;
                         bitmap.set_pixel(x, y, pixel);
                     }
                 }

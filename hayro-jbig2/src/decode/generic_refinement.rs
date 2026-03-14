@@ -166,7 +166,7 @@ pub(crate) fn decode_bitmap(
                     adaptive_template_pixels,
                 );
                 let pixel = decoder.read_bit(&mut contexts[context as usize]);
-                region.set_pixel(x, y, pixel != 0);
+                region.set_pixel(x, y, pixel as u8);
             };
 
         // "c) If LTP = 0 then, from left to right, explicitly decode all pixels
@@ -216,7 +216,7 @@ pub(crate) fn decode_bitmap(
                     let ref_x = x as i32 - reference_dx;
                     let ref_y = y as i32 - reference_dy;
                     let tpgrval = get_pixel(reference, ref_x, ref_y);
-                    region.set_pixel(x, y, tpgrval != 0);
+                    region.set_pixel(x, y, tpgrval as u8);
                 } else {
                     // "iii) Otherwise, explicitly decode the current pixel using the
                     // methodology of steps 3 c) i) through 3 c) iii) above." (6.3.5.6)
@@ -303,11 +303,9 @@ fn gather_context(
 /// Get a pixel value, returning 0 for out-of-bounds coordinates.
 #[inline]
 fn get_pixel(bitmap: &Bitmap, x: i32, y: i32) -> u16 {
-    if x < 0 || y < 0 || x >= bitmap.width as i32 || y >= bitmap.height as i32 {
+    if x < 0 || y < 0 {
         0
-    } else if bitmap.get_pixel(x as u32, y as u32) {
-        1
     } else {
-        0
+        bitmap.get_pixel(x as u32, y as u32) as u16
     }
 }
