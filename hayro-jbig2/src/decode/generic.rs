@@ -7,7 +7,7 @@ use super::{
 };
 use crate::ScratchBuffers;
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
-use crate::bitmap::Bitmap;
+use crate::bitmap::{Bitmap, WORD_BITS, WORD_SHIFT, Word};
 use crate::error::{ParseError, RegionError, Result, TemplateError, bail};
 use crate::reader::Reader;
 
@@ -195,28 +195,42 @@ pub(crate) fn decode_bitmap_mmr(bitmap: &mut Bitmap, data: &[u8]) -> Result<usiz
         }
 
         fn push_pixel_chunk(&mut self, white: bool, chunk_count: u32) {
-            const BYTE_MASKS: [u32; 4] = [0xFF000000, 0x00FF0000, 0x0000FF00, 0x000000FF];
+            const WORD_BYTES: usize = (WORD_BITS / 8) as usize;
+            const BYTE_MASKS: [Word; WORD_BYTES] = {
+                #[allow(trivial_numeric_casts)]
+                let mut masks = [0 as Word; WORD_BYTES];
+                let mut i = 0;
+                while i < WORD_BYTES {
+                    #[allow(trivial_numeric_casts)]
+                    {
+                        masks[i] = (0xFF as Word) << ((WORD_BYTES - 1 - i) * 8);
+                    }
+                    i += 1;
+                }
+                masks
+            };
 
             let row_start = (self.y * self.bitmap.stride) as usize;
             let end_x = (self.x + chunk_count * 8).min(self.bitmap.width);
-            // 0xFFFFFFFF for white, 0 for black.
-            let white_mask = (white as u32).wrapping_neg();
+            let white_mask = (white as Word).wrapping_neg();
 
             let start = (self.x / 8) as usize;
             let end = (end_x / 8) as usize;
-            let first_full = start.div_ceil(4);
-            let last_full = end / 4;
+            let first_full = start.div_ceil(WORD_BYTES);
+            let last_full = end / WORD_BYTES;
 
-            for b in start..(first_full * 4).min(end) {
-                self.bitmap.data[row_start + b / 4] |= BYTE_MASKS[b % 4] & white_mask;
+            for b in start..(first_full * WORD_BYTES).min(end) {
+                self.bitmap.data[row_start + b / WORD_BYTES] |=
+                    BYTE_MASKS[b % WORD_BYTES] & white_mask;
             }
 
             if last_full > first_full {
                 self.bitmap.data[row_start + first_full..row_start + last_full].fill(white_mask);
             }
 
-            for b in (first_full.max(last_full) * 4)..end {
-                self.bitmap.data[row_start + b / 4] |= BYTE_MASKS[b % 4] & white_mask;
+            for b in (first_full.max(last_full) * WORD_BYTES)..end {
+                self.bitmap.data[row_start + b / WORD_BYTES] |=
+                    BYTE_MASKS[b % WORD_BYTES] & white_mask;
             }
 
             self.x = end_x;
@@ -439,9 +453,9 @@ pub(crate) struct ContextGatherer<'a> {
     cur_y: u32,
     cur_x: u32,
     /// Pre-fetched pixel buffers for rows y-2, y-1, y.
-    buf_m2: u32,
-    buf_m1: u32,
-    buf_cur: u32,
+    buf_m2: Word,
+    buf_m1: Word,
+    buf_cur: Word,
     /// The current context for all 3 rows.
     ctx: u16,
 }
@@ -580,23 +594,23 @@ impl<'a> ContextGatherer<'a> {
     }
 
     #[inline(always)]
-    fn load_word(bitmap: &Bitmap, row_y: u32, start_x: u32) -> u32 {
-        let word_idx = start_x / 32;
+    fn load_word(bitmap: &Bitmap, row_y: u32, start_x: u32) -> Word {
+        let word_idx = start_x / WORD_BITS;
 
-        if start_x.is_multiple_of(32) {
+        if start_x.is_multiple_of(WORD_BITS) {
             bitmap.get_word(row_y, word_idx)
         } else {
-            let bit_offset = start_x % 32;
+            let bit_offset = start_x % WORD_BITS;
             let word1 = bitmap.get_word(row_y, word_idx);
             let word2 = bitmap.get_word(row_y, word_idx + 1);
-            (word1 << bit_offset) | (word2 >> (32 - bit_offset))
+            (word1 << bit_offset) | (word2 >> (WORD_BITS - bit_offset))
         }
     }
 
     #[inline]
-    fn get_buf_pixel(buf: u32, pos: u32) -> u16 {
-        if pos < 32 {
-            ((buf >> (31 - pos)) & 1) as u16
+    fn get_buf_pixel(buf: Word, pos: u32) -> u16 {
+        if pos < WORD_BITS {
+            ((buf >> (WORD_SHIFT - pos)) & 1) as u16
         } else {
             0
         }
@@ -615,7 +629,7 @@ impl<'a> ContextGatherer<'a> {
 
     #[inline(always)]
     fn maybe_reload_buffers(&mut self, bitmap: &Bitmap, x: u32) {
-        if x + self.max_right >= self.cur_x + 32 {
+        if x + self.max_right >= self.cur_x + WORD_BITS {
             let new_start = x.saturating_sub(4);
             self.cur_x = new_start;
             self.buf_m2 = if self.cur_y >= 2 {
@@ -790,10 +804,11 @@ impl<'a> ContextGatherer<'a> {
     /// first.
     #[inline(always)]
     pub(crate) fn update_current_row(&mut self, x: u32, value: bool) {
-        debug_assert!(x >= self.cur_x && x < self.cur_x + 32);
+        debug_assert!(x >= self.cur_x && x < self.cur_x + WORD_BITS);
 
-        let bit_pos = 31 - (x - self.cur_x);
-        let mask = 1_u32 << bit_pos;
-        self.buf_cur = (self.buf_cur & !mask) | ((value as u32) << bit_pos);
+        let bit_pos = WORD_SHIFT - (x - self.cur_x);
+        #[allow(trivial_numeric_casts)]
+        let mask = (1 as Word) << bit_pos;
+        self.buf_cur = (self.buf_cur & !mask) | ((value as Word) << bit_pos);
     }
 }

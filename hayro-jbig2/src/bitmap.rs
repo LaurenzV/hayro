@@ -14,6 +14,13 @@ use alloc::vec::Vec;
 // to `u16::MAX`, which should be more than enough.
 pub(crate) const MAX_DIMENSION: u32 = u16::MAX as u32;
 
+/// The underlying word type for packed pixel storage.
+/// Change this to `u32` to switch back to 32-bit words.
+pub(crate) type Word = u32;
+
+pub(crate) const WORD_BITS: u32 = Word::BITS;
+pub(crate) const WORD_SHIFT: u32 = WORD_BITS - 1;
+
 /// A decoded bitmap with position information.
 ///
 /// "Pixels decoded by the MMR decoder having the value 'black' shall be treated
@@ -25,11 +32,11 @@ pub(crate) struct Bitmap {
     pub(crate) width: u32,
     /// Height in pixels.
     pub(crate) height: u32,
-    /// Number of u32 words per row.
+    /// Number of words per row.
     pub(crate) stride: u32,
     /// Packed pixel data, one bit per pixel, row-major order.
-    /// Each row is padded to a 32-bit boundary.
-    pub(crate) data: Vec<u32>,
+    /// Each row is padded to a word boundary.
+    pub(crate) data: Vec<Word>,
     /// "This four-byte field gives the horizontal offset in pixels of the bitmap
     /// encoded in this segment relative to the page bitmap." (7.4.1.3)
     pub(crate) x_location: u32,
@@ -58,8 +65,8 @@ impl Bitmap {
             bail!(OverflowError::BitmapDimension);
         }
 
-        let stride = width.div_ceil(32);
-        let default_word = if default_pixel { !0_u32 } else { 0_u32 };
+        let stride = width.div_ceil(WORD_BITS);
+        let default_word: Word = if default_pixel { !0 } else { 0 };
         let data = vec![default_word; stride as usize * height as usize];
         Ok(Self {
             width,
@@ -81,8 +88,8 @@ impl Bitmap {
             return Err(OverflowError::BitmapDimension.into());
         }
 
-        let stride = width.div_ceil(32);
-        let default_word = if default_pixel { !0_u32 } else { 0_u32 };
+        let stride = width.div_ceil(WORD_BITS);
+        let default_word: Word = if default_pixel { !0 } else { 0 };
         self.width = width;
         self.height = height;
         self.stride = stride;
@@ -101,8 +108,8 @@ impl Bitmap {
         if x >= self.width || y >= self.height {
             return false;
         }
-        let word_idx = (y * self.stride + x / 32) as usize;
-        let bit_pos = 31 - (x % 32);
+        let word_idx = (y * self.stride + x / WORD_BITS) as usize;
+        let bit_pos = WORD_SHIFT - (x % WORD_BITS);
         (self.data[word_idx] >> bit_pos) & 1 != 0
     }
 
@@ -112,9 +119,9 @@ impl Bitmap {
         if x >= self.width || y >= self.height {
             return;
         }
-        let word_idx = (y * self.stride + x / 32) as usize;
-        let bit_pos = 31 - (x % 32);
-        self.data[word_idx] |= (value as u32) << bit_pos;
+        let word_idx = (y * self.stride + x / WORD_BITS) as usize;
+        let bit_pos = WORD_SHIFT - (x % WORD_BITS);
+        self.data[word_idx] |= (value as Word) << bit_pos;
     }
 
     /// Combine another bitmap into this one at a specific location.
@@ -142,12 +149,12 @@ impl Bitmap {
             let dest_x_start = dest_x_start as u32;
             let dest_x_end = dest_x_end as u32;
 
-            let first_word = dest_x_start / 32;
-            let last_word = (dest_x_end - 1) / 32;
+            let first_word = dest_x_start / WORD_BITS;
+            let last_word = (dest_x_end - 1) / WORD_BITS;
 
             for word_idx in first_word..=last_word {
-                let word_start_x = word_idx * 32;
-                let word_end_x = word_start_x + 32;
+                let word_start_x = word_idx * WORD_BITS;
+                let word_end_x = word_start_x + WORD_BITS;
 
                 let px_start = dest_x_start.max(word_start_x);
                 let px_end = dest_x_end.min(word_end_x);
@@ -155,15 +162,15 @@ impl Bitmap {
                 let bit_start = px_start - word_start_x;
                 let bit_end = px_end - word_start_x;
 
-                let mask = if bit_end == 32 {
-                    !0_u32 >> bit_start
+                let mask: Word = if bit_end == WORD_BITS {
+                    !0 >> bit_start
                 } else {
-                    (!0_u32 >> bit_start) & !(!0_u32 >> bit_end)
+                    (!0 >> bit_start) & !(!0 >> bit_end)
                 };
 
                 let src_x_for_range = src_x_start + (px_start - dest_x_start);
-                let src_word_idx = src_x_for_range / 32;
-                let src_bit_offset = src_x_for_range % 32;
+                let src_word_idx = src_x_for_range / WORD_BITS;
+                let src_bit_offset = src_x_for_range % WORD_BITS;
 
                 let src_word1 = other.get_word(src_y, src_word_idx);
                 let src_word2 = other.get_word(src_y, src_word_idx + 1);
@@ -171,7 +178,7 @@ impl Bitmap {
                 let src_raw = if src_bit_offset == 0 {
                     src_word1
                 } else {
-                    (src_word1 << src_bit_offset) | (src_word2 >> (32 - src_bit_offset))
+                    (src_word1 << src_bit_offset) | (src_word2 >> (WORD_BITS - src_bit_offset))
                 };
                 let src_aligned = src_raw >> bit_start;
 
@@ -192,7 +199,7 @@ impl Bitmap {
     }
 
     #[inline]
-    pub(crate) fn get_word(&self, row: u32, word_idx: u32) -> u32 {
+    pub(crate) fn get_word(&self, row: u32, word_idx: u32) -> Word {
         if row >= self.height || word_idx >= self.stride {
             return 0;
         }

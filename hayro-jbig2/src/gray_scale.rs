@@ -5,7 +5,7 @@ use alloc::vec::Vec;
 
 use crate::ScratchBuffers;
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
-use crate::bitmap::{Bitmap, MAX_DIMENSION};
+use crate::bitmap::{Bitmap, MAX_DIMENSION, WORD_BITS, WORD_SHIFT, Word};
 use crate::decode::generic::{ContextGatherer, decode_bitmap_mmr};
 use crate::decode::{AdaptiveTemplatePixel, Template};
 use crate::error::{OverflowError, Result, bail};
@@ -55,7 +55,7 @@ fn decode_mmr(data: &[u8], params: &GrayScaleParams<'_>) -> Result<Vec<u32>> {
     let height = params.height;
     // `GSBPP` - The number of bits per gray-scale value.
     let bits_per_pixel = params.bits_per_pixel;
-    let stride = width.div_ceil(32);
+    let stride = width.div_ceil(WORD_BITS);
 
     let mut offset = 0;
     decode_bitplanes(width, height, stride, bits_per_pixel, |_| {
@@ -85,9 +85,10 @@ fn decode_arithmetic(
 
     // `GSBPP` - The number of bits per gray-scale value.
     let bits_per_pixel = params.bits_per_pixel;
-    let stride = width.div_ceil(32);
+    let stride = width.div_ceil(WORD_BITS);
     // `GSKIP` - The skip mask (if GSUSESKIP = 1).
     let skip_mask = params.skip_mask;
+    let skip_stride = width.div_ceil(32);
     // `GSTEMPLATE` - The template used for bitplane decoding.
     let template = params.template;
 
@@ -122,7 +123,7 @@ fn decode_arithmetic(
             for x in 0..width {
                 // Table C.4: "USESKIP = GSUSESKIP, SKIP = GSKIP"
                 if let Some(mask) = skip_mask {
-                    let word_idx = (y * stride + x / 32) as usize;
+                    let word_idx = (y * skip_stride + x / 32) as usize;
                     let bit_pos = 31 - (x % 32);
                     if (mask[word_idx] >> bit_pos) & 1 != 0 {
                         // Still need to update the context.
@@ -157,7 +158,7 @@ fn decode_bitplanes<F>(
     mut decode_next: F,
 ) -> Result<Vec<u32>>
 where
-    F: FnMut(u32) -> Result<Vec<u32>>,
+    F: FnMut(u32) -> Result<Vec<Word>>,
 {
     let size = width as usize * height as usize;
     // `GSVALS` - The decoded gray-scale image array.
@@ -171,8 +172,8 @@ where
     // Extract bits from packed format.
     for y in 0..height {
         for x in 0..width {
-            let word_idx = (y * stride + x / 32) as usize;
-            let bit_pos = 31 - (x % 32);
+            let word_idx = (y * stride + x / WORD_BITS) as usize;
+            let bit_pos = WORD_SHIFT - (x % WORD_BITS);
             if (prev_plane[word_idx] >> bit_pos) & 1 != 0 {
                 let i = (y * width + x) as usize;
                 values[i] |= 1 << (bits_per_pixel - 1);
@@ -197,8 +198,8 @@ where
         // C.5 step 4: "GSVALS[x, y] = sum(J=0 to GSBPP-1) GSPLANES[J][x, y] * 2^J"
         for y in 0..height {
             for x in 0..width {
-                let word_idx = (y * stride + x / 32) as usize;
-                let bit_pos = 31 - (x % 32);
+                let word_idx = (y * stride + x / WORD_BITS) as usize;
+                let bit_pos = WORD_SHIFT - (x % WORD_BITS);
                 if (plane[word_idx] >> bit_pos) & 1 != 0 {
                     let i = (y * width + x) as usize;
                     values[i] |= 1 << j;
