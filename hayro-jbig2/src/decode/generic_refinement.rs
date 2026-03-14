@@ -146,9 +146,9 @@ pub(crate) struct RefinementContextGatherer<'a> {
     ctx: u16,
 }
 
-const SHIFT_MASK_T0_DEFAULT: u16 = 0b1_10_0_11_0_11_0_11_0;
-const SHIFT_MASK_T0_CUSTOM: u16 = 0b0_10_0_01_0_11_0_11_0;
-const SHIFT_MASK_T1: u16 = 0b11_000_11_0_10;
+const SHIFT_MASK_T0_DEFAULT: u16 = 0b1_1001_1011_0110;
+const SHIFT_MASK_T0_CUSTOM: u16 = 0b0_1000_1011_0110;
+const SHIFT_MASK_T1: u16 = 0b11_0001_1010;
 
 impl<'a> RefinementContextGatherer<'a> {
     pub(crate) fn new(
