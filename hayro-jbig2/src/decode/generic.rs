@@ -187,6 +187,7 @@ pub(crate) fn decode_bitmap_mmr(bitmap: &mut Bitmap, data: &[u8]) -> Result<usiz
     }
 
     impl hayro_ccitt::Decoder for BitmapDecoder<'_> {
+        #[inline]
         fn push_pixel(&mut self, white: bool) {
             if self.x < self.bitmap.width {
                 self.bitmap.set_pixel(self.x, self.y, white);
@@ -194,6 +195,7 @@ pub(crate) fn decode_bitmap_mmr(bitmap: &mut Bitmap, data: &[u8]) -> Result<usiz
             }
         }
 
+        #[inline]
         fn push_pixel_chunk(&mut self, white: bool, chunk_count: u32) {
             const WORD_BYTES: usize = (WORD_BITS / 8) as usize;
             const BYTE_MASKS: [Word; WORD_BYTES] = {
@@ -236,6 +238,7 @@ pub(crate) fn decode_bitmap_mmr(bitmap: &mut Bitmap, data: &[u8]) -> Result<usiz
             self.x = end_x;
         }
 
+        #[inline]
         fn next_line(&mut self) {
             self.x = 0;
             self.y += 1;
