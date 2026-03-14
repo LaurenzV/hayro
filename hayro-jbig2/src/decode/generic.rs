@@ -265,6 +265,60 @@ pub(crate) fn decode_bitmap_mmr(bitmap: &mut Bitmap, data: &[u8]) -> Result<usiz
         .map_err(|_| RegionError::InvalidDimension)?)
 }
 
+// I'm not sure why, but I was getting very weird codegen (with bad performance)
+// when attempting to do this via generics. Hence why we use a macro for that.
+macro_rules! decode_loop {
+    ($bitmap:expr, $decoder:expr, $contexts:expr, $ctx_gatherer:expr,
+     $tpgdon:expr, $sltp_context:expr, $gather:expr) => {{
+        let bitmap: &mut Bitmap = $bitmap;
+        let decoder: &mut ArithmeticDecoder<'_> = $decoder;
+        let contexts: &mut [ArithmeticDecoderContext] = $contexts;
+        let ctx_gatherer: &mut ContextGatherer<'_> = $ctx_gatherer;
+        let width = bitmap.width;
+        let height = bitmap.height;
+
+        // "1) Set: LTP = 0" (6.2.5.7)
+        let mut ltp = false;
+
+        // "3) Decode each row as follows:" (6.2.5.7)
+        for y in 0..height {
+            // "b) If TPGDON is 1, then decode a bit using the arithmetic entropy
+            // coder" (6.2.5.7)
+            if $tpgdon {
+                let sltp = decoder.read_bit(&mut contexts[$sltp_context as usize]);
+                // "Let SLTP be the value of this bit. Set: LTP = LTP XOR SLTP" (6.2.5.7)
+                ltp = ltp != (sltp != 0);
+            }
+
+            // "c) If LTP = 1 then set every pixel of the current row of GBREG equal
+            // to the corresponding pixel of the row immediately above." (6.2.5.7)
+            if ltp {
+                // If y == 0, pixels remain the same.
+                if y > 0 {
+                    let stride = bitmap.stride as usize;
+                    let src = (y as usize - 1) * stride;
+                    bitmap
+                        .data
+                        .copy_within(src..src + stride, y as usize * stride);
+                }
+            } else {
+                // "d) If LTP = 0 then, from left to right, decode each pixel of the
+                // current row of GBREG." (6.2.5.7)
+                ctx_gatherer.start_row(bitmap, y);
+
+                for x in 0..width {
+                    ctx_gatherer.maybe_reload_buffers(bitmap, x);
+                    let context_bits = ($gather)(ctx_gatherer, bitmap, x) as usize;
+                    let pixel = decoder.read_bit(&mut contexts[context_bits]);
+                    let value = pixel != 0;
+                    bitmap.set_pixel(x, y, value);
+                    ctx_gatherer.update_current_row(x, value);
+                }
+            }
+        }
+    }};
+}
+
 /// Decode a bitmap using arithmetic coding (6.2.5).
 pub(crate) fn decode_bitmap_arithmetic_coding(
     bitmap: &mut Bitmap,
@@ -274,13 +328,12 @@ pub(crate) fn decode_bitmap_arithmetic_coding(
     tpgdon: bool,
     adaptive_template_pixels: &[AdaptiveTemplatePixel],
 ) -> Result<()> {
-    let width = bitmap.width;
-    let height = bitmap.height;
-
-    // "1) Set: LTP = 0" (6.2.5.7)
-    let mut ltp = false;
-
-    let mut ctx_gatherer = ContextGatherer::new(width, height, template, adaptive_template_pixels);
+    let mut ctx_gatherer = ContextGatherer::new(
+        bitmap.width,
+        bitmap.height,
+        template,
+        adaptive_template_pixels,
+    );
 
     // See Figure 8 - 11.
     let sltp_context: u16 = match template {
@@ -290,39 +343,83 @@ pub(crate) fn decode_bitmap_arithmetic_coding(
         Template::Template3 => 0b0110010101,
     };
 
-    // "3) Decode each row as follows:" (6.2.5.7)
-    for y in 0..height {
-        // "b) If TPGDON is 1, then decode a bit using the arithmetic entropy
-        // coder" (6.2.5.7)
-        if tpgdon {
-            let sltp = decoder.read_bit(&mut contexts[sltp_context as usize]);
-            // "Let SLTP be the value of this bit. Set: LTP = LTP XOR SLTP" (6.2.5.7)
-            ltp = ltp != (sltp != 0);
+    if ctx_gatherer.use_default_at {
+        match template {
+            Template::Template0 => decode_loop!(
+                bitmap,
+                decoder,
+                contexts,
+                &mut ctx_gatherer,
+                tpgdon,
+                sltp_context,
+                ContextGatherer::gather_template0_default
+            ),
+            Template::Template1 => decode_loop!(
+                bitmap,
+                decoder,
+                contexts,
+                &mut ctx_gatherer,
+                tpgdon,
+                sltp_context,
+                ContextGatherer::gather_template1_default
+            ),
+            Template::Template2 => decode_loop!(
+                bitmap,
+                decoder,
+                contexts,
+                &mut ctx_gatherer,
+                tpgdon,
+                sltp_context,
+                ContextGatherer::gather_template2_default
+            ),
+            Template::Template3 => decode_loop!(
+                bitmap,
+                decoder,
+                contexts,
+                &mut ctx_gatherer,
+                tpgdon,
+                sltp_context,
+                ContextGatherer::gather_template3_default
+            ),
         }
-
-        // "c) If LTP = 1 then set every pixel of the current row of GBREG equal
-        // to the corresponding pixel of the row immediately above." (6.2.5.7)
-        if ltp {
-            // If y == 0, pixels remain the same.
-            if y > 0 {
-                let stride = bitmap.stride as usize;
-                let src = (y as usize - 1) * stride;
-                bitmap
-                    .data
-                    .copy_within(src..src + stride, y as usize * stride);
-            }
-        } else {
-            // "d) If LTP = 0 then, from left to right, decode each pixel of the
-            // current row of GBREG." (6.2.5.7)
-            ctx_gatherer.start_row(bitmap, y);
-
-            for x in 0..width {
-                let context_bits = ctx_gatherer.gather(bitmap, x);
-                let pixel = decoder.read_bit(&mut contexts[context_bits as usize]);
-                let value = pixel != 0;
-                bitmap.set_pixel(x, y, value);
-                ctx_gatherer.update_current_row(x, value);
-            }
+    } else {
+        match template {
+            Template::Template0 => decode_loop!(
+                bitmap,
+                decoder,
+                contexts,
+                &mut ctx_gatherer,
+                tpgdon,
+                sltp_context,
+                ContextGatherer::gather_template0_custom
+            ),
+            Template::Template1 => decode_loop!(
+                bitmap,
+                decoder,
+                contexts,
+                &mut ctx_gatherer,
+                tpgdon,
+                sltp_context,
+                ContextGatherer::gather_template1_custom
+            ),
+            Template::Template2 => decode_loop!(
+                bitmap,
+                decoder,
+                contexts,
+                &mut ctx_gatherer,
+                tpgdon,
+                sltp_context,
+                ContextGatherer::gather_template2_custom
+            ),
+            Template::Template3 => decode_loop!(
+                bitmap,
+                decoder,
+                contexts,
+                &mut ctx_gatherer,
+                tpgdon,
+                sltp_context,
+                ContextGatherer::gather_template3_custom
+            ),
         }
     }
 
@@ -482,7 +579,7 @@ impl<'a> ContextGatherer<'a> {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     fn load_word(bitmap: &Bitmap, row_y: u32, start_x: u32) -> u32 {
         let word_idx = start_x / 32;
 
@@ -516,7 +613,7 @@ impl<'a> ContextGatherer<'a> {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     fn maybe_reload_buffers(&mut self, bitmap: &Bitmap, x: u32) {
         if x + self.max_right >= self.cur_x + 32 {
             let new_start = x.saturating_sub(4);
@@ -541,10 +638,10 @@ impl<'a> ContextGatherer<'a> {
 
         if self.use_default_at {
             match self.template {
-                Template::Template0 => self.gather_template0_default(x),
-                Template::Template1 => self.gather_template1_default(x),
-                Template::Template2 => self.gather_template2_default(x),
-                Template::Template3 => self.gather_template3_default(x),
+                Template::Template0 => self.gather_template0_default(bitmap, x),
+                Template::Template1 => self.gather_template1_default(bitmap, x),
+                Template::Template2 => self.gather_template2_default(bitmap, x),
+                Template::Template3 => self.gather_template3_default(bitmap, x),
             }
         } else {
             match self.template {
@@ -647,7 +744,7 @@ impl<'a> ContextGatherer<'a> {
     }
 
     #[inline]
-    fn gather_template0_default(&mut self, x: u32) -> u16 {
+    fn gather_template0_default(&mut self, _bitmap: &Bitmap, x: u32) -> u16 {
         let bx = x - self.cur_x;
         let new_pixels = (Self::get_buf_pixel(self.buf_m2, bx + 2) << 11)
             | (Self::get_buf_pixel(self.buf_m1, bx + 3) << 4)
@@ -658,7 +755,7 @@ impl<'a> ContextGatherer<'a> {
     }
 
     #[inline]
-    fn gather_template1_default(&mut self, x: u32) -> u16 {
+    fn gather_template1_default(&mut self, _bitmap: &Bitmap, x: u32) -> u16 {
         let bx = x - self.cur_x;
         let new_pixels = (Self::get_buf_pixel(self.buf_m2, bx + 2) << 9)
             | (Self::get_buf_pixel(self.buf_m1, bx + 3) << 3)
@@ -669,7 +766,7 @@ impl<'a> ContextGatherer<'a> {
     }
 
     #[inline]
-    fn gather_template2_default(&mut self, x: u32) -> u16 {
+    fn gather_template2_default(&mut self, _bitmap: &Bitmap, x: u32) -> u16 {
         let bx = x - self.cur_x;
         let new_pixels = (Self::get_buf_pixel(self.buf_m2, bx + 1) << 7)
             | (Self::get_buf_pixel(self.buf_m1, bx + 2) << 2)
@@ -680,7 +777,7 @@ impl<'a> ContextGatherer<'a> {
     }
 
     #[inline]
-    fn gather_template3_default(&mut self, x: u32) -> u16 {
+    fn gather_template3_default(&mut self, _bitmap: &Bitmap, x: u32) -> u16 {
         let bx = x - self.cur_x;
         let new_pixels = (Self::get_buf_pixel(self.buf_m1, bx + 2) << 4)
             | Self::get_buf_pixel(self.buf_cur, bx.wrapping_sub(1));
