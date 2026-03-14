@@ -133,23 +133,24 @@ impl Bitmap {
     ///
     /// Pixels outside the destination bitmap are ignored.
     pub(crate) fn combine(&mut self, other: &Self, x: i32, y: i32, operator: CombinationOperator) {
+        let dest_x_start = x.max(0);
+        let dest_x_end = (x + other.width as i32).min(self.width as i32);
+
+        if dest_x_start >= dest_x_end {
+            return;
+        }
+
+        let src_x_start = (dest_x_start - x) as u32;
+        let dest_x_start = dest_x_start as u32;
+        let dest_x_end = dest_x_end as u32;
+
         for src_y in 0..other.height {
             let dest_y = y + src_y as i32;
             if dest_y < 0 || dest_y >= self.height as i32 {
                 continue;
             }
 
-            let dest_x_start = x.max(0);
-            let dest_x_end = (x + other.width as i32).min(self.width as i32);
-            if dest_x_start >= dest_x_end {
-                continue;
-            }
-
-            let src_x_start = (dest_x_start - x) as u32;
-
             let dest_y = dest_y as u32;
-            let dest_x_start = dest_x_start as u32;
-            let dest_x_end = dest_x_end as u32;
 
             let first_word = dest_x_start / WORD_BITS;
             let last_word = (dest_x_end - 1) / WORD_BITS;
