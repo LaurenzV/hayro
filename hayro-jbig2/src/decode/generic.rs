@@ -130,7 +130,7 @@ pub(crate) fn parse_adaptive_template_pixels(
 
     let mut pixels = [AdaptiveTemplatePixel::default(); 4];
 
-    for i in 0..num_pixels {
+    for pixel in pixels.iter_mut().take(num_pixels) {
         let x = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
         let y = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
 
@@ -142,7 +142,7 @@ pub(crate) fn parse_adaptive_template_pixels(
             bail!(TemplateError::InvalidAtPixel);
         }
 
-        pixels[i] = AdaptiveTemplatePixel { x, y };
+        *pixel = AdaptiveTemplatePixel { x, y };
     }
 
     Ok(pixels)
