@@ -6,7 +6,6 @@ use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use crate::bitmap::Bitmap;
 use crate::error::{OverflowError, ParseError, Result};
 use crate::reader::Reader;
-use alloc::vec;
 use alloc::vec::Vec;
 
 /// Decode a pattern dictionary segment (7.4.4.2, 6.7).
@@ -36,23 +35,25 @@ pub(crate) fn decode(
         let _ = generic::decode_bitmap_mmr(&mut collective_bitmap, header.data)?;
     } else {
         let at_pixels = match header.template {
-            Template::Template0 => {
-                vec![
-                    AdaptiveTemplatePixel {
-                        x: -(pattern_width as i8),
-                        y: 0,
-                    },
-                    AdaptiveTemplatePixel { x: -3, y: -1 },
-                    AdaptiveTemplatePixel { x: 2, y: -2 },
-                    AdaptiveTemplatePixel { x: -2, y: -2 },
-                ]
-            }
-            Template::Template1 | Template::Template2 | Template::Template3 => {
-                vec![AdaptiveTemplatePixel {
+            Template::Template0 => [
+                AdaptiveTemplatePixel {
                     x: -(pattern_width as i8),
                     y: 0,
-                }]
-            }
+                },
+                AdaptiveTemplatePixel { x: -3, y: -1 },
+                AdaptiveTemplatePixel { x: 2, y: -2 },
+                AdaptiveTemplatePixel { x: -2, y: -2 },
+            ],
+            Template::Template1 | Template::Template2 | Template::Template3 => [
+                AdaptiveTemplatePixel {
+                    x: -(pattern_width as i8),
+                    y: 0,
+                },
+                // Unused.
+                AdaptiveTemplatePixel::default(),
+                AdaptiveTemplatePixel::default(),
+                AdaptiveTemplatePixel::default(),
+            ],
         };
 
         let mut decoder = ArithmeticDecoder::new(header.data);

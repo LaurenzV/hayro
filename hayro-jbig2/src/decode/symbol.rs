@@ -721,7 +721,7 @@ pub(crate) struct SymbolDictionaryFlags {
 #[derive(Debug, Clone)]
 pub(crate) struct SymbolDictionaryHeader<'a> {
     pub(crate) flags: SymbolDictionaryFlags,
-    pub(crate) adaptive_template_pixels: Vec<AdaptiveTemplatePixel>,
+    pub(crate) adaptive_template_pixels: [AdaptiveTemplatePixel; 4],
     pub(crate) refinement_at_pixels: Vec<AdaptiveTemplatePixel>,
     pub(crate) num_exported_symbols: u32,
     pub(crate) num_new_symbols: u32,
@@ -781,7 +781,8 @@ pub(crate) fn parse<'a>(reader: &mut Reader<'a>) -> Result<SymbolDictionaryHeade
     let at_pixels = if !use_huffman {
         parse_adaptive_template_pixels(reader, template, false)?
     } else {
-        Vec::new()
+        // Unused.
+        [AdaptiveTemplatePixel::default(); 4]
     };
 
     let refinement_at_pixels = if use_refagg && refinement_template == RefinementTemplate::Template0

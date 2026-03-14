@@ -1,7 +1,5 @@
 //! Generic region segment parsing and decoding (7.4.6, 6.2).
 
-use alloc::vec::Vec;
-
 use super::{
     AdaptiveTemplatePixel, RegionBitmap, RegionSegmentInfo, Template, parse_region_segment_info,
 };
@@ -71,7 +69,7 @@ pub(crate) struct GenericRegionHeader<'a> {
     pub(crate) mmr: bool,
     pub(crate) template: Template,
     pub(crate) tpgdon: bool,
-    pub(crate) adaptive_template_pixels: Vec<AdaptiveTemplatePixel>,
+    pub(crate) adaptive_template_pixels: [AdaptiveTemplatePixel; 4],
     pub(crate) data: &'a [u8],
 }
 
@@ -87,7 +85,7 @@ pub(crate) fn parse<'a>(
     let tpgdon = flags & 0x08 != 0;
     let ext_template = flags & 0x10 != 0;
     let adaptive_template_pixels = if mmr {
-        Vec::new()
+        [AdaptiveTemplatePixel::default(); 4]
     } else {
         parse_adaptive_template_pixels(reader, template, ext_template)?
     };
@@ -127,12 +125,12 @@ pub(crate) fn parse_adaptive_template_pixels(
     template: Template,
     // TODO: Find a test with this flag.
     _ext_template: bool,
-) -> Result<Vec<AdaptiveTemplatePixel>> {
+) -> Result<[AdaptiveTemplatePixel; 4]> {
     let num_pixels = template.adaptive_template_pixels() as usize;
 
-    let mut pixels = Vec::with_capacity(num_pixels);
+    let mut pixels = [AdaptiveTemplatePixel::default(); 4];
 
-    for _ in 0..num_pixels {
+    for i in 0..num_pixels {
         let x = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
         let y = reader.read_byte().ok_or(ParseError::UnexpectedEof)? as i8;
 
@@ -144,7 +142,7 @@ pub(crate) fn parse_adaptive_template_pixels(
             bail!(TemplateError::InvalidAtPixel);
         }
 
-        pixels.push(AdaptiveTemplatePixel { x, y });
+        pixels[i] = AdaptiveTemplatePixel { x, y };
     }
 
     Ok(pixels)
@@ -152,11 +150,10 @@ pub(crate) fn parse_adaptive_template_pixels(
 
 /// Whether the adaptive template pixels correspond to the default ones.
 /// See Table 5.
-fn has_default_at_pixels(template: Template, at_pixels: &[AdaptiveTemplatePixel]) -> bool {
+fn has_default_at_pixels(template: Template, at_pixels: &[AdaptiveTemplatePixel; 4]) -> bool {
     match template {
         Template::Template0 => {
-            at_pixels.len() == 4
-                && at_pixels[0].x == 3
+            at_pixels[0].x == 3
                 && at_pixels[0].y == -1
                 && at_pixels[1].x == -3
                 && at_pixels[1].y == -1
@@ -165,9 +162,9 @@ fn has_default_at_pixels(template: Template, at_pixels: &[AdaptiveTemplatePixel]
                 && at_pixels[3].x == -2
                 && at_pixels[3].y == -2
         }
-        Template::Template1 => at_pixels.len() == 1 && at_pixels[0].x == 3 && at_pixels[0].y == -1,
-        Template::Template2 => at_pixels.len() == 1 && at_pixels[0].x == 2 && at_pixels[0].y == -1,
-        Template::Template3 => at_pixels.len() == 1 && at_pixels[0].x == 2 && at_pixels[0].y == -1,
+        Template::Template1 => at_pixels[0].x == 3 && at_pixels[0].y == -1,
+        Template::Template2 => at_pixels[0].x == 2 && at_pixels[0].y == -1,
+        Template::Template3 => at_pixels[0].x == 2 && at_pixels[0].y == -1,
     }
 }
 
@@ -379,7 +376,7 @@ pub(crate) fn decode_bitmap_arithmetic_coding(
     contexts: &mut [ArithmeticDecoderContext],
     template: Template,
     tpgdon: bool,
-    adaptive_template_pixels: &[AdaptiveTemplatePixel],
+    adaptive_template_pixels: &[AdaptiveTemplatePixel; 4],
 ) -> Result<()> {
     let mut ctx_gatherer = ContextGatherer::new(template, adaptive_template_pixels);
 
@@ -476,7 +473,7 @@ pub(crate) fn decode_bitmap_arithmetic_coding(
 
 pub(crate) struct ContextGatherer<'a> {
     template: Template,
-    at_pixels: &'a [AdaptiveTemplatePixel],
+    at_pixels: &'a [AdaptiveTemplatePixel; 4],
     use_default_at: bool,
     /// Used in `maybe_reload_buffers` to determine how far to the right
     /// we might access pixels.
@@ -493,7 +490,7 @@ pub(crate) struct ContextGatherer<'a> {
 }
 
 impl<'a> ContextGatherer<'a> {
-    pub(crate) fn new(template: Template, at_pixels: &'a [AdaptiveTemplatePixel]) -> Self {
+    pub(crate) fn new(template: Template, at_pixels: &'a [AdaptiveTemplatePixel; 4]) -> Self {
         let use_default_at = has_default_at_pixels(template, at_pixels);
         let max_right = match template {
             Template::Template0 | Template::Template1 => {

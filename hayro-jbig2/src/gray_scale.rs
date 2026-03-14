@@ -93,17 +93,27 @@ fn decode_arithmetic(
     let template = params.template;
 
     // Table C.4: Adaptive template pixel positions.
-    let at_pixels: Vec<AdaptiveTemplatePixel> = match template {
-        Template::Template0 => vec![
+    let at_pixels: [AdaptiveTemplatePixel; 4] = match template {
+        Template::Template0 => [
             AdaptiveTemplatePixel { x: 3, y: -1 },
             AdaptiveTemplatePixel { x: -3, y: -1 },
             AdaptiveTemplatePixel { x: 2, y: -2 },
             AdaptiveTemplatePixel { x: -2, y: -2 },
         ],
-        Template::Template1 => vec![AdaptiveTemplatePixel { x: 3, y: -1 }],
-        Template::Template2 | Template::Template3 => {
-            vec![AdaptiveTemplatePixel { x: 2, y: -1 }]
-        }
+        Template::Template1 => [
+            AdaptiveTemplatePixel { x: 3, y: -1 },
+            // Unused.
+            AdaptiveTemplatePixel::default(),
+            AdaptiveTemplatePixel::default(),
+            AdaptiveTemplatePixel::default(),
+        ],
+        Template::Template2 | Template::Template3 => [
+            AdaptiveTemplatePixel { x: 2, y: -1 },
+            // Unused.
+            AdaptiveTemplatePixel::default(),
+            AdaptiveTemplatePixel::default(),
+            AdaptiveTemplatePixel::default(),
+        ],
     };
 
     let mut decoder = ArithmeticDecoder::new(data);
