@@ -723,7 +723,7 @@ dependencies = [
 
 [[package]]
 name = "hayro-jbig2"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "criterion",
  "fearless_simd",
