@@ -695,3 +695,9 @@ fn custom_huffman_table_oob() {
     let file = include_bytes!("../pdfs/load/custom_huffman_table_oob.jb2");
     load_jbig2(file);
 }
+
+#[test]
+fn integer_decode_overflow() {
+    let file = include_bytes!("../pdfs/load/integer_decode_overflow.jb2");
+    load_jbig2(file);
+}

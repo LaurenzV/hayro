@@ -59,7 +59,8 @@ impl IntegerDecoder {
             self.decode_n_bits(decoder, &mut prev, 12) + 340
         } else {
             // Figure A.1: "V = (next 32 bits) + 4436"
-            self.decode_n_bits(decoder, &mut prev, 32) + 4436
+            self.decode_n_bits(decoder, &mut prev, 32)
+                .wrapping_add(4436)
         };
 
         // A.2: "The result of the integer arithmetic decoding procedure is equal to:
