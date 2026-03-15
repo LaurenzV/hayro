@@ -23,6 +23,7 @@ hayro-cmap = { workspace = true }
 hayro-write = { workspace = true }
 hayro-svg = { workspace = true }
 hayro-syntax = { workspace = true }
+hayro-jbig2 = { workspace = true }
 hayro-jpeg2000 = { workspace = true, features = ["image"] }
 pdf-writer = { workspace = true }
 image = { workspace = true, default-features = false}
