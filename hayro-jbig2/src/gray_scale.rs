@@ -242,7 +242,7 @@ fn extract_bits<S: Simd>(
     /// Bit masks for extracting individual bits from a packed u32 word (MSB-first).
     /// `BIT_MASKS[i] = 1 << (31 - i)`.
     const BIT_MASKS: [u32; 32] = {
-        let mut masks = [0u32; 32];
+        let mut masks = [0_u32; 32];
         let mut i = 0;
         while i < 32 {
             masks[i] = 1 << (31 - i);
@@ -251,7 +251,7 @@ fn extract_bits<S: Simd>(
         masks
     };
 
-    let bit_value = u32x8::splat(simd, 1u32 << j);
+    let bit_value = u32x8::splat(simd, 1_u32 << j);
     let zero = u32x8::splat(simd, 0);
     let simd_end = (width as usize) & !7;
 
