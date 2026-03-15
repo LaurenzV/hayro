@@ -174,40 +174,19 @@ where
     let mut values = vec![0_u32; size];
 
     let mut bitplane = Bitmap::new(width, height)?;
-
-    // C.5 step 1: "Decode GSPLANES[GSBPP - 1]"
-    // `GSPLANES` - Bitplanes of the gray-scale image.
-    decode_next(bits_per_pixel - 1, &mut bitplane)?;
     let mut prev_plane = vec![0; bitplane.data.len()];
-    prev_plane.copy_from_slice(&bitplane.data);
 
-    // The first (MSB) bitplane contributes directly to the gray values.
-    // Extract bits from packed format.
-    for y in 0..height {
-        for x in 0..width {
-            let word_idx = (y * stride + x / WORD_BITS) as usize;
-            let bit_pos = WORD_SHIFT - (x % WORD_BITS);
-            if (prev_plane[word_idx] >> bit_pos) & 1 != 0 {
-                let i = (y * width + x) as usize;
-                values[i] |= 1 << (bits_per_pixel - 1);
-            }
-        }
-    }
-
-    // C.5 step 2: "Set J = GSBPP - 2."
-    // C.5 step 3: "While J >= 0:"
-    // `J` - Bitplane counter.
-    for j in (0..bits_per_pixel - 1).rev() {
-        // C.5 step 3a: "Decode GSPLANES[J]"
+    for j in (0..bits_per_pixel).rev() {
         bitplane.data.fill(0);
         decode_next(j, &mut bitplane)?;
 
-        // This step applies gray coding.
-        // C.5 step 3b: "GSPLANES[J][x, y] = GSPLANES[J + 1][x, y] XOR GSPLANES[J][x, y]"
-        // With packed format, we can XOR whole words.
-        #[allow(clippy::needless_range_loop)]
-        for i in 0..bitplane.data.len() {
-            bitplane.data[i] ^= prev_plane[i];
+        // Done every time except the first time.
+        if j < bits_per_pixel - 1 {
+            // C.5 step 3b: "GSPLANES[J][x, y] = GSPLANES[J + 1][x, y] XOR GSPLANES[J][x, y]"
+            #[allow(clippy::needless_range_loop)]
+            for i in 0..bitplane.data.len() {
+                bitplane.data[i] ^= prev_plane[i];
+            }
         }
 
         // C.5 step 4: "GSVALS[x, y] = sum(J=0 to GSBPP-1) GSPLANES[J][x, y] * 2^J"
