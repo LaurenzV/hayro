@@ -123,36 +123,49 @@ fn decode_arithmetic(
         ArithmeticDecoderContext::default(),
     );
 
-    decode_bitplanes(width, height, stride, bits_per_pixel, |_, bitplane| {
-        // Table C.4: "GBW = GSW, GBH = GSH, TPGDON = 0"
-        let mut gatherer = ContextGatherer::new(template, &at_pixels);
+    macro_rules! gs_decode_loop {
+        ($gather:expr) => {
+            decode_bitplanes(width, height, stride, bits_per_pixel, |_, bitplane| {
+                // Table C.4: "GBW = GSW, GBH = GSH, TPGDON = 0"
+                let mut gatherer = ContextGatherer::new(template, &at_pixels);
 
-        for y in 0..height {
-            gatherer.start_row(bitplane, y);
-            for x in 0..width {
-                // Table C.4: "USESKIP = GSUSESKIP, SKIP = GSKIP"
-                if let Some(mask) = skip_mask {
-                    let word_idx = (y * skip_stride + x / 32) as usize;
-                    let bit_pos = 31 - (x % 32);
-                    if (mask[word_idx] >> bit_pos) & 1 != 0 {
-                        // Still need to update the context.
-                        let _ = gatherer.gather(bitplane, x);
-                        gatherer.update_current_row(x, 0);
-                        continue;
+                for y in 0..height {
+                    gatherer.start_row(bitplane, y);
+                    for x in 0..width {
+                        gatherer.maybe_reload_buffers(bitplane, x);
+
+                        // Table C.4: "USESKIP = GSUSESKIP, SKIP = GSKIP"
+                        if let Some(mask) = skip_mask {
+                            let word_idx = (y * skip_stride + x / 32) as usize;
+                            let bit_pos = 31 - (x % 32);
+                            if (mask[word_idx] >> bit_pos) & 1 != 0 {
+                                // Still need to update the context.
+                                let _ = ($gather)(&mut gatherer, bitplane, x);
+                                gatherer.update_current_row(x, 0);
+                                continue;
+                            }
+                        }
+
+                        let context = ($gather)(&mut gatherer, bitplane, x);
+                        let pixel = decoder.read_bit(&mut ctx.contexts[context as usize]);
+                        let value = pixel as u8;
+
+                        bitplane.set_pixel(x, y, value);
+                        gatherer.update_current_row(x, value);
                     }
                 }
 
-                let context = gatherer.gather(bitplane, x);
-                let pixel = decoder.read_bit(&mut ctx.contexts[context as usize]);
-                let value = pixel as u8;
+                Ok(())
+            })
+        };
+    }
 
-                bitplane.set_pixel(x, y, value);
-                gatherer.update_current_row(x, value);
-            }
-        }
-
-        Ok(())
-    })
+    match template {
+        Template::Template0 => gs_decode_loop!(ContextGatherer::gather_template0_default),
+        Template::Template1 => gs_decode_loop!(ContextGatherer::gather_template1_default),
+        Template::Template2 => gs_decode_loop!(ContextGatherer::gather_template2_default),
+        Template::Template3 => gs_decode_loop!(ContextGatherer::gather_template3_default),
+    }
 }
 
 /// The bitplane decoding and gray value computation procedure (C.5).
