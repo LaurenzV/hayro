@@ -277,7 +277,7 @@ impl HuffmanTable {
         }
 
         // 11) "Create the prefix codes using the algorithm described in B.3."
-        Ok(Self::build(&lines)?)
+        Self::build(&lines)
     }
 }
 
