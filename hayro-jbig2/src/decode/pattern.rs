@@ -3,7 +3,7 @@
 use super::{AdaptiveTemplatePixel, Template, generic};
 use crate::ScratchBuffers;
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
-use crate::bitmap::Bitmap;
+use crate::bitmap::{Bitmap, WORD_BITS, Word};
 use crate::error::{OverflowError, ParseError, Result};
 use crate::reader::Reader;
 use alloc::vec::Vec;
@@ -77,31 +77,89 @@ pub(crate) fn decode(
     // "4) While GRAY ≤ GRAYMAX:" (6.7.5)
     let mut patterns = Vec::with_capacity(num_patterns as usize);
 
+    let src_stride = collective_bitmap.stride;
+
     for gray in 0..num_patterns {
         // "a) Let the subimage of B_HDC consisting of HPH rows and columns
         // HDPW × GRAY through HDPW × (GRAY + 1) − 1 be denoted B_P. Set:
         // HDPATS[GRAY] = B_P" (6.7.5)"
         let start_x = gray * pattern_width;
-        let pattern = {
-            let mut pattern = Bitmap::new(pattern_width, pattern_height)?;
+        let mut pattern = Bitmap::new(pattern_width, pattern_height)?;
 
-            for y in 0..pattern_height {
-                for x in 0..pattern_width {
-                    let pixel = collective_bitmap.get_pixel(start_x + x, y);
-                    pattern.set_pixel(x, y, pixel);
-                }
+        let src_word_idx = start_x / WORD_BITS;
+        let src_bit_offset = start_x % WORD_BITS;
+        let dst_stride = pattern.stride;
+
+        for y in 0..pattern_height {
+            let src_row = (y * src_stride + src_word_idx) as usize;
+            let dst_row = (y * dst_stride) as usize;
+
+            for w in 0..dst_stride {
+                let s1 = collective_bitmap.data[src_row + w as usize];
+                let s2 = collective_bitmap
+                    .data
+                    .get(src_row + w as usize + 1)
+                    .copied()
+                    .unwrap_or(0);
+
+                let word: Word = if src_bit_offset == 0 {
+                    s1
+                } else {
+                    (s1 << src_bit_offset) | (s2 >> (WORD_BITS - src_bit_offset))
+                };
+
+                pattern.data[dst_row + w as usize] = word;
             }
 
-            pattern
-        };
+            // Clear trailing bits in the last word beyond `pattern_width`.
+            let trailing = pattern_width % WORD_BITS;
+            if trailing != 0 {
+                let last = dst_row + (dst_stride - 1) as usize;
+                pattern.data[last] &= !0 << (WORD_BITS - trailing);
+            }
+        }
 
         patterns.push(pattern);
     }
+
+    // It turns out that when rendering patterns, the `Bitmap::combine` operation
+    // can often be a huge bottleneck. This is because we need to do a lot of
+    // fiddling to compose the patterns in the right position. And since
+    // if a page uses such patterns, there's going to be a lot of them,
+    // this takes up a lot of time.
+    //
+    // The key insight for our optimization is that patterns are usually
+    // very small. Therefore, we precompute a new version of each pattern
+    // for all possible 32-bit alignments, which later on allows us to
+    // very easily blit it into the backdrop, significantly speeding up
+    // the whole process.
+    let shifted_patterns = if pattern_width <= WORD_BITS && pattern_height <= WORD_BITS {
+        let h = pattern_height as usize;
+        let mut data = Vec::with_capacity(patterns.len() * 32 * h * 2);
+        for pattern in &patterns {
+            for k in 0..32_u32 {
+                for y in 0..h {
+                    let word = pattern.data[y];
+                    if k == 0 {
+                        data.push(word);
+                        data.push(0);
+                    } else {
+                        data.push(word >> k);
+                        data.push(word << (WORD_BITS - k));
+                    }
+                }
+            }
+        }
+        data
+    } else {
+        Vec::new()
+    };
 
     Ok(PatternDictionary {
         patterns,
         pattern_width,
         pattern_height,
+        shifted_patterns,
     })
 }
 
@@ -111,6 +169,17 @@ pub(crate) struct PatternDictionary {
     pub(crate) patterns: Vec<Bitmap>,
     pub(crate) pattern_width: u32,
     pub(crate) pattern_height: u32,
+    shifted_patterns: Vec<Word>,
+}
+
+impl PatternDictionary {
+    #[inline(always)]
+    pub(crate) fn shifted_pattern(&self, pattern_idx: usize, bit_offset: u32) -> Option<&[Word]> {
+        let h = self.pattern_height as usize;
+        let len = h * 2;
+        let start = (pattern_idx * 32 + bit_offset as usize) * len;
+        self.shifted_patterns.get(start..start + len)
+    }
 }
 
 /// Parsed pattern dictionary segment header (7.4.4.1).

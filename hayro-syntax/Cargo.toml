@@ -10,7 +10,7 @@ readme = "README.md"
 
 [features]
 default = ["std", "images"]
-std = ["dep:flate2", "hayro-jbig2?/std", "hayro-jpeg2000?/std", "hayro-jpeg2000?/simd", "dep:rustc-hash", "zune-jpeg?/std"]
+std = ["dep:flate2", "hayro-jbig2?/std", "hayro-jbig2?/simd", "hayro-jpeg2000?/std", "hayro-jpeg2000?/simd", "dep:rustc-hash", "zune-jpeg?/std"]
 images = ["dep:zune-jpeg", "dep:hayro-ccitt", "dep:hayro-jbig2", "dep:hayro-jpeg2000"]
 
 [dependencies]

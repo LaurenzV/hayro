@@ -5,10 +5,11 @@ use alloc::vec::Vec;
 
 use crate::ScratchBuffers;
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
-use crate::bitmap::{Bitmap, MAX_DIMENSION, WORD_BITS, WORD_SHIFT, Word};
+use crate::bitmap::{Bitmap, MAX_DIMENSION, WORD_BITS};
 use crate::decode::generic::{ContextGatherer, decode_bitmap_mmr};
 use crate::decode::{AdaptiveTemplatePixel, Template};
 use crate::error::{OverflowError, Result, bail};
+use crate::simd::{self, Level, Simd, u32x8};
 
 /// Input parameters to the gray-scale image decoding procedure (Table C.1).
 #[derive(Debug, Clone)]
@@ -58,11 +59,11 @@ fn decode_mmr(data: &[u8], params: &GrayScaleParams<'_>) -> Result<Vec<u32>> {
     let stride = width.div_ceil(WORD_BITS);
 
     let mut offset = 0;
-    decode_bitplanes(width, height, stride, bits_per_pixel, |_| {
+    decode_bitplanes(width, height, stride, bits_per_pixel, |_, bitplane| {
         // Table C.4: "GBW = GSW, GBH = GSH"
-        let mut bitplane = Bitmap::new(width, height)?;
-        offset += decode_bitmap_mmr(&mut bitplane, &data[offset..])?;
-        Ok(bitplane.data)
+        offset += decode_bitmap_mmr(bitplane, &data[offset..])?;
+
+        Ok(())
     })
 }
 
@@ -123,43 +124,55 @@ fn decode_arithmetic(
         ArithmeticDecoderContext::default(),
     );
 
-    decode_bitplanes(width, height, stride, bits_per_pixel, |_| {
-        // Table C.4: "GBW = GSW, GBH = GSH, TPGDON = 0"
-        let mut bitplane = Bitmap::new(width, height)?;
-        let mut gatherer = ContextGatherer::new(template, &at_pixels);
+    macro_rules! gs_decode_loop {
+        ($gather:expr) => {
+            decode_bitplanes(width, height, stride, bits_per_pixel, |_, bitplane| {
+                // Table C.4: "GBW = GSW, GBH = GSH, TPGDON = 0"
+                let mut gatherer = ContextGatherer::new(template, &at_pixels);
 
-        for y in 0..height {
-            gatherer.start_row(&bitplane, y);
-            for x in 0..width {
-                // Table C.4: "USESKIP = GSUSESKIP, SKIP = GSKIP"
-                if let Some(mask) = skip_mask {
-                    let word_idx = (y * skip_stride + x / 32) as usize;
-                    let bit_pos = 31 - (x % 32);
-                    if (mask[word_idx] >> bit_pos) & 1 != 0 {
-                        // Still need to update the context.
-                        let _ = gatherer.gather(&bitplane, x);
-                        gatherer.update_current_row(x, 0);
-                        continue;
+                for y in 0..height {
+                    gatherer.start_row(bitplane, y);
+                    for x in 0..width {
+                        gatherer.maybe_reload_buffers(bitplane, x);
+
+                        // Table C.4: "USESKIP = GSUSESKIP, SKIP = GSKIP"
+                        if let Some(mask) = skip_mask {
+                            let word_idx = (y * skip_stride + x / 32) as usize;
+                            let bit_pos = 31 - (x % 32);
+                            if (mask[word_idx] >> bit_pos) & 1 != 0 {
+                                // Still need to update the context.
+                                let _ = ($gather)(&mut gatherer, bitplane, x);
+                                gatherer.update_current_row(x, 0);
+                                continue;
+                            }
+                        }
+
+                        let context = ($gather)(&mut gatherer, bitplane, x);
+                        let pixel = decoder.read_bit(&mut ctx.contexts[context as usize]);
+                        let value = pixel as u8;
+
+                        bitplane.set_pixel(x, y, value);
+                        gatherer.update_current_row(x, value);
                     }
                 }
 
-                let context = gatherer.gather(&bitplane, x);
-                let pixel = decoder.read_bit(&mut ctx.contexts[context as usize]);
-                let value = pixel as u8;
+                Ok(())
+            })
+        };
+    }
 
-                bitplane.set_pixel(x, y, value);
-                gatherer.update_current_row(x, value);
-            }
-        }
-
-        Ok(bitplane.data)
-    })
+    match template {
+        Template::Template0 => gs_decode_loop!(ContextGatherer::gather_template0_default),
+        Template::Template1 => gs_decode_loop!(ContextGatherer::gather_template1_default),
+        Template::Template2 => gs_decode_loop!(ContextGatherer::gather_template2_default),
+        Template::Template3 => gs_decode_loop!(ContextGatherer::gather_template3_default),
+    }
 }
 
 /// The bitplane decoding and gray value computation procedure (C.5).
 ///
 /// The closure `decode_next` is called for each bitplane, receiving the bitplane
-/// index (`GSBPP`-1 down to 0) and returning the decoded bitplane data in packed format.
+/// index (`GSBPP`-1 down to 0) and a zeroed bitmap to decode into.
 fn decode_bitplanes<F>(
     width: u32,
     height: u32,
@@ -168,58 +181,107 @@ fn decode_bitplanes<F>(
     mut decode_next: F,
 ) -> Result<Vec<u32>>
 where
-    F: FnMut(u32) -> Result<Vec<Word>>,
+    F: FnMut(u32, &mut Bitmap) -> Result<()>,
 {
     let size = width as usize * height as usize;
     // `GSVALS` - The decoded gray-scale image array.
     let mut values = vec![0_u32; size];
 
-    // C.5 step 1: "Decode GSPLANES[GSBPP - 1]"
-    // `GSPLANES` - Bitplanes of the gray-scale image.
-    let mut prev_plane = decode_next(bits_per_pixel - 1)?;
+    let mut bitplane = Bitmap::new(width, height)?;
+    let mut prev_plane = vec![0; bitplane.data.len()];
 
-    // The first (MSB) bitplane contributes directly to the gray values.
-    // Extract bits from packed format.
-    for y in 0..height {
-        for x in 0..width {
-            let word_idx = (y * stride + x / WORD_BITS) as usize;
-            let bit_pos = WORD_SHIFT - (x % WORD_BITS);
-            if (prev_plane[word_idx] >> bit_pos) & 1 != 0 {
-                let i = (y * width + x) as usize;
-                values[i] |= 1 << (bits_per_pixel - 1);
+    simd::dispatch!(Level::new(), simd => {
+        for j in (0..bits_per_pixel).rev() {
+            bitplane.data.fill(0);
+            decode_next(j, &mut bitplane)?;
+
+            // Done every time except the first time.
+            if j < bits_per_pixel - 1 {
+                // C.5 step 3b: "GSPLANES[J][x, y] = GSPLANES[J + 1][x, y] XOR GSPLANES[J][x, y]"
+                xor_planes(simd, &mut bitplane.data, &prev_plane);
+            }
+
+            // C.5 step 4: "GSVALS[x, y] = sum(J=0 to GSBPP-1) GSPLANES[J][x, y] * 2^J"
+            extract_bits(simd, &bitplane.data, &mut values, width, height, stride, j);
+
+            // C.5 step 3c: "Set J = J - 1."
+            prev_plane.copy_from_slice(&bitplane.data);
+        }
+
+        Ok(values)
+    })
+}
+
+#[inline(always)]
+fn xor_planes<S: Simd>(simd: S, plane: &mut [u32], prev: &[u32]) {
+    let simd_end = plane.len() & !7;
+
+    for i in (0..simd_end).step_by(simd::SIMD_WIDTH) {
+        let chunk = &mut plane[i..i + simd::SIMD_WIDTH];
+        let mut a = u32x8::from_slice(simd, chunk);
+        let b = u32x8::from_slice(simd, &prev[i..i + simd::SIMD_WIDTH]);
+        a ^= b;
+        a.store(chunk);
+    }
+
+    for i in simd_end..plane.len() {
+        plane[i] ^= prev[i];
+    }
+}
+
+#[inline(always)]
+fn extract_bits<S: Simd>(
+    simd: S,
+    data: &[u32],
+    values: &mut [u32],
+    width: u32,
+    height: u32,
+    stride: u32,
+    j: u32,
+) {
+    /// Bit masks for extracting individual bits from a packed u32 word (MSB-first).
+    /// `BIT_MASKS[i] = 1 << (31 - i)`.
+    const BIT_MASKS: [u32; 32] = {
+        let mut masks = [0_u32; 32];
+        let mut i = 0;
+        while i < 32 {
+            masks[i] = 1 << (31 - i);
+            i += 1;
+        }
+        masks
+    };
+
+    let bit_value = u32x8::splat(simd, 1_u32 << j);
+    let zero = u32x8::splat(simd, 0);
+    let simd_end = (width as usize) & !7;
+
+    for y in 0..height as usize {
+        let row_data = y * stride as usize;
+        let row_vals = y * width as usize;
+
+        // Handle in chunks of 8.
+        for x in (0..simd_end).step_by(simd::SIMD_WIDTH) {
+            let word = data[row_data + x / 32];
+            let bit_offset = x % 32;
+
+            let splatted = u32x8::splat(simd, word);
+            let masks =
+                u32x8::from_slice(simd, &BIT_MASKS[bit_offset..bit_offset + simd::SIMD_WIDTH]);
+            let extracted = splatted & masks;
+            let nonzero = extracted.simd_gt(zero);
+            let contribution = nonzero.select(bit_value, zero);
+            let vals = &mut values[row_vals + x..row_vals + x + simd::SIMD_WIDTH];
+            let current = u32x8::from_slice(simd, vals);
+            (current | contribution).store(vals);
+        }
+
+        // Handle the tail.
+        for x in simd_end..width as usize {
+            let word_idx = row_data + x / 32;
+            let bit_pos = 31 - (x % 32);
+            if (data[word_idx] >> bit_pos) & 1 != 0 {
+                values[row_vals + x] |= 1 << j;
             }
         }
     }
-
-    // C.5 step 2: "Set J = GSBPP - 2."
-    // C.5 step 3: "While J >= 0:"
-    // `J` - Bitplane counter.
-    for j in (0..bits_per_pixel - 1).rev() {
-        // C.5 step 3a: "Decode GSPLANES[J]"
-        let mut plane = decode_next(j)?;
-
-        // This step applies gray coding.
-        // C.5 step 3b: "GSPLANES[J][x, y] = GSPLANES[J + 1][x, y] XOR GSPLANES[J][x, y]"
-        // With packed format, we can XOR whole words.
-        for i in 0..plane.len() {
-            plane[i] ^= prev_plane[i];
-        }
-
-        // C.5 step 4: "GSVALS[x, y] = sum(J=0 to GSBPP-1) GSPLANES[J][x, y] * 2^J"
-        for y in 0..height {
-            for x in 0..width {
-                let word_idx = (y * stride + x / WORD_BITS) as usize;
-                let bit_pos = WORD_SHIFT - (x % WORD_BITS);
-                if (plane[word_idx] >> bit_pos) & 1 != 0 {
-                    let i = (y * width + x) as usize;
-                    values[i] |= 1 << j;
-                }
-            }
-        }
-
-        // C.5 step 3c: "Set J = J - 1."
-        prev_plane = plane;
-    }
-
-    Ok(values)
 }

@@ -14,8 +14,11 @@ in PDF documents for compressing scanned text documents.
 This crate is currently under development.
 
 ## Safety
-
-This crate forbids unsafe code via a crate-level attribute.
+By default, the crate has the `simd` feature enabled, which uses the
+[`fearless_simd`](https://github.com/linebender/fearless_simd) crate to accelerate decoding of JBIG2 images with halftoning. 
+If you want to eliminate any usage of unsafe in this crate as well as its dependencies, you can simply disable this
+feature and still get very good performance in the vast majority of cases. Unsafe code is forbidden
+via a crate-level attribute.
 
 ## License
 

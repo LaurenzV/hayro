@@ -10,11 +10,13 @@ readme = "README.md"
 exclude = ["/tests/", "/manifest_*.json", "/sync.py", "/generate_huffman_tables.py"]
 
 [features]
-default = ["std", "image"]
+default = ["std", "image", "simd"]
 std = []
+simd = ["fearless_simd", "std"]
 image = ["dep:image", "std"]
 
 [dependencies]
+fearless_simd = { workspace = true, optional = true }
 hayro-ccitt = { workspace = true }
 image = { workspace = true, default-features = false, optional = true }
 
@@ -22,6 +24,7 @@ image = { workspace = true, default-features = false, optional = true }
 workspace = true
 
 [dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
 image = { workspace = true, default-features = false, features = ["png"] }
 indicatif = { version = "0.17", features = ["rayon"] }
 rayon = "1.11"
@@ -31,4 +34,8 @@ serde_json = "1"
 [[test]]
 name = "asset_suite"
 path = "tests/mod.rs"
+harness = false
+
+[[bench]]
+name = "decode"
 harness = false
