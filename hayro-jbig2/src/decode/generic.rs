@@ -312,7 +312,7 @@ pub(crate) fn decode_bitmap_mmr(bitmap: &mut Bitmap, data: &[u8]) -> Result<usiz
     // nothing else to do here.
     let mut context = hayro_ccitt::DecoderContext::new(settings);
     Ok(hayro_ccitt::decode(data, &mut decoder, &mut context)
-        .map_err(|_| RegionError::InvalidDimension)?)
+        .map_err(|_| RegionError::InvalidMmrData)?)
 }
 
 // I'm not sure why, but I was getting very weird codegen (with bad performance)

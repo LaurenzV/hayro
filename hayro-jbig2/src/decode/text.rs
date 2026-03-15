@@ -324,7 +324,7 @@ impl<'a, 'b> DecodeContext<'a, 'b> {
                 let value = contexts
                     .iadt
                     .decode(decoder)
-                    .ok_or(SymbolError::OutOfRange)?;
+                    .ok_or(SymbolError::UnexpectedOob)?;
                 value
                     .checked_mul(strip_size as i32)
                     .ok_or(SymbolError::InvalidStripDelta.into())
@@ -341,7 +341,7 @@ impl<'a, 'b> DecodeContext<'a, 'b> {
             } => contexts
                 .iafs
                 .decode(decoder)
-                .ok_or(SymbolError::OutOfRange.into()),
+                .ok_or(SymbolError::UnexpectedOob.into()),
         }
     }
 
@@ -371,7 +371,7 @@ impl<'a, 'b> DecodeContext<'a, 'b> {
             } => contexts
                 .iait
                 .decode(decoder)
-                .ok_or(SymbolError::OutOfRange.into()),
+                .ok_or(SymbolError::UnexpectedOob.into()),
         }
     }
 
@@ -399,7 +399,7 @@ impl<'a, 'b> DecodeContext<'a, 'b> {
             } => Ok(contexts
                 .iari
                 .decode(decoder)
-                .ok_or(SymbolError::OutOfRange)? as u8),
+                .ok_or(SymbolError::UnexpectedOob)? as u8),
         }
     }
 
@@ -414,7 +414,7 @@ impl<'a, 'b> DecodeContext<'a, 'b> {
             } => contexts
                 .iardw
                 .decode(decoder)
-                .ok_or(SymbolError::OutOfRange.into()),
+                .ok_or(SymbolError::UnexpectedOob.into()),
         }
     }
 
@@ -429,7 +429,7 @@ impl<'a, 'b> DecodeContext<'a, 'b> {
             } => contexts
                 .iardh
                 .decode(decoder)
-                .ok_or(SymbolError::OutOfRange.into()),
+                .ok_or(SymbolError::UnexpectedOob.into()),
         }
     }
 
@@ -444,7 +444,7 @@ impl<'a, 'b> DecodeContext<'a, 'b> {
             } => contexts
                 .iardx
                 .decode(decoder)
-                .ok_or(SymbolError::OutOfRange.into()),
+                .ok_or(SymbolError::UnexpectedOob.into()),
         }
     }
 
@@ -459,7 +459,7 @@ impl<'a, 'b> DecodeContext<'a, 'b> {
             } => contexts
                 .iardy
                 .decode(decoder)
-                .ok_or(SymbolError::OutOfRange.into()),
+                .ok_or(SymbolError::UnexpectedOob.into()),
         }
     }
 

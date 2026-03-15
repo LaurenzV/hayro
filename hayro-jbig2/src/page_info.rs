@@ -83,12 +83,6 @@ pub(crate) struct PageStriping {
     pub(crate) _max_stripe_size: u16,
 }
 
-// Not really a default, just used as a dummy placeholder.
-
-// Not really a default, just used as a dummy placeholder.
-
-// Not really a default, just used as a dummy placeholder.
-
 /// Parse a page information segment (7.4.8).
 pub(crate) fn parse_page_information(reader: &mut Reader<'_>) -> Result<PageInformation> {
     // 7.4.8.1: Page bitmap width

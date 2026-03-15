@@ -309,7 +309,7 @@ fn render_patterns(
             gi_idx += 1;
 
             if pattern_index >= num_patterns {
-                bail!(RegionError::InvalidDimension);
+                bail!(RegionError::GrayScaleOutOfRange);
             }
 
             // Check whether we can use the blit fast path.

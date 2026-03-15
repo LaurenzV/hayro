@@ -16,7 +16,7 @@ use crate::decode::{
 };
 use crate::decode::{generic, generic_refinement};
 use crate::error::{
-    DecodeError, HuffmanError, OverflowError, ParseError, RegionError, Result, SymbolError, bail,
+    DecodeError, HuffmanError, OverflowError, ParseError, Result, SymbolError, bail,
 };
 use crate::huffman_table::{HuffmanTable, StandardHuffmanTables};
 use crate::integer_decoder::IntegerDecoder;
@@ -75,12 +75,12 @@ pub(crate) fn decode(
 
     while ctx.symbols_decoded_count < num_new_symbols {
         let height_class_delta =
-            read_height_class_delta(&mut ctx)?.ok_or(SymbolError::OutOfRange)?;
+            read_height_class_delta(&mut ctx)?.ok_or(SymbolError::UnexpectedOob)?;
 
         ctx.height_class_height = ctx
             .height_class_height
             .checked_add_signed(height_class_delta)
-            .ok_or(RegionError::InvalidDimension)?;
+            .ok_or(OverflowError::BitmapDimension)?;
 
         let mut symbol_width: u32 = 0;
         ctx.total_width = 0;
@@ -96,11 +96,11 @@ pub(crate) fn decode(
 
             symbol_width = symbol_width
                 .checked_add_signed(width_delta)
-                .ok_or(RegionError::InvalidDimension)?;
+                .ok_or(OverflowError::BitmapDimension)?;
             ctx.total_width = ctx
                 .total_width
                 .checked_add(symbol_width)
-                .ok_or(RegionError::InvalidDimension)?;
+                .ok_or(OverflowError::BitmapDimension)?;
 
             match (ctx.header.flags.use_huffman, ctx.header.flags.use_refagg) {
                 (false, false) => {

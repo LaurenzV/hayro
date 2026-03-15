@@ -86,6 +86,8 @@ pub enum RegionError {
     InvalidCombinationOperator,
     /// Region with invalid dimension.
     InvalidDimension,
+    /// MMR (Modified Modified Read) decoding failed.
+    InvalidMmrData,
     /// Gray-scale value exceeds pattern count.
     GrayScaleOutOfRange,
 }
@@ -214,6 +216,7 @@ impl fmt::Display for RegionError {
         match self {
             Self::InvalidCombinationOperator => write!(f, "invalid combination operator"),
             Self::InvalidDimension => write!(f, "invalid dimension value"),
+            Self::InvalidMmrData => write!(f, "invalid MMR-encoded data"),
             Self::GrayScaleOutOfRange => write!(f, "gray-scale value exceeds pattern count"),
         }
     }
