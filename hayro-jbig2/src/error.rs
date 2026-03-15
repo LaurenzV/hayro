@@ -110,6 +110,8 @@ pub enum SymbolError {
     Invalid,
     /// Strip delta multiplication overflowed.
     InvalidStripDelta,
+    /// Too many symbol instances in a text region.
+    TooManyInstances,
 }
 
 /// Arithmetic overflow errors.
@@ -229,6 +231,7 @@ impl fmt::Display for SymbolError {
             Self::TooManySymbols => write!(f, "symbol dictionary contains too many symbols"),
             Self::Invalid => write!(f, "invalid symbol encountered"),
             Self::InvalidStripDelta => write!(f, "strip delta overflow"),
+            Self::TooManyInstances => write!(f, "too many symbol instances"),
         }
     }
 }

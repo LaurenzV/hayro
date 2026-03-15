@@ -91,6 +91,13 @@ pub(crate) fn decode_with(
 ) -> Result<()> {
     let strip_size = header.strip_size();
 
+    // Arbitrarily chosen, but we need some limit to prevent timeouts.
+    const MAX_INSTANCES: u32 = 10_000;
+
+    if header.num_instances > MAX_INSTANCES {
+        bail!(SymbolError::TooManyInstances);
+    }
+
     let mut strip_t = ctx
         .read_strip_delta_t(strip_size)?
         .checked_neg()

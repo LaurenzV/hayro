@@ -701,3 +701,9 @@ fn integer_decode_overflow() {
     let file = include_bytes!("../pdfs/load/integer_decode_overflow.jb2");
     load_jbig2(file);
 }
+
+#[test]
+fn too_many_symbol_instances() {
+    let file = include_bytes!("../pdfs/load/too_many_symbol_instances.jb2");
+    load_jbig2(file);
+}
