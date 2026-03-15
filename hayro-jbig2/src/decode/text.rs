@@ -671,7 +671,7 @@ fn decode_symbol_id_huffman_table(
         runcode_lines.push(TableLine::new(runcode_idx, prefix_length, 0));
     }
 
-    let runcode_table = HuffmanTable::build(&runcode_lines);
+    let runcode_table = HuffmanTable::build(&runcode_lines)?;
     let mut symbol_code_lengths = Vec::with_capacity(num_symbols as usize);
 
     while symbol_code_lengths.len() < num_symbols as usize {
@@ -717,7 +717,7 @@ fn decode_symbol_id_huffman_table(
         .enumerate()
         .map(|(symbol_idx, &prefix_length)| TableLine::new(symbol_idx as i32, prefix_length, 0))
         .collect();
-    Ok(HuffmanTable::build(&symbol_lines))
+    Ok(HuffmanTable::build(&symbol_lines)?)
 }
 
 pub(crate) struct TextRegionHuffmanTables<'a> {

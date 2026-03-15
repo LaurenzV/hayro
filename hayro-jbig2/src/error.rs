@@ -71,6 +71,8 @@ pub enum HuffmanError {
     MissingTables,
     /// Unexpected out-of-band value.
     UnexpectedOob,
+    /// Huffman tree has conflicting codes (one code is a prefix of another).
+    ConflictingCodes,
 }
 
 /// Errors related to region parameters.
@@ -194,6 +196,7 @@ impl fmt::Display for HuffmanError {
             Self::InvalidSelection => write!(f, "invalid Huffman table selection"),
             Self::MissingTables => write!(f, "not enough referred Huffman tables"),
             Self::UnexpectedOob => write!(f, "unexpected out-of-band value"),
+            Self::ConflictingCodes => write!(f, "conflicting Huffman codes"),
         }
     }
 }

@@ -50,7 +50,7 @@ impl HuffmanTable {
 
     /// Build a Huffman table from table line definitions (B.3 "Assigning
     /// the prefix codes").
-    pub(crate) fn build(lines: &[TableLine]) -> Self {
+    pub(crate) fn build(lines: &[TableLine]) -> Result<Self> {
         // `NTEMP` - Number of table lines.
         let line_count = lines.len();
 
@@ -117,10 +117,10 @@ impl HuffmanTable {
                 line.range_length,
                 line.is_lower,
                 line.is_out_of_band,
-            );
+            )?;
         }
 
-        Self::from_dynamic(nodes)
+        Ok(Self::from_dynamic(nodes))
     }
 
     /// Build a uniform Huffman table where all symbols have the same code length.
@@ -128,7 +128,7 @@ impl HuffmanTable {
     /// This is used for symbol ID encoding (6.5.8.2.3): "For each value of i from
     /// 0 to SDNUMINSYMS + NSYMSDECODED – 1, set SBSYMCODES[i] to the binary
     /// representation of i using a SBSYMCODELEN-bit string."
-    pub(crate) fn build_uniform(num_symbols: u32, code_length: u32) -> Self {
+    pub(crate) fn build_uniform(num_symbols: u32, code_length: u32) -> Result<Self> {
         let lines: Vec<TableLine> = (0..num_symbols)
             .map(|i| TableLine::new(i as i32, code_length as u8, 0))
             .collect();
@@ -145,12 +145,12 @@ impl HuffmanTable {
         range_length: u8,
         is_lower: bool,
         is_out_of_band: bool,
-    ) {
+    ) -> Result<()> {
         if prefix_length == 0 {
             // We've consumed all bits, this should be a leaf.
             nodes[node_index as usize] =
                 HuffmanNode::new_leaf(range_low, range_length, is_lower, is_out_of_band);
-            return;
+            return Ok(());
         }
 
         // Get the next bit (MSB first).
@@ -162,7 +162,7 @@ impl HuffmanTable {
             None => {
                 let new_idx = NonZeroU32::new(nodes.len() as u32).unwrap();
                 nodes.push(HuffmanNode::new_intermediate());
-                nodes[node_index as usize].set_child(bit == 0, new_idx);
+                nodes[node_index as usize].set_child(bit == 0, new_idx)?;
                 new_idx
             }
         };
@@ -176,7 +176,7 @@ impl HuffmanTable {
             range_length,
             is_lower,
             is_out_of_band,
-        );
+        )
     }
 
     /// Read a custom Huffman table from the bitstream (B.2 "Decoding a code table").
@@ -277,7 +277,7 @@ impl HuffmanTable {
         }
 
         // 11) "Create the prefix codes using the algorithm described in B.3."
-        Ok(Self::build(&lines))
+        Ok(Self::build(&lines)?)
     }
 }
 
@@ -389,7 +389,11 @@ impl HuffmanNode {
     }
 
     /// Set the child index for a given bit (0 or 1).
-    fn set_child(&mut self, child_zero: bool, index: NonZeroU32) {
+    fn set_child(
+        &mut self,
+        child_zero: bool,
+        index: NonZeroU32,
+    ) -> core::result::Result<(), HuffmanError> {
         match self {
             Self::Intermediate { zero, one } => {
                 if child_zero {
@@ -397,8 +401,9 @@ impl HuffmanNode {
                 } else {
                     *one = Some(index);
                 }
+                Ok(())
             }
-            _ => panic!("set_child called on non-intermediate node"),
+            _ => Err(HuffmanError::ConflictingCodes),
         }
     }
 

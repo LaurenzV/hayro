@@ -683,3 +683,9 @@ fn invalid_strip_delta() {
     let file = include_bytes!("../pdfs/load/invalid_strip_delta.jb2");
     load_jbig2(file);
 }
+
+#[test]
+fn conflicting_huffman_codes() {
+    let file = include_bytes!("../pdfs/load/conflicting_huffman_codes.jb2");
+    load_jbig2(file);
+}
