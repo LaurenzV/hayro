@@ -306,7 +306,10 @@ impl<'a, 'b> DecodeContext<'a, 'b> {
     fn read_strip_delta_t(&mut self, strip_size: u32) -> Result<i32> {
         match self {
             DecodeContext::Huffman { reader, tables, .. } => {
-                Ok(tables.delta_t.decode_no_oob(reader)? * strip_size as i32)
+                let value = tables.delta_t.decode_no_oob(reader)?;
+                value
+                    .checked_mul(strip_size as i32)
+                    .ok_or(SymbolError::InvalidStripDelta.into())
             }
             DecodeContext::Arithmetic {
                 decoder, contexts, ..
@@ -315,7 +318,9 @@ impl<'a, 'b> DecodeContext<'a, 'b> {
                     .iadt
                     .decode(decoder)
                     .ok_or(SymbolError::OutOfRange)?;
-                Ok(value * strip_size as i32)
+                value
+                    .checked_mul(strip_size as i32)
+                    .ok_or(SymbolError::InvalidStripDelta.into())
             }
         }
     }

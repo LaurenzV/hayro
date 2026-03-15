@@ -677,3 +677,9 @@ fn generic_refinement_decoding_overflow() {
     let file = include_bytes!("../pdfs/load/generic_refinement_decoding_overflow.jb2");
     load_jbig2(file);
 }
+
+#[test]
+fn invalid_strip_delta() {
+    let file = include_bytes!("../pdfs/load/invalid_strip_delta.jb2");
+    load_jbig2(file);
+}

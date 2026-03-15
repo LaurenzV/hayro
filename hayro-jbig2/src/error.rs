@@ -106,6 +106,8 @@ pub enum SymbolError {
     UnexpectedOob,
     /// An invalid symbol was encountered.
     Invalid,
+    /// Strip delta multiplication overflowed.
+    InvalidStripDelta,
 }
 
 /// Arithmetic overflow errors.
@@ -223,6 +225,7 @@ impl fmt::Display for SymbolError {
             Self::UnexpectedOob => write!(f, "unexpected out-of-band value"),
             Self::TooManySymbols => write!(f, "symbol dictionary contains too many symbols"),
             Self::Invalid => write!(f, "invalid symbol encountered"),
+            Self::InvalidStripDelta => write!(f, "strip delta overflow"),
         }
     }
 }
