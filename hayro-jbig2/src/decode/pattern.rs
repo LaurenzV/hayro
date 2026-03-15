@@ -122,10 +122,44 @@ pub(crate) fn decode(
         patterns.push(pattern);
     }
 
+    // It turns out that when rendering patterns, the `Bitmap::combine` operation
+    // can often be a huge bottleneck. This is because we need to do a lot of
+    // fiddling to compose the patterns in the right position. And since
+    // if a page uses such patterns, there's going to be a lot of them,
+    // this takes up a lot of time.
+    //
+    // The key insight for our optimization is that patterns are usually
+    // very small. Therefore, we precompute a new version of each pattern
+    // for all possible 32-bit alignments, which later on allows us to
+    // very easily blit it into the backdrop, significantly speeding up
+    // the whole process.
+    let shifted_patterns = if pattern_width <= WORD_BITS && pattern_height <= WORD_BITS {
+        let h = pattern_height as usize;
+        let mut data = Vec::with_capacity(patterns.len() * 32 * h * 2);
+        for pattern in &patterns {
+            for k in 0..32u32 {
+                for y in 0..h {
+                    let word = pattern.data[y];
+                    if k == 0 {
+                        data.push(word);
+                        data.push(0);
+                    } else {
+                        data.push(word >> k);
+                        data.push(word << (WORD_BITS - k));
+                    }
+                }
+            }
+        }
+        data
+    } else {
+        Vec::new()
+    };
+
     Ok(PatternDictionary {
         patterns,
         pattern_width,
         pattern_height,
+        shifted_patterns,
     })
 }
 
@@ -135,6 +169,17 @@ pub(crate) struct PatternDictionary {
     pub(crate) patterns: Vec<Bitmap>,
     pub(crate) pattern_width: u32,
     pub(crate) pattern_height: u32,
+    shifted_patterns: Vec<Word>,
+}
+
+impl PatternDictionary {
+    #[inline(always)]
+    pub(crate) fn shifted_pattern(&self, pattern_idx: usize, bit_offset: u32) -> Option<&[Word]> {
+        let h = self.pattern_height as usize;
+        let len = h * 2;
+        let start = (pattern_idx * 32 + bit_offset as usize) * len;
+        self.shifted_patterns.get(start..start + len)
+    }
 }
 
 /// Parsed pattern dictionary segment header (7.4.4.1).
