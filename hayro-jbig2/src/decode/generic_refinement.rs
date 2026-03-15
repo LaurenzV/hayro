@@ -282,6 +282,7 @@ impl<'a> RefinementContextGatherer<'a> {
             } else {
                 // Fast path: shift and mask 3 bits at once.
                 #[allow(trivial_numeric_casts)]
+                #[allow(clippy::unnecessary_cast)]
                 {
                     ((buf >> (WORD_SHIFT - rbx - 1)) & 0b111) as u32
                 }
