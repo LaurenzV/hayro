@@ -284,7 +284,7 @@ impl<'a> RefinementContextGatherer<'a> {
 
         #[inline(always)]
         fn extract_3bits(buf: Word, rbx: u32) -> u32 {
-            if rbx == 0 || rbx + 1 >= WORD_BITS {
+            if rbx == 0 || rbx >= WORD_BITS - 1 {
                 // Near word boundary, fall back to individual extraction.
                 let b0 = ContextGatherer::get_buf_pixel(buf, rbx.wrapping_sub(1)) as u32;
                 let b1 = ContextGatherer::get_buf_pixel(buf, rbx) as u32;

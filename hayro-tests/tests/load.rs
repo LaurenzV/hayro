@@ -707,3 +707,9 @@ fn too_many_symbol_instances() {
     let file = include_bytes!("../pdfs/load/too_many_symbol_instances.jb2");
     load_jbig2(file);
 }
+
+#[test]
+fn refinement_tpgr_overflow() {
+    let file = include_bytes!("../pdfs/load/refinement_tpgr_overflow.jb2");
+    load_jbig2(file);
+}
