@@ -619,6 +619,7 @@ dependencies = [
 name = "hayro-jbig2"
 version = "0.1.0"
 dependencies = [
+ "fearless_simd",
  "hayro-ccitt",
  "image 0.25.10",
  "indicatif",

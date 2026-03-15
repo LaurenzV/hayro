@@ -66,6 +66,7 @@ mod lazy;
 mod page_info;
 mod reader;
 mod segment;
+mod simd;
 mod symbol_id_decoder;
 
 use error::bail;

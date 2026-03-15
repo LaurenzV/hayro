@@ -5,10 +5,11 @@ use alloc::vec::Vec;
 
 use crate::ScratchBuffers;
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
-use crate::bitmap::{Bitmap, MAX_DIMENSION, WORD_BITS, WORD_SHIFT};
+use crate::bitmap::{Bitmap, MAX_DIMENSION, WORD_BITS};
 use crate::decode::generic::{ContextGatherer, decode_bitmap_mmr};
 use crate::decode::{AdaptiveTemplatePixel, Template};
 use crate::error::{OverflowError, Result, bail};
+use crate::simd::{self, Level, Simd, u32x8};
 
 /// Input parameters to the gray-scale image decoding procedure (Table C.1).
 #[derive(Debug, Clone)]
@@ -189,34 +190,98 @@ where
     let mut bitplane = Bitmap::new(width, height)?;
     let mut prev_plane = vec![0; bitplane.data.len()];
 
-    for j in (0..bits_per_pixel).rev() {
-        bitplane.data.fill(0);
-        decode_next(j, &mut bitplane)?;
+    simd::dispatch!(Level::new(), simd => {
+        for j in (0..bits_per_pixel).rev() {
+            bitplane.data.fill(0);
+            decode_next(j, &mut bitplane)?;
 
-        // Done every time except the first time.
-        if j < bits_per_pixel - 1 {
-            // C.5 step 3b: "GSPLANES[J][x, y] = GSPLANES[J + 1][x, y] XOR GSPLANES[J][x, y]"
-            #[allow(clippy::needless_range_loop)]
-            for i in 0..bitplane.data.len() {
-                bitplane.data[i] ^= prev_plane[i];
+            // Done every time except the first time.
+            if j < bits_per_pixel - 1 {
+                // C.5 step 3b: "GSPLANES[J][x, y] = GSPLANES[J + 1][x, y] XOR GSPLANES[J][x, y]"
+                xor_planes(simd, &mut bitplane.data, &prev_plane);
             }
+
+            // C.5 step 4: "GSVALS[x, y] = sum(J=0 to GSBPP-1) GSPLANES[J][x, y] * 2^J"
+            extract_bits(simd, &bitplane.data, &mut values, width, height, stride, j);
+
+            // C.5 step 3c: "Set J = J - 1."
+            prev_plane.copy_from_slice(&bitplane.data);
         }
 
-        // C.5 step 4: "GSVALS[x, y] = sum(J=0 to GSBPP-1) GSPLANES[J][x, y] * 2^J"
-        for y in 0..height {
-            for x in 0..width {
-                let word_idx = (y * stride + x / WORD_BITS) as usize;
-                let bit_pos = WORD_SHIFT - (x % WORD_BITS);
-                if (bitplane.data[word_idx] >> bit_pos) & 1 != 0 {
-                    let i = (y * width + x) as usize;
-                    values[i] |= 1 << j;
-                }
-            }
-        }
+        Ok(values)
+    })
+}
 
-        // C.5 step 3c: "Set J = J - 1."
-        prev_plane.copy_from_slice(&bitplane.data);
+#[inline(always)]
+fn xor_planes<S: Simd>(simd: S, plane: &mut [u32], prev: &[u32]) {
+    let simd_end = plane.len() & !7;
+
+    for i in (0..simd_end).step_by(simd::SIMD_WIDTH) {
+        let chunk = &mut plane[i..i + simd::SIMD_WIDTH];
+        let mut a = u32x8::from_slice(simd, chunk);
+        let b = u32x8::from_slice(simd, &prev[i..i + simd::SIMD_WIDTH]);
+        a ^= b;
+        a.store(chunk);
     }
 
-    Ok(values)
+    for i in simd_end..plane.len() {
+        plane[i] ^= prev[i];
+    }
+}
+
+#[inline(always)]
+fn extract_bits<S: Simd>(
+    simd: S,
+    data: &[u32],
+    values: &mut [u32],
+    width: u32,
+    height: u32,
+    stride: u32,
+    j: u32,
+) {
+    /// Bit masks for extracting individual bits from a packed u32 word (MSB-first).
+    /// `BIT_MASKS[i] = 1 << (31 - i)`.
+    const BIT_MASKS: [u32; 32] = {
+        let mut masks = [0u32; 32];
+        let mut i = 0;
+        while i < 32 {
+            masks[i] = 1 << (31 - i);
+            i += 1;
+        }
+        masks
+    };
+
+    let bit_value = u32x8::splat(simd, 1u32 << j);
+    let zero = u32x8::splat(simd, 0);
+    let simd_end = (width as usize) & !7;
+
+    for y in 0..height as usize {
+        let row_data = y * stride as usize;
+        let row_vals = y * width as usize;
+
+        // Handle in chunks of 8.
+        for x in (0..simd_end).step_by(simd::SIMD_WIDTH) {
+            let word = data[row_data + x / 32];
+            let bit_offset = x % 32;
+
+            let splatted = u32x8::splat(simd, word);
+            let masks =
+                u32x8::from_slice(simd, &BIT_MASKS[bit_offset..bit_offset + simd::SIMD_WIDTH]);
+            let extracted = splatted & masks;
+            let nonzero = extracted.simd_gt(zero);
+            let contribution = nonzero.select(bit_value, zero);
+            let vals = &mut values[row_vals + x..row_vals + x + simd::SIMD_WIDTH];
+            let current = u32x8::from_slice(simd, vals);
+            (current | contribution).store(vals);
+        }
+
+        // Handle the tail.
+        for x in simd_end..width as usize {
+            let word_idx = row_data + x / 32;
+            let bit_pos = 31 - (x % 32);
+            if (data[word_idx] >> bit_pos) & 1 != 0 {
+                values[row_vals + x] |= 1 << j;
+            }
+        }
+    }
 }
