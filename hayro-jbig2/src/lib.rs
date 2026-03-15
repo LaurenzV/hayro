@@ -159,6 +159,10 @@ impl<'a> Image<'a> {
             page_info.height
         };
 
+        if page_info.width == 0 || height == 0 {
+            bail!(FormatError::EmptyPage);
+        }
+
         Ok(Self {
             segments,
             width: page_info.width,

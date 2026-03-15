@@ -43,6 +43,8 @@ pub enum FormatError {
     MissingPageInfo,
     /// Page height unknown with no stripe segments.
     UnknownPageHeight,
+    /// Page has zero width or height.
+    EmptyPage,
 }
 
 /// Errors related to segment processing.
@@ -175,6 +177,7 @@ impl fmt::Display for FormatError {
             Self::ReservedBits => write!(f, "reserved bits must be zero"),
             Self::MissingPageInfo => write!(f, "missing page information segment"),
             Self::UnknownPageHeight => write!(f, "page height unknown with no stripe segments"),
+            Self::EmptyPage => write!(f, "page has zero width or height"),
         }
     }
 }

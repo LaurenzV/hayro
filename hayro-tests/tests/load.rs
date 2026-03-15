@@ -713,3 +713,9 @@ fn refinement_tpgr_overflow() {
     let file = include_bytes!("../pdfs/load/refinement_tpgr_overflow.jb2");
     load_jbig2(file);
 }
+
+#[test]
+fn zero_dimension_bitmap() {
+    let file = include_bytes!("../pdfs/load/zero_dimension_bitmap.jb2");
+    load_jbig2(file);
+}
