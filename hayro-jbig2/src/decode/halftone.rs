@@ -268,9 +268,9 @@ fn render_patterns(
 
     // The original pattern mask has 1s in the top `pw` bits.
     let original_mask = if pw >= WORD_BITS {
-        !0u32
+        !0_u32
     } else {
-        !0u32 << (WORD_BITS - pw)
+        !0_u32 << (WORD_BITS - pw)
     };
 
     macro_rules! blit_rows {
