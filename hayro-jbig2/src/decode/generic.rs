@@ -639,7 +639,7 @@ impl<'a> ContextGatherer<'a> {
     }
 
     #[inline(always)]
-    fn maybe_reload_buffers(&mut self, bitmap: &Bitmap, x: u32) {
+    pub(crate) fn maybe_reload_buffers(&mut self, bitmap: &Bitmap, x: u32) {
         if x + self.max_right >= self.cur_x + WORD_BITS {
             let new_start = x.saturating_sub(4);
             self.cur_x = new_start;
@@ -654,27 +654,6 @@ impl<'a> ContextGatherer<'a> {
                 0
             };
             self.buf_cur = Self::load_word(bitmap, self.cur_y, new_start);
-        }
-    }
-
-    #[inline]
-    pub(crate) fn gather(&mut self, bitmap: &Bitmap, x: u32) -> u16 {
-        self.maybe_reload_buffers(bitmap, x);
-
-        if self.use_default_at {
-            match self.template {
-                Template::Template0 => self.gather_template0_default(bitmap, x),
-                Template::Template1 => self.gather_template1_default(bitmap, x),
-                Template::Template2 => self.gather_template2_default(bitmap, x),
-                Template::Template3 => self.gather_template3_default(bitmap, x),
-            }
-        } else {
-            match self.template {
-                Template::Template0 => self.gather_template0_custom(bitmap, x),
-                Template::Template1 => self.gather_template1_custom(bitmap, x),
-                Template::Template2 => self.gather_template2_custom(bitmap, x),
-                Template::Template3 => self.gather_template3_custom(bitmap, x),
-            }
         }
     }
 
@@ -757,7 +736,7 @@ impl<'a> ContextGatherer<'a> {
     }
 
     #[inline(always)]
-    fn gather_template0_default(&mut self, _bitmap: &Bitmap, x: u32) -> u16 {
+    pub(crate) fn gather_template0_default(&mut self, _bitmap: &Bitmap, x: u32) -> u16 {
         let bx = x - self.cur_x;
         let new_pixels = (Self::get_buf_pixel(self.buf_m2, bx + 2) << 11)
             | (Self::get_buf_pixel(self.buf_m1, bx + 3) << 4)
@@ -768,7 +747,7 @@ impl<'a> ContextGatherer<'a> {
     }
 
     #[inline(always)]
-    fn gather_template1_default(&mut self, _bitmap: &Bitmap, x: u32) -> u16 {
+    pub(crate) fn gather_template1_default(&mut self, _bitmap: &Bitmap, x: u32) -> u16 {
         let bx = x - self.cur_x;
         let new_pixels = (Self::get_buf_pixel(self.buf_m2, bx + 2) << 9)
             | (Self::get_buf_pixel(self.buf_m1, bx + 3) << 3)
@@ -779,7 +758,7 @@ impl<'a> ContextGatherer<'a> {
     }
 
     #[inline(always)]
-    fn gather_template2_default(&mut self, _bitmap: &Bitmap, x: u32) -> u16 {
+    pub(crate) fn gather_template2_default(&mut self, _bitmap: &Bitmap, x: u32) -> u16 {
         let bx = x - self.cur_x;
         let new_pixels = (Self::get_buf_pixel(self.buf_m2, bx + 1) << 7)
             | (Self::get_buf_pixel(self.buf_m1, bx + 2) << 2)
@@ -790,7 +769,7 @@ impl<'a> ContextGatherer<'a> {
     }
 
     #[inline(always)]
-    fn gather_template3_default(&mut self, _bitmap: &Bitmap, x: u32) -> u16 {
+    pub(crate) fn gather_template3_default(&mut self, _bitmap: &Bitmap, x: u32) -> u16 {
         let bx = x - self.cur_x;
         let new_pixels = (Self::get_buf_pixel(self.buf_m1, bx + 2) << 4)
             | Self::get_buf_pixel(self.buf_cur, bx.wrapping_sub(1));
