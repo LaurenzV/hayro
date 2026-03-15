@@ -205,6 +205,7 @@ where
         // This step applies gray coding.
         // C.5 step 3b: "GSPLANES[J][x, y] = GSPLANES[J + 1][x, y] XOR GSPLANES[J][x, y]"
         // With packed format, we can XOR whole words.
+        #[allow(clippy::needless_range_loop)]
         for i in 0..bitplane.data.len() {
             bitplane.data[i] ^= prev_plane[i];
         }
