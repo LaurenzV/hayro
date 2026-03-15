@@ -10,6 +10,7 @@ mod inner {
 
     #[derive(Copy, Clone)]
     #[allow(non_camel_case_types)]
+    #[repr(C, align(32))]
     pub(crate) struct mask32x8<S: Simd> {
         inner: fearless_simd::mask32x8<S>,
     }
@@ -128,6 +129,7 @@ mod inner {
 
     #[derive(Copy, Clone)]
     #[allow(non_camel_case_types)]
+    #[repr(C, align(32))]
     pub(crate) struct mask32x8<S: Simd> {
         val: [bool; SIMD_WIDTH],
         _marker: PhantomData<S>,
