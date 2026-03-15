@@ -59,6 +59,11 @@ impl HuffmanTable {
         // that the value I occurs in the array PREFLEN."
         // `LENMAX` - Maximum prefix length.
         let max_prefix_length = lines.iter().map(|l| l.prefix_length).max().unwrap_or(0) as usize;
+
+        if max_prefix_length > 32 {
+            bail!(HuffmanError::PrefixLengthTooLarge);
+        }
+
         // `LENCOUNT` - Histogram of prefix lengths.
         let mut length_counts = vec![0_u32; max_prefix_length + 1];
         for line in lines {
@@ -79,8 +84,10 @@ impl HuffmanTable {
             // a) "Set: FIRSTCODE[CURLEN] = (FIRSTCODE[CURLEN − 1] + LENCOUNT[CURLEN − 1]) × 2
             //         CURCODE = FIRSTCODE[CURLEN]
             //         CURTEMP = 0"
-            first_code_per_length[current_length] =
-                (first_code_per_length[current_length - 1] + length_counts[current_length - 1]) * 2;
+            first_code_per_length[current_length] = (first_code_per_length[current_length - 1]
+                + length_counts[current_length - 1])
+                .checked_mul(2)
+                .ok_or(HuffmanError::InvalidCode)?;
             // `CURCODE` - Current code value being assigned.
             let mut current_code = first_code_per_length[current_length];
 
@@ -92,7 +99,9 @@ impl HuffmanTable {
                 //        CURCODE = CURCODE + 1"
                 if lines[line_index].prefix_length as usize == current_length {
                     assigned_codes[line_index] = current_code;
-                    current_code += 1;
+                    current_code = current_code
+                        .checked_add(1)
+                        .ok_or(HuffmanError::InvalidCode)?;
                 }
                 // ii) "Set CURTEMP = CURTEMP + 1" (implicit in for loop)
             }

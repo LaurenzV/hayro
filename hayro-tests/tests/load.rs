@@ -719,3 +719,9 @@ fn zero_dimension_bitmap() {
     let file = include_bytes!("../pdfs/load/zero_dimension_bitmap.jb2");
     load_jbig2(file);
 }
+
+#[test]
+fn huffman_code_overflow() {
+    let file = include_bytes!("../pdfs/load/huffman_code_overflow.jb2");
+    load_jbig2(file);
+}
