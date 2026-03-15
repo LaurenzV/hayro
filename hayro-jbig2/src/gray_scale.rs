@@ -61,7 +61,7 @@ fn decode_mmr(data: &[u8], params: &GrayScaleParams<'_>) -> Result<Vec<u32>> {
     decode_bitplanes(width, height, stride, bits_per_pixel, |_, bitplane| {
         // Table C.4: "GBW = GSW, GBH = GSH"
         offset += decode_bitmap_mmr(bitplane, &data[offset..])?;
-        
+
         Ok(())
     })
 }
