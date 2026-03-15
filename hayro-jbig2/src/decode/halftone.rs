@@ -68,7 +68,6 @@ pub(crate) fn decode_into(
 
     // "5) Place sequentially the patterns corresponding to the values in GI into
     // HTREG by the procedure described in 6.6.5.2." (6.6.5)
-    // TODO: Optimize drawing axis-aligned grids.
     render_patterns(htreg, &gi, header, pattern_dict)?;
 
     Ok(())
@@ -274,6 +273,8 @@ fn render_patterns(
                 .get(pattern_index)
                 .ok_or(RegionError::InvalidDimension)?;
 
+            // TODO: This is showing up in profiles a lot, think about how we can
+            // speed this up.
             region.combine(pattern, x, y, header.flags.combination_operator);
 
             coords.advance_col();
