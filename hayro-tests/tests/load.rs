@@ -689,3 +689,9 @@ fn conflicting_huffman_codes() {
     let file = include_bytes!("../pdfs/load/conflicting_huffman_codes.jb2");
     load_jbig2(file);
 }
+
+#[test]
+fn custom_huffman_table_oob() {
+    let file = include_bytes!("../pdfs/load/custom_huffman_table_oob.jb2");
+    load_jbig2(file);
+}

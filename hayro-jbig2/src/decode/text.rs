@@ -577,17 +577,19 @@ fn select_huffman_tables<'a>(
 ) -> Result<TextRegionHuffmanTables<'a>> {
     let mut custom_table_idx = 0;
 
-    let mut get_custom = || -> &'a HuffmanTable {
-        let table = &custom_tables[custom_table_idx];
+    let mut get_custom = || -> Result<&'a HuffmanTable> {
+        let table = custom_tables
+            .get(custom_table_idx)
+            .ok_or(HuffmanError::MissingTables)?;
         custom_table_idx += 1;
-        table
+        Ok(table)
     };
 
     // "1) SBHUFFFS"
     let first_s = match flags.first_s_table {
         0 => standard_tables.table_f(),
         1 => standard_tables.table_g(),
-        3 => get_custom(),
+        3 => get_custom()?,
         _ => bail!(HuffmanError::InvalidSelection),
     };
 
@@ -596,7 +598,7 @@ fn select_huffman_tables<'a>(
         0 => standard_tables.table_h(),
         1 => standard_tables.table_i(),
         2 => standard_tables.table_j(),
-        3 => get_custom(),
+        3 => get_custom()?,
         _ => bail!(HuffmanError::InvalidSelection),
     };
 
@@ -605,7 +607,7 @@ fn select_huffman_tables<'a>(
         0 => standard_tables.table_k(),
         1 => standard_tables.table_l(),
         2 => standard_tables.table_m(),
-        3 => get_custom(),
+        3 => get_custom()?,
         _ => bail!(HuffmanError::InvalidSelection),
     };
 
@@ -613,7 +615,7 @@ fn select_huffman_tables<'a>(
     let refinement_width = match flags.refinement_width_table {
         0 => standard_tables.table_n(),
         1 => standard_tables.table_o(),
-        3 => get_custom(),
+        3 => get_custom()?,
         _ => bail!(HuffmanError::InvalidSelection),
     };
 
@@ -621,7 +623,7 @@ fn select_huffman_tables<'a>(
     let refinement_height = match flags.refinement_height_table {
         0 => standard_tables.table_n(),
         1 => standard_tables.table_o(),
-        3 => get_custom(),
+        3 => get_custom()?,
         _ => bail!(HuffmanError::InvalidSelection),
     };
 
@@ -629,7 +631,7 @@ fn select_huffman_tables<'a>(
     let refinement_y = match flags.refinement_y_table {
         0 => standard_tables.table_n(),
         1 => standard_tables.table_o(),
-        3 => get_custom(),
+        3 => get_custom()?,
         _ => bail!(HuffmanError::InvalidSelection),
     };
 
@@ -637,14 +639,14 @@ fn select_huffman_tables<'a>(
     let refinement_x = match flags.refinement_x_table {
         0 => standard_tables.table_n(),
         1 => standard_tables.table_o(),
-        3 => get_custom(),
+        3 => get_custom()?,
         _ => bail!(HuffmanError::InvalidSelection),
     };
 
     // "8) SBHUFFRSIZE"
     let refinement_size = match flags.refinement_size_table {
         0 => standard_tables.table_a(),
-        1 => get_custom(),
+        1 => get_custom()?,
         _ => bail!(HuffmanError::InvalidSelection),
     };
 
