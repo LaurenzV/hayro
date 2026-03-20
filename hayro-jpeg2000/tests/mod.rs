@@ -178,6 +178,8 @@ struct ManifestEntry {
     #[serde(default)]
     resolve_palette_indices: Option<bool>,
     #[serde(default)]
+    keep_bit_depth: Option<bool>,
+    #[serde(default)]
     target_resolution: Option<(u32, u32)>,
 }
 
@@ -221,6 +223,7 @@ impl ManifestItem {
                         .resolve_palette_indices
                         .unwrap_or(default_settings.resolve_palette_indices),
                     strict: entry.strict.unwrap_or(default_settings.strict),
+                    keep_bit_depth: entry.keep_bit_depth.unwrap_or(default_settings.keep_bit_depth),
                     target_resolution: entry
                         .target_resolution
                         .or(default_settings.target_resolution),

@@ -118,6 +118,7 @@ fn check_jpx_images(folder: &str) {
                         let settings = DecodeSettings {
                             resolve_palette_indices: false,
                             strict: false,
+                            keep_bit_depth: false,
                             target_resolution: Some((2000, 2000)),
                         };
 

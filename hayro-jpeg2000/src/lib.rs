@@ -121,8 +121,38 @@ pub struct DecodeSettings {
     /// It is recommended to leave this flag disabled, unless you have a
     /// specific reason not to.
     pub strict: bool,
+    /// Whether the original bit depth should be kept. By default, hayro-jpeg2000
+    /// always scales the output to 8-bit, but if you enable this flag, 
+    /// the output will be in the original bit depth of the image.
+    pub keep_bit_depth: bool,
     /// A hint for the target resolution that the image should be decoded at.
     pub target_resolution: Option<(u32, u32)>,
+}
+
+impl DecodeSettings {
+    /// Set whether palette indices should be resolved.
+    pub fn with_resolve_palette_indices(mut self, resolve_palette_indices: bool) -> Self {
+        self.resolve_palette_indices = resolve_palette_indices;
+        self
+    }
+
+    /// Set whether strict mode should be enabled when decoding.
+    pub fn with_strict(mut self, strict: bool) -> Self {
+        self.strict = strict;
+        self
+    }
+
+    /// Set whether the original bit depth should be kept.
+    pub fn with_keep_bit_depth(mut self, keep_bit_depth: bool) -> Self {
+        self.keep_bit_depth = keep_bit_depth;
+        self
+    }
+
+    /// Set the target resolution for decoding.
+    pub fn with_target_resolution(mut self, target_resolution: Option<(u32, u32)>) -> Self {
+        self.target_resolution = target_resolution;
+        self
+    }
 }
 
 impl Default for DecodeSettings {
@@ -130,6 +160,7 @@ impl Default for DecodeSettings {
         Self {
             resolve_palette_indices: true,
             strict: false,
+            keep_bit_depth: false,
             target_resolution: None,
         }
     }
@@ -194,9 +225,25 @@ impl<'a> Image<'a> {
     /// Decode the image and return its decoded result as a `Vec<u8>`, with each
     /// channel interleaved.
     pub fn decode(&self) -> Result<Vec<u8>> {
-        let buffer_size = self.width() as usize
-            * self.height() as usize
-            * (self.color_space.num_channels() as usize + if self.has_alpha { 1 } else { 0 });
+
+        let mut buffer_size = self.width() as usize
+                * self.height() as usize
+                * (self.color_space.num_channels() as usize + if self.has_alpha { 1 } else { 0 });
+
+        if self.settings.keep_bit_depth {
+            // 1、Fast path
+            // Note that this is only valid if all components of the image have the same bit depth.
+            buffer_size *= self.original_bit_depth().div_ceil(8) as usize;
+
+            // 2、Slow path
+            // Note that it is assumed that the components have different precision.
+            // let mut total_bytes_per_pixel = 0usize;
+            // for comp_info in self.header.component_infos.iter() {
+            //     let bit_depth = comp_info.size_info.precision.div_ceil(8) as usize;
+            //     total_bytes_per_pixel += bit_depth + if self.has_alpha { bit_depth } else { 0 };
+            // }
+            // buffer_size = (self.width() as usize) * (self.height() as usize) * total_bytes_per_pixel;
+        } 
         let mut buf = vec![0; buffer_size];
         let mut decoder_context = DecoderContext::default();
         self.decode_into(&mut buf, &mut decoder_context)?;
@@ -255,7 +302,7 @@ impl<'a> Image<'a> {
         // Note that this is only valid if all images have the same bit depth.
         let bit_depth = decoded_image.decoded_components[0].bit_depth;
         convert_color_space(&mut decoded_image, bit_depth)?;
-        interleave_and_convert(&mut decoded_image, buf);
+        interleave_and_convert(&mut decoded_image, settings.keep_bit_depth, buf);
 
         Ok(())
     }
@@ -389,7 +436,7 @@ pub struct Bitmap {
     pub original_bit_depth: u8,
 }
 
-fn interleave_and_convert(image: &mut DecodedImage<'_>, buf: &mut [u8]) {
+fn interleave_and_convert(image: &mut DecodedImage<'_>, keep_bit_depth: bool, buf: &mut [u8]) {
     let components = &mut *image.decoded_components;
     let num_components = components.len();
 
@@ -398,6 +445,7 @@ fn interleave_and_convert(image: &mut DecodedImage<'_>, buf: &mut [u8]) {
     for component in components.iter().skip(1) {
         if Some(component.bit_depth) != all_same_bit_depth {
             all_same_bit_depth = None;
+            break;
         }
     }
 
@@ -405,80 +453,108 @@ fn interleave_and_convert(image: &mut DecodedImage<'_>, buf: &mut [u8]) {
 
     let mut output_iter = buf.iter_mut();
 
-    if all_same_bit_depth == Some(8) && num_components <= 4 {
-        // Fast path for the common case.
-        match num_components {
-            // Gray-scale.
-            1 => {
-                for (output, input) in output_iter.zip(
-                    components[0]
-                        .container
-                        .iter()
-                        .map(|v| math::round_f32(*v) as u8),
-                ) {
-                    *output = input;
-                }
+    if keep_bit_depth {
+        match all_same_bit_depth {
+            Some(bit_depth) => {
+                // Fast path for the common case of all channels having the same bit depth.
+                let bytes_per_channel = bit_depth.div_ceil(8) as usize;
+                components.iter().for_each(|channel| {
+                    channel.container.iter().take(max_len).for_each(|sample| {
+                        let pixel = math::round_f32(*sample) as u32;
+                        for byte in pixel.to_le_bytes().into_iter().take(bytes_per_channel) {
+                            *output_iter.next().unwrap() = byte;
+                        }
+                    });
+                });
             }
-            // Gray-scale with alpha.
-            2 => {
-                let c0 = &components[0];
-                let c1 = &components[1];
-
-                let c0 = &c0.container[..max_len];
-                let c1 = &c1.container[..max_len];
-
-                for i in 0..max_len {
-                    *output_iter.next().unwrap() = math::round_f32(c0[i]) as u8;
-                    *output_iter.next().unwrap() = math::round_f32(c1[i]) as u8;
-                }
+            None => {
+                // Slow path for the case where channels have different bit depths.
+                components.iter().for_each(|channel| {
+                    channel.container.iter().take(max_len).for_each(|sample| {
+                        let pixel = math::round_f32(*sample) as u32;
+                        for byte in pixel.to_le_bytes().into_iter().take((channel.bit_depth.div_ceil(8)) as usize) {
+                            *output_iter.next().unwrap() = byte;
+                        }
+                    });
+                });
             }
-            // RGB
-            3 => {
-                let c0 = &components[0];
-                let c1 = &components[1];
-                let c2 = &components[2];
-
-                let c0 = &c0.container[..max_len];
-                let c1 = &c1.container[..max_len];
-                let c2 = &c2.container[..max_len];
-
-                for i in 0..max_len {
-                    *output_iter.next().unwrap() = math::round_f32(c0[i]) as u8;
-                    *output_iter.next().unwrap() = math::round_f32(c1[i]) as u8;
-                    *output_iter.next().unwrap() = math::round_f32(c2[i]) as u8;
-                }
-            }
-            // RGBA or CMYK.
-            4 => {
-                let c0 = &components[0];
-                let c1 = &components[1];
-                let c2 = &components[2];
-                let c3 = &components[3];
-
-                let c0 = &c0.container[..max_len];
-                let c1 = &c1.container[..max_len];
-                let c2 = &c2.container[..max_len];
-                let c3 = &c3.container[..max_len];
-
-                for i in 0..max_len {
-                    *output_iter.next().unwrap() = math::round_f32(c0[i]) as u8;
-                    *output_iter.next().unwrap() = math::round_f32(c1[i]) as u8;
-                    *output_iter.next().unwrap() = math::round_f32(c2[i]) as u8;
-                    *output_iter.next().unwrap() = math::round_f32(c3[i]) as u8;
-                }
-            }
-            _ => unreachable!(),
         }
     } else {
-        // Slow path that also requires us to scale to 8 bit.
-        let mul_factor = ((1 << 8) - 1) as f32;
+        if all_same_bit_depth == Some(8) && num_components <= 4 {
+            // Fast path for the common case.
+            match num_components {
+                // Gray-scale.
+                1 => {
+                    for (output, input) in output_iter.zip(
+                        components[0]
+                            .container
+                            .iter()
+                            .map(|v| math::round_f32(*v) as u8),
+                    ) {
+                        *output = input;
+                    }
+                }
+                // Gray-scale with alpha.
+                2 => {
+                    let c0 = &components[0];
+                    let c1 = &components[1];
 
-        for sample in 0..max_len {
-            for channel in components.iter() {
-                *output_iter.next().unwrap() = math::round_f32(
-                    (channel.container[sample] / ((1_u32 << channel.bit_depth) - 1) as f32)
-                        * mul_factor,
-                ) as u8;
+                    let c0 = &c0.container[..max_len];
+                    let c1 = &c1.container[..max_len];
+
+                    for i in 0..max_len {
+                        *output_iter.next().unwrap() = math::round_f32(c0[i]) as u8;
+                        *output_iter.next().unwrap() = math::round_f32(c1[i]) as u8;
+                    }
+                }
+                // RGB
+                3 => {
+                    let c0 = &components[0];
+                    let c1 = &components[1];
+                    let c2 = &components[2];
+
+                    let c0 = &c0.container[..max_len];
+                    let c1 = &c1.container[..max_len];
+                    let c2 = &c2.container[..max_len];
+
+                    for i in 0..max_len {
+                        *output_iter.next().unwrap() = math::round_f32(c0[i]) as u8;
+                        *output_iter.next().unwrap() = math::round_f32(c1[i]) as u8;
+                        *output_iter.next().unwrap() = math::round_f32(c2[i]) as u8;
+                    }
+                }
+                // RGBA or CMYK.
+                4 => {
+                    let c0 = &components[0];
+                    let c1 = &components[1];
+                    let c2 = &components[2];
+                    let c3 = &components[3];
+
+                    let c0 = &c0.container[..max_len];
+                    let c1 = &c1.container[..max_len];
+                    let c2 = &c2.container[..max_len];
+                    let c3 = &c3.container[..max_len];
+
+                    for i in 0..max_len {
+                        *output_iter.next().unwrap() = math::round_f32(c0[i]) as u8;
+                        *output_iter.next().unwrap() = math::round_f32(c1[i]) as u8;
+                        *output_iter.next().unwrap() = math::round_f32(c2[i]) as u8;
+                        *output_iter.next().unwrap() = math::round_f32(c3[i]) as u8;
+                    }
+                }
+                _ => unreachable!(),
+            }
+        } else {
+            // Slow path that also requires us to scale to 8 bit.
+            let mul_factor = ((1 << 8) - 1) as f32;
+
+            for sample in 0..max_len {
+                for channel in components.iter() {
+                    *output_iter.next().unwrap() = math::round_f32(
+                        (channel.container[sample] / ((1_u32 << channel.bit_depth) - 1) as f32)
+                            * mul_factor,
+                    ) as u8;
+                }
             }
         }
     }
