@@ -84,8 +84,9 @@ pub(crate) fn decode<'a>(
     // images exist!
     if tiles[0].mct {
         mct::apply_inverse(tile_ctx, &tiles[0].component_infos, header)?;
-        apply_sign_shift(tile_ctx, &header.component_infos);
     }
+
+    apply_sign_shift(tile_ctx, &header.component_infos);
 
     Ok(())
 }
@@ -429,15 +430,6 @@ fn store<'a>(
         component_tile,
         component_info.num_resolution_levels() - 1 - header.skipped_resolution_levels,
     );
-
-    // If we have MCT, the sign shift needs to be applied after the
-    // MCT transform. We take care of that in the main decode method.
-    // Otherwise, we might as well just apply it now.
-    if !tile.mct {
-        for sample in idwt_output.coefficients.iter_mut() {
-            *sample += (1_u32 << (component_info.size_info.precision - 1)) as f32;
-        }
-    }
 
     let (scale_x, scale_y) = (
         component_info.size_info.horizontal_resolution,
