@@ -221,7 +221,7 @@ impl<'a> Image<'a> {
         let settings = &self.settings;
         j2c::decode(self.codestream, &self.header, decoder_context)?;
         let mut decoded_image = DecodedImage {
-            decoded_components: &mut decoder_context.tile_decode_context.channel_data,
+            decoded_components: &mut decoder_context.channel_data,
             boxes: self.boxes.clone(),
         };
 

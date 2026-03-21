@@ -25,7 +25,7 @@ use crate::error::{DecodingError, Result, TileError, bail};
 use crate::j2c::segment::MAX_BITPLANE_COUNT;
 use crate::math::SimdBuffer;
 use crate::reader::BitReader;
-use core::ops::{DerefMut, Range};
+use core::ops::Range;
 
 pub(crate) fn decode<'a>(
     data: &'a [u8],
@@ -40,7 +40,6 @@ pub(crate) fn decode<'a>(
     }
 
     ctx.reset(header, &tiles[0]);
-    let (tile_ctx, storage) = (&mut ctx.tile_decode_context, &mut ctx.storage);
 
     for tile in &tiles {
         ltrace!(
@@ -76,17 +75,24 @@ pub(crate) fn decode<'a>(
                 ),
             };
 
-        decode_tile(tile, header, progression_iterator, tile_ctx, storage)?;
+        decode_tile(
+            tile,
+            header,
+            progression_iterator,
+            &mut ctx.tile_decode_context,
+            &mut ctx.channel_data,
+            &mut ctx.storage,
+        )?;
     }
 
     // Note that this assumes that either all tiles have MCT or none of them.
     // In theory, only some could have it... But hopefully no such cursed
     // images exist!
     if tiles[0].mct {
-        mct::apply_inverse(tile_ctx, &tiles[0].component_infos, header)?;
+        mct::apply_inverse(&mut ctx.channel_data, &tiles[0].component_infos, header)?;
     }
 
-    apply_sign_shift(tile_ctx, &header.component_infos);
+    apply_sign_shift(&mut ctx.channel_data, &header.component_infos);
 
     Ok(())
 }
@@ -94,14 +100,28 @@ pub(crate) fn decode<'a>(
 /// A decoder context for decoding JPEG2000 images.
 #[derive(Default)]
 pub struct DecoderContext<'a> {
-    pub(crate) tile_decode_context: TileDecodeContext,
+    tile_decode_context: TileDecodeContext,
+    /// The raw, decoded samples for each channel.
+    pub(crate) channel_data: Vec<ComponentData>,
     storage: DecompositionStorage<'a>,
 }
 
 impl DecoderContext<'_> {
     fn reset(&mut self, header: &Header<'_>, initial_tile: &Tile<'_>) {
-        self.tile_decode_context.reset(header, initial_tile);
+        self.tile_decode_context.reset();
         self.storage.reset();
+
+        self.channel_data.clear();
+        // TODO: SIMD Buffers should be reused across runs!
+        for info in &initial_tile.component_infos {
+            self.channel_data.push(ComponentData {
+                container: SimdBuffer::zeros(
+                    header.size_data.image_width() as usize
+                        * header.size_data.image_height() as usize,
+                ),
+                bit_depth: info.size_info.precision,
+            });
+        }
     }
 }
 
@@ -110,6 +130,7 @@ fn decode_tile<'a, 'b>(
     header: &Header<'_>,
     progression_iterator: Box<dyn Iterator<Item = ProgressionData> + '_>,
     tile_ctx: &mut TileDecodeContext,
+    channel_data: &mut [ComponentData],
     storage: &mut DecompositionStorage<'a>,
 ) -> Result<()> {
     storage.reset();
@@ -146,7 +167,13 @@ fn decode_tile<'a, 'b>(
         // IDWT and store on a per-component basis. Thus, we only need to
         // store one IDWT output at a time, allowing for better reuse of
         // allocations.
-        store(tile, header, tile_ctx, component_info, idx);
+        store(
+            tile,
+            header,
+            tile_ctx,
+            &mut channel_data[idx],
+            component_info,
+        );
     }
 
     Ok(())
@@ -257,28 +284,13 @@ pub(crate) struct TileDecodeContext {
     pub(crate) bit_plane_decode_context: BitPlaneDecodeContext,
     /// Reusable buffers for decoding bitplanes.
     pub(crate) bit_plane_decode_buffers: BitPlaneDecodeBuffers,
-    /// The raw, decoded samples for each channel.
-    pub(crate) channel_data: Vec<ComponentData>,
 }
 
 impl TileDecodeContext {
-    /// Reset the context for processing a new image.
-    fn reset(&mut self, header: &Header<'_>, initial_tile: &Tile<'_>) {
+    fn reset(&mut self) {
         // Bitplane decode context and buffers will be reset in the
         // corresponding methods. IDWT output and scratch buffer will be
         // overridden on demand, so those don't need to be reset either.
-        self.channel_data.clear();
-
-        // TODO: SIMD Buffers should be reused across runs!
-        for info in &initial_tile.component_infos {
-            self.channel_data.push(ComponentData {
-                container: SimdBuffer::zeros(
-                    header.size_data.image_width() as usize
-                        * header.size_data.image_height() as usize,
-                ),
-                bit_depth: info.size_info.precision,
-            });
-        }
     }
 }
 
@@ -405,11 +417,9 @@ fn decode_sub_band_bitplanes(
     Ok(())
 }
 
-fn apply_sign_shift(tile_ctx: &mut TileDecodeContext, component_infos: &[ComponentInfo]) {
-    for (channel_data, component_info) in
-        tile_ctx.channel_data.iter_mut().zip(component_infos.iter())
-    {
-        for sample in channel_data.container.deref_mut() {
+fn apply_sign_shift(channel_data: &mut [ComponentData], component_infos: &[ComponentInfo]) {
+    for (channel, component_info) in channel_data.iter_mut().zip(component_infos.iter()) {
+        for sample in channel.container.iter_mut() {
             *sample += (1_u32 << (component_info.size_info.precision - 1)) as f32;
         }
     }
@@ -419,10 +429,9 @@ fn store<'a>(
     tile: &'a Tile<'a>,
     header: &Header<'_>,
     tile_ctx: &mut TileDecodeContext,
+    channel_data: &mut ComponentData,
     component_info: &ComponentInfo,
-    component_idx: usize,
 ) {
-    let channel_data = &mut tile_ctx.channel_data[component_idx];
     let idwt_output = &mut tile_ctx.idwt_output;
 
     let component_tile = ComponentTile::new(tile, component_info);
