@@ -288,6 +288,8 @@ pub(crate) struct TileDecodeContext {
 
 impl TileDecodeContext {
     fn reset(&mut self) {
+        // This method doesn't do anything, just keeping it there in case
+        // it's needed in the future.
         // Bitplane decode context and buffers will be reset in the
         // corresponding methods. IDWT output and scratch buffer will be
         // overridden on demand, so those don't need to be reset either.
