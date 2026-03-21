@@ -420,10 +420,17 @@ fn decode_sub_band_bitplanes(
 }
 
 fn apply_sign_shift(channel_data: &mut [ComponentData], component_infos: &[ComponentInfo]) {
+    use crate::math::{Level, dispatch, f32x8};
+
     for (channel, component_info) in channel_data.iter_mut().zip(component_infos.iter()) {
-        for sample in channel.container.iter_mut() {
-            *sample += (1_u32 << (component_info.size_info.precision - 1)) as f32;
-        }
+        let offset = (1_u32 << (component_info.size_info.precision - 1)) as f32;
+        dispatch!(Level::new(), simd => {
+            let offset_v = f32x8::splat(simd, offset);
+            for chunk in channel.container.chunks_exact_mut(8) {
+                let v = f32x8::from_slice(simd, chunk);
+                (v + offset_v).store(chunk);
+            }
+        });
     }
 }
 
