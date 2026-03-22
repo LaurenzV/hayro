@@ -451,10 +451,11 @@ pub(crate) fn read_encoding(dict: &Dict<'_>) -> (Encoding, HashMap<u8, String>) 
                 WIN_ANSI_ENCODING => Encoding::WinAnsi,
                 MAC_ROMAN_ENCODING => Encoding::MacRoman,
                 MAC_EXPERT_ENCODING => Encoding::MacExpert,
+                STANDARD_ENCODING => Encoding::Standard,
                 _ => {
                     warn!("Unknown font encoding {}", name.as_str());
 
-                    Encoding::Standard
+                    Encoding::BuiltIn
                 }
             },
             None => Encoding::BuiltIn,
