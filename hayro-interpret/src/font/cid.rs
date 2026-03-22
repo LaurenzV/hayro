@@ -245,10 +245,13 @@ impl Type0Font {
                     None
                 }
             }
-            FontType::Type1(t) => {
-                let name = glyph_names::get_reverse(character)?;
-                let idx = t.table().charstring_index(name)?;
-                Some(GlyphId::new(idx as u32))
+            FontType::Type1(_) => {
+                // We could in theory map to a glyph via AFL and then look up
+                // the glyph index in the encoding, but since skrifa doesn't have
+                // an API for that and this is only really necessary for fallback
+                // fonts (which currently only supports OpenType and CFF as fallback),
+                // so we don't support this for now.
+                None
             }
         }
     }
