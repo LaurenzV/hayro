@@ -1,11 +1,14 @@
 use crate::font::UNITS_PER_EM;
 use crate::font::outline::OutlinePath;
-use hayro_font::{Matrix, cff, type1};
-use kurbo::{Affine, BezPath};
+use kurbo::BezPath;
 use skrifa::instance::{LocationRef, Size};
 use skrifa::metrics::GlyphMetrics;
 use skrifa::outline::{DrawSettings, Engine, HintingInstance, HintingOptions, Target};
+use skrifa::raw::ps::cff::{CffFontRef, v1::Cff};
+use skrifa::raw::ps::string::Sid;
+use skrifa::raw::ps::type1::Type1Font;
 use skrifa::raw::TableProvider;
+use skrifa::raw::{FontData as ReadFontData, FontRead};
 use skrifa::{FontRef, GlyphId, MetadataProvider, OutlineGlyphCollection};
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
@@ -16,8 +19,11 @@ type OpenTypeFontYoke = Yoke<OTFYoke<'static>, FontData>;
 type CffFontYoke = Yoke<CFFYoke<'static>, FontData>;
 
 /// A font blob for type 1 fonts.
+///
+/// Type1Font from read-fonts owns its data (uses Vec<u8> internally),
+/// so no Yoke is needed.
 #[derive(Clone)]
-pub(crate) struct Type1FontBlob(Arc<type1::Table>);
+pub(crate) struct Type1FontBlob(Arc<Type1Font>);
 
 impl Debug for Type1FontBlob {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -27,21 +33,19 @@ impl Debug for Type1FontBlob {
 
 impl Type1FontBlob {
     pub(crate) fn new(data: FontData) -> Option<Self> {
-        let table = type1::Table::parse(data.as_ref().as_ref())?;
-
+        let table = Type1Font::new(data.as_ref().as_ref()).ok()?;
         Some(Self(Arc::new(table)))
     }
 
-    pub(crate) fn table(&self) -> &type1::Table {
+    pub(crate) fn table(&self) -> &Type1Font {
         self.0.as_ref()
     }
 
-    pub(crate) fn outline_glyph(&self, name: &str) -> BezPath {
+    pub(crate) fn outline_glyph(&self, gid: GlyphId) -> BezPath {
         let mut path = OutlinePath::new();
+        let _ = self.table().draw(gid, Some(UNITS_PER_EM), &mut path);
 
-        self.table().outline(name, &mut path).unwrap_or_default();
-
-        Affine::scale(UNITS_PER_EM as f64) * convert_matrix(self.table().matrix()) * path.take()
+        path.take()
     }
 }
 
@@ -57,11 +61,13 @@ impl Debug for CffFontBlob {
 
 impl CffFontBlob {
     pub(crate) fn new(data: FontData) -> Option<Self> {
-        let _ = cff::Table::parse(data.as_ref().as_ref())?;
+        let _ = CffFontRef::new(data.as_ref().as_ref(), 0, None).ok()?;
 
         let yoke = Yoke::<CFFYoke<'static>, FontData>::attach_to_cart(data.clone(), |data| {
-            let table = cff::Table::parse(data.as_ref()).unwrap();
-            CFFYoke { table }
+            let bytes = data.as_ref();
+            let font = CffFontRef::new(bytes, 0, None).unwrap();
+            let cff = Cff::read(ReadFontData::new(bytes)).unwrap();
+            CFFYoke { font, cff }
         });
 
         Some(Self(Arc::new(yoke)))
@@ -71,22 +77,63 @@ impl CffFontBlob {
         self.0.backing_cart().clone()
     }
 
-    pub(crate) fn table(&self) -> &cff::Table<'_> {
-        &self.0.as_ref().get().table
+    pub(crate) fn font(&self) -> &CffFontRef<'_> {
+        &self.0.as_ref().get().font
     }
 
     pub(crate) fn outline_glyph(&self, glyph: GlyphId) -> BezPath {
         let mut path = OutlinePath::new();
-
-        let glyph_id = hayro_font::GlyphId(glyph.to_u32() as u16);
-
-        let Ok(_) = self.table().outline(glyph_id, &mut path) else {
+        let Some(subfont_index) = self.font().subfont_index(glyph) else {
             return BezPath::new();
         };
+        let Ok(subfont) = self.font().subfont(subfont_index, &[]) else {
+            return BezPath::new();
+        };
+        let _ = self
+            .font()
+            .draw(&subfont, glyph, &[], Some(UNITS_PER_EM), &mut path);
 
-        let matrix = self.table().glyph_matrix(glyph_id);
+        path.take()
+    }
 
-        Affine::scale(UNITS_PER_EM as f64) * convert_matrix(matrix) * path.take()
+    pub(crate) fn glyph_names(&self) -> Vec<(GlyphId, String)> {
+        let Some(charset) = self.font().charset() else {
+            return Vec::new();
+        };
+
+        charset
+            .iter()
+            .filter_map(|(gid, sid)| {
+                let bytes = self.0.as_ref().get().cff.string(sid)?;
+                let name = std::str::from_utf8(bytes).ok()?.to_string();
+                Some((gid, name))
+            })
+            .collect()
+    }
+
+    pub(crate) fn glyph_index_by_name(&self, name: &str) -> Option<GlyphId> {
+        self.font().charset()?.iter().find_map(|(gid, sid)| {
+            let bytes = self.0.as_ref().get().cff.string(sid)?;
+            (bytes == name.as_bytes()).then_some(gid)
+        })
+    }
+
+    pub(crate) fn glyph_index_by_cid(&self, cid: u16) -> Option<GlyphId> {
+        self.font().charset()?.glyph_id(Sid::new(cid)).ok()
+    }
+
+    pub(crate) fn glyph_index(&self, code: u8) -> Option<GlyphId> {
+        self.font()
+            .encoding()
+            .and_then(|encoding| encoding.map(code))
+    }
+
+    pub(crate) fn num_glyphs(&self) -> u32 {
+        self.font().num_glyphs()
+    }
+
+    pub(crate) fn is_cid(&self) -> bool {
+        self.font().is_cid()
     }
 }
 
@@ -189,17 +236,6 @@ impl OpenTypeFontBlob {
     }
 }
 
-fn convert_matrix(matrix: Matrix) -> Affine {
-    Affine::new([
-        matrix.sx as f64,
-        matrix.ky as f64,
-        matrix.kx as f64,
-        matrix.sy as f64,
-        matrix.tx as f64,
-        matrix.ty as f64,
-    ])
-}
-
 #[derive(Yokeable, Clone)]
 struct OTFYoke<'a> {
     font_ref: FontRef<'a>,
@@ -210,5 +246,6 @@ struct OTFYoke<'a> {
 
 #[derive(Yokeable, Clone)]
 struct CFFYoke<'a> {
-    table: cff::Table<'a>,
+    font: CffFontRef<'a>,
+    cff: Cff<'a>,
 }

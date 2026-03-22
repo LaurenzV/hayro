@@ -319,10 +319,7 @@ impl StandardFontBlob {
 impl StandardFontBlob {
     pub(crate) fn name_to_glyph(&self, name: &str) -> Option<GlyphId> {
         match self {
-            Self::Cff(blob) => blob
-                .table()
-                .glyph_index_by_name(name)
-                .map(|g| GlyphId::new(g.0 as u32)),
+            Self::Cff(blob) => blob.glyph_index_by_name(name),
             Self::Otf(_, glyph_names) => glyph_names.get(name).copied(),
         }
     }

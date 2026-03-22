@@ -182,17 +182,12 @@ impl Type0Font {
         match &self.font_type {
             FontType::OpenType(_) => self.cid_to_gid_map.map(cid as u16),
             FontType::Cff(c) => {
-                let table = c.table();
-
-                if table.is_cid() {
+                if c.is_cid() {
                     // Very confusing stuff going on here, see https://github.com/mozilla/pdf.js/pull/15563.
                     // The PDF spec makes it sounds like cid-to-gid map should only be used for TrueType fonts,
                     // but Acrobat also seems to support it for CFF fonts with some weird behavior.
                     if matches!(self.cid_to_gid_map, CidToGIdMap::Identity) {
-                        table
-                            .glyph_index_by_cid(cid as u16)
-                            .map(|g| GlyphId::new(g.0 as u32))
-                            .unwrap_or(GlyphId::NOTDEF)
+                        c.glyph_index_by_cid(cid as u16).unwrap_or(GlyphId::NOTDEF)
                     } else {
                         GlyphId::new(self.cid_to_gid_map.inverse_map(GlyphId::new(cid)) as u32)
                     }
@@ -233,13 +228,11 @@ impl Type0Font {
         match &self.font_type {
             FontType::OpenType(t) => t.font_ref().charmap().map(character),
             FontType::Cff(c) => {
-                let table = c.table();
-
                 // Map codepoint to glyph name via AFL, and then look it up.
                 if let Some(name) = glyph_names::get_reverse(character)
-                    && let Some(gid) = table.glyph_index_by_name(name)
+                    && let Some(gid) = c.glyph_index_by_name(name)
                 {
-                    Some(GlyphId::new(gid.0 as u32))
+                    Some(gid)
                 } else {
                     None
                 }
@@ -269,15 +262,7 @@ impl Type0Font {
         let path = match &self.font_type {
             FontType::OpenType(t) => t.outline_glyph(glyph),
             FontType::Cff(c) => c.outline_glyph(glyph),
-            FontType::Type1(t) => {
-                let name = t
-                    .table()
-                    .charstring_names()
-                    .get(glyph.to_u32() as usize)
-                    .map(|n| n.as_str())
-                    .unwrap_or(".notdef");
-                t.outline_glyph(name)
-            }
+            FontType::Type1(t) => t.outline_glyph(glyph),
         };
 
         if self.fallback

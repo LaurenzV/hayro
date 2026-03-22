@@ -542,9 +542,9 @@ checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
 
 [[package]]
 name = "font-types"
-version = "0.11.0"
+version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1e4d2d0cf79d38430cc9dc9aadec84774bff2e1ba30ae2bf6c16cfce9385a23"
+checksum = "2d9237c6d82152100c691fb77ea18037b402bcc7257d2c876a4ffac81bc22a1c"
 dependencies = [
  "bytemuck",
 ]
@@ -713,7 +713,6 @@ version = "0.5.0"
 dependencies = [
  "bitflags 2.11.0",
  "hayro-cmap",
- "hayro-font",
  "hayro-syntax",
  "image 0.25.10",
  "kurbo",
@@ -722,7 +721,7 @@ dependencies = [
  "phf",
  "rustc-hash",
  "siphasher",
- "skrifa",
+ "skrifa 0.42.0",
  "smallvec",
  "yoke",
 ]
@@ -1331,6 +1330,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "read-fonts"
+version = "0.39.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d962f56a037bdff66a05e4b663171eba5ceb3d8a4991cefd901424944c6be5b0"
+dependencies = [
+ "bytemuck",
+ "font-types",
+]
+
+[[package]]
 name = "regex"
 version = "1.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1556,7 +1565,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7fbdfe3d2475fbd7ddd1f3e5cf8288a30eb3e5f95832829570cd88115a7434ac"
 dependencies = [
  "bytemuck",
- "read-fonts",
+ "read-fonts 0.37.0",
+]
+
+[[package]]
+name = "skrifa"
+version = "0.42.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c844316c7318cf6ae9034ee45edd2c432076ef910fdc4bc598183b31f88d03c3"
+dependencies = [
+ "bytemuck",
+ "read-fonts 0.39.0",
 ]
 
 [[package]]
@@ -1826,7 +1845,7 @@ dependencies = [
  "log",
  "peniko",
  "png 0.18.1",
- "skrifa",
+ "skrifa 0.40.0",
  "smallvec",
  "thiserror",
 ]

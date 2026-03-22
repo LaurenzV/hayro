@@ -1,5 +1,4 @@
 use crate::font::blob::{CffFontBlob, Type1FontBlob};
-use crate::font::glyph_simulator::GlyphSimulator;
 use crate::font::standard_font::{StandardFont, StandardKind, select_standard_font};
 use crate::font::true_type::{Width, read_encoding, read_widths};
 use crate::font::{
@@ -158,7 +157,8 @@ struct Type1Kind {
     widths: Vec<Width>,
     missing_width: f32,
     encodings: HashMap<u8, String>,
-    glyph_simulator: GlyphSimulator,
+    /// Maps glyph name to GlyphId using the font's actual charstring indices.
+    name_to_gid: HashMap<String, GlyphId>,
     standard_font: Option<StandardFont>,
 }
 
@@ -172,46 +172,45 @@ impl Type1Kind {
         let (widths, missing_width) = read_widths(dict, &descriptor)?;
         let standard_font = select_standard_font(dict, &descriptor).map(|(f, _)| f);
 
-        let glyph_simulator = GlyphSimulator::new();
+        // Build name→GlyphId map from the font's charstrings.
+        let name_to_gid: HashMap<String, GlyphId> = font
+            .table()
+            .glyph_names()
+            .map(|(gid, name)| (name.to_string(), gid))
+            .collect();
 
         Some(Self {
             font,
             encoding,
-            glyph_simulator,
             widths,
             missing_width,
             encodings,
+            name_to_gid,
             standard_font,
         })
     }
 
-    fn string_to_glyph(&self, string: &str) -> GlyphId {
-        self.glyph_simulator.string_to_glyph(string)
+    fn name_to_glyph(&self, name: &str) -> Option<GlyphId> {
+        self.name_to_gid.get(name).copied()
     }
 
     fn map_code(&self, code: u8) -> GlyphId {
-        let table = self.font.table();
-
-        let get_glyph = |entry: &str| self.string_to_glyph(entry);
-
         if let Some(entry) = self.encodings.get(&code) {
-            Some(get_glyph(entry))
+            self.name_to_glyph(entry)
         } else {
             match self.encoding {
-                Encoding::BuiltIn => table.code_to_string(code).map(get_glyph),
-                _ => self.encoding.map_code(code).map(get_glyph),
+                Encoding::BuiltIn => self.font.table().encoding().and_then(|e| e.map(code)),
+                _ => self
+                    .encoding
+                    .map_code(code)
+                    .and_then(|name| self.name_to_glyph(name)),
             }
         }
         .unwrap_or(GlyphId::NOTDEF)
     }
 
     fn outline_glyph(&self, glyph: GlyphId) -> BezPath {
-        self.font.outline_glyph(
-            self.glyph_simulator
-                .glyph_to_string(glyph)
-                .unwrap()
-                .as_str(),
-        )
+        self.font.outline_glyph(glyph)
     }
 
     fn code_to_ps_name(&self, code: u8) -> Option<&str> {
@@ -219,7 +218,11 @@ impl Type1Kind {
             .get(&code)
             .map(String::as_str)
             .or_else(|| match self.encoding {
-                Encoding::BuiltIn => self.font.table().code_to_string(code),
+                Encoding::BuiltIn => self
+                    .font
+                    .table()
+                    .encoding()
+                    .and_then(|e| e.glyph_name(code)),
                 _ => self.encoding.map_code(code),
             })
     }
@@ -249,6 +252,8 @@ struct CffKind {
     widths: Vec<Width>,
     missing_width: f32,
     encodings: HashMap<u8, String>,
+    name_to_gid: HashMap<String, GlyphId>,
+    gid_to_name: Vec<Option<String>>,
     standard_font: Option<StandardFont>,
 }
 
@@ -261,6 +266,13 @@ impl CffKind {
         let (encoding, encodings) = read_encoding(dict);
         let (widths, missing_width) = read_widths(dict, &descriptor)?;
         let standard_font = select_standard_font(dict, &descriptor).map(|(f, _)| f);
+        let mut gid_to_name = vec![None; font.num_glyphs() as usize];
+        let name_to_gid: HashMap<String, GlyphId> = font
+            .glyph_names()
+            .into_iter()
+            .inspect(|(gid, name)| gid_to_name[gid.to_u32() as usize] = Some(name.clone()))
+            .map(|(gid, name)| (name, gid))
+            .collect();
 
         Some(Self {
             font,
@@ -268,25 +280,25 @@ impl CffKind {
             widths,
             missing_width,
             encodings,
+            name_to_gid,
+            gid_to_name,
             standard_font,
         })
     }
 
     fn map_code(&self, code: u8) -> GlyphId {
-        let table = self.font.table();
-
         let get_glyph = |entry: &str| {
-            table
-                .glyph_index_by_name(entry)
-                .or_else(|| table.glyph_index_by_name(normalized_glyph_name(entry)))
-                .map(|g| GlyphId::new(g.0 as u32))
+            self.name_to_gid
+                .get(entry)
+                .copied()
+                .or_else(|| self.name_to_gid.get(normalized_glyph_name(entry)).copied())
         };
 
         if let Some(entry) = self.encodings.get(&code) {
             get_glyph(entry)
         } else {
             match self.encoding {
-                Encoding::BuiltIn => table.glyph_index(code).map(|g| GlyphId::new(g.0 as u32)),
+                Encoding::BuiltIn => self.font.glyph_index(code),
                 _ => self.encoding.map_code(code).and_then(get_glyph),
             }
         }
@@ -301,9 +313,12 @@ impl CffKind {
         if let Some(entry) = self.encodings.get(&code) {
             Some(entry.as_str())
         } else {
-            let table = self.font.table();
             match self.encoding {
-                Encoding::BuiltIn => table.glyph_index(code).and_then(|g| table.glyph_name(g)),
+                Encoding::BuiltIn => self
+                    .font
+                    .glyph_index(code)
+                    .and_then(|gid| self.gid_to_name.get(gid.to_u32() as usize))
+                    .and_then(|name| name.as_deref()),
                 _ => self.encoding.map_code(code),
             }
         }

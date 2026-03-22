@@ -296,12 +296,9 @@ impl EmbeddedKind {
         }
 
         if let Some(blob) = self.cff_blob.as_ref() {
-            let table = blob.table();
-
             return self
                 .code_to_name(code)
-                .and_then(|name| table.glyph_index_by_name(name))
-                .map(|g| GlyphId::new(g.0 as u32))
+                .and_then(|name| blob.glyph_index_by_name(name))
                 .unwrap_or(GlyphId::NOTDEF);
         }
 
