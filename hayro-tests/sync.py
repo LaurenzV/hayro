@@ -47,6 +47,7 @@ MANIFESTS = [
     ("custom", SCRIPT_DIR / "manifest_custom.json", False),
     ("pdfjs", SCRIPT_DIR / "manifest_pdfjs.json", True),
     ("pdfbox", SCRIPT_DIR / "manifest_pdfbox.json", True),
+    ("pdfium", SCRIPT_DIR / "manifest_pdfium.json", True),
     ("corpus", SCRIPT_DIR / "manifest_corpus.json", True),
 ]
 
@@ -54,6 +55,7 @@ REMOTE_SOURCES = {
     "custom": ("https://hayro-assets.dev/custom/", "custom"),
     "pdfjs": ("https://hayro-assets.dev/pdfjs/", "pdfjs"),
     "pdfbox": ("https://hayro-assets.dev/pdfbox/", "pdfbox"),
+    "pdfium": ("https://hayro-assets.dev/pdfium/", "pdfium"),
     "corpus": ("https://hayro-assets.dev/corpus/", "corpus"),
 }
 
@@ -123,7 +125,7 @@ def build_test(entry: dict, kind: str) -> str:
         length = "None"
 
     func_stub = entry_id.replace("-", "_").replace(".", "_")
-    if kind in ("pdfjs", "pdfbox", "corpus"):
+    if kind in ("pdfjs", "pdfbox", "pdfium", "corpus"):
         func_name = f"{kind}_{func_stub}"
     else:
         func_name = func_stub
@@ -135,7 +137,7 @@ def build_test(entry: dict, kind: str) -> str:
             file_path = f"downloads/{kind}/{entry_id}.pdf"
     else:
         file_path = entry.get("file", "")
-        if kind in ("pdfjs", "pdfbox", "corpus") and file_path:
+        if kind in ("pdfjs", "pdfbox", "pdfium", "corpus") and file_path:
             relative = file_path.replace("pdfs/", "")
             file_path = f"pdfs/{kind}/{relative}"
 
