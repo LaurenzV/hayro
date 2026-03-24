@@ -4,7 +4,7 @@ pub(crate) const SIMD_WIDTH: usize = 8;
 mod inner {
     use super::SIMD_WIDTH;
     use core::ops::{BitAnd, BitOr, BitXor, BitXorAssign};
-    use fearless_simd::{Select, SimdBase};
+    use fearless_simd::{Select, SimdBase, SimdInt};
 
     pub(crate) use fearless_simd::{Level, Simd, dispatch};
 
@@ -48,7 +48,7 @@ mod inner {
 
         #[inline(always)]
         pub(crate) fn store(self, slice: &mut [u32]) {
-            slice[..SIMD_WIDTH].copy_from_slice(&self.inner.val);
+            self.inner.store_slice(&mut slice[..SIMD_WIDTH]);
         }
 
         #[inline(always)]

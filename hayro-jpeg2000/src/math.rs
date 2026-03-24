@@ -36,7 +36,7 @@ mod inner {
         #[inline(always)]
         pub(crate) fn mul_add(self, mul: Self, addend: Self) -> Self {
             Self {
-                inner: self.inner.madd(mul.inner, addend.inner),
+                inner: self.inner.mul_add(mul.inner, addend.inner),
             }
         }
 
@@ -49,7 +49,7 @@ mod inner {
 
         #[inline(always)]
         pub(crate) fn store(self, slice: &mut [f32]) {
-            slice[..SIMD_WIDTH].copy_from_slice(&self.inner.val);
+            self.inner.store_slice(&mut slice[..SIMD_WIDTH]);
         }
 
         #[inline(always)]

@@ -57,9 +57,9 @@ sitro = { git = "https://github.com/LaurenzV/sitro", rev="fb804b3" }
 xmlwriter = { version = "0.1" }
 base64 = { version = "0.22" }
 zune-jpeg = { version = "0.5", default-features = false }
-vello_cpu = { version = "0.0.6", default-features = false, features = ["std", "png", "u8_pipeline"] }
+vello_cpu = { version = "0.0.7", default-features = false, features = ["std", "png", "u8_pipeline"] }
 fast_image_resize = { version = "6.0", default-features = false, features = ["std"] }
-fearless_simd = "0.3.0"
+fearless_simd = "0.4.0"
 brotli = { version = "8", default-features = false, features = ["std"] }
 
 [workspace.lints]
