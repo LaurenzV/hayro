@@ -20,8 +20,7 @@
     "id": "373764900"
   },
   {
-    "id": "380018383",
-    "ignore": true
+    "id": "380018383"
   },
   {
     "id": "383375931"
@@ -75,8 +74,7 @@
     "id": "413635900_5"
   },
   {
-    "id": "413635900_6",
-    "ignore": true
+    "id": "413635900_6"
   },
   {
     "id": "413635900_7"
@@ -97,7 +95,8 @@
   },
   {
     "id": "41480189",
-    "ignore": true
+    "ignore": true,
+    "comment": "overhead from push/pop layer and blending in vello_cpu"
   },
   {
     "id": "42270032"
@@ -113,8 +112,7 @@
     "id": "42270083"
   },
   {
-    "id": "42270133",
-    "ignore": true
+    "id": "42270133"
   },
   {
     "id": "42270187",
@@ -130,7 +128,8 @@
   },
   {
     "id": "42270389",
-    "ignore": true
+    "ignore": true,
+    "comment": "takes long, lots of very small strokes and lots of content stream operators"
   },
   {
     "id": "42270415"
@@ -185,7 +184,8 @@
   },
   {
     "id": "42270659",
-    "ignore": true
+    "ignore": true,
+    "comments": "takes very long, nearly all of it in function evaluation"
   },
   {
     "id": "42270669"
@@ -205,8 +205,7 @@
     "ignore": true
   },
   {
-    "id": "42270732",
-    "ignore": true
+    "id": "42270732"
   },
   {
     "id": "42270743"
@@ -222,8 +221,7 @@
     "ignore": true
   },
   {
-    "id": "42270788",
-    "ignore": true
+    "id": "42270788"
   },
   {
     "id": "42270887"
@@ -270,8 +268,7 @@
     "ignore": true
   },
   {
-    "id": "42270962",
-    "ignore": true
+    "id": "42270962"
   },
   {
     "id": "42270973"
@@ -294,8 +291,7 @@
     "ignore": true
   },
   {
-    "id": "42271107",
-    "ignore": true
+    "id": "42271107"
   },
   {
     "id": "42271118"
@@ -411,7 +407,8 @@
   },
   {
     "id": "467170761",
-    "ignore": true
+    "ignore": true,
+    "comment": "doesnt stop, lots of time in dash generation and strip generation spent, degenerate dashes?"
   },
   {
     "id": "471224081",

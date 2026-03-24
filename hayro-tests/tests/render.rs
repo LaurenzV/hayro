@@ -1381,6 +1381,7 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn pdfium_361712478() { run_render_test("pdfium_361712478", "downloads/pdfium/361712478.pdf", None); }
 #[test] fn pdfium_364635887() { run_render_test("pdfium_364635887", "downloads/pdfium/364635887.pdf", None); }
 #[test] fn pdfium_373764900() { run_render_test("pdfium_373764900", "downloads/pdfium/373764900.pdf", None); }
+#[test] fn pdfium_380018383() { run_render_test("pdfium_380018383", "downloads/pdfium/380018383.pdf", None); }
 #[test] fn pdfium_383375931() { run_render_test("pdfium_383375931", "downloads/pdfium/383375931.pdf", None); }
 #[test] fn pdfium_391275083() { run_render_test("pdfium_391275083", "downloads/pdfium/391275083.pdf", None); }
 #[test] fn pdfium_398193019() { run_render_test("pdfium_398193019", "downloads/pdfium/398193019.pdf", None); }
@@ -1394,6 +1395,7 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn pdfium_413635900_3() { run_render_test("pdfium_413635900_3", "downloads/pdfium/413635900_3.pdf", None); }
 #[test] fn pdfium_413635900_4() { run_render_test("pdfium_413635900_4", "downloads/pdfium/413635900_4.pdf", None); }
 #[test] fn pdfium_413635900_5() { run_render_test("pdfium_413635900_5", "downloads/pdfium/413635900_5.pdf", None); }
+#[test] fn pdfium_413635900_6() { run_render_test("pdfium_413635900_6", "downloads/pdfium/413635900_6.pdf", None); }
 #[test] fn pdfium_413635900_7() { run_render_test("pdfium_413635900_7", "downloads/pdfium/413635900_7.pdf", None); }
 #[test] fn pdfium_414588524() { run_render_test("pdfium_414588524", "downloads/pdfium/414588524.pdf", None); }
 #[test] fn pdfium_41480155() { run_render_test("pdfium_41480155", "downloads/pdfium/41480155.pdf", None); }
@@ -1401,6 +1403,7 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn pdfium_42270032() { run_render_test("pdfium_42270032", "downloads/pdfium/42270032.pdf", None); }
 #[test] fn pdfium_42270075() { run_render_test("pdfium_42270075", "downloads/pdfium/42270075.pdf", None); }
 #[test] fn pdfium_42270083() { run_render_test("pdfium_42270083", "downloads/pdfium/42270083.pdf", None); }
+#[test] fn pdfium_42270133() { run_render_test("pdfium_42270133", "downloads/pdfium/42270133.pdf", None); }
 #[test] fn pdfium_42270339() { run_render_test("pdfium_42270339", "downloads/pdfium/42270339.pdf", None); }
 #[test] fn pdfium_42270415() { run_render_test("pdfium_42270415", "downloads/pdfium/42270415.pdf", None); }
 #[test] fn pdfium_42270494() { run_render_test("pdfium_42270494", "downloads/pdfium/42270494.pdf", None); }
@@ -1414,9 +1417,11 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn pdfium_42270669() { run_render_test("pdfium_42270669", "downloads/pdfium/42270669.pdf", None); }
 #[test] fn pdfium_42270676() { run_render_test("pdfium_42270676", "downloads/pdfium/42270676.pdf", None); }
 #[test] fn pdfium_42270705() { run_render_test("pdfium_42270705", "downloads/pdfium/42270705.pdf", None); }
+#[test] fn pdfium_42270732() { run_render_test("pdfium_42270732", "downloads/pdfium/42270732.pdf", None); }
 #[test] fn pdfium_42270743() { run_render_test("pdfium_42270743", "downloads/pdfium/42270743.pdf", None); }
 #[test] fn pdfium_42270774() { run_render_test("pdfium_42270774", "downloads/pdfium/42270774.pdf", None); }
 #[test] fn pdfium_42270784() { run_render_test("pdfium_42270784", "downloads/pdfium/42270784.pdf", None); }
+#[test] fn pdfium_42270788() { run_render_test("pdfium_42270788", "downloads/pdfium/42270788.pdf", None); }
 #[test] fn pdfium_42270887() { run_render_test("pdfium_42270887", "downloads/pdfium/42270887.pdf", None); }
 #[test] fn pdfium_42270892() { run_render_test("pdfium_42270892", "downloads/pdfium/42270892.pdf", None); }
 #[test] fn pdfium_42270899() { run_render_test("pdfium_42270899", "downloads/pdfium/42270899.pdf", None); }
@@ -1429,10 +1434,12 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn pdfium_42270931() { run_render_test("pdfium_42270931", "downloads/pdfium/42270931.pdf", None); }
 #[test] fn pdfium_42270933() { run_render_test("pdfium_42270933", "downloads/pdfium/42270933.pdf", None); }
 #[test] fn pdfium_42270942() { run_render_test("pdfium_42270942", "downloads/pdfium/42270942.pdf", None); }
+#[test] fn pdfium_42270962() { run_render_test("pdfium_42270962", "downloads/pdfium/42270962.pdf", None); }
 #[test] fn pdfium_42270973() { run_render_test("pdfium_42270973", "downloads/pdfium/42270973.pdf", None); }
 #[test] fn pdfium_42270993() { run_render_test("pdfium_42270993", "downloads/pdfium/42270993.pdf", None); }
 #[test] fn pdfium_42271017() { run_render_test("pdfium_42271017", "downloads/pdfium/42271017.pdf", None); }
 #[test] fn pdfium_42271064() { run_render_test("pdfium_42271064", "downloads/pdfium/42271064.pdf", None); }
+#[test] fn pdfium_42271107() { run_render_test("pdfium_42271107", "downloads/pdfium/42271107.pdf", None); }
 #[test] fn pdfium_42271118() { run_render_test("pdfium_42271118", "downloads/pdfium/42271118.pdf", None); }
 #[test] fn pdfium_42271134() { run_render_test("pdfium_42271134", "downloads/pdfium/42271134.pdf", None); }
 #[test] fn pdfium_42271141() { run_render_test("pdfium_42271141", "downloads/pdfium/42271141.pdf", None); }
