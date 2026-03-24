@@ -711,7 +711,7 @@ impl Indexed {
         // Skip name
         let _ = iter.next::<Name>()?;
         let base_color_space = ColorSpace::new(iter.next::<Object<'_>>()?, cache)?;
-        let hival = iter.next::<u8>()?;
+        let hival = iter.next::<u32>()?.min(u8::MAX as u32) as u8;
 
         let values = {
             let data = iter

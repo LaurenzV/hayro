@@ -1380,6 +1380,7 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn pdfium_346598551() { run_render_test("pdfium_346598551", "downloads/pdfium/346598551.pdf", None); }
 #[test] fn pdfium_361712478() { run_render_test("pdfium_361712478", "downloads/pdfium/361712478.pdf", None); }
 #[test] fn pdfium_364635887() { run_render_test("pdfium_364635887", "downloads/pdfium/364635887.pdf", None); }
+#[test] fn pdfium_372749732() { run_render_test("pdfium_372749732", "downloads/pdfium/372749732.pdf", None); }
 #[test] fn pdfium_373764900() { run_render_test("pdfium_373764900", "downloads/pdfium/373764900.pdf", None); }
 #[test] fn pdfium_380018383() { run_render_test("pdfium_380018383", "downloads/pdfium/380018383.pdf", None); }
 #[test] fn pdfium_383375931() { run_render_test("pdfium_383375931", "downloads/pdfium/383375931.pdf", None); }

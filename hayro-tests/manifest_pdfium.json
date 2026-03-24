@@ -13,8 +13,7 @@
     "id": "364635887"
   },
   {
-    "id": "372749732",
-    "ignore": true
+    "id": "372749732"
   },
   {
     "id": "373764900"
@@ -416,7 +415,8 @@
   },
   {
     "id": "471404119",
-    "ignore": true
+    "ignore": true,
+    "comment": "need to investigate, needs fixing in skrifa, some weird OpenType CFF font where we need charset?"
   },
   {
     "id": "479025308",
