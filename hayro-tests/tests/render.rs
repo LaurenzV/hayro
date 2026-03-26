@@ -1426,6 +1426,7 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn pdfium_42270743() { run_render_test("pdfium_42270743", "downloads/pdfium/42270743.pdf", None); }
 #[test] fn pdfium_42270774() { run_render_test("pdfium_42270774", "downloads/pdfium/42270774.pdf", None); }
 #[test] fn pdfium_42270784() { run_render_test("pdfium_42270784", "downloads/pdfium/42270784.pdf", None); }
+#[test] fn pdfium_42270786() { run_render_test("pdfium_42270786", "downloads/pdfium/42270786.pdf", None); }
 #[test] fn pdfium_42270788() { run_render_test("pdfium_42270788", "downloads/pdfium/42270788.pdf", None); }
 #[test] fn pdfium_42270887() { run_render_test("pdfium_42270887", "downloads/pdfium/42270887.pdf", None); }
 #[test] fn pdfium_42270892() { run_render_test("pdfium_42270892", "downloads/pdfium/42270892.pdf", None); }

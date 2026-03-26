@@ -212,7 +212,8 @@
   },
   {
     "id": "42270786",
-    "ignore": true
+    "ignore": true,
+    "comment": "bold-looking text, because it's not rendered as glyphs but as normal paths instead, therefore triggering the code that sets a minimum stroke width of 1 pixel"
   },
   {
     "id": "42270788"

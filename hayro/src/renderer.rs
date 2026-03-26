@@ -50,8 +50,8 @@ impl Renderer {
         let mut line_width = stroke_props.line_width.max(0.01);
         let transformed_width = line_width * min_factor;
 
-        // Only enforce line width if not inside of pattern.
-        if transformed_width < threshold && !self.inside_pattern {
+        // Only enforce line width if not inside of pattern or type 3 glyph.
+        if transformed_width < threshold && !self.inside_pattern && !self.in_type3_glyph {
             line_width /= transformed_width;
             line_width *= threshold;
         }
