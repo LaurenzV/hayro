@@ -792,7 +792,7 @@ fn resolve_matte(
 
     // In theory, matte needs to be applied in the image's original color space,
     // but we always do it in RGB for now.
-    let mut matte_rgb = [0u8; 3];
+    let mut matte_rgb = [0_u8; 3];
     color_space.convert_f32(&matte, &mut matte_rgb, false);
 
     let mask_obj = ImageXObject::new(&s_mask, |_| None, &obj.warning_sink, &obj.cache, true, None)?;
