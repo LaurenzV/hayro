@@ -790,7 +790,7 @@ fn resolve_matte(
         return None;
     }
 
-    // In theory, matte needs to eb applied in the image's original color space,
+    // In theory, matte needs to be applied in the image's original color space,
     // but we always do it in RGB for now.
     let mut matte_rgb = [0u8; 3];
     color_space.convert_f32(&matte, &mut matte_rgb, false);
