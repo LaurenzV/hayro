@@ -1,5 +1,5 @@
 use crate::cache::Cache;
-use crate::color::{ColorSpace, ToRgb};
+use crate::color::{ColorComponents, ColorSpace, ToRgb};
 use crate::context::Context;
 use crate::device::Device;
 use crate::function::{Function, interpolate};
@@ -618,25 +618,34 @@ fn decode_raster(
         rgb_data.map(ImageData::Rgb)
     };
 
-    // Use flatten here, so in case the alpha channel is invalid we can still
-    // return the main image (see PDFJS-19611).
-    let alpha = resolve_alpha(
-        obj,
-        &mut ctx.decoded,
-        &image_data,
-        &ctx.color_space,
-        ctx.bits_per_component,
-        ctx.width,
-        &mut height,
-        ctx.scale_factors,
-        target_dimension,
-    )
-    .flatten();
+    let mut image = image_data?;
 
-    Some(DecodedRaster {
-        image: image_data?,
-        alpha,
-    })
+    let alpha = if let Some((alpha, matte_rgb)) =
+        resolve_matte(obj, &ctx.color_space, target_dimension)
+        && alpha.width == ctx.width
+        && alpha.height == height
+    {
+        unpremultiply(&mut image, &alpha.data, &matte_rgb);
+
+        Some(alpha)
+    } else {
+        // Use flatten here, so in case the alpha channel is invalid we can still
+        // return the main image (see PDFJS-19611).
+        resolve_alpha(
+            obj,
+            &mut ctx.decoded,
+            Some(&image),
+            &ctx.color_space,
+            ctx.bits_per_component,
+            ctx.width,
+            &mut height,
+            ctx.scale_factors,
+            target_dimension,
+        )
+        .flatten()
+    };
+
+    Some(DecodedRaster { image, alpha })
 }
 
 fn decode_mask_bytes(
@@ -695,7 +704,7 @@ fn decode_mask_bytes(
 fn resolve_alpha(
     obj: &ImageXObject<'_>,
     decoded: &mut FilterResult,
-    image_data: &Option<ImageData>,
+    image_data: Option<&ImageData>,
     color_space: &ColorSpace,
     bits_per_component: u8,
     width: u32,
@@ -766,6 +775,57 @@ fn resolve_alpha(
     };
 
     Some(alpha)
+}
+
+fn resolve_matte(
+    obj: &ImageXObject<'_>,
+    color_space: &ColorSpace,
+    target_dimension: Option<(u32, u32)>,
+) -> Option<(LumaData, [u8; 3])> {
+    let dict = obj.stream.dict();
+    let s_mask = dict.get::<Stream<'_>>(SMASK)?;
+    let matte = s_mask.dict().get::<ColorComponents>(MATTE)?;
+
+    if matte.len() != color_space.num_components() as usize {
+        return None;
+    }
+
+    // In theory, matte needs to eb applied in the image's original color space,
+    // but we always do it in RGB for now.
+    let mut matte_rgb = [0u8; 3];
+    color_space.convert_f32(&matte, &mut matte_rgb, false);
+
+    let mask_obj = ImageXObject::new(&s_mask, |_| None, &obj.warning_sink, &obj.cache, true, None)?;
+    let alpha = decode_mask(&mask_obj, target_dimension)?.luma;
+
+    Some((alpha, matte_rgb))
+}
+
+fn unpremultiply(image: &mut ImageData, alpha: &[u8], matte_rgb: &[u8]) {
+    match image {
+        ImageData::Rgb(rgb) => {
+            for (pixel, &a) in rgb.data.chunks_exact_mut(3).zip(alpha.iter()) {
+                if a == 0 {
+                    continue;
+                }
+                let inv_alpha = 255.0 / a as f32;
+                for (c, &m) in pixel.iter_mut().zip(matte_rgb.iter()) {
+                    let m = m as f32;
+                    *c = (m + (*c as f32 - m) * inv_alpha) as u8;
+                }
+            }
+        }
+        ImageData::Luma(luma) => {
+            let m = matte_rgb[0] as f32;
+            for (c, &a) in luma.data.iter_mut().zip(alpha.iter()) {
+                if a == 0 {
+                    continue;
+                }
+                let inv_alpha = 255.0 / a as f32;
+                *c = (m + (*c as f32 - m) * inv_alpha) as u8;
+            }
+        }
+    }
 }
 
 fn get_rgb_data(

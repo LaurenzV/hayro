@@ -1390,6 +1390,7 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn pdfium_399937354() { run_render_test("pdfium_399937354", "downloads/pdfium/399937354.pdf", None); }
 #[test] fn pdfium_40643649() { run_render_test("pdfium_40643649", "downloads/pdfium/40643649.pdf", None); }
 #[test] fn pdfium_40643657() { run_render_test("pdfium_40643657", "downloads/pdfium/40643657.pdf", None); }
+#[test] fn pdfium_40643674() { run_render_test("pdfium_40643674", "downloads/pdfium/40643674.pdf", None); }
 #[test] fn pdfium_40643678() { run_render_test("pdfium_40643678", "downloads/pdfium/40643678.pdf", None); }
 #[test] fn pdfium_413597066() { run_render_test("pdfium_413597066", "downloads/pdfium/413597066.pdf", None); }
 #[test] fn pdfium_413635900_1() { run_render_test("pdfium_413635900_1", "downloads/pdfium/413635900_1.pdf", None); }
@@ -1419,6 +1420,7 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn pdfium_42270669() { run_render_test("pdfium_42270669", "downloads/pdfium/42270669.pdf", None); }
 #[test] fn pdfium_42270676() { run_render_test("pdfium_42270676", "downloads/pdfium/42270676.pdf", None); }
 #[test] fn pdfium_42270705() { run_render_test("pdfium_42270705", "downloads/pdfium/42270705.pdf", None); }
+#[test] fn pdfium_42270730() { run_render_test("pdfium_42270730", "downloads/pdfium/42270730.pdf", None); }
 #[test] fn pdfium_42270732() { run_render_test("pdfium_42270732", "downloads/pdfium/42270732.pdf", None); }
 #[test] fn pdfium_42270743() { run_render_test("pdfium_42270743", "downloads/pdfium/42270743.pdf", None); }
 #[test] fn pdfium_42270774() { run_render_test("pdfium_42270774", "downloads/pdfium/42270774.pdf", None); }
@@ -1441,6 +1443,7 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn pdfium_42270993() { run_render_test("pdfium_42270993", "downloads/pdfium/42270993.pdf", None); }
 #[test] fn pdfium_42271017() { run_render_test("pdfium_42271017", "downloads/pdfium/42271017.pdf", None); }
 #[test] fn pdfium_42271064() { run_render_test("pdfium_42271064", "downloads/pdfium/42271064.pdf", None); }
+#[test] fn pdfium_42271085() { run_render_test("pdfium_42271085", "downloads/pdfium/42271085.pdf", None); }
 #[test] fn pdfium_42271107() { run_render_test("pdfium_42271107", "downloads/pdfium/42271107.pdf", None); }
 #[test] fn pdfium_42271118() { run_render_test("pdfium_42271118", "downloads/pdfium/42271118.pdf", None); }
 #[test] fn pdfium_42271134() { run_render_test("pdfium_42271134", "downloads/pdfium/42271134.pdf", None); }
