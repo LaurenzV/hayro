@@ -1392,6 +1392,7 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn pdfium_40643657() { run_render_test("pdfium_40643657", "downloads/pdfium/40643657.pdf", None); }
 #[test] fn pdfium_40643674() { run_render_test("pdfium_40643674", "downloads/pdfium/40643674.pdf", None); }
 #[test] fn pdfium_40643678() { run_render_test("pdfium_40643678", "downloads/pdfium/40643678.pdf", None); }
+#[test] fn pdfium_412524377() { run_render_test("pdfium_412524377", "downloads/pdfium/412524377.pdf", None); }
 #[test] fn pdfium_413597066() { run_render_test("pdfium_413597066", "downloads/pdfium/413597066.pdf", None); }
 #[test] fn pdfium_413635900_1() { run_render_test("pdfium_413635900_1", "downloads/pdfium/413635900_1.pdf", None); }
 #[test] fn pdfium_413635900_2() { run_render_test("pdfium_413635900_2", "downloads/pdfium/413635900_2.pdf", None); }
@@ -1426,7 +1427,6 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn pdfium_42270743() { run_render_test("pdfium_42270743", "downloads/pdfium/42270743.pdf", None); }
 #[test] fn pdfium_42270774() { run_render_test("pdfium_42270774", "downloads/pdfium/42270774.pdf", None); }
 #[test] fn pdfium_42270784() { run_render_test("pdfium_42270784", "downloads/pdfium/42270784.pdf", None); }
-#[test] fn pdfium_42270786() { run_render_test("pdfium_42270786", "downloads/pdfium/42270786.pdf", None); }
 #[test] fn pdfium_42270788() { run_render_test("pdfium_42270788", "downloads/pdfium/42270788.pdf", None); }
 #[test] fn pdfium_42270887() { run_render_test("pdfium_42270887", "downloads/pdfium/42270887.pdf", None); }
 #[test] fn pdfium_42270892() { run_render_test("pdfium_42270892", "downloads/pdfium/42270892.pdf", None); }
@@ -1444,6 +1444,7 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn pdfium_42270973() { run_render_test("pdfium_42270973", "downloads/pdfium/42270973.pdf", None); }
 #[test] fn pdfium_42270993() { run_render_test("pdfium_42270993", "downloads/pdfium/42270993.pdf", None); }
 #[test] fn pdfium_42271017() { run_render_test("pdfium_42271017", "downloads/pdfium/42271017.pdf", None); }
+#[test] fn pdfium_42271051() { run_render_test("pdfium_42271051", "downloads/pdfium/42271051.pdf", None); }
 #[test] fn pdfium_42271064() { run_render_test("pdfium_42271064", "downloads/pdfium/42271064.pdf", None); }
 #[test] fn pdfium_42271085() { run_render_test("pdfium_42271085", "downloads/pdfium/42271085.pdf", None); }
 #[test] fn pdfium_42271107() { run_render_test("pdfium_42271107", "downloads/pdfium/42271107.pdf", None); }
@@ -1469,12 +1470,14 @@ use crate::{run_render_test, run_render_test_with_password};
 #[test] fn pdfium_42271606() { run_render_test("pdfium_42271606", "downloads/pdfium/42271606.pdf", None); }
 #[test] fn pdfium_42271609() { run_render_test("pdfium_42271609", "downloads/pdfium/42271609.pdf", None); }
 #[test] fn pdfium_42271613() { run_render_test("pdfium_42271613", "downloads/pdfium/42271613.pdf", None); }
+#[test] fn pdfium_42271618() { run_render_test("pdfium_42271618", "downloads/pdfium/42271618.pdf", None); }
 #[test] fn pdfium_42271676() { run_render_test("pdfium_42271676", "downloads/pdfium/42271676.pdf", None); }
 #[test] fn pdfium_42271713() { run_render_test("pdfium_42271713", "downloads/pdfium/42271713.pdf", None); }
 #[test] fn pdfium_42271895() { run_render_test("pdfium_42271895", "downloads/pdfium/42271895.pdf", None); }
 #[test] fn pdfium_42271935() { run_render_test("pdfium_42271935", "downloads/pdfium/42271935.pdf", None); }
 #[test] fn pdfium_42271946() { run_render_test("pdfium_42271946", "downloads/pdfium/42271946.pdf", None); }
 #[test] fn pdfium_42271956() { run_render_test("pdfium_42271956", "downloads/pdfium/42271956.pdf", None); }
+#[test] fn pdfium_487746367() { run_render_test("pdfium_487746367", "downloads/pdfium/487746367.pdf", None); }
 #[test] fn corpus_0000120() { run_render_test("corpus_0000120", "downloads/corpus/0000120.pdf", None); }
 #[test] fn corpus_0000325() { run_render_test("corpus_0000325", "downloads/corpus/0000325.pdf", None); }
 #[test] fn corpus_0002771() { run_render_test("corpus_0002771", "downloads/corpus/0002771.pdf", None); }

@@ -43,12 +43,7 @@
     "id": "40643678"
   },
   {
-    "id": "407752631",
-    "ignore": true
-  },
-  {
-    "id": "412524377",
-    "ignore": true
+    "id": "412524377"
   },
   {
     "id": "413597066"
@@ -256,7 +251,8 @@
   },
   {
     "id": "42270955",
-    "ignore": true
+    "ignore": true,
+    "comment": "non-embedded WingDings font"
   },
   {
     "id": "42270959",
@@ -275,8 +271,7 @@
     "id": "42271017"
   },
   {
-    "id": "42271051",
-    "ignore": true
+    "id": "42271051"
   },
   {
     "id": "42271064"
@@ -362,8 +357,7 @@
     "id": "42271613"
   },
   {
-    "id": "42271618",
-    "ignore": true
+    "id": "42271618"
   },
   {
     "id": "42271663",
@@ -384,7 +378,8 @@
   },
   {
     "id": "42271921",
-    "ignore": true
+    "ignore": true,
+    "comment": "annotations without appearence stream"
   },
   {
     "id": "42271935"
@@ -419,7 +414,6 @@
     "comment": "CMYK transparency group"
   },
   {
-    "id": "487746367",
-    "ignore": true
+    "id": "487746367"
   }
 ]
