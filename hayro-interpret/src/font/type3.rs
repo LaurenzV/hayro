@@ -196,7 +196,9 @@ impl<'a, 'b, T: Device<'a>> Type3ShapeGlyphDevice<'a, 'b, T> {
 
 // Only filling, stroking of paths and stencil masks are allowed.
 impl<'a, T: Device<'a>> Device<'a> for Type3ShapeGlyphDevice<'a, '_, T> {
-    fn set_soft_mask(&mut self, _: Option<SoftMask<'_>>) {}
+    fn set_soft_mask(&mut self, m: Option<SoftMask<'a>>) {
+        self.inner.set_soft_mask(m);
+    }
 
     fn draw_path(
         &mut self,

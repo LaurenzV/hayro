@@ -5,10 +5,7 @@
   {
     "id": "361712478"
   },
-  {
-    "id": "362796158",
-    "ignore": true
-  },
+  "362796158",
   {
     "id": "364635887"
   },
@@ -420,7 +417,8 @@
   },
   {
     "id": "479025308",
-    "ignore": true
+    "ignore": true,
+    "comment": "CMYK transparency group"
   },
   {
     "id": "487746367",
