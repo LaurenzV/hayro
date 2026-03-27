@@ -1,5 +1,7 @@
 use crate::font::Glyph;
 use crate::soft_mask::SoftMask;
+use crate::structure_tag::StructureTag;
+use crate::text_span::TextSpan;
 use crate::{BlendMode, ClipPath, Image};
 use crate::{GlyphDrawMode, Paint, PathDrawMode};
 use kurbo::{Affine, BezPath, Rect, Shape};
@@ -54,11 +56,21 @@ pub trait Device<'a> {
     ) {
         self.draw_path(&rect.to_path(0.1), transform, paint, draw_mode);
     }
+    /// Called once per `Tj` string operand or `TJ` string element with
+    /// structured text and position data.
+    ///
+    /// This method is called *after* the individual [`draw_glyph`](Self::draw_glyph)
+    /// calls for the glyphs in the span. The default implementation does nothing.
+    /// Implement this method to capture text content with accurate positions
+    /// and font sizes without reverse-engineering glyph transforms.
+    fn draw_text_span(&mut self, _span: &TextSpan) {}
+
     /// Called at the beginning of a marked content sequence (BMC/BDC).
     ///
-    /// The tag is the marked content tag (e.g. b"P", b"Span"). The mcid is
-    /// the marked content identifier from the properties dict, if present.
-    fn begin_marked_content(&mut self, _tag: &[u8], _mcid: Option<i32>) {}
+    /// The tag is the parsed structure element tag (e.g. [`StructureTag::P`],
+    /// [`StructureTag::Span`]).  The mcid is the marked content identifier
+    /// from the properties dict, if present.
+    fn begin_marked_content(&mut self, _tag: &StructureTag, _mcid: Option<i32>) {}
     /// Called at the end of a marked content sequence (EMC).
     fn end_marked_content(&mut self) {}
 }

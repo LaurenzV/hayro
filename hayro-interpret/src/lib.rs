@@ -36,6 +36,8 @@ mod function;
 mod interpret;
 mod ocg;
 mod soft_mask;
+mod structure_tag;
+mod text_span;
 mod types;
 mod x_object;
 
@@ -54,5 +56,7 @@ pub use hayro_cmap;
 pub use hayro_syntax;
 pub use interpret::*;
 pub use soft_mask::*;
+pub use structure_tag::*;
+pub use text_span::*;
 pub use types::*;
 pub use util::{RectExt, TransformExt};
