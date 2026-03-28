@@ -49,7 +49,7 @@ impl<'a> ReaderExt<'a> for Reader<'a> {
 
     #[inline]
     fn read_without_context<T: Readable<'a>>(&mut self) -> Option<T> {
-        self.read::<T>(&ReaderContext::dummy_in_content_stream())
+        self.read::<T>(ReaderContext::dummy_ref())
     }
 
     #[inline]
@@ -161,8 +161,8 @@ impl<'a> ReaderContext<'a> {
         })
     }
 
-    pub(crate) fn dummy_in_content_stream() -> Self {
-        Self(ReaderContextInner::Dummy {
+    pub(crate) fn dummy_ref() -> &'static Self {
+        &Self(ReaderContextInner::Dummy {
             in_content_stream: true,
         })
     }

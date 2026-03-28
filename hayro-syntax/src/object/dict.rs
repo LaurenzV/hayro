@@ -7,8 +7,7 @@ use crate::object::{Object, ObjectLike};
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 use crate::sync::Arc;
-use crate::sync::HashMap;
-use crate::xref::XRef;
+use crate::sync::FxHashMap;
 use alloc::format;
 use alloc::vec::Vec;
 use core::fmt::{Debug, Formatter};
@@ -17,7 +16,13 @@ use core::ops::Deref;
 /// A dictionary, which is a key-value map, keys being names, and values being any PDF object or
 /// objetc reference.
 #[derive(Clone)]
-pub struct Dict<'a>(Arc<Repr<'a>>);
+pub struct Dict<'a>(Inner<'a>);
+
+#[derive(Clone)]
+enum Inner<'a> {
+    Empty,
+    Some(Arc<Repr<'a>>),
+}
 
 impl Default for Dict<'_> {
     fn default() -> Self {
@@ -29,40 +34,38 @@ impl Default for Dict<'_> {
 // items are still considered different if they have different whitespaces.
 impl PartialEq for Dict<'_> {
     fn eq(&self, other: &Self) -> bool {
-        self.0.data == other.0.data
+        self.data() == other.data()
     }
 }
 
 impl<'a> Dict<'a> {
     /// Create a new empty dictionary.
     pub fn empty() -> Self {
-        let repr = Repr {
-            data: &[],
-            offsets: HashMap::new(),
-            ctx: ReaderContext::new(XRef::dummy(), false),
-        };
-
-        Self(Arc::new(repr))
+        Self(Inner::Empty)
     }
 
     /// Get the raw bytes underlying to the dictionary.
     pub fn data(&self) -> &'a [u8] {
-        self.0.data
+        match &self.0 {
+            Inner::Empty => &[],
+            Inner::Some(repr) => repr.data,
+        }
     }
 
     /// Returns the number of entries in the dictionary.
     pub fn len(&self) -> usize {
-        self.0.offsets.len()
+        self.offsets().map_or(0, FxHashMap::len)
     }
 
     /// Return whether the dictionary is empty.
     pub fn is_empty(&self) -> bool {
-        self.0.offsets.is_empty()
+        self.offsets().is_none_or(FxHashMap::is_empty)
     }
 
     /// Checks whether the dictionary contains an entry with a specific key.
     pub fn contains_key(&self, key: impl Deref<Target = [u8]>) -> bool {
-        self.0.offsets.contains_key(key.deref())
+        self.offsets()
+            .is_some_and(|offsets| offsets.contains_key(key.deref()))
     }
 
     /// Returns the entry of a key as a specific object, or try to resolve it in case it's
@@ -75,19 +78,21 @@ impl<'a> Dict<'a> {
     where
         T: ObjectLike<'a>,
     {
-        self.get_raw::<T>(key.as_ref())?.resolve(&self.0.ctx)
+        self.get_raw::<T>(key.as_ref())?.resolve(self.ctx())
     }
 
     /// Get the object reference linked to a key.
     pub fn get_ref(&self, key: impl Deref<Target = [u8]>) -> Option<ObjRef> {
-        let offset = *self.0.offsets.get(key.deref())?;
+        let offset = *self.offsets()?.get(key.deref())?;
 
-        Reader::new(&self.0.data[offset..]).read_with_context::<ObjRef>(&self.0.ctx)
+        Reader::new(&self.data()[offset..]).read_with_context::<ObjRef>(self.ctx())
     }
 
     /// Returns an iterator over all keys in the dictionary.
     pub fn keys(&self) -> impl Iterator<Item = Name<'a>> + '_ {
-        self.0.offsets.keys().cloned()
+        self.offsets()
+            .into_iter()
+            .flat_map(|offsets| offsets.keys().cloned())
     }
 
     /// An iterator over all entries in the dictionary, sorted by key.
@@ -102,7 +107,7 @@ impl<'a> Dict<'a> {
 
     /// Return the object identifier of the dict, if it's an indirect object.
     pub fn obj_id(&self) -> Option<ObjectIdentifier> {
-        self.0.ctx.obj_number()
+        self.ctx().obj_number()
     }
 
     /// Return the raw entry for a specific key.
@@ -111,28 +116,41 @@ impl<'a> Dict<'a> {
     where
         T: Readable<'a>,
     {
-        let offset = *self.0.offsets.get(key.deref())?;
+        let offset = *self.offsets()?.get(key.deref())?;
 
-        Reader::new(&self.0.data[offset..]).read_with_context::<MaybeRef<T>>(&self.0.ctx)
+        Reader::new(&self.data()[offset..]).read_with_context::<MaybeRef<T>>(self.ctx())
     }
 
     pub(crate) fn ctx(&self) -> &ReaderContext<'a> {
-        &self.0.ctx
+        match &self.0 {
+            Inner::Empty => ReaderContext::dummy_ref(),
+            Inner::Some(repr) => &repr.ctx,
+        }
+    }
+
+    fn offsets(&self) -> Option<&FxHashMap<Name<'a>, usize>> {
+        match &self.0 {
+            Inner::Empty => None,
+            Inner::Some(repr) => Some(&repr.offsets),
+        }
     }
 }
 
 impl Debug for Dict<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-        let mut r = Reader::new(self.0.data);
         let mut debug_struct = f.debug_struct("Dict");
 
-        for (key, val) in &self.0.offsets {
-            r.jump(*val);
-            debug_struct.field(
-                &format!("{:?}", key.as_str()),
-                &r.read_with_context::<MaybeRef<Object<'_>>>(&ReaderContext::dummy())
-                    .unwrap(),
-            );
+        if let Some(offsets) = self.offsets() {
+            let mut r = Reader::new(self.data());
+
+            for (key, val) in offsets {
+                r.jump(*val);
+                debug_struct.field(
+                    &format!("{:?}", key.as_str()),
+                    &r.read_with_context::<MaybeRef<Object<'_>>>(&ReaderContext::dummy())
+                        .unwrap(),
+                );
+            }
         }
         Ok(())
     }
@@ -178,7 +196,7 @@ fn read_inner<'a>(
     start_tag: Option<&[u8]>,
     end_tag: &[u8],
 ) -> Option<Dict<'a>> {
-    let mut offsets = HashMap::new();
+    let mut offsets = FxHashMap::default();
 
     let data = {
         let dict_data = r.tail()?;
@@ -231,18 +249,18 @@ fn read_inner<'a>(
         }
     };
 
-    Some(Dict(Arc::new(Repr {
+    Some(Dict(Inner::Some(Arc::new(Repr {
         data,
         offsets,
         ctx: ctx.clone(),
-    })))
+    }))))
 }
 
 object!(Dict<'a>, Dict);
 
 struct Repr<'a> {
     data: &'a [u8],
-    offsets: HashMap<Name<'a>, usize>,
+    offsets: FxHashMap<Name<'a>, usize>,
     ctx: ReaderContext<'a>,
 }
 
