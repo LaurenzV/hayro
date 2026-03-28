@@ -11,9 +11,9 @@ pub(crate) trait OptionLog {
 
 impl<T> OptionLog for Option<T> {
     #[inline]
-    fn warn_none(self, f: &str) -> Self {
+    fn warn_none(self, _f: &str) -> Self {
         self.or_else(|| {
-            warn!("{f}");
+            warn!("{_f}");
 
             None
         })
