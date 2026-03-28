@@ -500,18 +500,13 @@ pub(crate) trait OperatorTrait<'b, 'a>: Sized {
 
 mod macros {
     macro_rules! op_impl {
-        ($t:ident $(<$($l:lifetime),+>)?, $e:expr, $n:expr, $body:expr) => {
+        ($t:ident $(<$($l:lifetime),+>)?, $e:expr, $n:expr, |$stack:ident : $stack_ty:ty| $body:block) => {
             impl<'b, 'a> OperatorTrait<'b, 'a> for $t$(<$($l),+>)? {
                 const OPERATOR: &'static str = $e;
 
-                fn from_stack(stack: &'b Stack<'a>) -> Option<Self> {
-                    if $n != u8::MAX as usize {
-                        if stack.len() != $n {
-                            warn!("wrong stack length {} for operator {}, expected {}", stack.len(), Self::OPERATOR, $n);
-                        }
-                    }
-
-                    $body(stack).or_else(|| {
+                #[inline(always)]
+                fn from_stack($stack: $stack_ty) -> Option<Self> {
+                    $body.or_else(|| {
                         warn!("failed to convert operands for operator {}", Self::OPERATOR);
 
                         None
@@ -545,7 +540,9 @@ mod macros {
 
     macro_rules! op0 {
         ($t:ident $(<$($l:lifetime),+>)?, $e:expr) => {
-            crate::content::macros::op_impl!($t$(<$($l),+>)?, $e, 0, |_| Some(Self));
+            crate::content::macros::op_impl!($t$(<$($l),+>)?, $e, 0, |_stack: &'b Stack<'a>| {
+                Some(Self)
+            });
         }
     }
 
@@ -560,8 +557,9 @@ mod macros {
 
     macro_rules! op_all {
         ($t:ident $(<$($l:lifetime),+>)?, $e:expr) => {
-            crate::content::macros::op_impl!($t$(<$($l),+>)?, $e, u8::MAX as usize, |stack: &'b Stack<'a>|
-            Some(Self(stack.get_all()?)));
+            crate::content::macros::op_impl!($t$(<$($l),+>)?, $e, u8::MAX as usize, |stack: &'b Stack<'a>| {
+                Some(Self(stack.get_all()?))
+            });
         }
     }
 

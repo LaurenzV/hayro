@@ -73,27 +73,32 @@ impl Ord for Name<'_> {
 
 impl<'a> Name<'a> {
     /// Create a new name from a sequence of bytes.
+    #[inline]
     pub fn new(data: &'a [u8]) -> Self {
         if !data.contains(&b'#') {
             Self(NameInner::Borrowed(data))
         } else {
-            let mut result = SmallVec::new();
-            let mut r = Reader::new(data);
-
-            while let Some(b) = r.read_byte() {
-                if b == b'#' {
-                    // We already verified when skipping that it's a valid hex sequence.
-                    let hex = r.read_bytes(2).unwrap();
-                    result.push(
-                        decode_hex_digit(hex[0]).unwrap() << 4 | decode_hex_digit(hex[1]).unwrap(),
-                    );
-                } else {
-                    result.push(b);
-                }
-            }
-
-            Self(NameInner::Owned(result))
+            Self(NameInner::Owned(Self::new_from_escaped(data)))
         }
+    }
+
+    fn new_from_escaped(data: &'a [u8]) -> SmallVec<[u8; 23]> {
+        let mut result = SmallVec::new();
+        let mut r = Reader::new(data);
+
+        while let Some(b) = r.read_byte() {
+            if b == b'#' {
+                // We already verified when skipping that it's a valid hex sequence.
+                let hex = r.read_bytes(2).unwrap();
+                result.push(
+                    decode_hex_digit(hex[0]).unwrap() << 4 | decode_hex_digit(hex[1]).unwrap(),
+                );
+            } else {
+                result.push(b);
+            }
+        }
+
+        result
     }
 
     /// Return a string representation of the name.
