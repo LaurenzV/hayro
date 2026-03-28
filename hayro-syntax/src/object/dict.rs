@@ -12,7 +12,6 @@ use alloc::format;
 use alloc::vec::Vec;
 use core::fmt::{Debug, Formatter};
 use core::ops::Deref;
-use rustc_hash::FxBuildHasher;
 
 /// A dictionary, which is a key-value map, keys being names, and values being any PDF object or
 /// objetc reference.
@@ -198,7 +197,7 @@ fn read_inner<'a>(
     end_tag: &[u8],
 ) -> Option<Dict<'a>> {
     #[cfg(feature = "std")]
-    let mut offsets = FxHashMap::with_capacity_and_hasher(8, FxBuildHasher::default());
+    let mut offsets = FxHashMap::with_capacity_and_hasher(8, rustc_hash::FxBuildHasher::default());
     #[cfg(not(feature = "std"))]
     let mut offsets = FxHashMap::new();
 
