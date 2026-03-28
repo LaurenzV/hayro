@@ -87,7 +87,7 @@ fn bench_file(path: &Path) -> Result<BenchResult, String> {
     let mut op_count = 0;
     for page in pages.iter() {
         let mut iter = page.typed_operations();
-        while let Some(_) = iter.next() {
+        while iter.next().is_some() {
             op_count += 1;
         }
     }
