@@ -154,7 +154,7 @@ impl<'a> Object<'a> {
 
 impl<'a> ObjectLike<'a> for Object<'a> {}
 impl<'a> ObjectRefLike<'a> for Object<'a> {
-    fn cast_ref<'b>(obj: &'b Object<'a>) -> Option<&'b Self> {
+    fn cast_ref(obj: &Self) -> Option<&Self> {
         Some(obj)
     }
 }
