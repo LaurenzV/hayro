@@ -105,14 +105,14 @@ fn fallback_xref_map_inner<'a>(
             }
 
             if dict
-                .get::<Name>(TYPE)
+                .get::<Name<'_>>(TYPE)
                 .is_some_and(|n| n.as_str() == "Catalog")
             {
                 root_ref = last_obj_num;
             }
 
             if let Some(stream) = old_r.read::<Stream<'_>>(&dummy_ctx)
-                && stream.dict().get::<Name>(TYPE).as_deref() == Some(b"ObjStm")
+                && stream.dict().get::<Name<'_>>(TYPE).as_deref() == Some(b"ObjStm")
                 && let Some(data) = stream.decoded().ok()
                 && let Some(last_obj_num) = last_obj_num
                 && let Some(obj_stream) = ObjectStream::new(stream, &data, &dummy_ctx)
@@ -317,7 +317,7 @@ impl XRef {
                 let pages_ref = root.get_ref(PAGES).ok_or(XRefError::Unknown)?;
                 let has_ocgs = root.get::<Dict<'_>>(OCPROPERTIES).is_some();
                 let version = root
-                    .get::<Name>(VERSION)
+                    .get::<Name<'_>>(VERSION)
                     .and_then(|v| PdfVersion::from_bytes(v.deref()));
 
                 let td = TrailerData {
@@ -986,7 +986,7 @@ fn get_decryptor(trailer_dict: &Dict<'_>, password: &[u8]) -> Result<Decryptor, 
     if let Some(encryption_dict) = trailer_dict.get::<Dict<'_>>(ENCRYPT) {
         let id = if let Some(id) = trailer_dict
             .get::<Array<'_>>(ID)
-            .and_then(|a| a.flex_iter().next::<object::String>())
+            .and_then(|a| a.flex_iter().next::<object::String<'_>>())
         {
             id.to_vec()
         } else {
@@ -1046,20 +1046,28 @@ impl<'a> ObjectStream<'a> {
 fn parse_metadata(info_dict: &Dict<'_>) -> Metadata {
     Metadata {
         creation_date: info_dict
-            .get::<object::String>(CREATION_DATE)
+            .get::<object::String<'_>>(CREATION_DATE)
             .and_then(|c| DateTime::from_bytes(&c)),
         modification_date: info_dict
-            .get::<object::String>(MOD_DATE)
+            .get::<object::String<'_>>(MOD_DATE)
             .and_then(|c| DateTime::from_bytes(&c)),
-        title: info_dict.get::<object::String>(TITLE).map(|t| t.to_vec()),
-        author: info_dict.get::<object::String>(AUTHOR).map(|t| t.to_vec()),
-        subject: info_dict.get::<object::String>(SUBJECT).map(|t| t.to_vec()),
-        keywords: info_dict
-            .get::<object::String>(KEYWORDS)
+        title: info_dict
+            .get::<object::String<'_>>(TITLE)
             .map(|t| t.to_vec()),
-        creator: info_dict.get::<object::String>(CREATOR).map(|t| t.to_vec()),
+        author: info_dict
+            .get::<object::String<'_>>(AUTHOR)
+            .map(|t| t.to_vec()),
+        subject: info_dict
+            .get::<object::String<'_>>(SUBJECT)
+            .map(|t| t.to_vec()),
+        keywords: info_dict
+            .get::<object::String<'_>>(KEYWORDS)
+            .map(|t| t.to_vec()),
+        creator: info_dict
+            .get::<object::String<'_>>(CREATOR)
+            .map(|t| t.to_vec()),
         producer: info_dict
-            .get::<object::String>(PRODUCER)
+            .get::<object::String<'_>>(PRODUCER)
             .map(|t| t.to_vec()),
     }
 }

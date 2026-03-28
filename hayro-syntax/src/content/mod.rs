@@ -51,7 +51,7 @@ use smallvec::SmallVec;
 // DeviceN color spaces)
 const OPERANDS_THRESHOLD: usize = 6;
 
-impl Debug for Operator {
+impl Debug for Operator<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         write!(f, "{}", self.0.as_str())
     }
@@ -59,9 +59,9 @@ impl Debug for Operator {
 
 /// A content stream operator.
 #[derive(Clone, PartialEq)]
-pub struct Operator(Name);
+pub struct Operator<'a>(Name<'a>);
 
-impl Deref for Operator {
+impl Deref for Operator<'_> {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
@@ -69,14 +69,14 @@ impl Deref for Operator {
     }
 }
 
-impl Skippable for Operator {
+impl Skippable for Operator<'_> {
     fn skip(r: &mut Reader<'_>, _: bool) -> Option<()> {
         skip_name_like(r, false).map(|_| ())
     }
 }
 
-impl Readable<'_> for Operator {
-    fn read(r: &mut Reader<'_>, _: &ReaderContext<'_>) -> Option<Self> {
+impl<'a> Readable<'a> for Operator<'a> {
+    fn read(r: &mut Reader<'a>, _: &ReaderContext<'a>) -> Option<Self> {
         let start = r.offset();
         skip_name_like(r, false)?;
         let end = r.offset();
@@ -138,13 +138,13 @@ impl<'a> Iterator for UntypedIter<'a> {
                 // such an operator and then simply skip it.
                 if let Some(object) = self.reader.read_without_context::<Object<'_>>() {
                     self.stack.push(object);
-                } else if self.reader.read_without_context::<Operator>().is_some() {
+                } else if self.reader.read_without_context::<Operator<'_>>().is_some() {
                     self.stack.clear();
                 } else {
                     return None;
                 }
             } else {
-                let operator = match self.reader.read_without_context::<Operator>() {
+                let operator = match self.reader.read_without_context::<Operator<'_>>() {
                     Some(o) => o,
                     None => {
                         warn!("failed to read operator in content stream");
@@ -344,7 +344,7 @@ pub struct Instruction<'a> {
     /// The stack containing the operands.
     pub operands: Stack<'a>,
     /// The actual operator.
-    pub operator: Operator,
+    pub operator: Operator<'a>,
 }
 
 impl<'a> Instruction<'a> {

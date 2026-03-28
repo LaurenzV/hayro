@@ -211,7 +211,7 @@ pub(crate) fn select_standard_font(
     dict: &Dict<'_>,
     descriptor: &Dict<'_>,
 ) -> Option<(StandardFont, bool)> {
-    let base_font = dict.get::<Name>(BASE_FONT)?;
+    let base_font = dict.get::<Name<'_>>(BASE_FONT)?;
     let name = strip_subset_prefix(base_font.as_str());
 
     // First try whether it matches literally.

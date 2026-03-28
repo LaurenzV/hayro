@@ -16,14 +16,13 @@ include!("ops_generated.rs");
 
 // Need to special-case those because they have variable arguments.
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct StrokeColorNamed(pub SmallVec<[Number; OPERANDS_THRESHOLD]>, pub Option<Name>);
-
-fn scn_fn(stack: &Stack<'_>) -> Option<(SmallVec<[Number; OPERANDS_THRESHOLD]>, Option<Name>)> {
+fn parse_named_color<'a>(
+    objects: &[Object<'a>],
+) -> Option<(SmallVec<[Number; OPERANDS_THRESHOLD]>, Option<Name<'a>>)> {
     let mut nums = smallvec![];
     let mut name = None;
 
-    for o in &stack.0 {
+    for o in objects {
         match o {
             Object::Number(n) => nums.push(*n),
             Object::Name(n) => name = Some(n.clone()),
@@ -38,26 +37,35 @@ fn scn_fn(stack: &Stack<'_>) -> Option<(SmallVec<[Number; OPERANDS_THRESHOLD]>, 
     Some((nums, name))
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct StrokeColorNamed<'a>(
+    pub SmallVec<[Number; OPERANDS_THRESHOLD]>,
+    pub Option<Name<'a>>,
+);
+
 op_impl!(
-    StrokeColorNamed,
+    StrokeColorNamed<'a>,
     "SCN",
     u8::MAX as usize,
-    |stack: &Stack<'_>| {
-        let res = scn_fn(stack);
-        res.map(|r| StrokeColorNamed(r.0, r.1))
+    |stack: &Stack<'a>| {
+        let (nums, name) = parse_named_color(&stack.0)?;
+        Some(StrokeColorNamed(nums, name))
     }
 );
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct NonStrokeColorNamed(pub SmallVec<[Number; OPERANDS_THRESHOLD]>, pub Option<Name>);
+pub struct NonStrokeColorNamed<'a>(
+    pub SmallVec<[Number; OPERANDS_THRESHOLD]>,
+    pub Option<Name<'a>>,
+);
 
 op_impl!(
-    NonStrokeColorNamed,
+    NonStrokeColorNamed<'a>,
     "scn",
     u8::MAX as usize,
-    |stack: &Stack<'_>| {
-        let res = scn_fn(stack);
-        res.map(|r| NonStrokeColorNamed(r.0, r.1))
+    |stack: &Stack<'a>| {
+        let (nums, name) = parse_named_color(&stack.0)?;
+        Some(NonStrokeColorNamed(nums, name))
     }
 );
 

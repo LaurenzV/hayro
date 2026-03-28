@@ -7,40 +7,84 @@ use crate::object::macros::object;
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 use crate::trivia::is_white_space_character;
+use core::borrow::Borrow;
+use core::hash::{Hash, Hasher};
 use core::ops::Deref;
 use log::warn;
 use smallvec::SmallVec;
 
-type StringInner = SmallVec<[u8; 23]>;
+#[derive(Clone)]
+enum StringInner<'a> {
+    Borrowed(&'a [u8]),
+    Owned(SmallVec<[u8; 23]>),
+}
 
-/// A PDF string object.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct String(StringInner);
-
-impl String {
-    /// Returns the string data as a byte slice.
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.0
+impl AsRef<[u8]> for StringInner<'_> {
+    fn as_ref(&self) -> &[u8] {
+        match self {
+            Self::Borrowed(data) => data,
+            Self::Owned(data) => data,
+        }
     }
 }
 
-impl Deref for String {
+/// A PDF string object.
+#[derive(Clone)]
+pub struct String<'a>(StringInner<'a>);
+
+impl<'a> String<'a> {
+    /// Returns the string data as a byte slice.
+    pub fn as_bytes(&self) -> &[u8] {
+        self.as_ref()
+    }
+}
+
+impl Deref for String<'_> {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
-        &self.0
+        self.as_ref()
     }
 }
 
-impl AsRef<[u8]> for String {
+impl AsRef<[u8]> for String<'_> {
     fn as_ref(&self) -> &[u8] {
-        &self.0
+        match &self.0 {
+            StringInner::Borrowed(data) => data,
+            StringInner::Owned(data) => data,
+        }
     }
 }
 
-object!(String, String);
+impl Borrow<[u8]> for String<'_> {
+    fn borrow(&self) -> &[u8] {
+        self.as_ref()
+    }
+}
 
-impl Skippable for String {
+impl PartialEq for String<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.as_ref() == other.as_ref()
+    }
+}
+
+impl Eq for String<'_> {}
+
+impl Hash for String<'_> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.as_ref().hash(state);
+    }
+}
+
+impl core::fmt::Debug for String<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        <[u8] as core::fmt::Debug>::fmt(self.as_ref(), f)
+    }
+}
+
+object!(String<'a>, String);
+
+impl Skippable for String<'_> {
     fn skip(r: &mut Reader<'_>, _: bool) -> Option<()> {
         match r.peek_byte()? {
             b'<' => skip_hex(r),
@@ -50,10 +94,10 @@ impl Skippable for String {
     }
 }
 
-impl Readable<'_> for String {
-    fn read(r: &mut Reader<'_>, ctx: &ReaderContext<'_>) -> Option<Self> {
+impl<'a> Readable<'a> for String<'a> {
+    fn read(r: &mut Reader<'a>, ctx: &ReaderContext<'a>) -> Option<Self> {
         let decoded = match r.peek_byte()? {
-            b'<' => read_hex(r)?,
+            b'<' => StringInner::Owned(read_hex(r)?),
             b'(' => read_literal(r)?,
             _ => return None,
         };
@@ -62,8 +106,8 @@ impl Readable<'_> for String {
         let final_data = if ctx.xref().needs_decryption(ctx) {
             if let Some(obj_number) = ctx.obj_number() {
                 ctx.xref()
-                    .decrypt(obj_number, &decoded, DecryptionTarget::String)
-                    .map(SmallVec::from_vec)
+                    .decrypt(obj_number, decoded.as_ref(), DecryptionTarget::String)
+                    .map(StringInner::from)
                     .unwrap_or(decoded)
             } else {
                 decoded
@@ -73,6 +117,12 @@ impl Readable<'_> for String {
         };
 
         Some(Self(final_data))
+    }
+}
+
+impl From<Vec<u8>> for StringInner<'_> {
+    fn from(value: Vec<u8>) -> Self {
+        Self::Owned(SmallVec::from_vec(value))
     }
 }
 
@@ -93,7 +143,7 @@ fn skip_hex(r: &mut Reader<'_>) -> Option<()> {
     Some(())
 }
 
-fn read_hex(r: &mut Reader<'_>) -> Option<StringInner> {
+fn read_hex(r: &mut Reader<'_>) -> Option<SmallVec<[u8; 23]>> {
     let start = r.offset();
     skip_hex(r)?;
     let end = r.offset();
@@ -125,13 +175,17 @@ fn skip_literal(r: &mut Reader<'_>) -> Option<()> {
     Some(())
 }
 
-fn read_literal(r: &mut Reader<'_>) -> Option<StringInner> {
+fn read_literal<'a>(r: &mut Reader<'a>) -> Option<StringInner<'a>> {
     let start = r.offset();
     skip_literal(r)?;
     let end = r.offset();
 
     // Exclude outer parentheses.
     let data = r.range(start + 1..end - 1)?;
+
+    if !data.iter().any(|b| matches!(b, b'\\' | b'\n' | b'\r')) {
+        return Some(StringInner::Borrowed(data));
+    }
 
     let mut r = Reader::new(data);
     let mut result = SmallVec::new();
@@ -210,7 +264,7 @@ fn read_literal(r: &mut Reader<'_>) -> Option<StringInner> {
         }
     }
 
-    Some(result)
+    Some(StringInner::Owned(result))
 }
 
 fn is_octal_digit(byte: u8) -> bool {
@@ -227,7 +281,7 @@ mod tests {
     fn hex_string_empty() {
         assert_eq!(
             Reader::new(b"<>")
-                .read_without_context::<String>()
+                .read_without_context::<String<'_>>()
                 .unwrap()
                 .as_bytes(),
             b""
@@ -238,7 +292,7 @@ mod tests {
     fn hex_string_1() {
         assert_eq!(
             Reader::new(b"<00010203>")
-                .read_without_context::<String>()
+                .read_without_context::<String<'_>>()
                 .unwrap()
                 .as_bytes(),
             &[0x00, 0x01, 0x02, 0x03]
@@ -249,7 +303,7 @@ mod tests {
     fn hex_string_2() {
         assert_eq!(
             Reader::new(b"<000102034>")
-                .read_without_context::<String>()
+                .read_without_context::<String<'_>>()
                 .unwrap()
                 .as_bytes(),
             &[0x00, 0x01, 0x02, 0x03, 0x40]
@@ -260,7 +314,7 @@ mod tests {
     fn hex_string_trailing_1() {
         assert_eq!(
             Reader::new(b"<000102034>dfgfg4")
-                .read_without_context::<String>()
+                .read_without_context::<String<'_>>()
                 .unwrap()
                 .as_bytes(),
             &[0x00, 0x01, 0x02, 0x03, 0x40]
@@ -271,7 +325,7 @@ mod tests {
     fn hex_string_trailing_2() {
         assert_eq!(
             Reader::new(b"<1  3 4>dfgfg4")
-                .read_without_context::<String>()
+                .read_without_context::<String<'_>>()
                 .unwrap()
                 .as_bytes(),
             &[0x13, 0x40]
@@ -282,7 +336,7 @@ mod tests {
     fn hex_string_trailing_3() {
         assert_eq!(
             Reader::new(b"<1>dfgfg4")
-                .read_without_context::<String>()
+                .read_without_context::<String<'_>>()
                 .unwrap()
                 .as_bytes(),
             &[0x10]
@@ -291,14 +345,18 @@ mod tests {
 
     #[test]
     fn hex_string_invalid_1() {
-        assert!(Reader::new(b"<").read_without_context::<String>().is_none());
+        assert!(
+            Reader::new(b"<")
+                .read_without_context::<String<'_>>()
+                .is_none()
+        );
     }
 
     #[test]
     fn hex_string_invalid_2() {
         assert!(
             Reader::new(b"34AD")
-                .read_without_context::<String>()
+                .read_without_context::<String<'_>>()
                 .is_none()
         );
     }
@@ -307,7 +365,7 @@ mod tests {
     fn literal_string_empty() {
         assert_eq!(
             Reader::new(b"()")
-                .read_without_context::<String>()
+                .read_without_context::<String<'_>>()
                 .unwrap()
                 .as_bytes(),
             b""
@@ -318,7 +376,7 @@ mod tests {
     fn literal_string_1() {
         assert_eq!(
             Reader::new(b"(Hi there.)")
-                .read_without_context::<String>()
+                .read_without_context::<String<'_>>()
                 .unwrap()
                 .as_bytes(),
             b"Hi there."
@@ -329,7 +387,7 @@ mod tests {
     fn literal_string_2() {
         assert!(
             Reader::new(b"(Hi \\777)")
-                .read_without_context::<String>()
+                .read_without_context::<String<'_>>()
                 .is_some()
         );
     }
@@ -338,7 +396,7 @@ mod tests {
     fn literal_string_3() {
         assert_eq!(
             Reader::new(b"(Hi ) there.)")
-                .read_without_context::<String>()
+                .read_without_context::<String<'_>>()
                 .unwrap()
                 .as_bytes(),
             b"Hi "
@@ -349,7 +407,7 @@ mod tests {
     fn literal_string_4() {
         assert_eq!(
             Reader::new(b"(Hi (()) there)")
-                .read_without_context::<String>()
+                .read_without_context::<String<'_>>()
                 .unwrap()
                 .as_bytes(),
             b"Hi (()) there"
@@ -360,7 +418,7 @@ mod tests {
     fn literal_string_5() {
         assert_eq!(
             Reader::new(b"(Hi \\()")
-                .read_without_context::<String>()
+                .read_without_context::<String<'_>>()
                 .unwrap()
                 .as_bytes(),
             b"Hi ("
@@ -371,7 +429,7 @@ mod tests {
     fn literal_string_6() {
         assert_eq!(
             Reader::new(b"(Hi \\\nthere)")
-                .read_without_context::<String>()
+                .read_without_context::<String<'_>>()
                 .unwrap()
                 .as_bytes(),
             b"Hi there"
@@ -382,7 +440,7 @@ mod tests {
     fn literal_string_7() {
         assert_eq!(
             Reader::new(b"(Hi \\05354)")
-                .read_without_context::<String>()
+                .read_without_context::<String<'_>>()
                 .unwrap()
                 .as_bytes(),
             b"Hi +54"
@@ -393,7 +451,7 @@ mod tests {
     fn literal_string_8() {
         assert_eq!(
             Reader::new(b"(\\3)")
-                .read_without_context::<String>()
+                .read_without_context::<String<'_>>()
                 .unwrap()
                 .as_bytes(),
             b"\x03"
@@ -404,7 +462,7 @@ mod tests {
     fn literal_string_9() {
         assert_eq!(
             Reader::new(b"(\\36)")
-                .read_without_context::<String>()
+                .read_without_context::<String<'_>>()
                 .unwrap()
                 .as_bytes(),
             b"\x1e"
@@ -415,7 +473,7 @@ mod tests {
     fn literal_string_10() {
         assert_eq!(
             Reader::new(b"(\\36ab)")
-                .read_without_context::<String>()
+                .read_without_context::<String<'_>>()
                 .unwrap()
                 .as_bytes(),
             b"\x1eab"
@@ -426,7 +484,7 @@ mod tests {
     fn literal_string_11() {
         assert_eq!(
             Reader::new(b"(\\00Y)")
-                .read_without_context::<String>()
+                .read_without_context::<String<'_>>()
                 .unwrap()
                 .as_bytes(),
             b"\0Y"
@@ -437,7 +495,7 @@ mod tests {
     fn literal_string_12() {
         assert_eq!(
             Reader::new(b"(\\0Y)")
-                .read_without_context::<String>()
+                .read_without_context::<String<'_>>()
                 .unwrap()
                 .as_bytes(),
             b"\0Y"
@@ -448,7 +506,7 @@ mod tests {
     fn literal_string_trailing() {
         assert_eq!(
             Reader::new(b"(Hi there.)abcde")
-                .read_without_context::<String>()
+                .read_without_context::<String<'_>>()
                 .unwrap()
                 .as_bytes(),
             b"Hi there."
@@ -459,7 +517,7 @@ mod tests {
     fn literal_string_invalid() {
         assert_eq!(
             Reader::new(b"(Hi \\778)")
-                .read_without_context::<String>()
+                .read_without_context::<String<'_>>()
                 .unwrap()
                 .as_bytes(),
             b"Hi \x3F8"
@@ -470,7 +528,7 @@ mod tests {
     fn string_1() {
         assert_eq!(
             Reader::new(b"(Hi there.)")
-                .read_without_context::<String>()
+                .read_without_context::<String<'_>>()
                 .unwrap()
                 .as_bytes(),
             b"Hi there."
@@ -481,7 +539,7 @@ mod tests {
     fn string_2() {
         assert_eq!(
             Reader::new(b"<00010203>")
-                .read_without_context::<String>()
+                .read_without_context::<String<'_>>()
                 .unwrap()
                 .as_bytes(),
             &[0x00, 0x01, 0x02, 0x03]

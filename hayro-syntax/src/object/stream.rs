@@ -61,8 +61,8 @@ impl<'a> Stream<'a> {
         let mut collected_params = SmallVec::new();
 
         if let Some(filter) = dict
-            .get::<Name>(F)
-            .or_else(|| dict.get::<Name>(FILTER))
+            .get::<Name<'_>>(F)
+            .or_else(|| dict.get::<Name<'_>>(FILTER))
             .and_then(Filter::from_name)
         {
             let params = dict
@@ -76,7 +76,7 @@ impl<'a> Stream<'a> {
             .get::<Array<'_>>(F)
             .or_else(|| dict.get::<Array<'_>>(FILTER))
         {
-            let filters = filters.iter::<Name>().map(Filter::from_name);
+            let filters = filters.iter::<Name<'_>>().map(Filter::from_name);
             let mut params = dict
                 .get::<Array<'_>>(DP)
                 .or_else(|| dict.get::<Array<'_>>(DECODE_PARMS))
@@ -114,7 +114,7 @@ impl<'a> Stream<'a> {
             && self
                 .0
                 .dict
-                .get::<object::String>(TYPE)
+                .get::<object::String<'_>>(TYPE)
                 .map(|t| t.as_ref() != b"XRef")
                 .unwrap_or(true)
         {

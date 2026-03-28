@@ -420,7 +420,7 @@ fn serialize_resources(
 fn collect_resources<'a>(
     resources: &Resources<'a>,
     get_dict: impl FnMut(&Resources<'a>) -> Dict<'a> + Clone,
-) -> BTreeMap<hayro_syntax::object::Name, MaybeRef<Object<'a>>> {
+) -> BTreeMap<hayro_syntax::object::Name<'a>, MaybeRef<Object<'a>>> {
     let mut map = BTreeMap::new();
     collect_resources_inner(resources, get_dict, &mut map);
     map
@@ -429,7 +429,7 @@ fn collect_resources<'a>(
 fn collect_resources_inner<'a>(
     resources: &Resources<'a>,
     mut get_dict: impl FnMut(&Resources<'a>) -> Dict<'a> + Clone,
-    map: &mut BTreeMap<hayro_syntax::object::Name, MaybeRef<Object<'a>>>,
+    map: &mut BTreeMap<hayro_syntax::object::Name<'a>, MaybeRef<Object<'a>>>,
 ) {
     // Process parents first, so that duplicates get overridden by the current dictionary.
     // Since for inheritance, the current dictionary always has priority over entries in the

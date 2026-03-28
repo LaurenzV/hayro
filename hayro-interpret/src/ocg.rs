@@ -27,7 +27,7 @@ impl OcgState {
         let mut inactive = HashSet::new();
 
         let base_state = config
-            .get::<Name>(BASE_STATE)
+            .get::<Name<'_>>(BASE_STATE)
             .and_then(|b| BaseState::from_name(b.as_ref()));
 
         if base_state.unwrap_or(BaseState::On) == BaseState::Off
@@ -73,7 +73,7 @@ impl OcgState {
 
     pub(crate) fn begin_ocmd(&mut self, ocmd: &Dict<'_>) {
         let policy = ocmd
-            .get::<Name>(P)
+            .get::<Name<'_>>(P)
             .and_then(|n| OcmdPolicy::from_name(n.as_ref()))
             .unwrap_or(OcmdPolicy::AnyOn);
 
@@ -105,7 +105,7 @@ impl OcgState {
     }
 
     pub(crate) fn begin_ocg(&mut self, props: &Dict<'_>, ref_id: ObjectIdentifier) {
-        match props.get::<Name>(TYPE).as_deref() {
+        match props.get::<Name<'_>>(TYPE).as_deref() {
             Some(OCMD) => self.begin_ocmd(props),
             _ => self.begin_single_oc(ref_id),
         }

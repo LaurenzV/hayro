@@ -110,7 +110,7 @@ impl ColorSpaceType {
             return Self::new_from_name(name.clone());
         } else if let Some(color_array) = object.clone().into_array() {
             let mut iter = color_array.clone().flex_iter();
-            let name = iter.next::<Name>()?;
+            let name = iter.next::<Name<'_>>()?;
 
             match name.deref() {
                 ICC_BASED => {
@@ -173,7 +173,7 @@ impl ColorSpaceType {
                     return Some(Self::DeviceN(DeviceN::new(&color_array, cache)?));
                 }
                 PATTERN => {
-                    let _ = iter.next::<Name>();
+                    let _ = iter.next::<Name<'_>>();
                     let cs = iter
                         .next::<Object<'_>>()
                         .and_then(|o| ColorSpace::new(o, cache))
@@ -190,7 +190,7 @@ impl ColorSpaceType {
         None
     }
 
-    fn new_from_name(name: Name) -> Option<Self> {
+    fn new_from_name(name: Name<'_>) -> Option<Self> {
         match name.deref() {
             DEVICE_RGB | RGB => Some(Self::DeviceRgb),
             DEVICE_GRAY | G => Some(Self::DeviceGray),
@@ -213,7 +213,7 @@ impl ColorSpace {
     }
 
     /// Create a new color space from the name.
-    pub(crate) fn new_from_name(name: Name) -> Option<Self> {
+    pub(crate) fn new_from_name(name: Name<'_>) -> Option<Self> {
         ColorSpaceType::new_from_name(name).map(|c| Self(Arc::new(c)))
     }
 
@@ -709,7 +709,7 @@ impl Indexed {
     fn new(array: &Array<'_>, cache: &Cache) -> Option<Self> {
         let mut iter = array.flex_iter();
         // Skip name
-        let _ = iter.next::<Name>()?;
+        let _ = iter.next::<Name<'_>>()?;
         let base_color_space = ColorSpace::new(iter.next::<Object<'_>>()?, cache)?;
         let hival = iter.next::<u32>()?.min(u8::MAX as u32) as u8;
 
@@ -717,7 +717,7 @@ impl Indexed {
             let data = iter
                 .next::<Stream<'_>>()
                 .and_then(|s| s.decoded().ok())
-                .or_else(|| iter.next::<object::String>().map(|s| s.to_vec()))?;
+                .or_else(|| iter.next::<object::String<'_>>().map(|s| s.to_vec()))?;
 
             let num_components = base_color_space.num_components();
 
@@ -773,8 +773,8 @@ impl Separation {
     fn new(array: &Array<'_>, cache: &Cache) -> Option<Self> {
         let mut iter = array.flex_iter();
         // Skip `/Separation`
-        let _ = iter.next::<Name>()?;
-        let name = iter.next::<Name>()?;
+        let _ = iter.next::<Name<'_>>()?;
+        let name = iter.next::<Name<'_>>()?;
         let alternate_space = ColorSpace::new(iter.next::<Object<'_>>()?, cache)?;
         let tint_transform = Function::new(&iter.next::<Object<'_>>()?)?;
         // Either I did something wrong, or no other viewers properly handles
@@ -819,9 +819,12 @@ impl DeviceN {
     fn new(array: &Array<'_>, cache: &Cache) -> Option<Self> {
         let mut iter = array.flex_iter();
         // Skip `/DeviceN`
-        let _ = iter.next::<Name>()?;
+        let _ = iter.next::<Name<'_>>()?;
         // Skip `Name`.
-        let names = iter.next::<Array<'_>>()?.iter::<Name>().collect::<Vec<_>>();
+        let names = iter
+            .next::<Array<'_>>()?
+            .iter::<Name<'_>>()
+            .collect::<Vec<_>>();
         let num_components = u8::try_from(names.len()).ok()?;
         let all_none = names.iter().all(|n| n.as_str() == "None");
         let alternate_space = ColorSpace::new(iter.next::<Object<'_>>()?, cache)?;

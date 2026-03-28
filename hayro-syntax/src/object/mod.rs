@@ -44,9 +44,9 @@ pub enum Object<'a> {
     /// A number object.
     Number(Number),
     /// A string object.
-    String(String),
+    String(String<'a>),
     /// A name object.
-    Name(Name),
+    Name(Name<'a>),
     /// A dict object.
     Dict(Dict<'a>),
     /// An array object.
@@ -74,7 +74,7 @@ impl<'a> Object<'a> {
 
     /// Try casting the object to a name.
     #[inline(always)]
-    pub fn into_name(self) -> Option<Name> {
+    pub fn into_name(self) -> Option<Name<'a>> {
         self.cast()
     }
 
@@ -92,7 +92,7 @@ impl<'a> Object<'a> {
 
     /// Try casting the object to a string.
     #[inline(always)]
-    pub fn into_string(self) -> Option<String> {
+    pub fn into_string(self) -> Option<String<'a>> {
         self.cast()
     }
 
@@ -357,10 +357,10 @@ mod tests {
         assert_eq!(size_of::<Object<'_>>(), 40);
         assert_eq!(size_of::<Array<'_>>(), 32);
         assert_eq!(size_of::<Dict<'_>>(), 8);
-        assert_eq!(size_of::<Name>(), 32);
+        assert_eq!(size_of::<Name<'_>>(), 32);
         assert_eq!(size_of::<Null>(), 0);
         assert_eq!(size_of::<Number>(), 16);
         assert_eq!(size_of::<Stream<'_>>(), 8);
-        assert_eq!(size_of::<String>(), 32);
+        assert_eq!(size_of::<String<'_>>(), 32);
     }
 }

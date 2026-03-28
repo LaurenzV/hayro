@@ -232,7 +232,7 @@ impl<'a> Font<'a> {
         font_resolver: &FontResolverFn,
         cmap_resolver: &CMapResolverFn,
     ) -> Option<Self> {
-        let f_type = match dict.get::<Name>(SUBTYPE)?.deref() {
+        let f_type = match dict.get::<Name<'_>>(SUBTYPE)?.deref() {
             TYPE1 | MM_TYPE1 => {
                 FontType::Type1(Rc::new(Type1Font::new(dict, font_resolver, cmap_resolver)?))
             }
@@ -528,7 +528,7 @@ pub struct FallbackFontQuery {
 impl FallbackFontQuery {
     pub(crate) fn new(dict: &Dict<'_>) -> Self {
         let post_script_name = dict
-            .get::<Name>(BASE_FONT)
+            .get::<Name<'_>>(BASE_FONT)
             .map(|n| strip_subset_prefix(n.as_str()).to_string());
 
         let mut data = Self {
@@ -538,13 +538,13 @@ impl FallbackFontQuery {
 
         if let Some(descriptor) = dict.get::<Dict<'_>>(FONT_DESC) {
             data.font_name = dict
-                .get::<Name>(FONT_NAME)
+                .get::<Name<'_>>(FONT_NAME)
                 .map(|n| strip_subset_prefix(n.as_str()).to_string());
             data.font_family = descriptor
-                .get::<Name>(FONT_FAMILY)
+                .get::<Name<'_>>(FONT_FAMILY)
                 .map(|n| n.as_str().to_string());
             data.font_stretch = descriptor
-                .get::<Name>(FONT_STRETCH)
+                .get::<Name<'_>>(FONT_STRETCH)
                 .map(|n| FontStretch::from_string(n.as_str()))
                 .unwrap_or(FontStretch::Normal);
             data.font_weight = descriptor.get::<u32>(FONT_WEIGHT).unwrap_or(400);
@@ -650,7 +650,7 @@ pub(crate) fn read_to_unicode(dict: &Dict<'_>, cmap_resolver: &CMapResolverFn) -
         // See PDFJS-11915, where `Identity-H` is used for `ToUnicode`. I don't
         // believe it's valid, but at least mupdf seems to be able to deal with it.
         .or_else(|| {
-            dict.get::<Name>(TO_UNICODE)
+            dict.get::<Name<'_>>(TO_UNICODE)
                 .and_then(|name| (cmap_resolver)(CMapName::from_bytes(name.as_ref())))
                 .map(|d| d.to_vec())
         })

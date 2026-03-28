@@ -53,16 +53,16 @@ pub struct DashPattern<'a>(
 op2!(DashPattern<'a>, "d");
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct RenderingIntent(pub Name);
-op1!(RenderingIntent, "ri");
+pub struct RenderingIntent<'a>(pub Name<'a>);
+op1!(RenderingIntent<'a>, "ri");
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct FlatnessTolerance(pub Number);
 op1!(FlatnessTolerance, "i");
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct SetGraphicsState(pub Name);
-op1!(SetGraphicsState, "gs");
+pub struct SetGraphicsState<'a>(pub Name<'a>);
+op1!(SetGraphicsState<'a>, "gs");
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct MoveTo(
@@ -169,12 +169,12 @@ pub struct ClipEvenOdd;
 op0!(ClipEvenOdd, "W*");
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct ColorSpaceStroke(pub Name);
-op1!(ColorSpaceStroke, "CS");
+pub struct ColorSpaceStroke<'a>(pub Name<'a>);
+op1!(ColorSpaceStroke<'a>, "CS");
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct ColorSpaceNonStroke(pub Name);
-op1!(ColorSpaceNonStroke, "cs");
+pub struct ColorSpaceNonStroke<'a>(pub Name<'a>);
+op1!(ColorSpaceNonStroke<'a>, "cs");
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct StrokeColor(pub SmallVec<[Number; OPERANDS_THRESHOLD]>);
@@ -227,12 +227,12 @@ pub struct NonStrokeColorCmyk(
 op4!(NonStrokeColorCmyk, "k");
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct Shading(pub Name);
-op1!(Shading, "sh");
+pub struct Shading<'a>(pub Name<'a>);
+op1!(Shading<'a>, "sh");
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct XObject(pub Name);
-op1!(XObject, "Do");
+pub struct XObject<'a>(pub Name<'a>);
+op1!(XObject<'a>, "Do");
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct InlineImage<'a>(pub Stream<'a>);
@@ -255,11 +255,11 @@ pub struct TextLeading(pub Number);
 op1!(TextLeading, "TL");
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct TextFont(
-    pub Name,
+pub struct TextFont<'a>(
+    pub Name<'a>,
     pub Number,
 );
-op2!(TextFont, "Tf");
+op2!(TextFont<'a>, "Tf");
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct TextRenderingMode(pub Number);
@@ -307,20 +307,20 @@ pub struct NextLineUsingLeading;
 op0!(NextLineUsingLeading, "T*");
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct ShowText(pub object::String);
-op1!(ShowText, "Tj");
+pub struct ShowText<'a>(pub object::String<'a>);
+op1!(ShowText<'a>, "Tj");
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct NextLineAndShowText(pub object::String);
-op1!(NextLineAndShowText, "'");
+pub struct NextLineAndShowText<'a>(pub object::String<'a>);
+op1!(NextLineAndShowText<'a>, "'");
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct ShowTextWithParameters(
+pub struct ShowTextWithParameters<'a>(
     pub Number,
     pub Number,
-    pub object::String,
+    pub object::String<'a>,
 );
-op3!(ShowTextWithParameters, "\"");
+op3!(ShowTextWithParameters<'a>, "\"");
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct ShowTexts<'a>(pub Array<'a>);
@@ -345,23 +345,23 @@ pub struct ShapeGlyph(
 op6!(ShapeGlyph, "d1");
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct MarkedContentPoint(pub Name);
-op1!(MarkedContentPoint, "MP");
+pub struct MarkedContentPoint<'a>(pub Name<'a>);
+op1!(MarkedContentPoint<'a>, "MP");
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct MarkedContentPointWithProperties<'a>(
-    pub Name,
+    pub Name<'a>,
     pub Object<'a>,
 );
 op2!(MarkedContentPointWithProperties<'a>, "DP");
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct BeginMarkedContent(pub Name);
-op1!(BeginMarkedContent, "BMC");
+pub struct BeginMarkedContent<'a>(pub Name<'a>);
+op1!(BeginMarkedContent<'a>, "BMC");
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct BeginMarkedContentWithProperties<'a>(
-    pub Name,
+    pub Name<'a>,
     pub Object<'a>,
 );
 op2!(BeginMarkedContentWithProperties<'a>, "BDC");
@@ -382,9 +382,9 @@ pub enum TypedInstruction<'a> {
     LineJoin(LineJoin),
     MiterLimit(MiterLimit),
     DashPattern(DashPattern<'a>),
-    RenderingIntent(RenderingIntent),
+    RenderingIntent(RenderingIntent<'a>),
     FlatnessTolerance(FlatnessTolerance),
-    SetGraphicsState(SetGraphicsState),
+    SetGraphicsState(SetGraphicsState<'a>),
     MoveTo(MoveTo),
     LineTo(LineTo),
     CubicTo(CubicTo),
@@ -404,26 +404,26 @@ pub enum TypedInstruction<'a> {
     EndPath(EndPath),
     ClipNonZero(ClipNonZero),
     ClipEvenOdd(ClipEvenOdd),
-    ColorSpaceStroke(ColorSpaceStroke),
-    ColorSpaceNonStroke(ColorSpaceNonStroke),
+    ColorSpaceStroke(ColorSpaceStroke<'a>),
+    ColorSpaceNonStroke(ColorSpaceNonStroke<'a>),
     StrokeColor(StrokeColor),
-    StrokeColorNamed(StrokeColorNamed),
+    StrokeColorNamed(StrokeColorNamed<'a>),
     NonStrokeColor(NonStrokeColor),
-    NonStrokeColorNamed(NonStrokeColorNamed),
+    NonStrokeColorNamed(NonStrokeColorNamed<'a>),
     StrokeColorDeviceGray(StrokeColorDeviceGray),
     NonStrokeColorDeviceGray(NonStrokeColorDeviceGray),
     StrokeColorDeviceRgb(StrokeColorDeviceRgb),
     NonStrokeColorDeviceRgb(NonStrokeColorDeviceRgb),
     StrokeColorCmyk(StrokeColorCmyk),
     NonStrokeColorCmyk(NonStrokeColorCmyk),
-    Shading(Shading),
-    XObject(XObject),
+    Shading(Shading<'a>),
+    XObject(XObject<'a>),
     InlineImage(InlineImage<'a>),
     CharacterSpacing(CharacterSpacing),
     WordSpacing(WordSpacing),
     HorizontalScaling(HorizontalScaling),
     TextLeading(TextLeading),
-    TextFont(TextFont),
+    TextFont(TextFont<'a>),
     TextRenderingMode(TextRenderingMode),
     TextRise(TextRise),
     BeginText(BeginText),
@@ -432,18 +432,18 @@ pub enum TypedInstruction<'a> {
     NextLineAndSetLeading(NextLineAndSetLeading),
     SetTextMatrix(SetTextMatrix),
     NextLineUsingLeading(NextLineUsingLeading),
-    ShowText(ShowText),
-    NextLineAndShowText(NextLineAndShowText),
-    ShowTextWithParameters(ShowTextWithParameters),
+    ShowText(ShowText<'a>),
+    NextLineAndShowText(NextLineAndShowText<'a>),
+    ShowTextWithParameters(ShowTextWithParameters<'a>),
     ShowTexts(ShowTexts<'a>),
     ColorGlyph(ColorGlyph),
     ShapeGlyph(ShapeGlyph),
-    MarkedContentPoint(MarkedContentPoint),
+    MarkedContentPoint(MarkedContentPoint<'a>),
     MarkedContentPointWithProperties(MarkedContentPointWithProperties<'a>),
-    BeginMarkedContent(BeginMarkedContent),
+    BeginMarkedContent(BeginMarkedContent<'a>),
     BeginMarkedContentWithProperties(BeginMarkedContentWithProperties<'a>),
     EndMarkedContent(EndMarkedContent),
-    Fallback(Operator),
+    Fallback(Operator<'a>),
 }
 
 impl<'a> TypedInstruction<'a> {

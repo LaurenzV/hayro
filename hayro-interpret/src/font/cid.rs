@@ -131,7 +131,7 @@ impl Type0Font {
         }
 
         let postscript_name = dict
-            .get::<Name>(BASE_FONT)
+            .get::<Name<'_>>(BASE_FONT)
             .map(|n| strip_subset_prefix(n.as_str()).to_string());
 
         // Extract font flags from descriptor
@@ -484,7 +484,7 @@ enum CidToGIdMap {
 
 impl CidToGIdMap {
     fn new(dict: &Dict<'_>) -> Option<Self> {
-        if let Some(name) = dict.get::<Name>(CID_TO_GID_MAP) {
+        if let Some(name) = dict.get::<Name<'_>>(CID_TO_GID_MAP) {
             if name.deref() == IDENTITY {
                 Some(Self::Identity)
             } else {
@@ -575,8 +575,8 @@ fn read_widths2(arr: &Array<'_>) -> Option<HashMap<u32, [f32; 3]>> {
 
 fn read_cid_system_info(descendant_font: &Dict<'_>) -> Option<CharacterCollection> {
     let info = descendant_font.get::<Dict<'_>>(CIDSYSTEMINFO)?;
-    let registry = info.get::<object::String>(REGISTRY)?;
-    let ordering = info.get::<object::String>(ORDERING)?;
+    let registry = info.get::<object::String<'_>>(REGISTRY)?;
+    let ordering = info.get::<object::String<'_>>(ORDERING)?;
     let supplement = info.get::<i32>(SUPPLEMENT).unwrap_or(0);
     let family = CidFamily::from_registry_ordering(registry.deref(), ordering.deref());
 

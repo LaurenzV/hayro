@@ -55,7 +55,7 @@ enum DecryptorTag {
 }
 
 impl DecryptorTag {
-    fn from_name(name: &Name) -> Option<Self> {
+    fn from_name(name: &Name<'_>) -> Option<Self> {
         match name.as_str() {
             "None" | "Identity" => Some(Self::None),
             "V2" => Some(Self::Rc4),
@@ -111,7 +111,7 @@ pub(crate) fn get(
     id: &[u8],
     password: &[u8],
 ) -> Result<Decryptor, DecryptionError> {
-    let filter = dict.get::<Name>(FILTER).ok_or(InvalidEncryption)?;
+    let filter = dict.get::<Name<'_>>(FILTER).ok_or(InvalidEncryption)?;
 
     if filter.deref() != b"Standard" {
         return Err(DecryptionError::UnsupportedAlgorithm);
@@ -146,8 +146,8 @@ pub(crate) fn get(
 
     let byte_length = length / 8;
 
-    let owner_string = dict.get::<object::String>(O).ok_or(InvalidEncryption)?;
-    let user_string = dict.get::<object::String>(U).ok_or(InvalidEncryption)?;
+    let owner_string = dict.get::<object::String<'_>>(O).ok_or(InvalidEncryption)?;
+    let user_string = dict.get::<object::String<'_>>(U).ok_or(InvalidEncryption)?;
     let permissions = {
         let raw = dict.get::<i64>(P).ok_or(InvalidEncryption)?;
 
@@ -292,10 +292,10 @@ impl DecryptorData {
         }
 
         let stm_f = *mappings
-            .get(dict.get::<Name>(STM_F)?.as_str())
+            .get(dict.get::<Name<'_>>(STM_F)?.as_str())
             .unwrap_or(&CryptDictionary::identity(default_length));
         let str_f = *mappings
-            .get(dict.get::<Name>(STR_F)?.as_str())
+            .get(dict.get::<Name<'_>>(STR_F)?.as_str())
             .unwrap_or(&CryptDictionary::identity(default_length));
 
         Some(Self {
@@ -313,7 +313,7 @@ struct CryptDictionary {
 
 impl CryptDictionary {
     fn from_dict(dict: &Dict<'_>, default_length: u16) -> Option<Self> {
-        let cfm = DecryptorTag::from_name(&dict.get::<Name>(CFM)?)?;
+        let cfm = DecryptorTag::from_name(&dict.get::<Name<'_>>(CFM)?)?;
         // The standard security handler expresses the Length entry in bytes (e.g., 32 means a
         // length of 256 bits) and public-key security handlers express it as is (e.g., 256 means a
         // length of 256 bits).
@@ -451,7 +451,7 @@ fn decryption_key_rev1234(
     encrypt_metadata: bool,
     revision: u8,
     byte_length: u16,
-    owner_string: &object::String,
+    owner_string: &object::String<'_>,
     permissions: u32,
     id: &[u8],
 ) -> Result<Vec<u8>, DecryptionError> {
@@ -509,7 +509,7 @@ fn authenticate_user_password_rev234(
     revision: u8,
     decryption_key: &[u8],
     id: &[u8],
-    user_string: &object::String,
+    user_string: &object::String<'_>,
 ) -> Result<(), DecryptionError> {
     // a) Perform all but the last step of Algorithm 4 (revision 2) or Algorithm 5 (revision 3 + 4).
     let result = match revision {
@@ -591,8 +591,8 @@ fn decryption_key_rev56(
     dict: &Dict<'_>,
     revision: u8,
     password: &[u8],
-    owner_string: &object::String,
-    user_string: &object::String,
+    owner_string: &object::String<'_>,
+    user_string: &object::String<'_>,
 ) -> Result<Vec<u8>, DecryptionError> {
     // a) The UTF-8 password string shall be generated from Unicode input by processing the input string with
     // the SASLprep (Internet RFC 4013) profile of stringprep (Internet RFC 3454) using the Normalize and BiDi
@@ -628,7 +628,9 @@ fn decryption_key_rev56(
         let intermediate_owner_key =
             compute_hash_rev56(password, owner_key_salt, Some(trimmed_us), revision)?;
 
-        let oe_string = dict.get::<object::String>(OE).ok_or(InvalidEncryption)?;
+        let oe_string = dict
+            .get::<object::String<'_>>(OE)
+            .ok_or(InvalidEncryption)?;
 
         if oe_string.len() != 32 {
             return Err(InvalidEncryption);
@@ -645,7 +647,9 @@ fn decryption_key_rev56(
         // initialization vector of zero. The 32-byte result is the file encryption key.
         let intermediate_key = compute_hash_rev56(password, user_key_salt, None, revision)?;
 
-        let ue_string = dict.get::<object::String>(UE).ok_or(InvalidEncryption)?;
+        let ue_string = dict
+            .get::<object::String<'_>>(UE)
+            .ok_or(InvalidEncryption)?;
 
         if ue_string.len() != 32 {
             return Err(InvalidEncryption);

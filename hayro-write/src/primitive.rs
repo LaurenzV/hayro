@@ -77,13 +77,13 @@ impl WriteDirect for Null {
     }
 }
 
-impl WriteDirect for object::String {
+impl WriteDirect for object::String<'_> {
     fn write_direct(&self, obj: Obj<'_>, _: &mut ExtractionContext<'_>) {
         obj.primitive(pdf_writer::Str(self.as_ref()));
     }
 }
 
-impl WriteDirect for object::Name {
+impl WriteDirect for object::Name<'_> {
     fn write_direct(&self, obj: Obj<'_>, _: &mut ExtractionContext<'_>) {
         obj.primitive(pdf_writer::Name(self.deref()));
     }
@@ -165,8 +165,8 @@ macro_rules! write_indirect {
 write_indirect!(Null);
 write_indirect!(bool);
 write_indirect!(Number);
-write_indirect!(object::String);
-write_indirect!(object::Name);
+write_indirect!(object::String<'_>);
+write_indirect!(object::Name<'_>);
 write_indirect!(dict::Dict<'_>);
 write_indirect!(array::Array<'_>);
 

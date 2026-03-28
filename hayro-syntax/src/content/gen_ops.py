@@ -121,11 +121,11 @@ ops = {
 def rust_type(t: Type) -> str:
     return {
         Type.Number: "Number",
-        Type.String: "object::String",
+        Type.String: "object::String<'a>",
         Type.Array: "Array<'a>",
         Type.Object: "Object<'a>",
         Type.Stream: "Stream<'a>",
-        Type.Name: "Name",
+        Type.Name: "Name<'a>",
         Type.Dict: "Dict<'a>",
         Type.VecNum: "SmallVec<[Number; OPERANDS_THRESHOLD]>",
     }[t]
@@ -135,7 +135,7 @@ def lifetime_if_needed(types):
     return (
         "<'a>"
         if any(
-            t in [Type.Array, Type.Object, Type.Stream, Type.Dict]
+            t in [Type.Array, Type.Object, Type.Stream, Type.Dict, Type.Name, Type.String]
             for t in types
         )
         else ""
@@ -164,9 +164,9 @@ def gen_struct(name, code, types):
 
 
 def gen_enum_variant(name, types):
-    has_lifetime = (type(types) is list) and any(
-        t in [Type.Array, Type.Object, Type.Stream]
-        for t in types
+    has_lifetime = name in ["StrokeColorNamed", "NonStrokeColorNamed"] or (
+        (type(types) is list)
+        and any(t in [Type.Array, Type.Object, Type.Stream, Type.Name, Type.String] for t in types)
     )
     inner_type = f"{name}<'a>" if has_lifetime else name
     return f"{name}({inner_type})"
@@ -195,7 +195,7 @@ struct_block = "\n\n".join(structs)
 enum_block = (
     "#[derive(Debug, PartialEq, Clone)]\n"
     "pub enum TypedInstruction<'a> {\n" + "    " + ",\n    ".join(enum_variants) + ",\n"
-    "    Fallback(Operator),\n}"
+    "    Fallback(Operator<'a>),\n}"
 )
 
 dispatch_block = (

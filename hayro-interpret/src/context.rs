@@ -234,7 +234,7 @@ impl<'a> Context<'a> {
     pub(crate) fn get_color_space(
         &mut self,
         resources: &Resources<'_>,
-        name: Name,
+        name: Name<'_>,
     ) -> Option<ColorSpace> {
         let cs_object = resources.get_color_space(name)?;
         self.object_cache

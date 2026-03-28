@@ -253,7 +253,7 @@ impl EmbeddedKind {
             .and_then(|cff| CffFontBlob::new(Arc::new(cff.offset_data().as_ref().to_vec())));
 
         let postscript_name = dict
-            .get::<Name>(BASE_FONT)
+            .get::<Name<'_>>(BASE_FONT)
             .map(|n| strip_subset_prefix(n.as_str()).to_string());
 
         Some(Self {
@@ -445,8 +445,8 @@ impl CacheKey for TrueTypeFont {
 }
 
 pub(crate) fn read_encoding(dict: &Dict<'_>) -> (Encoding, HashMap<u8, String>) {
-    fn get_encoding_base(dict: &Dict<'_>, name: Name) -> Encoding {
-        match dict.get::<Name>(name.clone()) {
+    fn get_encoding_base(dict: &Dict<'_>, name: Name<'_>) -> Encoding {
+        match dict.get::<Name<'_>>(name.clone()) {
             Some(n) => match n.deref() {
                 WIN_ANSI_ENCODING => Encoding::WinAnsi,
                 MAC_ROMAN_ENCODING => Encoding::MacRoman,

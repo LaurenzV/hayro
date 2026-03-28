@@ -86,12 +86,12 @@ impl<'a> Dict<'a> {
     }
 
     /// Returns an iterator over all keys in the dictionary.
-    pub fn keys(&self) -> impl Iterator<Item = Name> + '_ {
+    pub fn keys(&self) -> impl Iterator<Item = Name<'a>> + '_ {
         self.0.offsets.keys().cloned()
     }
 
     /// An iterator over all entries in the dictionary, sorted by key.
-    pub fn entries(&self) -> impl Iterator<Item = (Name, MaybeRef<Object<'a>>)> + '_ {
+    pub fn entries(&self) -> impl Iterator<Item = (Name<'a>, MaybeRef<Object<'a>>)> + '_ {
         let mut sorted_keys = self.keys().collect::<Vec<_>>();
         sorted_keys.sort_by(|n1, n2| n1.as_ref().cmp(n2.as_ref()));
         sorted_keys.into_iter().map(|k| {
@@ -148,7 +148,7 @@ impl Skippable for Dict<'_> {
             if let Some(()) = r.forward_tag(b">>") {
                 break Some(());
             } else {
-                let Some(_) = r.skip::<Name>(is_content_stream) else {
+                let Some(_) = r.skip::<Name<'_>>(is_content_stream) else {
                     // In case there is garbage in-between, be lenient and just try to skip it.
                     r.skip::<Object<'_>>(is_content_stream)?;
                     continue;
@@ -199,7 +199,7 @@ fn read_inner<'a>(
 
                 break &dict_data[..end_offset];
             } else {
-                let Some(name) = r.read_without_context::<Name>() else {
+                let Some(name) = r.read_without_context::<Name<'_>>() else {
                     if start_tag.is_some() {
                         // In case there is garbage in-between, be lenient and just try to skip it.
                         // But only do this if we are parsing a proper dictionary as opposed to an
@@ -242,7 +242,7 @@ object!(Dict<'a>, Dict);
 
 struct Repr<'a> {
     data: &'a [u8],
-    offsets: HashMap<Name, usize>,
+    offsets: HashMap<Name<'a>, usize>,
     ctx: ReaderContext<'a>,
 }
 
@@ -980,12 +980,12 @@ mod tests {
             .read_with_context::<Dict<'_>>(&ReaderContext::dummy())
             .unwrap();
         assert_eq!(dict.len(), 6);
-        assert!(dict.get::<Name>(Name::new(b"Type")).is_some());
-        assert!(dict.get::<Name>(Name::new(b"Subtype")).is_some());
+        assert!(dict.get::<Name<'_>>(Name::new(b"Type")).is_some());
+        assert!(dict.get::<Name<'_>>(Name::new(b"Subtype")).is_some());
         assert!(dict.get::<Number>(Name::new(b"Version")).is_some());
         assert!(dict.get::<i32>(Name::new(b"IntegerItem")).is_some());
         assert!(
-            dict.get::<string::String>(Name::new(b"StringItem"))
+            dict.get::<string::String<'_>>(Name::new(b"StringItem"))
                 .is_some()
         );
         assert!(dict.get::<Dict<'_>>(Name::new(b"Subdictionary")).is_some());
