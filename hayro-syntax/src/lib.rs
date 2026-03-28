@@ -55,6 +55,7 @@ For better performance, it is strongly recommended to enable the `unsafe` featur
 which does result in slightly more unsafe code being, but does give better performance:
 - We will use the `flate2` crate for decoding flate streams.
 - SIMD will be enabled to accelerate decoding of images.
+- `memchr` will be used to accelerate some of the fallback parsing code.
 
 # Features
 The supported features include:

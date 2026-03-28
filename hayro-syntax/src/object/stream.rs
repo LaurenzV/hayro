@@ -11,6 +11,7 @@ use crate::object::{Object, ObjectLike};
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 use crate::sync::Arc;
+use crate::trivia::is_white_space_character;
 use crate::util::OptionLog;
 use alloc::borrow::Cow;
 use alloc::vec::Vec;
@@ -292,39 +293,71 @@ fn parse_proper<'a>(r: &mut Reader<'a>, dict: &Dict<'a>) -> Option<Stream<'a>> {
 }
 
 fn parse_fallback<'a>(r: &mut Reader<'a>, dict: &Dict<'a>) -> Option<Stream<'a>> {
-    while r.forward_tag(b"stream").is_none() {
-        r.read_byte()?;
-    }
+    let stream_offset = find_subslice(r.tail()?, b"stream")?;
+    r.read_bytes(stream_offset)?;
+    r.forward_tag(b"stream")?;
 
     r.forward_tag(b"\n")
         .or_else(|| r.forward_tag(b"\r\n"))
         // Technically not allowed, but no reason to not try it.
         .or_else(|| r.forward_tag(b"\r"))?;
 
-    let data_start = r.tail()?;
-    let start = r.offset();
+    let tail = r.tail()?;
+    let endstream_offset = find_subslice(tail, b"endstream")?;
+    let data_end = trim_trailing_ascii_whitespace(&tail[..endstream_offset]);
+    let data = tail.get(..data_end)?;
 
-    loop {
-        if r.peek_byte()?.is_ascii_whitespace() || r.peek_tag(b"endstream").is_some() {
-            let length = r.offset() - start;
-            let data = data_start.get(..length)?;
+    r.read_bytes(endstream_offset)?;
+    r.skip_white_spaces();
+    r.forward_tag(b"endstream")?;
 
-            r.skip_white_spaces();
+    Some(Stream::new(data, dict.clone()))
+}
 
-            // This was just a whitespace in the data stream but not actually marking the end
-            // of the stream, so continue searching.
-            if r.forward_tag(b"endstream").is_none() {
-                continue;
-            }
+#[cfg(feature = "unsafe")]
+fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    memchr::memmem::find(haystack, needle)
+}
 
-            let stream = Stream::new(data, dict.clone());
-
-            // Seems like we found the end!
-            return Some(stream);
-        } else {
-            r.read_byte()?;
-        }
+#[cfg(not(feature = "unsafe"))]
+fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    if needle.is_empty() {
+        return Some(0);
     }
+
+    let first = needle[0];
+    let mut i = 0;
+
+    while i + needle.len() <= haystack.len() {
+        while haystack.get(i).copied()? != first {
+            i += 1;
+            if i + needle.len() > haystack.len() {
+                return None;
+            }
+        }
+
+        if haystack.get(i..)?.starts_with(needle) {
+            return Some(i);
+        }
+
+        i += 1;
+    }
+
+    None
+}
+
+fn trim_trailing_ascii_whitespace(data: &[u8]) -> usize {
+    let mut end = data.len();
+
+    while data
+        .get(end.wrapping_sub(1))
+        .copied()
+        .is_some_and(is_white_space_character)
+    {
+        end -= 1;
+    }
+
+    end
 }
 
 impl<'a> TryFrom<Object<'a>> for Stream<'a> {
@@ -349,6 +382,17 @@ mod tests {
     #[test]
     fn stream() {
         let data = b"<< /Length 10 >> stream\nabcdefghij\nendstream";
+        let mut r = Reader::new(data);
+        let stream = r
+            .read_with_context::<Stream<'_>>(&ReaderContext::dummy())
+            .unwrap();
+
+        assert_eq!(stream.0.data, b"abcdefghij");
+    }
+
+    #[test]
+    fn stream_fallback() {
+        let data = b"<< /Length 999 >> stream\nabcdefghij\nendstream";
         let mut r = Reader::new(data);
         let stream = r
             .read_with_context::<Stream<'_>>(&ReaderContext::dummy())

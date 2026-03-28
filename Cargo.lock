@@ -784,6 +784,7 @@ dependencies = [
  "hayro-jpeg2000",
  "log",
  "md5",
+ "memchr",
  "rustc-hash",
  "sha2",
  "smallvec",

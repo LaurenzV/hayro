@@ -61,6 +61,7 @@ vello_cpu = { version = "0.0.7", default-features = false, features = ["std", "p
 fast_image_resize = { version = "6.0", default-features = false, features = ["std"] }
 fearless_simd = "0.4.0"
 brotli = { version = "8", default-features = false, features = ["std"] }
+memchr = { version = "2.8.0", default-features = false, features = ["alloc"] }
 
 [workspace.lints]
 # This one may vary depending on the project.
