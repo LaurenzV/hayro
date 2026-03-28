@@ -197,7 +197,7 @@ fn read_inner<'a>(
     end_tag: &[u8],
 ) -> Option<Dict<'a>> {
     #[cfg(feature = "std")]
-    let mut offsets = FxHashMap::with_capacity_and_hasher(8, rustc_hash::FxBuildHasher::default());
+    let mut offsets = FxHashMap::with_capacity_and_hasher(8, rustc_hash::FxBuildHasher);
     #[cfg(not(feature = "std"))]
     let mut offsets = FxHashMap::new();
 
