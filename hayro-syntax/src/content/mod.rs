@@ -118,6 +118,7 @@ impl<'a> UntypedIter<'a> {
     }
 
     /// Return the next instruction.
+    #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> Option<Instruction<'_, 'a>> {
         self.stack.clear();
         self.operator = None;
@@ -312,6 +313,7 @@ impl<'a> TypedIter<'a> {
     }
 
     /// Return the next typed instruction.
+    #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> Option<TypedInstruction<'_, 'a>> {
         let op = self.untyped.next()?;
         match TypedInstruction::dispatch(&op) {
