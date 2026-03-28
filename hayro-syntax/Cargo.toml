@@ -10,8 +10,16 @@ readme = "README.md"
 
 [features]
 default = ["std", "images"]
-std = ["dep:flate2", "hayro-jbig2?/std", "hayro-jbig2?/simd", "hayro-jpeg2000?/std", "hayro-jpeg2000?/simd", "dep:rustc-hash", "zune-jpeg?/std"]
+std = ["hayro-jbig2?/std", "hayro-jpeg2000?/std", "dep:rustc-hash", "zune-jpeg?/std"]
 images = ["dep:zune-jpeg", "dep:hayro-ccitt", "dep:hayro-jbig2", "dep:hayro-jpeg2000"]
+unsafe = [
+    "std",
+    "dep:flate2",
+    "hayro-jbig2?/simd",
+    "hayro-jpeg2000?/simd",
+    "zune-jpeg?/x86",
+    "zune-jpeg?/neon",
+]
 logging = ["dep:log", "hayro-jpeg2000?/logging"]
 
 [dependencies]
@@ -20,7 +28,7 @@ rustc-hash = { workspace = true, optional = true }
 smallvec = { workspace = true }
 flate2 = { workspace = true, optional = true }
 
-zune-jpeg = { workspace = true, features = ["neon", "x86"], optional = true }
+zune-jpeg = { workspace = true, optional = true }
 hayro-ccitt = { workspace = true, optional = true }
 hayro-jbig2 = { workspace = true, optional = true }
 hayro-jpeg2000 = { workspace = true, optional = true }

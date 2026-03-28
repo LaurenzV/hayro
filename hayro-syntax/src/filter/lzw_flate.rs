@@ -9,7 +9,7 @@ pub(crate) mod flate {
     use crate::filter::lzw_flate::{PredictorParams, apply_predictor};
     use crate::object::Dict;
 
-    #[cfg(feature = "std")]
+    #[cfg(feature = "unsafe")]
     pub(crate) fn decode(data: &[u8], params: Dict<'_>) -> Option<Vec<u8>> {
         use flate2::read::{DeflateDecoder, ZlibDecoder};
         use std::io::Read;
@@ -37,7 +37,7 @@ pub(crate) mod flate {
         apply_predictor(decoded, &params)
     }
 
-    #[cfg(not(feature = "std"))]
+    #[cfg(not(feature = "unsafe"))]
     pub(crate) fn decode(data: &[u8], params: Dict<'_>) -> Option<Vec<u8>> {
         let decoded = fallback::decode(data)?;
         let params = PredictorParams::from_params(&params);

@@ -16,8 +16,10 @@ Such functionality is out-of-scope for `hayro-syntax`, since this crate is suppo
 as *light-weight* and *application-agnostic* as possible.
 
 Functionality-wise, this crate is therefore close to feature-complete. The main missing feature
-is support for password-protected documents. In addition to that, more low-level APIs might be 
+is support for password-protected documents. In addition to that, more low-level APIs might be
 added in the future.
+
+The crate is `no_std` compatible but requires an allocator to be available.
 
 ## Example
 This short example shows you how to load a PDF file and iterate over the content streams of all
@@ -25,7 +27,6 @@ pages.
 ```rust
 use hayro_syntax::Pdf;
 use std::path::PathBuf;
-use std::sync::Arc;
 
 // First load the data that constitutes the PDF file.
 let data = std::fs::read(
@@ -37,13 +38,14 @@ let data = std::fs::read(
 //
 // Here we are just unwrapping in case reading the file failed, but you
 // might instead want to apply proper error handling.
-let pdf = Pdf::new(Arc::new(data)).unwrap();
+let pdf = Pdf::new(data).unwrap();
 
 // First access all pages, and then iterate over the operators of each page's
 // content stream and print them.
 let pages = pdf.pages();
 for page in pages.iter() {
     let mut ops = page.typed_operations();
+
     while let Some(op) = ops.next() {
         println!("{op:?}");
     }
@@ -51,8 +53,14 @@ for page in pages.iter() {
 ```
 
 ## Safety
-There is one usage of `unsafe`, needed to implement caching using a self-referential struct. Other
-than that, there is no usage of `unsafe`, especially in _any_ of the parser code.
+When the `unsafe` feature is disabled, there is only use of `unsafe` in `hayro-syntax`.
+We also unconditionally use the `smallvec` crate which uses unsafe internally, but that's
+it.
+
+For better performance, it is strongly recommended to enable the `unsafe` feature,
+which does result in slightly more unsafe code being, but does give better performance:
+- We will use the `flate2` crate for decoding flate streams.
+- SIMD will be enabled to accelerate decoding of images.
 
 ## Features
 The supported features include:

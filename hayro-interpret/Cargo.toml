@@ -10,7 +10,7 @@ readme = "README.md"
 
 [dependencies]
 hayro-cmap = { workspace = true }
-hayro-syntax = { workspace = true, features = ["std", "images"] }
+hayro-syntax = { workspace = true, features = ["std", "images", "unsafe"] }
 kurbo = { workspace = true }
 smallvec = { workspace = true }
 log = { workspace = true, optional = true }

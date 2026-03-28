@@ -47,8 +47,14 @@ for page in pages.iter() {
 ```
 
 # Safety
-There is one usage of `unsafe`, needed to implement caching using a self-referential struct. Other
-than that, there is no usage of `unsafe`, especially in _any_ of the parser code.
+When the `unsafe` feature is disabled, there is only use of `unsafe` in `hayro-syntax`.
+We also unconditionally use the `smallvec` crate which uses unsafe internally, but that's
+it.
+
+For better performance, it is strongly recommended to enable the `unsafe` feature,
+which does result in slightly more unsafe code being, but does give better performance:
+- We will use the `flate2` crate for decoding flate streams.
+- SIMD will be enabled to accelerate decoding of images.
 
 # Features
 The supported features include:
