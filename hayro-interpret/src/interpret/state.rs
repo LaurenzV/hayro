@@ -14,7 +14,6 @@ use hayro_syntax::object::dict::keys::{FONT, SMASK, TR, TR2};
 use hayro_syntax::object::{Array, Dict, Name, Number, Object};
 use hayro_syntax::page::Resources;
 use kurbo::{Affine, BezPath, Vec2};
-use log::warn;
 use smallvec::smallvec;
 use std::ops::Deref;
 

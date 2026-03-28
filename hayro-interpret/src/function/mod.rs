@@ -15,7 +15,6 @@ use crate::function::type4::Type4;
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::dict::keys::{DOMAIN, FUNCTION_TYPE, RANGE};
 use hayro_syntax::object::{Object, dict_or_stream};
-use log::warn;
 use smallvec::SmallVec;
 use std::sync::Arc;
 

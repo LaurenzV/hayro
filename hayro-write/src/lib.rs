@@ -8,6 +8,9 @@ well-documented.
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
+#[macro_use]
+mod log;
+
 mod primitive;
 
 use crate::primitive::{WriteDirect, WriteIndirect};
@@ -21,7 +24,6 @@ use hayro_syntax::object::dict::keys::{
 };
 use hayro_syntax::object::{MaybeRef, ObjRef};
 use hayro_syntax::page::{Page, Resources, Rotation};
-use log::warn;
 use pdf_writer::{Chunk, Content, Filter, Finish, Name, Rect, Ref};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::ops::Deref;

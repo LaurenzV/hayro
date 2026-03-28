@@ -18,7 +18,6 @@ use crate::object::Name;
 use crate::object::dict::keys::*;
 use crate::object::stream::{DecodeFailure, FilterResult, ImageDecodeParams};
 use core::ops::Deref;
-use log::warn;
 
 /// A data filter.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]

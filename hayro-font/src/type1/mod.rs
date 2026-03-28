@@ -19,7 +19,6 @@ use alloc::vec::Vec;
 use core::iter::Copied;
 use core::slice::Iter;
 use core::str::FromStr;
-use log::error;
 // Many parts of the parser code are adapted from
 // https://github.com/janpe2/CFFDump/blob/master/cff/type1/Type1Dump.java
 

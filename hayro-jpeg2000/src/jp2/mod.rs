@@ -97,7 +97,7 @@ pub(crate) fn parse<'a>(data: &'a [u8], mut settings: DecodeSettings) -> Result<
                             cmap::parse(&mut boxes, child_box.data)?;
                         }
                         _ => {
-                            ldebug!(
+                            debug!(
                                 "ignoring header box {}",
                                 r#box::tag_to_string(child_box.box_type)
                             );

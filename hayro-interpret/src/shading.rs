@@ -18,7 +18,6 @@ use hayro_syntax::object::dict::keys::{
     DECODE, DOMAIN, EXTEND, FUNCTION, MATRIX, SHADING_TYPE, VERTICES_PER_ROW,
 };
 use kurbo::{Affine, BezPath, CubicBez, ParamCurve, Point, Shape};
-use log::warn;
 use smallvec::{SmallVec, smallvec};
 use std::sync::Arc;
 

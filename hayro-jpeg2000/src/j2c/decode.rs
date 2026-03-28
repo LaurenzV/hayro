@@ -42,7 +42,7 @@ pub(crate) fn decode<'a>(
     ctx.reset(header, &tiles[0]);
 
     for tile in &tiles {
-        ltrace!(
+        trace!(
             "tile {} rect [{},{} {}x{}]",
             tile.idx,
             tile.rect.x0,

@@ -13,7 +13,7 @@ hayro-cmap = { workspace = true }
 hayro-syntax = { workspace = true, features = ["std", "images"] }
 kurbo = { workspace = true }
 smallvec = { workspace = true }
-log = { workspace = true }
+log = { workspace = true, optional = true }
 moxcms = { workspace = true }
 phf = { workspace = true, features = ["macros"] }
 skrifa = { workspace = true }
@@ -32,6 +32,7 @@ default = ["embed-fonts", "embed-cmaps"]
 embed-fonts = []
 # Embed the 61 predefined cmaps into the binary. Adds about ~250KB of brotli-encoded data.
 embed-cmaps = ["hayro-cmap/embed-cmaps"]
+logging = ["dep:log", "hayro-font/logging", "hayro-syntax/logging"]
 
 [lints]
 workspace = true

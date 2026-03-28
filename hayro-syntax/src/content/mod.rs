@@ -43,7 +43,6 @@ use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 use crate::trivia::is_white_space_character;
 use core::fmt::{Debug, Formatter};
 use core::ops::Deref;
-use log::warn;
 use smallvec::SmallVec;
 
 // 6 operands are used for example for ctm or cubic curves,

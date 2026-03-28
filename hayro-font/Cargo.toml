@@ -10,12 +10,13 @@ repository = { workspace = true }
 readme = "README.md"
 
 [dependencies]
-log =  { workspace = true }
+log =  { workspace = true, optional = true }
 phf = { workspace = true, features = ["macros"] }
 
 [features]
 default = ["std"]
 std = []
+logging = ["dep:log"]
 
 [lints]
 workspace = true

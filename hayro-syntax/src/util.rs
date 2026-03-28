@@ -2,16 +2,15 @@ use crate::sync::OnceLock;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::ops::Sub;
-use log::error;
 
 pub(crate) trait OptionLog {
     fn error_none(self, f: &str) -> Self;
 }
 
 impl<T> OptionLog for Option<T> {
-    fn error_none(self, f: &str) -> Self {
+    fn error_none(self, _f: &str) -> Self {
         self.or_else(|| {
-            error!("{f}");
+            error!("{_f}");
 
             None
         })

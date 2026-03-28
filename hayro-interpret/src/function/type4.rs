@@ -4,7 +4,6 @@ use hayro_syntax::object::Number;
 use hayro_syntax::object::Stream;
 use hayro_syntax::reader::Reader;
 use hayro_syntax::reader::{ReaderContext, ReaderExt};
-use log::error;
 use smallvec::SmallVec;
 use std::array;
 use std::ops::Rem;

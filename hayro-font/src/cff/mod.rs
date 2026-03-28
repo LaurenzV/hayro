@@ -28,7 +28,6 @@ use core::ops::Range;
 use dict::DictionaryParser;
 use encoding::{Encoding, STANDARD_ENCODING, parse_encoding};
 use index::{Index, parse_index, skip_index};
-use log::warn;
 use parser::{LazyArray16, NumFrom, Stream};
 use std_names::STANDARD_NAMES;
 

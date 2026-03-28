@@ -10,7 +10,6 @@ use crate::object::Stream;
 use smallvec::{SmallVec, smallvec};
 
 use crate::content::macros::{op_all, op_impl, op0, op1, op2, op3, op4, op6};
-use log::warn;
 
 include!("ops_generated.rs");
 

@@ -11,7 +11,6 @@ use alloc::vec::Vec;
 use core::borrow::Borrow;
 use core::hash::{Hash, Hasher};
 use core::ops::Deref;
-use log::warn;
 use smallvec::SmallVec;
 
 #[derive(Clone)]

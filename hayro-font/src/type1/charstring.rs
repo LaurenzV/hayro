@@ -5,7 +5,6 @@ use crate::type1::operator::{sb_operator, tb_operator};
 use crate::type1::stream::Stream;
 use crate::type1::{EncodingType, Parameters};
 use crate::{Builder, OutlineBuilder, RectF};
-use log::{debug, error, trace, warn};
 
 const MAX_ARGUMENTS_STACK_LEN: usize = 48;
 const STACK_LIMIT: u8 = 10;

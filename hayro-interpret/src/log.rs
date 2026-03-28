@@ -1,23 +1,10 @@
 //! Logging macros that optionally forward to the `log` crate.
 
-macro_rules! debug {
+macro_rules! error {
     ($fmt:literal $(, $($arg:expr),* $(,)?)?) => {{
         #[cfg(feature = "logging")]
         {
-            ::log::debug!($fmt $(, $($arg),*)?);
-        }
-        #[cfg(not(feature = "logging"))]
-        {
-            $($(let _ = &$arg;)*)?
-        }
-    }};
-}
-
-macro_rules! trace {
-    ($fmt:literal $(, $($arg:expr),* $(,)?)?) => {{
-        #[cfg(feature = "logging")]
-        {
-            ::log::trace!($fmt $(, $($arg),*)?);
+            ::log::error!($fmt $(, $($arg),*)?);
         }
         #[cfg(not(feature = "logging"))]
         {

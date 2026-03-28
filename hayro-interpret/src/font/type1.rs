@@ -11,7 +11,6 @@ use hayro_syntax::object::Dict;
 use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::{FONT_DESC, FONT_FILE, FONT_FILE3};
 use kurbo::BezPath;
-use log::warn;
 use skrifa::GlyphId;
 use std::collections::HashMap;
 use std::sync::Arc;

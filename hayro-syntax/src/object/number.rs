@@ -7,7 +7,6 @@ use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 use crate::trivia::{is_regular_character, is_white_space_character};
 use core::fmt::Debug;
-use log::debug;
 
 #[rustfmt::skip]
 static POWERS_OF_10: [f64; 20] = [

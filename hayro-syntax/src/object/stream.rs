@@ -15,7 +15,6 @@ use crate::util::OptionLog;
 use alloc::borrow::Cow;
 use alloc::vec::Vec;
 use core::fmt::{Debug, Formatter};
-use log::warn;
 use smallvec::SmallVec;
 
 #[derive(Clone)]

@@ -8,7 +8,6 @@ use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 use alloc::vec::Vec;
 use core::fmt::{Debug, Formatter};
 use core::marker::PhantomData;
-use log::warn;
 use smallvec::SmallVec;
 
 /// An array of PDF objects.

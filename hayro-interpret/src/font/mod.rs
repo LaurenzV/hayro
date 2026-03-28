@@ -20,7 +20,6 @@ use hayro_syntax::object::{Dict, Stream};
 use hayro_syntax::page::Resources;
 use hayro_syntax::xref::XRef;
 use kurbo::{Affine, BezPath, Vec2};
-use log::warn;
 use outline::OutlineFont;
 use skrifa::GlyphId;
 use std::fmt::Debug;

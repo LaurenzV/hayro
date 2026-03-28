@@ -13,6 +13,19 @@ macro_rules! debug {
     }};
 }
 
+macro_rules! error {
+    ($fmt:literal $(, $($arg:expr),* $(,)?)?) => {{
+        #[cfg(feature = "logging")]
+        {
+            ::log::error!($fmt $(, $($arg),*)?);
+        }
+        #[cfg(not(feature = "logging"))]
+        {
+            $($(let _ = &$arg;)*)?
+        }
+    }};
+}
+
 macro_rules! trace {
     ($fmt:literal $(, $($arg:expr),* $(,)?)?) => {{
         #[cfg(feature = "logging")]

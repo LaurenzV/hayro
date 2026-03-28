@@ -12,7 +12,6 @@ use hayro_syntax::object::Name;
 use hayro_syntax::page::Resources;
 use hayro_syntax::xref::XRef;
 use kurbo::{Affine, BezPath, PathEl, Point, Rect, Shape};
-use log::warn;
 use std::collections::HashMap;
 
 /// A context for interpreting PDF files.

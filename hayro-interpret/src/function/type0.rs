@@ -3,7 +3,6 @@ use hayro_syntax::bit_reader::BitReader;
 use hayro_syntax::object::Array;
 use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::{BITS_PER_SAMPLE, DECODE, ENCODE, SIZE};
-use log::{error, warn};
 use smallvec::{SmallVec, ToSmallVec, smallvec};
 use std::collections::HashMap;
 

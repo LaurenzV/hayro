@@ -21,7 +21,6 @@ use hayro_syntax::object::dict::keys::{ANNOTS, AP, F, MCID, N, OC, RECT};
 use hayro_syntax::object::{Array, Dict, Object, Rect, Stream, dict_or_stream};
 use hayro_syntax::page::{Page, Resources};
 use kurbo::{Affine, Point, Shape};
-use log::warn;
 use smallvec::smallvec;
 use std::sync::Arc;
 

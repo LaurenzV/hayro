@@ -19,7 +19,6 @@ use hayro_syntax::object::dict::keys::*;
 use hayro_syntax::object::stream::{FilterResult, ImageColorSpace, ImageDecodeParams};
 use hayro_syntax::page::Resources;
 use kurbo::{Affine, Rect, Shape};
-use log::warn;
 use smallvec::{SmallVec, smallvec};
 use std::iter;
 use std::ops::Deref;

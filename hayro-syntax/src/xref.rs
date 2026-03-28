@@ -25,7 +25,6 @@ use alloc::vec::Vec;
 use core::cmp::max;
 use core::iter;
 use core::ops::Deref;
-use log::{error, warn};
 
 pub(crate) const XREF_ENTRY_LEN: usize = 20;
 
@@ -882,8 +881,8 @@ fn xref_stream_num(data: &[u8]) -> Option<u32> {
                 return None;
             }
         }
-        n => {
-            warn!("invalid xref stream number {n}");
+        _n => {
+            warn!("invalid xref stream number {_n}");
 
             return None;
         }

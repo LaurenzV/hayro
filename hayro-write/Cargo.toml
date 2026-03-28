@@ -12,7 +12,10 @@ license = { workspace = true }
 hayro-syntax = { workspace = true }
 pdf-writer = { workspace = true }
 flate2 = { workspace = true }
-log = { workspace = true }
+log = { workspace = true, optional = true }
+
+[features]
+logging = ["dep:log", "hayro-syntax/logging"]
 
 [lints]
 workspace = true

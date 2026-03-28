@@ -1,7 +1,6 @@
 //! A number of utility methods.
 
 use kurbo::{BezPath, PathEl, Rect};
-use log::warn;
 use siphasher::sip128::{Hasher128, SipHasher13};
 use std::hash::Hash;
 use std::ops::Sub;

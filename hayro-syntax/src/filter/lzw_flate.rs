@@ -3,7 +3,6 @@ use crate::object::Dict;
 use crate::object::dict::keys::{BITS_PER_COMPONENT, COLORS, COLUMNS, EARLY_CHANGE, PREDICTOR};
 use alloc::vec;
 use alloc::vec::Vec;
-use log::warn;
 
 pub(crate) mod flate {
     use super::*;
@@ -50,7 +49,6 @@ pub(crate) mod flate {
     mod fallback {
         use alloc::vec;
         use alloc::vec::Vec;
-        use log::warn;
 
         pub(crate) fn decode(data: &[u8]) -> Option<Vec<u8>> {
             flate_decode(data)
@@ -569,7 +567,6 @@ pub(crate) mod lzw {
     use crate::object::Dict;
     use alloc::vec;
     use alloc::vec::Vec;
-    use log::warn;
 
     /// Decode a LZW-encoded stream.
     pub(crate) fn decode(data: &[u8], params: Dict<'_>) -> Option<Vec<u8>> {

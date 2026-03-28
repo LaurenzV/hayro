@@ -9,7 +9,6 @@ use hayro_syntax::object::Name;
 use hayro_syntax::object::Object;
 use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::*;
-use log::warn;
 use moxcms::{
     ColorProfile, DataColorSpace, Layout, Transform8BitExecutor, TransformF32Executor,
     TransformOptions, Xyzd,

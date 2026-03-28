@@ -19,6 +19,9 @@ The crate is `no_std` compatible but requires an allocator to be available.
 
 extern crate alloc;
 
+#[macro_use]
+mod log;
+
 #[cfg(not(feature = "std"))]
 pub(crate) use alloc::collections::BTreeMap as Map;
 #[cfg(feature = "std")]

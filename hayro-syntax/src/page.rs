@@ -17,7 +17,6 @@ use alloc::boxed::Box;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::ops::Deref;
-use log::warn;
 
 /// Attributes that can be inherited.
 #[derive(Debug, Clone)]

@@ -7,7 +7,6 @@ use crate::interpret::state::TextStateFont;
 use hayro_syntax::object;
 use hayro_syntax::page::Resources;
 use kurbo::Affine;
-use log::warn;
 
 pub(crate) fn show_text_string<'a>(
     ctx: &mut Context<'a>,
