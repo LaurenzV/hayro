@@ -40,6 +40,7 @@ use crate::object::name::{Name, skip_name_like};
 use crate::object::{Object, ObjectLike};
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
+use crate::trivia::is_white_space_character;
 use core::fmt::{Debug, Formatter};
 use core::ops::Deref;
 use log::warn;
@@ -167,6 +168,17 @@ impl<'a> Iterator for UntypedIter<'a> {
 
                     'outer: while let Some(bytes) = self.reader.peek_bytes(2) {
                         if bytes == b"EI" {
+                            // If the following character is not a whitespace character, then we are in a ASCII-85 stream.
+                            if self
+                                .reader
+                                .peek_bytes(3)
+                                .is_some_and(|b| !is_white_space_character(b[2]))
+                            {
+                                self.reader.read_bytes(3)?;
+
+                                continue;
+                            }
+
                             let end_offset = self.reader.offset() - start_offset;
                             let image_data = &stream_data[..end_offset];
 
