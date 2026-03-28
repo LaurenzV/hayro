@@ -18,6 +18,7 @@ use crate::pdf::PdfVersion;
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt};
 use crate::sync::{Arc, FxHashMap, RwLock, RwLockExt};
+use crate::trivia::is_regular_character;
 use crate::{PdfData, object};
 use alloc::vec;
 use alloc::vec::Vec;
@@ -25,7 +26,6 @@ use core::cmp::max;
 use core::iter;
 use core::ops::Deref;
 use log::{error, warn};
-use crate::trivia::is_regular_character;
 
 pub(crate) const XREF_ENTRY_LEN: usize = 20;
 
