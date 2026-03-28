@@ -439,7 +439,7 @@ impl<'a> Resources<'a> {
         }
     }
 
-    fn get_resource<T: ObjectLike<'a>>(&self, name: Name<'_>, dict: &Dict<'a>) -> Option<T> {
+    fn get_resource<T: ObjectLike<'a>>(&self, name: &Name<'_>, dict: &Dict<'a>) -> Option<T> {
         dict.get::<T>(name.deref())
     }
 
@@ -449,38 +449,38 @@ impl<'a> Resources<'a> {
     }
 
     /// Get an external graphics state by name.
-    pub fn get_ext_g_state(&self, name: Name<'_>) -> Option<Dict<'a>> {
-        self.get_resource::<Dict<'_>>(name.clone(), &self.ext_g_states)
+    pub fn get_ext_g_state(&self, name: &Name<'_>) -> Option<Dict<'a>> {
+        self.get_resource::<Dict<'_>>(name, &self.ext_g_states)
             .or_else(|| self.parent.as_ref().and_then(|p| p.get_ext_g_state(name)))
     }
 
     /// Get a color space by name.
-    pub fn get_color_space(&self, name: Name<'_>) -> Option<Object<'a>> {
-        self.get_resource::<Object<'_>>(name.clone(), &self.color_spaces)
+    pub fn get_color_space(&self, name: &Name<'_>) -> Option<Object<'a>> {
+        self.get_resource::<Object<'_>>(name, &self.color_spaces)
             .or_else(|| self.parent.as_ref().and_then(|p| p.get_color_space(name)))
     }
 
     /// Get a font by name.
-    pub fn get_font(&self, name: Name<'_>) -> Option<Dict<'a>> {
-        self.get_resource::<Dict<'_>>(name.clone(), &self.fonts)
+    pub fn get_font(&self, name: &Name<'_>) -> Option<Dict<'a>> {
+        self.get_resource::<Dict<'_>>(name, &self.fonts)
             .or_else(|| self.parent.as_ref().and_then(|p| p.get_font(name)))
     }
 
     /// Get a pattern by name.
-    pub fn get_pattern(&self, name: Name<'_>) -> Option<Object<'a>> {
-        self.get_resource::<Object<'_>>(name.clone(), &self.patterns)
+    pub fn get_pattern(&self, name: &Name<'_>) -> Option<Object<'a>> {
+        self.get_resource::<Object<'_>>(name, &self.patterns)
             .or_else(|| self.parent.as_ref().and_then(|p| p.get_pattern(name)))
     }
 
     /// Get an x object by name.
-    pub fn get_x_object(&self, name: Name<'_>) -> Option<Stream<'a>> {
-        self.get_resource::<Stream<'_>>(name.clone(), &self.x_objects)
+    pub fn get_x_object(&self, name: &Name<'_>) -> Option<Stream<'a>> {
+        self.get_resource::<Stream<'_>>(name, &self.x_objects)
             .or_else(|| self.parent.as_ref().and_then(|p| p.get_x_object(name)))
     }
 
     /// Get a shading by name.
-    pub fn get_shading(&self, name: Name<'_>) -> Option<Object<'a>> {
-        self.get_resource::<Object<'_>>(name.clone(), &self.shadings)
+    pub fn get_shading(&self, name: &Name<'_>) -> Option<Object<'a>> {
+        self.get_resource::<Object<'_>>(name, &self.shadings)
             .or_else(|| self.parent.as_ref().and_then(|p| p.get_shading(name)))
     }
 }

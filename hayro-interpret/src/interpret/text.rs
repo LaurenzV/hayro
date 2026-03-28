@@ -13,7 +13,7 @@ pub(crate) fn show_text_string<'a>(
     ctx: &mut Context<'a>,
     device: &mut impl Device<'a>,
     resources: &Resources<'a>,
-    text: object::String<'_>,
+    text: &object::String<'_>,
 ) {
     let Some(font) = ctx.get().text_state.font.clone() else {
         warn!("tried to show text without active font");

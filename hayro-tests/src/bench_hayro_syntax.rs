@@ -53,10 +53,6 @@ fn main() {
 
     if !failures.is_empty() {
         eprintln!("\nSkipped {} files due to errors:", failures.len());
-        for (path, err) in failures {
-            let relative = path.strip_prefix(&base_dir).unwrap_or(path.as_path());
-            eprintln!("  {}: {}", relative.display(), err);
-        }
     }
 }
 
@@ -90,7 +86,8 @@ fn bench_file(path: &Path) -> Result<BenchResult, String> {
 
     let mut op_count = 0;
     for page in pages.iter() {
-        for _ in page.typed_operations() {
+        let mut iter = page.typed_operations();
+        while let Some(_) = iter.next() {
             op_count += 1;
         }
     }

@@ -5,10 +5,7 @@ use std::path::PathBuf;
 
 fn main() {
     // First load the data that constitutes the PDF file.
-    let data = std::fs::read(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../hayro-tests/pdfs/text_with_rise.pdf"),
-    )
-    .unwrap();
+    let data = std::fs::read(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../in.pdf")).unwrap();
 
     // Then create a new PDF file from it.
     //
@@ -20,7 +17,9 @@ fn main() {
     // content stream and print them.
     let pages = pdf.pages();
     for page in pages.iter() {
-        for op in page.typed_operations() {
+        let mut ops = page.typed_operations();
+
+        while let Some(op) = ops.next() {
             println!("{op:?}");
         }
     }

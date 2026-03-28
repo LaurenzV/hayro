@@ -16,16 +16,16 @@ include!("ops_generated.rs");
 
 // Need to special-case those because they have variable arguments.
 
-fn parse_named_color<'a>(
-    objects: &[Object<'a>],
-) -> Option<(SmallVec<[Number; OPERANDS_THRESHOLD]>, Option<Name<'a>>)> {
+fn parse_named_color<'b, 'a>(
+    objects: &'b [Object<'a>],
+) -> Option<(SmallVec<[Number; OPERANDS_THRESHOLD]>, Option<&'b Name<'a>>)> {
     let mut nums = smallvec![];
     let mut name = None;
 
     for o in objects {
         match o {
             Object::Number(n) => nums.push(*n),
-            Object::Name(n) => name = Some(n.clone()),
+            Object::Name(n) => name = Some(n),
             _ => {
                 warn!("encountered unknown object {o:?} when parsing scn/SCN");
 
@@ -38,32 +38,32 @@ fn parse_named_color<'a>(
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct StrokeColorNamed<'a>(
+pub struct StrokeColorNamed<'b, 'a>(
     pub SmallVec<[Number; OPERANDS_THRESHOLD]>,
-    pub Option<Name<'a>>,
+    pub Option<&'b Name<'a>>,
 );
 
 op_impl!(
-    StrokeColorNamed<'a>,
+    StrokeColorNamed<'b, 'a>,
     "SCN",
     u8::MAX as usize,
-    |stack: &Stack<'a>| {
+    |stack: &'b Stack<'a>| {
         let (nums, name) = parse_named_color(&stack.0)?;
         Some(StrokeColorNamed(nums, name))
     }
 );
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct NonStrokeColorNamed<'a>(
+pub struct NonStrokeColorNamed<'b, 'a>(
     pub SmallVec<[Number; OPERANDS_THRESHOLD]>,
-    pub Option<Name<'a>>,
+    pub Option<&'b Name<'a>>,
 );
 
 op_impl!(
-    NonStrokeColorNamed<'a>,
+    NonStrokeColorNamed<'b, 'a>,
     "scn",
     u8::MAX as usize,
-    |stack: &Stack<'a>| {
+    |stack: &'b Stack<'a>| {
         let (nums, name) = parse_named_color(&stack.0)?;
         Some(NonStrokeColorNamed(nums, name))
     }
@@ -81,8 +81,6 @@ mod tests {
     use crate::object::Number;
     use crate::object::Object;
     use crate::object::{Dict, FromBytes};
-    use smallvec::smallvec;
-
     fn n(num: i32) -> Number {
         Number::from_i32(num)
     }
@@ -95,14 +93,24 @@ mod tests {
 1 0 0 rg
 ";
 
-        let expected = vec![
-            TypedInstruction::Transform(Transform(n(1), n(0), n(0), n(-1), n(0), n(200))),
-            TypedInstruction::SetGraphicsState(SetGraphicsState(Name::new(b"g0"))),
-            TypedInstruction::NonStrokeColorDeviceRgb(NonStrokeColorDeviceRgb(n(1), n(0), n(0))),
-        ];
+        let mut iter = TypedIter::new(input);
 
-        let elements = TypedIter::new(input).collect::<Vec<_>>();
-        assert_eq!(elements, expected,);
+        assert!(matches!(
+            iter.next(),
+            Some(TypedInstruction::Transform(Transform(a, b, c, d, e, f)))
+                if [a, b, c, d, e, f] == [n(1), n(0), n(0), n(-1), n(0), n(200)]
+        ));
+        assert!(matches!(
+            iter.next(),
+            Some(TypedInstruction::SetGraphicsState(SetGraphicsState(name)))
+                if name.as_ref() == b"g0"
+        ));
+        assert!(matches!(
+            iter.next(),
+            Some(TypedInstruction::NonStrokeColorDeviceRgb(NonStrokeColorDeviceRgb(r, g, b)))
+                if [r, g, b] == [n(1), n(0), n(0)]
+        ));
+        assert!(iter.next().is_none());
     }
 
     #[test]
@@ -116,17 +124,33 @@ h
 f
 ";
 
-        let expected = vec![
-            TypedInstruction::MoveTo(MoveTo(n(20), n(20))),
-            TypedInstruction::LineTo(LineTo(n(180), n(20))),
-            TypedInstruction::LineTo(LineTo(n(180), n(180))),
-            TypedInstruction::LineTo(LineTo(n(20), n(180))),
-            TypedInstruction::ClosePath(ClosePath),
-            TypedInstruction::FillPathNonZero(FillPathNonZero),
-        ];
+        let mut iter = TypedIter::new(input);
 
-        let elements = TypedIter::new(input).collect::<Vec<_>>();
-        assert_eq!(elements, expected,);
+        assert!(matches!(
+            iter.next(),
+            Some(TypedInstruction::MoveTo(MoveTo(x, y))) if [x, y] == [n(20), n(20)]
+        ));
+        assert!(matches!(
+            iter.next(),
+            Some(TypedInstruction::LineTo(LineTo(x, y))) if [x, y] == [n(180), n(20)]
+        ));
+        assert!(matches!(
+            iter.next(),
+            Some(TypedInstruction::LineTo(LineTo(x, y))) if [x, y] == [n(180), n(180)]
+        ));
+        assert!(matches!(
+            iter.next(),
+            Some(TypedInstruction::LineTo(LineTo(x, y))) if [x, y] == [n(20), n(180)]
+        ));
+        assert!(matches!(
+            iter.next(),
+            Some(TypedInstruction::ClosePath(ClosePath))
+        ));
+        assert!(matches!(
+            iter.next(),
+            Some(TypedInstruction::FillPathNonZero(FillPathNonZero))
+        ));
+        assert!(iter.next().is_none());
     }
 
     #[test]
@@ -136,73 +160,101 @@ f
 1.0 1.0 1.0 /DeviceRgb SCN
 ";
 
-        let expected = vec![
-            TypedInstruction::NonStrokeColorNamed(NonStrokeColorNamed(
-                smallvec![Number::from_f32(0.0)],
-                None,
-            )),
-            TypedInstruction::StrokeColorNamed(StrokeColorNamed(
-                smallvec![
-                    Number::from_f32(1.0),
-                    Number::from_f32(1.0),
-                    Number::from_f32(1.0)
-                ],
-                Some(Name::new(b"DeviceRgb")),
-            )),
-        ];
+        let mut iter = TypedIter::new(input);
 
-        let elements = TypedIter::new(input).collect::<Vec<_>>();
+        match iter.next() {
+            Some(TypedInstruction::NonStrokeColorNamed(NonStrokeColorNamed(nums, None))) => {
+                assert_eq!(nums.as_slice(), &[Number::from_f32(0.0)]);
+            }
+            other => panic!("unexpected instruction: {other:?}"),
+        }
 
-        assert_eq!(elements, expected);
+        match iter.next() {
+            Some(TypedInstruction::StrokeColorNamed(StrokeColorNamed(nums, Some(name)))) => {
+                assert_eq!(
+                    nums.as_slice(),
+                    &[
+                        Number::from_f32(1.0),
+                        Number::from_f32(1.0),
+                        Number::from_f32(1.0)
+                    ]
+                );
+                assert_eq!(name.as_ref(), b"DeviceRgb");
+            }
+            other => panic!("unexpected instruction: {other:?}"),
+        }
+
+        assert!(iter.next().is_none());
     }
 
     #[test]
     fn dp() {
         let input = b"/Attribute<</ShowCenterPoint false >> DP";
 
-        let expected = vec![TypedInstruction::MarkedContentPointWithProperties(
-            MarkedContentPointWithProperties(
-                Name::new(b"Attribute"),
-                Object::Dict(Dict::from_bytes(b"<</ShowCenterPoint false >>").unwrap()),
-            ),
-        )];
+        let mut iter = TypedIter::new(input);
 
-        let elements = TypedIter::new(input).collect::<Vec<_>>();
+        match iter.next() {
+            Some(TypedInstruction::MarkedContentPointWithProperties(
+                MarkedContentPointWithProperties(name, object),
+            )) => {
+                assert_eq!(name.as_ref(), b"Attribute");
+                assert_eq!(
+                    object,
+                    &Object::Dict(Dict::from_bytes(b"<</ShowCenterPoint false >>").unwrap())
+                );
+            }
+            other => panic!("unexpected instruction: {other:?}"),
+        }
 
-        assert_eq!(elements, expected);
+        assert!(iter.next().is_none());
     }
 
     #[test]
     fn bdc_with_dict() {
         let input = b"/Span << /MCID 0 /Alt (Alt)>> BDC EMC";
 
-        let expected = vec![
-            TypedInstruction::BeginMarkedContentWithProperties(BeginMarkedContentWithProperties(
-                Name::new(b"Span"),
-                Object::Dict(Dict::from_bytes(b"<< /MCID 0 /Alt (Alt)>>").unwrap()),
-            )),
-            TypedInstruction::EndMarkedContent(EndMarkedContent),
-        ];
+        let mut iter = TypedIter::new(input);
 
-        let elements = TypedIter::new(input).collect::<Vec<_>>();
+        match iter.next() {
+            Some(TypedInstruction::BeginMarkedContentWithProperties(
+                BeginMarkedContentWithProperties(name, object),
+            )) => {
+                assert_eq!(name.as_ref(), b"Span");
+                assert_eq!(
+                    object,
+                    &Object::Dict(Dict::from_bytes(b"<< /MCID 0 /Alt (Alt)>>").unwrap())
+                );
+            }
+            other => panic!("unexpected instruction: {other:?}"),
+        }
 
-        assert_eq!(elements, expected);
+        assert!(matches!(
+            iter.next(),
+            Some(TypedInstruction::EndMarkedContent(EndMarkedContent))
+        ));
+        assert!(iter.next().is_none());
     }
 
     #[test]
     fn bdc_with_name() {
         let input = b"/Span /Name BDC EMC";
 
-        let expected = vec![
-            TypedInstruction::BeginMarkedContentWithProperties(BeginMarkedContentWithProperties(
-                Name::new(b"Span"),
-                Object::Name(Name::new(b"Name")),
-            )),
-            TypedInstruction::EndMarkedContent(EndMarkedContent),
-        ];
+        let mut iter = TypedIter::new(input);
 
-        let elements = TypedIter::new(input).collect::<Vec<_>>();
+        match iter.next() {
+            Some(TypedInstruction::BeginMarkedContentWithProperties(
+                BeginMarkedContentWithProperties(name, object),
+            )) => {
+                assert_eq!(name.as_ref(), b"Span");
+                assert_eq!(object, &Object::Name(Name::new(b"Name")));
+            }
+            other => panic!("unexpected instruction: {other:?}"),
+        }
 
-        assert_eq!(elements, expected);
+        assert!(matches!(
+            iter.next(),
+            Some(TypedInstruction::EndMarkedContent(EndMarkedContent))
+        ));
+        assert!(iter.next().is_none());
     }
 }

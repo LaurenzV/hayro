@@ -46,23 +46,23 @@ pub struct MiterLimit(pub Number);
 op1!(MiterLimit, "M");
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct DashPattern<'a>(
-    pub Array<'a>,
+pub struct DashPattern<'b, 'a>(
+    pub &'b Array<'a>,
     pub Number,
 );
-op2!(DashPattern<'a>, "d");
+op2!(DashPattern<'b, 'a>, "d");
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct RenderingIntent<'a>(pub Name<'a>);
-op1!(RenderingIntent<'a>, "ri");
+pub struct RenderingIntent<'b, 'a>(pub &'b Name<'a>);
+op1!(RenderingIntent<'b, 'a>, "ri");
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct FlatnessTolerance(pub Number);
 op1!(FlatnessTolerance, "i");
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct SetGraphicsState<'a>(pub Name<'a>);
-op1!(SetGraphicsState<'a>, "gs");
+pub struct SetGraphicsState<'b, 'a>(pub &'b Name<'a>);
+op1!(SetGraphicsState<'b, 'a>, "gs");
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct MoveTo(
@@ -169,12 +169,12 @@ pub struct ClipEvenOdd;
 op0!(ClipEvenOdd, "W*");
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct ColorSpaceStroke<'a>(pub Name<'a>);
-op1!(ColorSpaceStroke<'a>, "CS");
+pub struct ColorSpaceStroke<'b, 'a>(pub &'b Name<'a>);
+op1!(ColorSpaceStroke<'b, 'a>, "CS");
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct ColorSpaceNonStroke<'a>(pub Name<'a>);
-op1!(ColorSpaceNonStroke<'a>, "cs");
+pub struct ColorSpaceNonStroke<'b, 'a>(pub &'b Name<'a>);
+op1!(ColorSpaceNonStroke<'b, 'a>, "cs");
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct StrokeColor(pub SmallVec<[Number; OPERANDS_THRESHOLD]>);
@@ -227,16 +227,16 @@ pub struct NonStrokeColorCmyk(
 op4!(NonStrokeColorCmyk, "k");
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct Shading<'a>(pub Name<'a>);
-op1!(Shading<'a>, "sh");
+pub struct Shading<'b, 'a>(pub &'b Name<'a>);
+op1!(Shading<'b, 'a>, "sh");
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct XObject<'a>(pub Name<'a>);
-op1!(XObject<'a>, "Do");
+pub struct XObject<'b, 'a>(pub &'b Name<'a>);
+op1!(XObject<'b, 'a>, "Do");
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct InlineImage<'a>(pub Stream<'a>);
-op1!(InlineImage<'a>, "BI");
+pub struct InlineImage<'b, 'a>(pub &'b Stream<'a>);
+op1!(InlineImage<'b, 'a>, "BI");
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct CharacterSpacing(pub Number);
@@ -255,11 +255,11 @@ pub struct TextLeading(pub Number);
 op1!(TextLeading, "TL");
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct TextFont<'a>(
-    pub Name<'a>,
+pub struct TextFont<'b, 'a>(
+    pub &'b Name<'a>,
     pub Number,
 );
-op2!(TextFont<'a>, "Tf");
+op2!(TextFont<'b, 'a>, "Tf");
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct TextRenderingMode(pub Number);
@@ -307,24 +307,24 @@ pub struct NextLineUsingLeading;
 op0!(NextLineUsingLeading, "T*");
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct ShowText<'a>(pub object::String<'a>);
-op1!(ShowText<'a>, "Tj");
+pub struct ShowText<'b, 'a>(pub &'b object::String<'a>);
+op1!(ShowText<'b, 'a>, "Tj");
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct NextLineAndShowText<'a>(pub object::String<'a>);
-op1!(NextLineAndShowText<'a>, "'");
+pub struct NextLineAndShowText<'b, 'a>(pub &'b object::String<'a>);
+op1!(NextLineAndShowText<'b, 'a>, "'");
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct ShowTextWithParameters<'a>(
+pub struct ShowTextWithParameters<'b, 'a>(
     pub Number,
     pub Number,
-    pub object::String<'a>,
+    pub &'b object::String<'a>,
 );
-op3!(ShowTextWithParameters<'a>, "\"");
+op3!(ShowTextWithParameters<'b, 'a>, "\"");
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct ShowTexts<'a>(pub Array<'a>);
-op1!(ShowTexts<'a>, "TJ");
+pub struct ShowTexts<'b, 'a>(pub &'b Array<'a>);
+op1!(ShowTexts<'b, 'a>, "TJ");
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct ColorGlyph(
@@ -345,33 +345,33 @@ pub struct ShapeGlyph(
 op6!(ShapeGlyph, "d1");
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct MarkedContentPoint<'a>(pub Name<'a>);
-op1!(MarkedContentPoint<'a>, "MP");
+pub struct MarkedContentPoint<'b, 'a>(pub &'b Name<'a>);
+op1!(MarkedContentPoint<'b, 'a>, "MP");
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct MarkedContentPointWithProperties<'a>(
-    pub Name<'a>,
-    pub Object<'a>,
+pub struct MarkedContentPointWithProperties<'b, 'a>(
+    pub &'b Name<'a>,
+    pub &'b Object<'a>,
 );
-op2!(MarkedContentPointWithProperties<'a>, "DP");
+op2!(MarkedContentPointWithProperties<'b, 'a>, "DP");
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct BeginMarkedContent<'a>(pub Name<'a>);
-op1!(BeginMarkedContent<'a>, "BMC");
+pub struct BeginMarkedContent<'b, 'a>(pub &'b Name<'a>);
+op1!(BeginMarkedContent<'b, 'a>, "BMC");
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct BeginMarkedContentWithProperties<'a>(
-    pub Name<'a>,
-    pub Object<'a>,
+pub struct BeginMarkedContentWithProperties<'b, 'a>(
+    pub &'b Name<'a>,
+    pub &'b Object<'a>,
 );
-op2!(BeginMarkedContentWithProperties<'a>, "BDC");
+op2!(BeginMarkedContentWithProperties<'b, 'a>, "BDC");
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct EndMarkedContent;
 op0!(EndMarkedContent, "EMC");
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum TypedInstruction<'a> {
+pub enum TypedInstruction<'b, 'a> {
     BeginCompatibility(BeginCompatibility),
     EndCompatibility(EndCompatibility),
     SaveState(SaveState),
@@ -381,10 +381,10 @@ pub enum TypedInstruction<'a> {
     LineCap(LineCap),
     LineJoin(LineJoin),
     MiterLimit(MiterLimit),
-    DashPattern(DashPattern<'a>),
-    RenderingIntent(RenderingIntent<'a>),
+    DashPattern(DashPattern<'b, 'a>),
+    RenderingIntent(RenderingIntent<'b, 'a>),
     FlatnessTolerance(FlatnessTolerance),
-    SetGraphicsState(SetGraphicsState<'a>),
+    SetGraphicsState(SetGraphicsState<'b, 'a>),
     MoveTo(MoveTo),
     LineTo(LineTo),
     CubicTo(CubicTo),
@@ -404,26 +404,26 @@ pub enum TypedInstruction<'a> {
     EndPath(EndPath),
     ClipNonZero(ClipNonZero),
     ClipEvenOdd(ClipEvenOdd),
-    ColorSpaceStroke(ColorSpaceStroke<'a>),
-    ColorSpaceNonStroke(ColorSpaceNonStroke<'a>),
+    ColorSpaceStroke(ColorSpaceStroke<'b, 'a>),
+    ColorSpaceNonStroke(ColorSpaceNonStroke<'b, 'a>),
     StrokeColor(StrokeColor),
-    StrokeColorNamed(StrokeColorNamed<'a>),
+    StrokeColorNamed(StrokeColorNamed<'b, 'a>),
     NonStrokeColor(NonStrokeColor),
-    NonStrokeColorNamed(NonStrokeColorNamed<'a>),
+    NonStrokeColorNamed(NonStrokeColorNamed<'b, 'a>),
     StrokeColorDeviceGray(StrokeColorDeviceGray),
     NonStrokeColorDeviceGray(NonStrokeColorDeviceGray),
     StrokeColorDeviceRgb(StrokeColorDeviceRgb),
     NonStrokeColorDeviceRgb(NonStrokeColorDeviceRgb),
     StrokeColorCmyk(StrokeColorCmyk),
     NonStrokeColorCmyk(NonStrokeColorCmyk),
-    Shading(Shading<'a>),
-    XObject(XObject<'a>),
-    InlineImage(InlineImage<'a>),
+    Shading(Shading<'b, 'a>),
+    XObject(XObject<'b, 'a>),
+    InlineImage(InlineImage<'b, 'a>),
     CharacterSpacing(CharacterSpacing),
     WordSpacing(WordSpacing),
     HorizontalScaling(HorizontalScaling),
     TextLeading(TextLeading),
-    TextFont(TextFont<'a>),
+    TextFont(TextFont<'b, 'a>),
     TextRenderingMode(TextRenderingMode),
     TextRise(TextRise),
     BeginText(BeginText),
@@ -432,97 +432,97 @@ pub enum TypedInstruction<'a> {
     NextLineAndSetLeading(NextLineAndSetLeading),
     SetTextMatrix(SetTextMatrix),
     NextLineUsingLeading(NextLineUsingLeading),
-    ShowText(ShowText<'a>),
-    NextLineAndShowText(NextLineAndShowText<'a>),
-    ShowTextWithParameters(ShowTextWithParameters<'a>),
-    ShowTexts(ShowTexts<'a>),
+    ShowText(ShowText<'b, 'a>),
+    NextLineAndShowText(NextLineAndShowText<'b, 'a>),
+    ShowTextWithParameters(ShowTextWithParameters<'b, 'a>),
+    ShowTexts(ShowTexts<'b, 'a>),
     ColorGlyph(ColorGlyph),
     ShapeGlyph(ShapeGlyph),
-    MarkedContentPoint(MarkedContentPoint<'a>),
-    MarkedContentPointWithProperties(MarkedContentPointWithProperties<'a>),
-    BeginMarkedContent(BeginMarkedContent<'a>),
-    BeginMarkedContentWithProperties(BeginMarkedContentWithProperties<'a>),
+    MarkedContentPoint(MarkedContentPoint<'b, 'a>),
+    MarkedContentPointWithProperties(MarkedContentPointWithProperties<'b, 'a>),
+    BeginMarkedContent(BeginMarkedContent<'b, 'a>),
+    BeginMarkedContentWithProperties(BeginMarkedContentWithProperties<'b, 'a>),
     EndMarkedContent(EndMarkedContent),
-    Fallback(Operator<'a>),
+    Fallback(&'b Operator<'a>),
 }
 
-impl<'a> TypedInstruction<'a> {
+impl<'b, 'a> TypedInstruction<'b, 'a> {
     #[inline(always)]
-    pub(crate) fn dispatch(instruction: &Instruction<'a>) -> Option<Self> {
+    pub(crate) fn dispatch(instruction: &Instruction<'b, 'a>) -> Option<Self> {
         let op_name = instruction.operator.as_ref();
         Some(match op_name {
-            b"BX" => BeginCompatibility::from_stack(&instruction.operands)?.into(),
-            b"EX" => EndCompatibility::from_stack(&instruction.operands)?.into(),
-            b"q" => SaveState::from_stack(&instruction.operands)?.into(),
-            b"Q" => RestoreState::from_stack(&instruction.operands)?.into(),
-            b"cm" => Transform::from_stack(&instruction.operands)?.into(),
-            b"w" => LineWidth::from_stack(&instruction.operands)?.into(),
-            b"J" => LineCap::from_stack(&instruction.operands)?.into(),
-            b"j" => LineJoin::from_stack(&instruction.operands)?.into(),
-            b"M" => MiterLimit::from_stack(&instruction.operands)?.into(),
-            b"d" => DashPattern::from_stack(&instruction.operands)?.into(),
-            b"ri" => RenderingIntent::from_stack(&instruction.operands)?.into(),
-            b"i" => FlatnessTolerance::from_stack(&instruction.operands)?.into(),
-            b"gs" => SetGraphicsState::from_stack(&instruction.operands)?.into(),
-            b"m" => MoveTo::from_stack(&instruction.operands)?.into(),
-            b"l" => LineTo::from_stack(&instruction.operands)?.into(),
-            b"c" => CubicTo::from_stack(&instruction.operands)?.into(),
-            b"v" => CubicStartTo::from_stack(&instruction.operands)?.into(),
-            b"y" => CubicEndTo::from_stack(&instruction.operands)?.into(),
-            b"h" => ClosePath::from_stack(&instruction.operands)?.into(),
-            b"re" => RectPath::from_stack(&instruction.operands)?.into(),
-            b"S" => StrokePath::from_stack(&instruction.operands)?.into(),
-            b"s" => CloseAndStrokePath::from_stack(&instruction.operands)?.into(),
-            b"f" => FillPathNonZero::from_stack(&instruction.operands)?.into(),
-            b"F" => FillPathNonZeroCompatibility::from_stack(&instruction.operands)?.into(),
-            b"f*" => FillPathEvenOdd::from_stack(&instruction.operands)?.into(),
-            b"B" => FillAndStrokeNonZero::from_stack(&instruction.operands)?.into(),
-            b"B*" => FillAndStrokeEvenOdd::from_stack(&instruction.operands)?.into(),
-            b"b" => CloseFillAndStrokeNonZero::from_stack(&instruction.operands)?.into(),
-            b"b*" => CloseFillAndStrokeEvenOdd::from_stack(&instruction.operands)?.into(),
-            b"n" => EndPath::from_stack(&instruction.operands)?.into(),
-            b"W" => ClipNonZero::from_stack(&instruction.operands)?.into(),
-            b"W*" => ClipEvenOdd::from_stack(&instruction.operands)?.into(),
-            b"CS" => ColorSpaceStroke::from_stack(&instruction.operands)?.into(),
-            b"cs" => ColorSpaceNonStroke::from_stack(&instruction.operands)?.into(),
-            b"SC" => StrokeColor::from_stack(&instruction.operands)?.into(),
-            b"SCN" => StrokeColorNamed::from_stack(&instruction.operands)?.into(),
-            b"sc" => NonStrokeColor::from_stack(&instruction.operands)?.into(),
-            b"scn" => NonStrokeColorNamed::from_stack(&instruction.operands)?.into(),
-            b"G" => StrokeColorDeviceGray::from_stack(&instruction.operands)?.into(),
-            b"g" => NonStrokeColorDeviceGray::from_stack(&instruction.operands)?.into(),
-            b"RG" => StrokeColorDeviceRgb::from_stack(&instruction.operands)?.into(),
-            b"rg" => NonStrokeColorDeviceRgb::from_stack(&instruction.operands)?.into(),
-            b"K" => StrokeColorCmyk::from_stack(&instruction.operands)?.into(),
-            b"k" => NonStrokeColorCmyk::from_stack(&instruction.operands)?.into(),
-            b"sh" => Shading::from_stack(&instruction.operands)?.into(),
-            b"Do" => XObject::from_stack(&instruction.operands)?.into(),
-            b"BI" => InlineImage::from_stack(&instruction.operands)?.into(),
-            b"Tc" => CharacterSpacing::from_stack(&instruction.operands)?.into(),
-            b"Tw" => WordSpacing::from_stack(&instruction.operands)?.into(),
-            b"Tz" => HorizontalScaling::from_stack(&instruction.operands)?.into(),
-            b"TL" => TextLeading::from_stack(&instruction.operands)?.into(),
-            b"Tf" => TextFont::from_stack(&instruction.operands)?.into(),
-            b"Tr" => TextRenderingMode::from_stack(&instruction.operands)?.into(),
-            b"Ts" => TextRise::from_stack(&instruction.operands)?.into(),
-            b"BT" => BeginText::from_stack(&instruction.operands)?.into(),
-            b"ET" => EndText::from_stack(&instruction.operands)?.into(),
-            b"Td" => NextLine::from_stack(&instruction.operands)?.into(),
-            b"TD" => NextLineAndSetLeading::from_stack(&instruction.operands)?.into(),
-            b"Tm" => SetTextMatrix::from_stack(&instruction.operands)?.into(),
-            b"T*" => NextLineUsingLeading::from_stack(&instruction.operands)?.into(),
-            b"Tj" => ShowText::from_stack(&instruction.operands)?.into(),
-            b"'" => NextLineAndShowText::from_stack(&instruction.operands)?.into(),
-            b"\"" => ShowTextWithParameters::from_stack(&instruction.operands)?.into(),
-            b"TJ" => ShowTexts::from_stack(&instruction.operands)?.into(),
-            b"d0" => ColorGlyph::from_stack(&instruction.operands)?.into(),
-            b"d1" => ShapeGlyph::from_stack(&instruction.operands)?.into(),
-            b"MP" => MarkedContentPoint::from_stack(&instruction.operands)?.into(),
-            b"DP" => MarkedContentPointWithProperties::from_stack(&instruction.operands)?.into(),
-            b"BMC" => BeginMarkedContent::from_stack(&instruction.operands)?.into(),
-            b"BDC" => BeginMarkedContentWithProperties::from_stack(&instruction.operands)?.into(),
-            b"EMC" => EndMarkedContent::from_stack(&instruction.operands)?.into(),
-            _ => return Self::Fallback(instruction.operator.clone()).into(),
+            b"BX" => BeginCompatibility::from_stack(instruction.operands)?.into(),
+            b"EX" => EndCompatibility::from_stack(instruction.operands)?.into(),
+            b"q" => SaveState::from_stack(instruction.operands)?.into(),
+            b"Q" => RestoreState::from_stack(instruction.operands)?.into(),
+            b"cm" => Transform::from_stack(instruction.operands)?.into(),
+            b"w" => LineWidth::from_stack(instruction.operands)?.into(),
+            b"J" => LineCap::from_stack(instruction.operands)?.into(),
+            b"j" => LineJoin::from_stack(instruction.operands)?.into(),
+            b"M" => MiterLimit::from_stack(instruction.operands)?.into(),
+            b"d" => DashPattern::from_stack(instruction.operands)?.into(),
+            b"ri" => RenderingIntent::from_stack(instruction.operands)?.into(),
+            b"i" => FlatnessTolerance::from_stack(instruction.operands)?.into(),
+            b"gs" => SetGraphicsState::from_stack(instruction.operands)?.into(),
+            b"m" => MoveTo::from_stack(instruction.operands)?.into(),
+            b"l" => LineTo::from_stack(instruction.operands)?.into(),
+            b"c" => CubicTo::from_stack(instruction.operands)?.into(),
+            b"v" => CubicStartTo::from_stack(instruction.operands)?.into(),
+            b"y" => CubicEndTo::from_stack(instruction.operands)?.into(),
+            b"h" => ClosePath::from_stack(instruction.operands)?.into(),
+            b"re" => RectPath::from_stack(instruction.operands)?.into(),
+            b"S" => StrokePath::from_stack(instruction.operands)?.into(),
+            b"s" => CloseAndStrokePath::from_stack(instruction.operands)?.into(),
+            b"f" => FillPathNonZero::from_stack(instruction.operands)?.into(),
+            b"F" => FillPathNonZeroCompatibility::from_stack(instruction.operands)?.into(),
+            b"f*" => FillPathEvenOdd::from_stack(instruction.operands)?.into(),
+            b"B" => FillAndStrokeNonZero::from_stack(instruction.operands)?.into(),
+            b"B*" => FillAndStrokeEvenOdd::from_stack(instruction.operands)?.into(),
+            b"b" => CloseFillAndStrokeNonZero::from_stack(instruction.operands)?.into(),
+            b"b*" => CloseFillAndStrokeEvenOdd::from_stack(instruction.operands)?.into(),
+            b"n" => EndPath::from_stack(instruction.operands)?.into(),
+            b"W" => ClipNonZero::from_stack(instruction.operands)?.into(),
+            b"W*" => ClipEvenOdd::from_stack(instruction.operands)?.into(),
+            b"CS" => ColorSpaceStroke::from_stack(instruction.operands)?.into(),
+            b"cs" => ColorSpaceNonStroke::from_stack(instruction.operands)?.into(),
+            b"SC" => StrokeColor::from_stack(instruction.operands)?.into(),
+            b"SCN" => StrokeColorNamed::from_stack(instruction.operands)?.into(),
+            b"sc" => NonStrokeColor::from_stack(instruction.operands)?.into(),
+            b"scn" => NonStrokeColorNamed::from_stack(instruction.operands)?.into(),
+            b"G" => StrokeColorDeviceGray::from_stack(instruction.operands)?.into(),
+            b"g" => NonStrokeColorDeviceGray::from_stack(instruction.operands)?.into(),
+            b"RG" => StrokeColorDeviceRgb::from_stack(instruction.operands)?.into(),
+            b"rg" => NonStrokeColorDeviceRgb::from_stack(instruction.operands)?.into(),
+            b"K" => StrokeColorCmyk::from_stack(instruction.operands)?.into(),
+            b"k" => NonStrokeColorCmyk::from_stack(instruction.operands)?.into(),
+            b"sh" => Shading::from_stack(instruction.operands)?.into(),
+            b"Do" => XObject::from_stack(instruction.operands)?.into(),
+            b"BI" => InlineImage::from_stack(instruction.operands)?.into(),
+            b"Tc" => CharacterSpacing::from_stack(instruction.operands)?.into(),
+            b"Tw" => WordSpacing::from_stack(instruction.operands)?.into(),
+            b"Tz" => HorizontalScaling::from_stack(instruction.operands)?.into(),
+            b"TL" => TextLeading::from_stack(instruction.operands)?.into(),
+            b"Tf" => TextFont::from_stack(instruction.operands)?.into(),
+            b"Tr" => TextRenderingMode::from_stack(instruction.operands)?.into(),
+            b"Ts" => TextRise::from_stack(instruction.operands)?.into(),
+            b"BT" => BeginText::from_stack(instruction.operands)?.into(),
+            b"ET" => EndText::from_stack(instruction.operands)?.into(),
+            b"Td" => NextLine::from_stack(instruction.operands)?.into(),
+            b"TD" => NextLineAndSetLeading::from_stack(instruction.operands)?.into(),
+            b"Tm" => SetTextMatrix::from_stack(instruction.operands)?.into(),
+            b"T*" => NextLineUsingLeading::from_stack(instruction.operands)?.into(),
+            b"Tj" => ShowText::from_stack(instruction.operands)?.into(),
+            b"'" => NextLineAndShowText::from_stack(instruction.operands)?.into(),
+            b"\"" => ShowTextWithParameters::from_stack(instruction.operands)?.into(),
+            b"TJ" => ShowTexts::from_stack(instruction.operands)?.into(),
+            b"d0" => ColorGlyph::from_stack(instruction.operands)?.into(),
+            b"d1" => ShapeGlyph::from_stack(instruction.operands)?.into(),
+            b"MP" => MarkedContentPoint::from_stack(instruction.operands)?.into(),
+            b"DP" => MarkedContentPointWithProperties::from_stack(instruction.operands)?.into(),
+            b"BMC" => BeginMarkedContent::from_stack(instruction.operands)?.into(),
+            b"BDC" => BeginMarkedContentWithProperties::from_stack(instruction.operands)?.into(),
+            b"EMC" => EndMarkedContent::from_stack(instruction.operands)?.into(),
+            _ => return Some(Self::Fallback(instruction.operator)),
         })
     }
 }

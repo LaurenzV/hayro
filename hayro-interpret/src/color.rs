@@ -107,7 +107,7 @@ impl ColorSpaceType {
 
     fn new_inner(object: Object<'_>, cache: &Cache) -> Option<Self> {
         if let Some(name) = object.clone().into_name() {
-            return Self::new_from_name(name.clone());
+            return Self::new_from_name(&name);
         } else if let Some(color_array) = object.clone().into_array() {
             let mut iter = color_array.clone().flex_iter();
             let name = iter.next::<Name<'_>>()?;
@@ -190,7 +190,7 @@ impl ColorSpaceType {
         None
     }
 
-    fn new_from_name(name: Name<'_>) -> Option<Self> {
+    fn new_from_name(name: &Name<'_>) -> Option<Self> {
         match name.deref() {
             DEVICE_RGB | RGB => Some(Self::DeviceRgb),
             DEVICE_GRAY | G => Some(Self::DeviceGray),
@@ -213,7 +213,7 @@ impl ColorSpace {
     }
 
     /// Create a new color space from the name.
-    pub(crate) fn new_from_name(name: Name<'_>) -> Option<Self> {
+    pub(crate) fn new_from_name(name: &Name<'_>) -> Option<Self> {
         ColorSpaceType::new_from_name(name).map(|c| Self(Arc::new(c)))
     }
 

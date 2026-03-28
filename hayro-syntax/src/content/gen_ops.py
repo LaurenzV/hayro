@@ -121,19 +121,19 @@ ops = {
 def rust_type(t: Type) -> str:
     return {
         Type.Number: "Number",
-        Type.String: "object::String<'a>",
-        Type.Array: "Array<'a>",
-        Type.Object: "Object<'a>",
-        Type.Stream: "Stream<'a>",
-        Type.Name: "Name<'a>",
-        Type.Dict: "Dict<'a>",
+        Type.String: "&'b object::String<'a>",
+        Type.Array: "&'b Array<'a>",
+        Type.Object: "&'b Object<'a>",
+        Type.Stream: "&'b Stream<'a>",
+        Type.Name: "&'b Name<'a>",
+        Type.Dict: "&'b Dict<'a>",
         Type.VecNum: "SmallVec<[Number; OPERANDS_THRESHOLD]>",
     }[t]
 
 
 def lifetime_if_needed(types):
     return (
-        "<'a>"
+        "<'b, 'a>"
         if any(
             t in [Type.Array, Type.Object, Type.Stream, Type.Dict, Type.Name, Type.String]
             for t in types
@@ -168,13 +168,13 @@ def gen_enum_variant(name, types):
         (type(types) is list)
         and any(t in [Type.Array, Type.Object, Type.Stream, Type.Name, Type.String] for t in types)
     )
-    inner_type = f"{name}<'a>" if has_lifetime else name
+    inner_type = f"{name}<'b, 'a>" if has_lifetime else name
     return f"{name}({inner_type})"
 
 
 def gen_dispatch_match(code, name, types):
     escaped_code = code.replace('"', '\\"')
-    return f'b"{escaped_code}" => {name}::from_stack(&instruction.operands)?.into(),'
+    return f'b"{escaped_code}" => {name}::from_stack(instruction.operands)?.into(),'
 
 
 # Generate all code pieces
@@ -194,20 +194,20 @@ struct_block = "\n\n".join(structs)
 
 enum_block = (
     "#[derive(Debug, PartialEq, Clone)]\n"
-    "pub enum TypedInstruction<'a> {\n" + "    " + ",\n    ".join(enum_variants) + ",\n"
-    "    Fallback(Operator<'a>),\n}"
+    "pub enum TypedInstruction<'b, 'a> {\n" + "    " + ",\n    ".join(enum_variants) + ",\n"
+    "    Fallback(&'b Operator<'a>),\n}"
 )
 
 dispatch_block = (
-    "impl<'a> TypedInstruction<'a> {\n"
+    "impl<'b, 'a> TypedInstruction<'b, 'a> {\n"
     "    #[inline(always)]\n"
-    "    pub(crate) fn dispatch(instruction: &Instruction<'a>) -> Option<Self> {\n"
+    "    pub(crate) fn dispatch(instruction: &Instruction<'b, 'a>) -> Option<Self> {\n"
     "        let op_name = instruction.operator.as_ref();\n"
     "        Some(match op_name {\n"
     + "            "
     + "\n            ".join(dispatch_arms)
     + "\n"
-    "            _ => return Self::Fallback(instruction.operator.clone()).into(),\n"
+    "            _ => return Some(Self::Fallback(instruction.operator)),\n"
     "        })\n"
     "    }\n"
     "}"

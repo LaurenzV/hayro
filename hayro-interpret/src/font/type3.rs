@@ -125,10 +125,10 @@ impl<'a> Type3<'a> {
         let iter = TypedIter::new(decoded.as_ref());
 
         let is_shape_glyph = {
-            let iter = iter.clone();
+            let mut iter = iter.clone();
             let mut is_shape_glyph = true;
 
-            for op in iter {
+            while let Some(op) = iter.next() {
                 match op {
                     TypedInstruction::ShapeGlyph(_) => {
                         break;

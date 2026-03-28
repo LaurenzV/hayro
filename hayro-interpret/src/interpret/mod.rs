@@ -15,6 +15,7 @@ use crate::util::{OptionLog, RectExt};
 use crate::x_object::{
     FormXObject, ImageXObject, XObject, draw_form_xobject, draw_image_xobject, draw_xobject,
 };
+use hayro_syntax::content::TypedIter;
 use hayro_syntax::content::ops::TypedInstruction;
 use hayro_syntax::object::dict::keys::{ANNOTS, AP, F, MCID, N, OC, RECT};
 use hayro_syntax::object::{Array, Dict, Object, Rect, Stream, dict_or_stream};
@@ -216,8 +217,8 @@ pub fn interpret_page<'a>(
 }
 
 /// Interpret the instructions from `ops` and render them into the device.
-pub fn interpret<'a, 'b>(
-    ops: impl Iterator<Item = TypedInstruction<'b>>,
+pub fn interpret<'a>(
+    mut ops: TypedIter<'_>,
     resources: &Resources<'a>,
     context: &mut Context<'a>,
     device: &mut impl Device<'a>,
@@ -226,7 +227,7 @@ pub fn interpret<'a, 'b>(
 
     context.save_state();
 
-    for op in ops {
+    while let Some(op) = ops.next() {
         match op {
             TypedInstruction::SaveState(_) => context.save_state(),
             TypedInstruction::StrokeColorDeviceRgb(s) => {
@@ -371,7 +372,7 @@ pub fn interpret<'a, 'b>(
             }
             TypedInstruction::SetGraphicsState(gs) => {
                 if let Some(gs) = resources
-                    .get_ext_g_state(gs.0.clone())
+                    .get_ext_g_state(gs.0)
                     .warn_none(&format!("failed to get extgstate {}", gs.0.as_str()))
                 {
                     handle_gs(&gs, context, resources);
@@ -413,7 +414,7 @@ pub fn interpret<'a, 'b>(
                 // Ignore for now.
             }
             TypedInstruction::ColorSpaceStroke(c) => {
-                let cs = if let Some(named) = ColorSpace::new_from_name(c.0.clone()) {
+                let cs = if let Some(named) = ColorSpace::new_from_name(c.0) {
                     named
                 } else {
                     context
@@ -428,7 +429,7 @@ pub fn interpret<'a, 'b>(
                 context.get_mut().graphics_state.stroke_cs = cs;
             }
             TypedInstruction::ColorSpaceNonStroke(c) => {
-                let cs = if let Some(named) = ColorSpace::new_from_name(c.0.clone()) {
+                let cs = if let Some(named) = ColorSpace::new_from_name(c.0) {
                     named
                 } else {
                     context
@@ -557,7 +558,7 @@ pub fn interpret<'a, 'b>(
                 // 2) In case it's `None` because we were unable to resolve the font
                 // (for whatever reason), leave it as `None`. Better showing no
                 // text at all than garbage text.
-                let font = if let Some(font_dict) = resources.get_font(name.clone()) {
+                let font = if let Some(font_dict) = resources.get_font(name) {
                     context.resolve_font(&font_dict)
                 } else {
                     Font::new_standard(StandardFont::Helvetica, &context.settings.font_resolver)
@@ -595,7 +596,7 @@ pub fn interpret<'a, 'b>(
                     if let Some(adjustment) = obj.clone().into_f32() {
                         context.get_mut().text_state.apply_adjustment(adjustment);
                     } else if let Some(text) = obj.into_string() {
-                        text::show_text_string(context, device, resources, text);
+                        text::show_text_string(context, device, resources, &text);
                     }
                 }
             }
@@ -667,7 +668,7 @@ pub fn interpret<'a, 'b>(
                 let cache = context.object_cache.clone();
                 if let Some(x_object) = ImageXObject::new(
                     &i.0,
-                    |name| context.get_color_space(resources, name.clone()),
+                    |name| context.get_color_space(resources, name),
                     &warning_sink,
                     &cache,
                     false,

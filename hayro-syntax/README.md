@@ -43,7 +43,8 @@ let pdf = Pdf::new(Arc::new(data)).unwrap();
 // content stream and print them.
 let pages = pdf.pages();
 for page in pages.iter() {
-    for op in page.typed_operations() {
+    let mut ops = page.typed_operations();
+    while let Some(op) = ops.next() {
         println!("{op:?}");
     }
 }
