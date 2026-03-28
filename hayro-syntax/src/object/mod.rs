@@ -34,6 +34,11 @@ pub mod stream;
 /// A trait for PDF objects.
 pub(crate) trait ObjectLike<'a>: TryFrom<Object<'a>> + Readable<'a> + Debug + Clone {}
 
+/// A trait for PDF objects that can be borrowed directly from an [`Object`].
+pub(crate) trait ObjectRefLike<'a>: Sized {
+    fn cast_ref<'b>(obj: &'b Object<'a>) -> Option<&'b Self>;
+}
+
 /// A primitive PDF object.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Object<'a> {
@@ -64,6 +69,14 @@ impl<'a> Object<'a> {
         T: ObjectLike<'a>,
     {
         self.try_into().ok()
+    }
+
+    /// Try casting the object to a reference of the specific type.
+    pub(crate) fn cast_ref<T>(&self) -> Option<&T>
+    where
+        T: ObjectRefLike<'a>,
+    {
+        T::cast_ref(self)
     }
 
     /// Try casting the object to a dict.
@@ -140,6 +153,11 @@ impl<'a> Object<'a> {
 }
 
 impl<'a> ObjectLike<'a> for Object<'a> {}
+impl<'a> ObjectRefLike<'a> for Object<'a> {
+    fn cast_ref<'b>(obj: &'b Object<'a>) -> Option<&'b Self> {
+        Some(obj)
+    }
+}
 
 impl Skippable for Object<'_> {
     fn skip(r: &mut Reader<'_>, is_content_stream: bool) -> Option<()> {
@@ -260,11 +278,13 @@ impl Skippable for ObjectIdentifier {
 /// If the object is just a dictionary, it will return `None` for the stream.
 /// If the object is a stream, it will return its dictionary as well as the stream
 /// itself.
-pub fn dict_or_stream<'a>(obj: &Object<'a>) -> Option<(Dict<'a>, Option<Stream<'a>>)> {
-    if let Some(stream) = obj.clone().cast::<Stream<'a>>() {
-        Some((stream.dict().clone(), Some(stream)))
+pub fn dict_or_stream<'a, 'b>(
+    obj: &'b Object<'a>,
+) -> Option<(&'b Dict<'a>, Option<&'b Stream<'a>>)> {
+    if let Some(stream) = obj.cast_ref::<Stream<'a>>() {
+        Some((stream.dict(), Some(stream)))
     } else {
-        obj.clone().cast::<Dict<'a>>().map(|dict| (dict, None))
+        obj.cast_ref::<Dict<'a>>().map(|dict| (dict, None))
     }
 }
 
@@ -283,6 +303,15 @@ mod macros {
             }
 
             impl<'a> crate::object::ObjectLike<'a> for $t$(<$l>),* {}
+
+            impl<'a> crate::object::ObjectRefLike<'a> for $t$(<$l>),* {
+                fn cast_ref<'b>(obj: &'b crate::object::Object<'a>) -> Option<&'b Self> {
+                    match obj {
+                        crate::object::Object::$s(b) => Some(b),
+                        _ => None,
+                    }
+                }
+            }
         };
     }
 

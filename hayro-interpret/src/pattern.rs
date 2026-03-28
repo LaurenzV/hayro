@@ -99,7 +99,7 @@ impl ShadingPattern {
         let shading = dict.get::<Object<'_>>(SHADING).and_then(|o| {
             let (dict, stream) = dict_or_stream(&o)?;
 
-            Shading::new(&dict, stream.as_ref(), cache)
+            Shading::new(dict, stream, cache)
         })?;
         let matrix = dict
             .get::<[f64; 6]>(MATRIX)

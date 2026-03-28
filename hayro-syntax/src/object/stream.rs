@@ -7,7 +7,7 @@ use crate::object::Dict;
 use crate::object::Name;
 use crate::object::dict::keys::{DECODE_PARMS, DP, F, FILTER, LENGTH, TYPE};
 use crate::object::{Array, ObjectIdentifier};
-use crate::object::{Object, ObjectLike};
+use crate::object::{Object, ObjectLike, ObjectRefLike};
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 use crate::sync::Arc;
@@ -372,6 +372,14 @@ impl<'a> TryFrom<Object<'a>> for Stream<'a> {
 }
 
 impl<'a> ObjectLike<'a> for Stream<'a> {}
+impl<'a> ObjectRefLike<'a> for Stream<'a> {
+    fn cast_ref<'b>(obj: &'b Object<'a>) -> Option<&'b Self> {
+        match obj {
+            Object::Stream(stream) => Some(stream),
+            _ => None,
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {

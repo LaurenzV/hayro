@@ -688,8 +688,10 @@ pub fn interpret<'a>(
 
                 if let Some(sp) = resources
                     .get_shading(s.0)
-                    .and_then(|o| dict_or_stream(&o))
-                    .and_then(|s| Shading::new(&s.0, s.1.as_ref(), &context.object_cache))
+                    .and_then(|o| {
+                        let (dict, stream) = dict_or_stream(&o)?;
+                        Shading::new(dict, stream, &context.object_cache)
+                    })
                     .map(|s| {
                         Pattern::Shading(ShadingPattern {
                             shading: Arc::new(s),

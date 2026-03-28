@@ -40,10 +40,10 @@ impl Function {
         let (dict, stream) = dict_or_stream(obj)?;
 
         let function_type = match dict.get::<u8>(FUNCTION_TYPE)? {
-            0 => FunctionType::Type0(Type0::new(&stream?)?),
-            2 => FunctionType::Type2(Type2::new(&dict)?),
-            3 => FunctionType::Type3(Type3::new(&dict)?),
-            4 => FunctionType::Type4(Type4::new(&stream?)?),
+            0 => FunctionType::Type0(Type0::new(stream?)?),
+            2 => FunctionType::Type2(Type2::new(dict)?),
+            3 => FunctionType::Type3(Type3::new(dict)?),
+            4 => FunctionType::Type4(Type4::new(stream?)?),
             _ => return None,
         };
 
