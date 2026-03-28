@@ -196,7 +196,10 @@ fn read_inner<'a>(
     start_tag: Option<&[u8]>,
     end_tag: &[u8],
 ) -> Option<Dict<'a>> {
-    let mut offsets = FxHashMap::default();
+    #[cfg(feature = "std")]
+    let mut offsets = FxHashMap::with_capacity_and_hasher(8, Default::default());
+    #[cfg(not(feature = "std"))]
+    let mut offsets = FxHashMap::new();
 
     let data = {
         let dict_data = r.tail()?;
