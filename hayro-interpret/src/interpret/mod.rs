@@ -477,7 +477,7 @@ pub fn interpret<'a>(
                 // 1. A Name that references an entry in the Resources/Properties dictionary
                 // 2. An inline dictionary with an OC key
 
-                let mcid = dict_or_stream(&bdc.1).and_then(|(props, _)| props.get::<i32>(MCID));
+                let mcid = dict_or_stream(bdc.1).and_then(|(props, _)| props.get::<i32>(MCID));
 
                 let oc = bdc
                     .1
@@ -492,7 +492,7 @@ pub fn interpret<'a>(
                         Some((d, r))
                     })
                     .or_else(|| {
-                        let (props, _) = dict_or_stream(&bdc.1)?;
+                        let (props, _) = dict_or_stream(bdc.1)?;
                         let r = props.get_ref(OC)?;
                         let d = props.get::<Dict<'_>>(OC).unwrap_or_default();
                         Some((d, r))
@@ -504,7 +504,7 @@ pub fn interpret<'a>(
                     context.ocg_state.begin_marked_content();
                 }
 
-                device.begin_marked_content(&bdc.0, mcid);
+                device.begin_marked_content(bdc.0, mcid);
             }
             TypedInstruction::MarkedContentPointWithProperties(_) => {}
             TypedInstruction::EndMarkedContent(_) => {
@@ -514,7 +514,7 @@ pub fn interpret<'a>(
             TypedInstruction::MarkedContentPoint(_) => {}
             TypedInstruction::BeginMarkedContent(bmc) => {
                 context.ocg_state.begin_marked_content();
-                device.begin_marked_content(&bmc.0, None);
+                device.begin_marked_content(bmc.0, None);
             }
             TypedInstruction::BeginText(_) => {
                 context.get_mut().text_state.text_matrix = Affine::IDENTITY;
@@ -667,7 +667,7 @@ pub fn interpret<'a>(
                 let transfer_function = context.get().graphics_state.transfer_function.clone();
                 let cache = context.object_cache.clone();
                 if let Some(x_object) = ImageXObject::new(
-                    &i.0,
+                    i.0,
                     |name| context.get_color_space(resources, name),
                     &warning_sink,
                     &cache,
