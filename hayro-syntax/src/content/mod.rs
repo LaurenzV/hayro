@@ -196,7 +196,7 @@ impl<'a> UntypedIter<'a> {
 
                             while let Some(bytes) = find_reader.peek_bytes(2) {
                                 if bytes == b"EI" {
-                                    let analyze_data = &tail;
+                                    let analyze_data = &tail[..find_reader.offset()];
 
                                     // If there is any binary data in-between, we for sure
                                     // have not reached the end.
