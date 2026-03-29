@@ -150,9 +150,9 @@ fn read_hex(r: &mut Reader<'_>) -> Option<SmallVec<[u8; 23]>> {
 
     // Exclude outer brackets.
     let raw = r.range(start + 1..end - 1)?;
-    let decoded = ascii_hex::decode(raw)?;
+    let decoded = ascii_hex::decode_into(raw)?;
 
-    Some(SmallVec::from_vec(decoded))
+    Some(decoded)
 }
 
 fn skip_literal(r: &mut Reader<'_>) -> Option<()> {

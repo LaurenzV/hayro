@@ -1,9 +1,14 @@
 // Keep in sync with `hayro-postscript/src/string/ascii_hex.rs`.
 
 use crate::trivia::is_white_space_character;
+use crate::util::ByteBuf;
 use alloc::vec::Vec;
 
 pub(crate) fn decode(data: &[u8]) -> Option<Vec<u8>> {
+    decode_into(data)
+}
+
+pub(crate) fn decode_into<B: ByteBuf>(data: &[u8]) -> Option<B> {
     // Find end (at `>` or end of data) and check for whitespace.
     let mut has_whitespace = false;
     let mut end = data.len();
@@ -18,7 +23,7 @@ pub(crate) fn decode(data: &[u8]) -> Option<Vec<u8>> {
     }
 
     let data = &data[..end];
-    let mut decoded = Vec::with_capacity(data.len().div_ceil(2));
+    let mut decoded = B::with_capacity(data.len().div_ceil(2));
 
     if !has_whitespace {
         // Fast path, don't need to worry about white spaces.
