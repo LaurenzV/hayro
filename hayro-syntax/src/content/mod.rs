@@ -331,6 +331,7 @@ impl<'a> TypedIter<'a> {
     #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> Option<TypedInstruction<'_, 'a>> {
         let op = self.untyped.next()?;
+        // TODO: Explore whether dispatching can be made more efficient.
         match TypedInstruction::dispatch(&op) {
             Some(op) => Some(op),
             // In case this returns `None`, the content stream is invalid. In case a path-drawing
@@ -375,6 +376,8 @@ impl<'b, 'a> Instruction<'b, 'a> {
 
 /// A stack holding the arguments of an operator.
 pub struct Stack<'a> {
+    // TODO: Explore using an object pool to avoid repeatedly
+    // allocating/deallocating objects.
     data: [Object<'a>; OPERANDS_THRESHOLD],
     len: usize,
 }
