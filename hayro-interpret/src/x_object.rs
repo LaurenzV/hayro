@@ -358,6 +358,10 @@ impl<'a> ImageXObject<'a> {
         self.height
     }
 
+    pub(crate) fn stream(&self) -> &Stream<'a> {
+        &self.stream
+    }
+
     fn has_mask(&self) -> bool {
         let dict = self.stream.dict();
 

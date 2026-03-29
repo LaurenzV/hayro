@@ -3,6 +3,7 @@ use crate::color::Color;
 use crate::pattern::Pattern;
 use crate::util::hash128;
 use crate::x_object::ImageXObject;
+use hayro_syntax::object::Stream;
 use kurbo::{BezPath, Cap, Join};
 use smallvec::{SmallVec, smallvec};
 
@@ -83,6 +84,11 @@ impl RasterImage<'_> {
         if let Some(decoded) = self.0.decoded_raster(target_dimension) {
             func(decoded.image, decoded.alpha);
         }
+    }
+
+    /// Return the underlying stream object.
+    pub fn stream(&self) -> &Stream<'_> {
+        self.0.stream()
     }
 
     // These are hidden since clients are supposed to call get the
