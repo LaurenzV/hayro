@@ -46,11 +46,11 @@ pub(crate) trait ByteBuf: Default {
 
 impl ByteBuf for Vec<u8> {
     fn with_capacity(capacity: usize) -> Self {
-        Vec::with_capacity(capacity)
+        Self::with_capacity(capacity)
     }
 
     fn push(&mut self, byte: u8) {
-        Vec::push(self, byte);
+        Self::push(self, byte);
     }
 }
 
@@ -59,11 +59,11 @@ where
     A: Array<Item = u8>,
 {
     fn with_capacity(capacity: usize) -> Self {
-        SmallVec::with_capacity(capacity)
+        Self::with_capacity(capacity)
     }
 
     fn push(&mut self, byte: u8) {
-        SmallVec::push(self, byte);
+        Self::push(self, byte);
     }
 }
 
