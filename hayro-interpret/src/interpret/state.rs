@@ -366,7 +366,7 @@ pub(crate) fn handle_gs_single<'a>(
             }
         }
         "BM" => {
-            if let Some(name) = dict.get::<Name<'_>>(key.clone()) {
+            if let Some(name) = dict.get::<Name<'_>>(key.as_ref()) {
                 if let Some(bm) = convert_blend_mode(name.as_str()) {
                     context.get_mut().graphics_state.blend_mode = bm;
 

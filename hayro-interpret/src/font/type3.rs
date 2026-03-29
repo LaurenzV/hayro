@@ -54,8 +54,8 @@ impl<'a> Type3<'a> {
             let dict = dict.get::<Dict<'_>>(CHAR_PROCS).unwrap_or_default();
 
             for name in dict.keys() {
-                if let Some(prog) = dict.get::<Stream<'_>>(name.clone()) {
-                    procs.insert(name.as_str().to_string(), prog.clone());
+                if let Some(prog) = dict.get::<Stream<'_>>(name.as_ref()) {
+                    procs.insert(name.as_str().to_string(), prog);
                 }
             }
 

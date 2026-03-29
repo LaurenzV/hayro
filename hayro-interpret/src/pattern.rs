@@ -39,18 +39,16 @@ impl<'a> Pattern<'a> {
         ctx: &Context<'a>,
         resources: &Resources<'a>,
     ) -> Option<Self> {
-        if let Some(dict) = object.clone().into_dict() {
-            Some(Self::Shading(ShadingPattern::new(
+        match object {
+            Object::Dict(dict) => Some(Self::Shading(ShadingPattern::new(
                 &dict,
                 &ctx.object_cache,
                 ctx.get().graphics_state.non_stroke_alpha,
-            )?))
-        } else if let Some(stream) = object.clone().into_stream() {
-            Some(Self::Tiling(Box::new(TilingPattern::new(
+            )?)),
+            Object::Stream(stream) => Some(Self::Tiling(Box::new(TilingPattern::new(
                 stream, ctx, resources,
-            )?)))
-        } else {
-            None
+            )?))),
+            _ => None,
         }
     }
 

@@ -10,7 +10,7 @@ use zune_jpeg::zune_core::options::DecoderOptions;
 
 pub(crate) fn decode(
     data: &[u8],
-    params: Dict<'_>,
+    params: &Dict<'_>,
     image_params: &ImageDecodeParams,
 ) -> Option<FilterResult<'static>> {
     if image_params.width > u16::MAX as u32 || image_params.height > u16::MAX as u32 {

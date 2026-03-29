@@ -10,7 +10,7 @@ pub(crate) mod flate {
     use crate::object::Dict;
 
     #[cfg(feature = "unsafe")]
-    pub(crate) fn decode(data: &[u8], params: Dict<'_>) -> Option<Vec<u8>> {
+    pub(crate) fn decode(data: &[u8], params: &Dict<'_>) -> Option<Vec<u8>> {
         use flate2::read::{DeflateDecoder, ZlibDecoder};
         use std::io::Read;
 
@@ -33,14 +33,14 @@ pub(crate) mod flate {
 
                 fallback::decode(data)
             })?;
-        let params = PredictorParams::from_params(&params);
+        let params = PredictorParams::from_params(params);
         apply_predictor(decoded, &params)
     }
 
     #[cfg(not(feature = "unsafe"))]
-    pub(crate) fn decode(data: &[u8], params: Dict<'_>) -> Option<Vec<u8>> {
+    pub(crate) fn decode(data: &[u8], params: &Dict<'_>) -> Option<Vec<u8>> {
         let decoded = fallback::decode(data)?;
-        let params = PredictorParams::from_params(&params);
+        let params = PredictorParams::from_params(params);
         apply_predictor(decoded, &params)
     }
 
@@ -569,8 +569,8 @@ pub(crate) mod lzw {
     use alloc::vec::Vec;
 
     /// Decode a LZW-encoded stream.
-    pub(crate) fn decode(data: &[u8], params: Dict<'_>) -> Option<Vec<u8>> {
-        let params = PredictorParams::from_params(&params);
+    pub(crate) fn decode(data: &[u8], params: &Dict<'_>) -> Option<Vec<u8>> {
+        let params = PredictorParams::from_params(params);
 
         let decoded = decode_impl(data, params.early_change)?;
 

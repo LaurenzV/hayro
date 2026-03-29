@@ -14,7 +14,7 @@ use core::iter;
 /// a stream with shared symbol dictionaries.
 pub(crate) fn decode(
     data: &[u8],
-    params: Dict<'_>,
+    params: &Dict<'_>,
     image_params: &ImageDecodeParams,
 ) -> Option<FilterResult<'static>> {
     let globals = params

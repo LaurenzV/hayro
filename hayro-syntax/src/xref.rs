@@ -173,7 +173,10 @@ fn fallback_xref_map_inner<'a>(
 
                         if let Some(obj) =
                             reader.read_with_context::<IndirectObject<Dict<'_>>>(&dummy_ctx)
-                            && check(&obj.clone().get())
+                            && {
+                                let obj = obj.get();
+                                check(&obj)
+                            }
                         {
                             trailer_dict = Some(dict);
                         }
@@ -186,11 +189,18 @@ fn fallback_xref_map_inner<'a>(
 
                             if let Some(stream) =
                                 reader.read_with_context::<IndirectObject<Stream<'_>>>(&dummy_ctx)
-                                && let Some(data) = stream.clone().get().decoded().ok()
-                                && let Some(object_stream) =
-                                    ObjectStream::new(stream.get(), &data, &dummy_ctx)
-                                && let Some(obj) = object_stream.get::<Dict<'_>>(*idx)
-                                && check(&obj)
+                                && {
+                                    let stream = stream.get();
+                                    if let Some(data) = stream.decoded().ok()
+                                        && let Some(object_stream) =
+                                            ObjectStream::new(stream, &data, &dummy_ctx)
+                                        && let Some(obj) = object_stream.get::<Dict<'_>>(*idx)
+                                    {
+                                        check(&obj)
+                                    } else {
+                                        false
+                                    }
+                                }
                             {
                                 trailer_dict = Some(dict);
                             }

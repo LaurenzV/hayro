@@ -445,7 +445,7 @@ impl CacheKey for TrueTypeFont {
 
 pub(crate) fn read_encoding(dict: &Dict<'_>) -> (Encoding, HashMap<u8, String>) {
     fn get_encoding_base(dict: &Dict<'_>, name: Name<'_>) -> Encoding {
-        match dict.get::<Name<'_>>(name.clone()) {
+        match dict.get::<Name<'_>>(name.as_ref()) {
             Some(n) => match n.deref() {
                 WIN_ANSI_ENCODING => Encoding::WinAnsi,
                 MAC_ROMAN_ENCODING => Encoding::MacRoman,
@@ -467,14 +467,20 @@ pub(crate) fn read_encoding(dict: &Dict<'_>) -> (Encoding, HashMap<u8, String>) 
         if let Some(differences) = encoding_dict.get::<Array<'_>>(DIFFERENCES) {
             let entries = differences.iter::<Object<'_>>();
 
-            let mut code = 0;
+            let mut code = 0_i64;
 
             for obj in entries {
-                if let Some(num) = obj.clone().into_i32() {
-                    code = num;
-                } else if let Some(name) = obj.into_name() {
-                    map.insert(code as u8, name.as_str().to_string());
-                    code += 1;
+                match obj {
+                    Object::Number(num) => {
+                        code = num.as_i64();
+                    }
+                    Object::Name(name) => {
+                        if let Ok(code) = code.try_into() {
+                            map.insert(code, name.as_str().to_string());
+                        }
+                        code += 1;
+                    }
+                    _ => {}
                 }
             }
         }

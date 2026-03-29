@@ -483,7 +483,7 @@ pub fn interpret<'a>(
                     .clone()
                     .into_name()
                     .and_then(|name| {
-                        let r = resources.properties.get_ref(name.clone())?;
+                        let r = resources.properties.get_ref(name.as_ref())?;
                         let d = resources
                             .properties
                             .get::<Dict<'_>>(name)
@@ -592,10 +592,14 @@ pub fn interpret<'a>(
                 }
 
                 for obj in s.0.iter::<Object<'_>>() {
-                    if let Some(adjustment) = obj.clone().into_f32() {
-                        context.get_mut().text_state.apply_adjustment(adjustment);
-                    } else if let Some(text) = obj.into_string() {
-                        text::show_text_string(context, device, resources, &text);
+                    match obj {
+                        Object::Number(num) => {
+                            context.get_mut().text_state.apply_adjustment(num.as_f32());
+                        }
+                        Object::String(text) => {
+                            text::show_text_string(context, device, resources, &text);
+                        }
+                        _ => {}
                     }
                 }
             }

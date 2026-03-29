@@ -83,7 +83,7 @@ impl Filter {
     pub(crate) fn apply(
         &self,
         data: &[u8],
-        params: Dict<'_>,
+        params: &Dict<'_>,
         #[cfg_attr(not(feature = "images"), allow(unused))] image_params: &ImageDecodeParams,
     ) -> Result<FilterResult<'static>, DecodeFailure> {
         let res = match self {

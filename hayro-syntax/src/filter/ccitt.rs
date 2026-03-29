@@ -10,7 +10,7 @@ use hayro_ccitt::{DecodeSettings, Decoder, DecoderContext, EncodingMode};
 
 pub(crate) fn decode(
     data: &[u8],
-    params: Dict<'_>,
+    params: &Dict<'_>,
     image_params: &ImageDecodeParams,
 ) -> Option<FilterResult<'static>> {
     let k = params.get::<i32>(K).unwrap_or(0);

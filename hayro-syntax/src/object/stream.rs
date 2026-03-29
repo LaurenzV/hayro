@@ -179,7 +179,7 @@ impl<'a> Stream<'a> {
         {
             let new = filter.apply(
                 current.as_ref().map(|c| c.data.as_ref()).unwrap_or(&data),
-                params.clone(),
+                params,
                 image_params,
             )?;
             current = Some(new);

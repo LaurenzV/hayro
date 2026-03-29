@@ -106,10 +106,10 @@ impl ColorSpaceType {
     }
 
     fn new_inner(object: Object<'_>, cache: &Cache) -> Option<Self> {
-        if let Some(name) = object.clone().into_name() {
+        if let Object::Name(name) = object {
             return Self::new_from_name(&name);
-        } else if let Some(color_array) = object.clone().into_array() {
-            let mut iter = color_array.clone().flex_iter();
+        } else if let Object::Array(color_array) = object {
+            let mut iter = color_array.flex_iter();
             let name = iter.next::<Name<'_>>()?;
 
             match name.deref() {
