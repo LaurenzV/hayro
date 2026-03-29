@@ -38,6 +38,38 @@ impl FloatExt for f32 {
     }
 }
 
+#[cfg(feature = "unsafe")]
+pub(crate) fn find_needle(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    memchr::memmem::find(haystack, needle)
+}
+
+#[cfg(not(feature = "unsafe"))]
+pub(crate) fn find_needle(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    if needle.is_empty() {
+        return Some(0);
+    }
+
+    let first = needle[0];
+    let mut i = 0;
+
+    while i + needle.len() <= haystack.len() {
+        while haystack.get(i).copied()? != first {
+            i += 1;
+            if i + needle.len() > haystack.len() {
+                return None;
+            }
+        }
+
+        if haystack.get(i..)?.starts_with(needle) {
+            return Some(i);
+        }
+
+        i += 1;
+    }
+
+    None
+}
+
 /// Allows to store elements at an index with an `&self` reference.
 ///
 /// This is similar to a thread-safe arena data structure, but with less moving

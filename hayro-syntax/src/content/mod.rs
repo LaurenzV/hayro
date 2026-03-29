@@ -41,6 +41,7 @@ use crate::object::{Array, Number, Object, Stream};
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 use crate::trivia::is_white_space_character;
+use crate::util::find_needle;
 use core::fmt::{Debug, Formatter};
 use core::ops::Deref;
 use smallvec::SmallVec;
@@ -167,8 +168,10 @@ impl<'a> UntypedIter<'a> {
                     let stream_data = self.reader.tail()?;
                     let start_offset = self.reader.offset();
 
-                    'outer: while let Some(bytes) = self.reader.peek_bytes(2) {
-                        if bytes == b"EI" {
+                    'outer: while let Some(pos) = find_needle(self.reader.tail()?, b"EI") {
+                        self.reader.read_bytes(pos)?;
+
+                        if self.reader.peek_bytes(2) == Some(b"EI") {
                             // If the following character is not a whitespace character, then we are in a ASCII-85 stream.
                             if self
                                 .reader
@@ -194,8 +197,22 @@ impl<'a> UntypedIter<'a> {
                             let tail = &self.reader.tail()?[2..];
                             let mut find_reader = Reader::new(tail);
 
-                            while let Some(bytes) = find_reader.peek_bytes(2) {
-                                if bytes == b"EI" {
+                            while !find_reader.at_end() {
+                                let remaining = find_reader.tail()?;
+                                let next_ei = find_needle(remaining, b"EI");
+                                let next_bi = find_needle(remaining, b"BI");
+
+                                let (next_pos, is_ei) = match (next_ei, next_bi) {
+                                    (Some(ei), Some(bi)) if ei <= bi => (ei, true),
+                                    (Some(_), Some(bi)) => (bi, false),
+                                    (Some(ei), None) => (ei, true),
+                                    (None, Some(bi)) => (bi, false),
+                                    (None, None) => break,
+                                };
+
+                                find_reader.read_bytes(next_pos)?;
+
+                                if is_ei {
                                     let analyze_data = &tail[..find_reader.offset()];
 
                                     // If there is any binary data in-between, we for sure
@@ -250,7 +267,7 @@ impl<'a> UntypedIter<'a> {
                                         self.reader.read_bytes(2)?;
                                         continue 'outer;
                                     }
-                                } else if bytes == b"BI" {
+                                } else {
                                     // Possibly another inline image, if so, the previously found "EI"
                                     // is indeed the end of data.
                                     let mut cloned = find_reader.clone();
@@ -272,8 +289,6 @@ impl<'a> UntypedIter<'a> {
                             self.reader.skip_white_spaces();
 
                             break;
-                        } else {
-                            self.reader.read_byte()?;
                         }
                     }
                 }

@@ -11,7 +11,7 @@ use crate::object::{Object, ObjectLike, ObjectRefLike};
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 use crate::trivia::is_white_space_character;
-use crate::util::OptionLog;
+use crate::util::{OptionLog, find_needle};
 use alloc::borrow::Cow;
 use alloc::vec::Vec;
 use core::fmt::{Debug, Formatter};
@@ -302,7 +302,7 @@ fn parse_proper<'a>(r: &mut Reader<'a>, dict: &Dict<'a>) -> Option<Stream<'a>> {
 }
 
 fn parse_fallback<'a>(r: &mut Reader<'a>, dict: &Dict<'a>) -> Option<Stream<'a>> {
-    let stream_offset = find_subslice(r.tail()?, b"stream")?;
+    let stream_offset = find_needle(r.tail()?, b"stream")?;
     r.read_bytes(stream_offset)?;
     r.forward_tag(b"stream")?;
 
@@ -312,7 +312,7 @@ fn parse_fallback<'a>(r: &mut Reader<'a>, dict: &Dict<'a>) -> Option<Stream<'a>>
         .or_else(|| r.forward_tag(b"\r"))?;
 
     let tail = r.tail()?;
-    let endstream_offset = find_subslice(tail, b"endstream")?;
+    let endstream_offset = find_needle(tail, b"endstream")?;
     let data_end = trim_trailing_ascii_whitespace(&tail[..endstream_offset]);
     let data = tail.get(..data_end)?;
 
@@ -321,38 +321,6 @@ fn parse_fallback<'a>(r: &mut Reader<'a>, dict: &Dict<'a>) -> Option<Stream<'a>>
     r.forward_tag(b"endstream")?;
 
     Some(Stream::new(data, dict.clone()))
-}
-
-#[cfg(feature = "unsafe")]
-fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
-    memchr::memmem::find(haystack, needle)
-}
-
-#[cfg(not(feature = "unsafe"))]
-fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
-    if needle.is_empty() {
-        return Some(0);
-    }
-
-    let first = needle[0];
-    let mut i = 0;
-
-    while i + needle.len() <= haystack.len() {
-        while haystack.get(i).copied()? != first {
-            i += 1;
-            if i + needle.len() > haystack.len() {
-                return None;
-            }
-        }
-
-        if haystack.get(i..)?.starts_with(needle) {
-            return Some(i);
-        }
-
-        i += 1;
-    }
-
-    None
 }
 
 fn trim_trailing_ascii_whitespace(data: &[u8]) -> usize {
