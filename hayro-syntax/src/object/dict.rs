@@ -196,67 +196,134 @@ fn read_inner<'a>(
     start_tag: Option<&[u8]>,
     end_tag: &[u8],
 ) -> Option<Dict<'a>> {
+    // TODO: Figure out how to
+    // 1) Make dictionaries easily cloneable without wrapping in Arc.
+    // 2) Maybe have an efficient per-document allocator pool for hashmaps
+    // that can be reused.
     #[cfg(feature = "std")]
     let mut offsets = FxHashMap::with_capacity_and_hasher(8, rustc_hash::FxBuildHasher);
     #[cfg(not(feature = "std"))]
     let mut offsets = FxHashMap::new();
 
-    let data = {
-        let dict_data = r.tail()?;
-        let start_offset = r.offset();
-
-        // Inline image dictionaries don't start with '<<'.
-        if let Some(start_tag) = start_tag {
-            r.forward_tag(start_tag)?;
-        }
-
-        loop {
-            r.skip_white_spaces_and_comments();
-
-            // Normal dictionaries end with '>>', inline image dictionaries end with BD.
-            if let Some(()) = r.peek_tag(end_tag) {
-                r.forward_tag(end_tag)?;
-                let end_offset = r.offset() - start_offset;
-
-                break &dict_data[..end_offset];
-            } else {
-                let Some(name) = r.read_without_context::<Name<'_>>() else {
-                    if start_tag.is_some() {
-                        // In case there is garbage in-between, be lenient and just try to skip it.
-                        // But only do this if we are parsing a proper dictionary as opposed to an
-                        // inline dictionary.
-                        r.read::<Object<'_>>(ctx)?;
-                        continue;
-                    } else {
-                        return None;
-                    }
-                };
-                r.skip_white_spaces_and_comments();
-
-                // Do note that we are including objects in our dictionary even if they
-                // are the null object, meaning that a call to `contains_key` will return `true`
-                // even if the object is the null object. The PDF reference in theory requires
-                // us to treat them as non-existing. Previously, we included a check to determine
-                // whether the object is `null` before inserting it, but that caused problems
-                // in some test cases where encryption + object streams are involved (as we would
-                // attempt to read an object stream before having resolved the encryption dictionary).
-                let offset = r.offset() - start_offset;
-                offsets.insert(name, offset);
-
-                if ctx.in_content_stream() {
-                    r.skip::<Object<'_>>(ctx.in_content_stream())?;
-                } else {
-                    r.skip::<MaybeRef<Object<'_>>>(ctx.in_content_stream())?;
-                }
-            }
-        }
-    };
+    let data = parse_dict_with(
+        r,
+        ctx,
+        start_tag,
+        end_tag,
+        #[inline]
+        |name, offset, _| {
+            offsets.insert(name, offset);
+            Some(())
+        },
+    )?;
 
     Some(Dict(Inner::Some(Arc::new(Repr {
         data,
         offsets,
         ctx: ctx.clone(),
     }))))
+}
+
+pub(crate) struct DictProbe<'a> {
+    pub(crate) data: &'a [u8],
+    pub(crate) has_root: bool,
+    pub(crate) has_type: bool,
+}
+
+// We use that method during fallback xref parsing, so that we can search for
+// the dictionaries we need without allocating the whole hash map.
+// If the above TODOs are ever resolved, we can probably remove this method.
+pub(crate) fn probe_dict<'a>(
+    r: &mut Reader<'a>,
+    ctx: &ReaderContext<'a>,
+    start_tag: Option<&[u8]>,
+    end_tag: &[u8],
+) -> Option<DictProbe<'a>> {
+    let mut has_root = false;
+    let mut has_type = false;
+
+    let data = parse_dict_with(
+        r,
+        ctx,
+        start_tag,
+        end_tag,
+        #[inline]
+        |name, _, _value_reader| {
+            if name.as_ref() == keys::ROOT {
+                has_root = true;
+            } else if name.as_ref() == keys::TYPE {
+                has_type = true;
+            }
+
+            Some(())
+        },
+    )?;
+
+    Some(DictProbe {
+        data,
+        has_root,
+        has_type,
+    })
+}
+
+fn parse_dict_with<'a, F>(
+    r: &mut Reader<'a>,
+    ctx: &ReaderContext<'a>,
+    start_tag: Option<&[u8]>,
+    end_tag: &[u8],
+    mut on_entry: F,
+) -> Option<&'a [u8]>
+where
+    F: FnMut(Name<'a>, usize, &Reader<'a>) -> Option<()>,
+{
+    let dict_data = r.tail()?;
+    let start_offset = r.offset();
+
+    // Inline image dictionaries don't start with '<<'.
+    if let Some(start_tag) = start_tag {
+        r.forward_tag(start_tag)?;
+    }
+
+    loop {
+        r.skip_white_spaces_and_comments();
+
+        // Normal dictionaries end with '>>', inline image dictionaries end with BD.
+        if let Some(()) = r.peek_tag(end_tag) {
+            r.forward_tag(end_tag)?;
+            let end_offset = r.offset() - start_offset;
+
+            break Some(&dict_data[..end_offset]);
+        } else {
+            let Some(name) = r.read_without_context::<Name<'_>>() else {
+                if start_tag.is_some() {
+                    // In case there is garbage in-between, be lenient and just try to skip it.
+                    // But only do this if we are parsing a proper dictionary as opposed to an
+                    // inline dictionary.
+                    r.read::<Object<'_>>(ctx)?;
+                    continue;
+                } else {
+                    return None;
+                }
+            };
+            r.skip_white_spaces_and_comments();
+
+            let offset = r.offset() - start_offset;
+            // Do note that we are including objects in our dictionary even if they
+            // are the null object, meaning that a call to `contains_key` will return `true`
+            // even if the object is the null object. The PDF reference in theory requires
+            // us to treat them as non-existing. Previously, we included a check to determine
+            // whether the object is `null` before inserting it, but that caused problems
+            // in some test cases where encryption + object streams are involved (as we would
+            // attempt to read an object stream before having resolved the encryption dictionary).
+            on_entry(name, offset, r)?;
+
+            if ctx.in_content_stream() {
+                r.skip::<Object<'_>>(ctx.in_content_stream())?;
+            } else {
+                r.skip::<MaybeRef<Object<'_>>>(ctx.in_content_stream())?;
+            }
+        }
+    }
 }
 
 object!(Dict<'a>, Dict);

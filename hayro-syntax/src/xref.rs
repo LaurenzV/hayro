@@ -10,6 +10,7 @@ use crate::object::dict::keys::{
     AUTHOR, CREATION_DATE, CREATOR, ENCRYPT, FIRST, ID, INDEX, INFO, KEYWORDS, MOD_DATE, N,
     OCPROPERTIES, PAGES, PREV, PRODUCER, ROOT, SIZE, SUBJECT, TITLE, TYPE, VERSION, W, XREF_STM,
 };
+use crate::object::dict::probe_dict;
 use crate::object::indirect::IndirectObject;
 use crate::object::{Array, MaybeRef};
 use crate::object::{DateTime, Dict};
@@ -98,59 +99,71 @@ fn fallback_xref_map_inner<'a>(
                 last_obj_num = Some(obj_id);
                 dummy_ctx.set_obj_number(obj_id);
             }
-        } else if let Some(dict) = r.read::<Dict<'_>>(&dummy_ctx) {
-            if dict.contains_key(ROOT) {
-                trailer_dicts.push(dict.clone());
-            }
+        } else {
+            let mut probe_reader = r.clone();
+            if let Some(probe) = probe_dict(&mut probe_reader, &dummy_ctx, Some(b"<<"), b">>") {
+                r = probe_reader;
+                if probe.has_root || probe.has_type {
+                    let mut dict_reader = Reader::new(probe.data);
+                    if let Some(dict) = dict_reader.read_with_context::<Dict<'_>>(&dummy_ctx) {
+                        if probe.has_root && dict.contains_key(ROOT) {
+                            trailer_dicts.push(dict.clone());
+                        }
 
-            if dict
-                .get::<Name<'_>>(TYPE)
-                .is_some_and(|n| n.as_str() == "Catalog")
-            {
-                root_ref = last_obj_num;
-            }
+                        if dict
+                            .get::<Name<'_>>(TYPE)
+                            .is_some_and(|n| n.as_str() == "Catalog")
+                        {
+                            root_ref = last_obj_num;
+                        }
 
-            if let Some(stream) = old_r.read::<Stream<'_>>(&dummy_ctx)
-                && stream.dict().get::<Name<'_>>(TYPE).as_deref() == Some(b"ObjStm")
-                && let Some(data) = stream.decoded().ok()
-                && let Some(last_obj_num) = last_obj_num
-                && let Some(obj_stream) = ObjectStream::new(stream, &data, &dummy_ctx)
-            {
-                for (idx, (obj_num, _)) in obj_stream.offsets.iter().enumerate() {
-                    let id = ObjectIdentifier::new(*obj_num as i32, 0);
-                    // If we already found an entry for that object number that was not
-                    // inside an object stream. Somewhat arbitrary and maybe
-                    // we can do better, but that seems to work for the current
-                    // set of tests.
-                    if xref_map
-                        .get(&id)
-                        .is_none_or(|e| !matches!(e, &EntryType::Normal(_)))
-                    {
-                        xref_map.insert(
-                            id,
-                            EntryType::ObjStream(last_obj_num.obj_number as u32, idx as u32),
-                        );
+                        if let Some(stream) = old_r.read::<Stream<'_>>(&dummy_ctx)
+                            && dict.get::<Name<'_>>(TYPE).as_deref() == Some(b"ObjStm")
+                            && let Some(data) = stream.decoded().ok()
+                            && let Some(last_obj_num) = last_obj_num
+                            && let Some(obj_stream) = ObjectStream::new(stream, &data, &dummy_ctx)
+                        {
+                            for (idx, (obj_num, _)) in obj_stream.offsets.iter().enumerate() {
+                                let id = ObjectIdentifier::new(*obj_num as i32, 0);
+                                // If we already found an entry for that object number that was not
+                                // inside an object stream. Somewhat arbitrary and maybe
+                                // we can do better, but that seems to work for the current
+                                // set of tests.
+                                if xref_map
+                                    .get(&id)
+                                    .is_none_or(|e| !matches!(e, &EntryType::Normal(_)))
+                                {
+                                    xref_map.insert(
+                                        id,
+                                        EntryType::ObjStream(
+                                            last_obj_num.obj_number as u32,
+                                            idx as u32,
+                                        ),
+                                    );
+                                }
+                            }
+                        }
                     }
                 }
-            }
-        } else {
-            // Previously, we would always just read a single byte here. However,
-            // when looking into why `pdfjs/filled-background-range` takes so long to
-            // render, I noticed a problem. The PDF contains of a stream that
-            // stores tens of thousands of digits of Pi. Therefore, we would always
-            // advance by one byte and then try to read an object identifier again,
-            // since we always have a digit.
-            // Therefore, there is something better we can do: Since we were unable
-            // to parse an object identifier, in case we currently have a regular
-            // character, we can skip _all_ regular characters directly adjacent
-            // to the current one. This fixes the issue in the given PDF. It's
-            // still possible to construct a malicious PDF that alternates
-            // between space and digits, so it might be worth thinking whether
-            // this can be improved further.
-            let old_pos = r.offset;
-            r.forward_while(is_regular_character);
-            if r.offset == old_pos {
-                r.read_byte();
+            } else {
+                // Previously, we would always just read a single byte here. However,
+                // when looking into why `pdfjs/filled-background-range` takes so long to
+                // render, I noticed a problem. The PDF contains of a stream that
+                // stores tens of thousands of digits of Pi. Therefore, we would always
+                // advance by one byte and then try to read an object identifier again,
+                // since we always have a digit.
+                // Therefore, there is something better we can do: Since we were unable
+                // to parse an object identifier, in case we currently have a regular
+                // character, we can skip _all_ regular characters directly adjacent
+                // to the current one. This fixes the issue in the given PDF. It's
+                // still possible to construct a malicious PDF that alternates
+                // between space and digits, so it might be worth thinking whether
+                // this can be improved further.
+                let old_pos = r.offset;
+                r.forward_while(is_regular_character);
+                if r.offset == old_pos {
+                    r.read_byte();
+                }
             }
         }
 
