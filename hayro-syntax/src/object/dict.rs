@@ -1037,7 +1037,7 @@ mod tests {
         let dict = dict_impl(dict_data).unwrap();
 
         assert_eq!(dict.len(), 1);
-        assert!(dict.get::<Number>(Name::new(b"Hi")).is_some());
+        assert!(dict.get::<Number>(Name::new_unescaped(b"Hi")).is_some());
     }
 
     #[test]
@@ -1046,8 +1046,8 @@ mod tests {
         let dict = dict_impl(dict_data).unwrap();
 
         assert_eq!(dict.len(), 2);
-        assert!(dict.get::<Number>(Name::new(b"Hi")).is_some());
-        assert!(dict.get::<bool>(Name::new(b"Second")).is_some());
+        assert!(dict.get::<Number>(Name::new_unescaped(b"Hi")).is_some());
+        assert!(dict.get::<bool>(Name::new_unescaped(b"Second")).is_some());
     }
 
     #[test]
@@ -1068,15 +1068,27 @@ mod tests {
             .read_with_context::<Dict<'_>>(&ReaderContext::dummy())
             .unwrap();
         assert_eq!(dict.len(), 6);
-        assert!(dict.get::<Name<'_>>(Name::new(b"Type")).is_some());
-        assert!(dict.get::<Name<'_>>(Name::new(b"Subtype")).is_some());
-        assert!(dict.get::<Number>(Name::new(b"Version")).is_some());
-        assert!(dict.get::<i32>(Name::new(b"IntegerItem")).is_some());
+        assert!(dict.get::<Name<'_>>(Name::new_unescaped(b"Type")).is_some());
         assert!(
-            dict.get::<string::String<'_>>(Name::new(b"StringItem"))
+            dict.get::<Name<'_>>(Name::new_unescaped(b"Subtype"))
                 .is_some()
         );
-        assert!(dict.get::<Dict<'_>>(Name::new(b"Subdictionary")).is_some());
+        assert!(
+            dict.get::<Number>(Name::new_unescaped(b"Version"))
+                .is_some()
+        );
+        assert!(
+            dict.get::<i32>(Name::new_unescaped(b"IntegerItem"))
+                .is_some()
+        );
+        assert!(
+            dict.get::<string::String<'_>>(Name::new_unescaped(b"StringItem"))
+                .is_some()
+        );
+        assert!(
+            dict.get::<Dict<'_>>(Name::new_unescaped(b"Subdictionary"))
+                .is_some()
+        );
     }
 
     #[test]

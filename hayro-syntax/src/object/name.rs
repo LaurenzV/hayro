@@ -74,31 +74,36 @@ impl Ord for Name<'_> {
 impl<'a> Name<'a> {
     /// Create a new name from a sequence of bytes.
     #[inline]
-    pub fn new(data: &'a [u8]) -> Self {
+    pub fn new(data: &'a [u8]) -> Option<Self> {
         if !data.contains(&b'#') {
-            Self(NameInner::Borrowed(data))
+            Some(Self::new_unescaped(data))
         } else {
-            Self(NameInner::Owned(Self::new_from_escaped(data)))
+            Self::new_escaped(data)
         }
     }
 
-    fn new_from_escaped(data: &'a [u8]) -> SmallVec<[u8; 23]> {
+    /// Create a new name from an unescaped byte sequence.
+    #[inline]
+    pub fn new_unescaped(data: &'a [u8]) -> Self {
+        Self(NameInner::Borrowed(data))
+    }
+
+    /// Create a new name from bytes that may contain escape sequences.
+    #[inline]
+    pub fn new_escaped(data: &'a [u8]) -> Option<Self> {
         let mut result = SmallVec::new();
         let mut r = Reader::new(data);
 
         while let Some(b) = r.read_byte() {
             if b == b'#' {
-                // We already verified when skipping that it's a valid hex sequence.
-                let hex = r.read_bytes(2).unwrap();
-                result.push(
-                    decode_hex_digit(hex[0]).unwrap() << 4 | decode_hex_digit(hex[1]).unwrap(),
-                );
+                let hex = r.read_bytes(2)?;
+                result.push(decode_hex_digit(hex[0])? << 4 | decode_hex_digit(hex[1])?);
             } else {
                 result.push(b);
             }
         }
 
-        result
+        Some(Self(NameInner::Owned(result)))
     }
 
     /// Return a string representation of the name.
@@ -134,28 +139,22 @@ impl<'a> Readable<'a> for Name<'a> {
 
         // Exclude leading solidus.
         let data = r.range(start + 1..end)?;
-        Some(Self::new(data))
+        Self::new(data)
     }
 }
 
 // This method is shared by `Name` and the parser for content stream operators (which behave like
 // names, except that they aren't preceded by a solidus.
 pub(crate) fn skip_name_like(r: &mut Reader<'_>, solidus: bool) -> Option<()> {
+    // Note that we are not validating hex escape sequences here
+    // (since this method can lie on the hot path), so it's possible
+    // this method will yield invalid names. Validation needs to happen during actual
+    // actual reading.
     if solidus {
         r.forward_tag(b"/")?;
-    }
-
-    let old = r.offset();
-
-    while let Some(b) = r.eat(is_regular_character) {
-        if b == b'#' {
-            r.eat(|n| n.is_ascii_hexdigit())?;
-            r.eat(|n| n.is_ascii_hexdigit())?;
-        }
-    }
-
-    if !solidus && old == r.offset() {
-        return None;
+        r.forward_while(is_regular_character);
+    } else {
+        r.forward_while_1(is_regular_character)?;
     }
 
     Some(())
