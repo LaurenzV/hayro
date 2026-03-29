@@ -389,7 +389,7 @@ mod tests {
         assert_eq!(size_of::<Name<'_>>(), 32);
         assert_eq!(size_of::<Null>(), 0);
         assert_eq!(size_of::<Number>(), 16);
-        assert_eq!(size_of::<Stream<'_>>(), 8);
+        assert_eq!(size_of::<Stream<'_>>(), 24);
         assert_eq!(size_of::<String<'_>>(), 32);
     }
 }
