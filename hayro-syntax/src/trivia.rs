@@ -3,21 +3,57 @@
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 
+const fn build_regular_character_table() -> [bool; 256] {
+    let mut table = [true; 256];
+
+    // Whitespace characters.
+    table[0x00] = false;
+    table[0x09] = false;
+    table[0x0a] = false;
+    table[0x0c] = false;
+    table[0x0d] = false;
+    table[0x20] = false;
+
+    // Delimiter characters.
+    table[b'(' as usize] = false;
+    table[b')' as usize] = false;
+    table[b'<' as usize] = false;
+    table[b'>' as usize] = false;
+    table[b'[' as usize] = false;
+    table[b']' as usize] = false;
+    table[b'{' as usize] = false;
+    table[b'}' as usize] = false;
+    table[b'/' as usize] = false;
+    table[b'%' as usize] = false;
+
+    table
+}
+
+const REGULAR_CHARACTER_TABLE: [bool; 256] = build_regular_character_table();
+
+const fn build_white_space_table() -> [bool; 256] {
+    let mut table = [false; 256];
+
+    table[0x00] = true;
+    table[0x09] = true;
+    table[0x0a] = true;
+    table[0x0c] = true;
+    table[0x0d] = true;
+    table[0x20] = true;
+
+    table
+}
+
+const WHITE_SPACE_CHARACTER_TABLE: [bool; 256] = build_white_space_table();
+
 #[inline(always)]
 pub(crate) fn is_white_space_character(char: u8) -> bool {
-    matches!(char, 0x00 | 0x09 | 0x0a | 0x0c | 0x0d | 0x20)
+    WHITE_SPACE_CHARACTER_TABLE[char as usize]
 }
 
 #[inline(always)]
 pub(crate) fn is_regular_character(char: u8) -> bool {
-    match char {
-        // Whitespace characters
-        0x00 | 0x09 | 0x0a | 0x0c | 0x0d | 0x20 => false,
-        // Delimiter characters
-        b'(' | b')' | b'<' | b'>' | b'[' | b']' | b'{' | b'}' | b'/' | b'%' => false,
-        // All other characters are considered regular.
-        _ => true,
-    }
+    REGULAR_CHARACTER_TABLE[char as usize]
 }
 
 #[inline(always)]

@@ -87,7 +87,7 @@ impl<'a> ReaderExt<'a> for Reader<'a> {
 
     #[inline]
     fn read_white_space(&mut self) -> Option<()> {
-        if self.peek_byte()?.is_ascii_whitespace() {
+        if is_white_space_character(self.peek_byte()?) {
             let w = self.read_byte()?;
 
             if w == b'\r' && self.peek_byte().is_some_and(|b| b == b'\n') {
