@@ -962,7 +962,7 @@ mod tests {
     #[test]
     fn decode_lzw() {
         let input = [0x80, 0x0B, 0x60, 0x50, 0x22, 0x0C, 0x0C, 0x85, 0x01];
-        let decoded = lzw::decode(&input, Dict::default()).unwrap();
+        let decoded = lzw::decode(&input, &Dict::default()).unwrap();
 
         assert_eq!(decoded, vec![45, 45, 45, 45, 45, 65, 45, 45, 45, 66]);
     }
@@ -973,7 +973,7 @@ mod tests {
             0x78, 0x9c, 0xf3, 0x48, 0xcd, 0xc9, 0xc9, 0x7, 0x0, 0x5, 0x8c, 0x1, 0xf5,
         ];
 
-        let decoded = flate::decode(&input, Dict::default()).unwrap();
+        let decoded = flate::decode(&input, &Dict::default()).unwrap();
         assert_eq!(decoded, b"Hello");
     }
 
@@ -981,7 +981,7 @@ mod tests {
     fn decode_flate() {
         let input = [0xf3, 0x48, 0xcd, 0xc9, 0xc9, 0x7, 0x0];
 
-        let decoded = flate::decode(&input, Dict::default()).unwrap();
+        let decoded = flate::decode(&input, &Dict::default()).unwrap();
         assert_eq!(decoded, b"Hello");
     }
     
