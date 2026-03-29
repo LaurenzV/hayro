@@ -1,5 +1,7 @@
 //! Ported from <https://github.com/mozilla/pdf.js/blob/master/src/core/crypto.js>.
 
+// TODO: Explore performance improvements.
+
 use alloc::vec;
 use alloc::vec::Vec;
 
