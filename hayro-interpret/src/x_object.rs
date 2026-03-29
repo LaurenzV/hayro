@@ -20,6 +20,7 @@ use hayro_syntax::object::stream::{FilterResult, ImageColorSpace, ImageDecodePar
 use hayro_syntax::page::Resources;
 use kurbo::{Affine, Rect, Shape};
 use smallvec::{SmallVec, smallvec};
+use std::borrow::Cow;
 use std::iter;
 use std::ops::Deref;
 
@@ -52,7 +53,7 @@ impl<'a> XObject<'a> {
 }
 
 pub(crate) struct FormXObject<'a> {
-    pub(crate) decoded: Vec<u8>,
+    pub(crate) decoded: Cow<'a, [u8]>,
     pub(crate) matrix: Affine,
     pub(crate) bbox: [f32; 4],
     is_transparency_group: bool,
@@ -373,8 +374,8 @@ pub(crate) struct DecodedRaster {
     pub(crate) alpha: Option<LumaData>,
 }
 
-struct DecodeContext {
-    decoded: FilterResult,
+struct DecodeContext<'a> {
+    decoded: FilterResult<'a>,
     width: u32,
     height: u32,
     scale_factors: (f32, f32),
@@ -383,10 +384,10 @@ struct DecodeContext {
     decode_arr: SmallVec<[(f32, f32); 4]>,
 }
 
-fn decode_context(
-    obj: &ImageXObject<'_>,
+fn decode_context<'a>(
+    obj: &ImageXObject<'a>,
     target_dimension: Option<(u32, u32)>,
-) -> Option<DecodeContext> {
+) -> Option<DecodeContext<'a>> {
     let dict = obj.stream.dict();
     let dict_bpc = dict
         .get::<u8>(BPC)
@@ -526,7 +527,7 @@ fn decode_raster(
         // the raw decoded data, which will already be in
         // RGB8/gray-scale with values between 0 and 255.
         fix_image_length(
-            &mut ctx.decoded.data,
+            ctx.decoded.data.to_mut(),
             ctx.width,
             &mut height,
             0,
@@ -534,14 +535,14 @@ fn decode_raster(
         )?;
 
         if is_inverted_default_decode {
-            for b in &mut ctx.decoded.data {
+            for b in ctx.decoded.data.to_mut() {
                 *b = 255 - *b;
             }
         }
 
         if ctx.color_space.is_device_gray() {
             Some(ImageData::Luma(LumaData {
-                data: core::mem::take(&mut ctx.decoded.data),
+                data: core::mem::take(&mut ctx.decoded.data).into_owned(),
                 width: ctx.width,
                 height,
                 interpolate: obj.interpolate,
@@ -648,7 +649,7 @@ fn decode_raster(
 }
 
 fn decode_mask_bytes(
-    mut decoded_data: Vec<u8>,
+    mut decoded_data: Cow<'_, [u8]>,
     width: u32,
     height: &mut u32,
     color_space: &ColorSpace,
@@ -664,12 +665,12 @@ fn decode_mask_bytes(
     let mut data = if fast_path {
         let should_invert = invert ^ (decode_arr == inverted_default.as_slice());
         if should_invert {
-            for b in &mut decoded_data {
+            for b in decoded_data.to_mut() {
                 *b = 255 - *b;
             }
         }
 
-        decoded_data
+        decoded_data.into_owned()
     } else {
         let components = get_components(
             &decoded_data,
@@ -702,7 +703,7 @@ fn decode_mask_bytes(
 
 fn resolve_alpha(
     obj: &ImageXObject<'_>,
-    decoded: &mut FilterResult,
+    decoded: &mut FilterResult<'_>,
     image_data: Option<&ImageData>,
     color_space: &ColorSpace,
     bits_per_component: u8,
@@ -743,7 +744,7 @@ fn resolve_alpha(
         // TODO: Make this less ugly.
         let raw_data = match image_data {
             Some(ImageData::Luma(d)) => &d.data,
-            _ => &decoded.data,
+            _ => decoded.data.as_ref(),
         };
 
         let components = get_components(raw_data, width, *height, color_space, bits_per_component)?;

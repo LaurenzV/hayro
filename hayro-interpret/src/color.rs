@@ -14,6 +14,7 @@ use moxcms::{
     TransformOptions, Xyzd,
 };
 use smallvec::{SmallVec, ToSmallVec, smallvec};
+use std::borrow::Cow;
 use std::fmt::{Debug, Formatter};
 use std::ops::Deref;
 use std::sync::{Arc, LazyLock};
@@ -716,7 +717,10 @@ impl Indexed {
             let data = iter
                 .next::<Stream<'_>>()
                 .and_then(|s| s.decoded().ok())
-                .or_else(|| iter.next::<object::String<'_>>().map(|s| s.to_vec()))?;
+                .or_else(|| {
+                    iter.next::<object::String<'_>>()
+                        .map(|s| Cow::Owned(s.to_vec()))
+                })?;
 
             let num_components = base_color_space.num_components();
 

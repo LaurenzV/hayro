@@ -3,6 +3,7 @@ use crate::object::dict::keys::{
     BLACK_IS_1, COLUMNS, ENCODED_BYTE_ALIGN, END_OF_BLOCK, END_OF_LINE, K, ROWS,
 };
 use crate::object::stream::{FilterResult, ImageColorSpace, ImageData, ImageDecodeParams};
+use alloc::borrow::Cow;
 use alloc::vec::Vec;
 use core::iter;
 use hayro_ccitt::{DecodeSettings, Decoder, DecoderContext, EncodingMode};
@@ -11,7 +12,7 @@ pub(crate) fn decode(
     data: &[u8],
     params: Dict<'_>,
     image_params: &ImageDecodeParams,
-) -> Option<FilterResult> {
+) -> Option<FilterResult<'static>> {
     let k = params.get::<i32>(K).unwrap_or(0);
 
     let rows = params.get::<u32>(ROWS).unwrap_or(image_params.height);
@@ -138,7 +139,7 @@ pub(crate) fn decode(
     };
 
     Some(FilterResult {
-        data: decoded,
+        data: Cow::Owned(decoded),
         image_data: Some(ImageData {
             alpha: None,
             color_space: Some(ImageColorSpace::Gray),

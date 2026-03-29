@@ -85,7 +85,7 @@ impl Filter {
         data: &[u8],
         params: Dict<'_>,
         #[cfg_attr(not(feature = "images"), allow(unused))] image_params: &ImageDecodeParams,
-    ) -> Result<FilterResult, DecodeFailure> {
+    ) -> Result<FilterResult<'static>, DecodeFailure> {
         let res = match self {
             Self::AsciiHexDecode => ascii_hex::decode(data)
                 .map(FilterResult::from_data)

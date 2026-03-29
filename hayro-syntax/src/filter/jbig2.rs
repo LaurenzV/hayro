@@ -3,6 +3,7 @@ use crate::object::Dict;
 use crate::object::Stream;
 use crate::object::dict::keys::JBIG2_GLOBALS;
 use crate::object::stream::{FilterResult, ImageColorSpace, ImageData, ImageDecodeParams};
+use alloc::borrow::Cow;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::iter;
@@ -15,7 +16,7 @@ pub(crate) fn decode(
     data: &[u8],
     params: Dict<'_>,
     image_params: &ImageDecodeParams,
-) -> Option<FilterResult> {
+) -> Option<FilterResult<'static>> {
     let globals = params
         .get::<Stream<'_>>(JBIG2_GLOBALS)
         .and_then(|g| g.decoded().ok());
@@ -83,7 +84,7 @@ pub(crate) fn decode(
     };
 
     Some(FilterResult {
-        data: decoded,
+        data: Cow::Owned(decoded),
         image_data: Some(ImageData {
             alpha: None,
             color_space: Some(ImageColorSpace::Gray),

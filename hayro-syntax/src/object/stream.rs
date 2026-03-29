@@ -156,7 +156,7 @@ impl<'a> Stream<'a> {
     ///
     /// Note that the result of this method will not be cached, so calling it multiple
     /// times is expensive.
-    pub fn decoded(&self) -> Result<Vec<u8>, DecodeFailure> {
+    pub fn decoded(&self) -> Result<Cow<'a, [u8]>, DecodeFailure> {
         self.decoded_image(&ImageDecodeParams::default())
             .map(|r| r.data)
     }
@@ -166,11 +166,11 @@ impl<'a> Stream<'a> {
     pub fn decoded_image(
         &self,
         image_params: &ImageDecodeParams,
-    ) -> Result<FilterResult, DecodeFailure> {
+    ) -> Result<FilterResult<'a>, DecodeFailure> {
         let data = self.raw_data();
         let filters_and_params = self.filters_and_params();
 
-        let mut current: Option<FilterResult> = None;
+        let mut current: Option<FilterResult<'a>> = None;
 
         for (filter, params) in filters_and_params
             .filters
@@ -186,7 +186,7 @@ impl<'a> Stream<'a> {
         }
 
         Ok(current.unwrap_or(FilterResult {
-            data: data.to_vec(),
+            data,
             image_data: None,
         }))
     }
@@ -270,17 +270,17 @@ pub struct ImageData {
 }
 
 /// The result of applying a filter.
-pub struct FilterResult {
+pub struct FilterResult<'a> {
     /// The decoded data.
-    pub data: Vec<u8>,
+    pub data: Cow<'a, [u8]>,
     /// Additional data that is extracted from JPX image streams.
     pub image_data: Option<ImageData>,
 }
 
-impl FilterResult {
+impl FilterResult<'_> {
     pub(crate) fn from_data(data: Vec<u8>) -> Self {
         Self {
-            data,
+            data: Cow::Owned(data),
             image_data: None,
         }
     }

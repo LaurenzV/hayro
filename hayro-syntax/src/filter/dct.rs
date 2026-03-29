@@ -12,7 +12,7 @@ pub(crate) fn decode(
     data: &[u8],
     params: Dict<'_>,
     image_params: &ImageDecodeParams,
-) -> Option<FilterResult> {
+) -> Option<FilterResult<'static>> {
     if image_params.width > u16::MAX as u32 || image_params.height > u16::MAX as u32 {
         return None;
     }
@@ -93,7 +93,7 @@ pub(crate) fn decode(
     };
 
     Some(FilterResult {
-        data: decoded,
+        data: Cow::Owned(decoded),
         image_data: Some(image_data),
     })
 }

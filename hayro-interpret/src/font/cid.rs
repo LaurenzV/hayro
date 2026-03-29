@@ -452,7 +452,7 @@ impl FontType {
             .decoded()
             .ok()?;
 
-        let data = Arc::new(data);
+        let data = Arc::new(data.into_owned());
 
         let parsed = if let Ok(_font_ref) = FontRef::from_index(data.as_ref(), 0) {
             // It's an OpenType font, either TrueType or CFF.

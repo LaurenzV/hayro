@@ -4,6 +4,7 @@ use crate::reader::ReaderContext;
 use crate::sync::HashMap;
 use crate::sync::{Arc, Mutex, MutexExt};
 use crate::util::SegmentList;
+use alloc::borrow::Cow;
 use alloc::vec::Vec;
 use core::fmt::{Debug, Formatter};
 
@@ -104,7 +105,7 @@ impl Data {
             self.decoded
                 .get_or_init(idx, || {
                     let stream = ctx.xref().get_with::<Stream<'_>>(id, ctx)?;
-                    stream.decoded().ok()
+                    stream.decoded().ok().map(Cow::into_owned)
                 })
                 .as_deref()
         }

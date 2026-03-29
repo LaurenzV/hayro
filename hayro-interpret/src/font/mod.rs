@@ -22,6 +22,7 @@ use hayro_syntax::xref::XRef;
 use kurbo::{Affine, BezPath, Vec2};
 use outline::OutlineFont;
 use skrifa::GlyphId;
+use std::borrow::Cow;
 use std::fmt::Debug;
 use std::ops::Deref;
 use std::rc::Rc;
@@ -651,7 +652,7 @@ pub(crate) fn read_to_unicode(dict: &Dict<'_>, cmap_resolver: &CMapResolverFn) -
         .or_else(|| {
             dict.get::<Name<'_>>(TO_UNICODE)
                 .and_then(|name| (cmap_resolver)(CMapName::from_bytes(name.as_ref())))
-                .map(|d| d.to_vec())
+                .map(|d| Cow::Owned(d.to_vec()))
         })
         .and_then(|data| {
             let cmap_resolver = cmap_resolver.clone();

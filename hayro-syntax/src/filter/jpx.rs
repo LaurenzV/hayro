@@ -2,6 +2,7 @@ use crate::bit_reader::BitWriter;
 use crate::filter::FilterResult;
 use crate::math::round_f32;
 use crate::object::stream::{ImageColorSpace, ImageData, ImageDecodeParams};
+use alloc::borrow::Cow;
 use alloc::vec;
 use alloc::vec::Vec;
 use hayro_jpeg2000::{ColorSpace, DecodeSettings};
@@ -17,7 +18,7 @@ impl ImageColorSpace {
     }
 }
 
-pub(crate) fn decode(data: &[u8], params: &ImageDecodeParams) -> Option<FilterResult> {
+pub(crate) fn decode(data: &[u8], params: &ImageDecodeParams) -> Option<FilterResult<'static>> {
     use crate::object::stream::ImageColorSpace;
 
     let settings = DecodeSettings {
@@ -76,7 +77,7 @@ pub(crate) fn decode(data: &[u8], params: &ImageDecodeParams) -> Option<FilterRe
     }
 
     Some(FilterResult {
-        data,
+        data: Cow::Owned(data),
         image_data: Some(ImageData {
             alpha,
             color_space: Some(cs),
