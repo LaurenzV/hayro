@@ -47,7 +47,7 @@ op_impl!(
     "SCN",
     u8::MAX as usize,
     |stack: &'b Stack<'a>| {
-        let (nums, name) = parse_named_color(&stack.0)?;
+        let (nums, name) = parse_named_color(stack.as_slice())?;
         Some(StrokeColorNamed(nums, name))
     }
 );
@@ -63,7 +63,7 @@ op_impl!(
     "scn",
     u8::MAX as usize,
     |stack: &'b Stack<'a>| {
-        let (nums, name) = parse_named_color(&stack.0)?;
+        let (nums, name) = parse_named_color(stack.as_slice())?;
         Some(NonStrokeColorNamed(nums, name))
     }
 );

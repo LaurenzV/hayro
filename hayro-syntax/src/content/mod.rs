@@ -37,19 +37,20 @@ use crate::content::ops::TypedInstruction;
 use crate::object;
 use crate::object::dict::InlineImageDict;
 use crate::object::name::{Name, skip_name_like};
-use crate::object::{Array, Number, Object, Stream};
+use crate::object::{Array, Null, Number, Object, Stream};
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 use crate::trivia::is_white_space_character;
 use crate::util::find_needle;
+use core::array;
 use core::fmt::{Debug, Formatter};
 use core::ops::Deref;
 use smallvec::SmallVec;
 
 // 6 operands are used for example for ctm or cubic curves,
 // but anything above should be pretty rare (only for example for
-// DeviceN color spaces)
-const OPERANDS_THRESHOLD: usize = 6;
+// DeviceN color spaces, or invalid PDF files). So we settle on 10.
+const OPERANDS_THRESHOLD: usize = 10;
 
 impl Debug for Operator<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
@@ -139,7 +140,7 @@ impl<'a> UntypedIter<'a> {
                 // similar behavior to Acrobat and Chromium, we try to consume
                 // such an operator and then simply skip it.
                 if let Some(object) = self.reader.read_without_context::<Object<'_>>() {
-                    self.stack.push(object);
+                    self.stack.push(object)?;
                 } else if self.reader.read_without_context::<Operator<'_>>().is_some() {
                     self.stack.clear();
                 } else {
@@ -283,7 +284,7 @@ impl<'a> UntypedIter<'a> {
                                 find_reader.read_byte()?;
                             }
 
-                            self.stack.push(Object::Stream(stream));
+                            self.stack.push(Object::Stream(stream))?;
 
                             self.reader.read_bytes(2)?;
                             self.reader.skip_white_spaces();
@@ -373,8 +374,10 @@ impl<'b, 'a> Instruction<'b, 'a> {
 }
 
 /// A stack holding the arguments of an operator.
-#[derive(Debug, Clone, PartialEq)]
-pub struct Stack<'a>(SmallVec<[Object<'a>; OPERANDS_THRESHOLD]>);
+pub struct Stack<'a> {
+    data: [Object<'a>; OPERANDS_THRESHOLD],
+    len: usize,
+}
 
 impl<'a> Default for Stack<'a> {
     fn default() -> Self {
@@ -385,26 +388,39 @@ impl<'a> Default for Stack<'a> {
 impl<'a> Stack<'a> {
     /// Create a new, empty stack.
     pub fn new() -> Self {
-        Self(SmallVec::new())
+        Self {
+            data: array::from_fn(|_| Object::Null(Null)),
+            len: 0,
+        }
     }
 
-    fn push(&mut self, operand: Object<'a>) {
-        self.0.push(operand);
+    fn push(&mut self, operand: Object<'a>) -> Option<()> {
+        if self.len >= OPERANDS_THRESHOLD {
+            return None;
+        }
+
+        self.data[self.len] = operand;
+        self.len += 1;
+        Some(())
     }
 
     fn clear(&mut self) {
-        self.0.clear();
+        self.len = 0;
     }
 
     fn len(&self) -> usize {
-        self.0.len()
+        self.len
+    }
+
+    fn as_slice(&self) -> &[Object<'a>] {
+        &self.data[..self.len]
     }
 
     fn get<'b, T>(&'b self, index: usize) -> Option<T>
     where
         T: Operand<'b, 'a>,
     {
-        self.0.get(index).and_then(T::from_object)
+        self.as_slice().get(index).and_then(T::from_object)
     }
 
     fn get_all<'b, T>(&'b self) -> Option<SmallVec<[T; OPERANDS_THRESHOLD]>>
@@ -413,12 +429,34 @@ impl<'a> Stack<'a> {
     {
         let mut operands = SmallVec::new();
 
-        for op in &self.0 {
+        for op in self.as_slice() {
             let converted = T::from_object(op)?;
             operands.push(converted);
         }
 
         Some(operands)
+    }
+}
+
+impl Debug for Stack<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        f.debug_list().entries(self.as_slice()).finish()
+    }
+}
+
+impl Clone for Stack<'_> {
+    fn clone(&self) -> Self {
+        let mut stack = Self::new();
+        for item in self.as_slice() {
+            stack.push(item.clone()).unwrap();
+        }
+        stack
+    }
+}
+
+impl PartialEq for Stack<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.as_slice() == other.as_slice()
     }
 }
 
@@ -496,7 +534,7 @@ impl<'b, 'a> Iterator for OperandIterator<'b, 'a> {
     type Item = &'b Object<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(item) = self.stack.0.get(self.cur_index) {
+        if let Some(item) = self.stack.as_slice().get(self.cur_index) {
             self.cur_index += 1;
 
             Some(item)
