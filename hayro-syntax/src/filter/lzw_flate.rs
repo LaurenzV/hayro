@@ -4,6 +4,9 @@ use crate::object::dict::keys::{BITS_PER_COMPONENT, COLORS, COLUMNS, EARLY_CHANG
 use alloc::vec;
 use alloc::vec::Vec;
 
+/// Maximum decompressed output size (256 MB) to prevent decompression bombs.
+pub(crate) const MAX_DECOMPRESSED_SIZE: usize = 256 * 1024 * 1024;
+
 pub(crate) mod flate {
     use super::*;
     use crate::filter::lzw_flate::{PredictorParams, apply_predictor};
@@ -14,16 +17,30 @@ pub(crate) mod flate {
         use flate2::read::{DeflateDecoder, ZlibDecoder};
         use std::io::Read;
 
-        fn zlib_stream(data: &[u8]) -> Option<Vec<u8>> {
-            let mut decoder = ZlibDecoder::new(data);
+        fn read_limited(mut reader: impl Read) -> Option<Vec<u8>> {
             let mut result = Vec::new();
-            decoder.read_to_end(&mut result).ok().map(|_| result)
+            let mut buf = [0u8; 8192];
+            loop {
+                match reader.read(&mut buf) {
+                    Ok(0) => return Some(result),
+                    Ok(n) => {
+                        result.extend_from_slice(&buf[..n]);
+                        if result.len() > super::MAX_DECOMPRESSED_SIZE {
+                            warn!("decompressed stream exceeds maximum size limit");
+                            return None;
+                        }
+                    }
+                    Err(_) => return None,
+                }
+            }
+        }
+
+        fn zlib_stream(data: &[u8]) -> Option<Vec<u8>> {
+            read_limited(ZlibDecoder::new(data))
         }
 
         fn deflate_stream(data: &[u8]) -> Option<Vec<u8>> {
-            let mut decoder = DeflateDecoder::new(data);
-            let mut result = Vec::new();
-            decoder.read_to_end(&mut result).ok().map(|_| result)
+            read_limited(DeflateDecoder::new(data))
         }
 
         let decoded = zlib_stream(data)
@@ -96,6 +113,10 @@ pub(crate) mod flate {
             fn decode(&mut self) -> Option<Vec<u8>> {
                 while !self.eof && self.pos < self.data.len() {
                     self.read_block();
+                    if self.output.len() > super::super::MAX_DECOMPRESSED_SIZE {
+                        warn!("decompressed stream exceeds maximum size limit");
+                        return None;
+                    }
                 }
 
                 Some(core::mem::take(&mut self.output))
@@ -631,6 +652,11 @@ pub(crate) mod lzw {
                         return None;
                     }
 
+                    if decoded.len() > super::MAX_DECOMPRESSED_SIZE {
+                        warn!("decompressed LZW stream exceeds maximum size limit");
+                        return None;
+                    }
+
                     bit_size = table.code_length();
                     prev = Some(new);
                 }
@@ -1069,5 +1095,29 @@ mod tests {
                 4, 3, 1, 252, 5, 253, 6, 1, 229, 254,
             ],
         );
+    }
+
+    #[test]
+    fn decompression_limit_constant_is_reasonable() {
+        use super::MAX_DECOMPRESSED_SIZE;
+        // 256 MB
+        assert_eq!(MAX_DECOMPRESSED_SIZE, 256 * 1024 * 1024);
+    }
+
+    #[test]
+    fn valid_flate_within_limit_succeeds() {
+        // A valid zlib-compressed "Hello" should decompress fine.
+        let input = [
+            0x78, 0x9c, 0xf3, 0x48, 0xcd, 0xc9, 0xc9, 0x7, 0x0, 0x5, 0x8c, 0x1, 0xf5,
+        ];
+        let decoded = flate::decode(&input, &Dict::default()).unwrap();
+        assert_eq!(decoded, b"Hello");
+    }
+
+    #[test]
+    fn valid_lzw_within_limit_succeeds() {
+        let input = [0x80, 0x0B, 0x60, 0x50, 0x22, 0x0C, 0x0C, 0x85, 0x01];
+        let decoded = lzw::decode(&input, &Dict::default()).unwrap();
+        assert_eq!(decoded, vec![45, 45, 45, 45, 45, 65, 45, 45, 45, 66]);
     }
 }

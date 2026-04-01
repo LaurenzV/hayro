@@ -2,6 +2,8 @@ use crate::reader::Reader;
 use alloc::vec;
 use alloc::vec::Vec;
 
+use super::lzw_flate::MAX_DECOMPRESSED_SIZE;
+
 pub(crate) fn decode(data: &[u8]) -> Option<Vec<u8>> {
     let mut reader = Reader::new(data);
     let mut decoded = vec![];
@@ -23,6 +25,11 @@ pub(crate) fn decode(data: &[u8]) -> Option<Vec<u8>> {
                 let length = 257 - length as usize;
                 decoded.extend([reader.read_byte()?].repeat(length));
             }
+        }
+
+        if decoded.len() > MAX_DECOMPRESSED_SIZE {
+            warn!("decompressed RunLength stream exceeds maximum size limit");
+            return None;
         }
     }
 
