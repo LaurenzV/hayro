@@ -87,6 +87,8 @@ impl RasterImage<'_> {
     }
 
     /// Return the underlying stream object.
+    ///
+    /// This allows you to get access to the raw encoded image data, without doing any decoding.
     pub fn stream(&self) -> &Stream<'_> {
         self.0.stream()
     }
