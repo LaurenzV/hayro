@@ -18,6 +18,7 @@ pub(crate) mod flate {
         use std::io::Read;
 
         fn read_limited(mut reader: impl Read) -> Option<Vec<u8>> {
+            let limit = MAX_DECOMPRESSED_SIZE;
             let mut result = Vec::new();
             let mut buf = [0u8; 8192];
             loop {
@@ -25,7 +26,7 @@ pub(crate) mod flate {
                     Ok(0) => return Some(result),
                     Ok(n) => {
                         result.extend_from_slice(&buf[..n]);
-                        if result.len() > super::MAX_DECOMPRESSED_SIZE {
+                        if result.len() > limit {
                             warn!("decompressed stream exceeds maximum size limit");
                             return None;
                         }

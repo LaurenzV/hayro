@@ -14,6 +14,10 @@ use hayro_syntax::xref::XRef;
 use kurbo::{Affine, BezPath, PathEl, Point, Rect, Shape};
 use std::collections::HashMap;
 
+/// Maximum recursion depth for form XObjects to prevent stack overflow
+/// from circular references.
+const MAX_FORM_XOBJECT_DEPTH: u32 = 100;
+
 /// A context for interpreting PDF files.
 pub struct Context<'a> {
     states: Vec<State<'a>>,
@@ -28,6 +32,7 @@ pub struct Context<'a> {
     pub(crate) object_cache: Cache,
     pub(crate) xref: &'a XRef,
     pub(crate) ocg_state: OcgState,
+    form_xobject_depth: u32,
 }
 
 impl<'a> Context<'a> {
@@ -72,6 +77,7 @@ impl<'a> Context<'a> {
             font_cache: HashMap::new(),
             object_cache: cache,
             ocg_state,
+            form_xobject_depth: 0,
         }
     }
 
@@ -248,6 +254,23 @@ impl<'a> Context<'a> {
 
     pub(crate) fn num_states(&self) -> usize {
         self.states.len()
+    }
+
+    /// Try to enter a form XObject. Returns `false` if the recursion depth
+    /// limit has been reached (to prevent stack overflow from circular
+    /// form XObject references).
+    pub(crate) fn enter_form_xobject(&mut self) -> bool {
+        if self.form_xobject_depth >= MAX_FORM_XOBJECT_DEPTH {
+            warn!("form XObject recursion depth limit ({}) exceeded", MAX_FORM_XOBJECT_DEPTH);
+            return false;
+        }
+        self.form_xobject_depth += 1;
+        true
+    }
+
+    /// Exit a form XObject, decrementing the recursion depth counter.
+    pub(crate) fn exit_form_xobject(&mut self) {
+        self.form_xobject_depth = self.form_xobject_depth.saturating_sub(1);
     }
 
     pub(crate) fn resolve_font(&mut self, font_dict: &Dict<'a>) -> Option<TextStateFont<'a>> {

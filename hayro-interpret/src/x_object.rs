@@ -110,11 +110,16 @@ pub(crate) fn draw_form_xobject<'a, 'b>(
         return;
     }
 
+    if !context.enter_form_xobject() {
+        return;
+    }
+
     let has_oc = xobject_oc(&x_object.dict, context);
     if !context.ocg_state.is_visible() {
         if has_oc {
             context.ocg_state.end_marked_content();
         }
+        context.exit_form_xobject();
         return;
     }
 
@@ -170,6 +175,8 @@ pub(crate) fn draw_form_xobject<'a, 'b>(
     if has_oc {
         context.ocg_state.end_marked_content();
     }
+
+    context.exit_form_xobject();
 }
 
 pub(crate) fn draw_image_xobject<'a, 'b>(
