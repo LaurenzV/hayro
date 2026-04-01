@@ -324,6 +324,28 @@ impl<'a> ImageXObject<'a> {
             return None;
         }
 
+        // Reject absurdly large images that would cause excessive memory allocation.
+        // 65535 per side matches the maximum dimension in most image formats, and
+        // 500 million total pixels prevents multi-GB allocations from decoded image data.
+        const MAX_IMAGE_DIMENSION: u32 = 65535;
+        const MAX_TOTAL_PIXELS: u64 = 500_000_000;
+
+        if width > MAX_IMAGE_DIMENSION || height > MAX_IMAGE_DIMENSION {
+            warn!(
+                "image dimensions {}x{} exceed maximum of {}",
+                width, height, MAX_IMAGE_DIMENSION
+            );
+            return None;
+        }
+
+        if (width as u64) * (height as u64) > MAX_TOTAL_PIXELS {
+            warn!(
+                "image pixel count {} exceeds maximum of {}",
+                (width as u64) * (height as u64), MAX_TOTAL_PIXELS
+            );
+            return None;
+        }
+
         Some(Self {
             width,
             cache: cache.clone(),
