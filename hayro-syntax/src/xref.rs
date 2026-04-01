@@ -21,6 +21,7 @@ use crate::reader::{Readable, ReaderContext, ReaderExt};
 use crate::sync::{Arc, FxHashMap, RwLock, RwLockExt};
 use crate::trivia::is_regular_character;
 use crate::{PdfData, object};
+use alloc::collections::BTreeSet;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::cmp::max;
@@ -740,6 +741,29 @@ impl XRefEntry {
 }
 
 fn populate_xref_impl<'a>(data: &'a [u8], pos: usize, xref_map: &mut XrefMap) -> Option<&'a [u8]> {
+    let mut visited = BTreeSet::new();
+    populate_xref_impl_inner(data, pos, xref_map, &mut visited)
+}
+
+/// Maximum depth of PREV chain traversal as defense-in-depth.
+const MAX_XREF_CHAIN_DEPTH: usize = 1024;
+
+fn populate_xref_impl_inner<'a>(
+    data: &'a [u8],
+    pos: usize,
+    xref_map: &mut XrefMap,
+    visited: &mut BTreeSet<usize>,
+) -> Option<&'a [u8]> {
+    if !visited.insert(pos) {
+        warn!("circular xref PREV chain detected at offset {}", pos);
+        return None;
+    }
+
+    if visited.len() > MAX_XREF_CHAIN_DEPTH {
+        warn!("xref PREV chain exceeds maximum depth of {}", MAX_XREF_CHAIN_DEPTH);
+        return None;
+    }
+
     let mut reader = Reader::new(data);
     reader.jump(pos);
     // In case the position points to before the object number of a xref stream.
@@ -751,9 +775,9 @@ fn populate_xref_impl<'a>(data: &'a [u8], pos: usize, xref_map: &mut XrefMap) ->
         .read_without_context::<ObjectIdentifier>()
         .is_some()
     {
-        populate_from_xref_stream(data, &mut r2, xref_map)
+        populate_from_xref_stream(data, &mut r2, xref_map, visited)
     } else {
-        populate_from_xref_table(data, &mut r2, xref_map)
+        populate_from_xref_table(data, &mut r2, xref_map, visited)
     }
 }
 
@@ -779,6 +803,7 @@ fn populate_from_xref_table<'a>(
     data: &'a [u8],
     reader: &mut Reader<'a>,
     insert_map: &mut XrefMap,
+    visited: &mut BTreeSet<usize>,
 ) -> Option<&'a [u8]> {
     let trailer = {
         let mut reader = reader.clone();
@@ -793,13 +818,13 @@ fn populate_from_xref_table<'a>(
 
     if let Some(prev) = trailer.get::<i32>(PREV) {
         // First insert the entries from any previous xref tables.
-        populate_xref_impl(data, prev as usize, insert_map)?;
+        populate_xref_impl_inner(data, prev as usize, insert_map, visited)?;
     }
 
     // In hybrid files, entries in `XRefStm` should have higher priority, therefore we insert them
     // after looking at `PREV`.
     if let Some(xref_stm) = trailer.get::<i32>(XREF_STM) {
-        populate_xref_impl(data, xref_stm as usize, insert_map)?;
+        populate_xref_impl_inner(data, xref_stm as usize, insert_map, visited)?;
     }
 
     while let Some(header) = reader.read_without_context::<SubsectionHeader>() {
@@ -831,6 +856,7 @@ fn populate_from_xref_stream<'a>(
     data: &'a [u8],
     reader: &mut Reader<'a>,
     insert_map: &mut XrefMap,
+    visited: &mut BTreeSet<usize>,
 ) -> Option<&'a [u8]> {
     let stream = reader
         .read_with_context::<IndirectObject<Stream<'_>>>(&ReaderContext::dummy())?
@@ -838,7 +864,7 @@ fn populate_from_xref_stream<'a>(
 
     if let Some(prev) = stream.dict().get::<i32>(PREV) {
         // First insert the entries from any previous xref tables.
-        let _ = populate_xref_impl(data, prev as usize, insert_map)?;
+        let _ = populate_xref_impl_inner(data, prev as usize, insert_map, visited)?;
     }
 
     let size = stream.dict().get::<u32>(SIZE)?;
@@ -1091,5 +1117,47 @@ fn parse_metadata(info_dict: &Dict<'_>) -> Metadata {
         producer: info_dict
             .get::<object::String<'_>>(PRODUCER)
             .map(|t| t.to_vec()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn circular_prev_chain_does_not_stack_overflow() {
+        // Construct a minimal PDF where the xref trailer's PREV pointer
+        // points back to the same xref offset, creating an infinite cycle.
+        // The xref table starts at offset 56. PREV also points to 56.
+        let pdf = b"%PDF-1.0\n\
+                     1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n\
+                     xref\n\
+                     0 1\n\
+                     0000000000 65535 f \r\n\
+                     trailer\n<< /Size 1 /Root 1 0 R /Prev 56 >>\n\
+                     startxref\n56\n%%EOF";
+        // This should return an error (or succeed if fallback kicks in),
+        // but must NOT stack overflow.
+        let mut xref_map = FxHashMap::default();
+        let xref_pos = find_last_xref_pos(pdf.as_ref());
+        if let Some(pos) = xref_pos {
+            // The cycle detection should cause this to return None on the
+            // second visit, and then the first call propagates None.
+            let _result = populate_xref_impl(pdf.as_ref(), pos, &mut xref_map);
+        }
+    }
+
+    #[test]
+    fn mutual_prev_cycle_does_not_stack_overflow() {
+        // Test the cycle detection directly by pre-seeding the visited set.
+        let mut xref_map = FxHashMap::default();
+        let mut visited = BTreeSet::new();
+        // Simulate: we already visited offsets 100 and 200
+        visited.insert(100);
+        visited.insert(200);
+        // Attempting to visit 100 again should be detected as a cycle
+        let data = b"%PDF-1.0\n";
+        let result = populate_xref_impl_inner(data.as_ref(), 100, &mut xref_map, &mut visited);
+        assert!(result.is_none(), "circular reference should return None");
     }
 }
