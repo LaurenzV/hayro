@@ -14,7 +14,7 @@ use hayro_syntax::xref::XRef;
 use kurbo::{Affine, BezPath, PathEl, Point, Rect, Shape};
 use std::collections::HashMap;
 
-/// Maximum recursion depth for form XObjects to prevent stack overflow
+/// Maximum recursion depth for form `XObject`s to prevent stack overflow
 /// from circular references.
 const MAX_FORM_XOBJECT_DEPTH: u32 = 100;
 
@@ -256,19 +256,22 @@ impl<'a> Context<'a> {
         self.states.len()
     }
 
-    /// Try to enter a form XObject. Returns `false` if the recursion depth
+    /// Try to enter a form `XObject`. Returns `false` if the recursion depth
     /// limit has been reached (to prevent stack overflow from circular
-    /// form XObject references).
+    /// form `XObject` references).
     pub(crate) fn enter_form_xobject(&mut self) -> bool {
         if self.form_xobject_depth >= MAX_FORM_XOBJECT_DEPTH {
-            warn!("form XObject recursion depth limit ({}) exceeded", MAX_FORM_XOBJECT_DEPTH);
+            warn!(
+                "form XObject recursion depth limit ({}) exceeded",
+                MAX_FORM_XOBJECT_DEPTH
+            );
             return false;
         }
         self.form_xobject_depth += 1;
         true
     }
 
-    /// Exit a form XObject, decrementing the recursion depth counter.
+    /// Exit a form `XObject`, decrementing the recursion depth counter.
     pub(crate) fn exit_form_xobject(&mut self) {
         self.form_xobject_depth = self.form_xobject_depth.saturating_sub(1);
     }

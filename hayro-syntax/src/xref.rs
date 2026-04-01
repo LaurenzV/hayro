@@ -760,7 +760,10 @@ fn populate_xref_impl_inner<'a>(
     }
 
     if visited.len() > MAX_XREF_CHAIN_DEPTH {
-        warn!("xref PREV chain exceeds maximum depth of {}", MAX_XREF_CHAIN_DEPTH);
+        warn!(
+            "xref PREV chain exceeds maximum depth of {}",
+            MAX_XREF_CHAIN_DEPTH
+        );
         return None;
     }
 

@@ -20,7 +20,7 @@ pub(crate) mod flate {
         fn read_limited(mut reader: impl Read) -> Option<Vec<u8>> {
             let limit = MAX_DECOMPRESSED_SIZE;
             let mut result = Vec::new();
-            let mut buf = [0u8; 8192];
+            let mut buf = [0_u8; 8192];
             loop {
                 match reader.read(&mut buf) {
                     Ok(0) => return Some(result),

@@ -341,7 +341,8 @@ impl<'a> ImageXObject<'a> {
         if (width as u64) * (height as u64) > MAX_TOTAL_PIXELS {
             warn!(
                 "image pixel count {} exceeds maximum of {}",
-                (width as u64) * (height as u64), MAX_TOTAL_PIXELS
+                (width as u64) * (height as u64),
+                MAX_TOTAL_PIXELS
             );
             return None;
         }
