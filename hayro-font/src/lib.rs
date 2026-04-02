@@ -22,6 +22,10 @@ extern crate alloc;
 #[macro_use]
 mod log;
 
+mod util;
+
+use util::TryNumFrom;
+
 #[cfg(not(feature = "std"))]
 pub(crate) use alloc::collections::BTreeMap as Map;
 #[cfg(feature = "std")]
@@ -32,40 +36,10 @@ pub(crate) use alloc::rc::Rc as Arc;
 #[cfg(feature = "std")]
 pub(crate) use alloc::sync::Arc;
 
-use crate::util::TryNumFrom;
-
 pub mod cff;
 pub mod type1;
 
-mod argstack;
-mod util;
-
-/// A type-safe wrapper for glyph ID.
-#[repr(transparent)]
-#[derive(Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Default, Debug, Hash)]
-pub struct GlyphId(pub u16);
-
-/// A trait for glyph outline construction.
-pub trait OutlineBuilder {
-    /// Appends a `MoveTo` segment.
-    ///
-    /// Start of a contour.
-    fn move_to(&mut self, x: f32, y: f32);
-
-    /// Appends a `LineTo` segment.
-    fn line_to(&mut self, x: f32, y: f32);
-
-    /// Appends a `QuadTo` segment.
-    fn quad_to(&mut self, x1: f32, y1: f32, x: f32, y: f32);
-
-    /// Appends a `CurveTo` segment.
-    fn curve_to(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x: f32, y: f32);
-
-    /// Appends a `ClosePath` segment.
-    ///
-    /// End of a contour.
-    fn close(&mut self);
-}
+pub use skrifa::raw::types::{GlyphId, pen::OutlinePen as OutlineBuilder};
 
 struct DummyOutline;
 impl OutlineBuilder for DummyOutline {
@@ -196,49 +170,24 @@ impl<'a> Builder<'a> {
     }
 }
 
-/// An affine transformation matrix.
-#[allow(missing_docs)]
-#[derive(Clone, Copy, Debug)]
-pub struct Matrix {
-    pub sx: f32,
-    pub ky: f32,
-    pub kx: f32,
-    pub sy: f32,
-    pub tx: f32,
-    pub ty: f32,
-}
-
-impl Default for Matrix {
-    fn default() -> Self {
-        Self {
-            sx: 0.001,
-            ky: 0.0,
-            kx: 0.0,
-            sy: 0.001,
-            tx: 0.0,
-            ty: 0.0,
-        }
+impl OutlineBuilder for Builder<'_> {
+    fn move_to(&mut self, x: f32, y: f32) {
+        self.move_to(x, y);
     }
-}
 
-/// A list of errors that can occur during CFF/Type1 glyph outlining.
-#[allow(missing_docs)]
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum OutlineError {
-    NoGlyph,
-    ReadOutOfBounds,
-    ZeroBBox,
-    InvalidOperator,
-    UnsupportedOperator,
-    MissingEndChar,
-    DataAfterEndChar,
-    NestingLimitReached,
-    ArgumentsStackLimitReached,
-    InvalidArgumentsStackLength,
-    BboxOverflow,
-    MissingMoveTo,
-    InvalidSubroutineIndex,
-    NoLocalSubroutines,
-    InvalidSeacCode,
-    TooLargeNumber,
+    fn line_to(&mut self, x: f32, y: f32) {
+        self.line_to(x, y);
+    }
+
+    fn quad_to(&mut self, cx0: f32, cy0: f32, x: f32, y: f32) {
+        // self.quad_to(cx0, cy0, x, y);
+    }
+
+    fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
+        self.curve_to(cx0, cy0, cx1, cy1, x, y);
+    }
+
+    fn close(&mut self) {
+        self.close();
+    }
 }

@@ -191,7 +191,6 @@ impl Type0Font {
                     if matches!(self.cid_to_gid_map, CidToGIdMap::Identity) {
                         table
                             .glyph_index_by_cid(cid as u16)
-                            .map(|g| GlyphId::new(g.0 as u32))
                             .unwrap_or(GlyphId::NOTDEF)
                     } else {
                         GlyphId::new(self.cid_to_gid_map.inverse_map(GlyphId::new(cid)) as u32)
@@ -239,7 +238,7 @@ impl Type0Font {
                 if let Some(name) = glyph_names::get_reverse(character)
                     && let Some(gid) = table.glyph_index_by_name(name)
                 {
-                    Some(GlyphId::new(gid.0 as u32))
+                    Some(gid)
                 } else {
                     None
                 }
@@ -269,15 +268,7 @@ impl Type0Font {
         let path = match &self.font_type {
             FontType::OpenType(t) => t.outline_glyph(glyph),
             FontType::Cff(c) => c.outline_glyph(glyph),
-            FontType::Type1(t) => {
-                let name = t
-                    .table()
-                    .charstring_names()
-                    .get(glyph.to_u32() as usize)
-                    .map(|n| n.as_str())
-                    .unwrap_or(".notdef");
-                t.outline_glyph(name)
-            }
+            FontType::Type1(t) => t.outline_glyph(t.table().remapped_gid(glyph)),
         };
 
         if self.fallback

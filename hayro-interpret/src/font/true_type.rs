@@ -301,7 +301,6 @@ impl EmbeddedKind {
             return self
                 .code_to_name(code)
                 .and_then(|name| table.glyph_index_by_name(name))
-                .map(|g| GlyphId::new(g.0 as u32))
                 .unwrap_or(GlyphId::NOTDEF);
         }
 

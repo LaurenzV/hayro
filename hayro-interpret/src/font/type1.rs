@@ -206,7 +206,7 @@ impl Type1Kind {
     }
 
     fn outline_glyph(&self, glyph: GlyphId) -> BezPath {
-        self.font.outline_glyph(
+        self.font.outline_glyph_by_name(
             self.glyph_simulator
                 .glyph_to_string(glyph)
                 .unwrap()
@@ -279,14 +279,13 @@ impl CffKind {
             table
                 .glyph_index_by_name(entry)
                 .or_else(|| table.glyph_index_by_name(normalized_glyph_name(entry)))
-                .map(|g| GlyphId::new(g.0 as u32))
         };
 
         if let Some(entry) = self.encodings.get(&code) {
             get_glyph(entry)
         } else {
             match self.encoding {
-                Encoding::BuiltIn => table.glyph_index(code).map(|g| GlyphId::new(g.0 as u32)),
+                Encoding::BuiltIn => table.glyph_index(code),
                 _ => self.encoding.map_code(code).and_then(get_glyph),
             }
         }

@@ -12,6 +12,7 @@ readme = "README.md"
 [dependencies]
 log =  { workspace = true, optional = true }
 phf = { workspace = true, features = ["macros"] }
+skrifa = { workspace = true }
 
 [features]
 default = ["std"]

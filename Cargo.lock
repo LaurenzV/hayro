@@ -550,6 +550,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "font-types"
+version = "0.11.1"
+source = "git+https://github.com/googlefonts/fontations?branch=cffext#bd84f61f92e47cd5dec11a0fe2b4c9aea2cae1d3"
+dependencies = [
+ "bytemuck",
+]
+
+[[package]]
 name = "fontconfig-parser"
 version = "0.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -694,6 +702,7 @@ version = "0.4.0"
 dependencies = [
  "log",
  "phf",
+ "skrifa 0.41.0",
 ]
 
 [[package]]
@@ -722,7 +731,7 @@ dependencies = [
  "phf",
  "rustc-hash",
  "siphasher",
- "skrifa",
+ "skrifa 0.41.0",
  "smallvec",
  "yoke",
 ]
@@ -1327,7 +1336,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7b634fabf032fab15307ffd272149b622260f55974d9fad689292a5d33df02e5"
 dependencies = [
  "bytemuck",
- "font-types",
+ "font-types 0.11.0",
+]
+
+[[package]]
+name = "read-fonts"
+version = "0.38.0"
+source = "git+https://github.com/googlefonts/fontations?branch=cffext#bd84f61f92e47cd5dec11a0fe2b4c9aea2cae1d3"
+dependencies = [
+ "bytemuck",
+ "font-types 0.11.1",
 ]
 
 [[package]]
@@ -1556,7 +1574,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7fbdfe3d2475fbd7ddd1f3e5cf8288a30eb3e5f95832829570cd88115a7434ac"
 dependencies = [
  "bytemuck",
- "read-fonts",
+ "read-fonts 0.37.0",
+]
+
+[[package]]
+name = "skrifa"
+version = "0.41.0"
+source = "git+https://github.com/googlefonts/fontations?branch=cffext#bd84f61f92e47cd5dec11a0fe2b4c9aea2cae1d3"
+dependencies = [
+ "bytemuck",
+ "read-fonts 0.38.0",
 ]
 
 [[package]]
@@ -1826,7 +1853,7 @@ dependencies = [
  "log",
  "peniko",
  "png 0.18.1",
- "skrifa",
+ "skrifa 0.40.0",
  "smallvec",
  "thiserror",
 ]

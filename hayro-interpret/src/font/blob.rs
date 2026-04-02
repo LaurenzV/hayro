@@ -1,6 +1,6 @@
 use crate::font::UNITS_PER_EM;
 use crate::font::outline::OutlinePath;
-use hayro_font::{Matrix, cff, type1};
+use hayro_font::{cff, type1};
 use kurbo::{Affine, BezPath};
 use skrifa::instance::{LocationRef, Size};
 use skrifa::metrics::GlyphMetrics;
@@ -36,12 +36,24 @@ impl Type1FontBlob {
         self.0.as_ref()
     }
 
-    pub(crate) fn outline_glyph(&self, name: &str) -> BezPath {
+    pub(crate) fn outline_glyph(&self, glyph_id: GlyphId) -> BezPath {
         let mut path = OutlinePath::new();
 
-        self.table().outline(name, &mut path).unwrap_or_default();
+        self.table()
+            .outline(glyph_id, &mut path)
+            .unwrap_or_default();
 
-        Affine::scale(UNITS_PER_EM as f64) * convert_matrix(self.table().matrix()) * path.take()
+        Affine::scale(UNITS_PER_EM as f64) * path.take()
+    }
+
+    pub(crate) fn outline_glyph_by_name(&self, name: &str) -> BezPath {
+        let mut path = OutlinePath::new();
+
+        self.table()
+            .outline_by_name(name, &mut path)
+            .unwrap_or_default();
+
+        Affine::scale(UNITS_PER_EM as f64) * path.take()
     }
 }
 
@@ -78,15 +90,11 @@ impl CffFontBlob {
     pub(crate) fn outline_glyph(&self, glyph: GlyphId) -> BezPath {
         let mut path = OutlinePath::new();
 
-        let glyph_id = hayro_font::GlyphId(glyph.to_u32() as u16);
-
-        let Ok(_) = self.table().outline(glyph_id, &mut path) else {
+        let Some(_) = self.table().outline(glyph, &mut path) else {
             return BezPath::new();
         };
 
-        let matrix = self.table().glyph_matrix(glyph_id);
-
-        Affine::scale(UNITS_PER_EM as f64) * convert_matrix(matrix) * path.take()
+        Affine::scale(UNITS_PER_EM as f64) * path.take()
     }
 }
 
@@ -187,17 +195,6 @@ impl OpenTypeFontBlob {
     pub(crate) fn num_glyphs(&self) -> u16 {
         self.font_ref().maxp().map(|m| m.num_glyphs()).unwrap_or(0)
     }
-}
-
-fn convert_matrix(matrix: Matrix) -> Affine {
-    Affine::new([
-        matrix.sx as f64,
-        matrix.ky as f64,
-        matrix.kx as f64,
-        matrix.sy as f64,
-        matrix.tx as f64,
-        matrix.ty as f64,
-    ])
 }
 
 #[derive(Yokeable, Clone)]
