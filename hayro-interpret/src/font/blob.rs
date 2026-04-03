@@ -119,6 +119,7 @@ impl CffFontBlob {
     }
 
     pub(crate) fn glyph_index_by_name(&self, name: &str) -> Option<GlyphId> {
+        // TODO: This is probably slow to do repeatedly?
         self.charset()?.iter().find_map(|(gid, sid)| {
             let bytes = self.0.as_ref().get().cff.string(sid)?;
             (bytes == name.as_bytes()).then_some(gid)
