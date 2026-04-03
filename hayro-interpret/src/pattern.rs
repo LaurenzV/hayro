@@ -144,6 +144,7 @@ pub struct TilingPattern<'a> {
     pub(crate) cache: Cache,
     pub(crate) settings: InterpreterSettings,
     pub(crate) xref: &'a XRef,
+    nesting_depth: u32,
 }
 
 impl Debug for TilingPattern<'_> {
@@ -199,6 +200,7 @@ impl<'a> TilingPattern<'a> {
             state.graphics_state.stroke_color.clone(),
             state.graphics_state.stroke_alpha,
         );
+        let nesting_depth = ctx.nesting_depth() + 1;
 
         Some(Self {
             cache_key,
@@ -215,6 +217,7 @@ impl<'a> TilingPattern<'a> {
             parent_resources: resources.clone(),
             cache: ctx.object_cache.clone(),
             xref: ctx.xref,
+            nesting_depth,
         })
     }
 
@@ -235,6 +238,7 @@ impl<'a> TilingPattern<'a> {
             self.xref,
             self.settings.clone(),
             state,
+            self.nesting_depth,
         );
 
         let decoded = self.stream.decoded().ok()?;

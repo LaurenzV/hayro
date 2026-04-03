@@ -60,6 +60,7 @@ struct Repr<'a> {
     settings: InterpreterSettings,
     background: Color,
     xref: &'a XRef,
+    nesting_depth: u32,
 }
 
 impl Hash for Repr<'_> {
@@ -128,6 +129,7 @@ impl<'a> SoftMask<'a> {
             ),
             _ => return None,
         };
+        let nesting_depth = context.nesting_depth() + 1;
 
         Some(Self(Arc::new(Repr {
             obj_id,
@@ -141,6 +143,7 @@ impl<'a> SoftMask<'a> {
             xref: context.xref,
             background,
             parent_resources,
+            nesting_depth,
         })))
     }
 
@@ -154,6 +157,7 @@ impl<'a> SoftMask<'a> {
             self.0.xref,
             self.0.settings.clone(),
             state,
+            self.0.nesting_depth,
         );
         draw_form_xobject(&self.0.parent_resources, &self.0.group, &mut ctx, device);
     }

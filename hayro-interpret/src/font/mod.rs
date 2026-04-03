@@ -192,6 +192,7 @@ pub struct Type3Glyph<'a> {
     pub(crate) cache: Cache,
     pub(crate) xref: &'a XRef,
     pub(crate) settings: InterpreterSettings,
+    pub(crate) nesting_depth: u32,
     pub(crate) char_code: u32,
 }
 
@@ -327,6 +328,7 @@ impl<'a> Font<'a> {
                 })
             }
             FontType::Type3(t) => {
+                let nesting_depth = ctx.nesting_depth() + 1;
                 let shape_glyph = Type3Glyph {
                     font: t.clone(),
                     glyph_id: glyph,
@@ -335,6 +337,7 @@ impl<'a> Font<'a> {
                     cache: ctx.object_cache.clone(),
                     xref: ctx.xref,
                     settings: ctx.settings.clone(),
+                    nesting_depth,
                     char_code,
                 };
 

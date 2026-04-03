@@ -14,6 +14,9 @@ use hayro_syntax::xref::XRef;
 use kurbo::{Affine, BezPath, PathEl, Point, Rect, Shape};
 use std::collections::HashMap;
 
+/// Maximum nesting depth for interpreting XObject's/patterns/streams
+pub(crate) const MAX_NESTED_INTERPRETATION_DEPTH: u32 = 100;
+
 /// A context for interpreting PDF files.
 pub struct Context<'a> {
     states: Vec<State<'a>>,
@@ -28,6 +31,7 @@ pub struct Context<'a> {
     pub(crate) object_cache: Cache,
     pub(crate) xref: &'a XRef,
     pub(crate) ocg_state: OcgState,
+    nesting_depth: u32,
 }
 
 impl<'a> Context<'a> {
@@ -41,7 +45,7 @@ impl<'a> Context<'a> {
         let cache = Cache::new();
         let state = State::new(initial_transform);
 
-        Self::new_with(initial_transform, bbox, cache, xref, settings, state)
+        Self::new_with(initial_transform, bbox, cache, xref, settings, state, 0)
     }
 
     pub(crate) fn new_with(
@@ -51,6 +55,7 @@ impl<'a> Context<'a> {
         xref: &'a XRef,
         settings: InterpreterSettings,
         state: State<'a>,
+        nesting_depth: u32,
     ) -> Self {
         let ocg_state = {
             let root_ref = xref.root_id();
@@ -72,6 +77,7 @@ impl<'a> Context<'a> {
             font_cache: HashMap::new(),
             object_cache: cache,
             ocg_state,
+            nesting_depth,
         }
     }
 
@@ -250,6 +256,25 @@ impl<'a> Context<'a> {
         self.states.len()
     }
 
+    pub(crate) fn nesting_depth(&self) -> u32 {
+        self.nesting_depth
+    }
+
+    pub(crate) fn begin_nested_interpretation(&mut self) -> bool {
+        if self.nesting_depth >= MAX_NESTED_INTERPRETATION_DEPTH {
+            warn!("interpreter nesting depth exceeded");
+
+            return false;
+        }
+
+        self.nesting_depth += 1;
+
+        true
+    }
+
+    pub(crate) fn end_nested_interpretation(&mut self) {
+        self.nesting_depth = self.nesting_depth.saturating_sub(1);
+    }
     pub(crate) fn resolve_font(&mut self, font_dict: &Dict<'a>) -> Option<TextStateFont<'a>> {
         let cache_key = font_dict.cache_key();
 

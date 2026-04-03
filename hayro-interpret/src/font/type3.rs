@@ -151,6 +151,7 @@ impl<'a> Type3<'a> {
             glyph.xref,
             glyph.settings.clone(),
             state,
+            glyph.nesting_depth,
         );
 
         let mut resources = Resources::from_parent(
