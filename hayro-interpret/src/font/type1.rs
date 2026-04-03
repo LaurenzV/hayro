@@ -157,7 +157,6 @@ struct Type1Kind {
     widths: Vec<Width>,
     missing_width: f32,
     encodings: HashMap<u8, String>,
-    /// Maps glyph name to GlyphId using the font's actual charstring indices.
     name_to_gid: HashMap<String, GlyphId>,
     standard_font: Option<StandardFont>,
 }
@@ -172,7 +171,6 @@ impl Type1Kind {
         let (widths, missing_width) = read_widths(dict, &descriptor)?;
         let standard_font = select_standard_font(dict, &descriptor).map(|(f, _)| f);
 
-        // Build name→GlyphId map from the font's charstrings.
         let name_to_gid: HashMap<String, GlyphId> = font
             .table()
             .glyph_names()

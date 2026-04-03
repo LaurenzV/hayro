@@ -19,9 +19,6 @@ type OpenTypeFontYoke = Yoke<OTFYoke<'static>, FontData>;
 type CffFontYoke = Yoke<CFFYoke<'static>, FontData>;
 
 /// A font blob for type 1 fonts.
-///
-/// Type1Font from read-fonts owns its data (uses Vec<u8> internally),
-/// so no Yoke is needed.
 #[derive(Clone)]
 pub(crate) struct Type1FontBlob(Arc<Type1Font>);
 
@@ -61,7 +58,9 @@ impl Debug for CffFontBlob {
 
 impl CffFontBlob {
     pub(crate) fn new(data: FontData) -> Option<Self> {
+        // Validate the font first, so we can unwrap in the yoke.
         let _ = CffFontRef::new(data.as_ref().as_ref(), 0, None).ok()?;
+        let _ = Cff::read(ReadFontData::new(data.as_ref().as_ref())).ok()?;
 
         let yoke = Yoke::<CFFYoke<'static>, FontData>::attach_to_cart(data.clone(), |data| {
             let bytes = data.as_ref();
@@ -83,12 +82,11 @@ impl CffFontBlob {
 
     pub(crate) fn outline_glyph(&self, glyph: GlyphId) -> BezPath {
         let mut path = OutlinePath::new();
-        let Some(subfont_index) = self.font().subfont_index(glyph) else {
+        let Some(subfont) = self.font().subfont_index(glyph)
+            .and_then(|subfont_index| self.font().subfont(subfont_index, &[]).ok())else {
             return BezPath::new();
         };
-        let Ok(subfont) = self.font().subfont(subfont_index, &[]) else {
-            return BezPath::new();
-        };
+        
         let _ = self
             .font()
             .draw(&subfont, glyph, &[], Some(UNITS_PER_EM), &mut path);
