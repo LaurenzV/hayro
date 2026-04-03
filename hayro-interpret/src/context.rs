@@ -14,7 +14,7 @@ use hayro_syntax::xref::XRef;
 use kurbo::{Affine, BezPath, PathEl, Point, Rect, Shape};
 use std::collections::HashMap;
 
-/// Maximum nesting depth for interpreting XObject's/patterns/streams.
+/// Maximum nesting depth for interpreting `XObject`'s/patterns/streams.
 pub(crate) const MAX_NESTED_INTERPRETATION_DEPTH: u32 = 50;
 
 /// A context for interpreting PDF files.
