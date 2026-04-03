@@ -4,10 +4,10 @@ use kurbo::BezPath;
 use skrifa::instance::{LocationRef, Size};
 use skrifa::metrics::GlyphMetrics;
 use skrifa::outline::{DrawSettings, Engine, HintingInstance, HintingOptions, Target};
+use skrifa::raw::TableProvider;
 use skrifa::raw::ps::cff::{CffFontRef, v1::Cff};
 use skrifa::raw::ps::string::Sid;
 use skrifa::raw::ps::type1::Type1Font;
-use skrifa::raw::TableProvider;
 use skrifa::raw::{FontData as ReadFontData, FontRead};
 use skrifa::{FontRef, GlyphId, MetadataProvider, OutlineGlyphCollection};
 use std::fmt::{Debug, Formatter};
@@ -82,11 +82,14 @@ impl CffFontBlob {
 
     pub(crate) fn outline_glyph(&self, glyph: GlyphId) -> BezPath {
         let mut path = OutlinePath::new();
-        let Some(subfont) = self.font().subfont_index(glyph)
-            .and_then(|subfont_index| self.font().subfont(subfont_index, &[]).ok())else {
+        let Some(subfont) = self
+            .font()
+            .subfont_index(glyph)
+            .and_then(|subfont_index| self.font().subfont(subfont_index, &[]).ok())
+        else {
             return BezPath::new();
         };
-        
+
         let _ = self
             .font()
             .draw(&subfont, glyph, &[], Some(UNITS_PER_EM), &mut path);
