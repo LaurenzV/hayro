@@ -5,7 +5,7 @@ use skrifa::instance::{LocationRef, Size};
 use skrifa::metrics::GlyphMetrics;
 use skrifa::outline::{DrawSettings, Engine, HintingInstance, HintingOptions, Target};
 use skrifa::raw::TableProvider;
-use skrifa::raw::ps::cff::{CffFontRef, v1::Cff};
+use skrifa::raw::ps::cff::{CffFontRef, charset::Charset, v1::Cff};
 use skrifa::raw::ps::string::Sid;
 use skrifa::raw::ps::type1::Type1Font;
 use skrifa::raw::{FontData as ReadFontData, FontRead};
@@ -66,7 +66,8 @@ impl CffFontBlob {
             let bytes = data.as_ref();
             let font = CffFontRef::new(bytes, 0, None).unwrap();
             let cff = Cff::read(ReadFontData::new(bytes)).unwrap();
-            CFFYoke { font, cff }
+            let charset = font.charset();
+            CFFYoke { font, cff, charset }
         });
 
         Some(Self(Arc::new(yoke)))
@@ -78,6 +79,10 @@ impl CffFontBlob {
 
     pub(crate) fn font(&self) -> &CffFontRef<'_> {
         &self.0.as_ref().get().font
+    }
+
+    fn charset(&self) -> Option<&Charset<'_>> {
+        self.0.as_ref().get().charset.as_ref()
     }
 
     pub(crate) fn outline_glyph(&self, glyph: GlyphId) -> BezPath {
@@ -98,10 +103,11 @@ impl CffFontBlob {
     }
 
     pub(crate) fn glyph_names(&self) -> Vec<(GlyphId, String)> {
-        let Some(charset) = self.font().charset() else {
+        let Some(charset) = self.charset() else {
             return Vec::new();
         };
 
+        // TODO: Avoid collecting here.
         charset
             .iter()
             .filter_map(|(gid, sid)| {
@@ -113,14 +119,14 @@ impl CffFontBlob {
     }
 
     pub(crate) fn glyph_index_by_name(&self, name: &str) -> Option<GlyphId> {
-        self.font().charset()?.iter().find_map(|(gid, sid)| {
+        self.charset()?.iter().find_map(|(gid, sid)| {
             let bytes = self.0.as_ref().get().cff.string(sid)?;
             (bytes == name.as_bytes()).then_some(gid)
         })
     }
 
     pub(crate) fn glyph_index_by_cid(&self, cid: u16) -> Option<GlyphId> {
-        self.font().charset()?.glyph_id(Sid::new(cid)).ok()
+        self.charset()?.glyph_id(Sid::new(cid)).ok()
     }
 
     pub(crate) fn glyph_index(&self, code: u8) -> Option<GlyphId> {
@@ -249,4 +255,5 @@ struct OTFYoke<'a> {
 struct CFFYoke<'a> {
     font: CffFontRef<'a>,
     cff: Cff<'a>,
+    charset: Option<Charset<'a>>,
 }
