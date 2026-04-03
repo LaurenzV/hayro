@@ -405,6 +405,12 @@ fn page_tree_cycle() {
 }
 
 #[test]
+fn xobject_cycle_two_forms() {
+    let file = include_bytes!("../pdfs/load/xobject_cycle_two_forms.pdf");
+    load_pdf(file);
+}
+
+#[test]
 fn issue645() {
     let file = include_bytes!("../pdfs/load/issue645.pdf");
     load_pdf(file);
