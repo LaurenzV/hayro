@@ -19,7 +19,7 @@ use crate::pdf::PdfVersion;
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt};
 use crate::sync::{Arc, FxHashMap, RwLock, RwLockExt};
-use crate::trivia::{is_regular_character, is_white_space_character};
+use crate::trivia::is_white_space_character;
 use crate::util::findr_needle;
 use crate::{PdfData, object};
 use alloc::collections::BTreeSet;
