@@ -72,6 +72,11 @@ pub(crate) fn find_needle(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     memchr::memmem::find(haystack, needle)
 }
 
+#[cfg(feature = "unsafe")]
+pub(crate) fn findr_needle(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    memchr::memmem::rfind(haystack, needle)
+}
+
 #[cfg(not(feature = "unsafe"))]
 pub(crate) fn find_needle(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     if needle.is_empty() {
@@ -97,6 +102,32 @@ pub(crate) fn find_needle(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     }
 
     None
+}
+
+#[cfg(not(feature = "unsafe"))]
+pub(crate) fn findr_needle(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    if needle.is_empty() {
+        return Some(haystack.len());
+    }
+
+    if needle.len() > haystack.len() {
+        return None;
+    }
+
+    let first = needle[0];
+    let mut i = haystack.len() - needle.len();
+
+    loop {
+        while haystack.get(i).copied()? != first {
+            i = i.checked_sub(1)?;
+        }
+
+        if haystack.get(i..)?.starts_with(needle) {
+            return Some(i);
+        }
+
+        i = i.checked_sub(1)?;
+    }
 }
 
 /// Allows to store elements at an index with an `&self` reference.
@@ -168,5 +199,13 @@ mod tests {
         for s in 0..8 {
             assert!(e.0[s].get().unwrap().iter().all(|s| s.get().is_some()));
         }
+    }
+
+    #[test]
+    fn test_findr_needle() {
+        assert_eq!(findr_needle(b"abc foo def foo xyz", b"foo"), Some(12));
+        assert_eq!(findr_needle(b"abc", b""), Some(3));
+        assert_eq!(findr_needle(b"abc", b"abcd"), None);
+        assert_eq!(findr_needle(b"abc", b"z"), None);
     }
 }

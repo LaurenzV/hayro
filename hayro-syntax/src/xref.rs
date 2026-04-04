@@ -20,6 +20,7 @@ use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt};
 use crate::sync::{Arc, FxHashMap, RwLock, RwLockExt};
 use crate::trivia::is_regular_character;
+use crate::util::findr_needle;
 use crate::{PdfData, object};
 use alloc::collections::BTreeSet;
 use alloc::vec;
@@ -626,24 +627,13 @@ pub(crate) enum XRefInput<'a> {
 }
 
 pub(crate) fn find_last_xref_pos(data: &[u8]) -> Option<usize> {
-    let mut finder = Reader::new(data);
-    let mut pos = finder.len().checked_sub(1)?;
-    finder.jump(pos);
-
     let needle = b"startxref";
-
-    loop {
-        if finder.forward_tag(needle).is_some() {
-            finder.skip_white_spaces_and_comments();
-
-            let offset = finder.read_without_context::<i32>()?.try_into().ok()?;
-
-            return Some(offset);
-        }
-
-        pos = pos.checked_sub(1)?;
-        finder.jump(pos);
-    }
+    let pos = findr_needle(data, needle)?;
+    let mut finder = Reader::new(data);
+    finder.jump(pos);
+    finder.forward_tag(needle)?;
+    finder.skip_white_spaces_and_comments();
+    finder.read_without_context::<i32>()?.try_into().ok()
 }
 
 /// A type of xref entry.
@@ -1147,5 +1137,11 @@ mod tests {
         let mut xref_map = FxHashMap::default();
         let xref_pos = find_last_xref_pos(pdf.as_ref()).unwrap();
         let _result = populate_xref_impl(pdf.as_ref(), xref_pos, &mut xref_map);
+    }
+
+    #[test]
+    fn find_last_xref_uses_last_startxref() {
+        let pdf = b"%PDF-1.0\nstartxref\n5\n%%EOF\nstartxref\n42\n%%EOF";
+        assert_eq!(find_last_xref_pos(pdf), Some(42));
     }
 }
