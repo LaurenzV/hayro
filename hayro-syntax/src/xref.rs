@@ -111,9 +111,10 @@ fn fallback_xref_map_inner<'a>(
             // Then, try to check whether we have a dictionary, in particular a trailer
             // dictionary.
             let mut probe_reader = r.clone();
-            if r.peek_bytes(2).is_some_and(|b| b == b"<<") && let Some(probe) = {
-                probe_dict(&mut probe_reader, &dummy_ctx, Some(b"<<"), b">>")
-            } {
+            if r.peek_bytes(2).is_some_and(|b| b == b"<<")
+                && let Some(probe) =
+                    { probe_dict(&mut probe_reader, &dummy_ctx, Some(b"<<"), b">>") }
+            {
                 r = probe_reader;
                 if probe.has_root || probe.has_type {
                     let mut dict_reader = Reader::new(probe.data);
