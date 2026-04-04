@@ -92,7 +92,7 @@ fn fallback_xref_map_inner<'a>(
 
         let mut old_r = r.clone();
 
-        if r.peek_byte().is_some_and(|b| matches!(b, b'0'..=b'9')) {
+        if r.peek_byte().is_some_and(|b: u8| b.is_ascii_digit()) {
             if let Some(obj_id) = r.read::<ObjectIdentifier>(&dummy_ctx) {
                 let mut cloned = r.clone();
                 // Check that the object following it is actually valid before inserting it.
@@ -104,7 +104,7 @@ fn fallback_xref_map_inner<'a>(
                 }
             } else {
                 // There must be a white space before the next object number.
-                r.forward_while(|b| !is_white_space_character(b))
+                r.forward_while(|b| !is_white_space_character(b));
             }
         } else {
             let mut probe_reader = r.clone();
