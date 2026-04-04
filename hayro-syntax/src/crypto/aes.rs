@@ -163,15 +163,15 @@ struct AESCore;
 
 impl AESCore {
     fn sub_bytes(state: &mut [u8; 16]) {
-        state
-            .iter_mut()
-            .for_each(|byte| *byte = S_BOX[*byte as usize]);
+        for byte in state.iter_mut() {
+            *byte = S_BOX[*byte as usize];
+        }
     }
 
     fn inv_sub_bytes(state: &mut [u8; 16]) {
-        state
-            .iter_mut()
-            .for_each(|byte| *byte = INV_S_BOX[*byte as usize]);
+        for byte in state.iter_mut() {
+            *byte = INV_S_BOX[*byte as usize];
+        }
     }
 
     fn shift_rows(state: &mut [u8; 16]) {
@@ -247,10 +247,9 @@ impl AESCore {
     }
 
     fn add_round_key(state: &mut [u8; 16], round_key: &[u8; 16]) {
-        state
-            .iter_mut()
-            .zip(round_key.iter())
-            .for_each(|(s, &k)| *s ^= k);
+        for i in 0..16 {
+            state[i] ^= round_key[i];
+        }
     }
 }
 
@@ -282,52 +281,58 @@ impl<const KEY_SIZE: usize, const ROUNDS: usize> AESCipher<KEY_SIZE, ROUNDS> {
     fn expand_key_128(round_keys: &mut [[u8; 16]; ROUNDS], key: &[u8]) {
         round_keys[0].copy_from_slice(&key[..16]);
 
-        (1..ROUNDS).for_each(|i| {
+        for i in 1..ROUNDS {
             let mut temp = [0_u8; 4];
             temp.copy_from_slice(&round_keys[i - 1][12..16]);
 
             temp.rotate_left(1);
-            temp.iter_mut().for_each(|b| *b = S_BOX[*b as usize]);
+            for b in &mut temp {
+                *b = S_BOX[*b as usize];
+            }
 
             temp[0] ^= RCON[i - 1];
 
-            (0..4).for_each(|j| {
-                (0..4).for_each(|k| {
+            for j in 0..4 {
+                for k in 0..4 {
                     round_keys[i][j * 4 + k] = round_keys[i - 1][j * 4 + k] ^ temp[k];
-                });
+                }
                 if j < 3 {
                     temp.copy_from_slice(&round_keys[i][j * 4..(j + 1) * 4]);
                 }
-            });
-        });
+            }
+        }
     }
 
     fn expand_key_256(round_keys: &mut [[u8; 16]; ROUNDS], key: &[u8]) {
         round_keys[0].copy_from_slice(&key[0..16]);
         round_keys[1].copy_from_slice(&key[16..32]);
 
-        (2..ROUNDS).for_each(|i| {
+        for i in 2..ROUNDS {
             let mut temp = [0_u8; 4];
 
             if i % 2 == 0 {
                 temp.copy_from_slice(&round_keys[i - 1][12..16]);
                 temp.rotate_left(1);
-                temp.iter_mut().for_each(|b| *b = S_BOX[*b as usize]);
+                for b in &mut temp {
+                    *b = S_BOX[*b as usize];
+                }
                 temp[0] ^= RCON[(i / 2) - 1];
             } else {
                 temp.copy_from_slice(&round_keys[i - 1][12..16]);
-                temp.iter_mut().for_each(|b| *b = S_BOX[*b as usize]);
+                for b in &mut temp {
+                    *b = S_BOX[*b as usize];
+                }
             }
 
-            (0..4).for_each(|j| {
-                (0..4).for_each(|k| {
+            for j in 0..4 {
+                for k in 0..4 {
                     round_keys[i][j * 4 + k] = round_keys[i - 2][j * 4 + k] ^ temp[k];
-                });
+                }
                 if j < 3 {
                     temp.copy_from_slice(&round_keys[i][j * 4..(j + 1) * 4]);
                 }
-            });
-        });
+            }
+        }
     }
 
     pub(crate) fn encrypt_block(&self, input: &[u8; 16]) -> [u8; 16] {
@@ -336,12 +341,12 @@ impl<const KEY_SIZE: usize, const ROUNDS: usize> AESCipher<KEY_SIZE, ROUNDS> {
         AESCore::add_round_key(&mut state, &self.round_keys[0]);
 
         let main_rounds = ROUNDS - 1;
-        (1..main_rounds).for_each(|round| {
+        for round in 1..main_rounds {
             AESCore::sub_bytes(&mut state);
             AESCore::shift_rows(&mut state);
             AESCore::mix_columns(&mut state);
             AESCore::add_round_key(&mut state, &self.round_keys[round]);
-        });
+        }
 
         AESCore::sub_bytes(&mut state);
         AESCore::shift_rows(&mut state);
@@ -359,12 +364,12 @@ impl<const KEY_SIZE: usize, const ROUNDS: usize> AESCipher<KEY_SIZE, ROUNDS> {
         AESCore::inv_shift_rows(&mut state);
         AESCore::inv_sub_bytes(&mut state);
 
-        (1..main_rounds).rev().for_each(|round| {
+        for round in (1..main_rounds).rev() {
             AESCore::add_round_key(&mut state, &self.round_keys[round]);
             AESCore::inv_mix_columns(&mut state);
             AESCore::inv_shift_rows(&mut state);
             AESCore::inv_sub_bytes(&mut state);
-        });
+        }
 
         AESCore::add_round_key(&mut state, &self.round_keys[0]);
 
