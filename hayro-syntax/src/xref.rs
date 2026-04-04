@@ -159,21 +159,11 @@ fn fallback_xref_map_inner<'a>(
                     }
                 }
             } else {
-                // Previously, we would always just read a single byte here. However,
-                // when looking into why `pdfjs/filled-background-range` takes so long to
-                // render, I noticed a problem. The PDF contains of a stream that
-                // stores tens of thousands of digits of Pi. Therefore, we would always
-                // advance by one byte and then try to read an object identifier again,
-                // since we always have a digit.
-                // Therefore, there is something better we can do: Since we were unable
-                // to parse an object identifier, in case we currently have a regular
-                // character, we can skip _all_ regular characters directly adjacent
-                // to the current one. This fixes the issue in the given PDF. It's
-                // still possible to construct a malicious PDF that alternates
-                // between space and digits, so it might be worth thinking whether
-                // this can be improved further.
+                // We can skip everything until the next white space character,
+                // as there cannot possibly be any new dictionary/object identifier
+                // until then.
                 let old_pos = r.offset;
-                r.forward_while(is_regular_character);
+                r.forward_while(|b| !is_white_space_character(b));
                 if r.offset == old_pos {
                     r.read_byte();
                 }
