@@ -20,7 +20,6 @@ While the main goal of `hayro` is rendering PDF files, the `hayro` project actua
 - [`hayro-jpeg2000`](hayro-jpeg2000): A JPEG2000 image decoder.
 - [`hayro-jbig2`](hayro-jbig2): A JBIG2 image decoder.
 - [`hayro-ccitt`](hayro-ccitt): A decoder for group 3 and group 4 CCITT-encoded images.
-- [`hayro-font`](hayro-font): A parser for Type1 and CFF fonts.
 - [`hayro-postscript`](hayro-postscript): A lightweight scanner for a specific subset of PostScript.
 - [`hayro-cmap`](hayro-cmap): A parser for CMap files in PDFs.
 

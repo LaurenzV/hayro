@@ -689,14 +689,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "hayro-font"
-version = "0.4.0"
-dependencies = [
- "log",
- "phf",
-]
-
-[[package]]
 name = "hayro-fuzz"
 version = "0.0.0"
 dependencies = [
