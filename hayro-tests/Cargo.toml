@@ -26,7 +26,7 @@ hayro = { workspace = true, features = ["embed-cmaps"] }
 hayro-cmap = { workspace = true }
 hayro-write = { workspace = true }
 hayro-svg = { workspace = true }
-hayro-syntax = { workspace = true }
+hayro-syntax = { workspace = true, features = ["std", "unsafe"] }
 hayro-jbig2 = { workspace = true }
 hayro-jpeg2000 = { workspace = true, features = ["image"] }
 pdf-writer = { workspace = true }
