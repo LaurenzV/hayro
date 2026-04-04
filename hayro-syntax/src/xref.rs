@@ -19,7 +19,7 @@ use crate::pdf::PdfVersion;
 use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt};
 use crate::sync::{Arc, FxHashMap, RwLock, RwLockExt};
-use crate::trivia::is_regular_character;
+use crate::trivia::{is_regular_character, is_white_space_character};
 use crate::util::findr_needle;
 use crate::{PdfData, object};
 use alloc::collections::BTreeSet;
@@ -92,14 +92,19 @@ fn fallback_xref_map_inner<'a>(
 
         let mut old_r = r.clone();
 
-        if let Some(obj_id) = r.read::<ObjectIdentifier>(&dummy_ctx) {
-            let mut cloned = r.clone();
-            // Check that the object following it is actually valid before inserting it.
-            cloned.skip_white_spaces_and_comments();
-            if cloned.skip::<Object<'_>>(false).is_some() {
-                xref_map.insert(obj_id, EntryType::Normal(cur_pos));
-                last_obj_num = Some(obj_id);
-                dummy_ctx.set_obj_number(obj_id);
+        if r.peek_byte().is_some_and(|b| matches!(b, b'0'..=b'9')) {
+            if let Some(obj_id) = r.read::<ObjectIdentifier>(&dummy_ctx) {
+                let mut cloned = r.clone();
+                // Check that the object following it is actually valid before inserting it.
+                cloned.skip_white_spaces_and_comments();
+                if cloned.skip::<Object<'_>>(false).is_some() {
+                    xref_map.insert(obj_id, EntryType::Normal(cur_pos));
+                    last_obj_num = Some(obj_id);
+                    dummy_ctx.set_obj_number(obj_id);
+                }
+            } else {
+                // There must be a white space before the next object number.
+                r.forward_while(|b| !is_white_space_character(b))
             }
         } else {
             let mut probe_reader = r.clone();
