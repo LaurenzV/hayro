@@ -92,6 +92,7 @@ fn fallback_xref_map_inner<'a>(
 
         let mut old_r = r.clone();
 
+        // First try to check if we have an object identifier.
         if r.peek_byte().is_some_and(|b: u8| b.is_ascii_digit()) {
             if let Some(obj_id) = r.read::<ObjectIdentifier>(&dummy_ctx) {
                 let mut cloned = r.clone();
@@ -107,8 +108,12 @@ fn fallback_xref_map_inner<'a>(
                 r.forward_while(|b| !is_white_space_character(b));
             }
         } else {
+            // Then, try to check whether we have a dictionary, in particular a trailer
+            // dictionary.
             let mut probe_reader = r.clone();
-            if let Some(probe) = probe_dict(&mut probe_reader, &dummy_ctx, Some(b"<<"), b">>") {
+            if r.peek_bytes(2).is_some_and(|b| b == b"<<") && let Some(probe) = {
+                probe_dict(&mut probe_reader, &dummy_ctx, Some(b"<<"), b">>")
+            } {
                 r = probe_reader;
                 if probe.has_root || probe.has_type {
                     let mut dict_reader = Reader::new(probe.data);
