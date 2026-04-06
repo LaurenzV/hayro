@@ -652,7 +652,7 @@ pub fn interpret<'a>(
             }
             TypedInstruction::ShapeGlyph(_) => {}
             TypedInstruction::XObject(x) => {
-                let cache = context.object_cache.clone();
+                let cache = context.interpreter_cache.object_cache.clone();
                 let transfer_function = context.get().graphics_state.transfer_function.clone();
                 if let Some(x_object) = resources.get_x_object(x.0).and_then(|s| {
                     XObject::new(
@@ -668,7 +668,7 @@ pub fn interpret<'a>(
             TypedInstruction::InlineImage(i) => {
                 let warning_sink = context.settings.warning_sink.clone();
                 let transfer_function = context.get().graphics_state.transfer_function.clone();
-                let cache = context.object_cache.clone();
+                let cache = context.interpreter_cache.object_cache.clone();
                 if let Some(x_object) = ImageXObject::new(
                     i.0,
                     |name| context.get_color_space(resources, name),
@@ -694,7 +694,7 @@ pub fn interpret<'a>(
                     .get_shading(s.0)
                     .and_then(|o| {
                         let (dict, stream) = dict_or_stream(&o)?;
-                        Shading::new(dict, stream, &context.object_cache)
+                        Shading::new(dict, stream, &context.interpreter_cache.object_cache)
                     })
                     .map(|s| {
                         Pattern::Shading(ShadingPattern {

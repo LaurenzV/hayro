@@ -1,5 +1,6 @@
 //! This example shows you how you can render a PDF file to PNG.
 
+use hayro::hayro_interpret::InterpreterCache;
 use hayro::hayro_interpret::InterpreterSettings;
 use hayro::hayro_interpret::font::{FontData, FontQuery, StandardFont};
 use hayro::hayro_interpret::hayro_cmap::CidFamily;
@@ -88,9 +89,10 @@ fn main() {
         bg_color: WHITE,
         ..Default::default()
     };
+    let cache = InterpreterCache::new();
 
     for (idx, page) in pdf.pages().iter().enumerate() {
-        let pixmap = render(page, &interpreter_settings, &render_settings);
+        let pixmap = render(page, &cache, &interpreter_settings, &render_settings);
         let output_path = format!("{}/rendered_{idx}.png", output_dir);
         std::fs::write(output_path, pixmap.into_png().unwrap()).unwrap();
     }

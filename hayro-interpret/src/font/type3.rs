@@ -147,7 +147,7 @@ impl<'a> Type3<'a> {
         let mut context = Context::new_with(
             state.ctm,
             self.font_bbox,
-            glyph.cache.clone(),
+            &glyph.cache,
             glyph.xref,
             glyph.settings.clone(),
             state,

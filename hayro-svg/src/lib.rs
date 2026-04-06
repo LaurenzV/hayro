@@ -24,8 +24,8 @@ use hayro_interpret::font::Glyph;
 use hayro_interpret::hayro_syntax::page::Page;
 use hayro_interpret::util::{Float32Ext, TransformExt};
 use hayro_interpret::{
-    BlendMode, CacheKey, ClipPath, Context, Device, GlyphDrawMode, Image, InterpreterSettings,
-    Paint, PathDrawMode, SoftMask, StrokeProps, interpret_page,
+    BlendMode, CacheKey, ClipPath, Context, Device, GlyphDrawMode, Image, InterpreterCache,
+    InterpreterSettings, Paint, PathDrawMode, SoftMask, StrokeProps, interpret_page,
 };
 use kurbo::{Affine, BezPath, Cap, Join, Rect};
 use siphasher::sip128::{Hasher128, SipHasher13};
@@ -46,8 +46,9 @@ pub(crate) mod paint;
 mod path;
 
 /// Convert the given page into an SVG string.
-pub fn convert(
-    page: &Page<'_>,
+pub fn convert<'a>(
+    page: &'a Page<'a>,
+    cache: &InterpreterCache<'a>,
     interpreter_settings: &InterpreterSettings,
     render_settings: &SvgRenderSettings,
 ) -> String {
@@ -59,6 +60,7 @@ pub fn convert(
             page.render_dimensions().0 as f64,
             page.render_dimensions().1 as f64,
         ),
+        cache,
         page.xref(),
         interpreter_settings.clone(),
     );

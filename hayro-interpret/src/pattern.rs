@@ -2,7 +2,7 @@
 
 use crate::cache::Cache;
 use crate::color::{Color, ColorSpace};
-use crate::context::Context;
+use crate::context::{Context, InterpreterCache};
 use crate::device::Device;
 use crate::font::Glyph;
 use crate::interpret::state::{ActiveTransferFunction, State};
@@ -42,7 +42,7 @@ impl<'a> Pattern<'a> {
         match object {
             Object::Dict(dict) => Some(Self::Shading(ShadingPattern::new(
                 &dict,
-                &ctx.object_cache,
+                &ctx.interpreter_cache.object_cache,
                 ctx.get().graphics_state.non_stroke_alpha,
             )?)),
             Object::Stream(stream) => Some(Self::Tiling(Box::new(TilingPattern::new(
@@ -141,7 +141,7 @@ pub struct TilingPattern<'a> {
     pub(crate) stroke_paint: Color,
     pub(crate) non_stroking_paint: Color,
     pub(crate) parent_resources: Resources<'a>,
-    pub(crate) cache: Cache,
+    pub(crate) cache: InterpreterCache<'a>,
     pub(crate) settings: InterpreterSettings,
     pub(crate) xref: &'a XRef,
     nesting_depth: u32,
@@ -215,7 +215,7 @@ impl<'a> TilingPattern<'a> {
             non_stroking_paint,
             settings: ctx.settings.clone(),
             parent_resources: resources.clone(),
-            cache: ctx.object_cache.clone(),
+            cache: ctx.interpreter_cache.clone(),
             xref: ctx.xref,
             nesting_depth,
         })
@@ -234,7 +234,7 @@ impl<'a> TilingPattern<'a> {
             state.ctm,
             // TODO: bbox?
             (initial_transform * self.ctx_bbox.to_path(0.1)).bounding_box(),
-            self.cache.clone(),
+            &self.cache,
             self.xref,
             self.settings.clone(),
             state,

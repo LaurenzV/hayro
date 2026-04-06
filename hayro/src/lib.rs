@@ -36,6 +36,7 @@ This crate has one optional feature:
 use crate::renderer::Renderer;
 use hayro_interpret::Device;
 use hayro_interpret::FillRule;
+use hayro_interpret::InterpreterCache;
 use hayro_interpret::InterpreterSettings;
 use hayro_interpret::hayro_syntax::Pdf;
 use hayro_interpret::hayro_syntax::page::Page;
@@ -88,8 +89,9 @@ impl Default for RenderSettings {
 }
 
 /// Render the page with the given settings to a pixmap.
-pub fn render(
-    page: &Page<'_>,
+pub fn render<'a>(
+    page: &'a Page<'a>,
+    cache: &InterpreterCache<'a>,
     interpreter_settings: &InterpreterSettings,
     render_settings: &RenderSettings,
 ) -> Pixmap {
@@ -108,6 +110,7 @@ pub fn render(
     let mut state = Context::new(
         initial_transform,
         Rect::new(0.0, 0.0, pix_width as f64, pix_height as f64),
+        cache,
         page.xref(),
         interpreter_settings.clone(),
     );
@@ -152,6 +155,7 @@ pub fn render_pdf(
     settings: InterpreterSettings,
     range: Option<RangeInclusive<usize>>,
 ) -> Option<Vec<Pixmap>> {
+    let cache = InterpreterCache::new();
     let rendered = pdf
         .pages()
         .iter()
@@ -163,6 +167,7 @@ pub fn render_pdf(
 
             let pixmap = render(
                 page,
+                &cache,
                 &settings,
                 &RenderSettings {
                     x_scale: scale,

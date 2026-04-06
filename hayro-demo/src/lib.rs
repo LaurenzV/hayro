@@ -121,7 +121,8 @@ impl PdfViewer {
             ..Default::default()
         };
 
-        let pixmap = hayro::render(page, &interpreter_settings, &render_settings);
+        let cache = hayro::hayro_interpret::InterpreterCache::new();
+        let pixmap = hayro::render(page, &cache, &interpreter_settings, &render_settings);
 
         // Return array: [width, height, pixel_data]
         let result = js_sys::Array::new_with_length(3);

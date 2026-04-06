@@ -1,6 +1,5 @@
-use crate::cache::Cache;
 use crate::color::{Color, ColorComponents, ColorSpace};
-use crate::context::Context;
+use crate::context::{Context, InterpreterCache};
 use crate::device::Device;
 use crate::function::Function;
 use crate::interpret::state::State;
@@ -55,7 +54,7 @@ struct Repr<'a> {
     parent_resources: Resources<'a>,
     root_transform: Affine,
     bbox: kurbo::Rect,
-    object_cache: Cache,
+    interpreter_cache: InterpreterCache<'a>,
     transfer_function: Option<TransferFunction>,
     settings: InterpreterSettings,
     background: Color,
@@ -107,7 +106,7 @@ impl<'a> SoftMask<'a> {
         let group = FormXObject::new(&group_stream)?;
         let cs = ColorSpace::new(
             group.dict.get::<Dict<'_>>(GROUP)?.get::<Object<'_>>(CS)?,
-            &context.object_cache,
+            &context.interpreter_cache.object_cache,
         )?;
         let transfer_function = dict
             .get::<Object<'_>>(TR)
@@ -138,7 +137,7 @@ impl<'a> SoftMask<'a> {
             root_transform: context.get().ctm,
             transfer_function,
             bbox: context.bbox(),
-            object_cache: context.object_cache.clone(),
+            interpreter_cache: context.interpreter_cache.clone(),
             settings: context.settings.clone(),
             xref: context.xref,
             background,
@@ -153,7 +152,7 @@ impl<'a> SoftMask<'a> {
         let mut ctx = Context::new_with(
             self.0.root_transform,
             self.0.bbox,
-            self.0.object_cache.clone(),
+            &self.0.interpreter_cache,
             self.0.xref,
             self.0.settings.clone(),
             state,

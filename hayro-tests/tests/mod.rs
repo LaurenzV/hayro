@@ -286,6 +286,7 @@ fn render_svg(
     render_settings: SvgRenderSettings,
     range: Option<RangeInclusive<usize>>,
 ) -> Vec<Vec<u8>> {
+    let cache = hayro::hayro_interpret::InterpreterCache::new();
     pdf.pages()
         .iter()
         .enumerate()
@@ -294,7 +295,7 @@ fn render_svg(
                 return None;
             }
 
-            let svg = hayro_svg::convert(p, &interpreter_settings, &render_settings);
+            let svg = hayro_svg::convert(p, &cache, &interpreter_settings, &render_settings);
 
             if STORE.is_some() {
                 let dir = STORE_PATH.join("svg");

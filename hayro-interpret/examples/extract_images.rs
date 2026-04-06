@@ -5,8 +5,8 @@
 
 use hayro_interpret::font::Glyph;
 use hayro_interpret::{
-    BlendMode, ClipPath, Context, Device, GlyphDrawMode, Image, ImageData, InterpreterSettings,
-    Paint, PathDrawMode, SoftMask, interpret_page,
+    BlendMode, ClipPath, Context, Device, GlyphDrawMode, Image, ImageData, InterpreterCache,
+    InterpreterSettings, Paint, PathDrawMode, SoftMask, interpret_page,
 };
 use hayro_syntax::Pdf;
 use image::{DynamicImage, ImageBuffer};
@@ -23,10 +23,12 @@ fn main() {
 
     let mut extractor = ImageExtractor::new();
     let settings = InterpreterSettings::default();
+    let cache = InterpreterCache::new();
     // Pass dummy values for bbox and initial transform, since we don't care about those.
     let mut context = Context::new(
         Affine::IDENTITY,
         Rect::new(0.0, 0.0, 1.0, 1.0),
+        &cache,
         pdf.xref(),
         settings,
     );

@@ -1,7 +1,7 @@
 //! Interacting with the different kinds of PDF fonts.
 
-use crate::cache::Cache;
 use crate::context::Context;
+use crate::context::InterpreterCache;
 use crate::device::Device;
 use crate::font::cid::Type0Font;
 use crate::font::generated::{
@@ -189,7 +189,7 @@ pub struct Type3Glyph<'a> {
     pub(crate) glyph_id: GlyphId,
     pub(crate) state: State<'a>,
     pub(crate) parent_resources: Resources<'a>,
-    pub(crate) cache: Cache,
+    pub(crate) cache: InterpreterCache<'a>,
     pub(crate) xref: &'a XRef,
     pub(crate) settings: InterpreterSettings,
     pub(crate) nesting_depth: u32,
@@ -334,7 +334,7 @@ impl<'a> Font<'a> {
                     glyph_id: glyph,
                     state: ctx.get().clone(),
                     parent_resources: resources.clone(),
-                    cache: ctx.object_cache.clone(),
+                    cache: ctx.interpreter_cache.clone(),
                     xref: ctx.xref,
                     settings: ctx.settings.clone(),
                     nesting_depth,

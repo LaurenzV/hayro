@@ -12,23 +12,51 @@ use hayro_syntax::object::Name;
 use hayro_syntax::page::Resources;
 use hayro_syntax::xref::XRef;
 use kurbo::{Affine, BezPath, PathEl, Point, Rect, Shape};
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 /// Maximum nesting depth for interpreting `XObject`'s/patterns/streams.
 pub(crate) const MAX_NESTED_INTERPRETATION_DEPTH: u32 = 50;
 
-/// A context for interpreting PDF files.
+/// A cache used by the interpreter.
+///
+/// Ideally, such a cache should be constructed once per PDF and then reused across
+/// multiple interpreter invocations (e.g. multiple page rendering operations) on
+/// the same document.
+#[derive(Clone)]
+pub struct InterpreterCache<'a> {
+    pub(crate) font_cache: Rc<RefCell<HashMap<u128, Option<Font<'a>>>>>,
+    pub(crate) object_cache: Cache,
+}
+
+impl<'a> Default for InterpreterCache<'a> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<'a> InterpreterCache<'a> {
+    /// Create a new interpreter cache.
+    pub fn new() -> Self {
+        Self {
+            font_cache: Rc::new(RefCell::new(HashMap::new())),
+            object_cache: Cache::new(),
+        }
+    }
+}
+
+/// A per-page interpretation context that borrows shared data from an [`InterpreterCache`].
 pub struct Context<'a> {
     states: Vec<State<'a>>,
     path: BezPath,
     sub_path_start: Point,
     last_point: Point,
     clip: Option<FillRule>,
-    pub(crate) font_cache: HashMap<u128, Option<Font<'a>>>,
     root_transforms: Vec<Affine>,
     bbox: Vec<Rect>,
     pub(crate) settings: InterpreterSettings,
-    pub(crate) object_cache: Cache,
+    pub(crate) interpreter_cache: InterpreterCache<'a>,
     pub(crate) xref: &'a XRef,
     pub(crate) ocg_state: OcgState,
     nesting_depth: u32,
@@ -39,10 +67,10 @@ impl<'a> Context<'a> {
     pub fn new(
         initial_transform: Affine,
         bbox: Rect,
+        cache: &InterpreterCache<'a>,
         xref: &'a XRef,
         settings: InterpreterSettings,
     ) -> Self {
-        let cache = Cache::new();
         let state = State::new(initial_transform);
 
         Self::new_with(initial_transform, bbox, cache, xref, settings, state, 0)
@@ -51,7 +79,7 @@ impl<'a> Context<'a> {
     pub(crate) fn new_with(
         initial_transform: Affine,
         bbox: Rect,
-        cache: Cache,
+        cache: &InterpreterCache<'a>,
         xref: &'a XRef,
         settings: InterpreterSettings,
         state: State<'a>,
@@ -74,8 +102,7 @@ impl<'a> Context<'a> {
             clip: None,
             bbox: vec![bbox],
             path: BezPath::new(),
-            font_cache: HashMap::new(),
-            object_cache: cache,
+            interpreter_cache: cache.clone(),
             ocg_state,
             nesting_depth,
         }
@@ -242,9 +269,10 @@ impl<'a> Context<'a> {
         name: &Name<'_>,
     ) -> Option<ColorSpace> {
         let cs_object = resources.get_color_space(name)?;
-        self.object_cache
+        self.interpreter_cache
+            .object_cache
             .get_or_insert_with(cs_object.cache_key(), || {
-                ColorSpace::new(cs_object.clone(), &self.object_cache)
+                ColorSpace::new(cs_object.clone(), &self.interpreter_cache.object_cache)
             })
     }
 
@@ -278,18 +306,21 @@ impl<'a> Context<'a> {
     pub(crate) fn resolve_font(&mut self, font_dict: &Dict<'a>) -> Option<TextStateFont<'a>> {
         let cache_key = font_dict.cache_key();
 
-        if let Some(resolved) = self
-            .font_cache
-            .entry(cache_key)
-            .or_insert_with(|| {
-                Font::new(
-                    font_dict,
-                    &self.settings.font_resolver,
-                    &self.settings.cmap_resolver,
-                )
-            })
-            .clone()
-        {
+        let resolved = {
+            let mut font_cache = self.interpreter_cache.font_cache.borrow_mut();
+            font_cache
+                .entry(cache_key)
+                .or_insert_with(|| {
+                    Font::new(
+                        font_dict,
+                        &self.settings.font_resolver,
+                        &self.settings.cmap_resolver,
+                    )
+                })
+                .clone()
+        };
+
+        if let Some(resolved) = resolved {
             Some(TextStateFont::Font(resolved))
         } else {
             Font::new_standard(StandardFont::Helvetica, &self.settings.font_resolver)
