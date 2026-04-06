@@ -982,22 +982,6 @@ impl ICCProfile {
 }
 
 impl ToRgb for ICCProfile {
-    fn convert_sample(&self, input: &[f32], output: &mut [u8], _: bool) -> Option<()> {
-        // We want to avoid using the f32 variant to avoid constructing it.
-        if input.len() <= 4 {
-            let converted = input
-                .iter()
-                .copied()
-                .map(f32_to_u8)
-                .collect::<SmallVec<[u8; 4]>>();
-            if self.convert_u8(&converted, output).is_some() {
-                return Some(());
-            }
-        }
-
-        self.convert_f32(input, output, false)
-    }
-
     fn convert_f32(&self, input: &[f32], output: &mut [u8], _: bool) -> Option<()> {
         let mut temp = vec![0.0_f32; output.len()];
 
@@ -1085,6 +1069,9 @@ static CMYK_TRANSFORM: LazyLock<ICCProfile> = LazyLock::new(|| {
 
 pub(crate) trait ToRgb {
     fn convert_sample(&self, input: &[f32], output: &mut [u8], manual_scale: bool) -> Option<()> {
+        // We prefer using the u8 variant for single samples, which is especially
+        // important for ICC profiles to avoid constructing the (more expensive)
+        // f32 variant.
         if self.supports_u8() {
             let converted = input
                 .iter()
