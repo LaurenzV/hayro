@@ -5,7 +5,7 @@ use skrifa::instance::{LocationRef, Size};
 use skrifa::metrics::GlyphMetrics;
 use skrifa::outline::{DrawSettings, Engine, HintingInstance, HintingOptions, Target};
 use skrifa::raw::TableProvider;
-use skrifa::raw::ps::cff::{CffFontRef, charset::Charset, v1::Cff};
+use skrifa::raw::ps::cff::{CffFontRef, Subfont, charset::Charset, v1::Cff};
 use skrifa::raw::ps::string::Sid;
 use skrifa::raw::ps::type1::Type1Font;
 use skrifa::raw::tables::post::DEFAULT_GLYPH_NAMES;
@@ -60,18 +60,30 @@ impl Debug for CffFontBlob {
 
 impl CffFontBlob {
     pub(crate) fn new(data: FontData) -> Option<Self> {
-        // Validate the font first, so we can unwrap in the yoke.
-        let _ = CffFontRef::new(data.as_ref().as_ref(), 0, None).ok()?;
-        let _ = Cff::read(ReadFontData::new(data.as_ref().as_ref())).ok()?;
+        let font = CffFontRef::new(data.as_ref().as_ref(), 0, None).ok()?;
+        let cff = Cff::read(ReadFontData::new(data.as_ref().as_ref())).ok()?;
+        let charset = font.charset();
+        let subfonts = (0..font.num_subfonts())
+            .map(|index| font.subfont(index, &[]).ok())
+            .collect::<Option<Vec<_>>>()?;
 
         let yoke = Yoke::<CFFYoke<'static>, FontData>::attach_to_cart(data.clone(), |data| {
             let bytes = data.as_ref();
             let font = CffFontRef::new(bytes, 0, None).unwrap();
             let cff = Cff::read(ReadFontData::new(bytes)).unwrap();
             let charset = font.charset();
-            CFFYoke { font, cff, charset }
+            let subfonts = (0..font.num_subfonts())
+                .map(|index| font.subfont(index, &[]).unwrap())
+                .collect();
+            CFFYoke {
+                font,
+                cff,
+                charset,
+                subfonts,
+            }
         });
 
+        let _ = (cff, charset, subfonts);
         Some(Self(Arc::new(yoke)))
     }
 
@@ -87,19 +99,20 @@ impl CffFontBlob {
         self.0.as_ref().get().charset.as_ref()
     }
 
+    fn subfont(&self, glyph: GlyphId) -> Option<&Subfont> {
+        let index = self.font().subfont_index(glyph)? as usize;
+        self.0.as_ref().get().subfonts.get(index)
+    }
+
     pub(crate) fn outline_glyph(&self, glyph: GlyphId) -> BezPath {
         let mut path = OutlinePath::new();
-        let Some(subfont) = self
-            .font()
-            .subfont_index(glyph)
-            .and_then(|subfont_index| self.font().subfont(subfont_index, &[]).ok())
-        else {
+        let Some(subfont) = self.subfont(glyph) else {
             return BezPath::new();
         };
 
         let _ = self
             .font()
-            .draw(&subfont, glyph, &[], Some(UNITS_PER_EM), &mut path);
+            .draw(subfont, glyph, &[], Some(UNITS_PER_EM), &mut path);
 
         path.take()
     }
@@ -149,7 +162,10 @@ impl CffFontBlob {
 
 /// A font blob for OpenType fonts.
 #[derive(Clone)]
-pub(crate) struct OpenTypeFontBlob(Arc<OpenTypeFontYoke>);
+pub(crate) struct OpenTypeFontBlob {
+    yoke: Arc<OpenTypeFontYoke>,
+    cff_blob: Option<CffFontBlob>,
+}
 
 impl Debug for OpenTypeFontBlob {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -173,6 +189,15 @@ impl OpenTypeFontBlob {
         if invalid {
             return None;
         }
+
+        // We store this separately because we want to be able to cache the subfonts
+        // of a CFF OpenType font, which is not possible using the current skrifa API.
+        // Hopefully there will be some way in the future.
+        let cff_blob = f
+            .cff()
+            .ok()
+            .map(|cff| Arc::new(cff.offset_data().as_ref().to_vec()) as FontData)
+            .and_then(CffFontBlob::new);
 
         let font_ref_yoke =
             Yoke::<OTFYoke<'static>, FontData>::attach_to_cart(data.clone(), |data| {
@@ -202,19 +227,22 @@ impl OpenTypeFontBlob {
                 }
             });
 
-        Some(Self(Arc::new(font_ref_yoke)))
+        Some(Self {
+            yoke: Arc::new(font_ref_yoke),
+            cff_blob,
+        })
     }
 
     pub(crate) fn font_data(&self) -> FontData {
-        self.0.backing_cart().clone()
+        self.yoke.backing_cart().clone()
     }
 
     pub(crate) fn font_ref(&self) -> &FontRef<'_> {
-        &self.0.as_ref().get().font_ref
+        &self.yoke.as_ref().get().font_ref
     }
 
     pub(crate) fn glyph_metrics(&self) -> &GlyphMetrics<'_> {
-        &self.0.as_ref().get().glyph_metrics
+        &self.yoke.as_ref().get().glyph_metrics
     }
 
     pub(crate) fn glyph_names(&self) -> HashMap<String, GlyphId> {
@@ -262,13 +290,17 @@ impl OpenTypeFontBlob {
     }
 
     fn outline_glyphs(&self) -> &OutlineGlyphCollection<'_> {
-        &self.0.as_ref().get().outline_glyphs
+        &self.yoke.as_ref().get().outline_glyphs
     }
 
     pub(crate) fn outline_glyph(&self, glyph: GlyphId) -> BezPath {
+        if let Some(cff_blob) = self.cff_blob.as_ref() {
+            return cff_blob.outline_glyph(glyph);
+        }
+
         let mut path = OutlinePath::new();
 
-        let draw_settings = if let Some(instance) = self.0.get().hinting_instance.as_ref() {
+        let draw_settings = if let Some(instance) = self.yoke.get().hinting_instance.as_ref() {
             // Note: We always hint at the font size `UNITS_PER_EM`, which obviously isn't very useful. We don't do this
             // for better text quality (right now), but instead because there are some PDFs with obscure fonts that
             // actually render wrongly if hinting is disabled!
@@ -299,4 +331,5 @@ struct CFFYoke<'a> {
     font: CffFontRef<'a>,
     cff: Cff<'a>,
     charset: Option<Charset<'a>>,
+    subfonts: Vec<Subfont>,
 }
