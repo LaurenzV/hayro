@@ -337,17 +337,24 @@ impl ToRgb for ColorSpace {
     fn convert_f32(&self, input: &[f32], output: &mut [u8], manual_scale: bool) -> Option<()> {
         match self.0.as_ref() {
             ColorSpaceType::DeviceCmyk => {
-                let converted = [
-                    f32_to_u8(*input.first().unwrap_or(&0.0)),
-                    f32_to_u8(*input.get(1).unwrap_or(&0.0)),
-                    f32_to_u8(*input.get(2).unwrap_or(&0.0)),
-                    f32_to_u8(*input.get(3).unwrap_or(&0.0)),
-                ];
-                CMYK_TRANSFORM.convert_u8(&converted, output)
+                if input.len() == 4 {
+                    let converted = [
+                        f32_to_u8(input[0]),
+                        f32_to_u8(input[1]),
+                        f32_to_u8(input[2]),
+                        f32_to_u8(input[3]),
+                    ];
+                    CMYK_TRANSFORM.convert_u8(&converted, output)
+                } else {
+                    let converted = input.iter().copied().map(f32_to_u8).collect::<Vec<_>>();
+                    CMYK_TRANSFORM.convert_u8(&converted, output)
+                }
             }
             ColorSpaceType::DeviceGray => {
-                let gray = f32_to_u8(*input.first().unwrap_or(&0.0));
-                output.copy_from_slice(&[gray, gray, gray]);
+                for (gray, output) in input.iter().zip(output.chunks_exact_mut(3)) {
+                    let gray = f32_to_u8(*gray);
+                    output.copy_from_slice(&[gray, gray, gray]);
+                }
 
                 Some(())
             }
