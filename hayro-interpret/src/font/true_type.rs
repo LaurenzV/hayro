@@ -18,7 +18,7 @@ use kurbo::BezPath;
 use skrifa::attribute::Style;
 use skrifa::raw::TableProvider;
 use skrifa::raw::tables::cmap::PlatformId;
-use skrifa::{GlyphId, GlyphId16, MetadataProvider};
+use skrifa::{GlyphId, MetadataProvider};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ops::Deref;
@@ -234,16 +234,7 @@ impl EmbeddedKind {
             .and_then(|s| s.decoded().ok())
             .and_then(|d| OpenTypeFontBlob::new(Arc::new(d.to_vec()), 0))?;
 
-        let mut glyph_names = HashMap::new();
-
-        // TODO: This is still pretty slow, see test file `font_truetype_slow_post_lookup`.
-        if let Ok(post) = base_font.font_ref().post() {
-            for i in 0..base_font.num_glyphs() {
-                if let Some(str) = post.glyph_name(GlyphId16::new(i)) {
-                    glyph_names.insert(str.to_string(), GlyphId::new(i as u32));
-                }
-            }
-        }
+        let glyph_names = base_font.glyph_names();
 
         let cff_font_blob = base_font
             .font_ref()

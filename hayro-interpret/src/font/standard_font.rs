@@ -10,8 +10,8 @@ use hayro_syntax::object::Dict;
 use hayro_syntax::object::Name;
 use hayro_syntax::object::dict::keys::{BASE_FONT, FONT_DESC, FONT_WEIGHT, ITALIC_ANGLE};
 use kurbo::BezPath;
+use skrifa::GlyphId;
 use skrifa::raw::TableProvider;
-use skrifa::{GlyphId, GlyphId16};
 use std::cell::RefCell;
 use std::collections::HashMap;
 
@@ -302,16 +302,7 @@ impl StandardFontBlob {
     }
 
     pub(crate) fn new_otf(blob: OpenTypeFontBlob) -> Self {
-        let mut glyph_names = HashMap::new();
-
-        if let Ok(post) = blob.font_ref().post() {
-            for i in 0..blob.num_glyphs() {
-                if let Some(str) = post.glyph_name(GlyphId16::new(i)) {
-                    glyph_names.insert(str.to_string(), GlyphId::new(i as u32));
-                }
-            }
-        }
-
+        let glyph_names = blob.glyph_names();
         Self::Otf(blob, glyph_names)
     }
 }

@@ -8,8 +8,10 @@ use skrifa::raw::TableProvider;
 use skrifa::raw::ps::cff::{CffFontRef, charset::Charset, v1::Cff};
 use skrifa::raw::ps::string::Sid;
 use skrifa::raw::ps::type1::Type1Font;
+use skrifa::raw::tables::post::DEFAULT_GLYPH_NAMES;
 use skrifa::raw::{FontData as ReadFontData, FontRead};
 use skrifa::{FontRef, GlyphId, MetadataProvider, OutlineGlyphCollection};
+use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
 use yoke::{Yoke, Yokeable};
@@ -215,6 +217,50 @@ impl OpenTypeFontBlob {
         &self.0.as_ref().get().glyph_metrics
     }
 
+    pub(crate) fn glyph_names(&self) -> HashMap<String, GlyphId> {
+        // Note: We don't call the `glyph_name` method provided by read-fonts because
+        // calling it repeatedly is very slow.
+        let mut glyph_names = HashMap::new();
+        let Ok(post) = self.font_ref().post() else {
+            return glyph_names;
+        };
+
+        match post.version().to_major_minor() {
+            (1, 0) => {
+                for (gid, name) in DEFAULT_GLYPH_NAMES.iter().enumerate() {
+                    glyph_names.insert((*name).to_string(), GlyphId::new(gid as u32));
+                }
+            }
+            (2, 0) => {
+                let Some(name_indices) = post.glyph_name_index() else {
+                    return glyph_names;
+                };
+                let Some(string_data) = post.string_data() else {
+                    return glyph_names;
+                };
+                let custom_names = string_data
+                    .iter()
+                    .map(|entry| entry.ok().map(|name| name.as_str()))
+                    .collect::<Vec<_>>();
+
+                for (gid, idx) in name_indices.iter().enumerate() {
+                    let idx = idx.get() as usize;
+                    if let Some(name) = DEFAULT_GLYPH_NAMES.get(idx).copied().or_else(|| {
+                        custom_names
+                            .get(idx.saturating_sub(DEFAULT_GLYPH_NAMES.len()))
+                            .copied()
+                            .flatten()
+                    }) {
+                        glyph_names.insert(name.to_string(), GlyphId::new(gid as u32));
+                    }
+                }
+            }
+            _ => {}
+        }
+
+        glyph_names
+    }
+
     fn outline_glyphs(&self) -> &OutlineGlyphCollection<'_> {
         &self.0.as_ref().get().outline_glyphs
     }
@@ -237,10 +283,6 @@ impl OpenTypeFontBlob {
 
         let _ = outline.draw(draw_settings, &mut path);
         path.take()
-    }
-
-    pub(crate) fn num_glyphs(&self) -> u16 {
-        self.font_ref().maxp().map(|m| m.num_glyphs()).unwrap_or(0)
     }
 }
 
