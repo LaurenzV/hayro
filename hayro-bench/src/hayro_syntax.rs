@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use walkdir::WalkDir;
 
 const LIMIT: usize = 200;
-const ROOTS: &[&str] = &["downloads", "pdfs/custom"];
+const ROOTS: &[&str] = &["hayro-tests/downloads", "hayro-tests/pdfs/custom"];
 
 struct BenchResult {
     path: PathBuf,
@@ -56,17 +56,19 @@ impl BenchResult {
 }
 
 fn main() {
-    let base_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let files = pdf_files(&base_dir);
+    let workspace_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("hayro-bench should live in the workspace root");
+    let files = pdf_files(workspace_dir);
     run_bench(
-        &base_dir,
+        workspace_dir,
         &files,
         "Hayro syntax full",
         BenchResult::bench_full,
     );
     println!();
     run_bench(
-        &base_dir,
+        workspace_dir,
         &files,
         "Hayro syntax open only",
         BenchResult::bench_open_only,

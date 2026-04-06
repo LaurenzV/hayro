@@ -13,10 +13,6 @@ autotests = false
 name = "experiment"
 path = "src/experiment.rs"
 
-[[bin]]
-name = "bench_hayro_syntax"
-path = "src/bench_hayro_syntax.rs"
-
 [[test]]
 name = "tests"
 path = "tests/mod.rs"

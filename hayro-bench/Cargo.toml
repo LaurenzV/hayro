@@ -1,0 +1,17 @@
+[package]
+name = "hayro-bench"
+version = "0.1.0"
+authors.workspace = true
+edition.workspace = true
+repository.workspace = true
+readme.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "hayro_syntax"
+path = "src/hayro_syntax.rs"
+
+[dependencies]
+hayro-syntax = { workspace = true, features = ["std", "unsafe"] }
+walkdir = "2"

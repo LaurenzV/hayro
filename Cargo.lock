@@ -663,6 +663,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "hayro-bench"
+version = "0.1.0"
+dependencies = [
+ "hayro-syntax",
+ "walkdir",
+]
+
+[[package]]
 name = "hayro-ccitt"
 version = "0.3.0"
 
