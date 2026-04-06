@@ -17,7 +17,7 @@ use smallvec::{SmallVec, ToSmallVec, smallvec};
 use std::borrow::Cow;
 use std::fmt::{Debug, Formatter};
 use std::ops::Deref;
-use std::sync::{Arc, LazyLock};
+use std::sync::{Arc, LazyLock, OnceLock};
 
 /// A storage for the components of colors.
 pub type ColorComponents = SmallVec<[f32; 4]>;
@@ -874,11 +874,13 @@ impl ToRgb for DeviceN {
 }
 
 struct ICCColorRepr {
-    transform_u8: Arc<Transform8BitExecutor>,
-    transform_f32: Arc<TransformF32Executor>,
+    src_profile: ColorProfile,
+    src_layout: Layout,
     number_components: usize,
     is_srgb: bool,
     is_lab: bool,
+    transform_u8: OnceLock<Option<Arc<Transform8BitExecutor>>>,
+    transform_f32: OnceLock<Option<Arc<TransformF32Executor>>>,
 }
 
 #[derive(Clone)]
@@ -911,8 +913,6 @@ impl ICCProfile {
         is_lab: bool,
         number_components: usize,
     ) -> Option<Self> {
-        let dest_profile = ColorProfile::new_srgb();
-
         let src_layout = match number_components {
             1 => Layout::Gray,
             3 => Layout::Rgb,
@@ -924,30 +924,14 @@ impl ICCProfile {
             }
         };
 
-        let u8_transform = src_profile
-            .create_transform_8bit(
-                src_layout,
-                &dest_profile,
-                Layout::Rgb,
-                TransformOptions::default(),
-            )
-            .ok()?;
-
-        let f32_transform = src_profile
-            .create_transform_f32(
-                src_layout,
-                &dest_profile,
-                Layout::Rgb,
-                TransformOptions::default(),
-            )
-            .ok()?;
-
         Some(Self(Arc::new(ICCColorRepr {
-            transform_u8: u8_transform,
-            transform_f32: f32_transform,
+            src_profile,
+            src_layout,
             number_components,
             is_srgb,
             is_lab,
+            transform_u8: OnceLock::new(),
+            transform_f32: OnceLock::new(),
         })))
     }
 
@@ -957,6 +941,44 @@ impl ICCProfile {
 
     fn is_lab(&self) -> bool {
         self.0.is_lab
+    }
+
+    fn transform_u8(&self) -> Option<&Arc<Transform8BitExecutor>> {
+        self.0
+            .transform_u8
+            .get_or_init(|| {
+                let dest_profile = ColorProfile::new_srgb();
+                self.0
+                    .src_profile
+                    .clone()
+                    .create_transform_8bit(
+                        self.0.src_layout,
+                        &dest_profile,
+                        Layout::Rgb,
+                        TransformOptions::default(),
+                    )
+                    .ok()
+            })
+            .as_ref()
+    }
+
+    fn transform_f32(&self) -> Option<&Arc<TransformF32Executor>> {
+        self.0
+            .transform_f32
+            .get_or_init(|| {
+                let dest_profile = ColorProfile::new_srgb();
+                self.0
+                    .src_profile
+                    .clone()
+                    .create_transform_f32(
+                        self.0.src_layout,
+                        &dest_profile,
+                        Layout::Rgb,
+                        TransformOptions::default(),
+                    )
+                    .ok()
+            })
+            .as_ref()
     }
 }
 
@@ -976,9 +998,9 @@ impl ToRgb for ICCProfile {
                     ]
                 })
                 .collect::<Vec<_>>();
-            self.0.transform_f32.transform(&scaled, &mut temp).ok()?;
+            self.transform_f32()?.transform(&scaled, &mut temp).ok()?;
         } else {
-            self.0.transform_f32.transform(input, &mut temp).ok()?;
+            self.transform_f32()?.transform(input, &mut temp).ok()?;
         };
 
         for (input, output) in temp.iter().zip(output.iter_mut()) {
@@ -996,7 +1018,7 @@ impl ToRgb for ICCProfile {
         if self.is_srgb() {
             output.copy_from_slice(input);
         } else {
-            self.0.transform_u8.transform(input, output).ok()?;
+            self.transform_u8()?.transform(input, output).ok()?;
         }
 
         Some(())
