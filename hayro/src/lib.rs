@@ -44,7 +44,10 @@ use hayro_interpret::util::{RectExt, TransformExt};
 use hayro_interpret::{BlendMode, Context};
 use hayro_interpret::{ClipPath, interpret_page};
 use kurbo::{Affine, Rect, Shape};
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::ops::RangeInclusive;
+use std::rc::Rc;
 
 pub use hayro_interpret;
 pub use hayro_interpret::hayro_syntax;
@@ -57,6 +60,26 @@ use vello_cpu::color::palette::css::WHITE;
 use vello_cpu::{Level, Pixmap, RenderMode};
 
 mod renderer;
+
+/// A cache used by the renderer.
+///
+/// Ideally, such a cache should be constructed once per PDF and then reused across
+/// multiple render invocations on the same document.
+#[derive(Clone, Default)]
+pub struct RenderCache<'a> {
+    pub(crate) interpreter_cache: InterpreterCache<'a>,
+    pub(crate) outline_cache: Rc<RefCell<HashMap<u128, Rc<kurbo::BezPath>>>>,
+}
+
+impl<'a> RenderCache<'a> {
+    /// Create a new render cache.
+    pub fn new() -> Self {
+        Self {
+            interpreter_cache: InterpreterCache::new(),
+            outline_cache: Rc::new(RefCell::new(HashMap::new())),
+        }
+    }
+}
 
 /// Settings to apply during rendering.
 #[derive(Clone, Copy)]
@@ -91,7 +114,7 @@ impl Default for RenderSettings {
 /// Render the page with the given settings to a pixmap.
 pub fn render<'a>(
     page: &'a Page<'a>,
-    cache: &InterpreterCache<'a>,
+    cache: &RenderCache<'a>,
     interpreter_settings: &InterpreterSettings,
     render_settings: &RenderSettings,
 ) -> Pixmap {
@@ -110,7 +133,7 @@ pub fn render<'a>(
     let mut state = Context::new(
         initial_transform,
         Rect::new(0.0, 0.0, pix_width as f64, pix_height as f64),
-        cache,
+        &cache.interpreter_cache,
         page.xref(),
         interpreter_settings.clone(),
     );
@@ -121,7 +144,7 @@ pub fn render<'a>(
         render_mode: RenderMode::OptimizeSpeed,
     };
 
-    let mut device = Renderer::new(pix_width, pix_height, vc_settings);
+    let mut device = Renderer::new(pix_width, pix_height, vc_settings, cache);
 
     device.ctx.set_paint(render_settings.bg_color);
     device
@@ -155,7 +178,7 @@ pub fn render_pdf(
     settings: InterpreterSettings,
     range: Option<RangeInclusive<usize>>,
 ) -> Option<Vec<Pixmap>> {
-    let cache = InterpreterCache::new();
+    let cache = RenderCache::new();
     let rendered = pdf
         .pages()
         .iter()

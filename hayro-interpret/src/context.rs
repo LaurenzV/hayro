@@ -22,8 +22,7 @@ pub(crate) const MAX_NESTED_INTERPRETATION_DEPTH: u32 = 50;
 /// A cache used by the interpreter.
 ///
 /// Ideally, such a cache should be constructed once per PDF and then reused across
-/// multiple interpreter invocations (e.g. multiple page rendering operations) on
-/// the same document.
+/// multiple interpreter invocations on the same document.
 #[derive(Clone)]
 pub struct InterpreterCache<'a> {
     pub(crate) font_cache: Rc<RefCell<HashMap<u128, Option<Font<'a>>>>>,

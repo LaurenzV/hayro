@@ -1,7 +1,7 @@
 use console_error_panic_hook;
-use hayro::RenderSettings;
 use hayro::hayro_interpret::InterpreterSettings;
 use hayro::hayro_syntax::Pdf;
+use hayro::{RenderCache, RenderSettings};
 use js_sys;
 use vello_cpu::color::palette::css::WHITE;
 use wasm_bindgen::prelude::*;
@@ -121,7 +121,7 @@ impl PdfViewer {
             ..Default::default()
         };
 
-        let cache = hayro::hayro_interpret::InterpreterCache::new();
+        let cache = RenderCache::new();
         let pixmap = hayro::render(page, &cache, &interpreter_settings, &render_settings);
 
         // Return array: [width, height, pixel_data]

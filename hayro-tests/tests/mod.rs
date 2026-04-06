@@ -286,7 +286,7 @@ fn render_svg(
     render_settings: SvgRenderSettings,
     range: Option<RangeInclusive<usize>>,
 ) -> Vec<Vec<u8>> {
-    let cache = hayro::hayro_interpret::InterpreterCache::new();
+    let cache = hayro_svg::RenderCache::new();
     pdf.pages()
         .iter()
         .enumerate()

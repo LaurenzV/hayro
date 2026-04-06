@@ -1,4 +1,4 @@
-use crate::derive_settings;
+use crate::{RenderCache, derive_settings};
 use fast_image_resize::{PixelType, ResizeAlg, ResizeOptions, Resizer, images::Image as FirImage};
 use hayro_interpret::encode::EncodedShadingPattern;
 use hayro_interpret::font::Glyph;
@@ -9,6 +9,7 @@ use hayro_interpret::{
 };
 use kurbo::{Affine, BezPath, Point, Rect, Shape, Vec2};
 use std::collections::HashMap;
+use std::rc::Rc;
 use std::sync::Arc;
 use vello_cpu::color::palette::css::BLACK;
 use vello_cpu::color::{AlphaColor, PremulRgba8, Srgb};
@@ -21,19 +22,24 @@ pub(crate) struct Renderer {
     pub(crate) ctx: RenderContext,
     pub(crate) inside_pattern: bool,
     pub(crate) soft_mask_cache: HashMap<u128, Mask>,
-    pub(crate) glyph_cache: Option<HashMap<u128, BezPath>>,
+    pub(crate) outline_cache: Rc<std::cell::RefCell<HashMap<u128, Rc<BezPath>>>>,
     pub(crate) cur_mask: Option<Mask>,
     pub(crate) cur_blend_mode: BlendMode,
     pub(crate) in_type3_glyph: bool,
 }
 
 impl Renderer {
-    pub(crate) fn new(width: u16, height: u16, settings: RenderSettings) -> Self {
+    pub(crate) fn new(
+        width: u16,
+        height: u16,
+        settings: RenderSettings,
+        cache: &RenderCache<'_>,
+    ) -> Self {
         Self {
             ctx: RenderContext::new_with(width, height, settings),
             inside_pattern: false,
             soft_mask_cache: HashMap::default(),
-            glyph_cache: Some(HashMap::new()),
+            outline_cache: cache.outline_cache.clone(),
             cur_mask: None,
             cur_blend_mode: BlendMode::default(),
             in_type3_glyph: false,
@@ -76,11 +82,19 @@ impl Renderer {
                     image_data.width() as f64 / alpha_data.width as f64,
                     image_data.height() as f64 / alpha_data.height as f64,
                 );
-            let mut renderer = Self::new(
-                self.ctx.width(),
-                self.ctx.height(),
-                derive_settings(self.ctx.render_settings()),
-            );
+            let mut renderer = Self {
+                ctx: RenderContext::new_with(
+                    self.ctx.width(),
+                    self.ctx.height(),
+                    derive_settings(self.ctx.render_settings()),
+                ),
+                inside_pattern: false,
+                soft_mask_cache: HashMap::default(),
+                outline_cache: self.outline_cache.clone(),
+                cur_mask: None,
+                cur_blend_mode: BlendMode::default(),
+                in_type3_glyph: false,
+            };
             let mut mask_pix = Pixmap::new(self.ctx.width(), self.ctx.height());
             let rgb_data = ImageData::Rgb(RgbData {
                 data: vec![0; alpha_data.width as usize * alpha_data.height as usize * 3],
@@ -426,7 +440,7 @@ impl Renderer {
                             cur_mask: None,
                             inside_pattern: true,
                             soft_mask_cache: HashMap::default(),
-                            glyph_cache: Some(HashMap::new()),
+                            outline_cache: self.outline_cache.clone(),
                             cur_blend_mode: BlendMode::default(),
                             in_type3_glyph: false,
                         };
@@ -529,23 +543,14 @@ impl Renderer {
     ) {
         match glyph {
             Glyph::Outline(o) => {
-                let id = o.identifier().cache_key();
-                // Otherwise we run into lifetime issues.
-                let mut cache = std::mem::take(&mut self.glyph_cache);
-                let base_outline = cache
-                    .as_mut()
-                    .unwrap()
-                    .entry(id)
-                    .or_insert_with(|| o.outline());
+                let base_outline = self.cached_outline(o);
 
                 self.fill_path(
-                    base_outline,
+                    base_outline.as_ref(),
                     transform * glyph_transform,
                     paint,
                     FillRule::NonZero,
                 );
-
-                self.glyph_cache = cache;
             }
             Glyph::Type3(s) => {
                 self.in_type3_glyph = true;
@@ -567,17 +572,10 @@ impl Renderer {
     ) {
         match glyph {
             Glyph::Outline(o) => {
-                let id = o.identifier().cache_key();
-                let base_outline = self
-                    .glyph_cache
-                    .as_mut()
-                    .unwrap()
-                    .entry(id)
-                    .or_insert_with(|| o.outline())
-                    .clone();
+                let base_outline = self.cached_outline(o);
 
                 self.stroke_path(
-                    &(glyph_transform * base_outline),
+                    &(glyph_transform * base_outline.as_ref().clone()),
                     transform,
                     paint,
                     stroke_props,
@@ -590,6 +588,18 @@ impl Renderer {
                 });
             }
         }
+    }
+
+    fn cached_outline(&self, glyph: &hayro_interpret::font::OutlineGlyph) -> Rc<BezPath> {
+        let id = glyph.identifier().cache_key();
+
+        if let Some(path) = self.outline_cache.borrow().get(&id) {
+            return path.clone();
+        }
+
+        let path = Rc::new(glyph.outline());
+        self.outline_cache.borrow_mut().insert(id, path.clone());
+        path
     }
 }
 
@@ -679,11 +689,19 @@ impl<'a> Device<'a> for Renderer {
                                         interpolate: stencil.interpolate,
                                         scale_factors: stencil.scale_factors,
                                     });
-                                    let mut sub_renderer = Self::new(
-                                        width,
-                                        height,
-                                        derive_settings(self.ctx.render_settings()),
-                                    );
+                                    let mut sub_renderer = Self {
+                                        ctx: RenderContext::new_with(
+                                            width,
+                                            height,
+                                            derive_settings(self.ctx.render_settings()),
+                                        ),
+                                        inside_pattern: false,
+                                        soft_mask_cache: HashMap::default(),
+                                        outline_cache: self.outline_cache.clone(),
+                                        cur_mask: None,
+                                        cur_blend_mode: BlendMode::default(),
+                                        in_type3_glyph: false,
+                                    };
                                     let mut sub_pix = Pixmap::new(width, height);
                                     sub_renderer.ctx.set_transform(transform);
                                     sub_renderer.draw_image(rgb_bytes, Some(stencil));
@@ -911,7 +929,7 @@ fn draw_soft_mask(mask: &SoftMask<'_>, settings: RenderSettings, width: u16, hei
         inside_pattern: false,
         cur_mask: None,
         soft_mask_cache: HashMap::default(),
-        glyph_cache: Some(HashMap::new()),
+        outline_cache: Rc::new(std::cell::RefCell::new(HashMap::new())),
         cur_blend_mode: BlendMode::default(),
         in_type3_glyph: false,
     };

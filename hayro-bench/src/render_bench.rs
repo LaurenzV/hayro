@@ -1,4 +1,3 @@
-use hayro::hayro_interpret::InterpreterCache;
 use hayro::hayro_interpret::InterpreterSettings;
 use hayro::vello_cpu::color::palette::css::WHITE;
 use pdfium_render::prelude::*;
@@ -165,7 +164,7 @@ impl RenderBackend for HayroRenderBackend {
         let document = hayro::hayro_syntax::Pdf::new(pdf_bytes)
             .map_err(|err| format!("load failed: {err:?}"))?;
         let interpreter_settings = InterpreterSettings::default();
-        let cache = InterpreterCache::new();
+        let cache = hayro::RenderCache::new();
         let render_settings = hayro::RenderSettings {
             bg_color: WHITE,
             ..Default::default()

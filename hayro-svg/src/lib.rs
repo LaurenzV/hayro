@@ -45,10 +45,28 @@ mod mask;
 pub(crate) mod paint;
 mod path;
 
+/// A cache used by the SVG converter.
+///
+/// Ideally, such a cache should be constructed once per PDF and then reused across
+/// multiple conversion invocations on the same document.
+#[derive(Clone, Default)]
+pub struct RenderCache<'a> {
+    pub(crate) interpreter_cache: InterpreterCache<'a>,
+}
+
+impl<'a> RenderCache<'a> {
+    /// Create a new render cache.
+    pub fn new() -> Self {
+        Self {
+            interpreter_cache: InterpreterCache::new(),
+        }
+    }
+}
+
 /// Convert the given page into an SVG string.
 pub fn convert<'a>(
     page: &'a Page<'a>,
-    cache: &InterpreterCache<'a>,
+    cache: &RenderCache<'a>,
     interpreter_settings: &InterpreterSettings,
     render_settings: &SvgRenderSettings,
 ) -> String {
@@ -60,7 +78,7 @@ pub fn convert<'a>(
             page.render_dimensions().0 as f64,
             page.render_dimensions().1 as f64,
         ),
-        cache,
+        &cache.interpreter_cache,
         page.xref(),
         interpreter_settings.clone(),
     );
