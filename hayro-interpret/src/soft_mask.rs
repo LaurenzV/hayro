@@ -18,7 +18,7 @@ use smallvec::smallvec;
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
-use std::sync::Arc;
+use std::rc::Rc;
 
 /// Type type of mask.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -71,7 +71,7 @@ impl Hash for Repr<'_> {
 
 /// A soft mask.
 #[derive(Clone, Hash)]
-pub struct SoftMask<'a>(Arc<Repr<'a>>);
+pub struct SoftMask<'a>(Rc<Repr<'a>>);
 
 impl Debug for SoftMask<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -130,7 +130,7 @@ impl<'a> SoftMask<'a> {
         };
         let nesting_depth = context.nesting_depth() + 1;
 
-        Some(Self(Arc::new(Repr {
+        Some(Self(Rc::new(Repr {
             obj_id,
             group,
             mask_type,
