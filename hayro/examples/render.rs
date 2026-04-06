@@ -1,6 +1,5 @@
 //! This example shows you how you can render a PDF file to PNG.
 
-use hayro::hayro_interpret::InterpreterCache;
 use hayro::hayro_interpret::InterpreterSettings;
 use hayro::hayro_interpret::font::{FontData, FontQuery, StandardFont};
 use hayro::hayro_interpret::hayro_cmap::CidFamily;
