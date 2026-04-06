@@ -4,7 +4,7 @@ use hayro::hayro_interpret::InterpreterSettings;
 use hayro::hayro_interpret::font::{FontData, FontQuery, StandardFont};
 use hayro::hayro_interpret::hayro_cmap::CidFamily;
 use hayro::hayro_syntax::Pdf;
-use hayro::{RenderSettings, render, RenderCache};
+use hayro::{RenderCache, RenderSettings, render};
 use std::path::Path;
 use std::sync::Arc;
 use vello_cpu::color::palette::css::WHITE;
