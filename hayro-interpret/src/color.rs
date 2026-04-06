@@ -403,7 +403,9 @@ impl ToRgb for ColorSpace {
                 Some(())
             }
             ColorSpaceType::DeviceRgb => {
-                output.copy_from_slice(input);
+                for (input, output) in input.iter().zip(output.iter_mut()) {
+                    *output = *input;
+                }
 
                 Some(())
             }
