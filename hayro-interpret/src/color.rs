@@ -980,6 +980,22 @@ impl ICCProfile {
 }
 
 impl ToRgb for ICCProfile {
+    fn convert_sample(&self, input: &[f32], output: &mut [u8], _: bool) -> Option<()> {
+        // We want to avoid using the f32 variant to avoid constructing it.
+        if input.len() <= 4 {
+            let converted = input
+                .iter()
+                .copied()
+                .map(f32_to_u8)
+                .collect::<SmallVec<[u8; 4]>>();
+            if self.convert_u8(&converted, output).is_some() {
+                return Some(());
+            }
+        }
+
+        self.convert_f32(input, output, false)
+    }
+
     fn convert_f32(&self, input: &[f32], output: &mut [u8], _: bool) -> Option<()> {
         let mut temp = vec![0.0_f32; output.len()];
 
@@ -1066,6 +1082,22 @@ static CMYK_TRANSFORM: LazyLock<ICCProfile> = LazyLock::new(|| {
 });
 
 pub(crate) trait ToRgb {
+    fn convert_sample(&self, input: &[f32], output: &mut [u8], manual_scale: bool) -> Option<()> {
+        if self.supports_u8() {
+            let converted = input
+                .iter()
+                .copied()
+                .map(f32_to_u8)
+                .collect::<SmallVec<[u8; 4]>>();
+
+            if self.convert_u8(&converted, output).is_some() {
+                return Some(());
+            }
+        }
+
+        self.convert_f32(input, output, manual_scale)
+    }
+
     fn convert_f32(&self, input: &[f32], output: &mut [u8], manual_scale: bool) -> Option<()>;
     fn supports_u8(&self) -> bool {
         false
@@ -1083,7 +1115,7 @@ pub(crate) trait ToRgb {
         manual_scale: bool,
     ) -> Option<AlphaColor> {
         let mut output = [0; 3];
-        self.convert_f32(input, &mut output, manual_scale)?;
+        self.convert_sample(input, &mut output, manual_scale)?;
 
         // For separation color spaces:
         // "The special colourant name None shall not produce any visible output.
