@@ -1,5 +1,7 @@
 use crate::{load_pdf, run_write_test};
 use hayro_syntax::Pdf;
+use hayro_syntax::object::Stream;
+use hayro_syntax::object::dict::keys::GROUP;
 use hayro_write::ExtractionQuery;
 use pdf_writer::Ref;
 use sitro::Renderer;
@@ -22,6 +24,7 @@ fn dont_cache_page_references() {
     let extracted = hayro_write::extract(
         &hayro_pdf,
         Box::new(|| next_ref.bump()),
+        |_| {},
         &[ExtractionQuery::new_page(0), ExtractionQuery::new_page(0)],
     )
     .unwrap();
@@ -201,6 +204,42 @@ fn write_xobject_basic_1() {
         &[0],
         Renderer::Pdfium,
         false,
+    );
+}
+
+#[test]
+fn write_xobject_uses_isolated_transparency_group() {
+    let hayro_pdf = load_pdf("pdfs/custom/clip_path_evenodd.pdf");
+    let extracted = hayro_write::extract_pages_as_xobject_to_pdf(&hayro_pdf, &[0]);
+    let rewritten = Pdf::new(extracted).unwrap();
+    let page = &rewritten.pages()[0];
+    let x_object = page.resources().x_objects.get::<Stream<'_>>("O1").unwrap();
+    let group = x_object
+        .dict()
+        .get::<hayro_syntax::object::Dict<'_>>(GROUP)
+        .unwrap();
+
+    assert_eq!(
+        group
+            .get::<hayro_syntax::object::Name<'_>>("Type")
+            .unwrap()
+            .as_ref(),
+        b"Group"
+    );
+    assert_eq!(
+        group
+            .get::<hayro_syntax::object::Name<'_>>("S")
+            .unwrap()
+            .as_ref(),
+        b"Transparency"
+    );
+    assert_eq!(group.get::<bool>(b"I"), Some(true));
+    assert_eq!(
+        group
+            .get::<hayro_syntax::object::Name<'_>>("CS")
+            .unwrap()
+            .as_ref(),
+        b"DeviceRGB"
     );
 }
 

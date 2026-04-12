@@ -16,7 +16,6 @@ mod primitive;
 use crate::primitive::{WriteDirect, WriteIndirect};
 use flate2::Compression;
 use flate2::write::ZlibEncoder;
-use hayro_syntax::Pdf;
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Object;
 use hayro_syntax::object::dict::keys::{
@@ -30,13 +29,18 @@ use std::ops::Deref;
 use std::ops::DerefMut;
 
 pub use hayro_syntax;
+use hayro_syntax::Pdf;
 
 /// Apply the extraction queries to the given PDF and return the results.
-pub fn extract<'a>(
+pub fn extract<'a, G>(
     pdf: &Pdf,
     new_ref: Box<dyn FnMut() -> Ref + 'a>,
+    mut write_xobject_group_cs: G,
     queries: &[ExtractionQuery],
-) -> Result<ExtractionResult, ExtractionError> {
+) -> Result<ExtractionResult, ExtractionError>
+where
+    G: for<'b> FnMut(&mut pdf_writer::writers::Group<'b>),
+{
     let pages = pdf.pages();
     let mut ctx = ExtractionContext::new(new_ref, pdf);
 
@@ -48,7 +52,9 @@ pub fn extract<'a>(
         let root_ref = ctx.new_ref();
 
         let res = match query.query_type {
-            ExtractionQueryType::XObject => write_xobject(page, root_ref, &mut ctx),
+            ExtractionQueryType::XObject => {
+                write_xobject(page, root_ref, &mut write_xobject_group_cs, &mut ctx)
+            }
             ExtractionQueryType::Page => write_page(page, root_ref, query.page_index, &mut ctx),
         };
 
@@ -206,7 +212,13 @@ pub fn extract_pages_to_pdf(hayro_pdf: &Pdf, page_indices: &[usize]) -> Vec<u8> 
 
     let catalog_id = next_ref.bump();
 
-    let extracted = extract(hayro_pdf, Box::new(|| next_ref.bump()), &requests).unwrap();
+    let extracted = extract(
+        hayro_pdf,
+        Box::new(|| next_ref.bump()),
+        /* Unused when writing as page instead of XObject */ |_| unreachable!(),
+        &requests,
+    )
+    .unwrap();
     pdf.catalog(catalog_id)
         .pages(extracted.page_tree_parent_ref);
     let count = extracted.root_refs.len();
@@ -237,7 +249,15 @@ pub fn extract_pages_as_xobject_to_pdf(hayro_pdf: &Pdf, page_indices: &[usize]) 
         })
         .collect::<Vec<_>>();
 
-    let extracted = extract(hayro_pdf, Box::new(|| next_ref.bump()), &requests).unwrap();
+    let extracted = extract(
+        hayro_pdf,
+        Box::new(|| next_ref.bump()),
+        |group| {
+            group.color_space().device_rgb();
+        },
+        &requests,
+    )
+    .unwrap();
 
     pdf.catalog(catalog_id)
         .pages(extracted.page_tree_parent_ref);
@@ -336,11 +356,15 @@ fn write_page(
     Ok(())
 }
 
-fn write_xobject(
+fn write_xobject<G>(
     page: &Page<'_>,
     xobj_ref: Ref,
+    write_xobject_group_cs: &mut G,
     ctx: &mut ExtractionContext<'_>,
-) -> Result<(), ExtractionError> {
+) -> Result<(), ExtractionError>
+where
+    G: for<'b> FnMut(&mut pdf_writer::writers::Group<'b>),
+{
     let mut chunk = Chunk::new();
     let encoded_stream = deflate_encode(page.page_stream().unwrap_or(b""));
     let mut x_object = chunk.form_xobject(xobj_ref, &encoded_stream);
@@ -367,6 +391,13 @@ fn write_xobject(
     ]);
 
     serialize_resources(page.resources(), ctx, &mut x_object);
+
+    // Latex seems to isolate all embedded PDFs which makes sense, so we also
+    // do the same. See also https://github.com/typst/typst/issues/7269.
+    let mut group = x_object.group();
+    group.transparency().isolated(true);
+    write_xobject_group_cs(&mut group);
+    group.finish();
 
     x_object.finish();
     ctx.chunks.push(chunk);
