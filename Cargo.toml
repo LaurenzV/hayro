@@ -41,7 +41,7 @@ bytemuck = { version = "1" }
 image = { version = "0.25", default-features = false }
 kurbo = { version = "0.13.0" }
 log = { version = "0.4" }
-resvg = { version = "0.46.0" }
+resvg = { version = "0.47.0" }
 flate2 = { version = "1", default-features = false, features = ["zlib-rs"] }
 once_cell = { version = "1" }
 phf = { version = "0.13.1", default-features = false }
