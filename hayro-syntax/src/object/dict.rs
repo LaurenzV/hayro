@@ -63,9 +63,9 @@ impl<'a> Dict<'a> {
     }
 
     /// Checks whether the dictionary contains an entry with a specific key.
-    pub fn contains_key(&self, key: impl Deref<Target = [u8]>) -> bool {
+    pub fn contains_key(&self, key: impl AsRef<[u8]>) -> bool {
         self.offsets()
-            .is_some_and(|offsets| offsets.contains_key(key.deref()))
+            .is_some_and(|offsets| offsets.contains_key(key.as_ref()))
     }
 
     /// Returns the entry of a key as a specific object, or try to resolve it in case it's
@@ -74,7 +74,7 @@ impl<'a> Dict<'a> {
         private_bounds,
         reason = "users shouldn't be able to implement `ObjectLike` for custom objects."
     )]
-    pub fn get<T>(&self, key: impl Deref<Target = [u8]>) -> Option<T>
+    pub fn get<T>(&self, key: impl AsRef<[u8]>) -> Option<T>
     where
         T: ObjectLike<'a>,
     {
@@ -82,8 +82,8 @@ impl<'a> Dict<'a> {
     }
 
     /// Get the object reference linked to a key.
-    pub fn get_ref(&self, key: impl Deref<Target = [u8]>) -> Option<ObjRef> {
-        let offset = *self.offsets()?.get(key.deref())?;
+    pub fn get_ref(&self, key: impl AsRef<[u8]>) -> Option<ObjRef> {
+        let offset = *self.offsets()?.get(key.as_ref())?;
 
         Reader::new(&self.data()[offset..]).read_with_context::<ObjRef>(self.ctx())
     }
@@ -112,11 +112,11 @@ impl<'a> Dict<'a> {
 
     /// Return the raw entry for a specific key.
     #[allow(private_bounds)]
-    pub fn get_raw<T>(&self, key: impl Deref<Target = [u8]>) -> Option<MaybeRef<T>>
+    pub fn get_raw<T>(&self, key: impl AsRef<[u8]>) -> Option<MaybeRef<T>>
     where
         T: Readable<'a>,
     {
-        let offset = *self.offsets()?.get(key.deref())?;
+        let offset = *self.offsets()?.get(key.as_ref())?;
 
         Reader::new(&self.data()[offset..]).read_with_context::<MaybeRef<T>>(self.ctx())
     }
@@ -1123,7 +1123,7 @@ mod tests {
         let dict_data = b"<< /PANTONE#20104#20C 234 >>";
         let dict = dict_impl(dict_data).unwrap();
 
-        assert!(dict.contains_key(b"PANTONE 104 C".as_ref()));
+        assert!(dict.contains_key("PANTONE 104 C"));
     }
 
     #[test]
@@ -1147,7 +1147,7 @@ mod tests {
             panic!("failed to parse ext g state");
         };
 
-        assert_eq!(dict.get_ref("GS2".as_ref()), Some(ObjRef::new(14, 0)));
-        assert_eq!(dict.get_ref("GS3".as_ref()), Some(ObjRef::new(15, 0)));
+        assert_eq!(dict.get_ref("GS2"), Some(ObjRef::new(14, 0)));
+        assert_eq!(dict.get_ref("GS3"), Some(ObjRef::new(15, 0)));
     }
 }

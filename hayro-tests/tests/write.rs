@@ -325,9 +325,9 @@ fn write_null_objects() {
     let reread = Pdf::new(extracted).unwrap();
     let dict = reread.pages()[0]
         .raw()
-        .get::<hayro_syntax::object::Dict>(&b"Resources"[..])
+        .get::<hayro_syntax::object::Dict>("Resources")
         .unwrap()
-        .get::<hayro_syntax::object::Dict>(&b"Font"[..])
+        .get::<hayro_syntax::object::Dict>("Font")
         .unwrap();
     let data = dict.data();
 
