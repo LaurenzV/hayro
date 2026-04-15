@@ -5,14 +5,13 @@ use hayro_svg::SvgRenderSettings;
 use hayro_syntax::Pdf;
 use hayro_syntax::{DecryptionError, LoadPdfError};
 use image::{Rgba, RgbaImage, load_from_memory};
-use once_cell::sync::Lazy;
 use resvg::tiny_skia::Pixmap;
 use resvg::usvg::{Options, Transform, Tree};
 use sitro::{RenderOptions, Renderer};
 use std::cmp::max;
 use std::ops::RangeInclusive;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 #[rustfmt::skip]
 #[allow(non_snake_case)]
@@ -24,23 +23,23 @@ mod write;
 const REPLACE: Option<&str> = option_env!("REPLACE");
 const STORE: Option<&str> = option_env!("STORE");
 
-pub(crate) static WORKSPACE_PATH: Lazy<PathBuf> =
-    Lazy::new(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(""));
+pub(crate) static WORKSPACE_PATH: LazyLock<PathBuf> =
+    LazyLock::new(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(""));
 
-pub(crate) static DIFFS_PATH: Lazy<PathBuf> = Lazy::new(|| {
+pub(crate) static DIFFS_PATH: LazyLock<PathBuf> = LazyLock::new(|| {
     let path = WORKSPACE_PATH.join("diffs");
     let _ = std::fs::remove_dir_all(&path);
     let _ = std::fs::create_dir_all(&path);
 
     path
 });
-pub(crate) static RENDER_SNAPSHOTS_PATH: Lazy<PathBuf> =
-    Lazy::new(|| WORKSPACE_PATH.join("snapshots/render"));
-pub(crate) static SVG_SNAPSHOTS_PATH: Lazy<PathBuf> =
-    Lazy::new(|| WORKSPACE_PATH.join("snapshots/svg"));
-pub(crate) static WRITE_SNAPSHOTS_PATH: Lazy<PathBuf> =
-    Lazy::new(|| WORKSPACE_PATH.join("snapshots/write"));
-pub(crate) static STORE_PATH: Lazy<PathBuf> = Lazy::new(|| WORKSPACE_PATH.join("store"));
+pub(crate) static RENDER_SNAPSHOTS_PATH: LazyLock<PathBuf> =
+    LazyLock::new(|| WORKSPACE_PATH.join("snapshots/render"));
+pub(crate) static SVG_SNAPSHOTS_PATH: LazyLock<PathBuf> =
+    LazyLock::new(|| WORKSPACE_PATH.join("snapshots/svg"));
+pub(crate) static WRITE_SNAPSHOTS_PATH: LazyLock<PathBuf> =
+    LazyLock::new(|| WORKSPACE_PATH.join("snapshots/write"));
+pub(crate) static STORE_PATH: LazyLock<PathBuf> = LazyLock::new(|| WORKSPACE_PATH.join("store"));
 
 type RenderedDocument = Vec<Vec<u8>>;
 type RenderedPage = Vec<u8>;

@@ -873,7 +873,6 @@ dependencies = [
  "hayro-write",
  "image 0.25.10",
  "memchr",
- "once_cell",
  "pdf-writer",
  "rayon",
  "resvg",
