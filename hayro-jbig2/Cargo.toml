@@ -4,6 +4,7 @@ version = "0.3.0"
 description = "A memory-safe, pure-Rust JBIG2 decoder."
 authors = { workspace = true }
 edition = { workspace = true }
+rust-version = { workspace = true }
 repository = { workspace = true }
 license = { workspace = true }
 readme = "README.md"

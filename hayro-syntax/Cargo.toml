@@ -4,6 +4,7 @@ version = "0.6.0"
 description = "A low-level crate for reading PDF files."
 authors = { workspace = true }
 edition = { workspace = true }
+rust-version = { workspace = true }
 repository = { workspace = true }
 license = { workspace = true }
 readme = "README.md"

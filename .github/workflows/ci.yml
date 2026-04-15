@@ -21,6 +21,15 @@ jobs:
       - run: cargo fmt --check --all
       - run: RUSTFLAGS="-D warnings" cargo doc --workspace --exclude hayro-demo --exclude hayro-bench --no-deps
       - run: RUSTFLAGS="-D warnings" cargo hack check --each-feature --workspace --exclude hayro-demo --exclude hayro-bench
+
+  min-version:
+    name: Check minimum Rust version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.92.0
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check --workspace
   
   no_std:
     name: Check no_std compatibility

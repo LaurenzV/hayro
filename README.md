@@ -25,3 +25,6 @@ While the main goal of `hayro` is rendering PDF files, the `hayro` project actua
 
 ## Demo
 A demo tool can be found at https://laurenzv.github.io/hayro/. Please note that this is not intended to be a PDF viewer application: It misses many important features like zooming, selecting text and important optimizations for improving the user experience. It's really just meant as a quick way to test the rendering capabilities of `hayro`.
+
+## Minimum Supported Rust Version (MSRV)
+The minimum supported Rust version is **1.92**.

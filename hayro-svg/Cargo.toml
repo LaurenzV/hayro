@@ -4,6 +4,7 @@ version = "0.4.0"
 description = "Converting PDF pages into SVG files."
 authors = { workspace = true }
 edition = { workspace = true }
+rust-version = { workspace = true }
 repository = { workspace = true }
 readme = "README.md"
 license = { workspace = true }

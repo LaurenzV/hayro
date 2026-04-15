@@ -20,6 +20,7 @@ members = [
 [workspace.package]
 authors = ["Laurenz Stampfl <laurenz.stampfl@gmail.com>"]
 edition = "2024"
+rust-version = "1.92" # also change in ci.yml
 repository = "https://github.com/LaurenzV/hayro"
 readme = "README.md"
 license = "Apache-2.0 OR MIT"
