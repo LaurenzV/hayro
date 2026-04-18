@@ -418,17 +418,9 @@ fn serialize_resources(
     let fonts = collect_resources(resources, |r| r.fonts.clone());
     let properties = collect_resources(resources, |r| r.properties.clone());
 
-    if !(ext_g_states.is_empty()
-        && shadings.is_empty()
-        && patterns.is_empty()
-        && x_objects.is_empty()
-        && color_spaces.is_empty()
-        && properties.is_empty()
-        && fonts.is_empty())
-    {
-        let mut resources = writer.resources();
+    let mut resources = writer.resources();
 
-        macro_rules! write {
+    macro_rules! write {
             ($name:ident, $key:expr) => {
                 if !$name.is_empty() {
                     let mut dict = resources.insert(Name($key)).dict();
@@ -440,14 +432,13 @@ fn serialize_resources(
             };
         }
 
-        write!(ext_g_states, EXT_G_STATE);
-        write!(shadings, SHADING);
-        write!(patterns, PATTERN);
-        write!(x_objects, XOBJECT);
-        write!(color_spaces, COLORSPACE);
-        write!(fonts, FONT);
-        write!(properties, PROPERTIES);
-    }
+    write!(ext_g_states, EXT_G_STATE);
+    write!(shadings, SHADING);
+    write!(patterns, PATTERN);
+    write!(x_objects, XOBJECT);
+    write!(color_spaces, COLORSPACE);
+    write!(fonts, FONT);
+    write!(properties, PROPERTIES);
 }
 
 fn collect_resources<'a>(
