@@ -423,16 +423,16 @@ fn serialize_resources(
     let mut resources = writer.resources();
 
     macro_rules! write {
-            ($name:ident, $key:expr) => {
-                if !$name.is_empty() {
-                    let mut dict = resources.insert(Name($key)).dict();
+        ($name:ident, $key:expr) => {
+            if !$name.is_empty() {
+                let mut dict = resources.insert(Name($key)).dict();
 
-                    for (name, obj) in $name {
-                        obj.write_direct(dict.insert(Name(name.deref())), ctx);
-                    }
+                for (name, obj) in $name {
+                    obj.write_direct(dict.insert(Name(name.deref())), ctx);
                 }
-            };
-        }
+            }
+        };
+    }
 
     write!(ext_g_states, EXT_G_STATE);
     write!(shadings, SHADING);
