@@ -418,6 +418,8 @@ fn serialize_resources(
     let fonts = collect_resources(resources, |r| r.fonts.clone());
     let properties = collect_resources(resources, |r| r.properties.clone());
 
+    // Resource dictionary is always required (unless it can be inherited), so
+    // let's just be safe and always write it.
     let mut resources = writer.resources();
 
     macro_rules! write {
