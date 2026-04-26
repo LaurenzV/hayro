@@ -24,6 +24,7 @@ fn dont_cache_page_references() {
     let extracted = hayro_write::extract(
         &hayro_pdf,
         Box::new(|| next_ref.bump()),
+        hayro_write::ChunkSettings::default(),
         |_| {},
         &[ExtractionQuery::new_page(0), ExtractionQuery::new_page(0)],
     )

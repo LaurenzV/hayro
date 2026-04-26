@@ -51,7 +51,7 @@ siphasher = "1"
 skrifa = { version = "0.42.0" }
 smallvec = { version = "1" }
 yoke = { version = "0.8" }
-pdf-writer = "0.14.0"
+pdf-writer = { git = "https://github.com/typst/pdf-writer", rev = "bc50acaea3c6022ef095a52bb75a273ef656813b" }
 sitro = { git = "https://github.com/LaurenzV/sitro", rev="fb804b3" }
 xmlwriter = { version = "0.1" }
 base64 = { version = "0.22" }

@@ -30,11 +30,13 @@ use std::ops::DerefMut;
 
 pub use hayro_syntax;
 use hayro_syntax::Pdf;
+pub use pdf_writer::Settings as ChunkSettings;
 
 /// Apply the extraction queries to the given PDF and return the results.
 pub fn extract<'a, G>(
     pdf: &Pdf,
     new_ref: Box<dyn FnMut() -> Ref + 'a>,
+    chunk_settings: ChunkSettings,
     mut write_xobject_group_cs: G,
     queries: &[ExtractionQuery],
 ) -> Result<ExtractionResult, ExtractionError>
@@ -42,7 +44,7 @@ where
     G: for<'b> FnMut(&mut pdf_writer::writers::Group<'b>),
 {
     let pages = pdf.pages();
-    let mut ctx = ExtractionContext::new(new_ref, pdf);
+    let mut ctx = ExtractionContext::new(new_ref, pdf, chunk_settings);
 
     for query in queries {
         let page = pages
@@ -65,7 +67,7 @@ where
     // any anymore.
     write_dependencies(pdf, &mut ctx);
 
-    let mut global_chunk = Chunk::new();
+    let mut global_chunk = Chunk::with_settings(chunk_settings);
 
     for chunk in &ctx.chunks {
         global_chunk.extend(chunk);
@@ -141,10 +143,15 @@ struct ExtractionContext<'a> {
     ref_map: HashMap<ObjRef, Ref>,
     cached_content_streams: HashMap<usize, Ref>,
     page_tree_parent_ref: Ref,
+    chunk_settings: ChunkSettings,
 }
 
 impl<'a> ExtractionContext<'a> {
-    fn new(mut new_ref: Box<dyn FnMut() -> Ref + 'a>, pdf: &'a Pdf) -> Self {
+    fn new(
+        mut new_ref: Box<dyn FnMut() -> Ref + 'a>,
+        pdf: &'a Pdf,
+        chunk_settings: ChunkSettings,
+    ) -> Self {
         let page_tree_parent_ref = new_ref();
         Self {
             chunks: vec![],
@@ -157,6 +164,7 @@ impl<'a> ExtractionContext<'a> {
             cached_content_streams: HashMap::new(),
             root_refs: Vec::new(),
             page_tree_parent_ref,
+            chunk_settings,
         }
     }
 
@@ -183,7 +191,7 @@ fn write_dependencies(pdf: &Pdf, ctx: &mut ExtractionContext<'_>) {
             continue;
         }
 
-        let mut chunk = Chunk::new();
+        let mut chunk = Chunk::with_settings(ctx.chunk_settings);
         if let Some(object) = pdf.xref().get::<Object<'_>>(ref_.into()) {
             let new_ref = ctx.map_ref(ref_);
             object.write_indirect(&mut chunk, new_ref, ctx);
@@ -215,6 +223,7 @@ pub fn extract_pages_to_pdf(hayro_pdf: &Pdf, page_indices: &[usize]) -> Vec<u8> 
     let extracted = extract(
         hayro_pdf,
         Box::new(|| next_ref.bump()),
+        ChunkSettings::default(),
         /* Unused when writing as page instead of XObject */ |_| unreachable!(),
         &requests,
     )
@@ -252,6 +261,7 @@ pub fn extract_pages_as_xobject_to_pdf(hayro_pdf: &Pdf, page_indices: &[usize]) 
     let extracted = extract(
         hayro_pdf,
         Box::new(|| next_ref.bump()),
+        ChunkSettings::default(),
         |group| {
             group.color_space().device_rgb();
         },
@@ -308,7 +318,7 @@ fn write_page(
     page_idx: usize,
     ctx: &mut ExtractionContext<'_>,
 ) -> Result<(), ExtractionError> {
-    let mut chunk = Chunk::new();
+    let mut chunk = Chunk::with_settings(ctx.chunk_settings);
     // Note: We can cache content stream references, but _not_ the page references themselves.
     // Acrobat for some reason doesn't like duplicate page references in the page tree.
     let stream_ref = if let Some(cached) = ctx.cached_content_streams.get(&page_idx) {
@@ -365,7 +375,7 @@ fn write_xobject<G>(
 where
     G: for<'b> FnMut(&mut pdf_writer::writers::Group<'b>),
 {
-    let mut chunk = Chunk::new();
+    let mut chunk = Chunk::with_settings(ctx.chunk_settings);
     let encoded_stream = deflate_encode(page.page_stream().unwrap_or(b""));
     let mut x_object = chunk.form_xobject(xobj_ref, &encoded_stream);
     x_object.deref_mut().filter(Filter::FlateDecode);
