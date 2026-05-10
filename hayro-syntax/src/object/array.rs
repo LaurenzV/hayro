@@ -78,9 +78,9 @@ impl Skippable for Array<'_> {
             if let Some(()) = r.forward_tag(b"]") {
                 return Some(());
             } else if is_content_stream {
-                r.skip_not_in_content_stream::<Object<'_>>()?;
+                r.skip::<Object<'_>>(true)?;
             } else {
-                r.skip_not_in_content_stream::<MaybeRef<Object<'_>>>()?;
+                r.skip::<MaybeRef<Object<'_>>>(false)?;
             }
         }
     }

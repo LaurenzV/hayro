@@ -17,7 +17,7 @@ impl Skippable for bool {
 
 impl Readable<'_> for bool {
     fn read(r: &mut Reader<'_>, _: &ReaderContext<'_>) -> Option<Self> {
-        match r.skip_in_content_stream::<Self>()? {
+        match r.skip::<Self>(true)? {
             b"true" => Some(true),
             b"false" => Some(false),
             _ => None,

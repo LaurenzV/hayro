@@ -568,9 +568,7 @@ impl XRef {
                 } else {
                     // There is a valid object at the offset, it's just not of the type the caller
                     // expected, which is fine.
-                    if r.skip_not_in_content_stream::<IndirectObject<Object<'_>>>()
-                        .is_some()
-                    {
+                    if r.skip::<IndirectObject<Object<'_>>>(false).is_some() {
                         return None;
                     }
                 };

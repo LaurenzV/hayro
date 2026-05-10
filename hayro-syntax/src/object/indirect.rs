@@ -49,9 +49,9 @@ where
     T: Skippable,
 {
     fn skip(r: &mut Reader<'_>, _: bool) -> Option<()> {
-        r.skip_in_content_stream::<ObjectIdentifier>()?;
+        r.skip::<ObjectIdentifier>(false)?;
         r.skip_white_spaces_and_comments();
-        r.skip_not_in_content_stream::<T>()?;
+        r.skip::<T>(false)?;
         r.skip_white_spaces_and_comments();
         // We are lenient and don't require it.
         r.forward_tag(b"endobj");

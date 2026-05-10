@@ -39,9 +39,9 @@ impl From<ObjectIdentifier> for ObjRef {
 
 impl Skippable for ObjRef {
     fn skip(r: &mut Reader<'_>, _: bool) -> Option<()> {
-        r.skip_not_in_content_stream::<i32>()?;
+        r.skip::<i32>(false)?;
         r.skip_white_spaces();
-        r.skip_not_in_content_stream::<i32>()?;
+        r.skip::<i32>(false)?;
         r.skip_white_spaces();
         r.forward_tag(b"R")?;
 

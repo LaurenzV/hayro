@@ -264,9 +264,9 @@ impl Readable<'_> for ObjectIdentifier {
 
 impl Skippable for ObjectIdentifier {
     fn skip(r: &mut Reader<'_>, _: bool) -> Option<()> {
-        r.skip_in_content_stream::<i32>()?;
+        r.skip::<i32>(false)?;
         r.skip_white_spaces_and_comments();
-        r.skip_in_content_stream::<i32>()?;
+        r.skip::<i32>(false)?;
         r.skip_white_spaces_and_comments();
         r.forward_tag(b"obj")?;
 
