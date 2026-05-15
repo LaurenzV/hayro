@@ -165,7 +165,8 @@ pub fn render<'a>(
     device.pop_clip_path();
 
     let mut pixmap = Pixmap::new(pix_width, pix_height);
-    device.ctx.render_to_pixmap(&mut pixmap);
+    let mut resources = vello_cpu::Resources::default();
+    device.ctx.render_to_pixmap(&mut resources, &mut pixmap);
 
     pixmap
 }

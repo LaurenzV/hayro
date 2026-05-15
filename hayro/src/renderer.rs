@@ -109,7 +109,8 @@ impl Renderer {
             // values between alpha_data and rgb_data don't match, which they do here.
             renderer.draw_image(rgb_data, Some(alpha_data));
             renderer.ctx.flush();
-            renderer.ctx.render_to_pixmap(&mut mask_pix);
+            let mut resources = vello_cpu::Resources::default();
+            renderer.ctx.render_to_pixmap(&mut resources, &mut mask_pix);
             Mask::new_alpha(&mask_pix)
         };
 
@@ -449,7 +450,8 @@ impl Renderer {
                         t.interpret(&mut renderer, initial_transform, is_stroke);
                         let mut pix = Pixmap::new(pix_width, pix_height);
                         renderer.ctx.flush();
-                        renderer.ctx.render_to_pixmap(&mut pix);
+                        let mut resources = vello_cpu::Resources::default();
+                        renderer.ctx.render_to_pixmap(&mut resources, &mut pix);
 
                         // TODO: Fix these
                         if x_step < 0.0 {
@@ -706,7 +708,10 @@ impl<'a> Device<'a> for Renderer {
                                     sub_renderer.ctx.set_transform(transform);
                                     sub_renderer.draw_image(rgb_bytes, Some(stencil));
                                     sub_renderer.ctx.flush();
-                                    sub_renderer.ctx.render_to_pixmap(&mut sub_pix);
+                                    let mut resources = vello_cpu::Resources::default();
+                                    sub_renderer
+                                        .ctx
+                                        .render_to_pixmap(&mut resources, &mut sub_pix);
                                     sub_pix
                                 };
 
@@ -955,7 +960,8 @@ fn draw_soft_mask(mask: &SoftMask<'_>, settings: RenderSettings, width: u16, hei
 
     let mut pix = Pixmap::new(width, height);
     renderer.ctx.flush();
-    renderer.ctx.render_to_pixmap(&mut pix);
+    let mut resources = vello_cpu::Resources::default();
+    renderer.ctx.render_to_pixmap(&mut resources, &mut pix);
 
     let mut rendered_mask = match mask.mask_type() {
         MaskType::Luminosity => Mask::new_luminance(&pix),
