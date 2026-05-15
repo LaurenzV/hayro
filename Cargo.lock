@@ -736,7 +736,7 @@ dependencies = [
 
 [[package]]
 name = "hayro"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "bytemuck",
  "fast_image_resize",
@@ -796,7 +796,7 @@ dependencies = [
 
 [[package]]
 name = "hayro-interpret"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "bitflags 2.11.0",
  "hayro-cmap",
@@ -847,7 +847,7 @@ version = "0.1.0"
 
 [[package]]
 name = "hayro-svg"
-version = "0.4.0"
+version = "0.7.0"
 dependencies = [
  "base64",
  "hayro-interpret",
@@ -860,7 +860,7 @@ dependencies = [
 
 [[package]]
 name = "hayro-syntax"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "aes",
  "cbc",
@@ -899,7 +899,7 @@ dependencies = [
 
 [[package]]
 name = "hayro-write"
-version = "0.5.1"
+version = "0.7.0"
 dependencies = [
  "flate2",
  "hayro-syntax",
