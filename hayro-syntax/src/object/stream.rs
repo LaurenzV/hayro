@@ -124,11 +124,7 @@ impl<'a> Stream<'a> {
         {
             Cow::Owned(
                 ctx.xref()
-                    .decrypt(
-                        self.dict.obj_id().unwrap(),
-                        self.data,
-                        DecryptionTarget::Stream,
-                    )
+                    .decrypt(self.obj_id(), self.data, DecryptionTarget::Stream)
                     // TODO: MAybe an error would be better?
                     .unwrap_or_default(),
             )
@@ -144,7 +140,11 @@ impl<'a> Stream<'a> {
 
     /// Return the object identifier of the stream.
     pub fn obj_id(&self) -> ObjectIdentifier {
-        self.dict.obj_id().unwrap()
+        self.dict.obj_id().unwrap_or_else(|| {
+            // In theory shouldn't never happen, but could theoretically be
+            // triggered in a crafted PDF.
+            ObjectIdentifier::new(0, 0)
+        })
     }
 
     /// Return the filters that are applied to the stream.
