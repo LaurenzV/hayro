@@ -145,6 +145,9 @@ pub(crate) fn get(
     };
 
     let byte_length = length / 8;
+    if byte_length == 0 {
+        return Err(InvalidEncryption);
+    }
 
     let owner_string = dict.get::<object::String<'_>>(O).ok_or(InvalidEncryption)?;
     let user_string = dict.get::<object::String<'_>>(U).ok_or(InvalidEncryption)?;
