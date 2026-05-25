@@ -220,6 +220,12 @@ macro_rules! int_num {
                     return None;
                 }
 
+                // See issue 994. Don't accept numbers that are followed by a regular character
+                // without any white space in-between.
+                if r.peek_byte().is_some_and(is_regular_character) {
+                    return None;
+                }
+
                 Some(())
             }
         }

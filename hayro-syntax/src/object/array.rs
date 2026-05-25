@@ -392,6 +392,16 @@ mod tests {
     }
 
     #[test]
+    fn malformed_ref_is_not_valid_array() {
+        assert!(array_ref_impl(b"[8 0R]").is_none());
+    }
+
+    #[test]
+    fn array_with_single_number_is_valid() {
+        assert!(array_ref_impl(b"[345345345]").is_some());
+    }
+
+    #[test]
     fn array_with_comment() {
         let res = array_impl(b"[true % A comment \n false]").unwrap();
         assert!(matches!(res[0], Object::Boolean(_)));
