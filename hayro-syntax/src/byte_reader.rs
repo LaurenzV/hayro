@@ -99,7 +99,9 @@ impl<'a> Reader<'a> {
     /// Peeks the specified number of bytes.
     #[inline]
     pub fn peek_bytes(&self, len: usize) -> Option<&'a [u8]> {
-        self.data.get(self.offset..self.offset + len)
+        self.offset
+            .checked_add(len)
+            .and_then(|end| self.data.get(self.offset..end))
     }
 
     /// Peeks a single byte.
@@ -207,5 +209,16 @@ impl<'a> Reader<'a> {
         Some(u64::from_be_bytes([
             bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
         ]))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Reader;
+
+    #[test]
+    fn peek_bytes_rejects_overflowing_len() {
+        let reader = Reader::new(b"abc");
+        assert!(reader.peek_bytes(usize::MAX).is_none());
     }
 }

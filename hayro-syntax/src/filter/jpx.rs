@@ -95,18 +95,22 @@ fn scale(
     width: u32,
     height: u32,
 ) -> Option<Vec<u8>> {
+    if bit_per_component == 0 || bit_per_component > 32 {
+        return None;
+    }
+
     let div_factor = ((1 << 8) - 1) as f32;
     let mul_factor = ((1_u32 << bit_per_component) - 1) as f32;
 
-    let mut input = vec![
-        0;
-        (width as u64 * num_components as u64 * bit_per_component as u64).div_ceil(8)
-            as usize
-            * height as usize
-    ];
+    let bits_per_row = (width as usize)
+        .checked_mul(num_components as usize)?
+        .checked_mul(bit_per_component as usize)?;
+    let input_len = bits_per_row.div_ceil(8).checked_mul(height as usize)?;
+    let mut input = vec![0; input_len];
     let mut writer = BitWriter::new(&mut input, bit_per_component)?;
+    let components_per_row = (num_components as usize).checked_mul(width as usize)?;
 
-    for bytes in data.chunks_exact(num_components as usize * width as usize) {
+    for bytes in data.chunks_exact(components_per_row) {
         for byte in bytes {
             let scaled = round_f32((*byte as f32 / div_factor) * mul_factor) as u32;
             writer.write(scaled)?;

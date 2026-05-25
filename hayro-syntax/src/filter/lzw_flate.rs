@@ -330,13 +330,16 @@ pub(crate) mod flate {
                             }
                         }
 
-                        // Copy from previous output
-                        let start = self.output.len().wrapping_sub(distance);
+                        if distance == 0 || distance > self.output.len() {
+                            warn!("invalid flate distance {}", distance);
+
+                            self.eof = true;
+                            return;
+                        }
+
                         for _ in 0..length {
-                            if start < self.output.len() {
-                                let byte = self.output[self.output.len() - distance];
-                                self.output.push(byte);
-                            }
+                            let byte = self.output[self.output.len() - distance];
+                            self.output.push(byte);
                         }
                     }
                 }
@@ -716,12 +719,13 @@ struct PredictorParams {
 }
 
 impl PredictorParams {
-    fn bits_per_pixel(&self) -> u8 {
-        self.bits_per_component * self.colors
+    fn bits_per_pixel(&self) -> Option<usize> {
+        (self.bits_per_component as usize).checked_mul(self.colors as usize)
     }
 
-    fn row_length_in_bytes(&self) -> usize {
-        (self.columns * self.bits_per_pixel() as usize).div_ceil(8)
+    fn row_length_in_bytes(&self) -> Option<usize> {
+        let bits_per_row = self.columns.checked_mul(self.bits_per_pixel()?)?;
+        Some(bits_per_row.div_ceil(8))
     }
 }
 
@@ -755,22 +759,25 @@ fn apply_predictor(data: Vec<u8>, params: &PredictorParams) -> Option<Vec<u8>> {
         i => {
             let is_png_predictor = i >= 10;
 
-            let row_len = params.row_length_in_bytes();
-
-            let total_row_len = if is_png_predictor {
-                // + 1 Because each row must start with the predictor that is used for PNG predictors.
-                row_len + 1
-            } else {
-                row_len
-            };
-
-            let num_rows = data.len() / total_row_len;
-
             if !matches!(params.bits_per_component, 1 | 2 | 4 | 8 | 16) {
                 warn!("invalid bits per component {}", params.bits_per_component);
 
                 return None;
             }
+
+            let row_len = params.row_length_in_bytes()?;
+            if row_len == 0 {
+                return None;
+            }
+
+            let total_row_len = if is_png_predictor {
+                // + 1 Because each row must start with the predictor that is used for PNG predictors.
+                row_len.checked_add(1)?
+            } else {
+                row_len
+            };
+
+            let num_rows = data.len() / total_row_len;
 
             let (bit_size, chunk_len) = if is_png_predictor {
                 (
@@ -783,7 +790,8 @@ fn apply_predictor(data: Vec<u8>, params: &PredictorParams) -> Option<Vec<u8>> {
             let zero_row = vec![0; row_len];
             let mut prev_row = BitChunks::new(&zero_row, bit_size, chunk_len)?;
             let zero_col = BitChunk::new(0, chunk_len);
-            let mut out = vec![0; num_rows * row_len];
+            let out_len = num_rows.checked_mul(row_len)?;
+            let mut out = vec![0; out_len];
             let mut writer = BitWriter::new(&mut out, bit_size)?;
 
             for in_row in data.chunks_exact(total_row_len) {
@@ -1069,5 +1077,18 @@ mod tests {
                 4, 3, 1, 252, 5, 253, 6, 1, 229, 254,
             ],
         );
+    }
+
+    #[test]
+    fn predictor_rejects_overflowing_row_size() {
+        let params = PredictorParams {
+            predictor: 10,
+            colors: 4,
+            bits_per_component: 16,
+            columns: usize::MAX,
+            early_change: false,
+        };
+
+        assert!(apply_predictor(vec![0], &params).is_none());
     }
 }

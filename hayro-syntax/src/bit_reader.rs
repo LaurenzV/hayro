@@ -39,6 +39,10 @@ impl<'a> BitReader<'a> {
     /// Returns `None` if `bit_size` > 32.
     #[inline(always)]
     pub fn read(&mut self, bit_size: u8) -> Option<u32> {
+        if !(1..=32).contains(&bit_size) {
+            return None;
+        }
+
         let byte_pos = self.byte_pos();
 
         if byte_pos >= self.data.len() {
@@ -52,7 +56,7 @@ impl<'a> BitReader<'a> {
 
                 Some(item)
             }
-            0..=32 => {
+            1..=32 => {
                 let bit_pos = self.bit_pos();
                 let end_byte_pos = (bit_pos + bit_size as usize - 1) / 8;
                 let mut read = [0_u8; 8];
@@ -116,7 +120,11 @@ impl<'a> BitReader<'a> {
 
 /// Get the mask for the given bit size.
 pub fn bit_mask(bit_size: u8) -> u32 {
-    ((1_u64 << bit_size as u64) - 1) as u32
+    match bit_size {
+        0 => 0,
+        1..=31 => (1_u32 << bit_size) - 1,
+        _ => u32::MAX,
+    }
 }
 /// A bit writer.
 #[derive(Debug)]
@@ -247,7 +255,7 @@ pub struct BitChunks<'a> {
 impl<'a> BitChunks<'a> {
     /// Create a new iterator over bit chunks.
     pub fn new(data: &'a [u8], bit_size: u8, chunk_len: usize) -> Option<Self> {
-        if bit_size > 16 {
+        if !(1..=16).contains(&bit_size) || chunk_len == 0 {
             return None;
         }
 
@@ -300,7 +308,7 @@ impl BitChunk {
         bit_size: u8,
         chunk_len: usize,
     ) -> Option<Self> {
-        if bit_size > 16 {
+        if !(1..=16).contains(&bit_size) || chunk_len == 0 {
             return None;
         }
 
@@ -545,6 +553,14 @@ mod tests {
         let mut buf = [0_u8; 4];
         assert!(BitWriter::new(&mut buf, 0).is_none());
         assert!(BitWriter::new(&mut buf, 33).is_none());
+    }
+
+    #[test]
+    fn bit_reader_rejects_invalid_sizes() {
+        let data = [0xff];
+        let mut reader = BitReader::new(&data);
+        assert!(reader.read(0).is_none());
+        assert!(reader.read(33).is_none());
     }
 
     #[test]

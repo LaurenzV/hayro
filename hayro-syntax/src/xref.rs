@@ -825,7 +825,7 @@ fn populate_from_xref_table<'a>(
         reader.skip_white_spaces();
 
         let start = header.start;
-        let end = start + header.num_entries;
+        let end = start.checked_add(header.num_entries)?;
 
         for obj_number in start..end {
             max_obj = max(max_obj, obj_number);
@@ -1014,7 +1014,8 @@ fn read_xref_table_trailer<'a>(
     reader.skip_white_spaces();
 
     while let Some(header) = reader.read_without_context::<SubsectionHeader>() {
-        reader.jump(reader.offset() + XREF_ENTRY_LEN * header.num_entries as usize);
+        let len = XREF_ENTRY_LEN.checked_mul(header.num_entries as usize)?;
+        reader.jump(reader.offset().checked_add(len)?);
     }
 
     reader.skip_white_spaces();
@@ -1142,5 +1143,12 @@ mod tests {
     fn find_last_xref_uses_last_startxref() {
         let pdf = b"%PDF-1.0\nstartxref\n5\n%%EOF\nstartxref\n42\n%%EOF";
         assert_eq!(find_last_xref_pos(pdf), Some(42));
+    }
+
+    #[test]
+    fn xref_table_trailer_rejects_overflowing_entry_skip() {
+        let data = b"xref\n0 999999999999999999999\ntrailer\n<<>>";
+        let mut reader = Reader::new(data);
+        assert!(read_xref_table_trailer(&mut reader, &ReaderContext::dummy()).is_none());
     }
 }
