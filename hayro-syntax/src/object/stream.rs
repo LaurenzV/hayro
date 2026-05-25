@@ -141,7 +141,7 @@ impl<'a> Stream<'a> {
     /// Return the object identifier of the stream.
     pub fn obj_id(&self) -> ObjectIdentifier {
         self.dict.obj_id().unwrap_or_else(|| {
-            // In theory shouldn't never happen, but could theoretically be
+            // In theory shouldn't ever happen, but could theoretically be
             // triggered in a crafted PDF.
             ObjectIdentifier::new(0, 0)
         })
