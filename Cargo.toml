@@ -31,7 +31,7 @@ hayro-ccitt = { path = "hayro-ccitt", version = "0.3.0", default-features = fals
 hayro-interpret = { path = "hayro-interpret", version = "0.7.0", default-features = false }
 hayro-jpeg2000 = { path = "hayro-jpeg2000", version = "0.3.5", default-features = false }
 hayro-jbig2 = { path = "hayro-jbig2", version = "0.3.0", default-features = false }
-hayro-syntax = { path = "hayro-syntax", version = "0.7.0", default-features = false }
+hayro-syntax = { path = "hayro-syntax", version = "0.7.1", default-features = false }
 hayro-svg = { path = "hayro-svg", version = "0.7.0", default-features = false }
 hayro-write = { path = "hayro-write", version = "0.7.0", default-features = false }
 hayro-postscript = { path = "hayro-postscript", version = "0.1.0", default-features = false }
@@ -51,7 +51,7 @@ siphasher = "1"
 skrifa = { version = "0.42.0" }
 smallvec = { version = "1" }
 yoke = { version = "0.8" }
-pdf-writer = { git = "https://github.com/typst/pdf-writer", rev = "bc50acaea3c6022ef095a52bb75a273ef656813b" }
+pdf-writer = { version = "0.15.0" }
 sitro = { git = "https://github.com/LaurenzV/sitro", rev="fb804b3" }
 xmlwriter = { version = "0.1" }
 base64 = { version = "0.22" }

@@ -859,7 +859,7 @@ dependencies = [
 
 [[package]]
 name = "hayro-syntax"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "aes",
  "cbc",
@@ -1225,8 +1225,9 @@ checksum = "d6790f58c7ff633d8771f42965289203411a5e5c68388703c06e14f24770b41e"
 
 [[package]]
 name = "pdf-writer"
-version = "0.14.0"
-source = "git+https://github.com/typst/pdf-writer?rev=bc50acaea3c6022ef095a52bb75a273ef656813b#bc50acaea3c6022ef095a52bb75a273ef656813b"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f5e456864a7a304047bff84977dc6fb162bd956475d40ba50b2dcecaada7f753"
 dependencies = [
  "bitflags 2.11.0",
  "itoa",
