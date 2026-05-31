@@ -16,6 +16,7 @@ trait RenderBackend {
         input_root: &Path,
         pdf_path: &Path,
         pdf_bytes: Arc<Vec<u8>>,
+        iterations: usize,
         save_root: Option<&Path>,
     ) -> Result<DocumentRun, String>;
 }
@@ -30,6 +31,7 @@ struct Cli {
     input_dir: PathBuf,
     backends: Vec<String>,
     save_bitmaps: bool,
+    iterations: usize,
 }
 
 struct DocumentRun {
@@ -95,6 +97,7 @@ impl RenderBackend for PdfiumRenderBackend {
         input_root: &Path,
         pdf_path: &Path,
         pdf_bytes: Arc<Vec<u8>>,
+        iterations: usize,
         save_root: Option<&Path>,
     ) -> Result<DocumentRun, String> {
         let document = self
@@ -104,7 +107,6 @@ impl RenderBackend for PdfiumRenderBackend {
         let render_config = PdfRenderConfig::new();
         let mut total_bytes = 0usize;
         let mut page_count = 0usize;
-        let mut duration = Duration::ZERO;
 
         let output_dir = save_root.map(|root| output_directory_for_pdf(root, input_root, pdf_path));
 
@@ -117,29 +119,37 @@ impl RenderBackend for PdfiumRenderBackend {
             })?;
         }
 
-        for (page_index, page) in document.pages().iter().enumerate() {
-            let start = Instant::now();
-            let bitmap = page
-                .render_with_config(&render_config)
-                .map_err(|err| format!("render failed on page {}: {err}", page_index + 1))?;
-            duration += start.elapsed();
-            let rgba_bytes = bitmap.as_rgba_bytes();
+        let start = Instant::now();
+        let mut unmeasured_duration = Duration::ZERO;
 
-            total_bytes += rgba_bytes.len();
-            page_count += 1;
+        for iteration in 0..iterations {
+            for (page_index, page) in document.pages().iter().enumerate() {
+                let bitmap = page
+                    .render_with_config(&render_config)
+                    .map_err(|err| format!("render failed on page {}: {err}", page_index + 1))?;
 
-            if let Some(path) = output_dir.as_deref() {
-                let file_path = path.join(format!(
-                    "page_{:04}_{}x{}.rgba",
-                    page_index + 1,
-                    bitmap.width(),
-                    bitmap.height()
-                ));
-                fs::write(&file_path, &rgba_bytes).map_err(|err| {
-                    format!("failed to write bitmap {}: {err}", file_path.display())
-                })?;
+                if iteration == 0 {
+                    total_bytes += bitmap.width() as usize * bitmap.height() as usize * 4;
+                    page_count += 1;
+
+                    if let Some(path) = output_dir.as_deref() {
+                        let unmeasured_start = Instant::now();
+                        let rgba_bytes = bitmap.as_rgba_bytes();
+                        let file_path = path.join(format!(
+                            "page_{:04}_{}x{}.rgba",
+                            page_index + 1,
+                            bitmap.width(),
+                            bitmap.height()
+                        ));
+                        fs::write(&file_path, &rgba_bytes).map_err(|err| {
+                            format!("failed to write bitmap {}: {err}", file_path.display())
+                        })?;
+                        unmeasured_duration += unmeasured_start.elapsed();
+                    }
+                }
             }
         }
+        let duration = start.elapsed().saturating_sub(unmeasured_duration) / iterations as u32;
 
         Ok(DocumentRun {
             page_count,
@@ -159,6 +169,7 @@ impl RenderBackend for HayroRenderBackend {
         input_root: &Path,
         pdf_path: &Path,
         pdf_bytes: Arc<Vec<u8>>,
+        iterations: usize,
         save_root: Option<&Path>,
     ) -> Result<DocumentRun, String> {
         let document = hayro::hayro_syntax::Pdf::new(pdf_bytes)
@@ -171,7 +182,6 @@ impl RenderBackend for HayroRenderBackend {
         };
         let mut total_bytes = 0usize;
         let mut page_count = 0usize;
-        let mut duration = Duration::ZERO;
 
         let output_dir = save_root.map(|root| output_directory_for_pdf(root, input_root, pdf_path));
 
@@ -184,27 +194,35 @@ impl RenderBackend for HayroRenderBackend {
             })?;
         }
 
-        for (page_index, page) in document.pages().iter().enumerate() {
-            let start = Instant::now();
-            let pixmap = hayro::render(page, &cache, &interpreter_settings, &render_settings);
-            duration += start.elapsed();
-            let rgba_bytes = pixmap.data_as_u8_slice();
+        let start = Instant::now();
+        let mut unmeasured_duration = Duration::ZERO;
 
-            total_bytes += rgba_bytes.len();
-            page_count += 1;
+        for iteration in 0..iterations {
+            for (page_index, page) in document.pages().iter().enumerate() {
+                let pixmap = hayro::render(page, &cache, &interpreter_settings, &render_settings);
 
-            if let Some(path) = output_dir.as_deref() {
-                let file_path = path.join(format!(
-                    "page_{:04}_{}x{}.rgba",
-                    page_index + 1,
-                    pixmap.width(),
-                    pixmap.height()
-                ));
-                fs::write(&file_path, rgba_bytes).map_err(|err| {
-                    format!("failed to write bitmap {}: {err}", file_path.display())
-                })?;
+                if iteration == 0 {
+                    total_bytes += pixmap.width() as usize * pixmap.height() as usize * 4;
+                    page_count += 1;
+
+                    if let Some(path) = output_dir.as_deref() {
+                        let unmeasured_start = Instant::now();
+                        let rgba_bytes = pixmap.data_as_u8_slice();
+                        let file_path = path.join(format!(
+                            "page_{:04}_{}x{}.rgba",
+                            page_index + 1,
+                            pixmap.width(),
+                            pixmap.height()
+                        ));
+                        fs::write(&file_path, rgba_bytes).map_err(|err| {
+                            format!("failed to write bitmap {}: {err}", file_path.display())
+                        })?;
+                        unmeasured_duration += unmeasured_start.elapsed();
+                    }
+                }
             }
         }
+        let duration = start.elapsed().saturating_sub(unmeasured_duration) / iterations as u32;
 
         Ok(DocumentRun {
             page_count,
@@ -317,6 +335,7 @@ fn run() -> Result<(), String> {
         pdfs.len(),
         input_dir.display()
     );
+    println!("iterations={}", cli.iterations);
     for (backend_name, path) in &save_roots {
         println!("saving_bitmaps_{}={}", backend_name, path.display());
     }
@@ -369,7 +388,13 @@ fn run() -> Result<(), String> {
                 .find(|(backend_name, _)| *backend_name == backend.name())
                 .map(|(_, path)| path.as_path());
 
-            match backend.render_document(&input_dir, pdf_path, Arc::clone(&pdf_bytes), save_root) {
+            match backend.render_document(
+                &input_dir,
+                pdf_path,
+                Arc::clone(&pdf_bytes),
+                cli.iterations,
+                save_root,
+            ) {
                 Ok(result) => {
                     summaries[index].success_count += 1;
                     summaries[index].total_pages += result.page_count;
@@ -406,6 +431,7 @@ impl Cli {
             .map(|backend| (*backend).to_string())
             .collect::<Vec<_>>();
         let mut save_bitmaps = false;
+        let mut iterations = 1;
 
         while let Some(arg) = args.next() {
             match arg.to_string_lossy().as_ref() {
@@ -417,6 +443,12 @@ impl Cli {
                 }
                 "--save-bitmaps" => {
                     save_bitmaps = true;
+                }
+                "--iter" => {
+                    let value = args
+                        .next()
+                        .ok_or_else(|| String::from("--iter requires a value"))?;
+                    iterations = parse_iteration_count(&value.to_string_lossy())?;
                 }
                 "--help" | "-h" => {
                     print_help(&program);
@@ -438,19 +470,23 @@ impl Cli {
             input_dir: input_dir.ok_or_else(|| String::from("missing input directory"))?,
             backends,
             save_bitmaps,
+            iterations,
         })
     }
 }
 
 fn print_help(program: &OsString) {
     println!(
-        "Usage: {} <input-dir> [--backend <name>] [--save-bitmaps]",
+        "Usage: {} <input-dir> [--backend <name>] [--iter <count>] [--save-bitmaps]",
         Path::new(program).display()
     );
     println!();
     println!("Options:");
     println!(
         "  --backend <name>     Backend to use: pdfium, hayro, comma-separated list, or all. Default: pdfium,hayro"
+    );
+    println!(
+        "  --iter <count>       Run each benchmark this many times and report the average. Default: 1"
     );
     println!("  --save-bitmaps       Save raw RGBA page bitmaps into <input-dir>-<backend>");
 }
@@ -496,6 +532,21 @@ fn parse_backend_list(value: &str) -> Result<Vec<String>, String> {
     }
 
     Ok(backends)
+}
+
+fn parse_iteration_count(value: &str) -> Result<usize, String> {
+    let iterations = value
+        .parse::<usize>()
+        .map_err(|_| format!("invalid iteration count: {value}"))?;
+
+    if iterations == 0 {
+        return Err(String::from("--iter must be greater than zero"));
+    }
+    if iterations > u32::MAX as usize {
+        return Err(format!("--iter must be at most {}", u32::MAX));
+    }
+
+    Ok(iterations)
 }
 
 fn print_table_header(layout: &TableLayout) {
