@@ -1,5 +1,4 @@
 use crate::{RenderCache, derive_settings};
-use fast_image_resize::{PixelType, ResizeAlg, ResizeOptions, Resizer, images::Image as FirImage};
 use hayro_interpret::encode::EncodedShadingPattern;
 use hayro_interpret::font::Glyph;
 use hayro_interpret::pattern::Pattern;
@@ -8,6 +7,9 @@ use hayro_interpret::{
     Paint, PathDrawMode, RgbData, SoftMask, StrokeProps,
 };
 use kurbo::{Affine, BezPath, Point, Rect, Shape, Vec2};
+use pic_scale::{
+    ImageSize, ImageStore, ImageStoreMut, PicScaleError, Resampling, ResamplingFunction, Scaler,
+};
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -25,8 +27,14 @@ pub(crate) struct Renderer {
     pub(crate) outline_cache: Rc<std::cell::RefCell<HashMap<u128, Rc<BezPath>>>>,
     pub(crate) cur_mask: Option<Mask>,
     pub(crate) in_type3_glyph: bool,
-    // TODO: Make sure the resizer can be used across masks/patterns/etc.
-    pub(crate) resizer: Resizer,
+    pub(crate) scaler: Scaler,
+}
+
+#[derive(Clone, Copy)]
+enum ImagePixelFormat {
+    Luma,
+    Rgb,
+    Rgba,
 }
 
 impl Renderer {
@@ -43,7 +51,7 @@ impl Renderer {
             outline_cache: cache.outline_cache.clone(),
             cur_mask: None,
             in_type3_glyph: false,
-            resizer: Resizer::new(),
+            scaler: Scaler::new(ResamplingFunction::CatmullRom),
         }
     }
 
@@ -94,7 +102,7 @@ impl Renderer {
                 outline_cache: self.outline_cache.clone(),
                 cur_mask: None,
                 in_type3_glyph: false,
-                resizer: Resizer::new(),
+                scaler: self.scaler,
             };
             let mut mask_pix = Pixmap::new(self.ctx.width(), self.ctx.height());
             let rgb_data = ImageData::Rgb(RgbData {
@@ -120,29 +128,73 @@ impl Renderer {
         self.ctx.pop_layer();
     }
 
-    fn resize_image(
-        &mut self,
+    fn resize_image_data(
+        &self,
         data: Vec<u8>,
         src_width: u32,
         src_height: u32,
         new_width: u32,
         new_height: u32,
-        pixel_type: PixelType,
+        pixel_format: ImagePixelFormat,
     ) -> Vec<u8> {
-        let src_image = FirImage::from_vec_u8(src_width, src_height, data, pixel_type).unwrap();
-        let mut dst_image = FirImage::new(new_width, new_height, pixel_type);
+        match pixel_format {
+            ImagePixelFormat::Luma => self.resize_image_data_impl::<1>(
+                data,
+                src_width,
+                src_height,
+                new_width,
+                new_height,
+                |scaler, source_size, target_size| {
+                    scaler.plan_planar_resampling(source_size, target_size)
+                },
+            ),
+            ImagePixelFormat::Rgb => self.resize_image_data_impl::<3>(
+                data,
+                src_width,
+                src_height,
+                new_width,
+                new_height,
+                |scaler, source_size, target_size| {
+                    scaler.plan_rgb_resampling(source_size, target_size)
+                },
+            ),
+            ImagePixelFormat::Rgba => self.resize_image_data_impl::<4>(
+                data,
+                src_width,
+                src_height,
+                new_width,
+                new_height,
+                |scaler, source_size, target_size| {
+                    scaler.plan_rgba_resampling(source_size, target_size, true)
+                },
+            ),
+        }
+    }
 
-        self.resizer
-            .resize(
-                &src_image,
-                &mut dst_image,
-                &ResizeOptions::new().resize_alg(ResizeAlg::Convolution(
-                    fast_image_resize::FilterType::CatmullRom,
-                )),
-            )
+    fn resize_image_data_impl<const N: usize>(
+        &self,
+        data: Vec<u8>,
+        src_width: u32,
+        src_height: u32,
+        new_width: u32,
+        new_height: u32,
+        plan: impl FnOnce(
+            &Scaler,
+            ImageSize,
+            ImageSize,
+        ) -> Result<Arc<Resampling<u8, N>>, PicScaleError>,
+    ) -> Vec<u8> {
+        let source_size = ImageSize::new(src_width as usize, src_height as usize);
+        let target_size = ImageSize::new(new_width as usize, new_height as usize);
+        let src = ImageStore::<u8, N>::from_slice(&data, src_width as usize, src_height as usize)
             .unwrap();
-
-        dst_image.into_vec()
+        let mut out = vec![0; new_width as usize * new_height as usize * N];
+        let mut dst =
+            ImageStoreMut::<u8, N>::from_slice(&mut out, new_width as usize, new_height as usize)
+                .unwrap();
+        let plan = plan(&self.scaler, source_size, target_size).unwrap();
+        plan.resample(&src, &mut dst).unwrap();
+        out
     }
 
     fn draw_image(&mut self, image_data: ImageData, alpha_data: Option<LumaData>) {
@@ -199,13 +251,13 @@ impl Renderer {
             let luma_data = if !needs_resize {
                 luma.data
             } else {
-                let resized = self.resize_image(
+                let resized = self.resize_image_data(
                     luma.data,
                     img_width,
                     img_height,
                     new_width,
                     new_height,
-                    PixelType::U8,
+                    ImagePixelFormat::Luma,
                 );
                 additional_transform = Affine::scale_non_uniform(
                     img_width as f64 / new_width as f64,
@@ -225,13 +277,13 @@ impl Renderer {
                 unreachable!()
             };
 
-            let resized = self.resize_image(
+            let resized = self.resize_image_data(
                 rgb.data,
                 img_width,
                 img_height,
                 new_width,
                 new_height,
-                PixelType::U8x3,
+                ImagePixelFormat::Rgb,
             );
             additional_transform = Affine::scale_non_uniform(
                 img_width as f64 / new_width as f64,
@@ -273,13 +325,13 @@ impl Renderer {
             if !needs_resize {
                 rgba_data
             } else {
-                let resized = self.resize_image(
+                let resized = self.resize_image_data(
                     rgba_data,
                     img_width,
                     img_height,
                     new_width,
                     new_height,
-                    PixelType::U8x4,
+                    ImagePixelFormat::Rgba,
                 );
                 additional_transform = Affine::scale_non_uniform(
                     img_width as f64 / new_width as f64,
@@ -454,7 +506,7 @@ impl Renderer {
                             soft_mask_cache: HashMap::default(),
                             outline_cache: self.outline_cache.clone(),
                             in_type3_glyph: false,
-                            resizer: Resizer::new(),
+                            scaler: self.scaler,
                         };
                         let mut initial_transform = Affine::scale_non_uniform(xs as f64, ys as f64)
                             * Affine::translate((-bbox.x0, -bbox.y0));
@@ -706,7 +758,7 @@ impl<'a> Device<'a> for Renderer {
                                         outline_cache: self.outline_cache.clone(),
                                         cur_mask: None,
                                         in_type3_glyph: false,
-                                        resizer: Resizer::new(),
+                                        scaler: self.scaler,
                                     };
                                     let mut sub_pix = Pixmap::new(width, height);
                                     sub_renderer.ctx.set_transform(transform);
@@ -936,7 +988,7 @@ fn draw_soft_mask(mask: &SoftMask<'_>, settings: RenderSettings, width: u16, hei
         soft_mask_cache: HashMap::default(),
         outline_cache: Rc::new(std::cell::RefCell::new(HashMap::new())),
         in_type3_glyph: false,
-        resizer: Resizer::new(),
+        scaler: Scaler::new(ResamplingFunction::CatmullRom),
     };
 
     let bg_color = mask.background_color().to_rgba();
