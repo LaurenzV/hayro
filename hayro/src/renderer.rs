@@ -644,7 +644,8 @@ impl<'a> Device<'a> for Renderer {
                                 );
 
                                 let blend_mode = self.ctx.blend_mode();
-                                let push_layer = alpha != 255 || blend_mode != Default::default();
+                                let push_layer =
+                                    alpha != 255 || blend_mode != peniko::BlendMode::default();
                                 self.ctx.set_transform(transform);
                                 if push_layer {
                                     self.ctx.push_layer(
