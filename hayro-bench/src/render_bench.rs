@@ -1,9 +1,11 @@
 use hayro::hayro_interpret::InterpreterSettings;
 use hayro::vello_cpu::color::palette::css::WHITE;
+use image::{ColorType, ImageEncoder, codecs::png::PngEncoder};
 use pdfium_render::prelude::*;
 use std::env;
 use std::ffi::OsString;
 use std::fs;
+use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -13,11 +15,9 @@ trait RenderBackend {
     fn name(&self) -> &'static str;
     fn render_document(
         &self,
-        input_root: &Path,
-        pdf_path: &Path,
         pdf_bytes: Arc<Vec<u8>>,
         iterations: usize,
-        save_root: Option<&Path>,
+        collect_bitmaps: bool,
     ) -> Result<DocumentRun, String>;
 }
 
@@ -38,6 +38,14 @@ struct DocumentRun {
     page_count: usize,
     total_bytes: usize,
     duration: Duration,
+    bitmaps: Vec<PageBitmap>,
+}
+
+struct PageBitmap {
+    page_index: usize,
+    width: u32,
+    height: u32,
+    rgba: Vec<u8>,
 }
 
 struct BackendSummary {
@@ -94,11 +102,9 @@ impl RenderBackend for PdfiumRenderBackend {
 
     fn render_document(
         &self,
-        input_root: &Path,
-        pdf_path: &Path,
         pdf_bytes: Arc<Vec<u8>>,
         iterations: usize,
-        save_root: Option<&Path>,
+        collect_bitmaps: bool,
     ) -> Result<DocumentRun, String> {
         let document = self
             .pdfium
@@ -108,19 +114,7 @@ impl RenderBackend for PdfiumRenderBackend {
         let mut total_bytes = 0usize;
         let mut page_count = 0usize;
 
-        let output_dir = save_root.map(|root| output_directory_for_pdf(root, input_root, pdf_path));
-
-        if let Some(path) = output_dir.as_deref() {
-            fs::create_dir_all(path).map_err(|err| {
-                format!(
-                    "failed to create output directory {}: {err}",
-                    path.display()
-                )
-            })?;
-        }
-
         let start = Instant::now();
-        let mut unmeasured_duration = Duration::ZERO;
 
         for iteration in 0..iterations {
             for (page_index, page) in document.pages().iter().enumerate() {
@@ -131,30 +125,33 @@ impl RenderBackend for PdfiumRenderBackend {
                 if iteration == 0 {
                     total_bytes += bitmap.width() as usize * bitmap.height() as usize * 4;
                     page_count += 1;
-
-                    if let Some(path) = output_dir.as_deref() {
-                        let unmeasured_start = Instant::now();
-                        let rgba_bytes = bitmap.as_rgba_bytes();
-                        let file_path = path.join(format!(
-                            "page_{:04}_{}x{}.rgba",
-                            page_index + 1,
-                            bitmap.width(),
-                            bitmap.height()
-                        ));
-                        fs::write(&file_path, &rgba_bytes).map_err(|err| {
-                            format!("failed to write bitmap {}: {err}", file_path.display())
-                        })?;
-                        unmeasured_duration += unmeasured_start.elapsed();
-                    }
                 }
             }
         }
-        let duration = start.elapsed().saturating_sub(unmeasured_duration) / iterations as u32;
+        let duration = start.elapsed() / iterations as u32;
+        let bitmaps = if collect_bitmaps {
+            let mut bitmaps = Vec::new();
+            for (page_index, page) in document.pages().iter().enumerate() {
+                let bitmap = page
+                    .render_with_config(&render_config)
+                    .map_err(|err| format!("render failed on page {}: {err}", page_index + 1))?;
+                bitmaps.push(PageBitmap {
+                    page_index,
+                    width: bitmap.width() as u32,
+                    height: bitmap.height() as u32,
+                    rgba: bitmap.as_rgba_bytes(),
+                });
+            }
+            bitmaps
+        } else {
+            Vec::new()
+        };
 
         Ok(DocumentRun {
             page_count,
             total_bytes,
             duration,
+            bitmaps,
         })
     }
 }
@@ -166,11 +163,9 @@ impl RenderBackend for HayroRenderBackend {
 
     fn render_document(
         &self,
-        input_root: &Path,
-        pdf_path: &Path,
         pdf_bytes: Arc<Vec<u8>>,
         iterations: usize,
-        save_root: Option<&Path>,
+        collect_bitmaps: bool,
     ) -> Result<DocumentRun, String> {
         let document = hayro::hayro_syntax::Pdf::new(pdf_bytes)
             .map_err(|err| format!("load failed: {err:?}"))?;
@@ -182,52 +177,52 @@ impl RenderBackend for HayroRenderBackend {
         };
         let mut total_bytes = 0usize;
         let mut page_count = 0usize;
-
-        let output_dir = save_root.map(|root| output_directory_for_pdf(root, input_root, pdf_path));
-
-        if let Some(path) = output_dir.as_deref() {
-            fs::create_dir_all(path).map_err(|err| {
-                format!(
-                    "failed to create output directory {}: {err}",
-                    path.display()
-                )
-            })?;
-        }
+        let mut rendered_bitmaps = Vec::new();
 
         let start = Instant::now();
-        let mut unmeasured_duration = Duration::ZERO;
 
         for iteration in 0..iterations {
+            let save_iteration = collect_bitmaps && iteration + 1 == iterations;
+
             for (page_index, page) in document.pages().iter().enumerate() {
                 let pixmap = hayro::render(page, &cache, &interpreter_settings, &render_settings);
 
                 if iteration == 0 {
                     total_bytes += pixmap.width() as usize * pixmap.height() as usize * 4;
                     page_count += 1;
+                }
 
-                    if let Some(path) = output_dir.as_deref() {
-                        let unmeasured_start = Instant::now();
-                        let rgba_bytes = pixmap.data_as_u8_slice();
-                        let file_path = path.join(format!(
-                            "page_{:04}_{}x{}.rgba",
-                            page_index + 1,
-                            pixmap.width(),
-                            pixmap.height()
-                        ));
-                        fs::write(&file_path, rgba_bytes).map_err(|err| {
-                            format!("failed to write bitmap {}: {err}", file_path.display())
-                        })?;
-                        unmeasured_duration += unmeasured_start.elapsed();
-                    }
+                if save_iteration {
+                    rendered_bitmaps.push((page_index, pixmap));
                 }
             }
         }
-        let duration = start.elapsed().saturating_sub(unmeasured_duration) / iterations as u32;
+        let duration = start.elapsed() / iterations as u32;
+        let bitmaps = rendered_bitmaps
+            .into_iter()
+            .map(|(page_index, pixmap)| {
+                let width = pixmap.width() as u32;
+                let height = pixmap.height() as u32;
+                let rgba = pixmap
+                    .take_unpremultiplied()
+                    .into_iter()
+                    .flat_map(|pixel| [pixel.r, pixel.g, pixel.b, pixel.a])
+                    .collect();
+
+                PageBitmap {
+                    page_index,
+                    width,
+                    height,
+                    rgba,
+                }
+            })
+            .collect();
 
         Ok(DocumentRun {
             page_count,
             total_bytes,
             duration,
+            bitmaps,
         })
     }
 }
@@ -389,13 +384,14 @@ fn run() -> Result<(), String> {
                 .map(|(_, path)| path.as_path());
 
             match backend.render_document(
-                &input_dir,
-                pdf_path,
                 Arc::clone(&pdf_bytes),
                 cli.iterations,
-                save_root,
+                save_root.is_some(),
             ) {
                 Ok(result) => {
+                    if let Some(save_root) = save_root {
+                        save_png_bitmaps(save_root, &input_dir, pdf_path, &result.bitmaps)?;
+                    }
                     summaries[index].success_count += 1;
                     summaries[index].total_pages += result.page_count;
                     summaries[index].total_bytes += result.total_bytes;
@@ -488,7 +484,7 @@ fn print_help(program: &OsString) {
     println!(
         "  --iter <count>       Run each benchmark this many times and report the average. Default: 1"
     );
-    println!("  --save-bitmaps       Save raw RGBA page bitmaps into <input-dir>-<backend>");
+    println!("  --save-bitmaps       Save page bitmaps as PNG files into <input-dir>-<backend>");
 }
 
 fn create_backends(backend_names: &[String]) -> Result<Vec<Box<dyn RenderBackend>>, String> {
@@ -696,6 +692,42 @@ fn derive_save_root(input_dir: &Path, backend_name: &str) -> PathBuf {
         Some(parent) => parent.join(suffixed),
         None => PathBuf::from(suffixed),
     }
+}
+
+fn save_png_bitmaps(
+    save_root: &Path,
+    input_root: &Path,
+    pdf_path: &Path,
+    bitmaps: &[PageBitmap],
+) -> Result<(), String> {
+    let output_dir = output_directory_for_pdf(save_root, input_root, pdf_path);
+    fs::create_dir_all(&output_dir).map_err(|err| {
+        format!(
+            "failed to create output directory {}: {err}",
+            output_dir.display()
+        )
+    })?;
+
+    for bitmap in bitmaps {
+        let file_path = output_dir.join(format!(
+            "page_{:04}_{}x{}.png",
+            bitmap.page_index + 1,
+            bitmap.width,
+            bitmap.height
+        ));
+        let file = File::create(&file_path)
+            .map_err(|err| format!("failed to create bitmap {}: {err}", file_path.display()))?;
+        PngEncoder::new(file)
+            .write_image(
+                &bitmap.rgba,
+                bitmap.width,
+                bitmap.height,
+                ColorType::Rgba8.into(),
+            )
+            .map_err(|err| format!("failed to write bitmap {}: {err}", file_path.display()))?;
+    }
+
+    Ok(())
 }
 
 fn output_directory_for_pdf(save_root: &Path, input_root: &Path, pdf_path: &Path) -> PathBuf {
