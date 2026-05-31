@@ -26,6 +26,8 @@ pub(crate) struct Renderer {
     pub(crate) cur_mask: Option<Mask>,
     pub(crate) cur_blend_mode: BlendMode,
     pub(crate) in_type3_glyph: bool,
+    // TODO: Make sure the resizer can be used across masks/patterns/etc.
+    pub(crate) resizer: Resizer,
 }
 
 impl Renderer {
@@ -43,6 +45,7 @@ impl Renderer {
             cur_mask: None,
             cur_blend_mode: BlendMode::default(),
             in_type3_glyph: false,
+            resizer: Resizer::new(),
         }
     }
 
@@ -94,6 +97,7 @@ impl Renderer {
                 cur_mask: None,
                 cur_blend_mode: BlendMode::default(),
                 in_type3_glyph: false,
+                resizer: Resizer::new(),
             };
             let mut mask_pix = Pixmap::new(self.ctx.width(), self.ctx.height());
             let rgb_data = ImageData::Rgb(RgbData {
@@ -120,6 +124,7 @@ impl Renderer {
     }
 
     fn resize_image(
+        &mut self,
         data: Vec<u8>,
         src_width: u32,
         src_height: u32,
@@ -130,8 +135,7 @@ impl Renderer {
         let src_image = FirImage::from_vec_u8(src_width, src_height, data, pixel_type).unwrap();
         let mut dst_image = FirImage::new(new_width, new_height, pixel_type);
 
-        let mut resizer = Resizer::new();
-        resizer
+        self.resizer
             .resize(
                 &src_image,
                 &mut dst_image,
@@ -198,7 +202,7 @@ impl Renderer {
             let luma_data = if !needs_resize {
                 luma.data
             } else {
-                let resized = Self::resize_image(
+                let resized = self.resize_image(
                     luma.data,
                     img_width,
                     img_height,
@@ -224,7 +228,7 @@ impl Renderer {
                 unreachable!()
             };
 
-            let resized = Self::resize_image(
+            let resized = self.resize_image(
                 rgb.data,
                 img_width,
                 img_height,
@@ -272,7 +276,7 @@ impl Renderer {
             if !needs_resize {
                 rgba_data
             } else {
-                let resized = Self::resize_image(
+                let resized = self.resize_image(
                     rgba_data,
                     img_width,
                     img_height,
@@ -471,6 +475,7 @@ impl Renderer {
                             outline_cache: self.outline_cache.clone(),
                             cur_blend_mode: BlendMode::default(),
                             in_type3_glyph: false,
+                            resizer: Resizer::new(),
                         };
                         let mut initial_transform = Affine::scale_non_uniform(xs as f64, ys as f64)
                             * Affine::translate((-bbox.x0, -bbox.y0));
@@ -730,6 +735,7 @@ impl<'a> Device<'a> for Renderer {
                                         cur_mask: None,
                                         cur_blend_mode: BlendMode::default(),
                                         in_type3_glyph: false,
+                                        resizer: Resizer::new(),
                                     };
                                     let mut sub_pix = Pixmap::new(width, height);
                                     sub_renderer.ctx.set_transform(transform);
@@ -964,6 +970,7 @@ fn draw_soft_mask(mask: &SoftMask<'_>, settings: RenderSettings, width: u16, hei
         outline_cache: Rc::new(std::cell::RefCell::new(HashMap::new())),
         cur_blend_mode: BlendMode::default(),
         in_type3_glyph: false,
+        resizer: Resizer::new(),
     };
 
     let bg_color = mask.background_color().to_rgba();
