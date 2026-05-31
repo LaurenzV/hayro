@@ -238,7 +238,7 @@ impl Renderer {
             );
             img_width = new_width;
             img_height = new_height;
-            
+
             let mut out = Vec::with_capacity((img_width * img_height) as usize * 4);
             for px in resized.chunks_exact(3) {
                 out.extend_from_slice(&[px[0], px[1], px[2], 255]);
