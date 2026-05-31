@@ -219,6 +219,31 @@ impl Renderer {
                 .iter()
                 .flat_map(|g| [*g, *g, *g, 255])
                 .collect::<Vec<_>>()
+        } else if matches!(&image_data, ImageData::Rgb(_)) && !has_alpha && needs_resize {
+            let ImageData::Rgb(rgb) = image_data else {
+                unreachable!()
+            };
+
+            let resized = Self::resize_image(
+                rgb.data,
+                img_width,
+                img_height,
+                new_width,
+                new_height,
+                PixelType::U8x3,
+            );
+            additional_transform = Affine::scale_non_uniform(
+                img_width as f64 / new_width as f64,
+                img_height as f64 / new_height as f64,
+            );
+            img_width = new_width;
+            img_height = new_height;
+
+            let mut out = Vec::with_capacity((img_width * img_height) as usize * 4);
+            for px in resized.chunks_exact(3) {
+                out.extend_from_slice(&[px[0], px[1], px[2], 255]);
+            }
+            out
         } else {
             let (rgb_data, alpha_data) = match image_data {
                 ImageData::Rgb(rgb) => (rgb.data, alpha_data.map(|a| a.data)),
