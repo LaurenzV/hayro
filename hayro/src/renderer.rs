@@ -24,7 +24,6 @@ pub(crate) struct Renderer {
     pub(crate) soft_mask_cache: HashMap<u128, Mask>,
     pub(crate) outline_cache: Rc<std::cell::RefCell<HashMap<u128, Rc<BezPath>>>>,
     pub(crate) cur_mask: Option<Mask>,
-    pub(crate) cur_blend_mode: BlendMode,
     pub(crate) in_type3_glyph: bool,
     // TODO: Make sure the resizer can be used across masks/patterns/etc.
     pub(crate) resizer: Resizer,
@@ -43,7 +42,6 @@ impl Renderer {
             soft_mask_cache: HashMap::default(),
             outline_cache: cache.outline_cache.clone(),
             cur_mask: None,
-            cur_blend_mode: BlendMode::default(),
             in_type3_glyph: false,
             resizer: Resizer::new(),
         }
@@ -95,7 +93,6 @@ impl Renderer {
                 soft_mask_cache: HashMap::default(),
                 outline_cache: self.outline_cache.clone(),
                 cur_mask: None,
-                cur_blend_mode: BlendMode::default(),
                 in_type3_glyph: false,
                 resizer: Resizer::new(),
             };
@@ -333,28 +330,11 @@ impl Renderer {
             img_height as u16,
         );
 
-        self.with_blend(|r| {
-            r.draw_pixmap(
-                Arc::new(pixmap),
-                quality,
-                cur_transform * additional_transform,
-            );
-        });
-    }
-
-    // TODO: Remove this method once vello_cpu supports inline blends.
-    fn with_blend(&mut self, op: impl FnOnce(&mut Self)) {
-        let push = self.cur_blend_mode != BlendMode::default();
-        if push {
-            self.ctx
-                .push_blend_layer(convert_blend_mode(self.cur_blend_mode));
-        }
-
-        op(self);
-
-        if push {
-            self.ctx.pop_layer();
-        }
+        self.draw_pixmap(
+            Arc::new(pixmap),
+            quality,
+            cur_transform * additional_transform,
+        );
     }
 
     fn push_clip_path_inner(&mut self, clip_path: &BezPath, fill: FillRule) {
@@ -473,7 +453,6 @@ impl Renderer {
                             inside_pattern: true,
                             soft_mask_cache: HashMap::default(),
                             outline_cache: self.outline_cache.clone(),
-                            cur_blend_mode: BlendMode::default(),
                             in_type3_glyph: false,
                             resizer: Resizer::new(),
                         };
@@ -536,9 +515,7 @@ impl Renderer {
         if let Some(clip_path) = clip_path.as_ref() {
             self.push_clip_path_inner(clip_path, FillRule::NonZero);
         }
-        self.with_blend(|r| {
-            r.ctx.stroke_path(path);
-        });
+        self.ctx.stroke_path(path);
         if clip_path.is_some() {
             self.ctx.pop_clip_path();
         }
@@ -559,9 +536,7 @@ impl Renderer {
             self.push_clip_path_inner(clip_path, fill_rule);
         }
 
-        self.with_blend(|r| {
-            r.ctx.fill_path(path);
-        });
+        self.ctx.fill_path(path);
 
         if clip_path.is_some() {
             self.ctx.pop_clip_path();
@@ -588,9 +563,7 @@ impl Renderer {
             }
             Glyph::Type3(s) => {
                 self.in_type3_glyph = true;
-                self.with_blend(|r| {
-                    s.interpret(r, transform, glyph_transform, paint);
-                });
+                s.interpret(self, transform, glyph_transform, paint);
                 self.in_type3_glyph = false;
             }
         }
@@ -617,9 +590,7 @@ impl Renderer {
                 );
             }
             Glyph::Type3(s) => {
-                self.with_blend(|r| {
-                    s.interpret(r, transform, glyph_transform, paint);
-                });
+                s.interpret(self, transform, glyph_transform, paint);
             }
         }
     }
@@ -672,13 +643,14 @@ impl<'a> Device<'a> for Renderer {
                                     color[3],
                                 );
 
+                                let blend_mode = self.ctx.blend_mode();
                                 let push_layer =
-                                    alpha != 255 || self.cur_blend_mode != BlendMode::default();
+                                    alpha != 255 || blend_mode != peniko::BlendMode::default();
                                 self.ctx.set_transform(transform);
                                 if push_layer {
                                     self.ctx.push_layer(
                                         None,
-                                        Some(convert_blend_mode(self.cur_blend_mode)),
+                                        Some(blend_mode),
                                         Some(alpha as f32 / 255.0),
                                         None,
                                         None,
@@ -733,7 +705,6 @@ impl<'a> Device<'a> for Renderer {
                                         soft_mask_cache: HashMap::default(),
                                         outline_cache: self.outline_cache.clone(),
                                         cur_mask: None,
-                                        cur_blend_mode: BlendMode::default(),
                                         in_type3_glyph: false,
                                         resizer: Resizer::new(),
                                     };
@@ -750,7 +721,7 @@ impl<'a> Device<'a> for Renderer {
 
                                 self.ctx.push_layer(
                                     None,
-                                    Some(convert_blend_mode(self.cur_blend_mode)),
+                                    Some(self.ctx.blend_mode()),
                                     None,
                                     Some(Mask::new_luminance(&mask_pix)),
                                     None,
@@ -780,9 +751,7 @@ impl<'a> Device<'a> for Renderer {
                         let (sx, sy) = image.scale_factors();
                         transform *= Affine::scale_non_uniform(sx as f64, sy as f64);
                         self.ctx.set_transform(transform);
-                        self.with_blend(|r| {
-                            r.draw_image(image, alpha);
-                        });
+                        self.draw_image(image, alpha);
                     },
                     Some((target_width, target_height)),
                 );
@@ -882,9 +851,7 @@ impl<'a> Device<'a> for Renderer {
                     self.push_clip_path_inner(clip_path, *fill_rule);
                 }
 
-                self.with_blend(|r| {
-                    r.ctx.fill_rect(rect);
-                });
+                self.ctx.fill_rect(rect);
 
                 if clip_path.is_some() {
                     self.ctx.pop_clip_path();
@@ -918,7 +885,7 @@ impl<'a> Device<'a> for Renderer {
     }
 
     fn set_blend_mode(&mut self, blend_mode: BlendMode) {
-        self.cur_blend_mode = blend_mode;
+        self.ctx.set_blend_mode(convert_blend_mode(blend_mode));
     }
 }
 
@@ -968,7 +935,6 @@ fn draw_soft_mask(mask: &SoftMask<'_>, settings: RenderSettings, width: u16, hei
         cur_mask: None,
         soft_mask_cache: HashMap::default(),
         outline_cache: Rc::new(std::cell::RefCell::new(HashMap::new())),
-        cur_blend_mode: BlendMode::default(),
         in_type3_glyph: false,
         resizer: Resizer::new(),
     };
