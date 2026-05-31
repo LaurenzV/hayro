@@ -18,10 +18,11 @@ use crate::x_object::{
 use hayro_syntax::content::TypedIter;
 use hayro_syntax::content::ops::TypedInstruction;
 use hayro_syntax::object::dict::keys::{ANNOTS, AP, F, MCID, N, OC, RECT};
-use hayro_syntax::object::{Array, Dict, Object, Rect, Stream, dict_or_stream};
+use hayro_syntax::object::{Array, Dict, Name, Object, Rect, Stream, dict_or_stream};
 use hayro_syntax::page::{Page, Resources};
 use kurbo::{Affine, Point, Shape};
 use smallvec::smallvec;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 pub(crate) mod path;
@@ -223,6 +224,7 @@ pub fn interpret<'a>(
     device: &mut impl Device<'a>,
 ) {
     let num_states = context.num_states();
+    let mut font_dict_cache = HashMap::<Name<'a>, Dict<'a>>::new();
 
     context.save_state();
 
@@ -557,7 +559,10 @@ pub fn interpret<'a>(
                 // 2) In case it's `None` because we were unable to resolve the font
                 // (for whatever reason), leave it as `None`. Better showing no
                 // text at all than garbage text.
-                let font = if let Some(font_dict) = resources.get_font(name) {
+                let font = if let Some(font_dict) = font_dict_cache.get(name).cloned() {
+                    context.resolve_font(&font_dict)
+                } else if let Some(font_dict) = resources.get_font(name) {
+                    font_dict_cache.insert(name.clone(), font_dict.clone());
                     context.resolve_font(&font_dict)
                 } else {
                     Font::new_standard(StandardFont::Helvetica, &context.settings.font_resolver)
