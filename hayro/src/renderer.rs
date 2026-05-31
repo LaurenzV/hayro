@@ -168,6 +168,7 @@ impl Renderer {
             ImageQuality::Low
         };
 
+        let has_alpha = alpha_data.is_some();
         let needs_resize = x_scale < 1.0 || y_scale < 1.0;
         let (new_width, new_height) = if needs_resize {
             let w = (img_width as f32 * x_scale)
@@ -188,7 +189,7 @@ impl Renderer {
 
         // For luma images without alpha, we can resize as single-channel and
         // expand to RGBA afterwards, which is ~4x faster.
-        let mut rgba_data = if matches!(&image_data, ImageData::Luma(_)) && alpha_data.is_none() {
+        let mut rgba_data = if matches!(&image_data, ImageData::Luma(_)) && !has_alpha {
             // We cannot lift this up due to borrowing issues.
             let ImageData::Luma(luma) = image_data else {
                 unreachable!()
@@ -264,13 +265,14 @@ impl Renderer {
             }
         };
 
-        let (chunks, _) = rgba_data.as_chunks_mut::<4>();
-
-        for chunk in chunks {
-            *chunk = AlphaColor::from_rgba8(chunk[0], chunk[1], chunk[2], chunk[3])
-                .premultiply()
-                .to_rgba8()
-                .to_u8_array();
+        if has_alpha {
+            let (chunks, _) = rgba_data.as_chunks_mut::<4>();
+            for chunk in chunks {
+                *chunk = AlphaColor::from_rgba8(chunk[0], chunk[1], chunk[2], chunk[3])
+                    .premultiply()
+                    .to_rgba8()
+                    .to_u8_array();
+            }
         }
 
         // The problem is that by default, when applying a bilinear or bicubic scaling, we will
