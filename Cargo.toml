@@ -57,8 +57,7 @@ xmlwriter = { version = "0.1" }
 base64 = { version = "0.22" }
 zune-jpeg = { version = "0.5", default-features = false }
 vello_cpu = { version = "0.0.9", default-features = false, features = ["std", "png", "u8_pipeline"] }
-# TODO: Remove MT dependencies if https://github.com/awxkee/pic-scale/issues/149 is implemented.
-pic-scale = "0.7"
+pic-scale = { version = "0.7.9", default-features = false, features = ["neon", "rdm", "sse", "avx"] }
 fearless_simd = "0.4.0"
 brotli = { version = "8", default-features = false, features = ["std"] }
 memchr = { version = "2.8.0", default-features = false, features = ["alloc"] }
