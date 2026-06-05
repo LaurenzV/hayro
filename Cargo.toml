@@ -26,7 +26,7 @@ readme = "README.md"
 license = "Apache-2.0 OR MIT"
 
 [workspace.dependencies]
-hayro = { path = "hayro", version = "0.7.0", default-features = false }
+hayro = { path = "hayro", version = "0.7.1", default-features = false }
 hayro-ccitt = { path = "hayro-ccitt", version = "0.3.0", default-features = false }
 hayro-interpret = { path = "hayro-interpret", version = "0.7.0", default-features = false }
 hayro-jpeg2000 = { path = "hayro-jpeg2000", version = "0.3.5", default-features = false }
