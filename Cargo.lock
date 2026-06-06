@@ -812,6 +812,7 @@ dependencies = [
 name = "hayro-jpeg2000"
 version = "0.3.5"
 dependencies = [
+ "criterion",
  "fearless_simd",
  "image 0.25.10",
  "indicatif",
