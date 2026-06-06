@@ -1,4 +1,4 @@
-//! Taken from the png crate, see https://github.com/image-rs/image-png/blob/master/src/filter/paeth.rs
+//! Taken from the png crate, see <https://github.com/image-rs/image-png/blob/master/src/filter/paeth.rs>
 
 use super::BytesPerPixel;
 

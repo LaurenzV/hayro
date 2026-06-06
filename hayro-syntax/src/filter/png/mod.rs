@@ -1,4 +1,4 @@
-//! Taken from the png crate, see https://github.com/image-rs/image-png/blob/master/src/filter/mod.rs
+//! Taken from the png crate, see <https://github.com/image-rs/image-png/blob/master/src/filter/mod.rs>
 
 use core::convert::TryInto;
 
@@ -18,7 +18,7 @@ pub(crate) enum BytesPerPixel {
 // Note: This impl is not from the png crate.
 impl BytesPerPixel {
     pub(crate) fn from_row_len(row_len: usize, bpp: usize) -> Option<Self> {
-        if row_len % bpp != 0 {
+        if !row_len.is_multiple_of(bpp) {
             return None;
         }
 

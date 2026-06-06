@@ -782,18 +782,18 @@ fn apply_predictor(data: Vec<u8>, params: &PredictorParams) -> Option<Vec<u8>> {
                 (params.bits_per_component, params.colors as usize)
             };
 
-            if bit_size == 8 {
-                if let Some(tbpp) = BytesPerPixel::from_row_len(row_len, chunk_len) {
-                    return apply_predictor_8bit_png(
-                        data,
-                        i,
-                        is_png_predictor,
-                        row_len,
-                        total_row_len,
-                        num_rows,
-                        tbpp,
-                    );
-                }
+            if bit_size == 8
+                && let Some(tbpp) = BytesPerPixel::from_row_len(row_len, chunk_len)
+            {
+                return apply_predictor_8bit_png(
+                    data,
+                    i,
+                    is_png_predictor,
+                    row_len,
+                    total_row_len,
+                    num_rows,
+                    tbpp,
+                );
             }
 
             let zero_row = vec![0; row_len];
