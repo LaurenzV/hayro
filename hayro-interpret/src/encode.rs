@@ -7,18 +7,60 @@ use crate::shading::{ShadingFunction, ShadingType, Triangle};
 use kurbo::{Affine, Point};
 use rustc_hash::FxHashMap;
 use smallvec::{ToSmallVec, smallvec};
+use std::sync::Arc;
 
 /// A shading pattern that was encoded so it can be sampled.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct EncodedShadingPattern {
     /// The base transform of the shading pattern.
     pub base_transform: Affine,
     pub(crate) color_space: ColorSpace,
     pub(crate) background_color: AlphaColor,
-    pub(crate) shading_type: EncodedShadingType,
+    /// The encoded shading type.
+    pub shading_type: EncodedShadingType,
     pub(crate) opacity: f32,
     pub(crate) transfer_function: Option<ActiveTransferFunction>,
 }
+
+/// The encoded shading type.
+#[derive(Clone, Debug)]
+pub enum EncodedShadingType {
+    /// Function-based shading.
+    FunctionBased(EncodedFunctionBasedShading),
+    /// Axial or radial shading.
+    RadialAxial(EncodedRadialAxialShading),
+    /// Mesh-based shading sampled into device pixels.
+    Sampled(EncodedSampledShading),
+    /// Empty dummy shading.
+    Dummy(EncodedDummyShading),
+}
+
+/// Encoded function-based shading.
+#[derive(Clone, Debug)]
+pub struct EncodedFunctionBasedShading {
+    pub(crate) domain: kurbo::Rect,
+    pub(crate) function: ShadingFunction,
+}
+
+/// Encoded axial or radial shading.
+#[derive(Clone, Debug)]
+pub struct EncodedRadialAxialShading {
+    pub(crate) function: ShadingFunction,
+    pub(crate) params: RadialAxialParams,
+    pub(crate) domain: [f32; 2],
+    pub(crate) extend: [bool; 2],
+}
+
+/// Encoded sampled mesh shading.
+#[derive(Clone, Debug)]
+pub struct EncodedSampledShading {
+    pub(crate) samples: Arc<FxHashMap<(u16, u16), ColorComponents>>,
+    pub(crate) function: Option<ShadingFunction>,
+}
+
+/// Encoded dummy shading.
+#[derive(Clone, Debug)]
+pub struct EncodedDummyShading;
 
 impl EncodedShadingPattern {
     /// Sample the shading at the given position.
@@ -77,10 +119,10 @@ impl ShadingPattern {
 
                 base_transform = Affine::IDENTITY;
 
-                EncodedShadingType::Sampled {
-                    samples,
+                EncodedShadingType::Sampled(EncodedSampledShading {
+                    samples: Arc::new(samples),
                     function: function.clone(),
-                }
+                })
             }
             ShadingType::CoonsPatchMesh { patches, function } => {
                 let mut triangles = vec![];
@@ -93,10 +135,10 @@ impl ShadingPattern {
 
                 base_transform = Affine::IDENTITY;
 
-                EncodedShadingType::Sampled {
-                    samples,
+                EncodedShadingType::Sampled(EncodedSampledShading {
+                    samples: Arc::new(samples),
                     function: function.clone(),
-                }
+                })
             }
             ShadingType::TensorProductPatchMesh { patches, function } => {
                 let mut triangles = vec![];
@@ -109,15 +151,15 @@ impl ShadingPattern {
 
                 base_transform = Affine::IDENTITY;
 
-                EncodedShadingType::Sampled {
-                    samples,
+                EncodedShadingType::Sampled(EncodedSampledShading {
+                    samples: Arc::new(samples),
                     function: function.clone(),
-                }
+                })
             }
             ShadingType::Dummy => {
                 base_transform = Affine::IDENTITY;
 
-                EncodedShadingType::Dummy
+                EncodedShadingType::Dummy(EncodedDummyShading)
             }
         };
 
@@ -175,12 +217,12 @@ fn encode_axial_shading(
     };
 
     (
-        EncodedShadingType::RadialAxial {
+        EncodedShadingType::RadialAxial(EncodedRadialAxialShading {
             function: function.clone(),
             params,
             domain,
             extend,
-        },
+        }),
         initial_transform,
     )
 }
@@ -230,35 +272,16 @@ fn encode_function_shading(domain: &[f32; 4], function: &ShadingFunction) -> Enc
         domain[3] as f64,
     );
 
-    EncodedShadingType::FunctionBased {
+    EncodedShadingType::FunctionBased(EncodedFunctionBasedShading {
         domain,
         function: function.clone(),
-    }
+    })
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(crate) enum RadialAxialParams {
     Axial,
     Radial { p1: Point, r: Point },
-}
-
-#[derive(Debug)]
-pub(crate) enum EncodedShadingType {
-    FunctionBased {
-        domain: kurbo::Rect,
-        function: ShadingFunction,
-    },
-    RadialAxial {
-        function: ShadingFunction,
-        params: RadialAxialParams,
-        domain: [f32; 2],
-        extend: [bool; 2],
-    },
-    Sampled {
-        samples: FxHashMap<(u16, u16), ColorComponents>,
-        function: Option<ShadingFunction>,
-    },
-    Dummy,
 }
 
 impl EncodedShadingType {
@@ -269,7 +292,7 @@ impl EncodedShadingType {
         color_space: &ColorSpace,
     ) -> Option<AlphaColor> {
         match self {
-            Self::FunctionBased { domain, function } => {
+            Self::FunctionBased(EncodedFunctionBasedShading { domain, function }) => {
                 if !domain.contains(pos) {
                     Some(bg_color)
                 } else {
@@ -278,12 +301,12 @@ impl EncodedShadingType {
                     Some(color_space.to_rgba(&out, 1.0, false))
                 }
             }
-            Self::RadialAxial {
+            Self::RadialAxial(EncodedRadialAxialShading {
                 function,
                 params,
                 domain,
                 extend,
-            } => {
+            }) => {
                 let (t0, t1) = (domain[0], domain[1]);
 
                 let mut t = match params {
@@ -317,7 +340,7 @@ impl EncodedShadingType {
 
                 Some(color_space.to_rgba(&val, 1.0, false))
             }
-            Self::Sampled { samples, function } => {
+            Self::Sampled(EncodedSampledShading { samples, function }) => {
                 let sample_point = (pos.x as u16, pos.y as u16);
 
                 if let Some(color) = samples.get(&sample_point) {
@@ -331,7 +354,7 @@ impl EncodedShadingType {
                     Some(bg_color)
                 }
             }
-            Self::Dummy => Some(AlphaColor::TRANSPARENT),
+            Self::Dummy(_) => Some(AlphaColor::TRANSPARENT),
         }
     }
 }
