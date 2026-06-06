@@ -503,26 +503,24 @@ impl BitPlaneDecodeContext {
     #[inline(always)]
     fn set_significant(&mut self, position: Position) {
         let idx = position.index(self.padded_width);
-        let is_significant = self.coefficient_states[idx].is_significant();
+        // Should only be called once, so it should be insignificant before.
+        debug_assert!(!self.coefficient_states[idx].is_significant());
 
-        if !is_significant {
-            self.coefficient_states[idx].set_significant();
+        self.coefficient_states[idx].set_significant();
 
-            // Update all neighbors so they know this coefficient is significant
-            // now.
-            self.neighbor_significances[position.top_left().index(self.padded_width)]
-                .set_bottom_right();
-            self.neighbor_significances[position.top().index(self.padded_width)].set_bottom();
-            self.neighbor_significances[position.top_right().index(self.padded_width)]
-                .set_bottom_left();
-            self.neighbor_significances[position.left().index(self.padded_width)].set_right();
-            self.neighbor_significances[position.right().index(self.padded_width)].set_left();
-            self.neighbor_significances[position.bottom_left().index(self.padded_width)]
-                .set_top_right();
-            self.neighbor_significances[position.bottom().index(self.padded_width)].set_top();
-            self.neighbor_significances[position.bottom_right().index(self.padded_width)]
-                .set_top_left();
-        }
+        // Update all neighbors so they know this coefficient is significant now.
+        self.neighbor_significances[position.top_left().index(self.padded_width)]
+            .set_bottom_right();
+        self.neighbor_significances[position.top().index(self.padded_width)].set_bottom();
+        self.neighbor_significances[position.top_right().index(self.padded_width)]
+            .set_bottom_left();
+        self.neighbor_significances[position.left().index(self.padded_width)].set_right();
+        self.neighbor_significances[position.right().index(self.padded_width)].set_left();
+        self.neighbor_significances[position.bottom_left().index(self.padded_width)]
+            .set_top_right();
+        self.neighbor_significances[position.bottom().index(self.padded_width)].set_top();
+        self.neighbor_significances[position.bottom_right().index(self.padded_width)]
+            .set_top_left();
     }
 
     #[inline(always)]
