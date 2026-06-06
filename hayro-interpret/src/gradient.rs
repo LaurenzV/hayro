@@ -236,7 +236,7 @@ fn approximate_gradient_interval(
     };
 
     approximate_gradient_interval(sample, stops, start, mid, tolerance, depth + 1);
-    approximate_gradient_interval(sample, stops, mid, end, tolerance, depth + 1)
+    approximate_gradient_interval(sample, stops, mid, end, tolerance, depth + 1);
 }
 
 fn lerp_color(c0: [f32; 4], c1: [f32; 4], t: f32) -> [f32; 4] {
