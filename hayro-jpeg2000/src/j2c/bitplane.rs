@@ -219,26 +219,21 @@ pub(crate) struct CoefficientState(u8);
 
 impl CoefficientState {
     #[inline(always)]
-    fn set_bit(&mut self, shift: u8, value: u8) {
-        debug_assert!(value < 2);
-
-        self.0 &= !(1_u8 << shift);
-        self.0 |= value << shift;
-    }
-
-    #[inline(always)]
     fn set_significant(&mut self) {
-        self.set_bit(SIGNIFICANCE_SHIFT, 1);
+        self.0 |= 1_u8 << SIGNIFICANCE_SHIFT;
     }
 
     #[inline(always)]
     fn set_zero_coded(&mut self, value: u8) {
-        self.set_bit(HAS_ZERO_CODING_SHIFT, value & 1);
+        debug_assert!(value < 2);
+
+        self.0 &= !(1_u8 << HAS_ZERO_CODING_SHIFT);
+        self.0 |= value << HAS_ZERO_CODING_SHIFT;
     }
 
     #[inline(always)]
     fn set_magnitude_refined(&mut self) {
-        self.set_bit(HAS_MAGNITUDE_REFINEMENT_SHIFT, 1);
+        self.0 |= 1_u8 << HAS_MAGNITUDE_REFINEMENT_SHIFT;
     }
 
     #[inline(always)]
