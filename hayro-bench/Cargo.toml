@@ -17,8 +17,13 @@ path = "src/hayro_syntax.rs"
 name = "render_bench"
 path = "src/render_bench.rs"
 
+[[bin]]
+name = "jpx_decode_bench"
+path = "src/jpx_decode_bench.rs"
+
 [dependencies]
 hayro = { workspace = true, features = ["embed-fonts", "embed-cmaps"] }
+hayro-jpeg2000 = { workspace = true, features = ["std", "simd"] }
 hayro-syntax = { workspace = true, features = ["std", "unsafe"] }
 image = { workspace = true, features = ["png"] }
 pdfium-render = "0.9.0"

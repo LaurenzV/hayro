@@ -731,6 +731,7 @@ name = "hayro-bench"
 version = "0.1.0"
 dependencies = [
  "hayro",
+ "hayro-jpeg2000",
  "hayro-syntax",
  "image 0.25.10",
  "pdfium-render",
