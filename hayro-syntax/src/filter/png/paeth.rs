@@ -27,6 +27,7 @@ pub(super) fn filter_paeth(a: u8, b: u8, c: u8) -> u8 {
     out
 }
 
+#[cfg(target_arch = "x86_64")]
 pub(super) fn filter_paeth_stbi(a: i16, b: i16, c: i16) -> u8 {
     // Decoding optimizes better with this algorithm than with `filter_paeth`
     //

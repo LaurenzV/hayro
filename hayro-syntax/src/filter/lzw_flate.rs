@@ -1,4 +1,5 @@
 use crate::bit_reader::{BitChunk, BitChunks, BitReader, BitWriter, bit_mask};
+use crate::filter::png::{self, BytesPerPixel, RowFilter};
 use crate::object::Dict;
 use crate::object::dict::keys::{BITS_PER_COMPONENT, COLORS, COLUMNS, EARLY_CHANGE, PREDICTOR};
 use alloc::vec;
@@ -782,15 +783,17 @@ fn apply_predictor(data: Vec<u8>, params: &PredictorParams) -> Option<Vec<u8>> {
             };
 
             if bit_size == 8 {
-                return apply_predictor_8bit(
-                    &data,
-                    i,
-                    is_png_predictor,
-                    row_len,
-                    total_row_len,
-                    num_rows,
-                    chunk_len,
-                );
+                if let Some(tbpp) = BytesPerPixel::from_row_len(row_len, chunk_len) {
+                    return apply_predictor_8bit_png(
+                        data,
+                        i,
+                        is_png_predictor,
+                        row_len,
+                        total_row_len,
+                        num_rows,
+                        tbpp,
+                    );
+                }
             }
 
             let zero_row = vec![0; row_len];
@@ -877,67 +880,59 @@ fn apply_predictor(data: Vec<u8>, params: &PredictorParams) -> Option<Vec<u8>> {
     }
 }
 
-fn apply_predictor_8bit(
-    data: &[u8],
+fn apply_predictor_8bit_png(
+    mut data: Vec<u8>,
     predictor: u8,
     is_png_predictor: bool,
     row_len: usize,
     total_row_len: usize,
     num_rows: usize,
-    chunk_len: usize,
+    tbpp: BytesPerPixel,
 ) -> Option<Vec<u8>> {
-    if row_len == 0 || chunk_len == 0 || total_row_len == 0 {
+    if row_len == 0 || total_row_len == 0 {
         return None;
     }
 
-    let mut out = vec![0; num_rows * row_len];
-    let zero_row = vec![0; row_len];
-    let mut prev_row = zero_row.as_slice();
+    let out_len = num_rows * row_len;
 
-    for (in_row, out_row) in data
-        .chunks_exact(total_row_len)
-        .zip(out.chunks_exact_mut(row_len))
-    {
+    for row_idx in 0..num_rows {
+        let src_start = row_idx * total_row_len;
+        let dst_start = row_idx * row_len;
+
         if is_png_predictor {
-            let predictor = in_row[0];
-            let in_data = &in_row[1..];
+            let predictor = data[src_start];
+            data.copy_within(src_start + 1..src_start + 1 + row_len, dst_start);
 
-            match predictor {
-                1 => apply_8::<Sub>(prev_row, in_data, out_row, chunk_len),
-                2 => apply_8::<Up>(prev_row, in_data, out_row, chunk_len),
-                3 => apply_8::<Avg>(prev_row, in_data, out_row, chunk_len),
-                4 => apply_8::<Paeth>(prev_row, in_data, out_row, chunk_len),
-                _ => out_row.copy_from_slice(in_data),
+            let (done, rest) = data.split_at_mut(dst_start);
+            let prev_row = if let Some(prev_start) = done.len().checked_sub(row_len) {
+                &done[prev_start..]
+            } else {
+                &[]
+            };
+            let row = &mut rest[..row_len];
+
+            if let Some(filter) = RowFilter::from_u8(predictor) {
+                png::unfilter(filter, tbpp, prev_row, row);
             }
         } else if predictor == 2 {
-            apply_8::<Sub>(prev_row, in_row, out_row, chunk_len);
+            let (done, rest) = data.split_at_mut(dst_start);
+            let prev_row = if let Some(prev_start) = done.len().checked_sub(row_len) {
+                &done[prev_start..]
+            } else {
+                &[]
+            };
+            let row = &mut rest[..row_len];
+            png::unfilter(RowFilter::Sub, tbpp, prev_row, row);
         } else {
             warn!("unknown predictor {predictor}");
 
             return None;
         }
-
-        prev_row = out_row;
     }
 
-    Some(out)
-}
+    data.truncate(out_len);
 
-fn apply_8<T: Predictor>(prev_row: &[u8], cur_row: &[u8], out_row: &mut [u8], chunk_len: usize) {
-    for i in 0..cur_row.len() {
-        let prev_col = if i >= chunk_len {
-            out_row[i - chunk_len] as u16
-        } else {
-            0
-        };
-        let top_left = if i >= chunk_len {
-            prev_row[i - chunk_len] as u16
-        } else {
-            0
-        };
-
-        out_row[i] = T::predict(cur_row[i] as u16, prev_row[i] as u16, prev_col, top_left) as u8;
-    }
+    Some(data)
 }
 
 fn apply<'a, T: Predictor>(

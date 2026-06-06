@@ -15,6 +15,25 @@ pub(crate) enum BytesPerPixel {
     Eight = 8,
 }
 
+// Note: This impl is not from the png crate.
+impl BytesPerPixel {
+    pub(crate) fn from_row_len(row_len: usize, bpp: usize) -> Option<Self> {
+        if row_len % bpp != 0 {
+            return None;
+        }
+
+        match bpp {
+            1 => Some(Self::One),
+            2 => Some(Self::Two),
+            3 => Some(Self::Three),
+            4 => Some(Self::Four),
+            6 => Some(Self::Six),
+            8 => Some(Self::Eight),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub(crate) enum RowFilter {
@@ -26,7 +45,7 @@ pub(crate) enum RowFilter {
 }
 
 impl RowFilter {
-    pub fn from_u8(n: u8) -> Option<Self> {
+    pub(crate) fn from_u8(n: u8) -> Option<Self> {
         match n {
             0 => Some(Self::NoFilter),
             1 => Some(Self::Sub),
