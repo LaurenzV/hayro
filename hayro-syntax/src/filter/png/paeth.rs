@@ -157,7 +157,7 @@ pub(super) fn unfilter(tbpp: BytesPerPixel, previous: &[u8], current: &mut [u8])
     }
 }
 
-/// The x86_64 functions avoid casting between u8xN and i16xN SIMD
+/// The `x86_64` functions avoid casting between u8xN and i16xN SIMD
 /// representations when possible by maintaining [i16; BPP] arrays
 /// between iterations instead of [u8; BPP].
 #[allow(unreachable_code)]
