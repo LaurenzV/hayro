@@ -503,7 +503,7 @@ impl BitPlaneDecodeContext {
     #[inline(always)]
     fn set_significant(&mut self, position: Position) {
         let idx = position.index(self.padded_width);
-        // Should only be called once, so it should be insignificant before.
+        // Should only be called once, so it should not be insignificant before.
         debug_assert!(!self.coefficient_states[idx].is_significant());
 
         self.coefficient_states[idx].set_significant();
