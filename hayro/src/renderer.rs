@@ -28,8 +28,6 @@ pub(crate) struct Renderer {
     pub(crate) cur_mask: Option<Mask>,
     pub(crate) in_type3_glyph: bool,
     pub(crate) scaler: Scaler,
-    // TODO: Remove this once vello_cpu bug with non-transparent images is fixed
-    image_transparency_stack: Vec<bool>,
 }
 
 #[derive(Clone, Copy)]
@@ -54,7 +52,6 @@ impl Renderer {
             cur_mask: None,
             in_type3_glyph: false,
             scaler: Scaler::new(ResamplingFunction::CatmullRom),
-            image_transparency_stack: Vec::new(),
         }
     }
 
@@ -106,7 +103,6 @@ impl Renderer {
                 cur_mask: None,
                 in_type3_glyph: false,
                 scaler: self.scaler,
-                image_transparency_stack: Vec::new(),
             };
             let mut mask_pix = Pixmap::new(self.ctx.width(), self.ctx.height());
             let rgb_data = ImageData::Rgb(RgbData {
@@ -128,9 +124,7 @@ impl Renderer {
         };
 
         self.ctx.push_mask_layer(mask);
-        self.image_transparency_stack.push(true);
         self.draw_image(image_data, None);
-        self.image_transparency_stack.pop();
         self.ctx.pop_layer();
     }
 
@@ -228,7 +222,7 @@ impl Renderer {
         };
 
         let has_alpha = alpha_data.is_some();
-        let mut may_have_transparency = has_alpha || self.force_images_may_have_transparency();
+        let mut may_have_transparency = has_alpha;
         let needs_resize = x_scale < 1.0 || y_scale < 1.0;
         let (new_width, new_height) = if needs_resize {
             let w = (img_width as f32 * x_scale)
@@ -461,8 +455,6 @@ impl Renderer {
                         let encoded = s.encode();
                         let (image, width, height, transform, may_have_transparency) =
                             render_shading_texture(bbox, &encoded);
-                        let may_have_transparency =
-                            may_have_transparency || self.force_images_may_have_transparency();
                         paint_transform = path_transform.inverse() * transform;
 
                         let pixmap = Pixmap::from_parts_with_opacity(
@@ -523,7 +515,6 @@ impl Renderer {
                             outline_cache: self.outline_cache.clone(),
                             in_type3_glyph: false,
                             scaler: self.scaler,
-                            image_transparency_stack: Vec::new(),
                         };
                         let mut initial_transform = Affine::scale_non_uniform(xs as f64, ys as f64)
                             * Affine::translate((-bbox.x0, -bbox.y0));
@@ -675,16 +666,6 @@ impl Renderer {
         self.outline_cache.borrow_mut().insert(id, path.clone());
         path
     }
-
-    fn force_images_may_have_transparency(&self) -> bool {
-        self.cur_mask.is_some()
-            || self
-                .image_transparency_stack
-                .last()
-                .copied()
-                .unwrap_or(false)
-            || self.ctx.blend_mode() != peniko::BlendMode::default()
-    }
 }
 
 impl<'a> Device<'a> for Renderer {
@@ -786,7 +767,6 @@ impl<'a> Device<'a> for Renderer {
                                         cur_mask: None,
                                         in_type3_glyph: false,
                                         scaler: self.scaler,
-                                        image_transparency_stack: Vec::new(),
                                     };
                                     let mut sub_pix = Pixmap::new(width, height);
                                     sub_renderer.ctx.set_transform(transform);
@@ -852,13 +832,6 @@ impl<'a> Device<'a> for Renderer {
         blend_mode: BlendMode,
     ) {
         let settings = *self.ctx.render_settings();
-        let force_images_may_have_transparency = mask.is_some()
-            || blend_mode != BlendMode::Normal
-            || self
-                .image_transparency_stack
-                .last()
-                .copied()
-                .unwrap_or(false);
         self.ctx.push_layer(
             None,
             Some(convert_blend_mode(blend_mode)),
@@ -875,8 +848,6 @@ impl<'a> Device<'a> for Renderer {
             }),
             None,
         );
-        self.image_transparency_stack
-            .push(force_images_may_have_transparency);
     }
 
     fn pop_clip_path(&mut self) {
@@ -884,7 +855,6 @@ impl<'a> Device<'a> for Renderer {
     }
 
     fn pop_transparency_group(&mut self) {
-        self.image_transparency_stack.pop();
         self.ctx.pop_layer();
     }
 
@@ -1030,7 +1000,6 @@ fn draw_soft_mask(mask: &SoftMask<'_>, settings: RenderSettings, width: u16, hei
         outline_cache: Rc::new(std::cell::RefCell::new(HashMap::new())),
         in_type3_glyph: false,
         scaler: Scaler::new(ResamplingFunction::CatmullRom),
-        image_transparency_stack: Vec::new(),
     };
 
     let bg_color = mask.background_color().to_rgba();
