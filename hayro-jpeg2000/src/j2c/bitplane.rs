@@ -621,11 +621,8 @@ fn cleanup_pass(ctx: &mut BitPlaneDecodeContext, decoder: &mut impl BitDecoder) 
                     if bit == 0 {
                         // "If the symbol 0 is returned, then all four contiguous coefficients in
                         // the column remain insignificant and are set to zero."
-                        ctx.push_magnitude_bit(*cur_pos, 0);
-
                         for _ in 0..3 {
                             cur_pos.index_y += 1;
-                            ctx.push_magnitude_bit(*cur_pos, 0);
                         }
 
                         return Some(());
@@ -642,7 +639,6 @@ fn cleanup_pass(ctx: &mut BitPlaneDecodeContext, decoder: &mut impl BitDecoder) 
                             | decoder.read_bit(ctx.arithmetic_decoder_context(18))?;
 
                         for _ in 0..num_zeroes {
-                            ctx.push_magnitude_bit(*cur_pos, 0);
                             cur_pos.index_y += 1;
                         }
 
@@ -653,9 +649,8 @@ fn cleanup_pass(ctx: &mut BitPlaneDecodeContext, decoder: &mut impl BitDecoder) 
                     decoder.read_bit(ctx.arithmetic_decoder_context(ctx_label))?
                 };
 
-                ctx.push_magnitude_bit(*cur_pos, bit);
-
                 if bit == 1 {
+                    ctx.push_magnitude_bit(*cur_pos, bit);
                     decode_sign_bit(*cur_pos, ctx, decoder);
                     ctx.set_significant(*cur_pos);
                 }
@@ -685,7 +680,6 @@ fn significance_propagation_pass(
             {
                 let ctx_label = context_label_zero_coding(*cur_pos, ctx);
                 let bit = decoder.read_bit(ctx.arithmetic_decoder_context(ctx_label))?;
-                ctx.push_magnitude_bit(*cur_pos, bit);
                 ctx.set_zero_coded(*cur_pos);
 
                 // "If the value of this bit is 1 then the significance
@@ -693,6 +687,7 @@ fn significance_propagation_pass(
                 // the sign bit for the coefficient. Otherwise, the significance
                 // state remains 0."
                 if bit == 1 {
+                    ctx.push_magnitude_bit(*cur_pos, bit);
                     decode_sign_bit(*cur_pos, ctx, decoder)?;
                     ctx.set_significant(*cur_pos);
                 }
@@ -718,7 +713,9 @@ fn magnitude_refinement_pass(
             if ctx.is_significant(*cur_pos) && !ctx.is_zero_coded(*cur_pos) {
                 let ctx_label = context_label_magnitude_refinement_coding(*cur_pos, ctx);
                 let bit = decoder.read_bit(ctx.arithmetic_decoder_context(ctx_label))?;
-                ctx.push_magnitude_bit(*cur_pos, bit);
+                if bit == 1 {
+                    ctx.push_magnitude_bit(*cur_pos, bit);
+                }
                 ctx.set_magnitude_refined(*cur_pos);
             }
 
