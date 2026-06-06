@@ -10,8 +10,8 @@ under the Apache 2.0 license:
 - The flate decoder.
 - The implementation of AES, MD5, SHA and RC4.
 
-The following parts of code have been adapted/translated from the [CFFDump](https://github.com/janpe2/CFFDump/) utility tool, available under the Apache 2.0 license:
-- The Type1 font parser.
+The following parts of code have been copied from the [png crate](https://github.com/image-rs/image-png), available under the Apache 2.0:
+- Decoding of PNG predictors.
 
                                  Apache License
                            Version 2.0, January 2004
