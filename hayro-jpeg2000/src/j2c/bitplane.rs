@@ -151,27 +151,16 @@ fn handle_coding_passes(
     ctx: &mut BitPlaneDecodeContext,
     decoder: &mut impl BitDecoder,
 ) -> Option<()> {
+    let reset_context_probabilities = ctx.style.reset_context_probabilities;
+
     for coding_pass in start..end {
-        enum PassType {
-            Cleanup,
-            SignificancePropagation,
-            MagnitudeRefinement,
-        }
-
-        // The first bitplane only has a cleanup pass, all other bitplanes
-        // are in the order SPP -> MRR -> C.
-        let pass = match coding_pass % 3 {
-            0 => PassType::Cleanup,
-            1 => PassType::SignificancePropagation,
-            2 => PassType::MagnitudeRefinement,
-            _ => unreachable!(),
-        };
-
         let current_bitplane = coding_pass.div_ceil(3);
         ctx.current_bit_position = ctx.bitplanes - 1 - current_bitplane;
 
-        match pass {
-            PassType::Cleanup => {
+        // The first bitplane only has a cleanup pass, all other bitplanes
+        // are in the order SPP -> MRR -> C.
+        match coding_pass % 3 {
+            0 => {
                 cleanup_pass(ctx, decoder)?;
 
                 if ctx.style.segmentation_symbols {
@@ -187,15 +176,16 @@ fn handle_coding_passes(
 
                 ctx.reset_for_next_bitplane();
             }
-            PassType::SignificancePropagation => {
+            1 => {
                 significance_propagation_pass(ctx, decoder)?;
             }
-            PassType::MagnitudeRefinement => {
+            2 => {
                 magnitude_refinement_pass(ctx, decoder)?;
             }
+            _ => unreachable!(),
         }
 
-        if ctx.style.reset_context_probabilities {
+        if reset_context_probabilities {
             ctx.reset_contexts();
         }
     }
