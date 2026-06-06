@@ -28,7 +28,7 @@ logging = ["dep:log", "hayro-jpeg2000?/logging"]
 log = { workspace = true, optional = true }
 rustc-hash = { workspace = true, optional = true }
 smallvec = { workspace = true }
-flate2 = { workspace = true, optional = true }
+flate2 = { workspace = true, optional = true, features = ["zlib-rs"] }
 memchr = { workspace = true, optional = true }
 
 zune-jpeg = { workspace = true, optional = true }
