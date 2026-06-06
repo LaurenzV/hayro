@@ -19,7 +19,9 @@ This crate has one optional feature:
 use crate::clip::CachedClipPath;
 use crate::glyph::{CachedOutlineGlyph, CachedType3Glyph};
 use crate::mask::MaskKind;
-use crate::paint::{CachedShading, CachedShadingPattern, CachedTilingPattern};
+use crate::paint::{
+    CachedNativeGradient, CachedShading, CachedShadingPattern, CachedTilingPattern,
+};
 use hayro_interpret::font::Glyph;
 use hayro_interpret::hayro_syntax::page::Page;
 use hayro_interpret::util::{Float32Ext, TransformExt};
@@ -115,6 +117,7 @@ pub(crate) struct SvgRenderer<'a> {
     pub(crate) clip_paths: Deduplicator<CachedClipPath>,
     pub(crate) masks: Deduplicator<MaskKind<'a>>,
     pub(crate) shadings: Deduplicator<CachedShading>,
+    pub(crate) gradients: Deduplicator<CachedNativeGradient>,
     pub(crate) shading_patterns: Deduplicator<CachedShadingPattern>,
     pub(crate) tiling_patterns: Deduplicator<CachedTilingPattern<'a>>,
     pub(crate) dimensions: (f32, f32),
@@ -351,6 +354,7 @@ impl<'a> SvgRenderer<'a> {
             clip_paths: Deduplicator::new('c'),
             masks: Deduplicator::new('m'),
             shadings: Deduplicator::new('s'),
+            gradients: Deduplicator::new('n'),
             shading_patterns: Deduplicator::new('v'),
             tiling_patterns: Deduplicator::new('t'),
             cur_mask: None,
@@ -400,6 +404,7 @@ impl<'a> SvgRenderer<'a> {
         self.write_mask_defs();
         self.write_clip_path_defs();
         self.write_shading_defs();
+        self.write_native_gradient_defs();
         self.write_shading_pattern_defs();
         self.write_tiling_pattern_defs();
         // Close the `svg` element.
