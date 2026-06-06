@@ -1,6 +1,7 @@
 use crate::{RenderCache, derive_settings};
-use hayro_interpret::encode::EncodedShadingPattern;
+use hayro_interpret::encode::{EncodedShadingPattern, EncodedShadingType};
 use hayro_interpret::font::Glyph;
+use hayro_interpret::gradient::SvgGradientKind;
 use hayro_interpret::pattern::Pattern;
 use hayro_interpret::{
     BlendMode, CacheKey, ClipPath, Device, FillRule, GlyphDrawMode, ImageData, LumaData, MaskType,
@@ -14,8 +15,8 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 use vello_cpu::color::palette::css::BLACK;
-use vello_cpu::color::{AlphaColor, PremulRgba8, Srgb};
-use vello_cpu::peniko::{Compose, Fill, ImageQuality, ImageSampler, Mix};
+use vello_cpu::color::{AlphaColor, DynamicColor, PremulRgba8, Srgb};
+use vello_cpu::peniko::{ColorStop, Compose, Fill, Gradient, ImageQuality, ImageSampler, Mix};
 use vello_cpu::{
     Image, ImageSource, Mask, PaintType, Pixmap, RenderContext, RenderSettings, peniko,
 };
@@ -435,7 +436,10 @@ impl Renderer {
 
                 match *p {
                     Pattern::Shading(s) => {
+                        const NATIVE_GRADIENT_TOLERANCE: f32 = 0.01;
+
                         clip_path = s.shading.clip_path.clone();
+                        let encoded = s.encode();
                         let mut bbox = (*path_transform * path.clone()).bounding_box();
 
                         if is_stroke {
@@ -452,29 +456,69 @@ impl Renderer {
                             self.ctx.height() as f64,
                         ));
 
-                        let encoded = s.encode();
-                        let (image, width, height, transform, may_have_transparency) =
-                            render_shading_texture(bbox, &encoded);
-                        paint_transform = path_transform.inverse() * transform;
+                        if let EncodedShadingType::RadialAxial(gradient) = &encoded.shading_type
+                            && let Some(native) =
+                                gradient.as_svg_gradient(&encoded, bbox, NATIVE_GRADIENT_TOLERANCE)
+                        {
+                            paint_transform = path_transform.inverse()
+                                * Affine::translate((-0.5, -0.5))
+                                * native.transform;
 
-                        let pixmap = Pixmap::from_parts_with_opacity(
-                            image,
-                            width as u16,
-                            height as u16,
-                            may_have_transparency,
-                        );
+                            let stops = native
+                                .stops
+                                .iter()
+                                .map(|stop| ColorStop {
+                                    offset: stop.offset,
+                                    color: DynamicColor::from_alpha_color(AlphaColor::<Srgb>::new(
+                                        stop.color,
+                                    )),
+                                })
+                                .collect::<Vec<_>>();
 
-                        let image = Image {
-                            image: ImageSource::Pixmap(Arc::new(pixmap)),
-                            sampler: ImageSampler {
-                                x_extend: peniko::Extend::Repeat,
-                                y_extend: peniko::Extend::Repeat,
-                                quality: ImageQuality::Medium,
-                                alpha: 1.0,
-                            },
-                        };
+                            let gradient = match native.kind {
+                                SvgGradientKind::Linear { start, end } => {
+                                    Gradient::new_linear(start, end)
+                                }
+                                SvgGradientKind::Radial {
+                                    start_center,
+                                    start_radius,
+                                    end_center,
+                                    end_radius,
+                                } => Gradient::new_two_point_radial(
+                                    start_center,
+                                    start_radius,
+                                    end_center,
+                                    end_radius,
+                                ),
+                            }
+                            .with_extend(peniko::Extend::Pad)
+                            .with_stops(stops.as_slice());
 
-                        PaintType::Image(image)
+                            PaintType::Gradient(gradient)
+                        } else {
+                            let (image, width, height, transform, may_have_transparency) =
+                                render_shading_texture(bbox, &encoded);
+                            paint_transform = path_transform.inverse() * transform;
+
+                            let pixmap = Pixmap::from_parts_with_opacity(
+                                image,
+                                width as u16,
+                                height as u16,
+                                may_have_transparency,
+                            );
+
+                            let image = Image {
+                                image: ImageSource::Pixmap(Arc::new(pixmap)),
+                                sampler: ImageSampler {
+                                    x_extend: peniko::Extend::Repeat,
+                                    y_extend: peniko::Extend::Repeat,
+                                    quality: ImageQuality::Medium,
+                                    alpha: 1.0,
+                                },
+                            };
+
+                            PaintType::Image(image)
+                        }
                     }
                     Pattern::Tiling(t) => {
                         const MAX_PIXMAP_SIZE: f32 = 3000.0;

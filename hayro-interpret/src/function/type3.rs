@@ -1,4 +1,4 @@
-use crate::function::{Clamper, Function, TupleVec, Values, interpolate};
+use crate::function::{Clamper, Function, StitchingBounds, TupleVec, Values, interpolate};
 use hayro_syntax::object::Array;
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Object;
@@ -60,6 +60,50 @@ impl Type3 {
         self.clamper.clamp_output(&mut evaluated);
 
         Some(evaluated)
+    }
+
+    pub(crate) fn stitching_bounds(&self) -> StitchingBounds {
+        let mut stitching_bounds = StitchingBounds::new();
+        if self.bounds.len() > 2 {
+            stitching_bounds.extend_from_slice(&self.bounds[1..self.bounds.len() - 1]);
+        }
+
+        for (index, function) in self.functions.iter().enumerate() {
+            let Some(bounds_i_minus_1) = self.bounds.get(index).copied() else {
+                continue;
+            };
+            let Some(bounds_i) = self.bounds.get(index + 1).copied() else {
+                continue;
+            };
+
+            let Some((encode_min, encode_max)) = self.encode.get(index).copied() else {
+                continue;
+            };
+
+            if (encode_max - encode_min).abs() <= f32::EPSILON {
+                continue;
+            }
+
+            for child_bound in function.stitching_bounds() {
+                let bound = interpolate(
+                    child_bound,
+                    encode_min,
+                    encode_max,
+                    bounds_i_minus_1,
+                    bounds_i,
+                );
+                let min_bound = bounds_i_minus_1.min(bounds_i);
+                let max_bound = bounds_i_minus_1.max(bounds_i);
+                if bound > min_bound && bound < max_bound {
+                    stitching_bounds.push(bound);
+                }
+            }
+        }
+
+        stitching_bounds.sort_by(f32::total_cmp);
+        stitching_bounds.dedup_by(|a, b| (*a - *b).abs() <= f32::EPSILON);
+
+        stitching_bounds
     }
 }
 

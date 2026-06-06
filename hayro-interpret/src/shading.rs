@@ -5,7 +5,7 @@
 use crate::CacheKey;
 use crate::cache::Cache;
 use crate::color::{ColorComponents, ColorSpace};
-use crate::function::{Function, Values, interpolate};
+use crate::function::{Function, StitchingBounds, Values, interpolate};
 use crate::util::{Float32Ext, PointExt, RectExt};
 use hayro_syntax::bit_reader::BitReader;
 use hayro_syntax::object::Array;
@@ -47,6 +47,23 @@ impl ShadingFunction {
                 Some(out)
             }
         }
+    }
+
+    pub(crate) fn stitching_bounds(&self) -> StitchingBounds {
+        let mut bounds = StitchingBounds::new();
+
+        match self {
+            Self::Single(function) => bounds.extend(function.stitching_bounds()),
+            Self::Multiple(functions) => {
+                for function in functions {
+                    bounds.extend(function.stitching_bounds());
+                }
+            }
+        }
+
+        bounds.sort_by(f32::total_cmp);
+        bounds.dedup_by(|a, b| (*a - *b).abs() <= f32::EPSILON);
+        bounds
     }
 }
 

@@ -20,6 +20,7 @@ use std::sync::Arc;
 
 /// The input/output type of functions.
 pub(crate) type Values = SmallVec<[f32; 4]>;
+pub(crate) type StitchingBounds = SmallVec<[f32; 3]>;
 type TupleVec = SmallVec<[(f32, f32); 4]>;
 
 #[derive(Debug)]
@@ -57,6 +58,13 @@ impl Function {
             FunctionType::Type2(t2) => Some(t2.eval(*input.first()?)),
             FunctionType::Type3(t3) => t3.eval(*input.first()?),
             FunctionType::Type4(t4) => Some(t4.eval(input)?),
+        }
+    }
+
+    pub(crate) fn stitching_bounds(&self) -> StitchingBounds {
+        match self.0.as_ref() {
+            FunctionType::Type3(t3) => t3.stitching_bounds(),
+            _ => SmallVec::new(),
         }
     }
 }
