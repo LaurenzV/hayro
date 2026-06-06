@@ -44,47 +44,6 @@ pub(super) fn filter_paeth_stbi(a: i16, b: i16, c: i16) -> u8 {
     t1 as u8
 }
 
-pub(super) fn filter_paeth_fpnge(a: u8, b: u8, c: u8) -> u8 {
-    // This is an optimized version of the paeth filter from the PNG specification, proposed by
-    // Luca Versari for [FPNGE](https://www.lucaversari.it/FJXL_and_FPNGE.pdf). It operates
-    // entirely on unsigned 8-bit quantities, making it more conducive to vectorization.
-    //
-    //     p = a + b - c
-    //     pa = |p - a| = |a + b - c - a| = |b - c| = max(b, c) - min(b, c)
-    //     pb = |p - b| = |a + b - c - b| = |a - c| = max(a, c) - min(a, c)
-    //     pc = |p - c| = |a + b - c - c| = |(b - c) + (a - c)| = ...
-    //
-    // Further optimizing the calculation of `pc` a bit tricker. However, notice that:
-    //
-    //        a > c && b > c
-    //    ==> (a - c) > 0 && (b - c) > 0
-    //    ==> pc > (a - c) && pc > (b - c)
-    //    ==> pc > |a - c| && pc > |b - c|
-    //    ==> pc > pb && pc > pa
-    //
-    // Meaning that if `c` is smaller than `a` and `b`, the value of `pc` is irrelevant. Similar
-    // reasoning applies if `c` is larger than the other two inputs. Assuming that `c >= b` and
-    // `c <= b` or vice versa:
-    //
-    //     pc = ||b - c| - |a - c|| =  |pa - pb| = max(pa, pb) - min(pa, pb)
-    //
-    let pa = b.max(c) - c.min(b);
-    let pb = a.max(c) - c.min(a);
-    let pc = if (a < c) == (c < b) {
-        pa.max(pb) - pa.min(pb)
-    } else {
-        255
-    };
-
-    if pa <= pb && pa <= pc {
-        a
-    } else if pb <= pc {
-        b
-    } else {
-        c
-    }
-}
-
 #[allow(unreachable_code)]
 #[cfg(not(target_arch = "x86_64"))]
 pub(super) fn unfilter(tbpp: BytesPerPixel, previous: &[u8], current: &mut [u8]) {
@@ -116,15 +75,6 @@ pub(super) fn unfilter(tbpp: BytesPerPixel, previous: &[u8], current: &mut [u8])
             }
         }
         BytesPerPixel::Three => {
-            #[cfg(all(feature = "unstable", not(target_vendor = "apple")))]
-            {
-                // Results in PR: https://github.com/image-rs/image-png/pull/632
-                // Approximately 30% better on Arm Cortex A520, 7%
-                // regression on Arm Cortex X4. Switched off on Apple
-                // Silicon due to 10-12% regression.
-                super::simd::paeth_unfilter_3bpp(current, previous);
-                return;
-            }
             let mut a_bpp = [0; 3];
             let mut c_bpp = [0; 3];
 
@@ -145,15 +95,6 @@ pub(super) fn unfilter(tbpp: BytesPerPixel, previous: &[u8], current: &mut [u8])
             }
         }
         BytesPerPixel::Four => {
-            #[cfg(feature = "unstable")]
-            {
-                // Results in PR: https://github.com/image-rs/image-png/pull/633
-                // No change on Apple Silicon, 42% better on Arm Cortex A520,
-                // 10% better on Arm Cortex X4.
-                super::simd::paeth_unfilter_4bpp(current, previous);
-                return;
-            }
-
             let mut a_bpp = [0; 4];
             let mut c_bpp = [0; 4];
 
@@ -260,14 +201,6 @@ pub(super) fn unfilter(tbpp: BytesPerPixel, previous: &[u8], current: &mut [u8])
             }
         }
         BytesPerPixel::Three => {
-            #[cfg(feature = "unstable")]
-            {
-                // Results in PR: https://github.com/image-rs/image-png/pull/632
-                // 23% better on an Epyc 7B13, 10% on a Zen 3 part.
-                // ~30% when targeting x86-64-v2.
-                super::simd::paeth_unfilter_3bpp(current, previous);
-                return;
-            }
             const BPP: usize = 3;
             let mut a_bpp = [0; BPP];
             let mut c_bpp = [0; BPP];
@@ -285,13 +218,6 @@ pub(super) fn unfilter(tbpp: BytesPerPixel, previous: &[u8], current: &mut [u8])
             }
         }
         BytesPerPixel::Four => {
-            #[cfg(feature = "unstable")]
-            {
-                // Results in PR: https://github.com/image-rs/image-png/pull/633
-                // May be slightly faster on AMD EPYC 7B13.
-                super::simd::paeth_unfilter_4bpp(current, previous);
-                return;
-            }
             const BPP: usize = 4;
             let mut a_bpp = [0; BPP];
             let mut c_bpp = [0; BPP];
@@ -372,28 +298,6 @@ pub(super) fn unfilter(tbpp: BytesPerPixel, previous: &[u8], current: &mut [u8])
                     p[6] as i16,
                     p[7] as i16,
                 ];
-            }
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    #[ignore] // takes ~20s without optimizations
-    fn paeth_impls_are_equivalent() {
-        for a in 0..=255 {
-            for b in 0..=255 {
-                for c in 0..=255 {
-                    let baseline = filter_paeth(a, b, c);
-                    let fpnge = filter_paeth_fpnge(a, b, c);
-                    let stbi = filter_paeth_stbi(a as i16, b as i16, c as i16);
-
-                    assert_eq!(baseline, fpnge);
-                    assert_eq!(baseline, stbi);
-                }
             }
         }
     }
