@@ -159,6 +159,28 @@ const MUL14: [u8; 256] = [
     0xd7, 0xd9, 0xcb, 0xc5, 0xef, 0xe1, 0xf3, 0xfd, 0xa7, 0xa9, 0xbb, 0xb5, 0x9f, 0x91, 0x83, 0x8d,
 ];
 
+const INV_MIX_0: [u32; 256] = build_inv_mix_table(0);
+const INV_MIX_1: [u32; 256] = build_inv_mix_table(1);
+const INV_MIX_2: [u32; 256] = build_inv_mix_table(2);
+const INV_MIX_3: [u32; 256] = build_inv_mix_table(3);
+
+const fn build_inv_mix_table(table: usize) -> [u32; 256] {
+    let mut result = [0_u32; 256];
+    let mut i = 0;
+    
+    while i < 256 {
+        result[i] = match table {
+            0 => u32::from_le_bytes([MUL14[i], MUL9[i], MUL13[i], MUL11[i]]),
+            1 => u32::from_le_bytes([MUL11[i], MUL14[i], MUL9[i], MUL13[i]]),
+            2 => u32::from_le_bytes([MUL13[i], MUL11[i], MUL14[i], MUL9[i]]),
+            _ => u32::from_le_bytes([MUL9[i], MUL13[i], MUL11[i], MUL14[i]]),
+        };
+        i += 1;
+    }
+
+    result
+}
+
 struct AESCore;
 
 impl AESCore {
@@ -239,14 +261,15 @@ impl AESCore {
             let col = i * 4;
             let [s0, s1, s2, s3] = [state[col], state[col + 1], state[col + 2], state[col + 3]];
 
-            state[col] =
-                MUL14[s0 as usize] ^ MUL11[s1 as usize] ^ MUL13[s2 as usize] ^ MUL9[s3 as usize];
-            state[col + 1] =
-                MUL9[s0 as usize] ^ MUL14[s1 as usize] ^ MUL11[s2 as usize] ^ MUL13[s3 as usize];
-            state[col + 2] =
-                MUL13[s0 as usize] ^ MUL9[s1 as usize] ^ MUL14[s2 as usize] ^ MUL11[s3 as usize];
-            state[col + 3] =
-                MUL11[s0 as usize] ^ MUL13[s1 as usize] ^ MUL9[s2 as usize] ^ MUL14[s3 as usize];
+            let word = INV_MIX_0[s0 as usize]
+                ^ INV_MIX_1[s1 as usize]
+                ^ INV_MIX_2[s2 as usize]
+                ^ INV_MIX_3[s3 as usize];
+            let [b0, b1, b2, b3] = word.to_le_bytes();
+            state[col] = b0;
+            state[col + 1] = b1;
+            state[col + 2] = b2;
+            state[col + 3] = b3;
         }
     }
 
