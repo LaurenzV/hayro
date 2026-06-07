@@ -13,6 +13,7 @@ license = { workspace = true }
 hayro-syntax = { workspace = true, features = ["std"] }
 pdf-writer = { workspace = true }
 flate2 = { workspace = true }
+rustc-hash = { workspace = true }
 log = { workspace = true, optional = true }
 
 [features]

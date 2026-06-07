@@ -18,17 +18,17 @@ use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::{CHAR_PROCS, FONT_BBOX, FONT_MATRIX, RESOURCES};
 use hayro_syntax::page::Resources;
 use kurbo::{Affine, BezPath, Rect};
+use rustc_hash::FxHashMap;
 use skrifa::GlyphId;
-use std::collections::HashMap;
 
 #[derive(Debug)]
 pub(crate) struct Type3<'a> {
     widths: Vec<Width>,
     missing_width: f32,
     encoding: Encoding,
-    encodings: HashMap<u8, String>,
+    encodings: FxHashMap<u8, String>,
     dict: Dict<'a>,
-    char_procs: HashMap<String, Stream<'a>>,
+    char_procs: FxHashMap<String, Stream<'a>>,
     glyph_simulator: GlyphSimulator,
     font_bbox: Rect,
     matrix: Affine,
@@ -50,7 +50,7 @@ impl<'a> Type3<'a> {
         );
 
         let char_procs = {
-            let mut procs = HashMap::new();
+            let mut procs = FxHashMap::default();
             let dict = dict.get::<Dict<'_>>(CHAR_PROCS).unwrap_or_default();
 
             for name in dict.keys() {

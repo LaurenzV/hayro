@@ -10,10 +10,10 @@ use hayro_syntax::object::Dict;
 use hayro_syntax::object::Name;
 use hayro_syntax::object::dict::keys::{BASE_FONT, FONT_DESC, FONT_WEIGHT, ITALIC_ANGLE};
 use kurbo::BezPath;
+use rustc_hash::FxHashMap;
 use skrifa::GlyphId;
 use skrifa::raw::TableProvider;
 use std::cell::RefCell;
-use std::collections::HashMap;
 
 /// The 14 standard fonts of PDF.
 #[derive(Copy, Clone, Debug)]
@@ -285,7 +285,7 @@ pub(crate) fn select_standard_font(
 #[derive(Debug)]
 pub(crate) enum StandardFontBlob {
     Cff(CffFontBlob),
-    Otf(OpenTypeFontBlob, HashMap<String, GlyphId>),
+    Otf(OpenTypeFontBlob, FxHashMap<String, GlyphId>),
 }
 
 impl StandardFontBlob {
@@ -355,8 +355,8 @@ pub(crate) struct StandardKind {
     widths: Vec<Width>,
     missing_width: f32,
     fallback: bool,
-    glyph_to_code: RefCell<HashMap<GlyphId, u8>>,
-    encodings: HashMap<u8, String>,
+    glyph_to_code: RefCell<FxHashMap<GlyphId, u8>>,
+    encodings: FxHashMap<u8, String>,
 }
 
 impl StandardKind {
@@ -391,7 +391,7 @@ impl StandardKind {
             widths,
             missing_width,
             encodings: encoding_map,
-            glyph_to_code: RefCell::new(HashMap::new()),
+            glyph_to_code: RefCell::new(FxHashMap::default()),
             fallback,
             encoding,
         })

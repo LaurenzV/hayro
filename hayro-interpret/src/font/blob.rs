@@ -1,6 +1,7 @@
 use crate::font::UNITS_PER_EM;
 use crate::font::outline::OutlinePath;
 use kurbo::BezPath;
+use rustc_hash::FxHashMap;
 use skrifa::instance::{LocationRef, Size};
 use skrifa::metrics::GlyphMetrics;
 use skrifa::outline::{DrawSettings, Engine, HintingInstance, HintingOptions, Target};
@@ -11,7 +12,6 @@ use skrifa::raw::ps::type1::Type1Font;
 use skrifa::raw::tables::post::DEFAULT_GLYPH_NAMES;
 use skrifa::raw::{FontData as ReadFontData, FontRead};
 use skrifa::{FontRef, GlyphId, MetadataProvider, OutlineGlyphCollection};
-use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
 use yoke::{Yoke, Yokeable};
@@ -245,10 +245,10 @@ impl OpenTypeFontBlob {
         &self.yoke.as_ref().get().glyph_metrics
     }
 
-    pub(crate) fn glyph_names(&self) -> HashMap<String, GlyphId> {
+    pub(crate) fn glyph_names(&self) -> FxHashMap<String, GlyphId> {
         // Note: We don't call the `glyph_name` method provided by read-fonts because
         // calling it repeatedly is very slow.
-        let mut glyph_names = HashMap::new();
+        let mut glyph_names = FxHashMap::default();
         let Ok(post) = self.font_ref().post() else {
             return glyph_names;
         };

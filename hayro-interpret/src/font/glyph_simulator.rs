@@ -1,22 +1,22 @@
+use rustc_hash::FxHashMap;
 use skrifa::GlyphId;
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
 
 #[derive(Debug)]
 pub(crate) struct GlyphSimulator {
     // We simulate that Type1 glyphs have glyph IDs so we can handle them transparently
     // to OpenType fonts.
-    glyph_to_string: RefCell<HashMap<GlyphId, String>>,
-    string_to_glyph: RefCell<HashMap<String, GlyphId>>,
+    glyph_to_string: RefCell<FxHashMap<GlyphId, String>>,
+    string_to_glyph: RefCell<FxHashMap<String, GlyphId>>,
     glyph_counter: Cell<u32>,
 }
 
 impl GlyphSimulator {
     pub(crate) fn new() -> Self {
-        let mut glyph_to_string = HashMap::new();
+        let mut glyph_to_string = FxHashMap::default();
         glyph_to_string.insert(GlyphId::NOTDEF, "notdef".to_string());
 
-        let mut string_to_glyph = HashMap::new();
+        let mut string_to_glyph = FxHashMap::default();
         string_to_glyph.insert("notdef".to_string(), GlyphId::NOTDEF);
 
         Self {

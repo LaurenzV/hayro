@@ -44,8 +44,8 @@ use hayro_interpret::util::{RectExt, TransformExt};
 use hayro_interpret::{BlendMode, Context};
 use hayro_interpret::{ClipPath, interpret_page};
 use kurbo::{Affine, Rect, Shape};
+use rustc_hash::FxHashMap;
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::ops::RangeInclusive;
 use std::rc::Rc;
 
@@ -68,7 +68,7 @@ mod renderer;
 #[derive(Clone, Default)]
 pub struct RenderCache<'a> {
     pub(crate) interpreter_cache: InterpreterCache<'a>,
-    pub(crate) outline_cache: Rc<RefCell<HashMap<u128, Rc<kurbo::BezPath>>>>,
+    pub(crate) outline_cache: Rc<RefCell<FxHashMap<u128, Rc<kurbo::BezPath>>>>,
 }
 
 impl<'a> RenderCache<'a> {
@@ -76,7 +76,7 @@ impl<'a> RenderCache<'a> {
     pub fn new() -> Self {
         Self {
             interpreter_cache: InterpreterCache::new(),
-            outline_cache: Rc::new(RefCell::new(HashMap::new())),
+            outline_cache: Rc::new(RefCell::new(FxHashMap::default())),
         }
     }
 }

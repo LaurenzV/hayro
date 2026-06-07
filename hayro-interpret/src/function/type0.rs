@@ -3,14 +3,14 @@ use hayro_syntax::bit_reader::BitReader;
 use hayro_syntax::object::Array;
 use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::{BITS_PER_SAMPLE, DECODE, ENCODE, SIZE};
+use rustc_hash::FxHashMap;
 use smallvec::{SmallVec, ToSmallVec, smallvec};
-use std::collections::HashMap;
 
 /// A type 0 function (sampled function).
 #[derive(Debug)]
 pub(crate) struct Type0 {
     sizes: IntVec,
-    table: HashMap<Key, IntVec>,
+    table: FxHashMap<Key, IntVec>,
     clamper: Clamper,
     range: TupleVec,
     bits_per_sample: u8,
@@ -166,7 +166,7 @@ impl Interpolator {
         }
     }
 
-    fn interpolate(&self, table: &HashMap<Key, IntVec>) -> Option<FloatVec> {
+    fn interpolate(&self, table: &FxHashMap<Key, IntVec>) -> Option<FloatVec> {
         self.interpolate_inner(smallvec![0; self.input.len()], 0, table)
     }
 
@@ -174,7 +174,7 @@ impl Interpolator {
         &self,
         mut coord: IntVec,
         step: usize,
-        table: &HashMap<Key, IntVec>,
+        table: &FxHashMap<Key, IntVec>,
     ) -> Option<FloatVec> {
         if step == self.input.len() - 1 {
             if self.in_prev[step] == self.in_next[step] {
@@ -233,9 +233,9 @@ impl Interpolator {
     }
 }
 
-fn build_table(data: &[u32], sizes: &[u32], n: usize) -> Option<HashMap<Key, IntVec>> {
+fn build_table(data: &[u32], sizes: &[u32], n: usize) -> Option<FxHashMap<Key, IntVec>> {
     let mut key = Key::new(sizes);
-    let mut table = HashMap::new();
+    let mut table = FxHashMap::default();
 
     let mut first = true;
 

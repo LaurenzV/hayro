@@ -722,6 +722,7 @@ dependencies = [
  "kurbo",
  "log",
  "pic-scale",
+ "rustc-hash",
  "vello_cpu",
 ]
 
@@ -835,6 +836,7 @@ dependencies = [
  "image 0.25.10",
  "kurbo",
  "log",
+ "rustc-hash",
  "siphasher",
  "xmlwriter",
 ]
@@ -886,6 +888,7 @@ dependencies = [
  "hayro-syntax",
  "log",
  "pdf-writer",
+ "rustc-hash",
 ]
 
 [[package]]

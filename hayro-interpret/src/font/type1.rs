@@ -10,8 +10,8 @@ use hayro_syntax::object::Dict;
 use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::{FONT_DESC, FONT_FILE, FONT_FILE3};
 use kurbo::BezPath;
+use rustc_hash::FxHashMap;
 use skrifa::GlyphId;
-use std::collections::HashMap;
 use std::sync::Arc;
 
 #[derive(Debug)]
@@ -156,8 +156,8 @@ struct Type1Kind {
     encoding: Encoding,
     widths: Vec<Width>,
     missing_width: f32,
-    encodings: HashMap<u8, String>,
-    name_to_gid: HashMap<String, GlyphId>,
+    encodings: FxHashMap<u8, String>,
+    name_to_gid: FxHashMap<String, GlyphId>,
     standard_font: Option<StandardFont>,
 }
 
@@ -171,7 +171,7 @@ impl Type1Kind {
         let (widths, missing_width) = read_widths(dict, &descriptor)?;
         let standard_font = select_standard_font(dict, &descriptor).map(|(f, _)| f);
 
-        let name_to_gid: HashMap<String, GlyphId> = font
+        let name_to_gid: FxHashMap<String, GlyphId> = font
             .table()
             .glyph_names()
             .map(|(gid, name)| (name.to_string(), gid))
@@ -249,8 +249,8 @@ struct CffKind {
     encoding: Encoding,
     widths: Vec<Width>,
     missing_width: f32,
-    encodings: HashMap<u8, String>,
-    name_to_gid: HashMap<String, GlyphId>,
+    encodings: FxHashMap<u8, String>,
+    name_to_gid: FxHashMap<String, GlyphId>,
     gid_to_name: Vec<Option<String>>,
     standard_font: Option<StandardFont>,
 }
@@ -265,7 +265,7 @@ impl CffKind {
         let (widths, missing_width) = read_widths(dict, &descriptor)?;
         let standard_font = select_standard_font(dict, &descriptor).map(|(f, _)| f);
         let mut gid_to_name = vec![None; font.num_glyphs() as usize];
-        let name_to_gid: HashMap<String, GlyphId> = font
+        let name_to_gid: FxHashMap<String, GlyphId> = font
             .glyph_names()
             .into_iter()
             .inspect(|(gid, name)| gid_to_name[gid.to_u32() as usize] = Some(name.clone()))

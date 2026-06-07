@@ -12,8 +12,8 @@ use hayro_syntax::object::Name;
 use hayro_syntax::page::Resources;
 use hayro_syntax::xref::XRef;
 use kurbo::{Affine, BezPath, PathEl, Point, Rect, Shape};
+use rustc_hash::FxHashMap;
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::rc::Rc;
 
 /// Maximum nesting depth for interpreting `XObject`'s/patterns/streams.
@@ -25,7 +25,7 @@ pub(crate) const MAX_NESTED_INTERPRETATION_DEPTH: u32 = 50;
 /// multiple interpreter invocations on the same document.
 #[derive(Clone)]
 pub struct InterpreterCache<'a> {
-    pub(crate) font_cache: Rc<RefCell<HashMap<u128, Option<Font<'a>>>>>,
+    pub(crate) font_cache: Rc<RefCell<FxHashMap<u128, Option<Font<'a>>>>>,
     pub(crate) object_cache: Cache,
 }
 
@@ -39,7 +39,7 @@ impl<'a> InterpreterCache<'a> {
     /// Create a new interpreter cache.
     pub fn new() -> Self {
         Self {
-            font_cache: Rc::new(RefCell::new(HashMap::new())),
+            font_cache: Rc::new(RefCell::new(FxHashMap::default())),
             object_cache: Cache::new(),
         }
     }

@@ -1,12 +1,12 @@
 use crate::util::hash128;
 use hayro_syntax::object::{Array, Dict, MaybeRef, Name, Null, ObjRef, Object, Stream};
 use kurbo::Affine;
+use rustc_hash::FxHashMap;
 use std::any::Any;
-use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::sync::{Arc, Mutex};
 
-type CacheMap = HashMap<u128, Option<Box<dyn Any + Send + Sync>>>;
+type CacheMap = FxHashMap<u128, Option<Box<dyn Any + Send + Sync>>>;
 #[derive(Clone)]
 pub(crate) struct Cache(Arc<Mutex<CacheMap>>);
 
@@ -18,7 +18,7 @@ impl Default for Cache {
 
 impl Cache {
     pub(crate) fn new() -> Self {
-        Self(Arc::new(Mutex::new(HashMap::new())))
+        Self(Arc::new(Mutex::new(FxHashMap::default())))
     }
 
     pub(crate) fn get_or_insert_with<T: Clone + Send + Sync + 'static>(

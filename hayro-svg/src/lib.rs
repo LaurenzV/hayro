@@ -30,8 +30,8 @@ use hayro_interpret::{
     InterpreterSettings, Paint, PathDrawMode, SoftMask, StrokeProps, interpret_page,
 };
 use kurbo::{Affine, BezPath, Cap, Join, Rect};
+use rustc_hash::FxHashMap;
 use siphasher::sip128::{Hasher128, SipHasher13};
-use std::collections::HashMap;
 use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::hash::Hash;
@@ -426,7 +426,7 @@ pub(crate) fn convert_transform(transform: &Affine) -> String {
 pub(crate) struct Deduplicator<T> {
     kind: char,
     vec: Vec<T>,
-    present: HashMap<u128, Id>,
+    present: FxHashMap<u128, Id>,
 }
 
 impl<T> Default for Deduplicator<T> {
@@ -440,7 +440,7 @@ impl<T> Deduplicator<T> {
         Self {
             kind,
             vec: Vec::new(),
-            present: HashMap::new(),
+            present: FxHashMap::default(),
         }
     }
 

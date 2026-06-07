@@ -11,7 +11,7 @@ use kurbo::{Affine, BezPath, Point, Rect, Shape, Vec2};
 use pic_scale::{
     ImageSize, ImageStore, ImageStoreMut, PicScaleError, Resampling, ResamplingFunction, Scaler,
 };
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 use vello_cpu::color::palette::css::BLACK;
@@ -24,8 +24,8 @@ use vello_cpu::{
 pub(crate) struct Renderer {
     pub(crate) ctx: RenderContext,
     pub(crate) inside_pattern: bool,
-    pub(crate) soft_mask_cache: HashMap<u128, Mask>,
-    pub(crate) outline_cache: Rc<std::cell::RefCell<HashMap<u128, Rc<BezPath>>>>,
+    pub(crate) soft_mask_cache: FxHashMap<u128, Mask>,
+    pub(crate) outline_cache: Rc<std::cell::RefCell<FxHashMap<u128, Rc<BezPath>>>>,
     pub(crate) cur_mask: Option<Mask>,
     pub(crate) in_type3_glyph: bool,
     pub(crate) scaler: Scaler,
@@ -48,7 +48,7 @@ impl Renderer {
         Self {
             ctx: RenderContext::new_with(width, height, settings),
             inside_pattern: false,
-            soft_mask_cache: HashMap::default(),
+            soft_mask_cache: FxHashMap::default(),
             outline_cache: cache.outline_cache.clone(),
             cur_mask: None,
             in_type3_glyph: false,
@@ -99,7 +99,7 @@ impl Renderer {
                     derive_settings(self.ctx.render_settings()),
                 ),
                 inside_pattern: false,
-                soft_mask_cache: HashMap::default(),
+                soft_mask_cache: FxHashMap::default(),
                 outline_cache: self.outline_cache.clone(),
                 cur_mask: None,
                 in_type3_glyph: false,
@@ -555,7 +555,7 @@ impl Renderer {
                             ),
                             cur_mask: None,
                             inside_pattern: true,
-                            soft_mask_cache: HashMap::default(),
+                            soft_mask_cache: FxHashMap::default(),
                             outline_cache: self.outline_cache.clone(),
                             in_type3_glyph: false,
                             scaler: self.scaler,
@@ -806,7 +806,7 @@ impl<'a> Device<'a> for Renderer {
                                             derive_settings(self.ctx.render_settings()),
                                         ),
                                         inside_pattern: false,
-                                        soft_mask_cache: HashMap::default(),
+                                        soft_mask_cache: FxHashMap::default(),
                                         outline_cache: self.outline_cache.clone(),
                                         cur_mask: None,
                                         in_type3_glyph: false,
@@ -1040,8 +1040,8 @@ fn draw_soft_mask(mask: &SoftMask<'_>, settings: RenderSettings, width: u16, hei
         ctx: RenderContext::new_with(width, height, derive_settings(&settings)),
         inside_pattern: false,
         cur_mask: None,
-        soft_mask_cache: HashMap::default(),
-        outline_cache: Rc::new(std::cell::RefCell::new(HashMap::new())),
+        soft_mask_cache: FxHashMap::default(),
+        outline_cache: Rc::new(std::cell::RefCell::new(FxHashMap::default())),
         in_type3_glyph: false,
         scaler: Scaler::new(ResamplingFunction::CatmullRom),
     };

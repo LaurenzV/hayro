@@ -21,8 +21,8 @@ use hayro_syntax::object::dict::keys::{ANNOTS, AP, F, MCID, N, OC, RECT};
 use hayro_syntax::object::{Array, Dict, Name, Object, Rect, Stream, dict_or_stream};
 use hayro_syntax::page::{Page, Resources};
 use kurbo::{Affine, Point, Shape};
+use rustc_hash::FxHashMap;
 use smallvec::smallvec;
-use std::collections::HashMap;
 use std::sync::Arc;
 
 pub(crate) mod path;
@@ -224,7 +224,7 @@ pub fn interpret<'a>(
     device: &mut impl Device<'a>,
 ) {
     let num_states = context.num_states();
-    let mut font_dict_cache = HashMap::<Name<'a>, Dict<'a>>::new();
+    let mut font_dict_cache = FxHashMap::<Name<'a>, Dict<'a>>::default();
 
     context.save_state();
 

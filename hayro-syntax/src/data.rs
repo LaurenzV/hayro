@@ -1,7 +1,7 @@
 use crate::object::ObjectIdentifier;
 use crate::object::Stream;
 use crate::reader::ReaderContext;
-use crate::sync::HashMap;
+use crate::sync::FxHashMap;
 use crate::sync::{Arc, Mutex, MutexExt};
 use crate::util::SegmentList;
 use alloc::borrow::Cow;
@@ -66,7 +66,7 @@ pub(crate) struct Data {
     data: PdfData,
     // 32 segments are more than enough as we can't have more objects than this.
     decoded: SegmentList<Option<Vec<u8>>, 32>,
-    map: Mutex<HashMap<ObjectIdentifier, usize>>,
+    map: Mutex<FxHashMap<ObjectIdentifier, usize>>,
 }
 
 impl Debug for Data {
@@ -81,7 +81,7 @@ impl Data {
         Self {
             data,
             decoded: SegmentList::new(),
-            map: Mutex::new(HashMap::new()),
+            map: Mutex::new(FxHashMap::default()),
         }
     }
 

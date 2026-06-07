@@ -24,7 +24,8 @@ use hayro_syntax::object::dict::keys::{
 use hayro_syntax::object::{MaybeRef, ObjRef};
 use hayro_syntax::page::{Page, Resources, Rotation};
 use pdf_writer::{Chunk, Content, Filter, Finish, Name, Rect, Ref};
-use std::collections::{BTreeMap, HashMap, HashSet};
+use rustc_hash::FxHashMap;
+use std::collections::{BTreeMap, HashSet};
 use std::ops::Deref;
 use std::ops::DerefMut;
 
@@ -136,12 +137,12 @@ struct ExtractionContext<'a> {
     chunks: Vec<Chunk>,
     visited_objects: HashSet<ObjRef>,
     to_visit_refs: Vec<ObjRef>,
-    valid_ref_cache: HashMap<ObjRef, bool>,
+    valid_ref_cache: FxHashMap<ObjRef, bool>,
     root_refs: Vec<Result<Ref, ExtractionError>>,
     pdf: &'a Pdf,
     new_ref: Box<dyn FnMut() -> Ref + 'a>,
-    ref_map: HashMap<ObjRef, Ref>,
-    cached_content_streams: HashMap<usize, Ref>,
+    ref_map: FxHashMap<ObjRef, Ref>,
+    cached_content_streams: FxHashMap<usize, Ref>,
     page_tree_parent_ref: Ref,
     chunk_settings: ChunkSettings,
 }
@@ -157,11 +158,11 @@ impl<'a> ExtractionContext<'a> {
             chunks: vec![],
             visited_objects: HashSet::new(),
             to_visit_refs: Vec::new(),
-            valid_ref_cache: HashMap::new(),
+            valid_ref_cache: FxHashMap::default(),
             pdf,
             new_ref,
-            ref_map: HashMap::new(),
-            cached_content_streams: HashMap::new(),
+            ref_map: FxHashMap::default(),
+            cached_content_streams: FxHashMap::default(),
             root_refs: Vec::new(),
             page_tree_parent_ref,
             chunk_settings,
