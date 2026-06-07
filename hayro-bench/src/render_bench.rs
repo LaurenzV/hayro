@@ -1,6 +1,6 @@
 use hayro::hayro_interpret::InterpreterSettings;
 use hayro::vello_cpu::color::palette::css::WHITE;
-use image::{codecs::png::PngEncoder, ColorType, ImageEncoder};
+use image::{ColorType, ImageEncoder, codecs::png::PngEncoder};
 use pdfium_render::prelude::*;
 use std::env;
 use std::ffi::OsString;
