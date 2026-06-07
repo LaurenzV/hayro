@@ -167,7 +167,7 @@ const INV_MIX_3: [u32; 256] = build_inv_mix_table(3);
 const fn build_inv_mix_table(table: usize) -> [u32; 256] {
     let mut result = [0_u32; 256];
     let mut i = 0;
-    
+
     while i < 256 {
         result[i] = match table {
             0 => u32::from_le_bytes([MUL14[i], MUL9[i], MUL13[i], MUL11[i]]),
