@@ -1,6 +1,6 @@
 use hayro::hayro_interpret::InterpreterSettings;
 use hayro::vello_cpu::color::palette::css::WHITE;
-use image::{ColorType, ImageEncoder, codecs::png::PngEncoder};
+use image::{codecs::png::PngEncoder, ColorType, ImageEncoder};
 use pdfium_render::prelude::*;
 use std::env;
 use std::ffi::OsString;
@@ -106,10 +106,6 @@ impl RenderBackend for PdfiumRenderBackend {
         iterations: usize,
         collect_bitmaps: bool,
     ) -> Result<DocumentRun, String> {
-        let document = self
-            .pdfium
-            .load_pdf_from_byte_slice(pdf_bytes.as_slice(), None)
-            .map_err(|err| format!("load failed: {err}"))?;
         let render_config = PdfRenderConfig::new();
         let mut total_bytes = 0usize;
         let mut page_count = 0usize;
@@ -117,6 +113,11 @@ impl RenderBackend for PdfiumRenderBackend {
         let start = Instant::now();
 
         for iteration in 0..iterations {
+            let document = self
+                .pdfium
+                .load_pdf_from_byte_slice(pdf_bytes.as_slice(), None)
+                .map_err(|err| format!("load failed: {err}"))?;
+
             for (page_index, page) in document.pages().iter().enumerate() {
                 let bitmap = page
                     .render_with_config(&render_config)
@@ -130,6 +131,10 @@ impl RenderBackend for PdfiumRenderBackend {
         }
         let duration = start.elapsed() / iterations as u32;
         let bitmaps = if collect_bitmaps {
+            let document = self
+                .pdfium
+                .load_pdf_from_byte_slice(pdf_bytes.as_slice(), None)
+                .map_err(|err| format!("load failed: {err}"))?;
             let mut bitmaps = Vec::new();
             for (page_index, page) in document.pages().iter().enumerate() {
                 let bitmap = page
@@ -167,56 +172,62 @@ impl RenderBackend for HayroRenderBackend {
         iterations: usize,
         collect_bitmaps: bool,
     ) -> Result<DocumentRun, String> {
-        let document = hayro::hayro_syntax::Pdf::new(pdf_bytes)
-            .map_err(|err| format!("load failed: {err:?}"))?;
         let interpreter_settings = InterpreterSettings::default();
-        let cache = hayro::RenderCache::new();
         let render_settings = hayro::RenderSettings {
             bg_color: WHITE,
             ..Default::default()
         };
         let mut total_bytes = 0usize;
         let mut page_count = 0usize;
-        let mut rendered_bitmaps = Vec::new();
 
         let start = Instant::now();
 
         for iteration in 0..iterations {
-            let save_iteration = collect_bitmaps && iteration + 1 == iterations;
+            let document = hayro::hayro_syntax::Pdf::new(Arc::clone(&pdf_bytes))
+                .map_err(|err| format!("load failed: {err:?}"))?;
+            let cache = hayro::RenderCache::new();
 
-            for (page_index, page) in document.pages().iter().enumerate() {
+            for page in document.pages().iter() {
                 let pixmap = hayro::render(page, &cache, &interpreter_settings, &render_settings);
 
                 if iteration == 0 {
                     total_bytes += pixmap.width() as usize * pixmap.height() as usize * 4;
                     page_count += 1;
                 }
-
-                if save_iteration {
-                    rendered_bitmaps.push((page_index, pixmap));
-                }
             }
         }
         let duration = start.elapsed() / iterations as u32;
-        let bitmaps = rendered_bitmaps
-            .into_iter()
-            .map(|(page_index, pixmap)| {
-                let width = pixmap.width() as u32;
-                let height = pixmap.height() as u32;
-                let rgba = pixmap
-                    .take_unpremultiplied()
-                    .into_iter()
-                    .flat_map(|pixel| [pixel.r, pixel.g, pixel.b, pixel.a])
-                    .collect();
+        let bitmaps = if collect_bitmaps {
+            let document = hayro::hayro_syntax::Pdf::new(pdf_bytes)
+                .map_err(|err| format!("load failed: {err:?}"))?;
+            let cache = hayro::RenderCache::new();
 
-                PageBitmap {
-                    page_index,
-                    width,
-                    height,
-                    rgba,
-                }
-            })
-            .collect();
+            document
+                .pages()
+                .iter()
+                .enumerate()
+                .map(|(page_index, page)| {
+                    let pixmap =
+                        hayro::render(page, &cache, &interpreter_settings, &render_settings);
+                    let width = pixmap.width() as u32;
+                    let height = pixmap.height() as u32;
+                    let rgba = pixmap
+                        .take_unpremultiplied()
+                        .into_iter()
+                        .flat_map(|pixel| [pixel.r, pixel.g, pixel.b, pixel.a])
+                        .collect();
+
+                    PageBitmap {
+                        page_index,
+                        width,
+                        height,
+                        rgba,
+                    }
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
 
         Ok(DocumentRun {
             page_count,
