@@ -162,18 +162,21 @@ const MUL14: [u8; 256] = [
 struct AESCore;
 
 impl AESCore {
+    #[inline(always)]
     fn sub_bytes(state: &mut [u8; 16]) {
         for byte in state.iter_mut() {
             *byte = S_BOX[*byte as usize];
         }
     }
 
+    #[inline(always)]
     fn inv_sub_bytes(state: &mut [u8; 16]) {
         for byte in state.iter_mut() {
             *byte = INV_S_BOX[*byte as usize];
         }
     }
 
+    #[inline(always)]
     fn shift_rows(state: &mut [u8; 16]) {
         let temp = state[1];
         state[1] = state[5];
@@ -195,6 +198,7 @@ impl AESCore {
         state[3] = temp;
     }
 
+    #[inline(always)]
     fn inv_shift_rows(state: &mut [u8; 16]) {
         let temp = state[13];
         state[13] = state[9];
@@ -216,7 +220,7 @@ impl AESCore {
         state[15] = temp;
     }
 
-    #[inline]
+    #[inline(always)]
     fn mix_columns(state: &mut [u8; 16]) {
         for i in 0..4 {
             let col = i * 4;
@@ -229,7 +233,7 @@ impl AESCore {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     fn inv_mix_columns(state: &mut [u8; 16]) {
         for i in 0..4 {
             let col = i * 4;
@@ -246,6 +250,7 @@ impl AESCore {
         }
     }
 
+    #[inline(always)]
     fn add_round_key(state: &mut [u8; 16], round_key: &[u8; 16]) {
         for i in 0..16 {
             state[i] ^= round_key[i];
