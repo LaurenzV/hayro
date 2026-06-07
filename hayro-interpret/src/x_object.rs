@@ -559,6 +559,14 @@ fn decode_raster(
                 interpolate: obj.interpolate,
                 scale_factors: ctx.scale_factors,
             }))
+        } else if ctx.color_space.is_device_rgb() {
+            Some(ImageData::Rgb(RgbData {
+                data: core::mem::take(&mut ctx.decoded.data).into_owned(),
+                width: ctx.width,
+                height,
+                interpolate: obj.interpolate,
+                scale_factors: ctx.scale_factors,
+            }))
         } else {
             let mut output_buf = vec![0; ctx.width as usize * height as usize * 3];
             ctx.color_space
@@ -754,7 +762,8 @@ fn resolve_alpha(
 
         // TODO: Make this less ugly.
         let raw_data = match image_data {
-            Some(ImageData::Luma(d)) => &d.data,
+            Some(ImageData::Luma(d)) if color_space.num_components() == 1 => &d.data,
+            Some(ImageData::Rgb(d)) if color_space.num_components() == 3 => &d.data,
             _ => decoded.data.as_ref(),
         };
 
