@@ -670,7 +670,7 @@ dependencies = [
 [[package]]
 name = "glifo"
 version = "0.1.1"
-source = "git+https://github.com/linebender/vello?rev=9afd263848efffee22bf41686a63caeabf1dd242#9afd263848efffee22bf41686a63caeabf1dd242"
+source = "git+https://github.com/linebender/vello?rev=0971c179#0971c179ea8209aaaaebde7a47dc68711bf95fe1"
 dependencies = [
  "bytemuck",
  "foldhash",
@@ -2028,7 +2028,7 @@ dependencies = [
 [[package]]
 name = "vello_common"
 version = "0.0.9"
-source = "git+https://github.com/linebender/vello?rev=9afd263848efffee22bf41686a63caeabf1dd242#9afd263848efffee22bf41686a63caeabf1dd242"
+source = "git+https://github.com/linebender/vello?rev=0971c179#0971c179ea8209aaaaebde7a47dc68711bf95fe1"
 dependencies = [
  "bytemuck",
  "fearless_simd",
@@ -2044,7 +2044,7 @@ dependencies = [
 [[package]]
 name = "vello_cpu"
 version = "0.0.9"
-source = "git+https://github.com/linebender/vello?rev=9afd263848efffee22bf41686a63caeabf1dd242#9afd263848efffee22bf41686a63caeabf1dd242"
+source = "git+https://github.com/linebender/vello?rev=0971c179#0971c179ea8209aaaaebde7a47dc68711bf95fe1"
 dependencies = [
  "bytemuck",
  "glifo",
