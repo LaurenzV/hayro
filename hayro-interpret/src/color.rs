@@ -327,9 +327,40 @@ impl ColorSpace {
     }
 
     /// Turn the given component values and opacity into an RGBA color.
+    #[inline]
     pub fn to_rgba(&self, c: &[f32], opacity: f32, manual_scale: bool) -> AlphaColor {
-        self.to_alpha_color(c, opacity, manual_scale)
-            .unwrap_or(AlphaColor::BLACK)
+        let alpha = f32_to_u8(opacity);
+
+        match self.0.as_ref() {
+            ColorSpaceType::DeviceGray => {
+                let gray = c.first().copied().map(f32_to_u8).unwrap_or(0);
+                AlphaColor::from_rgba8(gray, gray, gray, alpha)
+            }
+            ColorSpaceType::DeviceRgb => AlphaColor::from_rgba8(
+                c.first().copied().map(f32_to_u8).unwrap_or(0),
+                c.get(1).copied().map(f32_to_u8).unwrap_or(0),
+                c.get(2).copied().map(f32_to_u8).unwrap_or(0),
+                alpha,
+            ),
+            ColorSpaceType::DeviceCmyk if c.len() == 4 => {
+                let input = [
+                    f32_to_u8(c[0]),
+                    f32_to_u8(c[1]),
+                    f32_to_u8(c[2]),
+                    f32_to_u8(c[3]),
+                ];
+                let mut output = [0; 3];
+
+                if CMYK_TRANSFORM.convert_u8(&input, &mut output).is_some() {
+                    AlphaColor::from_rgba8(output[0], output[1], output[2], alpha)
+                } else {
+                    AlphaColor::BLACK
+                }
+            }
+            _ => self
+                .to_alpha_color(c, opacity, manual_scale)
+                .unwrap_or(AlphaColor::BLACK),
+        }
     }
 }
 
@@ -392,6 +423,7 @@ impl ToRgb for ColorSpace {
         }
     }
 
+    #[inline]
     fn convert_u8(&self, input: &[u8], output: &mut [u8]) -> Option<()> {
         match self.0.as_ref() {
             ColorSpaceType::DeviceCmyk => CMYK_TRANSFORM.convert_u8(input, output),
@@ -1047,12 +1079,14 @@ impl Color {
     }
 
     /// Return the color as an RGBA color.
+    #[inline]
     pub fn to_rgba(&self) -> AlphaColor {
         self.color_space
             .to_rgba(&self.components, self.opacity, false)
     }
 
     /// Create a color from RGBA.
+    #[inline]
     pub fn from_rgba(rgba: AlphaColor) -> Self {
         let c = rgba.components();
         Self {
