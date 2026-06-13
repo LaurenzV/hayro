@@ -151,6 +151,11 @@ impl<'a> Context<'a> {
                 self.get_mut().clips.push(ClipType::Dummy);
                 return;
             }
+
+            device.push_clip_rect(&clip_rect);
+            self.push_bbox(clip_rect);
+            self.get_mut().clips.push(ClipType::Real);
+            return;
         }
 
         let bbox = clip_path.bounding_box();
@@ -162,9 +167,9 @@ impl<'a> Context<'a> {
         self.get_mut().clips.push(ClipType::Real);
     }
 
-    pub(crate) fn pop_clip_path(&mut self, device: &mut impl Device<'a>) {
+    pub(crate) fn pop_clip(&mut self, device: &mut impl Device<'a>) {
         if let Some(ClipType::Real) = self.get_mut().clips.pop() {
-            device.pop_clip_path();
+            device.pop_clip();
             self.pop_bbox();
         }
     }
@@ -199,7 +204,7 @@ impl<'a> Context<'a> {
         };
 
         while self.get().clips.len() > target_clips {
-            self.pop_clip_path(device);
+            self.pop_clip(device);
         }
 
         // The first state should never be popped.

@@ -267,7 +267,7 @@ impl<'a> TilingPattern<'a> {
             interpret(iter, &resources, &mut context, &mut device);
         }
 
-        device.pop_clip_path();
+        device.pop_clip();
 
         Some(())
     }
@@ -333,8 +333,8 @@ impl<'a, T: Device<'a>> Device<'a> for StencilPatternDevice<'a, '_, T> {
         }
     }
 
-    fn pop_clip_path(&mut self) {
-        self.inner.pop_clip_path();
+    fn pop_clip(&mut self) {
+        self.inner.pop_clip();
     }
 
     fn pop_transparency_group(&mut self) {}

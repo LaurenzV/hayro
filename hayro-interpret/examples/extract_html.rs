@@ -112,7 +112,7 @@ impl Device<'_> for TextExtractor {
         }
     }
 
-    fn pop_clip_path(&mut self) {}
+    fn pop_clip(&mut self) {}
 
     fn pop_transparency_group(&mut self) {}
 

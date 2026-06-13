@@ -230,8 +230,8 @@ impl<'a, T: Device<'a>> Device<'a> for Type3ShapeGlyphDevice<'a, '_, T> {
             .draw_glyph(g, transform, glyph_transform, p, draw_mode);
     }
 
-    fn pop_clip_path(&mut self) {
-        self.inner.pop_clip_path();
+    fn pop_clip(&mut self) {
+        self.inner.pop_clip();
     }
 
     fn pop_transparency_group(&mut self) {}

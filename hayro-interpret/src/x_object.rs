@@ -163,7 +163,7 @@ pub(crate) fn draw_form_xobject<'a, 'b>(
         device,
     );
 
-    device.pop_clip_path();
+    device.pop_clip();
 
     if x_object.is_transparency_group {
         device.pop_transparency_group();

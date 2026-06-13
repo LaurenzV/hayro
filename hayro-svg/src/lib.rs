@@ -335,7 +335,7 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
         }
     }
 
-    fn pop_clip_path(&mut self) {
+    fn pop_clip(&mut self) {
         self.xml.end_element();
     }
 

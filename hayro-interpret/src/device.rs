@@ -1,6 +1,6 @@
 use crate::font::Glyph;
 use crate::soft_mask::SoftMask;
-use crate::{BlendMode, ClipPath, Image};
+use crate::{BlendMode, ClipPath, FillRule, Image};
 use crate::{GlyphDrawMode, Paint, PathDrawMode};
 use kurbo::{Affine, BezPath, Rect, Shape};
 
@@ -21,6 +21,13 @@ pub trait Device<'a> {
     );
     /// Push a new clip path to the clip stack.
     fn push_clip_path(&mut self, clip_path: &ClipPath);
+    /// Push a rectangular clip to the clip stack.
+    fn push_clip_rect(&mut self, rect: &Rect) {
+        self.push_clip_path(&ClipPath {
+            path: rect.to_path(0.1),
+            fill: FillRule::NonZero,
+        });
+    }
     /// Push a new transparency group to the blend stack.
     fn push_transparency_group(
         &mut self,
@@ -40,8 +47,8 @@ pub trait Device<'a> {
     );
     /// Draw an image.
     fn draw_image(&mut self, image: Image<'a, '_>, transform: Affine);
-    /// Pop the last clip path from the clip stack.
-    fn pop_clip_path(&mut self);
+    /// Pop the last clip path or clip rectangle from the clip stack.
+    fn pop_clip(&mut self);
     /// Pop the last transparency group from the blend stack.
     fn pop_transparency_group(&mut self);
     /// Draw a rectangle directly, without going through the general path pipeline.
@@ -82,6 +89,6 @@ impl Device<'_> for DummyDevice {
     ) {
     }
     fn draw_image(&mut self, _: Image<'_, '_>, _: Affine) {}
-    fn pop_clip_path(&mut self) {}
+    fn pop_clip(&mut self) {}
     fn pop_transparency_group(&mut self) {}
 }

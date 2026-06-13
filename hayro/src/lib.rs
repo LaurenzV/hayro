@@ -162,7 +162,7 @@ pub fn render<'a>(
 
     device.pop_transparency_group();
 
-    device.pop_clip_path();
+    device.pop_clip();
 
     let mut pixmap = Pixmap::new(pix_width, pix_height);
     let mut resources = vello_cpu::Resources::default();

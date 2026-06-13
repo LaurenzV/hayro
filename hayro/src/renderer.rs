@@ -869,6 +869,10 @@ impl<'a> Device<'a> for Renderer {
         self.push_clip_path_inner(&clip_path.path, clip_path.fill);
     }
 
+    fn push_clip_rect(&mut self, rect: &Rect) {
+        self.push_clip_path_inner(&rect.to_path(0.1), FillRule::NonZero);
+    }
+
     fn push_transparency_group(
         &mut self,
         opacity: f32,
@@ -894,7 +898,7 @@ impl<'a> Device<'a> for Renderer {
         );
     }
 
-    fn pop_clip_path(&mut self) {
+    fn pop_clip(&mut self) {
         self.ctx.pop_clip_path();
     }
 
