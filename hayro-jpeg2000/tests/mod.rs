@@ -1,6 +1,6 @@
 #![allow(missing_docs)]
 
-use hayro_jpeg2000::{DecodeSettings, Image};
+use hayro_jpeg2000::{ColorSpace, DecodeSettings, Image};
 use image::{ColorType, DynamicImage, ImageBuffer, ImageDecoder, ImageFormat, Rgba, RgbaImage};
 use indicatif::{ProgressBar, ProgressStyle};
 use rayon::prelude::*;
@@ -179,6 +179,8 @@ struct ManifestEntry {
     resolve_palette_indices: Option<bool>,
     #[serde(default)]
     target_resolution: Option<(u32, u32)>,
+    #[serde(default)]
+    decode_u16: bool,
 }
 
 struct AssetEntry {
@@ -187,6 +189,7 @@ struct AssetEntry {
     display_name: String,
     render: bool,
     decode_settings: DecodeSettings,
+    decode_u16: bool,
 }
 
 impl AssetEntry {
@@ -196,6 +199,7 @@ impl AssetEntry {
         path: String,
         render: bool,
         decode_settings: DecodeSettings,
+        decode_u16: bool,
     ) -> Self {
         let display_name = format!("{namespace}/{id}");
         let input_relative_path = Path::new(namespace).join(path);
@@ -206,6 +210,7 @@ impl AssetEntry {
             display_name,
             render,
             decode_settings,
+            decode_u16,
         }
     }
 }
@@ -214,7 +219,9 @@ impl ManifestItem {
     fn into_asset(self, namespace: &str) -> AssetEntry {
         let default_settings = DecodeSettings::default();
         match self {
-            Self::Simple(id) => AssetEntry::new(namespace, id.clone(), id, true, default_settings),
+            Self::Simple(id) => {
+                AssetEntry::new(namespace, id.clone(), id, true, default_settings, false)
+            }
             Self::Detailed(entry) => {
                 let decode_settings = DecodeSettings {
                     resolve_palette_indices: entry
@@ -231,6 +238,7 @@ impl ManifestItem {
                     entry.path,
                     entry.render,
                     decode_settings,
+                    entry.decode_u16,
                 )
             }
         }
@@ -283,31 +291,23 @@ fn run_asset_test(asset: &AssetEntry) -> Result<(), String> {
 
     if !asset.render {
         // Crash-only test: just execute the decoder to ensure it handles the file.
-        let _ = image.and_then(|i| i.decode());
+        let _ = image.and_then(|i| {
+            if asset.decode_u16 {
+                i.decode_u16().map(|_| ())
+            } else {
+                i.decode().map(|_| ())
+            }
+        });
         return Ok(());
     }
 
     let image = image.unwrap();
-    let color_type = image.color_type();
-    let width = image.width();
-    let height = image.height();
-    let mut buf = vec![0_u8; image.total_bytes() as usize];
-    image.read_image(&mut buf).unwrap();
-
-    let rgba = match color_type {
-        ColorType::L8 => {
-            DynamicImage::ImageLuma8(ImageBuffer::from_raw(width, height, buf).unwrap())
-        }
-        ColorType::La8 => {
-            DynamicImage::ImageLumaA8(ImageBuffer::from_raw(width, height, buf).unwrap())
-        }
-        ColorType::Rgb8 => {
-            DynamicImage::ImageRgb8(ImageBuffer::from_raw(width, height, buf).unwrap())
-        }
-        ColorType::Rgba8 => {
-            DynamicImage::ImageRgba8(ImageBuffer::from_raw(width, height, buf).unwrap())
-        }
-        _ => unimplemented!(),
+    let rgba = if asset.decode_u16 {
+        decode_u16_dynamic_image(&image)
+            .map_err(|err| format!("failed to decode {} as u16: {err}", asset_name))?
+    } else {
+        decode_u8_dynamic_image(image)
+            .map_err(|err| format!("failed to decode {} as u8: {err}", asset_name))?
     }
     .into_rgba8();
 
@@ -358,6 +358,65 @@ fn run_asset_test(asset: &AssetEntry) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+fn decode_u8_dynamic_image(image: Image<'_>) -> Result<DynamicImage, String> {
+    let color_type = image.color_type();
+    let width = image.width();
+    let height = image.height();
+    let mut buf = vec![0_u8; image.total_bytes() as usize];
+    image
+        .read_image(&mut buf)
+        .map_err(|err| format!("image crate decode failed: {err}"))?;
+
+    Ok(match color_type {
+        ColorType::L8 => {
+            DynamicImage::ImageLuma8(ImageBuffer::from_raw(width, height, buf).unwrap())
+        }
+        ColorType::La8 => {
+            DynamicImage::ImageLumaA8(ImageBuffer::from_raw(width, height, buf).unwrap())
+        }
+        ColorType::Rgb8 => {
+            DynamicImage::ImageRgb8(ImageBuffer::from_raw(width, height, buf).unwrap())
+        }
+        ColorType::Rgba8 => {
+            DynamicImage::ImageRgba8(ImageBuffer::from_raw(width, height, buf).unwrap())
+        }
+        _ => unimplemented!(),
+    })
+}
+
+fn decode_u16_dynamic_image(image: &Image<'_>) -> Result<DynamicImage, String> {
+    let width = image.width();
+    let height = image.height();
+    let has_alpha = image.has_alpha();
+    let num_channels = image.color_space().num_channels();
+    let buf = image
+        .decode_u16()
+        .map_err(|err| format!("native u16 decode failed: {err}"))?;
+
+    if matches!(image.color_space(), ColorSpace::CMYK) {
+        return Err("unsupported CMYK color space for u16 snapshot".to_owned());
+    }
+
+    match (num_channels, has_alpha) {
+        (1, false) => Ok(DynamicImage::ImageLuma16(
+            ImageBuffer::from_raw(width, height, buf).unwrap(),
+        )),
+        (1, true) => Ok(DynamicImage::ImageLumaA16(
+            ImageBuffer::from_raw(width, height, buf).unwrap(),
+        )),
+        (3, false) => Ok(DynamicImage::ImageRgb16(
+            ImageBuffer::from_raw(width, height, buf).unwrap(),
+        )),
+        (3, true) => Ok(DynamicImage::ImageRgba16(
+            ImageBuffer::from_raw(width, height, buf).unwrap(),
+        )),
+        _ => Err(format!(
+            "unsupported color space for u16 snapshot: {:?}",
+            image.color_space()
+        )),
+    }
 }
 
 fn get_diff(expected_image: &RgbaImage, actual_image: &RgbaImage) -> (RgbaImage, u32) {

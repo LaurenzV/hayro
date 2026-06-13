@@ -62,9 +62,19 @@
   "MarkerIsNotCompliant.j2k",
   "test_lossless.j2k",
   "issue228.j2k",
+  {
+    "id": "issue228_u16",
+    "path": "issue228.j2k",
+    "decode_u16": true
+  },
   "pacs.ge.j2k",
   "buxR.j2k",
   "CT_Phillips_JPEG2K_Decompr_Problem.j2k",
+  {
+    "id": "CT_Phillips_JPEG2K_Decompr_Problem_u16",
+    "path": "CT_Phillips_JPEG2K_Decompr_Problem.j2k",
+    "decode_u16": true
+  },
   "buxI.j2k",
   "issue171.jp2",
   "movie_00000.j2k",

@@ -191,8 +191,8 @@ impl<'a> Image<'a> {
         self.header.component_infos[0].size_info.precision
     }
 
-    /// Decode the image and return its decoded result as a `Vec<u8>`, with each
-    /// channel interleaved.
+    /// Decode the image and return its decoded result as a `Vec<u8>` as an
+    /// 8-bit image, with each channel interleaved.
     pub fn decode(&self) -> Result<Vec<u8>> {
         let buffer_size = self.width() as usize
             * self.height() as usize
@@ -200,6 +200,19 @@ impl<'a> Image<'a> {
         let mut buf = vec![0; buffer_size];
         let mut decoder_context = DecoderContext::default();
         self.decode_into(&mut buf, &mut decoder_context)?;
+
+        Ok(buf)
+    }
+
+    /// Decode the image and return its decoded result as a `Vec<u16>` as an
+    /// 16-bit image, with each channel interleaved.
+    pub fn decode_u16(&self) -> Result<Vec<u16>> {
+        let buffer_size = self.width() as usize
+            * self.height() as usize
+            * (self.color_space.num_channels() as usize + if self.has_alpha { 1 } else { 0 });
+        let mut buf = vec![0; buffer_size];
+        let mut decoder_context = DecoderContext::default();
+        self.decode_u16_into(&mut buf, &mut decoder_context)?;
 
         Ok(buf)
     }
@@ -218,6 +231,36 @@ impl<'a> Image<'a> {
         buf: &mut [u8],
         decoder_context: &mut DecoderContext<'a>,
     ) -> Result<()> {
+        let mut decoded_image = self.decode_components(decoder_context)?;
+        interleave_and_convert(&mut decoded_image, buf);
+
+        Ok(())
+    }
+
+    /// Decode the image into the given 16-bit buffer.
+    ///
+    /// This method does the same as [`Image::decode_u16`], but you can provide
+    /// a custom buffer for the output, as well as a decoder context. Doing so
+    /// will allow `hayro-jpeg2000` to reuse memory allocations, so this is
+    /// especially recommended if you plan on converting multiple images in the
+    /// same session.
+    ///
+    /// The buffer must have the correct size.
+    pub fn decode_u16_into(
+        &'a self,
+        buf: &mut [u16],
+        decoder_context: &mut DecoderContext<'a>,
+    ) -> Result<()> {
+        let mut decoded_image = self.decode_components(decoder_context)?;
+        interleave_and_convert(&mut decoded_image, buf);
+
+        Ok(())
+    }
+
+    fn decode_components<'b>(
+        &'a self,
+        decoder_context: &'b mut DecoderContext<'a>,
+    ) -> Result<DecodedImage<'b>> {
         let settings = &self.settings;
         j2c::decode(self.codestream, &self.header, decoder_context)?;
         let mut decoded_image = DecodedImage {
@@ -255,9 +298,8 @@ impl<'a> Image<'a> {
         // Note that this is only valid if all images have the same bit depth.
         let bit_depth = decoded_image.decoded_components[0].bit_depth;
         convert_color_space(&mut decoded_image, bit_depth)?;
-        interleave_and_convert(&mut decoded_image, buf);
 
-        Ok(())
+        Ok(decoded_image)
     }
 }
 
@@ -389,7 +431,39 @@ pub struct Bitmap {
     pub original_bit_depth: u8,
 }
 
-fn interleave_and_convert(image: &mut DecodedImage<'_>, buf: &mut [u8]) {
+trait OutputSample {
+    const BIT_DEPTH: u8;
+
+    fn from_native_f32(sample: f32) -> Self;
+
+    fn from_scaled_f32(sample: f32, bit_depth: u8) -> Self;
+}
+
+impl OutputSample for u8 {
+    const BIT_DEPTH: u8 = 8;
+
+    fn from_native_f32(sample: f32) -> Self {
+        math::round_f32(sample) as u8
+    }
+
+    fn from_scaled_f32(sample: f32, bit_depth: u8) -> Self {
+        scale_sample(sample, bit_depth, u8::MAX as u32) as u8
+    }
+}
+
+impl OutputSample for u16 {
+    const BIT_DEPTH: u8 = 16;
+
+    fn from_native_f32(sample: f32) -> Self {
+        math::round_f32(sample) as u16
+    }
+
+    fn from_scaled_f32(sample: f32, bit_depth: u8) -> Self {
+        scale_sample(sample, bit_depth, u16::MAX as u32) as u16
+    }
+}
+
+fn interleave_and_convert<T: OutputSample>(image: &mut DecodedImage<'_>, buf: &mut [T]) {
     let components = &mut *image.decoded_components;
     let num_components = components.len();
 
@@ -405,7 +479,7 @@ fn interleave_and_convert(image: &mut DecodedImage<'_>, buf: &mut [u8]) {
 
     let mut output_iter = buf.iter_mut();
 
-    if all_same_bit_depth == Some(8) && num_components <= 4 {
+    if all_same_bit_depth == Some(T::BIT_DEPTH) && num_components <= 4 {
         // Fast path for the common case.
         match num_components {
             // Gray-scale.
@@ -414,7 +488,7 @@ fn interleave_and_convert(image: &mut DecodedImage<'_>, buf: &mut [u8]) {
                     components[0]
                         .container
                         .iter()
-                        .map(|v| math::round_f32(*v) as u8),
+                        .map(|v| T::from_native_f32(*v)),
                 ) {
                     *output = input;
                 }
@@ -428,8 +502,8 @@ fn interleave_and_convert(image: &mut DecodedImage<'_>, buf: &mut [u8]) {
                 let c1 = &c1.container[..max_len];
 
                 for i in 0..max_len {
-                    *output_iter.next().unwrap() = math::round_f32(c0[i]) as u8;
-                    *output_iter.next().unwrap() = math::round_f32(c1[i]) as u8;
+                    *output_iter.next().unwrap() = T::from_native_f32(c0[i]);
+                    *output_iter.next().unwrap() = T::from_native_f32(c1[i]);
                 }
             }
             // RGB
@@ -443,9 +517,9 @@ fn interleave_and_convert(image: &mut DecodedImage<'_>, buf: &mut [u8]) {
                 let c2 = &c2.container[..max_len];
 
                 for i in 0..max_len {
-                    *output_iter.next().unwrap() = math::round_f32(c0[i]) as u8;
-                    *output_iter.next().unwrap() = math::round_f32(c1[i]) as u8;
-                    *output_iter.next().unwrap() = math::round_f32(c2[i]) as u8;
+                    *output_iter.next().unwrap() = T::from_native_f32(c0[i]);
+                    *output_iter.next().unwrap() = T::from_native_f32(c1[i]);
+                    *output_iter.next().unwrap() = T::from_native_f32(c2[i]);
                 }
             }
             // RGBA or CMYK.
@@ -461,27 +535,30 @@ fn interleave_and_convert(image: &mut DecodedImage<'_>, buf: &mut [u8]) {
                 let c3 = &c3.container[..max_len];
 
                 for i in 0..max_len {
-                    *output_iter.next().unwrap() = math::round_f32(c0[i]) as u8;
-                    *output_iter.next().unwrap() = math::round_f32(c1[i]) as u8;
-                    *output_iter.next().unwrap() = math::round_f32(c2[i]) as u8;
-                    *output_iter.next().unwrap() = math::round_f32(c3[i]) as u8;
+                    *output_iter.next().unwrap() = T::from_native_f32(c0[i]);
+                    *output_iter.next().unwrap() = T::from_native_f32(c1[i]);
+                    *output_iter.next().unwrap() = T::from_native_f32(c2[i]);
+                    *output_iter.next().unwrap() = T::from_native_f32(c3[i]);
                 }
             }
             _ => unreachable!(),
         }
     } else {
-        // Slow path that also requires us to scale to 8 bit.
-        let mul_factor = ((1 << 8) - 1) as f32;
-
+        // Slow path that also requires us to scale to the output bit depth.
         for sample in 0..max_len {
             for channel in components.iter() {
-                *output_iter.next().unwrap() = math::round_f32(
-                    (channel.container[sample] / ((1_u32 << channel.bit_depth) - 1) as f32)
-                        * mul_factor,
-                ) as u8;
+                *output_iter.next().unwrap() =
+                    T::from_scaled_f32(channel.container[sample], channel.bit_depth);
             }
         }
     }
+}
+
+fn scale_sample(sample: f32, bit_depth: u8, max_output: u32) -> u32 {
+    let max_input = ((1_u64 << bit_depth) - 1) as f32;
+    let sample = math::round_f32(sample).clamp(0.0, max_input);
+
+    math::round_f32((sample / max_input) * max_output as f32) as u32
 }
 
 fn convert_color_space(image: &mut DecodedImage<'_>, bit_depth: u8) -> Result<()> {
