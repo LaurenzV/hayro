@@ -144,9 +144,15 @@ pub(crate) fn read_header<'a>(
         .unwrap();
     let skipped_resolution_levels =
         if let Some((target_width, target_height)) = settings.target_resolution {
-            let width_log = size_data.image_width().checked_div(target_width).and_then(|v| v.checked_ilog2())
+            let width_log = size_data
+                .image_width()
+                .checked_div(target_width)
+                .and_then(|v| v.checked_ilog2())
                 .unwrap_or(0);
-            let height_log = size_data.image_height().checked_div(target_height).and_then(|v| v.checked_ilog2())
+            let height_log = size_data
+                .image_height()
+                .checked_div(target_height)
+                .and_then(|v| v.checked_ilog2())
                 .unwrap_or(0);
 
             width_log.min(height_log) as u8
