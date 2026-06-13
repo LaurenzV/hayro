@@ -5,7 +5,7 @@ use super::{
 };
 use crate::ScratchBuffers;
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
-use crate::bitmap::{Bitmap, WORD_BITS, WORD_SHIFT, Word};
+use crate::bitmap::{Bitmap, WORD_BITS, WORD_BYTES, WORD_SHIFT, Word};
 use crate::error::{ParseError, RegionError, Result, TemplateError, bail};
 use crate::reader::Reader;
 
@@ -372,6 +372,118 @@ macro_rules! decode_loop {
     }};
 }
 
+impl Bitmap {
+    #[inline(always)]
+    fn get_row_byte(&self, row: u32, byte_idx: usize) -> u32 {
+        let word_idx = byte_idx / WORD_BYTES as usize;
+        let shift = (WORD_BYTES as usize - 1 - byte_idx % WORD_BYTES as usize) * u8::BITS as usize;
+        ((self.data[row as usize * self.stride as usize + word_idx] >> shift) & 0xff) as u8 as u32
+    }
+
+    #[inline(always)]
+    fn set_row_byte(&mut self, row: u32, byte_idx: usize, value: u8) {
+        let word_idx = byte_idx / WORD_BYTES as usize;
+        let shift = (WORD_BYTES as usize - 1 - byte_idx % WORD_BYTES as usize) * u8::BITS as usize;
+        let idx = row as usize * self.stride as usize + word_idx;
+        let mask = Word::from(0xff_u8) << shift;
+        self.data[idx] = (self.data[idx] & !mask) | ((value as Word) << shift);
+    }
+}
+
+macro_rules! decode_default_template_fast_loop {
+    (
+        $bitmap:expr,
+        $decoder:expr,
+        $contexts:expr,
+        $tpgdon:expr,
+        $sltp_context:expr,
+        $params:expr
+    ) => {{
+        const BYTE_BITS: u32 = u8::BITS;
+        let stride = $bitmap.stride as usize;
+        let mut ltp = false;
+
+        let full_bytes = (($bitmap.width - 1) / BYTE_BITS) as usize;
+        let last_byte_bits = (($bitmap.width - 1) & (BYTE_BITS - 1)) + 1;
+
+        for y in 0..$bitmap.height {
+            if $tpgdon {
+                let sltp = $decoder.read_bit(&mut $contexts[$sltp_context as usize]);
+                ltp = ltp != (sltp != 0);
+            }
+
+            if ltp {
+                if y > 0 {
+                    let src = (y as usize - 1) * stride;
+                    $bitmap
+                        .data
+                        .copy_within(src..src + stride, y as usize * stride);
+                }
+
+                continue;
+            }
+
+            let has_prev2 = y >= 2;
+            let has_prev1 = y >= 1;
+            let mut val_prev2 = if has_prev2 {
+                $bitmap.get_row_byte(y - 2, 0) << ($params).prev2_initial_shift
+            } else {
+                0
+            };
+            let mut val_prev1 = if has_prev1 {
+                $bitmap.get_row_byte(y - 1, 0)
+            } else {
+                0
+            };
+            let mut context = (val_prev2 & ($params).prev2_initial_mask)
+                | ((val_prev1 >> ($params).prev1_shift) & ($params).prev1_initial_mask);
+
+            for byte_idx in 0..full_bytes {
+                val_prev2 = if has_prev2 {
+                    (val_prev2 << BYTE_BITS)
+                        | ($bitmap.get_row_byte(y - 2, byte_idx + 1)
+                            << ($params).prev2_initial_shift)
+                } else {
+                    0
+                };
+                val_prev1 = if has_prev1 {
+                    (val_prev1 << BYTE_BITS) | $bitmap.get_row_byte(y - 1, byte_idx + 1)
+                } else {
+                    0
+                };
+
+                let mut byte = 0;
+                
+                for bit in (0..BYTE_BITS).rev() {
+                    let pixel = $decoder.read_bit(&mut $contexts[context as usize]);
+                    byte |= (pixel as u8) << bit;
+                    context = ((context & ($params).shift_mask) << 1)
+                        | pixel
+                        | ((val_prev2 >> bit) & ($params).prev2_next_mask)
+                        | ((val_prev1 >> (bit + ($params).prev1_shift))
+                            & ($params).prev1_next_mask);
+                }
+                
+                $bitmap.set_row_byte(y, byte_idx, byte);
+            }
+
+            val_prev2 <<= BYTE_BITS;
+            val_prev1 <<= BYTE_BITS;
+            let mut byte = 0;
+            for k in 0..last_byte_bits {
+                let pixel = $decoder.read_bit(&mut $contexts[context as usize]);
+                byte |= (pixel as u8) << (u8::BITS - 1 - k);
+                context = ((context & ($params).shift_mask) << 1)
+                    | pixel
+                    | ((val_prev2 >> (u8::BITS - 1 - k)) & ($params).prev2_next_mask)
+                    | ((val_prev1 >> (u8::BITS - 1 + ($params).prev1_shift - k))
+                        & ($params).prev1_next_mask);
+            }
+            $bitmap.set_row_byte(y, full_bytes, byte);
+        }
+    }};
+}
+
 /// Decode a bitmap using arithmetic coding (6.2.5).
 pub(crate) fn decode_bitmap_arithmetic_coding(
     bitmap: &mut Bitmap,
@@ -393,41 +505,37 @@ pub(crate) fn decode_bitmap_arithmetic_coding(
 
     if ctx_gatherer.use_default_at {
         match template {
-            Template::Template0 => decode_loop!(
+            Template::Template0 => decode_default_template_fast_loop!(
                 bitmap,
                 decoder,
                 contexts,
-                &mut ctx_gatherer,
                 tpgdon,
                 sltp_context,
-                ContextGatherer::gather_template0_default
+                DEFAULT_TEMPLATE0_FAST_PARAMS
             ),
-            Template::Template1 => decode_loop!(
+            Template::Template1 => decode_default_template_fast_loop!(
                 bitmap,
                 decoder,
                 contexts,
-                &mut ctx_gatherer,
                 tpgdon,
                 sltp_context,
-                ContextGatherer::gather_template1_default
+                DEFAULT_TEMPLATE1_FAST_PARAMS
             ),
-            Template::Template2 => decode_loop!(
+            Template::Template2 => decode_default_template_fast_loop!(
                 bitmap,
                 decoder,
                 contexts,
-                &mut ctx_gatherer,
                 tpgdon,
                 sltp_context,
-                ContextGatherer::gather_template2_default
+                DEFAULT_TEMPLATE2_FAST_PARAMS
             ),
-            Template::Template3 => decode_loop!(
+            Template::Template3 => decode_default_template_fast_loop!(
                 bitmap,
                 decoder,
                 contexts,
-                &mut ctx_gatherer,
                 tpgdon,
                 sltp_context,
-                ContextGatherer::gather_template3_default
+                DEFAULT_TEMPLATE3_FAST_PARAMS
             ),
         }
     } else {
@@ -793,3 +901,54 @@ impl<'a> ContextGatherer<'a> {
         self.buf_cur = (self.buf_cur & !mask) | ((value as Word) << bit_pos);
     }
 }
+
+#[derive(Clone, Copy)]
+struct DefaultTemplateFastParams {
+    prev2_initial_shift: u32,
+    prev2_initial_mask: u32,
+    prev1_shift: u32,
+    prev1_initial_mask: u32,
+    shift_mask: u32,
+    prev2_next_mask: u32,
+    prev1_next_mask: u32,
+}
+
+const DEFAULT_TEMPLATE0_FAST_PARAMS: DefaultTemplateFastParams = DefaultTemplateFastParams {
+    prev2_initial_shift: 6,
+    prev2_initial_mask: 0xf800,
+    prev1_shift: 0,
+    prev1_initial_mask: 0x07f0,
+    shift_mask: 0x7bf7,
+    prev2_next_mask: 0x0800,
+    prev1_next_mask: 0x0010,
+};
+
+const DEFAULT_TEMPLATE1_FAST_PARAMS: DefaultTemplateFastParams = DefaultTemplateFastParams {
+    prev2_initial_shift: 4,
+    prev2_initial_mask: 0x1e00,
+    prev1_shift: 1,
+    prev1_initial_mask: 0x01f8,
+    shift_mask: 0x0efb,
+    prev2_next_mask: 0x0200,
+    prev1_next_mask: 0x0008,
+};
+
+const DEFAULT_TEMPLATE2_FAST_PARAMS: DefaultTemplateFastParams = DefaultTemplateFastParams {
+    prev2_initial_shift: 1,
+    prev2_initial_mask: 0x0380,
+    prev1_shift: 3,
+    prev1_initial_mask: 0x007c,
+    shift_mask: 0x01bd,
+    prev2_next_mask: 0x0080,
+    prev1_next_mask: 0x0004,
+};
+
+const DEFAULT_TEMPLATE3_FAST_PARAMS: DefaultTemplateFastParams = DefaultTemplateFastParams {
+    prev2_initial_shift: 0,
+    prev2_initial_mask: 0x0000,
+    prev1_shift: 1,
+    prev1_initial_mask: 0x03f0,
+    shift_mask: 0x01f7,
+    prev2_next_mask: 0x0000,
+    prev1_next_mask: 0x0010,
+};
