@@ -4,6 +4,7 @@ use crate::object::dict::keys::{
 };
 use crate::object::stream::{FilterResult, ImageColorSpace, ImageData, ImageDecodeParams};
 use alloc::borrow::Cow;
+use alloc::vec;
 use alloc::vec::Vec;
 use core::iter;
 use hayro_ccitt::{DecodeSettings, Decoder, DecoderContext, EncodingMode};
@@ -105,18 +106,27 @@ pub(crate) fn decode(
     } else {
         struct Luma8Decoder {
             output: Vec<u8>,
+            idx: usize,
             decoded_rows: u32,
         }
 
         impl Decoder for Luma8Decoder {
             fn push_pixel(&mut self, white: bool) {
-                self.output.push(if white { 0xFF } else { 0x00 });
+                if !white {
+                    self.output[self.idx] = 0x00;
+                }
+
+                self.idx += 1;
             }
 
             fn push_pixel_chunk(&mut self, white: bool, chunk_count: u32) {
-                let byte = if white { 0xFF } else { 0x00 };
-                self.output
-                    .extend(iter::repeat_n(byte, chunk_count as usize * 8));
+                let len = chunk_count as usize * 8;
+
+                if !white {
+                    self.output[self.idx..self.idx + len].fill(0x00);
+                }
+
+                self.idx += len;
             }
 
             fn next_line(&mut self) {
@@ -125,7 +135,8 @@ pub(crate) fn decode(
         }
 
         let mut decoder = Luma8Decoder {
-            output: Vec::new(),
+            output: vec![0xFF; settings.columns as usize * image_params.height as usize],
+            idx: 0,
             decoded_rows: 0,
         };
         let mut context = DecoderContext::new(settings);
@@ -133,6 +144,10 @@ pub(crate) fn decode(
 
         if result.is_err() && decoder.decoded_rows == 0 {
             return None;
+        }
+
+        if result.is_err() {
+            decoder.output.truncate(decoder.idx);
         }
 
         (decoder.output, 8)
