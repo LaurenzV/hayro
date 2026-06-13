@@ -443,11 +443,11 @@ impl OutputSample for u8 {
     const BIT_DEPTH: u8 = 8;
 
     fn from_native_f32(sample: f32) -> Self {
-        math::round_f32(sample) as u8
+        math::round_f32(sample) as Self
     }
 
     fn from_scaled_f32(sample: f32, bit_depth: u8) -> Self {
-        scale_sample(sample, bit_depth, u8::MAX as u32) as u8
+        scale_sample(sample, bit_depth, Self::MAX as u32) as Self
     }
 }
 
@@ -455,11 +455,11 @@ impl OutputSample for u16 {
     const BIT_DEPTH: u8 = 16;
 
     fn from_native_f32(sample: f32) -> Self {
-        math::round_f32(sample) as u16
+        math::round_f32(sample) as Self
     }
 
     fn from_scaled_f32(sample: f32, bit_depth: u8) -> Self {
-        scale_sample(sample, bit_depth, u16::MAX as u32) as u16
+        scale_sample(sample, bit_depth, Self::MAX as u32) as Self
     }
 }
 
