@@ -274,6 +274,45 @@ impl Renderer {
                 .iter()
                 .flat_map(|g| [*g, *g, *g, 255])
                 .collect::<Vec<_>>()
+        } else if matches!(&image_data, ImageData::Luma(_)) && has_alpha {
+            let ImageData::Luma(luma) = image_data else {
+                unreachable!()
+            };
+            let alpha = alpha_data.unwrap();
+
+            let (luma_data, alpha_data) = if !needs_resize {
+                (luma.data, alpha.data)
+            } else {
+                let resized_luma = self.resize_image_data(
+                    luma.data,
+                    img_width,
+                    img_height,
+                    new_width,
+                    new_height,
+                    ImagePixelFormat::Luma,
+                );
+                let resized_alpha = self.resize_image_data(
+                    alpha.data,
+                    img_width,
+                    img_height,
+                    new_width,
+                    new_height,
+                    ImagePixelFormat::Luma,
+                );
+                additional_transform = Affine::scale_non_uniform(
+                    img_width as f64 / new_width as f64,
+                    img_height as f64 / new_height as f64,
+                );
+                img_width = new_width;
+                img_height = new_height;
+                (resized_luma, resized_alpha)
+            };
+
+            let mut out = Vec::with_capacity(img_width as usize * img_height as usize * 4);
+            for (g, a) in luma_data.iter().zip(alpha_data) {
+                out.extend_from_slice(&[*g, *g, *g, a]);
+            }
+            out
         } else if matches!(&image_data, ImageData::Rgb(_)) && !has_alpha && needs_resize {
             let ImageData::Rgb(rgb) = image_data else {
                 unreachable!()
@@ -738,14 +777,7 @@ impl<'a> Device<'a> for Renderer {
                         match paint {
                             Paint::Color(c) => {
                                 let color = c.to_rgba().to_rgba8();
-                                let (rgb_bytes, alpha) = (
-                                    stencil
-                                        .data
-                                        .iter()
-                                        .flat_map(|_| [color[0], color[1], color[2]])
-                                        .collect::<Vec<u8>>(),
-                                    color[3],
-                                );
+                                let alpha = color[3];
 
                                 let blend_mode = self.ctx.blend_mode();
                                 let push_layer =
@@ -763,14 +795,32 @@ impl<'a> Device<'a> for Renderer {
                                 let old_rule = *self.ctx.fill_rule();
                                 self.ctx.set_fill_rule(Fill::NonZero);
 
-                                let rgb_data = ImageData::Rgb(RgbData {
-                                    data: rgb_bytes,
-                                    width: stencil.width,
-                                    height: stencil.height,
-                                    interpolate: stencil.interpolate,
-                                    scale_factors: stencil.scale_factors,
-                                });
-                                self.draw_image(rgb_data, Some(stencil));
+                                if color[0] == color[1] && color[1] == color[2] {
+                                    let luma_data = ImageData::Luma(LumaData {
+                                        data: vec![
+                                            color[0];
+                                            stencil.width as usize * stencil.height as usize
+                                        ],
+                                        width: stencil.width,
+                                        height: stencil.height,
+                                        interpolate: stencil.interpolate,
+                                        scale_factors: stencil.scale_factors,
+                                    });
+                                    self.draw_image(luma_data, Some(stencil));
+                                } else {
+                                    let rgb_data = ImageData::Rgb(RgbData {
+                                        data: stencil
+                                            .data
+                                            .iter()
+                                            .flat_map(|_| [color[0], color[1], color[2]])
+                                            .collect::<Vec<u8>>(),
+                                        width: stencil.width,
+                                        height: stencil.height,
+                                        interpolate: stencil.interpolate,
+                                        scale_factors: stencil.scale_factors,
+                                    });
+                                    self.draw_image(rgb_data, Some(stencil));
+                                }
 
                                 if push_layer {
                                     self.ctx.pop_layer();
