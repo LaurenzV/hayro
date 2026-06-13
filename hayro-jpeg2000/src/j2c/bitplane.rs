@@ -199,6 +199,8 @@ pub(crate) const BITPLANE_BIT_SIZE: u32 = size_of::<u32>() as u32 * 8 - 1;
 const SIGNIFICANCE_SHIFT: u8 = 7;
 const HAS_MAGNITUDE_REFINEMENT_SHIFT: u8 = 6;
 const HAS_ZERO_CODING_SHIFT: u8 = 5;
+const CLEANUP_SKIP_MASK: u8 = (1 << SIGNIFICANCE_SHIFT) | (1 << HAS_ZERO_CODING_SHIFT);
+const REFINEMENT_PASS_MASK: u8 = (1 << SIGNIFICANCE_SHIFT) | (1 << HAS_ZERO_CODING_SHIFT);
 
 /// Bit-packed coefficient state (only 3 bits used):
 /// - Bit 7: significance state (set when first non-zero bit is encountered)
@@ -242,8 +244,15 @@ impl CoefficientState {
     }
 
     #[inline(always)]
-    fn is_zero_coded(&self) -> bool {
-        (self.0 >> HAS_ZERO_CODING_SHIFT) & 1 == 1
+    fn should_decode_cleanup(&self) -> bool {
+        // Checks that it's not significant and not zero-coded.
+        self.0 & CLEANUP_SKIP_MASK == 0
+    }
+
+    #[inline(always)]
+    fn should_decode_refinement(&self) -> bool {
+        // Checks that it's significant and not zero-coded.
+        self.0 & REFINEMENT_PASS_MASK == 1 << SIGNIFICANCE_SHIFT
     }
 }
 
@@ -539,8 +548,13 @@ impl BitPlaneDecodeContext {
     }
 
     #[inline(always)]
-    fn is_zero_coded(&self, position: Position) -> bool {
-        self.coefficient_states[position.index(self.padded_width)].is_zero_coded()
+    fn should_decode_cleanup(&self, position: Position) -> bool {
+        self.coefficient_states[position.index(self.padded_width)].should_decode_cleanup()
+    }
+
+    #[inline(always)]
+    fn should_decode_refinement(&self, position: Position) -> bool {
+        self.coefficient_states[position.index(self.padded_width)].should_decode_refinement()
     }
 
     #[inline(always)]
@@ -581,7 +595,7 @@ fn cleanup_pass(ctx: &mut BitPlaneDecodeContext, decoder: &mut impl BitDecoder) 
         ctx.height,
         #[inline(always)]
         |cur_pos| {
-            if !ctx.is_significant(*cur_pos) && !ctx.is_zero_coded(*cur_pos) {
+            if ctx.should_decode_cleanup(*cur_pos) {
                 let use_rl = cur_pos.real_y() % 4 == 0
                     && (ctx.height - cur_pos.real_y()) >= 4
                     && ctx.neighborhood_significance_states(*cur_pos) == 0
@@ -698,7 +712,7 @@ fn magnitude_refinement_pass(
         ctx.height,
         #[inline(always)]
         |cur_pos| {
-            if ctx.is_significant(*cur_pos) && !ctx.is_zero_coded(*cur_pos) {
+            if ctx.should_decode_refinement(*cur_pos) {
                 let ctx_label = context_label_magnitude_refinement_coding(*cur_pos, ctx);
                 let bit = decoder.read_bit(ctx.arithmetic_decoder_context(ctx_label))?;
                 if bit == 1 {
