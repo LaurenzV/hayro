@@ -77,7 +77,9 @@ pub(crate) fn decode(
             fn next_line(&mut self) {}
         }
 
-        let mut decoder = Luma8Decoder { output: Vec::new() };
+        let mut decoder = Luma8Decoder {
+            output: Vec::with_capacity(image.width() as usize * image.height() as usize),
+        };
         image.decode(&mut decoder).ok()?;
 
         (decoder.output, 8)
