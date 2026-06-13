@@ -38,6 +38,60 @@ enum ImagePixelFormat {
     Rgba,
 }
 
+struct SolidColorImage {
+    color: [u8; 3],
+    width: u32,
+    height: u32,
+    interpolate: bool,
+}
+
+enum RenderImageData {
+    Rgb(RgbData),
+    Luma(LumaData),
+    Solid(SolidColorImage),
+}
+
+impl From<ImageData> for RenderImageData {
+    fn from(value: ImageData) -> Self {
+        match value {
+            ImageData::Rgb(rgb) => Self::Rgb(rgb),
+            ImageData::Luma(luma) => Self::Luma(luma),
+        }
+    }
+}
+
+impl From<RgbData> for RenderImageData {
+    fn from(value: RgbData) -> Self {
+        Self::Rgb(value)
+    }
+}
+
+impl RenderImageData {
+    fn width(&self) -> u32 {
+        match self {
+            Self::Rgb(d) => d.width,
+            Self::Luma(d) => d.width,
+            Self::Solid(d) => d.width,
+        }
+    }
+
+    fn height(&self) -> u32 {
+        match self {
+            Self::Rgb(d) => d.height,
+            Self::Luma(d) => d.height,
+            Self::Solid(d) => d.height,
+        }
+    }
+
+    fn interpolate(&self) -> bool {
+        match self {
+            Self::Rgb(d) => d.interpolate,
+            Self::Luma(d) => d.interpolate,
+            Self::Solid(d) => d.interpolate,
+        }
+    }
+}
+
 impl Renderer {
     pub(crate) fn new(
         width: u16,
@@ -85,7 +139,7 @@ impl Renderer {
         self.ctx.set_stroke(stroke);
     }
 
-    fn draw_image_with_alpha_mask(&mut self, image_data: ImageData, alpha_data: LumaData) {
+    fn draw_image_with_alpha_mask(&mut self, image_data: RenderImageData, alpha_data: LumaData) {
         let mask = {
             let transform = *self.ctx.transform()
                 * Affine::scale_non_uniform(
@@ -198,7 +252,8 @@ impl Renderer {
         out
     }
 
-    fn draw_image(&mut self, image_data: ImageData, alpha_data: Option<LumaData>) {
+    fn draw_image(&mut self, image_data: impl Into<RenderImageData>, alpha_data: Option<LumaData>) {
+        let image_data = image_data.into();
         let cur_transform = *self.ctx.transform();
         let mut additional_transform = Affine::IDENTITY;
 
@@ -244,9 +299,40 @@ impl Renderer {
 
         // For luma images without alpha, we can resize as single-channel and
         // expand to RGBA afterwards, which is ~4x faster.
-        let mut rgba_data = if matches!(&image_data, ImageData::Luma(_)) && !has_alpha {
+        let mut rgba_data = if matches!(&image_data, RenderImageData::Solid(_)) && has_alpha {
+            let RenderImageData::Solid(solid) = image_data else {
+                unreachable!()
+            };
+            let alpha = alpha_data.unwrap();
+
+            let alpha_data = if !needs_resize {
+                alpha.data
+            } else {
+                let resized_alpha = self.resize_image_data(
+                    alpha.data,
+                    img_width,
+                    img_height,
+                    new_width,
+                    new_height,
+                    ImagePixelFormat::Luma,
+                );
+                additional_transform = Affine::scale_non_uniform(
+                    img_width as f64 / new_width as f64,
+                    img_height as f64 / new_height as f64,
+                );
+                img_width = new_width;
+                img_height = new_height;
+                resized_alpha
+            };
+
+            let mut out = Vec::with_capacity(img_width as usize * img_height as usize * 4);
+            for a in alpha_data {
+                out.extend_from_slice(&[solid.color[0], solid.color[1], solid.color[2], a]);
+            }
+            out
+        } else if matches!(&image_data, RenderImageData::Luma(_)) && !has_alpha {
             // We cannot lift this up due to borrowing issues.
-            let ImageData::Luma(luma) = image_data else {
+            let RenderImageData::Luma(luma) = image_data else {
                 unreachable!()
             };
 
@@ -274,8 +360,8 @@ impl Renderer {
                 .iter()
                 .flat_map(|g| [*g, *g, *g, 255])
                 .collect::<Vec<_>>()
-        } else if matches!(&image_data, ImageData::Luma(_)) && has_alpha {
-            let ImageData::Luma(luma) = image_data else {
+        } else if matches!(&image_data, RenderImageData::Luma(_)) && has_alpha {
+            let RenderImageData::Luma(luma) = image_data else {
                 unreachable!()
             };
             let alpha = alpha_data.unwrap();
@@ -313,8 +399,8 @@ impl Renderer {
                 out.extend_from_slice(&[*g, *g, *g, a]);
             }
             out
-        } else if matches!(&image_data, ImageData::Rgb(_)) && !has_alpha && needs_resize {
-            let ImageData::Rgb(rgb) = image_data else {
+        } else if matches!(&image_data, RenderImageData::Rgb(_)) && !has_alpha && needs_resize {
+            let RenderImageData::Rgb(rgb) = image_data else {
                 unreachable!()
             };
 
@@ -340,13 +426,21 @@ impl Renderer {
             out
         } else {
             let (rgb_data, alpha_data) = match image_data {
-                ImageData::Rgb(rgb) => (rgb.data, alpha_data.map(|a| a.data)),
-                ImageData::Luma(luma) => {
+                RenderImageData::Rgb(rgb) => (rgb.data, alpha_data.map(|a| a.data)),
+                RenderImageData::Luma(luma) => {
                     let rgb = luma
                         .data
                         .iter()
                         .flat_map(|g| [*g, *g, *g])
                         .collect::<Vec<_>>();
+                    (rgb, alpha_data.map(|a| a.data))
+                }
+                RenderImageData::Solid(solid) => {
+                    let mut rgb =
+                        Vec::with_capacity(solid.width as usize * solid.height as usize * 3);
+                    for _ in 0..solid.width as usize * solid.height as usize {
+                        rgb.extend_from_slice(&solid.color);
+                    }
                     (rgb, alpha_data.map(|a| a.data))
                 }
             };
@@ -795,32 +889,15 @@ impl<'a> Device<'a> for Renderer {
                                 let old_rule = *self.ctx.fill_rule();
                                 self.ctx.set_fill_rule(Fill::NonZero);
 
-                                if color[0] == color[1] && color[1] == color[2] {
-                                    let luma_data = ImageData::Luma(LumaData {
-                                        data: vec![
-                                            color[0];
-                                            stencil.width as usize * stencil.height as usize
-                                        ],
+                                self.draw_image(
+                                    RenderImageData::Solid(SolidColorImage {
+                                        color: [color[0], color[1], color[2]],
                                         width: stencil.width,
                                         height: stencil.height,
                                         interpolate: stencil.interpolate,
-                                        scale_factors: stencil.scale_factors,
-                                    });
-                                    self.draw_image(luma_data, Some(stencil));
-                                } else {
-                                    let rgb_data = ImageData::Rgb(RgbData {
-                                        data: stencil
-                                            .data
-                                            .iter()
-                                            .flat_map(|_| [color[0], color[1], color[2]])
-                                            .collect::<Vec<u8>>(),
-                                        width: stencil.width,
-                                        height: stencil.height,
-                                        interpolate: stencil.interpolate,
-                                        scale_factors: stencil.scale_factors,
-                                    });
-                                    self.draw_image(rgb_data, Some(stencil));
-                                }
+                                    }),
+                                    Some(stencil),
+                                );
 
                                 if push_layer {
                                     self.ctx.pop_layer();
