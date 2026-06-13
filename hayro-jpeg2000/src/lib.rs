@@ -440,7 +440,7 @@ trait OutputSample {
 }
 
 impl OutputSample for u8 {
-    const BIT_DEPTH: u8 = 8;
+    const BIT_DEPTH: Self = 8;
 
     fn from_native_f32(sample: f32) -> Self {
         math::round_f32(sample) as Self
