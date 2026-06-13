@@ -453,7 +453,7 @@ macro_rules! decode_default_template_fast_loop {
                 };
 
                 let mut byte = 0;
-                
+
                 for bit in (0..BYTE_BITS).rev() {
                     let pixel = $decoder.read_bit(&mut $contexts[context as usize]);
                     byte |= (pixel as u8) << bit;
@@ -463,7 +463,7 @@ macro_rules! decode_default_template_fast_loop {
                         | ((val_prev1 >> (bit + ($params).prev1_shift))
                             & ($params).prev1_next_mask);
                 }
-                
+
                 $bitmap.set_row_byte(y, byte_idx, byte);
             }
 
