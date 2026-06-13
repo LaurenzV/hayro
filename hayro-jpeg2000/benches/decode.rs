@@ -13,6 +13,17 @@ const INPUT_MANIFESTS: &[(&str, &str)] = &[
     ("serenity", "manifest_serenity.json"),
 ];
 
+const BENCHMARK_ASSETS: &[&str] = &[
+    "openjpeg/Bretagne2_0.j2k",
+    "openjpeg/Cevennes1.j2k",
+    "openjpeg/Rome.jp2",
+    "openjpeg/X_4_2K_24_185_CBR_WB_000.j2k",
+    "openjpeg/X_5_2K_24_235_CBR_STEM24_000.j2k",
+    "openjpeg/file7.jp2",
+    "openjpeg/issue135.j2k",
+    "openjpeg/zoo1.jp2",
+];
+
 #[derive(Deserialize)]
 #[serde(untagged)]
 enum ManifestItem {
@@ -80,6 +91,7 @@ fn default_render() -> bool {
 
 fn collect_assets() -> Vec<BenchAsset> {
     let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let benchmark_assets = BENCHMARK_ASSETS.iter().copied().collect::<HashSet<_>>();
     let mut assets = Vec::new();
 
     for (namespace, manifest_name) in INPUT_MANIFESTS {
@@ -91,6 +103,10 @@ fn collect_assets() -> Vec<BenchAsset> {
 
         for entry in entries {
             if let Some(mut asset) = entry.into_asset(namespace) {
+                if !benchmark_assets.contains(asset.name.as_str()) {
+                    continue;
+                }
+
                 asset.path = crate_dir.join("test-inputs").join(asset.path);
 
                 if asset.path.exists() {
