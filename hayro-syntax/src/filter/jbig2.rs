@@ -6,7 +6,6 @@ use crate::object::stream::{FilterResult, ImageColorSpace, ImageData, ImageDecod
 use alloc::borrow::Cow;
 use alloc::vec;
 use alloc::vec::Vec;
-use core::iter;
 
 /// Decode JBIG2 data from a PDF stream.
 ///
@@ -61,24 +60,34 @@ pub(crate) fn decode(
     } else {
         struct Luma8Decoder {
             output: Vec<u8>,
+            pos: usize,
         }
 
         impl hayro_jbig2::Decoder for Luma8Decoder {
             fn push_pixel(&mut self, black: bool) {
-                self.output.push(if black { 0x00 } else { 0xFF });
+                if black {
+                    self.output[self.pos] = 0x00;
+                }
+
+                self.pos += 1;
             }
 
             fn push_pixel_chunk(&mut self, black: bool, chunk_count: u32) {
-                let byte = if black { 0x00 } else { 0xFF };
-                self.output
-                    .extend(iter::repeat_n(byte, chunk_count as usize * 8));
+                let count = chunk_count as usize * 8;
+
+                if black {
+                    self.output[self.pos..self.pos + count].fill(0x00);
+                }
+
+                self.pos += count;
             }
 
             fn next_line(&mut self) {}
         }
 
         let mut decoder = Luma8Decoder {
-            output: Vec::with_capacity(image.width() as usize * image.height() as usize),
+            output: vec![0xFF; image.width() as usize * image.height() as usize],
+            pos: 0,
         };
         image.decode(&mut decoder).ok()?;
 
