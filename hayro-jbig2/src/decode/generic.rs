@@ -361,8 +361,11 @@ macro_rules! decode_loop {
                     let context_bits = ($gather)(ctx_gatherer, bitmap, x) as usize;
                     let pixel = decoder.read_bit(&mut contexts[context_bits]);
                     let value = pixel as u8;
-                    bitmap.set_pixel(x, y, value);
-                    ctx_gatherer.update_current_row(x, value);
+
+                    if value != 0 {
+                        bitmap.set_pixel(x, y, value);
+                        ctx_gatherer.update_current_row(x, value);
+                    }
                 }
             }
         }

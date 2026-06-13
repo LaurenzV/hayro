@@ -429,8 +429,12 @@ pub(crate) fn decode_bitmap(
                         gatherer.maybe_reload_buffers(region, reference, x);
                         let context = ($gather)(gatherer, region, reference, x) as usize;
                         let pixel = decoder.read_bit(&mut contexts[context]);
-                        region.set_pixel(x, y, pixel as u8);
-                        gatherer.update_current_row(x, pixel as u8);
+                        let value = pixel as u8;
+
+                        if value != 0 {
+                            region.set_pixel(x, y, value);
+                            gatherer.update_current_row(x, value);
+                        }
                     }
                 } else {
                     // "d) If LTP = 1 then, from left to right, implicitly decode certain
@@ -454,14 +458,21 @@ pub(crate) fn decode_bitmap(
                             // predicted value, which is the common value of the nine adjacent
                             // pixels in the 3 × 3 array." (6.3.5.6)
                             let val = gatherer.ref_center_pixel(x);
-                            region.set_pixel(x, y, val);
-                            gatherer.update_current_row(x, val);
+
+                            if val != 0 {
+                                region.set_pixel(x, y, val);
+                                gatherer.update_current_row(x, val);
+                            }
                         } else {
                             // "iii) Otherwise, explicitly decode the current pixel using the
                             // methodology of steps 3 c) i) through 3 c) iii) above." (6.3.5.6)
                             let pixel = decoder.read_bit(&mut contexts[context]);
-                            region.set_pixel(x, y, pixel as u8);
-                            gatherer.update_current_row(x, pixel as u8);
+                            let value = pixel as u8;
+
+                            if value != 0 {
+                                region.set_pixel(x, y, value);
+                                gatherer.update_current_row(x, value);
+                            }
                         }
                     }
                 }

@@ -142,7 +142,7 @@ fn decode_arithmetic(
                             if (mask[word_idx] >> bit_pos) & 1 != 0 {
                                 // Still need to update the context.
                                 let _ = ($gather)(&mut gatherer, bitplane, x);
-                                gatherer.update_current_row(x, 0);
+
                                 continue;
                             }
                         }
@@ -151,8 +151,10 @@ fn decode_arithmetic(
                         let pixel = decoder.read_bit(&mut ctx.contexts[context as usize]);
                         let value = pixel as u8;
 
-                        bitplane.set_pixel(x, y, value);
-                        gatherer.update_current_row(x, value);
+                        if value != 0 {
+                            bitplane.set_pixel(x, y, value);
+                            gatherer.update_current_row(x, value);
+                        }
                     }
                 }
 
