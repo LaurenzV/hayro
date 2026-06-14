@@ -236,14 +236,14 @@ impl<'a> SvgRenderer<'a> {
 
     fn with_group(
         &mut self,
-        mask: Option<&SoftMask<'a>>,
+        mask: Option<SoftMask<'a>>,
         blend_mode: BlendMode,
         func: impl FnOnce(&mut Self),
     ) {
         let push_group = mask.is_some() || blend_mode != BlendMode::Normal;
 
         if push_group {
-            self.push_transparency_group(1.0, mask.cloned(), blend_mode);
+            self.push_transparency_group(1.0, mask, blend_mode);
         }
 
         func(self);
@@ -255,8 +255,8 @@ impl<'a> SvgRenderer<'a> {
 }
 
 impl<'a> Device<'a> for SvgRenderer<'a> {
-    fn draw_path(&mut self, path: &BezPath, props: DrawProps<'a, '_>, draw_mode: &DrawMode) {
-        self.with_group(props.soft_mask, props.blend_mode, |r| {
+    fn draw_path(&mut self, path: &BezPath, props: DrawProps<'a>, draw_mode: &DrawMode) {
+        self.with_group(props.soft_mask.clone(), props.blend_mode, |r| {
             Self::draw_path(r, path, props, draw_mode);
         });
     }
@@ -287,16 +287,16 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
         &mut self,
         glyph: &Glyph<'a>,
         glyph_transform: Affine,
-        props: DrawProps<'a, '_>,
+        props: DrawProps<'a>,
         draw_mode: &DrawMode,
     ) {
-        self.with_group(props.soft_mask, props.blend_mode, |r| {
+        self.with_group(props.soft_mask.clone(), props.blend_mode, |r| {
             Self::draw_glyph(r, glyph, glyph_transform, props, draw_mode);
         });
     }
 
-    fn draw_image(&mut self, image: Image<'a, '_>, props: ImageDrawProps<'a, '_>) {
-        self.with_group(props.soft_mask, props.blend_mode, |r| {
+    fn draw_image(&mut self, image: Image<'a, '_>, props: ImageDrawProps<'a>) {
+        self.with_group(props.soft_mask.clone(), props.blend_mode, |r| {
             let mut transform = props.transform;
             match image {
                 Image::Stencil(s) => {

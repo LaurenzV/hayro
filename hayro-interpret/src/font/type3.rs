@@ -197,7 +197,7 @@ impl<'a, 'b, T: Device<'a>> Type3ShapeGlyphDevice<'a, 'b, T> {
 
 // Only filling, stroking of paths and stencil masks are allowed.
 impl<'a, T: Device<'a>> Device<'a> for Type3ShapeGlyphDevice<'a, '_, T> {
-    fn draw_path(&mut self, path: &BezPath, props: DrawProps<'a, '_>, draw_mode: &DrawMode) {
+    fn draw_path(&mut self, path: &BezPath, props: DrawProps<'a>, draw_mode: &DrawMode) {
         let props = DrawProps {
             paint: self.paint.clone(),
             ..props
@@ -215,7 +215,7 @@ impl<'a, T: Device<'a>> Device<'a> for Type3ShapeGlyphDevice<'a, '_, T> {
         &mut self,
         g: &Glyph<'a>,
         glyph_transform: Affine,
-        props: DrawProps<'a, '_>,
+        props: DrawProps<'a>,
         draw_mode: &DrawMode,
     ) {
         self.inner.draw_glyph(g, glyph_transform, props, draw_mode);
@@ -227,7 +227,7 @@ impl<'a, T: Device<'a>> Device<'a> for Type3ShapeGlyphDevice<'a, '_, T> {
 
     fn pop_transparency_group(&mut self) {}
 
-    fn draw_image(&mut self, image: Image<'a, '_>, props: ImageDrawProps<'a, '_>) {
+    fn draw_image(&mut self, image: Image<'a, '_>, props: ImageDrawProps<'a>) {
         if let Image::Stencil(mut s) = image {
             s.paint = self.paint.clone();
             self.inner.draw_image(Image::Stencil(s), props);

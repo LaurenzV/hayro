@@ -214,11 +214,11 @@ impl<'a> Context<'a> {
         }
     }
 
-    pub(crate) fn draw_props(&self, is_stroke: bool) -> DrawProps<'a, '_> {
+    pub(crate) fn draw_props(&self, is_stroke: bool) -> DrawProps<'a> {
         DrawProps {
             transform: self.get().ctm,
             paint: self.get_paint(is_stroke),
-            soft_mask: self.get().graphics_state.soft_mask.as_ref(),
+            soft_mask: self.get().graphics_state.soft_mask.clone(),
             blend_mode: self.get().graphics_state.blend_mode,
         }
     }

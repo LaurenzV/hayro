@@ -23,7 +23,7 @@ impl<'a> SvgRenderer<'a> {
         &mut self,
         glyph: &Glyph<'a>,
         glyph_transform: Affine,
-        props: DrawProps<'a, '_>,
+        props: DrawProps<'a>,
         mode: &DrawMode,
     ) {
         if matches!(mode, DrawMode::Invisible) {

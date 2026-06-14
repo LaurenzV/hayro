@@ -4,8 +4,8 @@ use hayro_interpret::font::Glyph;
 use hayro_interpret::gradient::SvgGradientKind;
 use hayro_interpret::pattern::Pattern;
 use hayro_interpret::{
-    BlendMode, CacheKey, ClipPath, Device, FillRule, GlyphDrawMode, ImageData, LumaData, MaskType,
-    Paint, PathDrawMode, RgbData, SoftMask, StrokeProps,
+    BlendMode, CacheKey, ClipPath, Device, DrawMode, DrawProps, FillRule, ImageData,
+    ImageDrawProps, LumaData, MaskType, Paint, RgbData, SoftMask, StrokeProps,
 };
 use kurbo::{Affine, BezPath, Point, Rect, Shape, Vec2};
 use pic_scale::{
@@ -26,7 +26,6 @@ pub(crate) struct Renderer {
     pub(crate) inside_pattern: bool,
     pub(crate) soft_mask_cache: FxHashMap<u128, Mask>,
     pub(crate) outline_cache: Rc<std::cell::RefCell<FxHashMap<u128, Rc<BezPath>>>>,
-    pub(crate) cur_mask: Option<Mask>,
     pub(crate) in_type3_glyph: bool,
     pub(crate) scaler: Scaler,
 }
@@ -104,7 +103,6 @@ impl Renderer {
             inside_pattern: false,
             soft_mask_cache: FxHashMap::default(),
             outline_cache: cache.outline_cache.clone(),
-            cur_mask: None,
             in_type3_glyph: false,
             scaler: Scaler::new(ResamplingFunction::CatmullRom),
         }
@@ -155,7 +153,6 @@ impl Renderer {
                 inside_pattern: false,
                 soft_mask_cache: FxHashMap::default(),
                 outline_cache: self.outline_cache.clone(),
-                cur_mask: None,
                 in_type3_glyph: false,
                 scaler: self.scaler,
             };
@@ -554,6 +551,39 @@ impl Renderer {
             .fill_rect(&Rect::new(0.0, 0.0, width as f64, height as f64));
     }
 
+    fn apply_soft_mask(&mut self, mask: Option<&SoftMask<'_>>) {
+        let settings = *self.ctx.render_settings();
+        let mask = mask.map(|m| {
+            let width = self.ctx.width();
+            let height = self.ctx.height();
+
+            self.soft_mask_cache
+                .entry(m.cache_key())
+                .or_insert_with(|| draw_soft_mask(m, settings, width, height))
+                .clone()
+        });
+
+        if let Some(mask) = mask {
+            self.ctx.set_mask(mask);
+        } else {
+            self.ctx.reset_mask();
+        }
+    }
+
+    fn apply_draw_props(&mut self, props: &DrawProps<'_>) {
+        self.ctx.set_transform(props.transform);
+        self.apply_soft_mask(props.soft_mask.as_ref());
+        self.ctx
+            .set_blend_mode(convert_blend_mode(props.blend_mode));
+    }
+
+    fn apply_image_props(&mut self, props: &ImageDrawProps<'_>) {
+        self.ctx.set_transform(props.transform);
+        self.apply_soft_mask(props.soft_mask.as_ref());
+        self.ctx
+            .set_blend_mode(convert_blend_mode(props.blend_mode));
+    }
+
     #[must_use]
     fn set_paint(&mut self, paint: &Paint<'_>, path: &BezPath, is_stroke: bool) -> Option<BezPath> {
         let mut paint_transform = Affine::IDENTITY;
@@ -686,7 +716,6 @@ impl Renderer {
                                 pix_height,
                                 derive_settings(self.ctx.render_settings()),
                             ),
-                            cur_mask: None,
                             inside_pattern: true,
                             soft_mask_cache: FxHashMap::default(),
                             outline_cache: self.outline_cache.clone(),
@@ -740,15 +769,14 @@ impl Renderer {
     fn stroke_path(
         &mut self,
         path: &BezPath,
-        transform: Affine,
-        paint: &Paint<'_>,
+        props: DrawProps<'_>,
         stroke_props: &StrokeProps,
         is_text: bool,
     ) {
-        self.ctx.set_transform(transform);
+        self.apply_draw_props(&props);
         self.set_stroke_properties(stroke_props, is_text);
 
-        let clip_path = self.set_paint(paint, path, true);
+        let clip_path = self.set_paint(&props.paint, path, true);
         if let Some(clip_path) = clip_path.as_ref() {
             self.push_clip_path_inner(clip_path, FillRule::NonZero);
         }
@@ -758,17 +786,11 @@ impl Renderer {
         }
     }
 
-    fn fill_path(
-        &mut self,
-        path: &BezPath,
-        transform: Affine,
-        paint: &Paint<'_>,
-        fill_rule: FillRule,
-    ) {
+    fn fill_path(&mut self, path: &BezPath, props: DrawProps<'_>, fill_rule: FillRule) {
         self.ctx.set_fill_rule(convert_fill_rule(fill_rule));
-        self.ctx.set_transform(transform);
+        self.apply_draw_props(&props);
 
-        let clip_path = self.set_paint(paint, path, false);
+        let clip_path = self.set_paint(&props.paint, path, false);
         if let Some(clip_path) = clip_path.as_ref() {
             self.push_clip_path_inner(clip_path, fill_rule);
         }
@@ -780,27 +802,20 @@ impl Renderer {
         }
     }
 
-    fn fill_glyph<'a>(
-        &mut self,
-        glyph: &Glyph<'a>,
-        transform: Affine,
-        glyph_transform: Affine,
-        paint: &Paint<'a>,
-    ) {
+    fn fill_glyph<'a>(&mut self, glyph: &Glyph<'a>, props: DrawProps<'a>, glyph_transform: Affine) {
         match glyph {
             Glyph::Outline(o) => {
                 let base_outline = self.cached_outline(o);
+                let props = DrawProps {
+                    transform: props.transform * glyph_transform,
+                    ..props
+                };
 
-                self.fill_path(
-                    base_outline.as_ref(),
-                    transform * glyph_transform,
-                    paint,
-                    FillRule::NonZero,
-                );
+                self.fill_path(base_outline.as_ref(), props, FillRule::NonZero);
             }
             Glyph::Type3(s) => {
                 self.in_type3_glyph = true;
-                s.interpret(self, transform, glyph_transform, paint);
+                s.interpret(self, props.transform, glyph_transform, &props.paint);
                 self.in_type3_glyph = false;
             }
         }
@@ -809,9 +824,8 @@ impl Renderer {
     fn stroke_glyph<'a>(
         &mut self,
         glyph: &Glyph<'a>,
-        transform: Affine,
+        props: DrawProps<'a>,
         glyph_transform: Affine,
-        paint: &Paint<'a>,
         stroke_props: &StrokeProps,
     ) {
         match glyph {
@@ -820,14 +834,13 @@ impl Renderer {
 
                 self.stroke_path(
                     &(glyph_transform * base_outline.as_ref().clone()),
-                    transform,
-                    paint,
+                    props,
                     stroke_props,
                     true,
                 );
             }
             Glyph::Type3(s) => {
-                s.interpret(self, transform, glyph_transform, paint);
+                s.interpret(self, props.transform, glyph_transform, &props.paint);
             }
         }
     }
@@ -846,7 +859,9 @@ impl Renderer {
 }
 
 impl<'a> Device<'a> for Renderer {
-    fn draw_image(&mut self, image: hayro_interpret::Image<'a, '_>, mut transform: Affine) {
+    fn draw_image(&mut self, image: hayro_interpret::Image<'a, '_>, props: ImageDrawProps<'a>) {
+        self.apply_image_props(&props);
+        let mut transform = props.transform;
         self.ctx.set_paint_transform(Affine::IDENTITY);
         self.ctx.set_aliasing_threshold(Some(1));
 
@@ -935,7 +950,6 @@ impl<'a> Device<'a> for Renderer {
                                         inside_pattern: false,
                                         soft_mask_cache: FxHashMap::default(),
                                         outline_cache: self.outline_cache.clone(),
-                                        cur_mask: None,
                                         in_type3_glyph: false,
                                         scaler: self.scaler,
                                     };
@@ -960,7 +974,7 @@ impl<'a> Device<'a> for Renderer {
                                 self.ctx.set_transform(transform);
 
                                 let clip_path =
-                                    self.set_paint(paint, &stencil_rect.to_path(0.1), true);
+                                    self.set_paint(paint, &stencil_rect.to_path(0.1), false);
                                 if let Some(clip_path) = clip_path.as_ref() {
                                     self.push_clip_path_inner(clip_path, FillRule::NonZero);
                                 }
@@ -1033,55 +1047,30 @@ impl<'a> Device<'a> for Renderer {
         self.ctx.pop_layer();
     }
 
-    fn set_soft_mask(&mut self, mask: Option<SoftMask<'_>>) {
-        let settings = *self.ctx.render_settings();
-        self.cur_mask = mask.map(|m| {
-            let width = self.ctx.width();
-            let height = self.ctx.height();
-
-            self.soft_mask_cache
-                .entry(m.cache_key())
-                .or_insert_with(|| draw_soft_mask(&m, settings, width, height))
-                .clone()
-        });
-        if let Some(mask) = self.cur_mask.clone() {
-            self.ctx.set_mask(mask);
-        } else {
-            self.ctx.reset_mask();
-        }
-    }
-
-    fn draw_path(
-        &mut self,
-        path: &BezPath,
-        transform: Affine,
-        paint: &Paint<'_>,
-        draw_mode: &PathDrawMode,
-    ) {
+    fn draw_path(&mut self, path: &BezPath, props: DrawProps<'a>, draw_mode: &DrawMode) {
         match draw_mode {
-            PathDrawMode::Fill(f) => {
-                Self::fill_path(self, path, transform, paint, *f);
+            DrawMode::Fill(f) => {
+                Self::fill_path(self, path, props, *f);
             }
-            PathDrawMode::Stroke(s) => {
-                Self::stroke_path(self, path, transform, paint, s, false);
+            DrawMode::Stroke(s) => {
+                Self::stroke_path(self, path, props, s, false);
             }
+            DrawMode::FillAndStroke(f, s) => {
+                Self::fill_path(self, path, props.clone(), *f);
+                Self::stroke_path(self, path, props, s, false);
+            }
+            DrawMode::Invisible => {}
         }
     }
 
-    fn draw_rect(
-        &mut self,
-        rect: &Rect,
-        transform: Affine,
-        paint: &Paint<'_>,
-        draw_mode: &PathDrawMode,
-    ) {
+    fn draw_rect(&mut self, rect: &Rect, props: DrawProps<'a>, draw_mode: &DrawMode) {
         let path = rect.to_path(0.1);
         match draw_mode {
-            PathDrawMode::Fill(fill_rule) => {
+            DrawMode::Fill(fill_rule) => {
                 self.ctx.set_fill_rule(convert_fill_rule(*fill_rule));
-                self.ctx.set_transform(transform);
+                self.apply_draw_props(&props);
 
-                let clip_path = self.set_paint(paint, &path, false);
+                let clip_path = self.set_paint(&props.paint, &path, false);
                 if let Some(clip_path) = clip_path.as_ref() {
                     self.push_clip_path_inner(clip_path, *fill_rule);
                 }
@@ -1092,35 +1081,37 @@ impl<'a> Device<'a> for Renderer {
                     self.ctx.pop_clip_path();
                 }
             }
-            PathDrawMode::Stroke(s) => {
-                Self::stroke_path(self, &path, transform, paint, s, false);
+            DrawMode::Stroke(s) => {
+                Self::stroke_path(self, &path, props, s, false);
             }
+            DrawMode::FillAndStroke(fill_rule, stroke_props) => {
+                self.draw_rect(rect, props.clone(), &DrawMode::Fill(*fill_rule));
+                Self::stroke_path(self, &path, props, stroke_props, false);
+            }
+            DrawMode::Invisible => {}
         }
     }
 
     fn draw_glyph(
         &mut self,
         glyph: &Glyph<'a>,
-        transform: Affine,
         glyph_transform: Affine,
-        paint: &Paint<'a>,
-        draw_mode: &GlyphDrawMode,
+        props: DrawProps<'a>,
+        draw_mode: &DrawMode,
     ) {
         match draw_mode {
-            GlyphDrawMode::Fill => {
-                Self::fill_glyph(self, glyph, transform, glyph_transform, paint);
+            DrawMode::Fill(_) => {
+                Self::fill_glyph(self, glyph, props, glyph_transform);
             }
-            GlyphDrawMode::Stroke(s) => {
-                Self::stroke_glyph(self, glyph, transform, glyph_transform, paint, s);
+            DrawMode::Stroke(s) => {
+                Self::stroke_glyph(self, glyph, props, glyph_transform, s);
             }
-            GlyphDrawMode::Invisible => {
-                // Don't render invisible text for visual output
+            DrawMode::FillAndStroke(_, s) => {
+                Self::fill_glyph(self, glyph, props.clone(), glyph_transform);
+                Self::stroke_glyph(self, glyph, props, glyph_transform, s);
             }
+            DrawMode::Invisible => {}
         }
-    }
-
-    fn set_blend_mode(&mut self, blend_mode: BlendMode) {
-        self.ctx.set_blend_mode(convert_blend_mode(blend_mode));
     }
 }
 
@@ -1170,7 +1161,6 @@ fn draw_soft_mask(mask: &SoftMask<'_>, settings: RenderSettings, width: u16, hei
     let mut renderer = Renderer {
         ctx: RenderContext::new_with(width, height, derive_settings(&settings)),
         inside_pattern: false,
-        cur_mask: None,
         soft_mask_cache: FxHashMap::default(),
         outline_cache: Rc::new(std::cell::RefCell::new(FxHashMap::default())),
         in_type3_glyph: false,

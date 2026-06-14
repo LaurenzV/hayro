@@ -5,12 +5,7 @@ use std::io;
 use std::io::Write;
 
 impl<'a> SvgRenderer<'a> {
-    pub(crate) fn draw_path(
-        &mut self,
-        path: &BezPath,
-        props: DrawProps<'a, '_>,
-        draw_mode: &DrawMode,
-    ) {
+    pub(crate) fn draw_path(&mut self, path: &BezPath, props: DrawProps<'a>, draw_mode: &DrawMode) {
         let svg_path = path.to_svg_f32();
 
         self.xml.start_element("path");

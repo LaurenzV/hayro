@@ -72,7 +72,7 @@ struct TextExtractor {
 
 /// Implement `Device` for `TextExtractor`. We extract Unicode text from glyphs.
 impl Device<'_> for TextExtractor {
-    fn draw_path(&mut self, _: &BezPath, _: DrawProps<'_, '_>, _: &DrawMode) {}
+    fn draw_path(&mut self, _: &BezPath, _: DrawProps<'_>, _: &DrawMode) {}
 
     fn push_clip_path(&mut self, _: &ClipPath) {}
 
@@ -82,7 +82,7 @@ impl Device<'_> for TextExtractor {
         &mut self,
         glyph: &Glyph<'_>,
         glyph_transform: Affine,
-        props: DrawProps<'_, '_>,
+        props: DrawProps<'_>,
         _: &DrawMode,
     ) {
         if let Some(unicode_char) = glyph.as_unicode() {
@@ -113,5 +113,5 @@ impl Device<'_> for TextExtractor {
 
     fn pop_transparency_group(&mut self) {}
 
-    fn draw_image(&mut self, _: Image<'_, '_>, _: ImageDrawProps<'_, '_>) {}
+    fn draw_image(&mut self, _: Image<'_, '_>, _: ImageDrawProps<'_>) {}
 }

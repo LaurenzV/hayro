@@ -1,10 +1,11 @@
 use crate::CacheKey;
 use crate::color::Color;
 use crate::pattern::Pattern;
+use crate::soft_mask::SoftMask;
 use crate::util::hash128;
 use crate::x_object::ImageXObject;
 use hayro_syntax::object::Stream;
-use kurbo::{BezPath, Cap, Join};
+use kurbo::{Affine, BezPath, Cap, Join};
 use smallvec::{SmallVec, smallvec};
 
 /// A clip path.
@@ -268,22 +269,39 @@ impl CacheKey for Paint<'_> {
     }
 }
 
-/// The draw mode that should be used for a path.
+/// Properties for a painted drawing operation.
+#[derive(Clone)]
+pub struct DrawProps<'a> {
+    /// The transform.
+    pub transform: Affine,
+    /// The paint.
+    pub paint: Paint<'a>,
+    /// The soft mask.
+    pub soft_mask: Option<SoftMask<'a>>,
+    /// The blend mode.
+    pub blend_mode: BlendMode,
+}
+
+/// Properties for an image drawing operation.
+#[derive(Clone)]
+pub struct ImageDrawProps<'a> {
+    /// The transform.
+    pub transform: Affine,
+    /// The soft mask.
+    pub soft_mask: Option<SoftMask<'a>>,
+    /// The blend mode.
+    pub blend_mode: BlendMode,
+}
+
+/// The draw mode.
 #[derive(Clone, Debug)]
-pub enum PathDrawMode {
+pub enum DrawMode {
     /// Draw using a fill.
     Fill(FillRule),
     /// Draw using a stroke.
     Stroke(StrokeProps),
-}
-
-/// The draw mode that should be used for a glyph.
-#[derive(Clone, Debug)]
-pub enum GlyphDrawMode {
-    /// Draw using a fill.
-    Fill,
-    /// Draw using a stroke.
-    Stroke(StrokeProps),
+    /// Draw using both fill and stroke.
+    FillAndStroke(FillRule, StrokeProps),
     /// Invisible text (for text extraction but not visual rendering).
     Invisible,
 }
