@@ -1,6 +1,6 @@
 use crate::util::hash128;
 use hayro_syntax::object::{Array, Dict, MaybeRef, Name, Null, ObjRef, Object, Stream};
-use kurbo::Affine;
+use kurbo::{Affine, Rect};
 use rustc_hash::FxHashMap;
 use std::any::Any;
 use std::collections::hash_map::Entry;
@@ -150,6 +150,17 @@ impl CacheKey for Affine {
             c[3].to_bits(),
             c[4].to_bits(),
             c[5].to_bits(),
+        ])
+    }
+}
+
+impl CacheKey for Rect {
+    fn cache_key(&self) -> u128 {
+        hash128(&[
+            self.x0.to_bits(),
+            self.y0.to_bits(),
+            self.x1.to_bits(),
+            self.y1.to_bits(),
         ])
     }
 }

@@ -270,10 +270,20 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
     fn push_clip_path(&mut self, clip_path: &ClipPath) {
         let clip_id = self
             .clip_paths
-            .insert_with(clip_path.cache_key(), || CachedClipPath {
+            .insert_with(clip_path.cache_key(), || CachedClipPath::Path {
                 path: clip_path.path.clone(),
                 fill_rule: clip_path.fill,
             });
+
+        self.xml.start_element("g");
+        self.xml
+            .write_attribute_fmt("clip-path", format_args!("url(#{clip_id})"));
+    }
+
+    fn push_clip_rect(&mut self, rect: &Rect) {
+        let clip_id = self
+            .clip_paths
+            .insert_with(rect.cache_key(), || CachedClipPath::Rect(*rect));
 
         self.xml.start_element("g");
         self.xml

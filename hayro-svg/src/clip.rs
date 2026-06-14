@@ -1,11 +1,11 @@
 use crate::SvgRenderer;
 use crate::path::BezPathExt;
 use hayro_interpret::FillRule;
-use kurbo::BezPath;
+use kurbo::{BezPath, Rect};
 
-pub(crate) struct CachedClipPath {
-    pub(crate) path: BezPath,
-    pub(crate) fill_rule: FillRule,
+pub(crate) enum CachedClipPath {
+    Path { path: BezPath, fill_rule: FillRule },
+    Rect(Rect),
 }
 
 impl SvgRenderer<'_> {
@@ -20,14 +20,28 @@ impl SvgRenderer<'_> {
         for (id, clip_path) in self.clip_paths.iter() {
             self.xml.start_element("clipPath");
             self.xml.write_attribute("id", &id);
-            self.xml.start_element("path");
-            self.xml.write_attribute("d", &clip_path.path.to_svg_f32());
 
-            if clip_path.fill_rule == FillRule::EvenOdd {
-                self.xml.write_attribute("clip-rule", "evenodd");
+            match clip_path {
+                CachedClipPath::Path { path, fill_rule } => {
+                    self.xml.start_element("path");
+                    self.xml.write_attribute("d", &path.to_svg_f32());
+
+                    if *fill_rule == FillRule::EvenOdd {
+                        self.xml.write_attribute("clip-rule", "evenodd");
+                    }
+
+                    self.xml.end_element();
+                }
+                CachedClipPath::Rect(rect) => {
+                    self.xml.start_element("rect");
+                    self.xml.write_attribute("x", &rect.x0);
+                    self.xml.write_attribute("y", &rect.y0);
+                    self.xml.write_attribute("width", &rect.width());
+                    self.xml.write_attribute("height", &rect.height());
+                    self.xml.end_element();
+                }
             }
 
-            self.xml.end_element();
             self.xml.end_element();
         }
 
