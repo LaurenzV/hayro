@@ -32,26 +32,41 @@ impl<'a> SvgRenderer<'a> {
 
         match glyph {
             Glyph::Outline(o) => {
-                // TODO: Figure out how to better merge transform and glyph transform
                 let outline = o.outline();
-                let cache_key = hash128(&(o.identifier().cache_key(), glyph_transform.cache_key()));
+                let glyph_id = o.identifier().cache_key();
+                let (cache_key, glyph_path, use_transform, paint_transform) = match mode {
+                    DrawMode::Fill(_) => {
+                        let transform = props.transform * glyph_transform;
+                        (glyph_id, outline.clone(), transform, transform)
+                    }
+                    // TODO: Figure out how to better merge transform and glyph transform for stroked glyphs.
+                    DrawMode::Stroke(_) | DrawMode::FillAndStroke(_, _) => (
+                        hash128(&(glyph_id, glyph_transform.cache_key())),
+                        glyph_transform * outline.clone(),
+                        props.transform,
+                        props.transform,
+                    ),
+                    DrawMode::Invisible => {
+                        // We exited above.
+                        unreachable!()
+                    }
+                };
+
                 let id = self
                     .outline_glyphs
-                    .insert_with(cache_key, || CachedOutlineGlyph {
-                        path: glyph_transform * outline.clone(),
-                    });
+                    .insert_with(cache_key, || CachedOutlineGlyph { path: glyph_path });
 
                 self.xml.start_element("use");
                 self.xml
                     .write_attribute_fmt("xlink:href", format_args!("#{id}"));
-                self.write_transform(props.transform);
+                self.write_transform(use_transform);
 
                 match mode {
                     DrawMode::Fill(_) => {
                         self.write_paint(
                             &props.paint,
                             || outline.bounding_box(),
-                            props.transform,
+                            paint_transform,
                             None,
                         );
                     }
@@ -60,7 +75,7 @@ impl<'a> SvgRenderer<'a> {
                         self.write_paint(
                             &props.paint,
                             || outline.bounding_box(),
-                            props.transform,
+                            paint_transform,
                             Some(s),
                         );
                     }
@@ -69,7 +84,7 @@ impl<'a> SvgRenderer<'a> {
                         self.write_fill_and_stroke_paint(
                             &props.paint,
                             || outline.bounding_box(),
-                            props.transform,
+                            paint_transform,
                             s,
                         );
                     }
