@@ -66,6 +66,11 @@ fn pdfbox_6024() {
 }
 
 #[test]
+fn pdfbox_3000_3() {
+    run_svg_test("pdfbox_3000_3", "downloads/pdfbox/3000_3.pdf", None);
+}
+
+#[test]
 fn image_interpolate() {
     run_svg_test(
         "image_interpolate",

@@ -157,6 +157,7 @@ impl<'a> SvgRenderer<'a> {
                             self.clip_paths.insert(CachedClipPath::Path {
                                 path,
                                 fill_rule: FillRule::NonZero,
+                                parent: None,
                             })
                         });
 

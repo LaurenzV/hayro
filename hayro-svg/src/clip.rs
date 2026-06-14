@@ -1,11 +1,18 @@
-use crate::SvgRenderer;
 use crate::path::BezPathExt;
+use crate::{Id, SvgRenderer};
 use hayro_interpret::FillRule;
 use kurbo::{BezPath, Rect};
 
 pub(crate) enum CachedClipPath {
-    Path { path: BezPath, fill_rule: FillRule },
-    Rect(Rect),
+    Path {
+        path: BezPath,
+        fill_rule: FillRule,
+        parent: Option<Id>,
+    },
+    Rect {
+        rect: Rect,
+        parent: Option<Id>,
+    },
 }
 
 impl SvgRenderer<'_> {
@@ -22,7 +29,16 @@ impl SvgRenderer<'_> {
             self.xml.write_attribute("id", &id);
 
             match clip_path {
-                CachedClipPath::Path { path, fill_rule } => {
+                CachedClipPath::Path {
+                    path,
+                    fill_rule,
+                    parent,
+                } => {
+                    if let Some(parent) = parent {
+                        self.xml
+                            .write_attribute_fmt("clip-path", format_args!("url(#{parent})"));
+                    }
+
                     self.xml.start_element("path");
                     self.xml.write_attribute("d", &path.to_svg_f32());
 
@@ -32,7 +48,12 @@ impl SvgRenderer<'_> {
 
                     self.xml.end_element();
                 }
-                CachedClipPath::Rect(rect) => {
+                CachedClipPath::Rect { rect, parent } => {
+                    if let Some(parent) = parent {
+                        self.xml
+                            .write_attribute_fmt("clip-path", format_args!("url(#{parent})"));
+                    }
+
                     self.xml.start_element("rect");
                     self.xml.write_attribute("x", &rect.x0);
                     self.xml.write_attribute("y", &rect.y0);

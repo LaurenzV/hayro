@@ -120,6 +120,7 @@ pub(crate) struct SvgRenderer<'a> {
     pub(crate) gradients: Deduplicator<CachedNativeGradient>,
     pub(crate) shading_patterns: Deduplicator<CachedShadingPattern>,
     pub(crate) tiling_patterns: Deduplicator<CachedTilingPattern<'a>>,
+    active_clips: Vec<Id>,
     pub(crate) dimensions: (f32, f32),
 }
 
@@ -191,6 +192,11 @@ impl<'a> SvgRenderer<'a> {
         if !opacity.is_nearly_equal(1.0) {
             self.xml.write_attribute("opacity", &opacity.to_string());
         }
+
+        if let Some(clip_id) = self.active_clips.last() {
+            self.xml
+                .write_attribute_fmt("clip-path", format_args!("url(#{clip_id})"));
+        }
     }
 
     pub(crate) fn write_stroke_properties(&mut self, stroke_props: &StrokeProps) {
@@ -240,7 +246,8 @@ impl<'a> SvgRenderer<'a> {
         blend_mode: BlendMode,
         func: impl FnOnce(&mut Self),
     ) {
-        let push_group = mask.is_some() || blend_mode != BlendMode::Normal;
+        let push_group =
+            mask.is_some() || blend_mode != BlendMode::Normal || !self.active_clips.is_empty();
 
         if push_group {
             self.push_transparency_group(1.0, mask, blend_mode);
@@ -268,26 +275,32 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
     }
 
     fn push_clip_path(&mut self, clip_path: &ClipPath) {
-        let clip_id = self
-            .clip_paths
-            .insert_with(clip_path.cache_key(), || CachedClipPath::Path {
-                path: clip_path.path.clone(),
-                fill_rule: clip_path.fill,
-            });
+        let parent = self.active_clips.last().copied();
+        let clip_id =
+            self.clip_paths
+                .insert_with(hash128(&(clip_path.cache_key(), parent)), || {
+                    CachedClipPath::Path {
+                        path: clip_path.path.clone(),
+                        fill_rule: clip_path.fill,
+                        parent,
+                    }
+                });
 
-        self.xml.start_element("g");
-        self.xml
-            .write_attribute_fmt("clip-path", format_args!("url(#{clip_id})"));
+        self.active_clips.push(clip_id);
     }
 
     fn push_clip_rect(&mut self, rect: &Rect) {
+        let parent = self.active_clips.last().copied();
         let clip_id = self
             .clip_paths
-            .insert_with(rect.cache_key(), || CachedClipPath::Rect(*rect));
+            .insert_with(hash128(&(rect.cache_key(), parent)), || {
+                CachedClipPath::Rect {
+                    rect: *rect,
+                    parent,
+                }
+            });
 
-        self.xml.start_element("g");
-        self.xml
-            .write_attribute_fmt("clip-path", format_args!("url(#{clip_id})"));
+        self.active_clips.push(clip_id);
     }
 
     fn push_transparency_group(
@@ -342,7 +355,7 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
     }
 
     fn pop_clip(&mut self) {
-        self.xml.end_element();
+        self.active_clips.pop();
     }
 
     fn pop_transparency_group(&mut self) {
@@ -363,6 +376,7 @@ impl<'a> SvgRenderer<'a> {
             gradients: Deduplicator::new('n'),
             shading_patterns: Deduplicator::new('v'),
             tiling_patterns: Deduplicator::new('t'),
+            active_clips: Vec::new(),
             dimensions: page.render_dimensions(),
         }
     }
