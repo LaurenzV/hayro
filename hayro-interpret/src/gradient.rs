@@ -7,10 +7,11 @@
 use crate::color::AlphaColor;
 use crate::encode::{EncodedRadialAxialShading, EncodedShadingPattern, RadialAxialParams};
 use crate::function::StitchingBounds;
-use kurbo::{Affine, Point, Rect};
+use kurbo::{Affine, Circle, Point, Rect, Shape};
 use smallvec::smallvec;
 
 const MAX_GRADIENT_SUBDIVISION_DEPTH: u8 = 10;
+const RADIAL_EPSILON: f64 = 1.0e-6;
 
 /// An SVG-like gradient.
 pub struct SvgGradient {
@@ -68,7 +69,8 @@ impl EncodedRadialAxialShading {
                 }
             }
             RadialAxialParams::Radial { .. } => {
-                if !self.extend.iter().all(|e| *e) || pattern.background_color.components()[3] > 0.0
+                if !self.radial_extend_covers_bbox(pattern, path_bbox)
+                    || pattern.background_color.components()[3] > 0.0
                 {
                     return None;
                 }
@@ -126,6 +128,42 @@ impl EncodedRadialAxialShading {
         (self.extend[0] || min_x >= 0.0) && (self.extend[1] || max_x <= 1.0)
     }
 
+    fn radial_extend_covers_bbox(&self, pattern: &EncodedShadingPattern, path_bbox: Rect) -> bool {
+        let RadialAxialParams::Radial { p1, r } = self.params else {
+            return false;
+        };
+
+        let path_bbox = pattern.base_transform.transform_rect_bbox(path_bbox);
+
+        if p1.x.abs() <= RADIAL_EPSILON && p1.y.abs() <= RADIAL_EPSILON {
+            return self.same_center_radial_extend_covers_bbox(path_bbox, r.x, r.y);
+        }
+
+        let start_extend_ok = self.extend[0] || r.x.abs() <= RADIAL_EPSILON;
+        let end_extend_ok = self.extend[1] || circle_covers_bbox(Circle::new(p1, r.y), path_bbox);
+
+        start_extend_ok && end_extend_ok
+    }
+
+    fn same_center_radial_extend_covers_bbox(&self, path_bbox: Rect, r0: f64, r1: f64) -> bool {
+        let mut inner_circle = Circle::new(Point::ZERO, r0);
+        let mut outer_circle = Circle::new(Point::ZERO, r1);
+        let mut inner_extend = self.extend[0];
+        let mut outer_extend = self.extend[1];
+
+        if inner_circle.radius > outer_circle.radius {
+            std::mem::swap(&mut inner_circle, &mut outer_circle);
+            std::mem::swap(&mut inner_extend, &mut outer_extend);
+        }
+
+        let inner_extend_ok = inner_extend
+            || inner_circle.radius <= RADIAL_EPSILON
+            || circle_outside_bbox(inner_circle, path_bbox);
+        let outer_extend_ok = outer_extend || circle_covers_bbox(outer_circle, path_bbox);
+
+        inner_extend_ok && outer_extend_ok
+    }
+
     fn normalized_stitching_bounds(&self) -> StitchingBounds {
         let [t0, t1] = self.domain;
         let dt = t1 - t0;
@@ -147,6 +185,38 @@ impl EncodedRadialAxialShading {
 
         bounds
     }
+}
+
+fn circle_covers_bbox(circle: Circle, bbox: Rect) -> bool {
+    if circle.radius < 0.0 {
+        return false;
+    }
+
+    let radius_squared = circle.radius * circle.radius;
+    [
+        Point::new(bbox.x0, bbox.y0),
+        Point::new(bbox.x1, bbox.y0),
+        Point::new(bbox.x0, bbox.y1),
+        Point::new(bbox.x1, bbox.y1),
+    ]
+    .into_iter()
+    .all(|point| {
+        let delta = point - circle.center;
+        delta.hypot2() <= radius_squared
+    })
+}
+
+fn circle_outside_bbox(circle: Circle, bbox: Rect) -> bool {
+    if circle.radius <= 0.0 {
+        return true;
+    }
+
+    let closest = Point::new(
+        circle.center.x.clamp(bbox.x0, bbox.x1),
+        circle.center.y.clamp(bbox.y0, bbox.y1),
+    );
+
+    !circle.contains(closest)
 }
 
 fn approximate_gradient_stops(
