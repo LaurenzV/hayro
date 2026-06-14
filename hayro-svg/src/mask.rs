@@ -1,7 +1,7 @@
 use crate::{Id, SvgRenderer, hash128};
 use hayro_interpret::color::AlphaColor;
 use hayro_interpret::{
-    BlendMode, CacheKey, DrawMode, DrawProps, FillRule, MaskType, Paint, SoftMask,
+    BlendMode, CacheKey, DrawMode, DrawProps, FillRule, MaskType, Paint, SoftMask, TransferFunction,
 };
 use image::DynamicImage;
 use kurbo::{Affine, Rect, Shape};
@@ -57,15 +57,32 @@ impl<'a> SvgRenderer<'a> {
         let masks = self.masks.clone();
 
         for (id, mask) in masks.iter() {
+            if let MaskKind::SoftMask(mask) = mask
+                && let Some(transfer_function) = mask.transfer_function()
+            {
+                self.write_transfer_function_filter(
+                    &format!("f{id}"),
+                    mask.mask_type(),
+                    transfer_function,
+                );
+            }
+
             self.xml.start_element("mask");
             self.xml.write_attribute("id", &id);
             self.xml.write_attribute("maskUnits", "userSpaceOnUse");
 
             match mask {
                 MaskKind::SoftMask(mask) => {
-                    // TODO: Support transfer functions
-                    if mask.mask_type() != MaskType::Luminosity {
+                    let filter_id = mask.transfer_function().map(|_| format!("f{id}"));
+
+                    if mask.mask_type() != MaskType::Luminosity || filter_id.is_some() {
                         self.xml.write_attribute("mask-type", "alpha");
+                    }
+
+                    if let Some(filter_id) = &filter_id {
+                        self.xml.start_element("g");
+                        self.xml
+                            .write_attribute("filter", &format!("url(#{filter_id})"));
                     }
 
                     let bg_color = mask.background_color();
@@ -98,6 +115,10 @@ impl<'a> SvgRenderer<'a> {
                     if use_bg {
                         self.xml.end_element();
                     }
+
+                    if filter_id.is_some() {
+                        self.xml.end_element();
+                    }
                 }
                 MaskKind::Image(i) => self.write_image(&i.image, i.interpolate, None, i.transform),
             }
@@ -107,4 +128,42 @@ impl<'a> SvgRenderer<'a> {
 
         self.xml.end_element();
     }
+
+    fn write_transfer_function_filter(
+        &mut self,
+        id: &str,
+        mask_type: MaskType,
+        transfer_function: &TransferFunction,
+    ) {
+        let table_values = sampled_transfer_function(transfer_function);
+
+        self.xml.start_element("filter");
+        self.xml.write_attribute("id", id);
+        self.xml.write_attribute("filterUnits", "userSpaceOnUse");
+        self.xml.write_attribute("x", "0");
+        self.xml.write_attribute("y", "0");
+        self.xml.write_attribute("width", &self.dimensions.0);
+        self.xml.write_attribute("height", &self.dimensions.1);
+
+        if mask_type == MaskType::Luminosity {
+            self.xml.start_element("feColorMatrix");
+            self.xml.write_attribute("type", "luminanceToAlpha");
+            self.xml.end_element();
+        }
+
+        self.xml.start_element("feComponentTransfer");
+        self.xml.start_element("feFuncA");
+        self.xml.write_attribute("type", "table");
+        self.xml.write_attribute("tableValues", &table_values);
+        self.xml.end_element();
+        self.xml.end_element();
+        self.xml.end_element();
+    }
+}
+
+fn sampled_transfer_function(transfer_function: &TransferFunction) -> String {
+    (0..=255)
+        .map(|i| transfer_function.apply(i as f32 / 255.0).to_string())
+        .collect::<Vec<_>>()
+        .join(" ")
 }
