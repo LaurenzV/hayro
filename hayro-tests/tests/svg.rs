@@ -144,6 +144,11 @@ fn pattern_tiling_rotated() {
 }
 
 #[test]
+fn pdfium_41480161() {
+    run_svg_test("pdfium_41480161", "downloads/pdfium/41480161.pdf", None);
+}
+
+#[test]
 fn mask_luminance() {
     run_svg_test(
         "mask_luminance",

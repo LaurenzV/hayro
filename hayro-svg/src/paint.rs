@@ -286,7 +286,11 @@ impl<'a> SvgRenderer<'a> {
 
         for (id, pattern) in patterns {
             let pattern = pattern.clone();
-            let transform = pattern.transform * pattern.tiling_pattern.matrix;
+            let bbox_origin = Affine::translate((
+                pattern.tiling_pattern.bbox.x0,
+                pattern.tiling_pattern.bbox.y0,
+            ));
+            let transform = pattern.transform * pattern.tiling_pattern.matrix * bbox_origin;
 
             self.xml.start_element("pattern");
             self.xml.write_attribute("id", &id);
