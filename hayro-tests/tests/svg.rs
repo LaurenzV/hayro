@@ -203,6 +203,11 @@ fn pdfjs_issue13372() {
 }
 
 #[test]
+fn pdfjs_issue2177() {
+    run_svg_test("pdfjs_issue2177", "downloads/pdfjs/issue2177.pdf", None);
+}
+
+#[test]
 fn pdfjs_issue8565() {
     run_svg_test("pdfjs_issue8565", "downloads/pdfjs/issue8565.pdf", None);
 }

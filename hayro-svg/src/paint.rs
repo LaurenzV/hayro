@@ -291,15 +291,10 @@ impl<'a> SvgRenderer<'a> {
             self.xml.start_element("pattern");
             self.xml.write_attribute("id", &id);
             self.xml.write_attribute("patternUnits", "userSpaceOnUse");
-            // TODO: Respect the xStep/yStep attribute.
-            self.xml.write_attribute(
-                "width",
-                &(pattern.tiling_pattern.bbox.x1 - pattern.tiling_pattern.bbox.x0),
-            );
-            self.xml.write_attribute(
-                "height",
-                &(pattern.tiling_pattern.bbox.y1 - pattern.tiling_pattern.bbox.y0),
-            );
+            self.xml
+                .write_attribute("width", &pattern.tiling_pattern.x_step.abs());
+            self.xml
+                .write_attribute("height", &pattern.tiling_pattern.y_step.abs());
             self.xml.write_attribute(
                 "patternTransform",
                 &format!("matrix({})", convert_transform(&transform)),
