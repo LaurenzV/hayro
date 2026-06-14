@@ -371,9 +371,9 @@ pub fn get_diff(expected_image: &RgbaImage, actual_image: &RgbaImage) -> (RgbaIm
                     diff_image.put_pixel(x + 2 * width, y, *actual);
                     if is_pix_diff(expected, actual) {
                         pixel_diff += 1;
-                        diff_image.put_pixel(x + width, y, Rgba([255, 0, 0, 255]));
+                        diff_image.put_pixel(x + width, y, diff_pixel(expected, actual));
                     } else {
-                        diff_image.put_pixel(x + width, y, Rgba([0, 0, 0, 255]))
+                        diff_image.put_pixel(x + width, y, diff_pixel(expected, actual))
                     }
                 }
                 (Some(actual), None) => {
@@ -396,6 +396,22 @@ pub fn get_diff(expected_image: &RgbaImage, actual_image: &RgbaImage) -> (RgbaIm
     }
 
     (diff_image, pixel_diff)
+}
+
+fn diff_pixel(pixel1: &Rgba<u8>, pixel2: &Rgba<u8>) -> Rgba<u8> {
+    if pixel1.0[3] == 0 && pixel2.0[3] == 0 {
+        return Rgba([0, 0, 0, 255]);
+    }
+
+    let max_channel_deviation = pixel1
+        .0
+        .iter()
+        .zip(pixel2.0.iter())
+        .map(|(a, b)| a.abs_diff(*b))
+        .max()
+        .unwrap_or(0);
+
+    Rgba([max_channel_deviation, 0, 0, 255])
 }
 
 fn is_pix_diff(pixel1: &Rgba<u8>, pixel2: &Rgba<u8>) -> bool {
