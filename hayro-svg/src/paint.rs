@@ -6,7 +6,7 @@ use hayro_interpret::gradient::{SvgGradient, SvgGradientKind};
 use hayro_interpret::pattern::{Pattern, ShadingPattern, TilingPattern};
 use hayro_interpret::{CacheKey, FillRule, Paint, StrokeProps};
 use image::{DynamicImage, ImageBuffer};
-use kurbo::{Affine, BezPath, Point, Rect, Shape, Vec2};
+use kurbo::{Affine, Point, Rect, Shape, Vec2};
 
 #[derive(Clone)]
 pub(crate) struct CachedTilingPattern<'a> {
@@ -39,11 +39,11 @@ impl<'a> SvgRenderer<'a> {
     pub(crate) fn write_paint(
         &mut self,
         paint: &Paint<'a>,
-        path: &BezPath,
+        path_bbox: impl Fn() -> Rect,
         path_transform: Affine,
         stroke_props: Option<&StrokeProps>,
     ) {
-        let (paint_str, alpha) = self.svg_paint(paint, path, path_transform, stroke_props);
+        let (paint_str, alpha) = self.svg_paint(paint, &path_bbox, path_transform, stroke_props);
 
         if stroke_props.is_some() {
             self.xml.write_attribute("fill", "none");
@@ -63,13 +63,13 @@ impl<'a> SvgRenderer<'a> {
     pub(crate) fn write_fill_and_stroke_paint(
         &mut self,
         paint: &Paint<'a>,
-        path: &BezPath,
+        path_bbox: impl Fn() -> Rect,
         path_transform: Affine,
         stroke_props: &StrokeProps,
     ) {
-        let (fill_str, fill_alpha) = self.svg_paint(paint, path, path_transform, None);
+        let (fill_str, fill_alpha) = self.svg_paint(paint, &path_bbox, path_transform, None);
         let (stroke_str, stroke_alpha) =
-            self.svg_paint(paint, path, path_transform, Some(stroke_props));
+            self.svg_paint(paint, &path_bbox, path_transform, Some(stroke_props));
 
         self.xml.write_attribute("fill", &fill_str);
         self.xml.write_attribute("stroke", &stroke_str);
@@ -86,7 +86,7 @@ impl<'a> SvgRenderer<'a> {
     fn svg_paint(
         &mut self,
         paint: &Paint<'a>,
-        path: &BezPath,
+        path_bbox: &impl Fn() -> Rect,
         path_transform: Affine,
         stroke_props: Option<&StrokeProps>,
     ) -> (String, f32) {
@@ -109,7 +109,7 @@ impl<'a> SvgRenderer<'a> {
                     Pattern::Shading(s) => {
                         const NATIVE_GRADIENT_TOLERANCE: f32 = 0.01;
 
-                        let mut basic_bbox = path.bounding_box();
+                        let mut basic_bbox = path_bbox();
 
                         if let Some(stroke_width) = stroke_props.map(|s| s.line_width) {
                             basic_bbox =

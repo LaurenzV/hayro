@@ -3,7 +3,7 @@ use crate::hash128;
 use crate::path::BezPathExt;
 use hayro_interpret::font::{Glyph, Type3Glyph};
 use hayro_interpret::{CacheKey, DrawMode, DrawProps, Paint};
-use kurbo::{Affine, BezPath};
+use kurbo::{Affine, BezPath, Shape};
 
 pub(crate) struct CachedOutlineGlyph {
     path: BezPath,
@@ -48,17 +48,27 @@ impl<'a> SvgRenderer<'a> {
 
                 match mode {
                     DrawMode::Fill(_) => {
-                        self.write_paint(&props.paint, &outline, props.transform, None);
+                        self.write_paint(
+                            &props.paint,
+                            || outline.bounding_box(),
+                            props.transform,
+                            None,
+                        );
                     }
                     DrawMode::Stroke(s) => {
                         self.write_stroke_properties(s);
-                        self.write_paint(&props.paint, &outline, props.transform, Some(s));
+                        self.write_paint(
+                            &props.paint,
+                            || outline.bounding_box(),
+                            props.transform,
+                            Some(s),
+                        );
                     }
                     DrawMode::FillAndStroke(_, s) => {
                         self.write_stroke_properties(s);
                         self.write_fill_and_stroke_paint(
                             &props.paint,
-                            &outline,
+                            || outline.bounding_box(),
                             props.transform,
                             s,
                         );

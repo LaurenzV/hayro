@@ -16,18 +16,28 @@ impl<'a> SvgRenderer<'a> {
                 if *f == FillRule::EvenOdd {
                     self.xml.write_attribute("fill-rule", "evenodd");
                 }
-                self.write_paint(&props.paint, path, props.transform, None);
+                self.write_paint(&props.paint, || path.bounding_box(), props.transform, None);
             }
             DrawMode::Stroke(s) => {
                 self.write_stroke_properties(s);
-                self.write_paint(&props.paint, path, props.transform, Some(s));
+                self.write_paint(
+                    &props.paint,
+                    || path.bounding_box(),
+                    props.transform,
+                    Some(s),
+                );
             }
             DrawMode::FillAndStroke(f, s) => {
                 if *f == FillRule::EvenOdd {
                     self.xml.write_attribute("fill-rule", "evenodd");
                 }
                 self.write_stroke_properties(s);
-                self.write_fill_and_stroke_paint(&props.paint, path, props.transform, s);
+                self.write_fill_and_stroke_paint(
+                    &props.paint,
+                    || path.bounding_box(),
+                    props.transform,
+                    s,
+                );
             }
             DrawMode::Invisible => {
                 self.xml.end_element();
@@ -40,7 +50,6 @@ impl<'a> SvgRenderer<'a> {
     }
 
     pub(crate) fn draw_rect(&mut self, rect: &Rect, props: DrawProps<'a>, draw_mode: &DrawMode) {
-        let path = rect.to_path(0.1);
         self.xml.start_element("rect");
         self.xml.write_attribute("x", &rect.x0);
         self.xml.write_attribute("y", &rect.y0);
@@ -49,15 +58,15 @@ impl<'a> SvgRenderer<'a> {
 
         match draw_mode {
             DrawMode::Fill(_) => {
-                self.write_paint(&props.paint, &path, props.transform, None);
+                self.write_paint(&props.paint, || *rect, props.transform, None);
             }
             DrawMode::Stroke(s) => {
                 self.write_stroke_properties(s);
-                self.write_paint(&props.paint, &path, props.transform, Some(s));
+                self.write_paint(&props.paint, || *rect, props.transform, Some(s));
             }
             DrawMode::FillAndStroke(_, s) => {
                 self.write_stroke_properties(s);
-                self.write_fill_and_stroke_paint(&props.paint, &path, props.transform, s);
+                self.write_fill_and_stroke_paint(&props.paint, || *rect, props.transform, s);
             }
             DrawMode::Invisible => {
                 self.xml.end_element();
