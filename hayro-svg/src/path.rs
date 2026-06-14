@@ -1,6 +1,6 @@
 use crate::SvgRenderer;
 use hayro_interpret::{DrawMode, DrawProps, FillRule};
-use kurbo::{BezPath, PathEl};
+use kurbo::{BezPath, PathEl, Rect, Shape};
 use std::io;
 use std::io::Write;
 
@@ -28,6 +28,36 @@ impl<'a> SvgRenderer<'a> {
                 }
                 self.write_stroke_properties(s);
                 self.write_fill_and_stroke_paint(&props.paint, path, props.transform, s);
+            }
+            DrawMode::Invisible => {
+                self.xml.end_element();
+                return;
+            }
+        }
+
+        self.write_transform(props.transform);
+        self.xml.end_element();
+    }
+
+    pub(crate) fn draw_rect(&mut self, rect: &Rect, props: DrawProps<'a>, draw_mode: &DrawMode) {
+        let path = rect.to_path(0.1);
+        self.xml.start_element("rect");
+        self.xml.write_attribute("x", &rect.x0);
+        self.xml.write_attribute("y", &rect.y0);
+        self.xml.write_attribute("width", &rect.width());
+        self.xml.write_attribute("height", &rect.height());
+
+        match draw_mode {
+            DrawMode::Fill(_) => {
+                self.write_paint(&props.paint, &path, props.transform, None);
+            }
+            DrawMode::Stroke(s) => {
+                self.write_stroke_properties(s);
+                self.write_paint(&props.paint, &path, props.transform, Some(s));
+            }
+            DrawMode::FillAndStroke(_, s) => {
+                self.write_stroke_properties(s);
+                self.write_fill_and_stroke_paint(&props.paint, &path, props.transform, s);
             }
             DrawMode::Invisible => {
                 self.xml.end_element();

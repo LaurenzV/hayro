@@ -261,6 +261,12 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
         });
     }
 
+    fn draw_rect(&mut self, rect: &Rect, props: DrawProps<'a>, draw_mode: &DrawMode) {
+        self.with_group(props.soft_mask.clone(), props.blend_mode, |r| {
+            Self::draw_rect(r, rect, props, draw_mode);
+        });
+    }
+
     fn push_clip_path(&mut self, clip_path: &ClipPath) {
         let clip_id = self
             .clip_paths
