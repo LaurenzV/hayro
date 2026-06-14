@@ -5,7 +5,7 @@ use hayro_svg::SvgRenderSettings;
 use hayro_syntax::Pdf;
 use hayro_syntax::{DecryptionError, LoadPdfError};
 use image::{Rgba, RgbaImage, load_from_memory};
-use resvg::tiny_skia::Pixmap;
+use resvg::tiny_skia::{Color, Pixmap, PixmapPaint};
 use resvg::usvg::{Options, Transform, Tree};
 use sitro::{RenderOptions, Renderer};
 use std::cmp::max;
@@ -227,7 +227,7 @@ fn get_noto_fallback(query: &hayro::hayro_interpret::font::FallbackFontQuery) ->
 
 fn svg_render_settings() -> SvgRenderSettings {
     SvgRenderSettings {
-        bg_color: [255, 255, 255, 255],
+        bg_color: [0, 0, 0, 0],
     }
 }
 
@@ -304,13 +304,26 @@ fn render_svg(
             }
 
             let tree = Tree::from_data(svg.as_bytes(), &Options::default()).unwrap();
-            let mut pixmap = Pixmap::new(
+            let mut rendered = Pixmap::new(
                 tree.size().width().ceil() as u32,
                 tree.size().height().ceil() as u32,
             )
             .unwrap();
-            resvg::render(&tree, Transform::default(), &mut pixmap.as_mut());
-            Some(pixmap.encode_png().unwrap())
+            resvg::render(&tree, Transform::default(), &mut rendered.as_mut());
+
+            // A workaround for https://github.com/linebender/resvg/issues/1069
+            let mut composited = Pixmap::new(rendered.width(), rendered.height()).unwrap();
+            composited.fill(Color::from_rgba8(255, 255, 255, 255));
+            composited.draw_pixmap(
+                0,
+                0,
+                rendered.as_ref(),
+                &PixmapPaint::default(),
+                Transform::default(),
+                None,
+            );
+
+            Some(composited.encode_png().unwrap())
         })
         .collect::<Vec<_>>()
 }
