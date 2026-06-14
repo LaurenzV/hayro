@@ -37,12 +37,12 @@ impl<'a> SvgRenderer<'a> {
                 let (cache_key, glyph_path, use_transform, paint_transform) = match mode {
                     DrawMode::Fill(_) => {
                         let transform = props.transform * glyph_transform;
-                        (glyph_id, outline, transform, transform)
+                        (glyph_id, outline.clone(), transform, transform)
                     }
                     // TODO: Figure out how to better merge transform and glyph transform for stroked glyphs.
                     DrawMode::Stroke(_) | DrawMode::FillAndStroke(_, _) => (
                         hash128(&(glyph_id, glyph_transform.cache_key())),
-                        glyph_transform * outline,
+                        glyph_transform * outline.clone(),
                         props.transform,
                         props.transform,
                     ),
