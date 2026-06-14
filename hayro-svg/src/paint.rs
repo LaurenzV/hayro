@@ -179,7 +179,11 @@ impl<'a> SvgRenderer<'a> {
 
                         if !self.tiling_patterns.contains(cache_key) {
                             self.with_dummy(|r| {
-                                t.interpret(r, Affine::IDENTITY, false);
+                                t.interpret(
+                                    r,
+                                    Affine::translate((-pattern.bbox.x0, -pattern.bbox.y0)),
+                                    false,
+                                );
                             });
                         }
 

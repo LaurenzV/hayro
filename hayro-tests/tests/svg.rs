@@ -193,6 +193,11 @@ fn pdfjs_issue13372() {
 }
 
 #[test]
+fn pdfjs_issue8565() {
+    run_svg_test("pdfjs_issue8565", "downloads/pdfjs/issue8565.pdf", None);
+}
+
+#[test]
 fn fillrule_evenodd() {
     run_svg_test("fillrule_evenodd", "pdfs/custom/fillrule_evenodd.pdf", None);
 }

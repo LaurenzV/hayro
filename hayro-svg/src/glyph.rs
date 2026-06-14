@@ -88,7 +88,7 @@ impl<'a> SvgRenderer<'a> {
                     props.paint.cache_key(),
                 ));
 
-                if !self.outline_glyphs.contains(cache_key) {
+                if !self.type3_glyphs.contains(cache_key) {
                     self.with_dummy(|r| {
                         t.interpret(r, props.transform, glyph_transform, &props.paint);
                     });
