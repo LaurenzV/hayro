@@ -9,7 +9,7 @@ use crate::interpret::state::{ActiveTransferFunction, State};
 use crate::shading::Shading;
 use crate::soft_mask::SoftMask;
 use crate::util::{Float32Ext, RectExt, hash128};
-use crate::{BlendMode, CacheKey, ClipPath, GlyphDrawMode, Image, PathDrawMode};
+use crate::{BlendMode, CacheKey, ClipPath, DrawMode, DrawProps, Image, ImageDrawProps};
 use crate::{FillRule, InterpreterSettings, Paint, interpret};
 use hayro_syntax::content::TypedIter;
 use hayro_syntax::object::Dict;
@@ -295,18 +295,13 @@ impl<'a, 'b, T: Device<'a>> StencilPatternDevice<'a, 'b, T> {
 
 // Only filling, stroking of paths and stencil masks are allowed.
 impl<'a, T: Device<'a>> Device<'a> for StencilPatternDevice<'a, '_, T> {
-    fn draw_path(
-        &mut self,
-        path: &BezPath,
-        transform: Affine,
-        _: &Paint<'_>,
-        draw_mode: &PathDrawMode,
-    ) {
-        self.inner
-            .draw_path(path, transform, &self.paint, draw_mode);
+    fn draw_path(&mut self, path: &BezPath, props: DrawProps<'a, '_>, draw_mode: &DrawMode) {
+        let props = DrawProps {
+            paint: self.paint.clone(),
+            ..props
+        };
+        self.inner.draw_path(path, props, draw_mode);
     }
-
-    fn set_soft_mask(&mut self, _: Option<SoftMask<'_>>) {}
 
     fn push_clip_path(&mut self, clip_path: &ClipPath) {
         self.inner.push_clip_path(clip_path);
@@ -317,19 +312,17 @@ impl<'a, T: Device<'a>> Device<'a> for StencilPatternDevice<'a, '_, T> {
     fn draw_glyph(
         &mut self,
         g: &Glyph<'a>,
-        transform: Affine,
         glyph_transform: Affine,
-        p: &Paint<'a>,
-        draw_mode: &GlyphDrawMode,
+        props: DrawProps<'a, '_>,
+        draw_mode: &DrawMode,
     ) {
-        self.inner
-            .draw_glyph(g, transform, glyph_transform, p, draw_mode);
+        self.inner.draw_glyph(g, glyph_transform, props, draw_mode);
     }
 
-    fn draw_image(&mut self, image: Image<'a, '_>, transform: Affine) {
+    fn draw_image(&mut self, image: Image<'a, '_>, props: ImageDrawProps<'a, '_>) {
         if let Image::Stencil(mut s) = image {
             s.paint = self.paint.clone();
-            self.inner.draw_image(Image::Stencil(s), transform);
+            self.inner.draw_image(Image::Stencil(s), props);
         }
     }
 
@@ -338,6 +331,4 @@ impl<'a, T: Device<'a>> Device<'a> for StencilPatternDevice<'a, '_, T> {
     }
 
     fn pop_transparency_group(&mut self) {}
-
-    fn set_blend_mode(&mut self, _: BlendMode) {}
 }

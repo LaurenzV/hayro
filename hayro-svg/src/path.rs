@@ -1,6 +1,6 @@
 use crate::SvgRenderer;
-use hayro_interpret::{FillRule, Paint, PathDrawMode};
-use kurbo::{Affine, BezPath, PathEl};
+use hayro_interpret::{DrawMode, DrawProps, FillRule};
+use kurbo::{BezPath, PathEl};
 use std::io;
 use std::io::Write;
 
@@ -8,9 +8,8 @@ impl<'a> SvgRenderer<'a> {
     pub(crate) fn draw_path(
         &mut self,
         path: &BezPath,
-        transform: Affine,
-        paint: &Paint<'a>,
-        draw_mode: &PathDrawMode,
+        props: DrawProps<'a, '_>,
+        draw_mode: &DrawMode,
     ) {
         let svg_path = path.to_svg_f32();
 
@@ -18,19 +17,30 @@ impl<'a> SvgRenderer<'a> {
         self.xml.write_attribute("d", &svg_path);
 
         match draw_mode {
-            PathDrawMode::Fill(f) => {
+            DrawMode::Fill(f) => {
                 if *f == FillRule::EvenOdd {
                     self.xml.write_attribute("fill-rule", "evenodd");
                 }
-                self.write_paint(paint, path, transform, None);
+                self.write_paint(&props.paint, path, props.transform, None);
             }
-            PathDrawMode::Stroke(s) => {
+            DrawMode::Stroke(s) => {
                 self.write_stroke_properties(s);
-                self.write_paint(paint, path, transform, Some(s));
+                self.write_paint(&props.paint, path, props.transform, Some(s));
+            }
+            DrawMode::FillAndStroke(f, s) => {
+                if *f == FillRule::EvenOdd {
+                    self.xml.write_attribute("fill-rule", "evenodd");
+                }
+                self.write_stroke_properties(s);
+                self.write_fill_and_stroke_paint(&props.paint, path, props.transform, s);
+            }
+            DrawMode::Invisible => {
+                self.xml.end_element();
+                return;
             }
         }
 
-        self.write_transform(transform);
+        self.write_transform(props.transform);
         self.xml.end_element();
     }
 }

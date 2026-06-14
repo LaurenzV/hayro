@@ -2,7 +2,7 @@ use crate::SvgRenderer;
 use crate::hash128;
 use crate::path::BezPathExt;
 use hayro_interpret::font::{Glyph, Type3Glyph};
-use hayro_interpret::{CacheKey, GlyphDrawMode, Paint};
+use hayro_interpret::{CacheKey, DrawMode, DrawProps, Paint};
 use kurbo::{Affine, BezPath};
 
 pub(crate) struct CachedOutlineGlyph {
@@ -22,12 +22,11 @@ impl<'a> SvgRenderer<'a> {
     pub(crate) fn draw_glyph(
         &mut self,
         glyph: &Glyph<'a>,
-        transform: Affine,
         glyph_transform: Affine,
-        paint: &Paint<'a>,
-        mode: &GlyphDrawMode,
+        props: DrawProps<'a, '_>,
+        mode: &DrawMode,
     ) {
-        if matches!(mode, GlyphDrawMode::Invisible) {
+        if matches!(mode, DrawMode::Invisible) {
             return;
         }
 
@@ -45,17 +44,26 @@ impl<'a> SvgRenderer<'a> {
                 self.xml.start_element("use");
                 self.xml
                     .write_attribute_fmt("xlink:href", format_args!("#{id}"));
-                self.write_transform(transform);
+                self.write_transform(props.transform);
 
                 match mode {
-                    GlyphDrawMode::Fill => {
-                        self.write_paint(paint, &outline, transform, None);
+                    DrawMode::Fill(_) => {
+                        self.write_paint(&props.paint, &outline, props.transform, None);
                     }
-                    GlyphDrawMode::Stroke(s) => {
+                    DrawMode::Stroke(s) => {
                         self.write_stroke_properties(s);
-                        self.write_paint(paint, &outline, transform, Some(s));
+                        self.write_paint(&props.paint, &outline, props.transform, Some(s));
                     }
-                    GlyphDrawMode::Invisible => {
+                    DrawMode::FillAndStroke(_, s) => {
+                        self.write_stroke_properties(s);
+                        self.write_fill_and_stroke_paint(
+                            &props.paint,
+                            &outline,
+                            props.transform,
+                            s,
+                        );
+                    }
+                    DrawMode::Invisible => {
                         // We exited above.
                         unreachable!()
                     }
@@ -65,14 +73,14 @@ impl<'a> SvgRenderer<'a> {
             Glyph::Type3(t) => {
                 let cache_key = hash128(&(
                     t.cache_key(),
-                    transform.cache_key(),
+                    props.transform.cache_key(),
                     glyph_transform.cache_key(),
-                    paint.cache_key(),
+                    props.paint.cache_key(),
                 ));
 
                 if !self.outline_glyphs.contains(cache_key) {
                     self.with_dummy(|r| {
-                        t.interpret(r, transform, glyph_transform, paint);
+                        t.interpret(r, props.transform, glyph_transform, &props.paint);
                     });
                 }
 
@@ -81,9 +89,9 @@ impl<'a> SvgRenderer<'a> {
                     .type3_glyphs
                     .insert_with(cache_key, || CachedType3Glyph {
                         glyph: t.clone(),
-                        transform,
+                        transform: props.transform,
                         glyph_transform,
-                        paint: paint.clone(),
+                        paint: props.paint.clone(),
                     });
 
                 self.xml.start_element("use");

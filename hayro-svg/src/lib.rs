@@ -26,8 +26,8 @@ use hayro_interpret::font::Glyph;
 use hayro_interpret::hayro_syntax::page::Page;
 use hayro_interpret::util::{Float32Ext, TransformExt};
 use hayro_interpret::{
-    BlendMode, CacheKey, ClipPath, Context, Device, GlyphDrawMode, Image, InterpreterCache,
-    InterpreterSettings, Paint, PathDrawMode, SoftMask, StrokeProps, interpret_page,
+    BlendMode, CacheKey, ClipPath, Context, Device, DrawMode, DrawProps, Image, ImageDrawProps,
+    InterpreterCache, InterpreterSettings, SoftMask, StrokeProps, interpret_page,
 };
 use kurbo::{Affine, BezPath, Cap, Join, Rect};
 use rustc_hash::FxHashMap;
@@ -121,8 +121,6 @@ pub(crate) struct SvgRenderer<'a> {
     pub(crate) shading_patterns: Deduplicator<CachedShadingPattern>,
     pub(crate) tiling_patterns: Deduplicator<CachedTilingPattern<'a>>,
     pub(crate) dimensions: (f32, f32),
-    pub(crate) cur_mask: Option<SoftMask<'a>>,
-    pub(crate) cur_blend_mode: BlendMode,
 }
 
 impl<'a> SvgRenderer<'a> {
@@ -236,11 +234,16 @@ impl<'a> SvgRenderer<'a> {
         }
     }
 
-    fn with_group(&mut self, func: impl FnOnce(&mut Self)) {
-        let push_group = self.cur_mask.is_some() || self.cur_blend_mode != BlendMode::Normal;
+    fn with_group(
+        &mut self,
+        mask: Option<&SoftMask<'a>>,
+        blend_mode: BlendMode,
+        func: impl FnOnce(&mut Self),
+    ) {
+        let push_group = mask.is_some() || blend_mode != BlendMode::Normal;
 
         if push_group {
-            self.push_transparency_group(1.0, self.cur_mask.clone(), self.cur_blend_mode);
+            self.push_transparency_group(1.0, mask.cloned(), blend_mode);
         }
 
         func(self);
@@ -252,23 +255,9 @@ impl<'a> SvgRenderer<'a> {
 }
 
 impl<'a> Device<'a> for SvgRenderer<'a> {
-    fn set_soft_mask(&mut self, mask: Option<SoftMask<'a>>) {
-        self.cur_mask = mask;
-    }
-
-    fn set_blend_mode(&mut self, blend_mode: BlendMode) {
-        self.cur_blend_mode = blend_mode;
-    }
-
-    fn draw_path(
-        &mut self,
-        path: &BezPath,
-        transform: Affine,
-        paint: &Paint<'a>,
-        draw_mode: &PathDrawMode,
-    ) {
-        self.with_group(|r| {
-            Self::draw_path(r, path, transform, paint, draw_mode);
+    fn draw_path(&mut self, path: &BezPath, props: DrawProps<'a, '_>, draw_mode: &DrawMode) {
+        self.with_group(props.soft_mask, props.blend_mode, |r| {
+            Self::draw_path(r, path, props, draw_mode);
         });
     }
 
@@ -297,42 +286,43 @@ impl<'a> Device<'a> for SvgRenderer<'a> {
     fn draw_glyph(
         &mut self,
         glyph: &Glyph<'a>,
-        transform: Affine,
         glyph_transform: Affine,
-        paint: &Paint<'a>,
-        draw_mode: &GlyphDrawMode,
+        props: DrawProps<'a, '_>,
+        draw_mode: &DrawMode,
     ) {
-        self.with_group(|r| {
-            Self::draw_glyph(r, glyph, transform, glyph_transform, paint, draw_mode);
+        self.with_group(props.soft_mask, props.blend_mode, |r| {
+            Self::draw_glyph(r, glyph, glyph_transform, props, draw_mode);
         });
     }
 
-    fn draw_image(&mut self, image: Image<'a, '_>, mut transform: Affine) {
-        // TODO: Use Self::group
-        match image {
-            Image::Stencil(s) => {
-                s.with_stencil(
-                    |s, paint| {
-                        transform *= Affine::scale_non_uniform(
-                            s.scale_factors.0 as f64,
-                            s.scale_factors.1 as f64,
-                        );
-                        Self::draw_stencil_image(self, s, transform, paint);
-                    },
-                    None,
-                );
+    fn draw_image(&mut self, image: Image<'a, '_>, props: ImageDrawProps<'a, '_>) {
+        self.with_group(props.soft_mask, props.blend_mode, |r| {
+            let mut transform = props.transform;
+            match image {
+                Image::Stencil(s) => {
+                    s.with_stencil(
+                        |s, paint| {
+                            transform *= Affine::scale_non_uniform(
+                                s.scale_factors.0 as f64,
+                                s.scale_factors.1 as f64,
+                            );
+                            Self::draw_stencil_image(r, s, transform, paint);
+                        },
+                        None,
+                    );
+                }
+                Image::Raster(raster) => {
+                    raster.with_rgba(
+                        |image, alpha| {
+                            let (sx, sy) = image.scale_factors();
+                            transform *= Affine::scale_non_uniform(sx as f64, sy as f64);
+                            Self::draw_rgba_image(r, image, transform, alpha);
+                        },
+                        None,
+                    );
+                }
             }
-            Image::Raster(r) => {
-                r.with_rgba(
-                    |image, alpha| {
-                        let (sx, sy) = image.scale_factors();
-                        transform *= Affine::scale_non_uniform(sx as f64, sy as f64);
-                        Self::draw_rgba_image(self, image, transform, alpha);
-                    },
-                    None,
-                );
-            }
-        }
+        });
     }
 
     fn pop_clip(&mut self) {
@@ -357,9 +347,7 @@ impl<'a> SvgRenderer<'a> {
             gradients: Deduplicator::new('n'),
             shading_patterns: Deduplicator::new('v'),
             tiling_patterns: Deduplicator::new('t'),
-            cur_mask: None,
             dimensions: page.render_dimensions(),
-            cur_blend_mode: BlendMode::default(),
         }
     }
 

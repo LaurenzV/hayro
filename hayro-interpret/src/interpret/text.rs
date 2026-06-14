@@ -1,9 +1,8 @@
-use crate::GlyphDrawMode;
 use crate::context::Context;
 use crate::device::Device;
 use crate::font::Glyph;
-use crate::interpret::path::get_paint;
 use crate::interpret::state::TextStateFont;
+use crate::{DrawMode, FillRule};
 use hayro_syntax::object;
 use hayro_syntax::page::Resources;
 use kurbo::Affine;
@@ -65,94 +64,87 @@ pub(crate) fn show_glyph<'a>(
         return;
     }
 
-    device.set_soft_mask(ctx.get().graphics_state.soft_mask.clone());
-    device.set_blend_mode(ctx.get().graphics_state.blend_mode);
     let stroke_props = ctx.stroke_props();
 
     match ctx.get().text_state.render_mode {
         TextRenderingMode::Fill => {
+            let props = ctx.draw_props(false);
             device.draw_glyph(
                 glyph,
-                ctx.get().ctm,
                 glyph_transform,
-                &get_paint(ctx, false),
-                &GlyphDrawMode::Fill,
+                props,
+                &DrawMode::Fill(FillRule::NonZero),
             );
         }
         TextRenderingMode::Stroke => {
+            let props = ctx.draw_props(true);
             device.draw_glyph(
                 glyph,
-                ctx.get().ctm,
                 glyph_transform,
-                &get_paint(ctx, true),
-                &GlyphDrawMode::Stroke(stroke_props),
+                props,
+                &DrawMode::Stroke(stroke_props),
             );
         }
         TextRenderingMode::FillStroke => {
+            let props = ctx.draw_props(false);
             device.draw_glyph(
                 glyph,
-                ctx.get().ctm,
                 glyph_transform,
-                &get_paint(ctx, false),
-                &GlyphDrawMode::Fill,
+                props,
+                &DrawMode::Fill(FillRule::NonZero),
             );
+            let props = ctx.draw_props(true);
             device.draw_glyph(
                 glyph,
-                ctx.get().ctm,
                 glyph_transform,
-                &get_paint(ctx, true),
-                &GlyphDrawMode::Stroke(stroke_props),
+                props,
+                &DrawMode::Stroke(stroke_props),
             );
         }
         TextRenderingMode::Invisible => {
             // Still call draw_glyph for invisible text, so that it can
             // for example be used for text extraction.
-            device.draw_glyph(
-                glyph,
-                ctx.get().ctm,
-                glyph_transform,
-                &get_paint(ctx, false),
-                &GlyphDrawMode::Invisible,
-            );
+            let props = ctx.draw_props(false);
+            device.draw_glyph(glyph, glyph_transform, props, &DrawMode::Invisible);
         }
         TextRenderingMode::Clip => {
             clip_glyph(ctx, glyph, glyph_transform);
         }
         TextRenderingMode::FillAndClip => {
             clip_glyph(ctx, glyph, glyph_transform);
+            let props = ctx.draw_props(false);
             device.draw_glyph(
                 glyph,
-                ctx.get().ctm,
                 glyph_transform,
-                &get_paint(ctx, false),
-                &GlyphDrawMode::Fill,
+                props,
+                &DrawMode::Fill(FillRule::NonZero),
             );
         }
         TextRenderingMode::StrokeAndClip => {
             clip_glyph(ctx, glyph, glyph_transform);
+            let props = ctx.draw_props(true);
             device.draw_glyph(
                 glyph,
-                ctx.get().ctm,
                 glyph_transform,
-                &get_paint(ctx, true),
-                &GlyphDrawMode::Stroke(stroke_props),
+                props,
+                &DrawMode::Stroke(stroke_props),
             );
         }
         TextRenderingMode::FillAndStrokeAndClip => {
             clip_glyph(ctx, glyph, glyph_transform);
+            let props = ctx.draw_props(false);
             device.draw_glyph(
                 glyph,
-                ctx.get().ctm,
                 glyph_transform,
-                &get_paint(ctx, false),
-                &GlyphDrawMode::Fill,
+                props,
+                &DrawMode::Fill(FillRule::NonZero),
             );
+            let props = ctx.draw_props(true);
             device.draw_glyph(
                 glyph,
-                ctx.get().ctm,
                 glyph_transform,
-                &get_paint(ctx, true),
-                &GlyphDrawMode::Stroke(stroke_props),
+                props,
+                &DrawMode::Stroke(stroke_props),
             );
         }
     }

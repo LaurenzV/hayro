@@ -1,6 +1,8 @@
 use crate::{Id, SvgRenderer, hash128};
 use hayro_interpret::color::AlphaColor;
-use hayro_interpret::{CacheKey, FillRule, MaskType, Paint, PathDrawMode, SoftMask};
+use hayro_interpret::{
+    BlendMode, CacheKey, DrawMode, DrawProps, FillRule, MaskType, Paint, SoftMask,
+};
 use image::DynamicImage;
 use kurbo::{Affine, Rect, Shape};
 use std::sync::Arc;
@@ -70,6 +72,7 @@ impl<'a> SvgRenderer<'a> {
                     let use_bg = bg_color.to_rgba().to_rgba8() != AlphaColor::BLACK.to_rgba8();
 
                     if use_bg {
+                        let paint = Paint::Color(bg_color);
                         self.draw_path(
                             &Rect::new(
                                 0.0,
@@ -78,9 +81,13 @@ impl<'a> SvgRenderer<'a> {
                                 self.dimensions.1 as f64,
                             )
                             .to_path(0.1),
-                            Affine::IDENTITY,
-                            &Paint::Color(bg_color),
-                            &PathDrawMode::Fill(FillRule::NonZero),
+                            DrawProps {
+                                transform: Affine::IDENTITY,
+                                paint,
+                                soft_mask: None,
+                                blend_mode: BlendMode::Normal,
+                            },
+                            &DrawMode::Fill(FillRule::NonZero),
                         );
                         self.xml.start_element("g");
                         self.xml.write_attribute("style", "isolation:isolate");

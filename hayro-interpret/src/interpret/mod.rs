@@ -716,9 +716,6 @@ pub fn interpret<'a>(
                     st.graphics_state.non_stroke_pattern = Some(sp);
                     st.graphics_state.none_stroke_cs = ColorSpace::pattern();
 
-                    device.set_soft_mask(st.graphics_state.soft_mask.clone());
-                    device.set_blend_mode(st.graphics_state.blend_mode);
-
                     let bbox = context.bbox().to_path(0.1);
                     let inverted_bbox = context.get().ctm.inverse() * bbox;
                     fill_path_impl(context, device, FillRule::NonZero, Some(&inverted_bbox));

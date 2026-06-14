@@ -1,11 +1,11 @@
 use crate::cache::{Cache, CacheKey};
-use crate::color::ColorSpace;
+use crate::color::{Color, ColorSpace};
 use crate::convert::convert_transform;
 use crate::font::{Font, StandardFont};
 use crate::interpret::state::{ClipType, State, TextStateFont};
 use crate::ocg::OcgState;
 use crate::util::{BezPathExt, Float64Ext};
-use crate::{ClipPath, Device, FillRule, InterpreterSettings, StrokeProps};
+use crate::{ClipPath, Device, DrawProps, FillRule, InterpreterSettings, Paint, StrokeProps};
 use hayro_syntax::content::ops::Transform;
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Name;
@@ -13,6 +13,7 @@ use hayro_syntax::page::Resources;
 use hayro_syntax::xref::XRef;
 use kurbo::{Affine, BezPath, PathEl, Point, Rect, Shape};
 use rustc_hash::FxHashMap;
+use smallvec::smallvec;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -211,12 +212,46 @@ impl<'a> Context<'a> {
         if self.states.len() > 1 {
             self.states.pop();
         }
+    }
 
-        device.set_soft_mask(
-            self.states
-                .last()
-                .and_then(|l| l.graphics_state.soft_mask.clone()),
-        );
+    pub(crate) fn draw_props(&self, is_stroke: bool) -> DrawProps<'a, '_> {
+        DrawProps {
+            transform: self.get().ctm,
+            paint: self.get_paint(is_stroke),
+            soft_mask: self.get().graphics_state.soft_mask.as_ref(),
+            blend_mode: self.get().graphics_state.blend_mode,
+        }
+    }
+
+    pub(crate) fn get_paint(&self, is_stroke: bool) -> Paint<'a> {
+        let data = if is_stroke {
+            self.get().stroke_data()
+        } else {
+            self.get().non_stroke_data()
+        };
+
+        if data.color_space.is_pattern() || data.pattern.is_some() {
+            if let Some(mut pattern) = data.pattern {
+                if let Some(tf) = &data.transfer_function {
+                    pattern.set_transfer_function(tf.clone());
+                }
+
+                pattern.pre_concat_transform(self.root_transform());
+
+                Paint::Pattern(Box::new(pattern))
+            } else {
+                // Pattern was likely invalid, use transparent paint.
+                Paint::Color(Color::new(ColorSpace::device_gray(), smallvec![0.0], 0.0))
+            }
+        } else {
+            let color = Color::new(data.color_space, data.color, data.alpha);
+
+            if let Some(tf) = &data.transfer_function {
+                Paint::Color(Color::from_rgba(tf.apply(&color.to_rgba())))
+            } else {
+                Paint::Color(color)
+            }
+        }
     }
 
     pub(crate) fn path(&self) -> &BezPath {

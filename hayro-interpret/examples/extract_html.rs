@@ -7,8 +7,8 @@
 
 use hayro_interpret::font::Glyph;
 use hayro_interpret::{
-    BlendMode, ClipPath, Context, Device, GlyphDrawMode, Image, InterpreterCache,
-    InterpreterSettings, Paint, PathDrawMode, SoftMask, interpret_page,
+    BlendMode, ClipPath, Context, Device, DrawMode, DrawProps, Image, ImageDrawProps,
+    InterpreterCache, InterpreterSettings, SoftMask, interpret_page,
 };
 use hayro_syntax::Pdf;
 
@@ -72,9 +72,7 @@ struct TextExtractor {
 
 /// Implement `Device` for `TextExtractor`. We extract Unicode text from glyphs.
 impl Device<'_> for TextExtractor {
-    fn set_soft_mask(&mut self, _: Option<SoftMask<'_>>) {}
-
-    fn draw_path(&mut self, _: &BezPath, _: Affine, _: &Paint<'_>, _: &PathDrawMode) {}
+    fn draw_path(&mut self, _: &BezPath, _: DrawProps<'_, '_>, _: &DrawMode) {}
 
     fn push_clip_path(&mut self, _: &ClipPath) {}
 
@@ -83,17 +81,16 @@ impl Device<'_> for TextExtractor {
     fn draw_glyph(
         &mut self,
         glyph: &Glyph<'_>,
-        transform: Affine,
         glyph_transform: Affine,
-        _: &Paint<'_>,
-        _: &GlyphDrawMode,
+        props: DrawProps<'_, '_>,
+        _: &DrawMode,
     ) {
         if let Some(unicode_char) = glyph.as_unicode() {
             // Apply vertical flip transformation to combined transform
             // to place origin at top-left corner.
             let flip_transform = Affine::translate((0.0, self.dimensions.1 as f64))
                 * Affine::scale_non_uniform(1.0, -1.0);
-            let transform = flip_transform * transform * glyph_transform;
+            let transform = flip_transform * props.transform * glyph_transform;
 
             let point = Point::new(0.0, 0.0);
             let position = transform * point;
@@ -116,7 +113,5 @@ impl Device<'_> for TextExtractor {
 
     fn pop_transparency_group(&mut self) {}
 
-    fn draw_image(&mut self, _: Image<'_, '_>, _: Affine) {}
-
-    fn set_blend_mode(&mut self, _: BlendMode) {}
+    fn draw_image(&mut self, _: Image<'_, '_>, _: ImageDrawProps<'_, '_>) {}
 }

@@ -5,8 +5,8 @@
 
 use hayro_interpret::font::Glyph;
 use hayro_interpret::{
-    BlendMode, ClipPath, Context, Device, GlyphDrawMode, Image, ImageData, InterpreterCache,
-    InterpreterSettings, Paint, PathDrawMode, SoftMask, interpret_page,
+    BlendMode, ClipPath, Context, Device, DrawMode, DrawProps, Image, ImageData, ImageDrawProps,
+    InterpreterCache, InterpreterSettings, SoftMask, interpret_page,
 };
 use hayro_syntax::Pdf;
 use image::{DynamicImage, ImageBuffer};
@@ -54,29 +54,19 @@ impl ImageExtractor {
 /// Implement `Device` for `ImageExtractor`. We can ignore most operations and only
 /// need to implement `draw_rgba_image` and `draw_stencil_image`.
 impl Device<'_> for ImageExtractor {
-    fn set_soft_mask(&mut self, _: Option<SoftMask<'_>>) {}
-
-    fn draw_path(&mut self, _: &BezPath, _: Affine, _: &Paint<'_>, _: &PathDrawMode) {}
+    fn draw_path(&mut self, _: &BezPath, _: DrawProps<'_, '_>, _: &DrawMode) {}
 
     fn push_clip_path(&mut self, _: &ClipPath) {}
 
     fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask<'_>>, _: BlendMode) {}
 
-    fn draw_glyph(
-        &mut self,
-        _: &Glyph<'_>,
-        _: Affine,
-        _: Affine,
-        _: &Paint<'_>,
-        _: &GlyphDrawMode,
-    ) {
-    }
+    fn draw_glyph(&mut self, _: &Glyph<'_>, _: Affine, _: DrawProps<'_, '_>, _: &DrawMode) {}
 
     fn pop_clip(&mut self) {}
 
     fn pop_transparency_group(&mut self) {}
 
-    fn draw_image(&mut self, image: Image<'_, '_>, _: Affine) {
+    fn draw_image(&mut self, image: Image<'_, '_>, _: ImageDrawProps<'_, '_>) {
         match image {
             Image::Stencil(s) => {
                 s.with_stencil(
@@ -142,6 +132,4 @@ impl Device<'_> for ImageExtractor {
             }
         }
     }
-
-    fn set_blend_mode(&mut self, _: BlendMode) {}
 }

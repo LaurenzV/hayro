@@ -3,9 +3,8 @@ use crate::color::{ColorComponents, ColorSpace, ToRgb};
 use crate::context::Context;
 use crate::device::Device;
 use crate::function::{Function, interpolate};
-use crate::interpret::path::get_paint;
 use crate::interpret::state::ActiveTransferFunction;
-use crate::{BlendMode, CacheKey, ClipPath, Image, RasterImage, StencilImage};
+use crate::{BlendMode, CacheKey, ClipPath, Image, ImageDrawProps, RasterImage, StencilImage};
 use crate::{FillRule, InterpreterWarning, WarningSinkFn, interpret};
 use crate::{ImageData, LumaData, RgbData};
 use hayro_syntax::bit_reader::BitReader;
@@ -141,9 +140,6 @@ pub(crate) fn draw_form_xobject<'a, 'b>(
         context.get_mut().graphics_state.stroke_alpha = 1.0;
     }
 
-    device.set_soft_mask(context.get().graphics_state.soft_mask.clone());
-    device.set_blend_mode(context.get().graphics_state.blend_mode);
-
     device.push_clip_path(&ClipPath {
         path: context.get().ctm
             * Rect::new(
@@ -226,19 +222,23 @@ pub(crate) fn draw_image_xobject<'a, 'b>(
         blend_mode,
     );
 
-    device.set_soft_mask(None);
-    device.set_blend_mode(BlendMode::default());
-
     let image = if x_object.is_mask {
         Image::Stencil(StencilImage {
-            paint: get_paint(context, false),
+            paint: context.get_paint(false),
             image_xobject: x_object.clone(),
         })
     } else {
         Image::Raster(RasterImage(x_object.clone()))
     };
 
-    device.draw_image(image, transform);
+    device.draw_image(
+        image,
+        ImageDrawProps {
+            transform,
+            soft_mask: None,
+            blend_mode: BlendMode::default(),
+        },
+    );
     device.pop_transparency_group();
 
     context.restore_state(device);

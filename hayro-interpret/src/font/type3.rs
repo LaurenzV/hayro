@@ -8,7 +8,7 @@ use crate::interpret::state::TextState;
 use crate::soft_mask::SoftMask;
 use crate::util::RectExt;
 use crate::{BlendMode, interpret};
-use crate::{CacheKey, ClipPath, GlyphDrawMode, PathDrawMode};
+use crate::{CacheKey, ClipPath, DrawMode, DrawProps, ImageDrawProps};
 use crate::{Image, Paint};
 use hayro_cmap::{BfString, CMap};
 use hayro_syntax::content::TypedIter;
@@ -197,19 +197,12 @@ impl<'a, 'b, T: Device<'a>> Type3ShapeGlyphDevice<'a, 'b, T> {
 
 // Only filling, stroking of paths and stencil masks are allowed.
 impl<'a, T: Device<'a>> Device<'a> for Type3ShapeGlyphDevice<'a, '_, T> {
-    fn set_soft_mask(&mut self, m: Option<SoftMask<'a>>) {
-        self.inner.set_soft_mask(m);
-    }
-
-    fn draw_path(
-        &mut self,
-        path: &BezPath,
-        transform: Affine,
-        _: &Paint<'_>,
-        draw_mode: &PathDrawMode,
-    ) {
-        self.inner
-            .draw_path(path, transform, &self.paint, draw_mode);
+    fn draw_path(&mut self, path: &BezPath, props: DrawProps<'a, '_>, draw_mode: &DrawMode) {
+        let props = DrawProps {
+            paint: self.paint.clone(),
+            ..props
+        };
+        self.inner.draw_path(path, props, draw_mode);
     }
 
     fn push_clip_path(&mut self, clip_path: &ClipPath) {
@@ -221,13 +214,11 @@ impl<'a, T: Device<'a>> Device<'a> for Type3ShapeGlyphDevice<'a, '_, T> {
     fn draw_glyph(
         &mut self,
         g: &Glyph<'a>,
-        transform: Affine,
         glyph_transform: Affine,
-        p: &Paint<'a>,
-        draw_mode: &GlyphDrawMode,
+        props: DrawProps<'a, '_>,
+        draw_mode: &DrawMode,
     ) {
-        self.inner
-            .draw_glyph(g, transform, glyph_transform, p, draw_mode);
+        self.inner.draw_glyph(g, glyph_transform, props, draw_mode);
     }
 
     fn pop_clip(&mut self) {
@@ -236,12 +227,10 @@ impl<'a, T: Device<'a>> Device<'a> for Type3ShapeGlyphDevice<'a, '_, T> {
 
     fn pop_transparency_group(&mut self) {}
 
-    fn draw_image(&mut self, image: Image<'a, '_>, transform: Affine) {
+    fn draw_image(&mut self, image: Image<'a, '_>, props: ImageDrawProps<'a, '_>) {
         if let Image::Stencil(mut s) = image {
             s.paint = self.paint.clone();
-            self.inner.draw_image(Image::Stencil(s), transform);
+            self.inner.draw_image(Image::Stencil(s), props);
         }
     }
-
-    fn set_blend_mode(&mut self, _: BlendMode) {}
 }

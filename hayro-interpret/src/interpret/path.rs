@@ -1,10 +1,8 @@
-use crate::color::{Color, ColorSpace};
 use crate::context::{Context, path_as_rect};
 use crate::device::Device;
 use crate::util::{BezPathExt, Float32Ext};
-use crate::{FillRule, Paint, PathDrawMode, StrokeProps};
+use crate::{DrawMode, FillRule, StrokeProps};
 use kurbo::{BezPath, Cap, Join, PathEl};
-use smallvec::smallvec;
 
 pub(crate) fn fill_path<'a>(
     context: &mut Context<'a>,
@@ -54,11 +52,7 @@ pub(crate) fn fill_path_impl<'a>(
         return;
     }
 
-    let base_transform = context.get().ctm;
-
-    let paint = get_paint(context, false);
-    device.set_soft_mask(context.get().graphics_state.soft_mask.clone());
-    device.set_blend_mode(context.get().graphics_state.blend_mode);
+    let props = context.draw_props(false);
 
     let mut draw = |path: &BezPath| {
         // pdf.js issue 4260: Replace zero-sized paths with a small stroke instead.
@@ -69,11 +63,11 @@ pub(crate) fn fill_path_impl<'a>(
             (bbox.height() as f32).is_nearly_zero(),
         ) {
             (false, false) => {
-                let draw_mode = PathDrawMode::Fill(fill_rule);
+                let draw_mode = DrawMode::Fill(fill_rule);
                 if let Some(rect) = path_as_rect(path) {
-                    device.draw_rect(&rect, base_transform, &paint, &draw_mode);
+                    device.draw_rect(&rect, props.clone(), &draw_mode);
                 } else {
-                    device.draw_path(path, base_transform, &paint, &draw_mode);
+                    device.draw_path(path, props.clone(), &draw_mode);
                 }
             }
             _ => {
@@ -89,12 +83,7 @@ pub(crate) fn fill_path_impl<'a>(
                     ..Default::default()
                 };
 
-                device.draw_path(
-                    &path,
-                    base_transform,
-                    &paint,
-                    &PathDrawMode::Stroke(stroke_props),
-                );
+                device.draw_path(&path, props.clone(), &DrawMode::Stroke(stroke_props));
             }
         };
     };
@@ -114,50 +103,15 @@ pub(crate) fn stroke_path_impl<'a>(
         return;
     }
 
-    let base_transform = context.get().ctm;
-
     let stroke_props = context.stroke_props();
-    device.set_soft_mask(context.get().graphics_state.soft_mask.clone());
-    device.set_blend_mode(context.get().graphics_state.blend_mode);
-    let paint = get_paint(context, true);
+    let props = context.draw_props(true);
 
     let path = path.unwrap_or(context.path());
-    let draw_mode = PathDrawMode::Stroke(stroke_props);
+    let draw_mode = DrawMode::Stroke(stroke_props);
 
     if let Some(rect) = path_as_rect(path) {
-        device.draw_rect(&rect, base_transform, &paint, &draw_mode);
+        device.draw_rect(&rect, props, &draw_mode);
     } else {
-        device.draw_path(path, base_transform, &paint, &draw_mode);
-    }
-}
-
-pub(crate) fn get_paint<'a>(context: &Context<'a>, is_stroke: bool) -> Paint<'a> {
-    let data = if is_stroke {
-        context.get().stroke_data()
-    } else {
-        context.get().non_stroke_data()
-    };
-
-    if data.color_space.is_pattern() || data.pattern.is_some() {
-        if let Some(mut pattern) = data.pattern {
-            if let Some(tf) = &data.transfer_function {
-                pattern.set_transfer_function(tf.clone());
-            }
-
-            pattern.pre_concat_transform(context.root_transform());
-
-            Paint::Pattern(Box::new(pattern))
-        } else {
-            // Pattern was likely invalid, use transparent paint.
-            Paint::Color(Color::new(ColorSpace::device_gray(), smallvec![0.0], 0.0))
-        }
-    } else {
-        let color = Color::new(data.color_space, data.color, data.alpha);
-
-        if let Some(tf) = &data.transfer_function {
-            Paint::Color(Color::from_rgba(tf.apply(&color.to_rgba())))
-        } else {
-            Paint::Color(color)
-        }
+        device.draw_path(path, props, &draw_mode);
     }
 }

@@ -43,9 +43,54 @@ impl<'a> SvgRenderer<'a> {
         path_transform: Affine,
         stroke_props: Option<&StrokeProps>,
     ) {
-        let is_stroke = stroke_props.is_some();
+        let (paint_str, alpha) = self.svg_paint(paint, path, path_transform, stroke_props);
 
-        let (paint_str, alpha) = match &paint {
+        if stroke_props.is_some() {
+            self.xml.write_attribute("fill", "none");
+            self.xml.write_attribute("stroke", &paint_str);
+            if alpha != 1.0 {
+                self.xml.write_attribute("stroke-opacity", &alpha);
+            }
+        } else {
+            self.xml.write_attribute("fill", &paint_str);
+
+            if alpha != 1.0 {
+                self.xml.write_attribute("fill-opacity", &alpha);
+            }
+        }
+    }
+
+    pub(crate) fn write_fill_and_stroke_paint(
+        &mut self,
+        paint: &Paint<'a>,
+        path: &BezPath,
+        path_transform: Affine,
+        stroke_props: &StrokeProps,
+    ) {
+        let (fill_str, fill_alpha) = self.svg_paint(paint, path, path_transform, None);
+        let (stroke_str, stroke_alpha) =
+            self.svg_paint(paint, path, path_transform, Some(stroke_props));
+
+        self.xml.write_attribute("fill", &fill_str);
+        self.xml.write_attribute("stroke", &stroke_str);
+
+        if fill_alpha != 1.0 {
+            self.xml.write_attribute("fill-opacity", &fill_alpha);
+        }
+
+        if stroke_alpha != 1.0 {
+            self.xml.write_attribute("stroke-opacity", &stroke_alpha);
+        }
+    }
+
+    fn svg_paint(
+        &mut self,
+        paint: &Paint<'a>,
+        path: &BezPath,
+        path_transform: Affine,
+        stroke_props: Option<&StrokeProps>,
+    ) -> (String, f32) {
+        match &paint {
             Paint::Color(c) => {
                 let rgba8 = c.to_rgba().to_rgba8();
                 let color = format!(
@@ -147,20 +192,6 @@ impl<'a> SvgRenderer<'a> {
                 };
 
                 (format!("url(#{id})"), 1.0)
-            }
-        };
-
-        if is_stroke {
-            self.xml.write_attribute("fill", "none");
-            self.xml.write_attribute("stroke", &paint_str);
-            if alpha != 1.0 {
-                self.xml.write_attribute("stroke-opacity", &alpha);
-            }
-        } else {
-            self.xml.write_attribute("fill", &paint_str);
-
-            if alpha != 1.0 {
-                self.xml.write_attribute("fill-opacity", &alpha);
             }
         }
     }
