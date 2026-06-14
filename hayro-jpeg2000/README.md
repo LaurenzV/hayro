@@ -21,20 +21,22 @@ color space, which can then be processed further according to your needs.
 
 ## Example
 ```rust
-use hayro_jpeg2000::{Image, DecodeSettings};
+use hayro_jpeg2000::{DecodeSettings, DecoderContext, Image};
 
 let data = std::fs::read("image.jp2").unwrap();
 let image = Image::new(&data, &DecodeSettings::default()).unwrap();
 
 println!(
     "{}x{} image in {:?} with alpha={}",
-    image.width,
-    image.height,
-    image.color_space,
-    image.has_alpha,
+    image.width(),
+    image.height(),
+    image.color_space(),
+    image.has_alpha(),
 );
 
-let bitmap = image.decode().unwrap();
+let mut ctx = DecoderContext::default();
+let decoded = image.decode(&mut ctx).unwrap();
+let bitmap = decoded.data_u8();
 ```
 
 If you want to see a more comprehensive example, please take a look

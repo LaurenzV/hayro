@@ -48,7 +48,8 @@ pub(crate) fn decode(data: &[u8], params: &ImageDecodeParams) -> Option<FilterRe
         },
     };
     let has_alpha = image.has_alpha();
-    let bitmap = image.decode().ok()?;
+    let mut decoder_context = hayro_jpeg2000::DecoderContext::default();
+    let bitmap = image.decode(&mut decoder_context).ok()?.data_u8();
 
     let (mut data, mut alpha) = if !has_alpha {
         (bitmap, None)

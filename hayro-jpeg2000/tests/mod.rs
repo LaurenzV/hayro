@@ -283,7 +283,10 @@ fn run_asset_test(asset: &AssetEntry) -> Result<(), String> {
 
     if !asset.render {
         // Crash-only test: just execute the decoder to ensure it handles the file.
-        let _ = image.and_then(|i| i.decode());
+        let _ = image.and_then(|i| {
+            let mut decoder_context = hayro_jpeg2000::DecoderContext::default();
+            i.decode(&mut decoder_context).map(|_| ())
+        });
         return Ok(());
     }
 

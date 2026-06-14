@@ -147,8 +147,9 @@ fn bench_decode(c: &mut Criterion) {
             let mut ctx = DecoderContext::default();
             b.iter(|| {
                 image
-                    .decode_into(black_box(output.as_mut_slice()), &mut ctx)
-                    .unwrap();
+                    .decode(&mut ctx)
+                    .unwrap()
+                    .store_u8_into(black_box(output.as_mut_slice()));
                 black_box(&output);
             });
         });

@@ -10,12 +10,13 @@ changes in tile-parts), but all features that actually commonly appear in real-l
 images should be supported (if not, please open an issue!).
 
 The decoder abstracts away most of the internal complexity of JPEG2000
-and yields a simple 8-bit image with either greyscale, RGB, CMYK or an ICC-based
-color space, which can then be processed further according to your needs.
+and yields decoded image components, which can be inspected directly or packed
+into a simple 8-bit image with either greyscale, RGB, CMYK or an ICC-based color
+space.
 
 # Example
 ```rust,no_run
-use hayro_jpeg2000::{Image, DecodeSettings};
+use hayro_jpeg2000::{DecodeSettings, DecoderContext, Image};
 
 let data = std::fs::read("image.jp2").unwrap();
 let image = Image::new(&data, &DecodeSettings::default()).unwrap();
@@ -28,7 +29,9 @@ println!(
     image.has_alpha(),
 );
 
-let bitmap = image.decode().unwrap();
+let mut ctx = DecoderContext::default();
+let decoded = image.decode(&mut ctx).unwrap();
+let bitmap = decoded.data_u8();
 ```
 
 If you want to see a more comprehensive example, please take a look
@@ -71,12 +74,12 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use crate::error::{bail, err};
-use crate::j2c::{ComponentData, Header};
+use crate::j2c::Header;
+use crate::jp2::ImageBoxes;
 use crate::jp2::cdef::{ChannelAssociation, ChannelType};
 use crate::jp2::cmap::ComponentMappingType;
 use crate::jp2::colr::{CieLab, EnumeratedColorspace};
 use crate::jp2::icc::ICCMetadata;
-use crate::jp2::{DecodedImage, ImageBoxes};
 
 pub mod error;
 #[macro_use]
@@ -88,7 +91,8 @@ pub use error::{
     ColorError, DecodeError, DecodingError, FormatError, MarkerError, Result, TileError,
     ValidationError,
 };
-pub use j2c::DecoderContext;
+pub use j2c::{ComponentData, DecoderContext};
+pub use jp2::DecodedImage;
 
 #[cfg(feature = "image")]
 pub mod integration;
@@ -191,33 +195,11 @@ impl<'a> Image<'a> {
         self.header.component_infos[0].size_info.precision
     }
 
-    /// Decode the image and return its decoded result as a `Vec<u8>`, with each
-    /// channel interleaved.
-    pub fn decode(&self) -> Result<Vec<u8>> {
-        let buffer_size = self.width() as usize
-            * self.height() as usize
-            * (self.color_space.num_channels() as usize + if self.has_alpha { 1 } else { 0 });
-        let mut buf = vec![0; buffer_size];
-        let mut decoder_context = DecoderContext::default();
-        self.decode_into(&mut buf, &mut decoder_context)?;
-
-        Ok(buf)
-    }
-
-    /// Decode the image into the given buffer.
-    ///
-    /// This method does the same as [`Image::decode`], but you can provide
-    /// a custom buffer for the output, as well as a decoder context. Doing
-    /// so will allow `hayro-jpeg2000` to reuse memory allocations, so this is
-    /// especially recommended if you plan on converting multiple images
-    /// in the same session.
-    ///
-    /// The buffer must have the correct size.
-    pub fn decode_into(
+    /// Decode the image and return its decoded components.
+    pub fn decode<'b>(
         &'a self,
-        buf: &mut [u8],
-        decoder_context: &mut DecoderContext<'a>,
-    ) -> Result<()> {
+        decoder_context: &'b mut DecoderContext<'a>,
+    ) -> Result<DecodedImage<'b>> {
         let settings = &self.settings;
         j2c::decode(self.codestream, &self.header, decoder_context)?;
         let mut decoded_image = DecodedImage {
@@ -255,9 +237,8 @@ impl<'a> Image<'a> {
         // Note that this is only valid if all images have the same bit depth.
         let bit_depth = decoded_image.decoded_components[0].bit_depth;
         convert_color_space(&mut decoded_image, bit_depth)?;
-        interleave_and_convert(&mut decoded_image, buf);
 
-        Ok(())
+        Ok(decoded_image)
     }
 }
 
@@ -389,8 +370,31 @@ pub struct Bitmap {
     pub original_bit_depth: u8,
 }
 
-fn interleave_and_convert(image: &mut DecodedImage<'_>, buf: &mut [u8]) {
-    let components = &mut *image.decoded_components;
+impl DecodedImage<'_> {
+    /// The decoded components of the image.
+    pub fn components(&self) -> &[ComponentData] {
+        self.decoded_components
+    }
+
+    /// Return the decoded image as interleaved unsigned 8-bit sample data.
+    pub fn data_u8(&self) -> Vec<u8> {
+        let components = self.components();
+        let buffer_size = components[0].samples().len() * components.len();
+        let mut buf = vec![0; buffer_size];
+        self.store_u8_into(&mut buf);
+        buf
+    }
+
+    /// Store the decoded image as interleaved unsigned 8-bit sample data into `buf`.
+    ///
+    /// The buffer must have the correct size.
+    pub fn store_u8_into(&self, buf: &mut [u8]) {
+        interleave_and_convert(self, buf);
+    }
+}
+
+fn interleave_and_convert(image: &DecodedImage<'_>, buf: &mut [u8]) {
+    let components = &*image.decoded_components;
     let num_components = components.len();
 
     let mut all_same_bit_depth = Some(components[0].bit_depth);

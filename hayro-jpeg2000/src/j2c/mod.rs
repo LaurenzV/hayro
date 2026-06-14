@@ -28,10 +28,23 @@ pub(crate) struct ParsedCodestream<'a> {
     pub(crate) data: &'a [u8],
 }
 
+/// Decoded data for one JPEG2000 component.
 #[derive(Debug, Clone)]
-pub(crate) struct ComponentData {
+pub struct ComponentData {
     pub(crate) container: SimdBuffer<{ SIMD_WIDTH }>,
     pub(crate) bit_depth: u8,
+}
+
+impl ComponentData {
+    /// The bit depth of this component.
+    pub fn bit_depth(&self) -> u8 {
+        self.bit_depth
+    }
+
+    /// The decoded samples of this component.
+    pub fn samples(&self) -> &[f32] {
+        self.container.truncated()
+    }
 }
 
 pub(crate) fn parse<'a>(stream: &'a [u8], settings: &DecodeSettings) -> Result<Image<'a>> {

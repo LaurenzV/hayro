@@ -122,8 +122,10 @@ fn check_jpx_images(folder: &str) {
                         };
 
                         let decoded = catch_unwind(|| {
-                            hayro_jpeg2000::Image::new(&raw_data, &settings)
-                                .and_then(|image| image.decode())
+                            hayro_jpeg2000::Image::new(&raw_data, &settings).and_then(|image| {
+                                let mut decoder_context = hayro_jpeg2000::DecoderContext::default();
+                                image.decode(&mut decoder_context).map(|_| ())
+                            })
                         });
 
                         match decoded {

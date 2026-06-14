@@ -27,7 +27,8 @@ pub(crate) struct ImageBoxes {
     pub(crate) component_mapping: Option<ComponentMappingBox>,
 }
 
-pub(crate) struct DecodedImage<'a> {
+/// A decoded JPEG2000 image.
+pub struct DecodedImage<'a> {
     /// The raw decoded JPEG2000 codestream components.
     pub(crate) decoded_components: &'a mut Vec<ComponentData>,
     /// The JP2 boxes of the image. In the case of a raw codestream, we
