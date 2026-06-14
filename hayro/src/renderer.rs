@@ -585,7 +585,12 @@ impl Renderer {
     }
 
     #[must_use]
-    fn set_paint(&mut self, paint: &Paint<'_>, path: &BezPath, is_stroke: bool) -> Option<BezPath> {
+    fn set_paint(
+        &mut self,
+        paint: &Paint<'_>,
+        path_bbox: impl Fn() -> Rect,
+        is_stroke: bool,
+    ) -> Option<BezPath> {
         let mut paint_transform = Affine::IDENTITY;
         let mut clip_path = None;
 
@@ -603,7 +608,7 @@ impl Renderer {
 
                         clip_path = s.shading.clip_path.clone();
                         let encoded = s.encode();
-                        let mut bbox = (*path_transform * path.clone()).bounding_box();
+                        let mut bbox = (*path_transform * path_bbox().to_path(0.0)).bounding_box();
 
                         if is_stroke {
                             // Try to account for stroke in bbox.
@@ -776,7 +781,7 @@ impl Renderer {
         self.apply_draw_props(&props);
         self.set_stroke_properties(stroke_props, is_text);
 
-        let clip_path = self.set_paint(&props.paint, path, true);
+        let clip_path = self.set_paint(&props.paint, || path.bounding_box(), true);
         if let Some(clip_path) = clip_path.as_ref() {
             self.push_clip_path_inner(clip_path, FillRule::NonZero);
         }
@@ -790,7 +795,7 @@ impl Renderer {
         self.ctx.set_fill_rule(convert_fill_rule(fill_rule));
         self.apply_draw_props(&props);
 
-        let clip_path = self.set_paint(&props.paint, path, false);
+        let clip_path = self.set_paint(&props.paint, || path.bounding_box(), false);
         if let Some(clip_path) = clip_path.as_ref() {
             self.push_clip_path_inner(clip_path, fill_rule);
         }
@@ -973,8 +978,7 @@ impl<'a> Device<'a> for Renderer {
                                 );
                                 self.ctx.set_transform(transform);
 
-                                let clip_path =
-                                    self.set_paint(paint, &stencil_rect.to_path(0.1), false);
+                                let clip_path = self.set_paint(paint, || stencil_rect, false);
                                 if let Some(clip_path) = clip_path.as_ref() {
                                     self.push_clip_path_inner(clip_path, FillRule::NonZero);
                                 }
@@ -1064,13 +1068,12 @@ impl<'a> Device<'a> for Renderer {
     }
 
     fn draw_rect(&mut self, rect: &Rect, props: DrawProps<'a>, draw_mode: &DrawMode) {
-        let path = rect.to_path(0.1);
         match draw_mode {
             DrawMode::Fill(fill_rule) => {
                 self.ctx.set_fill_rule(convert_fill_rule(*fill_rule));
                 self.apply_draw_props(&props);
 
-                let clip_path = self.set_paint(&props.paint, &path, false);
+                let clip_path = self.set_paint(&props.paint, || *rect, false);
                 if let Some(clip_path) = clip_path.as_ref() {
                     self.push_clip_path_inner(clip_path, *fill_rule);
                 }
@@ -1082,10 +1085,12 @@ impl<'a> Device<'a> for Renderer {
                 }
             }
             DrawMode::Stroke(s) => {
+                let path = rect.to_path(0.1);
                 Self::stroke_path(self, &path, props, s, false);
             }
             DrawMode::FillAndStroke(fill_rule, stroke_props) => {
                 self.draw_rect(rect, props.clone(), &DrawMode::Fill(*fill_rule));
+                let path = rect.to_path(0.1);
                 Self::stroke_path(self, &path, props, stroke_props, false);
             }
             DrawMode::Invisible => {}
