@@ -493,8 +493,6 @@ pub(crate) fn decode_bitmap_arithmetic_coding(
     tpgdon: bool,
     adaptive_template_pixels: &[AdaptiveTemplatePixel; 4],
 ) -> Result<()> {
-    // An empty bitmap has nothing to decode, and the fast-loop path below
-    // computes `width - 1`, which would underflow when the width is 0.
     if bitmap.width == 0 || bitmap.height == 0 {
         return Ok(());
     }
@@ -958,38 +956,3 @@ const DEFAULT_TEMPLATE3_FAST_PARAMS: DefaultTemplateFastParams = DefaultTemplate
     prev2_next_mask: 0x0000,
     prev1_next_mask: 0x0010,
 };
-
-#[cfg(test)]
-mod tests {
-    use alloc::vec;
-
-    use super::*;
-
-    #[test]
-    fn arithmetic_coding_zero_width_bitmap() {
-        // A region header may specify a zero-width bitmap. Decoding it should be a
-        // no-op rather than underflowing on `width - 1` in the fast-loop path.
-        let mut bitmap = Bitmap::new(0, 4).unwrap();
-        let data = [0_u8; 4];
-        let mut decoder = ArithmeticDecoder::new(&data);
-        let mut contexts =
-            vec![ArithmeticDecoderContext::default(); 1 << Template::Template1.context_bits()];
-        // Template1 with its default AT pixel takes the fast-loop path.
-        let at = [
-            AdaptiveTemplatePixel { x: 3, y: -1 },
-            AdaptiveTemplatePixel::default(),
-            AdaptiveTemplatePixel::default(),
-            AdaptiveTemplatePixel::default(),
-        ];
-
-        decode_bitmap_arithmetic_coding(
-            &mut bitmap,
-            &mut decoder,
-            &mut contexts,
-            Template::Template1,
-            false,
-            &at,
-        )
-        .unwrap();
-    }
-}

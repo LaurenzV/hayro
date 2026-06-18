@@ -731,3 +731,9 @@ fn huffman_code_overflow() {
     let file = include_bytes!("../pdfs/load/huffman_code_overflow.jb2");
     load_jbig2(file);
 }
+
+#[test]
+fn issue1321() {
+    let file = include_bytes!("../pdfs/load/issue1321.pdf");
+    load_pdf(file);
+}
