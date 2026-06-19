@@ -57,7 +57,7 @@ use vello_cpu::color::AlphaColor;
 use vello_cpu::color::Srgb;
 use vello_cpu::color::palette::css::TRANSPARENT;
 use vello_cpu::color::palette::css::WHITE;
-use vello_cpu::{Level, Pixmap, RenderMode};
+use vello_cpu::{Level, Pixmap};
 
 mod renderer;
 
@@ -141,7 +141,6 @@ pub fn render<'a>(
     let vc_settings = vello_cpu::RenderSettings {
         level: Level::new(),
         num_threads: 0,
-        render_mode: RenderMode::OptimizeSpeed,
     };
 
     let mut device = Renderer::new(pix_width, pix_height, vc_settings, cache);
@@ -166,7 +165,7 @@ pub fn render<'a>(
 
     let mut pixmap = Pixmap::new(pix_width, pix_height);
     let mut resources = vello_cpu::Resources::default();
-    device.ctx.render_to_pixmap(&mut resources, &mut pixmap);
+    device.ctx.render(&mut pixmap, &mut resources);
 
     pixmap
 }

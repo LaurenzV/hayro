@@ -56,7 +56,7 @@ sitro = { git = "https://github.com/LaurenzV/sitro", rev="fb804b3" }
 xmlwriter = { version = "0.1" }
 base64 = { version = "0.22" }
 zune-jpeg = { version = "0.5", default-features = false }
-vello_cpu = { git = "https://github.com/linebender/vello", rev = "0971c179", default-features = false, features = ["std", "png", "u8_pipeline"] }
+vello_cpu = { git = "https://github.com/linebender/vello", rev = "8442ef4", default-features = false, features = ["std", "png", "u8_pipeline"] }
 pic-scale = { version = "0.7.9", default-features = false, features = ["neon", "rdm", "sse", "avx"] }
 fearless_simd = "0.4.0"
 brotli = { version = "8", default-features = false, features = ["std"] }

@@ -171,7 +171,7 @@ impl Renderer {
             renderer.draw_image(rgb_data, Some(alpha_data));
             renderer.ctx.flush();
             let mut resources = vello_cpu::Resources::default();
-            renderer.ctx.render_to_pixmap(&mut resources, &mut mask_pix);
+            renderer.ctx.render(&mut mask_pix, &mut resources);
             Mask::new_alpha(&mask_pix)
         };
 
@@ -733,7 +733,7 @@ impl Renderer {
                         let mut pix = Pixmap::new(pix_width, pix_height);
                         renderer.ctx.flush();
                         let mut resources = vello_cpu::Resources::default();
-                        renderer.ctx.render_to_pixmap(&mut resources, &mut pix);
+                        renderer.ctx.render(&mut pix, &mut resources);
 
                         // TODO: Fix these
                         if x_step < 0.0 {
@@ -963,9 +963,7 @@ impl<'a> Device<'a> for Renderer {
                                     sub_renderer.draw_image(rgb_bytes, Some(stencil));
                                     sub_renderer.ctx.flush();
                                     let mut resources = vello_cpu::Resources::default();
-                                    sub_renderer
-                                        .ctx
-                                        .render_to_pixmap(&mut resources, &mut sub_pix);
+                                    sub_renderer.ctx.render(&mut sub_pix, &mut resources);
                                     sub_pix
                                 };
 
@@ -1194,7 +1192,7 @@ fn draw_soft_mask(mask: &SoftMask<'_>, settings: RenderSettings, width: u16, hei
     let mut pix = Pixmap::new(width, height);
     renderer.ctx.flush();
     let mut resources = vello_cpu::Resources::default();
-    renderer.ctx.render_to_pixmap(&mut resources, &mut pix);
+    renderer.ctx.render(&mut pix, &mut resources);
 
     let mut rendered_mask = match mask.mask_type() {
         MaskType::Luminosity => Mask::new_luminance(&pix),
