@@ -22,6 +22,11 @@ use vello_cpu::{
     Image, ImageSource, Mask, PaintType, Pixmap, RenderContext, RenderSettings, peniko,
 };
 
+/// The per-pixel image-buffer expansions poll the cooperative stop once every
+/// this many pixels — frequent enough to bound cancellation latency to well
+/// under a millisecond, rare enough to be free on the throughput path.
+const IMAGE_STOP_POLL_INTERVAL: usize = 1 << 16;
+
 pub(crate) struct Renderer {
     pub(crate) ctx: RenderContext,
     pub(crate) inside_pattern: bool,
@@ -110,6 +115,15 @@ impl Renderer {
             scaler: Scaler::new(ResamplingFunction::CatmullRom),
             stop: Arc::new(enough::Unstoppable),
         }
+    }
+
+    /// Whether a long per-pixel image loop should stop because the cooperative
+    /// stop has fired. Polled on a coarse grid (every `IMAGE_STOP_POLL_INTERVAL`
+    /// pixels), so the check is effectively free. When this returns `true` the
+    /// caller bails out of `draw_image`; the render is being discarded on stop,
+    /// so leaving a partial buffer behind is fine.
+    fn poll_stop(&self, pixel_index: usize) -> bool {
+        pixel_index.is_multiple_of(IMAGE_STOP_POLL_INTERVAL) && self.stop.should_stop()
     }
 
     fn set_stroke_properties(&mut self, stroke_props: &StrokeProps, is_text: bool) {
@@ -360,10 +374,14 @@ impl Renderer {
                 resized
             };
 
-            luma_data
-                .iter()
-                .flat_map(|g| [*g, *g, *g, 255])
-                .collect::<Vec<_>>()
+            let mut out = Vec::with_capacity(luma_data.len() * 4);
+            for (i, g) in luma_data.iter().enumerate() {
+                if self.poll_stop(i) {
+                    return;
+                }
+                out.extend_from_slice(&[*g, *g, *g, 255]);
+            }
+            out
         } else if matches!(&image_data, RenderImageData::Luma(_)) && has_alpha {
             let RenderImageData::Luma(luma) = image_data else {
                 unreachable!()
@@ -399,7 +417,10 @@ impl Renderer {
             };
 
             let mut out = Vec::with_capacity(img_width as usize * img_height as usize * 4);
-            for (g, a) in luma_data.iter().zip(alpha_data) {
+            for (i, (g, a)) in luma_data.iter().zip(alpha_data).enumerate() {
+                if self.poll_stop(i) {
+                    return;
+                }
                 out.extend_from_slice(&[*g, *g, *g, a]);
             }
             out
@@ -424,7 +445,10 @@ impl Renderer {
             img_height = new_height;
 
             let mut out = Vec::with_capacity((img_width * img_height) as usize * 4);
-            for px in resized.chunks_exact(3) {
+            for (i, px) in resized.chunks_exact(3).enumerate() {
+                if self.poll_stop(i) {
+                    return;
+                }
                 out.extend_from_slice(&[px[0], px[1], px[2], 255]);
             }
             out
@@ -484,7 +508,10 @@ impl Renderer {
 
         if has_alpha {
             let (chunks, _) = rgba_data.as_chunks_mut::<4>();
-            for chunk in chunks {
+            for (i, chunk) in chunks.iter_mut().enumerate() {
+                if self.poll_stop(i) {
+                    return;
+                }
                 *chunk = AlphaColor::from_rgba8(chunk[0], chunk[1], chunk[2], chunk[3])
                     .premultiply()
                     .to_rgba8()
