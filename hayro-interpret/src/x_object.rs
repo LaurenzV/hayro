@@ -22,6 +22,7 @@ use smallvec::{SmallVec, smallvec};
 use std::borrow::Cow;
 use std::iter;
 use std::ops::Deref;
+use std::sync::Arc;
 
 pub(crate) enum XObject<'a> {
     FormXObject(FormXObject<'a>),
@@ -34,6 +35,7 @@ impl<'a> XObject<'a> {
         warning_sink: &WarningSinkFn,
         cache: &Cache,
         transfer_function: Option<ActiveTransferFunction>,
+        stop: &Arc<dyn enough::Stop>,
     ) -> Option<Self> {
         let dict = stream.dict();
         match dict.get::<Name<'_>>(SUBTYPE)?.deref() {
@@ -44,6 +46,7 @@ impl<'a> XObject<'a> {
                 cache,
                 false,
                 transfer_function,
+                stop,
             )?)),
             FORM => Some(Self::FormXObject(FormXObject::new(stream)?)),
             _ => None,
@@ -274,6 +277,7 @@ pub(crate) struct ImageXObject<'a> {
     stream: Stream<'a>,
     transfer_function: Option<ActiveTransferFunction>,
     warning_sink: WarningSinkFn,
+    stop: Arc<dyn enough::Stop>,
 }
 
 impl<'a> ImageXObject<'a> {
@@ -284,6 +288,7 @@ impl<'a> ImageXObject<'a> {
         cache: &Cache,
         mut is_mask: bool,
         transfer_function: Option<ActiveTransferFunction>,
+        stop: &Arc<dyn enough::Stop>,
     ) -> Option<Self> {
         let dict = stream.dict();
 
@@ -330,6 +335,7 @@ impl<'a> ImageXObject<'a> {
             height,
             color_space: image_cs,
             warning_sink: warning_sink.clone(),
+            stop: stop.clone(),
             transfer_function,
             interpolate,
             stream: stream.clone(),
@@ -417,7 +423,7 @@ fn decode_context<'a>(
 
     let decoded = obj
         .stream
-        .decoded_image(&decode_params)
+        .decoded_image(&decode_params, &obj.stop)
         .map_err(|_| (obj.warning_sink)(InterpreterWarning::ImageDecodeFailure))
         .ok()?;
 
@@ -754,7 +760,15 @@ fn resolve_alpha(
         .get::<Stream<'_>>(SMASK)
         .or_else(|| dict.get::<Stream<'_>>(MASK))
     {
-        let obj = ImageXObject::new(&s_mask, |_| None, &obj.warning_sink, &obj.cache, true, None)?;
+        let obj = ImageXObject::new(
+            &s_mask,
+            |_| None,
+            &obj.warning_sink,
+            &obj.cache,
+            true,
+            None,
+            &obj.stop,
+        )?;
 
         decode_mask(&obj, target_dimension).map(|decoded| decoded.luma)
     } else if let Some(color_key_mask) = dict.get::<SmallVec<[u16; 4]>>(MASK) {
@@ -815,7 +829,15 @@ fn resolve_matte(
     let mut matte_rgb = [0_u8; 3];
     color_space.convert_f32(&matte, &mut matte_rgb, false);
 
-    let mask_obj = ImageXObject::new(&s_mask, |_| None, &obj.warning_sink, &obj.cache, true, None)?;
+    let mask_obj = ImageXObject::new(
+        &s_mask,
+        |_| None,
+        &obj.warning_sink,
+        &obj.cache,
+        true,
+        None,
+        &obj.stop,
+    )?;
     let alpha = decode_mask(&mask_obj, target_dimension)?.luma;
 
     Some((alpha, matte_rgb))
