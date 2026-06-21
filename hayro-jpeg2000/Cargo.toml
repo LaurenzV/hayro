@@ -15,6 +15,7 @@ log = { workspace = true, optional = true }
 fearless_simd = { workspace = true, optional = true }
 image = { workspace = true, default-features = false, optional = true }
 moxcms = { workspace = true, optional = true }
+enough.workspace = true
 
 [features]
 default = ["std", "simd", "image"]

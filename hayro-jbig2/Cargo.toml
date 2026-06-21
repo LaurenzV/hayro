@@ -17,6 +17,7 @@ simd = ["fearless_simd", "std"]
 image = ["dep:image", "std"]
 
 [dependencies]
+enough.workspace = true
 fearless_simd = { workspace = true, optional = true }
 hayro-ccitt = { workspace = true }
 image = { workspace = true, default-features = false, optional = true }
