@@ -18,7 +18,9 @@ use crate::object::Dict;
 use crate::object::Name;
 use crate::object::dict::keys::*;
 use crate::object::stream::{DecodeFailure, FilterResult, ImageDecodeParams};
+use alloc::sync::Arc;
 use core::ops::Deref;
+use enough::Stop;
 
 /// A data filter.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -86,6 +88,7 @@ impl Filter {
         data: &[u8],
         params: &Dict<'_>,
         #[cfg_attr(not(feature = "images"), allow(unused))] image_params: &ImageDecodeParams,
+        #[cfg_attr(not(feature = "images"), allow(unused))] stop: &Arc<dyn Stop>,
     ) -> Result<FilterResult<'static>, DecodeFailure> {
         let res = match self {
             Self::AsciiHexDecode => ascii_hex::decode(data)
@@ -94,29 +97,29 @@ impl Filter {
             Self::Ascii85Decode => ascii_85::decode(data)
                 .map(FilterResult::from_data)
                 .ok_or(DecodeFailure::StreamDecode),
-            Self::RunLengthDecode => run_length::decode(data)
+            Self::RunLengthDecode => run_length::decode(data, stop.as_ref())
                 .map(FilterResult::from_data)
                 .ok_or(DecodeFailure::StreamDecode),
-            Self::LzwDecode => lzw_flate::lzw::decode(data, params)
+            Self::LzwDecode => lzw_flate::lzw::decode(data, params, stop.as_ref())
                 .map(FilterResult::from_data)
                 .ok_or(DecodeFailure::StreamDecode),
-            Self::FlateDecode => lzw_flate::flate::decode(data, params)
+            Self::FlateDecode => lzw_flate::flate::decode(data, params, stop.as_ref())
                 .map(FilterResult::from_data)
                 .ok_or(DecodeFailure::StreamDecode),
             #[cfg(feature = "images")]
             Self::DctDecode => {
-                dct::decode(data, params, image_params).ok_or(DecodeFailure::ImageDecode)
+                dct::decode(data, params, image_params, stop).ok_or(DecodeFailure::ImageDecode)
             }
             #[cfg(feature = "images")]
-            Self::CcittFaxDecode => {
-                ccitt::decode(data, params, image_params).ok_or(DecodeFailure::ImageDecode)
-            }
+            Self::CcittFaxDecode => ccitt::decode(data, params, image_params, stop.as_ref())
+                .ok_or(DecodeFailure::ImageDecode),
             #[cfg(feature = "images")]
-            Self::Jbig2Decode => {
-                jbig2::decode(data, params, image_params).ok_or(DecodeFailure::ImageDecode)
-            }
+            Self::Jbig2Decode => jbig2::decode(data, params, image_params, stop.as_ref())
+                .ok_or(DecodeFailure::ImageDecode),
             #[cfg(feature = "images")]
-            Self::JpxDecode => jpx::decode(data, image_params).ok_or(DecodeFailure::ImageDecode),
+            Self::JpxDecode => {
+                jpx::decode(data, image_params, stop.as_ref()).ok_or(DecodeFailure::ImageDecode)
+            }
             #[cfg(not(feature = "images"))]
             Self::DctDecode | Self::CcittFaxDecode | Self::Jbig2Decode | Self::JpxDecode => {
                 warn!("image decoding is not supported (enable the `images` feature)");
@@ -126,6 +129,11 @@ impl Filter {
         };
 
         if res.is_err() {
+            // A filter that bailed because the stop check fired reports a
+            // distinct failure instead of a generic decode error.
+            if stop.should_stop() {
+                return Err(DecodeFailure::Stopped);
+            }
             warn!("failed to apply filter {}", self.debug_name());
         }
 

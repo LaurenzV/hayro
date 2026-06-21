@@ -5,6 +5,7 @@ use crate::object::stream::{ImageColorSpace, ImageData, ImageDecodeParams};
 use alloc::borrow::Cow;
 use alloc::vec;
 use alloc::vec::Vec;
+use enough::Stop;
 use hayro_jpeg2000::{ColorSpace, DecodeSettings};
 
 impl ImageColorSpace {
@@ -18,7 +19,11 @@ impl ImageColorSpace {
     }
 }
 
-pub(crate) fn decode(data: &[u8], params: &ImageDecodeParams) -> Option<FilterResult<'static>> {
+pub(crate) fn decode(
+    data: &[u8],
+    params: &ImageDecodeParams,
+    stop: &dyn Stop,
+) -> Option<FilterResult<'static>> {
     use crate::object::stream::ImageColorSpace;
 
     let settings = DecodeSettings {
@@ -49,7 +54,10 @@ pub(crate) fn decode(data: &[u8], params: &ImageDecodeParams) -> Option<FilterRe
     };
     let has_alpha = image.has_alpha();
     let mut decoder_context = hayro_jpeg2000::DecoderContext::default();
-    let bitmap = image.decode(&mut decoder_context).ok()?.data_u8();
+    let bitmap = image
+        .decode_with_stop(&mut decoder_context, stop)
+        .ok()?
+        .data_u8();
 
     let (mut data, mut alpha) = if !has_alpha {
         (bitmap, None)

@@ -6,6 +6,7 @@ use crate::object::stream::{FilterResult, ImageColorSpace, ImageData, ImageDecod
 use alloc::borrow::Cow;
 use alloc::vec;
 use alloc::vec::Vec;
+use enough::Stop;
 
 /// Decode JBIG2 data from a PDF stream.
 ///
@@ -15,6 +16,7 @@ pub(crate) fn decode(
     data: &[u8],
     params: &Dict<'_>,
     image_params: &ImageDecodeParams,
+    stop: &dyn Stop,
 ) -> Option<FilterResult<'static>> {
     let globals = params
         .get::<Stream<'_>>(JBIG2_GLOBALS)
@@ -54,7 +56,13 @@ pub(crate) fn decode(
 
         let writer = BitWriter::new(&mut packed, 1)?;
         let mut decoder = BitWriterDecoder { writer };
-        image.decode(&mut decoder).ok()?;
+        image
+            .decode_with_stop(
+                &mut decoder,
+                &mut hayro_jbig2::DecoderContext::default(),
+                stop,
+            )
+            .ok()?;
 
         (packed, 1)
     } else {
@@ -89,7 +97,13 @@ pub(crate) fn decode(
             output: vec![0xFF; image.width() as usize * image.height() as usize],
             pos: 0,
         };
-        image.decode(&mut decoder).ok()?;
+        image
+            .decode_with_stop(
+                &mut decoder,
+                &mut hayro_jbig2::DecoderContext::default(),
+                stop,
+            )
+            .ok()?;
 
         (decoder.output, 8)
     };
