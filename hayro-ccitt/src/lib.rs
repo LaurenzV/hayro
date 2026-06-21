@@ -35,6 +35,7 @@ use crate::bit_reader::BitReader;
 use crate::decode::{EOFB, Mode};
 use alloc::vec;
 use alloc::vec::Vec;
+use enough::{Stop, StopReason};
 
 mod bit_reader;
 mod decode;
@@ -54,6 +55,8 @@ pub enum DecodeError {
     LineLengthMismatch,
     /// Arithmetic overflow in run length or position calculation.
     Overflow,
+    /// Decoding was stopped early by the stop check.
+    Stopped,
 }
 
 impl core::fmt::Display for DecodeError {
@@ -63,7 +66,14 @@ impl core::fmt::Display for DecodeError {
             Self::InvalidCode => write!(f, "invalid CCITT code sequence"),
             Self::LineLengthMismatch => write!(f, "scanline length mismatch"),
             Self::Overflow => write!(f, "arithmetic overflow in position calculation"),
+            Self::Stopped => write!(f, "decoding stopped by the stop check"),
         }
+    }
+}
+
+impl From<StopReason> for DecodeError {
+    fn from(_: StopReason) -> Self {
+        Self::Stopped
     }
 }
 
@@ -170,13 +180,25 @@ struct ColorChange {
 /// of rows were decoded successfully and written into the decoder, so those
 /// can still be used, but the image might be truncated.
 pub fn decode(data: &[u8], decoder: &mut impl Decoder, ctx: &mut DecoderContext) -> Result<usize> {
+    decode_with_stop(data, decoder, ctx, &enough::Unstoppable)
+}
+
+/// Decode like [`decode`], but poll `stop` once per scanline.
+///
+/// If the check signals a stop, decoding returns [`DecodeError::Stopped`].
+pub fn decode_with_stop(
+    data: &[u8],
+    decoder: &mut impl Decoder,
+    ctx: &mut DecoderContext,
+    stop: &dyn Stop,
+) -> Result<usize> {
     ctx.reset();
     let mut reader = BitReader::new(data);
 
     match ctx.settings.encoding {
-        EncodingMode::Group4 => decode_group4(ctx, &mut reader, decoder)?,
-        EncodingMode::Group3_1D => decode_group3_1d(ctx, &mut reader, decoder)?,
-        EncodingMode::Group3_2D { .. } => decode_group3_2d(ctx, &mut reader, decoder)?,
+        EncodingMode::Group4 => decode_group4(ctx, &mut reader, decoder, stop)?,
+        EncodingMode::Group3_1D => decode_group3_1d(ctx, &mut reader, decoder, stop)?,
+        EncodingMode::Group3_2D { .. } => decode_group3_2d(ctx, &mut reader, decoder, stop)?,
     }
 
     reader.align();
@@ -188,12 +210,15 @@ fn decode_group3_1d(
     ctx: &mut DecoderContext,
     reader: &mut BitReader<'_>,
     decoder: &mut impl Decoder,
+    stop: &dyn Stop,
 ) -> Result<()> {
     // It seems like PDF producers are a bit sloppy with the `end_of_line` flag,
     // so we just always try to read one.
     let _ = reader.read_eol_if_available();
 
+    let stop = stop.may_stop().then_some(stop);
     loop {
+        stop.check()?;
         decode_1d_line(ctx, reader, decoder)?;
         ctx.next_line(reader, decoder)?;
 
@@ -210,12 +235,15 @@ fn decode_group3_2d(
     ctx: &mut DecoderContext,
     reader: &mut BitReader<'_>,
     decoder: &mut impl Decoder,
+    stop: &dyn Stop,
 ) -> Result<()> {
     // It seems like PDF producers are a bit sloppy with the `end_of_line` flag,
     // so we just always try to read one.
     let _ = reader.read_eol_if_available();
 
+    let stop = stop.may_stop().then_some(stop);
     loop {
+        stop.check()?;
         let tag_bit = reader.read_bit()?;
 
         if tag_bit == 1 {
@@ -257,8 +285,11 @@ fn decode_group4(
     ctx: &mut DecoderContext,
     reader: &mut BitReader<'_>,
     decoder: &mut impl Decoder,
+    stop: &dyn Stop,
 ) -> Result<()> {
+    let stop = stop.may_stop().then_some(stop);
     loop {
+        stop.check()?;
         if ctx.settings.end_of_block && reader.peak_bits(24) == Ok(EOFB) {
             reader.read_bits(24)?;
             break;
