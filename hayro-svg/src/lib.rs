@@ -92,6 +92,27 @@ pub fn convert<'a>(
     device.finish()
 }
 
+/// Convert the given page into an SVG string, honoring the cooperative stop set
+/// in [`InterpreterSettings::stop`](hayro_interpret::InterpreterSettings::stop).
+///
+/// This is identical to [`convert`], except it reports whether the conversion
+/// was stopped. Interpretation is polled once per operator (and threaded into
+/// image decoding), so a set stop aborts a long conversion promptly. Returns
+/// `Err(StopReason)` if the stop fired; the SVG would have been incomplete in
+/// that case, so it is dropped rather than returned.
+pub fn convert_with_stop<'a>(
+    page: &'a Page<'a>,
+    cache: &RenderCache<'a>,
+    interpreter_settings: &InterpreterSettings,
+    render_settings: &SvgRenderSettings,
+) -> Result<String, enough::StopReason> {
+    use enough::Stop;
+
+    let svg = convert(page, cache, interpreter_settings, render_settings);
+    interpreter_settings.stop.check()?;
+    Ok(svg)
+}
+
 /// Settings to apply during SVG rendering.
 #[derive(Debug, Clone)]
 pub struct SvgRenderSettings {

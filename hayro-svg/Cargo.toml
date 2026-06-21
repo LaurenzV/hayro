@@ -11,6 +11,7 @@ license = { workspace = true }
 
 [dependencies]
 hayro-interpret = { workspace = true }
+enough = { workspace = true }
 xmlwriter = { workspace = true }
 siphasher = { workspace = true }
 kurbo = { workspace = true }

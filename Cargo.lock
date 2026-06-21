@@ -855,6 +855,7 @@ name = "hayro-svg"
 version = "0.7.0"
 dependencies = [
  "base64",
+ "enough",
  "hayro-interpret",
  "image 0.25.10",
  "kurbo",
