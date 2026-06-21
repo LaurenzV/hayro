@@ -8,11 +8,13 @@ use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use crate::bitmap::{Bitmap, WORD_BITS, WORD_BYTES, WORD_SHIFT, Word};
 use crate::error::{ParseError, RegionError, Result, TemplateError, bail};
 use crate::reader::Reader;
+use enough::Stop;
 
 /// Generic region decoding procedure (6.2).
 pub(crate) fn decode(
     header: &GenericRegionHeader<'_>,
     ctx: &mut ScratchBuffers,
+    stop: &dyn Stop,
 ) -> Result<RegionBitmap> {
     let mut bitmap = Bitmap::new_with(
         header.region_info.width,
@@ -22,7 +24,7 @@ pub(crate) fn decode(
         false,
     )?;
 
-    decode_into(header, &mut bitmap, ctx)?;
+    decode_into(header, &mut bitmap, ctx, stop)?;
 
     Ok(RegionBitmap {
         bitmap,
@@ -34,12 +36,13 @@ pub(crate) fn decode_into(
     header: &GenericRegionHeader<'_>,
     bitmap: &mut Bitmap,
     ctx: &mut ScratchBuffers,
+    stop: &dyn Stop,
 ) -> Result<()> {
     let data = header.data;
 
     if header.mmr {
         // "6.2.6 Decoding using MMR coding"
-        let _ = decode_bitmap_mmr(bitmap, data)?;
+        let _ = decode_bitmap_mmr(bitmap, data, stop)?;
     } else {
         let mut decoder = ArithmeticDecoder::new(data);
         ctx.contexts.clear();
@@ -56,6 +59,7 @@ pub(crate) fn decode_into(
             header.template,
             header.tpgdon,
             &header.adaptive_template_pixels,
+            stop,
         )?;
     }
 
@@ -169,7 +173,11 @@ fn has_default_at_pixels(template: Template, at_pixels: &[AdaptiveTemplatePixel;
 }
 
 /// Decode a bitmap using MMR coding (6.2.6).
-pub(crate) fn decode_bitmap_mmr(bitmap: &mut Bitmap, data: &[u8]) -> Result<usize> {
+pub(crate) fn decode_bitmap_mmr(
+    bitmap: &mut Bitmap,
+    data: &[u8],
+    stop: &dyn Stop,
+) -> Result<usize> {
     /// A decoder sink that writes decoded pixels into a `Bitmap`.
     struct BitmapDecoder<'a> {
         bitmap: &'a mut Bitmap,
@@ -311,14 +319,16 @@ pub(crate) fn decode_bitmap_mmr(bitmap: &mut Bitmap, data: &[u8]) -> Result<usiz
     // hayro-ccitt already aligns to the byte boundary before returning, so
     // nothing else to do here.
     let mut context = hayro_ccitt::DecoderContext::new(settings);
-    Ok(hayro_ccitt::decode(data, &mut decoder, &mut context)
-        .map_err(|_| RegionError::InvalidMmrData)?)
+    Ok(
+        hayro_ccitt::decode_with_stop(data, &mut decoder, &mut context, stop)
+            .map_err(|_| RegionError::InvalidMmrData)?,
+    )
 }
 
 // I'm not sure why, but I was getting very weird codegen (with bad performance)
 // when attempting to do this via generics. Hence why we use a macro for that.
 macro_rules! decode_loop {
-    ($bitmap:expr, $decoder:expr, $contexts:expr, $ctx_gatherer:expr,
+    ($stop:expr, $bitmap:expr, $decoder:expr, $contexts:expr, $ctx_gatherer:expr,
      $tpgdon:expr, $sltp_context:expr, $gather:expr) => {{
         let bitmap: &mut Bitmap = $bitmap;
         let decoder: &mut ArithmeticDecoder<'_> = $decoder;
@@ -332,6 +342,8 @@ macro_rules! decode_loop {
 
         // "3) Decode each row as follows:" (6.2.5.7)
         for y in 0..height {
+            // Poll the stop check once per region row.
+            $stop.check()?;
             // "b) If TPGDON is 1, then decode a bit using the arithmetic entropy
             // coder" (6.2.5.7)
             if $tpgdon {
@@ -392,6 +404,7 @@ impl Bitmap {
 
 macro_rules! decode_default_template_fast_loop {
     (
+        $stop:expr,
         $bitmap:expr,
         $decoder:expr,
         $contexts:expr,
@@ -407,6 +420,8 @@ macro_rules! decode_default_template_fast_loop {
         let last_byte_bits = (($bitmap.width - 1) & (BYTE_BITS - 1)) + 1;
 
         for y in 0..$bitmap.height {
+            // Poll the stop check once per region row.
+            $stop.check()?;
             if $tpgdon {
                 let sltp = $decoder.read_bit(&mut $contexts[$sltp_context as usize]);
                 ltp = ltp != (sltp != 0);
@@ -492,10 +507,14 @@ pub(crate) fn decode_bitmap_arithmetic_coding(
     template: Template,
     tpgdon: bool,
     adaptive_template_pixels: &[AdaptiveTemplatePixel; 4],
+    stop: &dyn Stop,
 ) -> Result<()> {
     if bitmap.width == 0 || bitmap.height == 0 {
         return Ok(());
     }
+
+    // Skip the per-row poll entirely when the stop can never fire.
+    let stop = stop.may_stop().then_some(stop);
 
     let mut ctx_gatherer = ContextGatherer::new(template, adaptive_template_pixels);
 
@@ -510,6 +529,7 @@ pub(crate) fn decode_bitmap_arithmetic_coding(
     if ctx_gatherer.use_default_at {
         match template {
             Template::Template0 => decode_default_template_fast_loop!(
+                stop,
                 bitmap,
                 decoder,
                 contexts,
@@ -518,6 +538,7 @@ pub(crate) fn decode_bitmap_arithmetic_coding(
                 DEFAULT_TEMPLATE0_FAST_PARAMS
             ),
             Template::Template1 => decode_default_template_fast_loop!(
+                stop,
                 bitmap,
                 decoder,
                 contexts,
@@ -526,6 +547,7 @@ pub(crate) fn decode_bitmap_arithmetic_coding(
                 DEFAULT_TEMPLATE1_FAST_PARAMS
             ),
             Template::Template2 => decode_default_template_fast_loop!(
+                stop,
                 bitmap,
                 decoder,
                 contexts,
@@ -534,6 +556,7 @@ pub(crate) fn decode_bitmap_arithmetic_coding(
                 DEFAULT_TEMPLATE2_FAST_PARAMS
             ),
             Template::Template3 => decode_default_template_fast_loop!(
+                stop,
                 bitmap,
                 decoder,
                 contexts,
@@ -545,6 +568,7 @@ pub(crate) fn decode_bitmap_arithmetic_coding(
     } else {
         match template {
             Template::Template0 => decode_loop!(
+                stop,
                 bitmap,
                 decoder,
                 contexts,
@@ -554,6 +578,7 @@ pub(crate) fn decode_bitmap_arithmetic_coding(
                 ContextGatherer::gather_template0_custom
             ),
             Template::Template1 => decode_loop!(
+                stop,
                 bitmap,
                 decoder,
                 contexts,
@@ -563,6 +588,7 @@ pub(crate) fn decode_bitmap_arithmetic_coding(
                 ContextGatherer::gather_template1_custom
             ),
             Template::Template2 => decode_loop!(
+                stop,
                 bitmap,
                 decoder,
                 contexts,
@@ -572,6 +598,7 @@ pub(crate) fn decode_bitmap_arithmetic_coding(
                 ContextGatherer::gather_template2_custom
             ),
             Template::Template3 => decode_loop!(
+                stop,
                 bitmap,
                 decoder,
                 contexts,

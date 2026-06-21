@@ -12,12 +12,14 @@ use crate::bitmap::{Bitmap, WORD_BITS, WORD_SHIFT, Word};
 use crate::decode::generic::ContextGatherer;
 use crate::error::{OverflowError, ParseError, RegionError, Result, bail};
 use crate::reader::Reader;
+use enough::Stop;
 
 /// Generic refinement region decoding procedure (6.3).
 pub(crate) fn decode(
     header: &GenericRefinementRegionHeader<'_>,
     reference: &Bitmap,
     ctx: &mut ScratchBuffers,
+    stop: &dyn Stop,
 ) -> Result<RegionBitmap> {
     let mut region = Bitmap::new_with(
         header.region_info.width,
@@ -27,7 +29,7 @@ pub(crate) fn decode(
         false,
     )?;
 
-    decode_into(header, reference, &mut region, ctx)?;
+    decode_into(header, reference, &mut region, ctx, stop)?;
 
     Ok(RegionBitmap {
         bitmap: region,
@@ -41,6 +43,7 @@ pub(crate) fn decode_into(
     reference: &Bitmap,
     region: &mut Bitmap,
     ctx: &mut ScratchBuffers,
+    stop: &dyn Stop,
 ) -> Result<()> {
     let data = header.data;
 
@@ -84,6 +87,7 @@ pub(crate) fn decode_into(
         header.template,
         &header.adaptive_template_pixels,
         header.tpgron,
+        stop,
     )?;
 
     Ok(())
@@ -400,9 +404,10 @@ pub(crate) fn decode_bitmap(
     gr_template: RefinementTemplate,
     adaptive_template_pixels: &[AdaptiveTemplatePixel],
     tpgron: bool,
+    stop: &dyn Stop,
 ) -> Result<()> {
     macro_rules! refinement_decode_loop {
-        ($gatherer:expr, $tpgron:expr, $sltp_context:expr, $gather:expr) => {{
+        ($stop:expr, $gatherer:expr, $tpgron:expr, $sltp_context:expr, $gather:expr) => {{
             let gatherer: &mut RefinementContextGatherer<'_> = $gatherer;
             let width = region.width;
             let height = region.height;
@@ -412,6 +417,8 @@ pub(crate) fn decode_bitmap(
 
             // "3) Decode each row as follows:" (6.3.5.6)
             for y in 0..height {
+                // Poll the stop check once per region row.
+                $stop.check()?;
                 // "b) If TPGRON is 1, then decode a bit using the arithmetic entropy
                 // coder" (6.3.5.6)
                 if $tpgron {
@@ -480,6 +487,9 @@ pub(crate) fn decode_bitmap(
         }};
     }
 
+    // Skip the per-row poll entirely when the stop can never fire.
+    let stop = stop.may_stop().then_some(stop);
+
     let mut gatherer = RefinementContextGatherer::new(
         gr_template,
         adaptive_template_pixels,
@@ -495,18 +505,21 @@ pub(crate) fn decode_bitmap(
 
     match gr_template {
         RefinementTemplate::Template0 if gatherer.use_default_at => refinement_decode_loop!(
+            stop,
             &mut gatherer,
             tpgron,
             sltp_context,
             RefinementContextGatherer::gather_template0_default
         ),
         RefinementTemplate::Template0 => refinement_decode_loop!(
+            stop,
             &mut gatherer,
             tpgron,
             sltp_context,
             RefinementContextGatherer::gather_template0_custom
         ),
         RefinementTemplate::Template1 => refinement_decode_loop!(
+            stop,
             &mut gatherer,
             tpgron,
             sltp_context,
