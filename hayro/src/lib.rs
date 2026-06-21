@@ -196,7 +196,20 @@ pub fn render<'a>(
     }
 
     let mut resources = vello_cpu::Resources::default();
-    device.ctx.render(&mut pixmap, &mut resources);
+    // Thread the cooperative stop into the rasterizer itself. This is the one
+    // CPU-heavy step interpretation-level polling can't reach: a single
+    // `render` call rasterizes the whole scene. `render_cancellable` polls the
+    // stop between strip rows, bounding cancellation latency to ~one strip row.
+    let stop = interpreter_settings.stop.clone();
+    if stop.may_stop() {
+        // The caller distinguishes complete vs cancelled via `render_with_stop`'s
+        // own stop check, so the returned status is not needed here.
+        let _ = device
+            .ctx
+            .render_cancellable(&mut pixmap, &mut resources, &|| stop.should_stop());
+    } else {
+        device.ctx.render(&mut pixmap, &mut resources);
+    }
 
     pixmap
 }

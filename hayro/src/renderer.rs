@@ -27,6 +27,21 @@ use vello_cpu::{
 /// under a millisecond, rare enough to be free on the throughput path.
 const IMAGE_STOP_POLL_INTERVAL: usize = 1 << 16;
 
+/// Flush `ctx` and rasterize it into `pixmap`, polling the cooperative `stop` so
+/// a long nested rasterization (soft mask, tiling pattern, image stencil) can be
+/// abandoned. Skips rasterizing entirely if the stop has already fired.
+fn render_pixmap_cancellable(ctx: &mut RenderContext, pixmap: &mut Pixmap, stop: &Arc<dyn Stop>) {
+    if stop.should_stop() {
+        return;
+    }
+    ctx.flush();
+    let mut resources = vello_cpu::Resources::default();
+    let stop = stop.clone();
+    // The nested rasterization is abandoned with the rest of the render; its
+    // completion status is irrelevant here.
+    let _ = ctx.render_cancellable(pixmap, &mut resources, &|| stop.should_stop());
+}
+
 pub(crate) struct Renderer {
     pub(crate) ctx: RenderContext,
     pub(crate) inside_pattern: bool,
@@ -188,11 +203,7 @@ impl Renderer {
             // but `draw_image_with_alpha_mask` is only called if the dimensions or interpolate
             // values between alpha_data and rgb_data don't match, which they do here.
             renderer.draw_image(rgb_data, Some(alpha_data));
-            if !renderer.stop.should_stop() {
-                renderer.ctx.flush();
-                let mut resources = vello_cpu::Resources::default();
-                renderer.ctx.render(&mut mask_pix, &mut resources);
-            }
+            render_pixmap_cancellable(&mut renderer.ctx, &mut mask_pix, &renderer.stop);
             Mask::new_alpha(&mask_pix)
         };
 
@@ -766,11 +777,7 @@ impl Renderer {
                             * Affine::translate((-bbox.x0, -bbox.y0));
                         t.interpret(&mut renderer, initial_transform, is_stroke);
                         let mut pix = Pixmap::new(pix_width, pix_height);
-                        if !renderer.stop.should_stop() {
-                            renderer.ctx.flush();
-                            let mut resources = vello_cpu::Resources::default();
-                            renderer.ctx.render(&mut pix, &mut resources);
-                        }
+                        render_pixmap_cancellable(&mut renderer.ctx, &mut pix, &renderer.stop);
 
                         // TODO: Fix these
                         if x_step < 0.0 {
@@ -999,11 +1006,11 @@ impl<'a> Device<'a> for Renderer {
                                     let mut sub_pix = Pixmap::new(width, height);
                                     sub_renderer.ctx.set_transform(transform);
                                     sub_renderer.draw_image(rgb_bytes, Some(stencil));
-                                    if !sub_renderer.stop.should_stop() {
-                                        sub_renderer.ctx.flush();
-                                        let mut resources = vello_cpu::Resources::default();
-                                        sub_renderer.ctx.render(&mut sub_pix, &mut resources);
-                                    }
+                                    render_pixmap_cancellable(
+                                        &mut sub_renderer.ctx,
+                                        &mut sub_pix,
+                                        &sub_renderer.stop,
+                                    );
                                     sub_pix
                                 };
 
@@ -1237,11 +1244,7 @@ fn draw_soft_mask(
     }
 
     let mut pix = Pixmap::new(width, height);
-    if !renderer.stop.should_stop() {
-        renderer.ctx.flush();
-        let mut resources = vello_cpu::Resources::default();
-        renderer.ctx.render(&mut pix, &mut resources);
-    }
+    render_pixmap_cancellable(&mut renderer.ctx, &mut pix, &renderer.stop);
 
     let mut rendered_mask = match mask.mask_type() {
         MaskType::Luminosity => Mask::new_luminance(&pix),
