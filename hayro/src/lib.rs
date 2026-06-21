@@ -34,6 +34,7 @@ This crate has one optional feature:
 #![deny(missing_docs)]
 
 use crate::renderer::Renderer;
+use enough::Stop;
 use hayro_interpret::Device;
 use hayro_interpret::FillRule;
 use hayro_interpret::InterpreterCache;
@@ -111,6 +112,22 @@ impl Default for RenderSettings {
     }
 }
 
+/// Render the page like [`render`], returning an error if the stop check
+/// configured in [`InterpreterSettings::stop`](hayro_interpret::InterpreterSettings)
+/// fired during rendering.
+///
+/// On `Err`, rendering was abandoned early (the partial pixmap is discarded).
+pub fn render_with_stop<'a>(
+    page: &'a Page<'a>,
+    cache: &RenderCache<'a>,
+    interpreter_settings: &InterpreterSettings,
+    render_settings: &RenderSettings,
+) -> Result<Pixmap, enough::StopReason> {
+    let pixmap = render(page, cache, interpreter_settings, render_settings);
+    interpreter_settings.stop.check()?;
+    Ok(pixmap)
+}
+
 /// Render the page with the given settings to a pixmap.
 pub fn render<'a>(
     page: &'a Page<'a>,
@@ -138,12 +155,19 @@ pub fn render<'a>(
         interpreter_settings.clone(),
     );
 
+    // If the stop has already fired, skip pixmap/renderer setup entirely —
+    // for large outputs the allocations alone can take hundreds of ms.
+    if interpreter_settings.stop.should_stop() {
+        return Pixmap::new(pix_width, pix_height);
+    }
+
     let vc_settings = vello_cpu::RenderSettings {
         level: Level::new(),
         num_threads: 0,
     };
 
     let mut device = Renderer::new(pix_width, pix_height, vc_settings, cache);
+    device.stop = interpreter_settings.stop.clone();
 
     device.ctx.set_paint(render_settings.bg_color);
     device
@@ -164,6 +188,13 @@ pub fn render<'a>(
     device.pop_clip();
 
     let mut pixmap = Pixmap::new(pix_width, pix_height);
+
+    // If the stop check fired during interpretation, the caller is abandoning
+    // this render: skip rasterization, which can dwarf interpretation time.
+    if interpreter_settings.stop.should_stop() {
+        return pixmap;
+    }
+
     let mut resources = vello_cpu::Resources::default();
     device.ctx.render(&mut pixmap, &mut resources);
 

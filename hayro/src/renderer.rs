@@ -1,4 +1,5 @@
 use crate::{RenderCache, derive_settings};
+use enough::Stop;
 use hayro_interpret::encode::{EncodedShadingPattern, EncodedShadingType};
 use hayro_interpret::font::Glyph;
 use hayro_interpret::gradient::SvgGradientKind;
@@ -28,6 +29,8 @@ pub(crate) struct Renderer {
     pub(crate) outline_cache: Rc<std::cell::RefCell<FxHashMap<u128, Rc<BezPath>>>>,
     pub(crate) in_type3_glyph: bool,
     pub(crate) scaler: Scaler,
+    /// Cooperative stop check; when fired, nested rasterizations are skipped.
+    pub(crate) stop: Arc<dyn Stop>,
 }
 
 #[derive(Clone, Copy)]
@@ -105,6 +108,7 @@ impl Renderer {
             outline_cache: cache.outline_cache.clone(),
             in_type3_glyph: false,
             scaler: Scaler::new(ResamplingFunction::CatmullRom),
+            stop: Arc::new(enough::Unstoppable),
         }
     }
 
@@ -155,6 +159,7 @@ impl Renderer {
                 outline_cache: self.outline_cache.clone(),
                 in_type3_glyph: false,
                 scaler: self.scaler,
+                stop: self.stop.clone(),
             };
             let mut mask_pix = Pixmap::new(self.ctx.width(), self.ctx.height());
             let rgb_data = ImageData::Rgb(RgbData {
@@ -169,9 +174,11 @@ impl Renderer {
             // but `draw_image_with_alpha_mask` is only called if the dimensions or interpolate
             // values between alpha_data and rgb_data don't match, which they do here.
             renderer.draw_image(rgb_data, Some(alpha_data));
-            renderer.ctx.flush();
-            let mut resources = vello_cpu::Resources::default();
-            renderer.ctx.render(&mut mask_pix, &mut resources);
+            if !renderer.stop.should_stop() {
+                renderer.ctx.flush();
+                let mut resources = vello_cpu::Resources::default();
+                renderer.ctx.render(&mut mask_pix, &mut resources);
+            }
             Mask::new_alpha(&mask_pix)
         };
 
@@ -559,7 +566,7 @@ impl Renderer {
 
             self.soft_mask_cache
                 .entry(m.cache_key())
-                .or_insert_with(|| draw_soft_mask(m, settings, width, height))
+                .or_insert_with(|| draw_soft_mask(m, settings, width, height, &self.stop))
                 .clone()
         });
 
@@ -726,14 +733,17 @@ impl Renderer {
                             outline_cache: self.outline_cache.clone(),
                             in_type3_glyph: false,
                             scaler: self.scaler,
+                            stop: self.stop.clone(),
                         };
                         let mut initial_transform = Affine::scale_non_uniform(xs as f64, ys as f64)
                             * Affine::translate((-bbox.x0, -bbox.y0));
                         t.interpret(&mut renderer, initial_transform, is_stroke);
                         let mut pix = Pixmap::new(pix_width, pix_height);
-                        renderer.ctx.flush();
-                        let mut resources = vello_cpu::Resources::default();
-                        renderer.ctx.render(&mut pix, &mut resources);
+                        if !renderer.stop.should_stop() {
+                            renderer.ctx.flush();
+                            let mut resources = vello_cpu::Resources::default();
+                            renderer.ctx.render(&mut pix, &mut resources);
+                        }
 
                         // TODO: Fix these
                         if x_step < 0.0 {
@@ -957,13 +967,16 @@ impl<'a> Device<'a> for Renderer {
                                         outline_cache: self.outline_cache.clone(),
                                         in_type3_glyph: false,
                                         scaler: self.scaler,
+                                        stop: self.stop.clone(),
                                     };
                                     let mut sub_pix = Pixmap::new(width, height);
                                     sub_renderer.ctx.set_transform(transform);
                                     sub_renderer.draw_image(rgb_bytes, Some(stencil));
-                                    sub_renderer.ctx.flush();
-                                    let mut resources = vello_cpu::Resources::default();
-                                    sub_renderer.ctx.render(&mut sub_pix, &mut resources);
+                                    if !sub_renderer.stop.should_stop() {
+                                        sub_renderer.ctx.flush();
+                                        let mut resources = vello_cpu::Resources::default();
+                                        sub_renderer.ctx.render(&mut sub_pix, &mut resources);
+                                    }
                                     sub_pix
                                 };
 
@@ -1034,7 +1047,7 @@ impl<'a> Device<'a> for Renderer {
 
                 self.soft_mask_cache
                     .entry(m.cache_key())
-                    .or_insert_with(|| draw_soft_mask(&m, settings, width, height))
+                    .or_insert_with(|| draw_soft_mask(&m, settings, width, height, &self.stop))
                     .clone()
             }),
             None,
@@ -1160,7 +1173,13 @@ fn render_shading_texture(
     )
 }
 
-fn draw_soft_mask(mask: &SoftMask<'_>, settings: RenderSettings, width: u16, height: u16) -> Mask {
+fn draw_soft_mask(
+    mask: &SoftMask<'_>,
+    settings: RenderSettings,
+    width: u16,
+    height: u16,
+    stop: &Arc<dyn Stop>,
+) -> Mask {
     let mut renderer = Renderer {
         ctx: RenderContext::new_with(width, height, derive_settings(&settings)),
         inside_pattern: false,
@@ -1168,6 +1187,7 @@ fn draw_soft_mask(mask: &SoftMask<'_>, settings: RenderSettings, width: u16, hei
         outline_cache: Rc::new(std::cell::RefCell::new(FxHashMap::default())),
         in_type3_glyph: false,
         scaler: Scaler::new(ResamplingFunction::CatmullRom),
+        stop: stop.clone(),
     };
 
     let bg_color = mask.background_color().to_rgba();
@@ -1190,9 +1210,11 @@ fn draw_soft_mask(mask: &SoftMask<'_>, settings: RenderSettings, width: u16, hei
     }
 
     let mut pix = Pixmap::new(width, height);
-    renderer.ctx.flush();
-    let mut resources = vello_cpu::Resources::default();
-    renderer.ctx.render(&mut pix, &mut resources);
+    if !renderer.stop.should_stop() {
+        renderer.ctx.flush();
+        let mut resources = vello_cpu::Resources::default();
+        renderer.ctx.render(&mut pix, &mut resources);
+    }
 
     let mut rendered_mask = match mask.mask_type() {
         MaskType::Luminosity => Mask::new_luminance(&pix),
