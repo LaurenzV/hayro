@@ -152,7 +152,7 @@ impl Debug for Dict<'_> {
                 );
             }
         }
-        
+
         debug_struct.finish()
     }
 }
