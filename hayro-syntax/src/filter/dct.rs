@@ -98,10 +98,6 @@ pub(crate) fn decode(
     })
 }
 
-pub(crate) fn is_default_params(params: &Dict<'_>) -> bool {
-    params.get::<u8>(COLOR_TRANSFORM).is_none_or(|c| c == 1)
-}
-
 fn maybe_patch_jpeg_dimensions<'a>(
     data: &'a [u8],
     image_params: &ImageDecodeParams,

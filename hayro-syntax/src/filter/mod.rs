@@ -136,7 +136,9 @@ impl Filter {
 
     pub(crate) fn as_format(self, formats: ImageFormats, params: &Dict<'_>) -> Option<ImageFormat> {
         match self {
-            Self::DctDecode if formats.jpeg && dct::is_default_params(params) => {
+            Self::DctDecode
+                if formats.jpeg && params.get::<u8>(COLOR_TRANSFORM).is_none_or(|c| c == 1) =>
+            {
                 Some(ImageFormat::Jpeg)
             }
             Self::JpxDecode if formats.jpeg_2000 => Some(ImageFormat::Jpeg2000),
