@@ -16,11 +16,13 @@ pub(crate) fn decode(
 ) -> Option<FilterResult<'static>> {
     let k = params.get::<i32>(K).unwrap_or(0);
 
+    let columns = params.get::<usize>(COLUMNS).unwrap_or(1728) as u32;
     let rows = params.get::<u32>(ROWS).unwrap_or(image_params.height);
+    let output_len = (columns as usize).checked_mul(rows as usize)?;
     let end_of_block = params.get::<bool>(END_OF_BLOCK).unwrap_or(true);
 
     let settings = DecodeSettings {
-        columns: params.get::<usize>(COLUMNS).unwrap_or(1728) as u32,
+        columns,
         rows,
         end_of_block,
         end_of_line: params.get::<bool>(END_OF_LINE).unwrap_or(false),
@@ -135,7 +137,7 @@ pub(crate) fn decode(
         }
 
         let mut decoder = Luma8Decoder {
-            output: vec![0xFF; settings.columns as usize * image_params.height as usize],
+            output: vec![0xFF; output_len],
             idx: 0,
             decoded_rows: 0,
         };
@@ -160,7 +162,25 @@ pub(crate) fn decode(
             color_space: Some(ImageColorSpace::Gray),
             bits_per_component: bpc,
             width: settings.columns,
-            height: image_params.height,
+            height: rows,
         }),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::decode;
+    use crate::object::FromBytes;
+    use crate::object::dict::Dict;
+    use crate::object::stream::ImageDecodeParams;
+
+    #[test]
+    fn issue1258() {
+        let params = Dict::from_bytes(b"<< /K 0 /Columns 8 /Rows 1 >>").unwrap();
+
+        let decoded = decode(&[0x35, 0x14], &params, &ImageDecodeParams::default()).unwrap();
+
+        assert_eq!(decoded.data.as_ref(), &[0; 8]);
+        assert_eq!(decoded.image_data.unwrap().height, 1);
+    }
 }
