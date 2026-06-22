@@ -152,7 +152,8 @@ impl Debug for Dict<'_> {
                 );
             }
         }
-        Ok(())
+        
+        debug_struct.finish()
     }
 }
 
@@ -1003,10 +1004,10 @@ pub mod keys {
 
 #[cfg(test)]
 mod tests {
-    use crate::object::Number;
     use crate::object::dict::keys::{COLORSPACE, EXT_G_STATE, FONT, PROC_SET};
     use crate::object::dict::{Dict, InlineImageDict};
     use crate::object::string;
+    use crate::object::{FromBytes, Number};
     use crate::object::{Name, ObjRef};
     use crate::reader::Reader;
     use crate::reader::{ReaderContext, ReaderExt};
@@ -1149,5 +1150,15 @@ mod tests {
 
         assert_eq!(dict.get_ref("GS2"), Some(ObjRef::new(14, 0)));
         assert_eq!(dict.get_ref("GS3"), Some(ObjRef::new(15, 0)));
+    }
+
+    #[test]
+    fn dict_repr() {
+        let dict = Dict::from_bytes(b"<< /Hi 34 >>").unwrap();
+
+        assert_eq!(
+            format!("{dict:?}"),
+            "Dict { \"Hi\": Number(Number(Integer(34))) }"
+        );
     }
 }

@@ -62,7 +62,7 @@ impl Debug for Array<'_> {
             debug_list.entry(&i);
         });
 
-        Ok(())
+        debug_list.finish()
     }
 }
 
@@ -312,9 +312,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::object::Array;
     use crate::object::Object;
     use crate::object::r#ref::{MaybeRef, ObjRef};
+    use crate::object::{Array, FromBytes};
     use crate::reader::Reader;
     use crate::reader::{ReaderContext, ReaderExt};
     use crate::xref::XRef;
@@ -413,5 +413,12 @@ mod tests {
         let res = array_impl(b"[(Hi) /Test]trialing data").unwrap();
         assert!(matches!(res[0], Object::String(_)));
         assert!(matches!(res[1], Object::Name(_)));
+    }
+
+    #[test]
+    fn array_repr() {
+        let array = Array::from_bytes(b"[34]").unwrap();
+
+        assert_eq!(format!("{array:?}"), "[Number(Number(Integer(34)))]");
     }
 }
