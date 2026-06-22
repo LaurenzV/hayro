@@ -4,9 +4,10 @@ use crate::pattern::Pattern;
 use crate::soft_mask::SoftMask;
 use crate::util::hash128;
 use crate::x_object::ImageXObject;
-use hayro_syntax::object::Stream;
+use hayro_syntax::object::stream::{ImageFormat, ImageFormats, Stream};
 use kurbo::{Affine, BezPath, Cap, Join};
 use smallvec::{SmallVec, smallvec};
+use std::borrow::Cow;
 
 /// A clip path.
 #[derive(Debug, Clone)]
@@ -69,7 +70,7 @@ impl CacheKey for StencilImage<'_, '_> {
 /// A raster image.
 pub struct RasterImage<'a>(pub(crate) ImageXObject<'a>);
 
-impl RasterImage<'_> {
+impl<'a> RasterImage<'a> {
     /// Perform some operation with the RGB and alpha channel of the image.
     ///
     /// The second argument allows you to give the image decoder a hint for
@@ -82,9 +83,21 @@ impl RasterImage<'_> {
         func: impl FnOnce(ImageData, Option<LumaData>),
         target_dimension: Option<(u32, u32)>,
     ) {
-        if let Some(decoded) = self.0.decoded_raster(target_dimension) {
-            func(decoded.image, decoded.alpha);
+        match self.to_file(target_dimension, ImageFormats::default()) {
+            Some(ImageFileOrData::File(_)) => unreachable!(),
+            Some(ImageFileOrData::Data { image, alpha }) => func(image, alpha),
+            None => {}
         }
+    }
+
+    /// Get the data of the image. If an image of a desired format is stored in the stream, it uses
+    /// that; otherwise, it decodes and returns raw samples.
+    pub fn to_file(
+        &self,
+        target_dimension: Option<(u32, u32)>,
+        formats: ImageFormats,
+    ) -> Option<ImageFileOrData<'a>> {
+        self.0.decoded_raster(target_dimension, formats)
     }
 
     /// Return the underlying stream object.
@@ -245,6 +258,42 @@ impl ImageData {
             Self::Luma(d) => d.scale_factors,
         }
     }
+}
+
+/// A structure holding image file data.
+#[derive(Clone)]
+pub struct ImageFile<'a> {
+    /// The actual data. It is encoded in the specified file format.
+    pub data: Cow<'a, [u8]>,
+    /// The format the data is encoded in. This is guaranteed to be one of the formats enabled in
+    /// [`RasterImage::to_file`].
+    pub format: ImageFormat,
+    /// The width.
+    ///
+    /// This is not necessarily the intrinsic width of the image, if the PDF provided wrong
+    /// metadata.
+    pub width: u32,
+    /// The height.
+    ///
+    /// This is not necessarily the intrinsic height of the image, if the PDF provided wrong
+    /// metadata.
+    pub height: u32,
+    /// Whether the image should be interpolated.
+    pub interpolate: bool,
+}
+
+/// Either an image file, or raw image samples.
+#[derive(Clone)]
+pub enum ImageFileOrData<'a> {
+    /// An image file in the given format.
+    File(ImageFile<'a>),
+    /// Image samples.
+    Data {
+        /// The RGB or greyscale samples.
+        image: ImageData,
+        /// The alpha channel, if there is one.
+        alpha: Option<LumaData>,
+    },
 }
 
 /// A type of paint.

@@ -4,9 +4,12 @@ use crate::context::Context;
 use crate::device::Device;
 use crate::function::{Function, interpolate};
 use crate::interpret::state::ActiveTransferFunction;
-use crate::{BlendMode, CacheKey, ClipPath, Image, ImageDrawProps, RasterImage, StencilImage};
+use crate::{
+    BlendMode, CacheKey, ClipPath, Image, ImageDrawProps, ImageFileOrData, RasterImage,
+    StencilImage,
+};
 use crate::{FillRule, InterpreterWarning, WarningSinkFn, interpret};
-use crate::{ImageData, LumaData, RgbData};
+use crate::{ImageData, ImageFile, LumaData, RgbData};
 use hayro_syntax::bit_reader::BitReader;
 use hayro_syntax::content::TypedIter;
 use hayro_syntax::object::Array;
@@ -15,7 +18,9 @@ use hayro_syntax::object::Name;
 use hayro_syntax::object::Object;
 use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::*;
-use hayro_syntax::object::stream::{FilterResult, ImageColorSpace, ImageDecodeParams};
+use hayro_syntax::object::stream::{
+    FilterResult, ImageColorSpace, ImageDecodeParams, ImageFormat, ImageFormats,
+};
 use hayro_syntax::page::Resources;
 use kurbo::{Affine, Rect, Shape};
 use smallvec::{SmallVec, smallvec};
@@ -349,12 +354,13 @@ impl<'a> ImageXObject<'a> {
     pub(crate) fn decoded_raster(
         &self,
         target_dimension: Option<(u32, u32)>,
-    ) -> Option<DecodedRaster> {
+        formats: ImageFormats,
+    ) -> Option<ImageFileOrData<'a>> {
         if self.is_mask {
             return None;
         }
 
-        decode_raster(self, target_dimension)
+        decode_raster(self, target_dimension, formats)
     }
 
     pub(crate) fn width(&self) -> u32 {
@@ -380,12 +386,12 @@ pub(crate) struct DecodedMask {
     pub(crate) luma: LumaData,
 }
 
-pub(crate) struct DecodedRaster {
-    pub(crate) image: ImageData,
-    pub(crate) alpha: Option<LumaData>,
+enum DecodeContext<'a> {
+    File(Cow<'a, [u8]>, ImageFormat),
+    Data(DecodeContextData<'a>),
 }
 
-struct DecodeContext<'a> {
+struct DecodeContextData<'a> {
     decoded: FilterResult<'a>,
     width: u32,
     height: u32,
@@ -398,6 +404,7 @@ struct DecodeContext<'a> {
 fn decode_context<'a>(
     obj: &ImageXObject<'a>,
     target_dimension: Option<(u32, u32)>,
+    mut formats: ImageFormats,
 ) -> Option<DecodeContext<'a>> {
     let dict = obj.stream.dict();
     let dict_bpc = dict
@@ -405,6 +412,27 @@ fn decode_context<'a>(
         .or_else(|| dict.get::<u8>(BITS_PER_COMPONENT));
     let color_space = obj.color_space.clone();
     let is_indexed = obj.color_space.as_ref().is_some_and(|cs| cs.is_indexed());
+
+    let decode_arr = dict
+        .get::<Array<'_>>(D)
+        .or_else(|| dict.get::<Array<'_>>(DECODE))
+        .map(|a| a.iter::<(f32, f32)>().collect::<SmallVec<[_; 4]>>());
+
+    // If any of the following are true:
+    // - There is a non-default color space
+    // - The decode array is non-default for the color space
+    // - The image has a mask
+    // - There is a transfer function
+    // then we can't return an image file.
+    if color_space
+        .as_ref()
+        .is_some_and(|c| !c.is_default_colors(decode_arr.as_deref()))
+        || (!dict.contains_key(SMASK_IN_DATA)
+            && (dict.contains_key(SMASK) || dict.contains_key(MASK)))
+        || obj.transfer_function.is_some()
+    {
+        formats = ImageFormats::default();
+    }
 
     let decode_params = ImageDecodeParams {
         is_indexed,
@@ -415,11 +443,17 @@ fn decode_context<'a>(
         height: obj.height,
     };
 
-    let decoded = obj
+    let decoded = match obj
         .stream
-        .decoded_image(&decode_params)
+        .decoded_image_file(&decode_params, formats)
         .map_err(|_| (obj.warning_sink)(InterpreterWarning::ImageDecodeFailure))
-        .ok()?;
+        .ok()?
+    {
+        hayro_syntax::object::stream::ImageFile::File { data, format } => {
+            return Some(DecodeContext::File(data, format));
+        }
+        hayro_syntax::object::stream::ImageFile::FilterResult(decoded) => decoded,
+    };
 
     let (mut scale_x, mut scale_y) = (1.0, 1.0);
 
@@ -460,13 +494,10 @@ fn decode_context<'a>(
         .or(dict_bpc)
         .unwrap_or(fallback_bpc);
 
-    let decode_arr = dict
-        .get::<Array<'_>>(D)
-        .or_else(|| dict.get::<Array<'_>>(DECODE))
-        .map(|a| a.iter::<(f32, f32)>().collect::<SmallVec<_>>())
-        .unwrap_or(color_space.default_decode_arr(bits_per_component as f32));
+    let decode_arr =
+        decode_arr.unwrap_or(color_space.default_decode_arr(bits_per_component as f32));
 
-    Some(DecodeContext {
+    Some(DecodeContext::Data(DecodeContextData {
         decoded,
         width,
         height,
@@ -474,14 +505,17 @@ fn decode_context<'a>(
         color_space,
         bits_per_component,
         decode_arr,
-    })
+    }))
 }
 
 fn decode_mask(
     obj: &ImageXObject<'_>,
     target_dimension: Option<(u32, u32)>,
 ) -> Option<DecodedMask> {
-    let ctx = decode_context(obj, target_dimension)?;
+    let DecodeContext::Data(ctx) = decode_context(obj, target_dimension, ImageFormats::default())?
+    else {
+        unreachable!()
+    };
     let mut height = ctx.height;
 
     let data = decode_mask_bytes(
@@ -511,11 +545,23 @@ fn decode_mask(
     })
 }
 
-fn decode_raster(
-    obj: &ImageXObject<'_>,
+fn decode_raster<'a>(
+    obj: &ImageXObject<'a>,
     target_dimension: Option<(u32, u32)>,
-) -> Option<DecodedRaster> {
-    let mut ctx = decode_context(obj, target_dimension)?;
+    formats: ImageFormats,
+) -> Option<ImageFileOrData<'a>> {
+    let mut ctx = match decode_context(obj, target_dimension, formats)? {
+        DecodeContext::File(data, format) => {
+            return Some(ImageFileOrData::File(ImageFile {
+                data,
+                format,
+                width: obj.width,
+                height: obj.height,
+                interpolate: obj.interpolate,
+            }));
+        }
+        DecodeContext::Data(ctx) => ctx,
+    };
     let mut height = ctx.height;
 
     let is_default_decode = ctx.decode_arr
@@ -664,7 +710,7 @@ fn decode_raster(
         .flatten()
     };
 
-    Some(DecodedRaster { image, alpha })
+    Some(ImageFileOrData::Data { image, alpha })
 }
 
 fn decode_mask_bytes(

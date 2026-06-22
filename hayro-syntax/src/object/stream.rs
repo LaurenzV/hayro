@@ -167,28 +167,42 @@ impl<'a> Stream<'a> {
         &self,
         image_params: &ImageDecodeParams,
     ) -> Result<FilterResult<'a>, DecodeFailure> {
+        match self.decoded_image_file(image_params, ImageFormats::default())? {
+            ImageFile::File { .. } => unreachable!(),
+            ImageFile::FilterResult(result) => Ok(result),
+        }
+    }
+
+    /// Return the decoded data of the stream, or an image file of a desired format if one is
+    /// stored in the stream.
+    pub fn decoded_image_file(
+        &self,
+        image_params: &ImageDecodeParams,
+        formats: ImageFormats,
+    ) -> Result<ImageFile<'a>, DecodeFailure> {
         let data = self.raw_data();
         let filters_and_params = self.filters_and_params();
 
-        let mut current: Option<FilterResult<'a>> = None;
+        let mut current: FilterResult<'a> = FilterResult {
+            data,
+            image_data: None,
+        };
 
         for (filter, params) in filters_and_params
             .filters
             .iter()
             .zip(filters_and_params.params.iter())
         {
-            let new = filter.apply(
-                current.as_ref().map(|c| c.data.as_ref()).unwrap_or(&data),
-                params,
-                image_params,
-            )?;
-            current = Some(new);
+            if let Some(format) = filter.as_format(formats, params) {
+                return Ok(ImageFile::File {
+                    data: current.data,
+                    format,
+                });
+            }
+            current = filter.apply(&current.data, params, image_params)?;
         }
 
-        Ok(current.unwrap_or(FilterResult {
-            data,
-            image_data: None,
-        }))
+        Ok(ImageFile::FilterResult(current))
     }
 }
 
@@ -284,6 +298,57 @@ impl FilterResult<'_> {
             image_data: None,
         }
     }
+}
+
+/// A set of image formats that may be returned by [`Stream::decoded_image_file`].
+#[derive(Debug, Default, Clone, Copy)]
+#[non_exhaustive]
+pub struct ImageFormats {
+    /// JPEG.
+    pub jpeg: bool,
+    /// JPEG 2000.
+    pub jpeg_2000: bool,
+}
+
+impl ImageFormats {
+    /// Add JPEG to the set.
+    pub fn jpeg(mut self) -> Self {
+        self.jpeg = true;
+        self
+    }
+
+    /// Add JPEG 2000 to the set.
+    pub fn jpeg_2000(mut self) -> Self {
+        self.jpeg_2000 = true;
+        self
+    }
+}
+
+/// Either an image file in a specific [`ImageFormat`], or a [`FilterResult`].
+///
+/// Returned by [`Stream::decoded_image_file`].
+pub enum ImageFile<'a> {
+    /// An image file.
+    File {
+        /// The encoded image data.
+        data: Cow<'a, [u8]>,
+        /// The format the data is in.
+        ///
+        /// This is guaranteed to be one of the formats enabled in [`ImageFormats`].
+        format: ImageFormat,
+    },
+    /// A `FilterResult` containing raw image samples.
+    FilterResult(FilterResult<'a>),
+}
+
+/// An image format.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ImageFormat {
+    /// JPEG.
+    Jpeg,
+    /// JPEG 2000.
+    Jpeg2000,
 }
 
 fn parse_proper<'a>(r: &mut Reader<'a>, dict: &Dict<'a>) -> Option<Stream<'a>> {
