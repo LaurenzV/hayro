@@ -160,20 +160,11 @@ impl PdfVersion {
 
 #[cfg(test)]
 mod tests {
-    use crate::pdf::{DecryptionError, LoadPdfError, Pdf, PdfVersion};
+    use crate::pdf::{Pdf, PdfVersion};
 
     #[test]
     fn issue_49() {
         let _ = Pdf::new(Vec::new());
-    }
-
-    #[test]
-    fn encrypt_out_of_range_length() {
-        let data = std::fs::read("../hayro-tests/pdfs/custom/encrypted_oob_length.pdf").unwrap();
-        assert!(matches!(
-            Pdf::new(data),
-            Err(LoadPdfError::Decryption(DecryptionError::InvalidEncryption))
-        ));
     }
 
     #[test]
