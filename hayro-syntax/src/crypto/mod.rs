@@ -493,6 +493,14 @@ fn decryption_key_rev1234(
     // g) Finish the hash.
     let mut hash = md5::calculate(&md5_input);
 
+    // The revision 2/3/4 file encryption key is at most the 16-byte MD5
+    // digest (a conformant `Length` is 40-128 bits, i.e. 5-16 bytes). A
+    // malformed document declaring a larger `Length` would slice past the
+    // digest below; reject it rather than panic on hostile input.
+    if byte_length as usize > hash.len() {
+        return Err(InvalidEncryption);
+    }
+
     // h) For revisions >= 3, do the following 50 times: Take the output from the previous
     // MD5 hash and pass the first n bytes of the output as input into a new MD5 hash,
     // where n is the number of bytes of the file encryption key as defined by the value
