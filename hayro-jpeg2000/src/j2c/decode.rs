@@ -27,6 +27,63 @@ use crate::math::SimdBuffer;
 use crate::reader::BitReader;
 use core::ops::Range;
 
+/// Raw write-view into the shared per-component output buffers, so tiles can be
+/// decoded in parallel — each tile writes a DISJOINT rectangle of the image.
+///
+/// SAFETY: every tile writes a distinct rectangle of the reference grid, so no
+/// two `store` calls (serial or concurrent) ever write the same element of any
+/// component buffer. The raw pointers therefore never alias across writes.
+struct ChannelWriter {
+    comps: Vec<ChannelPtr>,
+}
+
+#[derive(Clone, Copy)]
+struct ChannelPtr {
+    ptr: *mut f32,
+}
+
+// SAFETY: see ChannelWriter — writes are to disjoint regions, never aliasing.
+unsafe impl Send for ChannelWriter {}
+unsafe impl Sync for ChannelWriter {}
+
+impl ChannelWriter {
+    fn new(channel_data: &mut [ComponentData]) -> Self {
+        ChannelWriter {
+            comps: channel_data
+                .iter_mut()
+                .map(|c| ChannelPtr { ptr: c.container.as_mut_ptr() })
+                .collect(),
+        }
+    }
+}
+
+/// Build the packet-progression iterator for one tile.
+fn build_progression<'a>(
+    tile: &'a Tile<'a>,
+) -> Result<Box<dyn Iterator<Item = ProgressionData> + 'a>> {
+    let iter_input = IteratorInput::new(tile);
+    Ok(match tile.progression_order {
+        ProgressionOrder::LayerResolutionComponentPosition => {
+            Box::new(layer_resolution_component_position_progression(iter_input))
+        }
+        ProgressionOrder::ResolutionLayerComponentPosition => {
+            Box::new(resolution_layer_component_position_progression(iter_input))
+        }
+        ProgressionOrder::ResolutionPositionComponentLayer => Box::new(
+            resolution_position_component_layer_progression(iter_input)
+                .ok_or(DecodingError::InvalidProgressionIterator)?,
+        ),
+        ProgressionOrder::PositionComponentResolutionLayer => Box::new(
+            position_component_resolution_layer_progression(iter_input)
+                .ok_or(DecodingError::InvalidProgressionIterator)?,
+        ),
+        ProgressionOrder::ComponentPositionResolutionLayer => Box::new(
+            component_position_resolution_layer_progression(iter_input)
+                .ok_or(DecodingError::InvalidProgressionIterator)?,
+        ),
+    })
+}
+
 pub(crate) fn decode<'a>(
     data: &'a [u8],
     header: &'a Header<'a>,
@@ -41,46 +98,39 @@ pub(crate) fn decode<'a>(
 
     ctx.reset(header, &tiles[0]);
 
+    let writer = ChannelWriter::new(&mut ctx.channel_data);
+
+    // Tiles are independent (own coefficients, own IDWT region, disjoint output
+    // rectangle) — decode them in parallel on the AMBIENT rayon pool. The
+    // library deliberately does not create or size a pool: callers control
+    // parallelism (e.g. `rayon::ThreadPoolBuilder::new().num_threads(n).build()?
+    // .install(|| image.decode(..)))`), and callers that already parallelize
+    // across images compose for free — rayon's single global pool work-steals,
+    // so nested `par_iter`s never oversubscribe the CPU.
+    #[cfg(feature = "threads")]
+    {
+        use rayon::prelude::*;
+        tiles
+            .par_iter()
+            .map_init(
+                || (TileDecodeContext::default(), DecompositionStorage::default()),
+                |(tctx, storage), tile| {
+                    let prog = build_progression(tile)?;
+                    decode_tile(tile, header, prog, tctx, &writer, storage)
+                },
+            )
+            .collect::<Result<Vec<()>>>()?;
+    }
+
+    #[cfg(not(feature = "threads"))]
     for tile in &tiles {
-        trace!(
-            "tile {} rect [{},{} {}x{}]",
-            tile.idx,
-            tile.rect.x0,
-            tile.rect.y0,
-            tile.rect.width(),
-            tile.rect.height(),
-        );
-
-        let iter_input = IteratorInput::new(tile);
-
-        let progression_iterator: Box<dyn Iterator<Item = ProgressionData>> =
-            match tile.progression_order {
-                ProgressionOrder::LayerResolutionComponentPosition => {
-                    Box::new(layer_resolution_component_position_progression(iter_input))
-                }
-                ProgressionOrder::ResolutionLayerComponentPosition => {
-                    Box::new(resolution_layer_component_position_progression(iter_input))
-                }
-                ProgressionOrder::ResolutionPositionComponentLayer => Box::new(
-                    resolution_position_component_layer_progression(iter_input)
-                        .ok_or(DecodingError::InvalidProgressionIterator)?,
-                ),
-                ProgressionOrder::PositionComponentResolutionLayer => Box::new(
-                    position_component_resolution_layer_progression(iter_input)
-                        .ok_or(DecodingError::InvalidProgressionIterator)?,
-                ),
-                ProgressionOrder::ComponentPositionResolutionLayer => Box::new(
-                    component_position_resolution_layer_progression(iter_input)
-                        .ok_or(DecodingError::InvalidProgressionIterator)?,
-                ),
-            };
-
+        let prog = build_progression(tile)?;
         decode_tile(
             tile,
             header,
-            progression_iterator,
+            prog,
             &mut ctx.tile_decode_context,
-            &mut ctx.channel_data,
+            &writer,
             &mut ctx.storage,
         )?;
     }
@@ -130,7 +180,7 @@ fn decode_tile<'a, 'b>(
     header: &Header<'_>,
     progression_iterator: Box<dyn Iterator<Item = ProgressionData> + '_>,
     tile_ctx: &mut TileDecodeContext,
-    channel_data: &mut [ComponentData],
+    writer: &ChannelWriter,
     storage: &mut DecompositionStorage<'a>,
 ) -> Result<()> {
     storage.reset();
@@ -170,8 +220,8 @@ fn decode_tile<'a, 'b>(
         store(
             tile,
             header,
-            tile_ctx,
-            &mut channel_data[idx],
+            &tile_ctx.idwt_output,
+            writer.comps[idx],
             component_info,
         );
     }
@@ -437,12 +487,10 @@ fn apply_sign_shift(channel_data: &mut [ComponentData], component_infos: &[Compo
 fn store<'a>(
     tile: &'a Tile<'a>,
     header: &Header<'_>,
-    tile_ctx: &mut TileDecodeContext,
-    channel_data: &mut ComponentData,
+    idwt_output: &IDWTOutput,
+    out: ChannelPtr,
     component_info: &ComponentInfo,
 ) {
-    let idwt_output = &mut tile_ctx.idwt_output;
-
     let component_tile = ComponentTile::new(tile, component_info);
     let resolution_tile = ResolutionTile::new(
         component_tile,
@@ -471,24 +519,25 @@ fn store<'a>(
         let skip_x = image_x_offset.saturating_sub(idwt_output.rect.x0);
         let skip_y = image_y_offset.saturating_sub(idwt_output.rect.y0);
 
+        let img_w = header.size_data.image_width() as usize;
+        let start_row = resolution_tile.rect.y0.saturating_sub(image_y_offset) as usize;
+        let start_col = resolution_tile.rect.x0.saturating_sub(image_x_offset) as usize;
+
         let input_row_iter = idwt_output
             .coefficients
             .chunks_exact(idwt_output.rect.width() as usize)
             .skip(skip_y as usize)
             .take(idwt_output.rect.height() as usize);
 
-        let output_row_iter = channel_data
-            .container
-            .chunks_exact_mut(header.size_data.image_width() as usize)
-            .skip(resolution_tile.rect.y0.saturating_sub(image_y_offset) as usize);
-
-        for (input_row, output_row) in input_row_iter.zip(output_row_iter) {
+        for (i, input_row) in input_row_iter.enumerate() {
             let input_row = &input_row[skip_x as usize..];
-            let output_row = &mut output_row
-                [resolution_tile.rect.x0.saturating_sub(image_x_offset) as usize..]
-                [..input_row.len()];
-
-            output_row.copy_from_slice(input_row);
+            let off = (start_row + i) * img_w + start_col;
+            // SAFETY: this tile owns a disjoint rectangle of the image, so
+            // `off..off + len` lies inside this component's buffer and never
+            // overlaps another (possibly concurrent) tile's write.
+            unsafe {
+                core::ptr::copy_nonoverlapping(input_row.as_ptr(), out.ptr.add(off), input_row.len());
+            }
         }
     } else {
         let image_width = header.size_data.image_width();
@@ -527,7 +576,10 @@ fn store<'a>(
                         let pos = (y_position - y_offset) as usize * image_width as usize
                             + (x_position - x_offset) as usize;
 
-                        channel_data.container[pos] = sample;
+                        // SAFETY: disjoint per-tile write (see ChannelWriter).
+                        unsafe {
+                            *out.ptr.add(pos) = sample;
+                        }
                     }
                 }
             }
