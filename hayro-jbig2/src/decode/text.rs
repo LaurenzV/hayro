@@ -91,10 +91,7 @@ pub(crate) fn decode_with(
 ) -> Result<()> {
     let strip_size = header.strip_size();
 
-    // Arbitrarily chosen, but we need some limit to prevent timeouts.
-    const MAX_INSTANCES: u32 = 10_000;
-
-    if header.num_instances > MAX_INSTANCES {
+    if header.num_instances > crate::max_text_region_instances() {
         bail!(SymbolError::TooManyInstances);
     }
 

@@ -34,6 +34,30 @@ pub(crate) struct ScratchBuffers {
     pub(crate) contexts: Vec<ArithmeticDecoderContext>,
 }
 
+/// Default upper bound on the number of symbol instances in a single text
+/// region (see `set_max_text_region_instances`).
+pub const DEFAULT_MAX_TEXT_REGION_INSTANCES: u32 = 10_000;
+
+static MAX_TEXT_REGION_INSTANCES: core::sync::atomic::AtomicU32 =
+    core::sync::atomic::AtomicU32::new(DEFAULT_MAX_TEXT_REGION_INSTANCES);
+
+/// Set the process-wide upper bound on symbol instances per text region.
+///
+/// The bound exists to keep adversarial files (which can declare absurd
+/// instance counts) from causing very long decode times. The conservative
+/// default of [`DEFAULT_MAX_TEXT_REGION_INSTANCES`] rejects some legitimate
+/// images, however: dense full-page text masks produced by MRC scanners
+/// routinely carry tens of thousands of symbol instances per region.
+/// Embedders that process trusted inputs, or that enforce their own decode
+/// time budget, may raise the limit.
+pub fn set_max_text_region_instances(limit: u32) {
+    MAX_TEXT_REGION_INSTANCES.store(limit, core::sync::atomic::Ordering::Relaxed);
+}
+
+pub(crate) fn max_text_region_instances() -> u32 {
+    MAX_TEXT_REGION_INSTANCES.load(core::sync::atomic::Ordering::Relaxed)
+}
+
 /// A decoder for JBIG2 images.
 pub trait Decoder {
     /// Push a single pixel to the output.
