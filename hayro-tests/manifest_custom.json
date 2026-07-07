@@ -12,6 +12,10 @@
     "file": "pdfs/custom/TextClippingModeChanges.pdf"
   },
   {
+    "id": "annotation_checkbox",
+    "file": "pdfs/custom/annotation_checkbox.pdf"
+  },
+  {
     "id": "clip_path_evenodd",
     "file": "pdfs/custom/clip_path_evenodd.pdf"
   },
