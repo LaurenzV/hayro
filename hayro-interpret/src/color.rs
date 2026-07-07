@@ -839,16 +839,48 @@ impl Separation {
     }
 }
 
+/// Evaluate a single-input tint transform over `input`, memoizing results.
+///
+/// Inputs originating from 8/16-bit image samples take at most 2^8/2^16
+/// distinct values, so for large images (e.g. a Separation-encoded scan)
+/// this avoids re-running the function — which for Type 4 functions means
+/// re-interpreting a PostScript program — once per pixel. Repeated values
+/// are resolved via a last-value fast path and a sorted lookup table.
+fn memoized_tint_eval(input: &[f32], eval: impl Fn(f32) -> crate::function::Values) -> Vec<f32> {
+    let mut lut: Vec<(u32, crate::function::Values)> = Vec::new();
+    let mut out: Vec<f32> = Vec::new();
+    // (input bits, start offset and length of its output in `out`)
+    let mut last: Option<(u32, usize, usize)> = None;
+    for n in input {
+        let bits = n.to_bits();
+        if let Some((last_bits, start, len)) = last {
+            if last_bits == bits {
+                out.extend_from_within(start..start + len);
+                continue;
+            }
+        }
+        let vals = match lut.binary_search_by_key(&bits, |e| e.0) {
+            Ok(i) => lut[i].1.clone(),
+            Err(i) => {
+                let v = eval(*n);
+                lut.insert(i, (bits, v.clone()));
+                v
+            }
+        };
+        let start = out.len();
+        out.extend_from_slice(&vals);
+        last = Some((bits, start, vals.len()));
+    }
+    out
+}
+
 impl ToRgb for Separation {
     fn convert_f32(&self, input: &[f32], output: &mut [u8], _: bool) -> Option<()> {
-        let evaluated = input
-            .iter()
-            .flat_map(|n| {
-                self.tint_transform
-                    .eval(smallvec![*n])
-                    .unwrap_or(self.alternate_space.initial_color())
-            })
-            .collect::<Vec<_>>();
+        let evaluated = memoized_tint_eval(input, |n| {
+            self.tint_transform
+                .eval(smallvec![n])
+                .unwrap_or(self.alternate_space.initial_color())
+        });
         self.alternate_space.convert_f32(&evaluated, output, false)
     }
 
@@ -895,14 +927,32 @@ impl DeviceN {
 
 impl ToRgb for DeviceN {
     fn convert_f32(&self, input: &[f32], output: &mut [u8], _: bool) -> Option<()> {
-        let evaluated = input
-            .chunks_exact(self.num_components as usize)
-            .flat_map(|n| {
+        let nc = self.num_components as usize;
+        let evaluated = if nc == 1 {
+            memoized_tint_eval(input, |n| {
                 self.tint_transform
-                    .eval(n.to_smallvec())
+                    .eval(smallvec![n])
                     .unwrap_or(self.alternate_space.initial_color())
             })
-            .collect::<Vec<_>>();
+        } else {
+            // Multi-component inputs repeat too (image samples are
+            // quantized), so memoize on the component tuple.
+            let mut memo: std::collections::HashMap<SmallVec<[u32; 4]>, crate::function::Values> =
+                std::collections::HashMap::new();
+            input
+                .chunks_exact(nc)
+                .flat_map(|n| {
+                    let key: SmallVec<[u32; 4]> = n.iter().map(|v| v.to_bits()).collect();
+                    memo.entry(key)
+                        .or_insert_with(|| {
+                            self.tint_transform
+                                .eval(n.to_smallvec())
+                                .unwrap_or(self.alternate_space.initial_color())
+                        })
+                        .clone()
+                })
+                .collect::<Vec<_>>()
+        };
         self.alternate_space.convert_f32(&evaluated, output, false)
     }
 
