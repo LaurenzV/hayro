@@ -190,11 +190,8 @@ impl TrueTypeFont {
         }
 
         match &self.kind {
-            Kind::Embedded(e) => e
-                .code_to_name(code as u8)
-                .and_then(glyph_name_to_unicode)
-                .map(BfString::Char),
-            Kind::Standard(s) => s.char_code_to_unicode(code as u8).map(BfString::Char),
+            Kind::Embedded(e) => e.code_to_name(code as u8).and_then(glyph_name_to_unicode),
+            Kind::Standard(s) => s.char_code_to_unicode(code as u8),
         }
 
         // TODO: The test PDFs below fail (but mutool can render them correctly).

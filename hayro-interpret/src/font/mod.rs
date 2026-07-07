@@ -620,19 +620,71 @@ impl Default for FallbackFontQuery {
     }
 }
 
-/// Convert a glyph name to a Unicode character, if possible.
-/// An incomplete implementation of the Adobe Glyph List Specification
-/// <https://github.com/adobe-type-tools/agl-specification>
-pub(crate) fn glyph_name_to_unicode(name: &str) -> Option<char> {
+/// Convert a glyph name to its Unicode value, if possible.
+/// Implements the mapping algorithm of the Adobe Glyph List Specification
+/// <https://github.com/adobe-type-tools/agl-specification>: the name is
+/// looked up as a whole first; otherwise everything from the first period
+/// on is dropped (variant suffixes like `.case` or `.sc`) and the rest is
+/// split on underscores into components (ligatures like `f_i`), each mapped
+/// through the AGL or its `uniXXXX`/`uXXXX[XX]` forms.
+pub(crate) fn glyph_name_to_unicode(name: &str) -> Option<BfString> {
     if let Some(unicode_str) = glyph_names::get(name) {
-        return unicode_str.chars().next();
+        return bf_string_from_str(unicode_str);
+    }
+    if let Some(c) = unicode_from_name(name) {
+        return Some(BfString::Char(c));
     }
 
-    unicode_from_name(name).or_else(|| {
-        warn!("failed to map glyph name {} to unicode", name);
+    let base = name.split('.').next().unwrap_or(name);
+    let mut out = String::new();
+    for component in base.split('_') {
+        if !push_component(component, &mut out) {
+            warn!("failed to map glyph name {} to unicode", name);
 
-        None
-    })
+            return None;
+        }
+    }
+    bf_string_from_str(&out)
+}
+
+fn push_component(component: &str, out: &mut String) -> bool {
+    if let Some(unicode_str) = glyph_names::get(component) {
+        out.push_str(unicode_str);
+        return true;
+    }
+    if let Some(c) = unicode_from_name(component) {
+        out.push(c);
+        return true;
+    }
+    // `uni` followed by several concatenated 4-digit hex groups.
+    if let Some(hex) = component.strip_prefix("uni")
+        && hex.len() > 4
+        && hex.len() % 4 == 0
+        && hex.bytes().all(|b| b.is_ascii_hexdigit())
+    {
+        let decoded: Option<String> = (0..hex.len())
+            .step_by(4)
+            .map(|i| {
+                u32::from_str_radix(&hex[i..i + 4], 16)
+                    .ok()
+                    .and_then(char::from_u32)
+            })
+            .collect();
+        if let Some(decoded) = decoded {
+            out.push_str(&decoded);
+            return true;
+        }
+    }
+    false
+}
+
+fn bf_string_from_str(s: &str) -> Option<BfString> {
+    let mut chars = s.chars();
+    match (chars.next(), chars.next()) {
+        (Some(c), None) => Some(BfString::Char(c)),
+        (Some(_), Some(_)) => Some(BfString::String(s.to_string())),
+        (None, _) => None,
+    }
 }
 
 pub(crate) fn unicode_from_name(name: &str) -> Option<char> {
@@ -675,4 +727,81 @@ pub(crate) fn normalized_glyph_name(mut name: &str) -> &str {
     }
 
     name
+}
+
+#[cfg(test)]
+mod tests {
+    use super::glyph_name_to_unicode;
+    use hayro_cmap::BfString;
+
+    #[test]
+    fn direct_agl_names() {
+        assert_eq!(glyph_name_to_unicode("A"), Some(BfString::Char('A')));
+        assert_eq!(
+            glyph_name_to_unicode("fi"),
+            Some(BfString::Char('\u{FB01}'))
+        );
+        assert_eq!(glyph_name_to_unicode("hyphen"), Some(BfString::Char('-')));
+    }
+
+    #[test]
+    fn uni_and_u_names() {
+        assert_eq!(glyph_name_to_unicode("uni0041"), Some(BfString::Char('A')));
+        assert_eq!(
+            glyph_name_to_unicode("u1F600"),
+            Some(BfString::Char('\u{1F600}'))
+        );
+    }
+
+    #[test]
+    fn variant_suffixes_are_stripped() {
+        assert_eq!(
+            glyph_name_to_unicode("hyphen.case"),
+            Some(BfString::Char('-'))
+        );
+        assert_eq!(
+            glyph_name_to_unicode("parenleft.case"),
+            Some(BfString::Char('('))
+        );
+        assert_eq!(
+            glyph_name_to_unicode("uni0041.sc"),
+            Some(BfString::Char('A'))
+        );
+    }
+
+    #[test]
+    fn underscore_components_form_ligatures() {
+        assert_eq!(
+            glyph_name_to_unicode("f_i"),
+            Some(BfString::String("fi".to_string()))
+        );
+        assert_eq!(
+            glyph_name_to_unicode("f_f_l"),
+            Some(BfString::String("ffl".to_string()))
+        );
+        assert_eq!(
+            glyph_name_to_unicode("f_i.liga"),
+            Some(BfString::String("fi".to_string()))
+        );
+        assert_eq!(
+            glyph_name_to_unicode("uni0066_uni0069"),
+            Some(BfString::String("fi".to_string()))
+        );
+    }
+
+    #[test]
+    fn multi_group_uni_names() {
+        assert_eq!(
+            glyph_name_to_unicode("uni00660069"),
+            Some(BfString::String("fi".to_string()))
+        );
+    }
+
+    #[test]
+    fn unmappable_names_stay_unmapped() {
+        assert_eq!(glyph_name_to_unicode(".notdef"), None);
+        assert_eq!(glyph_name_to_unicode("g102"), None);
+        assert_eq!(glyph_name_to_unicode("f_g102"), None);
+        assert_eq!(glyph_name_to_unicode(""), None);
+    }
 }

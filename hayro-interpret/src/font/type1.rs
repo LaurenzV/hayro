@@ -118,9 +118,9 @@ impl Type1Font {
 
         let code = char_code as u8;
         match &self.1 {
-            Kind::Standard(s) => s.char_code_to_unicode(code).map(BfString::Char),
-            Kind::Cff(c) => c.char_code_to_unicode(code).map(BfString::Char),
-            Kind::Type1(t) => t.char_code_to_unicode(code).map(BfString::Char),
+            Kind::Standard(s) => s.char_code_to_unicode(code),
+            Kind::Cff(c) => c.char_code_to_unicode(code),
+            Kind::Type1(t) => t.char_code_to_unicode(code),
         }
     }
 }
@@ -238,7 +238,7 @@ impl Type1Kind {
         }
     }
 
-    fn char_code_to_unicode(&self, code: u8) -> Option<char> {
+    fn char_code_to_unicode(&self, code: u8) -> Option<BfString> {
         self.code_to_ps_name(code).and_then(glyph_name_to_unicode)
     }
 }
@@ -335,7 +335,7 @@ impl CffKind {
         }
     }
 
-    fn char_code_to_unicode(&self, code: u8) -> Option<char> {
+    fn char_code_to_unicode(&self, code: u8) -> Option<BfString> {
         self.code_to_ps_name(code).and_then(glyph_name_to_unicode)
     }
 }
