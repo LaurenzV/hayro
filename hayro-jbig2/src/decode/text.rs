@@ -91,10 +91,10 @@ pub(crate) fn decode_with(
 ) -> Result<()> {
     let strip_size = header.strip_size();
 
-    // Arbitrarily chosen, but we need some limit to prevent timeouts.
-    const MAX_INSTANCES: u32 = 10_000;
-
-    if header.num_instances > MAX_INSTANCES {
+    // Inspired by Chromium's limit:
+    // https://pdfium.googlesource.com/pdfium/%2B/refs/heads/main/core/fxcodec/jbig2/jbig2_context.cpp#666
+    let max_instances = header.segment_data_len.saturating_mul(32);
+    if header.num_instances as usize > max_instances {
         bail!(SymbolError::TooManyInstances);
     }
 
@@ -797,6 +797,7 @@ pub(crate) struct TextRegionHeader<'a> {
     pub(crate) refinement_at_pixels: Vec<AdaptiveTemplatePixel>,
     pub(crate) num_instances: u32,
     pub(crate) symbol_id_table: Option<HuffmanTable>,
+    pub(crate) segment_data_len: usize,
     pub(crate) data: &'a [u8],
 }
 
@@ -866,6 +867,7 @@ fn parse_text_region_huffman_flags(reader: &mut Reader<'_>) -> Result<TextRegion
 
 /// Parse a text region segment header (7.4.3.1).
 pub(crate) fn parse<'a>(reader: &mut Reader<'a>, num_symbols: u32) -> Result<TextRegionHeader<'a>> {
+    let segment_data_len = reader.tail().ok_or(ParseError::UnexpectedEof)?.len();
     let region_info = parse_region_segment_info(reader)?;
     let flags = parse_text_region_flags(reader)?;
     let huffman_flags = if flags.use_huffman {
@@ -898,6 +900,7 @@ pub(crate) fn parse<'a>(reader: &mut Reader<'a>, num_symbols: u32) -> Result<Tex
         refinement_at_pixels,
         num_instances,
         symbol_id_table,
+        segment_data_len,
         data,
     })
 }
