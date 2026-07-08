@@ -1,6 +1,6 @@
 %PDF-1.7
 1 0 obj
-<< /Type /Catalog /Pages 2 0 R >>
+<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [7 0 R 8 0 R 9 0 R 10 0 R 11 0 R] /NeedAppearances false >> >>
 endobj
 2 0 obj
 << /Type /Pages /Kids [3 0 R] /Count 1 >>
@@ -9,54 +9,54 @@ endobj
 << /Type /Page /Parent 2 0 R /MediaBox [0 0 160 60] /Resources << >> /Annots [7 0 R 8 0 R 9 0 R 10 0 R 11 0 R] >>
 endobj
 4 0 obj
-<< /Type /XObject /Subtype /Form /BBox [0 0 14 14] /Length 31 >>
+<< /Type /XObject /Subtype /Form /FormType 1 /BBox [0 0 14 14] /Resources << >> /Length 31 >>
 stream
 0 0 1 RG 1 w 0.5 0.5 13 13 re S
 endstream
 endobj
 5 0 obj
-<< /Type /XObject /Subtype /Form /BBox [0 0 14 14] /Length 77 >>
+<< /Type /XObject /Subtype /Form /FormType 1 /BBox [0 0 14 14] /Resources << >> /Length 77 >>
 stream
 0 0 1 RG 1 w 0.5 0.5 13 13 re S 2.5 2.5 m 11.5 11.5 l 2.5 11.5 m 11.5 2.5 l S
 endstream
 endobj
 6 0 obj
-<< /Type /XObject /Subtype /Form /BBox [0 0 14 14] /Length 36 >>
+<< /Type /XObject /Subtype /Form /FormType 1 /BBox [0 0 14 14] /Resources << >> /Length 36 >>
 stream
 0 0.6 0 RG 2 w 2 7 m 6 3 l 12 11 l S
 endstream
 endobj
 7 0 obj
-<< /Type /Annot /Subtype /Widget /FT /Btn /Rect [10 23 24 37] /AS /Yes /AP << /N << /Off 4 0 R /Yes 5 0 R >> >> >>
+<< /Type /Annot /Subtype /Widget /FT /Btn /T (checked-cross) /F 4 /Rect [10 23 24 37] /V /Yes /AS /Yes /AP << /N << /Off 4 0 R /Yes 5 0 R >> >> >>
 endobj
 8 0 obj
-<< /Type /Annot /Subtype /Widget /FT /Btn /Rect [40 23 54 37] /AS /Off /AP << /N << /Off 4 0 R /Yes 5 0 R >> >> >>
+<< /Type /Annot /Subtype /Widget /FT /Btn /T (unchecked) /F 4 /Rect [40 23 54 37] /V /Off /AS /Off /AP << /N << /Off 4 0 R /Yes 5 0 R >> >> >>
 endobj
 9 0 obj
-<< /Type /Annot /Subtype /Widget /FT /Btn /Rect [70 23 84 37] /AS /Ja#20wirklich /AP << /N << /Off 4 0 R /Ja#20wirklich 6 0 R >> >> >>
+<< /Type /Annot /Subtype /Widget /FT /Btn /T (checked-custom) /F 4 /Rect [70 23 84 37] /V /Ja#20wirklich /AS /Ja#20wirklich /AP << /N << /Off 4 0 R /Ja#20wirklich 6 0 R >> >> >>
 endobj
 10 0 obj
-<< /Type /Annot /Subtype /Widget /FT /Btn /Rect [100 23 114 37] /AP << /N << /Off 4 0 R /Yes 5 0 R >> >> >>
+<< /Type /Annot /Subtype /Widget /FT /Btn /T (unchecked-dictcase) /F 4 /Rect [100 23 114 37] /V /Off /AS /Off /AP << /N << /Off 4 0 R /Yes 5 0 R >> >> >>
 endobj
 11 0 obj
-<< /Type /Annot /Subtype /Widget /Rect [130 23 144 37] /AP << /N 6 0 R >> >>
+<< /Type /Annot /Subtype /Widget /FT /Btn /T (direct-normal-appearance) /F 4 /Rect [130 23 144 37] /V /Yes /AS /Yes /AP << /N 6 0 R >> >>
 endobj
 xref
 0 12
 0000000000 65535 f 
 0000000009 00000 n 
-0000000058 00000 n 
-0000000115 00000 n 
-0000000244 00000 n 
-0000000373 00000 n 
-0000000548 00000 n 
-0000000682 00000 n 
-0000000812 00000 n 
-0000000942 00000 n 
-0000001092 00000 n 
-0000001216 00000 n 
+0000000139 00000 n 
+0000000196 00000 n 
+0000000325 00000 n 
+0000000483 00000 n 
+0000000687 00000 n 
+0000000850 00000 n 
+0000001012 00000 n 
+0000001170 00000 n 
+0000001363 00000 n 
+0000001533 00000 n 
 trailer
 << /Size 12 /Root 1 0 R >>
 startxref
-1309
+1687
 %%EOF
