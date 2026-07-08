@@ -212,20 +212,12 @@ pub fn interpret_page<'a>(
     }
 }
 
-/// Resolve the normal appearance stream of an annotation.
-///
-/// See 12.5.5. The `N` entry is either a stream, or a dictionary containing
-/// one appearance stream per appearance state (used for example by checkboxes
-/// and radio buttons), in which case the annotation's `AS` entry selects the
-/// applicable one.
 fn appearance_stream<'a>(annot: &Dict<'a>) -> Option<Stream<'a>> {
     match annot.get::<Dict<'_>>(AP)?.get::<Object<'_>>(N)? {
         Object::Stream(stream) => Some(stream),
         Object::Dict(states) => annot
             .get::<Name<'_>>(AS)
             .and_then(|state| states.get::<Stream<'_>>(state))
-            // If no valid appearance state is selected, fall back to the
-            // `Off` state (like pdfium and poppler do).
             .or_else(|| states.get::<Stream<'_>>(b"Off")),
         _ => None,
     }
