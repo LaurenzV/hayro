@@ -17,7 +17,7 @@ use crate::x_object::{
 };
 use hayro_syntax::content::TypedIter;
 use hayro_syntax::content::ops::TypedInstruction;
-use hayro_syntax::object::dict::keys::{ANNOTS, AP, F, MCID, N, OC, RECT};
+use hayro_syntax::object::dict::keys::{ANNOTS, AP, AS, F, MCID, N, OC, RECT};
 use hayro_syntax::object::{Array, Dict, Name, Object, Rect, Stream, dict_or_stream};
 use hayro_syntax::page::{Page, Resources};
 use kurbo::{Affine, Point, Shape};
@@ -155,11 +155,7 @@ pub fn interpret_page<'a>(
                 continue;
             }
 
-            if let Some(apx) = annot
-                .get::<Dict<'_>>(AP)
-                .and_then(|ap| ap.get::<Stream<'_>>(N))
-                .and_then(|o| FormXObject::new(&o))
-            {
+            if let Some(apx) = appearance_stream(&annot).and_then(|o| FormXObject::new(&o)) {
                 let Some(rect) = annot.get::<Rect>(RECT) else {
                     continue;
                 };
@@ -213,6 +209,17 @@ pub fn interpret_page<'a>(
                 context.restore_state(device);
             }
         }
+    }
+}
+
+fn appearance_stream<'a>(annot: &Dict<'a>) -> Option<Stream<'a>> {
+    match annot.get::<Dict<'_>>(AP)?.get::<Object<'_>>(N)? {
+        Object::Stream(stream) => Some(stream),
+        Object::Dict(states) => annot
+            .get::<Name<'_>>(AS)
+            .and_then(|state| states.get::<Stream<'_>>(state))
+            .or_else(|| states.get::<Stream<'_>>(b"Off")),
+        _ => None,
     }
 }
 
