@@ -1,8 +1,9 @@
-use crate::{load_pdf, run_write_test};
+use crate::{get_diff, interpreter_settings, load_pdf, run_write_test};
 use hayro_syntax::Pdf;
 use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::GROUP;
 use hayro_write::ExtractionQuery;
+use image::load_from_memory;
 use pdf_writer::Ref;
 use sitro::Renderer;
 
@@ -352,6 +353,129 @@ fn write_xobject_contents_array() {
         Renderer::Pdfium,
         false,
     );
+}
+
+// `/OC` entries must survive extraction. Optional content that is hidden in the
+// original document (a common example are scanned documents that gate a fallback
+// image behind an OCMD with an `AllOff` visibility policy) would otherwise
+// become visible in the extracted page.
+#[test]
+fn write_page_preserves_optional_content() {
+    use pdf_writer::{Content, Finish, Name, Rect, Str};
+
+    let original = {
+        let mut pdf = pdf_writer::Pdf::new();
+
+        let catalog_id = Ref::new(1);
+        let page_tree_id = Ref::new(2);
+        let page_id = Ref::new(3);
+        let content_id = Ref::new(4);
+        let visible_image_id = Ref::new(5);
+        let hidden_image_id = Ref::new(6);
+        let ocg_id = Ref::new(7);
+        let ocmd_id = Ref::new(8);
+
+        let mut catalog = pdf.catalog(catalog_id);
+        catalog.pages(page_tree_id);
+        let mut oc_properties = catalog.insert(Name(b"OCProperties")).dict();
+        oc_properties.insert(Name(b"OCGs")).array().item(ocg_id);
+        oc_properties.insert(Name(b"D")).dict();
+        oc_properties.finish();
+        catalog.finish();
+
+        pdf.pages(page_tree_id).kids([page_id]).count(1);
+
+        let mut page = pdf.page(page_id);
+        page.parent(page_tree_id)
+            .media_box(Rect::new(0.0, 0.0, 100.0, 100.0))
+            .contents(content_id);
+        let mut resources = page.resources();
+        let mut x_objects = resources.x_objects();
+        x_objects.pair(Name(b"Im1"), visible_image_id);
+        x_objects.pair(Name(b"Im2"), hidden_image_id);
+        x_objects.finish();
+        resources.finish();
+        page.finish();
+
+        let mut content = Content::new();
+        // Draw the visible image over the whole page, and the hidden one on top of it.
+        for name in [b"Im1", b"Im2"] {
+            content.save_state();
+            content.transform([100.0, 0.0, 0.0, 100.0, 0.0, 0.0]);
+            content.x_object(Name(name));
+            content.restore_state();
+        }
+        pdf.stream(content_id, &content.finish());
+
+        // A 1x1 white RGB image.
+        let mut visible_image = pdf.image_xobject(visible_image_id, &[255, 255, 255]);
+        visible_image.width(1).height(1).bits_per_component(8);
+        visible_image.color_space().device_rgb();
+        visible_image.finish();
+
+        // A 1x1 black RGB image that is only visible if the OCG is disabled,
+        // i.e. it is hidden in the default configuration.
+        let mut hidden_image = pdf.image_xobject(hidden_image_id, &[0, 0, 0]);
+        hidden_image.width(1).height(1).bits_per_component(8);
+        hidden_image.color_space().device_rgb();
+        hidden_image.pair(Name(b"OC"), ocmd_id);
+        hidden_image.finish();
+
+        let mut ocmd = pdf.indirect(ocmd_id).dict();
+        ocmd.pair(Name(b"Type"), Name(b"OCMD"));
+        ocmd.insert(Name(b"OCGs")).array().item(ocg_id);
+        ocmd.pair(Name(b"P"), Name(b"AllOff"));
+        ocmd.finish();
+
+        let mut ocg = pdf.indirect(ocg_id).dict();
+        ocg.pair(Name(b"Type"), Name(b"OCG"));
+        ocg.pair(Name(b"Name"), Str(b"fallback"));
+        ocg.finish();
+
+        pdf.finish()
+    };
+
+    let hayro_pdf = Pdf::new(original).unwrap();
+    let extracted = hayro_write::extract_pages_to_pdf(&hayro_pdf, &[0]);
+    let reread = Pdf::new(extracted).unwrap();
+
+    // The `/OC` entry of the image must survive the extraction.
+    let image = reread.pages()[0]
+        .resources()
+        .x_objects
+        .get::<Stream<'_>>("Im2")
+        .unwrap();
+    let ocmd = image
+        .dict()
+        .get::<hayro_syntax::object::Dict<'_>>("OC")
+        .expect("`/OC` entry was dropped during extraction");
+    assert_eq!(
+        ocmd.get::<hayro_syntax::object::Name<'_>>("P")
+            .unwrap()
+            .as_ref(),
+        b"AllOff"
+    );
+
+    let render = |pdf: &Pdf| {
+        let mut pages = hayro::render_pdf(pdf, 1.0, interpreter_settings(), None).unwrap();
+        load_from_memory(&pages.remove(0).into_png().unwrap())
+            .unwrap()
+            .into_rgba8()
+    };
+
+    let original_render = render(&hayro_pdf);
+    let extracted_render = render(&reread);
+
+    // Sanity check: the hidden image must not show up in the original render.
+    assert_eq!(
+        original_render.get_pixel(50, 50),
+        &image::Rgba([255, 255, 255, 255])
+    );
+
+    // The extracted page must render identically to the original one. Without
+    // the `/OC` entry, the hidden image would become visible.
+    let (_, pixel_diff) = get_diff(&original_render, &extracted_render);
+    assert_eq!(pixel_diff, 0);
 }
 
 #[test]
