@@ -22,7 +22,7 @@ use hayro_syntax::object::dict::keys::{
     COLORSPACE, EXT_G_STATE, FONT, GROUP, PATTERN, PROPERTIES, SHADING, XOBJECT,
 };
 use hayro_syntax::object::{MaybeRef, ObjRef};
-use hayro_syntax::page::{Page, Resources, Rotation};
+use hayro_syntax::page::{Page, Resources};
 use pdf_writer::{Chunk, Content, Filter, Finish, Name, Rect, Ref};
 use rustc_hash::FxHashMap;
 use std::collections::{BTreeMap, HashSet};
@@ -31,6 +31,7 @@ use std::ops::DerefMut;
 
 pub use hayro_syntax;
 use hayro_syntax::Pdf;
+pub use hayro_syntax::page::Rotation;
 pub use pdf_writer::Settings as ChunkSettings;
 
 /// Apply the extraction queries to the given PDF and return the results.
@@ -58,7 +59,7 @@ where
             ExtractionQueryType::XObject => {
                 write_xobject(page, root_ref, &mut write_xobject_group_cs, &mut ctx)
             }
-            ExtractionQueryType::Page => write_page(page, root_ref, query.page_index, &mut ctx),
+            ExtractionQueryType::Page => write_page(page, root_ref, query, &mut ctx),
         };
 
         ctx.root_refs.push(res.map(|_| root_ref));
@@ -96,6 +97,7 @@ pub enum ExtractionQueryType {
 pub struct ExtractionQuery {
     query_type: ExtractionQueryType,
     page_index: usize,
+    rotation: Option<Rotation>,
 }
 
 impl ExtractionQuery {
@@ -104,6 +106,7 @@ impl ExtractionQuery {
         Self {
             query_type: ExtractionQueryType::Page,
             page_index,
+            rotation: None,
         }
     }
 
@@ -112,7 +115,15 @@ impl ExtractionQuery {
         Self {
             query_type: ExtractionQueryType::XObject,
             page_index,
+            rotation: None,
         }
+    }
+
+    /// Override the `/Rotate` entry of the extracted page instead of copying it
+    /// from the source page. Has no effect on `XObject` extraction queries.
+    pub fn with_rotation(mut self, rotation: Rotation) -> Self {
+        self.rotation = Some(rotation);
+        self
     }
 }
 
@@ -213,10 +224,7 @@ pub fn extract_pages_to_pdf(hayro_pdf: &Pdf, page_indices: &[usize]) -> Vec<u8> 
     let mut next_ref = Ref::new(1);
     let requests = page_indices
         .iter()
-        .map(|i| ExtractionQuery {
-            query_type: ExtractionQueryType::Page,
-            page_index: *i,
-        })
+        .map(|i| ExtractionQuery::new_page(*i))
         .collect::<Vec<_>>();
 
     let catalog_id = next_ref.bump();
@@ -253,10 +261,7 @@ pub fn extract_pages_as_xobject_to_pdf(hayro_pdf: &Pdf, page_indices: &[usize]) 
     let catalog_id = next_ref.bump();
     let requests = page_indices
         .iter()
-        .map(|i| ExtractionQuery {
-            query_type: ExtractionQueryType::XObject,
-            page_index: *i,
-        })
+        .map(|i| ExtractionQuery::new_xobject(*i))
         .collect::<Vec<_>>();
 
     let extracted = extract(
@@ -316,13 +321,13 @@ pub fn extract_pages_as_xobject_to_pdf(hayro_pdf: &Pdf, page_indices: &[usize]) 
 fn write_page(
     page: &Page<'_>,
     page_ref: Ref,
-    page_idx: usize,
+    query: &ExtractionQuery,
     ctx: &mut ExtractionContext<'_>,
 ) -> Result<(), ExtractionError> {
     let mut chunk = Chunk::with_settings(ctx.chunk_settings);
     // Note: We can cache content stream references, but _not_ the page references themselves.
     // Acrobat for some reason doesn't like duplicate page references in the page tree.
-    let stream_ref = if let Some(cached) = ctx.cached_content_streams.get(&page_idx) {
+    let stream_ref = if let Some(cached) = ctx.cached_content_streams.get(&query.page_index) {
         *cached
     } else {
         let stream_ref = ctx.new_ref();
@@ -333,7 +338,8 @@ fn write_page(
                 &deflate_encode(page.page_stream().unwrap_or(b"")),
             )
             .filter(Filter::FlateDecode);
-        ctx.cached_content_streams.insert(page_idx, stream_ref);
+        ctx.cached_content_streams
+            .insert(query.page_index, stream_ref);
 
         stream_ref
     };
@@ -343,7 +349,7 @@ fn write_page(
     pdf_page
         .media_box(convert_rect(&page.media_box()))
         .crop_box(convert_rect(&page.crop_box()))
-        .rotate(match page.rotation() {
+        .rotate(match query.rotation.unwrap_or(page.rotation()) {
             Rotation::None => 0,
             Rotation::Horizontal => 90,
             Rotation::Flipped => 180,

@@ -1,8 +1,9 @@
-use crate::{load_pdf, run_write_test};
+use crate::{get_diff, interpreter_settings, load_pdf, run_write_test};
 use hayro_syntax::Pdf;
 use hayro_syntax::object::Stream;
-use hayro_syntax::object::dict::keys::GROUP;
-use hayro_write::ExtractionQuery;
+use hayro_syntax::object::dict::keys::{GROUP, ROTATE};
+use hayro_write::{ExtractionQuery, Rotation};
+use image::load_from_memory;
 use pdf_writer::Ref;
 use sitro::Renderer;
 
@@ -352,6 +353,134 @@ fn write_xobject_contents_array() {
         Renderer::Pdfium,
         false,
     );
+}
+
+/// Build a single-page PDF with a black square in the bottom-left corner of the
+/// page and the given `/Rotate` entry.
+fn pdf_with_rotation(rotation: i32) -> Vec<u8> {
+    use pdf_writer::{Content, Finish, Rect};
+
+    let catalog_id = Ref::new(1);
+    let page_tree_id = Ref::new(2);
+    let page_id = Ref::new(3);
+    let content_id = Ref::new(4);
+
+    let mut pdf = pdf_writer::Pdf::new();
+    pdf.catalog(catalog_id).pages(page_tree_id);
+    pdf.pages(page_tree_id).kids([page_id]).count(1);
+
+    let mut page = pdf.page(page_id);
+    page.media_box(Rect::new(0.0, 0.0, 100.0, 100.0));
+    page.parent(page_tree_id);
+    page.contents(content_id);
+    page.rotate(rotation);
+    page.finish();
+
+    let mut content = Content::new();
+    content.rect(0.0, 0.0, 30.0, 30.0);
+    content.fill_nonzero();
+    pdf.stream(content_id, &content.finish());
+
+    pdf.finish()
+}
+
+/// Extract the given queries into a new PDF, like `extract_pages_to_pdf` does.
+fn extract_to_pdf(hayro_pdf: &Pdf, queries: &[ExtractionQuery]) -> Vec<u8> {
+    let mut pdf = pdf_writer::Pdf::new();
+    let mut next_ref = Ref::new(1);
+    let catalog_id = next_ref.bump();
+
+    let extracted = hayro_write::extract(
+        hayro_pdf,
+        Box::new(|| next_ref.bump()),
+        hayro_write::ChunkSettings::default(),
+        |_| {},
+        queries,
+    )
+    .unwrap();
+
+    pdf.catalog(catalog_id)
+        .pages(extracted.page_tree_parent_ref);
+    let count = extracted.root_refs.len();
+    pdf.pages(extracted.page_tree_parent_ref)
+        .kids(extracted.root_refs.iter().map(|r| r.unwrap()))
+        .count(count as i32);
+    pdf.extend(&extracted.chunk);
+
+    pdf.finish()
+}
+
+fn render_first_page(pdf: &Pdf) -> image::RgbaImage {
+    let mut pages = hayro::render_pdf(pdf, 1.0, interpreter_settings(), None).unwrap();
+    load_from_memory(&pages.remove(0).into_png().unwrap())
+        .unwrap()
+        .into_rgba8()
+}
+
+#[test]
+fn write_page_rotation_override() {
+    let original = Pdf::new(pdf_with_rotation(90)).unwrap();
+
+    let extracted = extract_to_pdf(
+        &original,
+        &[ExtractionQuery::new_page(0).with_rotation(Rotation::Flipped)],
+    );
+    let extracted = Pdf::new(extracted).unwrap();
+
+    // The page dictionary must contain exactly one `/Rotate` entry, holding
+    // the overridden value instead of the source page's.
+    let raw = extracted.pages()[0].raw();
+    assert_eq!(
+        raw.entries()
+            .filter(|(name, _)| name.as_ref() == ROTATE)
+            .count(),
+        1
+    );
+    assert_eq!(raw.get::<i32>(ROTATE), Some(180));
+
+    // The extracted page must render exactly like a page that was authored
+    // with `/Rotate 180` in the first place.
+    let expected = Pdf::new(pdf_with_rotation(180)).unwrap();
+    let expected_render = render_first_page(&expected);
+    let extracted_render = render_first_page(&extracted);
+
+    // Sanity check that the rotation was actually applied: the square drawn in
+    // the bottom-left corner of the page must show up in the top-right corner.
+    assert_eq!(
+        extracted_render.get_pixel(85, 15),
+        &image::Rgba([0, 0, 0, 255])
+    );
+    assert_ne!(
+        extracted_render.get_pixel(15, 85),
+        &image::Rgba([0, 0, 0, 255])
+    );
+
+    let (_, pixel_diff) = get_diff(&expected_render, &extracted_render);
+    assert_eq!(pixel_diff, 0);
+}
+
+#[test]
+fn write_page_rotation_without_override() {
+    let original = Pdf::new(pdf_with_rotation(90)).unwrap();
+
+    let extracted = extract_to_pdf(&original, &[ExtractionQuery::new_page(0)]);
+    let extracted = Pdf::new(extracted).unwrap();
+
+    // Without an override, the rotation of the source page is carried over.
+    let raw = extracted.pages()[0].raw();
+    assert_eq!(
+        raw.entries()
+            .filter(|(name, _)| name.as_ref() == ROTATE)
+            .count(),
+        1
+    );
+    assert_eq!(raw.get::<i32>(ROTATE), Some(90));
+
+    let original_render = render_first_page(&original);
+    let extracted_render = render_first_page(&extracted);
+
+    let (_, pixel_diff) = get_diff(&original_render, &extracted_render);
+    assert_eq!(pixel_diff, 0);
 }
 
 #[test]
