@@ -19,7 +19,7 @@ use flate2::write::ZlibEncoder;
 use hayro_syntax::object::Dict;
 use hayro_syntax::object::Object;
 use hayro_syntax::object::dict::keys::{
-    COLORSPACE, EXT_G_STATE, FONT, GROUP, PATTERN, PROPERTIES, SHADING, XOBJECT,
+    ANNOTS, COLORSPACE, EXT_G_STATE, FONT, GROUP, PATTERN, PROPERTIES, SHADING, XOBJECT,
 };
 use hayro_syntax::object::{MaybeRef, ObjRef};
 use hayro_syntax::page::{Page, Resources, Rotation};
@@ -356,6 +356,10 @@ fn write_page(
 
     if let Some(group) = raw_dict.get_raw::<Object<'_>>(GROUP) {
         group.write_direct(pdf_page.insert(Name(GROUP)), ctx);
+    }
+
+    if let Some(annots) = raw_dict.get_raw::<Object<'_>>(ANNOTS) {
+        annots.write_direct(pdf_page.insert(Name(ANNOTS)), ctx);
     }
 
     serialize_resources(page.resources(), ctx, &mut pdf_page);

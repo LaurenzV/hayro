@@ -1,7 +1,7 @@
 use crate::{load_pdf, run_write_test};
 use hayro_syntax::Pdf;
 use hayro_syntax::object::Stream;
-use hayro_syntax::object::dict::keys::GROUP;
+use hayro_syntax::object::dict::keys::{ANNOTS, AP, GROUP, N, P, RECT, SUBTYPE};
 use hayro_write::ExtractionQuery;
 use pdf_writer::Ref;
 use sitro::Renderer;
@@ -352,6 +352,105 @@ fn write_xobject_contents_array() {
         Renderer::Pdfium,
         false,
     );
+}
+
+/// Build a minimal single-page PDF containing a `Square` annotation whose appearance
+/// stream draws a black square, and whose `/P` entry points back to the page.
+fn pdf_with_annotation() -> Vec<u8> {
+    use pdf_writer::types::AnnotationType;
+    use pdf_writer::{Content, Finish, Rect};
+
+    let catalog_id = Ref::new(1);
+    let page_tree_id = Ref::new(2);
+    let page_id = Ref::new(3);
+    let content_id = Ref::new(4);
+    let annot_id = Ref::new(5);
+    let appearance_id = Ref::new(6);
+
+    let mut pdf = pdf_writer::Pdf::new();
+    pdf.catalog(catalog_id).pages(page_tree_id);
+    pdf.pages(page_tree_id).kids([page_id]).count(1);
+
+    let mut page = pdf.page(page_id);
+    page.media_box(Rect::new(0.0, 0.0, 200.0, 200.0));
+    page.parent(page_tree_id);
+    page.contents(content_id);
+    page.annotations([annot_id]);
+    page.finish();
+
+    pdf.stream(content_id, &Content::new().finish());
+
+    let mut annot = pdf.annotation(annot_id);
+    annot.subtype(AnnotationType::Square);
+    annot.rect(Rect::new(50.0, 50.0, 150.0, 150.0));
+    annot.page(page_id);
+    annot.appearance().normal().stream(appearance_id);
+    annot.finish();
+
+    let mut appearance = Content::new();
+    appearance.rect(0.0, 0.0, 100.0, 100.0);
+    appearance.fill_nonzero();
+    let appearance_content = appearance.finish();
+    pdf.form_xobject(appearance_id, &appearance_content)
+        .bbox(Rect::new(0.0, 0.0, 100.0, 100.0));
+
+    pdf.finish()
+}
+
+#[test]
+fn write_page_with_annotation() {
+    let original = Pdf::new(pdf_with_annotation()).unwrap();
+    let extracted = hayro_write::extract_pages_to_pdf(&original, &[0]);
+    let extracted = Pdf::new(extracted).unwrap();
+
+    // The annotation and its appearance stream must have been copied over.
+    let annot = extracted.pages()[0]
+        .raw()
+        .get::<hayro_syntax::object::Array>(ANNOTS)
+        .expect("extracted page should have an `Annots` entry")
+        .iter::<hayro_syntax::object::Dict>()
+        .next()
+        .expect("`Annots` should contain the annotation");
+    assert_eq!(
+        annot
+            .get::<hayro_syntax::object::Name>(SUBTYPE)
+            .unwrap()
+            .as_ref(),
+        b"Square"
+    );
+    assert!(annot.get::<hayro_syntax::object::Rect>(RECT).is_some());
+    assert!(
+        annot
+            .get::<hayro_syntax::object::Dict>(AP)
+            .unwrap()
+            .get::<Stream>(N)
+            .is_some()
+    );
+
+    // The `/P` entry must not have pulled the original page (tree) into the
+    // extracted document.
+    assert!(annot.get::<hayro_syntax::object::Dict>(P).is_none());
+
+    // The annotation must still render in the extracted document.
+    let original_rendered = crate::render_pdf(&original, "", crate::interpreter_settings(), None);
+    let extracted_rendered = crate::render_pdf(&extracted, "", crate::interpreter_settings(), None);
+
+    let original_image = image::load_from_memory(&original_rendered[0])
+        .unwrap()
+        .into_rgba8();
+    let extracted_image = image::load_from_memory(&extracted_rendered[0])
+        .unwrap()
+        .into_rgba8();
+
+    // Make sure we don't just compare two blank pages.
+    assert!(
+        original_image
+            .pixels()
+            .any(|pixel| pixel.0 == [0, 0, 0, 255])
+    );
+
+    let (_, pixel_diff) = crate::get_diff(&original_image, &extracted_image);
+    assert_eq!(pixel_diff, 0);
 }
 
 #[test]

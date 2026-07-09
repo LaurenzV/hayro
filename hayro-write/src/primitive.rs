@@ -1,8 +1,8 @@
 use crate::ExtractionContext;
 use hayro_syntax::object;
 use hayro_syntax::object::dict::keys::{
-    AF, LAST_MODIFIED, LENGTH, METADATA, OC, OPI, PIECE_INFO, PT_DATA, REF, STRUCT_PARENT,
-    STRUCT_PARENTS,
+    AF, LAST_MODIFIED, LENGTH, METADATA, OC, OPI, PAGE, PAGES, PIECE_INFO, PT_DATA, REF,
+    STRUCT_PARENT, STRUCT_PARENTS, TYPE,
 };
 use hayro_syntax::object::{MaybeRef, Null, Number, ObjectIdentifier, Stream};
 use hayro_syntax::object::{Object, array, dict};
@@ -40,7 +40,18 @@ impl WriteDirect for object::ObjRef {
         // don't actually exist in the PDF chunk, which will lead to a panic in krilla when renumbering.
         let valid = *ctx.valid_ref_cache.entry(*self).or_insert_with(|| {
             let id = ObjectIdentifier::new(self.obj_number, self.gen_number);
-            ctx.pdf.xref().get::<Object<'_>>(id).is_some()
+            match ctx.pdf.xref().get::<Object<'_>>(id) {
+                // References to page objects (e.g. via an annotation's `/P` entry or the
+                // target of a link destination) are also written as null objects. Pages
+                // are always rewritten from scratch, so copying an original page object
+                // would pull the whole original page tree into the output.
+                Some(Object::Dict(dict)) => !matches!(
+                    dict.get::<object::Name<'_>>(TYPE).as_deref(),
+                    Some(PAGE) | Some(PAGES)
+                ),
+                Some(_) => true,
+                None => false,
+            }
         });
 
         if valid {
