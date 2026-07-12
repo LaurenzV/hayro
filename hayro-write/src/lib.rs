@@ -34,16 +34,12 @@ use hayro_syntax::Pdf;
 pub use pdf_writer::Settings as ChunkSettings;
 
 /// Apply the extraction queries to the given PDF and return the results.
-pub fn extract<'a, G>(
+pub fn extract<'a>(
     pdf: &Pdf,
     new_ref: Box<dyn FnMut() -> Ref + 'a>,
     chunk_settings: ChunkSettings,
-    mut write_xobject_group_cs: G,
     queries: &[ExtractionQuery],
-) -> Result<ExtractionResult, ExtractionError>
-where
-    G: for<'b> FnMut(&mut pdf_writer::writers::Group<'b>),
-{
+) -> Result<ExtractionResult, ExtractionError> {
     let pages = pdf.pages();
     let mut ctx = ExtractionContext::new(new_ref, pdf, chunk_settings);
 
@@ -55,9 +51,7 @@ where
         let root_ref = ctx.new_ref();
 
         let res = match query.query_type {
-            ExtractionQueryType::XObject => {
-                write_xobject(page, root_ref, &mut write_xobject_group_cs, &mut ctx)
-            }
+            ExtractionQueryType::XObject => write_xobject(page, root_ref, &mut ctx),
             ExtractionQueryType::Page => write_page(page, root_ref, query.page_index, &mut ctx),
         };
 
@@ -225,7 +219,6 @@ pub fn extract_pages_to_pdf(hayro_pdf: &Pdf, page_indices: &[usize]) -> Vec<u8> 
         hayro_pdf,
         Box::new(|| next_ref.bump()),
         ChunkSettings::default(),
-        /* Unused when writing as page instead of XObject */ |_| unreachable!(),
         &requests,
     )
     .unwrap();
@@ -263,9 +256,6 @@ pub fn extract_pages_as_xobject_to_pdf(hayro_pdf: &Pdf, page_indices: &[usize]) 
         hayro_pdf,
         Box::new(|| next_ref.bump()),
         ChunkSettings::default(),
-        |group| {
-            group.color_space().device_rgb();
-        },
         &requests,
     )
     .unwrap();
@@ -367,15 +357,11 @@ fn write_page(
     Ok(())
 }
 
-fn write_xobject<G>(
+fn write_xobject(
     page: &Page<'_>,
     xobj_ref: Ref,
-    write_xobject_group_cs: &mut G,
     ctx: &mut ExtractionContext<'_>,
-) -> Result<(), ExtractionError>
-where
-    G: for<'b> FnMut(&mut pdf_writer::writers::Group<'b>),
-{
+) -> Result<(), ExtractionError> {
     let mut chunk = Chunk::with_settings(ctx.chunk_settings);
     let encoded_stream = deflate_encode(page.page_stream().unwrap_or(b""));
     let mut x_object = chunk.form_xobject(xobj_ref, &encoded_stream);
@@ -403,12 +389,11 @@ where
 
     serialize_resources(page.resources(), ctx, &mut x_object);
 
-    // Latex seems to isolate all embedded PDFs which makes sense, so we also
-    // do the same. See also https://github.com/typst/typst/issues/7269.
-    let mut group = x_object.group();
-    group.transparency().isolated(true);
-    write_xobject_group_cs(&mut group);
-    group.finish();
+    let raw_dict = page.raw();
+
+    if let Some(group) = raw_dict.get_raw::<Object<'_>>(GROUP) {
+        group.write_direct(x_object.insert(Name(GROUP)), ctx);
+    }
 
     x_object.finish();
     ctx.chunks.push(chunk);
