@@ -1,7 +1,7 @@
 use crate::{load_pdf, run_write_test};
 use hayro_syntax::Pdf;
-use hayro_syntax::object::Stream;
 use hayro_syntax::object::dict::keys::GROUP;
+use hayro_syntax::object::{Dict, Stream};
 use hayro_write::ExtractionQuery;
 use pdf_writer::Ref;
 use sitro::Renderer;
@@ -25,7 +25,6 @@ fn dont_cache_page_references() {
         &hayro_pdf,
         Box::new(|| next_ref.bump()),
         hayro_write::ChunkSettings::default(),
-        |_| {},
         &[ExtractionQuery::new_page(0), ExtractionQuery::new_page(0)],
     )
     .unwrap();
@@ -208,17 +207,27 @@ fn write_xobject_basic_1() {
     );
 }
 
+// See also https://github.com/LaurenzV/krilla/pull/410 for more info.
 #[test]
-fn write_xobject_uses_isolated_transparency_group() {
+fn write_xobject_does_not_synthesize_group() {
     let hayro_pdf = load_pdf("pdfs/custom/clip_path_evenodd.pdf");
     let extracted = hayro_write::extract_pages_as_xobject_to_pdf(&hayro_pdf, &[0]);
     let rewritten = Pdf::new(extracted).unwrap();
     let page = &rewritten.pages()[0];
     let x_object = page.resources().x_objects.get::<Stream<'_>>("O1").unwrap();
-    let group = x_object
-        .dict()
-        .get::<hayro_syntax::object::Dict<'_>>(GROUP)
-        .unwrap();
+
+    assert!(x_object.dict().get::<Dict<'_>>(GROUP).is_none());
+}
+
+// See also https://github.com/LaurenzV/krilla/pull/410 for more info.
+#[test]
+fn write_xobject_preserves_page_group() {
+    let hayro_pdf = load_pdf("pdfs/custom/shading_operator_2.pdf");
+    let extracted = hayro_write::extract_pages_as_xobject_to_pdf(&hayro_pdf, &[0]);
+    let rewritten = Pdf::new(extracted).unwrap();
+    let page = &rewritten.pages()[0];
+    let x_object = page.resources().x_objects.get::<Stream<'_>>("O1").unwrap();
+    let group = x_object.dict().get::<Dict<'_>>(GROUP).unwrap();
 
     assert_eq!(
         group
