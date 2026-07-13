@@ -37,6 +37,8 @@ hayro-write = { path = "hayro-write", version = "0.7.0", default-features = fals
 hayro-postscript = { path = "hayro-postscript", version = "0.1.0", default-features = false }
 hayro-cmap = { path = "hayro-cmap", version = "0.1.0", default-features = false }
 
+enough = { version = "0.4.4", default-features = false, features = ["alloc"] }
+
 bitflags = { version = "2.10" }
 bytemuck = { version = "1" }
 image = { version = "0.25", default-features = false }
@@ -56,7 +58,9 @@ sitro = { git = "https://github.com/LaurenzV/sitro", rev="fb804b3" }
 xmlwriter = { version = "0.1" }
 base64 = { version = "0.22" }
 zune-jpeg = { version = "0.5", default-features = false }
-vello_cpu = { git = "https://github.com/linebender/vello", rev = "8442ef4", default-features = false, features = ["std", "png", "u8_pipeline"] }
+# Points at the `render_cancellable` branch of a vello fork (linebender/vello#1712).
+# Swap back to the upstream vello rev once that lands.
+vello_cpu = { git = "https://github.com/lilith/vello", rev = "8243971a18809968af1d4d817bf56ebe3becbfbe", default-features = false, features = ["std", "png", "u8_pipeline"] }
 pic-scale = { version = "0.7.9", default-features = false, features = ["neon", "rdm", "sse", "avx"] }
 fearless_simd = "0.4.0"
 brotli = { version = "8", default-features = false, features = ["std"] }
@@ -122,3 +126,10 @@ strip = "none"
 inherits = "release"
 debug = 1
 overflow-checks = true
+
+[patch.crates-io]
+# zune-jpeg cooperative cancellation (CancelCheck / set_cancel), from our open
+# upstream PR, so DctDecode can be cancelled mid-decode. Drop once a published
+# zune-jpeg exposes the same hook.
+zune-jpeg = { git = "https://github.com/lilith/zune-image", branch = "jpeg-stop-vendored" }
+zune-core = { git = "https://github.com/lilith/zune-image", branch = "jpeg-stop-vendored" }

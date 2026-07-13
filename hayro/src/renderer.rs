@@ -1,4 +1,5 @@
 use crate::{RenderCache, derive_settings};
+use enough::Stop;
 use hayro_interpret::encode::{EncodedShadingPattern, EncodedShadingType};
 use hayro_interpret::font::Glyph;
 use hayro_interpret::gradient::SvgGradientKind;
@@ -21,6 +22,26 @@ use vello_cpu::{
     Image, ImageSource, Mask, PaintType, Pixmap, RenderContext, RenderSettings, peniko,
 };
 
+/// The per-pixel image-buffer expansions poll the cooperative stop once every
+/// this many pixels — frequent enough to bound cancellation latency to well
+/// under a millisecond, rare enough to be free on the throughput path.
+const IMAGE_STOP_POLL_INTERVAL: usize = 1 << 16;
+
+/// Flush `ctx` and rasterize it into `pixmap`, polling the cooperative `stop` so
+/// a long nested rasterization (soft mask, tiling pattern, image stencil) can be
+/// abandoned. Skips rasterizing entirely if the stop has already fired.
+fn render_pixmap_cancellable(ctx: &mut RenderContext, pixmap: &mut Pixmap, stop: &Arc<dyn Stop>) {
+    if stop.should_stop() {
+        return;
+    }
+    ctx.flush();
+    let mut resources = vello_cpu::Resources::default();
+    let stop = stop.clone();
+    // The nested rasterization is abandoned with the rest of the render; its
+    // completion status is irrelevant here.
+    let _ = ctx.render_cancellable(pixmap, &mut resources, &|| stop.should_stop());
+}
+
 pub(crate) struct Renderer {
     pub(crate) ctx: RenderContext,
     pub(crate) inside_pattern: bool,
@@ -28,6 +49,8 @@ pub(crate) struct Renderer {
     pub(crate) outline_cache: Rc<std::cell::RefCell<FxHashMap<u128, Rc<BezPath>>>>,
     pub(crate) in_type3_glyph: bool,
     pub(crate) scaler: Scaler,
+    /// Cooperative stop check; when fired, nested rasterizations are skipped.
+    pub(crate) stop: Arc<dyn Stop>,
 }
 
 #[derive(Clone, Copy)]
@@ -105,7 +128,17 @@ impl Renderer {
             outline_cache: cache.outline_cache.clone(),
             in_type3_glyph: false,
             scaler: Scaler::new(ResamplingFunction::CatmullRom),
+            stop: Arc::new(enough::Unstoppable),
         }
+    }
+
+    /// Whether a long per-pixel image loop should stop because the cooperative
+    /// stop has fired. Polled on a coarse grid (every `IMAGE_STOP_POLL_INTERVAL`
+    /// pixels), so the check is effectively free. When this returns `true` the
+    /// caller bails out of `draw_image`; the render is being discarded on stop,
+    /// so leaving a partial buffer behind is fine.
+    fn poll_stop(&self, pixel_index: usize) -> bool {
+        pixel_index.is_multiple_of(IMAGE_STOP_POLL_INTERVAL) && self.stop.should_stop()
     }
 
     fn set_stroke_properties(&mut self, stroke_props: &StrokeProps, is_text: bool) {
@@ -155,6 +188,7 @@ impl Renderer {
                 outline_cache: self.outline_cache.clone(),
                 in_type3_glyph: false,
                 scaler: self.scaler,
+                stop: self.stop.clone(),
             };
             let mut mask_pix = Pixmap::new(self.ctx.width(), self.ctx.height());
             let rgb_data = ImageData::Rgb(RgbData {
@@ -169,9 +203,7 @@ impl Renderer {
             // but `draw_image_with_alpha_mask` is only called if the dimensions or interpolate
             // values between alpha_data and rgb_data don't match, which they do here.
             renderer.draw_image(rgb_data, Some(alpha_data));
-            renderer.ctx.flush();
-            let mut resources = vello_cpu::Resources::default();
-            renderer.ctx.render(&mut mask_pix, &mut resources);
+            render_pixmap_cancellable(&mut renderer.ctx, &mut mask_pix, &renderer.stop);
             Mask::new_alpha(&mask_pix)
         };
 
@@ -353,10 +385,14 @@ impl Renderer {
                 resized
             };
 
-            luma_data
-                .iter()
-                .flat_map(|g| [*g, *g, *g, 255])
-                .collect::<Vec<_>>()
+            let mut out = Vec::with_capacity(luma_data.len() * 4);
+            for (i, g) in luma_data.iter().enumerate() {
+                if self.poll_stop(i) {
+                    return;
+                }
+                out.extend_from_slice(&[*g, *g, *g, 255]);
+            }
+            out
         } else if matches!(&image_data, RenderImageData::Luma(_)) && has_alpha {
             let RenderImageData::Luma(luma) = image_data else {
                 unreachable!()
@@ -392,7 +428,10 @@ impl Renderer {
             };
 
             let mut out = Vec::with_capacity(img_width as usize * img_height as usize * 4);
-            for (g, a) in luma_data.iter().zip(alpha_data) {
+            for (i, (g, a)) in luma_data.iter().zip(alpha_data).enumerate() {
+                if self.poll_stop(i) {
+                    return;
+                }
                 out.extend_from_slice(&[*g, *g, *g, a]);
             }
             out
@@ -417,7 +456,10 @@ impl Renderer {
             img_height = new_height;
 
             let mut out = Vec::with_capacity((img_width * img_height) as usize * 4);
-            for px in resized.chunks_exact(3) {
+            for (i, px) in resized.chunks_exact(3).enumerate() {
+                if self.poll_stop(i) {
+                    return;
+                }
                 out.extend_from_slice(&[px[0], px[1], px[2], 255]);
             }
             out
@@ -477,7 +519,10 @@ impl Renderer {
 
         if has_alpha {
             let (chunks, _) = rgba_data.as_chunks_mut::<4>();
-            for chunk in chunks {
+            for (i, chunk) in chunks.iter_mut().enumerate() {
+                if self.poll_stop(i) {
+                    return;
+                }
                 *chunk = AlphaColor::from_rgba8(chunk[0], chunk[1], chunk[2], chunk[3])
                     .premultiply()
                     .to_rgba8()
@@ -559,7 +604,7 @@ impl Renderer {
 
             self.soft_mask_cache
                 .entry(m.cache_key())
-                .or_insert_with(|| draw_soft_mask(m, settings, width, height))
+                .or_insert_with(|| draw_soft_mask(m, settings, width, height, &self.stop))
                 .clone()
         });
 
@@ -726,14 +771,13 @@ impl Renderer {
                             outline_cache: self.outline_cache.clone(),
                             in_type3_glyph: false,
                             scaler: self.scaler,
+                            stop: self.stop.clone(),
                         };
                         let mut initial_transform = Affine::scale_non_uniform(xs as f64, ys as f64)
                             * Affine::translate((-bbox.x0, -bbox.y0));
                         t.interpret(&mut renderer, initial_transform, is_stroke);
                         let mut pix = Pixmap::new(pix_width, pix_height);
-                        renderer.ctx.flush();
-                        let mut resources = vello_cpu::Resources::default();
-                        renderer.ctx.render(&mut pix, &mut resources);
+                        render_pixmap_cancellable(&mut renderer.ctx, &mut pix, &renderer.stop);
 
                         // TODO: Fix these
                         if x_step < 0.0 {
@@ -957,13 +1001,16 @@ impl<'a> Device<'a> for Renderer {
                                         outline_cache: self.outline_cache.clone(),
                                         in_type3_glyph: false,
                                         scaler: self.scaler,
+                                        stop: self.stop.clone(),
                                     };
                                     let mut sub_pix = Pixmap::new(width, height);
                                     sub_renderer.ctx.set_transform(transform);
                                     sub_renderer.draw_image(rgb_bytes, Some(stencil));
-                                    sub_renderer.ctx.flush();
-                                    let mut resources = vello_cpu::Resources::default();
-                                    sub_renderer.ctx.render(&mut sub_pix, &mut resources);
+                                    render_pixmap_cancellable(
+                                        &mut sub_renderer.ctx,
+                                        &mut sub_pix,
+                                        &sub_renderer.stop,
+                                    );
                                     sub_pix
                                 };
 
@@ -1034,7 +1081,7 @@ impl<'a> Device<'a> for Renderer {
 
                 self.soft_mask_cache
                     .entry(m.cache_key())
-                    .or_insert_with(|| draw_soft_mask(&m, settings, width, height))
+                    .or_insert_with(|| draw_soft_mask(&m, settings, width, height, &self.stop))
                     .clone()
             }),
             None,
@@ -1160,7 +1207,13 @@ fn render_shading_texture(
     )
 }
 
-fn draw_soft_mask(mask: &SoftMask<'_>, settings: RenderSettings, width: u16, height: u16) -> Mask {
+fn draw_soft_mask(
+    mask: &SoftMask<'_>,
+    settings: RenderSettings,
+    width: u16,
+    height: u16,
+    stop: &Arc<dyn Stop>,
+) -> Mask {
     let mut renderer = Renderer {
         ctx: RenderContext::new_with(width, height, derive_settings(&settings)),
         inside_pattern: false,
@@ -1168,6 +1221,7 @@ fn draw_soft_mask(mask: &SoftMask<'_>, settings: RenderSettings, width: u16, hei
         outline_cache: Rc::new(std::cell::RefCell::new(FxHashMap::default())),
         in_type3_glyph: false,
         scaler: Scaler::new(ResamplingFunction::CatmullRom),
+        stop: stop.clone(),
     };
 
     let bg_color = mask.background_color().to_rgba();
@@ -1190,9 +1244,7 @@ fn draw_soft_mask(mask: &SoftMask<'_>, settings: RenderSettings, width: u16, hei
     }
 
     let mut pix = Pixmap::new(width, height);
-    renderer.ctx.flush();
-    let mut resources = vello_cpu::Resources::default();
-    renderer.ctx.render(&mut pix, &mut resources);
+    render_pixmap_cancellable(&mut renderer.ctx, &mut pix, &renderer.stop);
 
     let mut rendered_mask = match mask.mask_type() {
         MaskType::Luminosity => Mask::new_luminance(&pix),

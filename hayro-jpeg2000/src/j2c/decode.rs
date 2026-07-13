@@ -27,10 +27,13 @@ use crate::math::SimdBuffer;
 use crate::reader::BitReader;
 use core::ops::Range;
 
+use enough::Stop;
+
 pub(crate) fn decode<'a>(
     data: &'a [u8],
     header: &'a Header<'a>,
     ctx: &mut DecoderContext<'a>,
+    stop: &dyn Stop,
 ) -> Result<()> {
     let mut reader = BitReader::new(data);
     let tiles = tile::parse(&mut reader, header)?;
@@ -40,8 +43,13 @@ pub(crate) fn decode<'a>(
     }
 
     ctx.reset(header, &tiles[0]);
+    // Skip the per-tile / per-code-block polls entirely when the stop can't fire.
+    let stop = stop.may_stop().then_some(stop);
 
     for tile in &tiles {
+        // Poll the stop check once per tile.
+        stop.check()?;
+
         trace!(
             "tile {} rect [{},{} {}x{}]",
             tile.idx,
@@ -82,6 +90,7 @@ pub(crate) fn decode<'a>(
             &mut ctx.tile_decode_context,
             &mut ctx.channel_data,
             &mut ctx.storage,
+            stop,
         )?;
     }
 
@@ -132,6 +141,7 @@ fn decode_tile<'a, 'b>(
     tile_ctx: &mut TileDecodeContext,
     channel_data: &mut [ComponentData],
     storage: &mut DecompositionStorage<'a>,
+    stop: Option<&dyn Stop>,
 ) -> Result<()> {
     storage.reset();
 
@@ -144,7 +154,7 @@ fn decode_tile<'a, 'b>(
     segment::parse(tile, progression_iterator, header, storage)?;
     // We then decode the bitplanes of each code block, yielding the
     // (possibly dequantized) coefficients of each code block.
-    decode_component_tile_bit_planes(tile, tile_ctx, storage, header)?;
+    decode_component_tile_bit_planes(tile, tile_ctx, storage, header, stop)?;
 
     // Unlike before, we interleave the apply_idwt and store stages
     // for each component tile so we can reuse allocations better.
@@ -301,6 +311,7 @@ fn decode_component_tile_bit_planes<'a>(
     tile_ctx: &mut TileDecodeContext,
     storage: &mut DecompositionStorage<'a>,
     header: &Header<'_>,
+    stop: Option<&dyn Stop>,
 ) -> Result<()> {
     for (tile_decompositions_idx, component_info) in tile.component_infos.iter().enumerate() {
         // Only decode the resolution levels we actually care about.
@@ -318,6 +329,7 @@ fn decode_component_tile_bit_planes<'a>(
                     tile_ctx,
                     storage,
                     header,
+                    stop,
                 )?;
             }
         }
@@ -333,6 +345,7 @@ fn decode_sub_band_bitplanes(
     tile_ctx: &mut TileDecodeContext,
     storage: &mut DecompositionStorage<'_>,
     header: &Header<'_>,
+    stop: Option<&dyn Stop>,
 ) -> Result<()> {
     let sub_band = &storage.sub_bands[sub_band_idx];
 
@@ -384,6 +397,8 @@ fn decode_sub_band_bitplanes(
             .clone()
             .map(|idx| &storage.code_blocks[idx])
         {
+            // Poll the stop check once per code block.
+            stop.check()?;
             bitplane::decode(
                 code_block,
                 sub_band.sub_band_type,

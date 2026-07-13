@@ -7,6 +7,7 @@ use crate::object::Name;
 use crate::object::Rect;
 use crate::object::Stream;
 use crate::object::dict::keys::*;
+use crate::object::stream::ImageDecodeParams;
 use crate::object::{Object, ObjectLike};
 use crate::reader::ReaderContext;
 use crate::sync::OnceLock;
@@ -14,6 +15,7 @@ use crate::transform::Transform;
 use crate::util::FloatExt;
 use crate::xref::XRef;
 use alloc::boxed::Box;
+use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::ops::Deref;
@@ -228,8 +230,18 @@ impl<'a> Page<'a> {
 
     /// Return the decoded content stream of the page.
     pub fn page_stream(&self) -> Option<&[u8]> {
+        self.page_stream_with_stop(enough::Unstoppable)
+    }
+
+    /// Like [`Page::page_stream`], but polls `stop` during filter decoding.
+    pub fn page_stream_with_stop(&self, stop: impl enough::Stop + 'static) -> Option<&[u8]> {
+        // Wrap once and share the same `Arc` across all of the page's streams.
+        let stop: Arc<dyn enough::Stop> = Arc::new(stop);
         let convert_single = |s: Stream<'_>| {
-            let data = s.decoded().ok()?;
+            let data = s
+                .decoded_image(&ImageDecodeParams::default(), &stop)
+                .map(|r| r.data)
+                .ok()?;
             Some(data.to_vec())
         };
 
@@ -335,6 +347,17 @@ impl<'a> Page<'a> {
     /// Return a typed iterator over the operators of the page's content stream.
     pub fn typed_operations(&self) -> TypedIter<'_> {
         TypedIter::from_untyped(self.operations())
+    }
+
+    /// Like [`Page::typed_operations`], but polls `stop` while decoding the
+    /// content stream (the decoded stream is cached, so only the first call
+    /// does decoding work).
+    pub fn typed_operations_with_stop(&self, stop: impl enough::Stop + 'static) -> TypedIter<'_> {
+        TypedIter::from_untyped(
+            self.page_stream_with_stop(stop)
+                .map(UntypedIter::new)
+                .unwrap_or(UntypedIter::empty()),
+        )
     }
 
     /// Return the initial transform that should be applied when rendering.

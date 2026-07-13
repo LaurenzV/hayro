@@ -200,8 +200,19 @@ impl<'a> Image<'a> {
         &'a self,
         decoder_context: &'b mut DecoderContext<'a>,
     ) -> Result<DecodedImage<'b>> {
+        self.decode_with_stop(decoder_context, &enough::Unstoppable)
+    }
+
+    /// Decode like [`decode`](Self::decode), but poll `stop` once per tile and
+    /// once per code block, returning
+    /// [`DecodeError::Stopped`](crate::error::DecodeError::Stopped) if it fires.
+    pub fn decode_with_stop<'b>(
+        &'a self,
+        decoder_context: &'b mut DecoderContext<'a>,
+        stop: &dyn enough::Stop,
+    ) -> Result<DecodedImage<'b>> {
         let settings = &self.settings;
-        j2c::decode(self.codestream, &self.header, decoder_context)?;
+        j2c::decode(self.codestream, &self.header, decoder_context, stop)?;
         let mut decoded_image = DecodedImage {
             decoded_components: &mut decoder_context.channel_data,
             boxes: self.boxes.clone(),

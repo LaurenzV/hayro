@@ -7,12 +7,14 @@ use alloc::borrow::Cow;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::iter;
+use enough::Stop;
 use hayro_ccitt::{DecodeSettings, Decoder, DecoderContext, EncodingMode};
 
 pub(crate) fn decode(
     data: &[u8],
     params: &Dict<'_>,
     image_params: &ImageDecodeParams,
+    stop: &dyn Stop,
 ) -> Option<FilterResult<'static>> {
     let k = params.get::<i32>(K).unwrap_or(0);
 
@@ -96,7 +98,7 @@ pub(crate) fn decode(
             bit_count: 0,
         };
         let mut context = DecoderContext::new(settings);
-        let result = hayro_ccitt::decode(data, &mut decoder, &mut context);
+        let result = hayro_ccitt::decode_with_stop(data, &mut decoder, &mut context, stop);
 
         // If we decoded at least one row, let's be lenient and return what we got.
         // See also 0001763.pdf.
@@ -142,7 +144,7 @@ pub(crate) fn decode(
             decoded_rows: 0,
         };
         let mut context = DecoderContext::new(settings);
-        let result = hayro_ccitt::decode(data, &mut decoder, &mut context);
+        let result = hayro_ccitt::decode_with_stop(data, &mut decoder, &mut context, stop);
 
         if result.is_err() && decoder.decoded_rows == 0 {
             return None;

@@ -2,7 +2,9 @@ use crate::object::Dict;
 use crate::object::dict::keys::COLOR_TRANSFORM;
 use crate::object::stream::{FilterResult, ImageColorSpace, ImageData, ImageDecodeParams};
 use alloc::borrow::Cow;
+use alloc::sync::Arc;
 use core::num::NonZeroU32;
+use enough::Stop;
 use zune_jpeg::zune_core::bytestream::ZCursor;
 use zune_jpeg::zune_core::colorspace::ColorSpace;
 use zune_jpeg::zune_core::colorspace::ColorSpace::CMYK;
@@ -12,6 +14,7 @@ pub(crate) fn decode(
     data: &[u8],
     params: &Dict<'_>,
     image_params: &ImageDecodeParams,
+    stop: &Arc<dyn Stop>,
 ) -> Option<FilterResult<'static>> {
     if image_params.width > u16::MAX as u32 || image_params.height > u16::MAX as u32 {
         return None;
@@ -61,6 +64,12 @@ pub(crate) fn decode(
     }
 
     decoder.set_options(DecoderOptions::default().jpeg_set_out_colorspace(out_colorspace));
+    // Bridge the PDF-level stop into zune-jpeg's CancelCheck so a large JPEG is
+    // cancellable mid-decode (polled per MCU rows), not just up front.
+    decoder.set_cancel({
+        let stop = stop.clone();
+        move || stop.should_stop()
+    });
     let mut decoded = decoder.decode().ok()?;
 
     if out_colorspace == ColorSpace::YCCK {

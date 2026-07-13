@@ -35,6 +35,7 @@ zune-jpeg = { workspace = true, optional = true }
 hayro-ccitt = { workspace = true, optional = true }
 hayro-jbig2 = { workspace = true, optional = true }
 hayro-jpeg2000 = { workspace = true, optional = true }
+enough.workspace = true
 
 [lints]
 workspace = true
