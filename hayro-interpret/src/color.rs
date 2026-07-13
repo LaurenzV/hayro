@@ -283,6 +283,17 @@ impl ColorSpace {
             .collect()
     }
 
+    /// Returns `true` if the color space is a device color space and the `decode_arr` is the
+    /// default decode array for this color space.
+    pub(crate) fn is_default_colors(&self, decode_arr: Option<&[(f32, f32)]>) -> bool {
+        match self.0.as_ref() {
+            ColorSpaceType::DeviceCmyk => decode_arr.is_none_or(|d| d == [(0.0, 1.0); 4]),
+            ColorSpaceType::DeviceGray => decode_arr.is_none_or(|d| d == [(0.0, 1.0); 1]),
+            ColorSpaceType::DeviceRgb => decode_arr.is_none_or(|d| d == [(0.0, 1.0); 3]),
+            _ => false,
+        }
+    }
+
     /// Get the initial color of the color space.
     pub(crate) fn initial_color(&self) -> ColorComponents {
         match self.0.as_ref() {

@@ -17,7 +17,9 @@ mod run_length;
 use crate::object::Dict;
 use crate::object::Name;
 use crate::object::dict::keys::*;
-use crate::object::stream::{DecodeFailure, FilterResult, ImageDecodeParams};
+use crate::object::stream::{
+    DecodeFailure, FilterResult, ImageDecodeParams, ImageFormat, ImageFormats,
+};
 use core::ops::Deref;
 
 /// A data filter.
@@ -130,5 +132,17 @@ impl Filter {
         }
 
         res
+    }
+
+    pub(crate) fn as_format(self, formats: ImageFormats, params: &Dict<'_>) -> Option<ImageFormat> {
+        match self {
+            Self::DctDecode
+                if formats.jpeg && params.get::<u8>(COLOR_TRANSFORM).is_none_or(|c| c == 1) =>
+            {
+                Some(ImageFormat::Jpeg)
+            }
+            Self::JpxDecode if formats.jpeg_2000 => Some(ImageFormat::Jpeg2000),
+            _ => None,
+        }
     }
 }
