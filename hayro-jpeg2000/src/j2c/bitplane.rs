@@ -481,6 +481,27 @@ impl BitPlaneDecodeContext {
         Ok(())
     }
 
+    /// The reconstruction bias to add to the magnitude of significant
+    /// coefficients when this code-block's coding passes stopped above bit 0.
+    ///
+    /// If the passes did not reach bitplane 0, the bits below the last decoded
+    /// bitplane `b` are unknown, so the true magnitude lies in `[q, q + 2^b)`.
+    /// The reconstruction procedure places it at the mid-point by adding
+    /// `2^(b - 1)`. Returns `0` when all bitplanes down to bit 0 were decoded
+    /// (the value is then exact) or when nothing was decoded.
+    pub(crate) fn undecoded_lsb_offset(&self) -> i32 {
+        // `current_bit_position` holds the position of the last decoded
+        // bitplane after the final coding pass. If it is > 0, the bits below
+        // it were never coded; the standard reconstruction places the value at
+        // the mid-point of the remaining uncertainty interval `[0, 2^b)`.
+        let b = self.current_bit_position;
+        if self.bitplanes == 0 || b == 0 {
+            0
+        } else {
+            1 << (b - 1)
+        }
+    }
+
     pub(crate) fn coefficient_rows(&self) -> impl Iterator<Item = &[Coefficient]> {
         self.coefficients
             .chunks_exact(self.padded_width as usize)
