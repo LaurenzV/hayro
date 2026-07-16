@@ -34,7 +34,7 @@ pub(crate) struct Renderer {
 enum ImagePixelFormat {
     Luma,
     Rgb,
-    Rgba,
+    PremultipliedRgba,
 }
 
 struct SolidColorImage {
@@ -210,14 +210,14 @@ impl Renderer {
                     scaler.plan_rgb_resampling(source_size, target_size)
                 },
             ),
-            ImagePixelFormat::Rgba => self.resize_image_data_impl::<4>(
+            ImagePixelFormat::PremultipliedRgba => self.resize_image_data_impl::<4>(
                 data,
                 src_width,
                 src_height,
                 new_width,
                 new_height,
                 |scaler, source_size, target_size| {
-                    scaler.plan_rgba_resampling(source_size, target_size, true)
+                    scaler.plan_rgba_resampling(source_size, target_size, false)
                 },
             ),
         }
@@ -296,6 +296,7 @@ impl Renderer {
 
         // For luma images without alpha, we can resize as single-channel and
         // expand to RGBA afterwards, which is ~4x faster.
+        let mut needs_premultiplication = has_alpha;
         let mut rgba_data = if matches!(&image_data, RenderImageData::Solid(_)) && has_alpha {
             let RenderImageData::Solid(solid) = image_data else {
                 unreachable!()
@@ -442,7 +443,7 @@ impl Renderer {
                 }
             };
 
-            let rgba_data = match alpha_data {
+            let mut rgba_data = match alpha_data {
                 None => rgb_data
                     .chunks_exact(3)
                     .flat_map(|rgb| [rgb[0], rgb[1], rgb[2], 255])
@@ -457,13 +458,17 @@ impl Renderer {
             if !needs_resize {
                 rgba_data
             } else {
+                // Vello consumes premultiplied RGBA. Keeping the data premultiplied through the
+                // resize also avoids pic-scale's CPU-dependent AVX unpremultiplication.
+                premultiply_rgba(&mut rgba_data);
+                needs_premultiplication = false;
                 let resized = self.resize_image_data(
                     rgba_data,
                     img_width,
                     img_height,
                     new_width,
                     new_height,
-                    ImagePixelFormat::Rgba,
+                    ImagePixelFormat::PremultipliedRgba,
                 );
                 additional_transform = Affine::scale_non_uniform(
                     img_width as f64 / new_width as f64,
@@ -475,14 +480,8 @@ impl Renderer {
             }
         };
 
-        if has_alpha {
-            let (chunks, _) = rgba_data.as_chunks_mut::<4>();
-            for chunk in chunks {
-                *chunk = AlphaColor::from_rgba8(chunk[0], chunk[1], chunk[2], chunk[3])
-                    .premultiply()
-                    .to_rgba8()
-                    .to_u8_array();
-            }
+        if needs_premultiplication {
+            premultiply_rgba(&mut rgba_data);
         }
 
         // The problem is that by default, when applying a bilinear or bicubic scaling, we will
@@ -1275,4 +1274,14 @@ fn convert_blend_mode(blend_mode: BlendMode) -> peniko::BlendMode {
     };
 
     peniko::BlendMode::new(mix, Compose::SrcOver)
+}
+
+fn premultiply_rgba(data: &mut [u8]) {
+    let (chunks, _) = data.as_chunks_mut::<4>();
+    for chunk in chunks {
+        *chunk = AlphaColor::from_rgba8(chunk[0], chunk[1], chunk[2], chunk[3])
+            .premultiply()
+            .to_rgba8()
+            .to_u8_array();
+    }
 }
