@@ -400,25 +400,18 @@ fn decode_sub_band_bitplanes(
             let x_offset = code_block.rect.x0 - sub_band.rect.x0;
             let y_offset = code_block.rect.y0 - sub_band.rect.y0;
 
-            // When the code-block's coding passes stop above bitplane 0, the
-            // bits below the last decoded bitplane are unknown. Per the
-            // reconstruction procedure, significant coefficients are placed at
-            // the mid-point of the remaining uncertainty interval.
-            let lsb_offset = tile_ctx.bit_plane_decode_context.undecoded_lsb_offset();
-
             let base_store = &mut storage.coefficients[sub_band.coefficients.clone()];
             let mut base_idx = (y_offset * sub_band.rect.width()) as usize + x_offset as usize;
 
-            for coefficients in tile_ctx.bit_plane_decode_context.coefficient_rows() {
+            for (coefficients, coefficient_states) in
+                tile_ctx.bit_plane_decode_context.coefficient_rows()
+            {
                 let out_row = &mut base_store[base_idx..];
 
-                for (output, coefficient) in out_row.iter_mut().zip(coefficients.iter().copied()) {
-                    let mut magnitude = coefficient.get();
-                    if magnitude != 0 && lsb_offset != 0 {
-                        // Bias toward zero-magnitude mid-point (preserve sign).
-                        magnitude += if magnitude > 0 { lsb_offset } else { -lsb_offset };
-                    }
-                    *output = magnitude as f32;
+                for ((output, coefficient), coefficient_state) in
+                    out_row.iter_mut().zip(coefficients).zip(coefficient_states)
+                {
+                    *output = coefficient.reconstructed(coefficient_state) as f32;
                     *output *= dequantization_step;
                 }
 

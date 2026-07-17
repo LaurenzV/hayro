@@ -200,13 +200,15 @@ pub(crate) const BITPLANE_BIT_SIZE: u32 = size_of::<u32>() as u32 * 8 - 1;
 const SIGNIFICANCE_SHIFT: u8 = 7;
 const HAS_MAGNITUDE_REFINEMENT_SHIFT: u8 = 6;
 const HAS_ZERO_CODING_SHIFT: u8 = 5;
+const DECODED_BIT_POSITION_MASK: u8 = 0x1f;
 const CLEANUP_SKIP_MASK: u8 = (1 << SIGNIFICANCE_SHIFT) | (1 << HAS_ZERO_CODING_SHIFT);
 const REFINEMENT_PASS_MASK: u8 = (1 << SIGNIFICANCE_SHIFT) | (1 << HAS_ZERO_CODING_SHIFT);
 
-/// Bit-packed coefficient state (only 3 bits used):
+/// Bit-packed coefficient state:
 /// - Bit 7: significance state (set when first non-zero bit is encountered)
 /// - Bit 6: has had magnitude refinement pass
 /// - Bit 5: zero coded in current bitplane's significance propagation pass
+/// - Bits 0-4: position of the least significant decoded magnitude bit
 #[derive(Default, Copy, Clone)]
 pub(crate) struct CoefficientState(u8);
 
@@ -227,6 +229,18 @@ impl CoefficientState {
     #[inline(always)]
     fn set_magnitude_refined(&mut self) {
         self.0 |= 1_u8 << HAS_MAGNITUDE_REFINEMENT_SHIFT;
+    }
+
+    #[inline(always)]
+    fn set_decoded_bit_position(&mut self, position: u8) {
+        debug_assert!(position <= DECODED_BIT_POSITION_MASK);
+
+        self.0 = (self.0 & !DECODED_BIT_POSITION_MASK) | position;
+    }
+
+    #[inline(always)]
+    fn decoded_bit_position(&self) -> u8 {
+        self.0 & DECODED_BIT_POSITION_MASK
     }
 
     #[inline(always)]
@@ -261,10 +275,19 @@ impl CoefficientState {
 pub(crate) struct Coefficient(u32);
 
 impl Coefficient {
-    pub(crate) fn get(&self) -> i32 {
+    pub(crate) fn reconstructed(&self, state: &CoefficientState) -> i32 {
         let mut magnitude = (self.0 & !0x80000000) as i32;
         // Map sign (0 for positive, 1 for negative) to 1, -1.
         magnitude *= 1 - 2 * (self.sign() as i32);
+
+        // See Formula E-6: In case the coefficient doesn't have full precision,
+        // we need to apply a reconstruction bias. The recommended value is
+        // 1/2.
+        let bit_position = state.decoded_bit_position();
+        if magnitude != 0 && bit_position != 0 {
+            let offset = 1 << (bit_position - 1);
+            magnitude += if magnitude > 0 { offset } else { -offset };
+        }
 
         magnitude
     }
@@ -481,32 +504,22 @@ impl BitPlaneDecodeContext {
         Ok(())
     }
 
-    /// The reconstruction bias to add to the magnitude of significant
-    /// coefficients when this code-block's coding passes stopped above bit 0.
-    ///
-    /// If the passes did not reach bitplane 0, the bits below the last decoded
-    /// bitplane `b` are unknown, so the true magnitude lies in `[q, q + 2^b)`.
-    /// The reconstruction procedure places it at the mid-point by adding
-    /// `2^(b - 1)`. Returns `0` when all bitplanes down to bit 0 were decoded
-    /// (the value is then exact) or when nothing was decoded.
-    pub(crate) fn undecoded_lsb_offset(&self) -> i32 {
-        // `current_bit_position` holds the position of the last decoded
-        // bitplane after the final coding pass. If it is > 0, the bits below
-        // it were never coded; the standard reconstruction places the value at
-        // the mid-point of the remaining uncertainty interval `[0, 2^b)`.
-        let b = self.current_bit_position;
-        if self.bitplanes == 0 || b == 0 {
-            0
-        } else {
-            1 << (b - 1)
-        }
-    }
-
-    pub(crate) fn coefficient_rows(&self) -> impl Iterator<Item = &[Coefficient]> {
+    pub(crate) fn coefficient_rows(
+        &self,
+    ) -> impl Iterator<Item = (&[Coefficient], &[CoefficientState])> {
         self.coefficients
             .chunks_exact(self.padded_width as usize)
+            .zip(
+                self.coefficient_states
+                    .chunks_exact(self.padded_width as usize),
+            )
             // Exclude the padding that we added.
-            .map(|row| &row[COEFFICIENTS_PADDING as usize..][..self.width as usize])
+            .map(|(coefficients, states)| {
+                (
+                    &coefficients[COEFFICIENTS_PADDING as usize..][..self.width as usize],
+                    &states[COEFFICIENTS_PADDING as usize..][..self.width as usize],
+                )
+            })
             .skip(COEFFICIENTS_PADDING as usize)
             .take(self.height as usize)
     }
@@ -549,6 +562,7 @@ impl BitPlaneDecodeContext {
         debug_assert!(!self.coefficient_states[idx].is_significant());
 
         self.coefficient_states[idx].set_significant();
+        self.coefficient_states[idx].set_decoded_bit_position(self.current_bit_position);
 
         // Update all neighbors so they know this coefficient is significant now.
         self.neighbor_significances[position.top_left().index(self.padded_width)]
@@ -572,7 +586,9 @@ impl BitPlaneDecodeContext {
 
     #[inline(always)]
     fn set_magnitude_refined(&mut self, position: Position) {
-        self.coefficient_states[position.index(self.padded_width)].set_magnitude_refined();
+        let state = &mut self.coefficient_states[position.index(self.padded_width)];
+        state.set_magnitude_refined();
+        state.set_decoded_bit_position(self.current_bit_position);
     }
 
     #[inline(always)]
@@ -1367,13 +1383,13 @@ mod fast_path {
         if should_decode_refinement {
             let ctx_label = magnitude_refinement_context(shifted_flags);
             let bit = decoder.read_bit(&mut ctx.contexts[ctx_label as usize]);
+            let coefficient_idx =
+                column.coefficient_idx + coefficient_in_stripe as usize * column.stride;
             if bit == 1 {
-                push_magnitude_bit(
-                    ctx,
-                    column.coefficient_idx + coefficient_in_stripe as usize * column.stride,
-                    bit,
-                );
+                push_magnitude_bit(ctx, coefficient_idx, bit);
             }
+            ctx.coefficient_states[coefficient_idx]
+                .set_decoded_bit_position(ctx.current_bit_position);
             *flags |= FLAG_MAGNITUDE_REFINED_THIS << shift;
         }
     }
@@ -1498,6 +1514,9 @@ mod fast_path {
         sign: u32,
     ) {
         let shift = coefficient_in_stripe * FLAGS_PER_COEFFICIENT;
+        let coefficient_idx =
+            column.coefficient_idx + coefficient_in_stripe as usize * column.stride;
+        ctx.coefficient_states[coefficient_idx].set_decoded_bit_position(ctx.current_bit_position);
 
         ctx.stripe_flags[column.flag_idx - 1] |= FLAG_SIGNIFICANT_RIGHT << shift;
         *flags |= ((sign << FLAG_SIGN_THIS_SHIFT) | FLAG_SIGNIFICANT_THIS) << shift;
