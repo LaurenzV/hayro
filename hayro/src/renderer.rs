@@ -1,5 +1,5 @@
 use crate::{RenderCache, derive_settings};
-use fearless_simd::{Level, Simd, SimdBase, SimdInt, SimdInto, u8x16, u16x16};
+use fearless_simd::{Level, Select, Simd, SimdBase, SimdInt, SimdInto, mask8x16, u8x16, u16x16};
 use hayro_interpret::encode::{EncodedShadingPattern, EncodedShadingType};
 use hayro_interpret::font::Glyph;
 use hayro_interpret::gradient::SvgGradientKind;
@@ -1289,21 +1289,35 @@ fn convert_blend_mode(blend_mode: BlendMode) -> peniko::BlendMode {
     peniko::BlendMode::new(mix, Compose::SrcOver)
 }
 
+trait Splat4thExt {
+    fn splat_4th(self) -> Self;
+}
+
+impl<S: Simd> Splat4thExt for u8x16<S> {
+    #[inline(always)]
+    fn splat_4th(self) -> Self {
+        [
+            self[3], self[3], self[3], self[3], self[7], self[7], self[7], self[7], self[11],
+            self[11], self[11], self[11], self[15], self[15], self[15], self[15],
+        ]
+        .simd_into(self.simd)
+    }
+}
+
 fn premultiply_rgba(level: Level, data: &mut [u8]) {
     let simd_len = data.len() / 16 * 16;
     let (simd_data, tail) = data.split_at_mut(simd_len);
 
     #[inline(always)]
     fn premultiply_rgba_simd<S: Simd>(simd: S, data: &mut [u8]) {
+        let alpha_lanes =
+            mask8x16::from_slice(simd, &[0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0, -1]);
         for chunk in data.chunks_exact_mut(16) {
             let rgba = u8x16::from_slice(simd, chunk);
-            let alphas: u8x16<S> = [
-                rgba[3], rgba[3], rgba[3], 255, rgba[7], rgba[7], rgba[7], 255, rgba[11], rgba[11],
-                rgba[11], 255, rgba[15], rgba[15], rgba[15], 255,
-            ]
-            .simd_into(simd);
+            let alphas = rgba.splat_4th();
             let premultiplied = (simd.widen_u8x16(rgba) * simd.widen_u8x16(alphas)).div_255();
-            simd.narrow_u16x16(premultiplied).store_slice(chunk);
+            let premultiplied = simd.narrow_u16x16(premultiplied);
+            alpha_lanes.select(rgba, premultiplied).store_slice(chunk);
         }
     }
 
@@ -1325,12 +1339,7 @@ fn clamp_premultiplied_rgba(level: Level, data: &mut [u8]) {
     fn clamp_premultiplied_rgba_simd<S: Simd>(simd: S, data: &mut [u8]) {
         for chunk in data.chunks_exact_mut(16) {
             let rgba = u8x16::from_slice(simd, chunk);
-            let alphas: u8x16<S> = [
-                rgba[3], rgba[3], rgba[3], rgba[3], rgba[7], rgba[7], rgba[7], rgba[7], rgba[11],
-                rgba[11], rgba[11], rgba[11], rgba[15], rgba[15], rgba[15], rgba[15],
-            ]
-            .simd_into(simd);
-            rgba.min(alphas).store_slice(chunk);
+            rgba.min(rgba.splat_4th()).store_slice(chunk);
         }
     }
 
